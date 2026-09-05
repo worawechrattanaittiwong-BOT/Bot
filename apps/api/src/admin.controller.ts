@@ -37,7 +37,7 @@ export class AdminController {
     );
     if (!account) throw new ConflictException("MT5 account not found");
     const used = await this.db.one(
-      "SELECT id,status,started_at,expires_at FROM trial_grants WHERE account_number=$1 AND broker_server=$2",
+      "SELECT id,status,started_at,expires_at FROM trial_grants WHERE lower(account_number)=lower($1) AND lower(broker_server)=lower($2)",
       [account.account_number, account.broker_server]
     );
     if (used) throw new ConflictException("this MT5 account/server has already received a trial");
