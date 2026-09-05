@@ -89,6 +89,9 @@ export class EaController {
       access,
       desiredState: access ? instance.desired_state : "SAFE_STOP",
       command: cmd || null,
+      commandId: cmd?.id || null,
+      commandName: cmd?.command || null,
+      commandPayload: cmd?.payload || null,
       settings: settings?.settings || {}
     };
   }
