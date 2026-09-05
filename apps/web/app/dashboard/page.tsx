@@ -63,6 +63,16 @@ export default function DashboardPage() {
   const desired = data?.instance?.desired_state || "STOPPED";
   const entitlement = data?.entitlement;
 
+  const accessExpiry = entitlement?.expiresAt ? new Date(entitlement.expiresAt) : null;
+  const accessRemaining = accessExpiry
+    ? Math.max(0, accessExpiry.getTime() - Date.now())
+    : null;
+  const remainingText = accessRemaining === null
+    ? ""
+    : Math.floor(accessRemaining / 3600000).toString().padStart(2,"0") + ":" +
+      Math.floor((accessRemaining % 3600000) / 60000).toString().padStart(2,"0") + ":" +
+      Math.floor((accessRemaining % 60000) / 1000).toString().padStart(2,"0");
+
   const trialLabel = useMemo(() => {
     if (!entitlement) return "—";
     if (entitlement.source === "TRIAL_READY") return "พร้อมเริ่ม 3 ชั่วโมง";
@@ -269,6 +279,13 @@ export default function DashboardPage() {
                   Trial 3 ชั่วโมงจะไม่เปิดอัตโนมัติ กรุณาแจ้ง User ID <b>{data.user.user_code}</b> กับผู้ดูแล
                   เพื่ออนุมัติสิทธิ์ บัญชี MT5 ที่เคยรับ Trial แล้วจะรับซ้ำไม่ได้
                 </div>
+                {remainingText && (
+                  <div className="flow-node purple" style={{marginTop:12}}>
+                    <b>ACCESS TIME REMAINING</b>
+                    <small className="mono" style={{fontSize:22,color:"var(--text)"}}>{remainingText}</small>
+                    <small>หมดอายุ {accessExpiry?.toLocaleString("th-TH")}</small>
+                  </div>
+                )}
                 <div style={{height:14}}/>
                 <div className="flow-node purple">
                   <b>MT5 ACCOUNT</b>
