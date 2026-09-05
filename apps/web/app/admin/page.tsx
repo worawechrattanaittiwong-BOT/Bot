@@ -12,11 +12,17 @@ export default function AdminPage() {
   const [startsAt, setStartsAt] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [plan, setPlan] = useState("CLOUD_30D");
+  const [system, setSystem] = useState<any>(null);
 
   async function search(e?: FormEvent) {
     e?.preventDefault();
     try {
-      setUsers(await adminApi("/admin/users?q=" + encodeURIComponent(query), adminKey));
+      const [userRows, systemStatus] = await Promise.all([
+        adminApi("/admin/users?q=" + encodeURIComponent(query), adminKey),
+        adminApi("/admin/system", adminKey)
+      ]);
+      setUsers(userRows);
+      setSystem(systemStatus);
       setMessage("");
     } catch (e: any) {
       setMessage(e.message);
@@ -136,6 +142,42 @@ export default function AdminPage() {
         </section>
 
         {message && <div className="notice" style={{marginTop:14}}>{message}</div>}
+
+        {system && (
+          <section className="kpi-grid" style={{marginTop:16}}>
+            <div className="kpi"><div className="label">Users</div><div className="value">{system.users?.total || 0}</div></div>
+            <div className="kpi"><div className="label">Bots Running</div><div className="value green">{system.bots?.running || 0}</div></div>
+            <div className="kpi"><div className="label">Bots Offline</div><div className="value">{system.bots?.offline || 0}</div></div>
+            <div className="kpi"><div className="label">Cloud Workers</div><div className="value">{system.workers?.filter((w:any)=>w.health==="ONLINE").length || 0}</div></div>
+          </section>
+        )}
+
+        {system?.workers?.length > 0 && (
+          <section className="panel purple" style={{marginTop:16}}>
+            <div className="panel-head">
+              <div>
+                <div className="eyebrow">CLOUD INFRASTRUCTURE</div>
+                <h2 style={{marginTop:7}}>Windows Trading Nodes</h2>
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>RUNNER</th><th>REGION</th><th>LOAD</th><th>HEALTH</th><th>LAST SEEN</th></tr></thead>
+                <tbody>
+                  {system.workers.map((worker:any)=>(
+                    <tr key={worker.runner_id}>
+                      <td>{worker.runner_id}<br/><span className="muted">{worker.hostname || "—"}</span></td>
+                      <td>{worker.region}</td>
+                      <td>{worker.active_instances} / {worker.capacity}</td>
+                      <td><span className="badge"><span className={"dot " + (worker.health==="ONLINE"?"green":"red")}/>{worker.health}</span></td>
+                      <td>{worker.last_seen_at ? new Date(worker.last_seen_at).toLocaleString("th-TH") : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         <section className="panel" style={{marginTop:16}}>
           <div className="panel-head">
