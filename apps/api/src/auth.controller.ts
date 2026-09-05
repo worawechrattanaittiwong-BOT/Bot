@@ -1,0 +1,60 @@
+import {
+  Body,
+  ConflictException,
+  Controller,
+  Post,
+  UnauthorizedException
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { compare, hash } from "bcryptjs";
+import { DbService } from "./db.service";
+
+@Controller("auth")
+export class AuthController {
+  constructor(
+    private readonly db: DbService,
+    private readonly jwt: JwtService
+  ) {}
+
+  @Post("register")
+  async register(@Body() body: { email: string; password: string }) {
+    const email = String(body.email || "").trim().toLowerCase();
+    if (!email || String(body.password || "").length < 8) {
+      throw new ConflictException("email required and password must be at least 8 characters");
+    }
+    const existing = await this.db.one("SELECT id FROM users WHERE email=$1", [email]);
+    if (existing) throw new ConflictException("email already exists");
+
+    const passwordHash = await hash(body.password, 12);
+    const code = "BOT-" + Date.now().toString(36).toUpperCase();
+    const user = await this.db.one(
+      "INSERT INTO users(user_code,email,password_hash) VALUES($1,$2,$3) RETURNING id,user_code,email,role,status",
+      [code, email, passwordHash]
+    );
+    return {
+      user,
+      token: this.jwt.sign({ sub: user.id, role: user.role, code: user.user_code })
+    };
+  }
+
+  @Post("login")
+  async login(@Body() body: { email: string; password: string }) {
+    const user = await this.db.one(
+      "SELECT id,user_code,email,password_hash,role,status FROM users WHERE email=$1",
+      [String(body.email || "").trim().toLowerCase()]
+    );
+    if (!user || !(await compare(String(body.password || ""), user.password_hash))) {
+      throw new UnauthorizedException("invalid email or password");
+    }
+    if (user.status !== "ACTIVE") throw new UnauthorizedException("account unavailable");
+    return {
+      user: {
+        id: user.id,
+        userCode: user.user_code,
+        email: user.email,
+        role: user.role
+      },
+      token: this.jwt.sign({ sub: user.id, role: user.role, code: user.user_code })
+    };
+  }
+}
