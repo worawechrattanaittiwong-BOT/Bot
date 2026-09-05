@@ -9,6 +9,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [days, setDays] = useState(30);
+  const [expiresAt, setExpiresAt] = useState("");
   const [plan, setPlan] = useState("CLOUD_30D");
 
   async function search(e?: FormEvent) {
@@ -45,11 +46,12 @@ export default function AdminPage() {
         body: JSON.stringify({
           userId: user.id,
           planCode: plan,
-          durationDays: days,
+          durationDays: expiresAt ? undefined : days,
+          expiresAt: expiresAt || undefined,
           activatedBy: "ADMIN"
         })
       });
-      setMessage("เปิดสมาชิก " + plan + " จำนวน " + days + " วัน ให้ " + user.user_code + " แล้ว");
+      setMessage("เปิดสมาชิก " + plan + " ให้ " + user.user_code + " แล้ว");
     } catch (e: any) {
       setMessage(e.message);
     }
@@ -122,8 +124,13 @@ export default function AdminPage() {
               </select>
             </div>
             <div className="field">
-              <label>จำนวนวัน</label>
+              <label>จำนวนวัน (ใช้เมื่อไม่กำหนดวันหมดอายุเอง)</label>
               <input className="input" type="number" min={1} value={days} onChange={e=>setDays(Number(e.target.value))}/>
+            </div>
+            <div className="field">
+              <label>หรือกำหนดวันหมดอายุเอง</label>
+              <input className="input" type="datetime-local" value={expiresAt} onChange={e=>setExpiresAt(e.target.value)}/>
+              <div className="help">ถ้ากรอกช่องนี้ ระบบจะใช้วันหมดอายุนี้แทนจำนวนวัน</div>
             </div>
           </div>
         </section>
