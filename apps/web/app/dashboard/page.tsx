@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const [brokerServer, setBrokerServer] = useState("");
   const [tradingPassword, setTradingPassword] = useState("");
   const [installToken, setInstallToken] = useState("");
+  const [installInstanceId, setInstallInstanceId] = useState("");
   const [settings, setSettings] = useState<any>(defaultSettings);
 
   async function load() {
@@ -85,7 +86,8 @@ export default function DashboardPage() {
           mode
         })
       });
-      setInstallToken(result.installToken);
+      setInstallToken(result.installToken || "");
+      setInstallInstanceId(result.instance?.id || "");
       if (mode === "CLOUD" && tradingPassword) {
         await api("/bot/mt5/cloud-credential", {
           method: "POST",
@@ -320,8 +322,9 @@ export default function DashboardPage() {
 
         {installToken && (
           <div className="notice good" style={{marginTop:16}}>
-            <b>Install Token (แสดงครั้งนี้ครั้งเดียว)</b><br/>
-            <span className="mono" style={{wordBreak:"break-all"}}>{installToken}</span>
+            <b>Local EA Activation (แสดงครั้งนี้ครั้งเดียว)</b><br/>
+            Instance ID: <span className="mono" style={{wordBreak:"break-all"}}>{installInstanceId}</span><br/>
+            Install Token: <span className="mono" style={{wordBreak:"break-all"}}>{installToken}</span>
           </div>
         )}
       </main>
