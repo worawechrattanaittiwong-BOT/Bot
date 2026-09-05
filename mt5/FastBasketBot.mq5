@@ -41,6 +41,7 @@ input double          InpStrongFlowPoints     = 25.0;
 input double          InpFlowTrailBoost       = 0.60;
 input bool            InpPauseOnManualTrade   = true;
 input int             InpHeartbeatSeconds     = 3;
+input int             InpMaxOfflineLeaseSeconds = 600;
 
 CTrade trade;
 
@@ -54,6 +55,7 @@ ulong  g_lastOrderMs = 0;
 datetime g_orderWindowStart = 0;
 int    g_ordersInWindow = 0;
 datetime g_lastHeartbeat = 0;
+datetime g_lastSuccessfulHeartbeat = 0;
 
 double g_lot;
 int    g_maxPositions;
@@ -106,6 +108,14 @@ void OnTick()
 {
    UpdateMomentum();
    RefreshDailyBaselineIfNeeded();
+
+   if(g_access && g_lastSuccessfulHeartbeat > 0 &&
+      TimeCurrent() - g_lastSuccessfulHeartbeat > InpMaxOfflineLeaseSeconds)
+   {
+      Print("SaaS lease expired while API is unreachable. Entering SAFE_STOP.");
+      g_access = false;
+      g_state = STATE_SAFE_STOP;
+   }
 
    int count = BasketPositionCount();
    double profit = BasketProfit();
@@ -254,6 +264,7 @@ void SendHeartbeat()
       return;
    }
 
+   g_lastSuccessfulHeartbeat = TimeCurrent();
    g_access = JsonBool(response, "access", false);
 
    string desired = JsonString(response, "desiredState", "STOPPED");
