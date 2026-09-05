@@ -64,6 +64,7 @@ export class AdminController {
     userId: string;
     planCode: string;
     durationDays?: number;
+    startsAt?: string;
     expiresAt?: string;
     activatedBy?: string;
     note?: string;
@@ -74,12 +75,14 @@ export class AdminController {
     );
     if (!plan) throw new ConflictException("plan not found");
     const days = Math.max(1, Number(body.durationDays || 30));
+    const startsAt = body.startsAt ? new Date(body.startsAt) : new Date();
     const expiresAt = body.expiresAt
       ? new Date(body.expiresAt)
-      : new Date(Date.now() + days * 86400000);
+      : new Date(startsAt.getTime() + days * 86400000);
+    if (expiresAt <= startsAt) throw new ConflictException("expiresAt must be after startsAt");
     const row = await this.db.one(
-      "INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note) VALUES($1,$2,now(),$3,$4,$5) RETURNING *",
-      [body.userId, plan.id, expiresAt, body.activatedBy || "ADMIN", body.note || null]
+      "INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
+      [body.userId, plan.id, startsAt, expiresAt, body.activatedBy || "ADMIN", body.note || null]
     );
     await this.audit("ADMIN", "ACTIVATE_SUBSCRIPTION", "subscription", row.id, {
       plan: body.planCode,
