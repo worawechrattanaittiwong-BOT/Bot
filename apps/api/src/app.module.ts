@@ -5,8 +5,9 @@ import { BotController } from "./bot.controller";
 import { AdminController } from "./admin.controller";
 import { EaController } from "./ea.controller";
 import { HealthController } from "./health.controller";
+import { WorkerController } from "./worker.controller";
 import { DbService } from "./db.service";
-import { AdminGuard, CryptoService, JwtGuard } from "./security";
+import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { AdminGuard, CryptoService, JwtGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [AuthController, BotController, AdminController, EaController, HealthController],
-  providers: [DbService, JwtGuard, AdminGuard, CryptoService]
+  controllers: [AuthController, BotController, AdminController, EaController, HealthController, WorkerController],
+  providers: [DbService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
 })
 export class AppModule {}
