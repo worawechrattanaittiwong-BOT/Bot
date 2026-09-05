@@ -9,6 +9,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [days, setDays] = useState(30);
+  const [startsAt, setStartsAt] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [plan, setPlan] = useState("CLOUD_30D");
 
@@ -47,6 +48,7 @@ export default function AdminPage() {
           userId: user.id,
           planCode: plan,
           durationDays: expiresAt ? undefined : days,
+          startsAt: startsAt || undefined,
           expiresAt: expiresAt || undefined,
           activatedBy: "ADMIN"
         })
@@ -149,6 +151,10 @@ export default function AdminPage() {
                 <option value="CLOUD_30D">CLOUD 30D</option>
                 <option value="LOCAL_30D">LOCAL 30D</option>
               </select>
+            </div>
+            <div className="field">
+              <label>วันเริ่มสมาชิก (เว้นว่าง = เริ่มทันที)</label>
+              <input className="input" type="datetime-local" value={startsAt} onChange={e=>setStartsAt(e.target.value)}/>
             </div>
             <div className="field">
               <label>จำนวนวัน (ใช้เมื่อไม่กำหนดวันหมดอายุเอง)</label>
