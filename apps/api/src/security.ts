@@ -38,6 +38,17 @@ export class AdminGuard implements CanActivate {
 }
 
 @Injectable()
+export class WorkerGuard implements CanActivate {
+  canActivate(context: ExecutionContext) {
+    const req = context.switchToHttp().getRequest();
+    const supplied = String(req.headers["x-worker-key"] || "");
+    const expected = String(process.env.WORKER_KEY || "");
+    if (!expected || supplied !== expected) throw new ForbiddenException("worker key invalid");
+    return true;
+  }
+}
+
+@Injectable()
 export class CryptoService {
   private key() {
     const raw = Buffer.from(process.env.CREDENTIAL_MASTER_KEY || "", "base64");
