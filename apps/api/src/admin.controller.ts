@@ -19,7 +19,7 @@ export class AdminController {
   async users(@Query("q") q = "") {
     const term = "%" + q.trim() + "%";
     const result = await this.db.query(
-      "SELECT u.id,u.user_code,u.email,u.status,a.id mt5_account_id,a.account_number,a.broker_server,a.mode FROM users u LEFT JOIN LATERAL (SELECT * FROM mt5_accounts m WHERE m.user_id=u.id ORDER BY created_at DESC LIMIT 1) a ON true WHERE u.user_code ILIKE $1 OR u.email ILIKE $1 OR a.account_number ILIKE $1 ORDER BY u.created_at DESC LIMIT 30",
+      "SELECT u.id,u.user_code,u.email,u.status,a.id mt5_account_id,a.account_number,a.broker_server,a.mode,s.subscription_id,s.plan_code,s.subscription_expires_at FROM users u LEFT JOIN LATERAL (SELECT * FROM mt5_accounts m WHERE m.user_id=u.id ORDER BY created_at DESC LIMIT 1) a ON true LEFT JOIN LATERAL (SELECT sub.id subscription_id,p.code plan_code,sub.expires_at subscription_expires_at FROM subscriptions sub JOIN plans p ON p.id=sub.plan_id WHERE sub.user_id=u.id ORDER BY sub.expires_at DESC LIMIT 1) s ON true WHERE u.user_code ILIKE $1 OR u.email ILIKE $1 OR a.account_number ILIKE $1 ORDER BY u.created_at DESC LIMIT 30",
       [term]
     );
     return result.rows;
@@ -122,6 +122,16 @@ export class AdminController {
       );
     }
     await this.audit("ADMIN", "SUSPEND_USER", "user", body.userId, {});
+    return { ok: true };
+  }
+
+  @Post("users/reactivate")
+  async reactivate(@Body() body: { userId: string }) {
+    await this.db.query(
+      "UPDATE users SET status='ACTIVE',updated_at=now() WHERE id=$1",
+      [body.userId]
+    );
+    await this.audit("ADMIN", "REACTIVATE_USER", "user", body.userId, {});
     return { ok: true };
   }
 
