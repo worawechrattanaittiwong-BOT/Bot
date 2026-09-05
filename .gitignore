@@ -1,0 +1,16 @@
+node_modules/
+.next/
+dist/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.ex5
+*.set
+*.ini
+runtime/
+secrets/
