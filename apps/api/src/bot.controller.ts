@@ -20,16 +20,16 @@ export class BotController {
     private readonly crypto: CryptoService
   ) {}
 
-  private async entitlement(userId: string) {
+  private async entitlement(userId: string, mt5AccountId: string | null, mode: string | null) {
     const sub = await this.db.one(
-      "SELECT s.id,s.expires_at,p.code,p.mode FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() ORDER BY s.expires_at DESC LIMIT 1",
-      [userId]
+      "SELECT s.id,s.expires_at,p.code,p.mode FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
+      [userId, mode]
     );
     if (sub) return { allowed: true, source: "SUBSCRIPTION", expiresAt: sub.expires_at };
 
     const trial = await this.db.one(
-      "SELECT id,status,duration_minutes,started_at,expires_at FROM trial_grants WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1",
-      [userId]
+      "SELECT id,status,duration_minutes,started_at,expires_at FROM trial_grants WHERE user_id=$1 AND ($2::uuid IS NULL OR mt5_account_id=$2) ORDER BY created_at DESC LIMIT 1",
+      [userId, mt5AccountId]
     );
     if (!trial) return { allowed: false, source: "NONE" };
     if (trial.status === "APPROVED") return { allowed: true, source: "TRIAL_READY", trialId: trial.id };
@@ -69,7 +69,7 @@ export class BotController {
       account,
       instance,
       settings: settings?.settings || null,
-      entitlement: await this.entitlement(userId)
+      entitlement: await this.entitlement(userId, account?.id || null, account?.mode || null)
     };
   }
 
@@ -133,15 +133,19 @@ export class BotController {
 
   @Post("start")
   async start(@Req() req: any) {
-    const access: any = await this.entitlement(req.user.sub);
-    if (!access.allowed) throw new ConflictException("trial or subscription required");
+    const instance = await this.getInstance(req.user.sub);
+    const access: any = await this.entitlement(
+      req.user.sub,
+      instance.mt5_account_id,
+      instance.mode
+    );
+    if (!access.allowed) throw new ConflictException("trial or matching subscription required");
     if (access.source === "TRIAL_READY") {
       await this.db.query(
         "UPDATE trial_grants SET status='ACTIVE',started_at=now(),expires_at=now() + (duration_minutes || ' minutes')::interval WHERE id=$1 AND status='APPROVED'",
         [access.trialId]
       );
     }
-    const instance = await this.getInstance(req.user.sub);
     await this.db.query(
       "UPDATE bot_instances SET desired_state='RUNNING',lock_owner=id::text WHERE id=$1",
       [instance.id]
@@ -186,7 +190,7 @@ export class BotController {
 
   private async getInstance(userId: string) {
     const instance = await this.db.one(
-      "SELECT bi.id FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE a.user_id=$1 ORDER BY bi.created_at DESC LIMIT 1",
+      "SELECT bi.id,bi.mt5_account_id,bi.mode FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE a.user_id=$1 ORDER BY bi.created_at DESC LIMIT 1",
       [userId]
     );
     if (!instance) throw new ConflictException("connect MT5 first");
