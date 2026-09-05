@@ -25,6 +25,20 @@ export class AdminController {
     return result.rows;
   }
 
+  @Get("system")
+  async system() {
+    const users = await this.db.one(
+      "SELECT count(*)::int total, count(*) FILTER (WHERE status='ACTIVE')::int active FROM users"
+    );
+    const bots = await this.db.one(
+      "SELECT count(*)::int total, count(*) FILTER (WHERE actual_state='RUNNING')::int running, count(*) FILTER (WHERE actual_state='OFFLINE')::int offline FROM bot_instances"
+    );
+    const workers = await this.db.query(
+      "SELECT runner_id,region,hostname,capacity,active_instances,status,last_seen_at, CASE WHEN last_seen_at > now() - interval '30 seconds' THEN 'ONLINE' ELSE 'STALE' END health FROM worker_nodes ORDER BY runner_id"
+    );
+    return { users, bots, workers: workers.rows };
+  }
+
   @Post("trials/grant")
   async grantTrial(@Body() body: {
     mt5AccountId: string;
