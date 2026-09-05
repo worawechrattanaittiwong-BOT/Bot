@@ -73,7 +73,7 @@ export class EaController {
     );
 
     const cmd = await this.db.one(
-      "SELECT id,command,payload FROM bot_commands WHERE bot_instance_id=$1 AND status='PENDING' ORDER BY id LIMIT 1",
+      "SELECT id,command,payload FROM bot_commands WHERE bot_instance_id=$1 AND (status='PENDING' OR (status='DELIVERED' AND delivered_at < now() - interval '10 seconds')) ORDER BY id LIMIT 1",
       [instance.id]
     );
     if (cmd) {
