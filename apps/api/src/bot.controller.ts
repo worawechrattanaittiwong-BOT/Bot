@@ -94,11 +94,22 @@ export class BotController {
       [account.id, mode, this.crypto.sha256(installToken)]
     );
     await this.db.query("INSERT INTO bot_settings(bot_instance_id) VALUES($1)", [instance.id]);
+
+    if (mode === "CLOUD") {
+      const secret = this.crypto.encrypt(installToken);
+      await this.db.query(
+        "INSERT INTO bot_instance_secrets(bot_instance_id,ciphertext,iv,auth_tag) VALUES($1,$2,$3,$4)",
+        [instance.id, secret.ciphertext, secret.iv, secret.authTag]
+      );
+    }
+
     return {
       account,
       instance,
-      installToken,
-      note: "Install token is shown once. Keep it private."
+      installToken: mode === "LOCAL" ? installToken : null,
+      note: mode === "LOCAL"
+        ? "Install token is shown once. Keep it private."
+        : "Cloud install token is held encrypted for the assigned worker."
     };
   }
 
