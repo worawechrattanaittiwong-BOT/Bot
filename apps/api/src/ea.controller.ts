@@ -25,15 +25,15 @@ export class EaController {
     return row;
   }
 
-  private async hasAccess(userId: string) {
+  private async hasAccess(userId: string, mt5AccountId: string, mode: string) {
     const sub = await this.db.one(
-      "SELECT 1 FROM subscriptions WHERE user_id=$1 AND status='ACTIVE' AND starts_at<=now() AND expires_at>now() LIMIT 1",
-      [userId]
+      "SELECT 1 FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND p.mode=$2 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() LIMIT 1",
+      [userId, mode]
     );
     if (sub) return true;
     const trial = await this.db.one(
-      "SELECT 1 FROM trial_grants WHERE user_id=$1 AND status='ACTIVE' AND expires_at>now() LIMIT 1",
-      [userId]
+      "SELECT 1 FROM trial_grants WHERE user_id=$1 AND mt5_account_id=$2 AND status='ACTIVE' AND expires_at>now() LIMIT 1",
+      [userId, mt5AccountId]
     );
     return !!trial;
   }
@@ -46,7 +46,11 @@ export class EaController {
     metrics?: Record<string, any>;
   }) {
     const instance = await this.instance(body.instanceId, body.installToken);
-    const access = await this.hasAccess(instance.user_id);
+    const access = await this.hasAccess(
+      instance.user_id,
+      instance.mt5_account_id,
+      instance.mode
+    );
 
     if (!access && instance.desired_state === "RUNNING") {
       await this.db.query(
