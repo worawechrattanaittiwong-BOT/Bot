@@ -57,6 +57,33 @@ export default function AdminPage() {
     }
   }
 
+  async function extend(user: any, addDays: number) {
+    if (!user.subscription_id) return setMessage("User นี้ยังไม่มี subscription ให้ต่ออายุ");
+    try {
+      await adminApi("/admin/subscriptions/extend", adminKey, {
+        method: "POST",
+        body: JSON.stringify({ subscriptionId: user.subscription_id, days: addDays })
+      });
+      setMessage("เพิ่ม " + addDays + " วันให้ " + user.user_code + " แล้ว");
+      await search();
+    } catch (e: any) {
+      setMessage(e.message);
+    }
+  }
+
+  async function reactivate(user: any) {
+    try {
+      await adminApi("/admin/users/reactivate", adminKey, {
+        method: "POST",
+        body: JSON.stringify({ userId: user.id })
+      });
+      setMessage("เปิด User " + user.user_code + " กลับมาแล้ว");
+      await search();
+    } catch (e: any) {
+      setMessage(e.message);
+    }
+  }
+
   async function suspend(user: any) {
     if (!confirm("Suspend " + user.user_code + " และ Safe Stop bot?")) return;
     try {
@@ -139,7 +166,7 @@ export default function AdminPage() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>USER</th><th>EMAIL</th><th>MT5</th><th>SERVER</th><th>MODE</th><th>ACTIONS</th></tr>
+                <tr><th>USER</th><th>EMAIL</th><th>MT5</th><th>MODE</th><th>SUBSCRIPTION</th><th>ACTIONS</th></tr>
               </thead>
               <tbody>
                 {users.map(user=>(
@@ -147,13 +174,20 @@ export default function AdminPage() {
                     <td><b>{user.user_code}</b><br/><span className="muted">{user.status}</span></td>
                     <td>{user.email}</td>
                     <td>{user.account_number || "—"}</td>
-                    <td>{user.broker_server || "—"}</td>
-                    <td>{user.mode || "—"}</td>
+                    <td>{user.mode || "—"}<br/><span className="muted">{user.broker_server || ""}</span></td>
+                    <td>
+                      {user.plan_code || "—"}
+                      {user.subscription_expires_at && <><br/><span className="muted">หมด {new Date(user.subscription_expires_at).toLocaleString("th-TH")}</span></>}
+                    </td>
                     <td>
                       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                         <button className="btn" onClick={()=>grantTrial(user)}>+ Trial 3h</button>
                         <button className="btn primary" onClick={()=>activate(user)}>Activate</button>
-                        <button className="btn danger" onClick={()=>suspend(user)}>Suspend</button>
+                        <button className="btn" onClick={()=>extend(user,7)}>+7 วัน</button>
+                        <button className="btn" onClick={()=>extend(user,30)}>+30 วัน</button>
+                        {user.status === "SUSPENDED"
+                          ? <button className="btn primary" onClick={()=>reactivate(user)}>Reactivate</button>
+                          : <button className="btn danger" onClick={()=>suspend(user)}>Suspend</button>}
                       </div>
                     </td>
                   </tr>
