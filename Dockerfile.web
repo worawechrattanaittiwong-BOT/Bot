@@ -1,0 +1,23 @@
+FROM node:20-alpine AS build
+WORKDIR /app
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+COPY package.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN npm install
+COPY apps/web apps/web
+RUN npm run build -w @bot/web
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN npm install --omit=dev
+COPY --from=build /app/apps/web/.next apps/web/.next
+COPY --from=build /app/apps/web/package.json apps/web/package.json
+COPY --from=build /app/apps/web/next.config.mjs apps/web/next.config.mjs
+EXPOSE 3000
+CMD ["npm","run","start","-w","@bot/web"]
