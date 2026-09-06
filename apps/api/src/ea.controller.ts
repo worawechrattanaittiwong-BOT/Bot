@@ -100,6 +100,34 @@ export class EaController {
     };
   }
 
+  @Post("agent-heartbeat")
+  async agentHeartbeat(@Body() body: {
+    instanceId: string;
+    installToken: string;
+    agentVersion?: string;
+    terminalPath?: string;
+    eaHash?: string;
+    hostname?: string;
+  }) {
+    const instance = await this.instance(body.instanceId, body.installToken);
+    await this.db.query(
+      "UPDATE bot_instances SET agent_last_seen_at=now(),agent_version=$2,agent_terminal_path=$3,agent_ea_hash=$4 WHERE id=$1",
+      [
+        instance.id,
+        String(body.agentVersion || "").slice(0, 32) || null,
+        String(body.terminalPath || "").slice(0, 1000) || null,
+        String(body.eaHash || "").slice(0, 128) || null
+      ]
+    );
+
+    return {
+      ok: true,
+      instanceId: instance.id,
+      eaDownloadUrl: "/downloads/FastBasketBot.mq5",
+      agentDownloadUrl: "/downloads/SCENOVA-Agent.ps1"
+    };
+  }
+
   @Post("ack")
   async ack(@Body() body: {
     instanceId: string;
