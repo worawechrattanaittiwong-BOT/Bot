@@ -256,10 +256,11 @@ void SendHeartbeat()
 
    string stateText = StateText();
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"momentumPoints\":%.1f}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"momentumPoints\":%.1f}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
+      IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)),
       _Symbol,
       AccountInfoString(ACCOUNT_SERVER),
       AccountInfoString(ACCOUNT_CURRENCY),
