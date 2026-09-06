@@ -1,19 +1,9 @@
+import SiteHeader from "../components/SiteHeader";
+
 export default function Home() {
   return (
     <>
-      <header className="topbar">
-        <div className="shell topbar-inner">
-          <a className="brand-lockup" href="/">
-            <span className="brand-mark">◆</span>
-            <span><strong>SCENOVA</strong><small>MT5 BOT EA</small></span>
-          </a>
-          <nav className="nav">
-            <a className="btn ghost hide-sm" href="#how">วิธีใช้งาน</a>
-            <a className="btn" href="/login">เข้าสู่ระบบ</a>
-            <a className="btn primary" href="/login?mode=register">เริ่มใช้งาน</a>
-          </nav>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="shell">
         <section className="hero">
