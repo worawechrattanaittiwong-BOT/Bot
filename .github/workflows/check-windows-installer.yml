@@ -66,3 +66,21 @@ jobs:
             throw "DPAPI round-trip failed"
           }
           Write-Host "OK: Windows DPAPI CurrentUser round-trip" -ForegroundColor Green
+
+
+      - name: ASCII compatibility check
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $files = @(
+            "apps/web/public/downloads/SCENOVA-MT5-Setup.ps1",
+            "apps/web/public/downloads/SCENOVA-Agent.ps1"
+          )
+
+          foreach ($file in $files) {
+            $text = [System.IO.File]::ReadAllText((Resolve-Path $file))
+            if ($text.ToCharArray() | Where-Object { [int]$_ -gt 127 }) {
+              throw "$file contains non-ASCII characters. Keep public PowerShell scripts ASCII-only for Windows PowerShell 5.1 compatibility."
+            }
+            Write-Host "OK: ASCII-safe $file" -ForegroundColor Green
+          }
