@@ -73,4 +73,6 @@ jobs:
             exit 0
           }
           git commit -m "build: publish private FastBasketBot.ex5 [skip ea build]"
+          git fetch origin main
+          git rebase origin/main
           git push origin HEAD:main
