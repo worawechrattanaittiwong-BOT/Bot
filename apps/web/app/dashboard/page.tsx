@@ -469,14 +469,21 @@ export default function DashboardPage() {
                 <section className="panel purple" style={{marginTop:16}}>
                   <div className="panel-head"><div><div className="eyebrow">LOCAL CONNECTION</div><h2>เชื่อม EA ให้เสร็จใน 4 ขั้น</h2></div></div>
                   <div className="instruction-list">
-                    <div><span>1</span><div><b>อนุญาต WebRequest ใน MT5</b><small>Tools → Options → Expert Advisors → Allow WebRequest แล้วเพิ่ม https://snvea-bot.online</small></div></div>
-                    <div><span>2</span><div><b>เปิด FastBasketBot บนกราฟ</b><small>Compile EA แล้ว Attach ลงกราฟที่ต้องการใช้งาน</small></div></div>
-                    <div><span>3</span><div><b>สร้างไฟล์ตั้งค่า</b><small>กดปุ่มด้านล่าง ระบบจะสร้าง Token ใหม่และดาวน์โหลด .set</small></div></div>
-                    <div><span>4</span><div><b>Load .set และเปิด Algo Trading</b><small>เมื่อ EA ส่ง Heartbeat เข้ามา สถานะจะเปลี่ยนเป็น “เชื่อมต่อแล้ว” อัตโนมัติ</small></div></div>
+                    <div><span>1</span><div><b>ดาวน์โหลดและติดตั้ง SCENOVA EA</b><small>ดาวน์โหลด FastBasketBot.mq5 จากปุ่มด้านล่าง แล้ววางใน MQL5 → Experts → SCENOVA และ Compile ให้ได้ 0 errors</small></div></div>
+                    <div><span>2</span><div><b>อนุญาต WebRequest ใน MT5</b><small>Tools → Options → Expert Advisors → Allow WebRequest แล้วเพิ่ม https://snvea-bot.online</small></div></div>
+                    <div><span>3</span><div><b>สร้างไฟล์เชื่อมต่อ .set</b><small>สร้าง Install Token สำหรับบัญชีนี้ แล้วดาวน์โหลดไฟล์ .set จากเว็บ</small></div></div>
+                    <div><span>4</span><div><b>Attach EA + Load .set + เปิด Algo Trading</b><small>เมื่อ EA ส่ง Heartbeat เข้ามา สถานะจะเปลี่ยนเป็น “เชื่อมต่อแล้ว” อัตโนมัติ</small></div></div>
                   </div>
                   {activationMessage && <div className="notice good">{activationMessage}</div>}
+                  <div className="ea-download-card">
+                    <div>
+                      <b>SCENOVA FastBasketBot EA</b>
+                      <small>ตัวโปรแกรม EA สำหรับ MetaTrader 5 — ติดตั้งครั้งเดียวต่อเครื่อง</small>
+                    </div>
+                    <a className="btn primary" href="/downloads/FastBasketBot.mq5" download>↓ ดาวน์โหลด FastBasketBot.mq5</a>
+                  </div>
                   <div className="primary-actions">
-                    <button className="btn primary btn-lg" disabled={busy} onClick={rotateInstallToken}>{busy?"กำลังสร้าง...":"สร้างรหัสเชื่อมต่อใหม่"}</button>
+                    <button className="btn" disabled={busy} onClick={rotateInstallToken}>{busy?"กำลังสร้าง...":"สร้างรหัสเชื่อมต่อใหม่"}</button>
                     <button className="btn download-set-btn" disabled={!installToken || !installInstanceId} onClick={()=>downloadEaSet()}>↓ ดาวน์โหลดไฟล์ .set</button>
                   </div>
                   {mt5ApiBase && <div className="connection-url"><span>API สำหรับ EA</span><code>{mt5ApiBase}</code></div>}
