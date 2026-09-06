@@ -19,7 +19,7 @@ export class AdminController {
   async users(@Query("q") q = "") {
     const term = "%" + q.trim() + "%";
     const result = await this.db.query(
-      "SELECT u.id,u.user_code,u.email,u.status,a.id mt5_account_id,a.account_number,a.broker_server,a.mode,s.subscription_id,s.plan_code,s.subscription_expires_at FROM users u LEFT JOIN LATERAL (SELECT * FROM mt5_accounts m WHERE m.user_id=u.id ORDER BY created_at DESC LIMIT 1) a ON true LEFT JOIN LATERAL (SELECT sub.id subscription_id,p.code plan_code,sub.expires_at subscription_expires_at FROM subscriptions sub JOIN plans p ON p.id=sub.plan_id WHERE sub.user_id=u.id ORDER BY sub.expires_at DESC LIMIT 1) s ON true WHERE u.user_code ILIKE $1 OR u.email ILIKE $1 OR a.account_number ILIKE $1 ORDER BY u.created_at DESC LIMIT 30",
+      "SELECT u.id,u.user_code,u.email,u.role,u.status,a.id mt5_account_id,a.account_number,a.broker_server,a.mode,bi.actual_state,bi.desired_state,(bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') mt5_online,s.subscription_id,s.plan_code,s.subscription_expires_at,t.trial_status,t.trial_expires_at FROM users u LEFT JOIN LATERAL (SELECT * FROM mt5_accounts m WHERE m.user_id=u.id ORDER BY created_at DESC LIMIT 1) a ON true LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id LEFT JOIN LATERAL (SELECT sub.id subscription_id,p.code plan_code,sub.expires_at subscription_expires_at FROM subscriptions sub JOIN plans p ON p.id=sub.plan_id WHERE sub.user_id=u.id ORDER BY sub.expires_at DESC LIMIT 1) s ON true LEFT JOIN LATERAL (SELECT tg.status trial_status,tg.expires_at trial_expires_at FROM trial_grants tg WHERE tg.user_id=u.id ORDER BY tg.created_at DESC LIMIT 1) t ON true WHERE u.status<>'DELETED' AND (u.user_code ILIKE $1 OR u.email ILIKE $1 OR a.account_number ILIKE $1) ORDER BY u.created_at DESC LIMIT 30",
       [term]
     );
     return result.rows;
@@ -28,7 +28,7 @@ export class AdminController {
   @Get("system")
   async system() {
     const users = await this.db.one(
-      "SELECT count(*)::int total, count(*) FILTER (WHERE status='ACTIVE')::int active FROM users"
+      "SELECT count(*) FILTER (WHERE status<>'DELETED')::int total, count(*) FILTER (WHERE status='ACTIVE')::int active FROM users"
     );
     const bots = await this.db.one(
       "SELECT count(*)::int total, count(*) FILTER (WHERE actual_state='RUNNING')::int running, count(*) FILTER (WHERE actual_state='OFFLINE')::int offline FROM bot_instances"
@@ -139,6 +139,56 @@ export class AdminController {
       );
     }
     await this.audit("ADMIN", "SUSPEND_USER", "user", body.userId, {});
+    return { ok: true };
+  }
+
+  @Post("users/delete")
+  async deleteUser(@Body() body: { userId: string }) {
+    const user = await this.db.one(
+      "SELECT id,user_code,email,role,status FROM users WHERE id=$1",
+      [body.userId]
+    );
+    if (!user) throw new ConflictException("user not found");
+    if (user.role === "OWNER" || user.role === "ADMIN") {
+      throw new ConflictException("owner/admin account cannot be deleted here");
+    }
+
+    const active = await this.db.one(
+      "SELECT count(*)::int active_count FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE a.user_id=$1 AND (bi.actual_state='RUNNING' OR bi.desired_state='RUNNING' OR COALESCE((bi.metrics->>'positions')::int,0)>0)",
+      [body.userId]
+    );
+    if ((active?.active_count || 0) > 0) {
+      throw new ConflictException("stop the bot and close all positions before deleting this account");
+    }
+
+    const instances = await this.db.query(
+      "SELECT bi.id FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE a.user_id=$1",
+      [body.userId]
+    );
+    for (const instance of instances.rows) {
+      await this.db.query(
+        "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1",
+        [instance.id]
+      );
+      await this.db.query(
+        "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
+        [instance.id]
+      );
+    }
+
+    await this.db.query(
+      "UPDATE subscriptions SET status='CANCELLED' WHERE user_id=$1 AND status='ACTIVE'",
+      [body.userId]
+    );
+    await this.db.query(
+      "UPDATE users SET status='DELETED',updated_at=now() WHERE id=$1",
+      [body.userId]
+    );
+    await this.audit("ADMIN", "DELETE_USER", "user", body.userId, {
+      userCode: user.user_code,
+      email: user.email,
+      preservedTrialHistory: true
+    });
     return { ok: true };
   }
 
