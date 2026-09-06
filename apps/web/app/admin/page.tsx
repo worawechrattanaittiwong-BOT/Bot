@@ -169,6 +169,20 @@ export default function AdminPage() {
           ))}
         </nav>
 
+        <div className="owner-nav-label owner-nav-label-secondary">MY SYSTEM</div>
+        <nav className="side-nav owner-nav">
+          <a className="owner-nav-item owner-nav-link" href="/dashboard">
+            <span className="owner-nav-icon">▣</span>
+            <span className="owner-nav-copy"><b>บัญชีเทรดของฉัน</b><small>MT5, EA, Settings, Trial</small></span>
+            <span className="owner-nav-caret">›</span>
+          </a>
+          <a className="owner-nav-item owner-nav-link" href="/">
+            <span className="owner-nav-icon">↗</span>
+            <span className="owner-nav-copy"><b>หน้าเว็บไซต์</b><small>หน้าแรก SCENOVA</small></span>
+            <span className="owner-nav-caret">›</span>
+          </a>
+        </nav>
+
         <div className="owner-profile">
           <div className="owner-avatar">O</div>
           <div><small>System role</small><b>OWNER</b></div>
@@ -182,8 +196,10 @@ export default function AdminPage() {
           <div className="brand-lockup"><span className="brand-mark">◆</span><span><strong>SCENOVA</strong><small>OWNER</small></span></div>
           <button className="btn ghost" onClick={logout}>ออก</button>
         </div>
-        <div className="mobile-only mobile-nav">
+        <div className="mobile-only mobile-nav owner-mobile-nav">
           {nav.map(item=><button key={item.id} className={activeMenu===item.id?"active":""} onClick={()=>setActiveMenu(item.id)}>{item.label}</button>)}
+          <a href="/dashboard">MT5 ของฉัน</a>
+          <a href="/">เว็บไซต์</a>
         </div>
 
         <header className="owner-head">
