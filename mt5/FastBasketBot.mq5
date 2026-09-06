@@ -81,6 +81,21 @@ int OnInit()
    g_entryMode = InpEntryMode;
 
    ResetDailyBaseline();
+
+   if(!MQLInfoInteger(MQL_TESTER))
+   {
+      bool apiOk = (StringFind(InpApiBase, "https://") == 0 || StringFind(InpApiBase, "http://") == 0);
+      if(!apiOk || StringLen(InpInstanceId) < 8 || StringLen(InpInstallToken) < 8)
+      {
+         Print("SCENOVA CONFIG ERROR: connection settings are missing. Load SCENOVA-FastBasketBot.set in Inputs.");
+         Comment(
+            "SCENOVA: CONFIG NOT LOADED\n",
+            "Open EA Inputs > Load > SCENOVA-FastBasketBot.set"
+         );
+         return(INIT_PARAMETERS_INCORRECT);
+      }
+   }
+
    EventSetTimer(1);
 
    // Strategy Tester cannot use WebRequest. In tester mode only,
@@ -104,6 +119,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
+   Comment("");
 }
 
 void OnTick()
@@ -261,10 +277,36 @@ void SendHeartbeat()
    );
 
    string response = "";
-   int code = HttpPostJson(InpApiBase + "/api/ea/heartbeat", payload, response);
+   string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";
+   int code = HttpPostJson(heartbeatUrl, payload, response);
+   int webError = GetLastError();
+
    if(code < 200 || code >= 300)
    {
-      Print("Heartbeat failed HTTP=", code, " error=", GetLastError());
+      Print("SCENOVA heartbeat failed. HTTP=", code, " error=", webError, " URL=", heartbeatUrl);
+
+      if(code == -1)
+      {
+         Comment(
+            "SCENOVA: WEBREQUEST BLOCKED / NETWORK ERROR\n",
+            "Allow this URL in MT5: ", InpApiBase, "\n",
+            "MT5 error: ", IntegerToString(webError)
+         );
+      }
+      else if(code == 401)
+      {
+         Comment(
+            "SCENOVA: AUTHENTICATION FAILED\n",
+            "Reinstall SCENOVA and reload the newest .set file."
+         );
+      }
+      else
+      {
+         Comment(
+            "SCENOVA: NOT CONNECTED\n",
+            "HTTP ", IntegerToString(code), " | ", heartbeatUrl
+         );
+      }
       return;
    }
 
@@ -288,6 +330,12 @@ void SendHeartbeat()
       g_state = STATE_SAFE_STOP;
       CloseAllBasket("REMOTE_CLOSE_ALL");
    }
+
+   Comment(
+      "SCENOVA: CONNECTED\n",
+      "Account: ", IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), "\n",
+      "State: ", StateText()
+   );
 
    long commandId = (long)JsonNumber(response, "commandId", 0.0);
    if(commandId > 0)
