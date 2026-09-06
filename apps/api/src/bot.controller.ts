@@ -8,7 +8,8 @@ import {
   Req,
   UseGuards
 } from "@nestjs/common";
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { DbService } from "./db.service";
 import { CryptoService, JwtGuard } from "./security";
 
@@ -19,6 +20,12 @@ export class BotController {
     private readonly db: DbService,
     private readonly crypto: CryptoService
   ) {}
+
+  private productionEaHash() {
+    const path = process.env.EA_ARTIFACT_PATH || "/app/apps/api/artifacts/FastBasketBot.ex5";
+    if (!existsSync(path)) return null;
+    return createHash("sha256").update(readFileSync(path)).digest("hex");
+  }
 
   private async entitlement(userId: string, mt5AccountId: string | null, mode: string | null) {
     const sub = await this.db.one(
@@ -191,6 +198,19 @@ export class BotController {
       instance.mode
     );
     if (!access.allowed) throw new ConflictException("trial or matching subscription required");
+
+    if (instance.mode === "LOCAL") {
+      const lastAgentSeen = instance.agent_last_seen_at ? new Date(instance.agent_last_seen_at).getTime() : 0;
+      if (!lastAgentSeen || Date.now() - lastAgentSeen > 30 * 60 * 1000) {
+        throw new ConflictException("SCENOVA Desktop Agent is offline; repair or reinstall the Local MT5 connection");
+      }
+
+      const expectedHash = this.productionEaHash();
+      if (!expectedHash || !instance.agent_ea_hash || String(instance.agent_ea_hash).toLowerCase() !== expectedHash) {
+        throw new ConflictException("SCENOVA EA integrity/version check failed; update or repair the EA before starting");
+      }
+    }
+
     if (access.source === "TRIAL_READY") {
       await this.db.query(
         "UPDATE trial_grants SET status='ACTIVE',started_at=now(),expires_at=now() + (duration_minutes || ' minutes')::interval WHERE id=$1 AND status='APPROVED'",
@@ -241,7 +261,7 @@ export class BotController {
 
   private async getInstance(userId: string) {
     const instance = await this.db.one(
-      "SELECT bi.id,bi.mt5_account_id,bi.mode FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE a.user_id=$1 ORDER BY bi.created_at DESC LIMIT 1",
+      "SELECT bi.id,bi.mt5_account_id,bi.mode,bi.agent_last_seen_at,bi.agent_ea_hash FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE a.user_id=$1 ORDER BY bi.created_at DESC LIMIT 1",
       [userId]
     );
     if (!instance) throw new ConflictException("connect MT5 first");
