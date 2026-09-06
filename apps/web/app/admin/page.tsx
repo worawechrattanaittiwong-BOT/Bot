@@ -4,7 +4,6 @@ import { FormEvent, useState } from "react";
 import { adminApi } from "../../lib/api";
 
 export default function AdminPage() {
-  const [adminKey, setAdminKey] = useState("");
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<any[]>([]);
   const [message, setMessage] = useState("");
@@ -18,8 +17,8 @@ export default function AdminPage() {
     e?.preventDefault();
     try {
       const [userRows, systemStatus] = await Promise.all([
-        adminApi("/admin/users?q=" + encodeURIComponent(query), adminKey),
-        adminApi("/admin/system", adminKey)
+        adminApi("/admin/users?q=" + encodeURIComponent(query)),
+        adminApi("/admin/system")
       ]);
       setUsers(userRows);
       setSystem(systemStatus);
@@ -32,7 +31,7 @@ export default function AdminPage() {
   async function grantTrial(user: any) {
     if (!user.mt5_account_id) return setMessage("User ยังไม่ได้เชื่อม MT5");
     try {
-      await adminApi("/admin/trials/grant", adminKey, {
+      await adminApi("/admin/trials/grant", {
         method: "POST",
         body: JSON.stringify({
           mt5AccountId: user.mt5_account_id,
@@ -48,7 +47,7 @@ export default function AdminPage() {
 
   async function activate(user: any) {
     try {
-      await adminApi("/admin/subscriptions/activate", adminKey, {
+      await adminApi("/admin/subscriptions/activate", {
         method: "POST",
         body: JSON.stringify({
           userId: user.id,
@@ -68,7 +67,7 @@ export default function AdminPage() {
   async function extend(user: any, addDays: number) {
     if (!user.subscription_id) return setMessage("User นี้ยังไม่มี subscription ให้ต่ออายุ");
     try {
-      await adminApi("/admin/subscriptions/extend", adminKey, {
+      await adminApi("/admin/subscriptions/extend", {
         method: "POST",
         body: JSON.stringify({ subscriptionId: user.subscription_id, days: addDays })
       });
@@ -81,7 +80,7 @@ export default function AdminPage() {
 
   async function reactivate(user: any) {
     try {
-      await adminApi("/admin/users/reactivate", adminKey, {
+      await adminApi("/admin/users/reactivate", {
         method: "POST",
         body: JSON.stringify({ userId: user.id })
       });
@@ -95,7 +94,7 @@ export default function AdminPage() {
   async function suspend(user: any) {
     if (!confirm("Suspend " + user.user_code + " และ Safe Stop bot?")) return;
     try {
-      await adminApi("/admin/users/suspend", adminKey, {
+      await adminApi("/admin/users/suspend", {
         method: "POST",
         body: JSON.stringify({ userId: user.id })
       });
@@ -109,7 +108,7 @@ export default function AdminPage() {
   return (
     <div className="app-wrap">
       <aside className="sidebar">
-        <div className="side-brand brand"><b>◆</b> ADMIN // BOT</div>
+        <div className="side-brand brand"><b>◆</b> SCENOVA // OWNER</div>
         <nav className="side-nav">
           <a className="side-link active" href="/admin">Users & Access</a>
           <a className="side-link" href="/dashboard">Customer Dashboard</a>
@@ -119,20 +118,16 @@ export default function AdminPage() {
       <main className="main">
         <header className="page-head">
           <div>
-            <div className="eyebrow">SYSTEM CONTROL // ADMIN</div>
-            <h2 style={{marginTop:7}}>จัดการ Trial และสมาชิก</h2>
+            <div className="eyebrow">SCENOVA // SYSTEM OWNER</div>
+            <h2 style={{marginTop:7}}>ศูนย์ควบคุมเจ้าของระบบ</h2>
           </div>
-          <span className="badge"><span className="dot red"/> ADMIN ONLY</span>
+          <span className="badge"><span className="dot green"/> OWNER</span>
         </header>
 
         <section className="panel purple">
           <div className="form-grid">
-            <div className="field">
-              <label>Admin Key</label>
-              <input className="input" type="password" value={adminKey} onChange={e=>setAdminKey(e.target.value)} placeholder="ADMIN_KEY จาก server env" />
-            </div>
             <form className="field" onSubmit={search}>
-              <label>ค้นหา User ID / Email / MT5</label>
+              <label>ค้นหาลูกค้า — User ID / Email / MT5</label>
               <div style={{display:"flex",gap:8}}>
                 <input className="input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="BOT-..., email, MT5" />
                 <button className="btn primary">ค้นหา</button>
