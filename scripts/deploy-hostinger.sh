@@ -22,6 +22,8 @@ if [ -z "$PUBLIC_IP" ]; then
   PUBLIC_IP="$(hostname -I | awk '{print $1}')"
 fi
 
+BOT_WEB_PORT="${BOT_WEB_PORT:-3100}"
+
 if [ ! -f .env.hostinger ]; then
   umask 077
   POSTGRES_PASSWORD="$(openssl rand -hex 24)"
@@ -35,10 +37,19 @@ JWT_SECRET=$JWT_SECRET
 ADMIN_KEY=$ADMIN_KEY
 WORKER_KEY=$WORKER_KEY
 CREDENTIAL_MASTER_KEY=$CREDENTIAL_MASTER_KEY
-PUBLIC_WEB_URL=http://$PUBLIC_IP:3000
-WEB_ORIGIN=http://$PUBLIC_IP:3000
+BOT_WEB_PORT=$BOT_WEB_PORT
+PUBLIC_WEB_URL=http://$PUBLIC_IP:$BOT_WEB_PORT
+WEB_ORIGIN=http://$PUBLIC_IP:$BOT_WEB_PORT
 EOF
 fi
+
+if grep -q '^BOT_WEB_PORT=' .env.hostinger; then
+  sed -i -E "s#^BOT_WEB_PORT=.*#BOT_WEB_PORT=$BOT_WEB_PORT#" .env.hostinger
+else
+  echo "BOT_WEB_PORT=$BOT_WEB_PORT" >> .env.hostinger
+fi
+sed -i -E "s#^PUBLIC_WEB_URL=.*#PUBLIC_WEB_URL=http://$PUBLIC_IP:$BOT_WEB_PORT#" .env.hostinger
+sed -i -E "s#^WEB_ORIGIN=.*#WEB_ORIGIN=http://$PUBLIC_IP:$BOT_WEB_PORT#" .env.hostinger
 
 set -a
 . ./.env.hostinger
@@ -60,8 +71,8 @@ docker compose --env-file .env.hostinger -f "$COMPOSE" up -d --build api web
 echo ""
 echo "========================================"
 echo "Bot SaaS is starting on Hostinger VPS"
-echo "Web: http://$PUBLIC_IP:3000"
-echo "API health through web: http://$PUBLIC_IP:3000/backend/api/health"
+echo "Web: http://$PUBLIC_IP:$BOT_WEB_PORT"
+echo "API health through web: http://$PUBLIC_IP:$BOT_WEB_PORT/backend/api/health"
 echo "========================================"
 echo ""
 echo "Check status:"
