@@ -537,7 +537,7 @@ export default function DashboardPage() {
                     <div>
                       <div className="eyebrow">LOCAL CONNECTION</div>
                       <h2>ติดตั้ง SCENOVA บน MT5</h2>
-                      <p className="muted">แนะนำการติดตั้งอัตโนมัติ ระบบจะตรวจหา MT5, ลง EA, สร้างไฟล์เชื่อมต่อ และติดตั้ง Agent ให้เอง</p>
+                      <p className="muted">กดติดตั้งครั้งเดียว ระบบจะหา MT5 ในเครื่อง วาง EA และไฟล์ .set ไว้ในโฟลเดอร์ที่ถูกต้อง พร้อมเชื่อมบัญชีนี้ให้อัตโนมัติ</p>
                     </div>
                     <span className={"badge "+(isAgentOnline?"agent-online":"")}>
                       <span className={"dot "+(isAgentOnline?"green":"red")}/>
@@ -554,15 +554,15 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="auto-install-features">
-                      <span>✓ ตรวจหา MT5 อัตโนมัติ</span>
-                      <span>✓ ติดตั้ง FastBasketBot</span>
-                      <span>✓ สร้าง .set และผูกบัญชี</span>
-                      <span>✓ ติดตั้ง Agent อัปเดตอัตโนมัติ</span>
+                      <span>✓ หา MT5 ในเครื่องให้เอง</span>
+                      <span>✓ วาง FastBasketBot.ex5 ใน Experts\SCENOVA</span>
+                      <span>✓ วาง SCENOVA-FastBasketBot.set ใน Profiles\Presets</span>
+                      <span>✓ เชื่อมบัญชีและติดตั้ง Agent ให้อัตโนมัติ</span>
                     </div>
                     <button className="btn primary btn-lg auto-install-button" disabled={busy} onClick={downloadWindowsInstaller}>
                       {busy ? "กำลังเตรียม Installer..." : "↓ ติดตั้ง SCENOVA บน Windows"}
                     </button>
-                    <div className="help">หลังดาวน์โหลด ให้ดับเบิลคลิก <b>SCENOVA-MT5-Installer.cmd</b> ได้เลย — ติดตั้งเฉพาะ Windows User ปัจจุบัน ไม่ต้องใช้ Administrator/UAC</div>
+                    <div className="help">หลังดาวน์โหลด ให้ดับเบิลคลิก <b>SCENOVA-MT5-Installer.cmd</b> แล้วรอจนขึ้นคำว่า “ติดตั้ง SCENOVA สำเร็จแล้ว” ไม่ต้องย้ายไฟล์ EA หรือ .set เอง</div>
                   </div>
 
                   {isAgentOnline && (
@@ -579,27 +579,54 @@ export default function DashboardPage() {
 
                   {activationMessage && <div className="notice good">{activationMessage}</div>}
 
-                  <div className="final-mt5-steps">
-                    <div><span>1</span><div><b>เปิด MT5 หลังติดตั้ง</b><small>Navigator → Expert Advisors → SCENOVA → FastBasketBot</small></div></div>
-                    <div><span>2</span><div><b>อนุญาต WebRequest</b><small>Tools → Options → Expert Advisors → เพิ่ม https://snvea-bot.online</small></div></div>
-                    <div><span>3</span><div><b>Attach EA และเปิด Algo Trading</b><small>Load SCENOVA-FastBasketBot.set แล้วสถานะเว็บจะเปลี่ยนเป็น “เชื่อมต่อแล้ว”</small></div></div>
+                  <div className="human-setup-guide">
+                    <div className="guide-title">
+                      <div>
+                        <div className="eyebrow">หลังติดตั้งเสร็จ</div>
+                        <h3>เปิดใช้งานใน MT5 ตามนี้</h3>
+                      </div>
+                      <span className="guide-note">ไม่ต้องหาไฟล์หรือย้ายไฟล์เอง</span>
+                    </div>
+
+                    <div className="human-steps">
+                      <div className="human-step">
+                        <span>1</span>
+                        <div><b>เปิด MT5 ใหม่</b><small>ถ้า MT5 เปิดค้างอยู่ ให้ปิดแล้วเปิดใหม่ หรือคลิกขวาที่ Navigator แล้วกด Refresh</small></div>
+                      </div>
+                      <div className="human-step">
+                        <span>2</span>
+                        <div><b>อนุญาตให้ EA ติดต่อเว็บ SCENOVA</b><small>ไปที่ Tools → Options → Expert Advisors → ติ๊ก Allow WebRequest แล้วเพิ่ม <code>https://snvea-bot.online</code></small></div>
+                      </div>
+                      <div className="human-step">
+                        <span>3</span>
+                        <div><b>เอา FastBasketBot ลงกราฟ</b><small>Navigator → Expert Advisors → SCENOVA → ลาก <b>FastBasketBot</b> ไปวางบนกราฟที่ต้องการเทรด</small></div>
+                      </div>
+                      <div className="human-step">
+                        <span>4</span>
+                        <div><b>โหลดไฟล์ตั้งค่าที่ระบบวางไว้ให้แล้ว</b><small>หน้าต่าง EA → แท็บ Inputs → กด Load → เลือก <b>SCENOVA-FastBasketBot.set</b> ไฟล์นี้อยู่ใน <code>MQL5\Profiles\Presets</code></small></div>
+                      </div>
+                      <div className="human-step">
+                        <span>5</span>
+                        <div><b>เปิด Algo Trading</b><small>กด OK แล้วเปิดปุ่ม Algo Trading ด้านบน MT5 จากนั้นรอสักครู่ หน้าเว็บจะขึ้นว่า “เชื่อมต่อแล้ว”</small></div>
+                      </div>
+                    </div>
                   </div>
 
                   <details className="manual-install">
-                    <summary>ซ่อมการเชื่อมต่อ / Advanced</summary>
+                    <summary>มีปัญหาในการติดตั้ง? เปิดวิธีแก้ไขและติดตั้งใหม่</summary>
                     <div className="manual-install-body">
                       <div className="notice security-notice">
                         <b>โค้ดกลยุทธ์ถูกป้องกัน</b>
-                        <span>SCENOVA ไม่ส่งไฟล์ .mq5 ไปยังเครื่องลูกค้า ตัว EA จะถูกติดตั้งเป็นไฟล์ .ex5 ที่ Compile แล้วผ่าน Installer เท่านั้น</span>
+                        <span>เครื่องลูกค้าจะได้รับเฉพาะ FastBasketBot.ex5 สำหรับใช้งานจริง ส่วน Source .mq5 เก็บอยู่ฝั่ง SCENOVA เท่านั้น</span>
                       </div>
                       <div className="instruction-list">
-                        <div><span>1</span><div><b>ติดตั้ง EA ใหม่</b><small>ใช้ปุ่ม “ติดตั้ง SCENOVA บน Windows” ด้านบน ระบบจะดาวน์โหลด .ex5 ผ่านสิทธิ์ของบัญชีนี้</small></div></div>
-                        <div><span>2</span><div><b>สร้างรหัสเชื่อมต่อใหม่</b><small>ใช้เมื่อเปลี่ยนเครื่องหรือสงสัยว่า Token เดิมรั่ว Token เก่าจะถูกยกเลิกทันที</small></div></div>
-                        <div><span>3</span><div><b>ดาวน์โหลด .set ใหม่</b><small>ไฟล์ .set มีเฉพาะค่าการเชื่อมต่อและการตั้งค่า ไม่มี Source Code ของกลยุทธ์</small></div></div>
+                        <div><span>1</span><div><b>ถ้าหา FastBasketBot ไม่เจอ</b><small>กด “ติดตั้ง SCENOVA บน Windows” ใหม่ ระบบจะวาง FastBasketBot.ex5 กลับเข้า MQL5\Experts\SCENOVA ให้เอง</small></div></div>
+                        <div><span>2</span><div><b>ถ้าเปลี่ยนคอม หรือรหัสเชื่อมต่อมีปัญหา</b><small>กด “สร้างรหัสเชื่อมต่อใหม่” แล้วติดตั้งใหม่ รหัสเก่าจะใช้ต่อไม่ได้เพื่อความปลอดภัย</small></div></div>
+                        <div><span>3</span><div><b>ถ้าต้องการไฟล์ .set สำรอง</b><small>กดดาวน์โหลดได้ด้านล่าง แต่การติดตั้งปกติไม่ต้องทำขั้นตอนนี้ เพราะ Installer วาง .set ใน MQL5\Profiles\Presets ให้แล้ว</small></div></div>
                       </div>
                       <div className="primary-actions">
                         <button className="btn" disabled={busy} onClick={rotateInstallToken}>{busy?"กำลังสร้าง...":"หมุนรหัสเชื่อมต่อใหม่"}</button>
-                        <button className="btn download-set-btn" disabled={!installToken || !installInstanceId} onClick={()=>downloadEaSet()}>↓ ดาวน์โหลดไฟล์ .set</button>
+                        <button className="btn download-set-btn" disabled={!installToken || !installInstanceId} onClick={()=>downloadEaSet()}>↓ ดาวน์โหลด .set สำรอง</button>
                       </div>
                     </div>
                   </details>
