@@ -52,8 +52,20 @@ export default function AdminPage() {
   function switchMenu(menu: Menu) {
     setActiveMenu(menu);
     if (typeof window !== "undefined") {
-      window.history.replaceState({}, "", "/admin?view=" + menu);
+      window.history.pushState({}, "", "/admin?view=" + menu);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
+  }
+
+  function handleOwnerNavigate(href:string) {
+    if (!href.startsWith("/admin?view=")) return false;
+    const requested = new URL(href, window.location.origin).searchParams.get("view");
+    if (requested === "overview") switchMenu("overview");
+    else if (requested === "customers" || requested === "users" || requested === "subscriptions") switchMenu("customers");
+    else if (requested === "workers") switchMenu("workers");
+    else return false;
+    setMessage("");
+    return true;
   }
 
   function logout() {
@@ -174,14 +186,14 @@ export default function AdminPage() {
 
   return (
     <div className="app-wrap owner-app">
-      <OwnerSidebar activeKey={ownerActiveKey} onLogout={logout}/>
+      <OwnerSidebar activeKey={ownerActiveKey} onLogout={logout} onNavigate={handleOwnerNavigate}/>
 
       <main className="main app-main owner-main">
         <div className="mobile-only mobile-app-head">
           <div className="brand-lockup"><span className="brand-mark">◆</span><span><strong>SCENOVA</strong><small>OWNER</small></span></div>
           <button className="btn ghost" onClick={logout}>ออก</button>
         </div>
-        <OwnerMobileNav activeKey={ownerActiveKey}/>
+        <OwnerMobileNav activeKey={ownerActiveKey} onNavigate={handleOwnerNavigate}/>
 
         <header className="owner-head">
           <div>
@@ -288,19 +300,30 @@ export default function AdminPage() {
                           <b>{user.trial_status ? "Trial " + user.trial_status : "ยังไม่มี Trial"}</b>
                           {user.trial_expires_at && <><br/><span className="muted">ถึง {new Date(user.trial_expires_at).toLocaleString("th-TH")}</span></>}
                         </td>
-                        <td>{user.plan_code || "ยังไม่มีสมาชิก"}{user.subscription_expires_at && <><br/><span className="muted">ถึง {new Date(user.subscription_expires_at).toLocaleDateString("th-TH")}</span></>}</td>
+                        <td>
+                          {user.role === "OWNER" || user.role === "ADMIN"
+                            ? <><b className="text-good">OWNER UNLIMITED</b><br/><span className="muted">ไม่ต้องเปิด Trial / สมาชิก</span></>
+                            : <>{user.plan_code || "ยังไม่มีสมาชิก"}{user.subscription_expires_at && <><br/><span className="muted">ถึง {new Date(user.subscription_expires_at).toLocaleDateString("th-TH")}</span></>}</>}
+                        </td>
                         <td><span className={"owner-state-chip "+(user.status==="SUSPENDED"?"bad":"good")}>{user.status}</span></td>
                         <td>
-                          <div className="owner-row-actions owner-row-actions-wrap">
-                            <button className="btn" onClick={()=>grantTrial(user)}>Trial 3h</button>
-                            <button className="btn primary" onClick={()=>activate(user)}>เปิดสมาชิก</button>
-                            <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,7)}>+7 วัน</button>
-                            <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,30)}>+30 วัน</button>
-                            {user.status==="SUSPENDED"
-                              ? <button className="btn primary" onClick={()=>reactivate(user)}>เปิดกลับ</button>
-                              : <button className="btn danger" onClick={()=>suspend(user)}>ระงับ</button>}
-                            <button className="btn danger subtle-danger" onClick={()=>deleteUser(user)}>ลบบัญชี</button>
-                          </div>
+                          {user.role === "OWNER" || user.role === "ADMIN" ? (
+                            <div className="owner-system-account">
+                              <span className="owner-state-chip good">SYSTEM OWNER</span>
+                              <small>สิทธิ์ถาวร · ไม่ต้องจัดการแพ็กเกจ</small>
+                            </div>
+                          ) : (
+                            <div className="owner-row-actions owner-row-actions-wrap">
+                              <button className="btn" onClick={()=>grantTrial(user)}>Trial 3h</button>
+                              <button className="btn primary" onClick={()=>activate(user)}>เปิดสมาชิก</button>
+                              <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,7)}>+7 วัน</button>
+                              <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,30)}>+30 วัน</button>
+                              {user.status==="SUSPENDED"
+                                ? <button className="btn primary" onClick={()=>reactivate(user)}>เปิดกลับ</button>
+                                : <button className="btn danger" onClick={()=>suspend(user)}>ระงับ</button>}
+                              <button className="btn danger subtle-danger" onClick={()=>deleteUser(user)}>ลบบัญชี</button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
