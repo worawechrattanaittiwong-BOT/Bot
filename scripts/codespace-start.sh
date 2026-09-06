@@ -75,11 +75,16 @@ for i in {1..60}; do
   if curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1; then WEB_OK=1; fi
 
   if [ "$API_OK" -eq 1 ] && [ "$WEB_OK" -eq 1 ]; then
+    if [ -n "${CODESPACE_NAME:-}" ] && command -v gh >/dev/null 2>&1; then
+      gh codespace ports visibility 3000:public -c "$CODESPACE_NAME" >/dev/null 2>&1 || true
+    fi
+
     echo ""
     echo "READY"
     echo "Web: $BOT_WEB_URL"
     echo "MT5 WebRequest: $NEXT_PUBLIC_MT5_API_BASE"
     echo ""
+    echo "Port 3000 is requested as PUBLIC automatically for browser/MT5 testing."
     echo "The services are running in the background and will keep running if this terminal closes."
     echo "Stop them with: bash scripts/codespace-stop.sh"
     exit 0
