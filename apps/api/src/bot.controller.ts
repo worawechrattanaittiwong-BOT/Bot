@@ -3,6 +3,7 @@ import {
   ConflictException,
   Controller,
   Get,
+  Header,
   Post,
   Put,
   Req,
@@ -47,6 +48,7 @@ export class BotController {
   }
 
   @Get("dashboard")
+  @Header("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
   async dashboard(@Req() req: any) {
     const userId = req.user.sub;
     const user = await this.db.one(
@@ -61,7 +63,7 @@ export class BotController {
     let settings = null;
     if (account) {
       instance = await this.db.one(
-        "SELECT * FROM bot_instances WHERE mt5_account_id=$1",
+        "SELECT bi.*, (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') AS mt5_online, (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '30 minutes') AS agent_online, CASE WHEN bi.last_seen_at IS NULL THEN NULL ELSE EXTRACT(EPOCH FROM (now() - bi.last_seen_at)) END AS ea_last_seen_age_seconds FROM bot_instances bi WHERE bi.mt5_account_id=$1",
         [account.id]
       );
       if (instance) {
