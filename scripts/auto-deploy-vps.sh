@@ -42,6 +42,55 @@ else
   echo "[SCENOVA] new commit detected: $CURRENT_SHA -> $REMOTE_SHA"
 fi
 
+verify_generated_ea_release() {
+  local sha="$1"
+  local subject author_email parent parent_ci changed
+
+  subject="$(git log -1 --format=%s "$sha" 2>/dev/null || true)"
+  author_email="$(git log -1 --format=%ae "$sha" 2>/dev/null || true)"
+
+  if [ "$subject" != "build: publish private FastBasketBot.ex5 [skip ea build]" ]; then
+    return 1
+  fi
+  if [ "$author_email" != "actions@users.noreply.github.com" ]; then
+    echo "[SCENOVA] generated EA release rejected: unexpected author $author_email"
+    return 1
+  fi
+
+  changed="$(git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null || true)"
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    case "$file" in
+      mt5/release/FastBasketBot.ex5|mt5/release/manifest.json)
+        ;;
+      *)
+        echo "[SCENOVA] generated EA release rejected: unexpected file $file"
+        return 1
+        ;;
+    esac
+  done <<< "$changed"
+
+  if ! git cat-file -e "$sha:mt5/release/FastBasketBot.ex5" 2>/dev/null; then
+    echo "[SCENOVA] generated EA release rejected: EX5 artifact missing"
+    return 1
+  fi
+
+  parent="$(git rev-parse "$sha^" 2>/dev/null || true)"
+  [ -n "$parent" ] || return 1
+
+  parent_ci="$(
+    gh run list       --repo "$REPO_FULL_NAME"       --commit "$parent"       --workflow CI       --limit 1       --json status,conclusion       --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end'       2>/dev/null || true
+  )"
+
+  if [ "$parent_ci" != "completed:success" ]; then
+    echo "[SCENOVA] generated EA release waiting for parent CI ($parent_ci)"
+    return 1
+  fi
+
+  echo "[SCENOVA] trusted generated EX5 release verified"
+  return 0
+}
+
 if command -v gh >/dev/null 2>&1; then
   CI_STATE="$(
     gh run list       --repo "$REPO_FULL_NAME"       --commit "$REMOTE_SHA"       --workflow CI       --limit 1       --json status,conclusion       --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end'       2>/dev/null || true
@@ -56,8 +105,12 @@ if command -v gh >/dev/null 2>&1; then
       exit 0
       ;;
     *)
-      echo "[SCENOVA] CI not ready yet ($CI_STATE); waiting for next check"
-      exit 0
+      if verify_generated_ea_release "$REMOTE_SHA"; then
+        echo "[SCENOVA] generated EX5 release accepted without a direct CI run"
+      else
+        echo "[SCENOVA] CI not ready yet ($CI_STATE); waiting for next check"
+        exit 0
+      fi
       ;;
   esac
 else
