@@ -1,5 +1,5 @@
 #property strict
-#property version   "0.10"
+#property version   "1.000"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
