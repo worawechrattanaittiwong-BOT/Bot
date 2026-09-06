@@ -179,8 +179,11 @@ Set-Content -Path $configPath -Value $config -Encoding UTF8
 
 try {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-  & icacls.exe $configPath /inheritance:r /grant:r "$identity:(F)" "SYSTEM:(F)" "Administrators:(F)" | Out-Null
-} catch {}
+  $identityGrant = "$($identity):(F)"
+  & icacls.exe $configPath /inheritance:r /grant:r $identityGrant "SYSTEM:(F)" "Administrators:(F)" | Out-Null
+} catch {
+  Write-Host "Warning: could not tighten config file permissions: $($_.Exception.Message)" -ForegroundColor Yellow
+}
 
 $taskCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$agentPath`""
 & schtasks.exe /Create /SC MINUTE /MO 15 /TN "SCENOVA MT5 Agent" /TR $taskCommand /RU SYSTEM /RL HIGHEST /F | Out-Null
