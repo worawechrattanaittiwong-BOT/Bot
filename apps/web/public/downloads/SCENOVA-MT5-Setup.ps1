@@ -161,21 +161,14 @@ Set-Content -Path $configPath -Value $config -Encoding UTF8
 # Start the agent automatically for this Windows user without UAC/admin rights.
 $startupDir = [Environment]::GetFolderPath("Startup")
 $startupCmd = Join-Path $startupDir "SCENOVA-MT5-Agent.cmd"
-$startupLines = @(
-  "@echo off",
-  "start \"\" /min powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"$agentPath\" -Loop"
-)
-Set-Content -Path $startupCmd -Value $startupLines -Encoding ASCII
+$startupLine = 'start "" /min powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $agentPath + '" -Loop'
+Set-Content -Path $startupCmd -Value @("@echo off", $startupLine) -Encoding ASCII
 
 Write-Host "Starting SCENOVA Agent..."
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $agentPath
-Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
-  "-NoProfile",
-  "-WindowStyle", "Hidden",
-  "-ExecutionPolicy", "Bypass",
-  "-File", $agentPath,
-  "-Loop"
-)
+
+$agentLoopArgs = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $agentPath + '" -Loop'
+Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $agentLoopArgs
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor DarkCyan
