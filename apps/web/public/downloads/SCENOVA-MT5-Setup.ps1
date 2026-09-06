@@ -6,42 +6,22 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$SetupVersion = "1.1.0"
+$SetupVersion = "1.2.0"
 
-function Is-Administrator {
-  $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-  $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-  return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-function Protect-LocalMachineSecret([string]$Value) {
+function Protect-CurrentUserSecret([string]$Value) {
   $bytes = [Text.Encoding]::UTF8.GetBytes($Value)
   $protected = [Security.Cryptography.ProtectedData]::Protect(
     $bytes,
     $null,
-    [Security.Cryptography.DataProtectionScope]::LocalMachine
+    [Security.Cryptography.DataProtectionScope]::CurrentUser
   )
   return [Convert]::ToBase64String($protected)
-}
-
-if (-not (Is-Administrator)) {
-  Write-Host "SCENOVA requires Windows administrator permission for first-time installation." -ForegroundColor Yellow
-  $args = @(
-    "-NoProfile",
-    "-ExecutionPolicy", "Bypass",
-    "-File", "`"$PSCommandPath`"",
-    "-ApiBase", "`"$ApiBase`"",
-    "-WebBase", "`"$WebBase`"",
-    "-InstanceId", "`"$InstanceId`"",
-    "-InstallToken", "`"$InstallToken`""
-  ) -join " "
-  Start-Process powershell.exe -Verb RunAs -ArgumentList $args
-  exit
 }
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor DarkCyan
 Write-Host " SCENOVA MT5 BOT EA - Secure Installer $SetupVersion" -ForegroundColor Green
+Write-Host " No administrator permission required" -ForegroundColor DarkGreen
 Write-Host "======================================================" -ForegroundColor DarkCyan
 Write-Host ""
 
@@ -160,8 +140,9 @@ $setLines = @(
 )
 Set-Content -Path $setPath -Value $setLines -Encoding UTF8
 
-$programDir = Join-Path $env:ProgramData "SCENOVA"
+$programDir = Join-Path $env:LOCALAPPDATA "SCENOVA"
 New-Item -ItemType Directory -Force -Path $programDir | Out-Null
+
 $agentPath = Join-Path $programDir "SCENOVA-Agent.ps1"
 Invoke-WebRequest -UseBasicParsing -Uri "$WebBase/downloads/SCENOVA-Agent.ps1" -OutFile $agentPath
 
@@ -170,26 +151,31 @@ $config = @{
   ApiBase = $ApiBase
   WebBase = $WebBase
   InstanceId = $InstanceId
-  InstallTokenProtected = (Protect-LocalMachineSecret $InstallToken)
+  InstallTokenProtected = (Protect-CurrentUserSecret $InstallToken)
   TerminalDataPath = $dataPath
   EaBinaryPath = $eaBinary
   InstalledAt = (Get-Date).ToString("o")
 } | ConvertTo-Json
 Set-Content -Path $configPath -Value $config -Encoding UTF8
 
-try {
-  $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-  $identityGrant = "$($identity):(F)"
-  & icacls.exe $configPath /inheritance:r /grant:r $identityGrant "SYSTEM:(F)" "Administrators:(F)" | Out-Null
-} catch {
-  Write-Host "Warning: could not tighten config file permissions: $($_.Exception.Message)" -ForegroundColor Yellow
-}
-
-$taskCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$agentPath`""
-& schtasks.exe /Create /SC MINUTE /MO 15 /TN "SCENOVA MT5 Agent" /TR $taskCommand /RU SYSTEM /RL HIGHEST /F | Out-Null
+# Start the agent automatically for this Windows user without UAC/admin rights.
+$startupDir = [Environment]::GetFolderPath("Startup")
+$startupCmd = Join-Path $startupDir "SCENOVA-MT5-Agent.cmd"
+$startupLines = @(
+  "@echo off",
+  "start \"\" /min powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"$agentPath\" -Loop"
+)
+Set-Content -Path $startupCmd -Value $startupLines -Encoding ASCII
 
 Write-Host "Starting SCENOVA Agent..."
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $agentPath
+Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
+  "-NoProfile",
+  "-WindowStyle", "Hidden",
+  "-ExecutionPolicy", "Bypass",
+  "-File", $agentPath,
+  "-Loop"
+)
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor DarkCyan
@@ -198,7 +184,8 @@ Write-Host "======================================================" -ForegroundC
 Write-Host " EA Binary : $eaBinary"
 Write-Host " Source MQ5: NOT INSTALLED"
 Write-Host " Preset    : $setPath"
-Write-Host " Agent     : Installed (secure update check every 15 minutes)"
+Write-Host " Agent     : Installed for current Windows user"
+Write-Host " Admin/UAC : NOT REQUIRED"
 Write-Host ""
 Write-Host "Final MT5 steps:" -ForegroundColor Yellow
 Write-Host " 1. MT5 > Tools > Options > Expert Advisors"
