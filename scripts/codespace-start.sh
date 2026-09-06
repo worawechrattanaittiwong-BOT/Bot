@@ -13,7 +13,7 @@ until docker compose exec -T postgres pg_isready -U bot -d bot >/dev/null 2>&1; 
   sleep 1
 done
 
-for migration in database/001_init.sql database/002_cloud_worker.sql database/003_trial_history_lock.sql; do
+for migration in database/001_init.sql database/002_cloud_worker.sql database/003_trial_history_lock.sql database/004_broker_catalog.sql; do
   docker compose exec -T postgres psql -U bot -d bot -f /dev/stdin < "$migration"
 done
 
