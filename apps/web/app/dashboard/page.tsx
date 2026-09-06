@@ -502,9 +502,9 @@ export default function DashboardPage() {
                     <small>1) เปิด MetaTrader 5 และ MetaEditor</small>
                     <small>2) Compile FastBasketBot.mq5 เป็น EX5 แล้ว Attach ลงกราฟ</small>
                     <small>3) เพิ่ม API URL ใน MT5 → Tools → Options → Expert Advisors → Allow WebRequest</small>
-                    <small>4) ถ้าทดสอบบน GitHub Codespaces ให้ตั้ง Port 3000 Visibility = Public ชั่วคราว เพื่อให้ MT5 บนเครื่องคุณเรียก Backend ผ่านเว็บได้</small>
+                    <small>4) ถ้าทดสอบบน GitHub Codespaces ให้ตั้ง Port 4000 Visibility = Public ชั่วคราว เพื่อให้ MT5 บนเครื่องคุณเข้าถึง API ได้</small>
                     <small>5) โหลดไฟล์ .set ที่สร้างจากปุ่มด้านล่าง แล้วเปิด Algo Trading</small>
-                    {mt5ApiBase && <small className="mono" style={{wordBreak:"break-all"}}>MT5 WebRequest URL: {mt5ApiBase}</small>}
+                    {mt5ApiBase && <small className="mono" style={{wordBreak:"break-all"}}>API: {mt5ApiBase}</small>}
                     {activationMessage && (
                       <div className="notice good" style={{marginTop:10}}>
                         {activationMessage}
