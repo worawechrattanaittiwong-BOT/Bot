@@ -10,6 +10,7 @@ coverage/
 .vscode/
 .idea/
 *.ex5
+!mt5/release/FastBasketBot.ex5
 *.set
 *.ini
 runtime/
