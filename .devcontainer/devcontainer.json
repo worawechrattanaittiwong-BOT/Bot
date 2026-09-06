@@ -1,0 +1,14 @@
+{
+  "name": "Bot SaaS Dev",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [3000, 4000, 5432, 6379],
+  "portsAttributes": {
+    "3000": { "label": "Bot Web", "onAutoForward": "openPreview" },
+    "4000": { "label": "Bot API", "onAutoForward": "notify" }
+  },
+  "postCreateCommand": "npm install",
+  "remoteUser": "node"
+}
