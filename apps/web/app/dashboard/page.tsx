@@ -216,7 +216,7 @@ export default function DashboardPage() {
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-      setActivationMessage("ดาวน์โหลด SCENOVA Installer แล้ว ให้ดับเบิลคลิกไฟล์ SCENOVA-MT5-Installer.cmd จากนั้นกด Yes เมื่อ Windows ขอสิทธิ์");
+      setActivationMessage("ดาวน์โหลด SCENOVA Installer แล้ว ให้ดับเบิลคลิกไฟล์ SCENOVA-MT5-Installer.cmd ได้เลย รุ่นนี้ติดตั้งแบบ Current User และไม่ต้องใช้สิทธิ์ Administrator/UAC");
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -562,7 +562,7 @@ export default function DashboardPage() {
                     <button className="btn primary btn-lg auto-install-button" disabled={busy} onClick={downloadWindowsInstaller}>
                       {busy ? "กำลังเตรียม Installer..." : "↓ ติดตั้ง SCENOVA บน Windows"}
                     </button>
-                    <div className="help">หลังดาวน์โหลด ให้ดับเบิลคลิก <b>SCENOVA-MT5-Installer.cmd</b> และกด Yes ที่ Windows UAC</div>
+                    <div className="help">หลังดาวน์โหลด ให้ดับเบิลคลิก <b>SCENOVA-MT5-Installer.cmd</b> ได้เลย — ติดตั้งเฉพาะ Windows User ปัจจุบัน ไม่ต้องใช้ Administrator/UAC</div>
                   </div>
 
                   {isAgentOnline && (
