@@ -297,8 +297,9 @@ export default function AdminPage() {
                           {user.account_number && <div className="owner-mini-status"><span className={"dot "+(user.mt5_online?"green":"red")}/>{user.mt5_online ? "MT5 ONLINE" : (user.actual_state || "OFFLINE")} · {user.mode || "—"}</div>}
                         </td>
                         <td>
-                          <b>{user.trial_status ? "Trial " + user.trial_status : "ยังไม่มี Trial"}</b>
-                          {user.trial_expires_at && <><br/><span className="muted">ถึง {new Date(user.trial_expires_at).toLocaleString("th-TH")}</span></>}
+                          {user.role === "OWNER" || user.role === "ADMIN"
+                            ? <><b className="text-good">FULL ACCESS</b><br/><span className="muted">ไม่ใช้ระบบ Trial</span></>
+                            : <><b>{user.trial_status ? "Trial " + user.trial_status : "ยังไม่มี Trial"}</b>{user.trial_expires_at && <><br/><span className="muted">ถึง {new Date(user.trial_expires_at).toLocaleString("th-TH")}</span></>}</>}
                         </td>
                         <td>
                           {user.role === "OWNER" || user.role === "ADMIN"
