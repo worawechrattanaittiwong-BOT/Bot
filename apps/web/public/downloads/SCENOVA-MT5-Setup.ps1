@@ -6,7 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$SetupVersion = "1.2.1"
+$SetupVersion = "1.2.2"
 
 function Protect-CurrentUserSecret([string]$Value) {
   Add-Type -AssemblyName System.Security -ErrorAction Stop
@@ -74,7 +74,8 @@ $dataPath = $selected.DataPath
 Write-Host "MT5 data folder: $dataPath" -ForegroundColor Green
 
 $expertsDir = Join-Path $dataPath "MQL5\Experts\SCENOVA"
-$profilesDir = Join-Path $dataPath "MQL5\Profiles\Tester"
+$profilesDir = Join-Path $dataPath "MQL5\Profiles\Presets"
+$legacyProfilesDir = Join-Path $dataPath "MQL5\Profiles\Tester"
 New-Item -ItemType Directory -Force -Path $expertsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $profilesDir | Out-Null
 
@@ -116,6 +117,15 @@ if ($downloadedHash -ne $expectedHash) {
 Move-Item -Force $tmpEa $eaBinary
 
 $setPath = Join-Path $profilesDir "SCENOVA-FastBasketBot.set"
+
+# Migrate any preset created by installer versions <= 1.2.1 from the Strategy Tester folder.
+$legacySetPath = Join-Path $legacyProfilesDir "SCENOVA-FastBasketBot.set"
+if (Test-Path $legacySetPath) {
+  try {
+    Copy-Item -Force $legacySetPath $setPath
+  } catch {}
+}
+
 $setLines = @(
   "InpApiBase=$ApiBase",
   "InpInstanceId=$InstanceId",
@@ -178,6 +188,7 @@ Write-Host "======================================================" -ForegroundC
 Write-Host " EA Binary : $eaBinary"
 Write-Host " Source MQ5: NOT INSTALLED"
 Write-Host " Preset    : $setPath"
+Write-Host " MT5 Load  : Inputs > Load > SCENOVA-FastBasketBot.set"
 Write-Host " Agent     : Installed for current Windows user"
 Write-Host " Admin/UAC : NOT REQUIRED"
 Write-Host ""
