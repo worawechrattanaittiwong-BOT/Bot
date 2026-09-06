@@ -6,12 +6,22 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$SetupVersion = "1.0.0"
+$SetupVersion = "1.1.0"
 
 function Is-Administrator {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
   $principal = New-Object Security.Principal.WindowsPrincipal($identity)
   return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Protect-LocalMachineSecret([string]$Value) {
+  $bytes = [Text.Encoding]::UTF8.GetBytes($Value)
+  $protected = [Security.Cryptography.ProtectedData]::Protect(
+    $bytes,
+    $null,
+    [Security.Cryptography.DataProtectionScope]::LocalMachine
+  )
+  return [Convert]::ToBase64String($protected)
 }
 
 if (-not (Is-Administrator)) {
@@ -31,7 +41,7 @@ if (-not (Is-Administrator)) {
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor DarkCyan
-Write-Host " SCENOVA MT5 BOT EA - Windows Installer $SetupVersion" -ForegroundColor Green
+Write-Host " SCENOVA MT5 BOT EA - Secure Installer $SetupVersion" -ForegroundColor Green
 Write-Host "======================================================" -ForegroundColor DarkCyan
 Write-Host ""
 
@@ -87,34 +97,19 @@ $profilesDir = Join-Path $dataPath "MQL5\Profiles\Tester"
 New-Item -ItemType Directory -Force -Path $expertsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $profilesDir | Out-Null
 
-$eaSource = Join-Path $expertsDir "FastBasketBot.mq5"
-Write-Host "Downloading SCENOVA FastBasketBot EA..."
-Invoke-WebRequest -UseBasicParsing -Uri "$WebBase/downloads/FastBasketBot.mq5" -OutFile $eaSource
+$eaBinary = Join-Path $expertsDir "FastBasketBot.ex5"
+$artifactPayload = @{
+  instanceId = $InstanceId
+  installToken = $InstallToken
+} | ConvertTo-Json -Compress
 
-$metaEditor = $null
-if ($selected.Origin) {
-  $originPath = $selected.Origin
-  if (Test-Path $originPath -PathType Leaf) {
-    $originPath = Split-Path -Parent $originPath
-  }
-  $candidate = Join-Path $originPath "metaeditor64.exe"
-  if (Test-Path $candidate) { $metaEditor = $candidate }
-
-  if (-not $metaEditor) {
-    $candidate = Join-Path $originPath "MetaEditor64.exe"
-    if (Test-Path $candidate) { $metaEditor = $candidate }
-  }
+Write-Host "Downloading protected SCENOVA FastBasketBot.ex5..."
+$tmpEa = Join-Path $env:TEMP "SCENOVA-FastBasketBot.ex5"
+Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$ApiBase/api/ea/artifact" -ContentType "application/json" -Body $artifactPayload -OutFile $tmpEa
+if (-not (Test-Path $tmpEa)) {
+  throw "Compiled SCENOVA EA could not be downloaded"
 }
-
-$compiled = $false
-if ($metaEditor) {
-  Write-Host "Compiling EA with MetaEditor..."
-  $compileLog = Join-Path $env:TEMP "SCENOVA-MetaEditor-compile.log"
-  $compileArgs = "/compile:`"$eaSource`" /log:`"$compileLog`""
-  Start-Process -FilePath $metaEditor -ArgumentList $compileArgs -Wait -WindowStyle Hidden | Out-Null
-  $ex5Path = [System.IO.Path]::ChangeExtension($eaSource, ".ex5")
-  $compiled = Test-Path $ex5Path
-}
+Move-Item -Force $tmpEa $eaBinary
 
 $setPath = Join-Path $profilesDir "SCENOVA-FastBasketBot.set"
 $setLines = @(
@@ -152,15 +147,13 @@ $config = @{
   ApiBase = $ApiBase
   WebBase = $WebBase
   InstanceId = $InstanceId
-  InstallToken = $InstallToken
+  InstallTokenProtected = (Protect-LocalMachineSecret $InstallToken)
   TerminalDataPath = $dataPath
-  EaSourcePath = $eaSource
-  MetaEditorPath = $metaEditor
+  EaBinaryPath = $eaBinary
   InstalledAt = (Get-Date).ToString("o")
 } | ConvertTo-Json
 Set-Content -Path $configPath -Value $config -Encoding UTF8
 
-# Restrict the configuration because it contains the local install token.
 try {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
   & icacls.exe $configPath /inheritance:r /grant:r "$identity:(F)" "SYSTEM:(F)" "Administrators:(F)" | Out-Null
@@ -174,12 +167,12 @@ Write-Host "Starting SCENOVA Agent..."
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor DarkCyan
-Write-Host " INSTALLATION COMPLETE" -ForegroundColor Green
+Write-Host " SECURE INSTALLATION COMPLETE" -ForegroundColor Green
 Write-Host "======================================================" -ForegroundColor DarkCyan
-Write-Host " EA Source : $eaSource"
-Write-Host " EA Compile: $(if($compiled){'SUCCESS'}else{'MANUAL COMPILE MAY BE REQUIRED'})"
+Write-Host " EA Binary : $eaBinary"
+Write-Host " Source MQ5: NOT INSTALLED"
 Write-Host " Preset    : $setPath"
-Write-Host " Agent     : Installed (checks every 15 minutes)"
+Write-Host " Agent     : Installed (secure update check every 15 minutes)"
 Write-Host ""
 Write-Host "Final MT5 steps:" -ForegroundColor Yellow
 Write-Host " 1. MT5 > Tools > Options > Expert Advisors"
