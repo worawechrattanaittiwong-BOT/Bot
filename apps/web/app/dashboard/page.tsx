@@ -432,7 +432,7 @@ export default function DashboardPage() {
 
       <main className="main app-main">
         <div className="mobile-only mobile-app-head">
-          <div className="brand-lockup"><span className="brand-mark">◆</span><span><strong>SCENOVA</strong><small>MT5 BOT EA</small></span></div>
+          <div className="brand-lockup"><span className="brand-mark">◆</span><span><strong>SCENOVA</strong><small>{isOwner ? "OWNER CONSOLE" : "MT5 BOT EA"}</small></span></div>
           <button className="btn ghost" onClick={logout}>ออก</button>
         </div>
 
@@ -545,6 +545,9 @@ export default function DashboardPage() {
                     <div><span>Basket Trail</span><b>${settings.basketTrailMoney}</b></div>
                     <div><span>Max Basket Loss</span><b>${settings.maxBasketLossMoney}</b></div>
                     <div><span>Daily Loss Limit</span><b>${settings.dailyLossMoney}</b></div>
+                    <div><span>Max Spread</span><b>{settings.maxSpreadPoints} pt</b></div>
+                    <div><span>Min Order Interval</span><b>{settings.minOrderIntervalMs} ms</b></div>
+                    <div><span>Max Orders / Min</span><b>{settings.maxOrdersPerMinute}</b></div>
                   </div>
                 </section>
 
