@@ -11,6 +11,15 @@ type Dashboard = {
   entitlement: any;
 };
 
+type BrokerCatalog = {
+  code: string;
+  name: string;
+  servers: Array<{
+    serverName: string;
+    environment: "DEMO" | "REAL" | "UNKNOWN";
+  }>;
+};
+
 const defaultSettings = {
   symbol: "XAUUSD",
   lot: 0.01,
@@ -31,7 +40,11 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<"CLOUD"|"LOCAL">("CLOUD");
   const [accountNumber, setAccountNumber] = useState("");
+  const [brokerCatalog, setBrokerCatalog] = useState<BrokerCatalog[]>([]);
+  const [brokerCode, setBrokerCode] = useState("EXNESS");
+  const [customBrokerName, setCustomBrokerName] = useState("");
   const [brokerServer, setBrokerServer] = useState("");
+  const [customBrokerServer, setCustomBrokerServer] = useState("");
   const [tradingPassword, setTradingPassword] = useState("");
   const [installToken, setInstallToken] = useState("");
   const [installInstanceId, setInstallInstanceId] = useState("");
@@ -54,12 +67,23 @@ export default function DashboardPage() {
       return;
     }
     load();
+    api("/catalog/brokers")
+      .then((rows)=>setBrokerCatalog(rows))
+      .catch(()=>setBrokerCatalog([]));
     const id = setInterval(load, 5000);
     return () => clearInterval(id);
   }, []);
 
   const metrics = data?.instance?.metrics || {};
   const state = data?.instance?.actual_state || "OFFLINE";
+  const isMt5Online = Boolean(data?.instance?.last_seen_at) && state !== "OFFLINE";
+  const selectedBroker = brokerCatalog.find((item)=>item.code === brokerCode);
+  const selectedBrokerName = brokerCode === "OTHER"
+    ? customBrokerName.trim()
+    : (selectedBroker?.name || brokerCode);
+  const selectedServer = brokerServer === "__CUSTOM__"
+    ? customBrokerServer.trim()
+    : brokerServer;
   const desired = data?.instance?.desired_state || "STOPPED";
   const entitlement = data?.entitlement;
 
@@ -87,12 +111,15 @@ export default function DashboardPage() {
     setBusy(true);
     setError("");
     try {
+      if (!selectedBrokerName) throw new Error("กรุณาเลือก Broker");
+      if (!selectedServer) throw new Error("กรุณาเลือก MT5 Server");
+
       const result = await api("/bot/mt5", {
         method: "POST",
         body: JSON.stringify({
           accountNumber,
-          broker: "Exness",
-          brokerServer,
+          broker: selectedBrokerName,
+          brokerServer: selectedServer,
           mode
         })
       });
@@ -212,9 +239,71 @@ export default function DashboardPage() {
                 <input className="input" value={accountNumber} onChange={e=>setAccountNumber(e.target.value)} placeholder="เช่น 123456789" required />
               </div>
               <div className="field">
-                <label>MT5 Broker Server</label>
-                <input className="input" value={brokerServer} onChange={e=>setBrokerServer(e.target.value)} placeholder="เช่น Exness-Real..." required />
+                <label>Broker</label>
+                <select
+                  className="input"
+                  value={brokerCode}
+                  onChange={e=>{
+                    setBrokerCode(e.target.value);
+                    setBrokerServer("");
+                    setCustomBrokerServer("");
+                  }}
+                  required
+                >
+                  {brokerCatalog.map((broker)=>(
+                    <option key={broker.code} value={broker.code}>{broker.name}</option>
+                  ))}
+                  {!brokerCatalog.length && <option value="EXNESS">Exness</option>}
+                </select>
+                <div className="help">เลือกโบรกเกอร์ก่อน ระบบจะแสดง Server ที่มีใน Catalog</div>
               </div>
+
+              {brokerCode === "OTHER" && (
+                <div className="field">
+                  <label>ชื่อ Broker</label>
+                  <input
+                    className="input"
+                    value={customBrokerName}
+                    onChange={e=>setCustomBrokerName(e.target.value)}
+                    placeholder="ชื่อ Broker"
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="field">
+                <label>MT5 Server</label>
+                <select
+                  className="input"
+                  value={brokerServer}
+                  onChange={e=>setBrokerServer(e.target.value)}
+                  required
+                >
+                  <option value="">เลือก Server</option>
+                  {(selectedBroker?.servers || []).map((server)=>(
+                    <option key={server.serverName} value={server.serverName}>
+                      {server.serverName} {server.environment !== "UNKNOWN" ? "· " + server.environment : ""}
+                    </option>
+                  ))}
+                  <option value="__CUSTOM__">ไม่พบ Server ในรายการ / ระบุเอง</option>
+                </select>
+                <div className="help">
+                  ชื่อ Server ต้องตรงกับที่แสดงใน MT5/Exness ของบัญชีนั้นทุกตัวอักษร
+                </div>
+              </div>
+
+              {brokerServer === "__CUSTOM__" && (
+                <div className="field">
+                  <label>ระบุ MT5 Server</label>
+                  <input
+                    className="input"
+                    value={customBrokerServer}
+                    onChange={e=>setCustomBrokerServer(e.target.value)}
+                    placeholder="เช่น Exness-MT5Trial6"
+                    required
+                  />
+                </div>
+              )}
               {mode === "CLOUD" && (
                 <div className="field">
                   <label>Trading Password สำหรับ Cloud Worker</label>
@@ -229,11 +318,33 @@ export default function DashboardPage() {
           </section>
         ) : (
           <>
+            {!isMt5Online && (
+              <div className="notice" style={{marginBottom:14}}>
+                <b>ยังไม่ได้รับข้อมูลจาก MT5</b><br/>
+                บัญชีถูกบันทึกในระบบแล้ว แต่ MT5/EA หรือ Cloud Worker ยังไม่เคยส่ง Heartbeat เข้ามา
+                จึงยังไม่สามารถอ่าน Balance, Equity และ Position จริงได้
+              </div>
+            )}
+
             <section className="kpi-grid">
-              <div className="kpi"><div className="label">Balance</div><div className="value">{"$" + Number(metrics.balance||0).toFixed(2)}</div></div>
-              <div className="kpi"><div className="label">Equity</div><div className="value">{"$" + Number(metrics.equity||0).toFixed(2)}</div></div>
-              <div className="kpi"><div className="label">Floating P/L</div><div className={"value " + (Number(metrics.basketProfit||0)>=0?"green":"")}>{"$" + Number(metrics.basketProfit||0).toFixed(2)}</div></div>
-              <div className="kpi"><div className="label">Positions</div><div className="value">{metrics.positions||0}</div></div>
+              <div className="kpi">
+                <div className="label">Balance</div>
+                <div className="value">{isMt5Online ? "$" + Number(metrics.balance||0).toFixed(2) : "—"}</div>
+              </div>
+              <div className="kpi">
+                <div className="label">Equity</div>
+                <div className="value">{isMt5Online ? "$" + Number(metrics.equity||0).toFixed(2) : "—"}</div>
+              </div>
+              <div className="kpi">
+                <div className="label">Floating P/L</div>
+                <div className={"value " + (isMt5Online && Number(metrics.basketProfit||0)>=0 ? "green":"")}>
+                  {isMt5Online ? "$" + Number(metrics.basketProfit||0).toFixed(2) : "—"}
+                </div>
+              </div>
+              <div className="kpi">
+                <div className="label">Positions</div>
+                <div className="value">{isMt5Online ? (metrics.positions ?? 0) : "—"}</div>
+              </div>
             </section>
 
             <div className="grid2">
@@ -294,7 +405,13 @@ export default function DashboardPage() {
                 </div>
                 <div className="flow-node">
                   <b>RUNNER STATUS</b>
-                  <small>{data.instance.actual_state} · last seen {data.instance.last_seen_at || "never"}</small>
+                  <small>
+                    {data.instance.actual_state} · {data.instance.last_seen_at
+                      ? "last seen " + new Date(data.instance.last_seen_at).toLocaleString("th-TH")
+                      : data.account.mode === "CLOUD"
+                        ? "รอ Cloud Worker เชื่อม MT5"
+                        : "รอ EA บน MT5 ส่ง Heartbeat"}
+                  </small>
                 </div>
               </section>
             </div>
