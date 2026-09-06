@@ -54,7 +54,7 @@ services:
       NEXT_PUBLIC_MT5_API_BASE: ${PUBLIC_WEB_URL}/backend
     depends_on: [api]
     ports:
-      - "3000:3000"
+      - "${BOT_WEB_PORT:-3100}:3000"
     networks: [internal]
 
 networks:
