@@ -30,6 +30,6 @@
   },
   "postCreateCommand": "npm install",
   "remoteUser": "node",
-  "postStartCommand": "bash scripts/codespace-start.sh",
-  "postAttachCommand": "bash scripts/codespace-start.sh"
+  "postStartCommand": "bash scripts/codespace-ensure.sh",
+  "postAttachCommand": "bash scripts/codespace-ensure.sh"
 }
