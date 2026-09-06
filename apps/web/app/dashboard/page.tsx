@@ -95,7 +95,12 @@ export default function DashboardPage() {
   const metrics = data?.instance?.metrics || {};
   const state = data?.instance?.actual_state || "OFFLINE";
   const desired = data?.instance?.desired_state || "STOPPED";
-  const isMt5Online = Boolean(data?.instance?.last_seen_at) && state !== "OFFLINE";
+  const eaLastSeen = data?.instance?.last_seen_at
+    ? new Date(data.instance.last_seen_at)
+    : null;
+  const isMt5Online = Boolean(eaLastSeen) &&
+    Date.now() - (eaLastSeen?.getTime() || 0) < 15000 &&
+    state !== "OFFLINE";
   const entitlement = data?.entitlement;
   const selectedBroker = brokerCatalog.find((item)=>item.code === brokerCode);
   const selectedBrokerName = brokerCode === "OTHER"
@@ -582,6 +587,24 @@ export default function DashboardPage() {
                     </div>
                   )}
 
+                  {isAgentOnline && !isMt5Online && (
+                    <div className="notice bad connection-diagnostic">
+                      <b>Agent ออนไลน์ แต่ EA ใน MT5 ยังไม่ส่งสถานะเข้าระบบ</b>
+                      <span>
+                        จากฝั่ง Server ตอนนี้ยังไม่ได้รับ Heartbeat จาก FastBasketBot
+                        {eaLastSeen ? <> · ครั้งล่าสุด {eaLastSeen.toLocaleString("th-TH")}</> : <> · ยังไม่เคยได้รับ Heartbeat</>}
+                      </span>
+                      <span>ตรวจ 2 จุดนี้: โหลด <b>SCENOVA-FastBasketBot.set</b> ใน Inputs แล้ว และเพิ่ม <code>{mt5ApiBase}</code> ใน Allow WebRequest</span>
+                    </div>
+                  )}
+
+                  {isMt5Online && (
+                    <div className="notice good connection-diagnostic">
+                      <b>MT5 เชื่อมต่อกับ SCENOVA แล้ว</b>
+                      <span>รับ Heartbeat ล่าสุด {eaLastSeen?.toLocaleString("th-TH") || "เมื่อสักครู่"} · บัญชี {metrics.accountNumber || data.account.account_number}</span>
+                    </div>
+                  )}
+
                   {activationMessage && <div className="notice good">{activationMessage}</div>}
 
                   <div className="human-setup-guide">
@@ -600,7 +623,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="human-step">
                         <span>2</span>
-                        <div><b>อนุญาตให้ EA ติดต่อเว็บ SCENOVA</b><small>ไปที่ Tools → Options → Expert Advisors → ติ๊ก Allow WebRequest แล้วเพิ่ม <code>https://snvea-bot.online</code></small></div>
+                        <div><b>อนุญาตให้ EA ติดต่อ API ของ SCENOVA</b><small>ไปที่ Tools → Options → Expert Advisors → ติ๊ก Allow WebRequest แล้วเพิ่ม <code>{mt5ApiBase}</code> ให้ตรงกับค่า API ที่ EA ใช้</small></div>
                       </div>
                       <div className="human-step connected-step">
                         <span>3</span>
@@ -638,7 +661,6 @@ export default function DashboardPage() {
                             </div>
                           )}
                         </div>
-                      </div>
                       </div>
                       <div className="human-step">
                         <span>5</span>
