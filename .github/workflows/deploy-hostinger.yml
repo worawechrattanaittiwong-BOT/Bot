@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$VPS_USER"
-          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" '
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" '
             set -euo pipefail
             cd /opt/Bot
             git fetch origin main
