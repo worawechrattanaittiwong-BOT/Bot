@@ -9,10 +9,33 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setRegister(params.get("mode") === "register");
+
+    const token = localStorage.getItem("bot_token");
+    if (!token) {
+      setCheckingSession(false);
+      return;
+    }
+
+    fetch(API_URL + "/api/auth/session", {
+      headers: { Authorization: "Bearer " + token }
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("invalid session");
+        return res.json();
+      })
+      .then((data) => {
+        const role = data.user?.role;
+        window.location.replace(role === "OWNER" || role === "ADMIN" ? "/admin" : "/dashboard");
+      })
+      .catch(() => {
+        localStorage.removeItem("bot_token");
+        setCheckingSession(false);
+      });
   }, []);
 
   async function submit(e: FormEvent) {
@@ -43,6 +66,21 @@ export default function LoginPage() {
     setRegister(next);
     setMessage("");
     window.history.replaceState({}, "", next ? "/login?mode=register" : "/login");
+  }
+
+  if (checkingSession) {
+    return (
+      <main className="auth-shell">
+        <section className="auth-card auth-session-card">
+          <div className="brand-lockup auth-brand">
+            <span className="brand-mark">◆</span>
+            <span><strong>SCENOVA</strong><small>MT5 BOT EA</small></span>
+          </div>
+          <div className="session-loader"><span className="dot green"/> กำลังตรวจสอบการเข้าสู่ระบบ...</div>
+          <p className="muted">ถ้าบัญชีของคุณยังอยู่ในระบบ เราจะพาไป Control Center โดยอัตโนมัติ</p>
+        </section>
+      </main>
+    );
   }
 
   return (
