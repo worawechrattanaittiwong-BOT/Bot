@@ -395,3 +395,25 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .owner-search{grid-template-columns:1fr}
   .owner-pulse-status{display:none}
 }
+
+
+/* Owner navigation: every real destination must be visible */
+.owner-nav-label-secondary{margin-top:22px}
+.owner-nav-link{text-decoration:none}
+.owner-nav-link:hover{background:#091015;border-color:#182830;color:#b9c9cf}
+.owner-mobile-nav a{
+  white-space:nowrap;
+  border:1px solid #1b2a33;
+  background:#080d11;
+  color:#748a93;
+  border-radius:10px;
+  padding:9px 11px;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+}
+.owner-mobile-nav a:hover{
+  color:var(--text);
+  border-color:#345f79;
+  background:#0e1a21;
+}
