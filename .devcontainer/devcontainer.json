@@ -4,12 +4,7 @@
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
-  "forwardPorts": [
-    3000,
-    4000,
-    5432,
-    6379
-  ],
+  "forwardPorts": [3000, 4000, 5432, 6379],
   "portsAttributes": {
     "3000": {
       "label": "Bot Web",
@@ -29,7 +24,5 @@
     }
   },
   "postCreateCommand": "npm install",
-  "remoteUser": "node",
-  "postStartCommand": "bash scripts/codespace-ensure.sh",
-  "postAttachCommand": "bash scripts/codespace-ensure.sh"
+  "remoteUser": "node"
 }
