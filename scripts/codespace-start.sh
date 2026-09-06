@@ -17,6 +17,9 @@ for migration in database/001_init.sql database/002_cloud_worker.sql database/00
   docker compose exec -T postgres psql -U bot -d bot -f /dev/stdin < "$migration"
 done
 
+export API_INTERNAL_URL="http://127.0.0.1:4000"
+export NEXT_PUBLIC_API_URL="/backend"
+
 echo "Starting API on :4000 and Web on :3000"
 
 npm run dev:api > /tmp/bot-api.log 2>&1 &
