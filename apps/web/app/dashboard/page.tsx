@@ -126,6 +126,11 @@ export default function DashboardPage() {
     ? new Date(data.instance.agent_last_seen_at)
     : null;
   const isAgentOnline = Boolean(agentLastSeen) && Date.now() - (agentLastSeen?.getTime() || 0) < 30 * 60 * 1000;
+  const terminalDataPath = String(data?.instance?.agent_terminal_path || "").replace(/[\\/]+$/, "");
+  const presetFolderPath = terminalDataPath
+    ? terminalDataPath + "\\MQL5\\Profiles\\Presets"
+    : "MQL5\\Profiles\\Presets";
+  const presetFilePath = presetFolderPath + "\\SCENOVA-FastBasketBot.set";
 
   async function linkAccount(e: FormEvent) {
     e.preventDefault();
@@ -597,17 +602,63 @@ export default function DashboardPage() {
                         <span>2</span>
                         <div><b>อนุญาตให้ EA ติดต่อเว็บ SCENOVA</b><small>ไปที่ Tools → Options → Expert Advisors → ติ๊ก Allow WebRequest แล้วเพิ่ม <code>https://snvea-bot.online</code></small></div>
                       </div>
-                      <div className="human-step">
+                      <div className="human-step connected-step">
                         <span>3</span>
-                        <div><b>เอา FastBasketBot ลงกราฟ</b><small>Navigator → Expert Advisors → SCENOVA → ลาก <b>FastBasketBot</b> ไปวางบนกราฟที่ต้องการเทรด</small></div>
+                        <div>
+                          <b>ลาก FastBasketBot ลงกราฟ แล้วอยู่ในหน้าต่าง EA ต่อเลย</b>
+                          <small>Navigator → Expert Advisors → SCENOVA → ลาก <b>FastBasketBot</b> ไปวางบนกราฟที่ต้องการเทรด จากนั้น MT5 จะเปิดหน้าต่างตั้งค่า EA ขึ้นมา <b>ยังไม่ต้องกด OK</b> ให้ไปขั้นตอน 4 ต่อในหน้าต่างนี้ทันที</small>
+                          <div className="step-connector">↓ ขั้นตอน 4 ทำต่อจากหน้าต่างที่เปิดขึ้นมาหลังลาก EA</div>
+                        </div>
                       </div>
-                      <div className="human-step">
+                      <div className="human-step connected-step preset-load-step">
                         <span>4</span>
-                        <div><b>โหลดไฟล์ตั้งค่าที่ระบบวางไว้ให้แล้ว</b><small>หน้าต่าง EA → แท็บ Inputs → กด Load → เลือก <b>SCENOVA-FastBasketBot.set</b> ไฟล์นี้อยู่ใน <code>MQL5\Profiles\Presets</code></small></div>
+                        <div>
+                          <b>ในหน้าต่างเดิม กด Inputs → Load แล้วเปิดไฟล์ .set</b>
+                          <small>กดแท็บ <b>Inputs</b> → กด <b>Load</b> ระบบ Windows อาจเปิดมาที่ Downloads หรือโฟลเดอร์ล่าสุดที่เคยใช้ ซึ่งเป็นเรื่องปกติ ไม่ได้แปลว่าไฟล์หาย</small>
+
+                          <div className="file-picker-help">
+                            <div className="file-picker-title">ถ้ากด Load แล้วเห็นหน้า Downloads เหมือนในรูป ให้ทำแบบนี้</div>
+                            <ol>
+                              <li>คลิกช่อง <b>Address bar</b> ด้านบนของหน้าต่าง Open ตรงที่แสดงคำว่า Downloads</li>
+                              <li>ลบข้อความเดิม แล้ววางตำแหน่งโฟลเดอร์ด้านล่างนี้</li>
+                              <li>กด <b>Enter</b> หน้าต่างจะพาไปยังโฟลเดอร์ Presets ของ MT5 ตัวนี้</li>
+                              <li>คลิก <b>SCENOVA-FastBasketBot.set</b> แล้วกด <b>Open</b></li>
+                              <li>เมื่อกลับมาหน้า Inputs ให้กด <b>OK</b></li>
+                            </ol>
+
+                            <div className="preset-path-box">
+                              <span>ตำแหน่งโฟลเดอร์ .set บนเครื่องนี้</span>
+                              <code>{presetFolderPath}</code>
+                              <button
+                                type="button"
+                                className="btn copy-path-btn"
+                                onClick={async()=>{
+                                  try {
+                                    await navigator.clipboard.writeText(presetFolderPath);
+                                    setActivationMessage("คัดลอกตำแหน่งโฟลเดอร์ .set แล้ว — กลับไปหน้าต่าง Open ของ MT5 แล้ววางใน Address bar ได้เลย");
+                                  } catch {
+                                    setActivationMessage("คัดลอกอัตโนมัติไม่ได้ ให้ลากเลือกข้อความตำแหน่งโฟลเดอร์แล้ว Copy แทน");
+                                  }
+                                }}
+                              >
+                                คัดลอกตำแหน่งโฟลเดอร์
+                              </button>
+                            </div>
+
+                            <div className="preset-file-name">
+                              <span>ชื่อไฟล์ที่ต้องเลือก</span>
+                              <b>SCENOVA-FastBasketBot.set</b>
+                            </div>
+
+                            {!terminalDataPath && (
+                              <div className="help warning-help">ถ้ายังไม่เห็นตำแหน่งเต็ม ให้รอ Desktop Agent เชื่อมต่อสักครู่แล้วกดรีเฟรชหน้าเว็บ จากนั้นระบบจะแสดง Path ของ MT5 เครื่องนี้ให้โดยอัตโนมัติ</div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                       <div className="human-step">
                         <span>5</span>
-                        <div><b>เปิด Algo Trading</b><small>กด OK แล้วเปิดปุ่ม Algo Trading ด้านบน MT5 จากนั้นรอสักครู่ หน้าเว็บจะขึ้นว่า “เชื่อมต่อแล้ว”</small></div>
+                        <div><b>หลังโหลด .set และกด OK แล้ว ให้เปิด Algo Trading</b><small>เปิดปุ่ม Algo Trading ด้านบน MT5 แล้วรอสักครู่ หน้าเว็บ SCENOVA จะเปลี่ยนสถานะเป็น “เชื่อมต่อแล้ว” อัตโนมัติ</small></div>
                       </div>
                     </div>
                   </div>
