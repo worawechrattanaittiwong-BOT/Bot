@@ -23,6 +23,7 @@ if [ -z "$PUBLIC_IP" ]; then
 fi
 
 BOT_WEB_PORT="${BOT_WEB_PORT:-3100}"
+APP_DOMAIN="${APP_DOMAIN:-}"
 
 if [ ! -f .env.hostinger ]; then
   umask 077
@@ -31,6 +32,12 @@ if [ ! -f .env.hostinger ]; then
   ADMIN_KEY="$(openssl rand -hex 32)"
   WORKER_KEY="$(openssl rand -hex 32)"
   CREDENTIAL_MASTER_KEY="$(openssl rand -base64 32 | tr -d '\n')"
+  if [ -n "$APP_DOMAIN" ]; then
+    PUBLIC_URL="https://$APP_DOMAIN"
+  else
+    PUBLIC_URL="http://$PUBLIC_IP:$BOT_WEB_PORT"
+  fi
+
   cat > .env.hostinger <<EOF
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 JWT_SECRET=$JWT_SECRET
@@ -38,8 +45,9 @@ ADMIN_KEY=$ADMIN_KEY
 WORKER_KEY=$WORKER_KEY
 CREDENTIAL_MASTER_KEY=$CREDENTIAL_MASTER_KEY
 BOT_WEB_PORT=$BOT_WEB_PORT
-PUBLIC_WEB_URL=http://$PUBLIC_IP:$BOT_WEB_PORT
-WEB_ORIGIN=http://$PUBLIC_IP:$BOT_WEB_PORT
+APP_DOMAIN=$APP_DOMAIN
+PUBLIC_WEB_URL=$PUBLIC_URL
+WEB_ORIGIN=$PUBLIC_URL
 EOF
 fi
 
@@ -48,8 +56,26 @@ if grep -q '^BOT_WEB_PORT=' .env.hostinger; then
 else
   echo "BOT_WEB_PORT=$BOT_WEB_PORT" >> .env.hostinger
 fi
-sed -i -E "s#^PUBLIC_WEB_URL=.*#PUBLIC_WEB_URL=http://$PUBLIC_IP:$BOT_WEB_PORT#" .env.hostinger
-sed -i -E "s#^WEB_ORIGIN=.*#WEB_ORIGIN=http://$PUBLIC_IP:$BOT_WEB_PORT#" .env.hostinger
+
+ENV_DOMAIN="$(grep '^APP_DOMAIN=' .env.hostinger 2>/dev/null | cut -d= -f2- || true)"
+if [ -z "$APP_DOMAIN" ] && [ -n "$ENV_DOMAIN" ]; then
+  APP_DOMAIN="$ENV_DOMAIN"
+fi
+
+if grep -q '^APP_DOMAIN=' .env.hostinger; then
+  sed -i -E "s#^APP_DOMAIN=.*#APP_DOMAIN=$APP_DOMAIN#" .env.hostinger
+else
+  echo "APP_DOMAIN=$APP_DOMAIN" >> .env.hostinger
+fi
+
+if [ -n "$APP_DOMAIN" ]; then
+  PUBLIC_URL="https://$APP_DOMAIN"
+else
+  PUBLIC_URL="http://$PUBLIC_IP:$BOT_WEB_PORT"
+fi
+
+sed -i -E "s#^PUBLIC_WEB_URL=.*#PUBLIC_WEB_URL=$PUBLIC_URL#" .env.hostinger
+sed -i -E "s#^WEB_ORIGIN=.*#WEB_ORIGIN=$PUBLIC_URL#" .env.hostinger
 
 set -a
 . ./.env.hostinger
@@ -71,8 +97,8 @@ docker compose --env-file .env.hostinger -f "$COMPOSE" up -d --build api web
 echo ""
 echo "========================================"
 echo "Bot SaaS is starting on Hostinger VPS"
-echo "Web: http://$PUBLIC_IP:$BOT_WEB_PORT"
-echo "API health through web: http://$PUBLIC_IP:$BOT_WEB_PORT/backend/api/health"
+echo "Web: $PUBLIC_WEB_URL"
+echo "API health through web: $PUBLIC_WEB_URL/backend/api/health"
 echo "========================================"
 echo ""
 echo "Check status:"
