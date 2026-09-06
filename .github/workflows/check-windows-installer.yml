@@ -42,3 +42,27 @@ jobs:
 
             Write-Host "OK: $file" -ForegroundColor Green
           }
+
+
+      - name: DPAPI compatibility smoke test
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          Add-Type -AssemblyName System.Security -ErrorAction Stop
+          $plain = "SCENOVA-DPAPI-SMOKE"
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($plain)
+          $protected = [System.Security.Cryptography.ProtectedData]::Protect(
+            $bytes,
+            $null,
+            [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+          )
+          $roundTrip = [System.Security.Cryptography.ProtectedData]::Unprotect(
+            $protected,
+            $null,
+            [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+          )
+          $decoded = [System.Text.Encoding]::UTF8.GetString($roundTrip)
+          if ($decoded -ne $plain) {
+            throw "DPAPI round-trip failed"
+          }
+          Write-Host "OK: Windows DPAPI CurrentUser round-trip" -ForegroundColor Green
