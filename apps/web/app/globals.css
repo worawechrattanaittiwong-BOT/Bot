@@ -515,3 +515,153 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
     width:100%;
   }
 }
+
+
+/* ===== SCENOVA automatic Windows installer ===== */
+.local-install-panel .panel-head{
+  align-items:flex-start;
+}
+.auto-install-card{
+  margin-top:14px;
+  border:1px solid #31566b;
+  background:
+    radial-gradient(circle at 88% 10%,rgba(85,167,255,.08),transparent 28%),
+    linear-gradient(135deg,#0d1b23,#0a1116);
+  border-radius:18px;
+  padding:18px;
+}
+.auto-install-visual{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.auto-install-visual b,
+.auto-install-visual small{
+  display:block;
+}
+.auto-install-visual b{
+  font-size:17px;
+  color:#f1f6f7;
+}
+.auto-install-visual small{
+  margin-top:4px;
+  color:#6f858e;
+}
+.auto-install-icon{
+  width:52px;
+  height:52px;
+  border-radius:14px;
+  display:grid;
+  place-items:center;
+  background:#102735;
+  border:1px solid #376f91;
+  color:#9ed4ff;
+  font:800 11px monospace;
+  letter-spacing:.09em;
+}
+.auto-install-features{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+  margin:16px 0;
+}
+.auto-install-features span{
+  padding:9px 10px;
+  border:1px solid #1d3440;
+  background:#091218;
+  border-radius:10px;
+  color:#91a9b2;
+  font-size:11px;
+}
+.auto-install-button{
+  width:100%;
+}
+.agent-online{
+  border-color:#25523d;
+  background:#09150f;
+}
+.agent-status-card{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  gap:10px;
+  align-items:center;
+  margin-top:12px;
+  padding:12px 13px;
+  border:1px solid #214434;
+  background:#08120d;
+  border-radius:12px;
+}
+.agent-status-card b,
+.agent-status-card small{
+  display:block;
+}
+.agent-status-card b{
+  color:#8fe6b6;
+}
+.agent-status-card small{
+  margin-top:3px;
+  color:#607c6d;
+  font-size:10px;
+}
+.final-mt5-steps{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  margin-top:14px;
+}
+.final-mt5-steps>div{
+  display:grid;
+  grid-template-columns:28px 1fr;
+  gap:9px;
+  padding:11px;
+  border:1px solid #1b2d35;
+  background:#090f13;
+  border-radius:12px;
+}
+.final-mt5-steps>div>span{
+  width:28px;
+  height:28px;
+  border-radius:8px;
+  display:grid;
+  place-items:center;
+  background:#11232d;
+  color:var(--green);
+  font:800 10px monospace;
+}
+.final-mt5-steps b,
+.final-mt5-steps small{
+  display:block;
+}
+.final-mt5-steps small{
+  margin-top:4px;
+  color:#657981;
+  line-height:1.45;
+  font-size:9px;
+}
+.manual-install{
+  margin-top:14px;
+  border:1px solid #1a2a31;
+  border-radius:13px;
+  background:#070c0f;
+  overflow:hidden;
+}
+.manual-install summary{
+  cursor:pointer;
+  padding:12px 14px;
+  color:#718790;
+  font-size:11px;
+  user-select:none;
+}
+.manual-install[open] summary{
+  border-bottom:1px solid #17252c;
+  color:#a7bac1;
+}
+.manual-install-body{
+  padding:14px;
+}
+@media(max-width:820px){
+  .auto-install-features,
+  .final-mt5-steps{
+    grid-template-columns:1fr;
+  }
+}
