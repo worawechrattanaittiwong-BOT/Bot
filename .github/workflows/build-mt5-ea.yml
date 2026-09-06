@@ -32,19 +32,15 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Locate MQL5 data tree
+      - name: Prepare private EA source
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          $roots = @("C:\SCENOVA-MT5-Build", "$env:APPDATA\MetaQuotes\Terminal")
-          $trade = Get-ChildItem -Path $roots -Filter "Trade.mqh" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $trade) { throw "Standard MQL5 Include tree was not found" }
-          $includeDir = Split-Path -Parent $trade.FullName
-          $mql5Dir = Split-Path -Parent $includeDir
-          $expertDir = Join-Path $mql5Dir "Experts\SCENOVA"
-          New-Item -ItemType Directory -Force -Path $expertDir | Out-Null
-          Copy-Item -Force "mt5\FastBasketBot.mq5" (Join-Path $expertDir "FastBasketBot.mq5")
-          "EA_SOURCE=$(Join-Path $expertDir 'FastBasketBot.mq5')" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $sourceDir = "C:\SCENOVA-EA-Source"
+          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
+          $source = Join-Path $sourceDir "FastBasketBot.mq5"
+          Copy-Item -Force "mt5\FastBasketBot.mq5" $source
+          "EA_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Compile private MQ5 to EX5
         shell: powershell
