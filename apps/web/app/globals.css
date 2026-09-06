@@ -443,3 +443,40 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .mobile-only.mobile-app-head{display:flex !important}
   .mobile-only.mobile-nav{display:flex !important}
 }
+
+
+/* ===== Professional persistent session UX ===== */
+.session-checking{
+  display:inline-flex;
+  align-items:center;
+  min-height:38px;
+  padding:0 10px;
+  color:#607780;
+  font-size:11px;
+}
+.auth-session-card{
+  width:min(440px,100%);
+  padding:30px;
+}
+.session-loader{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin:8px 0 10px;
+  color:#d8e2e5;
+  font-weight:650;
+}
+.site-nav button{
+  font:inherit;
+}
+@media(max-width:640px){
+  .site-nav{
+    gap:6px;
+  }
+  .site-nav .btn{
+    padding:9px 10px;
+  }
+  .site-nav .session-checking{
+    display:none;
+  }
+}
