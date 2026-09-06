@@ -6,8 +6,22 @@
   },
   "forwardPorts": [3000, 4000, 5432, 6379],
   "portsAttributes": {
-    "3000": { "label": "Bot Web", "onAutoForward": "openPreview" },
-    "4000": { "label": "Bot API", "onAutoForward": "notify" }
+    "3000": {
+      "label": "Bot Web",
+      "onAutoForward": "openBrowser"
+    },
+    "4000": {
+      "label": "Bot API",
+      "onAutoForward": "notify"
+    },
+    "5432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "silent"
+    },
+    "6379": {
+      "label": "Redis",
+      "onAutoForward": "silent"
+    }
   },
   "postCreateCommand": "npm install",
   "remoteUser": "node"
