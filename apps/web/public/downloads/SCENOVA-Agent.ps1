@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.2.0"
+$AgentVersion = "1.2.1"
 $BaseDir = Split-Path -Parent $ConfigPath
 $LogPath = Join-Path $BaseDir "agent.log"
 
@@ -14,13 +14,14 @@ function Write-AgentLog([string]$Message) {
 }
 
 function Unprotect-CurrentUserSecret([string]$ProtectedValue) {
-  $raw = [Convert]::FromBase64String($ProtectedValue)
-  $plain = [Security.Cryptography.ProtectedData]::Unprotect(
+  Add-Type -AssemblyName System.Security -ErrorAction Stop
+  $raw = [System.Convert]::FromBase64String($ProtectedValue)
+  $plain = [System.Security.Cryptography.ProtectedData]::Unprotect(
     $raw,
     $null,
-    [Security.Cryptography.DataProtectionScope]::CurrentUser
+    [System.Security.Cryptography.DataProtectionScope]::CurrentUser
   )
-  return [Text.Encoding]::UTF8.GetString($plain)
+  return [System.Text.Encoding]::UTF8.GetString($plain)
 }
 
 function Invoke-AgentCycle {
