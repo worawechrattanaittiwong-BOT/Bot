@@ -3,8 +3,6 @@
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
-#include <Trade/Trade.mqh>
-
 enum ENUM_ENTRY_MODE
 {
    ENTRY_AUTO_MOMENTUM = 0,
@@ -43,8 +41,6 @@ input bool            InpPauseOnManualTrade   = true;
 input int             InpHeartbeatSeconds     = 3;
 input int             InpMaxOfflineLeaseSeconds = 600;
 
-CTrade trade;
-
 ENUM_BOT_STATE g_state = STATE_STOPPED;
 bool   g_access = false;
 bool   g_trailArmed = false;
@@ -73,10 +69,6 @@ int    g_tickCount = 0;
 
 int OnInit()
 {
-   trade.SetExpertMagicNumber(InpMagic);
-   trade.SetAsyncMode(true);
-   trade.SetDeviationInPoints(30);
-
    g_lot = InpLot;
    g_maxPositions = InpMaxPositions;
    g_triggerMoney = InpBasketTriggerMoney;
@@ -205,12 +197,7 @@ void OnTick()
    if(direction == 0)
       return;
 
-   bool sent = false;
-   if(direction > 0)
-      sent = trade.Buy(g_lot, _Symbol, 0.0, 0.0, 0.0, "SaaSBasket");
-   else
-      sent = trade.Sell(g_lot, _Symbol, 0.0, 0.0, 0.0, "SaaSBasket");
-
+   bool sent = SendMarketOrder(direction);
    if(sent)
       RegisterOrderRequest();
 }
@@ -452,6 +439,132 @@ int BasketDirection()
    return 0;
 }
 
+ENUM_ORDER_TYPE_FILLING AllowedFillingMode()
+{
+   long filling = SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
+   if((filling & SYMBOL_FILLING_FOK) == SYMBOL_FILLING_FOK)
+      return ORDER_FILLING_FOK;
+   if((filling & SYMBOL_FILLING_IOC) == SYMBOL_FILLING_IOC)
+      return ORDER_FILLING_IOC;
+   return ORDER_FILLING_RETURN;
+}
+
+double NormalizeTradeVolume(double volume)
+{
+   double minVolume = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double maxVolume = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+
+   volume = MathMax(minVolume, MathMin(maxVolume, volume));
+   if(step > 0.0)
+      volume = MathFloor((volume + 1e-12) / step) * step;
+
+   return NormalizeDouble(volume, 8);
+}
+
+bool TradeResultAccepted(const MqlTradeResult &result)
+{
+   return (
+      result.retcode == TRADE_RETCODE_DONE ||
+      result.retcode == TRADE_RETCODE_PLACED ||
+      result.retcode == TRADE_RETCODE_DONE_PARTIAL
+   );
+}
+
+bool SendMarketOrder(int direction)
+{
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+      return false;
+
+   MqlTradeRequest request = {};
+   MqlTradeResult result = {};
+
+   request.action = TRADE_ACTION_DEAL;
+   request.magic = InpMagic;
+   request.symbol = _Symbol;
+   request.volume = NormalizeTradeVolume(g_lot);
+   request.deviation = 30;
+   request.type_filling = AllowedFillingMode();
+   request.comment = "SaaSBasket";
+
+   if(direction > 0)
+   {
+      request.type = ORDER_TYPE_BUY;
+      request.price = tick.ask;
+   }
+   else
+   {
+      request.type = ORDER_TYPE_SELL;
+      request.price = tick.bid;
+   }
+
+   if(!OrderSend(request, result))
+   {
+      Print("OrderSend failed. error=", GetLastError(), " retcode=", result.retcode);
+      return false;
+   }
+
+   if(!TradeResultAccepted(result))
+   {
+      Print("Order rejected. retcode=", result.retcode, " comment=", result.comment);
+      return false;
+   }
+
+   return true;
+}
+
+bool ClosePositionByTicket(ulong ticket)
+{
+   if(ticket == 0 || !PositionSelectByTicket(ticket))
+      return false;
+
+   string symbol = PositionGetString(POSITION_SYMBOL);
+   double volume = PositionGetDouble(POSITION_VOLUME);
+   long positionType = PositionGetInteger(POSITION_TYPE);
+
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol, tick))
+      return false;
+
+   MqlTradeRequest request = {};
+   MqlTradeResult result = {};
+
+   request.action = TRADE_ACTION_DEAL;
+   request.position = ticket;
+   request.magic = InpMagic;
+   request.symbol = symbol;
+   request.volume = NormalizeTradeVolume(volume);
+   request.deviation = 30;
+   request.type_filling = AllowedFillingMode();
+   request.comment = "SaaSBasketClose";
+
+   if(positionType == POSITION_TYPE_BUY)
+   {
+      request.type = ORDER_TYPE_SELL;
+      request.price = tick.bid;
+   }
+   else
+   {
+      request.type = ORDER_TYPE_BUY;
+      request.price = tick.ask;
+   }
+
+   if(!OrderSend(request, result))
+   {
+      Print("Close order failed. ticket=", ticket, " error=", GetLastError(), " retcode=", result.retcode);
+      return false;
+   }
+
+   if(!TradeResultAccepted(result))
+   {
+      Print("Close rejected. ticket=", ticket, " retcode=", result.retcode, " comment=", result.comment);
+      return false;
+   }
+
+   return true;
+}
+
 void CloseAllBasket(string reason)
 {
    Print("CloseAllBasket reason=", reason);
@@ -463,7 +576,7 @@ void CloseAllBasket(string reason)
       if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
          PositionGetInteger(POSITION_MAGIC) != InpMagic)
          continue;
-      trade.PositionClose(ticket);
+      ClosePositionByTicket(ticket);
    }
 }
 
