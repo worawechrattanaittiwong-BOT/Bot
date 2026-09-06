@@ -10,7 +10,12 @@ if curl -fsS --max-time 2 http://127.0.0.1:4000/api/health >/dev/null 2>&1; then
 
 if [ "$WEB_OK" -eq 1 ] && [ "$API_OK" -eq 1 ]; then
   if [ -n "${CODESPACE_NAME:-}" ] && command -v gh >/dev/null 2>&1; then
-    gh codespace ports visibility 3000:public -c "$CODESPACE_NAME" >/dev/null 2>&1 || true
+    if gh codespace ports visibility 3000:public -c "$CODESPACE_NAME"; then
+      echo "Port 3000 visibility: PUBLIC"
+    else
+      echo "WARNING: Could not make port 3000 public automatically."
+      echo "Open the Codespaces Ports panel, right-click port 3000, then choose Port Visibility -> Public."
+    fi
   fi
   echo "Bot Web/API already running. Port 3000 requested as PUBLIC."
   exit 0
