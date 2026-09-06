@@ -9,7 +9,7 @@ export const ownerNavItems = [
   { section:"MY TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"▣", label:"Control Center", hint:"Balance, Status, Start / Stop" },
   { section:"MY TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"M", label:"บัญชี MT5 & EA", hint:"เชื่อมบัญชี, Local / Cloud, .set" },
   { section:"MY TRADING", key:"trading-settings", href:"/dashboard?view=settings", icon:"⚙", label:"ตั้งค่าบอท", hint:"Lot, Risk, Entry, Basket" },
-  { section:"MY TRADING", key:"trading-access", href:"/dashboard?view=access", icon:"A", label:"สิทธิ์ใช้งานของฉัน", hint:"Trial, Member, Expiry" },
+  { section:"MY TRADING", key:"trading-access", href:"/dashboard?view=access", icon:"A", label:"สิทธิ์ใช้งานของฉัน", hint:"OWNER · Unlimited Access" },
   { section:"PUBLIC", key:"website", href:"/", icon:"↗", label:"หน้าเว็บไซต์", hint:"หน้าแรก SCENOVA" }
 ] as const;
 
