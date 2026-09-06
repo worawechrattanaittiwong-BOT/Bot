@@ -610,24 +610,16 @@ export default function DashboardPage() {
                           <div className="step-connector">↓ ขั้นตอน 4 ทำต่อจากหน้าต่างที่เปิดขึ้นมาหลังลาก EA</div>
                         </div>
                       </div>
-                      <div className="human-step connected-step preset-load-step">
+                                            <div className="human-step connected-step preset-load-step">
                         <span>4</span>
                         <div>
-                          <b>ในหน้าต่างเดิม กด Inputs → Load แล้วเปิดไฟล์ .set</b>
-                          <small>กดแท็บ <b>Inputs</b> → กด <b>Load</b> ระบบ Windows อาจเปิดมาที่ Downloads หรือโฟลเดอร์ล่าสุดที่เคยใช้ ซึ่งเป็นเรื่องปกติ ไม่ได้แปลว่าไฟล์หาย</small>
-
-                          <div className="file-picker-help">
-                            <div className="file-picker-title">ถ้ากด Load แล้วเห็นหน้า Downloads เหมือนในรูป ให้ทำแบบนี้</div>
-                            <ol>
-                              <li>คลิกช่อง <b>Address bar</b> ด้านบนของหน้าต่าง Open ตรงที่แสดงคำว่า Downloads</li>
-                              <li>ลบข้อความเดิม แล้ววางตำแหน่งโฟลเดอร์ด้านล่างนี้</li>
-                              <li>กด <b>Enter</b> หน้าต่างจะพาไปยังโฟลเดอร์ Presets ของ MT5 ตัวนี้</li>
-                              <li>คลิก <b>SCENOVA-FastBasketBot.set</b> แล้วกด <b>Open</b></li>
-                              <li>เมื่อกลับมาหน้า Inputs ให้กด <b>OK</b></li>
-                            </ol>
-
-                            <div className="preset-path-box">
-                              <span>ตำแหน่งโฟลเดอร์ .set บนเครื่องนี้</span>
+                          <b>ในหน้าต่างเดิม ไปที่ Inputs → Load แล้วเลือกไฟล์ .set</b>
+                          <small>
+                            เลือก <b>SCENOVA-FastBasketBot.set</b> จากโฟลเดอร์ Presets ของ MT5 เครื่องนี้
+                            {terminalDataPath ? <> ตำแหน่งจริงคือ <code>{presetFolderPath}</code></> : <> ระบบจะแสดงตำแหน่งจริงให้อัตโนมัติเมื่อ Desktop Agent เชื่อมต่อ</>}
+                          </small>
+                          {terminalDataPath && (
+                            <div className="preset-path-inline">
                               <code>{presetFolderPath}</code>
                               <button
                                 type="button"
@@ -635,26 +627,18 @@ export default function DashboardPage() {
                                 onClick={async()=>{
                                   try {
                                     await navigator.clipboard.writeText(presetFolderPath);
-                                    setActivationMessage("คัดลอกตำแหน่งโฟลเดอร์ .set แล้ว — กลับไปหน้าต่าง Open ของ MT5 แล้ววางใน Address bar ได้เลย");
+                                    setActivationMessage("คัดลอกตำแหน่งโฟลเดอร์ .set แล้ว");
                                   } catch {
-                                    setActivationMessage("คัดลอกอัตโนมัติไม่ได้ ให้ลากเลือกข้อความตำแหน่งโฟลเดอร์แล้ว Copy แทน");
+                                    setActivationMessage("คัดลอกอัตโนมัติไม่ได้ ให้ลากเลือก Path แล้ว Copy แทน");
                                   }
                                 }}
                               >
-                                คัดลอกตำแหน่งโฟลเดอร์
+                                คัดลอก Path
                               </button>
                             </div>
-
-                            <div className="preset-file-name">
-                              <span>ชื่อไฟล์ที่ต้องเลือก</span>
-                              <b>SCENOVA-FastBasketBot.set</b>
-                            </div>
-
-                            {!terminalDataPath && (
-                              <div className="help warning-help">ถ้ายังไม่เห็นตำแหน่งเต็ม ให้รอ Desktop Agent เชื่อมต่อสักครู่แล้วกดรีเฟรชหน้าเว็บ จากนั้นระบบจะแสดง Path ของ MT5 เครื่องนี้ให้โดยอัตโนมัติ</div>
-                            )}
-                          </div>
+                          )}
                         </div>
+                      </div>
                       </div>
                       <div className="human-step">
                         <span>5</span>
