@@ -142,6 +142,22 @@ export default function DashboardPage() {
     }
   }
 
+  async function resetMt5() {
+    if (!confirm("ต้องการเปลี่ยนบัญชีหรือโหมด MT5 ใช่หรือไม่? ใช้ได้เมื่อ Bot หยุดและยังไม่มี Trial history")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("/bot/mt5/reset", { method: "POST" });
+      setInstallToken("");
+      setInstallInstanceId("");
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function command(path: string) {
     setBusy(true);
     setError("");
@@ -413,6 +429,14 @@ export default function DashboardPage() {
                         : "รอ EA บน MT5 ส่ง Heartbeat"}
                   </small>
                 </div>
+                <button
+                  className="btn ghost full"
+                  style={{marginTop:12}}
+                  disabled={busy || state === "RUNNING" || desired === "RUNNING"}
+                  onClick={resetMt5}
+                >
+                  เปลี่ยนบัญชี / เปลี่ยน Cloud-Local Mode
+                </button>
               </section>
             </div>
 
