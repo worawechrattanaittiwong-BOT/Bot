@@ -6,7 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$SetupVersion = "1.2.3"
+$SetupVersion = "1.2.4"
 
 function Protect-CurrentUserSecret([string]$Value) {
   Add-Type -AssemblyName System.Security -ErrorAction Stop
@@ -188,24 +188,25 @@ Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $agentLoopArgs
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor DarkCyan
-Write-Host " ติดตั้ง SCENOVA สำเร็จแล้ว" -ForegroundColor Green
+Write-Host " SCENOVA INSTALLATION COMPLETE" -ForegroundColor Green
 Write-Host "======================================================" -ForegroundColor DarkCyan
-Write-Host " EA ที่ติดตั้ง : FastBasketBot.ex5"
-Write-Host " Source .mq5   : ไม่ได้ติดตั้งลงเครื่องลูกค้า"
-Write-Host " ไฟล์ตั้งค่า   : $setPath"
-Write-Host " Agent          : ติดตั้งแล้วสำหรับ Windows User นี้"
-Write-Host " Admin/UAC      : ไม่ต้องใช้"
+Write-Host " EA installed : FastBasketBot.ex5"
+Write-Host " Source .mq5  : NOT installed on this PC"
+Write-Host " Preset file  : $setPath"
+Write-Host " Agent        : Installed for this Windows user"
+Write-Host " Admin/UAC    : Not required"
 Write-Host ""
-Write-Host "ทำต่อใน MT5 แค่ 5 ขั้นตอน:" -ForegroundColor Yellow
-Write-Host " 1. เปิด MT5 (ถ้าเปิดค้างอยู่ ให้ปิดแล้วเปิดใหม่ หรือ Refresh Navigator)"
-Write-Host " 2. ไปที่ Tools > Options > Expert Advisors"
-Write-Host "    ติ๊ก Allow WebRequest และเพิ่ม: $WebBase"
-Write-Host " 3. ที่ Navigator เปิด Expert Advisors > SCENOVA"
-Write-Host "    ลาก FastBasketBot ไปวางบนกราฟที่ต้องการ"
-Write-Host " 4. ในแท็บ Inputs กด Load แล้วเลือก SCENOVA-FastBasketBot.set"
-Write-Host "    Installer วางไฟล์ไว้ใน MQL5\Profiles\Presets ให้แล้ว"
-Write-Host " 5. กด OK แล้วเปิดปุ่ม Algo Trading ด้านบนของ MT5"
+Write-Host "Next steps in MT5:" -ForegroundColor Yellow
+Write-Host " 1. Restart MT5, or refresh the Navigator."
+Write-Host " 2. Open Tools > Options > Expert Advisors."
+Write-Host "    Enable Allow WebRequest and add: $WebBase"
+Write-Host " 3. Navigator > Expert Advisors > SCENOVA."
+Write-Host "    Drag FastBasketBot onto the chart you want to trade."
+Write-Host " 4. In the EA window, open Inputs > Load."
+Write-Host "    Choose SCENOVA-FastBasketBot.set."
+Write-Host "    The installer already placed it in MQL5\Profiles\Presets."
+Write-Host " 5. Click OK and enable Algo Trading in MT5."
 Write-Host ""
-Write-Host "เมื่อ EA เชื่อมสำเร็จ หน้าเว็บ SCENOVA จะเปลี่ยนสถานะเป็น เชื่อมต่อแล้ว อัตโนมัติ" -ForegroundColor Green
+Write-Host "When the EA connects, the SCENOVA website will update automatically." -ForegroundColor Green
 Write-Host ""
-Read-Host "กด Enter เพื่อปิดหน้าต่างนี้"
+Read-Host "Press Enter to close this window"
