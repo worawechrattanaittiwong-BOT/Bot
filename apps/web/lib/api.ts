@@ -16,10 +16,12 @@ export async function api(path: string, init: RequestInit = {}) {
   return data;
 }
 
-export async function adminApi(path: string, adminKey: string, init: RequestInit = {}) {
+export async function adminApi(path: string, init: RequestInit = {}, emergencyAdminKey = "") {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
-  headers.set("x-admin-key", adminKey);
+  const token = getToken();
+  if (token) headers.set("Authorization", "Bearer " + token);
+  if (emergencyAdminKey) headers.set("x-admin-key", emergencyAdminKey);
   const response = await fetch(API_URL + "/api" + path, { ...init, headers });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.message || "Request failed");
