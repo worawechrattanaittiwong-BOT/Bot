@@ -113,6 +113,30 @@ export class BotController {
     };
   }
 
+  @Post("mt5/rotate-install-token")
+  async rotateInstallToken(@Req() req: any) {
+    const instance = await this.db.one(
+      "SELECT bi.id,bi.mode FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE a.user_id=$1 ORDER BY bi.created_at DESC LIMIT 1",
+      [req.user.sub]
+    );
+    if (!instance) throw new ConflictException("connect MT5 first");
+    if (instance.mode !== "LOCAL") {
+      throw new ConflictException("install token rotation is only available for LOCAL mode");
+    }
+
+    const installToken = randomBytes(32).toString("hex");
+    await this.db.query(
+      "UPDATE bot_instances SET install_token_hash=$2,actual_state='OFFLINE',last_seen_at=NULL WHERE id=$1",
+      [instance.id, this.crypto.sha256(installToken)]
+    );
+
+    return {
+      instanceId: instance.id,
+      installToken,
+      note: "Previous local install token is now invalid. This token is shown once."
+    };
+  }
+
   @Post("mt5/reset")
   async resetMt5(@Req() req: any) {
     const account = await this.db.one(
