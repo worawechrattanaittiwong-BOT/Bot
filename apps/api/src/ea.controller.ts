@@ -44,6 +44,14 @@ export class EaController {
   }
 
   private async hasAccess(userId: string, mt5AccountId: string, mode: string) {
+    const user = await this.db.one(
+      "SELECT role,status FROM users WHERE id=$1",
+      [userId]
+    );
+    if (user?.status === "ACTIVE" && (user.role === "OWNER" || user.role === "ADMIN")) {
+      return true;
+    }
+
     const sub = await this.db.one(
       "SELECT 1 FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND p.mode=$2 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() LIMIT 1",
       [userId, mode]
