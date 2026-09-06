@@ -49,6 +49,7 @@ export default function DashboardPage() {
   const [installToken, setInstallToken] = useState("");
   const [installInstanceId, setInstallInstanceId] = useState("");
   const [settings, setSettings] = useState<any>(defaultSettings);
+  const mt5ApiBase = process.env.NEXT_PUBLIC_MT5_API_BASE || "";
 
   async function load() {
     try {
@@ -140,6 +141,55 @@ export default function DashboardPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function rotateInstallToken() {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api("/bot/mt5/rotate-install-token", { method: "POST" });
+      setInstallInstanceId(result.instanceId || data?.instance?.id || "");
+      setInstallToken(result.installToken || "");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function downloadEaSet() {
+    if (!installToken || !installInstanceId || !mt5ApiBase) return;
+    const content = [
+      "InpApiBase=" + mt5ApiBase,
+      "InpInstanceId=" + installInstanceId,
+      "InpInstallToken=" + installToken,
+      "InpMagic=26090501",
+      "InpLot=" + settings.lot,
+      "InpMaxPositions=" + settings.maxPositions,
+      "InpBasketTriggerMoney=" + settings.basketTriggerMoney,
+      "InpBasketTrailMoney=" + settings.basketTrailMoney,
+      "InpMaxBasketLossMoney=" + settings.maxBasketLossMoney,
+      "InpDailyLossMoney=" + settings.dailyLossMoney,
+      "InpMaxSpreadPoints=" + settings.maxSpreadPoints,
+      "InpMinOrderIntervalMs=" + settings.minOrderIntervalMs,
+      "InpMaxOrdersPerMinute=" + settings.maxOrdersPerMinute,
+      "InpEntryMode=" + (settings.entryMode === "BUY_ONLY" ? 1 : settings.entryMode === "SELL_ONLY" ? 2 : 0),
+      "InpMomentumTicks=20",
+      "InpMomentumEntryPoints=8.0",
+      "InpStrongFlowPoints=25.0",
+      "InpFlowTrailBoost=0.60",
+      "InpPauseOnManualTrade=true",
+      "InpHeartbeatSeconds=3",
+      "InpMaxOfflineLeaseSeconds=600"
+    ].join("\r\n");
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "FastBasketBot-" + installInstanceId.slice(0,8) + ".set";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function resetMt5() {
@@ -336,9 +386,10 @@ export default function DashboardPage() {
           <>
             {!isMt5Online && (
               <div className="notice" style={{marginBottom:14}}>
-                <b>ยังไม่ได้รับข้อมูลจาก MT5</b><br/>
-                บัญชีถูกบันทึกในระบบแล้ว แต่ MT5/EA หรือ Cloud Worker ยังไม่เคยส่ง Heartbeat เข้ามา
-                จึงยังไม่สามารถอ่าน Balance, Equity และ Position จริงได้
+                <b>บัญชีถูกบันทึกแล้ว แต่ยังไม่ได้เชื่อม MT5 จริง</b><br/>
+                {data.account.mode === "LOCAL"
+                  ? "Local Mode ต้องให้ FastBasketBot EA รันอยู่ใน MetaTrader 5 ของเครื่องคุณก่อน ระบบจึงจะอ่าน Balance, Equity และ Position ได้"
+                  : "Cloud Mode ต้องมี Windows Cloud Worker เปิด MT5 ของบัญชีนี้ก่อน ระบบจึงจะอ่าน Balance, Equity และ Position ได้"}
               </div>
             )}
 
@@ -429,6 +480,25 @@ export default function DashboardPage() {
                         : "รอ EA บน MT5 ส่ง Heartbeat"}
                   </small>
                 </div>
+                {data.account.mode === "LOCAL" && !isMt5Online && (
+                  <div className="flow-node" style={{marginTop:12}}>
+                    <b>CONNECT LOCAL MT5</b>
+                    <small>1) เปิด MetaTrader 5 และ MetaEditor</small>
+                    <small>2) Compile FastBasketBot.mq5 เป็น EX5 แล้ว Attach ลงกราฟ</small>
+                    <small>3) เพิ่ม API URL ใน MT5 → Tools → Options → Expert Advisors → Allow WebRequest</small>
+                    <small>4) โหลดไฟล์ .set ที่สร้างจากปุ่มด้านล่าง แล้วเปิด Algo Trading</small>
+                    {mt5ApiBase && <small className="mono" style={{wordBreak:"break-all"}}>API: {mt5ApiBase}</small>}
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+                      <button className="btn primary" disabled={busy} onClick={rotateInstallToken}>
+                        สร้างรหัสเชื่อม EA ใหม่
+                      </button>
+                      <button className="btn" disabled={!installToken || !installInstanceId || !mt5ApiBase} onClick={downloadEaSet}>
+                        ดาวน์โหลดไฟล์ตั้งค่า EA (.set)
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   className="btn ghost full"
                   style={{marginTop:12}}
@@ -480,9 +550,10 @@ export default function DashboardPage() {
 
         {installToken && (
           <div className="notice good" style={{marginTop:16}}>
-            <b>Local EA Activation (แสดงครั้งนี้ครั้งเดียว)</b><br/>
+            <b>Local EA Activation — เก็บข้อมูลนี้เป็นความลับ</b><br/>
             Instance ID: <span className="mono" style={{wordBreak:"break-all"}}>{installInstanceId}</span><br/>
-            Install Token: <span className="mono" style={{wordBreak:"break-all"}}>{installToken}</span>
+            Install Token: <span className="mono" style={{wordBreak:"break-all"}}>{installToken}</span><br/>
+            <span className="help">การสร้าง Token ใหม่จะทำให้ Token เก่าใช้ไม่ได้</span>
           </div>
         )}
       </main>
