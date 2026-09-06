@@ -2,12 +2,16 @@ import {
   Body,
   ConflictException,
   Controller,
+  Get,
   Post,
-  UnauthorizedException
+  Req,
+  UnauthorizedException,
+  UseGuards
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { compare, hash } from "bcryptjs";
 import { DbService } from "./db.service";
+import { JwtGuard } from "./security";
 
 @Controller("auth")
 export class AuthController {
@@ -15,6 +19,28 @@ export class AuthController {
     private readonly db: DbService,
     private readonly jwt: JwtService
   ) {}
+
+  @Get("session")
+  @UseGuards(JwtGuard)
+  async session(@Req() req: any) {
+    const user = await this.db.one(
+      "SELECT id,user_code,email,role,status FROM users WHERE id=$1",
+      [req.user.sub]
+    );
+    if (!user || user.status !== "ACTIVE") {
+      throw new UnauthorizedException("session unavailable");
+    }
+    return {
+      authenticated: true,
+      user: {
+        id: user.id,
+        userCode: user.user_code,
+        email: user.email,
+        role: user.role,
+        status: user.status
+      }
+    };
+  }
 
   @Post("register")
   async register(@Body() body: { email: string; password: string }) {
