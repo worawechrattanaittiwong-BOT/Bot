@@ -480,3 +480,38 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
     display:none;
   }
 }
+
+
+/* ===== MT5 EA download UX ===== */
+.ea-download-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  margin-top:14px;
+  padding:14px 15px;
+  border:1px solid #244151;
+  border-radius:14px;
+  background:linear-gradient(135deg,#0d1920,#0a1014);
+}
+.ea-download-card b,
+.ea-download-card small{
+  display:block;
+}
+.ea-download-card b{
+  color:#eef5f7;
+}
+.ea-download-card small{
+  margin-top:4px;
+  color:#6c8189;
+  line-height:1.45;
+}
+@media(max-width:720px){
+  .ea-download-card{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  .ea-download-card .btn{
+    width:100%;
+  }
+}
