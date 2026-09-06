@@ -122,6 +122,10 @@ export default function DashboardPage() {
   }, [entitlement]);
 
   const connectionLabel = isMt5Online ? "เชื่อมต่อแล้ว" : data?.account ? "รอ MT5 เชื่อมต่อ" : "ยังไม่ได้เชื่อมบัญชี";
+  const agentLastSeen = data?.instance?.agent_last_seen_at
+    ? new Date(data.instance.agent_last_seen_at)
+    : null;
+  const isAgentOnline = Boolean(agentLastSeen) && Date.now() - (agentLastSeen?.getTime() || 0) < 30 * 60 * 1000;
 
   async function linkAccount(e: FormEvent) {
     e.preventDefault();
@@ -151,6 +155,68 @@ export default function DashboardPage() {
       setNotice("บันทึกบัญชี MT5 แล้ว ขั้นต่อไปคือเชื่อม EA ให้ระบบเห็นสถานะจริง");
       await load();
       setActiveView("account");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function downloadWindowsInstaller() {
+    setBusy(true);
+    setError("");
+    setActivationMessage("");
+    try {
+      if (data?.instance?.actual_state === "RUNNING" || data?.instance?.desired_state === "RUNNING") {
+        throw new Error("กรุณาหยุดบอทก่อนติดตั้งหรือเชื่อมใหม่");
+      }
+
+      const result = await api("/bot/mt5/rotate-install-token", { method: "POST" });
+      const instanceId = result.instanceId || data?.instance?.id || "";
+      const token = result.installToken || "";
+      if (!instanceId || !token) throw new Error("ไม่สามารถสร้างรหัสติดตั้งได้");
+
+      setInstallInstanceId(instanceId);
+      setInstallToken(token);
+
+      const webBase = window.location.origin;
+      const apiBase = mt5ApiBase || webBase + "/backend";
+      const installerUrl = webBase + "/downloads/SCENOVA-MT5-Setup.ps1";
+      const cmd = [
+        "@echo off",
+        "chcp 65001 >nul",
+        "title SCENOVA MT5 BOT EA Installer",
+        "echo.",
+        "echo ================================================",
+        "echo  SCENOVA MT5 BOT EA - Automatic Installer",
+        "echo ================================================",
+        "echo.",
+        "set \"SCENOVA_SETUP=%TEMP%\\SCENOVA-MT5-Setup.ps1\"",
+        "echo Downloading SCENOVA installer...",
+        "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"try { Invoke-WebRequest -UseBasicParsing -Uri '" + installerUrl + "' -OutFile $env:SCENOVA_SETUP } catch { Write-Host $_.Exception.Message -ForegroundColor Red; exit 1 }\"",
+        "if errorlevel 1 goto :failed",
+        "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%SCENOVA_SETUP%\" -ApiBase \"" + apiBase + "\" -WebBase \"" + webBase + "\" -InstanceId \"" + instanceId + "\" -InstallToken \"" + token + "\"",
+        "goto :end",
+        ":failed",
+        "echo.",
+        "echo Installation download failed. Please check your internet connection.",
+        ":end",
+        "echo.",
+        "pause"
+      ].join("\r\n");
+
+      const blob = new Blob([cmd], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "SCENOVA-MT5-Installer.cmd";
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+      setActivationMessage("ดาวน์โหลด SCENOVA Installer แล้ว ให้ดับเบิลคลิกไฟล์ SCENOVA-MT5-Installer.cmd จากนั้นกด Yes เมื่อ Windows ขอสิทธิ์");
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -466,26 +532,81 @@ export default function DashboardPage() {
               </section>
 
               {data.account.mode === "LOCAL" && (
-                <section className="panel purple" style={{marginTop:16}}>
-                  <div className="panel-head"><div><div className="eyebrow">LOCAL CONNECTION</div><h2>เชื่อม EA ให้เสร็จใน 4 ขั้น</h2></div></div>
-                  <div className="instruction-list">
-                    <div><span>1</span><div><b>ดาวน์โหลดและติดตั้ง SCENOVA EA</b><small>ดาวน์โหลด FastBasketBot.mq5 จากปุ่มด้านล่าง แล้ววางใน MQL5 → Experts → SCENOVA และ Compile ให้ได้ 0 errors</small></div></div>
-                    <div><span>2</span><div><b>อนุญาต WebRequest ใน MT5</b><small>Tools → Options → Expert Advisors → Allow WebRequest แล้วเพิ่ม https://snvea-bot.online</small></div></div>
-                    <div><span>3</span><div><b>สร้างไฟล์เชื่อมต่อ .set</b><small>สร้าง Install Token สำหรับบัญชีนี้ แล้วดาวน์โหลดไฟล์ .set จากเว็บ</small></div></div>
-                    <div><span>4</span><div><b>Attach EA + Load .set + เปิด Algo Trading</b><small>เมื่อ EA ส่ง Heartbeat เข้ามา สถานะจะเปลี่ยนเป็น “เชื่อมต่อแล้ว” อัตโนมัติ</small></div></div>
-                  </div>
-                  {activationMessage && <div className="notice good">{activationMessage}</div>}
-                  <div className="ea-download-card">
+                <section className="panel purple local-install-panel" style={{marginTop:16}}>
+                  <div className="panel-head">
                     <div>
-                      <b>SCENOVA FastBasketBot EA</b>
-                      <small>ตัวโปรแกรม EA สำหรับ MetaTrader 5 — ติดตั้งครั้งเดียวต่อเครื่อง</small>
+                      <div className="eyebrow">LOCAL CONNECTION</div>
+                      <h2>ติดตั้ง SCENOVA บน MT5</h2>
+                      <p className="muted">แนะนำการติดตั้งอัตโนมัติ ระบบจะตรวจหา MT5, ลง EA, สร้างไฟล์เชื่อมต่อ และติดตั้ง Agent ให้เอง</p>
                     </div>
-                    <a className="btn primary" href="/downloads/FastBasketBot.mq5" download>↓ ดาวน์โหลด FastBasketBot.mq5</a>
+                    <span className={"badge "+(isAgentOnline?"agent-online":"")}>
+                      <span className={"dot "+(isAgentOnline?"green":"red")}/>
+                      {isAgentOnline ? "Desktop Agent พร้อมใช้งาน" : "ยังไม่พบ Desktop Agent"}
+                    </span>
                   </div>
-                  <div className="primary-actions">
-                    <button className="btn" disabled={busy} onClick={rotateInstallToken}>{busy?"กำลังสร้าง...":"สร้างรหัสเชื่อมต่อใหม่"}</button>
-                    <button className="btn download-set-btn" disabled={!installToken || !installInstanceId} onClick={()=>downloadEaSet()}>↓ ดาวน์โหลดไฟล์ .set</button>
+
+                  <div className="auto-install-card">
+                    <div className="auto-install-visual">
+                      <span className="auto-install-icon">WIN</span>
+                      <div>
+                        <b>SCENOVA Automatic Installer</b>
+                        <small>สำหรับ Windows + MetaTrader 5</small>
+                      </div>
+                    </div>
+                    <div className="auto-install-features">
+                      <span>✓ ตรวจหา MT5 อัตโนมัติ</span>
+                      <span>✓ ติดตั้ง FastBasketBot</span>
+                      <span>✓ สร้าง .set และผูกบัญชี</span>
+                      <span>✓ ติดตั้ง Agent อัปเดตอัตโนมัติ</span>
+                    </div>
+                    <button className="btn primary btn-lg auto-install-button" disabled={busy} onClick={downloadWindowsInstaller}>
+                      {busy ? "กำลังเตรียม Installer..." : "↓ ติดตั้ง SCENOVA บน Windows"}
+                    </button>
+                    <div className="help">หลังดาวน์โหลด ให้ดับเบิลคลิก <b>SCENOVA-MT5-Installer.cmd</b> และกด Yes ที่ Windows UAC</div>
                   </div>
+
+                  {isAgentOnline && (
+                    <div className="agent-status-card">
+                      <span className="dot green"/>
+                      <div>
+                        <b>SCENOVA Desktop Agent เชื่อมต่อแล้ว</b>
+                        <small>
+                          เวอร์ชัน {data.instance?.agent_version || "—"} · ล่าสุด {agentLastSeen?.toLocaleString("th-TH") || "—"}
+                        </small>
+                      </div>
+                    </div>
+                  )}
+
+                  {activationMessage && <div className="notice good">{activationMessage}</div>}
+
+                  <div className="final-mt5-steps">
+                    <div><span>1</span><div><b>เปิด MT5 หลังติดตั้ง</b><small>Navigator → Expert Advisors → SCENOVA → FastBasketBot</small></div></div>
+                    <div><span>2</span><div><b>อนุญาต WebRequest</b><small>Tools → Options → Expert Advisors → เพิ่ม https://snvea-bot.online</small></div></div>
+                    <div><span>3</span><div><b>Attach EA และเปิด Algo Trading</b><small>Load SCENOVA-FastBasketBot.set แล้วสถานะเว็บจะเปลี่ยนเป็น “เชื่อมต่อแล้ว”</small></div></div>
+                  </div>
+
+                  <details className="manual-install">
+                    <summary>ติดตั้งแบบ Manual / สำหรับแก้ปัญหา</summary>
+                    <div className="manual-install-body">
+                      <div className="instruction-list">
+                        <div><span>1</span><div><b>ดาวน์โหลด EA</b><small>วาง FastBasketBot.mq5 ใน MQL5 → Experts → SCENOVA แล้ว Compile ให้ได้ 0 errors</small></div></div>
+                        <div><span>2</span><div><b>สร้างรหัสเชื่อมต่อ</b><small>Token ใหม่จะยกเลิก Token เก่า ใช้เมื่อเชื่อมเครื่องใหม่หรือแก้การติดตั้ง</small></div></div>
+                        <div><span>3</span><div><b>ดาวน์โหลด .set</b><small>Load ไฟล์ในหน้าต่าง Inputs ของ FastBasketBot</small></div></div>
+                      </div>
+                      <div className="ea-download-card">
+                        <div>
+                          <b>SCENOVA FastBasketBot EA</b>
+                          <small>ไฟล์ Source สำหรับการติดตั้ง Manual</small>
+                        </div>
+                        <a className="btn" href="/downloads/FastBasketBot.mq5" download>↓ FastBasketBot.mq5</a>
+                      </div>
+                      <div className="primary-actions">
+                        <button className="btn" disabled={busy} onClick={rotateInstallToken}>{busy?"กำลังสร้าง...":"สร้างรหัสเชื่อมต่อใหม่"}</button>
+                        <button className="btn download-set-btn" disabled={!installToken || !installInstanceId} onClick={()=>downloadEaSet()}>↓ ดาวน์โหลดไฟล์ .set</button>
+                      </div>
+                    </div>
+                  </details>
+
                   {mt5ApiBase && <div className="connection-url"><span>API สำหรับ EA</span><code>{mt5ApiBase}</code></div>}
                 </section>
               )}
