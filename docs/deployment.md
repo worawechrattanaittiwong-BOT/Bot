@@ -27,6 +27,7 @@ Production แนะนำให้ Web/API ใช้ domain แยก เช่
 1. database/001_init.sql
 2. database/002_cloud_worker.sql
 3. database/003_trial_history_lock.sql
+4. database/004_broker_catalog.sql
 
 ## Secrets
 ใช้ node scripts/generate-secrets.mjs เพื่อสร้างค่าเริ่มต้น แล้วเก็บค่าจริงใน secret manager / server environment เท่านั้น.
