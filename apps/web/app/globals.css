@@ -417,3 +417,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   border-color:#345f79;
   background:#0e1a21;
 }
+
+
+/* ===== Navigation visibility + complete owner menu fix ===== */
+.mobile-only.mobile-app-head,
+.mobile-only.mobile-nav{
+  display:none !important;
+}
+.owner-sidebar{
+  overflow-y:auto;
+  overflow-x:hidden;
+  scrollbar-width:thin;
+  scrollbar-color:#263943 transparent;
+}
+.owner-sidebar .owner-profile{
+  margin-top:22px;
+}
+.owner-nav-label-secondary{
+  margin-top:20px;
+}
+.owner-nav-link{
+  display:grid;
+}
+@media(max-width:960px){
+  .mobile-only.mobile-app-head{display:flex !important}
+  .mobile-only.mobile-nav{display:flex !important}
+}
