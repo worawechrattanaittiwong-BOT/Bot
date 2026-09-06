@@ -52,7 +52,7 @@ export class BotController {
   async dashboard(@Req() req: any) {
     const userId = req.user.sub;
     const user = await this.db.one(
-      "SELECT id,user_code,email,status FROM users WHERE id=$1",
+      "SELECT id,user_code,email,role,status FROM users WHERE id=$1",
       [userId]
     );
     const account = await this.db.one(
@@ -79,6 +79,24 @@ export class BotController {
       instance,
       settings: settings?.settings || null,
       entitlement: await this.entitlement(userId, account?.id || null, account?.mode || null)
+    };
+  }
+
+  @Get("logs")
+  @Header("Cache-Control", "no-store, no-cache, must-revalidate")
+  async logs(@Req() req: any) {
+    const instance = await this.getInstance(req.user.sub);
+    const snapshot = await this.db.one(
+      "SELECT bi.id,bi.actual_state,bi.desired_state,bi.last_seen_at,bi.metrics,a.account_number,a.broker,a.broker_server,a.mode FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE bi.id=$1",
+      [instance.id]
+    );
+    const rows = await this.db.query(
+      "SELECT id,command,payload,status,created_at,delivered_at,acked_at FROM bot_commands WHERE bot_instance_id=$1 ORDER BY id DESC LIMIT 80",
+      [instance.id]
+    );
+    return {
+      snapshot,
+      events: rows.rows
     };
   }
 
