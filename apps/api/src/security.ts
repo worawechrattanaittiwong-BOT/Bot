@@ -28,12 +28,30 @@ export class JwtGuard implements CanActivate {
 
 @Injectable()
 export class AdminGuard implements CanActivate {
+  constructor(private readonly jwt: JwtService) {}
+
   canActivate(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest();
+
+    const raw = String(req.headers.authorization || "");
+    const token = raw.startsWith("Bearer ") ? raw.slice(7) : "";
+    if (token) {
+      try {
+        const user = this.jwt.verify(token);
+        if (user?.role === "OWNER" || user?.role === "ADMIN") {
+          req.user = user;
+          return true;
+        }
+      } catch {
+        // Fall through to the emergency admin key.
+      }
+    }
+
     const supplied = String(req.headers["x-admin-key"] || "");
     const expected = String(process.env.ADMIN_KEY || "");
-    if (!expected || supplied !== expected) throw new ForbiddenException("admin key invalid");
-    return true;
+    if (expected && supplied === expected) return true;
+
+    throw new ForbiddenException("owner/admin access required");
   }
 }
 
