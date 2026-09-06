@@ -6,7 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$SetupVersion = "1.2.5"
+$SetupVersion = "1.2.6"
 
 function Protect-CurrentUserSecret([string]$Value) {
   Add-Type -AssemblyName System.Security -ErrorAction Stop
@@ -74,10 +74,11 @@ $dataPath = $selected.DataPath
 Write-Host "MT5 data folder: $dataPath" -ForegroundColor Green
 
 $expertsDir = Join-Path $dataPath "MQL5\Experts\SCENOVA"
-$profilesDir = Join-Path $dataPath "MQL5\Profiles\Presets"
-$legacyProfilesDir = Join-Path $dataPath "MQL5\Profiles\Tester"
+$presetsDir = Join-Path $dataPath "MQL5\Presets"
+$legacyProfilesPresetsDir = Join-Path $dataPath "MQL5\Profiles\Presets"
+$legacyTesterDir = Join-Path $dataPath "MQL5\Profiles\Tester"
 New-Item -ItemType Directory -Force -Path $expertsDir | Out-Null
-New-Item -ItemType Directory -Force -Path $profilesDir | Out-Null
+New-Item -ItemType Directory -Force -Path $presetsDir | Out-Null
 
 $eaBinary = Join-Path $expertsDir "FastBasketBot.ex5"
 $artifactPayload = @{
@@ -116,15 +117,10 @@ if ($downloadedHash -ne $expectedHash) {
 
 Move-Item -Force $tmpEa $eaBinary
 
-$setPath = Join-Path $profilesDir "SCENOVA-FastBasketBot.set"
+$setPath = Join-Path $presetsDir "SCENOVA-FastBasketBot.set"
 
-# Migrate any preset created by installer versions <= 1.2.1 from the Strategy Tester folder.
-$legacySetPath = Join-Path $legacyProfilesDir "SCENOVA-FastBasketBot.set"
-if (Test-Path $legacySetPath) {
-  try {
-    Copy-Item -Force $legacySetPath $setPath
-  } catch {}
-}
+$legacyProfilesPresetPath = Join-Path $legacyProfilesPresetsDir "SCENOVA-FastBasketBot.set"
+$legacyTesterPath = Join-Path $legacyTesterDir "SCENOVA-FastBasketBot.set"
 
 $setLines = @(
   "InpApiBase=$ApiBase",
@@ -151,9 +147,11 @@ $setLines = @(
 )
 Set-Content -Path $setPath -Value $setLines -Encoding UTF8
 
-# Remove the old SCENOVA preset from Strategy Tester to avoid confusing customers.
-if (Test-Path $legacySetPath) {
-  try { Remove-Item -Force $legacySetPath } catch {}
+# Remove presets created by older installer versions in incorrect locations.
+foreach ($oldPreset in @($legacyProfilesPresetPath, $legacyTesterPath)) {
+  if (Test-Path $oldPreset) {
+    try { Remove-Item -Force $oldPreset } catch {}
+  }
 }
 
 $programDir = Join-Path $env:LOCALAPPDATA "SCENOVA"
@@ -204,7 +202,7 @@ Write-Host " 3. Navigator > Expert Advisors > SCENOVA."
 Write-Host "    Drag FastBasketBot onto the chart you want to trade."
 Write-Host " 4. In the EA window, open Inputs > Load."
 Write-Host "    Choose SCENOVA-FastBasketBot.set."
-Write-Host "    The installer already placed it in MQL5\Profiles\Presets."
+Write-Host "    The installer already placed it in MQL5\Presets."
 Write-Host " 5. Click OK and enable Algo Trading in MT5."
 Write-Host ""
 Write-Host "When the EA connects, the SCENOVA website will update automatically." -ForegroundColor Green
