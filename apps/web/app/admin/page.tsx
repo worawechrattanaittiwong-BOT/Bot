@@ -169,13 +169,32 @@ export default function AdminPage() {
           ))}
         </nav>
 
-        <div className="owner-nav-label owner-nav-label-secondary">MY SYSTEM</div>
+        <div className="owner-nav-label owner-nav-label-secondary">MY TRADING</div>
         <nav className="side-nav owner-nav">
-          <a className="owner-nav-item owner-nav-link" href="/dashboard">
+          <a className="owner-nav-item owner-nav-link" href="/dashboard?view=overview">
             <span className="owner-nav-icon">▣</span>
-            <span className="owner-nav-copy"><b>บัญชีเทรดของฉัน</b><small>MT5, EA, Settings, Trial</small></span>
+            <span className="owner-nav-copy"><b>Control Center</b><small>Balance, Status, Start / Stop</small></span>
             <span className="owner-nav-caret">›</span>
           </a>
+          <a className="owner-nav-item owner-nav-link" href="/dashboard?view=account">
+            <span className="owner-nav-icon">M</span>
+            <span className="owner-nav-copy"><b>บัญชี MT5 & EA</b><small>เชื่อมบัญชี, Local / Cloud, .set</small></span>
+            <span className="owner-nav-caret">›</span>
+          </a>
+          <a className="owner-nav-item owner-nav-link" href="/dashboard?view=settings">
+            <span className="owner-nav-icon">⚙</span>
+            <span className="owner-nav-copy"><b>ตั้งค่าบอท</b><small>Lot, Risk, Entry, Basket</small></span>
+            <span className="owner-nav-caret">›</span>
+          </a>
+          <a className="owner-nav-item owner-nav-link" href="/dashboard?view=access">
+            <span className="owner-nav-icon">A</span>
+            <span className="owner-nav-copy"><b>สิทธิ์ใช้งานของฉัน</b><small>Trial, Member, Expiry</small></span>
+            <span className="owner-nav-caret">›</span>
+          </a>
+        </nav>
+
+        <div className="owner-nav-label owner-nav-label-secondary">PUBLIC</div>
+        <nav className="side-nav owner-nav">
           <a className="owner-nav-item owner-nav-link" href="/">
             <span className="owner-nav-icon">↗</span>
             <span className="owner-nav-copy"><b>หน้าเว็บไซต์</b><small>หน้าแรก SCENOVA</small></span>
@@ -198,7 +217,10 @@ export default function AdminPage() {
         </div>
         <div className="mobile-only mobile-nav owner-mobile-nav">
           {nav.map(item=><button key={item.id} className={activeMenu===item.id?"active":""} onClick={()=>setActiveMenu(item.id)}>{item.label}</button>)}
-          <a href="/dashboard">MT5 ของฉัน</a>
+          <a href="/dashboard?view=overview">Control</a>
+          <a href="/dashboard?view=account">MT5 & EA</a>
+          <a href="/dashboard?view=settings">ตั้งค่าบอท</a>
+          <a href="/dashboard?view=access">สิทธิ์</a>
           <a href="/">เว็บไซต์</a>
         </div>
 
