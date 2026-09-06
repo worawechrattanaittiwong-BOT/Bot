@@ -29,6 +29,14 @@ export class BotController {
   }
 
   private async entitlement(userId: string, mt5AccountId: string | null, mode: string | null) {
+    const user = await this.db.one(
+      "SELECT role,status FROM users WHERE id=$1",
+      [userId]
+    );
+    if (user?.status === "ACTIVE" && (user.role === "OWNER" || user.role === "ADMIN")) {
+      return { allowed: true, source: "OWNER", unlimited: true, expiresAt: null };
+    }
+
     const sub = await this.db.one(
       "SELECT s.id,s.expires_at,p.code,p.mode FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
       [userId, mode]
