@@ -103,12 +103,35 @@ $artifactPayload = @{
   installToken = $InstallToken
 } | ConvertTo-Json -Compress
 
+$metadataPayload = @{
+  instanceId = $InstanceId
+  installToken = $InstallToken
+  agentVersion = "setup-$SetupVersion"
+  terminalPath = $dataPath
+  eaHash = ""
+  hostname = $env:COMPUTERNAME
+} | ConvertTo-Json -Compress
+
+Write-Host "Checking protected SCENOVA EA release..."
+$metadata = Invoke-RestMethod -Method Post -Uri "$ApiBase/api/ea/agent-heartbeat" -ContentType "application/json" -Body $metadataPayload
+if (-not $metadata.artifactAvailable -or -not $metadata.artifactHash) {
+  throw "SCENOVA production EA artifact is not ready yet"
+}
+
 Write-Host "Downloading protected SCENOVA FastBasketBot.ex5..."
 $tmpEa = Join-Path $env:TEMP "SCENOVA-FastBasketBot.ex5"
 Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$ApiBase/api/ea/artifact" -ContentType "application/json" -Body $artifactPayload -OutFile $tmpEa
 if (-not (Test-Path $tmpEa)) {
   throw "Compiled SCENOVA EA could not be downloaded"
 }
+
+$downloadedHash = (Get-FileHash -Algorithm SHA256 -Path $tmpEa).Hash.ToLowerInvariant()
+$expectedHash = ([string]$metadata.artifactHash).ToLowerInvariant()
+if ($downloadedHash -ne $expectedHash) {
+  Remove-Item -Force $tmpEa -ErrorAction SilentlyContinue
+  throw "SCENOVA EA integrity verification failed"
+}
+
 Move-Item -Force $tmpEa $eaBinary
 
 $setPath = Join-Path $profilesDir "SCENOVA-FastBasketBot.set"
