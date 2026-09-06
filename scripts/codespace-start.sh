@@ -28,7 +28,7 @@ else
   export BOT_API_URL="http://127.0.0.1:4000"
 fi
 
-export NEXT_PUBLIC_MT5_API_BASE="$BOT_API_URL"
+export NEXT_PUBLIC_MT5_API_BASE="$BOT_WEB_URL/backend"
 
 echo "Starting API on :4000 and Web on :3000"
 
