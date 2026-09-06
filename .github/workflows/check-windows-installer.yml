@@ -1,0 +1,44 @@
+name: Check Windows Installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/public/downloads/SCENOVA-MT5-Setup.ps1"
+      - "apps/web/public/downloads/SCENOVA-Agent.ps1"
+      - ".github/workflows/check-windows-installer.yml"
+  workflow_dispatch:
+
+jobs:
+  syntax:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse PowerShell installer scripts
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $files = @(
+            "apps/web/public/downloads/SCENOVA-MT5-Setup.ps1",
+            "apps/web/public/downloads/SCENOVA-Agent.ps1"
+          )
+
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            )
+
+            if ($errors.Count -gt 0) {
+              Write-Host "PowerShell syntax errors in $file" -ForegroundColor Red
+              $errors | ForEach-Object { Write-Host $_.Message -ForegroundColor Red }
+              exit 1
+            }
+
+            Write-Host "OK: $file" -ForegroundColor Green
+          }
