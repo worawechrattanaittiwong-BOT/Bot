@@ -1062,3 +1062,42 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .bot-log-row{grid-template-columns:10px 1fr}
   .bot-log-row time{grid-column:2;white-space:normal}
 }
+
+
+/* ===== Owner sidebar click reliability + unlimited owner access ===== */
+.owner-nav-item,
+.owner-nav-link{
+  cursor:pointer;
+  min-height:58px;
+  position:relative;
+  z-index:1;
+  touch-action:manipulation;
+  user-select:none;
+  text-decoration:none;
+}
+.owner-nav-item > *,
+.owner-nav-link > *{
+  pointer-events:none;
+}
+.owner-nav-item:active{
+  transform:translateY(1px);
+}
+.owner-system-account{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  align-items:flex-start;
+}
+.owner-system-account small{
+  color:#647a83;
+  font-size:9px;
+}
+.owner-unlimited-access{
+  margin-top:14px;
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+}
+.owner-unlimited-access span{
+  color:#8da49b;
+}
