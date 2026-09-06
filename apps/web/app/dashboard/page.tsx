@@ -419,7 +419,7 @@ export default function DashboardPage() {
                 <div className="panel-head">
                   <div>
                     <div className="eyebrow">LIVE BOT ENGINE</div>
-                    <h2 style={{marginTop:7}}>{settings.symbol}</h2>
+                    <h2 style={{marginTop:7}}>{metrics.symbol || settings.symbol}</h2>
                   </div>
                   <span className="badge"><span className="dot green"/> {data.account.mode}</span>
                 </div>
@@ -468,7 +468,8 @@ export default function DashboardPage() {
                 <div className="flow-node purple">
                   <b>MT5 ACCOUNT</b>
                   <small>{data.account.broker} // {data.account.account_number}</small>
-                  <small>{data.account.broker_server}</small>
+                  <small>{metrics.server || data.account.broker_server}</small>
+                  {metrics.currency && <small>Currency: {metrics.currency}</small>}
                 </div>
                 <div className="flow-node">
                   <b>RUNNER STATUS</b>
