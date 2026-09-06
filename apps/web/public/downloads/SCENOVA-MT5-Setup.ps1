@@ -6,7 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$SetupVersion = "1.2.4"
+$SetupVersion = "1.2.5"
 
 function Protect-CurrentUserSecret([string]$Value) {
   Add-Type -AssemblyName System.Security -ErrorAction Stop
@@ -199,7 +199,7 @@ Write-Host ""
 Write-Host "Next steps in MT5:" -ForegroundColor Yellow
 Write-Host " 1. Restart MT5, or refresh the Navigator."
 Write-Host " 2. Open Tools > Options > Expert Advisors."
-Write-Host "    Enable Allow WebRequest and add: $WebBase"
+Write-Host "    Enable Allow WebRequest and add exactly: $ApiBase"
 Write-Host " 3. Navigator > Expert Advisors > SCENOVA."
 Write-Host "    Drag FastBasketBot onto the chart you want to trade."
 Write-Host " 4. In the EA window, open Inputs > Load."
