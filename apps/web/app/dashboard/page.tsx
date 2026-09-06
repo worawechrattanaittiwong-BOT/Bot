@@ -586,22 +586,19 @@ export default function DashboardPage() {
                   </div>
 
                   <details className="manual-install">
-                    <summary>ติดตั้งแบบ Manual / สำหรับแก้ปัญหา</summary>
+                    <summary>ซ่อมการเชื่อมต่อ / Advanced</summary>
                     <div className="manual-install-body">
-                      <div className="instruction-list">
-                        <div><span>1</span><div><b>ดาวน์โหลด EA</b><small>วาง FastBasketBot.mq5 ใน MQL5 → Experts → SCENOVA แล้ว Compile ให้ได้ 0 errors</small></div></div>
-                        <div><span>2</span><div><b>สร้างรหัสเชื่อมต่อ</b><small>Token ใหม่จะยกเลิก Token เก่า ใช้เมื่อเชื่อมเครื่องใหม่หรือแก้การติดตั้ง</small></div></div>
-                        <div><span>3</span><div><b>ดาวน์โหลด .set</b><small>Load ไฟล์ในหน้าต่าง Inputs ของ FastBasketBot</small></div></div>
+                      <div className="notice security-notice">
+                        <b>โค้ดกลยุทธ์ถูกป้องกัน</b>
+                        <span>SCENOVA ไม่ส่งไฟล์ .mq5 ไปยังเครื่องลูกค้า ตัว EA จะถูกติดตั้งเป็นไฟล์ .ex5 ที่ Compile แล้วผ่าน Installer เท่านั้น</span>
                       </div>
-                      <div className="ea-download-card">
-                        <div>
-                          <b>SCENOVA FastBasketBot EA</b>
-                          <small>ไฟล์ Source สำหรับการติดตั้ง Manual</small>
-                        </div>
-                        <a className="btn" href="/downloads/FastBasketBot.mq5" download>↓ FastBasketBot.mq5</a>
+                      <div className="instruction-list">
+                        <div><span>1</span><div><b>ติดตั้ง EA ใหม่</b><small>ใช้ปุ่ม “ติดตั้ง SCENOVA บน Windows” ด้านบน ระบบจะดาวน์โหลด .ex5 ผ่านสิทธิ์ของบัญชีนี้</small></div></div>
+                        <div><span>2</span><div><b>สร้างรหัสเชื่อมต่อใหม่</b><small>ใช้เมื่อเปลี่ยนเครื่องหรือสงสัยว่า Token เดิมรั่ว Token เก่าจะถูกยกเลิกทันที</small></div></div>
+                        <div><span>3</span><div><b>ดาวน์โหลด .set ใหม่</b><small>ไฟล์ .set มีเฉพาะค่าการเชื่อมต่อและการตั้งค่า ไม่มี Source Code ของกลยุทธ์</small></div></div>
                       </div>
                       <div className="primary-actions">
-                        <button className="btn" disabled={busy} onClick={rotateInstallToken}>{busy?"กำลังสร้าง...":"สร้างรหัสเชื่อมต่อใหม่"}</button>
+                        <button className="btn" disabled={busy} onClick={rotateInstallToken}>{busy?"กำลังสร้าง...":"หมุนรหัสเชื่อมต่อใหม่"}</button>
                         <button className="btn download-set-btn" disabled={!installToken || !installInstanceId} onClick={()=>downloadEaSet()}>↓ ดาวน์โหลดไฟล์ .set</button>
                       </div>
                     </div>
