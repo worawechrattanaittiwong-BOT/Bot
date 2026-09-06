@@ -1,11 +1,16 @@
 import {
   Body,
   Controller,
+  Header,
   Post,
+  ServiceUnavailableException,
+  StreamableFile,
   UnauthorizedException
 } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { CryptoService } from "./security";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 
 @Controller("ea")
 export class EaController {
@@ -13,6 +18,16 @@ export class EaController {
     private readonly db: DbService,
     private readonly crypto: CryptoService
   ) {}
+
+  private artifactPath() {
+    return process.env.EA_ARTIFACT_PATH || "/app/apps/api/artifacts/FastBasketBot.ex5";
+  }
+
+  private artifactHash() {
+    const path = this.artifactPath();
+    if (!existsSync(path)) return null;
+    return createHash("sha256").update(readFileSync(path)).digest("hex");
+  }
 
   private async instance(instanceId: string, installToken: string) {
     const row = await this.db.one(
@@ -120,12 +135,34 @@ export class EaController {
       ]
     );
 
+    const serverEaHash = this.artifactHash();
+
     return {
       ok: true,
       instanceId: instance.id,
-      eaDownloadUrl: "/downloads/FastBasketBot.mq5",
+      artifactAvailable: Boolean(serverEaHash),
+      artifactHash: serverEaHash,
+      artifactName: "FastBasketBot.ex5",
+      artifactEndpoint: "/api/ea/artifact",
       agentDownloadUrl: "/downloads/SCENOVA-Agent.ps1"
     };
+  }
+
+  @Post("artifact")
+  @Header("Content-Type", "application/octet-stream")
+  @Header("Content-Disposition", 'attachment; filename="FastBasketBot.ex5"')
+  async artifact(@Body() body: {
+    instanceId: string;
+    installToken: string;
+  }) {
+    await this.instance(body.instanceId, body.installToken);
+
+    const path = this.artifactPath();
+    if (!existsSync(path)) {
+      throw new ServiceUnavailableException("EA production artifact is not published yet");
+    }
+
+    return new StreamableFile(readFileSync(path));
   }
 
   @Post("ack")
