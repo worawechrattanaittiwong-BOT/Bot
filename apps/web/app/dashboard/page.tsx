@@ -143,6 +143,7 @@ export default function DashboardPage() {
 
   const accessLabel = useMemo(() => {
     if (!entitlement) return "ยังไม่มีสิทธิ์ใช้งาน";
+    if (entitlement.source === "OWNER") return "OWNER — ใช้งานได้ไม่จำกัด";
     if (entitlement.source === "TRIAL_READY") return "Trial พร้อมเริ่ม";
     if (entitlement.source === "TRIAL") return "Trial กำลังใช้งาน";
     if (entitlement.source === "SUBSCRIPTION") return "สมาชิกกำลังใช้งาน";
@@ -376,6 +377,20 @@ export default function DashboardPage() {
     }
   }
 
+  function handleOwnerNavigate(href:string) {
+    if (!href.startsWith("/dashboard?view=")) return false;
+    const requested = new URL(href, window.location.origin).searchParams.get("view");
+    if (requested === "overview" || requested === "account" || requested === "settings" || requested === "access") {
+      setActiveView(requested);
+      setError("");
+      setNotice("");
+      window.history.pushState({}, "", href);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return true;
+    }
+    return false;
+  }
+
   function logout() {
     localStorage.removeItem("bot_token");
     window.location.href = "/login";
@@ -402,7 +417,7 @@ export default function DashboardPage() {
   return (
     <div className="app-wrap">
       {isOwner ? (
-        <OwnerSidebar activeKey={ownerActiveKey} onLogout={logout}/>
+        <OwnerSidebar activeKey={ownerActiveKey} onLogout={logout} onNavigate={handleOwnerNavigate}/>
       ) : (
         <aside className="sidebar app-sidebar">
           <div className="brand-lockup side-brand">
@@ -437,7 +452,7 @@ export default function DashboardPage() {
         </div>
 
         {isOwner ? (
-          <OwnerMobileNav activeKey={ownerActiveKey}/>
+          <OwnerMobileNav activeKey={ownerActiveKey} onNavigate={handleOwnerNavigate}/>
         ) : (
           <div className="mobile-only mobile-nav">
             {navItems.map(item=>(
@@ -819,7 +834,12 @@ export default function DashboardPage() {
             <section className="panel purple">
               <div className="eyebrow">ACCESS STATUS</div>
               <h2 style={{marginTop:8}}>{accessLabel}</h2>
-              {remainingText ? (
+              {entitlement?.source === "OWNER" ? (
+                <div className="notice good owner-unlimited-access">
+                  <b>สิทธิ์เจ้าของระบบเปิดครบทุกฟังก์ชัน</b>
+                  <span>ไม่ต้องเปิด Trial หรือแพ็กเกจให้บัญชีนี้ และไม่มีวันหมดอายุ</span>
+                </div>
+              ) : remainingText ? (
                 <div className="time-card"><span>เวลาคงเหลือ</span><b className="mono">{remainingText}</b><small>หมดอายุ {accessExpiry?.toLocaleString("th-TH")}</small></div>
               ) : (
                 <p className="muted">ยังไม่มีเวลาสิทธิ์ที่กำลังนับอยู่</p>
