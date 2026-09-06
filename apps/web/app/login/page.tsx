@@ -23,7 +23,9 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "ไม่สามารถเข้าสู่ระบบได้");
       localStorage.setItem("bot_token", data.token);
-      window.location.href = "/dashboard";
+      window.location.href = data.user?.role === "OWNER" || data.user?.role === "ADMIN"
+        ? "/admin"
+        : "/dashboard";
     } catch (err: any) {
       setMessage(err.message);
     } finally {
