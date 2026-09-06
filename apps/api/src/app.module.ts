@@ -6,6 +6,7 @@ import { AdminController } from "./admin.controller";
 import { EaController } from "./ea.controller";
 import { HealthController } from "./health.controller";
 import { WorkerController } from "./worker.controller";
+import { RootController } from "./root.controller";
 import { DbService } from "./db.service";
 import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
 
@@ -16,7 +17,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [AuthController, BotController, AdminController, EaController, HealthController, WorkerController],
+  controllers: [RootController, AuthController, BotController, AdminController, EaController, HealthController, WorkerController],
   providers: [DbService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
 })
 export class AppModule {}
