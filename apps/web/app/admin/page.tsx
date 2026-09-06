@@ -126,55 +126,66 @@ export default function AdminPage() {
   return (
     <div className="app-wrap">
       <aside className="sidebar">
-        <div className="side-brand brand"><b>◆</b> SCENOVA // OWNER</div>
+        <div className="brand-lockup side-brand">
+          <span className="brand-mark">◆</span>
+          <span><strong>SCENOVA</strong><small>OWNER CONTROL</small></span>
+        </div>
+        <div className="side-section-label">จัดการระบบ</div>
         <nav className="side-nav">
           <button
             type="button"
-            className={"side-link " + (activeMenu === "overview" ? "active" : "")}
-            style={{width:"100%",textAlign:"left"}}
+            className={"side-link side-link-rich " + (activeMenu === "overview" ? "active" : "")}
             onClick={()=>setActiveMenu("overview")}
           >
-            ภาพรวมระบบ
+            <span>ภาพรวม</span>
+            <small>สถานะผู้ใช้ บอท และ Worker</small>
           </button>
           <button
             type="button"
-            className={"side-link " + (activeMenu === "users" ? "active" : "")}
-            style={{width:"100%",textAlign:"left"}}
+            className={"side-link side-link-rich " + (activeMenu === "users" ? "active" : "")}
             onClick={()=>setActiveMenu("users")}
           >
-            ลูกค้าและสิทธิ์
+            <span>ลูกค้า & สิทธิ์</span>
+            <small>ค้นหา Trial และ Suspend</small>
           </button>
           <button
             type="button"
-            className={"side-link " + (activeMenu === "subscriptions" ? "active" : "")}
-            style={{width:"100%",textAlign:"left"}}
+            className={"side-link side-link-rich " + (activeMenu === "subscriptions" ? "active" : "")}
             onClick={()=>setActiveMenu("subscriptions")}
           >
-            สมาชิกและแพ็กเกจ
+            <span>สมาชิก & แพ็กเกจ</span>
+            <small>เปิดสิทธิ์และต่ออายุ</small>
           </button>
           <button
             type="button"
-            className={"side-link " + (activeMenu === "workers" ? "active" : "")}
-            style={{width:"100%",textAlign:"left"}}
+            className={"side-link side-link-rich " + (activeMenu === "workers" ? "active" : "")}
             onClick={()=>setActiveMenu("workers")}
           >
-            Cloud Workers
+            <span>Cloud System</span>
+            <small>Trading Nodes และสถานะ</small>
           </button>
         </nav>
-        <button
-          type="button"
-          className="btn ghost full"
-          style={{marginTop:"auto"}}
-          onClick={logout}
-        >
-          ออกจากระบบ
-        </button>
+        <div className="sidebar-user">
+          <div><small>สิทธิ์ปัจจุบัน</small><b>OWNER</b></div>
+          <button type="button" className="btn ghost full" onClick={logout}>ออกจากระบบ</button>
+        </div>
       </aside>
       <main className="main">
         <header className="page-head">
           <div>
-            <div className="eyebrow">SCENOVA // SYSTEM OWNER</div>
-            <h2 style={{marginTop:7}}>ศูนย์ควบคุมเจ้าของระบบ</h2>
+            <div className="eyebrow">SCENOVA // OWNER CONTROL</div>
+            <h2 style={{marginTop:7}}>
+              {activeMenu === "overview" && "ภาพรวมระบบ"}
+              {activeMenu === "users" && "ลูกค้าและสิทธิ์"}
+              {activeMenu === "subscriptions" && "สมาชิกและแพ็กเกจ"}
+              {activeMenu === "workers" && "Cloud Trading System"}
+            </h2>
+            <div className="muted page-subtitle">
+              {activeMenu === "overview" && "ดูสุขภาพระบบและสิ่งที่ต้องสนใจ"}
+              {activeMenu === "users" && "ค้นหาลูกค้า อนุมัติ Trial และควบคุมสถานะบัญชี"}
+              {activeMenu === "subscriptions" && "เปิดสมาชิก กำหนดวันเริ่ม และต่ออายุ"}
+              {activeMenu === "workers" && "ตรวจ Node, Load และการเชื่อมต่อ Cloud MT5"}
+            </div>
           </div>
           <span className="badge"><span className="dot green"/> OWNER</span>
         </header>
@@ -233,7 +244,7 @@ export default function AdminPage() {
               <div className="panel-head">
                 <div>
                   <div className="eyebrow">USERS & ACCESS</div>
-                  <h2 style={{marginTop:7}}>ค้นหาและจัดการลูกค้า</h2>
+                  <h2 style={{marginTop:7}}>ค้นหาลูกค้า</h2>
                 </div>
               </div>
               <form className="field" onSubmit={search}>
@@ -292,8 +303,8 @@ export default function AdminPage() {
             <section className="panel">
               <div className="panel-head">
                 <div>
-                  <div className="eyebrow">MEMBERSHIP CONTROL</div>
-                  <h2 style={{marginTop:7}}>เปิดสมาชิกและต่ออายุ</h2>
+                  <div className="eyebrow">SUBSCRIPTION CONTROL</div>
+                  <h2 style={{marginTop:7}}>จัดการสมาชิก</h2>
                 </div>
               </div>
               <div className="form-grid">
@@ -372,7 +383,7 @@ export default function AdminPage() {
             <div className="panel-head">
               <div>
                 <div className="eyebrow">CLOUD INFRASTRUCTURE</div>
-                <h2 style={{marginTop:7}}>Windows Trading Nodes</h2>
+                <h2 style={{marginTop:7}}>Cloud Trading Nodes</h2>
               </div>
               <button className="btn" onClick={()=>search()} disabled={loading}>
                 {loading ? "กำลังโหลด..." : "รีเฟรช"}
@@ -391,7 +402,7 @@ export default function AdminPage() {
                       <td>{worker.last_seen_at ? new Date(worker.last_seen_at).toLocaleString("th-TH") : "—"}</td>
                     </tr>
                   ))}
-                  {!system?.workers?.length && <tr><td colSpan={5} className="muted">ยังไม่มี Cloud Worker เชื่อมต่อ</td></tr>}
+                  {!system?.workers?.length && <tr><td colSpan={5} className="muted">ยังไม่มี Cloud Worker เชื่อมต่อระบบ</td></tr>}
                 </tbody>
               </table>
             </div>
