@@ -748,3 +748,104 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
     align-self:flex-start;
   }
 }
+
+
+/* ===== Connected MT5 steps 3 -> 4 ===== */
+.connected-step{
+  position:relative;
+}
+.step-connector{
+  margin-top:10px;
+  padding:8px 10px;
+  border:1px solid #214536;
+  border-radius:9px;
+  background:#08140f;
+  color:#77d99f;
+  font-size:10px;
+  line-height:1.5;
+}
+.preset-load-step{
+  border-color:#28506a;
+  background:
+    linear-gradient(180deg,rgba(21,48,65,.10),rgba(10,17,21,.96));
+}
+.file-picker-help{
+  margin-top:12px;
+  padding:13px;
+  border:1px solid #253d49;
+  border-radius:12px;
+  background:#071015;
+}
+.file-picker-title{
+  color:#eef5f7;
+  font-weight:700;
+  font-size:12px;
+}
+.file-picker-help ol{
+  margin:10px 0 0;
+  padding-left:20px;
+  color:#91a4ab;
+}
+.file-picker-help li{
+  margin:7px 0;
+  line-height:1.55;
+  font-size:11px;
+}
+.preset-path-box{
+  margin-top:13px;
+  display:grid;
+  gap:7px;
+  padding:11px;
+  border:1px solid #27506a;
+  border-radius:10px;
+  background:#09161d;
+}
+.preset-path-box>span,
+.preset-file-name>span{
+  color:#6f8d99;
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.preset-path-box code{
+  display:block;
+  overflow-wrap:anywhere;
+  white-space:normal;
+  color:#a9dcf0;
+  background:transparent;
+  padding:0;
+  font-size:10px;
+  line-height:1.55;
+}
+.copy-path-btn{
+  justify-self:start;
+  min-height:34px;
+  padding:7px 10px;
+  font-size:10px;
+}
+.preset-file-name{
+  margin-top:8px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:9px 11px;
+  border:1px solid #213139;
+  border-radius:9px;
+  background:#090e11;
+}
+.preset-file-name b{
+  color:#edf4f5;
+  font-size:11px;
+  word-break:break-all;
+}
+.warning-help{
+  margin-top:9px;
+  color:#c8a96c;
+}
+@media(max-width:720px){
+  .preset-file-name{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+}
