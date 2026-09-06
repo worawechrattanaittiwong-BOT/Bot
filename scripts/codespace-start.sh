@@ -20,6 +20,14 @@ done
 export API_INTERNAL_URL="http://127.0.0.1:4000"
 export NEXT_PUBLIC_API_URL="/backend"
 
+if [ -n "${CODESPACE_NAME:-}" ] && [ -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}" ]; then
+  export BOT_WEB_URL="https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+  export BOT_API_URL="https://${CODESPACE_NAME}-4000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+else
+  export BOT_WEB_URL="http://127.0.0.1:3000"
+  export BOT_API_URL="http://127.0.0.1:4000"
+fi
+
 echo "Starting API on :4000 and Web on :3000"
 
 npm run dev:api > /tmp/bot-api.log 2>&1 &
@@ -46,9 +54,12 @@ for i in {1..40}; do
   if [ "$API_OK" -eq 1 ] && [ "$WEB_OK" -eq 1 ]; then
     echo ""
     echo "READY"
-    echo "  Web: http://127.0.0.1:3000"
-    echo "  API: http://127.0.0.1:4000/api/health"
-    echo "Open the forwarded port 3000 from the Codespaces Ports panel."
+    echo "  Web (open this in your browser): $BOT_WEB_URL"
+    echo "  API health: $BOT_API_URL/api/health"
+    echo ""
+    echo "IMPORTANT: Do NOT open http://localhost:3000 on your own PC."
+    echo "localhost refers to your PC, while the app is running inside GitHub Codespaces."
+    echo "Use the Codespaces forwarded URL above."
     wait
     exit 0
   fi
