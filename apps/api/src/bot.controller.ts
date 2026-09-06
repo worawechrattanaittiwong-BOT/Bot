@@ -113,6 +113,33 @@ export class BotController {
     };
   }
 
+  @Post("mt5/reset")
+  async resetMt5(@Req() req: any) {
+    const account = await this.db.one(
+      "SELECT a.id,a.account_number,a.broker_server,bi.actual_state,bi.desired_state,COALESCE((bi.metrics->>'positions')::int,0) positions FROM mt5_accounts a LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id WHERE a.user_id=$1 ORDER BY a.created_at DESC LIMIT 1",
+      [req.user.sub]
+    );
+    if (!account) return { ok: true };
+
+    if (account.actual_state === "RUNNING" || account.desired_state === "RUNNING" || account.positions > 0) {
+      throw new ConflictException("stop the bot and close positions before changing MT5 account");
+    }
+
+    const trial = await this.db.one(
+      "SELECT id FROM trial_grants WHERE mt5_account_id=$1 LIMIT 1",
+      [account.id]
+    );
+    if (trial) {
+      throw new ConflictException("this MT5 account already has trial history and cannot be reset from self-service");
+    }
+
+    await this.db.query("DELETE FROM mt5_accounts WHERE id=$1 AND user_id=$2", [
+      account.id,
+      req.user.sub
+    ]);
+    return { ok: true };
+  }
+
   @Post("mt5/cloud-credential")
   async saveCloudCredential(
     @Req() req: any,
