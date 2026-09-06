@@ -54,7 +54,9 @@ export default function DashboardPage() {
   const [installInstanceId, setInstallInstanceId] = useState("");
   const [activationMessage, setActivationMessage] = useState("");
   const [settings, setSettings] = useState<any>(defaultSettings);
-  const mt5ApiBase = process.env.NEXT_PUBLIC_MT5_API_BASE || "";
+  const mt5ApiBase =
+    process.env.NEXT_PUBLIC_MT5_API_BASE ||
+    (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
 
   async function load() {
     try {
@@ -166,11 +168,15 @@ export default function DashboardPage() {
       const token = result.installToken || "";
       setInstallInstanceId(instanceId);
       setInstallToken(token);
-      if (instanceId && token && mt5ApiBase) {
-        downloadEaSet(instanceId, token);
-        setActivationMessage("สร้างรหัสเชื่อมต่อสำเร็จ และดาวน์โหลดไฟล์ .set แล้ว");
+      if (instanceId && token) {
+        const downloaded = downloadEaSet(instanceId, token);
+        setActivationMessage(
+          downloaded
+            ? "สร้างรหัสเชื่อมต่อสำเร็จ ระบบเริ่มดาวน์โหลดไฟล์ .set แล้ว หากเบราว์เซอร์บล็อกให้กด “ดาวน์โหลดไฟล์ .set” อีกครั้ง"
+            : "สร้างรหัสเชื่อมต่อสำเร็จแล้ว กด “ดาวน์โหลดไฟล์ .set” เพื่อบันทึกไฟล์"
+        );
       } else {
-        setActivationMessage("สร้างรหัสเชื่อมต่อสำเร็จแล้ว กดดาวน์โหลดไฟล์ .set ได้ทันที");
+        setActivationMessage("สร้างรหัสเชื่อมต่อสำเร็จแล้ว แต่ยังสร้างไฟล์ไม่ได้ กรุณาลองใหม่");
       }
     } catch (e: any) {
       setError(e.message);
@@ -182,9 +188,12 @@ export default function DashboardPage() {
   function downloadEaSet(instanceIdArg?: string, tokenArg?: string) {
     const instanceId = instanceIdArg || installInstanceId;
     const token = tokenArg || installToken;
-    if (!token || !instanceId || !mt5ApiBase) return;
+    const apiBase =
+      mt5ApiBase ||
+      (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
+    if (!token || !instanceId || !apiBase) return false;
     const content = [
-      "InpApiBase=" + mt5ApiBase,
+      "InpApiBase=" + apiBase,
       "InpInstanceId=" + instanceId,
       "InpInstallToken=" + token,
       "InpMagic=26090501",
@@ -211,8 +220,12 @@ export default function DashboardPage() {
     const a = document.createElement("a");
     a.href = url;
     a.download = "FastBasketBot-" + instanceId.slice(0,8) + ".set";
+    a.style.display = "none";
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return true;
   }
 
   async function resetMt5() {
@@ -463,8 +476,8 @@ export default function DashboardPage() {
                   </div>
                   {activationMessage && <div className="notice good">{activationMessage}</div>}
                   <div className="primary-actions">
-                    <button className="btn primary btn-lg" disabled={busy} onClick={rotateInstallToken}>{busy?"กำลังสร้าง...":"สร้างรหัส + ดาวน์โหลด .set"}</button>
-                    <button className="btn" disabled={!installToken || !installInstanceId || !mt5ApiBase} onClick={()=>downloadEaSet()}>ดาวน์โหลด .set อีกครั้ง</button>
+                    <button className="btn primary btn-lg" disabled={busy} onClick={rotateInstallToken}>{busy?"กำลังสร้าง...":"สร้างรหัสเชื่อมต่อใหม่"}</button>
+                    <button className="btn download-set-btn" disabled={!installToken || !installInstanceId} onClick={()=>downloadEaSet()}>↓ ดาวน์โหลดไฟล์ .set</button>
                   </div>
                   {mt5ApiBase && <div className="connection-url"><span>API สำหรับ EA</span><code>{mt5ApiBase}</code></div>}
                 </section>
