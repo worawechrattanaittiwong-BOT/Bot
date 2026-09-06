@@ -13,7 +13,17 @@ export const ownerNavItems = [
   { section:"PUBLIC", key:"website", href:"/", icon:"↗", label:"หน้าเว็บไซต์", hint:"หน้าแรก SCENOVA" }
 ] as const;
 
-export function OwnerSidebar({activeKey,onLogout}:{activeKey:string;onLogout:()=>void}) {
+type OwnerNavigateHandler = (href:string)=>boolean | void;
+
+export function OwnerSidebar({
+  activeKey,
+  onLogout,
+  onNavigate
+}:{
+  activeKey:string;
+  onLogout:()=>void;
+  onNavigate?:OwnerNavigateHandler;
+}) {
   const sections = ["WORKSPACE","MY TRADING","PUBLIC"] as const;
   return (
     <aside className="sidebar app-sidebar owner-sidebar">
@@ -30,7 +40,12 @@ export function OwnerSidebar({activeKey,onLogout}:{activeKey:string;onLogout:()=
               <Link
                 key={item.key}
                 href={item.href}
+                prefetch
+                aria-current={activeKey===item.key ? "page" : undefined}
                 className={"owner-nav-item owner-nav-link " + (activeKey===item.key ? "active" : "")}
+                onClick={(event)=>{
+                  if (onNavigate?.(item.href) === true) event.preventDefault();
+                }}
               >
                 <span className="owner-nav-icon">{item.icon}</span>
                 <span className="owner-nav-copy"><b>{item.label}</b><small>{item.hint}</small></span>
@@ -51,11 +66,26 @@ export function OwnerSidebar({activeKey,onLogout}:{activeKey:string;onLogout:()=
   );
 }
 
-export function OwnerMobileNav({activeKey}:{activeKey:string}) {
+export function OwnerMobileNav({
+  activeKey,
+  onNavigate
+}:{
+  activeKey:string;
+  onNavigate?:OwnerNavigateHandler;
+}) {
   return (
     <div className="mobile-only mobile-nav owner-mobile-nav">
       {ownerNavItems.map(item=>(
-        <Link key={item.key} href={item.href} className={activeKey===item.key ? "active" : ""}>
+        <Link
+          key={item.key}
+          href={item.href}
+          prefetch
+          aria-current={activeKey===item.key ? "page" : undefined}
+          className={activeKey===item.key ? "active" : ""}
+          onClick={(event)=>{
+            if (onNavigate?.(item.href) === true) event.preventDefault();
+          }}
+        >
           {item.label}
         </Link>
       ))}
