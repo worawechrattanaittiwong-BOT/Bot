@@ -37,6 +37,9 @@ export class EaController {
     if (!row || row.install_token_hash !== this.crypto.sha256(String(installToken || ""))) {
       throw new UnauthorizedException("EA authentication failed");
     }
+    if (row.user_status !== "ACTIVE" || row.account_status !== "ACTIVE") {
+      throw new UnauthorizedException("SCENOVA account is not active");
+    }
     return row;
   }
 
