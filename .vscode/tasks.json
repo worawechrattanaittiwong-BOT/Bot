@@ -4,10 +4,15 @@
     {
       "label": "Bot: start services",
       "type": "shell",
-      "command": "bash scripts/codespace-start.sh",
-      "runOptions": { "runOn": "folderOpen" },
+      "command": "bash scripts/codespace-ensure.sh",
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
       "problemMatcher": [],
-      "presentation": { "reveal": "silent", "panel": "dedicated" }
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated"
+      }
     }
   ]
 }
