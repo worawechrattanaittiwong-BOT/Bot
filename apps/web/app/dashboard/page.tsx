@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../../lib/api";
+import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 
 type Dashboard = {
   user: any;
@@ -53,6 +54,9 @@ export default function DashboardPage() {
   const [installToken, setInstallToken] = useState("");
   const [installInstanceId, setInstallInstanceId] = useState("");
   const [activationMessage, setActivationMessage] = useState("");
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [botLogs, setBotLogs] = useState<any>(null);
   const [settings, setSettings] = useState<any>(defaultSettings);
   const mt5ApiBase =
     process.env.NEXT_PUBLIC_MT5_API_BASE ||
@@ -66,7 +70,6 @@ export default function DashboardPage() {
       const requestedView = typeof window !== "undefined"
         ? new URLSearchParams(window.location.search).get("view")
         : null;
-      if (!d.account && !requestedView) setActiveView("account");
       setError("");
     } catch (e: any) {
       setError(e.message);
@@ -91,6 +94,28 @@ export default function DashboardPage() {
     const id = setInterval(load, 5000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!logsOpen || !data?.instance?.id) return;
+    let cancelled = false;
+    const refreshLogs = async () => {
+      try {
+        setLogsLoading(true);
+        const result = await api("/bot/logs");
+        if (!cancelled) setBotLogs(result);
+      } catch (e: any) {
+        if (!cancelled) setError(e.message);
+      } finally {
+        if (!cancelled) setLogsLoading(false);
+      }
+    };
+    refreshLogs();
+    const id = setInterval(refreshLogs, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [logsOpen, data?.instance?.id]);
 
   const metrics = data?.instance?.metrics || {};
   const state = data?.instance?.actual_state || "OFFLINE";
@@ -360,6 +385,13 @@ export default function DashboardPage() {
     return <main className="auth-shell"><div className="auth-card loading-card"><span className="dot green"/> กำลังเปิด SCENOVA Control Center...</div></main>;
   }
 
+  const isOwner = data.user?.role === "OWNER" || data.user?.role === "ADMIN";
+  const ownerActiveKey =
+    activeView === "account" ? "trading-account" :
+    activeView === "settings" ? "trading-settings" :
+    activeView === "access" ? "trading-access" :
+    "trading-overview";
+
   const navItems: Array<{id:View;label:string;hint:string}> = [
     { id:"overview", label:"ภาพรวม", hint:"สถานะและควบคุมบอท" },
     { id:"account", label:"บัญชี MT5", hint:"เชื่อมต่อและติดตั้ง EA" },
@@ -369,30 +401,34 @@ export default function DashboardPage() {
 
   return (
     <div className="app-wrap">
-      <aside className="sidebar app-sidebar">
-        <div className="brand-lockup side-brand">
-          <span className="brand-mark">◆</span>
-          <span><strong>SCENOVA</strong><small>MT5 BOT EA</small></span>
-        </div>
-        <div className="side-section-label">เมนูหลัก</div>
-        <nav className="side-nav">
-          {navItems.map(item=>(
-            <button
-              type="button"
-              key={item.id}
-              className={"side-link side-link-rich " + (activeView===item.id ? "active" : "")}
-              onClick={()=>setActiveView(item.id)}
-            >
-              <span>{item.label}</span>
-              <small>{item.hint}</small>
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-user">
-          <div><small>User ID</small><b>{data.user?.user_code}</b></div>
-          <button className="btn ghost full" onClick={logout}>ออกจากระบบ</button>
-        </div>
-      </aside>
+      {isOwner ? (
+        <OwnerSidebar activeKey={ownerActiveKey} onLogout={logout}/>
+      ) : (
+        <aside className="sidebar app-sidebar">
+          <div className="brand-lockup side-brand">
+            <span className="brand-mark">◆</span>
+            <span><strong>SCENOVA</strong><small>MT5 BOT EA</small></span>
+          </div>
+          <div className="side-section-label">เมนูหลัก</div>
+          <nav className="side-nav">
+            {navItems.map(item=>(
+              <button
+                type="button"
+                key={item.id}
+                className={"side-link side-link-rich " + (activeView===item.id ? "active" : "")}
+                onClick={()=>setActiveView(item.id)}
+              >
+                <span>{item.label}</span>
+                <small>{item.hint}</small>
+              </button>
+            ))}
+          </nav>
+          <div className="sidebar-user">
+            <div><small>User ID</small><b>{data.user?.user_code}</b></div>
+            <button className="btn ghost full" onClick={logout}>ออกจากระบบ</button>
+          </div>
+        </aside>
+      )}
 
       <main className="main app-main">
         <div className="mobile-only mobile-app-head">
@@ -400,11 +436,15 @@ export default function DashboardPage() {
           <button className="btn ghost" onClick={logout}>ออก</button>
         </div>
 
-        <div className="mobile-only mobile-nav">
-          {navItems.map(item=>(
-            <button key={item.id} className={activeView===item.id ? "active" : ""} onClick={()=>setActiveView(item.id)}>{item.label}</button>
-          ))}
-        </div>
+        {isOwner ? (
+          <OwnerMobileNav activeKey={ownerActiveKey}/>
+        ) : (
+          <div className="mobile-only mobile-nav">
+            {navItems.map(item=>(
+              <button key={item.id} className={activeView===item.id ? "active" : ""} onClick={()=>setActiveView(item.id)}>{item.label}</button>
+            ))}
+          </div>
+        )}
 
         <header className="page-head human-head">
           <div>
@@ -453,9 +493,16 @@ export default function DashboardPage() {
 
               <div className="grid2 dashboard-grid">
                 <section className="panel blue action-panel">
-                  <div className="panel-head">
-                    <div><div className="eyebrow">BOT CONTROL</div><h2>{metrics.symbol || settings.symbol}</h2></div>
-                    <span className="badge"><span className={"dot "+(isMt5Online?"green":"red")}/>{data.account.mode}</span>
+                  <div className="panel-head bot-control-head">
+                    <button type="button" className="bot-log-title" onClick={()=>setLogsOpen(true)}>
+                      <div className="eyebrow">BOT CONTROL</div>
+                      <h2>{metrics.symbol || settings.symbol}</h2>
+                      <small>กดเพื่อดู Log การทำงาน →</small>
+                    </button>
+                    <div className="bot-head-actions">
+                      <span className="badge"><span className={"dot "+(isMt5Online?"green":"red")}/>{data.account.mode}</span>
+                      <button type="button" className="btn" onClick={()=>setLogsOpen(true)}>ดู Log</button>
+                    </div>
                   </div>
                   <div className="bot-summary">
                     <div><small>โหมดเข้าออเดอร์</small><b>{settings.entryMode}</b></div>
@@ -480,6 +527,39 @@ export default function DashboardPage() {
                     <div><span>สิทธิ์</span><b>{accessLabel}</b></div>
                   </div>
                   <button className="btn full" onClick={()=>setActiveView("account")}>ดูรายละเอียดการเชื่อมต่อ</button>
+                </section>
+              </div>
+
+              <div className="grid2 overview-inspection-grid">
+                <section className="panel overview-settings-card">
+                  <div className="panel-head">
+                    <div><div className="eyebrow">CURRENT SETTINGS</div><h2>ค่าที่บอทใช้อยู่</h2></div>
+                    <button className="btn" onClick={()=>setActiveView("settings")}>แก้ไขการตั้งค่า</button>
+                  </div>
+                  <div className="overview-setting-grid">
+                    <div><span>Symbol</span><b>{settings.symbol}</b></div>
+                    <div><span>Lot</span><b>{settings.lot}</b></div>
+                    <div><span>Entry Mode</span><b>{settings.entryMode}</b></div>
+                    <div><span>Max Positions</span><b>{settings.maxPositions}</b></div>
+                    <div><span>Basket Trigger</span><b>${settings.basketTriggerMoney}</b></div>
+                    <div><span>Basket Trail</span><b>${settings.basketTrailMoney}</b></div>
+                    <div><span>Max Basket Loss</span><b>${settings.maxBasketLossMoney}</b></div>
+                    <div><span>Daily Loss Limit</span><b>${settings.dailyLossMoney}</b></div>
+                  </div>
+                </section>
+
+                <section className="panel overview-access-card">
+                  <div className="panel-head">
+                    <div><div className="eyebrow">ACCOUNT & ACCESS</div><h2>สถานะพร้อมใช้งาน</h2></div>
+                    <button className="btn" onClick={()=>setActiveView("access")}>ดูสิทธิ์</button>
+                  </div>
+                  <div className="detail-list">
+                    <div><span>MT5</span><b className={isMt5Online ? "text-good":"text-warn"}>{connectionLabel}</b></div>
+                    <div><span>Bot State</span><b>{state}</b></div>
+                    <div><span>คำสั่งจากเว็บ</span><b>{desired}</b></div>
+                    <div><span>สิทธิ์</span><b>{accessLabel}</b></div>
+                    {accessExpiry && <div><span>หมดอายุ</span><b>{accessExpiry.toLocaleString("th-TH")}</b></div>}
+                  </div>
                 </section>
               </div>
             </>
@@ -751,6 +831,53 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {logsOpen && (
+          <div className="bot-log-overlay" onClick={()=>setLogsOpen(false)}>
+            <section className="bot-log-drawer" onClick={e=>e.stopPropagation()}>
+              <div className="bot-log-head">
+                <div>
+                  <div className="eyebrow">BOT ACTIVITY LOG</div>
+                  <h2>{metrics.symbol || settings.symbol} · การทำงานล่าสุด</h2>
+                  <p className="muted">ดูคำสั่งจากเว็บ สถานะการส่งคำสั่ง และสถานะ EA ล่าสุด โดยไม่เปลี่ยน Logic การเทรด</p>
+                </div>
+                <button className="btn" onClick={()=>setLogsOpen(false)}>ปิด</button>
+              </div>
+
+              <div className="bot-log-snapshot">
+                <div><span>MT5</span><b className={isMt5Online?"text-good":"text-warn"}>{connectionLabel}</b></div>
+                <div><span>Actual State</span><b>{botLogs?.snapshot?.actual_state || state}</b></div>
+                <div><span>Desired State</span><b>{botLogs?.snapshot?.desired_state || desired}</b></div>
+                <div><span>Heartbeat ล่าสุด</span><b>{botLogs?.snapshot?.last_seen_at ? new Date(botLogs.snapshot.last_seen_at).toLocaleString("th-TH") : "—"}</b></div>
+              </div>
+
+              <div className="bot-log-toolbar">
+                <b>เหตุการณ์ล่าสุด</b>
+                <span>{logsLoading ? "กำลังอัปเดต..." : "อัปเดตอัตโนมัติทุก 5 วินาที"}</span>
+              </div>
+
+              <div className="bot-log-list">
+                {(botLogs?.events || []).map((event:any)=>(
+                  <div className="bot-log-row" key={event.id}>
+                    <span className={"bot-log-dot "+String(event.status || "").toLowerCase()}/>
+                    <div className="bot-log-copy">
+                      <b>{commandLabel(event.command)}</b>
+                      <small>
+                        สถานะ {event.status}
+                        {event.delivered_at ? " · ส่งถึง EA " + new Date(event.delivered_at).toLocaleTimeString("th-TH") : ""}
+                        {event.acked_at ? " · EA รับแล้ว " + new Date(event.acked_at).toLocaleTimeString("th-TH") : ""}
+                      </small>
+                    </div>
+                    <time>{event.created_at ? new Date(event.created_at).toLocaleString("th-TH") : "—"}</time>
+                  </div>
+                ))}
+                {!logsLoading && !(botLogs?.events || []).length && (
+                  <div className="owner-empty">ยังไม่มีคำสั่งหรือเหตุการณ์ของบอท</div>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
         {installToken && activeView === "account" && (
           <div className="notice good secret-box">
             <b>รหัสเชื่อมต่อ Local EA — เก็บเป็นความลับ</b>
@@ -762,6 +889,16 @@ export default function DashboardPage() {
       </main>
     </div>
   );
+}
+
+function commandLabel(command:string) {
+  const labels:Record<string,string> = {
+    START:"เริ่มบอท",
+    SAFE_STOP:"หยุดอย่างปลอดภัย",
+    CLOSE_ALL:"ปิดออเดอร์ทั้งหมด",
+    UPDATE_SETTINGS:"อัปเดตการตั้งค่า"
+  };
+  return labels[command] || command || "SYSTEM";
 }
 
 function Metric({label,value,positive}:{label:string;value:string;positive?:boolean}) {
