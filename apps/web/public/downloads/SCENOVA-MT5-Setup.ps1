@@ -6,16 +6,17 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$SetupVersion = "1.2.0"
+$SetupVersion = "1.2.1"
 
 function Protect-CurrentUserSecret([string]$Value) {
-  $bytes = [Text.Encoding]::UTF8.GetBytes($Value)
-  $protected = [Security.Cryptography.ProtectedData]::Protect(
+  Add-Type -AssemblyName System.Security -ErrorAction Stop
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($Value)
+  $protected = [System.Security.Cryptography.ProtectedData]::Protect(
     $bytes,
     $null,
-    [Security.Cryptography.DataProtectionScope]::CurrentUser
+    [System.Security.Cryptography.DataProtectionScope]::CurrentUser
   )
-  return [Convert]::ToBase64String($protected)
+  return [System.Convert]::ToBase64String($protected)
 }
 
 Write-Host ""
