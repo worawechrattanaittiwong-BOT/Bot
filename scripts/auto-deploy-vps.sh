@@ -4,6 +4,8 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-/opt/Bot}"
 REPO_FULL_NAME="${REPO_FULL_NAME:-worawechrattanaitthiwong-creator/Bot}"
 LOCK_FILE="/run/lock/scenova-auto-deploy.lock"
+STATE_DIR="/var/lib/scenova"
+DEPLOYED_SHA_FILE="$STATE_DIR/deployed.sha"
 
 mkdir -p "$(dirname "$LOCK_FILE")"
 exec 9>"$LOCK_FILE"
@@ -16,17 +18,29 @@ cd "$REPO_DIR"
 git config --global --add safe.directory "$REPO_DIR" >/dev/null 2>&1 || true
 
 CURRENT_SHA="$(git rev-parse HEAD)"
+DEPLOYED_SHA=""
+if [ -f "$DEPLOYED_SHA_FILE" ]; then
+  DEPLOYED_SHA="$(cat "$DEPLOYED_SHA_FILE" 2>/dev/null || true)"
+fi
 
 echo "[SCENOVA] checking GitHub main..."
 git fetch --quiet origin main
 REMOTE_SHA="$(git rev-parse origin/main)"
 
-if [ "$CURRENT_SHA" = "$REMOTE_SHA" ]; then
-  echo "[SCENOVA] already current: $CURRENT_SHA"
+echo "[SCENOVA] repository HEAD: $CURRENT_SHA"
+echo "[SCENOVA] deployed SHA: ${DEPLOYED_SHA:-none}"
+echo "[SCENOVA] remote main: $REMOTE_SHA"
+
+if [ "$DEPLOYED_SHA" = "$REMOTE_SHA" ]; then
+  echo "[SCENOVA] production already deployed: $REMOTE_SHA"
   exit 0
 fi
 
-echo "[SCENOVA] new commit detected: $CURRENT_SHA -> $REMOTE_SHA"
+if [ "$CURRENT_SHA" = "$REMOTE_SHA" ]; then
+  echo "[SCENOVA] source is current but production image is stale; redeploying"
+else
+  echo "[SCENOVA] new commit detected: $CURRENT_SHA -> $REMOTE_SHA"
+fi
 
 if command -v gh >/dev/null 2>&1; then
   CI_STATE="$(
@@ -63,4 +77,7 @@ if [ -n "$PUBLIC_WEB_URL" ] && command -v curl >/dev/null 2>&1; then
   curl --fail --silent --show-error --max-time 20 "$PUBLIC_WEB_URL/backend/api/health" >/dev/null
 fi
 
+mkdir -p "$STATE_DIR"
+printf '%s\n' "$REMOTE_SHA" > "$DEPLOYED_SHA_FILE"
 echo "[SCENOVA] deploy complete: $REMOTE_SHA"
+echo "[SCENOVA] production marker updated: $DEPLOYED_SHA_FILE"
