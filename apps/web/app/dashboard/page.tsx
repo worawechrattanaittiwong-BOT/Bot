@@ -61,7 +61,10 @@ export default function DashboardPage() {
       const d = await api("/bot/dashboard");
       setData(d);
       setSettings({ ...defaultSettings, ...(d.settings || {}) });
-      if (!d.account) setActiveView("account");
+      const requestedView = typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("view")
+        : null;
+      if (!d.account && !requestedView) setActiveView("account");
       setError("");
     } catch (e: any) {
       setError(e.message);
@@ -73,6 +76,12 @@ export default function DashboardPage() {
       window.location.href = "/login";
       return;
     }
+
+    const requestedView = new URLSearchParams(window.location.search).get("view");
+    if (requestedView === "overview" || requestedView === "account" || requestedView === "settings" || requestedView === "access") {
+      setActiveView(requestedView);
+    }
+
     load();
     api("/catalog/brokers")
       .then((rows)=>setBrokerCatalog(rows))
