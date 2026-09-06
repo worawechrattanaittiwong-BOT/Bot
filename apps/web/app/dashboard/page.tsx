@@ -98,9 +98,8 @@ export default function DashboardPage() {
   const eaLastSeen = data?.instance?.last_seen_at
     ? new Date(data.instance.last_seen_at)
     : null;
-  const isMt5Online = Boolean(eaLastSeen) &&
-    Date.now() - (eaLastSeen?.getTime() || 0) < 15000 &&
-    state !== "OFFLINE";
+  const isMt5Online = Boolean(data?.instance?.mt5_online) && state !== "OFFLINE";
+  const eaLastSeenAgeSeconds = Number(data?.instance?.ea_last_seen_age_seconds ?? -1);
   const entitlement = data?.entitlement;
   const selectedBroker = brokerCatalog.find((item)=>item.code === brokerCode);
   const selectedBrokerName = brokerCode === "OTHER"
@@ -130,7 +129,7 @@ export default function DashboardPage() {
   const agentLastSeen = data?.instance?.agent_last_seen_at
     ? new Date(data.instance.agent_last_seen_at)
     : null;
-  const isAgentOnline = Boolean(agentLastSeen) && Date.now() - (agentLastSeen?.getTime() || 0) < 30 * 60 * 1000;
+  const isAgentOnline = Boolean(data?.instance?.agent_online);
   const terminalDataPath = String(data?.instance?.agent_terminal_path || "").replace(/[\\/]+$/, "");
   const presetFolderPath = terminalDataPath
     ? terminalDataPath + "\\MQL5\\Presets"
@@ -601,7 +600,7 @@ export default function DashboardPage() {
                   {isMt5Online && (
                     <div className="notice good connection-diagnostic">
                       <b>MT5 เชื่อมต่อกับ SCENOVA แล้ว</b>
-                      <span>รับ Heartbeat ล่าสุด {eaLastSeen?.toLocaleString("th-TH") || "เมื่อสักครู่"} · บัญชี {metrics.accountNumber || data.account.account_number}</span>
+                      <span>รับ Heartbeat ล่าสุดจาก EA แล้ว{eaLastSeenAgeSeconds >= 0 ? <> · ประมาณ {Math.round(eaLastSeenAgeSeconds)} วินาทีก่อน</> : null} · บัญชี {metrics.accountNumber || data.account.account_number}</span>
                     </div>
                   )}
 
