@@ -133,8 +133,8 @@ export default function DashboardPage() {
   const isAgentOnline = Boolean(agentLastSeen) && Date.now() - (agentLastSeen?.getTime() || 0) < 30 * 60 * 1000;
   const terminalDataPath = String(data?.instance?.agent_terminal_path || "").replace(/[\\/]+$/, "");
   const presetFolderPath = terminalDataPath
-    ? terminalDataPath + "\\MQL5\\Profiles\\Presets"
-    : "MQL5\\Profiles\\Presets";
+    ? terminalDataPath + "\\MQL5\\Presets"
+    : "MQL5\\Presets";
   const presetFilePath = presetFolderPath + "\\SCENOVA-FastBasketBot.set";
 
   async function linkAccount(e: FormEvent) {
@@ -295,7 +295,7 @@ export default function DashboardPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "FastBasketBot-" + instanceId.slice(0,8) + ".set";
+    a.download = "SCENOVA-FastBasketBot.set";
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
@@ -566,7 +566,7 @@ export default function DashboardPage() {
                     <div className="auto-install-features">
                       <span>✓ หา MT5 ในเครื่องให้เอง</span>
                       <span>✓ วาง FastBasketBot.ex5 ใน Experts\SCENOVA</span>
-                      <span>✓ วาง SCENOVA-FastBasketBot.set ใน Profiles\Presets</span>
+                      <span>✓ วาง SCENOVA-FastBasketBot.set ใน Presets</span>
                       <span>✓ เชื่อมบัญชีและติดตั้ง Agent ให้อัตโนมัติ</span>
                     </div>
                     <button className="btn primary btn-lg auto-install-button" disabled={busy} onClick={downloadWindowsInstaller}>
@@ -679,7 +679,7 @@ export default function DashboardPage() {
                       <div className="instruction-list">
                         <div><span>1</span><div><b>ถ้าหา FastBasketBot ไม่เจอ</b><small>กด “ติดตั้ง SCENOVA บน Windows” ใหม่ ระบบจะวาง FastBasketBot.ex5 กลับเข้า MQL5\Experts\SCENOVA ให้เอง</small></div></div>
                         <div><span>2</span><div><b>ถ้าเปลี่ยนคอม หรือรหัสเชื่อมต่อมีปัญหา</b><small>กด “สร้างรหัสเชื่อมต่อใหม่” แล้วติดตั้งใหม่ รหัสเก่าจะใช้ต่อไม่ได้เพื่อความปลอดภัย</small></div></div>
-                        <div><span>3</span><div><b>ถ้าต้องการไฟล์ .set สำรอง</b><small>กดดาวน์โหลดได้ด้านล่าง แต่การติดตั้งปกติไม่ต้องทำขั้นตอนนี้ เพราะ Installer วาง .set ใน MQL5\Profiles\Presets ให้แล้ว</small></div></div>
+                        <div><span>3</span><div><b>ถ้าต้องการไฟล์ .set สำรอง</b><small>กดดาวน์โหลดได้ด้านล่าง แต่การติดตั้งปกติไม่ต้องทำขั้นตอนนี้ เพราะ Installer วาง .set ใน MQL5\Presets ให้แล้ว</small></div></div>
                       </div>
                       <div className="primary-actions">
                         <button className="btn" disabled={busy} onClick={rotateInstallToken}>{busy?"กำลังสร้าง...":"หมุนรหัสเชื่อมต่อใหม่"}</button>
