@@ -48,6 +48,7 @@ export default function DashboardPage() {
   const [tradingPassword, setTradingPassword] = useState("");
   const [installToken, setInstallToken] = useState("");
   const [installInstanceId, setInstallInstanceId] = useState("");
+  const [activationMessage, setActivationMessage] = useState("");
   const [settings, setSettings] = useState<any>(defaultSettings);
   const mt5ApiBase = process.env.NEXT_PUBLIC_MT5_API_BASE || "";
 
@@ -146,10 +147,21 @@ export default function DashboardPage() {
   async function rotateInstallToken() {
     setBusy(true);
     setError("");
+    setActivationMessage("");
     try {
       const result = await api("/bot/mt5/rotate-install-token", { method: "POST" });
-      setInstallInstanceId(result.instanceId || data?.instance?.id || "");
-      setInstallToken(result.installToken || "");
+      const instanceId = result.instanceId || data?.instance?.id || "";
+      const token = result.installToken || "";
+
+      setInstallInstanceId(instanceId);
+      setInstallToken(token);
+
+      if (instanceId && token && mt5ApiBase) {
+        downloadEaSet(instanceId, token);
+        setActivationMessage("สร้างรหัสเชื่อมต่อสำเร็จ และดาวน์โหลดไฟล์ .set ให้แล้ว");
+      } else {
+        setActivationMessage("สร้างรหัสเชื่อมต่อสำเร็จแล้ว กดดาวน์โหลดไฟล์ .set ได้ทันที");
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -157,12 +169,15 @@ export default function DashboardPage() {
     }
   }
 
-  function downloadEaSet() {
-    if (!installToken || !installInstanceId || !mt5ApiBase) return;
+  function downloadEaSet(instanceIdArg?: string, tokenArg?: string) {
+    const instanceId = instanceIdArg || installInstanceId;
+    const token = tokenArg || installToken;
+    if (!token || !instanceId || !mt5ApiBase) return;
+
     const content = [
       "InpApiBase=" + mt5ApiBase,
-      "InpInstanceId=" + installInstanceId,
-      "InpInstallToken=" + installToken,
+      "InpInstanceId=" + instanceId,
+      "InpInstallToken=" + token,
       "InpMagic=26090501",
       "InpLot=" + settings.lot,
       "InpMaxPositions=" + settings.maxPositions,
@@ -187,7 +202,7 @@ export default function DashboardPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "FastBasketBot-" + installInstanceId.slice(0,8) + ".set";
+    a.download = "FastBasketBot-" + instanceId.slice(0,8) + ".set";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -490,14 +505,26 @@ export default function DashboardPage() {
                     <small>4) ถ้าทดสอบบน GitHub Codespaces ให้ตั้ง Port 4000 Visibility = Public ชั่วคราว เพื่อให้ MT5 บนเครื่องคุณเข้าถึง API ได้</small>
                     <small>5) โหลดไฟล์ .set ที่สร้างจากปุ่มด้านล่าง แล้วเปิด Algo Trading</small>
                     {mt5ApiBase && <small className="mono" style={{wordBreak:"break-all"}}>API: {mt5ApiBase}</small>}
+                    {activationMessage && (
+                      <div className="notice good" style={{marginTop:10}}>
+                        {activationMessage}
+                      </div>
+                    )}
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
                       <button className="btn primary" disabled={busy} onClick={rotateInstallToken}>
-                        สร้างรหัสเชื่อม EA ใหม่
+                        {busy ? "กำลังสร้าง..." : "สร้างรหัส + ดาวน์โหลดไฟล์ .set"}
                       </button>
-                      <button className="btn" disabled={!installToken || !installInstanceId || !mt5ApiBase} onClick={downloadEaSet}>
-                        ดาวน์โหลดไฟล์ตั้งค่า EA (.set)
+                      <button
+                        className="btn"
+                        disabled={!installToken || !installInstanceId || !mt5ApiBase}
+                        onClick={()=>downloadEaSet()}
+                      >
+                        ดาวน์โหลดไฟล์ .set อีกครั้ง
                       </button>
                     </div>
+                    <small style={{display:"block",marginTop:8}}>
+                      ปุ่มแรกจะสร้าง Token ใหม่และดาวน์โหลดไฟล์ตั้งค่าให้ทันที โดย Token เดิมจะถูกยกเลิก
+                    </small>
                   </div>
                 )}
 
