@@ -67,6 +67,15 @@ export class EaController {
       instance.mode
     );
 
+    const reportedAccount = String(body.metrics?.accountNumber || "").trim();
+    if (reportedAccount && reportedAccount !== String(instance.account_number)) {
+      await this.db.query(
+        "UPDATE bot_instances SET actual_state='SAFE_STOP',desired_state='SAFE_STOP',last_seen_at=now() WHERE id=$1",
+        [instance.id]
+      );
+      throw new UnauthorizedException("MT5 account does not match this SCENOVA license");
+    }
+
     if (!access && instance.desired_state === "RUNNING") {
       await this.db.query(
         "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1",
