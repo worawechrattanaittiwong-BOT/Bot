@@ -28,6 +28,8 @@ else
   export BOT_API_URL="http://127.0.0.1:4000"
 fi
 
+export NEXT_PUBLIC_MT5_API_BASE="$BOT_API_URL"
+
 echo "Starting API on :4000 and Web on :3000"
 
 npm run dev:api > /tmp/bot-api.log 2>&1 &
