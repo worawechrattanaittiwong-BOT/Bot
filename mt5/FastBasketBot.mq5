@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.000"
+#property version   "1.001"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -17,7 +17,7 @@ enum ENUM_BOT_STATE
    STATE_SAFE_STOP = 2
 };
 
-input string          InpApiBase              = "http://localhost:4000";
+input string          InpApiBase              = "https://snvea-bot.online/backend";
 input string          InpInstanceId           = "";
 input string          InpInstallToken         = "";
 input long            InpMagic                = 26090501;
