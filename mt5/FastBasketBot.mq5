@@ -91,6 +91,16 @@ int OnInit()
    ResetDailyBaseline();
    EventSetTimer(1);
 
+   // Strategy Tester cannot use WebRequest. In tester mode only,
+   // run the trading engine locally so historical tests work even when markets are closed.
+   if(MQLInfoInteger(MQL_TESTER))
+   {
+      g_access = true;
+      g_state = STATE_RUNNING;
+      g_lastSuccessfulHeartbeat = TimeCurrent();
+      Print("Strategy Tester mode: SaaS heartbeat bypassed for historical testing only.");
+   }
+
    long marginMode = AccountInfoInteger(ACCOUNT_MARGIN_MODE);
    if(marginMode != ACCOUNT_MARGIN_MODE_RETAIL_HEDGING)
       Print("WARNING: This basket strategy is designed for a hedging account.");
@@ -207,6 +217,9 @@ void OnTick()
 
 void OnTimer()
 {
+   if(MQLInfoInteger(MQL_TESTER))
+      return;
+
    datetime now = TimeCurrent();
    if(now - g_lastHeartbeat < MathMax(1, InpHeartbeatSeconds))
       return;
