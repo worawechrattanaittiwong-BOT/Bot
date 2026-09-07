@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.003"
+#property version   "1.004"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -28,6 +28,9 @@ input double          InpBasketTriggerMoney   = 2.00;
 input double          InpBasketTrailMoney     = 0.50;
 input double          InpMaxBasketLossMoney   = 10.00;
 input double          InpDailyLossMoney       = 25.00;
+input double          InpDailyProfitTargetMoney = 0.00;
+input double          InpBasketProfitTargetMoney = 0.00;
+input double          InpPerPositionLossMoney = 0.00;
 input int             InpMaxSpreadPoints      = 300;
 input int             InpMinOrderIntervalMs   = 300;
 input int             InpMaxOrdersPerMinute   = 120;
@@ -48,7 +51,10 @@ bool   g_forceFirstEntry = false;
 bool   g_trailArmed = false;
 double g_peakProfit = 0.0;
 double g_dayStartEquity = 0.0;
+double g_dailyClosedProfit = 0.0;
+bool   g_dailyProfitLocked = false;
 int    g_dayKey = -1;
+int    g_basketPeakPositionCount = 0;
 ulong  g_lastOrderMs = 0;
 datetime g_orderWindowStart = 0;
 int    g_ordersInWindow = 0;
@@ -66,6 +72,9 @@ double g_triggerMoney;
 double g_trailMoney;
 double g_maxBasketLoss;
 double g_dailyLoss;
+double g_dailyProfitTarget;
+double g_basketProfitTarget;
+double g_perPositionLoss;
 int    g_maxSpread;
 int    g_minOrderIntervalMs;
 int    g_maxOrdersPerMinute;
@@ -82,6 +91,9 @@ int OnInit()
    g_trailMoney = InpBasketTrailMoney;
    g_maxBasketLoss = InpMaxBasketLossMoney;
    g_dailyLoss = InpDailyLossMoney;
+   g_dailyProfitTarget = InpDailyProfitTargetMoney;
+   g_basketProfitTarget = InpBasketProfitTargetMoney;
+   g_perPositionLoss = InpPerPositionLossMoney;
    g_maxSpread = InpMaxSpreadPoints;
    g_minOrderIntervalMs = InpMinOrderIntervalMs;
    g_maxOrdersPerMinute = InpMaxOrdersPerMinute;
@@ -325,6 +337,9 @@ void OnTradeTransaction(
    string symbol = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
    long magic = HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
 
+   if(symbol == _Symbol && magic == InpMagic)
+      RecalculateDailyClosedProfit();
+
    if(symbol == _Symbol && magic != InpMagic && g_state == STATE_RUNNING)
    {
       Print("Manual/external trade detected on ", _Symbol, ". Entering SAFE_STOP.");
@@ -527,6 +542,9 @@ void ApplySettings(string json)
    g_trailMoney = MathMax(0.01, JsonNumber(json, "basketTrailMoney", g_trailMoney));
    g_maxBasketLoss = MathMax(0.0, JsonNumber(json, "maxBasketLossMoney", g_maxBasketLoss));
    g_dailyLoss = MathMax(0.0, JsonNumber(json, "dailyLossMoney", g_dailyLoss));
+   g_dailyProfitTarget = MathMax(0.0, JsonNumber(json, "dailyProfitTargetMoney", g_dailyProfitTarget));
+   g_basketProfitTarget = MathMax(0.0, JsonNumber(json, "basketProfitTargetMoney", g_basketProfitTarget));
+   g_perPositionLoss = MathMax(0.0, JsonNumber(json, "perPositionLossMoney", g_perPositionLoss));
    g_maxSpread = (int)MathMax(1.0, JsonNumber(json, "maxSpreadPoints", g_maxSpread));
    g_minOrderIntervalMs = (int)MathMax(0.0, JsonNumber(json, "minOrderIntervalMs", g_minOrderIntervalMs));
    g_maxOrdersPerMinute = (int)MathMax(1.0, JsonNumber(json, "maxOrdersPerMinute", g_maxOrdersPerMinute));
