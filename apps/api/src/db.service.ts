@@ -211,17 +211,18 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         WHERE status='ACTIVE';
 
 
-      -- This value is a fail-safe used only while Adaptive Spread warms up.
-      -- Live trading uses rolling broker/symbol percentiles from the EA.
+      -- Adaptive Engine uses live broker/symbol spread percentiles.
+      -- Remove legacy fixed XAUUSD defaults only for adaptive profiles.
       UPDATE bot_settings
       SET
-        settings=jsonb_set(settings,'{maxSpreadPoints}','300'::jsonb,true),
+        settings=jsonb_set(settings,'{maxSpreadPoints}','0'::jsonb,true),
         updated_at=now()
-      WHERE COALESCE(settings->>'symbol','') ILIKE 'XAUUSD%'
-        AND COALESCE((settings->>'maxSpreadPoints')::int,50)=50;
+      WHERE COALESCE((settings->>'adaptiveEngine')::boolean,true)=true
+        AND COALESCE(settings->>'symbol','') ILIKE 'XAUUSD%'
+        AND COALESCE((settings->>'maxSpreadPoints')::int,0) IN (50,300);
 
       -- Add Adaptive Engine defaults without replacing values already chosen
-      -- by a user. JSONB values on the right take precedence.
+      -- by a user. ATR 0 means fully adaptive, not disabled.
       UPDATE bot_settings
       SET settings='{
         "adaptiveEngine":true,
@@ -231,11 +232,18 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         "confidenceThreshold":70,
         "sessionStartHour":0,
         "sessionEndHour":24,
-        "maxAtrPoints":3000,
+        "maxAtrPoints":0,
         "cooldownMinutesAfterLoss":5,
         "maxConsecutiveLosses":3
       }'::jsonb || settings
       WHERE NOT settings ? 'adaptiveEngine';
+
+      -- Migrate the previous untouched ATR hard-cap default to fully adaptive.
+      UPDATE bot_settings
+      SET settings=jsonb_set(settings,'{maxAtrPoints}','0'::jsonb,true),
+          updated_at=now()
+      WHERE COALESCE((settings->>'adaptiveEngine')::boolean,true)=true
+        AND COALESCE((settings->>'maxAtrPoints')::numeric,0)=3000;
 
       -- Reduce the old untouched cooldown default. Custom values remain intact.
       UPDATE bot_settings
