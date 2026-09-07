@@ -149,6 +149,7 @@ export default function DashboardPage() {
   const hardStartBlocks = new Set([
     "NOT_INSTALLED",
     "MT5_OFFLINE",
+    "EA_NOT_LOADED",
     "TERMINAL_DISCONNECTED",
     "ALGO_TRADING_OFF",
     "EA_TRADING_DISABLED",
