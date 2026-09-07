@@ -143,6 +143,7 @@ datetime g_lastAdaptiveEvaluation = 0;
 int    g_cachedAdaptiveDirection = 0;
 
 #define SPREAD_HISTORY_CAPACITY 1800
+#define SPREAD_MIN_SAMPLES 300
 double g_spreadHistory[SPREAD_HISTORY_CAPACITY];
 int    g_spreadHistoryCount = 0;
 int    g_spreadHistoryIndex = 0;
@@ -1303,10 +1304,11 @@ void SampleSpread()
       g_spreadHistoryCount++;
 
    if((!g_spreadProfileRestored && g_spreadHistoryCount <= 60) ||
-      (g_spreadHistoryCount >= 30 && g_spreadHistoryCount % 5 == 0))
+      (!g_spreadProfileRestored && g_spreadHistoryCount % 5 == 0) ||
+      (g_spreadProfileRestored && g_spreadHistoryCount >= SPREAD_MIN_SAMPLES && g_spreadHistoryCount % 5 == 0))
       RecalculateSpreadProfile();
 
-   bool profileReady = g_spreadHistoryCount >= 30 || g_spreadProfileRestored;
+   bool profileReady = g_spreadHistoryCount >= SPREAD_MIN_SAMPLES || g_spreadProfileRestored;
    if(!profileReady)
    {
       g_adaptiveSpreadLimit = MathMax(1.0, (double)g_maxSpread);
@@ -1334,7 +1336,7 @@ void SampleSpread()
          20.0 * (spread - elevatedLevel) / (g_adaptiveSpreadLimit - elevatedLevel)
       );
 
-   if(g_spreadHistoryCount >= 60 && g_spreadHistoryCount % 60 == 0)
+   if(g_spreadHistoryCount >= SPREAD_MIN_SAMPLES && g_spreadHistoryCount % 60 == 0)
       PersistSpreadProfile();
 }
 
