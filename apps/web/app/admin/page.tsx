@@ -95,8 +95,17 @@ export default function AdminPage() {
   }
 
   async function activate(user: any) {
+    const selectedPlanMode = plan === "CLOUD_30D" ? "CLOUD" : "LOCAL";
+    if (user.mode && user.mode !== selectedPlanMode) {
+      setMessage(
+        "MT5 ที่แสดงของ " + user.user_code + " เป็น " + user.mode +
+        " แต่แพ็กที่เลือกเป็น " + selectedPlanMode +
+        " กรุณาเลือกแพ็ก " + user.mode + " ให้ตรงกับ Slot ก่อน"
+      );
+      return;
+    }
     try {
-      await adminApi("/admin/subscriptions/activate", {
+      const result = await adminApi("/admin/subscriptions/activate", {
         method: "POST",
         body: JSON.stringify({
           userId: user.id,
@@ -107,7 +116,11 @@ export default function AdminPage() {
           activatedBy: "OWNER"
         })
       });
-      setMessage("เปิดสมาชิก " + plan + " ให้ " + user.user_code + " แล้ว");
+      const slotCount = Array.isArray(result?.slots) ? result.slots.length : (result?.plan?.slots || 1);
+      setMessage(
+        "เปิดสิทธิ์ " + (result?.plan?.code || plan) +
+        " ให้ " + user.user_code + " แล้ว · " + slotCount + " Slot"
+      );
       await search();
     } catch (e: any) {
       setMessage(e.message);
@@ -284,7 +297,7 @@ export default function AdminPage() {
                   <option value="PARTNER_LOCAL_50">PARTNER LOCAL · 50 Slots</option>
                   <option value="CLOUD_30D">CLOUD 30D · 1 Slot</option>
                 </select></div>
-                <div className="field"><label>วันเริ่ม <span className="muted">(ว่าง = เริ่มทันที)</span></label><input className="input" type="datetime-local" value={startsAt} onChange={e=>setStartsAt(e.target.value)}/></div>
+                <div className="field"><label>วันเริ่ม <span className="muted">(ว่าง = เริ่มทันที)</span></label><input className="input" type="datetime-local" value={startsAt} onChange={e=>setStartsAt(e.target.value)}/><div className="help">Owner Console รุ่นนี้เปิดสิทธิ์ทันทีเท่านั้น ถ้ากำหนดเวลาอนาคตระบบจะแจ้งเตือน</div></div>
                 <div className="field"><label>จำนวนวัน</label><input className="input" type="number" min={1} value={days} onChange={e=>setDays(Number(e.target.value))}/></div>
                 <div className="field"><label>กำหนดวันหมดอายุเอง</label><input className="input" type="datetime-local" value={expiresAt} onChange={e=>setExpiresAt(e.target.value)}/><div className="help">ถ้ากรอก ระบบจะใช้วันนี้แทนจำนวนวัน</div></div>
               </div>
@@ -319,7 +332,7 @@ export default function AdminPage() {
                         <td>
                           {user.role === "OWNER" || user.role === "ADMIN"
                             ? <><b className="text-good">OWNER UNLIMITED</b><br/><span className="muted">ไม่ต้องเปิด Trial / สมาชิก</span></>
-                            : <><b>{user.plan_code || "ยังไม่มีสมาชิก"}</b>{user.plan_code && <><br/><span className="muted">{user.plan_slots || 1} Slots{user.allow_resale ? " · PARTNER" : ""} · ใช้แล้ว {user.assigned_slots || 0}/{user.total_slots || 0}</span></>}{user.subscription_expires_at && <><br/><span className="muted">ถึง {new Date(user.subscription_expires_at).toLocaleDateString("th-TH")}</span></>}</>}
+                            : <><b className={user.subscription_active ? "text-good" : ""}>{user.plan_code || "ยังไม่มีสิทธิ์บน Slot นี้"}</b>{user.plan_code && <><br/><span className="muted">{user.mode || "—"} · {user.plan_slots || 1} Slots{user.allow_resale ? " · PARTNER" : ""} · {user.subscription_active ? "ACTIVE" : (user.subscription_status || "INACTIVE")}</span></>}{user.subscription_expires_at && <><br/><span className="muted">ถึง {new Date(user.subscription_expires_at).toLocaleDateString("th-TH")}</span></>}</>}
                         </td>
                         <td><span className={"owner-state-chip "+(user.status==="SUSPENDED"?"bad":"good")}>{user.status}</span></td>
                         <td>
@@ -331,7 +344,7 @@ export default function AdminPage() {
                           ) : (
                             <div className="owner-row-actions owner-row-actions-wrap">
                               <button className="btn" disabled={!user.mt5_account_id || user.trial_request_status !== "PENDING" || Boolean(user.trial_status)} onClick={()=>grantTrial(user)}>อนุมัติ Trial 3h</button>
-                              <button className="btn primary" onClick={()=>activate(user)}>เปิดสมาชิก</button>
+                              <button className="btn primary" onClick={()=>activate(user)}>เปิดสิทธิ์ {user.mode || ""}</button>
                               <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,7)}>+7 วัน</button>
                               <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,30)}>+30 วัน</button>
                               {user.status==="SUSPENDED"
