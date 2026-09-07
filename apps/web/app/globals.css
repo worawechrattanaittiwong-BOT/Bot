@@ -87,6 +87,8 @@ h3{margin:0;font-size:16px}
 .simple-settings-form .field>label{min-height:20px}
 .toggle-select-field,.toggle-pair-field{border:1px solid #1d2b32;background:#080d10;border-radius:14px;padding:13px}
 .toggle-select-field.enabled,.toggle-pair-field.enabled{border-color:#31564b;background:#0a1210}
+.toggle-select-field.disabled,.toggle-pair-field.disabled{opacity:.48}
+.toggle-select-field.disabled .toggle-setting-label,.toggle-pair-field.disabled .toggle-setting-label{cursor:not-allowed}
 .toggle-setting-label{display:flex;align-items:center;gap:10px!important;cursor:pointer;color:#d8e3e6!important;font-weight:650}
 .toggle-setting-label input[type="checkbox"]{appearance:none;width:19px;height:19px;border-radius:5px;border:1px solid #36505c;background:#060a0d;display:grid;place-items:center;flex:0 0 auto;cursor:pointer}
 .toggle-setting-label input[type="checkbox"]:checked{background:#163d2d;border-color:#62d79d}
