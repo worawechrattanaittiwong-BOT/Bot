@@ -64,15 +64,72 @@ jobs:
       - name: Publish compiled artifact to private repository
         shell: powershell
         run: |
+          $ErrorActionPreference = "Stop"
+
+          # Preserve the compiled bytes outside the working tree. Rebasing a
+          # generated EX5 commit can conflict with another generated EX5 commit
+          # even when the MQ5 source itself did not conflict.
+          $compiledEx5 = "$env:RUNNER_TEMP\FastBasketBot.ex5"
+          $compiledManifest = "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
+          Copy-Item -Force "mt5\release\FastBasketBot.ex5" $compiledEx5
+          Copy-Item -Force "mt5\release\manifest.json" $compiledManifest
+
           git config user.name "SCENOVA Build Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add -f mt5/release/FastBasketBot.ex5
-          git add mt5/release/manifest.json
-          if (git diff --cached --quiet) {
-            Write-Host "Compiled artifact is unchanged."
-            exit 0
+
+          $published = $false
+          for ($attempt = 1; $attempt -le 6; $attempt++) {
+            Write-Host "EA publish attempt $attempt/6"
+
+            git fetch origin main
+            if ($LASTEXITCODE -ne 0) {
+              Start-Sleep -Seconds 2
+              continue
+            }
+
+            # If a newer commit changed the MQ5 source, this build is obsolete.
+            # The newer source push has its own Build MT5 EA run.
+            git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5
+            if ($LASTEXITCODE -eq 1) {
+              Write-Host "A newer FastBasketBot.mq5 exists on main; skipping obsolete EX5 publish."
+              exit 0
+            }
+            if ($LASTEXITCODE -ne 0) {
+              throw "Could not compare MT5 EA source with latest main"
+            }
+
+            git reset --hard origin/main
+            if ($LASTEXITCODE -ne 0) { throw "Could not reset to latest main" }
+
+            New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
+            Copy-Item -Force $compiledEx5 "mt5\release\FastBasketBot.ex5"
+            Copy-Item -Force $compiledManifest "mt5\release\manifest.json"
+
+            git add -f mt5/release/FastBasketBot.ex5
+            git add mt5/release/manifest.json
+            git diff --cached --quiet
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Compiled artifact is already current."
+              $published = $true
+              break
+            }
+            if ($LASTEXITCODE -ne 1) {
+              throw "Could not inspect generated EA changes"
+            }
+
+            git commit -m "build: publish private FastBasketBot.ex5 [skip ea build]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit compiled EA" }
+
+            git push origin HEAD:main
+            if ($LASTEXITCODE -eq 0) {
+              $published = $true
+              break
+            }
+
+            Write-Host "Main moved while publishing EX5; retrying from latest main..."
+            Start-Sleep -Seconds 2
           }
-          git commit -m "build: publish private FastBasketBot.ex5 [skip ea build]"
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
+
+          if (-not $published) {
+            throw "Failed to publish FastBasketBot.ex5 after retries"
+          }
