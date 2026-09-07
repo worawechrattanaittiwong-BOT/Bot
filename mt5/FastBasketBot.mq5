@@ -43,6 +43,7 @@ input int             InpMaxOfflineLeaseSeconds = 600;
 
 ENUM_BOT_STATE g_state = STATE_STOPPED;
 bool   g_access = false;
+bool   g_forceFirstEntry = false;
 bool   g_trailArmed = false;
 double g_peakProfit = 0.0;
 double g_dayStartEquity = 0.0;
@@ -232,7 +233,9 @@ void OnTick()
       return;
    }
 
-   if(!SpreadAllowed())
+   bool forceFirstEntry = (g_forceFirstEntry && count == 0);
+
+   if(!forceFirstEntry && !SpreadAllowed())
    {
       g_executionStatus = "SPREAD_TOO_HIGH";
       return;
@@ -244,7 +247,7 @@ void OnTick()
       return;
    }
 
-   int direction = EntryDirection(momentum);
+   int direction = forceFirstEntry ? ImmediateEntryDirection(momentum) : EntryDirection(momentum);
    if(direction == 0)
    {
       g_executionStatus = "WAITING_MOMENTUM";
@@ -260,7 +263,11 @@ void OnTick()
    g_executionStatus = direction > 0 ? "READY_BUY" : "READY_SELL";
    bool sent = SendMarketOrder(direction);
    if(sent)
+   {
       RegisterOrderRequest();
+      if(forceFirstEntry)
+         g_forceFirstEntry = false;
+   }
 }
 
 void OnTimer()
@@ -384,15 +391,26 @@ void SendHeartbeat()
    ApplySettings(response);
 
    if(!g_access)
+   {
       g_state = STATE_SAFE_STOP;
+      g_forceFirstEntry = false;
+   }
    else if(command == "START" || desired == "RUNNING")
+   {
+      if(g_state != STATE_RUNNING && BasketPositionCount() == 0)
+         g_forceFirstEntry = true;
       g_state = STATE_RUNNING;
+   }
    else if(command == "SAFE_STOP" || desired == "SAFE_STOP")
+   {
       g_state = STATE_SAFE_STOP;
+      g_forceFirstEntry = false;
+   }
 
    if(command == "CLOSE_ALL")
    {
       g_state = STATE_SAFE_STOP;
+      g_forceFirstEntry = false;
       CloseAllBasket("REMOTE_CLOSE_ALL");
    }
 
@@ -464,6 +482,24 @@ int EntryDirection(double momentum)
    return 0;
 }
 
+int ImmediateEntryDirection(double momentum)
+{
+   if(g_entryMode == ENTRY_BUY_ONLY) return 1;
+   if(g_entryMode == ENTRY_SELL_ONLY) return -1;
+   if(momentum > 0.0) return 1;
+   if(momentum < 0.0) return -1;
+
+   MqlTick tick;
+   if(SymbolInfoTick(_Symbol, tick))
+   {
+      double barOpen = iOpen(_Symbol, PERIOD_CURRENT, 0);
+      if(barOpen > 0.0)
+         return ((tick.bid + tick.ask) * 0.5 >= barOpen) ? 1 : -1;
+   }
+
+   return 1;
+}
+
 bool SpreadAllowed()
 {
    return CurrentSpreadPoints() <= g_maxSpread;
@@ -473,7 +509,7 @@ double CurrentSpreadPoints()
 {
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol, tick)) return 999999.0;
-   return (tick.ask - tick.bid) / _Point;
+   return (double)MathRound((tick.ask - tick.bid) / _Point);
 }
 
 bool CanSendOrder()
