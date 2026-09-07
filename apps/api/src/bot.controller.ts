@@ -74,6 +74,119 @@ export class BotController {
     }
   }
 
+
+  private executionStatusMeta(code: string) {
+    const map: Record<string, { label: string; detail: string; tone: string }> = {
+      NOT_INSTALLED: { label: "ยังไม่ได้ติดตั้ง", detail: "ติดตั้ง SCENOVA จากเว็บไซต์ก่อน", tone: "warn" },
+      MT5_OFFLINE: { label: "MT5 ยังไม่เชื่อมต่อ", detail: "เปิด MT5 และให้ EA ทำงานบนกราฟ", tone: "bad" },
+      TERMINAL_DISCONNECTED: { label: "MT5 ไม่มีการเชื่อมต่อ", detail: "Terminal ยังไม่เชื่อม Broker/Server", tone: "bad" },
+      ALGO_TRADING_OFF: { label: "Algo Trading ปิดอยู่", detail: "เปิด Algo Trading ใน MetaTrader 5 ก่อนเริ่มบอท", tone: "bad" },
+      EA_TRADING_DISABLED: { label: "EA ไม่ได้รับอนุญาตให้เทรด", detail: "เปิด Allow Algo Trading ใน Properties ของ EA", tone: "bad" },
+      ACCOUNT_TRADING_DISABLED: { label: "บัญชีนี้ไม่อนุญาตให้เทรด", detail: "ตรวจสิทธิ์ Trading ของบัญชีกับ Broker", tone: "bad" },
+      ACCOUNT_EXPERT_DISABLED: { label: "บัญชีไม่อนุญาต Expert Advisor", detail: "Broker/บัญชีปิดการเทรดด้วย EA", tone: "bad" },
+      SYMBOL_TRADING_DISABLED: { label: "Symbol นี้เปิดออเดอร์ไม่ได้", detail: "Broker ปิดการเปิดออเดอร์ใหม่บน Symbol นี้", tone: "bad" },
+      NO_ACCESS: { label: "ไม่มีสิทธิ์ใช้งาน", detail: "ต้องมี Trial หรือ Subscription ที่ตรงกับ Slot", tone: "bad" },
+      STOPPED: { label: "บอทหยุดอยู่", detail: "พร้อมรับคำสั่งเริ่มจากเว็บ", tone: "neutral" },
+      SAFE_STOP: { label: "Safe Stop", detail: "บอทจะไม่เปิดรอบใหม่", tone: "warn" },
+      WAITING_EA_START: { label: "กำลังรอ EA รับคำสั่ง Start", detail: "คำสั่งจากเว็บส่งแล้ว รอ Heartbeat รอบถัดไป", tone: "warn" },
+      WAITING_MOMENTUM: { label: "กำลังรอสัญญาณ Momentum", detail: "บอท RUNNING แล้ว แต่เงื่อนไขเข้าออเดอร์ยังไม่ถึง", tone: "good" },
+      SPREAD_TOO_HIGH: { label: "Spread สูงเกินกำหนด", detail: "บอทรอจน Spread ต่ำกว่า Max Spread", tone: "warn" },
+      MAX_POSITIONS: { label: "Position เต็มแล้ว", detail: "จำนวน Position ถึง Max Positions", tone: "warn" },
+      ORDER_RATE_LIMIT: { label: "กำลังรอช่วงส่งคำสั่งถัดไป", detail: "Rate limit ของบอทยังไม่พร้อมส่ง Order ใหม่", tone: "warn" },
+      READY_BUY: { label: "พบสัญญาณ BUY", detail: "เงื่อนไขพร้อมส่งคำสั่ง BUY", tone: "good" },
+      READY_SELL: { label: "พบสัญญาณ SELL", detail: "เงื่อนไขพร้อมส่งคำสั่ง SELL", tone: "good" },
+      ORDER_ACCEPTED: { label: "Broker รับคำสั่งแล้ว", detail: "Order ล่าสุดถูก Broker รับแล้ว", tone: "good" },
+      MARKET_CLOSED: { label: "ตลาดปิด", detail: "รอ Session เปิดก่อนส่ง Order", tone: "warn" },
+      TRADE_DISABLED: { label: "Broker ปิดการเทรด", detail: "Broker ปฏิเสธการส่ง Order", tone: "bad" },
+      SERVER_ALGO_DISABLED: { label: "Server ปิด Algo Trading", detail: "Trading Server ไม่อนุญาต Algo Trading", tone: "bad" },
+      NO_MONEY: { label: "Margin ไม่เพียงพอ", detail: "Order ล่าสุดถูกปฏิเสธเพราะเงิน/มาร์จิ้นไม่พอ", tone: "bad" },
+      BROKER_RATE_LIMIT: { label: "Broker จำกัดคำสั่งชั่วคราว", detail: "รอก่อนส่ง Order ใหม่", tone: "warn" },
+      INVALID_VOLUME: { label: "Lot ไม่ถูกต้อง", detail: "Broker ปฏิเสธ Volume ของ Order", tone: "bad" },
+      NO_PRICE: { label: "ไม่มีราคาให้ส่ง Order", detail: "รอราคาใหม่จาก Broker", tone: "warn" },
+      PRICE_CHANGED: { label: "ราคาเปลี่ยนระหว่างส่งคำสั่ง", detail: "บอทจะประเมินสัญญาณใหม่ใน Tick ถัดไป", tone: "warn" },
+      ORDER_REJECTED: { label: "Order ถูกปฏิเสธ", detail: "ตรวจ Retcode ล่าสุดในสถานะ Live", tone: "bad" },
+      RUNNING_READY: { label: "บอทกำลังทำงาน", detail: "ระบบพร้อมและกำลังประเมินเงื่อนไขเข้าออเดอร์", tone: "good" },
+      EVALUATING: { label: "กำลังประเมินตลาด", detail: "EA กำลังตรวจเงื่อนไขเข้าออเดอร์แบบ Real-time", tone: "good" }
+    };
+    return map[code] || { label: code || "กำลังตรวจสอบ", detail: "สถานะจาก EA", tone: "neutral" };
+  }
+
+  private buildLiveStatus(instance: any, settings: any, entitlement: any) {
+    if (!instance) {
+      const meta = this.executionStatusMeta("NOT_INSTALLED");
+      return { code: "NOT_INSTALLED", ...meta, tradeReady: false };
+    }
+
+    const metrics = instance.metrics || {};
+    if (!instance.mt5_online) {
+      const meta = this.executionStatusMeta("MT5_OFFLINE");
+      return { code: "MT5_OFFLINE", ...meta, tradeReady: false };
+    }
+
+    const permissionChecks: Array<[string, any]> = [
+      ["TERMINAL_DISCONNECTED", metrics.terminalConnected],
+      ["ALGO_TRADING_OFF", metrics.terminalTradeAllowed],
+      ["EA_TRADING_DISABLED", metrics.mqlTradeAllowed],
+      ["ACCOUNT_TRADING_DISABLED", metrics.accountTradeAllowed],
+      ["ACCOUNT_EXPERT_DISABLED", metrics.accountTradeExpert]
+    ];
+    for (const [code, value] of permissionChecks) {
+      if (value === false) {
+        const meta = this.executionStatusMeta(code);
+        return { code, ...meta, tradeReady: false };
+      }
+    }
+
+    if (!entitlement?.allowed) {
+      const meta = this.executionStatusMeta("NO_ACCESS");
+      return { code: "NO_ACCESS", ...meta, tradeReady: false };
+    }
+
+    if (instance.desired_state !== "RUNNING") {
+      const code = instance.desired_state === "SAFE_STOP" || instance.actual_state === "SAFE_STOP"
+        ? "SAFE_STOP"
+        : "STOPPED";
+      const meta = this.executionStatusMeta(code);
+      return { code, ...meta, tradeReady: metrics.tradeReady !== false };
+    }
+
+    if (instance.actual_state !== "RUNNING") {
+      const meta = this.executionStatusMeta("WAITING_EA_START");
+      return { code: "WAITING_EA_START", ...meta, tradeReady: metrics.tradeReady !== false };
+    }
+
+    let code = String(metrics.executionStatus || "").trim();
+    if (!code || code === "EVALUATING" || code === "INITIALIZING") {
+      const positions = Number(metrics.positions || 0);
+      const maxPositions = Number(settings?.maxPositions ?? 10);
+      const spread = Number(metrics.spreadPoints ?? 0);
+      const maxSpread = Number(settings?.maxSpreadPoints ?? metrics.maxSpreadPoints ?? 50);
+      const momentum = Number(metrics.momentumPoints ?? 0);
+      const momentumEntry = Number(metrics.momentumEntryPoints ?? 8);
+      const entryMode = String(settings?.entryMode || "AUTO_MOMENTUM");
+
+      if (positions >= maxPositions) code = "MAX_POSITIONS";
+      else if (spread > maxSpread) code = "SPREAD_TOO_HIGH";
+      else if (entryMode === "AUTO_MOMENTUM" && Math.abs(momentum) < momentumEntry) code = "WAITING_MOMENTUM";
+      else code = "RUNNING_READY";
+    }
+
+    const meta = this.executionStatusMeta(code);
+    return {
+      code,
+      ...meta,
+      tradeReady: metrics.tradeReady !== false,
+      telemetryEnhanced: typeof metrics.tradeReady === "boolean" || Boolean(metrics.executionStatus),
+      momentumPoints: Number(metrics.momentumPoints ?? 0),
+      momentumEntryPoints: Number(metrics.momentumEntryPoints ?? 8),
+      spreadPoints: Number(metrics.spreadPoints ?? 0),
+      maxSpreadPoints: Number(settings?.maxSpreadPoints ?? metrics.maxSpreadPoints ?? 50),
+      lastOrderRetcode: Number(metrics.lastOrderRetcode ?? 0),
+      lastOrderError: Number(metrics.lastOrderError ?? 0),
+      lastOrderAt: Number(metrics.lastOrderAt ?? 0)
+    };
+  }
+
   private async ensurePrimarySlot(userId: string) {
     let slot = await this.db.one(
       "SELECT * FROM license_slots WHERE owner_user_id=$1 AND assigned_user_id=$1 AND mode='LOCAL' AND status<>'DELETED' ORDER BY slot_number,id LIMIT 1",
@@ -296,6 +409,14 @@ export class BotController {
       [userId]
     );
 
+    const entitlement = await this.entitlement(
+      userId,
+      account?.id || null,
+      selectedSlot.mode || account?.mode || null,
+      selectedSlot.id
+    );
+    const liveStatus = this.buildLiveStatus(instance, settings, entitlement);
+
     return {
       user,
       slots,
@@ -304,12 +425,8 @@ export class BotController {
       instance,
       settings,
       trialRequest: latestTrialRequest,
-      entitlement: await this.entitlement(
-        userId,
-        account?.id || null,
-        selectedSlot.mode || account?.mode || null,
-        selectedSlot.id
-      )
+      entitlement,
+      liveStatus
     };
   }
 
@@ -828,6 +945,27 @@ export class BotController {
     if (!access.allowed) throw new ConflictException("trial or matching subscription required");
 
     if (instance.mode === "LOCAL") {
+      if (!instance.mt5_online) {
+        throw new ConflictException("MT5/EA ยังไม่เชื่อมต่อ กรุณาเปิด MT5 และให้ EA ส่ง Heartbeat ก่อนเริ่มบอท");
+      }
+
+      const metrics = instance.metrics || {};
+      if (metrics.terminalConnected === false) {
+        throw new ConflictException("MT5 ยังไม่เชื่อมกับ Broker/Server");
+      }
+      if (metrics.terminalTradeAllowed === false) {
+        throw new ConflictException("Algo Trading ปิดอยู่ กรุณาเปิด Algo Trading ใน MT5 ก่อนเริ่มบอท");
+      }
+      if (metrics.mqlTradeAllowed === false) {
+        throw new ConflictException("EA ยังไม่ได้เปิด Allow Algo Trading ใน Properties");
+      }
+      if (metrics.accountTradeAllowed === false) {
+        throw new ConflictException("บัญชี MT5 นี้ไม่อนุญาตให้เทรด");
+      }
+      if (metrics.accountTradeExpert === false) {
+        throw new ConflictException("บัญชี MT5 นี้ไม่อนุญาตให้ Expert Advisor เทรด");
+      }
+
       const useDeviceLock = instance.device_status === "ACTIVE";
       const seenAt = useDeviceLock ? instance.device_last_seen_at : instance.agent_last_seen_at;
       const limitMs = useDeviceLock ? 90_000 : 30 * 60_000;
@@ -899,7 +1037,10 @@ export class BotController {
   private async getInstance(userId: string, slotId?: string | null) {
     const slot = await this.resolveSlot(userId, slotId || null);
     const instance = await this.db.one(
-      "SELECT bi.id,bi.slot_id,bi.mt5_account_id,bi.mode,bi.agent_last_seen_at,bi.agent_ea_hash,bi.device_status,bi.device_last_seen_at FROM bot_instances bi WHERE bi.slot_id=$1",
+      `SELECT bi.*,
+         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') AS mt5_online
+       FROM bot_instances bi
+       WHERE bi.slot_id=$1`,
       [slot.id]
     );
     if (!instance) throw new ConflictException("install SCENOVA for this slot first");
