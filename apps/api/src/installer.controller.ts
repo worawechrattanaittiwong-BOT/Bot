@@ -8,6 +8,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { DbService } from "./db.service";
 import { CryptoService } from "./security";
+import { latestInstallerVersion } from "./release-version";
 
 @Controller("installer")
 export class InstallerController {
@@ -186,7 +187,7 @@ export class InstallerController {
       artifactHash: this.artifactHash(),
       artifactEndpoint: "/api/ea/artifact",
       startupSymbol: String(startup?.startup_symbol || "XAUUSD"),
-      agentVersionRequired: "2.0.5",
+      agentVersionRequired: latestInstallerVersion(),
       preservedLegacyToken: canPreserveLegacy
     };
   }
