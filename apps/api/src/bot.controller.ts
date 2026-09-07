@@ -1222,9 +1222,26 @@ export class BotController {
     numberSetting("dailyLossMoney", 0, 100000);
     numberSetting("dailyProfitTargetMoney", 0, 100000);
     numberSetting("basketProfitTargetMoney", 0, 100000);
+    numberSetting("perPositionProfitMoney", 0, 100000);
     numberSetting("perPositionLossMoney", 0, 100000);
     numberSetting("minOrderIntervalMs", 0, 60000, true);
     numberSetting("maxOrdersPerMinute", 1, 5000, true);
+
+    const requestedBasketProfit = Number(clean.basketProfitTargetMoney ?? 0);
+    const requestedPerPositionProfit = Number(clean.perPositionProfitMoney ?? 0);
+    if (requestedBasketProfit > 0 && requestedPerPositionProfit > 0) {
+      throw new BadRequestException(
+        "เลือกกำไรต่อไม้หรือกำไรรวม Basket ได้อย่างใดอย่างหนึ่งเท่านั้น"
+      );
+    }
+
+    // Switching one profit mode on explicitly disables the other mode at the
+    // Server too. This protects API clients in addition to the web UI.
+    if (requestedPerPositionProfit > 0) {
+      clean.basketProfitTargetMoney = 0;
+    } else if (requestedBasketProfit > 0) {
+      clean.perPositionProfitMoney = 0;
+    }
 
     if (body.entryMode !== undefined) {
       const entryMode = String(body.entryMode || "");
