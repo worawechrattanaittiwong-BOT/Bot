@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { ScenovaIcon } from "./ScenovaIcon";
 
 export const ownerNavItems = [
-  { section:"WORKSPACE", key:"admin-overview", href:"/admin?view=overview", icon:"◫", label:"ภาพรวมระบบ", hint:"สุขภาพระบบ" },
-  { section:"WORKSPACE", key:"admin-customers", href:"/admin?view=customers", icon:"◎", label:"ลูกค้า & สมาชิก", hint:"Trial, Access, แพ็กเกจ" },
-  { section:"WORKSPACE", key:"admin-workers", href:"/admin?view=workers", icon:"⌁", label:"Cloud", hint:"Trading Nodes" },
-  { section:"MY TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"▣", label:"Control Center", hint:"Start / Stop + ตั้งค่าบอท" },
-  { section:"MY TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"M", label:"บัญชี MT5 & EA", hint:"เชื่อมบัญชี, Local / Cloud, .set" },
-  { section:"MY TRADING", key:"trading-access", href:"/dashboard?view=access", icon:"A", label:"สิทธิ์ใช้งานของฉัน", hint:"OWNER · Unlimited Access" },
-  { section:"PUBLIC", key:"website", href:"/", icon:"↗", label:"หน้าเว็บไซต์", hint:"หน้าแรก SCENOVA" }
+  { section:"WORKSPACE", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"ภาพรวมระบบ", hint:"สุขภาพระบบ" },
+  { section:"WORKSPACE", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"ลูกค้า & สมาชิก", hint:"Trial, Access, แพ็กเกจ" },
+  { section:"WORKSPACE", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud", hint:"Trading Nodes" },
+  { section:"MY TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"control", label:"Control Center", hint:"ภาพรวมและควบคุมบอท" },
+  { section:"MY TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account", label:"บัญชี MT5 & EA", hint:"เชื่อมบัญชี Local / Cloud" },
+  { section:"MY TRADING", key:"trading-access", href:"/dashboard?view=access", icon:"shield", label:"สิทธิ์ใช้งานของฉัน", hint:"OWNER · Unlimited Access" },
+  { section:"PUBLIC", key:"website", href:"/", icon:"strategy", label:"หน้าเว็บไซต์", hint:"หน้าแรก SCENOVA" }
 ] as const;
 
 type OwnerNavigateHandler = (href:string)=>boolean | void;
@@ -27,7 +28,7 @@ export function OwnerSidebar({
   return (
     <aside className="sidebar app-sidebar owner-sidebar">
       <div className="brand-lockup side-brand">
-        <span className="brand-emblem" aria-hidden="true"><i/><b>◆</b></span>
+        <span className="brand-emblem" aria-hidden="true"><i/><ScenovaIcon name="brand" size={22}/></span>
         <span><strong>SCENOVA</strong><small>OWNER CONSOLE</small></span>
       </div>
 
@@ -46,7 +47,7 @@ export function OwnerSidebar({
                   if (onNavigate?.(item.href) === true) event.preventDefault();
                 }}
               >
-                <span className="owner-nav-icon">{item.icon}</span>
+                <span className="owner-nav-icon"><ScenovaIcon name={item.icon} size={19}/></span>
                 <span className="owner-nav-copy"><b>{item.label}</b><small>{item.hint}</small></span>
                 <span className="owner-nav-caret">›</span>
               </Link>
@@ -60,7 +61,7 @@ export function OwnerSidebar({
         <div><small>System role</small><b>OWNER</b></div>
         <span className="dot green"/>
       </div>
-      <button type="button" className="btn ghost full" onClick={onLogout}>ออกจากระบบ</button>
+      <button type="button" className="btn ghost full owner-logout" onClick={onLogout}><ScenovaIcon name="logout" size={18}/>ออกจากระบบ</button>
     </aside>
   );
 }

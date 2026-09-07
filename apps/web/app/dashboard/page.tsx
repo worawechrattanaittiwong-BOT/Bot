@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
+import { ScenovaIcon } from "../../components/ScenovaIcon";
 
 type Dashboard = {
   user: any;
@@ -27,6 +28,7 @@ type BrokerCatalog = {
 };
 
 type View = "overview" | "account" | "access";
+type SettingsTab = "basic" | "adaptive" | "risk" | "session" | "exit";
 
 const defaultSettings = {
   symbol: "XAUUSD",
@@ -88,6 +90,7 @@ export default function DashboardPage() {
   const [settings, setSettings] = useState<any>(defaultSettings);
   const settingsDirtyRef = useRef(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("basic");
   const mt5ApiBase =
     process.env.NEXT_PUBLIC_MT5_API_BASE ||
     (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
@@ -431,6 +434,22 @@ export default function DashboardPage() {
     DATA_NOT_READY: "รอข้อมูล",
     DISABLED: "ปิดการวิเคราะห์"
   };
+  const currentPositions = Math.max(0, Number(metrics.positions || 0));
+  const configuredMaxPositions = Math.max(1, Number(settings.maxPositions || 1));
+  const effectiveMaxPositions = Math.max(1, Number(metrics.adaptiveMaxPositions || configuredMaxPositions));
+  const pyramidProgressPoints = Number(metrics.pyramidProgressPoints || 0);
+  const pyramidRequiredPoints = Number(metrics.pyramidRequiredPoints || 0);
+  const entryBias = String(metrics.entryBias || (metrics.marketRegime === "TREND_UP" ? "BUY" : metrics.marketRegime === "TREND_DOWN" ? "SELL" : "BOTH"));
+  const entryBiasLabel = entryBias === "BUY" ? "BUY ตามเทรนด์" : entryBias === "SELL" ? "SELL ตามเทรนด์" : "BUY / SELL ตามสัญญาณ";
+  const trendText = (value:any) => Number(value) > 0 ? "ขึ้น" : Number(value) < 0 ? "ลง" : "กลาง";
+  const positionCapacityLabel = currentPositions + " / " + effectiveMaxPositions + (effectiveMaxPositions !== configuredMaxPositions ? " · ตั้ง " + configuredMaxPositions : "");
+  const basketAddExplanation = currentPositions > 0 && currentPositions < effectiveMaxPositions
+    ? "เปิดแล้ว " + currentPositions + "/" + configuredMaxPositions + " ไม้ · " +
+      (pyramidRequiredPoints > 0 ? "รอราคาเดินต่อฝั่งกำไร " + Math.max(0,pyramidRequiredPoints-pyramidProgressPoints).toFixed(0) + " points ก่อนเพิ่มไม้" : "รอ Momentum และความมั่นใจยืนยันก่อนเพิ่มไม้") +
+      " · Position สูงสุดคือเพดาน ไม่ใช่ยิงครบทุกไม้พร้อมกัน"
+    : "";
+  const liveExplanation = basketAddExplanation || liveStatus.detail || "บอทกำลังประเมิน Momentum, แนวโน้ม, Spread และ Risk แบบเรียลไทม์";
+
   const desiredStateLabel =
     desired === "RUNNING" ? "RUNNING — ให้บอททำงาน"
       : desired === "SAFE_STOP" ? "SAFE_STOP — ห้ามเปิดออเดอร์ใหม่"
@@ -958,22 +977,18 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <header className={"page-head human-head cc-page-head " + (activeView === "overview" ? "cc-page-head-overview" : "")}>
-          <div>
-            <div className="eyebrow">CONTROL CENTER</div>
-            <h2 style={{marginTop:7}}>
-              {activeView === "overview" && "บอทและการตั้งค่า"}
-              {activeView === "account" && "บัญชีและการเชื่อมต่อ MT5"}
-              {activeView === "access" && "สิทธิ์ใช้งาน"}
-            </h2>
-            {activeView !== "overview" && <div className="muted page-subtitle">
-              {activeView === "account" && "ติดตั้ง/อัปเดต SCENOVA และจัดการการเชื่อมต่อ MT5"}
-              {activeView === "access" && "ตรวจสถานะ Trial สมาชิก และเวลาคงเหลือ"}
-            </div>}
+        <header className={"page-head human-head cc-page-head cc-v3-head " + (activeView === "overview" ? "cc-page-head-overview" : "")}>
+          <div className="cc-v3-title">
+            <span className="cc-v3-title-icon"><ScenovaIcon name={activeView === "overview" ? "control" : activeView === "account" ? "account" : "shield"} size={24}/></span>
+            <div>
+              <h1>{activeView === "overview" ? "Control Center" : activeView === "account" ? "บัญชีและการเชื่อมต่อ MT5" : "สิทธิ์ใช้งาน"}</h1>
+              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "ติดตั้ง อัปเดต และตรวจการเชื่อมต่อ MT5 / EA" : "ตรวจสถานะ Trial สมาชิก และสิทธิ์ของ Slot"}</p>
+            </div>
           </div>
-          <div className="status-row cc-head-status">
-            <span className="badge"><span className={"dot " + (isMt5Online ? "green":"red")}/>{connectionLabel}</span>
-            <span className="badge"><span className={"dot " + (desired==="RUNNING" ? "blue":"purple")}/>{controlStateLabel}</span>
+          <div className="cc-v3-head-actions">
+            <span className={"cc-head-chip " + (isMt5Online ? "good" : "bad")}><i/><span><b>{isMt5Online ? "เชื่อมต่อแล้ว" : "ยังไม่เชื่อมต่อ"}</b><small>{data.account?.broker || "MT5"} · {data.selectedSlot?.mode || "LOCAL"}</small></span></span>
+            <span className={"cc-head-chip bot " + (desired==="RUNNING" ? "active" : "")}><ScenovaIcon name="bot" size={18}/><span><b>{controlStateLabel}</b><small>{settings.entryMode || "AUTO MOMENTUM"}</small></span></span>
+            <span className="cc-head-icon-button" aria-label="การแจ้งเตือน"><ScenovaIcon name="bell" size={18}/></span>
           </div>
         </header>
 
@@ -1023,415 +1038,128 @@ export default function DashboardPage() {
           !data.account ? (
             <EmptySetup onNext={()=>setActiveView("account")} />
           ) : (
-            <div className="cc-overview">
+            <div className="cc-overview cc-v3">
               {!isMt5Online && (
                 <div className="cc-connect-alert">
-                  <div className="cc-alert-icon">!</div>
-                  <div className="cc-alert-copy">
-                    <b>ยังไม่ได้เชื่อมต่อ MT5</b>
-                    <span>{data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span>
-                  </div>
+                  <div className="cc-alert-icon"><ScenovaIcon name="info" size={20}/></div>
+                  <div className="cc-alert-copy"><b>ยังไม่ได้เชื่อมต่อ MT5</b><span>{data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span></div>
                   <button className="btn cc-alert-action" onClick={()=>setActiveView("account")}>ไปหน้าการเชื่อมต่อ →</button>
                 </div>
               )}
 
-              <section className="cc-kpi-grid">
-                <DashboardMetric icon="◉" label="ยอดเงิน" value={isMt5Online ? "$"+Number(metrics.balance||0).toFixed(2) : "—"} />
-                <DashboardMetric icon="▣" label="มูลค่ารวม" value={isMt5Online ? "$"+Number(metrics.equity||0).toFixed(2) : "—"} />
-                <DashboardMetric
-                  icon="▥"
-                  label="กำไร / ขาดทุน"
-                  value={isMt5Online ? "$"+Number(metrics.basketProfit||0).toFixed(2) : "—"}
-                  tone={isMt5Online ? (Number(metrics.basketProfit||0)>=0 ? "good" : "bad") : "neutral"}
-                />
-                <DashboardMetric icon="▤" label="ออเดอร์" value={isMt5Online ? String(metrics.positions ?? 0) : "—"} />
+              <section className="cc-kpi-grid cc-v3-kpis">
+                <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online ? "$"+Number(metrics.balance||0).toFixed(2) : "—"} sub="Balance" />
+                <DashboardMetric icon="equity" label="มูลค่ารวม (Equity)" value={isMt5Online ? "$"+Number(metrics.equity||0).toFixed(2) : "—"} sub="เงินทุนรวมปัจจุบัน" />
+                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online ? (Number(metrics.dailyProfit||0)>=0 ? "+$" : "-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2) : "—"} sub="Daily P/L" tone={isMt5Online ? (Number(metrics.dailyProfit||0)>=0 ? "good" : "bad") : "neutral"} />
+                <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online ? String(currentPositions) : "—"} sub={"เพดาน "+configuredMaxPositions+" ไม้"} />
               </section>
 
-              <div className="cc-workspace">
-                <div className="cc-left-stack">
-                  <section className="panel cc-control-card">
-                    <div className="cc-card-head">
-                      <div className="cc-card-title">
-                        <span className="cc-card-icon">◆</span>
-                        <div>
-                          <h2>{metrics.symbol || settings.symbol}</h2>
-                        </div>
-                      </div>
-                      <span className={"cc-state-pill " + (state==="RUNNING" ? "running" : state==="SAFE_STOP" ? "safe" : "stopped")}>
-                        <span className="cc-state-dot"/>
-                        <b>{state==="RUNNING" ? "กำลังทำงาน" : state==="SAFE_STOP" ? "กำลังหยุด" : "หยุดอยู่"}</b>
-                        <small>{controlStateLabel}</small>
-                      </span>
-                    </div>
-
-                    <div className="cc-control-fields">
-                      <div className="cc-control-field">
-                        <span>สินทรัพย์</span>
-                        <b>{metrics.symbol || settings.symbol}</b>
-                      </div>
-                      <div className="cc-control-field">
-                        <span>โหมดการเทรด</span>
-                        <select value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}>
-                          <option value="AUTO_MOMENTUM">AUTO MOMENTUM</option>
-                          <option value="BUY_ONLY">BUY ONLY</option>
-                          <option value="SELL_ONLY">SELL ONLY</option>
-                        </select>
-                      </div>
-                      <div className="cc-control-field">
-                        <span>จำนวนออเดอร์สูงสุด</span>
-                        <select value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>
-                          {[1,2,3,4,5,6,7,8,9,10,12,15,20].map(v=><option key={v} value={v}>{v}</option>)}
-                        </select>
-                      </div>
-                      <div className="cc-control-field">
-                        <span>Lot สูงสุด</span>
-                        <select value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>
-                          {[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="cc-primary-actions">
-                      <button className="cc-action start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
-                        <span>▶</span><b>เริ่มบอท</b>
-                      </button>
-                      <button className="cc-action safe" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}>
-                        <span>■</span><b>หยุดบอท</b>
-                      </button>
-                      <button className="cc-action close" disabled={busy || Number(metrics.positions || 0) === 0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?") && command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}>
-                        <span>×</span><b>ปิดออเดอร์ทั้งหมด</b>
-                      </button>
-                    </div>
-
-                    <div className="cc-quick-row">
-                      <div className="cc-live-cell"><span>สภาวะตลาด</span><b>{marketRegimeLabel[String(metrics.marketRegime || "")] || "รอข้อมูล"}</b></div>
-                      <div className="cc-live-cell"><span>ความมั่นใจ</span><b>{Number(metrics.signalConfidence || 0).toFixed(0)}%</b></div>
-                      <div className="cc-live-cell"><span>Spread · Adaptive {spreadLimitLabel}</span><b>{spreadValueLabel}</b></div>
-                      <div className="cc-live-cell"><span>การเทรด</span><b className={liveStatus.tone === "bad" ? "text-bad" : liveStatus.tone === "warn" ? "text-warn" : "text-good"}>{liveStatus.label || "—"}</b></div>
-                      <button
-                        className="btn cc-save-quick"
-                        disabled={busy || !settingsDirty}
-                        onClick={(e:any)=>saveSettings(e)}
-                      >
-                        {settingsDirty ? "บันทึกการตั้งค่า" : "บันทึกแล้ว"}
-                      </button>
-                    </div>
-
-                    <div className="cc-adaptive-strip" aria-label="Adaptive Spread">
-                      <div><span>Current</span><b>{spreadValueLabel}</b></div>
-                      <div><span>Median</span><b>{spreadMetricLabel(metrics.spreadMedianPoints)}</b></div>
-                      <div><span>P95</span><b>{spreadMetricLabel(metrics.spreadP95Points)}</b></div>
-                      <div><span>Status</span><b className={spreadStatus.includes("BLOCKED") ? "text-bad" : spreadStatus === "ELEVATED" ? "text-warn" : "text-good"}>{spreadStatusLabel[spreadStatus] || spreadStatus}</b></div>
-                      <div><span>Spread cost · {Number(metrics.adaptiveLot || settings.lot).toFixed(2)} lot</span><b>${Number(metrics.spreadCost || 0).toFixed(2)}</b></div>
-                    </div>
-
-                    {startBlocked && !busy && (
-                      <div className="cc-inline-warning">{liveStatus.detail || "ตรวจสอบ MT5 และสิทธิ์ก่อนเริ่มบอท"}</div>
-                    )}
-                  </section>
-
-                  <section className="panel cc-terminal-card" aria-hidden="true">
-                    <div className="cc-terminal-head">
-                      <div className="cc-card-title">
-                        <span className="cc-terminal-icon">&gt;_</span>
-                        <div><h3>ประวัติการทำงาน</h3></div>
-                      </div>
-                      <div className="cc-terminal-actions">
-                        <span className={"cc-terminal-live " + (logsLoading ? "loading" : "")}>
-                          <i/>{logsLoading ? "SYNC" : "LIVE"}
-                        </span>
-                        <button className={"cc-terminal-auto " + (terminalAutoScroll ? "active" : "")} onClick={()=>setTerminalAutoScroll(v=>!v)}>
-                          AUTO
-                        </button>
-                        <button className="btn" onClick={()=>setLogsOpen(true)}>ขยาย ↗</button>
-                      </div>
-                    </div>
-
-                    <div className="cc-terminal-summary">
-                      <TerminalStat label="MT5" value={isMt5Online ? "ONLINE" : "OFFLINE"} tone={isMt5Online ? "good" : "bad"} />
-                      <TerminalStat label="BOT" value={state} tone={state==="RUNNING" ? "good" : state==="SAFE_STOP" ? "warn" : "neutral"} />
-                      <TerminalStat label="P/L TODAY" value={"$"+Number(metrics.dailyProfit || 0).toFixed(2)} tone={Number(metrics.dailyProfit || 0)>=0 ? "good" : "bad"} />
-                      <TerminalStat label="BASKET" value={"$"+Number(metrics.basketCycleProfit || metrics.basketProfit || 0).toFixed(2)} tone={Number(metrics.basketCycleProfit || metrics.basketProfit || 0)>=0 ? "good" : "bad"} />
-                      <TerminalStat label="LAST RETCODE" value={String(metrics.lastOrderRetcode || "—")} tone={Number(metrics.lastOrderError || 0)>0 ? "bad" : "neutral"} />
-                      <TerminalStat label="HEARTBEAT AGE" value={heartbeatAgeSeconds.toFixed(0) + "s"} tone={heartbeatAgeSeconds <= 20 ? "good" : "bad"} />
-                      <TerminalStat label="LATENCY" value={heartbeatLatencyMs > 0 ? heartbeatLatencyMs.toFixed(0) + " ms" : "—"} tone={heartbeatLatencyMs > 2000 ? "warn" : "neutral"} />
-                      <TerminalStat label="HTTP" value={heartbeatHttpStatus > 0 ? String(heartbeatHttpStatus) : "—"} tone={heartbeatHttpStatus >= 200 && heartbeatHttpStatus < 300 ? "good" : "bad"} />
-                      <TerminalStat label="SERVER CONTACT" value={lastServerContactLabel} />
-                    </div>
-
-                    <div className="cc-terminal-toolbar">
-                      {(["ALL","COMMAND","STATE","MARKET","RISK","ORDER"] as const).map(filter=>(
-                        <button
-                          key={filter}
-                          className={"cc-terminal-filter " + (terminalFilter===filter ? "active" : "")}
-                          onClick={()=>setTerminalFilter(filter)}
-                        >
-                          {filter}
-                        </button>
-                      ))}
-                      <span className="cc-terminal-count">{filteredTerminalEntries.length} lines</span>
-                    </div>
-
-                    <div className="cc-terminal-window" ref={terminalWindowRef}>
-                      {filteredTerminalEntries.slice(-40).map((entry:any)=>(
-                        <TerminalLine
-                          key={entry.id}
-                          time={entry.time}
-                          level={entry.level}
-                          category={entry.category}
-                          text={entry.text}
-                          detail={entry.detail}
-                        />
-                      ))}
-                      {!logsLoading && !filteredTerminalEntries.length && (
-                        <div className="cc-terminal-empty">No events in this filter · waiting for live data</div>
-                      )}
-                    </div>
-                  </section>
-                </div>
-
-                <section className="panel cc-status-card">
-                  <div className="cc-card-head">
-                    <div className="cc-card-title">
-                      <span className="cc-card-icon alt">▥</span>
-                      <div>
-                          <h2>สถานะบัญชี</h2>
-                      </div>
+              <div className="cc-workspace cc-v3-workspace">
+                <section className="panel cc-control-card cc-v3-control">
+                  <div className="cc-card-head cc-v3-control-head">
+                    <div className="cc-symbol-title"><span className="cc-gold-icon"><ScenovaIcon name="gold" size={28}/></span><div><h2>{metrics.symbol || settings.symbol}</h2><small>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}</small></div></div>
+                    <div className="cc-control-head-right">
+                      <span className={"cc-state-pill "+(state==="RUNNING"?"running":state==="SAFE_STOP"?"safe":"stopped")}><span className="cc-state-dot"/><span><b>{state==="RUNNING"?"กำลังทำงาน":state==="SAFE_STOP"?"Safe Stop":"หยุดอยู่"}</b><small>{state==="RUNNING"?"บอททำงานปกติ":controlStateLabel}</small></span></span>
+                      <span className="cc-last-update">อัปเดต {heartbeatAgeSeconds.toFixed(0)} วิ <ScenovaIcon name="refresh" size={14}/></span>
                     </div>
                   </div>
 
+                  <div className="cc-control-fields cc-v3-control-fields">
+                    <div className="cc-control-field"><span>Symbol</span><b>{metrics.symbol || settings.symbol}</b></div>
+                    <div className="cc-control-field"><span>โหมดเข้าออเดอร์</span><select value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO MOMENTUM</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></div>
+                    <div className="cc-control-field"><span>จำนวน Position สูงสุด</span><select value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
+                    <div className="cc-control-field"><span>Lot สูงสุด</span><select value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
+                  </div>
+
+                  <div className="cc-primary-actions cc-v3-actions">
+                    <button className="cc-action start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><span className="cc-action-icon"><ScenovaIcon name="play" size={20}/></span><span><b>เริ่มบอท</b><small>เริ่มการเทรดอัตโนมัติ</small></span></button>
+                    <button className="cc-action safe" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="stop" size={19}/></span><span><b>หยุดบอท</b><small>หยุดเปิดออเดอร์ใหม่</small></span></button>
+                    <button className="cc-action close" disabled={busy || currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?") && command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="close" size={20}/></span><span><b>ปิดออเดอร์ทั้งหมด</b><small>ปิดทุก Position ของบอท</small></span></button>
+                  </div>
+
+                  <div className="cc-signal-grid">
+                    <div className="cc-signal-item good"><ScenovaIcon name="trend" size={20}/><span><small>สภาพตลาด</small><b>{marketRegimeLabel[String(metrics.marketRegime||"")]||"รอข้อมูล"}</b></span></div>
+                    <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>ความมั่นใจ</small><b>{Number(metrics.signalConfidence||0).toFixed(0)}%</b></span></div>
+                    <div className="cc-signal-item"><ScenovaIcon name="spread" size={20}/><span><small>Spread</small><b>{spreadValueLabel}</b></span></div>
+                    <div className="cc-signal-item warn"><ScenovaIcon name="layers" size={20}/><span><small>Position</small><b>{positionCapacityLabel}</b></span></div>
+                    <div className={"cc-signal-item "+(liveStatus.tone==="bad"?"bad":liveStatus.tone==="warn"?"warn":"good")}><ScenovaIcon name="status" size={20}/><span><small>การเทรด</small><b>{liveStatus.label||"—"}</b></span></div>
+                  </div>
+
+                  <div className="cc-direction-strip">
+                    <div><span>Bias</span><b className={entryBias==="BUY"?"text-good":entryBias==="SELL"?"text-bad":""}>{entryBiasLabel}</b></div>
+                    <div><span>M5</span><b>{trendText(metrics.trendM5)}</b></div><div><span>M15</span><b>{trendText(metrics.trendM15)}</b></div><div><span>H1</span><b>{trendText(metrics.trendH1)}</b></div><div><span>Adaptive Max</span><b>{effectiveMaxPositions} ไม้</b></div>
+                  </div>
+
+                  <div className={"cc-intel-banner "+(liveStatus.tone==="bad"?"bad":liveStatus.tone==="warn"?"warn":"")}><ScenovaIcon name="info" size={19}/><div><b>{liveStatus.label||"บอทกำลังประเมินตลาด"}</b><span>{liveExplanation}</span></div></div>
+                </section>
+
+                <section className="panel cc-status-card cc-v3-account">
+                  <div className="cc-card-head"><div className="cc-card-title"><span className="cc-card-icon alt"><ScenovaIcon name="account" size={20}/></span><div><h2>สถานะบัญชี</h2></div></div><span className={"cc-mini-health "+(isMt5Online?"good":"warn")}><i/>{isMt5Online?"ใช้งานปกติ":"รอเชื่อมต่อ"}</span></div>
                   <div className="cc-status-list">
-                    <StatusRow label="เลขบัญชี" value={data.account.account_number} />
-                    <StatusRow label="โบรกเกอร์" value={data.account.broker} />
-                    <StatusRow label="เซิร์ฟเวอร์" value={metrics.server || data.account.broker_server} />
-                    <StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online ? "good" : "warn"} dot />
-                    <StatusRow label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0) + " วินาที · HTTP " + (heartbeatHttpStatus || "—")} tone={heartbeatAgeSeconds <= 20 ? "good" : "warn"} dot />
-                    <StatusRow label="สถานะบอท" value={controlStateLabel} tone={state==="RUNNING" ? "good" : state==="SAFE_STOP" ? "warn" : "bad"} dot />
-                    <StatusRow label="สิทธิ์ใช้งาน" value={accessLabel} />
+                    <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+" วินาที · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20?"good":"warn"} dot/><StatusRow label="สถานะบอท" value={controlStateLabel} tone={state==="RUNNING"?"good":state==="SAFE_STOP"?"warn":"bad"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
                   </div>
-
-                  <div className="cc-status-actions">
-                    <button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}>จัดการบัญชี</button>
-                    <button className="btn full cc-status-detail" onClick={()=>setLogsOpen(true)}>ประวัติการทำงาน</button>
-                  </div>
+                  <div className="cc-status-actions"><button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}><ScenovaIcon name="settings" size={16}/>จัดการบัญชี</button><button className="btn full cc-status-detail" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="clock" size={16}/>ประวัติการทำงาน</button></div>
                 </section>
               </div>
 
-              <details id="bot-settings" className="panel settings-panel overview-bot-settings cc-settings-details">
-                <summary className="cc-settings-summary">
-                  <div>
-                    <span className="cc-settings-summary-icon">⚙</span>
-                    <span><b>ตั้งค่าบอท</b></span>
-                  </div>
-                  <span className={"owner-state-chip " + (settingsDirty ? "warn" : "good")}>
-                    {settingsDirty ? "มีค่าที่ยังไม่ได้บันทึก" : "บันทึกแล้ว"}
-                  </span>
-                </summary>
-                <div className="panel-head">
-                  <div>
-                    <div className="eyebrow">BOT SETTINGS</div>
-                    <h2>ตั้งค่าบอท</h2>
-                  </div>
-                  <span className={"owner-state-chip " + (settingsDirty ? "warn" : "good")}>
-                    {settingsDirty ? "มีค่าที่ยังไม่ได้บันทึก" : "ค่าบันทึกแล้ว"}
-                  </span>
+              <section id="bot-settings" className="panel cc-settings-shell">
+                <div className="cc-settings-head">
+                  <div className="cc-settings-title"><span><ScenovaIcon name="settings" size={22}/></span><div><h2>การตั้งค่าบอท</h2><small>ปรับแต่งกลยุทธ์และพารามิเตอร์การเทรด</small></div></div>
+                  <div className="cc-settings-actions"><span className={"cc-change-chip "+(settingsDirty?"warn":"good")}><i/>{settingsDirty?"มีการเปลี่ยนแปลง":"บันทึกแล้ว"}</span><button type="button" className="btn cc-save-primary" disabled={busy||!settingsDirty} onClick={(e:any)=>saveSettings(e)}><ScenovaIcon name="save" size={17}/>{busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button></div>
                 </div>
-                <form className="form-grid form-grid-human simple-settings-form cc-settings-form" onSubmit={saveSettings}>
-                  <div className="field">
-                    <label>Symbol</label>
-                    <div className="input read-only-value">{metrics.symbol || settings.symbol}</div>
-                  </div>
-                  <SelectField
-                    label="Lot สูงสุด (Adaptive จะลดให้ตามความเสี่ยง)"
-                    options={[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1]}
-                    value={settings.lot}
-                    onChange={(v:string)=>editSetting("lot",v)}
-                  />
 
-                  <SelectField
-                    label="จำนวน Position สูงสุด"
-                    options={[1,2,3,4,5,6,7,8,9,10,12,15,20]}
-                    value={settings.maxPositions}
-                    onChange={(v:string)=>editSetting("maxPositions",v)}
-                  />
-                  <div className="field">
-                    <label>โหมดเข้าออเดอร์</label>
-                    <select className="input" value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}>
-                      <option value="AUTO_MOMENTUM">AUTO MOMENTUM</option>
-                      <option value="BUY_ONLY">BUY ONLY</option>
-                      <option value="SELL_ONLY">SELL ONLY</option>
-                    </select>
-                  </div>
+                <div className="cc-settings-tabs" role="tablist" aria-label="หมวดการตั้งค่าบอท">
+                  {([["basic","settings","พื้นฐาน"],["adaptive","brain","Adaptive Intelligence"],["risk","shield","ความเสี่ยง"],["session","clock","เวลาเทรด"],["exit","profit","ออกออเดอร์ / ปิดกำไร"]] as Array<[SettingsTab,string,string]>).map(([key,icon,label])=><button type="button" key={key} className={settingsTab===key?"active":""} onClick={()=>setSettingsTab(key)}><ScenovaIcon name={icon} size={17}/><span>{label}</span></button>)}
+                </div>
 
-                  <div className="settings-group-title cc-settings-group trail"><span className="cc-settings-group-icon">◈</span><div><b>Adaptive Intelligence</b><small>Multi-timeframe & Dynamic Risk</small></div></div>
+                <form className="cc-settings-form-v3" onSubmit={saveSettings}>
+                  {settingsTab==="basic"&&<><div className="cc-settings-section-title"><b>ตั้งค่าพื้นฐาน</b><span>กำหนดสินทรัพย์ รูปแบบการเข้า และจำนวนไม้</span></div><div className="cc-settings-grid">
+                    <SettingTile icon="gold" title="Symbol" description="สินทรัพย์ที่ EA กำลังเทรด"><div className="input read-only-value">{metrics.symbol||settings.symbol}</div></SettingTile>
+                    <SettingTile icon="bot" title="โหมดเข้าออเดอร์" description="AUTO ใช้ Momentum + Trend"><select className="input" value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO MOMENTUM</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></SettingTile>
+                    <SettingTile icon="layers" title="จำนวน Position สูงสุด" description="เป็นเพดาน ไม่ได้เปิดครบพร้อมกัน"><select className="input" value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></SettingTile>
+                    <SettingTile icon="lot" title="Lot สูงสุด (Adaptive)" description="Adaptive ลดได้ แต่ไม่เพิ่มเกินค่านี้"><select className="input" value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></SettingTile>
+                    <SettingTile icon="spark" title="ระยะห่างคำสั่งขั้นต่ำ" description="จำกัดความถี่การยิงคำสั่ง"><select className="input" value={String(settings.minOrderIntervalMs)} onChange={e=>editSetting("minOrderIntervalMs",e.target.value)}>{[100,200,300,500,750,1000,1500,2000,3000,5000].map(v=><option key={v} value={v}>{v} ms</option>)}</select></SettingTile>
+                    <SettingTile icon="orders" title="คำสั่งสูงสุดต่อนาที" description="ป้องกันส่งคำสั่งถี่เกินไป"><select className="input" value={String(settings.maxOrdersPerMinute)} onChange={e=>editSetting("maxOrdersPerMinute",e.target.value)}>{[10,20,30,60,90,120,180,240].map(v=><option key={v} value={v}>{v} ครั้ง</option>)}</select></SettingTile>
+                  </div></>}
 
-                  <div className="field">
-                    <label>ระบบวิเคราะห์อัจฉริยะ</label>
-                    <select className="input" value={settings.adaptiveEngine ? "on" : "off"} onChange={e=>editSetting("adaptiveEngine", e.target.value === "on")}>
-                      <option value="on">เปิดใช้งาน (แนะนำ)</option>
-                      <option value="off">ปิด ใช้ Momentum เดิม</option>
-                    </select>
-                  </div>
-                  <SelectField label="ความเสี่ยงสูงสุดต่อไม้" options={[0.1,0.25,0.5,0.75,1,1.5,2]} value={settings.riskPerOrderPercent} format={(v:string)=>v + "% Equity"} onChange={(v:string)=>editSetting("riskPerOrderPercent",v)} />
-                  <div className={"field toggle-select-field " + (settings.allowMinimumLotOverride ? "enabled" : "")}>
-                    <label className="toggle-setting-label">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(settings.allowMinimumLotOverride)}
-                        onChange={e=>editSetting("allowMinimumLotOverride", e.target.checked)}
-                      />
-                      <span>อนุญาต Lot ขั้นต่ำเมื่อ Risk % ไม่พอ</span>
-                    </label>
-                    <small className="help">ติ๊กแล้ว EA จะไม่ติด RISK_LIMIT_TOO_SMALL และจะใช้ Lot ขั้นต่ำของ Broker แทน แต่ความเสี่ยงจริงต่อไม้อาจสูงกว่า % ที่ตั้งไว้</small>
-                  </div>
-                  <SelectField label="คะแนนสัญญาณขั้นต่ำ" options={[50,60,65,70,75,80,85,90]} value={settings.confidenceThreshold} format={(v:string)=>v + "%"} onChange={(v:string)=>editSetting("confidenceThreshold",v)} />
-                  <SelectField label="Hard Stop ตาม ATR" options={[1,1.5,2,2.5,3,4]} value={settings.hardStopAtrMultiplier} format={(v:string)=>v + " × ATR"} onChange={(v:string)=>editSetting("hardStopAtrMultiplier",v)} />
-                  <SelectField label="ATR Period" options={[7,10,14,20,28,50]} value={settings.atrPeriod} onChange={(v:string)=>editSetting("atrPeriod",v)} />
-                  <SelectField label="พักหลังขาดทุน" options={[0,5,10,15,30,60,120]} value={settings.cooldownMinutesAfterLoss} format={(v:string)=>Number(v) === 0 ? "ไม่พัก" : v + " นาที"} onChange={(v:string)=>editSetting("cooldownMinutesAfterLoss",v)} />
-                  <SelectField label="ขาดทุนติดต่อกันสูงสุด" options={[0,1,2,3,4,5,7,10]} value={settings.maxConsecutiveLosses} format={(v:string)=>Number(v) === 0 ? "ไม่จำกัด" : v + " ไม้"} onChange={(v:string)=>editSetting("maxConsecutiveLosses",v)} />
-                  <SelectField label="เริ่ม Session (เวลา Server)" options={[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23]} value={settings.sessionStartHour} format={(v:string)=>String(v).padStart(2,"0") + ":00"} onChange={(v:string)=>editSetting("sessionStartHour",v)} />
-                  <SelectField label="จบ Session (เวลา Server)" options={[1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23,24]} value={settings.sessionEndHour} format={(v:string)=>String(v).padStart(2,"0") + ":00"} onChange={(v:string)=>editSetting("sessionEndHour",v)} />
-                  <SelectField label="ATR Adaptive Guard" options={[0,500,1000,1500,2000,3000,5000,10000]} value={settings.maxAtrPoints} format={(v:string)=>Number(v) === 0 ? "Adaptive อัตโนมัติ (แนะนำ)" : "เริ่มโหมดระวังที่ " + v + " points"} onChange={(v:string)=>editSetting("maxAtrPoints",v)} />
+                  {settingsTab==="adaptive"&&<><div className="cc-settings-section-title"><b>Adaptive Intelligence</b><span>Trend, Momentum, ATR และ Confidence</span></div><div className="cc-settings-grid">
+                    <SettingTile icon="brain" title="ระบบวิเคราะห์อัจฉริยะ" description="Multi-timeframe + Dynamic Risk"><SwitchSetting checked={Boolean(settings.adaptiveEngine)} onChange={(v:boolean)=>editSetting("adaptiveEngine",v)} onLabel="เปิดใช้งาน" offLabel="ปิดใช้งาน"/></SettingTile>
+                    <SettingTile icon="target" title="คะแนนสัญญาณขั้นต่ำ" description="ต่ำกว่านี้จะยังไม่เปิดไม้"><select className="input" value={String(settings.confidenceThreshold)} onChange={e=>editSetting("confidenceThreshold",e.target.value)}>{[50,60,65,70,75,80,85,90].map(v=><option key={v} value={v}>{v}%</option>)}</select></SettingTile>
+                    <SettingTile icon="risk" title="Hard Stop ตาม ATR" description="ระยะ Stop หลักต่อไม้"><select className="input" value={String(settings.hardStopAtrMultiplier)} onChange={e=>editSetting("hardStopAtrMultiplier",e.target.value)}>{[1,1.5,2,2.5,3,4].map(v=><option key={v} value={v}>{v} × ATR</option>)}</select></SettingTile>
+                    <SettingTile icon="trend" title="ATR Period" description="ช่วงข้อมูลวัดความผันผวน"><select className="input" value={String(settings.atrPeriod)} onChange={e=>editSetting("atrPeriod",e.target.value)}>{[7,10,14,20,28,50].map(v=><option key={v} value={v}>{v}</option>)}</select></SettingTile>
+                    <SettingTile icon="spark" title="ATR Adaptive Guard" description="0 = ให้ระบบปรับเองทั้งหมด"><select className="input" value={String(settings.maxAtrPoints)} onChange={e=>editSetting("maxAtrPoints",e.target.value)}>{[0,500,1000,1500,2000,3000,5000,10000].map(v=><option key={v} value={v}>{v===0?"Adaptive อัตโนมัติ":v+" points"}</option>)}</select></SettingTile>
+                    <SettingTile icon="timer" title="พักหลังขาดทุน" description="ลดการเทรดแก้มือ"><select className="input" value={String(settings.cooldownMinutesAfterLoss)} onChange={e=>editSetting("cooldownMinutesAfterLoss",e.target.value)}>{[0,5,10,15,30,60,120].map(v=><option key={v} value={v}>{v===0?"ไม่พัก":v+" นาที"}</option>)}</select></SettingTile>
+                    <SettingTile icon="shield" title="ขาดทุนติดต่อกันสูงสุด" description="ถึงเกณฑ์จะเพิ่มเวลาพัก"><select className="input" value={String(settings.maxConsecutiveLosses)} onChange={e=>editSetting("maxConsecutiveLosses",e.target.value)}>{[0,1,2,3,4,5,7,10].map(v=><option key={v} value={v}>{v===0?"ไม่จำกัด":v+" ไม้"}</option>)}</select></SettingTile>
+                    <SettingTile icon="trend" title="Trend Lock" description="AUTO จะไม่เปิดสวน M15/H1"><div className="cc-readout"><b>{entryBiasLabel}</b><small>M5 {trendText(metrics.trendM5)} · M15 {trendText(metrics.trendM15)} · H1 {trendText(metrics.trendH1)}</small></div></SettingTile>
+                  </div></>}
 
-                  <div className="settings-group-title cc-settings-group profit"><span className="cc-settings-group-icon">↗</span><div><b>เป้ากำไรและความเสี่ยง</b><small>Profit & Risk</small></div></div>
+                  {settingsTab==="risk"&&<><div className="cc-settings-section-title"><b>ความเสี่ยง</b><span>คุม Lot, Stop และขาดทุนของพอร์ต</span></div><div className="cc-settings-grid">
+                    <SettingTile icon="shield" title="ความเสี่ยงสูงสุดต่อไม้" description="คิดจาก Equity และระยะ Stop"><select className="input" value={String(settings.riskPerOrderPercent)} onChange={e=>editSetting("riskPerOrderPercent",e.target.value)}>{[0.1,0.25,0.5,0.75,1,1.5,2].map(v=><option key={v} value={v}>{v}% Equity</option>)}</select></SettingTile>
+                    <SettingTile icon="lot" title="อนุญาต Lot ขั้นต่ำ" description="ใช้ขั้นต่ำ Broker แม้ Risk % ไม่พอ" accent={Boolean(settings.allowMinimumLotOverride)}><SwitchSetting checked={Boolean(settings.allowMinimumLotOverride)} onChange={(v:boolean)=>editSetting("allowMinimumLotOverride",v)} onLabel="อนุญาต" offLabel="บล็อกตาม Risk"/></SettingTile>
+                    <SettingTile icon="pnl" title="ขาดทุนต่อวันแล้วหยุด" description="ป้องกัน Drawdown รายวัน"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="25" value={settings.dailyLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("dailyLossMoney",v)}/></SettingTile>
+                    <SettingTile icon="risk" title="ขาดทุน Basket สูงสุด" description="ถึงค่าแล้วปิด Basket"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="10" value={settings.maxBasketLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}/></SettingTile>
+                    <SettingTile icon="orders" title="ขาดทุนต่อไม้แล้วปิด" description="Stop แบบจำนวนเงินต่อ Position"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="2" value={settings.perPositionLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("perPositionLossMoney",v)}/></SettingTile>
+                    <SettingTile icon="status" title="สถานะ Risk ตอนนี้" description="ค่าที่ EA ใช้งานจริง"><div className="cc-readout"><b>Lot {Number(metrics.adaptiveLot||settings.lot).toFixed(2)}</b><small>{metrics.minimumLotOverrideActive?"กำลังใช้ Minimum Lot Override":"Adaptive Risk ปกติ"}</small></div></SettingTile>
+                  </div></>}
 
-                  <ToggleSelectField
-                    label="ปล่อยกำไรวิ่ง แล้วปิดเมื่อย่อลงจากจุดสูงสุด"
-                    options={[5,10,15,20,25,30,40,50]}
-                    defaultValue="20"
-                    value={settings.profitRunTrailPercent}
-                    format={(v:string)=>v + "%"}
-                    onChange={(v:string)=>editSetting("profitRunTrailPercent",v)}
-                  />
+                  {settingsTab==="session"&&<><div className="cc-settings-section-title"><b>เวลาเทรด</b><span>กำหนด Session ตามเวลา Server ของ Broker</span></div><div className="cc-settings-grid">
+                    <SettingTile icon="clock" title="เริ่ม Session" description="เวลา Server"><select className="input" value={String(settings.sessionStartHour)} onChange={e=>editSetting("sessionStartHour",e.target.value)}>{[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select></SettingTile>
+                    <SettingTile icon="clock" title="จบ Session" description="เวลา Server"><select className="input" value={String(settings.sessionEndHour)} onChange={e=>editSetting("sessionEndHour",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23,24].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select></SettingTile>
+                    <SettingTile icon="timer" title="Session ปัจจุบัน" description="อ่านจาก EA"><div className="cc-readout"><b>{String(metrics.sessionProfile||"UNKNOWN")}</b><small>Server session profile</small></div></SettingTile>
+                    <SettingTile icon="spread" title="Spread ตอนนี้" description={"Adaptive limit "+spreadLimitLabel}><div className="cc-readout"><b>{spreadValueLabel}</b><small>{spreadStatusLabel[spreadStatus]||spreadStatus}</small></div></SettingTile>
+                  </div></>}
 
-                  <DailyProfitTargetField
-                    value={settings.dailyProfitTargetMoney}
-                    continueAfterTarget={Boolean(settings.dailyProfitContinueAfterTarget)}
-                    drawdownPercent={settings.dailyProfitDrawdownPercent}
-                    targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                    percentOptions={[5,10,15,20,25,30,40,50]}
-                    defaultTarget="10"
-                    defaultPercent="20"
-                    onTargetChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)}
-                    onContinueChange={(v:boolean)=>editSetting("dailyProfitContinueAfterTarget",v)}
-                    onPercentChange={(v:string)=>editSetting("dailyProfitDrawdownPercent",v)}
-                  />
-                  <ToggleSelectField
-                    label="ขาดทุนต่อวันแล้วหยุด"
-                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                    defaultValue="25"
-                    value={settings.dailyLossMoney}
-                    format={(v:string)=>"$" + v}
-                    onChange={(v:string)=>editSetting("dailyLossMoney",v)}
-                  />
+                  {settingsTab==="exit"&&<><div className="cc-settings-section-title"><b>ออกออเดอร์ / ปิดกำไร</b><span>เลือกรูปแบบทำกำไรและ Trailing</span></div><div className="cc-settings-grid">
+                    <SettingTile icon="profit" title="ปล่อยกำไรวิ่ง" description="ปิดเมื่อกำไรย่อจาก Peak"><ToggleSelectField label="" options={[5,10,15,20,25,30,40,50]} defaultValue="20" value={settings.profitRunTrailPercent} format={(v:string)=>v+"%"} onChange={(v:string)=>editSetting("profitRunTrailPercent",v)}/></SettingTile>
+                    <SettingTile icon="pnl" title="กำไรต่อวัน" description="เลือกหยุดหรือรันต่อหลังถึงเป้า" wide><DailyProfitTargetField value={settings.dailyProfitTargetMoney} continueAfterTarget={Boolean(settings.dailyProfitContinueAfterTarget)} drawdownPercent={settings.dailyProfitDrawdownPercent} targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} percentOptions={[5,10,15,20,25,30,40,50]} defaultTarget="10" defaultPercent="20" onTargetChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)} onContinueChange={(v:boolean)=>editSetting("dailyProfitContinueAfterTarget",v)} onPercentChange={(v:string)=>editSetting("dailyProfitDrawdownPercent",v)}/></SettingTile>
+                    <SettingTile icon="orders" title="กำไรต่อไม้แล้วปิด" description="ใช้ไม่ได้พร้อม Profit Run"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="2" value={settings.perPositionProfitMoney} disabled={profitRunModeEnabled} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}/></SettingTile>
+                    <SettingTile icon="profit" title="กำไรรวม Basket แล้วปิด" description="ใช้ไม่ได้พร้อมกำไรต่อไม้"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="10" value={settings.basketProfitTargetMoney} disabled={profitRunModeEnabled} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}/></SettingTile>
+                    <SettingTile icon="trend" title="Basket Trailing" description="เริ่ม Trailing แล้วปิดเมื่อย่อ" wide><TogglePairField label="" firstValue={settings.basketTriggerMoney} secondValue={settings.basketTrailMoney} disabled={profitRunModeEnabled} firstDefault="2" secondDefault="0.5" firstOptions={[0.5,1,2,3,5,10,15,20,30,50,100]} secondOptions={[0.1,0.2,0.3,0.5,0.75,1,2,3,5,10]} firstPrefix="เริ่ม $" secondPrefix="ย่อ $" onFirstChange={(v:string)=>editSetting("basketTriggerMoney",v)} onSecondChange={(v:string)=>editSetting("basketTrailMoney",v)}/></SettingTile>
+                  </div></>}
 
-                  <ToggleSelectField
-                    label="กำไรต่อไม้แล้วปิด"
-                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                    defaultValue="2"
-                    value={settings.perPositionProfitMoney}
-                    disabled={profitRunModeEnabled}
-                    format={(v:string)=>"$" + v}
-                    onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}
-                  />
-                  <ToggleSelectField
-                    label="กำไรรวม Basket แล้วปิด"
-                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                    defaultValue="10"
-                    value={settings.basketProfitTargetMoney}
-                    disabled={profitRunModeEnabled}
-                    format={(v:string)=>"$" + v}
-                    onChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}
-                  />
-
-                  <ToggleSelectField
-                    label="ขาดทุนต่อไม้แล้วปิด"
-                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                    defaultValue="2"
-                    value={settings.perPositionLossMoney}
-                    format={(v:string)=>"$" + v}
-                    onChange={(v:string)=>editSetting("perPositionLossMoney",v)}
-                  />
-                  <ToggleSelectField
-                    label="ขาดทุน Basket สูงสุด"
-                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                    defaultValue="10"
-                    value={settings.maxBasketLossMoney}
-                    format={(v:string)=>"$" + v}
-                    onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}
-                  />
-
-                  <div className="settings-group-title cc-settings-group trail"><span className="cc-settings-group-icon">⌁</span><div><b>Basket Trailing</b><small>Protect Profit</small></div></div>
-
-                  <TogglePairField
-                    label="ใช้ Basket Trailing"
-                    firstValue={settings.basketTriggerMoney}
-                    secondValue={settings.basketTrailMoney}
-                    disabled={profitRunModeEnabled}
-                    firstDefault="2"
-                    secondDefault="0.5"
-                    firstOptions={[0.5,1,2,3,5,10,15,20,30,50,100]}
-                    secondOptions={[0.1,0.2,0.3,0.5,0.75,1,2,3,5,10]}
-                    firstPrefix="เริ่ม $"
-                    secondPrefix="ย่อ $"
-                    onFirstChange={(v:string)=>editSetting("basketTriggerMoney",v)}
-                    onSecondChange={(v:string)=>editSetting("basketTrailMoney",v)}
-                  />
-
-                  <div className="settings-group-title cc-settings-group speed"><span className="cc-settings-group-icon">ϟ</span><div><b>ความถี่การส่งคำสั่ง</b><small>Execution Speed</small></div></div>
-
-                  <SelectField
-                    label="ระยะห่างคำสั่งขั้นต่ำ"
-                    options={[100,200,300,500,750,1000,1500,2000,3000,5000]}
-                    value={settings.minOrderIntervalMs}
-                    format={(v:string)=>v + " ms"}
-                    onChange={(v:string)=>editSetting("minOrderIntervalMs",v)}
-                  />
-                  <SelectField
-                    label="คำสั่งสูงสุดต่อนาที"
-                    options={[10,20,30,60,90,120,180,240]}
-                    value={settings.maxOrdersPerMinute}
-                    format={(v:string)=>v + " ครั้ง"}
-                    onChange={(v:string)=>editSetting("maxOrdersPerMinute",v)}
-                  />
-
-                  <div className="field submit-field settings-submit">
-                    <button className="btn primary btn-lg" disabled={busy || !settingsDirty}>
-                      {busy ? "กำลังบันทึก..." : settingsDirty ? "บันทึกการตั้งค่า" : "บันทึกแล้ว"}
-                    </button>
-                  </div>
+                  <div className="cc-settings-savebar"><div><span className={settingsDirty?"warn-dot":"good-dot"}/><span>{settingsDirty?"มีค่าที่แก้ไขและยังไม่ได้ส่งให้ EA":"ค่าบนเว็บตรงกับค่าที่บันทึกแล้ว"}</span></div><button className="btn cc-save-primary" disabled={busy||!settingsDirty}><ScenovaIcon name="save" size={17}/>{busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button></div>
                 </form>
-                <div className="detail-list" style={{marginTop:12}}>
-                  <div>
-                    <span>กำไร EA วันนี้</span>
-                    <b>
-                      ${Number(metrics.dailyProfit || 0).toFixed(2)}
-                      {Number(settings.dailyProfitTargetMoney || 0) > 0 ? " / $" + Number(settings.dailyProfitTargetMoney).toFixed(2) : " · ไม่ตั้งเป้า"}
-                    </b>
-                  </div>
-                  <div>
-                    <span>กำไรรอบ Basket</span>
-                    <b>
-                      ${Number(metrics.basketCycleProfit || metrics.basketProfit || 0).toFixed(2)}
-                      {Number(settings.basketProfitTargetMoney || 0) > 0 ? " / $" + Number(settings.basketProfitTargetMoney).toFixed(2) : " · ไม่ตั้งเป้า"}
-                    </b>
-                  </div>
-                  <div>
-                    <span>โหมดปิดกำไร</span>
-                    <b>
-                      {profitRunModeEnabled
-                        ? "ปล่อยกำไรวิ่ง · ย่อ " + Number(settings.profitRunTrailPercent).toFixed(0) + "%"
-                        : Number(settings.perPositionProfitMoney || 0) > 0
-                          ? "ต่อไม้ · $" + Number(settings.perPositionProfitMoney).toFixed(2)
-                          : Number(settings.basketProfitTargetMoney || 0) > 0
-                            ? "รวม Basket · $" + Number(settings.basketProfitTargetMoney).toFixed(2)
-                            : "ไม่ตั้งเป้าปิดกำไร"}
-                    </b>
-                  </div>
-                  <div><span>สภาวะตลาด</span><b>{String(metrics.marketRegime || "รอข้อมูล")}</b></div>
-                  <div><span>ความมั่นใจสัญญาณ</span><b>{Number(metrics.signalConfidence || 0).toFixed(0)}% · Lot {Number(metrics.adaptiveLot || settings.lot).toFixed(2)}</b></div>
-                </div>
-              </details>
+              </section>
 
               <div className="cc-mobile-command-dock mobile-only" aria-label="ควบคุมบอท">
                 <button className="cc-mobile-command start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่งเริ่มบอทแล้ว")}>
@@ -1839,16 +1567,7 @@ function Metric({label,value,positive}:{label:string;value:string;positive?:bool
 }
 
 function DashboardMetric({icon,label,value,sub,tone="neutral"}:{icon:string;label:string;value:string;sub?:string;tone?:"neutral"|"good"|"warn"|"bad"}) {
-  return (
-    <div className={"cc-kpi cc-tone-" + tone}>
-      <span className="cc-kpi-icon">{icon}</span>
-      <div>
-        <span className="cc-kpi-label">{label}</span>
-        <b>{value}</b>
-        {sub ? <small>{sub}</small> : null}
-      </div>
-    </div>
-  );
+  return <div className={"cc-kpi cc-tone-"+tone}><span className="cc-kpi-icon"><ScenovaIcon name={icon} size={22}/></span><div><span className="cc-kpi-label">{label}</span><b>{value}</b>{sub?<small>{sub}</small>:null}</div></div>;
 }
 
 function StatusRow({label,value,tone="neutral",dot=false}:{label:string;value:any;tone?:"neutral"|"good"|"warn"|"bad";dot?:boolean}) {
@@ -1901,6 +1620,13 @@ function InfoTip({text}:{text:string}) {
       <span className="info-tip-popover" role="tooltip">{text}</span>
     </span>
   );
+}
+
+function SettingTile({icon,title,description,children,wide=false,accent=false}:{icon:string;title:string;description?:string;children:any;wide?:boolean;accent?:boolean}) {
+  return <div className={"cc-setting-tile "+(wide?"wide ":"")+(accent?"accent":"")}><div className="cc-setting-tile-head"><span><ScenovaIcon name={icon} size={18}/></span><div><b>{title}</b>{description?<small>{description}</small>:null}</div></div><div className="cc-setting-control">{children}</div></div>;
+}
+function SwitchSetting({checked,onChange,onLabel,offLabel}:{checked:boolean;onChange:(value:boolean)=>void;onLabel:string;offLabel:string}) {
+  return <label className={"cc-switch "+(checked?"on":"")}><input type="checkbox" checked={checked} onChange={e=>onChange(e.target.checked)}/><span className="cc-switch-track"><i/></span><b>{checked?onLabel:offLabel}</b></label>;
 }
 
 function SelectField(props: any) {
