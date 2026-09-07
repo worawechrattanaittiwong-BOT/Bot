@@ -43,6 +43,7 @@ input int             InpMaxOfflineLeaseSeconds = 600;
 
 ENUM_BOT_STATE g_state = STATE_STOPPED;
 bool   g_access = false;
+bool   g_runAuthorized = false;
 bool   g_forceFirstEntry = false;
 bool   g_trailArmed = false;
 double g_peakProfit = 0.0;
@@ -53,6 +54,7 @@ datetime g_orderWindowStart = 0;
 int    g_ordersInWindow = 0;
 datetime g_lastHeartbeat = 0;
 datetime g_lastSuccessfulHeartbeat = 0;
+datetime g_lastRunAuthorization = 0;
 string g_executionStatus = "INITIALIZING";
 long   g_lastOrderRetcode = 0;
 int    g_lastOrderError = 0;
@@ -108,8 +110,10 @@ int OnInit()
    if(MQLInfoInteger(MQL_TESTER))
    {
       g_access = true;
+      g_runAuthorized = true;
       g_state = STATE_RUNNING;
       g_lastSuccessfulHeartbeat = TimeCurrent();
+      g_lastRunAuthorization = TimeCurrent();
       Print("Strategy Tester mode: SaaS heartbeat bypassed for historical testing only.");
    }
 
@@ -135,9 +139,10 @@ void OnTick()
    if(g_access && g_lastSuccessfulHeartbeat > 0 &&
       TimeCurrent() - g_lastSuccessfulHeartbeat > InpMaxOfflineLeaseSeconds)
    {
-      Print("SaaS lease expired while API is unreachable. Entering SAFE_STOP.");
+      Print("SaaS lease expired while API is unreachable. Disabling new entries.");
       g_access = false;
-      g_state = STATE_SAFE_STOP;
+      g_runAuthorized = false;
+      g_forceFirstEntry = false;
    }
 
    int count = BasketPositionCount();
@@ -220,6 +225,16 @@ void OnTick()
       return;
    }
 
+   // New orders are allowed only while the website has very recently
+   // confirmed desiredState=RUNNING. Existing positions can still be managed.
+   if(!MQLInfoInteger(MQL_TESTER) &&
+      (!g_runAuthorized || g_lastRunAuthorization <= 0 ||
+       TimeCurrent() - g_lastRunAuthorization > 2))
+   {
+      g_executionStatus = "CONTROL_NOT_FRESH";
+      return;
+   }
+
    string permissionStatus = TradePermissionStatus();
    if(permissionStatus != "OK")
    {
@@ -241,11 +256,27 @@ void OnTick()
       return;
    }
 
-   int direction = forceFirstEntry ? ImmediateEntryDirection(momentum) : EntryDirection(momentum);
-   if(direction == 0)
+   int direction = 0;
+
+   // Never hedge against the current basket. Once the first position exists,
+   // every additional position must use that same direction until the basket is flat.
+   if(count > 0)
    {
-      g_executionStatus = "WAITING_MOMENTUM";
-      return;
+      direction = BasketDirection();
+      if(direction == 0)
+      {
+         g_executionStatus = "MIXED_BASKET_BLOCKED";
+         return;
+      }
+   }
+   else
+   {
+      direction = forceFirstEntry ? ImmediateEntryDirection(momentum) : EntryDirection(momentum);
+      if(direction == 0)
+      {
+         g_executionStatus = "WAITING_MOMENTUM";
+         return;
+      }
    }
 
    if(!OpenTradingAllowedForDirection(direction))
@@ -297,6 +328,8 @@ void OnTradeTransaction(
    {
       Print("Manual/external trade detected on ", _Symbol, ". Entering SAFE_STOP.");
       g_state = STATE_SAFE_STOP;
+      g_runAuthorized = false;
+      g_forceFirstEntry = false;
    }
 }
 
@@ -351,6 +384,12 @@ void SendHeartbeat()
 
    if(code < 200 || code >= 300)
    {
+      // Fail closed for new entries immediately when control cannot be verified.
+      g_runAuthorized = false;
+      g_forceFirstEntry = false;
+      if(g_state == STATE_RUNNING)
+         g_executionStatus = "CONTROL_NOT_FRESH";
+
       Print("SCENOVA heartbeat failed. HTTP=", code, " error=", webError, " URL=", heartbeatUrl);
 
       if(code == -1)
@@ -391,6 +430,7 @@ void SendHeartbeat()
    if(!g_access)
    {
       g_state = STATE_SAFE_STOP;
+      g_runAuthorized = false;
       g_forceFirstEntry = false;
       g_executionStatus = "NO_ACCESS";
    }
@@ -399,16 +439,20 @@ void SendHeartbeat()
       if(g_state != STATE_RUNNING && BasketPositionCount() == 0)
          g_forceFirstEntry = true;
       g_state = STATE_RUNNING;
+      g_runAuthorized = true;
+      g_lastRunAuthorization = TimeCurrent();
       g_executionStatus = "EVALUATING";
    }
    else if(desired == "SAFE_STOP")
    {
       g_state = STATE_SAFE_STOP;
+      g_runAuthorized = false;
       g_forceFirstEntry = false;
       g_executionStatus = "SAFE_STOP";
    }
    else if(desired == "STOPPED")
    {
+      g_runAuthorized = false;
       g_forceFirstEntry = false;
       if(BasketPositionCount() == 0)
       {
@@ -425,6 +469,7 @@ void SendHeartbeat()
    if(command == "CLOSE_ALL" && desired == "STOPPED")
    {
       g_state = STATE_SAFE_STOP;
+      g_runAuthorized = false;
       g_forceFirstEntry = false;
       g_executionStatus = "SAFE_STOP";
       CloseAllBasket("REMOTE_CLOSE_ALL");
