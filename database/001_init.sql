@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS bot_settings (
     "basketTrailMoney":0.5,
     "maxBasketLossMoney":10.0,
     "dailyLossMoney":25.0,
-    "maxSpreadPoints":50,
+    "maxSpreadPoints":300,
     "minOrderIntervalMs":300,
     "maxOrdersPerMinute":120,
     "entryMode":"AUTO_MOMENTUM"
