@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.004"
+#property version   "1.005"
 #define SCENOVA_PRODUCT_VERSION "2.0.5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -31,6 +31,7 @@ input double          InpMaxBasketLossMoney   = 10.00;
 input double          InpDailyLossMoney       = 25.00;
 input double          InpDailyProfitTargetMoney = 0.00;
 input double          InpBasketProfitTargetMoney = 0.00;
+input double          InpPerPositionProfitMoney = 0.00;
 input double          InpPerPositionLossMoney = 0.00;
 input int             InpMaxSpreadPoints      = 300;
 input int             InpMinOrderIntervalMs   = 300;
@@ -76,6 +77,7 @@ double g_maxBasketLoss;
 double g_dailyLoss;
 double g_dailyProfitTarget;
 double g_basketProfitTarget;
+double g_perPositionProfit;
 double g_perPositionLoss;
 int    g_maxSpread;
 int    g_minOrderIntervalMs;
@@ -95,6 +97,9 @@ int OnInit()
    g_dailyLoss = InpDailyLossMoney;
    g_dailyProfitTarget = InpDailyProfitTargetMoney;
    g_basketProfitTarget = InpBasketProfitTargetMoney;
+   g_perPositionProfit = InpPerPositionProfitMoney;
+   if(g_perPositionProfit > 0.0)
+      g_basketProfitTarget = 0.0;
    g_perPositionLoss = InpPerPositionLossMoney;
    g_maxSpread = InpMaxSpreadPoints;
    g_minOrderIntervalMs = InpMinOrderIntervalMs;
@@ -202,9 +207,9 @@ void OnTick()
 
    if(count > 0)
    {
-      // Per-position controls are evaluated before basket trailing. The
-      // profit target per position is the basket target divided by the
-      // highest number of simultaneous positions seen in this basket cycle.
+      // Per-position profit/loss controls are evaluated before basket-level
+      // controls. Per-position profit and total Basket profit are mutually
+      // exclusive settings, enforced by both Server and EA.
       bool closedIndividual = ManagePerPositionTargets();
       if(closedIndividual)
       {
@@ -649,6 +654,13 @@ void ApplySettings(string json)
    g_dailyLoss = MathMax(0.0, JsonNumber(json, "dailyLossMoney", g_dailyLoss));
    g_dailyProfitTarget = MathMax(0.0, JsonNumber(json, "dailyProfitTargetMoney", g_dailyProfitTarget));
    g_basketProfitTarget = MathMax(0.0, JsonNumber(json, "basketProfitTargetMoney", g_basketProfitTarget));
+   g_perPositionProfit = MathMax(0.0, JsonNumber(json, "perPositionProfitMoney", g_perPositionProfit));
+   // Fail-safe inside the EA: the two profit-closing modes must never run
+   // together even if an older/malformed client sends conflicting settings.
+   if(g_perPositionProfit > 0.0)
+      g_basketProfitTarget = 0.0;
+   else if(g_basketProfitTarget > 0.0)
+      g_perPositionProfit = 0.0;
    g_perPositionLoss = MathMax(0.0, JsonNumber(json, "perPositionLossMoney", g_perPositionLoss));
    g_maxSpread = (int)MathMax(1.0, JsonNumber(json, "maxSpreadPoints", g_maxSpread));
    g_minOrderIntervalMs = (int)MathMax(0.0, JsonNumber(json, "minOrderIntervalMs", g_minOrderIntervalMs));
@@ -862,10 +874,7 @@ double BasketCycleProfit()
 
 double CurrentPerPositionProfitTarget()
 {
-   if(g_basketProfitTarget <= 0.0 || g_basketPeakPositionCount <= 0)
-      return 0.0;
-
-   return g_basketProfitTarget / (double)g_basketPeakPositionCount;
+   return MathMax(0.0, g_perPositionProfit);
 }
 
 bool ManagePerPositionTargets()
