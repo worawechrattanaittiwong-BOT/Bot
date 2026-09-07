@@ -504,14 +504,9 @@ void OnTick()
       return;
    }
 
-   if(count > 0 && !AdaptiveBasketAddAllowed(direction))
-   {
-      g_executionStatus = "WAITING_BASKET_ADD";
-      return;
-   }
-
-   // Never hedge against the current basket. Keep the original entry signal,
-   // but if that signal flips against an open basket, wait instead of opening opposite.
+   // Never hedge against the current basket. Check this before the add gate
+   // so a trend flip is reported honestly as a direction lock, not as a vague
+   // "waiting to add" state.
    if(count > 0)
    {
       int basketDirection = BasketDirection();
@@ -525,6 +520,12 @@ void OnTick()
          g_executionStatus = "WAITING_DIRECTION_LOCK";
          return;
       }
+   }
+
+   if(count > 0 && !AdaptiveBasketAddAllowed(direction))
+   {
+      g_executionStatus = "WAITING_BASKET_ADD";
+      return;
    }
 
    if(!OpenTradingAllowedForDirection(direction))
