@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.009"
+#property version   "1.010"
 #define SCENOVA_PRODUCT_VERSION "2.0.6"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -71,7 +71,9 @@ input int             InpAtrPeriod             = 14;
 input int             InpConfidenceThreshold   = 70;
 input int             InpSessionStartHour      = 0;
 input int             InpSessionEndHour        = 24;
-input double          InpMaxAtrPoints          = 3000.0;
+// 0 = fully adaptive. A positive value is only a soft volatility marker;
+ // it never blocks trading by itself.
+input double          InpMaxAtrPoints          = 0.0;
 input int             InpCooldownMinutesAfterLoss = 5;
 input int             InpMaxConsecutiveLosses  = 3;
 
@@ -134,6 +136,7 @@ int    g_maxConsecutiveLosses;
 string g_marketRegime = "INITIALIZING";
 double g_signalConfidence = 0.0;
 double g_atrPoints = 0.0;
+double g_atrRatio = 1.0;
 double g_adaptiveLot = 0.0;
 string g_adaptiveBlockReason = "";
 string g_cachedAdaptiveBlockReason = "";
@@ -143,7 +146,7 @@ datetime g_lastAdaptiveEvaluation = 0;
 int    g_cachedAdaptiveDirection = 0;
 
 #define SPREAD_HISTORY_CAPACITY 1800
-#define SPREAD_MIN_SAMPLES 300
+#define SPREAD_MIN_SAMPLES 60
 double g_spreadHistory[SPREAD_HISTORY_CAPACITY];
 int    g_spreadHistoryCount = 0;
 int    g_spreadHistoryIndex = 0;
@@ -594,7 +597,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.009\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.010\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -973,10 +976,10 @@ double AdaptiveTradeVolume()
       return fallback;
 
    double calculated = MathMin(g_lot, riskMoney / moneyPerLot);
-   double volatilityRatio = g_atrBaselinePoints > 0.0
+   double g_atrRatio = g_atrBaselinePoints > 0.0
       ? g_atrPoints / g_atrBaselinePoints
       : 1.0;
-   double volatilityFactor = 1.0 / MathMax(1.0, volatilityRatio);
+   double volatilityFactor = 1.0 / MathMax(1.0, g_atrRatio);
    double lossFactor = MathPow(0.75, MathMax(0, g_consecutiveLosses));
    double executionFactor = 0.50 + 0.50 * MathMax(0.0, MathMin(100.0, g_executionQuality)) / 100.0;
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
@@ -1040,23 +1043,20 @@ int AdaptiveEntryDirection(double momentum)
       g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
       return 0;
    }
-   if(g_maxAtrPoints > 0.0 && g_atrPoints > g_maxAtrPoints)
-   {
-      g_marketRegime = "HIGH_VOLATILITY";
-      g_signalConfidence = 0.0;
-      g_adaptiveBlockReason = "VOLATILITY_TOO_HIGH";
-      g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
-      return 0;
-   }
 
    int trendM5 = TimeframeTrend(PERIOD_M5);
    int trendM15 = TimeframeTrend(PERIOD_M15);
    int trendH1 = TimeframeTrend(PERIOD_H1);
    int regimeDirection = trendM15 != 0 ? trendM15 : trendH1;
-   double volatilityRatio = g_atrBaselinePoints > 0.0 ? g_atrPoints / g_atrBaselinePoints : 1.0;
-   if(volatilityRatio >= 1.60)
+   g_atrRatio = g_atrBaselinePoints > 0.0 ? g_atrPoints / g_atrBaselinePoints : 1.0;
+
+   // ATR is a volatility input, not an on/off switch. A high reading moves the
+   // engine into a defensive profile: smaller lot, fewer positions, wider
+   // spacing and stronger confirmation. This keeps market-open trading usable.
+   bool atrSoftLimitExceeded = g_maxAtrPoints > 0.0 && g_atrPoints > g_maxAtrPoints;
+   if(atrSoftLimitExceeded || g_atrRatio >= 1.60)
       g_marketRegime = "HIGH_VOLATILITY";
-   else if(volatilityRatio <= 0.55)
+   else if(g_atrRatio <= 0.55)
       g_marketRegime = "QUIET";
    else if(regimeDirection > 0)
       g_marketRegime = "TREND_UP";
@@ -1067,11 +1067,11 @@ int AdaptiveEntryDirection(double momentum)
 
    g_sessionProfile = CurrentSessionProfile();
    double momentumFactor = 1.0;
-   if(g_marketRegime == "HIGH_VOLATILITY") momentumFactor = 1.45;
+   if(g_marketRegime == "HIGH_VOLATILITY") momentumFactor = 1.20;
    else if(g_marketRegime == "QUIET") momentumFactor = 0.70;
    else if(g_marketRegime == "RANGE") momentumFactor = 1.15;
-   if(volatilityRatio > 1.0)
-      momentumFactor *= MathMin(1.30, MathSqrt(volatilityRatio));
+   if(g_atrRatio > 1.0)
+      momentumFactor *= MathMin(1.15, MathSqrt(g_atrRatio));
    g_adaptiveMomentumThreshold = MathMax(2.0, InpMomentumEntryPoints * momentumFactor);
 
    int rawDirection = 0;
@@ -1107,7 +1107,7 @@ int AdaptiveEntryDirection(double momentum)
    g_signalConfidence = MathMax(0.0, MathMin(100.0, score));
 
    double positionFactor = 1.0;
-   if(g_marketRegime == "HIGH_VOLATILITY") positionFactor = 0.35;
+   if(g_marketRegime == "HIGH_VOLATILITY") positionFactor = 0.40;
    else if(g_marketRegime == "RANGE") positionFactor = 0.60;
    else if(g_marketRegime == "QUIET") positionFactor = 0.50;
    if(g_signalConfidence < g_confidenceThreshold + 10) positionFactor *= 0.75;
@@ -1115,7 +1115,7 @@ int AdaptiveEntryDirection(double momentum)
    g_adaptiveMaxPositions = MathMax(1, (int)MathFloor(g_maxPositions * positionFactor));
 
    double spacingFactor = 1.0;
-   if(g_marketRegime == "HIGH_VOLATILITY") spacingFactor = 3.0;
+   if(g_marketRegime == "HIGH_VOLATILITY") spacingFactor = 2.2;
    else if(g_marketRegime == "RANGE") spacingFactor = 1.8;
    else if(g_marketRegime == "QUIET") spacingFactor = 1.4;
    spacingFactor *= 1.0 + g_consecutiveLosses * 0.50;
@@ -1163,12 +1163,26 @@ string CurrentSessionProfile()
 
 bool AdaptiveBasketAddAllowed(int direction)
 {
-   if(!g_adaptiveEngine || BasketPositionCount() <= 0)
+   int count = BasketPositionCount();
+   if(!g_adaptiveEngine || count <= 0)
       return true;
    if(direction != BasketDirection())
       return false;
+
    if(g_marketRegime == "HIGH_VOLATILITY")
-      return false;
+   {
+      // Market-open volatility is tradable, but pyramiding is deliberately
+      // tighter: at most two positions and only with stronger confirmation.
+      int highVolCap = MathMin(2, MathMax(1, g_adaptiveMaxPositions));
+      if(count >= highVolCap)
+         return false;
+      if(g_signalConfidence < g_confidenceThreshold + 12)
+         return false;
+      if(MathAbs(MomentumPoints()) < g_adaptiveMomentumThreshold * 1.25)
+         return false;
+      return true;
+   }
+
    if(g_signalConfidence < g_confidenceThreshold + 3)
       return false;
    if(MathAbs(MomentumPoints()) < g_adaptiveMomentumThreshold * 1.10)
@@ -1311,7 +1325,16 @@ void SampleSpread()
    bool profileReady = g_spreadHistoryCount >= SPREAD_MIN_SAMPLES || g_spreadProfileRestored;
    if(!profileReady)
    {
-      g_adaptiveSpreadLimit = MathMax(1.0, (double)g_maxSpread);
+      // During warm-up use the broker's own live distribution. The configured
+      // spread is only a floor, never an arbitrary hard ceiling.
+      double bootstrapLimit = 0.0;
+      if(g_spreadMedian > 0.0)
+         bootstrapLimit = MathMax(g_spreadP95 * 1.35, g_spreadMedian * 2.25);
+      if(g_maxSpread > 0)
+         bootstrapLimit = MathMax(bootstrapLimit, (double)g_maxSpread);
+      if(bootstrapLimit <= 0.0)
+         bootstrapLimit = MathMax(1.0, spread * 2.25);
+      g_adaptiveSpreadLimit = bootstrapLimit;
       g_spreadStatus = "WARMUP";
    }
 
@@ -1342,10 +1365,16 @@ void SampleSpread()
 
 bool AdaptiveSpreadAllowed()
 {
+   double current = CurrentSpreadPoints();
+   if(current <= 0.0 || current >= 999999.0)
+      return false;
+
    if(!g_adaptiveEngine)
-      return CurrentSpreadPoints() <= g_maxSpread;
+      return g_maxSpread <= 0 || current <= g_maxSpread;
+
+   // Adaptive mode never falls back to a broker-agnostic fixed number.
    if(g_adaptiveSpreadLimit <= 0.0)
-      return CurrentSpreadPoints() <= g_maxSpread;
+      return true;
    return g_spreadHighSeconds < 3;
 }
 
