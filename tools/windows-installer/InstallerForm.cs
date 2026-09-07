@@ -6,7 +6,7 @@ namespace ScenovaInstaller;
 
 internal sealed class InstallerForm : Form
 {
-    private const string InstallerVersion = "2.0.3";
+    private const string InstallerVersion = "2.0.4";
     private const string LastUpdated = "7 กันยายน 2026";
     private readonly ComboBox _terminal = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
     private readonly Button _install = new() { Text = "ติดตั้ง SCENOVA", Width = 180, Height = 42 };
@@ -173,6 +173,7 @@ internal sealed class InstallerForm : Form
                 DeviceSecretProtected = ScenovaRuntime.Protect(deviceSecret),
                 TerminalDataPath = terminal.DataPath,
                 EaBinaryPath = eaPath,
+                StartupSymbol = enroll.StartupSymbol,
                 InstalledAt = DateTimeOffset.Now.ToString("O")
             };
 
@@ -181,13 +182,34 @@ internal sealed class InstallerForm : Form
                 JsonSerializer.Serialize(config, ScenovaRuntime.JsonOptions),
                 new UTF8Encoding(false));
 
-            _status.Text = "กำลังอัปเดตและเปิดใช้งาน Device Agent...";
+            _status.Text = "กำลังอัปเดต Device Agent และเปิด MT5 พร้อม EA...";
             AgentRunner.InstallAndStart();
 
+            var mt5Started = AgentRunner.EnsureMt5RunningWithEa(config, forceReload: true);
+            if (!mt5Started)
+                throw new InvalidOperationException("ติดตั้งไฟล์สำเร็จ แต่ไม่พบ terminal64.exe ของ MT5 ที่เลือก");
+
+            _status.Text = "กำลังรอ FastBasketBot เชื่อมต่อกับ SCENOVA...";
+            var eaReady = await WaitForEaConnectionAsync(
+                http,
+                config,
+                deviceSecret,
+                TimeSpan.FromSeconds(35));
+
             _progress.Visible = false;
-            _status.Text =
-                "ติดตั้งสำเร็จ\r\nเปิด MT5 → Navigator → Expert Advisors → SCENOVA → FastBasketBot และโหลด SCENOVA-FastBasketBot.set ครั้งแรก";
-            _install.Text = "ติดตั้งสำเร็จ";
+            if (eaReady)
+            {
+                _status.Text =
+                    "ติดตั้งสำเร็จ และ FastBasketBot เชื่อมต่อ SCENOVA แล้ว\r\nกลับไปหน้า Control Center ได้เลย";
+                _install.Text = "ติดตั้งสำเร็จ";
+            }
+            else
+            {
+                _status.Text =
+                    "ติดตั้งและเปิด MT5 แล้ว แต่ EA ยังไม่เชื่อมต่อ\r\nตรวจ MT5 > Tools > Options > Expert Advisors > Allow WebRequest สำหรับ https://snvea-bot.online/backend";
+                _install.Text = "ติดตั้งแล้ว";
+                _install.Enabled = true;
+            }
         }
         catch (Exception ex)
         {
@@ -195,6 +217,60 @@ internal sealed class InstallerForm : Form
             _install.Enabled = true;
             _status.Text = "ติดตั้งไม่สำเร็จ: " + FriendlyError(ex);
         }
+    }
+
+    private static async Task<bool> WaitForEaConnectionAsync(
+        HttpClient http,
+        AgentConfig config,
+        string deviceSecret,
+        TimeSpan timeout)
+    {
+        var installToken = ScenovaRuntime.TryUnprotect(config.InstallTokenProtected);
+        if (string.IsNullOrWhiteSpace(installToken))
+            return false;
+
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            try
+            {
+                var eaHash = "";
+                if (File.Exists(config.EaBinaryPath))
+                {
+                    eaHash = Convert.ToHexString(
+                        SHA256.HashData(await File.ReadAllBytesAsync(config.EaBinaryPath)))
+                        .ToLowerInvariant();
+                }
+
+                var heartbeat = await ScenovaClient.PostJsonAsync<AgentHeartbeatResponse>(
+                    http,
+                    config.ApiBase.TrimEnd('/') + "/api/ea/agent-heartbeat",
+                    new
+                    {
+                        instanceId = config.InstanceId,
+                        installToken,
+                        agentVersion = "2.0.4",
+                        terminalPath = config.TerminalDataPath,
+                        eaHash,
+                        hostname = Environment.MachineName,
+                        devicePublicId = config.DevicePublicId,
+                        deviceSecret
+                    });
+
+                if (heartbeat.DeviceVerified &&
+                    heartbeat.EaOnline &&
+                    !string.IsNullOrWhiteSpace(heartbeat.EaVersion))
+                    return true;
+            }
+            catch
+            {
+                // Keep waiting while MT5 starts and the EA initializes.
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(2));
+        }
+
+        return false;
     }
 
     private static string FriendlyError(Exception ex)
