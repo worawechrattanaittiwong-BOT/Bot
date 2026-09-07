@@ -101,7 +101,7 @@ jobs:
           test -n "$INSTALL_TOKEN"
 
           EA_HASH=$(sha256sum /tmp/FastBasketBot.ex5 | awk '{print $1}')
-          AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.0\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
+          AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.5\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
           test "$(printf '%s' "$AGENT" | jq -r '.deviceVerified')" = "true"
 
           echo "[integration] auto-binding first LOCAL MT5 from EA runtime"
@@ -145,7 +145,8 @@ jobs:
 
           curl -fsS -X POST "$BASE/admin/trials/grant" -H 'x-admin-key: integration-admin' -H 'content-type: application/json' -d "{\"mt5AccountId\":\"$ACCOUNT_ID\",\"minutes\":180,\"approvedBy\":\"CI\"}" >/tmp/trial-grant.json
 
-          echo "[integration] starting bot after settings"
+          echo "[integration] starting bot after settings with Agent intentionally stale"
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set agent_last_seen_at=now()-interval '2 hours',agent_ea_hash=NULL where id='$INSTANCE';" >/dev/null
           START=$(curl -fsS -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$START" | jq -r '.state')" = "RUNNING"
 
@@ -177,34 +178,21 @@ jobs:
           PREP_SECOND=$(curl -fsS -X POST "$BASE/bot/installers/windows" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d "{\"slotId\":\"$SLOT_SECOND\"}")
           CODE_SECOND=$(printf '%s' "$PREP_SECOND" | jq -r '.code')
 
-          DEVICE_TAKEOVER_HTTP=$(curl -sS -o /tmp/device-takeover.json -w "%{http_code}" -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE_SECOND\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"another-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal2\"}")
-          test "$DEVICE_TAKEOVER_HTTP" = "409"
-
-          echo "[integration] suspended Slot with stale RUNNING state can still release an offline device"
-          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update license_slots set status='SUSPENDED' where id='$SLOT'; update bot_instances set actual_state='RUNNING',desired_state='RUNNING',last_seen_at=now()-interval '5 minutes',metrics=jsonb_set(coalesce(metrics,'{}'::jsonb),'{positions}','0'::jsonb,true) where slot_id='$SLOT';" >/dev/null
-          RELEASE_DEVICE=$(curl -fsS -X POST "$BASE/bot/device/release?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
-          test "$(printf '%s' "$RELEASE_DEVICE" | jq -r '.released')" = "true"
-          RELEASED_STATE=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select device_status || ':' || desired_state from bot_instances where slot_id='$SLOT';")
-          test "$RELEASED_STATE" = "UNREGISTERED:STOPPED"
-
-          echo "[integration] same physical device can enroll another Slot after explicit release"
-          ENROLL_SECOND=$(curl -fsS -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE_SECOND\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"another-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal2\"}")
+          ENROLL_SECOND=$(curl -fsS -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE_SECOND\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"another-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal2\"}"))
           INSTANCE_SECOND=$(printf '%s' "$ENROLL_SECOND" | jq -r '.instanceId')
+          INSTALL_TOKEN_SECOND=$(printf '%s' "$ENROLL_SECOND" | jq -r '.installToken')
           test -n "$INSTANCE_SECOND"
+          test -n "$INSTALL_TOKEN_SECOND"
 
-          echo "[integration] owner customer list exposes LOCAL device locks"
-          ADMIN_USERS=$(curl -fsS "$BASE/admin/users?q=integration2" -H 'x-admin-key: integration-admin')
-          test "$(printf '%s' "$ADMIN_USERS" | jq -r '.[0].customer_slots | type')" = "array"
-          test "$(printf '%s' "$ADMIN_USERS" | jq -r --arg slot "$SLOT_SECOND" '.[0].customer_slots[] | select(.id==$slot) | .device_status')" = "ACTIVE"
+          echo "[integration] same physical PC is allowed; Server rights still decide trading"
+          SECOND_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE_SECOND\",\"installToken\":\"$INSTALL_TOKEN_SECOND\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"222222\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Demo2\",\"positions\":0}}")
+          test "$(printf '%s' "$SECOND_HB" | jq -r '.accountMismatch // false')" = "false"
+          SECOND_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT_SECOND" -H "authorization: Bearer $TOKEN2")
+          test "$(printf '%s' "$SECOND_DASH" | jq -r '.account.account_number')" = "222222"
+          NO_ACCESS_START=$(curl -sS -o /tmp/no-access-start.json -w "%{http_code}" -X POST "$BASE/bot/start?slotId=$SLOT_SECOND" -H "authorization: Bearer $TOKEN2")
+          test "$NO_ACCESS_START" = "409"
 
-          echo "[integration] owner can release an offline customer device even when stale RUNNING remains"
-          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set actual_state='RUNNING',desired_state='RUNNING',last_seen_at=now()-interval '5 minutes',metrics=jsonb_set(coalesce(metrics,'{}'::jsonb),'{positions}','0'::jsonb,true) where slot_id='$SLOT_SECOND';" >/dev/null
-          ADMIN_RELEASE=$(curl -fsS -X POST "$BASE/admin/devices/release" -H 'x-admin-key: integration-admin' -H 'content-type: application/json' -d "{\"userId\":\"$USER2_ID\",\"slotId\":\"$SLOT_SECOND\"}")
-          test "$(printf '%s' "$ADMIN_RELEASE" | jq -r '.released')" = "true"
-          ADMIN_RELEASED_STATE=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select device_status || ':' || desired_state from bot_instances where slot_id='$SLOT_SECOND';")
-          test "$ADMIN_RELEASED_STATE" = "UNREGISTERED:STOPPED"
-
-          echo "[integration] first MT5 bind is confirmable before Device Lock upgrade"
+          echo "[integration] first MT5 bind is automatic without Device Lock"
           REGISTER3=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration3@scenova.test","password":"Integration123!"}')
           TOKEN3=$(printf '%s' "$REGISTER3" | jq -r '.token')
           DASH3=$(curl -fsS "$BASE/bot/dashboard" -H "authorization: Bearer $TOKEN3")
@@ -220,16 +208,10 @@ jobs:
           PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set device_status='UNREGISTERED',device_last_seen_at=NULL,device_last_ip=NULL,mt5_account_id=NULL where id='$INSTANCE3';" >/dev/null
 
           FIRST_DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE3\",\"installToken\":\"$INSTALL_TOKEN3\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"300003\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Legacy\",\"positions\":0}}")
-          test "$(printf '%s' "$FIRST_DETECT" | jq -r '.accountMismatch')" = "true"
+          test "$(printf '%s' "$FIRST_DETECT" | jq -r '.accountMismatch // false')" = "false"
 
           FIRST_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT3" -H "authorization: Bearer $TOKEN3")
-          test "$(printf '%s' "$FIRST_DASH" | jq -r '.account')" = "null"
-          test "$(printf '%s' "$FIRST_DASH" | jq -r '.instance.first_bind_ready')" = "true"
-          test "$(printf '%s' "$FIRST_DASH" | jq -r '.instance.rebind_ready')" = "false"
-
-          FIRST_BIND=$(curl -fsS -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT3" -H "authorization: Bearer $TOKEN3")
-          test "$(printf '%s' "$FIRST_BIND" | jq -r '.firstBind')" = "true"
-          test "$(printf '%s' "$FIRST_BIND" | jq -r '.account.account_number')" = "300003"
+          test "$(printf '%s' "$FIRST_DASH" | jq -r '.account.account_number')" = "300003"
 
           DUP_MT5_HTTP=$(curl -sS -o /tmp/duplicate-mt5.json -w "%{http_code}" -X POST "$BASE/bot/mt5" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d '{"accountNumber":"200002","broker":"SCENOVA","brokerServer":"SCENOVA-Real","mode":"CLOUD"}')
           test "$DUP_MT5_HTTP" = "409"
