@@ -35,7 +35,6 @@ const defaultSettings = {
   basketTrailMoney: 0.5,
   maxBasketLossMoney: 10,
   dailyLossMoney: 25,
-  maxSpreadPoints: 300,
   minOrderIntervalMs: 300,
   maxOrdersPerMinute: 120,
   entryMode: "AUTO_MOMENTUM"
@@ -442,7 +441,6 @@ export default function DashboardPage() {
       "InpBasketTrailMoney=" + settings.basketTrailMoney,
       "InpMaxBasketLossMoney=" + settings.maxBasketLossMoney,
       "InpDailyLossMoney=" + settings.dailyLossMoney,
-      "InpMaxSpreadPoints=" + settings.maxSpreadPoints,
       "InpMinOrderIntervalMs=" + settings.minOrderIntervalMs,
       "InpMaxOrdersPerMinute=" + settings.maxOrdersPerMinute,
       "InpEntryMode=" + (settings.entryMode === "BUY_ONLY" ? 1 : settings.entryMode === "SELL_ONLY" ? 2 : 0),
@@ -769,12 +767,12 @@ export default function DashboardPage() {
                     <div><span>Symbol</span><b>{settings.symbol}</b></div>
                     <div><span>Lot</span><b>{settings.lot}</b></div>
                     <div><span>Entry Mode</span><b>{settings.entryMode}</b></div>
+                    <div><span>Direction Lock</span><b>SAME SIDE — ไม่เปิดสวน Basket</b></div>
                     <div><span>Max Positions</span><b>{settings.maxPositions}</b></div>
                     <div><span>Basket Trigger</span><b>${settings.basketTriggerMoney}</b></div>
                     <div><span>Basket Trail</span><b>${settings.basketTrailMoney}</b></div>
                     <div><span>Max Basket Loss</span><b>${settings.maxBasketLossMoney}</b></div>
                     <div><span>Daily Loss Limit</span><b>${settings.dailyLossMoney}</b></div>
-                    <div><span>Max Spread <InfoTip text="Spread สูงสุดที่ยอมให้เปิด Order ใหม่ ปรับได้ แต่ตั้งสูงเกินไปอาจทำให้ต้นทุนเข้าออเดอร์แพงขึ้น" /></span><b>{settings.maxSpreadPoints} pt</b></div>
                     <div><span>Min Order Interval</span><b>{settings.minOrderIntervalMs} ms</b></div>
                     <div><span>Max Orders / Min</span><b>{settings.maxOrdersPerMinute}</b></div>
                   </div>
@@ -985,7 +983,7 @@ export default function DashboardPage() {
         {activeView === "settings" && (
           !data.account ? <EmptySetup onNext={()=>setActiveView("account")} /> :
           <section className="panel settings-panel">
-            <div className="panel-head"><div><div className="eyebrow">BOT SETTINGS</div><h2>ค่าการเทรดที่ใช้งานอยู่</h2><p className="muted">ค่าที่มีผลต่อความเสี่ยงจะแสดงคำอธิบายไว้ใต้ช่อง</p></div></div>
+            <div className="panel-head"><div><div className="eyebrow">BOT SETTINGS</div><h2>ค่าการเทรดที่ใช้งานอยู่</h2><p className="muted">ค่าที่บันทึกจากหน้านี้เป็นค่าหลักของบอท และ EA จะรับค่าล่าสุดจาก Server โดยไม่ต้องไปแก้ Inputs ใน MT5</p></div></div>
             <form className="form-grid form-grid-human" onSubmit={saveSettings}>
               <Field label="Symbol" info="ชื่อ Symbol ที่บอทใช้ ต้องตรงกับชื่อของ Broker เช่น XAUUSDm ถ้ากรอกไม่ตรง EA อาจไม่ทำงานกับสินทรัพย์ที่ต้องการ" help="ชื่อสัญลักษณ์ต้องตรงกับ Broker" value={settings.symbol} onChange={(v:string)=>setSettings({...settings,symbol:v})}/>
               <Field label="Lot" info="ขนาด Lot ต่อ Order สามารถปรับได้ ค่ายิ่งสูงความเสี่ยงและ Margin ที่ใช้ยิ่งสูง ควรทดสอบ Demo ก่อน" help="เริ่มจากค่าน้อยบน Demo ก่อน" type="number" step="0.01" value={settings.lot} onChange={(v:string)=>setSettings({...settings,lot:Number(v)})}/>
@@ -994,16 +992,16 @@ export default function DashboardPage() {
               <Field label="ย่อตัวจาก Peak แล้วปิด ($)" info="หลังเริ่ม Trailing หากกำไรรวมย่อลงจาก Peak ตามจำนวนเงินนี้ EA จะปิด Basket เพื่อรักษากำไร สามารถปรับได้" type="number" step="0.01" value={settings.basketTrailMoney} onChange={(v:string)=>setSettings({...settings,basketTrailMoney:Number(v)})}/>
               <Field label="ขาดทุน Basket สูงสุด ($)" info="ขีดจำกัดขาดทุนของ Basket ใช้เป็นส่วนหนึ่งของระบบความเสี่ยง สามารถปรับได้ ยิ่งตั้งแคบยิ่งหยุดขาดทุนเร็ว" help="ถึงค่านี้ระบบจะควบคุมความเสี่ยงตามกลยุทธ์" type="number" step="0.01" value={settings.maxBasketLossMoney} onChange={(v:string)=>setSettings({...settings,maxBasketLossMoney:Number(v)})}/>
               <Field label="Daily Loss Limit ($)" info="วงเงินขาดทุนรายวันที่ยอมรับได้ เมื่อถึงขีดจำกัด EA จะเข้า Safe Stop ตาม Logic ความเสี่ยง สามารถปรับได้" type="number" step="0.01" value={settings.dailyLossMoney} onChange={(v:string)=>setSettings({...settings,dailyLossMoney:Number(v)})}/>
-              <Field label="Max Spread (points)" info="Spread สูงสุดที่ยอมให้เปิด Order ใหม่ สามารถปรับได้ สำหรับ XAUUSDm แบบ 3 ทศนิยม ตัวอย่าง Bid 4415.693 / Ask 4415.953 ต่างกัน 0.260 ซึ่งเท่ากับ 260 points ดังนั้น 260 / 300 pt ยังผ่านได้ แต่ถ้าสูงกว่า 300 บอทจะรอ" help="ตัวเลขนี้เป็นเพดานที่คุณตั้งได้ ไม่ใช่ Spread จริงของ Broker" type="number" value={settings.maxSpreadPoints} onChange={(v:string)=>setSettings({...settings,maxSpreadPoints:Number(v)})}/>
               <Field label="ระยะห่างคำสั่งขั้นต่ำ (ms)" info="เวลาขั้นต่ำระหว่างการส่ง Order แต่ละครั้ง ปรับได้ ใช้ป้องกันการส่งคำสั่งถี่เกินไป 300 ms = อย่างน้อย 0.3 วินาทีต่อคำสั่ง" type="number" value={settings.minOrderIntervalMs} onChange={(v:string)=>setSettings({...settings,minOrderIntervalMs:Number(v)})}/>
               <Field label="คำสั่งสูงสุดต่อนาที" info="Rate Limit จำนวนคำสั่ง Order สูงสุดใน 1 นาที ปรับได้ ใช้ป้องกันการยิงคำสั่งผิดปกติหรือมากเกินไป" type="number" value={settings.maxOrdersPerMinute} onChange={(v:string)=>setSettings({...settings,maxOrdersPerMinute:Number(v)})}/>
               <div className="field">
-                <label className="label-with-info">โหมดเข้าออเดอร์ <InfoTip text="AUTO MOMENTUM เลือก Buy/Sell จาก Momentum แบบ Real-time, BUY ONLY เปิดเฉพาะ Buy, SELL ONLY เปิดเฉพาะ Sell" /></label>
+                <label className="label-with-info">โหมดเข้าออเดอร์</label>
                 <select className="input" value={settings.entryMode} onChange={e=>setSettings({...settings,entryMode:e.target.value})}>
-                  <option value="AUTO_MOMENTUM">AUTO MOMENTUM — เลือกฝั่งอัตโนมัติ</option>
-                  <option value="BUY_ONLY">BUY ONLY — Buy เท่านั้น</option>
-                  <option value="SELL_ONLY">SELL ONLY — Sell เท่านั้น</option>
+                  <option value="AUTO_MOMENTUM">AUTO MOMENTUM — เลือกฝั่งออเดอร์แรก แล้วล็อกฝั่งเดียวทั้ง Basket</option>
+                  <option value="BUY_ONLY">BUY ONLY — Buy ทุกออเดอร์ ไม่เปิด Sell</option>
+                  <option value="SELL_ONLY">SELL ONLY — Sell ทุกออเดอร์ ไม่เปิด Buy</option>
                 </select>
+                <small className="help">ทุกโหมดล็อกทิศทางของ Basket: เมื่อมี Buy อยู่ ออเดอร์เพิ่มจะเป็น Buy เท่านั้น; เมื่อมี Sell อยู่ ออเดอร์เพิ่มจะเป็น Sell เท่านั้น</small>
               </div>
               <div className="field submit-field">
                 <div className="button-label-with-info">
