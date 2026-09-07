@@ -55,6 +55,7 @@ double g_dailyClosedProfit = 0.0;
 bool   g_dailyProfitLocked = false;
 int    g_dayKey = -1;
 int    g_basketPeakPositionCount = 0;
+double g_basketCycleRealizedProfit = 0.0;
 ulong  g_lastOrderMs = 0;
 datetime g_orderWindowStart = 0;
 int    g_ordersInWindow = 0;
@@ -403,7 +404,7 @@ void OnTradeTransaction(
    const MqlTradeResult &result
 )
 {
-   if(!InpPauseOnManualTrade || trans.type != TRADE_TRANSACTION_DEAL_ADD || trans.deal == 0)
+   if(trans.type != TRADE_TRANSACTION_DEAL_ADD || trans.deal == 0)
       return;
 
    if(!HistoryDealSelect(trans.deal))
@@ -413,9 +414,16 @@ void OnTradeTransaction(
    long magic = HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
 
    if(symbol == _Symbol && magic == InpMagic)
+   {
+      RecordBasketDeal(trans.deal);
       RecalculateDailyClosedProfit();
+      return;
+   }
 
-   if(symbol == _Symbol && magic != InpMagic && g_state == STATE_RUNNING)
+   if(InpPauseOnManualTrade &&
+      symbol == _Symbol &&
+      magic != InpMagic &&
+      g_state == STATE_RUNNING)
    {
       Print("Manual/external trade detected on ", _Symbol, ". Entering SAFE_STOP.");
       g_state = STATE_SAFE_STOP;
