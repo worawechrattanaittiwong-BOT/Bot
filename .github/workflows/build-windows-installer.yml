@@ -1,0 +1,65 @@
+name: Build SCENOVA Windows Installer
+
+on:
+  pull_request:
+    paths:
+      - "tools/windows-installer/**"
+      - ".github/workflows/build-windows-installer.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/windows-installer/**"
+      - ".github/workflows/build-windows-installer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish self-contained Windows installer
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          dotnet restore tools/windows-installer/ScenovaInstaller.csproj
+          dotnet publish tools/windows-installer/ScenovaInstaller.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o installer-publish
+
+          if (-not (Test-Path "installer-publish/SCENOVA-Setup.exe")) {
+            throw "SCENOVA-Setup.exe was not produced"
+          }
+
+      - name: Upload installer test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SCENOVA-Windows-Installer
+          path: installer-publish/SCENOVA-Setup.exe
+          if-no-files-found: error
+
+      - name: Publish installer to website on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          Copy-Item -Force "installer-publish/SCENOVA-Setup.exe" "apps/web/public/downloads/SCENOVA-Setup.exe"
+
+          git config user.name "scenova-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add "apps/web/public/downloads/SCENOVA-Setup.exe"
+
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Published installer is already current."
+            exit 0
+          }
+
+          git commit -m "build: publish SCENOVA Windows installer [skip ci]"
+          git push
