@@ -139,11 +139,11 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           Copy-Item -Force "installer-publish/SCENOVA-Setup.exe" "apps/web/public/downloads/SCENOVA-Setup.exe"
-          Copy-Item -Force "installer-publish/SCENOVA-Setup.exe" "apps/web/public/downloads/SCENOVA-Setup-v2.0.6.exe"
+          Copy-Item -Force "installer-publish/SCENOVA-Setup.exe" "apps/web/public/downloads/SCENOVA-Setup-v2.0.7.exe"
 
           git config user.name "scenova-build"
           git config user.email "actions@users.noreply.github.com"
-          git add "apps/web/public/downloads/SCENOVA-Setup.exe" "apps/web/public/downloads/SCENOVA-Setup-v2.0.6.exe"
+          git add "apps/web/public/downloads/SCENOVA-Setup.exe" "apps/web/public/downloads/SCENOVA-Setup-v2.0.7.exe"
 
           git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) {
