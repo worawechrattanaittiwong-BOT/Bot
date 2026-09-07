@@ -169,7 +169,7 @@ internal static class AgentRunner
                     {
                         instanceId = config.InstanceId,
                         installToken,
-                        agentVersion = "2.0.0",
+                        agentVersion = "2.0.1",
                         terminalPath = config.TerminalDataPath,
                         eaHash,
                         hostname = Environment.MachineName,
