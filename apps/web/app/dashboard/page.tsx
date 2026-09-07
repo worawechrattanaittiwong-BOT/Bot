@@ -216,7 +216,10 @@ export default function DashboardPage() {
     setError("");
     setActivationMessage("");
     try {
-      if (data?.instance?.actual_state === "RUNNING" || data?.instance?.desired_state === "RUNNING") {
+      const actualRunningNow =
+        data?.instance?.actual_state === "RUNNING" &&
+        Boolean(data?.instance?.mt5_online);
+      if (actualRunningNow || data?.instance?.desired_state === "RUNNING") {
         throw new Error("กรุณาหยุดบอทก่อนติดตั้ง ย้ายเครื่อง หรืออัปเกรด Device Lock");
       }
 
@@ -775,7 +778,7 @@ export default function DashboardPage() {
                     </div>
                     <button
                       className="btn primary btn-lg"
-                      disabled={busy || state==="RUNNING" || desired==="RUNNING"}
+                      disabled={busy || desired==="RUNNING" || (state==="RUNNING" && isMt5Online)}
                       onClick={downloadWindowsInstaller}
                     >
                       {busy ? "กำลังเตรียม..." : data.instance?.device_status === "ACTIVE" ? "ติดตั้งใหม่ / ย้ายเครื่อง" : "ติดตั้งจากเว็บไซต์"}
