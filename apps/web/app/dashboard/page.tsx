@@ -681,10 +681,22 @@ export default function DashboardPage() {
                     </div>
                     <p>{liveStatus.detail}</p>
                     <div className="execution-metrics">
-                      <span>Momentum <b>{Number(metrics.momentumPoints ?? 0).toFixed(1)}</b></span>
-                      <span>Spread <b>{Number(metrics.spreadPoints ?? 0).toFixed(1)} / {Number(settings.maxSpreadPoints ?? 50)} pt</b></span>
-                      <span>Algo <b>{metrics.terminalTradeAllowed === false ? "OFF" : metrics.terminalTradeAllowed === true ? "ON" : "รอ EA v1.002"}</b></span>
-                      <span>EA Trading <b>{metrics.mqlTradeAllowed === false ? "OFF" : metrics.mqlTradeAllowed === true ? "ON" : "รอ EA v1.002"}</b></span>
+                      <span>
+                        <span className="metric-label-with-info">Momentum <InfoTip text="ค่าการเคลื่อนที่ของราคาที่ EA วัดแบบ Real-time จาก Tick ล่าสุด ใช้ประกอบ AUTO_MOMENTUM ค่านี้เป็นค่าตลาด ไม่ใช่ช่องที่ผู้ใช้ตั้งโดยตรง" /></span>
+                        <b>{Number(metrics.momentumPoints ?? 0).toFixed(1)}</b>
+                      </span>
+                      <span>
+                        <span className="metric-label-with-info">Spread <InfoTip text="ตัวหน้า = Spread ปัจจุบันจาก Broker ปรับจากเว็บไม่ได้ · ตัวหลัง = Max Spread ที่คุณตั้งได้ ถ้า Spread ปัจจุบันสูงกว่า Max Spread บอทจะรอและไม่เปิดออเดอร์ใหม่" /></span>
+                        <b>{Number(metrics.spreadPoints ?? 0).toFixed(1)} / {Number(settings.maxSpreadPoints ?? 50)} pt</b>
+                      </span>
+                      <span>
+                        <span className="metric-label-with-info">Algo <InfoTip text="สถานะปุ่ม Algo Trading หลักของ MetaTrader 5 ต้องเป็น ON จึงจะอนุญาตให้ EA ส่งคำสั่งเทรด" /></span>
+                        <b>{metrics.terminalTradeAllowed === false ? "OFF" : metrics.terminalTradeAllowed === true ? "ON" : "รอ EA v1.002"}</b>
+                      </span>
+                      <span>
+                        <span className="metric-label-with-info">EA Trading <InfoTip text="สถานะ Allow Algo Trading ของ EA บนกราฟ ต้องเป็น ON เช่นกัน ไม่เช่นนั้น EA เชื่อม Server ได้แต่ส่ง Order ไม่ได้" /></span>
+                        <b>{metrics.mqlTradeAllowed === false ? "OFF" : metrics.mqlTradeAllowed === true ? "ON" : "รอ EA v1.002"}</b>
+                      </span>
                     </div>
                     {Number(liveStatus.lastOrderRetcode || 0) > 0 && (
                       <div className="execution-last-order">
@@ -694,10 +706,15 @@ export default function DashboardPage() {
                     )}
                   </div>
                   <div className="primary-actions">
-                    <button className="btn primary btn-lg" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว กำลังรอ EA ยืนยันสถานะการทำงานแบบ Real-time")}>▶ เริ่มบอท</button>
-                    <button className="btn purple btn-lg" disabled={busy} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}>■ หยุดอย่างปลอดภัย</button>
+                    <button className="btn primary btn-lg" title="สั่งให้ EA เริ่มประเมินเงื่อนไขและเปิดออเดอร์เมื่อเงื่อนไขผ่าน" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว กำลังรอ EA ยืนยันสถานะการทำงานแบบ Real-time")}>▶ เริ่มบอท</button>
+                    <button className="btn purple btn-lg" title="หยุดการเปิดออเดอร์ใหม่ แต่ยังให้ EA จัดการ Basket/Position ที่มีอยู่ตาม Logic ความปลอดภัย" disabled={busy} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}>■ หยุดอย่างปลอดภัย</button>
                   </div>
-                  <button className="btn danger full" disabled={busy} onClick={()=>command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}>⚠ ปิดออเดอร์ทั้งหมด</button>
+                  <button className="btn danger full" title="สั่ง EA ปิด Position ของบอททั้งหมดและหยุดบอท" disabled={busy} onClick={()=>command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}>⚠ ปิดออเดอร์ทั้งหมด</button>
+                  <div className="control-help-row">
+                    <span><InfoTip text="เริ่มบอท: เปลี่ยนสถานะเป็น RUNNING แต่ไม่ได้บังคับเปิด Order ทันที EA ยังต้องรอ Momentum, Spread และเงื่อนไขความปลอดภัยให้ผ่าน" /> เริ่มบอท</span>
+                    <span><InfoTip text="หยุดอย่างปลอดภัย: ห้ามเปิดรอบใหม่ แต่ Position/Basket ที่มีอยู่ยังถูก EA จัดการตาม Logic ที่กำหนด" /> Safe Stop</span>
+                    <span><InfoTip text="ปิดออเดอร์ทั้งหมด: ส่งคำสั่ง CLOSE ALL ให้ EA ปิด Position ที่บอทจัดการอยู่ แล้วหยุดระบบ" /> Close All</span>
+                  </div>
                   {startBlocked && !busy && (
                     <div className="help action-help">
                       เริ่มบอทยังไม่ได้: {liveStatus.detail || "ตรวจสถานะ MT5 / สิทธิ์ / Algo Trading"}
@@ -741,7 +758,7 @@ export default function DashboardPage() {
                     <div><span>Basket Trail</span><b>${settings.basketTrailMoney}</b></div>
                     <div><span>Max Basket Loss</span><b>${settings.maxBasketLossMoney}</b></div>
                     <div><span>Daily Loss Limit</span><b>${settings.dailyLossMoney}</b></div>
-                    <div><span>Max Spread</span><b>{settings.maxSpreadPoints} pt</b></div>
+                    <div><span>Max Spread <InfoTip text="Spread สูงสุดที่ยอมให้เปิด Order ใหม่ ปรับได้ แต่ตั้งสูงเกินไปอาจทำให้ต้นทุนเข้าออเดอร์แพงขึ้น" /></span><b>{settings.maxSpreadPoints} pt</b></div>
                     <div><span>Min Order Interval</span><b>{settings.minOrderIntervalMs} ms</b></div>
                     <div><span>Max Orders / Min</span><b>{settings.maxOrdersPerMinute}</b></div>
                   </div>
@@ -954,25 +971,30 @@ export default function DashboardPage() {
           <section className="panel settings-panel">
             <div className="panel-head"><div><div className="eyebrow">BOT SETTINGS</div><h2>ค่าการเทรดที่ใช้งานอยู่</h2><p className="muted">ค่าที่มีผลต่อความเสี่ยงจะแสดงคำอธิบายไว้ใต้ช่อง</p></div></div>
             <form className="form-grid form-grid-human" onSubmit={saveSettings}>
-              <Field label="Symbol" help="ชื่อสัญลักษณ์ต้องตรงกับ Broker" value={settings.symbol} onChange={(v:string)=>setSettings({...settings,symbol:v})}/>
-              <Field label="Lot" help="เริ่มจากค่าน้อยบน Demo ก่อน" type="number" step="0.01" value={settings.lot} onChange={(v:string)=>setSettings({...settings,lot:Number(v)})}/>
-              <Field label="จำนวน Position สูงสุด" type="number" value={settings.maxPositions} onChange={(v:string)=>setSettings({...settings,maxPositions:Number(v)})}/>
-              <Field label="กำไรรวมเริ่ม Trailing ($)" type="number" step="0.01" value={settings.basketTriggerMoney} onChange={(v:string)=>setSettings({...settings,basketTriggerMoney:Number(v)})}/>
-              <Field label="ย่อตัวจาก Peak แล้วปิด ($)" type="number" step="0.01" value={settings.basketTrailMoney} onChange={(v:string)=>setSettings({...settings,basketTrailMoney:Number(v)})}/>
-              <Field label="ขาดทุน Basket สูงสุด ($)" help="ถึงค่านี้ระบบจะควบคุมความเสี่ยงตามกลยุทธ์" type="number" step="0.01" value={settings.maxBasketLossMoney} onChange={(v:string)=>setSettings({...settings,maxBasketLossMoney:Number(v)})}/>
-              <Field label="Daily Loss Limit ($)" type="number" step="0.01" value={settings.dailyLossMoney} onChange={(v:string)=>setSettings({...settings,dailyLossMoney:Number(v)})}/>
-              <Field label="Max Spread (points)" type="number" value={settings.maxSpreadPoints} onChange={(v:string)=>setSettings({...settings,maxSpreadPoints:Number(v)})}/>
-              <Field label="ระยะห่างคำสั่งขั้นต่ำ (ms)" type="number" value={settings.minOrderIntervalMs} onChange={(v:string)=>setSettings({...settings,minOrderIntervalMs:Number(v)})}/>
-              <Field label="คำสั่งสูงสุดต่อนาที" type="number" value={settings.maxOrdersPerMinute} onChange={(v:string)=>setSettings({...settings,maxOrdersPerMinute:Number(v)})}/>
+              <Field label="Symbol" info="ชื่อ Symbol ที่บอทใช้ ต้องตรงกับชื่อของ Broker เช่น XAUUSDm ถ้ากรอกไม่ตรง EA อาจไม่ทำงานกับสินทรัพย์ที่ต้องการ" help="ชื่อสัญลักษณ์ต้องตรงกับ Broker" value={settings.symbol} onChange={(v:string)=>setSettings({...settings,symbol:v})}/>
+              <Field label="Lot" info="ขนาด Lot ต่อ Order สามารถปรับได้ ค่ายิ่งสูงความเสี่ยงและ Margin ที่ใช้ยิ่งสูง ควรทดสอบ Demo ก่อน" help="เริ่มจากค่าน้อยบน Demo ก่อน" type="number" step="0.01" value={settings.lot} onChange={(v:string)=>setSettings({...settings,lot:Number(v)})}/>
+              <Field label="จำนวน Position สูงสุด" info="จำนวน Position สูงสุดที่บอทเปิดพร้อมกันได้ สามารถปรับได้ เมื่อถึงจำนวนนี้ EA จะหยุดเปิด Position ใหม่จนกว่าจะมีที่ว่าง" type="number" value={settings.maxPositions} onChange={(v:string)=>setSettings({...settings,maxPositions:Number(v)})}/>
+              <Field label="กำไรรวมเริ่ม Trailing ($)" info="เมื่อกำไรรวมของ Basket ถึงค่านี้ ระบบเริ่มจำ Peak Profit เพื่อใช้ Trailing กำไร สามารถปรับได้" type="number" step="0.01" value={settings.basketTriggerMoney} onChange={(v:string)=>setSettings({...settings,basketTriggerMoney:Number(v)})}/>
+              <Field label="ย่อตัวจาก Peak แล้วปิด ($)" info="หลังเริ่ม Trailing หากกำไรรวมย่อลงจาก Peak ตามจำนวนเงินนี้ EA จะปิด Basket เพื่อรักษากำไร สามารถปรับได้" type="number" step="0.01" value={settings.basketTrailMoney} onChange={(v:string)=>setSettings({...settings,basketTrailMoney:Number(v)})}/>
+              <Field label="ขาดทุน Basket สูงสุด ($)" info="ขีดจำกัดขาดทุนของ Basket ใช้เป็นส่วนหนึ่งของระบบความเสี่ยง สามารถปรับได้ ยิ่งตั้งแคบยิ่งหยุดขาดทุนเร็ว" help="ถึงค่านี้ระบบจะควบคุมความเสี่ยงตามกลยุทธ์" type="number" step="0.01" value={settings.maxBasketLossMoney} onChange={(v:string)=>setSettings({...settings,maxBasketLossMoney:Number(v)})}/>
+              <Field label="Daily Loss Limit ($)" info="วงเงินขาดทุนรายวันที่ยอมรับได้ เมื่อถึงขีดจำกัด EA จะเข้า Safe Stop ตาม Logic ความเสี่ยง สามารถปรับได้" type="number" step="0.01" value={settings.dailyLossMoney} onChange={(v:string)=>setSettings({...settings,dailyLossMoney:Number(v)})}/>
+              <Field label="Max Spread (points)" info="Spread สูงสุดที่ยอมให้เปิด Order ใหม่ สามารถปรับได้ ตัวอย่าง 260 / 50 pt หมายถึง Broker กำลังมี Spread 260 points แต่ตั้งเพดานไว้ 50 จึงขึ้น SPREAD_TOO_HIGH และบอทจะรอ" help="ตัวเลขนี้เป็นเพดานที่คุณตั้งได้ ไม่ใช่ Spread จริงของ Broker" type="number" value={settings.maxSpreadPoints} onChange={(v:string)=>setSettings({...settings,maxSpreadPoints:Number(v)})}/>
+              <Field label="ระยะห่างคำสั่งขั้นต่ำ (ms)" info="เวลาขั้นต่ำระหว่างการส่ง Order แต่ละครั้ง ปรับได้ ใช้ป้องกันการส่งคำสั่งถี่เกินไป 300 ms = อย่างน้อย 0.3 วินาทีต่อคำสั่ง" type="number" value={settings.minOrderIntervalMs} onChange={(v:string)=>setSettings({...settings,minOrderIntervalMs:Number(v)})}/>
+              <Field label="คำสั่งสูงสุดต่อนาที" info="Rate Limit จำนวนคำสั่ง Order สูงสุดใน 1 นาที ปรับได้ ใช้ป้องกันการยิงคำสั่งผิดปกติหรือมากเกินไป" type="number" value={settings.maxOrdersPerMinute} onChange={(v:string)=>setSettings({...settings,maxOrdersPerMinute:Number(v)})}/>
               <div className="field">
-                <label>โหมดเข้าออเดอร์</label>
+                <label className="label-with-info">โหมดเข้าออเดอร์ <InfoTip text="AUTO MOMENTUM เลือก Buy/Sell จาก Momentum แบบ Real-time, BUY ONLY เปิดเฉพาะ Buy, SELL ONLY เปิดเฉพาะ Sell" /></label>
                 <select className="input" value={settings.entryMode} onChange={e=>setSettings({...settings,entryMode:e.target.value})}>
                   <option value="AUTO_MOMENTUM">AUTO MOMENTUM — เลือกฝั่งอัตโนมัติ</option>
                   <option value="BUY_ONLY">BUY ONLY — Buy เท่านั้น</option>
                   <option value="SELL_ONLY">SELL ONLY — Sell เท่านั้น</option>
                 </select>
               </div>
-              <div className="field submit-field"><button className="btn primary btn-lg" disabled={busy}>{busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button></div>
+              <div className="field submit-field">
+                <div className="button-label-with-info">
+                  <button className="btn primary btn-lg" title="บันทึกค่าบน Server และส่ง UPDATE_SETTINGS ให้ EA ใช้ค่าล่าสุด" disabled={busy}>{busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button>
+                  <InfoTip text="บันทึกค่าที่แก้บนเว็บลง Server และส่ง UPDATE_SETTINGS ไปยัง EA ของ Slot ที่กำลังเลือกอยู่" />
+                </div>
+              </div>
             </form>
             <div className="notice risk-notice">การเทรดอัตโนมัติมีความเสี่ยง ควรทดสอบบนบัญชี Demo และใช้ขนาด Lot ที่เหมาะสมก่อนบัญชีเงินจริง</div>
           </section>
@@ -1155,10 +1177,22 @@ function EmptySetup({onNext}:{onNext:()=>void}) {
   );
 }
 
+function InfoTip({text}:{text:string}) {
+  return (
+    <span className="info-tip-wrap">
+      <button type="button" className="info-tip" aria-label={"ข้อมูล: " + text} title={text}>!</button>
+      <span className="info-tip-popover" role="tooltip">{text}</span>
+    </span>
+  );
+}
+
 function Field(props: any) {
   return (
     <div className="field">
-      <label>{props.label}</label>
+      <label className="label-with-info">
+        <span>{props.label}</span>
+        {props.info && <InfoTip text={props.info} />}
+      </label>
       <input className="input" type={props.type || "text"} step={props.step} value={props.value} onChange={e=>props.onChange(e.target.value)} />
       {props.help && <div className="help">{props.help}</div>}
     </div>
