@@ -833,7 +833,7 @@ export default function DashboardPage() {
       ) : (
         <aside className="sidebar app-sidebar">
           <div className="brand-lockup side-brand">
-            <span className="brand-mark">◆</span>
+            <span className="brand-emblem" aria-hidden="true"><i/><b>◆</b></span>
             <span><strong>SCENOVA</strong><small>MT5 BOT EA</small></span>
           </div>
           <div className="side-section-label">เมนูหลัก</div>
