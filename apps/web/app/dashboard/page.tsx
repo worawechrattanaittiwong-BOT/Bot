@@ -684,219 +684,169 @@ export default function DashboardPage() {
         )}
 
         {activeView === "account" && (
-          !data.account ? (
-            <section className="panel purple setup-panel">
-              <div className="setup-heading">
-                <div><div className="eyebrow">SETUP // 1 OF 3</div><h2>เลือกวิธีที่คุณจะรัน MT5</h2><p className="muted">เลือกตามอุปกรณ์ที่คุณใช้จริง ระบบจะแสดงเฉพาะข้อมูลที่จำเป็น</p></div>
+          <div className="account-workspace">
+            <section className="panel account-card">
+              <div className="panel-head">
+                <div>
+                  <div className="eyebrow">SLOT {data.selectedSlot?.slot_number || "—"} · {data.selectedSlot?.mode || "LOCAL"}</div>
+                  <h2>
+                    {data.account
+                      ? (data.account.broker + " · " + data.account.account_number)
+                      : "ยังไม่ได้ผูกบัญชี MT5"}
+                  </h2>
+                  <p className="muted">
+                    {data.account
+                      ? (data.account.broker_server + " · บัญชีนี้เป็น Active MT5 ของ Slot")
+                      : "สมัคร SCENOVA ได้โดยไม่ต้องกรอก MT5 แล้วค่อยเชื่อมจาก Slot นี้"}
+                  </p>
+                </div>
+                <span className="badge">
+                  <span className={"dot "+(isMt5Online?"green":"red")}/>
+                  {connectionLabel}
+                </span>
               </div>
-
-              <div className="mode-picker">
-                <button className={"mode-option "+(mode==="LOCAL"?"selected":"")} onClick={()=>setMode("LOCAL")} type="button">
-                  <span className="mode-icon">PC</span><div><b>Local — ใช้ MT5 บนเครื่องของคุณ</b><small>เหมาะกับผู้มีคอมพิวเตอร์หรือ VPS ของตัวเอง</small></div><span className="radio-dot"/>
-                </button>
-                <button className={"mode-option "+(mode==="CLOUD"?"selected":"")} onClick={()=>setMode("CLOUD")} type="button">
-                  <span className="mode-icon purple">24/7</span><div><b>Cloud — ให้ระบบรัน MT5 ให้</b><small>เหมาะกับผู้ใช้มือถือและต้องการเปิดทำงานต่อเนื่อง</small></div><span className="radio-dot"/>
-                </button>
-              </div>
-
-              <div className="setup-divider"><span>2</span><b>กรอกข้อมูลบัญชี MT5</b></div>
-              <form className="form-grid form-grid-human" onSubmit={linkAccount}>
-                <div className="field">
-                  <label>เลขบัญชี MT5 <em>ไม่ใช่อีเมล</em></label>
-                  <input className="input" inputMode="numeric" value={accountNumber} onChange={e=>setAccountNumber(e.target.value)} placeholder="เช่น 414302260" required />
-                  <div className="help">ดูเลขบัญชีได้จากแถบ Accounts ใน MetaTrader 5</div>
-                </div>
-                <div className="field">
-                  <label>Broker</label>
-                  <select className="input" value={brokerCode} onChange={e=>{setBrokerCode(e.target.value);setBrokerServer("");setCustomBrokerServer("");}} required>
-                    {brokerCatalog.map(b=><option key={b.code} value={b.code}>{b.name}</option>)}
-                    {!brokerCatalog.length && <option value="EXNESS">Exness</option>}
-                  </select>
-                </div>
-                {brokerCode === "OTHER" && <div className="field"><label>ชื่อ Broker</label><input className="input" value={customBrokerName} onChange={e=>setCustomBrokerName(e.target.value)} required /></div>}
-                <div className="field">
-                  <label>MT5 Server</label>
-                  <select className="input" value={brokerServer} onChange={e=>setBrokerServer(e.target.value)} required>
-                    <option value="">เลือก Server</option>
-                    {(selectedBroker?.servers || []).map(s=><option key={s.serverName} value={s.serverName}>{s.serverName}{s.environment!=="UNKNOWN"?" · "+s.environment:""}</option>)}
-                    <option value="__CUSTOM__">ไม่พบในรายการ — ระบุเอง</option>
-                  </select>
-                  <div className="help">ชื่อต้องตรงกับ Server ใน MT5 ทุกตัวอักษร</div>
-                </div>
-                {brokerServer === "__CUSTOM__" && <div className="field"><label>ชื่อ MT5 Server</label><input className="input" value={customBrokerServer} onChange={e=>setCustomBrokerServer(e.target.value)} placeholder="เช่น Exness-MT5Trial6" required /></div>}
-                {mode === "CLOUD" && <div className="field"><label>Trading Password</label><input className="input" type="password" value={tradingPassword} onChange={e=>setTradingPassword(e.target.value)} required /><div className="help">ระบบเข้ารหัสก่อนบันทึกและไม่แสดงรหัสกลับมา</div></div>}
-                <div className="field submit-field"><button className="btn primary btn-lg" disabled={busy}>{busy?"กำลังเชื่อม...":"บันทึกและไปขั้นต่อไป →"}</button></div>
-              </form>
             </section>
-          ) : (
-            <>
-              <section className="panel account-card">
-                <div className="panel-head">
-                  <div><div className="eyebrow">MT5 ACCOUNT</div><h2>{data.account.broker} · {data.account.account_number}</h2><p className="muted">{data.account.broker_server} · {data.account.mode}</p></div>
-                  <span className="badge"><span className={"dot "+(isMt5Online?"green":"red")}/>{connectionLabel}</span>
-                </div>
-              </section>
 
-              {data.account.mode === "LOCAL" && (
-                <section className="panel purple local-install-panel" style={{marginTop:16}}>
+            {data.selectedSlot?.mode === "LOCAL" && (
+              <>
+                <section className="panel purple website-install-panel">
                   <div className="panel-head">
                     <div>
-                      <div className="eyebrow">LOCAL CONNECTION</div>
-                      <h2>ติดตั้ง SCENOVA บน MT5</h2>
-                      <p className="muted">กดติดตั้งครั้งเดียว ระบบจะหา MT5 ในเครื่อง วาง EA และไฟล์ .set ไว้ในโฟลเดอร์ที่ถูกต้อง พร้อมเชื่อมบัญชีนี้ให้อัตโนมัติ</p>
+                      <div className="eyebrow">WEBSITE-ONLY INSTALL</div>
+                      <h2>{data.instance?.device_status === "ACTIVE" ? "เครื่องนี้ลงทะเบียนกับ SCENOVA แล้ว" : "ติดตั้ง / อัปเกรด SCENOVA จากเว็บไซต์"}</h2>
+                      <p className="muted">
+                        ลูกค้าติดตั้งจากหน้า SCENOVA เท่านั้น ระบบจะออกรหัสติดตั้งครั้งเดียวและผูก Device กับ Slot นี้
+                        {data.instance?.id && data.instance?.device_status !== "ACTIVE"
+                          ? " · เครื่องเดิมสามารถอัปเกรด Device Lock โดยระบบพยายามรักษา Instance/Token เดิม"
+                          : ""}
+                      </p>
                     </div>
-                    <span className={"badge "+(isAgentOnline?"agent-online":"")}>
-                      <span className={"dot "+(isAgentOnline?"green":"red")}/>
-                      {isAgentOnline ? "Desktop Agent พร้อมใช้งาน" : "ยังไม่พบ Desktop Agent"}
+                    <span className={"badge "+(data.instance?.device_status==="ACTIVE"?"agent-online":"")}>
+                      <span className={"dot "+(data.instance?.device_status==="ACTIVE"?"green":"red")}/>
+                      {data.instance?.device_status === "ACTIVE" ? "DEVICE LOCK ACTIVE" : "DEVICE UPGRADE REQUIRED"}
                     </span>
                   </div>
 
-                  <div className="auto-install-card">
-                    <div className="auto-install-visual">
-                      <span className="auto-install-icon">WIN</span>
+                  <div className="website-install-card">
+                    <div className="website-install-copy">
+                      <span className="auto-install-icon">EXE</span>
                       <div>
-                        <b>SCENOVA Automatic Installer</b>
-                        <small>สำหรับ Windows + MetaTrader 5</small>
+                        <b>SCENOVA Windows Setup</b>
+                        <small>ไฟล์ .exe จาก Dashboard · ไม่ใช้ CMD / PowerShell · ลง EA + preset + Device Agent</small>
                       </div>
                     </div>
-                    <div className="auto-install-features">
-                      <span>✓ หา MT5 ในเครื่องให้เอง</span>
-                      <span>✓ วาง FastBasketBot.ex5 ใน Experts\SCENOVA</span>
-                      <span>✓ วาง SCENOVA-FastBasketBot.set ใน Presets</span>
-                      <span>✓ เชื่อมบัญชีและติดตั้ง Agent ให้อัตโนมัติ</span>
-                    </div>
-                    <button className="btn primary btn-lg auto-install-button" disabled={busy} onClick={downloadWindowsInstaller}>
-                      {busy ? "กำลังเตรียม Installer..." : "↓ ติดตั้ง SCENOVA บน Windows"}
+                    <button
+                      className="btn primary btn-lg"
+                      disabled={busy || state==="RUNNING" || desired==="RUNNING"}
+                      onClick={downloadWindowsInstaller}
+                    >
+                      {busy ? "กำลังเตรียม..." : data.instance?.device_status === "ACTIVE" ? "ติดตั้งใหม่ / ย้ายเครื่อง" : "ติดตั้งจากเว็บไซต์"}
                     </button>
-                    <div className="help">หลังดาวน์โหลด ให้ดับเบิลคลิก <b>SCENOVA-MT5-Installer.cmd</b> แล้วรอจนขึ้นคำว่า “ติดตั้ง SCENOVA สำเร็จแล้ว” ไม่ต้องย้ายไฟล์ EA หรือ .set เอง</div>
                   </div>
 
-                  {isAgentOnline && (
-                    <div className="agent-status-card">
-                      <span className="dot green"/>
-                      <div>
-                        <b>SCENOVA Desktop Agent เชื่อมต่อแล้ว</b>
-                        <small>
-                          เวอร์ชัน {data.instance?.agent_version || "—"} · ล่าสุด {agentLastSeen?.toLocaleString("th-TH") || "—"}
-                        </small>
-                      </div>
-                    </div>
-                  )}
-
-                  {isAgentOnline && !isMt5Online && (
-                    <div className="notice bad connection-diagnostic">
-                      <b>Agent ออนไลน์ แต่ EA ใน MT5 ยังไม่ส่งสถานะเข้าระบบ</b>
-                      <span>
-                        จากฝั่ง Server ตอนนี้ยังไม่ได้รับ Heartbeat จาก FastBasketBot
-                        {eaLastSeen ? <> · ครั้งล่าสุด {eaLastSeen.toLocaleString("th-TH")}</> : <> · ยังไม่เคยได้รับ Heartbeat</>}
-                      </span>
-                      <span>ตรวจ 2 จุดนี้: โหลด <b>SCENOVA-FastBasketBot.set</b> ใน Inputs แล้ว และเพิ่ม <code>{mt5ApiBase}</code> ใน Allow WebRequest</span>
-                    </div>
-                  )}
-
-                  {isMt5Online && (
-                    <div className="notice good connection-diagnostic">
-                      <b>MT5 เชื่อมต่อกับ SCENOVA แล้ว</b>
-                      <span>รับ Heartbeat ล่าสุดจาก EA แล้ว{eaLastSeenAgeSeconds >= 0 ? <> · ประมาณ {Math.round(eaLastSeenAgeSeconds)} วินาทีก่อน</> : null} · บัญชี {metrics.accountNumber || data.account.account_number}</span>
+                  {data.instance?.device_status === "ACTIVE" && (
+                    <div className="device-lock-grid">
+                      <div><span>Device</span><b>{data.instance.device_hostname || "REGISTERED PC"}</b></div>
+                      <div><span>Agent</span><b className={data.instance.device_online?"text-good":"text-warn"}>{data.instance.device_online ? "ONLINE" : "OFFLINE"}</b></div>
+                      <div><span>Last Seen</span><b>{data.instance.device_last_seen_at ? new Date(data.instance.device_last_seen_at).toLocaleString("th-TH") : "—"}</b></div>
                     </div>
                   )}
 
                   {activationMessage && <div className="notice good">{activationMessage}</div>}
+                </section>
 
-                  <div className="human-setup-guide">
-                    <div className="guide-title">
+                {data.instance?.pending_account_number && (
+                  <section className="panel detected-mt5-card">
+                    <div className="detected-mt5-head">
                       <div>
-                        <div className="eyebrow">หลังติดตั้งเสร็จ</div>
-                        <h3>เปิดใช้งานใน MT5 ตามนี้</h3>
+                        <div className="eyebrow">NEW MT5 DETECTED</div>
+                        <h2>พบบัญชี {data.instance.pending_account_number}</h2>
+                        <p className="muted">{data.instance.pending_broker_server || "ไม่ทราบ Server"}</p>
                       </div>
-                      <span className="guide-note">ไม่ต้องหาไฟล์หรือย้ายไฟล์เอง</span>
+                      <span className="owner-state-chip bad">SAFE STOP</span>
                     </div>
+                    <div className="mt5-change-arrow">
+                      <div><span>บัญชีเดิม</span><b>{data.account?.account_number || "ยังไม่มี"}</b></div>
+                      <span>→</span>
+                      <div><span>บัญชีที่ MT5 กำลัง Login</span><b>{data.instance.pending_account_number}</b></div>
+                    </div>
+                    <button
+                      className="btn primary btn-lg"
+                      disabled={busy || !data.instance.rebind_ready || state==="RUNNING" || desired==="RUNNING"}
+                      onClick={rebindDetectedAccount}
+                    >
+                      ใช้บัญชีนี้
+                    </button>
+                    <div className="help">
+                      {data.instance.rebind_ready
+                        ? "ตรวจแล้วว่า EA มาจาก Device ที่ลงทะเบียนไว้ กดเปลี่ยนได้โดยไม่ต้องโหลด .set ใหม่"
+                        : "รอ Device Agent ยืนยันเครื่องเดียวกันก่อน จึงจะอนุญาตให้เปลี่ยนบัญชี"}
+                    </div>
+                  </section>
+                )}
 
-                    <div className="human-steps">
-                      <div className="human-step">
-                        <span>1</span>
-                        <div><b>เปิด MT5 ใหม่</b><small>ถ้า MT5 เปิดค้างอยู่ ให้ปิดแล้วเปิดใหม่ หรือคลิกขวาที่ Navigator แล้วกด Refresh</small></div>
-                      </div>
-                      <div className="human-step">
-                        <span>2</span>
-                        <div><b>อนุญาตให้ EA ติดต่อ API ของ SCENOVA</b><small>ไปที่ Tools → Options → Expert Advisors → ติ๊ก Allow WebRequest แล้วเพิ่ม <code>{mt5ApiBase}</code> ให้ตรงกับค่า API ที่ EA ใช้</small></div>
-                      </div>
-                      <div className="human-step connected-step">
-                        <span>3</span>
-                        <div>
-                          <b>ลาก FastBasketBot ลงกราฟ แล้วอยู่ในหน้าต่าง EA ต่อเลย</b>
-                          <small>Navigator → Expert Advisors → SCENOVA → ลาก <b>FastBasketBot</b> ไปวางบนกราฟที่ต้องการเทรด จากนั้น MT5 จะเปิดหน้าต่างตั้งค่า EA ขึ้นมา <b>ยังไม่ต้องกด OK</b> ให้ไปขั้นตอน 4 ต่อในหน้าต่างนี้ทันที</small>
-                          <div className="step-connector">↓ ขั้นตอน 4 ทำต่อจากหน้าต่างที่เปิดขึ้นมาหลังลาก EA</div>
-                        </div>
-                      </div>
-                                            <div className="human-step connected-step preset-load-step">
-                        <span>4</span>
-                        <div>
-                          <b>ในหน้าต่างเดิม ไปที่ Inputs → Load แล้วเลือกไฟล์ .set</b>
-                          <small>
-                            เลือก <b>SCENOVA-FastBasketBot.set</b> จากโฟลเดอร์ Presets ของ MT5 เครื่องนี้
-                            {terminalDataPath ? <> ตำแหน่งจริงคือ <code>{presetFolderPath}</code></> : <> ระบบจะแสดงตำแหน่งจริงให้อัตโนมัติเมื่อ Desktop Agent เชื่อมต่อ</>}
-                          </small>
-                          {terminalDataPath && (
-                            <div className="preset-path-inline">
-                              <code>{presetFolderPath}</code>
-                              <button
-                                type="button"
-                                className="btn copy-path-btn"
-                                onClick={async()=>{
-                                  try {
-                                    await navigator.clipboard.writeText(presetFolderPath);
-                                    setActivationMessage("คัดลอกตำแหน่งโฟลเดอร์ .set แล้ว");
-                                  } catch {
-                                    setActivationMessage("คัดลอกอัตโนมัติไม่ได้ ให้ลากเลือก Path แล้ว Copy แทน");
-                                  }
-                                }}
-                              >
-                                คัดลอก Path
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="human-step">
-                        <span>5</span>
-                        <div><b>หลังโหลด .set และกด OK แล้ว ให้เปิด Algo Trading</b><small>เปิดปุ่ม Algo Trading ด้านบน MT5 แล้วรอสักครู่ หน้าเว็บ SCENOVA จะเปลี่ยนสถานะเป็น “เชื่อมต่อแล้ว” อัตโนมัติ</small></div>
-                      </div>
+                <section className="panel first-install-guide">
+                  <div className="eyebrow">FIRST INSTALL ONLY</div>
+                  <h2>ครั้งแรกทำเพียงครั้งเดียว</h2>
+                  <div className="first-install-steps">
+                    <div><span>1</span><div><b>ดาวน์โหลด .exe จากหน้านี้</b><small>ห้ามใช้ไฟล์ที่ส่งต่อกัน ระบบจะตรวจ Enrollment และ Device</small></div></div>
+                    <div><span>2</span><div><b>อนุญาต WebRequest</b><small>MT5 → Tools → Options → Expert Advisors → เพิ่ม <code>{mt5ApiBase}</code></small></div></div>
+                    <div><span>3</span><div><b>ลาก FastBasketBot ลงกราฟ</b><small>Navigator → Expert Advisors → SCENOVA → FastBasketBot</small></div></div>
+                    <div><span>4</span><div><b>Inputs → Load preset ครั้งแรก</b><small>เลือก <b>SCENOVA-FastBasketBot.set</b> ที่ Installer วางไว้ แล้วเปิด Algo Trading</small></div></div>
+                  </div>
+                  <div className="notice">
+                    หลังจากนี้ถ้าเปลี่ยน Demo → Real หรือ MT5 ใหม่บนเครื่องเดิม: Login บัญชีใหม่ → ระบบ Safe Stop และตรวจพบ → กด <b>“ใช้บัญชีนี้”</b> บนเว็บ ไม่ต้องเปลี่ยน .set
+                  </div>
+                </section>
+              </>
+            )}
+
+            {data.selectedSlot?.mode === "CLOUD" && (
+              !data.account ? (
+                <section className="panel purple setup-panel">
+                  <div className="setup-heading">
+                    <div>
+                      <div className="eyebrow">CLOUD SLOT {data.selectedSlot?.slot_number || "—"}</div>
+                      <h2>เชื่อมบัญชี MT5 สำหรับ Cloud</h2>
+                      <p className="muted">Cloud ยังต้องระบุบัญชีและ Trading Password เพื่อให้ Trading Node Login แทนคุณ</p>
                     </div>
                   </div>
-
-                  <details className="manual-install">
-                    <summary>มีปัญหาในการติดตั้ง? เปิดวิธีแก้ไขและติดตั้งใหม่</summary>
-                    <div className="manual-install-body">
-                      <div className="notice security-notice">
-                        <b>โค้ดกลยุทธ์ถูกป้องกัน</b>
-                        <span>เครื่องลูกค้าจะได้รับเฉพาะ FastBasketBot.ex5 สำหรับใช้งานจริง ส่วน Source .mq5 เก็บอยู่ฝั่ง SCENOVA เท่านั้น</span>
-                      </div>
-                      <div className="instruction-list">
-                        <div><span>1</span><div><b>ถ้าหา FastBasketBot ไม่เจอ</b><small>กด “ติดตั้ง SCENOVA บน Windows” ใหม่ ระบบจะวาง FastBasketBot.ex5 กลับเข้า MQL5\Experts\SCENOVA ให้เอง</small></div></div>
-                        <div><span>2</span><div><b>ถ้าเปลี่ยนคอม หรือรหัสเชื่อมต่อมีปัญหา</b><small>กด “สร้างรหัสเชื่อมต่อใหม่” แล้วติดตั้งใหม่ รหัสเก่าจะใช้ต่อไม่ได้เพื่อความปลอดภัย</small></div></div>
-                        <div><span>3</span><div><b>ถ้าต้องการไฟล์ .set สำรอง</b><small>กดดาวน์โหลดได้ด้านล่าง แต่การติดตั้งปกติไม่ต้องทำขั้นตอนนี้ เพราะ Installer วาง .set ใน MQL5\Presets ให้แล้ว</small></div></div>
-                      </div>
-                      <div className="primary-actions">
-                        <button className="btn" disabled={busy} onClick={rotateInstallToken}>{busy?"กำลังสร้าง...":"หมุนรหัสเชื่อมต่อใหม่"}</button>
-                        <button className="btn download-set-btn" disabled={!installToken || !installInstanceId} onClick={()=>downloadEaSet()}>↓ ดาวน์โหลด .set สำรอง</button>
-                      </div>
+                  <form className="form-grid form-grid-human" onSubmit={linkAccount}>
+                    <div className="field">
+                      <label>เลขบัญชี MT5</label>
+                      <input className="input" inputMode="numeric" value={accountNumber} onChange={e=>setAccountNumber(e.target.value)} required />
                     </div>
-                  </details>
-
-                  {mt5ApiBase && <div className="connection-url"><span>API สำหรับ EA</span><code>{mt5ApiBase}</code></div>}
+                    <div className="field">
+                      <label>Broker</label>
+                      <select className="input" value={brokerCode} onChange={e=>{setBrokerCode(e.target.value);setBrokerServer("");setCustomBrokerServer("");}} required>
+                        {brokerCatalog.map(b=><option key={b.code} value={b.code}>{b.name}</option>)}
+                        {!brokerCatalog.length && <option value="EXNESS">Exness</option>}
+                      </select>
+                    </div>
+                    {brokerCode === "OTHER" && <div className="field"><label>ชื่อ Broker</label><input className="input" value={customBrokerName} onChange={e=>setCustomBrokerName(e.target.value)} required /></div>}
+                    <div className="field">
+                      <label>MT5 Server</label>
+                      <select className="input" value={brokerServer} onChange={e=>setBrokerServer(e.target.value)} required>
+                        <option value="">เลือก Server</option>
+                        {(selectedBroker?.servers || []).map(server=><option key={server.serverName} value={server.serverName}>{server.serverName}{server.environment!=="UNKNOWN"?" · "+server.environment:""}</option>)}
+                        <option value="__CUSTOM__">ไม่พบในรายการ — ระบุเอง</option>
+                      </select>
+                    </div>
+                    {brokerServer === "__CUSTOM__" && <div className="field"><label>ชื่อ MT5 Server</label><input className="input" value={customBrokerServer} onChange={e=>setCustomBrokerServer(e.target.value)} required /></div>}
+                    <div className="field"><label>Trading Password</label><input className="input" type="password" value={tradingPassword} onChange={e=>setTradingPassword(e.target.value)} required /></div>
+                    <div className="field submit-field"><button className="btn primary btn-lg" disabled={busy}>{busy?"กำลังเชื่อม...":"เชื่อม Cloud MT5"}</button></div>
+                  </form>
                 </section>
-              )}
-
-              {data.account.mode === "CLOUD" && !isMt5Online && (
-                <div className="notice onboarding-notice" style={{marginTop:16}}>
-                  <b>กำลังรอ Cloud Worker</b><span>ระบบจะเชื่อม MT5 ของบัญชีนี้เมื่อมี Trading Node พร้อมใช้งาน</span>
-                </div>
-              )}
-
-              <button className="btn ghost" style={{marginTop:16}} disabled={busy || state==="RUNNING" || desired==="RUNNING"} onClick={resetMt5}>เปลี่ยนบัญชี / เปลี่ยนโหมด</button>
-            </>
-          )
+              ) : (
+                <section className="panel">
+                  <div className="eyebrow">CLOUD MT5</div>
+                  <h2>{data.account.account_number}</h2>
+                  <p className="muted">{data.account.broker} · {data.account.broker_server}</p>
+                  <button className="btn ghost" disabled={busy || state==="RUNNING" || desired==="RUNNING"} onClick={resetMt5}>เปลี่ยนบัญชี Cloud</button>
+                </section>
+              )
+            )}
+          </div>
         )}
 
         {activeView === "settings" && (
