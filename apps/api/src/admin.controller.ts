@@ -21,9 +21,9 @@ export class AdminController {
     const result = await this.db.query(
       `SELECT
          u.id,u.user_code,u.email,u.role,u.status,
-         x.mt5_account_id,x.account_number,x.broker_server,x.mode,
+         x.slot_id,x.slot_subscription_id,x.mt5_account_id,x.account_number,x.broker_server,x.mode,
          x.actual_state,x.desired_state,x.mt5_online,
-         s.subscription_id,s.plan_code,s.subscription_expires_at,s.plan_slots,s.allow_resale,
+         s.subscription_id,s.plan_code,s.subscription_status,s.subscription_starts_at,s.subscription_expires_at,s.plan_slots,s.allow_resale,s.subscription_active,
          t.trial_status,t.trial_expires_at,
          tr.trial_request_id,tr.line_contact,tr.request_ip,tr.trial_request_status,
          COALESCE(ss.total_slots,0)::int total_slots,
@@ -34,6 +34,7 @@ export class AdminController {
        FROM users u
        LEFT JOIN LATERAL (
          SELECT
+           ls.id slot_id,ls.subscription_id slot_subscription_id,
            a.id mt5_account_id,a.account_number,a.broker_server,ls.mode,
            bi.actual_state,bi.desired_state,
            (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') mt5_online
@@ -47,15 +48,18 @@ export class AdminController {
          LIMIT 1
        ) x ON true
        LEFT JOIN LATERAL (
-         SELECT sub.id subscription_id,p.code plan_code,sub.expires_at subscription_expires_at,
-                p.max_mt5_accounts plan_slots,p.allow_resale
+         SELECT
+           sub.id subscription_id,
+           sub.status subscription_status,
+           sub.starts_at subscription_starts_at,
+           sub.expires_at subscription_expires_at,
+           p.code plan_code,
+           p.max_mt5_accounts plan_slots,
+           p.allow_resale,
+           (sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now()) subscription_active
          FROM subscriptions sub
          JOIN plans p ON p.id=sub.plan_id
-         WHERE sub.user_id=u.id
-           AND (x.mode IS NULL OR p.mode=x.mode)
-         ORDER BY
-           CASE WHEN sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now() THEN 0 ELSE 1 END,
-           sub.expires_at DESC
+         WHERE sub.id=x.slot_subscription_id
          LIMIT 1
        ) s ON true
        LEFT JOIN LATERAL (
@@ -191,12 +195,37 @@ export class AdminController {
       [body.planCode]
     );
     if (!plan) throw new ConflictException("plan not found");
+    const user = await this.db.one(
+      "SELECT id,user_code,role,status FROM users WHERE id=$1",
+      [body.userId]
+    );
+    if (!user || user.status !== "ACTIVE") {
+      throw new ConflictException("SCENOVA user is not active");
+    }
+    if (user.role === "OWNER" || user.role === "ADMIN") {
+      throw new ConflictException("OWNER/ADMIN already has unlimited access");
+    }
+
     const days = Math.max(1, Number(body.durationDays || 30));
     const startsAt = body.startsAt ? new Date(body.startsAt) : new Date();
     const expiresAt = body.expiresAt
       ? new Date(body.expiresAt)
       : new Date(startsAt.getTime() + days * 86400000);
     if (expiresAt <= startsAt) throw new ConflictException("expiresAt must be after startsAt");
+    if (startsAt.getTime() > Date.now() + 60_000) {
+      throw new ConflictException("ตอนนี้การเปิดสมาชิกจาก Owner Console ต้องเริ่มทันที กรุณาเว้นวันเริ่มว่างไว้");
+    }
+
+    await this.db.query(
+      `UPDATE subscriptions sub
+       SET status='CANCELLED'
+       FROM plans p
+       WHERE sub.plan_id=p.id
+         AND sub.user_id=$1
+         AND p.mode=$2
+         AND sub.status='ACTIVE'`,
+      [body.userId, plan.mode]
+    );
 
     const row = await this.db.one(
       "INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
@@ -209,7 +238,20 @@ export class AdminController {
       slots: Number(plan.max_mt5_accounts || 1),
       reseller: Boolean(plan.allow_resale)
     });
-    return row;
+    const slots = await this.db.query(
+      "SELECT id,slot_number,mode,status,assigned_user_id,subscription_id FROM license_slots WHERE owner_user_id=$1 AND mode=$2 AND subscription_id=$3 ORDER BY slot_number",
+      [body.userId, plan.mode, row.id]
+    );
+    return {
+      subscription: row,
+      plan: {
+        code: plan.code,
+        mode: plan.mode,
+        slots: Number(plan.max_mt5_accounts || 1),
+        reseller: Boolean(plan.allow_resale)
+      },
+      slots: slots.rows
+    };
   }
 
   private async syncSlotsForSubscription(userId: string, subscriptionId: string, plan: any) {
