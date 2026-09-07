@@ -457,7 +457,7 @@ export class EaController {
       eaOnline: eaLastSeenAgeSeconds >= 0 && eaLastSeenAgeSeconds <= 10,
       eaVersion: String(runtime?.ea_version || ""),
       eaLastSeenAgeSeconds,
-      agentDownloadUrl: "/downloads/SCENOVA-Setup-v2.0.4.exe"
+      agentDownloadUrl: "/downloads/SCENOVA-Setup-v2.0.5.exe"
     };
   }
 
