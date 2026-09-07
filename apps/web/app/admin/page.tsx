@@ -312,6 +312,76 @@ export default function AdminPage() {
               </div>
             </section>
 
+            {selectedCustomer && (
+              <section className="owner-card">
+                <div className="owner-card-head">
+                  <div>
+                    <span className="owner-card-kicker">CUSTOMER ACCOUNT</span>
+                    <h3>{selectedCustomer.user_code}</h3>
+                    <p className="muted">{selectedCustomer.email}</p>
+                  </div>
+                  <button className="btn" onClick={()=>setSelectedCustomerId("")}>ปิดรายละเอียด</button>
+                </div>
+
+                <div className="owner-plan-inline">
+                  <div className="field">
+                    <label>บัญชี MT5</label>
+                    <div className="input" style={{display:"flex",alignItems:"center"}}>
+                      {selectedCustomer.account_number || "ยังไม่เชื่อม — LOCAL จะตรวจจาก MT5 อัตโนมัติ"}
+                    </div>
+                    <div className="help">
+                      {selectedCustomer.account_number
+                        ? (selectedCustomer.broker_server || "ตรวจจาก MT5 แล้ว")
+                        : "ไม่ต้องกรอกเลขบัญชี MT5 ให้ลูกค้าเปิด MT5 แล้วติดตั้ง SCENOVA ระบบจะผูกจาก Terminal จริง"}
+                    </div>
+                  </div>
+
+                  <div className="field">
+                    <label>สถานะบัญชี</label>
+                    <div className="input" style={{display:"flex",alignItems:"center"}}>{selectedCustomer.status}</div>
+                  </div>
+
+                  <div className="field">
+                    <label>แพ็กเกจที่จะเปิด/เปลี่ยน</label>
+                    <select className="input" value={plan} onChange={e=>setPlan(e.target.value)}>
+                      {planOptions.map(p=><option key={p.code} value={p.code}>{p.label}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="field submit-field">
+                    <button
+                      className="btn primary btn-lg"
+                      disabled={hasActivePlan(selectedCustomer, selectedPlan.code)}
+                      onClick={()=>activate(selectedCustomer, selectedPlan.code)}
+                    >
+                      {hasActivePlan(selectedCustomer, selectedPlan.code)
+                        ? selectedPlan.label + " ใช้งานอยู่"
+                        : hasActiveMode(selectedCustomer, selectedPlan.mode)
+                          ? "เปลี่ยนเป็น " + selectedPlan.label
+                          : "เปิด " + selectedPlan.label}
+                    </button>
+                    <small className="help">เปิดสมาชิกจาก User ID ได้ ไม่ต้องมีเลข MT5 ก่อน</small>
+                  </div>
+                </div>
+
+                <div className="detail-list">
+                  {memberships(selectedCustomer).length ? memberships(selectedCustomer).map((m:any)=>(
+                    <div key={m.subscription_id}>
+                      <span>{m.plan_code} · {m.mode}</span>
+                      <b>
+                        {m.active ? "ACTIVE" : m.status}
+                        {" · ถึง " + new Date(m.expires_at).toLocaleDateString("th-TH")}
+                        <button className="btn" style={{marginLeft:8}} onClick={()=>extendSubscription(selectedCustomer,m.subscription_id,7)}>+7 วัน</button>
+                        <button className="btn" style={{marginLeft:6}} onClick={()=>extendSubscription(selectedCustomer,m.subscription_id,30)}>+30 วัน</button>
+                      </b>
+                    </div>
+                  )) : (
+                    <div><span>สมาชิก</span><b>ยังไม่มีสมาชิก</b></div>
+                  )}
+                </div>
+              </section>
+            )}
+
             <section className="owner-card owner-table-card">
               <div className="owner-card-head">
                 <div><span className="owner-card-kicker">CUSTOMERS</span><h3>ลูกค้าและสิทธิ์</h3></div>
@@ -321,7 +391,10 @@ export default function AdminPage() {
                 <table>
                   <thead><tr><th>ลูกค้า</th><th>MT5 / Bot</th><th>สิทธิ์</th><th>สมาชิก</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
                   <tbody>
-                    {users.map(user=>(
+                    {users.map(user=>{
+                      const activeSelectedPlan = hasActivePlan(user, selectedPlan.code);
+                      const activeSelectedMode = hasActiveMode(user, selectedPlan.mode);
+                      return (
                       <tr key={user.id}>
                         <td><b>{user.user_code}</b><br/><span className="muted">{user.email}</span></td>
                         <td>
@@ -341,7 +414,14 @@ export default function AdminPage() {
                         <td>
                           {user.role === "OWNER" || user.role === "ADMIN"
                             ? <><b className="text-good">OWNER UNLIMITED</b><br/><span className="muted">ไม่ต้องเปิด Trial / สมาชิก</span></>
-                            : <><b className={user.subscription_active ? "text-good" : ""}>{user.plan_code || "ยังไม่มีสมาชิก"}</b>{user.plan_code && <><br/><span className="muted">{user.subscription_mode || "—"} · {user.plan_slots || 1} Slots{user.allow_resale ? " · PARTNER" : ""} · {user.subscription_active ? "ACTIVE" : (user.subscription_status || "INACTIVE")}</span></>}{user.subscription_expires_at && <><br/><span className="muted">ถึง {new Date(user.subscription_expires_at).toLocaleDateString("th-TH")}</span></>}</>}
+                            : memberships(user).length
+                              ? memberships(user).map((m:any)=>(
+                                  <div key={m.subscription_id} style={{marginBottom:4}}>
+                                    <b className={m.active ? "text-good" : ""}>{m.plan_code}</b><br/>
+                                    <span className="muted">{m.mode} · {m.slots || 1} Slots · {m.active ? "ACTIVE" : m.status} · ถึง {new Date(m.expires_at).toLocaleDateString("th-TH")}</span>
+                                  </div>
+                                ))
+                              : <><b>ยังไม่มีสมาชิก</b><br/><span className="muted">เลือกแพ็กเกจด้านบนแล้วกดเปิดสมาชิก</span></>}
                         </td>
                         <td><span className={"owner-state-chip "+(user.status==="SUSPENDED"?"bad":"good")}>{user.status}</span></td>
                         <td>
@@ -352,10 +432,19 @@ export default function AdminPage() {
                             </div>
                           ) : (
                             <div className="owner-row-actions owner-row-actions-wrap">
+                              <button className="btn" onClick={()=>setSelectedCustomerId(user.id)}>ดูบัญชี</button>
                               <button className="btn" disabled={!user.mt5_account_id || user.trial_request_status !== "PENDING" || Boolean(user.trial_status)} onClick={()=>grantTrial(user)}>อนุมัติ Trial 3h</button>
-                              <button className="btn primary" onClick={()=>activate(user)}>เปิดสมาชิก {plan.startsWith("CLOUD") ? "CLOUD" : "LOCAL"}</button>
-                              <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,7)}>+7 วัน</button>
-                              <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,30)}>+30 วัน</button>
+                              <button
+                                className="btn primary"
+                                disabled={activeSelectedPlan}
+                                onClick={()=>activate(user, selectedPlan.code)}
+                              >
+                                {activeSelectedPlan
+                                  ? selectedPlan.label + " ใช้งานอยู่"
+                                  : activeSelectedMode
+                                    ? "เปลี่ยนเป็น " + selectedPlan.label
+                                    : "เปิด " + selectedPlan.label}
+                              </button>
                               {user.status==="SUSPENDED"
                                 ? <button className="btn primary" onClick={()=>reactivate(user)}>เปิดกลับ</button>
                                 : <button className="btn danger" onClick={()=>suspend(user)}>ระงับ</button>}
@@ -364,7 +453,8 @@ export default function AdminPage() {
                           )}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                     {!users.length && <tr><td colSpan={6}><div className="owner-empty">ยังไม่มีผลการค้นหา</div></td></tr>}
                   </tbody>
                 </table>
