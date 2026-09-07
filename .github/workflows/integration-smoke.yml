@@ -156,7 +156,26 @@ jobs:
 
           curl -fsS -X POST "$BASE/admin/trials/grant" -H 'x-admin-key: integration-admin' -H 'content-type: application/json' -d "{\"mt5AccountId\":\"$ACCOUNT_ID\",\"minutes\":180,\"approvedBy\":\"CI\"}" >/tmp/trial-grant.json
 
-          echo "[integration] starting bot after settings with Agent intentionally stale"
+          echo "[integration] mandatory installer update blocks Start"
+          OLD_AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.4\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
+          test "$(printf '%s' "$OLD_AGENT" | jq -r '.agentUpdateRequired')" = "true"
+          test "$(printf '%s' "$OLD_AGENT" | jq -r '.agentVersionRequired')" = "2.0.5"
+
+          UPDATE_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$UPDATE_DASH" | jq -r '.softwareUpdate.required')" = "true"
+          test "$(printf '%s' "$UPDATE_DASH" | jq -r '.softwareUpdate.currentVersion')" = "2.0.4"
+          test "$(printf '%s' "$UPDATE_DASH" | jq -r '.softwareUpdate.latestVersion')" = "2.0.5"
+
+          OUTDATED_START_HTTP=$(curl -sS -o /tmp/outdated-installer-start.json -w "%{http_code}" -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$OUTDATED_START_HTTP" = "409"
+
+          CURRENT_AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.5\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
+          test "$(printf '%s' "$CURRENT_AGENT" | jq -r '.agentUpdateRequired')" = "false"
+
+          UPDATED_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$UPDATED_DASH" | jq -r '.softwareUpdate.required')" = "false"
+
+          echo "[integration] starting bot after mandatory update; Agent freshness/hash are not trading gates"
           PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set agent_last_seen_at=now()-interval '2 hours',agent_ea_hash=NULL where id='$INSTANCE';" >/dev/null
           START=$(curl -fsS -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$START" | jq -r '.state')" = "RUNNING"
