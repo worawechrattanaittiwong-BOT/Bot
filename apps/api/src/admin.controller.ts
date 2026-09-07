@@ -23,7 +23,7 @@ export class AdminController {
          u.id,u.user_code,u.email,u.role,u.status,
          x.slot_id,x.slot_subscription_id,x.mt5_account_id,x.account_number,x.broker_server,x.mode,
          x.actual_state,x.desired_state,x.mt5_online,
-         s.subscription_id,s.plan_code,s.subscription_status,s.subscription_starts_at,s.subscription_expires_at,s.plan_slots,s.allow_resale,s.subscription_active,
+         s.subscription_id,s.plan_code,s.subscription_mode,s.subscription_status,s.subscription_starts_at,s.subscription_expires_at,s.plan_slots,s.allow_resale,s.subscription_active,
          t.trial_status,t.trial_expires_at,
          tr.trial_request_id,tr.line_contact,tr.request_ip,tr.trial_request_status,
          COALESCE(ss.total_slots,0)::int total_slots,
@@ -54,12 +54,17 @@ export class AdminController {
            sub.starts_at subscription_starts_at,
            sub.expires_at subscription_expires_at,
            p.code plan_code,
+           p.mode subscription_mode,
            p.max_mt5_accounts plan_slots,
            p.allow_resale,
            (sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now()) subscription_active
          FROM subscriptions sub
          JOIN plans p ON p.id=sub.plan_id
-         WHERE sub.id=x.slot_subscription_id
+         WHERE sub.user_id=u.id
+         ORDER BY
+           CASE WHEN sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now() THEN 0 ELSE 1 END,
+           sub.expires_at DESC,
+           sub.created_at DESC
          LIMIT 1
        ) s ON true
        LEFT JOIN LATERAL (
