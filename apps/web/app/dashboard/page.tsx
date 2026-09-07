@@ -817,10 +817,10 @@ export default function DashboardPage() {
                     </button>
                     <div className="help">
                       {data.instance.rebind_ready
-                        ? "ตรวจแล้วว่าเป็น Device เดิมและอยู่ในช่วงที่ขอเปลี่ยนบัญชี กดใช้บัญชีนี้ได้โดยไม่ต้องโหลด .set ใหม่"
+                        ? "ตรวจแล้วว่า EA และบัญชีใหม่มาจาก Device ที่ลงทะเบียนไว้ กดใช้บัญชีนี้ได้โดยไม่ต้องโหลด .set ใหม่"
                         : data.instance.account_change_requested_at
                           ? "รอ Device Agent และ Heartbeat จาก MT5 บัญชีใหม่บนเครื่องเดิม"
-                          : "กด “เปลี่ยนบัญชี MT5” ด้านบนก่อน แล้ว Login บัญชีใหม่ใน MT5"}
+                          : "ถ้าต้องการเปลี่ยนอย่างปลอดภัย ให้กด “เปลี่ยนบัญชี MT5” ด้านบนก่อน แล้ว Login บัญชีใหม่ใน MT5"}
                     </div>
                   </section>
                 )}
