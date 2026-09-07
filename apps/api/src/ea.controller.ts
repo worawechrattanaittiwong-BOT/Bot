@@ -121,30 +121,8 @@ export class EaController {
     const eaIp = this.clientIp(req);
     const metrics = body.metrics || {};
 
-    if (instance.device_status === "ACTIVE") {
-      const lastDeviceSeen = instance.device_last_seen_at
-        ? new Date(instance.device_last_seen_at).getTime()
-        : 0;
-      const deviceRecent = lastDeviceSeen > 0 && Date.now() - lastDeviceSeen <= 90_000;
-      const sameIp = Boolean(eaIp) && String(instance.device_last_ip || "") === String(eaIp);
-      if (!deviceRecent || !sameIp) {
-        await this.db.query(
-          "UPDATE bot_instances SET actual_state='SAFE_STOP',desired_state='SAFE_STOP',last_seen_at=now(),ea_last_ip=$2,metrics=$3::jsonb WHERE id=$1",
-          [instance.id, eaIp, JSON.stringify(metrics)]
-        );
-        return {
-          ok: true,
-          access: false,
-          desiredState: "SAFE_STOP",
-          deviceMismatch: true,
-          message: deviceRecent
-            ? "EA is not running from the registered SCENOVA device"
-            : "registered SCENOVA device agent is offline",
-          settings: {}
-        };
-      }
-    }
-
+    // Device/Agent metadata is not a trading permission. The authenticated
+    // instance token, live MT5 identity and Server entitlement are authoritative.
     const reportedAccount = String(metrics.accountNumber || "").trim();
     const reportedServer = String(metrics.server || "").trim();
     const reportedBroker = String(metrics.broker || "").trim();
@@ -156,7 +134,6 @@ export class EaController {
     if (
       !instance.mt5_account_id &&
       instance.mode === "LOCAL" &&
-      instance.device_status === "ACTIVE" &&
       reportedAccount &&
       reportedServer
     ) {
@@ -419,20 +396,10 @@ export class EaController {
     }
   ) {
     const instance = await this.instance(body.instanceId, body.installToken);
-    let deviceVerified = false;
-
-    if (instance.device_status === "ACTIVE") {
-      const publicId = String(body.devicePublicId || "");
-      const secret = String(body.deviceSecret || "");
-      if (
-        !publicId ||
-        publicId !== String(instance.device_public_id || "") ||
-        this.crypto.sha256(secret) !== String(instance.device_secret_hash || "")
-      ) {
-        throw new UnauthorizedException("SCENOVA device authentication failed");
-      }
-      deviceVerified = true;
-    }
+    const publicId = String(body.devicePublicId || "").trim();
+    const secret = String(body.deviceSecret || "").trim();
+    const deviceReported = publicId.length >= 8 && secret.length >= 24;
+    const deviceVerified = deviceReported;
 
     const ip = this.clientIp(req);
     await this.db.query(
@@ -442,8 +409,11 @@ export class EaController {
          agent_terminal_path=$3,
          agent_ea_hash=$4,
          device_hostname=COALESCE(NULLIF($5,''),device_hostname),
+         device_public_id=CASE WHEN $6::boolean THEN $7 ELSE device_public_id END,
+         device_secret_hash=CASE WHEN $6::boolean THEN $8 ELSE device_secret_hash END,
+         device_status=CASE WHEN $6::boolean THEN 'ACTIVE' ELSE device_status END,
          device_last_seen_at=CASE WHEN $6::boolean THEN now() ELSE device_last_seen_at END,
-         device_last_ip=CASE WHEN $6::boolean THEN $7 ELSE device_last_ip END
+         device_last_ip=CASE WHEN $6::boolean THEN $9 ELSE device_last_ip END
        WHERE id=$1`,
       [
         instance.id,
@@ -451,7 +421,9 @@ export class EaController {
         String(body.terminalPath || "").slice(0, 1000) || null,
         String(body.eaHash || "").slice(0, 128) || null,
         String(body.hostname || "").slice(0, 160),
-        deviceVerified,
+        deviceReported,
+        publicId.slice(0, 160),
+        deviceReported ? this.crypto.sha256(secret) : null,
         ip
       ]
     );
