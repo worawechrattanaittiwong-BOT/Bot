@@ -3,6 +3,7 @@ import {
   Controller,
   Header,
   Post,
+  Req,
   ServiceUnavailableException,
   StreamableFile,
   UnauthorizedException
@@ -29,21 +30,46 @@ export class EaController {
     return createHash("sha256").update(readFileSync(path)).digest("hex");
   }
 
+  private clientIp(req: any) {
+    const forwarded = String(req?.headers?.["x-forwarded-for"] || "").split(",")[0].trim();
+    return (forwarded || String(req?.ip || req?.socket?.remoteAddress || "")).slice(0, 96) || null;
+  }
+
   private async instance(instanceId: string, installToken: string) {
     const row = await this.db.one(
-      "SELECT bi.*,a.user_id,a.account_number,a.broker_server,a.status account_status,u.status user_status FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id JOIN users u ON u.id=a.user_id WHERE bi.id=$1",
+      `SELECT
+         bi.*,
+         COALESCE(ls.assigned_user_id,a.user_id) user_id,
+         ls.status slot_status,
+         a.account_number,
+         a.broker,
+         a.broker_server,
+         a.status account_status,
+         u.status user_status,
+         u.role user_role
+       FROM bot_instances bi
+       LEFT JOIN license_slots ls ON ls.id=bi.slot_id
+       LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
+       LEFT JOIN users u ON u.id=COALESCE(ls.assigned_user_id,a.user_id)
+       WHERE bi.id=$1`,
       [instanceId]
     );
     if (!row || row.install_token_hash !== this.crypto.sha256(String(installToken || ""))) {
       throw new UnauthorizedException("EA authentication failed");
     }
-    if (row.user_status !== "ACTIVE" || row.account_status !== "ACTIVE") {
+    if (!row.user_id || row.user_status !== "ACTIVE") {
       throw new UnauthorizedException("SCENOVA account is not active");
+    }
+    if (row.mt5_account_id && row.account_status !== "ACTIVE") {
+      throw new UnauthorizedException("SCENOVA MT5 account is not active");
+    }
+    if (row.slot_id && row.slot_status && !["ACTIVE", "AVAILABLE"].includes(String(row.slot_status))) {
+      throw new UnauthorizedException("SCENOVA slot is not active");
     }
     return row;
   }
 
-  private async hasAccess(userId: string, mt5AccountId: string, mode: string) {
+  private async hasAccess(userId: string, mt5AccountId: string | null, mode: string, slotId: string | null) {
     const user = await this.db.one(
       "SELECT role,status FROM users WHERE id=$1",
       [userId]
@@ -52,40 +78,125 @@ export class EaController {
       return true;
     }
 
-    const sub = await this.db.one(
-      "SELECT 1 FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND p.mode=$2 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() LIMIT 1",
-      [userId, mode]
-    );
-    if (sub) return true;
-    const trial = await this.db.one(
-      "SELECT 1 FROM trial_grants WHERE user_id=$1 AND mt5_account_id=$2 AND status='ACTIVE' AND expires_at>now() LIMIT 1",
-      [userId, mt5AccountId]
-    );
-    return !!trial;
+    if (slotId) {
+      const sub = await this.db.one(
+        `SELECT 1
+         FROM license_slots ls
+         JOIN subscriptions s ON s.id=ls.subscription_id
+         JOIN plans p ON p.id=s.plan_id
+         WHERE ls.id=$1
+           AND ls.assigned_user_id=$2
+           AND ls.status='ACTIVE'
+           AND p.mode=$3
+           AND s.status='ACTIVE'
+           AND s.starts_at<=now()
+           AND s.expires_at>now()
+         LIMIT 1`,
+        [slotId, userId, mode]
+      );
+      if (sub) return true;
+    }
+
+    if (mt5AccountId) {
+      const trial = await this.db.one(
+        "SELECT 1 FROM trial_grants WHERE user_id=$1 AND mt5_account_id=$2 AND status='ACTIVE' AND expires_at>now() LIMIT 1",
+        [userId, mt5AccountId]
+      );
+      if (trial) return true;
+    }
+    return false;
   }
 
   @Post("heartbeat")
-  async heartbeat(@Body() body: {
-    instanceId: string;
-    installToken: string;
-    state: string;
-    metrics?: Record<string, any>;
-  }) {
+  async heartbeat(
+    @Req() req: any,
+    @Body() body: {
+      instanceId: string;
+      installToken: string;
+      state: string;
+      metrics?: Record<string, any>;
+    }
+  ) {
     const instance = await this.instance(body.instanceId, body.installToken);
+    const eaIp = this.clientIp(req);
+    const metrics = body.metrics || {};
+
+    if (instance.device_status === "ACTIVE") {
+      const lastDeviceSeen = instance.device_last_seen_at
+        ? new Date(instance.device_last_seen_at).getTime()
+        : 0;
+      const deviceRecent = lastDeviceSeen > 0 && Date.now() - lastDeviceSeen <= 90_000;
+      const sameIp = Boolean(eaIp) && String(instance.device_last_ip || "") === String(eaIp);
+      if (!deviceRecent || !sameIp) {
+        await this.db.query(
+          "UPDATE bot_instances SET actual_state='SAFE_STOP',desired_state='SAFE_STOP',last_seen_at=now(),ea_last_ip=$2,metrics=$3::jsonb WHERE id=$1",
+          [instance.id, eaIp, JSON.stringify(metrics)]
+        );
+        return {
+          ok: true,
+          access: false,
+          desiredState: "SAFE_STOP",
+          deviceMismatch: true,
+          message: deviceRecent
+            ? "EA is not running from the registered SCENOVA device"
+            : "registered SCENOVA device agent is offline",
+          settings: {}
+        };
+      }
+    }
+
+    const reportedAccount = String(metrics.accountNumber || "").trim();
+    const reportedServer = String(metrics.server || "").trim();
+    const reportedBroker = String(metrics.broker || "").trim();
+    const accountMismatch =
+      Boolean(reportedAccount) &&
+      (
+        !instance.mt5_account_id ||
+        reportedAccount !== String(instance.account_number || "") ||
+        (reportedServer && instance.broker_server && reportedServer !== String(instance.broker_server))
+      );
+
+    if (accountMismatch) {
+      await this.db.query(
+        `UPDATE bot_instances SET
+           actual_state='SAFE_STOP',
+           desired_state='SAFE_STOP',
+           last_seen_at=now(),
+           ea_last_ip=$2,
+           metrics=$3::jsonb,
+           pending_account_number=$4,
+           pending_broker=$5,
+           pending_broker_server=$6,
+           pending_account_ip=$2,
+           pending_account_seen_at=now()
+         WHERE id=$1`,
+        [
+          instance.id,
+          eaIp,
+          JSON.stringify(metrics),
+          reportedAccount,
+          reportedBroker || null,
+          reportedServer || "UNKNOWN"
+        ]
+      );
+      return {
+        ok: true,
+        access: false,
+        desiredState: "SAFE_STOP",
+        accountMismatch: true,
+        detectedAccount: reportedAccount,
+        detectedBroker: reportedBroker || null,
+        detectedServer: reportedServer || null,
+        settings: {}
+      };
+    }
+
     const access = await this.hasAccess(
       instance.user_id,
-      instance.mt5_account_id,
-      instance.mode
+      instance.mt5_account_id || null,
+      instance.mode,
+      instance.slot_id || null
     );
-
-    const reportedAccount = String(body.metrics?.accountNumber || "").trim();
-    if (reportedAccount && reportedAccount !== String(instance.account_number)) {
-      await this.db.query(
-        "UPDATE bot_instances SET actual_state='SAFE_STOP',desired_state='SAFE_STOP',last_seen_at=now() WHERE id=$1",
-        [instance.id]
-      );
-      throw new UnauthorizedException("MT5 account does not match this SCENOVA license");
-    }
 
     if (!access && instance.desired_state === "RUNNING") {
       await this.db.query(
@@ -99,11 +210,12 @@ export class EaController {
     }
 
     await this.db.query(
-      "UPDATE bot_instances SET actual_state=$2,last_seen_at=now(),metrics=$3::jsonb WHERE id=$1",
+      "UPDATE bot_instances SET actual_state=$2,last_seen_at=now(),ea_last_ip=$3,metrics=$4::jsonb WHERE id=$1",
       [
         instance.id,
         String(body.state || "UNKNOWN").slice(0, 24),
-        JSON.stringify(body.metrics || {})
+        eaIp,
+        JSON.stringify(metrics)
       ]
     );
 
@@ -136,22 +248,54 @@ export class EaController {
   }
 
   @Post("agent-heartbeat")
-  async agentHeartbeat(@Body() body: {
-    instanceId: string;
-    installToken: string;
-    agentVersion?: string;
-    terminalPath?: string;
-    eaHash?: string;
-    hostname?: string;
-  }) {
+  async agentHeartbeat(
+    @Req() req: any,
+    @Body() body: {
+      instanceId: string;
+      installToken: string;
+      agentVersion?: string;
+      terminalPath?: string;
+      eaHash?: string;
+      hostname?: string;
+      devicePublicId?: string;
+      deviceSecret?: string;
+    }
+  ) {
     const instance = await this.instance(body.instanceId, body.installToken);
+    let deviceVerified = false;
+
+    if (instance.device_status === "ACTIVE") {
+      const publicId = String(body.devicePublicId || "");
+      const secret = String(body.deviceSecret || "");
+      if (
+        !publicId ||
+        publicId !== String(instance.device_public_id || "") ||
+        this.crypto.sha256(secret) !== String(instance.device_secret_hash || "")
+      ) {
+        throw new UnauthorizedException("SCENOVA device authentication failed");
+      }
+      deviceVerified = true;
+    }
+
+    const ip = this.clientIp(req);
     await this.db.query(
-      "UPDATE bot_instances SET agent_last_seen_at=now(),agent_version=$2,agent_terminal_path=$3,agent_ea_hash=$4 WHERE id=$1",
+      `UPDATE bot_instances SET
+         agent_last_seen_at=now(),
+         agent_version=$2,
+         agent_terminal_path=$3,
+         agent_ea_hash=$4,
+         device_hostname=COALESCE(NULLIF($5,''),device_hostname),
+         device_last_seen_at=CASE WHEN $6::boolean THEN now() ELSE device_last_seen_at END,
+         device_last_ip=CASE WHEN $6::boolean THEN $7 ELSE device_last_ip END
+       WHERE id=$1`,
       [
         instance.id,
         String(body.agentVersion || "").slice(0, 32) || null,
         String(body.terminalPath || "").slice(0, 1000) || null,
-        String(body.eaHash || "").slice(0, 128) || null
+        String(body.eaHash || "").slice(0, 128) || null,
+        String(body.hostname || "").slice(0, 160),
+        deviceVerified,
+        ip
       ]
     );
 
@@ -160,11 +304,12 @@ export class EaController {
     return {
       ok: true,
       instanceId: instance.id,
+      deviceVerified,
       artifactAvailable: Boolean(serverEaHash),
       artifactHash: serverEaHash,
       artifactName: "FastBasketBot.ex5",
       artifactEndpoint: "/api/ea/artifact",
-      agentDownloadUrl: "/downloads/SCENOVA-Agent.ps1"
+      agentDownloadUrl: "/downloads/SCENOVA-Setup.exe"
     };
   }
 
