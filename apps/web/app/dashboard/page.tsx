@@ -982,14 +982,14 @@ export default function DashboardPage() {
                       <div className="account-card-actions" style={{marginTop:12}}>
                         <button
                           className="btn"
-                          disabled={busy || state==="RUNNING" || desired==="RUNNING"}
+                          disabled={busy || Number(data.instance?.metrics?.positions || 0) > 0 || (isMt5Online && (state==="RUNNING" || desired==="RUNNING"))}
                           onClick={()=>releaseLocalDevice(data.selectedSlot,false)}
                         >
                           ปลดเครื่องเดิม
                         </button>
                         <button
                           className="btn primary"
-                          disabled={busy || state==="RUNNING" || desired==="RUNNING"}
+                          disabled={busy || Number(data.instance?.metrics?.positions || 0) > 0 || (isMt5Online && (state==="RUNNING" || desired==="RUNNING"))}
                           onClick={()=>releaseLocalDevice(data.selectedSlot,true)}
                         >
                           ย้ายเครื่อง
@@ -1045,7 +1045,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="partner-slot-list">
-                    {(data.slots || []).filter((slot:any)=>slot.can_control && slot.mode==="LOCAL").map((slot:any)=>(
+                    {(data.slots || []).filter((slot:any)=>slot.can_release_device && slot.mode==="LOCAL").map((slot:any)=>(
                       <div className="partner-slot-row" key={slot.id}>
                         <div className="partner-slot-number"><span>SLOT</span><b>{slot.slot_number}</b></div>
                         <div className="partner-slot-user">
@@ -1053,14 +1053,22 @@ export default function DashboardPage() {
                           <small>{slot.account_number ? "MT5 " + slot.account_number : "ยังไม่เชื่อม MT5"}</small>
                         </div>
                         <div className="partner-slot-meta">
-                          <span>{slot.device_status || "UNREGISTERED"}</span>
-                          <small>{slot.device_last_seen_at ? "เห็นล่าสุด " + new Date(slot.device_last_seen_at).toLocaleString("th-TH") : ""}</small>
+                          <span>{slot.status} · {slot.device_status || "UNREGISTERED"}</span>
+                          <small>
+                            {Number(slot.positions || 0) > 0
+                              ? "มี " + slot.positions + " Position — ต้องปิดก่อน"
+                              : slot.mt5_online
+                                ? "MT5 ONLINE"
+                                : slot.device_last_seen_at
+                                  ? "เครื่อง Offline · เห็นล่าสุด " + new Date(slot.device_last_seen_at).toLocaleString("th-TH")
+                                  : "เครื่อง Offline"}
+                          </small>
                         </div>
                         <div className="partner-slot-actions">
                           {slot.device_status === "ACTIVE" ? (
                             <button
                               className="btn danger"
-                              disabled={busy || slot.actual_state==="RUNNING" || slot.desired_state==="RUNNING"}
+                              disabled={busy || Number(slot.positions || 0) > 0 || (slot.mt5_online && (slot.actual_state==="RUNNING" || slot.desired_state==="RUNNING"))}
                               onClick={()=>releaseLocalDevice(slot,false)}
                             >
                               ปลดเครื่อง
