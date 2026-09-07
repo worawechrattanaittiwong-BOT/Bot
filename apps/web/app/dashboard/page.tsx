@@ -39,6 +39,7 @@ const defaultSettings = {
   dailyProfitTargetMoney: 0,
   basketProfitTargetMoney: 0,
   perPositionProfitMoney: 0,
+  profitRunTrailPercent: 0,
   perPositionLossMoney: 0,
   minOrderIntervalMs: 300,
   maxOrdersPerMinute: 120,
@@ -149,6 +150,7 @@ export default function DashboardPage() {
   }, [logsOpen, data?.instance?.id, selectedSlotId]);
 
   const metrics = data?.instance?.metrics || {};
+  const profitRunModeEnabled = Number(settings.profitRunTrailPercent || 0) > 0;
   const state = data?.instance?.actual_state || "OFFLINE";
   const desired = data?.instance?.desired_state || "STOPPED";
   const eaLastSeen = data?.instance?.last_seen_at
@@ -532,12 +534,33 @@ export default function DashboardPage() {
     setSettings((current:any)=>{
       const next = { ...current, [key]: value };
 
-      // Profit closing modes are mutually exclusive. Whichever one the user
-      // enters last becomes active and the other is turned off immediately.
-      if (key === "perPositionProfitMoney" && Number(value || 0) > 0) {
+      const enabled = Number(value || 0) > 0;
+
+      if (key === "profitRunTrailPercent" && enabled) {
+        next.dailyProfitTargetMoney = 0;
+        next.perPositionProfitMoney = 0;
+        next.basketProfitTargetMoney = 0;
+        next.basketTriggerMoney = 0;
+        next.basketTrailMoney = 0;
+      }
+
+      if (
+        enabled &&
+        [
+          "dailyProfitTargetMoney",
+          "perPositionProfitMoney",
+          "basketProfitTargetMoney",
+          "basketTriggerMoney",
+          "basketTrailMoney"
+        ].includes(key)
+      ) {
+        next.profitRunTrailPercent = 0;
+      }
+
+      if (key === "perPositionProfitMoney" && enabled) {
         next.basketProfitTargetMoney = 0;
       }
-      if (key === "basketProfitTargetMoney" && Number(value || 0) > 0) {
+      if (key === "basketProfitTargetMoney" && enabled) {
         next.perPositionProfitMoney = 0;
       }
 
@@ -557,6 +580,7 @@ export default function DashboardPage() {
         "dailyProfitTargetMoney",
         "basketProfitTargetMoney",
         "perPositionProfitMoney",
+        "profitRunTrailPercent",
         "perPositionLossMoney",
         "basketTriggerMoney",
         "basketTrailMoney",
@@ -568,8 +592,6 @@ export default function DashboardPage() {
       const requiredNumericKeys = new Set([
         "lot",
         "maxPositions",
-        "basketTriggerMoney",
-        "basketTrailMoney",
         "maxOrdersPerMinute"
       ]);
       const integerKeys = new Set([
@@ -926,10 +948,20 @@ export default function DashboardPage() {
                   <div className="settings-group-title"><b>เป้ากำไรและความเสี่ยง</b></div>
 
                   <ToggleSelectField
+                    label="ปล่อยกำไรวิ่ง แล้วปิดเมื่อย่อลงจากจุดสูงสุด"
+                    options={[5,10,15,20,25,30,40,50]}
+                    defaultValue="20"
+                    value={settings.profitRunTrailPercent}
+                    format={(v:string)=>v + "%"}
+                    onChange={(v:string)=>editSetting("profitRunTrailPercent",v)}
+                  />
+
+                  <ToggleSelectField
                     label="กำไรต่อวันแล้วหยุด"
                     options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
                     defaultValue="10"
                     value={settings.dailyProfitTargetMoney}
+                    disabled={profitRunModeEnabled}
                     format={(v:string)=>"$" + v}
                     onChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)}
                   />
@@ -947,6 +979,7 @@ export default function DashboardPage() {
                     options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
                     defaultValue="2"
                     value={settings.perPositionProfitMoney}
+                    disabled={profitRunModeEnabled}
                     format={(v:string)=>"$" + v}
                     onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}
                   />
@@ -955,6 +988,7 @@ export default function DashboardPage() {
                     options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
                     defaultValue="10"
                     value={settings.basketProfitTargetMoney}
+                    disabled={profitRunModeEnabled}
                     format={(v:string)=>"$" + v}
                     onChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}
                   />
@@ -982,6 +1016,7 @@ export default function DashboardPage() {
                     label="ใช้ Basket Trailing"
                     firstValue={settings.basketTriggerMoney}
                     secondValue={settings.basketTrailMoney}
+                    disabled={profitRunModeEnabled}
                     firstDefault="2"
                     secondDefault="0.5"
                     firstOptions={[0.5,1,2,3,5,10,15,20,30,50,100]}
@@ -1033,15 +1068,17 @@ export default function DashboardPage() {
                   <div>
                     <span>โหมดปิดกำไร</span>
                     <b>
-                      {Number(settings.perPositionProfitMoney || 0) > 0
-                        ? "ต่อไม้ · $" + Number(settings.perPositionProfitMoney).toFixed(2)
-                        : Number(settings.basketProfitTargetMoney || 0) > 0
-                          ? "รวม Basket · $" + Number(settings.basketProfitTargetMoney).toFixed(2)
-                          : "ไม่ตั้งเป้าปิดกำไร"}
+                      {profitRunModeEnabled
+                        ? "ปล่อยกำไรวิ่ง · ย่อ " + Number(settings.profitRunTrailPercent).toFixed(0) + "%"
+                        : Number(settings.perPositionProfitMoney || 0) > 0
+                          ? "ต่อไม้ · $" + Number(settings.perPositionProfitMoney).toFixed(2)
+                          : Number(settings.basketProfitTargetMoney || 0) > 0
+                            ? "รวม Basket · $" + Number(settings.basketProfitTargetMoney).toFixed(2)
+                            : "ไม่ตั้งเป้าปิดกำไร"}
                     </b>
                   </div>
                 </div>
-                <div className="notice risk-notice">เลือกใช้ “กำไรต่อไม้” หรือ “กำไรรวม Basket” ได้อย่างใดอย่างหนึ่ง</div>
+                <div className="notice risk-notice">เมื่อเปิด “ปล่อยกำไรวิ่ง” ระบบจะปิดเป้ากำไรแบบอื่นและ Basket Trailing แบบ $ อัตโนมัติ</div>
               </section>
 
               <section className="panel overview-access-card">
@@ -1489,11 +1526,12 @@ function ToggleSelectField(props: any) {
   );
 
   return (
-    <div className={"field toggle-select-field " + (enabled ? "enabled" : "")}>
+    <div className={"field toggle-select-field " + (enabled ? "enabled" : "") + (props.disabled ? " disabled" : "")}>
       <label className="toggle-setting-label">
         <input
           type="checkbox"
           checked={enabled}
+          disabled={Boolean(props.disabled)}
           onChange={e=>{
             props.onChange?.(e.target.checked ? selectedValue : "0");
           }}
@@ -1503,7 +1541,7 @@ function ToggleSelectField(props: any) {
       <select
         className="input"
         value={selectedValue}
-        disabled={!enabled}
+        disabled={!enabled || Boolean(props.disabled)}
         onChange={e=>props.onChange?.(e.target.value)}
       >
         {values.map((value:string)=>(
@@ -1528,11 +1566,12 @@ function TogglePairField(props: any) {
   ]));
 
   return (
-    <div className={"field toggle-pair-field " + (enabled ? "enabled" : "")}>
+    <div className={"field toggle-pair-field " + (enabled ? "enabled" : "") + (props.disabled ? " disabled" : "")}>
       <label className="toggle-setting-label">
         <input
           type="checkbox"
           checked={enabled}
+          disabled={Boolean(props.disabled)}
           onChange={e=>{
             if (e.target.checked) {
               props.onFirstChange?.(firstValue);
@@ -1549,7 +1588,7 @@ function TogglePairField(props: any) {
         <select
           className="input"
           value={firstValue}
-          disabled={!enabled}
+          disabled={!enabled || Boolean(props.disabled)}
           onChange={e=>props.onFirstChange?.(e.target.value)}
         >
           {firstValues.map((value:string)=>(
@@ -1559,7 +1598,7 @@ function TogglePairField(props: any) {
         <select
           className="input"
           value={secondValue}
-          disabled={!enabled}
+          disabled={!enabled || Boolean(props.disabled)}
           onChange={e=>props.onSecondChange?.(e.target.value)}
         >
           {secondValues.map((value:string)=>(
