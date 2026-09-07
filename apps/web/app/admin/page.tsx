@@ -133,6 +133,27 @@ export default function AdminPage() {
     }
   }
 
+  async function releaseCustomerDevice(user: any, slot: any) {
+    if (!confirm(
+      "ปลด Device ของ " + user.user_code + " · Slot #" + slot.slot_number + " ใช่หรือไม่?\n\n" +
+      "ระบบจะไม่ลบสมาชิก ไม่ลบประวัติ Trial และไม่ลบ MT5 เดิม แต่เครื่องเก่าจะใช้งาน Slot นี้ต่อไม่ได้จนติดตั้งใหม่"
+    )) return;
+
+    setLoading(true);
+    try {
+      const result = await adminApi("/admin/devices/release", {
+        method: "POST",
+        body: JSON.stringify({ userId: user.id, slotId: slot.id })
+      });
+      setMessage(result?.message || "ปลด Device Lock ของลูกค้าแล้ว");
+      await search(undefined, true);
+    } catch (e: any) {
+      setMessage(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function reactivate(user: any) {
     try {
       await adminApi("/admin/users/reactivate", {
@@ -362,6 +383,37 @@ export default function AdminPage() {
                     </button>
                     <small className="help">เปิดสมาชิกจาก User ID ได้ ไม่ต้องมีเลข MT5 ก่อน</small>
                   </div>
+                </div>
+
+                <div className="detail-list" style={{marginBottom:14}}>
+                  {(Array.isArray(selectedCustomer.customer_slots) ? selectedCustomer.customer_slots : []).map((slot:any)=>(
+                    <div key={slot.id}>
+                      <span>
+                        Slot #{slot.slot_number} · {slot.mode}
+                        {slot.account_number ? " · MT5 " + slot.account_number : ""}
+                      </span>
+                      <b>
+                        {slot.mode === "LOCAL"
+                          ? (slot.device_status === "ACTIVE"
+                              ? (slot.device_hostname || "REGISTERED PC") + (slot.device_online ? " · ONLINE" : " · OFFLINE")
+                              : "ยังไม่ผูกเครื่อง")
+                          : (slot.actual_state || "CLOUD")}
+                        {slot.mode === "LOCAL" && slot.device_status === "ACTIVE" && (
+                          <button
+                            className="btn danger"
+                            style={{marginLeft:8}}
+                            disabled={loading || slot.actual_state==="RUNNING" || slot.desired_state==="RUNNING" || Number(slot.positions||0)>0}
+                            onClick={()=>releaseCustomerDevice(selectedCustomer,slot)}
+                          >
+                            ปลด Device
+                          </button>
+                        )}
+                      </b>
+                    </div>
+                  ))}
+                  {!(Array.isArray(selectedCustomer.customer_slots) && selectedCustomer.customer_slots.length) && (
+                    <div><span>Slots</span><b>ยังไม่มี Slot ที่ใช้งาน</b></div>
+                  )}
                 </div>
 
                 <div className="detail-list">
