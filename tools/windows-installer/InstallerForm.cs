@@ -6,6 +6,8 @@ namespace ScenovaInstaller;
 
 internal sealed class InstallerForm : Form
 {
+    private const string InstallerVersion = "2.0.2";
+    private const string LastUpdated = "7 กันยายน 2026";
     private readonly ComboBox _terminal = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
     private readonly Button _install = new() { Text = "ติดตั้ง SCENOVA", Width = 180, Height = 42 };
     private readonly Label _status = new() { AutoSize = false, Width = 620, Height = 90, Text = "พร้อมติดตั้ง" };
@@ -14,7 +16,7 @@ internal sealed class InstallerForm : Form
 
     internal InstallerForm()
     {
-        Text = "SCENOVA MT5 BOT EA v2.0.1";
+        Text = "SCENOVA MT5 BOT EA v" + InstallerVersion;
         Width = 700;
         Height = 390;
         StartPosition = FormStartPosition.CenterScreen;
@@ -24,9 +26,15 @@ internal sealed class InstallerForm : Form
 
         var title = new Label
         {
-            Text = "SCENOVA MT5 BOT EA v2.0.1",
+            Text = "SCENOVA MT5 BOT EA v" + InstallerVersion,
             Font = new Font(Font.FontFamily, 18, FontStyle.Bold),
             AutoSize = true
+        };
+        var versionInfo = new Label
+        {
+            Text = "เวอร์ชัน " + InstallerVersion + " · อัปเดตล่าสุด " + LastUpdated,
+            AutoSize = true,
+            Font = new Font(Font.FontFamily, 9, FontStyle.Bold)
         };
         var subtitle = new Label
         {
@@ -58,6 +66,7 @@ internal sealed class InstallerForm : Form
             AutoScroll = true
         };
         panel.Controls.Add(title);
+        panel.Controls.Add(versionInfo);
         panel.Controls.Add(subtitle);
         panel.Controls.Add(new Label { Height = 12 });
         panel.Controls.Add(terminalLabel);
