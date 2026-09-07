@@ -148,6 +148,143 @@ export class EaController {
     const reportedAccount = String(metrics.accountNumber || "").trim();
     const reportedServer = String(metrics.server || "").trim();
     const reportedBroker = String(metrics.broker || "").trim();
+
+    // First LOCAL connection is bound automatically from the MT5 runtime.
+    // Customers never type an MT5 account number for LOCAL mode. The installer
+    // already authenticates the SCENOVA slot/device, and the EA reports the
+    // actual MT5 login + server directly from the terminal.
+    if (
+      !instance.mt5_account_id &&
+      instance.mode === "LOCAL" &&
+      instance.device_status === "ACTIVE" &&
+      reportedAccount &&
+      reportedServer
+    ) {
+      const conflict = await this.db.one(
+        `SELECT a.id,a.user_id,bi.slot_id
+         FROM mt5_accounts a
+         LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
+         WHERE lower(a.account_number)=lower($1)
+           AND lower(a.broker_server)=lower($2)
+           AND a.status='ACTIVE'
+           AND (
+             a.user_id<>$3
+             OR (bi.slot_id IS NOT NULL AND bi.slot_id<>$4)
+           )
+         LIMIT 1`,
+        [reportedAccount, reportedServer, instance.user_id, instance.slot_id]
+      );
+
+      if (conflict) {
+        await this.db.query(
+          `UPDATE bot_instances SET
+             actual_state='SAFE_STOP',
+             desired_state='SAFE_STOP',
+             last_seen_at=now(),
+             ea_last_ip=$2,
+             metrics=$3::jsonb,
+             pending_account_number=$4,
+             pending_broker=$5,
+             pending_broker_server=$6,
+             pending_account_ip=$2,
+             pending_account_seen_at=now()
+           WHERE id=$1`,
+          [
+            instance.id,
+            eaIp,
+            JSON.stringify(metrics),
+            reportedAccount,
+            reportedBroker || null,
+            reportedServer
+          ]
+        );
+        return {
+          ok: true,
+          access: false,
+          desiredState: "SAFE_STOP",
+          accountConflict: true,
+          detectedAccount: reportedAccount,
+          detectedBroker: reportedBroker || null,
+          detectedServer: reportedServer,
+          message: "MT5 นี้ถูกผูกกับ SCENOVA Slot อื่นอยู่แล้ว",
+          settings: {}
+        };
+      }
+
+      let account = await this.db.one(
+        `SELECT *
+         FROM mt5_accounts
+         WHERE user_id=$1
+           AND lower(account_number)=lower($2)
+           AND lower(broker_server)=lower($3)
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [instance.user_id, reportedAccount, reportedServer]
+      );
+
+      if (account) {
+        account = await this.db.one(
+          "UPDATE mt5_accounts SET broker=$2,mode='LOCAL',status='ACTIVE' WHERE id=$1 RETURNING *",
+          [account.id, reportedBroker || account.broker || "Detected MT5"]
+        );
+      } else {
+        account = await this.db.one(
+          "INSERT INTO mt5_accounts(user_id,account_number,broker,broker_server,mode,status) VALUES($1,$2,$3,$4,'LOCAL','ACTIVE') RETURNING *",
+          [
+            instance.user_id,
+            reportedAccount,
+            reportedBroker || "Detected MT5",
+            reportedServer
+          ]
+        );
+      }
+
+      await this.db.query(
+        `UPDATE bot_instances SET
+           mt5_account_id=$2,
+           desired_state='STOPPED',
+           actual_state=$3,
+           last_seen_at=now(),
+           ea_last_ip=$4,
+           metrics=$5::jsonb,
+           pending_account_number=NULL,
+           pending_broker=NULL,
+           pending_broker_server=NULL,
+           pending_account_ip=NULL,
+           pending_account_seen_at=NULL,
+           account_change_requested_at=NULL
+         WHERE id=$1`,
+        [
+          instance.id,
+          account.id,
+          String(body.state || "STOPPED").slice(0, 24),
+          eaIp,
+          JSON.stringify(metrics)
+        ]
+      );
+
+      await this.db.query(
+        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'AUTO_BIND_MT5','bot_instance',$2,$3::jsonb)",
+        [
+          "EA:" + String(instance.user_id),
+          instance.id,
+          JSON.stringify({
+            slotId: instance.slot_id,
+            accountNumber: reportedAccount,
+            brokerServer: reportedServer,
+            source: "LOCAL_RUNTIME"
+          })
+        ]
+      );
+
+      instance.mt5_account_id = account.id;
+      instance.account_number = account.account_number;
+      instance.broker = account.broker;
+      instance.broker_server = account.broker_server;
+      instance.account_status = "ACTIVE";
+      instance.desired_state = "STOPPED";
+    }
+
     const accountMismatch =
       Boolean(reportedAccount) &&
       (
