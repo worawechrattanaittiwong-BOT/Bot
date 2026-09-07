@@ -18,6 +18,17 @@ enum ENUM_BOT_STATE
    STATE_SAFE_STOP = 2
 };
 
+enum ENUM_CLOSE_REASON
+{
+   CLOSE_REASON_NONE        = 0,
+   CLOSE_REASON_DAILY_LOSS  = 1,
+   CLOSE_REASON_DAILY_PROFIT = 2,
+   CLOSE_REASON_BASKET_LOSS = 3,
+   CLOSE_REASON_TRAIL       = 4,
+   CLOSE_REASON_SAFE_STOP   = 5,
+   CLOSE_REASON_REMOTE      = 6
+};
+
 input string          InpApiBase              = "https://snvea-bot.online/backend";
 input string          InpInstanceId           = "";
 input string          InpInstallToken         = "";
@@ -52,7 +63,6 @@ input int             InpMaxOfflineLeaseSeconds = 600;
 ENUM_BOT_STATE g_state = STATE_STOPPED;
 bool   g_access = false;
 bool   g_runAuthorized = false;
-bool   g_forceFirstEntry = false;
 bool   g_trailArmed = false;
 double g_peakProfit = 0.0;
 double g_dayStartEquity = 0.0;
@@ -73,6 +83,7 @@ string g_executionStatus = "INITIALIZING";
 long   g_lastOrderRetcode = 0;
 int    g_lastOrderError = 0;
 datetime g_lastOrderAt = 0;
+int    g_pendingCloseReason = CLOSE_REASON_NONE;
 
 double g_lot;
 int    g_maxPositions;
@@ -124,7 +135,7 @@ int OnInit()
    g_maxOrdersPerMinute = InpMaxOrdersPerMinute;
    g_entryMode = InpEntryMode;
 
-   ResetDailyBaseline();
+   RestoreDailyRiskState();
    LoadBasketCycleState();
 
    if(!MQLInfoInteger(MQL_TESTER))
@@ -180,7 +191,6 @@ void OnTick()
       Print("SaaS lease expired while API is unreachable. Disabling new entries.");
       g_access = false;
       g_runAuthorized = false;
-      g_forceFirstEntry = false;
    }
 
    int count = BasketPositionCount();
@@ -194,6 +204,15 @@ void OnTick()
    double dailyProfit = DailyBotProfit();
    g_executionStatus = "EVALUATING";
 
+   if(g_pendingCloseReason != CLOSE_REASON_NONE)
+   {
+      g_state = STATE_SAFE_STOP;
+      g_runAuthorized = false;
+      bool closed = CloseAllBasket(CloseReasonText(g_pendingCloseReason));
+      g_executionStatus = closed ? CloseCompletionStatus(g_pendingCloseReason) : "CLOSE_RETRY";
+      return;
+   }
+
    if(HandleDailyProfitControl(count))
       return;
 
@@ -202,7 +221,6 @@ void OnTick()
       if(count > 0) CloseAllBasket("DAILY_LOSS");
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
-      g_forceFirstEntry = false;
       g_executionStatus = "DAILY_LOSS_LOCK";
       return;
    }
@@ -359,15 +377,19 @@ void OnTick()
       return;
    }
 
-   bool forceFirstEntry = (g_forceFirstEntry && count == 0);
-
    if(!CanSendOrder())
    {
       g_executionStatus = "ORDER_RATE_LIMIT";
       return;
    }
 
-   int direction = forceFirstEntry ? ImmediateEntryDirection(momentum) : EntryDirection(momentum);
+   if(!SpreadAllowed())
+   {
+      g_executionStatus = "SPREAD_TOO_HIGH";
+      return;
+   }
+
+   int direction = EntryDirection(momentum);
    if(direction == 0)
    {
       g_executionStatus = "WAITING_MOMENTUM";
@@ -400,11 +422,7 @@ void OnTick()
    g_executionStatus = direction > 0 ? "READY_BUY" : "READY_SELL";
    bool sent = SendMarketOrder(direction);
    if(sent)
-   {
       RegisterOrderRequest();
-      if(forceFirstEntry)
-         g_forceFirstEntry = false;
-   }
 }
 
 void OnTimer()
@@ -413,9 +431,8 @@ void OnTimer()
       return;
 
    datetime now = TimeCurrent();
-   // Control commands must react quickly. Poll the SaaS state every second
-   // so START/SAFE_STOP takes effect without waiting several seconds.
-   if(now - g_lastHeartbeat < 1)
+   int heartbeatSeconds = MathMax(1, InpHeartbeatSeconds);
+   if(now - g_lastHeartbeat < heartbeatSeconds)
       return;
    g_lastHeartbeat = now;
    SendHeartbeat();
@@ -451,7 +468,6 @@ void OnTradeTransaction(
       Print("Manual/external trade detected on ", _Symbol, ". Entering SAFE_STOP.");
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
-      g_forceFirstEntry = false;
    }
 }
 
@@ -526,7 +542,6 @@ void SendHeartbeat()
    {
       // Fail closed for new entries immediately when control cannot be verified.
       g_runAuthorized = false;
-      g_forceFirstEntry = false;
       if(g_state == STATE_RUNNING)
          g_executionStatus = "CONTROL_NOT_FRESH";
 
@@ -571,7 +586,6 @@ void SendHeartbeat()
    {
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
-      g_forceFirstEntry = false;
       g_executionStatus = "NO_ACCESS";
    }
    else if(desired == "RUNNING")
@@ -580,13 +594,10 @@ void SendHeartbeat()
       {
          g_state = STATE_SAFE_STOP;
          g_runAuthorized = false;
-         g_forceFirstEntry = false;
          g_executionStatus = "DAILY_PROFIT_LOCK";
       }
       else
       {
-         if(g_state != STATE_RUNNING && BasketPositionCount() == 0)
-            g_forceFirstEntry = true;
          g_state = STATE_RUNNING;
          g_runAuthorized = true;
          g_lastRunAuthorization = TimeCurrent();
@@ -597,13 +608,11 @@ void SendHeartbeat()
    {
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
-      g_forceFirstEntry = false;
       g_executionStatus = "SAFE_STOP";
    }
    else if(desired == "STOPPED")
    {
       g_runAuthorized = false;
-      g_forceFirstEntry = false;
       if(BasketPositionCount() == 0)
       {
          g_state = STATE_STOPPED;
@@ -620,7 +629,6 @@ void SendHeartbeat()
    {
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
-      g_forceFirstEntry = false;
       g_executionStatus = "SAFE_STOP";
       CloseAllBasket("REMOTE_CLOSE_ALL");
    }
@@ -634,7 +642,11 @@ void SendHeartbeat()
 
    long commandId = (long)JsonNumber(response, "commandId", 0.0);
    if(commandId > 0)
-      AckCommand(commandId);
+   {
+      bool closeConfirmed = (command != "CLOSE_ALL" || BasketPositionCount() == 0);
+      if(closeConfirmed)
+         AckCommand(commandId);
+   }
 }
 
 void AckCommand(long commandId)
@@ -716,24 +728,6 @@ int EntryDirection(double momentum)
    if(momentum >= InpMomentumEntryPoints) return 1;
    if(momentum <= -InpMomentumEntryPoints) return -1;
    return 0;
-}
-
-int ImmediateEntryDirection(double momentum)
-{
-   if(g_entryMode == ENTRY_BUY_ONLY) return 1;
-   if(g_entryMode == ENTRY_SELL_ONLY) return -1;
-   if(momentum > 0.0) return 1;
-   if(momentum < 0.0) return -1;
-
-   MqlTick tick;
-   if(SymbolInfoTick(_Symbol, tick))
-   {
-      double barOpen = iOpen(_Symbol, PERIOD_CURRENT, 0);
-      if(barOpen > 0.0)
-         return ((tick.bid + tick.ask) * 0.5 >= barOpen) ? 1 : -1;
-   }
-
-   return 1;
 }
 
 bool SpreadAllowed()
@@ -1092,7 +1086,6 @@ bool HandleDailyProfitControl(int count)
 
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
-      g_forceFirstEntry = false;
       g_executionStatus = "DAILY_PROFIT_LOCK";
       ResetTrail();
       return true;
@@ -1125,7 +1118,6 @@ bool HandleDailyProfitControl(int count)
 
             g_state = STATE_SAFE_STOP;
             g_runAuthorized = false;
-            g_forceFirstEntry = false;
             g_executionStatus = "DAILY_PROFIT_GIVEBACK_LOCK";
             ResetTrail();
             return true;
@@ -1146,7 +1138,6 @@ bool HandleDailyProfitControl(int count)
 
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
-      g_forceFirstEntry = false;
       g_executionStatus = "DAILY_PROFIT_LOCK";
       ResetTrail();
       return true;
@@ -1241,7 +1232,10 @@ double NormalizeTradeVolume(double volume)
 
    volume = MathMax(minVolume, MathMin(maxVolume, volume));
    if(step > 0.0)
+   {
       volume = MathFloor((volume + 1e-12) / step) * step;
+      volume = MathMax(minVolume, MathMin(maxVolume, volume));
+   }
 
    return NormalizeDouble(volume, 8);
 }
@@ -1434,9 +1428,56 @@ bool ClosePositionByTicket(ulong ticket)
    return true;
 }
 
-void CloseAllBasket(string reason)
+int CloseReasonCode(string reason)
+{
+   if(StringFind(reason, "DAILY_PROFIT") == 0) return CLOSE_REASON_DAILY_PROFIT;
+   if(StringFind(reason, "DAILY_LOSS") == 0) return CLOSE_REASON_DAILY_LOSS;
+   if(StringFind(reason, "MAX_BASKET_LOSS") == 0) return CLOSE_REASON_BASKET_LOSS;
+   if(StringFind(reason, "PROFIT_RUN") == 0 ||
+      StringFind(reason, "PROFIT_TRAIL") == 0 ||
+      StringFind(reason, "BASKET_PROFIT") == 0)
+      return CLOSE_REASON_TRAIL;
+   if(StringFind(reason, "SAFE_STOP") == 0) return CLOSE_REASON_SAFE_STOP;
+   if(StringFind(reason, "REMOTE_CLOSE_ALL") == 0) return CLOSE_REASON_REMOTE;
+   return CLOSE_REASON_NONE;
+}
+
+string CloseReasonText(int reasonCode)
+{
+   if(reasonCode == CLOSE_REASON_DAILY_PROFIT) return "DAILY_PROFIT_LOCK";
+   if(reasonCode == CLOSE_REASON_DAILY_LOSS) return "DAILY_LOSS";
+   if(reasonCode == CLOSE_REASON_BASKET_LOSS) return "MAX_BASKET_LOSS";
+   if(reasonCode == CLOSE_REASON_TRAIL) return "PROFIT_TRAIL";
+   if(reasonCode == CLOSE_REASON_SAFE_STOP) return "SAFE_STOP_BREAKEVEN";
+   if(reasonCode == CLOSE_REASON_REMOTE) return "REMOTE_CLOSE_ALL";
+   return "CLOSE_ALL";
+}
+
+string CloseCompletionStatus(int reasonCode)
+{
+   if(reasonCode == CLOSE_REASON_DAILY_PROFIT) return "DAILY_PROFIT_LOCK";
+   if(reasonCode == CLOSE_REASON_DAILY_LOSS) return "DAILY_LOSS_LOCK";
+   if(reasonCode == CLOSE_REASON_BASKET_LOSS) return "MAX_BASKET_LOSS";
+   if(reasonCode == CLOSE_REASON_TRAIL) return "PROFIT_TRAIL";
+   if(reasonCode == CLOSE_REASON_SAFE_STOP) return "SAFE_STOP";
+   return "STOPPED";
+}
+
+void PersistPendingClose()
+{
+   GlobalVariableSet(DailyRiskStateKey("close"), (double)g_pendingCloseReason);
+}
+
+bool CloseAllBasket(string reason)
 {
    Print("CloseAllBasket reason=", reason);
+   int reasonCode = CloseReasonCode(reason);
+   if(reasonCode != CLOSE_REASON_NONE)
+   {
+      g_pendingCloseReason = reasonCode;
+      PersistPendingClose();
+   }
+
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
@@ -1447,6 +1488,14 @@ void CloseAllBasket(string reason)
          continue;
       ClosePositionByTicket(ticket);
    }
+
+   bool closed = BasketPositionCount() == 0;
+   if(closed && reasonCode != CLOSE_REASON_NONE)
+   {
+      g_pendingCloseReason = CLOSE_REASON_NONE;
+      PersistPendingClose();
+   }
+   return closed;
 }
 
 void ResetTrail()
@@ -1490,9 +1539,69 @@ void ResetDailyBaseline()
    TimeToStruct(TimeCurrent(), t);
    g_dayKey = t.year * 1000 + t.day_of_year;
    g_dayStartEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+   PersistDailyRiskState();
    RecalculateDailyClosedProfit();
    LoadDailyProfitRunOnState();
    LoadDailyProfitLock();
+}
+
+string DailyRiskStateKey(string suffix)
+{
+   string loginId = StringFormat("%I64d", (long)AccountInfoInteger(ACCOUNT_LOGIN));
+   string magicId = StringFormat("%I64d", InpMagic);
+   int loginStart = StringLen(loginId) > 10 ? StringLen(loginId) - 10 : 0;
+   int magicStart = StringLen(magicId) > 10 ? StringLen(magicId) - 10 : 0;
+   return StringFormat(
+      "SCN.R.%s.%s.%s.%s",
+      StringSubstr(loginId, loginStart, 10),
+      StringSubstr(magicId, magicStart, 10),
+      StringSubstr(_Symbol, 0, 10),
+      suffix
+   );
+}
+
+void PersistDailyRiskState()
+{
+   GlobalVariableSet(DailyRiskStateKey("day"), (double)g_dayKey);
+   GlobalVariableSet(DailyRiskStateKey("equity"), g_dayStartEquity);
+}
+
+void RestoreDailyRiskState()
+{
+   MqlDateTime t;
+   TimeToStruct(TimeCurrent(), t);
+   int today = t.year * 1000 + t.day_of_year;
+   string dayKey = DailyRiskStateKey("day");
+   string equityKey = DailyRiskStateKey("equity");
+
+   if(GlobalVariableCheck(dayKey) && GlobalVariableCheck(equityKey) &&
+      (int)GlobalVariableGet(dayKey) == today)
+   {
+      g_dayKey = today;
+      g_dayStartEquity = GlobalVariableGet(equityKey);
+      RecalculateDailyClosedProfit();
+      LoadDailyProfitRunOnState();
+      LoadDailyProfitLock();
+   }
+   else
+   {
+      ResetDailyBaseline();
+   }
+
+   string closeKey = DailyRiskStateKey("close");
+   if(BasketPositionCount() > 0 && GlobalVariableCheck(closeKey))
+   {
+      int restoredReason = (int)GlobalVariableGet(closeKey);
+      g_pendingCloseReason =
+         (restoredReason >= CLOSE_REASON_DAILY_LOSS && restoredReason <= CLOSE_REASON_REMOTE)
+         ? restoredReason
+         : CLOSE_REASON_NONE;
+   }
+   else
+   {
+      g_pendingCloseReason = CLOSE_REASON_NONE;
+      PersistPendingClose();
+   }
 }
 
 void RefreshDailyBaselineIfNeeded()
