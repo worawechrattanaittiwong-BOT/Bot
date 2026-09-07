@@ -664,6 +664,10 @@ export class BotController {
 
   @Post("mt5/rotate-install-token")
   async rotateInstallToken(@Req() req: any, @Query("slotId") slotId = "") {
+    const user = await this.user(req.user.sub);
+    if (!user || (user.role !== "OWNER" && user.role !== "ADMIN")) {
+      throw new ConflictException("use the SCENOVA website installer to repair or move a customer device");
+    }
     const instance = await this.getInstance(req.user.sub, slotId || null);
     if (instance.mode !== "LOCAL") {
       throw new ConflictException("install token rotation is only available for LOCAL mode");
