@@ -13,6 +13,7 @@ type Dashboard = {
   settings: any;
   entitlement: any;
   trialRequest: any;
+  liveStatus: any;
 };
 
 type BrokerCatalog = {
@@ -103,7 +104,7 @@ export default function DashboardPage() {
     api("/catalog/brokers")
       .then((rows)=>setBrokerCatalog(rows))
       .catch(()=>setBrokerCatalog([]));
-    const id = setInterval(()=>load(selectedSlotIdRef.current), 5000);
+    const id = setInterval(()=>load(selectedSlotIdRef.current), 2000);
     return () => clearInterval(id);
   }, []);
 
@@ -139,6 +140,25 @@ export default function DashboardPage() {
   const isMt5Online = Boolean(data?.instance?.mt5_online) && state !== "OFFLINE";
   const eaLastSeenAgeSeconds = Number(data?.instance?.ea_last_seen_age_seconds ?? -1);
   const entitlement = data?.entitlement;
+  const liveStatus = data?.liveStatus || {
+    code: isMt5Online ? "RUNNING_READY" : "MT5_OFFLINE",
+    label: isMt5Online ? "กำลังตรวจสอบสถานะบอท" : "MT5 ยังไม่เชื่อมต่อ",
+    detail: isMt5Online ? "รอข้อมูล Execution จาก EA" : "เปิด MT5 และ EA บนกราฟ",
+    tone: isMt5Online ? "neutral" : "bad",
+    tradeReady: false
+  };
+  const hardStartBlocks = new Set([
+    "NOT_INSTALLED",
+    "MT5_OFFLINE",
+    "TERMINAL_DISCONNECTED",
+    "ALGO_TRADING_OFF",
+    "EA_TRADING_DISABLED",
+    "ACCOUNT_TRADING_DISABLED",
+    "ACCOUNT_EXPERT_DISABLED",
+    "SYMBOL_TRADING_DISABLED",
+    "NO_ACCESS"
+  ]);
+  const startBlocked = busy || !entitlement?.allowed || hardStartBlocks.has(String(liveStatus.code || ""));
   const selectedBroker = brokerCatalog.find((item)=>item.code === brokerCode);
   const selectedBrokerName = brokerCode === "OTHER"
     ? customBrokerName.trim()
@@ -650,22 +670,57 @@ export default function DashboardPage() {
                     <div><small>จำนวน Position สูงสุด</small><b>{settings.maxPositions}</b></div>
                     <div><small>Basket Trigger</small><b>{"$"+settings.basketTriggerMoney}</b></div>
                   </div>
+                  <div className={"execution-live execution-" + String(liveStatus.tone || "neutral")}>
+                    <div className="execution-live-head">
+                      <span className="live-pulse"/>
+                      <div>
+                        <small>REAL-TIME EXECUTION</small>
+                        <b>{liveStatus.label}</b>
+                      </div>
+                      <span className="execution-code">{liveStatus.code}</span>
+                    </div>
+                    <p>{liveStatus.detail}</p>
+                    <div className="execution-metrics">
+                      <span>Momentum <b>{Number(metrics.momentumPoints ?? 0).toFixed(1)}</b></span>
+                      <span>Spread <b>{Number(metrics.spreadPoints ?? 0).toFixed(1)} / {Number(settings.maxSpreadPoints ?? 50)} pt</b></span>
+                      <span>Algo <b>{metrics.terminalTradeAllowed === false ? "OFF" : metrics.terminalTradeAllowed === true ? "ON" : "รอ EA v1.002"}</b></span>
+                      <span>EA Trading <b>{metrics.mqlTradeAllowed === false ? "OFF" : metrics.mqlTradeAllowed === true ? "ON" : "รอ EA v1.002"}</b></span>
+                    </div>
+                    {Number(liveStatus.lastOrderRetcode || 0) > 0 && (
+                      <div className="execution-last-order">
+                        Order ล่าสุด: Retcode <b>{liveStatus.lastOrderRetcode}</b>
+                        {liveStatus.lastOrderError ? <> · Error <b>{liveStatus.lastOrderError}</b></> : null}
+                      </div>
+                    )}
+                  </div>
                   <div className="primary-actions">
-                    <button className="btn primary btn-lg" disabled={busy || !entitlement?.allowed} onClick={()=>command("/bot/start","ส่งคำสั่งเริ่มบอทแล้ว")}>▶ เริ่มบอท</button>
+                    <button className="btn primary btn-lg" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว กำลังรอ EA ยืนยันสถานะการทำงานแบบ Real-time")}>▶ เริ่มบอท</button>
                     <button className="btn purple btn-lg" disabled={busy} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}>■ หยุดอย่างปลอดภัย</button>
                   </div>
                   <button className="btn danger full" disabled={busy} onClick={()=>command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}>⚠ ปิดออเดอร์ทั้งหมด</button>
-                  {!entitlement?.allowed && <div className="help action-help">ยังเริ่มบอทไม่ได้ เพราะบัญชียังไม่มีสิทธิ์ใช้งาน</div>}
+                  {startBlocked && !busy && (
+                    <div className="help action-help">
+                      เริ่มบอทยังไม่ได้: {liveStatus.detail || "ตรวจสถานะ MT5 / สิทธิ์ / Algo Trading"}
+                    </div>
+                  )}
                 </section>
 
                 <section className="panel">
-                  <div className="panel-head"><div><div className="eyebrow">LIVE STATUS</div><h2>สถานะบัญชี</h2></div></div>
+                  <div className="panel-head">
+                    <div><div className="eyebrow">LIVE STATUS · AUTO REFRESH 2S</div><h2>สถานะบัญชีและการส่งคำสั่ง</h2></div>
+                    <span className={"owner-state-chip " + (liveStatus.tone === "good" ? "good" : liveStatus.tone === "bad" ? "bad" : "")}>{liveStatus.label}</span>
+                  </div>
                   <div className="detail-list">
                     <div><span>บัญชี</span><b>{data.account.account_number}</b></div>
                     <div><span>Broker</span><b>{data.account.broker}</b></div>
                     <div><span>Server</span><b>{metrics.server || data.account.broker_server}</b></div>
                     <div><span>การเชื่อมต่อ</span><b className={isMt5Online ? "text-good":"text-warn"}>{connectionLabel}</b></div>
+                    <div><span>Bot State</span><b>{state}</b></div>
+                    <div><span>คำสั่งจากเว็บ</span><b>{desired}</b></div>
+                    <div><span>Execution</span><b className={liveStatus.tone === "good" ? "text-good" : liveStatus.tone === "bad" ? "text-bad" : "text-warn"}>{liveStatus.label}</b></div>
+                    <div><span>เหตุผล</span><b>{liveStatus.detail}</b></div>
                     <div><span>สิทธิ์</span><b>{accessLabel}</b></div>
+                    <div><span>Heartbeat</span><b>{eaLastSeenAgeSeconds >= 0 ? eaLastSeenAgeSeconds.toFixed(1) + " วินาทีที่แล้ว" : "—"}</b></div>
                   </div>
                   <button className="btn full" onClick={()=>setActiveView("account")}>ดูรายละเอียดการเชื่อมต่อ</button>
                 </section>
@@ -701,6 +756,8 @@ export default function DashboardPage() {
                     <div><span>MT5</span><b className={isMt5Online ? "text-good":"text-warn"}>{connectionLabel}</b></div>
                     <div><span>Bot State</span><b>{state}</b></div>
                     <div><span>คำสั่งจากเว็บ</span><b>{desired}</b></div>
+                    <div><span>Execution</span><b>{liveStatus.label}</b></div>
+                    <div><span>เหตุผลล่าสุด</span><b>{liveStatus.detail}</b></div>
                     <div><span>สิทธิ์</span><b>{accessLabel}</b></div>
                     {accessExpiry && <div><span>หมดอายุ</span><b>{accessExpiry.toLocaleString("th-TH")}</b></div>}
                   </div>
