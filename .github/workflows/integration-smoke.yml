@@ -1,0 +1,134 @@
+name: Integration Smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  api-db-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bot
+          POSTGRES_PASSWORD: bot
+          POSTGRES_DB: bot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U bot -d bot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Apply database migrations twice
+        env:
+          PGPASSWORD: bot
+        run: |
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/001_init.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/002_slots_devices.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/002_slots_devices.sql
+
+      - name: Build API
+        run: npm run build -w @bot/api
+
+      - name: Start API
+        env:
+          DATABASE_URL: postgresql://bot:bot@localhost:5432/bot
+          JWT_SECRET: integration-jwt-secret
+          ADMIN_KEY: integration-admin
+          CREDENTIAL_MASTER_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          EA_ARTIFACT_PATH: /tmp/FastBasketBot.ex5
+          PUBLIC_API_BASE: http://127.0.0.1:4000
+          PUBLIC_WEB_BASE: http://127.0.0.1:3000
+          PORT: 4000
+        run: |
+          printf 'integration-ea-artifact' > /tmp/FastBasketBot.ex5
+          node apps/api/dist/main.js > /tmp/scenova-api.log 2>&1 &
+          echo $! > /tmp/scenova-api.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4000/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/scenova-api.log
+          exit 1
+
+      - name: Exercise signup device enrollment MT5 rebind Trial and Start
+        env:
+          BASE: http://127.0.0.1:4000/api
+        run: |
+          set -euo pipefail
+
+          REGISTER=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration@scenova.test","password":"Integration123!"}')
+          TOKEN=$(printf '%s' "$REGISTER" | jq -r '.token')
+          test -n "$TOKEN"
+
+          DASH=$(curl -fsS "$BASE/bot/dashboard" -H "authorization: Bearer $TOKEN")
+          SLOT=$(printf '%s' "$DASH" | jq -r '.selectedSlot.id')
+          test -n "$SLOT"
+          test "$(printf '%s' "$DASH" | jq -r '.account')" = "null"
+
+          PREP=$(curl -fsS -X POST "$BASE/bot/installers/windows" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "{\"slotId\":\"$SLOT\"}")
+          CODE=$(printf '%s' "$PREP" | jq -r '.code')
+          test -n "$CODE"
+
+          ENROLL=$(curl -fsS -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal\"}")
+          INSTANCE=$(printf '%s' "$ENROLL" | jq -r '.instanceId')
+          INSTALL_TOKEN=$(printf '%s' "$ENROLL" | jq -r '.installToken')
+          test -n "$INSTANCE"
+          test -n "$INSTALL_TOKEN"
+
+          EA_HASH=$(sha256sum /tmp/FastBasketBot.ex5 | awk '{print $1}')
+          AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.0\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
+          test "$(printf '%s' "$AGENT" | jq -r '.deviceVerified')" = "true"
+
+          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          test "$(printf '%s' "$DETECT" | jq -r '.accountMismatch')" = "true"
+
+          DASH2=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$DASH2" | jq -r '.instance.rebind_ready')" = "true"
+          test "$(printf '%s' "$DASH2" | jq -r '.instance.pending_account_number')" = "100001"
+
+          REBIND=$(curl -fsS -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          ACCOUNT_ID=$(printf '%s' "$REBIND" | jq -r '.account.id')
+          test "$(printf '%s' "$REBIND" | jq -r '.account.account_number')" = "100001"
+
+          curl -fsS -X POST "$BASE/bot/trial-request?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"lineContact":"@integration-line"}' >/tmp/trial-request.json
+
+          curl -fsS -X POST "$BASE/admin/trials/grant" -H 'x-admin-key: integration-admin' -H 'content-type: application/json' -d "{\"mt5AccountId\":\"$ACCOUNT_ID\",\"minutes\":180,\"approvedBy\":\"CI\"}" >/tmp/trial-grant.json
+
+          START=$(curl -fsS -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$START" | jq -r '.state')" = "RUNNING"
+
+          HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"RUNNING\",\"metrics\":{\"accountNumber\":\"100001\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          test "$(printf '%s' "$HB" | jq -r '.access')" = "true"
+
+          curl -fsS -X POST "$BASE/bot/stop?slotId=$SLOT" -H "authorization: Bearer $TOKEN" >/dev/null
+          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
+          test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch')" = "true"
+
+          REBIND_REAL=$(curl -fsS -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$REBIND_REAL" | jq -r '.account.account_number')" = "200002"
+
+          TRIAL_COUNT=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from trial_grants where user_id=(select id from users where email='integration@scenova.test');")
+          test "$TRIAL_COUNT" = "1"
+          OLD_TRIAL=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from trial_grants where account_number='100001';")
+          test "$OLD_TRIAL" = "1"
+
+      - name: Show API log on failure
+        if: failure()
+        run: cat /tmp/scenova-api.log || true

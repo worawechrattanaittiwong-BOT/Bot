@@ -6,6 +6,7 @@ import {
   Header,
   Post,
   Put,
+  Query,
   Req,
   UseGuards
 } from "@nestjs/common";
@@ -28,7 +29,136 @@ export class BotController {
     return createHash("sha256").update(readFileSync(path)).digest("hex");
   }
 
-  private async entitlement(userId: string, mt5AccountId: string | null, mode: string | null) {
+  private clientIp(req: any) {
+    const forwarded = String(req?.headers?.["x-forwarded-for"] || "").split(",")[0].trim();
+    return (forwarded || String(req?.ip || req?.socket?.remoteAddress || "")).slice(0, 96) || null;
+  }
+
+  private async user(userId: string) {
+    return this.db.one(
+      "SELECT id,user_code,email,role,status FROM users WHERE id=$1",
+      [userId]
+    );
+  }
+
+  private async ensurePrimarySlot(userId: string) {
+    let slot = await this.db.one(
+      "SELECT * FROM license_slots WHERE owner_user_id=$1 AND assigned_user_id=$1 AND mode='LOCAL' AND status<>'DELETED' ORDER BY slot_number,id LIMIT 1",
+      [userId]
+    );
+    if (slot) return slot;
+
+    const user = await this.user(userId);
+    const max = await this.db.one(
+      "SELECT COALESCE(max(slot_number),0)::int max_slot FROM license_slots WHERE owner_user_id=$1 AND mode='LOCAL'",
+      [userId]
+    );
+    slot = await this.db.one(
+      "INSERT INTO license_slots(owner_user_id,assigned_user_id,mode,slot_number,slot_type,status,label) VALUES($1,$1,'LOCAL',$2,$3,'ACTIVE','Primary') RETURNING *",
+      [userId, Number(max?.max_slot || 0) + 1, user?.role === "OWNER" || user?.role === "ADMIN" ? "OWNER" : "PERSONAL"]
+    );
+    return slot;
+  }
+
+  private async ensureModeSlot(userId: string, mode: "CLOUD" | "LOCAL") {
+    if (mode === "LOCAL") return this.ensurePrimarySlot(userId);
+    let slot = await this.db.one(
+      "SELECT * FROM license_slots WHERE assigned_user_id=$1 AND mode=$2 AND status<>'DELETED' ORDER BY CASE WHEN subscription_id IS NOT NULL THEN 0 ELSE 1 END,slot_number,id LIMIT 1",
+      [userId, mode]
+    );
+    if (slot) return slot;
+    const max = await this.db.one(
+      "SELECT COALESCE(max(slot_number),0)::int max_slot FROM license_slots WHERE owner_user_id=$1 AND mode=$2",
+      [userId, mode]
+    );
+    slot = await this.db.one(
+      "INSERT INTO license_slots(owner_user_id,assigned_user_id,mode,slot_number,slot_type,status,label) VALUES($1,$1,$2,$3,'PERSONAL','ACTIVE','Cloud') RETURNING *",
+      [userId, mode, Number(max?.max_slot || 0) + 1]
+    );
+    return slot;
+  }
+
+  private async slotRows(userId: string) {
+    await this.ensurePrimarySlot(userId);
+    const rows = await this.db.query(
+      `SELECT
+         ls.*,
+         ou.user_code owner_user_code,
+         au.user_code assigned_user_code,
+         au.email assigned_email,
+         s.status subscription_status,
+         s.starts_at subscription_starts_at,
+         s.expires_at subscription_expires_at,
+         p.code plan_code,
+         p.name_th plan_name,
+         p.allow_resale,
+         p.max_mt5_accounts plan_slots,
+         bi.id instance_id,
+         bi.actual_state,
+         bi.desired_state,
+         bi.device_status,
+         bi.device_hostname,
+         bi.device_last_seen_at,
+         bi.pending_account_number,
+         bi.pending_broker_server,
+         a.id mt5_account_id,
+         a.account_number,
+         a.broker,
+         a.broker_server,
+         a.status account_status,
+         (ls.assigned_user_id=$1) can_control,
+         (ls.owner_user_id=$1) can_manage,
+         (s.id IS NOT NULL AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now()) subscription_active
+       FROM license_slots ls
+       JOIN users ou ON ou.id=ls.owner_user_id
+       LEFT JOIN users au ON au.id=ls.assigned_user_id
+       LEFT JOIN subscriptions s ON s.id=ls.subscription_id
+       LEFT JOIN plans p ON p.id=s.plan_id
+       LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
+       LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
+       WHERE (ls.owner_user_id=$1 OR ls.assigned_user_id=$1)
+         AND ls.status<>'DELETED'
+       ORDER BY
+         CASE WHEN ls.assigned_user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() THEN 0
+              WHEN ls.assigned_user_id=$1 THEN 1 ELSE 2 END,
+         ls.mode,ls.slot_number,ls.created_at`,
+      [userId]
+    );
+    return rows.rows;
+  }
+
+  private async resolveSlot(userId: string, slotId?: string | null) {
+    await this.ensurePrimarySlot(userId);
+    if (slotId) {
+      const slot = await this.db.one(
+        "SELECT * FROM license_slots WHERE id=$1 AND assigned_user_id=$2 AND status IN ('ACTIVE','AVAILABLE')",
+        [slotId, userId]
+      );
+      if (!slot) throw new ConflictException("slot is not assigned to this SCENOVA account");
+      return slot;
+    }
+    const slot = await this.db.one(
+      `SELECT ls.*
+       FROM license_slots ls
+       LEFT JOIN subscriptions s ON s.id=ls.subscription_id
+       WHERE ls.assigned_user_id=$1 AND ls.status IN ('ACTIVE','AVAILABLE')
+       ORDER BY
+         CASE WHEN s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() THEN 0 ELSE 1 END,
+         CASE WHEN ls.mode='LOCAL' THEN 0 ELSE 1 END,
+         ls.slot_number,ls.created_at
+       LIMIT 1`,
+      [userId]
+    );
+    if (!slot) throw new ConflictException("no usable slot");
+    return slot;
+  }
+
+  private async entitlement(
+    userId: string,
+    mt5AccountId: string | null,
+    mode: string | null,
+    slotId: string | null
+  ) {
     const user = await this.db.one(
       "SELECT role,status FROM users WHERE id=$1",
       [userId]
@@ -37,11 +167,43 @@ export class BotController {
       return { allowed: true, source: "OWNER", unlimited: true, expiresAt: null };
     }
 
-    const sub = await this.db.one(
-      "SELECT s.id,s.expires_at,p.code,p.mode FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
+    if (slotId) {
+      const sub = await this.db.one(
+        `SELECT s.id,s.expires_at,p.code,p.mode,p.allow_resale,p.max_mt5_accounts
+         FROM license_slots ls
+         JOIN subscriptions s ON s.id=ls.subscription_id
+         JOIN plans p ON p.id=s.plan_id
+         WHERE ls.id=$1
+           AND ls.assigned_user_id=$2
+           AND ls.status='ACTIVE'
+           AND s.status='ACTIVE'
+           AND s.starts_at<=now()
+           AND s.expires_at>now()
+           AND ($3::text IS NULL OR p.mode=$3)
+         LIMIT 1`,
+        [slotId, userId, mode]
+      );
+      if (sub) {
+        return {
+          allowed: true,
+          source: "SUBSCRIPTION",
+          expiresAt: sub.expires_at,
+          planCode: sub.code,
+          slots: sub.max_mt5_accounts,
+          reseller: Boolean(sub.allow_resale)
+        };
+      }
+    }
+
+    // Legacy fallback keeps already-issued subscriptions working while their slot
+    // migration catches up.
+    const legacySub = await this.db.one(
+      "SELECT s.id,s.expires_at,p.code,p.mode,p.max_mt5_accounts,p.allow_resale FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
       [userId, mode]
     );
-    if (sub) return { allowed: true, source: "SUBSCRIPTION", expiresAt: sub.expires_at };
+    if (legacySub && !slotId) {
+      return { allowed: true, source: "SUBSCRIPTION", expiresAt: legacySub.expires_at };
+    }
 
     const trial = await this.db.one(
       "SELECT id,status,duration_minutes,started_at,expires_at FROM trial_grants WHERE user_id=$1 AND ($2::uuid IS NULL OR mt5_account_id=$2) ORDER BY created_at DESC LIMIT 1",
@@ -57,146 +219,490 @@ export class BotController {
 
   @Get("dashboard")
   @Header("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
-  async dashboard(@Req() req: any) {
+  async dashboard(@Req() req: any, @Query("slotId") slotId = "") {
     const userId = req.user.sub;
-    const user = await this.db.one(
-      "SELECT id,user_code,email,role,status FROM users WHERE id=$1",
-      [userId]
+    const user = await this.user(userId);
+    const selectedSlot = await this.resolveSlot(userId, slotId || null);
+    const slots = await this.slotRows(userId);
+
+    const instance = await this.db.one(
+      `SELECT bi.*,
+         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') AS mt5_online,
+         (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '30 minutes') AS agent_online,
+         (bi.device_last_seen_at IS NOT NULL AND bi.device_last_seen_at > now() - interval '90 seconds') AS device_online,
+         CASE WHEN bi.last_seen_at IS NULL THEN NULL ELSE EXTRACT(EPOCH FROM (now() - bi.last_seen_at)) END AS ea_last_seen_age_seconds,
+         CASE WHEN bi.device_status='ACTIVE'
+                    AND bi.device_last_seen_at > now() - interval '90 seconds'
+                    AND bi.pending_account_number IS NOT NULL
+                    AND bi.pending_account_seen_at > now() - interval '10 minutes'
+                    AND COALESCE(bi.pending_account_ip,'')=COALESCE(bi.device_last_ip,'')
+              THEN true ELSE false END AS rebind_ready
+       FROM bot_instances bi
+       WHERE bi.slot_id=$1`,
+      [selectedSlot.id]
     );
-    const account = await this.db.one(
-      "SELECT * FROM mt5_accounts WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1",
-      [userId]
-    );
-    let instance = null;
+
+    let account = null;
     let settings = null;
-    if (account) {
-      instance = await this.db.one(
-        "SELECT bi.*, (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') AS mt5_online, (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '30 minutes') AS agent_online, CASE WHEN bi.last_seen_at IS NULL THEN NULL ELSE EXTRACT(EPOCH FROM (now() - bi.last_seen_at)) END AS ea_last_seen_age_seconds FROM bot_instances bi WHERE bi.mt5_account_id=$1",
-        [account.id]
+    if (instance?.mt5_account_id) {
+      account = await this.db.one(
+        "SELECT * FROM mt5_accounts WHERE id=$1",
+        [instance.mt5_account_id]
       );
-      if (instance) {
-        settings = await this.db.one(
-          "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
-          [instance.id]
-        );
-      }
     }
+    if (instance) {
+      const row = await this.db.one(
+        "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+        [instance.id]
+      );
+      settings = row?.settings || null;
+    }
+
+    const latestTrialRequest = await this.db.one(
+      "SELECT id,line_contact,request_ip,status,created_at FROM trial_requests WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1",
+      [userId]
+    );
+
     return {
       user,
+      slots,
+      selectedSlot,
       account,
       instance,
-      settings: settings?.settings || null,
-      entitlement: await this.entitlement(userId, account?.id || null, account?.mode || null)
+      settings,
+      trialRequest: latestTrialRequest,
+      entitlement: await this.entitlement(
+        userId,
+        account?.id || null,
+        selectedSlot.mode || account?.mode || null,
+        selectedSlot.id
+      )
     };
+  }
+
+  @Get("slots")
+  @Header("Cache-Control", "no-store, no-cache, must-revalidate")
+  async slots(@Req() req: any) {
+    return this.slotRows(req.user.sub);
   }
 
   @Get("logs")
   @Header("Cache-Control", "no-store, no-cache, must-revalidate")
-  async logs(@Req() req: any) {
-    const instance = await this.getInstance(req.user.sub);
+  async logs(@Req() req: any, @Query("slotId") slotId = "") {
+    const instance = await this.getInstance(req.user.sub, slotId || null);
     const snapshot = await this.db.one(
-      "SELECT bi.id,bi.actual_state,bi.desired_state,bi.last_seen_at,bi.metrics,a.account_number,a.broker,a.broker_server,a.mode FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE bi.id=$1",
+      "SELECT bi.id,bi.actual_state,bi.desired_state,bi.last_seen_at,bi.metrics,a.account_number,a.broker,a.broker_server,bi.mode FROM bot_instances bi LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE bi.id=$1",
       [instance.id]
     );
     const rows = await this.db.query(
       "SELECT id,command,payload,status,created_at,delivered_at,acked_at FROM bot_commands WHERE bot_instance_id=$1 ORDER BY id DESC LIMIT 80",
       [instance.id]
     );
+    return { snapshot, events: rows.rows };
+  }
+
+  @Post("trial-request")
+  async requestTrial(
+    @Req() req: any,
+    @Query("slotId") slotId = "",
+    @Body() body: { lineContact: string }
+  ) {
+    const slot = await this.resolveSlot(req.user.sub, slotId || null);
+    const instance = await this.db.one(
+      "SELECT bi.*,a.account_number,a.broker_server FROM bot_instances bi LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE bi.slot_id=$1",
+      [slot.id]
+    );
+    if (!instance?.mt5_account_id) {
+      throw new ConflictException("เชื่อมบัญชี MT5 ให้เรียบร้อยก่อนขอ Trial");
+    }
+    const lineContact = String(body.lineContact || "").trim();
+    if (lineContact.length < 2) throw new ConflictException("กรุณาระบุ LINE ที่ใช้ติดต่อ");
+
+    const used = await this.db.one(
+      `SELECT id FROM trial_grants
+       WHERE user_id=$1
+          OR (line_contact IS NOT NULL AND lower(line_contact)=lower($2))
+          OR (lower(account_number)=lower($3) AND lower(broker_server)=lower($4))
+       LIMIT 1`,
+      [req.user.sub, lineContact, instance.account_number, instance.broker_server]
+    );
+    if (used) throw new ConflictException("บัญชีนี้ / LINE นี้ / MT5 นี้เคยได้รับ Trial แล้ว");
+
+    await this.db.query(
+      "UPDATE trial_requests SET status='REPLACED' WHERE user_id=$1 AND status='PENDING'",
+      [req.user.sub]
+    );
+    const row = await this.db.one(
+      "INSERT INTO trial_requests(user_id,mt5_account_id,line_contact,request_ip) VALUES($1,$2,$3,$4) RETURNING id,line_contact,request_ip,status,created_at",
+      [req.user.sub, instance.mt5_account_id, lineContact, this.clientIp(req)]
+    );
+    await this.db.query(
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'REQUEST_TRIAL','trial_request',$2,$3::jsonb)",
+      [String(req.user.code || req.user.sub), row.id, JSON.stringify({ slotId: slot.id, lineContact })]
+    );
+    return row;
+  }
+
+  @Post("installers/windows")
+  async prepareWindowsInstaller(
+    @Req() req: any,
+    @Body() body: { slotId?: string }
+  ) {
+    const slot = await this.resolveSlot(req.user.sub, body.slotId || null);
+    if (slot.mode !== "LOCAL") {
+      throw new ConflictException("Windows installer is only for LOCAL slots");
+    }
+
+    let instance = await this.db.one(
+      "SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions FROM bot_instances bi WHERE bi.slot_id=$1",
+      [slot.id]
+    );
+    if (instance && (
+      instance.actual_state === "RUNNING" ||
+      instance.desired_state === "RUNNING" ||
+      Number(instance.positions || 0) > 0
+    )) {
+      throw new ConflictException("หยุดบอทและจัดการ Position ให้เรียบร้อยก่อนติดตั้งหรือย้ายเครื่อง");
+    }
+
+    if (!instance) {
+      const placeholder = randomBytes(32).toString("hex");
+      instance = await this.db.one(
+        "INSERT INTO bot_instances(slot_id,mt5_account_id,mode,install_token_hash) VALUES($1,NULL,'LOCAL',$2) RETURNING *",
+        [slot.id, this.crypto.sha256(placeholder)]
+      );
+      await this.db.query(
+        "INSERT INTO bot_settings(bot_instance_id) VALUES($1) ON CONFLICT(bot_instance_id) DO NOTHING",
+        [instance.id]
+      );
+    }
+
+    await this.db.query(
+      "UPDATE install_enrollments SET status='CANCELLED' WHERE slot_id=$1 AND status='PENDING'",
+      [slot.id]
+    );
+    const code = randomBytes(18).toString("base64url");
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    await this.db.query(
+      "INSERT INTO install_enrollments(slot_id,requested_by_user_id,code_hash,expires_at) VALUES($1,$2,$3,$4)",
+      [slot.id, req.user.sub, this.crypto.sha256(code), expiresAt]
+    );
+
     return {
-      snapshot,
-      events: rows.rows
+      code,
+      fileName: "SCENOVA-Setup-" + code + ".exe",
+      downloadPath: "/downloads/SCENOVA-Setup.exe",
+      expiresAt,
+      slotId: slot.id
     };
+  }
+
+  @Post("slots/assign")
+  async assignSlot(
+    @Req() req: any,
+    @Body() body: { slotId: string; target: string; label?: string }
+  ) {
+    const slot = await this.db.one(
+      `SELECT ls.*,p.allow_resale,s.status subscription_status,s.starts_at,s.expires_at
+       FROM license_slots ls
+       LEFT JOIN subscriptions s ON s.id=ls.subscription_id
+       LEFT JOIN plans p ON p.id=s.plan_id
+       WHERE ls.id=$1 AND ls.owner_user_id=$2`,
+      [body.slotId, req.user.sub]
+    );
+    if (!slot) throw new ConflictException("slot not found");
+    if (!slot.allow_resale) throw new ConflictException("แพ็กเกจนี้ไม่อนุญาตให้เปิด Slot ให้ผู้อื่น");
+    if (slot.subscription_status !== "ACTIVE" || new Date(slot.starts_at) > new Date() || new Date(slot.expires_at) <= new Date()) {
+      throw new ConflictException("สมาชิกของ Slot นี้ไม่ Active");
+    }
+
+    const targetText = String(body.target || "").trim();
+    const target = await this.db.one(
+      "SELECT id,user_code,email,status FROM users WHERE status='ACTIVE' AND (lower(email)=lower($1) OR upper(user_code)=upper($1))",
+      [targetText]
+    );
+    if (!target) throw new ConflictException("ไม่พบบัญชี SCENOVA ของผู้รับ Slot");
+
+    const instance = await this.db.one(
+      "SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions FROM bot_instances bi WHERE bi.slot_id=$1",
+      [slot.id]
+    );
+    if (instance && (
+      instance.actual_state === "RUNNING" ||
+      instance.desired_state === "RUNNING" ||
+      Number(instance.positions || 0) > 0
+    )) {
+      throw new ConflictException("หยุดบอทและปิด Position ของ Slot นี้ก่อนเปลี่ยนผู้ใช้งาน");
+    }
+
+    if (instance && slot.assigned_user_id && slot.assigned_user_id !== target.id) {
+      if (instance.mt5_account_id) {
+        await this.db.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [instance.mt5_account_id]);
+      }
+      const revoked = randomBytes(32).toString("hex");
+      await this.db.query(
+        `UPDATE bot_instances SET
+           mt5_account_id=NULL,install_token_hash=$2,desired_state='STOPPED',actual_state='OFFLINE',
+           last_seen_at=NULL,agent_last_seen_at=NULL,device_public_id=NULL,device_secret_hash=NULL,
+           device_status='UNREGISTERED',device_hostname=NULL,device_registered_at=NULL,device_last_seen_at=NULL,
+           device_last_ip=NULL,ea_last_ip=NULL,pending_account_number=NULL,pending_broker=NULL,
+           pending_broker_server=NULL,pending_account_ip=NULL,pending_account_seen_at=NULL
+         WHERE id=$1`,
+        [instance.id, this.crypto.sha256(revoked)]
+      );
+    }
+
+    const updated = await this.db.one(
+      "UPDATE license_slots SET assigned_user_id=$2,status='ACTIVE',label=COALESCE(NULLIF($3,''),label),updated_at=now() WHERE id=$1 RETURNING *",
+      [slot.id, target.id, String(body.label || "").trim()]
+    );
+    await this.db.query(
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'ASSIGN_SLOT','license_slot',$2,$3::jsonb)",
+      [String(req.user.code || req.user.sub), slot.id, JSON.stringify({ assignedUserId: target.id, target: targetText })]
+    );
+    return { slot: updated, assignedUser: target };
+  }
+
+  @Post("slots/release")
+  async releaseSlot(@Req() req: any, @Body() body: { slotId: string }) {
+    const slot = await this.db.one(
+      "SELECT * FROM license_slots WHERE id=$1 AND owner_user_id=$2",
+      [body.slotId, req.user.sub]
+    );
+    if (!slot) throw new ConflictException("slot not found");
+
+    const instance = await this.db.one(
+      "SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions FROM bot_instances bi WHERE bi.slot_id=$1",
+      [slot.id]
+    );
+    if (instance && (
+      instance.actual_state === "RUNNING" ||
+      instance.desired_state === "RUNNING" ||
+      Number(instance.positions || 0) > 0
+    )) {
+      throw new ConflictException("หยุดบอทและปิด Position ก่อนคืน Slot");
+    }
+
+    if (instance) {
+      if (instance.mt5_account_id) {
+        await this.db.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [instance.mt5_account_id]);
+      }
+      const revoked = randomBytes(32).toString("hex");
+      await this.db.query(
+        `UPDATE bot_instances SET
+           mt5_account_id=NULL,install_token_hash=$2,desired_state='STOPPED',actual_state='OFFLINE',
+           last_seen_at=NULL,agent_last_seen_at=NULL,device_public_id=NULL,device_secret_hash=NULL,
+           device_status='UNREGISTERED',device_hostname=NULL,device_registered_at=NULL,device_last_seen_at=NULL,
+           device_last_ip=NULL,ea_last_ip=NULL,pending_account_number=NULL,pending_broker=NULL,
+           pending_broker_server=NULL,pending_account_ip=NULL,pending_account_seen_at=NULL
+         WHERE id=$1`,
+        [instance.id, this.crypto.sha256(revoked)]
+      );
+    }
+
+    await this.db.query(
+      "UPDATE license_slots SET assigned_user_id=NULL,status='AVAILABLE',updated_at=now() WHERE id=$1",
+      [slot.id]
+    );
+    await this.db.query(
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'RELEASE_SLOT','license_slot',$2,'{}'::jsonb)",
+      [String(req.user.code || req.user.sub), slot.id]
+    );
+    return { ok: true };
+  }
+
+  @Post("mt5/rebind")
+  async rebindMt5(@Req() req: any, @Query("slotId") slotId = "") {
+    const slot = await this.resolveSlot(req.user.sub, slotId || null);
+    const instance = await this.db.one(
+      `SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         a.id old_account_id,a.broker old_broker
+       FROM bot_instances bi
+       LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
+       WHERE bi.slot_id=$1`,
+      [slot.id]
+    );
+    if (!instance) throw new ConflictException("ติดตั้ง SCENOVA จากเว็บไซต์ก่อน");
+    if (slot.mode !== "LOCAL") throw new ConflictException("rebind is only available for LOCAL slots");
+    if (instance.actual_state === "RUNNING" || instance.desired_state === "RUNNING" || Number(instance.positions || 0) > 0) {
+      throw new ConflictException("หยุดบอทและจัดการ Position ให้เรียบร้อยก่อนเปลี่ยน MT5");
+    }
+    if (
+      instance.device_status !== "ACTIVE" ||
+      !instance.device_last_seen_at ||
+      Date.now() - new Date(instance.device_last_seen_at).getTime() > 90_000
+    ) {
+      throw new ConflictException("เครื่องนี้ยังไม่ได้ลงทะเบียนด้วย SCENOVA Installer รุ่นใหม่ หรือ Agent ไม่ออนไลน์");
+    }
+    if (!instance.pending_account_number || !instance.pending_broker_server || !instance.pending_account_seen_at) {
+      throw new ConflictException("ยังไม่พบบัญชี MT5 ใหม่จาก EA");
+    }
+    if (Date.now() - new Date(instance.pending_account_seen_at).getTime() > 10 * 60_000) {
+      throw new ConflictException("ข้อมูลบัญชีที่ตรวจพบหมดอายุ กรุณาเปิด MT5 ให้ EA ส่งสถานะใหม่");
+    }
+    if (!instance.pending_account_ip || instance.pending_account_ip !== instance.device_last_ip) {
+      throw new ConflictException("บัญชี MT5 ใหม่นี้ไม่ได้มาจากเครื่องที่ลงทะเบียนไว้");
+    }
+
+    const accountNumber = String(instance.pending_account_number);
+    const brokerServer = String(instance.pending_broker_server);
+    const broker = String(instance.pending_broker || instance.old_broker || "Detected MT5").slice(0, 80);
+
+    const activeElsewhere = await this.db.one(
+      `SELECT a.id,a.user_id,bi.slot_id
+       FROM mt5_accounts a
+       JOIN bot_instances bi ON bi.mt5_account_id=a.id
+       WHERE lower(a.account_number)=lower($1)
+         AND lower(a.broker_server)=lower($2)
+         AND a.status='ACTIVE'
+         AND bi.slot_id<>$3
+       LIMIT 1`,
+      [accountNumber, brokerServer, slot.id]
+    );
+    if (activeElsewhere) {
+      throw new ConflictException("MT5 นี้ถูกผูกกับ Slot อื่นอยู่แล้ว");
+    }
+
+    let account = await this.db.one(
+      "SELECT * FROM mt5_accounts WHERE user_id=$1 AND lower(account_number)=lower($2) AND lower(broker_server)=lower($3) ORDER BY created_at DESC LIMIT 1",
+      [req.user.sub, accountNumber, brokerServer]
+    );
+    if (instance.old_account_id && (!account || account.id !== instance.old_account_id)) {
+      await this.db.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [instance.old_account_id]);
+    }
+    if (account) {
+      account = await this.db.one(
+        "UPDATE mt5_accounts SET broker=$2,mode='LOCAL',status='ACTIVE' WHERE id=$1 RETURNING *",
+        [account.id, broker]
+      );
+    } else {
+      account = await this.db.one(
+        "INSERT INTO mt5_accounts(user_id,account_number,broker,broker_server,mode,status) VALUES($1,$2,$3,$4,'LOCAL','ACTIVE') RETURNING *",
+        [req.user.sub, accountNumber, broker, brokerServer]
+      );
+    }
+
+    await this.db.query(
+      `UPDATE bot_instances SET
+         mt5_account_id=$2,desired_state='STOPPED',actual_state='SAFE_STOP',
+         pending_account_number=NULL,pending_broker=NULL,pending_broker_server=NULL,
+         pending_account_ip=NULL,pending_account_seen_at=NULL
+       WHERE id=$1`,
+      [instance.id, account.id]
+    );
+    await this.db.query(
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'REBIND_MT5','bot_instance',$2,$3::jsonb)",
+      [String(req.user.code || req.user.sub), instance.id, JSON.stringify({ slotId: slot.id, accountNumber, brokerServer, preservedTrialHistory: true })]
+    );
+    return { ok: true, account };
   }
 
   @Post("mt5")
   async linkMt5(
     @Req() req: any,
     @Body() body: {
+      slotId?: string;
       accountNumber: string;
       broker?: string;
       brokerServer: string;
       mode: "CLOUD" | "LOCAL";
     }
   ) {
-    const mode = body.mode === "CLOUD" ? "CLOUD" : "LOCAL";
-    const account = await this.db.one(
-      "INSERT INTO mt5_accounts(user_id,account_number,broker,broker_server,mode) VALUES($1,$2,$3,$4,$5) RETURNING *",
-      [req.user.sub, String(body.accountNumber), body.broker || "Exness", String(body.brokerServer), mode]
-    );
-    const installToken = randomBytes(32).toString("hex");
-    const instance = await this.db.one(
-      "INSERT INTO bot_instances(mt5_account_id,mode,install_token_hash) VALUES($1,$2,$3) RETURNING id,mode,desired_state,actual_state",
-      [account.id, mode, this.crypto.sha256(installToken)]
-    );
-    await this.db.query("INSERT INTO bot_settings(bot_instance_id) VALUES($1)", [instance.id]);
+    const mode: "CLOUD" | "LOCAL" = body.mode === "CLOUD" ? "CLOUD" : "LOCAL";
+    const slot = body.slotId
+      ? await this.resolveSlot(req.user.sub, body.slotId)
+      : await this.ensureModeSlot(req.user.sub, mode);
+    if (slot.mode !== mode) throw new ConflictException("slot mode does not match MT5 mode");
+    if (mode === "LOCAL") {
+      throw new ConflictException("LOCAL mode must be installed from the SCENOVA website; MT5 will be detected automatically");
+    }
 
-    if (mode === "CLOUD") {
-      const secret = this.crypto.encrypt(installToken);
-      await this.db.query(
-        "INSERT INTO bot_instance_secrets(bot_instance_id,ciphertext,iv,auth_tag) VALUES($1,$2,$3,$4)",
-        [instance.id, secret.ciphertext, secret.iv, secret.authTag]
+    let account = await this.db.one(
+      "SELECT * FROM mt5_accounts WHERE user_id=$1 AND lower(account_number)=lower($2) AND lower(broker_server)=lower($3) LIMIT 1",
+      [req.user.sub, String(body.accountNumber), String(body.brokerServer)]
+    );
+    if (account) {
+      account = await this.db.one(
+        "UPDATE mt5_accounts SET broker=$2,mode=$3,status='ACTIVE' WHERE id=$1 RETURNING *",
+        [account.id, body.broker || "Exness", mode]
+      );
+    } else {
+      account = await this.db.one(
+        "INSERT INTO mt5_accounts(user_id,account_number,broker,broker_server,mode) VALUES($1,$2,$3,$4,$5) RETURNING *",
+        [req.user.sub, String(body.accountNumber), body.broker || "Exness", String(body.brokerServer), mode]
       );
     }
+
+    const installToken = randomBytes(32).toString("hex");
+    let instance = await this.db.one("SELECT * FROM bot_instances WHERE slot_id=$1", [slot.id]);
+    if (instance) {
+      instance = await this.db.one(
+        "UPDATE bot_instances SET mt5_account_id=$2,mode=$3,install_token_hash=$4,actual_state='OFFLINE',last_seen_at=NULL WHERE id=$1 RETURNING id,mode,desired_state,actual_state",
+        [instance.id, account.id, mode, this.crypto.sha256(installToken)]
+      );
+    } else {
+      instance = await this.db.one(
+        "INSERT INTO bot_instances(slot_id,mt5_account_id,mode,install_token_hash) VALUES($1,$2,$3,$4) RETURNING id,mode,desired_state,actual_state",
+        [slot.id, account.id, mode, this.crypto.sha256(installToken)]
+      );
+      await this.db.query("INSERT INTO bot_settings(bot_instance_id) VALUES($1)", [instance.id]);
+    }
+
+    const secret = this.crypto.encrypt(installToken);
+    await this.db.query(
+      "INSERT INTO bot_instance_secrets(bot_instance_id,ciphertext,iv,auth_tag) VALUES($1,$2,$3,$4) ON CONFLICT(bot_instance_id) DO UPDATE SET ciphertext=EXCLUDED.ciphertext,iv=EXCLUDED.iv,auth_tag=EXCLUDED.auth_tag",
+      [instance.id, secret.ciphertext, secret.iv, secret.authTag]
+    );
 
     return {
       account,
       instance,
-      installToken: mode === "LOCAL" ? installToken : null,
-      note: mode === "LOCAL"
-        ? "Install token is shown once. Keep it private."
-        : "Cloud install token is held encrypted for the assigned worker."
+      installToken: null,
+      note: "Cloud install token is held encrypted for the assigned worker."
     };
   }
 
   @Post("mt5/rotate-install-token")
-  async rotateInstallToken(@Req() req: any) {
-    const instance = await this.db.one(
-      "SELECT bi.id,bi.mode FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE a.user_id=$1 ORDER BY bi.created_at DESC LIMIT 1",
-      [req.user.sub]
-    );
-    if (!instance) throw new ConflictException("connect MT5 first");
+  async rotateInstallToken(@Req() req: any, @Query("slotId") slotId = "") {
+    const user = await this.user(req.user.sub);
+    if (!user || (user.role !== "OWNER" && user.role !== "ADMIN")) {
+      throw new ConflictException("use the SCENOVA website installer to repair or move a customer device");
+    }
+    const instance = await this.getInstance(req.user.sub, slotId || null);
     if (instance.mode !== "LOCAL") {
       throw new ConflictException("install token rotation is only available for LOCAL mode");
     }
-
     const installToken = randomBytes(32).toString("hex");
     await this.db.query(
       "UPDATE bot_instances SET install_token_hash=$2,actual_state='OFFLINE',last_seen_at=NULL WHERE id=$1",
       [instance.id, this.crypto.sha256(installToken)]
     );
-
     return {
       instanceId: instance.id,
       installToken,
-      note: "Previous local install token is now invalid. This token is shown once."
+      note: "Emergency rotation only. Reinstall from the website to apply this token safely."
     };
   }
 
   @Post("mt5/reset")
-  async resetMt5(@Req() req: any) {
-    const account = await this.db.one(
-      "SELECT a.id,a.account_number,a.broker_server,bi.actual_state,bi.desired_state,COALESCE((bi.metrics->>'positions')::int,0) positions FROM mt5_accounts a LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id WHERE a.user_id=$1 ORDER BY a.created_at DESC LIMIT 1",
-      [req.user.sub]
+  async resetMt5(@Req() req: any, @Query("slotId") slotId = "") {
+    const slot = await this.resolveSlot(req.user.sub, slotId || null);
+    const instance = await this.db.one(
+      "SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions FROM bot_instances bi WHERE bi.slot_id=$1",
+      [slot.id]
     );
-    if (!account) return { ok: true };
-
-    if (account.actual_state === "RUNNING" || account.desired_state === "RUNNING" || account.positions > 0) {
+    if (!instance) return { ok: true };
+    if (instance.actual_state === "RUNNING" || instance.desired_state === "RUNNING" || Number(instance.positions || 0) > 0) {
       throw new ConflictException("stop the bot and close positions before changing MT5 account");
     }
-
-    const trial = await this.db.one(
-      "SELECT id FROM trial_grants WHERE mt5_account_id=$1 LIMIT 1",
-      [account.id]
-    );
-    if (trial) {
-      throw new ConflictException("this MT5 account already has trial history and cannot be reset from self-service");
+    if (instance.mt5_account_id) {
+      await this.db.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [instance.mt5_account_id]);
     }
-
-    await this.db.query("DELETE FROM mt5_accounts WHERE id=$1 AND user_id=$2", [
-      account.id,
-      req.user.sub
-    ]);
-    return { ok: true };
+    await this.db.query(
+      "UPDATE bot_instances SET mt5_account_id=NULL,desired_state='STOPPED',actual_state='OFFLINE',last_seen_at=NULL,pending_account_number=NULL,pending_broker=NULL,pending_broker_server=NULL,pending_account_ip=NULL,pending_account_seen_at=NULL WHERE id=$1",
+      [instance.id]
+    );
+    return { ok: true, preservedTrialHistory: true };
   }
 
   @Post("mt5/cloud-credential")
@@ -218,19 +724,26 @@ export class BotController {
   }
 
   @Post("start")
-  async start(@Req() req: any) {
-    const instance = await this.getInstance(req.user.sub);
+  async start(@Req() req: any, @Query("slotId") slotId = "") {
+    const instance = await this.getInstance(req.user.sub, slotId || null);
+    if (!instance.mt5_account_id) throw new ConflictException("เชื่อมบัญชี MT5 ก่อนเริ่มบอท");
     const access: any = await this.entitlement(
       req.user.sub,
       instance.mt5_account_id,
-      instance.mode
+      instance.mode,
+      instance.slot_id
     );
     if (!access.allowed) throw new ConflictException("trial or matching subscription required");
 
     if (instance.mode === "LOCAL") {
-      const lastAgentSeen = instance.agent_last_seen_at ? new Date(instance.agent_last_seen_at).getTime() : 0;
-      if (!lastAgentSeen || Date.now() - lastAgentSeen > 30 * 60 * 1000) {
-        throw new ConflictException("SCENOVA Desktop Agent is offline; repair or reinstall the Local MT5 connection");
+      const useDeviceLock = instance.device_status === "ACTIVE";
+      const seenAt = useDeviceLock ? instance.device_last_seen_at : instance.agent_last_seen_at;
+      const limitMs = useDeviceLock ? 90_000 : 30 * 60_000;
+      const seenMs = seenAt ? new Date(seenAt).getTime() : 0;
+      if (!seenMs || Date.now() - seenMs > limitMs) {
+        throw new ConflictException(useDeviceLock
+          ? "SCENOVA Device Agent is offline; open the registered PC before starting"
+          : "SCENOVA Desktop Agent is offline; reinstall from the website");
       }
 
       const expectedHash = this.productionEaHash();
@@ -257,18 +770,22 @@ export class BotController {
   }
 
   @Post("stop")
-  async safeStop(@Req() req: any) {
-    return this.commandForUser(req.user.sub, "SAFE_STOP");
+  async safeStop(@Req() req: any, @Query("slotId") slotId = "") {
+    return this.commandForUser(req.user.sub, "SAFE_STOP", slotId || null);
   }
 
   @Post("close-all")
-  async closeAll(@Req() req: any) {
-    return this.commandForUser(req.user.sub, "CLOSE_ALL");
+  async closeAll(@Req() req: any, @Query("slotId") slotId = "") {
+    return this.commandForUser(req.user.sub, "CLOSE_ALL", slotId || null);
   }
 
   @Put("settings")
-  async updateSettings(@Req() req: any, @Body() body: Record<string, any>) {
-    const instance = await this.getInstance(req.user.sub);
+  async updateSettings(
+    @Req() req: any,
+    @Query("slotId") slotId = "",
+    @Body() body: Record<string, any>
+  ) {
+    const instance = await this.getInstance(req.user.sub, slotId || null);
     const allowedKeys = [
       "symbol","lot","maxPositions","basketTriggerMoney","basketTrailMoney",
       "maxBasketLossMoney","dailyLossMoney","maxSpreadPoints","minOrderIntervalMs",
@@ -287,17 +804,18 @@ export class BotController {
     return { ok: true, settings: clean };
   }
 
-  private async getInstance(userId: string) {
+  private async getInstance(userId: string, slotId?: string | null) {
+    const slot = await this.resolveSlot(userId, slotId || null);
     const instance = await this.db.one(
-      "SELECT bi.id,bi.mt5_account_id,bi.mode,bi.agent_last_seen_at,bi.agent_ea_hash FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id WHERE a.user_id=$1 ORDER BY bi.created_at DESC LIMIT 1",
-      [userId]
+      "SELECT bi.id,bi.slot_id,bi.mt5_account_id,bi.mode,bi.agent_last_seen_at,bi.agent_ea_hash,bi.device_status,bi.device_last_seen_at FROM bot_instances bi WHERE bi.slot_id=$1",
+      [slot.id]
     );
-    if (!instance) throw new ConflictException("connect MT5 first");
+    if (!instance) throw new ConflictException("install SCENOVA for this slot first");
     return instance;
   }
 
-  private async commandForUser(userId: string, command: string) {
-    const instance = await this.getInstance(userId);
+  private async commandForUser(userId: string, command: string, slotId?: string | null) {
+    const instance = await this.getInstance(userId, slotId || null);
     const desired = command === "CLOSE_ALL" ? "STOPPED" : "SAFE_STOP";
     await this.db.query("UPDATE bot_instances SET desired_state=$2 WHERE id=$1", [instance.id, desired]);
     await this.db.query(

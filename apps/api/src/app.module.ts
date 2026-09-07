@@ -8,6 +8,7 @@ import { HealthController } from "./health.controller";
 import { WorkerController } from "./worker.controller";
 import { RootController } from "./root.controller";
 import { CatalogController } from "./catalog.controller";
+import { InstallerController } from "./installer.controller";
 import { DbService } from "./db.service";
 import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
 
@@ -18,7 +19,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [RootController, CatalogController, AuthController, BotController, AdminController, EaController, HealthController, WorkerController],
+  controllers: [RootController, CatalogController, AuthController, BotController, AdminController, EaController, InstallerController, HealthController, WorkerController],
   providers: [DbService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
 })
 export class AppModule {}
