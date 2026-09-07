@@ -165,6 +165,8 @@ internal sealed class AgentHeartbeatResponse
     public bool EaOnline { get; set; }
     public string? EaVersion { get; set; }
     public double EaLastSeenAgeSeconds { get; set; }
+    public bool? TerminalTradeAllowed { get; set; }
+    public bool? MqlTradeAllowed { get; set; }
 }
 
 internal sealed class ApiError
