@@ -52,10 +52,10 @@ internal static class AgentRunner
 
     private static void StopExistingAgent(string agentPath)
     {
-        var processName = Path.GetFileNameWithoutExtension(agentPath);
         var currentProcessId = Environment.ProcessId;
+        var normalizedAgentPath = Path.GetFullPath(agentPath);
 
-        foreach (var process in Process.GetProcessesByName(processName))
+        foreach (var process in Process.GetProcesses())
         {
             try
             {
@@ -69,27 +69,43 @@ internal static class AgentRunner
                 }
                 catch
                 {
-                    // The process name is unique to SCENOVA Agent. If Windows
-                    // prevents reading MainModule, still stop the old Agent.
+                    // Continue with the process-name fallback below.
                 }
 
-                if (!string.IsNullOrWhiteSpace(runningPath) &&
-                    !string.Equals(runningPath, agentPath, StringComparison.OrdinalIgnoreCase))
+                var pathMatches =
+                    !string.IsNullOrWhiteSpace(runningPath) &&
+                    string.Equals(
+                        Path.GetFullPath(runningPath),
+                        normalizedAgentPath,
+                        StringComparison.OrdinalIgnoreCase);
+
+                // SCENOVA-Agent-v2.exe is a renamed copy of the single-file
+                // SCENOVA-Setup assembly. Depending on Windows/.NET, the
+                // running process can be reported under either name.
+                var nameMatches =
+                    string.Equals(process.ProcessName, "SCENOVA-Agent-v2", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(process.ProcessName, "SCENOVA-Setup", StringComparison.OrdinalIgnoreCase);
+
+                if (!pathMatches && !nameMatches)
                     continue;
 
                 process.Kill(entireProcessTree: true);
-                process.WaitForExit(5000);
+                if (!process.WaitForExit(5000))
+                    throw new IOException("SCENOVA Agent did not stop within 5 seconds.");
             }
             catch
             {
-                // File replacement below has retries and will surface a clear
-                // error if Windows still keeps the old Agent executable locked.
+                // File replacement below retries. If a matching process still
+                // owns the executable, the installer returns a clear error.
             }
             finally
             {
                 process.Dispose();
             }
         }
+
+        // Give Windows a short moment to release the executable image mapping.
+        Thread.Sleep(350);
     }
 
     private static void CopyExecutableWithRetry(string source, string agentPath)
