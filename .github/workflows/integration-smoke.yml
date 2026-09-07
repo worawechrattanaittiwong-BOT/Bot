@@ -113,6 +113,25 @@ jobs:
           ACCOUNT_ID=$(printf '%s' "$REBIND" | jq -r '.account.id')
           test "$(printf '%s' "$REBIND" | jq -r '.account.account_number')" = "100001"
 
+          SETTINGS=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"symbol":"XAUUSDm","lot":0.02,"maxPositions":7,"basketTriggerMoney":3.5,"basketTrailMoney":0.75,"maxBasketLossMoney":12,"dailyLossMoney":30,"minOrderIntervalMs":450,"maxOrdersPerMinute":90,"entryMode":"BUY_ONLY"}')
+          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.symbol')" = "XAUUSDm"
+          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.lot')" = "0.02"
+          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.maxPositions')" = "7"
+          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.entryMode')" = "BUY_ONLY"
+
+          SETTINGS_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.lot')" = "0.02"
+          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.maxPositions')" = "7"
+          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.entryMode')" = "BUY_ONLY"
+
+          SETTINGS_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{"instanceId":"$INSTANCE","installToken":"$INSTALL_TOKEN","state":"STOPPED","metrics":{"accountNumber":"100001","eaVersion":"1.003","symbol":"XAUUSDm","server":"SCENOVA-Demo","positions":0}}")
+          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.lot')" = "0.02"
+          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.maxPositions')" = "7"
+          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.entryMode')" = "BUY_ONLY"
+
+          BAD_SETTINGS_HTTP=$(curl -sS -o /tmp/bad-settings.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"lot":0}')
+          test "$BAD_SETTINGS_HTTP" = "400"
+
           curl -fsS -X POST "$BASE/bot/trial-request?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"lineContact":"@integration-line"}' >/tmp/trial-request.json
 
           curl -fsS -X POST "$BASE/admin/trials/grant" -H 'x-admin-key: integration-admin' -H 'content-type: application/json' -d "{\"mt5AccountId\":\"$ACCOUNT_ID\",\"minutes\":180,\"approvedBy\":\"CI\"}" >/tmp/trial-grant.json
