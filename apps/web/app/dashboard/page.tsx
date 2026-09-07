@@ -14,6 +14,7 @@ type Dashboard = {
   entitlement: any;
   trialRequest: any;
   liveStatus: any;
+  softwareUpdate: any;
 };
 
 type BrokerCatalog = {
@@ -175,7 +176,13 @@ export default function DashboardPage() {
     "NO_ACCESS",
     "DAILY_PROFIT_LOCK"
   ]);
-  const startBlocked = busy || !entitlement?.allowed || hardStartBlocks.has(String(liveStatus.code || ""));
+  const softwareUpdate = data?.softwareUpdate || { required: false, currentVersion: null, latestVersion: "", downloadPath: "" };
+  const installerUpdateRequired = data?.selectedSlot?.mode === "LOCAL" && Boolean(softwareUpdate.required);
+  const startBlocked =
+    busy ||
+    installerUpdateRequired ||
+    !entitlement?.allowed ||
+    hardStartBlocks.has(String(liveStatus.code || ""));
   const selectedBroker = brokerCatalog.find((item)=>item.code === brokerCode);
   const selectedBrokerName = brokerCode === "OTHER"
     ? customBrokerName.trim()
@@ -640,7 +647,7 @@ export default function DashboardPage() {
             </h2>
             <div className="muted page-subtitle">
               {activeView === "overview" && "ดูสถานะ สั่ง Start/Stop และตั้งค่าบอทจากหน้าเดียว"}
-              {activeView === "account" && "ติดตั้งจากเว็บไซต์ จัดการ Device และเปลี่ยน MT5 โดยไม่ต้องเปลี่ยน .set"}
+              {activeView === "account" && "ติดตั้ง/อัปเดตจากเว็บไซต์ และจัดการการเชื่อมต่อ MT5 โดยไม่ต้องแก้ .set เอง"}
               {activeView === "access" && "ตรวจสถานะ Trial สมาชิก และเวลาคงเหลือ"}
             </div>
           </div>
@@ -672,6 +679,29 @@ export default function DashboardPage() {
 
         {error && <div className="notice bad page-notice">{error}</div>}
         {notice && <div className="notice good page-notice">{notice}</div>}
+
+        {activeView === "overview" && installerUpdateRequired && (
+          <div className="notice bad page-notice onboarding-notice">
+            <div>
+              <b>ต้องอัปเดต SCENOVA ก่อนเริ่มบอท</b>
+              <span>
+                เครื่องนี้ใช้ {softwareUpdate.currentVersion ? "v" + softwareUpdate.currentVersion : "เวอร์ชันที่ตรวจสอบไม่ได้"}
+                {" · "}เวอร์ชันล่าสุดคือ v{softwareUpdate.latestVersion}
+                {" · "}ปุ่มเริ่มบอทถูกล็อกจนกว่า Device Agent จะรายงานเวอร์ชันล่าสุด
+              </span>
+            </div>
+            <button
+              className="btn primary"
+              disabled={busy || desired === "RUNNING" || (state === "RUNNING" && isMt5Online)}
+              onClick={downloadWindowsInstaller}
+            >
+              {busy ? "กำลังเตรียม..." : "อัปเดตเป็น v" + softwareUpdate.latestVersion}
+            </button>
+            {(desired === "RUNNING" || (state === "RUNNING" && isMt5Online)) && (
+              <small className="help">หยุดบอทก่อน แล้วจึงกดอัปเดต</small>
+            )}
+          </div>
+        )}
 
         {activeView === "overview" && (
           !data.account ? (
