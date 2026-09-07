@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -1041,22 +1042,74 @@ export class BotController {
     @Body() body: Record<string, any>
   ) {
     const instance = await this.getInstance(req.user.sub, slotId || null);
-    const allowedKeys = [
-      "symbol","lot","maxPositions","basketTriggerMoney","basketTrailMoney",
-      "maxBasketLossMoney","dailyLossMoney","minOrderIntervalMs",
-      "maxOrdersPerMinute","entryMode"
-    ];
     const clean: Record<string, any> = {};
-    for (const key of allowedKeys) if (body[key] !== undefined) clean[key] = body[key];
-    await this.db.query(
-      "UPDATE bot_settings SET settings=settings || $2::jsonb,updated_at=now() WHERE bot_instance_id=$1",
+
+    const numberSetting = (
+      key: string,
+      min: number,
+      max: number,
+      integer = false
+    ) => {
+      if (body[key] === undefined) return;
+      const value = Number(body[key]);
+      if (!Number.isFinite(value) || value < min || value > max) {
+        throw new BadRequestException(key + " ไม่อยู่ในช่วงที่อนุญาต");
+      }
+      clean[key] = integer ? Math.trunc(value) : value;
+    };
+
+    if (body.symbol !== undefined) {
+      const symbol = String(body.symbol || "").trim();
+      if (!symbol || symbol.length > 64 || !/^[A-Za-z0-9._#-]+$/.test(symbol)) {
+        throw new BadRequestException("Symbol ไม่ถูกต้อง");
+      }
+      clean.symbol = symbol;
+    }
+
+    numberSetting("lot", 0.01, 100);
+    numberSetting("maxPositions", 1, 100, true);
+    numberSetting("basketTriggerMoney", 0.01, 100000);
+    numberSetting("basketTrailMoney", 0.01, 100000);
+    numberSetting("maxBasketLossMoney", 0, 100000);
+    numberSetting("dailyLossMoney", 0, 100000);
+    numberSetting("minOrderIntervalMs", 0, 60000, true);
+    numberSetting("maxOrdersPerMinute", 1, 5000, true);
+
+    if (body.entryMode !== undefined) {
+      const entryMode = String(body.entryMode || "");
+      if (!["AUTO_MOMENTUM", "BUY_ONLY", "SELL_ONLY"].includes(entryMode)) {
+        throw new BadRequestException("Entry Mode ไม่ถูกต้อง");
+      }
+      clean.entryMode = entryMode;
+    }
+
+    if (Object.keys(clean).length === 0) {
+      throw new BadRequestException("ไม่มีค่าการตั้งค่าที่บันทึกได้");
+    }
+
+    const saved = await this.db.one(
+      `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
+       VALUES($1,$2::jsonb,now())
+       ON CONFLICT(bot_instance_id)
+       DO UPDATE SET
+         settings=bot_settings.settings || EXCLUDED.settings,
+         updated_at=now()
+       RETURNING settings`,
       [instance.id, JSON.stringify(clean)]
+    );
+
+    // Only the newest settings command matters. EA also receives the complete
+    // latest settings object in every heartbeat.
+    await this.db.query(
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND command='UPDATE_SETTINGS' AND status IN ('PENDING','DELIVERED')",
+      [instance.id]
     );
     await this.db.query(
       "INSERT INTO bot_commands(bot_instance_id,command,payload) VALUES($1,'UPDATE_SETTINGS',$2::jsonb)",
       [instance.id, JSON.stringify(clean)]
     );
-    return { ok: true, settings: clean };
+
+    return { ok: true, settings: saved?.settings || clean };
   }
 
   private async getInstance(userId: string, slotId?: string | null) {
