@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.006"
+#property version   "1.007"
 #define SCENOVA_PRODUCT_VERSION "2.0.5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -30,6 +30,8 @@ input double          InpBasketTrailMoney     = 0.50;
 input double          InpMaxBasketLossMoney   = 10.00;
 input double          InpDailyLossMoney       = 25.00;
 input double          InpDailyProfitTargetMoney = 0.00;
+input bool            InpDailyProfitContinueAfterTarget = false;
+input double          InpDailyProfitDrawdownPercent = 20.00;
 input double          InpBasketProfitTargetMoney = 0.00;
 input double          InpPerPositionProfitMoney = 0.00;
 input double          InpProfitRunTrailPercent = 0.00;
@@ -56,6 +58,7 @@ double g_peakProfit = 0.0;
 double g_dayStartEquity = 0.0;
 double g_dailyClosedProfit = 0.0;
 bool   g_dailyProfitLocked = false;
+bool   g_dailyProfitTargetArmed = false;
 int    g_dayKey = -1;
 int    g_basketPeakPositionCount = 0;
 double g_basketCycleRealizedProfit = 0.0;
@@ -78,6 +81,8 @@ double g_trailMoney;
 double g_maxBasketLoss;
 double g_dailyLoss;
 double g_dailyProfitTarget;
+bool   g_dailyProfitContinueAfterTarget;
+double g_dailyProfitDrawdownPercent;
 double g_basketProfitTarget;
 double g_perPositionProfit;
 double g_profitRunTrailPercent;
@@ -99,12 +104,13 @@ int OnInit()
    g_maxBasketLoss = InpMaxBasketLossMoney;
    g_dailyLoss = InpDailyLossMoney;
    g_dailyProfitTarget = InpDailyProfitTargetMoney;
+   g_dailyProfitContinueAfterTarget = InpDailyProfitContinueAfterTarget;
+   g_dailyProfitDrawdownPercent = MathMax(0.0, MathMin(95.0, InpDailyProfitDrawdownPercent));
    g_basketProfitTarget = InpBasketProfitTargetMoney;
    g_perPositionProfit = InpPerPositionProfitMoney;
    g_profitRunTrailPercent = InpProfitRunTrailPercent;
    if(g_profitRunTrailPercent > 0.0)
    {
-      g_dailyProfitTarget = 0.0;
       g_basketProfitTarget = 0.0;
       g_perPositionProfit = 0.0;
       g_triggerMoney = 0.0;
@@ -188,24 +194,8 @@ void OnTick()
    double dailyProfit = DailyBotProfit();
    g_executionStatus = "EVALUATING";
 
-   // Daily profit is a hard lock for the rest of the broker day. It counts
-   // realized EA P/L today plus the current basket floating P/L.
-   if(g_dailyProfitLocked ||
-      (g_dailyProfitTarget > 0.0 && dailyProfit >= g_dailyProfitTarget))
-   {
-      if(!g_dailyProfitLocked)
-         LockDailyProfitTarget();
-
-      if(count > 0)
-         CloseAllBasket("DAILY_PROFIT_TARGET");
-
-      g_state = STATE_SAFE_STOP;
-      g_runAuthorized = false;
-      g_forceFirstEntry = false;
-      g_executionStatus = "DAILY_PROFIT_LOCK";
-      ResetTrail();
+   if(HandleDailyProfitControl(count))
       return;
-   }
 
    if(g_dailyLoss > 0.0 && AccountInfoDouble(ACCOUNT_EQUITY) <= g_dayStartEquity - g_dailyLoss)
    {
@@ -229,17 +219,8 @@ void OnTick()
          profit = BasketProfit();
          dailyProfit = DailyBotProfit();
 
-         if(g_dailyProfitTarget > 0.0 && dailyProfit >= g_dailyProfitTarget)
-         {
-            LockDailyProfitTarget();
-            if(count > 0) CloseAllBasket("DAILY_PROFIT_TARGET");
-            g_state = STATE_SAFE_STOP;
-            g_runAuthorized = false;
-            g_forceFirstEntry = false;
-            g_executionStatus = "DAILY_PROFIT_LOCK";
-            ResetTrail();
+         if(HandleDailyProfitControl(count))
             return;
-         }
 
          if(count == 0)
          {
@@ -487,9 +468,11 @@ void SendHeartbeat()
    string accountTradeExpert = AccountExpertAllowedNow() ? "true" : "false";
    string tradeReady = TradePermissionStatus() == "OK" ? "true" : "false";
    string dailyProfitLockedText = g_dailyProfitLocked ? "true" : "false";
+   string dailyProfitTargetArmedText = g_dailyProfitTargetArmed ? "true" : "false";
+   string dailyProfitContinueText = g_dailyProfitContinueAfterTarget ? "true" : "false";
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.006\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.007\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -510,6 +493,10 @@ void SendHeartbeat()
       g_perPositionLoss,
       DailyBotProfit(),
       g_dailyProfitTarget,
+      dailyProfitContinueText,
+      g_dailyProfitDrawdownPercent,
+      dailyProfitTargetArmedText,
+      DailyProfitGivebackFloor(),
       dailyProfitLockedText,
       g_peakProfit,
       BasketPositionCount(),
@@ -690,13 +677,14 @@ void ApplySettings(string json)
    g_maxBasketLoss = MathMax(0.0, JsonNumber(json, "maxBasketLossMoney", g_maxBasketLoss));
    g_dailyLoss = MathMax(0.0, JsonNumber(json, "dailyLossMoney", g_dailyLoss));
    g_dailyProfitTarget = MathMax(0.0, JsonNumber(json, "dailyProfitTargetMoney", g_dailyProfitTarget));
+   g_dailyProfitContinueAfterTarget = JsonBool(json, "dailyProfitContinueAfterTarget", g_dailyProfitContinueAfterTarget);
+   g_dailyProfitDrawdownPercent = MathMax(0.0, MathMin(95.0, JsonNumber(json, "dailyProfitDrawdownPercent", g_dailyProfitDrawdownPercent)));
    g_basketProfitTarget = MathMax(0.0, JsonNumber(json, "basketProfitTargetMoney", g_basketProfitTarget));
    g_perPositionProfit = MathMax(0.0, JsonNumber(json, "perPositionProfitMoney", g_perPositionProfit));
    g_profitRunTrailPercent = MathMax(0.0, MathMin(95.0, JsonNumber(json, "profitRunTrailPercent", g_profitRunTrailPercent)));
    // Percentage profit-run mode is exclusive with every fixed profit exit.
    if(g_profitRunTrailPercent > 0.0)
    {
-      g_dailyProfitTarget = 0.0;
       g_basketProfitTarget = 0.0;
       g_perPositionProfit = 0.0;
       g_triggerMoney = 0.0;
@@ -715,6 +703,10 @@ void ApplySettings(string json)
    if(mode == "BUY_ONLY") g_entryMode = ENTRY_BUY_ONLY;
    else if(mode == "SELL_ONLY") g_entryMode = ENTRY_SELL_ONLY;
    else if(mode == "AUTO_MOMENTUM") g_entryMode = ENTRY_AUTO_MOMENTUM;
+
+   if(g_dailyProfitTargetArmed &&
+      (g_dailyProfitTarget <= 0.0 || DailyBotProfit() < g_dailyProfitTarget))
+      DisarmDailyProfitRunOn();
 }
 
 int EntryDirection(double momentum)
@@ -836,6 +828,16 @@ string ProfitRunPeakGlobalKey()
 {
    return StringFormat(
       "SCN_PRP_%I64d_%I64d_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),
+      InpMagic,
+      _Symbol
+   );
+}
+
+string DailyProfitArmedGlobalKey()
+{
+   return StringFormat(
+      "SCN_DPA_%I64d_%I64d_%s",
       (long)AccountInfoInteger(ACCOUNT_LOGIN),
       InpMagic,
       _Symbol
@@ -1032,6 +1034,127 @@ double DailyBotProfit()
    return g_dailyClosedProfit + BasketProfit();
 }
 
+double DailyProfitGivebackFloor()
+{
+   if(g_dailyProfitTarget <= 0.0)
+      return 0.0;
+
+   double percent = MathMax(0.0, MathMin(95.0, g_dailyProfitDrawdownPercent));
+   return g_dailyProfitTarget * (1.0 - percent / 100.0);
+}
+
+void LoadDailyProfitRunOnState()
+{
+   string key = DailyProfitArmedGlobalKey();
+   g_dailyProfitTargetArmed = false;
+
+   if(!GlobalVariableCheck(key))
+      return;
+
+   int armedDay = (int)GlobalVariableGet(key);
+   if(armedDay == g_dayKey)
+      g_dailyProfitTargetArmed = true;
+   else
+      GlobalVariableDel(key);
+}
+
+void ArmDailyProfitRunOn()
+{
+   if(g_dailyProfitTargetArmed)
+      return;
+
+   g_dailyProfitTargetArmed = true;
+   GlobalVariableSet(DailyProfitArmedGlobalKey(), (double)g_dayKey);
+   Print(
+      "DAILY_PROFIT_RUN_ON armed. Target=",
+      DoubleToString(g_dailyProfitTarget, 2),
+      " floor=",
+      DoubleToString(DailyProfitGivebackFloor(), 2)
+   );
+}
+
+void DisarmDailyProfitRunOn()
+{
+   g_dailyProfitTargetArmed = false;
+   string key = DailyProfitArmedGlobalKey();
+   if(GlobalVariableCheck(key))
+      GlobalVariableDel(key);
+}
+
+bool HandleDailyProfitControl(int count)
+{
+   double dailyProfit = DailyBotProfit();
+
+   if(g_dailyProfitLocked)
+   {
+      if(count > 0)
+         CloseAllBasket("DAILY_PROFIT_LOCK");
+
+      g_state = STATE_SAFE_STOP;
+      g_runAuthorized = false;
+      g_forceFirstEntry = false;
+      g_executionStatus = "DAILY_PROFIT_LOCK";
+      ResetTrail();
+      return true;
+   }
+
+   if(g_dailyProfitTarget <= 0.0)
+   {
+      if(g_dailyProfitTargetArmed)
+         DisarmDailyProfitRunOn();
+      return false;
+   }
+
+   bool continueAfterTarget =
+      g_dailyProfitContinueAfterTarget &&
+      g_dailyProfitDrawdownPercent > 0.0;
+
+   if(continueAfterTarget)
+   {
+      if(!g_dailyProfitTargetArmed && dailyProfit >= g_dailyProfitTarget)
+         ArmDailyProfitRunOn();
+
+      if(g_dailyProfitTargetArmed)
+      {
+         double floor = DailyProfitGivebackFloor();
+         if(dailyProfit <= floor)
+         {
+            LockDailyProfitGiveback();
+            if(count > 0)
+               CloseAllBasket("DAILY_PROFIT_GIVEBACK");
+
+            g_state = STATE_SAFE_STOP;
+            g_runAuthorized = false;
+            g_forceFirstEntry = false;
+            g_executionStatus = "DAILY_PROFIT_GIVEBACK_LOCK";
+            ResetTrail();
+            return true;
+         }
+      }
+
+      return false;
+   }
+
+   if(g_dailyProfitTargetArmed)
+      DisarmDailyProfitRunOn();
+
+   if(dailyProfit >= g_dailyProfitTarget)
+   {
+      LockDailyProfitTarget();
+      if(count > 0)
+         CloseAllBasket("DAILY_PROFIT_TARGET");
+
+      g_state = STATE_SAFE_STOP;
+      g_runAuthorized = false;
+      g_forceFirstEntry = false;
+      g_executionStatus = "DAILY_PROFIT_LOCK";
+      ResetTrail();
+      return true;
+   }
+
+   return false;
+}
+
 void LoadDailyProfitLock()
 {
    string key = DailyProfitLockGlobalKey();
@@ -1052,6 +1175,7 @@ void LockDailyProfitTarget()
    if(g_dailyProfitLocked)
       return;
 
+   DisarmDailyProfitRunOn();
    g_dailyProfitLocked = true;
    GlobalVariableSet(DailyProfitLockGlobalKey(), (double)g_dayKey);
    Print(
@@ -1059,6 +1183,22 @@ void LockDailyProfitTarget()
       DoubleToString(DailyBotProfit(), 2),
       " target=",
       DoubleToString(g_dailyProfitTarget, 2)
+   );
+}
+
+void LockDailyProfitGiveback()
+{
+   if(g_dailyProfitLocked)
+      return;
+
+   DisarmDailyProfitRunOn();
+   g_dailyProfitLocked = true;
+   GlobalVariableSet(DailyProfitLockGlobalKey(), (double)g_dayKey);
+   Print(
+      "DAILY_PROFIT_GIVEBACK reached. Daily bot P/L=",
+      DoubleToString(DailyBotProfit(), 2),
+      " floor=",
+      DoubleToString(DailyProfitGivebackFloor(), 2)
    );
 }
 
@@ -1351,6 +1491,7 @@ void ResetDailyBaseline()
    g_dayKey = t.year * 1000 + t.day_of_year;
    g_dayStartEquity = AccountInfoDouble(ACCOUNT_EQUITY);
    RecalculateDailyClosedProfit();
+   LoadDailyProfitRunOnState();
    LoadDailyProfitLock();
 }
 
