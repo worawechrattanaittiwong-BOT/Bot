@@ -235,12 +235,6 @@ void OnTick()
 
    bool forceFirstEntry = (g_forceFirstEntry && count == 0);
 
-   if(!forceFirstEntry && !SpreadAllowed())
-   {
-      g_executionStatus = "SPREAD_TOO_HIGH";
-      return;
-   }
-
    if(!CanSendOrder())
    {
       g_executionStatus = "ORDER_RATE_LIMIT";
