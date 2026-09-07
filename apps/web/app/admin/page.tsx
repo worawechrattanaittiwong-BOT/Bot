@@ -402,7 +402,7 @@ export default function AdminPage() {
                           <button
                             className="btn danger"
                             style={{marginLeft:8}}
-                            disabled={loading || slot.actual_state==="RUNNING" || slot.desired_state==="RUNNING" || Number(slot.positions||0)>0}
+                            disabled={loading || Number(slot.positions||0)>0 || (slot.mt5_online && (slot.actual_state==="RUNNING" || slot.desired_state==="RUNNING"))}
                             onClick={()=>releaseCustomerDevice(selectedCustomer,slot)}
                           >
                             ปลด Device
