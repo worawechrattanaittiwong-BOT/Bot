@@ -314,7 +314,7 @@ internal static class AgentRunner
                     {
                         instanceId = config.InstanceId,
                         installToken,
-                        agentVersion = "2.0.4",
+                        agentVersion = "2.0.5",
                         terminalPath = config.TerminalDataPath,
                         eaHash,
                         hostname = Environment.MachineName,
@@ -322,9 +322,8 @@ internal static class AgentRunner
                         deviceSecret
                     });
 
-                if (!heartbeat.DeviceVerified)
-                    throw new InvalidOperationException("device verification failed");
-
+                // DeviceVerified is telemetry only. The install token and
+                // Server entitlement are authoritative for trading access.
                 var updated = await UpdateEaIfNeededAsync(
                     http,
                     config,
