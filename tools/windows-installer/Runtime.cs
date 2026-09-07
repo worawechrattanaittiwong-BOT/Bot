@@ -59,10 +59,27 @@ internal static class ScenovaRuntime
     {
         var path = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(path)) return null;
+
         var name = Path.GetFileNameWithoutExtension(path);
         const string prefix = "SCENOVA-Setup-";
         if (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return null;
+
         var code = name[prefix.Length..].Trim();
+
+        // Versioned downloads use:
+        // SCENOVA-Setup-v2.0.3-<enrollment>.exe
+        // Strip only a valid leading semantic version so the API receives the
+        // original enrollment code rather than "v2.0.3-<code>".
+        if (code.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+        {
+            var separator = code.IndexOf('-');
+            if (separator > 1 &&
+                Version.TryParse(code[1..separator], out _))
+            {
+                code = code[(separator + 1)..].Trim();
+            }
+        }
+
         return code.Length >= 12 ? code : null;
     }
 
