@@ -133,27 +133,6 @@ export default function AdminPage() {
     }
   }
 
-  async function releaseCustomerDevice(user: any, slot: any) {
-    if (!confirm(
-      "ปลด Device ของ " + user.user_code + " · Slot #" + slot.slot_number + " ใช่หรือไม่?\n\n" +
-      "ระบบจะไม่ลบสมาชิก ไม่ลบประวัติ Trial และไม่ลบ MT5 เดิม แต่เครื่องเก่าจะใช้งาน Slot นี้ต่อไม่ได้จนติดตั้งใหม่"
-    )) return;
-
-    setLoading(true);
-    try {
-      const result = await adminApi("/admin/devices/release", {
-        method: "POST",
-        body: JSON.stringify({ userId: user.id, slotId: slot.id })
-      });
-      setMessage(result?.message || "ปลด Device Lock ของลูกค้าแล้ว");
-      await search(undefined, true);
-    } catch (e: any) {
-      setMessage(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function reactivate(user: any) {
     try {
       await adminApi("/admin/users/reactivate", {
@@ -394,20 +373,12 @@ export default function AdminPage() {
                       </span>
                       <b>
                         {slot.mode === "LOCAL"
-                          ? (slot.device_status === "ACTIVE"
-                              ? (slot.device_hostname || "REGISTERED PC") + (slot.device_online ? " · ONLINE" : " · OFFLINE")
-                              : "ยังไม่ผูกเครื่อง")
+                          ? (slot.mt5_online
+                              ? "EA ONLINE" + (slot.actual_state ? " · " + slot.actual_state : "")
+                              : slot.account_number
+                                ? "EA OFFLINE"
+                                : "รอลูกค้าติดตั้ง / เปิด MT5")
                           : (slot.actual_state || "CLOUD")}
-                        {slot.mode === "LOCAL" && slot.device_status === "ACTIVE" && (
-                          <button
-                            className="btn danger"
-                            style={{marginLeft:8}}
-                            disabled={loading || Number(slot.positions||0)>0 || (slot.mt5_online && (slot.actual_state==="RUNNING" || slot.desired_state==="RUNNING"))}
-                            onClick={()=>releaseCustomerDevice(selectedCustomer,slot)}
-                          >
-                            ปลด Device
-                          </button>
-                        )}
                       </b>
                     </div>
                   ))}
