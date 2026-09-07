@@ -557,9 +557,9 @@ export class BotController {
 
     return {
       code,
-      fileName: "SCENOVA-Setup-v2.0.1-" + code + ".exe",
-      downloadPath: "/downloads/SCENOVA-Setup-v2.0.1.exe",
-      installerVersion: "2.0.1",
+      fileName: "SCENOVA-Setup-v2.0.2-" + code + ".exe",
+      downloadPath: "/downloads/SCENOVA-Setup-v2.0.2.exe",
+      installerVersion: "2.0.2",
       expiresAt,
       slotId: slot.id
     };
