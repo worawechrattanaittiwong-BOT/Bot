@@ -1739,7 +1739,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .cc-control-field>b{display:block;color:#eaf1f4;font-size:12px}
 .cc-control-field select{
   appearance:none;width:100%;border:0;outline:0;background:transparent;
-  color:#e8eef2;font:700 11px inherit;padding:0;cursor:pointer;
+  color:#e8eef2;font-weight:700;font-size:11px;font-family:inherit;padding:0;cursor:pointer;
 }
 .cc-control-field select option{background:#090f14;color:#e9eef2}
 
