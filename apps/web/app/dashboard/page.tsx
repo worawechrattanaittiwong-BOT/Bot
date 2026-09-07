@@ -897,158 +897,123 @@ export default function DashboardPage() {
                     {settingsDirty ? "มีค่าที่ยังไม่ได้บันทึก" : "ค่าบันทึกแล้ว"}
                   </span>
                 </div>
-                <form className="form-grid form-grid-human" onSubmit={saveSettings}>
-                  <Field
-                    label="Symbol ที่ EA กำลังใช้"
-                    info="อ่านจาก MT5/กราฟที่ FastBasketBot ทำงานอยู่ เพื่อป้องกันชื่อ Symbol ของแต่ละ Broker เช่น XAUUSDm ไม่ตรงกัน"
-                    help="ระบบตรวจจาก MT5 อัตโนมัติ ไม่ต้องกรอกเอง"
-                    value={metrics.symbol || settings.symbol}
-                    readOnly
-                  />
-                  <Field
+                <form className="form-grid form-grid-human simple-settings-form" onSubmit={saveSettings}>
+                  <div className="field">
+                    <label>Symbol</label>
+                    <div className="input read-only-value">{metrics.symbol || settings.symbol}</div>
+                  </div>
+                  <SelectField
                     label="Lot"
-                    info="ขนาด Lot ต่อ Order ค่านี้ถูกส่งให้ EA จาก Server"
-                    help="เริ่มจากค่าน้อยบน Demo ก่อน"
-                    type="number"
-                    step="0.01"
+                    options={[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1]}
                     value={settings.lot}
                     onChange={(v:string)=>editSetting("lot",v)}
                   />
 
-                  <Field
+                  <SelectField
                     label="จำนวน Position สูงสุด"
-                    info="จำนวน Position สูงสุดที่บอทเปิดพร้อมกันได้"
-                    type="number"
+                    options={[1,2,3,4,5,6,7,8,9,10,12,15,20]}
                     value={settings.maxPositions}
                     onChange={(v:string)=>editSetting("maxPositions",v)}
                   />
                   <div className="field">
-                    <label className="label-with-info">โหมดเข้าออเดอร์</label>
+                    <label>โหมดเข้าออเดอร์</label>
                     <select className="input" value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}>
-                      <option value="AUTO_MOMENTUM">AUTO MOMENTUM — เลือกฝั่งออเดอร์แรก แล้วล็อกฝั่งเดียวทั้ง Basket</option>
-                      <option value="BUY_ONLY">BUY ONLY — Buy ทุกออเดอร์ ไม่เปิด Sell</option>
-                      <option value="SELL_ONLY">SELL ONLY — Sell ทุกออเดอร์ ไม่เปิด Buy</option>
+                      <option value="AUTO_MOMENTUM">AUTO MOMENTUM</option>
+                      <option value="BUY_ONLY">BUY ONLY</option>
+                      <option value="SELL_ONLY">SELL ONLY</option>
                     </select>
-                    <small className="help">เมื่อ Basket มี Buy อยู่จะไม่เปิด Sell สวน และเมื่อมี Sell อยู่จะไม่เปิด Buy สวน</small>
                   </div>
 
-                  <div className="settings-group-title">
-                    <b>เป้ากำไรและความเสี่ยง</b>
-                    <span>กำหนดเป้ารายวัน รายไม้ และทั้ง Basket</span>
-                  </div>
+                  <div className="settings-group-title"><b>เป้ากำไรและความเสี่ยง</b></div>
 
-                  <Field
-                    label="กำไรต่อวันแล้วหยุด ($)"
-                    info="กำไรสะสมของ EA วันนี้ = กำไร/ขาดทุนที่ปิดแล้ววันนี้ + Floating ของ Basket ปัจจุบัน เมื่อถึงค่านี้ EA จะปิดทั้งหมดและล็อกหยุดจนขึ้นวันใหม่"
-                    help="ใส่ 0 = ปิดฟังก์ชันนี้"
-                    type="number"
-                    step="0.01"
+                  <ToggleSelectField
+                    label="กำไรต่อวันแล้วหยุด"
+                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
+                    defaultValue="10"
                     value={settings.dailyProfitTargetMoney}
+                    format={(v:string)=>"$" + v}
                     onChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)}
                   />
-                  <Field
-                    label="ขาดทุนต่อวันแล้วหยุด ($)"
-                    info="วงเงินขาดทุนรายวัน เมื่อถึงขีดจำกัดระบบจะหยุดตาม Logic ความเสี่ยง"
-                    help="ใส่ 0 = ปิดฟังก์ชันนี้"
-                    type="number"
-                    step="0.01"
+                  <ToggleSelectField
+                    label="ขาดทุนต่อวันแล้วหยุด"
+                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
+                    defaultValue="25"
                     value={settings.dailyLossMoney}
+                    format={(v:string)=>"$" + v}
                     onChange={(v:string)=>editSetting("dailyLossMoney",v)}
                   />
 
-                  <Field
-                    label="กำไรต่อไม้แล้วปิด ($)"
-                    info="Position ไหนมี P/L ถึงกำไรที่กำหนด EA จะปิดเฉพาะ Position นั้น"
-                    help={
-                      Number(settings.perPositionProfitMoney || 0) > 0
-                        ? "โหมดกำไรต่อไม้กำลังทำงาน · กำไรรวม Basket ถูกปิดอัตโนมัติ"
-                        : "ใส่ 0 = ปิดโหมดกำไรต่อไม้"
-                    }
-                    type="number"
-                    step="0.01"
+                  <ToggleSelectField
+                    label="กำไรต่อไม้แล้วปิด"
+                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
+                    defaultValue="2"
                     value={settings.perPositionProfitMoney}
+                    format={(v:string)=>"$" + v}
                     onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}
                   />
-                  <Field
-                    label="กำไรรวม Basket แล้วปิด ($)"
-                    info="เมื่อกำไรรวมของรอบ Basket ถึงค่านี้ EA จะปิด Position ที่เหลือทั้งหมด"
-                    help={
-                      Number(settings.basketProfitTargetMoney || 0) > 0
-                        ? "โหมดกำไรรวมกำลังทำงาน · กำไรต่อไม้ถูกปิดอัตโนมัติ"
-                        : "ใส่ 0 = ปิดโหมดกำไรรวม"
-                    }
-                    type="number"
-                    step="0.01"
+                  <ToggleSelectField
+                    label="กำไรรวม Basket แล้วปิด"
+                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
+                    defaultValue="10"
                     value={settings.basketProfitTargetMoney}
+                    format={(v:string)=>"$" + v}
                     onChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}
                   />
 
-                  <Field
-                    label="ขาดทุนต่อไม้แล้วปิด ($)"
-                    info="Position ไหนมี P/L ถึงค่าขาดทุนที่กำหนด EA จะปิดเฉพาะ Position นั้นทันที ไม่รอ Max Basket Loss"
-                    help="เช่น 2 = ปิดไม้เมื่อ P/L ของไม้นั้น ≤ -$2 · ใส่ 0 = ปิดฟังก์ชันนี้"
-                    type="number"
-                    step="0.01"
+                  <ToggleSelectField
+                    label="ขาดทุนต่อไม้แล้วปิด"
+                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
+                    defaultValue="2"
                     value={settings.perPositionLossMoney}
+                    format={(v:string)=>"$" + v}
                     onChange={(v:string)=>editSetting("perPositionLossMoney",v)}
                   />
-                  <Field
-                    label="ขาดทุน Basket สูงสุด ($)"
-                    info="ขีดจำกัดขาดทุนรวม Floating ของ Basket ถ้าถึงจะปิดทุกไม้ใน Basket"
-                    help="ใส่ 0 = ปิดฟังก์ชันนี้"
-                    type="number"
-                    step="0.01"
+                  <ToggleSelectField
+                    label="ขาดทุน Basket สูงสุด"
+                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
+                    defaultValue="10"
                     value={settings.maxBasketLossMoney}
+                    format={(v:string)=>"$" + v}
                     onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}
                   />
 
-                  <div className="settings-group-title">
-                    <b>Basket Trailing</b>
-                    <span>ใช้เมื่อต้องการปล่อยกำไรวิ่ง แล้วปิดเมื่อย่อลงจาก Peak</span>
-                  </div>
+                  <div className="settings-group-title"><b>Basket Trailing</b></div>
 
-                  <Field
-                    label="กำไรรวมเริ่ม Trailing ($)"
-                    info="เมื่อกำไรรวม Floating ของ Basket ถึงค่านี้ ระบบเริ่มจำ Peak Profit"
-                    type="number"
-                    step="0.01"
-                    value={settings.basketTriggerMoney}
-                    onChange={(v:string)=>editSetting("basketTriggerMoney",v)}
-                  />
-                  <Field
-                    label="ย่อตัวจาก Peak แล้วปิด ($)"
-                    info="หลังเริ่ม Trailing หากกำไรรวมย่อลงจาก Peak ตามค่านี้ EA จะปิด Basket"
-                    type="number"
-                    step="0.01"
-                    value={settings.basketTrailMoney}
-                    onChange={(v:string)=>editSetting("basketTrailMoney",v)}
+                  <TogglePairField
+                    label="ใช้ Basket Trailing"
+                    firstValue={settings.basketTriggerMoney}
+                    secondValue={settings.basketTrailMoney}
+                    firstDefault="2"
+                    secondDefault="0.5"
+                    firstOptions={[0.5,1,2,3,5,10,15,20,30,50,100]}
+                    secondOptions={[0.1,0.2,0.3,0.5,0.75,1,2,3,5,10]}
+                    firstPrefix="เริ่ม $"
+                    secondPrefix="ย่อ $"
+                    onFirstChange={(v:string)=>editSetting("basketTriggerMoney",v)}
+                    onSecondChange={(v:string)=>editSetting("basketTrailMoney",v)}
                   />
 
-                  <div className="settings-group-title">
-                    <b>ความถี่การส่งคำสั่ง</b>
-                    <span>ควบคุมจังหวะและจำนวนคำสั่งสูงสุดของ EA</span>
-                  </div>
+                  <div className="settings-group-title"><b>ความถี่การส่งคำสั่ง</b></div>
 
-                  <Field
-                    label="ระยะห่างคำสั่งขั้นต่ำ (ms)"
-                    info="เวลาขั้นต่ำระหว่างการส่ง Order แต่ละครั้ง"
-                    type="number"
+                  <SelectField
+                    label="ระยะห่างคำสั่งขั้นต่ำ"
+                    options={[100,200,300,500,750,1000,1500,2000,3000,5000]}
                     value={settings.minOrderIntervalMs}
+                    format={(v:string)=>v + " ms"}
                     onChange={(v:string)=>editSetting("minOrderIntervalMs",v)}
                   />
-                  <Field
+                  <SelectField
                     label="คำสั่งสูงสุดต่อนาที"
-                    info="Rate Limit จำนวนคำสั่ง Order สูงสุดใน 1 นาที"
-                    type="number"
+                    options={[10,20,30,60,90,120,180,240]}
                     value={settings.maxOrdersPerMinute}
+                    format={(v:string)=>v + " ครั้ง"}
                     onChange={(v:string)=>editSetting("maxOrdersPerMinute",v)}
                   />
 
                   <div className="field submit-field settings-submit">
-                    <button className="btn primary btn-lg" title="บันทึกค่าไป Server ให้ EA รับใน Heartbeat ถัดไป" disabled={busy || !settingsDirty}>
-                      {busy ? "กำลังบันทึก..." : settingsDirty ? "บันทึกและใช้ค่ากับบอท" : "ใช้ค่าล่าสุดแล้ว"}
+                    <button className="btn primary btn-lg" disabled={busy || !settingsDirty}>
+                      {busy ? "กำลังบันทึก..." : settingsDirty ? "บันทึกการตั้งค่า" : "บันทึกแล้ว"}
                     </button>
-                    <small className="help">Auto Refresh 2 วินาทีจะไม่เขียนทับค่าที่คุณกำลังแก้ ก่อนกดบันทึก</small>
                   </div>
                 </form>
                 <div className="detail-list" style={{marginTop:12}}>
@@ -1077,7 +1042,7 @@ export default function DashboardPage() {
                     </b>
                   </div>
                 </div>
-                <div className="notice risk-notice">กำไรต่อไม้และกำไรรวม Basket ใช้พร้อมกันไม่ได้ · ถ้ากำหนดตัวใดมากกว่า 0 ระบบจะปิดอีกตัวเป็น 0 อัตโนมัติ ทั้งหน้าเว็บ Server และ EA</div>
+                <div className="notice risk-notice">เลือกใช้ “กำไรต่อไม้” หรือ “กำไรรวม Basket” ได้อย่างใดอย่างหนึ่ง</div>
               </section>
 
               <section className="panel overview-access-card">
@@ -1484,6 +1449,118 @@ function InfoTip({text}:{text:string}) {
       <button type="button" className="info-tip" aria-label={"ข้อมูล: " + text} title={text}>!</button>
       <span className="info-tip-popover" role="tooltip">{text}</span>
     </span>
+  );
+}
+
+function SelectField(props: any) {
+  const values = Array.from(
+    new Set([
+      ...(props.options || []).map((value:any)=>String(value)),
+      props.value !== undefined && props.value !== null && String(props.value) !== ""
+        ? String(props.value)
+        : ""
+    ].filter(Boolean))
+  );
+
+  return (
+    <div className="field">
+      <label>{props.label}</label>
+      <select
+        className="input"
+        value={String(props.value ?? "")}
+        disabled={Boolean(props.disabled)}
+        onChange={e=>props.onChange?.(e.target.value)}
+      >
+        {values.map((value:string)=>(
+          <option key={value} value={value}>{props.format ? props.format(value) : value}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function ToggleSelectField(props: any) {
+  const enabled = Number(props.value || 0) > 0;
+  const selectedValue = enabled ? String(props.value) : String(props.defaultValue);
+  const values = Array.from(
+    new Set([
+      ...(props.options || []).map((value:any)=>String(value)),
+      selectedValue
+    ].filter(Boolean))
+  );
+
+  return (
+    <div className={"field toggle-select-field " + (enabled ? "enabled" : "")}>
+      <label className="toggle-setting-label">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={e=>{
+            props.onChange?.(e.target.checked ? selectedValue : "0");
+          }}
+        />
+        <span>{props.label}</span>
+      </label>
+      <select
+        className="input"
+        value={selectedValue}
+        disabled={!enabled}
+        onChange={e=>props.onChange?.(e.target.value)}
+      >
+        {values.map((value:string)=>(
+          <option key={value} value={value}>{props.format ? props.format(value) : value}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function TogglePairField(props: any) {
+  const enabled = Number(props.firstValue || 0) > 0 && Number(props.secondValue || 0) > 0;
+  const firstValue = enabled ? String(props.firstValue) : String(props.firstDefault);
+  const secondValue = enabled ? String(props.secondValue) : String(props.secondDefault);
+
+  return (
+    <div className={"field toggle-pair-field " + (enabled ? "enabled" : "")}>
+      <label className="toggle-setting-label">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={e=>{
+            if (e.target.checked) {
+              props.onFirstChange?.(firstValue);
+              props.onSecondChange?.(secondValue);
+            } else {
+              props.onFirstChange?.("0");
+              props.onSecondChange?.("0");
+            }
+          }}
+        />
+        <span>{props.label}</span>
+      </label>
+      <div className="toggle-pair-controls">
+        <select
+          className="input"
+          value={firstValue}
+          disabled={!enabled}
+          onChange={e=>props.onFirstChange?.(e.target.value)}
+        >
+          {props.firstOptions.map((value:any)=>(
+            <option key={value} value={String(value)}>{props.firstPrefix || ""}{value}</option>
+          ))}
+        </select>
+        <select
+          className="input"
+          value={secondValue}
+          disabled={!enabled}
+          onChange={e=>props.onSecondChange?.(e.target.value)}
+        >
+          {props.secondOptions.map((value:any)=>(
+            <option key={value} value={String(value)}>{props.secondPrefix || ""}{value}</option>
+          ))}
+        </select>
+      </div>
+    </div>
   );
 }
 
