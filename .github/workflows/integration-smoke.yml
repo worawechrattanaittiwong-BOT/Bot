@@ -192,6 +192,11 @@ jobs:
           INSTANCE_SECOND=$(printf '%s' "$ENROLL_SECOND" | jq -r '.instanceId')
           test -n "$INSTANCE_SECOND"
 
+          echo "[integration] owner customer list exposes LOCAL device locks"
+          ADMIN_USERS=$(curl -fsS "$BASE/admin/users?q=integration2" -H 'x-admin-key: integration-admin')
+          test "$(printf '%s' "$ADMIN_USERS" | jq -r '.[0].customer_slots | type')" = "array"
+          test "$(printf '%s' "$ADMIN_USERS" | jq -r --arg slot "$SLOT_SECOND" '.[0].customer_slots[] | select(.id==$slot) | .device_status')" = "ACTIVE"
+
           echo "[integration] owner can release an offline customer device even when stale RUNNING remains"
           PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set actual_state='RUNNING',desired_state='RUNNING',last_seen_at=now()-interval '5 minutes',metrics=jsonb_set(coalesce(metrics,'{}'::jsonb),'{positions}','0'::jsonb,true) where slot_id='$SLOT_SECOND';" >/dev/null
           ADMIN_RELEASE=$(curl -fsS -X POST "$BASE/admin/devices/release" -H 'x-admin-key: integration-admin' -H 'content-type: application/json' -d "{\"userId\":\"$USER2_ID\",\"slotId\":\"$SLOT_SECOND\"}")
