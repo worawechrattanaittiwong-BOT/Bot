@@ -78,7 +78,8 @@ export class BotController {
   private executionStatusMeta(code: string) {
     const map: Record<string, { label: string; detail: string; tone: string }> = {
       NOT_INSTALLED: { label: "ยังไม่ได้ติดตั้ง", detail: "ติดตั้ง SCENOVA จากเว็บไซต์ก่อน", tone: "warn" },
-      MT5_OFFLINE: { label: "MT5 ยังไม่เชื่อมต่อ", detail: "เปิด MT5 และให้ EA ทำงานบนกราฟ", tone: "bad" },
+      MT5_OFFLINE: { label: "MT5 ยังไม่เชื่อมต่อ", detail: "ยังไม่พบ Heartbeat จาก EA ใน MetaTrader 5", tone: "bad" },
+      EA_NOT_LOADED: { label: "Device Agent ออนไลน์ แต่ EA ยังไม่ทำงาน", detail: "ติดตั้งสำเร็จแล้ว แต่ FastBasketBot ยังไม่ได้ถูกโหลด/เชื่อมใน MT5", tone: "warn" },
       TERMINAL_DISCONNECTED: { label: "MT5 ไม่มีการเชื่อมต่อ", detail: "Terminal ยังไม่เชื่อม Broker/Server", tone: "bad" },
       ALGO_TRADING_OFF: { label: "Algo Trading ปิดอยู่", detail: "เปิด Algo Trading ใน MetaTrader 5 ก่อนเริ่มบอท", tone: "bad" },
       EA_TRADING_DISABLED: { label: "EA ไม่ได้รับอนุญาตให้เทรด", detail: "เปิด Allow Algo Trading ใน Properties ของ EA", tone: "bad" },
@@ -123,8 +124,9 @@ export class BotController {
 
     const metrics = instance.metrics || {};
     if (!instance.mt5_online) {
-      const meta = this.executionStatusMeta("MT5_OFFLINE");
-      return { code: "MT5_OFFLINE", ...meta, tradeReady: false };
+      const code = instance.agent_online ? "EA_NOT_LOADED" : "MT5_OFFLINE";
+      const meta = this.executionStatusMeta(code);
+      return { code, ...meta, tradeReady: false };
     }
 
     if (String(metrics.eaVersion || "") !== "1.003") {
