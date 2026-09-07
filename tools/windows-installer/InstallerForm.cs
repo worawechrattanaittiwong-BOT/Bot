@@ -6,7 +6,7 @@ namespace ScenovaInstaller;
 
 internal sealed class InstallerForm : Form
 {
-    private const string InstallerVersion = "2.0.2";
+    private const string InstallerVersion = "2.0.3";
     private const string LastUpdated = "7 กันยายน 2026";
     private readonly ComboBox _terminal = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
     private readonly Button _install = new() { Text = "ติดตั้ง SCENOVA", Width = 180, Height = 42 };
