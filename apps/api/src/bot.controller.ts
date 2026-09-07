@@ -26,7 +26,7 @@ export class BotController {
 
   private supportedEaRuntime(version: any) {
     const value = Number(String(version || "").trim());
-    return Number.isFinite(value) && value >= 1.004;
+    return Number.isFinite(value) && value >= 1.005;
   }
 
   private installerUpdateState(instance: any, mode?: string | null) {
@@ -108,7 +108,7 @@ export class BotController {
       TERMINAL_DISCONNECTED: { label: "MT5 ไม่มีการเชื่อมต่อ", detail: "Terminal ยังไม่เชื่อม Broker/Server", tone: "bad" },
       ALGO_TRADING_OFF: { label: "Algo Trading ปิดอยู่", detail: "เปิด Algo Trading ใน MetaTrader 5 ก่อนเริ่มบอท", tone: "bad" },
       EA_TRADING_DISABLED: { label: "EA ไม่ได้รับอนุญาตให้เทรด", detail: "เปิด Allow Algo Trading ใน Properties ของ EA", tone: "bad" },
-      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "ติดตั้ง/อัปเดต FastBasketBot จากเว็บไซต์ SCENOVA ให้เป็น v1.004 ขึ้นไป", tone: "bad" },
+      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "ติดตั้ง/อัปเดต FastBasketBot จากเว็บไซต์ SCENOVA ให้เป็น v1.005 ขึ้นไป", tone: "bad" },
       ACCOUNT_TRADING_DISABLED: { label: "บัญชีนี้ไม่อนุญาตให้เทรด", detail: "ตรวจสิทธิ์ Trading ของบัญชีกับ Broker", tone: "bad" },
       ACCOUNT_EXPERT_DISABLED: { label: "บัญชีไม่อนุญาต Expert Advisor", detail: "Broker/บัญชีปิดการเทรดด้วย EA", tone: "bad" },
       SYMBOL_TRADING_DISABLED: { label: "Symbol นี้เปิดออเดอร์ไม่ได้", detail: "Broker ปิดการเปิดออเดอร์ใหม่บน Symbol นี้", tone: "bad" },
