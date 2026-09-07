@@ -89,6 +89,15 @@ h3{margin:0;font-size:16px}
 .toggle-select-field.enabled,.toggle-pair-field.enabled{border-color:#31564b;background:#0a1210}
 .toggle-select-field.disabled,.toggle-pair-field.disabled{opacity:.48}
 .toggle-select-field.disabled .toggle-setting-label,.toggle-pair-field.disabled .toggle-setting-label{cursor:not-allowed}
+.daily-profit-target-field{border:1px solid #1d2b32;background:#080d10;border-radius:14px;padding:13px}
+.daily-profit-target-field.enabled{border-color:#31564b;background:#0a1210}
+.daily-profit-main-row{display:grid;grid-template-columns:minmax(120px,.75fr) auto minmax(170px,1fr);gap:10px;align-items:center}
+.mini-check{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:11px;color:#b8c7cc;cursor:pointer;padding:0 4px}
+.mini-check input[type="checkbox"]{appearance:none;width:16px;height:16px;border-radius:4px;border:1px solid #36505c;background:#060a0d;display:grid;place-items:center;flex:0 0 auto;cursor:pointer}
+.mini-check input[type="checkbox"]:checked{background:#163d2d;border-color:#62d79d}
+.mini-check input[type="checkbox"]:checked:after{content:"✓";font-size:11px;line-height:1;color:#9df0c3;font-weight:900}
+.mini-check.disabled{opacity:.4;cursor:not-allowed}
+.daily-profit-percent-select:disabled{opacity:.35}
 .toggle-setting-label{display:flex;align-items:center;gap:10px!important;cursor:pointer;color:#d8e3e6!important;font-weight:650}
 .toggle-setting-label input[type="checkbox"]{appearance:none;width:19px;height:19px;border-radius:5px;border:1px solid #36505c;background:#060a0d;display:grid;place-items:center;flex:0 0 auto;cursor:pointer}
 .toggle-setting-label input[type="checkbox"]:checked{background:#163d2d;border-color:#62d79d}
@@ -130,6 +139,8 @@ td{color:#b9c8ce}
   .settings-group-title{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
   .settings-group-title span{text-align:left}
   .toggle-pair-controls{grid-template-columns:1fr}
+  .daily-profit-main-row{grid-template-columns:1fr}
+  .mini-check{padding:2px 0}
   .shell{width:min(100% - 22px,1180px)}
   .topbar{height:62px}
   .nav .hide-sm{display:none}
