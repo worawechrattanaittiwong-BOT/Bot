@@ -172,7 +172,7 @@ internal sealed class InstallerForm : Form
                 JsonSerializer.Serialize(config, ScenovaRuntime.JsonOptions),
                 new UTF8Encoding(false));
 
-            _status.Text = "กำลังเปิดใช้งาน Device Agent...";
+            _status.Text = "กำลังอัปเดตและเปิดใช้งาน Device Agent...";
             AgentRunner.InstallAndStart();
 
             _progress.Visible = false;
