@@ -273,29 +273,69 @@ export default function DashboardPage() {
         throw new Error("กรุณาหยุดบอทก่อนติดตั้ง ย้ายเครื่อง หรืออัปเกรด Device Lock");
       }
 
-      const result = await api("/bot/installers/windows", {
-        method: "POST",
-        body: JSON.stringify({ slotId: selectedSlotIdRef.current || undefined })
-      });
-      if (!result?.downloadPath || !result?.fileName) {
-        throw new Error("ยังไม่มี SCENOVA Windows Installer พร้อมดาวน์โหลด");
+      await downloadInstallerForSlot(selectedSlotIdRef.current);
+      setActivationMessage("ดาวน์โหลด SCENOVA Setup แล้ว ดับเบิลคลิกไฟล์ .exe ที่ได้จากหน้านี้เพื่อติดตั้ง ไม่ต้องใช้ CMD หรือ PowerShell");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function downloadInstallerForSlot(slotId: string) {
+    const result = await api("/bot/installers/windows", {
+      method: "POST",
+      body: JSON.stringify({ slotId: slotId || undefined })
+    });
+    if (!result?.downloadPath || !result?.fileName) {
+      throw new Error("ยังไม่มี SCENOVA Windows Installer พร้อมดาวน์โหลด");
+    }
+
+    const response = await fetch(result.downloadPath, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error("ไฟล์ SCENOVA Installer ยังไม่พร้อม กรุณาลองอีกครั้งหลังระบบ Build เสร็จ");
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = result.fileName;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return result;
+  }
+
+  async function releaseLocalDevice(slot: any, moveAndDownload = false) {
+    const action = moveAndDownload ? "ย้ายเครื่อง" : "ปลดเครื่องเดิม";
+    if (!confirm(
+      action + " ของ Slot #" + slot.slot_number + " ใช่หรือไม่?\n\n" +
+      "ระบบจะหยุดสิทธิ์ Device เดิมทันที แต่จะไม่ลบสมาชิก ประวัติ Trial หรือบัญชี MT5 ของ Slot"
+    )) return;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    setActivationMessage("");
+    try {
+      const result = await api(
+        "/bot/device/release?slotId=" + encodeURIComponent(slot.id),
+        { method: "POST" }
+      );
+
+      if (moveAndDownload) {
+        await downloadInstallerForSlot(slot.id);
+        setActivationMessage(
+          "ปลดเครื่องเดิมแล้ว และดาวน์โหลด Installer สำหรับ Slot #" + slot.slot_number +
+          " เรียบร้อย ให้นำไฟล์นี้ไปติดตั้งบนเครื่องใหม่"
+        );
+      } else {
+        setNotice(result?.message || "ปลดเครื่องเดิมแล้ว Slot พร้อมลงทะเบียนเครื่องใหม่");
       }
 
-      const response = await fetch(result.downloadPath, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error("ไฟล์ SCENOVA Installer ยังไม่พร้อม กรุณาลองอีกครั้งหลังระบบ Build เสร็จ");
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = result.fileName;
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setActivationMessage("ดาวน์โหลด SCENOVA Setup แล้ว ดับเบิลคลิกไฟล์ .exe ที่ได้จากหน้านี้เพื่อติดตั้ง ไม่ต้องใช้ CMD หรือ PowerShell");
+      await load(selectedSlotIdRef.current || slot.id);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -873,10 +913,10 @@ export default function DashboardPage() {
                     <span className={"dot "+(isMt5Online?"green":"red")}/>
                     {connectionLabel}
                   </span>
-                  {data.selectedSlot?.mode === "LOCAL" && data.account && (
+                  {data.selectedSlot?.mode === "LOCAL" && (
                     <button
                       className="btn primary"
-                      disabled={busy || state==="RUNNING" || desired==="RUNNING" || !data.instance?.device_online}
+                      disabled={busy || !data.account || state==="RUNNING" || desired==="RUNNING" || !data.instance?.device_online}
                       onClick={requestMt5Change}
                     >
                       เปลี่ยนบัญชี MT5
@@ -884,8 +924,14 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
-              {data.selectedSlot?.mode === "LOCAL" && data.account && !data.instance?.device_online && (
-                <div className="help">ต้องให้ Device Agent ของเครื่องที่ลงทะเบียน Online ก่อน จึงจะกดเปลี่ยน MT5 ได้</div>
+              {data.selectedSlot?.mode === "LOCAL" && (
+                <div className="help">
+                  {!data.account
+                    ? "ยังไม่มีบัญชี MT5 เดิมให้เปลี่ยน — ติดตั้ง SCENOVA แล้วระบบจะตรวจและผูก MT5 ครั้งแรกให้อัตโนมัติ"
+                    : !data.instance?.device_online
+                      ? "ปุ่มเปลี่ยนบัญชีแสดงอยู่ แต่ต้องให้ Device Agent ของเครื่องที่ลงทะเบียน Online ก่อนจึงจะใช้งานได้"
+                      : "ต้องการเปลี่ยน Demo / Real หรือ Login อื่นบนเครื่องเดิม ให้กด “เปลี่ยนบัญชี MT5”"}
+                </div>
               )}
             </section>
 
@@ -927,11 +973,32 @@ export default function DashboardPage() {
                   </div>
 
                   {data.instance?.device_status === "ACTIVE" && (
-                    <div className="device-lock-grid">
-                      <div><span>Device</span><b>{data.instance.device_hostname || "REGISTERED PC"}</b></div>
-                      <div><span>Agent</span><b className={data.instance.device_online?"text-good":"text-warn"}>{data.instance.device_online ? "ONLINE" : "OFFLINE"}</b></div>
-                      <div><span>Last Seen</span><b>{data.instance.device_last_seen_at ? new Date(data.instance.device_last_seen_at).toLocaleString("th-TH") : "—"}</b></div>
-                    </div>
+                    <>
+                      <div className="device-lock-grid">
+                        <div><span>Device</span><b>{data.instance.device_hostname || "REGISTERED PC"}</b></div>
+                        <div><span>Agent</span><b className={data.instance.device_online?"text-good":"text-warn"}>{data.instance.device_online ? "ONLINE" : "OFFLINE"}</b></div>
+                        <div><span>Last Seen</span><b>{data.instance.device_last_seen_at ? new Date(data.instance.device_last_seen_at).toLocaleString("th-TH") : "—"}</b></div>
+                      </div>
+                      <div className="account-card-actions" style={{marginTop:12}}>
+                        <button
+                          className="btn"
+                          disabled={busy || state==="RUNNING" || desired==="RUNNING"}
+                          onClick={()=>releaseLocalDevice(data.selectedSlot,false)}
+                        >
+                          ปลดเครื่องเดิม
+                        </button>
+                        <button
+                          className="btn primary"
+                          disabled={busy || state==="RUNNING" || desired==="RUNNING"}
+                          onClick={()=>releaseLocalDevice(data.selectedSlot,true)}
+                        >
+                          ย้ายเครื่อง
+                        </button>
+                      </div>
+                      <div className="help">
+                        “ปลดเครื่องเดิม” ใช้เมื่อเครื่องเก่าเข้าไม่ได้หรือจะให้เครื่องนี้ใช้ Slot อื่น · “ย้ายเครื่อง” จะปลดเครื่องเดิมและดาวน์โหลด Installer ของ Slot นี้ทันที
+                      </div>
+                    </>
                   )}
 
                   {activationMessage && <div className="notice good">{activationMessage}</div>}
@@ -968,6 +1035,44 @@ export default function DashboardPage() {
                     </div>
                   </section>
                 )}
+
+                <section className="panel">
+                  <div className="panel-head">
+                    <div>
+                      <div className="eyebrow">LOCAL DEVICE LOCKS</div>
+                      <h2>เครื่องที่ผูกกับ Local Slots</h2>
+                      <p className="muted">ถ้า Installer แจ้งว่าเครื่องนี้มี Local Slot เดิมอยู่ ให้ดูรายการนี้แล้วปลด Slot เดิมก่อนติดตั้ง Slot ใหม่บนเครื่องเดียวกัน</p>
+                    </div>
+                  </div>
+                  <div className="partner-slot-list">
+                    {(data.slots || []).filter((slot:any)=>slot.can_control && slot.mode==="LOCAL").map((slot:any)=>(
+                      <div className="partner-slot-row" key={slot.id}>
+                        <div className="partner-slot-number"><span>SLOT</span><b>{slot.slot_number}</b></div>
+                        <div className="partner-slot-user">
+                          <b>{slot.device_status === "ACTIVE" ? (slot.device_hostname || "REGISTERED PC") : "ยังไม่ผูกเครื่อง"}</b>
+                          <small>{slot.account_number ? "MT5 " + slot.account_number : "ยังไม่เชื่อม MT5"}</small>
+                        </div>
+                        <div className="partner-slot-meta">
+                          <span>{slot.device_status || "UNREGISTERED"}</span>
+                          <small>{slot.device_last_seen_at ? "เห็นล่าสุด " + new Date(slot.device_last_seen_at).toLocaleString("th-TH") : ""}</small>
+                        </div>
+                        <div className="partner-slot-actions">
+                          {slot.device_status === "ACTIVE" ? (
+                            <button
+                              className="btn danger"
+                              disabled={busy || slot.actual_state==="RUNNING" || slot.desired_state==="RUNNING"}
+                              onClick={()=>releaseLocalDevice(slot,false)}
+                            >
+                              ปลดเครื่อง
+                            </button>
+                          ) : (
+                            <span className="owner-state-chip">FREE</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
 
                 <section className="panel first-install-guide">
                   <div className="eyebrow">LOCAL MT5 · AUTO DETECT</div>
