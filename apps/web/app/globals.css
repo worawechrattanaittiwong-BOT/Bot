@@ -1336,3 +1336,94 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
     width:100%;
   }
 }
+
+
+/* ===== Real-time EA execution telemetry ===== */
+.execution-live{
+  margin:14px 0;
+  padding:13px 14px;
+  border:1px solid #20343d;
+  border-radius:13px;
+  background:#081014;
+}
+.execution-live-head{
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  gap:9px;
+  align-items:center;
+}
+.live-pulse{
+  width:9px;
+  height:9px;
+  border-radius:50%;
+  background:#79d99f;
+  box-shadow:0 0 0 5px rgba(121,217,159,.08),0 0 16px rgba(121,217,159,.35);
+  animation:scenova-live-pulse 1.6s ease-in-out infinite;
+}
+.execution-live-head small,
+.execution-live-head b{display:block}
+.execution-live-head small{
+  color:#6b858f;
+  font:8px monospace;
+  letter-spacing:.12em;
+}
+.execution-live-head b{
+  margin-top:2px;
+  color:#e8f0f2;
+  font-size:12px;
+}
+.execution-code{
+  color:#71858e;
+  font:8px monospace;
+  border:1px solid #233840;
+  border-radius:999px;
+  padding:5px 8px;
+}
+.execution-live p{
+  margin:8px 0 0;
+  color:#81949c;
+  font-size:10px;
+  line-height:1.5;
+}
+.execution-metrics{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:7px;
+  margin-top:10px;
+}
+.execution-metrics span{
+  padding:8px 9px;
+  border:1px solid #192c34;
+  border-radius:9px;
+  color:#627983;
+  font-size:8px;
+  background:#071014;
+}
+.execution-metrics b{
+  display:block;
+  margin-top:3px;
+  color:#c9d8dd;
+  font:700 10px monospace;
+}
+.execution-last-order{
+  margin-top:9px;
+  padding-top:8px;
+  border-top:1px solid #193039;
+  color:#748a93;
+  font-size:9px;
+}
+.execution-good{border-color:#204b39}
+.execution-good .live-pulse{background:#79d99f}
+.execution-warn{border-color:#4a4124}
+.execution-warn .live-pulse{background:#e6c46a;box-shadow:0 0 0 5px rgba(230,196,106,.08),0 0 16px rgba(230,196,106,.28)}
+.execution-bad{border-color:#532b31}
+.execution-bad .live-pulse{background:#ee7782;box-shadow:0 0 0 5px rgba(238,119,130,.08),0 0 16px rgba(238,119,130,.28)}
+@keyframes scenova-live-pulse{
+  0%,100%{transform:scale(.9);opacity:.72}
+  50%{transform:scale(1.15);opacity:1}
+}
+@media(max-width:760px){
+  .execution-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .execution-live-head{grid-template-columns:auto 1fr}
+  .execution-code{grid-column:2;justify-self:start}
+}
