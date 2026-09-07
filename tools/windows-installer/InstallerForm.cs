@@ -330,6 +330,16 @@ internal sealed class InstallerForm : Form
         "InpFlowTrailBoost=0.60",
         "InpPauseOnManualTrade=true",
         "InpHeartbeatSeconds=3",
-        "InpMaxOfflineLeaseSeconds=600"
+        "InpMaxOfflineLeaseSeconds=600",
+        "InpAdaptiveEngine=true",
+        "InpRiskPerOrderPercent=0.25",
+        "InpHardStopAtrMultiplier=2.0",
+        "InpAtrPeriod=14",
+        "InpConfidenceThreshold=70",
+        "InpSessionStartHour=0",
+        "InpSessionEndHour=24",
+        "InpMaxAtrPoints=0",
+        "InpCooldownMinutesAfterLoss=5",
+        "InpMaxConsecutiveLosses=3"
     ];
 }
