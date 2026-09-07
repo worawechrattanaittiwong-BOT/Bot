@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.010"
+#property version   "1.011"
 #define SCENOVA_PRODUCT_VERSION "2.0.7"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -140,6 +140,11 @@ double g_maxAtrPoints;
 int    g_cooldownMinutesAfterLoss;
 int    g_maxConsecutiveLosses;
 string g_marketRegime = "INITIALIZING";
+int    g_trendM5 = 0;
+int    g_trendM15 = 0;
+int    g_trendH1 = 0;
+int    g_macroTrendDirection = 0;
+string g_entryBias = "BOTH";
 double g_signalConfidence = 0.0;
 double g_atrPoints = 0.0;
 double g_atrRatio = 1.0;
@@ -176,6 +181,8 @@ int    g_executionAttempts = 0;
 int    g_executionAccepted = 0;
 double g_averageSlippagePoints = 0.0;
 datetime g_lastEntryAt = 0;
+double g_pyramidProgressPoints = 0.0;
+double g_pyramidRequiredPoints = 0.0;
 string g_sessionProfile = "UNKNOWN";
 bool   g_spreadProfileRestored = false;
 
@@ -607,7 +614,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.010\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.011\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -672,7 +679,7 @@ void SendHeartbeat()
          ? (int)MathMax(0, TimeCurrent() - g_lastSuccessfulHeartbeat)
          : -1;
       string diagnostics = StringFormat(
-         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\",\"atrRatio\":%.3f,\"minimumLotOverrideEnabled\":%s,\"minimumLotOverrideActive\":%s}}",
+         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\",\"atrRatio\":%.3f,\"minimumLotOverrideEnabled\":%s,\"minimumLotOverrideActive\":%s,\"trendM5\":%d,\"trendM15\":%d,\"trendH1\":%d,\"entryBias\":\"%s\",\"pyramidProgressPoints\":%.1f,\"pyramidRequiredPoints\":%.1f,\"momentumSamples\":%d,\"momentumSamplesRequired\":%d}}",
          heartbeatAge,
          g_lastHeartbeatLatencyMs,
          g_lastHeartbeatHttpStatus,
@@ -695,7 +702,15 @@ void SendHeartbeat()
          g_sessionProfile,
          g_atrRatio,
          minimumLotOverrideEnabledText,
-         minimumLotOverrideActiveText
+         minimumLotOverrideActiveText,
+         g_trendM5,
+         g_trendM15,
+         g_trendH1,
+         g_entryBias,
+         g_pyramidProgressPoints,
+         g_pyramidRequiredPoints,
+         g_tickCount,
+         MathMin(128, MathMax(2, InpMomentumTicks))
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + diagnostics;
    }
@@ -1070,7 +1085,21 @@ int AdaptiveEntryDirection(double momentum)
    int trendM5 = TimeframeTrend(PERIOD_M5);
    int trendM15 = TimeframeTrend(PERIOD_M15);
    int trendH1 = TimeframeTrend(PERIOD_H1);
-   int regimeDirection = trendM15 != 0 ? trendM15 : trendH1;
+   g_trendM5 = trendM5;
+   g_trendM15 = trendM15;
+   g_trendH1 = trendH1;
+
+   // Treat M15/H1 as a true macro consensus. Opposite M15/H1 trends are
+   // mixed/range, not TREND_UP/TREND_DOWN based on one timeframe alone.
+   int regimeDirection = 0;
+   if(trendM15 == trendH1)
+      regimeDirection = trendM15;
+   else if(trendM15 == 0)
+      regimeDirection = trendH1;
+   else if(trendH1 == 0)
+      regimeDirection = trendM15;
+   g_macroTrendDirection = regimeDirection;
+   g_entryBias = regimeDirection > 0 ? "BUY" : regimeDirection < 0 ? "SELL" : "BOTH";
    g_atrRatio = g_atrBaselinePoints > 0.0 ? g_atrPoints / g_atrBaselinePoints : 1.0;
 
    // ATR is a volatility input, not an on/off switch. A high reading moves the
@@ -1145,6 +1174,18 @@ int AdaptiveEntryDirection(double momentum)
    spacingFactor *= 1.0 + (100.0 - g_executionQuality) / 100.0;
    g_adaptiveEntrySpacingMs = (int)MathMax(g_minOrderIntervalMs, g_minOrderIntervalMs * spacingFactor);
 
+   // AUTO_MOMENTUM is trend-following. When M15/H1 establish a macro bias,
+   // do not open the opposite side. BUY_ONLY / SELL_ONLY remain explicit
+   // manual direction overrides.
+   if(g_entryMode == ENTRY_AUTO_MOMENTUM &&
+      g_macroTrendDirection != 0 &&
+      rawDirection != g_macroTrendDirection)
+   {
+      g_adaptiveBlockReason = "WAITING_REGIME_ALIGNMENT";
+      g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
+      return 0;
+   }
+
    // Higher timeframes may be neutral, but never allow an entry directly
    // against both M15 and H1 trends.
    if(trendM15 == -rawDirection && trendH1 == -rawDirection)
@@ -1184,31 +1225,113 @@ string CurrentSessionProfile()
    return "ROLLOVER";
 }
 
+double LastBasketEntryPrice(int direction)
+{
+   long newestTime = -1;
+   ulong newestTicket = 0;
+   double newestPrice = 0.0;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
+         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+
+      long type = PositionGetInteger(POSITION_TYPE);
+      if((direction > 0 && type != POSITION_TYPE_BUY) ||
+         (direction < 0 && type != POSITION_TYPE_SELL))
+         continue;
+
+      long openedAt = (long)PositionGetInteger(POSITION_TIME_MSC);
+      if(openedAt > newestTime || (openedAt == newestTime && ticket > newestTicket))
+      {
+         newestTime = openedAt;
+         newestTicket = ticket;
+         newestPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      }
+   }
+   return newestPrice;
+}
+
+double BasketFavorableProgressPoints(int direction)
+{
+   MqlTick tick;
+   double lastPrice = LastBasketEntryPrice(direction);
+   if(lastPrice <= 0.0 || !SymbolInfoTick(_Symbol, tick))
+      return 0.0;
+
+   if(direction > 0)
+      return (tick.bid - lastPrice) / _Point;
+   return (lastPrice - tick.ask) / _Point;
+}
+
+bool DirectionalMomentumStillValid(int direction, double thresholdMultiplier)
+{
+   double momentum = MomentumPoints();
+   double threshold = g_adaptiveMomentumThreshold * thresholdMultiplier;
+   return direction > 0 ? momentum >= threshold : momentum <= -threshold;
+}
+
 bool AdaptiveBasketAddAllowed(int direction)
 {
    int count = BasketPositionCount();
+   g_pyramidProgressPoints = 0.0;
+   g_pyramidRequiredPoints = 0.0;
+
    if(!g_adaptiveEngine || count <= 0)
       return true;
    if(direction != BasketDirection())
       return false;
+   if(count >= g_adaptiveMaxPositions)
+      return false;
+
+   // MaxPositions is a ceiling, not "fire all positions now".
+   // Every add must happen on the profitable side of the latest entry.
+   g_pyramidProgressPoints = BasketFavorableProgressPoints(direction);
+
+   bool directionalTrend =
+      (g_macroTrendDirection > 0 && direction > 0) ||
+      (g_macroTrendDirection < 0 && direction < 0);
 
    if(g_marketRegime == "HIGH_VOLATILITY")
    {
-      // Market-open volatility is tradable, but pyramiding is deliberately
-      // tighter: at most two positions and only with stronger confirmation.
       int highVolCap = MathMin(2, MathMax(1, g_adaptiveMaxPositions));
       if(count >= highVolCap)
          return false;
+      g_pyramidRequiredPoints = MathMax(5.0, g_atrPoints * 0.10);
+      if(g_pyramidProgressPoints < g_pyramidRequiredPoints)
+         return false;
       if(g_signalConfidence < g_confidenceThreshold + 12)
          return false;
-      if(MathAbs(MomentumPoints()) < g_adaptiveMomentumThreshold * 1.25)
+      if(!DirectionalMomentumStillValid(direction, 1.10))
          return false;
       return true;
    }
 
-   if(g_signalConfidence < g_confidenceThreshold + 3)
+   if(directionalTrend)
+   {
+      g_pyramidRequiredPoints = MathMax(3.0, g_atrPoints * 0.06);
+      if(g_pyramidProgressPoints < g_pyramidRequiredPoints)
+         return false;
+      if(g_signalConfidence < g_confidenceThreshold + 3)
+         return false;
+      // After the first impulse a healthy trend can slow down. The old 110%
+      // momentum requirement often left MaxPositions=4 baskets stuck at 1.
+      // Favorable price progress + 75% continuation is a safer add condition.
+      if(!DirectionalMomentumStillValid(direction, 0.75))
+         return false;
+      return true;
+   }
+
+   g_pyramidRequiredPoints = MathMax(3.0, g_atrPoints * 0.05);
+   if(g_pyramidProgressPoints < g_pyramidRequiredPoints)
       return false;
-   if(MathAbs(MomentumPoints()) < g_adaptiveMomentumThreshold * 1.10)
+   if(g_signalConfidence < g_confidenceThreshold + 5)
+      return false;
+   if(!DirectionalMomentumStillValid(direction, 1.10))
       return false;
    return true;
 }
@@ -2253,6 +2376,11 @@ void ResetTrail()
    g_peakProfit = 0.0;
 }
 
+int RequiredMomentumTicks()
+{
+   return MathMin(128, MathMax(2, InpMomentumTicks));
+}
+
 void UpdateMomentum()
 {
    MqlTick tick;
@@ -2260,7 +2388,7 @@ void UpdateMomentum()
       return;
 
    double mid = (tick.bid + tick.ask) * 0.5;
-   int maxTicks = MathMin(128, MathMax(2, InpMomentumTicks));
+   int maxTicks = RequiredMomentumTicks();
 
    if(g_tickCount < maxTicks)
    {
@@ -2277,7 +2405,10 @@ void UpdateMomentum()
 
 double MomentumPoints()
 {
-   if(g_tickCount < 2)
+   // Wait for the full configured window before trading. Previously two ticks
+   // were enough after attach/restart, which could create a wrong-side micro
+   // signal before the 20-tick window had actually formed.
+   if(g_tickCount < RequiredMomentumTicks())
       return 0.0;
    return (g_ticks[g_tickCount - 1] - g_ticks[0]) / _Point;
 }
