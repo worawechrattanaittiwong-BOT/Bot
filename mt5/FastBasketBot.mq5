@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.005"
+#property version   "1.006"
 #define SCENOVA_PRODUCT_VERSION "2.0.5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -32,6 +32,7 @@ input double          InpDailyLossMoney       = 25.00;
 input double          InpDailyProfitTargetMoney = 0.00;
 input double          InpBasketProfitTargetMoney = 0.00;
 input double          InpPerPositionProfitMoney = 0.00;
+input double          InpProfitRunTrailPercent = 0.00;
 input double          InpPerPositionLossMoney = 0.00;
 input int             InpMaxSpreadPoints      = 300;
 input int             InpMinOrderIntervalMs   = 300;
@@ -58,6 +59,7 @@ bool   g_dailyProfitLocked = false;
 int    g_dayKey = -1;
 int    g_basketPeakPositionCount = 0;
 double g_basketCycleRealizedProfit = 0.0;
+double g_profitRunPeak = 0.0;
 ulong  g_lastOrderMs = 0;
 datetime g_orderWindowStart = 0;
 int    g_ordersInWindow = 0;
@@ -78,6 +80,7 @@ double g_dailyLoss;
 double g_dailyProfitTarget;
 double g_basketProfitTarget;
 double g_perPositionProfit;
+double g_profitRunTrailPercent;
 double g_perPositionLoss;
 int    g_maxSpread;
 int    g_minOrderIntervalMs;
@@ -98,7 +101,16 @@ int OnInit()
    g_dailyProfitTarget = InpDailyProfitTargetMoney;
    g_basketProfitTarget = InpBasketProfitTargetMoney;
    g_perPositionProfit = InpPerPositionProfitMoney;
-   if(g_perPositionProfit > 0.0)
+   g_profitRunTrailPercent = InpProfitRunTrailPercent;
+   if(g_profitRunTrailPercent > 0.0)
+   {
+      g_dailyProfitTarget = 0.0;
+      g_basketProfitTarget = 0.0;
+      g_perPositionProfit = 0.0;
+      g_triggerMoney = 0.0;
+      g_trailMoney = 0.0;
+   }
+   else if(g_perPositionProfit > 0.0)
       g_basketProfitTarget = 0.0;
    g_perPositionLoss = InpPerPositionLossMoney;
    g_maxSpread = InpMaxSpreadPoints;
@@ -239,6 +251,28 @@ void OnTick()
       }
 
       double cycleProfit = BasketCycleProfit();
+
+      if(g_profitRunTrailPercent > 0.0)
+      {
+         if(cycleProfit > 0.0 && cycleProfit > g_profitRunPeak)
+         {
+            g_profitRunPeak = cycleProfit;
+            SaveBasketCycleState();
+         }
+
+         if(g_profitRunPeak > 0.0)
+         {
+            double closeLevel = g_profitRunPeak * (1.0 - g_profitRunTrailPercent / 100.0);
+            if(cycleProfit <= closeLevel)
+            {
+               CloseAllBasket("PROFIT_RUN_PERCENT_TRAIL");
+               ResetTrail();
+               g_executionStatus = "PROFIT_RUN_PERCENT_TRAIL";
+               return;
+            }
+         }
+      }
+
       if(g_basketProfitTarget > 0.0 && cycleProfit >= g_basketProfitTarget)
       {
          CloseAllBasket("BASKET_PROFIT_TARGET");
@@ -254,7 +288,8 @@ void OnTick()
          return;
       }
 
-      if(!g_trailArmed && profit >= g_triggerMoney)
+      if(g_triggerMoney > 0.0 && g_trailMoney > 0.0 &&
+         !g_trailArmed && profit >= g_triggerMoney)
       {
          g_trailArmed = true;
          g_peakProfit = profit;
@@ -454,7 +489,7 @@ void SendHeartbeat()
    string dailyProfitLockedText = g_dailyProfitLocked ? "true" : "false";
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.005\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.006\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -470,6 +505,8 @@ void SendHeartbeat()
       g_basketProfitTarget,
       g_basketPeakPositionCount,
       CurrentPerPositionProfitTarget(),
+      g_profitRunTrailPercent,
+      g_profitRunPeak,
       g_perPositionLoss,
       DailyBotProfit(),
       g_dailyProfitTarget,
@@ -648,16 +685,24 @@ void ApplySettings(string json)
 {
    g_lot = MathMax(0.01, JsonNumber(json, "lot", g_lot));
    g_maxPositions = (int)MathMax(1.0, JsonNumber(json, "maxPositions", g_maxPositions));
-   g_triggerMoney = MathMax(0.01, JsonNumber(json, "basketTriggerMoney", g_triggerMoney));
-   g_trailMoney = MathMax(0.01, JsonNumber(json, "basketTrailMoney", g_trailMoney));
+   g_triggerMoney = MathMax(0.0, JsonNumber(json, "basketTriggerMoney", g_triggerMoney));
+   g_trailMoney = MathMax(0.0, JsonNumber(json, "basketTrailMoney", g_trailMoney));
    g_maxBasketLoss = MathMax(0.0, JsonNumber(json, "maxBasketLossMoney", g_maxBasketLoss));
    g_dailyLoss = MathMax(0.0, JsonNumber(json, "dailyLossMoney", g_dailyLoss));
    g_dailyProfitTarget = MathMax(0.0, JsonNumber(json, "dailyProfitTargetMoney", g_dailyProfitTarget));
    g_basketProfitTarget = MathMax(0.0, JsonNumber(json, "basketProfitTargetMoney", g_basketProfitTarget));
    g_perPositionProfit = MathMax(0.0, JsonNumber(json, "perPositionProfitMoney", g_perPositionProfit));
-   // Fail-safe inside the EA: the two profit-closing modes must never run
-   // together even if an older/malformed client sends conflicting settings.
-   if(g_perPositionProfit > 0.0)
+   g_profitRunTrailPercent = MathMax(0.0, MathMin(95.0, JsonNumber(json, "profitRunTrailPercent", g_profitRunTrailPercent)));
+   // Percentage profit-run mode is exclusive with every fixed profit exit.
+   if(g_profitRunTrailPercent > 0.0)
+   {
+      g_dailyProfitTarget = 0.0;
+      g_basketProfitTarget = 0.0;
+      g_perPositionProfit = 0.0;
+      g_triggerMoney = 0.0;
+      g_trailMoney = 0.0;
+   }
+   else if(g_perPositionProfit > 0.0)
       g_basketProfitTarget = 0.0;
    else if(g_basketProfitTarget > 0.0)
       g_perPositionProfit = 0.0;
@@ -787,6 +832,16 @@ string BasketRealizedGlobalKey()
    );
 }
 
+string ProfitRunPeakGlobalKey()
+{
+   return StringFormat(
+      "SCN_PRP_%I64d_%I64d_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),
+      InpMagic,
+      _Symbol
+   );
+}
+
 string DailyProfitLockGlobalKey()
 {
    return StringFormat(
@@ -801,6 +856,7 @@ void SaveBasketCycleState()
 {
    GlobalVariableSet(BasketPeakGlobalKey(), (double)g_basketPeakPositionCount);
    GlobalVariableSet(BasketRealizedGlobalKey(), g_basketCycleRealizedProfit);
+   GlobalVariableSet(ProfitRunPeakGlobalKey(), g_profitRunPeak);
 }
 
 void LoadBasketCycleState()
@@ -814,6 +870,7 @@ void LoadBasketCycleState()
 
    string peakKey = BasketPeakGlobalKey();
    string realizedKey = BasketRealizedGlobalKey();
+   string profitRunPeakKey = ProfitRunPeakGlobalKey();
 
    g_basketPeakPositionCount = count;
    if(GlobalVariableCheck(peakKey))
@@ -824,22 +881,30 @@ void LoadBasketCycleState()
    if(GlobalVariableCheck(realizedKey))
       g_basketCycleRealizedProfit = GlobalVariableGet(realizedKey);
 
+   g_profitRunPeak = 0.0;
+   if(GlobalVariableCheck(profitRunPeakKey))
+      g_profitRunPeak = GlobalVariableGet(profitRunPeakKey);
+
    SaveBasketCycleState();
 }
 
 void ResetBasketCycleState()
 {
    if(g_basketPeakPositionCount == 0 &&
-      MathAbs(g_basketCycleRealizedProfit) < 0.0000001)
+      MathAbs(g_basketCycleRealizedProfit) < 0.0000001 &&
+      MathAbs(g_profitRunPeak) < 0.0000001)
       return;
 
    g_basketPeakPositionCount = 0;
    g_basketCycleRealizedProfit = 0.0;
+   g_profitRunPeak = 0.0;
 
    string peakKey = BasketPeakGlobalKey();
    string realizedKey = BasketRealizedGlobalKey();
+   string profitRunPeakKey = ProfitRunPeakGlobalKey();
    if(GlobalVariableCheck(peakKey)) GlobalVariableDel(peakKey);
    if(GlobalVariableCheck(realizedKey)) GlobalVariableDel(realizedKey);
+   if(GlobalVariableCheck(profitRunPeakKey)) GlobalVariableDel(profitRunPeakKey);
 }
 
 void UpdateBasketPeakPositionCount(int count)
