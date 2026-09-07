@@ -152,6 +152,7 @@ export default function DashboardPage() {
     "TERMINAL_DISCONNECTED",
     "ALGO_TRADING_OFF",
     "EA_TRADING_DISABLED",
+    "EA_RUNTIME_OUTDATED",
     "ACCOUNT_TRADING_DISABLED",
     "ACCOUNT_EXPERT_DISABLED",
     "SYMBOL_TRADING_DISABLED",
@@ -705,11 +706,11 @@ export default function DashboardPage() {
                       </span>
                       <span>
                         <span className="metric-label-with-info">Algo</span>
-                        <b>{metrics.terminalTradeAllowed === false ? "OFF" : metrics.terminalTradeAllowed === true ? "ON" : "รอ EA v1.002"}</b>
+                        <b>{metrics.terminalTradeAllowed === false ? "OFF" : metrics.terminalTradeAllowed === true ? "ON" : "รอ EA v1.003"}</b>
                       </span>
                       <span>
                         <span className="metric-label-with-info">EA Trading</span>
-                        <b>{metrics.mqlTradeAllowed === false ? "OFF" : metrics.mqlTradeAllowed === true ? "ON" : "รอ EA v1.002"}</b>
+                        <b>{metrics.mqlTradeAllowed === false ? "OFF" : metrics.mqlTradeAllowed === true ? "ON" : "รอ EA v1.003"}</b>
                       </span>
                     </div>
                     {Number(liveStatus.lastOrderRetcode || 0) > 0 && (
@@ -745,6 +746,7 @@ export default function DashboardPage() {
                     <div><span>บัญชี</span><b>{data.account.account_number}</b></div>
                     <div><span>Broker</span><b>{data.account.broker}</b></div>
                     <div><span>Server</span><b>{metrics.server || data.account.broker_server}</b></div>
+                    <div><span>EA Runtime</span><b>{metrics.eaVersion ? "v" + metrics.eaVersion : "รุ่นเก่า / ยังไม่รายงาน"}</b></div>
                     <div><span>การเชื่อมต่อ</span><b className={isMt5Online ? "text-good":"text-warn"}>{connectionLabel}</b></div>
                     <div><span>Bot State</span><b>{actualStateLabel}</b></div>
                     <div><span>คำสั่งจากเว็บ</span><b>{desiredStateLabel}</b></div>
