@@ -369,13 +369,30 @@ export default function DashboardPage() {
 
   async function rebindDetectedAccount() {
     if (!data?.instance?.pending_account_number) return;
-    if (!confirm("เปลี่ยน Slot นี้มาใช้ MT5 " + data.instance.pending_account_number + " (" + (data.instance.pending_broker_server || "ไม่ทราบ Server") + ") ใช่หรือไม่?")) return;
+    const firstBind = !data?.account;
+    const accountText =
+      data.instance.pending_account_number +
+      " (" + (data.instance.pending_broker_server || "ไม่ทราบ Server") + ")";
+
+    if (!confirm(
+      firstBind
+        ? "ผูก MT5 " + accountText + " เข้ากับ Slot นี้เป็นบัญชีแรกใช่หรือไม่?"
+        : "เปลี่ยน Slot นี้มาใช้ MT5 " + accountText + " ใช่หรือไม่?"
+    )) return;
+
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      await api("/bot/mt5/rebind?slotId=" + encodeURIComponent(selectedSlotIdRef.current), { method: "POST" });
-      setNotice("เปลี่ยนบัญชี MT5 ให้ Slot นี้แล้ว ไม่ต้องเปลี่ยน .set หรือ Install Token");
+      const result = await api(
+        "/bot/mt5/rebind?slotId=" + encodeURIComponent(selectedSlotIdRef.current),
+        { method: "POST" }
+      );
+      setNotice(
+        result?.firstBind
+          ? "ผูกบัญชี MT5 แรกให้ Slot นี้แล้ว"
+          : "เปลี่ยนบัญชี MT5 ให้ Slot นี้แล้ว ไม่ต้องเปลี่ยน .set หรือ Install Token"
+      );
       await load(selectedSlotIdRef.current);
     } catch (e: any) {
       setError(e.message);
@@ -914,23 +931,41 @@ export default function DashboardPage() {
                     {connectionLabel}
                   </span>
                   {data.selectedSlot?.mode === "LOCAL" && (
-                    <button
-                      className="btn primary"
-                      disabled={busy || !data.account || state==="RUNNING" || desired==="RUNNING" || !data.instance?.device_online}
-                      onClick={requestMt5Change}
-                    >
-                      เปลี่ยนบัญชี MT5
-                    </button>
+                    data.account ? (
+                      <button
+                        className="btn primary"
+                        disabled={busy || state==="RUNNING" || desired==="RUNNING" || !data.instance?.device_online}
+                        onClick={requestMt5Change}
+                      >
+                        เปลี่ยนบัญชี MT5
+                      </button>
+                    ) : data.instance?.pending_account_number ? (
+                      <button
+                        className="btn primary"
+                        disabled={busy || !data.instance?.first_bind_ready || state==="RUNNING" || desired==="RUNNING"}
+                        onClick={rebindDetectedAccount}
+                      >
+                        ผูกบัญชีนี้
+                      </button>
+                    ) : (
+                      <button className="btn" disabled>
+                        รอตรวจบัญชี MT5
+                      </button>
+                    )
                   )}
                 </div>
               </div>
               {data.selectedSlot?.mode === "LOCAL" && (
                 <div className="help">
-                  {!data.account
-                    ? "ยังไม่มีบัญชี MT5 เดิมให้เปลี่ยน — ติดตั้ง SCENOVA แล้วระบบจะตรวจและผูก MT5 ครั้งแรกให้อัตโนมัติ"
-                    : !data.instance?.device_online
-                      ? "ปุ่มเปลี่ยนบัญชีแสดงอยู่ แต่ต้องให้ Device Agent ของเครื่องที่ลงทะเบียน Online ก่อนจึงจะใช้งานได้"
-                      : "ต้องการเปลี่ยน Demo / Real หรือ Login อื่นบนเครื่องเดิม ให้กด “เปลี่ยนบัญชี MT5”"}
+                  {!data.account && data.instance?.pending_account_number
+                    ? data.instance?.first_bind_ready
+                      ? "นี่คือการผูกบัญชีครั้งแรก ไม่ใช่การเปลี่ยนบัญชี กด “ผูกบัญชีนี้” ได้เลย"
+                      : "ตรวจพบบัญชีแล้ว แต่กำลังรอ Heartbeat ล่าสุดจาก EA ก่อนเปิดให้ผูกบัญชีครั้งแรก"
+                    : !data.account
+                      ? "ยังไม่มีบัญชีเดิมให้เปลี่ยน ระบบกำลังรอตรวจ MT5 จาก EA"
+                      : !data.instance?.device_online
+                        ? "การเปลี่ยนบัญชีภายหลังต้องให้ Device Agent ของเครื่องเดิม Online ก่อน"
+                        : "ต้องการเปลี่ยน Demo / Real หรือ Login อื่นบนเครื่องเดิม ให้กด “เปลี่ยนบัญชี MT5”"}
                 </div>
               )}
             </section>
@@ -1008,30 +1043,41 @@ export default function DashboardPage() {
                   <section className="panel detected-mt5-card">
                     <div className="detected-mt5-head">
                       <div>
-                        <div className="eyebrow">NEW MT5 DETECTED</div>
+                        <div className="eyebrow">{data.account ? "NEW MT5 DETECTED" : "FIRST MT5 DETECTED"}</div>
                         <h2>พบบัญชี {data.instance.pending_account_number}</h2>
                         <p className="muted">{data.instance.pending_broker_server || "ไม่ทราบ Server"}</p>
                       </div>
-                      <span className="owner-state-chip bad">SAFE STOP</span>
+                      <span className={"owner-state-chip " + (data.account ? "bad" : "warn")}>
+                        {data.account ? "SAFE STOP" : "รอผูกบัญชี"}
+                      </span>
                     </div>
                     <div className="mt5-change-arrow">
-                      <div><span>บัญชีเดิม</span><b>{data.account?.account_number || "ยังไม่มี"}</b></div>
+                      <div><span>{data.account ? "บัญชีเดิม" : "สถานะ Slot"}</span><b>{data.account?.account_number || "ยังไม่มีบัญชี"}</b></div>
                       <span>→</span>
                       <div><span>บัญชีที่ MT5 กำลัง Login</span><b>{data.instance.pending_account_number}</b></div>
                     </div>
                     <button
                       className="btn primary btn-lg"
-                      disabled={busy || !data.instance.rebind_ready || state==="RUNNING" || desired==="RUNNING"}
+                      disabled={
+                        busy ||
+                        (data.account ? !data.instance.rebind_ready : !data.instance.first_bind_ready) ||
+                        state==="RUNNING" ||
+                        desired==="RUNNING"
+                      }
                       onClick={rebindDetectedAccount}
                     >
-                      ใช้บัญชีนี้
+                      {data.account ? "ใช้บัญชีนี้" : "ผูกบัญชีนี้"}
                     </button>
                     <div className="help">
-                      {data.instance.rebind_ready
-                        ? "ตรวจแล้วว่า EA และบัญชีใหม่มาจาก Device ที่ลงทะเบียนไว้ กดใช้บัญชีนี้ได้โดยไม่ต้องโหลด .set ใหม่"
-                        : data.instance.account_change_requested_at
-                          ? "รอ Device Agent และ Heartbeat จาก MT5 บัญชีใหม่บนเครื่องเดิม"
-                          : "ถ้าต้องการเปลี่ยนอย่างปลอดภัย ให้กด “เปลี่ยนบัญชี MT5” ด้านบนก่อน แล้ว Login บัญชีใหม่ใน MT5"}
+                      {!data.account
+                        ? data.instance.first_bind_ready
+                          ? "ตรวจพบจาก Heartbeat ล่าสุดของ EA แล้ว กด “ผูกบัญชีนี้” เพื่อใช้เป็น MT5 แรกของ Slot ได้เลย"
+                          : "กำลังรอ Heartbeat ล่าสุดจาก EA หาก MT5 เปิดอยู่ให้รอสักครู่แล้วปุ่มจะใช้งานได้"
+                        : data.instance.rebind_ready
+                          ? "ตรวจแล้วว่า EA และบัญชีใหม่มาจาก Device ที่ลงทะเบียนไว้ กดใช้บัญชีนี้ได้โดยไม่ต้องโหลด .set ใหม่"
+                          : data.instance.account_change_requested_at
+                            ? "รอ Device Agent และ Heartbeat จาก MT5 บัญชีใหม่บนเครื่องเดิม"
+                            : "กรณีเปลี่ยนบัญชีภายหลัง ให้กด “เปลี่ยนบัญชี MT5” ด้านบนก่อน แล้ว Login บัญชีใหม่ใน MT5"}
                     </div>
                   </section>
                 )}
