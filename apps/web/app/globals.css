@@ -83,6 +83,17 @@ h3{margin:0;font-size:16px}
 .settings-group-title{grid-column:1/-1;display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-top:8px;padding:14px 2px 8px;border-top:1px solid rgba(255,255,255,.07)}
 .settings-group-title b{font-size:13px;color:#d5e1e5}
 .settings-group-title span{font-size:10px;color:#657982;text-align:right}
+.simple-settings-form{gap:14px 16px}
+.simple-settings-form .field>label{min-height:20px}
+.toggle-select-field,.toggle-pair-field{border:1px solid #1d2b32;background:#080d10;border-radius:14px;padding:13px}
+.toggle-select-field.enabled,.toggle-pair-field.enabled{border-color:#31564b;background:#0a1210}
+.toggle-setting-label{display:flex;align-items:center;gap:10px!important;cursor:pointer;color:#d8e3e6!important;font-weight:650}
+.toggle-setting-label input[type="checkbox"]{appearance:none;width:19px;height:19px;border-radius:5px;border:1px solid #36505c;background:#060a0d;display:grid;place-items:center;flex:0 0 auto;cursor:pointer}
+.toggle-setting-label input[type="checkbox"]:checked{background:#163d2d;border-color:#62d79d}
+.toggle-setting-label input[type="checkbox"]:checked:after{content:"✓";font-size:13px;line-height:1;color:#9df0c3;font-weight:900}
+.toggle-select-field select:disabled,.toggle-pair-field select:disabled{opacity:.35}
+.toggle-pair-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.read-only-value{display:flex;align-items:center;min-height:46px;color:#aebfc5;background:#0a0f12}
 .settings-submit{grid-column:1/-1;margin-top:4px}
 .settings-submit .btn{width:100%}
 .input{background:#070b0e;border:1px solid #22343e;border-radius:11px;color:var(--text);padding:12px 13px;outline:none;width:100%}
@@ -116,6 +127,7 @@ td{color:#b9c8ce}
 @media(max-width:640px){
   .settings-group-title{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
   .settings-group-title span{text-align:left}
+  .toggle-pair-controls{grid-template-columns:1fr}
   .shell{width:min(100% - 22px,1180px)}
   .topbar{height:62px}
   .nav .hide-sm{display:none}
