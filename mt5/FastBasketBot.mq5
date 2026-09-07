@@ -101,6 +101,7 @@ int OnInit()
    g_entryMode = InpEntryMode;
 
    ResetDailyBaseline();
+   LoadBasketCycleState();
 
    if(!MQLInfoInteger(MQL_TESTER))
    {
@@ -733,6 +734,239 @@ double BasketProfit()
    return total;
 }
 
+string BasketPeakGlobalKey()
+{
+   return StringFormat(
+      "SCN_BPK_%I64d_%I64d_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),
+      InpMagic,
+      _Symbol
+   );
+}
+
+string BasketRealizedGlobalKey()
+{
+   return StringFormat(
+      "SCN_BRL_%I64d_%I64d_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),
+      InpMagic,
+      _Symbol
+   );
+}
+
+string DailyProfitLockGlobalKey()
+{
+   return StringFormat(
+      "SCN_DPL_%I64d_%I64d_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),
+      InpMagic,
+      _Symbol
+   );
+}
+
+void SaveBasketCycleState()
+{
+   GlobalVariableSet(BasketPeakGlobalKey(), (double)g_basketPeakPositionCount);
+   GlobalVariableSet(BasketRealizedGlobalKey(), g_basketCycleRealizedProfit);
+}
+
+void LoadBasketCycleState()
+{
+   int count = BasketPositionCount();
+   if(count <= 0)
+   {
+      ResetBasketCycleState();
+      return;
+   }
+
+   string peakKey = BasketPeakGlobalKey();
+   string realizedKey = BasketRealizedGlobalKey();
+
+   g_basketPeakPositionCount = count;
+   if(GlobalVariableCheck(peakKey))
+      g_basketPeakPositionCount =
+         (int)MathMax((double)count, GlobalVariableGet(peakKey));
+
+   g_basketCycleRealizedProfit = 0.0;
+   if(GlobalVariableCheck(realizedKey))
+      g_basketCycleRealizedProfit = GlobalVariableGet(realizedKey);
+
+   SaveBasketCycleState();
+}
+
+void ResetBasketCycleState()
+{
+   if(g_basketPeakPositionCount == 0 &&
+      MathAbs(g_basketCycleRealizedProfit) < 0.0000001)
+      return;
+
+   g_basketPeakPositionCount = 0;
+   g_basketCycleRealizedProfit = 0.0;
+
+   string peakKey = BasketPeakGlobalKey();
+   string realizedKey = BasketRealizedGlobalKey();
+   if(GlobalVariableCheck(peakKey)) GlobalVariableDel(peakKey);
+   if(GlobalVariableCheck(realizedKey)) GlobalVariableDel(realizedKey);
+}
+
+void UpdateBasketPeakPositionCount(int count)
+{
+   if(count <= 0) return;
+   if(count > g_basketPeakPositionCount)
+   {
+      g_basketPeakPositionCount = count;
+      SaveBasketCycleState();
+   }
+}
+
+void RecordBasketDeal(ulong deal)
+{
+   if(deal == 0 || !HistoryDealSelect(deal))
+      return;
+
+   if(HistoryDealGetString(deal, DEAL_SYMBOL) != _Symbol ||
+      HistoryDealGetInteger(deal, DEAL_MAGIC) != InpMagic)
+      return;
+
+   g_basketCycleRealizedProfit += HistoryDealGetDouble(deal, DEAL_PROFIT);
+   g_basketCycleRealizedProfit += HistoryDealGetDouble(deal, DEAL_SWAP);
+   g_basketCycleRealizedProfit += HistoryDealGetDouble(deal, DEAL_COMMISSION);
+   SaveBasketCycleState();
+}
+
+double BasketCycleProfit()
+{
+   return g_basketCycleRealizedProfit + BasketProfit();
+}
+
+double CurrentPerPositionProfitTarget()
+{
+   if(g_basketProfitTarget <= 0.0 || g_basketPeakPositionCount <= 0)
+      return 0.0;
+
+   return g_basketProfitTarget / (double)g_basketPeakPositionCount;
+}
+
+bool ManagePerPositionTargets()
+{
+   double profitTarget = CurrentPerPositionProfitTarget();
+   bool closedAny = false;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
+         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+
+      double positionProfit =
+         PositionGetDouble(POSITION_PROFIT) +
+         PositionGetDouble(POSITION_SWAP);
+
+      bool closeForLoss =
+         g_perPositionLoss > 0.0 &&
+         positionProfit <= -g_perPositionLoss;
+      bool closeForProfit =
+         profitTarget > 0.0 &&
+         positionProfit >= profitTarget;
+
+      if(!closeForLoss && !closeForProfit)
+         continue;
+
+      string reason = closeForLoss ? "POSITION_LOSS_LIMIT" : "POSITION_PROFIT_TARGET";
+      Print(
+         reason,
+         " ticket=", ticket,
+         " pnl=", DoubleToString(positionProfit, 2),
+         " target=", DoubleToString(closeForLoss ? -g_perPositionLoss : profitTarget, 2)
+      );
+
+      if(ClosePositionByTicket(ticket))
+      {
+         closedAny = true;
+         g_executionStatus = closeForLoss
+            ? "POSITION_LOSS_CLOSED"
+            : "POSITION_PROFIT_CLOSED";
+      }
+   }
+
+   return closedAny;
+}
+
+datetime BrokerDayStart()
+{
+   MqlDateTime t;
+   TimeToStruct(TimeCurrent(), t);
+   t.hour = 0;
+   t.min = 0;
+   t.sec = 0;
+   return StructToTime(t);
+}
+
+void RecalculateDailyClosedProfit()
+{
+   g_dailyClosedProfit = 0.0;
+
+   datetime from = BrokerDayStart();
+   datetime to = TimeCurrent();
+   if(!HistorySelect(from, to))
+      return;
+
+   int deals = (int)HistoryDealsTotal();
+   for(int i = 0; i < deals; i++)
+   {
+      ulong deal = HistoryDealGetTicket(i);
+      if(deal == 0)
+         continue;
+
+      if(HistoryDealGetString(deal, DEAL_SYMBOL) != _Symbol ||
+         HistoryDealGetInteger(deal, DEAL_MAGIC) != InpMagic)
+         continue;
+
+      g_dailyClosedProfit += HistoryDealGetDouble(deal, DEAL_PROFIT);
+      g_dailyClosedProfit += HistoryDealGetDouble(deal, DEAL_SWAP);
+      g_dailyClosedProfit += HistoryDealGetDouble(deal, DEAL_COMMISSION);
+   }
+}
+
+double DailyBotProfit()
+{
+   return g_dailyClosedProfit + BasketProfit();
+}
+
+void LoadDailyProfitLock()
+{
+   string key = DailyProfitLockGlobalKey();
+   g_dailyProfitLocked = false;
+
+   if(!GlobalVariableCheck(key))
+      return;
+
+   int lockedDay = (int)GlobalVariableGet(key);
+   if(lockedDay == g_dayKey)
+      g_dailyProfitLocked = true;
+   else
+      GlobalVariableDel(key);
+}
+
+void LockDailyProfitTarget()
+{
+   if(g_dailyProfitLocked)
+      return;
+
+   g_dailyProfitLocked = true;
+   GlobalVariableSet(DailyProfitLockGlobalKey(), (double)g_dayKey);
+   Print(
+      "DAILY_PROFIT_TARGET reached. Daily bot P/L=",
+      DoubleToString(DailyBotProfit(), 2),
+      " target=",
+      DoubleToString(g_dailyProfitTarget, 2)
+   );
+}
+
 int BasketDirection()
 {
    int buys = 0;
@@ -1021,6 +1255,8 @@ void ResetDailyBaseline()
    TimeToStruct(TimeCurrent(), t);
    g_dayKey = t.year * 1000 + t.day_of_year;
    g_dayStartEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+   RecalculateDailyClosedProfit();
+   LoadDailyProfitLock();
 }
 
 void RefreshDailyBaselineIfNeeded()
