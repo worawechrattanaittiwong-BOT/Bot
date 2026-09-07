@@ -183,7 +183,7 @@ jobs:
           PREP_SECOND=$(curl -fsS -X POST "$BASE/bot/installers/windows" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d "{\"slotId\":\"$SLOT_SECOND\"}")
           CODE_SECOND=$(printf '%s' "$PREP_SECOND" | jq -r '.code')
 
-          ENROLL_SECOND=$(curl -fsS -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE_SECOND\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"another-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal2\"}"))
+          ENROLL_SECOND=$(curl -fsS -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE_SECOND\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"another-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal2\"}")
           INSTANCE_SECOND=$(printf '%s' "$ENROLL_SECOND" | jq -r '.instanceId')
           INSTALL_TOKEN_SECOND=$(printf '%s' "$ENROLL_SECOND" | jq -r '.installToken')
           test -n "$INSTANCE_SECOND"
