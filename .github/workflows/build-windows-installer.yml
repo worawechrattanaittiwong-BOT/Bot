@@ -157,18 +157,35 @@ jobs:
             git commit -m "build: publish SCENOVA Windows installer [skip ci]"
           }
 
-          # Main may advance while the Windows runner is compiling (for example
-          # a docs-only commit). Rebase the generated binary commit onto the
-          # latest main before pushing. Workflow concurrency cancels obsolete
-          # installer builds when a newer installer-related push arrives.
-          git fetch origin main
-          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch latest main before publishing installer" }
+          # Main can advance again between fetch and push while other CI work
+          # publishes status/UI commits. Retry fetch -> rebase -> push so the
+          # generated binary release is not lost to a non-fast-forward race.
+          $published = $false
+          for ($attempt = 1; $attempt -le 6; $attempt++) {
+            Write-Host "Publish attempt $attempt/6"
 
-          git rebase origin/main
-          if ($LASTEXITCODE -ne 0) {
-            git rebase --abort
-            throw "Could not rebase generated installer onto latest main"
+            git fetch origin main
+            if ($LASTEXITCODE -ne 0) {
+              Start-Sleep -Seconds 2
+              continue
+            }
+
+            git rebase origin/main
+            if ($LASTEXITCODE -ne 0) {
+              git rebase --abort
+              throw "Could not rebase generated installer onto latest main"
+            }
+
+            git push origin HEAD:main
+            if ($LASTEXITCODE -eq 0) {
+              $published = $true
+              break
+            }
+
+            Write-Host "Main moved during publish; retrying..."
+            Start-Sleep -Seconds 2
           }
 
-          git push origin HEAD:main
-          if ($LASTEXITCODE -ne 0) { throw "Failed to publish SCENOVA installer to main" }
+          if (-not $published) {
+            throw "Failed to publish SCENOVA installer to main after retries"
+          }
