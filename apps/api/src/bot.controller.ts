@@ -88,6 +88,12 @@ export class BotController {
       NO_ACCESS: { label: "ไม่มีสิทธิ์ใช้งาน", detail: "ต้องมี Trial หรือ Subscription ที่ตรงกับ Slot", tone: "bad" },
       STOPPED: { label: "บอทหยุดอยู่", detail: "พร้อมรับคำสั่งเริ่มจากเว็บ", tone: "neutral" },
       SAFE_STOP: { label: "Safe Stop", detail: "บอทจะไม่เปิดรอบใหม่", tone: "warn" },
+      DAILY_PROFIT_LOCK: { label: "ถึงเป้ากำไรประจำวันแล้ว", detail: "EA ปิด Position และล็อกไม่เปิดรอบใหม่จนกว่าจะขึ้นวันใหม่", tone: "good" },
+      DAILY_LOSS_LOCK: { label: "ถึงขีดจำกัดขาดทุนรายวัน", detail: "EA หยุดเปิดรอบใหม่ตาม Daily Loss Limit", tone: "bad" },
+      POSITION_PROFIT_CLOSED: { label: "ปิดไม้ที่ถึงเป้ากำไร", detail: "Position ที่ถึงกำไรต่อไม้ถูกปิดแล้ว", tone: "good" },
+      POSITION_LOSS_CLOSED: { label: "ปิดไม้ที่ถึงขาดทุนกำหนด", detail: "Position ที่ถึง Loss ต่อไม้ถูกปิดแล้ว", tone: "warn" },
+      POSITION_TARGET_CLOSED: { label: "ปิดไม้ตามเป้าหมายแล้ว", detail: "EA จะประเมิน Basket ใหม่ใน Tick ถัดไป", tone: "good" },
+      BASKET_PROFIT_TARGET: { label: "ถึงกำไรเป้าหมาย Basket", detail: "กำไรรวมของรอบถึงเป้าและ EA ปิด Basket แล้ว", tone: "good" },
       WAITING_EA_START: { label: "กำลังรอ EA รับคำสั่ง Start", detail: "คำสั่งจากเว็บส่งแล้ว รอ Heartbeat รอบถัดไป", tone: "warn" },
       WAITING_MOMENTUM: { label: "กำลังรอสัญญาณ Momentum", detail: "บอท RUNNING แล้ว แต่เงื่อนไขเข้าออเดอร์ยังไม่ถึง", tone: "good" },
       SPREAD_TOO_HIGH: { label: "Spread สูงเกินกำหนด", detail: "บอทรอจน Spread ต่ำกว่า Max Spread", tone: "warn" },
@@ -1072,6 +1078,9 @@ export class BotController {
       }
 
       const metrics = instance.metrics || {};
+      if (metrics.dailyProfitLocked === true) {
+        throw new ConflictException("วันนี้บอทถึงเป้ากำไรที่ตั้งไว้แล้ว ระบบล็อกหยุดจนกว่าจะขึ้นวันใหม่");
+      }
       if (metrics.terminalConnected === false) {
         throw new ConflictException("MT5 ยังไม่เชื่อมกับ Broker/Server");
       }
@@ -1162,6 +1171,9 @@ export class BotController {
     numberSetting("basketTrailMoney", 0.01, 100000);
     numberSetting("maxBasketLossMoney", 0, 100000);
     numberSetting("dailyLossMoney", 0, 100000);
+    numberSetting("dailyProfitTargetMoney", 0, 100000);
+    numberSetting("basketProfitTargetMoney", 0, 100000);
+    numberSetting("perPositionLossMoney", 0, 100000);
     numberSetting("minOrderIntervalMs", 0, 60000, true);
     numberSetting("maxOrdersPerMinute", 1, 5000, true);
 
