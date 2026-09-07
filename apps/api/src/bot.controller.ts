@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
+import { installerDownloadPath, isVersionAtLeast, latestInstallerVersion } from "./release-version";
 import { CryptoService, JwtGuard } from "./security";
 
 @Controller("bot")
@@ -26,6 +27,32 @@ export class BotController {
   private supportedEaRuntime(version: any) {
     const value = Number(String(version || "").trim());
     return Number.isFinite(value) && value >= 1.004;
+  }
+
+  private installerUpdateState(instance: any, mode?: string | null) {
+    const latestVersion = latestInstallerVersion();
+    if (String(mode || instance?.mode || "") !== "LOCAL" || !instance) {
+      return {
+        required: false,
+        currentVersion: null,
+        latestVersion,
+        downloadPath: installerDownloadPath(latestVersion)
+      };
+    }
+
+    const currentVersion = String(instance.agent_version || "").trim() || null;
+    const required = !currentVersion || !isVersionAtLeast(currentVersion, latestVersion);
+    return {
+      required,
+      currentVersion,
+      latestVersion,
+      downloadPath: installerDownloadPath(latestVersion),
+      reason: required
+        ? currentVersion
+          ? "มี SCENOVA Windows Setup รุ่นใหม่ ต้องอัปเดตก่อนเริ่มบอท"
+          : "ยังไม่พบเวอร์ชัน SCENOVA Agent ที่รองรับ ต้องติดตั้ง/อัปเดตก่อนเริ่มบอท"
+        : null
+    };
   }
 
   private clientIp(req: any) {
@@ -451,6 +478,7 @@ export class BotController {
       selectedSlot.id
     );
     const liveStatus = this.buildLiveStatus(instance, settings, entitlement);
+    const softwareUpdate = this.installerUpdateState(instance, selectedSlot.mode);
 
     return {
       user,
@@ -461,7 +489,8 @@ export class BotController {
       settings,
       trialRequest: latestTrialRequest,
       entitlement,
-      liveStatus
+      liveStatus,
+      softwareUpdate
     };
   }
 
@@ -577,11 +606,12 @@ export class BotController {
       [slot.id, req.user.sub, this.crypto.sha256(code), expiresAt]
     );
 
+    const installerVersion = latestInstallerVersion();
     return {
       code,
-      fileName: "SCENOVA-Setup-v2.0.5-" + code + ".exe",
-      downloadPath: "/downloads/SCENOVA-Setup-v2.0.5.exe",
-      installerVersion: "2.0.5",
+      fileName: "SCENOVA-Setup-v" + installerVersion + "-" + code + ".exe",
+      downloadPath: installerDownloadPath(installerVersion),
+      installerVersion,
       expiresAt,
       slotId: slot.id
     };
@@ -1084,6 +1114,14 @@ export class BotController {
     if (!access.allowed) throw new ConflictException("trial or matching subscription required");
 
     if (instance.mode === "LOCAL") {
+      const softwareUpdate = this.installerUpdateState(instance, instance.mode);
+      if (softwareUpdate.required) {
+        throw new ConflictException(
+          "ต้องอัปเดต SCENOVA Windows Setup เป็น v" + softwareUpdate.latestVersion +
+          " ก่อนเริ่มบอท (เครื่องนี้: " + (softwareUpdate.currentVersion || "ไม่ทราบเวอร์ชัน") + ")"
+        );
+      }
+
       if (!instance.mt5_online) {
         throw new ConflictException("MT5/EA ยังไม่เชื่อมต่อ กรุณาเปิด MT5 และให้ EA ส่ง Heartbeat ก่อนเริ่มบอท");
       }
