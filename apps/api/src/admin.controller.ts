@@ -30,6 +30,7 @@ export class AdminController {
          COALESCE(ss.total_slots,0)::int total_slots,
          COALESCE(ss.assigned_slots,0)::int assigned_slots,
          COALESCE(ss.partner_slots,0)::int partner_slots,
+         COALESCE(cs.customer_slots,'[]'::jsonb) customer_slots,
          COALESCE(ip.ip_user_count,0)::int ip_user_count,
          COALESCE(ip.ip_trial_count,0)::int ip_trial_count
        FROM users u
@@ -111,6 +112,32 @@ export class AdminController {
          FROM license_slots ls2
          WHERE ls2.owner_user_id=u.id AND ls2.status<>'DELETED'
        ) ss ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(
+           jsonb_build_object(
+             'id',ls3.id,
+             'slot_number',ls3.slot_number,
+             'mode',ls3.mode,
+             'status',ls3.status,
+             'label',ls3.label,
+             'subscription_id',ls3.subscription_id,
+             'device_status',bi3.device_status,
+             'device_hostname',bi3.device_hostname,
+             'device_online',(bi3.device_last_seen_at IS NOT NULL AND bi3.device_last_seen_at > now() - interval '90 seconds'),
+             'actual_state',bi3.actual_state,
+             'desired_state',bi3.desired_state,
+             'positions',COALESCE(NULLIF(bi3.metrics->>'positions','')::int,0),
+             'account_number',a3.account_number,
+             'broker_server',a3.broker_server
+           )
+           ORDER BY ls3.mode,ls3.slot_number
+         ) AS customer_slots
+         FROM license_slots ls3
+         LEFT JOIN bot_instances bi3 ON bi3.slot_id=ls3.id
+         LEFT JOIN mt5_accounts a3 ON a3.id=bi3.mt5_account_id
+         WHERE ls3.assigned_user_id=u.id
+           AND ls3.status<>'DELETED'
+       ) cs ON true
        LEFT JOIN LATERAL (
          SELECT
            count(DISTINCT ae.user_id) FILTER (WHERE ae.user_id IS NOT NULL)::int ip_user_count,
@@ -357,6 +384,81 @@ export class AdminController {
       days: body.days
     });
     return row;
+  }
+
+  @Post("devices/release")
+  async releaseCustomerDevice(@Body() body: { userId: string; slotId: string }) {
+    const slot = await this.db.one(
+      `SELECT ls.*,bi.id instance_id,bi.actual_state,bi.desired_state,
+         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         bi.device_hostname,bi.mt5_account_id
+       FROM license_slots ls
+       LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
+       WHERE ls.id=$1
+         AND ls.assigned_user_id=$2
+         AND ls.mode='LOCAL'
+         AND ls.status<>'DELETED'`,
+      [body.slotId, body.userId]
+    );
+    if (!slot) throw new ConflictException("ไม่พบ LOCAL Slot ของลูกค้ารายนี้");
+    if (!slot.instance_id) {
+      return { ok: true, released: false, message: "Slot นี้ยังไม่มี Device ที่ลงทะเบียน" };
+    }
+    if (
+      slot.actual_state === "RUNNING" ||
+      slot.desired_state === "RUNNING" ||
+      Number(slot.positions || 0) > 0
+    ) {
+      throw new ConflictException("หยุดบอทและปิด Position ของลูกค้าก่อนปลดเครื่อง");
+    }
+
+    await this.db.query(
+      `UPDATE bot_instances SET
+         install_token_hash=encode(gen_random_bytes(32),'hex'),
+         desired_state='STOPPED',
+         actual_state='OFFLINE',
+         last_seen_at=NULL,
+         agent_last_seen_at=NULL,
+         agent_version=NULL,
+         agent_terminal_path=NULL,
+         agent_ea_hash=NULL,
+         device_public_id=NULL,
+         device_secret_hash=NULL,
+         device_status='UNREGISTERED',
+         device_hostname=NULL,
+         device_registered_at=NULL,
+         device_last_seen_at=NULL,
+         device_last_ip=NULL,
+         ea_last_ip=NULL,
+         pending_account_number=NULL,
+         pending_broker=NULL,
+         pending_broker_server=NULL,
+         pending_account_ip=NULL,
+         pending_account_seen_at=NULL,
+         account_change_requested_at=NULL
+       WHERE id=$1`,
+      [slot.instance_id]
+    );
+    await this.db.query(
+      "UPDATE install_enrollments SET status='CANCELLED' WHERE slot_id=$1 AND status='PENDING'",
+      [slot.id]
+    );
+    await this.db.query(
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED')",
+      [slot.instance_id]
+    );
+    await this.audit("OWNER", "RELEASE_CUSTOMER_DEVICE", "bot_instance", slot.instance_id, {
+      userId: body.userId,
+      slotId: slot.id,
+      deviceHostname: slot.device_hostname || null,
+      preservedMt5AccountId: slot.mt5_account_id || null
+    });
+
+    return {
+      ok: true,
+      released: true,
+      message: "ปลด Device Lock ของลูกค้าแล้ว สมาชิกและ MT5 เดิมยังคงอยู่"
+    };
   }
 
   @Post("users/suspend")
