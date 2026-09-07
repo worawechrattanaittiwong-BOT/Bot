@@ -95,6 +95,7 @@ export class BotController {
       ORDER_RATE_LIMIT: { label: "กำลังรอช่วงส่งคำสั่งถัดไป", detail: "Rate limit ของบอทยังไม่พร้อมส่ง Order ใหม่", tone: "warn" },
       CONTROL_NOT_FRESH: { label: "หยุดเปิดออเดอร์ใหม่", detail: "ยังไม่ได้รับการยืนยัน RUNNING ล่าสุดจาก Server จึงล็อกการเปิดออเดอร์ใหม่ไว้", tone: "warn" },
       MIXED_BASKET_BLOCKED: { label: "ล็อก Basket ที่มีสองฝั่ง", detail: "พบ Buy/Sell ปนกันใน Basket เดิม ระบบจะไม่เปิดออเดอร์เพิ่มจนกว่า Basket จะเหลือฝั่งเดียวหรือปิดหมด", tone: "warn" },
+      WAITING_DIRECTION_LOCK: { label: "รอสัญญาณฝั่งเดิม", detail: "สัญญาณล่าสุดกลับฝั่งจาก Basket ที่เปิดอยู่ จึงไม่เปิดออเดอร์สวน", tone: "good" },
       READY_BUY: { label: "พบสัญญาณ BUY", detail: "เงื่อนไขพร้อมส่งคำสั่ง BUY", tone: "good" },
       READY_SELL: { label: "พบสัญญาณ SELL", detail: "เงื่อนไขพร้อมส่งคำสั่ง SELL", tone: "good" },
       ORDER_ACCEPTED: { label: "Broker รับคำสั่งแล้ว", detail: "Order ล่าสุดถูก Broker รับแล้ว", tone: "good" },
