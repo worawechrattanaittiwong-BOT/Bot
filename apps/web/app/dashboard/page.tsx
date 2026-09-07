@@ -162,7 +162,6 @@ export default function DashboardPage() {
   const hardStartBlocks = new Set([
     "NOT_INSTALLED",
     "MT5_OFFLINE",
-    "EA_NOT_LOADED",
     "TERMINAL_DISCONNECTED",
     "ALGO_TRADING_OFF",
     "EA_TRADING_DISABLED",
@@ -961,6 +960,7 @@ export default function DashboardPage() {
                       disabled={
                         busy ||
                         (data.account ? !data.instance.rebind_ready : !data.instance.first_bind_ready) ||
+                        Number(data.instance?.metrics?.previousBoundPositions || 0) > 0 ||
                         state==="RUNNING" ||
                         desired==="RUNNING"
                       }
@@ -973,9 +973,11 @@ export default function DashboardPage() {
                         ? data.instance.first_bind_ready
                           ? "บัญชีแรกปกติจะถูกผูกอัตโนมัติจาก EA หากยังค้าง กด “ผูกบัญชีนี้” ได้"
                           : "กำลังรอ Heartbeat ล่าสุดจาก EA"
-                        : data.instance.rebind_ready
-                          ? "บัญชีที่ MT5 กำลัง Login ต่างจากบัญชีเดิม ระบบ Safe Stop แล้ว กด “ใช้บัญชีนี้” เพื่อยืนยันการเปลี่ยนครั้งเดียว"
-                          : "กำลังรอ Heartbeat ล่าสุดจากบัญชี MT5 ใหม่"}
+                        : Number(data.instance?.metrics?.previousBoundPositions || 0) > 0
+                          ? "บัญชีเดิมยังมี " + Number(data.instance.metrics.previousBoundPositions) + " Position ตามสถานะล่าสุด กรุณา Login กลับบัญชีเดิมและปิดให้หมดก่อน"
+                          : data.instance.rebind_ready
+                            ? "บัญชีที่ MT5 กำลัง Login ต่างจากบัญชีเดิม ระบบ Safe Stop แล้ว กด “ใช้บัญชีนี้” เพื่อยืนยันการเปลี่ยนครั้งเดียว"
+                            : "กำลังรอ Heartbeat ล่าสุดจากบัญชี MT5 ใหม่"}
                     </div>
                   </section>
                 )}
