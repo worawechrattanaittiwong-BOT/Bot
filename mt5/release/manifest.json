@@ -1,6 +1,6 @@
 ﻿{
-    "sha256":  "5e7d9562a96af96c3af4ce0a9b3e2499c15d7fb2e7ac4643b75231640edc097e",
-    "sourceCommit":  "7688bf0fac1314f95631295241eb59e261683f50",
+    "sha256":  "707e1d465678f5112180ce43fcfaed930b161bda0c711776ab376ea79a43bc81",
+    "sourceCommit":  "46a201e2abe7bff61be67c816773837fa238502e",
     "file":  "FastBasketBot.ex5",
-    "builtAt":  "2026-09-07T02:17:14.1544775Z"
+    "builtAt":  "2026-09-07T02:56:55.4269487Z"
 }
