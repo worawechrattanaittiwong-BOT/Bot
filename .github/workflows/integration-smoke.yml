@@ -233,6 +233,30 @@ jobs:
           FIRST_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT3" -H "authorization: Bearer $TOKEN3")
           test "$(printf '%s' "$FIRST_DASH" | jq -r '.account.account_number')" = "300003"
 
+          echo "[integration] reinstalling the same Slot revokes the old EA token"
+          REGISTER4=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration4@scenova.test","password":"Integration123!"}')
+          TOKEN4=$(printf '%s' "$REGISTER4" | jq -r '.token')
+          DASH4=$(curl -fsS "$BASE/bot/dashboard" -H "authorization: Bearer $TOKEN4")
+          SLOT4=$(printf '%s' "$DASH4" | jq -r '.selectedSlot.id')
+
+          PREP4A=$(curl -fsS -X POST "$BASE/bot/installers/windows" -H "authorization: Bearer $TOKEN4" -H 'content-type: application/json' -d "{\"slotId\":\"$SLOT4\"}")
+          CODE4A=$(printf '%s' "$PREP4A" | jq -r '.code')
+          ENROLL4A=$(curl -fsS -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE4A\",\"devicePublicId\":\"integration-device-004a\",\"deviceSecret\":\"integration-device-secret-4444444444a\",\"hostname\":\"OLD-PC\",\"terminalPath\":\"/tmp/terminal4a\"}")
+          INSTANCE4=$(printf '%s' "$ENROLL4A" | jq -r '.instanceId')
+          INSTALL_TOKEN4A=$(printf '%s' "$ENROLL4A" | jq -r '.installToken')
+
+          PREP4B=$(curl -fsS -X POST "$BASE/bot/installers/windows" -H "authorization: Bearer $TOKEN4" -H 'content-type: application/json' -d "{\"slotId\":\"$SLOT4\"}")
+          CODE4B=$(printf '%s' "$PREP4B" | jq -r '.code')
+          ENROLL4B=$(curl -fsS -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE4B\",\"devicePublicId\":\"integration-device-004b\",\"deviceSecret\":\"integration-device-secret-4444444444b\",\"hostname\":\"NEW-PC\",\"terminalPath\":\"/tmp/terminal4b\"}")
+          INSTALL_TOKEN4B=$(printf '%s' "$ENROLL4B" | jq -r '.installToken')
+          test "$INSTALL_TOKEN4A" != "$INSTALL_TOKEN4B"
+
+          OLD_TOKEN_HTTP=$(curl -sS -o /tmp/old-token.json -w "%{http_code}" -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE4\",\"installToken\":\"$INSTALL_TOKEN4A\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"400004\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Demo4\",\"positions\":0}}")
+          test "$OLD_TOKEN_HTTP" = "401"
+
+          NEW_TOKEN_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE4\",\"installToken\":\"$INSTALL_TOKEN4B\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"400004\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Demo4\",\"positions\":0}}")
+          test "$(printf '%s' "$NEW_TOKEN_HB" | jq -r '.accountMismatch // false')" = "false"
+
           DUP_MT5_HTTP=$(curl -sS -o /tmp/duplicate-mt5.json -w "%{http_code}" -X POST "$BASE/bot/mt5" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d '{"accountNumber":"200002","broker":"SCENOVA","brokerServer":"SCENOVA-Real","mode":"CLOUD"}')
           test "$DUP_MT5_HTTP" = "409"
 
