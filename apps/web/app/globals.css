@@ -1318,3 +1318,21 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .mt5-change-arrow{grid-template-columns:1fr}
   .mt5-change-arrow>span{transform:rotate(90deg);justify-self:center}
 }
+
+
+.account-card-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  flex-wrap:wrap;
+}
+@media(max-width:620px){
+  .account-card-actions{
+    width:100%;
+    justify-content:flex-start;
+  }
+  .account-card-actions .btn{
+    width:100%;
+  }
+}
