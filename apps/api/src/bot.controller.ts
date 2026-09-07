@@ -387,12 +387,16 @@ export class BotController {
     }
 
     let instance = await this.db.one(
-      "SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions FROM bot_instances bi WHERE bi.slot_id=$1",
+      `SELECT bi.*,
+         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') mt5_online
+       FROM bot_instances bi
+       WHERE bi.slot_id=$1`,
       [slot.id]
     );
     if (instance && (
-      instance.actual_state === "RUNNING" ||
       instance.desired_state === "RUNNING" ||
+      (instance.actual_state === "RUNNING" && Boolean(instance.mt5_online)) ||
       Number(instance.positions || 0) > 0
     )) {
       throw new ConflictException("หยุดบอทและจัดการ Position ให้เรียบร้อยก่อนติดตั้งหรือย้ายเครื่อง");
