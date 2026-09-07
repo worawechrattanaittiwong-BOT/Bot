@@ -25,7 +25,7 @@ type BrokerCatalog = {
   }>;
 };
 
-type View = "overview" | "account" | "settings" | "access";
+type View = "overview" | "account" | "access";
 
 const defaultSettings = {
   symbol: "XAUUSD",
@@ -64,6 +64,8 @@ export default function DashboardPage() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [botLogs, setBotLogs] = useState<any>(null);
   const [settings, setSettings] = useState<any>(defaultSettings);
+  const settingsDirtyRef = useRef(false);
+  const [settingsDirty, setSettingsDirty] = useState(false);
   const mt5ApiBase =
     process.env.NEXT_PUBLIC_MT5_API_BASE ||
     (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
@@ -73,7 +75,13 @@ export default function DashboardPage() {
       const slotId = slotIdArg ?? selectedSlotIdRef.current;
       const d = await api("/bot/dashboard" + (slotId ? "?slotId=" + encodeURIComponent(slotId) : ""));
       setData(d);
-      setSettings({ ...defaultSettings, ...(d.settings || {}) });
+      if (!settingsDirtyRef.current) {
+        setSettings({
+          ...defaultSettings,
+          ...(d.settings || {}),
+          ...(d.instance?.metrics?.symbol ? { symbol: d.instance.metrics.symbol } : {})
+        });
+      }
       const resolvedSlotId = String(d.selectedSlot?.id || "");
       if (resolvedSlotId && resolvedSlotId !== selectedSlotIdRef.current) {
         selectedSlotIdRef.current = resolvedSlotId;
@@ -95,8 +103,13 @@ export default function DashboardPage() {
     }
 
     const requestedView = new URLSearchParams(window.location.search).get("view");
-    if (requestedView === "overview" || requestedView === "account" || requestedView === "settings" || requestedView === "access") {
+    if (requestedView === "account" || requestedView === "access") {
       setActiveView(requestedView);
+    } else {
+      setActiveView("overview");
+      if (requestedView === "settings") {
+        window.setTimeout(() => document.getElementById("bot-settings")?.scrollIntoView({ behavior: "smooth", block: "start" }), 250);
+      }
     }
 
     load("");
@@ -390,6 +403,8 @@ export default function DashboardPage() {
 
   function selectSlot(slotId: string) {
     if (!slotId || slotId === selectedSlotIdRef.current) return;
+    settingsDirtyRef.current = false;
+    setSettingsDirty(false);
     selectedSlotIdRef.current = slotId;
     setSelectedSlotId(slotId);
     setError("");
@@ -502,6 +517,12 @@ export default function DashboardPage() {
     }
   }
 
+  function editSetting(key: string, value: any) {
+    settingsDirtyRef.current = true;
+    setSettingsDirty(true);
+    setSettings((current:any)=>({ ...current, [key]: value }));
+  }
+
   async function saveSettings(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -510,8 +531,10 @@ export default function DashboardPage() {
     try {
       const suffix = selectedSlotIdRef.current ? "?slotId=" + encodeURIComponent(selectedSlotIdRef.current) : "";
       await api("/bot/settings" + suffix, { method: "PUT", body: JSON.stringify(settings) });
-      setNotice("บันทึกค่าการเทรดแล้ว");
-      await load();
+      settingsDirtyRef.current = false;
+      setSettingsDirty(false);
+      setNotice("บันทึกการตั้งค่าแล้ว · EA จะรับค่าล่าสุดใน Heartbeat ถัดไป");
+      await load(selectedSlotIdRef.current);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -522,12 +545,17 @@ export default function DashboardPage() {
   function handleOwnerNavigate(href:string) {
     if (!href.startsWith("/dashboard?view=")) return false;
     const requested = new URL(href, window.location.origin).searchParams.get("view");
-    if (requested === "overview" || requested === "account" || requested === "settings" || requested === "access") {
-      setActiveView(requested);
+    if (requested === "overview" || requested === "account" || requested === "access" || requested === "settings") {
+      const targetView: View = requested === "settings" ? "overview" : requested;
+      setActiveView(targetView);
       setError("");
       setNotice("");
-      window.history.pushState({}, "", href);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.history.pushState({}, "", requested === "settings" ? "/dashboard?view=overview#bot-settings" : href);
+      if (requested === "settings") {
+        window.setTimeout(() => document.getElementById("bot-settings")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
       return true;
     }
     return false;
@@ -545,14 +573,12 @@ export default function DashboardPage() {
   const isOwner = data.user?.role === "OWNER" || data.user?.role === "ADMIN";
   const ownerActiveKey =
     activeView === "account" ? "trading-account" :
-    activeView === "settings" ? "trading-settings" :
     activeView === "access" ? "trading-access" :
     "trading-overview";
 
   const navItems: Array<{id:View;label:string;hint:string}> = [
-    { id:"overview", label:"ภาพรวม", hint:"สถานะและควบคุมบอท" },
+    { id:"overview", label:"บอท", hint:"สถานะ ควบคุม และตั้งค่า" },
     { id:"account", label:"บัญชี MT5", hint:"Slots, Device และการเชื่อมต่อ" },
-    { id:"settings", label:"ตั้งค่าบอท", hint:"กลยุทธ์และความเสี่ยง" },
     { id:"access", label:"สิทธิ์ใช้งาน", hint:"Trial และสมาชิก" }
   ];
 
@@ -607,15 +633,13 @@ export default function DashboardPage() {
           <div>
             <div className="eyebrow">CONTROL CENTER</div>
             <h2 style={{marginTop:7}}>
-              {activeView === "overview" && "ภาพรวมการทำงาน"}
+              {activeView === "overview" && "บอทและการตั้งค่า"}
               {activeView === "account" && "บัญชีและการเชื่อมต่อ MT5"}
-              {activeView === "settings" && "ตั้งค่าบอทและความเสี่ยง"}
               {activeView === "access" && "สิทธิ์ใช้งาน"}
             </h2>
             <div className="muted page-subtitle">
-              {activeView === "overview" && "ดูสิ่งสำคัญและสั่งงานบอทจากจุดเดียว"}
+              {activeView === "overview" && "ดูสถานะ สั่ง Start/Stop และตั้งค่าบอทจากหน้าเดียว"}
               {activeView === "account" && "ติดตั้งจากเว็บไซต์ จัดการ Device และเปลี่ยน MT5 โดยไม่ต้องเปลี่ยน .set"}
-              {activeView === "settings" && "ปรับค่าที่มีผลต่อการเข้าออเดอร์และการควบคุมความเสี่ยง"}
               {activeView === "access" && "ตรวจสถานะ Trial สมาชิก และเวลาคงเหลือ"}
             </div>
           </div>
@@ -764,7 +788,6 @@ export default function DashboardPage() {
                 <section className="panel overview-settings-card">
                   <div className="panel-head">
                     <div><div className="eyebrow">CURRENT SETTINGS</div><h2>ค่าที่บอทใช้อยู่</h2></div>
-                    <button className="btn" onClick={()=>setActiveView("settings")}>แก้ไขการตั้งค่า</button>
                   </div>
                   <div className="overview-setting-grid">
                     <div><span>Symbol</span><b>{settings.symbol}</b></div>
