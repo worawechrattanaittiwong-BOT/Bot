@@ -784,42 +784,67 @@ export default function DashboardPage() {
                 </section>
               </div>
 
-              <div className="grid2 overview-inspection-grid">
-                <section className="panel overview-settings-card">
-                  <div className="panel-head">
-                    <div><div className="eyebrow">CURRENT SETTINGS</div><h2>ค่าที่บอทใช้อยู่</h2></div>
+              <section id="bot-settings" className="panel settings-panel overview-bot-settings">
+                <div className="panel-head">
+                  <div>
+                    <div className="eyebrow">BOT SETTINGS · SAME PAGE</div>
+                    <h2>ตั้งค่าบอท</h2>
+                    <p className="muted">ตั้งค่าจากหน้า Control Center นี้ได้เลย ค่า Lot, Position, Basket, Risk และ Entry Mode จะถูกส่งให้ EA ผ่าน Server โดยไม่ต้องไปแก้ Inputs ใน MT5</p>
                   </div>
-                  <div className="overview-setting-grid">
-                    <div><span>Symbol</span><b>{settings.symbol}</b></div>
-                    <div><span>Lot</span><b>{settings.lot}</b></div>
-                    <div><span>Entry Mode</span><b>{settings.entryMode}</b></div>
-                    <div><span>Direction Lock</span><b>SAME SIDE — ไม่เปิดสวน Basket</b></div>
-                    <div><span>Max Positions</span><b>{settings.maxPositions}</b></div>
-                    <div><span>Basket Trigger</span><b>${settings.basketTriggerMoney}</b></div>
-                    <div><span>Basket Trail</span><b>${settings.basketTrailMoney}</b></div>
-                    <div><span>Max Basket Loss</span><b>${settings.maxBasketLossMoney}</b></div>
-                    <div><span>Daily Loss Limit</span><b>${settings.dailyLossMoney}</b></div>
-                    <div><span>Min Order Interval</span><b>{settings.minOrderIntervalMs} ms</b></div>
-                    <div><span>Max Orders / Min</span><b>{settings.maxOrdersPerMinute}</b></div>
+                  <span className={"owner-state-chip " + (settingsDirty ? "warn" : "good")}>
+                    {settingsDirty ? "มีค่าที่ยังไม่ได้บันทึก" : "ค่าบันทึกแล้ว"}
+                  </span>
+                </div>
+                <form className="form-grid form-grid-human" onSubmit={saveSettings}>
+                  <Field
+                    label="Symbol ที่ EA กำลังใช้"
+                    info="อ่านจาก MT5/กราฟที่ FastBasketBot ทำงานอยู่ เพื่อป้องกันชื่อ Symbol ของแต่ละ Broker เช่น XAUUSDm ไม่ตรงกัน"
+                    help="ระบบตรวจจาก MT5 อัตโนมัติ ไม่ต้องกรอกเอง"
+                    value={metrics.symbol || settings.symbol}
+                    readOnly
+                  />
+                  <Field label="Lot" info="ขนาด Lot ต่อ Order ค่านี้ถูกส่งให้ EA จาก Server" help="เริ่มจากค่าน้อยบน Demo ก่อน" type="number" step="0.01" value={settings.lot} onChange={(v:string)=>editSetting("lot",Number(v))}/>
+                  <Field label="จำนวน Position สูงสุด" info="จำนวน Position สูงสุดที่บอทเปิดพร้อมกันได้" type="number" value={settings.maxPositions} onChange={(v:string)=>editSetting("maxPositions",Number(v))}/>
+                  <Field label="กำไรรวมเริ่ม Trailing ($)" info="เมื่อกำไรรวม Basket ถึงค่านี้ ระบบเริ่มจำ Peak Profit" type="number" step="0.01" value={settings.basketTriggerMoney} onChange={(v:string)=>editSetting("basketTriggerMoney",Number(v))}/>
+                  <Field label="ย่อตัวจาก Peak แล้วปิด ($)" info="หลังเริ่ม Trailing หากกำไรรวมย่อลงจาก Peak ตามค่านี้ EA จะปิด Basket" type="number" step="0.01" value={settings.basketTrailMoney} onChange={(v:string)=>editSetting("basketTrailMoney",Number(v))}/>
+                  <Field label="ขาดทุน Basket สูงสุด ($)" info="ขีดจำกัดขาดทุนรวมของ Basket" type="number" step="0.01" value={settings.maxBasketLossMoney} onChange={(v:string)=>editSetting("maxBasketLossMoney",Number(v))}/>
+                  <Field label="Daily Loss Limit ($)" info="วงเงินขาดทุนรายวัน เมื่อถึงขีดจำกัดระบบจะหยุดตาม Logic ความเสี่ยง" type="number" step="0.01" value={settings.dailyLossMoney} onChange={(v:string)=>editSetting("dailyLossMoney",Number(v))}/>
+                  <Field label="ระยะห่างคำสั่งขั้นต่ำ (ms)" info="เวลาขั้นต่ำระหว่างการส่ง Order แต่ละครั้ง" type="number" value={settings.minOrderIntervalMs} onChange={(v:string)=>editSetting("minOrderIntervalMs",Number(v))}/>
+                  <Field label="คำสั่งสูงสุดต่อนาที" info="Rate Limit จำนวนคำสั่ง Order สูงสุดใน 1 นาที" type="number" value={settings.maxOrdersPerMinute} onChange={(v:string)=>editSetting("maxOrdersPerMinute",Number(v))}/>
+                  <div className="field">
+                    <label className="label-with-info">โหมดเข้าออเดอร์</label>
+                    <select className="input" value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}>
+                      <option value="AUTO_MOMENTUM">AUTO MOMENTUM — เลือกฝั่งออเดอร์แรก แล้วล็อกฝั่งเดียวทั้ง Basket</option>
+                      <option value="BUY_ONLY">BUY ONLY — Buy ทุกออเดอร์ ไม่เปิด Sell</option>
+                      <option value="SELL_ONLY">SELL ONLY — Sell ทุกออเดอร์ ไม่เปิด Buy</option>
+                    </select>
+                    <small className="help">เมื่อ Basket มี Buy อยู่จะไม่เปิด Sell สวน และเมื่อมี Sell อยู่จะไม่เปิด Buy สวน</small>
                   </div>
-                </section>
+                  <div className="field submit-field">
+                    <button className="btn primary btn-lg" title="บันทึกค่าไป Server ให้ EA รับใน Heartbeat ถัดไป" disabled={busy || !settingsDirty}>
+                      {busy ? "กำลังบันทึก..." : settingsDirty ? "บันทึกและใช้ค่ากับบอท" : "ใช้ค่าล่าสุดแล้ว"}
+                    </button>
+                    <small className="help">Auto Refresh 2 วินาทีจะไม่เขียนทับค่าที่คุณกำลังแก้ ก่อนกดบันทึก</small>
+                  </div>
+                </form>
+                <div className="notice risk-notice">ค่าที่บันทึกจะเป็นค่าหลักของ Slot นี้ และ EA จะรับค่าล่าสุดจาก Server ใน Heartbeat ถัดไป</div>
+              </section>
 
-                <section className="panel overview-access-card">
-                  <div className="panel-head">
-                    <div><div className="eyebrow">ACCOUNT & ACCESS</div><h2>สถานะพร้อมใช้งาน</h2></div>
-                    <button className="btn" onClick={()=>setActiveView("access")}>ดูสิทธิ์</button>
-                  </div>
-                  <div className="detail-list">
-                    <div><span>MT5</span><b className={isMt5Online ? "text-good":"text-warn"}>{connectionLabel}</b></div>
-                    <div><span>Bot State</span><b>{actualStateLabel}</b></div>
-                    <div><span>คำสั่งจากเว็บ</span><b>{desiredStateLabel}</b></div>
-                    <div><span>Execution</span><b>{liveStatus.label}</b></div>
-                    <div><span>เหตุผลล่าสุด</span><b>{liveStatus.detail}</b></div>
-                    <div><span>สิทธิ์</span><b>{accessLabel}</b></div>
-                    {accessExpiry && <div><span>หมดอายุ</span><b>{accessExpiry.toLocaleString("th-TH")}</b></div>}
-                  </div>
-                </section>
-              </div>
+              <section className="panel overview-access-card">
+                <div className="panel-head">
+                  <div><div className="eyebrow">ACCOUNT & ACCESS</div><h2>สถานะพร้อมใช้งาน</h2></div>
+                  <button className="btn" onClick={()=>setActiveView("access")}>ดูสิทธิ์</button>
+                </div>
+                <div className="detail-list">
+                  <div><span>MT5</span><b className={isMt5Online ? "text-good":"text-warn"}>{connectionLabel}</b></div>
+                  <div><span>Bot State</span><b>{actualStateLabel}</b></div>
+                  <div><span>คำสั่งจากเว็บ</span><b>{desiredStateLabel}</b></div>
+                  <div><span>Execution</span><b>{liveStatus.label}</b></div>
+                  <div><span>เหตุผลล่าสุด</span><b>{liveStatus.detail}</b></div>
+                  <div><span>สิทธิ์</span><b>{accessLabel}</b></div>
+                  {accessExpiry && <div><span>หมดอายุ</span><b>{accessExpiry.toLocaleString("th-TH")}</b></div>}
+                </div>
+              </section>
             </>
           )
         )}
@@ -1004,40 +1029,6 @@ export default function DashboardPage() {
               )
             )}
           </div>
-        )}
-
-        {activeView === "settings" && (
-          !data.account ? <EmptySetup onNext={()=>setActiveView("account")} /> :
-          <section className="panel settings-panel">
-            <div className="panel-head"><div><div className="eyebrow">BOT SETTINGS</div><h2>ค่าการเทรดที่ใช้งานอยู่</h2><p className="muted">ค่าที่บันทึกจากหน้านี้เป็นค่าหลักของบอท และ EA จะรับค่าล่าสุดจาก Server โดยไม่ต้องไปแก้ Inputs ใน MT5</p></div></div>
-            <form className="form-grid form-grid-human" onSubmit={saveSettings}>
-              <Field label="Symbol" info="ชื่อ Symbol ที่บอทใช้ ต้องตรงกับชื่อของ Broker เช่น XAUUSDm ถ้ากรอกไม่ตรง EA อาจไม่ทำงานกับสินทรัพย์ที่ต้องการ" help="ชื่อสัญลักษณ์ต้องตรงกับ Broker" value={settings.symbol} onChange={(v:string)=>setSettings({...settings,symbol:v})}/>
-              <Field label="Lot" info="ขนาด Lot ต่อ Order สามารถปรับได้ ค่ายิ่งสูงความเสี่ยงและ Margin ที่ใช้ยิ่งสูง ควรทดสอบ Demo ก่อน" help="เริ่มจากค่าน้อยบน Demo ก่อน" type="number" step="0.01" value={settings.lot} onChange={(v:string)=>setSettings({...settings,lot:Number(v)})}/>
-              <Field label="จำนวน Position สูงสุด" info="จำนวน Position สูงสุดที่บอทเปิดพร้อมกันได้ สามารถปรับได้ เมื่อถึงจำนวนนี้ EA จะหยุดเปิด Position ใหม่จนกว่าจะมีที่ว่าง" type="number" value={settings.maxPositions} onChange={(v:string)=>setSettings({...settings,maxPositions:Number(v)})}/>
-              <Field label="กำไรรวมเริ่ม Trailing ($)" info="เมื่อกำไรรวมของ Basket ถึงค่านี้ ระบบเริ่มจำ Peak Profit เพื่อใช้ Trailing กำไร สามารถปรับได้" type="number" step="0.01" value={settings.basketTriggerMoney} onChange={(v:string)=>setSettings({...settings,basketTriggerMoney:Number(v)})}/>
-              <Field label="ย่อตัวจาก Peak แล้วปิด ($)" info="หลังเริ่ม Trailing หากกำไรรวมย่อลงจาก Peak ตามจำนวนเงินนี้ EA จะปิด Basket เพื่อรักษากำไร สามารถปรับได้" type="number" step="0.01" value={settings.basketTrailMoney} onChange={(v:string)=>setSettings({...settings,basketTrailMoney:Number(v)})}/>
-              <Field label="ขาดทุน Basket สูงสุด ($)" info="ขีดจำกัดขาดทุนของ Basket ใช้เป็นส่วนหนึ่งของระบบความเสี่ยง สามารถปรับได้ ยิ่งตั้งแคบยิ่งหยุดขาดทุนเร็ว" help="ถึงค่านี้ระบบจะควบคุมความเสี่ยงตามกลยุทธ์" type="number" step="0.01" value={settings.maxBasketLossMoney} onChange={(v:string)=>setSettings({...settings,maxBasketLossMoney:Number(v)})}/>
-              <Field label="Daily Loss Limit ($)" info="วงเงินขาดทุนรายวันที่ยอมรับได้ เมื่อถึงขีดจำกัด EA จะเข้า Safe Stop ตาม Logic ความเสี่ยง สามารถปรับได้" type="number" step="0.01" value={settings.dailyLossMoney} onChange={(v:string)=>setSettings({...settings,dailyLossMoney:Number(v)})}/>
-              <Field label="ระยะห่างคำสั่งขั้นต่ำ (ms)" info="เวลาขั้นต่ำระหว่างการส่ง Order แต่ละครั้ง ปรับได้ ใช้ป้องกันการส่งคำสั่งถี่เกินไป 300 ms = อย่างน้อย 0.3 วินาทีต่อคำสั่ง" type="number" value={settings.minOrderIntervalMs} onChange={(v:string)=>setSettings({...settings,minOrderIntervalMs:Number(v)})}/>
-              <Field label="คำสั่งสูงสุดต่อนาที" info="Rate Limit จำนวนคำสั่ง Order สูงสุดใน 1 นาที ปรับได้ ใช้ป้องกันการยิงคำสั่งผิดปกติหรือมากเกินไป" type="number" value={settings.maxOrdersPerMinute} onChange={(v:string)=>setSettings({...settings,maxOrdersPerMinute:Number(v)})}/>
-              <div className="field">
-                <label className="label-with-info">โหมดเข้าออเดอร์</label>
-                <select className="input" value={settings.entryMode} onChange={e=>setSettings({...settings,entryMode:e.target.value})}>
-                  <option value="AUTO_MOMENTUM">AUTO MOMENTUM — เลือกฝั่งออเดอร์แรก แล้วล็อกฝั่งเดียวทั้ง Basket</option>
-                  <option value="BUY_ONLY">BUY ONLY — Buy ทุกออเดอร์ ไม่เปิด Sell</option>
-                  <option value="SELL_ONLY">SELL ONLY — Sell ทุกออเดอร์ ไม่เปิด Buy</option>
-                </select>
-                <small className="help">ทุกโหมดล็อกทิศทางของ Basket: เมื่อมี Buy อยู่ ออเดอร์เพิ่มจะเป็น Buy เท่านั้น; เมื่อมี Sell อยู่ ออเดอร์เพิ่มจะเป็น Sell เท่านั้น</small>
-              </div>
-              <div className="field submit-field">
-                <div className="button-label-with-info">
-                  <button className="btn primary btn-lg" title="บันทึกค่าบน Server และส่ง UPDATE_SETTINGS ให้ EA ใช้ค่าล่าสุด" disabled={busy}>{busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button>
-                  <InfoTip text="บันทึกค่าที่แก้บนเว็บลง Server และส่ง UPDATE_SETTINGS ไปยัง EA ของ Slot ที่กำลังเลือกอยู่" />
-                </div>
-              </div>
-            </form>
-            <div className="notice risk-notice">การเทรดอัตโนมัติมีความเสี่ยง ควรทดสอบบนบัญชี Demo และใช้ขนาด Lot ที่เหมาะสมก่อนบัญชีเงินจริง</div>
-          </section>
         )}
 
         {activeView === "access" && (
@@ -1233,7 +1224,15 @@ function Field(props: any) {
         <span>{props.label}</span>
         {props.info && <InfoTip text={props.info} />}
       </label>
-      <input className="input" type={props.type || "text"} step={props.step} value={props.value} onChange={e=>props.onChange(e.target.value)} />
+      <input
+        className="input"
+        type={props.type || "text"}
+        step={props.step}
+        value={props.value}
+        readOnly={Boolean(props.readOnly)}
+        disabled={Boolean(props.disabled)}
+        onChange={e=>props.onChange?.(e.target.value)}
+      />
       {props.help && <div className="help">{props.help}</div>}
     </div>
   );
