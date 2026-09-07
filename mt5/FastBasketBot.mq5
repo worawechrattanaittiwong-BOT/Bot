@@ -270,7 +270,9 @@ void OnTimer()
       return;
 
    datetime now = TimeCurrent();
-   if(now - g_lastHeartbeat < MathMax(1, InpHeartbeatSeconds))
+   // Control commands must react quickly. Poll the SaaS state every second
+   // so START/SAFE_STOP takes effect without waiting several seconds.
+   if(now - g_lastHeartbeat < 1)
       return;
    g_lastHeartbeat = now;
    SendHeartbeat();
@@ -384,27 +386,47 @@ void SendHeartbeat()
 
    ApplySettings(response);
 
+   // desiredState is authoritative. A stale START/SAFE_STOP command must never
+   // override the latest state selected on the website.
    if(!g_access)
    {
       g_state = STATE_SAFE_STOP;
       g_forceFirstEntry = false;
+      g_executionStatus = "NO_ACCESS";
    }
-   else if(command == "START" || desired == "RUNNING")
+   else if(desired == "RUNNING")
    {
       if(g_state != STATE_RUNNING && BasketPositionCount() == 0)
          g_forceFirstEntry = true;
       g_state = STATE_RUNNING;
+      g_executionStatus = "EVALUATING";
    }
-   else if(command == "SAFE_STOP" || desired == "SAFE_STOP")
+   else if(desired == "SAFE_STOP")
    {
       g_state = STATE_SAFE_STOP;
       g_forceFirstEntry = false;
+      g_executionStatus = "SAFE_STOP";
+   }
+   else if(desired == "STOPPED")
+   {
+      g_forceFirstEntry = false;
+      if(BasketPositionCount() == 0)
+      {
+         g_state = STATE_STOPPED;
+         g_executionStatus = "STOPPED";
+      }
+      else
+      {
+         g_state = STATE_SAFE_STOP;
+         g_executionStatus = "SAFE_STOP";
+      }
    }
 
-   if(command == "CLOSE_ALL")
+   if(command == "CLOSE_ALL" && desired == "STOPPED")
    {
       g_state = STATE_SAFE_STOP;
       g_forceFirstEntry = false;
+      g_executionStatus = "SAFE_STOP";
       CloseAllBasket("REMOTE_CLOSE_ALL");
    }
 
@@ -423,10 +445,12 @@ void SendHeartbeat()
 void AckCommand(long commandId)
 {
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"commandId\":%I64d}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"commandId\":%I64d,\"state\":\"%s\",\"executionStatus\":\"%s\"}",
       InpInstanceId,
       InpInstallToken,
-      commandId
+      commandId,
+      StateText(),
+      g_executionStatus
    );
    string response = "";
    HttpPostJson(InpApiBase + "/api/ea/ack", payload, response);
