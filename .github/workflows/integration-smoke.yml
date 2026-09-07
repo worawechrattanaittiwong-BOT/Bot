@@ -44,6 +44,10 @@ jobs:
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/002_slots_devices.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/003_unique_mt5_identity.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/003_unique_mt5_identity.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/004_mt5_change_request.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/004_mt5_change_request.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/005_gold_spread_default.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/005_gold_spread_default.sql
 
       - name: Build API
         run: npm run build -w @bot/api
