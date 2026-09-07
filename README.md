@@ -103,7 +103,7 @@ Production API มี idempotent startup migration สำหรับ schema Slo
 4. `npm install`
 5. `npm run dev:api` และ `npm run dev:web`
 
-Windows Installer ปัจจุบัน: **v2.0.6** — อัปเดตล่าสุด **7 กันยายน 2026**
+Windows Installer ปัจจุบัน: **v2.0.7** — อัปเดตล่าสุด **7 กันยายน 2026**
 
 Windows Installer build:
 
