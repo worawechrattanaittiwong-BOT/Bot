@@ -26,7 +26,7 @@ export class BotController {
 
   private supportedEaRuntime(version: any) {
     const value = Number(String(version || "").trim());
-    return Number.isFinite(value) && value >= 1.005;
+    return Number.isFinite(value) && value >= 1.006;
   }
 
   private installerUpdateState(instance: any, mode?: string | null) {
@@ -108,7 +108,7 @@ export class BotController {
       TERMINAL_DISCONNECTED: { label: "MT5 ไม่มีการเชื่อมต่อ", detail: "Terminal ยังไม่เชื่อม Broker/Server", tone: "bad" },
       ALGO_TRADING_OFF: { label: "Algo Trading ปิดอยู่", detail: "เปิด Algo Trading ใน MetaTrader 5 ก่อนเริ่มบอท", tone: "bad" },
       EA_TRADING_DISABLED: { label: "EA ไม่ได้รับอนุญาตให้เทรด", detail: "เปิด Allow Algo Trading ใน Properties ของ EA", tone: "bad" },
-      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "ติดตั้ง/อัปเดต FastBasketBot จากเว็บไซต์ SCENOVA ให้เป็น v1.005 ขึ้นไป", tone: "bad" },
+      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "ติดตั้ง/อัปเดต FastBasketBot จากเว็บไซต์ SCENOVA ให้เป็น v1.006 ขึ้นไป", tone: "bad" },
       ACCOUNT_TRADING_DISABLED: { label: "บัญชีนี้ไม่อนุญาตให้เทรด", detail: "ตรวจสิทธิ์ Trading ของบัญชีกับ Broker", tone: "bad" },
       ACCOUNT_EXPERT_DISABLED: { label: "บัญชีไม่อนุญาต Expert Advisor", detail: "Broker/บัญชีปิดการเทรดด้วย EA", tone: "bad" },
       SYMBOL_TRADING_DISABLED: { label: "Symbol นี้เปิดออเดอร์ไม่ได้", detail: "Broker ปิดการเปิดออเดอร์ใหม่บน Symbol นี้", tone: "bad" },
@@ -121,6 +121,7 @@ export class BotController {
       POSITION_LOSS_CLOSED: { label: "ปิดไม้ที่ถึงขาดทุนกำหนด", detail: "Position ที่ถึง Loss ต่อไม้ถูกปิดแล้ว", tone: "warn" },
       POSITION_TARGET_CLOSED: { label: "ปิดไม้ตามเป้าหมายแล้ว", detail: "EA จะประเมิน Basket ใหม่ใน Tick ถัดไป", tone: "good" },
       BASKET_PROFIT_TARGET: { label: "ถึงกำไรเป้าหมาย Basket", detail: "กำไรรวมของรอบถึงเป้าและ EA ปิด Basket แล้ว", tone: "good" },
+      PROFIT_RUN_PERCENT_TRAIL: { label: "ปิดกำไรตาม % จากจุดสูงสุด", detail: "กำไรย่อลงจาก Peak ตามเปอร์เซ็นต์ที่ตั้งไว้", tone: "good" },
       WAITING_EA_START: { label: "กำลังรอ EA รับคำสั่ง Start", detail: "คำสั่งจากเว็บส่งแล้ว รอ Heartbeat รอบถัดไป", tone: "warn" },
       WAITING_MOMENTUM: { label: "กำลังรอสัญญาณ Momentum", detail: "บอท RUNNING แล้ว แต่เงื่อนไขเข้าออเดอร์ยังไม่ถึง", tone: "good" },
       SPREAD_TOO_HIGH: { label: "Spread สูงเกินกำหนด", detail: "บอทรอจน Spread ต่ำกว่า Max Spread", tone: "warn" },
@@ -1216,31 +1217,53 @@ export class BotController {
 
     numberSetting("lot", 0.01, 100);
     numberSetting("maxPositions", 1, 100, true);
-    numberSetting("basketTriggerMoney", 0.01, 100000);
-    numberSetting("basketTrailMoney", 0.01, 100000);
+    numberSetting("basketTriggerMoney", 0, 100000);
+    numberSetting("basketTrailMoney", 0, 100000);
     numberSetting("maxBasketLossMoney", 0, 100000);
     numberSetting("dailyLossMoney", 0, 100000);
     numberSetting("dailyProfitTargetMoney", 0, 100000);
     numberSetting("basketProfitTargetMoney", 0, 100000);
     numberSetting("perPositionProfitMoney", 0, 100000);
+    numberSetting("profitRunTrailPercent", 0, 95);
     numberSetting("perPositionLossMoney", 0, 100000);
     numberSetting("minOrderIntervalMs", 0, 60000, true);
     numberSetting("maxOrdersPerMinute", 1, 5000, true);
 
     const requestedBasketProfit = Number(clean.basketProfitTargetMoney ?? 0);
     const requestedPerPositionProfit = Number(clean.perPositionProfitMoney ?? 0);
+    const requestedProfitRunPercent = Number(clean.profitRunTrailPercent ?? 0);
+    const requestedDailyProfit = Number(clean.dailyProfitTargetMoney ?? 0);
+    const requestedDollarTrail =
+      Number(clean.basketTriggerMoney ?? 0) > 0 ||
+      Number(clean.basketTrailMoney ?? 0) > 0;
+
     if (requestedBasketProfit > 0 && requestedPerPositionProfit > 0) {
       throw new BadRequestException(
         "เลือกกำไรต่อไม้หรือกำไรรวม Basket ได้อย่างใดอย่างหนึ่งเท่านั้น"
       );
     }
 
-    // Switching one profit mode on explicitly disables the other mode at the
-    // Server too. This protects API clients in addition to the web UI.
-    if (requestedPerPositionProfit > 0) {
+    // Percentage profit-run mode owns all profit exits. Enabling it turns
+    // every fixed profit target/trailing mode off. Enabling any fixed profit
+    // mode later turns percentage mode off.
+    if (requestedProfitRunPercent > 0) {
+      clean.dailyProfitTargetMoney = 0;
       clean.basketProfitTargetMoney = 0;
-    } else if (requestedBasketProfit > 0) {
       clean.perPositionProfitMoney = 0;
+      clean.basketTriggerMoney = 0;
+      clean.basketTrailMoney = 0;
+    } else if (
+      requestedDailyProfit > 0 ||
+      requestedBasketProfit > 0 ||
+      requestedPerPositionProfit > 0 ||
+      requestedDollarTrail
+    ) {
+      clean.profitRunTrailPercent = 0;
+      if (requestedPerPositionProfit > 0) {
+        clean.basketProfitTargetMoney = 0;
+      } else if (requestedBasketProfit > 0) {
+        clean.perPositionProfitMoney = 0;
+      }
     }
 
     if (body.entryMode !== undefined) {
