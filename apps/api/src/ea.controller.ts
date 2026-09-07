@@ -219,9 +219,21 @@ export class EaController {
       ]
     );
 
+    const effectiveDesired = access ? String(instance.desired_state || "STOPPED") : "SAFE_STOP";
     const cmd = await this.db.one(
-      "SELECT id,command,payload FROM bot_commands WHERE bot_instance_id=$1 AND (status='PENDING' OR (status='DELIVERED' AND delivered_at < now() - interval '10 seconds')) ORDER BY id LIMIT 1",
-      [instance.id]
+      `SELECT id,command,payload
+       FROM bot_commands
+       WHERE bot_instance_id=$1
+         AND (status='PENDING' OR (status='DELIVERED' AND delivered_at < now() - interval '10 seconds'))
+         AND (
+           command NOT IN ('START','SAFE_STOP','CLOSE_ALL')
+           OR (command='START' AND $2='RUNNING')
+           OR (command='SAFE_STOP' AND $2='SAFE_STOP')
+           OR (command='CLOSE_ALL' AND $2='STOPPED')
+         )
+       ORDER BY id DESC
+       LIMIT 1`,
+      [instance.id, effectiveDesired]
     );
     if (cmd) {
       await this.db.query(
@@ -238,7 +250,7 @@ export class EaController {
     return {
       ok: true,
       access,
-      desiredState: access ? instance.desired_state : "SAFE_STOP",
+      desiredState: effectiveDesired,
       command: cmd || null,
       commandId: cmd?.id || null,
       commandName: cmd?.command || null,
@@ -335,8 +347,24 @@ export class EaController {
     instanceId: string;
     installToken: string;
     commandId: number;
+    state?: string;
+    executionStatus?: string;
   }) {
     await this.instance(body.instanceId, body.installToken);
+
+    const state = String(body.state || "");
+    const executionStatus = String(body.executionStatus || "").slice(0, 64);
+    if (["RUNNING", "SAFE_STOP", "STOPPED"].includes(state)) {
+      await this.db.query(
+        `UPDATE bot_instances
+         SET actual_state=$2,
+             last_seen_at=now(),
+             metrics=jsonb_set(COALESCE(metrics,'{}'::jsonb),'{executionStatus}',to_jsonb($3::text),true)
+         WHERE id=$1`,
+        [body.instanceId, state, executionStatus || state]
+      );
+    }
+
     await this.db.query(
       "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE id=$1 AND bot_instance_id=$2",
       [body.commandId, body.instanceId]
