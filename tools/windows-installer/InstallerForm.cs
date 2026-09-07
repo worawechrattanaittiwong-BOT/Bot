@@ -6,7 +6,7 @@ namespace ScenovaInstaller;
 
 internal sealed class InstallerForm : Form
 {
-    private const string InstallerVersion = "2.0.4";
+    private const string InstallerVersion = "2.0.5";
     private const string LastUpdated = "7 กันยายน 2026";
     private readonly ComboBox _terminal = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
     private readonly Button _install = new() { Text = "ติดตั้ง SCENOVA", Width = 180, Height = 42 };
@@ -48,7 +48,7 @@ internal sealed class InstallerForm : Form
         };
         var note = new Label
         {
-            Text = "ระบบจะลง EA, preset และ Device Agent ให้อัตโนมัติ",
+            Text = "ระบบจะลง EA, preset และตัวอัปเดต SCENOVA ให้อัตโนมัติ",
             AutoSize = true
         };
 
@@ -101,7 +101,7 @@ internal sealed class InstallerForm : Form
 
         try
         {
-            _status.Text = "กำลังลงทะเบียนเครื่องกับ SCENOVA...";
+            _status.Text = "กำลังเชื่อม Slot กับ SCENOVA...";
             Directory.CreateDirectory(ScenovaRuntime.BaseDir);
 
             var existing = ScenovaRuntime.ReadConfig();
@@ -182,7 +182,7 @@ internal sealed class InstallerForm : Form
                 JsonSerializer.Serialize(config, ScenovaRuntime.JsonOptions),
                 new UTF8Encoding(false));
 
-            _status.Text = "กำลังอัปเดต Device Agent และเปิด MT5 พร้อม EA...";
+            _status.Text = "กำลังเปิดตัวอัปเดต SCENOVA และ MT5 พร้อม EA...";
             AgentRunner.InstallAndStart();
 
             var mt5Started = AgentRunner.EnsureMt5RunningWithEa(config, forceReload: true);
@@ -249,7 +249,7 @@ internal sealed class InstallerForm : Form
                     {
                         instanceId = config.InstanceId,
                         installToken,
-                        agentVersion = "2.0.4",
+                        agentVersion = "2.0.5",
                         terminalPath = config.TerminalDataPath,
                         eaHash,
                         hostname = Environment.MachineName,
@@ -257,8 +257,7 @@ internal sealed class InstallerForm : Form
                         deviceSecret
                     });
 
-                if (heartbeat.DeviceVerified &&
-                    heartbeat.EaOnline &&
+                if (heartbeat.EaOnline &&
                     !string.IsNullOrWhiteSpace(heartbeat.EaVersion))
                     return true;
             }
