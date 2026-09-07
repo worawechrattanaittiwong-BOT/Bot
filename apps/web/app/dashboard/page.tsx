@@ -270,7 +270,7 @@ export default function DashboardPage() {
         data?.instance?.actual_state === "RUNNING" &&
         Boolean(data?.instance?.mt5_online);
       if (actualRunningNow || data?.instance?.desired_state === "RUNNING") {
-        throw new Error("กรุณาหยุดบอทก่อนติดตั้ง ย้ายเครื่อง หรืออัปเกรด Device Lock");
+        throw new Error("กรุณาหยุดบอทก่อนติดตั้งหรืออัปเดต SCENOVA");
       }
 
       await downloadInstallerForSlot(selectedSlotIdRef.current);
@@ -306,65 +306,6 @@ export default function DashboardPage() {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     return result;
-  }
-
-  async function releaseLocalDevice(slot: any, moveAndDownload = false) {
-    const action = moveAndDownload ? "ย้ายเครื่อง" : "ปลดเครื่องเดิม";
-    if (!confirm(
-      action + " ของ Slot #" + slot.slot_number + " ใช่หรือไม่?\n\n" +
-      "ระบบจะหยุดสิทธิ์ Device เดิมทันที แต่จะไม่ลบสมาชิก ประวัติ Trial หรือบัญชี MT5 ของ Slot"
-    )) return;
-
-    setBusy(true);
-    setError("");
-    setNotice("");
-    setActivationMessage("");
-    try {
-      const result = await api(
-        "/bot/device/release?slotId=" + encodeURIComponent(slot.id),
-        { method: "POST" }
-      );
-
-      if (moveAndDownload) {
-        await downloadInstallerForSlot(slot.id);
-        setActivationMessage(
-          "ปลดเครื่องเดิมแล้ว และดาวน์โหลด Installer สำหรับ Slot #" + slot.slot_number +
-          " เรียบร้อย ให้นำไฟล์นี้ไปติดตั้งบนเครื่องใหม่"
-        );
-      } else {
-        setNotice(result?.message || "ปลดเครื่องเดิมแล้ว Slot พร้อมลงทะเบียนเครื่องใหม่");
-      }
-
-      await load(selectedSlotIdRef.current || slot.id);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function requestMt5Change() {
-    if (!data?.account) return;
-    if (!confirm(
-      "เตรียมเปลี่ยนบัญชี MT5 ของ Slot นี้ใช่หรือไม่?\n\n" +
-      "ระบบจะ Safe Stop ก่อน จากนั้นให้ Login MT5 บัญชีใหม่บนเครื่องเดิม แล้วกลับมากด “ใช้บัญชีนี้”"
-    )) return;
-
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const result = await api(
-        "/bot/mt5/change-request?slotId=" + encodeURIComponent(selectedSlotIdRef.current),
-        { method: "POST" }
-      );
-      setNotice(result?.message || "พร้อมเปลี่ยน MT5 แล้ว กรุณา Login บัญชีใหม่ใน MT5 บนเครื่องเดิม");
-      await load(selectedSlotIdRef.current);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function rebindDetectedAccount() {
@@ -930,16 +871,8 @@ export default function DashboardPage() {
                     <span className={"dot "+(isMt5Online?"green":"red")}/>
                     {connectionLabel}
                   </span>
-                  {data.selectedSlot?.mode === "LOCAL" && (
-                    data.account ? (
-                      <button
-                        className="btn primary"
-                        disabled={busy || state==="RUNNING" || desired==="RUNNING" || !data.instance?.device_online}
-                        onClick={requestMt5Change}
-                      >
-                        เปลี่ยนบัญชี MT5
-                      </button>
-                    ) : data.instance?.pending_account_number ? (
+                  {data.selectedSlot?.mode === "LOCAL" && !data.account && (
+                    data.instance?.pending_account_number ? (
                       <button
                         className="btn primary"
                         disabled={busy || !data.instance?.first_bind_ready || state==="RUNNING" || desired==="RUNNING"}
@@ -948,24 +881,18 @@ export default function DashboardPage() {
                         ผูกบัญชีนี้
                       </button>
                     ) : (
-                      <button className="btn" disabled>
-                        รอตรวจบัญชี MT5
-                      </button>
+                      <span className="owner-state-chip">รอ EA ตรวจบัญชี</span>
                     )
                   )}
                 </div>
               </div>
               {data.selectedSlot?.mode === "LOCAL" && (
                 <div className="help">
-                  {!data.account && data.instance?.pending_account_number
-                    ? data.instance?.first_bind_ready
-                      ? "นี่คือการผูกบัญชีครั้งแรก ไม่ใช่การเปลี่ยนบัญชี กด “ผูกบัญชีนี้” ได้เลย"
-                      : "ตรวจพบบัญชีแล้ว แต่กำลังรอ Heartbeat ล่าสุดจาก EA ก่อนเปิดให้ผูกบัญชีครั้งแรก"
-                    : !data.account
-                      ? "ยังไม่มีบัญชีเดิมให้เปลี่ยน ระบบกำลังรอตรวจ MT5 จาก EA"
-                      : !data.instance?.device_online
-                        ? "การเปลี่ยนบัญชีภายหลังต้องให้ Device Agent ของเครื่องเดิม Online ก่อน"
-                        : "ต้องการเปลี่ยน Demo / Real หรือ Login อื่นบนเครื่องเดิม ให้กด “เปลี่ยนบัญชี MT5”"}
+                  {!data.account
+                    ? data.instance?.pending_account_number
+                      ? "ระบบตรวจพบบัญชีจาก EA แล้ว ปกติจะผูกบัญชีแรกให้อัตโนมัติ หากยังค้างสามารถกด “ผูกบัญชีนี้” ได้"
+                      : "เปิด MT5 ที่ Login บัญชีที่ต้องการแล้วติดตั้ง SCENOVA ระบบจะอ่าน Login / Broker / Server และผูกบัญชีแรกให้อัตโนมัติ"
+                    : "ถ้าจะเปลี่ยน Demo / Real หรือ Login อื่น: ปิด Position เดิมให้เรียบร้อย แล้ว Login บัญชีใหม่ใน MT5 ระบบจะ Safe Stop และแสดงบัญชีใหม่ให้ยืนยันครั้งเดียว"}
                 </div>
               )}
             </section>
@@ -975,18 +902,15 @@ export default function DashboardPage() {
                 <section className="panel purple website-install-panel">
                   <div className="panel-head">
                     <div>
-                      <div className="eyebrow">WEBSITE-ONLY INSTALL</div>
-                      <h2>{data.instance?.device_status === "ACTIVE" ? "เครื่องนี้ลงทะเบียนกับ SCENOVA แล้ว" : "ติดตั้ง / อัปเกรด SCENOVA จากเว็บไซต์"}</h2>
+                      <div className="eyebrow">SCENOVA LOCAL INSTALL</div>
+                      <h2>ติดตั้ง / อัปเดต SCENOVA</h2>
                       <p className="muted">
-                        ลูกค้าติดตั้งจากหน้า SCENOVA เท่านั้น ระบบจะออกรหัสติดตั้งครั้งเดียวและผูก Device กับ Slot นี้
-                        {data.instance?.id && data.instance?.device_status !== "ACTIVE"
-                          ? " · เครื่องเดิมสามารถอัปเกรด Device Lock โดยระบบพยายามรักษา Instance/Token เดิม"
-                          : ""}
+                        Installer มีหน้าที่ลง EA + preset + Device Agent เท่านั้น การอนุญาตให้บอททำงานตรวจจากบัญชี SCENOVA, MT5 Login/Server และสิทธิ์บน Server ทุกครั้ง
                       </p>
                     </div>
-                    <span className={"badge "+(data.instance?.device_status==="ACTIVE"?"agent-online":"")}>
-                      <span className={"dot "+(data.instance?.device_status==="ACTIVE"?"green":"red")}/>
-                      {data.instance?.device_status === "ACTIVE" ? "DEVICE LOCK ACTIVE" : "DEVICE UPGRADE REQUIRED"}
+                    <span className={"badge "+(isMt5Online?"agent-online":"")}>
+                      <span className={"dot "+(isMt5Online?"green":"red")}/>
+                      {isMt5Online ? "EA CONNECTED" : "WAITING FOR EA"}
                     </span>
                   </div>
 
@@ -995,7 +919,7 @@ export default function DashboardPage() {
                       <span className="auto-install-icon">EXE</span>
                       <div>
                         <b>SCENOVA Windows Setup</b>
-                        <small>ไฟล์ .exe จาก Dashboard · ไม่ใช้ CMD / PowerShell · ลง EA + preset + Device Agent</small>
+                        <small>ติดตั้งซ้ำหรือย้ายไปเครื่องใหม่ได้ · ไม่ต้องปลด Device Lock · ระบบตรวจสิทธิ์จาก Server</small>
                       </div>
                     </div>
                     <button
@@ -1003,39 +927,15 @@ export default function DashboardPage() {
                       disabled={busy || desired==="RUNNING" || (state==="RUNNING" && isMt5Online)}
                       onClick={downloadWindowsInstaller}
                     >
-                      {busy ? "กำลังเตรียม..." : data.instance?.device_status === "ACTIVE" ? "ติดตั้งใหม่ / ย้ายเครื่อง" : "ติดตั้งจากเว็บไซต์"}
+                      {busy ? "กำลังเตรียม..." : data.instance?.id ? "ติดตั้ง / อัปเดตใหม่" : "ติดตั้ง SCENOVA"}
                     </button>
                   </div>
 
-                  {data.instance?.device_status === "ACTIVE" && (
-                    <>
-                      <div className="device-lock-grid">
-                        <div><span>Device</span><b>{data.instance.device_hostname || "REGISTERED PC"}</b></div>
-                        <div><span>Agent</span><b className={data.instance.device_online?"text-good":"text-warn"}>{data.instance.device_online ? "ONLINE" : "OFFLINE"}</b></div>
-                        <div><span>Last Seen</span><b>{data.instance.device_last_seen_at ? new Date(data.instance.device_last_seen_at).toLocaleString("th-TH") : "—"}</b></div>
-                      </div>
-                      <div className="account-card-actions" style={{marginTop:12}}>
-                        <button
-                          className="btn"
-                          disabled={busy || Number(data.instance?.metrics?.positions || 0) > 0 || (isMt5Online && (state==="RUNNING" || desired==="RUNNING"))}
-                          onClick={()=>releaseLocalDevice(data.selectedSlot,false)}
-                        >
-                          ปลดเครื่องเดิม
-                        </button>
-                        <button
-                          className="btn primary"
-                          disabled={busy || Number(data.instance?.metrics?.positions || 0) > 0 || (isMt5Online && (state==="RUNNING" || desired==="RUNNING"))}
-                          onClick={()=>releaseLocalDevice(data.selectedSlot,true)}
-                        >
-                          ย้ายเครื่อง
-                        </button>
-                      </div>
-                      <div className="help">
-                        “ปลดเครื่องเดิม” ใช้เมื่อเครื่องเก่าเข้าไม่ได้หรือจะให้เครื่องนี้ใช้ Slot อื่น · “ย้ายเครื่อง” จะปลดเครื่องเดิมและดาวน์โหลด Installer ของ Slot นี้ทันที
-                      </div>
-                    </>
+                  {data.instance?.agent_last_seen_at && (
+                    <div className="help">
+                      Device Agent ล่าสุด: {new Date(data.instance.agent_last_seen_at).toLocaleString("th-TH")} · ใช้เพื่ออัปเดต EA และวินิจฉัยเท่านั้น ไม่ใช่สิทธิ์เทรด
+                    </div>
                   )}
-
                   {activationMessage && <div className="notice good">{activationMessage}</div>}
                 </section>
 
@@ -1071,62 +971,14 @@ export default function DashboardPage() {
                     <div className="help">
                       {!data.account
                         ? data.instance.first_bind_ready
-                          ? "ตรวจพบจาก Heartbeat ล่าสุดของ EA แล้ว กด “ผูกบัญชีนี้” เพื่อใช้เป็น MT5 แรกของ Slot ได้เลย"
-                          : "กำลังรอ Heartbeat ล่าสุดจาก EA หาก MT5 เปิดอยู่ให้รอสักครู่แล้วปุ่มจะใช้งานได้"
+                          ? "บัญชีแรกปกติจะถูกผูกอัตโนมัติจาก EA หากยังค้าง กด “ผูกบัญชีนี้” ได้"
+                          : "กำลังรอ Heartbeat ล่าสุดจาก EA"
                         : data.instance.rebind_ready
-                          ? "ตรวจแล้วว่า EA และบัญชีใหม่มาจาก Device ที่ลงทะเบียนไว้ กดใช้บัญชีนี้ได้โดยไม่ต้องโหลด .set ใหม่"
-                          : data.instance.account_change_requested_at
-                            ? "รอ Device Agent และ Heartbeat จาก MT5 บัญชีใหม่บนเครื่องเดิม"
-                            : "กรณีเปลี่ยนบัญชีภายหลัง ให้กด “เปลี่ยนบัญชี MT5” ด้านบนก่อน แล้ว Login บัญชีใหม่ใน MT5"}
+                          ? "บัญชีที่ MT5 กำลัง Login ต่างจากบัญชีเดิม ระบบ Safe Stop แล้ว กด “ใช้บัญชีนี้” เพื่อยืนยันการเปลี่ยนครั้งเดียว"
+                          : "กำลังรอ Heartbeat ล่าสุดจากบัญชี MT5 ใหม่"}
                     </div>
                   </section>
                 )}
-
-                <section className="panel">
-                  <div className="panel-head">
-                    <div>
-                      <div className="eyebrow">LOCAL DEVICE LOCKS</div>
-                      <h2>เครื่องที่ผูกกับ Local Slots</h2>
-                      <p className="muted">ถ้า Installer แจ้งว่าเครื่องนี้มี Local Slot เดิมอยู่ ให้ดูรายการนี้แล้วปลด Slot เดิมก่อนติดตั้ง Slot ใหม่บนเครื่องเดียวกัน</p>
-                    </div>
-                  </div>
-                  <div className="partner-slot-list">
-                    {(data.slots || []).filter((slot:any)=>slot.can_release_device && slot.mode==="LOCAL").map((slot:any)=>(
-                      <div className="partner-slot-row" key={slot.id}>
-                        <div className="partner-slot-number"><span>SLOT</span><b>{slot.slot_number}</b></div>
-                        <div className="partner-slot-user">
-                          <b>{slot.device_status === "ACTIVE" ? (slot.device_hostname || "REGISTERED PC") : "ยังไม่ผูกเครื่อง"}</b>
-                          <small>{slot.account_number ? "MT5 " + slot.account_number : "ยังไม่เชื่อม MT5"}</small>
-                        </div>
-                        <div className="partner-slot-meta">
-                          <span>{slot.status} · {slot.device_status || "UNREGISTERED"}</span>
-                          <small>
-                            {Number(slot.positions || 0) > 0
-                              ? "มี " + slot.positions + " Position — ต้องปิดก่อน"
-                              : slot.mt5_online
-                                ? "MT5 ONLINE"
-                                : slot.device_last_seen_at
-                                  ? "เครื่อง Offline · เห็นล่าสุด " + new Date(slot.device_last_seen_at).toLocaleString("th-TH")
-                                  : "เครื่อง Offline"}
-                          </small>
-                        </div>
-                        <div className="partner-slot-actions">
-                          {slot.device_status === "ACTIVE" ? (
-                            <button
-                              className="btn danger"
-                              disabled={busy || Number(slot.positions || 0) > 0 || (slot.mt5_online && (slot.actual_state==="RUNNING" || slot.desired_state==="RUNNING"))}
-                              onClick={()=>releaseLocalDevice(slot,false)}
-                            >
-                              ปลดเครื่อง
-                            </button>
-                          ) : (
-                            <span className="owner-state-chip">FREE</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
 
                 <section className="panel first-install-guide">
                   <div className="eyebrow">LOCAL MT5 · AUTO DETECT</div>
@@ -1137,10 +989,10 @@ export default function DashboardPage() {
                     <div><span>3</span><div><b>อนุญาต WebRequest ถ้า MT5 ยังบล็อก</b><small>MT5 → Tools → Options → Expert Advisors → เพิ่ม <code>{mt5ApiBase}</code> แล้วระบบจะเชื่อมและผูกบัญชีให้เอง</small></div></div>
                   </div>
                   <div className="notice good">
-                    ครั้งแรกระบบจะผูก MT5 ที่ตรวจพบเข้ากับ Slot อัตโนมัติ เมื่อเป็น Device ที่ลงทะเบียนและบัญชีไม่ถูก Slot อื่นใช้อยู่
+                    ครั้งแรกระบบจะผูก MT5 ที่ตรวจพบเข้ากับ Slot อัตโนมัติ หาก MT5 Login + Server ยังไม่ถูก SCENOVA Slot อื่นใช้อยู่
                   </div>
                   <div className="notice">
-                    ถ้าจะเปลี่ยน Demo → Real หรือเปลี่ยนบัญชีภายหลัง: กด <b>“เปลี่ยนบัญชี MT5”</b> → Login บัญชีใหม่ใน MT5 → ระบบ Safe Stop และให้ยืนยัน <b>“ใช้บัญชีนี้”</b> เพื่อป้องกันการเปลี่ยนบัญชีโดยไม่ตั้งใจ
+                    ถ้าจะเปลี่ยน Demo → Real หรือเปลี่ยนบัญชีภายหลัง: ปิด Position เดิม → Login บัญชีใหม่ใน MT5 → ระบบ Safe Stop อัตโนมัติ → กลับมากดยืนยัน <b>“ใช้บัญชีนี้”</b> ครั้งเดียว
                   </div>
                 </section>
               </>
