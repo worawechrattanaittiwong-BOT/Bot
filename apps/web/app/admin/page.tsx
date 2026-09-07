@@ -20,7 +20,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
 
-  async function search(e?: FormEvent) {
+  async function search(e?: FormEvent, preserveMessage = false) {
     e?.preventDefault();
     setLoading(true);
     try {
@@ -30,7 +30,7 @@ export default function AdminPage() {
       ]);
       setUsers(userRows);
       setSystem(systemStatus);
-      setMessage("");
+      if (!preserveMessage) setMessage("");
     } catch (e: any) {
       setMessage(e.message);
     } finally {
@@ -89,7 +89,7 @@ export default function AdminPage() {
         })
       });
       setMessage("อนุมัติ Trial 3 ชั่วโมงให้ " + user.user_code + " แล้ว");
-      await search();
+      await search(undefined, true);
     } catch (e: any) {
       setMessage(e.message);
     }
@@ -113,7 +113,7 @@ export default function AdminPage() {
         "เปิดสิทธิ์ " + (result?.plan?.code || planCode) +
         " ให้ " + user.user_code + " แล้ว · " + slotCount + " Slot"
       );
-      await search();
+      await search(undefined, true);
     } catch (e: any) {
       setMessage(e.message);
     }
@@ -127,7 +127,7 @@ export default function AdminPage() {
         body: JSON.stringify({ subscriptionId, days: addDays })
       });
       setMessage("เพิ่ม " + addDays + " วันให้ " + user.user_code + " แล้ว");
-      await search();
+      await search(undefined, true);
     } catch (e: any) {
       setMessage(e.message);
     }
@@ -140,7 +140,7 @@ export default function AdminPage() {
         body: JSON.stringify({ userId: user.id })
       });
       setMessage("เปิดบัญชี " + user.user_code + " กลับมาแล้ว");
-      await search();
+      await search(undefined, true);
     } catch (e: any) {
       setMessage(e.message);
     }
@@ -154,7 +154,7 @@ export default function AdminPage() {
         body: JSON.stringify({ userId: user.id })
       });
       setMessage("ระงับ " + user.user_code + " แล้ว");
-      await search();
+      await search(undefined, true);
     } catch (e: any) {
       setMessage(e.message);
     }
@@ -171,7 +171,7 @@ export default function AdminPage() {
         body: JSON.stringify({ userId: user.id })
       });
       setMessage("ลบบัญชี " + user.user_code + " ออกจากการใช้งานแล้ว");
-      await search();
+      await search(undefined, true);
     } catch (e: any) {
       setMessage(e.message);
     }
