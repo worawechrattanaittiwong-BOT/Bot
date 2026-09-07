@@ -91,6 +91,61 @@ verify_generated_ea_release() {
   return 0
 }
 
+
+verify_generated_installer_release() {
+  local sha="$1"
+  local subject author_email parent parent_ci changed
+
+  subject="$(git log -1 --format=%s "$sha" 2>/dev/null || true)"
+  author_email="$(git log -1 --format=%ae "$sha" 2>/dev/null || true)"
+
+  case "$subject" in
+    "build: publish SCENOVA Windows installer [skip ci]"|"build: publish signed SCENOVA Windows installer [skip ci]")
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  if [ "$author_email" != "actions@users.noreply.github.com" ]; then
+    echo "[SCENOVA] generated installer release rejected: unexpected author $author_email"
+    return 1
+  fi
+
+  changed="$(git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null || true)"
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    case "$file" in
+      apps/web/public/downloads/SCENOVA-Setup.exe|apps/web/public/downloads/SCENOVA-Setup-v*.exe)
+        ;;
+      *)
+        echo "[SCENOVA] generated installer release rejected: unexpected file $file"
+        return 1
+        ;;
+    esac
+  done <<< "$changed"
+
+  if ! git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-Setup.exe" 2>/dev/null; then
+    echo "[SCENOVA] generated installer release rejected: installer artifact missing"
+    return 1
+  fi
+
+  parent="$(git rev-parse "$sha^" 2>/dev/null || true)"
+  [ -n "$parent" ] || return 1
+
+  parent_ci="$(
+    gh run list       --repo "$REPO_FULL_NAME"       --commit "$parent"       --workflow CI       --limit 1       --json status,conclusion       --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end'       2>/dev/null || true
+  )"
+
+  if [ "$parent_ci" != "completed:success" ]; then
+    echo "[SCENOVA] generated installer release waiting for parent CI ($parent_ci)"
+    return 1
+  fi
+
+  echo "[SCENOVA] trusted generated Windows installer release verified"
+  return 0
+}
+
 if command -v gh >/dev/null 2>&1; then
   CI_STATE="$(
     gh run list       --repo "$REPO_FULL_NAME"       --commit "$REMOTE_SHA"       --workflow CI       --limit 1       --json status,conclusion       --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end'       2>/dev/null || true
@@ -107,6 +162,8 @@ if command -v gh >/dev/null 2>&1; then
     *)
       if verify_generated_ea_release "$REMOTE_SHA"; then
         echo "[SCENOVA] generated EX5 release accepted without a direct CI run"
+      elif verify_generated_installer_release "$REMOTE_SHA"; then
+        echo "[SCENOVA] generated Windows installer release accepted without a direct CI run"
       else
         echo "[SCENOVA] CI not ready yet ($CI_STATE); waiting for next check"
         exit 0
