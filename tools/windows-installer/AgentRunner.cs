@@ -131,6 +131,149 @@ internal static class AgentRunner
             lastError);
     }
 
+    internal static bool EnsureMt5RunningWithEa(AgentConfig config, bool forceReload)
+    {
+        var terminalExe = ScenovaRuntime.ResolveTerminalExecutable(config.TerminalDataPath);
+        if (string.IsNullOrWhiteSpace(terminalExe) || !File.Exists(terminalExe))
+            return false;
+
+        var matching = FindTargetMt5Processes(terminalExe);
+        try
+        {
+            if (matching.Count > 0 && !forceReload)
+                return true;
+
+            if (forceReload)
+            {
+                foreach (var process in matching)
+                    StopTargetMt5(process);
+            }
+        }
+        finally
+        {
+            foreach (var process in matching)
+                process.Dispose();
+        }
+
+        var startupConfig = Path.Combine(ScenovaRuntime.BaseDir, "mt5-scenova-startup.ini");
+        var lines = new List<string>
+        {
+            "[Experts]",
+            "Enabled=1",
+            "AllowLiveTrading=1",
+            "Account=1",
+            "Profile=1",
+            "Chart=1",
+            "",
+            "[StartUp]",
+            "Expert=SCENOVA\\FastBasketBot",
+            "ExpertParameters=SCENOVA-FastBasketBot.set"
+        };
+
+        if (!string.IsNullOrWhiteSpace(config.StartupSymbol))
+            lines.Add("Symbol=" + config.StartupSymbol.Trim());
+
+        lines.Add("Period=M1");
+        File.WriteAllLines(startupConfig, lines, new System.Text.UTF8Encoding(false));
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = terminalExe,
+            Arguments = "/config:\"" + startupConfig + "\"",
+            WorkingDirectory = Path.GetDirectoryName(terminalExe) ?? "",
+            UseShellExecute = true
+        });
+        return true;
+    }
+
+    private static List<Process> FindTargetMt5Processes(string terminalExe)
+    {
+        var result = new List<Process>();
+        var normalized = Path.GetFullPath(terminalExe);
+
+        foreach (var process in Process.GetProcessesByName("terminal64"))
+        {
+            try
+            {
+                var runningPath = process.MainModule?.FileName;
+                if (!string.IsNullOrWhiteSpace(runningPath) &&
+                    string.Equals(
+                        Path.GetFullPath(runningPath),
+                        normalized,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Add(process);
+                    continue;
+                }
+            }
+            catch
+            {
+                // Ignore MT5 instances that cannot be matched safely by path.
+            }
+
+            process.Dispose();
+        }
+
+        return result;
+    }
+
+    private static void StopTargetMt5(Process process)
+    {
+        try
+        {
+            if (process.HasExited) return;
+
+            try
+            {
+                process.CloseMainWindow();
+            }
+            catch { }
+
+            if (!process.WaitForExit(5000))
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(5000);
+            }
+        }
+        catch { }
+    }
+
+    private static async Task<bool> UpdateEaIfNeededAsync(
+        HttpClient http,
+        AgentConfig config,
+        string installToken,
+        string localEaHash,
+        AgentHeartbeatResponse heartbeat,
+        string logPath)
+    {
+        if (!heartbeat.ArtifactAvailable ||
+            string.IsNullOrWhiteSpace(heartbeat.ArtifactHash) ||
+            string.Equals(localEaHash, heartbeat.ArtifactHash, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var eaBytes = await ScenovaClient.DownloadArtifactAsync(
+            http,
+            config.ApiBase,
+            config.InstanceId,
+            installToken);
+
+        var downloadedHash = Convert.ToHexString(SHA256.HashData(eaBytes)).ToLowerInvariant();
+        if (!string.Equals(downloadedHash, heartbeat.ArtifactHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("downloaded EA hash does not match server artifact");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(config.EaBinaryPath) ?? ScenovaRuntime.BaseDir);
+        var tempPath = config.EaBinaryPath + ".update";
+        await File.WriteAllBytesAsync(tempPath, eaBytes);
+        File.Move(tempPath, config.EaBinaryPath, true);
+
+        await AppendLogAsync(
+            logPath,
+            "EA updated automatically. hash=" + downloadedHash);
+
+        EnsureMt5RunningWithEa(config, forceReload: true);
+        return true;
+    }
+
     internal static async Task RunAsync()
     {
         Directory.CreateDirectory(ScenovaRuntime.BaseDir);
@@ -141,6 +284,8 @@ internal static class AgentRunner
             "Local\\SCENOVA-MT5-Agent-v2-" + Environment.UserName,
             out var createdNew);
         if (!createdNew) return;
+
+        var attemptedInitialMt5Start = false;
 
         while (true)
         {
@@ -169,7 +314,7 @@ internal static class AgentRunner
                     {
                         instanceId = config.InstanceId,
                         installToken,
-                        agentVersion = "2.0.3",
+                        agentVersion = "2.0.4",
                         terminalPath = config.TerminalDataPath,
                         eaHash,
                         hostname = Environment.MachineName,
@@ -180,7 +325,30 @@ internal static class AgentRunner
                 if (!heartbeat.DeviceVerified)
                     throw new InvalidOperationException("device verification failed");
 
-                await AppendLogAsync(logPath, "Heartbeat OK. device=" + config.DevicePublicId);
+                var updated = await UpdateEaIfNeededAsync(
+                    http,
+                    config,
+                    installToken,
+                    eaHash,
+                    heartbeat,
+                    logPath);
+
+                if (updated)
+                {
+                    attemptedInitialMt5Start = true;
+                }
+                else if (!heartbeat.EaOnline && !attemptedInitialMt5Start)
+                {
+                    attemptedInitialMt5Start = EnsureMt5RunningWithEa(config, forceReload: false);
+                    if (attemptedInitialMt5Start)
+                        await AppendLogAsync(logPath, "MT5 start requested automatically.");
+                }
+
+                await AppendLogAsync(
+                    logPath,
+                    "Heartbeat OK. device=" + config.DevicePublicId +
+                    " eaOnline=" + heartbeat.EaOnline +
+                    " eaVersion=" + (heartbeat.EaVersion ?? ""));
             }
             catch (Exception ex)
             {
