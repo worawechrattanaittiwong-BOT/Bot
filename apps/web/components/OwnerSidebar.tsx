@@ -27,7 +27,7 @@ export function OwnerSidebar({
   return (
     <aside className="sidebar app-sidebar owner-sidebar">
       <div className="brand-lockup side-brand">
-        <span className="brand-mark">◆</span>
+        <span className="brand-emblem" aria-hidden="true"><i/><b>◆</b></span>
         <span><strong>SCENOVA</strong><small>OWNER CONSOLE</small></span>
       </div>
 
