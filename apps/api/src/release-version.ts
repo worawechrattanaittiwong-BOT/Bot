@@ -1,4 +1,4 @@
-export const DEFAULT_INSTALLER_VERSION = "2.0.6";
+export const DEFAULT_INSTALLER_VERSION = "2.0.7";
 
 export function latestInstallerVersion() {
   return String(process.env.SCENOVA_INSTALLER_VERSION || DEFAULT_INSTALLER_VERSION).trim() || DEFAULT_INSTALLER_VERSION;
