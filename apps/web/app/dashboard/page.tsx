@@ -52,7 +52,7 @@ const defaultSettings = {
   confidenceThreshold: 70,
   sessionStartHour: 0,
   sessionEndHour: 24,
-  maxAtrPoints: 3000,
+  maxAtrPoints: 0,
   cooldownMinutesAfterLoss: 5,
   maxConsecutiveLosses: 3,
   entryMode: "AUTO_MOMENTUM"
@@ -1278,7 +1278,7 @@ export default function DashboardPage() {
                   <SelectField label="ขาดทุนติดต่อกันสูงสุด" options={[0,1,2,3,4,5,7,10]} value={settings.maxConsecutiveLosses} format={(v:string)=>Number(v) === 0 ? "ไม่จำกัด" : v + " ไม้"} onChange={(v:string)=>editSetting("maxConsecutiveLosses",v)} />
                   <SelectField label="เริ่ม Session (เวลา Server)" options={[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23]} value={settings.sessionStartHour} format={(v:string)=>String(v).padStart(2,"0") + ":00"} onChange={(v:string)=>editSetting("sessionStartHour",v)} />
                   <SelectField label="จบ Session (เวลา Server)" options={[1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23,24]} value={settings.sessionEndHour} format={(v:string)=>String(v).padStart(2,"0") + ":00"} onChange={(v:string)=>editSetting("sessionEndHour",v)} />
-                  <SelectField label="ATR สูงสุดที่อนุญาต" options={[0,500,1000,1500,2000,3000,5000,10000]} value={settings.maxAtrPoints} format={(v:string)=>Number(v) === 0 ? "ไม่จำกัด" : v + " points"} onChange={(v:string)=>editSetting("maxAtrPoints",v)} />
+                  <SelectField label="ATR Adaptive Guard" options={[0,500,1000,1500,2000,3000,5000,10000]} value={settings.maxAtrPoints} format={(v:string)=>Number(v) === 0 ? "Adaptive อัตโนมัติ (แนะนำ)" : "เริ่มโหมดระวังที่ " + v + " points"} onChange={(v:string)=>editSetting("maxAtrPoints",v)} />
 
                   <div className="settings-group-title cc-settings-group profit"><span className="cc-settings-group-icon">↗</span><div><b>เป้ากำไรและความเสี่ยง</b><small>Profit & Risk</small></div></div>
 
