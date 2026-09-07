@@ -1055,36 +1055,53 @@ export default function DashboardPage() {
                     <div className="cc-terminal-head">
                       <div className="cc-card-title">
                         <span className="cc-terminal-icon">&gt;_</span>
-                        <div><h3>Terminal / Live Log</h3><span>เหตุการณ์ล่าสุดของบอท</span></div>
+                        <div><h3>SCENOVA Terminal</h3><span>Live execution stream · MT5 / EA / Risk / Commands</span></div>
                       </div>
                       <div className="cc-terminal-actions">
                         <span className={"cc-terminal-live " + (logsLoading ? "loading" : "")}>
-                          <i/>{logsLoading ? "กำลังอัปเดต" : "Live"}
+                          <i/>{logsLoading ? "SYNC" : "LIVE"}
                         </span>
-                        <button className="btn" onClick={()=>setLogsOpen(true)}>ขยาย</button>
+                        <button className={"cc-terminal-auto " + (terminalAutoScroll ? "active" : "")} onClick={()=>setTerminalAutoScroll(v=>!v)}>
+                          AUTO
+                        </button>
+                        <button className="btn" onClick={()=>setLogsOpen(true)}>ขยาย ↗</button>
                       </div>
                     </div>
-                    <div className="cc-terminal-window">
-                      <TerminalLine
-                        time={botLogs?.snapshot?.last_seen_at || data.instance?.last_seen_at}
-                        level={isMt5Online ? "SUCCESS" : "WARN"}
-                        text={"MT5 " + connectionLabel + " · " + data.account.account_number + " · " + (metrics.server || data.account.broker_server)}
-                      />
-                      <TerminalLine
-                        time={botLogs?.snapshot?.last_seen_at || data.instance?.last_seen_at}
-                        level="STATE"
-                        text={"Bot " + actualStateLabel + " · Web " + desiredStateLabel}
-                      />
-                      {(botLogs?.events || []).slice(0,10).reverse().map((event:any)=>(
+
+                    <div className="cc-terminal-summary">
+                      <TerminalStat label="MT5" value={isMt5Online ? "ONLINE" : "OFFLINE"} tone={isMt5Online ? "good" : "bad"} />
+                      <TerminalStat label="BOT" value={state} tone={state==="RUNNING" ? "good" : state==="SAFE_STOP" ? "warn" : "neutral"} />
+                      <TerminalStat label="P/L TODAY" value={"$"+Number(metrics.dailyProfit || 0).toFixed(2)} tone={Number(metrics.dailyProfit || 0)>=0 ? "good" : "bad"} />
+                      <TerminalStat label="BASKET" value={"$"+Number(metrics.basketCycleProfit || metrics.basketProfit || 0).toFixed(2)} tone={Number(metrics.basketCycleProfit || metrics.basketProfit || 0)>=0 ? "good" : "bad"} />
+                      <TerminalStat label="LAST RETCODE" value={String(metrics.lastOrderRetcode || "—")} tone={Number(metrics.lastOrderError || 0)>0 ? "bad" : "neutral"} />
+                    </div>
+
+                    <div className="cc-terminal-toolbar">
+                      {(["ALL","COMMAND","STATE","MARKET","RISK","ORDER"] as const).map(filter=>(
+                        <button
+                          key={filter}
+                          className={"cc-terminal-filter " + (terminalFilter===filter ? "active" : "")}
+                          onClick={()=>setTerminalFilter(filter)}
+                        >
+                          {filter}
+                        </button>
+                      ))}
+                      <span className="cc-terminal-count">{filteredTerminalEntries.length} lines</span>
+                    </div>
+
+                    <div className="cc-terminal-window" ref={terminalWindowRef}>
+                      {filteredTerminalEntries.slice(-40).map((entry:any)=>(
                         <TerminalLine
-                          key={event.id}
-                          time={event.created_at}
-                          level={String(event.status || "INFO").toUpperCase()}
-                          text={commandLabel(event.command) + (event.acked_at ? " · EA รับคำสั่งแล้ว" : event.delivered_at ? " · ส่งถึง EA แล้ว" : " · รอส่ง")}
+                          key={entry.id}
+                          time={entry.time}
+                          level={entry.level}
+                          category={entry.category}
+                          text={entry.text}
+                          detail={entry.detail}
                         />
                       ))}
-                      {!logsLoading && !(botLogs?.events || []).length && (
-                        <div className="cc-terminal-empty">ยังไม่มีคำสั่งล่าสุด · Terminal กำลังรอเหตุการณ์ใหม่</div>
+                      {!logsLoading && !filteredTerminalEntries.length && (
+                        <div className="cc-terminal-empty">No events in this filter · waiting for live data</div>
                       )}
                     </div>
                   </section>
@@ -1145,7 +1162,7 @@ export default function DashboardPage() {
                     {settingsDirty ? "มีค่าที่ยังไม่ได้บันทึก" : "ค่าบันทึกแล้ว"}
                   </span>
                 </div>
-                <form className="form-grid form-grid-human simple-settings-form" onSubmit={saveSettings}>
+                <form className="form-grid form-grid-human simple-settings-form cc-settings-form" onSubmit={saveSettings}>
                   <div className="field">
                     <label>Symbol</label>
                     <div className="input read-only-value">{metrics.symbol || settings.symbol}</div>
@@ -1172,7 +1189,7 @@ export default function DashboardPage() {
                     </select>
                   </div>
 
-                  <div className="settings-group-title"><b>เป้ากำไรและความเสี่ยง</b></div>
+                  <div className="settings-group-title cc-settings-group profit"><span className="cc-settings-group-icon">↗</span><div><b>เป้ากำไรและความเสี่ยง</b><small>Profit & Risk</small></div></div>
 
                   <ToggleSelectField
                     label="ปล่อยกำไรวิ่ง แล้วปิดเมื่อย่อลงจากจุดสูงสุด"
@@ -1240,7 +1257,7 @@ export default function DashboardPage() {
                     onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}
                   />
 
-                  <div className="settings-group-title"><b>Basket Trailing</b></div>
+                  <div className="settings-group-title cc-settings-group trail"><span className="cc-settings-group-icon">⌁</span><div><b>Basket Trailing</b><small>Protect Profit</small></div></div>
 
                   <TogglePairField
                     label="ใช้ Basket Trailing"
@@ -1257,7 +1274,7 @@ export default function DashboardPage() {
                     onSecondChange={(v:string)=>editSetting("basketTrailMoney",v)}
                   />
 
-                  <div className="settings-group-title"><b>ความถี่การส่งคำสั่ง</b></div>
+                  <div className="settings-group-title cc-settings-group speed"><span className="cc-settings-group-icon">ϟ</span><div><b>ความถี่การส่งคำสั่ง</b><small>Execution Speed</small></div></div>
 
                   <SelectField
                     label="ระยะห่างคำสั่งขั้นต่ำ"
