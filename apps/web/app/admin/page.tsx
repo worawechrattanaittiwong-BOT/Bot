@@ -18,6 +18,7 @@ export default function AdminPage() {
   const [system, setSystem] = useState<any>(null);
   const [activeMenu, setActiveMenu] = useState<Menu>("overview");
   const [loading, setLoading] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
 
   async function search(e?: FormEvent) {
     e?.preventDefault();
@@ -94,13 +95,13 @@ export default function AdminPage() {
     }
   }
 
-  async function activate(user: any) {
+  async function activate(user: any, planCode = plan) {
     try {
       const result = await adminApi("/admin/subscriptions/activate", {
         method: "POST",
         body: JSON.stringify({
           userId: user.id,
-          planCode: plan,
+          planCode,
           durationDays: expiresAt ? undefined : days,
           startsAt: startsAt || undefined,
           expiresAt: expiresAt || undefined,
@@ -109,7 +110,7 @@ export default function AdminPage() {
       });
       const slotCount = Array.isArray(result?.slots) ? result.slots.length : (result?.plan?.slots || 1);
       setMessage(
-        "เปิดสิทธิ์ " + (result?.plan?.code || plan) +
+        "เปิดสิทธิ์ " + (result?.plan?.code || planCode) +
         " ให้ " + user.user_code + " แล้ว · " + slotCount + " Slot"
       );
       await search();
@@ -118,12 +119,12 @@ export default function AdminPage() {
     }
   }
 
-  async function extend(user: any, addDays: number) {
-    if (!user.subscription_id) return setMessage("ผู้ใช้นี้ยังไม่มีสมาชิกให้ต่ออายุ");
+  async function extendSubscription(user: any, subscriptionId: string, addDays: number) {
+    if (!subscriptionId) return setMessage("ไม่พบสมาชิกที่ต้องการต่ออายุ");
     try {
       await adminApi("/admin/subscriptions/extend", {
         method: "POST",
-        body: JSON.stringify({ subscriptionId: user.subscription_id, days: addDays })
+        body: JSON.stringify({ subscriptionId, days: addDays })
       });
       setMessage("เพิ่ม " + addDays + " วันให้ " + user.user_code + " แล้ว");
       await search();
@@ -175,6 +176,23 @@ export default function AdminPage() {
       setMessage(e.message);
     }
   }
+
+  const planOptions = [
+    { code:"LOCAL_30D", label:"LOCAL 30D", mode:"LOCAL" },
+    { code:"LOCAL_3SLOT", label:"LOCAL 30D · 3 Slots", mode:"LOCAL" },
+    { code:"LOCAL_5SLOT", label:"LOCAL 30D · 5 Slots", mode:"LOCAL" },
+    { code:"PARTNER_LOCAL_10", label:"PARTNER LOCAL · 10 Slots", mode:"LOCAL" },
+    { code:"PARTNER_LOCAL_25", label:"PARTNER LOCAL · 25 Slots", mode:"LOCAL" },
+    { code:"PARTNER_LOCAL_50", label:"PARTNER LOCAL · 50 Slots", mode:"LOCAL" },
+    { code:"CLOUD_30D", label:"CLOUD 30D", mode:"CLOUD" }
+  ];
+  const selectedPlan = planOptions.find(p=>p.code===plan) || planOptions[0];
+  const selectedCustomer = users.find((u:any)=>u.id===selectedCustomerId) || null;
+  const memberships = (user:any) => Array.isArray(user?.memberships) ? user.memberships : [];
+  const hasActivePlan = (user:any, planCode:string) =>
+    memberships(user).some((m:any)=>m.plan_code===planCode && m.active);
+  const hasActiveMode = (user:any, mode:string) =>
+    memberships(user).some((m:any)=>m.mode===mode && m.active);
 
   const workersOnline = system?.workers?.filter((w:any)=>w.health === "ONLINE").length || 0;
   const workersTotal = system?.workers?.length || 0;
