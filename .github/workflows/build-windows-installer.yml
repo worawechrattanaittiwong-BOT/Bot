@@ -16,6 +16,10 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: scenova-windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
@@ -151,4 +155,19 @@ jobs:
           } else {
             git commit -m "build: publish SCENOVA Windows installer [skip ci]"
           }
-          git push
+
+          # Main may advance while the Windows runner is compiling (for example
+          # a docs-only commit). Rebase the generated binary commit onto the
+          # latest main before pushing. Workflow concurrency cancels obsolete
+          # installer builds when a newer installer-related push arrives.
+          git fetch origin main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch latest main before publishing installer" }
+
+          git rebase origin/main
+          if ($LASTEXITCODE -ne 0) {
+            git rebase --abort
+            throw "Could not rebase generated installer onto latest main"
+          }
+
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to publish SCENOVA installer to main" }
