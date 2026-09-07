@@ -84,7 +84,9 @@ jobs:
           test -n "$TOKEN"
 
           DASH=$(curl -fsS "$BASE/bot/dashboard" -H "authorization: Bearer $TOKEN")
+          USER1_ID=$(printf '%s' "$DASH" | jq -r '.user.id')
           SLOT=$(printf '%s' "$DASH" | jq -r '.selectedSlot.id')
+          test -n "$USER1_ID"
           test -n "$SLOT"
           test "$(printf '%s' "$DASH" | jq -r '.account')" = "null"
 
@@ -168,13 +170,28 @@ jobs:
           REGISTER2=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration2@scenova.test","password":"Integration123!"}')
           TOKEN2=$(printf '%s' "$REGISTER2" | jq -r '.token')
           DASH_SECOND=$(curl -fsS "$BASE/bot/dashboard" -H "authorization: Bearer $TOKEN2")
+          USER2_ID=$(printf '%s' "$DASH_SECOND" | jq -r '.user.id')
           SLOT_SECOND=$(printf '%s' "$DASH_SECOND" | jq -r '.selectedSlot.id')
+          test -n "$USER2_ID"
 
           PREP_SECOND=$(curl -fsS -X POST "$BASE/bot/installers/windows" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d "{\"slotId\":\"$SLOT_SECOND\"}")
           CODE_SECOND=$(printf '%s' "$PREP_SECOND" | jq -r '.code')
 
           DEVICE_TAKEOVER_HTTP=$(curl -sS -o /tmp/device-takeover.json -w "%{http_code}" -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE_SECOND\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"another-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal2\"}")
           test "$DEVICE_TAKEOVER_HTTP" = "409"
+
+          echo "[integration] customer releases old LOCAL device lock"
+          RELEASE_DEVICE=$(curl -fsS -X POST "$BASE/bot/device/release?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$RELEASE_DEVICE" | jq -r '.released')" = "true"
+
+          echo "[integration] same physical device can enroll another Slot after explicit release"
+          ENROLL_SECOND=$(curl -fsS -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE_SECOND\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"another-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal2\"}")
+          INSTANCE_SECOND=$(printf '%s' "$ENROLL_SECOND" | jq -r '.instanceId')
+          test -n "$INSTANCE_SECOND"
+
+          echo "[integration] owner can release a customer device lock"
+          ADMIN_RELEASE=$(curl -fsS -X POST "$BASE/admin/devices/release" -H 'x-admin-key: integration-admin' -H 'content-type: application/json' -d "{\"userId\":\"$USER2_ID\",\"slotId\":\"$SLOT_SECOND\"}")
+          test "$(printf '%s' "$ADMIN_RELEASE" | jq -r '.released')" = "true"
 
           DUP_MT5_HTTP=$(curl -sS -o /tmp/duplicate-mt5.json -w "%{http_code}" -X POST "$BASE/bot/mt5" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d '{"accountNumber":"200002","broker":"SCENOVA","brokerServer":"SCENOVA-Real","mode":"CLOUD"}')
           test "$DUP_MT5_HTTP" = "409"
