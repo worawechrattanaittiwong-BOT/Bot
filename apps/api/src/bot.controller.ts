@@ -41,6 +41,39 @@ export class BotController {
     );
   }
 
+
+  private async assertMt5IdentityAvailable(
+    userId: string,
+    accountNumber: string,
+    brokerServer: string,
+    slotId: string
+  ) {
+    const conflict = await this.db.one(
+      `SELECT a.id,a.user_id,bi.slot_id,u.user_code,u.role
+       FROM mt5_accounts a
+       JOIN users u ON u.id=a.user_id
+       LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
+       WHERE lower(a.account_number)=lower($1)
+         AND lower(a.broker_server)=lower($2)
+         AND a.status='ACTIVE'
+         AND (
+           a.user_id<>$3
+           OR (bi.slot_id IS NOT NULL AND bi.slot_id<>$4)
+         )
+       ORDER BY
+         CASE WHEN u.role IN ('OWNER','ADMIN') THEN 0 ELSE 1 END,
+         a.created_at ASC
+       LIMIT 1`,
+      [accountNumber, brokerServer, userId, slotId]
+    );
+    if (conflict) {
+      throw new ConflictException(
+        "MT5 " + accountNumber + " / " + brokerServer +
+        " ถูกผูกกับ SCENOVA Slot อื่นอยู่แล้ว"
+      );
+    }
+  }
+
   private async ensurePrimarySlot(userId: string) {
     let slot = await this.db.one(
       "SELECT * FROM license_slots WHERE owner_user_id=$1 AND assigned_user_id=$1 AND mode='LOCAL' AND status<>'DELETED' ORDER BY slot_number,id LIMIT 1",
@@ -548,20 +581,12 @@ export class BotController {
     const brokerServer = String(instance.pending_broker_server);
     const broker = String(instance.pending_broker || instance.old_broker || "Detected MT5").slice(0, 80);
 
-    const activeElsewhere = await this.db.one(
-      `SELECT a.id,a.user_id,bi.slot_id
-       FROM mt5_accounts a
-       JOIN bot_instances bi ON bi.mt5_account_id=a.id
-       WHERE lower(a.account_number)=lower($1)
-         AND lower(a.broker_server)=lower($2)
-         AND a.status='ACTIVE'
-         AND bi.slot_id<>$3
-       LIMIT 1`,
-      [accountNumber, brokerServer, slot.id]
+    await this.assertMt5IdentityAvailable(
+      req.user.sub,
+      accountNumber,
+      brokerServer,
+      slot.id
     );
-    if (activeElsewhere) {
-      throw new ConflictException("MT5 นี้ถูกผูกกับ Slot อื่นอยู่แล้ว");
-    }
 
     let account = await this.db.one(
       "SELECT * FROM mt5_accounts WHERE user_id=$1 AND lower(account_number)=lower($2) AND lower(broker_server)=lower($3) ORDER BY created_at DESC LIMIT 1",
@@ -616,6 +641,13 @@ export class BotController {
     if (mode === "LOCAL") {
       throw new ConflictException("LOCAL mode must be installed from the SCENOVA website; MT5 will be detected automatically");
     }
+
+    await this.assertMt5IdentityAvailable(
+      req.user.sub,
+      String(body.accountNumber),
+      String(body.brokerServer),
+      slot.id
+    );
 
     let account = await this.db.one(
       "SELECT * FROM mt5_accounts WHERE user_id=$1 AND lower(account_number)=lower($2) AND lower(broker_server)=lower($3) LIMIT 1",
