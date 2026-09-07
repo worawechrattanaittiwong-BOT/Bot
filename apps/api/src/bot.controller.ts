@@ -682,6 +682,87 @@ export class BotController {
     return { ok: true };
   }
 
+  @Post("device/release")
+  async releaseLocalDevice(@Req() req: any, @Query("slotId") slotId = "") {
+    const slot = await this.resolveSlot(req.user.sub, slotId || null);
+    if (slot.mode !== "LOCAL") {
+      throw new ConflictException("Device Lock ใช้กับ LOCAL Slot เท่านั้น");
+    }
+
+    const instance = await this.db.one(
+      "SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions FROM bot_instances bi WHERE bi.slot_id=$1",
+      [slot.id]
+    );
+    if (!instance) {
+      return { ok: true, released: false, message: "Slot นี้ยังไม่มี Device ที่ลงทะเบียน" };
+    }
+    if (
+      instance.actual_state === "RUNNING" ||
+      instance.desired_state === "RUNNING" ||
+      Number(instance.positions || 0) > 0
+    ) {
+      throw new ConflictException("หยุดบอทและปิด Position ให้เรียบร้อยก่อนปลดหรือย้ายเครื่อง");
+    }
+
+    const revoked = randomBytes(32).toString("hex");
+    await this.db.query(
+      `UPDATE bot_instances SET
+         install_token_hash=$2,
+         desired_state='STOPPED',
+         actual_state='OFFLINE',
+         last_seen_at=NULL,
+         agent_last_seen_at=NULL,
+         agent_version=NULL,
+         agent_terminal_path=NULL,
+         agent_ea_hash=NULL,
+         device_public_id=NULL,
+         device_secret_hash=NULL,
+         device_status='UNREGISTERED',
+         device_hostname=NULL,
+         device_registered_at=NULL,
+         device_last_seen_at=NULL,
+         device_last_ip=NULL,
+         ea_last_ip=NULL,
+         pending_account_number=NULL,
+         pending_broker=NULL,
+         pending_broker_server=NULL,
+         pending_account_ip=NULL,
+         pending_account_seen_at=NULL,
+         account_change_requested_at=NULL
+       WHERE id=$1`,
+      [instance.id, this.crypto.sha256(revoked)]
+    );
+    await this.db.query(
+      "UPDATE install_enrollments SET status='CANCELLED' WHERE slot_id=$1 AND status='PENDING'",
+      [slot.id]
+    );
+    await this.db.query(
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED')",
+      [instance.id]
+    );
+    await this.db.query(
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'RELEASE_DEVICE','bot_instance',$2,$3::jsonb)",
+      [
+        String(req.user.code || req.user.sub),
+        instance.id,
+        JSON.stringify({
+          slotId: slot.id,
+          deviceHostname: instance.device_hostname || null,
+          preservedMt5AccountId: instance.mt5_account_id || null,
+          preservedTrialHistory: true
+        })
+      ]
+    );
+
+    return {
+      ok: true,
+      released: true,
+      slotId: slot.id,
+      preservedMt5Account: Boolean(instance.mt5_account_id),
+      message: "ปลดเครื่องเดิมแล้ว Slot นี้พร้อมติดตั้งบนเครื่องใหม่"
+    };
+  }
+
   @Post("mt5/change-request")
   async requestMt5Change(@Req() req: any, @Query("slotId") slotId = "") {
     const slot = await this.resolveSlot(req.user.sub, slotId || null);
