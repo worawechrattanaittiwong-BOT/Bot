@@ -52,7 +52,10 @@ export class AdminController {
          FROM subscriptions sub
          JOIN plans p ON p.id=sub.plan_id
          WHERE sub.user_id=u.id
-         ORDER BY sub.expires_at DESC
+           AND (x.mode IS NULL OR p.mode=x.mode)
+         ORDER BY
+           CASE WHEN sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now() THEN 0 ELSE 1 END,
+           sub.expires_at DESC
          LIMIT 1
        ) s ON true
        LEFT JOIN LATERAL (
