@@ -236,7 +236,7 @@ internal sealed class InstallerForm : Form
         "InpBasketTrailMoney=0.5",
         "InpMaxBasketLossMoney=10",
         "InpDailyLossMoney=25",
-        "InpMaxSpreadPoints=50",
+        "InpMaxSpreadPoints=300",
         "InpMinOrderIntervalMs=300",
         "InpMaxOrdersPerMinute=120",
         "InpEntryMode=0",
