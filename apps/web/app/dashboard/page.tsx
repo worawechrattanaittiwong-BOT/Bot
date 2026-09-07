@@ -1496,7 +1496,7 @@ function Field(props: any) {
       </label>
       <input
         className="input"
-        type={props.type || "text"}
+        type={props.type === "number" ? "text" : (props.type || "text")}
         step={props.step}
         inputMode={props.type === "number" ? "decimal" : undefined}
         value={props.value ?? ""}
@@ -1508,7 +1508,16 @@ function Field(props: any) {
           }
           props.onFocus?.(e);
         }}
-        onChange={e=>props.onChange?.(e.target.value)}
+        onChange={e=>{
+          if (props.type === "number") {
+            const value = e.target.value.replace(",", ".");
+            if (value === "" || /^\d*(?:\.\d*)?$/.test(value)) {
+              props.onChange?.(value);
+            }
+            return;
+          }
+          props.onChange?.(e.target.value);
+        }}
       />
       {props.help && <div className="help">{props.help}</div>}
     </div>
