@@ -160,8 +160,21 @@ jobs:
           test "$(printf '%s' "$EXPIRED_HB" | jq -r '.desiredState')" = "SAFE_STOP"
 
           curl -fsS -X POST "$BASE/bot/stop?slotId=$SLOT" -H "authorization: Bearer $TOKEN" >/dev/null
+
+          echo "[integration] account change is blocked while old MT5 has open positions"
+          OLD_WITH_POS=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Demo\",\"positions\":2}}")
+          DETECT_REAL_BLOCKED=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
+          test "$(printf '%s' "$DETECT_REAL_BLOCKED" | jq -r '.accountMismatch')" = "true"
+          test "$(printf '%s' "$DETECT_REAL_BLOCKED" | jq -r '.previousBoundPositions')" = "2"
+          test "$(printf '%s' "$DETECT_REAL_BLOCKED" | jq -r '.accountChangeBlocked')" = "true"
+          REBIND_BLOCKED_HTTP=$(curl -sS -o /tmp/rebind-open-positions.json -w "%{http_code}" -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$REBIND_BLOCKED_HTTP" = "409"
+
+          echo "[integration] rebind succeeds after old MT5 reports flat"
+          OLD_FLAT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch')" = "true"
+          test "$(printf '%s' "$DETECT_REAL" | jq -r '.previousBoundPositions')" = "0"
 
           REBIND_REAL=$(curl -fsS -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$REBIND_REAL" | jq -r '.account.account_number')" = "200002"
