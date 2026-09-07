@@ -320,6 +320,22 @@ export class EaController {
     );
 
     const serverEaHash = this.artifactHash();
+    const runtime = await this.db.one(
+      `SELECT
+         last_seen_at,
+         metrics->>'eaVersion' AS ea_version,
+         CASE
+           WHEN last_seen_at IS NULL THEN NULL
+           ELSE EXTRACT(EPOCH FROM (now()-last_seen_at))
+         END AS ea_last_seen_age_seconds
+       FROM bot_instances
+       WHERE id=$1`,
+      [instance.id]
+    );
+    const eaLastSeenAgeSeconds =
+      runtime?.ea_last_seen_age_seconds === null || runtime?.ea_last_seen_age_seconds === undefined
+        ? -1
+        : Number(runtime.ea_last_seen_age_seconds);
 
     return {
       ok: true,
@@ -329,7 +345,10 @@ export class EaController {
       artifactHash: serverEaHash,
       artifactName: "FastBasketBot.ex5",
       artifactEndpoint: "/api/ea/artifact",
-      agentDownloadUrl: "/downloads/SCENOVA-Setup.exe"
+      eaOnline: eaLastSeenAgeSeconds >= 0 && eaLastSeenAgeSeconds <= 10,
+      eaVersion: String(runtime?.ea_version || ""),
+      eaLastSeenAgeSeconds,
+      agentDownloadUrl: "/downloads/SCENOVA-Setup-v2.0.4.exe"
     };
   }
 
