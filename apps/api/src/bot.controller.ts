@@ -187,13 +187,36 @@ export class BotController {
     }
 
     if (metrics.dailyProfitLocked === true) {
-      const meta = this.executionStatusMeta("DAILY_PROFIT_LOCK");
+      const code =
+        String(metrics.executionStatus || "") === "DAILY_PROFIT_GIVEBACK_LOCK"
+          ? "DAILY_PROFIT_GIVEBACK_LOCK"
+          : "DAILY_PROFIT_LOCK";
+      const meta = this.executionStatusMeta(code);
       return {
-        code: "DAILY_PROFIT_LOCK",
+        code,
         ...meta,
         tradeReady: false,
         dailyProfit: Number(metrics.dailyProfit ?? 0),
-        dailyProfitTarget: Number(metrics.dailyProfitTarget ?? settings?.dailyProfitTargetMoney ?? 0)
+        dailyProfitTarget: Number(metrics.dailyProfitTarget ?? settings?.dailyProfitTargetMoney ?? 0),
+        dailyProfitGivebackFloor: Number(metrics.dailyProfitGivebackFloor ?? 0)
+      };
+    }
+
+    if (
+      metrics.dailyProfitTargetArmed === true &&
+      instance.desired_state === "RUNNING" &&
+      instance.actual_state === "RUNNING"
+    ) {
+      const code = "DAILY_PROFIT_RUN_ON";
+      const meta = this.executionStatusMeta(code);
+      return {
+        code,
+        ...meta,
+        tradeReady: metrics.tradeReady !== false,
+        dailyProfit: Number(metrics.dailyProfit ?? 0),
+        dailyProfitTarget: Number(metrics.dailyProfitTarget ?? settings?.dailyProfitTargetMoney ?? 0),
+        dailyProfitGivebackFloor: Number(metrics.dailyProfitGivebackFloor ?? 0),
+        dailyProfitDrawdownPercent: Number(metrics.dailyProfitDrawdownPercent ?? settings?.dailyProfitDrawdownPercent ?? 0)
       };
     }
 
