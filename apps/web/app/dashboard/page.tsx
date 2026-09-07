@@ -603,7 +603,7 @@ export default function DashboardPage() {
       await api("/bot/settings" + suffix, { method: "PUT", body: JSON.stringify(payload) });
       settingsDirtyRef.current = false;
       setSettingsDirty(false);
-      setNotice("บันทึกการตั้งค่าแล้ว · EA จะรับค่าล่าสุดใน Heartbeat ถัดไป");
+      setNotice("บันทึกการตั้งค่าแล้ว");
       await load(selectedSlotIdRef.current);
     } catch (e: any) {
       setError(e.message);
@@ -889,9 +889,8 @@ export default function DashboardPage() {
               <section id="bot-settings" className="panel settings-panel overview-bot-settings">
                 <div className="panel-head">
                   <div>
-                    <div className="eyebrow">BOT SETTINGS · SAME PAGE</div>
+                    <div className="eyebrow">BOT SETTINGS</div>
                     <h2>ตั้งค่าบอท</h2>
-                    <p className="muted">ตั้งค่าจากหน้า Control Center นี้ได้เลย ค่า Lot, Position, Basket, Risk และ Entry Mode จะถูกส่งให้ EA ผ่าน Server โดยไม่ต้องไปแก้ Inputs ใน MT5</p>
                   </div>
                   <span className={"owner-state-chip " + (settingsDirty ? "warn" : "good")}>
                     {settingsDirty ? "มีค่าที่ยังไม่ได้บันทึก" : "ค่าบันทึกแล้ว"}
@@ -1519,6 +1518,14 @@ function TogglePairField(props: any) {
   const enabled = Number(props.firstValue || 0) > 0 && Number(props.secondValue || 0) > 0;
   const firstValue = enabled ? String(props.firstValue) : String(props.firstDefault);
   const secondValue = enabled ? String(props.secondValue) : String(props.secondDefault);
+  const firstValues = Array.from(new Set([
+    ...props.firstOptions.map((value:any)=>String(value)),
+    firstValue
+  ]));
+  const secondValues = Array.from(new Set([
+    ...props.secondOptions.map((value:any)=>String(value)),
+    secondValue
+  ]));
 
   return (
     <div className={"field toggle-pair-field " + (enabled ? "enabled" : "")}>
@@ -1545,8 +1552,8 @@ function TogglePairField(props: any) {
           disabled={!enabled}
           onChange={e=>props.onFirstChange?.(e.target.value)}
         >
-          {props.firstOptions.map((value:any)=>(
-            <option key={value} value={String(value)}>{props.firstPrefix || ""}{value}</option>
+          {firstValues.map((value:string)=>(
+            <option key={value} value={value}>{props.firstPrefix || ""}{value}</option>
           ))}
         </select>
         <select
@@ -1555,8 +1562,8 @@ function TogglePairField(props: any) {
           disabled={!enabled}
           onChange={e=>props.onSecondChange?.(e.target.value)}
         >
-          {props.secondOptions.map((value:any)=>(
-            <option key={value} value={String(value)}>{props.secondPrefix || ""}{value}</option>
+          {secondValues.map((value:string)=>(
+            <option key={value} value={value}>{props.secondPrefix || ""}{value}</option>
           ))}
         </select>
       </div>
