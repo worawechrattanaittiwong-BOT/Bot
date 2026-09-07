@@ -14,7 +14,7 @@ internal sealed class InstallerForm : Form
 
     internal InstallerForm()
     {
-        Text = "SCENOVA MT5 BOT EA";
+        Text = "SCENOVA MT5 BOT EA v2.0.1";
         Width = 700;
         Height = 390;
         StartPosition = FormStartPosition.CenterScreen;
@@ -24,7 +24,7 @@ internal sealed class InstallerForm : Form
 
         var title = new Label
         {
-            Text = "SCENOVA MT5 BOT EA",
+            Text = "SCENOVA MT5 BOT EA v2.0.1",
             Font = new Font(Font.FontFamily, 18, FontStyle.Bold),
             AutoSize = true
         };
