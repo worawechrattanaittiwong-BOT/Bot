@@ -20,9 +20,9 @@
     <Authors>SCENOVA</Authors>
     <Description>SCENOVA MT5 BOT EA Windows Installer and Device Agent</Description>
     <Copyright>Copyright © SCENOVA</Copyright>
-    <Version>2.0.3</Version>
-    <FileVersion>2.0.3.0</FileVersion>
-    <AssemblyVersion>2.0.3.0</AssemblyVersion>
+    <Version>2.0.4</Version>
+    <FileVersion>2.0.4.0</FileVersion>
+    <AssemblyVersion>2.0.4.0</AssemblyVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
