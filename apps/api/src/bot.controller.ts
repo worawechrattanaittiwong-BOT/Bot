@@ -26,7 +26,7 @@ export class BotController {
 
   private supportedEaRuntime(version: any) {
     const value = Number(String(version || "").trim());
-    return Number.isFinite(value) && value >= 1.006;
+    return Number.isFinite(value) && value >= 1.007;
   }
 
   private installerUpdateState(instance: any, mode?: string | null) {
@@ -108,7 +108,7 @@ export class BotController {
       TERMINAL_DISCONNECTED: { label: "MT5 ไม่มีการเชื่อมต่อ", detail: "Terminal ยังไม่เชื่อม Broker/Server", tone: "bad" },
       ALGO_TRADING_OFF: { label: "Algo Trading ปิดอยู่", detail: "เปิด Algo Trading ใน MetaTrader 5 ก่อนเริ่มบอท", tone: "bad" },
       EA_TRADING_DISABLED: { label: "EA ไม่ได้รับอนุญาตให้เทรด", detail: "เปิด Allow Algo Trading ใน Properties ของ EA", tone: "bad" },
-      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "ติดตั้ง/อัปเดต FastBasketBot จากเว็บไซต์ SCENOVA ให้เป็น v1.006 ขึ้นไป", tone: "bad" },
+      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "ติดตั้ง/อัปเดต FastBasketBot จากเว็บไซต์ SCENOVA ให้เป็น v1.007 ขึ้นไป", tone: "bad" },
       ACCOUNT_TRADING_DISABLED: { label: "บัญชีนี้ไม่อนุญาตให้เทรด", detail: "ตรวจสิทธิ์ Trading ของบัญชีกับ Broker", tone: "bad" },
       ACCOUNT_EXPERT_DISABLED: { label: "บัญชีไม่อนุญาต Expert Advisor", detail: "Broker/บัญชีปิดการเทรดด้วย EA", tone: "bad" },
       SYMBOL_TRADING_DISABLED: { label: "Symbol นี้เปิดออเดอร์ไม่ได้", detail: "Broker ปิดการเปิดออเดอร์ใหม่บน Symbol นี้", tone: "bad" },
@@ -116,6 +116,8 @@ export class BotController {
       STOPPED: { label: "บอทหยุดอยู่", detail: "พร้อมรับคำสั่งเริ่มจากเว็บ", tone: "neutral" },
       SAFE_STOP: { label: "Safe Stop", detail: "บอทจะไม่เปิดรอบใหม่", tone: "warn" },
       DAILY_PROFIT_LOCK: { label: "ถึงเป้ากำไรประจำวันแล้ว", detail: "EA ปิด Position และล็อกไม่เปิดรอบใหม่จนกว่าจะขึ้นวันใหม่", tone: "good" },
+      DAILY_PROFIT_RUN_ON: { label: "ถึงเป้ากำไรแล้ว · รันต่อ", detail: "บอทยังทำงานต่อและรอเงื่อนไข % ที่ตั้งไว้", tone: "good" },
+      DAILY_PROFIT_GIVEBACK_LOCK: { label: "ปิดบอทตาม % กำไรต่อวัน", detail: "กำไรลดลงจากเป้าหมายถึงเปอร์เซ็นต์ที่กำหนด ระบบปิดทั้งหมดและหยุด", tone: "good" },
       DAILY_LOSS_LOCK: { label: "ถึงขีดจำกัดขาดทุนรายวัน", detail: "EA หยุดเปิดรอบใหม่ตาม Daily Loss Limit", tone: "bad" },
       POSITION_PROFIT_CLOSED: { label: "ปิดไม้ที่ถึงเป้ากำไร", detail: "Position ที่ถึงกำไรต่อไม้ถูกปิดแล้ว", tone: "good" },
       POSITION_LOSS_CLOSED: { label: "ปิดไม้ที่ถึงขาดทุนกำหนด", detail: "Position ที่ถึง Loss ต่อไม้ถูกปิดแล้ว", tone: "warn" },
@@ -1207,6 +1209,14 @@ export class BotController {
       clean[key] = integer ? Math.trunc(value) : value;
     };
 
+    const booleanSetting = (key: string) => {
+      if (body[key] === undefined) return;
+      if (typeof body[key] !== "boolean") {
+        throw new BadRequestException(key + " ต้องเป็น true หรือ false");
+      }
+      clean[key] = body[key];
+    };
+
     if (body.symbol !== undefined) {
       const symbol = String(body.symbol || "").trim();
       if (!symbol || symbol.length > 64 || !/^[A-Za-z0-9._#-]+$/.test(symbol)) {
@@ -1222,6 +1232,8 @@ export class BotController {
     numberSetting("maxBasketLossMoney", 0, 100000);
     numberSetting("dailyLossMoney", 0, 100000);
     numberSetting("dailyProfitTargetMoney", 0, 100000);
+    booleanSetting("dailyProfitContinueAfterTarget");
+    numberSetting("dailyProfitDrawdownPercent", 1, 95);
     numberSetting("basketProfitTargetMoney", 0, 100000);
     numberSetting("perPositionProfitMoney", 0, 100000);
     numberSetting("profitRunTrailPercent", 0, 95);
@@ -1232,7 +1244,6 @@ export class BotController {
     const requestedBasketProfit = Number(clean.basketProfitTargetMoney ?? 0);
     const requestedPerPositionProfit = Number(clean.perPositionProfitMoney ?? 0);
     const requestedProfitRunPercent = Number(clean.profitRunTrailPercent ?? 0);
-    const requestedDailyProfit = Number(clean.dailyProfitTargetMoney ?? 0);
     const requestedDollarTrail =
       Number(clean.basketTriggerMoney ?? 0) > 0 ||
       Number(clean.basketTrailMoney ?? 0) > 0;
@@ -1243,17 +1254,14 @@ export class BotController {
       );
     }
 
-    // Percentage profit-run mode owns all profit exits. Enabling it turns
-    // every fixed profit target/trailing mode off. Enabling any fixed profit
-    // mode later turns percentage mode off.
+    // Percentage Basket run mode is exclusive with Basket/per-position
+    // profit exits, but the daily profit target remains independent.
     if (requestedProfitRunPercent > 0) {
-      clean.dailyProfitTargetMoney = 0;
       clean.basketProfitTargetMoney = 0;
       clean.perPositionProfitMoney = 0;
       clean.basketTriggerMoney = 0;
       clean.basketTrailMoney = 0;
     } else if (
-      requestedDailyProfit > 0 ||
       requestedBasketProfit > 0 ||
       requestedPerPositionProfit > 0 ||
       requestedDollarTrail
@@ -1263,6 +1271,17 @@ export class BotController {
         clean.basketProfitTargetMoney = 0;
       } else if (requestedBasketProfit > 0) {
         clean.perPositionProfitMoney = 0;
+      }
+    }
+
+    if (clean.dailyProfitContinueAfterTarget === true) {
+      const drawdown = Number(
+        clean.dailyProfitDrawdownPercent ?? body.dailyProfitDrawdownPercent
+      );
+      if (!Number.isFinite(drawdown) || drawdown <= 0 || drawdown > 95) {
+        throw new BadRequestException(
+          "กรุณากำหนด % ลดลงหลังถึงเป้ากำไรต่อวัน"
+        );
       }
     }
 
