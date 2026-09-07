@@ -42,6 +42,8 @@ jobs:
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/001_init.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/002_slots_devices.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/002_slots_devices.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/003_unique_mt5_identity.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/003_unique_mt5_identity.sql
 
       - name: Build API
         run: npm run build -w @bot/api
@@ -128,6 +130,26 @@ jobs:
           test "$TRIAL_COUNT" = "1"
           OLD_TRIAL=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from trial_grants where account_number='100001';")
           test "$OLD_TRIAL" = "1"
+
+
+          # A second SCENOVA user must not be able to take the same registered
+          # device or the same active MT5 identity.
+          REGISTER2=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration2@scenova.test","password":"Integration123!"}')
+          TOKEN2=$(printf '%s' "$REGISTER2" | jq -r '.token')
+          DASH_SECOND=$(curl -fsS "$BASE/bot/dashboard" -H "authorization: Bearer $TOKEN2")
+          SLOT_SECOND=$(printf '%s' "$DASH_SECOND" | jq -r '.selectedSlot.id')
+
+          PREP_SECOND=$(curl -fsS -X POST "$BASE/bot/installers/windows" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d "{\"slotId\":\"$SLOT_SECOND\"}")
+          CODE_SECOND=$(printf '%s' "$PREP_SECOND" | jq -r '.code')
+
+          DEVICE_TAKEOVER_HTTP=$(curl -sS -o /tmp/device-takeover.json -w "%{http_code}" -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE_SECOND\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"another-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal2\"}")
+          test "$DEVICE_TAKEOVER_HTTP" = "409"
+
+          DUP_MT5_HTTP=$(curl -sS -o /tmp/duplicate-mt5.json -w "%{http_code}" -X POST "$BASE/bot/mt5" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d '{"accountNumber":"200002","broker":"SCENOVA","brokerServer":"SCENOVA-Real","mode":"CLOUD"}')
+          test "$DUP_MT5_HTTP" = "409"
+
+          ACTIVE_IDENTITY_COUNT=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from mt5_accounts where lower(account_number)='200002' and lower(broker_server)='scenova-real' and status='ACTIVE';")
+          test "$ACTIVE_IDENTITY_COUNT" = "1"
 
       - name: Show API log on failure
         if: failure()
