@@ -401,7 +401,13 @@ export class BotController {
                     AND bi.pending_account_number IS NOT NULL
                     AND bi.pending_account_seen_at > now() - interval '10 minutes'
                     AND COALESCE(bi.pending_account_ip,'')=COALESCE(bi.device_last_ip,'')
-              THEN true ELSE false END AS rebind_ready
+              THEN true ELSE false END AS rebind_ready,
+         CASE WHEN bi.mt5_account_id IS NULL
+                    AND bi.pending_account_number IS NOT NULL
+                    AND bi.pending_account_seen_at > now() - interval '10 minutes'
+                    AND bi.last_seen_at > now() - interval '20 seconds'
+                    AND COALESCE(bi.pending_account_ip,'')=COALESCE(bi.ea_last_ip,'')
+              THEN true ELSE false END AS first_bind_ready
        FROM bot_instances bi
        WHERE bi.slot_id=$1`,
       [selectedSlot.id]
@@ -852,12 +858,20 @@ export class BotController {
     if (instance.actual_state === "RUNNING" || instance.desired_state === "RUNNING" || Number(instance.positions || 0) > 0) {
       throw new ConflictException("หยุดบอทและจัดการ Position ให้เรียบร้อยก่อนเปลี่ยน MT5");
     }
-    if (
+    const isFirstBind = !instance.old_account_id;
+
+    if (!isFirstBind && (
       instance.device_status !== "ACTIVE" ||
       !instance.device_last_seen_at ||
       Date.now() - new Date(instance.device_last_seen_at).getTime() > 90_000
-    ) {
+    )) {
       throw new ConflictException("เครื่องนี้ยังไม่ได้ลงทะเบียนด้วย SCENOVA Installer รุ่นใหม่ หรือ Agent ไม่ออนไลน์");
+    }
+    if (isFirstBind && (
+      !instance.last_seen_at ||
+      Date.now() - new Date(instance.last_seen_at).getTime() > 20_000
+    )) {
+      throw new ConflictException("รอ Heartbeat ล่าสุดจาก EA ก่อนผูกบัญชี MT5 ครั้งแรก");
     }
     if (!instance.pending_account_number || !instance.pending_broker_server || !instance.pending_account_seen_at) {
       throw new ConflictException("ยังไม่พบบัญชี MT5 ใหม่จาก EA");
@@ -865,8 +879,17 @@ export class BotController {
     if (Date.now() - new Date(instance.pending_account_seen_at).getTime() > 10 * 60_000) {
       throw new ConflictException("ข้อมูลบัญชีที่ตรวจพบหมดอายุ กรุณาเปิด MT5 ให้ EA ส่งสถานะใหม่");
     }
-    if (!instance.pending_account_ip || instance.pending_account_ip !== instance.device_last_ip) {
-      throw new ConflictException("บัญชี MT5 ใหม่นี้ไม่ได้มาจากเครื่องที่ลงทะเบียนไว้");
+    if (
+      !instance.pending_account_ip ||
+      (isFirstBind
+        ? instance.pending_account_ip !== instance.ea_last_ip
+        : instance.pending_account_ip !== instance.device_last_ip)
+    ) {
+      throw new ConflictException(
+        isFirstBind
+          ? "บัญชี MT5 ที่ตรวจพบไม่ได้มาจาก Heartbeat ล่าสุดของ EA"
+          : "บัญชี MT5 ใหม่นี้ไม่ได้มาจากเครื่องที่ลงทะเบียนไว้"
+      );
     }
 
     const accountNumber = String(instance.pending_account_number);
@@ -908,10 +931,21 @@ export class BotController {
       [instance.id, account.id]
     );
     await this.db.query(
-      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'REBIND_MT5','bot_instance',$2,$3::jsonb)",
-      [String(req.user.code || req.user.sub), instance.id, JSON.stringify({ slotId: slot.id, accountNumber, brokerServer, preservedTrialHistory: true })]
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,$2,'bot_instance',$3,$4::jsonb)",
+      [
+        String(req.user.code || req.user.sub),
+        isFirstBind ? "BIND_MT5_FIRST" : "REBIND_MT5",
+        instance.id,
+        JSON.stringify({
+          slotId: slot.id,
+          accountNumber,
+          brokerServer,
+          preservedTrialHistory: true,
+          firstBind: isFirstBind
+        })
+      ]
     );
-    return { ok: true, account };
+    return { ok: true, account, firstBind: isFirstBind };
   }
 
   @Post("mt5")
