@@ -266,7 +266,6 @@ export class BotController {
          CASE WHEN bi.last_seen_at IS NULL THEN NULL ELSE EXTRACT(EPOCH FROM (now() - bi.last_seen_at)) END AS ea_last_seen_age_seconds,
          CASE WHEN bi.device_status='ACTIVE'
                     AND bi.device_last_seen_at > now() - interval '90 seconds'
-                    AND bi.account_change_requested_at > now() - interval '30 minutes'
                     AND bi.pending_account_number IS NOT NULL
                     AND bi.pending_account_seen_at > now() - interval '10 minutes'
                     AND COALESCE(bi.pending_account_ip,'')=COALESCE(bi.device_last_ip,'')
@@ -623,12 +622,6 @@ export class BotController {
       Date.now() - new Date(instance.device_last_seen_at).getTime() > 90_000
     ) {
       throw new ConflictException("เครื่องนี้ยังไม่ได้ลงทะเบียนด้วย SCENOVA Installer รุ่นใหม่ หรือ Agent ไม่ออนไลน์");
-    }
-    if (
-      !instance.account_change_requested_at ||
-      Date.now() - new Date(instance.account_change_requested_at).getTime() > 30 * 60_000
-    ) {
-      throw new ConflictException("กรุณากด “เปลี่ยนบัญชี MT5” บนเว็บก่อน แล้ว Login บัญชีใหม่ใน MT5");
     }
     if (!instance.pending_account_number || !instance.pending_broker_server || !instance.pending_account_seen_at) {
       throw new ConflictException("ยังไม่พบบัญชี MT5 ใหม่จาก EA");
