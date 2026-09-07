@@ -832,7 +832,9 @@ export class BotController {
   async rebindMt5(@Req() req: any, @Query("slotId") slotId = "") {
     const slot = await this.resolveSlot(req.user.sub, slotId || null);
     const instance = await this.db.one(
-      `SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+      `SELECT bi.*,
+         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         COALESCE(NULLIF(bi.metrics->>'previousBoundPositions','')::int,0) previous_bound_positions,
          a.id old_account_id,a.broker old_broker
        FROM bot_instances bi
        LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
@@ -843,6 +845,11 @@ export class BotController {
     if (slot.mode !== "LOCAL") throw new ConflictException("rebind is only available for LOCAL slots");
     if (instance.actual_state === "RUNNING" || instance.desired_state === "RUNNING" || Number(instance.positions || 0) > 0) {
       throw new ConflictException("หยุดบอทและจัดการ Position ให้เรียบร้อยก่อนเปลี่ยน MT5");
+    }
+    if (Number(instance.previous_bound_positions || 0) > 0) {
+      throw new ConflictException(
+        "บัญชี MT5 เดิมยังมี Position ค้างจากสถานะล่าสุด กรุณา Login กลับบัญชีเดิม ปิด Position ให้หมด แล้วค่อย Login บัญชีใหม่อีกครั้ง"
+      );
     }
     const isFirstBind = !instance.old_account_id;
 
@@ -891,6 +898,7 @@ export class BotController {
     await this.db.query(
       `UPDATE bot_instances SET
          mt5_account_id=$2,desired_state='STOPPED',actual_state='SAFE_STOP',
+         metrics=COALESCE(metrics,'{}'::jsonb) - 'previousBoundPositions',
          pending_account_number=NULL,pending_broker=NULL,pending_broker_server=NULL,
          pending_account_ip=NULL,pending_account_seen_at=NULL,account_change_requested_at=NULL
        WHERE id=$1`,
