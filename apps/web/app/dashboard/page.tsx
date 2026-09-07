@@ -250,6 +250,30 @@ export default function DashboardPage() {
     }
   }
 
+  async function requestMt5Change() {
+    if (!data?.account) return;
+    if (!confirm(
+      "เตรียมเปลี่ยนบัญชี MT5 ของ Slot นี้ใช่หรือไม่?\n\n" +
+      "ระบบจะ Safe Stop ก่อน จากนั้นให้ Login MT5 บัญชีใหม่บนเครื่องเดิม แล้วกลับมากด “ใช้บัญชีนี้”"
+    )) return;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await api(
+        "/bot/mt5/change-request?slotId=" + encodeURIComponent(selectedSlotIdRef.current),
+        { method: "POST" }
+      );
+      setNotice(result?.message || "พร้อมเปลี่ยน MT5 แล้ว กรุณา Login บัญชีใหม่ใน MT5 บนเครื่องเดิม");
+      await load(selectedSlotIdRef.current);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function rebindDetectedAccount() {
     if (!data?.instance?.pending_account_number) return;
     if (!confirm("เปลี่ยน Slot นี้มาใช้ MT5 " + data.instance.pending_account_number + " (" + (data.instance.pending_broker_server || "ไม่ทราบ Server") + ") ใช่หรือไม่?")) return;
@@ -700,11 +724,25 @@ export default function DashboardPage() {
                       : "สมัคร SCENOVA ได้โดยไม่ต้องกรอก MT5 แล้วค่อยเชื่อมจาก Slot นี้"}
                   </p>
                 </div>
-                <span className="badge">
-                  <span className={"dot "+(isMt5Online?"green":"red")}/>
-                  {connectionLabel}
-                </span>
+                <div className="account-card-actions">
+                  <span className="badge">
+                    <span className={"dot "+(isMt5Online?"green":"red")}/>
+                    {connectionLabel}
+                  </span>
+                  {data.selectedSlot?.mode === "LOCAL" && data.account && (
+                    <button
+                      className="btn primary"
+                      disabled={busy || state==="RUNNING" || desired==="RUNNING" || !data.instance?.device_online}
+                      onClick={requestMt5Change}
+                    >
+                      เปลี่ยนบัญชี MT5
+                    </button>
+                  )}
+                </div>
               </div>
+              {data.selectedSlot?.mode === "LOCAL" && data.account && !data.instance?.device_online && (
+                <div className="help">ต้องให้ Device Agent ของเครื่องที่ลงทะเบียน Online ก่อน จึงจะกดเปลี่ยน MT5 ได้</div>
+              )}
             </section>
 
             {data.selectedSlot?.mode === "LOCAL" && (
@@ -779,8 +817,10 @@ export default function DashboardPage() {
                     </button>
                     <div className="help">
                       {data.instance.rebind_ready
-                        ? "ตรวจแล้วว่า EA มาจาก Device ที่ลงทะเบียนไว้ กดเปลี่ยนได้โดยไม่ต้องโหลด .set ใหม่"
-                        : "รอ Device Agent ยืนยันเครื่องเดียวกันก่อน จึงจะอนุญาตให้เปลี่ยนบัญชี"}
+                        ? "ตรวจแล้วว่าเป็น Device เดิมและอยู่ในช่วงที่ขอเปลี่ยนบัญชี กดใช้บัญชีนี้ได้โดยไม่ต้องโหลด .set ใหม่"
+                        : data.instance.account_change_requested_at
+                          ? "รอ Device Agent และ Heartbeat จาก MT5 บัญชีใหม่บนเครื่องเดิม"
+                          : "กด “เปลี่ยนบัญชี MT5” ด้านบนก่อน แล้ว Login บัญชีใหม่ใน MT5"}
                     </div>
                   </section>
                 )}
@@ -795,7 +835,7 @@ export default function DashboardPage() {
                     <div><span>4</span><div><b>Inputs → Load preset ครั้งแรก</b><small>เลือก <b>SCENOVA-FastBasketBot.set</b> ที่ Installer วางไว้ แล้วเปิด Algo Trading</small></div></div>
                   </div>
                   <div className="notice">
-                    หลังจากนี้ถ้าเปลี่ยน Demo → Real หรือ MT5 ใหม่บนเครื่องเดิม: Login บัญชีใหม่ → ระบบ Safe Stop และตรวจพบ → กด <b>“ใช้บัญชีนี้”</b> บนเว็บ ไม่ต้องเปลี่ยน .set
+                    หลังจากนี้ถ้าจะเปลี่ยน Demo → Real หรือ MT5 ใหม่บนเครื่องเดิม: กด <b>“เปลี่ยนบัญชี MT5”</b> บนเว็บ → Login บัญชีใหม่ใน MT5 → ระบบตรวจพบและ Safe Stop → กด <b>“ใช้บัญชีนี้”</b> ไม่ต้องเปลี่ยน .set
                   </div>
                 </section>
               </>
