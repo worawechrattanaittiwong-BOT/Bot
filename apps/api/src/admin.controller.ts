@@ -24,6 +24,7 @@ export class AdminController {
          x.slot_id,x.slot_subscription_id,x.mt5_account_id,x.account_number,x.broker_server,x.mode,
          x.actual_state,x.desired_state,x.mt5_online,
          s.subscription_id,s.plan_code,s.subscription_mode,s.subscription_status,s.subscription_starts_at,s.subscription_expires_at,s.plan_slots,s.allow_resale,s.subscription_active,
+         COALESCE(ms.memberships,'[]'::jsonb) memberships,
          t.trial_status,t.trial_expires_at,
          tr.trial_request_id,tr.line_contact,tr.request_ip,tr.trial_request_status,
          COALESCE(ss.total_slots,0)::int total_slots,
@@ -67,6 +68,27 @@ export class AdminController {
            sub.created_at DESC
          LIMIT 1
        ) s ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(
+           jsonb_build_object(
+             'subscription_id',sub.id,
+             'plan_code',p.code,
+             'mode',p.mode,
+             'status',sub.status,
+             'starts_at',sub.starts_at,
+             'expires_at',sub.expires_at,
+             'slots',p.max_mt5_accounts,
+             'allow_resale',p.allow_resale,
+             'active',(sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now())
+           )
+           ORDER BY p.mode,sub.expires_at DESC
+         ) AS memberships
+         FROM subscriptions sub
+         JOIN plans p ON p.id=sub.plan_id
+         WHERE sub.user_id=u.id
+           AND sub.status='ACTIVE'
+           AND sub.expires_at>now()
+       ) ms ON true
        LEFT JOIN LATERAL (
          SELECT tg.status trial_status,tg.expires_at trial_expires_at
          FROM trial_grants tg
