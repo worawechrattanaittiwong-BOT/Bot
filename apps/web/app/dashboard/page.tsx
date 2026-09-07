@@ -35,6 +35,9 @@ const defaultSettings = {
   basketTrailMoney: 0.5,
   maxBasketLossMoney: 10,
   dailyLossMoney: 25,
+  dailyProfitTargetMoney: 0,
+  basketProfitTargetMoney: 0,
+  perPositionLossMoney: 0,
   minOrderIntervalMs: 300,
   maxOrdersPerMinute: 120,
   entryMode: "AUTO_MOMENTUM"
@@ -169,7 +172,8 @@ export default function DashboardPage() {
     "ACCOUNT_TRADING_DISABLED",
     "ACCOUNT_EXPERT_DISABLED",
     "SYMBOL_TRADING_DISABLED",
-    "NO_ACCESS"
+    "NO_ACCESS",
+    "DAILY_PROFIT_LOCK"
   ]);
   const startBlocked = busy || !entitlement?.allowed || hardStartBlocks.has(String(liveStatus.code || ""));
   const selectedBroker = brokerCatalog.find((item)=>item.code === brokerCode);
@@ -802,10 +806,42 @@ export default function DashboardPage() {
                   />
                   <Field label="Lot" info="ขนาด Lot ต่อ Order ค่านี้ถูกส่งให้ EA จาก Server" help="เริ่มจากค่าน้อยบน Demo ก่อน" type="number" step="0.01" value={settings.lot} onChange={(v:string)=>editSetting("lot",Number(v))}/>
                   <Field label="จำนวน Position สูงสุด" info="จำนวน Position สูงสุดที่บอทเปิดพร้อมกันได้" type="number" value={settings.maxPositions} onChange={(v:string)=>editSetting("maxPositions",Number(v))}/>
-                  <Field label="กำไรรวมเริ่ม Trailing ($)" info="เมื่อกำไรรวม Basket ถึงค่านี้ ระบบเริ่มจำ Peak Profit" type="number" step="0.01" value={settings.basketTriggerMoney} onChange={(v:string)=>editSetting("basketTriggerMoney",Number(v))}/>
+                  <Field
+                    label="กำไรต่อวันแล้วหยุด ($)"
+                    info="กำไรสะสมของ EA วันนี้ = กำไร/ขาดทุนที่ปิดแล้ววันนี้ + Floating ของ Basket ปัจจุบัน เมื่อถึงค่านี้ EA จะปิดทั้งหมดและล็อกหยุดจนขึ้นวันใหม่"
+                    help="ใส่ 0 = ปิดฟังก์ชันนี้"
+                    type="number"
+                    step="0.01"
+                    value={settings.dailyProfitTargetMoney}
+                    onChange={(v:string)=>editSetting("dailyProfitTargetMoney",Number(v))}
+                  />
+                  <Field
+                    label="กำไรเป้าหมายต่อรอบ Basket ($)"
+                    info="เป้ากำไรรวมของรอบ Basket รวมทั้งไม้ที่ปิดไปแล้วในรอบนั้นและ Floating ที่ยังเปิดอยู่ เมื่อถึงเป้า EA จะปิดไม้ที่เหลือทั้งหมด"
+                    help={
+                      Number(settings.basketProfitTargetMoney || 0) > 0
+                        ? "ถ้า Basket เปิดสูงสุด " + Math.max(1, Number(metrics.basketPeakPositions || metrics.positions || 1)) + " ไม้ เป้าต่อไม้ตอนนี้ ≈ $" +
+                          (Number(settings.basketProfitTargetMoney || 0) / Math.max(1, Number(metrics.basketPeakPositions || metrics.positions || 1))).toFixed(2)
+                        : "ใส่ 0 = ไม่ใช้เป้ากำไรแบบหารต่อไม้"
+                    }
+                    type="number"
+                    step="0.01"
+                    value={settings.basketProfitTargetMoney}
+                    onChange={(v:string)=>editSetting("basketProfitTargetMoney",Number(v))}
+                  />
+                  <Field
+                    label="ขาดทุนต่อไม้แล้วปิด ($)"
+                    info="Position ไหนมี P/L ถึงค่าขาดทุนที่กำหนด EA จะปิดเฉพาะ Position นั้นทันที ไม่รอ Max Basket Loss"
+                    help="เช่น 2 = ปิดไม้เมื่อ P/L ของไม้นั้น ≤ -$2 · ใส่ 0 = ปิดฟังก์ชันนี้"
+                    type="number"
+                    step="0.01"
+                    value={settings.perPositionLossMoney}
+                    onChange={(v:string)=>editSetting("perPositionLossMoney",Number(v))}
+                  />
+                  <Field label="กำไรรวมเริ่ม Trailing ($)" info="เมื่อกำไรรวม Floating ของ Basket ถึงค่านี้ ระบบเริ่มจำ Peak Profit" type="number" step="0.01" value={settings.basketTriggerMoney} onChange={(v:string)=>editSetting("basketTriggerMoney",Number(v))}/>
                   <Field label="ย่อตัวจาก Peak แล้วปิด ($)" info="หลังเริ่ม Trailing หากกำไรรวมย่อลงจาก Peak ตามค่านี้ EA จะปิด Basket" type="number" step="0.01" value={settings.basketTrailMoney} onChange={(v:string)=>editSetting("basketTrailMoney",Number(v))}/>
-                  <Field label="ขาดทุน Basket สูงสุด ($)" info="ขีดจำกัดขาดทุนรวมของ Basket" type="number" step="0.01" value={settings.maxBasketLossMoney} onChange={(v:string)=>editSetting("maxBasketLossMoney",Number(v))}/>
-                  <Field label="Daily Loss Limit ($)" info="วงเงินขาดทุนรายวัน เมื่อถึงขีดจำกัดระบบจะหยุดตาม Logic ความเสี่ยง" type="number" step="0.01" value={settings.dailyLossMoney} onChange={(v:string)=>editSetting("dailyLossMoney",Number(v))}/>
+                  <Field label="ขาดทุน Basket สูงสุด ($)" info="ขีดจำกัดขาดทุนรวม Floating ของ Basket ถ้าถึงจะปิดทุกไม้ใน Basket" type="number" step="0.01" value={settings.maxBasketLossMoney} onChange={(v:string)=>editSetting("maxBasketLossMoney",Number(v))}/>
+                  <Field label="ขาดทุนต่อวันแล้วหยุด ($)" info="วงเงินขาดทุนรายวันแบบเดิม เมื่อถึงขีดจำกัดระบบจะหยุดตาม Logic ความเสี่ยง" type="number" step="0.01" value={settings.dailyLossMoney} onChange={(v:string)=>editSetting("dailyLossMoney",Number(v))}/>
                   <Field label="ระยะห่างคำสั่งขั้นต่ำ (ms)" info="เวลาขั้นต่ำระหว่างการส่ง Order แต่ละครั้ง" type="number" value={settings.minOrderIntervalMs} onChange={(v:string)=>editSetting("minOrderIntervalMs",Number(v))}/>
                   <Field label="คำสั่งสูงสุดต่อนาที" info="Rate Limit จำนวนคำสั่ง Order สูงสุดใน 1 นาที" type="number" value={settings.maxOrdersPerMinute} onChange={(v:string)=>editSetting("maxOrdersPerMinute",Number(v))}/>
                   <div className="field">
@@ -824,7 +860,27 @@ export default function DashboardPage() {
                     <small className="help">Auto Refresh 2 วินาทีจะไม่เขียนทับค่าที่คุณกำลังแก้ ก่อนกดบันทึก</small>
                   </div>
                 </form>
-                <div className="notice risk-notice">ค่าที่บันทึกจะเป็นค่าหลักของ Slot นี้ และ EA จะรับค่าล่าสุดจาก Server ใน Heartbeat ถัดไป</div>
+                <div className="detail-list" style={{marginTop:12}}>
+                  <div>
+                    <span>กำไร EA วันนี้</span>
+                    <b>
+                      ${Number(metrics.dailyProfit || 0).toFixed(2)}
+                      {Number(settings.dailyProfitTargetMoney || 0) > 0 ? " / $" + Number(settings.dailyProfitTargetMoney).toFixed(2) : " · ไม่ตั้งเป้า"}
+                    </b>
+                  </div>
+                  <div>
+                    <span>กำไรรอบ Basket</span>
+                    <b>
+                      ${Number(metrics.basketCycleProfit || metrics.basketProfit || 0).toFixed(2)}
+                      {Number(settings.basketProfitTargetMoney || 0) > 0 ? " / $" + Number(settings.basketProfitTargetMoney).toFixed(2) : " · ไม่ตั้งเป้า"}
+                    </b>
+                  </div>
+                  <div>
+                    <span>เป้ากำไรต่อไม้ปัจจุบัน</span>
+                    <b>{Number(metrics.perPositionProfitTarget || 0) > 0 ? "$" + Number(metrics.perPositionProfitTarget).toFixed(2) : "—"}</b>
+                  </div>
+                </div>
+                <div className="notice risk-notice">ค่าที่บันทึกจะเป็นค่าหลักของ Slot นี้ และ EA จะรับค่าล่าสุดจาก Server ใน Heartbeat ถัดไป · เป้ากำไรต่อไม้จะหารจากจำนวน Position สูงสุดที่ Basket เปิดในรอบนั้น และจะไม่ขยับสูงขึ้นเมื่อมีไม้ถูกปิดไปแล้ว</div>
               </section>
 
               <section className="panel overview-access-card">
