@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.001"
+#property version   "1.002"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -52,6 +52,10 @@ datetime g_orderWindowStart = 0;
 int    g_ordersInWindow = 0;
 datetime g_lastHeartbeat = 0;
 datetime g_lastSuccessfulHeartbeat = 0;
+string g_executionStatus = "INITIALIZING";
+long   g_lastOrderRetcode = 0;
+int    g_lastOrderError = 0;
+datetime g_lastOrderAt = 0;
 
 double g_lot;
 int    g_maxPositions;
@@ -138,11 +142,13 @@ void OnTick()
    int count = BasketPositionCount();
    double profit = BasketProfit();
    double momentum = MomentumPoints();
+   g_executionStatus = "EVALUATING";
 
    if(g_dailyLoss > 0.0 && AccountInfoDouble(ACCOUNT_EQUITY) <= g_dayStartEquity - g_dailyLoss)
    {
       if(count > 0) CloseAllBasket("DAILY_LOSS");
       g_state = STATE_SAFE_STOP;
+      g_executionStatus = "DAILY_LOSS_LOCK";
       return;
    }
 
@@ -196,23 +202,62 @@ void OnTick()
       if(g_state == STATE_SAFE_STOP)
       {
          g_state = STATE_STOPPED;
+         g_executionStatus = "STOPPED";
          return;
       }
    }
 
-   if(g_state != STATE_RUNNING || !g_access)
+   if(g_state != STATE_RUNNING)
+   {
+      g_executionStatus = (g_state == STATE_SAFE_STOP ? "SAFE_STOP" : "STOPPED");
       return;
+   }
+
+   if(!g_access)
+   {
+      g_executionStatus = "NO_ACCESS";
+      return;
+   }
+
+   string permissionStatus = TradePermissionStatus();
+   if(permissionStatus != "OK")
+   {
+      g_executionStatus = permissionStatus;
+      return;
+   }
 
    if(count >= g_maxPositions)
+   {
+      g_executionStatus = "MAX_POSITIONS";
       return;
+   }
 
-   if(!SpreadAllowed() || !CanSendOrder())
+   if(!SpreadAllowed())
+   {
+      g_executionStatus = "SPREAD_TOO_HIGH";
       return;
+   }
+
+   if(!CanSendOrder())
+   {
+      g_executionStatus = "ORDER_RATE_LIMIT";
+      return;
+   }
 
    int direction = EntryDirection(momentum);
    if(direction == 0)
+   {
+      g_executionStatus = "WAITING_MOMENTUM";
       return;
+   }
 
+   if(!OpenTradingAllowedForDirection(direction))
+   {
+      g_executionStatus = "SYMBOL_DIRECTION_BLOCKED";
+      return;
+   }
+
+   g_executionStatus = direction > 0 ? "READY_BUY" : "READY_SELL";
    bool sent = SendMarketOrder(direction);
    if(sent)
       RegisterOrderRequest();
@@ -258,8 +303,15 @@ void SendHeartbeat()
       return;
 
    string stateText = StateText();
+   string terminalConnected = TerminalConnectedNow() ? "true" : "false";
+   string terminalTradeAllowed = TerminalTradeAllowedNow() ? "true" : "false";
+   string mqlTradeAllowed = EaTradeAllowedNow() ? "true" : "false";
+   string accountTradeAllowed = AccountTradeAllowedNow() ? "true" : "false";
+   string accountTradeExpert = AccountExpertAllowedNow() ? "true" : "false";
+   string tradeReady = TradePermissionStatus() == "OK" ? "true" : "false";
+
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"momentumPoints\":%.1f}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -273,7 +325,20 @@ void SendHeartbeat()
       g_peakProfit,
       BasketPositionCount(),
       CurrentSpreadPoints(),
-      MomentumPoints()
+      MomentumPoints(),
+      InpMomentumEntryPoints,
+      g_maxSpread,
+      terminalConnected,
+      terminalTradeAllowed,
+      mqlTradeAllowed,
+      accountTradeAllowed,
+      accountTradeExpert,
+      tradeReady,
+      SymbolTradeModeNow(),
+      g_executionStatus,
+      g_lastOrderRetcode,
+      g_lastOrderError,
+      (long)g_lastOrderAt
    );
 
    string response = "";
@@ -334,7 +399,8 @@ void SendHeartbeat()
    Comment(
       "SCENOVA: CONNECTED\n",
       "Account: ", IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), "\n",
-      "State: ", StateText()
+      "State: ", StateText(), "\n",
+      "Execution: ", g_executionStatus
    );
 
    long commandId = (long)JsonNumber(response, "commandId", 0.0);
@@ -519,11 +585,85 @@ bool TradeResultAccepted(const MqlTradeResult &result)
    );
 }
 
+bool TerminalConnectedNow()
+{
+   return TerminalInfoInteger(TERMINAL_CONNECTED) != 0;
+}
+
+bool TerminalTradeAllowedNow()
+{
+   return TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) != 0;
+}
+
+bool EaTradeAllowedNow()
+{
+   return MQLInfoInteger(MQL_TRADE_ALLOWED) != 0;
+}
+
+bool AccountTradeAllowedNow()
+{
+   return AccountInfoInteger(ACCOUNT_TRADE_ALLOWED) != 0;
+}
+
+bool AccountExpertAllowedNow()
+{
+   return AccountInfoInteger(ACCOUNT_TRADE_EXPERT) != 0;
+}
+
+int SymbolTradeModeNow()
+{
+   return (int)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE);
+}
+
+string TradePermissionStatus()
+{
+   if(!TerminalConnectedNow()) return "TERMINAL_DISCONNECTED";
+   if(!TerminalTradeAllowedNow()) return "ALGO_TRADING_OFF";
+   if(!EaTradeAllowedNow()) return "EA_TRADING_DISABLED";
+   if(!AccountTradeAllowedNow()) return "ACCOUNT_TRADING_DISABLED";
+   if(!AccountExpertAllowedNow()) return "ACCOUNT_EXPERT_DISABLED";
+
+   int mode = SymbolTradeModeNow();
+   if(mode == SYMBOL_TRADE_MODE_DISABLED || mode == SYMBOL_TRADE_MODE_CLOSEONLY)
+      return "SYMBOL_TRADING_DISABLED";
+
+   return "OK";
+}
+
+bool OpenTradingAllowedForDirection(int direction)
+{
+   int mode = SymbolTradeModeNow();
+   if(mode == SYMBOL_TRADE_MODE_FULL) return true;
+   if(mode == SYMBOL_TRADE_MODE_LONGONLY) return direction > 0;
+   if(mode == SYMBOL_TRADE_MODE_SHORTONLY) return direction < 0;
+   return false;
+}
+
+string RetcodeExecutionStatus(long retcode)
+{
+   if(retcode == TRADE_RETCODE_MARKET_CLOSED) return "MARKET_CLOSED";
+   if(retcode == TRADE_RETCODE_TRADE_DISABLED) return "TRADE_DISABLED";
+   if(retcode == TRADE_RETCODE_CLIENT_DISABLES_AT) return "ALGO_TRADING_OFF";
+   if(retcode == TRADE_RETCODE_SERVER_DISABLES_AT) return "SERVER_ALGO_DISABLED";
+   if(retcode == TRADE_RETCODE_NO_MONEY) return "NO_MONEY";
+   if(retcode == TRADE_RETCODE_TOO_MANY_REQUESTS) return "BROKER_RATE_LIMIT";
+   if(retcode == TRADE_RETCODE_INVALID_VOLUME) return "INVALID_VOLUME";
+   if(retcode == TRADE_RETCODE_PRICE_OFF) return "NO_PRICE";
+   if(retcode == TRADE_RETCODE_PRICE_CHANGED || retcode == TRADE_RETCODE_REQUOTE) return "PRICE_CHANGED";
+   return "ORDER_REJECTED";
+}
+
 bool SendMarketOrder(int direction)
 {
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol, tick))
+   {
+      g_lastOrderError = GetLastError();
+      g_lastOrderRetcode = 0;
+      g_lastOrderAt = TimeCurrent();
+      g_executionStatus = "NO_TICK";
       return false;
+   }
 
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
@@ -547,18 +687,29 @@ bool SendMarketOrder(int direction)
       request.price = tick.bid;
    }
 
+   ResetLastError();
    if(!OrderSend(request, result))
    {
-      Print("OrderSend failed. error=", GetLastError(), " retcode=", result.retcode);
+      g_lastOrderError = GetLastError();
+      g_lastOrderRetcode = (long)result.retcode;
+      g_lastOrderAt = TimeCurrent();
+      g_executionStatus = RetcodeExecutionStatus((long)result.retcode);
+      Print("OrderSend failed. error=", g_lastOrderError, " retcode=", result.retcode);
       return false;
    }
 
+   g_lastOrderRetcode = (long)result.retcode;
+   g_lastOrderError = GetLastError();
+   g_lastOrderAt = TimeCurrent();
+
    if(!TradeResultAccepted(result))
    {
+      g_executionStatus = RetcodeExecutionStatus((long)result.retcode);
       Print("Order rejected. retcode=", result.retcode, " comment=", result.comment);
       return false;
    }
 
+   g_executionStatus = "ORDER_ACCEPTED";
    return true;
 }
 
