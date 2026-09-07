@@ -62,6 +62,22 @@ export class InstallerController {
       throw new ConflictException("this installer code is not valid for a LOCAL slot");
     }
 
+    const deviceConflict = await this.db.one(
+      `SELECT bi.id,bi.slot_id,bi.device_hostname,ls.assigned_user_id
+       FROM bot_instances bi
+       JOIN license_slots ls ON ls.id=bi.slot_id
+       WHERE bi.device_status='ACTIVE'
+         AND bi.device_public_id=$1
+         AND bi.slot_id<>$2
+       LIMIT 1`,
+      [devicePublicId.slice(0, 160), enrollment.slot_id]
+    );
+    if (deviceConflict) {
+      throw new ConflictException(
+        "เครื่องนี้มี SCENOVA Local Slot ที่ลงทะเบียนอยู่แล้ว กรุณาคืน/ย้าย Slot เดิมก่อนติดตั้ง Slot อื่นบนเครื่องเดียวกัน"
+      );
+    }
+
     let instance = await this.db.one(
       "SELECT * FROM bot_instances WHERE slot_id=$1",
       [enrollment.slot_id]
