@@ -49,7 +49,9 @@ input double          InpProfitRunTrailPercent = 0.00;
 input double          InpPerPositionLossMoney = 0.00;
 // Used only while the adaptive spread profile is warming up or unavailable.
 // Once enough live samples exist, the EA uses broker/symbol rolling percentiles.
-input int             InpMaxSpreadPoints      = 300;
+// Used only when Adaptive Engine is OFF. In adaptive mode the EA learns the
+// live broker/symbol spread distribution and has no fixed spread number.
+input int             InpMaxSpreadPoints      = 0;
 input int             InpMinOrderIntervalMs   = 300;
 input int             InpMaxOrdersPerMinute   = 120;
 input ENUM_ENTRY_MODE InpEntryMode            = ENTRY_AUTO_MOMENTUM;
@@ -662,7 +664,7 @@ void SendHeartbeat()
          ? (int)MathMax(0, TimeCurrent() - g_lastSuccessfulHeartbeat)
          : -1;
       string diagnostics = StringFormat(
-         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\"}}",
+         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\",\"atrRatio\":%.3f}}",
          heartbeatAge,
          g_lastHeartbeatLatencyMs,
          g_lastHeartbeatHttpStatus,
@@ -682,7 +684,8 @@ void SendHeartbeat()
          g_adaptiveEntrySpacingMs,
          g_executionQuality,
          g_averageSlippagePoints,
-         g_sessionProfile
+         g_sessionProfile,
+         g_atrRatio
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + diagnostics;
    }
@@ -976,10 +979,8 @@ double AdaptiveTradeVolume()
       return fallback;
 
    double calculated = MathMin(g_lot, riskMoney / moneyPerLot);
-   double g_atrRatio = g_atrBaselinePoints > 0.0
-      ? g_atrPoints / g_atrBaselinePoints
-      : 1.0;
-   double volatilityFactor = 1.0 / MathMax(1.0, g_atrRatio);
+   double volatilityRatio = g_atrRatio > 0.0 ? g_atrRatio : 1.0;
+   double volatilityFactor = 1.0 / MathMax(1.0, volatilityRatio);
    double lossFactor = MathPow(0.75, MathMax(0, g_consecutiveLosses));
    double executionFactor = 0.50 + 0.50 * MathMax(0.0, MathMin(100.0, g_executionQuality)) / 100.0;
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
@@ -1328,10 +1329,8 @@ void SampleSpread()
       // During warm-up use the broker's own live distribution. The configured
       // spread is only a floor, never an arbitrary hard ceiling.
       double bootstrapLimit = 0.0;
-      if(g_spreadMedian > 0.0)
+      if(g_spreadHistoryCount >= 5 && g_spreadMedian > 0.0)
          bootstrapLimit = MathMax(g_spreadP95 * 1.35, g_spreadMedian * 2.25);
-      if(g_maxSpread > 0)
-         bootstrapLimit = MathMax(bootstrapLimit, (double)g_maxSpread);
       if(bootstrapLimit <= 0.0)
          bootstrapLimit = MathMax(1.0, spread * 2.25);
       g_adaptiveSpreadLimit = bootstrapLimit;
