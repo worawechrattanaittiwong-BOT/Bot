@@ -35,7 +35,7 @@ const defaultSettings = {
   basketTrailMoney: 0.5,
   maxBasketLossMoney: 10,
   dailyLossMoney: 25,
-  maxSpreadPoints: 50,
+  maxSpreadPoints: 300,
   minOrderIntervalMs: 300,
   maxOrdersPerMinute: 120,
   entryMode: "AUTO_MOMENTUM"
@@ -978,7 +978,7 @@ export default function DashboardPage() {
               <Field label="ย่อตัวจาก Peak แล้วปิด ($)" info="หลังเริ่ม Trailing หากกำไรรวมย่อลงจาก Peak ตามจำนวนเงินนี้ EA จะปิด Basket เพื่อรักษากำไร สามารถปรับได้" type="number" step="0.01" value={settings.basketTrailMoney} onChange={(v:string)=>setSettings({...settings,basketTrailMoney:Number(v)})}/>
               <Field label="ขาดทุน Basket สูงสุด ($)" info="ขีดจำกัดขาดทุนของ Basket ใช้เป็นส่วนหนึ่งของระบบความเสี่ยง สามารถปรับได้ ยิ่งตั้งแคบยิ่งหยุดขาดทุนเร็ว" help="ถึงค่านี้ระบบจะควบคุมความเสี่ยงตามกลยุทธ์" type="number" step="0.01" value={settings.maxBasketLossMoney} onChange={(v:string)=>setSettings({...settings,maxBasketLossMoney:Number(v)})}/>
               <Field label="Daily Loss Limit ($)" info="วงเงินขาดทุนรายวันที่ยอมรับได้ เมื่อถึงขีดจำกัด EA จะเข้า Safe Stop ตาม Logic ความเสี่ยง สามารถปรับได้" type="number" step="0.01" value={settings.dailyLossMoney} onChange={(v:string)=>setSettings({...settings,dailyLossMoney:Number(v)})}/>
-              <Field label="Max Spread (points)" info="Spread สูงสุดที่ยอมให้เปิด Order ใหม่ สามารถปรับได้ ตัวอย่าง 260 / 50 pt หมายถึง Broker กำลังมี Spread 260 points แต่ตั้งเพดานไว้ 50 จึงขึ้น SPREAD_TOO_HIGH และบอทจะรอ" help="ตัวเลขนี้เป็นเพดานที่คุณตั้งได้ ไม่ใช่ Spread จริงของ Broker" type="number" value={settings.maxSpreadPoints} onChange={(v:string)=>setSettings({...settings,maxSpreadPoints:Number(v)})}/>
+              <Field label="Max Spread (points)" info="Spread สูงสุดที่ยอมให้เปิด Order ใหม่ สามารถปรับได้ สำหรับ XAUUSDm แบบ 3 ทศนิยม ตัวอย่าง Bid 4415.693 / Ask 4415.953 ต่างกัน 0.260 ซึ่งเท่ากับ 260 points ดังนั้น 260 / 300 pt ยังผ่านได้ แต่ถ้าสูงกว่า 300 บอทจะรอ" help="ตัวเลขนี้เป็นเพดานที่คุณตั้งได้ ไม่ใช่ Spread จริงของ Broker" type="number" value={settings.maxSpreadPoints} onChange={(v:string)=>setSettings({...settings,maxSpreadPoints:Number(v)})}/>
               <Field label="ระยะห่างคำสั่งขั้นต่ำ (ms)" info="เวลาขั้นต่ำระหว่างการส่ง Order แต่ละครั้ง ปรับได้ ใช้ป้องกันการส่งคำสั่งถี่เกินไป 300 ms = อย่างน้อย 0.3 วินาทีต่อคำสั่ง" type="number" value={settings.minOrderIntervalMs} onChange={(v:string)=>setSettings({...settings,minOrderIntervalMs:Number(v)})}/>
               <Field label="คำสั่งสูงสุดต่อนาที" info="Rate Limit จำนวนคำสั่ง Order สูงสุดใน 1 นาที ปรับได้ ใช้ป้องกันการยิงคำสั่งผิดปกติหรือมากเกินไป" type="number" value={settings.maxOrdersPerMinute} onChange={(v:string)=>setSettings({...settings,maxOrdersPerMinute:Number(v)})}/>
               <div className="field">
