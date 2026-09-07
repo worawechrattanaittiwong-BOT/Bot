@@ -102,16 +102,16 @@ jobs:
           AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.0\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
           test "$(printf '%s' "$AGENT" | jq -r '.deviceVerified')" = "true"
 
-          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
-          test "$(printf '%s' "$DETECT" | jq -r '.accountMismatch')" = "true"
+          echo "[integration] auto-binding first LOCAL MT5 from EA runtime"
+          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          test "$(printf '%s' "$DETECT" | jq -r '.accountMismatch // false')" = "false"
 
           DASH2=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
-          test "$(printf '%s' "$DASH2" | jq -r '.instance.rebind_ready')" = "true"
-          test "$(printf '%s' "$DASH2" | jq -r '.instance.pending_account_number')" = "100001"
-
-          REBIND=$(curl -fsS -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
-          ACCOUNT_ID=$(printf '%s' "$REBIND" | jq -r '.account.id')
-          test "$(printf '%s' "$REBIND" | jq -r '.account.account_number')" = "100001"
+          ACCOUNT_ID=$(printf '%s' "$DASH2" | jq -r '.account.id')
+          test -n "$ACCOUNT_ID"
+          test "$(printf '%s' "$DASH2" | jq -r '.account.account_number')" = "100001"
+          test "$(printf '%s' "$DASH2" | jq -r '.account.broker_server')" = "SCENOVA-Demo"
+          test "$(printf '%s' "$DASH2" | jq -r '.instance.pending_account_number // empty')" = ""
 
           echo "[integration] saving bot settings"
           SETTINGS_HTTP=$(curl -sS -o /tmp/settings-save.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"symbol":"XAUUSDm","lot":0.02,"maxPositions":7,"basketTriggerMoney":3.5,"basketTrailMoney":0.75,"maxBasketLossMoney":12,"dailyLossMoney":30,"minOrderIntervalMs":450,"maxOrdersPerMinute":90,"entryMode":"BUY_ONLY"}')
