@@ -10,6 +10,7 @@ import {
 } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { CryptoService } from "./security";
+import { installerDownloadPath, isVersionAtLeast, latestInstallerVersion } from "./release-version";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
@@ -460,6 +461,10 @@ export class EaController {
         ? -1
         : Number(runtime.ea_last_seen_age_seconds);
 
+    const agentVersionRequired = latestInstallerVersion();
+    const reportedAgentVersion = String(body.agentVersion || "").trim();
+    const agentUpdateRequired = !isVersionAtLeast(reportedAgentVersion, agentVersionRequired);
+
     return {
       ok: true,
       instanceId: instance.id,
@@ -471,7 +476,10 @@ export class EaController {
       eaOnline: eaLastSeenAgeSeconds >= 0 && eaLastSeenAgeSeconds <= 10,
       eaVersion: String(runtime?.ea_version || ""),
       eaLastSeenAgeSeconds,
-      agentDownloadUrl: "/downloads/SCENOVA-Setup-v2.0.5.exe"
+      agentVersion: reportedAgentVersion,
+      agentVersionRequired,
+      agentUpdateRequired,
+      agentDownloadUrl: installerDownloadPath(agentVersionRequired)
     };
   }
 
