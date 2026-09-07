@@ -132,7 +132,7 @@ export class BotController {
       VOLATILITY_TOO_HIGH: { label: "ความผันผวนสูง", detail: "EA รุ่นเก่าใช้ ATR เป็นตัวบล็อก กรุณาอัปเดตเป็น Adaptive Engine รุ่นล่าสุด", tone: "warn" },
       ADAPTIVE_DATA_NOT_READY: { label: "กำลังเตรียมข้อมูลตลาด", detail: "รอข้อมูลแท่งราคา M5, M15 และ H1 ให้เพียงพอ", tone: "warn" },
       LOSS_COOLDOWN: { label: "พักหลังขาดทุน", detail: "ระบบหยุดเปิดไม้ชั่วคราวเพื่อลดการเทรดแก้มือ", tone: "warn" },
-      RISK_LIMIT_TOO_SMALL: { label: "ความเสี่ยงไม่พอสำหรับ Lot ขั้นต่ำ", detail: "Stop distance และ Equity ปัจจุบันทำให้ Lot ขั้นต่ำของ Broker เสี่ยงเกินค่าที่ตั้งไว้", tone: "warn" },
+      RISK_LIMIT_TOO_SMALL: { label: "ความเสี่ยงไม่พอสำหรับ Lot ขั้นต่ำ", detail: "Risk % ปัจจุบันต่ำกว่าที่ Lot ขั้นต่ำของ Broker ต้องใช้ หากยอมรับความเสี่ยงเพิ่มให้ติ๊กอนุญาต Lot ขั้นต่ำในตั้งค่าบอท", tone: "warn" },
       SPREAD_TOO_HIGH: { label: "Spread ผิดปกติต่อเนื่อง", detail: "Adaptive Spread ระงับเฉพาะออเดอร์ใหม่ ส่วน Position เดิมยังถูกดูแลตามปกติ", tone: "warn" },
       WAITING_BASKET_ADD: { label: "รอจังหวะเพิ่มไม้", detail: "ทิศทางหรือความมั่นใจยังไม่แข็งแรงพอสำหรับเพิ่ม Position", tone: "good" },
       MAX_POSITIONS: { label: "Position เต็มแล้ว", detail: "จำนวน Position ถึง Max Positions", tone: "warn" },
@@ -1271,6 +1271,7 @@ export class BotController {
     numberSetting("maxOrdersPerMinute", 1, 5000, true);
     booleanSetting("adaptiveEngine");
     numberSetting("riskPerOrderPercent", 0.01, 5);
+    booleanSetting("allowMinimumLotOverride");
     numberSetting("hardStopAtrMultiplier", 0.5, 10);
     numberSetting("atrPeriod", 5, 100, true);
     numberSetting("confidenceThreshold", 40, 95, true);

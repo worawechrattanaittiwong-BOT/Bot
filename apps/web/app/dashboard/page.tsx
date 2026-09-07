@@ -47,6 +47,7 @@ const defaultSettings = {
   maxOrdersPerMinute: 120,
   adaptiveEngine: true,
   riskPerOrderPercent: 0.25,
+  allowMinimumLotOverride: false,
   hardStopAtrMultiplier: 2,
   atrPeriod: 14,
   confidenceThreshold: 70,
@@ -688,6 +689,7 @@ export default function DashboardPage() {
       "InpMaxOfflineLeaseSeconds=600",
       "InpAdaptiveEngine=" + Boolean(settings.adaptiveEngine),
       "InpRiskPerOrderPercent=" + settings.riskPerOrderPercent,
+      "InpAllowMinimumLotOverride=" + Boolean(settings.allowMinimumLotOverride),
       "InpHardStopAtrMultiplier=" + settings.hardStopAtrMultiplier,
       "InpAtrPeriod=" + settings.atrPeriod,
       "InpConfidenceThreshold=" + settings.confidenceThreshold,
@@ -1271,6 +1273,17 @@ export default function DashboardPage() {
                     </select>
                   </div>
                   <SelectField label="ความเสี่ยงสูงสุดต่อไม้" options={[0.1,0.25,0.5,0.75,1,1.5,2]} value={settings.riskPerOrderPercent} format={(v:string)=>v + "% Equity"} onChange={(v:string)=>editSetting("riskPerOrderPercent",v)} />
+                  <div className={"field toggle-select-field " + (settings.allowMinimumLotOverride ? "enabled" : "")}>
+                    <label className="toggle-setting-label">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(settings.allowMinimumLotOverride)}
+                        onChange={e=>editSetting("allowMinimumLotOverride", e.target.checked)}
+                      />
+                      <span>อนุญาต Lot ขั้นต่ำเมื่อ Risk % ไม่พอ</span>
+                    </label>
+                    <small className="help">ติ๊กแล้ว EA จะไม่ติด RISK_LIMIT_TOO_SMALL และจะใช้ Lot ขั้นต่ำของ Broker แทน แต่ความเสี่ยงจริงต่อไม้อาจสูงกว่า % ที่ตั้งไว้</small>
+                  </div>
                   <SelectField label="คะแนนสัญญาณขั้นต่ำ" options={[50,60,65,70,75,80,85,90]} value={settings.confidenceThreshold} format={(v:string)=>v + "%"} onChange={(v:string)=>editSetting("confidenceThreshold",v)} />
                   <SelectField label="Hard Stop ตาม ATR" options={[1,1.5,2,2.5,3,4]} value={settings.hardStopAtrMultiplier} format={(v:string)=>v + " × ATR"} onChange={(v:string)=>editSetting("hardStopAtrMultiplier",v)} />
                   <SelectField label="ATR Period" options={[7,10,14,20,28,50]} value={settings.atrPeriod} onChange={(v:string)=>editSetting("atrPeriod",v)} />

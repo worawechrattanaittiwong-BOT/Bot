@@ -68,6 +68,9 @@ input int             InpMaxOfflineLeaseSeconds = 600;
 // always treated as a ceiling; adaptive sizing can reduce it, never increase it.
 input bool            InpAdaptiveEngine        = true;
 input double          InpRiskPerOrderPercent   = 0.25;
+// When enabled, a risk-sized volume below the broker minimum may use the
+// broker minimum lot instead of blocking the entry. This can exceed RiskPerOrder%.
+input bool            InpAllowMinimumLotOverride = false;
 input double          InpHardStopAtrMultiplier = 2.00;
 input int             InpAtrPeriod             = 14;
 input int             InpConfidenceThreshold   = 70;
@@ -127,6 +130,7 @@ ENUM_ENTRY_MODE g_entryMode;
 
 bool   g_adaptiveEngine;
 double g_riskPerOrderPercent;
+bool   g_allowMinimumLotOverride;
 double g_hardStopAtrMultiplier;
 int    g_atrPeriod;
 int    g_confidenceThreshold;
@@ -140,6 +144,7 @@ double g_signalConfidence = 0.0;
 double g_atrPoints = 0.0;
 double g_atrRatio = 1.0;
 double g_adaptiveLot = 0.0;
+bool   g_minimumLotOverrideActive = false;
 string g_adaptiveBlockReason = "";
 string g_cachedAdaptiveBlockReason = "";
 int    g_consecutiveLosses = 0;
@@ -207,6 +212,7 @@ int OnInit()
    g_entryMode = InpEntryMode;
    g_adaptiveEngine = InpAdaptiveEngine;
    g_riskPerOrderPercent = MathMax(0.01, MathMin(5.0, InpRiskPerOrderPercent));
+   g_allowMinimumLotOverride = InpAllowMinimumLotOverride;
    g_hardStopAtrMultiplier = MathMax(0.5, MathMin(10.0, InpHardStopAtrMultiplier));
    g_atrPeriod = MathMax(5, MathMin(100, InpAtrPeriod));
    g_confidenceThreshold = MathMax(40, MathMin(95, InpConfidenceThreshold));
@@ -591,6 +597,8 @@ void SendHeartbeat()
    string dailyProfitTargetArmedText = g_dailyProfitTargetArmed ? "true" : "false";
    string dailyProfitContinueText = g_dailyProfitContinueAfterTarget ? "true" : "false";
    string adaptiveEngineText = g_adaptiveEngine ? "true" : "false";
+   string minimumLotOverrideEnabledText = g_allowMinimumLotOverride ? "true" : "false";
+   string minimumLotOverrideActiveText = g_minimumLotOverrideActive ? "true" : "false";
    double telemetrySpreadLimit = g_adaptiveEngine && g_adaptiveSpreadLimit > 0.0
       ? g_adaptiveSpreadLimit
       : (double)g_maxSpread;
@@ -664,7 +672,7 @@ void SendHeartbeat()
          ? (int)MathMax(0, TimeCurrent() - g_lastSuccessfulHeartbeat)
          : -1;
       string diagnostics = StringFormat(
-         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\",\"atrRatio\":%.3f}}",
+         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\",\"atrRatio\":%.3f,\"minimumLotOverrideEnabled\":%s,\"minimumLotOverrideActive\":%s}}",
          heartbeatAge,
          g_lastHeartbeatLatencyMs,
          g_lastHeartbeatHttpStatus,
@@ -685,7 +693,9 @@ void SendHeartbeat()
          g_executionQuality,
          g_averageSlippagePoints,
          g_sessionProfile,
-         g_atrRatio
+         g_atrRatio,
+         minimumLotOverrideEnabledText,
+         minimumLotOverrideActiveText
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + diagnostics;
    }
@@ -874,6 +884,7 @@ void ApplySettings(string json)
    g_maxOrdersPerMinute = (int)MathMax(1.0, JsonNumber(json, "maxOrdersPerMinute", g_maxOrdersPerMinute));
    g_adaptiveEngine = JsonBool(json, "adaptiveEngine", g_adaptiveEngine);
    g_riskPerOrderPercent = MathMax(0.01, MathMin(5.0, JsonNumber(json, "riskPerOrderPercent", g_riskPerOrderPercent)));
+   g_allowMinimumLotOverride = JsonBool(json, "allowMinimumLotOverride", g_allowMinimumLotOverride);
    g_hardStopAtrMultiplier = MathMax(0.5, MathMin(10.0, JsonNumber(json, "hardStopAtrMultiplier", g_hardStopAtrMultiplier)));
    g_atrPeriod = (int)MathMax(5.0, MathMin(100.0, JsonNumber(json, "atrPeriod", g_atrPeriod)));
    g_confidenceThreshold = (int)MathMax(40.0, MathMin(95.0, JsonNumber(json, "confidenceThreshold", g_confidenceThreshold)));
@@ -962,6 +973,7 @@ int TimeframeTrend(ENUM_TIMEFRAMES timeframe)
 
 double AdaptiveTradeVolume()
 {
+   g_minimumLotOverrideActive = false;
    double fallback = NormalizeTradeVolume(g_lot);
    if(!g_adaptiveEngine || g_atrPoints <= 0.0 || g_riskPerOrderPercent <= 0.0)
       return fallback;
@@ -989,12 +1001,22 @@ double AdaptiveTradeVolume()
    calculated *= volatilityFactor * lossFactor * executionFactor * drawdownFactor;
    double brokerMinimum = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
    if(calculated + 1e-12 < brokerMinimum)
-      return 0.0;
+   {
+      // Optional small-account override: keep every other Adaptive/Risk guard,
+      // but do not block solely because the broker cannot trade below its
+      // minimum volume. Never exceed the user's configured lot ceiling.
+      if(!g_allowMinimumLotOverride || brokerMinimum > g_lot + 1e-12)
+         return 0.0;
+
+      g_minimumLotOverrideActive = true;
+      return NormalizeTradeVolume(brokerMinimum);
+   }
    return NormalizeTradeVolume(calculated);
 }
 
 int AdaptiveEntryDirection(double momentum)
 {
+   g_minimumLotOverrideActive = false;
    if(!g_adaptiveEngine)
    {
       int rawDirection = EntryDirection(momentum);

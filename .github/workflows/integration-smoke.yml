@@ -128,7 +128,7 @@ jobs:
           test "$(printf '%s' "$DASH2" | jq -r '.instance.metrics.productVersion')" = "2.0.7"
 
           echo "[integration] saving bot settings with Basket profit mode"
-          SETTINGS_HTTP=$(curl -sS -o /tmp/settings-save.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"symbol":"XAUUSDm","lot":0.02,"maxPositions":7,"basketTriggerMoney":3.5,"basketTrailMoney":0.75,"maxBasketLossMoney":12,"dailyLossMoney":30,"dailyProfitTargetMoney":10,"dailyProfitContinueAfterTarget":true,"dailyProfitDrawdownPercent":20,"basketProfitTargetMoney":10,"perPositionProfitMoney":0,"perPositionLossMoney":2,"minOrderIntervalMs":450,"maxOrdersPerMinute":90,"entryMode":"BUY_ONLY"}')
+          SETTINGS_HTTP=$(curl -sS -o /tmp/settings-save.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"symbol":"XAUUSDm","lot":0.02,"maxPositions":7,"basketTriggerMoney":3.5,"basketTrailMoney":0.75,"maxBasketLossMoney":12,"dailyLossMoney":30,"dailyProfitTargetMoney":10,"dailyProfitContinueAfterTarget":true,"dailyProfitDrawdownPercent":20,"basketProfitTargetMoney":10,"perPositionProfitMoney":0,"perPositionLossMoney":2,"minOrderIntervalMs":450,"maxOrdersPerMinute":90,"entryMode":"BUY_ONLY","allowMinimumLotOverride":true}')
           if [ "$SETTINGS_HTTP" != "200" ]; then cat /tmp/settings-save.json; exit 1; fi
           SETTINGS=$(cat /tmp/settings-save.json)
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.symbol')" = "XAUUSDm"
@@ -141,6 +141,7 @@ jobs:
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.perPositionProfitMoney')" = "0"
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.perPositionLossMoney')" = "2"
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.entryMode')" = "BUY_ONLY"
+          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
           echo "[integration] enabling per-position profit automatically disables Basket profit"
           PER_POSITION=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"perPositionProfitMoney":2}')
@@ -177,6 +178,7 @@ jobs:
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.profitRunTrailPercent')" = "20"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.perPositionLossMoney')" = "2"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.entryMode')" = "BUY_ONLY"
+          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
           echo "[integration] verifying settings in EA heartbeat"
           SETTINGS_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.010\",\"symbol\":\"XAUUSDm\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
@@ -190,6 +192,7 @@ jobs:
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.profitRunTrailPercent')" = "20"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.perPositionLossMoney')" = "2"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.entryMode')" = "BUY_ONLY"
+          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
           echo "[integration] verifying invalid settings rejection"
           BAD_SETTINGS_HTTP=$(curl -sS -o /tmp/bad-settings.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"lot":0}')
@@ -202,6 +205,8 @@ jobs:
           test "$BAD_DAILY_DRAWDOWN_HTTP" = "400"
           BAD_DAILY_CONTINUE_HTTP=$(curl -sS -o /tmp/bad-daily-continue.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"dailyProfitContinueAfterTarget":"true"}')
           test "$BAD_DAILY_CONTINUE_HTTP" = "400"
+          BAD_MIN_LOT_OVERRIDE_HTTP=$(curl -sS -o /tmp/bad-min-lot-override.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"allowMinimumLotOverride":"true"}')
+          test "$BAD_MIN_LOT_OVERRIDE_HTTP" = "400"
           CONFLICT_PROFIT_HTTP=$(curl -sS -o /tmp/conflict-profit.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"basketProfitTargetMoney":10,"perPositionProfitMoney":2}')
           test "$CONFLICT_PROFIT_HTTP" = "400"
 
