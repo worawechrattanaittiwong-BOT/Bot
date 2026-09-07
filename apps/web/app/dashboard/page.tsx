@@ -802,7 +802,16 @@ export default function DashboardPage() {
                     <div><span>บัญชี</span><b>{data.account.account_number}</b></div>
                     <div><span>Broker</span><b>{data.account.broker}</b></div>
                     <div><span>Server</span><b>{metrics.server || data.account.broker_server}</b></div>
-                    <div><span>EA Runtime</span><b>{metrics.eaVersion ? "v" + metrics.eaVersion : "รุ่นเก่า / ยังไม่รายงาน"}</b></div>
+                    <div>
+                      <span>SCENOVA Version</span>
+                      <b>
+                        {metrics.productVersion
+                          ? "v" + metrics.productVersion
+                          : metrics.eaVersion
+                            ? "กำลังอัปเดตเวอร์ชัน..."
+                            : "ยังไม่รายงาน"}
+                      </b>
+                    </div>
                     <div><span>การเชื่อมต่อ</span><b className={isMt5Online ? "text-good":"text-warn"}>{connectionLabel}</b></div>
                     <div><span>Bot State</span><b>{actualStateLabel}</b></div>
                     <div><span>คำสั่งจากเว็บ</span><b>{desiredStateLabel}</b></div>
