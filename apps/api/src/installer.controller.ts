@@ -78,7 +78,7 @@ export class InstallerController {
       retryEnrollment = Boolean(enrollment);
     }
 
-    if (!enrollment) throw new ConflictException("installer code expired, already used, or belongs to another device");
+    if (!enrollment) throw new ConflictException("installer code expired or already used; download a fresh installer from SCENOVA");
     if (!enrollment.assigned_user_id || enrollment.user_status !== "ACTIVE") {
       throw new ConflictException("slot is not assigned to an active SCENOVA user");
     }
@@ -86,90 +86,9 @@ export class InstallerController {
       throw new ConflictException("this installer code is not valid for a LOCAL slot");
     }
 
-    let deviceConflict = await this.db.one(
-      `SELECT bi.id,bi.slot_id,bi.device_hostname,ls.assigned_user_id,ls.slot_number,ls.label,ls.status slot_status,
-         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
-         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') mt5_online
-       FROM bot_instances bi
-       JOIN license_slots ls ON ls.id=bi.slot_id
-       WHERE bi.device_status='ACTIVE'
-         AND bi.device_public_id=$1
-         AND bi.slot_id<>$2
-       LIMIT 1`,
-      [devicePublicId.slice(0, 160), enrollment.slot_id]
-    );
-    if (deviceConflict) {
-      const sameUser =
-        String(deviceConflict.assigned_user_id || "") === String(enrollment.assigned_user_id || "");
-      const slotText = deviceConflict.slot_number
-        ? "Slot #" + deviceConflict.slot_number
-        : "Local Slot เดิม";
-      const safeToAutoRelease =
-        sameUser &&
-        !Boolean(deviceConflict.mt5_online) &&
-        Number(deviceConflict.positions || 0) === 0;
-
-      if (safeToAutoRelease) {
-        const revoked = randomBytes(32).toString("hex");
-        await this.db.query(
-          `UPDATE bot_instances SET
-             install_token_hash=$2,
-             desired_state='STOPPED',
-             actual_state='OFFLINE',
-             last_seen_at=NULL,
-             agent_last_seen_at=NULL,
-             agent_version=NULL,
-             agent_terminal_path=NULL,
-             agent_ea_hash=NULL,
-             device_public_id=NULL,
-             device_secret_hash=NULL,
-             device_status='UNREGISTERED',
-             device_hostname=NULL,
-             device_registered_at=NULL,
-             device_last_seen_at=NULL,
-             device_last_ip=NULL,
-             ea_last_ip=NULL,
-             pending_account_number=NULL,
-             pending_broker=NULL,
-             pending_broker_server=NULL,
-             pending_account_ip=NULL,
-             pending_account_seen_at=NULL,
-             account_change_requested_at=NULL
-           WHERE id=$1`,
-          [deviceConflict.id, this.crypto.sha256(revoked)]
-        );
-        await this.db.query(
-          "UPDATE install_enrollments SET status='CANCELLED' WHERE slot_id=$1 AND status='PENDING'",
-          [deviceConflict.slot_id]
-        );
-        await this.db.query(
-          "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'AUTO_RELEASE_STALE_DEVICE','bot_instance',$2,$3::jsonb)",
-          [
-            String(enrollment.requested_by_user_id),
-            deviceConflict.id,
-            JSON.stringify({
-              oldSlotId: deviceConflict.slot_id,
-              oldSlotNumber: deviceConflict.slot_number || null,
-              newSlotId: enrollment.slot_id,
-              devicePublicId,
-              reason: "same_user_offline_zero_positions"
-            })
-          ]
-        );
-        deviceConflict = null;
-      } else {
-        throw new ConflictException(
-          sameUser
-            ? (
-                Number(deviceConflict.positions || 0) > 0
-                  ? slotText + " ยังมี Position ค้างอยู่ กรุณาปิด Position ก่อนย้าย Device"
-                  : "เครื่องนี้ถูกผูกกับ " + slotText + " ซึ่งยัง Online อยู่ กรุณาหยุดบอทแล้วกด “ปลดเครื่อง” ที่ " + slotText + " ก่อนติดตั้ง Slot ใหม่"
-              )
-            : "เครื่องนี้เคยผูกกับ Local Slot ของบัญชี SCENOVA อื่นอยู่ กรุณาให้เจ้าของระบบปลด Device Lock ของเครื่องเดิมก่อนติดตั้ง"
-        );
-      }
-    }
-
+    // Device identity is installation telemetry only. A valid Slot enrollment
+    // may be installed on any PC; trading authorization is decided by the
+    // Slot token + live MT5 identity + Server entitlement on every heartbeat.
     let instance = await this.db.one(
       "SELECT * FROM bot_instances WHERE slot_id=$1",
       [enrollment.slot_id]
