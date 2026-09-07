@@ -71,6 +71,9 @@ export default function DashboardPage() {
   const [logsOpen, setLogsOpen] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
   const [botLogs, setBotLogs] = useState<any>(null);
+  const [terminalFilter, setTerminalFilter] = useState<"ALL"|"COMMAND"|"STATE"|"MARKET"|"RISK"|"ORDER">("ALL");
+  const [terminalAutoScroll, setTerminalAutoScroll] = useState(true);
+  const terminalWindowRef = useRef<HTMLDivElement | null>(null);
   const [settings, setSettings] = useState<any>(defaultSettings);
   const settingsDirtyRef = useRef(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
@@ -152,6 +155,150 @@ export default function DashboardPage() {
   }, [logsOpen, activeView, data?.instance?.id, selectedSlotId]);
 
   const metrics = data?.instance?.metrics || {};
+  const terminalEntries = useMemo(() => {
+    const snapshot = botLogs?.snapshot || {};
+    const m = snapshot.metrics || metrics || {};
+    const heartbeatTime = snapshot.last_seen_at || data?.instance?.last_seen_at || null;
+    const entries:any[] = [];
+
+    const add = (time:any, level:string, category:string, text:string, detail="") => {
+      entries.push({
+        id: category + "-" + level + "-" + String(time || "") + "-" + entries.length,
+        time,
+        level,
+        category,
+        text,
+        detail
+      });
+    };
+
+    add(
+      heartbeatTime,
+      Boolean(data?.instance?.mt5_online) ? "SUCCESS" : "WARN",
+      "STATE",
+      "MT5 " + (Boolean(data?.instance?.mt5_online) ? "CONNECTED" : "WAITING"),
+      [
+        snapshot.account_number || data?.account?.account_number,
+        snapshot.broker || data?.account?.broker,
+        m.server || snapshot.broker_server || data?.account?.broker_server
+      ].filter(Boolean).join(" · ")
+    );
+
+    add(
+      heartbeatTime,
+      "STATE",
+      "STATE",
+      "BOT " + String(snapshot.actual_state || data?.instance?.actual_state || "—"),
+      "WEB " + String(snapshot.desired_state || data?.instance?.desired_state || "—") +
+      " · Execution " + String(m.executionStatus || data?.liveStatus?.code || "—")
+    );
+
+    add(
+      heartbeatTime,
+      Number(m.basketProfit || 0) >= 0 ? "MARKET" : "WARN",
+      "MARKET",
+      "Floating $" + Number(m.basketProfit || 0).toFixed(2) +
+      " · Positions " + Number(m.positions || 0),
+      "Spread " + Number(m.spreadPoints || 0).toFixed(1) + " pt" +
+      " · Momentum " + Number(m.momentumPoints || 0).toFixed(1)
+    );
+
+    add(
+      heartbeatTime,
+      "RISK",
+      "RISK",
+      "Daily P/L $" + Number(m.dailyProfit || 0).toFixed(2) +
+      (Number(m.dailyProfitTarget || settings.dailyProfitTargetMoney || 0) > 0
+        ? " / Target $" + Number(m.dailyProfitTarget || settings.dailyProfitTargetMoney || 0).toFixed(2)
+        : ""),
+      Number(m.dailyProfitGivebackFloor || 0) > 0
+        ? "Giveback floor $" + Number(m.dailyProfitGivebackFloor).toFixed(2) +
+          " · " + Number(m.dailyProfitDrawdownPercent || settings.dailyProfitDrawdownPercent || 0).toFixed(0) + "%"
+        : (Number(settings.maxBasketLossMoney || 0) > 0
+            ? "Max Basket Loss $" + Number(settings.maxBasketLossMoney).toFixed(2)
+            : "Risk guard active")
+    );
+
+    if (Number(m.profitRunTrailPercent || settings.profitRunTrailPercent || 0) > 0) {
+      add(
+        heartbeatTime,
+        "TRAIL",
+        "RISK",
+        "Profit Run " + Number(m.profitRunTrailPercent || settings.profitRunTrailPercent).toFixed(0) + "%",
+        "Peak $" + Number(m.profitRunPeak || 0).toFixed(2) +
+        " · Basket cycle $" + Number(m.basketCycleProfit || m.basketProfit || 0).toFixed(2)
+      );
+    }
+
+    if (Number(m.lastOrderAt || 0) > 0 || Number(m.lastOrderRetcode || 0) > 0 || Number(m.lastOrderError || 0) > 0) {
+      const rawLastOrderAt = Number(m.lastOrderAt || 0);
+      const lastOrderTime = rawLastOrderAt > 0
+        ? new Date(rawLastOrderAt > 100000000000 ? rawLastOrderAt : rawLastOrderAt * 1000).toISOString()
+        : heartbeatTime;
+      add(
+        lastOrderTime,
+        Number(m.lastOrderError || 0) > 0 ? "ERROR" : "ORDER",
+        "ORDER",
+        "Last order · retcode " + String(m.lastOrderRetcode || "—"),
+        "error " + String(m.lastOrderError || 0) +
+        " · tradeReady " + (m.tradeReady === false ? "NO" : "YES")
+      );
+    }
+
+    for (const event of (botLogs?.events || [])) {
+      let payloadText = "";
+      if (event.payload && typeof event.payload === "object" && Object.keys(event.payload).length) {
+        payloadText = Object.entries(event.payload)
+          .slice(0, 4)
+          .map(([key,value])=>key + "=" + String(value))
+          .join(" · ");
+      }
+      const delivery = event.acked_at
+        ? "ACK " + new Date(event.acked_at).toLocaleTimeString("th-TH",{hour12:false})
+        : event.delivered_at
+          ? "DELIVERED " + new Date(event.delivered_at).toLocaleTimeString("th-TH",{hour12:false})
+          : "WAITING EA";
+      add(
+        event.created_at,
+        String(event.status || "COMMAND").toUpperCase(),
+        "COMMAND",
+        "#" + event.id + " · " + commandLabel(event.command),
+        delivery + (payloadText ? " · " + payloadText : "")
+      );
+    }
+
+    return entries
+      .filter(entry=>entry.time)
+      .sort((a,b)=>new Date(a.time).getTime() - new Date(b.time).getTime());
+  }, [
+    botLogs,
+    metrics,
+    data?.instance?.last_seen_at,
+    data?.instance?.actual_state,
+    data?.instance?.desired_state,
+    data?.instance?.mt5_online,
+    data?.account?.account_number,
+    data?.account?.broker,
+    data?.account?.broker_server,
+    data?.liveStatus?.code,
+    settings.dailyProfitTargetMoney,
+    settings.dailyProfitDrawdownPercent,
+    settings.maxBasketLossMoney,
+    settings.profitRunTrailPercent
+  ]);
+
+  const filteredTerminalEntries = useMemo(
+    () => terminalFilter === "ALL"
+      ? terminalEntries
+      : terminalEntries.filter((entry:any)=>entry.category === terminalFilter),
+    [terminalEntries, terminalFilter]
+  );
+
+  useEffect(() => {
+    if (!terminalAutoScroll || !terminalWindowRef.current) return;
+    terminalWindowRef.current.scrollTop = terminalWindowRef.current.scrollHeight;
+  }, [filteredTerminalEntries.length, terminalAutoScroll]);
+
   const profitRunModeEnabled = Number(settings.profitRunTrailPercent || 0) > 0;
   const state = data?.instance?.actual_state || "OFFLINE";
   const desired = data?.instance?.desired_state || "STOPPED";
