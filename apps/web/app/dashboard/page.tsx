@@ -38,6 +38,7 @@ const defaultSettings = {
   dailyLossMoney: 25,
   dailyProfitTargetMoney: 0,
   basketProfitTargetMoney: 0,
+  perPositionProfitMoney: 0,
   perPositionLossMoney: 0,
   minOrderIntervalMs: 300,
   maxOrdersPerMinute: 120,
@@ -528,7 +529,20 @@ export default function DashboardPage() {
   function editSetting(key: string, value: any) {
     settingsDirtyRef.current = true;
     setSettingsDirty(true);
-    setSettings((current:any)=>({ ...current, [key]: value }));
+    setSettings((current:any)=>{
+      const next = { ...current, [key]: value };
+
+      // Profit closing modes are mutually exclusive. Whichever one the user
+      // enters last becomes active and the other is turned off immediately.
+      if (key === "perPositionProfitMoney" && Number(value || 0) > 0) {
+        next.basketProfitTargetMoney = 0;
+      }
+      if (key === "basketProfitTargetMoney" && Number(value || 0) > 0) {
+        next.perPositionProfitMoney = 0;
+      }
+
+      return next;
+    });
   }
 
   async function saveSettings(e: FormEvent) {
@@ -855,18 +869,30 @@ export default function DashboardPage() {
                     onChange={(v:string)=>editSetting("dailyProfitTargetMoney",Number(v))}
                   />
                   <Field
-                    label="กำไรเป้าหมายต่อรอบ Basket ($)"
-                    info="เป้ากำไรรวมของรอบ Basket รวมทั้งไม้ที่ปิดไปแล้วในรอบนั้นและ Floating ที่ยังเปิดอยู่ เมื่อถึงเป้า EA จะปิดไม้ที่เหลือทั้งหมด"
+                    label="กำไรรวม Basket แล้วปิด ($)"
+                    info="เมื่อกำไรรวมของรอบ Basket ถึงค่านี้ EA จะปิด Position ที่เหลือทั้งหมด"
                     help={
                       Number(settings.basketProfitTargetMoney || 0) > 0
-                        ? "ถ้า Basket เปิดสูงสุด " + Math.max(1, Number(metrics.basketPeakPositions || metrics.positions || 1)) + " ไม้ เป้าต่อไม้ตอนนี้ ≈ $" +
-                          (Number(settings.basketProfitTargetMoney || 0) / Math.max(1, Number(metrics.basketPeakPositions || metrics.positions || 1))).toFixed(2)
-                        : "ใส่ 0 = ไม่ใช้เป้ากำไรแบบหารต่อไม้"
+                        ? "โหมดกำไรรวมกำลังทำงาน · กำไรต่อไม้ถูกปิดอัตโนมัติ"
+                        : "ใส่ 0 = ปิดโหมดกำไรรวม"
                     }
                     type="number"
                     step="0.01"
                     value={settings.basketProfitTargetMoney}
                     onChange={(v:string)=>editSetting("basketProfitTargetMoney",Number(v))}
+                  />
+                  <Field
+                    label="กำไรต่อไม้แล้วปิด ($)"
+                    info="Position ไหนมี P/L ถึงกำไรที่กำหนด EA จะปิดเฉพาะ Position นั้น"
+                    help={
+                      Number(settings.perPositionProfitMoney || 0) > 0
+                        ? "โหมดกำไรต่อไม้กำลังทำงาน · กำไรรวม Basket ถูกปิดอัตโนมัติ"
+                        : "ใส่ 0 = ปิดโหมดกำไรต่อไม้"
+                    }
+                    type="number"
+                    step="0.01"
+                    value={settings.perPositionProfitMoney}
+                    onChange={(v:string)=>editSetting("perPositionProfitMoney",Number(v))}
                   />
                   <Field
                     label="ขาดทุนต่อไม้แล้วปิด ($)"
@@ -915,11 +941,17 @@ export default function DashboardPage() {
                     </b>
                   </div>
                   <div>
-                    <span>เป้ากำไรต่อไม้ปัจจุบัน</span>
-                    <b>{Number(metrics.perPositionProfitTarget || 0) > 0 ? "$" + Number(metrics.perPositionProfitTarget).toFixed(2) : "—"}</b>
+                    <span>โหมดปิดกำไร</span>
+                    <b>
+                      {Number(settings.perPositionProfitMoney || 0) > 0
+                        ? "ต่อไม้ · $" + Number(settings.perPositionProfitMoney).toFixed(2)
+                        : Number(settings.basketProfitTargetMoney || 0) > 0
+                          ? "รวม Basket · $" + Number(settings.basketProfitTargetMoney).toFixed(2)
+                          : "ไม่ตั้งเป้าปิดกำไร"}
+                    </b>
                   </div>
                 </div>
-                <div className="notice risk-notice">ค่าที่บันทึกจะเป็นค่าหลักของ Slot นี้ และ EA จะรับค่าล่าสุดจาก Server ใน Heartbeat ถัดไป · เป้ากำไรต่อไม้จะหารจากจำนวน Position สูงสุดที่ Basket เปิดในรอบนั้น และจะไม่ขยับสูงขึ้นเมื่อมีไม้ถูกปิดไปแล้ว</div>
+                <div className="notice risk-notice">กำไรต่อไม้และกำไรรวม Basket ใช้พร้อมกันไม่ได้ · ถ้ากำหนดตัวใดมากกว่า 0 ระบบจะปิดอีกตัวเป็น 0 อัตโนมัติ ทั้งหน้าเว็บ Server และ EA</div>
               </section>
 
               <section className="panel overview-access-card">
