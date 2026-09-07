@@ -16,6 +16,29 @@ internal static class ScenovaRuntime
 
     internal static string ConfigPath => Path.Combine(BaseDir, "config-v2.json");
 
+    internal static string? ResolveTerminalExecutable(string terminalDataPath)
+    {
+        try
+        {
+            var originPath = Path.Combine(terminalDataPath, "origin.txt");
+            if (!File.Exists(originPath)) return null;
+
+            var origin = File.ReadAllText(originPath).Trim('\0', ' ', '\r', '\n');
+            if (string.IsNullOrWhiteSpace(origin)) return null;
+
+            if (File.Exists(origin) &&
+                string.Equals(Path.GetFileName(origin), "terminal64.exe", StringComparison.OrdinalIgnoreCase))
+                return origin;
+
+            var terminalExe = Path.Combine(origin, "terminal64.exe");
+            return File.Exists(terminalExe) ? terminalExe : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     internal static string Protect(string value)
     {
         var protectedBytes = ProtectedData.Protect(
@@ -119,6 +142,7 @@ internal sealed class AgentConfig
     public string DeviceSecretProtected { get; set; } = "";
     public string TerminalDataPath { get; set; } = "";
     public string EaBinaryPath { get; set; } = "";
+    public string StartupSymbol { get; set; } = "";
     public string InstalledAt { get; set; } = "";
 }
 
@@ -129,6 +153,7 @@ internal sealed class EnrollResponse
     public string ApiBase { get; set; } = ScenovaRuntime.ProductionApiBase;
     public string WebBase { get; set; } = ScenovaRuntime.ProductionWebBase;
     public string? ArtifactHash { get; set; }
+    public string StartupSymbol { get; set; } = "";
     public bool PreservedLegacyToken { get; set; }
 }
 
@@ -137,6 +162,9 @@ internal sealed class AgentHeartbeatResponse
     public bool DeviceVerified { get; set; }
     public bool ArtifactAvailable { get; set; }
     public string? ArtifactHash { get; set; }
+    public bool EaOnline { get; set; }
+    public string? EaVersion { get; set; }
+    public double EaLastSeenAgeSeconds { get; set; }
 }
 
 internal sealed class ApiError
