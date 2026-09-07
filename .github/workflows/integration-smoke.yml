@@ -166,8 +166,7 @@ jobs:
           test "$OLD_TRIAL" = "1"
 
 
-          # A second SCENOVA user must not be able to take the same registered
-          # device or the same active MT5 identity.
+          # Device identity is telemetry only; active MT5 identity remains unique.
           REGISTER2=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration2@scenova.test","password":"Integration123!"}')
           TOKEN2=$(printf '%s' "$REGISTER2" | jq -r '.token')
           DASH_SECOND=$(curl -fsS "$BASE/bot/dashboard" -H "authorization: Bearer $TOKEN2")
@@ -204,7 +203,7 @@ jobs:
           INSTANCE3=$(printf '%s' "$ENROLL3" | jq -r '.instanceId')
           INSTALL_TOKEN3=$(printf '%s' "$ENROLL3" | jq -r '.installToken')
 
-          # Simulate an older/legacy Device Lock state while the EA itself is alive.
+          # Device telemetry may be missing; authenticated EA still auto-binds MT5.
           PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set device_status='UNREGISTERED',device_last_seen_at=NULL,device_last_ip=NULL,mt5_account_id=NULL where id='$INSTANCE3';" >/dev/null
 
           FIRST_DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE3\",\"installToken\":\"$INSTALL_TOKEN3\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"300003\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Legacy\",\"positions\":0}}")
