@@ -95,15 +95,6 @@ export default function AdminPage() {
   }
 
   async function activate(user: any) {
-    const selectedPlanMode = plan === "CLOUD_30D" ? "CLOUD" : "LOCAL";
-    if (user.mode && user.mode !== selectedPlanMode) {
-      setMessage(
-        "MT5 ที่แสดงของ " + user.user_code + " เป็น " + user.mode +
-        " แต่แพ็กที่เลือกเป็น " + selectedPlanMode +
-        " กรุณาเลือกแพ็ก " + user.mode + " ให้ตรงกับ Slot ก่อน"
-      );
-      return;
-    }
     try {
       const result = await adminApi("/admin/subscriptions/activate", {
         method: "POST",
@@ -275,16 +266,16 @@ export default function AdminPage() {
         {activeMenu === "customers" && (
           <>
             <section className="owner-toolbar-card">
-              <div><span className="owner-card-kicker">CUSTOMER & MEMBER</span><h2>ค้นหาและจัดการจากหน้าเดียว</h2><p>ค้นด้วย User ID, Email, LINE หรือเลขบัญชี MT5 แล้วจัดการ Trial, สมาชิก และจำนวน Slot ได้ทันที</p></div>
+              <div><span className="owner-card-kicker">CUSTOMER & MEMBER</span><h2>จัดการบัญชีลูกค้าโดยไม่ต้องกรอก MT5</h2><p>เปิดสมาชิกจาก User ID ได้ก่อน ลูกค้า LOCAL จะให้ระบบอ่านเลขบัญชี MT5 จาก EA/Terminal อัตโนมัติหลังติดตั้ง ส่วนเลข MT5 ใช้สำหรับค้นหาและตรวจสอบเท่านั้น</p></div>
               <form className="owner-search" onSubmit={search}>
-                <input className="input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="BOT-..., email, LINE หรือ MT5"/>
+                <input className="input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="User ID, email, LINE หรือค้นหา MT5 ที่เชื่อมแล้ว"/>
                 <button className="btn primary" disabled={loading}>{loading?"กำลังค้นหา...":"ค้นหา"}</button>
               </form>
             </section>
 
             <section className="owner-card owner-plan-inline-card">
               <div className="owner-card-head">
-                <div><span className="owner-card-kicker">MEMBERSHIP SETUP</span><h3>ค่าที่จะใช้เมื่อกด “เปิดสมาชิก”</h3></div>
+                <div><span className="owner-card-kicker">MEMBERSHIP SETUP</span><h3>เปิดสิทธิ์จากบัญชี SCENOVA</h3><p className="muted">ไม่ต้องรอเลขบัญชี MT5 เลือกแพ็กเกจแล้วกด “เปิดสมาชิก” ที่ลูกค้าได้เลย ระบบจะสร้าง/อัปเดต Slot ตามโหมดของแพ็กเกจ</p></div>
                 <span className="owner-count">ใช้กับลูกค้าที่เลือกด้านล่าง</span>
               </div>
               <div className="owner-plan-inline">
@@ -332,7 +323,7 @@ export default function AdminPage() {
                         <td>
                           {user.role === "OWNER" || user.role === "ADMIN"
                             ? <><b className="text-good">OWNER UNLIMITED</b><br/><span className="muted">ไม่ต้องเปิด Trial / สมาชิก</span></>
-                            : <><b className={user.subscription_active ? "text-good" : ""}>{user.plan_code || "ยังไม่มีสิทธิ์บน Slot นี้"}</b>{user.plan_code && <><br/><span className="muted">{user.mode || "—"} · {user.plan_slots || 1} Slots{user.allow_resale ? " · PARTNER" : ""} · {user.subscription_active ? "ACTIVE" : (user.subscription_status || "INACTIVE")}</span></>}{user.subscription_expires_at && <><br/><span className="muted">ถึง {new Date(user.subscription_expires_at).toLocaleDateString("th-TH")}</span></>}</>}
+                            : <><b className={user.subscription_active ? "text-good" : ""}>{user.plan_code || "ยังไม่มีสมาชิก"}</b>{user.plan_code && <><br/><span className="muted">{user.subscription_mode || "—"} · {user.plan_slots || 1} Slots{user.allow_resale ? " · PARTNER" : ""} · {user.subscription_active ? "ACTIVE" : (user.subscription_status || "INACTIVE")}</span></>}{user.subscription_expires_at && <><br/><span className="muted">ถึง {new Date(user.subscription_expires_at).toLocaleDateString("th-TH")}</span></>}</>}
                         </td>
                         <td><span className={"owner-state-chip "+(user.status==="SUSPENDED"?"bad":"good")}>{user.status}</span></td>
                         <td>
@@ -344,7 +335,7 @@ export default function AdminPage() {
                           ) : (
                             <div className="owner-row-actions owner-row-actions-wrap">
                               <button className="btn" disabled={!user.mt5_account_id || user.trial_request_status !== "PENDING" || Boolean(user.trial_status)} onClick={()=>grantTrial(user)}>อนุมัติ Trial 3h</button>
-                              <button className="btn primary" onClick={()=>activate(user)}>เปิดสิทธิ์ {user.mode || ""}</button>
+                              <button className="btn primary" onClick={()=>activate(user)}>เปิดสมาชิก {plan.startsWith("CLOUD") ? "CLOUD" : "LOCAL"}</button>
                               <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,7)}>+7 วัน</button>
                               <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,30)}>+30 วัน</button>
                               {user.status==="SUSPENDED"
