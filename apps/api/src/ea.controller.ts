@@ -219,7 +219,15 @@ export class EaController {
       ]
     );
 
-    const effectiveDesired = access ? String(instance.desired_state || "STOPPED") : "SAFE_STOP";
+    // Re-read the control state immediately before responding so a Start/Stop
+    // click that happened during this heartbeat cannot be overwritten by stale data.
+    const latestControl = await this.db.one(
+      "SELECT desired_state FROM bot_instances WHERE id=$1",
+      [instance.id]
+    );
+    const effectiveDesired = access
+      ? String(latestControl?.desired_state || "STOPPED")
+      : "SAFE_STOP";
     const cmd = await this.db.one(
       `SELECT id,command,payload
        FROM bot_commands
