@@ -324,7 +324,9 @@ export class EaController {
       instance.slot_id || null
     );
 
-    if (!access && instance.desired_state === "RUNNING") {
+    const dailyProfitLocked = metrics.dailyProfitLocked === true;
+
+    if ((!access || dailyProfitLocked) && instance.desired_state === "RUNNING") {
       await this.db.query(
         "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1",
         [instance.id]
