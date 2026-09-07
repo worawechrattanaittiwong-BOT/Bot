@@ -209,7 +209,9 @@ export default function DashboardPage() {
       "MARKET",
       "Floating $" + Number(m.basketProfit || 0).toFixed(2) +
       " · Positions " + Number(m.positions || 0),
-      "Spread " + Number(m.spreadPoints || 0).toFixed(1) + " pt" +
+      "Spread " + (Number(m.spreadPrice || 0) > 0
+        ? Number(m.spreadPrice).toFixed(Math.max(0,Math.min(8,Number(m.symbolDigits ?? 3))))
+        : Number(m.spreadPoints || 0).toFixed(0) + " points") +
       " · Momentum " + Number(m.momentumPoints || 0).toFixed(1)
     );
 
@@ -317,6 +319,15 @@ export default function DashboardPage() {
     : null;
   const isMt5Online = Boolean(data?.instance?.mt5_online) && state !== "OFFLINE";
   const eaLastSeenAgeSeconds = Number(data?.instance?.ea_last_seen_age_seconds ?? -1);
+  const symbolDigits = Math.max(0, Math.min(8, Number(metrics.symbolDigits ?? 3)));
+  const spreadPoints = Number(metrics.spreadPoints || 0);
+  const pointSize = Number(metrics.pointSize || 0);
+  const spreadPrice = Number(metrics.spreadPrice ?? (pointSize > 0 ? spreadPoints * pointSize : 0));
+  const maxSpreadPrice = Number(metrics.maxSpreadPrice ?? (pointSize > 0 ? Number(metrics.maxSpreadPoints || settings.maxSpreadPoints || 0) * pointSize : 0));
+  const spreadValueLabel = spreadPrice > 0
+    ? spreadPrice.toFixed(symbolDigits) + " (" + spreadPoints.toFixed(0) + " points)"
+    : spreadPoints.toFixed(0) + " points";
+  const spreadLimitLabel = maxSpreadPrice > 0 ? maxSpreadPrice.toFixed(symbolDigits) : "—";
   const entitlement = data?.entitlement;
   const liveStatus = data?.liveStatus || {
     code: isMt5Online ? "RUNNING_READY" : "MT5_OFFLINE",
@@ -1067,7 +1078,7 @@ export default function DashboardPage() {
                     <div className="cc-quick-row">
                       <div className="cc-live-cell"><span>สภาวะตลาด</span><b>{marketRegimeLabel[String(metrics.marketRegime || "")] || "รอข้อมูล"}</b></div>
                       <div className="cc-live-cell"><span>ความมั่นใจ</span><b>{Number(metrics.signalConfidence || 0).toFixed(0)}%</b></div>
-                      <div className="cc-live-cell"><span>Lot ที่ใช้</span><b>{Number(metrics.adaptiveLot || settings.lot).toFixed(2)}</b></div>
+                      <div className="cc-live-cell"><span>Spread · สูงสุด {spreadLimitLabel}</span><b>{spreadValueLabel}</b></div>
                       <div className="cc-live-cell"><span>การเทรด</span><b className={metrics.tradeReady === false ? "text-bad" : "text-good"}>{metrics.tradeReady === false ? "ยังไม่พร้อม" : metrics.tradeReady === true ? "พร้อม" : "—"}</b></div>
                       <button
                         className="btn cc-save-quick"
@@ -1696,7 +1707,7 @@ export default function DashboardPage() {
                 <TerminalStat label="CONNECTION" value={connectionLabel} tone={isMt5Online ? "good" : "bad"} />
                 <TerminalStat label="ACTUAL" value={String(botLogs?.snapshot?.actual_state || state)} tone={state==="RUNNING" ? "good" : "neutral"} />
                 <TerminalStat label="DESIRED" value={String(botLogs?.snapshot?.desired_state || desired)} tone={desired==="RUNNING" ? "good" : "neutral"} />
-                <TerminalStat label="SPREAD" value={Number(metrics.spreadPoints || 0).toFixed(1)+" pt"} />
+                <TerminalStat label="SPREAD" value={spreadValueLabel} />
                 <TerminalStat label="MOMENTUM" value={Number(metrics.momentumPoints || 0).toFixed(1)} />
                 <TerminalStat label="POSITIONS" value={String(metrics.positions || 0)} />
               </div>
