@@ -82,6 +82,7 @@ export class BotController {
       TERMINAL_DISCONNECTED: { label: "MT5 ไม่มีการเชื่อมต่อ", detail: "Terminal ยังไม่เชื่อม Broker/Server", tone: "bad" },
       ALGO_TRADING_OFF: { label: "Algo Trading ปิดอยู่", detail: "เปิด Algo Trading ใน MetaTrader 5 ก่อนเริ่มบอท", tone: "bad" },
       EA_TRADING_DISABLED: { label: "EA ไม่ได้รับอนุญาตให้เทรด", detail: "เปิด Allow Algo Trading ใน Properties ของ EA", tone: "bad" },
+      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "อัปเดต FastBasketBot และรีสตาร์ต/ถอดติด EA ใน MT5 ให้รัน v1.003 ก่อนเริ่มบอท", tone: "bad" },
       ACCOUNT_TRADING_DISABLED: { label: "บัญชีนี้ไม่อนุญาตให้เทรด", detail: "ตรวจสิทธิ์ Trading ของบัญชีกับ Broker", tone: "bad" },
       ACCOUNT_EXPERT_DISABLED: { label: "บัญชีไม่อนุญาต Expert Advisor", detail: "Broker/บัญชีปิดการเทรดด้วย EA", tone: "bad" },
       SYMBOL_TRADING_DISABLED: { label: "Symbol นี้เปิดออเดอร์ไม่ได้", detail: "Broker ปิดการเปิดออเดอร์ใหม่บน Symbol นี้", tone: "bad" },
@@ -124,6 +125,11 @@ export class BotController {
     if (!instance.mt5_online) {
       const meta = this.executionStatusMeta("MT5_OFFLINE");
       return { code: "MT5_OFFLINE", ...meta, tradeReady: false };
+    }
+
+    if (String(metrics.eaVersion || "") !== "1.003") {
+      const meta = this.executionStatusMeta("EA_RUNTIME_OUTDATED");
+      return { code: "EA_RUNTIME_OUTDATED", ...meta, tradeReady: false };
     }
 
     const permissionChecks: Array<[string, any]> = [
@@ -986,6 +992,11 @@ export class BotController {
       const expectedHash = this.productionEaHash();
       if (!expectedHash || !instance.agent_ea_hash || String(instance.agent_ea_hash).toLowerCase() !== expectedHash) {
         throw new ConflictException("SCENOVA EA integrity/version check failed; update or repair the EA before starting");
+      }
+
+      const runningEaVersion = String(instance.metrics?.eaVersion || "");
+      if (runningEaVersion !== "1.003") {
+        throw new ConflictException("EA ที่กำลังรันใน MT5 เป็นรุ่นเก่า กรุณาอัปเดต FastBasketBot แล้ว Restart MT5 หรือถอด/ติด EA ใหม่ให้เป็น v1.003");
       }
     }
 
