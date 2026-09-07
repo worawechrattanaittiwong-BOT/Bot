@@ -78,11 +78,10 @@ export class BotController {
     const map: Record<string, { label: string; detail: string; tone: string }> = {
       NOT_INSTALLED: { label: "ยังไม่ได้ติดตั้ง", detail: "ติดตั้ง SCENOVA จากเว็บไซต์ก่อน", tone: "warn" },
       MT5_OFFLINE: { label: "MT5 ยังไม่เชื่อมต่อ", detail: "ยังไม่พบ Heartbeat จาก EA ใน MetaTrader 5", tone: "bad" },
-      EA_NOT_LOADED: { label: "Device Agent ออนไลน์ แต่ EA ยังไม่ทำงาน", detail: "ติดตั้งสำเร็จแล้ว แต่ FastBasketBot ยังไม่ได้ถูกโหลด/เชื่อมใน MT5", tone: "warn" },
       TERMINAL_DISCONNECTED: { label: "MT5 ไม่มีการเชื่อมต่อ", detail: "Terminal ยังไม่เชื่อม Broker/Server", tone: "bad" },
       ALGO_TRADING_OFF: { label: "Algo Trading ปิดอยู่", detail: "เปิด Algo Trading ใน MetaTrader 5 ก่อนเริ่มบอท", tone: "bad" },
       EA_TRADING_DISABLED: { label: "EA ไม่ได้รับอนุญาตให้เทรด", detail: "เปิด Allow Algo Trading ใน Properties ของ EA", tone: "bad" },
-      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "อัปเดต FastBasketBot และรีสตาร์ต/ถอดติด EA ใน MT5 ให้รัน v1.003 ก่อนเริ่มบอท", tone: "bad" },
+      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "ติดตั้ง/อัปเดต FastBasketBot จากเว็บไซต์ SCENOVA ให้เป็น v1.003 ขึ้นไป", tone: "bad" },
       ACCOUNT_TRADING_DISABLED: { label: "บัญชีนี้ไม่อนุญาตให้เทรด", detail: "ตรวจสิทธิ์ Trading ของบัญชีกับ Broker", tone: "bad" },
       ACCOUNT_EXPERT_DISABLED: { label: "บัญชีไม่อนุญาต Expert Advisor", detail: "Broker/บัญชีปิดการเทรดด้วย EA", tone: "bad" },
       SYMBOL_TRADING_DISABLED: { label: "Symbol นี้เปิดออเดอร์ไม่ได้", detail: "Broker ปิดการเปิดออเดอร์ใหม่บน Symbol นี้", tone: "bad" },
