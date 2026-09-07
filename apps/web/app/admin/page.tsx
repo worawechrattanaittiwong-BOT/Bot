@@ -14,7 +14,7 @@ export default function AdminPage() {
   const [days, setDays] = useState(30);
   const [startsAt, setStartsAt] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
-  const [plan, setPlan] = useState("CLOUD_30D");
+  const [plan, setPlan] = useState("LOCAL_30D");
   const [system, setSystem] = useState<any>(null);
   const [activeMenu, setActiveMenu] = useState<Menu>("overview");
   const [loading, setLoading] = useState(false);
@@ -75,6 +75,9 @@ export default function AdminPage() {
 
   async function grantTrial(user: any) {
     if (!user.mt5_account_id) return setMessage("บัญชีนี้ยังไม่ได้เชื่อม MT5");
+    if (!user.trial_request_id || user.trial_request_status !== "PENDING") {
+      return setMessage("ลูกค้าต้องส่งคำขอ Trial พร้อม LINE จากหน้า SCENOVA ก่อน");
+    }
     try {
       await adminApi("/admin/trials/grant", {
         method: "POST",
@@ -227,7 +230,7 @@ export default function AdminPage() {
               <OwnerKpi label="ผู้ใช้ทั้งหมด" value={system?.users?.total ?? "—"} meta="บัญชีที่ยังใช้งานในระบบ" tone="blue"/>
               <OwnerKpi label="ผู้ใช้ Active" value={system?.users?.active ?? "—"} meta="พร้อมใช้งาน" tone="green"/>
               <OwnerKpi label="Bots Running" value={system?.bots?.running ?? "—"} meta="กำลังทำงาน" tone="purple"/>
-              <OwnerKpi label="Bots Offline" value={system?.bots?.offline ?? "—"} meta="ควรตรวจสอบ" tone={(system?.bots?.offline||0)>0?"red":"neutral"}/>
+              <OwnerKpi label="Bots Offline" value={system?.bots?.offline ?? "—"} meta={"Slots " + (system?.slots?.active ?? 0) + " active"} tone={(system?.bots?.offline||0)>0?"red":"neutral"}/>
             </section>
 
             <div className="owner-overview-grid">
@@ -259,9 +262,9 @@ export default function AdminPage() {
         {activeMenu === "customers" && (
           <>
             <section className="owner-toolbar-card">
-              <div><span className="owner-card-kicker">CUSTOMER & MEMBER</span><h2>ค้นหาและจัดการจากหน้าเดียว</h2><p>ค้นด้วย User ID, Email หรือเลขบัญชี MT5 แล้วจัดการ Trial และสมาชิกได้ทันที</p></div>
+              <div><span className="owner-card-kicker">CUSTOMER & MEMBER</span><h2>ค้นหาและจัดการจากหน้าเดียว</h2><p>ค้นด้วย User ID, Email, LINE หรือเลขบัญชี MT5 แล้วจัดการ Trial, สมาชิก และจำนวน Slot ได้ทันที</p></div>
               <form className="owner-search" onSubmit={search}>
-                <input className="input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="BOT-..., email หรือ MT5"/>
+                <input className="input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="BOT-..., email, LINE หรือ MT5"/>
                 <button className="btn primary" disabled={loading}>{loading?"กำลังค้นหา...":"ค้นหา"}</button>
               </form>
             </section>
@@ -272,7 +275,15 @@ export default function AdminPage() {
                 <span className="owner-count">ใช้กับลูกค้าที่เลือกด้านล่าง</span>
               </div>
               <div className="owner-plan-inline">
-                <div className="field"><label>แพ็กเกจ</label><select className="input" value={plan} onChange={e=>setPlan(e.target.value)}><option value="CLOUD_30D">CLOUD 30D</option><option value="LOCAL_30D">LOCAL 30D</option></select></div>
+                <div className="field"><label>แพ็กเกจ</label><select className="input" value={plan} onChange={e=>setPlan(e.target.value)}>
+                  <option value="LOCAL_30D">LOCAL 30D · 1 Slot</option>
+                  <option value="LOCAL_3SLOT">LOCAL 30D · 3 Slots</option>
+                  <option value="LOCAL_5SLOT">LOCAL 30D · 5 Slots</option>
+                  <option value="PARTNER_LOCAL_10">PARTNER LOCAL · 10 Slots</option>
+                  <option value="PARTNER_LOCAL_25">PARTNER LOCAL · 25 Slots</option>
+                  <option value="PARTNER_LOCAL_50">PARTNER LOCAL · 50 Slots</option>
+                  <option value="CLOUD_30D">CLOUD 30D · 1 Slot</option>
+                </select></div>
                 <div className="field"><label>วันเริ่ม <span className="muted">(ว่าง = เริ่มทันที)</span></label><input className="input" type="datetime-local" value={startsAt} onChange={e=>setStartsAt(e.target.value)}/></div>
                 <div className="field"><label>จำนวนวัน</label><input className="input" type="number" min={1} value={days} onChange={e=>setDays(Number(e.target.value))}/></div>
                 <div className="field"><label>กำหนดวันหมดอายุเอง</label><input className="input" type="datetime-local" value={expiresAt} onChange={e=>setExpiresAt(e.target.value)}/><div className="help">ถ้ากรอก ระบบจะใช้วันนี้แทนจำนวนวัน</div></div>
@@ -299,12 +310,16 @@ export default function AdminPage() {
                         <td>
                           {user.role === "OWNER" || user.role === "ADMIN"
                             ? <><b className="text-good">FULL ACCESS</b><br/><span className="muted">ไม่ใช้ระบบ Trial</span></>
-                            : <><b>{user.trial_status ? "Trial " + user.trial_status : "ยังไม่มี Trial"}</b>{user.trial_expires_at && <><br/><span className="muted">ถึง {new Date(user.trial_expires_at).toLocaleString("th-TH")}</span></>}</>}
+                            : user.trial_status
+                              ? <><b>{"Trial " + user.trial_status}</b>{user.trial_expires_at && <><br/><span className="muted">ถึง {new Date(user.trial_expires_at).toLocaleString("th-TH")}</span></>}</>
+                              : user.trial_request_status === "PENDING"
+                                ? <div className="owner-trial-request"><b className="text-warn">รออนุมัติ Trial</b><small>LINE: {user.line_contact || "—"}</small><small>IP: {user.request_ip || "—"} · พบ {user.ip_user_count || 0} User / {user.ip_trial_count || 0} Trial</small></div>
+                                : <><b>ยังไม่มี Trial</b><br/><span className="muted">รอลูกค้าส่งคำขอพร้อม LINE</span></>}
                         </td>
                         <td>
                           {user.role === "OWNER" || user.role === "ADMIN"
                             ? <><b className="text-good">OWNER UNLIMITED</b><br/><span className="muted">ไม่ต้องเปิด Trial / สมาชิก</span></>
-                            : <>{user.plan_code || "ยังไม่มีสมาชิก"}{user.subscription_expires_at && <><br/><span className="muted">ถึง {new Date(user.subscription_expires_at).toLocaleDateString("th-TH")}</span></>}</>}
+                            : <><b>{user.plan_code || "ยังไม่มีสมาชิก"}</b>{user.plan_code && <><br/><span className="muted">{user.plan_slots || 1} Slots{user.allow_resale ? " · PARTNER" : ""} · ใช้แล้ว {user.assigned_slots || 0}/{user.total_slots || 0}</span></>}{user.subscription_expires_at && <><br/><span className="muted">ถึง {new Date(user.subscription_expires_at).toLocaleDateString("th-TH")}</span></>}</>}
                         </td>
                         <td><span className={"owner-state-chip "+(user.status==="SUSPENDED"?"bad":"good")}>{user.status}</span></td>
                         <td>
@@ -315,7 +330,7 @@ export default function AdminPage() {
                             </div>
                           ) : (
                             <div className="owner-row-actions owner-row-actions-wrap">
-                              <button className="btn" onClick={()=>grantTrial(user)}>Trial 3h</button>
+                              <button className="btn" disabled={!user.mt5_account_id || user.trial_request_status !== "PENDING" || Boolean(user.trial_status)} onClick={()=>grantTrial(user)}>อนุมัติ Trial 3h</button>
                               <button className="btn primary" onClick={()=>activate(user)}>เปิดสมาชิก</button>
                               <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,7)}>+7 วัน</button>
                               <button className="btn" disabled={!user.subscription_id} onClick={()=>extend(user,30)}>+30 วัน</button>
