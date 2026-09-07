@@ -726,7 +726,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <header className="page-head human-head">
+        <header className="page-head human-head cc-page-head">
           <div>
             <div className="eyebrow">CONTROL CENTER</div>
             <h2 style={{marginTop:7}}>
@@ -735,8 +735,8 @@ export default function DashboardPage() {
               {activeView === "access" && "สิทธิ์ใช้งาน"}
             </h2>
             <div className="muted page-subtitle">
-              {activeView === "overview" && "ดูสถานะ สั่ง Start/Stop และตั้งค่าบอทจากหน้าเดียว"}
-              {activeView === "account" && "ติดตั้ง/อัปเดตจากเว็บไซต์ และจัดการการเชื่อมต่อ MT5 โดยไม่ต้องแก้ .set เอง"}
+              {activeView === "overview" && "ดูสถานะ ควบคุมบอท และติดตามการทำงานแบบเรียลไทม์"}
+              {activeView === "account" && "ติดตั้ง/อัปเดต SCENOVA และจัดการการเชื่อมต่อ MT5"}
               {activeView === "access" && "ตรวจสถานะ Trial สมาชิก และเวลาคงเหลือ"}
             </div>
           </div>
@@ -744,6 +744,56 @@ export default function DashboardPage() {
             <span className="badge"><span className={"dot " + (isMt5Online ? "green":"red")}/>{connectionLabel}</span>
             <span className="badge"><span className={"dot " + (desired==="RUNNING" ? "blue":"purple")}/>{controlStateLabel}</span>
             {activeView === "overview" && (
+              <span className="badge cc-version-chip">
+                <b>{metrics.productVersion ? "v" + metrics.productVersion : "SCENOVA"}</b>
+              </span>
+            )}
+          </div>
+        </header>
+
+        {(data.slots || []).filter((slot:any)=>slot.can_control).length > 1 && (
+          <section className="slot-switcher">
+            <div>
+              <span className="slot-switcher-label">ACTIVE SLOT</span>
+              <b>เลือก Slot ที่ต้องการควบคุม</b>
+            </div>
+            <select
+              className="input slot-switcher-select"
+              value={selectedSlotId || data.selectedSlot?.id || ""}
+              onChange={e=>selectSlot(e.target.value)}
+            >
+              {(data.slots || []).filter((slot:any)=>slot.can_control).map((slot:any)=>(
+                <option key={slot.id} value={slot.id}>
+                  Slot {slot.slot_number} · {slot.mode} · {slot.account_number || "ยังไม่เชื่อม MT5"}
+                </option>
+              ))}
+            </select>
+          </section>
+        )}
+
+        {error && <div className="notice bad page-notice">{error}</div>}
+        {notice && <div className="notice good page-notice">{notice}</div>}
+
+        {activeView === "overview" && installerUpdateRequired && (
+          <div className="notice bad page-notice onboarding-notice">
+            <div>
+              <b>ต้องอัปเดต SCENOVA ก่อนเริ่มบอท</b>
+              <span>
+                เครื่องนี้ใช้ {softwareUpdate.currentVersion ? "v" + softwareUpdate.currentVersion : "เวอร์ชันที่ตรวจสอบไม่ได้"}
+                {" · "}เวอร์ชันล่าสุดคือ v{softwareUpdate.latestVersion}
+              </span>
+            </div>
+            <button
+              className="btn primary"
+              disabled={busy || desired === "RUNNING" || (state === "RUNNING" && isMt5Online)}
+              onClick={downloadWindowsInstaller}
+            >
+              {busy ? "กำลังเตรียม..." : "อัปเดตเป็น v" + softwareUpdate.latestVersion}
+            </button>
+          </div>
+        )}
+
+        {activeView === "overview" && (
           !data.account ? (
             <EmptySetup onNext={()=>setActiveView("account")} />
           ) : (
