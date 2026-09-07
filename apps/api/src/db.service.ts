@@ -107,7 +107,8 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         ADD COLUMN IF NOT EXISTS pending_broker varchar(120),
         ADD COLUMN IF NOT EXISTS pending_broker_server varchar(160),
         ADD COLUMN IF NOT EXISTS pending_account_ip varchar(96),
-        ADD COLUMN IF NOT EXISTS pending_account_seen_at timestamptz;
+        ADD COLUMN IF NOT EXISTS pending_account_seen_at timestamptz,
+        ADD COLUMN IF NOT EXISTS account_change_requested_at timestamptz;
 
       DO $migration$
       BEGIN
