@@ -158,20 +158,87 @@ void OnTick()
    }
 
    int count = BasketPositionCount();
+   if(count > 0)
+      UpdateBasketPeakPositionCount(count);
+   else
+      ResetBasketCycleState();
+
    double profit = BasketProfit();
    double momentum = MomentumPoints();
+   double dailyProfit = DailyBotProfit();
    g_executionStatus = "EVALUATING";
+
+   // Daily profit is a hard lock for the rest of the broker day. It counts
+   // realized EA P/L today plus the current basket floating P/L.
+   if(g_dailyProfitLocked ||
+      (g_dailyProfitTarget > 0.0 && dailyProfit >= g_dailyProfitTarget))
+   {
+      if(!g_dailyProfitLocked)
+         LockDailyProfitTarget();
+
+      if(count > 0)
+         CloseAllBasket("DAILY_PROFIT_TARGET");
+
+      g_state = STATE_SAFE_STOP;
+      g_runAuthorized = false;
+      g_forceFirstEntry = false;
+      g_executionStatus = "DAILY_PROFIT_LOCK";
+      ResetTrail();
+      return;
+   }
 
    if(g_dailyLoss > 0.0 && AccountInfoDouble(ACCOUNT_EQUITY) <= g_dayStartEquity - g_dailyLoss)
    {
       if(count > 0) CloseAllBasket("DAILY_LOSS");
       g_state = STATE_SAFE_STOP;
+      g_runAuthorized = false;
+      g_forceFirstEntry = false;
       g_executionStatus = "DAILY_LOSS_LOCK";
       return;
    }
 
    if(count > 0)
    {
+      // Per-position controls are evaluated before basket trailing. The
+      // profit target per position is the basket target divided by the
+      // highest number of simultaneous positions seen in this basket cycle.
+      bool closedIndividual = ManagePerPositionTargets();
+      if(closedIndividual)
+      {
+         count = BasketPositionCount();
+         profit = BasketProfit();
+         dailyProfit = DailyBotProfit();
+
+         if(g_dailyProfitTarget > 0.0 && dailyProfit >= g_dailyProfitTarget)
+         {
+            LockDailyProfitTarget();
+            if(count > 0) CloseAllBasket("DAILY_PROFIT_TARGET");
+            g_state = STATE_SAFE_STOP;
+            g_runAuthorized = false;
+            g_forceFirstEntry = false;
+            g_executionStatus = "DAILY_PROFIT_LOCK";
+            ResetTrail();
+            return;
+         }
+
+         if(count == 0)
+         {
+            ResetTrail();
+            ResetBasketCycleState();
+            g_executionStatus = "POSITION_TARGET_CLOSED";
+            return;
+         }
+      }
+
+      double cycleProfit = BasketCycleProfit();
+      if(g_basketProfitTarget > 0.0 && cycleProfit >= g_basketProfitTarget)
+      {
+         CloseAllBasket("BASKET_PROFIT_TARGET");
+         ResetTrail();
+         g_executionStatus = "BASKET_PROFIT_TARGET";
+         return;
+      }
+
       if(g_maxBasketLoss > 0.0 && profit <= -g_maxBasketLoss)
       {
          CloseAllBasket("MAX_BASKET_LOSS");
@@ -213,10 +280,18 @@ void OnTick()
          ResetTrail();
          return;
       }
+
+      if(closedIndividual)
+      {
+         // Do not replace a position on the same tick that it was closed by
+         // a profit/loss rule. Re-evaluate the basket on the next market tick.
+         return;
+      }
    }
    else
    {
       ResetTrail();
+      ResetBasketCycleState();
       if(g_state == STATE_SAFE_STOP)
       {
          g_state = STATE_STOPPED;
