@@ -271,6 +271,16 @@ export class EaController {
       );
 
     if (accountMismatch) {
+      const previousBoundPositions = Number(
+        instance.metrics?.previousBoundPositions ??
+        instance.metrics?.positions ??
+        0
+      );
+      const mismatchMetrics = {
+        ...metrics,
+        previousBoundPositions
+      };
+
       await this.db.query(
         `UPDATE bot_instances SET
            actual_state='SAFE_STOP',
@@ -287,7 +297,7 @@ export class EaController {
         [
           instance.id,
           eaIp,
-          JSON.stringify(metrics),
+          JSON.stringify(mismatchMetrics),
           reportedAccount,
           reportedBroker || null,
           reportedServer || "UNKNOWN"
@@ -301,6 +311,8 @@ export class EaController {
         detectedAccount: reportedAccount,
         detectedBroker: reportedBroker || null,
         detectedServer: reportedServer || null,
+        previousBoundPositions,
+        accountChangeBlocked: previousBoundPositions > 0,
         settings: {}
       };
     }
