@@ -26,7 +26,7 @@ export class BotController {
 
   private supportedEaRuntime(version: any) {
     const value = Number(String(version || "").trim());
-    return Number.isFinite(value) && value >= 1.008;
+    return Number.isFinite(value) && value >= 1.010;
   }
 
   private installerUpdateState(instance: any, mode?: string | null) {
@@ -107,8 +107,8 @@ export class BotController {
       MT5_OFFLINE: { label: "MT5 ยังไม่เชื่อมต่อ", detail: "ยังไม่พบ Heartbeat จาก EA ใน MetaTrader 5", tone: "bad" },
       TERMINAL_DISCONNECTED: { label: "MT5 ไม่มีการเชื่อมต่อ", detail: "Terminal ยังไม่เชื่อม Broker/Server", tone: "bad" },
       ALGO_TRADING_OFF: { label: "Algo Trading ปิดอยู่", detail: "เปิด Algo Trading ใน MetaTrader 5 ก่อนเริ่มบอท", tone: "bad" },
-      EA_TRADING_DISABLED: { label: "EA ไม่ได้รับอนุญาตให้เทรด", detail: "เปิด Allow Algo Trading ใน Properties ของ EA", tone: "bad" },
-      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "ติดตั้ง/อัปเดต FastBasketBot จากเว็บไซต์ SCENOVA ให้เป็น v1.008 ขึ้นไป", tone: "bad" },
+      EA_TRADING_DISABLED: { label: "กำลังแก้สิทธิ์การเทรดของ EA", detail: "SCENOVA Agent จะเปิด MT5 ใหม่พร้อม Allow Live Trading อัตโนมัติ หากยังไม่หายให้ตรวจ Algo Trading ด้านบนของ MT5", tone: "warn" },
+      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "อัปเดต SCENOVA เพื่อใช้ Adaptive Engine รุ่นล่าสุด", tone: "bad" },
       ACCOUNT_TRADING_DISABLED: { label: "บัญชีนี้ไม่อนุญาตให้เทรด", detail: "ตรวจสิทธิ์ Trading ของบัญชีกับ Broker", tone: "bad" },
       ACCOUNT_EXPERT_DISABLED: { label: "บัญชีไม่อนุญาต Expert Advisor", detail: "Broker/บัญชีปิดการเทรดด้วย EA", tone: "bad" },
       SYMBOL_TRADING_DISABLED: { label: "Symbol นี้เปิดออเดอร์ไม่ได้", detail: "Broker ปิดการเปิดออเดอร์ใหม่บน Symbol นี้", tone: "bad" },
@@ -129,7 +129,7 @@ export class BotController {
       WAITING_CONFIDENCE: { label: "กำลังรอความมั่นใจของสัญญาณ", detail: "คะแนนหลาย Timeframe ยังต่ำกว่าเกณฑ์ที่ตั้งไว้", tone: "good" },
       WAITING_TREND_ALIGNMENT: { label: "กำลังรอแนวโน้มยืนยัน", detail: "M15 และ H1 ยังไม่สนับสนุนทิศทางเข้าออเดอร์", tone: "good" },
       SESSION_BLOCKED: { label: "อยู่นอกช่วงเวลาเทรด", detail: "Adaptive Engine จะเริ่มประเมินใหม่ใน Session ที่กำหนด", tone: "warn" },
-      VOLATILITY_TOO_HIGH: { label: "ความผันผวนสูงเกินกำหนด", detail: "ATR สูงกว่าระดับปลอดภัย ระบบจึงพักการเปิดออเดอร์ใหม่", tone: "warn" },
+      VOLATILITY_TOO_HIGH: { label: "ความผันผวนสูง", detail: "EA รุ่นเก่าใช้ ATR เป็นตัวบล็อก กรุณาอัปเดตเป็น Adaptive Engine รุ่นล่าสุด", tone: "warn" },
       ADAPTIVE_DATA_NOT_READY: { label: "กำลังเตรียมข้อมูลตลาด", detail: "รอข้อมูลแท่งราคา M5, M15 และ H1 ให้เพียงพอ", tone: "warn" },
       LOSS_COOLDOWN: { label: "พักหลังขาดทุน", detail: "ระบบหยุดเปิดไม้ชั่วคราวเพื่อลดการเทรดแก้มือ", tone: "warn" },
       RISK_LIMIT_TOO_SMALL: { label: "ความเสี่ยงไม่พอสำหรับ Lot ขั้นต่ำ", detail: "Stop distance และ Equity ปัจจุบันทำให้ Lot ขั้นต่ำของ Broker เสี่ยงเกินค่าที่ตั้งไว้", tone: "warn" },
@@ -1169,7 +1169,7 @@ export class BotController {
         throw new ConflictException("Algo Trading ปิดอยู่ กรุณาเปิด Algo Trading ใน MT5 ก่อนเริ่มบอท");
       }
       if (metrics.mqlTradeAllowed === false) {
-        throw new ConflictException("EA ยังไม่ได้เปิด Allow Algo Trading ใน Properties");
+        throw new ConflictException("EA ยังไม่พร้อมส่งคำสั่ง ระบบกำลังซ่อม Allow Live Trading อัตโนมัติ กรุณารอ Heartbeat ถัดไป");
       }
       if (metrics.accountTradeAllowed === false) {
         throw new ConflictException("บัญชี MT5 นี้ไม่อนุญาตให้เทรด");
