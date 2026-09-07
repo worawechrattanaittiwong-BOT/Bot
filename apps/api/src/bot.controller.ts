@@ -258,6 +258,8 @@ export class BotController {
          bi.id instance_id,
          bi.actual_state,
          bi.desired_state,
+         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') mt5_online,
          bi.device_status,
          bi.device_hostname,
          bi.device_last_seen_at,
@@ -268,7 +270,8 @@ export class BotController {
          a.broker,
          a.broker_server,
          a.status account_status,
-         (ls.assigned_user_id=$1) can_control,
+         (ls.assigned_user_id=$1 AND ls.status IN ('ACTIVE','AVAILABLE')) can_control,
+         (ls.assigned_user_id=$1 AND ls.mode='LOCAL' AND ls.status<>'DELETED') can_release_device,
          (ls.owner_user_id=$1) can_manage,
          (s.id IS NOT NULL AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now()) subscription_active
        FROM license_slots ls
@@ -684,24 +687,38 @@ export class BotController {
 
   @Post("device/release")
   async releaseLocalDevice(@Req() req: any, @Query("slotId") slotId = "") {
-    const slot = await this.resolveSlot(req.user.sub, slotId || null);
-    if (slot.mode !== "LOCAL") {
-      throw new ConflictException("Device Lock ใช้กับ LOCAL Slot เท่านั้น");
+    const slot = await this.db.one(
+      `SELECT *
+       FROM license_slots
+       WHERE id=$1
+         AND assigned_user_id=$2
+         AND mode='LOCAL'
+         AND status<>'DELETED'`,
+      [slotId, req.user.sub]
+    );
+    if (!slot) {
+      throw new ConflictException("ไม่พบ Local Slot นี้ หรือ Slot ไม่ได้เป็นของบัญชี SCENOVA นี้");
     }
 
     const instance = await this.db.one(
-      "SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions FROM bot_instances bi WHERE bi.slot_id=$1",
+      `SELECT bi.*,
+         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') mt5_online
+       FROM bot_instances bi
+       WHERE bi.slot_id=$1`,
       [slot.id]
     );
     if (!instance) {
       return { ok: true, released: false, message: "Slot นี้ยังไม่มี Device ที่ลงทะเบียน" };
     }
+    if (Number(instance.positions || 0) > 0) {
+      throw new ConflictException("ยังมี Position ค้างอยู่ กรุณาปิด Position ให้เรียบร้อยก่อนปลดหรือย้ายเครื่อง");
+    }
     if (
-      instance.actual_state === "RUNNING" ||
-      instance.desired_state === "RUNNING" ||
-      Number(instance.positions || 0) > 0
+      Boolean(instance.mt5_online) &&
+      (instance.actual_state === "RUNNING" || instance.desired_state === "RUNNING")
     ) {
-      throw new ConflictException("หยุดบอทและปิด Position ให้เรียบร้อยก่อนปลดหรือย้ายเครื่อง");
+      throw new ConflictException("MT5 ยัง Online และบอทกำลังทำงาน กรุณากดหยุดบอทก่อนปลดหรือย้ายเครื่อง");
     }
 
     const revoked = randomBytes(32).toString("hex");
