@@ -162,6 +162,17 @@ export class InstallerController {
         [enrollment.id]
       );
     }
+    const startup = await this.db.one(
+      `SELECT COALESCE(
+           NULLIF(bi.metrics->>'symbol',''),
+           NULLIF(bs.settings->>'symbol',''),
+           'XAUUSD'
+         ) AS startup_symbol
+       FROM bot_instances bi
+       LEFT JOIN bot_settings bs ON bs.bot_instance_id=bi.id
+       WHERE bi.id=$1`,
+      [instance.id]
+    );
     await this.db.query(
       "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'ENROLL_DEVICE','bot_instance',$2,$3::jsonb)",
       [
@@ -187,7 +198,8 @@ export class InstallerController {
       webBase: process.env.PUBLIC_WEB_BASE || "https://snvea-bot.online",
       artifactHash: this.artifactHash(),
       artifactEndpoint: "/api/ea/artifact",
-      agentVersionRequired: "2.0.3",
+      startupSymbol: String(startup?.startup_symbol || "XAUUSD"),
+      agentVersionRequired: "2.0.4",
       preservedLegacyToken: canPreserveLegacy
     };
   }
