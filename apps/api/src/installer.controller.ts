@@ -186,7 +186,7 @@ export class InstallerController {
       artifactHash: this.artifactHash(),
       artifactEndpoint: "/api/ea/artifact",
       startupSymbol: String(startup?.startup_symbol || "XAUUSD"),
-      agentVersionRequired: "2.0.4",
+      agentVersionRequired: "2.0.5",
       preservedLegacyToken: canPreserveLegacy
     };
   }
