@@ -211,11 +211,8 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         WHERE status='ACTIVE';
 
 
-      -- Legacy XAUUSD profiles used 50 raw broker points as Max Spread.
-      -- On 3-decimal gold symbols (for example XAUUSDm), a normal 0.260
-      -- Bid/Ask gap is 260 points, so 50 blocked nearly every entry.
-      -- Upgrade only the untouched legacy 50pt gold profile; custom values
-      -- chosen by users are preserved.
+      -- This value is a fail-safe used only while Adaptive Spread warms up.
+      -- Live trading uses rolling broker/symbol percentiles from the EA.
       UPDATE bot_settings
       SET
         settings=jsonb_set(settings,'{maxSpreadPoints}','300'::jsonb,true),
@@ -235,10 +232,16 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         "sessionStartHour":0,
         "sessionEndHour":24,
         "maxAtrPoints":3000,
-        "cooldownMinutesAfterLoss":15,
+        "cooldownMinutesAfterLoss":5,
         "maxConsecutiveLosses":3
       }'::jsonb || settings
       WHERE NOT settings ? 'adaptiveEngine';
+
+      -- Reduce the old untouched cooldown default. Custom values remain intact.
+      UPDATE bot_settings
+      SET settings=jsonb_set(settings,'{cooldownMinutesAfterLoss}','5'::jsonb,true),
+          updated_at=now()
+      WHERE COALESCE((settings->>'cooldownMinutesAfterLoss')::int,15)=15;
     `);
   }
 

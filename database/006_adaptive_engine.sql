@@ -9,7 +9,7 @@ SET
     "sessionStartHour":0,
     "sessionEndHour":24,
     "maxAtrPoints":3000,
-    "cooldownMinutesAfterLoss":15,
+    "cooldownMinutesAfterLoss":5,
     "maxConsecutiveLosses":3
   }'::jsonb || settings,
   updated_at=now()

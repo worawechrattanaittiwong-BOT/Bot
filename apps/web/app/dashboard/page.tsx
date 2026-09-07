@@ -53,7 +53,7 @@ const defaultSettings = {
   sessionStartHour: 0,
   sessionEndHour: 24,
   maxAtrPoints: 3000,
-  cooldownMinutesAfterLoss: 15,
+  cooldownMinutesAfterLoss: 5,
   maxConsecutiveLosses: 3,
   entryMode: "AUTO_MOMENTUM"
 };
@@ -190,7 +190,9 @@ export default function DashboardPage() {
       [
         snapshot.account_number || data?.account?.account_number,
         snapshot.broker || data?.account?.broker,
-        m.server || snapshot.broker_server || data?.account?.broker_server
+        m.server || snapshot.broker_server || data?.account?.broker_server,
+        "HTTP " + String(m.heartbeatHttpStatus || "—"),
+        Number(m.heartbeatLatencyMs || 0) > 0 ? Number(m.heartbeatLatencyMs).toFixed(0) + " ms" : ""
       ].filter(Boolean).join(" · ")
     );
 
@@ -323,11 +325,34 @@ export default function DashboardPage() {
   const spreadPoints = Number(metrics.spreadPoints || 0);
   const pointSize = Number(metrics.pointSize || 0);
   const spreadPrice = Number(metrics.spreadPrice ?? (pointSize > 0 ? spreadPoints * pointSize : 0));
-  const maxSpreadPrice = Number(metrics.maxSpreadPrice ?? (pointSize > 0 ? Number(metrics.maxSpreadPoints || settings.maxSpreadPoints || 0) * pointSize : 0));
+  const adaptiveSpreadLimitPoints = Number(metrics.adaptiveSpreadLimitPoints ?? metrics.maxSpreadPoints ?? settings.maxSpreadPoints ?? 0);
+  const maxSpreadPrice = Number(metrics.adaptiveSpreadLimitPrice ?? (pointSize > 0 ? adaptiveSpreadLimitPoints * pointSize : metrics.maxSpreadPrice || 0));
   const spreadValueLabel = spreadPrice > 0
     ? spreadPrice.toFixed(symbolDigits) + " (" + spreadPoints.toFixed(0) + " points)"
     : spreadPoints.toFixed(0) + " points";
   const spreadLimitLabel = maxSpreadPrice > 0 ? maxSpreadPrice.toFixed(symbolDigits) : "—";
+  const spreadMetricLabel = (points:any) => {
+    const value = Number(points || 0);
+    if (value <= 0) return "—";
+    return pointSize > 0
+      ? (value * pointSize).toFixed(symbolDigits) + " (" + value.toFixed(0) + ")"
+      : value.toFixed(0) + " points";
+  };
+  const spreadStatus = String(metrics.spreadStatus || "WARMUP");
+  const spreadStatusLabel:Record<string,string> = {
+    NORMAL: "ปกติ",
+    ELEVATED: "สูงกว่าปกติ",
+    BLOCKED: "พักเปิดออเดอร์ใหม่",
+    FALLBACK_BLOCKED: "พักเปิดออเดอร์ใหม่",
+    WARMUP: "กำลังเรียนรู้"
+  };
+  const heartbeatAgeSeconds = Math.max(0, Number(data?.instance?.ea_last_seen_age_seconds ?? metrics.heartbeatAgeSeconds ?? 0));
+  const heartbeatLatencyMs = Number(metrics.heartbeatLatencyMs ?? 0);
+  const heartbeatHttpStatus = Number(metrics.heartbeatHttpStatus ?? 0);
+  const lastServerContactEpoch = Number(metrics.lastServerContactAt || 0);
+  const lastServerContactLabel = lastServerContactEpoch > 0
+    ? new Date(lastServerContactEpoch * 1000).toLocaleString("th-TH", {hour12:false})
+    : "—";
   const entitlement = data?.entitlement;
   const liveStatus = data?.liveStatus || {
     code: isMt5Online ? "RUNNING_READY" : "MT5_OFFLINE",
@@ -401,6 +426,7 @@ export default function DashboardPage() {
     TREND_DOWN: "ขาลง",
     RANGE: "แกว่งตัว",
     HIGH_VOLATILITY: "ผันผวนสูง",
+    QUIET: "ตลาดเงียบ",
     DATA_NOT_READY: "รอข้อมูล",
     DISABLED: "ปิดการวิเคราะห์"
   };
@@ -1078,8 +1104,8 @@ export default function DashboardPage() {
                     <div className="cc-quick-row">
                       <div className="cc-live-cell"><span>สภาวะตลาด</span><b>{marketRegimeLabel[String(metrics.marketRegime || "")] || "รอข้อมูล"}</b></div>
                       <div className="cc-live-cell"><span>ความมั่นใจ</span><b>{Number(metrics.signalConfidence || 0).toFixed(0)}%</b></div>
-                      <div className="cc-live-cell"><span>Spread · สูงสุด {spreadLimitLabel}</span><b>{spreadValueLabel}</b></div>
-                      <div className="cc-live-cell"><span>การเทรด</span><b className={metrics.tradeReady === false ? "text-bad" : "text-good"}>{metrics.tradeReady === false ? "ยังไม่พร้อม" : metrics.tradeReady === true ? "พร้อม" : "—"}</b></div>
+                      <div className="cc-live-cell"><span>Spread · Adaptive {spreadLimitLabel}</span><b>{spreadValueLabel}</b></div>
+                      <div className="cc-live-cell"><span>การเทรด</span><b className={liveStatus.tone === "bad" ? "text-bad" : liveStatus.tone === "warn" ? "text-warn" : "text-good"}>{liveStatus.label || "—"}</b></div>
                       <button
                         className="btn cc-save-quick"
                         disabled={busy || !settingsDirty}
@@ -1087,6 +1113,14 @@ export default function DashboardPage() {
                       >
                         {settingsDirty ? "บันทึกการตั้งค่า" : "บันทึกแล้ว"}
                       </button>
+                    </div>
+
+                    <div className="cc-adaptive-strip" aria-label="Adaptive Spread">
+                      <div><span>Current</span><b>{spreadValueLabel}</b></div>
+                      <div><span>Median</span><b>{spreadMetricLabel(metrics.spreadMedianPoints)}</b></div>
+                      <div><span>P95</span><b>{spreadMetricLabel(metrics.spreadP95Points)}</b></div>
+                      <div><span>Status</span><b className={spreadStatus.includes("BLOCKED") ? "text-bad" : spreadStatus === "ELEVATED" ? "text-warn" : "text-good"}>{spreadStatusLabel[spreadStatus] || spreadStatus}</b></div>
+                      <div><span>Spread cost · {Number(metrics.adaptiveLot || settings.lot).toFixed(2)} lot</span><b>${Number(metrics.spreadCost || 0).toFixed(2)}</b></div>
                     </div>
 
                     {startBlocked && !busy && (
@@ -1117,6 +1151,10 @@ export default function DashboardPage() {
                       <TerminalStat label="P/L TODAY" value={"$"+Number(metrics.dailyProfit || 0).toFixed(2)} tone={Number(metrics.dailyProfit || 0)>=0 ? "good" : "bad"} />
                       <TerminalStat label="BASKET" value={"$"+Number(metrics.basketCycleProfit || metrics.basketProfit || 0).toFixed(2)} tone={Number(metrics.basketCycleProfit || metrics.basketProfit || 0)>=0 ? "good" : "bad"} />
                       <TerminalStat label="LAST RETCODE" value={String(metrics.lastOrderRetcode || "—")} tone={Number(metrics.lastOrderError || 0)>0 ? "bad" : "neutral"} />
+                      <TerminalStat label="HEARTBEAT AGE" value={heartbeatAgeSeconds.toFixed(0) + "s"} tone={heartbeatAgeSeconds <= 20 ? "good" : "bad"} />
+                      <TerminalStat label="LATENCY" value={heartbeatLatencyMs > 0 ? heartbeatLatencyMs.toFixed(0) + " ms" : "—"} tone={heartbeatLatencyMs > 2000 ? "warn" : "neutral"} />
+                      <TerminalStat label="HTTP" value={heartbeatHttpStatus > 0 ? String(heartbeatHttpStatus) : "—"} tone={heartbeatHttpStatus >= 200 && heartbeatHttpStatus < 300 ? "good" : "bad"} />
+                      <TerminalStat label="SERVER CONTACT" value={lastServerContactLabel} />
                     </div>
 
                     <div className="cc-terminal-toolbar">
@@ -1165,6 +1203,7 @@ export default function DashboardPage() {
                     <StatusRow label="โบรกเกอร์" value={data.account.broker} />
                     <StatusRow label="เซิร์ฟเวอร์" value={metrics.server || data.account.broker_server} />
                     <StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online ? "good" : "warn"} dot />
+                    <StatusRow label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0) + " วินาที · HTTP " + (heartbeatHttpStatus || "—")} tone={heartbeatAgeSeconds <= 20 ? "good" : "warn"} dot />
                     <StatusRow label="สถานะบอท" value={controlStateLabel} tone={state==="RUNNING" ? "good" : state==="SAFE_STOP" ? "warn" : "bad"} dot />
                     <StatusRow label="สิทธิ์ใช้งาน" value={accessLabel} />
                   </div>
@@ -1710,6 +1749,10 @@ export default function DashboardPage() {
                 <TerminalStat label="SPREAD" value={spreadValueLabel} />
                 <TerminalStat label="MOMENTUM" value={Number(metrics.momentumPoints || 0).toFixed(1)} />
                 <TerminalStat label="POSITIONS" value={String(metrics.positions || 0)} />
+                <TerminalStat label="HEARTBEAT AGE" value={heartbeatAgeSeconds.toFixed(0) + "s"} tone={heartbeatAgeSeconds <= 20 ? "good" : "bad"} />
+                <TerminalStat label="LATENCY" value={heartbeatLatencyMs > 0 ? heartbeatLatencyMs.toFixed(0) + " ms" : "—"} tone={heartbeatLatencyMs > 2000 ? "warn" : "neutral"} />
+                <TerminalStat label="HTTP STATUS" value={heartbeatHttpStatus > 0 ? String(heartbeatHttpStatus) : "—"} tone={heartbeatHttpStatus >= 200 && heartbeatHttpStatus < 300 ? "good" : "bad"} />
+                <TerminalStat label="LAST CONTACT" value={lastServerContactLabel} />
               </div>
 
               <div className="cc-terminal-drawer-meta">
@@ -1717,6 +1760,10 @@ export default function DashboardPage() {
                 <div><span>Daily P/L</span><b className={Number(metrics.dailyProfit || 0)>=0 ? "text-good" : "text-bad"}>{"$"+Number(metrics.dailyProfit || 0).toFixed(2)}</b></div>
                 <div><span>Basket P/L</span><b className={Number(metrics.basketCycleProfit || metrics.basketProfit || 0)>=0 ? "text-good" : "text-bad"}>{"$"+Number(metrics.basketCycleProfit || metrics.basketProfit || 0).toFixed(2)}</b></div>
                 <div><span>Last order</span><b>retcode {String(metrics.lastOrderRetcode || "—")} / error {String(metrics.lastOrderError || 0)}</b></div>
+                <div><span>Adaptive Spread</span><b>{spreadStatusLabel[spreadStatus] || spreadStatus} · P95 {spreadMetricLabel(metrics.spreadP95Points)}</b></div>
+                <div><span>Spread cost</span><b>${Number(metrics.spreadCost || 0).toFixed(2)} · {Number(metrics.adaptiveLot || settings.lot).toFixed(2)} lot</b></div>
+                <div><span>Adaptive limits</span><b>{Number(metrics.adaptiveMaxPositions || settings.maxPositions)} positions · {Number(metrics.adaptiveEntrySpacingMs || settings.minOrderIntervalMs)} ms</b></div>
+                <div><span>Execution quality</span><b>{Number(metrics.executionQuality || 0).toFixed(0)}% · slip {Number(metrics.averageSlippagePoints || 0).toFixed(1)} pt</b></div>
               </div>
 
               <div className="cc-terminal-toolbar drawer">

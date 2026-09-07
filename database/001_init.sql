@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS bot_settings (
     "sessionStartHour":0,
     "sessionEndHour":24,
     "maxAtrPoints":3000,
-    "cooldownMinutesAfterLoss":15,
+    "cooldownMinutesAfterLoss":5,
     "maxConsecutiveLosses":3,
     "entryMode":"AUTO_MOMENTUM"
   }'::jsonb,

@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.008"
+#property version   "1.009"
 #define SCENOVA_PRODUCT_VERSION "2.0.6"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -47,6 +47,8 @@ input double          InpBasketProfitTargetMoney = 0.00;
 input double          InpPerPositionProfitMoney = 0.00;
 input double          InpProfitRunTrailPercent = 0.00;
 input double          InpPerPositionLossMoney = 0.00;
+// Used only while the adaptive spread profile is warming up or unavailable.
+// Once enough live samples exist, the EA uses broker/symbol rolling percentiles.
 input int             InpMaxSpreadPoints      = 300;
 input int             InpMinOrderIntervalMs   = 300;
 input int             InpMaxOrdersPerMinute   = 120;
@@ -70,7 +72,7 @@ input int             InpConfidenceThreshold   = 70;
 input int             InpSessionStartHour      = 0;
 input int             InpSessionEndHour        = 24;
 input double          InpMaxAtrPoints          = 3000.0;
-input int             InpCooldownMinutesAfterLoss = 15;
+input int             InpCooldownMinutesAfterLoss = 5;
 input int             InpMaxConsecutiveLosses  = 3;
 
 ENUM_BOT_STATE g_state = STATE_STOPPED;
@@ -92,6 +94,9 @@ int    g_ordersInWindow = 0;
 datetime g_lastHeartbeat = 0;
 datetime g_lastSuccessfulHeartbeat = 0;
 datetime g_lastRunAuthorization = 0;
+datetime g_lastServerContactAt = 0;
+long   g_lastHeartbeatLatencyMs = 0;
+int    g_lastHeartbeatHttpStatus = 0;
 string g_executionStatus = "INITIALIZING";
 long   g_lastOrderRetcode = 0;
 int    g_lastOrderError = 0;
@@ -137,6 +142,32 @@ datetime g_cooldownUntil = 0;
 datetime g_lastAdaptiveEvaluation = 0;
 int    g_cachedAdaptiveDirection = 0;
 
+#define SPREAD_HISTORY_CAPACITY 1800
+double g_spreadHistory[SPREAD_HISTORY_CAPACITY];
+int    g_spreadHistoryCount = 0;
+int    g_spreadHistoryIndex = 0;
+datetime g_lastSpreadSampleAt = 0;
+double g_spreadMedian = 0.0;
+double g_spreadP90 = 0.0;
+double g_spreadP95 = 0.0;
+double g_spreadP99 = 0.0;
+double g_adaptiveSpreadLimit = 0.0;
+string g_spreadStatus = "WARMUP";
+int    g_spreadHighSeconds = 0;
+double g_spreadConfidencePenalty = 0.0;
+
+double g_adaptiveMomentumThreshold = 0.0;
+int    g_adaptiveMaxPositions = 1;
+int    g_adaptiveEntrySpacingMs = 0;
+double g_atrBaselinePoints = 0.0;
+double g_executionQuality = 100.0;
+int    g_executionAttempts = 0;
+int    g_executionAccepted = 0;
+double g_averageSlippagePoints = 0.0;
+datetime g_lastEntryAt = 0;
+string g_sessionProfile = "UNKNOWN";
+bool   g_spreadProfileRestored = false;
+
 double g_ticks[128];
 int    g_tickCount = 0;
 
@@ -178,9 +209,13 @@ int OnInit()
    g_maxAtrPoints = MathMax(0.0, InpMaxAtrPoints);
    g_cooldownMinutesAfterLoss = MathMax(0, InpCooldownMinutesAfterLoss);
    g_maxConsecutiveLosses = MathMax(0, InpMaxConsecutiveLosses);
+   g_adaptiveMomentumThreshold = InpMomentumEntryPoints;
+   g_adaptiveMaxPositions = g_maxPositions;
+   g_adaptiveEntrySpacingMs = g_minOrderIntervalMs;
 
    RestoreDailyRiskState();
    RestoreAdaptiveRiskState();
+   RestoreSpreadProfile();
    LoadBasketCycleState();
 
    if(!MQLInfoInteger(MQL_TESTER))
@@ -228,6 +263,7 @@ void OnDeinit(const int reason)
 void OnTick()
 {
    UpdateMomentum();
+   SampleSpread();
    RefreshDailyBaselineIfNeeded();
 
    if(g_access && g_lastSuccessfulHeartbeat > 0 &&
@@ -353,6 +389,16 @@ void OnTick()
          if(flowStrong)
             effectiveTrail = g_trailMoney * (1.0 + MathMax(0.0, InpFlowTrailBoost));
 
+         if(g_adaptiveEngine)
+         {
+            if((g_marketRegime == "TREND_UP" || g_marketRegime == "TREND_DOWN") &&
+               flowStrong && g_signalConfidence >= g_confidenceThreshold + 10)
+               effectiveTrail *= 1.35;
+            else if(g_marketRegime == "RANGE" ||
+                    g_signalConfidence < g_confidenceThreshold + 5)
+               effectiveTrail *= 0.70;
+         }
+
          if(profit <= g_peakProfit - effectiveTrail)
          {
             CloseAllBasket("PROFIT_TRAIL");
@@ -401,9 +447,7 @@ void OnTick()
 
    // New orders are allowed only while the website has very recently
    // confirmed desiredState=RUNNING. Existing positions can still be managed.
-   if(!MQLInfoInteger(MQL_TESTER) &&
-      (!g_runAuthorized || g_lastRunAuthorization <= 0 ||
-       TimeCurrent() - g_lastRunAuthorization > 2))
+   if(!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid())
    {
       g_executionStatus = "CONTROL_NOT_FRESH";
       return;
@@ -416,19 +460,13 @@ void OnTick()
       return;
    }
 
-   if(count >= g_maxPositions)
-   {
-      g_executionStatus = "MAX_POSITIONS";
-      return;
-   }
-
    if(!CanSendOrder())
    {
       g_executionStatus = "ORDER_RATE_LIMIT";
       return;
    }
 
-   if(!SpreadAllowed())
+   if(!AdaptiveSpreadAllowed())
    {
       g_executionStatus = "SPREAD_TOO_HIGH";
       return;
@@ -438,6 +476,18 @@ void OnTick()
    if(direction == 0)
    {
       g_executionStatus = g_adaptiveBlockReason == "" ? "WAITING_MOMENTUM" : g_adaptiveBlockReason;
+      return;
+   }
+
+   if(count >= (g_adaptiveEngine ? g_adaptiveMaxPositions : g_maxPositions))
+   {
+      g_executionStatus = "MAX_POSITIONS";
+      return;
+   }
+
+   if(count > 0 && !AdaptiveBasketAddAllowed(direction))
+   {
+      g_executionStatus = "WAITING_BASKET_ADD";
       return;
    }
 
@@ -472,6 +522,8 @@ void OnTick()
 
 void OnTimer()
 {
+   SampleSpread();
+
    if(MQLInfoInteger(MQL_TESTER))
       return;
 
@@ -533,9 +585,15 @@ void SendHeartbeat()
    string dailyProfitTargetArmedText = g_dailyProfitTargetArmed ? "true" : "false";
    string dailyProfitContinueText = g_dailyProfitContinueAfterTarget ? "true" : "false";
    string adaptiveEngineText = g_adaptiveEngine ? "true" : "false";
+   double telemetrySpreadLimit = g_adaptiveEngine && g_adaptiveSpreadLimit > 0.0
+      ? g_adaptiveSpreadLimit
+      : (double)g_maxSpread;
+   double telemetryLot = g_adaptiveEngine && g_adaptiveLot > 0.0
+      ? g_adaptiveLot
+      : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.008\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.009\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -567,10 +625,10 @@ void SendHeartbeat()
       DoubleToString(CurrentSpreadPrice(), SymbolDigitsNow()),
       DoubleToString(_Point, SymbolDigitsNow()),
       SymbolDigitsNow(),
-      DoubleToString(g_maxSpread * _Point, SymbolDigitsNow()),
+      DoubleToString(telemetrySpreadLimit * _Point, SymbolDigitsNow()),
       MomentumPoints(),
       InpMomentumEntryPoints,
-      g_maxSpread,
+      (int)MathRound(telemetrySpreadLimit),
       terminalConnected,
       terminalTradeAllowed,
       mqlTradeAllowed,
@@ -592,9 +650,47 @@ void SendHeartbeat()
       (long)g_lastOrderAt
    );
 
+   // Add diagnostics separately so the stable heartbeat format remains easy to
+   // audit and new telemetry cannot shift StringFormat arguments accidentally.
+   if(StringLen(payload) >= 2)
+   {
+      int heartbeatAge = g_lastSuccessfulHeartbeat > 0
+         ? (int)MathMax(0, TimeCurrent() - g_lastSuccessfulHeartbeat)
+         : -1;
+      string diagnostics = StringFormat(
+         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\"}}",
+         heartbeatAge,
+         g_lastHeartbeatLatencyMs,
+         g_lastHeartbeatHttpStatus,
+         (long)g_lastServerContactAt,
+         EntryLeaseValid() ? "true" : "false",
+         g_spreadHistoryCount,
+         g_spreadMedian,
+         g_spreadP90,
+         g_spreadP95,
+         g_spreadP99,
+         g_adaptiveSpreadLimit,
+         DoubleToString(g_adaptiveSpreadLimit * _Point, SymbolDigitsNow()),
+         g_spreadStatus,
+         CurrentSpreadCost(telemetryLot),
+         g_adaptiveMomentumThreshold,
+         g_adaptiveMaxPositions,
+         g_adaptiveEntrySpacingMs,
+         g_executionQuality,
+         g_averageSlippagePoints,
+         g_sessionProfile
+      );
+      payload = StringSubstr(payload, 0, StringLen(payload) - 2) + diagnostics;
+   }
+
    string response = "";
    string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";
+   ulong heartbeatStartedMs = GetTickCount64();
    int code = HttpPostJson(heartbeatUrl, payload, response);
+   g_lastHeartbeatLatencyMs = (long)(GetTickCount64() - heartbeatStartedMs);
+   g_lastHeartbeatHttpStatus = code;
+   if(code > 0)
+      g_lastServerContactAt = TimeCurrent();
    int webError = GetLastError();
 
    if(code < 200 || code >= 300)
@@ -876,6 +972,16 @@ double AdaptiveTradeVolume()
       return fallback;
 
    double calculated = MathMin(g_lot, riskMoney / moneyPerLot);
+   double volatilityRatio = g_atrBaselinePoints > 0.0
+      ? g_atrPoints / g_atrBaselinePoints
+      : 1.0;
+   double volatilityFactor = 1.0 / MathMax(1.0, volatilityRatio);
+   double lossFactor = MathPow(0.75, MathMax(0, g_consecutiveLosses));
+   double executionFactor = 0.50 + 0.50 * MathMax(0.0, MathMin(100.0, g_executionQuality)) / 100.0;
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double drawdownRatio = equity > 0.0 ? MathMax(0.0, -DailyBotProfit() / equity) : 0.0;
+   double drawdownFactor = MathMax(0.50, 1.0 - drawdownRatio * 10.0);
+   calculated *= volatilityFactor * lossFactor * executionFactor * drawdownFactor;
    double brokerMinimum = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
    if(calculated + 1e-12 < brokerMinimum)
       return 0.0;
@@ -884,9 +990,9 @@ double AdaptiveTradeVolume()
 
 int AdaptiveEntryDirection(double momentum)
 {
-   int rawDirection = EntryDirection(momentum);
    if(!g_adaptiveEngine)
    {
+      int rawDirection = EntryDirection(momentum);
       g_adaptiveBlockReason = "";
       g_marketRegime = "DISABLED";
       g_signalConfidence = rawDirection == 0 ? 0.0 : 100.0;
@@ -924,6 +1030,7 @@ int AdaptiveEntryDirection(double momentum)
    g_adaptiveBlockReason = "";
 
    g_atrPoints = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   g_atrBaselinePoints = AverageTrueRangePoints(PERIOD_M15, MathMax(30, g_atrPeriod * 3));
    if(g_atrPoints <= 0.0)
    {
       g_marketRegime = "DATA_NOT_READY";
@@ -945,7 +1052,32 @@ int AdaptiveEntryDirection(double momentum)
    int trendM15 = TimeframeTrend(PERIOD_M15);
    int trendH1 = TimeframeTrend(PERIOD_H1);
    int regimeDirection = trendM15 != 0 ? trendM15 : trendH1;
-   g_marketRegime = regimeDirection > 0 ? "TREND_UP" : regimeDirection < 0 ? "TREND_DOWN" : "RANGE";
+   double volatilityRatio = g_atrBaselinePoints > 0.0 ? g_atrPoints / g_atrBaselinePoints : 1.0;
+   if(volatilityRatio >= 1.60)
+      g_marketRegime = "HIGH_VOLATILITY";
+   else if(volatilityRatio <= 0.55)
+      g_marketRegime = "QUIET";
+   else if(regimeDirection > 0)
+      g_marketRegime = "TREND_UP";
+   else if(regimeDirection < 0)
+      g_marketRegime = "TREND_DOWN";
+   else
+      g_marketRegime = "RANGE";
+
+   g_sessionProfile = CurrentSessionProfile();
+   double momentumFactor = 1.0;
+   if(g_marketRegime == "HIGH_VOLATILITY") momentumFactor = 1.45;
+   else if(g_marketRegime == "QUIET") momentumFactor = 0.70;
+   else if(g_marketRegime == "RANGE") momentumFactor = 1.15;
+   if(volatilityRatio > 1.0)
+      momentumFactor *= MathMin(1.30, MathSqrt(volatilityRatio));
+   g_adaptiveMomentumThreshold = MathMax(2.0, InpMomentumEntryPoints * momentumFactor);
+
+   int rawDirection = 0;
+   if(g_entryMode == ENTRY_BUY_ONLY) rawDirection = 1;
+   else if(g_entryMode == ENTRY_SELL_ONLY) rawDirection = -1;
+   else if(momentum >= g_adaptiveMomentumThreshold) rawDirection = 1;
+   else if(momentum <= -g_adaptiveMomentumThreshold) rawDirection = -1;
 
    if(rawDirection == 0)
    {
@@ -955,12 +1087,39 @@ int AdaptiveEntryDirection(double momentum)
       return 0;
    }
 
-   double score = 25.0;
-   if(trendM5 == rawDirection) score += 20.0;
-   if(trendM15 == rawDirection) score += 25.0;
-   if(trendH1 == rawDirection) score += 20.0;
-   if(CurrentSpreadPoints() <= g_maxSpread * 0.60) score += 10.0;
-   g_signalConfidence = MathMin(100.0, score);
+   double momentumStrength = MathMin(2.0, MathAbs(momentum) / MathMax(1.0, g_adaptiveMomentumThreshold));
+   double score = 15.0 + momentumStrength * 12.5;
+   bool directionalRegime = g_marketRegime == "TREND_UP" || g_marketRegime == "TREND_DOWN";
+   double weightM5 = directionalRegime ? 15.0 : 10.0;
+   double weightM15 = directionalRegime ? 22.0 : 12.0;
+   double weightH1 = directionalRegime ? 18.0 : 10.0;
+   if(trendM5 == rawDirection) score += weightM5;
+   else if(trendM5 == -rawDirection) score -= weightM5 * 0.50;
+   if(trendM15 == rawDirection) score += weightM15;
+   else if(trendM15 == -rawDirection) score -= weightM15 * 0.60;
+   if(trendH1 == rawDirection) score += weightH1;
+   else if(trendH1 == -rawDirection) score -= weightH1 * 0.60;
+   score += MathMax(0.0, 15.0 - g_spreadConfidencePenalty);
+   score += g_marketRegime == "HIGH_VOLATILITY" ? 0.0 : g_marketRegime == "QUIET" ? 6.0 : 10.0;
+   score += MathMax(0.0, MathMin(10.0, g_executionQuality * 0.10));
+   score -= MathMin(20.0, g_consecutiveLosses * 5.0);
+   g_signalConfidence = MathMax(0.0, MathMin(100.0, score));
+
+   double positionFactor = 1.0;
+   if(g_marketRegime == "HIGH_VOLATILITY") positionFactor = 0.35;
+   else if(g_marketRegime == "RANGE") positionFactor = 0.60;
+   else if(g_marketRegime == "QUIET") positionFactor = 0.50;
+   if(g_signalConfidence < g_confidenceThreshold + 10) positionFactor *= 0.75;
+   positionFactor *= MathPow(0.80, MathMax(0, g_consecutiveLosses));
+   g_adaptiveMaxPositions = MathMax(1, (int)MathFloor(g_maxPositions * positionFactor));
+
+   double spacingFactor = 1.0;
+   if(g_marketRegime == "HIGH_VOLATILITY") spacingFactor = 3.0;
+   else if(g_marketRegime == "RANGE") spacingFactor = 1.8;
+   else if(g_marketRegime == "QUIET") spacingFactor = 1.4;
+   spacingFactor *= 1.0 + g_consecutiveLosses * 0.50;
+   spacingFactor *= 1.0 + (100.0 - g_executionQuality) / 100.0;
+   g_adaptiveEntrySpacingMs = (int)MathMax(g_minOrderIntervalMs, g_minOrderIntervalMs * spacingFactor);
 
    // Higher timeframes may be neutral, but never allow an entry directly
    // against both M15 and H1 trends.
@@ -987,6 +1146,33 @@ int AdaptiveEntryDirection(double momentum)
    g_cachedAdaptiveBlockReason = "";
    g_cachedAdaptiveDirection = rawDirection;
    return rawDirection;
+}
+
+string CurrentSessionProfile()
+{
+   MqlDateTime parts;
+   datetime now = TimeTradeServer();
+   if(now <= 0) now = TimeCurrent();
+   TimeToStruct(now, parts);
+   if(parts.hour < 7) return "ASIAN";
+   if(parts.hour < 13) return "LONDON";
+   if(parts.hour < 22) return "NEW_YORK";
+   return "ROLLOVER";
+}
+
+bool AdaptiveBasketAddAllowed(int direction)
+{
+   if(!g_adaptiveEngine || BasketPositionCount() <= 0)
+      return true;
+   if(direction != BasketDirection())
+      return false;
+   if(g_marketRegime == "HIGH_VOLATILITY")
+      return false;
+   if(g_signalConfidence < g_confidenceThreshold + 3)
+      return false;
+   if(MathAbs(MomentumPoints()) < g_adaptiveMomentumThreshold * 1.10)
+      return false;
+   return true;
 }
 
 void PersistAdaptiveRiskState()
@@ -1017,7 +1203,7 @@ void UpdateAdaptiveLossState(ulong dealTicket)
       g_consecutiveLosses++;
       int cooldownMinutes = g_cooldownMinutesAfterLoss;
       if(g_maxConsecutiveLosses > 0 && g_consecutiveLosses >= g_maxConsecutiveLosses)
-         cooldownMinutes = MathMax(cooldownMinutes, 60);
+         cooldownMinutes = MathMax(cooldownMinutes, 15);
       if(cooldownMinutes > 0)
          g_cooldownUntil = TimeCurrent() + cooldownMinutes * 60;
    }
@@ -1029,9 +1215,136 @@ void UpdateAdaptiveLossState(ulong dealTicket)
    PersistAdaptiveRiskState();
 }
 
-bool SpreadAllowed()
+string SpreadProfileKey(string suffix)
 {
-   return CurrentSpreadPoints() <= g_maxSpread;
+   string brokerServer = AccountInfoString(ACCOUNT_SERVER);
+   long serverHash = 0;
+   for(int i = 0; i < StringLen(brokerServer); i++)
+      serverHash = (serverHash * 31 + StringGetCharacter(brokerServer, i)) % 1000000007;
+   return StringFormat(
+      "SCN_SPR_%I64d_%I64d_%I64d_%s_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),
+      InpMagic,
+      serverHash,
+      _Symbol,
+      suffix
+   );
+}
+
+void PersistSpreadProfile()
+{
+   if(g_spreadMedian <= 0.0 || g_spreadP95 <= 0.0)
+      return;
+   GlobalVariableSet(SpreadProfileKey("MED"), g_spreadMedian);
+   GlobalVariableSet(SpreadProfileKey("P90"), g_spreadP90);
+   GlobalVariableSet(SpreadProfileKey("P95"), g_spreadP95);
+   GlobalVariableSet(SpreadProfileKey("P99"), g_spreadP99);
+}
+
+void RestoreSpreadProfile()
+{
+   string medianKey = SpreadProfileKey("MED");
+   string p95Key = SpreadProfileKey("P95");
+   if(!GlobalVariableCheck(medianKey) || !GlobalVariableCheck(p95Key))
+      return;
+
+   g_spreadMedian = GlobalVariableGet(medianKey);
+   g_spreadP95 = GlobalVariableGet(p95Key);
+   string p90Key = SpreadProfileKey("P90");
+   string p99Key = SpreadProfileKey("P99");
+   g_spreadP90 = GlobalVariableCheck(p90Key) ? GlobalVariableGet(p90Key) : g_spreadMedian;
+   g_spreadP99 = GlobalVariableCheck(p99Key) ? GlobalVariableGet(p99Key) : g_spreadP95;
+   g_spreadProfileRestored = g_spreadMedian > 0.0 && g_spreadP95 > 0.0;
+}
+
+double SpreadPercentile(double &sorted[], int count, double percentile)
+{
+   if(count <= 0) return 0.0;
+   int index = (int)MathFloor((count - 1) * MathMax(0.0, MathMin(1.0, percentile)));
+   return sorted[index];
+}
+
+void RecalculateSpreadProfile()
+{
+   if(g_spreadHistoryCount <= 0)
+      return;
+
+   double sorted[];
+   ArrayResize(sorted, g_spreadHistoryCount);
+   for(int i = 0; i < g_spreadHistoryCount; i++)
+      sorted[i] = g_spreadHistory[i];
+   ArraySort(sorted);
+
+   g_spreadMedian = SpreadPercentile(sorted, g_spreadHistoryCount, 0.50);
+   g_spreadP90 = SpreadPercentile(sorted, g_spreadHistoryCount, 0.90);
+   g_spreadP95 = SpreadPercentile(sorted, g_spreadHistoryCount, 0.95);
+   g_spreadP99 = SpreadPercentile(sorted, g_spreadHistoryCount, 0.99);
+
+   // P95 follows normal broker conditions while the median multiplier prevents
+   // a compressed session from making the gate unrealistically narrow.
+   g_adaptiveSpreadLimit = MathMax(g_spreadP95 * 1.15, g_spreadMedian * 1.75);
+   g_adaptiveSpreadLimit = MathMax(g_adaptiveSpreadLimit, 1.0);
+}
+
+void SampleSpread()
+{
+   datetime now = TimeCurrent();
+   if(now <= 0 || now == g_lastSpreadSampleAt)
+      return;
+
+   double spread = CurrentSpreadPoints();
+   if(spread <= 0.0 || spread >= 999999.0)
+      return;
+
+   g_lastSpreadSampleAt = now;
+   g_spreadHistory[g_spreadHistoryIndex] = spread;
+   g_spreadHistoryIndex = (g_spreadHistoryIndex + 1) % SPREAD_HISTORY_CAPACITY;
+   if(g_spreadHistoryCount < SPREAD_HISTORY_CAPACITY)
+      g_spreadHistoryCount++;
+
+   if((!g_spreadProfileRestored && g_spreadHistoryCount <= 60) ||
+      (g_spreadHistoryCount >= 30 && g_spreadHistoryCount % 5 == 0))
+      RecalculateSpreadProfile();
+
+   bool profileReady = g_spreadHistoryCount >= 30 || g_spreadProfileRestored;
+   if(!profileReady)
+   {
+      g_adaptiveSpreadLimit = MathMax(1.0, (double)g_maxSpread);
+      g_spreadStatus = "WARMUP";
+   }
+
+   double elevatedLevel = g_spreadP90 > 0.0 ? g_spreadP90 : g_adaptiveSpreadLimit * 0.75;
+   bool aboveLimit = spread > g_adaptiveSpreadLimit;
+   if(aboveLimit)
+      g_spreadHighSeconds++;
+   else
+      g_spreadHighSeconds = 0;
+
+   if(g_spreadHighSeconds >= 3)
+      g_spreadStatus = profileReady ? "BLOCKED" : "FALLBACK_BLOCKED";
+   else if(aboveLimit || spread > elevatedLevel)
+      g_spreadStatus = profileReady ? "ELEVATED" : "WARMUP";
+   else
+      g_spreadStatus = profileReady ? "NORMAL" : "WARMUP";
+
+   g_spreadConfidencePenalty = 0.0;
+   if(spread > elevatedLevel && g_adaptiveSpreadLimit > elevatedLevel)
+      g_spreadConfidencePenalty = MathMin(
+         20.0,
+         20.0 * (spread - elevatedLevel) / (g_adaptiveSpreadLimit - elevatedLevel)
+      );
+
+   if(g_spreadHistoryCount >= 60 && g_spreadHistoryCount % 60 == 0)
+      PersistSpreadProfile();
+}
+
+bool AdaptiveSpreadAllowed()
+{
+   if(!g_adaptiveEngine)
+      return CurrentSpreadPoints() <= g_maxSpread;
+   if(g_adaptiveSpreadLimit <= 0.0)
+      return CurrentSpreadPoints() <= g_maxSpread;
+   return g_spreadHighSeconds < 3;
 }
 
 double CurrentSpreadPoints()
@@ -1048,6 +1361,24 @@ double CurrentSpreadPrice()
    return MathMax(0.0, tick.ask - tick.bid);
 }
 
+double CurrentSpreadCost(double volume)
+{
+   MqlTick tick;
+   if(volume <= 0.0 || !SymbolInfoTick(_Symbol, tick) || tick.ask <= tick.bid)
+      return 0.0;
+
+   double profit = 0.0;
+   if(OrderCalcProfit(ORDER_TYPE_BUY, _Symbol, volume, tick.ask, tick.bid, profit))
+      return MathAbs(profit);
+
+   double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+   double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE_LOSS);
+   if(tickValue <= 0.0) tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+   if(tickSize <= 0.0 || tickValue <= 0.0)
+      return 0.0;
+   return MathAbs((tick.ask - tick.bid) / tickSize * tickValue * volume);
+}
+
 int SymbolDigitsNow()
 {
    return (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
@@ -1056,7 +1387,8 @@ int SymbolDigitsNow()
 bool CanSendOrder()
 {
    ulong nowMs = GetTickCount64();
-   if(nowMs - g_lastOrderMs < (ulong)g_minOrderIntervalMs)
+   int spacingMs = g_adaptiveEngine ? g_adaptiveEntrySpacingMs : g_minOrderIntervalMs;
+   if(nowMs - g_lastOrderMs < (ulong)MathMax(0, spacingMs))
       return false;
 
    datetime now = TimeCurrent();
@@ -1067,6 +1399,14 @@ bool CanSendOrder()
    }
 
    return g_ordersInWindow < g_maxOrdersPerMinute;
+}
+
+bool EntryLeaseValid()
+{
+   if(MQLInfoInteger(MQL_TESTER)) return true;
+   int freshnessSeconds = MathMax(10, MathMax(1, InpHeartbeatSeconds) * 3);
+   return g_access && g_runAuthorized && g_lastRunAuthorization > 0 &&
+          TimeCurrent() - g_lastRunAuthorization <= freshnessSeconds;
 }
 
 void RegisterOrderRequest()
@@ -1628,6 +1968,32 @@ string RetcodeExecutionStatus(long retcode)
    return "ORDER_REJECTED";
 }
 
+void RecordExecutionQuality(bool accepted, double slippagePoints)
+{
+   g_executionAttempts++;
+   if(accepted) g_executionAccepted++;
+   if(accepted && slippagePoints >= 0.0)
+   {
+      if(g_executionAccepted <= 1) g_averageSlippagePoints = slippagePoints;
+      else g_averageSlippagePoints = g_averageSlippagePoints * 0.85 + slippagePoints * 0.15;
+   }
+
+   double successRate = g_executionAttempts > 0
+      ? (double)g_executionAccepted / g_executionAttempts
+      : 1.0;
+   double referenceSpread = MathMax(1.0, g_spreadMedian > 0.0 ? g_spreadMedian : CurrentSpreadPoints());
+   double slippagePenalty = MathMin(30.0, g_averageSlippagePoints / referenceSpread * 30.0);
+   g_executionQuality = MathMax(0.0, MathMin(100.0, successRate * 100.0 - slippagePenalty));
+
+   // Keep the rolling profile responsive and prevent very old incidents from
+   // dominating execution quality forever.
+   if(g_executionAttempts >= 100)
+   {
+      g_executionAttempts = MathMax(1, g_executionAttempts / 2);
+      g_executionAccepted = MathMin(g_executionAttempts, g_executionAccepted / 2);
+   }
+}
+
 bool SendMarketOrder(int direction)
 {
    MqlTick tick;
@@ -1666,7 +2032,11 @@ bool SendMarketOrder(int direction)
    {
       int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
       double brokerMinimum = (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
-      double stopDistance = MathMax(g_atrPoints * g_hardStopAtrMultiplier * _Point, brokerMinimum + _Point);
+      double adaptiveStopMultiplier = g_hardStopAtrMultiplier;
+      if(g_marketRegime == "HIGH_VOLATILITY") adaptiveStopMultiplier *= 1.25;
+      else if(g_marketRegime == "QUIET") adaptiveStopMultiplier *= 0.85;
+      adaptiveStopMultiplier = MathMax(0.5, MathMin(10.0, adaptiveStopMultiplier));
+      double stopDistance = MathMax(g_atrPoints * adaptiveStopMultiplier * _Point, brokerMinimum + _Point);
       request.sl = NormalizeDouble(direction > 0 ? tick.ask - stopDistance : tick.bid + stopDistance, digits);
    }
 
@@ -1675,6 +2045,7 @@ bool SendMarketOrder(int direction)
    ResetLastError();
    if(!OrderSend(request, result))
    {
+      RecordExecutionQuality(false, 0.0);
       g_lastOrderError = GetLastError();
       g_lastOrderRetcode = (long)result.retcode;
       g_lastOrderAt = TimeCurrent();
@@ -1689,11 +2060,16 @@ bool SendMarketOrder(int direction)
 
    if(!TradeResultAccepted(result))
    {
+      RecordExecutionQuality(false, 0.0);
       g_executionStatus = RetcodeExecutionStatus((long)result.retcode);
       Print("Order rejected. retcode=", result.retcode, " comment=", result.comment);
       return false;
    }
 
+   double fillPrice = result.price > 0.0 ? result.price : request.price;
+   double slippagePoints = MathAbs(fillPrice - request.price) / _Point;
+   RecordExecutionQuality(true, slippagePoints);
+   g_lastEntryAt = TimeCurrent();
    g_executionStatus = "ORDER_ACCEPTED";
    return true;
 }

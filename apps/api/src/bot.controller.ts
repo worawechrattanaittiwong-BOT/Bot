@@ -133,7 +133,8 @@ export class BotController {
       ADAPTIVE_DATA_NOT_READY: { label: "กำลังเตรียมข้อมูลตลาด", detail: "รอข้อมูลแท่งราคา M5, M15 และ H1 ให้เพียงพอ", tone: "warn" },
       LOSS_COOLDOWN: { label: "พักหลังขาดทุน", detail: "ระบบหยุดเปิดไม้ชั่วคราวเพื่อลดการเทรดแก้มือ", tone: "warn" },
       RISK_LIMIT_TOO_SMALL: { label: "ความเสี่ยงไม่พอสำหรับ Lot ขั้นต่ำ", detail: "Stop distance และ Equity ปัจจุบันทำให้ Lot ขั้นต่ำของ Broker เสี่ยงเกินค่าที่ตั้งไว้", tone: "warn" },
-      SPREAD_TOO_HIGH: { label: "Spread สูงเกินกำหนด", detail: "บอทรอจน Spread ต่ำกว่า Max Spread", tone: "warn" },
+      SPREAD_TOO_HIGH: { label: "Spread ผิดปกติต่อเนื่อง", detail: "Adaptive Spread ระงับเฉพาะออเดอร์ใหม่ ส่วน Position เดิมยังถูกดูแลตามปกติ", tone: "warn" },
+      WAITING_BASKET_ADD: { label: "รอจังหวะเพิ่มไม้", detail: "ทิศทางหรือความมั่นใจยังไม่แข็งแรงพอสำหรับเพิ่ม Position", tone: "good" },
       MAX_POSITIONS: { label: "Position เต็มแล้ว", detail: "จำนวน Position ถึง Max Positions", tone: "warn" },
       ORDER_RATE_LIMIT: { label: "กำลังรอช่วงส่งคำสั่งถัดไป", detail: "Rate limit ของบอทยังไม่พร้อมส่ง Order ใหม่", tone: "warn" },
       CONTROL_NOT_FRESH: { label: "หยุดเปิดออเดอร์ใหม่", detail: "ยังไม่ได้รับการยืนยัน RUNNING ล่าสุดจาก Server จึงล็อกการเปิดออเดอร์ใหม่ไว้", tone: "warn" },
@@ -253,9 +254,6 @@ export class BotController {
       else code = "RUNNING_READY";
     }
 
-    // Spread is telemetry only now; it must never make the dashboard report
-    // a blocked trading state after the EA spread gate was removed.
-    if (code === "SPREAD_TOO_HIGH") code = "RUNNING_READY";
     if (instance.actual_state === "RUNNING" && (code === "SAFE_STOP" || code === "STOPPED")) {
       code = "RUNNING_READY";
     }
@@ -269,7 +267,8 @@ export class BotController {
       momentumPoints: Number(metrics.momentumPoints ?? 0),
       momentumEntryPoints: Number(metrics.momentumEntryPoints ?? 8),
       spreadPoints: Number(metrics.spreadPoints ?? 0),
-      maxSpreadPoints: Number(settings?.maxSpreadPoints ?? metrics.maxSpreadPoints ?? 50),
+      adaptiveSpreadLimitPoints: Number(metrics.adaptiveSpreadLimitPoints ?? settings?.maxSpreadPoints ?? metrics.maxSpreadPoints ?? 300),
+      spreadStatus: String(metrics.spreadStatus || "WARMUP"),
       lastOrderRetcode: Number(metrics.lastOrderRetcode ?? 0),
       lastOrderError: Number(metrics.lastOrderError ?? 0),
       lastOrderAt: Number(metrics.lastOrderAt ?? 0)
