@@ -448,6 +448,8 @@ export class EaController {
       `SELECT
          last_seen_at,
          metrics->>'eaVersion' AS ea_version,
+         metrics->>'terminalTradeAllowed' AS terminal_trade_allowed,
+         metrics->>'mqlTradeAllowed' AS mql_trade_allowed,
          CASE
            WHEN last_seen_at IS NULL THEN NULL
            ELSE EXTRACT(EPOCH FROM (now()-last_seen_at))
@@ -476,6 +478,18 @@ export class EaController {
       eaOnline: eaLastSeenAgeSeconds >= 0 && eaLastSeenAgeSeconds <= 10,
       eaVersion: String(runtime?.ea_version || ""),
       eaLastSeenAgeSeconds,
+      terminalTradeAllowed:
+        runtime?.terminal_trade_allowed === "true"
+          ? true
+          : runtime?.terminal_trade_allowed === "false"
+            ? false
+            : null,
+      mqlTradeAllowed:
+        runtime?.mql_trade_allowed === "true"
+          ? true
+          : runtime?.mql_trade_allowed === "false"
+            ? false
+            : null,
       agentVersion: reportedAgentVersion,
       agentVersionRequired,
       agentUpdateRequired,
