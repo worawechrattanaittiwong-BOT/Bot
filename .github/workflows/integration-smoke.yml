@@ -102,7 +102,7 @@ jobs:
           AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.0\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
           test "$(printf '%s' "$AGENT" | jq -r '.deviceVerified')" = "true"
 
-          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           test "$(printf '%s' "$DETECT" | jq -r '.accountMismatch')" = "true"
 
           DASH2=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
@@ -120,11 +120,11 @@ jobs:
           START=$(curl -fsS -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$START" | jq -r '.state')" = "RUNNING"
 
-          HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"RUNNING\",\"metrics\":{\"accountNumber\":\"100001\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"RUNNING\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           test "$(printf '%s' "$HB" | jq -r '.access')" = "true"
 
           curl -fsS -X POST "$BASE/bot/stop?slotId=$SLOT" -H "authorization: Bearer $TOKEN" >/dev/null
-          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
+          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch')" = "true"
 
           REBIND_REAL=$(curl -fsS -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
