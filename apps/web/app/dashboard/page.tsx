@@ -1628,45 +1628,61 @@ export default function DashboardPage() {
 
         {logsOpen && (
           <div className="bot-log-overlay" onClick={()=>setLogsOpen(false)}>
-            <section className="bot-log-drawer" onClick={e=>e.stopPropagation()}>
-              <div className="bot-log-head">
-                <div>
-                  <div className="eyebrow">BOT ACTIVITY LOG</div>
-                  <h2>{metrics.symbol || settings.symbol} · การทำงานล่าสุด</h2>
-                  <p className="muted">ดูคำสั่งจากเว็บ สถานะการส่งคำสั่ง และสถานะ EA ล่าสุด โดยไม่เปลี่ยน Logic การเทรด</p>
-                </div>
-                <button className="btn" onClick={()=>setLogsOpen(false)}>ปิด</button>
-              </div>
-
-              <div className="bot-log-snapshot">
-                <div><span>MT5</span><b className={isMt5Online?"text-good":"text-warn"}>{connectionLabel}</b></div>
-                <div><span>Actual State</span><b>{botLogs?.snapshot?.actual_state || state}</b></div>
-                <div><span>Desired State</span><b>{botLogs?.snapshot?.desired_state || desired}</b></div>
-                <div><span>Heartbeat ล่าสุด</span><b>{botLogs?.snapshot?.last_seen_at ? new Date(botLogs.snapshot.last_seen_at).toLocaleString("th-TH") : "—"}</b></div>
-              </div>
-
-              <div className="bot-log-toolbar">
-                <b>เหตุการณ์ล่าสุด</b>
-                <span>{logsLoading ? "กำลังอัปเดต..." : "อัปเดตอัตโนมัติทุก 5 วินาที"}</span>
-              </div>
-
-              <div className="bot-log-list">
-                {(botLogs?.events || []).map((event:any)=>(
-                  <div className="bot-log-row" key={event.id}>
-                    <span className={"bot-log-dot "+String(event.status || "").toLowerCase()}/>
-                    <div className="bot-log-copy">
-                      <b>{commandLabel(event.command)}</b>
-                      <small>
-                        สถานะ {event.status}
-                        {event.delivered_at ? " · ส่งถึง EA " + new Date(event.delivered_at).toLocaleTimeString("th-TH") : ""}
-                        {event.acked_at ? " · EA รับแล้ว " + new Date(event.acked_at).toLocaleTimeString("th-TH") : ""}
-                      </small>
-                    </div>
-                    <time>{event.created_at ? new Date(event.created_at).toLocaleString("th-TH") : "—"}</time>
+            <section className="bot-log-drawer cc-terminal-drawer" onClick={e=>e.stopPropagation()}>
+              <div className="bot-log-head cc-terminal-drawer-head">
+                <div className="cc-card-title">
+                  <span className="cc-terminal-icon">&gt;_</span>
+                  <div>
+                    <div className="eyebrow">SCENOVA TERMINAL</div>
+                    <h2>{metrics.symbol || settings.symbol} · Live Execution Console</h2>
+                    <span>Account {data.account?.account_number || "—"} · {metrics.server || data.account?.broker_server || "—"}</span>
                   </div>
+                </div>
+                <button className="btn" onClick={()=>setLogsOpen(false)}>ปิด ×</button>
+              </div>
+
+              <div className="cc-terminal-drawer-stats">
+                <TerminalStat label="CONNECTION" value={connectionLabel} tone={isMt5Online ? "good" : "bad"} />
+                <TerminalStat label="ACTUAL" value={String(botLogs?.snapshot?.actual_state || state)} tone={state==="RUNNING" ? "good" : "neutral"} />
+                <TerminalStat label="DESIRED" value={String(botLogs?.snapshot?.desired_state || desired)} tone={desired==="RUNNING" ? "good" : "neutral"} />
+                <TerminalStat label="SPREAD" value={Number(metrics.spreadPoints || 0).toFixed(1)+" pt"} />
+                <TerminalStat label="MOMENTUM" value={Number(metrics.momentumPoints || 0).toFixed(1)} />
+                <TerminalStat label="POSITIONS" value={String(metrics.positions || 0)} />
+              </div>
+
+              <div className="cc-terminal-drawer-meta">
+                <div><span>Execution</span><b>{liveStatus.label}</b></div>
+                <div><span>Daily P/L</span><b className={Number(metrics.dailyProfit || 0)>=0 ? "text-good" : "text-bad"}>{"$"+Number(metrics.dailyProfit || 0).toFixed(2)}</b></div>
+                <div><span>Basket P/L</span><b className={Number(metrics.basketCycleProfit || metrics.basketProfit || 0)>=0 ? "text-good" : "text-bad"}>{"$"+Number(metrics.basketCycleProfit || metrics.basketProfit || 0).toFixed(2)}</b></div>
+                <div><span>Last order</span><b>retcode {String(metrics.lastOrderRetcode || "—")} / error {String(metrics.lastOrderError || 0)}</b></div>
+              </div>
+
+              <div className="cc-terminal-toolbar drawer">
+                {(["ALL","COMMAND","STATE","MARKET","RISK","ORDER"] as const).map(filter=>(
+                  <button
+                    key={filter}
+                    className={"cc-terminal-filter " + (terminalFilter===filter ? "active" : "")}
+                    onClick={()=>setTerminalFilter(filter)}
+                  >
+                    {filter}
+                  </button>
                 ))}
-                {!logsLoading && !(botLogs?.events || []).length && (
-                  <div className="owner-empty">ยังไม่มีคำสั่งหรือเหตุการณ์ของบอท</div>
+                <span className="cc-terminal-count">{filteredTerminalEntries.length} lines · refresh 5s</span>
+              </div>
+
+              <div className="cc-terminal-window cc-terminal-window-full">
+                {filteredTerminalEntries.map((entry:any)=>(
+                  <TerminalLine
+                    key={"drawer-"+entry.id}
+                    time={entry.time}
+                    level={entry.level}
+                    category={entry.category}
+                    text={entry.text}
+                    detail={entry.detail}
+                  />
+                ))}
+                {!logsLoading && !filteredTerminalEntries.length && (
+                  <div className="cc-terminal-empty">No events in this filter</div>
                 )}
               </div>
             </section>
@@ -1722,13 +1738,26 @@ function StatusRow({label,value,tone="neutral",dot=false}:{label:string;value:an
   );
 }
 
-function TerminalLine({time,level,text}:{time?:any;level:string;text:string}) {
+function TerminalStat({label,value,tone="neutral"}:{label:string;value:string;tone?:"neutral"|"good"|"warn"|"bad"}) {
+  return (
+    <div className={"cc-terminal-stat cc-tone-" + tone}>
+      <span>{label}</span>
+      <b>{value}</b>
+    </div>
+  );
+}
+
+function TerminalLine({time,level,category,text,detail}:{time?:any;level:string;category?:string;text:string;detail?:string}) {
   const stamp = time ? new Date(time).toLocaleTimeString("th-TH",{hour12:false}) : "--:--:--";
   return (
     <div className="cc-terminal-line">
       <time>[{stamp}]</time>
       <b className={"cc-terminal-level level-" + String(level || "INFO").toLowerCase()}>{level}</b>
-      <span>{text}</span>
+      <em>{category || "SYSTEM"}</em>
+      <span>
+        <strong>{text}</strong>
+        {detail ? <small>{detail}</small> : null}
+      </span>
     </div>
   );
 }
