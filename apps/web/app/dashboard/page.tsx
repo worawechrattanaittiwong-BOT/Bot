@@ -142,7 +142,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if ((!logsOpen && activeView !== "overview") || !data?.instance?.id) return;
+    if (!logsOpen || !data?.instance?.id) return;
     let cancelled = false;
     const refreshLogs = async () => {
       try {
@@ -342,9 +342,12 @@ export default function DashboardPage() {
   const installerUpdateRequired = data?.selectedSlot?.mode === "LOCAL" && Boolean(softwareUpdate.required);
   const startBlocked =
     busy ||
+    desired === "RUNNING" ||
+    state === "RUNNING" ||
     installerUpdateRequired ||
     !entitlement?.allowed ||
     hardStartBlocks.has(String(liveStatus.code || ""));
+  const stopBlocked = busy || (desired !== "RUNNING" && state !== "RUNNING");
   const selectedBroker = brokerCatalog.find((item)=>item.code === brokerCode);
   const selectedBrokerName = brokerCode === "OTHER"
     ? customBrokerName.trim()
@@ -382,6 +385,14 @@ export default function DashboardPage() {
       : state === "SAFE_STOP" ? "SAFE_STOP — ไม่เปิดออเดอร์ใหม่"
       : state === "STOPPED" ? "STOPPED — หยุด"
       : state;
+  const marketRegimeLabel: Record<string,string> = {
+    TREND_UP: "ขาขึ้น",
+    TREND_DOWN: "ขาลง",
+    RANGE: "แกว่งตัว",
+    HIGH_VOLATILITY: "ผันผวนสูง",
+    DATA_NOT_READY: "รอข้อมูล",
+    DISABLED: "ปิดการวิเคราะห์"
+  };
   const desiredStateLabel =
     desired === "RUNNING" ? "RUNNING — ให้บอททำงาน"
       : desired === "SAFE_STOP" ? "SAFE_STOP — ห้ามเปิดออเดอร์ใหม่"
@@ -908,7 +919,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <header className="page-head human-head cc-page-head">
+        <header className={"page-head human-head cc-page-head " + (activeView === "overview" ? "cc-page-head-overview" : "")}>
           <div>
             <div className="eyebrow">CONTROL CENTER</div>
             <h2 style={{marginTop:7}}>
@@ -916,20 +927,14 @@ export default function DashboardPage() {
               {activeView === "account" && "บัญชีและการเชื่อมต่อ MT5"}
               {activeView === "access" && "สิทธิ์ใช้งาน"}
             </h2>
-            <div className="muted page-subtitle">
-              {activeView === "overview" && "ดูสถานะ ควบคุมบอท และติดตามการทำงานแบบเรียลไทม์"}
+            {activeView !== "overview" && <div className="muted page-subtitle">
               {activeView === "account" && "ติดตั้ง/อัปเดต SCENOVA และจัดการการเชื่อมต่อ MT5"}
               {activeView === "access" && "ตรวจสถานะ Trial สมาชิก และเวลาคงเหลือ"}
-            </div>
+            </div>}
           </div>
           <div className="status-row cc-head-status">
             <span className="badge"><span className={"dot " + (isMt5Online ? "green":"red")}/>{connectionLabel}</span>
             <span className="badge"><span className={"dot " + (desired==="RUNNING" ? "blue":"purple")}/>{controlStateLabel}</span>
-            {activeView === "overview" && (
-              <span className="badge cc-version-chip">
-                <b>{metrics.productVersion ? "v" + metrics.productVersion : "SCENOVA"}</b>
-              </span>
-            )}
           </div>
         </header>
 
@@ -985,29 +990,22 @@ export default function DashboardPage() {
                   <div className="cc-alert-icon">!</div>
                   <div className="cc-alert-copy">
                     <b>ยังไม่ได้เชื่อมต่อ MT5</b>
-                    <span>{data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 และให้ EA เชื่อมต่อกับ SCENOVA" : "กำลังรอ Cloud MT5 เชื่อมต่อ"}</span>
+                    <span>{data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span>
                   </div>
                   <button className="btn cc-alert-action" onClick={()=>setActiveView("account")}>ไปหน้าการเชื่อมต่อ →</button>
                 </div>
               )}
 
               <section className="cc-kpi-grid">
-                <DashboardMetric icon="◉" label="Balance" value={isMt5Online ? "$"+Number(metrics.balance||0).toFixed(2) : "—"} />
-                <DashboardMetric icon="▣" label="Equity" value={isMt5Online ? "$"+Number(metrics.equity||0).toFixed(2) : "—"} />
+                <DashboardMetric icon="◉" label="ยอดเงิน" value={isMt5Online ? "$"+Number(metrics.balance||0).toFixed(2) : "—"} />
+                <DashboardMetric icon="▣" label="มูลค่ารวม" value={isMt5Online ? "$"+Number(metrics.equity||0).toFixed(2) : "—"} />
                 <DashboardMetric
                   icon="▥"
-                  label="Floating P/L"
+                  label="กำไร / ขาดทุน"
                   value={isMt5Online ? "$"+Number(metrics.basketProfit||0).toFixed(2) : "—"}
                   tone={isMt5Online ? (Number(metrics.basketProfit||0)>=0 ? "good" : "bad") : "neutral"}
                 />
-                <DashboardMetric icon="▤" label="Positions" value={isMt5Online ? String(metrics.positions ?? 0) : "—"} sub={isMt5Online && Number(metrics.positions||0)===0 ? "ไม่มีออเดอร์" : ""} />
-                <DashboardMetric
-                  icon="ϟ"
-                  label="Heartbeat"
-                  value={eaLastSeenAgeSeconds >= 0 ? eaLastSeenAgeSeconds.toFixed(1) + "s" : "—"}
-                  sub={isMt5Online ? "เชื่อมต่อปกติ" : "รอ EA"}
-                  tone={isMt5Online ? "good" : "warn"}
-                />
+                <DashboardMetric icon="▤" label="ออเดอร์" value={isMt5Online ? String(metrics.positions ?? 0) : "—"} />
               </section>
 
               <div className="cc-workspace">
@@ -1017,20 +1015,19 @@ export default function DashboardPage() {
                       <div className="cc-card-title">
                         <span className="cc-card-icon">◆</span>
                         <div>
-                          <h2>ควบคุมบอท</h2>
-                          <span>{metrics.symbol || settings.symbol} · {data.account.mode}</span>
+                          <h2>{metrics.symbol || settings.symbol}</h2>
                         </div>
                       </div>
                       <span className={"cc-state-pill " + (state==="RUNNING" ? "running" : state==="SAFE_STOP" ? "safe" : "stopped")}>
                         <span className="cc-state-dot"/>
-                        <b>{state==="RUNNING" ? "RUNNING" : state==="SAFE_STOP" ? "SAFE STOP" : "STOPPED"}</b>
+                        <b>{state==="RUNNING" ? "กำลังทำงาน" : state==="SAFE_STOP" ? "กำลังหยุด" : "หยุดอยู่"}</b>
                         <small>{controlStateLabel}</small>
                       </span>
                     </div>
 
                     <div className="cc-control-fields">
                       <div className="cc-control-field">
-                        <span>Symbol</span>
+                        <span>สินทรัพย์</span>
                         <b>{metrics.symbol || settings.symbol}</b>
                       </div>
                       <div className="cc-control-field">
@@ -1042,13 +1039,13 @@ export default function DashboardPage() {
                         </select>
                       </div>
                       <div className="cc-control-field">
-                        <span>Position สูงสุด</span>
+                        <span>จำนวนออเดอร์สูงสุด</span>
                         <select value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>
                           {[1,2,3,4,5,6,7,8,9,10,12,15,20].map(v=><option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
                       <div className="cc-control-field">
-                        <span>Lot</span>
+                        <span>Lot สูงสุด</span>
                         <select value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>
                           {[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}
                         </select>
@@ -1057,21 +1054,21 @@ export default function DashboardPage() {
 
                     <div className="cc-primary-actions">
                       <button className="cc-action start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
-                        <span>▶</span><b>เริ่มบอท</b><small>Start Bot</small>
+                        <span>▶</span><b>เริ่มบอท</b>
                       </button>
-                      <button className="cc-action safe" disabled={busy} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}>
-                        <span>■</span><b>หยุดอย่างปลอดภัย</b><small>Safe Stop</small>
+                      <button className="cc-action safe" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}>
+                        <span>■</span><b>หยุดบอท</b>
                       </button>
-                      <button className="cc-action close" disabled={busy} onClick={()=>command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}>
-                        <span>×</span><b>ปิดออเดอร์ทั้งหมด</b><small>Close All</small>
+                      <button className="cc-action close" disabled={busy || Number(metrics.positions || 0) === 0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?") && command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}>
+                        <span>×</span><b>ปิดออเดอร์ทั้งหมด</b>
                       </button>
                     </div>
 
                     <div className="cc-quick-row">
-                      <div className="cc-live-cell"><span>Momentum</span><b>{Number(metrics.momentumPoints ?? 0).toFixed(1)}</b></div>
-                      <div className="cc-live-cell"><span>Spread</span><b>{Number(metrics.spreadPoints ?? 0).toFixed(1)} pt</b></div>
-                      <div className="cc-live-cell"><span>Algo</span><b className={metrics.terminalTradeAllowed === false ? "text-bad" : "text-good"}>{metrics.terminalTradeAllowed === false ? "OFF" : metrics.terminalTradeAllowed === true ? "ON" : "—"}</b></div>
-                      <div className="cc-live-cell"><span>EA Trading</span><b className={metrics.mqlTradeAllowed === false ? "text-bad" : "text-good"}>{metrics.mqlTradeAllowed === false ? "OFF" : metrics.mqlTradeAllowed === true ? "ON" : "—"}</b></div>
+                      <div className="cc-live-cell"><span>สภาวะตลาด</span><b>{marketRegimeLabel[String(metrics.marketRegime || "")] || "รอข้อมูล"}</b></div>
+                      <div className="cc-live-cell"><span>ความมั่นใจ</span><b>{Number(metrics.signalConfidence || 0).toFixed(0)}%</b></div>
+                      <div className="cc-live-cell"><span>Lot ที่ใช้</span><b>{Number(metrics.adaptiveLot || settings.lot).toFixed(2)}</b></div>
+                      <div className="cc-live-cell"><span>การเทรด</span><b className={metrics.tradeReady === false ? "text-bad" : "text-good"}>{metrics.tradeReady === false ? "ยังไม่พร้อม" : metrics.tradeReady === true ? "พร้อม" : "—"}</b></div>
                       <button
                         className="btn cc-save-quick"
                         disabled={busy || !settingsDirty}
@@ -1086,11 +1083,11 @@ export default function DashboardPage() {
                     )}
                   </section>
 
-                  <section className="panel cc-terminal-card">
+                  <section className="panel cc-terminal-card" aria-hidden="true">
                     <div className="cc-terminal-head">
                       <div className="cc-card-title">
                         <span className="cc-terminal-icon">&gt;_</span>
-                        <div><h3>SCENOVA Terminal</h3><span>Live execution stream · MT5 / EA / Risk / Commands</span></div>
+                        <div><h3>ประวัติการทำงาน</h3></div>
                       </div>
                       <div className="cc-terminal-actions">
                         <span className={"cc-terminal-live " + (logsLoading ? "loading" : "")}>
@@ -1147,33 +1144,23 @@ export default function DashboardPage() {
                     <div className="cc-card-title">
                       <span className="cc-card-icon alt">▥</span>
                       <div>
-                        <h2>สถานะบัญชีและการเชื่อมต่อ</h2>
-                        <span>ข้อมูล MT5 และสถานะการทำงาน</span>
+                          <h2>สถานะบัญชี</h2>
                       </div>
                     </div>
                   </div>
 
                   <div className="cc-status-list">
                     <StatusRow label="เลขบัญชี" value={data.account.account_number} />
-                    <StatusRow label="Broker" value={data.account.broker} />
-                    <StatusRow label="Server" value={metrics.server || data.account.broker_server} />
-                    <StatusRow label="SCENOVA" value={metrics.productVersion ? "v"+metrics.productVersion : "—"} />
+                    <StatusRow label="โบรกเกอร์" value={data.account.broker} />
+                    <StatusRow label="เซิร์ฟเวอร์" value={metrics.server || data.account.broker_server} />
                     <StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online ? "good" : "warn"} dot />
-                    <StatusRow label="สถานะบอท" value={actualStateLabel} tone={state==="RUNNING" ? "good" : state==="SAFE_STOP" ? "warn" : "bad"} dot />
-                    <StatusRow label="Execution" value={liveStatus.label} tone={liveStatus.tone === "good" ? "good" : liveStatus.tone === "bad" ? "bad" : "warn"} dot />
-                    <StatusRow label="สาเหตุ" value={liveStatus.detail} />
+                    <StatusRow label="สถานะบอท" value={controlStateLabel} tone={state==="RUNNING" ? "good" : state==="SAFE_STOP" ? "warn" : "bad"} dot />
                     <StatusRow label="สิทธิ์ใช้งาน" value={accessLabel} />
-                    <StatusRow label="Heartbeat ล่าสุด" value={eaLastSeenAgeSeconds >= 0 ? eaLastSeenAgeSeconds.toFixed(1)+" วินาทีที่แล้ว" : "—"} />
                   </div>
 
-                  <button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}>ดูรายละเอียดการเชื่อมต่อ</button>
-
-                  <div className={"cc-system-note " + (isMt5Online && entitlement?.allowed ? "good" : "warn")}>
-                    <span>i</span>
-                    <div>
-                      <b>{isMt5Online && entitlement?.allowed ? "ระบบพร้อมใช้งาน" : "กำลังรอความพร้อม"}</b>
-                      <small>{liveStatus.detail}</small>
-                    </div>
+                  <div className="cc-status-actions">
+                    <button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}>จัดการบัญชี</button>
+                    <button className="btn full cc-status-detail" onClick={()=>setLogsOpen(true)}>ประวัติการทำงาน</button>
                   </div>
                 </section>
               </div>
@@ -1182,7 +1169,7 @@ export default function DashboardPage() {
                 <summary className="cc-settings-summary">
                   <div>
                     <span className="cc-settings-summary-icon">⚙</span>
-                    <span><b>ตั้งค่าบอททั้งหมด</b><small>กำไร ความเสี่ยง Trailing และความถี่คำสั่ง</small></span>
+                    <span><b>ตั้งค่าบอท</b></span>
                   </div>
                   <span className={"owner-state-chip " + (settingsDirty ? "warn" : "good")}>
                     {settingsDirty ? "มีค่าที่ยังไม่ได้บันทึก" : "บันทึกแล้ว"}
@@ -1381,8 +1368,16 @@ export default function DashboardPage() {
                   <div><span>สภาวะตลาด</span><b>{String(metrics.marketRegime || "รอข้อมูล")}</b></div>
                   <div><span>ความมั่นใจสัญญาณ</span><b>{Number(metrics.signalConfidence || 0).toFixed(0)}% · Lot {Number(metrics.adaptiveLot || settings.lot).toFixed(2)}</b></div>
                 </div>
-                <div className="notice risk-notice">กำไรต่อวันใช้ได้ตลอด ส่วน “ปล่อยกำไรวิ่ง” จะปิดเฉพาะกำไรต่อไม้ กำไรรวม Basket และ Basket Trailing แบบ $</div>
               </details>
+
+              <div className="cc-mobile-command-dock mobile-only" aria-label="ควบคุมบอท">
+                <button className="cc-mobile-command start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่งเริ่มบอทแล้ว")}>
+                  <span>▶</span><b>เริ่ม</b>
+                </button>
+                <button className="cc-mobile-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดบอทแล้ว")}>
+                  <span>■</span><b>หยุด</b>
+                </button>
+              </div>
             </div>
           )
         )}
