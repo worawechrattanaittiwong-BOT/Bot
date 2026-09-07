@@ -863,7 +863,9 @@ export default function DashboardPage() {
                   <p className="muted">
                     {data.account
                       ? (data.account.broker_server + " · บัญชีนี้เป็น Active MT5 ของ Slot")
-                      : "สมัคร SCENOVA ได้โดยไม่ต้องกรอก MT5 แล้วค่อยเชื่อมจาก Slot นี้"}
+                      : data.selectedSlot?.mode === "LOCAL"
+                        ? "ไม่ต้องกรอกเลขบัญชี MT5 · เปิด MT5 ที่ Login บัญชีที่ต้องการ แล้วติดตั้ง SCENOVA ระบบจะอ่านบัญชีจาก Terminal และผูกให้อัตโนมัติ"
+                        : "Cloud ต้องใช้ MT5 Login และ Trading Password เพื่อให้ Trading Node Login แทนคุณ"}
                   </p>
                 </div>
                 <div className="account-card-actions">
@@ -968,16 +970,18 @@ export default function DashboardPage() {
                 )}
 
                 <section className="panel first-install-guide">
-                  <div className="eyebrow">FIRST INSTALL ONLY</div>
-                  <h2>ครั้งแรกทำเพียงครั้งเดียว</h2>
+                  <div className="eyebrow">LOCAL MT5 · AUTO DETECT</div>
+                  <h2>ไม่ต้องกรอกเลขบัญชี MT5</h2>
                   <div className="first-install-steps">
-                    <div><span>1</span><div><b>ดาวน์โหลด .exe จากหน้านี้</b><small>ห้ามใช้ไฟล์ที่ส่งต่อกัน ระบบจะตรวจ Enrollment และ Device</small></div></div>
-                    <div><span>2</span><div><b>อนุญาต WebRequest</b><small>MT5 → Tools → Options → Expert Advisors → เพิ่ม <code>{mt5ApiBase}</code></small></div></div>
-                    <div><span>3</span><div><b>ลาก FastBasketBot ลงกราฟ</b><small>Navigator → Expert Advisors → SCENOVA → FastBasketBot</small></div></div>
-                    <div><span>4</span><div><b>Inputs → Load preset ครั้งแรก</b><small>เลือก <b>SCENOVA-FastBasketBot.set</b> ที่ Installer วางไว้ แล้วเปิด Algo Trading</small></div></div>
+                    <div><span>1</span><div><b>เปิด MT5 และ Login บัญชีที่ต้องการใช้</b><small>เลข Login, Broker และ Server จะถูกอ่านจาก MT5 จริง ไม่รับค่าที่ผู้ใช้พิมพ์เอง</small></div></div>
+                    <div><span>2</span><div><b>ดาวน์โหลดและติดตั้ง SCENOVA จากหน้านี้</b><small>Installer จะลง EA + preset + Device Agent และเปิด FastBasketBot ให้โดยอัตโนมัติ</small></div></div>
+                    <div><span>3</span><div><b>อนุญาต WebRequest ถ้า MT5 ยังบล็อก</b><small>MT5 → Tools → Options → Expert Advisors → เพิ่ม <code>{mt5ApiBase}</code> แล้วระบบจะเชื่อมและผูกบัญชีให้เอง</small></div></div>
+                  </div>
+                  <div className="notice good">
+                    ครั้งแรกระบบจะผูก MT5 ที่ตรวจพบเข้ากับ Slot อัตโนมัติ เมื่อเป็น Device ที่ลงทะเบียนและบัญชีไม่ถูก Slot อื่นใช้อยู่
                   </div>
                   <div className="notice">
-                    หลังจากนี้ถ้าจะเปลี่ยน Demo → Real หรือ MT5 ใหม่บนเครื่องเดิม: กด <b>“เปลี่ยนบัญชี MT5”</b> บนเว็บ → Login บัญชีใหม่ใน MT5 → ระบบตรวจพบและ Safe Stop → กด <b>“ใช้บัญชีนี้”</b> ไม่ต้องเปลี่ยน .set
+                    ถ้าจะเปลี่ยน Demo → Real หรือเปลี่ยนบัญชีภายหลัง: กด <b>“เปลี่ยนบัญชี MT5”</b> → Login บัญชีใหม่ใน MT5 → ระบบ Safe Stop และให้ยืนยัน <b>“ใช้บัญชีนี้”</b> เพื่อป้องกันการเปลี่ยนบัญชีโดยไม่ตั้งใจ
                   </div>
                 </section>
               </>
@@ -989,13 +993,13 @@ export default function DashboardPage() {
                   <div className="setup-heading">
                     <div>
                       <div className="eyebrow">CLOUD SLOT {data.selectedSlot?.slot_number || "—"}</div>
-                      <h2>เชื่อมบัญชี MT5 สำหรับ Cloud</h2>
-                      <p className="muted">Cloud ยังต้องระบุบัญชีและ Trading Password เพื่อให้ Trading Node Login แทนคุณ</p>
+                      <h2>เชื่อม MT5 Login สำหรับ Cloud</h2>
+                      <p className="muted">เฉพาะ Cloud เท่านั้นที่ต้องกรอก MT5 Login + Trading Password เพราะ Trading Node ต้อง Login Terminal แทนลูกค้า; LOCAL ไม่ต้องกรอกเลขบัญชี</p>
                     </div>
                   </div>
                   <form className="form-grid form-grid-human" onSubmit={linkAccount}>
                     <div className="field">
-                      <label>เลขบัญชี MT5</label>
+                      <label>MT5 Login</label>
                       <input className="input" inputMode="numeric" value={accountNumber} onChange={e=>setAccountNumber(e.target.value)} required />
                     </div>
                     <div className="field">
