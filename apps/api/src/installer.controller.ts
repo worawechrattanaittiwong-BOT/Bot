@@ -87,7 +87,7 @@ export class InstallerController {
     }
 
     const deviceConflict = await this.db.one(
-      `SELECT bi.id,bi.slot_id,bi.device_hostname,ls.assigned_user_id
+      `SELECT bi.id,bi.slot_id,bi.device_hostname,ls.assigned_user_id,ls.slot_number,ls.label
        FROM bot_instances bi
        JOIN license_slots ls ON ls.id=bi.slot_id
        WHERE bi.device_status='ACTIVE'
@@ -97,8 +97,16 @@ export class InstallerController {
       [devicePublicId.slice(0, 160), enrollment.slot_id]
     );
     if (deviceConflict) {
+      const sameUser =
+        String(deviceConflict.assigned_user_id || "") === String(enrollment.assigned_user_id || "");
+      const slotText = deviceConflict.slot_number
+        ? "Slot #" + deviceConflict.slot_number
+        : "Local Slot เดิม";
+
       throw new ConflictException(
-        "เครื่องนี้มี SCENOVA Local Slot ที่ลงทะเบียนอยู่แล้ว กรุณาคืน/ย้าย Slot เดิมก่อนติดตั้ง Slot อื่นบนเครื่องเดียวกัน"
+        sameUser
+          ? "เครื่องนี้ถูกผูกกับ " + slotText + " ของบัญชี SCENOVA นี้อยู่ กรุณาไปหน้า บัญชี MT5 > เครื่องที่ผูกกับ Local Slots แล้วกด “ปลดเครื่อง” ที่ " + slotText + " ก่อนติดตั้ง Slot ใหม่"
+          : "เครื่องนี้เคยผูกกับ Local Slot ของบัญชี SCENOVA อื่นอยู่ กรุณาให้เจ้าของระบบปลด Device Lock ของเครื่องเดิมก่อนติดตั้ง"
       );
     }
 
