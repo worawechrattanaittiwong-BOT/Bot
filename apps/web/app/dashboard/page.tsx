@@ -905,8 +905,38 @@ export default function DashboardPage() {
                     value={metrics.symbol || settings.symbol}
                     readOnly
                   />
-                  <Field label="Lot" info="ขนาด Lot ต่อ Order ค่านี้ถูกส่งให้ EA จาก Server" help="เริ่มจากค่าน้อยบน Demo ก่อน" type="number" step="0.01" value={settings.lot} onChange={(v:string)=>editSetting("lot",v)}/>
-                  <Field label="จำนวน Position สูงสุด" info="จำนวน Position สูงสุดที่บอทเปิดพร้อมกันได้" type="number" value={settings.maxPositions} onChange={(v:string)=>editSetting("maxPositions",v)}/>
+                  <Field
+                    label="Lot"
+                    info="ขนาด Lot ต่อ Order ค่านี้ถูกส่งให้ EA จาก Server"
+                    help="เริ่มจากค่าน้อยบน Demo ก่อน"
+                    type="number"
+                    step="0.01"
+                    value={settings.lot}
+                    onChange={(v:string)=>editSetting("lot",v)}
+                  />
+
+                  <Field
+                    label="จำนวน Position สูงสุด"
+                    info="จำนวน Position สูงสุดที่บอทเปิดพร้อมกันได้"
+                    type="number"
+                    value={settings.maxPositions}
+                    onChange={(v:string)=>editSetting("maxPositions",v)}
+                  />
+                  <div className="field">
+                    <label className="label-with-info">โหมดเข้าออเดอร์</label>
+                    <select className="input" value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}>
+                      <option value="AUTO_MOMENTUM">AUTO MOMENTUM — เลือกฝั่งออเดอร์แรก แล้วล็อกฝั่งเดียวทั้ง Basket</option>
+                      <option value="BUY_ONLY">BUY ONLY — Buy ทุกออเดอร์ ไม่เปิด Sell</option>
+                      <option value="SELL_ONLY">SELL ONLY — Sell ทุกออเดอร์ ไม่เปิด Buy</option>
+                    </select>
+                    <small className="help">เมื่อ Basket มี Buy อยู่จะไม่เปิด Sell สวน และเมื่อมี Sell อยู่จะไม่เปิด Buy สวน</small>
+                  </div>
+
+                  <div className="settings-group-title">
+                    <b>เป้ากำไรและความเสี่ยง</b>
+                    <span>กำหนดเป้ารายวัน รายไม้ และทั้ง Basket</span>
+                  </div>
+
                   <Field
                     label="กำไรต่อวันแล้วหยุด ($)"
                     info="กำไรสะสมของ EA วันนี้ = กำไร/ขาดทุนที่ปิดแล้ววันนี้ + Floating ของ Basket ปัจจุบัน เมื่อถึงค่านี้ EA จะปิดทั้งหมดและล็อกหยุดจนขึ้นวันใหม่"
@@ -917,18 +947,15 @@ export default function DashboardPage() {
                     onChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)}
                   />
                   <Field
-                    label="กำไรรวม Basket แล้วปิด ($)"
-                    info="เมื่อกำไรรวมของรอบ Basket ถึงค่านี้ EA จะปิด Position ที่เหลือทั้งหมด"
-                    help={
-                      Number(settings.basketProfitTargetMoney || 0) > 0
-                        ? "โหมดกำไรรวมกำลังทำงาน · กำไรต่อไม้ถูกปิดอัตโนมัติ"
-                        : "ใส่ 0 = ปิดโหมดกำไรรวม"
-                    }
+                    label="ขาดทุนต่อวันแล้วหยุด ($)"
+                    info="วงเงินขาดทุนรายวัน เมื่อถึงขีดจำกัดระบบจะหยุดตาม Logic ความเสี่ยง"
+                    help="ใส่ 0 = ปิดฟังก์ชันนี้"
                     type="number"
                     step="0.01"
-                    value={settings.basketProfitTargetMoney}
-                    onChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}
+                    value={settings.dailyLossMoney}
+                    onChange={(v:string)=>editSetting("dailyLossMoney",v)}
                   />
+
                   <Field
                     label="กำไรต่อไม้แล้วปิด ($)"
                     info="Position ไหนมี P/L ถึงกำไรที่กำหนด EA จะปิดเฉพาะ Position นั้น"
@@ -943,6 +970,20 @@ export default function DashboardPage() {
                     onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}
                   />
                   <Field
+                    label="กำไรรวม Basket แล้วปิด ($)"
+                    info="เมื่อกำไรรวมของรอบ Basket ถึงค่านี้ EA จะปิด Position ที่เหลือทั้งหมด"
+                    help={
+                      Number(settings.basketProfitTargetMoney || 0) > 0
+                        ? "โหมดกำไรรวมกำลังทำงาน · กำไรต่อไม้ถูกปิดอัตโนมัติ"
+                        : "ใส่ 0 = ปิดโหมดกำไรรวม"
+                    }
+                    type="number"
+                    step="0.01"
+                    value={settings.basketProfitTargetMoney}
+                    onChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}
+                  />
+
+                  <Field
                     label="ขาดทุนต่อไม้แล้วปิด ($)"
                     info="Position ไหนมี P/L ถึงค่าขาดทุนที่กำหนด EA จะปิดเฉพาะ Position นั้นทันที ไม่รอ Max Basket Loss"
                     help="เช่น 2 = ปิดไม้เมื่อ P/L ของไม้นั้น ≤ -$2 · ใส่ 0 = ปิดฟังก์ชันนี้"
@@ -951,22 +992,59 @@ export default function DashboardPage() {
                     value={settings.perPositionLossMoney}
                     onChange={(v:string)=>editSetting("perPositionLossMoney",v)}
                   />
-                  <Field label="กำไรรวมเริ่ม Trailing ($)" info="เมื่อกำไรรวม Floating ของ Basket ถึงค่านี้ ระบบเริ่มจำ Peak Profit" type="number" step="0.01" value={settings.basketTriggerMoney} onChange={(v:string)=>editSetting("basketTriggerMoney",v)}/>
-                  <Field label="ย่อตัวจาก Peak แล้วปิด ($)" info="หลังเริ่ม Trailing หากกำไรรวมย่อลงจาก Peak ตามค่านี้ EA จะปิด Basket" type="number" step="0.01" value={settings.basketTrailMoney} onChange={(v:string)=>editSetting("basketTrailMoney",v)}/>
-                  <Field label="ขาดทุน Basket สูงสุด ($)" info="ขีดจำกัดขาดทุนรวม Floating ของ Basket ถ้าถึงจะปิดทุกไม้ใน Basket" type="number" step="0.01" value={settings.maxBasketLossMoney} onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}/>
-                  <Field label="ขาดทุนต่อวันแล้วหยุด ($)" info="วงเงินขาดทุนรายวันแบบเดิม เมื่อถึงขีดจำกัดระบบจะหยุดตาม Logic ความเสี่ยง" type="number" step="0.01" value={settings.dailyLossMoney} onChange={(v:string)=>editSetting("dailyLossMoney",v)}/>
-                  <Field label="ระยะห่างคำสั่งขั้นต่ำ (ms)" info="เวลาขั้นต่ำระหว่างการส่ง Order แต่ละครั้ง" type="number" value={settings.minOrderIntervalMs} onChange={(v:string)=>editSetting("minOrderIntervalMs",v)}/>
-                  <Field label="คำสั่งสูงสุดต่อนาที" info="Rate Limit จำนวนคำสั่ง Order สูงสุดใน 1 นาที" type="number" value={settings.maxOrdersPerMinute} onChange={(v:string)=>editSetting("maxOrdersPerMinute",v)}/>
-                  <div className="field">
-                    <label className="label-with-info">โหมดเข้าออเดอร์</label>
-                    <select className="input" value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}>
-                      <option value="AUTO_MOMENTUM">AUTO MOMENTUM — เลือกฝั่งออเดอร์แรก แล้วล็อกฝั่งเดียวทั้ง Basket</option>
-                      <option value="BUY_ONLY">BUY ONLY — Buy ทุกออเดอร์ ไม่เปิด Sell</option>
-                      <option value="SELL_ONLY">SELL ONLY — Sell ทุกออเดอร์ ไม่เปิด Buy</option>
-                    </select>
-                    <small className="help">เมื่อ Basket มี Buy อยู่จะไม่เปิด Sell สวน และเมื่อมี Sell อยู่จะไม่เปิด Buy สวน</small>
+                  <Field
+                    label="ขาดทุน Basket สูงสุด ($)"
+                    info="ขีดจำกัดขาดทุนรวม Floating ของ Basket ถ้าถึงจะปิดทุกไม้ใน Basket"
+                    help="ใส่ 0 = ปิดฟังก์ชันนี้"
+                    type="number"
+                    step="0.01"
+                    value={settings.maxBasketLossMoney}
+                    onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}
+                  />
+
+                  <div className="settings-group-title">
+                    <b>Basket Trailing</b>
+                    <span>ใช้เมื่อต้องการปล่อยกำไรวิ่ง แล้วปิดเมื่อย่อลงจาก Peak</span>
                   </div>
-                  <div className="field submit-field">
+
+                  <Field
+                    label="กำไรรวมเริ่ม Trailing ($)"
+                    info="เมื่อกำไรรวม Floating ของ Basket ถึงค่านี้ ระบบเริ่มจำ Peak Profit"
+                    type="number"
+                    step="0.01"
+                    value={settings.basketTriggerMoney}
+                    onChange={(v:string)=>editSetting("basketTriggerMoney",v)}
+                  />
+                  <Field
+                    label="ย่อตัวจาก Peak แล้วปิด ($)"
+                    info="หลังเริ่ม Trailing หากกำไรรวมย่อลงจาก Peak ตามค่านี้ EA จะปิด Basket"
+                    type="number"
+                    step="0.01"
+                    value={settings.basketTrailMoney}
+                    onChange={(v:string)=>editSetting("basketTrailMoney",v)}
+                  />
+
+                  <div className="settings-group-title">
+                    <b>ความถี่การส่งคำสั่ง</b>
+                    <span>ควบคุมจังหวะและจำนวนคำสั่งสูงสุดของ EA</span>
+                  </div>
+
+                  <Field
+                    label="ระยะห่างคำสั่งขั้นต่ำ (ms)"
+                    info="เวลาขั้นต่ำระหว่างการส่ง Order แต่ละครั้ง"
+                    type="number"
+                    value={settings.minOrderIntervalMs}
+                    onChange={(v:string)=>editSetting("minOrderIntervalMs",v)}
+                  />
+                  <Field
+                    label="คำสั่งสูงสุดต่อนาที"
+                    info="Rate Limit จำนวนคำสั่ง Order สูงสุดใน 1 นาที"
+                    type="number"
+                    value={settings.maxOrdersPerMinute}
+                    onChange={(v:string)=>editSetting("maxOrdersPerMinute",v)}
+                  />
+
+                  <div className="field submit-field settings-submit">
                     <button className="btn primary btn-lg" title="บันทึกค่าไป Server ให้ EA รับใน Heartbeat ถัดไป" disabled={busy || !settingsDirty}>
                       {busy ? "กำลังบันทึก..." : settingsDirty ? "บันทึกและใช้ค่ากับบอท" : "ใช้ค่าล่าสุดแล้ว"}
                     </button>
