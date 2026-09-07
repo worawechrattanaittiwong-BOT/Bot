@@ -879,27 +879,95 @@ export default function DashboardPage() {
         )}
 
         {activeView === "access" && (
-          <div className="grid2 access-grid">
-            <section className="panel purple">
-              <div className="eyebrow">ACCESS STATUS</div>
-              <h2 style={{marginTop:8}}>{accessLabel}</h2>
-              {entitlement?.source === "OWNER" ? (
-                <div className="notice good owner-unlimited-access">
-                  <b>สิทธิ์เจ้าของระบบเปิดครบทุกฟังก์ชัน</b>
-                  <span>ไม่ต้องเปิด Trial หรือแพ็กเกจให้บัญชีนี้ และไม่มีวันหมดอายุ</span>
+          <div className="access-workspace">
+            <div className="grid2 access-grid">
+              <section className="panel purple">
+                <div className="eyebrow">ACCESS STATUS · SLOT {data.selectedSlot?.slot_number || "—"}</div>
+                <h2 style={{marginTop:8}}>{accessLabel}</h2>
+                {entitlement?.source === "OWNER" ? (
+                  <div className="notice good owner-unlimited-access">
+                    <b>สิทธิ์เจ้าของระบบเปิดครบทุกฟังก์ชัน</b>
+                    <span>ไม่ต้องเปิด Trial หรือแพ็กเกจให้บัญชีนี้ และไม่มีวันหมดอายุ</span>
+                  </div>
+                ) : remainingText ? (
+                  <div className="time-card"><span>เวลาคงเหลือ</span><b className="mono">{remainingText}</b><small>หมดอายุ {accessExpiry?.toLocaleString("th-TH")}</small></div>
+                ) : (
+                  <p className="muted">ยังไม่มีสิทธิ์ที่กำลังใช้งานกับ Slot นี้</p>
+                )}
+                {data.selectedSlot?.plan_code && (
+                  <div className="slot-plan-summary">
+                    <span>แพ็กเกจ</span>
+                    <b>{data.selectedSlot.plan_code}</b>
+                    <small>{data.selectedSlot.plan_slots || 1} Slots{data.selectedSlot.allow_resale ? " · Partner / Reseller" : ""}</small>
+                  </div>
+                )}
+              </section>
+
+              <section className="panel">
+                <div className="eyebrow">YOUR USER ID</div>
+                <h2 className="mono user-code-big">{data.user.user_code}</h2>
+                <p className="muted">ใช้รหัสนี้แจ้งผู้ดูแลเรื่อง Trial หรือสมาชิก</p>
+
+                {entitlement?.source !== "OWNER" && (
+                  <>
+                    {data.trialRequest?.status === "PENDING" ? (
+                      <div className="notice">
+                        <b>คำขอ Trial กำลังรอ Owner อนุมัติ</b>
+                        <span>LINE: {data.trialRequest.line_contact}</span>
+                      </div>
+                    ) : !["TRIAL","TRIAL_READY","TRIAL_EXPIRED"].includes(String(entitlement?.source || "")) ? (
+                      <form className="trial-request-form" onSubmit={requestTrial}>
+                        <div className="field">
+                          <label>LINE ที่ใช้ติดต่อขอ Trial</label>
+                          <input className="input" value={lineContact} onChange={e=>setLineContact(e.target.value)} placeholder="@line หรือชื่อ LINE" required />
+                          <div className="help">Trial ไม่ได้มาอัตโนมัติหลังสมัคร Owner จะตรวจ User / LINE / MT5 / ประวัติ IP ก่อนอนุมัติ</div>
+                        </div>
+                        <button className="btn primary" disabled={busy || !data.account}>ส่งคำขอ Trial 3 ชั่วโมง</button>
+                      </form>
+                    ) : (
+                      <div className="notice">Trial ของ User นี้มีประวัติแล้ว ระบบจะไม่สร้าง Trial ใหม่จากการเปลี่ยน MT5 ภายใต้ User เดิม</div>
+                    )}
+                  </>
+                )}
+              </section>
+            </div>
+
+            {(data.slots || []).some((slot:any)=>slot.can_manage && slot.slot_type === "PARTNER") && (
+              <section className="panel partner-slots-panel">
+                <div className="panel-head">
+                  <div>
+                    <div className="eyebrow">PARTNER / RESELLER</div>
+                    <h2>จัดการ Slots ที่เปิดให้ผู้อื่น</h2>
+                    <p className="muted">ผู้รับ Slot ต้องมีบัญชี SCENOVA ของตัวเอง ไม่ต้องแชร์ Email/Password, EX5 หรือ .set</p>
+                  </div>
+                  <span className="badge">{(data.slots || []).filter((slot:any)=>slot.can_manage && slot.slot_type === "PARTNER").length} SLOTS</span>
                 </div>
-              ) : remainingText ? (
-                <div className="time-card"><span>เวลาคงเหลือ</span><b className="mono">{remainingText}</b><small>หมดอายุ {accessExpiry?.toLocaleString("th-TH")}</small></div>
-              ) : (
-                <p className="muted">ยังไม่มีเวลาสิทธิ์ที่กำลังนับอยู่</p>
-              )}
-            </section>
-            <section className="panel">
-              <div className="eyebrow">YOUR USER ID</div>
-              <h2 className="mono user-code-big">{data.user.user_code}</h2>
-              <p className="muted">ใช้รหัสนี้แจ้งผู้ดูแลเพื่อขอ Trial หรือเปิดสมาชิก</p>
-              <div className="notice">Trial 3 ชั่วโมงจะเริ่มหลังผู้ดูแลอนุมัติ และเริ่มนับเมื่อเริ่มใช้งานครั้งแรก บัญชี MT5 เดิมรับ Trial ซ้ำไม่ได้</div>
-            </section>
+                <div className="partner-slot-list">
+                  {(data.slots || []).filter((slot:any)=>slot.can_manage && slot.slot_type === "PARTNER").map((slot:any)=>(
+                    <div className="partner-slot-row" key={slot.id}>
+                      <div className="partner-slot-number"><span>SLOT</span><b>{slot.slot_number}</b></div>
+                      <div className="partner-slot-user">
+                        <b>{slot.assigned_user_code || "ว่าง — พร้อมเปิดให้ลูกค้า"}</b>
+                        <small>{slot.assigned_email || slot.label || "AVAILABLE"}</small>
+                      </div>
+                      <div className="partner-slot-meta">
+                        <span>{slot.account_number ? "MT5 " + slot.account_number : "ยังไม่เชื่อม MT5"}</span>
+                        <small>{slot.subscription_expires_at ? "แพ็กหมด " + new Date(slot.subscription_expires_at).toLocaleDateString("th-TH") : ""}</small>
+                      </div>
+                      <div className="partner-slot-actions">
+                        {slot.assigned_user_id && slot.assigned_user_id !== data.user.id ? (
+                          <button className="btn danger" disabled={busy} onClick={()=>releasePartnerSlot(slot)}>คืน Slot</button>
+                        ) : slot.assigned_user_id === data.user.id ? (
+                          <span className="owner-state-chip good">ใช้เอง</span>
+                        ) : (
+                          <button className="btn primary" disabled={busy} onClick={()=>assignPartnerSlot(slot)}>เปิดให้ลูกค้า</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
 
