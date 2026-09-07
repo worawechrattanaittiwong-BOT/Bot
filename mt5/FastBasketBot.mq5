@@ -256,25 +256,26 @@ void OnTick()
       return;
    }
 
-   int direction = 0;
+   int direction = forceFirstEntry ? ImmediateEntryDirection(momentum) : EntryDirection(momentum);
+   if(direction == 0)
+   {
+      g_executionStatus = "WAITING_MOMENTUM";
+      return;
+   }
 
-   // Never hedge against the current basket. Once the first position exists,
-   // every additional position must use that same direction until the basket is flat.
+   // Never hedge against the current basket. Keep the original entry signal,
+   // but if that signal flips against an open basket, wait instead of opening opposite.
    if(count > 0)
    {
-      direction = BasketDirection();
-      if(direction == 0)
+      int basketDirection = BasketDirection();
+      if(basketDirection == 0)
       {
          g_executionStatus = "MIXED_BASKET_BLOCKED";
          return;
       }
-   }
-   else
-   {
-      direction = forceFirstEntry ? ImmediateEntryDirection(momentum) : EntryDirection(momentum);
-      if(direction == 0)
+      if(direction != basketDirection)
       {
-         g_executionStatus = "WAITING_MOMENTUM";
+         g_executionStatus = "WAITING_DIRECTION_LOCK";
          return;
       }
    }
