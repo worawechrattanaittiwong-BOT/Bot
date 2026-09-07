@@ -445,9 +445,10 @@ void SendHeartbeat()
    string accountTradeAllowed = AccountTradeAllowedNow() ? "true" : "false";
    string accountTradeExpert = AccountExpertAllowedNow() ? "true" : "false";
    string tradeReady = TradePermissionStatus() == "OK" ? "true" : "false";
+   string dailyProfitLockedText = g_dailyProfitLocked ? "true" : "false";
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.003\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.004\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -458,6 +459,14 @@ void SendHeartbeat()
       AccountInfoDouble(ACCOUNT_BALANCE),
       AccountInfoDouble(ACCOUNT_EQUITY),
       BasketProfit(),
+      BasketCycleProfit(),
+      g_basketProfitTarget,
+      g_basketPeakPositionCount,
+      CurrentPerPositionProfitTarget(),
+      g_perPositionLoss,
+      DailyBotProfit(),
+      g_dailyProfitTarget,
+      dailyProfitLockedText,
       g_peakProfit,
       BasketPositionCount(),
       CurrentSpreadPoints(),
@@ -536,12 +545,22 @@ void SendHeartbeat()
    }
    else if(desired == "RUNNING")
    {
-      if(g_state != STATE_RUNNING && BasketPositionCount() == 0)
-         g_forceFirstEntry = true;
-      g_state = STATE_RUNNING;
-      g_runAuthorized = true;
-      g_lastRunAuthorization = TimeCurrent();
-      g_executionStatus = "EVALUATING";
+      if(g_dailyProfitLocked)
+      {
+         g_state = STATE_SAFE_STOP;
+         g_runAuthorized = false;
+         g_forceFirstEntry = false;
+         g_executionStatus = "DAILY_PROFIT_LOCK";
+      }
+      else
+      {
+         if(g_state != STATE_RUNNING && BasketPositionCount() == 0)
+            g_forceFirstEntry = true;
+         g_state = STATE_RUNNING;
+         g_runAuthorized = true;
+         g_lastRunAuthorization = TimeCurrent();
+         g_executionStatus = "EVALUATING";
+      }
    }
    else if(desired == "SAFE_STOP")
    {
