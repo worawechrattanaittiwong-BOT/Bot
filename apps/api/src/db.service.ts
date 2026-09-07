@@ -209,6 +209,19 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_mt5_active_identity_unique
         ON mt5_accounts(lower(account_number),lower(broker_server))
         WHERE status='ACTIVE';
+
+
+      -- Legacy XAUUSD profiles used 50 raw broker points as Max Spread.
+      -- On 3-decimal gold symbols (for example XAUUSDm), a normal 0.260
+      -- Bid/Ask gap is 260 points, so 50 blocked nearly every entry.
+      -- Upgrade only the untouched legacy 50pt gold profile; custom values
+      -- chosen by users are preserved.
+      UPDATE bot_settings
+      SET
+        settings=jsonb_set(settings,'{maxSpreadPoints}','300'::jsonb,true),
+        updated_at=now()
+      WHERE COALESCE(settings->>'symbol','') ILIKE 'XAUUSD%'
+        AND COALESCE((settings->>'maxSpreadPoints')::int,50)=50;
     `);
   }
 
