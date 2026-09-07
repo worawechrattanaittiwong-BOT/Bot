@@ -124,6 +124,7 @@ export class AdminController {
              'device_status',bi3.device_status,
              'device_hostname',bi3.device_hostname,
              'device_online',(bi3.device_last_seen_at IS NOT NULL AND bi3.device_last_seen_at > now() - interval '90 seconds'),
+             'mt5_online',(bi3.last_seen_at IS NOT NULL AND bi3.last_seen_at > now() - interval '20 seconds'),
              'actual_state',bi3.actual_state,
              'desired_state',bi3.desired_state,
              'positions',COALESCE(NULLIF(bi3.metrics->>'positions','')::int,0),
@@ -391,6 +392,7 @@ export class AdminController {
     const slot = await this.db.one(
       `SELECT ls.*,bi.id instance_id,bi.actual_state,bi.desired_state,
          COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') mt5_online,
          bi.device_hostname,bi.mt5_account_id
        FROM license_slots ls
        LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
@@ -404,12 +406,14 @@ export class AdminController {
     if (!slot.instance_id) {
       return { ok: true, released: false, message: "Slot นี้ยังไม่มี Device ที่ลงทะเบียน" };
     }
+    if (Number(slot.positions || 0) > 0) {
+      throw new ConflictException("ลูกค้ายังมี Position ค้างอยู่ กรุณาปิด Position ก่อนปลดเครื่อง");
+    }
     if (
-      slot.actual_state === "RUNNING" ||
-      slot.desired_state === "RUNNING" ||
-      Number(slot.positions || 0) > 0
+      Boolean(slot.mt5_online) &&
+      (slot.actual_state === "RUNNING" || slot.desired_state === "RUNNING")
     ) {
-      throw new ConflictException("หยุดบอทและปิด Position ของลูกค้าก่อนปลดเครื่อง");
+      throw new ConflictException("MT5 ของลูกค้ายัง Online และบอทกำลังทำงาน กรุณาหยุดบอทก่อนปลดเครื่อง");
     }
 
     await this.db.query(
