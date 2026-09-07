@@ -180,18 +180,24 @@ jobs:
           DEVICE_TAKEOVER_HTTP=$(curl -sS -o /tmp/device-takeover.json -w "%{http_code}" -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE_SECOND\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"another-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal2\"}")
           test "$DEVICE_TAKEOVER_HTTP" = "409"
 
-          echo "[integration] customer releases old LOCAL device lock"
+          echo "[integration] suspended Slot with stale RUNNING state can still release an offline device"
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update license_slots set status='SUSPENDED' where id='$SLOT'; update bot_instances set actual_state='RUNNING',desired_state='RUNNING',last_seen_at=now()-interval '5 minutes',metrics=jsonb_set(coalesce(metrics,'{}'::jsonb),'{positions}','0'::jsonb,true) where slot_id='$SLOT';" >/dev/null
           RELEASE_DEVICE=$(curl -fsS -X POST "$BASE/bot/device/release?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$RELEASE_DEVICE" | jq -r '.released')" = "true"
+          RELEASED_STATE=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select device_status || ':' || desired_state from bot_instances where slot_id='$SLOT';")
+          test "$RELEASED_STATE" = "UNREGISTERED:STOPPED"
 
           echo "[integration] same physical device can enroll another Slot after explicit release"
           ENROLL_SECOND=$(curl -fsS -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE_SECOND\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"another-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal2\"}")
           INSTANCE_SECOND=$(printf '%s' "$ENROLL_SECOND" | jq -r '.instanceId')
           test -n "$INSTANCE_SECOND"
 
-          echo "[integration] owner can release a customer device lock"
+          echo "[integration] owner can release an offline customer device even when stale RUNNING remains"
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set actual_state='RUNNING',desired_state='RUNNING',last_seen_at=now()-interval '5 minutes',metrics=jsonb_set(coalesce(metrics,'{}'::jsonb),'{positions}','0'::jsonb,true) where slot_id='$SLOT_SECOND';" >/dev/null
           ADMIN_RELEASE=$(curl -fsS -X POST "$BASE/admin/devices/release" -H 'x-admin-key: integration-admin' -H 'content-type: application/json' -d "{\"userId\":\"$USER2_ID\",\"slotId\":\"$SLOT_SECOND\"}")
           test "$(printf '%s' "$ADMIN_RELEASE" | jq -r '.released')" = "true"
+          ADMIN_RELEASED_STATE=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select device_status || ':' || desired_state from bot_instances where slot_id='$SLOT_SECOND';")
+          test "$ADMIN_RELEASED_STATE" = "UNREGISTERED:STOPPED"
 
           DUP_MT5_HTTP=$(curl -sS -o /tmp/duplicate-mt5.json -w "%{http_code}" -X POST "$BASE/bot/mt5" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d '{"accountNumber":"200002","broker":"SCENOVA","brokerServer":"SCENOVA-Real","mode":"CLOUD"}')
           test "$DUP_MT5_HTTP" = "409"
