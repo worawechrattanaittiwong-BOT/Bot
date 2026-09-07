@@ -187,7 +187,7 @@ export class InstallerController {
       webBase: process.env.PUBLIC_WEB_BASE || "https://snvea-bot.online",
       artifactHash: this.artifactHash(),
       artifactEndpoint: "/api/ea/artifact",
-      agentVersionRequired: "2.0.2",
+      agentVersionRequired: "2.0.3",
       preservedLegacyToken: canPreserveLegacy
     };
   }
