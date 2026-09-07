@@ -286,6 +286,7 @@ internal static class AgentRunner
         if (!createdNew) return;
 
         var attemptedInitialMt5Start = false;
+        var attemptedEaPermissionRepair = false;
 
         while (true)
         {
@@ -335,12 +336,33 @@ internal static class AgentRunner
                 if (updated)
                 {
                     attemptedInitialMt5Start = true;
+                    attemptedEaPermissionRepair = false;
                 }
                 else if (!heartbeat.EaOnline && !attemptedInitialMt5Start)
                 {
                     attemptedInitialMt5Start = EnsureMt5RunningWithEa(config, forceReload: false);
                     if (attemptedInitialMt5Start)
                         await AppendLogAsync(logPath, "MT5 start requested automatically.");
+                }
+                else if (
+                    heartbeat.EaOnline &&
+                    heartbeat.TerminalTradeAllowed == true &&
+                    heartbeat.MqlTradeAllowed == false &&
+                    !attemptedEaPermissionRepair)
+                {
+                    // MT5 global Algo Trading is already ON, but this EA chart
+                    // reports Allow Algo Trading OFF. Relaunch once with the
+                    // SCENOVA startup config, which explicitly sets
+                    // AllowLiveTrading=1 for the Expert.
+                    attemptedEaPermissionRepair = EnsureMt5RunningWithEa(config, forceReload: true);
+                    if (attemptedEaPermissionRepair)
+                        await AppendLogAsync(
+                            logPath,
+                            "EA trading permission repair requested automatically.");
+                }
+                else if (heartbeat.MqlTradeAllowed == true)
+                {
+                    attemptedEaPermissionRepair = false;
                 }
 
                 await AppendLogAsync(
