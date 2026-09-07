@@ -11,8 +11,7 @@ import {
   Req,
   UseGuards
 } from "@nestjs/common";
-import { createHash, randomBytes } from "crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
 import { CryptoService, JwtGuard } from "./security";
 
@@ -24,10 +23,9 @@ export class BotController {
     private readonly crypto: CryptoService
   ) {}
 
-  private productionEaHash() {
-    const path = process.env.EA_ARTIFACT_PATH || "/app/apps/api/artifacts/FastBasketBot.ex5";
-    if (!existsSync(path)) return null;
-    return createHash("sha256").update(readFileSync(path)).digest("hex");
+  private supportedEaRuntime(version: any) {
+    const value = Number(String(version || "").trim());
+    return Number.isFinite(value) && value >= 1.003;
   }
 
   private clientIp(req: any) {
@@ -125,12 +123,11 @@ export class BotController {
 
     const metrics = instance.metrics || {};
     if (!instance.mt5_online) {
-      const code = instance.agent_online ? "EA_NOT_LOADED" : "MT5_OFFLINE";
-      const meta = this.executionStatusMeta(code);
-      return { code, ...meta, tradeReady: false };
+      const meta = this.executionStatusMeta("MT5_OFFLINE");
+      return { code: "MT5_OFFLINE", ...meta, tradeReady: false };
     }
 
-    if (String(metrics.eaVersion || "") !== "1.003") {
+    if (!this.supportedEaRuntime(metrics.eaVersion)) {
       const meta = this.executionStatusMeta("EA_RUNTIME_OUTDATED");
       return { code: "EA_RUNTIME_OUTDATED", ...meta, tradeReady: false };
     }
@@ -396,17 +393,14 @@ export class BotController {
          (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '30 minutes') AS agent_online,
          (bi.device_last_seen_at IS NOT NULL AND bi.device_last_seen_at > now() - interval '90 seconds') AS device_online,
          CASE WHEN bi.last_seen_at IS NULL THEN NULL ELSE EXTRACT(EPOCH FROM (now() - bi.last_seen_at)) END AS ea_last_seen_age_seconds,
-         CASE WHEN bi.device_status='ACTIVE'
-                    AND bi.device_last_seen_at > now() - interval '90 seconds'
-                    AND bi.pending_account_number IS NOT NULL
+         CASE WHEN bi.pending_account_number IS NOT NULL
                     AND bi.pending_account_seen_at > now() - interval '10 minutes'
-                    AND COALESCE(bi.pending_account_ip,'')=COALESCE(bi.device_last_ip,'')
+                    AND bi.last_seen_at > now() - interval '20 seconds'
               THEN true ELSE false END AS rebind_ready,
          CASE WHEN bi.mt5_account_id IS NULL
                     AND bi.pending_account_number IS NOT NULL
                     AND bi.pending_account_seen_at > now() - interval '10 minutes'
                     AND bi.last_seen_at > now() - interval '20 seconds'
-                    AND COALESCE(bi.pending_account_ip,'')=COALESCE(bi.ea_last_ip,'')
               THEN true ELSE false END AS first_bind_ready
        FROM bot_instances bi
        WHERE bi.slot_id=$1`,
@@ -806,14 +800,6 @@ export class BotController {
     ) {
       throw new ConflictException("หยุดบอทและปิด Position ให้เรียบร้อยก่อนเปลี่ยนบัญชี MT5");
     }
-    if (
-      instance.device_status !== "ACTIVE" ||
-      !instance.device_last_seen_at ||
-      Date.now() - new Date(instance.device_last_seen_at).getTime() > 90_000
-    ) {
-      throw new ConflictException("Device Agent ของเครื่องที่ลงทะเบียนต้อง Online ก่อนเปลี่ยน MT5");
-    }
-
     await this.db.query(
       `UPDATE bot_instances SET
          desired_state='SAFE_STOP',
@@ -860,18 +846,11 @@ export class BotController {
     }
     const isFirstBind = !instance.old_account_id;
 
-    if (!isFirstBind && (
-      instance.device_status !== "ACTIVE" ||
-      !instance.device_last_seen_at ||
-      Date.now() - new Date(instance.device_last_seen_at).getTime() > 90_000
-    )) {
-      throw new ConflictException("เครื่องนี้ยังไม่ได้ลงทะเบียนด้วย SCENOVA Installer รุ่นใหม่ หรือ Agent ไม่ออนไลน์");
-    }
-    if (isFirstBind && (
+    if (
       !instance.last_seen_at ||
       Date.now() - new Date(instance.last_seen_at).getTime() > 20_000
-    )) {
-      throw new ConflictException("รอ Heartbeat ล่าสุดจาก EA ก่อนผูกบัญชี MT5 ครั้งแรก");
+    ) {
+      throw new ConflictException("รอ Heartbeat ล่าสุดจาก EA ก่อนยืนยันบัญชี MT5");
     }
     if (!instance.pending_account_number || !instance.pending_broker_server || !instance.pending_account_seen_at) {
       throw new ConflictException("ยังไม่พบบัญชี MT5 ใหม่จาก EA");
@@ -879,19 +858,6 @@ export class BotController {
     if (Date.now() - new Date(instance.pending_account_seen_at).getTime() > 10 * 60_000) {
       throw new ConflictException("ข้อมูลบัญชีที่ตรวจพบหมดอายุ กรุณาเปิด MT5 ให้ EA ส่งสถานะใหม่");
     }
-    if (
-      !instance.pending_account_ip ||
-      (isFirstBind
-        ? instance.pending_account_ip !== instance.ea_last_ip
-        : instance.pending_account_ip !== instance.device_last_ip)
-    ) {
-      throw new ConflictException(
-        isFirstBind
-          ? "บัญชี MT5 ที่ตรวจพบไม่ได้มาจาก Heartbeat ล่าสุดของ EA"
-          : "บัญชี MT5 ใหม่นี้ไม่ได้มาจากเครื่องที่ลงทะเบียนไว้"
-      );
-    }
-
     const accountNumber = String(instance.pending_account_number);
     const brokerServer = String(instance.pending_broker_server);
     const broker = String(instance.pending_broker || instance.old_broker || "Detected MT5").slice(0, 80);
@@ -1115,24 +1081,9 @@ export class BotController {
         throw new ConflictException("บัญชี MT5 นี้ไม่อนุญาตให้ Expert Advisor เทรด");
       }
 
-      const useDeviceLock = instance.device_status === "ACTIVE";
-      const seenAt = useDeviceLock ? instance.device_last_seen_at : instance.agent_last_seen_at;
-      const limitMs = useDeviceLock ? 90_000 : 30 * 60_000;
-      const seenMs = seenAt ? new Date(seenAt).getTime() : 0;
-      if (!seenMs || Date.now() - seenMs > limitMs) {
-        throw new ConflictException(useDeviceLock
-          ? "SCENOVA Device Agent is offline; open the registered PC before starting"
-          : "SCENOVA Desktop Agent is offline; reinstall from the website");
-      }
-
-      const expectedHash = this.productionEaHash();
-      if (!expectedHash || !instance.agent_ea_hash || String(instance.agent_ea_hash).toLowerCase() !== expectedHash) {
-        throw new ConflictException("SCENOVA EA integrity/version check failed; update or repair the EA before starting");
-      }
-
       const runningEaVersion = String(instance.metrics?.eaVersion || "");
-      if (runningEaVersion !== "1.003") {
-        throw new ConflictException("EA ที่กำลังรันใน MT5 เป็นรุ่นเก่า กรุณาอัปเดต FastBasketBot แล้ว Restart MT5 หรือถอด/ติด EA ใหม่ให้เป็น v1.003");
+      if (!this.supportedEaRuntime(runningEaVersion)) {
+        throw new ConflictException("FastBasketBot ที่กำลังรันเก่าเกินไป กรุณาติดตั้ง/อัปเดตจากเว็บไซต์ SCENOVA แล้วเปิด MT5 ใหม่");
       }
     }
 
