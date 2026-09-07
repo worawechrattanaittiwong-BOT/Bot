@@ -37,6 +37,8 @@ const defaultSettings = {
   maxBasketLossMoney: 10,
   dailyLossMoney: 25,
   dailyProfitTargetMoney: 0,
+  dailyProfitContinueAfterTarget: false,
+  dailyProfitDrawdownPercent: 20,
   basketProfitTargetMoney: 0,
   perPositionProfitMoney: 0,
   profitRunTrailPercent: 0,
@@ -537,7 +539,6 @@ export default function DashboardPage() {
       const enabled = Number(value || 0) > 0;
 
       if (key === "profitRunTrailPercent" && enabled) {
-        next.dailyProfitTargetMoney = 0;
         next.perPositionProfitMoney = 0;
         next.basketProfitTargetMoney = 0;
         next.basketTriggerMoney = 0;
@@ -547,7 +548,6 @@ export default function DashboardPage() {
       if (
         enabled &&
         [
-          "dailyProfitTargetMoney",
           "perPositionProfitMoney",
           "basketProfitTargetMoney",
           "basketTriggerMoney",
@@ -564,6 +564,10 @@ export default function DashboardPage() {
         next.perPositionProfitMoney = 0;
       }
 
+      if (key === "dailyProfitTargetMoney" && !enabled) {
+        next.dailyProfitContinueAfterTarget = false;
+      }
+
       return next;
     });
   }
@@ -578,6 +582,7 @@ export default function DashboardPage() {
         "lot",
         "maxPositions",
         "dailyProfitTargetMoney",
+        "dailyProfitDrawdownPercent",
         "basketProfitTargetMoney",
         "perPositionProfitMoney",
         "profitRunTrailPercent",
@@ -956,14 +961,17 @@ export default function DashboardPage() {
                     onChange={(v:string)=>editSetting("profitRunTrailPercent",v)}
                   />
 
-                  <ToggleSelectField
-                    label="กำไรต่อวันแล้วหยุด"
-                    options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                    defaultValue="10"
+                  <DailyProfitTargetField
                     value={settings.dailyProfitTargetMoney}
-                    disabled={profitRunModeEnabled}
-                    format={(v:string)=>"$" + v}
-                    onChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)}
+                    continueAfterTarget={Boolean(settings.dailyProfitContinueAfterTarget)}
+                    drawdownPercent={settings.dailyProfitDrawdownPercent}
+                    targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
+                    percentOptions={[5,10,15,20,25,30,40,50]}
+                    defaultTarget="10"
+                    defaultPercent="20"
+                    onTargetChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)}
+                    onContinueChange={(v:boolean)=>editSetting("dailyProfitContinueAfterTarget",v)}
+                    onPercentChange={(v:string)=>editSetting("dailyProfitDrawdownPercent",v)}
                   />
                   <ToggleSelectField
                     label="ขาดทุนต่อวันแล้วหยุด"
@@ -1078,7 +1086,7 @@ export default function DashboardPage() {
                     </b>
                   </div>
                 </div>
-                <div className="notice risk-notice">เมื่อเปิด “ปล่อยกำไรวิ่ง” ระบบจะปิดเป้ากำไรแบบอื่นและ Basket Trailing แบบ $ อัตโนมัติ</div>
+                <div className="notice risk-notice">กำไรต่อวันใช้ได้ตลอด ส่วน “ปล่อยกำไรวิ่ง” จะปิดเฉพาะกำไรต่อไม้ กำไรรวม Basket และ Basket Trailing แบบ $</div>
               </section>
 
               <section className="panel overview-access-card">
@@ -1548,6 +1556,74 @@ function ToggleSelectField(props: any) {
           <option key={value} value={value}>{props.format ? props.format(value) : value}</option>
         ))}
       </select>
+    </div>
+  );
+}
+
+function DailyProfitTargetField(props: any) {
+  const enabled = Number(props.value || 0) > 0;
+  const targetValue = enabled ? String(props.value) : String(props.defaultTarget);
+  const percentValue = String(props.drawdownPercent || props.defaultPercent);
+  const targetValues = Array.from(new Set([
+    ...props.targetOptions.map((value:any)=>String(value)),
+    targetValue
+  ]));
+  const percentValues = Array.from(new Set([
+    ...props.percentOptions.map((value:any)=>String(value)),
+    percentValue
+  ]));
+
+  return (
+    <div className={"field daily-profit-target-field " + (enabled ? "enabled" : "")}>
+      <label className="toggle-setting-label">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={e=>{
+            if (e.target.checked) {
+              props.onTargetChange?.(targetValue);
+            } else {
+              props.onTargetChange?.("0");
+              props.onContinueChange?.(false);
+            }
+          }}
+        />
+        <span>กำไรต่อวัน</span>
+      </label>
+
+      <div className="daily-profit-main-row">
+        <select
+          className="input"
+          value={targetValue}
+          disabled={!enabled}
+          onChange={e=>props.onTargetChange?.(e.target.value)}
+        >
+          {targetValues.map((value:string)=>(
+            <option key={value} value={value}>${value}</option>
+          ))}
+        </select>
+
+        <label className={"mini-check " + (!enabled ? "disabled" : "")}>
+          <input
+            type="checkbox"
+            checked={enabled && Boolean(props.continueAfterTarget)}
+            disabled={!enabled}
+            onChange={e=>props.onContinueChange?.(e.target.checked)}
+          />
+          <span>ถึงเป้าแล้วรันต่อ</span>
+        </label>
+
+        <select
+          className="input daily-profit-percent-select"
+          value={percentValue}
+          disabled={!enabled || !props.continueAfterTarget}
+          onChange={e=>props.onPercentChange?.(e.target.value)}
+        >
+          {percentValues.map((value:string)=>(
+            <option key={value} value={value}>ลด {value}% แล้วหยุด</option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }
