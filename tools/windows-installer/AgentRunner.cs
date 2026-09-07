@@ -15,7 +15,10 @@ internal static class AgentRunner
         var agentPath = Path.Combine(ScenovaRuntime.BaseDir, "SCENOVA-Agent-v2.exe");
 
         if (!string.Equals(source, agentPath, StringComparison.OrdinalIgnoreCase))
-            File.Copy(source, agentPath, true);
+        {
+            StopExistingAgent(agentPath);
+            CopyExecutableWithRetry(source, agentPath);
+        }
 
         using (var runKey = Registry.CurrentUser.OpenSubKey(
                    @"Software\Microsoft\Windows\CurrentVersion\Run", true))
@@ -45,6 +48,71 @@ internal static class AgentRunner
             });
         }
         catch { }
+    }
+
+    private static void StopExistingAgent(string agentPath)
+    {
+        var processName = Path.GetFileNameWithoutExtension(agentPath);
+        var currentProcessId = Environment.ProcessId;
+
+        foreach (var process in Process.GetProcessesByName(processName))
+        {
+            try
+            {
+                if (process.Id == currentProcessId)
+                    continue;
+
+                string? runningPath = null;
+                try
+                {
+                    runningPath = process.MainModule?.FileName;
+                }
+                catch
+                {
+                    // The process name is unique to SCENOVA Agent. If Windows
+                    // prevents reading MainModule, still stop the old Agent.
+                }
+
+                if (!string.IsNullOrWhiteSpace(runningPath) &&
+                    !string.Equals(runningPath, agentPath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(5000);
+            }
+            catch
+            {
+                // File replacement below has retries and will surface a clear
+                // error if Windows still keeps the old Agent executable locked.
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+    }
+
+    private static void CopyExecutableWithRetry(string source, string agentPath)
+    {
+        Exception? lastError = null;
+
+        for (var attempt = 1; attempt <= 12; attempt++)
+        {
+            try
+            {
+                File.Copy(source, agentPath, true);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                lastError = ex;
+                Thread.Sleep(250);
+            }
+        }
+
+        throw new InvalidOperationException(
+            "ไม่สามารถอัปเดต SCENOVA Device Agent ได้ กรุณารอสักครู่แล้วกดติดตั้งอีกครั้ง",
+            lastError);
     }
 
     internal static async Task RunAsync()
