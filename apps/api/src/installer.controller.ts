@@ -43,7 +43,9 @@ export class InstallerController {
       throw new ConflictException("invalid SCENOVA installer enrollment");
     }
 
-    const enrollment = await this.db.one(
+    const codeHash = this.crypto.sha256(code);
+    let retryEnrollment = false;
+    let enrollment = await this.db.one(
       `SELECT ie.*,ls.assigned_user_id,ls.mode,ls.status slot_status,u.status user_status
        FROM install_enrollments ie
        JOIN license_slots ls ON ls.id=ie.slot_id
@@ -52,9 +54,31 @@ export class InstallerController {
          AND ie.status='PENDING'
          AND ie.expires_at>now()
        LIMIT 1`,
-      [this.crypto.sha256(code)]
+      [codeHash]
     );
-    if (!enrollment) throw new ConflictException("installer code expired or already used");
+
+    // If installation failed after enrollment was consumed (for example while
+    // replacing the local Device Agent), allow the same installer to retry on
+    // the same registered device for a short window. A different device ID
+    // still cannot reuse the consumed enrollment.
+    if (!enrollment) {
+      enrollment = await this.db.one(
+        `SELECT ie.*,ls.assigned_user_id,ls.mode,ls.status slot_status,u.status user_status
+         FROM install_enrollments ie
+         JOIN license_slots ls ON ls.id=ie.slot_id
+         LEFT JOIN users u ON u.id=ls.assigned_user_id
+         JOIN bot_instances bi ON bi.slot_id=ie.slot_id
+         WHERE ie.code_hash=$1
+           AND ie.status='USED'
+           AND ie.used_at>now() - interval '30 minutes'
+           AND bi.device_public_id=$2
+         LIMIT 1`,
+        [codeHash, devicePublicId.slice(0, 160)]
+      );
+      retryEnrollment = Boolean(enrollment);
+    }
+
+    if (!enrollment) throw new ConflictException("installer code expired, already used, or belongs to another device");
     if (!enrollment.assigned_user_id || enrollment.user_status !== "ACTIVE") {
       throw new ConflictException("slot is not assigned to an active SCENOVA user");
     }
@@ -132,10 +156,12 @@ export class InstallerController {
       ]
     );
 
-    await this.db.query(
-      "UPDATE install_enrollments SET status='USED',used_at=now() WHERE id=$1",
-      [enrollment.id]
-    );
+    if (!retryEnrollment) {
+      await this.db.query(
+        "UPDATE install_enrollments SET status='USED',used_at=now() WHERE id=$1",
+        [enrollment.id]
+      );
+    }
     await this.db.query(
       "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'ENROLL_DEVICE','bot_instance',$2,$3::jsonb)",
       [
@@ -145,7 +171,8 @@ export class InstallerController {
           slotId: enrollment.slot_id,
           devicePublicId,
           hostname: body.hostname || null,
-          preservedLegacyToken: canPreserveLegacy
+          preservedLegacyToken: canPreserveLegacy,
+          retryEnrollment
         })
       ]
     );
@@ -160,7 +187,7 @@ export class InstallerController {
       webBase: process.env.PUBLIC_WEB_BASE || "https://snvea-bot.online",
       artifactHash: this.artifactHash(),
       artifactEndpoint: "/api/ea/artifact",
-      agentVersionRequired: "2.0.0",
+      agentVersionRequired: "2.0.2",
       preservedLegacyToken: canPreserveLegacy
     };
   }
