@@ -266,6 +266,7 @@ export class BotController {
          CASE WHEN bi.last_seen_at IS NULL THEN NULL ELSE EXTRACT(EPOCH FROM (now() - bi.last_seen_at)) END AS ea_last_seen_age_seconds,
          CASE WHEN bi.device_status='ACTIVE'
                     AND bi.device_last_seen_at > now() - interval '90 seconds'
+                    AND bi.account_change_requested_at > now() - interval '30 minutes'
                     AND bi.pending_account_number IS NOT NULL
                     AND bi.pending_account_seen_at > now() - interval '10 minutes'
                     AND COALESCE(bi.pending_account_ip,'')=COALESCE(bi.device_last_ip,'')
@@ -544,6 +545,62 @@ export class BotController {
     return { ok: true };
   }
 
+  @Post("mt5/change-request")
+  async requestMt5Change(@Req() req: any, @Query("slotId") slotId = "") {
+    const slot = await this.resolveSlot(req.user.sub, slotId || null);
+    if (slot.mode !== "LOCAL") {
+      throw new ConflictException("ปุ่มเปลี่ยน MT5 แบบไม่เปลี่ยน .set ใช้กับ LOCAL Slot เท่านั้น");
+    }
+
+    const instance = await this.db.one(
+      "SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions FROM bot_instances bi WHERE bi.slot_id=$1",
+      [slot.id]
+    );
+    if (!instance) throw new ConflictException("ติดตั้ง SCENOVA จากเว็บไซต์ก่อน");
+    if (!instance.mt5_account_id) throw new ConflictException("Slot นี้ยังไม่มี MT5 เดิมให้เปลี่ยน");
+    if (
+      instance.actual_state === "RUNNING" ||
+      instance.desired_state === "RUNNING" ||
+      Number(instance.positions || 0) > 0
+    ) {
+      throw new ConflictException("หยุดบอทและปิด Position ให้เรียบร้อยก่อนเปลี่ยนบัญชี MT5");
+    }
+    if (
+      instance.device_status !== "ACTIVE" ||
+      !instance.device_last_seen_at ||
+      Date.now() - new Date(instance.device_last_seen_at).getTime() > 90_000
+    ) {
+      throw new ConflictException("Device Agent ของเครื่องที่ลงทะเบียนต้อง Online ก่อนเปลี่ยน MT5");
+    }
+
+    await this.db.query(
+      `UPDATE bot_instances SET
+         desired_state='SAFE_STOP',
+         account_change_requested_at=now(),
+         pending_account_number=NULL,
+         pending_broker=NULL,
+         pending_broker_server=NULL,
+         pending_account_ip=NULL,
+         pending_account_seen_at=NULL
+       WHERE id=$1`,
+      [instance.id]
+    );
+    await this.db.query(
+      "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
+      [instance.id]
+    );
+    await this.db.query(
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'REQUEST_MT5_CHANGE','bot_instance',$2,$3::jsonb)",
+      [String(req.user.code || req.user.sub), instance.id, JSON.stringify({ slotId: slot.id })]
+    );
+
+    return {
+      ok: true,
+      expiresInMinutes: 30,
+      message: "พร้อมเปลี่ยน MT5 แล้ว กรุณา Login บัญชีใหม่ใน MT5 บนเครื่องเดิม"
+    };
+  }
+
   @Post("mt5/rebind")
   async rebindMt5(@Req() req: any, @Query("slotId") slotId = "") {
     const slot = await this.resolveSlot(req.user.sub, slotId || null);
@@ -566,6 +623,12 @@ export class BotController {
       Date.now() - new Date(instance.device_last_seen_at).getTime() > 90_000
     ) {
       throw new ConflictException("เครื่องนี้ยังไม่ได้ลงทะเบียนด้วย SCENOVA Installer รุ่นใหม่ หรือ Agent ไม่ออนไลน์");
+    }
+    if (
+      !instance.account_change_requested_at ||
+      Date.now() - new Date(instance.account_change_requested_at).getTime() > 30 * 60_000
+    ) {
+      throw new ConflictException("กรุณากด “เปลี่ยนบัญชี MT5” บนเว็บก่อน แล้ว Login บัญชีใหม่ใน MT5");
     }
     if (!instance.pending_account_number || !instance.pending_broker_server || !instance.pending_account_seen_at) {
       throw new ConflictException("ยังไม่พบบัญชี MT5 ใหม่จาก EA");
@@ -611,7 +674,7 @@ export class BotController {
       `UPDATE bot_instances SET
          mt5_account_id=$2,desired_state='STOPPED',actual_state='SAFE_STOP',
          pending_account_number=NULL,pending_broker=NULL,pending_broker_server=NULL,
-         pending_account_ip=NULL,pending_account_seen_at=NULL
+         pending_account_ip=NULL,pending_account_seen_at=NULL,account_change_requested_at=NULL
        WHERE id=$1`,
       [instance.id, account.id]
     );
@@ -731,7 +794,7 @@ export class BotController {
       await this.db.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [instance.mt5_account_id]);
     }
     await this.db.query(
-      "UPDATE bot_instances SET mt5_account_id=NULL,desired_state='STOPPED',actual_state='OFFLINE',last_seen_at=NULL,pending_account_number=NULL,pending_broker=NULL,pending_broker_server=NULL,pending_account_ip=NULL,pending_account_seen_at=NULL WHERE id=$1",
+      "UPDATE bot_instances SET mt5_account_id=NULL,desired_state='STOPPED',actual_state='OFFLINE',last_seen_at=NULL,pending_account_number=NULL,pending_broker=NULL,pending_broker_server=NULL,pending_account_ip=NULL,pending_account_seen_at=NULL,account_change_requested_at=NULL WHERE id=$1",
       [instance.id]
     );
     return { ok: true, preservedTrialHistory: true };
