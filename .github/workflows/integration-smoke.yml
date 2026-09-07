@@ -204,6 +204,33 @@ jobs:
           ADMIN_RELEASED_STATE=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select device_status || ':' || desired_state from bot_instances where slot_id='$SLOT_SECOND';")
           test "$ADMIN_RELEASED_STATE" = "UNREGISTERED:STOPPED"
 
+          echo "[integration] first MT5 bind is confirmable before Device Lock upgrade"
+          REGISTER3=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration3@scenova.test","password":"Integration123!"}')
+          TOKEN3=$(printf '%s' "$REGISTER3" | jq -r '.token')
+          DASH3=$(curl -fsS "$BASE/bot/dashboard" -H "authorization: Bearer $TOKEN3")
+          SLOT3=$(printf '%s' "$DASH3" | jq -r '.selectedSlot.id')
+
+          PREP3=$(curl -fsS -X POST "$BASE/bot/installers/windows" -H "authorization: Bearer $TOKEN3" -H 'content-type: application/json' -d "{\"slotId\":\"$SLOT3\"}")
+          CODE3=$(printf '%s' "$PREP3" | jq -r '.code')
+          ENROLL3=$(curl -fsS -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE3\",\"devicePublicId\":\"integration-device-003\",\"deviceSecret\":\"integration-device-secret-3333333333\",\"hostname\":\"LEGACY-PC\",\"terminalPath\":\"/tmp/terminal3\"}")
+          INSTANCE3=$(printf '%s' "$ENROLL3" | jq -r '.instanceId')
+          INSTALL_TOKEN3=$(printf '%s' "$ENROLL3" | jq -r '.installToken')
+
+          # Simulate an older/legacy Device Lock state while the EA itself is alive.
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set device_status='UNREGISTERED',device_last_seen_at=NULL,device_last_ip=NULL,mt5_account_id=NULL where id='$INSTANCE3';" >/dev/null
+
+          FIRST_DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE3\",\"installToken\":\"$INSTALL_TOKEN3\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"300003\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.003\",\"server\":\"SCENOVA-Legacy\",\"positions\":0}}")
+          test "$(printf '%s' "$FIRST_DETECT" | jq -r '.accountMismatch')" = "true"
+
+          FIRST_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT3" -H "authorization: Bearer $TOKEN3")
+          test "$(printf '%s' "$FIRST_DASH" | jq -r '.account')" = "null"
+          test "$(printf '%s' "$FIRST_DASH" | jq -r '.instance.first_bind_ready')" = "true"
+          test "$(printf '%s' "$FIRST_DASH" | jq -r '.instance.rebind_ready')" = "false"
+
+          FIRST_BIND=$(curl -fsS -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT3" -H "authorization: Bearer $TOKEN3")
+          test "$(printf '%s' "$FIRST_BIND" | jq -r '.firstBind')" = "true"
+          test "$(printf '%s' "$FIRST_BIND" | jq -r '.account.account_number')" = "300003"
+
           DUP_MT5_HTTP=$(curl -sS -o /tmp/duplicate-mt5.json -w "%{http_code}" -X POST "$BASE/bot/mt5" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d '{"accountNumber":"200002","broker":"SCENOVA","brokerServer":"SCENOVA-Real","mode":"CLOUD"}')
           test "$DUP_MT5_HTTP" = "409"
 
