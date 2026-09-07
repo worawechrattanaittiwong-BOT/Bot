@@ -156,6 +156,17 @@ export class BotController {
       return { code: "NO_ACCESS", ...meta, tradeReady: false };
     }
 
+    if (metrics.dailyProfitLocked === true) {
+      const meta = this.executionStatusMeta("DAILY_PROFIT_LOCK");
+      return {
+        code: "DAILY_PROFIT_LOCK",
+        ...meta,
+        tradeReady: false,
+        dailyProfit: Number(metrics.dailyProfit ?? 0),
+        dailyProfitTarget: Number(metrics.dailyProfitTarget ?? settings?.dailyProfitTargetMoney ?? 0)
+      };
+    }
+
     if (instance.desired_state !== "RUNNING") {
       const code = instance.desired_state === "SAFE_STOP" || instance.actual_state === "SAFE_STOP"
         ? "SAFE_STOP"
