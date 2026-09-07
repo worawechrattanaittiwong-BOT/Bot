@@ -159,16 +159,20 @@ export class BotController {
     if (!code || code === "EVALUATING" || code === "INITIALIZING") {
       const positions = Number(metrics.positions || 0);
       const maxPositions = Number(settings?.maxPositions ?? 10);
-      const spread = Number(metrics.spreadPoints ?? 0);
-      const maxSpread = Number(settings?.maxSpreadPoints ?? metrics.maxSpreadPoints ?? 50);
       const momentum = Number(metrics.momentumPoints ?? 0);
       const momentumEntry = Number(metrics.momentumEntryPoints ?? 8);
       const entryMode = String(settings?.entryMode || "AUTO_MOMENTUM");
 
       if (positions >= maxPositions) code = "MAX_POSITIONS";
-      else if (spread > maxSpread) code = "SPREAD_TOO_HIGH";
       else if (entryMode === "AUTO_MOMENTUM" && Math.abs(momentum) < momentumEntry) code = "WAITING_MOMENTUM";
       else code = "RUNNING_READY";
+    }
+
+    // Spread is telemetry only now; it must never make the dashboard report
+    // a blocked trading state after the EA spread gate was removed.
+    if (code === "SPREAD_TOO_HIGH") code = "RUNNING_READY";
+    if (instance.actual_state === "RUNNING" && (code === "SAFE_STOP" || code === "STOPPED")) {
+      code = "RUNNING_READY";
     }
 
     const meta = this.executionStatusMeta(code);
@@ -993,6 +997,10 @@ export class BotController {
       [instance.id]
     );
     await this.db.query(
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+      [instance.id]
+    );
+    await this.db.query(
       "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'START')",
       [instance.id]
     );
@@ -1051,6 +1059,10 @@ export class BotController {
     const instance = await this.getInstance(userId, slotId || null);
     const desired = command === "CLOSE_ALL" ? "STOPPED" : "SAFE_STOP";
     await this.db.query("UPDATE bot_instances SET desired_state=$2 WHERE id=$1", [instance.id, desired]);
+    await this.db.query(
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+      [instance.id]
+    );
     await this.db.query(
       "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,$2)",
       [instance.id, command]
