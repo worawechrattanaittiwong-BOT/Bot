@@ -45,6 +45,16 @@ const defaultSettings = {
   perPositionLossMoney: 0,
   minOrderIntervalMs: 300,
   maxOrdersPerMinute: 120,
+  adaptiveEngine: true,
+  riskPerOrderPercent: 0.25,
+  hardStopAtrMultiplier: 2,
+  atrPeriod: 14,
+  confidenceThreshold: 70,
+  sessionStartHour: 0,
+  sessionEndHour: 24,
+  maxAtrPoints: 3000,
+  cooldownMinutesAfterLoss: 15,
+  maxConsecutiveLosses: 3,
   entryMode: "AUTO_MOMENTUM"
 };
 
@@ -627,7 +637,17 @@ export default function DashboardPage() {
       "InpFlowTrailBoost=0.60",
       "InpPauseOnManualTrade=true",
       "InpHeartbeatSeconds=3",
-      "InpMaxOfflineLeaseSeconds=600"
+      "InpMaxOfflineLeaseSeconds=600",
+      "InpAdaptiveEngine=" + Boolean(settings.adaptiveEngine),
+      "InpRiskPerOrderPercent=" + settings.riskPerOrderPercent,
+      "InpHardStopAtrMultiplier=" + settings.hardStopAtrMultiplier,
+      "InpAtrPeriod=" + settings.atrPeriod,
+      "InpConfidenceThreshold=" + settings.confidenceThreshold,
+      "InpSessionStartHour=" + settings.sessionStartHour,
+      "InpSessionEndHour=" + settings.sessionEndHour,
+      "InpMaxAtrPoints=" + settings.maxAtrPoints,
+      "InpCooldownMinutesAfterLoss=" + settings.cooldownMinutesAfterLoss,
+      "InpMaxConsecutiveLosses=" + settings.maxConsecutiveLosses
     ].join("\r\n");
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -739,12 +759,27 @@ export default function DashboardPage() {
         "maxBasketLossMoney",
         "dailyLossMoney",
         "minOrderIntervalMs",
-        "maxOrdersPerMinute"
+        "maxOrdersPerMinute",
+        "riskPerOrderPercent",
+        "hardStopAtrMultiplier",
+        "atrPeriod",
+        "confidenceThreshold",
+        "sessionStartHour",
+        "sessionEndHour",
+        "maxAtrPoints",
+        "cooldownMinutesAfterLoss",
+        "maxConsecutiveLosses"
       ];
       const requiredNumericKeys = new Set([
         "lot",
         "maxPositions",
-        "maxOrdersPerMinute"
+        "maxOrdersPerMinute",
+        "atrPeriod",
+        "confidenceThreshold",
+        "sessionStartHour",
+        "sessionEndHour",
+        "cooldownMinutesAfterLoss",
+        "maxConsecutiveLosses"
       ]);
       const integerKeys = new Set([
         "maxPositions",
@@ -1168,7 +1203,7 @@ export default function DashboardPage() {
                     <div className="input read-only-value">{metrics.symbol || settings.symbol}</div>
                   </div>
                   <SelectField
-                    label="Lot"
+                    label="Lot สูงสุด (Adaptive จะลดให้ตามความเสี่ยง)"
                     options={[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1]}
                     value={settings.lot}
                     onChange={(v:string)=>editSetting("lot",v)}
@@ -1188,6 +1223,25 @@ export default function DashboardPage() {
                       <option value="SELL_ONLY">SELL ONLY</option>
                     </select>
                   </div>
+
+                  <div className="settings-group-title cc-settings-group trail"><span className="cc-settings-group-icon">◈</span><div><b>Adaptive Intelligence</b><small>Multi-timeframe & Dynamic Risk</small></div></div>
+
+                  <div className="field">
+                    <label>ระบบวิเคราะห์อัจฉริยะ</label>
+                    <select className="input" value={settings.adaptiveEngine ? "on" : "off"} onChange={e=>editSetting("adaptiveEngine", e.target.value === "on")}>
+                      <option value="on">เปิดใช้งาน (แนะนำ)</option>
+                      <option value="off">ปิด ใช้ Momentum เดิม</option>
+                    </select>
+                  </div>
+                  <SelectField label="ความเสี่ยงสูงสุดต่อไม้" options={[0.1,0.25,0.5,0.75,1,1.5,2]} value={settings.riskPerOrderPercent} format={(v:string)=>v + "% Equity"} onChange={(v:string)=>editSetting("riskPerOrderPercent",v)} />
+                  <SelectField label="คะแนนสัญญาณขั้นต่ำ" options={[50,60,65,70,75,80,85,90]} value={settings.confidenceThreshold} format={(v:string)=>v + "%"} onChange={(v:string)=>editSetting("confidenceThreshold",v)} />
+                  <SelectField label="Hard Stop ตาม ATR" options={[1,1.5,2,2.5,3,4]} value={settings.hardStopAtrMultiplier} format={(v:string)=>v + " × ATR"} onChange={(v:string)=>editSetting("hardStopAtrMultiplier",v)} />
+                  <SelectField label="ATR Period" options={[7,10,14,20,28,50]} value={settings.atrPeriod} onChange={(v:string)=>editSetting("atrPeriod",v)} />
+                  <SelectField label="พักหลังขาดทุน" options={[0,5,10,15,30,60,120]} value={settings.cooldownMinutesAfterLoss} format={(v:string)=>Number(v) === 0 ? "ไม่พัก" : v + " นาที"} onChange={(v:string)=>editSetting("cooldownMinutesAfterLoss",v)} />
+                  <SelectField label="ขาดทุนติดต่อกันสูงสุด" options={[0,1,2,3,4,5,7,10]} value={settings.maxConsecutiveLosses} format={(v:string)=>Number(v) === 0 ? "ไม่จำกัด" : v + " ไม้"} onChange={(v:string)=>editSetting("maxConsecutiveLosses",v)} />
+                  <SelectField label="เริ่ม Session (เวลา Server)" options={[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23]} value={settings.sessionStartHour} format={(v:string)=>String(v).padStart(2,"0") + ":00"} onChange={(v:string)=>editSetting("sessionStartHour",v)} />
+                  <SelectField label="จบ Session (เวลา Server)" options={[1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23,24]} value={settings.sessionEndHour} format={(v:string)=>String(v).padStart(2,"0") + ":00"} onChange={(v:string)=>editSetting("sessionEndHour",v)} />
+                  <SelectField label="ATR สูงสุดที่อนุญาต" options={[0,500,1000,1500,2000,3000,5000,10000]} value={settings.maxAtrPoints} format={(v:string)=>Number(v) === 0 ? "ไม่จำกัด" : v + " points"} onChange={(v:string)=>editSetting("maxAtrPoints",v)} />
 
                   <div className="settings-group-title cc-settings-group profit"><span className="cc-settings-group-icon">↗</span><div><b>เป้ากำไรและความเสี่ยง</b><small>Profit & Risk</small></div></div>
 
@@ -1324,6 +1378,8 @@ export default function DashboardPage() {
                             : "ไม่ตั้งเป้าปิดกำไร"}
                     </b>
                   </div>
+                  <div><span>สภาวะตลาด</span><b>{String(metrics.marketRegime || "รอข้อมูล")}</b></div>
+                  <div><span>ความมั่นใจสัญญาณ</span><b>{Number(metrics.signalConfidence || 0).toFixed(0)}% · Lot {Number(metrics.adaptiveLot || settings.lot).toFixed(2)}</b></div>
                 </div>
                 <div className="notice risk-notice">กำไรต่อวันใช้ได้ตลอด ส่วน “ปล่อยกำไรวิ่ง” จะปิดเฉพาะกำไรต่อไม้ กำไรรวม Basket และ Basket Trailing แบบ $</div>
               </details>

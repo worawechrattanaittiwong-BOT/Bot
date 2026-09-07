@@ -222,6 +222,23 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         updated_at=now()
       WHERE COALESCE(settings->>'symbol','') ILIKE 'XAUUSD%'
         AND COALESCE((settings->>'maxSpreadPoints')::int,50)=50;
+
+      -- Add Adaptive Engine defaults without replacing values already chosen
+      -- by a user. JSONB values on the right take precedence.
+      UPDATE bot_settings
+      SET settings='{
+        "adaptiveEngine":true,
+        "riskPerOrderPercent":0.25,
+        "hardStopAtrMultiplier":2.0,
+        "atrPeriod":14,
+        "confidenceThreshold":70,
+        "sessionStartHour":0,
+        "sessionEndHour":24,
+        "maxAtrPoints":3000,
+        "cooldownMinutesAfterLoss":15,
+        "maxConsecutiveLosses":3
+      }'::jsonb || settings
+      WHERE NOT settings ? 'adaptiveEngine';
     `);
   }
 

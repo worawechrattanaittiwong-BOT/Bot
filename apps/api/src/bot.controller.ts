@@ -26,7 +26,7 @@ export class BotController {
 
   private supportedEaRuntime(version: any) {
     const value = Number(String(version || "").trim());
-    return Number.isFinite(value) && value >= 1.007;
+    return Number.isFinite(value) && value >= 1.008;
   }
 
   private installerUpdateState(instance: any, mode?: string | null) {
@@ -108,7 +108,7 @@ export class BotController {
       TERMINAL_DISCONNECTED: { label: "MT5 ไม่มีการเชื่อมต่อ", detail: "Terminal ยังไม่เชื่อม Broker/Server", tone: "bad" },
       ALGO_TRADING_OFF: { label: "Algo Trading ปิดอยู่", detail: "เปิด Algo Trading ใน MetaTrader 5 ก่อนเริ่มบอท", tone: "bad" },
       EA_TRADING_DISABLED: { label: "EA ไม่ได้รับอนุญาตให้เทรด", detail: "เปิด Allow Algo Trading ใน Properties ของ EA", tone: "bad" },
-      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "ติดตั้ง/อัปเดต FastBasketBot จากเว็บไซต์ SCENOVA ให้เป็น v1.007 ขึ้นไป", tone: "bad" },
+      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "ติดตั้ง/อัปเดต FastBasketBot จากเว็บไซต์ SCENOVA ให้เป็น v1.008 ขึ้นไป", tone: "bad" },
       ACCOUNT_TRADING_DISABLED: { label: "บัญชีนี้ไม่อนุญาตให้เทรด", detail: "ตรวจสิทธิ์ Trading ของบัญชีกับ Broker", tone: "bad" },
       ACCOUNT_EXPERT_DISABLED: { label: "บัญชีไม่อนุญาต Expert Advisor", detail: "Broker/บัญชีปิดการเทรดด้วย EA", tone: "bad" },
       SYMBOL_TRADING_DISABLED: { label: "Symbol นี้เปิดออเดอร์ไม่ได้", detail: "Broker ปิดการเปิดออเดอร์ใหม่บน Symbol นี้", tone: "bad" },
@@ -126,6 +126,13 @@ export class BotController {
       PROFIT_RUN_PERCENT_TRAIL: { label: "ปิดกำไรตาม % จากจุดสูงสุด", detail: "กำไรย่อลงจาก Peak ตามเปอร์เซ็นต์ที่ตั้งไว้", tone: "good" },
       WAITING_EA_START: { label: "กำลังรอ EA รับคำสั่ง Start", detail: "คำสั่งจากเว็บส่งแล้ว รอ Heartbeat รอบถัดไป", tone: "warn" },
       WAITING_MOMENTUM: { label: "กำลังรอสัญญาณ Momentum", detail: "บอท RUNNING แล้ว แต่เงื่อนไขเข้าออเดอร์ยังไม่ถึง", tone: "good" },
+      WAITING_CONFIDENCE: { label: "กำลังรอความมั่นใจของสัญญาณ", detail: "คะแนนหลาย Timeframe ยังต่ำกว่าเกณฑ์ที่ตั้งไว้", tone: "good" },
+      WAITING_TREND_ALIGNMENT: { label: "กำลังรอแนวโน้มยืนยัน", detail: "M15 และ H1 ยังไม่สนับสนุนทิศทางเข้าออเดอร์", tone: "good" },
+      SESSION_BLOCKED: { label: "อยู่นอกช่วงเวลาเทรด", detail: "Adaptive Engine จะเริ่มประเมินใหม่ใน Session ที่กำหนด", tone: "warn" },
+      VOLATILITY_TOO_HIGH: { label: "ความผันผวนสูงเกินกำหนด", detail: "ATR สูงกว่าระดับปลอดภัย ระบบจึงพักการเปิดออเดอร์ใหม่", tone: "warn" },
+      ADAPTIVE_DATA_NOT_READY: { label: "กำลังเตรียมข้อมูลตลาด", detail: "รอข้อมูลแท่งราคา M5, M15 และ H1 ให้เพียงพอ", tone: "warn" },
+      LOSS_COOLDOWN: { label: "พักหลังขาดทุน", detail: "ระบบหยุดเปิดไม้ชั่วคราวเพื่อลดการเทรดแก้มือ", tone: "warn" },
+      RISK_LIMIT_TOO_SMALL: { label: "ความเสี่ยงไม่พอสำหรับ Lot ขั้นต่ำ", detail: "Stop distance และ Equity ปัจจุบันทำให้ Lot ขั้นต่ำของ Broker เสี่ยงเกินค่าที่ตั้งไว้", tone: "warn" },
       SPREAD_TOO_HIGH: { label: "Spread สูงเกินกำหนด", detail: "บอทรอจน Spread ต่ำกว่า Max Spread", tone: "warn" },
       MAX_POSITIONS: { label: "Position เต็มแล้ว", detail: "จำนวน Position ถึง Max Positions", tone: "warn" },
       ORDER_RATE_LIMIT: { label: "กำลังรอช่วงส่งคำสั่งถัดไป", detail: "Rate limit ของบอทยังไม่พร้อมส่ง Order ใหม่", tone: "warn" },
@@ -1263,6 +1270,16 @@ export class BotController {
     numberSetting("perPositionLossMoney", 0, 100000);
     numberSetting("minOrderIntervalMs", 0, 60000, true);
     numberSetting("maxOrdersPerMinute", 1, 5000, true);
+    booleanSetting("adaptiveEngine");
+    numberSetting("riskPerOrderPercent", 0.01, 5);
+    numberSetting("hardStopAtrMultiplier", 0.5, 10);
+    numberSetting("atrPeriod", 5, 100, true);
+    numberSetting("confidenceThreshold", 40, 95, true);
+    numberSetting("sessionStartHour", 0, 23, true);
+    numberSetting("sessionEndHour", 1, 24, true);
+    numberSetting("maxAtrPoints", 0, 100000);
+    numberSetting("cooldownMinutesAfterLoss", 0, 1440, true);
+    numberSetting("maxConsecutiveLosses", 0, 20, true);
 
     const requestedBasketProfit = Number(clean.basketProfitTargetMoney ?? 0);
     const requestedPerPositionProfit = Number(clean.perPositionProfitMoney ?? 0);

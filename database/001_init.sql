@@ -105,6 +105,16 @@ CREATE TABLE IF NOT EXISTS bot_settings (
     "maxSpreadPoints":300,
     "minOrderIntervalMs":300,
     "maxOrdersPerMinute":120,
+    "adaptiveEngine":true,
+    "riskPerOrderPercent":0.25,
+    "hardStopAtrMultiplier":2.0,
+    "atrPeriod":14,
+    "confidenceThreshold":70,
+    "sessionStartHour":0,
+    "sessionEndHour":24,
+    "maxAtrPoints":3000,
+    "cooldownMinutesAfterLoss":15,
+    "maxConsecutiveLosses":3,
     "entryMode":"AUTO_MOMENTUM"
   }'::jsonb,
   updated_at timestamptz NOT NULL DEFAULT now()
