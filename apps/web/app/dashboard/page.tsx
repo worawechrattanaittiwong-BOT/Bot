@@ -1,15 +1,18 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 
 type Dashboard = {
   user: any;
+  slots: any[];
+  selectedSlot: any;
   account: any;
   instance: any;
   settings: any;
   entitlement: any;
+  trialRequest: any;
 };
 
 type BrokerCatalog = {
@@ -43,6 +46,9 @@ export default function DashboardPage() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [activeView, setActiveView] = useState<View>("overview");
+  const [selectedSlotId, setSelectedSlotId] = useState("");
+  const selectedSlotIdRef = useRef("");
+  const [lineContact, setLineContact] = useState("");
   const [mode, setMode] = useState<"CLOUD"|"LOCAL">("LOCAL");
   const [accountNumber, setAccountNumber] = useState("");
   const [brokerCatalog, setBrokerCatalog] = useState<BrokerCatalog[]>([]);
@@ -62,14 +68,20 @@ export default function DashboardPage() {
     process.env.NEXT_PUBLIC_MT5_API_BASE ||
     (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
 
-  async function load() {
+  async function load(slotIdArg?: string) {
     try {
-      const d = await api("/bot/dashboard");
+      const slotId = slotIdArg ?? selectedSlotIdRef.current;
+      const d = await api("/bot/dashboard" + (slotId ? "?slotId=" + encodeURIComponent(slotId) : ""));
       setData(d);
       setSettings({ ...defaultSettings, ...(d.settings || {}) });
-      const requestedView = typeof window !== "undefined"
-        ? new URLSearchParams(window.location.search).get("view")
-        : null;
+      const resolvedSlotId = String(d.selectedSlot?.id || "");
+      if (resolvedSlotId && resolvedSlotId !== selectedSlotIdRef.current) {
+        selectedSlotIdRef.current = resolvedSlotId;
+        setSelectedSlotId(resolvedSlotId);
+      }
+      if (d.selectedSlot?.mode === "CLOUD" || d.selectedSlot?.mode === "LOCAL") {
+        setMode(d.selectedSlot.mode);
+      }
       setError("");
     } catch (e: any) {
       setError(e.message);
@@ -87,11 +99,11 @@ export default function DashboardPage() {
       setActiveView(requestedView);
     }
 
-    load();
+    load("");
     api("/catalog/brokers")
       .then((rows)=>setBrokerCatalog(rows))
       .catch(()=>setBrokerCatalog([]));
-    const id = setInterval(load, 5000);
+    const id = setInterval(()=>load(selectedSlotIdRef.current), 5000);
     return () => clearInterval(id);
   }, []);
 
@@ -101,7 +113,8 @@ export default function DashboardPage() {
     const refreshLogs = async () => {
       try {
         setLogsLoading(true);
-        const result = await api("/bot/logs");
+        const slotQuery = selectedSlotIdRef.current ? "?slotId=" + encodeURIComponent(selectedSlotIdRef.current) : "";
+        const result = await api("/bot/logs" + slotQuery);
         if (!cancelled) setBotLogs(result);
       } catch (e: any) {
         if (!cancelled) setError(e.message);
@@ -115,7 +128,7 @@ export default function DashboardPage() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [logsOpen, data?.instance?.id]);
+  }, [logsOpen, data?.instance?.id, selectedSlotId]);
 
   const metrics = data?.instance?.metrics || {};
   const state = data?.instance?.actual_state || "OFFLINE";
@@ -173,10 +186,11 @@ export default function DashboardPage() {
       const result = await api("/bot/mt5", {
         method: "POST",
         body: JSON.stringify({
+          slotId: selectedSlotIdRef.current || undefined,
           accountNumber,
           broker: selectedBrokerName,
           brokerServer: selectedServer,
-          mode
+          mode: "CLOUD"
         })
       });
       setInstallToken(result.installToken || "");
@@ -203,60 +217,121 @@ export default function DashboardPage() {
     setActivationMessage("");
     try {
       if (data?.instance?.actual_state === "RUNNING" || data?.instance?.desired_state === "RUNNING") {
-        throw new Error("กรุณาหยุดบอทก่อนติดตั้งหรือเชื่อมใหม่");
+        throw new Error("กรุณาหยุดบอทก่อนติดตั้ง ย้ายเครื่อง หรืออัปเกรด Device Lock");
       }
 
-      const result = await api("/bot/mt5/rotate-install-token", { method: "POST" });
-      const instanceId = result.instanceId || data?.instance?.id || "";
-      const token = result.installToken || "";
-      if (!instanceId || !token) throw new Error("ไม่สามารถสร้างรหัสติดตั้งได้");
+      const result = await api("/bot/installers/windows", {
+        method: "POST",
+        body: JSON.stringify({ slotId: selectedSlotIdRef.current || undefined })
+      });
+      if (!result?.downloadPath || !result?.fileName) {
+        throw new Error("ยังไม่มี SCENOVA Windows Installer พร้อมดาวน์โหลด");
+      }
 
-      setInstallInstanceId(instanceId);
-      setInstallToken(token);
-
-      const webBase = window.location.origin;
-      const apiBase = mt5ApiBase || webBase + "/backend";
-      const installerUrl = webBase + "/downloads/SCENOVA-MT5-Setup.ps1";
-      const cmd = [
-        "@echo off",
-        "chcp 65001 >nul",
-        "title SCENOVA MT5 BOT EA Installer",
-        "echo.",
-        "echo ================================================",
-        "echo  SCENOVA MT5 BOT EA - Automatic Installer",
-        "echo ================================================",
-        "echo.",
-        "set \"SCENOVA_SETUP=%TEMP%\\SCENOVA-MT5-Setup.ps1\"",
-        "echo Downloading SCENOVA installer...",
-        "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"try { Invoke-WebRequest -UseBasicParsing -Uri '" + installerUrl + "' -OutFile $env:SCENOVA_SETUP } catch { Write-Host $_.Exception.Message -ForegroundColor Red; exit 1 }\"",
-        "if errorlevel 1 goto :failed",
-        "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%SCENOVA_SETUP%\" -ApiBase \"" + apiBase + "\" -WebBase \"" + webBase + "\" -InstanceId \"" + instanceId + "\" -InstallToken \"" + token + "\"",
-        "goto :end",
-        ":failed",
-        "echo.",
-        "echo Installation download failed. Please check your internet connection.",
-        ":end",
-        "echo.",
-        "pause"
-      ].join("\r\n");
-
-      const blob = new Blob([cmd], { type: "application/octet-stream" });
+      const response = await fetch(result.downloadPath, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("ไฟล์ SCENOVA Installer ยังไม่พร้อม กรุณาลองอีกครั้งหลังระบบ Build เสร็จ");
+      }
+      const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "SCENOVA-MT5-Installer.cmd";
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.fileName;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-      setActivationMessage("ดาวน์โหลด SCENOVA Installer แล้ว ให้ดับเบิลคลิกไฟล์ SCENOVA-MT5-Installer.cmd ได้เลย รุ่นนี้ติดตั้งแบบ Current User และไม่ต้องใช้สิทธิ์ Administrator/UAC");
+      setActivationMessage("ดาวน์โหลด SCENOVA Setup แล้ว ดับเบิลคลิกไฟล์ .exe ที่ได้จากหน้านี้เพื่อติดตั้ง ไม่ต้องใช้ CMD หรือ PowerShell");
     } catch (e: any) {
       setError(e.message);
     } finally {
       setBusy(false);
     }
+  }
+
+  async function rebindDetectedAccount() {
+    if (!data?.instance?.pending_account_number) return;
+    if (!confirm("เปลี่ยน Slot นี้มาใช้ MT5 " + data.instance.pending_account_number + " (" + (data.instance.pending_broker_server || "ไม่ทราบ Server") + ") ใช่หรือไม่?")) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api("/bot/mt5/rebind?slotId=" + encodeURIComponent(selectedSlotIdRef.current), { method: "POST" });
+      setNotice("เปลี่ยนบัญชี MT5 ให้ Slot นี้แล้ว ไม่ต้องเปลี่ยน .set หรือ Install Token");
+      await load(selectedSlotIdRef.current);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function requestTrial(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api("/bot/trial-request?slotId=" + encodeURIComponent(selectedSlotIdRef.current), {
+        method: "POST",
+        body: JSON.stringify({ lineContact })
+      });
+      setNotice("ส่งคำขอ Trial แล้ว กรุณาแจ้ง User ID และ LINE นี้กับผู้ดูแลเพื่อรออนุมัติ");
+      setLineContact("");
+      await load(selectedSlotIdRef.current);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function assignPartnerSlot(slot: any) {
+    const target = prompt("กรอก Email หรือ User ID ของลูกค้าที่จะใช้ Slot #" + slot.slot_number);
+    if (!target) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("/bot/slots/assign", {
+        method: "POST",
+        body: JSON.stringify({ slotId: slot.id, target })
+      });
+      setNotice("เปิด Slot #" + slot.slot_number + " ให้ " + target + " แล้ว");
+      await load(selectedSlotIdRef.current);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function releasePartnerSlot(slot: any) {
+    if (!confirm("คืน Slot #" + slot.slot_number + " และยกเลิกเครื่อง/MT5 ที่ผูกกับ Slot นี้ใช่หรือไม่?")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("/bot/slots/release", {
+        method: "POST",
+        body: JSON.stringify({ slotId: slot.id })
+      });
+      setNotice("คืน Slot #" + slot.slot_number + " แล้ว พร้อมนำไปเปิดให้ผู้ใช้อื่น");
+      await load(selectedSlotIdRef.current);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function selectSlot(slotId: string) {
+    if (!slotId || slotId === selectedSlotIdRef.current) return;
+    selectedSlotIdRef.current = slotId;
+    setSelectedSlotId(slotId);
+    setError("");
+    setNotice("");
+    setActivationMessage("");
+    load(slotId);
   }
 
   async function rotateInstallToken() {
@@ -334,7 +409,7 @@ export default function DashboardPage() {
     setBusy(true);
     setError("");
     try {
-      await api("/bot/mt5/reset", { method: "POST" });
+      await api("/bot/mt5/reset?slotId=" + encodeURIComponent(selectedSlotIdRef.current), { method: "POST" });
       setInstallToken("");
       setInstallInstanceId("");
       await load();
@@ -351,7 +426,10 @@ export default function DashboardPage() {
     setError("");
     setNotice("");
     try {
-      await api(path, { method: "POST" });
+      const suffix = selectedSlotIdRef.current
+        ? (path.includes("?") ? "&" : "?") + "slotId=" + encodeURIComponent(selectedSlotIdRef.current)
+        : "";
+      await api(path + suffix, { method: "POST" });
       setNotice(success);
       await load();
     } catch (e: any) {
@@ -367,7 +445,8 @@ export default function DashboardPage() {
     setError("");
     setNotice("");
     try {
-      await api("/bot/settings", { method: "PUT", body: JSON.stringify(settings) });
+      const suffix = selectedSlotIdRef.current ? "?slotId=" + encodeURIComponent(selectedSlotIdRef.current) : "";
+      await api("/bot/settings" + suffix, { method: "PUT", body: JSON.stringify(settings) });
       setNotice("บันทึกค่าการเทรดแล้ว");
       await load();
     } catch (e: any) {
@@ -409,7 +488,7 @@ export default function DashboardPage() {
 
   const navItems: Array<{id:View;label:string;hint:string}> = [
     { id:"overview", label:"ภาพรวม", hint:"สถานะและควบคุมบอท" },
-    { id:"account", label:"บัญชี MT5", hint:"เชื่อมต่อและติดตั้ง EA" },
+    { id:"account", label:"บัญชี MT5", hint:"Slots, Device และการเชื่อมต่อ" },
     { id:"settings", label:"ตั้งค่าบอท", hint:"กลยุทธ์และความเสี่ยง" },
     { id:"access", label:"สิทธิ์ใช้งาน", hint:"Trial และสมาชิก" }
   ];
@@ -472,7 +551,7 @@ export default function DashboardPage() {
             </h2>
             <div className="muted page-subtitle">
               {activeView === "overview" && "ดูสิ่งสำคัญและสั่งงานบอทจากจุดเดียว"}
-              {activeView === "account" && "ตั้งค่าการเชื่อมต่อให้ครบตามลำดับ"}
+              {activeView === "account" && "ติดตั้งจากเว็บไซต์ จัดการ Device และเปลี่ยน MT5 โดยไม่ต้องเปลี่ยน .set"}
               {activeView === "settings" && "ปรับค่าที่มีผลต่อการเข้าออเดอร์และการควบคุมความเสี่ยง"}
               {activeView === "access" && "ตรวจสถานะ Trial สมาชิก และเวลาคงเหลือ"}
             </div>
@@ -482,6 +561,26 @@ export default function DashboardPage() {
             <span className="badge"><span className={"dot " + (desired==="RUNNING" ? "blue":"purple")}/>{desired==="RUNNING" ? "บอทกำลังทำงาน" : "บอทหยุดอยู่"}</span>
           </div>
         </header>
+
+        {(data.slots || []).filter((slot:any)=>slot.can_control).length > 1 && (
+          <section className="slot-switcher">
+            <div>
+              <span className="slot-switcher-label">ACTIVE SLOT</span>
+              <b>เลือก Slot ที่ต้องการควบคุม</b>
+            </div>
+            <select
+              className="input slot-switcher-select"
+              value={selectedSlotId || data.selectedSlot?.id || ""}
+              onChange={e=>selectSlot(e.target.value)}
+            >
+              {(data.slots || []).filter((slot:any)=>slot.can_control).map((slot:any)=>(
+                <option key={slot.id} value={slot.id}>
+                  Slot {slot.slot_number} · {slot.mode} · {slot.account_number || "ยังไม่เชื่อม MT5"}
+                </option>
+              ))}
+            </select>
+          </section>
+        )}
 
         {error && <div className="notice bad page-notice">{error}</div>}
         {notice && <div className="notice good page-notice">{notice}</div>}
