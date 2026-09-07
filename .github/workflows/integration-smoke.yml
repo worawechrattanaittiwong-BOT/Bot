@@ -79,6 +79,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          PRODUCT_VERSION=$(sed -n 's/^#define SCENOVA_PRODUCT_VERSION "\([^"]*\)"/\1/p' mt5/FastBasketBot.mq5)
+          INSTALLER_VERSION=$(sed -n 's/^export const DEFAULT_INSTALLER_VERSION = "\([^"]*\)";/\1/p' apps/api/src/release-version.ts)
+          test -n "$PRODUCT_VERSION"
+          test "$PRODUCT_VERSION" = "$INSTALLER_VERSION"
+
           REGISTER=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration@scenova.test","password":"Integration123!"}')
           TOKEN=$(printf '%s' "$REGISTER" | jq -r '.token')
           test -n "$TOKEN"
@@ -105,7 +110,7 @@ jobs:
           test "$(printf '%s' "$AGENT" | jq -r '.deviceVerified')" = "true"
 
           echo "[integration] auto-binding first LOCAL MT5 from EA runtime"
-          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.004\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.004\",\"productVersion\":\"2.0.5\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           test "$(printf '%s' "$DETECT" | jq -r '.accountMismatch // false')" = "false"
 
           DASH2=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
@@ -114,6 +119,7 @@ jobs:
           test "$(printf '%s' "$DASH2" | jq -r '.account.account_number')" = "100001"
           test "$(printf '%s' "$DASH2" | jq -r '.account.broker_server')" = "SCENOVA-Demo"
           test "$(printf '%s' "$DASH2" | jq -r '.instance.pending_account_number // empty')" = ""
+          test "$(printf '%s' "$DASH2" | jq -r '.instance.metrics.productVersion')" = "2.0.5"
 
           echo "[integration] saving bot settings"
           SETTINGS_HTTP=$(curl -sS -o /tmp/settings-save.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"symbol":"XAUUSDm","lot":0.02,"maxPositions":7,"basketTriggerMoney":3.5,"basketTrailMoney":0.75,"maxBasketLossMoney":12,"dailyLossMoney":30,"dailyProfitTargetMoney":10,"basketProfitTargetMoney":10,"perPositionLossMoney":2,"minOrderIntervalMs":450,"maxOrdersPerMinute":90,"entryMode":"BUY_ONLY"}')
