@@ -185,6 +185,22 @@ export default function DashboardPage() {
   }, [entitlement]);
 
   const connectionLabel = isMt5Online ? "เชื่อมต่อแล้ว" : data?.account ? "รอ MT5 เชื่อมต่อ" : "ยังไม่ได้เชื่อมบัญชี";
+  const controlStateLabel =
+    desired === "RUNNING"
+      ? (state === "RUNNING" ? "บอทกำลังทำงาน" : "กำลังเริ่มบอท")
+      : desired === "SAFE_STOP"
+        ? "Safe Stop — ไม่เปิดออเดอร์ใหม่"
+        : "บอทหยุดอยู่";
+  const actualStateLabel =
+    state === "RUNNING" ? "RUNNING — กำลังทำงาน"
+      : state === "SAFE_STOP" ? "SAFE_STOP — ไม่เปิดออเดอร์ใหม่"
+      : state === "STOPPED" ? "STOPPED — หยุด"
+      : state;
+  const desiredStateLabel =
+    desired === "RUNNING" ? "RUNNING — ให้บอททำงาน"
+      : desired === "SAFE_STOP" ? "SAFE_STOP — ห้ามเปิดออเดอร์ใหม่"
+      : desired === "STOPPED" ? "STOPPED — หยุด"
+      : desired;
   const agentLastSeen = data?.instance?.agent_last_seen_at
     ? new Date(data.instance.agent_last_seen_at)
     : null;
@@ -605,7 +621,7 @@ export default function DashboardPage() {
           </div>
           <div className="status-row">
             <span className="badge"><span className={"dot " + (isMt5Online ? "green":"red")}/>{connectionLabel}</span>
-            <span className="badge"><span className={"dot " + (desired==="RUNNING" ? "blue":"purple")}/>{desired==="RUNNING" ? "บอทกำลังทำงาน" : "บอทหยุดอยู่"}</span>
+            <span className="badge"><span className={"dot " + (desired==="RUNNING" ? "blue":"purple")}/>{controlStateLabel}</span>
           </div>
         </header>
 
@@ -682,19 +698,19 @@ export default function DashboardPage() {
                     <p>{liveStatus.detail}</p>
                     <div className="execution-metrics">
                       <span>
-                        <span className="metric-label-with-info">Momentum <InfoTip text="ค่าการเคลื่อนที่ของราคาที่ EA วัดแบบ Real-time จาก Tick ล่าสุด ใช้ประกอบ AUTO_MOMENTUM ค่านี้เป็นค่าตลาด ไม่ใช่ช่องที่ผู้ใช้ตั้งโดยตรง" /></span>
+                        <span className="metric-label-with-info">Momentum</span>
                         <b>{Number(metrics.momentumPoints ?? 0).toFixed(1)}</b>
                       </span>
                       <span>
-                        <span className="metric-label-with-info">Spread <InfoTip text="ตัวหน้า = Spread ปัจจุบันจาก Broker ปรับจากเว็บไม่ได้ · ตัวหลัง = Max Spread ที่คุณตั้งได้ ถ้า Spread ปัจจุบันสูงกว่า Max Spread บอทจะรอและไม่เปิดออเดอร์ใหม่" /></span>
-                        <b>{Number(metrics.spreadPoints ?? 0).toFixed(1)} / {Number(settings.maxSpreadPoints ?? 50)} pt</b>
+                        <span className="metric-label-with-info">Spread</span>
+                        <b>{Number(metrics.spreadPoints ?? 0).toFixed(1)} pt</b>
                       </span>
                       <span>
-                        <span className="metric-label-with-info">Algo <InfoTip text="สถานะปุ่ม Algo Trading หลักของ MetaTrader 5 ต้องเป็น ON จึงจะอนุญาตให้ EA ส่งคำสั่งเทรด" /></span>
+                        <span className="metric-label-with-info">Algo</span>
                         <b>{metrics.terminalTradeAllowed === false ? "OFF" : metrics.terminalTradeAllowed === true ? "ON" : "รอ EA v1.002"}</b>
                       </span>
                       <span>
-                        <span className="metric-label-with-info">EA Trading <InfoTip text="สถานะ Allow Algo Trading ของ EA บนกราฟ ต้องเป็น ON เช่นกัน ไม่เช่นนั้น EA เชื่อม Server ได้แต่ส่ง Order ไม่ได้" /></span>
+                        <span className="metric-label-with-info">EA Trading</span>
                         <b>{metrics.mqlTradeAllowed === false ? "OFF" : metrics.mqlTradeAllowed === true ? "ON" : "รอ EA v1.002"}</b>
                       </span>
                     </div>
@@ -706,14 +722,14 @@ export default function DashboardPage() {
                     )}
                   </div>
                   <div className="primary-actions">
-                    <button className="btn primary btn-lg" title="สั่งให้ EA เริ่มประเมินเงื่อนไขและเปิดออเดอร์เมื่อเงื่อนไขผ่าน" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว กำลังรอ EA ยืนยันสถานะการทำงานแบบ Real-time")}>▶ เริ่มบอท</button>
+                    <button className="btn primary btn-lg" title="สั่ง EA เริ่มทำงานและเปิดออเดอร์แรกทันทีเมื่อรับคำสั่ง" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>▶ เริ่มบอท</button>
                     <button className="btn purple btn-lg" title="หยุดการเปิดออเดอร์ใหม่ แต่ยังให้ EA จัดการ Basket/Position ที่มีอยู่ตาม Logic ความปลอดภัย" disabled={busy} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}>■ หยุดอย่างปลอดภัย</button>
                   </div>
                   <button className="btn danger full" title="สั่ง EA ปิด Position ของบอททั้งหมดและหยุดบอท" disabled={busy} onClick={()=>command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}>⚠ ปิดออเดอร์ทั้งหมด</button>
                   <div className="control-help-row">
-                    <span><InfoTip text="เริ่มบอท: เปลี่ยนสถานะเป็น RUNNING แต่ไม่ได้บังคับเปิด Order ทันที EA ยังต้องรอ Momentum, Spread และเงื่อนไขความปลอดภัยให้ผ่าน" /> เริ่มบอท</span>
-                    <span><InfoTip text="หยุดอย่างปลอดภัย: ห้ามเปิดรอบใหม่ แต่ Position/Basket ที่มีอยู่ยังถูก EA จัดการตาม Logic ที่กำหนด" /> Safe Stop</span>
-                    <span><InfoTip text="ปิดออเดอร์ทั้งหมด: ส่งคำสั่ง CLOSE ALL ให้ EA ปิด Position ที่บอทจัดการอยู่ แล้วหยุดระบบ" /> Close All</span>
+                    <span>เริ่มบอท: เปิดออเดอร์แรกทันทีเมื่อ EA รับคำสั่ง</span>
+                    <span>Safe Stop: ห้ามเปิดออเดอร์ใหม่</span>
+                    <span>Close All: ปิด Position ของบอททั้งหมด</span>
                   </div>
                   {startBlocked && !busy && (
                     <div className="help action-help">
@@ -732,8 +748,8 @@ export default function DashboardPage() {
                     <div><span>Broker</span><b>{data.account.broker}</b></div>
                     <div><span>Server</span><b>{metrics.server || data.account.broker_server}</b></div>
                     <div><span>การเชื่อมต่อ</span><b className={isMt5Online ? "text-good":"text-warn"}>{connectionLabel}</b></div>
-                    <div><span>Bot State</span><b>{state}</b></div>
-                    <div><span>คำสั่งจากเว็บ</span><b>{desired}</b></div>
+                    <div><span>Bot State</span><b>{actualStateLabel}</b></div>
+                    <div><span>คำสั่งจากเว็บ</span><b>{desiredStateLabel}</b></div>
                     <div><span>Execution</span><b className={liveStatus.tone === "good" ? "text-good" : liveStatus.tone === "bad" ? "text-bad" : "text-warn"}>{liveStatus.label}</b></div>
                     <div><span>เหตุผล</span><b>{liveStatus.detail}</b></div>
                     <div><span>สิทธิ์</span><b>{accessLabel}</b></div>
@@ -771,8 +787,8 @@ export default function DashboardPage() {
                   </div>
                   <div className="detail-list">
                     <div><span>MT5</span><b className={isMt5Online ? "text-good":"text-warn"}>{connectionLabel}</b></div>
-                    <div><span>Bot State</span><b>{state}</b></div>
-                    <div><span>คำสั่งจากเว็บ</span><b>{desired}</b></div>
+                    <div><span>Bot State</span><b>{actualStateLabel}</b></div>
+                    <div><span>คำสั่งจากเว็บ</span><b>{desiredStateLabel}</b></div>
                     <div><span>Execution</span><b>{liveStatus.label}</b></div>
                     <div><span>เหตุผลล่าสุด</span><b>{liveStatus.detail}</b></div>
                     <div><span>สิทธิ์</span><b>{accessLabel}</b></div>
