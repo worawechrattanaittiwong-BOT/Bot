@@ -551,8 +551,56 @@ export default function DashboardPage() {
     setError("");
     setNotice("");
     try {
+      const numericKeys = [
+        "lot",
+        "maxPositions",
+        "dailyProfitTargetMoney",
+        "basketProfitTargetMoney",
+        "perPositionProfitMoney",
+        "perPositionLossMoney",
+        "basketTriggerMoney",
+        "basketTrailMoney",
+        "maxBasketLossMoney",
+        "dailyLossMoney",
+        "minOrderIntervalMs",
+        "maxOrdersPerMinute"
+      ];
+      const requiredNumericKeys = new Set([
+        "lot",
+        "maxPositions",
+        "basketTriggerMoney",
+        "basketTrailMoney",
+        "maxOrdersPerMinute"
+      ]);
+      const integerKeys = new Set([
+        "maxPositions",
+        "minOrderIntervalMs",
+        "maxOrdersPerMinute"
+      ]);
+
+      const payload:any = { ...settings };
+      for (const key of numericKeys) {
+        const raw = payload[key];
+
+        // Allow an empty field while the user is typing. On save, optional
+        // risk controls use 0 (= disabled); required fields must be filled.
+        if (raw === "" || raw === null || raw === undefined) {
+          if (requiredNumericKeys.has(key)) {
+            throw new Error("กรุณากรอกค่าช่องที่จำเป็นให้ครบก่อนบันทึก");
+          }
+          payload[key] = 0;
+          continue;
+        }
+
+        const value = Number(raw);
+        if (!Number.isFinite(value)) {
+          throw new Error("พบค่าตัวเลขไม่ถูกต้อง กรุณาตรวจสอบช่องตั้งค่าบอท");
+        }
+        payload[key] = integerKeys.has(key) ? Math.trunc(value) : value;
+      }
+
       const suffix = selectedSlotIdRef.current ? "?slotId=" + encodeURIComponent(selectedSlotIdRef.current) : "";
-      await api("/bot/settings" + suffix, { method: "PUT", body: JSON.stringify(settings) });
+      await api("/bot/settings" + suffix, { method: "PUT", body: JSON.stringify(payload) });
       settingsDirtyRef.current = false;
       setSettingsDirty(false);
       setNotice("บันทึกการตั้งค่าแล้ว · EA จะรับค่าล่าสุดใน Heartbeat ถัดไป");
@@ -857,8 +905,8 @@ export default function DashboardPage() {
                     value={metrics.symbol || settings.symbol}
                     readOnly
                   />
-                  <Field label="Lot" info="ขนาด Lot ต่อ Order ค่านี้ถูกส่งให้ EA จาก Server" help="เริ่มจากค่าน้อยบน Demo ก่อน" type="number" step="0.01" value={settings.lot} onChange={(v:string)=>editSetting("lot",Number(v))}/>
-                  <Field label="จำนวน Position สูงสุด" info="จำนวน Position สูงสุดที่บอทเปิดพร้อมกันได้" type="number" value={settings.maxPositions} onChange={(v:string)=>editSetting("maxPositions",Number(v))}/>
+                  <Field label="Lot" info="ขนาด Lot ต่อ Order ค่านี้ถูกส่งให้ EA จาก Server" help="เริ่มจากค่าน้อยบน Demo ก่อน" type="number" step="0.01" value={settings.lot} onChange={(v:string)=>editSetting("lot",v)}/>
+                  <Field label="จำนวน Position สูงสุด" info="จำนวน Position สูงสุดที่บอทเปิดพร้อมกันได้" type="number" value={settings.maxPositions} onChange={(v:string)=>editSetting("maxPositions",v)}/>
                   <Field
                     label="กำไรต่อวันแล้วหยุด ($)"
                     info="กำไรสะสมของ EA วันนี้ = กำไร/ขาดทุนที่ปิดแล้ววันนี้ + Floating ของ Basket ปัจจุบัน เมื่อถึงค่านี้ EA จะปิดทั้งหมดและล็อกหยุดจนขึ้นวันใหม่"
@@ -866,7 +914,7 @@ export default function DashboardPage() {
                     type="number"
                     step="0.01"
                     value={settings.dailyProfitTargetMoney}
-                    onChange={(v:string)=>editSetting("dailyProfitTargetMoney",Number(v))}
+                    onChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)}
                   />
                   <Field
                     label="กำไรรวม Basket แล้วปิด ($)"
@@ -879,7 +927,7 @@ export default function DashboardPage() {
                     type="number"
                     step="0.01"
                     value={settings.basketProfitTargetMoney}
-                    onChange={(v:string)=>editSetting("basketProfitTargetMoney",Number(v))}
+                    onChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}
                   />
                   <Field
                     label="กำไรต่อไม้แล้วปิด ($)"
@@ -892,7 +940,7 @@ export default function DashboardPage() {
                     type="number"
                     step="0.01"
                     value={settings.perPositionProfitMoney}
-                    onChange={(v:string)=>editSetting("perPositionProfitMoney",Number(v))}
+                    onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}
                   />
                   <Field
                     label="ขาดทุนต่อไม้แล้วปิด ($)"
@@ -901,14 +949,14 @@ export default function DashboardPage() {
                     type="number"
                     step="0.01"
                     value={settings.perPositionLossMoney}
-                    onChange={(v:string)=>editSetting("perPositionLossMoney",Number(v))}
+                    onChange={(v:string)=>editSetting("perPositionLossMoney",v)}
                   />
-                  <Field label="กำไรรวมเริ่ม Trailing ($)" info="เมื่อกำไรรวม Floating ของ Basket ถึงค่านี้ ระบบเริ่มจำ Peak Profit" type="number" step="0.01" value={settings.basketTriggerMoney} onChange={(v:string)=>editSetting("basketTriggerMoney",Number(v))}/>
-                  <Field label="ย่อตัวจาก Peak แล้วปิด ($)" info="หลังเริ่ม Trailing หากกำไรรวมย่อลงจาก Peak ตามค่านี้ EA จะปิด Basket" type="number" step="0.01" value={settings.basketTrailMoney} onChange={(v:string)=>editSetting("basketTrailMoney",Number(v))}/>
-                  <Field label="ขาดทุน Basket สูงสุด ($)" info="ขีดจำกัดขาดทุนรวม Floating ของ Basket ถ้าถึงจะปิดทุกไม้ใน Basket" type="number" step="0.01" value={settings.maxBasketLossMoney} onChange={(v:string)=>editSetting("maxBasketLossMoney",Number(v))}/>
-                  <Field label="ขาดทุนต่อวันแล้วหยุด ($)" info="วงเงินขาดทุนรายวันแบบเดิม เมื่อถึงขีดจำกัดระบบจะหยุดตาม Logic ความเสี่ยง" type="number" step="0.01" value={settings.dailyLossMoney} onChange={(v:string)=>editSetting("dailyLossMoney",Number(v))}/>
-                  <Field label="ระยะห่างคำสั่งขั้นต่ำ (ms)" info="เวลาขั้นต่ำระหว่างการส่ง Order แต่ละครั้ง" type="number" value={settings.minOrderIntervalMs} onChange={(v:string)=>editSetting("minOrderIntervalMs",Number(v))}/>
-                  <Field label="คำสั่งสูงสุดต่อนาที" info="Rate Limit จำนวนคำสั่ง Order สูงสุดใน 1 นาที" type="number" value={settings.maxOrdersPerMinute} onChange={(v:string)=>editSetting("maxOrdersPerMinute",Number(v))}/>
+                  <Field label="กำไรรวมเริ่ม Trailing ($)" info="เมื่อกำไรรวม Floating ของ Basket ถึงค่านี้ ระบบเริ่มจำ Peak Profit" type="number" step="0.01" value={settings.basketTriggerMoney} onChange={(v:string)=>editSetting("basketTriggerMoney",v)}/>
+                  <Field label="ย่อตัวจาก Peak แล้วปิด ($)" info="หลังเริ่ม Trailing หากกำไรรวมย่อลงจาก Peak ตามค่านี้ EA จะปิด Basket" type="number" step="0.01" value={settings.basketTrailMoney} onChange={(v:string)=>editSetting("basketTrailMoney",v)}/>
+                  <Field label="ขาดทุน Basket สูงสุด ($)" info="ขีดจำกัดขาดทุนรวม Floating ของ Basket ถ้าถึงจะปิดทุกไม้ใน Basket" type="number" step="0.01" value={settings.maxBasketLossMoney} onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}/>
+                  <Field label="ขาดทุนต่อวันแล้วหยุด ($)" info="วงเงินขาดทุนรายวันแบบเดิม เมื่อถึงขีดจำกัดระบบจะหยุดตาม Logic ความเสี่ยง" type="number" step="0.01" value={settings.dailyLossMoney} onChange={(v:string)=>editSetting("dailyLossMoney",v)}/>
+                  <Field label="ระยะห่างคำสั่งขั้นต่ำ (ms)" info="เวลาขั้นต่ำระหว่างการส่ง Order แต่ละครั้ง" type="number" value={settings.minOrderIntervalMs} onChange={(v:string)=>editSetting("minOrderIntervalMs",v)}/>
+                  <Field label="คำสั่งสูงสุดต่อนาที" info="Rate Limit จำนวนคำสั่ง Order สูงสุดใน 1 นาที" type="number" value={settings.maxOrdersPerMinute} onChange={(v:string)=>editSetting("maxOrdersPerMinute",v)}/>
                   <div className="field">
                     <label className="label-with-info">โหมดเข้าออเดอร์</label>
                     <select className="input" value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}>
@@ -1372,9 +1420,16 @@ function Field(props: any) {
         className="input"
         type={props.type || "text"}
         step={props.step}
-        value={props.value}
+        inputMode={props.type === "number" ? "decimal" : undefined}
+        value={props.value ?? ""}
         readOnly={Boolean(props.readOnly)}
         disabled={Boolean(props.disabled)}
+        onFocus={e=>{
+          if (props.type === "number" && !props.readOnly && !props.disabled) {
+            e.currentTarget.select();
+          }
+          props.onFocus?.(e);
+        }}
         onChange={e=>props.onChange?.(e.target.value)}
       />
       {props.help && <div className="help">{props.help}</div>}
