@@ -455,6 +455,11 @@ export default function DashboardPage() {
       " · Position สูงสุดคือเพดาน ไม่ใช่ยิงครบทุกไม้พร้อมกัน"
     : "";
   const liveExplanation = basketAddExplanation || liveStatus.detail || "บอทกำลังประเมิน Momentum, แนวโน้ม, Spread และ Risk แบบเรียลไทม์";
+  const hideModeIrrelevantStatus = String(liveStatus.code || "") === "RISK_LIMIT_TOO_SMALL";
+  const visibleLiveStatus = hideModeIrrelevantStatus
+    ? { label: "รอสัญญาณเข้า", tone: "good" }
+    : liveStatus;
+  const showControlAlert = !hideModeIrrelevantStatus && (liveStatus.tone === "bad" || liveStatus.tone === "warn");
 
   const desiredStateLabel =
     desired === "RUNNING" ? "RUNNING — ให้บอททำงาน"
@@ -1073,9 +1078,9 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="cc-primary-actions cc-v3-actions">
-                    <button className="cc-action start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><span className="cc-action-icon"><ScenovaIcon name="play" size={20}/></span><span><b>เริ่มบอท</b><small>เริ่มการเทรดอัตโนมัติ</small></span></button>
-                    <button className="cc-action safe" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="stop" size={19}/></span><span><b>หยุดบอท</b><small>หยุดเปิดออเดอร์ใหม่</small></span></button>
-                    <button className="cc-action close" disabled={busy || currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?") && command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="close" size={20}/></span><span><b>ปิดออเดอร์ทั้งหมด</b><small>ปิดทุก Position ของบอท</small></span></button>
+                    <button className="cc-action start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><span className="cc-action-icon"><ScenovaIcon name="play" size={19}/></span><b>เริ่มบอท</b></button>
+                    <button className="cc-action safe" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="stop" size={18}/></span><b>หยุดบอท</b></button>
+                    <button className="cc-action close" disabled={busy || currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?") && command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="close" size={19}/></span><b>ปิดทุกไม้</b></button>
                   </div>
 
                   <div className="cc-signal-grid">
@@ -1083,7 +1088,7 @@ export default function DashboardPage() {
                     <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>ความมั่นใจ</small><b>{Number(metrics.signalConfidence||0).toFixed(0)}%</b></span></div>
                     <div className="cc-signal-item"><ScenovaIcon name="spread" size={20}/><span><small>Spread</small><b>{spreadValueLabel}</b></span></div>
                     <div className="cc-signal-item warn"><ScenovaIcon name="layers" size={20}/><span><small>Position</small><b>{positionCapacityLabel}</b></span></div>
-                    <div className={"cc-signal-item "+(liveStatus.tone==="bad"?"bad":liveStatus.tone==="warn"?"warn":"good")}><ScenovaIcon name="status" size={20}/><span><small>การเทรด</small><b>{liveStatus.label||"—"}</b></span></div>
+                    <div className={"cc-signal-item "+(visibleLiveStatus.tone==="bad"?"bad":visibleLiveStatus.tone==="warn"?"warn":"good")}><ScenovaIcon name="status" size={20}/><span><small>การเทรด</small><b>{visibleLiveStatus.label||"—"}</b></span></div>
                   </div>
 
                   <div className="cc-direction-strip">
@@ -1091,7 +1096,7 @@ export default function DashboardPage() {
                     <div><span>M5</span><b>{trendText(metrics.trendM5)}</b></div><div><span>M15</span><b>{trendText(metrics.trendM15)}</b></div><div><span>H1</span><b>{trendText(metrics.trendH1)}</b></div><div><span>Adaptive Max</span><b>{effectiveMaxPositions} ไม้</b></div>
                   </div>
 
-                  <div className={"cc-intel-banner "+(liveStatus.tone==="bad"?"bad":liveStatus.tone==="warn"?"warn":"")}><ScenovaIcon name="info" size={19}/><div><b>{liveStatus.label||"บอทกำลังประเมินตลาด"}</b><span>{liveExplanation}</span></div></div>
+                  {showControlAlert&&<div className={"cc-intel-banner "+(liveStatus.tone==="bad"?"bad":"warn")}><ScenovaIcon name="info" size={19}/><div><b>{liveStatus.label||"ตรวจสอบการทำงาน"}</b><span>{liveExplanation}</span></div></div>}
                 </section>
 
                 <section className="panel cc-status-card cc-v3-account">
@@ -1125,14 +1130,13 @@ export default function DashboardPage() {
                     <SettingTile icon="bot" title="โหมดเข้าออเดอร์" description="AUTO ใช้ Momentum + Trend"><select className="input" value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO MOMENTUM</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></SettingTile>
                     <SettingTile icon="layers" title="จำนวนไม้ที่ต้องการ" description="Burst จะส่งตามจำนวนนี้"><select className="input" value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></SettingTile>
                     <SettingTile icon="lot" title="Lot สูงสุด (Adaptive)" description="Adaptive ลดได้ แต่ไม่เพิ่มเกินค่านี้"><select className="input" value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></SettingTile>
-                    <SettingTile icon="status" title="โปรไฟล์ที่ EA ใช้" description="ค่าจริงจาก Heartbeat"><div className="cc-readout"><b>{tradingProfileLabel[tradingProfile]||tradingProfile}</b><small>{tradingProfile==="BURST_10"?"กำลังใช้ Basket Scalping Engine":"Adaptive profile พร้อมใช้งาน"}</small></div></SettingTile>
                   </div></>}
 
-                  {settingsTab==="adaptive"&&<><div className="cc-settings-section-title"><b>ระบบวิเคราะห์ตลาด</b><span>ค่าทั้งหมดปรับอัตโนมัติตามตลาดจริง</span></div><div className="cc-settings-grid">
-                    <SettingTile icon="brain" title="Adaptive Engine" description="ระบบกำหนดค่าตามโปรไฟล์"><div className="cc-readout"><b>เปิดใช้งานตลอด</b><small>{tradingProfileLabel[tradingProfile]||tradingProfile}</small></div></SettingTile>
-                    <SettingTile icon="target" title="ความมั่นใจปัจจุบัน" description="คำนวณจากตลาดจริง"><div className="cc-readout"><b>{Number(metrics.signalConfidence||0).toFixed(0)}%</b><small>{String(metrics.marketRegime||"รอข้อมูล")}</small></div></SettingTile>
-                    <SettingTile icon="spread" title="Adaptive Spread" description="เรียนรู้จาก Broker และ Symbol"><div className="cc-readout"><b>{spreadValueLabel}</b><small>{spreadStatusLabel[spreadStatus]||spreadStatus}</small></div></SettingTile>
-                    <SettingTile icon="trend" title="Trend Lock" description="AUTO จะไม่เปิดสวน M15/H1"><div className="cc-readout"><b>{entryBiasLabel}</b><small>M5 {trendText(metrics.trendM5)} · M15 {trendText(metrics.trendM15)} · H1 {trendText(metrics.trendH1)}</small></div></SettingTile>
+                  {settingsTab==="adaptive"&&<><div className="cc-settings-section-title"><b>ระบบวิเคราะห์ตลาด</b><span>ทำงานอัตโนมัติตามรูปแบบ {tradingProfileLabel[tradingProfile]||tradingProfile}</span></div><div className="cc-system-strip">
+                    <div><span>ระบบวิเคราะห์</span><b>เปิดตลอด</b></div>
+                    <div><span>ความมั่นใจ</span><b>{Number(metrics.signalConfidence||0).toFixed(0)}%</b></div>
+                    <div><span>Spread</span><b>{spreadValueLabel}</b><small>{spreadStatusLabel[spreadStatus]||spreadStatus}</small></div>
+                    <div><span>ทิศทาง</span><b>{entryBiasLabel}</b><small>M5 {trendText(metrics.trendM5)} · M15 {trendText(metrics.trendM15)} · H1 {trendText(metrics.trendH1)}</small></div>
                   </div></>}
 
                   {settingsTab==="risk"&&<><div className="cc-settings-section-title cc-risk-title"><div><b>ป้องกันขาดทุน</b><span>กำหนดวงเงินที่ยอมรับได้</span></div><div className="cc-risk-summary"><span>รูปแบบ <b>{tradingProfileLabel[tradingProfile]||tradingProfile}</b></span><span>ขนาดไม้ปัจจุบัน <b>{Number(metrics.adaptiveLot||settings.lot).toFixed(2)} Lot</b></span></div></div><div className="cc-settings-grid cc-risk-grid">
@@ -1141,7 +1145,7 @@ export default function DashboardPage() {
                     <SettingTile icon="orders" title="ตัดขาดทุนแต่ละไม้" description="ปิดเฉพาะไม้ที่ขาดทุนถึงจำนวนนี้"><ToggleSelectField options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="2" value={settings.perPositionLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("perPositionLossMoney",v)}/></SettingTile>
                   </div></>}
 
-                  {settingsTab==="session"&&<><div className="cc-settings-section-title"><b>เวลาเทรด</b><span>กำหนด Session ตามเวลา Server ของ Broker</span></div><div className="cc-settings-grid">
+                  {settingsTab==="session"&&<><div className="cc-settings-section-title"><b>เวลาเทรด</b><span>อ้างอิงเวลา Server ของ Broker</span></div><div className="cc-settings-grid cc-session-grid">
                     <SettingTile icon="clock" title="เริ่ม Session" description="เวลา Server"><select className="input" value={String(settings.sessionStartHour)} onChange={e=>editSetting("sessionStartHour",e.target.value)}>{[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select></SettingTile>
                     <SettingTile icon="clock" title="จบ Session" description="เวลา Server"><select className="input" value={String(settings.sessionEndHour)} onChange={e=>editSetting("sessionEndHour",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23,24].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select></SettingTile>
                     <SettingTile icon="timer" title="Session ปัจจุบัน" description="อ่านจาก EA"><div className="cc-readout"><b>{String(metrics.sessionProfile||"UNKNOWN")}</b><small>Server session profile</small></div></SettingTile>
@@ -1158,7 +1162,7 @@ export default function DashboardPage() {
                     <SettingTile icon="pnl" title="เป้ากำไรวันนี้" description="กำหนดยอดกำไรที่ต้องการในแต่ละวัน" wide><DailyProfitTargetField value={settings.dailyProfitTargetMoney} continueAfterTarget={Boolean(settings.dailyProfitContinueAfterTarget)} drawdownPercent={settings.dailyProfitDrawdownPercent} targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} percentOptions={[5,10,15,20,25,30,40,50]} defaultTarget="10" defaultPercent="20" onTargetChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)} onContinueChange={(v:boolean)=>editSetting("dailyProfitContinueAfterTarget",v)} onPercentChange={(v:string)=>editSetting("dailyProfitDrawdownPercent",v)}/></SettingTile>
                     <SettingTile icon="orders" title="ปิดแต่ละไม้เมื่อได้กำไร" description="ถึงจำนวนนี้ให้ปิดเฉพาะไม้นั้น"><ToggleSelectField options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="2" value={settings.perPositionProfitMoney} disabled={profitRunModeEnabled} format={(v:string)=>"กำไร $"+v} onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}/></SettingTile>
                     <SettingTile icon="profit" title="ปิดทั้งชุดเมื่อได้กำไร" description="รวมกำไรทุกไม้ถึงจำนวนนี้แล้วปิดทั้งหมด"><ToggleSelectField options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="10" value={settings.basketProfitTargetMoney} disabled={profitRunModeEnabled} format={(v:string)=>"กำไรรวม $"+v} onChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}/></SettingTile>
-                    <SettingTile icon="trend" title="ปิดกำไรทั้งชุดเมื่อราคาย่อ" description="เริ่มจับกำไรเมื่อถึงเป้า แล้วปิดเมื่อกำไรลดลง" wide><TogglePairField firstValue={settings.basketTriggerMoney} secondValue={settings.basketTrailMoney} disabled={profitRunModeEnabled} firstDefault="2" secondDefault="0.5" firstOptions={[0.5,1,2,3,5,10,15,20,30,50,100]} secondOptions={[0.1,0.2,0.3,0.5,0.75,1,2,3,5,10]} firstPrefix="เริ่มจับที่ $" secondPrefix="ลดลง $" onFirstChange={(v:string)=>editSetting("basketTriggerMoney",v)} onSecondChange={(v:string)=>editSetting("basketTrailMoney",v)}/></SettingTile>
+                    <SettingTile icon="trend" title="ปิดกำไรทั้งชุดเมื่อราคาย่อ" description="เริ่มจับกำไรเมื่อถึงเป้า แล้วปิดเมื่อกำไรลดลง"><TogglePairField firstValue={settings.basketTriggerMoney} secondValue={settings.basketTrailMoney} disabled={profitRunModeEnabled} firstDefault="2" secondDefault="0.5" firstOptions={[0.5,1,2,3,5,10,15,20,30,50,100]} secondOptions={[0.1,0.2,0.3,0.5,0.75,1,2,3,5,10]} firstPrefix="เริ่มจับที่ $" secondPrefix="ลดลง $" onFirstChange={(v:string)=>editSetting("basketTriggerMoney",v)} onSecondChange={(v:string)=>editSetting("basketTrailMoney",v)}/></SettingTile>
                     </>}
                   </div></>}
 
@@ -1685,7 +1689,7 @@ function ToggleSelectField(props: any) {
         <span className="setting-toggle-track"><i/></span>
         <span className="setting-toggle-text">{props.label || (enabled ? "เปิดใช้งาน" : "ปิดใช้งาน")}</span>
       </label>
-      <select
+      {enabled&&<select
         className="input"
         value={selectedValue}
         disabled={!enabled || Boolean(props.disabled)}
@@ -1694,7 +1698,7 @@ function ToggleSelectField(props: any) {
         {values.map((value:string)=>(
           <option key={value} value={value}>{props.format ? props.format(value) : value}</option>
         ))}
-      </select>
+      </select>}
     </div>
   );
 }
@@ -1732,7 +1736,7 @@ function DailyProfitTargetField(props: any) {
         <span className="setting-toggle-text">{enabled ? "เปิดเป้ากำไรวันนี้" : "ไม่ตั้งเป้ากำไรวันนี้"}</span>
       </label>
 
-      <div className="daily-profit-main-row">
+      {enabled&&<div className="daily-profit-main-row">
         <select
           className="input"
           value={targetValue}
@@ -1764,7 +1768,7 @@ function DailyProfitTargetField(props: any) {
             <option key={value} value={value}>กำไรลด {value}% แล้วหยุด</option>
           ))}
         </select>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -1803,7 +1807,7 @@ function TogglePairField(props: any) {
         <span className="setting-toggle-track"><i/></span>
         <span className="setting-toggle-text">{props.label || (enabled ? "เปิดใช้งาน" : "ปิดใช้งาน")}</span>
       </label>
-      <div className="toggle-pair-controls">
+      {enabled&&<div className="toggle-pair-controls">
         <select
           className="input"
           value={firstValue}
@@ -1824,7 +1828,7 @@ function TogglePairField(props: any) {
             <option key={value} value={value}>{props.secondPrefix || ""}{value}</option>
           ))}
         </select>
-      </div>
+      </div>}
     </div>
   );
 }
