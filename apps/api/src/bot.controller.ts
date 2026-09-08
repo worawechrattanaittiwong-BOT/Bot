@@ -696,12 +696,14 @@ export class BotController {
       );
     }
 
+    // Keep previously downloaded installers valid until their own expiry.
+    // Downloading Setup again must not silently invalidate an older file.
     await this.db.query(
-      "UPDATE install_enrollments SET status='CANCELLED' WHERE slot_id=$1 AND status='PENDING'",
+      "UPDATE install_enrollments SET status='CANCELLED' WHERE slot_id=$1 AND status='PENDING' AND expires_at<=now()",
       [slot.id]
     );
     const code = randomBytes(18).toString("base64url");
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await this.db.query(
       "INSERT INTO install_enrollments(slot_id,requested_by_user_id,code_hash,expires_at) VALUES($1,$2,$3,$4)",
       [slot.id, req.user.sub, this.crypto.sha256(code), expiresAt]
@@ -714,6 +716,7 @@ export class BotController {
       downloadPath: installerDownloadPath(installerVersion),
       installerVersion,
       expiresAt,
+      validForHours: 24,
       slotId: slot.id
     };
   }
