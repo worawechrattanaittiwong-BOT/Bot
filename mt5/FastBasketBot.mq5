@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.022"
+#property version   "1.023"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -140,6 +140,7 @@ int    g_sessionStartHour;
 int    g_sessionEndHour;
 double g_maxAtrPoints;
 string g_marketRegime = "INITIALIZING";
+string g_marketRegimeDetail = "INITIALIZING";
 int    g_trendM1 = 0;
 int    g_trendM5 = 0;
 int    g_trendM15 = 0;
@@ -163,6 +164,16 @@ double g_bearishOrderBlockLow = 0.0;
 double g_bearishOrderBlockHigh = 0.0;
 double g_bullishOrderBlockStrength = 0.0;
 double g_bearishOrderBlockStrength = 0.0;
+double g_bullishOrderBlockQuality = 0.0;
+double g_bearishOrderBlockQuality = 0.0;
+int    g_bullishOrderBlockMitigations = 0;
+int    g_bearishOrderBlockMitigations = 0;
+int    g_bullishOrderBlockAgeBars = 0;
+int    g_bearishOrderBlockAgeBars = 0;
+string g_bullishOrderBlockState = "NONE";
+string g_bearishOrderBlockState = "NONE";
+string g_bullishOrderBlockTimeframe = "NONE";
+string g_bearishOrderBlockTimeframe = "NONE";
 string g_orderBlockTimeframe = "NONE";
 double g_fibSwingLow = 0.0;
 double g_fibSwingHigh = 0.0;
@@ -171,6 +182,8 @@ datetime g_fibSwingHighTime = 0;
 int    g_fibDirection = 0;
 double g_fibRetracement = 0.0;
 double g_fibConfluenceScore = 0.0;
+double g_fibSetupScore = 0.0;
+string g_fibSetupGrade = "NONE";
 string g_fibTimeframe = "NONE";
 int    g_fibM5Direction = 0;
 double g_fibM5Retracement = 0.0;
@@ -181,6 +194,8 @@ double g_fibM15Strength = 0.0;
 double g_structureScore = 0.0;
 double g_locationScore = 0.0;
 double g_entryScore = 0.0;
+double g_entryQualityScore = 0.0;
+string g_entryQuality = "C";
 string g_entryModel = "NONE";
 string g_entryTrigger = "NONE";
 datetime g_lastMarketContextUpdate = 0;
@@ -224,6 +239,15 @@ double g_averageSlippagePoints = 0.0;
 datetime g_lastEntryAt = 0;
 double g_pyramidProgressPoints = 0.0;
 double g_pyramidRequiredPoints = 0.0;
+int    g_ladderRung = 0;
+double g_ladderProgressPoints = 0.0;
+double g_ladderRequiredPoints = 0.0;
+string g_ladderMode = "IDLE";
+double g_dynamicStopPrice = 0.0;
+double g_dynamicTakeProfitPrice = 0.0;
+datetime g_lastDynamicProtectionAt = 0;
+int    g_journalSent = 0;
+int    g_journalFailed = 0;
 string g_sessionProfile = "UNKNOWN";
 bool   g_spreadProfileRestored = false;
 
@@ -283,7 +307,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.022", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.023", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -468,6 +492,11 @@ void OnTick()
 
    if(count > 0)
    {
+      // Dynamic protection never decides whether an entry is allowed. It only
+      // manages exits after a Position exists.
+      RefreshMarketContext(false);
+      ManageDynamicProtection();
+
       // Per-position profit/loss controls are evaluated before basket-level
       // controls. Per-position profit and total Basket profit are mutually
       // exclusive settings, enforced by both Server and EA.
@@ -778,6 +807,11 @@ void OnTradeTransaction(
       RecordBasketDeal(trans.deal);
       RecalculateDailyClosedProfit();
       UpdateAdaptiveLossState(trans.deal);
+
+      // Journal is best-effort observability only. A network/database failure
+      // must never change trading state or block order execution.
+      PostTradeJournalDeal(trans.deal);
+
       long dealEntry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
       if(BasketFillEnabled() &&
          (dealEntry == DEAL_ENTRY_OUT || dealEntry == DEAL_ENTRY_OUT_BY) &&
@@ -891,7 +925,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.022\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.023\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1018,7 +1052,7 @@ void SendHeartbeat()
 
       // Market-context telemetry makes every entry auditable on the web.
       string marketContextDiagnostics = StringFormat(
-         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V2\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
+         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V3\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
          g_trendM1,
          g_trendM30,
          g_effectiveConfidenceThreshold,
@@ -1051,8 +1085,35 @@ void SendHeartbeat()
          g_entryModel,
          g_fiboVisible ? "true" : "false"
       );
+      string intelligenceV3Diagnostics = StringFormat(
+         ",\"marketRegimeDetail\":\"%s\",\"bullishOrderBlockQuality\":%.1f,\"bearishOrderBlockQuality\":%.1f,\"bullishOrderBlockState\":\"%s\",\"bearishOrderBlockState\":\"%s\",\"bullishOrderBlockTimeframe\":\"%s\",\"bearishOrderBlockTimeframe\":\"%s\",\"bullishOrderBlockMitigations\":%d,\"bearishOrderBlockMitigations\":%d,\"bullishOrderBlockAgeBars\":%d,\"bearishOrderBlockAgeBars\":%d,\"fibSetupScore\":%.1f,\"fibSetupGrade\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.1f,\"basketLadderRung\":%d,\"basketLadderProgressPoints\":%.1f,\"basketLadderRequiredPoints\":%.1f,\"basketLadderMode\":\"%s\",\"dynamicStopPrice\":%s,\"dynamicTakeProfitPrice\":%s,\"journalSent\":%d,\"journalFailed\":%d",
+         g_marketRegimeDetail,
+         g_bullishOrderBlockQuality,
+         g_bearishOrderBlockQuality,
+         g_bullishOrderBlockState,
+         g_bearishOrderBlockState,
+         g_bullishOrderBlockTimeframe,
+         g_bearishOrderBlockTimeframe,
+         g_bullishOrderBlockMitigations,
+         g_bearishOrderBlockMitigations,
+         g_bullishOrderBlockAgeBars,
+         g_bearishOrderBlockAgeBars,
+         g_fibSetupScore,
+         g_fibSetupGrade,
+         g_entryQuality,
+         g_entryQualityScore,
+         g_ladderRung,
+         g_ladderProgressPoints,
+         g_ladderRequiredPoints,
+         g_ladderMode,
+         DoubleToString(g_dynamicStopPrice, SymbolDigitsNow()),
+         DoubleToString(g_dynamicTakeProfitPrice, SymbolDigitsNow()),
+         g_journalSent,
+         g_journalFailed
+      );
       string positionDiagnostics =
-         marketContextDiagnostics + ",\"openPositions\":" + OpenPositionsTelemetryJson() + "}}";
+         marketContextDiagnostics + intelligenceV3Diagnostics +
+         ",\"openPositions\":" + OpenPositionsTelemetryJson() + "}}";
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + positionDiagnostics;
    }
 
@@ -1187,7 +1248,7 @@ void AckCommand(long commandId)
    HttpPostJson(InpApiBase + "/api/ea/ack", payload, response);
 }
 
-int HttpPostJson(string url, string payload, string &response)
+int HttpPostJsonTimeout(string url, string payload, string &response, int timeoutMs)
 {
    char data[];
    char result[];
@@ -1199,9 +1260,87 @@ int HttpPostJson(string url, string payload, string &response)
       ArrayResize(data, ArraySize(data) - 1);
 
    ResetLastError();
-   int code = WebRequest("POST", url, headers, 5000, data, result, resultHeaders);
+   int code = WebRequest(
+      "POST",
+      url,
+      headers,
+      MathMax(250, timeoutMs),
+      data,
+      result,
+      resultHeaders
+   );
    response = CharArrayToString(result, 0, -1, CP_UTF8);
    return code;
+}
+
+int HttpPostJson(string url, string payload, string &response)
+{
+   return HttpPostJsonTimeout(url, payload, response, 5000);
+}
+
+void PostTradeJournalDeal(ulong dealTicket)
+{
+   if(MQLInfoInteger(MQL_TESTER) || dealTicket == 0 || !HistoryDealSelect(dealTicket))
+      return;
+
+   long dealEntry = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+   if(dealEntry != DEAL_ENTRY_IN &&
+      dealEntry != DEAL_ENTRY_OUT &&
+      dealEntry != DEAL_ENTRY_OUT_BY &&
+      dealEntry != DEAL_ENTRY_INOUT)
+      return;
+
+   long dealType = HistoryDealGetInteger(dealTicket, DEAL_TYPE);
+   if(dealType != DEAL_TYPE_BUY && dealType != DEAL_TYPE_SELL)
+      return;
+
+   bool isExit = dealEntry == DEAL_ENTRY_OUT ||
+                 dealEntry == DEAL_ENTRY_OUT_BY ||
+                 dealEntry == DEAL_ENTRY_INOUT;
+   int dealDirection = dealType == DEAL_TYPE_BUY ? 1 : -1;
+   int positionDirection = isExit ? -dealDirection : dealDirection;
+
+   double net =
+      HistoryDealGetDouble(dealTicket, DEAL_PROFIT) +
+      HistoryDealGetDouble(dealTicket, DEAL_SWAP) +
+      HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
+
+   double obQuality = positionDirection > 0
+      ? g_bullishOrderBlockQuality
+      : g_bearishOrderBlockQuality;
+   int basketIndex = isExit
+      ? BasketPositionCount() + 1
+      : MathMax(1, BasketPositionCount());
+
+   string payload = StringFormat(
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d}",
+      InpInstanceId,
+      InpInstallToken,
+      (long)dealTicket,
+      (long)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID),
+      isExit ? "EXIT" : "ENTRY",
+      positionDirection > 0 ? "BUY" : "SELL",
+      HistoryDealGetDouble(dealTicket, DEAL_VOLUME),
+      DoubleToString(HistoryDealGetDouble(dealTicket, DEAL_PRICE), SymbolDigitsNow()),
+      net,
+      g_entryTrigger,
+      g_entryModel,
+      g_entryQuality,
+      g_entryQualityScore,
+      g_marketRegime,
+      g_marketRegimeDetail,
+      g_fibSetupScore,
+      obQuality,
+      g_signalConfidence,
+      basketIndex
+   );
+
+   string response = "";
+   int code = HttpPostJsonTimeout(InpApiBase + "/api/ea/journal", payload, response, 650);
+   if(code >= 200 && code < 300)
+      g_journalSent++;
+   else
+      g_journalFailed++;
 }
 
 bool BasketFillEnabled()
@@ -1583,6 +1722,14 @@ bool FindActiveImpulse(
    return true;
 }
 
+string OrderBlockStateName(int mitigations)
+{
+   if(mitigations <= 0) return "FRESH";
+   if(mitigations == 1) return "TESTED";
+   if(mitigations <= 3) return "MITIGATED";
+   return "HEAVY_MITIGATION";
+}
+
 bool FindRecentOrderBlock(
    ENUM_TIMEFRAMES timeframe,
    int lookback,
@@ -1591,12 +1738,19 @@ bool FindRecentOrderBlock(
    double currentPrice,
    double &zoneLow,
    double &zoneHigh,
-   double &strength
+   double &strength,
+   int &mitigationsOut,
+   int &ageBarsOut,
+   string &stateOut
 )
 {
    zoneLow = 0.0;
    zoneHigh = 0.0;
    strength = 0.0;
+   mitigationsOut = 0;
+   ageBarsOut = 0;
+   stateOut = "NONE";
+
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
    int copied = CopyRates(_Symbol, timeframe, 1, MathMax(30, lookback), rates);
@@ -1606,6 +1760,7 @@ bool FindRecentOrderBlock(
    double safeAtr = MathMax(_Point * 20.0, atrPrice);
    double displacementFloor = MathMax(_Point * 8.0, safeAtr * 0.55);
    double bestRank = -1.0e100;
+
    for(int i = 4; i < copied - 9; i++)
    {
       bool candidate = bullish
@@ -1645,8 +1800,6 @@ bool FindRecentOrderBlock(
       if(!brokeStructure || displacement < displacementFloor)
          continue;
 
-      // Refine to the origin body plus rejection wick instead of the candle's
-      // entire range. This produces a tighter and more tradable reaction zone.
       double candidateLow = bullish ? rates[i].low : MathMin(rates[i].open, rates[i].close);
       double candidateHigh = bullish ? MathMax(rates[i].open, rates[i].close) : rates[i].high;
 
@@ -1680,13 +1833,19 @@ bool FindRecentOrderBlock(
          (imbalance ? 10.0 : 0.0) + freshness * 15.0 -
          MathMax(0, mitigations - 1) * 8.0;
       candidateStrength = MathMax(0.0, MathMin(100.0, candidateStrength));
-      double rank = candidateStrength + freshness * 8.0;
+
+      // v2 rank values freshness/displacement but does not invalidate a setup
+      // simply because it has already been tested. State is advisory.
+      double rank = candidateStrength + freshness * 8.0 - MathMax(0, mitigations - 1) * 2.0;
       if(rank > bestRank)
       {
          bestRank = rank;
          zoneLow = candidateLow;
          zoneHigh = candidateHigh;
          strength = candidateStrength;
+         mitigationsOut = mitigations;
+         ageBarsOut = i;
+         stateOut = OrderBlockStateName(mitigations);
       }
    }
    return zoneLow > 0.0 && zoneHigh >= zoneLow;
@@ -1821,25 +1980,69 @@ void RefreshMarketContext(bool force)
    g_resistanceStrength = MathAbs(g_nearestResistance - r15) < _Point ? rs15 :
                           MathAbs(g_nearestResistance - r30) < _Point ? rs30 : rsH1;
 
-   double bull15L=0.0,bull15H=0.0,bear15L=0.0,bear15H=0.0;
    double bull5L=0.0,bull5H=0.0,bear5L=0.0,bear5H=0.0;
-   double bull15Strength=0.0,bear15Strength=0.0,bull5Strength=0.0,bear5Strength=0.0;
-   bool haveBull15 = FindRecentOrderBlock(PERIOD_M15, 120, true, atrM15Price, price, bull15L, bull15H, bull15Strength);
-   bool haveBear15 = FindRecentOrderBlock(PERIOD_M15, 120, false, atrM15Price, price, bear15L, bear15H, bear15Strength);
-   bool haveBull5 = FindRecentOrderBlock(PERIOD_M5, 160, true, atrM15Price * 0.55, price, bull5L, bull5H, bull5Strength);
-   bool haveBear5 = FindRecentOrderBlock(PERIOD_M5, 160, false, atrM15Price * 0.55, price, bear5L, bear5H, bear5Strength);
+   double bull15L=0.0,bull15H=0.0,bear15L=0.0,bear15H=0.0;
+   double bull30L=0.0,bull30H=0.0,bear30L=0.0,bear30H=0.0;
+   double bull5Strength=0.0,bear5Strength=0.0;
+   double bull15Strength=0.0,bear15Strength=0.0;
+   double bull30Strength=0.0,bear30Strength=0.0;
+   int bull5Mit=0,bear5Mit=0,bull15Mit=0,bear15Mit=0,bull30Mit=0,bear30Mit=0;
+   int bull5Age=0,bear5Age=0,bull15Age=0,bear15Age=0,bull30Age=0,bear30Age=0;
+   string bull5State="NONE",bear5State="NONE",bull15State="NONE",bear15State="NONE",bull30State="NONE",bear30State="NONE";
 
-   bool useBull15 = haveBull15 && (!haveBull5 || bull15Strength + 8.0 >= bull5Strength);
-   bool useBear15 = haveBear15 && (!haveBear5 || bear15Strength + 8.0 >= bear5Strength);
-   g_bullishOrderBlockLow = useBull15 ? bull15L : (haveBull5 ? bull5L : 0.0);
-   g_bullishOrderBlockHigh = useBull15 ? bull15H : (haveBull5 ? bull5H : 0.0);
-   g_bullishOrderBlockStrength = useBull15 ? bull15Strength : (haveBull5 ? bull5Strength : 0.0);
-   g_bearishOrderBlockLow = useBear15 ? bear15L : (haveBear5 ? bear5L : 0.0);
-   g_bearishOrderBlockHigh = useBear15 ? bear15H : (haveBear5 ? bear5H : 0.0);
-   g_bearishOrderBlockStrength = useBear15 ? bear15Strength : (haveBear5 ? bear5Strength : 0.0);
-   bool anyM15 = useBull15 || useBear15;
-   bool anyM5 = (haveBull5 && !useBull15) || (haveBear5 && !useBear15);
-   g_orderBlockTimeframe = anyM15 && anyM5 ? "M15+M5" : anyM15 ? "M15" : anyM5 ? "M5" : "NONE";
+   bool haveBull5 = FindRecentOrderBlock(PERIOD_M5,160,true,atrM15Price*0.55,price,bull5L,bull5H,bull5Strength,bull5Mit,bull5Age,bull5State);
+   bool haveBear5 = FindRecentOrderBlock(PERIOD_M5,160,false,atrM15Price*0.55,price,bear5L,bear5H,bear5Strength,bear5Mit,bear5Age,bear5State);
+   bool haveBull15 = FindRecentOrderBlock(PERIOD_M15,120,true,atrM15Price,price,bull15L,bull15H,bull15Strength,bull15Mit,bull15Age,bull15State);
+   bool haveBear15 = FindRecentOrderBlock(PERIOD_M15,120,false,atrM15Price,price,bear15L,bear15H,bear15Strength,bear15Mit,bear15Age,bear15State);
+   bool haveBull30 = FindRecentOrderBlock(PERIOD_M30,100,true,atrM15Price*1.35,price,bull30L,bull30H,bull30Strength,bull30Mit,bull30Age,bull30State);
+   bool haveBear30 = FindRecentOrderBlock(PERIOD_M30,100,false,atrM15Price*1.35,price,bear30L,bear30H,bear30Strength,bear30Mit,bear30Age,bear30State);
+
+   double bull5Rank = haveBull5 ? bull5Strength - bull5Mit*2.0 - bull5Age*0.02 : -1.0e100;
+   double bull15Rank = haveBull15 ? bull15Strength + 4.0 - bull15Mit*2.0 - bull15Age*0.02 : -1.0e100;
+   double bull30Rank = haveBull30 ? bull30Strength + 7.0 - bull30Mit*2.0 - bull30Age*0.02 : -1.0e100;
+   double bear5Rank = haveBear5 ? bear5Strength - bear5Mit*2.0 - bear5Age*0.02 : -1.0e100;
+   double bear15Rank = haveBear15 ? bear15Strength + 4.0 - bear15Mit*2.0 - bear15Age*0.02 : -1.0e100;
+   double bear30Rank = haveBear30 ? bear30Strength + 7.0 - bear30Mit*2.0 - bear30Age*0.02 : -1.0e100;
+
+   if(bull30Rank >= bull15Rank && bull30Rank >= bull5Rank)
+   {
+      g_bullishOrderBlockLow=bull30L; g_bullishOrderBlockHigh=bull30H; g_bullishOrderBlockStrength=bull30Strength;
+      g_bullishOrderBlockMitigations=bull30Mit; g_bullishOrderBlockAgeBars=bull30Age; g_bullishOrderBlockState=bull30State; g_bullishOrderBlockTimeframe="M30";
+   }
+   else if(bull15Rank >= bull5Rank)
+   {
+      g_bullishOrderBlockLow=bull15L; g_bullishOrderBlockHigh=bull15H; g_bullishOrderBlockStrength=bull15Strength;
+      g_bullishOrderBlockMitigations=bull15Mit; g_bullishOrderBlockAgeBars=bull15Age; g_bullishOrderBlockState=bull15State; g_bullishOrderBlockTimeframe="M15";
+   }
+   else
+   {
+      g_bullishOrderBlockLow=bull5L; g_bullishOrderBlockHigh=bull5H; g_bullishOrderBlockStrength=bull5Strength;
+      g_bullishOrderBlockMitigations=bull5Mit; g_bullishOrderBlockAgeBars=bull5Age; g_bullishOrderBlockState=bull5State; g_bullishOrderBlockTimeframe=haveBull5?"M5":"NONE";
+   }
+
+   if(bear30Rank >= bear15Rank && bear30Rank >= bear5Rank)
+   {
+      g_bearishOrderBlockLow=bear30L; g_bearishOrderBlockHigh=bear30H; g_bearishOrderBlockStrength=bear30Strength;
+      g_bearishOrderBlockMitigations=bear30Mit; g_bearishOrderBlockAgeBars=bear30Age; g_bearishOrderBlockState=bear30State; g_bearishOrderBlockTimeframe="M30";
+   }
+   else if(bear15Rank >= bear5Rank)
+   {
+      g_bearishOrderBlockLow=bear15L; g_bearishOrderBlockHigh=bear15H; g_bearishOrderBlockStrength=bear15Strength;
+      g_bearishOrderBlockMitigations=bear15Mit; g_bearishOrderBlockAgeBars=bear15Age; g_bearishOrderBlockState=bear15State; g_bearishOrderBlockTimeframe="M15";
+   }
+   else
+   {
+      g_bearishOrderBlockLow=bear5L; g_bearishOrderBlockHigh=bear5H; g_bearishOrderBlockStrength=bear5Strength;
+      g_bearishOrderBlockMitigations=bear5Mit; g_bearishOrderBlockAgeBars=bear5Age; g_bearishOrderBlockState=bear5State; g_bearishOrderBlockTimeframe=haveBear5?"M5":"NONE";
+   }
+
+   double bullStateFactor = g_bullishOrderBlockState=="FRESH" ? 1.00 : g_bullishOrderBlockState=="TESTED" ? 0.95 : g_bullishOrderBlockState=="MITIGATED" ? 0.82 : 0.70;
+   double bearStateFactor = g_bearishOrderBlockState=="FRESH" ? 1.00 : g_bearishOrderBlockState=="TESTED" ? 0.95 : g_bearishOrderBlockState=="MITIGATED" ? 0.82 : 0.70;
+   g_bullishOrderBlockQuality = MathMax(0.0,MathMin(100.0,g_bullishOrderBlockStrength*bullStateFactor));
+   g_bearishOrderBlockQuality = MathMax(0.0,MathMin(100.0,g_bearishOrderBlockStrength*bearStateFactor));
+   g_orderBlockTimeframe = g_bullishOrderBlockTimeframe==g_bearishOrderBlockTimeframe
+      ? g_bullishOrderBlockTimeframe
+      : g_bullishOrderBlockTimeframe+"+"+g_bearishOrderBlockTimeframe;
 
    // Read both execution (M5) and structure (M15) impulses. The primary Fib is
    // selected by swing quality + trend agreement, while both contribute to the
@@ -2175,6 +2378,7 @@ double EvaluateMarketLocationScore(int direction)
       : PriceInsideOrNearZone(price, g_bearishOrderBlockLow, g_bearishOrderBlockHigh, nearBuffer * 0.35);
    double desiredLevelStrength = direction > 0 ? g_supportStrength : g_resistanceStrength;
    double desiredObStrength = direction > 0 ? g_bullishOrderBlockStrength : g_bearishOrderBlockStrength;
+   double desiredObQuality = direction > 0 ? g_bullishOrderBlockQuality : g_bearishOrderBlockQuality;
    double desiredObLow = direction > 0 ? g_bullishOrderBlockLow : g_bearishOrderBlockLow;
    double desiredObHigh = direction > 0 ? g_bullishOrderBlockHigh : g_bearishOrderBlockHigh;
 
@@ -2188,6 +2392,35 @@ double EvaluateMarketLocationScore(int direction)
       g_fibConfluenceScore = MathMin(22.0,
          g_fibConfluenceScore + MathMin(fibM5Score, fibM15Score) * 0.45 + 3.0);
    bool fibConfluence = g_fibConfluenceScore > 0.0;
+
+   // Fibonacci Setup Scoring v2: normalized 0-100 quality. This score is
+   // advisory and never becomes a standalone entry permission.
+   double primaryRetracement = direction == g_fibM15Direction
+      ? g_fibM15Retracement
+      : direction == g_fibM5Direction ? g_fibM5Retracement : 0.0;
+   double primaryFibStrength = direction == g_fibM15Direction
+      ? g_fibM15Strength
+      : direction == g_fibM5Direction ? g_fibM5Strength : 0.0;
+   g_fibSetupScore = 0.0;
+   if(primaryRetracement >= 0.382 && primaryRetracement <= 0.786)
+   {
+      g_fibSetupScore = 22.0 + MathMin(20.0, primaryFibStrength * 0.20);
+      if(primaryRetracement >= 0.500 && primaryRetracement <= 0.705)
+         g_fibSetupScore += 18.0;
+      if(MathAbs(primaryRetracement - 0.618) <= 0.050)
+         g_fibSetupScore += 12.0;
+      else if(MathAbs(primaryRetracement - 0.705) <= 0.045)
+         g_fibSetupScore += 8.0;
+   }
+   if(fibM5Score > 0.0 && fibM15Score > 0.0 &&
+      g_fibM5Direction == direction && g_fibM15Direction == direction)
+      g_fibSetupScore += 15.0;
+   if(inOrderBlock) g_fibSetupScore += MathMin(8.0, desiredObQuality * 0.08);
+   if(nearSupport || nearResistance) g_fibSetupScore += MathMin(7.0, desiredLevelStrength * 0.07);
+   g_fibSetupScore = MathMax(0.0, MathMin(100.0, g_fibSetupScore));
+   g_fibSetupGrade = g_fibSetupScore >= 80.0 ? "A" :
+                     g_fibSetupScore >= 60.0 ? "B" :
+                     g_fibSetupScore > 0.0 ? "C" : "NONE";
 
    int confluenceCount = 0;
    if(nearSupport || nearResistance)
@@ -2245,6 +2478,24 @@ double EvaluateMarketLocationScore(int direction)
 
    g_locationScore = MathMax(0.0, MathMin(48.0, g_locationScore));
    g_entryScore = MathMax(0.0, MathMin(100.0, g_structureScore + g_locationScore));
+
+   // Entry Quality A/B/C is a readable quality label, not a gate.
+   double setupBonus =
+      g_entryModel == "OB_FIB_PULLBACK" ? 10.0 :
+      g_entryModel == "BREAKOUT" ? 8.0 :
+      g_entryModel == "ORDER_BLOCK_PULLBACK" ? 7.0 :
+      g_entryModel == "FIB_PULLBACK" ? 6.0 :
+      g_entryModel == "LEVEL_REACTION" ? 5.0 : 2.0;
+   g_entryQualityScore =
+      g_entryScore * 0.55 +
+      g_fibSetupScore * 0.20 +
+      desiredObQuality * 0.15 +
+      setupBonus;
+   if(HigherTimeframeSupportsDirection(direction))
+      g_entryQualityScore += 5.0;
+   g_entryQualityScore = MathMax(0.0, MathMin(100.0, g_entryQualityScore));
+   g_entryQuality = g_entryQualityScore >= 75.0 ? "A" :
+                    g_entryQualityScore >= 55.0 ? "B" : "C";
    return g_entryScore;
 }
 
@@ -2385,6 +2636,43 @@ double AdaptiveTradeVolume()
    return NormalizeTradeVolume(calculated);
 }
 
+string DetailedMarketRegime(double momentum, int direction)
+{
+   double absMomentum = MathAbs(momentum);
+   double threshold = MathMax(1.0, g_adaptiveMomentumThreshold);
+
+   if(g_marketRegime == "HIGH_VOLATILITY")
+   {
+      if(absMomentum >= threshold * 0.55)
+         return "NEWS_IMPULSE";
+      return "VOLATILITY_EXPANSION";
+   }
+
+   if(g_entryModel == "BREAKOUT")
+      return "BREAKOUT_EXPANSION";
+
+   if(direction != 0)
+   {
+      bool microAgainst = g_trendM1 == -direction || g_trendM5 == -direction;
+      if(microAgainst)
+         return "TREND_PULLBACK";
+      if(absMomentum >= threshold * 0.85)
+         return "TREND_ACCELERATION";
+      return "TREND_CONTINUATION";
+   }
+
+   if(g_marketRegime == "QUIET")
+      return "LOW_VOLATILITY";
+
+   if(g_trendM5 != 0 && (g_trendM5 == g_trendM15 || g_trendM5 == g_trendM30))
+      return "RANGE_BREAK_ATTEMPT";
+
+   if(g_marketRegime == "RANGE")
+      return "RANGE_ROTATION";
+
+   return "TRANSITION";
+}
+
 int AdaptiveEntryDirection(double momentum)
 {
    g_minimumLotOverrideActive = false;
@@ -2478,6 +2766,7 @@ int AdaptiveEntryDirection(double momentum)
    // trigger an entry directly. Momentum accelerates timing but is not the only
    // path into the market.
    int rawDirection = SetupFirstDirection(momentum);
+   g_marketRegimeDetail = DetailedMarketRegime(momentum, rawDirection);
 
    if(rawDirection == 0)
    {
@@ -2937,11 +3226,127 @@ void EnsureBurstTargets(int plannedPositions)
    double volume = g_adaptiveLot > 0.0 ? g_adaptiveLot : NormalizeTradeVolume(g_lot);
    double plannedSpreadCost = CurrentSpreadCost(volume) * targetCount;
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-   g_burstTargetMoney = MathMax(0.50, MathMax(plannedSpreadCost * 0.50, equity * 0.0002));
+   double fallbackTarget = MathMax(0.50, MathMax(plannedSpreadCost * 0.50, equity * 0.0002));
+   double dynamicTarget = 0.0;
+
+   int direction = BasketDirection();
+   double anchorPrice = BasketAnchorEntryPrice(direction);
+   if(direction != 0 && anchorPrice > 0.0)
+   {
+      double stopPrice = DynamicInitialStopPrice(direction, anchorPrice);
+      double takeProfitPrice = DynamicTakeProfitPrice(direction, anchorPrice, stopPrice);
+      double projectedPerPosition = 0.0;
+      ENUM_ORDER_TYPE orderType = direction > 0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+      if(takeProfitPrice > 0.0 &&
+         OrderCalcProfit(orderType, _Symbol, volume, anchorPrice, takeProfitPrice, projectedPerPosition))
+      {
+         // Ladder entries occur progressively, so use a conservative portion of
+         // the anchor projection instead of pretending all ten fills are at rung 1.
+         dynamicTarget = MathAbs(projectedPerPosition) * targetCount * 0.60;
+         if(equity > 0.0)
+            dynamicTarget = MathMin(dynamicTarget, equity * 0.005);
+         g_dynamicStopPrice = stopPrice;
+         g_dynamicTakeProfitPrice = takeProfitPrice;
+      }
+   }
+
+   g_burstTargetMoney = MathMax(fallbackTarget, dynamicTarget);
 
    // Loss protection is never synthesized. If the user sets Basket Loss to 0,
    // the effective Basket loss is OFF.
    g_burstLossMoney = 0.0;
+}
+
+double BasketAnchorEntryPrice(int direction)
+{
+   long oldestTime = 0;
+   double oldestPrice = 0.0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
+         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+      long type = PositionGetInteger(POSITION_TYPE);
+      if((direction > 0 && type != POSITION_TYPE_BUY) ||
+         (direction < 0 && type != POSITION_TYPE_SELL))
+         continue;
+
+      long openedAt = (long)PositionGetInteger(POSITION_TIME_MSC);
+      if(oldestTime == 0 || openedAt < oldestTime)
+      {
+         oldestTime = openedAt;
+         oldestPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      }
+   }
+   return oldestPrice;
+}
+
+double BasketProgressFromAnchorPoints(int direction)
+{
+   MqlTick tick;
+   double anchorPrice = BasketAnchorEntryPrice(direction);
+   if(anchorPrice <= 0.0 || !SymbolInfoTick(_Symbol, tick))
+      return 0.0;
+   return direction > 0
+      ? (tick.bid - anchorPrice) / _Point
+      : (anchorPrice - tick.ask) / _Point;
+}
+
+double LadderFractionForRung(int rung)
+{
+   if(rung <= 1) return 0.0;
+   if(rung == 2) return 0.03;
+   if(rung == 3) return 0.07;
+   if(rung == 4) return 0.12;
+   if(rung == 5) return 0.18;
+   if(rung == 6) return 0.25;
+   if(rung == 7) return 0.33;
+   if(rung == 8) return 0.42;
+   if(rung == 9) return 0.52;
+   if(rung == 10) return 0.63;
+   return 0.63 + (rung - 10) * 0.08;
+}
+
+bool BasketLadderReady(int direction, int count, int targetPositions)
+{
+   int nextRung = count + 1;
+   g_ladderRung = MathMax(1, nextRung);
+   g_ladderProgressPoints = MathMax(0.0, BasketProgressFromAnchorPoints(direction));
+
+   if(nextRung <= 1)
+   {
+      g_ladderRequiredPoints = 0.0;
+      g_ladderMode = "INITIAL";
+      return true;
+   }
+
+   double atr = g_atrPoints > 0.0
+      ? g_atrPoints
+      : AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   atr = MathMax(10.0, atr);
+
+   double qualityFactor = g_entryQuality == "A" ? 0.78 :
+                          g_entryQuality == "B" ? 0.92 : 1.05;
+   double regimeFactor =
+      g_marketRegimeDetail == "NEWS_IMPULSE" ? 0.72 :
+      g_marketRegime == "HIGH_VOLATILITY" ? 0.82 :
+      g_marketRegimeDetail == "TREND_ACCELERATION" ? 0.85 : 1.0;
+
+   g_ladderRequiredPoints = MathMax(
+      3.0,
+      atr * LadderFractionForRung(nextRung) * qualityFactor * regimeFactor
+   );
+   g_ladderMode =
+      g_marketRegimeDetail == "NEWS_IMPULSE" ? "FAST_NEWS" :
+      g_entryQuality == "A" ? "QUALITY_A" :
+      g_entryQuality == "B" ? "QUALITY_B" : "QUALITY_C";
+
+   // Ladder is an intentional position-management schedule, not an entry
+   // filter. Rung 1 has already traded; this only spaces additional positions.
+   return g_ladderProgressPoints >= g_ladderRequiredPoints;
 }
 
 void ArmBurst(int direction)
@@ -2951,8 +3356,12 @@ void ArmBurst(int direction)
 
    g_burstDirection = direction;
    g_burstTargetPositions = MathMax(1, g_maxPositions);
-   g_burstRequestsSent = 1;
+   g_burstRequestsSent = MathMax(1, BasketPositionCount());
    g_burstStartedAt = TimeCurrent();
+   g_ladderRung = MathMax(1, BasketPositionCount() + 1);
+   g_ladderProgressPoints = 0.0;
+   g_ladderRequiredPoints = 0.0;
+   g_ladderMode = "ARMED";
    g_burstActive = g_burstRequestsSent < g_burstTargetPositions;
    g_burstNeedsRearm = false;
    EnsureBurstTargets(g_burstTargetPositions);
@@ -2983,28 +3392,28 @@ void ProcessBurstQueue()
       AbortBurst("CONTROL_NOT_FRESH");
       return;
    }
-   int burstTimeoutSeconds = MathMax(15, (g_burstTargetPositions * g_minOrderIntervalMs) / 1000 + 10);
-   if(TimeCurrent() - g_burstStartedAt > burstTimeoutSeconds)
-   {
-      AbortBurst("BASKET_FILL_TIMEOUT");
-      return;
-   }
    if(TradePermissionStatus() != "OK")
    {
       AbortBurst("TRADE_PERMISSION");
       return;
    }
    int count = BasketPositionCount();
-   if(count >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
+   if(count >= g_burstTargetPositions)
    {
       g_burstActive = false;
       g_burstNeedsRearm = false;
       g_executionStatus = "BASKET_FILL_COMPLETE";
+      g_ladderMode = "COMPLETE";
       return;
    }
-   // Revalidate each queued add. Keep this deliberately light: do not demand
-   // every timeframe/Fib/OB signal again, but never keep firing into a new
-   // major opposing zone or after M15+H1 have flipped against the Basket.
+   // Rung 1 was opened immediately by the setup engine. Additional positions
+   // are staged transparently by the Ladder rather than fired in one burst.
+   if(!BasketLadderReady(g_burstDirection, count, g_burstTargetPositions))
+   {
+      g_executionStatus = "BASKET_LADDER_WAIT";
+      return;
+   }
+
    if(!CanSendOrder())
       return;
    if(!AdaptiveSpreadAllowed())
@@ -3019,19 +3428,22 @@ void ProcessBurstQueue()
    }
    bool accepted = SendMarketOrder(g_burstDirection);
    RegisterOrderRequest();
-   g_burstRequestsSent++;
    int filled = BasketPositionCount();
-   bool completed = filled >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions;
+   if(accepted)
+      g_burstRequestsSent = MathMax(g_burstRequestsSent + 1, filled);
+
+   bool completed = filled >= g_burstTargetPositions;
    if(completed)
-      g_executionStatus = "BASKET_FILL_COMPLETE";
-   else if(accepted)
-      g_executionStatus = "BASKET_FILLING";
-   // On rejection keep the exact MT5 retcode status from SendMarketOrder, then
-   // continue with the next requested attempt. MT5/Broker decides every order.
-   if(filled >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
    {
+      g_executionStatus = "BASKET_FILL_COMPLETE";
+      g_ladderMode = "COMPLETE";
       g_burstActive = false;
       g_burstNeedsRearm = false;
+   }
+   else if(accepted)
+   {
+      g_executionStatus = "BASKET_LADDER_ADVANCE";
+      g_ladderRung = filled + 1;
    }
 }
 
@@ -3646,6 +4058,232 @@ void RecordExecutionQuality(bool accepted, double slippagePoints)
    }
 }
 
+double DynamicInitialStopPrice(int direction, double entryPrice)
+{
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   double atrPoints = g_atrPoints > 0.0 ? g_atrPoints : AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   double atrPrice = MathMax(_Point * 10.0, atrPoints * _Point);
+   double baseDistance = MathMax(1.0, EffectiveStopLossDistancePoints()) * _Point;
+   double baseStop = direction > 0 ? entryPrice - baseDistance : entryPrice + baseDistance;
+
+   double structure = 0.0;
+   if(direction > 0)
+   {
+      structure = ClosestBelow(entryPrice, g_nearestSupport, g_bullishOrderBlockLow, g_majorSupport);
+      if(structure > 0.0)
+      {
+         double structuralStop = structure - atrPrice * 0.12;
+         if(structuralStop > baseStop && structuralStop < entryPrice)
+            baseStop = structuralStop;
+      }
+   }
+   else
+   {
+      structure = ClosestAbove(entryPrice, g_nearestResistance, g_bearishOrderBlockHigh, g_majorResistance);
+      if(structure > 0.0)
+      {
+         double structuralStop = structure + atrPrice * 0.12;
+         if(structuralStop < baseStop && structuralStop > entryPrice)
+            baseStop = structuralStop;
+      }
+   }
+
+   // Structural intelligence may tighten risk, but never inside the Broker's
+   // legal Stops Level. This prevents Dynamic SL from turning into an order
+   // rejection / hidden entry blocker.
+   double minStopPoints = MathMax(
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
+      0.0
+   ) + 2.0;
+   if(direction > 0)
+      baseStop = MathMin(baseStop, entryPrice - minStopPoints * _Point);
+   else
+      baseStop = MathMax(baseStop, entryPrice + minStopPoints * _Point);
+
+   return NormalizeDouble(baseStop, digits);
+}
+
+double DynamicTakeProfitPrice(int direction, double entryPrice, double stopPrice)
+{
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   double atrPoints = g_atrPoints > 0.0 ? g_atrPoints : AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   double atrPrice = MathMax(_Point * 10.0, atrPoints * _Point);
+   double riskDistance = MathMax(atrPrice * 0.45, MathAbs(entryPrice - stopPrice));
+
+   double rewardMultiple = g_entryQuality == "A" ? 1.85 :
+                           g_entryQuality == "B" ? 1.55 : 1.30;
+   if(g_marketRegimeDetail == "NEWS_IMPULSE")
+      rewardMultiple = MathMax(rewardMultiple, 2.10);
+   else if(g_marketRegimeDetail == "TREND_ACCELERATION")
+      rewardMultiple = MathMax(rewardMultiple, 1.90);
+
+   double target = direction > 0
+      ? entryPrice + riskDistance * rewardMultiple
+      : entryPrice - riskDistance * rewardMultiple;
+
+   double opposing = direction > 0 ? g_nearestResistance : g_nearestSupport;
+   if(direction > 0 && opposing > entryPrice + atrPrice * 0.55)
+   {
+      double levelTarget = opposing - atrPrice * 0.06;
+      if(levelTarget > entryPrice + riskDistance * 0.80 &&
+         (g_entryQuality != "A" || levelTarget <= target))
+         target = levelTarget;
+   }
+   else if(direction < 0 && opposing > 0.0 && opposing < entryPrice - atrPrice * 0.55)
+   {
+      double levelTarget = opposing + atrPrice * 0.06;
+      if(levelTarget < entryPrice - riskDistance * 0.80 &&
+         (g_entryQuality != "A" || levelTarget >= target))
+         target = levelTarget;
+   }
+
+   // A-grade trend/news setups may target the 127.2 Fib extension when it is
+   // beyond the nearby reaction target but still within a sane R multiple.
+   if(g_entryQuality == "A" && g_fibDirection == direction &&
+      g_fibSwingHigh > g_fibSwingLow)
+   {
+      double range = g_fibSwingHigh - g_fibSwingLow;
+      double extension = direction > 0
+         ? g_fibSwingHigh + range * 0.272
+         : g_fibSwingLow - range * 0.272;
+      if(direction > 0 && extension > target &&
+         extension <= entryPrice + riskDistance * 2.60)
+         target = extension;
+      else if(direction < 0 && extension < target &&
+              extension >= entryPrice - riskDistance * 2.60)
+         target = extension;
+   }
+
+   return NormalizeDouble(target, digits);
+}
+
+bool ModifyPositionProtection(ulong ticket, double sl, double tp)
+{
+   if(ticket == 0 || !PositionSelectByTicket(ticket))
+      return false;
+
+   MqlTradeRequest request = {};
+   MqlTradeResult result = {};
+   request.action = TRADE_ACTION_SLTP;
+   request.position = ticket;
+   request.magic = InpMagic;
+   request.symbol = PositionGetString(POSITION_SYMBOL);
+   request.sl = sl;
+   request.tp = tp;
+
+   ResetLastError();
+   if(!OrderSend(request, result))
+      return false;
+   return TradeResultAccepted(result);
+}
+
+void ManageDynamicProtection()
+{
+   datetime now = TimeCurrent();
+   if(g_lastDynamicProtectionAt > 0 && now - g_lastDynamicProtectionAt < 2)
+      return;
+   g_lastDynamicProtectionAt = now;
+
+   int count = BasketPositionCount();
+   if(count <= 0)
+      return;
+
+   g_atrPoints = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   double atr = MathMax(10.0, g_atrPoints);
+   double minStopPoints = MathMax(
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
+   ) + 2.0;
+
+   int basketDirection = BasketDirection();
+   double anchorPrice = BasketAnchorEntryPrice(basketDirection);
+   if(anchorPrice > 0.0 && basketDirection != 0)
+   {
+      double basketStop = DynamicInitialStopPrice(basketDirection, anchorPrice);
+      g_dynamicStopPrice = basketStop;
+      g_dynamicTakeProfitPrice = DynamicTakeProfitPrice(basketDirection, anchorPrice, basketStop);
+   }
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+      return;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
+         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+
+      long type = PositionGetInteger(POSITION_TYPE);
+      int direction = type == POSITION_TYPE_BUY ? 1 : -1;
+      double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      double currentSL = PositionGetDouble(POSITION_SL);
+      double currentTP = PositionGetDouble(POSITION_TP);
+      double marketPrice = direction > 0 ? tick.bid : tick.ask;
+      double profitPoints = direction > 0
+         ? (marketPrice - openPrice) / _Point
+         : (openPrice - marketPrice) / _Point;
+
+      double desiredSL = currentSL;
+      if(profitPoints >= atr * 0.55)
+      {
+         double breakEven = direction > 0
+            ? openPrice + atr * 0.04 * _Point
+            : openPrice - atr * 0.04 * _Point;
+         if(direction > 0)
+            desiredSL = currentSL <= 0.0 ? breakEven : MathMax(currentSL, breakEven);
+         else
+            desiredSL = currentSL <= 0.0 ? breakEven : MathMin(currentSL, breakEven);
+      }
+
+      if(profitPoints >= atr * 1.10)
+      {
+         double trail = direction > 0
+            ? marketPrice - atr * 0.55 * _Point
+            : marketPrice + atr * 0.55 * _Point;
+         if(direction > 0)
+            desiredSL = desiredSL <= 0.0 ? trail : MathMax(desiredSL, trail);
+         else
+            desiredSL = desiredSL <= 0.0 ? trail : MathMin(desiredSL, trail);
+      }
+
+      int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+      if(direction > 0 && desiredSL > 0.0)
+         desiredSL = MathMin(desiredSL, tick.bid - minStopPoints * _Point);
+      else if(direction < 0 && desiredSL > 0.0)
+         desiredSL = MathMax(desiredSL, tick.ask + minStopPoints * _Point);
+      desiredSL = desiredSL > 0.0 ? NormalizeDouble(desiredSL, digits) : 0.0;
+
+      // For a single-position strategy with no explicit money target, keep a
+      // live Broker TP. Multi-position baskets use the dynamic Basket target
+      // instead so one rung cannot close and be immediately replaced.
+      double desiredTP = currentTP;
+      if(count == 1 && g_perPositionProfit <= 0.0 && g_basketProfitTarget <= 0.0)
+      {
+         double baseStop = desiredSL > 0.0
+            ? desiredSL
+            : DynamicInitialStopPrice(direction, openPrice);
+         desiredTP = DynamicTakeProfitPrice(direction, openPrice, baseStop);
+         if(direction > 0)
+            desiredTP = MathMax(desiredTP, tick.ask + minStopPoints * _Point);
+         else
+            desiredTP = MathMin(desiredTP, tick.bid - minStopPoints * _Point);
+         desiredTP = NormalizeDouble(desiredTP, digits);
+      }
+
+      bool slChanged = desiredSL > 0.0 &&
+         (currentSL <= 0.0 || MathAbs(desiredSL - currentSL) >= _Point * 2.0);
+      bool tpChanged = desiredTP > 0.0 &&
+         (currentTP <= 0.0 || MathAbs(desiredTP - currentTP) >= _Point * 4.0);
+
+      if(slChanged || tpChanged)
+         ModifyPositionProtection(ticket, slChanged ? desiredSL : currentSL, tpChanged ? desiredTP : currentTP);
+   }
+}
+
 string ProfitControlModeName()
 {
    if(g_perPositionProfit > 0.0)
@@ -3693,16 +4331,35 @@ bool SendMarketOrder(int direction)
       request.price = tick.bid;
    }
 
-   double effectiveStopLossPoints = EffectiveStopLossDistancePoints();
-   if(effectiveStopLossPoints > 0.0)
+   double entryPrice = request.price;
+   request.sl = DynamicInitialStopPrice(direction, entryPrice);
+   if(request.sl > 0.0 &&
+      !BasketFillEnabled() &&
+      g_perPositionProfit <= 0.0 &&
+      g_basketProfitTarget <= 0.0)
    {
+      request.tp = DynamicTakeProfitPrice(direction, entryPrice, request.sl);
+      double minTargetPoints = MathMax(
+         (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
+         0.0
+      ) + 2.0;
       int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-      double stopDistance = effectiveStopLossPoints * _Point;
-      request.sl = NormalizeDouble(
-         direction > 0 ? tick.ask - stopDistance : tick.bid + stopDistance,
-         digits
-      );
+      if(direction > 0)
+         request.tp = NormalizeDouble(
+            MathMax(request.tp, entryPrice + minTargetPoints * _Point),
+            digits
+         );
+      else
+         request.tp = NormalizeDouble(
+            MathMin(request.tp, entryPrice - minTargetPoints * _Point),
+            digits
+         );
    }
+
+   g_dynamicStopPrice = request.sl;
+   g_dynamicTakeProfitPrice = request.tp > 0.0
+      ? request.tp
+      : DynamicTakeProfitPrice(direction, entryPrice, request.sl);
 
    g_adaptiveLot = request.volume;
 

@@ -84,6 +84,36 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       CREATE INDEX IF NOT EXISTS idx_auth_events_user ON auth_events(user_id,created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_auth_events_ip ON auth_events(ip_address,created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS trade_journal (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        bot_instance_id uuid NOT NULL REFERENCES bot_instances(id) ON DELETE CASCADE,
+        mt5_account_id uuid REFERENCES mt5_accounts(id) ON DELETE SET NULL,
+        deal_ticket bigint NOT NULL,
+        position_id bigint,
+        event_type varchar(16) NOT NULL CHECK (event_type IN ('ENTRY','EXIT')),
+        direction varchar(8) NOT NULL CHECK (direction IN ('BUY','SELL')),
+        volume numeric(18,8) NOT NULL DEFAULT 0,
+        price numeric(24,10) NOT NULL DEFAULT 0,
+        net_profit numeric(18,2) NOT NULL DEFAULT 0,
+        entry_trigger varchar(64),
+        entry_model varchar(64),
+        entry_quality varchar(8),
+        entry_quality_score numeric(8,2) NOT NULL DEFAULT 0,
+        market_regime varchar(64),
+        market_regime_detail varchar(64),
+        fib_setup_score numeric(8,2) NOT NULL DEFAULT 0,
+        order_block_quality numeric(8,2) NOT NULL DEFAULT 0,
+        confidence numeric(8,2) NOT NULL DEFAULT 0,
+        basket_index integer NOT NULL DEFAULT 0,
+        metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(bot_instance_id,deal_ticket,event_type)
+      );
+      CREATE INDEX IF NOT EXISTS idx_trade_journal_instance_created
+        ON trade_journal(bot_instance_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_trade_journal_instance_exit
+        ON trade_journal(bot_instance_id,event_type,created_at DESC);
+
       ALTER TABLE trial_grants
         ADD COLUMN IF NOT EXISTS line_contact varchar(160),
         ADD COLUMN IF NOT EXISTS request_ip varchar(96);
@@ -262,8 +292,8 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       WHERE NOT settings ? 'manualStopLossPoints'
          OR COALESCE((settings->>'perPositionLossMoney')::numeric,0)<>0;
 
-      -- EA 1.020 uses one Adaptive engine. Remove profile/cooldown values and
-      -- normalize old accounts to the same transparent execution behaviour.
+      -- Setup-First Engine: normalize legacy hidden gates while preserving the
+      -- user's explicit Confidence checkbox when it already exists.
       UPDATE bot_settings
       SET settings=(settings - 'tradingProfile' - 'cooldownMinutesAfterLoss' - 'maxConsecutiveLosses') ||
                    jsonb_build_object(
@@ -272,15 +302,22 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
                      'maxOrdersPerMinute',120,
                      'riskPerOrderPercent',0.25,
                      'hardStopAtrMultiplier',2.0,
-                     'confidenceThreshold',62,
-                     'allowMinimumLotOverride',false,
+                     'confidenceGateEnabled',COALESCE((settings->>'confidenceGateEnabled')::boolean,false),
+                     'confidenceThreshold',55,
+                     'allowMinimumLotOverride',true,
+                     'sessionStartHour',0,
+                     'sessionEndHour',24,
                      'maxAtrPoints',0
                    ),
           updated_at=now()
       WHERE settings ? 'tradingProfile'
          OR settings ? 'cooldownMinutesAfterLoss'
          OR settings ? 'maxConsecutiveLosses'
-         OR COALESCE((settings->>'confidenceThreshold')::int,0)<>62;
+         OR NOT settings ? 'confidenceGateEnabled'
+         OR COALESCE((settings->>'confidenceThreshold')::int,0)<>55
+         OR COALESCE((settings->>'allowMinimumLotOverride')::boolean,false)=false
+         OR COALESCE((settings->>'sessionStartHour')::int,-1)<>0
+         OR COALESCE((settings->>'sessionEndHour')::int,-1)<>24;
     `);
   }
 

@@ -187,7 +187,9 @@ export class BotController {
       ADAPTIVE_DATA_NOT_READY: { label: "กำลังเตรียมข้อมูลตลาด", detail: "รอข้อมูลแท่งราคา M1, M5, M15, M30 และ H1 ให้เพียงพอ", tone: "warn" },
       RISK_LIMIT_TOO_SMALL: { label: "ความเสี่ยงไม่พอสำหรับ Lot ขั้นต่ำ", detail: "Risk % ปัจจุบันต่ำกว่าที่ Lot ขั้นต่ำของ Broker ต้องใช้ หากยอมรับความเสี่ยงเพิ่มให้ติ๊กอนุญาต Lot ขั้นต่ำในตั้งค่าบอท", tone: "warn" },
       SPREAD_TOO_HIGH: { label: "Spread ผิดปกติต่อเนื่อง", detail: "Adaptive Spread ระงับเฉพาะออเดอร์ใหม่ ส่วน Position เดิมยังถูกดูแลตามปกติ", tone: "warn" },
-      WAITING_BASKET_ADD: { label: "รอจังหวะเพิ่มไม้", detail: "Max Positions คือเพดาน ระบบจะเพิ่มไม้เมื่อราคาเดินต่อฝั่งกำไรและ Momentum/Confidence ยังยืนยัน ไม่ยิงครบทุกไม้พร้อมกัน", tone: "good" },
+      WAITING_BASKET_ADD: { label: "รอจังหวะเพิ่มไม้", detail: "ไม้แรกเปิดแล้ว ระบบกำลังจัดระยะไม้เพิ่มตาม Basket Ladder โดยไม่ใช้ Confidence เป็น Gate", tone: "good" },
+      BASKET_LADDER_WAIT: { label: "Basket Ladder กำลังรอ Rung ถัดไป", detail: "นี่เป็นระยะห่างของไม้ 2–10 หลังไม้แรก ไม่ใช่เงื่อนไขดักไม้แรก", tone: "good" },
+      BASKET_LADDER_ADVANCE: { label: "Basket Ladder เพิ่มไม้แล้ว", detail: "ราคาเดินถึง Rung ถัดไปและ Broker รับคำสั่งเพิ่มไม้", tone: "good" },
       BASKET_FILLING: { label: "กำลังเปิดตามจำนวนไม้", detail: "EA กำลังส่งคำสั่งตามจำนวนที่เลือก โดย MT5/Broker เป็นผู้ตอบรับแต่ละคำสั่ง", tone: "good" },
       BASKET_FILL_COMPLETE: { label: "ส่งคำสั่งครบจำนวนแล้ว", detail: "ระบบกำลังดูแล Position ที่ MT5 เปิดสำเร็จ", tone: "good" },
       BASKET_MANAGING: { label: "กำลังดูแลออเดอร์", detail: "EA ดูแล Position ที่เปิดอยู่ตามเป้ากำไรและ Stop Loss", tone: "good" },
@@ -552,6 +554,66 @@ export class BotController {
       settings = row?.settings || null;
     }
 
+    let tradeJournal = {
+      stats: {
+        closedTrades: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        netProfit: 0,
+        averageWin: 0,
+        averageLoss: 0,
+        profitFactor: 0
+      },
+      recent: [] as any[]
+    };
+
+    if (instance) {
+      const stats = await this.db.one(
+        `SELECT
+           COUNT(*) FILTER (WHERE event_type='EXIT')::int AS closed_trades,
+           COUNT(*) FILTER (WHERE event_type='EXIT' AND net_profit>0)::int AS wins,
+           COUNT(*) FILTER (WHERE event_type='EXIT' AND net_profit<0)::int AS losses,
+           COALESCE(SUM(net_profit) FILTER (WHERE event_type='EXIT'),0)::float8 AS net_profit,
+           COALESCE(AVG(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit>0),0)::float8 AS average_win,
+           COALESCE(AVG(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit<0),0)::float8 AS average_loss,
+           COALESCE(SUM(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit>0),0)::float8 AS gross_profit,
+           ABS(COALESCE(SUM(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit<0),0))::float8 AS gross_loss
+         FROM trade_journal
+         WHERE bot_instance_id=$1`,
+        [instance.id]
+      );
+      const closedTrades = Number(stats?.closed_trades || 0);
+      const wins = Number(stats?.wins || 0);
+      const grossProfit = Number(stats?.gross_profit || 0);
+      const grossLoss = Number(stats?.gross_loss || 0);
+
+      tradeJournal.stats = {
+        closedTrades,
+        wins,
+        losses: Number(stats?.losses || 0),
+        winRate: closedTrades > 0 ? wins / closedTrades * 100 : 0,
+        netProfit: Number(stats?.net_profit || 0),
+        averageWin: Number(stats?.average_win || 0),
+        averageLoss: Number(stats?.average_loss || 0),
+        profitFactor: grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? grossProfit : 0
+      };
+
+      const recentJournal = await this.db.query(
+        `SELECT
+           event_type,direction,volume::float8,price::float8,net_profit::float8,
+           entry_trigger,entry_model,entry_quality,entry_quality_score::float8,
+           market_regime_detail,fib_setup_score::float8,order_block_quality::float8,
+           confidence::float8,basket_index,created_at
+         FROM trade_journal
+         WHERE bot_instance_id=$1
+         ORDER BY created_at DESC
+         LIMIT 20`,
+        [instance.id]
+      );
+      tradeJournal.recent = recentJournal.rows;
+    }
+
     const latestTrialRequest = await this.db.one(
       "SELECT id,line_contact,request_ip,status,created_at FROM trial_requests WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1",
       [userId]
@@ -576,7 +638,8 @@ export class BotController {
       trialRequest: latestTrialRequest,
       entitlement,
       liveStatus,
-      softwareUpdate
+      softwareUpdate,
+      tradeJournal
     };
   }
 
