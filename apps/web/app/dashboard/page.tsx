@@ -32,6 +32,7 @@ type SettingsTab = "basic" | "adaptive" | "risk" | "session" | "exit";
 
 const defaultSettings = {
   symbol: "XAUUSD",
+  tradingProfile: "BALANCED",
   lot: 0.01,
   maxPositions: 10,
   basketTriggerMoney: 2,
@@ -56,8 +57,6 @@ const defaultSettings = {
   sessionStartHour: 0,
   sessionEndHour: 24,
   maxAtrPoints: 0,
-  cooldownMinutesAfterLoss: 5,
-  maxConsecutiveLosses: 3,
   entryMode: "AUTO_MOMENTUM"
 };
 
@@ -343,6 +342,13 @@ export default function DashboardPage() {
       : value.toFixed(0) + " points";
   };
   const spreadStatus = String(metrics.spreadStatus || "WARMUP");
+  const tradingProfile = String(metrics.tradingProfile || settings.tradingProfile || "BALANCED");
+  const tradingProfileLabel:Record<string,string> = {
+    SAFE: "ปลอดภัย",
+    BALANCED: "สมดุล",
+    AGGRESSIVE: "เชิงรุก",
+    BURST_10: "Burst 10"
+  };
   const spreadStatusLabel:Record<string,string> = {
     NORMAL: "ปกติ",
     ELEVATED: "สูงกว่าปกติ",
@@ -690,6 +696,7 @@ export default function DashboardPage() {
       "InpInstanceId=" + instanceId,
       "InpInstallToken=" + token,
       "InpMagic=26090501",
+      "InpTradingProfile=" + ({SAFE:0,BALANCED:1,AGGRESSIVE:2,BURST_10:3} as Record<string,number>)[String(settings.tradingProfile||"BALANCED")],
       "InpLot=" + settings.lot,
       "InpMaxPositions=" + settings.maxPositions,
       "InpBasketTriggerMoney=" + settings.basketTriggerMoney,
@@ -714,9 +721,7 @@ export default function DashboardPage() {
       "InpConfidenceThreshold=" + settings.confidenceThreshold,
       "InpSessionStartHour=" + settings.sessionStartHour,
       "InpSessionEndHour=" + settings.sessionEndHour,
-      "InpMaxAtrPoints=" + settings.maxAtrPoints,
-      "InpCooldownMinutesAfterLoss=" + settings.cooldownMinutesAfterLoss,
-      "InpMaxConsecutiveLosses=" + settings.maxConsecutiveLosses
+      "InpMaxAtrPoints=" + settings.maxAtrPoints
     ].join("\r\n");
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -835,9 +840,7 @@ export default function DashboardPage() {
         "confidenceThreshold",
         "sessionStartHour",
         "sessionEndHour",
-        "maxAtrPoints",
-        "cooldownMinutesAfterLoss",
-        "maxConsecutiveLosses"
+        "maxAtrPoints"
       ];
       const requiredNumericKeys = new Set([
         "lot",
@@ -846,9 +849,7 @@ export default function DashboardPage() {
         "atrPeriod",
         "confidenceThreshold",
         "sessionStartHour",
-        "sessionEndHour",
-        "cooldownMinutesAfterLoss",
-        "maxConsecutiveLosses"
+        "sessionEndHour"
       ]);
       const integerKeys = new Set([
         "maxPositions",
@@ -1114,28 +1115,27 @@ export default function DashboardPage() {
 
                 <form className="cc-settings-form-v3" onSubmit={saveSettings}>
                   {settingsTab==="basic"&&<><div className="cc-settings-section-title"><b>ตั้งค่าพื้นฐาน</b><span>กำหนดสินทรัพย์ รูปแบบการเข้า และจำนวนไม้</span></div><div className="cc-settings-grid">
+                    <SettingTile icon="brain" title="โปรไฟล์การเทรด" description="เลือกแบบเดียว ระบบจัดค่าภายในให้ทั้งหมด" wide><div className="cc-profile-picker">{[
+                      ["SAFE","ปลอดภัย","สูงสุด 3 ไม้ · คัดสัญญาณเข้ม"],
+                      ["BALANCED","สมดุล","สูงสุด 5 ไม้ · เหมาะใช้ทั่วไป"],
+                      ["AGGRESSIVE","เชิงรุก","สูงสุด 8 ไม้ · เข้าเร็วขึ้น"],
+                      ["BURST_10","Burst 10","Basket Scalping · เปิดรัวสูงสุด 10 ไม้"]
+                    ].map(([value,label,detail])=><button type="button" key={value} className={String(settings.tradingProfile||"BALANCED")===value?"active":""} onClick={()=>editSetting("tradingProfile",value)}><b>{label}</b><small>{detail}</small></button>)}</div></SettingTile>
                     <SettingTile icon="gold" title="Symbol" description="สินทรัพย์ที่ EA กำลังเทรด"><div className="input read-only-value">{metrics.symbol||settings.symbol}</div></SettingTile>
                     <SettingTile icon="bot" title="โหมดเข้าออเดอร์" description="AUTO ใช้ Momentum + Trend"><select className="input" value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO MOMENTUM</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></SettingTile>
-                    <SettingTile icon="layers" title="จำนวน Position สูงสุด" description="เป็นเพดาน ไม่ได้เปิดครบพร้อมกัน"><select className="input" value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></SettingTile>
                     <SettingTile icon="lot" title="Lot สูงสุด (Adaptive)" description="Adaptive ลดได้ แต่ไม่เพิ่มเกินค่านี้"><select className="input" value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></SettingTile>
-                    <SettingTile icon="spark" title="ระยะห่างคำสั่งขั้นต่ำ" description="จำกัดความถี่การยิงคำสั่ง"><select className="input" value={String(settings.minOrderIntervalMs)} onChange={e=>editSetting("minOrderIntervalMs",e.target.value)}>{[100,200,300,500,750,1000,1500,2000,3000,5000].map(v=><option key={v} value={v}>{v} ms</option>)}</select></SettingTile>
-                    <SettingTile icon="orders" title="คำสั่งสูงสุดต่อนาที" description="ป้องกันส่งคำสั่งถี่เกินไป"><select className="input" value={String(settings.maxOrdersPerMinute)} onChange={e=>editSetting("maxOrdersPerMinute",e.target.value)}>{[10,20,30,60,90,120,180,240].map(v=><option key={v} value={v}>{v} ครั้ง</option>)}</select></SettingTile>
+                    <SettingTile icon="status" title="โปรไฟล์ที่ EA ใช้" description="ค่าจริงจาก Heartbeat"><div className="cc-readout"><b>{tradingProfileLabel[tradingProfile]||tradingProfile}</b><small>{tradingProfile==="BURST_10"?"กำลังใช้ Basket Scalping Engine":"Adaptive profile พร้อมใช้งาน"}</small></div></SettingTile>
                   </div></>}
 
                   {settingsTab==="adaptive"&&<><div className="cc-settings-section-title"><b>Adaptive Intelligence</b><span>Trend, Momentum, ATR และ Confidence</span></div><div className="cc-settings-grid">
-                    <SettingTile icon="brain" title="ระบบวิเคราะห์อัจฉริยะ" description="Multi-timeframe + Dynamic Risk"><SwitchSetting checked={Boolean(settings.adaptiveEngine)} onChange={(v:boolean)=>editSetting("adaptiveEngine",v)} onLabel="เปิดใช้งาน" offLabel="ปิดใช้งาน"/></SettingTile>
-                    <SettingTile icon="target" title="คะแนนสัญญาณขั้นต่ำ" description="ต่ำกว่านี้จะยังไม่เปิดไม้"><select className="input" value={String(settings.confidenceThreshold)} onChange={e=>editSetting("confidenceThreshold",e.target.value)}>{[50,60,65,70,75,80,85,90].map(v=><option key={v} value={v}>{v}%</option>)}</select></SettingTile>
-                    <SettingTile icon="risk" title="Hard Stop ตาม ATR" description="ระยะ Stop หลักต่อไม้"><select className="input" value={String(settings.hardStopAtrMultiplier)} onChange={e=>editSetting("hardStopAtrMultiplier",e.target.value)}>{[1,1.5,2,2.5,3,4].map(v=><option key={v} value={v}>{v} × ATR</option>)}</select></SettingTile>
-                    <SettingTile icon="trend" title="ATR Period" description="ช่วงข้อมูลวัดความผันผวน"><select className="input" value={String(settings.atrPeriod)} onChange={e=>editSetting("atrPeriod",e.target.value)}>{[7,10,14,20,28,50].map(v=><option key={v} value={v}>{v}</option>)}</select></SettingTile>
-                    <SettingTile icon="spark" title="ATR Adaptive Guard" description="0 = ให้ระบบปรับเองทั้งหมด"><select className="input" value={String(settings.maxAtrPoints)} onChange={e=>editSetting("maxAtrPoints",e.target.value)}>{[0,500,1000,1500,2000,3000,5000,10000].map(v=><option key={v} value={v}>{v===0?"Adaptive อัตโนมัติ":v+" points"}</option>)}</select></SettingTile>
-                    <SettingTile icon="timer" title="พักหลังขาดทุน" description="ลดการเทรดแก้มือ"><select className="input" value={String(settings.cooldownMinutesAfterLoss)} onChange={e=>editSetting("cooldownMinutesAfterLoss",e.target.value)}>{[0,5,10,15,30,60,120].map(v=><option key={v} value={v}>{v===0?"ไม่พัก":v+" นาที"}</option>)}</select></SettingTile>
-                    <SettingTile icon="shield" title="ขาดทุนติดต่อกันสูงสุด" description="ถึงเกณฑ์จะเพิ่มเวลาพัก"><select className="input" value={String(settings.maxConsecutiveLosses)} onChange={e=>editSetting("maxConsecutiveLosses",e.target.value)}>{[0,1,2,3,4,5,7,10].map(v=><option key={v} value={v}>{v===0?"ไม่จำกัด":v+" ไม้"}</option>)}</select></SettingTile>
+                    <SettingTile icon="brain" title="Adaptive Engine" description="ระบบกำหนดค่าตามโปรไฟล์"><div className="cc-readout"><b>เปิดใช้งานตลอด</b><small>{tradingProfileLabel[tradingProfile]||tradingProfile}</small></div></SettingTile>
+                    <SettingTile icon="target" title="ความมั่นใจปัจจุบัน" description="คำนวณจากตลาดจริง"><div className="cc-readout"><b>{Number(metrics.signalConfidence||0).toFixed(0)}%</b><small>{String(metrics.marketRegime||"รอข้อมูล")}</small></div></SettingTile>
+                    <SettingTile icon="spread" title="Adaptive Spread" description="เรียนรู้จาก Broker และ Symbol"><div className="cc-readout"><b>{spreadValueLabel}</b><small>{spreadStatusLabel[spreadStatus]||spreadStatus}</small></div></SettingTile>
                     <SettingTile icon="trend" title="Trend Lock" description="AUTO จะไม่เปิดสวน M15/H1"><div className="cc-readout"><b>{entryBiasLabel}</b><small>M5 {trendText(metrics.trendM5)} · M15 {trendText(metrics.trendM15)} · H1 {trendText(metrics.trendH1)}</small></div></SettingTile>
                   </div></>}
 
                   {settingsTab==="risk"&&<><div className="cc-settings-section-title"><b>ความเสี่ยง</b><span>คุม Lot, Stop และขาดทุนของพอร์ต</span></div><div className="cc-settings-grid">
-                    <SettingTile icon="shield" title="ความเสี่ยงสูงสุดต่อไม้" description="คิดจาก Equity และระยะ Stop"><select className="input" value={String(settings.riskPerOrderPercent)} onChange={e=>editSetting("riskPerOrderPercent",e.target.value)}>{[0.1,0.25,0.5,0.75,1,1.5,2].map(v=><option key={v} value={v}>{v}% Equity</option>)}</select></SettingTile>
-                    <SettingTile icon="lot" title="อนุญาต Lot ขั้นต่ำ" description="ใช้ขั้นต่ำ Broker แม้ Risk % ไม่พอ" accent={Boolean(settings.allowMinimumLotOverride)}><SwitchSetting checked={Boolean(settings.allowMinimumLotOverride)} onChange={(v:boolean)=>editSetting("allowMinimumLotOverride",v)} onLabel="อนุญาต" offLabel="บล็อกตาม Risk"/></SettingTile>
+                    <SettingTile icon="shield" title="การควบคุมความเสี่ยง" description="กำหนดโดยโปรไฟล์อัตโนมัติ"><div className="cc-readout"><b>{tradingProfileLabel[tradingProfile]||tradingProfile}</b><small>Lot รวม, ATR Stop และ Margin Guard</small></div></SettingTile>
                     <SettingTile icon="pnl" title="ขาดทุนต่อวันแล้วหยุด" description="ป้องกัน Drawdown รายวัน"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="25" value={settings.dailyLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("dailyLossMoney",v)}/></SettingTile>
                     <SettingTile icon="risk" title="ขาดทุน Basket สูงสุด" description="ถึงค่าแล้วปิด Basket"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="10" value={settings.maxBasketLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}/></SettingTile>
                     <SettingTile icon="orders" title="ขาดทุนต่อไม้แล้วปิด" description="Stop แบบจำนวนเงินต่อ Position"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="2" value={settings.perPositionLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("perPositionLossMoney",v)}/></SettingTile>
@@ -1150,11 +1150,17 @@ export default function DashboardPage() {
                   </div></>}
 
                   {settingsTab==="exit"&&<><div className="cc-settings-section-title"><b>ออกออเดอร์ / ปิดกำไร</b><span>เลือกรูปแบบทำกำไรและ Trailing</span></div><div className="cc-settings-grid">
+                    {String(settings.tradingProfile||"BALANCED")==="BURST_10"?<>
+                    <SettingTile icon="orders" title="Basket Scalping Engine" description="ระบบเปิดชุดและปิดกำไรให้อัตโนมัติ" wide><div className="cc-readout"><b>{metrics.burstActive?"กำลังเปิดชุด "+Number(metrics.burstFilledPositions||0)+" / 10":"พร้อมเปิดสูงสุด 10 ไม้"}</b><small>เป้ากำไรและขาดทุนคำนวณจาก Equity, ATR และต้นทุน Spread</small></div></SettingTile>
+                    <SettingTile icon="profit" title="เป้ากำไร Basket อัตโนมัติ" description="ค่าจริงจาก EA"><div className="cc-readout"><b>${Number(metrics.burstTargetMoney||0).toFixed(2)}</b><small>ปรับใหม่ทุก Cycle</small></div></SettingTile>
+                    <SettingTile icon="risk" title="ขีดจำกัด Basket อัตโนมัติ" description="ค่าจริงจาก EA"><div className="cc-readout"><b>${Number(metrics.burstLossMoney||0).toFixed(2)}</b><small>มี Margin และ Total-risk guard</small></div></SettingTile>
+                    </>:<>
                     <SettingTile icon="profit" title="ปล่อยกำไรวิ่ง" description="ปิดเมื่อกำไรย่อจาก Peak"><ToggleSelectField label="" options={[5,10,15,20,25,30,40,50]} defaultValue="20" value={settings.profitRunTrailPercent} format={(v:string)=>v+"%"} onChange={(v:string)=>editSetting("profitRunTrailPercent",v)}/></SettingTile>
                     <SettingTile icon="pnl" title="กำไรต่อวัน" description="เลือกหยุดหรือรันต่อหลังถึงเป้า" wide><DailyProfitTargetField value={settings.dailyProfitTargetMoney} continueAfterTarget={Boolean(settings.dailyProfitContinueAfterTarget)} drawdownPercent={settings.dailyProfitDrawdownPercent} targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} percentOptions={[5,10,15,20,25,30,40,50]} defaultTarget="10" defaultPercent="20" onTargetChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)} onContinueChange={(v:boolean)=>editSetting("dailyProfitContinueAfterTarget",v)} onPercentChange={(v:string)=>editSetting("dailyProfitDrawdownPercent",v)}/></SettingTile>
                     <SettingTile icon="orders" title="กำไรต่อไม้แล้วปิด" description="ใช้ไม่ได้พร้อม Profit Run"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="2" value={settings.perPositionProfitMoney} disabled={profitRunModeEnabled} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}/></SettingTile>
                     <SettingTile icon="profit" title="กำไรรวม Basket แล้วปิด" description="ใช้ไม่ได้พร้อมกำไรต่อไม้"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="10" value={settings.basketProfitTargetMoney} disabled={profitRunModeEnabled} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}/></SettingTile>
                     <SettingTile icon="trend" title="Basket Trailing" description="เริ่ม Trailing แล้วปิดเมื่อย่อ" wide><TogglePairField label="" firstValue={settings.basketTriggerMoney} secondValue={settings.basketTrailMoney} disabled={profitRunModeEnabled} firstDefault="2" secondDefault="0.5" firstOptions={[0.5,1,2,3,5,10,15,20,30,50,100]} secondOptions={[0.1,0.2,0.3,0.5,0.75,1,2,3,5,10]} firstPrefix="เริ่ม $" secondPrefix="ย่อ $" onFirstChange={(v:string)=>editSetting("basketTriggerMoney",v)} onSecondChange={(v:string)=>editSetting("basketTrailMoney",v)}/></SettingTile>
+                    </>}
                   </div></>}
 
                   <div className="cc-settings-savebar"><div><span className={settingsDirty?"warn-dot":"good-dot"}/><span>{settingsDirty?"มีค่าที่แก้ไขและยังไม่ได้ส่งให้ EA":"ค่าบนเว็บตรงกับค่าที่บันทึกแล้ว"}</span></div><button className="btn cc-save-primary" disabled={busy||!settingsDirty}><ScenovaIcon name="save" size={17}/>{busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button></div>

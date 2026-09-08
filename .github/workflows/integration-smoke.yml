@@ -143,6 +143,11 @@ jobs:
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.entryMode')" = "BUY_ONLY"
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
+          echo "[integration] selecting managed Burst 10 profile"
+          BURST_PROFILE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"tradingProfile":"BURST_10"}')
+          test "$(printf '%s' "$BURST_PROFILE" | jq -r '.settings.tradingProfile')" = "BURST_10"
+          test "$(printf '%s' "$BURST_PROFILE" | jq -r '.settings.adaptiveEngine')" = "true"
+
           echo "[integration] enabling per-position profit automatically disables Basket profit"
           PER_POSITION=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"perPositionProfitMoney":2}')
           test "$(printf '%s' "$PER_POSITION" | jq -r '.settings.perPositionProfitMoney')" = "2"
@@ -206,6 +211,8 @@ jobs:
           BAD_DAILY_CONTINUE_HTTP=$(curl -sS -o /tmp/bad-daily-continue.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"dailyProfitContinueAfterTarget":"true"}')
           test "$BAD_DAILY_CONTINUE_HTTP" = "400"
           BAD_MIN_LOT_OVERRIDE_HTTP=$(curl -sS -o /tmp/bad-min-lot-override.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"allowMinimumLotOverride":"true"}')
+          BAD_PROFILE_HTTP=$(curl -sS -o /tmp/bad-profile.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"tradingProfile":"UNKNOWN"}')
+          test "$BAD_PROFILE_HTTP" = "400"
           test "$BAD_MIN_LOT_OVERRIDE_HTTP" = "400"
           CONFLICT_PROFIT_HTTP=$(curl -sS -o /tmp/conflict-profit.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"basketProfitTargetMoney":10,"perPositionProfitMoney":2}')
           test "$CONFLICT_PROFIT_HTTP" = "400"

@@ -2287,6 +2287,13 @@ body{
     linear-gradient(135deg,#563bd3,#34248d);
   box-shadow:0 10px 28px rgba(82,57,210,.18);
 }
+.cc-profile-picker{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.cc-profile-picker button{min-height:76px;padding:12px;text-align:left;border:1px solid #293846;border-radius:12px;background:#081018;color:#dce7eb;cursor:pointer;transition:.16s ease}
+.cc-profile-picker button:hover{border-color:#526a7a;transform:translateY(-1px)}
+.cc-profile-picker button.active{border-color:#7666ff;background:linear-gradient(145deg,#201947,#10162a);box-shadow:0 0 0 2px rgba(112,91,255,.12),0 10px 26px rgba(58,40,155,.16)}
+.cc-profile-picker b,.cc-profile-picker small{display:block}
+.cc-profile-picker b{font-size:12px}
+.cc-profile-picker small{margin-top:5px;color:#82949e;font-size:9px;line-height:1.45}
 
 .cc-terminal-head{
   background:
@@ -2487,6 +2494,7 @@ body{
   .cc-terminal-drawer-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .cc-terminal-drawer-meta{grid-template-columns:1fr}
   .cc-adaptive-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cc-profile-picker{grid-template-columns:1fr 1fr}
 }
 @media(max-width:480px){
   .cc-terminal-line{

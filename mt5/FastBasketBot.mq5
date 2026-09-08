@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.011"
+#property version   "1.012"
 #define SCENOVA_PRODUCT_VERSION "2.0.7"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -9,6 +9,14 @@ enum ENUM_ENTRY_MODE
    ENTRY_AUTO_MOMENTUM = 0,
    ENTRY_BUY_ONLY      = 1,
    ENTRY_SELL_ONLY     = 2
+};
+
+enum ENUM_TRADING_PROFILE
+{
+   PROFILE_SAFE       = 0,
+   PROFILE_BALANCED   = 1,
+   PROFILE_AGGRESSIVE = 2,
+   PROFILE_BURST_10   = 3
 };
 
 enum ENUM_BOT_STATE
@@ -33,6 +41,7 @@ input string          InpApiBase              = "https://snvea-bot.online/backen
 input string          InpInstanceId           = "";
 input string          InpInstallToken         = "";
 input long            InpMagic                = 26090501;
+input ENUM_TRADING_PROFILE InpTradingProfile  = PROFILE_BALANCED;
 
 input double          InpLot                  = 0.01;
 input int             InpMaxPositions         = 10;
@@ -79,8 +88,6 @@ input int             InpSessionEndHour        = 24;
 // 0 = fully adaptive. A positive value is only a soft volatility marker;
  // it never blocks trading by itself.
 input double          InpMaxAtrPoints          = 0.0;
-input int             InpCooldownMinutesAfterLoss = 5;
-input int             InpMaxConsecutiveLosses  = 3;
 
 ENUM_BOT_STATE g_state = STATE_STOPPED;
 bool   g_access = false;
@@ -127,6 +134,7 @@ int    g_maxSpread;
 int    g_minOrderIntervalMs;
 int    g_maxOrdersPerMinute;
 ENUM_ENTRY_MODE g_entryMode;
+ENUM_TRADING_PROFILE g_tradingProfile;
 
 bool   g_adaptiveEngine;
 double g_riskPerOrderPercent;
@@ -137,8 +145,6 @@ int    g_confidenceThreshold;
 int    g_sessionStartHour;
 int    g_sessionEndHour;
 double g_maxAtrPoints;
-int    g_cooldownMinutesAfterLoss;
-int    g_maxConsecutiveLosses;
 string g_marketRegime = "INITIALIZING";
 int    g_trendM5 = 0;
 int    g_trendM15 = 0;
@@ -153,7 +159,6 @@ bool   g_minimumLotOverrideActive = false;
 string g_adaptiveBlockReason = "";
 string g_cachedAdaptiveBlockReason = "";
 int    g_consecutiveLosses = 0;
-datetime g_cooldownUntil = 0;
 datetime g_lastAdaptiveEvaluation = 0;
 int    g_cachedAdaptiveDirection = 0;
 
@@ -186,6 +191,15 @@ double g_pyramidRequiredPoints = 0.0;
 string g_sessionProfile = "UNKNOWN";
 bool   g_spreadProfileRestored = false;
 
+bool   g_burstActive = false;
+bool   g_burstNeedsRearm = false;
+int    g_burstDirection = 0;
+int    g_burstTargetPositions = 0;
+int    g_burstRequestsSent = 0;
+datetime g_burstStartedAt = 0;
+double g_burstTargetMoney = 0.0;
+double g_burstLossMoney = 0.0;
+
 double g_ticks[128];
 int    g_tickCount = 0;
 
@@ -217,6 +231,7 @@ int OnInit()
    g_minOrderIntervalMs = InpMinOrderIntervalMs;
    g_maxOrdersPerMinute = InpMaxOrdersPerMinute;
    g_entryMode = InpEntryMode;
+   g_tradingProfile = InpTradingProfile;
    g_adaptiveEngine = InpAdaptiveEngine;
    g_riskPerOrderPercent = MathMax(0.01, MathMin(5.0, InpRiskPerOrderPercent));
    g_allowMinimumLotOverride = InpAllowMinimumLotOverride;
@@ -226,8 +241,6 @@ int OnInit()
    g_sessionStartHour = MathMax(0, MathMin(23, InpSessionStartHour));
    g_sessionEndHour = MathMax(1, MathMin(24, InpSessionEndHour));
    g_maxAtrPoints = MathMax(0.0, InpMaxAtrPoints);
-   g_cooldownMinutesAfterLoss = MathMax(0, InpCooldownMinutesAfterLoss);
-   g_maxConsecutiveLosses = MathMax(0, InpMaxConsecutiveLosses);
    g_adaptiveMomentumThreshold = InpMomentumEntryPoints;
    g_adaptiveMaxPositions = g_maxPositions;
    g_adaptiveEntrySpacingMs = g_minOrderIntervalMs;
@@ -236,6 +249,7 @@ int OnInit()
    RestoreAdaptiveRiskState();
    RestoreSpreadProfile();
    LoadBasketCycleState();
+   ApplyTradingProfile();
 
    if(!MQLInfoInteger(MQL_TESTER))
    {
@@ -251,7 +265,9 @@ int OnInit()
       }
    }
 
-   EventSetTimer(1);
+   // A 200 ms timer drives the controlled Burst queue. Heartbeat still keeps
+   // its own second-based gate and is never sent at this frequency.
+   EventSetMillisecondTimer(200);
 
    // Strategy Tester cannot use WebRequest. In tester mode only,
    // run the trading engine locally so historical tests work even when markets are closed.
@@ -295,7 +311,10 @@ void OnTick()
 
    int count = BasketPositionCount();
    if(count > 0)
+   {
       UpdateBasketPeakPositionCount(count);
+      EnsureBurstTargets(g_burstActive ? 10 : count);
+   }
    else
       ResetBasketCycleState();
 
@@ -372,7 +391,8 @@ void OnTick()
          }
       }
 
-      if(g_basketProfitTarget > 0.0 && cycleProfit >= g_basketProfitTarget)
+      double effectiveBasketTarget = EffectiveBasketProfitTarget();
+      if(effectiveBasketTarget > 0.0 && cycleProfit >= effectiveBasketTarget)
       {
          CloseAllBasket("BASKET_PROFIT_TARGET");
          ResetTrail();
@@ -380,7 +400,9 @@ void OnTick()
          return;
       }
 
-      if(g_maxBasketLoss > 0.0 && profit <= -g_maxBasketLoss)
+      double effectiveBasketLoss = EffectiveBasketLossLimit();
+      double lossControlProfit = IsBurstProfile() ? cycleProfit : profit;
+      if(effectiveBasketLoss > 0.0 && lossControlProfit <= -effectiveBasketLoss)
       {
          CloseAllBasket("MAX_BASKET_LOSS");
          ResetTrail();
@@ -479,6 +501,30 @@ void OnTick()
       return;
    }
 
+   if(IsBurstProfile() && g_burstActive)
+   {
+      ProcessBurstQueue();
+      return;
+   }
+
+   if(IsBurstProfile() && count > 0)
+   {
+      g_executionStatus = count >= 10 ? "BURST_COMPLETE" : "BURST_PARTIAL_MANAGING";
+      return;
+   }
+
+   if(IsBurstProfile() && g_burstNeedsRearm)
+   {
+      double rearmThreshold = MathMax(2.0, g_adaptiveMomentumThreshold) * 0.35;
+      if(MathAbs(momentum) <= rearmThreshold)
+         g_burstNeedsRearm = false;
+      else
+      {
+         g_executionStatus = "WAITING_BURST_REARM";
+         return;
+      }
+   }
+
    if(!CanSendOrder())
    {
       g_executionStatus = "ORDER_RATE_LIMIT";
@@ -522,7 +568,7 @@ void OnTick()
       }
    }
 
-   if(count > 0 && !AdaptiveBasketAddAllowed(direction))
+   if(count > 0 && !IsBurstProfile() && !AdaptiveBasketAddAllowed(direction))
    {
       g_executionStatus = "WAITING_BASKET_ADD";
       return;
@@ -534,10 +580,27 @@ void OnTick()
       return;
    }
 
+   if(IsBurstProfile() &&
+      AccountInfoInteger(ACCOUNT_MARGIN_MODE) != ACCOUNT_MARGIN_MODE_RETAIL_HEDGING)
+   {
+      g_executionStatus = "BURST_REQUIRES_HEDGING";
+      return;
+   }
+
+   if(IsBurstProfile() && !BurstRiskAllowed(g_adaptiveLot))
+   {
+      g_executionStatus = "BURST_RISK_LIMIT";
+      return;
+   }
+
    g_executionStatus = direction > 0 ? "READY_BUY" : "READY_SELL";
    bool sent = SendMarketOrder(direction);
    if(sent)
+   {
       RegisterOrderRequest();
+      if(IsBurstProfile())
+         ArmBurst(direction);
+   }
 }
 
 void OnTimer()
@@ -545,14 +608,19 @@ void OnTimer()
    SampleSpread();
 
    if(MQLInfoInteger(MQL_TESTER))
+   {
+      ProcessBurstQueue();
       return;
+   }
 
    datetime now = TimeCurrent();
    int heartbeatSeconds = MathMax(1, InpHeartbeatSeconds);
-   if(now - g_lastHeartbeat < heartbeatSeconds)
-      return;
-   g_lastHeartbeat = now;
-   SendHeartbeat();
+   if(now - g_lastHeartbeat >= heartbeatSeconds)
+   {
+      g_lastHeartbeat = now;
+      SendHeartbeat();
+   }
+   ProcessBurstQueue();
 }
 
 void OnTradeTransaction(
@@ -575,6 +643,18 @@ void OnTradeTransaction(
       RecordBasketDeal(trans.deal);
       RecalculateDailyClosedProfit();
       UpdateAdaptiveLossState(trans.deal);
+      long dealEntry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
+      if(IsBurstProfile() &&
+         (dealEntry == DEAL_ENTRY_OUT || dealEntry == DEAL_ENTRY_OUT_BY) &&
+         BasketPositionCount() == 0)
+      {
+         g_burstActive = false;
+         g_burstNeedsRearm = true;
+         g_burstTargetPositions = 0;
+         g_burstRequestsSent = 0;
+         g_burstTargetMoney = 0.0;
+         g_burstLossMoney = 0.0;
+      }
       return;
    }
 
@@ -615,7 +695,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.011\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.012\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -628,7 +708,7 @@ void SendHeartbeat()
       AccountInfoDouble(ACCOUNT_EQUITY),
       BasketProfit(),
       BasketCycleProfit(),
-      g_basketProfitTarget,
+      EffectiveBasketProfitTarget(),
       g_basketPeakPositionCount,
       CurrentPerPositionProfitTarget(),
       g_profitRunTrailPercent,
@@ -665,7 +745,7 @@ void SendHeartbeat()
       g_atrPoints,
       g_adaptiveBlockReason,
       g_consecutiveLosses,
-      (long)g_cooldownUntil,
+      (long)0,
       g_executionStatus,
       g_lastOrderRetcode,
       g_lastOrderError,
@@ -714,6 +794,18 @@ void SendHeartbeat()
          MathMin(128, MathMax(2, InpMomentumTicks))
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + diagnostics;
+      string burstDiagnostics = StringFormat(
+         ",\"tradingProfile\":\"%s\",\"burstActive\":%s,\"burstTargetPositions\":%d,\"burstRequestsSent\":%d,\"burstFilledPositions\":%d,\"burstTargetMoney\":%.2f,\"burstLossMoney\":%.2f,\"burstNeedsRearm\":%s}}",
+         TradingProfileName(),
+         g_burstActive ? "true" : "false",
+         g_burstTargetPositions,
+         g_burstRequestsSent,
+         BasketPositionCount(),
+         g_burstTargetMoney,
+         g_burstLossMoney,
+         g_burstNeedsRearm ? "true" : "false"
+      );
+      payload = StringSubstr(payload, 0, StringLen(payload) - 2) + burstDiagnostics;
    }
 
    string response = "";
@@ -868,8 +960,96 @@ int HttpPostJson(string url, string payload, string &response)
    return code;
 }
 
+bool IsBurstProfile()
+{
+   return g_tradingProfile == PROFILE_BURST_10;
+}
+
+string TradingProfileName()
+{
+   if(g_tradingProfile == PROFILE_SAFE) return "SAFE";
+   if(g_tradingProfile == PROFILE_AGGRESSIVE) return "AGGRESSIVE";
+   if(g_tradingProfile == PROFILE_BURST_10) return "BURST_10";
+   return "BALANCED";
+}
+
+void ApplyTradingProfile()
+{
+   g_adaptiveEngine = true;
+   g_maxAtrPoints = 0.0;
+   if(!IsBurstProfile())
+   {
+      g_burstActive = false;
+      g_burstNeedsRearm = false;
+      g_burstDirection = 0;
+      g_burstTargetPositions = 0;
+      g_burstRequestsSent = 0;
+      g_burstStartedAt = 0;
+      g_burstTargetMoney = 0.0;
+      g_burstLossMoney = 0.0;
+   }
+
+   if(g_tradingProfile == PROFILE_SAFE)
+   {
+      g_maxPositions = 3;
+      g_minOrderIntervalMs = 1200;
+      g_maxOrdersPerMinute = 30;
+      g_confidenceThreshold = 80;
+      g_riskPerOrderPercent = 0.10;
+      g_hardStopAtrMultiplier = 2.50;
+      g_allowMinimumLotOverride = false;
+   }
+   else if(g_tradingProfile == PROFILE_AGGRESSIVE)
+   {
+      g_maxPositions = 8;
+      g_minOrderIntervalMs = 350;
+      g_maxOrdersPerMinute = 120;
+      g_confidenceThreshold = 60;
+      g_riskPerOrderPercent = 0.30;
+      g_hardStopAtrMultiplier = 1.80;
+      g_allowMinimumLotOverride = false;
+   }
+   else if(g_tradingProfile == PROFILE_BURST_10)
+   {
+      g_maxPositions = 10;
+      g_minOrderIntervalMs = 250;
+      g_maxOrdersPerMinute = 180;
+      g_confidenceThreshold = 65;
+      // Total planned risk is controlled as one 10-position Basket. Per-order
+      // risk is deliberately small; minimum-lot use still passes BurstRiskAllowed.
+      g_riskPerOrderPercent = 0.05;
+      g_hardStopAtrMultiplier = 1.70;
+      g_allowMinimumLotOverride = true;
+      g_profitRunTrailPercent = 0.0;
+      g_perPositionProfit = 0.0;
+      g_perPositionLoss = 0.0;
+      g_basketProfitTarget = 0.0;
+      g_triggerMoney = 0.0;
+      g_trailMoney = 0.0;
+   }
+   else
+   {
+      g_maxPositions = 5;
+      g_minOrderIntervalMs = 700;
+      g_maxOrdersPerMinute = 60;
+      g_confidenceThreshold = 70;
+      g_riskPerOrderPercent = 0.20;
+      g_hardStopAtrMultiplier = 2.00;
+      g_allowMinimumLotOverride = false;
+   }
+
+   g_adaptiveMaxPositions = g_maxPositions;
+   g_adaptiveEntrySpacingMs = g_minOrderIntervalMs;
+}
+
 void ApplySettings(string json)
 {
+   string profile = JsonString(json, "tradingProfile", "");
+   if(profile == "SAFE") g_tradingProfile = PROFILE_SAFE;
+   else if(profile == "AGGRESSIVE") g_tradingProfile = PROFILE_AGGRESSIVE;
+   else if(profile == "BURST_10") g_tradingProfile = PROFILE_BURST_10;
+   else if(profile == "BALANCED") g_tradingProfile = PROFILE_BALANCED;
+
    g_lot = MathMax(0.01, JsonNumber(json, "lot", g_lot));
    g_maxPositions = (int)MathMax(1.0, JsonNumber(json, "maxPositions", g_maxPositions));
    g_triggerMoney = MathMax(0.0, JsonNumber(json, "basketTriggerMoney", g_triggerMoney));
@@ -895,7 +1075,7 @@ void ApplySettings(string json)
    else if(g_basketProfitTarget > 0.0)
       g_perPositionProfit = 0.0;
    g_perPositionLoss = MathMax(0.0, JsonNumber(json, "perPositionLossMoney", g_perPositionLoss));
-   g_maxSpread = (int)MathMax(1.0, JsonNumber(json, "maxSpreadPoints", g_maxSpread));
+   g_maxSpread = (int)MathMax(0.0, JsonNumber(json, "maxSpreadPoints", g_maxSpread));
    g_minOrderIntervalMs = (int)MathMax(0.0, JsonNumber(json, "minOrderIntervalMs", g_minOrderIntervalMs));
    g_maxOrdersPerMinute = (int)MathMax(1.0, JsonNumber(json, "maxOrdersPerMinute", g_maxOrdersPerMinute));
    g_adaptiveEngine = JsonBool(json, "adaptiveEngine", g_adaptiveEngine);
@@ -907,14 +1087,14 @@ void ApplySettings(string json)
    g_sessionStartHour = (int)MathMax(0.0, MathMin(23.0, JsonNumber(json, "sessionStartHour", g_sessionStartHour)));
    g_sessionEndHour = (int)MathMax(1.0, MathMin(24.0, JsonNumber(json, "sessionEndHour", g_sessionEndHour)));
    g_maxAtrPoints = MathMax(0.0, JsonNumber(json, "maxAtrPoints", g_maxAtrPoints));
-   g_cooldownMinutesAfterLoss = (int)MathMax(0.0, JsonNumber(json, "cooldownMinutesAfterLoss", g_cooldownMinutesAfterLoss));
-   g_maxConsecutiveLosses = (int)MathMax(0.0, JsonNumber(json, "maxConsecutiveLosses", g_maxConsecutiveLosses));
    g_lastAdaptiveEvaluation = 0;
 
    string mode = JsonString(json, "entryMode", "");
    if(mode == "BUY_ONLY") g_entryMode = ENTRY_BUY_ONLY;
    else if(mode == "SELL_ONLY") g_entryMode = ENTRY_SELL_ONLY;
    else if(mode == "AUTO_MOMENTUM") g_entryMode = ENTRY_AUTO_MOMENTUM;
+
+   ApplyTradingProfile();
 
    if(g_dailyProfitTargetArmed &&
       (g_dailyProfitTarget <= 0.0 || DailyBotProfit() < g_dailyProfitTarget))
@@ -1044,18 +1224,6 @@ int AdaptiveEntryDirection(double momentum)
    }
 
    datetime now = TimeCurrent();
-   if(now < g_cooldownUntil)
-   {
-      g_adaptiveBlockReason = "LOSS_COOLDOWN";
-      return 0;
-   }
-   if(g_maxConsecutiveLosses > 0 && g_consecutiveLosses >= g_maxConsecutiveLosses)
-   {
-      // A completed cooldown starts a fresh, controlled attempt rather than
-      // permanently locking the EA with no possibility of a winning exit.
-      g_consecutiveLosses = 0;
-      PersistAdaptiveRiskState();
-   }
    if(!AdaptiveSessionAllowed())
    {
       g_adaptiveBlockReason = "SESSION_BLOCKED";
@@ -1166,6 +1334,8 @@ int AdaptiveEntryDirection(double momentum)
    if(g_signalConfidence < g_confidenceThreshold + 10) positionFactor *= 0.75;
    positionFactor *= MathPow(0.80, MathMax(0, g_consecutiveLosses));
    g_adaptiveMaxPositions = MathMax(1, (int)MathFloor(g_maxPositions * positionFactor));
+   if(IsBurstProfile())
+      g_adaptiveMaxPositions = 10;
 
    double spacingFactor = 1.0;
    if(g_marketRegime == "HIGH_VOLATILITY") spacingFactor = 2.2;
@@ -1340,15 +1510,16 @@ bool AdaptiveBasketAddAllowed(int direction)
 void PersistAdaptiveRiskState()
 {
    GlobalVariableSet(DailyRiskStateKey("ALOSS"), (double)g_consecutiveLosses);
-   GlobalVariableSet(DailyRiskStateKey("ACOOL"), (double)g_cooldownUntil);
 }
 
 void RestoreAdaptiveRiskState()
 {
    string lossKey = DailyRiskStateKey("ALOSS");
-   string cooldownKey = DailyRiskStateKey("ACOOL");
    if(GlobalVariableCheck(lossKey)) g_consecutiveLosses = (int)GlobalVariableGet(lossKey);
-   if(GlobalVariableCheck(cooldownKey)) g_cooldownUntil = (datetime)GlobalVariableGet(cooldownKey);
+   // Remove cooldown state left by older EA versions. Loss history may still
+   // reduce risk, but it never delays or blocks the next valid signal.
+   string cooldownKey = DailyRiskStateKey("ACOOL");
+   if(GlobalVariableCheck(cooldownKey)) GlobalVariableDel(cooldownKey);
 }
 
 void UpdateAdaptiveLossState(ulong dealTicket)
@@ -1361,19 +1532,9 @@ void UpdateAdaptiveLossState(ulong dealTicket)
               + HistoryDealGetDouble(dealTicket, DEAL_SWAP)
               + HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
    if(net < 0.0)
-   {
       g_consecutiveLosses++;
-      int cooldownMinutes = g_cooldownMinutesAfterLoss;
-      if(g_maxConsecutiveLosses > 0 && g_consecutiveLosses >= g_maxConsecutiveLosses)
-         cooldownMinutes = MathMax(cooldownMinutes, 15);
-      if(cooldownMinutes > 0)
-         g_cooldownUntil = TimeCurrent() + cooldownMinutes * 60;
-   }
    else if(net > 0.0)
-   {
       g_consecutiveLosses = 0;
-      g_cooldownUntil = 0;
-   }
    PersistAdaptiveRiskState();
 }
 
@@ -1555,6 +1716,165 @@ double CurrentSpreadCost(double volume)
    return MathAbs((tick.ask - tick.bid) / tickSize * tickValue * volume);
 }
 
+double EffectiveBasketProfitTarget()
+{
+   if(IsBurstProfile() && g_burstTargetMoney > 0.0)
+      return g_burstTargetMoney;
+   return g_basketProfitTarget;
+}
+
+double EffectiveBasketLossLimit()
+{
+   if(IsBurstProfile() && g_burstLossMoney > 0.0)
+      return g_burstLossMoney;
+   return g_maxBasketLoss;
+}
+
+void EnsureBurstTargets(int plannedPositions)
+{
+   if(!IsBurstProfile() || (g_burstTargetMoney > 0.0 && g_burstLossMoney > 0.0))
+      return;
+
+   int targetCount = MathMax(1, MathMin(10, plannedPositions));
+   double volume = g_adaptiveLot > 0.0 ? g_adaptiveLot : NormalizeTradeVolume(g_lot);
+   double plannedSpreadCost = CurrentSpreadCost(volume) * targetCount;
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   g_burstTargetMoney = MathMax(0.50, MathMax(plannedSpreadCost * 0.50, equity * 0.0002));
+   double riskCeiling = MathMax(0.50, equity * 0.015);
+   g_burstLossMoney = MathMin(MathMax(g_burstTargetMoney * 3.0, equity * 0.005), riskCeiling);
+}
+
+bool BurstRiskAllowed(double volume)
+{
+   if(!IsBurstProfile() || volume <= 0.0)
+      return true;
+
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+   double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE_LOSS);
+   if(tickValue <= 0.0) tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+   double stopDistance = g_atrPoints * g_hardStopAtrMultiplier * _Point;
+   if(equity <= 0.0 || tickSize <= 0.0 || tickValue <= 0.0 || stopDistance <= 0.0)
+      return false;
+
+   double riskPerLot = stopDistance / tickSize * tickValue;
+   double plannedRisk = riskPerLot * volume * 10.0;
+   return plannedRisk <= equity * 0.02;
+}
+
+void ArmBurst(int direction)
+{
+   if(!IsBurstProfile() || g_burstActive)
+      return;
+
+   g_burstDirection = direction;
+   g_burstTargetPositions = 10;
+   g_burstRequestsSent = 1;
+   g_burstStartedAt = TimeCurrent();
+   g_burstActive = BasketPositionCount() < g_burstTargetPositions;
+   g_burstNeedsRearm = false;
+   EnsureBurstTargets(g_burstTargetPositions);
+   Print(
+      "BURST_10 armed direction=", direction,
+      " target=", DoubleToString(g_burstTargetMoney, 2),
+      " loss=", DoubleToString(g_burstLossMoney, 2)
+   );
+}
+
+void AbortBurst(string reason)
+{
+   if(!g_burstActive) return;
+   g_burstActive = false;
+   g_executionStatus = "BURST_ABORTED";
+   g_adaptiveBlockReason = reason;
+   Print("BURST_10 aborted: ", reason, " filled=", BasketPositionCount());
+}
+
+void ProcessBurstQueue()
+{
+   if(!IsBurstProfile() || !g_burstActive)
+      return;
+
+   if(g_state != STATE_RUNNING || !g_access ||
+      (!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid()))
+   {
+      AbortBurst("CONTROL_NOT_FRESH");
+      return;
+   }
+   if(AccountInfoInteger(ACCOUNT_MARGIN_MODE) != ACCOUNT_MARGIN_MODE_RETAIL_HEDGING)
+   {
+      AbortBurst("BURST_REQUIRES_HEDGING");
+      return;
+   }
+
+   if(TimeCurrent() - g_burstStartedAt > 15)
+   {
+      AbortBurst("BURST_TIMEOUT");
+      return;
+   }
+   if(TradePermissionStatus() != "OK")
+   {
+      AbortBurst("TRADE_PERMISSION");
+      return;
+   }
+   if(!AdaptiveSpreadAllowed())
+   {
+      AbortBurst("SPREAD_TOO_HIGH");
+      return;
+   }
+
+   int count = BasketPositionCount();
+   if(count >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
+   {
+      g_burstActive = false;
+      g_executionStatus = "BURST_COMPLETE";
+      return;
+   }
+   int basketDirection = BasketDirection();
+   if(basketDirection != 0 && basketDirection != g_burstDirection)
+   {
+      AbortBurst("DIRECTION_CHANGED");
+      return;
+   }
+   if(g_macroTrendDirection != 0 && g_entryMode == ENTRY_AUTO_MOMENTUM &&
+      g_macroTrendDirection != g_burstDirection)
+   {
+      AbortBurst("TREND_CHANGED");
+      return;
+   }
+   double liveMomentum = MomentumPoints();
+   double continuationThreshold = MathMax(2.0, g_adaptiveMomentumThreshold) * 0.50;
+   bool momentumValid = g_burstDirection > 0
+      ? liveMomentum >= continuationThreshold
+      : liveMomentum <= -continuationThreshold;
+   if(!momentumValid)
+   {
+      AbortBurst("MOMENTUM_FADED");
+      return;
+   }
+   if(!CanSendOrder())
+      return;
+   if(!BurstRiskAllowed(g_adaptiveLot))
+   {
+      AbortBurst("BURST_RISK_LIMIT");
+      return;
+   }
+
+   if(!SendMarketOrder(g_burstDirection))
+   {
+      AbortBurst("ORDER_REJECTED");
+      return;
+   }
+   RegisterOrderRequest();
+   g_burstRequestsSent++;
+   int filled = BasketPositionCount();
+   g_executionStatus = (filled >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
+      ? "BURST_COMPLETE"
+      : "BURST_FILLING";
+   if(filled >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
+      g_burstActive = false;
+}
+
 int SymbolDigitsNow()
 {
    return (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
@@ -1563,7 +1883,9 @@ int SymbolDigitsNow()
 bool CanSendOrder()
 {
    ulong nowMs = GetTickCount64();
-   int spacingMs = g_adaptiveEngine ? g_adaptiveEntrySpacingMs : g_minOrderIntervalMs;
+   int spacingMs = IsBurstProfile()
+      ? g_minOrderIntervalMs
+      : (g_adaptiveEngine ? g_adaptiveEntrySpacingMs : g_minOrderIntervalMs);
    if(nowMs - g_lastOrderMs < (ulong)MathMax(0, spacingMs))
       return false;
 
@@ -2217,6 +2539,18 @@ bool SendMarketOrder(int direction)
    }
 
    g_adaptiveLot = request.volume;
+
+   MqlTradeCheckResult check = {};
+   ResetLastError();
+   if(!OrderCheck(request, check))
+   {
+      g_lastOrderError = GetLastError();
+      g_lastOrderRetcode = (long)check.retcode;
+      g_lastOrderAt = TimeCurrent();
+      g_executionStatus = "ORDER_PRECHECK_FAILED";
+      Print("OrderCheck failed. error=", g_lastOrderError, " retcode=", check.retcode, " comment=", check.comment);
+      return false;
+   }
 
    ResetLastError();
    if(!OrderSend(request, result))

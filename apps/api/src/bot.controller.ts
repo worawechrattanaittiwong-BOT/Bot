@@ -132,10 +132,17 @@ export class BotController {
       SESSION_BLOCKED: { label: "อยู่นอกช่วงเวลาเทรด", detail: "Adaptive Engine จะเริ่มประเมินใหม่ใน Session ที่กำหนด", tone: "warn" },
       VOLATILITY_TOO_HIGH: { label: "ความผันผวนสูง", detail: "EA รุ่นเก่าใช้ ATR เป็นตัวบล็อก กรุณาอัปเดตเป็น Adaptive Engine รุ่นล่าสุด", tone: "warn" },
       ADAPTIVE_DATA_NOT_READY: { label: "กำลังเตรียมข้อมูลตลาด", detail: "รอข้อมูลแท่งราคา M5, M15 และ H1 ให้เพียงพอ", tone: "warn" },
-      LOSS_COOLDOWN: { label: "พักหลังขาดทุน", detail: "ระบบหยุดเปิดไม้ชั่วคราวเพื่อลดการเทรดแก้มือ", tone: "warn" },
       RISK_LIMIT_TOO_SMALL: { label: "ความเสี่ยงไม่พอสำหรับ Lot ขั้นต่ำ", detail: "Risk % ปัจจุบันต่ำกว่าที่ Lot ขั้นต่ำของ Broker ต้องใช้ หากยอมรับความเสี่ยงเพิ่มให้ติ๊กอนุญาต Lot ขั้นต่ำในตั้งค่าบอท", tone: "warn" },
       SPREAD_TOO_HIGH: { label: "Spread ผิดปกติต่อเนื่อง", detail: "Adaptive Spread ระงับเฉพาะออเดอร์ใหม่ ส่วน Position เดิมยังถูกดูแลตามปกติ", tone: "warn" },
       WAITING_BASKET_ADD: { label: "รอจังหวะเพิ่มไม้", detail: "Max Positions คือเพดาน ระบบจะเพิ่มไม้เมื่อราคาเดินต่อฝั่งกำไรและ Momentum/Confidence ยังยืนยัน ไม่ยิงครบทุกไม้พร้อมกัน", tone: "good" },
+      WAITING_BURST_REARM: { label: "รอสัญญาณรอบใหม่", detail: "Basket เดิมปิดแล้ว ระบบรอ Momentum รีเซ็ตก่อนเริ่ม Burst รอบถัดไป", tone: "good" },
+      BURST_FILLING: { label: "กำลังเปิด Burst 10", detail: "EA กำลังส่งคำสั่งตามคิวพร้อมตรวจ Spread, Margin และทิศทางทุกไม้", tone: "good" },
+      BURST_COMPLETE: { label: "เปิด Burst ครบแล้ว", detail: "Basket Scalping Engine กำลังดูแลเป้ากำไรและขีดจำกัดความเสี่ยง", tone: "good" },
+      BURST_PARTIAL_MANAGING: { label: "ดูแล Burst ที่เปิดได้", detail: "คิวหยุดก่อนครบ 10 ไม้ ระบบจะดูแล Position ที่เปิดแล้วโดยไม่ยิงซ้ำ", tone: "warn" },
+      BURST_RISK_LIMIT: { label: "ความเสี่ยงรวมสูงเกินไป", detail: "Margin หรือความเสี่ยง Stop ของ 10 ไม้สูงเกินเพดาน Basket", tone: "warn" },
+      BURST_REQUIRES_HEDGING: { label: "Burst 10 ต้องใช้บัญชี Hedging", detail: "บัญชี Netting จะรวมคำสั่งเป็น Position เดียว จึงไม่สามารถเปิดแยก 10 ไม้ได้", tone: "bad" },
+      BURST_ABORTED: { label: "หยุดคิว Burst", detail: "สภาวะตลาดหรือคุณภาพ Execution เปลี่ยน ระบบหยุดเฉพาะไม้ที่ยังไม่ส่ง", tone: "warn" },
+      ORDER_PRECHECK_FAILED: { label: "คำสั่งไม่ผ่านการตรวจล่วงหน้า", detail: "Broker หรือ Margin ไม่พร้อม ระบบไม่ส่งคำสั่งนี้", tone: "warn" },
       MAX_POSITIONS: { label: "Position เต็มแล้ว", detail: "จำนวน Position ถึง Max Positions", tone: "warn" },
       ORDER_RATE_LIMIT: { label: "กำลังรอช่วงส่งคำสั่งถัดไป", detail: "Rate limit ของบอทยังไม่พร้อมส่ง Order ใหม่", tone: "warn" },
       CONTROL_NOT_FRESH: { label: "หยุดเปิดออเดอร์ใหม่", detail: "ยังไม่ได้รับการยืนยัน RUNNING ล่าสุดจาก Server จึงล็อกการเปิดออเดอร์ใหม่ไว้", tone: "warn" },
@@ -1279,8 +1286,6 @@ export class BotController {
     numberSetting("sessionStartHour", 0, 23, true);
     numberSetting("sessionEndHour", 1, 24, true);
     numberSetting("maxAtrPoints", 0, 100000);
-    numberSetting("cooldownMinutesAfterLoss", 0, 1440, true);
-    numberSetting("maxConsecutiveLosses", 0, 20, true);
 
     const requestedBasketProfit = Number(clean.basketProfitTargetMoney ?? 0);
     const requestedPerPositionProfit = Number(clean.perPositionProfitMoney ?? 0);
@@ -1332,6 +1337,17 @@ export class BotController {
         throw new BadRequestException("Entry Mode ไม่ถูกต้อง");
       }
       clean.entryMode = entryMode;
+    }
+
+    if (body.tradingProfile !== undefined) {
+      const tradingProfile = String(body.tradingProfile || "");
+      if (!["SAFE", "BALANCED", "AGGRESSIVE", "BURST_10"].includes(tradingProfile)) {
+        throw new BadRequestException("Trading Profile ไม่ถูกต้อง");
+      }
+      clean.tradingProfile = tradingProfile;
+      // Profiles own the execution/adaptive values. Legacy fields can remain
+      // in JSON for compatibility, but EA 1.012 never uses them over a profile.
+      clean.adaptiveEngine = true;
     }
 
     if (Object.keys(clean).length === 0) {

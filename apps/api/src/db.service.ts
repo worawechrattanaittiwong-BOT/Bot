@@ -226,15 +226,14 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       UPDATE bot_settings
       SET settings='{
         "adaptiveEngine":true,
+        "tradingProfile":"BALANCED",
         "riskPerOrderPercent":0.25,
         "hardStopAtrMultiplier":2.0,
         "atrPeriod":14,
         "confidenceThreshold":70,
         "sessionStartHour":0,
         "sessionEndHour":24,
-        "maxAtrPoints":0,
-        "cooldownMinutesAfterLoss":5,
-        "maxConsecutiveLosses":3
+        "maxAtrPoints":0
       }'::jsonb || settings
       WHERE NOT settings ? 'adaptiveEngine';
 
@@ -245,11 +244,15 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       WHERE COALESCE((settings->>'adaptiveEngine')::boolean,true)=true
         AND COALESCE((settings->>'maxAtrPoints')::numeric,0)=3000;
 
-      -- Reduce the old untouched cooldown default. Custom values remain intact.
+      -- Trading profiles own execution speed and Adaptive parameters. Legacy
+      -- loss cooldown fields are removed and never block a new valid signal.
       UPDATE bot_settings
-      SET settings=jsonb_set(settings,'{cooldownMinutesAfterLoss}','5'::jsonb,true),
+      SET settings=(settings - 'cooldownMinutesAfterLoss' - 'maxConsecutiveLosses') ||
+                   jsonb_build_object('tradingProfile',COALESCE(NULLIF(settings->>'tradingProfile',''),'BALANCED')),
           updated_at=now()
-      WHERE COALESCE((settings->>'cooldownMinutesAfterLoss')::int,15)=15;
+      WHERE settings ? 'cooldownMinutesAfterLoss'
+         OR settings ? 'maxConsecutiveLosses'
+         OR NOT settings ? 'tradingProfile';
     `);
   }
 
