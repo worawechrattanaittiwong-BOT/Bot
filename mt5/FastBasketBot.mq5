@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.016"
+#property version   "1.017"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -55,6 +55,9 @@ input double          InpDailyProfitDrawdownPercent = 20.00;
 input double          InpBasketProfitTargetMoney = 0.00;
 input double          InpPerPositionProfitMoney = 0.00;
 input double          InpProfitRunTrailPercent = 0.00;
+// 0 = use the profile/system ATR Stop Loss. Positive = fixed manual SL distance in points.
+input double          InpManualStopLossPoints  = 0.0;
+// Legacy compatibility only. EA 1.017 no longer closes a Position by floating loss money.
 input double          InpPerPositionLossMoney = 0.00;
 // Used only while the adaptive spread profile is warming up or unavailable.
 // Once enough live samples exist, the EA uses broker/symbol rolling percentiles.
@@ -130,6 +133,7 @@ double g_basketProfitTarget;
 double g_perPositionProfit;
 double g_profitRunTrailPercent;
 double g_perPositionLoss;
+double g_manualStopLossPoints;
 int    g_maxSpread;
 int    g_minOrderIntervalMs;
 int    g_maxOrdersPerMinute;
@@ -237,7 +241,10 @@ int OnInit()
    {
       g_profitRunTrailPercent = 0.0;
    }
-   g_perPositionLoss = InpPerPositionLossMoney;
+   // Money-based per-position loss is retired in 1.017. A real Broker SL is
+   // always used instead: manual fixed distance when enabled, otherwise system ATR.
+   g_perPositionLoss = 0.0;
+   g_manualStopLossPoints = MathMax(0.0, InpManualStopLossPoints);
    g_maxSpread = InpMaxSpreadPoints;
    g_minOrderIntervalMs = InpMinOrderIntervalMs;
    g_maxOrdersPerMinute = InpMaxOrdersPerMinute;
@@ -716,7 +723,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.016\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.017\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -781,7 +788,7 @@ void SendHeartbeat()
          ? (int)MathMax(0, TimeCurrent() - g_lastSuccessfulHeartbeat)
          : -1;
       string diagnostics = StringFormat(
-         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\",\"atrRatio\":%.3f,\"minimumLotOverrideEnabled\":%s,\"minimumLotOverrideActive\":%s,\"trendM5\":%d,\"trendM15\":%d,\"trendH1\":%d,\"entryBias\":\"%s\",\"pyramidProgressPoints\":%.1f,\"pyramidRequiredPoints\":%.1f,\"momentumSamples\":%d,\"momentumSamplesRequired\":%d,\"configuredLot\":%.4f,\"configuredMaxPositions\":%d,\"configuredBasketProfitTarget\":%.2f,\"effectiveBasketProfitTarget\":%.2f,\"configuredMaxBasketLoss\":%.2f,\"effectiveMaxBasketLoss\":%.2f,\"appliedPerPositionProfit\":%.2f,\"appliedPerPositionLoss\":%.2f,\"appliedProfitRunTrailPercent\":%.2f,\"hardStopAtrMultiplier\":%.3f,\"hardStopDistancePoints\":%.1f,\"profitControlMode\":\"%s\"}}",
+         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\",\"atrRatio\":%.3f,\"minimumLotOverrideEnabled\":%s,\"minimumLotOverrideActive\":%s,\"trendM5\":%d,\"trendM15\":%d,\"trendH1\":%d,\"entryBias\":\"%s\",\"pyramidProgressPoints\":%.1f,\"pyramidRequiredPoints\":%.1f,\"momentumSamples\":%d,\"momentumSamplesRequired\":%d,\"configuredLot\":%.4f,\"configuredMaxPositions\":%d,\"configuredBasketProfitTarget\":%.2f,\"effectiveBasketProfitTarget\":%.2f,\"configuredMaxBasketLoss\":%.2f,\"effectiveMaxBasketLoss\":%.2f,\"appliedPerPositionProfit\":%.2f,\"appliedPerPositionLoss\":%.2f,\"appliedProfitRunTrailPercent\":%.2f,\"manualStopLossPoints\":%.1f,\"hardStopAtrMultiplier\":%.3f,\"systemHardStopDistancePoints\":%.1f,\"hardStopDistancePoints\":%.1f,\"stopLossMode\":\"%s\",\"profitControlMode\":\"%s\"}}",
          heartbeatAge,
          g_lastHeartbeatLatencyMs,
          g_lastHeartbeatHttpStatus,
@@ -822,8 +829,11 @@ void SendHeartbeat()
          g_perPositionProfit,
          g_perPositionLoss,
          g_profitRunTrailPercent,
+         g_manualStopLossPoints,
          EffectiveHardStopMultiplier(),
          EffectiveHardStopDistancePoints(),
+         EffectiveStopLossDistancePoints(),
+         StopLossModeName(),
          ProfitControlModeName()
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + diagnostics;
@@ -1120,7 +1130,10 @@ void ApplySettings(string json)
       g_profitRunPeak = 0.0;
       SaveBasketCycleState();
    }
-   g_perPositionLoss = MathMax(0.0, JsonNumber(json, "perPositionLossMoney", g_perPositionLoss));
+   // Legacy money-loss close is intentionally disabled. Per-position risk is
+   // enforced by a real Stop Loss attached to the Broker order.
+   g_perPositionLoss = 0.0;
+   g_manualStopLossPoints = MathMax(0.0, JsonNumber(json, "manualStopLossPoints", g_manualStopLossPoints));
    g_maxSpread = (int)MathMax(0.0, JsonNumber(json, "maxSpreadPoints", g_maxSpread));
    g_minOrderIntervalMs = (int)MathMax(0.0, JsonNumber(json, "minOrderIntervalMs", g_minOrderIntervalMs));
    g_maxOrdersPerMinute = (int)MathMax(1.0, JsonNumber(json, "maxOrdersPerMinute", g_maxOrdersPerMinute));
@@ -1213,6 +1226,43 @@ int TimeframeTrend(ENUM_TIMEFRAMES timeframe)
    return 0;
 }
 
+double EffectiveHardStopMultiplier()
+{
+   double multiplier = g_hardStopAtrMultiplier;
+   if(g_marketRegime == "HIGH_VOLATILITY") multiplier *= 1.25;
+   else if(g_marketRegime == "QUIET") multiplier *= 0.85;
+   return MathMax(0.5, MathMin(10.0, multiplier));
+}
+
+double EffectiveHardStopDistancePoints()
+{
+   if(!g_adaptiveEngine || g_atrPoints <= 0.0 || g_hardStopAtrMultiplier <= 0.0)
+      return 0.0;
+
+   double brokerMinimumPoints =
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   return MathMax(
+      g_atrPoints * EffectiveHardStopMultiplier(),
+      brokerMinimumPoints + 1.0
+   );
+}
+
+double EffectiveStopLossDistancePoints()
+{
+   double brokerMinimumPoints =
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+
+   if(g_manualStopLossPoints > 0.0)
+      return MathMax(g_manualStopLossPoints, brokerMinimumPoints + 1.0);
+
+   return EffectiveHardStopDistancePoints();
+}
+
+string StopLossModeName()
+{
+   return g_manualStopLossPoints > 0.0 ? "MANUAL_POINTS" : "SYSTEM_ATR";
+}
+
 double AdaptiveTradeVolume()
 {
    g_minimumLotOverrideActive = false;
@@ -1223,7 +1273,7 @@ double AdaptiveTradeVolume()
    double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
    double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE_LOSS);
    if(tickValue <= 0.0) tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-   double stopDistance = g_atrPoints * g_hardStopAtrMultiplier * _Point;
+   double stopDistance = EffectiveStopLossDistancePoints() * _Point;
    if(tickSize <= 0.0 || tickValue <= 0.0 || stopDistance <= 0.0)
       return fallback;
 
@@ -2112,30 +2162,24 @@ bool ManagePerPositionTargets()
          PositionGetDouble(POSITION_PROFIT) +
          PositionGetDouble(POSITION_SWAP);
 
-      bool closeForLoss =
-         g_perPositionLoss > 0.0 &&
-         positionProfit <= -g_perPositionLoss;
       bool closeForProfit =
          profitTarget > 0.0 &&
          positionProfit >= profitTarget;
 
-      if(!closeForLoss && !closeForProfit)
+      if(!closeForProfit)
          continue;
 
-      string reason = closeForLoss ? "POSITION_LOSS_LIMIT" : "POSITION_PROFIT_TARGET";
       Print(
-         reason,
+         "POSITION_PROFIT_TARGET",
          " ticket=", ticket,
          " pnl=", DoubleToString(positionProfit, 2),
-         " target=", DoubleToString(closeForLoss ? -g_perPositionLoss : profitTarget, 2)
+         " target=", DoubleToString(profitTarget, 2)
       );
 
       if(ClosePositionByTicket(ticket))
       {
          closedAny = true;
-         g_executionStatus = closeForLoss
-            ? "POSITION_LOSS_CLOSED"
-            : "POSITION_PROFIT_CLOSED";
+         g_executionStatus = "POSITION_PROFIT_CLOSED";
       }
    }
 
@@ -2498,27 +2542,6 @@ void RecordExecutionQuality(bool accepted, double slippagePoints)
    }
 }
 
-double EffectiveHardStopMultiplier()
-{
-   double multiplier = g_hardStopAtrMultiplier;
-   if(g_marketRegime == "HIGH_VOLATILITY") multiplier *= 1.25;
-   else if(g_marketRegime == "QUIET") multiplier *= 0.85;
-   return MathMax(0.5, MathMin(10.0, multiplier));
-}
-
-double EffectiveHardStopDistancePoints()
-{
-   if(!g_adaptiveEngine || g_atrPoints <= 0.0 || g_hardStopAtrMultiplier <= 0.0)
-      return 0.0;
-
-   double brokerMinimumPoints =
-      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
-   return MathMax(
-      g_atrPoints * EffectiveHardStopMultiplier(),
-      brokerMinimumPoints + 1.0
-   );
-}
-
 string ProfitControlModeName()
 {
    if(g_perPositionProfit > 0.0)
@@ -2566,10 +2589,11 @@ bool SendMarketOrder(int direction)
       request.price = tick.bid;
    }
 
-   if(g_adaptiveEngine && g_atrPoints > 0.0 && g_hardStopAtrMultiplier > 0.0)
+   double effectiveStopLossPoints = EffectiveStopLossDistancePoints();
+   if(effectiveStopLossPoints > 0.0)
    {
       int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-      double stopDistance = EffectiveHardStopDistancePoints() * _Point;
+      double stopDistance = effectiveStopLossPoints * _Point;
       request.sl = NormalizeDouble(
          direction > 0 ? tick.ask - stopDistance : tick.bid + stopDistance,
          digits
