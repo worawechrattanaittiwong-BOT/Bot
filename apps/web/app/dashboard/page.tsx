@@ -67,11 +67,20 @@ const tradingProfileHelp: Record<string, {
   BURST_10: {
     title: "Burst",
     short: "ทำงานเป็นชุด พยายามเปิดตามจำนวนไม้ที่คุณกำหนด",
-    detail: "โหมด Burst เหมาะกับคนที่ต้องการทำรอบแบบ Basket เมื่อสัญญาณหลักผ่าน ระบบจะพยายามส่งไม้ตามจำนวนที่ตั้งไว้ โดยยังต้องผ่านกฎ Spread, ทิศทาง, ความเสี่ยง, Rate limit และข้อจำกัดของ Broker ก่อนทุกครั้ง ไม่ใช่โหมดสุ่มยิงออเดอร์",
+    detail: "โหมด Burst เหมาะกับคนที่ต้องการทำรอบแบบ Basket เมื่อสัญญาณหลักผ่าน ระบบจะพยายามส่งไม้ตามจำนวนที่ตั้งไว้ และก่อนเพิ่มแต่ละไม้จะตรวจ Spread กับ Market Structure/แนวรับแนวต้านอีกครั้ง โดยไม่บังคับให้ Fib, Order Block และทุก Timeframe ต้องตรงพร้อมกัน",
     bestFor: ["คนที่เข้าใจการเทรดหลายไม้เป็นชุด", "คนที่ต้องการควบคุมจำนวนไม้ชัดเจน", "คนที่ยอมรับความเสี่ยงรวมของ Basket ได้"],
-    strengths: ["ทำงานเป็นรอบและเห็นจำนวนไม้ชัด", "เหมาะกับการตั้งเป้ากำไรรวม Basket", "ใช้จำนวนไม้ที่ตั้งไว้เป็นเป้าหมายของรอบ"],
-    cautions: ["ความเสี่ยงรวมสูงกว่าเมื่อเปิดหลายไม้", "จำนวนไม้ที่ตั้งคือเพดาน/เป้าหมาย ไม่ได้แปลว่าจะเปิดครบถ้าเงื่อนไขตลาดหรือ Broker ไม่อนุญาต", "ควรตรวจ SL, Basket Loss และ Lot ก่อนใช้งาน"],
+    strengths: ["ทำงานเป็นรอบและเห็นจำนวนไม้ชัด", "ตรวจโครงสร้างตลาดซ้ำก่อนเพิ่มแต่ละไม้", "ใช้จำนวนไม้ที่ตั้งไว้เป็นเป้าหมายของรอบ"],
+    cautions: ["ความเสี่ยงรวมสูงกว่าเมื่อเปิดหลายไม้", "จะพักเพิ่มไม้เมื่อกำลังยิงชนแนวรับ/แนวต้านใหญ่หรือโครงสร้าง M30/H1 พลิก", "ควรตรวจ SL, Basket Loss และ Lot ก่อนใช้งาน"],
     badge: "เปิดเป็นชุด"
+  },
+  MAXIMUM: {
+    title: "เสี่ยงสูงสุด",
+    short: "ใช้ Lot ที่ตั้งตรง ๆ แต่ยังใช้สมอง S/R + Order Block + Fibonacci เต็มระบบ",
+    detail: "โหมดนี้สำหรับผู้ใช้ที่ยอมรับความเสี่ยงสูงและต้องการให้ EA ใช้ Lot ที่กำหนดโดยไม่ลดอัตโนมัติจาก ATR, แพ้ต่อเนื่อง, Drawdown หรือ Execution Quality จุดเข้ายังถูกคัดจาก M1/M5/M15/M30/H1, แนวรับแนวต้าน, Order Block และ Fibonacci เหมือนเดิม",
+    bestFor: ["ทุนเล็กที่เจ้าของบัญชียอมรับโอกาสขาดทุนสูง", "ผู้ใช้ที่ต้องการให้ Lot ที่ตั้งเป็น Lot จริง", "ผู้ใช้ที่ต้องการความไวโดยไม่ทิ้งหลักการหาจุดเข้า"],
+    strengths: ["ไม่ลด Lot ที่ผู้ใช้ตั้งโดย Adaptive Risk", "Confidence ผ่อนลงเพื่อไม่ดักออเดอร์เกินจำเป็น", "ยังห้ามเฉพาะการไล่ Buy ชนแนวต้านใหญ่ / Sell ชนแนวรับใหญ่ที่ยังไม่ Break"],
+    cautions: ["มีโอกาสสูญเสียเงินทั้งหมดสูงมาก", "Max Positions และ Lot ที่ตั้งมีผลต่อ Exposure โดยตรง", "Broker/Margin/สิทธิ์เทรดยังเป็นข้อจำกัดที่เลี่ยงไม่ได้"],
+    badge: "ยอมรับความเสี่ยงสูง"
   }
 };
 
@@ -413,7 +422,8 @@ export default function DashboardPage() {
     SAFE: "ปลอดภัย",
     BALANCED: "สมดุล",
     AGGRESSIVE: "เชิงรุก",
-    BURST_10: "Burst"
+    BURST_10: "Burst",
+    MAXIMUM: "เสี่ยงสูงสุด"
   };
   const spreadStatusLabel:Record<string,string> = {
     NORMAL: "ปกติ",
@@ -847,7 +857,7 @@ export default function DashboardPage() {
       "InpInstanceId=" + instanceId,
       "InpInstallToken=" + token,
       "InpMagic=26090501",
-      "InpTradingProfile=" + ({SAFE:0,BALANCED:1,AGGRESSIVE:2,BURST_10:3} as Record<string,number>)[String(settings.tradingProfile||"BALANCED")],
+      "InpTradingProfile=" + ({SAFE:0,BALANCED:1,AGGRESSIVE:2,BURST_10:3,MAXIMUM:4} as Record<string,number>)[String(settings.tradingProfile||"BALANCED")],
       "InpLot=" + settings.lot,
       "InpMaxPositions=" + settings.maxPositions,
       "InpBasketTriggerMoney=" + settings.basketTriggerMoney,
@@ -1937,7 +1947,8 @@ function BotSettingsModal(props:any) {
     SAFE: { confidence:80, riskPercent:0.10, stopAtr:2.50, minIntervalMs:1200, maxOrdersPerMinute:30, minimumLotOverride:false },
     BALANCED: { confidence:70, riskPercent:0.20, stopAtr:2.00, minIntervalMs:700, maxOrdersPerMinute:60, minimumLotOverride:false },
     AGGRESSIVE: { confidence:60, riskPercent:0.30, stopAtr:1.80, minIntervalMs:350, maxOrdersPerMinute:120, minimumLotOverride:false },
-    BURST_10: { confidence:65, riskPercent:0.05, stopAtr:1.70, minIntervalMs:250, maxOrdersPerMinute:180, minimumLotOverride:true }
+    BURST_10: { confidence:60, riskPercent:0.05, stopAtr:1.70, minIntervalMs:250, maxOrdersPerMinute:180, minimumLotOverride:true },
+    MAXIMUM: { confidence:50, riskPercent:5.00, stopAtr:1.70, minIntervalMs:200, maxOrdersPerMinute:240, minimumLotOverride:true }
   };
   const helpProfile = String(props.profileHelpOpen || "");
   const helpRules = helpProfile ? profileRuleMap[helpProfile] : null;
@@ -1946,7 +1957,8 @@ function BotSettingsModal(props:any) {
     ["SAFE","shield"],
     ["BALANCED","settings"],
     ["AGGRESSIVE","trend"],
-    ["BURST_10","layers"]
+    ["BURST_10","layers"],
+    ["MAXIMUM","risk"]
   ];
   const basketProfitEnabled = Number(props.settings?.basketProfitTargetMoney || 0) > 0;
   const perPositionProfitEnabled = Number(props.settings?.perPositionProfitMoney || 0) > 0;
@@ -1965,7 +1977,9 @@ function BotSettingsModal(props:any) {
   const blockReasonText:Record<string,string> = {
     WAITING_MOMENTUM: "รอแรงราคาให้ชัดกว่านี้",
     WAITING_REGIME_ALIGNMENT: "รอ Momentum ไปทางเดียวกับแนวโน้มหลัก",
-    WAITING_TREND_ALIGNMENT: "รอ M15 / H1 ไม่สวนทางกับสัญญาณ",
+    WAITING_TREND_ALIGNMENT: "รอ M30 / H1 กลับมายืนฝั่งเดียวกับสัญญาณ",
+    BLOCKED_MAJOR_RESISTANCE: "ราคาอยู่ชิดแนวต้านใหญ่ M30/H1 — รอ Breakout ก่อน Buy",
+    BLOCKED_MAJOR_SUPPORT: "ราคาอยู่ชิดแนวรับใหญ่ M30/H1 — รอ Breakdown ก่อน Sell",
     WAITING_CONFIDENCE: "คะแนนความมั่นใจยังไม่ถึงเกณฑ์",
     SESSION_BLOCKED: "อยู่นอกเวลาที่อนุญาตให้เทรด",
     ADAPTIVE_DATA_NOT_READY: "ATR / ข้อมูลกราฟยังไม่พร้อม",
@@ -1973,7 +1987,7 @@ function BotSettingsModal(props:any) {
   };
   const currentBlockReason = String(props.metrics?.adaptiveBlockReason || "");
   const currentConfidence = Number(props.metrics?.signalConfidence || 0);
-  const profileConfidenceThreshold:Record<string,number> = { SAFE:80, BALANCED:70, AGGRESSIVE:60, BURST_10:65 };
+  const profileConfidenceThreshold:Record<string,number> = { SAFE:80, BALANCED:70, AGGRESSIVE:60, BURST_10:60, MAXIMUM:50 };
   const confidenceThreshold = Number(profileConfidenceThreshold[profile] || props.settings?.confidenceThreshold || 70);
   const currentRegime = String(props.metrics?.marketRegime || "");
   const momentum = Number(props.metrics?.momentumPoints || 0);
@@ -2047,7 +2061,7 @@ function BotSettingsModal(props:any) {
 
               <div className="cc-profile-rule-summary">
                 <ModeRuleMetric label="Confidence ขั้นต่ำ" value={"≥ "+helpRules.confidence+"%"} note="ไม้แรกต้องถึงค่านี้"/>
-                <ModeRuleMetric label="Risk ต่อออเดอร์" value={helpRules.riskPercent.toFixed(2)+"% Equity"} note="ใช้คำนวณ Lot"/>
+                <ModeRuleMetric label={helpProfile==="MAXIMUM"?"โหมด Lot":"Risk ต่อออเดอร์"} value={helpProfile==="MAXIMUM"?"ใช้ Lot ที่ตั้งตรง ๆ":helpRules.riskPercent.toFixed(2)+"% Equity"} note={helpProfile==="MAXIMUM"?"ไม่ลด Lot ด้วย ATR/Loss/Drawdown":"ใช้คำนวณ Lot"}/>
                 <ModeRuleMetric label="SL ระบบ" value={"ATR × "+helpRules.stopAtr.toFixed(2)} note="ถ้าไม่ได้กำหนด SL เอง"/>
                 <ModeRuleMetric label="เว้นคำสั่งขั้นต่ำ" value={helpRules.minIntervalMs+" ms"} note={"สูงสุด "+helpRules.maxOrdersPerMinute+" คำสั่ง/นาที"}/>
                 <ModeRuleMetric label="Momentum ฐาน" value="±8.0 pt" note="Adaptive จะปรับตามสภาพตลาด"/>
@@ -2088,10 +2102,10 @@ function BotSettingsModal(props:any) {
                   <EaFilterCard
                     step="02"
                     icon="trend"
-                    title="Trend M5 / M15 / H1"
-                    description="M15/H1 เป็น Macro Trend; AUTO ห้ามเปิดสวน Macro และห้ามสวนทั้ง M15 กับ H1 พร้อมกัน"
-                    value={helpIsActive ? "M5 "+trendText(props.metrics?.trendM5)+" · M15 "+trendText(props.metrics?.trendM15) : "AUTO ต้องไม่สวน M15/H1"}
-                    detail={helpIsActive ? "H1 "+trendText(props.metrics?.trendH1) : "M5 ช่วยเพิ่ม/ลดคะแนน Confidence"}
+                    title="Trend M1 / M5 / M15 / M30 / H1"
+                    description="M30/H1 กำหนด Bias ใหญ่, M15 เชื่อมโครงสร้าง, M1/M5 ใช้จับ Pullback/Trigger จึงไม่บังคับให้ทั้ง 5 TF ต้องสีเดียวกัน"
+                    value={helpIsActive ? "M1 "+trendText(props.metrics?.trendM1)+" · M5 "+trendText(props.metrics?.trendM5)+" · M15 "+trendText(props.metrics?.trendM15) : "Macro ใช้ M30/H1"}
+                    detail={helpIsActive ? "M30 "+trendText(props.metrics?.trendM30)+" · H1 "+trendText(props.metrics?.trendH1) : "M1/M5 สามารถสวนชั่วคราวระหว่าง Pullback ได้"}
                     tone="neutral"
                   />
                   <EaFilterCard
@@ -2116,7 +2130,7 @@ function BotSettingsModal(props:any) {
                     step="05"
                     icon="status"
                     title="Confidence Score"
-                    description="รวม Momentum + Trend + Spread + Regime + Execution Quality และประวัติแพ้ เป็นคะแนน 0–100"
+                    description="รวม Momentum + Trend 5 TF + Market Structure + ตำแหน่ง Support/Resistance + Order Block + Fibonacci + Spread/Execution เป็นคะแนน 0–100"
                     value={"ต้อง ≥ "+helpRules.confidence+"%"}
                     detail={helpIsActive ? "ตอนนี้ "+currentConfidence.toFixed(0)+"%" : "ต่ำกว่านี้ = ยังไม่เปิดไม้แรก"}
                     tone={helpIsActive&&currentConfidence>=helpRules.confidence ? "good" : "warn"}
@@ -2125,9 +2139,9 @@ function BotSettingsModal(props:any) {
                     step="06"
                     icon="lot"
                     title="Risk / Lot"
-                    description="คำนวณ Lot จาก Equity และระยะ SL แล้วลดเพิ่มตาม Volatility, Loss streak, Execution และ Drawdown"
-                    value={"Risk "+helpRules.riskPercent.toFixed(2)+"% Equity"}
-                    detail={helpIsActive ? "Lot ที่ EA คำนวณ "+(adaptiveLot>0?adaptiveLot.toFixed(2):"0.00")+" / เพดาน "+Number(props.settings?.lot||0.01).toFixed(2) : "Lot จะไม่เกินค่าที่คุณตั้ง"}
+                    description={helpProfile==="MAXIMUM" ? "Maximum ใช้ Lot ที่คุณตั้งโดยตรง ไม่ลดจาก Volatility, Loss streak, Execution หรือ Drawdown แต่ยังใช้สมองเลือกจุดเข้าเต็มระบบ" : "คำนวณ Lot จาก Equity และระยะ SL แล้วลดเพิ่มตาม Volatility, Loss streak, Execution และ Drawdown"}
+                    value={helpProfile==="MAXIMUM" ? "Lot ตรงตามที่ตั้ง" : "Risk "+helpRules.riskPercent.toFixed(2)+"% Equity"}
+                    detail={helpIsActive ? "Lot ที่ EA ใช้ "+(adaptiveLot>0?adaptiveLot.toFixed(2):Number(props.settings?.lot||0.01).toFixed(2))+" / ตั้งไว้ "+Number(props.settings?.lot||0.01).toFixed(2) : (helpProfile==="MAXIMUM"?"ไม่ใช้ Adaptive ลด Lot":"Lot จะไม่เกินค่าที่คุณตั้ง")}
                     tone="neutral"
                   />
                   <EaFilterCard
@@ -2140,6 +2154,24 @@ function BotSettingsModal(props:any) {
                     tone={helpIsActive&&props.metrics?.tradeReady===true ? "good" : "neutral"}
                   />
                 </div>
+
+                {helpIsActive&&<div className="cc-profile-add-thresholds">
+                  <div>
+                    <span>แนวรับ / แนวต้าน</span>
+                    <b>{"S "+Number(props.metrics?.nearestSupport||0).toFixed(2)+" · R "+Number(props.metrics?.nearestResistance||0).toFixed(2)}</b>
+                    <small>{"Major S "+Number(props.metrics?.majorSupport||0).toFixed(2)+" · Major R "+Number(props.metrics?.majorResistance||0).toFixed(2)}</small>
+                  </div>
+                  <div>
+                    <span>Order Block</span>
+                    <b>{String(props.metrics?.orderBlockTimeframe||"NONE")}</b>
+                    <small>{"Bull "+Number(props.metrics?.bullishOrderBlockLow||0).toFixed(2)+"–"+Number(props.metrics?.bullishOrderBlockHigh||0).toFixed(2)+" · Bear "+Number(props.metrics?.bearishOrderBlockLow||0).toFixed(2)+"–"+Number(props.metrics?.bearishOrderBlockHigh||0).toFixed(2)}</small>
+                  </div>
+                  <div>
+                    <span>Fibonacci / Entry</span>
+                    <b>{String(props.metrics?.entryModel||"NONE")+" · Score "+Number(props.metrics?.entryScore||0).toFixed(0)+"/100"}</b>
+                    <small>{"Fib "+(Number(props.metrics?.fibRetracement||0)*100).toFixed(1)+"% · "+(props.metrics?.fiboVisible?"แสดงบน MT5":"รอ Start/ข้อมูล Swing")}</small>
+                  </div>
+                </div>}
               </div>
 
               <div className="cc-ea-add-guide cc-profile-add-guide">
