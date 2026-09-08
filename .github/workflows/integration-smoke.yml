@@ -91,9 +91,11 @@ jobs:
           API_EA_VERSION=$(sed -n 's/^export const DEFAULT_EA_VERSION = "\([^"]*\)";/\1/p' apps/api/src/release-version.ts)
           EA_VERSION=$(jq -r '.eaVersion // empty' mt5/release/manifest.json)
           test -n "$PRODUCT_VERSION"
+          test -n "$INSTALLER_VERSION"
           test -n "$SOURCE_EA_VERSION"
           test -n "$EA_VERSION"
-          test "$PRODUCT_VERSION" = "$INSTALLER_VERSION"
+          # Windows Agent/Installer and EA are independently versioned. Agent
+          # fixes must not force an EX5 rebuild when EA trading logic is unchanged.
           test "$SOURCE_EA_VERSION" = "$API_EA_VERSION"
 
           REGISTER=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration@scenova.test","password":"Integration123!"}')
