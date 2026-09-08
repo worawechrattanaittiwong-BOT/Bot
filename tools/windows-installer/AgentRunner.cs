@@ -340,7 +340,7 @@ internal static class AgentRunner
 
         var attemptedInitialMt5Start = false;
         var attemptedEaPermissionRepair = false;
-        var attemptedEaOfflineRepair = false;
+        var lastEaOfflineRepairAt = DateTimeOffset.MinValue;
 
         while (true)
         {
@@ -396,29 +396,35 @@ internal static class AgentRunner
                 {
                     attemptedInitialMt5Start = true;
                     attemptedEaPermissionRepair = false;
-                    attemptedEaOfflineRepair = false;
+                    lastEaOfflineRepairAt = DateTimeOffset.MinValue;
                 }
                 else if (
                     !heartbeat.EaOnline &&
-                    !attemptedEaOfflineRepair &&
                     (
                         presetCredentialsChanged ||
                         heartbeat.EaLastSeenAgeSeconds < 0 ||
                         heartbeat.EaLastSeenAgeSeconds > 20
+                    ) &&
+                    (
+                        lastEaOfflineRepairAt == DateTimeOffset.MinValue ||
+                        DateTimeOffset.UtcNow - lastEaOfflineRepairAt > TimeSpan.FromMinutes(2)
                     ))
                 {
                     // If Agent authentication works but the EA heartbeat is stale,
                     // refresh Instance/Token in the preset and force one clean MT5
                     // reload. This self-heals AUTHENTICATION FAILED caused by a
                     // stale chart input without asking the customer to edit .set.
-                    attemptedEaOfflineRepair = EnsureMt5RunningWithEa(config, forceReload: true);
-                    attemptedInitialMt5Start = attemptedEaOfflineRepair || attemptedInitialMt5Start;
-                    if (attemptedEaOfflineRepair)
+                    var repairRequested = EnsureMt5RunningWithEa(config, forceReload: true);
+                    if (repairRequested)
+                    {
+                        lastEaOfflineRepairAt = DateTimeOffset.UtcNow;
+                        attemptedInitialMt5Start = true;
                         await AppendLogAsync(
                             logPath,
                             "EA offline/auth repair requested. presetChanged=" +
                             presetCredentialsChanged +
                             " lastSeenAge=" + heartbeat.EaLastSeenAgeSeconds.ToString("0"));
+                    }
                 }
                 else if (!heartbeat.EaOnline && !attemptedInitialMt5Start)
                 {
@@ -444,7 +450,7 @@ internal static class AgentRunner
                 }
                 else if (heartbeat.EaOnline)
                 {
-                    attemptedEaOfflineRepair = false;
+                    lastEaOfflineRepairAt = DateTimeOffset.MinValue;
                     if (heartbeat.MqlTradeAllowed == true)
                         attemptedEaPermissionRepair = false;
                 }
