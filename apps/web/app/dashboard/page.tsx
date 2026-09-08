@@ -1974,7 +1974,8 @@ function BotSettingsModal(props:any) {
   };
   const currentBlockReason = String(props.metrics?.adaptiveBlockReason || "");
   const currentConfidence = Number(props.metrics?.signalConfidence || 0);
-  const confidenceThreshold = Number(props.settings?.confidenceThreshold || 70);
+  const profileConfidenceThreshold:Record<string,number> = { SAFE:80, BALANCED:70, AGGRESSIVE:60, BURST_10:65 };
+  const confidenceThreshold = Number(profileConfidenceThreshold[profile] || props.settings?.confidenceThreshold || 70);
   const currentRegime = String(props.metrics?.marketRegime || "");
   const momentum = Number(props.metrics?.momentumPoints || 0);
   const momentumThreshold = Number(props.metrics?.adaptiveMomentumThreshold || props.metrics?.momentumEntryPoints || 0);
