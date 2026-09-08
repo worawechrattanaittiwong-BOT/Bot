@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.013"
+#property version   "1.014"
 #define SCENOVA_PRODUCT_VERSION "2.0.7"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -580,7 +580,7 @@ void OnTick()
 
    g_executionStatus = direction > 0 ? "READY_BUY" : "READY_SELL";
    bool sent = SendMarketOrder(direction);
-   if(sent)
+   if(sent || IsBurstProfile())
    {
       RegisterOrderRequest();
       if(IsBurstProfile())
@@ -680,7 +680,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.013\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.014\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1758,7 +1758,8 @@ void ProcessBurstQueue()
       AbortBurst("CONTROL_NOT_FRESH");
       return;
    }
-   if(TimeCurrent() - g_burstStartedAt > 15)
+   int burstTimeoutSeconds = MathMax(15, (g_burstTargetPositions * g_minOrderIntervalMs) / 1000 + 10);
+   if(TimeCurrent() - g_burstStartedAt > burstTimeoutSeconds)
    {
       AbortBurst("BURST_TIMEOUT");
       return;
@@ -1768,56 +1769,35 @@ void ProcessBurstQueue()
       AbortBurst("TRADE_PERMISSION");
       return;
    }
-   if(!AdaptiveSpreadAllowed())
-   {
-      AbortBurst("SPREAD_TOO_HIGH");
-      return;
-   }
-
    int count = BasketPositionCount();
    if(count >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
    {
       g_burstActive = false;
+      if(count == 0) g_burstNeedsRearm = true;
       g_executionStatus = "BURST_COMPLETE";
       return;
    }
-   int basketDirection = BasketDirection();
-   if(basketDirection != 0 && basketDirection != g_burstDirection)
-   {
-      AbortBurst("DIRECTION_CHANGED");
-      return;
-   }
-   if(g_macroTrendDirection != 0 && g_entryMode == ENTRY_AUTO_MOMENTUM &&
-      g_macroTrendDirection != g_burstDirection)
-   {
-      AbortBurst("TREND_CHANGED");
-      return;
-   }
-   double liveMomentum = MomentumPoints();
-   double continuationThreshold = MathMax(2.0, g_adaptiveMomentumThreshold) * 0.50;
-   bool momentumValid = g_burstDirection > 0
-      ? liveMomentum >= continuationThreshold
-      : liveMomentum <= -continuationThreshold;
-   if(!momentumValid)
-   {
-      AbortBurst("MOMENTUM_FADED");
-      return;
-   }
+   // The entry signal and spread are validated before the Basket starts. Once
+   // armed, submit every selected attempt; only Stop/control/trading permission
+   // can interrupt the queue. MT5/Broker accepts or rejects each order.
    if(!CanSendOrder())
       return;
-   if(!SendMarketOrder(g_burstDirection))
-   {
-      AbortBurst("ORDER_REJECTED");
-      return;
-   }
+   bool accepted = SendMarketOrder(g_burstDirection);
    RegisterOrderRequest();
    g_burstRequestsSent++;
    int filled = BasketPositionCount();
-   g_executionStatus = (filled >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
-      ? "BURST_COMPLETE"
-      : "BURST_FILLING";
+   bool completed = filled >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions;
+   if(completed)
+      g_executionStatus = "BURST_COMPLETE";
+   else if(accepted)
+      g_executionStatus = "BURST_FILLING";
+   // On rejection keep the exact MT5 retcode status from SendMarketOrder, then
+   // continue with the next requested attempt. MT5/Broker decides every order.
    if(filled >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
+   {
       g_burstActive = false;
+      if(filled == 0) g_burstNeedsRearm = true;
+   }
 }
 
 int SymbolDigitsNow()
@@ -2484,18 +2464,6 @@ bool SendMarketOrder(int direction)
    }
 
    g_adaptiveLot = request.volume;
-
-   MqlTradeCheckResult check = {};
-   ResetLastError();
-   if(!OrderCheck(request, check))
-   {
-      g_lastOrderError = GetLastError();
-      g_lastOrderRetcode = (long)check.retcode;
-      g_lastOrderAt = TimeCurrent();
-      g_executionStatus = "ORDER_PRECHECK_FAILED";
-      Print("OrderCheck failed. error=", g_lastOrderError, " retcode=", check.retcode, " comment=", check.comment);
-      return false;
-   }
 
    ResetLastError();
    if(!OrderSend(request, result))

@@ -137,7 +137,7 @@ export class BotController {
       WAITING_BASKET_ADD: { label: "รอจังหวะเพิ่มไม้", detail: "Max Positions คือเพดาน ระบบจะเพิ่มไม้เมื่อราคาเดินต่อฝั่งกำไรและ Momentum/Confidence ยังยืนยัน ไม่ยิงครบทุกไม้พร้อมกัน", tone: "good" },
       WAITING_BURST_REARM: { label: "รอสัญญาณรอบใหม่", detail: "Basket เดิมปิดแล้ว ระบบรอ Momentum รีเซ็ตก่อนเริ่ม Burst รอบถัดไป", tone: "good" },
       BURST_FILLING: { label: "กำลังเปิด Basket", detail: "EA กำลังส่งคำสั่งตามจำนวนไม้ที่เลือก โดย MT5/Broker เป็นผู้ตอบรับแต่ละคำสั่ง", tone: "good" },
-      BURST_COMPLETE: { label: "เปิด Burst ครบแล้ว", detail: "Basket Scalping Engine กำลังดูแลเป้ากำไรและขีดจำกัดความเสี่ยง", tone: "good" },
+      BURST_COMPLETE: { label: "ส่งคำสั่งครบจำนวนแล้ว", detail: "MT5/Broker ตอบรับหรือปฏิเสธแต่ละไม้ และระบบดูแล Position ที่เปิดสำเร็จ", tone: "good" },
       BURST_PARTIAL_MANAGING: { label: "ดูแล Basket ที่เปิดได้", detail: "คิวหยุดก่อนครบจำนวนที่เลือก ระบบจะดูแล Position ที่ MT5 เปิดแล้วโดยไม่ยิงซ้ำ", tone: "warn" },
       BURST_ABORTED: { label: "หยุดคิว Burst", detail: "สภาวะตลาดหรือคุณภาพ Execution เปลี่ยน ระบบหยุดเฉพาะไม้ที่ยังไม่ส่ง", tone: "warn" },
       ORDER_PRECHECK_FAILED: { label: "คำสั่งไม่ผ่านการตรวจล่วงหน้า", detail: "Broker หรือ Margin ไม่พร้อม ระบบไม่ส่งคำสั่งนี้", tone: "warn" },
@@ -1344,7 +1344,7 @@ export class BotController {
       }
       clean.tradingProfile = tradingProfile;
       // Profiles own the execution/adaptive values. Legacy fields can remain
-      // in JSON for compatibility, but EA 1.013 never uses them over a profile.
+      // in JSON for compatibility, but EA 1.014 never uses them over a profile.
       clean.adaptiveEngine = true;
     }
 
