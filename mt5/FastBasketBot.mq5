@@ -1336,7 +1336,7 @@ void PostTradeJournalDeal(ulong dealTicket)
    );
 
    string response = "";
-   int code = HttpPostJsonTimeout(InpApiBase + "/api/ea/journal", payload, response, 1200);
+   int code = HttpPostJsonTimeout(InpApiBase + "/api/ea/journal", payload, response, 650);
    if(code >= 200 && code < 300)
       g_journalSent++;
    else
@@ -4088,6 +4088,18 @@ double DynamicInitialStopPrice(int direction, double entryPrice)
       }
    }
 
+   // Structural intelligence may tighten risk, but never inside the Broker's
+   // legal Stops Level. This prevents Dynamic SL from turning into an order
+   // rejection / hidden entry blocker.
+   double minStopPoints = MathMax(
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
+      0.0
+   ) + 2.0;
+   if(direction > 0)
+      baseStop = MathMin(baseStop, entryPrice - minStopPoints * _Point);
+   else
+      baseStop = MathMax(baseStop, entryPrice + minStopPoints * _Point);
+
    return NormalizeDouble(baseStop, digits);
 }
 
@@ -4325,7 +4337,24 @@ bool SendMarketOrder(int direction)
       !BasketFillEnabled() &&
       g_perPositionProfit <= 0.0 &&
       g_basketProfitTarget <= 0.0)
+   {
       request.tp = DynamicTakeProfitPrice(direction, entryPrice, request.sl);
+      double minTargetPoints = MathMax(
+         (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
+         0.0
+      ) + 2.0;
+      int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+      if(direction > 0)
+         request.tp = NormalizeDouble(
+            MathMax(request.tp, entryPrice + minTargetPoints * _Point),
+            digits
+         );
+      else
+         request.tp = NormalizeDouble(
+            MathMin(request.tp, entryPrice - minTargetPoints * _Point),
+            digits
+         );
+   }
 
    g_dynamicStopPrice = request.sl;
    g_dynamicTakeProfitPrice = request.tp > 0.0
