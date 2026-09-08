@@ -447,6 +447,9 @@ export class EaController {
     const runtime = await this.db.one(
       `SELECT
          last_seen_at,
+         desired_state,
+         actual_state,
+         COALESCE(NULLIF(metrics->>'positions','')::int,0) AS positions,
          metrics->>'eaVersion' AS ea_version,
          metrics->>'terminalTradeAllowed' AS terminal_trade_allowed,
          metrics->>'mqlTradeAllowed' AS mql_trade_allowed,
@@ -490,6 +493,10 @@ export class EaController {
           : runtime?.mql_trade_allowed === "false"
             ? false
             : null,
+      safeToRestart:
+        String(runtime?.desired_state || "STOPPED") !== "RUNNING" &&
+        String(runtime?.actual_state || "STOPPED") !== "RUNNING" &&
+        Number(runtime?.positions || 0) <= 0,
       agentVersion: reportedAgentVersion,
       agentVersionRequired,
       agentUpdateRequired,
