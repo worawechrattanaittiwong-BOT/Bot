@@ -1162,7 +1162,6 @@ export default function DashboardPage() {
                     </>}
                   </div></>}
 
-                  <div className="cc-settings-savebar"><div><span className={settingsDirty?"warn-dot":"good-dot"}/><span>{settingsDirty?"มีค่าที่แก้ไขและยังไม่ได้ส่งให้ EA":"ค่าบนเว็บตรงกับค่าที่บันทึกแล้ว"}</span></div><button className="btn cc-save-primary" disabled={busy||!settingsDirty}><ScenovaIcon name="save" size={17}/>{busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button></div>
                 </form>
               </section>
 
@@ -1676,6 +1675,7 @@ function ToggleSelectField(props: any) {
       <label className="toggle-setting-label">
         <input
           type="checkbox"
+          aria-label={props.label || "เปิดหรือปิดการตั้งค่านี้"}
           checked={enabled}
           disabled={Boolean(props.disabled)}
           onChange={e=>{
@@ -1717,6 +1717,7 @@ function DailyProfitTargetField(props: any) {
       <label className="toggle-setting-label">
         <input
           type="checkbox"
+          aria-label="เปิดหรือปิดเป้ากำไรวันนี้"
           checked={enabled}
           onChange={e=>{
             if (e.target.checked) {
@@ -1786,6 +1787,7 @@ function TogglePairField(props: any) {
       <label className="toggle-setting-label">
         <input
           type="checkbox"
+          aria-label={props.label || "เปิดหรือปิดการตั้งค่านี้"}
           checked={enabled}
           disabled={Boolean(props.disabled)}
           onChange={e=>{

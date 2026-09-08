@@ -2733,3 +2733,73 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   #bot-settings .cc-risk-summary{width:100%;display:grid;grid-template-columns:1fr 1fr}
   #bot-settings .daily-profit-main-row{grid-template-columns:1fr!important}
 }
+
+/* Unified Control Center typography and compact interaction layout. */
+.cc-v3 .cc-v3-title p{font-size:12px;line-height:1.45;color:#7d87a2}
+.cc-v3 .cc-head-chip b{font-size:12px}
+.cc-v3 .cc-head-chip small{font-size:10px}
+.cc-v3 .cc-v3-kpis .cc-kpi-label{font-size:11px!important}
+.cc-v3 .cc-v3-kpis .cc-kpi small{font-size:10px}
+.cc-v3 .cc-symbol-title small{font-size:11px}
+.cc-v3 .cc-state-pill b{font-size:12px!important}
+.cc-v3 .cc-state-pill small{font-size:10px!important}
+.cc-v3 .cc-last-update{font-size:10px}
+.cc-v3 .cc-v3-control-fields span{font-size:10px!important}
+.cc-v3 .cc-v3-control-fields b,
+.cc-v3 .cc-v3-control-fields select{font-size:12px!important}
+.cc-v3 .cc-signal-item small{font-size:10px}
+.cc-v3 .cc-signal-item b{font-size:12px}
+.cc-v3 .cc-direction-strip span{font-size:9px}
+.cc-v3 .cc-direction-strip b{font-size:10px}
+.cc-v3 .cc-intel-banner b{font-size:11px}
+.cc-v3 .cc-intel-banner span{font-size:10px}
+.cc-v3 .cc-v3-account .cc-card-title h2{font-size:18px!important}
+.cc-v3 .cc-mini-health{font-size:10px}
+.cc-v3 .cc-v3-account .cc-status-row>span{font-size:10px!important}
+.cc-v3 .cc-v3-account .cc-status-value{font-size:11px!important}
+.cc-v3 .cc-v3-account .cc-status-detail{font-size:11px!important}
+
+.cc-v3 .cc-v3-actions .cc-action{overflow:hidden;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease,filter .2s ease}
+.cc-v3 .cc-v3-actions .cc-action>span:last-child{width:auto;height:auto;min-width:0;flex:1;align-items:flex-start;justify-content:center}
+.cc-v3 .cc-v3-actions .cc-action b{font-size:14px!important;line-height:1.2;white-space:nowrap}
+.cc-v3 .cc-v3-actions .cc-action small{font-size:10px;line-height:1.3;white-space:nowrap}
+.cc-v3 .cc-v3-actions .cc-action:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 25px rgba(0,0,0,.22)}
+.cc-v3 .cc-v3-actions .cc-action:active:not(:disabled){transform:translateY(0) scale(.985)}
+.cc-v3 .cc-state-pill.running{animation:ccSoftStatus 2.8s ease-in-out infinite}
+
+#bot-settings .cc-setting-tile{position:relative;min-height:108px;padding:12px;gap:8px;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+#bot-settings .cc-setting-tile:hover{transform:translateY(-1px);border-color:#354064;box-shadow:0 10px 24px rgba(0,0,0,.16)}
+#bot-settings .cc-setting-tile-head{padding-right:50px}
+#bot-settings .cc-setting-control{margin-top:4px}
+#bot-settings .toggle-setting-label{position:absolute;top:13px;right:12px;min-height:22px;margin:0!important;z-index:2}
+#bot-settings .toggle-setting-label .setting-toggle-text{display:none}
+#bot-settings .toggle-setting-label .setting-toggle-track{width:38px;height:21px;padding:3px}
+#bot-settings .toggle-setting-label .setting-toggle-track i{width:13px;height:13px}
+#bot-settings .enabled .toggle-setting-label .setting-toggle-track i{transform:translateX(17px)}
+#bot-settings .toggle-select-field select,
+#bot-settings .toggle-pair-field select,
+#bot-settings .daily-profit-target-field select{min-height:39px!important}
+#bot-settings .cc-settings-tabs button{transition:color .18s ease,background .18s ease,border-color .18s ease}
+#bot-settings .cc-settings-tabs button:hover{color:#d3c6f5;background:rgba(111,78,210,.06)}
+#bot-settings .cc-settings-tabs button.active svg{animation:ccTabPop .28s ease-out}
+#bot-settings .cc-save-primary:not(:disabled){animation:ccSaveGlow 3s ease-in-out infinite}
+
+@keyframes ccSoftStatus{
+  0%,100%{box-shadow:0 0 0 rgba(82,220,157,0)}
+  50%{box-shadow:0 0 18px rgba(82,220,157,.14)}
+}
+@keyframes ccTabPop{
+  0%{transform:translateY(2px) scale(.88);opacity:.55}
+  100%{transform:translateY(0) scale(1);opacity:1}
+}
+@keyframes ccSaveGlow{
+  0%,100%{filter:brightness(1) drop-shadow(0 0 0 rgba(139,92,246,0))}
+  50%{filter:brightness(1.08) drop-shadow(0 0 8px rgba(139,92,246,.28))}
+}
+@media(prefers-reduced-motion:reduce){
+  .cc-v3 .cc-state-pill.running,
+  #bot-settings .cc-settings-tabs button.active svg,
+  #bot-settings .cc-save-primary:not(:disabled){animation:none}
+  .cc-v3 .cc-v3-actions .cc-action,
+  #bot-settings .cc-setting-tile{transition:none}
+}
