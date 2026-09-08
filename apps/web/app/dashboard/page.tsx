@@ -28,8 +28,6 @@ type BrokerCatalog = {
 };
 
 type View = "overview" | "account" | "access";
-type SettingsTab = "exit" | "risk" | "session";
-
 const tradingProfileHelp: Record<string, {
   title: string;
   short: string;
@@ -137,7 +135,6 @@ export default function DashboardPage() {
   const [settings, setSettings] = useState<any>(defaultSettings);
   const settingsDirtyRef = useRef(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("exit");
   const [botSettingsOpen, setBotSettingsOpen] = useState(false);
   const [profileHelpOpen, setProfileHelpOpen] = useState<string>("");
   const mt5ApiBase =
@@ -212,7 +209,8 @@ export default function DashboardPage() {
   }, [botSettingsOpen]);
 
   useEffect(() => {
-    if (!logsOpen || !data?.instance?.id) return;
+    const terminalVisible = activeView === "overview";
+    if ((!logsOpen && !terminalVisible) || !data?.instance?.id) return;
     let cancelled = false;
     const refreshLogs = async () => {
       try {
@@ -525,6 +523,31 @@ export default function DashboardPage() {
   };
   const currentPositions = Math.max(0, Number(metrics.positions || 0));
   const configuredMaxPositions = Math.max(1, Number(settings.maxPositions || 1));
+
+  const openPositions = Array.isArray(metrics.openPositions)
+    ? [...metrics.openPositions].sort((a:any,b:any)=>Number(a.openedAt||0)-Number(b.openedAt||0))
+    : [];
+  const latestBotCommand = Array.isArray(botLogs?.events) && botLogs.events.length
+    ? botLogs.events[0]
+    : null;
+  const latestCommandStatusLabel:Record<string,string> = {
+    PENDING: "รอ EA รับคำสั่ง",
+    DELIVERED: "ส่งถึง EA แล้ว",
+    ACKED: "EA รับและตอบกลับแล้ว",
+    FAILED: "คำสั่งมีปัญหา"
+  };
+  const latestCommandStatus = latestBotCommand
+    ? (latestCommandStatusLabel[String(latestBotCommand.status||"")] || String(latestBotCommand.status||"—"))
+    : "ยังไม่มีคำสั่งล่าสุด";
+  const marketTradeLabel =
+    String(liveStatus.code||"") === "MARKET_CLOSED"
+      ? "ตลาดปิด — รอ Session"
+      : metrics.tradeReady === true
+        ? "ตลาดเปิด — พร้อมส่งออเดอร์"
+        : isMt5Online
+          ? "มีราคา แต่ยังมีเงื่อนไขที่บล็อกการเทรด"
+          : "รอ MT5 เชื่อมต่อ";
+
 
   const nearlyEqual = (left:any, right:any, tolerance=0.005) =>
     Math.abs(Number(left || 0) - Number(right || 0)) <= tolerance;
@@ -1276,158 +1299,70 @@ export default function DashboardPage() {
                 </section>
               </div>
 
-              <section id="bot-settings" className="panel cc-settings-shell">
-                <div className="cc-settings-head">
-                  <div className="cc-settings-title"><span><ScenovaIcon name="settings" size={22}/></span><div><h2>ตั้งค่าการเทรด</h2><small>เลือกเฉพาะสิ่งที่ต้องการ ระบบจะจัดการส่วนที่เหลือให้</small></div></div>
-                  <div className="cc-settings-actions">
-                    <span className={"cc-ea-sync-chip "+settingsSyncTone}><i/>{settingsSyncLabel}</span>
-                    <span className={"cc-change-chip "+(settingsDirty?"warn":"good")}><i/>{settingsDirty?"มีการเปลี่ยนแปลง":"บันทึกแล้ว"}</span>
-                    <button type="button" className="btn cc-save-primary" disabled={busy||!settingsDirty} onClick={(e:any)=>saveSettings(e)}><ScenovaIcon name="save" size={17}/>{busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button>
-                  </div>
-                </div>
-
+              <section id="bot-settings" className="panel cc-settings-launch-card">
                 <button
                   type="button"
-                  className="cc-bot-settings-launcher"
+                  className="cc-bot-settings-launcher cc-bot-settings-launcher-v2"
                   onClick={() => {
                     setProfileHelpOpen("");
                     setBotSettingsOpen(true);
                   }}
                 >
-                  <span className="cc-bot-settings-launcher-icon"><ScenovaIcon name="bot" size={24}/></span>
+                  <span className="cc-bot-settings-launcher-icon"><ScenovaIcon name="settings" size={26}/></span>
                   <span className="cc-bot-settings-launcher-copy">
-                    <span className="cc-bot-settings-launcher-kicker">ตั้งค่าบอทหลัก</span>
-                    <b>กดเพื่อเลือกโหมดและตั้งค่าการเข้าออเดอร์</b>
-                    <small>โหมด <strong>{tradingProfileHelp[String(settings.tradingProfile||"BALANCED")]?.title || "สมดุล"}</strong> · {metrics.symbol||settings.symbol} · {settings.entryMode} · {Number(settings.maxPositions||1)} ไม้ · Lot สูงสุด {Number(settings.lot||0.01).toFixed(2)}</small>
+                    <span className="cc-bot-settings-launcher-kicker">การตั้งค่าบอททั้งหมด</span>
+                    <b>กดเพื่อเปิดการตั้งค่า โหมด / กำไร / SL / เวลาเทรด</b>
+                    <small>
+                      <strong>{tradingProfileHelp[String(settings.tradingProfile||"BALANCED")]?.title || "สมดุล"}</strong>
+                      {" · "}{settings.entryMode}
+                      {" · "}{Number(settings.maxPositions||1)} ไม้
+                      {" · Lot "}{Number(settings.lot||0.01).toFixed(2)}
+                      {" · SL "}{manualStopLossPoints>0 ? Number(manualStopLossPoints).toFixed(0)+" pt" : "ตามระบบ"}
+                    </small>
                   </span>
-                  <span className="cc-bot-settings-launcher-action">
-                    <span>เปิดการตั้งค่า</span>
-                    <ScenovaIcon name="settings" size={18}/>
+                  <span className="cc-bot-settings-launcher-sync">
+                    <span className={"cc-ea-sync-chip "+settingsSyncTone}><i/>{settingsSyncLabel}</span>
+                    <span className="cc-bot-settings-launcher-action"><span>เปิดตั้งค่า</span><ScenovaIcon name="settings" size={18}/></span>
                   </span>
                 </button>
-
-                <div className="cc-settings-tabs" role="tablist" aria-label="หมวดการตั้งค่าบอท">
-                  {([["exit","profit","เป้าหมายกำไร"],["risk","shield","ป้องกันขาดทุน"],["session","clock","เวลาเทรด"]] as Array<[SettingsTab,string,string]>).map(([key,icon,label])=><button type="button" key={key} className={settingsTab===key?"active":""} onClick={()=>setSettingsTab(key)}><ScenovaIcon name={icon} size={17}/><span>{label}</span></button>)}
-                </div>
-
-                <form className="cc-settings-form-v3" onSubmit={saveSettings}>
-                  {settingsTab==="risk"&&<>
-                    <div className="cc-settings-section-title cc-risk-title">
-                      <div><b>ป้องกันขาดทุน</b><span>ค่าที่กำหนดตรงนี้มีผลกับ EA ทุกโปรไฟล์ รวมถึง Burst</span></div>
-                      <div className="cc-risk-summary">
-                        <span>รูปแบบ <b>{tradingProfileLabel[tradingProfile]||tradingProfile}</b></span>
-                        <span>ขนาดไม้ปัจจุบัน <b>{Number(metrics.adaptiveLot||settings.lot).toFixed(2)} Lot</b></span>
-                      </div>
-                    </div>
-                    <div className="cc-settings-grid cc-risk-grid">
-                      <SettingTile icon="shield" title="SL ระบบ (Auto)" description="ใช้ ATR + โปรไฟล์ + สภาพตลาด และส่ง Stop Loss จริงไปที่ Broker">
-                        <div className="cc-readout">
-                          <b>{hardStopMultiplier>0 ? "ATR × "+hardStopMultiplier.toFixed(2) : "กำลังคำนวณ"}</b>
-                          <small>{systemHardStopDistancePoints>0 ? "ระยะระบบตอนนี้ประมาณ "+systemHardStopDistancePoints.toFixed(0)+" points" : "รอ ATR จาก EA"}</small>
-                        </div>
-                      </SettingTile>
-                      <SettingTile icon="orders" title="SL ต่อไม้" description="ปิดสวิตช์ = ใช้ SL ระบบด้านบน · เปิดสวิตช์ = กำหนดระยะ SL เอง">
-                        <ToggleNumberField
-                          label={manualStopLossPoints>0 ? "ใช้ SL กำหนดเอง" : "ใช้ SL ตามระบบ"}
-                          defaultValue={String(Math.max(1,Math.round(systemHardStopDistancePoints||1000)))}
-                          value={settings.manualStopLossPoints}
-                          prefix="PT"
-                          suffix="ระยะจากราคาเปิด"
-                          onChange={(v:string)=>editSetting("manualStopLossPoints",v)}
-                        />
-                        {manualStopLossPoints<=0&&<div className="cc-auto-fallback"><span>System SL</span><b>{systemHardStopDistancePoints>0?systemHardStopDistancePoints.toFixed(0)+" pt":"รอ ATR"}</b><small>ระบบปรับตามตลาดอัตโนมัติ</small></div>}
-                      </SettingTile>
-                      <SettingTile icon="pnl" title="หยุดเมื่อขาดทุนวันนี้" description="ขาดทุนรวมของบอทวันนี้ถึงจำนวนนี้ → ปิด/หยุดตาม Daily Loss">
-                        <ToggleMoneyField label="เปิดขาดทุนรายวัน" defaultValue="25" value={settings.dailyLossMoney} suffix="ขาดทุนรวมวันนี้" onChange={(v:string)=>editSetting("dailyLossMoney",v)}/>
-                      </SettingTile>
-                      <SettingTile icon="risk" title="ปิดทั้งชุดเมื่อขาดทุน" description={tradingProfile==="BURST_10" ? "เปิด = ใช้จำนวนที่คุณตั้ง · ปิด = Burst ใช้ Auto Basket Loss" : "รวมผลขาดทุนของทุกไม้ใน Basket ปัจจุบัน"}>
-                        <ToggleMoneyField label="เปิด Basket Loss" defaultValue="10" value={settings.maxBasketLossMoney} suffix="ขาดทุนรวมทั้งชุด" onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}/>
-                        {tradingProfile==="BURST_10"&&Number(settings.maxBasketLossMoney||0)<=0&&<div className="cc-auto-fallback"><span>Auto Burst</span><b>{"$"+Number(metrics.burstLossMoney||0).toFixed(2)}</b><small>EA คำนวณใหม่แต่ละ Cycle</small></div>}
-                      </SettingTile>
-                    </div>
-                    <div className="cc-applied-settings-strip">
-                      <span><small>โหมด SL ต่อไม้</small><b>{stopLossModeLabel}</b></span>
-                      <span><small>EA ใช้ SL จริง</small><b>{hardStopDistancePoints>0 ? hardStopDistancePoints.toFixed(0)+" pt" : "รอข้อมูล"}</b></span>
-                      <span><small>EA ใช้ Basket Loss</small><b>{"$"+effectiveBasketLoss.toFixed(2)}</b></span>
-                    </div>
-                  </>}
-
-                  {settingsTab==="session"&&<><div className="cc-settings-section-title"><b>เวลาเทรด</b><span>อ้างอิงเวลา Server ของ Broker</span></div><div className="cc-settings-grid cc-session-grid">
-                    <SettingTile icon="clock" title="เริ่ม Session" description="เวลา Server"><select className="input" value={String(settings.sessionStartHour)} onChange={e=>editSetting("sessionStartHour",e.target.value)}>{[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select></SettingTile>
-                    <SettingTile icon="clock" title="จบ Session" description="เวลา Server"><select className="input" value={String(settings.sessionEndHour)} onChange={e=>editSetting("sessionEndHour",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23,24].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select></SettingTile>
-                    <SettingTile icon="timer" title="Session ปัจจุบัน" description="อ่านจาก EA"><div className="cc-readout"><b>{String(metrics.sessionProfile||"UNKNOWN")}</b><small>Server session profile</small></div></SettingTile>
-                    <SettingTile icon="spread" title="Spread ตอนนี้" description={"Adaptive limit "+spreadLimitLabel}><div className="cc-readout"><b>{spreadValueLabel}</b><small>{spreadStatusLabel[spreadStatus]||spreadStatus}</small></div></SettingTile>
-                  </div></>}
-
-                  {settingsTab==="exit"&&<>
-                    <div className="cc-settings-section-title cc-profit-title">
-                      <div><b>เป้าหมายกำไร</b><span>ค่าที่ตั้งบนเว็บมีสิทธิ์สูงกว่า Auto ของโปรไฟล์</span></div>
-                      <div className="cc-profit-mode-note"><ScenovaIcon name="info" size={14}/><span>เปิดอันไหน อีกอันจะปิดเองอัตโนมัติ</span></div>
-                    </div>
-
-                    <div className="cc-settings-grid cc-profit-mode-grid">
-                      <SettingTile icon="profit" title="กำไรทั้งชุดถึงแล้วปิด" description="รวมกำไรทุก Position ใน Basket เดียวกัน" wide accent={basketProfitEnabled}>
-                        <BasketProfitTargetField
-                          value={settings.basketProfitTargetMoney}
-                          trailPercent={settings.profitRunTrailPercent}
-                          targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                          percentOptions={[5,10,15,20,25,30,40,50]}
-                          defaultTarget="10"
-                          defaultPercent="20"
-                          onTargetChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}
-                          onPercentChange={(v:string)=>editSetting("profitRunTrailPercent",v)}
-                        />
-                      </SettingTile>
-
-                      <SettingTile icon="orders" title="กำไรต่อไม้" description="แต่ละ Position ถึงกำไรที่ตั้ง → ปิดเฉพาะไม้นั้นทันที" wide accent={perPositionProfitEnabled}>
-                        <ToggleMoneyField
-                          label="เปิดกำไรต่อไม้"
-                          defaultValue="2"
-                          value={settings.perPositionProfitMoney}
-                          suffix="กำไรต่อ Position"
-                          onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}
-                        />
-                      </SettingTile>
-                    </div>
-
-                    {tradingProfile==="BURST_10"&&<div className={"cc-burst-profit-status "+((basketProfitEnabled||perPositionProfitEnabled)?"manual":"auto")}>
-                      <div><ScenovaIcon name="layers" size={16}/><span><b>โหมด Burst</b><small>{basketProfitEnabled||perPositionProfitEnabled ? "ใช้เป้าหมายที่คุณกำหนดแทน Auto" : "ไม่ได้กำหนดเป้าหมายเอง → ใช้ Auto ของ EA"}</small></span></div>
-                      <div className="cc-burst-profit-values">
-                        <span><small>Auto ที่ EA คำนวณ</small><b>{"$"+Number(metrics.burstTargetMoney||0).toFixed(2)}</b></span>
-                        <span><small>เป้าที่ EA ใช้จริง</small><b>{effectiveBasketProfit>0 ? "$"+effectiveBasketProfit.toFixed(2) : (perPositionProfitEnabled ? "ต่อไม้" : "รอ Cycle")}</b></span>
-                        <span><small>โหมดปิดจริง</small><b>{profitControlMode==="PER_POSITION"?"กำไรต่อไม้":profitControlMode==="BASKET_RUN_ON"?"Basket + ปล่อยวิ่ง":profitControlMode==="BASKET_FIXED"?"Basket ตามจำนวน":profitControlMode==="BURST_AUTO"?"Burst Auto":"รอ EA"}</b></span>
-                      </div>
-                    </div>}
-
-                    <div className="cc-profit-independent">
-                      <div className="cc-settings-section-title"><b>เป้ากำไรรายวัน</b><span>ทำงานแยกจากวิธีปิด Basket / Position ด้านบน</span></div>
-                      <div className="cc-settings-grid">
-                        <SettingTile icon="pnl" title="เป้ากำไรวันนี้" description="ถึงเป้ารายวันแล้วเลือกหยุดหรือปล่อยต่อ" wide>
-                          <DailyProfitTargetField
-                            value={settings.dailyProfitTargetMoney}
-                            continueAfterTarget={Boolean(settings.dailyProfitContinueAfterTarget)}
-                            drawdownPercent={settings.dailyProfitDrawdownPercent}
-                            targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                            percentOptions={[5,10,15,20,25,30,40,50]}
-                            defaultTarget="10"
-                            defaultPercent="20"
-                            onTargetChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)}
-                            onContinueChange={(v:boolean)=>editSetting("dailyProfitContinueAfterTarget",v)}
-                            onPercentChange={(v:string)=>editSetting("dailyProfitDrawdownPercent",v)}
-                          />
-                        </SettingTile>
-                      </div>
-                    </div>
-
-                    <div className="cc-applied-settings-strip">
-                      <span><small>EA ใช้กำไร Basket</small><b>{effectiveBasketProfit>0 ? "$"+effectiveBasketProfit.toFixed(2) : "ปิด"}</b></span>
-                      <span><small>EA ใช้กำไรต่อไม้</small><b>{Number(metrics.appliedPerPositionProfit||0)>0 ? "$"+Number(metrics.appliedPerPositionProfit).toFixed(2) : "ปิด"}</b></span>
-                      <span><small>Trailing หลังถึงเป้า</small><b>{Number(metrics.appliedProfitRunTrailPercent||0)>0 ? Number(metrics.appliedProfitRunTrailPercent).toFixed(0)+"%" : "ปิด"}</b></span>
-                    </div>
-                  </>}
-
-                </form>
               </section>
+
+              <LiveTerminalPanel
+                symbol={String(metrics.symbol||settings.symbol||"")}
+                accountNumber={String(data.account?.account_number||"—")}
+                server={String(metrics.server||data.account?.broker_server||"—")}
+                connectionLabel={connectionLabel}
+                state={String(state)}
+                desired={String(desired)}
+                executionLabel={String(liveStatus.label||"—")}
+                executionDetail={String(liveStatus.detail||"")}
+                marketTradeLabel={marketTradeLabel}
+                marketRegime={marketRegimeLabel[String(metrics.marketRegime||"")]||String(metrics.marketRegime||"รอข้อมูล")}
+                entryBias={entryBiasLabel}
+                confidence={Number(metrics.signalConfidence||0)}
+                spread={spreadValueLabel}
+                spreadStatus={spreadStatusLabel[spreadStatus]||spreadStatus}
+                momentum={Number(metrics.momentumPoints||0)}
+                heartbeatAge={heartbeatAgeSeconds}
+                heartbeatLatency={heartbeatLatencyMs}
+                heartbeatHttp={heartbeatHttpStatus}
+                latestCommand={latestBotCommand ? commandLabel(String(latestBotCommand.command||"")) : "—"}
+                latestCommandStatus={latestCommandStatus}
+                openPositions={openPositions}
+                positionsCount={currentPositions}
+                maxPositions={configuredMaxPositions}
+                symbolDigits={symbolDigits}
+                dailyProfit={Number(metrics.dailyProfit||0)}
+                basketProfit={Number(metrics.basketCycleProfit||metrics.basketProfit||0)}
+                filter={terminalFilter}
+                onFilter={setTerminalFilter}
+                entries={filteredTerminalEntries}
+                loading={logsLoading}
+                autoScroll={terminalAutoScroll}
+                onAutoScroll={setTerminalAutoScroll}
+                terminalRef={terminalWindowRef}
+                onOpenFull={()=>setLogsOpen(true)}
+              />
 
               <BotSettingsModal
                 open={botSettingsOpen}
@@ -1440,6 +1375,18 @@ export default function DashboardPage() {
                 dirty={settingsDirty}
                 busy={busy}
                 syncLabel={settingsSyncLabel}
+                metrics={metrics}
+                tradingProfile={tradingProfile}
+                hardStopMultiplier={hardStopMultiplier}
+                systemHardStopDistancePoints={systemHardStopDistancePoints}
+                hardStopDistancePoints={hardStopDistancePoints}
+                manualStopLossPoints={manualStopLossPoints}
+                effectiveBasketLoss={effectiveBasketLoss}
+                effectiveBasketProfit={effectiveBasketProfit}
+                profitControlMode={profitControlMode}
+                spreadValueLabel={spreadValueLabel}
+                spreadLimitLabel={spreadLimitLabel}
+                spreadStatusLabel={spreadStatusLabel[spreadStatus]||spreadStatus}
                 profileHelpOpen={profileHelpOpen}
                 onProfileHelp={(value:string)=>setProfileHelpOpen(value)}
                 onEdit={editSetting}
@@ -1843,6 +1790,93 @@ export default function DashboardPage() {
   );
 }
 
+function LiveTerminalPanel(props:any) {
+  const positions = Array.isArray(props.openPositions) ? props.openPositions : [];
+  const filters = ["ALL","COMMAND","STATE","MARKET","RISK","ORDER"] as const;
+
+  return (
+    <section className="panel cc-live-terminal-panel">
+      <div className="cc-live-terminal-head">
+        <div className="cc-live-terminal-title">
+          <span className="cc-terminal-icon">&gt;_</span>
+          <div>
+            <div className="eyebrow">LIVE EA TERMINAL</div>
+            <h2>{props.symbol} · สถานะการทำงานแบบ Real-time</h2>
+            <small>Account {props.accountNumber} · {props.server}</small>
+          </div>
+        </div>
+        <div className="cc-live-terminal-head-actions">
+          <label className="cc-terminal-auto">
+            <input type="checkbox" checked={Boolean(props.autoScroll)} onChange={e=>props.onAutoScroll?.(e.target.checked)}/>
+            <span>เลื่อนตามอัตโนมัติ</span>
+          </label>
+          <button type="button" className="btn" onClick={props.onOpenFull}>เปิด Terminal เต็มจอ</button>
+        </div>
+      </div>
+
+      <div className="cc-live-terminal-status-grid">
+        <TerminalStatusCard icon="status" label="EA กำลังทำอะไร" value={props.executionLabel} detail={props.executionDetail||"สถานะล่าสุดจาก EA"} tone={props.state==="RUNNING"?"good":"neutral"}/>
+        <TerminalStatusCard icon="clock" label="คำสั่งล่าสุดจากเว็บ" value={props.latestCommand} detail={props.latestCommandStatus} tone={String(props.latestCommandStatus).includes("ตอบกลับ")?"good":"neutral"}/>
+        <TerminalStatusCard icon="trend" label="สถานะตลาด" value={props.marketTradeLabel} detail={props.marketRegime+" · Bias "+props.entryBias} tone={String(props.marketTradeLabel).includes("พร้อม")?"good":String(props.marketTradeLabel).includes("ปิด")?"warn":"neutral"}/>
+        <TerminalStatusCard icon="spread" label="สัญญาณ / Spread" value={"Confidence "+Number(props.confidence||0).toFixed(0)+"%"} detail={"Spread "+props.spread+" · "+props.spreadStatus+" · Momentum "+Number(props.momentum||0).toFixed(1)} tone={Number(props.confidence||0)>=70?"good":"neutral"}/>
+      </div>
+
+      <div className="cc-live-terminal-mini-grid">
+        <div><span>Web ต้องการ</span><b>{props.desired}</b></div>
+        <div><span>EA จริง</span><b>{props.state}</b></div>
+        <div><span>Position</span><b>{props.positionsCount} / {props.maxPositions}</b></div>
+        <div><span>Heartbeat</span><b>{Number(props.heartbeatAge||0).toFixed(0)}s · HTTP {props.heartbeatHttp||"—"}</b></div>
+        <div><span>Latency</span><b>{Number(props.heartbeatLatency||0)>0?Number(props.heartbeatLatency).toFixed(0)+" ms":"—"}</b></div>
+        <div><span>Daily / Basket P&L</span><b className={Number(props.dailyProfit||0)>=0?"text-good":"text-bad"}>{"$"+Number(props.dailyProfit||0).toFixed(2)} / {"$"+Number(props.basketProfit||0).toFixed(2)}</b></div>
+      </div>
+
+      <div className="cc-live-positions">
+        <div className="cc-live-subhead">
+          <div><b>ออเดอร์ที่เปิดอยู่</b><small>รายละเอียดส่งตรงจาก EA ทุก Heartbeat</small></div>
+          <span>{positions.length} ไม้</span>
+        </div>
+        {positions.length ? (
+          <div className="cc-live-position-table">
+            <div className="cc-live-position-row header">
+              <span>ไม้ / Ticket</span><span>ฝั่ง</span><span>Lot</span><span>ราคาเปิด</span><span>ราคาปัจจุบัน</span><span>SL</span><span>P/L</span><span>ระยะเดิน</span>
+            </div>
+            {positions.map((position:any,index:number)=>(
+              <div className="cc-live-position-row" key={String(position.ticket||index)}>
+                <span><b>#{index+1}</b><small>{String(position.ticket||"—")}</small></span>
+                <span><b className={String(position.side)==="BUY"?"text-good":"text-bad"}>{String(position.side||"—")}</b></span>
+                <span><b>{Number(position.volume||0).toFixed(2)}</b></span>
+                <span><b>{Number(position.openPrice||0).toFixed(props.symbolDigits)}</b></span>
+                <span><b>{Number(position.currentPrice||0).toFixed(props.symbolDigits)}</b></span>
+                <span><b>{Number(position.sl||0)>0?Number(position.sl).toFixed(props.symbolDigits):"ไม่มี"}</b><small>{Number(position.slDistancePoints||0)>0?Number(position.slDistancePoints).toFixed(0)+" pt ถึง SL":""}</small></span>
+                <span><b className={Number(position.profit||0)>=0?"text-good":"text-bad"}>{Number(position.profit||0)>=0?"+$":"-$"}{Math.abs(Number(position.profit||0)).toFixed(2)}</b></span>
+                <span><b className={Number(position.movePoints||0)>=0?"text-good":"text-bad"}>{Number(position.movePoints||0)>=0?"+":""}{Number(position.movePoints||0).toFixed(0)} pt</b></span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="cc-live-position-empty"><ScenovaIcon name="orders" size={20}/><div><b>ยังไม่มี Position เปิดอยู่</b><small>เมื่อ EA เปิดออเดอร์ รายละเอียดแต่ละไม้จะขึ้นตรงนี้ทันที</small></div></div>
+        )}
+      </div>
+
+      <div className="cc-terminal-toolbar cc-live-terminal-toolbar">
+        {filters.map(filter=><button type="button" key={filter} className={"cc-terminal-filter "+(props.filter===filter?"active":"")} onClick={()=>props.onFilter?.(filter)}>{filter}</button>)}
+        <span className="cc-terminal-count">{props.entries?.length||0} lines · refresh 5s</span>
+      </div>
+
+      <div className="cc-terminal-window cc-live-terminal-window" ref={props.terminalRef}>
+        {(props.entries||[]).map((entry:any)=>(
+          <TerminalLine key={"inline-"+entry.id} time={entry.time} level={entry.level} category={entry.category} text={entry.text} detail={entry.detail}/>
+        ))}
+        {!props.loading && !(props.entries||[]).length && <div className="cc-terminal-empty">ยังไม่มี Event ในหมวดนี้</div>}
+      </div>
+    </section>
+  );
+}
+
+function TerminalStatusCard({icon,label,value,detail,tone="neutral"}:{icon:string;label:string;value:string;detail?:string;tone?:"neutral"|"good"|"warn"|"bad"}) {
+  return <div className={"cc-live-status-card tone-"+tone}><span><ScenovaIcon name={icon} size={19}/></span><div><small>{label}</small><b>{value}</b>{detail?<em>{detail}</em>:null}</div></div>;
+}
+
 function commandLabel(command:string) {
   const labels:Record<string,string> = {
     START:"เริ่มบอท",
@@ -1915,18 +1949,22 @@ function BotSettingsModal(props:any) {
     ["AGGRESSIVE","trend"],
     ["BURST_10","layers"]
   ];
+  const basketProfitEnabled = Number(props.settings?.basketProfitTargetMoney || 0) > 0;
+  const perPositionProfitEnabled = Number(props.settings?.perPositionProfitMoney || 0) > 0;
+  const manualSl = Number(props.settings?.manualStopLossPoints || 0);
+  const burstMode = profile === "BURST_10";
 
   return (
     <div className="cc-bot-modal-backdrop" role="presentation" onMouseDown={e=>{
       if (e.target === e.currentTarget && !props.busy) props.onClose?.();
     }}>
-      <div className="cc-bot-modal" role="dialog" aria-modal="true" aria-labelledby="cc-bot-modal-title">
+      <div className="cc-bot-modal cc-bot-modal-full" role="dialog" aria-modal="true" aria-labelledby="cc-bot-modal-title">
         <div className="cc-bot-modal-head">
           <div className="cc-bot-modal-title">
-            <span><ScenovaIcon name="bot" size={24}/></span>
+            <span><ScenovaIcon name="bot" size={26}/></span>
             <div>
-              <h2 id="cc-bot-modal-title">ตั้งค่าบอท</h2>
-              <small>เลือกบุคลิกการเทรดก่อน แล้วค่อยกำหนดวิธีเข้า จำนวนไม้ และ Lot</small>
+              <h2 id="cc-bot-modal-title">ตั้งค่าบอททั้งหมด</h2>
+              <small>ทุกค่าที่มีผลกับการเข้าออเดอร์ กำไร ขาดทุน และเวลาเทรด อยู่ในหน้าต่างนี้</small>
             </div>
           </div>
           <div className="cc-bot-modal-head-actions">
@@ -1940,9 +1978,9 @@ function BotSettingsModal(props:any) {
             <div className="cc-mode-section-head">
               <div>
                 <span className="cc-mode-step">1</span>
-                <div><b>เลือกโหมดการเทรด</b><small>เลือกว่าต้องการให้บอท “นิ่ง”, “กลาง ๆ”, “ไว” หรือ “เปิดเป็นชุด”</small></div>
+                <div><b>เลือกโหมดการเทรด</b><small>โหมดกำหนดความไวและพฤติกรรมการเข้า ส่วนกำไร/SL ใช้ค่าที่คุณตั้งด้านล่าง</small></div>
               </div>
-              <span className="cc-mode-recommend"><ScenovaIcon name="info" size={14}/>ถ้ายังไม่แน่ใจ เริ่มที่ “สมดุล”</span>
+              <span className="cc-mode-recommend"><ScenovaIcon name="info" size={15}/>ถ้ายังไม่แน่ใจ เริ่มที่ “สมดุล”</span>
             </div>
 
             <div className="cc-mode-card-grid">
@@ -1953,7 +1991,7 @@ function BotSettingsModal(props:any) {
                 return (
                   <div key={value} className={"cc-mode-card "+(active?"active ":"")+(helpOpen?"help-open":"")}>
                     <button type="button" className="cc-mode-select" onClick={()=>props.onEdit?.("tradingProfile",value)}>
-                      <span className="cc-mode-card-icon"><ScenovaIcon name={icon} size={19}/></span>
+                      <span className="cc-mode-card-icon"><ScenovaIcon name={icon} size={20}/></span>
                       <span className="cc-mode-card-copy">
                         <span className="cc-mode-badge">{info.badge}</span>
                         <b>{info.title}</b>
@@ -1961,12 +1999,7 @@ function BotSettingsModal(props:any) {
                       </span>
                       {active?<span className="cc-mode-active-mark">กำลังใช้</span>:null}
                     </button>
-                    <button
-                      type="button"
-                      className="cc-mode-help-button"
-                      aria-label={"อ่านรายละเอียดโหมด "+info.title}
-                      onClick={()=>props.onProfileHelp?.(helpOpen?"":value)}
-                    >!</button>
+                    <button type="button" className="cc-mode-help-button" aria-label={"อ่านรายละเอียดโหมด "+info.title} onClick={()=>props.onProfileHelp?.(helpOpen?"":value)}>!</button>
                   </div>
                 );
               })}
@@ -1974,7 +2007,7 @@ function BotSettingsModal(props:any) {
 
             {activeHelp&&<div className="cc-mode-help-panel">
               <div className="cc-mode-help-title">
-                <span><ScenovaIcon name="info" size={18}/></span>
+                <span><ScenovaIcon name="info" size={19}/></span>
                 <div><b>{activeHelp.title} — คืออะไร?</b><p>{activeHelp.detail}</p></div>
                 <button type="button" onClick={()=>props.onProfileHelp?.("")}>ปิดคำอธิบาย</button>
               </div>
@@ -1987,34 +2020,28 @@ function BotSettingsModal(props:any) {
           </section>
 
           <section className="cc-bot-basic-section">
-            <div className="cc-mode-section-head compact">
-              <div><span className="cc-mode-step">2</span><div><b>ตั้งค่าพื้นฐาน</b><small>ค่ากลุ่มนี้กำหนดว่า EA เทรดอะไร เข้าแบบไหน และเปิดได้กี่ไม้</small></div></div>
-            </div>
-
+            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">2</span><div><b>ตั้งค่าพื้นฐาน</b><small>เลือกวิธีเข้า จำนวนไม้ และเพดาน Lot</small></div></div></div>
             <div className="cc-bot-basic-grid">
               <div className="cc-bot-basic-card">
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="gold" size={18}/></span><div><b>Symbol</b><small>สินทรัพย์ที่ EA กำลังทำงานอยู่</small></div></div>
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="gold" size={19}/></span><div><b>Symbol</b><small>สินทรัพย์ที่ EA กำลังทำงานอยู่</small></div></div>
                 <div className="cc-bot-basic-readonly">{props.symbol || "—"}</div>
               </div>
-
               <label className="cc-bot-basic-card">
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="bot" size={18}/></span><div><b>โหมดเข้าออเดอร์</b><small>AUTO ให้ระบบดู Momentum + Trend ก่อนเลือก BUY/SELL</small></div></div>
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="bot" size={19}/></span><div><b>โหมดเข้าออเดอร์</b><small>AUTO ให้ระบบเลือก BUY/SELL จาก Momentum + Trend</small></div></div>
                 <select className="input" value={String(props.settings.entryMode||"AUTO_MOMENTUM")} onChange={e=>props.onEdit?.("entryMode",e.target.value)}>
                   <option value="AUTO_MOMENTUM">AUTO MOMENTUM — ให้ระบบเลือกทิศทาง</option>
                   <option value="BUY_ONLY">BUY ONLY — เปิดเฉพาะ Buy</option>
                   <option value="SELL_ONLY">SELL ONLY — เปิดเฉพาะ Sell</option>
                 </select>
               </label>
-
               <label className="cc-bot-basic-card">
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="layers" size={18}/></span><div><b>จำนวนไม้สูงสุด</b><small>จำนวน Position สูงสุดที่รอบนี้อนุญาต; ระบบอาจเปิดน้อยกว่าถ้าความเสี่ยงไม่ผ่าน</small></div></div>
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="layers" size={19}/></span><div><b>จำนวนไม้สูงสุด</b><small>เป็นเพดาน Position; ระบบอาจเปิดน้อยกว่าถ้าความเสี่ยงหรือเงื่อนไขไม่ผ่าน</small></div></div>
                 <select className="input" value={String(props.settings.maxPositions||1)} onChange={e=>props.onEdit?.("maxPositions",e.target.value)}>
                   {[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}
                 </select>
               </label>
-
               <label className="cc-bot-basic-card">
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="lot" size={18}/></span><div><b>Lot สูงสุด</b><small>เป็นเพดาน Lot; Adaptive ลดให้เล็กลงได้ตามความเสี่ยง แต่จะไม่เพิ่มเกินค่านี้</small></div></div>
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="lot" size={19}/></span><div><b>Lot สูงสุด</b><small>Adaptive ลดได้ตามความเสี่ยง แต่จะไม่เพิ่มเกินค่านี้</small></div></div>
                 <select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>
                   {[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}
                 </select>
@@ -2022,21 +2049,105 @@ function BotSettingsModal(props:any) {
             </div>
           </section>
 
+          <section className="cc-modal-settings-section">
+            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">3</span><div><b>เป้าหมายกำไร</b><small>เลือกกำไรรวมทั้งชุด หรือกำไรต่อไม้; เปิดอย่างหนึ่ง อีกอย่างจะปิดเอง</small></div></div></div>
+            <div className="cc-modal-setting-grid two">
+              <SettingTile icon="profit" title="กำไรทั้งชุดถึงแล้วปิด" description="รวมกำไรทุก Position ใน Basket เดียวกัน" wide accent={basketProfitEnabled}>
+                <BasketProfitTargetField
+                  value={props.settings.basketProfitTargetMoney}
+                  trailPercent={props.settings.profitRunTrailPercent}
+                  targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
+                  percentOptions={[5,10,15,20,25,30,40,50]}
+                  defaultTarget="10"
+                  defaultPercent="20"
+                  onTargetChange={(v:string)=>props.onEdit?.("basketProfitTargetMoney",v)}
+                  onPercentChange={(v:string)=>props.onEdit?.("profitRunTrailPercent",v)}
+                />
+              </SettingTile>
+              <SettingTile icon="orders" title="กำไรต่อไม้" description="Position ไหนถึงกำไรที่ตั้ง ปิดเฉพาะไม้นั้น" wide accent={perPositionProfitEnabled}>
+                <ToggleMoneyField label="เปิดกำไรต่อไม้" defaultValue="2" value={props.settings.perPositionProfitMoney} suffix="กำไรต่อ Position" onChange={(v:string)=>props.onEdit?.("perPositionProfitMoney",v)}/>
+              </SettingTile>
+            </div>
+            {burstMode&&<div className="cc-modal-auto-strip">
+              <span><small>Auto Burst ที่ EA คำนวณ</small><b>{"$"+Number(props.metrics?.burstTargetMoney||0).toFixed(2)}</b></span>
+              <span><small>เป้า Basket ที่ EA ใช้จริง</small><b>{Number(props.effectiveBasketProfit||0)>0?"$"+Number(props.effectiveBasketProfit).toFixed(2):"ปิด"}</b></span>
+              <span><small>โหมดปิดจริง</small><b>{String(props.profitControlMode||"รอ EA")}</b></span>
+            </div>}
+            <div className="cc-modal-setting-grid one">
+              <SettingTile icon="pnl" title="เป้ากำไรวันนี้" description="ทำงานแยกจากกำไร Basket/ต่อไม้; ถึงเป้าแล้วเลือกหยุดหรือปล่อยต่อ" wide>
+                <DailyProfitTargetField
+                  value={props.settings.dailyProfitTargetMoney}
+                  continueAfterTarget={Boolean(props.settings.dailyProfitContinueAfterTarget)}
+                  drawdownPercent={props.settings.dailyProfitDrawdownPercent}
+                  targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
+                  percentOptions={[5,10,15,20,25,30,40,50]}
+                  defaultTarget="10"
+                  defaultPercent="20"
+                  onTargetChange={(v:string)=>props.onEdit?.("dailyProfitTargetMoney",v)}
+                  onContinueChange={(v:boolean)=>props.onEdit?.("dailyProfitContinueAfterTarget",v)}
+                  onPercentChange={(v:string)=>props.onEdit?.("dailyProfitDrawdownPercent",v)}
+                />
+              </SettingTile>
+            </div>
+          </section>
+
+          <section className="cc-modal-settings-section">
+            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">4</span><div><b>ป้องกันขาดทุน / Stop Loss</b><small>ปิดสวิตช์ SL ต่อไม้ = ใช้ SL ระบบ ATR; เปิด = ใช้ระยะที่คุณกำหนด</small></div></div></div>
+            <div className="cc-modal-setting-grid four">
+              <SettingTile icon="shield" title="SL ระบบ (Auto)" description="ATR + โปรไฟล์ + สภาพตลาด">
+                <div className="cc-readout"><b>{Number(props.hardStopMultiplier||0)>0?"ATR × "+Number(props.hardStopMultiplier).toFixed(2):"กำลังคำนวณ"}</b><small>{Number(props.systemHardStopDistancePoints||0)>0?"ระยะระบบตอนนี้ "+Number(props.systemHardStopDistancePoints).toFixed(0)+" points":"รอ ATR จาก EA"}</small></div>
+              </SettingTile>
+              <SettingTile icon="orders" title="SL ต่อไม้" description="Stop Loss จริงที่ส่งไป Broker">
+                <ToggleNumberField
+                  label={manualSl>0?"ใช้ SL กำหนดเอง":"ใช้ SL ตามระบบ"}
+                  defaultValue={String(Math.max(1,Math.round(Number(props.systemHardStopDistancePoints||1000))))}
+                  value={props.settings.manualStopLossPoints}
+                  prefix="PT"
+                  suffix="ระยะจากราคาเปิด"
+                  onChange={(v:string)=>props.onEdit?.("manualStopLossPoints",v)}
+                />
+              </SettingTile>
+              <SettingTile icon="pnl" title="หยุดเมื่อขาดทุนวันนี้" description="ขาดทุนรวมวันนี้ถึงจำนวนนี้ ระบบหยุดตาม Daily Loss">
+                <ToggleMoneyField label="เปิดขาดทุนรายวัน" defaultValue="25" value={props.settings.dailyLossMoney} suffix="ขาดทุนรวมวันนี้" onChange={(v:string)=>props.onEdit?.("dailyLossMoney",v)}/>
+              </SettingTile>
+              <SettingTile icon="risk" title="ปิดทั้งชุดเมื่อขาดทุน" description={burstMode?"เปิด = ใช้ค่าคุณ · ปิด = Burst ใช้ Auto":"รวมขาดทุนทุกไม้ใน Basket"}>
+                <ToggleMoneyField label="เปิด Basket Loss" defaultValue="10" value={props.settings.maxBasketLossMoney} suffix="ขาดทุนรวมทั้งชุด" onChange={(v:string)=>props.onEdit?.("maxBasketLossMoney",v)}/>
+              </SettingTile>
+            </div>
+            <div className="cc-modal-auto-strip">
+              <span><small>โหมด SL ต่อไม้</small><b>{manualSl>0?"กำหนดเอง":"ตามระบบ ATR"}</b></span>
+              <span><small>EA ใช้ SL จริง</small><b>{Number(props.hardStopDistancePoints||0)>0?Number(props.hardStopDistancePoints).toFixed(0)+" pt":"รอข้อมูล"}</b></span>
+              <span><small>EA ใช้ Basket Loss</small><b>{"$"+Number(props.effectiveBasketLoss||0).toFixed(2)}</b></span>
+            </div>
+          </section>
+
+          <section className="cc-modal-settings-section">
+            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">5</span><div><b>เวลาเทรด</b><small>อ้างอิงเวลา Server ของ Broker ไม่ใช่เวลาบนคอมพิวเตอร์</small></div></div></div>
+            <div className="cc-modal-setting-grid four">
+              <SettingTile icon="clock" title="เริ่ม Session" description="เวลา Server">
+                <select className="input" value={String(props.settings.sessionStartHour)} onChange={e=>props.onEdit?.("sessionStartHour",e.target.value)}>{[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select>
+              </SettingTile>
+              <SettingTile icon="clock" title="จบ Session" description="เวลา Server">
+                <select className="input" value={String(props.settings.sessionEndHour)} onChange={e=>props.onEdit?.("sessionEndHour",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23,24].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select>
+              </SettingTile>
+              <SettingTile icon="timer" title="Session ปัจจุบัน" description="อ่านจาก EA"><div className="cc-readout"><b>{String(props.metrics?.sessionProfile||"UNKNOWN")}</b><small>โปรไฟล์ช่วงเวลาตลาด</small></div></SettingTile>
+              <SettingTile icon="spread" title="Spread ตอนนี้" description={"Adaptive limit "+String(props.spreadLimitLabel||"—")}><div className="cc-readout"><b>{String(props.spreadValueLabel||"—")}</b><small>{String(props.spreadStatusLabel||"—")}</small></div></SettingTile>
+            </div>
+          </section>
+
           <div className="cc-bot-modal-summary">
-            <div><small>โหมดที่เลือก</small><b>{tradingProfileHelp[profile]?.title || profile}</b></div>
+            <div><small>โหมด</small><b>{tradingProfileHelp[profile]?.title || profile}</b></div>
             <div><small>จำนวนไม้</small><b>{Number(props.settings.maxPositions||1)} ไม้</b></div>
             <div><small>Lot สูงสุด</small><b>{Number(props.settings.lot||0.01).toFixed(2)}</b></div>
-            <div><small>สถานะการเชื่อมค่า</small><b>{props.syncLabel || "รอ EA"}</b></div>
+            <div><small>EA Sync</small><b>{props.syncLabel || "รอ EA"}</b></div>
           </div>
         </div>
 
         <div className="cc-bot-modal-footer">
-          <div><ScenovaIcon name="info" size={15}/><span>การเปลี่ยนโหมดจะปรับ “จังหวะและความไว” ของระบบ ส่วนเป้ากำไรและ SL ใช้ค่าที่คุณตั้งในแท็บด้านหลัง</span></div>
+          <div><ScenovaIcon name="info" size={16}/><span>กดบันทึกแล้ว Server จะส่ง UPDATE_SETTINGS ให้ EA ผ่าน Heartbeat และสถานะ EA Sync จะยืนยันว่าค่าที่ EA ใช้ตรงกับหน้าเว็บ</span></div>
           <div>
             <button type="button" className="btn" onClick={()=>props.onClose?.()} disabled={props.busy}>ปิดหน้าต่าง</button>
-            <button type="button" className="btn cc-save-primary" disabled={props.busy||!props.dirty} onClick={props.onSave}>
-              <ScenovaIcon name="save" size={16}/>{props.busy?"กำลังบันทึก...":"บันทึกและปิด"}
-            </button>
+            <button type="button" className="btn cc-save-primary" disabled={props.busy||!props.dirty} onClick={props.onSave}><ScenovaIcon name="save" size={17}/>{props.busy?"กำลังบันทึก...":"บันทึกทั้งหมด"}</button>
           </div>
         </div>
       </div>
