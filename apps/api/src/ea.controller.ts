@@ -10,7 +10,7 @@ import {
 } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { CryptoService } from "./security";
-import { installerDownloadPath, isVersionAtLeast, latestInstallerVersion } from "./release-version";
+import { installerDownloadPath, isVersionExact, latestInstallerVersion } from "./release-version";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
@@ -465,7 +465,7 @@ export class EaController {
 
     const agentVersionRequired = latestInstallerVersion();
     const reportedAgentVersion = String(body.agentVersion || "").trim();
-    const agentUpdateRequired = !isVersionAtLeast(reportedAgentVersion, agentVersionRequired);
+    const agentUpdateRequired = !isVersionExact(reportedAgentVersion, agentVersionRequired);
 
     return {
       ok: true,

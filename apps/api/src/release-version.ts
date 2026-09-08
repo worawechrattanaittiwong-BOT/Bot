@@ -32,10 +32,14 @@ function normalizedExactVersion(version: unknown) {
   return String(version || "").trim().replace(/^v/i, "");
 }
 
-export function isEaVersionExact(current: unknown, required: unknown) {
+export function isVersionExact(current: unknown, required: unknown) {
   const a = normalizedExactVersion(current);
   const b = normalizedExactVersion(required);
   return Boolean(a && b && a === b);
+}
+
+export function isEaVersionExact(current: unknown, required: unknown) {
+  return isVersionExact(current, required);
 }
 
 function artifactPath() {
