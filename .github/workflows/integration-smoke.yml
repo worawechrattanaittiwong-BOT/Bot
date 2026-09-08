@@ -54,6 +54,8 @@ jobs:
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/007_adaptive_spread.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/008_market_open_adaptive.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/008_market_open_adaptive.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/010_trade_journal.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/010_trade_journal.sql
 
       - name: Build API
         run: npm run build -w @bot/api
@@ -309,6 +311,15 @@ jobs:
 
           HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"RUNNING\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           test "$(printf '%s' "$HB" | jq -r '.access')" = "true"
+
+          echo "[integration] trade journal records entries/exits without affecting Start"
+          curl -fsS -X POST "$BASE/ea/journal" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"dealTicket\":\"900001\",\"positionId\":\"700001\",\"eventType\":\"ENTRY\",\"direction\":\"BUY\",\"volume\":0.01,\"price\":4400.25,\"entryTrigger\":\"OB_FIB_PULLBACK\",\"entryModel\":\"OB_FIB_PULLBACK\",\"entryQuality\":\"A\",\"entryQualityScore\":87,\"marketRegime\":\"TREND_UP\",\"marketRegimeDetail\":\"TREND_PULLBACK\",\"fibSetupScore\":91,\"orderBlockQuality\":84,\"confidence\":51,\"basketIndex\":1}" >/dev/null
+          curl -fsS -X POST "$BASE/ea/journal" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"dealTicket\":\"900002\",\"positionId\":\"700001\",\"eventType\":\"EXIT\",\"direction\":\"BUY\",\"volume\":0.01,\"price\":4412.50,\"netProfit\":12.50,\"entryTrigger\":\"OB_FIB_PULLBACK\",\"entryModel\":\"OB_FIB_PULLBACK\",\"entryQuality\":\"A\",\"entryQualityScore\":87,\"marketRegime\":\"TREND_UP\",\"marketRegimeDetail\":\"TREND_CONTINUATION\",\"fibSetupScore\":91,\"orderBlockQuality\":84,\"confidence\":51,\"basketIndex\":1}" >/dev/null
+          JOURNAL_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$JOURNAL_DASH" | jq -r '.tradeJournal.stats.closedTrades')" = "1"
+          test "$(printf '%s' "$JOURNAL_DASH" | jq -r '.tradeJournal.stats.wins')" = "1"
+          test "$(printf '%s' "$JOURNAL_DASH" | jq -r '.tradeJournal.stats.netProfit')" = "12.5"
+          test "$(printf '%s' "$JOURNAL_DASH" | jq -r '.tradeJournal.recent | length')" = "2"
 
           echo "[integration] entitlement expiry forces SAFE_STOP on the next heartbeat"
           PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update trial_grants set expires_at=now()-interval '1 second' where mt5_account_id='$ACCOUNT_ID';" >/dev/null
