@@ -16,6 +16,7 @@ type Dashboard = {
   trialRequest: any;
   liveStatus: any;
   softwareUpdate: any;
+  tradeJournal: any;
 };
 
 type BrokerCatalog = {
@@ -470,6 +471,18 @@ export default function DashboardPage() {
     DATA_NOT_READY: "รอข้อมูล",
     DISABLED: "ปิดการวิเคราะห์"
   };
+  const marketRegimeDetailLabel: Record<string,string> = {
+    NEWS_IMPULSE: "News Impulse",
+    VOLATILITY_EXPANSION: "Volatility Expansion",
+    BREAKOUT_EXPANSION: "Breakout Expansion",
+    TREND_PULLBACK: "Trend Pullback",
+    TREND_ACCELERATION: "Trend Acceleration",
+    TREND_CONTINUATION: "Trend Continuation",
+    LOW_VOLATILITY: "Low Volatility",
+    RANGE_BREAK_ATTEMPT: "Range Break Attempt",
+    RANGE_ROTATION: "Range Rotation",
+    TRANSITION: "Transition"
+  };
   const currentPositions = Math.max(0, Number(metrics.positions || 0));
   const configuredMaxPositions = Math.max(1, Number(settings.maxPositions || 1));
 
@@ -543,11 +556,20 @@ export default function DashboardPage() {
   const entryBiasLabel = entryBias === "BUY" ? "BUY ตามเทรนด์" : entryBias === "SELL" ? "SELL ตามเทรนด์" : "BUY / SELL ตามสัญญาณ";
   const trendText = (value:any) => Number(value) > 0 ? "ขึ้น" : Number(value) < 0 ? "ลง" : "กลาง";
   const positionCapacityLabel = currentPositions + " / " + effectiveMaxPositions + (effectiveMaxPositions !== configuredMaxPositions ? " · ตั้ง " + configuredMaxPositions : "");
+  const ladderProgressPoints = Number(metrics.basketLadderProgressPoints || 0);
+  const ladderRequiredPoints = Number(metrics.basketLadderRequiredPoints || 0);
+  const ladderRung = Number(metrics.basketLadderRung || Math.max(1,currentPositions+1));
   const basketAddExplanation = currentPositions > 0 && currentPositions < effectiveMaxPositions
     ? "เปิดแล้ว " + currentPositions + "/" + configuredMaxPositions + " ไม้ · " +
-      (pyramidRequiredPoints > 0 ? "รอราคาเดินต่อฝั่งกำไร " + Math.max(0,pyramidRequiredPoints-pyramidProgressPoints).toFixed(0) + " points ก่อนเพิ่มไม้" : "รอ Setup / โครงสร้าง / Price Action ยืนยันก่อนเพิ่มไม้") +
-      " · Position สูงสุดคือเพดาน ไม่ใช่ยิงครบทุกไม้พร้อมกัน"
+      (ladderRequiredPoints > 0
+        ? "Ladder rung " + ladderRung + " · ขาดอีก " + Math.max(0,ladderRequiredPoints-ladderProgressPoints).toFixed(0) + " points"
+        : pyramidRequiredPoints > 0
+          ? "รอราคาเดินต่อฝั่งกำไร " + Math.max(0,pyramidRequiredPoints-pyramidProgressPoints).toFixed(0) + " points ก่อนเพิ่มไม้"
+          : "รอ Setup / โครงสร้าง / Price Action ยืนยันก่อนเพิ่มไม้") +
+      " · ไม้แรกไม่ถูก Ladder ดัก"
     : "";
+  const journalStats = data?.tradeJournal?.stats || {};
+  const journalRecent = Array.isArray(data?.tradeJournal?.recent) ? data.tradeJournal.recent : [];
   const liveExplanation = basketAddExplanation || liveStatus.detail || "บอทกำลังประเมิน S/R, Order Block, Fibonacci, Structure, Price Action และ Momentum แบบเรียลไทม์";
   const hideModeIrrelevantStatus = String(liveStatus.code || "") === "RISK_LIMIT_TOO_SMALL";
   const visibleLiveStatus = hideModeIrrelevantStatus
