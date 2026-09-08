@@ -46,6 +46,7 @@ const defaultSettings = {
   perPositionProfitMoney: 0,
   profitRunTrailPercent: 0,
   perPositionLossMoney: 0,
+  manualStopLossPoints: 0,
   minOrderIntervalMs: 300,
   maxOrdersPerMinute: 120,
   adaptiveEngine: true,
@@ -465,7 +466,8 @@ export default function DashboardPage() {
     isMt5Online &&
     metrics.configuredMaxPositions !== undefined &&
     metrics.configuredBasketProfitTarget !== undefined &&
-    metrics.configuredMaxBasketLoss !== undefined;
+    metrics.configuredMaxBasketLoss !== undefined &&
+    metrics.manualStopLossPoints !== undefined;
   const eaSettingsSynced =
     eaSettingsTelemetryReady &&
     String(metrics.tradingProfile || "") === String(settings.tradingProfile || "BALANCED") &&
@@ -475,7 +477,7 @@ export default function DashboardPage() {
     nearlyEqual(metrics.appliedPerPositionProfit, settings.perPositionProfitMoney) &&
     nearlyEqual(metrics.appliedProfitRunTrailPercent, settings.profitRunTrailPercent) &&
     nearlyEqual(metrics.configuredMaxBasketLoss, settings.maxBasketLossMoney) &&
-    nearlyEqual(metrics.appliedPerPositionLoss, settings.perPositionLossMoney);
+    nearlyEqual(metrics.manualStopLossPoints, settings.manualStopLossPoints);
   const settingsSyncLabel = settingsDirty
     ? "ยังไม่บันทึก"
     : !eaSettingsTelemetryReady
@@ -490,6 +492,10 @@ export default function DashboardPage() {
       : "warn";
   const hardStopMultiplier = Number(metrics.hardStopAtrMultiplier || 0);
   const hardStopDistancePoints = Number(metrics.hardStopDistancePoints || 0);
+  const systemHardStopDistancePoints = Number(metrics.systemHardStopDistancePoints ?? metrics.hardStopDistancePoints ?? 0);
+  const manualStopLossPoints = Number(settings.manualStopLossPoints || 0);
+  const stopLossMode = String(metrics.stopLossMode || (manualStopLossPoints > 0 ? "MANUAL_POINTS" : "SYSTEM_ATR"));
+  const stopLossModeLabel = stopLossMode === "MANUAL_POINTS" ? "กำหนดเอง" : "ตามระบบ ATR";
   const effectiveBasketProfit = Number(metrics.effectiveBasketProfitTarget ?? metrics.basketProfitTarget ?? 0);
   const effectiveBasketLoss = Number(metrics.effectiveMaxBasketLoss ?? settings.maxBasketLossMoney ?? 0);
   const profitControlMode = String(metrics.profitControlMode || "");
@@ -773,6 +779,8 @@ export default function DashboardPage() {
       "InpRiskPerOrderPercent=" + settings.riskPerOrderPercent,
       "InpAllowMinimumLotOverride=" + Boolean(settings.allowMinimumLotOverride),
       "InpHardStopAtrMultiplier=" + settings.hardStopAtrMultiplier,
+      "InpManualStopLossPoints=" + Number(settings.manualStopLossPoints || 0),
+      "InpPerPositionLossMoney=0",
       "InpAtrPeriod=" + settings.atrPeriod,
       "InpConfidenceThreshold=" + settings.confidenceThreshold,
       "InpSessionStartHour=" + settings.sessionStartHour,
@@ -884,6 +892,7 @@ export default function DashboardPage() {
         "perPositionProfitMoney",
         "profitRunTrailPercent",
         "perPositionLossMoney",
+        "manualStopLossPoints",
         "basketTriggerMoney",
         "basketTrailMoney",
         "maxBasketLossMoney",
@@ -919,6 +928,9 @@ export default function DashboardPage() {
       // Clear hidden legacy values on every save so they cannot affect trades.
       payload.basketTriggerMoney = 0;
       payload.basketTrailMoney = 0;
+      // EA 1.017 uses a real Broker SL. Never send the retired floating-money
+      // per-position loss control from the web.
+      payload.perPositionLossMoney = 0;
       if (Number(payload.basketProfitTargetMoney || 0) <= 0) {
         payload.profitRunTrailPercent = 0;
       }
@@ -1235,11 +1247,22 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="cc-settings-grid cc-risk-grid">
-                      <SettingTile icon="shield" title="Hard SL ต่อไม้ที่ Broker" description="EA ส่ง Stop Loss จริงไปกับทุกออเดอร์; โปรไฟล์กำหนดระยะตาม ATR">
+                      <SettingTile icon="shield" title="SL ระบบ (Auto)" description="ใช้ ATR + โปรไฟล์ + สภาพตลาด และส่ง Stop Loss จริงไปที่ Broker">
                         <div className="cc-readout">
                           <b>{hardStopMultiplier>0 ? "ATR × "+hardStopMultiplier.toFixed(2) : "กำลังคำนวณ"}</b>
-                          <small>{hardStopDistancePoints>0 ? "ระยะปัจจุบันประมาณ "+hardStopDistancePoints.toFixed(0)+" points" : "รอ ATR จาก EA"}</small>
+                          <small>{systemHardStopDistancePoints>0 ? "ระยะระบบตอนนี้ประมาณ "+systemHardStopDistancePoints.toFixed(0)+" points" : "รอ ATR จาก EA"}</small>
                         </div>
+                      </SettingTile>
+                      <SettingTile icon="orders" title="SL ต่อไม้" description="ปิดสวิตช์ = ใช้ SL ระบบด้านบน · เปิดสวิตช์ = กำหนดระยะ SL เอง">
+                        <ToggleNumberField
+                          label={manualStopLossPoints>0 ? "ใช้ SL กำหนดเอง" : "ใช้ SL ตามระบบ"}
+                          defaultValue={String(Math.max(1,Math.round(systemHardStopDistancePoints||1000)))}
+                          value={settings.manualStopLossPoints}
+                          prefix="PT"
+                          suffix="ระยะจากราคาเปิด"
+                          onChange={(v:string)=>editSetting("manualStopLossPoints",v)}
+                        />
+                        {manualStopLossPoints<=0&&<div className="cc-auto-fallback"><span>System SL</span><b>{systemHardStopDistancePoints>0?systemHardStopDistancePoints.toFixed(0)+" pt":"รอ ATR"}</b><small>ระบบปรับตามตลาดอัตโนมัติ</small></div>}
                       </SettingTile>
                       <SettingTile icon="pnl" title="หยุดเมื่อขาดทุนวันนี้" description="ขาดทุนรวมของบอทวันนี้ถึงจำนวนนี้ → ปิด/หยุดตาม Daily Loss">
                         <ToggleMoneyField label="เปิดขาดทุนรายวัน" defaultValue="25" value={settings.dailyLossMoney} suffix="ขาดทุนรวมวันนี้" onChange={(v:string)=>editSetting("dailyLossMoney",v)}/>
@@ -1248,14 +1271,11 @@ export default function DashboardPage() {
                         <ToggleMoneyField label="เปิด Basket Loss" defaultValue="10" value={settings.maxBasketLossMoney} suffix="ขาดทุนรวมทั้งชุด" onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}/>
                         {tradingProfile==="BURST_10"&&Number(settings.maxBasketLossMoney||0)<=0&&<div className="cc-auto-fallback"><span>Auto Burst</span><b>{"$"+Number(metrics.burstLossMoney||0).toFixed(2)}</b><small>EA คำนวณใหม่แต่ละ Cycle</small></div>}
                       </SettingTile>
-                      <SettingTile icon="orders" title="ตัดขาดทุนแต่ละไม้" description="ถึงจำนวนนี้ → ปิดเฉพาะ Position นั้น; ทำงานเพิ่มจาก Hard SL">
-                        <ToggleMoneyField label="เปิด Loss ต่อไม้" defaultValue="2" value={settings.perPositionLossMoney} suffix="ขาดทุนต่อ Position" onChange={(v:string)=>editSetting("perPositionLossMoney",v)}/>
-                      </SettingTile>
                     </div>
                     <div className="cc-applied-settings-strip">
+                      <span><small>โหมด SL ต่อไม้</small><b>{stopLossModeLabel}</b></span>
+                      <span><small>EA ใช้ SL จริง</small><b>{hardStopDistancePoints>0 ? hardStopDistancePoints.toFixed(0)+" pt" : "รอข้อมูล"}</b></span>
                       <span><small>EA ใช้ Basket Loss</small><b>{"$"+effectiveBasketLoss.toFixed(2)}</b></span>
-                      <span><small>EA ใช้ Loss ต่อไม้</small><b>{Number(metrics.appliedPerPositionLoss||0)>0 ? "$"+Number(metrics.appliedPerPositionLoss).toFixed(2) : "ปิด"}</b></span>
-                      <span><small>Hard SL</small><b>{hardStopDistancePoints>0 ? hardStopDistancePoints.toFixed(0)+" pt" : "รอข้อมูล"}</b></span>
                     </div>
                   </>}
 
@@ -1877,6 +1897,87 @@ function MoneyInput(props: any) {
         }}
       />
       {props.suffix ? <small>{props.suffix}</small> : null}
+    </div>
+  );
+}
+
+function NumberInput(props: any) {
+  const externalValue = String(props.value ?? "");
+  const [draft, setDraft] = useState(externalValue);
+
+  useEffect(() => {
+    setDraft(externalValue);
+  }, [externalValue]);
+
+  const commit = () => {
+    const normalized = String(draft || "").replace(",", ".").trim();
+    const value = Number(normalized);
+    if (!Number.isFinite(value) || value <= 0) {
+      setDraft(externalValue);
+      return;
+    }
+    const next = String(Math.round(value * 100) / 100);
+    setDraft(next);
+    if (next !== externalValue) props.onCommit?.(next);
+  };
+
+  return (
+    <div className={"money-input-shell " + (props.disabled ? "disabled" : "")}>
+      {props.prefix ? <span className="money-prefix">{props.prefix}</span> : null}
+      <input
+        className="input money-input"
+        type="text"
+        inputMode="decimal"
+        aria-label={props.ariaLabel || "ค่าตัวเลข"}
+        value={draft}
+        disabled={Boolean(props.disabled)}
+        onFocus={e=>e.currentTarget.select()}
+        onChange={e=>{
+          const value = e.target.value.replace(",", ".");
+          if (value === "" || /^\d*(?:\.\d{0,2})?$/.test(value)) {
+            setDraft(value);
+          }
+        }}
+        onBlur={commit}
+        onKeyDown={e=>{
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      {props.suffix ? <small>{props.suffix}</small> : null}
+    </div>
+  );
+}
+
+function ToggleNumberField(props: any) {
+  const enabled = Number(props.value || 0) > 0;
+  const selectedValue = enabled ? String(props.value) : String(props.defaultValue || "1");
+
+  return (
+    <div className={"field toggle-select-field toggle-money-field " + (enabled ? "enabled" : "") + (props.disabled ? " disabled" : "")}>
+      <label className="toggle-setting-label">
+        <input
+          type="checkbox"
+          aria-label={props.label || "เปิดหรือปิดการตั้งค่านี้"}
+          checked={enabled}
+          disabled={Boolean(props.disabled)}
+          onChange={e=>props.onChange?.(e.target.checked ? selectedValue : "0")}
+        />
+        <span className="setting-toggle-track"><i/></span>
+        <span className="setting-toggle-text">{props.label || (enabled ? "เปิดใช้งาน" : "ปิดใช้งาน")}</span>
+      </label>
+      {enabled ? (
+        <NumberInput
+          value={selectedValue}
+          disabled={Boolean(props.disabled)}
+          prefix={props.prefix}
+          suffix={props.suffix}
+          ariaLabel={props.label}
+          onCommit={(value:string)=>props.onChange?.(value)}
+        />
+      ) : null}
     </div>
   );
 }
