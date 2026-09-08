@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.019"
+#property version   "1.020"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -9,18 +9,6 @@ enum ENUM_ENTRY_MODE
    ENTRY_AUTO_MOMENTUM = 0,
    ENTRY_BUY_ONLY      = 1,
    ENTRY_SELL_ONLY     = 2
-};
-
-enum ENUM_TRADING_PROFILE
-{
-   PROFILE_SAFE       = 0,
-   PROFILE_BALANCED   = 1,
-   PROFILE_AGGRESSIVE = 2,
-   PROFILE_BURST_10   = 3,
-   // Keeps the full entry intelligence, but uses the user-configured Lot
-   // directly and removes adaptive volume throttling. Max Positions and Broker
-   // constraints remain authoritative.
-   PROFILE_MAXIMUM    = 4
 };
 
 enum ENUM_BOT_STATE
@@ -45,8 +33,6 @@ input string          InpApiBase              = "https://snvea-bot.online/backen
 input string          InpInstanceId           = "";
 input string          InpInstallToken         = "";
 input long            InpMagic                = 26090501;
-input ENUM_TRADING_PROFILE InpTradingProfile  = PROFILE_BALANCED;
-
 input double          InpLot                  = 0.01;
 input int             InpMaxPositions         = 10;
 input double          InpBasketTriggerMoney   = 2.00;
@@ -142,8 +128,6 @@ int    g_maxSpread;
 int    g_minOrderIntervalMs;
 int    g_maxOrdersPerMinute;
 ENUM_ENTRY_MODE g_entryMode;
-ENUM_TRADING_PROFILE g_tradingProfile;
-
 bool   g_adaptiveEngine;
 double g_riskPerOrderPercent;
 bool   g_allowMinimumLotOverride;
@@ -185,6 +169,13 @@ datetime g_fibSwingHighTime = 0;
 int    g_fibDirection = 0;
 double g_fibRetracement = 0.0;
 double g_fibConfluenceScore = 0.0;
+string g_fibTimeframe = "NONE";
+int    g_fibM5Direction = 0;
+double g_fibM5Retracement = 0.0;
+double g_fibM5Strength = 0.0;
+int    g_fibM15Direction = 0;
+double g_fibM15Retracement = 0.0;
+double g_fibM15Strength = 0.0;
 double g_structureScore = 0.0;
 double g_locationScore = 0.0;
 double g_entryScore = 0.0;
@@ -288,7 +279,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.019", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.020", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -363,7 +354,6 @@ int OnInit()
    g_minOrderIntervalMs = InpMinOrderIntervalMs;
    g_maxOrdersPerMinute = InpMaxOrdersPerMinute;
    g_entryMode = InpEntryMode;
-   g_tradingProfile = InpTradingProfile;
    g_adaptiveEngine = InpAdaptiveEngine;
    g_riskPerOrderPercent = MathMax(0.01, MathMin(5.0, InpRiskPerOrderPercent));
    g_allowMinimumLotOverride = InpAllowMinimumLotOverride;
@@ -381,7 +371,7 @@ int OnInit()
    RestoreAdaptiveRiskState();
    RestoreSpreadProfile();
    LoadBasketCycleState();
-   ApplyTradingProfile();
+   ApplyUnifiedTradingEngine();
 
    if(!MQLInfoInteger(MQL_TESTER))
    {
@@ -394,7 +384,7 @@ int OnInit()
       }
    }
 
-   // A 200 ms timer drives the controlled Burst queue. Heartbeat still keeps
+   // A 200 ms timer drives the controlled multi-position queue. Heartbeat keeps
    // its own second-based gate and is never sent at this frequency.
    EventSetMillisecondTimer(200);
 
@@ -498,9 +488,8 @@ void OnTick()
       double cycleProfit = BasketCycleProfit();
       double effectiveBasketTarget = EffectiveBasketProfitTarget();
 
-      // Manual Basket target behaves the same in every profile, including Burst.
-      // If no manual Basket/per-position profit target is configured, Burst falls
-      // back to its automatic Cycle target.
+      // If no manual Basket/per-position target is configured, multi-position
+      // trading falls back to an automatic cycle target.
       if(g_basketProfitTarget > 0.0 && g_perPositionProfit <= 0.0)
       {
          if(g_profitRunTrailPercent > 0.0)
@@ -541,7 +530,7 @@ void OnTick()
             return;
          }
       }
-      else if(IsBurstProfile() &&
+      else if(BasketFillEnabled() &&
               g_perPositionProfit <= 0.0 &&
               effectiveBasketTarget > 0.0 &&
               cycleProfit >= effectiveBasketTarget)
@@ -553,7 +542,7 @@ void OnTick()
       }
 
       double effectiveBasketLoss = EffectiveBasketLossLimit();
-      double lossControlProfit = IsBurstProfile() ? cycleProfit : profit;
+      double lossControlProfit = BasketFillEnabled() ? cycleProfit : profit;
       if(effectiveBasketLoss > 0.0 && lossControlProfit <= -effectiveBasketLoss)
       {
          CloseAllBasket("MAX_BASKET_LOSS");
@@ -653,31 +642,23 @@ void OnTick()
       return;
    }
 
-   if(IsBurstProfile() && g_burstActive)
+   if(BasketFillEnabled() && g_burstActive)
    {
       ProcessBurstQueue();
       return;
    }
 
-   if(IsBurstProfile() && count > 0)
+   if(BasketFillEnabled() && count > 0)
    {
       g_executionStatus = g_burstTargetPositions > 0 && g_burstRequestsSent >= g_burstTargetPositions
-         ? "BURST_COMPLETE"
-         : "BURST_PARTIAL_MANAGING";
+         ? "BASKET_FILL_COMPLETE"
+         : "BASKET_MANAGING";
       return;
    }
 
-   if(IsBurstProfile() && g_burstNeedsRearm)
-   {
-      double rearmThreshold = MathMax(2.0, g_adaptiveMomentumThreshold) * 0.35;
-      if(MathAbs(momentum) <= rearmThreshold)
-         g_burstNeedsRearm = false;
-      else
-      {
-         g_executionStatus = "WAITING_BURST_REARM";
-         return;
-      }
-   }
+   // A completed Basket can start a new cycle as soon as a fresh signal passes.
+   // There is no profile-specific rearm wait or hidden cooldown.
+   g_burstNeedsRearm = false;
 
    if(!CanSendOrder())
    {
@@ -722,7 +703,7 @@ void OnTick()
       }
    }
 
-   if(count > 0 && !IsBurstProfile() && !AdaptiveBasketAddAllowed(direction))
+   if(count > 0 && !BasketFillEnabled() && !AdaptiveBasketAddAllowed(direction))
    {
       g_executionStatus = "WAITING_BASKET_ADD";
       return;
@@ -742,10 +723,10 @@ void OnTick()
 
    g_executionStatus = direction > 0 ? "READY_BUY" : "READY_SELL";
    bool sent = SendMarketOrder(direction);
-   if(sent || IsBurstProfile())
+   if(sent || BasketFillEnabled())
    {
       RegisterOrderRequest();
-      if(IsBurstProfile())
+      if(BasketFillEnabled())
          ArmBurst(direction);
    }
 }
@@ -793,12 +774,12 @@ void OnTradeTransaction(
       RecalculateDailyClosedProfit();
       UpdateAdaptiveLossState(trans.deal);
       long dealEntry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
-      if(IsBurstProfile() &&
+      if(BasketFillEnabled() &&
          (dealEntry == DEAL_ENTRY_OUT || dealEntry == DEAL_ENTRY_OUT_BY) &&
          BasketPositionCount() == 0)
       {
          g_burstActive = false;
-         g_burstNeedsRearm = true;
+         g_burstNeedsRearm = false;
          g_burstTargetPositions = 0;
          g_burstRequestsSent = 0;
          g_burstTargetMoney = 0.0;
@@ -905,7 +886,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.019\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.020\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1020,21 +1001,19 @@ void SendHeartbeat()
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + diagnostics;
       string burstDiagnostics = StringFormat(
-         ",\"tradingProfile\":\"%s\",\"burstActive\":%s,\"burstTargetPositions\":%d,\"burstRequestsSent\":%d,\"burstFilledPositions\":%d,\"burstTargetMoney\":%.2f,\"burstLossMoney\":%.2f,\"burstNeedsRearm\":%s}}",
-         TradingProfileName(),
+         ",\"engineMode\":\"ADAPTIVE\",\"basketFillActive\":%s,\"basketTargetPositions\":%d,\"basketRequestsSent\":%d,\"basketFilledPositions\":%d,\"basketAutoTargetMoney\":%.2f,\"basketLossMoney\":%.2f}}",
          g_burstActive ? "true" : "false",
          g_burstTargetPositions,
          g_burstRequestsSent,
          BasketPositionCount(),
          g_burstTargetMoney,
-         g_burstLossMoney,
-         g_burstNeedsRearm ? "true" : "false"
+         g_burstLossMoney
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + burstDiagnostics;
 
       // Market-context telemetry makes every entry auditable on the web.
       string marketContextDiagnostics = StringFormat(
-         ",\"trendM1\":%d,\"trendM30\":%d,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
+         ",\"trendM1\":%d,\"trendM30\":%d,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
          g_trendM1,
          g_trendM30,
          DoubleToString(g_nearestSupport, SymbolDigitsNow()),
@@ -1050,6 +1029,14 @@ void SendHeartbeat()
          DoubleToString(g_fibSwingHigh, SymbolDigitsNow()),
          g_fibDirection,
          g_fibRetracement,
+         g_fibTimeframe,
+         g_fibM5Direction,
+         g_fibM5Retracement,
+         g_fibM5Strength,
+         g_fibM15Direction,
+         g_fibM15Retracement,
+         g_fibM15Strength,
+         g_fibConfluenceScore,
          g_structureScore,
          g_locationScore,
          g_entryScore,
@@ -1209,30 +1196,26 @@ int HttpPostJson(string url, string payload, string &response)
    return code;
 }
 
-bool IsBurstProfile()
+bool BasketFillEnabled()
 {
-   return g_tradingProfile == PROFILE_BURST_10;
+   return g_maxPositions > 1;
 }
 
-bool IsMaximumRiskProfile()
+void ApplyUnifiedTradingEngine()
 {
-   return g_tradingProfile == PROFILE_MAXIMUM;
-}
-
-string TradingProfileName()
-{
-   if(g_tradingProfile == PROFILE_SAFE) return "SAFE";
-   if(g_tradingProfile == PROFILE_AGGRESSIVE) return "AGGRESSIVE";
-   if(g_tradingProfile == PROFILE_BURST_10) return "BURST_10";
-   if(g_tradingProfile == PROFILE_MAXIMUM) return "MAXIMUM";
-   return "BALANCED";
-}
-
-void ApplyTradingProfile()
-{
+   // One transparent engine for every account. Users control Lot, direction,
+   // position count and exits; these internal values no longer change behind a
+   // hidden trading profile.
    g_adaptiveEngine = true;
    g_maxAtrPoints = 0.0;
-   if(!IsBurstProfile())
+   g_minOrderIntervalMs = 300;
+   g_maxOrdersPerMinute = 120;
+   g_confidenceThreshold = 62;
+   g_riskPerOrderPercent = 0.25;
+   g_hardStopAtrMultiplier = 2.00;
+   g_allowMinimumLotOverride = false;
+
+   if(!BasketFillEnabled())
    {
       g_burstActive = false;
       g_burstNeedsRearm = false;
@@ -1244,73 +1227,12 @@ void ApplyTradingProfile()
       g_burstLossMoney = 0.0;
    }
 
-   if(g_tradingProfile == PROFILE_SAFE)
-   {
-      g_minOrderIntervalMs = 1200;
-      g_maxOrdersPerMinute = 30;
-      g_confidenceThreshold = 80;
-      g_riskPerOrderPercent = 0.10;
-      g_hardStopAtrMultiplier = 2.50;
-      g_allowMinimumLotOverride = false;
-   }
-   else if(g_tradingProfile == PROFILE_AGGRESSIVE)
-   {
-      g_minOrderIntervalMs = 350;
-      g_maxOrdersPerMinute = 120;
-      g_confidenceThreshold = 60;
-      g_riskPerOrderPercent = 0.30;
-      g_hardStopAtrMultiplier = 1.80;
-      g_allowMinimumLotOverride = false;
-   }
-   else if(g_tradingProfile == PROFILE_BURST_10)
-   {
-      g_minOrderIntervalMs = 250;
-      g_maxOrdersPerMinute = 180;
-      g_confidenceThreshold = 60;
-      // Burst still uses the adaptive entry brain. Every queued add is
-      // revalidated against live spread + market location before it is sent.
-      g_riskPerOrderPercent = 0.05;
-      g_hardStopAtrMultiplier = 1.70;
-      g_allowMinimumLotOverride = true;
-
-      g_triggerMoney = 0.0;
-      g_trailMoney = 0.0;
-   }
-   else if(g_tradingProfile == PROFILE_MAXIMUM)
-   {
-      // Maximum risk is deliberately permissive on execution, not random on
-      // direction. Structure / S-R / Order Block / Fibonacci remain active.
-      // The configured Lot is used directly by AdaptiveTradeVolume().
-      g_minOrderIntervalMs = 200;
-      g_maxOrdersPerMinute = 240;
-      g_confidenceThreshold = 50;
-      g_riskPerOrderPercent = 5.00;
-      g_hardStopAtrMultiplier = 1.70;
-      g_allowMinimumLotOverride = true;
-   }
-   else
-   {
-      g_minOrderIntervalMs = 700;
-      g_maxOrdersPerMinute = 60;
-      g_confidenceThreshold = 70;
-      g_riskPerOrderPercent = 0.20;
-      g_hardStopAtrMultiplier = 2.00;
-      g_allowMinimumLotOverride = false;
-   }
-
    g_adaptiveMaxPositions = g_maxPositions;
    g_adaptiveEntrySpacingMs = g_minOrderIntervalMs;
 }
 
 void ApplySettings(string json)
 {
-   string profile = JsonString(json, "tradingProfile", "");
-   if(profile == "SAFE") g_tradingProfile = PROFILE_SAFE;
-   else if(profile == "AGGRESSIVE") g_tradingProfile = PROFILE_AGGRESSIVE;
-   else if(profile == "BURST_10") g_tradingProfile = PROFILE_BURST_10;
-   else if(profile == "MAXIMUM") g_tradingProfile = PROFILE_MAXIMUM;
-   else if(profile == "BALANCED") g_tradingProfile = PROFILE_BALANCED;
-
    g_lot = MathMax(0.01, JsonNumber(json, "lot", g_lot));
    g_maxPositions = (int)MathMax(1.0, JsonNumber(json, "maxPositions", g_maxPositions));
    g_triggerMoney = MathMax(0.0, JsonNumber(json, "basketTriggerMoney", g_triggerMoney));
@@ -1374,7 +1296,7 @@ void ApplySettings(string json)
    else if(mode == "SELL_ONLY") g_entryMode = ENTRY_SELL_ONLY;
    else if(mode == "AUTO_MOMENTUM") g_entryMode = ENTRY_AUTO_MOMENTUM;
 
-   ApplyTradingProfile();
+   ApplyUnifiedTradingEngine();
 
    if(g_dailyProfitTargetArmed &&
       (g_dailyProfitTarget <= 0.0 || DailyBotProfit() < g_dailyProfitTarget))
@@ -1572,7 +1494,8 @@ bool FindActiveImpulse(
    datetime &swingLowTime,
    double &swingHigh,
    datetime &swingHighTime,
-   int &direction
+   int &direction,
+   double &strength
 )
 {
    swingLow = 0.0;
@@ -1580,6 +1503,7 @@ bool FindActiveImpulse(
    swingLowTime = 0;
    swingHighTime = 0;
    direction = 0;
+   strength = 0.0;
 
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
@@ -1636,6 +1560,10 @@ bool FindActiveImpulse(
       direction = 0;
       return false;
    }
+   double rangeAtr = (swingHigh - swingLow) / MathMax(_Point * 20.0, atrPrice);
+   int newestPivotIndex = MathMin(latestLowIndex, latestHighIndex);
+   double recency = 1.0 - (double)newestPivotIndex / MathMax(1, copied);
+   strength = MathMin(100.0, 30.0 + MathMin(45.0, rangeAtr * 16.0) + recency * 25.0);
    return true;
 }
 
@@ -1814,6 +1742,7 @@ void DrawTradingFibonacci()
       "0.0  Impulse","23.6","38.2  Pullback","50.0  Value",
       "61.8  Golden","70.5  OTE","78.6","100.0  Origin","127.2  TP","161.8  TP"
    };
+   labels[0] = "0.0  " + g_fibTimeframe + " Impulse";
    ObjectSetInteger(0, name, OBJPROP_LEVELS, levelCount);
    ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, true);
    ObjectSetInteger(0, name, OBJPROP_BACK, false);
@@ -1830,6 +1759,17 @@ void DrawTradingFibonacci()
       ObjectSetInteger(0, name, OBJPROP_LEVELWIDTH, i, (i == 4 || i == 5) ? 2 : 1);
    }
    g_fiboVisible = true;
+}
+
+double FibonacciRetracementAtPrice(int direction, double swingLow, double swingHigh, double price)
+{
+   double range = swingHigh - swingLow;
+   if(direction == 0 || range <= 0.0)
+      return 0.0;
+   double retracement = direction > 0
+      ? (swingHigh - price) / range
+      : (price - swingLow) / range;
+   return MathMax(0.0, MathMin(1.75, retracement));
 }
 
 void RefreshMarketContext(bool force)
@@ -1885,25 +1825,60 @@ void RefreshMarketContext(bool force)
    bool anyM5 = (haveBull5 && !useBull15) || (haveBear5 && !useBear15);
    g_orderBlockTimeframe = anyM15 && anyM5 ? "M15+M5" : anyM15 ? "M15" : anyM5 ? "M5" : "NONE";
 
-   bool haveImpulse = FindActiveImpulse(
-      PERIOD_M15, 120, atrM15Price,
-      g_fibSwingLow, g_fibSwingLowTime,
-      g_fibSwingHigh, g_fibSwingHighTime,
-      g_fibDirection
+   // Read both execution (M5) and structure (M15) impulses. The primary Fib is
+   // selected by swing quality + trend agreement, while both contribute to the
+   // entry score below.
+   double atrM5Price = MathMax(_Point * 12.0, AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point);
+   double fib5Low=0.0,fib5High=0.0,fib15Low=0.0,fib15High=0.0;
+   datetime fib5LowTime=0,fib5HighTime=0,fib15LowTime=0,fib15HighTime=0;
+   bool haveFib5 = FindActiveImpulse(
+      PERIOD_M5, 180, atrM5Price,
+      fib5Low, fib5LowTime, fib5High, fib5HighTime,
+      g_fibM5Direction, g_fibM5Strength
    );
-   if(haveImpulse && g_fibSwingHigh > g_fibSwingLow)
+   bool haveFib15 = FindActiveImpulse(
+      PERIOD_M15, 140, atrM15Price,
+      fib15Low, fib15LowTime, fib15High, fib15HighTime,
+      g_fibM15Direction, g_fibM15Strength
+   );
+   g_fibM5Retracement = haveFib5
+      ? FibonacciRetracementAtPrice(g_fibM5Direction, fib5Low, fib5High, price) : 0.0;
+   g_fibM15Retracement = haveFib15
+      ? FibonacciRetracementAtPrice(g_fibM15Direction, fib15Low, fib15High, price) : 0.0;
+
+   double fib5Quality = haveFib5
+      ? g_fibM5Strength + (g_fibM5Direction == g_trendM5 ? 10.0 : 0.0) : -1.0;
+   double fib15Quality = haveFib15
+      ? g_fibM15Strength + (g_fibM15Direction == g_trendM15 ? 12.0 : 0.0) + 5.0 : -1.0;
+   bool useFib15 = haveFib15 && (!haveFib5 || fib15Quality >= fib5Quality);
+
+   if(useFib15)
    {
-      double range = g_fibSwingHigh - g_fibSwingLow;
-      if(g_fibDirection > 0)
-         g_fibRetracement = (g_fibSwingHigh - price) / range;
-      else
-         g_fibRetracement = (price - g_fibSwingLow) / range;
-      g_fibRetracement = MathMax(0.0, MathMin(1.75, g_fibRetracement));
+      g_fibSwingLow = fib15Low;
+      g_fibSwingLowTime = fib15LowTime;
+      g_fibSwingHigh = fib15High;
+      g_fibSwingHighTime = fib15HighTime;
+      g_fibDirection = g_fibM15Direction;
+      g_fibRetracement = g_fibM15Retracement;
+      g_fibTimeframe = "M15";
+   }
+   else if(haveFib5)
+   {
+      g_fibSwingLow = fib5Low;
+      g_fibSwingLowTime = fib5LowTime;
+      g_fibSwingHigh = fib5High;
+      g_fibSwingHighTime = fib5HighTime;
+      g_fibDirection = g_fibM5Direction;
+      g_fibRetracement = g_fibM5Retracement;
+      g_fibTimeframe = "M5";
    }
    else
    {
+      g_fibSwingLow = 0.0;
+      g_fibSwingHigh = 0.0;
       g_fibDirection = 0;
       g_fibRetracement = 0.0;
+      g_fibTimeframe = "NONE";
    }
 
    if(g_state == STATE_RUNNING)
@@ -1915,6 +1890,18 @@ bool PriceInsideOrNearZone(double price, double low, double high, double buffer)
    if(low <= 0.0 || high <= 0.0 || high < low)
       return false;
    return price >= low - buffer && price <= high + buffer;
+}
+
+double FibonacciSetupScore(int direction, int fibDirection, double retracement, double strength)
+{
+   if(fibDirection != direction || retracement < 0.382 || retracement > 0.786)
+      return 0.0;
+   double score = 4.0 + MathMin(5.0, strength * 0.05);
+   if(retracement >= 0.500 && retracement <= 0.705)
+      score += 5.0;
+   if(MathAbs(retracement - 0.618) <= 0.060)
+      score += 3.0;
+   return score;
 }
 
 bool ConfirmedLevelBreak(int direction, double level, double buffer)
@@ -1991,17 +1978,16 @@ double EvaluateMarketLocationScore(int direction)
    double desiredObLow = direction > 0 ? g_bullishOrderBlockLow : g_bearishOrderBlockLow;
    double desiredObHigh = direction > 0 ? g_bullishOrderBlockHigh : g_bearishOrderBlockHigh;
 
-   g_fibConfluenceScore = 0.0;
-   bool fibConfluence = g_fibDirection == direction &&
-      g_fibRetracement >= 0.382 && g_fibRetracement <= 0.786;
-   if(fibConfluence)
-   {
-      g_fibConfluenceScore = 8.0;
-      if(g_fibRetracement >= 0.500 && g_fibRetracement <= 0.705)
-         g_fibConfluenceScore += 5.0;
-      if(MathAbs(g_fibRetracement - 0.618) <= 0.060)
-         g_fibConfluenceScore += 3.0;
-   }
+   double fibM5Score = FibonacciSetupScore(
+      direction, g_fibM5Direction, g_fibM5Retracement, g_fibM5Strength);
+   double fibM15Score = FibonacciSetupScore(
+      direction, g_fibM15Direction, g_fibM15Retracement, g_fibM15Strength);
+   g_fibConfluenceScore = MathMax(fibM5Score, fibM15Score);
+   if(fibM5Score > 0.0 && fibM15Score > 0.0 &&
+      g_fibM5Direction == g_fibM15Direction)
+      g_fibConfluenceScore = MathMin(22.0,
+         g_fibConfluenceScore + MathMin(fibM5Score, fibM15Score) * 0.45 + 3.0);
+   bool fibConfluence = g_fibConfluenceScore > 0.0;
 
    int confluenceCount = 0;
    if(nearSupport || nearResistance)
@@ -2074,7 +2060,7 @@ bool MarketLocationEntryAllowed(int direction, bool fastRevalidation)
 
    EvaluateMarketLocationScore(direction);
    // S/R, Fibonacci and Order Block are advisory intelligence. They change the
-   // score/model but never veto an order or interrupt an active Burst queue.
+   // score/model but never veto an order or interrupt an active Basket queue.
    // Actual execution constraints remain MT5 permissions, spread and user risk.
    return true;
 }
@@ -2121,12 +2107,6 @@ double AdaptiveTradeVolume()
 {
    g_minimumLotOverrideActive = false;
    double fallback = NormalizeTradeVolume(g_lot);
-
-   // In MAXIMUM mode the customer explicitly accepts the configured exposure.
-   // Keep the market-entry intelligence, but do not silently reduce Lot because
-   // of ATR, prior losses, drawdown, or execution-quality multipliers.
-   if(IsMaximumRiskProfile())
-      return fallback;
 
    if(!g_adaptiveEngine || g_atrPoints <= 0.0 || g_riskPerOrderPercent <= 0.0)
       return fallback;
@@ -2317,10 +2297,7 @@ int AdaptiveEntryDirection(double momentum)
    if(trendM30 == -rawDirection && trendH1 == -rawDirection)
       score -= 12.0;
 
-   // MAXIMUM keeps entry intelligence intact, but prior losses do not make the
-   // signal progressively impossible to take.
-   if(!IsMaximumRiskProfile())
-      score -= MathMin(15.0, g_consecutiveLosses * 4.0);
+   score -= MathMin(15.0, g_consecutiveLosses * 4.0);
    g_signalConfidence = MathMax(0.0, MathMin(100.0, score));
 
    // Position count is controlled only by the user's Max Positions setting.
@@ -2433,11 +2410,6 @@ bool AdaptiveBasketAddAllowed(int direction)
    if(direction != BasketDirection())
       return false;
 
-   // MAXIMUM means the user accepts exposure up to Max Positions. The full
-   // market-location gate still runs before SendMarketOrder(), so do not add a
-   // second adaptive pyramid throttle here.
-   if(IsMaximumRiskProfile())
-      return true;
    if(count >= g_adaptiveMaxPositions)
       return false;
 
@@ -2708,8 +2680,8 @@ double EffectiveBasketProfitTarget()
    if(g_basketProfitTarget > 0.0)
       return g_basketProfitTarget;
 
-   // Burst auto target is only a fallback when the user left Basket profit off.
-   if(IsBurstProfile() && g_burstTargetMoney > 0.0)
+   // Automatic Basket target is a fallback when the user left Basket profit off.
+   if(BasketFillEnabled() && g_burstTargetMoney > 0.0)
       return g_burstTargetMoney;
 
    return 0.0;
@@ -2718,13 +2690,13 @@ double EffectiveBasketProfitTarget()
 double EffectiveBasketLossLimit()
 {
    // 0 means OFF exactly. Never invent a hidden Basket loss behind the user's
-   // setting, including in Burst or Maximum-risk workflows.
+   // setting in every workflow.
    return MathMax(0.0, g_maxBasketLoss);
 }
 
 void EnsureBurstTargets(int plannedPositions)
 {
-   if(!IsBurstProfile() || g_burstTargetMoney > 0.0)
+   if(!BasketFillEnabled() || g_burstTargetMoney > 0.0)
       return;
 
    int targetCount = MathMax(1, plannedPositions);
@@ -2740,7 +2712,7 @@ void EnsureBurstTargets(int plannedPositions)
 
 void ArmBurst(int direction)
 {
-   if(!IsBurstProfile() || g_burstActive)
+   if(!BasketFillEnabled() || g_burstActive)
       return;
 
    g_burstDirection = direction;
@@ -2751,7 +2723,7 @@ void ArmBurst(int direction)
    g_burstNeedsRearm = false;
    EnsureBurstTargets(g_burstTargetPositions);
    Print(
-      "BURST_10 armed direction=", direction,
+      "Basket fill armed direction=", direction,
       " target=", DoubleToString(g_burstTargetMoney, 2),
       " loss=", DoubleToString(g_burstLossMoney, 2)
    );
@@ -2761,14 +2733,14 @@ void AbortBurst(string reason)
 {
    if(!g_burstActive) return;
    g_burstActive = false;
-   g_executionStatus = "BURST_ABORTED";
+   g_executionStatus = "BASKET_FILL_ABORTED";
    g_adaptiveBlockReason = reason;
-   Print("BURST_10 aborted: ", reason, " filled=", BasketPositionCount());
+   Print("Basket fill aborted: ", reason, " filled=", BasketPositionCount());
 }
 
 void ProcessBurstQueue()
 {
-   if(!IsBurstProfile() || !g_burstActive)
+   if(!BasketFillEnabled() || !g_burstActive)
       return;
 
    if(g_state != STATE_RUNNING || !g_access ||
@@ -2780,7 +2752,7 @@ void ProcessBurstQueue()
    int burstTimeoutSeconds = MathMax(15, (g_burstTargetPositions * g_minOrderIntervalMs) / 1000 + 10);
    if(TimeCurrent() - g_burstStartedAt > burstTimeoutSeconds)
    {
-      AbortBurst("BURST_TIMEOUT");
+      AbortBurst("BASKET_FILL_TIMEOUT");
       return;
    }
    if(TradePermissionStatus() != "OK")
@@ -2792,8 +2764,8 @@ void ProcessBurstQueue()
    if(count >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
    {
       g_burstActive = false;
-      if(count == 0) g_burstNeedsRearm = true;
-      g_executionStatus = "BURST_COMPLETE";
+      g_burstNeedsRearm = false;
+      g_executionStatus = "BASKET_FILL_COMPLETE";
       return;
    }
    // Revalidate each queued add. Keep this deliberately light: do not demand
@@ -2817,15 +2789,15 @@ void ProcessBurstQueue()
    int filled = BasketPositionCount();
    bool completed = filled >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions;
    if(completed)
-      g_executionStatus = "BURST_COMPLETE";
+      g_executionStatus = "BASKET_FILL_COMPLETE";
    else if(accepted)
-      g_executionStatus = "BURST_FILLING";
+      g_executionStatus = "BASKET_FILLING";
    // On rejection keep the exact MT5 retcode status from SendMarketOrder, then
    // continue with the next requested attempt. MT5/Broker decides every order.
    if(filled >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
    {
       g_burstActive = false;
-      if(filled == 0) g_burstNeedsRearm = true;
+      g_burstNeedsRearm = false;
    }
 }
 
@@ -2837,7 +2809,7 @@ int SymbolDigitsNow()
 bool CanSendOrder()
 {
    ulong nowMs = GetTickCount64();
-   int spacingMs = IsBurstProfile()
+   int spacingMs = BasketFillEnabled()
       ? g_minOrderIntervalMs
       : (g_adaptiveEngine ? g_adaptiveEntrySpacingMs : g_minOrderIntervalMs);
    if(nowMs - g_lastOrderMs < (ulong)MathMax(0, spacingMs))
@@ -3448,8 +3420,8 @@ string ProfitControlModeName()
       return "BASKET_RUN_ON";
    if(g_basketProfitTarget > 0.0)
       return "BASKET_FIXED";
-   if(IsBurstProfile())
-      return "BURST_AUTO";
+   if(BasketFillEnabled())
+      return "BASKET_AUTO";
    return "NONE";
 }
 

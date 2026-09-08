@@ -3124,6 +3124,30 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 .cc-bot-modal-close:disabled{opacity:.45;cursor:not-allowed}
 
 .cc-bot-modal-body{padding:15px 17px 17px;overflow:auto;display:flex;flex-direction:column;gap:13px}
+.cc-smart-engine-banner{
+  position:relative;overflow:hidden;padding:14px 16px;border:1px solid #4a3f79;border-radius:15px;
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:13px;
+  background:radial-gradient(circle at 10% 0,rgba(134,92,246,.18),transparent 42%),linear-gradient(135deg,#111329,#0a1019);
+  box-shadow:inset 0 1px rgba(255,255,255,.025),0 12px 30px rgba(27,18,65,.18)
+}
+.cc-smart-engine-banner::after{
+  content:"";position:absolute;inset:-120% auto -120% -25%;width:18%;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(179,153,255,.12),transparent);
+  transform:rotate(14deg);animation:cc-smart-sweep 7s ease-in-out infinite
+}
+@keyframes cc-smart-sweep{0%,70%{left:-25%}100%{left:125%}}
+.cc-smart-engine-icon{
+  width:44px;height:44px;border-radius:13px;display:grid;place-items:center;color:#c4b0ff;
+  border:1px solid #51418a;background:linear-gradient(145deg,#241c4a,#15172d);box-shadow:0 0 22px rgba(130,91,235,.18)
+}
+.cc-smart-engine-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
+.cc-smart-engine-copy b{font-size:15px;color:#f1edff}
+.cc-smart-engine-copy small{font-size:10.5px;line-height:1.5;color:#99a4bd}
+.cc-smart-engine-badges{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.cc-smart-engine-badges span{
+  padding:6px 9px;border-radius:999px;border:1px solid #34445a;background:#0c141b;
+  color:#8fdcb5;font-size:9px;font-weight:800;white-space:nowrap
+}
 .cc-mode-section,.cc-bot-basic-section{
   padding:13px;border:1px solid #202b47;border-radius:14px;
   background:linear-gradient(145deg,#0b101a,#080c14)
@@ -3458,10 +3482,16 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .cc-live-terminal-head-actions{width:100%;justify-content:space-between}
   .cc-live-terminal-status-grid,
   .cc-live-terminal-mini-grid{grid-template-columns:1fr 1fr}
+  .cc-smart-engine-banner{grid-template-columns:auto minmax(0,1fr);padding:13px}
+  .cc-smart-engine-badges{grid-column:1/-1;justify-content:flex-start}
 }
 @media(max-width:520px){
   .cc-live-terminal-status-grid,.cc-live-terminal-mini-grid{grid-template-columns:1fr}
+  .cc-smart-engine-copy b{font-size:14px}
+  .cc-smart-engine-copy small{font-size:10px}
 }
+
+@media(prefers-reduced-motion:reduce){.cc-smart-engine-banner::after{animation:none}}
 
 
 /* ===== EA entry selection guide ===== */

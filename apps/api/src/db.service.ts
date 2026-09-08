@@ -226,11 +226,10 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       UPDATE bot_settings
       SET settings='{
         "adaptiveEngine":true,
-        "tradingProfile":"BALANCED",
         "riskPerOrderPercent":0.25,
         "hardStopAtrMultiplier":2.0,
         "atrPeriod":14,
-        "confidenceThreshold":70,
+        "confidenceThreshold":62,
         "sessionStartHour":0,
         "sessionEndHour":24,
         "maxAtrPoints":0
@@ -263,15 +262,25 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       WHERE NOT settings ? 'manualStopLossPoints'
          OR COALESCE((settings->>'perPositionLossMoney')::numeric,0)<>0;
 
-      -- Trading profiles own execution speed and Adaptive parameters. Legacy
-      -- loss cooldown fields are removed and never block a new valid signal.
+      -- EA 1.020 uses one Adaptive engine. Remove profile/cooldown values and
+      -- normalize old accounts to the same transparent execution behaviour.
       UPDATE bot_settings
-      SET settings=(settings - 'cooldownMinutesAfterLoss' - 'maxConsecutiveLosses') ||
-                   jsonb_build_object('tradingProfile',COALESCE(NULLIF(settings->>'tradingProfile',''),'BALANCED')),
+      SET settings=(settings - 'tradingProfile' - 'cooldownMinutesAfterLoss' - 'maxConsecutiveLosses') ||
+                   jsonb_build_object(
+                     'adaptiveEngine',true,
+                     'minOrderIntervalMs',300,
+                     'maxOrdersPerMinute',120,
+                     'riskPerOrderPercent',0.25,
+                     'hardStopAtrMultiplier',2.0,
+                     'confidenceThreshold',62,
+                     'allowMinimumLotOverride',false,
+                     'maxAtrPoints',0
+                   ),
           updated_at=now()
-      WHERE settings ? 'cooldownMinutesAfterLoss'
+      WHERE settings ? 'tradingProfile'
+         OR settings ? 'cooldownMinutesAfterLoss'
          OR settings ? 'maxConsecutiveLosses'
-         OR NOT settings ? 'tradingProfile';
+         OR COALESCE((settings->>'confidenceThreshold')::int,0)<>62;
     `);
   }
 

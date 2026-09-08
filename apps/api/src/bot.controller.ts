@@ -187,11 +187,10 @@ export class BotController {
       RISK_LIMIT_TOO_SMALL: { label: "ความเสี่ยงไม่พอสำหรับ Lot ขั้นต่ำ", detail: "Risk % ปัจจุบันต่ำกว่าที่ Lot ขั้นต่ำของ Broker ต้องใช้ หากยอมรับความเสี่ยงเพิ่มให้ติ๊กอนุญาต Lot ขั้นต่ำในตั้งค่าบอท", tone: "warn" },
       SPREAD_TOO_HIGH: { label: "Spread ผิดปกติต่อเนื่อง", detail: "Adaptive Spread ระงับเฉพาะออเดอร์ใหม่ ส่วน Position เดิมยังถูกดูแลตามปกติ", tone: "warn" },
       WAITING_BASKET_ADD: { label: "รอจังหวะเพิ่มไม้", detail: "Max Positions คือเพดาน ระบบจะเพิ่มไม้เมื่อราคาเดินต่อฝั่งกำไรและ Momentum/Confidence ยังยืนยัน ไม่ยิงครบทุกไม้พร้อมกัน", tone: "good" },
-      WAITING_BURST_REARM: { label: "รอสัญญาณรอบใหม่", detail: "Basket เดิมปิดแล้ว ระบบรอ Momentum รีเซ็ตก่อนเริ่ม Burst รอบถัดไป", tone: "good" },
-      BURST_FILLING: { label: "กำลังเปิด Basket", detail: "EA กำลังส่งคำสั่งตามจำนวนไม้ที่เลือก โดย MT5/Broker เป็นผู้ตอบรับแต่ละคำสั่ง", tone: "good" },
-      BURST_COMPLETE: { label: "ส่งคำสั่งครบจำนวนแล้ว", detail: "MT5/Broker ตอบรับหรือปฏิเสธแต่ละไม้ และระบบดูแล Position ที่เปิดสำเร็จ", tone: "good" },
-      BURST_PARTIAL_MANAGING: { label: "ดูแล Basket ที่เปิดได้", detail: "คิวหยุดก่อนครบจำนวนที่เลือก ระบบจะดูแล Position ที่ MT5 เปิดแล้วโดยไม่ยิงซ้ำ", tone: "warn" },
-      BURST_ABORTED: { label: "หยุดคิว Burst", detail: "สภาวะตลาดหรือคุณภาพ Execution เปลี่ยน ระบบหยุดเฉพาะไม้ที่ยังไม่ส่ง", tone: "warn" },
+      BASKET_FILLING: { label: "กำลังเปิดตามจำนวนไม้", detail: "EA กำลังส่งคำสั่งตามจำนวนที่เลือก โดย MT5/Broker เป็นผู้ตอบรับแต่ละคำสั่ง", tone: "good" },
+      BASKET_FILL_COMPLETE: { label: "ส่งคำสั่งครบจำนวนแล้ว", detail: "ระบบกำลังดูแล Position ที่ MT5 เปิดสำเร็จ", tone: "good" },
+      BASKET_MANAGING: { label: "กำลังดูแลออเดอร์", detail: "EA ดูแล Position ที่เปิดอยู่ตามเป้ากำไรและ Stop Loss", tone: "good" },
+      BASKET_FILL_ABORTED: { label: "หยุดส่งไม้ที่เหลือ", detail: "สิทธิ์เทรดหรือการเชื่อมต่อเปลี่ยน แต่ Position ที่เปิดแล้วจะยังถูกดูแล", tone: "warn" },
       ORDER_PRECHECK_FAILED: { label: "คำสั่งไม่ผ่านการตรวจล่วงหน้า", detail: "Broker หรือ Margin ไม่พร้อม ระบบไม่ส่งคำสั่งนี้", tone: "warn" },
       MAX_POSITIONS: { label: "Position เต็มแล้ว", detail: "จำนวน Position ถึง Max Positions", tone: "warn" },
       ORDER_RATE_LIMIT: { label: "กำลังรอช่วงส่งคำสั่งถัดไป", detail: "Rate limit ของบอทยังไม่พร้อมส่ง Order ใหม่", tone: "warn" },
@@ -1417,17 +1416,16 @@ export class BotController {
       clean.entryMode = entryMode;
     }
 
-    if (body.tradingProfile !== undefined) {
-      const tradingProfile = String(body.tradingProfile || "");
-      if (!["SAFE", "BALANCED", "AGGRESSIVE", "BURST_10", "MAXIMUM"].includes(tradingProfile)) {
-        throw new BadRequestException("Trading Profile ไม่ถูกต้อง");
-      }
-      clean.tradingProfile = tradingProfile;
-      // Profiles own entry cadence / adaptive execution values.
-      // Exit and money-risk controls remain user-owned and must be applied by
-      // the EA exactly as saved, including in BURST_10.
-      clean.adaptiveEngine = true;
-    }
+    // One Adaptive engine for every account. Ignore legacy profile values from
+    // older clients and keep the execution brain deterministic.
+    clean.adaptiveEngine = true;
+    clean.minOrderIntervalMs = 300;
+    clean.maxOrdersPerMinute = 120;
+    clean.riskPerOrderPercent = 0.25;
+    clean.hardStopAtrMultiplier = 2;
+    clean.confidenceThreshold = 62;
+    clean.allowMinimumLotOverride = false;
+    clean.maxAtrPoints = 0;
 
     if (Object.keys(clean).length === 0) {
       throw new BadRequestException("ไม่มีค่าการตั้งค่าที่บันทึกได้");
@@ -1438,7 +1436,7 @@ export class BotController {
        VALUES($1,$2::jsonb,now())
        ON CONFLICT(bot_instance_id)
        DO UPDATE SET
-         settings=bot_settings.settings || EXCLUDED.settings,
+         settings=(bot_settings.settings - 'tradingProfile') || EXCLUDED.settings,
          updated_at=now()
        RETURNING settings`,
       [instance.id, JSON.stringify(clean)]

@@ -28,65 +28,8 @@ type BrokerCatalog = {
 };
 
 type View = "overview" | "account" | "access";
-const tradingProfileHelp: Record<string, {
-  title: string;
-  short: string;
-  detail: string;
-  bestFor: string[];
-  strengths: string[];
-  cautions: string[];
-  badge: string;
-}> = {
-  SAFE: {
-    title: "ปลอดภัย",
-    short: "รอจังหวะชัด คัดสัญญาณเข้ม ไม่รีบเข้า",
-    detail: "โหมดนี้ให้ความสำคัญกับความระวังมากกว่าความถี่ บอทจะยอมรอถ้าสัญญาณยังไม่ชัด และจะลดความเร่งในการเปิดไม้ เหมาะเวลาคุณอยากให้ระบบนิ่งขึ้น ไม่ต้องการให้บอทไล่ทุกการขยับของราคา",
-    bestFor: ["คนเริ่มใช้บอท", "คนที่อยากให้เข้าออเดอร์น้อยแต่คัดมากขึ้น", "บัญชีที่ต้องการลดความเร่งของการเปิดไม้"],
-    strengths: ["ลดการรีบเข้าในตลาดแกว่ง", "คัดจังหวะเข้มกว่าโหมดอื่น", "เหมาะกับการเปิดทิ้งไว้แบบไม่ต้องการความถี่สูง"],
-    cautions: ["อาจรอนานกว่าจะได้ออเดอร์", "บางครั้งราคาวิ่งไปก่อนแล้วบอทยังไม่เข้า เพราะระบบกำลังรอสัญญาณยืนยัน"],
-    badge: "เน้นนิ่ง"
-  },
-  BALANCED: {
-    title: "สมดุล",
-    short: "กลาง ๆ ใช้ง่าย สมดุลความไวกับความระวัง",
-    detail: "โหมดนี้เป็นค่ากลางสำหรับใช้งานทั่วไป บอทจะไม่ช้าแบบโหมดปลอดภัย และไม่เร่งเท่าโหมดเชิงรุก ถ้าคุณยังไม่รู้ว่าจะเริ่มจากอะไร ให้เริ่มที่โหมดนี้ก่อน แล้วค่อยปรับตามพฤติกรรมที่คุณชอบ",
-    bestFor: ["ผู้ใช้ทั่วไป", "คนที่เพิ่งเริ่มและยังไม่รู้จะเลือกโหมดไหน", "คนที่ต้องการบาลานซ์โอกาสกับความเสี่ยง"],
-    strengths: ["เข้าใจง่ายและใช้ได้กว้าง", "จังหวะเข้าไม่ช้าหรือเร็วเกินไป", "เหมาะเป็นค่าเริ่มต้นสำหรับทดสอบระบบ"],
-    cautions: ["ไม่ใช่โหมดที่เซฟที่สุด", "ไม่ใช่โหมดที่เร็วที่สุด แต่เป็นทางกลางของทั้งสองแบบ"],
-    badge: "แนะนำเริ่มต้น"
-  },
-  AGGRESSIVE: {
-    title: "เชิงรุก",
-    short: "ตอบสนองไวขึ้น พร้อมเข้าเมื่อเห็นแรงตลาดเร็วขึ้น",
-    detail: "โหมดนี้ทำให้บอทกล้าตัดสินใจเร็วขึ้นเมื่อเห็นแรงราคาและทิศทางที่ระบบยอมรับ เหมาะกับคนที่อยากให้บอท active มากกว่าเดิม แต่ต้องเข้าใจว่าการเข้าเร็วขึ้นย่อมเพิ่มโอกาสเจอสัญญาณหลอกในช่วงตลาดสะบัด",
-    bestFor: ["คนที่รับความผันผวนได้มากขึ้น", "คนที่ต้องการให้บอทเข้าไวกว่าโหมดสมดุล", "ช่วงตลาดมีทิศทางและ Momentum ชัด"],
-    strengths: ["ตอบสนองต่อแรงตลาดเร็ว", "มีโอกาสได้จังหวะก่อนโหมดที่คัดเข้ม", "เหมาะกับตลาดที่กำลังวิ่ง"],
-    cautions: ["ความไวที่เพิ่มขึ้นทำให้มีโอกาสเข้าในจังหวะหลอกมากขึ้น", "ควรตั้ง SL และขีดจำกัดขาดทุนให้เหมาะกับทุน"],
-    badge: "เข้าไวขึ้น"
-  },
-  BURST_10: {
-    title: "Burst",
-    short: "ทำงานเป็นชุด พยายามเปิดตามจำนวนไม้ที่คุณกำหนด",
-    detail: "โหมด Burst เหมาะกับคนที่ต้องการทำรอบแบบ Basket เมื่อสัญญาณหลักผ่าน ระบบจะพยายามส่งไม้ตามจำนวนที่ตั้งไว้ และก่อนเพิ่มแต่ละไม้จะตรวจ Spread กับ Market Structure/แนวรับแนวต้านอีกครั้ง โดยไม่บังคับให้ Fib, Order Block และทุก Timeframe ต้องตรงพร้อมกัน",
-    bestFor: ["คนที่เข้าใจการเทรดหลายไม้เป็นชุด", "คนที่ต้องการควบคุมจำนวนไม้ชัดเจน", "คนที่ยอมรับความเสี่ยงรวมของ Basket ได้"],
-    strengths: ["ทำงานเป็นรอบและเห็นจำนวนไม้ชัด", "ตรวจโครงสร้างตลาดซ้ำก่อนเพิ่มแต่ละไม้", "ใช้จำนวนไม้ที่ตั้งไว้เป็นเป้าหมายของรอบ"],
-    cautions: ["ความเสี่ยงรวมสูงกว่าเมื่อเปิดหลายไม้", "จะพักเพิ่มไม้เมื่อกำลังยิงชนแนวรับ/แนวต้านใหญ่หรือโครงสร้าง M30/H1 พลิก", "ควรตรวจ SL, Basket Loss และ Lot ก่อนใช้งาน"],
-    badge: "เปิดเป็นชุด"
-  },
-  MAXIMUM: {
-    title: "เสี่ยงสูงสุด",
-    short: "ใช้ Lot ที่ตั้งตรง ๆ แต่ยังใช้สมอง S/R + Order Block + Fibonacci เต็มระบบ",
-    detail: "โหมดนี้สำหรับผู้ใช้ที่ยอมรับความเสี่ยงสูงและต้องการให้ EA ใช้ Lot ที่กำหนดโดยไม่ลดอัตโนมัติจาก ATR, แพ้ต่อเนื่อง, Drawdown หรือ Execution Quality จุดเข้ายังถูกคัดจาก M1/M5/M15/M30/H1, แนวรับแนวต้าน, Order Block และ Fibonacci เหมือนเดิม",
-    bestFor: ["ทุนเล็กที่เจ้าของบัญชียอมรับโอกาสขาดทุนสูง", "ผู้ใช้ที่ต้องการให้ Lot ที่ตั้งเป็น Lot จริง", "ผู้ใช้ที่ต้องการความไวโดยไม่ทิ้งหลักการหาจุดเข้า"],
-    strengths: ["ไม่ลด Lot ที่ผู้ใช้ตั้งโดย Adaptive Risk", "Confidence ผ่อนลงเพื่อไม่ดักออเดอร์เกินจำเป็น", "ยังห้ามเฉพาะการไล่ Buy ชนแนวต้านใหญ่ / Sell ชนแนวรับใหญ่ที่ยังไม่ Break"],
-    cautions: ["มีโอกาสสูญเสียเงินทั้งหมดสูงมาก", "Max Positions และ Lot ที่ตั้งมีผลต่อ Exposure โดยตรง", "Broker/Margin/สิทธิ์เทรดยังเป็นข้อจำกัดที่เลี่ยงไม่ได้"],
-    badge: "ยอมรับความเสี่ยงสูง"
-  }
-};
-
 const defaultSettings = {
   symbol: "XAUUSD",
-  tradingProfile: "BALANCED",
   lot: 0.01,
   maxPositions: 10,
   basketTriggerMoney: 2,
@@ -108,7 +51,7 @@ const defaultSettings = {
   allowMinimumLotOverride: false,
   hardStopAtrMultiplier: 2,
   atrPeriod: 14,
-  confidenceThreshold: 70,
+  confidenceThreshold: 62,
   sessionStartHour: 0,
   sessionEndHour: 24,
   maxAtrPoints: 0,
@@ -145,7 +88,6 @@ export default function DashboardPage() {
   const settingsDirtyRef = useRef(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [botSettingsOpen, setBotSettingsOpen] = useState(false);
-  const [profileHelpOpen, setProfileHelpOpen] = useState<string>("");
   const mt5ApiBase =
     process.env.NEXT_PUBLIC_MT5_API_BASE ||
     (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
@@ -417,14 +359,6 @@ export default function DashboardPage() {
       : value.toFixed(0) + " points";
   };
   const spreadStatus = String(metrics.spreadStatus || "WARMUP");
-  const tradingProfile = String(metrics.tradingProfile || settings.tradingProfile || "BALANCED");
-  const tradingProfileLabel:Record<string,string> = {
-    SAFE: "ปลอดภัย",
-    BALANCED: "สมดุล",
-    AGGRESSIVE: "เชิงรุก",
-    BURST_10: "Burst",
-    MAXIMUM: "เสี่ยงสูงสุด"
-  };
   const spreadStatusLabel:Record<string,string> = {
     NORMAL: "ปกติ",
     ELEVATED: "สูงกว่าปกติ",
@@ -569,7 +503,6 @@ export default function DashboardPage() {
     metrics.manualStopLossPoints !== undefined;
   const eaSettingsSynced =
     eaSettingsTelemetryReady &&
-    String(metrics.tradingProfile || "") === String(settings.tradingProfile || "BALANCED") &&
     Number(metrics.configuredMaxPositions || 0) === Number(settings.maxPositions || 0) &&
     nearlyEqual(metrics.configuredLot, settings.lot, 0.0001) &&
     nearlyEqual(metrics.configuredBasketProfitTarget, settings.basketProfitTargetMoney) &&
@@ -857,15 +790,14 @@ export default function DashboardPage() {
       "InpInstanceId=" + instanceId,
       "InpInstallToken=" + token,
       "InpMagic=26090501",
-      "InpTradingProfile=" + ({SAFE:0,BALANCED:1,AGGRESSIVE:2,BURST_10:3,MAXIMUM:4} as Record<string,number>)[String(settings.tradingProfile||"BALANCED")],
       "InpLot=" + settings.lot,
       "InpMaxPositions=" + settings.maxPositions,
       "InpBasketTriggerMoney=" + settings.basketTriggerMoney,
       "InpBasketTrailMoney=" + settings.basketTrailMoney,
       "InpMaxBasketLossMoney=" + settings.maxBasketLossMoney,
       "InpDailyLossMoney=" + settings.dailyLossMoney,
-      "InpMinOrderIntervalMs=" + settings.minOrderIntervalMs,
-      "InpMaxOrdersPerMinute=" + settings.maxOrdersPerMinute,
+      "InpMinOrderIntervalMs=300",
+      "InpMaxOrdersPerMinute=120",
       "InpEntryMode=" + (settings.entryMode === "BUY_ONLY" ? 1 : settings.entryMode === "SELL_ONLY" ? 2 : 0),
       "InpMomentumTicks=20",
       "InpMomentumEntryPoints=8.0",
@@ -874,14 +806,14 @@ export default function DashboardPage() {
       "InpPauseOnManualTrade=true",
       "InpHeartbeatSeconds=3",
       "InpMaxOfflineLeaseSeconds=600",
-      "InpAdaptiveEngine=" + Boolean(settings.adaptiveEngine),
-      "InpRiskPerOrderPercent=" + settings.riskPerOrderPercent,
-      "InpAllowMinimumLotOverride=" + Boolean(settings.allowMinimumLotOverride),
-      "InpHardStopAtrMultiplier=" + settings.hardStopAtrMultiplier,
+      "InpAdaptiveEngine=true",
+      "InpRiskPerOrderPercent=0.25",
+      "InpAllowMinimumLotOverride=false",
+      "InpHardStopAtrMultiplier=2",
       "InpManualStopLossPoints=" + Number(settings.manualStopLossPoints || 0),
       "InpPerPositionLossMoney=0",
       "InpAtrPeriod=" + settings.atrPeriod,
-      "InpConfidenceThreshold=" + settings.confidenceThreshold,
+      "InpConfidenceThreshold=62",
       "InpSessionStartHour=" + settings.sessionStartHour,
       "InpSessionEndHour=" + settings.sessionEndHour,
       "InpMaxAtrPoints=" + settings.maxAtrPoints
@@ -1022,6 +954,15 @@ export default function DashboardPage() {
       ]);
 
       const payload:any = { ...settings };
+      delete payload.tradingProfile;
+      payload.adaptiveEngine = true;
+      payload.minOrderIntervalMs = 300;
+      payload.maxOrdersPerMinute = 120;
+      payload.riskPerOrderPercent = 0.25;
+      payload.allowMinimumLotOverride = false;
+      payload.hardStopAtrMultiplier = 2;
+      payload.confidenceThreshold = 62;
+      payload.maxAtrPoints = 0;
 
       // New profit UX no longer exposes the legacy dollar Basket trailing.
       // Clear hidden legacy values on every save so they cannot affect trades.
@@ -1361,7 +1302,6 @@ export default function DashboardPage() {
                 open={botSettingsOpen}
                 onClose={() => {
                   setBotSettingsOpen(false);
-                  setProfileHelpOpen("");
                 }}
                 settings={settings}
                 symbol={String(metrics.symbol||settings.symbol||"")}
@@ -1369,7 +1309,6 @@ export default function DashboardPage() {
                 busy={busy}
                 syncLabel={settingsSyncLabel}
                 metrics={metrics}
-                tradingProfile={tradingProfile}
                 hardStopMultiplier={hardStopMultiplier}
                 systemHardStopDistancePoints={systemHardStopDistancePoints}
                 hardStopDistancePoints={hardStopDistancePoints}
@@ -1380,14 +1319,11 @@ export default function DashboardPage() {
                 spreadValueLabel={spreadValueLabel}
                 spreadLimitLabel={spreadLimitLabel}
                 spreadStatusLabel={spreadStatusLabel[spreadStatus]||spreadStatus}
-                profileHelpOpen={profileHelpOpen}
-                onProfileHelp={(value:string)=>setProfileHelpOpen(value)}
                 onEdit={editSetting}
                 onSave={async(e:any)=>{
                   await saveSettings(e);
                   if (!settingsDirtyRef.current) {
                     setBotSettingsOpen(false);
-                    setProfileHelpOpen("");
                   }
                 }}
               />
@@ -1934,69 +1870,9 @@ function EmptySetup({onNext}:{onNext:()=>void}) {
 function BotSettingsModal(props:any) {
   if (!props.open) return null;
 
-  const profile = String(props.settings?.tradingProfile || "BALANCED");
-  const activeHelp = props.profileHelpOpen ? tradingProfileHelp[props.profileHelpOpen] : null;
-  const profileRuleMap:Record<string,{
-    confidence:number;
-    riskPercent:number;
-    stopAtr:number;
-    minIntervalMs:number;
-    maxOrdersPerMinute:number;
-    minimumLotOverride:boolean;
-  }> = {
-    SAFE: { confidence:80, riskPercent:0.10, stopAtr:2.50, minIntervalMs:1200, maxOrdersPerMinute:30, minimumLotOverride:false },
-    BALANCED: { confidence:70, riskPercent:0.20, stopAtr:2.00, minIntervalMs:700, maxOrdersPerMinute:60, minimumLotOverride:false },
-    AGGRESSIVE: { confidence:60, riskPercent:0.30, stopAtr:1.80, minIntervalMs:350, maxOrdersPerMinute:120, minimumLotOverride:false },
-    BURST_10: { confidence:60, riskPercent:0.05, stopAtr:1.70, minIntervalMs:250, maxOrdersPerMinute:180, minimumLotOverride:true },
-    MAXIMUM: { confidence:50, riskPercent:5.00, stopAtr:1.70, minIntervalMs:200, maxOrdersPerMinute:240, minimumLotOverride:true }
-  };
-  const helpProfile = String(props.profileHelpOpen || "");
-  const helpRules = helpProfile ? profileRuleMap[helpProfile] : null;
-  const helpIsActive = helpProfile === profile;
-  const profiles = [
-    ["SAFE","shield"],
-    ["BALANCED","settings"],
-    ["AGGRESSIVE","trend"],
-    ["BURST_10","layers"],
-    ["MAXIMUM","risk"]
-  ];
   const basketProfitEnabled = Number(props.settings?.basketProfitTargetMoney || 0) > 0;
   const perPositionProfitEnabled = Number(props.settings?.perPositionProfitMoney || 0) > 0;
   const manualSl = Number(props.settings?.manualStopLossPoints || 0);
-  const burstMode = profile === "BURST_10";
-  const trendText = (value:any) => Number(value) > 0 ? "ขาขึ้น" : Number(value) < 0 ? "ขาลง" : "กลาง/ยังไม่ชัด";
-  const regimeText:Record<string,string> = {
-    TREND_UP: "แนวโน้มขึ้น",
-    TREND_DOWN: "แนวโน้มลง",
-    RANGE: "แกว่งในกรอบ",
-    QUIET: "ตลาดนิ่ง",
-    HIGH_VOLATILITY: "ผันผวนสูง",
-    DATA_NOT_READY: "ข้อมูลยังไม่พร้อม",
-    DISABLED: "ปิด Adaptive"
-  };
-  const blockReasonText:Record<string,string> = {
-    WAITING_MOMENTUM: "รอแรงราคาให้ชัดกว่านี้",
-    WAITING_REGIME_ALIGNMENT: "รอ Momentum ไปทางเดียวกับแนวโน้มหลัก",
-    WAITING_TREND_ALIGNMENT: "รอ M30 / H1 กลับมายืนฝั่งเดียวกับสัญญาณ",
-    BLOCKED_MAJOR_RESISTANCE: "ราคาอยู่ชิดแนวต้านใหญ่ M30/H1 — รอ Breakout ก่อน Buy",
-    BLOCKED_MAJOR_SUPPORT: "ราคาอยู่ชิดแนวรับใหญ่ M30/H1 — รอ Breakdown ก่อน Sell",
-    WAITING_CONFIDENCE: "คะแนนความมั่นใจยังไม่ถึงเกณฑ์",
-    SESSION_BLOCKED: "อยู่นอกเวลาที่อนุญาตให้เทรด",
-    ADAPTIVE_DATA_NOT_READY: "ATR / ข้อมูลกราฟยังไม่พร้อม",
-    RISK_LIMIT_TOO_SMALL: "Lot ที่คำนวณตามความเสี่ยงเล็กกว่าที่ Broker อนุญาต"
-  };
-  const currentBlockReason = String(props.metrics?.adaptiveBlockReason || "");
-  const currentConfidence = Number(props.metrics?.signalConfidence || 0);
-  const profileConfidenceThreshold:Record<string,number> = { SAFE:80, BALANCED:70, AGGRESSIVE:60, BURST_10:60, MAXIMUM:50 };
-  const confidenceThreshold = Number(profileConfidenceThreshold[profile] || props.settings?.confidenceThreshold || 70);
-  const currentRegime = String(props.metrics?.marketRegime || "");
-  const momentum = Number(props.metrics?.momentumPoints || 0);
-  const momentumThreshold = Number(props.metrics?.adaptiveMomentumThreshold || props.metrics?.momentumEntryPoints || 0);
-  const executionQuality = Number(props.metrics?.executionQuality || 0);
-  const atrPoints = Number(props.metrics?.atrPoints || 0);
-  const adaptiveLot = Number(props.metrics?.adaptiveLot || props.settings?.lot || 0);
-  const addProgress = Number(props.metrics?.pyramidProgressPoints || 0);
-  const addRequired = Number(props.metrics?.pyramidRequiredPoints || 0);
 
   return (
     <div className="cc-bot-modal-backdrop" role="presentation" onMouseDown={e=>{
@@ -2018,205 +1894,28 @@ function BotSettingsModal(props:any) {
         </div>
 
         <div className="cc-bot-modal-body">
-          <section className="cc-mode-section">
-            <div className="cc-mode-section-head">
-              <div>
-                <span className="cc-mode-step">1</span>
-                <div><b>เลือกโหมดการเทรด</b><small>โหมดกำหนดความไวและพฤติกรรมการเข้า ส่วนกำไร/SL ใช้ค่าที่คุณตั้งด้านล่าง</small></div>
-              </div>
-              <span className="cc-mode-recommend"><ScenovaIcon name="info" size={15}/>ถ้ายังไม่แน่ใจ เริ่มที่ “สมดุล”</span>
+          <section className="cc-smart-engine-banner">
+            <span className="cc-smart-engine-icon"><ScenovaIcon name="brain" size={24}/></span>
+            <div className="cc-smart-engine-copy">
+              <b>Adaptive Intelligence พร้อมทำงาน</b>
+              <small>ระบบเดียวอ่านแนวโน้ม แนวรับ–แนวต้าน Order Block และ Fibonacci จาก M5 + M15 แล้วเปิดตามจำนวนไม้ที่เลือก</small>
             </div>
-
-            <div className="cc-mode-card-grid">
-              {profiles.map(([value,icon])=>{
-                const info = tradingProfileHelp[value];
-                const active = profile === value;
-                const helpOpen = props.profileHelpOpen === value;
-                return (
-                  <div key={value} className={"cc-mode-card "+(active?"active ":"")+(helpOpen?"help-open":"")}>
-                    <button type="button" className="cc-mode-select" onClick={()=>props.onEdit?.("tradingProfile",value)}>
-                      <span className="cc-mode-card-icon"><ScenovaIcon name={icon} size={20}/></span>
-                      <span className="cc-mode-card-copy">
-                        <span className="cc-mode-badge">{info.badge}</span>
-                        <b>{info.title}</b>
-                        <small>{info.short}</small>
-                      </span>
-                      {active?<span className="cc-mode-active-mark">กำลังใช้</span>:null}
-                    </button>
-                    <button type="button" className="cc-mode-help-button" aria-label={"อ่านรายละเอียดโหมด "+info.title} onClick={()=>props.onProfileHelp?.(helpOpen?"":value)}>!</button>
-                  </div>
-                );
-              })}
+            <div className="cc-smart-engine-badges">
+              <span>{"Fib M5 + M15 · หลัก "+String(props.metrics?.fibTimeframe||"กำลังเลือก")}</span>
+              <span>เปิดเป็นชุดอัตโนมัติ</span>
+              <span>{String(props.metrics?.entryModel||"กำลังวิเคราะห์")}</span>
             </div>
-
-            {activeHelp&&helpRules&&<div className="cc-mode-help-panel cc-mode-help-expanded">
-              <div className="cc-mode-help-title">
-                <span><ScenovaIcon name="info" size={19}/></span>
-                <div>
-                  <b>{activeHelp.title} — คืออะไร และต้องผ่านค่าอะไรบ้าง?</b>
-                  <p>{activeHelp.detail}</p>
-                </div>
-                <button type="button" onClick={()=>props.onProfileHelp?.("")}>ปิดคำอธิบาย</button>
-              </div>
-
-              <div className="cc-profile-rule-summary">
-                <ModeRuleMetric label="Confidence ขั้นต่ำ" value={"≥ "+helpRules.confidence+"%"} note="ไม้แรกต้องถึงค่านี้"/>
-                <ModeRuleMetric label={helpProfile==="MAXIMUM"?"โหมด Lot":"Risk ต่อออเดอร์"} value={helpProfile==="MAXIMUM"?"ใช้ Lot ที่ตั้งตรง ๆ":helpRules.riskPercent.toFixed(2)+"% Equity"} note={helpProfile==="MAXIMUM"?"ไม่ลด Lot ด้วย ATR/Loss/Drawdown":"ใช้คำนวณ Lot"}/>
-                <ModeRuleMetric label="SL ระบบ" value={"ATR × "+helpRules.stopAtr.toFixed(2)} note="ถ้าไม่ได้กำหนด SL เอง"/>
-                <ModeRuleMetric label="เว้นคำสั่งขั้นต่ำ" value={helpRules.minIntervalMs+" ms"} note={"สูงสุด "+helpRules.maxOrdersPerMinute+" คำสั่ง/นาที"}/>
-                <ModeRuleMetric label="Momentum ฐาน" value="±8.0 pt" note="Adaptive จะปรับตามสภาพตลาด"/>
-                <ModeRuleMetric label="Minimum Lot Override" value={helpRules.minimumLotOverride?"เปิด":"ปิด"} note={helpRules.minimumLotOverride?"Burst อาจใช้ Lot ขั้นต่ำ Broker":"ถ้า Risk เล็กเกิน Lot ขั้นต่ำ จะไม่เข้า"}/>
-              </div>
-
-              <div className="cc-mode-help-columns">
-                <ProfileHelpList title="เหมาะกับใคร" items={activeHelp.bestFor}/>
-                <ProfileHelpList title="ข้อดี" items={activeHelp.strengths}/>
-                <ProfileHelpList title="ต้องรู้ก่อนใช้" items={activeHelp.cautions} caution/>
-              </div>
-
-              <div className="cc-profile-filter-detail">
-                <div className="cc-ea-filter-guide-head">
-                  <div>
-                    <span><ScenovaIcon name="brain" size={20}/></span>
-                    <div>
-                      <b>ก่อนเปิดไม้แรก EA คัด 7 ชั้น</b>
-                      <small>ค่าด้านล่างคือกฎจริงของโหมด {activeHelp.title}{helpIsActive?" และแสดงค่า Live จาก EA":" — เลือกโหมดนี้แล้ว EA จะใช้ค่าชุดนี้"}</small>
-                    </div>
-                  </div>
-                  {helpIsActive&&<div className={"cc-ea-filter-now "+(currentBlockReason?"waiting":"ready")}>
-                    <i/>
-                    <span>{currentBlockReason ? (blockReasonText[currentBlockReason] || currentBlockReason) : "เงื่อนไขหลักผ่าน / กำลังประเมินจังหวะ"}</span>
-                  </div>}
-                </div>
-
-                <div className="cc-ea-filter-grid">
-                  <EaFilterCard
-                    step="01"
-                    icon="trend"
-                    title="Momentum"
-                    description="AUTO ต้องมีแรงราคาเกิน Adaptive threshold ก่อนเลือก BUY/SELL; BUY ONLY / SELL ONLY ล็อกฝั่ง แต่ Momentum ยังมีผลต่อ Confidence"
-                    value={helpIsActive&&momentumThreshold>0 ? "ต้อง ≥ ±"+momentumThreshold.toFixed(1)+" pt" : "ฐาน ±8.0 pt"}
-                    detail={helpIsActive ? "ตอนนี้ "+momentum.toFixed(1)+" pt" : "Quiet ลดเกณฑ์ · Range/High Vol เพิ่มเกณฑ์ตาม ATR"}
-                    tone={helpIsActive&&momentumThreshold>0&&Math.abs(momentum)>=momentumThreshold ? "good" : "neutral"}
-                  />
-                  <EaFilterCard
-                    step="02"
-                    icon="trend"
-                    title="Trend M1 / M5 / M15 / M30 / H1"
-                    description="M30/H1 กำหนด Bias ใหญ่, M15 เชื่อมโครงสร้าง, M1/M5 ใช้จับ Pullback/Trigger จึงไม่บังคับให้ทั้ง 5 TF ต้องสีเดียวกัน"
-                    value={helpIsActive ? "M1 "+trendText(props.metrics?.trendM1)+" · M5 "+trendText(props.metrics?.trendM5)+" · M15 "+trendText(props.metrics?.trendM15) : "Macro ใช้ M30/H1"}
-                    detail={helpIsActive ? "M30 "+trendText(props.metrics?.trendM30)+" · H1 "+trendText(props.metrics?.trendH1) : "M1/M5 สามารถสวนชั่วคราวระหว่าง Pullback ได้"}
-                    tone="neutral"
-                  />
-                  <EaFilterCard
-                    step="03"
-                    icon="risk"
-                    title="ATR / Market Regime"
-                    description="ATR ใช้ M15 ตาม Period ที่ตั้ง เพื่อแยกตลาดนิ่ง, Range, Trend และ High Volatility"
-                    value={"ATR Period "+Number(props.settings?.atrPeriod||14)}
-                    detail={helpIsActive ? ((regimeText[currentRegime]||currentRegime||"รอข้อมูล")+" · ATR "+(atrPoints>0?atrPoints.toFixed(0)+" pt":"รอข้อมูล")) : "High Vol: ATR ratio ≥1.60 · Quiet: ≤0.55"}
-                    tone={helpIsActive&&currentRegime==="HIGH_VOLATILITY" ? "warn" : "neutral"}
-                  />
-                  <EaFilterCard
-                    step="04"
-                    icon="spread"
-                    title="Spread"
-                    description="ไม่มีเลขตายตัว ระบบเรียนรู้ Spread ของ Broker/Symbol แล้วสร้าง Adaptive limit; แพงผิดปกติจะพักเปิดไม้ใหม่"
-                    value={helpIsActive ? String(props.spreadValueLabel||"—") : "ต้องไม่เกิน Adaptive limit"}
-                    detail={helpIsActive ? "Limit "+String(props.spreadLimitLabel||"—")+" · "+String(props.spreadStatusLabel||"—") : "Limit เปลี่ยนตาม Spread จริงของ Symbol"}
-                    tone={helpIsActive&&String(props.spreadStatusLabel||"").includes("ปกติ") ? "good" : "neutral"}
-                  />
-                  <EaFilterCard
-                    step="05"
-                    icon="status"
-                    title="Confidence Score"
-                    description="รวม Momentum + Trend 5 TF + Market Structure + ตำแหน่ง Support/Resistance + Order Block + Fibonacci + Spread/Execution เป็นคะแนน 0–100"
-                    value={"ต้อง ≥ "+helpRules.confidence+"%"}
-                    detail={helpIsActive ? "ตอนนี้ "+currentConfidence.toFixed(0)+"%" : "ต่ำกว่านี้ = ยังไม่เปิดไม้แรก"}
-                    tone={helpIsActive&&currentConfidence>=helpRules.confidence ? "good" : "warn"}
-                  />
-                  <EaFilterCard
-                    step="06"
-                    icon="lot"
-                    title="Risk / Lot"
-                    description={helpProfile==="MAXIMUM" ? "Maximum ใช้ Lot ที่คุณตั้งโดยตรง ไม่ลดจาก Volatility, Loss streak, Execution หรือ Drawdown แต่ยังใช้สมองเลือกจุดเข้าเต็มระบบ" : "คำนวณ Lot จาก Equity และระยะ SL แล้วลดเพิ่มตาม Volatility, Loss streak, Execution และ Drawdown"}
-                    value={helpProfile==="MAXIMUM" ? "Lot ตรงตามที่ตั้ง" : "Risk "+helpRules.riskPercent.toFixed(2)+"% Equity"}
-                    detail={helpIsActive ? "Lot ที่ EA ใช้ "+(adaptiveLot>0?adaptiveLot.toFixed(2):Number(props.settings?.lot||0.01).toFixed(2))+" / ตั้งไว้ "+Number(props.settings?.lot||0.01).toFixed(2) : (helpProfile==="MAXIMUM"?"ไม่ใช้ Adaptive ลด Lot":"Lot จะไม่เกินค่าที่คุณตั้ง")}
-                    tone="neutral"
-                  />
-                  <EaFilterCard
-                    step="07"
-                    icon="clock"
-                    title="Session + สิทธิ์เทรด"
-                    description="ต้องอยู่ในเวลาที่ตั้ง และ MT5 / Algo Trading / บัญชี / Symbol ต้องอนุญาตส่งออเดอร์"
-                    value={helpIsActive ? String(props.metrics?.sessionProfile||"รอข้อมูล") : String(props.settings?.sessionStartHour??0).padStart(2,"0")+":00–"+String(props.settings?.sessionEndHour??24).padStart(2,"0")+":00"}
-                    detail={helpIsActive ? (props.metrics?.tradeReady===true?"สิทธิ์เทรดพร้อม":"กำลังตรวจสิทธิ์ MT5") : "อ้างอิงเวลา Server ของ Broker"}
-                    tone={helpIsActive&&props.metrics?.tradeReady===true ? "good" : "neutral"}
-                  />
-                </div>
-
-                {helpIsActive&&<div className="cc-profile-add-thresholds">
-                  <div>
-                    <span>แนวรับ / แนวต้าน</span>
-                    <b>{"S "+Number(props.metrics?.nearestSupport||0).toFixed(2)+" · R "+Number(props.metrics?.nearestResistance||0).toFixed(2)}</b>
-                    <small>{"Major S "+Number(props.metrics?.majorSupport||0).toFixed(2)+" · Major R "+Number(props.metrics?.majorResistance||0).toFixed(2)}</small>
-                  </div>
-                  <div>
-                    <span>Order Block</span>
-                    <b>{String(props.metrics?.orderBlockTimeframe||"NONE")}</b>
-                    <small>{"Bull "+Number(props.metrics?.bullishOrderBlockLow||0).toFixed(2)+"–"+Number(props.metrics?.bullishOrderBlockHigh||0).toFixed(2)+" · Bear "+Number(props.metrics?.bearishOrderBlockLow||0).toFixed(2)+"–"+Number(props.metrics?.bearishOrderBlockHigh||0).toFixed(2)}</small>
-                  </div>
-                  <div>
-                    <span>Fibonacci / Entry</span>
-                    <b>{String(props.metrics?.entryModel||"NONE")+" · Score "+Number(props.metrics?.entryScore||0).toFixed(0)+"/100"}</b>
-                    <small>{"Fib "+(Number(props.metrics?.fibRetracement||0)*100).toFixed(1)+"% · "+(props.metrics?.fiboVisible?"แสดงบน MT5":"รอ Start/ข้อมูล Swing")}</small>
-                  </div>
-                </div>}
-              </div>
-
-              <div className="cc-ea-add-guide cc-profile-add-guide">
-                <div className="cc-ea-add-guide-title">
-                  <span><ScenovaIcon name="layers" size={18}/></span>
-                  <div>
-                    <b>ถ้ามีไม้แล้ว ต้องผ่านค่าเท่าไรถึงเพิ่มไม้?</b>
-                    <small>Max Positions เป็นเพดาน ไม่ใช่คำสั่งยิงครบทุกไม้ทันที</small>
-                  </div>
-                </div>
-                <div className="cc-profile-add-thresholds">
-                  <div>
-                    <span>ตลาดเป็น Trend</span>
-                    <b>ราคาเดิน ≥ max(3 pt, ATR × 6%)</b>
-                    <small>Confidence ≥ {helpRules.confidence+3}% · Momentum ต่อเนื่อง ≥ 75% ของเกณฑ์</small>
-                  </div>
-                  <div>
-                    <span>Range / ตลาดไม่เป็น Trend</span>
-                    <b>ราคาเดิน ≥ max(3 pt, ATR × 5%)</b>
-                    <small>Confidence ≥ {helpRules.confidence+5}% · Momentum ≥ 110% ของเกณฑ์</small>
-                  </div>
-                  <div className="warn">
-                    <span>High Volatility</span>
-                    <b>ราคาเดิน ≥ max(5 pt, ATR × 10%)</b>
-                    <small>Confidence ≥ {helpRules.confidence+12}% · Momentum ≥ 110% · สูงสุด 2 ไม้</small>
-                  </div>
-                </div>
-                {helpIsActive&&<div className="cc-profile-live-add">
-                  <span>ค่า Live ตอนนี้</span>
-                  <b>{addRequired>0 ? "ราคาเดิน "+addProgress.toFixed(0)+" / ต้องการ "+addRequired.toFixed(0)+" pt" : "ยังไม่มีเงื่อนไขเพิ่มไม้ที่กำลังนับ"}</b>
-                </div>}
-              </div>
-            </div>}
-
           </section>
 
           <section className="cc-bot-basic-section">
-            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">2</span><div><b>ตั้งค่าพื้นฐาน</b><small>เลือกวิธีเข้า จำนวนไม้ และเพดาน Lot</small></div></div></div>
+            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">1</span><div><b>ตั้งค่าพื้นฐาน</b><small>เลือกทิศทาง จำนวนไม้ และ Lot ที่ต้องการ</small></div></div></div>
             <div className="cc-bot-basic-grid">
               <div className="cc-bot-basic-card">
                 <div className="cc-bot-basic-label"><span><ScenovaIcon name="gold" size={19}/></span><div><b>Symbol</b><small>สินทรัพย์ที่ EA กำลังทำงานอยู่</small></div></div>
                 <div className="cc-bot-basic-readonly">{props.symbol || "—"}</div>
               </div>
               <label className="cc-bot-basic-card">
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="bot" size={19}/></span><div><b>โหมดเข้าออเดอร์</b><small>AUTO ให้ระบบเลือก BUY/SELL จาก Momentum + Trend</small></div></div>
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="bot" size={19}/></span><div><b>ทิศทางออเดอร์</b><small>AUTO ให้ระบบเลือก BUY/SELL อัตโนมัติ</small></div></div>
                 <select className="input" value={String(props.settings.entryMode||"AUTO_MOMENTUM")} onChange={e=>props.onEdit?.("entryMode",e.target.value)}>
                   <option value="AUTO_MOMENTUM">AUTO MOMENTUM — ให้ระบบเลือกทิศทาง</option>
                   <option value="BUY_ONLY">BUY ONLY — เปิดเฉพาะ Buy</option>
@@ -2224,7 +1923,7 @@ function BotSettingsModal(props:any) {
                 </select>
               </label>
               <label className="cc-bot-basic-card">
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="layers" size={19}/></span><div><b>จำนวนไม้สูงสุด</b><small>เป็นเพดาน Position; ระบบอาจเปิดน้อยกว่าถ้าความเสี่ยงหรือเงื่อนไขไม่ผ่าน</small></div></div>
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="layers" size={19}/></span><div><b>จำนวนไม้</b><small>เมื่อสัญญาณผ่าน ระบบจะเปิดเป็นชุดตามจำนวนนี้</small></div></div>
                 <select className="input" value={String(props.settings.maxPositions||1)} onChange={e=>props.onEdit?.("maxPositions",e.target.value)}>
                   {[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}
                 </select>
@@ -2239,7 +1938,7 @@ function BotSettingsModal(props:any) {
           </section>
 
           <section className="cc-modal-settings-section">
-            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">3</span><div><b>เป้าหมายกำไร</b><small>เลือกกำไรรวมทั้งชุด หรือกำไรต่อไม้; เปิดอย่างหนึ่ง อีกอย่างจะปิดเอง</small></div></div></div>
+            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">2</span><div><b>เป้าหมายกำไร</b><small>เลือกกำไรรวมทั้งชุด หรือกำไรต่อไม้</small></div></div></div>
             <div className="cc-modal-setting-grid two">
               <SettingTile icon="profit" title="กำไรทั้งชุดถึงแล้วปิด" description="รวมกำไรทุก Position ใน Basket เดียวกัน" wide accent={basketProfitEnabled}>
                 <BasketProfitTargetField
@@ -2257,11 +1956,6 @@ function BotSettingsModal(props:any) {
                 <ToggleMoneyField label="เปิดกำไรต่อไม้" defaultValue="2" value={props.settings.perPositionProfitMoney} suffix="กำไรต่อ Position" onChange={(v:string)=>props.onEdit?.("perPositionProfitMoney",v)}/>
               </SettingTile>
             </div>
-            {burstMode&&<div className="cc-modal-auto-strip">
-              <span><small>Auto Burst ที่ EA คำนวณ</small><b>{"$"+Number(props.metrics?.burstTargetMoney||0).toFixed(2)}</b></span>
-              <span><small>เป้า Basket ที่ EA ใช้จริง</small><b>{Number(props.effectiveBasketProfit||0)>0?"$"+Number(props.effectiveBasketProfit).toFixed(2):"ปิด"}</b></span>
-              <span><small>โหมดปิดจริง</small><b>{String(props.profitControlMode||"รอ EA")}</b></span>
-            </div>}
             <div className="cc-modal-setting-grid one">
               <SettingTile icon="pnl" title="เป้ากำไรวันนี้" description="ทำงานแยกจากกำไร Basket/ต่อไม้; ถึงเป้าแล้วเลือกหยุดหรือปล่อยต่อ" wide>
                 <DailyProfitTargetField
@@ -2281,9 +1975,9 @@ function BotSettingsModal(props:any) {
           </section>
 
           <section className="cc-modal-settings-section">
-            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">4</span><div><b>ป้องกันขาดทุน / Stop Loss</b><small>ปิดสวิตช์ SL ต่อไม้ = ใช้ SL ระบบ ATR; เปิด = ใช้ระยะที่คุณกำหนด</small></div></div></div>
+            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">3</span><div><b>ป้องกันขาดทุน / Stop Loss</b><small>ใช้ SL ระบบ หรือกำหนดระยะเอง</small></div></div></div>
             <div className="cc-modal-setting-grid four">
-              <SettingTile icon="shield" title="SL ระบบ (Auto)" description="ATR + โปรไฟล์ + สภาพตลาด">
+              <SettingTile icon="shield" title="SL ระบบ (Auto)" description="คำนวณจาก ATR และสภาพตลาด">
                 <div className="cc-readout"><b>{Number(props.hardStopMultiplier||0)>0?"ATR × "+Number(props.hardStopMultiplier).toFixed(2):"กำลังคำนวณ"}</b><small>{Number(props.systemHardStopDistancePoints||0)>0?"ระยะระบบตอนนี้ "+Number(props.systemHardStopDistancePoints).toFixed(0)+" points":"รอ ATR จาก EA"}</small></div>
               </SettingTile>
               <SettingTile icon="orders" title="SL ต่อไม้" description="Stop Loss จริงที่ส่งไป Broker">
@@ -2299,7 +1993,7 @@ function BotSettingsModal(props:any) {
               <SettingTile icon="pnl" title="หยุดเมื่อขาดทุนวันนี้" description="ขาดทุนรวมวันนี้ถึงจำนวนนี้ ระบบหยุดตาม Daily Loss">
                 <ToggleMoneyField label="เปิดขาดทุนรายวัน" defaultValue="25" value={props.settings.dailyLossMoney} suffix="ขาดทุนรวมวันนี้" onChange={(v:string)=>props.onEdit?.("dailyLossMoney",v)}/>
               </SettingTile>
-              <SettingTile icon="risk" title="ปิดทั้งชุดเมื่อขาดทุน" description={burstMode?"เปิด = ใช้ค่าคุณ · ปิด = Burst ใช้ Auto":"รวมขาดทุนทุกไม้ใน Basket"}>
+              <SettingTile icon="risk" title="ปิดทั้งชุดเมื่อขาดทุน" description="รวมขาดทุนทุกไม้ใน Basket">
                 <ToggleMoneyField label="เปิด Basket Loss" defaultValue="10" value={props.settings.maxBasketLossMoney} suffix="ขาดทุนรวมทั้งชุด" onChange={(v:string)=>props.onEdit?.("maxBasketLossMoney",v)}/>
               </SettingTile>
             </div>
@@ -2311,7 +2005,7 @@ function BotSettingsModal(props:any) {
           </section>
 
           <section className="cc-modal-settings-section">
-            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">5</span><div><b>เวลาเทรด</b><small>อ้างอิงเวลา Server ของ Broker ไม่ใช่เวลาบนคอมพิวเตอร์</small></div></div></div>
+            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">4</span><div><b>เวลาเทรด</b><small>อ้างอิงเวลา Server ของ Broker</small></div></div></div>
             <div className="cc-modal-setting-grid four">
               <SettingTile icon="clock" title="เริ่ม Session" description="เวลา Server">
                 <select className="input" value={String(props.settings.sessionStartHour)} onChange={e=>props.onEdit?.("sessionStartHour",e.target.value)}>{[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select>
@@ -2319,13 +2013,13 @@ function BotSettingsModal(props:any) {
               <SettingTile icon="clock" title="จบ Session" description="เวลา Server">
                 <select className="input" value={String(props.settings.sessionEndHour)} onChange={e=>props.onEdit?.("sessionEndHour",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23,24].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select>
               </SettingTile>
-              <SettingTile icon="timer" title="Session ปัจจุบัน" description="อ่านจาก EA"><div className="cc-readout"><b>{String(props.metrics?.sessionProfile||"UNKNOWN")}</b><small>โปรไฟล์ช่วงเวลาตลาด</small></div></SettingTile>
+              <SettingTile icon="timer" title="Session ปัจจุบัน" description="อ่านจาก EA"><div className="cc-readout"><b>{String(props.metrics?.sessionProfile||"UNKNOWN")}</b><small>ช่วงเวลาตลาด</small></div></SettingTile>
               <SettingTile icon="spread" title="Spread ตอนนี้" description={"Adaptive limit "+String(props.spreadLimitLabel||"—")}><div className="cc-readout"><b>{String(props.spreadValueLabel||"—")}</b><small>{String(props.spreadStatusLabel||"—")}</small></div></SettingTile>
             </div>
           </section>
 
           <div className="cc-bot-modal-summary">
-            <div><small>โหมด</small><b>{tradingProfileHelp[profile]?.title || profile}</b></div>
+            <div><small>ระบบวิเคราะห์</small><b>Adaptive M5 + M15</b></div>
             <div><small>จำนวนไม้</small><b>{Number(props.settings.maxPositions||1)} ไม้</b></div>
             <div><small>Lot สูงสุด</small><b>{Number(props.settings.lot||0.01).toFixed(2)}</b></div>
             <div><small>EA Sync</small><b>{props.syncLabel || "รอ EA"}</b></div>
@@ -2342,33 +2036,6 @@ function BotSettingsModal(props:any) {
       </div>
     </div>
   );
-}
-
-function ModeRuleMetric({label,value,note}:{label:string;value:string;note:string}) {
-  return (
-    <div className="cc-mode-rule-metric">
-      <small>{label}</small>
-      <b>{value}</b>
-      <span>{note}</span>
-    </div>
-  );
-}
-
-function EaFilterCard({step,icon,title,description,value,detail,tone="neutral"}:{step:string;icon:string;title:string;description:string;value:string;detail?:string;tone?:"neutral"|"good"|"warn"}) {
-  return (
-    <div className={"cc-ea-filter-card tone-"+tone}>
-      <div className="cc-ea-filter-card-top">
-        <span className="cc-ea-filter-number">{step}</span>
-        <span className="cc-ea-filter-icon"><ScenovaIcon name={icon} size={18}/></span>
-        <div><b>{title}</b><small>{description}</small></div>
-      </div>
-      <div className="cc-ea-filter-live"><b>{value}</b>{detail?<span>{detail}</span>:null}</div>
-    </div>
-  );
-}
-
-function ProfileHelpList({title,items,caution=false}:{title:string;items:string[];caution?:boolean}) {
-  return <div className={"cc-profile-help-list "+(caution?"caution":"")}><b>{title}</b><ul>{items.map((item)=><li key={item}>{item}</li>)}</ul></div>;
 }
 
 function InfoTip({text}:{text:string}) {
