@@ -1339,7 +1339,13 @@ export class BotController {
     numberSetting("basketProfitTargetMoney", 0, 100000);
     numberSetting("perPositionProfitMoney", 0, 100000);
     numberSetting("profitRunTrailPercent", 0, 95);
+    // EA 1.017 replaces floating-money loss closes with a real Broker SL.
+    // Keep accepting the legacy key only to let old clients clear it safely.
     numberSetting("perPositionLossMoney", 0, 100000);
+    numberSetting("manualStopLossPoints", 0, 1000000);
+    if (body.perPositionLossMoney !== undefined) {
+      clean.perPositionLossMoney = 0;
+    }
     numberSetting("minOrderIntervalMs", 0, 60000, true);
     numberSetting("maxOrdersPerMinute", 1, 5000, true);
     booleanSetting("adaptiveEngine");
