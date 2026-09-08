@@ -1,7 +1,7 @@
 ﻿{
-    "sourceCommit":  "a8ff13bc6c8700ef12e8110d0f27b57c4e1afd21",
-    "sha256":  "f78c60d10e68884015f2fa0e6bce6064571015300fcb8a48b44f81b07b64a571",
+    "sourceCommit":  "7705b36eebff633e25e342e9d915444653241cd9",
+    "sha256":  "c12e1d768bfb392fead05db4f93c3c76219a1e2cbd753bb6742c1904511192d7",
     "eaVersion":  "1.015",
     "file":  "FastBasketBot.ex5",
-    "builtAt":  "2026-09-08T03:06:49.2925152Z"
+    "builtAt":  "2026-09-08T03:48:37.1688527Z"
 }
