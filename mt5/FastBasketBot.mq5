@@ -492,6 +492,11 @@ void OnTick()
 
    if(count > 0)
    {
+      // Dynamic protection never decides whether an entry is allowed. It only
+      // manages exits after a Position exists.
+      RefreshMarketContext(false);
+      ManageDynamicProtection();
+
       // Per-position profit/loss controls are evaluated before basket-level
       // controls. Per-position profit and total Basket profit are mutually
       // exclusive settings, enforced by both Server and EA.
@@ -3919,6 +3924,220 @@ void RecordExecutionQuality(bool accepted, double slippagePoints)
    }
 }
 
+double DynamicInitialStopPrice(int direction, double entryPrice)
+{
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   double atrPoints = g_atrPoints > 0.0 ? g_atrPoints : AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   double atrPrice = MathMax(_Point * 10.0, atrPoints * _Point);
+   double baseDistance = MathMax(1.0, EffectiveStopLossDistancePoints()) * _Point;
+   double baseStop = direction > 0 ? entryPrice - baseDistance : entryPrice + baseDistance;
+
+   double structure = 0.0;
+   if(direction > 0)
+   {
+      structure = ClosestBelow(entryPrice, g_nearestSupport, g_bullishOrderBlockLow, g_majorSupport);
+      if(structure > 0.0)
+      {
+         double structuralStop = structure - atrPrice * 0.12;
+         if(structuralStop > baseStop && structuralStop < entryPrice)
+            baseStop = structuralStop;
+      }
+   }
+   else
+   {
+      structure = ClosestAbove(entryPrice, g_nearestResistance, g_bearishOrderBlockHigh, g_majorResistance);
+      if(structure > 0.0)
+      {
+         double structuralStop = structure + atrPrice * 0.12;
+         if(structuralStop < baseStop && structuralStop > entryPrice)
+            baseStop = structuralStop;
+      }
+   }
+
+   return NormalizeDouble(baseStop, digits);
+}
+
+double DynamicTakeProfitPrice(int direction, double entryPrice, double stopPrice)
+{
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   double atrPoints = g_atrPoints > 0.0 ? g_atrPoints : AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   double atrPrice = MathMax(_Point * 10.0, atrPoints * _Point);
+   double riskDistance = MathMax(atrPrice * 0.45, MathAbs(entryPrice - stopPrice));
+
+   double rewardMultiple = g_entryQuality == "A" ? 1.85 :
+                           g_entryQuality == "B" ? 1.55 : 1.30;
+   if(g_marketRegimeDetail == "NEWS_IMPULSE")
+      rewardMultiple = MathMax(rewardMultiple, 2.10);
+   else if(g_marketRegimeDetail == "TREND_ACCELERATION")
+      rewardMultiple = MathMax(rewardMultiple, 1.90);
+
+   double target = direction > 0
+      ? entryPrice + riskDistance * rewardMultiple
+      : entryPrice - riskDistance * rewardMultiple;
+
+   double opposing = direction > 0 ? g_nearestResistance : g_nearestSupport;
+   if(direction > 0 && opposing > entryPrice + atrPrice * 0.55)
+   {
+      double levelTarget = opposing - atrPrice * 0.06;
+      if(levelTarget > entryPrice + riskDistance * 0.80 &&
+         (g_entryQuality != "A" || levelTarget <= target))
+         target = levelTarget;
+   }
+   else if(direction < 0 && opposing > 0.0 && opposing < entryPrice - atrPrice * 0.55)
+   {
+      double levelTarget = opposing + atrPrice * 0.06;
+      if(levelTarget < entryPrice - riskDistance * 0.80 &&
+         (g_entryQuality != "A" || levelTarget >= target))
+         target = levelTarget;
+   }
+
+   // A-grade trend/news setups may target the 127.2 Fib extension when it is
+   // beyond the nearby reaction target but still within a sane R multiple.
+   if(g_entryQuality == "A" && g_fibDirection == direction &&
+      g_fibSwingHigh > g_fibSwingLow)
+   {
+      double range = g_fibSwingHigh - g_fibSwingLow;
+      double extension = direction > 0
+         ? g_fibSwingHigh + range * 0.272
+         : g_fibSwingLow - range * 0.272;
+      if(direction > 0 && extension > target &&
+         extension <= entryPrice + riskDistance * 2.60)
+         target = extension;
+      else if(direction < 0 && extension < target &&
+              extension >= entryPrice - riskDistance * 2.60)
+         target = extension;
+   }
+
+   return NormalizeDouble(target, digits);
+}
+
+bool ModifyPositionProtection(ulong ticket, double sl, double tp)
+{
+   if(ticket == 0 || !PositionSelectByTicket(ticket))
+      return false;
+
+   MqlTradeRequest request = {};
+   MqlTradeResult result = {};
+   request.action = TRADE_ACTION_SLTP;
+   request.position = ticket;
+   request.magic = InpMagic;
+   request.symbol = PositionGetString(POSITION_SYMBOL);
+   request.sl = sl;
+   request.tp = tp;
+
+   ResetLastError();
+   if(!OrderSend(request, result))
+      return false;
+   return TradeResultAccepted(result);
+}
+
+void ManageDynamicProtection()
+{
+   datetime now = TimeCurrent();
+   if(g_lastDynamicProtectionAt > 0 && now - g_lastDynamicProtectionAt < 2)
+      return;
+   g_lastDynamicProtectionAt = now;
+
+   int count = BasketPositionCount();
+   if(count <= 0)
+      return;
+
+   g_atrPoints = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   double atr = MathMax(10.0, g_atrPoints);
+   double minStopPoints = MathMax(
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
+   ) + 2.0;
+
+   int basketDirection = BasketDirection();
+   double anchorPrice = BasketAnchorEntryPrice(basketDirection);
+   if(anchorPrice > 0.0 && basketDirection != 0)
+   {
+      double basketStop = DynamicInitialStopPrice(basketDirection, anchorPrice);
+      g_dynamicStopPrice = basketStop;
+      g_dynamicTakeProfitPrice = DynamicTakeProfitPrice(basketDirection, anchorPrice, basketStop);
+   }
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+      return;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
+         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+
+      long type = PositionGetInteger(POSITION_TYPE);
+      int direction = type == POSITION_TYPE_BUY ? 1 : -1;
+      double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      double currentSL = PositionGetDouble(POSITION_SL);
+      double currentTP = PositionGetDouble(POSITION_TP);
+      double marketPrice = direction > 0 ? tick.bid : tick.ask;
+      double profitPoints = direction > 0
+         ? (marketPrice - openPrice) / _Point
+         : (openPrice - marketPrice) / _Point;
+
+      double desiredSL = currentSL;
+      if(profitPoints >= atr * 0.55)
+      {
+         double breakEven = direction > 0
+            ? openPrice + atr * 0.04 * _Point
+            : openPrice - atr * 0.04 * _Point;
+         if(direction > 0)
+            desiredSL = currentSL <= 0.0 ? breakEven : MathMax(currentSL, breakEven);
+         else
+            desiredSL = currentSL <= 0.0 ? breakEven : MathMin(currentSL, breakEven);
+      }
+
+      if(profitPoints >= atr * 1.10)
+      {
+         double trail = direction > 0
+            ? marketPrice - atr * 0.55 * _Point
+            : marketPrice + atr * 0.55 * _Point;
+         if(direction > 0)
+            desiredSL = desiredSL <= 0.0 ? trail : MathMax(desiredSL, trail);
+         else
+            desiredSL = desiredSL <= 0.0 ? trail : MathMin(desiredSL, trail);
+      }
+
+      int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+      if(direction > 0 && desiredSL > 0.0)
+         desiredSL = MathMin(desiredSL, tick.bid - minStopPoints * _Point);
+      else if(direction < 0 && desiredSL > 0.0)
+         desiredSL = MathMax(desiredSL, tick.ask + minStopPoints * _Point);
+      desiredSL = desiredSL > 0.0 ? NormalizeDouble(desiredSL, digits) : 0.0;
+
+      // For a single-position strategy with no explicit money target, keep a
+      // live Broker TP. Multi-position baskets use the dynamic Basket target
+      // instead so one rung cannot close and be immediately replaced.
+      double desiredTP = currentTP;
+      if(count == 1 && g_perPositionProfit <= 0.0 && g_basketProfitTarget <= 0.0)
+      {
+         double baseStop = desiredSL > 0.0
+            ? desiredSL
+            : DynamicInitialStopPrice(direction, openPrice);
+         desiredTP = DynamicTakeProfitPrice(direction, openPrice, baseStop);
+         if(direction > 0)
+            desiredTP = MathMax(desiredTP, tick.ask + minStopPoints * _Point);
+         else
+            desiredTP = MathMin(desiredTP, tick.bid - minStopPoints * _Point);
+         desiredTP = NormalizeDouble(desiredTP, digits);
+      }
+
+      bool slChanged = desiredSL > 0.0 &&
+         (currentSL <= 0.0 || MathAbs(desiredSL - currentSL) >= _Point * 2.0);
+      bool tpChanged = desiredTP > 0.0 &&
+         (currentTP <= 0.0 || MathAbs(desiredTP - currentTP) >= _Point * 4.0);
+
+      if(slChanged || tpChanged)
+         ModifyPositionProtection(ticket, slChanged ? desiredSL : currentSL, tpChanged ? desiredTP : currentTP);
+   }
+}
+
 string ProfitControlModeName()
 {
    if(g_perPositionProfit > 0.0)
@@ -3966,16 +4185,18 @@ bool SendMarketOrder(int direction)
       request.price = tick.bid;
    }
 
-   double effectiveStopLossPoints = EffectiveStopLossDistancePoints();
-   if(effectiveStopLossPoints > 0.0)
-   {
-      int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-      double stopDistance = effectiveStopLossPoints * _Point;
-      request.sl = NormalizeDouble(
-         direction > 0 ? tick.ask - stopDistance : tick.bid + stopDistance,
-         digits
-      );
-   }
+   double entryPrice = request.price;
+   request.sl = DynamicInitialStopPrice(direction, entryPrice);
+   if(request.sl > 0.0 &&
+      !BasketFillEnabled() &&
+      g_perPositionProfit <= 0.0 &&
+      g_basketProfitTarget <= 0.0)
+      request.tp = DynamicTakeProfitPrice(direction, entryPrice, request.sl);
+
+   g_dynamicStopPrice = request.sl;
+   g_dynamicTakeProfitPrice = request.tp > 0.0
+      ? request.tp
+      : DynamicTakeProfitPrice(direction, entryPrice, request.sl);
 
    g_adaptiveLot = request.volume;
 
