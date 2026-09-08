@@ -244,6 +244,25 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       WHERE COALESCE((settings->>'adaptiveEngine')::boolean,true)=true
         AND COALESCE((settings->>'maxAtrPoints')::numeric,0)=3000;
 
+      -- EA 1.017 uses a real Broker Stop Loss per Position. A value of 0
+      -- means use the profile/system ATR stop; positive values are fixed points.
+      -- Retire the old floating-money per-position loss close for every account.
+      UPDATE bot_settings
+      SET settings=jsonb_set(
+            jsonb_set(
+              settings,
+              '{manualStopLossPoints}',
+              COALESCE(settings->'manualStopLossPoints','0'::jsonb),
+              true
+            ),
+            '{perPositionLossMoney}',
+            '0'::jsonb,
+            true
+          ),
+          updated_at=now()
+      WHERE NOT settings ? 'manualStopLossPoints'
+         OR COALESCE((settings->>'perPositionLossMoney')::numeric,0)<>0;
+
       -- Trading profiles own execution speed and Adaptive parameters. Legacy
       -- loss cooldown fields are removed and never block a new valid signal.
       UPDATE bot_settings
