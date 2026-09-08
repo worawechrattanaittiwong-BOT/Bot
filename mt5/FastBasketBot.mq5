@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.012"
+#property version   "1.013"
 #define SCENOVA_PRODUCT_VERSION "2.0.7"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -281,10 +281,6 @@ int OnInit()
       Print("Strategy Tester mode: SaaS heartbeat bypassed for historical testing only.");
    }
 
-   long marginMode = AccountInfoInteger(ACCOUNT_MARGIN_MODE);
-   if(marginMode != ACCOUNT_MARGIN_MODE_RETAIL_HEDGING)
-      Print("WARNING: This basket strategy is designed for a hedging account.");
-
    Print("Bot SaaS EA initialized. Instance=", InpInstanceId);
    return(INIT_SUCCEEDED);
 }
@@ -313,7 +309,7 @@ void OnTick()
    if(count > 0)
    {
       UpdateBasketPeakPositionCount(count);
-      EnsureBurstTargets(g_burstActive ? 10 : count);
+      EnsureBurstTargets(g_burstActive ? MathMax(1, g_burstTargetPositions) : count);
    }
    else
       ResetBasketCycleState();
@@ -509,7 +505,9 @@ void OnTick()
 
    if(IsBurstProfile() && count > 0)
    {
-      g_executionStatus = count >= 10 ? "BURST_COMPLETE" : "BURST_PARTIAL_MANAGING";
+      g_executionStatus = g_burstTargetPositions > 0 && g_burstRequestsSent >= g_burstTargetPositions
+         ? "BURST_COMPLETE"
+         : "BURST_PARTIAL_MANAGING";
       return;
    }
 
@@ -577,19 +575,6 @@ void OnTick()
    if(!OpenTradingAllowedForDirection(direction))
    {
       g_executionStatus = "SYMBOL_DIRECTION_BLOCKED";
-      return;
-   }
-
-   if(IsBurstProfile() &&
-      AccountInfoInteger(ACCOUNT_MARGIN_MODE) != ACCOUNT_MARGIN_MODE_RETAIL_HEDGING)
-   {
-      g_executionStatus = "BURST_REQUIRES_HEDGING";
-      return;
-   }
-
-   if(IsBurstProfile() && !BurstRiskAllowed(g_adaptiveLot))
-   {
-      g_executionStatus = "BURST_RISK_LIMIT";
       return;
    }
 
@@ -695,7 +680,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.012\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.013\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -991,7 +976,6 @@ void ApplyTradingProfile()
 
    if(g_tradingProfile == PROFILE_SAFE)
    {
-      g_maxPositions = 3;
       g_minOrderIntervalMs = 1200;
       g_maxOrdersPerMinute = 30;
       g_confidenceThreshold = 80;
@@ -1001,7 +985,6 @@ void ApplyTradingProfile()
    }
    else if(g_tradingProfile == PROFILE_AGGRESSIVE)
    {
-      g_maxPositions = 8;
       g_minOrderIntervalMs = 350;
       g_maxOrdersPerMinute = 120;
       g_confidenceThreshold = 60;
@@ -1011,12 +994,11 @@ void ApplyTradingProfile()
    }
    else if(g_tradingProfile == PROFILE_BURST_10)
    {
-      g_maxPositions = 10;
       g_minOrderIntervalMs = 250;
       g_maxOrdersPerMinute = 180;
       g_confidenceThreshold = 65;
-      // Total planned risk is controlled as one 10-position Basket. Per-order
-      // risk is deliberately small; minimum-lot use still passes BurstRiskAllowed.
+      // The selected Max Positions controls the Burst size. MT5/Broker decides
+      // whether each submitted order can be accepted.
       g_riskPerOrderPercent = 0.05;
       g_hardStopAtrMultiplier = 1.70;
       g_allowMinimumLotOverride = true;
@@ -1029,7 +1011,6 @@ void ApplyTradingProfile()
    }
    else
    {
-      g_maxPositions = 5;
       g_minOrderIntervalMs = 700;
       g_maxOrdersPerMinute = 60;
       g_confidenceThreshold = 70;
@@ -1327,15 +1308,9 @@ int AdaptiveEntryDirection(double momentum)
    score -= MathMin(20.0, g_consecutiveLosses * 5.0);
    g_signalConfidence = MathMax(0.0, MathMin(100.0, score));
 
-   double positionFactor = 1.0;
-   if(g_marketRegime == "HIGH_VOLATILITY") positionFactor = 0.40;
-   else if(g_marketRegime == "RANGE") positionFactor = 0.60;
-   else if(g_marketRegime == "QUIET") positionFactor = 0.50;
-   if(g_signalConfidence < g_confidenceThreshold + 10) positionFactor *= 0.75;
-   positionFactor *= MathPow(0.80, MathMax(0, g_consecutiveLosses));
-   g_adaptiveMaxPositions = MathMax(1, (int)MathFloor(g_maxPositions * positionFactor));
-   if(IsBurstProfile())
-      g_adaptiveMaxPositions = 10;
+   // Position count is controlled only by the user's Max Positions setting.
+   // Adaptive Intelligence may decide when to enter, but never lowers this cap.
+   g_adaptiveMaxPositions = g_maxPositions;
 
    double spacingFactor = 1.0;
    if(g_marketRegime == "HIGH_VOLATILITY") spacingFactor = 2.2;
@@ -1735,7 +1710,7 @@ void EnsureBurstTargets(int plannedPositions)
    if(!IsBurstProfile() || (g_burstTargetMoney > 0.0 && g_burstLossMoney > 0.0))
       return;
 
-   int targetCount = MathMax(1, MathMin(10, plannedPositions));
+   int targetCount = MathMax(1, plannedPositions);
    double volume = g_adaptiveLot > 0.0 ? g_adaptiveLot : NormalizeTradeVolume(g_lot);
    double plannedSpreadCost = CurrentSpreadCost(volume) * targetCount;
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
@@ -1744,34 +1719,16 @@ void EnsureBurstTargets(int plannedPositions)
    g_burstLossMoney = MathMin(MathMax(g_burstTargetMoney * 3.0, equity * 0.005), riskCeiling);
 }
 
-bool BurstRiskAllowed(double volume)
-{
-   if(!IsBurstProfile() || volume <= 0.0)
-      return true;
-
-   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-   double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-   double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE_LOSS);
-   if(tickValue <= 0.0) tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-   double stopDistance = g_atrPoints * g_hardStopAtrMultiplier * _Point;
-   if(equity <= 0.0 || tickSize <= 0.0 || tickValue <= 0.0 || stopDistance <= 0.0)
-      return false;
-
-   double riskPerLot = stopDistance / tickSize * tickValue;
-   double plannedRisk = riskPerLot * volume * 10.0;
-   return plannedRisk <= equity * 0.02;
-}
-
 void ArmBurst(int direction)
 {
    if(!IsBurstProfile() || g_burstActive)
       return;
 
    g_burstDirection = direction;
-   g_burstTargetPositions = 10;
+   g_burstTargetPositions = MathMax(1, g_maxPositions);
    g_burstRequestsSent = 1;
    g_burstStartedAt = TimeCurrent();
-   g_burstActive = BasketPositionCount() < g_burstTargetPositions;
+   g_burstActive = g_burstRequestsSent < g_burstTargetPositions;
    g_burstNeedsRearm = false;
    EnsureBurstTargets(g_burstTargetPositions);
    Print(
@@ -1801,12 +1758,6 @@ void ProcessBurstQueue()
       AbortBurst("CONTROL_NOT_FRESH");
       return;
    }
-   if(AccountInfoInteger(ACCOUNT_MARGIN_MODE) != ACCOUNT_MARGIN_MODE_RETAIL_HEDGING)
-   {
-      AbortBurst("BURST_REQUIRES_HEDGING");
-      return;
-   }
-
    if(TimeCurrent() - g_burstStartedAt > 15)
    {
       AbortBurst("BURST_TIMEOUT");
@@ -1854,12 +1805,6 @@ void ProcessBurstQueue()
    }
    if(!CanSendOrder())
       return;
-   if(!BurstRiskAllowed(g_adaptiveLot))
-   {
-      AbortBurst("BURST_RISK_LIMIT");
-      return;
-   }
-
    if(!SendMarketOrder(g_burstDirection))
    {
       AbortBurst("ORDER_REJECTED");

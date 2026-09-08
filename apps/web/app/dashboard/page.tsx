@@ -347,7 +347,7 @@ export default function DashboardPage() {
     SAFE: "ปลอดภัย",
     BALANCED: "สมดุล",
     AGGRESSIVE: "เชิงรุก",
-    BURST_10: "Burst 10"
+    BURST_10: "Burst"
   };
   const spreadStatusLabel:Record<string,string> = {
     NORMAL: "ปกติ",
@@ -1068,7 +1068,7 @@ export default function DashboardPage() {
                   <div className="cc-control-fields cc-v3-control-fields">
                     <div className="cc-control-field"><span>Symbol</span><b>{metrics.symbol || settings.symbol}</b></div>
                     <div className="cc-control-field"><span>โหมดเข้าออเดอร์</span><select value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO MOMENTUM</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></div>
-                    <div className="cc-control-field"><span>จำนวน Position สูงสุด</span><select value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
+                    <div className="cc-control-field"><span>จำนวนไม้</span><select value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
                     <div className="cc-control-field"><span>Lot สูงสุด</span><select value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
                   </div>
 
@@ -1116,13 +1116,14 @@ export default function DashboardPage() {
                 <form className="cc-settings-form-v3" onSubmit={saveSettings}>
                   {settingsTab==="basic"&&<><div className="cc-settings-section-title"><b>ตั้งค่าพื้นฐาน</b><span>กำหนดสินทรัพย์ รูปแบบการเข้า และจำนวนไม้</span></div><div className="cc-settings-grid">
                     <SettingTile icon="brain" title="โปรไฟล์การเทรด" description="เลือกแบบเดียว ระบบจัดค่าภายในให้ทั้งหมด" wide><div className="cc-profile-picker">{[
-                      ["SAFE","ปลอดภัย","สูงสุด 3 ไม้ · คัดสัญญาณเข้ม"],
-                      ["BALANCED","สมดุล","สูงสุด 5 ไม้ · เหมาะใช้ทั่วไป"],
-                      ["AGGRESSIVE","เชิงรุก","สูงสุด 8 ไม้ · เข้าเร็วขึ้น"],
-                      ["BURST_10","Burst 10","Basket Scalping · เปิดรัวสูงสุด 10 ไม้"]
+                      ["SAFE","ปลอดภัย","คัดสัญญาณเข้ม"],
+                      ["BALANCED","สมดุล","เหมาะใช้ทั่วไป"],
+                      ["AGGRESSIVE","เชิงรุก","เข้าเร็วขึ้น"],
+                      ["BURST_10","Burst","เปิดรัวตามจำนวนไม้ที่เลือก"]
                     ].map(([value,label,detail])=><button type="button" key={value} className={String(settings.tradingProfile||"BALANCED")===value?"active":""} onClick={()=>editSetting("tradingProfile",value)}><b>{label}</b><small>{detail}</small></button>)}</div></SettingTile>
                     <SettingTile icon="gold" title="Symbol" description="สินทรัพย์ที่ EA กำลังเทรด"><div className="input read-only-value">{metrics.symbol||settings.symbol}</div></SettingTile>
                     <SettingTile icon="bot" title="โหมดเข้าออเดอร์" description="AUTO ใช้ Momentum + Trend"><select className="input" value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO MOMENTUM</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></SettingTile>
+                    <SettingTile icon="layers" title="จำนวนไม้ที่ต้องการ" description="Burst จะส่งตามจำนวนนี้"><select className="input" value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></SettingTile>
                     <SettingTile icon="lot" title="Lot สูงสุด (Adaptive)" description="Adaptive ลดได้ แต่ไม่เพิ่มเกินค่านี้"><select className="input" value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></SettingTile>
                     <SettingTile icon="status" title="โปรไฟล์ที่ EA ใช้" description="ค่าจริงจาก Heartbeat"><div className="cc-readout"><b>{tradingProfileLabel[tradingProfile]||tradingProfile}</b><small>{tradingProfile==="BURST_10"?"กำลังใช้ Basket Scalping Engine":"Adaptive profile พร้อมใช้งาน"}</small></div></SettingTile>
                   </div></>}
@@ -1135,7 +1136,7 @@ export default function DashboardPage() {
                   </div></>}
 
                   {settingsTab==="risk"&&<><div className="cc-settings-section-title"><b>ความเสี่ยง</b><span>คุม Lot, Stop และขาดทุนของพอร์ต</span></div><div className="cc-settings-grid">
-                    <SettingTile icon="shield" title="การควบคุมความเสี่ยง" description="กำหนดโดยโปรไฟล์อัตโนมัติ"><div className="cc-readout"><b>{tradingProfileLabel[tradingProfile]||tradingProfile}</b><small>Lot รวม, ATR Stop และ Margin Guard</small></div></SettingTile>
+                    <SettingTile icon="shield" title="การควบคุมความเสี่ยง" description="กำหนดโดยโปรไฟล์อัตโนมัติ"><div className="cc-readout"><b>{tradingProfileLabel[tradingProfile]||tradingProfile}</b><small>Lot, ATR Stop และการดูแล Basket</small></div></SettingTile>
                     <SettingTile icon="pnl" title="ขาดทุนต่อวันแล้วหยุด" description="ป้องกัน Drawdown รายวัน"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="25" value={settings.dailyLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("dailyLossMoney",v)}/></SettingTile>
                     <SettingTile icon="risk" title="ขาดทุน Basket สูงสุด" description="ถึงค่าแล้วปิด Basket"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="10" value={settings.maxBasketLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}/></SettingTile>
                     <SettingTile icon="orders" title="ขาดทุนต่อไม้แล้วปิด" description="Stop แบบจำนวนเงินต่อ Position"><ToggleSelectField label="" options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="2" value={settings.perPositionLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("perPositionLossMoney",v)}/></SettingTile>
@@ -1151,9 +1152,9 @@ export default function DashboardPage() {
 
                   {settingsTab==="exit"&&<><div className="cc-settings-section-title"><b>ออกออเดอร์ / ปิดกำไร</b><span>เลือกรูปแบบทำกำไรและ Trailing</span></div><div className="cc-settings-grid">
                     {String(settings.tradingProfile||"BALANCED")==="BURST_10"?<>
-                    <SettingTile icon="orders" title="Basket Scalping Engine" description="ระบบเปิดชุดและปิดกำไรให้อัตโนมัติ" wide><div className="cc-readout"><b>{metrics.burstActive?"กำลังเปิดชุด "+Number(metrics.burstFilledPositions||0)+" / 10":"พร้อมเปิดสูงสุด 10 ไม้"}</b><small>เป้ากำไรและขาดทุนคำนวณจาก Equity, ATR และต้นทุน Spread</small></div></SettingTile>
+                    <SettingTile icon="orders" title="Basket Scalping Engine" description="ระบบเปิดชุดและปิดกำไรให้อัตโนมัติ" wide><div className="cc-readout"><b>{metrics.burstActive?"กำลังส่ง "+Number(metrics.burstRequestsSent||0)+" / "+configuredMaxPositions+" ไม้":"พร้อมเปิด "+configuredMaxPositions+" ไม้"}</b><small>ส่งตามจำนวนที่เลือก และให้ MT5/Broker ตอบรับแต่ละคำสั่ง</small></div></SettingTile>
                     <SettingTile icon="profit" title="เป้ากำไร Basket อัตโนมัติ" description="ค่าจริงจาก EA"><div className="cc-readout"><b>${Number(metrics.burstTargetMoney||0).toFixed(2)}</b><small>ปรับใหม่ทุก Cycle</small></div></SettingTile>
-                    <SettingTile icon="risk" title="ขีดจำกัด Basket อัตโนมัติ" description="ค่าจริงจาก EA"><div className="cc-readout"><b>${Number(metrics.burstLossMoney||0).toFixed(2)}</b><small>มี Margin และ Total-risk guard</small></div></SettingTile>
+                    <SettingTile icon="risk" title="ขีดจำกัด Basket อัตโนมัติ" description="ค่าจริงจาก EA"><div className="cc-readout"><b>${Number(metrics.burstLossMoney||0).toFixed(2)}</b><small>ดูแล Position ที่ MT5 เปิดสำเร็จแล้ว</small></div></SettingTile>
                     </>:<>
                     <SettingTile icon="profit" title="ปล่อยกำไรวิ่ง" description="ปิดเมื่อกำไรย่อจาก Peak"><ToggleSelectField label="" options={[5,10,15,20,25,30,40,50]} defaultValue="20" value={settings.profitRunTrailPercent} format={(v:string)=>v+"%"} onChange={(v:string)=>editSetting("profitRunTrailPercent",v)}/></SettingTile>
                     <SettingTile icon="pnl" title="กำไรต่อวัน" description="เลือกหยุดหรือรันต่อหลังถึงเป้า" wide><DailyProfitTargetField value={settings.dailyProfitTargetMoney} continueAfterTarget={Boolean(settings.dailyProfitContinueAfterTarget)} drawdownPercent={settings.dailyProfitDrawdownPercent} targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} percentOptions={[5,10,15,20,25,30,40,50]} defaultTarget="10" defaultPercent="20" onTargetChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)} onContinueChange={(v:boolean)=>editSetting("dailyProfitContinueAfterTarget",v)} onPercentChange={(v:string)=>editSetting("dailyProfitDrawdownPercent",v)}/></SettingTile>

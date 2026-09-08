@@ -147,6 +147,7 @@ jobs:
           BURST_PROFILE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"tradingProfile":"BURST_10"}')
           test "$(printf '%s' "$BURST_PROFILE" | jq -r '.settings.tradingProfile')" = "BURST_10"
           test "$(printf '%s' "$BURST_PROFILE" | jq -r '.settings.adaptiveEngine')" = "true"
+          test "$(printf '%s' "$BURST_PROFILE" | jq -r '.settings.maxPositions')" = "7"
 
           echo "[integration] enabling per-position profit automatically disables Basket profit"
           PER_POSITION=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"perPositionProfitMoney":2}')

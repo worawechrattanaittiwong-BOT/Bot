@@ -136,11 +136,9 @@ export class BotController {
       SPREAD_TOO_HIGH: { label: "Spread ผิดปกติต่อเนื่อง", detail: "Adaptive Spread ระงับเฉพาะออเดอร์ใหม่ ส่วน Position เดิมยังถูกดูแลตามปกติ", tone: "warn" },
       WAITING_BASKET_ADD: { label: "รอจังหวะเพิ่มไม้", detail: "Max Positions คือเพดาน ระบบจะเพิ่มไม้เมื่อราคาเดินต่อฝั่งกำไรและ Momentum/Confidence ยังยืนยัน ไม่ยิงครบทุกไม้พร้อมกัน", tone: "good" },
       WAITING_BURST_REARM: { label: "รอสัญญาณรอบใหม่", detail: "Basket เดิมปิดแล้ว ระบบรอ Momentum รีเซ็ตก่อนเริ่ม Burst รอบถัดไป", tone: "good" },
-      BURST_FILLING: { label: "กำลังเปิด Burst 10", detail: "EA กำลังส่งคำสั่งตามคิวพร้อมตรวจ Spread, Margin และทิศทางทุกไม้", tone: "good" },
+      BURST_FILLING: { label: "กำลังเปิด Basket", detail: "EA กำลังส่งคำสั่งตามจำนวนไม้ที่เลือก โดย MT5/Broker เป็นผู้ตอบรับแต่ละคำสั่ง", tone: "good" },
       BURST_COMPLETE: { label: "เปิด Burst ครบแล้ว", detail: "Basket Scalping Engine กำลังดูแลเป้ากำไรและขีดจำกัดความเสี่ยง", tone: "good" },
-      BURST_PARTIAL_MANAGING: { label: "ดูแล Burst ที่เปิดได้", detail: "คิวหยุดก่อนครบ 10 ไม้ ระบบจะดูแล Position ที่เปิดแล้วโดยไม่ยิงซ้ำ", tone: "warn" },
-      BURST_RISK_LIMIT: { label: "ความเสี่ยงรวมสูงเกินไป", detail: "Margin หรือความเสี่ยง Stop ของ 10 ไม้สูงเกินเพดาน Basket", tone: "warn" },
-      BURST_REQUIRES_HEDGING: { label: "Burst 10 ต้องใช้บัญชี Hedging", detail: "บัญชี Netting จะรวมคำสั่งเป็น Position เดียว จึงไม่สามารถเปิดแยก 10 ไม้ได้", tone: "bad" },
+      BURST_PARTIAL_MANAGING: { label: "ดูแล Basket ที่เปิดได้", detail: "คิวหยุดก่อนครบจำนวนที่เลือก ระบบจะดูแล Position ที่ MT5 เปิดแล้วโดยไม่ยิงซ้ำ", tone: "warn" },
       BURST_ABORTED: { label: "หยุดคิว Burst", detail: "สภาวะตลาดหรือคุณภาพ Execution เปลี่ยน ระบบหยุดเฉพาะไม้ที่ยังไม่ส่ง", tone: "warn" },
       ORDER_PRECHECK_FAILED: { label: "คำสั่งไม่ผ่านการตรวจล่วงหน้า", detail: "Broker หรือ Margin ไม่พร้อม ระบบไม่ส่งคำสั่งนี้", tone: "warn" },
       MAX_POSITIONS: { label: "Position เต็มแล้ว", detail: "จำนวน Position ถึง Max Positions", tone: "warn" },
@@ -1346,7 +1344,7 @@ export class BotController {
       }
       clean.tradingProfile = tradingProfile;
       // Profiles own the execution/adaptive values. Legacy fields can remain
-      // in JSON for compatibility, but EA 1.012 never uses them over a profile.
+      // in JSON for compatibility, but EA 1.013 never uses them over a profile.
       clean.adaptiveEngine = true;
     }
 
