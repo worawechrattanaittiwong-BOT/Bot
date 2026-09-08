@@ -160,7 +160,7 @@ jobs:
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.perPositionLossMoney')" = "0"
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.entryMode')" = "BUY_ONLY"
-          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.allowMinimumLotOverride')" = "false"
+          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
           echo "[integration] verifying unified Adaptive Engine"
           UNIFIED_ENGINE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"maxPositions":7}')
@@ -169,6 +169,18 @@ jobs:
           test "$(printf '%s' "$UNIFIED_ENGINE" | jq -r '.settings.maxPositions')" = "7"
           test "$(printf '%s' "$UNIFIED_ENGINE" | jq -r '.settings.minOrderIntervalMs')" = "300"
           test "$(printf '%s' "$UNIFIED_ENGINE" | jq -r '.settings.maxOrdersPerMinute')" = "120"
+          test "$(printf '%s' "$UNIFIED_ENGINE" | jq -r '.settings.allowMinimumLotOverride')" = "true"
+          test "$(printf '%s' "$UNIFIED_ENGINE" | jq -r '.settings.sessionStartHour')" = "0"
+          test "$(printf '%s' "$UNIFIED_ENGINE" | jq -r '.settings.sessionEndHour')" = "24"
+          test "$(printf '%s' "$UNIFIED_ENGINE" | jq -r '.settings.confidenceGateEnabled // false')" = "false"
+
+          echo "[integration] optional Confidence gate can be enabled and disabled"
+          CONF_ON=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"confidenceGateEnabled":true}')
+          test "$(printf '%s' "$CONF_ON" | jq -r '.settings.confidenceGateEnabled')" = "true"
+          CONF_PRESERVE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"maxPositions":7}')
+          test "$(printf '%s' "$CONF_PRESERVE" | jq -r '.settings.confidenceGateEnabled')" = "true"
+          CONF_OFF=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"confidenceGateEnabled":false}')
+          test "$(printf '%s' "$CONF_OFF" | jq -r '.settings.confidenceGateEnabled')" = "false"
 
           echo "[integration] enabling per-position profit automatically disables Basket profit"
           PER_POSITION=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"perPositionProfitMoney":2}')
@@ -207,7 +219,7 @@ jobs:
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.perPositionLossMoney')" = "0"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.entryMode')" = "BUY_ONLY"
-          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.allowMinimumLotOverride')" = "false"
+          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
           echo "[integration] verifying settings in EA heartbeat"
           SETTINGS_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"symbol\":\"XAUUSDm\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
@@ -222,7 +234,7 @@ jobs:
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.perPositionLossMoney')" = "0"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.entryMode')" = "BUY_ONLY"
-          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.allowMinimumLotOverride')" = "false"
+          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
           echo "[integration] verifying invalid settings rejection"
           BAD_SETTINGS_HTTP=$(curl -sS -o /tmp/bad-settings.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"lot":0}')
@@ -238,6 +250,8 @@ jobs:
           BAD_DAILY_CONTINUE_HTTP=$(curl -sS -o /tmp/bad-daily-continue.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"dailyProfitContinueAfterTarget":"true"}')
           test "$BAD_DAILY_CONTINUE_HTTP" = "400"
           BAD_MIN_LOT_OVERRIDE_HTTP=$(curl -sS -o /tmp/bad-min-lot-override.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"allowMinimumLotOverride":"true"}')
+          BAD_CONFIDENCE_GATE_HTTP=$(curl -sS -o /tmp/bad-confidence-gate.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"confidenceGateEnabled":"true"}')
+          test "$BAD_CONFIDENCE_GATE_HTTP" = "400"
           LEGACY_PROFILE_HTTP=$(curl -sS -o /tmp/legacy-profile.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"tradingProfile":"UNKNOWN"}')
           test "$LEGACY_PROFILE_HTTP" = "200"
           test "$(jq -r '.settings.tradingProfile // empty' /tmp/legacy-profile.json)" = ""

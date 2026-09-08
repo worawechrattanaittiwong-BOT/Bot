@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.021"
+#property version   "1.022"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -75,6 +75,7 @@ input double          InpRiskPerOrderPercent   = 0.25;
 input bool            InpAllowMinimumLotOverride = false;
 input double          InpHardStopAtrMultiplier = 2.00;
 input int             InpAtrPeriod             = 14;
+input bool            InpConfidenceGateEnabled = false;
 input int             InpConfidenceThreshold   = 55;
 input int             InpSessionStartHour      = 0;
 input int             InpSessionEndHour        = 24;
@@ -133,6 +134,7 @@ double g_riskPerOrderPercent;
 bool   g_allowMinimumLotOverride;
 double g_hardStopAtrMultiplier;
 int    g_atrPeriod;
+bool   g_confidenceGateEnabled;
 int    g_confidenceThreshold;
 int    g_sessionStartHour;
 int    g_sessionEndHour;
@@ -180,6 +182,7 @@ double g_structureScore = 0.0;
 double g_locationScore = 0.0;
 double g_entryScore = 0.0;
 string g_entryModel = "NONE";
+string g_entryTrigger = "NONE";
 datetime g_lastMarketContextUpdate = 0;
 string g_fiboObjectName = "";
 bool   g_fiboVisible = false;
@@ -280,7 +283,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.021", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.022", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -360,6 +363,7 @@ int OnInit()
    g_allowMinimumLotOverride = InpAllowMinimumLotOverride;
    g_hardStopAtrMultiplier = MathMax(0.5, MathMin(10.0, InpHardStopAtrMultiplier));
    g_atrPeriod = MathMax(5, MathMin(100, InpAtrPeriod));
+   g_confidenceGateEnabled = InpConfidenceGateEnabled;
    g_confidenceThreshold = MathMax(40, MathMin(95, InpConfidenceThreshold));
    g_sessionStartHour = MathMax(0, MathMin(23, InpSessionStartHour));
    g_sessionEndHour = MathMax(1, MathMin(24, InpSessionEndHour));
@@ -887,7 +891,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.021\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.022\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1014,10 +1018,12 @@ void SendHeartbeat()
 
       // Market-context telemetry makes every entry auditable on the web.
       string marketContextDiagnostics = StringFormat(
-         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
+         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V2\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
          g_trendM1,
          g_trendM30,
          g_effectiveConfidenceThreshold,
+         g_confidenceGateEnabled ? "true" : "false",
+         g_entryTrigger,
          DoubleToString(g_nearestSupport, SymbolDigitsNow()),
          DoubleToString(g_nearestResistance, SymbolDigitsNow()),
          DoubleToString(g_majorSupport, SymbolDigitsNow()),
@@ -1212,11 +1218,17 @@ void ApplyUnifiedTradingEngine()
    g_maxAtrPoints = 0.0;
    g_minOrderIntervalMs = 300;
    g_maxOrdersPerMinute = 120;
-   // Base threshold only; live entry threshold is adjusted by setup quality.
+   // Confidence is retained as a quality metric only. It is never an entry gate.
    g_confidenceThreshold = 55;
    g_riskPerOrderPercent = 0.25;
    g_hardStopAtrMultiplier = 2.00;
-   g_allowMinimumLotOverride = false;
+
+   // Unified Engine is always available 24h while the market/Broker permits it.
+   // Small accounts may use the Broker minimum volume when risk sizing falls
+   // below it, but the EA never exceeds the user's configured Lot ceiling.
+   g_sessionStartHour = 0;
+   g_sessionEndHour = 24;
+   g_allowMinimumLotOverride = true;
 
    if(!BasketFillEnabled())
    {
@@ -1288,6 +1300,7 @@ void ApplySettings(string json)
    g_allowMinimumLotOverride = JsonBool(json, "allowMinimumLotOverride", g_allowMinimumLotOverride);
    g_hardStopAtrMultiplier = MathMax(0.5, MathMin(10.0, JsonNumber(json, "hardStopAtrMultiplier", g_hardStopAtrMultiplier)));
    g_atrPeriod = (int)MathMax(5.0, MathMin(100.0, JsonNumber(json, "atrPeriod", g_atrPeriod)));
+   g_confidenceGateEnabled = JsonBool(json, "confidenceGateEnabled", g_confidenceGateEnabled);
    g_confidenceThreshold = (int)MathMax(40.0, MathMin(95.0, JsonNumber(json, "confidenceThreshold", g_confidenceThreshold)));
    g_sessionStartHour = (int)MathMax(0.0, MathMin(23.0, JsonNumber(json, "sessionStartHour", g_sessionStartHour)));
    g_sessionEndHour = (int)MathMax(1.0, MathMin(24.0, JsonNumber(json, "sessionEndHour", g_sessionEndHour)));
@@ -1945,6 +1958,190 @@ bool RecentDirectionalRejection(int direction, double zoneLow, double zoneHigh, 
    return rates[0].close < rates[0].open && upperWick >= body * 0.60;
 }
 
+bool RecentDirectionalBody(int direction, ENUM_TIMEFRAMES timeframe)
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, timeframe, 1, 2, rates) < 2)
+      return false;
+
+   double range = MathMax(_Point, rates[0].high - rates[0].low);
+   double body = MathAbs(rates[0].close - rates[0].open);
+   if(body < range * 0.28)
+      return false;
+
+   if(direction > 0)
+      return rates[0].close > rates[0].open &&
+         rates[0].close >= rates[0].low + range * 0.58;
+   return rates[0].close < rates[0].open &&
+      rates[0].close <= rates[0].high - range * 0.58;
+}
+
+bool LowerTimeframeSupportsDirection(int direction)
+{
+   return
+      g_trendM1 == direction ||
+      g_trendM5 == direction ||
+      RecentDirectionalBody(direction, PERIOD_M1) ||
+      RecentDirectionalBody(direction, PERIOD_M5);
+}
+
+bool HigherTimeframeSupportsDirection(int direction)
+{
+   int votes = 0;
+   if(g_trendM15 == direction) votes++;
+   if(g_trendM30 == direction) votes++;
+   if(g_trendH1 == direction) votes++;
+   return votes >= 2;
+}
+
+bool MomentumSupportsDirection(int direction, double momentum, double factor)
+{
+   double threshold = MathMax(1.0, g_adaptiveMomentumThreshold * factor);
+   return direction > 0 ? momentum >= threshold : momentum <= -threshold;
+}
+
+bool DirectSetupReady(
+   int direction,
+   double momentum,
+   string &modelOut,
+   double &scoreOut
+)
+{
+   scoreOut = EvaluateMarketLocationScore(direction);
+   modelOut = g_entryModel;
+
+   bool microSupport = LowerTimeframeSupportsDirection(direction);
+   bool higherSupport = HigherTimeframeSupportsDirection(direction);
+   bool lightMomentum = MomentumSupportsDirection(direction, momentum, 0.25);
+   bool strongMomentum = MomentumSupportsDirection(
+      direction,
+      momentum,
+      g_marketRegime == "HIGH_VOLATILITY" ? 0.55 : 0.75
+   );
+
+   // A confirmed M5 level break is already price-action confirmation.
+   if(modelOut == "BREAKOUT")
+      return true;
+
+   // Pullback/reaction setups only need one lower-timeframe turn or light
+   // directional momentum. No Confidence score is allowed to veto them.
+   if(modelOut == "OB_FIB_PULLBACK" ||
+      modelOut == "ORDER_BLOCK_PULLBACK" ||
+      modelOut == "FIB_PULLBACK" ||
+      modelOut == "LEVEL_REACTION")
+      return microSupport || lightMomentum;
+
+   // Continuation is valid when the higher structure is aligned and execution
+   // frames are not dead against it.
+   if(modelOut == "CONTINUATION")
+      return higherSupport && (microSupport || lightMomentum);
+
+   // During news/high volatility, a real directional impulse can trade even
+   // before a textbook pullback forms, provided market structure is supporting.
+   if(g_marketRegime == "HIGH_VOLATILITY" &&
+      strongMomentum &&
+      (microSupport || g_trendM15 == direction))
+      return true;
+
+   // CAUTION_ZONE is not a hard block. It simply needs stronger direct price
+   // action instead of a numeric confidence threshold.
+   if(modelOut == "CAUTION_ZONE")
+      return strongMomentum && microSupport && higherSupport;
+
+   return strongMomentum && (microSupport || higherSupport);
+}
+
+int SetupFirstDirection(double momentum)
+{
+   g_entryTrigger = "NONE";
+
+   if(g_entryMode == ENTRY_BUY_ONLY || g_entryMode == ENTRY_SELL_ONLY)
+   {
+      int fixedDirection = g_entryMode == ENTRY_BUY_ONLY ? 1 : -1;
+      string fixedModel = "NONE";
+      double fixedScore = 0.0;
+      if(DirectSetupReady(fixedDirection, momentum, fixedModel, fixedScore))
+      {
+         EvaluateMarketLocationScore(fixedDirection);
+         g_entryTrigger = g_entryModel;
+         return fixedDirection;
+      }
+
+      if(HigherTimeframeSupportsDirection(fixedDirection) &&
+         LowerTimeframeSupportsDirection(fixedDirection))
+      {
+         EvaluateMarketLocationScore(fixedDirection);
+         g_entryTrigger = "STRUCTURE_CONTINUATION";
+         return fixedDirection;
+      }
+      return 0;
+   }
+
+   string buyModel = "NONE";
+   string sellModel = "NONE";
+   double buyScore = 0.0;
+   double sellScore = 0.0;
+   bool buyReady = DirectSetupReady(1, momentum, buyModel, buyScore);
+   bool sellReady = DirectSetupReady(-1, momentum, sellModel, sellScore);
+
+   int chosen = 0;
+   if(buyReady && !sellReady)
+      chosen = 1;
+   else if(sellReady && !buyReady)
+      chosen = -1;
+   else if(buyReady && sellReady)
+   {
+      // Score selects between two valid setups; it never decides whether a
+      // valid setup is allowed to trade.
+      if(MathAbs(buyScore - sellScore) >= 4.0)
+         chosen = buyScore > sellScore ? 1 : -1;
+      else if(momentum > 0.0)
+         chosen = 1;
+      else if(momentum < 0.0)
+         chosen = -1;
+      else if(g_macroTrendDirection != 0)
+         chosen = g_macroTrendDirection;
+      else
+         chosen = buyScore >= sellScore ? 1 : -1;
+   }
+
+   if(chosen == 0 && g_macroTrendDirection != 0 &&
+      HigherTimeframeSupportsDirection(g_macroTrendDirection) &&
+      LowerTimeframeSupportsDirection(g_macroTrendDirection))
+   {
+      chosen = g_macroTrendDirection;
+      g_entryTrigger = "STRUCTURE_CONTINUATION";
+   }
+
+   if(chosen == 0)
+   {
+      int momentumDirection = momentum > 0.0 ? 1 : momentum < 0.0 ? -1 : 0;
+      if(momentumDirection != 0 &&
+         MomentumSupportsDirection(
+            momentumDirection,
+            momentum,
+            g_marketRegime == "HIGH_VOLATILITY" ? 0.55 : 0.75
+         ) &&
+         (g_trendM5 == momentumDirection || g_trendM15 == momentumDirection))
+      {
+         chosen = momentumDirection;
+         g_entryTrigger = g_marketRegime == "HIGH_VOLATILITY"
+            ? "NEWS_IMPULSE"
+            : "MOMENTUM_CONTINUATION";
+      }
+   }
+
+   if(chosen != 0)
+   {
+      EvaluateMarketLocationScore(chosen);
+      if(g_entryTrigger == "NONE")
+         g_entryTrigger = g_entryModel;
+   }
+   return chosen;
+}
+
+
 double EvaluateMarketLocationScore(int direction)
 {
    RefreshMarketContext(false);
@@ -2277,29 +2474,16 @@ int AdaptiveEntryDirection(double momentum)
    else if(g_marketRegime == "RANGE") momentumFactor = 1.10;
    g_adaptiveMomentumThreshold = MathMax(2.0, InpMomentumEntryPoints * momentumFactor);
 
-   int rawDirection = 0;
-   if(g_entryMode == ENTRY_BUY_ONLY) rawDirection = 1;
-   else if(g_entryMode == ENTRY_SELL_ONLY) rawDirection = -1;
-   else if(momentum >= g_adaptiveMomentumThreshold) rawDirection = 1;
-   else if(momentum <= -g_adaptiveMomentumThreshold) rawDirection = -1;
-
-   // A high-quality pullback may turn before momentum reaches the full breakout
-   // threshold. Allow a softer trigger only when market-location confluence is
-   // already strong; this improves timing without creating another hard filter.
-   if(rawDirection == 0 && g_entryMode == ENTRY_AUTO_MOMENTUM &&
-      MathAbs(momentum) >= g_adaptiveMomentumThreshold * 0.55)
-   {
-      int earlyDirection = momentum > 0.0 ? 1 : -1;
-      double earlyLocationScore = EvaluateMarketLocationScore(earlyDirection);
-      if(earlyLocationScore >= 68.0)
-         rawDirection = earlyDirection;
-   }
+   // Setup-first: S/R, Order Block, Fibonacci, Breakout and Structure can all
+   // trigger an entry directly. Momentum accelerates timing but is not the only
+   // path into the market.
+   int rawDirection = SetupFirstDirection(momentum);
 
    if(rawDirection == 0)
    {
       g_signalConfidence = 0.0;
-      g_effectiveConfidenceThreshold = MathMax(48.0, MathMin(60.0, (double)g_confidenceThreshold));
-      g_adaptiveBlockReason = "WAITING_MOMENTUM";
+      g_effectiveConfidenceThreshold = 0.0;
+      g_adaptiveBlockReason = "WAITING_SETUP";
       g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
       return 0;
    }
@@ -2346,13 +2530,10 @@ int AdaptiveEntryDirection(double momentum)
    // Adaptive Intelligence may decide when to enter, but never lowers this cap.
    g_adaptiveMaxPositions = g_maxPositions;
 
-   double spacingFactor = 1.0;
-   if(g_marketRegime == "HIGH_VOLATILITY") spacingFactor = 2.2;
-   else if(g_marketRegime == "RANGE") spacingFactor = 1.8;
-   else if(g_marketRegime == "QUIET") spacingFactor = 1.4;
-   spacingFactor *= 1.0 + g_consecutiveLosses * 0.50;
-   spacingFactor *= 1.0 + (100.0 - g_executionQuality) / 100.0;
-   g_adaptiveEntrySpacingMs = (int)MathMax(g_minOrderIntervalMs, g_minOrderIntervalMs * spacingFactor);
+   // No hidden adaptive waiting. Once a real setup is ready, only the normal
+   // order-rate protection applies.
+   g_adaptiveEntrySpacingMs = g_minOrderIntervalMs;
+   g_effectiveConfidenceThreshold = 0.0;
 
    if(!MarketLocationEntryAllowed(rawDirection, false))
    {
@@ -2360,13 +2541,21 @@ int AdaptiveEntryDirection(double momentum)
       return 0;
    }
 
-   double liveConfidenceThreshold = DynamicConfidenceThreshold(rawDirection);
-   if(g_signalConfidence < liveConfidenceThreshold)
+   // Confidence is optional. Default OFF means the score is telemetry only and
+   // can never prevent a valid setup-first entry. Users who explicitly enable
+   // the filter get the Dynamic Confidence gate back.
+   if(g_confidenceGateEnabled)
    {
-      g_adaptiveBlockReason = "WAITING_CONFIDENCE";
-      g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
-      return 0;
+      double liveConfidenceThreshold = DynamicConfidenceThreshold(rawDirection);
+      if(g_signalConfidence < liveConfidenceThreshold)
+      {
+         g_adaptiveBlockReason = "WAITING_CONFIDENCE";
+         g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
+         return 0;
+      }
    }
+   else
+      g_effectiveConfidenceThreshold = 0.0;
 
    g_adaptiveLot = AdaptiveTradeVolume();
    if(g_adaptiveLot <= 0.0)
@@ -2464,31 +2653,23 @@ bool AdaptiveBasketAddAllowed(int direction)
       (g_macroTrendDirection > 0 && direction > 0) ||
       (g_macroTrendDirection < 0 && direction < 0);
 
-   // News/high-volatility uses the normal continuation logic; do not silently
-   // cap a Basket at two positions just because ATR expands.
-   if(directionalTrend)
-   {
-      g_pyramidRequiredPoints = MathMax(3.0, g_atrPoints * 0.06);
-      if(g_pyramidProgressPoints < g_pyramidRequiredPoints)
-         return false;
-      if(g_signalConfidence < g_effectiveConfidenceThreshold + 2.0)
-         return false;
-      // After the first impulse a healthy trend can slow down. The old 110%
-      // momentum requirement often left MaxPositions=4 baskets stuck at 1.
-      // Favorable price progress + 75% continuation is a safer add condition.
-      if(!DirectionalMomentumStillValid(direction, 0.75))
-         return false;
-      return true;
-   }
-
-   g_pyramidRequiredPoints = MathMax(3.0, g_atrPoints * 0.05);
+   // Adds use favorable price progress + live setup/structure. Confidence is
+   // not a gate here either.
+   g_pyramidRequiredPoints = MathMax(3.0, g_atrPoints * (directionalTrend ? 0.05 : 0.04));
    if(g_pyramidProgressPoints < g_pyramidRequiredPoints)
       return false;
-   if(g_signalConfidence < g_effectiveConfidenceThreshold + 3.0)
-      return false;
-   if(!DirectionalMomentumStillValid(direction, 1.10))
-      return false;
-   return true;
+
+   EvaluateMarketLocationScore(direction);
+   if(g_entryModel == "CAUTION_ZONE")
+      return DirectionalMomentumStillValid(direction, 0.55) &&
+         LowerTimeframeSupportsDirection(direction);
+
+   if(LowerTimeframeSupportsDirection(direction) ||
+      HigherTimeframeSupportsDirection(direction) ||
+      DirectionalMomentumStillValid(direction, 0.35))
+      return true;
+
+   return false;
 }
 
 void PersistAdaptiveRiskState()

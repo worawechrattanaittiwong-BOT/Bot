@@ -175,8 +175,9 @@ export class BotController {
       BASKET_PROFIT_TARGET: { label: "ถึงกำไรเป้าหมาย Basket", detail: "กำไรรวมของรอบถึงเป้าและ EA ปิด Basket แล้ว", tone: "good" },
       PROFIT_RUN_PERCENT_TRAIL: { label: "ปิด Basket หลังปล่อยกำไรวิ่ง", detail: "กำไรรวมถึงเป้าแล้ว ระบบปล่อยต่อจนกำไรย่อลงจาก Peak ตามเปอร์เซ็นต์ที่ตั้ง", tone: "good" },
       WAITING_EA_START: { label: "กำลังรอ EA รับคำสั่ง Start", detail: "คำสั่งจากเว็บส่งแล้ว รอ Heartbeat รอบถัดไป", tone: "warn" },
-      WAITING_MOMENTUM: { label: "กำลังรอสัญญาณ Momentum", detail: "บอท RUNNING แล้ว แต่เงื่อนไขเข้าออเดอร์ยังไม่ถึง", tone: "good" },
-      WAITING_CONFIDENCE: { label: "กำลังรอความมั่นใจของสัญญาณ", detail: "คะแนนยังต่ำกว่าเกณฑ์ Dynamic ของจุดนี้ ซึ่งปรับตาม S/R, Order Block, Fibonacci และโครงสร้างหลาย Timeframe", tone: "good" },
+      WAITING_SETUP: { label: "กำลังหาจุดเข้า", detail: "Setup-First Engine กำลังหา Pullback / S-R reaction / Order Block / Fibonacci / Breakout / Structure continuation โดยไม่บังคับ Confidence", tone: "good" },
+      WAITING_MOMENTUM: { label: "กำลังหาจุดเข้า", detail: "สถานะจาก EA รุ่นเก่า; รุ่นใหม่ใช้ Momentum เป็นตัวช่วย ไม่ใช่ประตูบังคับ", tone: "good" },
+      WAITING_CONFIDENCE: { label: "กำลังรอ Confidence", detail: "ผู้ใช้เปิดตัวกรอง Confidence ไว้ และคะแนนยังต่ำกว่าเกณฑ์ Dynamic ของจุดนี้", tone: "good" },
       WAITING_TREND_ALIGNMENT: { label: "กำลังรอแนวโน้มยืนยัน", detail: "M30 และ H1 พลิกสวนทิศทางออเดอร์พร้อมกัน ระบบรอโครงสร้างกลับมายืนยัน", tone: "good" },
       WAITING_REGIME_ALIGNMENT: { label: "รอ Momentum ไปทางเดียวกับเทรนด์", detail: "AUTO MOMENTUM จะไม่เปิดสวน Bias หลักของ M30/H1 เมื่อแนวโน้มชัดเจน", tone: "good" },
       BLOCKED_MAJOR_RESISTANCE: { label: "รอผ่านแนวต้านใหญ่", detail: "ราคากำลังชิดแนวต้าน M30/H1 จึงไม่ Buy ไล่เข้าชนโซนโดยตรง; เมื่อ Breakout ผ่าน ระบบจะประเมินใหม่ทันที", tone: "warn" },
@@ -302,13 +303,9 @@ export class BotController {
     if (!code || code === "EVALUATING" || code === "INITIALIZING") {
       const positions = Number(metrics.positions || 0);
       const maxPositions = Number(settings?.maxPositions ?? 10);
-      const momentum = Number(metrics.momentumPoints ?? 0);
-      const momentumEntry = Number(metrics.momentumEntryPoints ?? 8);
-      const entryMode = String(settings?.entryMode || "AUTO_MOMENTUM");
 
       if (positions >= maxPositions) code = "MAX_POSITIONS";
-      else if (entryMode === "AUTO_MOMENTUM" && Math.abs(momentum) < momentumEntry) code = "WAITING_MOMENTUM";
-      else code = "RUNNING_READY";
+      else code = "WAITING_SETUP";
     }
 
     if (instance.actual_state === "RUNNING" && (code === "SAFE_STOP" || code === "STOPPED")) {
@@ -1354,6 +1351,7 @@ export class BotController {
     booleanSetting("allowMinimumLotOverride");
     numberSetting("hardStopAtrMultiplier", 0.5, 10);
     numberSetting("atrPeriod", 5, 100, true);
+    booleanSetting("confidenceGateEnabled");
     numberSetting("confidenceThreshold", 40, 95, true);
     numberSetting("sessionStartHour", 0, 23, true);
     numberSetting("sessionEndHour", 1, 24, true);
@@ -1423,9 +1421,13 @@ export class BotController {
     clean.maxOrdersPerMinute = 120;
     clean.riskPerOrderPercent = 0.25;
     clean.hardStopAtrMultiplier = 2;
-    // Base threshold; EA adjusts the live threshold per setup.
+    // Setup-First v2 is the default. Confidence starts OFF in the EA/web
+    // defaults. If the field is omitted on a partial API update, preserve the
+    // previously stored choice instead of resetting it.
     clean.confidenceThreshold = 55;
-    clean.allowMinimumLotOverride = false;
+    clean.allowMinimumLotOverride = true;
+    clean.sessionStartHour = 0;
+    clean.sessionEndHour = 24;
     clean.maxAtrPoints = 0;
 
     if (Object.keys(clean).length === 0) {

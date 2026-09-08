@@ -48,9 +48,10 @@ const defaultSettings = {
   maxOrdersPerMinute: 120,
   adaptiveEngine: true,
   riskPerOrderPercent: 0.25,
-  allowMinimumLotOverride: false,
+  allowMinimumLotOverride: true,
   hardStopAtrMultiplier: 2,
   atrPeriod: 14,
+  confidenceGateEnabled: false,
   confidenceThreshold: 55,
   sessionStartHour: 0,
   sessionEndHour: 24,
@@ -544,10 +545,10 @@ export default function DashboardPage() {
   const positionCapacityLabel = currentPositions + " / " + effectiveMaxPositions + (effectiveMaxPositions !== configuredMaxPositions ? " · ตั้ง " + configuredMaxPositions : "");
   const basketAddExplanation = currentPositions > 0 && currentPositions < effectiveMaxPositions
     ? "เปิดแล้ว " + currentPositions + "/" + configuredMaxPositions + " ไม้ · " +
-      (pyramidRequiredPoints > 0 ? "รอราคาเดินต่อฝั่งกำไร " + Math.max(0,pyramidRequiredPoints-pyramidProgressPoints).toFixed(0) + " points ก่อนเพิ่มไม้" : "รอ Momentum และความมั่นใจยืนยันก่อนเพิ่มไม้") +
+      (pyramidRequiredPoints > 0 ? "รอราคาเดินต่อฝั่งกำไร " + Math.max(0,pyramidRequiredPoints-pyramidProgressPoints).toFixed(0) + " points ก่อนเพิ่มไม้" : "รอ Setup / โครงสร้าง / Price Action ยืนยันก่อนเพิ่มไม้") +
       " · Position สูงสุดคือเพดาน ไม่ใช่ยิงครบทุกไม้พร้อมกัน"
     : "";
-  const liveExplanation = basketAddExplanation || liveStatus.detail || "บอทกำลังประเมิน Momentum, แนวโน้ม, Spread และ Risk แบบเรียลไทม์";
+  const liveExplanation = basketAddExplanation || liveStatus.detail || "บอทกำลังประเมิน S/R, Order Block, Fibonacci, Structure, Price Action และ Momentum แบบเรียลไทม์";
   const hideModeIrrelevantStatus = String(liveStatus.code || "") === "RISK_LIMIT_TOO_SMALL";
   const visibleLiveStatus = hideModeIrrelevantStatus
     ? { label: "รอสัญญาณเข้า", tone: "good" }
@@ -812,11 +813,12 @@ export default function DashboardPage() {
       "InpMaxOfflineLeaseSeconds=600",
       "InpAdaptiveEngine=true",
       "InpRiskPerOrderPercent=0.25",
-      "InpAllowMinimumLotOverride=false",
+      "InpAllowMinimumLotOverride=true",
       "InpHardStopAtrMultiplier=2",
       "InpManualStopLossPoints=" + Number(settings.manualStopLossPoints || 0),
       "InpPerPositionLossMoney=0",
       "InpAtrPeriod=" + settings.atrPeriod,
+      "InpConfidenceGateEnabled=" + (settings.confidenceGateEnabled ? "true" : "false"),
       "InpConfidenceThreshold=55",
       "InpSessionStartHour=" + settings.sessionStartHour,
       "InpSessionEndHour=" + settings.sessionEndHour,
@@ -963,9 +965,12 @@ export default function DashboardPage() {
       payload.minOrderIntervalMs = 300;
       payload.maxOrdersPerMinute = 120;
       payload.riskPerOrderPercent = 0.25;
-      payload.allowMinimumLotOverride = false;
+      payload.allowMinimumLotOverride = true;
       payload.hardStopAtrMultiplier = 2;
+      payload.confidenceGateEnabled = Boolean(settings.confidenceGateEnabled);
       payload.confidenceThreshold = 55;
+      payload.sessionStartHour = 0;
+      payload.sessionEndHour = 24;
       payload.maxAtrPoints = 0;
 
       // New profit UX no longer exposes the legacy dollar Basket trailing.
@@ -1264,7 +1269,7 @@ export default function DashboardPage() {
 
                   <div className="cc-control-fields cc-v3-control-fields">
                     <div className="cc-control-field"><span>Symbol</span><b>{metrics.symbol || settings.symbol}</b></div>
-                    <div className="cc-control-field"><span>โหมดเข้าออเดอร์</span><select value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO MOMENTUM</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></div>
+                    <div className="cc-control-field"><span>โหมดเข้าออเดอร์</span><select value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO SMART</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></div>
                     <div className="cc-control-field"><span>จำนวนไม้</span><select value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
                     <div className="cc-control-field"><span>Lot สูงสุด</span><select value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
                   </div>
@@ -1287,7 +1292,7 @@ export default function DashboardPage() {
 
                   <div className="cc-signal-grid">
                     <div className="cc-signal-item good"><ScenovaIcon name="trend" size={20}/><span><small>สภาพตลาด</small><b>{marketRegimeLabel[String(metrics.marketRegime||"")]||"รอข้อมูล"}</b></span></div>
-                    <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>ความมั่นใจ</small><b>{Number(metrics.signalConfidence||0).toFixed(0)}% / {Number(metrics.effectiveConfidenceThreshold||55).toFixed(0)}%</b></span></div>
+                    <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Confidence</small><b>{Boolean(settings.confidenceGateEnabled) ? Number(metrics.signalConfidence||0).toFixed(0)+"% / "+Number(metrics.effectiveConfidenceThreshold||55).toFixed(0)+"%" : Number(metrics.signalConfidence||0).toFixed(0)+"% · ไม่บล็อก"}</b></span></div>
                     <div className="cc-signal-item"><ScenovaIcon name="spread" size={20}/><span><small>Spread</small><b>{spreadValueLabel}</b></span></div>
                     <div className="cc-signal-item warn"><ScenovaIcon name="layers" size={20}/><span><small>Position</small><b>{positionCapacityLabel}</b></span></div>
                     <div className={"cc-signal-item "+(visibleLiveStatus.tone==="bad"?"bad":visibleLiveStatus.tone==="warn"?"warn":"good")}><ScenovaIcon name="status" size={20}/><span><small>การเทรด</small><b>{visibleLiveStatus.label||"—"}</b></span></div>
@@ -1295,7 +1300,7 @@ export default function DashboardPage() {
 
                   <div className="cc-direction-strip">
                     <div><span>Bias</span><b className={entryBias==="BUY"?"text-good":entryBias==="SELL"?"text-bad":""}>{entryBiasLabel}</b></div>
-                    <div><span>M5</span><b>{trendText(metrics.trendM5)}</b></div><div><span>M15</span><b>{trendText(metrics.trendM15)}</b></div><div><span>H1</span><b>{trendText(metrics.trendH1)}</b></div><div><span>Adaptive Max</span><b>{effectiveMaxPositions} ไม้</b></div>
+                    <div><span>M5</span><b>{trendText(metrics.trendM5)}</b></div><div><span>M15</span><b>{trendText(metrics.trendM15)}</b></div><div><span>H1</span><b>{trendText(metrics.trendH1)}</b></div><div><span>Setup</span><b>{String(metrics.entryTrigger||metrics.entryModel||"กำลังหา")}</b></div>
                   </div>
 
                   {showControlAlert&&<div className={"cc-intel-banner "+(liveStatus.tone==="bad"?"bad":"warn")}><ScenovaIcon name="info" size={19}/><div><b>{liveStatus.label||"ตรวจสอบการทำงาน"}</b><span>{liveExplanation}</span></div></div>}
@@ -1958,8 +1963,8 @@ function BotSettingsModal(props:any) {
           <section className="cc-smart-engine-banner">
             <span className="cc-smart-engine-icon"><ScenovaIcon name="brain" size={24}/></span>
             <div className="cc-smart-engine-copy">
-              <b>Adaptive Intelligence พร้อมทำงาน</b>
-              <small>ระบบเดียวอ่านแนวโน้ม แนวรับ–แนวต้าน Order Block และ Fibonacci จาก M5 + M15 แล้วเปิดตามจำนวนไม้ที่เลือก</small>
+              <b>Setup-First Intelligence พร้อมทำงาน</b>
+              <small>วิเคราะห์ M1/M5/M15/M30/H1 + แนวรับ–แนวต้าน + Order Block + Fibonacci + Price Action โดย Confidence เป็นตัวกรองเสริมที่เลือกเปิดได้</small>
             </div>
             <div className="cc-smart-engine-badges">
               <span>{"Fib M5 + M15 · หลัก "+String(props.metrics?.fibTimeframe||"กำลังเลือก")}</span>
@@ -1997,7 +2002,7 @@ function BotSettingsModal(props:any) {
               <label className="cc-bot-basic-card">
                 <div className="cc-bot-basic-label"><span><ScenovaIcon name="bot" size={19}/></span><div><b>ทิศทางออเดอร์</b><small>AUTO ให้ระบบเลือก BUY/SELL อัตโนมัติ</small></div></div>
                 <select className="input" value={String(props.settings.entryMode||"AUTO_MOMENTUM")} onChange={e=>props.onEdit?.("entryMode",e.target.value)}>
-                  <option value="AUTO_MOMENTUM">AUTO MOMENTUM — ให้ระบบเลือกทิศทาง</option>
+                  <option value="AUTO_MOMENTUM">AUTO SMART — Setup-First เลือก BUY/SELL</option>
                   <option value="BUY_ONLY">BUY ONLY — เปิดเฉพาะ Buy</option>
                   <option value="SELL_ONLY">SELL ONLY — เปิดเฉพาะ Sell</option>
                 </select>
@@ -2014,6 +2019,15 @@ function BotSettingsModal(props:any) {
                   {[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}
                 </select>
               </label>
+              <div className={"cc-bot-basic-card "+(props.settings.confidenceGateEnabled?"accent":"")}>
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="target" size={19}/></span><div><b>ตัวกรอง Confidence</b><small>ค่าเริ่มต้นปิด — ถ้าเปิดจะใช้ Dynamic Threshold ตาม Setup (ฐาน 55); ถ้าปิดคะแนนยังคำนวณแต่ไม่บล็อกออเดอร์</small></div></div>
+                <SwitchSetting
+                  checked={Boolean(props.settings.confidenceGateEnabled)}
+                  onChange={(value:boolean)=>props.onEdit?.("confidenceGateEnabled",value)}
+                  onLabel="เปิดใช้ · Dynamic Confidence จะช่วยกรองจุดเข้า"
+                  offLabel="ปิดอยู่ · คะแนนยังคำนวณ แต่ไม่บล็อกออเดอร์"
+                />
+              </div>
             </div>
           </section>
 
@@ -2087,11 +2101,11 @@ function BotSettingsModal(props:any) {
           <section className="cc-modal-settings-section cc-bot-settings-panel" hidden={activeSection!=="time"}>
             <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">4</span><div><b>เวลาเทรด</b><small>อ้างอิงเวลา Server ของ Broker</small></div></div></div>
             <div className="cc-modal-setting-grid four">
-              <SettingTile icon="clock" title="เริ่ม Session" description="เวลา Server">
-                <select className="input" value={String(props.settings.sessionStartHour)} onChange={e=>props.onEdit?.("sessionStartHour",e.target.value)}>{[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select>
+              <SettingTile icon="clock" title="ช่วงเวลาเทรด" description="Setup-First Engine เปิดวิเคราะห์ตลอด 24 ชั่วโมง">
+                <div className="cc-readout"><b>00:00–24:00</b><small>ไม่ใช้ Session filter มาดักออเดอร์</small></div>
               </SettingTile>
-              <SettingTile icon="clock" title="จบ Session" description="เวลา Server">
-                <select className="input" value={String(props.settings.sessionEndHour)} onChange={e=>props.onEdit?.("sessionEndHour",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23,24].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select>
+              <SettingTile icon="status" title="เทรดช่วงข่าว" description="ไม่มี News Calendar hard block">
+                <div className="cc-readout"><b>เปิดใช้งาน</b><small>หยุดเฉพาะ Spread ระดับ EXTREME / Broker ไม่อนุญาต</small></div>
               </SettingTile>
               <SettingTile icon="timer" title="Session ปัจจุบัน" description="อ่านจาก EA"><div className="cc-readout"><b>{String(props.metrics?.sessionProfile||"UNKNOWN")}</b><small>ช่วงเวลาตลาด</small></div></SettingTile>
               <SettingTile icon="spread" title="Spread ตอนนี้" description={"Adaptive limit "+String(props.spreadLimitLabel||"—")}><div className="cc-readout"><b>{String(props.spreadValueLabel||"—")}</b><small>{String(props.spreadStatusLabel||"—")}</small></div></SettingTile>
@@ -2099,7 +2113,7 @@ function BotSettingsModal(props:any) {
           </section>
 
           <div className="cc-bot-modal-summary cc-bot-modal-summary-compact">
-            <div><small>ระบบวิเคราะห์</small><b>Adaptive M5 + M15</b></div>
+            <div><small>ระบบวิเคราะห์</small><b>Setup-First 5 TF</b></div>
             <div><small>จำนวนไม้</small><b>{Number(props.settings.maxPositions||1)} ไม้</b></div>
             <div><small>Lot สูงสุด</small><b>{Number(props.settings.lot||0.01).toFixed(2)}</b></div>
             <div><small>EA Sync</small><b>{props.syncLabel || "รอ EA"}</b></div>
