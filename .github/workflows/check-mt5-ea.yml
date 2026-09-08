@@ -1,0 +1,50 @@
+name: Check MT5 EA
+
+on:
+  pull_request:
+    paths:
+      - "mt5/FastBasketBot.mq5"
+      - ".github/workflows/check-mt5-ea.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install official MetaTrader 5 build environment
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = "$env:RUNNER_TEMP\mt5setup.exe"
+          $installDir = "C:\SCENOVA-MT5-Check"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://download.terminal.free/cdn/web/metaquotes.ltd/mt5/mt5setup.exe" -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "/auto /path:`"$installDir`"" -Wait
+          $metaEditor = Get-ChildItem -Path $installDir -Filter "metaeditor64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
+          "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Compile FastBasketBot.mq5
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sourceDir = "$env:RUNNER_TEMP\SCENOVA-EA-Source"
+          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
+          $source = Join-Path $sourceDir "FastBasketBot.mq5"
+          Copy-Item -Force "mt5\FastBasketBot.mq5" $source
+          $log = "$env:RUNNER_TEMP\FastBasketBot-compile.log"
+          Start-Process -FilePath "$env:METAEDITOR" -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
+          if (Test-Path $log) { Get-Content $log }
+          $ex5 = [System.IO.Path]::ChangeExtension($source, ".ex5")
+          if (-not (Test-Path $ex5)) { throw "FastBasketBot.ex5 was not produced" }
+
+          if (Test-Path $log) {
+            $logText = Get-Content $log -Raw
+            if ($logText -match "(?im)\b[1-9][0-9]*\s+errors?\b") {
+              throw "MetaEditor reported compile errors"
+            }
+          }
