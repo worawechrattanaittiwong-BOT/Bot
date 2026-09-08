@@ -2665,3 +2665,71 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 @media(max-width:1050px){.app-wrap{grid-template-columns:210px minmax(0,1fr)}.owner-sidebar{width:210px}.cc-v3-workspace{grid-template-columns:1fr!important}.cc-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:960px){.app-wrap{display:block}.app-main{padding:14px 12px 80px!important}.cc-v3-head-actions{display:none}.cc-v3-workspace{grid-template-columns:1fr!important}.cc-settings-tabs{overflow-x:auto;display:flex}.cc-settings-tabs button{min-width:150px;padding:0 12px}}
 @media(max-width:680px){.cc-v3-title h1{font-size:21px!important}.cc-v3-kpis{grid-template-columns:1fr 1fr!important}.cc-v3-control-fields{grid-template-columns:1fr 1fr!important}.cc-v3-actions{grid-template-columns:1fr!important}.cc-signal-grid{grid-template-columns:1fr 1fr}.cc-direction-strip{grid-template-columns:1fr 1fr}.cc-settings-grid{grid-template-columns:1fr}.cc-setting-tile.wide{grid-column:auto}.cc-settings-actions .cc-change-chip{display:none}.cc-setting-tile .daily-profit-main-row{grid-template-columns:1fr!important}}
+
+/* Bot settings: readable, compact controls scoped to this page only. */
+#bot-settings .cc-settings-head{min-height:76px;padding:14px 18px}
+#bot-settings .cc-settings-title{gap:12px}
+#bot-settings .cc-settings-title>span{width:42px;height:42px}
+#bot-settings .cc-settings-title h2{font-size:20px!important;line-height:1.15}
+#bot-settings .cc-settings-title small{margin-top:4px;font-size:11px;line-height:1.4;color:#7b86a2}
+#bot-settings .cc-change-chip{padding:7px 10px;font-size:11px}
+#bot-settings .cc-save-primary{min-height:42px!important;padding:10px 15px!important;font-size:12px!important}
+#bot-settings .cc-settings-tabs{padding:8px 16px 0}
+#bot-settings .cc-settings-tabs button{min-height:48px;gap:8px;font-size:12px;font-weight:650;cursor:pointer}
+#bot-settings .cc-settings-form-v3{padding:16px 18px 18px}
+#bot-settings .cc-settings-section-title{min-height:30px;margin-bottom:12px;gap:10px}
+#bot-settings .cc-settings-section-title b{font-size:15px}
+#bot-settings .cc-settings-section-title span{font-size:11px;color:#7a85a0}
+#bot-settings .cc-settings-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+#bot-settings .cc-setting-tile{min-height:126px;padding:13px;border-radius:13px;gap:12px}
+#bot-settings .cc-setting-tile-head{gap:10px}
+#bot-settings .cc-setting-tile-head>span{width:36px;height:36px;border-radius:10px}
+#bot-settings .cc-setting-tile-head>div{gap:3px}
+#bot-settings .cc-setting-tile-head b{font-size:13px;line-height:1.35;color:#e2e6f0}
+#bot-settings .cc-setting-tile-head small{font-size:10px;line-height:1.45;color:#7b85a0}
+#bot-settings .cc-setting-control .input{min-height:42px!important;padding:9px 11px!important;font-size:12px!important}
+#bot-settings .cc-readout{min-height:42px;padding:9px 11px}
+#bot-settings .cc-readout b{font-size:12px}
+#bot-settings .cc-readout small{font-size:10px;margin-top:3px}
+#bot-settings .cc-profile-picker{gap:9px}
+#bot-settings .cc-profile-picker button{min-height:82px;padding:12px}
+#bot-settings .cc-profile-picker b{font-size:13px}
+#bot-settings .cc-profile-picker small{font-size:10px;line-height:1.4}
+
+#bot-settings .cc-risk-title{display:flex;align-items:center;justify-content:space-between;gap:16px}
+#bot-settings .cc-risk-title>div:first-child{display:flex;align-items:baseline;gap:10px}
+#bot-settings .cc-risk-summary{display:flex;align-items:center;gap:8px}
+#bot-settings .cc-risk-summary span{padding:7px 10px;border:1px solid #283250;border-radius:9px;background:#090e19;font-size:10px;color:#7f8aa5}
+#bot-settings .cc-risk-summary b{margin-left:4px;font-size:11px;color:#dce2ef}
+#bot-settings .cc-risk-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+
+#bot-settings .toggle-setting-label{position:relative;min-height:26px;margin:0 0 9px!important;gap:9px!important}
+#bot-settings .toggle-setting-label input[type="checkbox"]{position:absolute;opacity:0;pointer-events:none;width:1px!important;height:1px!important}
+#bot-settings .toggle-setting-label .setting-toggle-track{width:40px;height:22px;padding:3px;border:1px solid #35405b;border-radius:999px;background:#171d2d;display:block;flex:0 0 auto;transition:.18s ease}
+#bot-settings .toggle-setting-label .setting-toggle-track i{display:block;width:14px;height:14px;border-radius:50%;background:#7c879e;transition:.18s ease}
+#bot-settings .enabled .toggle-setting-label .setting-toggle-track{border-color:#318262;background:#123628;box-shadow:0 0 0 3px rgba(72,209,150,.08)}
+#bot-settings .enabled .toggle-setting-label .setting-toggle-track i{transform:translateX(18px);background:#6ce8ae;box-shadow:0 0 9px rgba(108,232,174,.4)}
+#bot-settings .toggle-setting-label .setting-toggle-text{font-size:11px!important;color:#8f99b1;font-weight:700}
+#bot-settings .enabled .toggle-setting-label .setting-toggle-text{color:#78dfad}
+#bot-settings .toggle-select-field select,
+#bot-settings .toggle-pair-field select,
+#bot-settings .daily-profit-target-field select{min-height:40px!important;padding:8px 10px!important;font-size:12px!important}
+#bot-settings .daily-profit-main-row{grid-template-columns:minmax(105px,.7fr) minmax(170px,auto) minmax(180px,1fr)!important;gap:9px!important}
+#bot-settings .mini-check{min-height:40px;padding:0 8px;font-size:11px!important}
+#bot-settings .cc-settings-savebar{margin-top:15px;padding:10px 11px}
+#bot-settings .cc-settings-savebar>div{font-size:11px}
+
+@media(max-width:1250px){
+  #bot-settings .cc-settings-grid,#bot-settings .cc-risk-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  #bot-settings .cc-settings-head{padding:12px 13px}
+  #bot-settings .cc-settings-title small{display:none}
+  #bot-settings .cc-settings-tabs button{min-width:132px;font-size:11px}
+  #bot-settings .cc-settings-form-v3{padding:14px 12px 16px}
+  #bot-settings .cc-settings-grid,#bot-settings .cc-risk-grid{grid-template-columns:1fr}
+  #bot-settings .cc-setting-tile.wide{grid-column:auto}
+  #bot-settings .cc-risk-title{align-items:flex-start;flex-direction:column}
+  #bot-settings .cc-risk-summary{width:100%;display:grid;grid-template-columns:1fr 1fr}
+  #bot-settings .daily-profit-main-row{grid-template-columns:1fr!important}
+}
