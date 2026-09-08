@@ -2020,7 +2020,7 @@ function BotSettingsModal(props:any) {
                 </select>
               </label>
               <div className={"cc-bot-basic-card "+(props.settings.confidenceGateEnabled?"accent":"")}>
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="target" size={19}/></span><div><b>ตัวกรอง Confidence</b><small>ค่าเริ่มต้นปิด — EA ยังวิเคราะห์คะแนน แต่จะไม่ใช้คะแนนห้ามออเดอร์</small></div></div>
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="target" size={19}/></span><div><b>ตัวกรอง Confidence</b><small>ค่าเริ่มต้นปิด — ถ้าเปิดจะใช้ Dynamic Threshold ตาม Setup (ฐาน 55); ถ้าปิดคะแนนยังคำนวณแต่ไม่บล็อกออเดอร์</small></div></div>
                 <SwitchSetting
                   checked={Boolean(props.settings.confidenceGateEnabled)}
                   onChange={(value:boolean)=>props.onEdit?.("confidenceGateEnabled",value)}
