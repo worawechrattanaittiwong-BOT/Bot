@@ -154,7 +154,7 @@ jobs:
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.perPositionLossMoney')" = "0"
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.entryMode')" = "BUY_ONLY"
-          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.allowMinimumLotOverride')" = "true"
+          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.allowMinimumLotOverride')" = "false"
 
           echo "[integration] verifying unified Adaptive Engine"
           UNIFIED_ENGINE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"maxPositions":7}')
@@ -201,7 +201,7 @@ jobs:
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.perPositionLossMoney')" = "0"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.entryMode')" = "BUY_ONLY"
-          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.allowMinimumLotOverride')" = "true"
+          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.allowMinimumLotOverride')" = "false"
 
           echo "[integration] verifying settings in EA heartbeat"
           SETTINGS_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"symbol\":\"XAUUSDm\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
@@ -216,7 +216,7 @@ jobs:
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.perPositionLossMoney')" = "0"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.entryMode')" = "BUY_ONLY"
-          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.allowMinimumLotOverride')" = "true"
+          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.allowMinimumLotOverride')" = "false"
 
           echo "[integration] verifying invalid settings rejection"
           BAD_SETTINGS_HTTP=$(curl -sS -o /tmp/bad-settings.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"lot":0}')
