@@ -3116,7 +3116,31 @@ void EnsureBurstTargets(int plannedPositions)
    double volume = g_adaptiveLot > 0.0 ? g_adaptiveLot : NormalizeTradeVolume(g_lot);
    double plannedSpreadCost = CurrentSpreadCost(volume) * targetCount;
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-   g_burstTargetMoney = MathMax(0.50, MathMax(plannedSpreadCost * 0.50, equity * 0.0002));
+   double fallbackTarget = MathMax(0.50, MathMax(plannedSpreadCost * 0.50, equity * 0.0002));
+   double dynamicTarget = 0.0;
+
+   int direction = BasketDirection();
+   double anchorPrice = BasketAnchorEntryPrice(direction);
+   if(direction != 0 && anchorPrice > 0.0)
+   {
+      double stopPrice = DynamicInitialStopPrice(direction, anchorPrice);
+      double takeProfitPrice = DynamicTakeProfitPrice(direction, anchorPrice, stopPrice);
+      double projectedPerPosition = 0.0;
+      ENUM_ORDER_TYPE orderType = direction > 0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+      if(takeProfitPrice > 0.0 &&
+         OrderCalcProfit(orderType, _Symbol, volume, anchorPrice, takeProfitPrice, projectedPerPosition))
+      {
+         // Ladder entries occur progressively, so use a conservative portion of
+         // the anchor projection instead of pretending all ten fills are at rung 1.
+         dynamicTarget = MathAbs(projectedPerPosition) * targetCount * 0.60;
+         if(equity > 0.0)
+            dynamicTarget = MathMin(dynamicTarget, equity * 0.005);
+         g_dynamicStopPrice = stopPrice;
+         g_dynamicTakeProfitPrice = takeProfitPrice;
+      }
+   }
+
+   g_burstTargetMoney = MathMax(fallbackTarget, dynamicTarget);
 
    // Loss protection is never synthesized. If the user sets Basket Loss to 0,
    // the effective Basket loss is OFF.
