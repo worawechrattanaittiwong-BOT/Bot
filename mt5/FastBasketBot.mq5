@@ -3118,6 +3118,98 @@ void EnsureBurstTargets(int plannedPositions)
    g_burstLossMoney = 0.0;
 }
 
+double BasketAnchorEntryPrice(int direction)
+{
+   long oldestTime = 0;
+   double oldestPrice = 0.0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
+         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+      long type = PositionGetInteger(POSITION_TYPE);
+      if((direction > 0 && type != POSITION_TYPE_BUY) ||
+         (direction < 0 && type != POSITION_TYPE_SELL))
+         continue;
+
+      long openedAt = (long)PositionGetInteger(POSITION_TIME_MSC);
+      if(oldestTime == 0 || openedAt < oldestTime)
+      {
+         oldestTime = openedAt;
+         oldestPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      }
+   }
+   return oldestPrice;
+}
+
+double BasketProgressFromAnchorPoints(int direction)
+{
+   MqlTick tick;
+   double anchorPrice = BasketAnchorEntryPrice(direction);
+   if(anchorPrice <= 0.0 || !SymbolInfoTick(_Symbol, tick))
+      return 0.0;
+   return direction > 0
+      ? (tick.bid - anchorPrice) / _Point
+      : (anchorPrice - tick.ask) / _Point;
+}
+
+double LadderFractionForRung(int rung)
+{
+   if(rung <= 1) return 0.0;
+   if(rung == 2) return 0.03;
+   if(rung == 3) return 0.07;
+   if(rung == 4) return 0.12;
+   if(rung == 5) return 0.18;
+   if(rung == 6) return 0.25;
+   if(rung == 7) return 0.33;
+   if(rung == 8) return 0.42;
+   if(rung == 9) return 0.52;
+   if(rung == 10) return 0.63;
+   return 0.63 + (rung - 10) * 0.08;
+}
+
+bool BasketLadderReady(int direction, int count, int targetPositions)
+{
+   int nextRung = count + 1;
+   g_ladderRung = MathMax(1, nextRung);
+   g_ladderProgressPoints = MathMax(0.0, BasketProgressFromAnchorPoints(direction));
+
+   if(nextRung <= 1)
+   {
+      g_ladderRequiredPoints = 0.0;
+      g_ladderMode = "INITIAL";
+      return true;
+   }
+
+   double atr = g_atrPoints > 0.0
+      ? g_atrPoints
+      : AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   atr = MathMax(10.0, atr);
+
+   double qualityFactor = g_entryQuality == "A" ? 0.78 :
+                          g_entryQuality == "B" ? 0.92 : 1.05;
+   double regimeFactor =
+      g_marketRegimeDetail == "NEWS_IMPULSE" ? 0.72 :
+      g_marketRegime == "HIGH_VOLATILITY" ? 0.82 :
+      g_marketRegimeDetail == "TREND_ACCELERATION" ? 0.85 : 1.0;
+
+   g_ladderRequiredPoints = MathMax(
+      3.0,
+      atr * LadderFractionForRung(nextRung) * qualityFactor * regimeFactor
+   );
+   g_ladderMode =
+      g_marketRegimeDetail == "NEWS_IMPULSE" ? "FAST_NEWS" :
+      g_entryQuality == "A" ? "QUALITY_A" :
+      g_entryQuality == "B" ? "QUALITY_B" : "QUALITY_C";
+
+   // Ladder is an intentional position-management schedule, not an entry
+   // filter. Rung 1 has already traded; this only spaces additional positions.
+   return g_ladderProgressPoints >= g_ladderRequiredPoints;
+}
+
 void ArmBurst(int direction)
 {
    if(!BasketFillEnabled() || g_burstActive)
@@ -3125,8 +3217,12 @@ void ArmBurst(int direction)
 
    g_burstDirection = direction;
    g_burstTargetPositions = MathMax(1, g_maxPositions);
-   g_burstRequestsSent = 1;
+   g_burstRequestsSent = MathMax(1, BasketPositionCount());
    g_burstStartedAt = TimeCurrent();
+   g_ladderRung = MathMax(1, BasketPositionCount() + 1);
+   g_ladderProgressPoints = 0.0;
+   g_ladderRequiredPoints = 0.0;
+   g_ladderMode = "ARMED";
    g_burstActive = g_burstRequestsSent < g_burstTargetPositions;
    g_burstNeedsRearm = false;
    EnsureBurstTargets(g_burstTargetPositions);
@@ -3157,28 +3253,28 @@ void ProcessBurstQueue()
       AbortBurst("CONTROL_NOT_FRESH");
       return;
    }
-   int burstTimeoutSeconds = MathMax(15, (g_burstTargetPositions * g_minOrderIntervalMs) / 1000 + 10);
-   if(TimeCurrent() - g_burstStartedAt > burstTimeoutSeconds)
-   {
-      AbortBurst("BASKET_FILL_TIMEOUT");
-      return;
-   }
    if(TradePermissionStatus() != "OK")
    {
       AbortBurst("TRADE_PERMISSION");
       return;
    }
    int count = BasketPositionCount();
-   if(count >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
+   if(count >= g_burstTargetPositions)
    {
       g_burstActive = false;
       g_burstNeedsRearm = false;
       g_executionStatus = "BASKET_FILL_COMPLETE";
+      g_ladderMode = "COMPLETE";
       return;
    }
-   // Revalidate each queued add. Keep this deliberately light: do not demand
-   // every timeframe/Fib/OB signal again, but never keep firing into a new
-   // major opposing zone or after M15+H1 have flipped against the Basket.
+   // Rung 1 was opened immediately by the setup engine. Additional positions
+   // are staged transparently by the Ladder rather than fired in one burst.
+   if(!BasketLadderReady(g_burstDirection, count, g_burstTargetPositions))
+   {
+      g_executionStatus = "BASKET_LADDER_WAIT";
+      return;
+   }
+
    if(!CanSendOrder())
       return;
    if(!AdaptiveSpreadAllowed())
@@ -3193,19 +3289,22 @@ void ProcessBurstQueue()
    }
    bool accepted = SendMarketOrder(g_burstDirection);
    RegisterOrderRequest();
-   g_burstRequestsSent++;
    int filled = BasketPositionCount();
-   bool completed = filled >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions;
+   if(accepted)
+      g_burstRequestsSent = MathMax(g_burstRequestsSent + 1, filled);
+
+   bool completed = filled >= g_burstTargetPositions;
    if(completed)
-      g_executionStatus = "BASKET_FILL_COMPLETE";
-   else if(accepted)
-      g_executionStatus = "BASKET_FILLING";
-   // On rejection keep the exact MT5 retcode status from SendMarketOrder, then
-   // continue with the next requested attempt. MT5/Broker decides every order.
-   if(filled >= g_burstTargetPositions || g_burstRequestsSent >= g_burstTargetPositions)
    {
+      g_executionStatus = "BASKET_FILL_COMPLETE";
+      g_ladderMode = "COMPLETE";
       g_burstActive = false;
       g_burstNeedsRearm = false;
+   }
+   else if(accepted)
+   {
+      g_executionStatus = "BASKET_LADDER_ADVANCE";
+      g_ladderRung = filled + 1;
    }
 }
 
