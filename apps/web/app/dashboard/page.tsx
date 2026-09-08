@@ -1256,6 +1256,17 @@ export default function DashboardPage() {
                   <div className="cc-card-head cc-v3-control-head">
                     <div className="cc-symbol-title"><span className="cc-gold-icon"><ScenovaIcon name="gold" size={28}/></span><div><h2>{metrics.symbol || settings.symbol}</h2><small>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}</small></div></div>
                     <div className="cc-control-head-right">
+                      <button
+                        type="button"
+                        className="cc-control-settings-button"
+                        onClick={() => {
+                          setProfileHelpOpen("");
+                          setBotSettingsOpen(true);
+                        }}
+                      >
+                        <ScenovaIcon name="settings" size={18}/>
+                        <span>ตั้งค่าบอท</span>
+                      </button>
                       <span className={"cc-state-pill "+(state==="RUNNING"?"running":state==="SAFE_STOP"?"safe":"stopped")}><span className="cc-state-dot"/><span><b>{state==="RUNNING"?"กำลังทำงาน":state==="SAFE_STOP"?"Safe Stop":"หยุดอยู่"}</b><small>{state==="RUNNING"?"บอททำงานปกติ":controlStateLabel}</small></span></span>
                       <span className="cc-last-update">อัปเดต {heartbeatAgeSeconds.toFixed(0)} วิ <ScenovaIcon name="refresh" size={14}/></span>
                     </div>
@@ -1298,34 +1309,6 @@ export default function DashboardPage() {
                   <div className="cc-status-actions"><button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}><ScenovaIcon name="settings" size={16}/>จัดการบัญชี</button><button className="btn full cc-status-detail" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="clock" size={16}/>ประวัติการทำงาน</button></div>
                 </section>
               </div>
-
-              <section id="bot-settings" className="panel cc-settings-launch-card">
-                <button
-                  type="button"
-                  className="cc-bot-settings-launcher cc-bot-settings-launcher-v2"
-                  onClick={() => {
-                    setProfileHelpOpen("");
-                    setBotSettingsOpen(true);
-                  }}
-                >
-                  <span className="cc-bot-settings-launcher-icon"><ScenovaIcon name="settings" size={26}/></span>
-                  <span className="cc-bot-settings-launcher-copy">
-                    <span className="cc-bot-settings-launcher-kicker">การตั้งค่าบอททั้งหมด</span>
-                    <b>กดเพื่อเปิดการตั้งค่า โหมด / กำไร / SL / เวลาเทรด</b>
-                    <small>
-                      <strong>{tradingProfileHelp[String(settings.tradingProfile||"BALANCED")]?.title || "สมดุล"}</strong>
-                      {" · "}{settings.entryMode}
-                      {" · "}{Number(settings.maxPositions||1)} ไม้
-                      {" · Lot "}{Number(settings.lot||0.01).toFixed(2)}
-                      {" · SL "}{manualStopLossPoints>0 ? Number(manualStopLossPoints).toFixed(0)+" pt" : "ตามระบบ"}
-                    </small>
-                  </span>
-                  <span className="cc-bot-settings-launcher-sync">
-                    <span className={"cc-ea-sync-chip "+settingsSyncTone}><i/>{settingsSyncLabel}</span>
-                    <span className="cc-bot-settings-launcher-action"><span>เปิดตั้งค่า</span><ScenovaIcon name="settings" size={18}/></span>
-                  </span>
-                </button>
-              </section>
 
               <LiveTerminalPanel
                 symbol={String(metrics.symbol||settings.symbol||"")}
