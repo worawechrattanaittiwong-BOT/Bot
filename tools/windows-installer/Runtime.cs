@@ -221,6 +221,7 @@ internal sealed class AgentHeartbeatResponse
     public double EaLastSeenAgeSeconds { get; set; }
     public bool? TerminalTradeAllowed { get; set; }
     public bool? MqlTradeAllowed { get; set; }
+    public bool SafeToRestart { get; set; }
 }
 
 internal sealed class ApiError

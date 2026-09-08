@@ -88,7 +88,7 @@ export class InstallerController {
     }
 
     // If a first install failed after the Server consumed the code, installer
-    // v2.0.8 keeps the same pending device identity so the same PC can retry
+    // v2.0.9 keeps the same pending device identity so the same PC can retry
     // safely for 24 hours.
     if (!enrollment) {
       enrollment = await this.db.one(
