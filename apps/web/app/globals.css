@@ -3676,3 +3676,112 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .cc-profile-add-thresholds{grid-template-columns:1fr}
   .cc-profile-live-add{align-items:flex-start;flex-direction:column}
 }
+
+
+/* ===== 2026-09 connection clarity + standard readable typography ===== */
+.cc-head-chip.warn{
+  border-color:#5f4b26;
+  background:linear-gradient(145deg,#18130a,#0e0d0b);
+}
+.cc-head-chip.warn i{background:#e3b956;box-shadow:0 0 8px rgba(227,185,86,.35)}
+.cc-head-chip.warn b{color:#e4c579}
+
+.cc-connect-alert.agent-online{
+  border-color:#5c4927;
+  background:linear-gradient(135deg,#171209,#0e0d0b);
+}
+.cc-connect-alert.agent-online .cc-alert-icon{
+  color:#e1bc70;
+  border-color:#5a4728;
+  background:#21180b;
+}
+.cc-connect-alert.agent-online .cc-alert-copy b{color:#ebca82}
+.cc-connect-alert.agent-online .cc-alert-copy span{color:#a89570}
+
+/* Settings action belongs at the far-right of the symbol header. */
+.cc-control-head-right{
+  justify-content:flex-end;
+}
+.cc-control-settings-button{
+  min-height:46px;
+  padding:11px 17px;
+  border-radius:12px;
+  font-size:13px;
+  gap:9px;
+  margin-left:4px;
+  box-shadow:0 0 24px rgba(118,78,228,.20),inset 0 1px 0 rgba(255,255,255,.05);
+}
+.cc-control-settings-button span{font-size:13px;font-weight:850}
+.cc-control-settings-button svg{width:20px;height:20px}
+
+/* Live Terminal: use the same readable scale as the rest of Control Center. */
+.cc-live-terminal-title .eyebrow{font-size:11px;letter-spacing:.08em}
+.cc-live-terminal-title h2{font-size:19px;line-height:1.3}
+.cc-live-terminal-title small{font-size:12px;line-height:1.45}
+.cc-terminal-auto{font-size:12px}
+.cc-live-terminal-head-actions .btn{font-size:12px;min-height:40px}
+
+.cc-live-status-card{min-height:98px;padding:12px}
+.cc-live-status-card>span{width:38px;height:38px}
+.cc-live-status-card small{font-size:11px;line-height:1.35}
+.cc-live-status-card b{font-size:14px;line-height:1.4}
+.cc-live-status-card em{font-size:11px;line-height:1.5}
+
+.cc-live-terminal-mini-grid>div{min-height:60px;padding:10px 11px}
+.cc-live-terminal-mini-grid span{font-size:10.5px;line-height:1.35}
+.cc-live-terminal-mini-grid b{font-size:12.5px;line-height:1.35}
+
+.cc-live-subhead{min-height:56px;padding:11px 13px}
+.cc-live-subhead b{font-size:13.5px}
+.cc-live-subhead small{font-size:11px;line-height:1.45}
+.cc-live-subhead>span{font-size:11px;padding:6px 9px}
+
+.cc-live-position-row>span{
+  min-height:56px;
+  padding:10px 11px;
+  font-size:11.5px;
+}
+.cc-live-position-row b{font-size:12.5px}
+.cc-live-position-row small{font-size:10.5px;line-height:1.35}
+.cc-live-position-row.header>span{
+  min-height:40px;
+  font-size:11px;
+}
+.cc-live-position-empty{min-height:88px}
+.cc-live-position-empty b{font-size:13px}
+.cc-live-position-empty small{font-size:11px;line-height:1.45}
+
+.cc-live-terminal-toolbar{padding:10px 0!important}
+.cc-live-terminal-toolbar .cc-terminal-filter{font-size:10.5px;min-height:30px;padding:6px 9px}
+.cc-live-terminal-toolbar .cc-terminal-count{font-size:10.5px}
+.cc-live-terminal-window{min-height:190px;max-height:300px}
+.cc-live-terminal-window .cc-terminal-line{
+  min-height:38px;
+  font-size:12px;
+  line-height:1.45;
+}
+.cc-live-terminal-window .cc-terminal-line time{font-size:10.5px}
+.cc-live-terminal-window .cc-terminal-line strong{font-size:12px}
+.cc-live-terminal-window .cc-terminal-line small{font-size:10.5px;line-height:1.5}
+.cc-terminal-empty{font-size:12px}
+
+/* Profile ! details: never fall below the normal dashboard reading scale. */
+.cc-mode-rule-metric small{font-size:10.5px}
+.cc-mode-rule-metric b{font-size:13px}
+.cc-mode-rule-metric span{font-size:10.5px;line-height:1.45}
+.cc-ea-filter-number{font-size:10px}
+.cc-ea-filter-card-top b{font-size:12.5px}
+.cc-ea-filter-card-top small{font-size:10.5px;line-height:1.55}
+.cc-ea-filter-live b{font-size:12px}
+.cc-ea-filter-live span{font-size:10.5px;line-height:1.45}
+.cc-profile-add-thresholds span{font-size:10.5px}
+.cc-profile-add-thresholds b{font-size:12px}
+.cc-profile-add-thresholds small{font-size:10.5px;line-height:1.5}
+.cc-profile-live-add span{font-size:10.5px}
+.cc-profile-live-add b{font-size:12px}
+
+@media(max-width:680px){
+  .cc-control-settings-button{order:3;margin-left:0}
+  .cc-state-pill{order:1}
+  .cc-last-update{order:2}
+}
