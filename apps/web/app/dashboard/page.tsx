@@ -1159,14 +1159,14 @@ export default function DashboardPage() {
                     <SettingTile icon="spread" title="Spread ตอนนี้" description={"Adaptive limit "+spreadLimitLabel}><div className="cc-readout"><b>{spreadValueLabel}</b><small>{spreadStatusLabel[spreadStatus]||spreadStatus}</small></div></SettingTile>
                   </div></>}
 
-                  {settingsTab==="exit"&&<><div className="cc-settings-section-title cc-profit-title"><div><b>เป้าหมายกำไร</b><span>เลือกวิธีปิดกำไรหลักเพียงแบบเดียว</span></div><div className="cc-profit-mode-note"><ScenovaIcon name="info" size={14}/><span>กำไรรวมทั้งชุด และกำไรต่อไม้ เลือกพร้อมกันไม่ได้</span></div></div>
+                  {settingsTab==="exit"&&<><div className="cc-settings-section-title cc-profit-title"><div><b>เป้าหมายกำไร</b><span>เลือกวิธีปิดกำไรหลักเพียงแบบเดียว</span></div><div className="cc-profit-mode-note"><ScenovaIcon name="info" size={14}/><span>เปิดอันไหน อีกอันจะปิดเองอัตโนมัติ</span></div></div>
                     {String(settings.tradingProfile||"BALANCED")==="BURST_10"?<div className="cc-settings-grid">
                       <SettingTile icon="orders" title="Basket Scalping Engine" description="Burst ใช้เป้ากำไรอัตโนมัติตาม Cycle" wide><div className="cc-readout"><b>{metrics.burstActive?"กำลังส่ง "+Number(metrics.burstRequestsSent||0)+" / "+configuredMaxPositions+" ไม้":"พร้อมเปิด "+configuredMaxPositions+" ไม้"}</b><small>โปรไฟล์ Burst จัดการเป้ากำไร Basket อัตโนมัติ</small></div></SettingTile>
                       <SettingTile icon="profit" title="เป้ากำไร Basket อัตโนมัติ" description="ค่าจริงจาก EA"><div className="cc-readout"><b>{"$"+Number(metrics.burstTargetMoney||0).toFixed(2)}</b><small>ปรับใหม่ทุก Cycle</small></div></SettingTile>
                       <SettingTile icon="risk" title="ขีดจำกัด Basket อัตโนมัติ" description="ค่าจริงจาก EA"><div className="cc-readout"><b>{"$"+Number(metrics.burstLossMoney||0).toFixed(2)}</b><small>ดูแล Position ที่เปิดสำเร็จแล้ว</small></div></SettingTile>
                     </div>:<>
                       <div className="cc-settings-grid cc-profit-mode-grid">
-                        {!perPositionProfitEnabled&&<SettingTile icon="profit" title="กำไรทั้งชุดถึงแล้วปิด" description="รวมกำไรทุก Position ใน Basket เดียวกัน" wide accent={basketProfitEnabled}>
+                        <SettingTile icon="profit" title="กำไรทั้งชุดถึงแล้วปิด" description="รวมกำไรทุก Position ใน Basket เดียวกัน" wide accent={basketProfitEnabled}>
                           <BasketProfitTargetField
                             value={settings.basketProfitTargetMoney}
                             trailPercent={settings.profitRunTrailPercent}
@@ -1177,9 +1177,9 @@ export default function DashboardPage() {
                             onTargetChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}
                             onPercentChange={(v:string)=>editSetting("profitRunTrailPercent",v)}
                           />
-                        </SettingTile>}
+                        </SettingTile>
 
-                        {!basketProfitEnabled&&<SettingTile icon="orders" title="กำไรต่อไม้" description="แต่ละ Position ถึงกำไรที่ตั้ง ให้ปิดเฉพาะไม้นั้นทันที" wide accent={perPositionProfitEnabled}>
+                        <SettingTile icon="orders" title="กำไรต่อไม้" description="แต่ละ Position ถึงกำไรที่ตั้ง ให้ปิดเฉพาะไม้นั้นทันที" wide accent={perPositionProfitEnabled}>
                           <ToggleSelectField
                             label="เปิดกำไรต่อไม้"
                             options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
@@ -1188,7 +1188,7 @@ export default function DashboardPage() {
                             format={(v:string)=>"ถึง $"+v+" → ปิดไม้นั้น"}
                             onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}
                           />
-                        </SettingTile>}
+                        </SettingTile>
                       </div>
 
                       <div className="cc-profit-independent">
