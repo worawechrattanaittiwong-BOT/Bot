@@ -389,6 +389,7 @@ export default function DashboardPage() {
     ? new Date(data.instance.last_seen_at)
     : null;
   const isMt5Online = Boolean(data?.instance?.mt5_online) && state !== "OFFLINE";
+  const agentOnline = Boolean(data?.instance?.agent_online || data?.instance?.device_online);
   const eaLastSeenAgeSeconds = Number(data?.instance?.ea_last_seen_age_seconds ?? -1);
   const symbolDigits = Math.max(0, Math.min(8, Number(metrics.symbolDigits ?? 3)));
   const spreadPoints = Number(metrics.spreadPoints || 0);
@@ -500,7 +501,37 @@ export default function DashboardPage() {
     return "ยังไม่มีสิทธิ์ใช้งาน";
   }, [entitlement]);
 
-  const connectionLabel = isMt5Online ? "เชื่อมต่อแล้ว" : data?.account ? "รอ MT5 เชื่อมต่อ" : "ยังไม่ได้เชื่อมบัญชี";
+  const connectionLabel = isMt5Online
+    ? "EA + MT5 เชื่อมต่อแล้ว"
+    : agentOnline
+      ? "Windows Agent เชื่อมแล้ว · รอ EA"
+      : data?.account
+        ? "รอ Windows Agent / MT5"
+        : "ยังไม่ได้เชื่อมบัญชี";
+  const connectionHeadline = isMt5Online
+    ? "เชื่อมต่อครบแล้ว"
+    : agentOnline
+      ? "Windows Agent เชื่อมแล้ว แต่ EA ยังไม่ยืนยัน"
+      : "ยังไม่พบการเชื่อมต่อจากเครื่อง MT5";
+  const connectionDetail = isMt5Online
+    ? "EA ส่ง Heartbeat เข้าระบบตามปกติ"
+    : agentOnline
+      ? (
+          softwareUpdate.installerRequired
+            ? "ตัว Agent ยังเชื่อมอยู่ แต่ EA ไม่ส่ง Heartbeat · กรุณาอัปเดต SCENOVA Setup เพื่อซ่อมข้อมูลยืนยัน EA อัตโนมัติ"
+            : "ตัว Agent ยังเชื่อมอยู่ แต่ EA ไม่ส่ง Heartbeat · ระบบ Agent จะซ่อม preset/credential และเปิด EA ใหม่ให้อัตโนมัติ"
+        )
+      : (data?.account?.mode === "LOCAL"
+          ? "เปิด SCENOVA Agent และ MetaTrader 5 บนเครื่องที่ติดตั้ง"
+          : "กำลังรอ MT5 เชื่อมต่อ");
+  const terminalExecutionLabel = !isMt5Online && agentOnline
+    ? "Agent เชื่อมแล้ว · รอ EA Heartbeat"
+    : String(liveStatus.label||"—");
+  const terminalExecutionDetail = !isMt5Online && agentOnline
+    ? (eaLastSeenAgeSeconds >= 0
+        ? "EA ติดต่อ Server ล่าสุด "+Math.max(0,eaLastSeenAgeSeconds).toFixed(0)+" วินาทีที่แล้ว · กำลังซ่อมการยืนยัน/รีโหลด EA"
+        : "Agent ติดต่อ Server ได้ แต่ยังไม่เคยได้รับ Heartbeat จาก EA")
+    : String(liveStatus.detail||"");
   const controlStateLabel =
     desired === "RUNNING"
       ? (state === "RUNNING" ? "บอทกำลังทำงาน" : "กำลังเริ่มบอท")
@@ -1157,7 +1188,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="cc-v3-head-actions">
-            <span className={"cc-head-chip " + (isMt5Online ? "good" : "bad")}><i/><span><b>{isMt5Online ? "เชื่อมต่อแล้ว" : "ยังไม่เชื่อมต่อ"}</b><small>{data.account?.broker || "MT5"} · {data.selectedSlot?.mode || "LOCAL"}</small></span></span>
+            <span className={"cc-head-chip " + (isMt5Online ? "good" : agentOnline ? "warn" : "bad")}><i/><span><b>{isMt5Online ? "เชื่อมต่อแล้ว" : agentOnline ? "Agent เชื่อมแล้ว" : "ยังไม่เชื่อมต่อ"}</b><small>{isMt5Online ? (data.account?.broker || "MT5")+" · EA Online" : agentOnline ? "Windows Agent Online · รอ EA" : (data.account?.broker || "MT5")+" · "+(data.selectedSlot?.mode || "LOCAL")}</small></span></span>
             <span className={"cc-head-chip bot " + (desired==="RUNNING" ? "active" : "")}><ScenovaIcon name="bot" size={18}/><span><b>{controlStateLabel}</b><small>{settings.entryMode || "AUTO MOMENTUM"}</small></span></span>
             <span className="cc-head-icon-button" aria-label="การแจ้งเตือน"><ScenovaIcon name="bell" size={18}/></span>
           </div>
@@ -1237,10 +1268,12 @@ export default function DashboardPage() {
           ) : (
             <div className="cc-overview cc-v3">
               {!isMt5Online && (
-                <div className="cc-connect-alert">
-                  <div className="cc-alert-icon"><ScenovaIcon name="info" size={20}/></div>
-                  <div className="cc-alert-copy"><b>ยังไม่ได้เชื่อมต่อ MT5</b><span>{data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span></div>
-                  <button className="btn cc-alert-action" onClick={()=>setActiveView("account")}>ไปหน้าการเชื่อมต่อ →</button>
+                <div className={"cc-connect-alert "+(agentOnline?"agent-online":"")}>
+                  <div className="cc-alert-icon"><ScenovaIcon name={agentOnline?"refresh":"info"} size={20}/></div>
+                  <div className="cc-alert-copy"><b>{connectionHeadline}</b><span>{connectionDetail}</span></div>
+                  <button className="btn cc-alert-action" onClick={softwareUpdate.installerRequired?downloadWindowsInstaller:()=>setActiveView("account")}>
+                    {softwareUpdate.installerRequired?"ดาวน์โหลดอัปเดต →":"ตรวจการเชื่อมต่อ →"}
+                  </button>
                 </div>
               )}
 
@@ -1256,6 +1289,8 @@ export default function DashboardPage() {
                   <div className="cc-card-head cc-v3-control-head">
                     <div className="cc-symbol-title"><span className="cc-gold-icon"><ScenovaIcon name="gold" size={28}/></span><div><h2>{metrics.symbol || settings.symbol}</h2><small>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}</small></div></div>
                     <div className="cc-control-head-right">
+                      <span className={"cc-state-pill "+(state==="RUNNING"?"running":state==="SAFE_STOP"?"safe":"stopped")}><span className="cc-state-dot"/><span><b>{state==="RUNNING"?"กำลังทำงาน":state==="SAFE_STOP"?"Safe Stop":"หยุดอยู่"}</b><small>{state==="RUNNING"?"บอททำงานปกติ":controlStateLabel}</small></span></span>
+                      <span className="cc-last-update">อัปเดต {heartbeatAgeSeconds.toFixed(0)} วิ <ScenovaIcon name="refresh" size={14}/></span>
                       <button
                         type="button"
                         className="cc-control-settings-button"
@@ -1264,11 +1299,9 @@ export default function DashboardPage() {
                           setBotSettingsOpen(true);
                         }}
                       >
-                        <ScenovaIcon name="settings" size={18}/>
+                        <ScenovaIcon name="settings" size={20}/>
                         <span>ตั้งค่าบอท</span>
                       </button>
-                      <span className={"cc-state-pill "+(state==="RUNNING"?"running":state==="SAFE_STOP"?"safe":"stopped")}><span className="cc-state-dot"/><span><b>{state==="RUNNING"?"กำลังทำงาน":state==="SAFE_STOP"?"Safe Stop":"หยุดอยู่"}</b><small>{state==="RUNNING"?"บอททำงานปกติ":controlStateLabel}</small></span></span>
-                      <span className="cc-last-update">อัปเดต {heartbeatAgeSeconds.toFixed(0)} วิ <ScenovaIcon name="refresh" size={14}/></span>
                     </div>
                   </div>
 
@@ -1302,7 +1335,7 @@ export default function DashboardPage() {
                 </section>
 
                 <section className="panel cc-status-card cc-v3-account">
-                  <div className="cc-card-head"><div className="cc-card-title"><span className="cc-card-icon alt"><ScenovaIcon name="account" size={20}/></span><div><h2>สถานะบัญชี</h2></div></div><span className={"cc-mini-health "+(isMt5Online?"good":"warn")}><i/>{isMt5Online?"ใช้งานปกติ":"รอเชื่อมต่อ"}</span></div>
+                  <div className="cc-card-head"><div className="cc-card-title"><span className="cc-card-icon alt"><ScenovaIcon name="account" size={20}/></span><div><h2>สถานะบัญชี</h2></div></div><span className={"cc-mini-health "+(isMt5Online?"good":"warn")}><i/>{isMt5Online?"ใช้งานปกติ":agentOnline?"Agent เชื่อมแล้ว":"รอเชื่อมต่อ"}</span></div>
                   <div className="cc-status-list">
                     <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+" วินาที · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20?"good":"warn"} dot/><StatusRow label="สถานะบอท" value={controlStateLabel} tone={state==="RUNNING"?"good":state==="SAFE_STOP"?"warn":"bad"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
                   </div>
@@ -1317,8 +1350,8 @@ export default function DashboardPage() {
                 connectionLabel={connectionLabel}
                 state={String(state)}
                 desired={String(desired)}
-                executionLabel={String(liveStatus.label||"—")}
-                executionDetail={String(liveStatus.detail||"")}
+                executionLabel={terminalExecutionLabel}
+                executionDetail={terminalExecutionDetail}
                 marketTradeLabel={marketTradeLabel}
                 marketRegime={marketRegimeLabel[String(metrics.marketRegime||"")]||String(metrics.marketRegime||"รอข้อมูล")}
                 entryBias={entryBiasLabel}
