@@ -3785,3 +3785,16 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .cc-state-pill{order:1}
   .cc-last-update{order:2}
 }
+
+
+/* Version/connection diagnostics use the same readable scale as the dashboard. */
+.cc-version-status.warn{color:#e5c06f}
+.cc-version-status.warn i{background:#e2b955;box-shadow:0 0 9px rgba(226,185,85,.4)}
+.cc-version-guard-title b{font-size:12.5px}
+.cc-version-guard-title small{font-size:10.5px;line-height:1.4}
+.cc-version-checks small{font-size:9.5px}
+.cc-version-checks b{font-size:11px;line-height:1.35}
+.cc-version-guard-action small{font-size:10px;line-height:1.45;max-width:340px}
+.cc-version-status{font-size:11px}
+.cc-version-guard-action .btn{min-height:36px;padding:8px 11px;font-size:10.5px}
+.cc-ea-sync-chip{font-size:10px}
