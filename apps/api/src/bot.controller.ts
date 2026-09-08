@@ -177,11 +177,13 @@ export class BotController {
       WAITING_EA_START: { label: "กำลังรอ EA รับคำสั่ง Start", detail: "คำสั่งจากเว็บส่งแล้ว รอ Heartbeat รอบถัดไป", tone: "warn" },
       WAITING_MOMENTUM: { label: "กำลังรอสัญญาณ Momentum", detail: "บอท RUNNING แล้ว แต่เงื่อนไขเข้าออเดอร์ยังไม่ถึง", tone: "good" },
       WAITING_CONFIDENCE: { label: "กำลังรอความมั่นใจของสัญญาณ", detail: "คะแนนหลาย Timeframe ยังต่ำกว่าเกณฑ์ที่ตั้งไว้", tone: "good" },
-      WAITING_TREND_ALIGNMENT: { label: "กำลังรอแนวโน้มยืนยัน", detail: "M15 และ H1 ยังไม่สนับสนุนทิศทางเข้าออเดอร์", tone: "good" },
-      WAITING_REGIME_ALIGNMENT: { label: "รอ Momentum ไปทางเดียวกับเทรนด์", detail: "AUTO MOMENTUM จะไม่เปิดสวน Bias ของ M15/H1 เมื่อแนวโน้มชัดเจน", tone: "good" },
+      WAITING_TREND_ALIGNMENT: { label: "กำลังรอแนวโน้มยืนยัน", detail: "M30 และ H1 พลิกสวนทิศทางออเดอร์พร้อมกัน ระบบรอโครงสร้างกลับมายืนยัน", tone: "good" },
+      WAITING_REGIME_ALIGNMENT: { label: "รอ Momentum ไปทางเดียวกับเทรนด์", detail: "AUTO MOMENTUM จะไม่เปิดสวน Bias หลักของ M30/H1 เมื่อแนวโน้มชัดเจน", tone: "good" },
+      BLOCKED_MAJOR_RESISTANCE: { label: "รอผ่านแนวต้านใหญ่", detail: "ราคากำลังชิดแนวต้าน M30/H1 จึงไม่ Buy ไล่เข้าชนโซนโดยตรง; เมื่อ Breakout ผ่าน ระบบจะประเมินใหม่ทันที", tone: "warn" },
+      BLOCKED_MAJOR_SUPPORT: { label: "รอผ่านแนวรับใหญ่", detail: "ราคากำลังชิดแนวรับ M30/H1 จึงไม่ Sell ไล่เข้าชนโซนโดยตรง; เมื่อ Breakdown ผ่าน ระบบจะประเมินใหม่ทันที", tone: "warn" },
       SESSION_BLOCKED: { label: "อยู่นอกช่วงเวลาเทรด", detail: "Adaptive Engine จะเริ่มประเมินใหม่ใน Session ที่กำหนด", tone: "warn" },
       VOLATILITY_TOO_HIGH: { label: "ความผันผวนสูง", detail: "EA รุ่นเก่าใช้ ATR เป็นตัวบล็อก กรุณาอัปเดตเป็น Adaptive Engine รุ่นล่าสุด", tone: "warn" },
-      ADAPTIVE_DATA_NOT_READY: { label: "กำลังเตรียมข้อมูลตลาด", detail: "รอข้อมูลแท่งราคา M5, M15 และ H1 ให้เพียงพอ", tone: "warn" },
+      ADAPTIVE_DATA_NOT_READY: { label: "กำลังเตรียมข้อมูลตลาด", detail: "รอข้อมูลแท่งราคา M1, M5, M15, M30 และ H1 ให้เพียงพอ", tone: "warn" },
       RISK_LIMIT_TOO_SMALL: { label: "ความเสี่ยงไม่พอสำหรับ Lot ขั้นต่ำ", detail: "Risk % ปัจจุบันต่ำกว่าที่ Lot ขั้นต่ำของ Broker ต้องใช้ หากยอมรับความเสี่ยงเพิ่มให้ติ๊กอนุญาต Lot ขั้นต่ำในตั้งค่าบอท", tone: "warn" },
       SPREAD_TOO_HIGH: { label: "Spread ผิดปกติต่อเนื่อง", detail: "Adaptive Spread ระงับเฉพาะออเดอร์ใหม่ ส่วน Position เดิมยังถูกดูแลตามปกติ", tone: "warn" },
       WAITING_BASKET_ADD: { label: "รอจังหวะเพิ่มไม้", detail: "Max Positions คือเพดาน ระบบจะเพิ่มไม้เมื่อราคาเดินต่อฝั่งกำไรและ Momentum/Confidence ยังยืนยัน ไม่ยิงครบทุกไม้พร้อมกัน", tone: "good" },
@@ -1417,7 +1419,7 @@ export class BotController {
 
     if (body.tradingProfile !== undefined) {
       const tradingProfile = String(body.tradingProfile || "");
-      if (!["SAFE", "BALANCED", "AGGRESSIVE", "BURST_10"].includes(tradingProfile)) {
+      if (!["SAFE", "BALANCED", "AGGRESSIVE", "BURST_10", "MAXIMUM"].includes(tradingProfile)) {
         throw new BadRequestException("Trading Profile ไม่ถูกต้อง");
       }
       clean.tradingProfile = tradingProfile;
