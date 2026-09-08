@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.022"
+#property version   "1.023"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -140,6 +140,7 @@ int    g_sessionStartHour;
 int    g_sessionEndHour;
 double g_maxAtrPoints;
 string g_marketRegime = "INITIALIZING";
+string g_marketRegimeDetail = "INITIALIZING";
 int    g_trendM1 = 0;
 int    g_trendM5 = 0;
 int    g_trendM15 = 0;
@@ -163,6 +164,16 @@ double g_bearishOrderBlockLow = 0.0;
 double g_bearishOrderBlockHigh = 0.0;
 double g_bullishOrderBlockStrength = 0.0;
 double g_bearishOrderBlockStrength = 0.0;
+double g_bullishOrderBlockQuality = 0.0;
+double g_bearishOrderBlockQuality = 0.0;
+int    g_bullishOrderBlockMitigations = 0;
+int    g_bearishOrderBlockMitigations = 0;
+int    g_bullishOrderBlockAgeBars = 0;
+int    g_bearishOrderBlockAgeBars = 0;
+string g_bullishOrderBlockState = "NONE";
+string g_bearishOrderBlockState = "NONE";
+string g_bullishOrderBlockTimeframe = "NONE";
+string g_bearishOrderBlockTimeframe = "NONE";
 string g_orderBlockTimeframe = "NONE";
 double g_fibSwingLow = 0.0;
 double g_fibSwingHigh = 0.0;
@@ -171,6 +182,8 @@ datetime g_fibSwingHighTime = 0;
 int    g_fibDirection = 0;
 double g_fibRetracement = 0.0;
 double g_fibConfluenceScore = 0.0;
+double g_fibSetupScore = 0.0;
+string g_fibSetupGrade = "NONE";
 string g_fibTimeframe = "NONE";
 int    g_fibM5Direction = 0;
 double g_fibM5Retracement = 0.0;
@@ -181,6 +194,8 @@ double g_fibM15Strength = 0.0;
 double g_structureScore = 0.0;
 double g_locationScore = 0.0;
 double g_entryScore = 0.0;
+double g_entryQualityScore = 0.0;
+string g_entryQuality = "C";
 string g_entryModel = "NONE";
 string g_entryTrigger = "NONE";
 datetime g_lastMarketContextUpdate = 0;
@@ -224,6 +239,15 @@ double g_averageSlippagePoints = 0.0;
 datetime g_lastEntryAt = 0;
 double g_pyramidProgressPoints = 0.0;
 double g_pyramidRequiredPoints = 0.0;
+int    g_ladderRung = 0;
+double g_ladderProgressPoints = 0.0;
+double g_ladderRequiredPoints = 0.0;
+string g_ladderMode = "IDLE";
+double g_dynamicStopPrice = 0.0;
+double g_dynamicTakeProfitPrice = 0.0;
+datetime g_lastDynamicProtectionAt = 0;
+int    g_journalSent = 0;
+int    g_journalFailed = 0;
 string g_sessionProfile = "UNKNOWN";
 bool   g_spreadProfileRestored = false;
 
@@ -283,7 +307,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.022", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.023", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -891,7 +915,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.022\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.023\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
