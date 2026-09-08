@@ -597,7 +597,7 @@ export class BotController {
         profitFactor: grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? grossProfit : 0
       };
 
-      tradeJournal.recent = await this.db.query(
+      const recentJournal = await this.db.query(
         `SELECT
            event_type,direction,volume::float8,price::float8,net_profit::float8,
            entry_trigger,entry_model,entry_quality,entry_quality_score::float8,
@@ -609,6 +609,7 @@ export class BotController {
          LIMIT 20`,
         [instance.id]
       );
+      tradeJournal.recent = recentJournal.rows;
     }
 
     const latestTrialRequest = await this.db.one(
