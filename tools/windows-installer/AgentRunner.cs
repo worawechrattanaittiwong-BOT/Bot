@@ -131,6 +131,59 @@ internal static class AgentRunner
             lastError);
     }
 
+    private static bool RefreshEaCredentialPreset(AgentConfig config, string installToken)
+    {
+        var presetsDir = Path.Combine(config.TerminalDataPath, "MQL5", "Presets");
+        Directory.CreateDirectory(presetsDir);
+        var presetPath = Path.Combine(presetsDir, "SCENOVA-FastBasketBot.set");
+
+        var desired = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["InpApiBase"] = config.ApiBase.TrimEnd('/'),
+            ["InpInstanceId"] = config.InstanceId,
+            ["InpInstallToken"] = installToken
+        };
+
+        var lines = File.Exists(presetPath)
+            ? File.ReadAllLines(presetPath).ToList()
+            : new List<string>();
+
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        var changed = !File.Exists(presetPath);
+
+        for (var i = 0; i < lines.Count; i++)
+        {
+            foreach (var item in desired)
+            {
+                var prefix = item.Key + "=";
+                if (!lines[i].StartsWith(prefix, StringComparison.Ordinal))
+                    continue;
+
+                found.Add(item.Key);
+                var next = prefix + item.Value;
+                if (!string.Equals(lines[i], next, StringComparison.Ordinal))
+                {
+                    lines[i] = next;
+                    changed = true;
+                }
+                break;
+            }
+        }
+
+        foreach (var item in desired)
+        {
+            if (found.Contains(item.Key))
+                continue;
+            lines.Insert(0, item.Key + "=" + item.Value);
+            changed = true;
+        }
+
+        if (changed)
+            File.WriteAllLines(presetPath, lines, new System.Text.UTF8Encoding(false));
+
+        return changed;
+    }
+
     internal static bool EnsureMt5RunningWithEa(AgentConfig config, bool forceReload)
     {
         var terminalExe = ScenovaRuntime.ResolveTerminalExecutable(config.TerminalDataPath);
@@ -287,6 +340,7 @@ internal static class AgentRunner
 
         var attemptedInitialMt5Start = false;
         var attemptedEaPermissionRepair = false;
+        var attemptedEaOfflineRepair = false;
 
         while (true)
         {
@@ -315,13 +369,18 @@ internal static class AgentRunner
                     {
                         instanceId = config.InstanceId,
                         installToken,
-                        agentVersion = "2.0.8",
+                        agentVersion = "2.0.9",
                         terminalPath = config.TerminalDataPath,
                         eaHash,
                         hostname = Environment.MachineName,
                         devicePublicId = config.DevicePublicId,
                         deviceSecret
                     });
+
+                // Keep the EA preset credentials synchronized with the Agent's
+                // authenticated config. This repairs the common case where MT5
+                // is still running with an old .set token after reinstall/update.
+                var presetCredentialsChanged = RefreshEaCredentialPreset(config, installToken);
 
                 // DeviceVerified is telemetry only. The install token and
                 // Server entitlement are authoritative for trading access.
@@ -337,6 +396,29 @@ internal static class AgentRunner
                 {
                     attemptedInitialMt5Start = true;
                     attemptedEaPermissionRepair = false;
+                    attemptedEaOfflineRepair = false;
+                }
+                else if (
+                    !heartbeat.EaOnline &&
+                    !attemptedEaOfflineRepair &&
+                    (
+                        presetCredentialsChanged ||
+                        heartbeat.EaLastSeenAgeSeconds < 0 ||
+                        heartbeat.EaLastSeenAgeSeconds > 20
+                    ))
+                {
+                    // If Agent authentication works but the EA heartbeat is stale,
+                    // refresh Instance/Token in the preset and force one clean MT5
+                    // reload. This self-heals AUTHENTICATION FAILED caused by a
+                    // stale chart input without asking the customer to edit .set.
+                    attemptedEaOfflineRepair = EnsureMt5RunningWithEa(config, forceReload: true);
+                    attemptedInitialMt5Start = attemptedEaOfflineRepair || attemptedInitialMt5Start;
+                    if (attemptedEaOfflineRepair)
+                        await AppendLogAsync(
+                            logPath,
+                            "EA offline/auth repair requested. presetChanged=" +
+                            presetCredentialsChanged +
+                            " lastSeenAge=" + heartbeat.EaLastSeenAgeSeconds.ToString("0"));
                 }
                 else if (!heartbeat.EaOnline && !attemptedInitialMt5Start)
                 {
@@ -360,9 +442,11 @@ internal static class AgentRunner
                             logPath,
                             "EA trading permission repair requested automatically.");
                 }
-                else if (heartbeat.MqlTradeAllowed == true)
+                else if (heartbeat.EaOnline)
                 {
-                    attemptedEaPermissionRepair = false;
+                    attemptedEaOfflineRepair = false;
+                    if (heartbeat.MqlTradeAllowed == true)
+                        attemptedEaPermissionRepair = false;
                 }
 
                 await AppendLogAsync(
