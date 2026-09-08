@@ -9,7 +9,7 @@ internal static class ScenovaClient
     internal static HttpClient NewHttpClient()
     {
         var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SCENOVA-Installer", "2.0.7"));
+        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SCENOVA-Installer", "2.0.8"));
         return http;
     }
 
