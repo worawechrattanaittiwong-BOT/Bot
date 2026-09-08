@@ -1530,22 +1530,18 @@ bool FindRecentOrderBlock(
 double ClosestBelow(double currentPrice, double a, double b, double c)
 {
    double best = 0.0;
-   double values[3] = {a,b,c};
-   for(int i = 0; i < 3; i++)
-      if(values[i] > 0.0 && values[i] < currentPrice &&
-         (best <= 0.0 || values[i] > best))
-         best = values[i];
+   if(a > 0.0 && a < currentPrice) best = a;
+   if(b > 0.0 && b < currentPrice && (best <= 0.0 || b > best)) best = b;
+   if(c > 0.0 && c < currentPrice && (best <= 0.0 || c > best)) best = c;
    return best;
 }
 
 double ClosestAbove(double currentPrice, double a, double b, double c)
 {
    double best = 0.0;
-   double values[3] = {a,b,c};
-   for(int i = 0; i < 3; i++)
-      if(values[i] > currentPrice &&
-         (best <= 0.0 || values[i] < best))
-         best = values[i];
+   if(a > currentPrice) best = a;
+   if(b > currentPrice && (best <= 0.0 || b < best)) best = b;
+   if(c > currentPrice && (best <= 0.0 || c < best)) best = c;
    return best;
 }
 
@@ -1592,8 +1588,8 @@ void DrawTradingFibonacci()
    }
 
    const int levelCount = 7;
-   double levels[levelCount] = {0.0,0.236,0.382,0.500,0.618,0.786,1.0};
-   string labels[levelCount] = {"0.0","23.6","38.2","50.0","61.8","78.6","100.0"};
+   double levels[7] = {0.0,0.236,0.382,0.500,0.618,0.786,1.0};
+   string labels[7] = {"0.0","23.6","38.2","50.0","61.8","78.6","100.0"};
    ObjectSetInteger(0, name, OBJPROP_LEVELS, levelCount);
    ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, true);
    ObjectSetInteger(0, name, OBJPROP_BACK, false);
@@ -1691,15 +1687,18 @@ double EvaluateMarketLocationScore(int direction)
    double atrPrice = MathMax(_Point * 20.0, AverageTrueRangePoints(PERIOD_M15, g_atrPeriod) * _Point);
    double nearBuffer = MathMax(_Point * 8.0, atrPrice * 0.18);
 
-   g_structureScore = 0.0;
-   int trends[5] = {g_trendM1,g_trendM5,g_trendM15,g_trendM30,g_trendH1};
-   double weights[5] = {5.0,8.0,12.0,12.0,15.0};
-   for(int i = 0; i < 5; i++)
-   {
-      if(trends[i] == direction) g_structureScore += weights[i];
-      else if(trends[i] == -direction) g_structureScore -= weights[i] * 0.45;
-   }
-   g_structureScore = MathMax(0.0, MathMin(52.0, g_structureScore + 18.0));
+   g_structureScore = 18.0;
+   if(g_trendM1 == direction) g_structureScore += 5.0;
+   else if(g_trendM1 == -direction) g_structureScore -= 2.25;
+   if(g_trendM5 == direction) g_structureScore += 8.0;
+   else if(g_trendM5 == -direction) g_structureScore -= 3.60;
+   if(g_trendM15 == direction) g_structureScore += 12.0;
+   else if(g_trendM15 == -direction) g_structureScore -= 5.40;
+   if(g_trendM30 == direction) g_structureScore += 12.0;
+   else if(g_trendM30 == -direction) g_structureScore -= 5.40;
+   if(g_trendH1 == direction) g_structureScore += 15.0;
+   else if(g_trendH1 == -direction) g_structureScore -= 6.75;
+   g_structureScore = MathMax(0.0, MathMin(52.0, g_structureScore));
 
    g_locationScore = 12.0;
    bool nearSupport = direction > 0 && g_nearestSupport > 0.0 &&
