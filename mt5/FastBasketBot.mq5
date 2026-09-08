@@ -2263,6 +2263,7 @@ double EvaluateMarketLocationScore(int direction)
       : PriceInsideOrNearZone(price, g_bearishOrderBlockLow, g_bearishOrderBlockHigh, nearBuffer * 0.35);
    double desiredLevelStrength = direction > 0 ? g_supportStrength : g_resistanceStrength;
    double desiredObStrength = direction > 0 ? g_bullishOrderBlockStrength : g_bearishOrderBlockStrength;
+   double desiredObQuality = direction > 0 ? g_bullishOrderBlockQuality : g_bearishOrderBlockQuality;
    double desiredObLow = direction > 0 ? g_bullishOrderBlockLow : g_bearishOrderBlockLow;
    double desiredObHigh = direction > 0 ? g_bullishOrderBlockHigh : g_bearishOrderBlockHigh;
 
@@ -2276,6 +2277,35 @@ double EvaluateMarketLocationScore(int direction)
       g_fibConfluenceScore = MathMin(22.0,
          g_fibConfluenceScore + MathMin(fibM5Score, fibM15Score) * 0.45 + 3.0);
    bool fibConfluence = g_fibConfluenceScore > 0.0;
+
+   // Fibonacci Setup Scoring v2: normalized 0-100 quality. This score is
+   // advisory and never becomes a standalone entry permission.
+   double primaryRetracement = direction == g_fibM15Direction
+      ? g_fibM15Retracement
+      : direction == g_fibM5Direction ? g_fibM5Retracement : 0.0;
+   double primaryFibStrength = direction == g_fibM15Direction
+      ? g_fibM15Strength
+      : direction == g_fibM5Direction ? g_fibM5Strength : 0.0;
+   g_fibSetupScore = 0.0;
+   if(primaryRetracement >= 0.382 && primaryRetracement <= 0.786)
+   {
+      g_fibSetupScore = 22.0 + MathMin(20.0, primaryFibStrength * 0.20);
+      if(primaryRetracement >= 0.500 && primaryRetracement <= 0.705)
+         g_fibSetupScore += 18.0;
+      if(MathAbs(primaryRetracement - 0.618) <= 0.050)
+         g_fibSetupScore += 12.0;
+      else if(MathAbs(primaryRetracement - 0.705) <= 0.045)
+         g_fibSetupScore += 8.0;
+   }
+   if(fibM5Score > 0.0 && fibM15Score > 0.0 &&
+      g_fibM5Direction == direction && g_fibM15Direction == direction)
+      g_fibSetupScore += 15.0;
+   if(inOrderBlock) g_fibSetupScore += MathMin(8.0, desiredObQuality * 0.08);
+   if(nearSupport || nearResistance) g_fibSetupScore += MathMin(7.0, desiredLevelStrength * 0.07);
+   g_fibSetupScore = MathMax(0.0, MathMin(100.0, g_fibSetupScore));
+   g_fibSetupGrade = g_fibSetupScore >= 80.0 ? "A" :
+                     g_fibSetupScore >= 60.0 ? "B" :
+                     g_fibSetupScore > 0.0 ? "C" : "NONE";
 
    int confluenceCount = 0;
    if(nearSupport || nearResistance)
@@ -2333,6 +2363,24 @@ double EvaluateMarketLocationScore(int direction)
 
    g_locationScore = MathMax(0.0, MathMin(48.0, g_locationScore));
    g_entryScore = MathMax(0.0, MathMin(100.0, g_structureScore + g_locationScore));
+
+   // Entry Quality A/B/C is a readable quality label, not a gate.
+   double setupBonus =
+      g_entryModel == "OB_FIB_PULLBACK" ? 10.0 :
+      g_entryModel == "BREAKOUT" ? 8.0 :
+      g_entryModel == "ORDER_BLOCK_PULLBACK" ? 7.0 :
+      g_entryModel == "FIB_PULLBACK" ? 6.0 :
+      g_entryModel == "LEVEL_REACTION" ? 5.0 : 2.0;
+   g_entryQualityScore =
+      g_entryScore * 0.55 +
+      g_fibSetupScore * 0.20 +
+      desiredObQuality * 0.15 +
+      setupBonus;
+   if(HigherTimeframeSupportsDirection(direction))
+      g_entryQualityScore += 5.0;
+   g_entryQualityScore = MathMax(0.0, MathMin(100.0, g_entryQualityScore));
+   g_entryQuality = g_entryQualityScore >= 75.0 ? "A" :
+                    g_entryQualityScore >= 55.0 ? "B" : "C";
    return g_entryScore;
 }
 
@@ -2473,6 +2521,43 @@ double AdaptiveTradeVolume()
    return NormalizeTradeVolume(calculated);
 }
 
+string DetailedMarketRegime(double momentum, int direction)
+{
+   double absMomentum = MathAbs(momentum);
+   double threshold = MathMax(1.0, g_adaptiveMomentumThreshold);
+
+   if(g_marketRegime == "HIGH_VOLATILITY")
+   {
+      if(absMomentum >= threshold * 0.55)
+         return "NEWS_IMPULSE";
+      return "VOLATILITY_EXPANSION";
+   }
+
+   if(g_entryModel == "BREAKOUT")
+      return "BREAKOUT_EXPANSION";
+
+   if(direction != 0)
+   {
+      bool microAgainst = g_trendM1 == -direction || g_trendM5 == -direction;
+      if(microAgainst)
+         return "TREND_PULLBACK";
+      if(absMomentum >= threshold * 0.85)
+         return "TREND_ACCELERATION";
+      return "TREND_CONTINUATION";
+   }
+
+   if(g_marketRegime == "QUIET")
+      return "LOW_VOLATILITY";
+
+   if(g_trendM5 != 0 && (g_trendM5 == g_trendM15 || g_trendM5 == g_trendM30))
+      return "RANGE_BREAK_ATTEMPT";
+
+   if(g_marketRegime == "RANGE")
+      return "RANGE_ROTATION";
+
+   return "TRANSITION";
+}
+
 int AdaptiveEntryDirection(double momentum)
 {
    g_minimumLotOverrideActive = false;
@@ -2566,6 +2651,7 @@ int AdaptiveEntryDirection(double momentum)
    // trigger an entry directly. Momentum accelerates timing but is not the only
    // path into the market.
    int rawDirection = SetupFirstDirection(momentum);
+   g_marketRegimeDetail = DetailedMarketRegime(momentum, rawDirection);
 
    if(rawDirection == 0)
    {
