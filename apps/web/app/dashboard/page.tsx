@@ -28,7 +28,54 @@ type BrokerCatalog = {
 };
 
 type View = "overview" | "account" | "access";
-type SettingsTab = "basic" | "exit" | "risk" | "session";
+type SettingsTab = "exit" | "risk" | "session";
+
+const tradingProfileHelp: Record<string, {
+  title: string;
+  short: string;
+  detail: string;
+  bestFor: string[];
+  strengths: string[];
+  cautions: string[];
+  badge: string;
+}> = {
+  SAFE: {
+    title: "ปลอดภัย",
+    short: "รอจังหวะชัด คัดสัญญาณเข้ม ไม่รีบเข้า",
+    detail: "โหมดนี้ให้ความสำคัญกับความระวังมากกว่าความถี่ บอทจะยอมรอถ้าสัญญาณยังไม่ชัด และจะลดความเร่งในการเปิดไม้ เหมาะเวลาคุณอยากให้ระบบนิ่งขึ้น ไม่ต้องการให้บอทไล่ทุกการขยับของราคา",
+    bestFor: ["คนเริ่มใช้บอท", "คนที่อยากให้เข้าออเดอร์น้อยแต่คัดมากขึ้น", "บัญชีที่ต้องการลดความเร่งของการเปิดไม้"],
+    strengths: ["ลดการรีบเข้าในตลาดแกว่ง", "คัดจังหวะเข้มกว่าโหมดอื่น", "เหมาะกับการเปิดทิ้งไว้แบบไม่ต้องการความถี่สูง"],
+    cautions: ["อาจรอนานกว่าจะได้ออเดอร์", "บางครั้งราคาวิ่งไปก่อนแล้วบอทยังไม่เข้า เพราะระบบกำลังรอสัญญาณยืนยัน"],
+    badge: "เน้นนิ่ง"
+  },
+  BALANCED: {
+    title: "สมดุล",
+    short: "กลาง ๆ ใช้ง่าย สมดุลความไวกับความระวัง",
+    detail: "โหมดนี้เป็นค่ากลางสำหรับใช้งานทั่วไป บอทจะไม่ช้าแบบโหมดปลอดภัย และไม่เร่งเท่าโหมดเชิงรุก ถ้าคุณยังไม่รู้ว่าจะเริ่มจากอะไร ให้เริ่มที่โหมดนี้ก่อน แล้วค่อยปรับตามพฤติกรรมที่คุณชอบ",
+    bestFor: ["ผู้ใช้ทั่วไป", "คนที่เพิ่งเริ่มและยังไม่รู้จะเลือกโหมดไหน", "คนที่ต้องการบาลานซ์โอกาสกับความเสี่ยง"],
+    strengths: ["เข้าใจง่ายและใช้ได้กว้าง", "จังหวะเข้าไม่ช้าหรือเร็วเกินไป", "เหมาะเป็นค่าเริ่มต้นสำหรับทดสอบระบบ"],
+    cautions: ["ไม่ใช่โหมดที่เซฟที่สุด", "ไม่ใช่โหมดที่เร็วที่สุด แต่เป็นทางกลางของทั้งสองแบบ"],
+    badge: "แนะนำเริ่มต้น"
+  },
+  AGGRESSIVE: {
+    title: "เชิงรุก",
+    short: "ตอบสนองไวขึ้น พร้อมเข้าเมื่อเห็นแรงตลาดเร็วขึ้น",
+    detail: "โหมดนี้ทำให้บอทกล้าตัดสินใจเร็วขึ้นเมื่อเห็นแรงราคาและทิศทางที่ระบบยอมรับ เหมาะกับคนที่อยากให้บอท active มากกว่าเดิม แต่ต้องเข้าใจว่าการเข้าเร็วขึ้นย่อมเพิ่มโอกาสเจอสัญญาณหลอกในช่วงตลาดสะบัด",
+    bestFor: ["คนที่รับความผันผวนได้มากขึ้น", "คนที่ต้องการให้บอทเข้าไวกว่าโหมดสมดุล", "ช่วงตลาดมีทิศทางและ Momentum ชัด"],
+    strengths: ["ตอบสนองต่อแรงตลาดเร็ว", "มีโอกาสได้จังหวะก่อนโหมดที่คัดเข้ม", "เหมาะกับตลาดที่กำลังวิ่ง"],
+    cautions: ["ความไวที่เพิ่มขึ้นทำให้มีโอกาสเข้าในจังหวะหลอกมากขึ้น", "ควรตั้ง SL และขีดจำกัดขาดทุนให้เหมาะกับทุน"],
+    badge: "เข้าไวขึ้น"
+  },
+  BURST_10: {
+    title: "Burst",
+    short: "ทำงานเป็นชุด พยายามเปิดตามจำนวนไม้ที่คุณกำหนด",
+    detail: "โหมด Burst เหมาะกับคนที่ต้องการทำรอบแบบ Basket เมื่อสัญญาณหลักผ่าน ระบบจะพยายามส่งไม้ตามจำนวนที่ตั้งไว้ โดยยังต้องผ่านกฎ Spread, ทิศทาง, ความเสี่ยง, Rate limit และข้อจำกัดของ Broker ก่อนทุกครั้ง ไม่ใช่โหมดสุ่มยิงออเดอร์",
+    bestFor: ["คนที่เข้าใจการเทรดหลายไม้เป็นชุด", "คนที่ต้องการควบคุมจำนวนไม้ชัดเจน", "คนที่ยอมรับความเสี่ยงรวมของ Basket ได้"],
+    strengths: ["ทำงานเป็นรอบและเห็นจำนวนไม้ชัด", "เหมาะกับการตั้งเป้ากำไรรวม Basket", "ใช้จำนวนไม้ที่ตั้งไว้เป็นเป้าหมายของรอบ"],
+    cautions: ["ความเสี่ยงรวมสูงกว่าเมื่อเปิดหลายไม้", "จำนวนไม้ที่ตั้งคือเพดาน/เป้าหมาย ไม่ได้แปลว่าจะเปิดครบถ้าเงื่อนไขตลาดหรือ Broker ไม่อนุญาต", "ควรตรวจ SL, Basket Loss และ Lot ก่อนใช้งาน"],
+    badge: "เปิดเป็นชุด"
+  }
+};
 
 const defaultSettings = {
   symbol: "XAUUSD",
@@ -90,7 +137,9 @@ export default function DashboardPage() {
   const [settings, setSettings] = useState<any>(defaultSettings);
   const settingsDirtyRef = useRef(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("basic");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("exit");
+  const [botSettingsOpen, setBotSettingsOpen] = useState(false);
+  const [profileHelpOpen, setProfileHelpOpen] = useState<string>("");
   const mt5ApiBase =
     process.env.NEXT_PUBLIC_MT5_API_BASE ||
     (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
@@ -144,6 +193,23 @@ export default function DashboardPage() {
     const id = setInterval(()=>load(selectedSlotIdRef.current), 2000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!botSettingsOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setBotSettingsOpen(false);
+        setProfileHelpOpen("");
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [botSettingsOpen]);
 
   useEffect(() => {
     if (!logsOpen || !data?.instance?.id) return;
@@ -1220,24 +1286,31 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
+                <button
+                  type="button"
+                  className="cc-bot-settings-launcher"
+                  onClick={() => {
+                    setProfileHelpOpen("");
+                    setBotSettingsOpen(true);
+                  }}
+                >
+                  <span className="cc-bot-settings-launcher-icon"><ScenovaIcon name="bot" size={24}/></span>
+                  <span className="cc-bot-settings-launcher-copy">
+                    <span className="cc-bot-settings-launcher-kicker">ตั้งค่าบอทหลัก</span>
+                    <b>กดเพื่อเลือกโหมดและตั้งค่าการเข้าออเดอร์</b>
+                    <small>โหมด <strong>{tradingProfileHelp[String(settings.tradingProfile||"BALANCED")]?.title || "สมดุล"}</strong> · {metrics.symbol||settings.symbol} · {settings.entryMode} · {Number(settings.maxPositions||1)} ไม้ · Lot สูงสุด {Number(settings.lot||0.01).toFixed(2)}</small>
+                  </span>
+                  <span className="cc-bot-settings-launcher-action">
+                    <span>เปิดการตั้งค่า</span>
+                    <ScenovaIcon name="settings" size={18}/>
+                  </span>
+                </button>
+
                 <div className="cc-settings-tabs" role="tablist" aria-label="หมวดการตั้งค่าบอท">
-                  {([["basic","settings","ตั้งค่าหลัก"],["exit","profit","เป้าหมายกำไร"],["risk","shield","ป้องกันขาดทุน"],["session","clock","เวลาเทรด"]] as Array<[SettingsTab,string,string]>).map(([key,icon,label])=><button type="button" key={key} className={settingsTab===key?"active":""} onClick={()=>setSettingsTab(key)}><ScenovaIcon name={icon} size={17}/><span>{label}</span></button>)}
+                  {([["exit","profit","เป้าหมายกำไร"],["risk","shield","ป้องกันขาดทุน"],["session","clock","เวลาเทรด"]] as Array<[SettingsTab,string,string]>).map(([key,icon,label])=><button type="button" key={key} className={settingsTab===key?"active":""} onClick={()=>setSettingsTab(key)}><ScenovaIcon name={icon} size={17}/><span>{label}</span></button>)}
                 </div>
 
                 <form className="cc-settings-form-v3" onSubmit={saveSettings}>
-                  {settingsTab==="basic"&&<><div className="cc-settings-section-title"><b>ตั้งค่าพื้นฐาน</b><span>กำหนดสินทรัพย์ รูปแบบการเข้า และจำนวนไม้</span></div><div className="cc-settings-grid">
-                    <SettingTile icon="brain" title="โปรไฟล์การเทรด" description="จัดจังหวะเข้า ความเร็ว และ Adaptive; เป้ากำไร/ขาดทุนใช้ค่าที่คุณตั้ง" wide><div className="cc-profile-picker">{[
-                      ["SAFE","ปลอดภัย","คัดสัญญาณเข้ม"],
-                      ["BALANCED","สมดุล","เหมาะใช้ทั่วไป"],
-                      ["AGGRESSIVE","เชิงรุก","เข้าเร็วขึ้น"],
-                      ["BURST_10","Burst","เปิดรัวตามจำนวนไม้ที่เลือก"]
-                    ].map(([value,label,detail])=><button type="button" key={value} className={String(settings.tradingProfile||"BALANCED")===value?"active":""} onClick={()=>editSetting("tradingProfile",value)}><b>{label}</b><small>{detail}</small></button>)}</div></SettingTile>
-                    <SettingTile icon="gold" title="Symbol" description="สินทรัพย์ที่ EA กำลังเทรด"><div className="input read-only-value">{metrics.symbol||settings.symbol}</div></SettingTile>
-                    <SettingTile icon="bot" title="โหมดเข้าออเดอร์" description="AUTO ใช้ Momentum + Trend"><select className="input" value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO MOMENTUM</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></SettingTile>
-                    <SettingTile icon="layers" title="จำนวนไม้ที่ต้องการ" description="Burst จะส่งตามจำนวนนี้"><select className="input" value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></SettingTile>
-                    <SettingTile icon="lot" title="Lot สูงสุด (Adaptive)" description="Adaptive ลดได้ แต่ไม่เพิ่มเกินค่านี้"><select className="input" value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></SettingTile>
-                  </div></>}
-
                   {settingsTab==="risk"&&<>
                     <div className="cc-settings-section-title cc-risk-title">
                       <div><b>ป้องกันขาดทุน</b><span>ค่าที่กำหนดตรงนี้มีผลกับ EA ทุกโปรไฟล์ รวมถึง Burst</span></div>
@@ -1355,6 +1428,29 @@ export default function DashboardPage() {
 
                 </form>
               </section>
+
+              <BotSettingsModal
+                open={botSettingsOpen}
+                onClose={() => {
+                  setBotSettingsOpen(false);
+                  setProfileHelpOpen("");
+                }}
+                settings={settings}
+                symbol={String(metrics.symbol||settings.symbol||"")}
+                dirty={settingsDirty}
+                busy={busy}
+                syncLabel={settingsSyncLabel}
+                profileHelpOpen={profileHelpOpen}
+                onProfileHelp={(value:string)=>setProfileHelpOpen(value)}
+                onEdit={editSetting}
+                onSave={async(e:any)=>{
+                  await saveSettings(e);
+                  if (!settingsDirtyRef.current) {
+                    setBotSettingsOpen(false);
+                    setProfileHelpOpen("");
+                  }
+                }}
+              />
 
               <div className="cc-mobile-command-dock mobile-only" aria-label="ควบคุมบอท">
                 <button className="cc-mobile-command start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่งเริ่มบอทแล้ว")}>
@@ -1806,6 +1902,150 @@ function EmptySetup({onNext}:{onNext:()=>void}) {
       <button className="btn primary btn-lg" onClick={onNext}>เริ่มเชื่อม MT5 →</button>
     </section>
   );
+}
+
+function BotSettingsModal(props:any) {
+  if (!props.open) return null;
+
+  const profile = String(props.settings?.tradingProfile || "BALANCED");
+  const activeHelp = props.profileHelpOpen ? tradingProfileHelp[props.profileHelpOpen] : null;
+  const profiles = [
+    ["SAFE","shield"],
+    ["BALANCED","settings"],
+    ["AGGRESSIVE","trend"],
+    ["BURST_10","layers"]
+  ];
+
+  return (
+    <div className="cc-bot-modal-backdrop" role="presentation" onMouseDown={e=>{
+      if (e.target === e.currentTarget && !props.busy) props.onClose?.();
+    }}>
+      <div className="cc-bot-modal" role="dialog" aria-modal="true" aria-labelledby="cc-bot-modal-title">
+        <div className="cc-bot-modal-head">
+          <div className="cc-bot-modal-title">
+            <span><ScenovaIcon name="bot" size={24}/></span>
+            <div>
+              <h2 id="cc-bot-modal-title">ตั้งค่าบอท</h2>
+              <small>เลือกบุคลิกการเทรดก่อน แล้วค่อยกำหนดวิธีเข้า จำนวนไม้ และ Lot</small>
+            </div>
+          </div>
+          <div className="cc-bot-modal-head-actions">
+            <span className={"cc-bot-modal-dirty "+(props.dirty?"warn":"good")}><i/>{props.dirty?"มีค่าที่ยังไม่บันทึก":"ค่าถูกบันทึกแล้ว"}</span>
+            <button type="button" className="cc-bot-modal-close" onClick={()=>props.onClose?.()} disabled={props.busy} aria-label="ปิดหน้าต่างตั้งค่าบอท">×</button>
+          </div>
+        </div>
+
+        <div className="cc-bot-modal-body">
+          <section className="cc-mode-section">
+            <div className="cc-mode-section-head">
+              <div>
+                <span className="cc-mode-step">1</span>
+                <div><b>เลือกโหมดการเทรด</b><small>เลือกว่าต้องการให้บอท “นิ่ง”, “กลาง ๆ”, “ไว” หรือ “เปิดเป็นชุด”</small></div>
+              </div>
+              <span className="cc-mode-recommend"><ScenovaIcon name="info" size={14}/>ถ้ายังไม่แน่ใจ เริ่มที่ “สมดุล”</span>
+            </div>
+
+            <div className="cc-mode-card-grid">
+              {profiles.map(([value,icon])=>{
+                const info = tradingProfileHelp[value];
+                const active = profile === value;
+                const helpOpen = props.profileHelpOpen === value;
+                return (
+                  <div key={value} className={"cc-mode-card "+(active?"active ":"")+(helpOpen?"help-open":"")}>
+                    <button type="button" className="cc-mode-select" onClick={()=>props.onEdit?.("tradingProfile",value)}>
+                      <span className="cc-mode-card-icon"><ScenovaIcon name={icon} size={19}/></span>
+                      <span className="cc-mode-card-copy">
+                        <span className="cc-mode-badge">{info.badge}</span>
+                        <b>{info.title}</b>
+                        <small>{info.short}</small>
+                      </span>
+                      {active?<span className="cc-mode-active-mark">กำลังใช้</span>:null}
+                    </button>
+                    <button
+                      type="button"
+                      className="cc-mode-help-button"
+                      aria-label={"อ่านรายละเอียดโหมด "+info.title}
+                      onClick={()=>props.onProfileHelp?.(helpOpen?"":value)}
+                    >!</button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {activeHelp&&<div className="cc-mode-help-panel">
+              <div className="cc-mode-help-title">
+                <span><ScenovaIcon name="info" size={18}/></span>
+                <div><b>{activeHelp.title} — คืออะไร?</b><p>{activeHelp.detail}</p></div>
+                <button type="button" onClick={()=>props.onProfileHelp?.("")}>ปิดคำอธิบาย</button>
+              </div>
+              <div className="cc-mode-help-columns">
+                <ProfileHelpList title="เหมาะกับใคร" items={activeHelp.bestFor}/>
+                <ProfileHelpList title="ข้อดี" items={activeHelp.strengths}/>
+                <ProfileHelpList title="ต้องรู้ก่อนใช้" items={activeHelp.cautions} caution/>
+              </div>
+            </div>}
+          </section>
+
+          <section className="cc-bot-basic-section">
+            <div className="cc-mode-section-head compact">
+              <div><span className="cc-mode-step">2</span><div><b>ตั้งค่าพื้นฐาน</b><small>ค่ากลุ่มนี้กำหนดว่า EA เทรดอะไร เข้าแบบไหน และเปิดได้กี่ไม้</small></div></div>
+            </div>
+
+            <div className="cc-bot-basic-grid">
+              <div className="cc-bot-basic-card">
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="gold" size={18}/></span><div><b>Symbol</b><small>สินทรัพย์ที่ EA กำลังทำงานอยู่</small></div></div>
+                <div className="cc-bot-basic-readonly">{props.symbol || "—"}</div>
+              </div>
+
+              <label className="cc-bot-basic-card">
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="bot" size={18}/></span><div><b>โหมดเข้าออเดอร์</b><small>AUTO ให้ระบบดู Momentum + Trend ก่อนเลือก BUY/SELL</small></div></div>
+                <select className="input" value={String(props.settings.entryMode||"AUTO_MOMENTUM")} onChange={e=>props.onEdit?.("entryMode",e.target.value)}>
+                  <option value="AUTO_MOMENTUM">AUTO MOMENTUM — ให้ระบบเลือกทิศทาง</option>
+                  <option value="BUY_ONLY">BUY ONLY — เปิดเฉพาะ Buy</option>
+                  <option value="SELL_ONLY">SELL ONLY — เปิดเฉพาะ Sell</option>
+                </select>
+              </label>
+
+              <label className="cc-bot-basic-card">
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="layers" size={18}/></span><div><b>จำนวนไม้สูงสุด</b><small>จำนวน Position สูงสุดที่รอบนี้อนุญาต; ระบบอาจเปิดน้อยกว่าถ้าความเสี่ยงไม่ผ่าน</small></div></div>
+                <select className="input" value={String(props.settings.maxPositions||1)} onChange={e=>props.onEdit?.("maxPositions",e.target.value)}>
+                  {[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}
+                </select>
+              </label>
+
+              <label className="cc-bot-basic-card">
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="lot" size={18}/></span><div><b>Lot สูงสุด</b><small>เป็นเพดาน Lot; Adaptive ลดให้เล็กลงได้ตามความเสี่ยง แต่จะไม่เพิ่มเกินค่านี้</small></div></div>
+                <select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>
+                  {[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <div className="cc-bot-modal-summary">
+            <div><small>โหมดที่เลือก</small><b>{tradingProfileHelp[profile]?.title || profile}</b></div>
+            <div><small>จำนวนไม้</small><b>{Number(props.settings.maxPositions||1)} ไม้</b></div>
+            <div><small>Lot สูงสุด</small><b>{Number(props.settings.lot||0.01).toFixed(2)}</b></div>
+            <div><small>สถานะการเชื่อมค่า</small><b>{props.syncLabel || "รอ EA"}</b></div>
+          </div>
+        </div>
+
+        <div className="cc-bot-modal-footer">
+          <div><ScenovaIcon name="info" size={15}/><span>การเปลี่ยนโหมดจะปรับ “จังหวะและความไว” ของระบบ ส่วนเป้ากำไรและ SL ใช้ค่าที่คุณตั้งในแท็บด้านหลัง</span></div>
+          <div>
+            <button type="button" className="btn" onClick={()=>props.onClose?.()} disabled={props.busy}>ปิดหน้าต่าง</button>
+            <button type="button" className="btn cc-save-primary" disabled={props.busy||!props.dirty} onClick={props.onSave}>
+              <ScenovaIcon name="save" size={16}/>{props.busy?"กำลังบันทึก...":"บันทึกและปิด"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileHelpList({title,items,caution=false}:{title:string;items:string[];caution?:boolean}) {
+  return <div className={"cc-profile-help-list "+(caution?"caution":"")}><b>{title}</b><ul>{items.map((item)=><li key={item}>{item}</li>)}</ul></div>;
 }
 
 function InfoTip({text}:{text:string}) {
