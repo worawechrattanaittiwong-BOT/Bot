@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.018"
+#property version   "1.019"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -169,10 +169,14 @@ double g_nearestSupport = 0.0;
 double g_nearestResistance = 0.0;
 double g_majorSupport = 0.0;
 double g_majorResistance = 0.0;
+double g_supportStrength = 0.0;
+double g_resistanceStrength = 0.0;
 double g_bullishOrderBlockLow = 0.0;
 double g_bullishOrderBlockHigh = 0.0;
 double g_bearishOrderBlockLow = 0.0;
 double g_bearishOrderBlockHigh = 0.0;
+double g_bullishOrderBlockStrength = 0.0;
+double g_bearishOrderBlockStrength = 0.0;
 string g_orderBlockTimeframe = "NONE";
 double g_fibSwingLow = 0.0;
 double g_fibSwingHigh = 0.0;
@@ -180,6 +184,7 @@ datetime g_fibSwingLowTime = 0;
 datetime g_fibSwingHighTime = 0;
 int    g_fibDirection = 0;
 double g_fibRetracement = 0.0;
+double g_fibConfluenceScore = 0.0;
 double g_structureScore = 0.0;
 double g_locationScore = 0.0;
 double g_entryScore = 0.0;
@@ -283,7 +288,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.018", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.019", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -900,7 +905,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.018\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.019\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1452,45 +1457,90 @@ string TimeframeShortName(ENUM_TIMEFRAMES timeframe)
    return "TF";
 }
 
-bool FindNearestPivotLevels(
+bool FindClusteredPivotLevels(
    ENUM_TIMEFRAMES timeframe,
    int lookback,
    double currentPrice,
+   double atrPrice,
    double &support,
-   double &resistance
+   double &resistance,
+   double &supportStrength,
+   double &resistanceStrength
 )
 {
    support = 0.0;
    resistance = 0.0;
+   supportStrength = 0.0;
+   resistanceStrength = 0.0;
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
    int copied = CopyRates(_Symbol, timeframe, 1, MathMax(20, lookback), rates);
    if(copied < 10)
       return false;
 
-   for(int i = 2; i < copied - 2; i++)
+   double tolerance = MathMax(_Point * 8.0, atrPrice * 0.10);
+   double safeAtr = MathMax(_Point * 20.0, atrPrice);
+   double bestSupportRank = -1.0e100;
+   double bestResistanceRank = -1.0e100;
+
+   // A useful S/R level is not one isolated wick. Score every confirmed pivot
+   // by repeated touches, rejection size, recency and distance from live price.
+   for(int i = 3; i < copied - 3; i++)
    {
-      bool pivotLow =
-         rates[i].low <= rates[i-1].low &&
-         rates[i].low <= rates[i-2].low &&
-         rates[i].low < rates[i+1].low &&
-         rates[i].low < rates[i+2].low;
-      bool pivotHigh =
-         rates[i].high >= rates[i-1].high &&
-         rates[i].high >= rates[i-2].high &&
-         rates[i].high > rates[i+1].high &&
-         rates[i].high > rates[i+2].high;
+      bool pivotLow = true;
+      bool pivotHigh = true;
+      for(int depth = 1; depth <= 3; depth++)
+      {
+         if(rates[i].low >= rates[i-depth].low || rates[i].low > rates[i+depth].low)
+            pivotLow = false;
+         if(rates[i].high <= rates[i-depth].high || rates[i].high < rates[i+depth].high)
+            pivotHigh = false;
+      }
 
-      if(pivotLow && rates[i].low < currentPrice &&
-         (support <= 0.0 || rates[i].low > support))
-         support = rates[i].low;
+      if(pivotLow && rates[i].low < currentPrice)
+      {
+         int touches = 0;
+         for(int j = 2; j < copied - 2; j++)
+            if(MathAbs(rates[j].low - rates[i].low) <= tolerance)
+               touches++;
 
-      if(pivotHigh && rates[i].high > currentPrice &&
-         (resistance <= 0.0 || rates[i].high < resistance))
-         resistance = rates[i].high;
+         double rejection = MathMax(0.0, rates[i].close - rates[i].low) / safeAtr;
+         double recency = 1.0 - (double)i / MathMax(1, copied);
+         double strength = MathMin(100.0,
+            18.0 + MathMin(5, touches) * 12.0 + MathMin(25.0, rejection * 22.0) + recency * 16.0);
+         double distanceAtr = (currentPrice - rates[i].low) / safeAtr;
+         double rank = strength - distanceAtr * 2.0;
+         if(rank > bestSupportRank)
+         {
+            bestSupportRank = rank;
+            support = rates[i].low;
+            supportStrength = strength;
+         }
+      }
+
+      if(pivotHigh && rates[i].high > currentPrice)
+      {
+         int touches = 0;
+         for(int j = 2; j < copied - 2; j++)
+            if(MathAbs(rates[j].high - rates[i].high) <= tolerance)
+               touches++;
+
+         double rejection = MathMax(0.0, rates[i].high - rates[i].close) / safeAtr;
+         double recency = 1.0 - (double)i / MathMax(1, copied);
+         double strength = MathMin(100.0,
+            18.0 + MathMin(5, touches) * 12.0 + MathMin(25.0, rejection * 22.0) + recency * 16.0);
+         double distanceAtr = (rates[i].high - currentPrice) / safeAtr;
+         double rank = strength - distanceAtr * 2.0;
+         if(rank > bestResistanceRank)
+         {
+            bestResistanceRank = rank;
+            resistance = rates[i].high;
+            resistanceStrength = strength;
+         }
+      }
    }
 
-   // Pivot fallback prevents missing context in a one-way market.
+   // Keep context available in a one-way market, but mark fallback levels weak.
    if(support <= 0.0 || resistance <= 0.0)
    {
       double lowest = rates[0].low;
@@ -1500,25 +1550,36 @@ bool FindNearestPivotLevels(
          lowest = MathMin(lowest, rates[i].low);
          highest = MathMax(highest, rates[i].high);
       }
-      if(support <= 0.0 && lowest < currentPrice) support = lowest;
-      if(resistance <= 0.0 && highest > currentPrice) resistance = highest;
+      if(support <= 0.0 && lowest < currentPrice)
+      {
+         support = lowest;
+         supportStrength = 20.0;
+      }
+      if(resistance <= 0.0 && highest > currentPrice)
+      {
+         resistance = highest;
+         resistanceStrength = 20.0;
+      }
    }
    return support > 0.0 || resistance > 0.0;
 }
 
-bool FindImpulseRange(
+bool FindActiveImpulse(
    ENUM_TIMEFRAMES timeframe,
    int lookback,
+   double atrPrice,
    double &swingLow,
    datetime &swingLowTime,
    double &swingHigh,
-   datetime &swingHighTime
+   datetime &swingHighTime,
+   int &direction
 )
 {
    swingLow = 0.0;
    swingHigh = 0.0;
    swingLowTime = 0;
    swingHighTime = 0;
+   direction = 0;
 
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
@@ -1526,24 +1587,56 @@ bool FindImpulseRange(
    if(copied < 20)
       return false;
 
-   swingLow = rates[0].low;
-   swingHigh = rates[0].high;
-   swingLowTime = rates[0].time;
-   swingHighTime = rates[0].time;
-   for(int i = 1; i < copied; i++)
+   // Use the latest confirmed swing pair. The previous implementation used the
+   // absolute high/low of the whole window, which often drew a stale Fibonacci.
+   int latestLowIndex = -1;
+   int latestHighIndex = -1;
+   const int depth = 3;
+   for(int i = depth; i < copied - depth; i++)
    {
-      if(rates[i].low < swingLow)
+      bool pivotLow = true;
+      bool pivotHigh = true;
+      for(int j = 1; j <= depth; j++)
       {
-         swingLow = rates[i].low;
-         swingLowTime = rates[i].time;
+         if(rates[i].low >= rates[i-j].low || rates[i].low > rates[i+j].low)
+            pivotLow = false;
+         if(rates[i].high <= rates[i-j].high || rates[i].high < rates[i+j].high)
+            pivotHigh = false;
       }
-      if(rates[i].high > swingHigh)
-      {
-         swingHigh = rates[i].high;
-         swingHighTime = rates[i].time;
-      }
+      if(latestLowIndex < 0 && pivotLow) latestLowIndex = i;
+      if(latestHighIndex < 0 && pivotHigh) latestHighIndex = i;
+      if(latestLowIndex >= 0 && latestHighIndex >= 0) break;
    }
-   return swingHigh > swingLow;
+
+   if(latestLowIndex < 0 || latestHighIndex < 0 || latestLowIndex == latestHighIndex)
+      return false;
+
+   // Series arrays are newest first. A newer high after an older low is a
+   // bullish impulse; a newer low after an older high is bearish.
+   if(latestHighIndex < latestLowIndex)
+   {
+      direction = 1;
+      swingLow = rates[latestLowIndex].low;
+      swingLowTime = rates[latestLowIndex].time;
+      swingHigh = rates[latestHighIndex].high;
+      swingHighTime = rates[latestHighIndex].time;
+   }
+   else
+   {
+      direction = -1;
+      swingHigh = rates[latestHighIndex].high;
+      swingHighTime = rates[latestHighIndex].time;
+      swingLow = rates[latestLowIndex].low;
+      swingLowTime = rates[latestLowIndex].time;
+   }
+
+   double minimumImpulse = MathMax(_Point * 20.0, atrPrice * 0.75);
+   if(swingHigh <= swingLow || swingHigh - swingLow < minimumImpulse)
+   {
+      direction = 0;
+      return false;
+   }
+   return true;
 }
 
 bool FindRecentOrderBlock(
@@ -1551,20 +1644,25 @@ bool FindRecentOrderBlock(
    int lookback,
    bool bullish,
    double atrPrice,
+   double currentPrice,
    double &zoneLow,
-   double &zoneHigh
+   double &zoneHigh,
+   double &strength
 )
 {
    zoneLow = 0.0;
    zoneHigh = 0.0;
+   strength = 0.0;
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
    int copied = CopyRates(_Symbol, timeframe, 1, MathMax(30, lookback), rates);
    if(copied < 12)
       return false;
 
-   double displacementFloor = MathMax(_Point * 5.0, atrPrice * 0.30);
-   for(int i = 3; i < copied - 2; i++)
+   double safeAtr = MathMax(_Point * 20.0, atrPrice);
+   double displacementFloor = MathMax(_Point * 8.0, safeAtr * 0.55);
+   double bestRank = -1.0e100;
+   for(int i = 4; i < copied - 9; i++)
    {
       bool candidate = bullish
          ? rates[i].close < rates[i].open
@@ -1572,21 +1670,82 @@ bool FindRecentOrderBlock(
       if(!candidate)
          continue;
 
-      // The newer candle must displace away from the candidate and clear its
-      // full range. This is intentionally deterministic and conservative enough
-      // to avoid labeling every opposite candle as an Order Block.
-      double body = MathAbs(rates[i-1].close - rates[i-1].open);
-      bool displaced = bullish
-         ? (rates[i-1].close > rates[i].high && body >= displacementFloor)
-         : (rates[i-1].close < rates[i].low && body >= displacementFloor);
-      if(!displaced)
+      double impulseClose = rates[i-1].close;
+      double impulseExtreme = bullish ? rates[i-1].high : rates[i-1].low;
+      for(int j = i - 2; j >= MathMax(0, i - 3); j--)
+      {
+         if(bullish)
+         {
+            impulseClose = MathMax(impulseClose, rates[j].close);
+            impulseExtreme = MathMax(impulseExtreme, rates[j].high);
+         }
+         else
+         {
+            impulseClose = MathMin(impulseClose, rates[j].close);
+            impulseExtreme = MathMin(impulseExtreme, rates[j].low);
+         }
+      }
+
+      double priorStructure = bullish ? rates[i+1].high : rates[i+1].low;
+      for(int j = i + 2; j <= MathMin(copied - 1, i + 8); j++)
+         priorStructure = bullish
+            ? MathMax(priorStructure, rates[j].high)
+            : MathMin(priorStructure, rates[j].low);
+
+      double displacement = bullish
+         ? impulseExtreme - rates[i].close
+         : rates[i].close - impulseExtreme;
+      bool brokeStructure = bullish
+         ? impulseClose > priorStructure + safeAtr * 0.03
+         : impulseClose < priorStructure - safeAtr * 0.03;
+      if(!brokeStructure || displacement < displacementFloor)
          continue;
 
-      zoneLow = rates[i].low;
-      zoneHigh = rates[i].high;
-      return true;
+      // Refine to the origin body plus rejection wick instead of the candle's
+      // entire range. This produces a tighter and more tradable reaction zone.
+      double candidateLow = bullish ? rates[i].low : MathMin(rates[i].open, rates[i].close);
+      double candidateHigh = bullish ? MathMax(rates[i].open, rates[i].close) : rates[i].high;
+
+      bool invalidated = bullish
+         ? currentPrice < candidateLow - safeAtr * 0.08
+         : currentPrice > candidateHigh + safeAtr * 0.08;
+      int mitigations = 0;
+      for(int j = i - 1; j >= 0 && !invalidated; j--)
+      {
+         if(bullish && rates[j].close < candidateLow - safeAtr * 0.08)
+            invalidated = true;
+         else if(!bullish && rates[j].close > candidateHigh + safeAtr * 0.08)
+            invalidated = true;
+
+         if(rates[j].low <= candidateHigh && rates[j].high >= candidateLow)
+            mitigations++;
+      }
+      if(invalidated)
+         continue;
+
+      bool imbalance = i >= 2 && (bullish
+         ? rates[i-2].low > rates[i].high
+         : rates[i-2].high < rates[i].low);
+      double breakMargin = bullish
+         ? impulseClose - priorStructure
+         : priorStructure - impulseClose;
+      double freshness = 1.0 - (double)i / MathMax(1, copied);
+      double candidateStrength = 35.0 +
+         MathMin(25.0, displacement / safeAtr * 12.0) +
+         MathMin(15.0, MathMax(0.0, breakMargin) / safeAtr * 20.0) +
+         (imbalance ? 10.0 : 0.0) + freshness * 15.0 -
+         MathMax(0, mitigations - 1) * 8.0;
+      candidateStrength = MathMax(0.0, MathMin(100.0, candidateStrength));
+      double rank = candidateStrength + freshness * 8.0;
+      if(rank > bestRank)
+      {
+         bestRank = rank;
+         zoneLow = candidateLow;
+         zoneHigh = candidateHigh;
+         strength = candidateStrength;
+      }
    }
-   return false;
+   return zoneLow > 0.0 && zoneHigh >= zoneLow;
 }
 
 double ClosestBelow(double currentPrice, double a, double b, double c)
@@ -1649,17 +1808,26 @@ void DrawTradingFibonacci()
       ObjectMove(0, name, 1, time2, price2);
    }
 
-   const int levelCount = 7;
-   double levels[7] = {0.0,0.236,0.382,0.500,0.618,0.786,1.0};
-   string labels[7] = {"0.0","23.6","38.2","50.0","61.8","78.6","100.0"};
+   const int levelCount = 10;
+   double levels[10] = {0.0,0.236,0.382,0.500,0.618,0.705,0.786,1.0,1.272,1.618};
+   string labels[10] = {
+      "0.0  Impulse","23.6","38.2  Pullback","50.0  Value",
+      "61.8  Golden","70.5  OTE","78.6","100.0  Origin","127.2  TP","161.8  TP"
+   };
    ObjectSetInteger(0, name, OBJPROP_LEVELS, levelCount);
    ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, true);
    ObjectSetInteger(0, name, OBJPROP_BACK, false);
-   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
    for(int i = 0; i < levelCount; i++)
    {
       ObjectSetDouble(0, name, OBJPROP_LEVELVALUE, i, levels[i]);
       ObjectSetString(0, name, OBJPROP_LEVELTEXT, i, labels[i]);
+      color levelColor = (i == 4 || i == 5) ? clrGold :
+                         (i >= 8 ? clrLimeGreen : C'121,105,255');
+      ObjectSetInteger(0, name, OBJPROP_LEVELCOLOR, i, levelColor);
+      ObjectSetInteger(0, name, OBJPROP_LEVELSTYLE, i, i >= 8 ? STYLE_DASH : STYLE_SOLID);
+      ObjectSetInteger(0, name, OBJPROP_LEVELWIDTH, i, (i == 4 || i == 5) ? 2 : 1);
    }
    g_fiboVisible = true;
 }
@@ -1682,45 +1850,55 @@ void RefreshMarketContext(bool force)
    g_trendM30 = TimeframeTrend(PERIOD_M30);
    g_trendH1 = TimeframeTrend(PERIOD_H1);
 
+   double atrM15Price = MathMax(_Point * 20.0, AverageTrueRangePoints(PERIOD_M15, g_atrPeriod) * _Point);
    double s15=0.0,r15=0.0,s30=0.0,r30=0.0,sH1=0.0,rH1=0.0;
-   FindNearestPivotLevels(PERIOD_M15, 120, price, s15, r15);
-   FindNearestPivotLevels(PERIOD_M30, 100, price, s30, r30);
-   FindNearestPivotLevels(PERIOD_H1, 80, price, sH1, rH1);
+   double ss15=0.0,rs15=0.0,ss30=0.0,rs30=0.0,ssH1=0.0,rsH1=0.0;
+   FindClusteredPivotLevels(PERIOD_M15, 140, price, atrM15Price, s15, r15, ss15, rs15);
+   FindClusteredPivotLevels(PERIOD_M30, 120, price, atrM15Price * 1.35, s30, r30, ss30, rs30);
+   FindClusteredPivotLevels(PERIOD_H1, 100, price, atrM15Price * 1.80, sH1, rH1, ssH1, rsH1);
    g_nearestSupport = ClosestBelow(price, s15, s30, sH1);
    g_nearestResistance = ClosestAbove(price, r15, r30, rH1);
    g_majorSupport = ClosestBelow(price, s30, sH1, 0.0);
    g_majorResistance = ClosestAbove(price, r30, rH1, 0.0);
+   g_supportStrength = MathAbs(g_nearestSupport - s15) < _Point ? ss15 :
+                       MathAbs(g_nearestSupport - s30) < _Point ? ss30 : ssH1;
+   g_resistanceStrength = MathAbs(g_nearestResistance - r15) < _Point ? rs15 :
+                          MathAbs(g_nearestResistance - r30) < _Point ? rs30 : rsH1;
 
-   double atrM15Price = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod) * _Point;
    double bull15L=0.0,bull15H=0.0,bear15L=0.0,bear15H=0.0;
    double bull5L=0.0,bull5H=0.0,bear5L=0.0,bear5H=0.0;
-   bool haveBull15 = FindRecentOrderBlock(PERIOD_M15, 100, true, atrM15Price, bull15L, bull15H);
-   bool haveBear15 = FindRecentOrderBlock(PERIOD_M15, 100, false, atrM15Price, bear15L, bear15H);
-   bool haveBull5 = FindRecentOrderBlock(PERIOD_M5, 120, true, atrM15Price * 0.55, bull5L, bull5H);
-   bool haveBear5 = FindRecentOrderBlock(PERIOD_M5, 120, false, atrM15Price * 0.55, bear5L, bear5H);
+   double bull15Strength=0.0,bear15Strength=0.0,bull5Strength=0.0,bear5Strength=0.0;
+   bool haveBull15 = FindRecentOrderBlock(PERIOD_M15, 120, true, atrM15Price, price, bull15L, bull15H, bull15Strength);
+   bool haveBear15 = FindRecentOrderBlock(PERIOD_M15, 120, false, atrM15Price, price, bear15L, bear15H, bear15Strength);
+   bool haveBull5 = FindRecentOrderBlock(PERIOD_M5, 160, true, atrM15Price * 0.55, price, bull5L, bull5H, bull5Strength);
+   bool haveBear5 = FindRecentOrderBlock(PERIOD_M5, 160, false, atrM15Price * 0.55, price, bear5L, bear5H, bear5Strength);
 
-   g_bullishOrderBlockLow = haveBull15 ? bull15L : (haveBull5 ? bull5L : 0.0);
-   g_bullishOrderBlockHigh = haveBull15 ? bull15H : (haveBull5 ? bull5H : 0.0);
-   g_bearishOrderBlockLow = haveBear15 ? bear15L : (haveBear5 ? bear5L : 0.0);
-   g_bearishOrderBlockHigh = haveBear15 ? bear15H : (haveBear5 ? bear5H : 0.0);
-   g_orderBlockTimeframe = (haveBull15 || haveBear15) ? "M15" :
-                           (haveBull5 || haveBear5) ? "M5" : "NONE";
+   bool useBull15 = haveBull15 && (!haveBull5 || bull15Strength + 8.0 >= bull5Strength);
+   bool useBear15 = haveBear15 && (!haveBear5 || bear15Strength + 8.0 >= bear5Strength);
+   g_bullishOrderBlockLow = useBull15 ? bull15L : (haveBull5 ? bull5L : 0.0);
+   g_bullishOrderBlockHigh = useBull15 ? bull15H : (haveBull5 ? bull5H : 0.0);
+   g_bullishOrderBlockStrength = useBull15 ? bull15Strength : (haveBull5 ? bull5Strength : 0.0);
+   g_bearishOrderBlockLow = useBear15 ? bear15L : (haveBear5 ? bear5L : 0.0);
+   g_bearishOrderBlockHigh = useBear15 ? bear15H : (haveBear5 ? bear5H : 0.0);
+   g_bearishOrderBlockStrength = useBear15 ? bear15Strength : (haveBear5 ? bear5Strength : 0.0);
+   bool anyM15 = useBull15 || useBear15;
+   bool anyM5 = (haveBull5 && !useBull15) || (haveBear5 && !useBear15);
+   g_orderBlockTimeframe = anyM15 && anyM5 ? "M15+M5" : anyM15 ? "M15" : anyM5 ? "M5" : "NONE";
 
-   FindImpulseRange(
-      PERIOD_M15, 90,
+   bool haveImpulse = FindActiveImpulse(
+      PERIOD_M15, 120, atrM15Price,
       g_fibSwingLow, g_fibSwingLowTime,
-      g_fibSwingHigh, g_fibSwingHighTime
+      g_fibSwingHigh, g_fibSwingHighTime,
+      g_fibDirection
    );
-   if(g_fibSwingHigh > g_fibSwingLow)
+   if(haveImpulse && g_fibSwingHigh > g_fibSwingLow)
    {
-      // Chronological order defines the active impulse.
-      g_fibDirection = g_fibSwingHighTime > g_fibSwingLowTime ? 1 : -1;
       double range = g_fibSwingHigh - g_fibSwingLow;
       if(g_fibDirection > 0)
          g_fibRetracement = (g_fibSwingHigh - price) / range;
       else
          g_fibRetracement = (price - g_fibSwingLow) / range;
-      g_fibRetracement = MathMax(0.0, MathMin(1.50, g_fibRetracement));
+      g_fibRetracement = MathMax(0.0, MathMin(1.75, g_fibRetracement));
    }
    else
    {
@@ -1737,6 +1915,44 @@ bool PriceInsideOrNearZone(double price, double low, double high, double buffer)
    if(low <= 0.0 || high <= 0.0 || high < low)
       return false;
    return price >= low - buffer && price <= high + buffer;
+}
+
+bool ConfirmedLevelBreak(int direction, double level, double buffer)
+{
+   if(level <= 0.0)
+      return false;
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 3, rates) < 3)
+      return false;
+
+   if(direction > 0)
+      return rates[0].close > level + buffer &&
+         (rates[1].close <= level + buffer || rates[0].low <= level + buffer);
+   return rates[0].close < level - buffer &&
+      (rates[1].close >= level - buffer || rates[0].high >= level - buffer);
+}
+
+bool RecentDirectionalRejection(int direction, double zoneLow, double zoneHigh, double buffer)
+{
+   if(zoneLow <= 0.0 || zoneHigh < zoneLow)
+      return false;
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 2, rates) < 2)
+      return false;
+
+   bool touched = rates[0].low <= zoneHigh + buffer && rates[0].high >= zoneLow - buffer;
+   if(!touched)
+      return false;
+   double body = MathMax(_Point, MathAbs(rates[0].close - rates[0].open));
+   if(direction > 0)
+   {
+      double lowerWick = MathMin(rates[0].open, rates[0].close) - rates[0].low;
+      return rates[0].close > rates[0].open && lowerWick >= body * 0.60;
+   }
+   double upperWick = rates[0].high - MathMax(rates[0].open, rates[0].close);
+   return rates[0].close < rates[0].open && upperWick >= body * 0.60;
 }
 
 double EvaluateMarketLocationScore(int direction)
@@ -1762,36 +1978,87 @@ double EvaluateMarketLocationScore(int direction)
    else if(g_trendH1 == -direction) g_structureScore -= 6.75;
    g_structureScore = MathMax(0.0, MathMin(52.0, g_structureScore));
 
-   g_locationScore = 12.0;
+   g_locationScore = 8.0;
    bool nearSupport = direction > 0 && g_nearestSupport > 0.0 &&
-                      price - g_nearestSupport <= nearBuffer;
+                       price - g_nearestSupport <= nearBuffer;
    bool nearResistance = direction < 0 && g_nearestResistance > 0.0 &&
                          g_nearestResistance - price <= nearBuffer;
    bool inOrderBlock = direction > 0
       ? PriceInsideOrNearZone(price, g_bullishOrderBlockLow, g_bullishOrderBlockHigh, nearBuffer * 0.35)
       : PriceInsideOrNearZone(price, g_bearishOrderBlockLow, g_bearishOrderBlockHigh, nearBuffer * 0.35);
-   bool fibConfluence =
-      g_fibDirection == direction &&
-      g_fibRetracement >= 0.35 &&
-      g_fibRetracement <= 0.82;
+   double desiredLevelStrength = direction > 0 ? g_supportStrength : g_resistanceStrength;
+   double desiredObStrength = direction > 0 ? g_bullishOrderBlockStrength : g_bearishOrderBlockStrength;
+   double desiredObLow = direction > 0 ? g_bullishOrderBlockLow : g_bearishOrderBlockLow;
+   double desiredObHigh = direction > 0 ? g_bullishOrderBlockHigh : g_bearishOrderBlockHigh;
 
-   if(nearSupport || nearResistance) g_locationScore += 12.0;
-   if(inOrderBlock) g_locationScore += 10.0;
-   if(fibConfluence) g_locationScore += 10.0;
+   g_fibConfluenceScore = 0.0;
+   bool fibConfluence = g_fibDirection == direction &&
+      g_fibRetracement >= 0.382 && g_fibRetracement <= 0.786;
+   if(fibConfluence)
+   {
+      g_fibConfluenceScore = 8.0;
+      if(g_fibRetracement >= 0.500 && g_fibRetracement <= 0.705)
+         g_fibConfluenceScore += 5.0;
+      if(MathAbs(g_fibRetracement - 0.618) <= 0.060)
+         g_fibConfluenceScore += 3.0;
+   }
 
-   bool breakout = direction > 0
-      ? (g_majorResistance > 0.0 && price > g_majorResistance + nearBuffer * 0.20)
-      : (g_majorSupport > 0.0 && price < g_majorSupport - nearBuffer * 0.20);
+   int confluenceCount = 0;
+   if(nearSupport || nearResistance)
+   {
+      g_locationScore += 4.0 + desiredLevelStrength * 0.10;
+      confluenceCount++;
+   }
+   if(inOrderBlock)
+   {
+      g_locationScore += 4.0 + desiredObStrength * 0.10;
+      confluenceCount++;
+   }
+   if(fibConfluence)
+   {
+      g_locationScore += g_fibConfluenceScore;
+      confluenceCount++;
+   }
+   if(RecentDirectionalRejection(direction, desiredObLow, desiredObHigh, nearBuffer * 0.25))
+      g_locationScore += 7.0;
+   if(confluenceCount >= 2)
+      g_locationScore += 6.0;
 
-   if(nearSupport || nearResistance || inOrderBlock || fibConfluence)
-      g_entryModel = "PULLBACK";
+   double breakoutLevel = direction > 0 ? g_majorResistance : g_majorSupport;
+   bool breakout = ConfirmedLevelBreak(direction, breakoutLevel, nearBuffer * 0.18);
+   if(breakout)
+      g_locationScore += 12.0;
+
+   // Opposing areas reduce confidence but never become a hidden hard block.
+   bool nearOpposingLevel = direction > 0
+      ? (g_majorResistance > price && g_majorResistance - price <= nearBuffer)
+      : (g_majorSupport > 0.0 && price > g_majorSupport && price - g_majorSupport <= nearBuffer);
+   bool inOpposingOrderBlock = direction > 0
+      ? PriceInsideOrNearZone(price, g_bearishOrderBlockLow, g_bearishOrderBlockHigh, nearBuffer * 0.25)
+      : PriceInsideOrNearZone(price, g_bullishOrderBlockLow, g_bullishOrderBlockHigh, nearBuffer * 0.25);
+   double opposingObStrength = direction > 0 ? g_bearishOrderBlockStrength : g_bullishOrderBlockStrength;
+   if(nearOpposingLevel && !breakout)
+      g_locationScore -= 12.0;
+   if(inOpposingOrderBlock)
+      g_locationScore -= 6.0 + opposingObStrength * 0.06;
+
+   if(inOrderBlock && fibConfluence)
+      g_entryModel = "OB_FIB_PULLBACK";
+   else if(inOrderBlock)
+      g_entryModel = "ORDER_BLOCK_PULLBACK";
+   else if(fibConfluence)
+      g_entryModel = "FIB_PULLBACK";
+   else if(nearSupport || nearResistance)
+      g_entryModel = "LEVEL_REACTION";
    else if(breakout)
       g_entryModel = "BREAKOUT";
+   else if(nearOpposingLevel || inOpposingOrderBlock)
+      g_entryModel = "CAUTION_ZONE";
    else
       g_entryModel = "CONTINUATION";
 
-   g_locationScore = MathMax(0.0, MathMin(42.0, g_locationScore));
-   g_entryScore = MathMax(0.0, MathMin(100.0, g_structureScore + g_locationScore + 6.0));
+   g_locationScore = MathMax(0.0, MathMin(48.0, g_locationScore));
+   g_entryScore = MathMax(0.0, MathMin(100.0, g_structureScore + g_locationScore));
    return g_entryScore;
 }
 
@@ -1805,39 +2072,10 @@ bool MarketLocationEntryAllowed(int direction, bool fastRevalidation)
       return false;
    }
 
-   double price = (tick.bid + tick.ask) * 0.5;
-   double atrPrice = MathMax(_Point * 20.0, AverageTrueRangePoints(PERIOD_M15, g_atrPeriod) * _Point);
-   // Keep the hard opposing-zone buffer deliberately narrow. S/R, OB and Fib
-   // mostly affect score; they do not all have to agree before an order can fire.
-   double hardBuffer = MathMax(_Point * 8.0, atrPrice * 0.12);
-
    EvaluateMarketLocationScore(direction);
-
-   // Only hard-block a direct entry into an unbroken higher-timeframe opposing
-   // zone. Once price genuinely clears the level the block disappears.
-   if(direction > 0 && g_majorResistance > price &&
-      g_majorResistance - price <= hardBuffer)
-   {
-      g_adaptiveBlockReason = "BLOCKED_MAJOR_RESISTANCE";
-      return false;
-   }
-   if(direction < 0 && g_majorSupport > 0.0 && price > g_majorSupport &&
-      price - g_majorSupport <= hardBuffer)
-   {
-      g_adaptiveBlockReason = "BLOCKED_MAJOR_SUPPORT";
-      return false;
-   }
-
-   // During Burst revalidation, stop adding only when both controlling
-   // timeframes have flipped against the queued direction. Do not require every
-   // lower timeframe, OB and Fib condition to align on each add.
-   if(fastRevalidation &&
-      g_trendM15 == -direction &&
-      g_trendH1 == -direction)
-   {
-      g_adaptiveBlockReason = "WAITING_TREND_ALIGNMENT";
-      return false;
-   }
+   // S/R, Fibonacci and Order Block are advisory intelligence. They change the
+   // score/model but never veto an order or interrupt an active Burst queue.
+   // Actual execution constraints remain MT5 permissions, spread and user risk.
    return true;
 }
 
@@ -2024,6 +2262,18 @@ int AdaptiveEntryDirection(double momentum)
    else if(momentum >= g_adaptiveMomentumThreshold) rawDirection = 1;
    else if(momentum <= -g_adaptiveMomentumThreshold) rawDirection = -1;
 
+   // A high-quality pullback may turn before momentum reaches the full breakout
+   // threshold. Allow a softer trigger only when market-location confluence is
+   // already strong; this improves timing without creating another hard filter.
+   if(rawDirection == 0 && g_entryMode == ENTRY_AUTO_MOMENTUM &&
+      MathAbs(momentum) >= g_adaptiveMomentumThreshold * 0.55)
+   {
+      int earlyDirection = momentum > 0.0 ? 1 : -1;
+      double earlyLocationScore = EvaluateMarketLocationScore(earlyDirection);
+      if(earlyLocationScore >= 68.0)
+         rawDirection = earlyDirection;
+   }
+
    if(rawDirection == 0)
    {
       g_signalConfidence = 0.0;
@@ -2056,7 +2306,16 @@ int AdaptiveEntryDirection(double momentum)
 
    // Price location is confluence, not a wall of mandatory filters.
    double marketEntryScore = EvaluateMarketLocationScore(rawDirection);
-   score = score * 0.72 + marketEntryScore * 0.28;
+   score = score * 0.64 + marketEntryScore * 0.36;
+
+   // Higher-timeframe disagreement is a confidence penalty, not a veto. A
+   // strong OB/Fib/level reaction can still trade, while weak counter-trend
+   // setups naturally fall below the selected profile's confidence threshold.
+   if(g_entryMode == ENTRY_AUTO_MOMENTUM &&
+      g_macroTrendDirection != 0 && rawDirection != g_macroTrendDirection)
+      score -= 10.0;
+   if(trendM30 == -rawDirection && trendH1 == -rawDirection)
+      score -= 12.0;
 
    // MAXIMUM keeps entry intelligence intact, but prior losses do not make the
    // signal progressively impossible to take.
@@ -2075,27 +2334,6 @@ int AdaptiveEntryDirection(double momentum)
    spacingFactor *= 1.0 + g_consecutiveLosses * 0.50;
    spacingFactor *= 1.0 + (100.0 - g_executionQuality) / 100.0;
    g_adaptiveEntrySpacingMs = (int)MathMax(g_minOrderIntervalMs, g_minOrderIntervalMs * spacingFactor);
-
-   // AUTO_MOMENTUM is trend-following. When M15/H1 establish a macro bias,
-   // do not open the opposite side. BUY_ONLY / SELL_ONLY remain explicit
-   // manual direction overrides.
-   if(g_entryMode == ENTRY_AUTO_MOMENTUM &&
-      g_macroTrendDirection != 0 &&
-      rawDirection != g_macroTrendDirection)
-   {
-      g_adaptiveBlockReason = "WAITING_REGIME_ALIGNMENT";
-      g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
-      return 0;
-   }
-
-   // Never allow an entry directly against both M30 and H1. M1/M5 are timing
-   // frames and are intentionally allowed to pull back against the macro trend.
-   if(trendM30 == -rawDirection && trendH1 == -rawDirection)
-   {
-      g_adaptiveBlockReason = "WAITING_TREND_ALIGNMENT";
-      g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
-      return 0;
-   }
 
    if(!MarketLocationEntryAllowed(rawDirection, false))
    {
