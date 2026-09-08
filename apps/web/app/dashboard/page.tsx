@@ -51,7 +51,7 @@ const defaultSettings = {
   allowMinimumLotOverride: false,
   hardStopAtrMultiplier: 2,
   atrPeriod: 14,
-  confidenceThreshold: 62,
+  confidenceThreshold: 55,
   sessionStartHour: 0,
   sessionEndHour: 24,
   maxAtrPoints: 0,
@@ -363,6 +363,8 @@ export default function DashboardPage() {
     ELEVATED: "สูงกว่าปกติ",
     BLOCKED: "พักเปิดออเดอร์ใหม่",
     FALLBACK_BLOCKED: "พักเปิดออเดอร์ใหม่",
+    NEWS_WIDE: "สเปรดกว้างช่วงข่าว · ยังเทรดได้",
+    EXTREME: "สเปรดผิดปกติรุนแรง · หยุดส่งคำสั่ง",
     WARMUP: "กำลังเรียนรู้"
   };
   const heartbeatAgeSeconds = Math.max(0, Number(data?.instance?.ea_last_seen_age_seconds ?? metrics.heartbeatAgeSeconds ?? 0));
@@ -812,7 +814,7 @@ export default function DashboardPage() {
       "InpManualStopLossPoints=" + Number(settings.manualStopLossPoints || 0),
       "InpPerPositionLossMoney=0",
       "InpAtrPeriod=" + settings.atrPeriod,
-      "InpConfidenceThreshold=62",
+      "InpConfidenceThreshold=55",
       "InpSessionStartHour=" + settings.sessionStartHour,
       "InpSessionEndHour=" + settings.sessionEndHour,
       "InpMaxAtrPoints=" + settings.maxAtrPoints
@@ -960,7 +962,7 @@ export default function DashboardPage() {
       payload.riskPerOrderPercent = 0.25;
       payload.allowMinimumLotOverride = false;
       payload.hardStopAtrMultiplier = 2;
-      payload.confidenceThreshold = 62;
+      payload.confidenceThreshold = 55;
       payload.maxAtrPoints = 0;
 
       // New profit UX no longer exposes the legacy dollar Basket trailing.
@@ -1236,7 +1238,7 @@ export default function DashboardPage() {
 
                   <div className="cc-signal-grid">
                     <div className="cc-signal-item good"><ScenovaIcon name="trend" size={20}/><span><small>สภาพตลาด</small><b>{marketRegimeLabel[String(metrics.marketRegime||"")]||"รอข้อมูล"}</b></span></div>
-                    <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>ความมั่นใจ</small><b>{Number(metrics.signalConfidence||0).toFixed(0)}%</b></span></div>
+                    <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>ความมั่นใจ</small><b>{Number(metrics.signalConfidence||0).toFixed(0)}% / {Number(metrics.effectiveConfidenceThreshold||55).toFixed(0)}%</b></span></div>
                     <div className="cc-signal-item"><ScenovaIcon name="spread" size={20}/><span><small>Spread</small><b>{spreadValueLabel}</b></span></div>
                     <div className="cc-signal-item warn"><ScenovaIcon name="layers" size={20}/><span><small>Position</small><b>{positionCapacityLabel}</b></span></div>
                     <div className={"cc-signal-item "+(visibleLiveStatus.tone==="bad"?"bad":visibleLiveStatus.tone==="warn"?"warn":"good")}><ScenovaIcon name="status" size={20}/><span><small>การเทรด</small><b>{visibleLiveStatus.label||"—"}</b></span></div>
