@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Header,
@@ -394,6 +395,94 @@ export class EaController {
       commandPayload: cmd?.payload || null,
       settings: settings?.settings || {}
     };
+  }
+
+  @Post("journal")
+  async journal(@Body() body: {
+    instanceId: string;
+    installToken: string;
+    dealTicket: string | number;
+    positionId?: string | number;
+    eventType: string;
+    direction: string;
+    volume?: number;
+    price?: number;
+    netProfit?: number;
+    entryTrigger?: string;
+    entryModel?: string;
+    entryQuality?: string;
+    entryQualityScore?: number;
+    marketRegime?: string;
+    marketRegimeDetail?: string;
+    fibSetupScore?: number;
+    orderBlockQuality?: number;
+    confidence?: number;
+    basketIndex?: number;
+  }) {
+    const instance = await this.instance(body.instanceId, body.installToken);
+
+    const eventType = String(body.eventType || "").toUpperCase();
+    const direction = String(body.direction || "").toUpperCase();
+    const dealTicket = String(body.dealTicket ?? "").trim();
+    const positionId = String(body.positionId ?? "").trim();
+
+    if (!["ENTRY", "EXIT"].includes(eventType)) {
+      throw new BadRequestException("Journal event type is invalid");
+    }
+    if (!["BUY", "SELL"].includes(direction)) {
+      throw new BadRequestException("Journal direction is invalid");
+    }
+    if (!/^\d+$/.test(dealTicket)) {
+      throw new BadRequestException("Journal deal ticket is invalid");
+    }
+    if (positionId && !/^\d+$/.test(positionId)) {
+      throw new BadRequestException("Journal position id is invalid");
+    }
+
+    const n = (value: unknown, fallback = 0) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    const text = (value: unknown, max = 64) =>
+      String(value ?? "").trim().slice(0, max) || null;
+
+    await this.db.query(
+      `INSERT INTO trade_journal(
+         bot_instance_id,mt5_account_id,deal_ticket,position_id,event_type,direction,
+         volume,price,net_profit,entry_trigger,entry_model,entry_quality,
+         entry_quality_score,market_regime,market_regime_detail,fib_setup_score,
+         order_block_quality,confidence,basket_index,metadata
+       )
+       VALUES(
+         $1,$2,$3::bigint,NULLIF($4,'')::bigint,$5,$6,
+         $7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb
+       )
+       ON CONFLICT(bot_instance_id,deal_ticket,event_type) DO NOTHING`,
+      [
+        instance.id,
+        instance.mt5_account_id || null,
+        dealTicket,
+        positionId,
+        eventType,
+        direction,
+        Math.max(0, n(body.volume)),
+        Math.max(0, n(body.price)),
+        n(body.netProfit),
+        text(body.entryTrigger),
+        text(body.entryModel),
+        text(body.entryQuality, 8),
+        Math.max(0, Math.min(100, n(body.entryQualityScore))),
+        text(body.marketRegime),
+        text(body.marketRegimeDetail),
+        Math.max(0, Math.min(100, n(body.fibSetupScore))),
+        Math.max(0, Math.min(100, n(body.orderBlockQuality))),
+        Math.max(0, Math.min(100, n(body.confidence))),
+        Math.max(0, Math.trunc(n(body.basketIndex))),
+        JSON.stringify({ source: "EA", schema: 1 })
+      ]
+    );
+
+    return { ok: true };
   }
 
   @Post("agent-heartbeat")
