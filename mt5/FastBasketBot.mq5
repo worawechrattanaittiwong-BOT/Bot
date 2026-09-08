@@ -75,7 +75,7 @@ input double          InpRiskPerOrderPercent   = 0.25;
 input bool            InpAllowMinimumLotOverride = false;
 input double          InpHardStopAtrMultiplier = 2.00;
 input int             InpAtrPeriod             = 14;
-input int             InpConfidenceThreshold   = 70;
+input int             InpConfidenceThreshold   = 55;
 input int             InpSessionStartHour      = 0;
 input int             InpSessionEndHour        = 24;
 // 0 = fully adaptive. A positive value is only a soft volatility marker;
@@ -2298,6 +2298,7 @@ int AdaptiveEntryDirection(double momentum)
    if(rawDirection == 0)
    {
       g_signalConfidence = 0.0;
+      g_effectiveConfidenceThreshold = MathMax(48.0, MathMin(60.0, (double)g_confidenceThreshold));
       g_adaptiveBlockReason = "WAITING_MOMENTUM";
       g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
       return 0;
@@ -2322,7 +2323,7 @@ int AdaptiveEntryDirection(double momentum)
    if(trendH1 == rawDirection) score += weightH1;
    else if(trendH1 == -rawDirection) score -= weightH1 * 0.55;
    score += MathMax(0.0, 12.0 - g_spreadConfidencePenalty * 0.60);
-   score += g_marketRegime == "HIGH_VOLATILITY" ? 2.0 : g_marketRegime == "QUIET" ? 5.0 : 8.0;
+   score += g_marketRegime == "HIGH_VOLATILITY" ? 5.0 : g_marketRegime == "QUIET" ? 5.0 : 8.0;
    score += MathMax(0.0, MathMin(8.0, g_executionQuality * 0.08));
 
    // Price location is confluence, not a wall of mandatory filters.
@@ -2652,10 +2653,16 @@ void SampleSpread()
 
    g_spreadConfidencePenalty = 0.0;
    if(spread > elevatedLevel && g_adaptiveSpreadLimit > elevatedLevel)
+   {
+      // News spread should not become a hidden 20-point Confidence veto.
+      // EXTREME spread is already blocked by AdaptiveSpreadAllowed().
+      double maxSpreadPenalty = g_spreadStatus == "NEWS_WIDE" ? 4.0 : 10.0;
       g_spreadConfidencePenalty = MathMin(
-         20.0,
-         20.0 * (spread - elevatedLevel) / (g_adaptiveSpreadLimit - elevatedLevel)
+         maxSpreadPenalty,
+         maxSpreadPenalty * (spread - elevatedLevel) /
+            MathMax(1.0, g_adaptiveSpreadLimit - elevatedLevel)
       );
+   }
 
    if(g_spreadHistoryCount >= SPREAD_MIN_SAMPLES && g_spreadHistoryCount % 60 == 0)
       PersistSpreadProfile();
