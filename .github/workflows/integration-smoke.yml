@@ -392,9 +392,12 @@ jobs:
           test "$(printf '%s' "$NEW_TOKEN_HB" | jq -r '.accountMismatch // false')" = "false"
 
           DUP_MT5_HTTP=$(curl -sS -o /tmp/duplicate-mt5.json -w "%{http_code}" -X POST "$BASE/bot/mt5" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d '{"accountNumber":"200002","broker":"SCENOVA","brokerServer":"SCENOVA-Real","mode":"CLOUD"}')
+          echo "[integration] duplicate MT5 HTTP=$DUP_MT5_HTTP body=$(cat /tmp/duplicate-mt5.json)"
           test "$DUP_MT5_HTTP" = "409"
 
           ACTIVE_IDENTITY_COUNT=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from mt5_accounts where lower(account_number)='200002' and lower(broker_server)='scenova-real' and status='ACTIVE';")
+          echo "[integration] active 200002/SCENOVA-Real identity count=$ACTIVE_IDENTITY_COUNT"
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select account_number,broker_server,status,user_id from mt5_accounts where lower(account_number)='200002';"
           test "$ACTIVE_IDENTITY_COUNT" = "1"
 
       - name: Show API log on failure
