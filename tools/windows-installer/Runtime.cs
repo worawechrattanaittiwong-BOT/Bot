@@ -15,6 +15,7 @@ internal static class ScenovaRuntime
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SCENOVA");
 
     internal static string ConfigPath => Path.Combine(BaseDir, "config-v2.json");
+    internal static string PendingInstallPath => Path.Combine(BaseDir, "pending-install-v2.json");
 
     internal static string? ResolveTerminalExecutable(string terminalDataPath)
     {
@@ -106,10 +107,56 @@ internal static class ScenovaRuntime
         return code.Length >= 12 ? code : null;
     }
 
+    internal static PendingInstallIdentity? ReadPendingInstallIdentity()
+    {
+        try
+        {
+            if (!File.Exists(PendingInstallPath)) return null;
+            return JsonSerializer.Deserialize<PendingInstallIdentity>(
+                File.ReadAllText(PendingInstallPath),
+                JsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static void SavePendingInstallIdentity(string devicePublicId, string deviceSecret)
+    {
+        Directory.CreateDirectory(BaseDir);
+        var pending = new PendingInstallIdentity
+        {
+            DevicePublicId = devicePublicId,
+            DeviceSecretProtected = Protect(deviceSecret),
+            CreatedAt = DateTimeOffset.Now.ToString("O")
+        };
+        File.WriteAllText(
+            PendingInstallPath,
+            JsonSerializer.Serialize(pending, JsonOptions),
+            new UTF8Encoding(false));
+    }
+
+    internal static void ClearPendingInstallIdentity()
+    {
+        try
+        {
+            if (File.Exists(PendingInstallPath))
+                File.Delete(PendingInstallPath);
+        }
+        catch { }
+    }
+
     internal static (string? InstanceId, string? InstallToken) ReadLegacyCredentials()
     {
         try
         {
+            var current = ReadConfig();
+            var currentToken = TryUnprotect(current?.InstallTokenProtected);
+            if (!string.IsNullOrWhiteSpace(current?.InstanceId) &&
+                !string.IsNullOrWhiteSpace(currentToken))
+                return (current.InstanceId, currentToken);
+
             var path = Path.Combine(BaseDir, "config.json");
             if (!File.Exists(path)) return (null, null);
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
@@ -130,6 +177,13 @@ internal sealed class TerminalChoice
     public string DataPath { get; init; } = "";
     public string Display { get; init; } = "";
     public override string ToString() => Display;
+}
+
+internal sealed class PendingInstallIdentity
+{
+    public string DevicePublicId { get; set; } = "";
+    public string DeviceSecretProtected { get; set; } = "";
+    public string CreatedAt { get; set; } = "";
 }
 
 internal sealed class AgentConfig
