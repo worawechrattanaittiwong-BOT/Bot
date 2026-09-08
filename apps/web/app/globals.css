@@ -3550,3 +3550,43 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .cc-ea-filter-now{white-space:normal;width:100%}
   .cc-ea-filter-grid,.cc-ea-add-rule-grid{grid-template-columns:1fr}
 }
+
+
+/* ===== Compact bot settings button inside XAUUSD control header ===== */
+.cc-control-settings-button{
+  min-height:40px;
+  padding:9px 13px;
+  border:1px solid #6f52d8;
+  border-radius:10px;
+  background:linear-gradient(135deg,#3b2678,#2a1c59);
+  color:#eee8ff;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  font-size:11px;
+  font-weight:850;
+  white-space:nowrap;
+  cursor:pointer;
+  box-shadow:0 0 20px rgba(118,78,228,.16),inset 0 1px 0 rgba(255,255,255,.04);
+  transition:transform .16s ease,border-color .16s ease,filter .16s ease,box-shadow .16s ease;
+}
+.cc-control-settings-button:hover{
+  transform:translateY(-1px);
+  border-color:#9a78ff;
+  filter:brightness(1.08);
+  box-shadow:0 0 25px rgba(128,87,238,.24);
+}
+.cc-control-settings-button:active{transform:translateY(0)}
+.cc-control-settings-button svg{color:#c9b4ff;flex:0 0 auto}
+
+@media(max-width:1180px){
+  .cc-control-head-right{flex-wrap:wrap;justify-content:flex-end}
+}
+@media(max-width:680px){
+  .cc-v3-control-head{align-items:flex-start!important}
+  .cc-control-head-right{width:100%;justify-content:flex-start;margin-top:8px}
+  .cc-control-settings-button{order:0}
+  .cc-state-pill{order:1}
+  .cc-last-update{order:2}
+}
