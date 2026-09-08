@@ -2417,20 +2417,14 @@ double EffectiveBasketProfitTarget()
 
 double EffectiveBasketLossLimit()
 {
-   // Explicit website Basket loss always wins.
-   if(g_maxBasketLoss > 0.0)
-      return g_maxBasketLoss;
-
-   // Burst auto loss is only a fallback when the user disabled Basket loss.
-   if(IsBurstProfile() && g_burstLossMoney > 0.0)
-      return g_burstLossMoney;
-
-   return 0.0;
+   // 0 means OFF exactly. Never invent a hidden Basket loss behind the user's
+   // setting, including in Burst or Maximum-risk workflows.
+   return MathMax(0.0, g_maxBasketLoss);
 }
 
 void EnsureBurstTargets(int plannedPositions)
 {
-   if(!IsBurstProfile() || (g_burstTargetMoney > 0.0 && g_burstLossMoney > 0.0))
+   if(!IsBurstProfile() || g_burstTargetMoney > 0.0)
       return;
 
    int targetCount = MathMax(1, plannedPositions);
@@ -2438,8 +2432,10 @@ void EnsureBurstTargets(int plannedPositions)
    double plannedSpreadCost = CurrentSpreadCost(volume) * targetCount;
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
    g_burstTargetMoney = MathMax(0.50, MathMax(plannedSpreadCost * 0.50, equity * 0.0002));
-   double riskCeiling = MathMax(0.50, equity * 0.015);
-   g_burstLossMoney = MathMin(MathMax(g_burstTargetMoney * 3.0, equity * 0.005), riskCeiling);
+
+   // Loss protection is never synthesized. If the user sets Basket Loss to 0,
+   // the effective Basket loss is OFF.
+   g_burstLossMoney = 0.0;
 }
 
 void ArmBurst(int direction)
