@@ -45,7 +45,14 @@ export class InstallerController {
     }
 
     const codeHash = this.crypto.sha256(code);
+    const legacyToken = String(body.legacyInstallToken || "").trim();
+    const legacyInstanceId = String(body.legacyInstanceId || "").trim();
+    const legacyTokenHash = legacyToken.length >= 8
+      ? this.crypto.sha256(legacyToken)
+      : "";
+
     let retryEnrollment = false;
+    let authenticatedReinstall = false;
     let enrollment = await this.db.one(
       `SELECT ie.*,ls.assigned_user_id,ls.mode,ls.status slot_status,u.status user_status
        FROM install_enrollments ie
@@ -58,10 +65,31 @@ export class InstallerController {
       [codeHash]
     );
 
-    // If installation failed after enrollment was consumed (for example while
-    // replacing the local Device Agent), allow the same installer to retry on
-    // the same registered device for a short window. A different device ID
-    // still cannot reuse the consumed enrollment.
+    // An already authenticated SCENOVA installation may repair/update itself
+    // even if the filename enrollment code is old. The existing instance ID +
+    // install token must still match the same Slot, so this does not bypass
+    // Server authorization.
+    if (!enrollment && legacyInstanceId && legacyTokenHash) {
+      enrollment = await this.db.one(
+        `SELECT ie.*,ls.assigned_user_id,ls.mode,ls.status slot_status,u.status user_status
+         FROM install_enrollments ie
+         JOIN license_slots ls ON ls.id=ie.slot_id
+         LEFT JOIN users u ON u.id=ls.assigned_user_id
+         JOIN bot_instances bi ON bi.slot_id=ie.slot_id
+         WHERE ie.code_hash=$1
+           AND ie.status IN ('PENDING','USED','CANCELLED')
+           AND bi.id=$2
+           AND bi.install_token_hash=$3
+         LIMIT 1`,
+        [codeHash, legacyInstanceId, legacyTokenHash]
+      );
+      retryEnrollment = Boolean(enrollment);
+      authenticatedReinstall = Boolean(enrollment);
+    }
+
+    // If a first install failed after the Server consumed the code, installer
+    // v2.0.8 keeps the same pending device identity so the same PC can retry
+    // safely for 24 hours.
     if (!enrollment) {
       enrollment = await this.db.one(
         `SELECT ie.*,ls.assigned_user_id,ls.mode,ls.status slot_status,u.status user_status
@@ -71,7 +99,7 @@ export class InstallerController {
          JOIN bot_instances bi ON bi.slot_id=ie.slot_id
          WHERE ie.code_hash=$1
            AND ie.status='USED'
-           AND ie.used_at>now() - interval '30 minutes'
+           AND ie.used_at>now() - interval '24 hours'
            AND bi.device_public_id=$2
          LIMIT 1`,
         [codeHash, devicePublicId.slice(0, 160)]
@@ -79,7 +107,11 @@ export class InstallerController {
       retryEnrollment = Boolean(enrollment);
     }
 
-    if (!enrollment) throw new ConflictException("installer code expired or already used; download a fresh installer from SCENOVA");
+    if (!enrollment) {
+      throw new ConflictException(
+        "รหัสติดตั้งหมดอายุหรือถูกใช้จากเครื่องอื่นแล้ว กรุณากลับหน้า SCENOVA Control Center และดาวน์โหลด Setup ใหม่"
+      );
+    }
     if (!enrollment.assigned_user_id || enrollment.user_status !== "ACTIVE") {
       throw new ConflictException("slot is not assigned to an active SCENOVA user");
     }
@@ -107,8 +139,6 @@ export class InstallerController {
     }
 
     let installToken = "";
-    const legacyToken = String(body.legacyInstallToken || "");
-    const legacyInstanceId = String(body.legacyInstanceId || "");
     const canPreserveLegacy =
       legacyToken.length >= 8 &&
       legacyInstanceId === String(instance.id) &&
@@ -171,7 +201,8 @@ export class InstallerController {
           devicePublicId,
           hostname: body.hostname || null,
           preservedLegacyToken: canPreserveLegacy,
-          retryEnrollment
+          retryEnrollment,
+          authenticatedReinstall
         })
       ]
     );
@@ -188,7 +219,9 @@ export class InstallerController {
       artifactEndpoint: "/api/ea/artifact",
       startupSymbol: String(startup?.startup_symbol || "XAUUSD"),
       agentVersionRequired: latestInstallerVersion(),
-      preservedLegacyToken: canPreserveLegacy
+      preservedLegacyToken: canPreserveLegacy,
+      retryEnrollment,
+      authenticatedReinstall
     };
   }
 }
