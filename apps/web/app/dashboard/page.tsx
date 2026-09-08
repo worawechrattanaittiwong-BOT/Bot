@@ -1269,7 +1269,7 @@ export default function DashboardPage() {
 
                   <div className="cc-control-fields cc-v3-control-fields">
                     <div className="cc-control-field"><span>Symbol</span><b>{metrics.symbol || settings.symbol}</b></div>
-                    <div className="cc-control-field"><span>โหมดเข้าออเดอร์</span><select value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO MOMENTUM</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></div>
+                    <div className="cc-control-field"><span>โหมดเข้าออเดอร์</span><select value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO SMART</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></div>
                     <div className="cc-control-field"><span>จำนวนไม้</span><select value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
                     <div className="cc-control-field"><span>Lot สูงสุด</span><select value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
                   </div>
@@ -2002,7 +2002,7 @@ function BotSettingsModal(props:any) {
               <label className="cc-bot-basic-card">
                 <div className="cc-bot-basic-label"><span><ScenovaIcon name="bot" size={19}/></span><div><b>ทิศทางออเดอร์</b><small>AUTO ให้ระบบเลือก BUY/SELL อัตโนมัติ</small></div></div>
                 <select className="input" value={String(props.settings.entryMode||"AUTO_MOMENTUM")} onChange={e=>props.onEdit?.("entryMode",e.target.value)}>
-                  <option value="AUTO_MOMENTUM">AUTO MOMENTUM — ให้ระบบเลือกทิศทาง</option>
+                  <option value="AUTO_MOMENTUM">AUTO SMART — Setup-First เลือก BUY/SELL</option>
                   <option value="BUY_ONLY">BUY ONLY — เปิดเฉพาะ Buy</option>
                   <option value="SELL_ONLY">SELL ONLY — เปิดเฉพาะ Sell</option>
                 </select>
@@ -2024,8 +2024,8 @@ function BotSettingsModal(props:any) {
                 <SwitchSetting
                   checked={Boolean(props.settings.confidenceGateEnabled)}
                   onChange={(value:boolean)=>props.onEdit?.("confidenceGateEnabled",value)}
-                  onLabel="เปิดใช้ Confidence เป็นตัวกรอง"
-                  offLabel="ปิดอยู่ · Confidence ไม่บล็อกออเดอร์"
+                  onLabel="เปิดใช้ · Dynamic Confidence จะช่วยกรองจุดเข้า"
+                  offLabel="ปิดอยู่ · คะแนนยังคำนวณ แต่ไม่บล็อกออเดอร์"
                 />
               </div>
             </div>
