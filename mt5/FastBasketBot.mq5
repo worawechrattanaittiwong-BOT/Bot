@@ -1052,7 +1052,7 @@ void SendHeartbeat()
 
       // Market-context telemetry makes every entry auditable on the web.
       string marketContextDiagnostics = StringFormat(
-         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V2\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
+         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V3\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
          g_trendM1,
          g_trendM30,
          g_effectiveConfidenceThreshold,
@@ -1085,8 +1085,35 @@ void SendHeartbeat()
          g_entryModel,
          g_fiboVisible ? "true" : "false"
       );
+      string intelligenceV3Diagnostics = StringFormat(
+         ",\"marketRegimeDetail\":\"%s\",\"bullishOrderBlockQuality\":%.1f,\"bearishOrderBlockQuality\":%.1f,\"bullishOrderBlockState\":\"%s\",\"bearishOrderBlockState\":\"%s\",\"bullishOrderBlockTimeframe\":\"%s\",\"bearishOrderBlockTimeframe\":\"%s\",\"bullishOrderBlockMitigations\":%d,\"bearishOrderBlockMitigations\":%d,\"bullishOrderBlockAgeBars\":%d,\"bearishOrderBlockAgeBars\":%d,\"fibSetupScore\":%.1f,\"fibSetupGrade\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.1f,\"basketLadderRung\":%d,\"basketLadderProgressPoints\":%.1f,\"basketLadderRequiredPoints\":%.1f,\"basketLadderMode\":\"%s\",\"dynamicStopPrice\":%s,\"dynamicTakeProfitPrice\":%s,\"journalSent\":%d,\"journalFailed\":%d",
+         g_marketRegimeDetail,
+         g_bullishOrderBlockQuality,
+         g_bearishOrderBlockQuality,
+         g_bullishOrderBlockState,
+         g_bearishOrderBlockState,
+         g_bullishOrderBlockTimeframe,
+         g_bearishOrderBlockTimeframe,
+         g_bullishOrderBlockMitigations,
+         g_bearishOrderBlockMitigations,
+         g_bullishOrderBlockAgeBars,
+         g_bearishOrderBlockAgeBars,
+         g_fibSetupScore,
+         g_fibSetupGrade,
+         g_entryQuality,
+         g_entryQualityScore,
+         g_ladderRung,
+         g_ladderProgressPoints,
+         g_ladderRequiredPoints,
+         g_ladderMode,
+         DoubleToString(g_dynamicStopPrice, SymbolDigitsNow()),
+         DoubleToString(g_dynamicTakeProfitPrice, SymbolDigitsNow()),
+         g_journalSent,
+         g_journalFailed
+      );
       string positionDiagnostics =
-         marketContextDiagnostics + ",\"openPositions\":" + OpenPositionsTelemetryJson() + "}}";
+         marketContextDiagnostics + intelligenceV3Diagnostics +
+         ",\"openPositions\":" + OpenPositionsTelemetryJson() + "}}";
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + positionDiagnostics;
    }
 
