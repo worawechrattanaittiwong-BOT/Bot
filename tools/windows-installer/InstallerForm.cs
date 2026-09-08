@@ -6,8 +6,8 @@ namespace ScenovaInstaller;
 
 internal sealed class InstallerForm : Form
 {
-    private const string InstallerVersion = "2.0.7";
-    private const string LastUpdated = "7 กันยายน 2026";
+    private const string InstallerVersion = "2.0.8";
+    private const string LastUpdated = "8 กันยายน 2026";
     private readonly ComboBox _terminal = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
     private readonly Button _install = new() { Text = "ติดตั้ง SCENOVA", Width = 180, Height = 42 };
     private readonly Label _status = new() { AutoSize = false, Width = 620, Height = 90, Text = "พร้อมติดตั้ง" };
@@ -105,15 +105,22 @@ internal sealed class InstallerForm : Form
             Directory.CreateDirectory(ScenovaRuntime.BaseDir);
 
             var existing = ScenovaRuntime.ReadConfig();
-            var devicePublicId = existing?.DevicePublicId;
-            var deviceSecret = existing is null
-                ? null
-                : ScenovaRuntime.TryUnprotect(existing.DeviceSecretProtected);
+            var pending = ScenovaRuntime.ReadPendingInstallIdentity();
+
+            var devicePublicId =
+                existing?.DevicePublicId ??
+                pending?.DevicePublicId;
+            var deviceSecret =
+                existing is not null
+                    ? ScenovaRuntime.TryUnprotect(existing.DeviceSecretProtected)
+                    : ScenovaRuntime.TryUnprotect(pending?.DeviceSecretProtected);
 
             if (string.IsNullOrWhiteSpace(devicePublicId))
                 devicePublicId = Guid.NewGuid().ToString("N");
             if (string.IsNullOrWhiteSpace(deviceSecret))
                 deviceSecret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+
+            ScenovaRuntime.SavePendingInstallIdentity(devicePublicId, deviceSecret);
 
             var (legacyInstanceId, legacyInstallToken) = ScenovaRuntime.ReadLegacyCredentials();
 
@@ -181,6 +188,7 @@ internal sealed class InstallerForm : Form
                 ScenovaRuntime.ConfigPath,
                 JsonSerializer.Serialize(config, ScenovaRuntime.JsonOptions),
                 new UTF8Encoding(false));
+            ScenovaRuntime.ClearPendingInstallIdentity();
 
             _status.Text = "กำลังเปิดตัวอัปเดต SCENOVA และ MT5 พร้อม EA...";
             AgentRunner.InstallAndStart();
@@ -249,7 +257,7 @@ internal sealed class InstallerForm : Form
                     {
                         instanceId = config.InstanceId,
                         installToken,
-                        agentVersion = "2.0.7",
+                        agentVersion = "2.0.8",
                         terminalPath = config.TerminalDataPath,
                         eaHash,
                         hostname = Environment.MachineName,
@@ -275,6 +283,12 @@ internal sealed class InstallerForm : Form
     private static string FriendlyError(Exception ex)
     {
         var msg = ex.Message;
+        if (msg.Contains("รหัสติดตั้งหมดอายุ", StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("installer code expired", StringComparison.OrdinalIgnoreCase))
+        {
+            return "รหัสติดตั้งหมดอายุ กรุณากลับหน้า SCENOVA Control Center แล้วกด ติดตั้ง / อัปเดตใหม่ จากนั้นเปิดไฟล์ที่ดาวน์โหลดล่าสุด";
+        }
+
         return msg.Length > 300 ? msg[..300] : msg;
     }
 
