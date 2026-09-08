@@ -1415,8 +1415,9 @@ export class BotController {
         throw new BadRequestException("Trading Profile ไม่ถูกต้อง");
       }
       clean.tradingProfile = tradingProfile;
-      // Profiles own the execution/adaptive values. Legacy fields can remain
-      // in JSON for compatibility, but EA 1.014 never uses them over a profile.
+      // Profiles own entry cadence / adaptive execution values.
+      // Exit and money-risk controls remain user-owned and must be applied by
+      // the EA exactly as saved, including in BURST_10.
       clean.adaptiveEngine = true;
     }
 
