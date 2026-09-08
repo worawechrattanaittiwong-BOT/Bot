@@ -1300,7 +1300,7 @@ export default function DashboardPage() {
 
                   <div className="cc-direction-strip">
                     <div><span>Bias</span><b className={entryBias==="BUY"?"text-good":entryBias==="SELL"?"text-bad":""}>{entryBiasLabel}</b></div>
-                    <div><span>M5</span><b>{trendText(metrics.trendM5)}</b></div><div><span>M15</span><b>{trendText(metrics.trendM15)}</b></div><div><span>H1</span><b>{trendText(metrics.trendH1)}</b></div><div><span>Adaptive Max</span><b>{effectiveMaxPositions} ไม้</b></div>
+                    <div><span>M5</span><b>{trendText(metrics.trendM5)}</b></div><div><span>M15</span><b>{trendText(metrics.trendM15)}</b></div><div><span>H1</span><b>{trendText(metrics.trendH1)}</b></div><div><span>Setup</span><b>{String(metrics.entryTrigger||metrics.entryModel||"กำลังหา")}</b></div>
                   </div>
 
                   {showControlAlert&&<div className={"cc-intel-banner "+(liveStatus.tone==="bad"?"bad":"warn")}><ScenovaIcon name="info" size={19}/><div><b>{liveStatus.label||"ตรวจสอบการทำงาน"}</b><span>{liveExplanation}</span></div></div>}
