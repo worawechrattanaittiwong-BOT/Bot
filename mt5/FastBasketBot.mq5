@@ -1607,6 +1607,14 @@ bool FindActiveImpulse(
    return true;
 }
 
+string OrderBlockStateName(int mitigations)
+{
+   if(mitigations <= 0) return "FRESH";
+   if(mitigations == 1) return "TESTED";
+   if(mitigations <= 3) return "MITIGATED";
+   return "HEAVY_MITIGATION";
+}
+
 bool FindRecentOrderBlock(
    ENUM_TIMEFRAMES timeframe,
    int lookback,
@@ -1615,12 +1623,19 @@ bool FindRecentOrderBlock(
    double currentPrice,
    double &zoneLow,
    double &zoneHigh,
-   double &strength
+   double &strength,
+   int &mitigationsOut,
+   int &ageBarsOut,
+   string &stateOut
 )
 {
    zoneLow = 0.0;
    zoneHigh = 0.0;
    strength = 0.0;
+   mitigationsOut = 0;
+   ageBarsOut = 0;
+   stateOut = "NONE";
+
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
    int copied = CopyRates(_Symbol, timeframe, 1, MathMax(30, lookback), rates);
@@ -1630,6 +1645,7 @@ bool FindRecentOrderBlock(
    double safeAtr = MathMax(_Point * 20.0, atrPrice);
    double displacementFloor = MathMax(_Point * 8.0, safeAtr * 0.55);
    double bestRank = -1.0e100;
+
    for(int i = 4; i < copied - 9; i++)
    {
       bool candidate = bullish
@@ -1669,8 +1685,6 @@ bool FindRecentOrderBlock(
       if(!brokeStructure || displacement < displacementFloor)
          continue;
 
-      // Refine to the origin body plus rejection wick instead of the candle's
-      // entire range. This produces a tighter and more tradable reaction zone.
       double candidateLow = bullish ? rates[i].low : MathMin(rates[i].open, rates[i].close);
       double candidateHigh = bullish ? MathMax(rates[i].open, rates[i].close) : rates[i].high;
 
@@ -1704,13 +1718,19 @@ bool FindRecentOrderBlock(
          (imbalance ? 10.0 : 0.0) + freshness * 15.0 -
          MathMax(0, mitigations - 1) * 8.0;
       candidateStrength = MathMax(0.0, MathMin(100.0, candidateStrength));
-      double rank = candidateStrength + freshness * 8.0;
+
+      // v2 rank values freshness/displacement but does not invalidate a setup
+      // simply because it has already been tested. State is advisory.
+      double rank = candidateStrength + freshness * 8.0 - MathMax(0, mitigations - 1) * 2.0;
       if(rank > bestRank)
       {
          bestRank = rank;
          zoneLow = candidateLow;
          zoneHigh = candidateHigh;
          strength = candidateStrength;
+         mitigationsOut = mitigations;
+         ageBarsOut = i;
+         stateOut = OrderBlockStateName(mitigations);
       }
    }
    return zoneLow > 0.0 && zoneHigh >= zoneLow;
@@ -1845,25 +1865,69 @@ void RefreshMarketContext(bool force)
    g_resistanceStrength = MathAbs(g_nearestResistance - r15) < _Point ? rs15 :
                           MathAbs(g_nearestResistance - r30) < _Point ? rs30 : rsH1;
 
-   double bull15L=0.0,bull15H=0.0,bear15L=0.0,bear15H=0.0;
    double bull5L=0.0,bull5H=0.0,bear5L=0.0,bear5H=0.0;
-   double bull15Strength=0.0,bear15Strength=0.0,bull5Strength=0.0,bear5Strength=0.0;
-   bool haveBull15 = FindRecentOrderBlock(PERIOD_M15, 120, true, atrM15Price, price, bull15L, bull15H, bull15Strength);
-   bool haveBear15 = FindRecentOrderBlock(PERIOD_M15, 120, false, atrM15Price, price, bear15L, bear15H, bear15Strength);
-   bool haveBull5 = FindRecentOrderBlock(PERIOD_M5, 160, true, atrM15Price * 0.55, price, bull5L, bull5H, bull5Strength);
-   bool haveBear5 = FindRecentOrderBlock(PERIOD_M5, 160, false, atrM15Price * 0.55, price, bear5L, bear5H, bear5Strength);
+   double bull15L=0.0,bull15H=0.0,bear15L=0.0,bear15H=0.0;
+   double bull30L=0.0,bull30H=0.0,bear30L=0.0,bear30H=0.0;
+   double bull5Strength=0.0,bear5Strength=0.0;
+   double bull15Strength=0.0,bear15Strength=0.0;
+   double bull30Strength=0.0,bear30Strength=0.0;
+   int bull5Mit=0,bear5Mit=0,bull15Mit=0,bear15Mit=0,bull30Mit=0,bear30Mit=0;
+   int bull5Age=0,bear5Age=0,bull15Age=0,bear15Age=0,bull30Age=0,bear30Age=0;
+   string bull5State="NONE",bear5State="NONE",bull15State="NONE",bear15State="NONE",bull30State="NONE",bear30State="NONE";
 
-   bool useBull15 = haveBull15 && (!haveBull5 || bull15Strength + 8.0 >= bull5Strength);
-   bool useBear15 = haveBear15 && (!haveBear5 || bear15Strength + 8.0 >= bear5Strength);
-   g_bullishOrderBlockLow = useBull15 ? bull15L : (haveBull5 ? bull5L : 0.0);
-   g_bullishOrderBlockHigh = useBull15 ? bull15H : (haveBull5 ? bull5H : 0.0);
-   g_bullishOrderBlockStrength = useBull15 ? bull15Strength : (haveBull5 ? bull5Strength : 0.0);
-   g_bearishOrderBlockLow = useBear15 ? bear15L : (haveBear5 ? bear5L : 0.0);
-   g_bearishOrderBlockHigh = useBear15 ? bear15H : (haveBear5 ? bear5H : 0.0);
-   g_bearishOrderBlockStrength = useBear15 ? bear15Strength : (haveBear5 ? bear5Strength : 0.0);
-   bool anyM15 = useBull15 || useBear15;
-   bool anyM5 = (haveBull5 && !useBull15) || (haveBear5 && !useBear15);
-   g_orderBlockTimeframe = anyM15 && anyM5 ? "M15+M5" : anyM15 ? "M15" : anyM5 ? "M5" : "NONE";
+   bool haveBull5 = FindRecentOrderBlock(PERIOD_M5,160,true,atrM15Price*0.55,price,bull5L,bull5H,bull5Strength,bull5Mit,bull5Age,bull5State);
+   bool haveBear5 = FindRecentOrderBlock(PERIOD_M5,160,false,atrM15Price*0.55,price,bear5L,bear5H,bear5Strength,bear5Mit,bear5Age,bear5State);
+   bool haveBull15 = FindRecentOrderBlock(PERIOD_M15,120,true,atrM15Price,price,bull15L,bull15H,bull15Strength,bull15Mit,bull15Age,bull15State);
+   bool haveBear15 = FindRecentOrderBlock(PERIOD_M15,120,false,atrM15Price,price,bear15L,bear15H,bear15Strength,bear15Mit,bear15Age,bear15State);
+   bool haveBull30 = FindRecentOrderBlock(PERIOD_M30,100,true,atrM15Price*1.35,price,bull30L,bull30H,bull30Strength,bull30Mit,bull30Age,bull30State);
+   bool haveBear30 = FindRecentOrderBlock(PERIOD_M30,100,false,atrM15Price*1.35,price,bear30L,bear30H,bear30Strength,bear30Mit,bear30Age,bear30State);
+
+   double bull5Rank = haveBull5 ? bull5Strength - bull5Mit*2.0 - bull5Age*0.02 : -1.0e100;
+   double bull15Rank = haveBull15 ? bull15Strength + 4.0 - bull15Mit*2.0 - bull15Age*0.02 : -1.0e100;
+   double bull30Rank = haveBull30 ? bull30Strength + 7.0 - bull30Mit*2.0 - bull30Age*0.02 : -1.0e100;
+   double bear5Rank = haveBear5 ? bear5Strength - bear5Mit*2.0 - bear5Age*0.02 : -1.0e100;
+   double bear15Rank = haveBear15 ? bear15Strength + 4.0 - bear15Mit*2.0 - bear15Age*0.02 : -1.0e100;
+   double bear30Rank = haveBear30 ? bear30Strength + 7.0 - bear30Mit*2.0 - bear30Age*0.02 : -1.0e100;
+
+   if(bull30Rank >= bull15Rank && bull30Rank >= bull5Rank)
+   {
+      g_bullishOrderBlockLow=bull30L; g_bullishOrderBlockHigh=bull30H; g_bullishOrderBlockStrength=bull30Strength;
+      g_bullishOrderBlockMitigations=bull30Mit; g_bullishOrderBlockAgeBars=bull30Age; g_bullishOrderBlockState=bull30State; g_bullishOrderBlockTimeframe="M30";
+   }
+   else if(bull15Rank >= bull5Rank)
+   {
+      g_bullishOrderBlockLow=bull15L; g_bullishOrderBlockHigh=bull15H; g_bullishOrderBlockStrength=bull15Strength;
+      g_bullishOrderBlockMitigations=bull15Mit; g_bullishOrderBlockAgeBars=bull15Age; g_bullishOrderBlockState=bull15State; g_bullishOrderBlockTimeframe="M15";
+   }
+   else
+   {
+      g_bullishOrderBlockLow=bull5L; g_bullishOrderBlockHigh=bull5H; g_bullishOrderBlockStrength=bull5Strength;
+      g_bullishOrderBlockMitigations=bull5Mit; g_bullishOrderBlockAgeBars=bull5Age; g_bullishOrderBlockState=bull5State; g_bullishOrderBlockTimeframe=haveBull5?"M5":"NONE";
+   }
+
+   if(bear30Rank >= bear15Rank && bear30Rank >= bear5Rank)
+   {
+      g_bearishOrderBlockLow=bear30L; g_bearishOrderBlockHigh=bear30H; g_bearishOrderBlockStrength=bear30Strength;
+      g_bearishOrderBlockMitigations=bear30Mit; g_bearishOrderBlockAgeBars=bear30Age; g_bearishOrderBlockState=bear30State; g_bearishOrderBlockTimeframe="M30";
+   }
+   else if(bear15Rank >= bear5Rank)
+   {
+      g_bearishOrderBlockLow=bear15L; g_bearishOrderBlockHigh=bear15H; g_bearishOrderBlockStrength=bear15Strength;
+      g_bearishOrderBlockMitigations=bear15Mit; g_bearishOrderBlockAgeBars=bear15Age; g_bearishOrderBlockState=bear15State; g_bearishOrderBlockTimeframe="M15";
+   }
+   else
+   {
+      g_bearishOrderBlockLow=bear5L; g_bearishOrderBlockHigh=bear5H; g_bearishOrderBlockStrength=bear5Strength;
+      g_bearishOrderBlockMitigations=bear5Mit; g_bearishOrderBlockAgeBars=bear5Age; g_bearishOrderBlockState=bear5State; g_bearishOrderBlockTimeframe=haveBear5?"M5":"NONE";
+   }
+
+   double bullStateFactor = g_bullishOrderBlockState=="FRESH" ? 1.00 : g_bullishOrderBlockState=="TESTED" ? 0.95 : g_bullishOrderBlockState=="MITIGATED" ? 0.82 : 0.70;
+   double bearStateFactor = g_bearishOrderBlockState=="FRESH" ? 1.00 : g_bearishOrderBlockState=="TESTED" ? 0.95 : g_bearishOrderBlockState=="MITIGATED" ? 0.82 : 0.70;
+   g_bullishOrderBlockQuality = MathMax(0.0,MathMin(100.0,g_bullishOrderBlockStrength*bullStateFactor));
+   g_bearishOrderBlockQuality = MathMax(0.0,MathMin(100.0,g_bearishOrderBlockStrength*bearStateFactor));
+   g_orderBlockTimeframe = g_bullishOrderBlockTimeframe==g_bearishOrderBlockTimeframe
+      ? g_bullishOrderBlockTimeframe
+      : g_bullishOrderBlockTimeframe+"+"+g_bearishOrderBlockTimeframe;
 
    // Read both execution (M5) and structure (M15) impulses. The primary Fib is
    // selected by swing quality + trend agreement, while both contribute to the
