@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.017"
+#property version   "1.018"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -697,6 +697,67 @@ void OnTradeTransaction(
    }
 }
 
+string OpenPositionsTelemetryJson()
+{
+   string json = "[";
+   bool first = true;
+   MqlTick tick;
+   bool haveTick = SymbolInfoTick(_Symbol, tick);
+   int digits = SymbolDigitsNow();
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
+         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+
+      long type = PositionGetInteger(POSITION_TYPE);
+      string side = type == POSITION_TYPE_BUY ? "BUY" : "SELL";
+      double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      double sl = PositionGetDouble(POSITION_SL);
+      double volume = PositionGetDouble(POSITION_VOLUME);
+      double profit =
+         PositionGetDouble(POSITION_PROFIT) +
+         PositionGetDouble(POSITION_SWAP);
+      double currentPrice = openPrice;
+      if(haveTick)
+         currentPrice = type == POSITION_TYPE_BUY ? tick.bid : tick.ask;
+      double movePoints = 0.0;
+      if(_Point > 0.0)
+         movePoints = type == POSITION_TYPE_BUY
+            ? (currentPrice - openPrice) / _Point
+            : (openPrice - currentPrice) / _Point;
+      double slDistancePoints = 0.0;
+      if(sl > 0.0 && _Point > 0.0)
+         slDistancePoints = MathAbs(currentPrice - sl) / _Point;
+
+      string item = StringFormat(
+         "{\"ticket\":\"%I64u\",\"side\":\"%s\",\"volume\":%.4f,\"openPrice\":%s,\"currentPrice\":%s,\"sl\":%s,\"profit\":%.2f,\"movePoints\":%.1f,\"slDistancePoints\":%.1f,\"openedAt\":%I64d}",
+         ticket,
+         side,
+         volume,
+         DoubleToString(openPrice, digits),
+         DoubleToString(currentPrice, digits),
+         DoubleToString(sl, digits),
+         profit,
+         movePoints,
+         slDistancePoints,
+         (long)PositionGetInteger(POSITION_TIME)
+      );
+
+      if(!first)
+         json += ",";
+      json += item;
+      first = false;
+   }
+
+   json += "]";
+   return json;
+}
+
 void SendHeartbeat()
 {
    if(StringLen(InpApiBase) < 8 || StringLen(InpInstanceId) < 8 || StringLen(InpInstallToken) < 8)
@@ -723,7 +784,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.017\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.018\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -849,6 +910,12 @@ void SendHeartbeat()
          g_burstNeedsRearm ? "true" : "false"
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + burstDiagnostics;
+
+      // Position-level telemetry powers the live web terminal. This is read-only
+      // monitoring data and does not alter execution decisions.
+      string positionDiagnostics =
+         ",\"openPositions\":" + OpenPositionsTelemetryJson() + "}}";
+      payload = StringSubstr(payload, 0, StringLen(payload) - 2) + positionDiagnostics;
    }
 
    string response = "";
