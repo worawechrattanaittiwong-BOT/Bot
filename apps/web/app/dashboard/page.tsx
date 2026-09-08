@@ -413,9 +413,12 @@ export default function DashboardPage() {
   const softwareUpdateRequired =
     data?.selectedSlot?.mode === "LOCAL" &&
     Boolean(softwareUpdate.required);
+  const botStarting = desired === "RUNNING" && state !== "RUNNING";
+  const botRunning = state === "RUNNING";
   const startBlocked =
     busy ||
-    state === "RUNNING" ||
+    botStarting ||
+    botRunning ||
     softwareUpdateRequired ||
     !entitlement?.allowed ||
     hardStartBlocks.has(String(liveStatus.code || ""));
@@ -1138,46 +1141,82 @@ export default function DashboardPage() {
         {error && <div className="notice bad page-notice">{error}</div>}
         {notice && <div className="notice good page-notice">{notice}</div>}
 
-        {activeView === "overview" && data.account && data.selectedSlot?.mode === "LOCAL" && (
-          <div className={"cc-version-guard " + (softwareUpdateRequired ? "needs-update" : "ready")}>
-            <div className="cc-version-guard-title">
-              <span><ScenovaIcon name="shield" size={19}/></span>
-              <div><b>Version Guard</b><small>ต้องตรงกับ Server ก่อนจึงจะเริ่มบอทได้</small></div>
+        {activeView === "overview" && data.account && data.selectedSlot?.mode === "LOCAL" && softwareUpdateRequired && (
+          <div className="cc-update-alert" role="alert">
+            <div className="cc-update-alert-head">
+              <span className="cc-update-alert-icon">!</span>
+              <div>
+                <b>ต้องดำเนินการก่อนเริ่มบอท</b>
+                <small>กล่องนี้จะแสดงเฉพาะเมื่อ Agent / EA / EX5 ไม่ตรงกับ Server เท่านั้น</small>
+              </div>
+              <button className="btn cc-update-refresh" disabled={busy} onClick={()=>load(selectedSlotIdRef.current)}>
+                <ScenovaIcon name="refresh" size={15}/>ตรวจสอบอีกครั้ง
+              </button>
             </div>
-            <div className="cc-version-checks">
-              <div className={softwareUpdate.installerRequired ? "bad" : "good"}>
-                <small>Windows Agent</small>
-                <b>{softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : "ไม่พบ"} → v{softwareUpdate.latestVersion || "—"}</b>
-              </div>
-              <div className={softwareUpdate.eaVersionMatch ? "good" : "bad"}>
-                <small>EA Runtime</small>
-                <b>{softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "ไม่พบ"} → v{softwareUpdate.latestEaVersion || "—"}</b>
-              </div>
-              <div className={softwareUpdate.eaHashMatch ? "good" : "bad"}>
-                <small>EX5 Hash</small>
-                <b>{softwareUpdate.eaHashMatch ? "ตรงกับ Server" : "ยังไม่ตรง"}</b>
-              </div>
-            </div>
-            <div className="cc-version-guard-action">
-              {softwareUpdateRequired ? (
-                <>
-                  <span className="cc-version-status bad"><i/>ต้องอัปเดตก่อน Start</span>
-                  <small>{softwareUpdate.reason || "กำลังรอ Agent/EA อัปเดตให้ตรงกับ Server"}</small>
-                  {softwareUpdate.installerRequired ? (
-                    <button className="btn primary" disabled={busy || state === "RUNNING" || currentPositions > 0} onClick={downloadWindowsInstaller}>
-                      {busy ? "กำลังเตรียม..." : "ดาวน์โหลดอัปเดต"}
+
+            <div className="cc-update-alert-list">
+              {softwareUpdate.installerRequired && (
+                <div className="cc-update-alert-row">
+                  <span className="cc-update-row-dot">!</span>
+                  <div className="cc-update-row-copy">
+                    <b>Windows Agent ไม่ตรงเวอร์ชัน</b>
+                    <small>
+                      ปัจจุบัน {softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : "ไม่พบเวอร์ชัน"} · Server ต้องการ v{softwareUpdate.latestVersion || "—"}
+                    </small>
+                  </div>
+                  <div className="cc-update-row-action">
+                    <strong>
+                      {(state === "RUNNING" || desired === "RUNNING" || currentPositions > 0)
+                        ? "หยุดบอทและรอให้ออเดอร์เป็น 0 ก่อนติดตั้งใหม่"
+                        : "ต้องติดตั้ง Windows Agent ใหม่"}
+                    </strong>
+                    <button
+                      className="btn danger-outline"
+                      disabled={busy || state === "RUNNING" || desired === "RUNNING" || currentPositions > 0}
+                      onClick={downloadWindowsInstaller}
+                    >
+                      ติดตั้ง v{softwareUpdate.latestVersion || "ล่าสุด"}
                     </button>
-                  ) : (
-                    <button className="btn" disabled={busy} onClick={()=>load(selectedSlotIdRef.current)}>
-                      <ScenovaIcon name="refresh" size={15}/>ตรวจสอบอีกครั้ง
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <span className="cc-version-status good"><i/>เวอร์ชันตรงกัน พร้อม Start</span>
-                  <small>Agent + EA Runtime + EX5 ตรงกับ Server</small>
-                </>
+                  </div>
+                </div>
+              )}
+
+              {(softwareUpdate.eaUpdateRequired || !softwareUpdate.eaVersionMatch) && (
+                <div className="cc-update-alert-row">
+                  <span className="cc-update-row-dot">!</span>
+                  <div className="cc-update-row-copy">
+                    <b>EA Runtime ไม่ตรงเวอร์ชัน</b>
+                    <small>
+                      ปัจจุบัน {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "ไม่พบเวอร์ชัน"} · Server ต้องการ v{softwareUpdate.latestEaVersion || "—"}
+                    </small>
+                  </div>
+                  <div className="cc-update-row-action">
+                    <strong>
+                      {(state === "RUNNING" || desired === "RUNNING" || currentPositions > 0)
+                        ? "หยุดบอท และรอให้ออเดอร์เป็น 0"
+                        : "ไม่ต้องติดตั้งเอง — รอ Agent อัปเดต EA อัตโนมัติ"}
+                    </strong>
+                    <small>เมื่อปลอดภัย Agent จะโหลด EA รุ่นใหม่และรีโหลด MT5 ให้เอง</small>
+                  </div>
+                </div>
+              )}
+
+              {!softwareUpdate.eaHashMatch && (
+                <div className="cc-update-alert-row">
+                  <span className="cc-update-row-dot">!</span>
+                  <div className="cc-update-row-copy">
+                    <b>EX5 Hash ไม่ตรง Server</b>
+                    <small>ไฟล์ EA ในเครื่องไม่ใช่ไฟล์เดียวกับ Release ล่าสุดบน Server</small>
+                  </div>
+                  <div className="cc-update-row-action">
+                    <strong>
+                      {(state === "RUNNING" || desired === "RUNNING" || currentPositions > 0)
+                        ? "หยุดบอท และรอให้ออเดอร์เป็น 0"
+                        : "ไม่ต้องติดตั้งเอง — รอ Agent รีโหลด EX5 อัตโนมัติ"}
+                    </strong>
+                    <small>ระบบจะไม่บังคับ Restart MT5 ระหว่างที่บอทกำลังทำงานหรือยังมี Position</small>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -1231,7 +1270,17 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="cc-primary-actions cc-v3-actions">
-                    <button className="cc-action start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><span className="cc-action-icon"><ScenovaIcon name="play" size={19}/></span><b>เริ่มบอท</b></button>
+                    <button
+                      className={"cc-action start " + (botStarting ? "starting" : botRunning ? "running" : "idle")}
+                      disabled={startBlocked}
+                      onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}
+                      aria-live="polite"
+                    >
+                      <span className="cc-action-icon">
+                        {botStarting ? <i className="cc-start-spinner" aria-hidden="true"/> : botRunning ? <i className="cc-start-pulse" aria-hidden="true"/> : <ScenovaIcon name="play" size={19}/>}
+                      </span>
+                      <b>{botStarting ? "กำลังเริ่มบอท..." : botRunning ? "บอทกำลังทำงาน" : "เริ่มบอท"}</b>
+                    </button>
                     <button className="cc-action safe" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="stop" size={18}/></span><b>หยุดบอท</b></button>
                     <button className="cc-action close" disabled={busy || currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?") && command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="close" size={19}/></span><b>ปิดทุกไม้</b></button>
                   </div>
@@ -1329,8 +1378,14 @@ export default function DashboardPage() {
               />
 
               <div className="cc-mobile-command-dock mobile-only" aria-label="ควบคุมบอท">
-                <button className="cc-mobile-command start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่งเริ่มบอทแล้ว")}>
-                  <span>▶</span><b>เริ่ม</b>
+                <button
+                  className={"cc-mobile-command start " + (botStarting ? "starting" : botRunning ? "running" : "idle")}
+                  disabled={startBlocked}
+                  onClick={()=>command("/bot/start","ส่งคำสั่งเริ่มบอทแล้ว")}
+                  aria-live="polite"
+                >
+                  <span>{botStarting ? <i className="cc-start-spinner" aria-hidden="true"/> : botRunning ? <i className="cc-start-pulse" aria-hidden="true"/> : "▶"}</span>
+                  <b>{botStarting ? "กำลังเริ่ม" : botRunning ? "กำลังทำงาน" : "เริ่ม"}</b>
                 </button>
                 <button className="cc-mobile-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดบอทแล้ว")}>
                   <span>■</span><b>หยุด</b>
