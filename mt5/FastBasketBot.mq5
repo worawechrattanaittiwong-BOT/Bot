@@ -75,6 +75,7 @@ input double          InpRiskPerOrderPercent   = 0.25;
 input bool            InpAllowMinimumLotOverride = false;
 input double          InpHardStopAtrMultiplier = 2.00;
 input int             InpAtrPeriod             = 14;
+input bool            InpConfidenceGateEnabled = false;
 input int             InpConfidenceThreshold   = 55;
 input int             InpSessionStartHour      = 0;
 input int             InpSessionEndHour        = 24;
@@ -133,6 +134,7 @@ double g_riskPerOrderPercent;
 bool   g_allowMinimumLotOverride;
 double g_hardStopAtrMultiplier;
 int    g_atrPeriod;
+bool   g_confidenceGateEnabled;
 int    g_confidenceThreshold;
 int    g_sessionStartHour;
 int    g_sessionEndHour;
@@ -361,6 +363,7 @@ int OnInit()
    g_allowMinimumLotOverride = InpAllowMinimumLotOverride;
    g_hardStopAtrMultiplier = MathMax(0.5, MathMin(10.0, InpHardStopAtrMultiplier));
    g_atrPeriod = MathMax(5, MathMin(100, InpAtrPeriod));
+   g_confidenceGateEnabled = InpConfidenceGateEnabled;
    g_confidenceThreshold = MathMax(40, MathMin(95, InpConfidenceThreshold));
    g_sessionStartHour = MathMax(0, MathMin(23, InpSessionStartHour));
    g_sessionEndHour = MathMax(1, MathMin(24, InpSessionEndHour));
@@ -1015,10 +1018,11 @@ void SendHeartbeat()
 
       // Market-context telemetry makes every entry auditable on the web.
       string marketContextDiagnostics = StringFormat(
-         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":false,\"entryDecisionMode\":\"SETUP_FIRST_V2\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
+         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V2\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
          g_trendM1,
          g_trendM30,
          g_effectiveConfidenceThreshold,
+         g_confidenceGateEnabled ? "true" : "false",
          g_entryTrigger,
          DoubleToString(g_nearestSupport, SymbolDigitsNow()),
          DoubleToString(g_nearestResistance, SymbolDigitsNow()),
@@ -1296,6 +1300,7 @@ void ApplySettings(string json)
    g_allowMinimumLotOverride = JsonBool(json, "allowMinimumLotOverride", g_allowMinimumLotOverride);
    g_hardStopAtrMultiplier = MathMax(0.5, MathMin(10.0, JsonNumber(json, "hardStopAtrMultiplier", g_hardStopAtrMultiplier)));
    g_atrPeriod = (int)MathMax(5.0, MathMin(100.0, JsonNumber(json, "atrPeriod", g_atrPeriod)));
+   g_confidenceGateEnabled = JsonBool(json, "confidenceGateEnabled", g_confidenceGateEnabled);
    g_confidenceThreshold = (int)MathMax(40.0, MathMin(95.0, JsonNumber(json, "confidenceThreshold", g_confidenceThreshold)));
    g_sessionStartHour = (int)MathMax(0.0, MathMin(23.0, JsonNumber(json, "sessionStartHour", g_sessionStartHour)));
    g_sessionEndHour = (int)MathMax(1.0, MathMin(24.0, JsonNumber(json, "sessionEndHour", g_sessionEndHour)));
@@ -2536,8 +2541,21 @@ int AdaptiveEntryDirection(double momentum)
       return 0;
    }
 
-   // Confidence remains telemetry/quality intelligence only. It can never veto
-   // a setup-first entry.
+   // Confidence is optional. Default OFF means the score is telemetry only and
+   // can never prevent a valid setup-first entry. Users who explicitly enable
+   // the filter get the Dynamic Confidence gate back.
+   if(g_confidenceGateEnabled)
+   {
+      double liveConfidenceThreshold = DynamicConfidenceThreshold(rawDirection);
+      if(g_signalConfidence < liveConfidenceThreshold)
+      {
+         g_adaptiveBlockReason = "WAITING_CONFIDENCE";
+         g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
+         return 0;
+      }
+   }
+   else
+      g_effectiveConfidenceThreshold = 0.0;
 
    g_adaptiveLot = AdaptiveTradeVolume();
    if(g_adaptiveLot <= 0.0)
