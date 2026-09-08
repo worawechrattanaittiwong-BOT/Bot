@@ -235,9 +235,86 @@ int    g_burstRequestsSent = 0;
 datetime g_burstStartedAt = 0;
 double g_burstTargetMoney = 0.0;
 double g_burstLossMoney = 0.0;
+ulong  g_lastChartStatusMs = 0;
 
 double g_ticks[128];
 int    g_tickCount = 0;
+
+string ChartStatusObjectName(string suffix)
+{
+   return StringFormat("SCENOVA_STATUS_%I64d_%s", InpMagic, suffix);
+}
+
+void SetChartStatusText(string suffix, string text, int y, int fontSize, color textColor)
+{
+   string name = ChartStatusObjectName(suffix);
+   if(ObjectFind(0, name) < 0)
+      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, 30);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, fontSize);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, textColor);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+   ObjectSetString(0, name, OBJPROP_FONT, "Segoe UI Semibold");
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+}
+
+void RenderChartStatus(string connectionText, color statusColor, string executionText)
+{
+   string panel = ChartStatusObjectName("PANEL");
+   if(ObjectFind(0, panel) < 0)
+      ObjectCreate(0, panel, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, panel, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+   ObjectSetInteger(0, panel, OBJPROP_XDISTANCE, 12);
+   ObjectSetInteger(0, panel, OBJPROP_YDISTANCE, 16);
+   ObjectSetInteger(0, panel, OBJPROP_XSIZE, 360);
+   ObjectSetInteger(0, panel, OBJPROP_YSIZE, 150);
+   ObjectSetInteger(0, panel, OBJPROP_BGCOLOR, C'7,11,18');
+   ObjectSetInteger(0, panel, OBJPROP_COLOR, C'57,68,91');
+   ObjectSetInteger(0, panel, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+   ObjectSetInteger(0, panel, OBJPROP_BACK, false);
+   ObjectSetInteger(0, panel, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, panel, OBJPROP_HIDDEN, true);
+
+   SetChartStatusText("TITLE", "SCENOVA  •  " + connectionText, 30, 14, statusColor);
+   SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
+   SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
+   SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
+   SetChartStatusText("VERSION", "EA v1.018", 137, 9, C'104,117,142');
+   ChartRedraw(0);
+}
+
+void RefreshChartStatus(bool force=false)
+{
+   ulong nowMs = GetTickCount64();
+   if(!force && nowMs - g_lastChartStatusMs < 500)
+      return;
+   g_lastChartStatusMs = nowMs;
+
+   if(MQLInfoInteger(MQL_TESTER))
+   {
+      RenderChartStatus("TESTER", clrDeepSkyBlue, g_executionStatus);
+      return;
+   }
+
+   bool terminalOnline = TerminalConnectedNow();
+   bool serverFresh = g_lastSuccessfulHeartbeat > 0 &&
+      TimeCurrent() - g_lastSuccessfulHeartbeat <= InpMaxOfflineLeaseSeconds;
+   string connectionText = !terminalOnline ? "MT5 OFFLINE" : serverFresh ? "CONNECTED" : "CONNECTING";
+   color statusColor = !terminalOnline ? clrTomato : serverFresh ? clrLimeGreen : clrGold;
+   RenderChartStatus(connectionText, statusColor, g_executionStatus);
+}
+
+void ClearChartStatus()
+{
+   string suffixes[6] = {"PANEL","TITLE","ACCOUNT","STATE","EXECUTION","VERSION"};
+   for(int i = 0; i < ArraySize(suffixes); i++)
+      ObjectDelete(0, ChartStatusObjectName(suffixes[i]));
+   ChartRedraw(0);
+}
 
 int OnInit()
 {
@@ -307,10 +384,7 @@ int OnInit()
       if(!apiOk || StringLen(InpInstanceId) < 8 || StringLen(InpInstallToken) < 8)
       {
          Print("SCENOVA CONFIG ERROR: connection settings are missing. Load SCENOVA-FastBasketBot.set in Inputs.");
-         Comment(
-            "SCENOVA: CONFIG NOT LOADED\n",
-            "Open EA Inputs > Load > SCENOVA-FastBasketBot.set"
-         );
+         RenderChartStatus("CONFIG REQUIRED", clrTomato, "Load SCENOVA-FastBasketBot.set");
          return(INIT_PARAMETERS_INCORRECT);
       }
    }
@@ -331,6 +405,7 @@ int OnInit()
       Print("Strategy Tester mode: SaaS heartbeat bypassed for historical testing only.");
    }
 
+   RefreshChartStatus(true);
    Print("Bot SaaS EA initialized. Instance=", InpInstanceId);
    return(INIT_SUCCEEDED);
 }
@@ -339,7 +414,7 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    DeleteTradingFibonacci();
-   Comment("");
+   ClearChartStatus();
 }
 
 void OnTick()
@@ -677,6 +752,7 @@ void OnTimer()
    if(MQLInfoInteger(MQL_TESTER))
    {
       ProcessBurstQueue();
+      RefreshChartStatus();
       return;
    }
 
@@ -688,6 +764,7 @@ void OnTimer()
       SendHeartbeat();
    }
    ProcessBurstQueue();
+   RefreshChartStatus();
 }
 
 void OnTradeTransaction(
@@ -1000,25 +1077,15 @@ void SendHeartbeat()
 
       if(code == -1)
       {
-         Comment(
-            "SCENOVA: WEBREQUEST BLOCKED / NETWORK ERROR\n",
-            "Allow this URL in MT5: ", InpApiBase, "\n",
-            "MT5 error: ", IntegerToString(webError)
-         );
+         RenderChartStatus("NETWORK ERROR", clrTomato, "WebRequest error " + IntegerToString(webError));
       }
       else if(code == 401)
       {
-         Comment(
-            "SCENOVA: AUTHENTICATION FAILED\n",
-            "Reinstall SCENOVA and reload the newest .set file."
-         );
+         RenderChartStatus("AUTH FAILED", clrTomato, "Reload the newest SCENOVA .set file");
       }
       else
       {
-         Comment(
-            "SCENOVA: NOT CONNECTED\n",
-            "HTTP ", IntegerToString(code), " | ", heartbeatUrl
-         );
+         RenderChartStatus("NOT CONNECTED", clrTomato, "HTTP " + IntegerToString(code));
       }
       return;
    }
@@ -1095,12 +1162,7 @@ void SendHeartbeat()
       CloseAllBasket("REMOTE_CLOSE_ALL");
    }
 
-   Comment(
-      "SCENOVA: CONNECTED\n",
-      "Account: ", IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), "\n",
-      "State: ", StateText(), "\n",
-      "Execution: ", g_executionStatus
-   );
+   RenderChartStatus("CONNECTED", clrLimeGreen, g_executionStatus);
 
    long commandId = (long)JsonNumber(response, "commandId", 0.0);
    if(commandId > 0)
