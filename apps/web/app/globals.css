@@ -3852,3 +3852,194 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .cc-profile-add-thresholds{grid-template-columns:1fr}
   .cc-profile-live-add{align-items:flex-start;flex-direction:column}
 }
+
+
+/* ===== Mismatch-only update alert ===== */
+.cc-update-alert{
+  margin:0 0 16px;
+  padding:13px;
+  border:1px solid #a9364d;
+  border-radius:14px;
+  background:
+    radial-gradient(circle at 92% 0,rgba(255,74,105,.10),transparent 30%),
+    linear-gradient(145deg,#1a0b12,#0b0d16 72%);
+  box-shadow:0 0 0 1px rgba(255,77,108,.08),0 16px 38px rgba(0,0,0,.24),0 0 28px rgba(255,62,94,.08);
+}
+.cc-update-alert-head{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  gap:10px;
+  align-items:center;
+  padding:2px 2px 11px;
+}
+.cc-update-alert-icon,
+.cc-update-row-dot{
+  display:grid;
+  place-items:center;
+  border:1px solid #c94660;
+  color:#ff8295;
+  background:#2a0f18;
+  font-weight:900;
+  box-shadow:0 0 16px rgba(255,72,104,.13);
+}
+.cc-update-alert-icon{width:34px;height:34px;border-radius:10px;font-size:17px}
+.cc-update-alert-head>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cc-update-alert-head b{font-size:12px;color:#ff9aaa}
+.cc-update-alert-head small{font-size:8.5px;color:#9b7180;line-height:1.45}
+.cc-update-refresh{
+  min-height:32px!important;
+  border-color:#5d2e3a!important;
+  color:#e997a5!important;
+  background:#170c12!important;
+  font-size:8px!important;
+}
+.cc-update-alert-list{display:grid;gap:7px}
+.cc-update-alert-row{
+  display:grid;
+  grid-template-columns:auto minmax(220px,.85fr) minmax(320px,1.15fr);
+  gap:10px;
+  align-items:center;
+  min-height:64px;
+  padding:9px 10px;
+  border:1px solid #582733;
+  border-radius:11px;
+  background:linear-gradient(135deg,rgba(58,18,29,.55),rgba(10,12,20,.92));
+}
+.cc-update-row-dot{width:25px;height:25px;border-radius:8px;font-size:12px}
+.cc-update-row-copy,
+.cc-update-row-action{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cc-update-row-copy b{font-size:10px;color:#f1b2bd}
+.cc-update-row-copy small{font-size:8px;color:#96717c;line-height:1.45}
+.cc-update-row-action{
+  align-items:flex-end;
+  text-align:right;
+}
+.cc-update-row-action strong{font-size:9.5px;color:#ff778c;line-height:1.4}
+.cc-update-row-action small{font-size:7.5px;color:#8d6d78;line-height:1.4;max-width:430px}
+.cc-update-row-action .danger-outline{
+  min-height:31px;
+  margin-top:3px;
+  padding:6px 10px;
+  border:1px solid #b63c55;
+  background:#270e17;
+  color:#ff8ca0;
+  font-size:8.5px;
+  font-weight:850;
+}
+.cc-update-row-action .danger-outline:hover:not(:disabled){
+  border-color:#ef5874;
+  background:#36101d;
+  box-shadow:0 0 18px rgba(255,69,102,.12);
+}
+.cc-update-row-action .danger-outline:disabled{opacity:.42;cursor:not-allowed}
+
+@media(max-width:980px){
+  .cc-update-alert-row{grid-template-columns:auto minmax(0,1fr)}
+  .cc-update-row-action{grid-column:2;align-items:flex-start;text-align:left}
+}
+@media(max-width:640px){
+  .cc-update-alert-head{grid-template-columns:auto minmax(0,1fr)}
+  .cc-update-refresh{grid-column:1/-1;width:100%}
+  .cc-update-alert-row{grid-template-columns:auto minmax(0,1fr)}
+}
+
+/* ===== Start / Running activity animation ===== */
+.cc-v3 .cc-v3-actions .cc-action.start.starting,
+.cc-v3 .cc-v3-actions .cc-action.start.running{
+  position:relative;
+  overflow:hidden;
+  opacity:1!important;
+  filter:none!important;
+  cursor:default;
+}
+.cc-v3 .cc-v3-actions .cc-action.start.starting{
+  color:#a5f4cb!important;
+  border-color:#2d8a62!important;
+  background:linear-gradient(135deg,#0d3325,#10271f)!important;
+  animation:ccStartGlow 1.35s ease-in-out infinite;
+}
+.cc-v3 .cc-v3-actions .cc-action.start.running{
+  color:#9bf0c5!important;
+  border-color:#267955!important;
+  background:linear-gradient(135deg,#0c2c20,#0f231c)!important;
+  animation:ccRunGlow 2s ease-in-out infinite;
+}
+.cc-v3 .cc-v3-actions .cc-action.start.starting::after{
+  content:"";
+  position:absolute;
+  inset:-30% auto -30% -20%;
+  width:18%;
+  transform:skewX(-18deg);
+  background:linear-gradient(90deg,transparent,rgba(132,255,197,.26),transparent);
+  animation:ccStartSweep 1.35s linear infinite;
+  pointer-events:none;
+}
+.cc-start-spinner{
+  width:16px;
+  height:16px;
+  display:block;
+  border-radius:50%;
+  border:2px solid rgba(138,241,192,.24);
+  border-top-color:#8ff0bf;
+  border-right-color:#60dca0;
+  animation:ccStartSpin .72s linear infinite;
+}
+.cc-start-pulse{
+  position:relative;
+  width:10px;
+  height:10px;
+  display:block;
+  border-radius:50%;
+  background:#65e7a6;
+  box-shadow:0 0 12px rgba(101,231,166,.65);
+}
+.cc-start-pulse::after{
+  content:"";
+  position:absolute;
+  inset:-6px;
+  border:1px solid rgba(101,231,166,.62);
+  border-radius:50%;
+  animation:ccStartPulseRing 1.55s ease-out infinite;
+}
+.cc-mobile-command.start.starting:disabled,
+.cc-mobile-command.start.running:disabled{
+  opacity:1;
+  filter:none;
+}
+.cc-mobile-command.start.starting{
+  animation:ccStartGlow 1.35s ease-in-out infinite;
+}
+.cc-mobile-command.start.running{
+  border-color:#2d8a62;
+  background:linear-gradient(135deg,#17623f,#103826);
+  animation:ccRunGlow 2s ease-in-out infinite;
+}
+
+@keyframes ccStartSpin{
+  to{transform:rotate(360deg)}
+}
+@keyframes ccStartSweep{
+  from{left:-24%}
+  to{left:118%}
+}
+@keyframes ccStartGlow{
+  0%,100%{box-shadow:0 0 0 rgba(85,230,165,0),inset 0 0 0 rgba(85,230,165,0)}
+  50%{box-shadow:0 0 24px rgba(85,230,165,.16),inset 0 0 18px rgba(85,230,165,.05)}
+}
+@keyframes ccRunGlow{
+  0%,100%{box-shadow:0 0 0 rgba(85,230,165,0)}
+  50%{box-shadow:0 0 18px rgba(85,230,165,.12)}
+}
+@keyframes ccStartPulseRing{
+  0%{transform:scale(.65);opacity:.9}
+  100%{transform:scale(1.65);opacity:0}
+}
+@media(prefers-reduced-motion:reduce){
+  .cc-v3 .cc-v3-actions .cc-action.start.starting,
+  .cc-v3 .cc-v3-actions .cc-action.start.running,
+  .cc-mobile-command.start.starting,
+  .cc-mobile-command.start.running,
+  .cc-start-spinner,
+  .cc-start-pulse::after{animation:none!important}
+  .cc-v3 .cc-v3-actions .cc-action.start.starting::after{display:none}
+}
