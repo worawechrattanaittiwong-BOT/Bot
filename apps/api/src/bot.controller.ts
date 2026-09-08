@@ -552,6 +552,65 @@ export class BotController {
       settings = row?.settings || null;
     }
 
+    let tradeJournal = {
+      stats: {
+        closedTrades: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        netProfit: 0,
+        averageWin: 0,
+        averageLoss: 0,
+        profitFactor: 0
+      },
+      recent: [] as any[]
+    };
+
+    if (instance) {
+      const stats = await this.db.one(
+        `SELECT
+           COUNT(*) FILTER (WHERE event_type='EXIT')::int AS closed_trades,
+           COUNT(*) FILTER (WHERE event_type='EXIT' AND net_profit>0)::int AS wins,
+           COUNT(*) FILTER (WHERE event_type='EXIT' AND net_profit<0)::int AS losses,
+           COALESCE(SUM(net_profit) FILTER (WHERE event_type='EXIT'),0)::float8 AS net_profit,
+           COALESCE(AVG(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit>0),0)::float8 AS average_win,
+           COALESCE(AVG(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit<0),0)::float8 AS average_loss,
+           COALESCE(SUM(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit>0),0)::float8 AS gross_profit,
+           ABS(COALESCE(SUM(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit<0),0))::float8 AS gross_loss
+         FROM trade_journal
+         WHERE bot_instance_id=$1`,
+        [instance.id]
+      );
+      const closedTrades = Number(stats?.closed_trades || 0);
+      const wins = Number(stats?.wins || 0);
+      const grossProfit = Number(stats?.gross_profit || 0);
+      const grossLoss = Number(stats?.gross_loss || 0);
+
+      tradeJournal.stats = {
+        closedTrades,
+        wins,
+        losses: Number(stats?.losses || 0),
+        winRate: closedTrades > 0 ? wins / closedTrades * 100 : 0,
+        netProfit: Number(stats?.net_profit || 0),
+        averageWin: Number(stats?.average_win || 0),
+        averageLoss: Number(stats?.average_loss || 0),
+        profitFactor: grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? grossProfit : 0
+      };
+
+      tradeJournal.recent = await this.db.query(
+        `SELECT
+           event_type,direction,volume::float8,price::float8,net_profit::float8,
+           entry_trigger,entry_model,entry_quality,entry_quality_score::float8,
+           market_regime_detail,fib_setup_score::float8,order_block_quality::float8,
+           confidence::float8,basket_index,created_at
+         FROM trade_journal
+         WHERE bot_instance_id=$1
+         ORDER BY created_at DESC
+         LIMIT 20`,
+        [instance.id]
+      );
+    }
+
     const latestTrialRequest = await this.db.one(
       "SELECT id,line_contact,request_ip,status,created_at FROM trial_requests WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1",
       [userId]
@@ -576,7 +635,8 @@ export class BotController {
       trialRequest: latestTrialRequest,
       entitlement,
       liveStatus,
-      softwareUpdate
+      softwareUpdate,
+      tradeJournal
     };
   }
 
