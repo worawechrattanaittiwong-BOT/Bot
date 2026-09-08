@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.015"
+#property version   "1.016"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -378,18 +378,10 @@ void OnTick()
       double cycleProfit = BasketCycleProfit();
       double effectiveBasketTarget = EffectiveBasketProfitTarget();
 
-      // Burst keeps its automatic immediate Basket target behavior.
-      if(IsBurstProfile())
-      {
-         if(effectiveBasketTarget > 0.0 && cycleProfit >= effectiveBasketTarget)
-         {
-            CloseAllBasket("BASKET_PROFIT_TARGET");
-            ResetTrail();
-            g_executionStatus = "BASKET_PROFIT_TARGET";
-            return;
-         }
-      }
-      else if(g_basketProfitTarget > 0.0)
+      // Manual Basket target behaves the same in every profile, including Burst.
+      // If no manual Basket/per-position profit target is configured, Burst falls
+      // back to its automatic Cycle target.
+      if(g_basketProfitTarget > 0.0 && g_perPositionProfit <= 0.0)
       {
          if(g_profitRunTrailPercent > 0.0)
          {
@@ -428,6 +420,16 @@ void OnTick()
             g_executionStatus = "BASKET_PROFIT_TARGET";
             return;
          }
+      }
+      else if(IsBurstProfile() &&
+              g_perPositionProfit <= 0.0 &&
+              effectiveBasketTarget > 0.0 &&
+              cycleProfit >= effectiveBasketTarget)
+      {
+         CloseAllBasket("BASKET_PROFIT_TARGET");
+         ResetTrail();
+         g_executionStatus = "BASKET_PROFIT_TARGET";
+         return;
       }
 
       double effectiveBasketLoss = EffectiveBasketLossLimit();
@@ -714,7 +716,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.015\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.016\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -779,7 +781,7 @@ void SendHeartbeat()
          ? (int)MathMax(0, TimeCurrent() - g_lastSuccessfulHeartbeat)
          : -1;
       string diagnostics = StringFormat(
-         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\",\"atrRatio\":%.3f,\"minimumLotOverrideEnabled\":%s,\"minimumLotOverrideActive\":%s,\"trendM5\":%d,\"trendM15\":%d,\"trendH1\":%d,\"entryBias\":\"%s\",\"pyramidProgressPoints\":%.1f,\"pyramidRequiredPoints\":%.1f,\"momentumSamples\":%d,\"momentumSamplesRequired\":%d}}",
+         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\",\"atrRatio\":%.3f,\"minimumLotOverrideEnabled\":%s,\"minimumLotOverrideActive\":%s,\"trendM5\":%d,\"trendM15\":%d,\"trendH1\":%d,\"entryBias\":\"%s\",\"pyramidProgressPoints\":%.1f,\"pyramidRequiredPoints\":%.1f,\"momentumSamples\":%d,\"momentumSamplesRequired\":%d,\"configuredLot\":%.4f,\"configuredMaxPositions\":%d,\"configuredBasketProfitTarget\":%.2f,\"effectiveBasketProfitTarget\":%.2f,\"configuredMaxBasketLoss\":%.2f,\"effectiveMaxBasketLoss\":%.2f,\"appliedPerPositionProfit\":%.2f,\"appliedPerPositionLoss\":%.2f,\"appliedProfitRunTrailPercent\":%.2f,\"hardStopAtrMultiplier\":%.3f,\"hardStopDistancePoints\":%.1f,\"profitControlMode\":\"%s\"}}",
          heartbeatAge,
          g_lastHeartbeatLatencyMs,
          g_lastHeartbeatHttpStatus,
@@ -810,7 +812,19 @@ void SendHeartbeat()
          g_pyramidProgressPoints,
          g_pyramidRequiredPoints,
          g_tickCount,
-         MathMin(128, MathMax(2, InpMomentumTicks))
+         MathMin(128, MathMax(2, InpMomentumTicks)),
+         g_lot,
+         g_maxPositions,
+         g_basketProfitTarget,
+         EffectiveBasketProfitTarget(),
+         g_maxBasketLoss,
+         EffectiveBasketLossLimit(),
+         g_perPositionProfit,
+         g_perPositionLoss,
+         g_profitRunTrailPercent,
+         EffectiveHardStopMultiplier(),
+         EffectiveHardStopDistancePoints(),
+         ProfitControlModeName()
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + diagnostics;
       string burstDiagnostics = StringFormat(
@@ -1036,10 +1050,11 @@ void ApplyTradingProfile()
       g_riskPerOrderPercent = 0.05;
       g_hardStopAtrMultiplier = 1.70;
       g_allowMinimumLotOverride = true;
-      g_profitRunTrailPercent = 0.0;
-      g_perPositionProfit = 0.0;
-      g_perPositionLoss = 0.0;
-      g_basketProfitTarget = 0.0;
+
+      // Burst controls entry cadence and adaptive sizing only.
+      // User-defined exit/risk settings from the website remain authoritative.
+      // Legacy dollar Basket trailing is still disabled because the current UI
+      // uses Basket target + optional percentage giveback instead.
       g_triggerMoney = 0.0;
       g_trailMoney = 0.0;
    }
@@ -1743,16 +1758,32 @@ double CurrentSpreadCost(double volume)
 
 double EffectiveBasketProfitTarget()
 {
+   // Per-position profit mode is mutually exclusive with Basket profit.
+   if(g_perPositionProfit > 0.0)
+      return 0.0;
+
+   // Explicit website setting always wins.
+   if(g_basketProfitTarget > 0.0)
+      return g_basketProfitTarget;
+
+   // Burst auto target is only a fallback when the user left Basket profit off.
    if(IsBurstProfile() && g_burstTargetMoney > 0.0)
       return g_burstTargetMoney;
-   return g_basketProfitTarget;
+
+   return 0.0;
 }
 
 double EffectiveBasketLossLimit()
 {
+   // Explicit website Basket loss always wins.
+   if(g_maxBasketLoss > 0.0)
+      return g_maxBasketLoss;
+
+   // Burst auto loss is only a fallback when the user disabled Basket loss.
    if(IsBurstProfile() && g_burstLossMoney > 0.0)
       return g_burstLossMoney;
-   return g_maxBasketLoss;
+
+   return 0.0;
 }
 
 void EnsureBurstTargets(int plannedPositions)
@@ -2467,6 +2498,40 @@ void RecordExecutionQuality(bool accepted, double slippagePoints)
    }
 }
 
+double EffectiveHardStopMultiplier()
+{
+   double multiplier = g_hardStopAtrMultiplier;
+   if(g_marketRegime == "HIGH_VOLATILITY") multiplier *= 1.25;
+   else if(g_marketRegime == "QUIET") multiplier *= 0.85;
+   return MathMax(0.5, MathMin(10.0, multiplier));
+}
+
+double EffectiveHardStopDistancePoints()
+{
+   if(!g_adaptiveEngine || g_atrPoints <= 0.0 || g_hardStopAtrMultiplier <= 0.0)
+      return 0.0;
+
+   double brokerMinimumPoints =
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   return MathMax(
+      g_atrPoints * EffectiveHardStopMultiplier(),
+      brokerMinimumPoints + 1.0
+   );
+}
+
+string ProfitControlModeName()
+{
+   if(g_perPositionProfit > 0.0)
+      return "PER_POSITION";
+   if(g_basketProfitTarget > 0.0 && g_profitRunTrailPercent > 0.0)
+      return "BASKET_RUN_ON";
+   if(g_basketProfitTarget > 0.0)
+      return "BASKET_FIXED";
+   if(IsBurstProfile())
+      return "BURST_AUTO";
+   return "NONE";
+}
+
 bool SendMarketOrder(int direction)
 {
    MqlTick tick;
@@ -2504,13 +2569,11 @@ bool SendMarketOrder(int direction)
    if(g_adaptiveEngine && g_atrPoints > 0.0 && g_hardStopAtrMultiplier > 0.0)
    {
       int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-      double brokerMinimum = (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
-      double adaptiveStopMultiplier = g_hardStopAtrMultiplier;
-      if(g_marketRegime == "HIGH_VOLATILITY") adaptiveStopMultiplier *= 1.25;
-      else if(g_marketRegime == "QUIET") adaptiveStopMultiplier *= 0.85;
-      adaptiveStopMultiplier = MathMax(0.5, MathMin(10.0, adaptiveStopMultiplier));
-      double stopDistance = MathMax(g_atrPoints * adaptiveStopMultiplier * _Point, brokerMinimum + _Point);
-      request.sl = NormalizeDouble(direction > 0 ? tick.ask - stopDistance : tick.bid + stopDistance, digits);
+      double stopDistance = EffectiveHardStopDistancePoints() * _Point;
+      request.sl = NormalizeDouble(
+         direction > 0 ? tick.ask - stopDistance : tick.bid + stopDistance,
+         digits
+      );
    }
 
    g_adaptiveLot = request.volume;
