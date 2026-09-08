@@ -140,7 +140,7 @@ jobs:
           test "$(printf '%s' "$DASH2" | jq -r '.instance.metrics.productVersion')" = "2.0.8"
 
           echo "[integration] saving bot settings with Basket profit mode"
-          SETTINGS_HTTP=$(curl -sS -o /tmp/settings-save.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"symbol":"XAUUSDm","lot":0.02,"maxPositions":7,"basketTriggerMoney":3.5,"basketTrailMoney":0.75,"maxBasketLossMoney":12,"dailyLossMoney":30,"dailyProfitTargetMoney":10,"dailyProfitContinueAfterTarget":true,"dailyProfitDrawdownPercent":20,"basketProfitTargetMoney":10,"perPositionProfitMoney":0,"perPositionLossMoney":2,"minOrderIntervalMs":450,"maxOrdersPerMinute":90,"entryMode":"BUY_ONLY","allowMinimumLotOverride":true}')
+          SETTINGS_HTTP=$(curl -sS -o /tmp/settings-save.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"symbol":"XAUUSDm","lot":0.02,"maxPositions":7,"basketTriggerMoney":3.5,"basketTrailMoney":0.75,"maxBasketLossMoney":12,"dailyLossMoney":30,"dailyProfitTargetMoney":10,"dailyProfitContinueAfterTarget":true,"dailyProfitDrawdownPercent":20,"basketProfitTargetMoney":10,"perPositionProfitMoney":0,"perPositionLossMoney":2,"manualStopLossPoints":900,"minOrderIntervalMs":450,"maxOrdersPerMinute":90,"entryMode":"BUY_ONLY","allowMinimumLotOverride":true}')
           if [ "$SETTINGS_HTTP" != "200" ]; then cat /tmp/settings-save.json; exit 1; fi
           SETTINGS=$(cat /tmp/settings-save.json)
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.symbol')" = "XAUUSDm"
@@ -151,7 +151,8 @@ jobs:
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.dailyProfitDrawdownPercent')" = "20"
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.basketProfitTargetMoney')" = "10"
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.perPositionProfitMoney')" = "0"
-          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.perPositionLossMoney')" = "2"
+          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.perPositionLossMoney')" = "0"
+          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.entryMode')" = "BUY_ONLY"
           test "$(printf '%s' "$SETTINGS" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
@@ -180,7 +181,8 @@ jobs:
           test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.perPositionProfitMoney')" = "0"
           test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.basketTriggerMoney')" = "0"
           test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.basketTrailMoney')" = "0"
-          test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.perPositionLossMoney')" = "2"
+          test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.perPositionLossMoney')" = "0"
+          test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.maxBasketLossMoney')" = "12"
 
 
@@ -194,7 +196,8 @@ jobs:
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.basketProfitTargetMoney')" = "10"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.perPositionProfitMoney')" = "0"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.profitRunTrailPercent')" = "20"
-          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.perPositionLossMoney')" = "2"
+          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.perPositionLossMoney')" = "0"
+          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.entryMode')" = "BUY_ONLY"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
@@ -208,7 +211,8 @@ jobs:
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.basketProfitTargetMoney')" = "10"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.perPositionProfitMoney')" = "0"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.profitRunTrailPercent')" = "20"
-          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.perPositionLossMoney')" = "2"
+          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.perPositionLossMoney')" = "0"
+          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.entryMode')" = "BUY_ONLY"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
@@ -217,6 +221,8 @@ jobs:
           test "$BAD_SETTINGS_HTTP" = "400"
           BAD_POSITION_LOSS_HTTP=$(curl -sS -o /tmp/bad-position-loss.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"perPositionLossMoney":-1}')
           test "$BAD_POSITION_LOSS_HTTP" = "400"
+          BAD_MANUAL_SL_HTTP=$(curl -sS -o /tmp/bad-manual-sl.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"manualStopLossPoints":-1}')
+          test "$BAD_MANUAL_SL_HTTP" = "400"
           BAD_PERCENT_HTTP=$(curl -sS -o /tmp/bad-profit-percent.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"profitRunTrailPercent":96}')
           test "$BAD_PERCENT_HTTP" = "400"
           BAD_DAILY_DRAWDOWN_HTTP=$(curl -sS -o /tmp/bad-daily-drawdown.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"dailyProfitDrawdownPercent":96}')
