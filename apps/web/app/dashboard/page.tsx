@@ -1953,6 +1953,36 @@ function BotSettingsModal(props:any) {
   const perPositionProfitEnabled = Number(props.settings?.perPositionProfitMoney || 0) > 0;
   const manualSl = Number(props.settings?.manualStopLossPoints || 0);
   const burstMode = profile === "BURST_10";
+  const trendText = (value:any) => Number(value) > 0 ? "ขาขึ้น" : Number(value) < 0 ? "ขาลง" : "กลาง/ยังไม่ชัด";
+  const regimeText:Record<string,string> = {
+    TREND_UP: "แนวโน้มขึ้น",
+    TREND_DOWN: "แนวโน้มลง",
+    RANGE: "แกว่งในกรอบ",
+    QUIET: "ตลาดนิ่ง",
+    HIGH_VOLATILITY: "ผันผวนสูง",
+    DATA_NOT_READY: "ข้อมูลยังไม่พร้อม",
+    DISABLED: "ปิด Adaptive"
+  };
+  const blockReasonText:Record<string,string> = {
+    WAITING_MOMENTUM: "รอแรงราคาให้ชัดกว่านี้",
+    WAITING_REGIME_ALIGNMENT: "รอ Momentum ไปทางเดียวกับแนวโน้มหลัก",
+    WAITING_TREND_ALIGNMENT: "รอ M15 / H1 ไม่สวนทางกับสัญญาณ",
+    WAITING_CONFIDENCE: "คะแนนความมั่นใจยังไม่ถึงเกณฑ์",
+    SESSION_BLOCKED: "อยู่นอกเวลาที่อนุญาตให้เทรด",
+    ADAPTIVE_DATA_NOT_READY: "ATR / ข้อมูลกราฟยังไม่พร้อม",
+    RISK_LIMIT_TOO_SMALL: "Lot ที่คำนวณตามความเสี่ยงเล็กกว่าที่ Broker อนุญาต"
+  };
+  const currentBlockReason = String(props.metrics?.adaptiveBlockReason || "");
+  const currentConfidence = Number(props.metrics?.signalConfidence || 0);
+  const confidenceThreshold = Number(props.settings?.confidenceThreshold || 70);
+  const currentRegime = String(props.metrics?.marketRegime || "");
+  const momentum = Number(props.metrics?.momentumPoints || 0);
+  const momentumThreshold = Number(props.metrics?.adaptiveMomentumThreshold || props.metrics?.momentumEntryPoints || 0);
+  const executionQuality = Number(props.metrics?.executionQuality || 0);
+  const atrPoints = Number(props.metrics?.atrPoints || 0);
+  const adaptiveLot = Number(props.metrics?.adaptiveLot || props.settings?.lot || 0);
+  const addProgress = Number(props.metrics?.pyramidProgressPoints || 0);
+  const addRequired = Number(props.metrics?.pyramidRequiredPoints || 0);
 
   return (
     <div className="cc-bot-modal-backdrop" role="presentation" onMouseDown={e=>{
@@ -2017,6 +2047,102 @@ function BotSettingsModal(props:any) {
                 <ProfileHelpList title="ต้องรู้ก่อนใช้" items={activeHelp.cautions} caution/>
               </div>
             </div>}
+
+            <div className="cc-ea-filter-guide">
+              <div className="cc-ea-filter-guide-head">
+                <div>
+                  <span><ScenovaIcon name="brain" size={20}/></span>
+                  <div>
+                    <b>EA ใช้หลักการอะไรคัดก่อนเปิดออเดอร์?</b>
+                    <small>ไม่ได้สุ่ม Buy / Sell — ระบบไล่ตรวจหลายชั้นก่อนอนุญาตให้เปิดไม้แรก</small>
+                  </div>
+                </div>
+                <div className={"cc-ea-filter-now "+(currentBlockReason?"waiting":"ready")}>
+                  <i/>
+                  <span>{currentBlockReason ? (blockReasonText[currentBlockReason] || currentBlockReason) : "เงื่อนไขหลักผ่าน / กำลังประเมินจังหวะ"}</span>
+                </div>
+              </div>
+
+              <div className="cc-ea-filter-grid">
+                <EaFilterCard
+                  step="01"
+                  icon="trend"
+                  title="Momentum"
+                  description="ดูแรงการเคลื่อนที่ของราคาล่าสุด ถ้าแรงยังไม่ถึงเกณฑ์จะยังไม่เลือก BUY/SELL"
+                  value={momentum.toFixed(1)+" pt"}
+                  detail={momentumThreshold>0 ? "เกณฑ์ตอนนี้ ±"+momentumThreshold.toFixed(1)+" pt" : "รอค่าเกณฑ์จาก EA"}
+                  tone={momentumThreshold>0 && Math.abs(momentum)>=momentumThreshold ? "good" : "neutral"}
+                />
+                <EaFilterCard
+                  step="02"
+                  icon="trend"
+                  title="Trend หลาย Timeframe"
+                  description="เช็ก M5, M15 และ H1 โดย M15/H1 ใช้เป็นแนวโน้มหลัก และ AUTO จะไม่เปิดสวน Macro Trend"
+                  value={"M5 "+trendText(props.metrics?.trendM5)+" · M15 "+trendText(props.metrics?.trendM15)}
+                  detail={"H1 "+trendText(props.metrics?.trendH1)}
+                  tone="neutral"
+                />
+                <EaFilterCard
+                  step="03"
+                  icon="risk"
+                  title="ATR / สภาพตลาด"
+                  description="วัดความผันผวนเพื่อแยกตลาดนิ่ง, แกว่ง, เทรนด์ หรือผันผวนสูง แล้วปรับความเข้มของสัญญาณ"
+                  value={regimeText[currentRegime] || currentRegime || "รอข้อมูล"}
+                  detail={atrPoints>0 ? "ATR "+atrPoints.toFixed(0)+" pt" : "รอ ATR"}
+                  tone={currentRegime==="HIGH_VOLATILITY" ? "warn" : "neutral"}
+                />
+                <EaFilterCard
+                  step="04"
+                  icon="spread"
+                  title="Spread"
+                  description="ดูต้นทุน Spread แบบ Adaptive ถ้าแพงผิดปกติ ระบบจะพักเปิดออเดอร์ใหม่"
+                  value={String(props.spreadValueLabel||"—")}
+                  detail={String(props.spreadStatusLabel||"—")}
+                  tone={String(props.spreadStatusLabel||"").includes("ปกติ") ? "good" : "neutral"}
+                />
+                <EaFilterCard
+                  step="05"
+                  icon="status"
+                  title="Confidence Score"
+                  description="รวม Momentum, Trend, Spread, สภาพตลาด, คุณภาพ Execution และประวัติแพ้ล่าสุดเป็นคะแนน 0–100"
+                  value={currentConfidence.toFixed(0)+"%"}
+                  detail={"ต้องถึงอย่างน้อย "+confidenceThreshold.toFixed(0)+"%"}
+                  tone={currentConfidence>=confidenceThreshold ? "good" : "warn"}
+                />
+                <EaFilterCard
+                  step="06"
+                  icon="lot"
+                  title="Risk / Lot"
+                  description="คำนวณ Lot จาก Equity, SL, ATR, ความผันผวน, ผลขาดทุนต่อเนื่อง และคุณภาพการส่งคำสั่ง โดยไม่เกิน Lot ที่คุณตั้ง"
+                  value={adaptiveLot>0 ? adaptiveLot.toFixed(2)+" Lot" : "รอคำนวณ"}
+                  detail={executionQuality>0 ? "Execution quality "+executionQuality.toFixed(0)+"%" : "รอข้อมูล Execution"}
+                  tone="neutral"
+                />
+                <EaFilterCard
+                  step="07"
+                  icon="clock"
+                  title="Session + สิทธิ์เทรด"
+                  description="ต้องอยู่ในเวลาที่ตั้ง และ MT5 / Algo Trading / บัญชี / Symbol ต้องอนุญาตให้ส่งออเดอร์"
+                  value={String(props.metrics?.sessionProfile||"รอข้อมูล")}
+                  detail={props.metrics?.tradeReady===true ? "สิทธิ์เทรดพร้อม" : "กำลังตรวจสิทธิ์และสถานะ MT5"}
+                  tone={props.metrics?.tradeReady===true ? "good" : "neutral"}
+                />
+              </div>
+
+              <div className="cc-ea-add-guide">
+                <div className="cc-ea-add-guide-title">
+                  <span><ScenovaIcon name="layers" size={18}/></span>
+                  <div><b>ถ้ามีไม้แล้ว EA จะเพิ่มไม้อย่างไร?</b><small>จำนวนไม้ที่ตั้งไว้คือ “เพดาน” ไม่ใช่คำสั่งให้ยิงครบทุกไม้ทันที</small></div>
+                </div>
+                <div className="cc-ea-add-rule-grid">
+                  <span><i>1</i><b>ต้องฝั่งเดียวกับ Basket</b><small>ไม่เปิด Buy/Sell สวนกันในรอบเดียว</small></span>
+                  <span><i>2</i><b>ราคาต้องเดินไปทางกำไร</b><small>{addRequired>0 ? "ตอนนี้เดิน "+addProgress.toFixed(0)+" / ต้องการ "+addRequired.toFixed(0)+" pt" : "ต้องขยับพ้นราคาไม้ล่าสุดก่อน"}</small></span>
+                  <span><i>3</i><b>Momentum ยังต้องต่อเนื่อง</b><small>แรงราคาต้องยังไปทางเดียวกับไม้เดิม</small></span>
+                  <span><i>4</i><b>Confidence ต้องสูงพอ</b><small>การเพิ่มไม้เข้มกว่าไม้แรก โดยเฉพาะช่วงผันผวนสูง</small></span>
+                  <span><i>5</i><b>ไม่เกิน Max Positions</b><small>หยุดเพิ่มทันทีเมื่อถึงจำนวนไม้สูงสุดที่คุณตั้ง</small></span>
+                </div>
+              </div>
+            </div>
           </section>
 
           <section className="cc-bot-basic-section">
@@ -2151,6 +2277,19 @@ function BotSettingsModal(props:any) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function EaFilterCard({step,icon,title,description,value,detail,tone="neutral"}:{step:string;icon:string;title:string;description:string;value:string;detail?:string;tone?:"neutral"|"good"|"warn"}) {
+  return (
+    <div className={"cc-ea-filter-card tone-"+tone}>
+      <div className="cc-ea-filter-card-top">
+        <span className="cc-ea-filter-number">{step}</span>
+        <span className="cc-ea-filter-icon"><ScenovaIcon name={icon} size={18}/></span>
+        <div><b>{title}</b><small>{description}</small></div>
+      </div>
+      <div className="cc-ea-filter-live"><b>{value}</b>{detail?<span>{detail}</span>:null}</div>
     </div>
   );
 }
