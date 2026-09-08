@@ -6,6 +6,50 @@ namespace ScenovaInstaller;
 
 internal static class AgentRunner
 {
+    private static string RestartStampPath =>
+        Path.Combine(ScenovaRuntime.BaseDir, "mt5-restart-v2.stamp");
+    private static string PermissionRepairStampPath =>
+        Path.Combine(ScenovaRuntime.BaseDir, "mt5-permission-repair-v2.stamp");
+    private static string PendingEaReloadPath =>
+        Path.Combine(ScenovaRuntime.BaseDir, "ea-reload-required-v2.txt");
+
+    private static bool CooldownElapsed(string path, TimeSpan cooldown)
+    {
+        try
+        {
+            if (!File.Exists(path)) return true;
+            var raw = File.ReadAllText(path).Trim();
+            if (!long.TryParse(raw, out var unixSeconds)) return true;
+            var last = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+            return DateTimeOffset.UtcNow - last >= cooldown;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static void MarkNow(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(ScenovaRuntime.BaseDir);
+            File.WriteAllText(
+                path,
+                DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
+        }
+        catch { }
+    }
+
+    private static void ClearFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch { }
+    }
+
     internal static void InstallAndStart()
     {
         Directory.CreateDirectory(ScenovaRuntime.BaseDir);
@@ -161,9 +205,12 @@ internal static class AgentRunner
             "[Experts]",
             "Enabled=1",
             "AllowLiveTrading=1",
-            "Account=1",
-            "Profile=1",
-            "Chart=1",
+            // Do not let MT5 silently disable EA trading when the customer
+            // switches account/profile/chart period. The SaaS Start/Stop state
+            // remains the authoritative safety control.
+            "Account=0",
+            "Profile=0",
+            "Chart=0",
             "",
             "[StartUp]",
             "Expert=SCENOVA\\FastBasketBot",
@@ -173,7 +220,7 @@ internal static class AgentRunner
         if (!string.IsNullOrWhiteSpace(config.StartupSymbol))
             lines.Add("Symbol=" + config.StartupSymbol.Trim());
 
-        lines.Add("Period=M1");
+        lines.Add("Period=M5");
         File.WriteAllLines(startupConfig, lines, new System.Text.UTF8Encoding(false));
 
         Process.Start(new ProcessStartInfo
@@ -268,9 +315,17 @@ internal static class AgentRunner
 
         await AppendLogAsync(
             logPath,
-            "EA updated automatically. hash=" + downloadedHash);
+            "EA binary updated. reload queued. hash=" + downloadedHash);
 
-        EnsureMt5RunningWithEa(config, forceReload: true);
+        // Replacing the EX5 file is safe, but forcing MT5 to restart is not.
+        // Queue one reload and let the main loop apply it only when the Server
+        // confirms the bot is stopped and there are no open Positions.
+        try
+        {
+            File.WriteAllText(PendingEaReloadPath, downloadedHash);
+        }
+        catch { }
+
         return true;
     }
 
@@ -315,7 +370,7 @@ internal static class AgentRunner
                     {
                         instanceId = config.InstanceId,
                         installToken,
-                        agentVersion = "2.0.8",
+                        agentVersion = "2.0.9",
                         terminalPath = config.TerminalDataPath,
                         eaHash,
                         hostname = Environment.MachineName,
@@ -325,7 +380,7 @@ internal static class AgentRunner
 
                 // DeviceVerified is telemetry only. The install token and
                 // Server entitlement are authoritative for trading access.
-                var updated = await UpdateEaIfNeededAsync(
+                _ = await UpdateEaIfNeededAsync(
                     http,
                     config,
                     installToken,
@@ -333,10 +388,27 @@ internal static class AgentRunner
                     heartbeat,
                     logPath);
 
-                if (updated)
+                var restartCooldownReady =
+                    CooldownElapsed(RestartStampPath, TimeSpan.FromMinutes(10));
+
+                // Apply a downloaded EA only when the Server confirms it is
+                // safe to restart MT5. Multiple releases inside the cooldown
+                // collapse into one reload of the newest EX5.
+                if (File.Exists(PendingEaReloadPath) &&
+                    heartbeat.SafeToRestart &&
+                    restartCooldownReady)
                 {
-                    attemptedInitialMt5Start = true;
-                    attemptedEaPermissionRepair = false;
+                    var reloaded = EnsureMt5RunningWithEa(config, forceReload: true);
+                    if (reloaded)
+                    {
+                        MarkNow(RestartStampPath);
+                        ClearFile(PendingEaReloadPath);
+                        attemptedInitialMt5Start = true;
+                        attemptedEaPermissionRepair = false;
+                        await AppendLogAsync(
+                            logPath,
+                            "Queued EA reload applied while bot was safely stopped.");
+                    }
                 }
                 else if (!heartbeat.EaOnline && !attemptedInitialMt5Start)
                 {
@@ -346,23 +418,30 @@ internal static class AgentRunner
                 }
                 else if (
                     heartbeat.EaOnline &&
+                    heartbeat.SafeToRestart &&
                     heartbeat.TerminalTradeAllowed == true &&
                     heartbeat.MqlTradeAllowed == false &&
-                    !attemptedEaPermissionRepair)
+                    !attemptedEaPermissionRepair &&
+                    restartCooldownReady &&
+                    CooldownElapsed(PermissionRepairStampPath, TimeSpan.FromHours(6)))
                 {
-                    // MT5 global Algo Trading is already ON, but this EA chart
-                    // reports Allow Algo Trading OFF. Relaunch once with the
-                    // SCENOVA startup config, which explicitly sets
-                    // AllowLiveTrading=1 for the Expert.
+                    // Repair at most once per 6 hours, and only while stopped.
+                    // Persisting the cooldown prevents repeated MT5 restarts if
+                    // the Agent process itself is restarted.
                     attemptedEaPermissionRepair = EnsureMt5RunningWithEa(config, forceReload: true);
                     if (attemptedEaPermissionRepair)
+                    {
+                        MarkNow(RestartStampPath);
+                        MarkNow(PermissionRepairStampPath);
                         await AppendLogAsync(
                             logPath,
-                            "EA trading permission repair requested automatically.");
+                            "EA trading permission repair requested once while safely stopped.");
+                    }
                 }
                 else if (heartbeat.MqlTradeAllowed == true)
                 {
                     attemptedEaPermissionRepair = false;
+                    ClearFile(PermissionRepairStampPath);
                 }
 
                 await AppendLogAsync(
