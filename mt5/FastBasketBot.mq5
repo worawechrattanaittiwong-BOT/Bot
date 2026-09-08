@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.014"
+#property version   "1.015"
 #define SCENOVA_PRODUCT_VERSION "2.0.7"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -217,15 +217,26 @@ int OnInit()
    g_basketProfitTarget = InpBasketProfitTargetMoney;
    g_perPositionProfit = InpPerPositionProfitMoney;
    g_profitRunTrailPercent = InpProfitRunTrailPercent;
-   if(g_profitRunTrailPercent > 0.0)
+
+   // Two mutually-exclusive profit modes:
+   // 1) Basket target, optionally followed by percentage giveback from peak.
+   // 2) Per-position target, closing each Position independently.
+   if(g_perPositionProfit > 0.0)
    {
       g_basketProfitTarget = 0.0;
-      g_perPositionProfit = 0.0;
+      g_profitRunTrailPercent = 0.0;
       g_triggerMoney = 0.0;
       g_trailMoney = 0.0;
    }
-   else if(g_perPositionProfit > 0.0)
-      g_basketProfitTarget = 0.0;
+   else if(g_basketProfitTarget > 0.0)
+   {
+      g_triggerMoney = 0.0;
+      g_trailMoney = 0.0;
+   }
+   else
+   {
+      g_profitRunTrailPercent = 0.0;
+   }
    g_perPositionLoss = InpPerPositionLossMoney;
    g_maxSpread = InpMaxSpreadPoints;
    g_minOrderIntervalMs = InpMinOrderIntervalMs;
@@ -365,35 +376,58 @@ void OnTick()
       }
 
       double cycleProfit = BasketCycleProfit();
+      double effectiveBasketTarget = EffectiveBasketProfitTarget();
 
-      if(g_profitRunTrailPercent > 0.0)
+      // Burst keeps its automatic immediate Basket target behavior.
+      if(IsBurstProfile())
       {
-         if(cycleProfit > 0.0 && cycleProfit > g_profitRunPeak)
+         if(effectiveBasketTarget > 0.0 && cycleProfit >= effectiveBasketTarget)
          {
-            g_profitRunPeak = cycleProfit;
-            SaveBasketCycleState();
-         }
-
-         if(g_profitRunPeak > 0.0)
-         {
-            double closeLevel = g_profitRunPeak * (1.0 - g_profitRunTrailPercent / 100.0);
-            if(cycleProfit <= closeLevel)
-            {
-               CloseAllBasket("PROFIT_RUN_PERCENT_TRAIL");
-               ResetTrail();
-               g_executionStatus = "PROFIT_RUN_PERCENT_TRAIL";
-               return;
-            }
+            CloseAllBasket("BASKET_PROFIT_TARGET");
+            ResetTrail();
+            g_executionStatus = "BASKET_PROFIT_TARGET";
+            return;
          }
       }
-
-      double effectiveBasketTarget = EffectiveBasketProfitTarget();
-      if(effectiveBasketTarget > 0.0 && cycleProfit >= effectiveBasketTarget)
+      else if(g_basketProfitTarget > 0.0)
       {
-         CloseAllBasket("BASKET_PROFIT_TARGET");
-         ResetTrail();
-         g_executionStatus = "BASKET_PROFIT_TARGET";
-         return;
+         if(g_profitRunTrailPercent > 0.0)
+         {
+            // Arm percentage giveback only after the configured Basket target
+            // has actually been reached. Before that, do not trail profit.
+            if(g_profitRunPeak <= 0.0 && cycleProfit >= g_basketProfitTarget)
+            {
+               g_profitRunPeak = cycleProfit;
+               SaveBasketCycleState();
+               g_executionStatus = "BASKET_PROFIT_RUN_ON";
+            }
+
+            if(g_profitRunPeak > 0.0)
+            {
+               if(cycleProfit > g_profitRunPeak)
+               {
+                  g_profitRunPeak = cycleProfit;
+                  SaveBasketCycleState();
+               }
+
+               double closeLevel =
+                  g_profitRunPeak * (1.0 - g_profitRunTrailPercent / 100.0);
+               if(cycleProfit <= closeLevel)
+               {
+                  CloseAllBasket("PROFIT_RUN_PERCENT_TRAIL");
+                  ResetTrail();
+                  g_executionStatus = "PROFIT_RUN_PERCENT_TRAIL";
+                  return;
+               }
+            }
+         }
+         else if(cycleProfit >= g_basketProfitTarget)
+         {
+            CloseAllBasket("BASKET_PROFIT_TARGET");
+            ResetTrail();
+            g_executionStatus = "BASKET_PROFIT_TARGET";
+            return;
+         }
       }
 
       double effectiveBasketLoss = EffectiveBasketLossLimit();
@@ -680,7 +714,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.014\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.015\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1040,21 +1074,37 @@ void ApplySettings(string json)
    g_dailyProfitTarget = MathMax(0.0, JsonNumber(json, "dailyProfitTargetMoney", g_dailyProfitTarget));
    g_dailyProfitContinueAfterTarget = JsonBool(json, "dailyProfitContinueAfterTarget", g_dailyProfitContinueAfterTarget);
    g_dailyProfitDrawdownPercent = MathMax(0.0, MathMin(95.0, JsonNumber(json, "dailyProfitDrawdownPercent", g_dailyProfitDrawdownPercent)));
+   double previousBasketProfitTarget = g_basketProfitTarget;
+   double previousProfitRunTrailPercent = g_profitRunTrailPercent;
+
    g_basketProfitTarget = MathMax(0.0, JsonNumber(json, "basketProfitTargetMoney", g_basketProfitTarget));
    g_perPositionProfit = MathMax(0.0, JsonNumber(json, "perPositionProfitMoney", g_perPositionProfit));
    g_profitRunTrailPercent = MathMax(0.0, MathMin(95.0, JsonNumber(json, "profitRunTrailPercent", g_profitRunTrailPercent)));
-   // Percentage profit-run mode is exclusive with every fixed profit exit.
-   if(g_profitRunTrailPercent > 0.0)
+
+   if(g_perPositionProfit > 0.0)
    {
       g_basketProfitTarget = 0.0;
-      g_perPositionProfit = 0.0;
+      g_profitRunTrailPercent = 0.0;
       g_triggerMoney = 0.0;
       g_trailMoney = 0.0;
    }
-   else if(g_perPositionProfit > 0.0)
-      g_basketProfitTarget = 0.0;
    else if(g_basketProfitTarget > 0.0)
-      g_perPositionProfit = 0.0;
+   {
+      g_triggerMoney = 0.0;
+      g_trailMoney = 0.0;
+   }
+   else
+   {
+      g_profitRunTrailPercent = 0.0;
+   }
+
+   // Changing Basket target or giveback percentage starts a fresh peak.
+   if(MathAbs(previousBasketProfitTarget - g_basketProfitTarget) > 0.0000001 ||
+      MathAbs(previousProfitRunTrailPercent - g_profitRunTrailPercent) > 0.0000001)
+   {
+      g_profitRunPeak = 0.0;
+      SaveBasketCycleState();
+   }
    g_perPositionLoss = MathMax(0.0, JsonNumber(json, "perPositionLossMoney", g_perPositionLoss));
    g_maxSpread = (int)MathMax(0.0, JsonNumber(json, "maxSpreadPoints", g_maxSpread));
    g_minOrderIntervalMs = (int)MathMax(0.0, JsonNumber(json, "minOrderIntervalMs", g_minOrderIntervalMs));

@@ -123,7 +123,7 @@ export class BotController {
       POSITION_LOSS_CLOSED: { label: "ปิดไม้ที่ถึงขาดทุนกำหนด", detail: "Position ที่ถึง Loss ต่อไม้ถูกปิดแล้ว", tone: "warn" },
       POSITION_TARGET_CLOSED: { label: "ปิดไม้ตามเป้าหมายแล้ว", detail: "EA จะประเมิน Basket ใหม่ใน Tick ถัดไป", tone: "good" },
       BASKET_PROFIT_TARGET: { label: "ถึงกำไรเป้าหมาย Basket", detail: "กำไรรวมของรอบถึงเป้าและ EA ปิด Basket แล้ว", tone: "good" },
-      PROFIT_RUN_PERCENT_TRAIL: { label: "ปิดกำไรตาม % จากจุดสูงสุด", detail: "กำไรย่อลงจาก Peak ตามเปอร์เซ็นต์ที่ตั้งไว้", tone: "good" },
+      PROFIT_RUN_PERCENT_TRAIL: { label: "ปิด Basket หลังปล่อยกำไรวิ่ง", detail: "กำไรรวมถึงเป้าแล้ว ระบบปล่อยต่อจนกำไรย่อลงจาก Peak ตามเปอร์เซ็นต์ที่ตั้ง", tone: "good" },
       WAITING_EA_START: { label: "กำลังรอ EA รับคำสั่ง Start", detail: "คำสั่งจากเว็บส่งแล้ว รอ Heartbeat รอบถัดไป", tone: "warn" },
       WAITING_MOMENTUM: { label: "กำลังรอสัญญาณ Momentum", detail: "บอท RUNNING แล้ว แต่เงื่อนไขเข้าออเดอร์ยังไม่ถึง", tone: "good" },
       WAITING_CONFIDENCE: { label: "กำลังรอความมั่นใจของสัญญาณ", detail: "คะแนนหลาย Timeframe ยังต่ำกว่าเกณฑ์ที่ตั้งไว้", tone: "good" },
@@ -1288,34 +1288,39 @@ export class BotController {
     const requestedBasketProfit = Number(clean.basketProfitTargetMoney ?? 0);
     const requestedPerPositionProfit = Number(clean.perPositionProfitMoney ?? 0);
     const requestedProfitRunPercent = Number(clean.profitRunTrailPercent ?? 0);
-    const requestedDollarTrail =
-      Number(clean.basketTriggerMoney ?? 0) > 0 ||
-      Number(clean.basketTrailMoney ?? 0) > 0;
 
     if (requestedBasketProfit > 0 && requestedPerPositionProfit > 0) {
       throw new BadRequestException(
-        "เลือกกำไรต่อไม้หรือกำไรรวม Basket ได้อย่างใดอย่างหนึ่งเท่านั้น"
+        "เลือกกำไรต่อไม้หรือกำไรรวมทั้งชุดได้อย่างใดอย่างหนึ่งเท่านั้น"
       );
     }
 
-    // Percentage Basket run mode is exclusive with Basket/per-position
-    // profit exits, but the daily profit target remains independent.
-    if (requestedProfitRunPercent > 0) {
+    // New semantics:
+    // basketProfitTargetMoney = Basket target
+    // profitRunTrailPercent = optional giveback AFTER Basket target is reached
+    // perPositionProfitMoney = mutually-exclusive per-position mode
+    if (requestedPerPositionProfit > 0) {
       clean.basketProfitTargetMoney = 0;
+      clean.profitRunTrailPercent = 0;
+      clean.basketTriggerMoney = 0;
+      clean.basketTrailMoney = 0;
+    } else if (requestedBasketProfit > 0) {
       clean.perPositionProfitMoney = 0;
       clean.basketTriggerMoney = 0;
       clean.basketTrailMoney = 0;
-    } else if (
-      requestedBasketProfit > 0 ||
-      requestedPerPositionProfit > 0 ||
-      requestedDollarTrail
+    }
+
+    if (requestedProfitRunPercent > 0) {
+      clean.perPositionProfitMoney = 0;
+      clean.basketTriggerMoney = 0;
+      clean.basketTrailMoney = 0;
+    }
+
+    if (
+      body.basketProfitTargetMoney !== undefined &&
+      requestedBasketProfit <= 0
     ) {
       clean.profitRunTrailPercent = 0;
-      if (requestedPerPositionProfit > 0) {
-        clean.basketProfitTargetMoney = 0;
-      } else if (requestedBasketProfit > 0) {
-        clean.perPositionProfitMoney = 0;
-      }
     }
 
     if (clean.dailyProfitContinueAfterTarget === true) {
