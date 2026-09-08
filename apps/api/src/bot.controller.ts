@@ -1421,9 +1421,9 @@ export class BotController {
     clean.maxOrdersPerMinute = 120;
     clean.riskPerOrderPercent = 0.25;
     clean.hardStopAtrMultiplier = 2;
-    // Setup-First v2 is the default. Confidence remains optional and starts
-    // OFF unless the user explicitly enables it.
-    clean.confidenceGateEnabled = Boolean(clean.confidenceGateEnabled ?? false);
+    // Setup-First v2 is the default. Confidence starts OFF in the EA/web
+    // defaults. If the field is omitted on a partial API update, preserve the
+    // previously stored choice instead of resetting it.
     clean.confidenceThreshold = 55;
     clean.allowMinimumLotOverride = true;
     clean.sessionStartHour = 0;
