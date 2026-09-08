@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.020"
+#property version   "1.021"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -75,7 +75,7 @@ input double          InpRiskPerOrderPercent   = 0.25;
 input bool            InpAllowMinimumLotOverride = false;
 input double          InpHardStopAtrMultiplier = 2.00;
 input int             InpAtrPeriod             = 14;
-input int             InpConfidenceThreshold   = 70;
+input int             InpConfidenceThreshold   = 55;
 input int             InpSessionStartHour      = 0;
 input int             InpSessionEndHour        = 24;
 // 0 = fully adaptive. A positive value is only a soft volatility marker;
@@ -184,6 +184,7 @@ datetime g_lastMarketContextUpdate = 0;
 string g_fiboObjectName = "";
 bool   g_fiboVisible = false;
 double g_signalConfidence = 0.0;
+double g_effectiveConfidenceThreshold = 55.0;
 double g_atrPoints = 0.0;
 double g_atrRatio = 1.0;
 double g_adaptiveLot = 0.0;
@@ -279,7 +280,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.020", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.021", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -886,7 +887,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.020\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.021\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1013,9 +1014,10 @@ void SendHeartbeat()
 
       // Market-context telemetry makes every entry auditable on the web.
       string marketContextDiagnostics = StringFormat(
-         ",\"trendM1\":%d,\"trendM30\":%d,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
+         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
          g_trendM1,
          g_trendM30,
+         g_effectiveConfidenceThreshold,
          DoubleToString(g_nearestSupport, SymbolDigitsNow()),
          DoubleToString(g_nearestResistance, SymbolDigitsNow()),
          DoubleToString(g_majorSupport, SymbolDigitsNow()),
@@ -1210,7 +1212,8 @@ void ApplyUnifiedTradingEngine()
    g_maxAtrPoints = 0.0;
    g_minOrderIntervalMs = 300;
    g_maxOrdersPerMinute = 120;
-   g_confidenceThreshold = 62;
+   // Base threshold only; live entry threshold is adjusted by setup quality.
+   g_confidenceThreshold = 55;
    g_riskPerOrderPercent = 0.25;
    g_hardStopAtrMultiplier = 2.00;
    g_allowMinimumLotOverride = false;
@@ -2065,6 +2068,44 @@ bool MarketLocationEntryAllowed(int direction, bool fastRevalidation)
    return true;
 }
 
+double DynamicConfidenceThreshold(int direction)
+{
+   double threshold = MathMax(48.0, MathMin(60.0, (double)g_confidenceThreshold));
+
+   if(g_entryModel == "OB_FIB_PULLBACK")
+      threshold = MathMin(threshold, 48.0);
+   else if(g_entryModel == "ORDER_BLOCK_PULLBACK")
+      threshold = MathMin(threshold, 50.0);
+   else if(g_entryModel == "FIB_PULLBACK")
+      threshold = MathMin(threshold, 50.0);
+   else if(g_entryModel == "LEVEL_REACTION")
+      threshold = MathMin(threshold, 52.0);
+   else if(g_entryModel == "BREAKOUT")
+      threshold = MathMin(threshold, 52.0);
+
+   if(g_locationScore >= 40.0)
+      threshold = MathMin(threshold, 49.0);
+   else if(g_locationScore >= 32.0)
+      threshold = MathMin(threshold, 52.0);
+
+   if(g_fibConfluenceScore >= 14.0)
+      threshold = MathMin(threshold, 50.0);
+
+   if(g_entryModel == "CAUTION_ZONE")
+      threshold = MathMax(threshold, 60.0);
+
+   if(g_macroTrendDirection != 0 && direction != g_macroTrendDirection)
+      threshold = MathMax(threshold, 60.0);
+
+   if(g_trendM30 == -direction && g_trendH1 == -direction)
+      threshold = MathMax(threshold, 64.0);
+
+   // High volatility/news does not raise the threshold.
+   g_effectiveConfidenceThreshold = MathMax(48.0, MathMin(64.0, threshold));
+   return g_effectiveConfidenceThreshold;
+}
+
+
 
 double EffectiveHardStopMultiplier()
 {
@@ -2229,11 +2270,11 @@ int AdaptiveEntryDirection(double momentum)
 
    g_sessionProfile = CurrentSessionProfile();
    double momentumFactor = 1.0;
-   if(g_marketRegime == "HIGH_VOLATILITY") momentumFactor = 1.20;
+   // News/high-volatility trading remains enabled; ATR expansion must not make
+   // the entry trigger harder simply because a news impulse is in progress.
+   if(g_marketRegime == "HIGH_VOLATILITY") momentumFactor = 0.95;
    else if(g_marketRegime == "QUIET") momentumFactor = 0.70;
-   else if(g_marketRegime == "RANGE") momentumFactor = 1.15;
-   if(g_atrRatio > 1.0)
-      momentumFactor *= MathMin(1.15, MathSqrt(g_atrRatio));
+   else if(g_marketRegime == "RANGE") momentumFactor = 1.10;
    g_adaptiveMomentumThreshold = MathMax(2.0, InpMomentumEntryPoints * momentumFactor);
 
    int rawDirection = 0;
@@ -2257,6 +2298,7 @@ int AdaptiveEntryDirection(double momentum)
    if(rawDirection == 0)
    {
       g_signalConfidence = 0.0;
+      g_effectiveConfidenceThreshold = MathMax(48.0, MathMin(60.0, (double)g_confidenceThreshold));
       g_adaptiveBlockReason = "WAITING_MOMENTUM";
       g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
       return 0;
@@ -2281,7 +2323,7 @@ int AdaptiveEntryDirection(double momentum)
    if(trendH1 == rawDirection) score += weightH1;
    else if(trendH1 == -rawDirection) score -= weightH1 * 0.55;
    score += MathMax(0.0, 12.0 - g_spreadConfidencePenalty * 0.60);
-   score += g_marketRegime == "HIGH_VOLATILITY" ? 2.0 : g_marketRegime == "QUIET" ? 5.0 : 8.0;
+   score += g_marketRegime == "HIGH_VOLATILITY" ? 5.0 : g_marketRegime == "QUIET" ? 5.0 : 8.0;
    score += MathMax(0.0, MathMin(8.0, g_executionQuality * 0.08));
 
    // Price location is confluence, not a wall of mandatory filters.
@@ -2318,7 +2360,8 @@ int AdaptiveEntryDirection(double momentum)
       return 0;
    }
 
-   if(g_signalConfidence < g_confidenceThreshold)
+   double liveConfidenceThreshold = DynamicConfidenceThreshold(rawDirection);
+   if(g_signalConfidence < liveConfidenceThreshold)
    {
       g_adaptiveBlockReason = "WAITING_CONFIDENCE";
       g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
@@ -2421,27 +2464,14 @@ bool AdaptiveBasketAddAllowed(int direction)
       (g_macroTrendDirection > 0 && direction > 0) ||
       (g_macroTrendDirection < 0 && direction < 0);
 
-   if(g_marketRegime == "HIGH_VOLATILITY")
-   {
-      int highVolCap = MathMin(2, MathMax(1, g_adaptiveMaxPositions));
-      if(count >= highVolCap)
-         return false;
-      g_pyramidRequiredPoints = MathMax(5.0, g_atrPoints * 0.10);
-      if(g_pyramidProgressPoints < g_pyramidRequiredPoints)
-         return false;
-      if(g_signalConfidence < g_confidenceThreshold + 12)
-         return false;
-      if(!DirectionalMomentumStillValid(direction, 1.10))
-         return false;
-      return true;
-   }
-
+   // News/high-volatility uses the normal continuation logic; do not silently
+   // cap a Basket at two positions just because ATR expands.
    if(directionalTrend)
    {
       g_pyramidRequiredPoints = MathMax(3.0, g_atrPoints * 0.06);
       if(g_pyramidProgressPoints < g_pyramidRequiredPoints)
          return false;
-      if(g_signalConfidence < g_confidenceThreshold + 3)
+      if(g_signalConfidence < g_effectiveConfidenceThreshold + 2.0)
          return false;
       // After the first impulse a healthy trend can slow down. The old 110%
       // momentum requirement often left MaxPositions=4 baskets stuck at 1.
@@ -2454,7 +2484,7 @@ bool AdaptiveBasketAddAllowed(int direction)
    g_pyramidRequiredPoints = MathMax(3.0, g_atrPoints * 0.05);
    if(g_pyramidProgressPoints < g_pyramidRequiredPoints)
       return false;
-   if(g_signalConfidence < g_confidenceThreshold + 5)
+   if(g_signalConfidence < g_effectiveConfidenceThreshold + 3.0)
       return false;
    if(!DirectionalMomentumStillValid(direction, 1.10))
       return false;
@@ -2605,8 +2635,17 @@ void SampleSpread()
    else
       g_spreadHighSeconds = 0;
 
-   if(g_spreadHighSeconds >= 3)
-      g_spreadStatus = profileReady ? "BLOCKED" : "FALLBACK_BLOCKED";
+   double emergencySpreadLimit = MathMax(
+      g_adaptiveSpreadLimit * 3.0,
+      MathMax(g_spreadP99 * 2.0, g_spreadMedian * 5.0)
+   );
+   if(emergencySpreadLimit <= 0.0)
+      emergencySpreadLimit = MathMax(1.0, spread * 3.0);
+
+   if(spread > emergencySpreadLimit)
+      g_spreadStatus = "EXTREME";
+   else if(g_spreadHighSeconds >= 3)
+      g_spreadStatus = "NEWS_WIDE";
    else if(aboveLimit || spread > elevatedLevel)
       g_spreadStatus = profileReady ? "ELEVATED" : "WARMUP";
    else
@@ -2614,10 +2653,16 @@ void SampleSpread()
 
    g_spreadConfidencePenalty = 0.0;
    if(spread > elevatedLevel && g_adaptiveSpreadLimit > elevatedLevel)
+   {
+      // News spread should not become a hidden 20-point Confidence veto.
+      // EXTREME spread is already blocked by AdaptiveSpreadAllowed().
+      double maxSpreadPenalty = g_spreadStatus == "NEWS_WIDE" ? 4.0 : 10.0;
       g_spreadConfidencePenalty = MathMin(
-         20.0,
-         20.0 * (spread - elevatedLevel) / (g_adaptiveSpreadLimit - elevatedLevel)
+         maxSpreadPenalty,
+         maxSpreadPenalty * (spread - elevatedLevel) /
+            MathMax(1.0, g_adaptiveSpreadLimit - elevatedLevel)
       );
+   }
 
    if(g_spreadHistoryCount >= SPREAD_MIN_SAMPLES && g_spreadHistoryCount % 60 == 0)
       PersistSpreadProfile();
@@ -2632,10 +2677,18 @@ bool AdaptiveSpreadAllowed()
    if(!g_adaptiveEngine)
       return g_maxSpread <= 0 || current <= g_maxSpread;
 
-   // Adaptive mode never falls back to a broker-agnostic fixed number.
+   // Allow normal news-session widening. Only an extreme spread several times
+   // the learned broker distribution remains a hard execution stop.
    if(g_adaptiveSpreadLimit <= 0.0)
       return true;
-   return g_spreadHighSeconds < 3;
+
+   double emergencySpreadLimit = MathMax(
+      g_adaptiveSpreadLimit * 3.0,
+      MathMax(g_spreadP99 * 2.0, g_spreadMedian * 5.0)
+   );
+   if(emergencySpreadLimit <= 0.0)
+      return true;
+   return current <= emergencySpreadLimit;
 }
 
 double CurrentSpreadPoints()

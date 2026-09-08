@@ -176,7 +176,7 @@ export class BotController {
       PROFIT_RUN_PERCENT_TRAIL: { label: "ปิด Basket หลังปล่อยกำไรวิ่ง", detail: "กำไรรวมถึงเป้าแล้ว ระบบปล่อยต่อจนกำไรย่อลงจาก Peak ตามเปอร์เซ็นต์ที่ตั้ง", tone: "good" },
       WAITING_EA_START: { label: "กำลังรอ EA รับคำสั่ง Start", detail: "คำสั่งจากเว็บส่งแล้ว รอ Heartbeat รอบถัดไป", tone: "warn" },
       WAITING_MOMENTUM: { label: "กำลังรอสัญญาณ Momentum", detail: "บอท RUNNING แล้ว แต่เงื่อนไขเข้าออเดอร์ยังไม่ถึง", tone: "good" },
-      WAITING_CONFIDENCE: { label: "กำลังรอความมั่นใจของสัญญาณ", detail: "คะแนนหลาย Timeframe ยังต่ำกว่าเกณฑ์ที่ตั้งไว้", tone: "good" },
+      WAITING_CONFIDENCE: { label: "กำลังรอความมั่นใจของสัญญาณ", detail: "คะแนนยังต่ำกว่าเกณฑ์ Dynamic ของจุดนี้ ซึ่งปรับตาม S/R, Order Block, Fibonacci และโครงสร้างหลาย Timeframe", tone: "good" },
       WAITING_TREND_ALIGNMENT: { label: "กำลังรอแนวโน้มยืนยัน", detail: "M30 และ H1 พลิกสวนทิศทางออเดอร์พร้อมกัน ระบบรอโครงสร้างกลับมายืนยัน", tone: "good" },
       WAITING_REGIME_ALIGNMENT: { label: "รอ Momentum ไปทางเดียวกับเทรนด์", detail: "AUTO MOMENTUM จะไม่เปิดสวน Bias หลักของ M30/H1 เมื่อแนวโน้มชัดเจน", tone: "good" },
       BLOCKED_MAJOR_RESISTANCE: { label: "รอผ่านแนวต้านใหญ่", detail: "ราคากำลังชิดแนวต้าน M30/H1 จึงไม่ Buy ไล่เข้าชนโซนโดยตรง; เมื่อ Breakout ผ่าน ระบบจะประเมินใหม่ทันที", tone: "warn" },
@@ -1423,7 +1423,8 @@ export class BotController {
     clean.maxOrdersPerMinute = 120;
     clean.riskPerOrderPercent = 0.25;
     clean.hardStopAtrMultiplier = 2;
-    clean.confidenceThreshold = 62;
+    // Base threshold; EA adjusts the live threshold per setup.
+    clean.confidenceThreshold = 55;
     clean.allowMinimumLotOverride = false;
     clean.maxAtrPoints = 0;
 

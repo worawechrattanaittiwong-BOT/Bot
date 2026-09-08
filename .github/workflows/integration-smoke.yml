@@ -70,6 +70,8 @@ jobs:
           PORT: 4000
         run: |
           printf 'integration-ea-artifact' > /tmp/FastBasketBot.ex5
+          export SCENOVA_EA_VERSION="$(sed -n 's/^#property version[[:space:]]*"\([^"]*\)"/\1/p' mt5/FastBasketBot.mq5)"
+          test -n "$SCENOVA_EA_VERSION"
           node apps/api/dist/main.js > /tmp/scenova-api.log 2>&1 &
           echo $! > /tmp/scenova-api.pid
           for i in {1..30}; do
@@ -89,10 +91,12 @@ jobs:
           INSTALLER_VERSION=$(sed -n 's/^export const DEFAULT_INSTALLER_VERSION = "\([^"]*\)";/\1/p' apps/api/src/release-version.ts)
           SOURCE_EA_VERSION=$(sed -n 's/^#property version[[:space:]]*"\([^"]*\)"/\1/p' mt5/FastBasketBot.mq5)
           API_EA_VERSION=$(sed -n 's/^export const DEFAULT_EA_VERSION = "\([^"]*\)";/\1/p' apps/api/src/release-version.ts)
-          EA_VERSION=$(jq -r '.eaVersion // empty' mt5/release/manifest.json)
+          MANIFEST_EA_VERSION=$(jq -r '.eaVersion // empty' mt5/release/manifest.json)
+          EA_VERSION="$SOURCE_EA_VERSION"
           test -n "$PRODUCT_VERSION"
           test -n "$INSTALLER_VERSION"
           test -n "$SOURCE_EA_VERSION"
+          test -n "$MANIFEST_EA_VERSION"
           test -n "$EA_VERSION"
           # Windows Agent/Installer and EA are independently versioned. Agent
           # fixes must not force an EX5 rebuild when EA trading logic is unchanged.
