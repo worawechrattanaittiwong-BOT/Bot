@@ -458,6 +458,41 @@ export default function DashboardPage() {
   };
   const currentPositions = Math.max(0, Number(metrics.positions || 0));
   const configuredMaxPositions = Math.max(1, Number(settings.maxPositions || 1));
+
+  const nearlyEqual = (left:any, right:any, tolerance=0.005) =>
+    Math.abs(Number(left || 0) - Number(right || 0)) <= tolerance;
+  const eaSettingsTelemetryReady =
+    isMt5Online &&
+    metrics.configuredMaxPositions !== undefined &&
+    metrics.configuredBasketProfitTarget !== undefined &&
+    metrics.configuredMaxBasketLoss !== undefined;
+  const eaSettingsSynced =
+    eaSettingsTelemetryReady &&
+    String(metrics.tradingProfile || "") === String(settings.tradingProfile || "BALANCED") &&
+    Number(metrics.configuredMaxPositions || 0) === Number(settings.maxPositions || 0) &&
+    nearlyEqual(metrics.configuredLot, settings.lot, 0.0001) &&
+    nearlyEqual(metrics.configuredBasketProfitTarget, settings.basketProfitTargetMoney) &&
+    nearlyEqual(metrics.appliedPerPositionProfit, settings.perPositionProfitMoney) &&
+    nearlyEqual(metrics.appliedProfitRunTrailPercent, settings.profitRunTrailPercent) &&
+    nearlyEqual(metrics.configuredMaxBasketLoss, settings.maxBasketLossMoney) &&
+    nearlyEqual(metrics.appliedPerPositionLoss, settings.perPositionLossMoney);
+  const settingsSyncLabel = settingsDirty
+    ? "ยังไม่บันทึก"
+    : !eaSettingsTelemetryReady
+      ? "รอ EA รายงานค่า"
+      : eaSettingsSynced
+        ? "EA รับค่าตรงกัน"
+        : "รอ EA รับค่าล่าสุด";
+  const settingsSyncTone = settingsDirty
+    ? "warn"
+    : eaSettingsSynced
+      ? "good"
+      : "warn";
+  const hardStopMultiplier = Number(metrics.hardStopAtrMultiplier || 0);
+  const hardStopDistancePoints = Number(metrics.hardStopDistancePoints || 0);
+  const effectiveBasketProfit = Number(metrics.effectiveBasketProfitTarget ?? metrics.basketProfitTarget ?? 0);
+  const effectiveBasketLoss = Number(metrics.effectiveMaxBasketLoss ?? settings.maxBasketLossMoney ?? 0);
+  const profitControlMode = String(metrics.profitControlMode || "");
   const effectiveMaxPositions = Math.max(1, Number(metrics.adaptiveMaxPositions || configuredMaxPositions));
   const pyramidProgressPoints = Number(metrics.pyramidProgressPoints || 0);
   const pyramidRequiredPoints = Number(metrics.pyramidRequiredPoints || 0);
@@ -1166,7 +1201,11 @@ export default function DashboardPage() {
               <section id="bot-settings" className="panel cc-settings-shell">
                 <div className="cc-settings-head">
                   <div className="cc-settings-title"><span><ScenovaIcon name="settings" size={22}/></span><div><h2>ตั้งค่าการเทรด</h2><small>เลือกเฉพาะสิ่งที่ต้องการ ระบบจะจัดการส่วนที่เหลือให้</small></div></div>
-                  <div className="cc-settings-actions"><span className={"cc-change-chip "+(settingsDirty?"warn":"good")}><i/>{settingsDirty?"มีการเปลี่ยนแปลง":"บันทึกแล้ว"}</span><button type="button" className="btn cc-save-primary" disabled={busy||!settingsDirty} onClick={(e:any)=>saveSettings(e)}><ScenovaIcon name="save" size={17}/>{busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button></div>
+                  <div className="cc-settings-actions">
+                    <span className={"cc-ea-sync-chip "+settingsSyncTone}><i/>{settingsSyncLabel}</span>
+                    <span className={"cc-change-chip "+(settingsDirty?"warn":"good")}><i/>{settingsDirty?"มีการเปลี่ยนแปลง":"บันทึกแล้ว"}</span>
+                    <button type="button" className="btn cc-save-primary" disabled={busy||!settingsDirty} onClick={(e:any)=>saveSettings(e)}><ScenovaIcon name="save" size={17}/>{busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button>
+                  </div>
                 </div>
 
                 <div className="cc-settings-tabs" role="tablist" aria-label="หมวดการตั้งค่าบอท">
@@ -1175,7 +1214,7 @@ export default function DashboardPage() {
 
                 <form className="cc-settings-form-v3" onSubmit={saveSettings}>
                   {settingsTab==="basic"&&<><div className="cc-settings-section-title"><b>ตั้งค่าพื้นฐาน</b><span>กำหนดสินทรัพย์ รูปแบบการเข้า และจำนวนไม้</span></div><div className="cc-settings-grid">
-                    <SettingTile icon="brain" title="โปรไฟล์การเทรด" description="เลือกแบบเดียว ระบบจัดค่าภายในให้ทั้งหมด" wide><div className="cc-profile-picker">{[
+                    <SettingTile icon="brain" title="โปรไฟล์การเทรด" description="จัดจังหวะเข้า ความเร็ว และ Adaptive; เป้ากำไร/ขาดทุนใช้ค่าที่คุณตั้ง" wide><div className="cc-profile-picker">{[
                       ["SAFE","ปลอดภัย","คัดสัญญาณเข้ม"],
                       ["BALANCED","สมดุล","เหมาะใช้ทั่วไป"],
                       ["AGGRESSIVE","เชิงรุก","เข้าเร็วขึ้น"],
@@ -1187,11 +1226,38 @@ export default function DashboardPage() {
                     <SettingTile icon="lot" title="Lot สูงสุด (Adaptive)" description="Adaptive ลดได้ แต่ไม่เพิ่มเกินค่านี้"><select className="input" value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></SettingTile>
                   </div></>}
 
-                  {settingsTab==="risk"&&<><div className="cc-settings-section-title cc-risk-title"><div><b>ป้องกันขาดทุน</b><span>กำหนดวงเงินที่ยอมรับได้</span></div><div className="cc-risk-summary"><span>รูปแบบ <b>{tradingProfileLabel[tradingProfile]||tradingProfile}</b></span><span>ขนาดไม้ปัจจุบัน <b>{Number(metrics.adaptiveLot||settings.lot).toFixed(2)} Lot</b></span></div></div><div className="cc-settings-grid cc-risk-grid">
-                    <SettingTile icon="pnl" title="หยุดเมื่อขาดทุนวันนี้" description="หยุดบอทเมื่อยอดขาดทุนรวมวันนี้ถึงจำนวนนี้"><ToggleSelectField options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="25" value={settings.dailyLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("dailyLossMoney",v)}/></SettingTile>
-                    <SettingTile icon="risk" title="ปิดทั้งชุดเมื่อขาดทุน" description="รวมผลขาดทุนของทุกไม้ในชุดปัจจุบัน"><ToggleSelectField options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="10" value={settings.maxBasketLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}/></SettingTile>
-                    <SettingTile icon="orders" title="ตัดขาดทุนแต่ละไม้" description="ปิดเฉพาะไม้ที่ขาดทุนถึงจำนวนนี้"><ToggleSelectField options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]} defaultValue="2" value={settings.perPositionLossMoney} format={(v:string)=>"$"+v} onChange={(v:string)=>editSetting("perPositionLossMoney",v)}/></SettingTile>
-                  </div></>}
+                  {settingsTab==="risk"&&<>
+                    <div className="cc-settings-section-title cc-risk-title">
+                      <div><b>ป้องกันขาดทุน</b><span>ค่าที่กำหนดตรงนี้มีผลกับ EA ทุกโปรไฟล์ รวมถึง Burst</span></div>
+                      <div className="cc-risk-summary">
+                        <span>รูปแบบ <b>{tradingProfileLabel[tradingProfile]||tradingProfile}</b></span>
+                        <span>ขนาดไม้ปัจจุบัน <b>{Number(metrics.adaptiveLot||settings.lot).toFixed(2)} Lot</b></span>
+                      </div>
+                    </div>
+                    <div className="cc-settings-grid cc-risk-grid">
+                      <SettingTile icon="shield" title="Hard SL ต่อไม้ที่ Broker" description="EA ส่ง Stop Loss จริงไปกับทุกออเดอร์; โปรไฟล์กำหนดระยะตาม ATR">
+                        <div className="cc-readout">
+                          <b>{hardStopMultiplier>0 ? "ATR × "+hardStopMultiplier.toFixed(2) : "กำลังคำนวณ"}</b>
+                          <small>{hardStopDistancePoints>0 ? "ระยะปัจจุบันประมาณ "+hardStopDistancePoints.toFixed(0)+" points" : "รอ ATR จาก EA"}</small>
+                        </div>
+                      </SettingTile>
+                      <SettingTile icon="pnl" title="หยุดเมื่อขาดทุนวันนี้" description="ขาดทุนรวมของบอทวันนี้ถึงจำนวนนี้ → ปิด/หยุดตาม Daily Loss">
+                        <ToggleMoneyField label="เปิดขาดทุนรายวัน" defaultValue="25" value={settings.dailyLossMoney} suffix="ขาดทุนรวมวันนี้" onChange={(v:string)=>editSetting("dailyLossMoney",v)}/>
+                      </SettingTile>
+                      <SettingTile icon="risk" title="ปิดทั้งชุดเมื่อขาดทุน" description={tradingProfile==="BURST_10" ? "เปิด = ใช้จำนวนที่คุณตั้ง · ปิด = Burst ใช้ Auto Basket Loss" : "รวมผลขาดทุนของทุกไม้ใน Basket ปัจจุบัน"}>
+                        <ToggleMoneyField label="เปิด Basket Loss" defaultValue="10" value={settings.maxBasketLossMoney} suffix="ขาดทุนรวมทั้งชุด" onChange={(v:string)=>editSetting("maxBasketLossMoney",v)}/>
+                        {tradingProfile==="BURST_10"&&Number(settings.maxBasketLossMoney||0)<=0&&<div className="cc-auto-fallback"><span>Auto Burst</span><b>{"$"+Number(metrics.burstLossMoney||0).toFixed(2)}</b><small>EA คำนวณใหม่แต่ละ Cycle</small></div>}
+                      </SettingTile>
+                      <SettingTile icon="orders" title="ตัดขาดทุนแต่ละไม้" description="ถึงจำนวนนี้ → ปิดเฉพาะ Position นั้น; ทำงานเพิ่มจาก Hard SL">
+                        <ToggleMoneyField label="เปิด Loss ต่อไม้" defaultValue="2" value={settings.perPositionLossMoney} suffix="ขาดทุนต่อ Position" onChange={(v:string)=>editSetting("perPositionLossMoney",v)}/>
+                      </SettingTile>
+                    </div>
+                    <div className="cc-applied-settings-strip">
+                      <span><small>EA ใช้ Basket Loss</small><b>{"$"+effectiveBasketLoss.toFixed(2)}</b></span>
+                      <span><small>EA ใช้ Loss ต่อไม้</small><b>{Number(metrics.appliedPerPositionLoss||0)>0 ? "$"+Number(metrics.appliedPerPositionLoss).toFixed(2) : "ปิด"}</b></span>
+                      <span><small>Hard SL</small><b>{hardStopDistancePoints>0 ? hardStopDistancePoints.toFixed(0)+" pt" : "รอข้อมูล"}</b></span>
+                    </div>
+                  </>}
 
                   {settingsTab==="session"&&<><div className="cc-settings-section-title"><b>เวลาเทรด</b><span>อ้างอิงเวลา Server ของ Broker</span></div><div className="cc-settings-grid cc-session-grid">
                     <SettingTile icon="clock" title="เริ่ม Session" description="เวลา Server"><select className="input" value={String(settings.sessionStartHour)} onChange={e=>editSetting("sessionStartHour",e.target.value)}>{[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,23].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}:00</option>)}</select></SettingTile>
@@ -1200,57 +1266,71 @@ export default function DashboardPage() {
                     <SettingTile icon="spread" title="Spread ตอนนี้" description={"Adaptive limit "+spreadLimitLabel}><div className="cc-readout"><b>{spreadValueLabel}</b><small>{spreadStatusLabel[spreadStatus]||spreadStatus}</small></div></SettingTile>
                   </div></>}
 
-                  {settingsTab==="exit"&&<><div className="cc-settings-section-title cc-profit-title"><div><b>เป้าหมายกำไร</b><span>เลือกวิธีปิดกำไรหลักเพียงแบบเดียว</span></div><div className="cc-profit-mode-note"><ScenovaIcon name="info" size={14}/><span>เปิดอันไหน อีกอันจะปิดเองอัตโนมัติ</span></div></div>
-                    {String(settings.tradingProfile||"BALANCED")==="BURST_10"?<div className="cc-settings-grid">
-                      <SettingTile icon="orders" title="Basket Scalping Engine" description="Burst ใช้เป้ากำไรอัตโนมัติตาม Cycle" wide><div className="cc-readout"><b>{metrics.burstActive?"กำลังส่ง "+Number(metrics.burstRequestsSent||0)+" / "+configuredMaxPositions+" ไม้":"พร้อมเปิด "+configuredMaxPositions+" ไม้"}</b><small>โปรไฟล์ Burst จัดการเป้ากำไร Basket อัตโนมัติ</small></div></SettingTile>
-                      <SettingTile icon="profit" title="เป้ากำไร Basket อัตโนมัติ" description="ค่าจริงจาก EA"><div className="cc-readout"><b>{"$"+Number(metrics.burstTargetMoney||0).toFixed(2)}</b><small>ปรับใหม่ทุก Cycle</small></div></SettingTile>
-                      <SettingTile icon="risk" title="ขีดจำกัด Basket อัตโนมัติ" description="ค่าจริงจาก EA"><div className="cc-readout"><b>{"$"+Number(metrics.burstLossMoney||0).toFixed(2)}</b><small>ดูแล Position ที่เปิดสำเร็จแล้ว</small></div></SettingTile>
-                    </div>:<>
-                      <div className="cc-settings-grid cc-profit-mode-grid">
-                        <SettingTile icon="profit" title="กำไรทั้งชุดถึงแล้วปิด" description="รวมกำไรทุก Position ใน Basket เดียวกัน" wide accent={basketProfitEnabled}>
-                          <BasketProfitTargetField
-                            value={settings.basketProfitTargetMoney}
-                            trailPercent={settings.profitRunTrailPercent}
+                  {settingsTab==="exit"&&<>
+                    <div className="cc-settings-section-title cc-profit-title">
+                      <div><b>เป้าหมายกำไร</b><span>ค่าที่ตั้งบนเว็บมีสิทธิ์สูงกว่า Auto ของโปรไฟล์</span></div>
+                      <div className="cc-profit-mode-note"><ScenovaIcon name="info" size={14}/><span>เปิดอันไหน อีกอันจะปิดเองอัตโนมัติ</span></div>
+                    </div>
+
+                    <div className="cc-settings-grid cc-profit-mode-grid">
+                      <SettingTile icon="profit" title="กำไรทั้งชุดถึงแล้วปิด" description="รวมกำไรทุก Position ใน Basket เดียวกัน" wide accent={basketProfitEnabled}>
+                        <BasketProfitTargetField
+                          value={settings.basketProfitTargetMoney}
+                          trailPercent={settings.profitRunTrailPercent}
+                          targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
+                          percentOptions={[5,10,15,20,25,30,40,50]}
+                          defaultTarget="10"
+                          defaultPercent="20"
+                          onTargetChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}
+                          onPercentChange={(v:string)=>editSetting("profitRunTrailPercent",v)}
+                        />
+                      </SettingTile>
+
+                      <SettingTile icon="orders" title="กำไรต่อไม้" description="แต่ละ Position ถึงกำไรที่ตั้ง → ปิดเฉพาะไม้นั้นทันที" wide accent={perPositionProfitEnabled}>
+                        <ToggleMoneyField
+                          label="เปิดกำไรต่อไม้"
+                          defaultValue="2"
+                          value={settings.perPositionProfitMoney}
+                          suffix="กำไรต่อ Position"
+                          onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}
+                        />
+                      </SettingTile>
+                    </div>
+
+                    {tradingProfile==="BURST_10"&&<div className={"cc-burst-profit-status "+((basketProfitEnabled||perPositionProfitEnabled)?"manual":"auto")}>
+                      <div><ScenovaIcon name="layers" size={16}/><span><b>โหมด Burst</b><small>{basketProfitEnabled||perPositionProfitEnabled ? "ใช้เป้าหมายที่คุณกำหนดแทน Auto" : "ไม่ได้กำหนดเป้าหมายเอง → ใช้ Auto ของ EA"}</small></span></div>
+                      <div className="cc-burst-profit-values">
+                        <span><small>Auto ที่ EA คำนวณ</small><b>{"$"+Number(metrics.burstTargetMoney||0).toFixed(2)}</b></span>
+                        <span><small>เป้าที่ EA ใช้จริง</small><b>{effectiveBasketProfit>0 ? "$"+effectiveBasketProfit.toFixed(2) : (perPositionProfitEnabled ? "ต่อไม้" : "รอ Cycle")}</b></span>
+                        <span><small>โหมดปิดจริง</small><b>{profitControlMode==="PER_POSITION"?"กำไรต่อไม้":profitControlMode==="BASKET_RUN_ON"?"Basket + ปล่อยวิ่ง":profitControlMode==="BASKET_FIXED"?"Basket ตามจำนวน":profitControlMode==="BURST_AUTO"?"Burst Auto":"รอ EA"}</b></span>
+                      </div>
+                    </div>}
+
+                    <div className="cc-profit-independent">
+                      <div className="cc-settings-section-title"><b>เป้ากำไรรายวัน</b><span>ทำงานแยกจากวิธีปิด Basket / Position ด้านบน</span></div>
+                      <div className="cc-settings-grid">
+                        <SettingTile icon="pnl" title="เป้ากำไรวันนี้" description="ถึงเป้ารายวันแล้วเลือกหยุดหรือปล่อยต่อ" wide>
+                          <DailyProfitTargetField
+                            value={settings.dailyProfitTargetMoney}
+                            continueAfterTarget={Boolean(settings.dailyProfitContinueAfterTarget)}
+                            drawdownPercent={settings.dailyProfitDrawdownPercent}
                             targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
                             percentOptions={[5,10,15,20,25,30,40,50]}
                             defaultTarget="10"
                             defaultPercent="20"
-                            onTargetChange={(v:string)=>editSetting("basketProfitTargetMoney",v)}
-                            onPercentChange={(v:string)=>editSetting("profitRunTrailPercent",v)}
-                          />
-                        </SettingTile>
-
-                        <SettingTile icon="orders" title="กำไรต่อไม้" description="แต่ละ Position ถึงกำไรที่ตั้ง ให้ปิดเฉพาะไม้นั้นทันที" wide accent={perPositionProfitEnabled}>
-                          <ToggleMoneyField
-                            label="เปิดกำไรต่อไม้"
-                            defaultValue="2"
-                            value={settings.perPositionProfitMoney}
-                            suffix="กำไรต่อ Position"
-                            onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}
+                            onTargetChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)}
+                            onContinueChange={(v:boolean)=>editSetting("dailyProfitContinueAfterTarget",v)}
+                            onPercentChange={(v:string)=>editSetting("dailyProfitDrawdownPercent",v)}
                           />
                         </SettingTile>
                       </div>
+                    </div>
 
-                      <div className="cc-profit-independent">
-                        <div className="cc-settings-section-title"><b>เป้ากำไรรายวัน</b><span>ทำงานแยกจากวิธีปิด Basket / Position ด้านบน</span></div>
-                        <div className="cc-settings-grid">
-                          <SettingTile icon="pnl" title="เป้ากำไรวันนี้" description="ถึงเป้ารายวันแล้วเลือกหยุดหรือปล่อยต่อ" wide>
-                            <DailyProfitTargetField
-                              value={settings.dailyProfitTargetMoney}
-                              continueAfterTarget={Boolean(settings.dailyProfitContinueAfterTarget)}
-                              drawdownPercent={settings.dailyProfitDrawdownPercent}
-                              targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                              percentOptions={[5,10,15,20,25,30,40,50]}
-                              defaultTarget="10"
-                              defaultPercent="20"
-                              onTargetChange={(v:string)=>editSetting("dailyProfitTargetMoney",v)}
-                              onContinueChange={(v:boolean)=>editSetting("dailyProfitContinueAfterTarget",v)}
-                              onPercentChange={(v:string)=>editSetting("dailyProfitDrawdownPercent",v)}
-                            />
-                          </SettingTile>
-                        </div>
-                      </div>
-                    </>}
+                    <div className="cc-applied-settings-strip">
+                      <span><small>EA ใช้กำไร Basket</small><b>{effectiveBasketProfit>0 ? "$"+effectiveBasketProfit.toFixed(2) : "ปิด"}</b></span>
+                      <span><small>EA ใช้กำไรต่อไม้</small><b>{Number(metrics.appliedPerPositionProfit||0)>0 ? "$"+Number(metrics.appliedPerPositionProfit).toFixed(2) : "ปิด"}</b></span>
+                      <span><small>Trailing หลังถึงเป้า</small><b>{Number(metrics.appliedProfitRunTrailPercent||0)>0 ? Number(metrics.appliedProfitRunTrailPercent).toFixed(0)+"%" : "ปิด"}</b></span>
+                    </div>
                   </>}
 
                 </form>
