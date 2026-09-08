@@ -385,13 +385,28 @@ export default function DashboardPage() {
     "NO_ACCESS",
     "DAILY_PROFIT_LOCK"
   ]);
-  const softwareUpdate = data?.softwareUpdate || { required: false, currentVersion: null, latestVersion: "", downloadPath: "" };
-  const installerUpdateRequired = data?.selectedSlot?.mode === "LOCAL" && Boolean(softwareUpdate.required);
+  const softwareUpdate = data?.softwareUpdate || {
+    required: false,
+    installerRequired: false,
+    eaUpdateRequired: false,
+    currentVersion: null,
+    latestVersion: "",
+    currentEaVersion: null,
+    latestEaVersion: "",
+    currentEaHash: null,
+    latestEaHash: null,
+    eaVersionMatch: false,
+    eaHashMatch: false,
+    downloadPath: "",
+    reason: null
+  };
+  const softwareUpdateRequired =
+    data?.selectedSlot?.mode === "LOCAL" &&
+    Boolean(softwareUpdate.required);
   const startBlocked =
     busy ||
-    desired === "RUNNING" ||
     state === "RUNNING" ||
-    installerUpdateRequired ||
+    softwareUpdateRequired ||
     !entitlement?.allowed ||
     hardStartBlocks.has(String(liveStatus.code || ""));
   const stopBlocked = busy || (desired !== "RUNNING" && state !== "RUNNING");
@@ -521,8 +536,8 @@ export default function DashboardPage() {
       const actualRunningNow =
         data?.instance?.actual_state === "RUNNING" &&
         Boolean(data?.instance?.mt5_online);
-      if (actualRunningNow || data?.instance?.desired_state === "RUNNING") {
-        throw new Error("กรุณาหยุดบอทก่อนติดตั้งหรืออัปเดต SCENOVA");
+      if (actualRunningNow || Number(data?.instance?.metrics?.positions || 0) > 0) {
+        throw new Error("กรุณาหยุดบอทและปิด Position ให้หมดก่อนติดตั้งหรืออัปเดต SCENOVA");
       }
 
       await downloadInstallerForSlot(selectedSlotIdRef.current);
@@ -1035,22 +1050,48 @@ export default function DashboardPage() {
         {error && <div className="notice bad page-notice">{error}</div>}
         {notice && <div className="notice good page-notice">{notice}</div>}
 
-        {activeView === "overview" && installerUpdateRequired && (
-          <div className="notice bad page-notice onboarding-notice">
-            <div>
-              <b>ต้องอัปเดต SCENOVA ก่อนเริ่มบอท</b>
-              <span>
-                เครื่องนี้ใช้ {softwareUpdate.currentVersion ? "v" + softwareUpdate.currentVersion : "เวอร์ชันที่ตรวจสอบไม่ได้"}
-                {" · "}เวอร์ชันล่าสุดคือ v{softwareUpdate.latestVersion}
-              </span>
+        {activeView === "overview" && data.account && data.selectedSlot?.mode === "LOCAL" && (
+          <div className={"cc-version-guard " + (softwareUpdateRequired ? "needs-update" : "ready")}>
+            <div className="cc-version-guard-title">
+              <span><ScenovaIcon name="shield" size={19}/></span>
+              <div><b>Version Guard</b><small>ต้องตรงกับ Server ก่อนจึงจะเริ่มบอทได้</small></div>
             </div>
-            <button
-              className="btn primary"
-              disabled={busy || desired === "RUNNING" || (state === "RUNNING" && isMt5Online)}
-              onClick={downloadWindowsInstaller}
-            >
-              {busy ? "กำลังเตรียม..." : "อัปเดตเป็น v" + softwareUpdate.latestVersion}
-            </button>
+            <div className="cc-version-checks">
+              <div className={softwareUpdate.installerRequired ? "bad" : "good"}>
+                <small>Windows Agent</small>
+                <b>{softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : "ไม่พบ"} → v{softwareUpdate.latestVersion || "—"}</b>
+              </div>
+              <div className={softwareUpdate.eaVersionMatch ? "good" : "bad"}>
+                <small>EA Runtime</small>
+                <b>{softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "ไม่พบ"} → v{softwareUpdate.latestEaVersion || "—"}</b>
+              </div>
+              <div className={softwareUpdate.eaHashMatch ? "good" : "bad"}>
+                <small>EX5 Hash</small>
+                <b>{softwareUpdate.eaHashMatch ? "ตรงกับ Server" : "ยังไม่ตรง"}</b>
+              </div>
+            </div>
+            <div className="cc-version-guard-action">
+              {softwareUpdateRequired ? (
+                <>
+                  <span className="cc-version-status bad"><i/>ต้องอัปเดตก่อน Start</span>
+                  <small>{softwareUpdate.reason || "กำลังรอ Agent/EA อัปเดตให้ตรงกับ Server"}</small>
+                  {softwareUpdate.installerRequired ? (
+                    <button className="btn primary" disabled={busy || state === "RUNNING" || currentPositions > 0} onClick={downloadWindowsInstaller}>
+                      {busy ? "กำลังเตรียม..." : "ดาวน์โหลดอัปเดต"}
+                    </button>
+                  ) : (
+                    <button className="btn" disabled={busy} onClick={()=>load(selectedSlotIdRef.current)}>
+                      <ScenovaIcon name="refresh" size={15}/>ตรวจสอบอีกครั้ง
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="cc-version-status good"><i/>เวอร์ชันตรงกัน พร้อม Start</span>
+                  <small>Agent + EA Runtime + EX5 ตรงกับ Server</small>
+                </>
+              )}
+            </div>
           </div>
         )}
 
@@ -1180,12 +1221,11 @@ export default function DashboardPage() {
                         </SettingTile>
 
                         <SettingTile icon="orders" title="กำไรต่อไม้" description="แต่ละ Position ถึงกำไรที่ตั้ง ให้ปิดเฉพาะไม้นั้นทันที" wide accent={perPositionProfitEnabled}>
-                          <ToggleSelectField
+                          <ToggleMoneyField
                             label="เปิดกำไรต่อไม้"
-                            options={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
                             defaultValue="2"
                             value={settings.perPositionProfitMoney}
-                            format={(v:string)=>"ถึง $"+v+" → ปิดไม้นั้น"}
+                            suffix="กำไรต่อ Position"
                             onChange={(v:string)=>editSetting("perPositionProfitMoney",v)}
                           />
                         </SettingTile>
@@ -1711,6 +1751,86 @@ function SelectField(props: any) {
   );
 }
 
+function MoneyInput(props: any) {
+  const externalValue = String(props.value ?? "");
+  const [draft, setDraft] = useState(externalValue);
+
+  useEffect(() => {
+    setDraft(externalValue);
+  }, [externalValue]);
+
+  const commit = () => {
+    const normalized = String(draft || "").replace(",", ".").trim();
+    const value = Number(normalized);
+    if (!Number.isFinite(value) || value <= 0) {
+      setDraft(externalValue);
+      return;
+    }
+    const next = String(Math.round(value * 100) / 100);
+    setDraft(next);
+    if (next !== externalValue) props.onCommit?.(next);
+  };
+
+  return (
+    <div className={"money-input-shell " + (props.disabled ? "disabled" : "")}>
+      <span className="money-prefix">$</span>
+      <input
+        className="input money-input"
+        type="text"
+        inputMode="decimal"
+        aria-label={props.ariaLabel || "จำนวนเงิน"}
+        value={draft}
+        disabled={Boolean(props.disabled)}
+        onFocus={e=>e.currentTarget.select()}
+        onChange={e=>{
+          const value = e.target.value.replace(",", ".");
+          if (value === "" || /^\d*(?:\.\d{0,2})?$/.test(value)) {
+            setDraft(value);
+          }
+        }}
+        onBlur={commit}
+        onKeyDown={e=>{
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      {props.suffix ? <small>{props.suffix}</small> : null}
+    </div>
+  );
+}
+
+function ToggleMoneyField(props: any) {
+  const enabled = Number(props.value || 0) > 0;
+  const selectedValue = enabled ? String(props.value) : String(props.defaultValue || "1");
+
+  return (
+    <div className={"field toggle-select-field toggle-money-field " + (enabled ? "enabled" : "") + (props.disabled ? " disabled" : "")}>
+      <label className="toggle-setting-label">
+        <input
+          type="checkbox"
+          aria-label={props.label || "เปิดหรือปิดการตั้งค่านี้"}
+          checked={enabled}
+          disabled={Boolean(props.disabled)}
+          onChange={e=>props.onChange?.(e.target.checked ? selectedValue : "0")}
+        />
+        <span className="setting-toggle-track"><i/></span>
+        <span className="setting-toggle-text">{props.label || (enabled ? "เปิดใช้งาน" : "ปิดใช้งาน")}</span>
+      </label>
+      {enabled ? (
+        <MoneyInput
+          value={selectedValue}
+          disabled={Boolean(props.disabled)}
+          suffix={props.suffix}
+          ariaLabel={props.label}
+          onCommit={(value:string)=>props.onChange?.(value)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function ToggleSelectField(props: any) {
   const enabled = Number(props.value || 0) > 0;
   const selectedValue = enabled ? String(props.value) : String(props.defaultValue);
@@ -1755,10 +1875,6 @@ function BasketProfitTargetField(props: any) {
   const targetValue = enabled ? String(props.value) : String(props.defaultTarget);
   const trailEnabled = enabled && Number(props.trailPercent || 0) > 0;
   const percentValue = trailEnabled ? String(props.trailPercent) : String(props.defaultPercent);
-  const targetValues = Array.from(new Set([
-    ...props.targetOptions.map((value:any)=>String(value)),
-    targetValue
-  ]));
   const percentValues = Array.from(new Set([
     ...props.percentOptions.map((value:any)=>String(value)),
     percentValue
@@ -1785,9 +1901,12 @@ function BasketProfitTargetField(props: any) {
       </label>
 
       {enabled&&<div className="daily-profit-main-row basket-profit-main-row">
-        <select className="input" value={targetValue} onChange={e=>props.onTargetChange?.(e.target.value)}>
-          {targetValues.map((value:string)=><option key={value} value={value}>{"กำไรรวมถึง $"+value}</option>)}
-        </select>
+        <MoneyInput
+          value={targetValue}
+          suffix="กำไรรวมทั้ง Basket"
+          ariaLabel="เป้ากำไรรวมทั้งชุด"
+          onCommit={(value:string)=>props.onTargetChange?.(value)}
+        />
 
         <label className="mini-check">
           <input

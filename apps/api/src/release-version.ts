@@ -1,4 +1,9 @@
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+
 export const DEFAULT_INSTALLER_VERSION = "2.0.7";
+export const DEFAULT_EA_VERSION = "1.015";
 
 export function latestInstallerVersion() {
   return String(process.env.SCENOVA_INSTALLER_VERSION || DEFAULT_INSTALLER_VERSION).trim() || DEFAULT_INSTALLER_VERSION;
@@ -21,6 +26,74 @@ export function isVersionAtLeast(current: unknown, required: unknown) {
     if (a[i] < b[i]) return false;
   }
   return true;
+}
+
+function normalizedExactVersion(version: unknown) {
+  return String(version || "").trim().replace(/^v/i, "");
+}
+
+export function isEaVersionExact(current: unknown, required: unknown) {
+  const a = normalizedExactVersion(current);
+  const b = normalizedExactVersion(required);
+  return Boolean(a && b && a === b);
+}
+
+function artifactPath() {
+  return String(process.env.EA_ARTIFACT_PATH || "").trim() ||
+    "/app/apps/api/artifacts/FastBasketBot.ex5";
+}
+
+function readReleaseManifest() {
+  const path = artifactPath();
+  const candidates = [
+    String(process.env.EA_RELEASE_MANIFEST_PATH || "").trim(),
+    resolve(dirname(path), "manifest.json"),
+    "/app/apps/api/artifacts/manifest.json",
+    resolve(process.cwd(), "apps/api/artifacts/manifest.json"),
+    resolve(process.cwd(), "mt5/release/manifest.json")
+  ].filter(Boolean);
+
+  for (const candidate of Array.from(new Set(candidates))) {
+    try {
+      if (!existsSync(candidate)) continue;
+      const parsed = JSON.parse(readFileSync(candidate, "utf8").replace(/^\uFEFF/, ""));
+      if (parsed && typeof parsed === "object") return parsed as Record<string, any>;
+    } catch {
+      // Keep verification strict and fall back to generated/default metadata.
+    }
+  }
+  return {};
+}
+
+function actualArtifactHash() {
+  try {
+    const path = artifactPath();
+    if (!existsSync(path)) return null;
+    return createHash("sha256").update(readFileSync(path)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+export function latestEaRelease() {
+  const manifest = readReleaseManifest();
+  const eaVersion =
+    String(process.env.SCENOVA_EA_VERSION || manifest.eaVersion || DEFAULT_EA_VERSION).trim() ||
+    DEFAULT_EA_VERSION;
+  const sha256 =
+    String(
+      process.env.SCENOVA_EA_SHA256 ||
+      actualArtifactHash() ||
+      manifest.sha256 ||
+      ""
+    ).trim().toLowerCase() || null;
+
+  return {
+    eaVersion,
+    sha256,
+    sourceCommit: String(manifest.sourceCommit || "").trim() || null,
+    builtAt: String(manifest.builtAt || "").trim() || null
+  };
 }
 
 export function installerDownloadPath(version = latestInstallerVersion()) {

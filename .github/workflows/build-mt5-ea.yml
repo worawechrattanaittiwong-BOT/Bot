@@ -54,9 +54,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
           Copy-Item -Force $ex5 "mt5\release\FastBasketBot.ex5"
           $hash = (Get-FileHash -Algorithm SHA256 "mt5\release\FastBasketBot.ex5").Hash.ToLowerInvariant()
+          $sourceText = Get-Content "$env:EA_SOURCE" -Raw
+          $versionMatch = [regex]::Match($sourceText, '#property\s+version\s+"([^"]+)"')
+          if (-not $versionMatch.Success) { throw "EA #property version was not found" }
+          $eaVersion = $versionMatch.Groups[1].Value
           @{
             file = "FastBasketBot.ex5"
             sha256 = $hash
+            eaVersion = $eaVersion
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "mt5\release\manifest.json"

@@ -87,8 +87,12 @@ jobs:
 
           PRODUCT_VERSION=$(sed -n 's/^#define SCENOVA_PRODUCT_VERSION "\([^"]*\)"/\1/p' mt5/FastBasketBot.mq5)
           INSTALLER_VERSION=$(sed -n 's/^export const DEFAULT_INSTALLER_VERSION = "\([^"]*\)";/\1/p' apps/api/src/release-version.ts)
+          EA_VERSION=$(sed -n 's/^#property version[[:space:]]*"\([^"]*\)"/\1/p' mt5/FastBasketBot.mq5)
+          API_EA_VERSION=$(sed -n 's/^export const DEFAULT_EA_VERSION = "\([^"]*\)";/\1/p' apps/api/src/release-version.ts)
           test -n "$PRODUCT_VERSION"
+          test -n "$EA_VERSION"
           test "$PRODUCT_VERSION" = "$INSTALLER_VERSION"
+          test "$EA_VERSION" = "$API_EA_VERSION"
 
           REGISTER=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration@scenova.test","password":"Integration123!"}')
           TOKEN=$(printf '%s' "$REGISTER" | jq -r '.token')
@@ -116,7 +120,7 @@ jobs:
           test "$(printf '%s' "$AGENT" | jq -r '.deviceVerified')" = "true"
 
           echo "[integration] auto-binding first LOCAL MT5 from EA runtime"
-          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.010\",\"productVersion\":\"2.0.7\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"productVersion\":\"2.0.7\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           test "$(printf '%s' "$DETECT" | jq -r '.accountMismatch // false')" = "false"
 
           DASH2=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
@@ -187,7 +191,7 @@ jobs:
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
           echo "[integration] verifying settings in EA heartbeat"
-          SETTINGS_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.010\",\"symbol\":\"XAUUSDm\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          SETTINGS_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"symbol\":\"XAUUSDm\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.lot')" = "0.02"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.maxPositions')" = "7"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.dailyProfitTargetMoney')" = "10"
@@ -223,6 +227,17 @@ jobs:
 
           curl -fsS -X POST "$BASE/admin/trials/grant" -H 'x-admin-key: integration-admin' -H 'content-type: application/json' -d "{\"mt5AccountId\":\"$ACCOUNT_ID\",\"minutes\":180,\"approvedBy\":\"CI\"}" >/tmp/trial-grant.json
 
+          echo "[integration] exact EA runtime version mismatch blocks Start"
+          OLD_RUNTIME=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.014\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          RUNTIME_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$RUNTIME_DASH" | jq -r '.softwareUpdate.eaVersionMatch')" = "false"
+          OLD_RUNTIME_START_HTTP=$(curl -sS -o /tmp/outdated-ea-start.json -w "%{http_code}" -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$OLD_RUNTIME_START_HTTP" = "409"
+
+          CURRENT_RUNTIME=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          CURRENT_RUNTIME_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$CURRENT_RUNTIME_DASH" | jq -r '.softwareUpdate.eaVersionMatch')" = "true"
+
           echo "[integration] mandatory installer update blocks Start"
           OLD_AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.4\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
           test "$(printf '%s' "$OLD_AGENT" | jq -r '.agentUpdateRequired')" = "true"
@@ -241,26 +256,34 @@ jobs:
 
           UPDATED_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$UPDATED_DASH" | jq -r '.softwareUpdate.required')" = "false"
+          test "$(printf '%s' "$UPDATED_DASH" | jq -r '.softwareUpdate.eaVersionMatch')" = "true"
+          test "$(printf '%s' "$UPDATED_DASH" | jq -r '.softwareUpdate.eaHashMatch')" = "true"
 
-          echo "[integration] starting bot after mandatory update; Agent freshness/hash are not trading gates"
-          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set agent_last_seen_at=now()-interval '2 hours',agent_ea_hash=NULL where id='$INSTANCE';" >/dev/null
+          echo "[integration] exact EX5 hash is a mandatory Start gate"
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set agent_ea_hash=NULL where id='$INSTANCE';" >/dev/null
+          HASHLESS_START_HTTP=$(curl -sS -o /tmp/hashless-start.json -w "%{http_code}" -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$HASHLESS_START_HTTP" = "409"
+
+          HASH_REFRESH=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.7\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
+          test "$(printf '%s' "$HASH_REFRESH" | jq -r '.agentUpdateRequired')" = "false"
+
           START=$(curl -fsS -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$START" | jq -r '.state')" = "RUNNING"
 
-          HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"RUNNING\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.010\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"RUNNING\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           test "$(printf '%s' "$HB" | jq -r '.access')" = "true"
 
           echo "[integration] entitlement expiry forces SAFE_STOP on the next heartbeat"
           PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update trial_grants set expires_at=now()-interval '1 second' where mt5_account_id='$ACCOUNT_ID';" >/dev/null
-          EXPIRED_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"RUNNING\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.010\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          EXPIRED_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"RUNNING\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           test "$(printf '%s' "$EXPIRED_HB" | jq -r '.access')" = "false"
           test "$(printf '%s' "$EXPIRED_HB" | jq -r '.desiredState')" = "SAFE_STOP"
 
           curl -fsS -X POST "$BASE/bot/stop?slotId=$SLOT" -H "authorization: Bearer $TOKEN" >/dev/null
 
           echo "[integration] account change is blocked while old MT5 has open positions"
-          OLD_WITH_POS=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.010\",\"server\":\"SCENOVA-Demo\",\"positions\":2}}")
-          DETECT_REAL_BLOCKED=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"1.010\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
+          OLD_WITH_POS=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":2}}")
+          DETECT_REAL_BLOCKED=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
           test "$(printf '%s' "$DETECT_REAL_BLOCKED" | jq -r '.accountMismatch')" = "true"
           test "$(printf '%s' "$DETECT_REAL_BLOCKED" | jq -r '.previousBoundPositions')" = "2"
           test "$(printf '%s' "$DETECT_REAL_BLOCKED" | jq -r '.accountChangeBlocked')" = "true"
@@ -268,8 +291,8 @@ jobs:
           test "$REBIND_BLOCKED_HTTP" = "409"
 
           echo "[integration] rebind succeeds after old MT5 reports flat"
-          OLD_FLAT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"1.010\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
-          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"1.010\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
+          OLD_FLAT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch')" = "true"
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.previousBoundPositions')" = "0"
 
@@ -300,7 +323,7 @@ jobs:
           test -n "$INSTALL_TOKEN_SECOND"
 
           echo "[integration] same physical PC is allowed; Server rights still decide trading"
-          SECOND_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE_SECOND\",\"installToken\":\"$INSTALL_TOKEN_SECOND\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"222222\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.010\",\"server\":\"SCENOVA-Demo2\",\"positions\":0}}")
+          SECOND_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE_SECOND\",\"installToken\":\"$INSTALL_TOKEN_SECOND\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"222222\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo2\",\"positions\":0}}")
           test "$(printf '%s' "$SECOND_HB" | jq -r '.accountMismatch // false')" = "false"
           test "$(printf '%s' "$SECOND_HB" | jq -r '.access')" = "false"
           test "$(printf '%s' "$SECOND_HB" | jq -r '.desiredState')" = "SAFE_STOP"
@@ -324,7 +347,7 @@ jobs:
           # Device telemetry may be missing; authenticated EA still auto-binds MT5.
           PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set device_status='UNREGISTERED',device_last_seen_at=NULL,device_last_ip=NULL,mt5_account_id=NULL where id='$INSTANCE3';" >/dev/null
 
-          FIRST_DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE3\",\"installToken\":\"$INSTALL_TOKEN3\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"300003\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.010\",\"server\":\"SCENOVA-Legacy\",\"positions\":0}}")
+          FIRST_DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE3\",\"installToken\":\"$INSTALL_TOKEN3\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"300003\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Legacy\",\"positions\":0}}")
           test "$(printf '%s' "$FIRST_DETECT" | jq -r '.accountMismatch // false')" = "false"
 
           FIRST_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT3" -H "authorization: Bearer $TOKEN3")
@@ -348,10 +371,10 @@ jobs:
           INSTALL_TOKEN4B=$(printf '%s' "$ENROLL4B" | jq -r '.installToken')
           test "$INSTALL_TOKEN4A" != "$INSTALL_TOKEN4B"
 
-          OLD_TOKEN_HTTP=$(curl -sS -o /tmp/old-token.json -w "%{http_code}" -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE4\",\"installToken\":\"$INSTALL_TOKEN4A\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"400004\",\"eaVersion\":\"1.010\",\"server\":\"SCENOVA-Demo4\",\"positions\":0}}")
+          OLD_TOKEN_HTTP=$(curl -sS -o /tmp/old-token.json -w "%{http_code}" -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE4\",\"installToken\":\"$INSTALL_TOKEN4A\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"400004\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo4\",\"positions\":0}}")
           test "$OLD_TOKEN_HTTP" = "401"
 
-          NEW_TOKEN_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE4\",\"installToken\":\"$INSTALL_TOKEN4B\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"400004\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.010\",\"server\":\"SCENOVA-Demo4\",\"positions\":0}}")
+          NEW_TOKEN_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE4\",\"installToken\":\"$INSTALL_TOKEN4B\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"400004\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo4\",\"positions\":0}}")
           test "$(printf '%s' "$NEW_TOKEN_HB" | jq -r '.accountMismatch // false')" = "false"
 
           DUP_MT5_HTTP=$(curl -sS -o /tmp/duplicate-mt5.json -w "%{http_code}" -X POST "$BASE/bot/mt5" -H "authorization: Bearer $TOKEN2" -H 'content-type: application/json' -d '{"accountNumber":"200002","broker":"SCENOVA","brokerServer":"SCENOVA-Real","mode":"CLOUD"}')

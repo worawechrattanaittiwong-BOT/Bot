@@ -13,7 +13,7 @@ import {
 } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
-import { installerDownloadPath, isVersionAtLeast, latestInstallerVersion } from "./release-version";
+import { installerDownloadPath, isEaVersionExact, isVersionAtLeast, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { CryptoService, JwtGuard } from "./security";
 
 @Controller("bot")
@@ -25,33 +25,83 @@ export class BotController {
   ) {}
 
   private supportedEaRuntime(version: any) {
-    const value = Number(String(version || "").trim());
-    return Number.isFinite(value) && value >= 1.010;
+    return isEaVersionExact(version, latestEaRelease().eaVersion);
   }
 
   private installerUpdateState(instance: any, mode?: string | null) {
     const latestVersion = latestInstallerVersion();
+    const release = latestEaRelease();
+
     if (String(mode || instance?.mode || "") !== "LOCAL" || !instance) {
       return {
         required: false,
+        installerRequired: false,
+        eaUpdateRequired: false,
         currentVersion: null,
         latestVersion,
-        downloadPath: installerDownloadPath(latestVersion)
+        currentEaVersion: null,
+        latestEaVersion: release.eaVersion,
+        currentEaHash: null,
+        latestEaHash: release.sha256,
+        eaVersionMatch: true,
+        eaHashMatch: true,
+        downloadPath: installerDownloadPath(latestVersion),
+        reason: null
       };
     }
 
     const currentVersion = String(instance.agent_version || "").trim() || null;
-    const required = !currentVersion || !isVersionAtLeast(currentVersion, latestVersion);
+    const currentEaVersion = String(instance.metrics?.eaVersion || "").trim() || null;
+    const currentEaHash = String(instance.agent_ea_hash || "").trim().toLowerCase() || null;
+    const latestEaHash = String(release.sha256 || "").trim().toLowerCase() || null;
+
+    const installerRequired =
+      !currentVersion ||
+      !isVersionAtLeast(currentVersion, latestVersion);
+
+    const eaVersionMatch = isEaVersionExact(currentEaVersion, release.eaVersion);
+    const eaHashMatch = Boolean(
+      latestEaHash &&
+      currentEaHash &&
+      currentEaHash === latestEaHash
+    );
+    const eaUpdateRequired = !eaVersionMatch || !eaHashMatch;
+    const required = installerRequired || eaUpdateRequired;
+
+    let reason: string | null = null;
+    if (installerRequired) {
+      reason = currentVersion
+        ? "SCENOVA Windows Setup เวอร์ชันไม่ตรงกับ Server ต้องอัปเดตก่อนเริ่มบอท"
+        : "ยังตรวจสอบ SCENOVA Agent ไม่ได้ ต้องติดตั้ง/อัปเดตก่อนเริ่มบอท";
+    } else if (!eaVersionMatch) {
+      reason =
+        "FastBasketBot เวอร์ชันไม่ตรงกับ Server: เครื่องนี้ v" +
+        (currentEaVersion || "ไม่ทราบ") +
+        " · Server v" + release.eaVersion;
+    } else if (!latestEaHash) {
+      reason = "Server ยังตรวจสอบ EX5 ล่าสุดไม่ได้ จึงยังไม่อนุญาตให้เริ่มบอท";
+    } else if (!eaHashMatch) {
+      reason = currentEaHash
+        ? "ไฟล์ FastBasketBot.ex5 ในเครื่องยังไม่ตรงกับไฟล์ล่าสุดบน Server"
+        : "ยังไม่ได้รับค่า Hash ของ FastBasketBot.ex5 จาก Agent";
+    }
+
     return {
       required,
+      installerRequired,
+      eaUpdateRequired,
       currentVersion,
       latestVersion,
+      currentEaVersion,
+      latestEaVersion: release.eaVersion,
+      currentEaHash,
+      latestEaHash,
+      eaVersionMatch,
+      eaHashMatch,
+      sourceCommit: release.sourceCommit,
+      builtAt: release.builtAt,
       downloadPath: installerDownloadPath(latestVersion),
-      reason: required
-        ? currentVersion
-          ? "มี SCENOVA Windows Setup รุ่นใหม่ ต้องอัปเดตก่อนเริ่มบอท"
-          : "ยังไม่พบเวอร์ชัน SCENOVA Agent ที่รองรับ ต้องติดตั้ง/อัปเดตก่อนเริ่มบอท"
-        : null
+      reason
     };
   }
 
@@ -108,7 +158,7 @@ export class BotController {
       TERMINAL_DISCONNECTED: { label: "MT5 ไม่มีการเชื่อมต่อ", detail: "Terminal ยังไม่เชื่อม Broker/Server", tone: "bad" },
       ALGO_TRADING_OFF: { label: "Algo Trading ปิดอยู่", detail: "เปิด Algo Trading ใน MetaTrader 5 ก่อนเริ่มบอท", tone: "bad" },
       EA_TRADING_DISABLED: { label: "กำลังแก้สิทธิ์การเทรดของ EA", detail: "SCENOVA Agent จะเปิด MT5 ใหม่พร้อม Allow Live Trading อัตโนมัติ หากยังไม่หายให้ตรวจ Algo Trading ด้านบนของ MT5", tone: "warn" },
-      EA_RUNTIME_OUTDATED: { label: "EA ที่กำลังรันเป็นรุ่นเก่า", detail: "อัปเดต SCENOVA เพื่อใช้ Adaptive Engine รุ่นล่าสุด", tone: "bad" },
+      EA_RUNTIME_OUTDATED: { label: "EA Version ไม่ตรงกับ Server", detail: "ต้องใช้ FastBasketBot เวอร์ชันล่าสุดที่ตรงกับ Server ก่อนเริ่มบอท", tone: "bad" },
       ACCOUNT_TRADING_DISABLED: { label: "บัญชีนี้ไม่อนุญาตให้เทรด", detail: "ตรวจสิทธิ์ Trading ของบัญชีกับ Broker", tone: "bad" },
       ACCOUNT_EXPERT_DISABLED: { label: "บัญชีไม่อนุญาต Expert Advisor", detail: "Broker/บัญชีปิดการเทรดด้วย EA", tone: "bad" },
       SYMBOL_TRADING_DISABLED: { label: "Symbol นี้เปิดออเดอร์ไม่ได้", detail: "Broker ปิดการเปิดออเดอร์ใหม่บน Symbol นี้", tone: "bad" },
@@ -614,11 +664,24 @@ export class BotController {
       [slot.id]
     );
     if (instance && (
-      instance.desired_state === "RUNNING" ||
-      (instance.actual_state === "RUNNING" && Boolean(instance.mt5_online)) ||
+      instance.actual_state === "RUNNING" ||
       Number(instance.positions || 0) > 0
     )) {
       throw new ConflictException("หยุดบอทและจัดการ Position ให้เรียบร้อยก่อนติดตั้งหรือย้ายเครื่อง");
+    }
+
+    // Recover a stale Start intent. If the EA never reached RUNNING and there
+    // are no positions, the user must still be able to update the software.
+    if (instance?.desired_state === "RUNNING") {
+      await this.db.query(
+        "UPDATE bot_instances SET desired_state='STOPPED' WHERE id=$1",
+        [instance.id]
+      );
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command='START'",
+        [instance.id]
+      );
+      instance.desired_state = "STOPPED";
     }
 
     if (!instance) {
@@ -1155,8 +1218,9 @@ export class BotController {
       const softwareUpdate = this.installerUpdateState(instance, instance.mode);
       if (softwareUpdate.required) {
         throw new ConflictException(
-          "ต้องอัปเดต SCENOVA Windows Setup เป็น v" + softwareUpdate.latestVersion +
-          " ก่อนเริ่มบอท (เครื่องนี้: " + (softwareUpdate.currentVersion || "ไม่ทราบเวอร์ชัน") + ")"
+          "ยังเริ่มบอทไม่ได้: " +
+          (softwareUpdate.reason || "เวอร์ชัน SCENOVA / EA ยังไม่ตรงกับ Server") +
+          " · ต้องอัปเดตให้ Agent, EA Version และ EX5 Hash ตรงกันก่อน"
         );
       }
 
