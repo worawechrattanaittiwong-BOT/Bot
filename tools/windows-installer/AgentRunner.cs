@@ -315,7 +315,7 @@ internal static class AgentRunner
                     {
                         instanceId = config.InstanceId,
                         installToken,
-                        agentVersion = "2.0.7",
+                        agentVersion = "2.0.8",
                         terminalPath = config.TerminalDataPath,
                         eaHash,
                         hostname = Environment.MachineName,
