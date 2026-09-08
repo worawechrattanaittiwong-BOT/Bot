@@ -115,12 +115,18 @@ jobs:
           test -n "$INSTANCE"
           test -n "$INSTALL_TOKEN"
 
+          echo "[integration] authenticated reinstall accepts an old consumed installer code"
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update install_enrollments set used_at=now()-interval '2 days',expires_at=now()-interval '1 day' where slot_id='$SLOT' and status='USED';" >/dev/null
+          REINSTALL=$(curl -fsS -X POST "$BASE/installer/enroll" -H 'content-type: application/json' -d "{\"code\":\"$CODE\",\"devicePublicId\":\"integration-device-001-retry\",\"deviceSecret\":\"integration-device-secret-1234567890\",\"hostname\":\"CI-PC\",\"terminalPath\":\"/tmp/terminal\",\"legacyInstanceId\":\"$INSTANCE\",\"legacyInstallToken\":\"$INSTALL_TOKEN\"}")
+          test "$(printf '%s' "$REINSTALL" | jq -r '.authenticatedReinstall')" = "true"
+          test "$(printf '%s' "$REINSTALL" | jq -r '.installToken')" = "$INSTALL_TOKEN"
+
           EA_HASH=$(sha256sum /tmp/FastBasketBot.ex5 | awk '{print $1}')
-          AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.7\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
+          AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.8\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
           test "$(printf '%s' "$AGENT" | jq -r '.deviceVerified')" = "true"
 
           echo "[integration] auto-binding first LOCAL MT5 from EA runtime"
-          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"productVersion\":\"2.0.7\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"productVersion\":\"2.0.8\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           test "$(printf '%s' "$DETECT" | jq -r '.accountMismatch // false')" = "false"
 
           DASH2=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
@@ -129,7 +135,7 @@ jobs:
           test "$(printf '%s' "$DASH2" | jq -r '.account.account_number')" = "100001"
           test "$(printf '%s' "$DASH2" | jq -r '.account.broker_server')" = "SCENOVA-Demo"
           test "$(printf '%s' "$DASH2" | jq -r '.instance.pending_account_number // empty')" = ""
-          test "$(printf '%s' "$DASH2" | jq -r '.instance.metrics.productVersion')" = "2.0.7"
+          test "$(printf '%s' "$DASH2" | jq -r '.instance.metrics.productVersion')" = "2.0.8"
 
           echo "[integration] saving bot settings with Basket profit mode"
           SETTINGS_HTTP=$(curl -sS -o /tmp/settings-save.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"symbol":"XAUUSDm","lot":0.02,"maxPositions":7,"basketTriggerMoney":3.5,"basketTrailMoney":0.75,"maxBasketLossMoney":12,"dailyLossMoney":30,"dailyProfitTargetMoney":10,"dailyProfitContinueAfterTarget":true,"dailyProfitDrawdownPercent":20,"basketProfitTargetMoney":10,"perPositionProfitMoney":0,"perPositionLossMoney":2,"minOrderIntervalMs":450,"maxOrdersPerMinute":90,"entryMode":"BUY_ONLY","allowMinimumLotOverride":true}')
@@ -241,17 +247,17 @@ jobs:
           echo "[integration] mandatory installer update blocks Start"
           OLD_AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.4\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
           test "$(printf '%s' "$OLD_AGENT" | jq -r '.agentUpdateRequired')" = "true"
-          test "$(printf '%s' "$OLD_AGENT" | jq -r '.agentVersionRequired')" = "2.0.7"
+          test "$(printf '%s' "$OLD_AGENT" | jq -r '.agentVersionRequired')" = "2.0.8"
 
           UPDATE_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$UPDATE_DASH" | jq -r '.softwareUpdate.required')" = "true"
           test "$(printf '%s' "$UPDATE_DASH" | jq -r '.softwareUpdate.currentVersion')" = "2.0.4"
-          test "$(printf '%s' "$UPDATE_DASH" | jq -r '.softwareUpdate.latestVersion')" = "2.0.7"
+          test "$(printf '%s' "$UPDATE_DASH" | jq -r '.softwareUpdate.latestVersion')" = "2.0.8"
 
           OUTDATED_START_HTTP=$(curl -sS -o /tmp/outdated-installer-start.json -w "%{http_code}" -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$OUTDATED_START_HTTP" = "409"
 
-          CURRENT_AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.7\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
+          CURRENT_AGENT=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.8\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
           test "$(printf '%s' "$CURRENT_AGENT" | jq -r '.agentUpdateRequired')" = "false"
 
           UPDATED_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
@@ -264,7 +270,7 @@ jobs:
           HASHLESS_START_HTTP=$(curl -sS -o /tmp/hashless-start.json -w "%{http_code}" -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$HASHLESS_START_HTTP" = "409"
 
-          HASH_REFRESH=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.7\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
+          HASH_REFRESH=$(curl -fsS -X POST "$BASE/ea/agent-heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"agentVersion\":\"2.0.8\",\"terminalPath\":\"/tmp/terminal\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"CI-PC\",\"devicePublicId\":\"integration-device-001\",\"deviceSecret\":\"integration-device-secret-1234567890\"}")
           test "$(printf '%s' "$HASH_REFRESH" | jq -r '.agentUpdateRequired')" = "false"
 
           START=$(curl -fsS -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
