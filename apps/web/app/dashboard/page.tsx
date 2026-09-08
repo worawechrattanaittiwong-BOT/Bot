@@ -571,13 +571,13 @@ export default function DashboardPage() {
     ? (latestCommandStatusLabel[String(latestBotCommand.status||"")] || String(latestBotCommand.status||"—"))
     : "ยังไม่มีคำสั่งล่าสุด";
   const marketTradeLabel =
-    String(liveStatus.code||"") === "MARKET_CLOSED"
-      ? "ตลาดปิด — รอ Session"
-      : metrics.tradeReady === true
-        ? "ตลาดเปิด — พร้อมส่งออเดอร์"
-        : isMt5Online
-          ? "มีราคา แต่ยังมีเงื่อนไขที่บล็อกการเทรด"
-          : "รอ MT5 เชื่อมต่อ";
+    !isMt5Online
+      ? (agentOnline ? "รอ EA Heartbeat — ยังส่งออเดอร์ไม่ได้" : "รอ MT5 เชื่อมต่อ")
+      : String(liveStatus.code||"") === "MARKET_CLOSED"
+        ? "ตลาดปิด — รอ Session"
+        : metrics.tradeReady === true
+          ? "ตลาดเปิด — พร้อมส่งออเดอร์"
+          : "มีราคา แต่ยังมีเงื่อนไขที่บล็อกการเทรด";
 
 
   const nearlyEqual = (left:any, right:any, tolerance=0.005) =>
@@ -1254,8 +1254,8 @@ export default function DashboardPage() {
                 </>
               ) : (
                 <>
-                  <span className="cc-version-status good"><i/>เวอร์ชันตรงกัน พร้อม Start</span>
-                  <small>Agent + EA Runtime + EX5 ตรงกับ Server</small>
+                  <span className={"cc-version-status "+(isMt5Online?"good":"warn")}><i/>{isMt5Online?"เวอร์ชันตรงกัน พร้อม Start":"เวอร์ชันตรงกัน · รอ EA เชื่อมต่อ"}</span>
+                  <small>{isMt5Online?"Agent + EA Runtime + EX5 ตรงกับ Server และ EA Online":"ไฟล์และเวอร์ชันตรงกับ Server แต่ต้องรอ Heartbeat สดจาก EA ก่อน Start"}</small>
                 </>
               )}
             </div>
@@ -1337,7 +1337,7 @@ export default function DashboardPage() {
                 <section className="panel cc-status-card cc-v3-account">
                   <div className="cc-card-head"><div className="cc-card-title"><span className="cc-card-icon alt"><ScenovaIcon name="account" size={20}/></span><div><h2>สถานะบัญชี</h2></div></div><span className={"cc-mini-health "+(isMt5Online?"good":"warn")}><i/>{isMt5Online?"ใช้งานปกติ":agentOnline?"Agent เชื่อมแล้ว":"รอเชื่อมต่อ"}</span></div>
                   <div className="cc-status-list">
-                    <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+" วินาที · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20?"good":"warn"} dot/><StatusRow label="สถานะบอท" value={controlStateLabel} tone={state==="RUNNING"?"good":state==="SAFE_STOP"?"warn":"bad"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
+                    <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="Heartbeat" value={"ล่าสุด "+heartbeatAgeSeconds.toFixed(0)+" วินาทีที่แล้ว · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20?"good":"warn"} dot/><StatusRow label="สถานะบอท" value={controlStateLabel} tone={state==="RUNNING"?"good":state==="SAFE_STOP"?"warn":"bad"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
                   </div>
                   <div className="cc-status-actions"><button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}><ScenovaIcon name="settings" size={16}/>จัดการบัญชี</button><button className="btn full cc-status-detail" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="clock" size={16}/>ประวัติการทำงาน</button></div>
                 </section>
@@ -1841,7 +1841,7 @@ function LiveTerminalPanel(props:any) {
         <div><span>Web ต้องการ</span><b>{props.desired}</b></div>
         <div><span>EA จริง</span><b>{props.state}</b></div>
         <div><span>Position</span><b>{props.positionsCount} / {props.maxPositions}</b></div>
-        <div><span>Heartbeat</span><b>{Number(props.heartbeatAge||0).toFixed(0)}s · HTTP {props.heartbeatHttp||"—"}</b></div>
+        <div><span>Heartbeat ล่าสุด</span><b>{Number(props.heartbeatAge||0).toFixed(0)}s ที่แล้ว · HTTP {props.heartbeatHttp||"—"}</b></div>
         <div><span>Latency</span><b>{Number(props.heartbeatLatency||0)>0?Number(props.heartbeatLatency).toFixed(0)+" ms":"—"}</b></div>
         <div><span>Daily / Basket P&L</span><b className={Number(props.dailyProfit||0)>=0?"text-good":"text-bad"}>{"$"+Number(props.dailyProfit||0).toFixed(2)} / {"$"+Number(props.basketProfit||0).toFixed(2)}</b></div>
       </div>
