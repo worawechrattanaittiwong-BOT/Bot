@@ -807,6 +807,11 @@ void OnTradeTransaction(
       RecordBasketDeal(trans.deal);
       RecalculateDailyClosedProfit();
       UpdateAdaptiveLossState(trans.deal);
+
+      // Journal is best-effort observability only. A network/database failure
+      // must never change trading state or block order execution.
+      PostTradeJournalDeal(trans.deal);
+
       long dealEntry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
       if(BasketFillEnabled() &&
          (dealEntry == DEAL_ENTRY_OUT || dealEntry == DEAL_ENTRY_OUT_BY) &&
@@ -1216,7 +1221,7 @@ void AckCommand(long commandId)
    HttpPostJson(InpApiBase + "/api/ea/ack", payload, response);
 }
 
-int HttpPostJson(string url, string payload, string &response)
+int HttpPostJsonTimeout(string url, string payload, string &response, int timeoutMs)
 {
    char data[];
    char result[];
@@ -1228,9 +1233,87 @@ int HttpPostJson(string url, string payload, string &response)
       ArrayResize(data, ArraySize(data) - 1);
 
    ResetLastError();
-   int code = WebRequest("POST", url, headers, 5000, data, result, resultHeaders);
+   int code = WebRequest(
+      "POST",
+      url,
+      headers,
+      MathMax(250, timeoutMs),
+      data,
+      result,
+      resultHeaders
+   );
    response = CharArrayToString(result, 0, -1, CP_UTF8);
    return code;
+}
+
+int HttpPostJson(string url, string payload, string &response)
+{
+   return HttpPostJsonTimeout(url, payload, response, 5000);
+}
+
+void PostTradeJournalDeal(ulong dealTicket)
+{
+   if(MQLInfoInteger(MQL_TESTER) || dealTicket == 0 || !HistoryDealSelect(dealTicket))
+      return;
+
+   long dealEntry = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+   if(dealEntry != DEAL_ENTRY_IN &&
+      dealEntry != DEAL_ENTRY_OUT &&
+      dealEntry != DEAL_ENTRY_OUT_BY &&
+      dealEntry != DEAL_ENTRY_INOUT)
+      return;
+
+   long dealType = HistoryDealGetInteger(dealTicket, DEAL_TYPE);
+   if(dealType != DEAL_TYPE_BUY && dealType != DEAL_TYPE_SELL)
+      return;
+
+   bool isExit = dealEntry == DEAL_ENTRY_OUT ||
+                 dealEntry == DEAL_ENTRY_OUT_BY ||
+                 dealEntry == DEAL_ENTRY_INOUT;
+   int dealDirection = dealType == DEAL_TYPE_BUY ? 1 : -1;
+   int positionDirection = isExit ? -dealDirection : dealDirection;
+
+   double net =
+      HistoryDealGetDouble(dealTicket, DEAL_PROFIT) +
+      HistoryDealGetDouble(dealTicket, DEAL_SWAP) +
+      HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
+
+   double obQuality = positionDirection > 0
+      ? g_bullishOrderBlockQuality
+      : g_bearishOrderBlockQuality;
+   int basketIndex = isExit
+      ? BasketPositionCount() + 1
+      : MathMax(1, BasketPositionCount());
+
+   string payload = StringFormat(
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d}",
+      InpInstanceId,
+      InpInstallToken,
+      (long)dealTicket,
+      (long)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID),
+      isExit ? "EXIT" : "ENTRY",
+      positionDirection > 0 ? "BUY" : "SELL",
+      HistoryDealGetDouble(dealTicket, DEAL_VOLUME),
+      DoubleToString(HistoryDealGetDouble(dealTicket, DEAL_PRICE), SymbolDigitsNow()),
+      net,
+      g_entryTrigger,
+      g_entryModel,
+      g_entryQuality,
+      g_entryQualityScore,
+      g_marketRegime,
+      g_marketRegimeDetail,
+      g_fibSetupScore,
+      obQuality,
+      g_signalConfidence,
+      basketIndex
+   );
+
+   string response = "";
+   int code = HttpPostJsonTimeout(InpApiBase + "/api/ea/journal", payload, response, 1200);
+   if(code >= 200 && code < 300)
+      g_journalSent++;
+   else
+      g_journalFailed++;
 }
 
 bool BasketFillEnabled()
