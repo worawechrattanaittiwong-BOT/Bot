@@ -70,6 +70,8 @@ jobs:
           PORT: 4000
         run: |
           printf 'integration-ea-artifact' > /tmp/FastBasketBot.ex5
+          export SCENOVA_EA_VERSION="$(sed -n 's/^#property version[[:space:]]*"\([^"]*\)"/\1/p' mt5/FastBasketBot.mq5)"
+          test -n "$SCENOVA_EA_VERSION"
           node apps/api/dist/main.js > /tmp/scenova-api.log 2>&1 &
           echo $! > /tmp/scenova-api.pid
           for i in {1..30}; do
