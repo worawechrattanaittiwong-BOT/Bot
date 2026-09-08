@@ -149,7 +149,6 @@ export default function DashboardPage() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setBotSettingsOpen(false);
-        setProfileHelpOpen("");
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -1211,7 +1210,6 @@ export default function DashboardPage() {
                         type="button"
                         className="cc-control-settings-button"
                         onClick={() => {
-                          setProfileHelpOpen("");
                           setBotSettingsOpen(true);
                         }}
                       >
