@@ -1442,10 +1442,13 @@ export default function DashboardPage() {
                       <span className="cc-action-icon">
                         {botStarting ? <i className="cc-start-spinner" aria-hidden="true"/> : botRunning ? <i className="cc-start-pulse" aria-hidden="true"/> : <ScenovaIcon name="play" size={19}/>}
                       </span>
-                      <b>{botStarting ? "กำลังเริ่มบอท..." : botRunning ? "บอทกำลังทำงาน" : "เริ่มบอท"}</b>
+                      <span className="cc-action-copy">
+                        <b>{botStarting ? "กำลังเริ่มบอท..." : botRunning ? "บอทกำลังทำงาน" : "เริ่มบอท"}</b>
+                        <small>{botStarting ? "ส่งคำสั่งแล้ว · รอ EA ตอบกลับ" : botRunning ? "ระบบกำลังทำงานตามเงื่อนไขที่ตั้งไว้" : "เริ่มการทำงานอัตโนมัติ"}</small>
+                      </span>
                     </button>
-                    <button className="cc-action safe" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="stop" size={18}/></span><b>หยุดบอท</b></button>
-                    <button className="cc-action close" disabled={busy || currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?") && command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="close" size={19}/></span><b>ปิดทุกไม้</b></button>
+                    <button className="cc-action safe" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="stop" size={18}/></span><span className="cc-action-copy"><b>หยุดบอท</b><small>หยุดเปิดออเดอร์ใหม่อย่างปลอดภัย</small></span></button>
+                    <button className="cc-action close" disabled={busy || currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?") && command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="close" size={19}/></span><span className="cc-action-copy"><b>ปิดทุกไม้</b><small>ปิดออเดอร์ทั้งหมดทันที</small></span></button>
                   </div>
 
                   <div className="cc-signal-grid">
