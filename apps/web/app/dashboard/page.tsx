@@ -589,6 +589,11 @@ export default function DashboardPage() {
   const rescueReversalScore = Number(metrics.rescueReversalScore || 0);
   const rescueOldestMinutes = Number(metrics.rescueOldestAgeSeconds || 0) / 60;
   const rescueReason = String(metrics.rescueReversalReason || "NONE");
+  const effectiveLadderTarget = Number(metrics.effectiveLadderTargetPositions || configuredMaxPositions);
+  const performanceRiskMode = String(metrics.performanceRiskMode || "NORMAL");
+  const consecutiveBasketLosses = Number(metrics.consecutiveBasketLosses || 0);
+  const rescueStableSeconds = Number(metrics.rescueReversalStableSeconds || 0);
+  const rescueHedgeLockSeconds = Number(metrics.rescueHedgeLockSeconds || 0);
 
   const basketAddExplanation = currentPositions > 0 && currentPositions < effectiveMaxPositions
     ? "เปิดแล้ว " + currentPositions + "/" + configuredMaxPositions + " ไม้ · " +
@@ -1387,13 +1392,14 @@ export default function DashboardPage() {
                   <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>Order Block v2</small><b>{entryBias==="SELL" ? String(metrics.bearishOrderBlockState||"NONE")+" · "+Number(metrics.bearishOrderBlockQuality||0).toFixed(0) : String(metrics.bullishOrderBlockState||"NONE")+" · "+Number(metrics.bullishOrderBlockQuality||0).toFixed(0)}</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Fib Setup</small><b>{String(metrics.fibSetupGrade||"NONE")} · {Number(metrics.fibSetupScore||0).toFixed(0)}/100</b></span></div>
                   <div className={"cc-signal-item "+(String(metrics.entryQuality||"C")==="A"?"good":String(metrics.entryQuality||"C")==="B"?"warn":"")}><ScenovaIcon name="status" size={20}/><span><small>Entry Quality</small><b>{String(metrics.entryQuality||"—")} · {Number(metrics.entryQualityScore||0).toFixed(0)}/100</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>Pullback-Aware Ladder</small><b>{currentPositions>0 ? "R"+ladderRung+" · "+String(metrics.basketLadderMode||"—")+" · PB "+Math.max(0,ladderPullbackPoints).toFixed(0)+"/"+Math.max(0,ladderPullbackRequiredPoints).toFixed(0) : "ไม้แรกไม่ถูก Ladder ดัก"}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>Pullback-Aware Ladder</small><b>{currentPositions>0 ? "R"+ladderRung+" · เป้า "+effectiveLadderTarget+"/"+configuredMaxPositions+" · "+String(metrics.basketLadderMode||"—")+" · PB "+Math.max(0,ladderPullbackPoints).toFixed(0)+"/"+Math.max(0,ladderPullbackRequiredPoints).toFixed(0) : "ไม้แรกไม่ถูก Ladder ดัก"}</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="shield" size={20}/><span><small>Dynamic TP / SL</small><b>{Number(metrics.dynamicTakeProfitPrice||0)>0 ? "TP "+Number(metrics.dynamicTakeProfitPrice).toFixed(symbolDigits)+" · SL "+Number(metrics.dynamicStopPrice||0).toFixed(symbolDigits) : "Structure + ATR + EMA21/50"}</b></span></div>
 
                   <div className="cc-signal-item good"><ScenovaIcon name="trend" size={20}/><span><small>EMA Stack / Slope</small><b>{emaStack+" · "+emaSlope+" · "+emaVolatilityState}</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="trend" size={20}/><span><small>EMA 9 / 21 / 50 / 200</small><b>{[9,21,50,200].map((p,i)=>p+" "+Number([metrics.ema9,metrics.ema21,metrics.ema50,metrics.ema200][i]||0).toFixed(symbolDigits)).join(" · ")}</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>EMA Multi-TF</small><b>{"M1 M5 M15 M30 H1 · "+emaTfText+" · "+emaPriceVs200}</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="status" size={20}/><span><small>EMA Reclaim / Price Action</small><b>{emaReclaimState+" · BUY "+String(metrics.priceActionBuy||"NONE")+" · SELL "+String(metrics.priceActionSell||"NONE")}</b></span></div>
+                  <div className={"cc-signal-item "+(performanceRiskMode==="NORMAL"?"good":"warn")}><ScenovaIcon name="shield" size={20}/><span><small>Expectancy / Exposure Control</small><b>{performanceRiskMode+" · Ladder "+effectiveLadderTarget+"/"+configuredMaxPositions+" · แพ้ติดกัน "+consecutiveBasketLosses+" Basket"}</b></span></div>
                 </div>
 
                 <div className={"cc-intel-banner "+(rescueActive?(rescueState==="RECOVERY"?"":"warn"):"")}>
@@ -1412,7 +1418,8 @@ export default function DashboardPage() {
                   <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Recovery Progress</small><b>{"คืนแล้ว $"+rescueRecoveredMoney.toFixed(2)+" · เหลือ $"+rescueRequiredMoney.toFixed(2)}</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Recovery TP</small><b>{rescueRecoveryPrice>0 ? rescueRecoveryPrice.toFixed(symbolDigits)+" · Combined $"+rescueCombinedProfit.toFixed(2) : "รอคำนวณจาก Net Exposure"}</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="clock" size={20}/><span><small>Time Rescue</small><b>{rescueOldestMinutes.toFixed(0)+" นาที · Partial Close "+Number(metrics.rescuePartialCloseCount||0)+" ครั้ง"}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="status" size={20}/><span><small>Reversal Detection</small><b>{rescueReversalScore.toFixed(0)+"/100 · "+(Boolean(metrics.rescueReversalConfirmed)?"ยืนยันแล้ว":"กำลังประเมิน")}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="status" size={20}/><span><small>Reversal Detection</small><b>{rescueReversalScore.toFixed(0)+"/100 · "+(Boolean(metrics.rescueReversalConfirmed)?"ยืนยันแล้ว":"กำลังประเมิน")+" · Stable "+rescueStableSeconds.toFixed(0)+"s"}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="clock" size={20}/><span><small>Rescue Hysteresis</small><b>{rescueHedgeLockSeconds>0 ? "ล็อก Hedge อีก "+rescueHedgeLockSeconds.toFixed(0)+"s" : "พร้อมปรับเมื่อสัญญาณคงที่"}</b></span></div>
                 </div>
 
                 <div className="cc-status-list">

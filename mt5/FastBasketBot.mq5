@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.026"
+#property version   "1.027"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -277,6 +277,10 @@ int g_rescuePartialCloseCount = 0;
 long g_rescueOldestAgeSeconds = 0;
 datetime g_lastRescueEvaluationAt = 0;
 datetime g_lastRescueOrderAt = 0;
+datetime g_rescueReversalCandidateSince = 0;
+datetime g_rescuePrimaryRecoverySince = 0;
+datetime g_rescueHedgeLockedUntil = 0;
+double g_rescueLastAdjustedScore = 0.0;
 
 // Anti-chase / price-location intelligence. These states are intentionally
 // visible in telemetry so waiting for a pullback/retest is never a hidden gate.
@@ -311,6 +315,8 @@ bool   g_minimumLotOverrideActive = false;
 string g_adaptiveBlockReason = "";
 string g_cachedAdaptiveBlockReason = "";
 int    g_consecutiveLosses = 0;
+int    g_effectiveLadderTargetPositions = 1;
+string g_performanceRiskMode = "NORMAL";
 datetime g_lastAdaptiveEvaluation = 0;
 int    g_cachedAdaptiveDirection = 0;
 
@@ -449,7 +455,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.026", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.027", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -1094,13 +1100,53 @@ void OnTick()
       }
       else if(BasketFillEnabled() &&
               g_perPositionProfit <= 0.0 &&
-              effectiveBasketTarget > 0.0 &&
-              cycleProfit >= effectiveBasketTarget)
+              effectiveBasketTarget > 0.0)
       {
-         CloseAllBasket("BASKET_PROFIT_TARGET");
-         ResetTrail();
-         g_executionStatus = "BASKET_PROFIT_TARGET";
-         return;
+         // Automatic Basket mode protects a meaningful unrealized winner when
+         // the execution structure rolls over before the full target. Explicit
+         // user Basket/position targets are never overridden by this logic.
+         if(cycleProfit > g_profitRunPeak + 0.05)
+         {
+            g_profitRunPeak = cycleProfit;
+            SaveBasketCycleState();
+         }
+
+         if(cycleProfit >= effectiveBasketTarget)
+         {
+            CloseAllBasket("BASKET_PROFIT_TARGET");
+            ResetTrail();
+            g_executionStatus = "BASKET_PROFIT_TARGET";
+            return;
+         }
+
+         int autoDirection = BasketDirection();
+         if(autoDirection != 0 &&
+            g_profitRunPeak >= effectiveBasketTarget * 0.55 &&
+            cycleProfit > 0.0)
+         {
+            bool microReversal =
+               g_trendM1 == -autoDirection &&
+               g_trendM5 == -autoDirection;
+            bool emaReversal =
+               g_emaTrendM5 == -autoDirection ||
+               (autoDirection > 0 && g_emaReclaimState == "LOSE_EMA21_DOWN") ||
+               (autoDirection < 0 && g_emaReclaimState == "RECLAIM_EMA21_UP");
+            double oppositePa = autoDirection > 0
+               ? g_priceActionSellScore
+               : g_priceActionBuyScore;
+            bool executionInvalidated =
+               (microReversal && emaReversal) ||
+               oppositePa >= 27.0;
+
+            double defenseFloor = MathMax(0.10,g_profitRunPeak * 0.45);
+            if(executionInvalidated && cycleProfit <= defenseFloor)
+            {
+               CloseAllBasket("AUTO_PROFIT_DEFENSE");
+               ResetTrail();
+               g_executionStatus = "AUTO_PROFIT_DEFENSE";
+               return;
+            }
+         }
       }
 
       double effectiveBasketLoss = EffectiveBasketLossLimit();
@@ -1348,12 +1394,26 @@ void OnTradeTransaction(
 
    if(symbol == _Symbol && magic == RescueMagic())
    {
-      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_PROFIT);
-      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_SWAP);
-      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_COMMISSION);
+      double rescueDealNet =
+         HistoryDealGetDouble(trans.deal,DEAL_PROFIT) +
+         HistoryDealGetDouble(trans.deal,DEAL_SWAP) +
+         HistoryDealGetDouble(trans.deal,DEAL_COMMISSION);
+
+      g_rescueRealizedProfit += rescueDealNet;
+      if(g_basketJournalId != 0)
+         g_basketJournalProfit += rescueDealNet;
+
       RecalculateDailyClosedProfit();
       SaveRescueState();
       PostRescueJournalDeal(trans.deal);
+
+      long rescueEntry = HistoryDealGetInteger(trans.deal,DEAL_ENTRY);
+      if((rescueEntry == DEAL_ENTRY_OUT ||
+          rescueEntry == DEAL_ENTRY_OUT_BY ||
+          rescueEntry == DEAL_ENTRY_INOUT) &&
+         BasketPositionCount() == 0 &&
+         RescuePositionCount() == 0)
+         FinalizeBasketJournal();
       return;
    }
 
@@ -1361,7 +1421,6 @@ void OnTradeTransaction(
    {
       RecordBasketDeal(trans.deal);
       RecalculateDailyClosedProfit();
-      UpdateAdaptiveLossState(trans.deal);
       TrackBasketJournalDeal(trans.deal);
 
       // Journal is best-effort observability only. A network/database failure
@@ -1481,7 +1540,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.026\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.027\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1608,7 +1667,7 @@ void SendHeartbeat()
 
       // Market-context telemetry makes every entry auditable on the web.
       string marketContextDiagnostics = StringFormat(
-         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V5\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"m5Support\":%s,\"m5Resistance\":%s,\"supportTimeframe\":\"%s\",\"resistanceTimeframe\":\"%s\",\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
+         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V6\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"m5Support\":%s,\"m5Resistance\":%s,\"supportTimeframe\":\"%s\",\"resistanceTimeframe\":\"%s\",\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
          g_trendM1,
          g_trendM30,
          g_effectiveConfidenceThreshold,
@@ -1696,7 +1755,7 @@ void SendHeartbeat()
          UpdateRescueExposure();
 
       string intelligenceV4Diagnostics = StringFormat(
-         ",\"ema9\":%s,\"ema21\":%s,\"ema50\":%s,\"ema200\":%s,\"emaStack\":\"%s\",\"emaSlope\":\"%s\",\"emaVolatilityState\":\"%s\",\"emaPriceVs200\":\"%s\",\"emaReclaimState\":\"%s\",\"emaDistanceAtr\":%.3f,\"emaTrendM1\":%d,\"emaTrendM5\":%d,\"emaTrendM15\":%d,\"emaTrendM30\":%d,\"emaTrendH1\":%d,\"emaConfluenceBuy\":%.1f,\"emaConfluenceSell\":%.1f,\"priceActionBuy\":\"%s\",\"priceActionSell\":\"%s\",\"priceActionBuyScore\":%.1f,\"priceActionSellScore\":%.1f,\"rescueState\":\"%s\",\"rescuePrimaryDirection\":%d,\"rescueHedgeDirection\":%d,\"rescuePrimaryVolume\":%.4f,\"rescueHedgeLot\":%.4f,\"rescueNetExposure\":%.4f,\"rescueReversalScore\":%.1f,\"rescueReversalConfirmed\":%s,\"rescueReversalReason\":\"%s\",\"rescueRequiredMoney\":%.2f,\"rescueRecoveredMoney\":%.2f,\"rescueTargetMoney\":%.2f,\"rescueRecoveryPrice\":%s,\"rescuePrimaryProfit\":%.2f,\"rescueHedgeProfit\":%.2f,\"rescueCombinedProfit\":%.2f,\"rescuePartialCloseCount\":%d,\"rescueOldestAgeSeconds\":%I64d,\"rescuePositionCount\":%d",
+         ",\"ema9\":%s,\"ema21\":%s,\"ema50\":%s,\"ema200\":%s,\"emaStack\":\"%s\",\"emaSlope\":\"%s\",\"emaVolatilityState\":\"%s\",\"emaPriceVs200\":\"%s\",\"emaReclaimState\":\"%s\",\"emaDistanceAtr\":%.3f,\"emaTrendM1\":%d,\"emaTrendM5\":%d,\"emaTrendM15\":%d,\"emaTrendM30\":%d,\"emaTrendH1\":%d,\"emaConfluenceBuy\":%.1f,\"emaConfluenceSell\":%.1f,\"priceActionBuy\":\"%s\",\"priceActionSell\":\"%s\",\"priceActionBuyScore\":%.1f,\"priceActionSellScore\":%.1f,\"effectiveLadderTargetPositions\":%d,\"performanceRiskMode\":\"%s\",\"consecutiveBasketLosses\":%d,\"rescueState\":\"%s\",\"rescuePrimaryDirection\":%d,\"rescueHedgeDirection\":%d,\"rescuePrimaryVolume\":%.4f,\"rescueHedgeLot\":%.4f,\"rescueNetExposure\":%.4f,\"rescueReversalScore\":%.1f,\"rescueReversalConfirmed\":%s,\"rescueReversalReason\":\"%s\",\"rescueReversalStableSeconds\":%I64d,\"rescueHedgeLockSeconds\":%I64d,\"rescueRequiredMoney\":%.2f,\"rescueRecoveredMoney\":%.2f,\"rescueTargetMoney\":%.2f,\"rescueRecoveryPrice\":%s,\"rescuePrimaryProfit\":%.2f,\"rescueHedgeProfit\":%.2f,\"rescueCombinedProfit\":%.2f,\"rescuePartialCloseCount\":%d,\"rescueOldestAgeSeconds\":%I64d,\"rescuePositionCount\":%d",
          DoubleToString(g_ema9,SymbolDigitsNow()),
          DoubleToString(g_ema21,SymbolDigitsNow()),
          DoubleToString(g_ema50,SymbolDigitsNow()),
@@ -1718,6 +1777,9 @@ void SendHeartbeat()
          g_priceActionSell,
          g_priceActionBuyScore,
          g_priceActionSellScore,
+         g_effectiveLadderTargetPositions,
+         g_performanceRiskMode,
+         g_consecutiveLosses,
          RescueStateName(),
          g_rescuePrimaryDirection,
          g_rescueHedgeDirection,
@@ -1727,6 +1789,8 @@ void SendHeartbeat()
          g_rescueReversalScore,
          g_rescueReversalConfirmed ? "true" : "false",
          g_rescueReversalReason,
+         (long)(g_rescueReversalCandidateSince>0 ? MathMax(0,TimeCurrent()-g_rescueReversalCandidateSince) : 0),
+         (long)(g_rescueHedgeLockedUntil>TimeCurrent() ? g_rescueHedgeLockedUntil-TimeCurrent() : 0),
          g_rescueRequiredMoney,
          g_rescueRecoveredMoney,
          g_rescueTargetMoney,
@@ -2118,7 +2182,7 @@ void RecoverOpenBasketJournal()
    g_basketJournalStartedAt = oldestTime;
    g_basketJournalDirection = direction;
    g_basketJournalVolume = volume;
-   g_basketJournalProfit = g_basketCycleRealizedProfit;
+   g_basketJournalProfit = g_basketCycleRealizedProfit + g_rescueRealizedProfit;
    g_basketJournalTrigger = "RECOVERED";
    g_basketJournalModel = g_entryModel;
    g_basketJournalQuality = g_entryQuality;
@@ -2146,6 +2210,7 @@ void FinalizeBasketJournal()
    g_pendingBasketDirection = g_basketJournalDirection;
    g_pendingBasketVolume = g_basketJournalVolume;
    g_pendingBasketProfit = g_basketJournalProfit;
+   UpdateAdaptiveLossStateFromBasket(g_pendingBasketProfit);
    g_pendingBasketPeakPositions = MathMax(1, g_basketPeakPositionCount);
    g_pendingBasketTrigger = g_basketJournalTrigger;
    g_pendingBasketModel = g_basketJournalModel;
@@ -2173,7 +2238,8 @@ void TrackBasketJournalDeal(ulong dealTicket)
          HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
 
    if((entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_OUT_BY) &&
-      BasketPositionCount() == 0)
+      BasketPositionCount() == 0 &&
+      RescuePositionCount() == 0)
       FinalizeBasketJournal();
 }
 
@@ -2192,7 +2258,7 @@ void FlushPendingBasketJournal()
       return;
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"eventType\":\"BASKET\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":0,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d,\"symbol\":\"%s\",\"brokerServer\":\"%s\",\"startedAt\":%I64d,\"endedAt\":%I64d,\"peakPositions\":%d,\"sessionProfile\":\"%s\"}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"eventType\":\"BASKET\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":0,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d,\"symbol\":\"%s\",\"brokerServer\":\"%s\",\"startedAt\":%I64d,\"endedAt\":%I64d,\"peakPositions\":%d,\"sessionProfile\":\"%s\",\"journalSchema\":3}",
       InpInstanceId,
       InpInstallToken,
       g_pendingBasketId,
@@ -3549,6 +3615,67 @@ bool AntiChaseLocationReady(
    return false;
 }
 
+bool ExecutionConfirmationReady(
+   int direction,
+   double momentum,
+   bool requireHigherTimeframe
+)
+{
+   bool higher = HigherTimeframeSupportsDirection(direction);
+   bool micro = LowerTimeframeSupportsDirection(direction);
+   bool emaExecution =
+      g_emaTrendM5 == direction ||
+      (g_emaTrendM1 == direction && g_emaTrendM15 == direction);
+   bool emaMacro =
+      g_emaTrendM15 == direction ||
+      g_emaTrendM30 == direction ||
+      g_emaTrendH1 == direction;
+
+   double paScore = direction > 0
+      ? g_priceActionBuyScore
+      : g_priceActionSellScore;
+   bool priceAction = paScore >= 18.0;
+   bool emaReclaim =
+      (direction > 0 && g_emaReclaimState == "RECLAIM_EMA21_UP") ||
+      (direction < 0 && g_emaReclaimState == "LOSE_EMA21_DOWN");
+   bool momentumReady = MomentumSupportsDirection(direction,momentum,0.40);
+
+   if(requireHigherTimeframe && !higher)
+      return false;
+
+   // A fallback continuation needs an execution event, not only an old trend
+   // average. Any one of Price Action / EMA reclaim / live momentum may trigger,
+   // but it must sit on top of EMA + lower-timeframe directional agreement.
+   return micro &&
+      emaExecution &&
+      (emaMacro || higher) &&
+      (priceAction || emaReclaim || momentumReady);
+}
+
+bool NewsImpulseExecutionReady(int direction,double momentum)
+{
+   if(g_marketRegime != "HIGH_VOLATILITY")
+      return false;
+
+   double paScore = direction > 0
+      ? g_priceActionBuyScore
+      : g_priceActionSellScore;
+   bool emaAligned =
+      g_emaTrendM5 == direction &&
+      (g_emaTrendM15 == direction || g_emaTrendM30 == direction);
+   bool priceAction = paScore >= 18.0;
+   bool trendAligned =
+      g_trendM5 == direction &&
+      (g_trendM15 == direction || g_trendM30 == direction);
+
+   // News trading remains enabled, but "fast market" alone is no longer a
+   // reason to chase. Demand a real directional impulse plus EMA/structure.
+   return MomentumSupportsDirection(direction,momentum,0.75) &&
+      trendAligned &&
+      emaAligned &&
+      priceAction;
+}
+
 bool DirectSetupReady(
    int direction,
    double momentum,
@@ -3561,12 +3688,22 @@ bool DirectSetupReady(
 
    bool microSupport = LowerTimeframeSupportsDirection(direction);
    bool higherSupport = HigherTimeframeSupportsDirection(direction);
-   bool lightMomentum = MomentumSupportsDirection(direction, momentum, 0.25);
+   bool lightMomentum = MomentumSupportsDirection(direction, momentum, 0.30);
    bool strongMomentum = MomentumSupportsDirection(
       direction,
       momentum,
-      g_marketRegime == "HIGH_VOLATILITY" ? 0.55 : 0.75
+      g_marketRegime == "HIGH_VOLATILITY" ? 0.65 : 0.80
    );
+   double paScore = direction > 0
+      ? g_priceActionBuyScore
+      : g_priceActionSellScore;
+   bool priceActionReady = paScore >= 18.0;
+   bool emaExecution =
+      g_emaTrendM5 == direction ||
+      (g_emaTrendM1 == direction && g_emaTrendM15 == direction);
+   bool emaReclaim =
+      (direction > 0 && g_emaReclaimState == "RECLAIM_EMA21_UP") ||
+      (direction < 0 && g_emaReclaimState == "LOSE_EMA21_DOWN");
 
    double atrPrice = MathMax(
       _Point * 20.0,
@@ -3612,28 +3749,36 @@ bool DirectSetupReady(
       modelOut = locationTrigger;
 
    if(modelOut == "PULLBACK_RETEST")
-      return microSupport || lightMomentum || strongMomentum;
+      return microSupport &&
+         emaExecution &&
+         (priceActionReady || emaReclaim || lightMomentum);
 
-   // Pullback/reaction setups only need one lower-timeframe turn or light
-   // directional momentum. Confidence remains optional and separate.
+   // Pullback/reaction models already have a real location thesis. They still
+   // need a fresh execution turn so an old OB/Fib level cannot trigger by itself.
    if(g_entryModel == "OB_FIB_PULLBACK" ||
       g_entryModel == "ORDER_BLOCK_PULLBACK" ||
       g_entryModel == "FIB_PULLBACK" ||
       g_entryModel == "LEVEL_REACTION")
-      return microSupport || lightMomentum;
+      return microSupport &&
+         (priceActionReady || emaReclaim || lightMomentum);
 
    if(g_entryModel == "CONTINUATION")
-      return higherSupport && (microSupport || lightMomentum);
+      return ExecutionConfirmationReady(direction,momentum,true);
 
    if(g_marketRegime == "HIGH_VOLATILITY" &&
-      strongMomentum &&
-      (microSupport || g_trendM15 == direction))
+      NewsImpulseExecutionReady(direction,momentum))
       return true;
 
    if(g_entryModel == "CAUTION_ZONE")
-      return strongMomentum && microSupport && higherSupport;
+      return strongMomentum &&
+         microSupport &&
+         higherSupport &&
+         emaExecution &&
+         priceActionReady;
 
-   return strongMomentum && (microSupport || higherSupport);
+   // No bare trend/momentum fallback here. If there is no identifiable setup
+   // and no confirmed execution event, the engine waits for the next event.
+   return false;
 }
 
 int SetupFirstDirection(double momentum)
@@ -3662,8 +3807,7 @@ int SetupFirstDirection(double momentum)
          return fixedDirection;
       }
 
-      if(HigherTimeframeSupportsDirection(fixedDirection) &&
-         LowerTimeframeSupportsDirection(fixedDirection))
+      if(ExecutionConfirmationReady(fixedDirection,momentum,true))
       {
          string locationTrigger = "NONE";
          if(AntiChaseLocationReady(
@@ -3678,7 +3822,7 @@ int SetupFirstDirection(double momentum)
             EvaluateMarketLocationScore(fixedDirection);
             g_entryTrigger = locationTrigger != "NONE"
                ? locationTrigger
-               : "STRUCTURE_CONTINUATION";
+               : "STRUCTURE_EXECUTION";
             return fixedDirection;
          }
       }
@@ -3721,8 +3865,7 @@ int SetupFirstDirection(double momentum)
    }
 
    if(chosen == 0 && g_macroTrendDirection != 0 &&
-      HigherTimeframeSupportsDirection(g_macroTrendDirection) &&
-      LowerTimeframeSupportsDirection(g_macroTrendDirection))
+      ExecutionConfirmationReady(g_macroTrendDirection,momentum,true))
    {
       string locationTrigger = "NONE";
       if(AntiChaseLocationReady(
@@ -3737,20 +3880,15 @@ int SetupFirstDirection(double momentum)
          chosen = g_macroTrendDirection;
          chosenModel = locationTrigger != "NONE"
             ? locationTrigger
-            : "STRUCTURE_CONTINUATION";
+            : "STRUCTURE_EXECUTION";
       }
    }
 
-   if(chosen == 0)
+   if(chosen == 0 && g_marketRegime == "HIGH_VOLATILITY")
    {
       int momentumDirection = momentum > 0.0 ? 1 : momentum < 0.0 ? -1 : 0;
       if(momentumDirection != 0 &&
-         MomentumSupportsDirection(
-            momentumDirection,
-            momentum,
-            g_marketRegime == "HIGH_VOLATILITY" ? 0.55 : 0.75
-         ) &&
-         (g_trendM5 == momentumDirection || g_trendM15 == momentumDirection))
+         NewsImpulseExecutionReady(momentumDirection,momentum))
       {
          string locationTrigger = "NONE";
          if(AntiChaseLocationReady(
@@ -3765,9 +3903,7 @@ int SetupFirstDirection(double momentum)
             chosen = momentumDirection;
             chosenModel = locationTrigger != "NONE"
                ? locationTrigger
-               : (g_marketRegime == "HIGH_VOLATILITY"
-                  ? "NEWS_IMPULSE"
-                  : "MOMENTUM_CONTINUATION");
+               : "NEWS_EXECUTION";
          }
       }
    }
@@ -4485,31 +4621,32 @@ bool AdaptiveBasketAddAllowed(int direction)
 
 void PersistAdaptiveRiskState()
 {
-   GlobalVariableSet(DailyRiskStateKey("ALOSS"), (double)g_consecutiveLosses);
+   GlobalVariableSet(DailyRiskStateKey("ALOSS2"), (double)g_consecutiveLosses);
 }
 
 void RestoreAdaptiveRiskState()
 {
-   string lossKey = DailyRiskStateKey("ALOSS");
-   if(GlobalVariableCheck(lossKey)) g_consecutiveLosses = (int)GlobalVariableGet(lossKey);
-   // Remove cooldown state left by older EA versions. Loss history may still
-   // reduce risk, but it never delays or blocks the next valid signal.
+   // ALOSS in older builds counted every losing position. v1.027 counts one
+   // completed Basket/Rescue Cycle as one decision, so migrate to a clean key.
+   string lossKey = DailyRiskStateKey("ALOSS2");
+   g_consecutiveLosses = GlobalVariableCheck(lossKey)
+      ? (int)GlobalVariableGet(lossKey)
+      : 0;
+
+   string legacyLossKey = DailyRiskStateKey("ALOSS");
+   if(GlobalVariableCheck(legacyLossKey)) GlobalVariableDel(legacyLossKey);
+
    string cooldownKey = DailyRiskStateKey("ACOOL");
    if(GlobalVariableCheck(cooldownKey)) GlobalVariableDel(cooldownKey);
 }
 
-void UpdateAdaptiveLossState(ulong dealTicket)
+void UpdateAdaptiveLossStateFromBasket(double net)
 {
-   long entry = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
-   if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_OUT_BY)
-      return;
-
-   double net = HistoryDealGetDouble(dealTicket, DEAL_PROFIT)
-              + HistoryDealGetDouble(dealTicket, DEAL_SWAP)
-              + HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
-   if(net < 0.0)
+   // One losing 10-position Basket is one losing decision, not ten losses.
+   // Track streak at completed Cycle level so risk scaling is statistically sane.
+   if(net < -0.01)
       g_consecutiveLosses++;
-   else if(net > 0.0)
+   else if(net > 0.01)
       g_consecutiveLosses = 0;
    PersistAdaptiveRiskState();
 }
@@ -4817,19 +4954,55 @@ double BasketProgressFromAnchorPoints(int direction)
       : (anchorPrice - tick.ask) / _Point;
 }
 
+int EffectiveLadderTargetPositions(int direction)
+{
+   int cap = MathMax(1,g_maxPositions);
+   if(cap <= 1)
+   {
+      g_performanceRiskMode = "SINGLE";
+      return 1;
+   }
+
+   if(g_entryQuality == "B")
+      cap = MathMin(cap,MathMax(2,(int)MathCeil(g_maxPositions*0.65)));
+   else if(g_entryQuality == "C")
+      cap = MathMin(cap,MathMax(2,(int)MathCeil(g_maxPositions*0.35)));
+
+   double historyWin = direction > 0 ? g_buyWinProbability : g_sellWinProbability;
+   int historySamples = direction > 0 ? g_buyWinSamples : g_sellWinSamples;
+   if(historySamples >= 20 && historyWin < 45.0)
+      cap = MathMin(cap,MathMax(2,(int)MathCeil(g_maxPositions*0.50)));
+   if(historySamples >= 30 && historyWin < 35.0)
+      cap = MathMin(cap,2);
+
+   if(g_consecutiveLosses >= 4)
+      cap = MathMax(1,cap-2);
+   else if(g_consecutiveLosses >= 2)
+      cap = MathMax(1,cap-1);
+
+   g_performanceRiskMode =
+      g_consecutiveLosses >= 4 ? "DEFENSIVE_STREAK" :
+      (historySamples >= 30 && historyWin < 35.0) ? "DEFENSIVE_HISTORY" :
+      g_entryQuality == "C" ? "QUALITY_C_LIMITED" :
+      g_entryQuality == "B" ? "QUALITY_B_LIMITED" :
+      "NORMAL";
+
+   return MathMax(1,MathMin(g_maxPositions,cap));
+}
+
 double LadderFractionForRung(int rung)
 {
    if(rung <= 1) return 0.0;
-   if(rung == 2) return 0.03;
-   if(rung == 3) return 0.07;
-   if(rung == 4) return 0.12;
-   if(rung == 5) return 0.18;
-   if(rung == 6) return 0.25;
-   if(rung == 7) return 0.33;
-   if(rung == 8) return 0.42;
-   if(rung == 9) return 0.52;
-   if(rung == 10) return 0.63;
-   return 0.63 + (rung - 10) * 0.08;
+   if(rung == 2) return 0.08;
+   if(rung == 3) return 0.16;
+   if(rung == 4) return 0.26;
+   if(rung == 5) return 0.38;
+   if(rung == 6) return 0.52;
+   if(rung == 7) return 0.68;
+   if(rung == 8) return 0.86;
+   if(rung == 9) return 1.06;
+   if(rung == 10) return 1.28;
+   return 1.28 + (rung - 10) * 0.18;
 }
 
 bool RecentDirectionalBodyAfter(
@@ -4875,12 +5048,12 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       : AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
    atr = MathMax(10.0, atr);
 
-   double qualityFactor = g_entryQuality == "A" ? 0.78 :
-                          g_entryQuality == "B" ? 0.92 : 1.05;
+   double qualityFactor = g_entryQuality == "A" ? 0.95 :
+                          g_entryQuality == "B" ? 1.10 : 1.30;
    double regimeFactor =
-      g_marketRegimeDetail == "NEWS_IMPULSE" ? 0.72 :
-      g_marketRegime == "HIGH_VOLATILITY" ? 0.82 :
-      g_marketRegimeDetail == "TREND_ACCELERATION" ? 0.85 : 1.0;
+      g_marketRegimeDetail == "NEWS_IMPULSE" ? 1.15 :
+      g_marketRegime == "HIGH_VOLATILITY" ? 1.10 :
+      g_marketRegimeDetail == "TREND_ACCELERATION" ? 0.95 : 1.0;
 
    g_ladderRequiredPoints = MathMax(
       3.0,
@@ -4909,8 +5082,8 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       : MathMax(0.0, (current - g_ladderExtremePrice) / _Point);
 
    double pullbackFactor =
-      g_marketRegimeDetail == "NEWS_IMPULSE" ? 0.045 :
-      g_marketRegime == "HIGH_VOLATILITY" ? 0.055 : 0.070;
+      g_marketRegimeDetail == "NEWS_IMPULSE" ? 0.080 :
+      g_marketRegime == "HIGH_VOLATILITY" ? 0.100 : 0.120;
    g_ladderPullbackRequiredPoints = MathMax(
       2.0,
       MathMin(
@@ -4945,12 +5118,23 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
    // After the pullback, require a fresh execution turn back in Basket
    // direction. This converts the Ladder from "add on new low/high" into
    // "add after pullback + continuation".
+   bool m1Turn = RecentDirectionalBodyAfter(
+      direction,
+      PERIOD_M1,
+      g_ladderPullbackArmedAt
+   );
+   bool emaContinuation =
+      g_emaTrendM1 == direction &&
+      g_emaTrendM5 == direction;
+   double paScore = direction > 0
+      ? g_priceActionBuyScore
+      : g_priceActionSellScore;
    bool continuation =
-      MomentumSupportsDirection(direction, MomentumPoints(), 0.18) ||
-      RecentDirectionalBodyAfter(
-         direction,
-         PERIOD_M1,
-         g_ladderPullbackArmedAt
+      m1Turn &&
+      (
+         MomentumSupportsDirection(direction,MomentumPoints(),0.30) ||
+         emaContinuation ||
+         paScore >= 18.0
       );
 
    if(!continuation)
@@ -4986,7 +5170,8 @@ void ArmBurst(int direction)
       return;
 
    g_burstDirection = direction;
-   g_burstTargetPositions = MathMax(1, g_maxPositions);
+   g_effectiveLadderTargetPositions = EffectiveLadderTargetPositions(direction);
+   g_burstTargetPositions = MathMax(1,g_effectiveLadderTargetPositions);
    g_burstRequestsSent = MathMax(1, BasketPositionCount());
    g_burstStartedAt = TimeCurrent();
    g_ladderRung = MathMax(1, BasketPositionCount() + 1);
@@ -5676,6 +5861,10 @@ void ResetRescueState()
    g_rescueHedgeProfit = 0.0;
    g_rescuePartialCloseCount = 0;
    g_rescueOldestAgeSeconds = 0;
+   g_rescueReversalCandidateSince = 0;
+   g_rescuePrimaryRecoverySince = 0;
+   g_rescueHedgeLockedUntil = 0;
+   g_rescueLastAdjustedScore = 0.0;
 
    string keys[7] = {"state","start","dir","real","def","target","partial"};
    for(int i=0;i<ArraySize(keys);i++)
@@ -6155,6 +6344,12 @@ void AdjustRescueHedge()
    if(g_rescuePrimaryDirection==0 || g_rescuePrimaryVolume<=0.0)
       return;
 
+   datetime now=TimeCurrent();
+   // Do not rebalance every few ticks in a sideways market. Spread/commission
+   // from Hedge churn can be more expensive than the protection itself.
+   if(g_lastRescueOrderAt>0 && now-g_lastRescueOrderAt<60)
+      return;
+
    double ratio=RescueDesiredHedgeRatio();
    double desired=g_rescuePrimaryVolume*ratio;
    double current=VolumeForMagic(RescueMagic(),-g_rescuePrimaryDirection);
@@ -6163,14 +6358,24 @@ void AdjustRescueHedge()
    if(current+minVolume*0.50<desired)
    {
       double add=NormalizeRescueVolume(desired-current);
-      if(add>0.0)
-         SendRescueOrder(-g_rescuePrimaryDirection,add);
+      if(add>0.0 && SendRescueOrder(-g_rescuePrimaryDirection,add))
+      {
+         g_rescueHedgeLockedUntil=now+120;
+         g_rescueLastAdjustedScore=g_rescueReversalScore;
+      }
    }
    else if(current>desired+minVolume*0.75)
    {
+      // Never trim a freshly opened Hedge on a one-minute noise reversal.
+      if(now<g_rescueHedgeLockedUntil)
+         return;
+
       double trim=NormalizeRescueVolume(current-desired);
-      if(trim>0.0)
-         ReduceRescueVolume(trim);
+      if(trim>0.0 && ReduceRescueVolume(trim))
+      {
+         g_lastRescueOrderAt=now;
+         g_rescueLastAdjustedScore=g_rescueReversalScore;
+      }
    }
 }
 
@@ -6229,9 +6434,22 @@ bool ManageAdaptiveRescue()
 
    long timeLimit=RescueTimeThresholdSeconds();
    bool timeRescue=g_rescueOldestAgeSeconds>=timeLimit && g_rescueCombinedProfit<0.0;
+
+   bool reversalCandidate =
+      g_rescueReversalScore>=70.0 ||
+      (timeRescue && g_rescueReversalScore>=58.0);
+   if(reversalCandidate)
+   {
+      if(g_rescueReversalCandidateSince==0)
+         g_rescueReversalCandidateSince=now;
+   }
+   else
+      g_rescueReversalCandidateSince=0;
+
+   long confirmationSeconds=timeRescue ? 15 : 25;
    g_rescueReversalConfirmed=
-      g_rescueReversalScore>=65.0 ||
-      (timeRescue && g_rescueReversalScore>=52.0);
+      g_rescueReversalCandidateSince>0 &&
+      now-g_rescueReversalCandidateSince>=confirmationSeconds;
 
    double rescueThreshold=RescueThresholdMoney();
    double warningThreshold=MathMax(0.50,rescueThreshold*0.55);
@@ -6281,6 +6499,9 @@ bool ManageAdaptiveRescue()
       {
          g_rescueState=RESCUE_ACTIVE;
          g_rescueStartedAt=now;
+         g_rescueHedgeLockedUntil=now+120;
+         g_rescuePrimaryRecoverySince=0;
+         g_rescueLastAdjustedScore=g_rescueReversalScore;
          g_rescueTargetMoney=MathMax(
             0.20,
             CurrentSpreadCost(MathMax(SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),g_lot))*0.50
@@ -6351,16 +6572,30 @@ bool ManageAdaptiveRescue()
          SaveRescueState();
       }
 
-      // If the original structure recovers before the hedge earns its keep,
-      // unwind the hedge instead of holding two opposing positions forever.
-      if(g_rescueReversalScore<40.0 &&
-         g_rescueCombinedProfit>-warningThreshold)
+      // Original-structure recovery must persist before unwinding a Hedge.
+      // This hysteresis prevents Hedge -> close -> Hedge loops in chop.
+      bool primaryRecoveryCandidate =
+         g_rescueReversalScore<35.0 &&
+         g_rescueCombinedProfit>-warningThreshold;
+      if(primaryRecoveryCandidate)
+      {
+         if(g_rescuePrimaryRecoverySince==0)
+            g_rescuePrimaryRecoverySince=now;
+      }
+      else
+         g_rescuePrimaryRecoverySince=0;
+
+      if(g_rescuePrimaryRecoverySince>0 &&
+         now-g_rescuePrimaryRecoverySince>=60 &&
+         now>=g_rescueHedgeLockedUntil)
       {
          CloseRescuePositions();
          if(RescuePositionCount()==0)
          {
             g_rescueState=RESCUE_WARNING;
-            g_rescueReversalReason="PRIMARY_STRUCTURE_RECOVERED";
+            g_rescueReversalReason="PRIMARY_STRUCTURE_RECOVERED_STABLE";
+            g_rescueReversalCandidateSince=0;
+            g_rescuePrimaryRecoverySince=0;
             SaveRescueState();
          }
       }

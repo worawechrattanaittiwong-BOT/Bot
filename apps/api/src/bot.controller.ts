@@ -200,6 +200,7 @@ export class BotController {
       RESCUE_RECOVERY: { label: "Recovery กำลังพา Basket กลับ", detail: "กำไรจาก Hedge/การฟื้นตัวกำลังลด Deficit ระบบจะใช้ Partial Close และ Recovery TP เพื่อออกจาก Cycle", tone: "good" },
       RESCUE_EXIT: { label: "กำลังปิด Rescue Cycle", detail: "ถึง Recovery target แล้ว ระบบกำลังปิด Primary และ Hedge ให้หมด", tone: "good" },
       RESCUE_CYCLE_CLOSED: { label: "Rescue Cycle ปิดแล้ว", detail: "Primary/Hedge ถูกปิดครบและระบบกลับสู่ NORMAL พร้อมหา Setup ใหม่", tone: "good" },
+      AUTO_PROFIT_DEFENSE: { label: "ป้องกันกำไรอัตโนมัติ", detail: "Basket เคยมีกำไรถึงช่วงสำคัญ แต่ M1/M5 + EMA/Price Action เริ่มกลับทิศ ระบบจึงปิดกำไรที่เหลือก่อน Winner กลายเป็น Loser; ใช้เฉพาะ Auto Basket target", tone: "good" },
       BASKET_LADDER_ADVANCE: { label: "Basket Ladder เพิ่มไม้แล้ว", detail: "ราคาเดินถึง Rung ถัดไปและ Broker รับคำสั่งเพิ่มไม้", tone: "good" },
       BASKET_FILLING: { label: "กำลังเปิดตามจำนวนไม้", detail: "EA กำลังส่งคำสั่งตามจำนวนที่เลือก โดย MT5/Broker เป็นผู้ตอบรับแต่ละคำสั่ง", tone: "good" },
       BASKET_FILL_COMPLETE: { label: "ส่งคำสั่งครบจำนวนแล้ว", detail: "ระบบกำลังดูแล Position ที่ MT5 เปิดสำเร็จ", tone: "good" },
