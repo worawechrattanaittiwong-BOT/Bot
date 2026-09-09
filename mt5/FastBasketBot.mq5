@@ -948,12 +948,13 @@ void OnTick()
    }
 
    int count = BasketPositionCount();
+   int rescueCount = RescuePositionCount();
    if(count > 0)
    {
       UpdateBasketPeakPositionCount(count);
       EnsureBurstTargets(g_burstActive ? MathMax(1, g_burstTargetPositions) : count);
    }
-   else
+   else if(rescueCount <= 0)
       ResetBasketCycleState();
 
    double profit = BasketProfit();
@@ -975,10 +976,18 @@ void OnTick()
 
    if(g_dailyLoss > 0.0 && AccountInfoDouble(ACCOUNT_EQUITY) <= g_dayStartEquity - g_dailyLoss)
    {
-      if(count > 0) CloseAllBasket("DAILY_LOSS");
+      if(count > 0 || rescueCount > 0) CloseAllBasket("DAILY_LOSS");
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
       g_executionStatus = "DAILY_LOSS_LOCK";
+      return;
+   }
+
+   if(count <= 0 && rescueCount > 0)
+   {
+      RefreshMarketContext(false);
+      ManageAdaptiveRescue();
+      g_executionStatus = "RESCUE_EXIT";
       return;
    }
 
@@ -989,6 +998,26 @@ void OnTick()
       RefreshMarketContext(false);
       RecoverOpenBasketJournal();
       ManageDynamicProtection();
+
+      bool rescueManaging = ManageAdaptiveRescue();
+      if(g_rescueState == RESCUE_ACTIVE ||
+         g_rescueState == RESCUE_RECOVERY ||
+         g_rescueState == RESCUE_EXIT)
+      {
+         double rescueLossLimit = EffectiveBasketLossLimit();
+         double rescueCycleProfit = RescueCombinedCycleProfit();
+         if(rescueLossLimit > 0.0 && rescueCycleProfit <= -rescueLossLimit)
+         {
+            CloseAllBasket("MAX_BASKET_LOSS");
+            ResetTrail();
+            return;
+         }
+
+         // Rescue/Recovery owns position management until the Cycle is closed
+         // or the original structure recovers. It never affects first entry.
+         if(rescueManaging)
+            return;
+      }
 
       // Per-position profit/loss controls are evaluated before basket-level
       // controls. Per-position profit and total Basket profit are mutually
@@ -1069,7 +1098,10 @@ void OnTick()
       }
 
       double effectiveBasketLoss = EffectiveBasketLossLimit();
-      double lossControlProfit = BasketFillEnabled() ? cycleProfit : profit;
+      double lossControlProfit =
+         (g_rescueState != RESCUE_NORMAL || RescuePositionCount() > 0)
+         ? RescueCombinedCycleProfit()
+         : (BasketFillEnabled() ? cycleProfit : profit);
       if(effectiveBasketLoss > 0.0 && lossControlProfit <= -effectiveBasketLoss)
       {
          CloseAllBasket("MAX_BASKET_LOSS");
@@ -1159,6 +1191,16 @@ void OnTick()
    if(!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid())
    {
       g_executionStatus = "CONTROL_NOT_FRESH";
+      return;
+   }
+
+   // WARNING pauses only additional positions while Rescue evaluates the open
+   // Basket. It is post-entry management, not a first-entry filter.
+   if(count > 0 && g_rescueState == RESCUE_WARNING)
+   {
+      g_executionStatus = g_rescueOldestAgeSeconds >= RescueTimeThresholdSeconds()
+         ? "TIME_RESCUE_WARNING"
+         : "RESCUE_WARNING";
       return;
    }
 
