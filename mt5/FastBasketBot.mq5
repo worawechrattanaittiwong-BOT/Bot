@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.025"
+#property version   "1.026"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -27,6 +27,15 @@ enum ENUM_CLOSE_REASON
    CLOSE_REASON_TRAIL       = 4,
    CLOSE_REASON_SAFE_STOP   = 5,
    CLOSE_REASON_REMOTE      = 6
+};
+
+enum ENUM_RESCUE_STATE
+{
+   RESCUE_NORMAL   = 0,
+   RESCUE_WARNING  = 1,
+   RESCUE_ACTIVE   = 2,
+   RESCUE_RECOVERY = 3,
+   RESCUE_EXIT     = 4
 };
 
 input string          InpApiBase              = "https://snvea-bot.online/backend";
@@ -82,6 +91,13 @@ input int             InpSessionEndHour        = 24;
 // 0 = fully adaptive. A positive value is only a soft volatility marker;
  // it never blocks trading by itself.
 input double          InpMaxAtrPoints          = 0.0;
+
+// Intelligence v4: post-entry recovery and EMA intelligence. These features
+// never decide whether the first trade is permitted.
+input bool            InpAdaptiveRescueEngine  = true;
+input double          InpRescueMaxHedgeRatio   = 0.65;
+input int             InpTimeRescueMinutes     = 20;
+input bool            InpShowEmaOnChart        = true;
 
 ENUM_BOT_STATE g_state = STATE_STOPPED;
 bool   g_access = false;
@@ -202,6 +218,65 @@ double g_entryQualityScore = 0.0;
 string g_entryQuality = "C";
 string g_entryModel = "NONE";
 string g_entryTrigger = "NONE";
+
+// EMA Intelligence ---------------------------------------------------------
+#define EMA_TF_COUNT 5
+#define EMA_PERIOD_COUNT 4
+int g_emaHandles[EMA_TF_COUNT][EMA_PERIOD_COUNT];
+int g_emaChartHandles[EMA_PERIOD_COUNT];
+double g_ema9 = 0.0;
+double g_ema21 = 0.0;
+double g_ema50 = 0.0;
+double g_ema200 = 0.0;
+double g_emaDistanceAtr = 0.0;
+double g_emaConfluenceScoreBuy = 0.0;
+double g_emaConfluenceScoreSell = 0.0;
+int g_emaTrendM1 = 0;
+int g_emaTrendM5 = 0;
+int g_emaTrendM15 = 0;
+int g_emaTrendM30 = 0;
+int g_emaTrendH1 = 0;
+string g_emaStack = "MIXED";
+string g_emaSlope = "FLAT";
+string g_emaVolatilityState = "NORMAL";
+string g_emaPriceVs200 = "UNKNOWN";
+string g_emaReclaimState = "NONE";
+datetime g_lastEmaRefreshAt = 0;
+datetime g_lastEmaDrawBar = 0;
+datetime g_lastEmaDrawAt = 0;
+
+// Candlestick / Price Action intelligence. Advisory only for first entries.
+string g_priceActionBuy = "NONE";
+string g_priceActionSell = "NONE";
+double g_priceActionBuyScore = 0.0;
+double g_priceActionSellScore = 0.0;
+
+// Adaptive Basket Rescue & Recovery ---------------------------------------
+bool g_rescueEnabled = true;
+ENUM_RESCUE_STATE g_rescueState = RESCUE_NORMAL;
+datetime g_rescueStartedAt = 0;
+datetime g_rescueWarningAt = 0;
+int g_rescuePrimaryDirection = 0;
+int g_rescueHedgeDirection = 0;
+double g_rescueHedgeLot = 0.0;
+double g_rescuePrimaryVolume = 0.0;
+double g_rescueNetExposure = 0.0;
+double g_rescueReversalScore = 0.0;
+bool g_rescueReversalConfirmed = false;
+string g_rescueReversalReason = "NONE";
+double g_rescueRequiredMoney = 0.0;
+double g_rescueRecoveredMoney = 0.0;
+double g_rescueInitialDeficit = 0.0;
+double g_rescueTargetMoney = 0.0;
+double g_rescueRecoveryPrice = 0.0;
+double g_rescueRealizedProfit = 0.0;
+double g_rescueCombinedProfit = 0.0;
+double g_rescuePrimaryProfit = 0.0;
+double g_rescueHedgeProfit = 0.0;
+int g_rescuePartialCloseCount = 0;
+long g_rescueOldestAgeSeconds = 0;
+datetime g_lastRescueEvaluationAt = 0;
+datetime g_lastRescueOrderAt = 0;
 
 // Anti-chase / price-location intelligence. These states are intentionally
 // visible in telemetry so waiting for a pullback/retest is never a hidden gate.
@@ -374,7 +449,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.025", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.026", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -407,8 +482,354 @@ void ClearChartStatus()
    ChartRedraw(0);
 }
 
+ENUM_TIMEFRAMES EmaTimeframeAt(int index)
+{
+   if(index == 0) return PERIOD_M1;
+   if(index == 1) return PERIOD_M5;
+   if(index == 2) return PERIOD_M15;
+   if(index == 3) return PERIOD_M30;
+   return PERIOD_H1;
+}
+
+int EmaPeriodAt(int index)
+{
+   if(index == 0) return 9;
+   if(index == 1) return 21;
+   if(index == 2) return 50;
+   return 200;
+}
+
+color EmaColorAt(int index)
+{
+   if(index == 0) return clrDodgerBlue;
+   if(index == 1) return clrGold;
+   if(index == 2) return clrMagenta;
+   return clrRed;
+}
+
+string EmaObjectPrefix()
+{
+   return StringFormat("SCN_EMA_%I64d_", InpMagic);
+}
+
+bool InitializeEmaIntelligence()
+{
+   bool ok = true;
+   for(int t = 0; t < EMA_TF_COUNT; t++)
+   {
+      for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+      {
+         g_emaHandles[t][p] = iMA(
+            _Symbol,
+            EmaTimeframeAt(t),
+            EmaPeriodAt(p),
+            0,
+            MODE_EMA,
+            PRICE_CLOSE
+         );
+         if(g_emaHandles[t][p] == INVALID_HANDLE)
+            ok = false;
+      }
+   }
+
+   for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+   {
+      g_emaChartHandles[p] = iMA(
+         _Symbol,
+         PERIOD_CURRENT,
+         EmaPeriodAt(p),
+         0,
+         MODE_EMA,
+         PRICE_CLOSE
+      );
+      if(g_emaChartHandles[p] == INVALID_HANDLE)
+         ok = false;
+   }
+   return ok;
+}
+
+void DeleteEmaObjects()
+{
+   string prefix = EmaObjectPrefix();
+   int total = ObjectsTotal(0);
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(0, i);
+      if(StringFind(name, prefix) == 0)
+         ObjectDelete(0, name);
+   }
+   ChartRedraw(0);
+}
+
+void ReleaseEmaIntelligence()
+{
+   for(int t = 0; t < EMA_TF_COUNT; t++)
+   {
+      for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+      {
+         if(g_emaHandles[t][p] != INVALID_HANDLE)
+         {
+            IndicatorRelease(g_emaHandles[t][p]);
+            g_emaHandles[t][p] = INVALID_HANDLE;
+         }
+      }
+   }
+   for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+   {
+      if(g_emaChartHandles[p] != INVALID_HANDLE)
+      {
+         IndicatorRelease(g_emaChartHandles[p]);
+         g_emaChartHandles[p] = INVALID_HANDLE;
+      }
+   }
+   DeleteEmaObjects();
+}
+
+bool EmaValueByIndex(int tfIndex, int periodIndex, int shift, double &value)
+{
+   value = 0.0;
+   if(tfIndex < 0 || tfIndex >= EMA_TF_COUNT ||
+      periodIndex < 0 || periodIndex >= EMA_PERIOD_COUNT)
+      return false;
+   int handle = g_emaHandles[tfIndex][periodIndex];
+   if(handle == INVALID_HANDLE)
+      return false;
+
+   double buffer[];
+   ArraySetAsSeries(buffer, true);
+   if(CopyBuffer(handle, 0, shift, 1, buffer) < 1)
+      return false;
+   value = buffer[0];
+   return value > 0.0;
+}
+
+int EmaDirectionForTf(int tfIndex)
+{
+   double e9=0.0,e21=0.0,e50=0.0,e200=0.0;
+   if(!EmaValueByIndex(tfIndex,0,1,e9) ||
+      !EmaValueByIndex(tfIndex,1,1,e21) ||
+      !EmaValueByIndex(tfIndex,2,1,e50) ||
+      !EmaValueByIndex(tfIndex,3,1,e200))
+      return 0;
+
+   if(e9 > e21 && e21 > e50 && e50 > e200)
+      return 1;
+   if(e9 < e21 && e21 < e50 && e50 < e200)
+      return -1;
+
+   if(e9 > e21 && e21 > e50)
+      return 1;
+   if(e9 < e21 && e21 < e50)
+      return -1;
+   return 0;
+}
+
+double EmaConfluenceScore(int direction)
+{
+   int dirs[5] = {
+      g_emaTrendM1,
+      g_emaTrendM5,
+      g_emaTrendM15,
+      g_emaTrendM30,
+      g_emaTrendH1
+   };
+   double weights[5] = {8.0, 12.0, 18.0, 22.0, 25.0};
+   double score = 0.0;
+   double total = 0.0;
+   for(int i = 0; i < 5; i++)
+   {
+      total += weights[i];
+      if(dirs[i] == direction)
+         score += weights[i];
+      else if(dirs[i] == -direction)
+         score -= weights[i] * 0.35;
+   }
+   return MathMax(0.0, MathMin(100.0, 50.0 + score / MathMax(1.0,total) * 50.0));
+}
+
+void RefreshEmaIntelligence(bool force)
+{
+   datetime now = TimeCurrent();
+   if(!force && g_lastEmaRefreshAt > 0 && now == g_lastEmaRefreshAt)
+      return;
+   g_lastEmaRefreshAt = now;
+
+   EmaValueByIndex(1,0,1,g_ema9);
+   EmaValueByIndex(1,1,1,g_ema21);
+   EmaValueByIndex(1,2,1,g_ema50);
+   EmaValueByIndex(1,3,1,g_ema200);
+
+   g_emaTrendM1 = EmaDirectionForTf(0);
+   g_emaTrendM5 = EmaDirectionForTf(1);
+   g_emaTrendM15 = EmaDirectionForTf(2);
+   g_emaTrendM30 = EmaDirectionForTf(3);
+   g_emaTrendH1 = EmaDirectionForTf(4);
+
+   if(g_ema9 > g_ema21 && g_ema21 > g_ema50 && g_ema50 > g_ema200)
+      g_emaStack = "BULL_9>21>50>200";
+   else if(g_ema9 < g_ema21 && g_ema21 < g_ema50 && g_ema50 < g_ema200)
+      g_emaStack = "BEAR_9<21<50<200";
+   else
+      g_emaStack = "MIXED";
+
+   double e9Past=0.0,e21Past=0.0,e50Past=0.0;
+   EmaValueByIndex(1,0,4,e9Past);
+   EmaValueByIndex(1,1,4,e21Past);
+   EmaValueByIndex(1,2,4,e50Past);
+   int up = 0;
+   int down = 0;
+   if(g_ema9 > e9Past) up++; else if(g_ema9 < e9Past) down++;
+   if(g_ema21 > e21Past) up++; else if(g_ema21 < e21Past) down++;
+   if(g_ema50 > e50Past) up++; else if(g_ema50 < e50Past) down++;
+   g_emaSlope = up >= 2 ? "UP" : down >= 2 ? "DOWN" : "FLAT";
+
+   MqlTick tick;
+   double price = 0.0;
+   if(SymbolInfoTick(_Symbol, tick))
+      price = (tick.bid + tick.ask) * 0.5;
+
+   g_emaPriceVs200 = price > 0.0 && g_ema200 > 0.0
+      ? (price >= g_ema200 ? "ABOVE_EMA200" : "BELOW_EMA200")
+      : "UNKNOWN";
+
+   double atrPrice = MathMax(
+      _Point * 10.0,
+      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point
+   );
+   double hi = MathMax(g_ema9, MathMax(g_ema21, g_ema50));
+   double lo = MathMin(g_ema9, MathMin(g_ema21, g_ema50));
+   double bandAtr = atrPrice > 0.0 ? (hi - lo) / atrPrice : 0.0;
+   g_emaDistanceAtr = price > 0.0 && g_ema21 > 0.0 && atrPrice > 0.0
+      ? MathAbs(price - g_ema21) / atrPrice
+      : 0.0;
+
+   if(bandAtr <= 0.18)
+      g_emaVolatilityState = "COMPRESSION";
+   else if(bandAtr >= 0.65)
+      g_emaVolatilityState = "EXPANSION";
+   else
+      g_emaVolatilityState = "NORMAL";
+
+   g_emaConfluenceScoreBuy = EmaConfluenceScore(1);
+   g_emaConfluenceScoreSell = EmaConfluenceScore(-1);
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   double e21Now=0.0,e21Prev=0.0;
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 2, rates) >= 2 &&
+      EmaValueByIndex(1,1,1,e21Now) &&
+      EmaValueByIndex(1,1,2,e21Prev))
+   {
+      if(rates[1].close <= e21Prev && rates[0].close > e21Now)
+         g_emaReclaimState = "RECLAIM_EMA21_UP";
+      else if(rates[1].close >= e21Prev && rates[0].close < e21Now)
+         g_emaReclaimState = "LOSE_EMA21_DOWN";
+      else
+         g_emaReclaimState = "NONE";
+   }
+}
+
+void DrawEmaCurves()
+{
+   if(!InpShowEmaOnChart || MQLInfoInteger(MQL_TESTER))
+      return;
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   const int bars = 70;
+   if(CopyRates(_Symbol, PERIOD_CURRENT, 0, bars + 1, rates) < bars + 1)
+      return;
+
+   datetime currentBar = rates[0].time;
+   datetime now = TimeCurrent();
+   if(g_lastEmaDrawBar == currentBar &&
+      g_lastEmaDrawAt > 0 &&
+      now - g_lastEmaDrawAt < 5)
+      return;
+   g_lastEmaDrawBar = currentBar;
+   g_lastEmaDrawAt = now;
+
+   string prefix = EmaObjectPrefix();
+   for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+   {
+      int handle = g_emaChartHandles[p];
+      if(handle == INVALID_HANDLE)
+         continue;
+
+      double values[];
+      ArraySetAsSeries(values, true);
+      if(CopyBuffer(handle, 0, 0, bars + 1, values) < bars + 1)
+         continue;
+
+      color lineColor = EmaColorAt(p);
+      int width = p >= 2 ? 2 : 1;
+      for(int i = 0; i < bars; i++)
+      {
+         string name = prefix + IntegerToString(EmaPeriodAt(p)) + "_" + IntegerToString(i);
+         if(ObjectFind(0, name) < 0)
+         {
+            if(!ObjectCreate(
+               0,name,OBJ_TREND,0,
+               rates[i+1].time,values[i+1],
+               rates[i].time,values[i]
+            ))
+               continue;
+         }
+         else
+         {
+            ObjectMove(0,name,0,rates[i+1].time,values[i+1]);
+            ObjectMove(0,name,1,rates[i].time,values[i]);
+         }
+
+         ObjectSetInteger(0,name,OBJPROP_COLOR,lineColor);
+         ObjectSetInteger(0,name,OBJPROP_WIDTH,width);
+         ObjectSetInteger(0,name,OBJPROP_RAY_RIGHT,false);
+         ObjectSetInteger(0,name,OBJPROP_BACK,true);
+         ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
+         ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
+      }
+
+      string labelName = prefix + "LABEL_" + IntegerToString(EmaPeriodAt(p));
+      if(ObjectFind(0,labelName) < 0)
+         ObjectCreate(0,labelName,OBJ_LABEL,0,0,0);
+      ObjectSetInteger(0,labelName,OBJPROP_CORNER,CORNER_LEFT_UPPER);
+      ObjectSetInteger(0,labelName,OBJPROP_XDISTANCE,12);
+      ObjectSetInteger(0,labelName,OBJPROP_YDISTANCE,20 + p * 17);
+      ObjectSetInteger(0,labelName,OBJPROP_FONTSIZE,9);
+      ObjectSetInteger(0,labelName,OBJPROP_COLOR,lineColor);
+      ObjectSetInteger(0,labelName,OBJPROP_SELECTABLE,false);
+      ObjectSetString(
+         0,labelName,OBJPROP_TEXT,
+         "EMA " + IntegerToString(EmaPeriodAt(p)) + "  " +
+         DoubleToString(values[0], SymbolDigitsNow())
+      );
+   }
+   ChartRedraw(0);
+}
+
+double EmaTrailReference(int direction)
+{
+   RefreshEmaIntelligence(false);
+   if(g_ema21 <= 0.0 || g_ema50 <= 0.0)
+      return 0.0;
+
+   if(direction > 0)
+      return g_marketRegimeDetail == "TREND_ACCELERATION"
+         ? MathMax(g_ema21,g_ema50)
+         : g_ema21;
+   return g_marketRegimeDetail == "TREND_ACCELERATION"
+      ? MathMin(g_ema21,g_ema50)
+      : g_ema21;
+}
+
 int OnInit()
 {
+   for(int t = 0; t < EMA_TF_COUNT; t++)
+      for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+         g_emaHandles[t][p] = INVALID_HANDLE;
+   for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+      g_emaChartHandles[p] = INVALID_HANDLE;
+
    g_lot = InpLot;
    g_maxPositions = InpMaxPositions;
    g_triggerMoney = InpBasketTriggerMoney;
@@ -459,6 +880,7 @@ int OnInit()
    g_sessionStartHour = MathMax(0, MathMin(23, InpSessionStartHour));
    g_sessionEndHour = MathMax(1, MathMin(24, InpSessionEndHour));
    g_maxAtrPoints = MathMax(0.0, InpMaxAtrPoints);
+   g_rescueEnabled = InpAdaptiveRescueEngine;
    g_adaptiveMomentumThreshold = InpMomentumEntryPoints;
    g_adaptiveMaxPositions = g_maxPositions;
    g_adaptiveEntrySpacingMs = g_minOrderIntervalMs;
@@ -468,6 +890,12 @@ int OnInit()
    RestoreSpreadProfile();
    LoadBasketCycleState();
    ApplyUnifiedTradingEngine();
+
+   if(!InitializeEmaIntelligence())
+      Print("EMA Intelligence: one or more EMA handles are not ready yet.");
+   RefreshEmaIntelligence(true);
+   DrawEmaCurves();
+   RestoreRescueState();
 
    if(!MQLInfoInteger(MQL_TESTER))
    {
@@ -505,6 +933,7 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    DeleteTradingFibonacci();
+   ReleaseEmaIntelligence();
    ClearChartStatus();
 }
 
@@ -512,6 +941,8 @@ void OnTick()
 {
    UpdateMomentum();
    SampleSpread();
+   RefreshEmaIntelligence(false);
+   DrawEmaCurves();
    RefreshDailyBaselineIfNeeded();
 
    if(g_access && g_lastSuccessfulHeartbeat > 0 &&
@@ -523,12 +954,13 @@ void OnTick()
    }
 
    int count = BasketPositionCount();
+   int rescueCount = RescuePositionCount();
    if(count > 0)
    {
       UpdateBasketPeakPositionCount(count);
       EnsureBurstTargets(g_burstActive ? MathMax(1, g_burstTargetPositions) : count);
    }
-   else
+   else if(rescueCount <= 0)
       ResetBasketCycleState();
 
    double profit = BasketProfit();
@@ -550,10 +982,18 @@ void OnTick()
 
    if(g_dailyLoss > 0.0 && AccountInfoDouble(ACCOUNT_EQUITY) <= g_dayStartEquity - g_dailyLoss)
    {
-      if(count > 0) CloseAllBasket("DAILY_LOSS");
+      if(count > 0 || rescueCount > 0) CloseAllBasket("DAILY_LOSS");
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
       g_executionStatus = "DAILY_LOSS_LOCK";
+      return;
+   }
+
+   if(count <= 0 && rescueCount > 0)
+   {
+      RefreshMarketContext(false);
+      ManageAdaptiveRescue();
+      g_executionStatus = "RESCUE_EXIT";
       return;
    }
 
@@ -564,6 +1004,26 @@ void OnTick()
       RefreshMarketContext(false);
       RecoverOpenBasketJournal();
       ManageDynamicProtection();
+
+      bool rescueManaging = ManageAdaptiveRescue();
+      if(g_rescueState == RESCUE_ACTIVE ||
+         g_rescueState == RESCUE_RECOVERY ||
+         g_rescueState == RESCUE_EXIT)
+      {
+         double rescueLossLimit = EffectiveBasketLossLimit();
+         double rescueCycleProfit = RescueCombinedCycleProfit();
+         if(rescueLossLimit > 0.0 && rescueCycleProfit <= -rescueLossLimit)
+         {
+            CloseAllBasket("MAX_BASKET_LOSS");
+            ResetTrail();
+            return;
+         }
+
+         // Rescue/Recovery owns position management until the Cycle is closed
+         // or the original structure recovers. It never affects first entry.
+         if(rescueManaging)
+            return;
+      }
 
       // Per-position profit/loss controls are evaluated before basket-level
       // controls. Per-position profit and total Basket profit are mutually
@@ -644,7 +1104,10 @@ void OnTick()
       }
 
       double effectiveBasketLoss = EffectiveBasketLossLimit();
-      double lossControlProfit = BasketFillEnabled() ? cycleProfit : profit;
+      double lossControlProfit =
+         (g_rescueState != RESCUE_NORMAL || RescuePositionCount() > 0)
+         ? RescueCombinedCycleProfit()
+         : (BasketFillEnabled() ? cycleProfit : profit);
       if(effectiveBasketLoss > 0.0 && lossControlProfit <= -effectiveBasketLoss)
       {
          CloseAllBasket("MAX_BASKET_LOSS");
@@ -734,6 +1197,16 @@ void OnTick()
    if(!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid())
    {
       g_executionStatus = "CONTROL_NOT_FRESH";
+      return;
+   }
+
+   // WARNING pauses only additional positions while Rescue evaluates the open
+   // Basket. It is post-entry management, not a first-entry filter.
+   if(count > 0 && g_rescueState == RESCUE_WARNING)
+   {
+      g_executionStatus = g_rescueOldestAgeSeconds >= RescueTimeThresholdSeconds()
+         ? "TIME_RESCUE_WARNING"
+         : "RESCUE_WARNING";
       return;
    }
 
@@ -836,6 +1309,8 @@ void OnTick()
 void OnTimer()
 {
    SampleSpread();
+   RefreshEmaIntelligence(false);
+   DrawEmaCurves();
 
    if(MQLInfoInteger(MQL_TESTER))
    {
@@ -871,6 +1346,17 @@ void OnTradeTransaction(
    string symbol = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
    long magic = HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
 
+   if(symbol == _Symbol && magic == RescueMagic())
+   {
+      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_PROFIT);
+      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_SWAP);
+      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_COMMISSION);
+      RecalculateDailyClosedProfit();
+      SaveRescueState();
+      PostRescueJournalDeal(trans.deal);
+      return;
+   }
+
    if(symbol == _Symbol && magic == InpMagic)
    {
       RecordBasketDeal(trans.deal);
@@ -899,7 +1385,7 @@ void OnTradeTransaction(
 
    if(InpPauseOnManualTrade &&
       symbol == _Symbol &&
-      magic != InpMagic &&
+      !IsScenovaMagic(magic) &&
       g_state == STATE_RUNNING)
    {
       Print("Manual/external trade detected on ", _Symbol, ". Entering SAFE_STOP.");
@@ -995,7 +1481,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.025\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.026\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1205,8 +1691,57 @@ void SendHeartbeat()
          g_confidenceSource,
          g_pendingBasketJournal ? "true" : "false"
       );
+
+      if(BasketPositionCount()>0 || RescuePositionCount()>0)
+         UpdateRescueExposure();
+
+      string intelligenceV4Diagnostics = StringFormat(
+         ",\"ema9\":%s,\"ema21\":%s,\"ema50\":%s,\"ema200\":%s,\"emaStack\":\"%s\",\"emaSlope\":\"%s\",\"emaVolatilityState\":\"%s\",\"emaPriceVs200\":\"%s\",\"emaReclaimState\":\"%s\",\"emaDistanceAtr\":%.3f,\"emaTrendM1\":%d,\"emaTrendM5\":%d,\"emaTrendM15\":%d,\"emaTrendM30\":%d,\"emaTrendH1\":%d,\"emaConfluenceBuy\":%.1f,\"emaConfluenceSell\":%.1f,\"priceActionBuy\":\"%s\",\"priceActionSell\":\"%s\",\"priceActionBuyScore\":%.1f,\"priceActionSellScore\":%.1f,\"rescueState\":\"%s\",\"rescuePrimaryDirection\":%d,\"rescueHedgeDirection\":%d,\"rescuePrimaryVolume\":%.4f,\"rescueHedgeLot\":%.4f,\"rescueNetExposure\":%.4f,\"rescueReversalScore\":%.1f,\"rescueReversalConfirmed\":%s,\"rescueReversalReason\":\"%s\",\"rescueRequiredMoney\":%.2f,\"rescueRecoveredMoney\":%.2f,\"rescueTargetMoney\":%.2f,\"rescueRecoveryPrice\":%s,\"rescuePrimaryProfit\":%.2f,\"rescueHedgeProfit\":%.2f,\"rescueCombinedProfit\":%.2f,\"rescuePartialCloseCount\":%d,\"rescueOldestAgeSeconds\":%I64d,\"rescuePositionCount\":%d",
+         DoubleToString(g_ema9,SymbolDigitsNow()),
+         DoubleToString(g_ema21,SymbolDigitsNow()),
+         DoubleToString(g_ema50,SymbolDigitsNow()),
+         DoubleToString(g_ema200,SymbolDigitsNow()),
+         g_emaStack,
+         g_emaSlope,
+         g_emaVolatilityState,
+         g_emaPriceVs200,
+         g_emaReclaimState,
+         g_emaDistanceAtr,
+         g_emaTrendM1,
+         g_emaTrendM5,
+         g_emaTrendM15,
+         g_emaTrendM30,
+         g_emaTrendH1,
+         g_emaConfluenceScoreBuy,
+         g_emaConfluenceScoreSell,
+         g_priceActionBuy,
+         g_priceActionSell,
+         g_priceActionBuyScore,
+         g_priceActionSellScore,
+         RescueStateName(),
+         g_rescuePrimaryDirection,
+         g_rescueHedgeDirection,
+         g_rescuePrimaryVolume,
+         g_rescueHedgeLot,
+         g_rescueNetExposure,
+         g_rescueReversalScore,
+         g_rescueReversalConfirmed ? "true" : "false",
+         g_rescueReversalReason,
+         g_rescueRequiredMoney,
+         g_rescueRecoveredMoney,
+         g_rescueTargetMoney,
+         DoubleToString(g_rescueRecoveryPrice,SymbolDigitsNow()),
+         g_rescuePrimaryProfit,
+         g_rescueHedgeProfit,
+         g_rescueCombinedProfit,
+         g_rescuePartialCloseCount,
+         g_rescueOldestAgeSeconds,
+         RescuePositionCount()
+      );
+
       string positionDiagnostics =
          marketContextDiagnostics + intelligenceV3Diagnostics + probabilityDiagnostics +
+         intelligenceV4Diagnostics +
          ",\"openPositions\":" + OpenPositionsTelemetryJson() + "}}";
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + positionDiagnostics;
    }
@@ -1440,6 +1975,60 @@ void PostTradeJournalDeal(ulong dealTicket)
    string response = "";
    int code = HttpPostJsonTimeout(InpApiBase + "/api/ea/journal", payload, response, 650);
    if(code >= 200 && code < 300)
+      g_journalSent++;
+   else
+      g_journalFailed++;
+}
+
+void PostRescueJournalDeal(ulong dealTicket)
+{
+   if(MQLInfoInteger(MQL_TESTER) || dealTicket==0 || !HistoryDealSelect(dealTicket))
+      return;
+
+   long dealEntry=HistoryDealGetInteger(dealTicket,DEAL_ENTRY);
+   if(dealEntry!=DEAL_ENTRY_IN &&
+      dealEntry!=DEAL_ENTRY_OUT &&
+      dealEntry!=DEAL_ENTRY_OUT_BY &&
+      dealEntry!=DEAL_ENTRY_INOUT)
+      return;
+
+   long dealType=HistoryDealGetInteger(dealTicket,DEAL_TYPE);
+   if(dealType!=DEAL_TYPE_BUY && dealType!=DEAL_TYPE_SELL)
+      return;
+
+   bool isExit=
+      dealEntry==DEAL_ENTRY_OUT ||
+      dealEntry==DEAL_ENTRY_OUT_BY ||
+      dealEntry==DEAL_ENTRY_INOUT;
+   int dealDirection=dealType==DEAL_TYPE_BUY ? 1 : -1;
+   int positionDirection=isExit ? -dealDirection : dealDirection;
+   double net=
+      HistoryDealGetDouble(dealTicket,DEAL_PROFIT)+
+      HistoryDealGetDouble(dealTicket,DEAL_SWAP)+
+      HistoryDealGetDouble(dealTicket,DEAL_COMMISSION);
+
+   string payload=StringFormat(
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"RESCUE_HEDGE\",\"entryModel\":\"WEIGHT_BALANCE\",\"entryQuality\":\"R\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":0}",
+      InpInstanceId,
+      InpInstallToken,
+      (long)dealTicket,
+      (long)HistoryDealGetInteger(dealTicket,DEAL_POSITION_ID),
+      isExit ? "EXIT" : "ENTRY",
+      positionDirection>0 ? "BUY" : "SELL",
+      HistoryDealGetDouble(dealTicket,DEAL_VOLUME),
+      DoubleToString(HistoryDealGetDouble(dealTicket,DEAL_PRICE),SymbolDigitsNow()),
+      net,
+      g_rescueReversalScore,
+      g_marketRegime,
+      g_marketRegimeDetail,
+      g_fibSetupScore,
+      positionDirection>0 ? g_bullishOrderBlockQuality : g_bearishOrderBlockQuality,
+      g_signalConfidence
+   );
+
+   string response="";
+   int code=HttpPostJsonTimeout(InpApiBase+"/api/ea/journal",payload,response,650);
+   if(code>=200 && code<300)
       g_journalSent++;
    else
       g_journalFailed++;
@@ -2266,6 +2855,8 @@ void RefreshMarketContext(bool force)
    g_trendM15 = TimeframeTrend(PERIOD_M15);
    g_trendM30 = TimeframeTrend(PERIOD_M30);
    g_trendH1 = TimeframeTrend(PERIOD_H1);
+   RefreshEmaIntelligence(false);
+   RefreshPriceActionIntelligence();
 
    double atrM15Price = MathMax(_Point * 20.0, AverageTrueRangePoints(PERIOD_M15, g_atrPeriod) * _Point);
    double atrM5Price = MathMax(_Point * 12.0, AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point);
@@ -2493,6 +3084,114 @@ bool RecentDirectionalBody(int direction, ENUM_TIMEFRAMES timeframe)
          rates[0].close >= rates[0].low + range * 0.58;
    return rates[0].close < rates[0].open &&
       rates[0].close <= rates[0].high - range * 0.58;
+}
+
+string CandlestickPattern(
+   int direction,
+   ENUM_TIMEFRAMES timeframe,
+   double &scoreOut
+)
+{
+   scoreOut = 0.0;
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   if(CopyRates(_Symbol,timeframe,1,4,rates) < 4)
+      return "NONE";
+
+   double range0 = MathMax(_Point,rates[0].high-rates[0].low);
+   double body0 = MathAbs(rates[0].close-rates[0].open);
+   double lowerWick0 = MathMin(rates[0].open,rates[0].close)-rates[0].low;
+   double upperWick0 = rates[0].high-MathMax(rates[0].open,rates[0].close);
+
+   bool bull0 = rates[0].close > rates[0].open;
+   bool bear0 = rates[0].close < rates[0].open;
+   bool bull1 = rates[1].close > rates[1].open;
+   bool bear1 = rates[1].close < rates[1].open;
+
+   bool engulfing = direction > 0
+      ? (bull0 && bear1 &&
+         rates[0].open <= rates[1].close &&
+         rates[0].close >= rates[1].open)
+      : (bear0 && bull1 &&
+         rates[0].open >= rates[1].close &&
+         rates[0].close <= rates[1].open);
+   if(engulfing)
+   {
+      scoreOut = 38.0;
+      return direction > 0 ? "BULL_ENGULFING" : "BEAR_ENGULFING";
+   }
+
+   double wickRatio = direction > 0
+      ? lowerWick0/range0
+      : upperWick0/range0;
+   double oppositeWickRatio = direction > 0
+      ? upperWick0/range0
+      : lowerWick0/range0;
+   bool directionClose = direction > 0 ? bull0 : bear0;
+
+   if(wickRatio >= 0.55 && oppositeWickRatio <= 0.20)
+   {
+      scoreOut = 34.0;
+      return direction > 0 ? "BULL_PINBAR" : "BEAR_PINBAR";
+   }
+
+   if(directionClose && wickRatio >= 0.35)
+   {
+      scoreOut = 27.0;
+      return direction > 0 ? "BULL_REJECTION" : "BEAR_REJECTION";
+   }
+
+   bool breakRetest = direction > 0
+      ? (rates[1].close > rates[2].high &&
+         rates[0].low <= rates[2].high &&
+         rates[0].close > rates[2].high)
+      : (rates[1].close < rates[2].low &&
+         rates[0].high >= rates[2].low &&
+         rates[0].close < rates[2].low);
+   if(breakRetest)
+   {
+      scoreOut = 32.0;
+      return direction > 0 ? "BULL_BREAK_RETEST" : "BEAR_BREAK_RETEST";
+   }
+
+   if(directionClose && body0 >= range0*0.60)
+   {
+      scoreOut = 18.0;
+      return direction > 0 ? "BULL_BODY" : "BEAR_BODY";
+   }
+
+   return "NONE";
+}
+
+void RefreshPriceActionIntelligence()
+{
+   double buyM1=0.0,buyM5=0.0,sellM1=0.0,sellM5=0.0;
+   string buy1 = CandlestickPattern(1,PERIOD_M1,buyM1);
+   string buy5 = CandlestickPattern(1,PERIOD_M5,buyM5);
+   string sell1 = CandlestickPattern(-1,PERIOD_M1,sellM1);
+   string sell5 = CandlestickPattern(-1,PERIOD_M5,sellM5);
+
+   if(buyM5 >= buyM1)
+   {
+      g_priceActionBuy = buy5;
+      g_priceActionBuyScore = buyM5;
+   }
+   else
+   {
+      g_priceActionBuy = buy1;
+      g_priceActionBuyScore = buyM1;
+   }
+
+   if(sellM5 >= sellM1)
+   {
+      g_priceActionSell = sell5;
+      g_priceActionSellScore = sellM5;
+   }
+   else
+   {
+      g_priceActionSell = sell1;
+      g_priceActionSellScore = sellM1;
+   }
 }
 
 bool LowerTimeframeSupportsDirection(int direction)
@@ -3261,10 +3960,19 @@ double EvaluateMarketLocationScore(int direction)
       g_entryModel == "ORDER_BLOCK_PULLBACK" ? 7.0 :
       g_entryModel == "FIB_PULLBACK" ? 6.0 :
       g_entryModel == "LEVEL_REACTION" ? 5.0 : 2.0;
+   double emaQuality = direction > 0
+      ? g_emaConfluenceScoreBuy
+      : g_emaConfluenceScoreSell;
+   double priceActionQuality = direction > 0
+      ? g_priceActionBuyScore
+      : g_priceActionSellScore;
+
    g_entryQualityScore =
-      g_entryScore * 0.55 +
-      g_fibSetupScore * 0.20 +
-      desiredObQuality * 0.15 +
+      g_entryScore * 0.45 +
+      g_fibSetupScore * 0.18 +
+      desiredObQuality * 0.12 +
+      emaQuality * 0.12 +
+      MathMin(100.0,priceActionQuality*2.0) * 0.08 +
       setupBonus;
    if(HigherTimeframeSupportsDirection(direction))
       g_entryQualityScore += 5.0;
@@ -4668,7 +5376,7 @@ void RecalculateDailyClosedProfit()
          continue;
 
       if(HistoryDealGetString(deal, DEAL_SYMBOL) != _Symbol ||
-         HistoryDealGetInteger(deal, DEAL_MAGIC) != InpMagic)
+         !IsScenovaMagic(HistoryDealGetInteger(deal, DEAL_MAGIC)))
          continue;
 
       g_dailyClosedProfit += HistoryDealGetDouble(deal, DEAL_PROFIT);
@@ -4679,7 +5387,7 @@ void RecalculateDailyClosedProfit()
 
 double DailyBotProfit()
 {
-   return g_dailyClosedProfit + BasketProfit();
+   return g_dailyClosedProfit + BasketProfit() + RescueProfit();
 }
 
 double DailyProfitGivebackFloor()
@@ -4901,6 +5609,784 @@ bool TradeResultAccepted(const MqlTradeResult &result)
       result.retcode == TRADE_RETCODE_PLACED ||
       result.retcode == TRADE_RETCODE_DONE_PARTIAL
    );
+}
+
+long RescueMagic()
+{
+   return InpMagic + 910001;
+}
+
+bool IsScenovaMagic(long magic)
+{
+   return magic == InpMagic || magic == RescueMagic();
+}
+
+string RescueStateName()
+{
+   if(g_rescueState == RESCUE_WARNING) return "WARNING";
+   if(g_rescueState == RESCUE_ACTIVE) return "RESCUE";
+   if(g_rescueState == RESCUE_RECOVERY) return "RECOVERY";
+   if(g_rescueState == RESCUE_EXIT) return "EXIT";
+   return "NORMAL";
+}
+
+string RescueGlobalKey(string suffix)
+{
+   return StringFormat(
+      "SCN_RSC_%I64d_%I64d_%s_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),
+      InpMagic,
+      _Symbol,
+      suffix
+   );
+}
+
+void SaveRescueState()
+{
+   GlobalVariableSet(RescueGlobalKey("state"),(double)g_rescueState);
+   GlobalVariableSet(RescueGlobalKey("start"),(double)g_rescueStartedAt);
+   GlobalVariableSet(RescueGlobalKey("dir"),(double)g_rescuePrimaryDirection);
+   GlobalVariableSet(RescueGlobalKey("real"),g_rescueRealizedProfit);
+   GlobalVariableSet(RescueGlobalKey("def"),g_rescueInitialDeficit);
+   GlobalVariableSet(RescueGlobalKey("target"),g_rescueTargetMoney);
+   GlobalVariableSet(RescueGlobalKey("partial"),(double)g_rescuePartialCloseCount);
+}
+
+void ResetRescueState()
+{
+   g_rescueState = RESCUE_NORMAL;
+   g_rescueStartedAt = 0;
+   g_rescueWarningAt = 0;
+   g_rescuePrimaryDirection = 0;
+   g_rescueHedgeDirection = 0;
+   g_rescueHedgeLot = 0.0;
+   g_rescuePrimaryVolume = 0.0;
+   g_rescueNetExposure = 0.0;
+   g_rescueReversalScore = 0.0;
+   g_rescueReversalConfirmed = false;
+   g_rescueReversalReason = "NONE";
+   g_rescueRequiredMoney = 0.0;
+   g_rescueRecoveredMoney = 0.0;
+   g_rescueInitialDeficit = 0.0;
+   g_rescueTargetMoney = 0.0;
+   g_rescueRecoveryPrice = 0.0;
+   g_rescueRealizedProfit = 0.0;
+   g_rescueCombinedProfit = 0.0;
+   g_rescuePrimaryProfit = 0.0;
+   g_rescueHedgeProfit = 0.0;
+   g_rescuePartialCloseCount = 0;
+   g_rescueOldestAgeSeconds = 0;
+
+   string keys[7] = {"state","start","dir","real","def","target","partial"};
+   for(int i=0;i<ArraySize(keys);i++)
+   {
+      string key = RescueGlobalKey(keys[i]);
+      if(GlobalVariableCheck(key))
+         GlobalVariableDel(key);
+   }
+}
+
+void RestoreRescueState()
+{
+   if(GlobalVariableCheck(RescueGlobalKey("state")))
+      g_rescueState = (ENUM_RESCUE_STATE)(int)GlobalVariableGet(RescueGlobalKey("state"));
+   if(GlobalVariableCheck(RescueGlobalKey("start")))
+      g_rescueStartedAt = (datetime)(long)GlobalVariableGet(RescueGlobalKey("start"));
+   if(GlobalVariableCheck(RescueGlobalKey("dir")))
+      g_rescuePrimaryDirection = (int)GlobalVariableGet(RescueGlobalKey("dir"));
+   if(GlobalVariableCheck(RescueGlobalKey("real")))
+      g_rescueRealizedProfit = GlobalVariableGet(RescueGlobalKey("real"));
+   if(GlobalVariableCheck(RescueGlobalKey("def")))
+      g_rescueInitialDeficit = GlobalVariableGet(RescueGlobalKey("def"));
+   if(GlobalVariableCheck(RescueGlobalKey("target")))
+      g_rescueTargetMoney = GlobalVariableGet(RescueGlobalKey("target"));
+   if(GlobalVariableCheck(RescueGlobalKey("partial")))
+      g_rescuePartialCloseCount = (int)GlobalVariableGet(RescueGlobalKey("partial"));
+
+   if(BasketPositionCount() == 0 && RescuePositionCount() == 0)
+      ResetRescueState();
+}
+
+int RescuePositionCount()
+{
+   int count = 0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)==_Symbol &&
+         PositionGetInteger(POSITION_MAGIC)==RescueMagic())
+         count++;
+   }
+   return count;
+}
+
+double FloatingProfitForMagic(long magic)
+{
+   double total=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=magic)
+         continue;
+      total += PositionGetDouble(POSITION_PROFIT);
+      total += PositionGetDouble(POSITION_SWAP);
+   }
+   return total;
+}
+
+double VolumeForMagic(long magic,int direction)
+{
+   double total=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=magic)
+         continue;
+      long type=PositionGetInteger(POSITION_TYPE);
+      if((direction>0 && type==POSITION_TYPE_BUY) ||
+         (direction<0 && type==POSITION_TYPE_SELL))
+         total += PositionGetDouble(POSITION_VOLUME);
+   }
+   return total;
+}
+
+double RescueProfit()
+{
+   return FloatingProfitForMagic(RescueMagic());
+}
+
+double RescueCombinedCycleProfit()
+{
+   return BasketCycleProfit() + g_rescueRealizedProfit + RescueProfit();
+}
+
+long OldestPrimaryPositionAgeSeconds()
+{
+   datetime oldest=0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+      datetime opened=(datetime)PositionGetInteger(POSITION_TIME);
+      if(oldest==0 || opened<oldest)
+         oldest=opened;
+   }
+   return oldest>0 ? (long)MathMax(0,TimeCurrent()-oldest) : 0;
+}
+
+bool AccountSupportsHedging()
+{
+   long mode=AccountInfoInteger(ACCOUNT_MARGIN_MODE);
+   return mode==ACCOUNT_MARGIN_MODE_RETAIL_HEDGING;
+}
+
+bool RescueHedgeGranularityAvailable()
+{
+   if(!AccountSupportsHedging() || g_rescuePrimaryVolume<=0.0)
+      return false;
+   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+   double maxRatio=MathMax(0.20,MathMin(0.85,InpRescueMaxHedgeRatio));
+   return g_rescuePrimaryVolume*maxRatio>=minVolume-1e-12;
+}
+
+double NormalizeRescueVolume(double volume)
+{
+   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+   double maxVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
+   double step=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
+   if(volume < minVolume-1e-12)
+      return 0.0;
+   volume=MathMin(maxVolume,volume);
+   if(step>0.0)
+      volume=MathFloor((volume+1e-12)/step)*step;
+   if(volume < minVolume-1e-12)
+      return 0.0;
+   return NormalizeDouble(volume,8);
+}
+
+double RescueThresholdMoney()
+{
+   double equity=MathMax(1.0,AccountInfoDouble(ACCOUNT_EQUITY));
+   int count=MathMax(1,BasketPositionCount());
+   double spreadReserve=CurrentSpreadCost(MathMax(SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),g_lot))*count*3.0;
+   double threshold=MathMax(1.0,MathMax(spreadReserve,equity*0.0035));
+   if(g_maxBasketLoss>0.0)
+      threshold=MathMin(threshold,MathMax(1.0,g_maxBasketLoss*0.45));
+   return threshold;
+}
+
+long RescueTimeThresholdSeconds()
+{
+   double factor=1.0;
+   if(g_marketRegime=="HIGH_VOLATILITY") factor=0.55;
+   else if(g_marketRegime=="QUIET") factor=1.45;
+   else if(g_marketRegimeDetail=="TREND_ACCELERATION") factor=0.75;
+   int minutes=MathMax(5,InpTimeRescueMinutes);
+   return (long)MathMax(300.0,minutes*60.0*factor);
+}
+
+double RescueReversalScore(int primaryDirection,string &reasonOut)
+{
+   int opposite=-primaryDirection;
+   double score=0.0;
+   reasonOut="NONE";
+
+   if(LowerTimeframeSupportsDirection(opposite))
+      score+=18.0;
+   if(g_trendM15==opposite)
+      score+=15.0;
+   if(g_trendM30==opposite)
+      score+=10.0;
+   if(g_trendH1==opposite)
+      score+=8.0;
+
+   int emaDirs[3]={g_emaTrendM1,g_emaTrendM5,g_emaTrendM15};
+   double emaWeights[3]={6.0,10.0,12.0};
+   for(int i=0;i<3;i++)
+      if(emaDirs[i]==opposite)
+         score+=emaWeights[i];
+
+   double paScore=opposite>0 ? g_priceActionBuyScore : g_priceActionSellScore;
+   string paName=opposite>0 ? g_priceActionBuy : g_priceActionSell;
+   score+=MathMin(15.0,paScore*0.40);
+
+   bool emaReclaimAgainst=
+      (opposite>0 && g_emaReclaimState=="RECLAIM_EMA21_UP") ||
+      (opposite<0 && g_emaReclaimState=="LOSE_EMA21_DOWN");
+   if(emaReclaimAgainst)
+      score+=10.0;
+
+   MqlTick tick;
+   if(SymbolInfoTick(_Symbol,tick))
+   {
+      double price=(tick.bid+tick.ask)*0.5;
+      double atrPrice=MathMax(_Point*10.0,AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point);
+      bool oppositeOb=opposite>0
+         ? PriceInsideOrNearZone(price,g_bullishOrderBlockLow,g_bullishOrderBlockHigh,atrPrice*0.12)
+         : PriceInsideOrNearZone(price,g_bearishOrderBlockLow,g_bearishOrderBlockHigh,atrPrice*0.12);
+      if(oppositeOb)
+         score+=8.0;
+   }
+
+   bool oppositeFib=
+      (g_fibM5Direction==opposite && g_fibM5Retracement>=0.382 && g_fibM5Retracement<=0.786) ||
+      (g_fibM15Direction==opposite && g_fibM15Retracement>=0.382 && g_fibM15Retracement<=0.786);
+   if(oppositeFib)
+      score+=7.0;
+
+   if(g_antiChaseActive && g_antiChaseDirection==primaryDirection)
+      score+=9.0;
+
+   score=MathMax(0.0,MathMin(100.0,score));
+   if(score>=75.0)
+      reasonOut="STRUCTURE_EMA_PRICE_ACTION";
+   else if(score>=65.0)
+      reasonOut=paName!="NONE" ? paName : "REVERSAL_CONFIRMED";
+   else if(score>=52.0)
+      reasonOut="REVERSAL_BUILDING";
+   else
+      reasonOut="PRIMARY_STRUCTURE_HOLDING";
+   return score;
+}
+
+bool SendRescueOrder(int direction,double requestedVolume)
+{
+   if(!AccountSupportsHedging() ||
+      TradePermissionStatus()!="OK" ||
+      !OpenTradingAllowedForDirection(direction) ||
+      g_spreadStatus=="EXTREME")
+      return false;
+
+   double volume=NormalizeRescueVolume(requestedVolume);
+   if(volume<=0.0 || !CanSendOrder())
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return false;
+
+   MqlTradeRequest request={};
+   MqlTradeResult result={};
+   request.action=TRADE_ACTION_DEAL;
+   request.magic=RescueMagic();
+   request.symbol=_Symbol;
+   request.volume=volume;
+   request.deviation=30;
+   request.type_filling=AllowedFillingMode();
+   request.comment="SCNRescue";
+   request.type=direction>0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+   request.price=direction>0 ? tick.ask : tick.bid;
+   request.sl=DynamicInitialStopPrice(direction,request.price);
+   request.tp=0.0;
+
+   ResetLastError();
+   if(!OrderSend(request,result) || !TradeResultAccepted(result))
+   {
+      g_lastOrderError=GetLastError();
+      g_lastOrderRetcode=(long)result.retcode;
+      g_lastOrderAt=TimeCurrent();
+      return false;
+   }
+
+   RegisterOrderRequest();
+   g_lastRescueOrderAt=TimeCurrent();
+   g_executionStatus="RESCUE_HEDGE_OPENED";
+   return true;
+}
+
+bool ClosePositionVolumeByTicket(ulong ticket,double requestedVolume,string comment)
+{
+   if(ticket==0 || !PositionSelectByTicket(ticket))
+      return false;
+
+   string symbol=PositionGetString(POSITION_SYMBOL);
+   double currentVolume=PositionGetDouble(POSITION_VOLUME);
+   long positionType=PositionGetInteger(POSITION_TYPE);
+   long magic=PositionGetInteger(POSITION_MAGIC);
+   double minVolume=SymbolInfoDouble(symbol,SYMBOL_VOLUME_MIN);
+   double step=SymbolInfoDouble(symbol,SYMBOL_VOLUME_STEP);
+
+   double volume=MathMin(currentVolume,requestedVolume);
+   if(step>0.0)
+      volume=MathFloor((volume+1e-12)/step)*step;
+   volume=NormalizeDouble(volume,8);
+   if(volume<minVolume-1e-12)
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol,tick))
+      return false;
+
+   MqlTradeRequest request={};
+   MqlTradeResult result={};
+   request.action=TRADE_ACTION_DEAL;
+   request.position=ticket;
+   request.magic=magic;
+   request.symbol=symbol;
+   request.volume=volume;
+   request.deviation=30;
+   request.type_filling=AllowedFillingMode();
+   request.comment=comment;
+   if(positionType==POSITION_TYPE_BUY)
+   {
+      request.type=ORDER_TYPE_SELL;
+      request.price=tick.bid;
+   }
+   else
+   {
+      request.type=ORDER_TYPE_BUY;
+      request.price=tick.ask;
+   }
+
+   ResetLastError();
+   if(!OrderSend(request,result))
+      return false;
+   return TradeResultAccepted(result);
+}
+
+bool CloseRescuePositions()
+{
+   bool allClosed=true;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=RescueMagic())
+         continue;
+      if(!ClosePositionVolumeByTicket(
+         ticket,
+         PositionGetDouble(POSITION_VOLUME),
+         "SCNRescueClose"
+      ))
+         allClosed=false;
+   }
+   return allClosed && RescuePositionCount()==0;
+}
+
+bool ReduceRescueVolume(double requestedVolume)
+{
+   double remaining=requestedVolume;
+   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+   for(int i=PositionsTotal()-1;i>=0 && remaining>=minVolume-1e-12;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=RescueMagic())
+         continue;
+      double volume=PositionGetDouble(POSITION_VOLUME);
+      double closeVolume=MathMin(volume,remaining);
+      if(ClosePositionVolumeByTicket(ticket,closeVolume,"SCNRescueTrim"))
+         remaining-=closeVolume;
+   }
+   return remaining<minVolume;
+}
+
+double WorstPrimaryLossAbs()
+{
+   double worst=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+      double pnl=PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
+      if(pnl<worst)
+         worst=pnl;
+   }
+   return MathAbs(MathMin(0.0,worst));
+}
+
+bool PartialCloseWorstPrimary()
+{
+   ulong worstTicket=0;
+   double worstProfit=0.0;
+   double worstVolume=0.0;
+   int primaryCount=BasketPositionCount();
+
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+      double pnl=PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
+      if(worstTicket==0 || pnl<worstProfit)
+      {
+         worstTicket=ticket;
+         worstProfit=pnl;
+         worstVolume=PositionGetDouble(POSITION_VOLUME);
+      }
+   }
+
+   if(worstTicket==0 || worstProfit>=0.0)
+      return false;
+
+   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+   double closeVolume=0.0;
+   if(worstVolume>=minVolume*2.0-1e-12)
+      closeVolume=worstVolume*0.50;
+   else if(primaryCount>1)
+      closeVolume=worstVolume;
+   else
+      return false;
+
+   if(ClosePositionVolumeByTicket(worstTicket,closeVolume,"SCNRecoveryPartial"))
+   {
+      g_rescuePartialCloseCount++;
+      SaveRescueState();
+      return true;
+   }
+   return false;
+}
+
+void UpdateRescueExposure()
+{
+   int direction=BasketDirection();
+   if(direction==0)
+      direction=g_rescuePrimaryDirection;
+   g_rescuePrimaryDirection=direction;
+   g_rescueHedgeDirection=direction==0 ? 0 : -direction;
+   g_rescuePrimaryVolume=direction==0 ? 0.0 : VolumeForMagic(InpMagic,direction);
+   g_rescueHedgeLot=g_rescueHedgeDirection==0 ? 0.0 : VolumeForMagic(RescueMagic(),g_rescueHedgeDirection);
+   g_rescueNetExposure=
+      direction*g_rescuePrimaryVolume +
+      g_rescueHedgeDirection*g_rescueHedgeLot;
+   g_rescuePrimaryProfit=BasketCycleProfit();
+   g_rescueHedgeProfit=g_rescueRealizedProfit+RescueProfit();
+   g_rescueCombinedProfit=g_rescuePrimaryProfit+g_rescueHedgeProfit;
+   g_rescueOldestAgeSeconds=OldestPrimaryPositionAgeSeconds();
+
+   g_rescueRecoveryPrice=0.0;
+   MqlTick tick;
+   double tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   double tickValue=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_VALUE);
+   if(tickValue<=0.0)
+      tickValue=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_VALUE_PROFIT);
+   if(SymbolInfoTick(_Symbol,tick) &&
+      MathAbs(g_rescueNetExposure)>1e-8 &&
+      tickSize>0.0 && tickValue>0.0)
+   {
+      double currentPrice=(tick.bid+tick.ask)*0.5;
+      double moneyNeeded=MathMax(0.0,g_rescueTargetMoney-g_rescueCombinedProfit);
+      double moneyPerPrice=
+         MathAbs(g_rescueNetExposure)*tickValue/tickSize;
+      if(moneyPerPrice>0.0)
+      {
+         double priceMove=moneyNeeded/moneyPerPrice;
+         g_rescueRecoveryPrice=NormalizeDouble(
+            currentPrice+(g_rescueNetExposure>0.0 ? priceMove : -priceMove),
+            SymbolDigitsNow()
+         );
+      }
+   }
+}
+
+double RescueDesiredHedgeRatio()
+{
+   double maxRatio=MathMax(0.20,MathMin(0.85,InpRescueMaxHedgeRatio));
+   double normalized=MathMax(0.0,MathMin(1.0,(g_rescueReversalScore-60.0)/40.0));
+   double ratio=0.30+normalized*(maxRatio-0.30);
+   return MathMax(0.0,MathMin(maxRatio,ratio));
+}
+
+void AdjustRescueHedge()
+{
+   if(g_rescuePrimaryDirection==0 || g_rescuePrimaryVolume<=0.0)
+      return;
+
+   double ratio=RescueDesiredHedgeRatio();
+   double desired=g_rescuePrimaryVolume*ratio;
+   double current=VolumeForMagic(RescueMagic(),-g_rescuePrimaryDirection);
+   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+
+   if(current+minVolume*0.50<desired)
+   {
+      double add=NormalizeRescueVolume(desired-current);
+      if(add>0.0)
+         SendRescueOrder(-g_rescuePrimaryDirection,add);
+   }
+   else if(current>desired+minVolume*0.75)
+   {
+      double trim=NormalizeRescueVolume(current-desired);
+      if(trim>0.0)
+         ReduceRescueVolume(trim);
+   }
+}
+
+bool CloseRecoveryCycle(string reason)
+{
+   g_rescueState=RESCUE_EXIT;
+   g_executionStatus="RESCUE_EXIT";
+   SaveRescueState();
+
+   bool primaryClosed=CloseAllBasket(reason);
+   bool hedgeClosed=CloseRescuePositions();
+   if(primaryClosed && hedgeClosed)
+   {
+      ResetRescueState();
+      g_executionStatus="RESCUE_CYCLE_CLOSED";
+      return true;
+   }
+   return false;
+}
+
+bool ManageAdaptiveRescue()
+{
+   if(!g_rescueEnabled)
+      return false;
+
+   datetime now=TimeCurrent();
+   if(g_lastRescueEvaluationAt>0 && now-g_lastRescueEvaluationAt<2)
+      return g_rescueState!=RESCUE_NORMAL;
+   g_lastRescueEvaluationAt=now;
+
+   int primaryCount=BasketPositionCount();
+   int rescueCount=RescuePositionCount();
+
+   if(primaryCount<=0)
+   {
+      if(rescueCount>0)
+      {
+         g_rescueState=RESCUE_EXIT;
+         g_executionStatus="RESCUE_EXIT";
+         CloseRescuePositions();
+         return true;
+      }
+      if(g_rescueState!=RESCUE_NORMAL || g_rescueRealizedProfit!=0.0)
+         ResetRescueState();
+      return false;
+   }
+
+   UpdateRescueExposure();
+   int direction=g_rescuePrimaryDirection;
+   if(direction==0)
+      return false;
+
+   string reversalReason="NONE";
+   g_rescueReversalScore=RescueReversalScore(direction,reversalReason);
+   g_rescueReversalReason=reversalReason;
+
+   long timeLimit=RescueTimeThresholdSeconds();
+   bool timeRescue=g_rescueOldestAgeSeconds>=timeLimit && g_rescueCombinedProfit<0.0;
+   g_rescueReversalConfirmed=
+      g_rescueReversalScore>=65.0 ||
+      (timeRescue && g_rescueReversalScore>=52.0);
+
+   double rescueThreshold=RescueThresholdMoney();
+   double warningThreshold=MathMax(0.50,rescueThreshold*0.55);
+   bool lossWarning=g_rescueCombinedProfit<=-warningThreshold;
+   bool rescueLoss=g_rescueCombinedProfit<=-rescueThreshold;
+   bool severeLoss=false;
+   if(g_maxBasketLoss>0.0 &&
+      g_rescueCombinedProfit<=-g_maxBasketLoss*0.65)
+   {
+      rescueLoss=true;
+      severeLoss=true;
+   }
+
+   // A normal pullback should not pause the Basket just because P/L is red.
+   // WARNING requires evidence that the market is actually building a reversal,
+   // a time-stalled trade, or a loss already approaching the user's hard limit.
+   bool warningEvidence=
+      g_rescueReversalScore>=40.0 ||
+      timeRescue ||
+      severeLoss;
+
+   if(g_rescueState==RESCUE_NORMAL &&
+      ((lossWarning && warningEvidence) ||
+       (timeRescue && g_rescueCombinedProfit<0.0)))
+   {
+      g_rescueState=RESCUE_WARNING;
+      g_rescueWarningAt=now;
+      g_executionStatus="RESCUE_WARNING";
+      SaveRescueState();
+   }
+
+   if(g_rescueState==RESCUE_WARNING)
+   {
+      g_burstActive=false;
+      g_burstNeedsRearm=false;
+
+      if((g_rescueCombinedProfit>=0.0 && rescueCount==0) ||
+         (!timeRescue && !severeLoss &&
+          g_rescueReversalScore<35.0 &&
+          g_rescueCombinedProfit>-rescueThreshold))
+      {
+         ResetRescueState();
+         return false;
+      }
+
+      if(g_rescueReversalConfirmed && (rescueLoss || timeRescue))
+      {
+         g_rescueState=RESCUE_ACTIVE;
+         g_rescueStartedAt=now;
+         g_rescueTargetMoney=MathMax(
+            0.20,
+            CurrentSpreadCost(MathMax(SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),g_lot))*0.50
+         );
+         g_rescueInitialDeficit=MathMax(
+            g_rescueTargetMoney,
+            g_rescueTargetMoney-g_rescueCombinedProfit
+         );
+         SaveRescueState();
+      }
+      else
+      {
+         g_executionStatus=timeRescue ? "TIME_RESCUE_WARNING" : "RESCUE_WARNING";
+         return true;
+      }
+   }
+
+   if(g_rescueState==RESCUE_ACTIVE || g_rescueState==RESCUE_RECOVERY)
+   {
+      g_burstActive=false;
+      g_burstNeedsRearm=false;
+
+      if(g_rescueState==RESCUE_ACTIVE && g_rescueReversalConfirmed)
+      {
+         if(RescueHedgeGranularityAvailable())
+            AdjustRescueHedge();
+         else
+         {
+            // Netting accounts or very small positions cannot create a
+            // fractional opposite Hedge. Fall back to controlled exposure
+            // reduction rather than over-hedging beyond the configured ratio.
+            g_rescueState=RESCUE_RECOVERY;
+            g_rescueReversalReason=AccountSupportsHedging()
+               ? "RECOVERY_NO_HEDGE_GRANULARITY"
+               : "RECOVERY_NETTING_ACCOUNT";
+
+            if(now-g_lastRescueOrderAt>=60 &&
+               g_rescueReversalScore>=70.0)
+            {
+               if(PartialCloseWorstPrimary())
+                  g_lastRescueOrderAt=now;
+               else if(timeRescue && g_rescueReversalScore>=82.0)
+               {
+                  CloseRecoveryCycle("RESCUE_CONTROLLED_EXIT");
+                  return true;
+               }
+            }
+            SaveRescueState();
+         }
+      }
+
+      UpdateRescueExposure();
+
+      double currentDeficit=MathMax(0.0,g_rescueTargetMoney-g_rescueCombinedProfit);
+      g_rescueRequiredMoney=currentDeficit;
+      g_rescueRecoveredMoney=MathMax(0.0,g_rescueInitialDeficit-currentDeficit);
+
+      if(g_rescueCombinedProfit>=g_rescueTargetMoney)
+      {
+         CloseRecoveryCycle("RESCUE_RECOVERY_EXIT");
+         return true;
+      }
+
+      if(g_rescueInitialDeficit>0.0 &&
+         currentDeficit<=g_rescueInitialDeficit*0.35)
+      {
+         g_rescueState=RESCUE_RECOVERY;
+         SaveRescueState();
+      }
+
+      // If the original structure recovers before the hedge earns its keep,
+      // unwind the hedge instead of holding two opposing positions forever.
+      if(g_rescueReversalScore<40.0 &&
+         g_rescueCombinedProfit>-warningThreshold)
+      {
+         CloseRescuePositions();
+         if(RescuePositionCount()==0)
+         {
+            g_rescueState=RESCUE_WARNING;
+            g_rescueReversalReason="PRIMARY_STRUCTURE_RECOVERED";
+            SaveRescueState();
+         }
+      }
+
+      // Partial close is funded by Rescue profit and never increases lot.
+      double hedgeAvailable=MathMax(0.0,g_rescueHedgeProfit);
+      double worstLoss=WorstPrimaryLossAbs();
+      if(worstLoss>0.0 &&
+         hedgeAvailable>=worstLoss*0.70 &&
+         g_rescueCombinedProfit>-g_rescueInitialDeficit*0.70 &&
+         g_rescuePartialCloseCount<MathMax(1,g_maxPositions/2))
+      {
+         PartialCloseWorstPrimary();
+         UpdateRescueExposure();
+         if(g_rescueState==RESCUE_ACTIVE)
+            AdjustRescueHedge();
+      }
+
+      g_executionStatus=g_rescueState==RESCUE_RECOVERY
+         ? "RESCUE_RECOVERY"
+         : "RESCUE_ACTIVE";
+      SaveRescueState();
+      return true;
+   }
+
+   return g_rescueState!=RESCUE_NORMAL;
 }
 
 bool TerminalConnectedNow()
@@ -5189,6 +6675,24 @@ void ManageDynamicProtection()
             desiredSL = desiredSL <= 0.0 ? trail : MathMin(desiredSL, trail);
       }
 
+      // EMA Dynamic Trailing: once profit is established, EMA21/50 becomes a
+      // structural trailing reference. It only tightens SL; it never widens it.
+      if(profitPoints >= atr * 0.70)
+      {
+         double emaRef = EmaTrailReference(direction);
+         if(emaRef > 0.0)
+         {
+            double emaTrail = direction > 0
+               ? emaRef - atr * 0.10 * _Point
+               : emaRef + atr * 0.10 * _Point;
+
+            if(direction > 0 && emaTrail > openPrice && emaTrail < marketPrice)
+               desiredSL = desiredSL <= 0.0 ? emaTrail : MathMax(desiredSL,emaTrail);
+            else if(direction < 0 && emaTrail < openPrice && emaTrail > marketPrice)
+               desiredSL = desiredSL <= 0.0 ? emaTrail : MathMin(desiredSL,emaTrail);
+         }
+      }
+
       int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
       if(direction > 0 && desiredSL > 0.0)
          desiredSL = MathMin(desiredSL, tick.bid - minStopPoints * _Point);
@@ -5352,7 +6856,7 @@ bool ClosePositionByTicket(ulong ticket)
 
    request.action = TRADE_ACTION_DEAL;
    request.position = ticket;
-   request.magic = InpMagic;
+   request.magic = PositionGetInteger(POSITION_MAGIC);
    request.symbol = symbol;
    request.volume = NormalizeTradeVolume(volume);
    request.deviation = 30;
@@ -5441,12 +6945,12 @@ bool CloseAllBasket(string reason)
       if(ticket == 0 || !PositionSelectByTicket(ticket))
          continue;
       if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
-         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         !IsScenovaMagic(PositionGetInteger(POSITION_MAGIC)))
          continue;
       ClosePositionByTicket(ticket);
    }
 
-   bool closed = BasketPositionCount() == 0;
+   bool closed = BasketPositionCount() == 0 && RescuePositionCount() == 0;
    if(closed && reasonCode != CLOSE_REASON_NONE)
    {
       g_pendingCloseReason = CLOSE_REASON_NONE;

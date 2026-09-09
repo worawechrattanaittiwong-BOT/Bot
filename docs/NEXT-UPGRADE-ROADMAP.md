@@ -29,5 +29,16 @@
 20. **Pullback-Aware Basket Ladder** — ไม้ 2–10 ไม่เพิ่มตรง New High/New Low; รอ Progress → Pullback → Continuation ก่อนเพิ่ม Rung ถัดไป
 
 ### สถานะปัจจุบัน
-- ข้อ 16–20: ลงโค้ดใน EA 1.025
-- ข้อ 1–15: Roadmap รอบถัดไป
+- ข้อ 16–20: ลงโค้ดใน EA 1.025 (Price Location / Anti-Chase / Breakout Retest / Pullback-Aware Ladder)
+- ข้อ 1–15: ลงโค้ดใน EA 1.026 (Intelligence v4 — Rescue & Recovery + EMA Suite)
+
+### Intelligence v4 Implementation Notes
+- Rescue ทำงานหลังมี Position เท่านั้น จึงไม่เป็น Hidden Gate ของไม้แรก
+- Smart Hedge ใช้เฉพาะบัญชี MT5 แบบ Hedging และจำกัด Hedge Ratio ไม่เกิน Primary exposure; ไม่มี Martingale
+- บัญชี Netting ยังใช้ Reversal Detection / Time Rescue / Dynamic Exit ได้ แต่จะไม่เปิด Hedge สวน
+- Weight Balance คำนวณ Primary volume, Hedge volume และ Net Exposure แบบสด
+- Partial Close จะทำเมื่อกำไรฝั่ง Rescue มีน้ำหนักเพียงพอชดเชยไม้ที่เสีย ไม่ตัดไม้จากกำไร Hedge เล็กน้อย
+- Recovery TP คำนวณทั้งเป้าหมายเงินและราคาโดยอิง Net Exposure ปัจจุบัน
+- EMA 9/21/50/200 วาดบนกราฟ พร้อม Multi-TF EMA จาก M1/M5/M15/M30/H1
+- EMA / Candlestick / Price Action เป็น Confluence และ Quality intelligence ไม่เป็น first-entry hard gate
+- EMA21/50 ใช้เป็น Dynamic Trailing reference หลัง Position มีกำไรแล้ว
