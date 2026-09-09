@@ -4854,3 +4854,284 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .cc-v3-control>.cc-signal-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .cc-realtime-strip{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
+
+
+/* ===== TradingView live bot monitor ===== */
+.cc-tv-monitor{
+  max-width:1680px;
+  margin:14px auto 0;
+  padding:14px!important;
+  overflow:hidden;
+  border-color:#30395a!important;
+  background:
+    radial-gradient(circle at 96% 0%,rgba(98,72,210,.08),transparent 30%),
+    linear-gradient(155deg,#0b101b,#070a12)!important;
+}
+.cc-tv-monitor-head{
+  min-height:54px;
+  margin-bottom:10px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+}
+.cc-tv-monitor-head .cc-card-title h2{font-size:18px!important}
+.cc-tv-monitor-head .cc-card-title small{font-size:10px!important;color:#7f8aa2}
+.cc-tv-monitor-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.cc-tv-timeframes{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  padding:4px;
+  border:1px solid #28324d;
+  border-radius:9px;
+  background:#080d16;
+}
+.cc-tv-timeframes button{
+  min-width:42px;
+  min-height:30px;
+  padding:5px 8px;
+  border:0;
+  border-radius:7px;
+  background:transparent;
+  color:#75819a;
+  font-size:9px;
+  font-weight:800;
+  cursor:pointer;
+}
+.cc-tv-timeframes button:hover{color:#c5cde0;background:#101626}
+.cc-tv-timeframes button.active{
+  color:#d9cdff;
+  background:#211941;
+  box-shadow:inset 0 0 0 1px #5a48a0;
+}
+.cc-tv-live-chip{
+  min-height:34px;
+  padding:7px 10px;
+  border:1px solid #504127;
+  border-radius:999px;
+  background:#151108;
+  color:#dfbd69;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:9px;
+  font-weight:800;
+}
+.cc-tv-live-chip i{width:7px;height:7px;border-radius:50%;background:#e2b95e}
+.cc-tv-live-chip.good{border-color:#28503b;background:#0b1711;color:#77dda8}
+.cc-tv-live-chip.good i{background:#63e6a4;box-shadow:0 0 9px rgba(99,230,164,.45)}
+
+.cc-tv-monitor-grid{
+  min-height:520px;
+  display:grid;
+  grid-template-columns:minmax(0,2.55fr) minmax(300px,.85fr);
+  gap:10px;
+}
+.cc-tv-chart-shell{
+  position:relative;
+  min-width:0;
+  min-height:520px;
+  overflow:hidden;
+  border:1px solid #202b46;
+  border-radius:12px;
+  background:#060a11;
+}
+.cc-tv-widget{
+  width:100%;
+  height:100%;
+  min-height:520px;
+}
+.cc-tv-chart-badge{
+  position:absolute;
+  top:11px;
+  left:11px;
+  z-index:5;
+  pointer-events:none;
+  padding:7px 9px;
+  border:1px solid rgba(75,85,122,.62);
+  border-radius:9px;
+  background:rgba(7,10,17,.78);
+  backdrop-filter:blur(10px);
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  box-shadow:0 8px 24px rgba(0,0,0,.25);
+}
+.cc-tv-chart-badge b{font-size:10px;color:#e6ebf4}
+.cc-tv-chart-badge span{font-size:7.5px;color:#7d89a1}
+
+.cc-tv-bot-panel{
+  min-width:0;
+  min-height:520px;
+  padding:11px;
+  border:1px solid #222d48;
+  border-radius:12px;
+  background:linear-gradient(180deg,#090e17,#070b12);
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+}
+.cc-tv-bot-summary{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:7px;
+}
+.cc-tv-bot-summary>span{
+  min-width:0;
+  min-height:62px;
+  padding:8px 9px;
+  border:1px solid #1e2941;
+  border-radius:9px;
+  background:#070b12;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:3px;
+}
+.cc-tv-bot-summary small{font-size:8px;color:#68748d}
+.cc-tv-bot-summary b{
+  font-size:10.5px;
+  line-height:1.35;
+  color:#dce3ee;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.cc-tv-position-head{
+  min-height:45px;
+  padding:8px 9px;
+  border:1px solid #252f49;
+  border-radius:9px;
+  background:#0a0f18;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:9px;
+}
+.cc-tv-position-head>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cc-tv-position-head b{font-size:10px;color:#dce3ef}
+.cc-tv-position-head small{font-size:7.5px;color:#68748c;line-height:1.4}
+.cc-tv-position-head>span{
+  min-width:27px;height:27px;padding:0 7px;border-radius:999px;display:grid;place-items:center;
+  border:1px solid #403369;background:#17142e;color:#b49af6;font-size:9px;font-weight:900
+}
+.cc-tv-position-list{
+  min-height:0;
+  flex:1;
+  overflow:auto;
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+}
+.cc-tv-position-card{
+  padding:9px;
+  border:1px solid #202a43;
+  border-radius:10px;
+  background:#070b12;
+}
+.cc-tv-position-top{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:7px;
+  margin-bottom:8px;
+}
+.cc-tv-position-top>span{
+  min-width:38px;
+  padding:4px 7px;
+  border:1px solid #2a4e3d;
+  border-radius:999px;
+  background:#0a1712;
+  color:#74dfa8;
+  text-align:center;
+  font-size:8px;
+  font-weight:900;
+}
+.cc-tv-position-top>span.sell{border-color:#55323b;background:#190f13;color:#ef8d9a}
+.cc-tv-position-top b{min-width:0;font-size:9px;color:#dce3ed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-tv-position-top strong{font-size:10px;font-variant-numeric:tabular-nums}
+.cc-tv-position-prices{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:5px;
+}
+.cc-tv-position-prices>span{
+  min-width:0;
+  padding:6px 7px;
+  border:1px solid #1b253b;
+  border-radius:8px;
+  background:#060a10;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.cc-tv-position-prices small{font-size:7px;color:#617089}
+.cc-tv-position-prices b{
+  min-width:0;
+  font-size:9px;
+  color:#cfd7e5;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-variant-numeric:tabular-nums;
+}
+.cc-tv-position-empty{
+  flex:1;
+  min-height:190px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  padding:18px;
+  text-align:center;
+  color:#67738c;
+}
+.cc-tv-position-empty svg{color:#8e75d4}
+.cc-tv-position-empty b{font-size:10.5px;color:#9aa5ba}
+.cc-tv-position-empty span{max-width:230px;font-size:8px;line-height:1.5}
+
+.cc-tv-protection{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:7px;
+}
+.cc-tv-protection>div{
+  min-height:52px;
+  padding:8px 9px;
+  border:1px solid #2a3150;
+  border-radius:9px;
+  background:#0a0d18;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:3px;
+}
+.cc-tv-protection small{font-size:7.5px;color:#6b7690}
+.cc-tv-protection b{font-size:10px;color:#cfc6f1;font-variant-numeric:tabular-nums}
+.cc-tv-note{
+  margin:0;
+  padding:8px 9px;
+  border:1px solid #4e4025;
+  border-radius:8px;
+  background:#151107;
+  color:#a88f58;
+  font-size:7.5px;
+  line-height:1.5;
+}
+
+@media(max-width:1180px){
+  .cc-tv-monitor-grid{grid-template-columns:1fr}
+  .cc-tv-bot-panel{min-height:0}
+  .cc-tv-position-list{max-height:320px}
+}
+@media(max-width:720px){
+  .cc-tv-monitor-head{align-items:flex-start;flex-direction:column}
+  .cc-tv-monitor-actions{width:100%;justify-content:space-between}
+  .cc-tv-timeframes{flex:1}
+  .cc-tv-timeframes button{flex:1}
+  .cc-tv-chart-shell,.cc-tv-widget{min-height:430px}
+  .cc-tv-monitor-grid{min-height:0}
+  .cc-tv-bot-summary{grid-template-columns:1fr 1fr}
+  .cc-tv-position-prices{grid-template-columns:1fr 1fr 1fr}
+}
