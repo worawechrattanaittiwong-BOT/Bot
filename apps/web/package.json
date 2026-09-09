@@ -11,7 +11,8 @@
   "dependencies": {
     "next": "^15.1.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "lightweight-charts": "^4.2.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
