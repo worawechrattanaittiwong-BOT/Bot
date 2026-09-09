@@ -64,6 +64,8 @@ jobs:
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/011_basket_intelligence.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/012_auto_profit_target_mode.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/012_auto_profit_target_mode.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/013_backtest_performance.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/013_backtest_performance.sql
 
       - name: Build API
         run: npm run build -w @bot/api
