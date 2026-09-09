@@ -384,19 +384,6 @@ export default function DashboardPage() {
     tone: isMt5Online ? "neutral" : "bad",
     tradeReady: false
   };
-  const hardStartBlocks = new Set([
-    "NOT_INSTALLED",
-    "MT5_OFFLINE",
-    "TERMINAL_DISCONNECTED",
-    "ALGO_TRADING_OFF",
-    "EA_TRADING_DISABLED",
-    "EA_RUNTIME_OUTDATED",
-    "ACCOUNT_TRADING_DISABLED",
-    "ACCOUNT_EXPERT_DISABLED",
-    "SYMBOL_TRADING_DISABLED",
-    "NO_ACCESS",
-    "DAILY_PROFIT_LOCK"
-  ]);
   const softwareUpdate = data?.softwareUpdate || {
     required: false,
     installerRequired: false,
