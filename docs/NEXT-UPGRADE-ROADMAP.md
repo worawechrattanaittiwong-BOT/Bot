@@ -42,3 +42,16 @@
 - EMA 9/21/50/200 วาดบนกราฟ พร้อม Multi-TF EMA จาก M1/M5/M15/M30/H1
 - EMA / Candlestick / Price Action เป็น Confluence และ Quality intelligence ไม่เป็น first-entry hard gate
 - EMA21/50 ใช้เป็น Dynamic Trailing reference หลัง Position มีกำไรแล้ว
+
+
+## Intelligence v4.1 / EA 1.027 — Expectancy Repair
+- ตัด Bare STRUCTURE/MOMENTUM fallback ที่ไม่มี Execution confirmation จริง
+- News ยังเทรดได้ แต่ต้องมี M5 structure + EMA alignment + Price Action
+- Ladder spacing กว้างขึ้น และ News/High Volatility ไม่เร่งกองไม้
+- A/B/C ไม่ได้ห้ามไม้แรก แต่ควบคุมจำนวนไม้เพิ่ม: A ใช้ได้เต็ม, B/C ลด exposure
+- Historical win rate และ Losing Basket streak ลดจำนวนไม้เพิ่มแทนการดักไม้แรก
+- Losing streak นับเป็น Basket/Cycle ไม่ใช่นับทุก Position
+- Auto Basket mode มี AUTO_PROFIT_DEFENSE ป้องกัน winner กลายเป็น loser เมื่อ execution thesis กลับทิศ
+- Rescue เพิ่ม hysteresis: ยืนยัน Reversal คงที่ 15–25 วินาที, rebalance cooldown 60 วินาที, Hedge lock 120 วินาที, recovery ต้องคงที่ 60 วินาทีก่อน unwind
+- Basket Journal รวมกำไร/ขาดทุนของ Rescue/Hedge และ finalize เมื่อ Primary + Rescue ปิดครบทั้งหมด
+- Setup decision telemetry = SETUP_FIRST_V6
