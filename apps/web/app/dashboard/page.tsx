@@ -559,10 +559,22 @@ export default function DashboardPage() {
   const ladderProgressPoints = Number(metrics.basketLadderProgressPoints || 0);
   const ladderRequiredPoints = Number(metrics.basketLadderRequiredPoints || 0);
   const ladderRung = Number(metrics.basketLadderRung || Math.max(1,currentPositions+1));
+  const ladderPullbackPoints = Number(metrics.basketLadderPullbackPoints || 0);
+  const ladderPullbackRequiredPoints = Number(metrics.basketLadderPullbackRequiredPoints || 0);
+  const antiChaseActive = Boolean(metrics.antiChaseActive);
+  const priceLocationState = String(metrics.priceLocationState || "NORMAL");
+  const exhaustionScore = Number(metrics.exhaustionScore || 0);
+  const extensionAtr = Number(metrics.extensionAtr || 0);
+  const adverseWickRatio = Number(metrics.adverseWickRatio || 0);
+  const antiChaseReason = String(metrics.antiChaseReason || "NONE");
   const basketAddExplanation = currentPositions > 0 && currentPositions < effectiveMaxPositions
     ? "เปิดแล้ว " + currentPositions + "/" + configuredMaxPositions + " ไม้ · " +
-      (ladderRequiredPoints > 0
-        ? "Ladder rung " + ladderRung + " · ขาดอีก " + Math.max(0,ladderRequiredPoints-ladderProgressPoints).toFixed(0) + " points"
+      (String(metrics.basketLadderMode||"").includes("PULLBACK")
+        ? "Ladder rung " + ladderRung + " · รอ Pullback " + Math.max(0,ladderPullbackRequiredPoints-ladderPullbackPoints).toFixed(0) + " points"
+        : String(metrics.basketLadderMode||"")==="WAIT_CONTINUATION"
+          ? "Ladder rung " + ladderRung + " · Pullback มาแล้ว กำลังรอ Continuation"
+          : ladderRequiredPoints > 0
+            ? "Ladder rung " + ladderRung + " · ขาดอีก " + Math.max(0,ladderRequiredPoints-ladderProgressPoints).toFixed(0) + " points"
         : pyramidRequiredPoints > 0
           ? "รอราคาเดินต่อฝั่งกำไร " + Math.max(0,pyramidRequiredPoints-pyramidProgressPoints).toFixed(0) + " points ก่อนเพิ่มไม้"
           : "รอ Setup / โครงสร้าง / Price Action ยืนยันก่อนเพิ่มไม้") +
@@ -1340,20 +1352,22 @@ export default function DashboardPage() {
 
               <section className="panel cc-intelligence-v3">
                 <div className="cc-card-head">
-                  <div className="cc-card-title"><span className="cc-card-icon"><ScenovaIcon name="brain" size={20}/></span><div><h2>Intelligence v3</h2><small>Regime · Order Block v2 · Fibonacci · Quality · Ladder · Dynamic Exit · Journal</small></div></div>
+                  <div className="cc-card-title"><span className="cc-card-icon"><ScenovaIcon name="brain" size={20}/></span><div><h2>Intelligence v3.1</h2><small>Price Location · Anti-Chase · Regime · OB · Fib · Pullback Ladder · Dynamic Exit · Journal</small></div></div>
                   <span className="cc-mini-health good"><i/>ไม่เพิ่ม Hidden Gate</span>
                 </div>
 
                 <div className="cc-signal-grid">
+                  <div className={"cc-signal-item "+(antiChaseActive?"warn":"good")}><ScenovaIcon name="target" size={20}/><span><small>Price Location / Anti-Chase</small><b>{antiChaseActive ? priceLocationState+" · "+antiChaseReason : priceLocationState==="NORMAL" ? "NORMAL · เข้าได้ตาม Setup" : priceLocationState}</b></span></div>
                   <div className="cc-signal-item good"><ScenovaIcon name="trend" size={20}/><span><small>Market Regime</small><b>{marketRegimeDetailLabel[String(metrics.marketRegimeDetail||"")]||String(metrics.marketRegimeDetail||"กำลังวิเคราะห์")}</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>Order Block v2</small><b>{entryBias==="SELL" ? String(metrics.bearishOrderBlockState||"NONE")+" · "+Number(metrics.bearishOrderBlockQuality||0).toFixed(0) : String(metrics.bullishOrderBlockState||"NONE")+" · "+Number(metrics.bullishOrderBlockQuality||0).toFixed(0)}</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Fib Setup</small><b>{String(metrics.fibSetupGrade||"NONE")} · {Number(metrics.fibSetupScore||0).toFixed(0)}/100</b></span></div>
                   <div className={"cc-signal-item "+(String(metrics.entryQuality||"C")==="A"?"good":String(metrics.entryQuality||"C")==="B"?"warn":"")}><ScenovaIcon name="status" size={20}/><span><small>Entry Quality</small><b>{String(metrics.entryQuality||"—")} · {Number(metrics.entryQualityScore||0).toFixed(0)}/100</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>Basket Ladder</small><b>{currentPositions>0 ? "Rung "+ladderRung+"/"+configuredMaxPositions+" · "+Math.max(0,ladderProgressPoints).toFixed(0)+"/"+Math.max(0,ladderRequiredPoints).toFixed(0)+" pt" : "ไม้แรกเข้าได้ทันทีเมื่อ Setup มา"}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>Pullback-Aware Ladder</small><b>{currentPositions>0 ? "R"+ladderRung+" · "+String(metrics.basketLadderMode||"—")+" · PB "+Math.max(0,ladderPullbackPoints).toFixed(0)+"/"+Math.max(0,ladderPullbackRequiredPoints).toFixed(0) : "ไม้แรกไม่ถูก Ladder ดัก"}</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="shield" size={20}/><span><small>Dynamic TP / SL</small><b>{Number(metrics.dynamicTakeProfitPrice||0)>0 ? "TP "+Number(metrics.dynamicTakeProfitPrice).toFixed(symbolDigits)+" · SL "+Number(metrics.dynamicStopPrice||0).toFixed(symbolDigits) : "คำนวณตาม Structure + ATR"}</b></span></div>
                 </div>
 
                 <div className="cc-status-list">
+                  <StatusRow label="Exhaustion / Extension" value={"Score "+exhaustionScore.toFixed(0)+"/100 · Extension "+extensionAtr.toFixed(2)+" ATR · ไส้สวน "+(adverseWickRatio*100).toFixed(0)+"%"} tone={antiChaseActive?"warn":"good"} dot/>
                   <StatusRow label="Trade Journal" value={Number(journalStats.closedTrades||0)+" เทรดปิด · Win "+Number(journalStats.winRate||0).toFixed(1)+"% · Net $"+Number(journalStats.netProfit||0).toFixed(2)} tone={Number(journalStats.netProfit||0)>=0?"good":"warn"} dot/>
                   <StatusRow label="Profit Factor" value={Number(journalStats.profitFactor||0).toFixed(2)+" · Avg Win $"+Number(journalStats.averageWin||0).toFixed(2)+" · Avg Loss $"+Number(journalStats.averageLoss||0).toFixed(2)}/>
                   {journalRecent.slice(0,3).map((row:any,index:number)=>(
