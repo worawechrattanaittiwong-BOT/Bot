@@ -1826,9 +1826,19 @@ void SendHeartbeat()
          RescuePositionCount()
       );
 
+      string expectancyDiagnostics = StringFormat(
+         ",\"smartProfitDefenseActive\":%s,\"smartProfitDefenseReason\":\"%s\",\"smartProfitDefenseFloor\":%.2f,\"smartProfitDefenseLastProfit\":%.2f,\"effectiveLadderTargetPositions\":%d,\"performanceRiskMode\":\"%s\"",
+         g_smartProfitDefenseActive ? "true" : "false",
+         g_smartProfitDefenseReason,
+         g_smartProfitDefenseFloor,
+         g_smartProfitDefenseLastProfit,
+         g_effectiveLadderTargetPositions,
+         g_performanceRiskMode
+      );
+
       string positionDiagnostics =
          marketContextDiagnostics + intelligenceV3Diagnostics + probabilityDiagnostics +
-         intelligenceV4Diagnostics +
+         intelligenceV4Diagnostics + expectancyDiagnostics +
          ",\"openPositions\":" + OpenPositionsTelemetryJson() + "}}";
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + positionDiagnostics;
    }
@@ -5486,6 +5496,10 @@ void ResetBasketCycleState()
    g_basketPeakPositionCount = 0;
    g_basketCycleRealizedProfit = 0.0;
    g_profitRunPeak = 0.0;
+   g_smartProfitDefenseFloor = 0.0;
+   g_smartProfitDefenseLastProfit = 0.0;
+   g_smartProfitDefenseReason = "NONE";
+   g_smartProfitDefenseActive = false;
 
    string peakKey = BasketPeakGlobalKey();
    string realizedKey = BasketRealizedGlobalKey();
