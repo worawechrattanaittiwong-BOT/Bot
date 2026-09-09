@@ -1100,13 +1100,53 @@ void OnTick()
       }
       else if(BasketFillEnabled() &&
               g_perPositionProfit <= 0.0 &&
-              effectiveBasketTarget > 0.0 &&
-              cycleProfit >= effectiveBasketTarget)
+              effectiveBasketTarget > 0.0)
       {
-         CloseAllBasket("BASKET_PROFIT_TARGET");
-         ResetTrail();
-         g_executionStatus = "BASKET_PROFIT_TARGET";
-         return;
+         // Automatic Basket mode protects a meaningful unrealized winner when
+         // the execution structure rolls over before the full target. Explicit
+         // user Basket/position targets are never overridden by this logic.
+         if(cycleProfit > g_profitRunPeak + 0.05)
+         {
+            g_profitRunPeak = cycleProfit;
+            SaveBasketCycleState();
+         }
+
+         if(cycleProfit >= effectiveBasketTarget)
+         {
+            CloseAllBasket("BASKET_PROFIT_TARGET");
+            ResetTrail();
+            g_executionStatus = "BASKET_PROFIT_TARGET";
+            return;
+         }
+
+         int autoDirection = BasketDirection();
+         if(autoDirection != 0 &&
+            g_profitRunPeak >= effectiveBasketTarget * 0.55 &&
+            cycleProfit > 0.0)
+         {
+            bool microReversal =
+               g_trendM1 == -autoDirection &&
+               g_trendM5 == -autoDirection;
+            bool emaReversal =
+               g_emaTrendM5 == -autoDirection ||
+               (autoDirection > 0 && g_emaReclaimState == "LOSE_EMA21_DOWN") ||
+               (autoDirection < 0 && g_emaReclaimState == "RECLAIM_EMA21_UP");
+            double oppositePa = autoDirection > 0
+               ? g_priceActionSellScore
+               : g_priceActionBuyScore;
+            bool executionInvalidated =
+               (microReversal && emaReversal) ||
+               oppositePa >= 27.0;
+
+            double defenseFloor = MathMax(0.10,g_profitRunPeak * 0.45);
+            if(executionInvalidated && cycleProfit <= defenseFloor)
+            {
+               CloseAllBasket("AUTO_PROFIT_DEFENSE");
+               ResetTrail();
+               g_executionStatus = "AUTO_PROFIT_DEFENSE";
+               return;
+            }
+         }
       }
 
       double effectiveBasketLoss = EffectiveBasketLossLimit();
