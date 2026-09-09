@@ -1530,9 +1530,11 @@ export class BotController {
     const dailyTargetWasEdited =
       body.dailyProfitTargetMoney !== undefined ||
       body.dailyProfitContinueAfterTarget !== undefined;
+    const runtimeExecutionStatus = String(runtimeMetrics.executionStatus || "");
     const wasDailyProfitLocked =
       runtimeMetrics.dailyProfitLocked === true ||
-      String(runtimeMetrics.executionStatus || "").startsWith("DAILY_PROFIT");
+      runtimeExecutionStatus === "DAILY_PROFIT_LOCK" ||
+      runtimeExecutionStatus === "DAILY_PROFIT_GIVEBACK_LOCK";
     const currentDailyProfit = Number(runtimeMetrics.dailyProfit || 0);
     const newDailyProfitTarget = Number(savedSettings.dailyProfitTargetMoney || 0);
     const resumeAfterDailyProfitEdit =
