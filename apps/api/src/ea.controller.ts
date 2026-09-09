@@ -118,6 +118,7 @@ export class EaController {
        FROM trade_journal
        WHERE bot_instance_id=$1
          AND event_type='BASKET'
+         AND COALESCE((metadata->>'schema')::int,0) >= 3
          AND ($2='' OR metadata->>'symbol'=$2)
        GROUP BY direction`,
       [instanceId, symbol]
@@ -465,6 +466,7 @@ export class EaController {
     endedAt?: number;
     peakPositions?: number;
     sessionProfile?: string;
+    journalSchema?: number;
   }) {
     const instance = await this.instance(body.instanceId, body.installToken);
 
@@ -527,7 +529,9 @@ export class EaController {
         Math.max(0, Math.trunc(n(body.basketIndex))),
         JSON.stringify({
           source: "EA",
-          schema: eventType === "BASKET" ? 2 : 1,
+          schema: eventType === "BASKET"
+            ? Math.max(2, Math.min(3, Math.trunc(n(body.journalSchema, 2))))
+            : 1,
           symbol: text(body.symbol, 48),
           brokerServer: text(body.brokerServer, 96),
           startedAt: Math.max(0, Math.trunc(n(body.startedAt))),
