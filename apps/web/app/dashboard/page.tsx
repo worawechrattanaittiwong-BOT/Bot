@@ -1977,44 +1977,50 @@ function LiveTerminalPanel(props:any) {
         <div><span>Daily / Basket P&L</span><b className={Number(props.dailyProfit||0)>=0?"text-good":"text-bad"}>{"$"+Number(props.dailyProfit||0).toFixed(2)} / {"$"+Number(props.basketProfit||0).toFixed(2)}</b></div>
       </div>
 
-      <div className="cc-live-positions">
-        <div className="cc-live-subhead">
-          <div><b>ออเดอร์ที่เปิดอยู่</b><small>รายละเอียดส่งตรงจาก EA ทุก Heartbeat</small></div>
-          <span>{positions.length} ไม้</span>
-        </div>
-        {positions.length ? (
-          <div className="cc-live-position-table">
-            <div className="cc-live-position-row header">
-              <span>ไม้ / Ticket</span><span>ฝั่ง</span><span>Lot</span><span>ราคาเปิด</span><span>ราคาปัจจุบัน</span><span>SL</span><span>P/L</span><span>ระยะเดิน</span>
+      <div className="cc-live-terminal-split">
+        <div className="cc-live-terminal-half cc-live-terminal-half-positions">
+          <div className="cc-live-positions">
+            <div className="cc-live-subhead">
+              <div><b>ออเดอร์ที่เปิดอยู่</b><small>รายละเอียดส่งตรงจาก EA ทุก Heartbeat · พื้นที่ 50%</small></div>
+              <span>{positions.length} ไม้</span>
             </div>
-            {positions.map((position:any,index:number)=>(
-              <div className="cc-live-position-row" key={String(position.ticket||index)}>
-                <span><b>#{index+1}</b><small>{String(position.ticket||"—")}</small></span>
-                <span><b className={String(position.side)==="BUY"?"text-good":"text-bad"}>{String(position.side||"—")}</b></span>
-                <span><b>{Number(position.volume||0).toFixed(2)}</b></span>
-                <span><b>{Number(position.openPrice||0).toFixed(props.symbolDigits)}</b></span>
-                <span><b>{Number(position.currentPrice||0).toFixed(props.symbolDigits)}</b></span>
-                <span><b>{Number(position.sl||0)>0?Number(position.sl).toFixed(props.symbolDigits):"ไม่มี"}</b><small>{Number(position.slDistancePoints||0)>0?Number(position.slDistancePoints).toFixed(0)+" pt ถึง SL":""}</small></span>
-                <span><b className={Number(position.profit||0)>=0?"text-good":"text-bad"}>{Number(position.profit||0)>=0?"+$":"-$"}{Math.abs(Number(position.profit||0)).toFixed(2)}</b></span>
-                <span><b className={Number(position.movePoints||0)>=0?"text-good":"text-bad"}>{Number(position.movePoints||0)>=0?"+":""}{Number(position.movePoints||0).toFixed(0)} pt</b></span>
+            {positions.length ? (
+              <div className="cc-live-position-table">
+                <div className="cc-live-position-row header">
+                  <span>ไม้ / Ticket</span><span>ฝั่ง</span><span>Lot</span><span>ราคาเปิด</span><span>ราคาปัจจุบัน</span><span>SL</span><span>P/L</span><span>ระยะเดิน</span>
+                </div>
+                {positions.map((position:any,index:number)=>(
+                  <div className="cc-live-position-row" key={String(position.ticket||index)}>
+                    <span><b>#{index+1}</b><small>{String(position.ticket||"—")}</small></span>
+                    <span><b className={String(position.side)==="BUY"?"text-good":"text-bad"}>{String(position.side||"—")}</b></span>
+                    <span><b>{Number(position.volume||0).toFixed(2)}</b></span>
+                    <span><b>{Number(position.openPrice||0).toFixed(props.symbolDigits)}</b></span>
+                    <span><b>{Number(position.currentPrice||0).toFixed(props.symbolDigits)}</b></span>
+                    <span><b>{Number(position.sl||0)>0?Number(position.sl).toFixed(props.symbolDigits):"ไม่มี"}</b><small>{Number(position.slDistancePoints||0)>0?Number(position.slDistancePoints).toFixed(0)+" pt ถึง SL":""}</small></span>
+                    <span><b className={Number(position.profit||0)>=0?"text-good":"text-bad"}>{Number(position.profit||0)>=0?"+$":"-$"}{Math.abs(Number(position.profit||0)).toFixed(2)}</b></span>
+                    <span><b className={Number(position.movePoints||0)>=0?"text-good":"text-bad"}>{Number(position.movePoints||0)>=0?"+":""}{Number(position.movePoints||0).toFixed(0)} pt</b></span>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <div className="cc-live-position-empty"><ScenovaIcon name="orders" size={20}/><div><b>ยังไม่มี Position เปิดอยู่</b><small>เมื่อ EA เปิดออเดอร์ รายละเอียดแต่ละไม้จะขึ้นตรงนี้ทันที</small></div></div>
+            )}
           </div>
-        ) : (
-          <div className="cc-live-position-empty"><ScenovaIcon name="orders" size={20}/><div><b>ยังไม่มี Position เปิดอยู่</b><small>เมื่อ EA เปิดออเดอร์ รายละเอียดแต่ละไม้จะขึ้นตรงนี้ทันที</small></div></div>
-        )}
-      </div>
+        </div>
 
-      <div className="cc-terminal-toolbar cc-live-terminal-toolbar">
-        {filters.map(filter=><button type="button" key={filter} className={"cc-terminal-filter "+(props.filter===filter?"active":"")} onClick={()=>props.onFilter?.(filter)}>{filter}</button>)}
-        <span className="cc-terminal-count">{props.entries?.length||0} lines · refresh 5s</span>
-      </div>
+        <div className="cc-live-terminal-half cc-live-terminal-half-events">
+          <div className="cc-terminal-toolbar cc-live-terminal-toolbar">
+            {filters.map(filter=><button type="button" key={filter} className={"cc-terminal-filter "+(props.filter===filter?"active":"")} onClick={()=>props.onFilter?.(filter)}>{filter}</button>)}
+            <span className="cc-terminal-count">{props.entries?.length||0} lines · refresh 5s</span>
+          </div>
 
-      <div className="cc-terminal-window cc-live-terminal-window" ref={props.terminalRef}>
-        {(props.entries||[]).map((entry:any)=>(
-          <TerminalLine key={"inline-"+entry.id} time={entry.time} level={entry.level} category={entry.category} text={entry.text} detail={entry.detail}/>
-        ))}
-        {!props.loading && !(props.entries||[]).length && <div className="cc-terminal-empty">ยังไม่มี Event ในหมวดนี้</div>}
+          <div className="cc-terminal-window cc-live-terminal-window" ref={props.terminalRef}>
+            {(props.entries||[]).map((entry:any)=>(
+              <TerminalLine key={"inline-"+entry.id} time={entry.time} level={entry.level} category={entry.category} text={entry.text} detail={entry.detail}/>
+            ))}
+            {!props.loading && !(props.entries||[]).length && <div className="cc-terminal-empty">ยังไม่มี Event ในหมวดนี้</div>}
+          </div>
+        </div>
       </div>
     </section>
   );
