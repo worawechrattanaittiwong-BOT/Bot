@@ -3096,6 +3096,25 @@ int SetupFirstDirection(double momentum)
             : "NORMAL";
       }
 
+      if(!g_antiChaseActive)
+      {
+         if(chosenModel == "BREAKOUT_RETEST")
+            g_priceLocationState = "BREAKOUT_RETEST_READY";
+         else if(chosenModel == "PULLBACK_RETEST")
+            g_priceLocationState = "PULLBACK_RETEST_READY";
+         else
+         {
+            g_priceLocationState = "NORMAL";
+            g_exhaustionScore = 0.0;
+            g_extensionAtr = 0.0;
+            g_adverseWickRatio = 0.0;
+            g_antiChaseReason = "NONE";
+            g_breakoutRetestRequired = false;
+            g_breakoutRetestReady = false;
+            g_breakoutReferenceLevel = 0.0;
+         }
+      }
+
       EvaluateMarketLocationScore(chosen);
       g_entryTrigger = chosenModel != "NONE" ? chosenModel : g_entryModel;
    }
