@@ -2100,6 +2100,15 @@ function BotSettingsModal(props:any) {
   const basketProfitEnabled = profitTargetMode === "MANUAL" && Number(props.settings?.basketProfitTargetMoney || 0) > 0;
   const perPositionProfitEnabled = profitTargetMode === "MANUAL" && Number(props.settings?.perPositionProfitMoney || 0) > 0;
   const manualSl = Number(props.settings?.manualStopLossPoints || 0);
+  const stopLossMode = manualSl > 0 ? "MANUAL" : "AUTO";
+  const suggestedManualSl = String(Math.max(
+    1,
+    Math.round(Number(
+      props.systemHardStopDistancePoints ||
+      props.hardStopDistancePoints ||
+      1000
+    ))
+  ));
 
   return (
     <div className="cc-bot-modal-backdrop" role="presentation" onMouseDown={e=>{
@@ -2145,7 +2154,7 @@ function BotSettingsModal(props:any) {
             </button>
             <button type="button" className={activeSection==="risk"?"active":""} onClick={()=>setActiveSection("risk")} aria-current={activeSection==="risk"?"page":undefined}>
               <span><ScenovaIcon name="shield" size={18}/></span>
-              <div><b>ป้องกันขาดทุน</b><small>{manualSl>0?"SL กำหนดเอง":"SL ระบบอัตโนมัติ"}</small></div>
+              <div><b>ป้องกันขาดทุน</b><small>{stopLossMode==="AUTO"?"Auto · ระบบตั้ง SL":"กำหนดเอง · "+Number(manualSl).toFixed(0)+" pt"}</small></div>
             </button>
             <button type="button" className={activeSection==="time"?"active":""} onClick={()=>setActiveSection("time")} aria-current={activeSection==="time"?"page":undefined}>
               <span><ScenovaIcon name="clock" size={18}/></span>
@@ -2237,21 +2246,26 @@ function BotSettingsModal(props:any) {
           </section>
 
           <section className="cc-modal-settings-section cc-bot-settings-panel" hidden={activeSection!=="risk"}>
-            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">3</span><div><b>ป้องกันขาดทุน / Stop Loss</b><small>ใช้ SL ระบบ หรือกำหนดระยะเอง</small></div></div></div>
-            <div className="cc-modal-setting-grid four">
-              <SettingTile icon="shield" title="SL ระบบ (Auto)" description="คำนวณจาก ATR และสภาพตลาด">
-                <div className="cc-readout"><b>{Number(props.hardStopMultiplier||0)>0?"ATR × "+Number(props.hardStopMultiplier).toFixed(2):"กำลังคำนวณ"}</b><small>{Number(props.systemHardStopDistancePoints||0)>0?"ระยะระบบตอนนี้ "+Number(props.systemHardStopDistancePoints).toFixed(0)+" points":"รอ ATR จาก EA"}</small></div>
-              </SettingTile>
-              <SettingTile icon="orders" title="SL ต่อไม้" description="Stop Loss จริงที่ส่งไป Broker">
-                <ToggleNumberField
-                  label={manualSl>0?"ใช้ SL กำหนดเอง":"ใช้ SL ตามระบบ"}
-                  defaultValue={String(Math.max(1,Math.round(Number(props.systemHardStopDistancePoints||1000))))}
-                  value={props.settings.manualStopLossPoints}
-                  prefix="PT"
-                  suffix="ระยะจากราคาเปิด"
-                  onChange={(v:string)=>props.onEdit?.("manualStopLossPoints",v)}
-                />
-              </SettingTile>
+            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">3</span><div><b>ป้องกันขาดทุน / Stop Loss</b><small>ค่าเริ่มต้น Auto — ให้ EA คำนวณ SL หรือเลือกกำหนดระยะเอง</small></div></div></div>
+
+            <StopLossModeField
+              mode={stopLossMode}
+              manualPoints={manualSl}
+              suggestedManualPoints={suggestedManualSl}
+              systemMultiplier={props.hardStopMultiplier}
+              systemDistancePoints={props.systemHardStopDistancePoints}
+              appliedDistancePoints={props.hardStopDistancePoints}
+              onModeChange={(mode:string)=>{
+                if (mode === "AUTO") {
+                  props.onEdit?.("manualStopLossPoints",0);
+                } else if (manualSl <= 0) {
+                  props.onEdit?.("manualStopLossPoints",suggestedManualSl);
+                }
+              }}
+              onManualChange={(v:string)=>props.onEdit?.("manualStopLossPoints",v)}
+            />
+
+            <div className="cc-modal-setting-grid two">
               <SettingTile icon="pnl" title="หยุดเมื่อขาดทุนวันนี้" description="ขาดทุนรวมวันนี้ถึงจำนวนนี้ ระบบหยุดตาม Daily Loss">
                 <ToggleMoneyField label="เปิดขาดทุนรายวัน" defaultValue="25" value={props.settings.dailyLossMoney} suffix="ขาดทุนรวมวันนี้" onChange={(v:string)=>props.onEdit?.("dailyLossMoney",v)}/>
               </SettingTile>
@@ -2259,8 +2273,9 @@ function BotSettingsModal(props:any) {
                 <ToggleMoneyField label="เปิด Basket Loss" defaultValue="10" value={props.settings.maxBasketLossMoney} suffix="ขาดทุนรวมทั้งชุด" onChange={(v:string)=>props.onEdit?.("maxBasketLossMoney",v)}/>
               </SettingTile>
             </div>
+
             <div className="cc-modal-auto-strip">
-              <span><small>โหมด SL ต่อไม้</small><b>{manualSl>0?"กำหนดเอง":"ตามระบบ ATR"}</b></span>
+              <span><small>โหมด SL ต่อไม้</small><b>{stopLossMode==="AUTO"?"AUTO · ระบบ ATR":"กำหนดเอง"}</b></span>
               <span><small>EA ใช้ SL จริง</small><b>{Number(props.hardStopDistancePoints||0)>0?Number(props.hardStopDistancePoints).toFixed(0)+" pt":"รอข้อมูล"}</b></span>
               <span><small>EA ใช้ Basket Loss</small><b>{"$"+Number(props.effectiveBasketLoss||0).toFixed(2)}</b></span>
             </div>
@@ -2546,7 +2561,7 @@ function ToggleSelectField(props: any) {
 function ProfitTargetModeField(props:any) {
   const mode = String(props.mode || "AUTO").toUpperCase();
   const options = [
-    { value:"AUTO", label:"Auto", detail:"EA ปิดทั้งชุดเมื่อกำไรย่อลงหรือกราฟยืนยันกลับตัว" },
+    { value:"AUTO", label:"Auto (ค่าเริ่มต้น)", detail:"EA คำนวณเป้ากำไรและปิดทั้งชุดเมื่อกำไรย่อลงหรือกราฟยืนยันกลับตัว" },
     { value:"MANUAL", label:"กำหนดเอง", detail:"ตั้งจำนวนเงินกำไรรวม หรือกำไรต่อไม้ด้วยตัวเอง" },
     { value:"OFF", label:"ปิด", detail:"ไม่ใช้เป้ากำไร เงินขาดทุนและ Stop Loss ยังทำงาน" }
   ];
@@ -2571,6 +2586,67 @@ function ProfitTargetModeField(props:any) {
         <small>ระบบจะปิดเฉพาะตอนกำไรรวมยังเป็นบวกและเหลือมากกว่าค่าเผื่อปิดออเดอร์</small>
       </div>}
       {mode==="OFF"&&<div className="auto-profit-off-note">ปิดเฉพาะระบบทำกำไรอัตโนมัติ — Stop Loss และตัวควบคุมขาดทุนยังทำงานตามเดิม</div>}
+    </div>
+  );
+}
+
+function StopLossModeField(props:any) {
+  const mode = String(props.mode || "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : "AUTO";
+  const systemDistance = Number(props.systemDistancePoints || 0);
+  const appliedDistance = Number(props.appliedDistancePoints || 0);
+  const manualValue = Number(props.manualPoints || 0) > 0
+    ? String(props.manualPoints)
+    : String(props.suggestedManualPoints || "1000");
+  const options = [
+    {
+      value:"AUTO",
+      label:"Auto (ค่าเริ่มต้น)",
+      detail:"EA คำนวณ Stop Loss จาก ATR + โครงสร้างตลาด และปรับการป้องกันให้อัตโนมัติ"
+    },
+    {
+      value:"MANUAL",
+      label:"กำหนดเอง",
+      detail:"กำหนดระยะ Stop Loss เป็น points จากราคาเปิดของแต่ละ Position"
+    }
+  ];
+
+  return (
+    <div className={"profit-target-mode-card stop-loss-mode-card mode-"+mode.toLowerCase()}>
+      <div className="profit-target-mode-options stop-loss-mode-options" role="radiogroup" aria-label="โหมด Stop Loss">
+        {options.map(option=><button
+          key={option.value}
+          type="button"
+          role="radio"
+          aria-checked={mode===option.value}
+          className={mode===option.value?"active":""}
+          onClick={()=>props.onModeChange?.(option.value)}
+        >
+          <b>{option.label}</b>
+          <small>{option.detail}</small>
+        </button>)}
+      </div>
+
+      {mode==="AUTO"
+        ? <div className="auto-profit-live stop-loss-auto-live">
+            <span><i/>Auto SL กำลังทำงาน</span>
+            <b>{Number(props.systemMultiplier||0)>0
+              ? "ATR × "+Number(props.systemMultiplier).toFixed(2)
+              : "ระบบกำลังคำนวณ ATR"}</b>
+            <small>{systemDistance>0
+              ? "ระยะระบบตอนนี้ "+systemDistance.toFixed(0)+" pt · EA ใช้จริง "+(appliedDistance>0?appliedDistance.toFixed(0)+" pt":"รอ Sync")
+              : "EA จะคำนวณระยะ SL ตาม ATR และสภาพตลาดทันทีเมื่อข้อมูลพร้อม"}</small>
+          </div>
+        : <div className="stop-loss-manual-live">
+            <b>ระยะ Stop Loss ที่กำหนดเอง</b>
+            <NumberInput
+              value={manualValue}
+              prefix="PT"
+              suffix="ระยะจากราคาเปิด"
+              ariaLabel="ระยะ Stop Loss ที่กำหนดเอง"
+              onCommit={(value:string)=>props.onManualChange?.(value)}
+            />
+            <small>ค่าที่บันทึกจะถูกส่งเป็น Broker SL จริงทุก Position และ EA จะไม่ใช้ระยะ ATR เริ่มต้นแทน</small>
+          </div>}
     </div>
   );
 }
