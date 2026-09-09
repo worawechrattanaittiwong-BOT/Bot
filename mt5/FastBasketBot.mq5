@@ -5792,6 +5792,15 @@ bool AccountSupportsHedging()
    return mode==ACCOUNT_MARGIN_MODE_RETAIL_HEDGING;
 }
 
+bool RescueHedgeGranularityAvailable()
+{
+   if(!AccountSupportsHedging() || g_rescuePrimaryVolume<=0.0)
+      return false;
+   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+   double maxRatio=MathMax(0.20,MathMin(0.85,InpRescueMaxHedgeRatio));
+   return g_rescuePrimaryVolume*maxRatio>=minVolume-1e-12;
+}
+
 double NormalizeRescueVolume(double volume)
 {
    double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
@@ -6295,7 +6304,33 @@ bool ManageAdaptiveRescue()
       g_burstNeedsRearm=false;
 
       if(g_rescueState==RESCUE_ACTIVE && g_rescueReversalConfirmed)
-         AdjustRescueHedge();
+      {
+         if(RescueHedgeGranularityAvailable())
+            AdjustRescueHedge();
+         else
+         {
+            // Netting accounts or very small positions cannot create a
+            // fractional opposite Hedge. Fall back to controlled exposure
+            // reduction rather than over-hedging beyond the configured ratio.
+            g_rescueState=RESCUE_RECOVERY;
+            g_rescueReversalReason=AccountSupportsHedging()
+               ? "RECOVERY_NO_HEDGE_GRANULARITY"
+               : "RECOVERY_NETTING_ACCOUNT";
+
+            if(now-g_lastRescueOrderAt>=60 &&
+               g_rescueReversalScore>=70.0)
+            {
+               if(PartialCloseWorstPrimary())
+                  g_lastRescueOrderAt=now;
+               else if(timeRescue && g_rescueReversalScore>=82.0)
+               {
+                  CloseRecoveryCycle("RESCUE_CONTROLLED_EXIT");
+                  return true;
+               }
+            }
+            SaveRescueState();
+         }
+      }
 
       UpdateRescueExposure();
 
