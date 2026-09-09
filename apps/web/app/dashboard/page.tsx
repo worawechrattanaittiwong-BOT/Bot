@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../../lib/api";
+import { API_URL, api, getToken } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 
@@ -28,7 +28,7 @@ type BrokerCatalog = {
   }>;
 };
 
-type View = "overview" | "account" | "access";
+type View = "overview" | "account" | "access" | "backtest";
 const defaultSettings = {
   symbol: "XAUUSD",
   lot: 0.01,
@@ -128,7 +128,7 @@ export default function DashboardPage() {
     }
 
     const requestedView = new URLSearchParams(window.location.search).get("view");
-    if (requestedView === "account" || requestedView === "access") {
+    if (requestedView === "account" || requestedView === "access" || requestedView === "backtest") {
       setActiveView(requestedView);
     } else {
       setActiveView("overview");
@@ -1179,7 +1179,7 @@ export default function DashboardPage() {
   function handleOwnerNavigate(href:string) {
     if (!href.startsWith("/dashboard?view=")) return false;
     const requested = new URL(href, window.location.origin).searchParams.get("view");
-    if (requested === "overview" || requested === "account" || requested === "access" || requested === "settings") {
+    if (requested === "overview" || requested === "account" || requested === "access" || requested === "backtest" || requested === "settings") {
       const targetView: View = requested === "settings" ? "overview" : requested;
       setActiveView(targetView);
       setError("");
@@ -1208,12 +1208,14 @@ export default function DashboardPage() {
   const ownerActiveKey =
     activeView === "account" ? "trading-account" :
     activeView === "access" ? "trading-access" :
+    activeView === "backtest" ? "trading-backtest" :
     "trading-overview";
 
   const navItems: Array<{id:View;label:string;hint:string}> = [
     { id:"overview", label:"บอท", hint:"สถานะ ควบคุม และตั้งค่า" },
     { id:"account", label:"บัญชี MT5", hint:"Slots, Device และการเชื่อมต่อ" },
-    { id:"access", label:"สิทธิ์ใช้งาน", hint:"Trial และสมาชิก" }
+    { id:"access", label:"สิทธิ์ใช้งาน", hint:"Trial และสมาชิก" },
+    { id:"backtest", label:"Backtest", hint:"ผลย้อนหลัง ดาวน์โหลด และแชร์ตัวอย่าง" }
   ];
 
   return (
@@ -1265,10 +1267,10 @@ export default function DashboardPage() {
 
         <header className={"page-head human-head cc-page-head cc-v3-head " + (activeView === "overview" ? "cc-page-head-overview" : "")}>
           <div className="cc-v3-title">
-            <span className="cc-v3-title-icon"><ScenovaIcon name={activeView === "overview" ? "control" : activeView === "account" ? "account" : "shield"} size={24}/></span>
+            <span className="cc-v3-title-icon"><ScenovaIcon name={activeView === "overview" ? "control" : activeView === "account" ? "account" : activeView === "backtest" ? "strategy" : "shield"} size={24}/></span>
             <div>
-              <h1>{activeView === "overview" ? "Control Center" : activeView === "account" ? "บัญชีและการเชื่อมต่อ MT5" : "สิทธิ์ใช้งาน"}</h1>
-              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "ติดตั้ง อัปเดต และตรวจการเชื่อมต่อ MT5 / EA" : "ตรวจสถานะ Trial สมาชิก และสิทธิ์ของ Slot"}</p>
+              <h1>{activeView === "overview" ? "Control Center" : activeView === "account" ? "บัญชีและการเชื่อมต่อ MT5" : activeView === "backtest" ? "Backtest & Performance" : "สิทธิ์ใช้งาน"}</h1>
+              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "ติดตั้ง อัปเดต และตรวจการเชื่อมต่อ MT5 / EA" : activeView === "backtest" ? "ดูผลทดสอบย้อนหลัง ดาวน์โหลดรายงาน และสร้างหน้าพอร์ตตัวอย่างแบบอ่านอย่างเดียว" : "ตรวจสถานะ Trial สมาชิก และสิทธิ์ของ Slot"}</p>
             </div>
           </div>
           <div className="cc-v3-head-actions">
@@ -1852,6 +1854,14 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {activeView === "backtest" && (
+          <BacktestCenter
+            slotId={selectedSlotId || data.selectedSlot?.id || ""}
+            onError={(message:string)=>setError(message)}
+            onNotice={(message:string)=>setNotice(message)}
+          />
+        )}
+
         {activeView === "access" && (
           <div className="access-workspace">
             <div className="grid2 access-grid">
@@ -2026,6 +2036,236 @@ export default function DashboardPage() {
         )}
       </main>
     </div>
+  );
+}
+
+function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNotice:(message:string)=>void}) {
+  const [runs,setRuns] = useState<any[]>([]);
+  const [selected,setSelected] = useState<any|null>(null);
+  const [loading,setLoading] = useState(false);
+  const [busy,setBusy] = useState(false);
+
+  async function refresh(selectId?:string) {
+    setLoading(true);
+    try {
+      const query = props.slotId ? "?slotId="+encodeURIComponent(props.slotId) : "";
+      const rows = await api("/backtest/runs"+query);
+      setRuns(Array.isArray(rows)?rows:[]);
+      const targetId = selectId || selected?.id || rows?.[0]?.id;
+      if (targetId) {
+        const detail = await api("/backtest/run?id="+encodeURIComponent(targetId));
+        setSelected(detail);
+      } else {
+        setSelected(null);
+      }
+    } catch (e:any) {
+      props.onError(String(e?.message||"โหลด Backtest ไม่สำเร็จ"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(()=>{
+    refresh();
+  },[props.slotId]);
+
+  async function createSample() {
+    setBusy(true);
+    try {
+      const created = await api("/backtest/sample",{
+        method:"POST",
+        body:JSON.stringify({
+          slotId:props.slotId,
+          title:"SCENOVA Backtest ตัวอย่าง",
+          symbol:"XAUUSDm",
+          timeframe:"M5",
+          initialDeposit:1000,
+          lot:0.01
+        })
+      });
+      props.onNotice("สร้าง Backtest ตัวอย่างแล้ว");
+      await refresh(created.id);
+    } catch (e:any) {
+      props.onError(String(e?.message||"สร้างตัวอย่างไม่สำเร็จ"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function togglePublish() {
+    if(!selected?.id) return;
+    setBusy(true);
+    try {
+      const result = await api("/backtest/publish",{
+        method:"POST",
+        body:JSON.stringify({id:selected.id,published:!selected.is_published})
+      });
+      const detail = await api("/backtest/run?id="+encodeURIComponent(selected.id));
+      setSelected(detail);
+      setRuns(rows=>rows.map(row=>row.id===selected.id?{...row,...result}:row));
+      props.onNotice(result.is_published?"เปิดหน้าพอร์ตตัวอย่างแล้ว":"ปิดการแชร์สาธารณะแล้ว");
+    } catch (e:any) {
+      props.onError(String(e?.message||"เปลี่ยนสถานะการแชร์ไม่สำเร็จ"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function downloadCsv() {
+    if(!selected?.id) return;
+    try {
+      const token = getToken();
+      const response = await fetch(API_URL+"/api/backtest/export.csv?id="+encodeURIComponent(selected.id),{
+        headers:token?{Authorization:"Bearer "+token}:{},
+        cache:"no-store"
+      });
+      if(!response.ok){
+        const body = await response.json().catch(()=>({}));
+        throw new Error(body.message||"ดาวน์โหลดไม่สำเร็จ");
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition")||"";
+      const match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const fileName = match ? decodeURIComponent(match[1]) : "scenova-backtest.csv";
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href=url;
+      link.download=fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch(e:any){
+      props.onError(String(e?.message||"ดาวน์โหลดไม่สำเร็จ"));
+    }
+  }
+
+  const summary = selected?.summary || {};
+  const equity = Array.isArray(selected?.equity_curve)?selected.equity_curve:[];
+  const publicUrl = selected?.is_published && selected?.public_slug
+    ? (typeof window!=="undefined"?window.location.origin:"")+"/performance/"+selected.public_slug
+    : "";
+
+  return (
+    <div className="backtest-workspace">
+      <section className="panel backtest-hero">
+        <div>
+          <span className="eyebrow">BACKTEST CENTER</span>
+          <h2>ผลทดสอบย้อนหลังและพอร์ตตัวอย่าง</h2>
+          <p>ผล Backtest เป็นข้อมูลจำลองย้อนหลัง ไม่ใช่การรับประกันกำไรในอนาคต หน้าพอร์ตสาธารณะเป็นแบบอ่านอย่างเดียวและไม่เปิดเผยรหัส MT5</p>
+        </div>
+        <div className="backtest-hero-actions">
+          <button className="btn" disabled={loading||busy} onClick={()=>refresh()}><ScenovaIcon name="refresh" size={16}/>รีเฟรช</button>
+          <button className="btn primary" disabled={busy} onClick={createSample}><ScenovaIcon name="strategy" size={16}/>สร้างตัวอย่าง</button>
+        </div>
+      </section>
+
+      <div className="backtest-layout">
+        <section className="panel backtest-run-list">
+          <div className="panel-head">
+            <div><div className="eyebrow">REPORTS</div><h2>รายงาน Backtest</h2></div>
+            <span className="badge">{runs.length} รายการ</span>
+          </div>
+          <div className="backtest-run-scroll">
+            {runs.map((run:any)=>(
+              <button key={run.id} className={"backtest-run-item "+(selected?.id===run.id?"active":"")} onClick={async()=>{
+                setLoading(true);
+                try{setSelected(await api("/backtest/run?id="+encodeURIComponent(run.id)));}
+                catch(e:any){props.onError(String(e?.message||"เปิดรายงานไม่สำเร็จ"));}
+                finally{setLoading(false);}
+              }}>
+                <div><b>{run.title}</b><small>{run.symbol+" · "+run.timeframe+" · "+new Date(run.created_at).toLocaleDateString("th-TH")}</small></div>
+                <span className={run.source==="SAMPLE"?"warn":""}>{run.source==="SAMPLE"?"ตัวอย่าง":"Backtest"}</span>
+              </button>
+            ))}
+            {!loading&&!runs.length&&<div className="backtest-empty">ยังไม่มีรายงาน Backtest<br/><small>สร้างตัวอย่างเพื่อดูรูปแบบหน้ารายงานได้ทันที</small></div>}
+          </div>
+        </section>
+
+        <section className="panel backtest-report">
+          {selected ? (
+            <>
+              <div className="backtest-report-head">
+                <div>
+                  <div className="eyebrow">{selected.source==="SAMPLE"?"SIMULATED SAMPLE":"BACKTEST REPORT"}</div>
+                  <h2>{selected.title}</h2>
+                  <p>{selected.symbol+" · "+selected.timeframe+" · Lot "+Number(selected.lot||0).toFixed(2)+" · เงินเริ่มต้น $"+Number(selected.initial_deposit||0).toFixed(2)}</p>
+                </div>
+                <div className="backtest-actions">
+                  <button className="btn" onClick={downloadCsv}>ดาวน์โหลด CSV</button>
+                  <button className={selected.is_published?"btn danger-outline":"btn primary"} disabled={busy} onClick={togglePublish}>
+                    {selected.is_published?"หยุดแชร์":"สร้างพอร์ตตัวอย่าง"}
+                  </button>
+                </div>
+              </div>
+
+              {selected.source==="SAMPLE"&&<div className="notice warn backtest-disclaimer"><b>ผลจำลองตัวอย่าง</b><span>ข้อมูลชุดนี้สร้างขึ้นเพื่อสาธิตหน้ารายงานเท่านั้น ไม่ใช่ผลการเทรดจริง</span></div>}
+
+              <div className="backtest-kpis">
+                <BacktestKpi label="Net P/L" value={(Number(summary.netProfit||0)>=0?"+$":"-$")+Math.abs(Number(summary.netProfit||0)).toFixed(2)} tone={Number(summary.netProfit||0)>=0?"good":"bad"}/>
+                <BacktestKpi label="Return" value={Number(summary.returnPercent||0).toFixed(2)+"%"} tone={Number(summary.returnPercent||0)>=0?"good":"bad"}/>
+                <BacktestKpi label="Win Rate" value={Number(summary.winRate||0).toFixed(1)+"%"} />
+                <BacktestKpi label="Profit Factor" value={Number(summary.profitFactor||0).toFixed(2)} />
+                <BacktestKpi label="Max Drawdown" value={Number(summary.maxDrawdownPercent||0).toFixed(2)+"%"} tone="warn"/>
+                <BacktestKpi label="Trades" value={String(summary.closedTrades||0)} />
+              </div>
+
+              <div className="backtest-chart-card">
+                <div className="backtest-chart-head"><div><b>Equity Curve</b><small>การเปลี่ยนแปลง Balance หลังแต่ละรายการ</small></div><strong>{"$"+Number(summary.finalBalance||0).toFixed(2)}</strong></div>
+                <BacktestEquityChart points={equity}/>
+              </div>
+
+              {publicUrl&&(
+                <div className="backtest-public-link">
+                  <div><b>พอร์ตตัวอย่างเปิดให้ลูกค้าดูแล้ว</b><small>เป็นหน้าอ่านอย่างเดียว ไม่มีรหัสผ่าน MT5 และไม่มีสิทธิ์ส่งคำสั่งเทรด</small></div>
+                  <a className="btn primary" href={publicUrl} target="_blank" rel="noreferrer">เปิดหน้าสาธารณะ ↗</a>
+                  <button className="btn" onClick={()=>navigator.clipboard?.writeText(publicUrl).then(()=>props.onNotice("คัดลอกลิงก์แล้ว"))}>คัดลอกลิงก์</button>
+                </div>
+              )}
+
+              <div className="backtest-trade-table">
+                <div className="backtest-trade-row header"><span>#</span><span>ฝั่ง</span><span>Lot</span><span>ราคาเปิด</span><span>ราคาปิด</span><span>P/L</span><span>Balance</span></div>
+                {(selected.trades||[]).slice(-20).reverse().map((trade:any)=>(
+                  <div className="backtest-trade-row" key={trade.trade_index}>
+                    <span>{trade.trade_index}</span>
+                    <span className={trade.direction==="BUY"?"text-good":"text-bad"}>{trade.direction}</span>
+                    <span>{Number(trade.volume||0).toFixed(2)}</span>
+                    <span>{Number(trade.open_price||0).toFixed(3)}</span>
+                    <span>{Number(trade.close_price||0).toFixed(3)}</span>
+                    <span className={Number(trade.profit||0)>=0?"text-good":"text-bad"}>{Number(trade.profit||0)>=0?"+$":"-$"}{Math.abs(Number(trade.profit||0)).toFixed(2)}</span>
+                    <span>{"$"+Number(trade.balance_after||0).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : <div className="backtest-report-empty"><ScenovaIcon name="strategy" size={28}/><b>เลือกรายงาน Backtest</b><span>ผลสรุป กราฟ รายการเทรด และปุ่มดาวน์โหลดจะแสดงตรงนี้</span></div>}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function BacktestKpi(props:{label:string;value:string;tone?:string}) {
+  return <div className={"backtest-kpi "+(props.tone||"")}><span>{props.label}</span><b>{props.value}</b></div>;
+}
+
+function BacktestEquityChart({points}:{points:any[]}) {
+  if(!points.length) return <div className="backtest-chart-empty">ยังไม่มีข้อมูล Equity</div>;
+  const values = points.map((point:any)=>Number(point.balance||0));
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1,max-min);
+  const width = 900;
+  const height = 220;
+  const coords = values.map((value,index)=>{
+    const x = values.length<=1 ? 0 : index/(values.length-1)*width;
+    const y = height-((value-min)/range*(height-20)+10);
+    return x.toFixed(1)+","+y.toFixed(1);
+  }).join(" ");
+  return (
+    <svg className="backtest-equity-svg" viewBox={"0 0 "+width+" "+height} preserveAspectRatio="none" role="img" aria-label="Equity curve">
+      <polyline points={coords} fill="none" vectorEffect="non-scaling-stroke"/>
+    </svg>
   );
 }
 
