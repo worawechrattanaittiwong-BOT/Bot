@@ -4893,19 +4893,55 @@ double BasketProgressFromAnchorPoints(int direction)
       : (anchorPrice - tick.ask) / _Point;
 }
 
+int EffectiveLadderTargetPositions(int direction)
+{
+   int cap = MathMax(1,g_maxPositions);
+   if(cap <= 1)
+   {
+      g_performanceRiskMode = "SINGLE";
+      return 1;
+   }
+
+   if(g_entryQuality == "B")
+      cap = MathMin(cap,MathMax(2,(int)MathCeil(g_maxPositions*0.65)));
+   else if(g_entryQuality == "C")
+      cap = MathMin(cap,MathMax(2,(int)MathCeil(g_maxPositions*0.35)));
+
+   double historyWin = direction > 0 ? g_buyWinProbability : g_sellWinProbability;
+   int historySamples = direction > 0 ? g_buyWinSamples : g_sellWinSamples;
+   if(historySamples >= 20 && historyWin < 45.0)
+      cap = MathMin(cap,MathMax(2,(int)MathCeil(g_maxPositions*0.50)));
+   if(historySamples >= 30 && historyWin < 35.0)
+      cap = MathMin(cap,2);
+
+   if(g_consecutiveLosses >= 4)
+      cap = MathMax(1,cap-2);
+   else if(g_consecutiveLosses >= 2)
+      cap = MathMax(1,cap-1);
+
+   g_performanceRiskMode =
+      g_consecutiveLosses >= 4 ? "DEFENSIVE_STREAK" :
+      (historySamples >= 30 && historyWin < 35.0) ? "DEFENSIVE_HISTORY" :
+      g_entryQuality == "C" ? "QUALITY_C_LIMITED" :
+      g_entryQuality == "B" ? "QUALITY_B_LIMITED" :
+      "NORMAL";
+
+   return MathMax(1,MathMin(g_maxPositions,cap));
+}
+
 double LadderFractionForRung(int rung)
 {
    if(rung <= 1) return 0.0;
-   if(rung == 2) return 0.03;
-   if(rung == 3) return 0.07;
-   if(rung == 4) return 0.12;
-   if(rung == 5) return 0.18;
-   if(rung == 6) return 0.25;
-   if(rung == 7) return 0.33;
-   if(rung == 8) return 0.42;
-   if(rung == 9) return 0.52;
-   if(rung == 10) return 0.63;
-   return 0.63 + (rung - 10) * 0.08;
+   if(rung == 2) return 0.08;
+   if(rung == 3) return 0.16;
+   if(rung == 4) return 0.26;
+   if(rung == 5) return 0.38;
+   if(rung == 6) return 0.52;
+   if(rung == 7) return 0.68;
+   if(rung == 8) return 0.86;
+   if(rung == 9) return 1.06;
+   if(rung == 10) return 1.28;
+   return 1.28 + (rung - 10) * 0.18;
 }
 
 bool RecentDirectionalBodyAfter(
@@ -4951,12 +4987,12 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       : AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
    atr = MathMax(10.0, atr);
 
-   double qualityFactor = g_entryQuality == "A" ? 0.78 :
-                          g_entryQuality == "B" ? 0.92 : 1.05;
+   double qualityFactor = g_entryQuality == "A" ? 0.95 :
+                          g_entryQuality == "B" ? 1.10 : 1.30;
    double regimeFactor =
-      g_marketRegimeDetail == "NEWS_IMPULSE" ? 0.72 :
-      g_marketRegime == "HIGH_VOLATILITY" ? 0.82 :
-      g_marketRegimeDetail == "TREND_ACCELERATION" ? 0.85 : 1.0;
+      g_marketRegimeDetail == "NEWS_IMPULSE" ? 1.15 :
+      g_marketRegime == "HIGH_VOLATILITY" ? 1.10 :
+      g_marketRegimeDetail == "TREND_ACCELERATION" ? 0.95 : 1.0;
 
    g_ladderRequiredPoints = MathMax(
       3.0,
@@ -4985,8 +5021,8 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       : MathMax(0.0, (current - g_ladderExtremePrice) / _Point);
 
    double pullbackFactor =
-      g_marketRegimeDetail == "NEWS_IMPULSE" ? 0.045 :
-      g_marketRegime == "HIGH_VOLATILITY" ? 0.055 : 0.070;
+      g_marketRegimeDetail == "NEWS_IMPULSE" ? 0.080 :
+      g_marketRegime == "HIGH_VOLATILITY" ? 0.100 : 0.120;
    g_ladderPullbackRequiredPoints = MathMax(
       2.0,
       MathMin(
@@ -5021,12 +5057,23 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
    // After the pullback, require a fresh execution turn back in Basket
    // direction. This converts the Ladder from "add on new low/high" into
    // "add after pullback + continuation".
+   bool m1Turn = RecentDirectionalBodyAfter(
+      direction,
+      PERIOD_M1,
+      g_ladderPullbackArmedAt
+   );
+   bool emaContinuation =
+      g_emaTrendM1 == direction &&
+      g_emaTrendM5 == direction;
+   double paScore = direction > 0
+      ? g_priceActionBuyScore
+      : g_priceActionSellScore;
    bool continuation =
-      MomentumSupportsDirection(direction, MomentumPoints(), 0.18) ||
-      RecentDirectionalBodyAfter(
-         direction,
-         PERIOD_M1,
-         g_ladderPullbackArmedAt
+      m1Turn &&
+      (
+         MomentumSupportsDirection(direction,MomentumPoints(),0.30) ||
+         emaContinuation ||
+         paScore >= 18.0
       );
 
    if(!continuation)
@@ -5062,7 +5109,8 @@ void ArmBurst(int direction)
       return;
 
    g_burstDirection = direction;
-   g_burstTargetPositions = MathMax(1, g_maxPositions);
+   g_effectiveLadderTargetPositions = EffectiveLadderTargetPositions(direction);
+   g_burstTargetPositions = MathMax(1,g_effectiveLadderTargetPositions);
    g_burstRequestsSent = MathMax(1, BasketPositionCount());
    g_burstStartedAt = TimeCurrent();
    g_ladderRung = MathMax(1, BasketPositionCount() + 1);
