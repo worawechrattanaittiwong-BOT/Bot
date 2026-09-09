@@ -12,6 +12,8 @@ internal static class AgentRunner
         Path.Combine(ScenovaRuntime.BaseDir, "mt5-permission-repair-v2.stamp");
     private static string PendingEaReloadPath =>
         Path.Combine(ScenovaRuntime.BaseDir, "ea-reload-required-v2.txt");
+    private static string EaAuthRepairStampPath =>
+        Path.Combine(ScenovaRuntime.BaseDir, "mt5-auth-repair-v2.stamp");
 
     private static bool CooldownElapsed(string path, TimeSpan cooldown)
     {
@@ -173,6 +175,60 @@ internal static class AgentRunner
         throw new InvalidOperationException(
             "ไม่สามารถอัปเดต SCENOVA Device Agent ได้ กรุณารอสักครู่แล้วกดติดตั้งอีกครั้ง",
             lastError);
+    }
+
+    private static bool RefreshEaCredentialPreset(AgentConfig config, string installToken)
+    {
+        var presetsDir = Path.Combine(config.TerminalDataPath, "MQL5", "Presets");
+        Directory.CreateDirectory(presetsDir);
+        var presetPath = Path.Combine(presetsDir, "SCENOVA-FastBasketBot.set");
+
+        var desired = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["InpApiBase"] = config.ApiBase.TrimEnd('/'),
+            ["InpInstanceId"] = config.InstanceId,
+            ["InpInstallToken"] = installToken
+        };
+
+        var lines = File.Exists(presetPath)
+            ? File.ReadAllLines(presetPath).ToList()
+            : new List<string>();
+
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        var changed = !File.Exists(presetPath);
+
+        for (var i = 0; i < lines.Count; i++)
+        {
+            foreach (var item in desired)
+            {
+                var prefix = item.Key + "=";
+                if (!lines[i].StartsWith(prefix, StringComparison.Ordinal))
+                    continue;
+
+                found.Add(item.Key);
+                var next = prefix + item.Value;
+                if (!string.Equals(lines[i], next, StringComparison.Ordinal))
+                {
+                    lines[i] = next;
+                    changed = true;
+                }
+                break;
+            }
+        }
+
+        foreach (var item in desired)
+        {
+            if (found.Contains(item.Key))
+                continue;
+
+            lines.Insert(0, item.Key + "=" + item.Value);
+            changed = true;
+        }
+
+        if (changed)
+            File.WriteAllLines(presetPath, lines, new System.Text.UTF8Encoding(false));
+
+        return changed;
     }
 
     internal static bool EnsureMt5RunningWithEa(AgentConfig config, bool forceReload)
@@ -378,6 +434,11 @@ internal static class AgentRunner
                         deviceSecret
                     });
 
+                // Keep the EA preset credentials synchronized with the Agent's
+                // authenticated config. A reinstall can rotate Instance/Token
+                // while an already-open MT5 chart still holds the old inputs.
+                var presetCredentialsChanged = RefreshEaCredentialPreset(config, installToken);
+
                 // DeviceVerified is telemetry only. The install token and
                 // Server entitlement are authoritative for trading access.
                 _ = await UpdateEaIfNeededAsync(
@@ -408,6 +469,34 @@ internal static class AgentRunner
                         await AppendLogAsync(
                             logPath,
                             "Queued EA reload applied while bot was safely stopped.");
+                    }
+                }
+                else if (
+                    !heartbeat.EaOnline &&
+                    heartbeat.SafeToRestart &&
+                    (
+                        presetCredentialsChanged ||
+                        heartbeat.EaLastSeenAgeSeconds < 0 ||
+                        heartbeat.EaLastSeenAgeSeconds > 20
+                    ) &&
+                    restartCooldownReady &&
+                    CooldownElapsed(EaAuthRepairStampPath, TimeSpan.FromMinutes(2)))
+                {
+                    // Agent authentication works, but the EA heartbeat is stale.
+                    // Refresh the preset and perform one controlled reload only
+                    // while Server state confirms there are no open positions.
+                    var repaired = EnsureMt5RunningWithEa(config, forceReload: true);
+                    if (repaired)
+                    {
+                        MarkNow(RestartStampPath);
+                        MarkNow(EaAuthRepairStampPath);
+                        attemptedInitialMt5Start = true;
+                        attemptedEaPermissionRepair = false;
+                        await AppendLogAsync(
+                            logPath,
+                            "EA offline/auth repair applied safely. presetChanged=" +
+                            presetCredentialsChanged +
+                            " lastSeenAge=" + heartbeat.EaLastSeenAgeSeconds.ToString("0"));
                     }
                 }
                 else if (!heartbeat.EaOnline && !attemptedInitialMt5Start)
@@ -442,6 +531,7 @@ internal static class AgentRunner
                 {
                     attemptedEaPermissionRepair = false;
                     ClearFile(PermissionRepairStampPath);
+                    ClearFile(EaAuthRepairStampPath);
                 }
 
                 await AppendLogAsync(
