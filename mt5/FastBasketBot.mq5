@@ -2929,6 +2929,16 @@ bool DirectSetupReady(
 int SetupFirstDirection(double momentum)
 {
    g_entryTrigger = "NONE";
+   g_antiChaseActive = false;
+   g_antiChaseDirection = 0;
+   g_exhaustionScore = 0.0;
+   g_extensionAtr = 0.0;
+   g_adverseWickRatio = 0.0;
+   g_priceLocationState = "NORMAL";
+   g_antiChaseReason = "NONE";
+   g_breakoutRetestRequired = false;
+   g_breakoutRetestReady = false;
+   g_breakoutReferenceLevel = 0.0;
 
    if(g_entryMode == ENTRY_BUY_ONLY || g_entryMode == ENTRY_SELL_ONLY)
    {
@@ -2938,16 +2948,29 @@ int SetupFirstDirection(double momentum)
       if(DirectSetupReady(fixedDirection, momentum, fixedModel, fixedScore))
       {
          EvaluateMarketLocationScore(fixedDirection);
-         g_entryTrigger = g_entryModel;
+         g_entryTrigger = fixedModel != "NONE" ? fixedModel : g_entryModel;
          return fixedDirection;
       }
 
       if(HigherTimeframeSupportsDirection(fixedDirection) &&
          LowerTimeframeSupportsDirection(fixedDirection))
       {
-         EvaluateMarketLocationScore(fixedDirection);
-         g_entryTrigger = "STRUCTURE_CONTINUATION";
-         return fixedDirection;
+         string locationTrigger = "NONE";
+         if(AntiChaseLocationReady(
+            fixedDirection,
+            momentum,
+            false,
+            0.0,
+            0.0,
+            locationTrigger
+         ))
+         {
+            EvaluateMarketLocationScore(fixedDirection);
+            g_entryTrigger = locationTrigger != "NONE"
+               ? locationTrigger
+               : "STRUCTURE_CONTINUATION";
+            return fixedDirection;
+         }
       }
       return 0;
    }
@@ -2960,14 +2983,20 @@ int SetupFirstDirection(double momentum)
    bool sellReady = DirectSetupReady(-1, momentum, sellModel, sellScore);
 
    int chosen = 0;
+   string chosenModel = "NONE";
    if(buyReady && !sellReady)
+   {
       chosen = 1;
+      chosenModel = buyModel;
+   }
    else if(sellReady && !buyReady)
+   {
       chosen = -1;
+      chosenModel = sellModel;
+   }
    else if(buyReady && sellReady)
    {
-      // Score selects between two valid setups; it never decides whether a
-      // valid setup is allowed to trade.
+      // Score selects between two already-valid setups. It is not an entry gate.
       if(MathAbs(buyScore - sellScore) >= 4.0)
          chosen = buyScore > sellScore ? 1 : -1;
       else if(momentum > 0.0)
@@ -2978,14 +3007,28 @@ int SetupFirstDirection(double momentum)
          chosen = g_macroTrendDirection;
       else
          chosen = buyScore >= sellScore ? 1 : -1;
+      chosenModel = chosen > 0 ? buyModel : sellModel;
    }
 
    if(chosen == 0 && g_macroTrendDirection != 0 &&
       HigherTimeframeSupportsDirection(g_macroTrendDirection) &&
       LowerTimeframeSupportsDirection(g_macroTrendDirection))
    {
-      chosen = g_macroTrendDirection;
-      g_entryTrigger = "STRUCTURE_CONTINUATION";
+      string locationTrigger = "NONE";
+      if(AntiChaseLocationReady(
+         g_macroTrendDirection,
+         momentum,
+         false,
+         0.0,
+         0.0,
+         locationTrigger
+      ))
+      {
+         chosen = g_macroTrendDirection;
+         chosenModel = locationTrigger != "NONE"
+            ? locationTrigger
+            : "STRUCTURE_CONTINUATION";
+      }
    }
 
    if(chosen == 0)
@@ -2999,18 +3042,49 @@ int SetupFirstDirection(double momentum)
          ) &&
          (g_trendM5 == momentumDirection || g_trendM15 == momentumDirection))
       {
-         chosen = momentumDirection;
-         g_entryTrigger = g_marketRegime == "HIGH_VOLATILITY"
-            ? "NEWS_IMPULSE"
-            : "MOMENTUM_CONTINUATION";
+         string locationTrigger = "NONE";
+         if(AntiChaseLocationReady(
+            momentumDirection,
+            momentum,
+            false,
+            0.0,
+            0.0,
+            locationTrigger
+         ))
+         {
+            chosen = momentumDirection;
+            chosenModel = locationTrigger != "NONE"
+               ? locationTrigger
+               : (g_marketRegime == "HIGH_VOLATILITY"
+                  ? "NEWS_IMPULSE"
+                  : "MOMENTUM_CONTINUATION");
+         }
       }
    }
 
    if(chosen != 0)
    {
+      // If the opposite direction was exhausted but this direction has a valid
+      // setup, do not let the opposite anti-chase state pollute the UI.
+      if(g_antiChaseActive && g_antiChaseDirection != chosen)
+      {
+         g_antiChaseActive = false;
+         g_antiChaseDirection = 0;
+         g_exhaustionScore = 0.0;
+         g_extensionAtr = 0.0;
+         g_adverseWickRatio = 0.0;
+         g_antiChaseReason = "NONE";
+         g_breakoutRetestRequired = false;
+         g_breakoutRetestReady = false;
+         g_breakoutReferenceLevel = 0.0;
+         g_priceLocationState =
+            (chosenModel == "PULLBACK_RETEST" || chosenModel == "BREAKOUT_RETEST")
+            ? "RETEST_READY"
+            : "NORMAL";
+      }
+
       EvaluateMarketLocationScore(chosen);
-      if(g_entryTrigger == "NONE")
-         g_entryTrigger = g_entryModel;
+      g_entryTrigger = chosenModel != "NONE" ? chosenModel : g_entryModel;
    }
    return chosen;
 }
