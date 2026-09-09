@@ -1489,6 +1489,19 @@ export default function DashboardPage() {
                 </section>
               </div>
 
+              <TradingViewBotMonitor
+                symbol={String(metrics.symbol||settings.symbol||"XAUUSD")}
+                openPositions={openPositions}
+                state={String(state)}
+                desired={String(desired)}
+                executionLabel={String(visibleLiveStatus.label||"—")}
+                basketProfit={Number(metrics.basketProfit||0)}
+                dailyProfit={Number(metrics.dailyProfit||0)}
+                symbolDigits={symbolDigits}
+                dynamicStopPrice={Number(metrics.dynamicStopPrice||0)}
+                dynamicTakeProfitPrice={Number(metrics.dynamicTakeProfitPrice||0)}
+              />
+
               <section className="panel cc-intelligence-v3 cc-customer-intelligence">
                 <div className="cc-card-head">
                   <div className="cc-card-title">
@@ -2269,6 +2282,137 @@ function BacktestEquityChart({points}:{points:any[]}) {
     <svg className="backtest-equity-svg" viewBox={"0 0 "+width+" "+height} preserveAspectRatio="none" role="img" aria-label="Equity curve">
       <polyline points={coords} fill="none" vectorEffect="non-scaling-stroke"/>
     </svg>
+  );
+}
+
+function TradingViewBotMonitor(props:any) {
+  const [interval,setInterval] = useState("5");
+  const chartHostRef = useRef<HTMLDivElement|null>(null);
+  const positions = Array.isArray(props.openPositions) ? props.openPositions : [];
+  const symbol = String(props.symbol || "XAUUSD");
+  const normalized = symbol.toUpperCase().replace(/[^A-Z0-9]/g,"");
+  const tvSymbol =
+    normalized.startsWith("XAUUSD") ? "OANDA:XAUUSD" :
+    normalized.startsWith("XAGUSD") ? "OANDA:XAGUSD" :
+    normalized.startsWith("BTCUSD") ? "BITSTAMP:BTCUSD" :
+    normalized.startsWith("ETHUSD") ? "BITSTAMP:ETHUSD" :
+    normalized.includes("EURUSD") ? "OANDA:EURUSD" :
+    normalized.includes("GBPUSD") ? "OANDA:GBPUSD" :
+    normalized.includes("USDJPY") ? "OANDA:USDJPY" :
+    normalized.includes("AUDUSD") ? "OANDA:AUDUSD" :
+    "OANDA:XAUUSD";
+
+  useEffect(()=>{
+    const host = chartHostRef.current;
+    if(!host) return;
+    host.innerHTML = "";
+    const widget = document.createElement("div");
+    widget.className = "tradingview-widget-container__widget";
+    widget.style.height = "100%";
+    widget.style.width = "100%";
+    host.appendChild(widget);
+
+    const script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      autosize:true,
+      symbol:tvSymbol,
+      interval,
+      timezone:"Asia/Bangkok",
+      theme:"dark",
+      style:"1",
+      locale:"en",
+      backgroundColor:"rgba(6, 10, 17, 1)",
+      gridColor:"rgba(35, 43, 66, 0.45)",
+      hide_top_toolbar:false,
+      hide_legend:false,
+      hide_side_toolbar:false,
+      allow_symbol_change:false,
+      save_image:false,
+      calendar:false,
+      support_host:"https://www.tradingview.com"
+    });
+    host.appendChild(script);
+
+    return ()=>{ host.innerHTML = ""; };
+  },[tvSymbol,interval]);
+
+  return (
+    <section className="panel cc-tv-monitor">
+      <div className="cc-tv-monitor-head">
+        <div className="cc-card-title">
+          <span className="cc-card-icon"><ScenovaIcon name="trend" size={20}/></span>
+          <div>
+            <h2>Live Trading Chart</h2>
+            <small>ดูกราฟตลาดพร้อมสถานะออเดอร์จริงจาก EA ในหน้าเดียว</small>
+          </div>
+        </div>
+        <div className="cc-tv-monitor-actions">
+          <div className="cc-tv-timeframes" role="group" aria-label="กรอบเวลากราฟ">
+            {[["1","M1"],["5","M5"],["15","M15"],["60","H1"]].map(([value,label])=>(
+              <button type="button" key={value} className={interval===value?"active":""} onClick={()=>setInterval(value)}>{label}</button>
+            ))}
+          </div>
+          <span className={"cc-tv-live-chip "+(props.state==="RUNNING"?"good":"warn")}><i/>{props.state==="RUNNING"?"BOT LIVE":"BOT "+String(props.state||"STOPPED")}</span>
+        </div>
+      </div>
+
+      <div className="cc-tv-monitor-grid">
+        <div className="cc-tv-chart-shell">
+          <div className="cc-tv-chart-badge">
+            <b>{symbol}</b>
+            <span>กราฟตลาดอ้างอิง TradingView</span>
+          </div>
+          <div ref={chartHostRef} className="tradingview-widget-container cc-tv-widget"/>
+        </div>
+
+        <aside className="cc-tv-bot-panel">
+          <div className="cc-tv-bot-summary">
+            <span><small>สถานะบอท</small><b>{String(props.executionLabel||"—")}</b></span>
+            <span><small>ออเดอร์เปิด</small><b>{positions.length+" ไม้"}</b></span>
+            <span><small>Basket P/L</small><b className={Number(props.basketProfit||0)>=0?"text-good":"text-bad"}>{(Number(props.basketProfit||0)>=0?"+$":"-$")+Math.abs(Number(props.basketProfit||0)).toFixed(2)}</b></span>
+            <span><small>Daily P/L</small><b className={Number(props.dailyProfit||0)>=0?"text-good":"text-bad"}>{(Number(props.dailyProfit||0)>=0?"+$":"-$")+Math.abs(Number(props.dailyProfit||0)).toFixed(2)}</b></span>
+          </div>
+
+          <div className="cc-tv-position-head">
+            <div><b>ออเดอร์จริงจาก EA</b><small>ข้อมูลอัปเดตจาก Heartbeat ของบัญชีที่เชื่อมอยู่</small></div>
+            <span>{positions.length}</span>
+          </div>
+
+          <div className="cc-tv-position-list">
+            {positions.length ? positions.map((position:any,index:number)=>(
+              <div className="cc-tv-position-card" key={String(position.ticket||index)}>
+                <div className="cc-tv-position-top">
+                  <span className={String(position.side)==="BUY"?"buy":"sell"}>{String(position.side||"—")}</span>
+                  <b>{"#"+(index+1)+" · "+Number(position.volume||0).toFixed(2)+" Lot"}</b>
+                  <strong className={Number(position.profit||0)>=0?"text-good":"text-bad"}>{(Number(position.profit||0)>=0?"+$":"-$")+Math.abs(Number(position.profit||0)).toFixed(2)}</strong>
+                </div>
+                <div className="cc-tv-position-prices">
+                  <span><small>เปิด</small><b>{Number(position.openPrice||0).toFixed(props.symbolDigits)}</b></span>
+                  <span><small>ปัจจุบัน</small><b>{Number(position.currentPrice||0).toFixed(props.symbolDigits)}</b></span>
+                  <span><small>SL</small><b>{Number(position.sl||0)>0?Number(position.sl).toFixed(props.symbolDigits):"—"}</b></span>
+                </div>
+              </div>
+            )) : (
+              <div className="cc-tv-position-empty">
+                <ScenovaIcon name="orders" size={24}/>
+                <b>ยังไม่มีออเดอร์เปิด</b>
+                <span>เมื่อ EA เปิดออเดอร์ จะเห็นฝั่ง Lot ราคา SL และ P/L ตรงนี้ทันที</span>
+              </div>
+            )}
+          </div>
+
+          <div className="cc-tv-protection">
+            <div><small>TP ระบบ</small><b>{Number(props.dynamicTakeProfitPrice||0)>0?Number(props.dynamicTakeProfitPrice).toFixed(props.symbolDigits):"รอออเดอร์"}</b></div>
+            <div><small>SL ระบบ</small><b>{Number(props.dynamicStopPrice||0)>0?Number(props.dynamicStopPrice).toFixed(props.symbolDigits):"รอออเดอร์"}</b></div>
+          </div>
+
+          <p className="cc-tv-note">ราคาในกราฟ TradingView เป็นราคาตลาดอ้างอิง อาจต่างจากราคา Exness/XAUUSDm เล็กน้อย ส่วนออเดอร์ Lot SL และ P/L ด้านขวาเป็นข้อมูลจริงจาก EA ของบัญชีที่เชื่อมอยู่</p>
+        </aside>
+      </div>
+    </section>
   );
 }
 
