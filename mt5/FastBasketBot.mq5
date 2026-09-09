@@ -479,6 +479,342 @@ void ClearChartStatus()
    ChartRedraw(0);
 }
 
+ENUM_TIMEFRAMES EmaTimeframeAt(int index)
+{
+   if(index == 0) return PERIOD_M1;
+   if(index == 1) return PERIOD_M5;
+   if(index == 2) return PERIOD_M15;
+   if(index == 3) return PERIOD_M30;
+   return PERIOD_H1;
+}
+
+int EmaPeriodAt(int index)
+{
+   if(index == 0) return 9;
+   if(index == 1) return 21;
+   if(index == 2) return 50;
+   return 200;
+}
+
+color EmaColorAt(int index)
+{
+   if(index == 0) return clrDodgerBlue;
+   if(index == 1) return clrGold;
+   if(index == 2) return clrMagenta;
+   return clrRed;
+}
+
+string EmaObjectPrefix()
+{
+   return StringFormat("SCN_EMA_%I64d_", InpMagic);
+}
+
+bool InitializeEmaIntelligence()
+{
+   bool ok = true;
+   for(int t = 0; t < EMA_TF_COUNT; t++)
+   {
+      for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+      {
+         g_emaHandles[t][p] = iMA(
+            _Symbol,
+            EmaTimeframeAt(t),
+            EmaPeriodAt(p),
+            0,
+            MODE_EMA,
+            PRICE_CLOSE
+         );
+         if(g_emaHandles[t][p] == INVALID_HANDLE)
+            ok = false;
+      }
+   }
+
+   for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+   {
+      g_emaChartHandles[p] = iMA(
+         _Symbol,
+         PERIOD_CURRENT,
+         EmaPeriodAt(p),
+         0,
+         MODE_EMA,
+         PRICE_CLOSE
+      );
+      if(g_emaChartHandles[p] == INVALID_HANDLE)
+         ok = false;
+   }
+   return ok;
+}
+
+void DeleteEmaObjects()
+{
+   string prefix = EmaObjectPrefix();
+   int total = ObjectsTotal(0);
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(0, i);
+      if(StringFind(name, prefix) == 0)
+         ObjectDelete(0, name);
+   }
+   ChartRedraw(0);
+}
+
+void ReleaseEmaIntelligence()
+{
+   for(int t = 0; t < EMA_TF_COUNT; t++)
+   {
+      for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+      {
+         if(g_emaHandles[t][p] != INVALID_HANDLE)
+         {
+            IndicatorRelease(g_emaHandles[t][p]);
+            g_emaHandles[t][p] = INVALID_HANDLE;
+         }
+      }
+   }
+   for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+   {
+      if(g_emaChartHandles[p] != INVALID_HANDLE)
+      {
+         IndicatorRelease(g_emaChartHandles[p]);
+         g_emaChartHandles[p] = INVALID_HANDLE;
+      }
+   }
+   DeleteEmaObjects();
+}
+
+bool EmaValueByIndex(int tfIndex, int periodIndex, int shift, double &value)
+{
+   value = 0.0;
+   if(tfIndex < 0 || tfIndex >= EMA_TF_COUNT ||
+      periodIndex < 0 || periodIndex >= EMA_PERIOD_COUNT)
+      return false;
+   int handle = g_emaHandles[tfIndex][periodIndex];
+   if(handle == INVALID_HANDLE)
+      return false;
+
+   double buffer[];
+   ArraySetAsSeries(buffer, true);
+   if(CopyBuffer(handle, 0, shift, 1, buffer) < 1)
+      return false;
+   value = buffer[0];
+   return value > 0.0;
+}
+
+int EmaDirectionForTf(int tfIndex)
+{
+   double e9=0.0,e21=0.0,e50=0.0,e200=0.0;
+   if(!EmaValueByIndex(tfIndex,0,1,e9) ||
+      !EmaValueByIndex(tfIndex,1,1,e21) ||
+      !EmaValueByIndex(tfIndex,2,1,e50) ||
+      !EmaValueByIndex(tfIndex,3,1,e200))
+      return 0;
+
+   if(e9 > e21 && e21 > e50 && e50 > e200)
+      return 1;
+   if(e9 < e21 && e21 < e50 && e50 < e200)
+      return -1;
+
+   if(e9 > e21 && e21 > e50)
+      return 1;
+   if(e9 < e21 && e21 < e50)
+      return -1;
+   return 0;
+}
+
+double EmaConfluenceScore(int direction)
+{
+   int dirs[5] = {
+      g_emaTrendM1,
+      g_emaTrendM5,
+      g_emaTrendM15,
+      g_emaTrendM30,
+      g_emaTrendH1
+   };
+   double weights[5] = {8.0, 12.0, 18.0, 22.0, 25.0};
+   double score = 0.0;
+   double total = 0.0;
+   for(int i = 0; i < 5; i++)
+   {
+      total += weights[i];
+      if(dirs[i] == direction)
+         score += weights[i];
+      else if(dirs[i] == -direction)
+         score -= weights[i] * 0.35;
+   }
+   return MathMax(0.0, MathMin(100.0, 50.0 + score / MathMax(1.0,total) * 50.0));
+}
+
+void RefreshEmaIntelligence(bool force)
+{
+   datetime now = TimeCurrent();
+   if(!force && g_lastEmaRefreshAt > 0 && now == g_lastEmaRefreshAt)
+      return;
+   g_lastEmaRefreshAt = now;
+
+   EmaValueByIndex(1,0,1,g_ema9);
+   EmaValueByIndex(1,1,1,g_ema21);
+   EmaValueByIndex(1,2,1,g_ema50);
+   EmaValueByIndex(1,3,1,g_ema200);
+
+   g_emaTrendM1 = EmaDirectionForTf(0);
+   g_emaTrendM5 = EmaDirectionForTf(1);
+   g_emaTrendM15 = EmaDirectionForTf(2);
+   g_emaTrendM30 = EmaDirectionForTf(3);
+   g_emaTrendH1 = EmaDirectionForTf(4);
+
+   if(g_ema9 > g_ema21 && g_ema21 > g_ema50 && g_ema50 > g_ema200)
+      g_emaStack = "BULL_9>21>50>200";
+   else if(g_ema9 < g_ema21 && g_ema21 < g_ema50 && g_ema50 < g_ema200)
+      g_emaStack = "BEAR_9<21<50<200";
+   else
+      g_emaStack = "MIXED";
+
+   double e9Past=0.0,e21Past=0.0,e50Past=0.0;
+   EmaValueByIndex(1,0,4,e9Past);
+   EmaValueByIndex(1,1,4,e21Past);
+   EmaValueByIndex(1,2,4,e50Past);
+   int up = 0;
+   int down = 0;
+   if(g_ema9 > e9Past) up++; else if(g_ema9 < e9Past) down++;
+   if(g_ema21 > e21Past) up++; else if(g_ema21 < e21Past) down++;
+   if(g_ema50 > e50Past) up++; else if(g_ema50 < e50Past) down++;
+   g_emaSlope = up >= 2 ? "UP" : down >= 2 ? "DOWN" : "FLAT";
+
+   MqlTick tick;
+   double price = 0.0;
+   if(SymbolInfoTick(_Symbol, tick))
+      price = (tick.bid + tick.ask) * 0.5;
+
+   g_emaPriceVs200 = price > 0.0 && g_ema200 > 0.0
+      ? (price >= g_ema200 ? "ABOVE_EMA200" : "BELOW_EMA200")
+      : "UNKNOWN";
+
+   double atrPrice = MathMax(
+      _Point * 10.0,
+      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point
+   );
+   double hi = MathMax(g_ema9, MathMax(g_ema21, g_ema50));
+   double lo = MathMin(g_ema9, MathMin(g_ema21, g_ema50));
+   double bandAtr = atrPrice > 0.0 ? (hi - lo) / atrPrice : 0.0;
+   g_emaDistanceAtr = price > 0.0 && g_ema21 > 0.0 && atrPrice > 0.0
+      ? MathAbs(price - g_ema21) / atrPrice
+      : 0.0;
+
+   if(bandAtr <= 0.18)
+      g_emaVolatilityState = "COMPRESSION";
+   else if(bandAtr >= 0.65)
+      g_emaVolatilityState = "EXPANSION";
+   else
+      g_emaVolatilityState = "NORMAL";
+
+   g_emaConfluenceScoreBuy = EmaConfluenceScore(1);
+   g_emaConfluenceScoreSell = EmaConfluenceScore(-1);
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   double e21Now=0.0,e21Prev=0.0;
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 2, rates) >= 2 &&
+      EmaValueByIndex(1,1,1,e21Now) &&
+      EmaValueByIndex(1,1,2,e21Prev))
+   {
+      if(rates[1].close <= e21Prev && rates[0].close > e21Now)
+         g_emaReclaimState = "RECLAIM_EMA21_UP";
+      else if(rates[1].close >= e21Prev && rates[0].close < e21Now)
+         g_emaReclaimState = "LOSE_EMA21_DOWN";
+      else
+         g_emaReclaimState = "NONE";
+   }
+}
+
+void DrawEmaCurves()
+{
+   if(!InpShowEmaOnChart || MQLInfoInteger(MQL_TESTER))
+      return;
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   const int bars = 70;
+   if(CopyRates(_Symbol, PERIOD_CURRENT, 0, bars + 1, rates) < bars + 1)
+      return;
+
+   datetime currentBar = rates[0].time;
+   if(g_lastEmaDrawBar == currentBar)
+      return;
+   g_lastEmaDrawBar = currentBar;
+
+   string prefix = EmaObjectPrefix();
+   for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+   {
+      int handle = g_emaChartHandles[p];
+      if(handle == INVALID_HANDLE)
+         continue;
+
+      double values[];
+      ArraySetAsSeries(values, true);
+      if(CopyBuffer(handle, 0, 0, bars + 1, values) < bars + 1)
+         continue;
+
+      color lineColor = EmaColorAt(p);
+      int width = p >= 2 ? 2 : 1;
+      for(int i = 0; i < bars; i++)
+      {
+         string name = prefix + IntegerToString(EmaPeriodAt(p)) + "_" + IntegerToString(i);
+         if(ObjectFind(0, name) < 0)
+         {
+            if(!ObjectCreate(
+               0,name,OBJ_TREND,0,
+               rates[i+1].time,values[i+1],
+               rates[i].time,values[i]
+            ))
+               continue;
+         }
+         else
+         {
+            ObjectMove(0,name,0,rates[i+1].time,values[i+1]);
+            ObjectMove(0,name,1,rates[i].time,values[i]);
+         }
+
+         ObjectSetInteger(0,name,OBJPROP_COLOR,lineColor);
+         ObjectSetInteger(0,name,OBJPROP_WIDTH,width);
+         ObjectSetInteger(0,name,OBJPROP_RAY_RIGHT,false);
+         ObjectSetInteger(0,name,OBJPROP_BACK,true);
+         ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
+         ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
+      }
+
+      string labelName = prefix + "LABEL_" + IntegerToString(EmaPeriodAt(p));
+      if(ObjectFind(0,labelName) < 0)
+         ObjectCreate(0,labelName,OBJ_LABEL,0,0,0);
+      ObjectSetInteger(0,labelName,OBJPROP_CORNER,CORNER_LEFT_UPPER);
+      ObjectSetInteger(0,labelName,OBJPROP_XDISTANCE,12);
+      ObjectSetInteger(0,labelName,OBJPROP_YDISTANCE,20 + p * 17);
+      ObjectSetInteger(0,labelName,OBJPROP_FONTSIZE,9);
+      ObjectSetInteger(0,labelName,OBJPROP_COLOR,lineColor);
+      ObjectSetInteger(0,labelName,OBJPROP_SELECTABLE,false);
+      ObjectSetString(
+         0,labelName,OBJPROP_TEXT,
+         "EMA " + IntegerToString(EmaPeriodAt(p)) + "  " +
+         DoubleToString(values[0], SymbolDigitsNow())
+      );
+   }
+   ChartRedraw(0);
+}
+
+double EmaTrailReference(int direction)
+{
+   RefreshEmaIntelligence(false);
+   if(g_ema21 <= 0.0 || g_ema50 <= 0.0)
+      return 0.0;
+
+   if(direction > 0)
+      return g_marketRegimeDetail == "TREND_ACCELERATION"
+         ? MathMax(g_ema21,g_ema50)
+         : g_ema21;
+   return g_marketRegimeDetail == "TREND_ACCELERATION"
+      ? MathMin(g_ema21,g_ema50)
+      : g_ema21;
+}
+
 int OnInit()
 {
    g_lot = InpLot;
