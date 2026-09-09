@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.029"
+#property version   "1.030"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1568,7 +1568,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.029\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.030\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -4287,46 +4287,11 @@ string StopLossModeName()
 
 double AdaptiveTradeVolume()
 {
+   // Lot is customer-controlled. Adaptive intelligence may decide WHEN to
+   // trade, spacing, direction, confidence and protection, but it must never
+   // silently reduce the customer's configured order volume.
    g_minimumLotOverrideActive = false;
-   double fallback = NormalizeTradeVolume(g_lot);
-
-   if(!g_adaptiveEngine || g_atrPoints <= 0.0 || g_riskPerOrderPercent <= 0.0)
-      return fallback;
-
-   double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-   double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE_LOSS);
-   if(tickValue <= 0.0) tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-   double stopDistance = EffectiveStopLossDistancePoints() * _Point;
-   if(tickSize <= 0.0 || tickValue <= 0.0 || stopDistance <= 0.0)
-      return fallback;
-
-   double riskMoney = AccountInfoDouble(ACCOUNT_EQUITY) * g_riskPerOrderPercent / 100.0;
-   double moneyPerLot = (stopDistance / tickSize) * tickValue;
-   if(riskMoney <= 0.0 || moneyPerLot <= 0.0)
-      return fallback;
-
-   double calculated = MathMin(g_lot, riskMoney / moneyPerLot);
-   double volatilityRatio = g_atrRatio > 0.0 ? g_atrRatio : 1.0;
-   double volatilityFactor = 1.0 / MathMax(1.0, volatilityRatio);
-   double lossFactor = MathPow(0.75, MathMax(0, g_consecutiveLosses));
-   double executionFactor = 0.50 + 0.50 * MathMax(0.0, MathMin(100.0, g_executionQuality)) / 100.0;
-   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-   double drawdownRatio = equity > 0.0 ? MathMax(0.0, -DailyBotProfit() / equity) : 0.0;
-   double drawdownFactor = MathMax(0.50, 1.0 - drawdownRatio * 10.0);
-   calculated *= volatilityFactor * lossFactor * executionFactor * drawdownFactor;
-   double brokerMinimum = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   if(calculated + 1e-12 < brokerMinimum)
-   {
-      // Optional small-account override: keep every other Adaptive/Risk guard,
-      // but do not block solely because the broker cannot trade below its
-      // minimum volume. Never exceed the user's configured lot ceiling.
-      if(!g_allowMinimumLotOverride || brokerMinimum > g_lot + 1e-12)
-         return 0.0;
-
-      g_minimumLotOverrideActive = true;
-      return NormalizeTradeVolume(brokerMinimum);
-   }
-   return NormalizeTradeVolume(calculated);
+   return NormalizeTradeVolume(g_lot);
 }
 
 string DetailedMarketRegime(double momentum, int direction)
