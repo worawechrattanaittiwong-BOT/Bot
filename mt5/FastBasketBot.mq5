@@ -5448,6 +5448,687 @@ bool TradeResultAccepted(const MqlTradeResult &result)
    );
 }
 
+long RescueMagic()
+{
+   return InpMagic + 910001;
+}
+
+bool IsScenovaMagic(long magic)
+{
+   return magic == InpMagic || magic == RescueMagic();
+}
+
+string RescueStateName()
+{
+   if(g_rescueState == RESCUE_WARNING) return "WARNING";
+   if(g_rescueState == RESCUE_ACTIVE) return "RESCUE";
+   if(g_rescueState == RESCUE_RECOVERY) return "RECOVERY";
+   if(g_rescueState == RESCUE_EXIT) return "EXIT";
+   return "NORMAL";
+}
+
+string RescueGlobalKey(string suffix)
+{
+   return StringFormat(
+      "SCN_RSC_%I64d_%I64d_%s_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),
+      InpMagic,
+      _Symbol,
+      suffix
+   );
+}
+
+void SaveRescueState()
+{
+   GlobalVariableSet(RescueGlobalKey("state"),(double)g_rescueState);
+   GlobalVariableSet(RescueGlobalKey("start"),(double)g_rescueStartedAt);
+   GlobalVariableSet(RescueGlobalKey("dir"),(double)g_rescuePrimaryDirection);
+   GlobalVariableSet(RescueGlobalKey("real"),g_rescueRealizedProfit);
+   GlobalVariableSet(RescueGlobalKey("def"),g_rescueInitialDeficit);
+   GlobalVariableSet(RescueGlobalKey("target"),g_rescueTargetMoney);
+   GlobalVariableSet(RescueGlobalKey("partial"),(double)g_rescuePartialCloseCount);
+}
+
+void ResetRescueState()
+{
+   g_rescueState = RESCUE_NORMAL;
+   g_rescueStartedAt = 0;
+   g_rescueWarningAt = 0;
+   g_rescuePrimaryDirection = 0;
+   g_rescueHedgeDirection = 0;
+   g_rescueHedgeLot = 0.0;
+   g_rescuePrimaryVolume = 0.0;
+   g_rescueNetExposure = 0.0;
+   g_rescueReversalScore = 0.0;
+   g_rescueReversalConfirmed = false;
+   g_rescueReversalReason = "NONE";
+   g_rescueRequiredMoney = 0.0;
+   g_rescueRecoveredMoney = 0.0;
+   g_rescueInitialDeficit = 0.0;
+   g_rescueTargetMoney = 0.0;
+   g_rescueRealizedProfit = 0.0;
+   g_rescueCombinedProfit = 0.0;
+   g_rescuePrimaryProfit = 0.0;
+   g_rescueHedgeProfit = 0.0;
+   g_rescuePartialCloseCount = 0;
+   g_rescueOldestAgeSeconds = 0;
+
+   string keys[7] = {"state","start","dir","real","def","target","partial"};
+   for(int i=0;i<ArraySize(keys);i++)
+   {
+      string key = RescueGlobalKey(keys[i]);
+      if(GlobalVariableCheck(key))
+         GlobalVariableDel(key);
+   }
+}
+
+void RestoreRescueState()
+{
+   if(GlobalVariableCheck(RescueGlobalKey("state")))
+      g_rescueState = (ENUM_RESCUE_STATE)(int)GlobalVariableGet(RescueGlobalKey("state"));
+   if(GlobalVariableCheck(RescueGlobalKey("start")))
+      g_rescueStartedAt = (datetime)(long)GlobalVariableGet(RescueGlobalKey("start"));
+   if(GlobalVariableCheck(RescueGlobalKey("dir")))
+      g_rescuePrimaryDirection = (int)GlobalVariableGet(RescueGlobalKey("dir"));
+   if(GlobalVariableCheck(RescueGlobalKey("real")))
+      g_rescueRealizedProfit = GlobalVariableGet(RescueGlobalKey("real"));
+   if(GlobalVariableCheck(RescueGlobalKey("def")))
+      g_rescueInitialDeficit = GlobalVariableGet(RescueGlobalKey("def"));
+   if(GlobalVariableCheck(RescueGlobalKey("target")))
+      g_rescueTargetMoney = GlobalVariableGet(RescueGlobalKey("target"));
+   if(GlobalVariableCheck(RescueGlobalKey("partial")))
+      g_rescuePartialCloseCount = (int)GlobalVariableGet(RescueGlobalKey("partial"));
+
+   if(BasketPositionCount() == 0 && RescuePositionCount() == 0)
+      ResetRescueState();
+}
+
+int RescuePositionCount()
+{
+   int count = 0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)==_Symbol &&
+         PositionGetInteger(POSITION_MAGIC)==RescueMagic())
+         count++;
+   }
+   return count;
+}
+
+double FloatingProfitForMagic(long magic)
+{
+   double total=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=magic)
+         continue;
+      total += PositionGetDouble(POSITION_PROFIT);
+      total += PositionGetDouble(POSITION_SWAP);
+   }
+   return total;
+}
+
+double VolumeForMagic(long magic,int direction)
+{
+   double total=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=magic)
+         continue;
+      long type=PositionGetInteger(POSITION_TYPE);
+      if((direction>0 && type==POSITION_TYPE_BUY) ||
+         (direction<0 && type==POSITION_TYPE_SELL))
+         total += PositionGetDouble(POSITION_VOLUME);
+   }
+   return total;
+}
+
+double RescueProfit()
+{
+   return FloatingProfitForMagic(RescueMagic());
+}
+
+double RescueCombinedCycleProfit()
+{
+   return BasketCycleProfit() + g_rescueRealizedProfit + RescueProfit();
+}
+
+long OldestPrimaryPositionAgeSeconds()
+{
+   datetime oldest=0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+      datetime opened=(datetime)PositionGetInteger(POSITION_TIME);
+      if(oldest==0 || opened<oldest)
+         oldest=opened;
+   }
+   return oldest>0 ? (long)MathMax(0,TimeCurrent()-oldest) : 0;
+}
+
+bool AccountSupportsHedging()
+{
+   long mode=AccountInfoInteger(ACCOUNT_MARGIN_MODE);
+   return mode==ACCOUNT_MARGIN_MODE_RETAIL_HEDGING;
+}
+
+double NormalizeRescueVolume(double volume)
+{
+   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+   double maxVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
+   double step=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
+   if(volume < minVolume-1e-12)
+      return 0.0;
+   volume=MathMin(maxVolume,volume);
+   if(step>0.0)
+      volume=MathFloor((volume+1e-12)/step)*step;
+   if(volume < minVolume-1e-12)
+      return 0.0;
+   return NormalizeDouble(volume,8);
+}
+
+double RescueThresholdMoney()
+{
+   double equity=MathMax(1.0,AccountInfoDouble(ACCOUNT_EQUITY));
+   int count=MathMax(1,BasketPositionCount());
+   double spreadReserve=CurrentSpreadCost(MathMax(SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),g_lot))*count*3.0;
+   double threshold=MathMax(1.0,MathMax(spreadReserve,equity*0.0035));
+   if(g_maxBasketLoss>0.0)
+      threshold=MathMin(threshold,MathMax(1.0,g_maxBasketLoss*0.45));
+   return threshold;
+}
+
+long RescueTimeThresholdSeconds()
+{
+   double factor=1.0;
+   if(g_marketRegime=="HIGH_VOLATILITY") factor=0.55;
+   else if(g_marketRegime=="QUIET") factor=1.45;
+   else if(g_marketRegimeDetail=="TREND_ACCELERATION") factor=0.75;
+   int minutes=MathMax(5,InpTimeRescueMinutes);
+   return (long)MathMax(300.0,minutes*60.0*factor);
+}
+
+double RescueReversalScore(int primaryDirection,string &reasonOut)
+{
+   int opposite=-primaryDirection;
+   double score=0.0;
+   reasonOut="NONE";
+
+   if(LowerTimeframeSupportsDirection(opposite))
+      score+=18.0;
+   if(g_trendM15==opposite)
+      score+=15.0;
+   if(g_trendM30==opposite)
+      score+=10.0;
+   if(g_trendH1==opposite)
+      score+=8.0;
+
+   int emaDirs[3]={g_emaTrendM1,g_emaTrendM5,g_emaTrendM15};
+   double emaWeights[3]={6.0,10.0,12.0};
+   for(int i=0;i<3;i++)
+      if(emaDirs[i]==opposite)
+         score+=emaWeights[i];
+
+   double paScore=opposite>0 ? g_priceActionBuyScore : g_priceActionSellScore;
+   string paName=opposite>0 ? g_priceActionBuy : g_priceActionSell;
+   score+=MathMin(15.0,paScore*0.40);
+
+   bool emaReclaimAgainst=
+      (opposite>0 && g_emaReclaimState=="RECLAIM_EMA21_UP") ||
+      (opposite<0 && g_emaReclaimState=="LOSE_EMA21_DOWN");
+   if(emaReclaimAgainst)
+      score+=10.0;
+
+   MqlTick tick;
+   if(SymbolInfoTick(_Symbol,tick))
+   {
+      double price=(tick.bid+tick.ask)*0.5;
+      double atrPrice=MathMax(_Point*10.0,AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point);
+      bool oppositeOb=opposite>0
+         ? PriceInsideOrNearZone(price,g_bullishOrderBlockLow,g_bullishOrderBlockHigh,atrPrice*0.12)
+         : PriceInsideOrNearZone(price,g_bearishOrderBlockLow,g_bearishOrderBlockHigh,atrPrice*0.12);
+      if(oppositeOb)
+         score+=8.0;
+   }
+
+   bool oppositeFib=
+      (g_fibM5Direction==opposite && g_fibM5Retracement>=0.382 && g_fibM5Retracement<=0.786) ||
+      (g_fibM15Direction==opposite && g_fibM15Retracement>=0.382 && g_fibM15Retracement<=0.786);
+   if(oppositeFib)
+      score+=7.0;
+
+   if(g_antiChaseActive && g_antiChaseDirection==primaryDirection)
+      score+=9.0;
+
+   score=MathMax(0.0,MathMin(100.0,score));
+   if(score>=75.0)
+      reasonOut="STRUCTURE_EMA_PRICE_ACTION";
+   else if(score>=65.0)
+      reasonOut=paName!="NONE" ? paName : "REVERSAL_CONFIRMED";
+   else if(score>=52.0)
+      reasonOut="REVERSAL_BUILDING";
+   else
+      reasonOut="PRIMARY_STRUCTURE_HOLDING";
+   return score;
+}
+
+bool SendRescueOrder(int direction,double requestedVolume)
+{
+   if(!AccountSupportsHedging() ||
+      TradePermissionStatus()!="OK" ||
+      !OpenTradingAllowedForDirection(direction) ||
+      g_spreadStatus=="EXTREME")
+      return false;
+
+   double volume=NormalizeRescueVolume(requestedVolume);
+   if(volume<=0.0 || !CanSendOrder())
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return false;
+
+   MqlTradeRequest request={};
+   MqlTradeResult result={};
+   request.action=TRADE_ACTION_DEAL;
+   request.magic=RescueMagic();
+   request.symbol=_Symbol;
+   request.volume=volume;
+   request.deviation=30;
+   request.type_filling=AllowedFillingMode();
+   request.comment="SCNRescue";
+   request.type=direction>0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+   request.price=direction>0 ? tick.ask : tick.bid;
+   request.sl=DynamicInitialStopPrice(direction,request.price);
+   request.tp=0.0;
+
+   ResetLastError();
+   if(!OrderSend(request,result) || !TradeResultAccepted(result))
+   {
+      g_lastOrderError=GetLastError();
+      g_lastOrderRetcode=(long)result.retcode;
+      g_lastOrderAt=TimeCurrent();
+      return false;
+   }
+
+   RegisterOrderRequest();
+   g_lastRescueOrderAt=TimeCurrent();
+   g_executionStatus="RESCUE_HEDGE_OPENED";
+   return true;
+}
+
+bool ClosePositionVolumeByTicket(ulong ticket,double requestedVolume,string comment)
+{
+   if(ticket==0 || !PositionSelectByTicket(ticket))
+      return false;
+
+   string symbol=PositionGetString(POSITION_SYMBOL);
+   double currentVolume=PositionGetDouble(POSITION_VOLUME);
+   long positionType=PositionGetInteger(POSITION_TYPE);
+   long magic=PositionGetInteger(POSITION_MAGIC);
+   double minVolume=SymbolInfoDouble(symbol,SYMBOL_VOLUME_MIN);
+   double step=SymbolInfoDouble(symbol,SYMBOL_VOLUME_STEP);
+
+   double volume=MathMin(currentVolume,requestedVolume);
+   if(step>0.0)
+      volume=MathFloor((volume+1e-12)/step)*step;
+   volume=NormalizeDouble(volume,8);
+   if(volume<minVolume-1e-12)
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol,tick))
+      return false;
+
+   MqlTradeRequest request={};
+   MqlTradeResult result={};
+   request.action=TRADE_ACTION_DEAL;
+   request.position=ticket;
+   request.magic=magic;
+   request.symbol=symbol;
+   request.volume=volume;
+   request.deviation=30;
+   request.type_filling=AllowedFillingMode();
+   request.comment=comment;
+   if(positionType==POSITION_TYPE_BUY)
+   {
+      request.type=ORDER_TYPE_SELL;
+      request.price=tick.bid;
+   }
+   else
+   {
+      request.type=ORDER_TYPE_BUY;
+      request.price=tick.ask;
+   }
+
+   ResetLastError();
+   if(!OrderSend(request,result))
+      return false;
+   return TradeResultAccepted(result);
+}
+
+bool CloseRescuePositions()
+{
+   bool allClosed=true;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=RescueMagic())
+         continue;
+      if(!ClosePositionVolumeByTicket(
+         ticket,
+         PositionGetDouble(POSITION_VOLUME),
+         "SCNRescueClose"
+      ))
+         allClosed=false;
+   }
+   return allClosed && RescuePositionCount()==0;
+}
+
+bool ReduceRescueVolume(double requestedVolume)
+{
+   double remaining=requestedVolume;
+   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+   for(int i=PositionsTotal()-1;i>=0 && remaining>=minVolume-1e-12;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=RescueMagic())
+         continue;
+      double volume=PositionGetDouble(POSITION_VOLUME);
+      double closeVolume=MathMin(volume,remaining);
+      if(ClosePositionVolumeByTicket(ticket,closeVolume,"SCNRescueTrim"))
+         remaining-=closeVolume;
+   }
+   return remaining<minVolume;
+}
+
+bool PartialCloseWorstPrimary()
+{
+   ulong worstTicket=0;
+   double worstProfit=0.0;
+   double worstVolume=0.0;
+   int primaryCount=BasketPositionCount();
+
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+      double pnl=PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
+      if(worstTicket==0 || pnl<worstProfit)
+      {
+         worstTicket=ticket;
+         worstProfit=pnl;
+         worstVolume=PositionGetDouble(POSITION_VOLUME);
+      }
+   }
+
+   if(worstTicket==0 || worstProfit>=0.0)
+      return false;
+
+   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+   double closeVolume=0.0;
+   if(worstVolume>=minVolume*2.0-1e-12)
+      closeVolume=worstVolume*0.50;
+   else if(primaryCount>1)
+      closeVolume=worstVolume;
+   else
+      return false;
+
+   if(ClosePositionVolumeByTicket(worstTicket,closeVolume,"SCNRecoveryPartial"))
+   {
+      g_rescuePartialCloseCount++;
+      SaveRescueState();
+      return true;
+   }
+   return false;
+}
+
+void UpdateRescueExposure()
+{
+   int direction=BasketDirection();
+   if(direction==0)
+      direction=g_rescuePrimaryDirection;
+   g_rescuePrimaryDirection=direction;
+   g_rescueHedgeDirection=direction==0 ? 0 : -direction;
+   g_rescuePrimaryVolume=direction==0 ? 0.0 : VolumeForMagic(InpMagic,direction);
+   g_rescueHedgeLot=g_rescueHedgeDirection==0 ? 0.0 : VolumeForMagic(RescueMagic(),g_rescueHedgeDirection);
+   g_rescueNetExposure=
+      direction*g_rescuePrimaryVolume +
+      g_rescueHedgeDirection*g_rescueHedgeLot;
+   g_rescuePrimaryProfit=BasketCycleProfit();
+   g_rescueHedgeProfit=g_rescueRealizedProfit+RescueProfit();
+   g_rescueCombinedProfit=g_rescuePrimaryProfit+g_rescueHedgeProfit;
+   g_rescueOldestAgeSeconds=OldestPrimaryPositionAgeSeconds();
+}
+
+double RescueDesiredHedgeRatio()
+{
+   double maxRatio=MathMax(0.20,MathMin(0.85,InpRescueMaxHedgeRatio));
+   double normalized=MathMax(0.0,MathMin(1.0,(g_rescueReversalScore-60.0)/40.0));
+   double ratio=0.30+normalized*(maxRatio-0.30);
+   return MathMax(0.0,MathMin(maxRatio,ratio));
+}
+
+void AdjustRescueHedge()
+{
+   if(g_rescuePrimaryDirection==0 || g_rescuePrimaryVolume<=0.0)
+      return;
+
+   double ratio=RescueDesiredHedgeRatio();
+   double desired=g_rescuePrimaryVolume*ratio;
+   double current=VolumeForMagic(RescueMagic(),-g_rescuePrimaryDirection);
+   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+
+   if(current+minVolume*0.50<desired)
+   {
+      double add=NormalizeRescueVolume(desired-current);
+      if(add>0.0)
+         SendRescueOrder(-g_rescuePrimaryDirection,add);
+   }
+   else if(current>desired+minVolume*0.75)
+   {
+      double trim=NormalizeRescueVolume(current-desired);
+      if(trim>0.0)
+         ReduceRescueVolume(trim);
+   }
+}
+
+bool CloseRecoveryCycle(string reason)
+{
+   g_rescueState=RESCUE_EXIT;
+   g_executionStatus="RESCUE_EXIT";
+   SaveRescueState();
+
+   bool primaryClosed=CloseAllBasket(reason);
+   bool hedgeClosed=CloseRescuePositions();
+   if(primaryClosed && hedgeClosed)
+   {
+      ResetRescueState();
+      g_executionStatus="RESCUE_CYCLE_CLOSED";
+      return true;
+   }
+   return false;
+}
+
+bool ManageAdaptiveRescue()
+{
+   if(!g_rescueEnabled)
+      return false;
+
+   datetime now=TimeCurrent();
+   if(g_lastRescueEvaluationAt>0 && now-g_lastRescueEvaluationAt<2)
+      return g_rescueState!=RESCUE_NORMAL;
+   g_lastRescueEvaluationAt=now;
+
+   int primaryCount=BasketPositionCount();
+   int rescueCount=RescuePositionCount();
+
+   if(primaryCount<=0)
+   {
+      if(rescueCount>0)
+      {
+         g_rescueState=RESCUE_EXIT;
+         g_executionStatus="RESCUE_EXIT";
+         CloseRescuePositions();
+         return true;
+      }
+      if(g_rescueState!=RESCUE_NORMAL || g_rescueRealizedProfit!=0.0)
+         ResetRescueState();
+      return false;
+   }
+
+   UpdateRescueExposure();
+   int direction=g_rescuePrimaryDirection;
+   if(direction==0)
+      return false;
+
+   string reversalReason="NONE";
+   g_rescueReversalScore=RescueReversalScore(direction,reversalReason);
+   g_rescueReversalReason=reversalReason;
+
+   long timeLimit=RescueTimeThresholdSeconds();
+   bool timeRescue=g_rescueOldestAgeSeconds>=timeLimit && g_rescueCombinedProfit<0.0;
+   g_rescueReversalConfirmed=
+      g_rescueReversalScore>=65.0 ||
+      (timeRescue && g_rescueReversalScore>=52.0);
+
+   double rescueThreshold=RescueThresholdMoney();
+   double warningThreshold=MathMax(0.50,rescueThreshold*0.55);
+   bool lossWarning=g_rescueCombinedProfit<=-warningThreshold;
+   bool rescueLoss=g_rescueCombinedProfit<=-rescueThreshold;
+   if(g_maxBasketLoss>0.0 &&
+      g_rescueCombinedProfit<=-g_maxBasketLoss*0.65)
+      rescueLoss=true;
+
+   if(g_rescueState==RESCUE_NORMAL && (lossWarning || (timeRescue && g_rescueCombinedProfit<0.0)))
+   {
+      g_rescueState=RESCUE_WARNING;
+      g_rescueWarningAt=now;
+      g_executionStatus="RESCUE_WARNING";
+      SaveRescueState();
+   }
+
+   if(g_rescueState==RESCUE_WARNING)
+   {
+      g_burstActive=false;
+      g_burstNeedsRearm=false;
+
+      if(g_rescueCombinedProfit>=0.0 && rescueCount==0)
+      {
+         ResetRescueState();
+         return false;
+      }
+
+      if(g_rescueReversalConfirmed && (rescueLoss || timeRescue))
+      {
+         g_rescueState=RESCUE_ACTIVE;
+         g_rescueStartedAt=now;
+         g_rescueTargetMoney=MathMax(
+            0.20,
+            CurrentSpreadCost(MathMax(SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),g_lot))*0.50
+         );
+         g_rescueInitialDeficit=MathMax(
+            g_rescueTargetMoney,
+            g_rescueTargetMoney-g_rescueCombinedProfit
+         );
+         SaveRescueState();
+      }
+      else
+      {
+         g_executionStatus=timeRescue ? "TIME_RESCUE_WARNING" : "RESCUE_WARNING";
+         return true;
+      }
+   }
+
+   if(g_rescueState==RESCUE_ACTIVE || g_rescueState==RESCUE_RECOVERY)
+   {
+      g_burstActive=false;
+      g_burstNeedsRearm=false;
+
+      if(g_rescueState==RESCUE_ACTIVE && g_rescueReversalConfirmed)
+         AdjustRescueHedge();
+
+      UpdateRescueExposure();
+
+      double currentDeficit=MathMax(0.0,g_rescueTargetMoney-g_rescueCombinedProfit);
+      g_rescueRequiredMoney=currentDeficit;
+      g_rescueRecoveredMoney=MathMax(0.0,g_rescueInitialDeficit-currentDeficit);
+
+      if(g_rescueCombinedProfit>=g_rescueTargetMoney)
+      {
+         CloseRecoveryCycle("RESCUE_RECOVERY_EXIT");
+         return true;
+      }
+
+      if(g_rescueInitialDeficit>0.0 &&
+         currentDeficit<=g_rescueInitialDeficit*0.35)
+      {
+         g_rescueState=RESCUE_RECOVERY;
+         SaveRescueState();
+      }
+
+      // If the original structure recovers before the hedge earns its keep,
+      // unwind the hedge instead of holding two opposing positions forever.
+      if(g_rescueReversalScore<40.0 &&
+         g_rescueCombinedProfit>-warningThreshold)
+      {
+         CloseRescuePositions();
+         if(RescuePositionCount()==0)
+         {
+            g_rescueState=RESCUE_WARNING;
+            g_rescueReversalReason="PRIMARY_STRUCTURE_RECOVERED";
+            SaveRescueState();
+         }
+      }
+
+      // Partial close is funded by Rescue profit and never increases lot.
+      double hedgeAvailable=MathMax(0.0,g_rescueHedgeProfit);
+      if(hedgeAvailable>0.0 &&
+         g_rescueCombinedProfit>-g_rescueInitialDeficit*0.70 &&
+         g_rescuePartialCloseCount<MathMax(1,g_maxPositions/2))
+      {
+         PartialCloseWorstPrimary();
+         UpdateRescueExposure();
+         if(g_rescueState==RESCUE_ACTIVE)
+            AdjustRescueHedge();
+      }
+
+      g_executionStatus=g_rescueState==RESCUE_RECOVERY
+         ? "RESCUE_RECOVERY"
+         : "RESCUE_ACTIVE";
+      SaveRescueState();
+      return true;
+   }
+
+   return g_rescueState!=RESCUE_NORMAL;
+}
+
 bool TerminalConnectedNow()
 {
    return TerminalInfoInteger(TERMINAL_CONNECTED) != 0;
