@@ -1354,12 +1354,26 @@ void OnTradeTransaction(
 
    if(symbol == _Symbol && magic == RescueMagic())
    {
-      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_PROFIT);
-      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_SWAP);
-      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_COMMISSION);
+      double rescueDealNet =
+         HistoryDealGetDouble(trans.deal,DEAL_PROFIT) +
+         HistoryDealGetDouble(trans.deal,DEAL_SWAP) +
+         HistoryDealGetDouble(trans.deal,DEAL_COMMISSION);
+
+      g_rescueRealizedProfit += rescueDealNet;
+      if(g_basketJournalId != 0)
+         g_basketJournalProfit += rescueDealNet;
+
       RecalculateDailyClosedProfit();
       SaveRescueState();
       PostRescueJournalDeal(trans.deal);
+
+      long rescueEntry = HistoryDealGetInteger(trans.deal,DEAL_ENTRY);
+      if((rescueEntry == DEAL_ENTRY_OUT ||
+          rescueEntry == DEAL_ENTRY_OUT_BY ||
+          rescueEntry == DEAL_ENTRY_INOUT) &&
+         BasketPositionCount() == 0 &&
+         RescuePositionCount() == 0)
+         FinalizeBasketJournal();
       return;
    }
 
@@ -1367,7 +1381,6 @@ void OnTradeTransaction(
    {
       RecordBasketDeal(trans.deal);
       RecalculateDailyClosedProfit();
-      UpdateAdaptiveLossState(trans.deal);
       TrackBasketJournalDeal(trans.deal);
 
       // Journal is best-effort observability only. A network/database failure
@@ -2124,7 +2137,7 @@ void RecoverOpenBasketJournal()
    g_basketJournalStartedAt = oldestTime;
    g_basketJournalDirection = direction;
    g_basketJournalVolume = volume;
-   g_basketJournalProfit = g_basketCycleRealizedProfit;
+   g_basketJournalProfit = g_basketCycleRealizedProfit + g_rescueRealizedProfit;
    g_basketJournalTrigger = "RECOVERED";
    g_basketJournalModel = g_entryModel;
    g_basketJournalQuality = g_entryQuality;
@@ -2152,6 +2165,7 @@ void FinalizeBasketJournal()
    g_pendingBasketDirection = g_basketJournalDirection;
    g_pendingBasketVolume = g_basketJournalVolume;
    g_pendingBasketProfit = g_basketJournalProfit;
+   UpdateAdaptiveLossStateFromBasket(g_pendingBasketProfit);
    g_pendingBasketPeakPositions = MathMax(1, g_basketPeakPositionCount);
    g_pendingBasketTrigger = g_basketJournalTrigger;
    g_pendingBasketModel = g_basketJournalModel;
@@ -2179,7 +2193,8 @@ void TrackBasketJournalDeal(ulong dealTicket)
          HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
 
    if((entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_OUT_BY) &&
-      BasketPositionCount() == 0)
+      BasketPositionCount() == 0 &&
+      RescuePositionCount() == 0)
       FinalizeBasketJournal();
 }
 
@@ -4574,18 +4589,13 @@ void RestoreAdaptiveRiskState()
    if(GlobalVariableCheck(cooldownKey)) GlobalVariableDel(cooldownKey);
 }
 
-void UpdateAdaptiveLossState(ulong dealTicket)
+void UpdateAdaptiveLossStateFromBasket(double net)
 {
-   long entry = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
-   if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_OUT_BY)
-      return;
-
-   double net = HistoryDealGetDouble(dealTicket, DEAL_PROFIT)
-              + HistoryDealGetDouble(dealTicket, DEAL_SWAP)
-              + HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
-   if(net < 0.0)
+   // One losing 10-position Basket is one losing decision, not ten losses.
+   // Track streak at completed Cycle level so risk scaling is statistically sane.
+   if(net < -0.01)
       g_consecutiveLosses++;
-   else if(net > 0.0)
+   else if(net > 0.01)
       g_consecutiveLosses = 0;
    PersistAdaptiveRiskState();
 }
