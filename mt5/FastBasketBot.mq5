@@ -889,6 +889,7 @@ int OnInit()
       Print("EMA Intelligence: one or more EMA handles are not ready yet.");
    RefreshEmaIntelligence(true);
    DrawEmaCurves();
+   RestoreRescueState();
 
    if(!MQLInfoInteger(MQL_TESTER))
    {
@@ -1297,6 +1298,17 @@ void OnTradeTransaction(
    string symbol = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
    long magic = HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
 
+   if(symbol == _Symbol && magic == RescueMagic())
+   {
+      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_PROFIT);
+      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_SWAP);
+      g_rescueRealizedProfit += HistoryDealGetDouble(trans.deal,DEAL_COMMISSION);
+      RecalculateDailyClosedProfit();
+      SaveRescueState();
+      PostRescueJournalDeal(trans.deal);
+      return;
+   }
+
    if(symbol == _Symbol && magic == InpMagic)
    {
       RecordBasketDeal(trans.deal);
@@ -1325,7 +1337,7 @@ void OnTradeTransaction(
 
    if(InpPauseOnManualTrade &&
       symbol == _Symbol &&
-      magic != InpMagic &&
+      !IsScenovaMagic(magic) &&
       g_state == STATE_RUNNING)
    {
       Print("Manual/external trade detected on ", _Symbol, ". Entering SAFE_STOP.");
@@ -5213,7 +5225,7 @@ void RecalculateDailyClosedProfit()
          continue;
 
       if(HistoryDealGetString(deal, DEAL_SYMBOL) != _Symbol ||
-         HistoryDealGetInteger(deal, DEAL_MAGIC) != InpMagic)
+         !IsScenovaMagic(HistoryDealGetInteger(deal, DEAL_MAGIC)))
          continue;
 
       g_dailyClosedProfit += HistoryDealGetDouble(deal, DEAL_PROFIT);
@@ -5224,7 +5236,7 @@ void RecalculateDailyClosedProfit()
 
 double DailyBotProfit()
 {
-   return g_dailyClosedProfit + BasketProfit();
+   return g_dailyClosedProfit + BasketProfit() + RescueProfit();
 }
 
 double DailyProfitGivebackFloor()
@@ -6578,7 +6590,7 @@ bool ClosePositionByTicket(ulong ticket)
 
    request.action = TRADE_ACTION_DEAL;
    request.position = ticket;
-   request.magic = InpMagic;
+   request.magic = PositionGetInteger(POSITION_MAGIC);
    request.symbol = symbol;
    request.volume = NormalizeTradeVolume(volume);
    request.deviation = 30;
@@ -6667,12 +6679,12 @@ bool CloseAllBasket(string reason)
       if(ticket == 0 || !PositionSelectByTicket(ticket))
          continue;
       if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
-         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         !IsScenovaMagic(PositionGetInteger(POSITION_MAGIC)))
          continue;
       ClosePositionByTicket(ticket);
    }
 
-   bool closed = BasketPositionCount() == 0;
+   bool closed = BasketPositionCount() == 0 && RescuePositionCount() == 0;
    if(closed && reasonCode != CLOSE_REASON_NONE)
    {
       g_pendingCloseReason = CLOSE_REASON_NONE;
