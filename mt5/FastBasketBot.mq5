@@ -3526,7 +3526,9 @@ int AdaptiveEntryDirection(double momentum)
       g_historicalWinSamples = 0;
       g_confidenceSource = "MODEL";
       g_effectiveConfidenceThreshold = 0.0;
-      g_adaptiveBlockReason = "WAITING_SETUP";
+      g_adaptiveBlockReason = g_antiChaseActive
+         ? (g_breakoutRetestRequired ? "WAITING_BREAKOUT_RETEST" : "WAITING_PULLBACK_RETEST")
+         : "WAITING_SETUP";
       g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
       return 0;
    }
