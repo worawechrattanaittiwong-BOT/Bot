@@ -6523,6 +6523,24 @@ void ManageDynamicProtection()
             desiredSL = desiredSL <= 0.0 ? trail : MathMin(desiredSL, trail);
       }
 
+      // EMA Dynamic Trailing: once profit is established, EMA21/50 becomes a
+      // structural trailing reference. It only tightens SL; it never widens it.
+      if(profitPoints >= atr * 0.70)
+      {
+         double emaRef = EmaTrailReference(direction);
+         if(emaRef > 0.0)
+         {
+            double emaTrail = direction > 0
+               ? emaRef - atr * 0.10 * _Point
+               : emaRef + atr * 0.10 * _Point;
+
+            if(direction > 0 && emaTrail > openPrice && emaTrail < marketPrice)
+               desiredSL = desiredSL <= 0.0 ? emaTrail : MathMax(desiredSL,emaTrail);
+            else if(direction < 0 && emaTrail < openPrice && emaTrail > marketPrice)
+               desiredSL = desiredSL <= 0.0 ? emaTrail : MathMin(desiredSL,emaTrail);
+         }
+      }
+
       int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
       if(direction > 0 && desiredSL > 0.0)
          desiredSL = MathMin(desiredSL, tick.bid - minStopPoints * _Point);
