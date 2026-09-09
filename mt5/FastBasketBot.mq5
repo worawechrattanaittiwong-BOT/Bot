@@ -6223,11 +6223,25 @@ bool ManageAdaptiveRescue()
    double warningThreshold=MathMax(0.50,rescueThreshold*0.55);
    bool lossWarning=g_rescueCombinedProfit<=-warningThreshold;
    bool rescueLoss=g_rescueCombinedProfit<=-rescueThreshold;
+   bool severeLoss=false;
    if(g_maxBasketLoss>0.0 &&
       g_rescueCombinedProfit<=-g_maxBasketLoss*0.65)
+   {
       rescueLoss=true;
+      severeLoss=true;
+   }
 
-   if(g_rescueState==RESCUE_NORMAL && (lossWarning || (timeRescue && g_rescueCombinedProfit<0.0)))
+   // A normal pullback should not pause the Basket just because P/L is red.
+   // WARNING requires evidence that the market is actually building a reversal,
+   // a time-stalled trade, or a loss already approaching the user's hard limit.
+   bool warningEvidence=
+      g_rescueReversalScore>=40.0 ||
+      timeRescue ||
+      severeLoss;
+
+   if(g_rescueState==RESCUE_NORMAL &&
+      ((lossWarning && warningEvidence) ||
+       (timeRescue && g_rescueCombinedProfit<0.0)))
    {
       g_rescueState=RESCUE_WARNING;
       g_rescueWarningAt=now;
@@ -6240,7 +6254,10 @@ bool ManageAdaptiveRescue()
       g_burstActive=false;
       g_burstNeedsRearm=false;
 
-      if(g_rescueCombinedProfit>=0.0 && rescueCount==0)
+      if((g_rescueCombinedProfit>=0.0 && rescueCount==0) ||
+         (!timeRescue && !severeLoss &&
+          g_rescueReversalScore<35.0 &&
+          g_rescueCombinedProfit>-rescueThreshold))
       {
          ResetRescueState();
          return false;
