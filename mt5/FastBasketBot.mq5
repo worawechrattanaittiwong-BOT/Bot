@@ -3555,6 +3555,67 @@ bool AntiChaseLocationReady(
    return false;
 }
 
+bool ExecutionConfirmationReady(
+   int direction,
+   double momentum,
+   bool requireHigherTimeframe
+)
+{
+   bool higher = HigherTimeframeSupportsDirection(direction);
+   bool micro = LowerTimeframeSupportsDirection(direction);
+   bool emaExecution =
+      g_emaTrendM5 == direction ||
+      (g_emaTrendM1 == direction && g_emaTrendM15 == direction);
+   bool emaMacro =
+      g_emaTrendM15 == direction ||
+      g_emaTrendM30 == direction ||
+      g_emaTrendH1 == direction;
+
+   double paScore = direction > 0
+      ? g_priceActionBuyScore
+      : g_priceActionSellScore;
+   bool priceAction = paScore >= 18.0;
+   bool emaReclaim =
+      (direction > 0 && g_emaReclaimState == "RECLAIM_EMA21_UP") ||
+      (direction < 0 && g_emaReclaimState == "LOSE_EMA21_DOWN");
+   bool momentumReady = MomentumSupportsDirection(direction,momentum,0.40);
+
+   if(requireHigherTimeframe && !higher)
+      return false;
+
+   // A fallback continuation needs an execution event, not only an old trend
+   // average. Any one of Price Action / EMA reclaim / live momentum may trigger,
+   // but it must sit on top of EMA + lower-timeframe directional agreement.
+   return micro &&
+      emaExecution &&
+      (emaMacro || higher) &&
+      (priceAction || emaReclaim || momentumReady);
+}
+
+bool NewsImpulseExecutionReady(int direction,double momentum)
+{
+   if(g_marketRegime != "HIGH_VOLATILITY")
+      return false;
+
+   double paScore = direction > 0
+      ? g_priceActionBuyScore
+      : g_priceActionSellScore;
+   bool emaAligned =
+      g_emaTrendM5 == direction &&
+      (g_emaTrendM15 == direction || g_emaTrendM30 == direction);
+   bool priceAction = paScore >= 18.0;
+   bool trendAligned =
+      g_trendM5 == direction &&
+      (g_trendM15 == direction || g_trendM30 == direction);
+
+   // News trading remains enabled, but "fast market" alone is no longer a
+   // reason to chase. Demand a real directional impulse plus EMA/structure.
+   return MomentumSupportsDirection(direction,momentum,0.75) &&
+      trendAligned &&
+      emaAligned &&
+      priceAction;
+}
+
 bool DirectSetupReady(
    int direction,
    double momentum,
@@ -3567,12 +3628,22 @@ bool DirectSetupReady(
 
    bool microSupport = LowerTimeframeSupportsDirection(direction);
    bool higherSupport = HigherTimeframeSupportsDirection(direction);
-   bool lightMomentum = MomentumSupportsDirection(direction, momentum, 0.25);
+   bool lightMomentum = MomentumSupportsDirection(direction, momentum, 0.30);
    bool strongMomentum = MomentumSupportsDirection(
       direction,
       momentum,
-      g_marketRegime == "HIGH_VOLATILITY" ? 0.55 : 0.75
+      g_marketRegime == "HIGH_VOLATILITY" ? 0.65 : 0.80
    );
+   double paScore = direction > 0
+      ? g_priceActionBuyScore
+      : g_priceActionSellScore;
+   bool priceActionReady = paScore >= 18.0;
+   bool emaExecution =
+      g_emaTrendM5 == direction ||
+      (g_emaTrendM1 == direction && g_emaTrendM15 == direction);
+   bool emaReclaim =
+      (direction > 0 && g_emaReclaimState == "RECLAIM_EMA21_UP") ||
+      (direction < 0 && g_emaReclaimState == "LOSE_EMA21_DOWN");
 
    double atrPrice = MathMax(
       _Point * 20.0,
@@ -3618,28 +3689,36 @@ bool DirectSetupReady(
       modelOut = locationTrigger;
 
    if(modelOut == "PULLBACK_RETEST")
-      return microSupport || lightMomentum || strongMomentum;
+      return microSupport &&
+         emaExecution &&
+         (priceActionReady || emaReclaim || lightMomentum);
 
-   // Pullback/reaction setups only need one lower-timeframe turn or light
-   // directional momentum. Confidence remains optional and separate.
+   // Pullback/reaction models already have a real location thesis. They still
+   // need a fresh execution turn so an old OB/Fib level cannot trigger by itself.
    if(g_entryModel == "OB_FIB_PULLBACK" ||
       g_entryModel == "ORDER_BLOCK_PULLBACK" ||
       g_entryModel == "FIB_PULLBACK" ||
       g_entryModel == "LEVEL_REACTION")
-      return microSupport || lightMomentum;
+      return microSupport &&
+         (priceActionReady || emaReclaim || lightMomentum);
 
    if(g_entryModel == "CONTINUATION")
-      return higherSupport && (microSupport || lightMomentum);
+      return ExecutionConfirmationReady(direction,momentum,true);
 
    if(g_marketRegime == "HIGH_VOLATILITY" &&
-      strongMomentum &&
-      (microSupport || g_trendM15 == direction))
+      NewsImpulseExecutionReady(direction,momentum))
       return true;
 
    if(g_entryModel == "CAUTION_ZONE")
-      return strongMomentum && microSupport && higherSupport;
+      return strongMomentum &&
+         microSupport &&
+         higherSupport &&
+         emaExecution &&
+         priceActionReady;
 
-   return strongMomentum && (microSupport || higherSupport);
+   // No bare trend/momentum fallback here. If there is no identifiable setup
+   // and no confirmed execution event, the engine waits for the next event.
+   return false;
 }
 
 int SetupFirstDirection(double momentum)
