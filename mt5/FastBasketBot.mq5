@@ -112,6 +112,10 @@ int    g_dayKey = -1;
 int    g_basketPeakPositionCount = 0;
 double g_basketCycleRealizedProfit = 0.0;
 double g_profitRunPeak = 0.0;
+double g_smartProfitDefenseFloor = 0.0;
+double g_smartProfitDefenseLastProfit = 0.0;
+string g_smartProfitDefenseReason = "NONE";
+bool   g_smartProfitDefenseActive = false;
 ulong  g_lastOrderMs = 0;
 datetime g_orderWindowStart = 0;
 int    g_ordersInWindow = 0;
@@ -5489,6 +5493,87 @@ double BasketCycleProfit()
 double CurrentPerPositionProfitTarget()
 {
    return MathMax(0.0, g_perPositionProfit);
+}
+
+double SmartProfitProtectionFloor(int direction)
+{
+   double volume = direction == 0
+      ? MathMax(SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),g_lot)
+      : MathMax(
+         SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),
+         VolumeForMagic(InpMagic,direction)
+      );
+
+   // Floating P/L already reflects spread movement, but closing may still pay
+   // commission. Keep a small positive reserve so "profit protection" does not
+   // manufacture a negative Cycle after costs.
+   double costReserve = CurrentSpreadCost(volume) * 0.35;
+   double configuredReference = g_basketProfitTarget > 0.0
+      ? g_basketProfitTarget * 0.05
+      : 0.0;
+   return MathMax(0.10,MathMax(costReserve,configuredReference));
+}
+
+bool SmartProfitReversalDetected(
+   int direction,
+   double cycleProfit,
+   string &reasonOut
+)
+{
+   reasonOut = "NONE";
+   g_smartProfitDefenseActive = false;
+   g_smartProfitDefenseReason = "NONE";
+   g_smartProfitDefenseLastProfit = cycleProfit;
+
+   if(direction == 0 || cycleProfit <= 0.0)
+      return false;
+
+   double floor = SmartProfitProtectionFloor(direction);
+   g_smartProfitDefenseFloor = floor;
+   if(cycleProfit < floor)
+      return false;
+
+   int opposite = -direction;
+   bool m1Flip = g_trendM1 == opposite;
+   bool m5Flip = g_trendM5 == opposite;
+   bool m15Flip = g_trendM15 == opposite;
+   bool emaFlip =
+      g_emaTrendM5 == opposite ||
+      (direction > 0 && g_emaReclaimState == "LOSE_EMA21_DOWN") ||
+      (direction < 0 && g_emaReclaimState == "RECLAIM_EMA21_UP");
+   bool emaMacroFlip =
+      g_emaTrendM15 == opposite ||
+      g_emaTrendM30 == opposite;
+   double oppositePa = direction > 0
+      ? g_priceActionSellScore
+      : g_priceActionBuyScore;
+   bool momentumFlip = MomentumSupportsDirection(
+      opposite,
+      MomentumPoints(),
+      0.35
+   );
+
+   bool confirmed =
+      (m1Flip && m5Flip && (emaFlip || oppositePa >= 18.0)) ||
+      (m5Flip && emaFlip && oppositePa >= 27.0) ||
+      (oppositePa >= 34.0 && (m1Flip || emaFlip)) ||
+      (m15Flip && emaMacroFlip && momentumFlip);
+
+   if(!confirmed)
+      return false;
+
+   if(m15Flip && emaMacroFlip)
+      reasonOut = "M15_EMA_REVERSAL";
+   else if(oppositePa >= 34.0)
+      reasonOut = "PRICE_ACTION_REVERSAL";
+   else if(m1Flip && m5Flip)
+      reasonOut = "M1_M5_REVERSAL";
+   else
+      reasonOut = "EMA_MOMENTUM_REVERSAL";
+
+   g_smartProfitDefenseActive = true;
+   g_smartProfitDefenseReason = reasonOut;
+   return true;
 }
 
 bool ManagePerPositionTargets()
