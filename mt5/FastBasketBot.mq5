@@ -272,6 +272,7 @@ double g_ladderExtremePrice = 0.0;
 double g_ladderPullbackPoints = 0.0;
 double g_ladderPullbackRequiredPoints = 0.0;
 bool   g_ladderPullbackArmed = false;
+datetime g_ladderPullbackArmedAt = 0;
 string g_ladderMode = "IDLE";
 double g_dynamicStopPrice = 0.0;
 double g_dynamicTakeProfitPrice = 0.0;
@@ -4094,6 +4095,29 @@ double LadderFractionForRung(int rung)
    return 0.63 + (rung - 10) * 0.08;
 }
 
+bool RecentDirectionalBodyAfter(
+   int direction,
+   ENUM_TIMEFRAMES timeframe,
+   datetime since
+)
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, timeframe, 1, 2, rates) < 2)
+      return false;
+   if(since > 0 && rates[0].time < since)
+      return false;
+
+   double range = MathMax(_Point, rates[0].high - rates[0].low);
+   double body = MathAbs(rates[0].close - rates[0].open);
+   if(body < range * 0.25)
+      return false;
+
+   return direction > 0
+      ? rates[0].close > rates[0].open
+      : rates[0].close < rates[0].open;
+}
+
 bool BasketLadderReady(int direction, int count, int targetPositions)
 {
    int nextRung = count + 1;
@@ -4103,6 +4127,8 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
    if(nextRung <= 1)
    {
       g_ladderRequiredPoints = 0.0;
+      g_ladderPullbackPoints = 0.0;
+      g_ladderPullbackRequiredPoints = 0.0;
       g_ladderMode = "INITIAL";
       return true;
    }
@@ -4123,14 +4149,98 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       3.0,
       atr * LadderFractionForRung(nextRung) * qualityFactor * regimeFactor
    );
-   g_ladderMode =
-      g_marketRegimeDetail == "NEWS_IMPULSE" ? "FAST_NEWS" :
-      g_entryQuality == "A" ? "QUALITY_A" :
-      g_entryQuality == "B" ? "QUALITY_B" : "QUALITY_C";
 
-   // Ladder is an intentional position-management schedule, not an entry
-   // filter. Rung 1 has already traded; this only spaces additional positions.
-   return g_ladderProgressPoints >= g_ladderRequiredPoints;
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+   {
+      g_ladderMode = "NO_TICK";
+      return false;
+   }
+
+   double current = direction > 0 ? tick.bid : tick.ask;
+   if(g_ladderExtremePrice <= 0.0)
+      g_ladderExtremePrice = current;
+
+   // Track the most favorable price after the previous rung.
+   if(direction > 0)
+      g_ladderExtremePrice = MathMax(g_ladderExtremePrice, current);
+   else
+      g_ladderExtremePrice = MathMin(g_ladderExtremePrice, current);
+
+   g_ladderPullbackPoints = direction > 0
+      ? MathMax(0.0, (g_ladderExtremePrice - current) / _Point)
+      : MathMax(0.0, (current - g_ladderExtremePrice) / _Point);
+
+   double pullbackFactor =
+      g_marketRegimeDetail == "NEWS_IMPULSE" ? 0.045 :
+      g_marketRegime == "HIGH_VOLATILITY" ? 0.055 : 0.070;
+   g_ladderPullbackRequiredPoints = MathMax(
+      2.0,
+      MathMin(
+         atr * pullbackFactor,
+         MathMax(2.0, g_ladderRequiredPoints * 0.35)
+      )
+   );
+
+   if(!g_ladderPullbackArmed &&
+      g_ladderProgressPoints < g_ladderRequiredPoints)
+   {
+      g_ladderMode = "WAIT_PROGRESS";
+      return false;
+   }
+
+   // Critical anti-chase change: once the next rung distance is reached, do
+   // not add at the new extreme. Wait for a small pullback first.
+   if(!g_ladderPullbackArmed)
+   {
+      if(g_ladderPullbackPoints < g_ladderPullbackRequiredPoints)
+      {
+         g_ladderMode = "WAIT_PULLBACK";
+         return false;
+      }
+
+      g_ladderPullbackArmed = true;
+      g_ladderPullbackArmedAt = TimeCurrent();
+      g_ladderMode = "WAIT_CONTINUATION";
+      return false;
+   }
+
+   // After the pullback, require a fresh execution turn back in Basket
+   // direction. This converts the Ladder from "add on new low/high" into
+   // "add after pullback + continuation".
+   bool continuation =
+      MomentumSupportsDirection(direction, MomentumPoints(), 0.18) ||
+      RecentDirectionalBodyAfter(
+         direction,
+         PERIOD_M1,
+         g_ladderPullbackArmedAt
+      );
+
+   if(!continuation)
+   {
+      g_ladderMode = "WAIT_CONTINUATION";
+      return false;
+   }
+
+   double exhaustion = 0.0;
+   double extensionAtr = 0.0;
+   double adverseWick = 0.0;
+   string exhaustionReason = "NONE";
+   bool exhausted = DirectionalExhaustion(
+      direction,
+      exhaustion,
+      extensionAtr,
+      adverseWick,
+      exhaustionReason
+   );
+   if(exhausted && !PullbackRetestReady(direction, MomentumPoints()))
+   {
+      g_ladderMode = "EXHAUSTION_PULLBACK";
+      return false;
+   }
+
+   g_ladderMode = "PULLBACK_CONTINUATION_READY";
+   return true;
 }
 
 void ArmBurst(int direction)
@@ -4145,6 +4255,11 @@ void ArmBurst(int direction)
    g_ladderRung = MathMax(1, BasketPositionCount() + 1);
    g_ladderProgressPoints = 0.0;
    g_ladderRequiredPoints = 0.0;
+   g_ladderExtremePrice = 0.0;
+   g_ladderPullbackPoints = 0.0;
+   g_ladderPullbackRequiredPoints = 0.0;
+   g_ladderPullbackArmed = false;
+   g_ladderPullbackArmedAt = 0;
    g_ladderMode = "ARMED";
    g_burstActive = g_burstRequestsSent < g_burstTargetPositions;
    g_burstNeedsRearm = false;
@@ -4194,7 +4309,13 @@ void ProcessBurstQueue()
    // are staged transparently by the Ladder rather than fired in one burst.
    if(!BasketLadderReady(g_burstDirection, count, g_burstTargetPositions))
    {
-      g_executionStatus = "BASKET_LADDER_WAIT";
+      g_executionStatus =
+         g_ladderMode == "WAIT_PULLBACK" ||
+         g_ladderMode == "EXHAUSTION_PULLBACK"
+         ? "BASKET_LADDER_PULLBACK_WAIT"
+         : g_ladderMode == "WAIT_CONTINUATION"
+           ? "BASKET_LADDER_CONTINUATION_WAIT"
+           : "BASKET_LADDER_WAIT";
       return;
    }
 
@@ -4228,6 +4349,11 @@ void ProcessBurstQueue()
    {
       g_executionStatus = "BASKET_LADDER_ADVANCE";
       g_ladderRung = filled + 1;
+      g_ladderExtremePrice = 0.0;
+      g_ladderPullbackPoints = 0.0;
+      g_ladderPullbackRequiredPoints = 0.0;
+      g_ladderPullbackArmed = false;
+      g_ladderPullbackArmedAt = 0;
    }
 }
 
