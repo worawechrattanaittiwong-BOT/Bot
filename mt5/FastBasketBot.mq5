@@ -267,6 +267,7 @@ double g_rescueRequiredMoney = 0.0;
 double g_rescueRecoveredMoney = 0.0;
 double g_rescueInitialDeficit = 0.0;
 double g_rescueTargetMoney = 0.0;
+double g_rescueRecoveryPrice = 0.0;
 double g_rescueRealizedProfit = 0.0;
 double g_rescueCombinedProfit = 0.0;
 double g_rescuePrimaryProfit = 0.0;
@@ -5614,6 +5615,7 @@ void ResetRescueState()
    g_rescueRecoveredMoney = 0.0;
    g_rescueInitialDeficit = 0.0;
    g_rescueTargetMoney = 0.0;
+   g_rescueRecoveryPrice = 0.0;
    g_rescueRealizedProfit = 0.0;
    g_rescueCombinedProfit = 0.0;
    g_rescuePrimaryProfit = 0.0;
@@ -5972,6 +5974,24 @@ bool ReduceRescueVolume(double requestedVolume)
    return remaining<minVolume;
 }
 
+double WorstPrimaryLossAbs()
+{
+   double worst=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+      double pnl=PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
+      if(pnl<worst)
+         worst=pnl;
+   }
+   return MathAbs(MathMin(0.0,worst));
+}
+
 bool PartialCloseWorstPrimary()
 {
    ulong worstTicket=0;
@@ -6033,6 +6053,30 @@ void UpdateRescueExposure()
    g_rescueHedgeProfit=g_rescueRealizedProfit+RescueProfit();
    g_rescueCombinedProfit=g_rescuePrimaryProfit+g_rescueHedgeProfit;
    g_rescueOldestAgeSeconds=OldestPrimaryPositionAgeSeconds();
+
+   g_rescueRecoveryPrice=0.0;
+   MqlTick tick;
+   double tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   double tickValue=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_VALUE);
+   if(tickValue<=0.0)
+      tickValue=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_VALUE_PROFIT);
+   if(SymbolInfoTick(_Symbol,tick) &&
+      MathAbs(g_rescueNetExposure)>1e-8 &&
+      tickSize>0.0 && tickValue>0.0)
+   {
+      double currentPrice=(tick.bid+tick.ask)*0.5;
+      double moneyNeeded=MathMax(0.0,g_rescueTargetMoney-g_rescueCombinedProfit);
+      double moneyPerPrice=
+         MathAbs(g_rescueNetExposure)*tickValue/tickSize;
+      if(moneyPerPrice>0.0)
+      {
+         double priceMove=moneyNeeded/moneyPerPrice;
+         g_rescueRecoveryPrice=NormalizeDouble(
+            currentPrice+(g_rescueNetExposure>0.0 ? priceMove : -priceMove),
+            SymbolDigitsNow()
+         );
+      }
+   }
 }
 
 double RescueDesiredHedgeRatio()
@@ -6217,7 +6261,9 @@ bool ManageAdaptiveRescue()
 
       // Partial close is funded by Rescue profit and never increases lot.
       double hedgeAvailable=MathMax(0.0,g_rescueHedgeProfit);
-      if(hedgeAvailable>0.0 &&
+      double worstLoss=WorstPrimaryLossAbs();
+      if(worstLoss>0.0 &&
+         hedgeAvailable>=worstLoss*0.70 &&
          g_rescueCombinedProfit>-g_rescueInitialDeficit*0.70 &&
          g_rescuePartialCloseCount<MathMax(1,g_maxPositions/2))
       {
