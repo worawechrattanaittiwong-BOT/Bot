@@ -2626,13 +2626,11 @@ bool DirectionalExhaustion(
 
 bool PullbackRetestReady(int direction, double momentum)
 {
-   double retracement = -1.0;
-   if(g_fibM15Direction == direction)
-      retracement = MathMax(retracement, g_fibM15Retracement);
-   if(g_fibM5Direction == direction)
-      retracement = MathMax(retracement, g_fibM5Retracement);
-
-   bool fibPullback = retracement >= 0.236 && retracement <= 0.786;
+   bool fibPullback =
+      (g_fibM15Direction == direction &&
+       g_fibM15Retracement >= 0.236 && g_fibM15Retracement <= 0.786) ||
+      (g_fibM5Direction == direction &&
+       g_fibM5Retracement >= 0.236 && g_fibM5Retracement <= 0.786);
    bool executionTurn =
       RecentDirectionalBody(direction, PERIOD_M1) ||
       RecentDirectionalBody(direction, PERIOD_M5) ||
