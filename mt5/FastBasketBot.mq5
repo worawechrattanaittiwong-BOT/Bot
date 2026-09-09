@@ -5498,7 +5498,10 @@ void ResetBasketCycleState()
 {
    if(g_basketPeakPositionCount == 0 &&
       MathAbs(g_basketCycleRealizedProfit) < 0.0000001 &&
-      MathAbs(g_profitRunPeak) < 0.0000001)
+      MathAbs(g_profitRunPeak) < 0.0000001 &&
+      !g_smartProfitDefenseActive &&
+      g_smartProfitDefenseReason == "NONE" &&
+      MathAbs(g_smartProfitDefenseLastProfit) < 0.0000001)
       return;
 
    g_basketPeakPositionCount = 0;
