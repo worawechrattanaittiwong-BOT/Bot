@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.025"
+#property version   "1.026"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -27,6 +27,15 @@ enum ENUM_CLOSE_REASON
    CLOSE_REASON_TRAIL       = 4,
    CLOSE_REASON_SAFE_STOP   = 5,
    CLOSE_REASON_REMOTE      = 6
+};
+
+enum ENUM_RESCUE_STATE
+{
+   RESCUE_NORMAL   = 0,
+   RESCUE_WARNING  = 1,
+   RESCUE_ACTIVE   = 2,
+   RESCUE_RECOVERY = 3,
+   RESCUE_EXIT     = 4
 };
 
 input string          InpApiBase              = "https://snvea-bot.online/backend";
@@ -82,6 +91,13 @@ input int             InpSessionEndHour        = 24;
 // 0 = fully adaptive. A positive value is only a soft volatility marker;
  // it never blocks trading by itself.
 input double          InpMaxAtrPoints          = 0.0;
+
+// Intelligence v4: post-entry recovery and EMA intelligence. These features
+// never decide whether the first trade is permitted.
+input bool            InpAdaptiveRescueEngine  = true;
+input double          InpRescueMaxHedgeRatio   = 0.65;
+input int             InpTimeRescueMinutes     = 20;
+input bool            InpShowEmaOnChart        = true;
 
 ENUM_BOT_STATE g_state = STATE_STOPPED;
 bool   g_access = false;
@@ -202,6 +218,62 @@ double g_entryQualityScore = 0.0;
 string g_entryQuality = "C";
 string g_entryModel = "NONE";
 string g_entryTrigger = "NONE";
+
+// EMA Intelligence ---------------------------------------------------------
+#define EMA_TF_COUNT 5
+#define EMA_PERIOD_COUNT 4
+int g_emaHandles[EMA_TF_COUNT][EMA_PERIOD_COUNT];
+int g_emaChartHandles[EMA_PERIOD_COUNT];
+double g_ema9 = 0.0;
+double g_ema21 = 0.0;
+double g_ema50 = 0.0;
+double g_ema200 = 0.0;
+double g_emaDistanceAtr = 0.0;
+double g_emaConfluenceScoreBuy = 0.0;
+double g_emaConfluenceScoreSell = 0.0;
+int g_emaTrendM1 = 0;
+int g_emaTrendM5 = 0;
+int g_emaTrendM15 = 0;
+int g_emaTrendM30 = 0;
+int g_emaTrendH1 = 0;
+string g_emaStack = "MIXED";
+string g_emaSlope = "FLAT";
+string g_emaVolatilityState = "NORMAL";
+string g_emaPriceVs200 = "UNKNOWN";
+string g_emaReclaimState = "NONE";
+datetime g_lastEmaRefreshAt = 0;
+datetime g_lastEmaDrawBar = 0;
+
+// Candlestick / Price Action intelligence. Advisory only for first entries.
+string g_priceActionBuy = "NONE";
+string g_priceActionSell = "NONE";
+double g_priceActionBuyScore = 0.0;
+double g_priceActionSellScore = 0.0;
+
+// Adaptive Basket Rescue & Recovery ---------------------------------------
+bool g_rescueEnabled = true;
+ENUM_RESCUE_STATE g_rescueState = RESCUE_NORMAL;
+datetime g_rescueStartedAt = 0;
+datetime g_rescueWarningAt = 0;
+int g_rescuePrimaryDirection = 0;
+int g_rescueHedgeDirection = 0;
+double g_rescueHedgeLot = 0.0;
+double g_rescuePrimaryVolume = 0.0;
+double g_rescueNetExposure = 0.0;
+double g_rescueReversalScore = 0.0;
+bool g_rescueReversalConfirmed = false;
+string g_rescueReversalReason = "NONE";
+double g_rescueRequiredMoney = 0.0;
+double g_rescueRecoveredMoney = 0.0;
+double g_rescueTargetMoney = 0.0;
+double g_rescueRealizedProfit = 0.0;
+double g_rescueCombinedProfit = 0.0;
+double g_rescuePrimaryProfit = 0.0;
+double g_rescueHedgeProfit = 0.0;
+int g_rescuePartialCloseCount = 0;
+long g_rescueOldestAgeSeconds = 0;
+datetime g_lastRescueEvaluationAt = 0;
+datetime g_lastRescueOrderAt = 0;
 
 // Anti-chase / price-location intelligence. These states are intentionally
 // visible in telemetry so waiting for a pullback/retest is never a hidden gate.
