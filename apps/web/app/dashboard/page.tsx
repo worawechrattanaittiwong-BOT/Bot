@@ -467,16 +467,16 @@ export default function DashboardPage() {
     DISABLED: "ปิดการวิเคราะห์"
   };
   const marketRegimeDetailLabel: Record<string,string> = {
-    NEWS_IMPULSE: "News Impulse",
-    VOLATILITY_EXPANSION: "Volatility Expansion",
-    BREAKOUT_EXPANSION: "Breakout Expansion",
-    TREND_PULLBACK: "Trend Pullback",
-    TREND_ACCELERATION: "Trend Acceleration",
-    TREND_CONTINUATION: "Trend Continuation",
-    LOW_VOLATILITY: "Low Volatility",
-    RANGE_BREAK_ATTEMPT: "Range Break Attempt",
-    RANGE_ROTATION: "Range Rotation",
-    TRANSITION: "Transition"
+    NEWS_IMPULSE: "มีแรงส่งเร็วจากตลาด",
+    VOLATILITY_EXPANSION: "ความผันผวนกำลังเพิ่ม",
+    BREAKOUT_EXPANSION: "ราคากำลังขยายหลังเบรกกรอบ",
+    TREND_PULLBACK: "ราคากำลังย่อในแนวโน้ม",
+    TREND_ACCELERATION: "แนวโน้มกำลังเร่งตัว",
+    TREND_CONTINUATION: "แนวโน้มกำลังเดินต่อ",
+    LOW_VOLATILITY: "ตลาดเคลื่อนไหวแคบ",
+    RANGE_BREAK_ATTEMPT: "กำลังทดสอบการออกจากกรอบ",
+    RANGE_ROTATION: "ราคาแกว่งสลับในกรอบ",
+    TRANSITION: "ตลาดกำลังเปลี่ยนสภาวะ"
   };
   const currentPositions = Math.max(0, Number(metrics.positions || 0));
   const configuredMaxPositions = Math.max(1, Number(settings.maxPositions || 1));
@@ -601,6 +601,89 @@ export default function DashboardPage() {
   const visibleLiveStatus = hideModeIrrelevantStatus
     ? { label: "รอสัญญาณเข้า", tone: "good" }
     : liveStatus;
+
+  const customerSetupLabel = (value:any) => {
+    const code = String(value || "NONE").toUpperCase();
+    const labels: Record<string,string> = {
+      NONE: "ยังไม่มีจุดเข้าที่ชัดเจน",
+      FIB_PULLBACK: "ราคาย่อกลับเข้าโซน Fibonacci",
+      ORDER_BLOCK_PULLBACK: "ราคาย่อกลับเข้า Order Block",
+      OB_FIB_PULLBACK: "Order Block และ Fibonacci สนับสนุนตรงกัน",
+      LEVEL_REACTION: "ราคากำลังตอบสนองแนวรับ/แนวต้าน",
+      BREAKOUT: "ราคากำลังเบรกกรอบ",
+      BREAKOUT_RETEST: "เบรกแล้วกลับมาทดสอบโซน",
+      PULLBACK_RETEST: "ราคาย่อกลับมาทดสอบแนวโน้ม",
+      CONTINUATION: "มีจังหวะเดินตามแนวโน้มต่อ",
+      STRUCTURE_EXECUTION: "โครงสร้างราคาเริ่มยืนยันจุดเข้า",
+      NEWS_EXECUTION: "มีแรงส่งระยะสั้นจากตลาด",
+      CAUTION_ZONE: "จุดเข้าอยู่ใกล้โซนที่ต้องระวัง"
+    };
+    return labels[code] || "กำลังประเมินจุดเข้า";
+  };
+  const rawSetupCode = String(metrics.entryTrigger || metrics.entryModel || "NONE");
+  const setupCustomerText = customerSetupLabel(rawSetupCode);
+  const entryQualityGrade = String(metrics.entryQuality || "C").toUpperCase();
+  const entryQualityCustomerText =
+    entryQualityGrade === "A" ? "A · คุณภาพสูง"
+      : entryQualityGrade === "B" ? "B · คุณภาพปานกลาง"
+      : "C · รอเงื่อนไขเพิ่ม";
+  const priceLocationCustomerText = antiChaseActive
+    ? "ราคาวิ่งไกลเกินจุดเหมาะสม · รอจังหวะใหม่"
+    : priceLocationState === "BREAKOUT_RETEST_READY"
+      ? "ราคากลับมาทดสอบหลังเบรก · พร้อมประเมินเข้า"
+      : priceLocationState === "PULLBACK_RETEST_READY" || priceLocationState === "RETEST_READY"
+        ? "ราคาย่อกลับเข้าบริเวณที่เหมาะสม"
+        : "ตำแหน่งราคาอยู่ในช่วงที่ประเมินเข้าได้";
+  const rawOrderBlockState = entryBias === "SELL"
+    ? String(metrics.bearishOrderBlockState || "NONE")
+    : String(metrics.bullishOrderBlockState || "NONE");
+  const orderBlockQuality = entryBias === "SELL"
+    ? Number(metrics.bearishOrderBlockQuality || 0)
+    : Number(metrics.bullishOrderBlockQuality || 0);
+  const orderBlockCustomerText =
+    rawOrderBlockState === "NONE" || orderBlockQuality <= 0
+      ? "ยังไม่พบ Order Block ที่เด่น"
+      : orderBlockQuality >= 75
+        ? "พบ Order Block คุณภาพสูง"
+        : orderBlockQuality >= 45
+          ? "พบ Order Block ที่ใช้งานได้"
+          : "พบ Order Block แต่ยังต้องรอยืนยัน";
+  const fibScore = Number(metrics.fibSetupScore || 0);
+  const fibCustomerText =
+    fibScore >= 70 ? "Fibonacci สนับสนุนจุดเข้าอย่างชัดเจน"
+      : fibScore >= 40 ? "Fibonacci เริ่มสนับสนุนจุดเข้า"
+      : "Fibonacci ยังไม่ให้สัญญาณเด่น";
+  const emaStackCustomerText =
+    emaStack === "BULLISH" ? "เส้นค่าเฉลี่ยเรียงตัวสนับสนุนขาขึ้น"
+      : emaStack === "BEARISH" ? "เส้นค่าเฉลี่ยเรียงตัวสนับสนุนขาลง"
+      : "เส้นค่าเฉลี่ยยังผสมกัน · รอทิศทางชัดขึ้น";
+  const emaReclaimCustomerText =
+    emaReclaimState === "RECLAIM_EMA21_UP" ? "ราคากลับยืนเหนือแนวเฉลี่ยระยะสั้น"
+      : emaReclaimState === "LOSE_EMA21_DOWN" ? "ราคาหลุดแนวเฉลี่ยระยะสั้น"
+      : "ยังไม่มีสัญญาณกลับตัวจากเส้นค่าเฉลี่ย";
+  const ladderCustomerText = currentPositions > 0
+    ? "กำลังจัดจังหวะไม้ถัดไปตามระยะราคา · ไม้ "+currentPositions+"/"+configuredMaxPositions
+    : "จะเริ่มเพิ่มไม้หลังจากเปิดไม้แรกแล้ว";
+  const protectionCustomerText = Number(metrics.dynamicTakeProfitPrice || 0) > 0
+    ? "กำลังใช้ TP "+Number(metrics.dynamicTakeProfitPrice).toFixed(symbolDigits)+" และ SL "+Number(metrics.dynamicStopPrice || 0).toFixed(symbolDigits)
+    : "ระบบจะคำนวณ TP และ SL ตามสภาพตลาดเมื่อมีออเดอร์";
+  const riskCustomerText = performanceRiskMode === "NORMAL"
+    ? "ระดับความเสี่ยงปกติ · ใช้จำนวนไม้ตามที่ลูกค้ากำหนด"
+    : "ระบบกำลังระมัดระวังมากขึ้นหลังผลการเทรดช่วงล่าสุด";
+  const rescueStateCustomerText =
+    rescueState === "NORMAL" ? "ยังไม่ต้องใช้การฟื้นตัว"
+      : rescueState === "WARNING" ? "กำลังเฝ้าระวัง Basket ที่ติดลบ"
+      : rescueState === "ACTIVE" ? "กำลังลดความเสี่ยงของ Basket"
+      : rescueState === "RECOVERY" ? "กำลังฟื้นผลขาดทุนของ Basket"
+      : "กำลังจัดการ Basket ให้กลับสู่สถานะปกติ";
+  const recoveryCustomerText = rescueActive
+    ? "ฟื้นแล้ว $"+rescueRecoveredMoney.toFixed(2)+" · เหลือ $"+rescueRequiredMoney.toFixed(2)
+    : "ไม่มีภาระการฟื้นตัวในขณะนี้";
+  const reversalCustomerText = rescueActive
+    ? (Boolean(metrics.rescueReversalConfirmed)
+        ? "ยืนยันแรงกลับตัวแล้ว"
+        : "กำลังติดตามแรงกลับตัว")
+    : "ยังไม่มีสถานะที่ต้องติดตามการกลับตัว";
 
   const desiredStateLabel =
     desired === "RUNNING" ? "RUNNING — ให้บอททำงาน"
@@ -1343,7 +1426,7 @@ export default function DashboardPage() {
                     <div className="cc-control-field"><span>Symbol</span><b>{metrics.symbol || settings.symbol}</b></div>
                     <div className="cc-control-field"><span>โหมดเข้าออเดอร์</span><select value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO SMART</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></div>
                     <div className="cc-control-field"><span>จำนวนไม้</span><select value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
-                    <div className="cc-control-field"><span>Lot สูงสุด</span><select value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
+                    <div className="cc-control-field"><span>Lot ต่อไม้</span><select value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
                   </div>
 
                   <div className="cc-primary-actions cc-v3-actions">
@@ -1365,16 +1448,29 @@ export default function DashboardPage() {
 
                   <div className="cc-signal-grid">
                     <div className="cc-signal-item good"><ScenovaIcon name="trend" size={20}/><span><small>สภาพตลาด</small><b>{marketRegimeDetailLabel[String(metrics.marketRegimeDetail||"")]||marketRegimeLabel[String(metrics.marketRegime||"")]||"รอข้อมูล"}</b></span></div>
-                    <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Confidence</small><b>{Boolean(settings.confidenceGateEnabled) ? Number(metrics.signalConfidence||0).toFixed(0)+"% / "+Number(metrics.effectiveConfidenceThreshold||55).toFixed(0)+"%" : Number(metrics.signalConfidence||0).toFixed(0)+"% · ไม่บล็อก"}</b></span></div>
-                    <div className={"cc-signal-item "+(String(metrics.entryQuality||"C")==="A"?"good":String(metrics.entryQuality||"C")==="B"?"warn":"")}><ScenovaIcon name="status" size={20}/><span><small>Entry Quality</small><b>{String(metrics.entryQuality||"—")} · {Number(metrics.entryQualityScore||0).toFixed(0)}</b></span></div>
-                    <div className="cc-signal-item"><ScenovaIcon name="spread" size={20}/><span><small>Spread</small><b>{spreadValueLabel}</b></span></div>
-                    <div className="cc-signal-item warn"><ScenovaIcon name="layers" size={20}/><span><small>Position</small><b>{positionCapacityLabel}</b></span></div>
+                    <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>ความมั่นใจ</small><b>{Boolean(settings.confidenceGateEnabled) ? Number(metrics.signalConfidence||0).toFixed(0)+"% / เกณฑ์ "+Number(metrics.effectiveConfidenceThreshold||55).toFixed(0)+"%" : Number(metrics.signalConfidence||0).toFixed(0)+"% · ใช้ประกอบการตัดสินใจ"}</b></span></div>
+                    <div className={"cc-signal-item "+(String(metrics.entryQuality||"C")==="A"?"good":String(metrics.entryQuality||"C")==="B"?"warn":"")}><ScenovaIcon name="status" size={20}/><span><small>คุณภาพจุดเข้า</small><b>{entryQualityCustomerText+" · "+Number(metrics.entryQualityScore||0).toFixed(0)+"/100"}</b></span></div>
+                    <div className="cc-signal-item"><ScenovaIcon name="spread" size={20}/><span><small>สเปรด</small><b>{spreadValueLabel}</b></span></div>
+                    <div className="cc-signal-item warn"><ScenovaIcon name="layers" size={20}/><span><small>ออเดอร์</small><b>{positionCapacityLabel}</b></span></div>
                     <div className={"cc-signal-item "+(visibleLiveStatus.tone==="bad"?"bad":visibleLiveStatus.tone==="warn"?"warn":"good")}><ScenovaIcon name="status" size={20}/><span><small>การเทรด</small><b>{visibleLiveStatus.label||"—"}</b></span></div>
                   </div>
 
                   <div className="cc-direction-strip">
-                    <div><span>Bias</span><b className={entryBias==="BUY"?"text-good":entryBias==="SELL"?"text-bad":""}>{entryBiasLabel}</b></div>
-                    <div><span>M5</span><b>{trendText(metrics.trendM5)}</b></div><div><span>M15</span><b>{trendText(metrics.trendM15)}</b></div><div><span>H1</span><b>{trendText(metrics.trendH1)}</b></div><div><span>Setup</span><b>{String(metrics.entryTrigger||metrics.entryModel||"กำลังหา")}</b></div><div><span>Ladder</span><b>{currentPositions>0 ? "R"+ladderRung+" · "+String(metrics.basketLadderMode||"—") : "รอไม้แรก"}</b></div>
+                    <div><span>ทิศทาง</span><b className={entryBias==="BUY"?"text-good":entryBias==="SELL"?"text-bad":""}>{entryBiasLabel}</b></div>
+                    <div><span>M5</span><b>{trendText(metrics.trendM5)}</b></div>
+                    <div><span>M15</span><b>{trendText(metrics.trendM15)}</b></div>
+                    <div><span>H1</span><b>{trendText(metrics.trendH1)}</b></div>
+                    <div><span>จุดเข้า</span><b>{setupCustomerText}</b></div>
+                    <div><span>เพิ่มไม้</span><b>{currentPositions>0 ? "ไม้ "+currentPositions+"/"+configuredMaxPositions : "รอไม้แรก"}</b></div>
+                  </div>
+
+                  <div className="cc-realtime-strip" aria-label="ข้อมูลเรียลไทม์">
+                    <div><span>ตำแหน่งราคา</span><b>{priceLocationCustomerText}</b></div>
+                    <div><span>Order Block</span><b>{orderBlockCustomerText}</b></div>
+                    <div><span>Fibonacci</span><b>{fibCustomerText}</b></div>
+                    <div><span>TP / SL ปัจจุบัน</span><b>{Number(metrics.dynamicTakeProfitPrice||0)>0 ? "TP "+Number(metrics.dynamicTakeProfitPrice).toFixed(symbolDigits)+" · SL "+Number(metrics.dynamicStopPrice||0).toFixed(symbolDigits) : "รอออเดอร์เพื่อคำนวณ"}</b></div>
+                    <div><span>การฟื้นตัว</span><b>{recoveryCustomerText}</b></div>
+                    <div><span>แรงกลับตัว</span><b>{reversalCustomerText}</b></div>
                   </div>
 
                 </section>
@@ -1388,50 +1484,82 @@ export default function DashboardPage() {
                 </section>
               </div>
 
-              <section className="panel cc-intelligence-v3">
+              <section className="panel cc-intelligence-v3 cc-customer-intelligence">
                 <div className="cc-card-head">
-                  <div className="cc-card-title"><span className="cc-card-icon"><ScenovaIcon name="brain" size={20}/></span><div><h2>Intelligence v4</h2><small>Rescue & Recovery · EMA 9/21/50/200 · Price Action · Anti-Chase · OB · Fib · Ladder · Dynamic Exit</small></div></div>
-                  <span className="cc-mini-health good"><i/>ไม่เพิ่ม Hidden Gate</span>
+                  <div className="cc-card-title">
+                    <span className="cc-card-icon"><ScenovaIcon name="brain" size={20}/></span>
+                    <div>
+                      <h2>ภาพรวมการวิเคราะห์</h2>
+                      <small>สรุปสิ่งที่บอทเห็นในตลาดและสิ่งที่กำลังรอ ก่อนตัดสินใจเปิดหรือดูแลออเดอร์</small>
+                    </div>
+                  </div>
+                  <span className="cc-mini-health good"><i/>อัปเดตตามตลาด</span>
                 </div>
 
-                <div className="cc-signal-grid">
-                  <div className={"cc-signal-item "+(antiChaseActive?"warn":"good")}><ScenovaIcon name="target" size={20}/><span><small>Price Location / Anti-Chase</small><b>{antiChaseActive ? priceLocationState+" · "+antiChaseReason : priceLocationState==="NORMAL" ? "NORMAL · เข้าได้ตาม Setup" : priceLocationState}</b></span></div>
-                  <div className="cc-signal-item good"><ScenovaIcon name="trend" size={20}/><span><small>Market Regime</small><b>{marketRegimeDetailLabel[String(metrics.marketRegimeDetail||"")]||String(metrics.marketRegimeDetail||"กำลังวิเคราะห์")}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>Order Block v2</small><b>{entryBias==="SELL" ? String(metrics.bearishOrderBlockState||"NONE")+" · "+Number(metrics.bearishOrderBlockQuality||0).toFixed(0) : String(metrics.bullishOrderBlockState||"NONE")+" · "+Number(metrics.bullishOrderBlockQuality||0).toFixed(0)}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Fib Setup</small><b>{String(metrics.fibSetupGrade||"NONE")} · {Number(metrics.fibSetupScore||0).toFixed(0)}/100</b></span></div>
-                  <div className={"cc-signal-item "+(String(metrics.entryQuality||"C")==="A"?"good":String(metrics.entryQuality||"C")==="B"?"warn":"")}><ScenovaIcon name="status" size={20}/><span><small>Entry Quality</small><b>{String(metrics.entryQuality||"—")} · {Number(metrics.entryQualityScore||0).toFixed(0)}/100</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>Pullback-Aware Ladder</small><b>{currentPositions>0 ? "R"+ladderRung+" · เป้า "+effectiveLadderTarget+"/"+configuredMaxPositions+" · "+String(metrics.basketLadderMode||"—")+" · PB "+Math.max(0,ladderPullbackPoints).toFixed(0)+"/"+Math.max(0,ladderPullbackRequiredPoints).toFixed(0) : "ไม้แรกไม่ถูก Ladder ดัก"}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="shield" size={20}/><span><small>Dynamic TP / SL</small><b>{Number(metrics.dynamicTakeProfitPrice||0)>0 ? "TP "+Number(metrics.dynamicTakeProfitPrice).toFixed(symbolDigits)+" · SL "+Number(metrics.dynamicStopPrice||0).toFixed(symbolDigits) : "Structure + ATR + EMA21/50"}</b></span></div>
-
-                  <div className="cc-signal-item good"><ScenovaIcon name="trend" size={20}/><span><small>EMA Stack / Slope</small><b>{emaStack+" · "+emaSlope+" · "+emaVolatilityState}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="trend" size={20}/><span><small>EMA 9 / 21 / 50 / 200</small><b>{[9,21,50,200].map((p,i)=>p+" "+Number([metrics.ema9,metrics.ema21,metrics.ema50,metrics.ema200][i]||0).toFixed(symbolDigits)).join(" · ")}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>EMA Multi-TF</small><b>{"M1 M5 M15 M30 H1 · "+emaTfText+" · "+emaPriceVs200}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="status" size={20}/><span><small>EMA Reclaim / Price Action</small><b>{emaReclaimState+" · BUY "+String(metrics.priceActionBuy||"NONE")+" · SELL "+String(metrics.priceActionSell||"NONE")}</b></span></div>
-                  <div className={"cc-signal-item "+(performanceRiskMode==="NORMAL"?"good":"warn")}><ScenovaIcon name="shield" size={20}/><span><small>Expectancy / Exposure Control</small><b>{performanceRiskMode+" · Ladder "+effectiveLadderTarget+"/"+configuredMaxPositions+" · แพ้ติดกัน "+consecutiveBasketLosses+" Basket"}</b></span></div>
+                <div className="cc-intel-summary-grid">
+                  <div className="cc-intel-summary-card">
+                    <span className="cc-summary-icon"><ScenovaIcon name="target" size={19}/></span>
+                    <div><small>จังหวะราคา</small><b>{priceLocationCustomerText}</b><p>{setupCustomerText}</p></div>
+                  </div>
+                  <div className="cc-intel-summary-card">
+                    <span className="cc-summary-icon"><ScenovaIcon name="trend" size={19}/></span>
+                    <div><small>แนวโน้ม</small><b>{emaStackCustomerText}</b><p>{emaReclaimCustomerText}</p></div>
+                  </div>
+                  <div className="cc-intel-summary-card">
+                    <span className="cc-summary-icon"><ScenovaIcon name="layers" size={19}/></span>
+                    <div><small>โซนสนับสนุนจุดเข้า</small><b>{orderBlockCustomerText}</b><p>{fibCustomerText}</p></div>
+                  </div>
+                  <div className="cc-intel-summary-card">
+                    <span className="cc-summary-icon"><ScenovaIcon name="shield" size={19}/></span>
+                    <div><small>การป้องกันออเดอร์</small><b>{protectionCustomerText}</b><p>บอทปรับการป้องกันตามราคาจริงและค่าที่ลูกค้าตั้งไว้</p></div>
+                  </div>
+                  <div className="cc-intel-summary-card">
+                    <span className="cc-summary-icon"><ScenovaIcon name="layers" size={19}/></span>
+                    <div><small>การเพิ่มไม้</small><b>{ladderCustomerText}</b><p>จะเพิ่มไม้เมื่อราคาผ่านจังหวะที่กำหนด ไม่ยิงเพิ่มทันทีโดยไม่มีเงื่อนไข</p></div>
+                  </div>
+                  <div className={"cc-intel-summary-card "+(rescueActive?"warn":"")}>
+                    <span className="cc-summary-icon"><ScenovaIcon name="shield" size={19}/></span>
+                    <div><small>การดูแลความเสี่ยง</small><b>{rescueStateCustomerText}</b><p>{riskCustomerText}</p></div>
+                  </div>
                 </div>
 
-                <div className="cc-signal-grid">
-                  <div className={"cc-signal-item "+(rescueActive?"warn":"good")}><ScenovaIcon name="shield" size={20}/><span><small>Rescue State</small><b>{rescueState+" · "+rescueReason}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>Weight Balance</small><b>{"Hedge "+rescueHedgeLot.toFixed(2)+" · Net "+rescueNetExposure.toFixed(2)+" lot"}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Recovery Progress</small><b>{"คืนแล้ว $"+rescueRecoveredMoney.toFixed(2)+" · เหลือ $"+rescueRequiredMoney.toFixed(2)}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Recovery TP</small><b>{rescueRecoveryPrice>0 ? rescueRecoveryPrice.toFixed(symbolDigits)+" · Combined $"+rescueCombinedProfit.toFixed(2) : "รอคำนวณจาก Net Exposure"}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="clock" size={20}/><span><small>Time Rescue</small><b>{rescueOldestMinutes.toFixed(0)+" นาที · Partial Close "+Number(metrics.rescuePartialCloseCount||0)+" ครั้ง"}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="status" size={20}/><span><small>Reversal Detection</small><b>{rescueReversalScore.toFixed(0)+"/100 · "+(Boolean(metrics.rescueReversalConfirmed)?"ยืนยันแล้ว":"กำลังประเมิน")+" · Stable "+rescueStableSeconds.toFixed(0)+"s"}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="clock" size={20}/><span><small>Rescue Hysteresis</small><b>{rescueHedgeLockSeconds>0 ? "ล็อก Hedge อีก "+rescueHedgeLockSeconds.toFixed(0)+"s" : "พร้อมปรับเมื่อสัญญาณคงที่"}</b></span></div>
-                </div>
+                <div className="cc-performance-board">
+                  <div className="cc-performance-head">
+                    <div><b>ผลการเทรดโดยรวม</b><small>สรุปจากรายการที่ปิดแล้ว เพื่อให้เห็นคุณภาพการทำงานแบบอ่านง่าย</small></div>
+                  </div>
 
-                <div className="cc-status-list">
-                  <StatusRow label="Exhaustion / Extension" value={"Score "+exhaustionScore.toFixed(0)+"/100 · Extension "+extensionAtr.toFixed(2)+" ATR · ไส้สวน "+(adverseWickRatio*100).toFixed(0)+"%"} tone={antiChaseActive?"warn":"good"} dot/>
-                  <StatusRow label="Trade Journal" value={Number(journalStats.closedTrades||0)+" เทรดปิด · Win "+Number(journalStats.winRate||0).toFixed(1)+"% · Net $"+Number(journalStats.netProfit||0).toFixed(2)} tone={Number(journalStats.netProfit||0)>=0?"good":"warn"} dot/>
-                  <StatusRow label="Profit Factor" value={Number(journalStats.profitFactor||0).toFixed(2)+" · Avg Win $"+Number(journalStats.averageWin||0).toFixed(2)+" · Avg Loss $"+Number(journalStats.averageLoss||0).toFixed(2)}/>
-                  {journalRecent.slice(0,3).map((row:any,index:number)=>(
-                    <StatusRow
-                      key={String(row.created_at||index)+"-"+index}
-                      label={(row.event_type==="ENTRY"?"เข้า ":"ออก ")+String(row.direction||"")+" · "+String(row.entry_quality||"—")}
-                      value={String(row.entry_trigger||row.entry_model||row.market_regime_detail||"Setup")+" · "+(row.event_type==="EXIT"?"P/L $"+Number(row.net_profit||0).toFixed(2):Number(row.price||0).toFixed(symbolDigits))}
-                      tone={row.event_type==="EXIT" ? (Number(row.net_profit||0)>=0?"good":"warn") : undefined}
-                    />
-                  ))}
+                  <div className="cc-performance-kpis">
+                    <div className="cc-performance-kpi"><span>เทรดที่ปิดแล้ว</span><b>{Number(journalStats.closedTrades||0)}</b><small>รายการ</small></div>
+                    <div className={"cc-performance-kpi "+(Number(journalStats.winRate||0)>=50?"good":"warn")}><span>อัตราชนะ</span><b>{Number(journalStats.winRate||0).toFixed(1)+"%"}</b><small>จากรายการที่มีผลลัพธ์</small></div>
+                    <div className={"cc-performance-kpi "+(Number(journalStats.netProfit||0)>=0?"good":"bad")}><span>กำไรสุทธิ</span><b>{(Number(journalStats.netProfit||0)>=0?"+$":"-$")+Math.abs(Number(journalStats.netProfit||0)).toFixed(2)}</b><small>รวมรายการที่บันทึก</small></div>
+                    <div className="cc-performance-kpi"><span>Profit Factor</span><b>{Number(journalStats.profitFactor||0).toFixed(2)}</b><small>กำไรรวมเทียบขาดทุนรวม</small></div>
+                    <div className="cc-performance-kpi good"><span>กำไรเฉลี่ย</span><b>{"+$"+Number(journalStats.averageWin||0).toFixed(2)}</b><small>ต่อรายการที่ชนะ</small></div>
+                    <div className="cc-performance-kpi bad"><span>ขาดทุนเฉลี่ย</span><b>{"-$"+Math.abs(Number(journalStats.averageLoss||0)).toFixed(2)}</b><small>ต่อรายการที่แพ้</small></div>
+                  </div>
+
+                  <div className="cc-recent-activity">
+                    <div className="cc-recent-activity-head"><b>รายการล่าสุด</b><small>แสดงสูงสุด 5 รายการล่าสุด</small></div>
+                    <div className="cc-recent-activity-list">
+                      {journalRecent.length ? journalRecent.slice(0,5).map((row:any,index:number)=>{
+                        const isExit = row.event_type === "EXIT";
+                        const pnl = Number(row.net_profit || 0);
+                        const activitySetup = customerSetupLabel(row.entry_trigger || row.entry_model || row.market_regime_detail);
+                        const timeLabel = row.created_at ? new Date(row.created_at).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}) : "—";
+                        return (
+                          <div className="cc-recent-activity-row" key={String(row.created_at||index)+"-"+index}>
+                            <span className={"cc-activity-badge "+(isExit?(pnl>=0?"good":"bad"):"entry")}>{isExit?"ปิด":"เข้า"}</span>
+                            <div className="cc-activity-main">
+                              <b>{String(row.direction||"—")+" · "+activitySetup}</b>
+                              <small>{timeLabel+" · คุณภาพ "+String(row.entry_quality||"—")}</small>
+                            </div>
+                            <strong className={isExit?(pnl>=0?"text-good":"text-bad"):""}>
+                              {isExit ? (pnl>=0?"+$":"-$")+Math.abs(pnl).toFixed(2) : Number(row.price||0).toFixed(symbolDigits)}
+                            </strong>
+                          </div>
+                        );
+                      }) : <div className="cc-recent-activity-empty">ยังไม่มีรายการเทรดที่บันทึกไว้</div>}
+                    </div>
+                  </div>
                 </div>
               </section>
 
