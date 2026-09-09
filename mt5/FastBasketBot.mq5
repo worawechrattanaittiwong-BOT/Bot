@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.024"
+#property version   "1.025"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -202,6 +202,20 @@ double g_entryQualityScore = 0.0;
 string g_entryQuality = "C";
 string g_entryModel = "NONE";
 string g_entryTrigger = "NONE";
+
+// Anti-chase / price-location intelligence. These states are intentionally
+// visible in telemetry so waiting for a pullback/retest is never a hidden gate.
+bool   g_antiChaseActive = false;
+int    g_antiChaseDirection = 0;
+double g_exhaustionScore = 0.0;
+double g_extensionAtr = 0.0;
+double g_adverseWickRatio = 0.0;
+string g_priceLocationState = "NORMAL";
+string g_antiChaseReason = "NONE";
+bool   g_breakoutRetestRequired = false;
+bool   g_breakoutRetestReady = false;
+double g_breakoutReferenceLevel = 0.0;
+
 datetime g_lastMarketContextUpdate = 0;
 string g_fiboObjectName = "";
 bool   g_fiboVisible = false;
@@ -254,6 +268,10 @@ double g_pyramidRequiredPoints = 0.0;
 int    g_ladderRung = 0;
 double g_ladderProgressPoints = 0.0;
 double g_ladderRequiredPoints = 0.0;
+double g_ladderExtremePrice = 0.0;
+double g_ladderPullbackPoints = 0.0;
+double g_ladderPullbackRequiredPoints = 0.0;
+bool   g_ladderPullbackArmed = false;
 string g_ladderMode = "IDLE";
 double g_dynamicStopPrice = 0.0;
 double g_dynamicTakeProfitPrice = 0.0;
@@ -355,7 +373,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.024", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.025", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -976,7 +994,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.024\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.025\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -2486,6 +2504,243 @@ bool MomentumSupportsDirection(int direction, double momentum, double factor)
 {
    double threshold = MathMax(1.0, g_adaptiveMomentumThreshold * factor);
    return direction > 0 ? momentum >= threshold : momentum <= -threshold;
+}
+
+int RecentDirectionalRun(int direction, ENUM_TIMEFRAMES timeframe, int bars)
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   int need = MathMax(2, bars);
+   if(CopyRates(_Symbol, timeframe, 1, need, rates) < need)
+      return 0;
+
+   int run = 0;
+   for(int i = 0; i < need; i++)
+   {
+      bool same = direction > 0
+         ? rates[i].close > rates[i].open
+         : rates[i].close < rates[i].open;
+      if(!same)
+         break;
+      run++;
+   }
+   return run;
+}
+
+bool DirectionalExhaustion(
+   int direction,
+   double &scoreOut,
+   double &extensionAtrOut,
+   double &wickRatioOut,
+   string &reasonOut
+)
+{
+   scoreOut = 0.0;
+   extensionAtrOut = 0.0;
+   wickRatioOut = 0.0;
+   reasonOut = "NONE";
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+      return false;
+
+   double price = (tick.bid + tick.ask) * 0.5;
+   double atrPrice = MathMax(
+      _Point * 12.0,
+      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point
+   );
+
+   double terminalRetracement = 2.0;
+   if(g_fibM15Direction == direction)
+      terminalRetracement = MathMin(terminalRetracement, g_fibM15Retracement);
+   if(g_fibM5Direction == direction)
+      terminalRetracement = MathMin(terminalRetracement, g_fibM5Retracement);
+
+   double impulseRange = 0.0;
+   if(g_fibDirection == direction && g_fibSwingHigh > g_fibSwingLow)
+      impulseRange = g_fibSwingHigh - g_fibSwingLow;
+   extensionAtrOut = impulseRange > 0.0
+      ? impulseRange / atrPrice * MathMax(0.0, 1.0 - MathMin(1.0, terminalRetracement))
+      : 0.0;
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 4, rates) >= 4)
+   {
+      double range = MathMax(_Point, rates[0].high - rates[0].low);
+      double lowerWick = MathMin(rates[0].open, rates[0].close) - rates[0].low;
+      double upperWick = rates[0].high - MathMax(rates[0].open, rates[0].close);
+      wickRatioOut = direction < 0 ? lowerWick / range : upperWick / range;
+
+      if(wickRatioOut >= 0.35) scoreOut += 18.0;
+      if(wickRatioOut >= 0.55) scoreOut += 12.0;
+   }
+
+   if(terminalRetracement <= 0.236)
+   {
+      scoreOut += 30.0;
+      reasonOut = "FIB_TERMINAL_ZONE";
+   }
+   if(terminalRetracement <= 0.10)
+      scoreOut += 15.0;
+
+   if(extensionAtrOut >= 1.25)
+   {
+      scoreOut += 18.0;
+      if(reasonOut == "NONE") reasonOut = "EXTENDED_IMPULSE";
+   }
+   if(extensionAtrOut >= 1.80)
+      scoreOut += 12.0;
+
+   int run = RecentDirectionalRun(direction, PERIOD_M5, 4);
+   if(run >= 3)
+      scoreOut += 12.0;
+
+   bool nearTerminalLevel = direction < 0
+      ? (g_nearestSupport > 0.0 && price - g_nearestSupport <= atrPrice * 0.25)
+      : (g_nearestResistance > 0.0 && g_nearestResistance - price <= atrPrice * 0.25);
+   if(nearTerminalLevel)
+   {
+      scoreOut += 18.0;
+      if(reasonOut == "NONE") reasonOut = direction < 0 ? "NEAR_SUPPORT" : "NEAR_RESISTANCE";
+   }
+
+   if(wickRatioOut >= 0.45 && reasonOut == "NONE")
+      reasonOut = "ADVERSE_WICK";
+
+   return scoreOut >= 55.0;
+}
+
+bool PullbackRetestReady(int direction, double momentum)
+{
+   double retracement = -1.0;
+   if(g_fibM15Direction == direction)
+      retracement = MathMax(retracement, g_fibM15Retracement);
+   if(g_fibM5Direction == direction)
+      retracement = MathMax(retracement, g_fibM5Retracement);
+
+   bool fibPullback = retracement >= 0.236 && retracement <= 0.786;
+   bool executionTurn =
+      RecentDirectionalBody(direction, PERIOD_M1) ||
+      RecentDirectionalBody(direction, PERIOD_M5) ||
+      MomentumSupportsDirection(direction, momentum, 0.20);
+
+   if(fibPullback && executionTurn)
+      return true;
+
+   // Fallback when an active Fib cannot be formed: demand a measurable pullback
+   // from the recent M5 extreme, then a fresh directional execution candle.
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 10, rates) < 10)
+      return false;
+
+   double atrPrice = MathMax(
+      _Point * 12.0,
+      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point
+   );
+   double extreme = direction > 0 ? rates[0].high : rates[0].low;
+   for(int i = 1; i < 10; i++)
+      extreme = direction > 0 ? MathMax(extreme, rates[i].high) : MathMin(extreme, rates[i].low);
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+      return false;
+   double current = direction > 0 ? tick.bid : tick.ask;
+   double pullback = direction > 0 ? extreme - current : current - extreme;
+
+   return pullback >= atrPrice * 0.18 && executionTurn;
+}
+
+bool CleanBreakoutImpulse(int direction, double level, double buffer)
+{
+   if(level <= 0.0)
+      return false;
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 2, rates) < 2)
+      return false;
+
+   double atrPrice = MathMax(
+      _Point * 12.0,
+      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point
+   );
+   double range = MathMax(_Point, rates[0].high - rates[0].low);
+   double body = MathAbs(rates[0].close - rates[0].open);
+   double bodyRatio = body / range;
+   double adverseWick = direction > 0
+      ? rates[0].high - MathMax(rates[0].open, rates[0].close)
+      : MathMin(rates[0].open, rates[0].close) - rates[0].low;
+   double adverseWickRatio = adverseWick / range;
+   double closeDistance = MathAbs(rates[0].close - level);
+
+   bool directionalClose = direction > 0
+      ? rates[0].close > level + buffer
+      : rates[0].close < level - buffer;
+
+   return directionalClose &&
+      bodyRatio >= 0.45 &&
+      adverseWickRatio <= 0.30 &&
+      range <= atrPrice * 1.60 &&
+      closeDistance <= atrPrice * 0.80;
+}
+
+bool BreakoutRetestConfirmed(int direction, double level, double buffer)
+{
+   if(level <= 0.0)
+      return false;
+
+   ENUM_TIMEFRAMES timeframes[2] = {PERIOD_M1, PERIOD_M5};
+   for(int t = 0; t < 2; t++)
+   {
+      MqlRates rates[];
+      ArraySetAsSeries(rates, true);
+      if(CopyRates(_Symbol, timeframes[t], 1, 3, rates) < 3)
+         continue;
+
+      if(direction > 0)
+      {
+         bool broke = rates[1].close > level + buffer;
+         bool retested = rates[0].low <= level + buffer * 1.5;
+         bool held = rates[0].close > level && rates[0].close > rates[0].open;
+         if(broke && retested && held)
+            return true;
+      }
+      else
+      {
+         bool broke = rates[1].close < level - buffer;
+         bool retested = rates[0].high >= level - buffer * 1.5;
+         bool held = rates[0].close < level && rates[0].close < rates[0].open;
+         if(broke && retested && held)
+            return true;
+      }
+   }
+   return false;
+}
+
+void RegisterAntiChase(
+   int direction,
+   double score,
+   double extensionAtr,
+   double wickRatio,
+   string reason,
+   double referenceLevel,
+   bool breakoutRetest
+)
+{
+   if(!g_antiChaseActive || score >= g_exhaustionScore)
+   {
+      g_antiChaseActive = true;
+      g_antiChaseDirection = direction;
+      g_exhaustionScore = score;
+      g_extensionAtr = extensionAtr;
+      g_adverseWickRatio = wickRatio;
+      g_antiChaseReason = reason;
+      g_breakoutReferenceLevel = referenceLevel;
+      g_breakoutRetestRequired = breakoutRetest;
+      g_priceLocationState = breakoutRetest ? "WAIT_BREAKOUT_RETEST" : "WAIT_PULLBACK";
+   }
 }
 
 bool DirectSetupReady(
