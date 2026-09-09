@@ -1925,6 +1925,60 @@ void PostTradeJournalDeal(ulong dealTicket)
       g_journalFailed++;
 }
 
+void PostRescueJournalDeal(ulong dealTicket)
+{
+   if(MQLInfoInteger(MQL_TESTER) || dealTicket==0 || !HistoryDealSelect(dealTicket))
+      return;
+
+   long dealEntry=HistoryDealGetInteger(dealTicket,DEAL_ENTRY);
+   if(dealEntry!=DEAL_ENTRY_IN &&
+      dealEntry!=DEAL_ENTRY_OUT &&
+      dealEntry!=DEAL_ENTRY_OUT_BY &&
+      dealEntry!=DEAL_ENTRY_INOUT)
+      return;
+
+   long dealType=HistoryDealGetInteger(dealTicket,DEAL_TYPE);
+   if(dealType!=DEAL_TYPE_BUY && dealType!=DEAL_TYPE_SELL)
+      return;
+
+   bool isExit=
+      dealEntry==DEAL_ENTRY_OUT ||
+      dealEntry==DEAL_ENTRY_OUT_BY ||
+      dealEntry==DEAL_ENTRY_INOUT;
+   int dealDirection=dealType==DEAL_TYPE_BUY ? 1 : -1;
+   int positionDirection=isExit ? -dealDirection : dealDirection;
+   double net=
+      HistoryDealGetDouble(dealTicket,DEAL_PROFIT)+
+      HistoryDealGetDouble(dealTicket,DEAL_SWAP)+
+      HistoryDealGetDouble(dealTicket,DEAL_COMMISSION);
+
+   string payload=StringFormat(
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"RESCUE_HEDGE\",\"entryModel\":\"WEIGHT_BALANCE\",\"entryQuality\":\"R\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":0}",
+      InpInstanceId,
+      InpInstallToken,
+      (long)dealTicket,
+      (long)HistoryDealGetInteger(dealTicket,DEAL_POSITION_ID),
+      isExit ? "EXIT" : "ENTRY",
+      positionDirection>0 ? "BUY" : "SELL",
+      HistoryDealGetDouble(dealTicket,DEAL_VOLUME),
+      DoubleToString(HistoryDealGetDouble(dealTicket,DEAL_PRICE),SymbolDigitsNow()),
+      net,
+      g_rescueReversalScore,
+      g_marketRegime,
+      g_marketRegimeDetail,
+      g_fibSetupScore,
+      positionDirection>0 ? g_bullishOrderBlockQuality : g_bearishOrderBlockQuality,
+      g_signalConfidence
+   );
+
+   string response="";
+   int code=HttpPostJsonTimeout(InpApiBase+"/api/ea/journal",payload,response,650);
+   if(code>=200 && code<300)
+      g_journalSent++;
+   else
+      g_journalFailed++;
+}
+
 void ClearActiveBasketJournal()
 {
    g_basketJournalId = 0;
