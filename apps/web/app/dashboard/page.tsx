@@ -554,7 +554,6 @@ export default function DashboardPage() {
   const pyramidRequiredPoints = Number(metrics.pyramidRequiredPoints || 0);
   const entryBias = String(metrics.entryBias || (metrics.marketRegime === "TREND_UP" ? "BUY" : metrics.marketRegime === "TREND_DOWN" ? "SELL" : "BOTH"));
   const entryBiasLabel = entryBias === "BUY" ? "BUY ตามเทรนด์" : entryBias === "SELL" ? "SELL ตามเทรนด์" : "BUY / SELL ตามสัญญาณ";
-  const trendText = (value:any) => Number(value) > 0 ? "ขึ้น" : Number(value) < 0 ? "ลง" : "กลาง";
   const positionCapacityLabel = currentPositions + " / " + effectiveMaxPositions + (effectiveMaxPositions !== configuredMaxPositions ? " · ตั้ง " + configuredMaxPositions : "");
   const ladderProgressPoints = Number(metrics.basketLadderProgressPoints || 0);
   const ladderRequiredPoints = Number(metrics.basketLadderRequiredPoints || 0);
@@ -1432,7 +1431,7 @@ export default function DashboardPage() {
                     <div className="cc-control-field"><span>Lot ต่อไม้</span><select value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
                   </div>
 
-                  <div className="cc-primary-actions cc-v3-actions">
+                  <div className="cc-primary-actions cc-v3-actions cc-command-actions-v5">
                     <button
                       className={"cc-action start " + (botStarting ? "starting" : botRunning ? "running" : "idle")}
                       disabled={startBlocked}
@@ -1461,13 +1460,14 @@ export default function DashboardPage() {
                     <div className={"cc-signal-item "+(visibleLiveStatus.tone==="bad"?"bad":visibleLiveStatus.tone==="warn"?"warn":"good")}><ScenovaIcon name="status" size={20}/><span><small>การเทรด</small><b>{visibleLiveStatus.label||"—"}</b></span></div>
                   </div>
 
-                  <div className="cc-direction-strip">
-                    <div><span>ทิศทาง</span><b className={entryBias==="BUY"?"text-good":entryBias==="SELL"?"text-bad":""}>{entryBiasLabel}</b></div>
-                    <div><span>M5</span><b>{trendText(metrics.trendM5)}</b></div>
-                    <div><span>M15</span><b>{trendText(metrics.trendM15)}</b></div>
-                    <div><span>H1</span><b>{trendText(metrics.trendH1)}</b></div>
-                    <div><span>จุดเข้า</span><b>{setupCustomerText}</b></div>
-                    <div><span>เพิ่มไม้</span><b>{currentPositions>0 ? "ไม้ "+currentPositions+"/"+configuredMaxPositions : "รอไม้แรก"}</b></div>
+                  <div className="cc-direction-strip cc-direction-strip-v5">
+                    <div className="cc-direction-bias"><span>ทิศทางหลัก</span><b className={entryBias==="BUY"?"text-good":entryBias==="SELL"?"text-bad":""}>{entryBiasLabel}</b></div>
+                    <TimeframeTrend label="M5" value={metrics.trendM5}/>
+                    <TimeframeTrend label="M15" value={metrics.trendM15}/>
+                    <TimeframeTrend label="M30" value={metrics.trendM30}/>
+                    <TimeframeTrend label="H1" value={metrics.trendH1}/>
+                    <div className="cc-direction-setup"><span>จุดเข้า</span><b>{setupCustomerText}</b></div>
+                    <div className="cc-direction-ladder"><span>เพิ่มไม้</span><b>{currentPositions>0 ? "ไม้ "+currentPositions+"/"+configuredMaxPositions : "รอไม้แรก"}</b></div>
                   </div>
 
                   <div className="cc-realtime-strip" aria-label="ข้อมูลเรียลไทม์">
@@ -2387,6 +2387,18 @@ function Metric({label,value,positive}:{label:string;value:string;positive?:bool
 
 function DashboardMetric({icon,label,value,sub,tone="neutral"}:{icon:string;label:string;value:string;sub?:string;tone?:"neutral"|"good"|"warn"|"bad"}) {
   return <div className={"cc-kpi cc-tone-"+tone}><span className="cc-kpi-icon"><ScenovaIcon name={icon} size={22}/></span><div><span className="cc-kpi-label">{label}</span><b>{value}</b>{sub?<small>{sub}</small>:null}</div></div>;
+}
+
+function TimeframeTrend({label,value}:{label:string;value:any}) {
+  const numericValue = Number(value);
+  const direction = numericValue > 0 ? "up" : numericValue < 0 ? "down" : "flat";
+  const directionLabel = direction === "up" ? "ขึ้น" : direction === "down" ? "ลง" : "กลาง";
+  return (
+    <div className={"cc-timeframe-trend "+direction} aria-label={label+" แนวโน้ม"+directionLabel}>
+      <span>{label}</span>
+      <b><i className="cc-trend-bolt"><ScenovaIcon name="spark" size={17}/></i><em>{directionLabel}</em></b>
+    </div>
+  );
 }
 
 function StatusRow({label,value,tone="neutral",dot=false}:{label:string;value:any;tone?:"neutral"|"good"|"warn"|"bad";dot?:boolean}) {
