@@ -1981,7 +1981,7 @@ function LiveTerminalPanel(props:any) {
         <div className="cc-live-terminal-half cc-live-terminal-half-positions">
           <div className="cc-live-positions">
             <div className="cc-live-subhead">
-              <div><b>ออเดอร์ที่เปิดอยู่</b><small>รายละเอียดส่งตรงจาก EA ทุก Heartbeat · พื้นที่ 50%</small></div>
+              <div><b>ออเดอร์ที่เปิดอยู่</b><small>รายละเอียดส่งตรงจาก EA ทุก Heartbeat</small></div>
               <span>{positions.length} ไม้</span>
             </div>
             {positions.length ? (
@@ -2009,16 +2009,18 @@ function LiveTerminalPanel(props:any) {
         </div>
 
         <div className="cc-live-terminal-half cc-live-terminal-half-events">
-          <div className="cc-terminal-toolbar cc-live-terminal-toolbar">
-            {filters.map(filter=><button type="button" key={filter} className={"cc-terminal-filter "+(props.filter===filter?"active":"")} onClick={()=>props.onFilter?.(filter)}>{filter}</button>)}
-            <span className="cc-terminal-count">{props.entries?.length||0} lines · refresh 5s</span>
-          </div>
+          <div className="cc-live-terminal-events-shell">
+            <div className="cc-terminal-toolbar cc-live-terminal-toolbar">
+              {filters.map(filter=><button type="button" key={filter} className={"cc-terminal-filter "+(props.filter===filter?"active":"")} onClick={()=>props.onFilter?.(filter)}>{filter}</button>)}
+              <span className="cc-terminal-count">{props.entries?.length||0} lines · refresh 5s</span>
+            </div>
 
-          <div className="cc-terminal-window cc-live-terminal-window" ref={props.terminalRef}>
-            {(props.entries||[]).map((entry:any)=>(
-              <TerminalLine key={"inline-"+entry.id} time={entry.time} level={entry.level} category={entry.category} text={entry.text} detail={entry.detail}/>
-            ))}
-            {!props.loading && !(props.entries||[]).length && <div className="cc-terminal-empty">ยังไม่มี Event ในหมวดนี้</div>}
+            <div className="cc-terminal-window cc-live-terminal-window" ref={props.terminalRef}>
+              {(props.entries||[]).map((entry:any)=>(
+                <TerminalLine key={"inline-"+entry.id} time={entry.time} level={entry.level} category={entry.category} text={entry.text} detail={entry.detail}/>
+              ))}
+              {!props.loading && !(props.entries||[]).length && <div className="cc-terminal-empty">ยังไม่มี Event ในหมวดนี้</div>}
+            </div>
           </div>
         </div>
       </div>
