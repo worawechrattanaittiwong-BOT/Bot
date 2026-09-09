@@ -1522,6 +1522,24 @@ export class BotController {
       [instance.id, JSON.stringify(clean)]
     );
 
+    const savedSettings = saved?.settings || clean;
+    const runtimeMetrics =
+      instance.metrics && typeof instance.metrics === "object"
+        ? instance.metrics
+        : {};
+    const dailyTargetWasEdited =
+      body.dailyProfitTargetMoney !== undefined ||
+      body.dailyProfitContinueAfterTarget !== undefined;
+    const wasDailyProfitLocked =
+      runtimeMetrics.dailyProfitLocked === true ||
+      String(runtimeMetrics.executionStatus || "").startsWith("DAILY_PROFIT");
+    const currentDailyProfit = Number(runtimeMetrics.dailyProfit || 0);
+    const newDailyProfitTarget = Number(savedSettings.dailyProfitTargetMoney || 0);
+    const resumeAfterDailyProfitEdit =
+      dailyTargetWasEdited &&
+      wasDailyProfitLocked &&
+      (newDailyProfitTarget <= 0 || currentDailyProfit < newDailyProfitTarget);
+
     // Only the newest settings command matters. EA also receives the complete
     // latest settings object in every heartbeat.
     await this.db.query(
@@ -1533,7 +1551,37 @@ export class BotController {
       [instance.id, JSON.stringify(clean)]
     );
 
-    return { ok: true, settings: saved?.settings || clean };
+    if (resumeAfterDailyProfitEdit) {
+      // Mark a one-heartbeat bypass for the stale EA lock bit. The EA will
+      // receive the new target, delete its local/global lock, and then report
+      // dailyProfitLocked=false on the next heartbeat.
+      await this.db.query(
+        `UPDATE bot_instances
+         SET desired_state='RUNNING',
+             metrics=jsonb_set(
+               COALESCE(metrics,'{}'::jsonb),
+               '{dailyProfitUnlockRequested}',
+               'true'::jsonb,
+               true
+             )
+         WHERE id=$1`,
+        [instance.id]
+      );
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND command IN ('START','SAFE_STOP') AND status IN ('PENDING','DELIVERED')",
+        [instance.id]
+      );
+      await this.db.query(
+        "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'START')",
+        [instance.id]
+      );
+    }
+
+    return {
+      ok: true,
+      settings: savedSettings,
+      resumedFromDailyProfitLock: resumeAfterDailyProfitEdit
+    };
   }
 
   private async getInstance(userId: string, slotId?: string | null) {
