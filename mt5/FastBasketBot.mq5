@@ -4958,7 +4958,22 @@ void EnsureBurstTargets(int plannedPositions)
       }
    }
 
-   g_burstTargetMoney = MathMax(fallbackTarget, dynamicTarget);
+   // Automatic target must not be tiny compared with the user's loss budget.
+   // Otherwise many small winners can be erased by one full Basket loss.
+   // This is only the run target; Smart Profit Defense may still bank a smaller
+   // positive Cycle immediately when the graph confirms a reversal.
+   double expectancyFloor = 0.0;
+   if(g_maxBasketLoss > 0.0)
+   {
+      expectancyFloor = g_maxBasketLoss * 0.30;
+      if(equity > 0.0)
+         expectancyFloor = MathMin(expectancyFloor,equity * 0.01);
+   }
+
+   g_burstTargetMoney = MathMax(
+      fallbackTarget,
+      MathMax(dynamicTarget,expectancyFloor)
+   );
 
    // Loss protection is never synthesized. If the user sets Basket Loss to 0,
    // the effective Basket loss is OFF.
