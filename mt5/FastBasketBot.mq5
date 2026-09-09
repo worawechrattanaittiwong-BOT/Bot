@@ -2743,6 +2743,102 @@ void RegisterAntiChase(
    }
 }
 
+bool AntiChaseLocationReady(
+   int direction,
+   double momentum,
+   bool breakoutModel,
+   double breakoutLevel,
+   double breakoutBuffer,
+   string &triggerOverride
+)
+{
+   triggerOverride = "NONE";
+
+   double exhaustion = 0.0;
+   double extensionAtr = 0.0;
+   double adverseWick = 0.0;
+   string reason = "NONE";
+   bool exhausted = DirectionalExhaustion(
+      direction,
+      exhaustion,
+      extensionAtr,
+      adverseWick,
+      reason
+   );
+
+   if(breakoutModel)
+   {
+      bool retestReady = BreakoutRetestConfirmed(
+         direction,
+         breakoutLevel,
+         breakoutBuffer
+      );
+      bool cleanBreak = CleanBreakoutImpulse(
+         direction,
+         breakoutLevel,
+         breakoutBuffer
+      );
+
+      if(retestReady)
+      {
+         g_breakoutRetestReady = true;
+         g_breakoutRetestRequired = false;
+         g_breakoutReferenceLevel = breakoutLevel;
+         g_exhaustionScore = exhaustion;
+         g_extensionAtr = extensionAtr;
+         g_adverseWickRatio = adverseWick;
+         g_priceLocationState = "BREAKOUT_RETEST_READY";
+         g_antiChaseReason = "RETEST_CONFIRMED";
+         triggerOverride = "BREAKOUT_RETEST";
+         return true;
+      }
+
+      if(cleanBreak && !exhausted)
+      {
+         g_breakoutRetestReady = false;
+         g_breakoutRetestRequired = false;
+         g_breakoutReferenceLevel = breakoutLevel;
+         return true;
+      }
+
+      RegisterAntiChase(
+         direction,
+         MathMax(exhaustion, 55.0),
+         extensionAtr,
+         adverseWick,
+         exhausted ? reason : "BREAKOUT_EXTENDED_OR_WICKY",
+         breakoutLevel,
+         true
+      );
+      return false;
+   }
+
+   if(!exhausted)
+      return true;
+
+   if(PullbackRetestReady(direction, momentum))
+   {
+      g_exhaustionScore = exhaustion;
+      g_extensionAtr = extensionAtr;
+      g_adverseWickRatio = adverseWick;
+      g_priceLocationState = "PULLBACK_RETEST_READY";
+      g_antiChaseReason = reason;
+      triggerOverride = "PULLBACK_RETEST";
+      return true;
+   }
+
+   RegisterAntiChase(
+      direction,
+      exhaustion,
+      extensionAtr,
+      adverseWick,
+      reason,
+      0.0,
+      false
+   );
+   return false;
+}
+
 bool DirectSetupReady(
    int direction,
    double momentum,
@@ -2762,33 +2858,69 @@ bool DirectSetupReady(
       g_marketRegime == "HIGH_VOLATILITY" ? 0.55 : 0.75
    );
 
-   // A confirmed M5 level break is already price-action confirmation.
+   double atrPrice = MathMax(
+      _Point * 20.0,
+      AverageTrueRangePoints(PERIOD_M15, g_atrPeriod) * _Point
+   );
+   double breakoutBuffer = MathMax(_Point * 8.0, atrPrice * 0.18) * 0.18;
+   double breakoutLevel = direction > 0 ? g_majorResistance : g_majorSupport;
+   string locationTrigger = "NONE";
+
+   // Breakout no longer means "sell/buy immediately". A clean, compact break
+   // may execute directly; an extended/wicky break must retest first.
    if(modelOut == "BREAKOUT")
+   {
+      if(!AntiChaseLocationReady(
+         direction,
+         momentum,
+         true,
+         breakoutLevel,
+         breakoutBuffer,
+         locationTrigger
+      ))
+         return false;
+
+      if(locationTrigger != "NONE")
+         modelOut = locationTrigger;
       return true;
+   }
+
+   // All other setups pass through terminal-location awareness. This protects
+   // against selling the bottom / buying the top while preserving valid
+   // pullback, OB, Fib, level and continuation entries.
+   if(!AntiChaseLocationReady(
+      direction,
+      momentum,
+      false,
+      0.0,
+      0.0,
+      locationTrigger
+   ))
+      return false;
+
+   if(locationTrigger != "NONE")
+      modelOut = locationTrigger;
+
+   if(modelOut == "PULLBACK_RETEST")
+      return microSupport || lightMomentum || strongMomentum;
 
    // Pullback/reaction setups only need one lower-timeframe turn or light
-   // directional momentum. No Confidence score is allowed to veto them.
-   if(modelOut == "OB_FIB_PULLBACK" ||
-      modelOut == "ORDER_BLOCK_PULLBACK" ||
-      modelOut == "FIB_PULLBACK" ||
-      modelOut == "LEVEL_REACTION")
+   // directional momentum. Confidence remains optional and separate.
+   if(g_entryModel == "OB_FIB_PULLBACK" ||
+      g_entryModel == "ORDER_BLOCK_PULLBACK" ||
+      g_entryModel == "FIB_PULLBACK" ||
+      g_entryModel == "LEVEL_REACTION")
       return microSupport || lightMomentum;
 
-   // Continuation is valid when the higher structure is aligned and execution
-   // frames are not dead against it.
-   if(modelOut == "CONTINUATION")
+   if(g_entryModel == "CONTINUATION")
       return higherSupport && (microSupport || lightMomentum);
 
-   // During news/high volatility, a real directional impulse can trade even
-   // before a textbook pullback forms, provided market structure is supporting.
    if(g_marketRegime == "HIGH_VOLATILITY" &&
       strongMomentum &&
       (microSupport || g_trendM15 == direction))
       return true;
 
-   // CAUTION_ZONE is not a hard block. It simply needs stronger direct price
-   // action instead of a numeric confidence threshold.
-   if(modelOut == "CAUTION_ZONE")
+   if(g_entryModel == "CAUTION_ZONE")
       return strongMomentum && microSupport && higherSupport;
 
    return strongMomentum && (microSupport || higherSupport);
