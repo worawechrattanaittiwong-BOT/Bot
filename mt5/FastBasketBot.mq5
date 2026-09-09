@@ -265,6 +265,7 @@ bool g_rescueReversalConfirmed = false;
 string g_rescueReversalReason = "NONE";
 double g_rescueRequiredMoney = 0.0;
 double g_rescueRecoveredMoney = 0.0;
+double g_rescueInitialDeficit = 0.0;
 double g_rescueTargetMoney = 0.0;
 double g_rescueRealizedProfit = 0.0;
 double g_rescueCombinedProfit = 0.0;
