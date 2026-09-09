@@ -1060,6 +1060,25 @@ void OnTick()
       double cycleProfit = BasketCycleProfit();
       double effectiveBasketTarget = EffectiveBasketProfitTarget();
 
+      // Smart Profit Defense is independent from the configured target. Once a
+      // Cycle is genuinely positive, a confirmed execution reversal may close
+      // it immediately instead of letting a winner turn into a loser.
+      int profitDefenseDirection = BasketDirection();
+      string profitDefenseReason = "NONE";
+      if(profitDefenseDirection != 0 &&
+         SmartProfitReversalDetected(
+            profitDefenseDirection,
+            cycleProfit,
+            profitDefenseReason
+         ))
+      {
+         CloseAllBasket("SMART_PROFIT_REVERSAL");
+         ResetTrail();
+         g_executionStatus = "SMART_PROFIT_REVERSAL";
+         g_adaptiveBlockReason = profitDefenseReason;
+         return;
+      }
+
       // If no manual Basket/per-position target is configured, multi-position
       // trading falls back to an automatic cycle target.
       if(g_basketProfitTarget > 0.0 && g_perPositionProfit <= 0.0)
