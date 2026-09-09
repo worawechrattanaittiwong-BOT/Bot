@@ -22,7 +22,7 @@ export function ScenovaIcon({name,size=18,className=""}:{name:ScenovaIconName|st
   };
   let body:ReactNode;
   switch(name){
-    case "brand": body=<P><path d="M12 2.8 21.2 12 12 21.2 2.8 12 12 2.8Z"/><path d="m12 7 5 5-5 5-5-5 5-5Z"/><circle cx="12" cy="12" r="1.5"/></P>;break;
+    case "brand": body=<P><path d="M12 2.4 21.6 12 12 21.6 2.4 12 12 2.4Z"/><path d="m7.2 9.2 3-3h5.4l1.4 1.4-3 3h-4l-2.8 2.8 3.4 3.4h3.2l3-3"/><path d="M14.2 4.9H19v4.8M19 4.9l-6.2 6.2"/><circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none"/></P>;break;
     case "control": body=<P><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M8 12h8M12 8v8"/><circle cx="12" cy="12" r="5"/></P>;break;
     case "overview": body=<P><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></P>;break;
     case "users": body=<P><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></P>;break;

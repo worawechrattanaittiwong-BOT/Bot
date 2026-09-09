@@ -344,6 +344,11 @@ export default function DashboardPage() {
   const symbolDigits = Math.max(0, Math.min(8, Number(metrics.symbolDigits ?? 3)));
   const spreadPoints = Number(metrics.spreadPoints || 0);
   const pointSize = Number(metrics.pointSize || 0);
+  const atrPoints = Number(metrics.atrPoints || 0);
+  const atrPrice = pointSize > 0 ? atrPoints * pointSize : 0;
+  const atrValueLabel = atrPoints > 0
+    ? (atrPrice > 0 ? atrPrice.toFixed(symbolDigits) + " · " : "") + atrPoints.toFixed(0) + " pt"
+    : "—";
   const spreadPrice = Number(metrics.spreadPrice ?? (pointSize > 0 ? spreadPoints * pointSize : 0));
   const adaptiveSpreadLimitPoints = Number(metrics.adaptiveSpreadLimitPoints ?? metrics.maxSpreadPoints ?? settings.maxSpreadPoints ?? 0);
   const maxSpreadPrice = Number(metrics.adaptiveSpreadLimitPrice ?? (pointSize > 0 ? adaptiveSpreadLimitPoints * pointSize : metrics.maxSpreadPrice || 0));
@@ -554,7 +559,6 @@ export default function DashboardPage() {
   const pyramidRequiredPoints = Number(metrics.pyramidRequiredPoints || 0);
   const entryBias = String(metrics.entryBias || (metrics.marketRegime === "TREND_UP" ? "BUY" : metrics.marketRegime === "TREND_DOWN" ? "SELL" : "BOTH"));
   const entryBiasLabel = entryBias === "BUY" ? "BUY ตามเทรนด์" : entryBias === "SELL" ? "SELL ตามเทรนด์" : "BUY / SELL ตามสัญญาณ";
-  const positionCapacityLabel = currentPositions + " / " + effectiveMaxPositions + (effectiveMaxPositions !== configuredMaxPositions ? " · ตั้ง " + configuredMaxPositions : "");
   const ladderProgressPoints = Number(metrics.basketLadderProgressPoints || 0);
   const ladderRequiredPoints = Number(metrics.basketLadderRequiredPoints || 0);
   const ladderRung = Number(metrics.basketLadderRung || Math.max(1,currentPositions+1));
@@ -594,12 +598,7 @@ export default function DashboardPage() {
   const rescueStableSeconds = Number(metrics.rescueReversalStableSeconds || 0);
   const rescueHedgeLockSeconds = Number(metrics.rescueHedgeLockSeconds || 0);
 
-  const journalStats = data?.tradeJournal?.stats || {};
-  const journalRecent = Array.isArray(data?.tradeJournal?.recent) ? data.tradeJournal.recent : [];
-  const hideModeIrrelevantStatus = String(liveStatus.code || "") === "RISK_LIMIT_TOO_SMALL";
-  const visibleLiveStatus = hideModeIrrelevantStatus
-    ? { label: "รอสัญญาณเข้า", tone: "good" }
-    : liveStatus;
+  const hourlyWinRate = Array.isArray(data?.tradeJournal?.hourlyWinRate) ? data.tradeJournal.hourlyWinRate : [];
 
   const customerSetupLabel = (value:any) => {
     const code = String(value || "NONE").toUpperCase();
@@ -1397,180 +1396,99 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <section className="cc-kpi-grid cc-v3-kpis">
-                <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online ? "$"+Number(metrics.balance||0).toFixed(2) : "—"} sub="Balance" />
-                <DashboardMetric icon="equity" label="มูลค่ารวม (Equity)" value={isMt5Online ? "$"+Number(metrics.equity||0).toFixed(2) : "—"} sub="เงินทุนรวมปัจจุบัน" />
-                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online ? (Number(metrics.dailyProfit||0)>=0 ? "+$" : "-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2) : "—"} sub="Daily P/L" tone={isMt5Online ? (Number(metrics.dailyProfit||0)>=0 ? "good" : "bad") : "neutral"} />
-                <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online ? String(currentPositions) : "—"} sub={"เพดาน "+configuredMaxPositions+" ไม้"} />
+              <section className="cc-v6-telemetry" aria-label="ข้อมูลสดจาก EA">
+                <div className="cc-v6-telemetry-live"><i/>REALTIME</div>
+                <LiveTelemetryItem icon="timer" label="ATR (M15)" value={atrValueLabel} tone={atrPoints>0?"good":"neutral"}/>
+                <LiveTelemetryItem icon="spread" label="Spread" value={spreadValueLabel} tone={spreadStatus==="NORMAL"?"good":spreadStatus==="EXTREME"?"bad":"warn"}/>
+                <LiveTelemetryItem icon="spark" label="Momentum" value={Number(metrics.momentumPoints||0).toFixed(1)+" pt"}/>
+                <LiveTelemetryItem icon="clock" label="Latency" value={heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"} tone={heartbeatLatencyMs>2000?"bad":heartbeatLatencyMs>700?"warn":"good"}/>
+                <LiveTelemetryItem icon="status" label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20&&heartbeatHttpStatus>=200&&heartbeatHttpStatus<300?"good":"warn"}/>
+                <LiveTelemetryItem icon="shield" label="Execution" value={Number(metrics.executionQuality||0)>0?Number(metrics.executionQuality).toFixed(0)+"%":"—"} tone={Number(metrics.executionQuality||0)>=80?"good":"neutral"}/>
               </section>
 
-              <div className="cc-workspace cc-v3-workspace cc-v4-command-grid">
-                <section className={"panel cc-control-card cc-v3-control cc-command-hero "+(state === "RUNNING" ? "is-running" : "is-idle")}>
-                  <div className="cc-card-head cc-v3-control-head">
-                    <div className="cc-symbol-title"><span className="cc-gold-icon"><ScenovaIcon name="gold" size={28}/></span><div><span className="cc-v4-eyebrow">LIVE EXECUTION</span><h2>{metrics.symbol || settings.symbol}</h2><small>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}</small></div></div>
-                    <div className="cc-control-head-right">
-                      <button
-                        type="button"
-                        className="cc-control-settings-button"
-                        onClick={() => {
-                          setBotSettingsOpen(true);
-                        }}
-                      >
-                        <ScenovaIcon name="settings" size={18}/>
-                        <span>ตั้งค่าบอท</span>
-                      </button>
-                      <span className={"cc-state-pill "+(state==="RUNNING"?"running":state==="SAFE_STOP"?"safe":"stopped")}><span className="cc-state-dot"/><span><b>{state==="RUNNING"?"กำลังทำงาน":state==="SAFE_STOP"?"Safe Stop":"หยุดอยู่"}</b><small>{state==="RUNNING"?"บอททำงานปกติ":controlStateLabel}</small></span></span>
-                      <span className="cc-last-update">อัปเดต {heartbeatAgeSeconds.toFixed(0)} วิ <ScenovaIcon name="refresh" size={14}/></span>
+              <section className={"panel cc-v6-hero "+(state === "RUNNING" ? "is-running" : "is-idle")}>
+                <div className="cc-v6-hero-main">
+                  <div className="cc-v6-gold-stage"><ScenovaIcon name="gold" size={52}/><i/><i/></div>
+                  <div className="cc-v6-symbol-copy">
+                    <span className="cc-v4-eyebrow">SCENOVA · LIVE EXECUTION</span>
+                    <h2>{metrics.symbol || settings.symbol}</h2>
+                    <p>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}<em/>MT5 Expert Advisor</p>
+                    <div className="cc-v6-symbol-chips">
+                      <span>{settings.entryMode === "AUTO_MOMENTUM" ? "AUTO SMART" : settings.entryMode}</span>
+                      <span>{Number(settings.lot||0).toFixed(2)} Lot</span>
+                      <span>{configuredMaxPositions} ไม้</span>
+                      <HeroTrendChip label="M5" value={metrics.trendM5}/>
+                      <HeroTrendChip label="M15" value={metrics.trendM15}/>
+                      <HeroTrendChip label="M30" value={metrics.trendM30}/>
+                      <HeroTrendChip label="H1" value={metrics.trendH1}/>
                     </div>
                   </div>
+                </div>
 
-                  <div className="cc-control-fields cc-v3-control-fields">
-                    <div className="cc-control-field"><span>Symbol</span><b>{metrics.symbol || settings.symbol}</b></div>
-                    <div className="cc-control-field"><span>โหมดเข้าออเดอร์</span><select value={settings.entryMode} onChange={e=>editSetting("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">AUTO SMART</option><option value="BUY_ONLY">BUY ONLY</option><option value="SELL_ONLY">SELL ONLY</option></select></div>
-                    <div className="cc-control-field"><span>จำนวนไม้</span><select value={String(settings.maxPositions)} onChange={e=>editSetting("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
-                    <div className="cc-control-field"><span>Lot ต่อไม้</span><select value={String(settings.lot)} onChange={e=>editSetting("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
+                <div className="cc-v6-command-center">
+                  <div className={"cc-v6-run-state "+(state==="RUNNING"?"running":state==="SAFE_STOP"?"safe":"stopped")}>
+                    <span className="cc-state-dot"/>
+                    <div><b>{state==="RUNNING"?"กำลังทำงาน":state==="SAFE_STOP"?"หยุดอย่างปลอดภัย":"บอทหยุดอยู่"}</b><small>{controlStateLabel} · อัปเดต {heartbeatAgeSeconds.toFixed(0)} วินาที</small></div>
                   </div>
-
-                  <div className="cc-primary-actions cc-v3-actions cc-command-actions-v5">
-                    <button
-                      className={"cc-action start " + (botStarting ? "starting" : botRunning ? "running" : "idle")}
-                      disabled={startBlocked}
-                      title={!startConnectionReady ? "รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5" : undefined}
-                      onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}
-                      aria-live="polite"
-                    >
-                      <span className="cc-action-icon">
-                        {botStarting ? <i className="cc-start-spinner" aria-hidden="true"/> : botRunning ? <i className="cc-start-pulse" aria-hidden="true"/> : <ScenovaIcon name="play" size={19}/>}
-                      </span>
-                      <span className="cc-action-copy">
-                        <b>{botStarting ? "กำลังเริ่มบอท..." : botRunning ? "บอทกำลังทำงาน" : "เริ่มบอท"}</b>
-                        <small>{botStarting ? "ส่งคำสั่งแล้ว · รอ EA ตอบกลับ" : botRunning ? "ระบบกำลังทำงานตามเงื่อนไขที่ตั้งไว้" : "เริ่มการทำงานอัตโนมัติ"}</small>
-                      </span>
+                  <div className="cc-v6-hero-actions">
+                    <button className={"cc-v6-command start "+(botStarting?"starting":botRunning?"running":"idle")} disabled={startBlocked} title={!startConnectionReady?"รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5":undefined} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
+                      <span>{botStarting?<i className="cc-start-spinner"/>:botRunning?<i className="cc-start-pulse"/>:<ScenovaIcon name="play" size={22}/>}</span><b>{botStarting?"กำลังเริ่ม":botRunning?"ทำงานอยู่":"เริ่มบอท"}</b><small>Start Trading</small>
                     </button>
-                    <button className="cc-action safe" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="stop" size={18}/></span><span className="cc-action-copy"><b>หยุดบอท</b><small>หยุดเปิดออเดอร์ใหม่อย่างปลอดภัย</small></span></button>
-                    <button className="cc-action close" disabled={busy || currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?") && command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span className="cc-action-icon"><ScenovaIcon name="close" size={19}/></span><span className="cc-action-copy"><b>ปิดทุกไม้</b><small>ปิดออเดอร์ทั้งหมดทันที</small></span></button>
+                    <button className="cc-v6-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}><span><ScenovaIcon name="stop" size={21}/></span><b>หยุดบอท</b><small>Safe Stop</small></button>
+                    <button className="cc-v6-command close" disabled={busy||currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?")&&command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span><ScenovaIcon name="close" size={22}/></span><b>ปิดทุกไม้</b><small>Close All</small></button>
+                    <button className="cc-v6-command settings" onClick={()=>setBotSettingsOpen(true)}><span><ScenovaIcon name="settings" size={21}/></span><b>ตั้งค่า</b><small>Settings</small></button>
                   </div>
+                </div>
+              </section>
 
-                  <div className="cc-signal-grid">
-                    <div className="cc-signal-item good"><ScenovaIcon name="trend" size={20}/><span><small>สภาพตลาด</small><b>{marketRegimeDetailLabel[String(metrics.marketRegimeDetail||"")]||marketRegimeLabel[String(metrics.marketRegime||"")]||"รอข้อมูล"}</b></span></div>
-                    <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>ความมั่นใจ</small><b>{Boolean(settings.confidenceGateEnabled) ? Number(metrics.signalConfidence||0).toFixed(0)+"% / เกณฑ์ "+Number(metrics.effectiveConfidenceThreshold||55).toFixed(0)+"%" : Number(metrics.signalConfidence||0).toFixed(0)+"% · ใช้ประกอบการตัดสินใจ"}</b></span></div>
-                    <div className={"cc-signal-item "+(String(metrics.entryQuality||"C")==="A"?"good":String(metrics.entryQuality||"C")==="B"?"warn":"")}><ScenovaIcon name="status" size={20}/><span><small>คุณภาพจุดเข้า</small><b>{entryQualityCustomerText+" · "+Number(metrics.entryQualityScore||0).toFixed(0)+"/100"}</b></span></div>
-                    <div className="cc-signal-item"><ScenovaIcon name="spread" size={20}/><span><small>สเปรด</small><b>{spreadValueLabel}</b></span></div>
-                    <div className="cc-signal-item warn"><ScenovaIcon name="layers" size={20}/><span><small>ออเดอร์</small><b>{positionCapacityLabel}</b></span></div>
-                    <div className={"cc-signal-item "+(visibleLiveStatus.tone==="bad"?"bad":visibleLiveStatus.tone==="warn"?"warn":"good")}><ScenovaIcon name="status" size={20}/><span><small>การเทรด</small><b>{visibleLiveStatus.label||"—"}</b></span></div>
+              <section className="cc-kpi-grid cc-v3-kpis cc-v6-kpis">
+                <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online?"$"+Number(metrics.balance||0).toFixed(2):"—"} sub="Balance" />
+                <DashboardMetric icon="equity" label="มูลค่ารวม" value={isMt5Online?"$"+Number(metrics.equity||0).toFixed(2):"—"} sub="Equity" />
+                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2):"—"} sub="Daily P/L" tone={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"good":"bad"):"neutral"} />
+                <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
+                <DashboardMetric icon="clock" label="ความหน่วง MT5" value={isMt5Online&&heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"} sub="Heartbeat Latency" tone={heartbeatLatencyMs>2000?"bad":heartbeatLatencyMs>700?"warn":"good"} />
+                <DashboardMetric icon="shield" label="สถานะระบบ" value={isMt5Online&&heartbeatAgeSeconds<=20?"พร้อมใช้งาน":isAgentOnline?"รอ EA":"ออฟไลน์"} sub={"HTTP "+(heartbeatHttpStatus||"—")+" · "+heartbeatAgeSeconds.toFixed(0)+"s"} tone={isMt5Online&&heartbeatAgeSeconds<=20?"good":"warn"} />
+              </section>
+
+              <div className="cc-v6-analytics-grid">
+                <HourlyWinRateChart points={hourlyWinRate}/>
+
+                <div className="cc-v6-insight-stack">
+                  <section className="panel cc-v6-market-insight">
+                    <div className="cc-v6-panel-head"><div><span><ScenovaIcon name="brain" size={18}/></span><b>Market Insight</b></div><em>AI ANALYSIS</em></div>
+                    <div className={"cc-v6-market-bias "+(entryBias==="SELL"?"down":entryBias==="BUY"?"up":"flat")}>
+                      <ScenovaIcon name={entryBias==="SELL"?"arrow-down":"arrow-up"} size={31}/>
+                      <div><small>แนวโน้มปัจจุบัน</small><b>{entryBiasLabel}</b><span>{marketRegimeDetailLabel[String(metrics.marketRegimeDetail||"")]||marketRegimeLabel[String(metrics.marketRegime||"")]||"กำลังวิเคราะห์"}</span></div>
+                    </div>
+                    <div className="cc-v6-insight-rows">
+                      <InsightRow label="คุณภาพจุดเข้า" value={entryQualityCustomerText+" · "+Number(metrics.entryQualityScore||0).toFixed(0)+"/100"}/>
+                      <InsightRow label="Confidence" value={Number(metrics.signalConfidence||0).toFixed(0)+"%"} tone={Number(metrics.signalConfidence||0)>=70?"good":"neutral"}/>
+                      <InsightRow label="Order Block" value={orderBlockCustomerText+" · "+orderBlockQuality.toFixed(0)+"%"}/>
+                      <InsightRow label="Fibonacci" value={fibCustomerText+" · "+fibScore.toFixed(0)+"%"}/>
+                      <InsightRow label="แนวรับ / แนวต้าน" value={(Number(metrics.nearestSupport||0)>0?Number(metrics.nearestSupport).toFixed(symbolDigits):"—")+" / "+(Number(metrics.nearestResistance||0)>0?Number(metrics.nearestResistance).toFixed(symbolDigits):"—")}/>
+                      <InsightRow label="จังหวะเข้า" value={setupCustomerText}/>
+                    </div>
+                  </section>
+
+                  <section className="panel cc-v6-account-card">
+                    <div className="cc-v6-panel-head"><div><span><ScenovaIcon name="account" size={18}/></span><b>สถานะบัญชี</b></div><em className={isMt5Online?"good":"warn"}>{isMt5Online?"LIVE":"WAITING"}</em></div>
+                    <div className="cc-v6-account-grid">
+                      <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20?"good":"warn"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
+                    </div>
+                    <button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}><ScenovaIcon name="settings" size={16}/>จัดการบัญชี</button>
+                  </section>
+                </div>
+
+                <section className="panel cc-v6-ai-brand">
+                  <div className="cc-v6-ai-grid" aria-hidden="true"/>
+                  <img src="/assets/scenova-ai-operator-v1.png" alt="SCENOVA AI trading operator"/>
+                  <div className="cc-v6-ai-brand-copy">
+                    <div className="cc-v6-ai-logo"><span><ScenovaIcon name="brand" size={30}/></span><div><b>SCENOVA</b><small>INTELLIGENT EA ECOSYSTEM</small></div></div>
+                    <p>DISCIPLINE<br/>AUTOMATES OPPORTUNITY</p>
+                    <div><span><ScenovaIcon name="spark" size={14}/>ANALYZE</span><span><ScenovaIcon name="timer" size={14}/>EXECUTE</span><span><ScenovaIcon name="shield" size={14}/>PROTECT</span></div>
                   </div>
-
-                  <div className="cc-direction-strip cc-direction-strip-v5">
-                    <div className="cc-direction-bias"><span>ทิศทางหลัก</span><b className={entryBias==="BUY"?"text-good":entryBias==="SELL"?"text-bad":""}>{entryBiasLabel}</b></div>
-                    <TimeframeTrend label="M5" value={metrics.trendM5}/>
-                    <TimeframeTrend label="M15" value={metrics.trendM15}/>
-                    <TimeframeTrend label="M30" value={metrics.trendM30}/>
-                    <TimeframeTrend label="H1" value={metrics.trendH1}/>
-                    <div className="cc-direction-setup"><span>จุดเข้า</span><b>{setupCustomerText}</b></div>
-                    <div className="cc-direction-ladder"><span>เพิ่มไม้</span><b>{currentPositions>0 ? "ไม้ "+currentPositions+"/"+configuredMaxPositions : "รอไม้แรก"}</b></div>
-                  </div>
-
-                  <div className="cc-realtime-strip" aria-label="ข้อมูลเรียลไทม์">
-                    <div><span>ตำแหน่งราคา</span><b>{priceLocationCustomerText}</b></div>
-                    <div><span>Order Block</span><b>{orderBlockCustomerText}</b></div>
-                    <div><span>Fibonacci</span><b>{fibCustomerText}</b></div>
-                    <div><span>TP / SL ปัจจุบัน</span><b>{Number(metrics.dynamicTakeProfitPrice||0)>0 ? "TP "+Number(metrics.dynamicTakeProfitPrice).toFixed(symbolDigits)+" · SL "+Number(metrics.dynamicStopPrice||0).toFixed(symbolDigits) : "รอออเดอร์เพื่อคำนวณ"}</b></div>
-                    <div><span>การฟื้นตัว</span><b>{recoveryCustomerText}</b></div>
-                    <div><span>แรงกลับตัว</span><b>{reversalCustomerText}</b></div>
-                  </div>
-
-                </section>
-
-                <section className="panel cc-status-card cc-v3-account cc-account-console">
-                  <div className="cc-card-head"><div className="cc-card-title"><span className="cc-card-icon alt"><ScenovaIcon name="account" size={20}/></span><div><h2>สถานะบัญชี</h2></div></div><span className={"cc-mini-health "+(isMt5Online?"good":"warn")}><i/>{isMt5Online?"ใช้งานปกติ":isAgentOnline?"Agent เชื่อมแล้ว · รอ EA":"รอเชื่อมต่อ"}</span></div>
-                  <div className="cc-status-list">
-                    <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+" วินาที · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20?"good":"warn"} dot/><StatusRow label="สถานะบอท" value={controlStateLabel} tone={state==="RUNNING"?"good":state==="SAFE_STOP"?"warn":"bad"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
-                  </div>
-                  <div className="cc-status-actions"><button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}><ScenovaIcon name="settings" size={16}/>จัดการบัญชี</button><button className="btn full cc-status-detail" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="clock" size={16}/>ประวัติการทำงาน</button></div>
                 </section>
               </div>
-
-              <section className="panel cc-intelligence-v3 cc-customer-intelligence cc-v4-intelligence">
-                <div className="cc-card-head">
-                  <div className="cc-card-title">
-                    <span className="cc-card-icon"><ScenovaIcon name="brain" size={20}/></span>
-                    <div>
-                      <span className="cc-v4-eyebrow">MARKET INTELLIGENCE</span>
-                      <h2>ภาพรวมการวิเคราะห์</h2>
-                      <small>สรุปสิ่งที่บอทเห็นในตลาดและสิ่งที่กำลังรอ ก่อนตัดสินใจเปิดหรือดูแลออเดอร์</small>
-                    </div>
-                  </div>
-                  <span className="cc-mini-health good"><i/>อัปเดตตามตลาด</span>
-                </div>
-
-                <div className="cc-v4-section-label"><span>01</span><div><b>สัญญาณตลาดที่สำคัญ</b><small>สรุปให้อ่านง่ายจากการวิเคราะห์หลาย Timeframe</small></div></div>
-                <div className="cc-intel-summary-grid">
-                  <div className="cc-intel-summary-card">
-                    <span className="cc-summary-icon"><ScenovaIcon name="target" size={19}/></span>
-                    <div><small>จังหวะราคา</small><b>{priceLocationCustomerText}</b><p>{setupCustomerText}</p></div>
-                  </div>
-                  <div className="cc-intel-summary-card">
-                    <span className="cc-summary-icon"><ScenovaIcon name="trend" size={19}/></span>
-                    <div><small>แนวโน้ม</small><b>{emaStackCustomerText}</b><p>{emaReclaimCustomerText}</p></div>
-                  </div>
-                  <div className="cc-intel-summary-card">
-                    <span className="cc-summary-icon"><ScenovaIcon name="layers" size={19}/></span>
-                    <div><small>โซนสนับสนุนจุดเข้า</small><b>{orderBlockCustomerText}</b><p>{fibCustomerText}</p></div>
-                  </div>
-                  <div className="cc-intel-summary-card">
-                    <span className="cc-summary-icon"><ScenovaIcon name="shield" size={19}/></span>
-                    <div><small>การป้องกันออเดอร์</small><b>{protectionCustomerText}</b><p>บอทปรับการป้องกันตามราคาจริงและค่าที่ลูกค้าตั้งไว้</p></div>
-                  </div>
-                  <div className="cc-intel-summary-card">
-                    <span className="cc-summary-icon"><ScenovaIcon name="layers" size={19}/></span>
-                    <div><small>การเพิ่มไม้</small><b>{ladderCustomerText}</b><p>จะเพิ่มไม้เมื่อราคาผ่านจังหวะที่กำหนด ไม่ยิงเพิ่มทันทีโดยไม่มีเงื่อนไข</p></div>
-                  </div>
-                  <div className={"cc-intel-summary-card "+(rescueActive?"warn":"")}>
-                    <span className="cc-summary-icon"><ScenovaIcon name="shield" size={19}/></span>
-                    <div><small>การดูแลความเสี่ยง</small><b>{rescueStateCustomerText}</b><p>{riskCustomerText}</p></div>
-                  </div>
-                </div>
-
-                <div className="cc-performance-board">
-                  <div className="cc-v4-section-label"><span>02</span><div><b>ประสิทธิภาพการเทรด</b><small>ผลลัพธ์จากรายการที่ปิดแล้วและกิจกรรมล่าสุด</small></div></div>
-                  <div className="cc-performance-head">
-                    <div><b>ผลการเทรดโดยรวม</b><small>สรุปจากรายการที่ปิดแล้ว เพื่อให้เห็นคุณภาพการทำงานแบบอ่านง่าย</small></div>
-                  </div>
-
-                  <div className="cc-performance-kpis">
-                    <div className="cc-performance-kpi"><span>เทรดที่ปิดแล้ว</span><b>{Number(journalStats.closedTrades||0)}</b><small>รายการ</small></div>
-                    <div className={"cc-performance-kpi "+(Number(journalStats.winRate||0)>=50?"good":"warn")}><span>อัตราชนะ</span><b>{Number(journalStats.winRate||0).toFixed(1)+"%"}</b><small>จากรายการที่มีผลลัพธ์</small></div>
-                    <div className={"cc-performance-kpi "+(Number(journalStats.netProfit||0)>=0?"good":"bad")}><span>กำไรสุทธิ</span><b>{(Number(journalStats.netProfit||0)>=0?"+$":"-$")+Math.abs(Number(journalStats.netProfit||0)).toFixed(2)}</b><small>รวมรายการที่บันทึก</small></div>
-                    <div className="cc-performance-kpi"><span>Profit Factor</span><b>{Number(journalStats.profitFactor||0).toFixed(2)}</b><small>กำไรรวมเทียบขาดทุนรวม</small></div>
-                    <div className="cc-performance-kpi good"><span>กำไรเฉลี่ย</span><b>{"+$"+Number(journalStats.averageWin||0).toFixed(2)}</b><small>ต่อรายการที่ชนะ</small></div>
-                    <div className="cc-performance-kpi bad"><span>ขาดทุนเฉลี่ย</span><b>{"-$"+Math.abs(Number(journalStats.averageLoss||0)).toFixed(2)}</b><small>ต่อรายการที่แพ้</small></div>
-                  </div>
-
-                  <div className="cc-recent-activity">
-                    <div className="cc-recent-activity-head"><b>รายการล่าสุด</b><small>แสดงสูงสุด 5 รายการล่าสุด</small></div>
-                    <div className="cc-recent-activity-list">
-                      {journalRecent.length ? journalRecent.slice(0,5).map((row:any,index:number)=>{
-                        const isExit = row.event_type === "EXIT";
-                        const pnl = Number(row.net_profit || 0);
-                        const activitySetup = customerSetupLabel(row.entry_trigger || row.entry_model || row.market_regime_detail);
-                        const timeLabel = row.created_at ? new Date(row.created_at).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}) : "—";
-                        return (
-                          <div className="cc-recent-activity-row" key={String(row.created_at||index)+"-"+index}>
-                            <span className={"cc-activity-badge "+(isExit?(pnl>=0?"good":"bad"):"entry")}>{isExit?"ปิด":"เข้า"}</span>
-                            <div className="cc-activity-main">
-                              <b>{String(row.direction||"—")+" · "+activitySetup}</b>
-                              <small>{timeLabel+" · คุณภาพ "+String(row.entry_quality||"—")}</small>
-                            </div>
-                            <strong className={isExit?(pnl>=0?"text-good":"text-bad"):""}>
-                              {isExit ? (pnl>=0?"+$":"-$")+Math.abs(pnl).toFixed(2) : Number(row.price||0).toFixed(symbolDigits)}
-                            </strong>
-                          </div>
-                        );
-                      }) : <div className="cc-recent-activity-empty">ยังไม่มีรายการเทรดที่บันทึกไว้</div>}
-                    </div>
-                  </div>
-                </div>
-              </section>
 
               <LiveTerminalPanel
                 symbol={String(metrics.symbol||settings.symbol||"")}
@@ -2389,15 +2307,83 @@ function DashboardMetric({icon,label,value,sub,tone="neutral"}:{icon:string;labe
   return <div className={"cc-kpi cc-tone-"+tone}><span className="cc-kpi-icon"><ScenovaIcon name={icon} size={22}/></span><div><span className="cc-kpi-label">{label}</span><b>{value}</b>{sub?<small>{sub}</small>:null}</div></div>;
 }
 
-function TimeframeTrend({label,value}:{label:string;value:any}) {
-  const numericValue = Number(value);
-  const direction = numericValue > 0 ? "up" : numericValue < 0 ? "down" : "flat";
-  const directionLabel = direction === "up" ? "ขึ้น" : direction === "down" ? "ลง" : "กลาง";
+function LiveTelemetryItem({icon,label,value,tone="neutral"}:{icon:string;label:string;value:string;tone?:"neutral"|"good"|"warn"|"bad"}) {
+  return <div className={"cc-v6-telemetry-item tone-"+tone}><ScenovaIcon name={icon} size={15}/><span>{label}</span><b>{value}</b></div>;
+}
+
+function HeroTrendChip({label,value}:{label:string;value:any}) {
+  const direction = Number(value)>0 ? "up" : Number(value)<0 ? "down" : "flat";
+  return <span className={"cc-v6-hero-trend "+direction}><ScenovaIcon name="spark" size={12}/>{label} {direction==="up"?"ขึ้น":direction==="down"?"ลง":"กลาง"}</span>;
+}
+
+function InsightRow({label,value,tone="neutral"}:{label:string;value:string;tone?:"neutral"|"good"|"warn"|"bad"}) {
+  return <div className={"cc-v6-insight-row tone-"+tone}><span>{label}</span><b>{value}</b></div>;
+}
+
+function HourlyWinRateChart({points}:{points:any[]}) {
+  const rows = new Map<number,any>();
+  for (const point of points || []) rows.set(Number(point.hour||0),point);
+  const series = Array.from({length:24},(_,hour)=>{
+    const row = rows.get(hour);
+    return {
+      hour,
+      trades:Number(row?.trades||0),
+      wins:Number(row?.wins||0),
+      losses:Number(row?.losses||0),
+      winRate:Math.max(0,Math.min(100,Number(row?.winRate||0))),
+      netProfit:Number(row?.netProfit||0),
+      grossProfit:Number(row?.grossProfit||0),
+      grossLoss:Number(row?.grossLoss||0)
+    };
+  });
+  const active = series.filter(point=>point.trades>0);
+  const totalTrades = active.reduce((sum,point)=>sum+point.trades,0);
+  const totalWins = active.reduce((sum,point)=>sum+point.wins,0);
+  const totalNet = active.reduce((sum,point)=>sum+point.netProfit,0);
+  const grossProfit = active.reduce((sum,point)=>sum+point.grossProfit,0);
+  const grossLoss = active.reduce((sum,point)=>sum+point.grossLoss,0);
+  const overallWinRate = totalTrades>0 ? totalWins/totalTrades*100 : 0;
+  const profitFactor = grossLoss>0 ? grossProfit/grossLoss : grossProfit>0 ? grossProfit : 0;
+  const best = active.reduce<any>((winner,point)=>!winner||point.winRate>winner.winRate||(point.winRate===winner.winRate&&point.trades>winner.trades)?point:winner,null);
+  const width = 940;
+  const height = 286;
+  const pad = {left:48,right:18,top:20,bottom:38};
+  const xFor = (hour:number)=>pad.left+(hour/23)*(width-pad.left-pad.right);
+  const yFor = (value:number)=>pad.top+((100-value)/100)*(height-pad.top-pad.bottom);
+  const plotted = active.map(point=>({...point,x:xFor(point.hour),y:yFor(point.winRate)}));
+  const linePath = plotted.map((point,index)=>(index===0?"M":"L")+point.x.toFixed(1)+" "+point.y.toFixed(1)).join(" ");
+  const areaPath = plotted.length>1 ? linePath+" L "+plotted[plotted.length-1].x.toFixed(1)+" "+(height-pad.bottom)+" L "+plotted[0].x.toFixed(1)+" "+(height-pad.bottom)+" Z" : "";
+  const hourLabel = (hour:number)=>String(hour).padStart(2,"0")+":00";
   return (
-    <div className={"cc-timeframe-trend "+direction} aria-label={label+" แนวโน้ม"+directionLabel}>
-      <span>{label}</span>
-      <b><i className="cc-trend-bolt"><ScenovaIcon name="spark" size={17}/></i><em>{directionLabel}</em></b>
-    </div>
+    <section className="panel cc-v6-hourly-chart">
+      <div className="cc-v6-panel-head">
+        <div><span><ScenovaIcon name="pnl" size={18}/></span><div><b>อัตราชนะรายชั่วโมง</b><small>สถิติ Basket ที่ปิดแล้ว 30 วันล่าสุด · เวลาไทย</small></div></div>
+        <em>24 HOURS</em>
+      </div>
+      <div className="cc-v6-chart-kpis">
+        <div><b>{overallWinRate.toFixed(1)}%</b><span>Win Rate</span></div>
+        <div><b>{best?hourLabel(best.hour):"—"}</b><span>Best Hour</span></div>
+        <div><b>{totalTrades}</b><span>Total Baskets</span></div>
+        <div><b>{profitFactor.toFixed(2)}</b><span>Profit Factor</span></div>
+        <div className={totalNet>=0?"good":"bad"}><b>{(totalNet>=0?"+$":"-$")+Math.abs(totalNet).toFixed(2)}</b><span>Net P/L</span></div>
+      </div>
+      <div className="cc-v6-chart-canvas">
+        <svg viewBox={"0 0 "+width+" "+height} preserveAspectRatio="none" role="img" aria-label="กราฟอัตราชนะรายชั่วโมง">
+          <defs>
+            <linearGradient id="hourlyWinLine" x1="0" x2="1"><stop offset="0" stopColor="#48e8ff"/><stop offset=".55" stopColor="#57a9ff"/><stop offset="1" stopColor="#a978ff"/></linearGradient>
+            <linearGradient id="hourlyWinArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4fcfff" stopOpacity=".25"/><stop offset="1" stopColor="#7658ff" stopOpacity="0"/></linearGradient>
+            <filter id="hourlyGlow"><feGaussianBlur stdDeviation="3.2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          {[0,25,50,75,100].map(value=><g key={value}><line x1={pad.left} x2={width-pad.right} y1={yFor(value)} y2={yFor(value)} className="cc-v6-chart-gridline"/><text x={pad.left-10} y={yFor(value)+4} textAnchor="end" className="cc-v6-chart-axis">{value}%</text></g>)}
+          {[0,4,8,12,16,20,23].map(hour=><g key={hour}><line x1={xFor(hour)} x2={xFor(hour)} y1={pad.top} y2={height-pad.bottom} className="cc-v6-chart-gridline vertical"/><text x={xFor(hour)} y={height-12} textAnchor={hour===0?"start":hour===23?"end":"middle"} className="cc-v6-chart-axis">{hourLabel(hour)}</text></g>)}
+          {areaPath&&<path d={areaPath} className="cc-v6-chart-area"/>}
+          {linePath&&<path d={linePath} className="cc-v6-chart-line" filter="url(#hourlyGlow)"/>}
+          {plotted.map(point=><g key={point.hour} className={best?.hour===point.hour?"cc-v6-chart-point best":"cc-v6-chart-point"}><circle cx={point.x} cy={point.y} r={best?.hour===point.hour?6:4}/><title>{hourLabel(point.hour)+" · ชนะ "+point.winRate.toFixed(1)+"% · "+point.trades+" Basket"}</title></g>)}
+          {best&&<g className="cc-v6-best-hour"><line x1={xFor(best.hour)} x2={xFor(best.hour)} y1={yFor(best.winRate)+10} y2={height-pad.bottom}/><rect x={Math.min(width-155,Math.max(pad.left,xFor(best.hour)-58))} y={Math.max(3,yFor(best.winRate)-39)} width="116" height="27" rx="7"/><text x={Math.min(width-97,Math.max(pad.left+58,xFor(best.hour)))} y={Math.max(21,yFor(best.winRate)-21)} textAnchor="middle">ดีที่สุด {hourLabel(best.hour)} · {best.winRate.toFixed(0)}%</text></g>}
+        </svg>
+        {!active.length&&<div className="cc-v6-chart-empty"><ScenovaIcon name="report" size={24}/><b>ยังไม่มี Basket ที่ปิดใน 30 วันล่าสุด</b><span>กราฟจะเริ่มแสดงทันทีเมื่อ EA ส่งผลการเทรดจริง</span></div>}
+      </div>
+    </section>
   );
 }
 

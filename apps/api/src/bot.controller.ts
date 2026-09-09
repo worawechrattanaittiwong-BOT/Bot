@@ -580,7 +580,17 @@ export class BotController {
         averageLoss: 0,
         profitFactor: 0
       },
-      recent: [] as any[]
+      recent: [] as any[],
+      hourlyWinRate: [] as Array<{
+        hour: number;
+        trades: number;
+        wins: number;
+        losses: number;
+        winRate: number;
+        netProfit: number;
+        grossProfit: number;
+        grossLoss: number;
+      }>
     };
 
     if (instance) {
@@ -627,6 +637,38 @@ export class BotController {
         [instance.id]
       );
       tradeJournal.recent = recentJournal.rows;
+
+      const hourlyWinRate = await this.db.query(
+        `SELECT
+           EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Bangkok')::int AS hour,
+           COUNT(*)::int AS trades,
+           COUNT(*) FILTER (WHERE net_profit>0)::int AS wins,
+           COUNT(*) FILTER (WHERE net_profit<0)::int AS losses,
+           COALESCE(SUM(net_profit),0)::float8 AS net_profit,
+           COALESCE(SUM(net_profit) FILTER (WHERE net_profit>0),0)::float8 AS gross_profit,
+           ABS(COALESCE(SUM(net_profit) FILTER (WHERE net_profit<0),0))::float8 AS gross_loss
+         FROM trade_journal
+         WHERE bot_instance_id=$1
+           AND event_type='BASKET'
+           AND created_at>=now()-interval '30 days'
+         GROUP BY 1
+         ORDER BY 1`,
+        [instance.id]
+      );
+      tradeJournal.hourlyWinRate = hourlyWinRate.rows.map((row:any) => {
+        const trades = Number(row.trades || 0);
+        const wins = Number(row.wins || 0);
+        return {
+          hour: Number(row.hour || 0),
+          trades,
+          wins,
+          losses: Number(row.losses || 0),
+          winRate: trades > 0 ? wins / trades * 100 : 0,
+          netProfit: Number(row.net_profit || 0),
+          grossProfit: Number(row.gross_profit || 0),
+          grossLoss: Number(row.gross_loss || 0)
+        };
+      });
     }
 
     const latestTrialRequest = await this.db.one(
