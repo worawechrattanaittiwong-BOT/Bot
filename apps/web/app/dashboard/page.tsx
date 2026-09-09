@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createChart, LineStyle } from "lightweight-charts";
 import { API_URL, api, getToken } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
@@ -1500,6 +1501,8 @@ export default function DashboardPage() {
                 symbolDigits={symbolDigits}
                 dynamicStopPrice={Number(metrics.dynamicStopPrice||0)}
                 dynamicTakeProfitPrice={Number(metrics.dynamicTakeProfitPrice||0)}
+                chartBars={metrics.chartBars||{}}
+                journalRecent={journalRecent}
               />
 
               <section className="panel cc-intelligence-v3 cc-customer-intelligence">
@@ -2286,86 +2289,260 @@ function BacktestEquityChart({points}:{points:any[]}) {
 }
 
 function TradingViewBotMonitor(props:any) {
-  const [interval,setInterval] = useState("5");
+  const [timeframe,setTimeframe] = useState("M5");
+  const [fullscreen,setFullscreen] = useState(false);
+  const monitorRef = useRef<HTMLElement|null>(null);
   const chartHostRef = useRef<HTMLDivElement|null>(null);
+  const chartRef = useRef<any>(null);
+  const candleSeriesRef = useRef<any>(null);
+  const priceLinesRef = useRef<any[]>([]);
   const positions = Array.isArray(props.openPositions) ? props.openPositions : [];
+  const journal = Array.isArray(props.journalRecent) ? props.journalRecent : [];
   const symbol = String(props.symbol || "XAUUSD");
-  const normalized = symbol.toUpperCase().replace(/[^A-Z0-9]/g,"");
-  const tvSymbol =
-    normalized.startsWith("XAUUSD") ? "OANDA:XAUUSD" :
-    normalized.startsWith("XAGUSD") ? "OANDA:XAGUSD" :
-    normalized.startsWith("BTCUSD") ? "BITSTAMP:BTCUSD" :
-    normalized.startsWith("ETHUSD") ? "BITSTAMP:ETHUSD" :
-    normalized.includes("EURUSD") ? "OANDA:EURUSD" :
-    normalized.includes("GBPUSD") ? "OANDA:GBPUSD" :
-    normalized.includes("USDJPY") ? "OANDA:USDJPY" :
-    normalized.includes("AUDUSD") ? "OANDA:AUDUSD" :
-    "OANDA:XAUUSD";
+  const bars = Array.isArray(props.chartBars?.[timeframe]) ? props.chartBars[timeframe] : [];
 
   useEffect(()=>{
     const host = chartHostRef.current;
     if(!host) return;
+
     host.innerHTML = "";
-    const widget = document.createElement("div");
-    widget.className = "tradingview-widget-container__widget";
-    widget.style.height = "100%";
-    widget.style.width = "100%";
-    host.appendChild(widget);
-
-    const script = document.createElement("script");
-    script.type = "text/javascript";
-    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-    script.async = true;
-    script.innerHTML = JSON.stringify({
-      autosize:true,
-      symbol:tvSymbol,
-      interval,
-      timezone:"Asia/Bangkok",
-      theme:"dark",
-      style:"1",
-      locale:"en",
-      backgroundColor:"rgba(6, 10, 17, 1)",
-      gridColor:"rgba(35, 43, 66, 0.45)",
-      hide_top_toolbar:true,
-      hide_legend:true,
-      hide_side_toolbar:true,
-      allow_symbol_change:false,
-      save_image:false,
-      calendar:false,
-      support_host:"https://www.tradingview.com"
+    const chart = createChart(host,{
+      width:Math.max(320,host.clientWidth),
+      height:Math.max(360,host.clientHeight),
+      layout:{
+        background:{color:"#060a11"},
+        textColor:"#8591aa",
+        fontSize:11
+      },
+      grid:{
+        vertLines:{color:"rgba(30,40,62,.62)"},
+        horzLines:{color:"rgba(30,40,62,.62)"}
+      },
+      crosshair:{
+        vertLine:{color:"#6f5cc9",width:1,style:LineStyle.Dashed,labelBackgroundColor:"#493a83"},
+        horzLine:{color:"#6f5cc9",width:1,style:LineStyle.Dashed,labelBackgroundColor:"#493a83"}
+      },
+      rightPriceScale:{
+        borderColor:"#26314b",
+        scaleMargins:{top:.08,bottom:.14}
+      },
+      timeScale:{
+        borderColor:"#26314b",
+        timeVisible:true,
+        secondsVisible:false,
+        rightOffset:6,
+        barSpacing:8,
+        minBarSpacing:3
+      },
+      localization:{locale:"th-TH"}
     });
-    host.appendChild(script);
 
-    return ()=>{ host.innerHTML = ""; };
-  },[tvSymbol,interval]);
+    const series = chart.addCandlestickSeries({
+      upColor:"#20c997",
+      downColor:"#f35d6e",
+      borderUpColor:"#20c997",
+      borderDownColor:"#f35d6e",
+      wickUpColor:"#35d7aa",
+      wickDownColor:"#ff7180",
+      priceLineVisible:true,
+      lastValueVisible:true
+    });
+
+    chartRef.current = chart;
+    candleSeriesRef.current = series;
+
+    const resize = new ResizeObserver(()=>{
+      if(!chartHostRef.current || !chartRef.current) return;
+      chartRef.current.applyOptions({
+        width:Math.max(320,chartHostRef.current.clientWidth),
+        height:Math.max(360,chartHostRef.current.clientHeight)
+      });
+    });
+    resize.observe(host);
+
+    return ()=>{
+      resize.disconnect();
+      priceLinesRef.current=[];
+      candleSeriesRef.current=null;
+      chartRef.current=null;
+      chart.remove();
+      host.innerHTML="";
+    };
+  },[timeframe]);
+
+  useEffect(()=>{
+    const series = candleSeriesRef.current;
+    const chart = chartRef.current;
+    if(!series || !chart) return;
+
+    const candleData = bars
+      .map((bar:any)=>({
+        time:Number(bar.time||0),
+        open:Number(bar.open||0),
+        high:Number(bar.high||0),
+        low:Number(bar.low||0),
+        close:Number(bar.close||0)
+      }))
+      .filter((bar:any)=>bar.time>0 && bar.open>0 && bar.high>0 && bar.low>0 && bar.close>0)
+      .sort((a:any,b:any)=>a.time-b.time);
+
+    series.setData(candleData);
+
+    const availableTimes = candleData.map((bar:any)=>Number(bar.time));
+    const nearestBarTime = (epoch:any)=>{
+      const target = Number(epoch||0);
+      if(!target || !availableTimes.length) return availableTimes[availableTimes.length-1]||0;
+      let selected = availableTimes[0];
+      for(const value of availableTimes){
+        if(value<=target) selected=value;
+        else break;
+      }
+      return selected;
+    };
+
+    const markers:any[] = [];
+
+    positions.forEach((position:any,index:number)=>{
+      const time = nearestBarTime(Number(position.openedAt||0));
+      if(!time) return;
+      const side = String(position.side||"BUY").toUpperCase();
+      markers.push({
+        time,
+        position:side==="BUY"?"belowBar":"aboveBar",
+        color:side==="BUY"?"#44e3a5":"#ff6f7d",
+        shape:side==="BUY"?"arrowUp":"arrowDown",
+        text:side+" "+Number(position.volume||0).toFixed(2)+" · "+Number(position.openPrice||0).toFixed(props.symbolDigits)
+      });
+    });
+
+    journal.slice(0,20).forEach((row:any)=>{
+      const eventType = String(row.event_type||"").toUpperCase();
+      if(eventType!=="ENTRY" && eventType!=="EXIT") return;
+      const epoch = row.created_at ? Math.floor(new Date(row.created_at).getTime()/1000) : 0;
+      const time = nearestBarTime(epoch);
+      if(!time) return;
+      const side = String(row.direction||"").toUpperCase();
+      const pnl = Number(row.net_profit||0);
+      markers.push({
+        time,
+        position:eventType==="ENTRY"?(side==="SELL"?"aboveBar":"belowBar"):(pnl>=0?"belowBar":"aboveBar"),
+        color:eventType==="ENTRY"?(side==="SELL"?"#ff6f7d":"#44e3a5"):(pnl>=0?"#62e6aa":"#ff8a98"),
+        shape:eventType==="ENTRY"?(side==="SELL"?"arrowDown":"arrowUp"):"circle",
+        text:eventType==="ENTRY"
+          ? side+" · "+Number(row.price||0).toFixed(props.symbolDigits)
+          : "CLOSE "+(pnl>=0?"+$":"-$")+Math.abs(pnl).toFixed(2)
+      });
+    });
+
+    markers.sort((a:any,b:any)=>Number(a.time)-Number(b.time));
+    series.setMarkers(markers);
+
+    priceLinesRef.current.forEach((line:any)=>{
+      try{series.removePriceLine(line);}catch{}
+    });
+    priceLinesRef.current=[];
+
+    positions.forEach((position:any,index:number)=>{
+      const side=String(position.side||"BUY").toUpperCase();
+      const entry=Number(position.openPrice||0);
+      const sl=Number(position.sl||0);
+      if(entry>0){
+        priceLinesRef.current.push(series.createPriceLine({
+          price:entry,
+          color:side==="BUY"?"#39dca1":"#ff6978",
+          lineWidth:1,
+          lineStyle:LineStyle.Dashed,
+          axisLabelVisible:true,
+          title:side+" #"+(index+1)+" "+Number(position.volume||0).toFixed(2)
+        }));
+      }
+      if(sl>0){
+        priceLinesRef.current.push(series.createPriceLine({
+          price:sl,
+          color:"#f05d6d",
+          lineWidth:1,
+          lineStyle:LineStyle.Dashed,
+          axisLabelVisible:true,
+          title:"SL"
+        }));
+      }
+    });
+
+    const tp=Number(props.dynamicTakeProfitPrice||0);
+    if(tp>0){
+      priceLinesRef.current.push(series.createPriceLine({
+        price:tp,
+        color:"#43dc9f",
+        lineWidth:1,
+        lineStyle:LineStyle.Dashed,
+        axisLabelVisible:true,
+        title:"TP"
+      }));
+    }
+
+    if(candleData.length) chart.timeScale().fitContent();
+  },[
+    props.chartBars,
+    timeframe,
+    props.openPositions,
+    props.journalRecent,
+    props.dynamicTakeProfitPrice,
+    props.symbolDigits
+  ]);
+
+  useEffect(()=>{
+    const onFullscreen=()=>setFullscreen(document.fullscreenElement===monitorRef.current);
+    document.addEventListener("fullscreenchange",onFullscreen);
+    return ()=>document.removeEventListener("fullscreenchange",onFullscreen);
+  },[]);
+
+  async function toggleFullscreen(){
+    try{
+      if(document.fullscreenElement){
+        await document.exitFullscreen();
+      }else{
+        await monitorRef.current?.requestFullscreen();
+      }
+    }catch{}
+  }
 
   return (
-    <section className="panel cc-tv-monitor">
+    <section ref={monitorRef as any} className={"panel cc-tv-monitor "+(fullscreen?"is-fullscreen":"")}>
       <div className="cc-tv-monitor-head">
         <div className="cc-card-title">
           <span className="cc-card-icon"><ScenovaIcon name="trend" size={20}/></span>
           <div>
-            <h2>Live Trading Chart</h2>
-            <small>ดูกราฟตลาดพร้อมสถานะออเดอร์จริงจาก EA ในหน้าเดียว</small>
+            <h2>{symbol+" · Live EA Trading"}</h2>
+            <small>กราฟราคา MT5 จริง พร้อมจุดเข้า ปิดออเดอร์ SL และ TP ของ EA</small>
           </div>
         </div>
         <div className="cc-tv-monitor-actions">
           <div className="cc-tv-timeframes" role="group" aria-label="กรอบเวลากราฟ">
-            {[["1","M1"],["5","M5"],["15","M15"],["60","H1"]].map(([value,label])=>(
-              <button type="button" key={value} className={interval===value?"active":""} onClick={()=>setInterval(value)}>{label}</button>
+            {["M1","M5","M15","H1"].map(label=>(
+              <button type="button" key={label} className={timeframe===label?"active":""} onClick={()=>setTimeframe(label)}>{label}</button>
             ))}
           </div>
           <span className={"cc-tv-live-chip "+(props.state==="RUNNING"?"good":"warn")}><i/>{props.state==="RUNNING"?"BOT LIVE":"BOT "+String(props.state||"STOPPED")}</span>
+          <button type="button" className="cc-tv-fullscreen-btn" onClick={toggleFullscreen}>
+            {fullscreen?"ออกจากเต็มจอ":"ขยายเต็มจอ"}
+          </button>
         </div>
       </div>
 
       <div className="cc-tv-monitor-grid">
         <div className="cc-tv-chart-shell">
           <div className="cc-tv-chart-badge">
-            <b>{symbol}</b>
-            <span>กราฟตลาดอ้างอิง TradingView</span>
+            <b>{symbol+" · "+timeframe}</b>
+            <span>{bars.length ? "ราคาโดยตรงจาก MT5 / Broker" : "กำลังรอข้อมูลกราฟจาก EA 1.031"}</span>
           </div>
-          <div ref={chartHostRef} className="tradingview-widget-container cc-tv-widget"/>
+          <div ref={chartHostRef} className="cc-tv-widget cc-mt5-chart"/>
+          {!bars.length&&(
+            <div className="cc-tv-chart-empty">
+              <ScenovaIcon name="trend" size={26}/>
+              <b>รอข้อมูลแท่งเทียนจาก EA</b>
+              <span>หลังอัปเดต EA 1.031 ระบบจะส่งกราฟ M1 / M5 / M15 / H1 จาก MT5 มาที่หน้านี้โดยตรง</span>
+            </div>
+          )}
         </div>
 
         <aside className="cc-tv-bot-panel">
@@ -2377,7 +2554,7 @@ function TradingViewBotMonitor(props:any) {
           </div>
 
           <div className="cc-tv-position-head">
-            <div><b>ออเดอร์จริงจาก EA</b><small>ข้อมูลอัปเดตจาก Heartbeat ของบัญชีที่เชื่อมอยู่</small></div>
+            <div><b>ออเดอร์จริงจาก EA</b><small>จุด BUY / SELL เดียวกันจะแสดงบนแท่งเทียนด้านซ้าย</small></div>
             <span>{positions.length}</span>
           </div>
 
@@ -2399,9 +2576,25 @@ function TradingViewBotMonitor(props:any) {
               <div className="cc-tv-position-empty">
                 <ScenovaIcon name="orders" size={24}/>
                 <b>ยังไม่มีออเดอร์เปิด</b>
-                <span>เมื่อ EA เปิดออเดอร์ จะเห็นฝั่ง Lot ราคา SL และ P/L ตรงนี้ทันที</span>
+                <span>เมื่อ EA เปิดออเดอร์ จะมี Marker BUY / SELL ขึ้นบนกราฟทันที</span>
               </div>
             )}
+          </div>
+
+          <div className="cc-tv-trade-history">
+            <div className="cc-tv-history-head"><b>การเข้า-ออกล่าสุด</b><small>จาก Trade Journal</small></div>
+            <div className="cc-tv-history-list">
+              {journal.filter((row:any)=>["ENTRY","EXIT"].includes(String(row.event_type||"").toUpperCase())).slice(0,5).map((row:any,index:number)=>{
+                const exit=String(row.event_type||"").toUpperCase()==="EXIT";
+                const pnl=Number(row.net_profit||0);
+                return <div className="cc-tv-history-row" key={String(row.created_at||index)+"-"+index}>
+                  <span className={exit?(pnl>=0?"good":"bad"):String(row.direction||"").toLowerCase()}>{exit?"CLOSE":String(row.direction||"—")}</span>
+                  <div><b>{row.created_at?new Date(row.created_at).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}):"—"}</b><small>{exit?"ปิดออเดอร์":"เปิดที่ "+Number(row.price||0).toFixed(props.symbolDigits)}</small></div>
+                  <strong className={exit?(pnl>=0?"text-good":"text-bad"):""}>{exit?(pnl>=0?"+$":"-$")+Math.abs(pnl).toFixed(2):""}</strong>
+                </div>;
+              })}
+              {!journal.some((row:any)=>["ENTRY","EXIT"].includes(String(row.event_type||"").toUpperCase()))&&<div className="cc-tv-history-empty">ยังไม่มีประวัติเข้า-ออกล่าสุด</div>}
+            </div>
           </div>
 
           <div className="cc-tv-protection">
@@ -2409,7 +2602,7 @@ function TradingViewBotMonitor(props:any) {
             <div><small>SL ระบบ</small><b>{Number(props.dynamicStopPrice||0)>0?Number(props.dynamicStopPrice).toFixed(props.symbolDigits):"รอออเดอร์"}</b></div>
           </div>
 
-          <p className="cc-tv-note">ราคาในกราฟ TradingView เป็นราคาตลาดอ้างอิง อาจต่างจากราคา Exness/XAUUSDm เล็กน้อย ส่วนออเดอร์ Lot SL และ P/L ด้านขวาเป็นข้อมูลจริงจาก EA ของบัญชีที่เชื่อมอยู่</p>
+          <p className="cc-tv-note">กราฟและออเดอร์หน้านี้ใช้ข้อมูลจาก MT5/EA ที่เชื่อมกับ SCENOVA โดยตรง จุดเข้าและเส้นราคาอาจขยับตามการแก้ SL/TP ของ EA แบบ Real-time</p>
         </aside>
       </div>
     </section>
