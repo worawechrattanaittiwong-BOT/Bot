@@ -3747,8 +3747,7 @@ int SetupFirstDirection(double momentum)
          return fixedDirection;
       }
 
-      if(HigherTimeframeSupportsDirection(fixedDirection) &&
-         LowerTimeframeSupportsDirection(fixedDirection))
+      if(ExecutionConfirmationReady(fixedDirection,momentum,true))
       {
          string locationTrigger = "NONE";
          if(AntiChaseLocationReady(
@@ -3763,7 +3762,7 @@ int SetupFirstDirection(double momentum)
             EvaluateMarketLocationScore(fixedDirection);
             g_entryTrigger = locationTrigger != "NONE"
                ? locationTrigger
-               : "STRUCTURE_CONTINUATION";
+               : "STRUCTURE_EXECUTION";
             return fixedDirection;
          }
       }
@@ -3806,8 +3805,7 @@ int SetupFirstDirection(double momentum)
    }
 
    if(chosen == 0 && g_macroTrendDirection != 0 &&
-      HigherTimeframeSupportsDirection(g_macroTrendDirection) &&
-      LowerTimeframeSupportsDirection(g_macroTrendDirection))
+      ExecutionConfirmationReady(g_macroTrendDirection,momentum,true))
    {
       string locationTrigger = "NONE";
       if(AntiChaseLocationReady(
@@ -3822,20 +3820,15 @@ int SetupFirstDirection(double momentum)
          chosen = g_macroTrendDirection;
          chosenModel = locationTrigger != "NONE"
             ? locationTrigger
-            : "STRUCTURE_CONTINUATION";
+            : "STRUCTURE_EXECUTION";
       }
    }
 
-   if(chosen == 0)
+   if(chosen == 0 && g_marketRegime == "HIGH_VOLATILITY")
    {
       int momentumDirection = momentum > 0.0 ? 1 : momentum < 0.0 ? -1 : 0;
       if(momentumDirection != 0 &&
-         MomentumSupportsDirection(
-            momentumDirection,
-            momentum,
-            g_marketRegime == "HIGH_VOLATILITY" ? 0.55 : 0.75
-         ) &&
-         (g_trendM5 == momentumDirection || g_trendM15 == momentumDirection))
+         NewsImpulseExecutionReady(momentumDirection,momentum))
       {
          string locationTrigger = "NONE";
          if(AntiChaseLocationReady(
@@ -3850,9 +3843,7 @@ int SetupFirstDirection(double momentum)
             chosen = momentumDirection;
             chosenModel = locationTrigger != "NONE"
                ? locationTrigger
-               : (g_marketRegime == "HIGH_VOLATILITY"
-                  ? "NEWS_IMPULSE"
-                  : "MOMENTUM_CONTINUATION");
+               : "NEWS_EXECUTION";
          }
       }
    }
