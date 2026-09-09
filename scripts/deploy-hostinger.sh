@@ -87,7 +87,7 @@ until docker compose --env-file .env.hostinger -f "$COMPOSE" exec -T postgres pg
   sleep 2
 done
 
-for migration in   database/001_init.sql   database/002_cloud_worker.sql   database/003_trial_history_lock.sql   database/004_broker_catalog.sql   database/005_local_desktop_agent.sql   database/010_trade_journal.sql
+for migration in   database/001_init.sql   database/002_cloud_worker.sql   database/003_trial_history_lock.sql   database/004_broker_catalog.sql   database/005_local_desktop_agent.sql   database/010_trade_journal.sql   database/011_basket_intelligence.sql
 do
   docker compose --env-file .env.hostinger -f "$COMPOSE" exec -T postgres     psql -U bot -d bot -v ON_ERROR_STOP=1 -f /dev/stdin < "$migration"
 done

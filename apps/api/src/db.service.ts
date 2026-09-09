@@ -90,7 +90,7 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         mt5_account_id uuid REFERENCES mt5_accounts(id) ON DELETE SET NULL,
         deal_ticket bigint NOT NULL,
         position_id bigint,
-        event_type varchar(16) NOT NULL CHECK (event_type IN ('ENTRY','EXIT')),
+        event_type varchar(16) NOT NULL CHECK (event_type IN ('ENTRY','EXIT','BASKET')),
         direction varchar(8) NOT NULL CHECK (direction IN ('BUY','SELL')),
         volume numeric(18,8) NOT NULL DEFAULT 0,
         price numeric(24,10) NOT NULL DEFAULT 0,
@@ -113,6 +113,15 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         ON trade_journal(bot_instance_id,created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_trade_journal_instance_exit
         ON trade_journal(bot_instance_id,event_type,created_at DESC);
+
+      ALTER TABLE trade_journal
+        DROP CONSTRAINT IF EXISTS trade_journal_event_type_check;
+      ALTER TABLE trade_journal
+        ADD CONSTRAINT trade_journal_event_type_check
+        CHECK (event_type IN ('ENTRY','EXIT','BASKET'));
+      CREATE INDEX IF NOT EXISTS idx_trade_journal_basket_stats
+        ON trade_journal(bot_instance_id,direction,created_at DESC)
+        WHERE event_type='BASKET';
 
       ALTER TABLE trial_grants
         ADD COLUMN IF NOT EXISTS line_contact varchar(160),

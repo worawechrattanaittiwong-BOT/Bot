@@ -571,14 +571,14 @@ export class BotController {
     if (instance) {
       const stats = await this.db.one(
         `SELECT
-           COUNT(*) FILTER (WHERE event_type='EXIT')::int AS closed_trades,
-           COUNT(*) FILTER (WHERE event_type='EXIT' AND net_profit>0)::int AS wins,
-           COUNT(*) FILTER (WHERE event_type='EXIT' AND net_profit<0)::int AS losses,
-           COALESCE(SUM(net_profit) FILTER (WHERE event_type='EXIT'),0)::float8 AS net_profit,
-           COALESCE(AVG(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit>0),0)::float8 AS average_win,
-           COALESCE(AVG(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit<0),0)::float8 AS average_loss,
-           COALESCE(SUM(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit>0),0)::float8 AS gross_profit,
-           ABS(COALESCE(SUM(net_profit) FILTER (WHERE event_type='EXIT' AND net_profit<0),0))::float8 AS gross_loss
+           COUNT(*) FILTER (WHERE event_type='BASKET')::int AS closed_trades,
+           COUNT(*) FILTER (WHERE event_type='BASKET' AND net_profit>0)::int AS wins,
+           COUNT(*) FILTER (WHERE event_type='BASKET' AND net_profit<0)::int AS losses,
+           COALESCE(SUM(net_profit) FILTER (WHERE event_type='BASKET'),0)::float8 AS net_profit,
+           COALESCE(AVG(net_profit) FILTER (WHERE event_type='BASKET' AND net_profit>0),0)::float8 AS average_win,
+           COALESCE(AVG(net_profit) FILTER (WHERE event_type='BASKET' AND net_profit<0),0)::float8 AS average_loss,
+           COALESCE(SUM(net_profit) FILTER (WHERE event_type='BASKET' AND net_profit>0),0)::float8 AS gross_profit,
+           ABS(COALESCE(SUM(net_profit) FILTER (WHERE event_type='BASKET' AND net_profit<0),0))::float8 AS gross_loss
          FROM trade_journal
          WHERE bot_instance_id=$1`,
         [instance.id]

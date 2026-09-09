@@ -109,6 +109,42 @@ export class EaController {
     return false;
   }
 
+  private async basketWinProbability(instanceId: string, symbol: string) {
+    const rows = await this.db.query(
+      `SELECT
+         direction,
+         COUNT(*) FILTER (WHERE net_profit<>0)::int AS samples,
+         COUNT(*) FILTER (WHERE net_profit>0)::int AS wins
+       FROM trade_journal
+       WHERE bot_instance_id=$1
+         AND event_type='BASKET'
+         AND ($2='' OR metadata->>'symbol'=$2)
+       GROUP BY direction`,
+      [instanceId, symbol]
+    );
+    const byDirection = new Map<string, { samples: number; wins: number }>();
+    for (const row of rows.rows) {
+      byDirection.set(String(row.direction), {
+        samples: Number(row.samples || 0),
+        wins: Number(row.wins || 0)
+      });
+    }
+    const buy = byDirection.get("BUY") || { samples: 0, wins: 0 };
+    const sell = byDirection.get("SELL") || { samples: 0, wins: 0 };
+    const totalSamples = buy.samples + sell.samples;
+    const totalWins = buy.wins + sell.wins;
+    const rate = (wins: number, samples: number) => samples > 0 ? wins / samples * 100 : 0;
+
+    return {
+      basketWinProbability: rate(totalWins, totalSamples),
+      basketWinSamples: totalSamples,
+      buyWinProbability: rate(buy.wins, buy.samples),
+      buyWinSamples: buy.samples,
+      sellWinProbability: rate(sell.wins, sell.samples),
+      sellWinSamples: sell.samples
+    };
+  }
+
   @Post("heartbeat")
   async heartbeat(
     @Req() req: any,
@@ -384,6 +420,10 @@ export class EaController {
       "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
       [instance.id]
     );
+    const intelligenceStats = await this.basketWinProbability(
+      instance.id,
+      String(metrics.symbol || "").trim()
+    );
 
     return {
       ok: true,
@@ -393,7 +433,8 @@ export class EaController {
       commandId: cmd?.id || null,
       commandName: cmd?.command || null,
       commandPayload: cmd?.payload || null,
-      settings: settings?.settings || {}
+      settings: settings?.settings || {},
+      ...intelligenceStats
     };
   }
 
@@ -418,6 +459,12 @@ export class EaController {
     orderBlockQuality?: number;
     confidence?: number;
     basketIndex?: number;
+    symbol?: string;
+    brokerServer?: string;
+    startedAt?: number;
+    endedAt?: number;
+    peakPositions?: number;
+    sessionProfile?: string;
   }) {
     const instance = await this.instance(body.instanceId, body.installToken);
 
@@ -426,7 +473,7 @@ export class EaController {
     const dealTicket = String(body.dealTicket ?? "").trim();
     const positionId = String(body.positionId ?? "").trim();
 
-    if (!["ENTRY", "EXIT"].includes(eventType)) {
+    if (!["ENTRY", "EXIT", "BASKET"].includes(eventType)) {
       throw new BadRequestException("Journal event type is invalid");
     }
     if (!["BUY", "SELL"].includes(direction)) {
@@ -478,7 +525,16 @@ export class EaController {
         Math.max(0, Math.min(100, n(body.orderBlockQuality))),
         Math.max(0, Math.min(100, n(body.confidence))),
         Math.max(0, Math.trunc(n(body.basketIndex))),
-        JSON.stringify({ source: "EA", schema: 1 })
+        JSON.stringify({
+          source: "EA",
+          schema: eventType === "BASKET" ? 2 : 1,
+          symbol: text(body.symbol, 48),
+          brokerServer: text(body.brokerServer, 96),
+          startedAt: Math.max(0, Math.trunc(n(body.startedAt))),
+          endedAt: Math.max(0, Math.trunc(n(body.endedAt))),
+          peakPositions: Math.max(0, Math.trunc(n(body.peakPositions))),
+          sessionProfile: text(body.sessionProfile, 32)
+        })
       ]
     );
 

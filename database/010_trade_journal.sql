@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS trade_journal (
   mt5_account_id uuid REFERENCES mt5_accounts(id) ON DELETE SET NULL,
   deal_ticket bigint NOT NULL,
   position_id bigint,
-  event_type varchar(16) NOT NULL CHECK (event_type IN ('ENTRY','EXIT')),
+  event_type varchar(16) NOT NULL CHECK (event_type IN ('ENTRY','EXIT','BASKET')),
   direction varchar(8) NOT NULL CHECK (direction IN ('BUY','SELL')),
   volume numeric(18,8) NOT NULL DEFAULT 0,
   price numeric(24,10) NOT NULL DEFAULT 0,
