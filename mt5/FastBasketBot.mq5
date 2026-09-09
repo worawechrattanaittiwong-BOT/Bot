@@ -5810,6 +5810,10 @@ void ResetRescueState()
    g_rescueHedgeProfit = 0.0;
    g_rescuePartialCloseCount = 0;
    g_rescueOldestAgeSeconds = 0;
+   g_rescueReversalCandidateSince = 0;
+   g_rescuePrimaryRecoverySince = 0;
+   g_rescueHedgeLockedUntil = 0;
+   g_rescueLastAdjustedScore = 0.0;
 
    string keys[7] = {"state","start","dir","real","def","target","partial"};
    for(int i=0;i<ArraySize(keys);i++)
@@ -6289,6 +6293,12 @@ void AdjustRescueHedge()
    if(g_rescuePrimaryDirection==0 || g_rescuePrimaryVolume<=0.0)
       return;
 
+   datetime now=TimeCurrent();
+   // Do not rebalance every few ticks in a sideways market. Spread/commission
+   // from Hedge churn can be more expensive than the protection itself.
+   if(g_lastRescueOrderAt>0 && now-g_lastRescueOrderAt<60)
+      return;
+
    double ratio=RescueDesiredHedgeRatio();
    double desired=g_rescuePrimaryVolume*ratio;
    double current=VolumeForMagic(RescueMagic(),-g_rescuePrimaryDirection);
@@ -6297,14 +6307,24 @@ void AdjustRescueHedge()
    if(current+minVolume*0.50<desired)
    {
       double add=NormalizeRescueVolume(desired-current);
-      if(add>0.0)
-         SendRescueOrder(-g_rescuePrimaryDirection,add);
+      if(add>0.0 && SendRescueOrder(-g_rescuePrimaryDirection,add))
+      {
+         g_rescueHedgeLockedUntil=now+120;
+         g_rescueLastAdjustedScore=g_rescueReversalScore;
+      }
    }
    else if(current>desired+minVolume*0.75)
    {
+      // Never trim a freshly opened Hedge on a one-minute noise reversal.
+      if(now<g_rescueHedgeLockedUntil)
+         return;
+
       double trim=NormalizeRescueVolume(current-desired);
-      if(trim>0.0)
-         ReduceRescueVolume(trim);
+      if(trim>0.0 && ReduceRescueVolume(trim))
+      {
+         g_lastRescueOrderAt=now;
+         g_rescueLastAdjustedScore=g_rescueReversalScore;
+      }
    }
 }
 
@@ -6363,9 +6383,22 @@ bool ManageAdaptiveRescue()
 
    long timeLimit=RescueTimeThresholdSeconds();
    bool timeRescue=g_rescueOldestAgeSeconds>=timeLimit && g_rescueCombinedProfit<0.0;
+
+   bool reversalCandidate =
+      g_rescueReversalScore>=70.0 ||
+      (timeRescue && g_rescueReversalScore>=58.0);
+   if(reversalCandidate)
+   {
+      if(g_rescueReversalCandidateSince==0)
+         g_rescueReversalCandidateSince=now;
+   }
+   else
+      g_rescueReversalCandidateSince=0;
+
+   long confirmationSeconds=timeRescue ? 15 : 25;
    g_rescueReversalConfirmed=
-      g_rescueReversalScore>=65.0 ||
-      (timeRescue && g_rescueReversalScore>=52.0);
+      g_rescueReversalCandidateSince>0 &&
+      now-g_rescueReversalCandidateSince>=confirmationSeconds;
 
    double rescueThreshold=RescueThresholdMoney();
    double warningThreshold=MathMax(0.50,rescueThreshold*0.55);
@@ -6415,6 +6448,9 @@ bool ManageAdaptiveRescue()
       {
          g_rescueState=RESCUE_ACTIVE;
          g_rescueStartedAt=now;
+         g_rescueHedgeLockedUntil=now+120;
+         g_rescuePrimaryRecoverySince=0;
+         g_rescueLastAdjustedScore=g_rescueReversalScore;
          g_rescueTargetMoney=MathMax(
             0.20,
             CurrentSpreadCost(MathMax(SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),g_lot))*0.50
@@ -6485,16 +6521,30 @@ bool ManageAdaptiveRescue()
          SaveRescueState();
       }
 
-      // If the original structure recovers before the hedge earns its keep,
-      // unwind the hedge instead of holding two opposing positions forever.
-      if(g_rescueReversalScore<40.0 &&
-         g_rescueCombinedProfit>-warningThreshold)
+      // Original-structure recovery must persist before unwinding a Hedge.
+      // This hysteresis prevents Hedge -> close -> Hedge loops in chop.
+      bool primaryRecoveryCandidate =
+         g_rescueReversalScore<35.0 &&
+         g_rescueCombinedProfit>-warningThreshold;
+      if(primaryRecoveryCandidate)
+      {
+         if(g_rescuePrimaryRecoverySince==0)
+            g_rescuePrimaryRecoverySince=now;
+      }
+      else
+         g_rescuePrimaryRecoverySince=0;
+
+      if(g_rescuePrimaryRecoverySince>0 &&
+         now-g_rescuePrimaryRecoverySince>=60 &&
+         now>=g_rescueHedgeLockedUntil)
       {
          CloseRescuePositions();
          if(RescuePositionCount()==0)
          {
             g_rescueState=RESCUE_WARNING;
-            g_rescueReversalReason="PRIMARY_STRUCTURE_RECOVERED";
+            g_rescueReversalReason="PRIMARY_STRUCTURE_RECOVERED_STABLE";
+            g_rescueReversalCandidateSince=0;
+            g_rescuePrimaryRecoverySince=0;
             SaveRescueState();
          }
       }
