@@ -567,6 +567,29 @@ export default function DashboardPage() {
   const extensionAtr = Number(metrics.extensionAtr || 0);
   const adverseWickRatio = Number(metrics.adverseWickRatio || 0);
   const antiChaseReason = String(metrics.antiChaseReason || "NONE");
+
+  const emaStack = String(metrics.emaStack || "MIXED");
+  const emaSlope = String(metrics.emaSlope || "FLAT");
+  const emaVolatilityState = String(metrics.emaVolatilityState || "NORMAL");
+  const emaPriceVs200 = String(metrics.emaPriceVs200 || "UNKNOWN");
+  const emaReclaimState = String(metrics.emaReclaimState || "NONE");
+  const emaTfText = [metrics.emaTrendM1,metrics.emaTrendM5,metrics.emaTrendM15,metrics.emaTrendM30,metrics.emaTrendH1]
+    .map(v=>Number(v)>0?"↑":Number(v)<0?"↓":"·").join(" ");
+
+  const rescueState = String(metrics.rescueState || "NORMAL");
+  const rescueActive = rescueState !== "NORMAL";
+  const rescuePrimaryDirection = Number(metrics.rescuePrimaryDirection || 0);
+  const rescueDirectionLabel = rescuePrimaryDirection > 0 ? "BUY" : rescuePrimaryDirection < 0 ? "SELL" : "—";
+  const rescueHedgeLot = Number(metrics.rescueHedgeLot || 0);
+  const rescueNetExposure = Number(metrics.rescueNetExposure || 0);
+  const rescueRequiredMoney = Number(metrics.rescueRequiredMoney || 0);
+  const rescueRecoveredMoney = Number(metrics.rescueRecoveredMoney || 0);
+  const rescueRecoveryPrice = Number(metrics.rescueRecoveryPrice || 0);
+  const rescueCombinedProfit = Number(metrics.rescueCombinedProfit || 0);
+  const rescueReversalScore = Number(metrics.rescueReversalScore || 0);
+  const rescueOldestMinutes = Number(metrics.rescueOldestAgeSeconds || 0) / 60;
+  const rescueReason = String(metrics.rescueReversalReason || "NONE");
+
   const basketAddExplanation = currentPositions > 0 && currentPositions < effectiveMaxPositions
     ? "เปิดแล้ว " + currentPositions + "/" + configuredMaxPositions + " ไม้ · " +
       (String(metrics.basketLadderMode||"").includes("PULLBACK")
@@ -582,7 +605,9 @@ export default function DashboardPage() {
     : "";
   const journalStats = data?.tradeJournal?.stats || {};
   const journalRecent = Array.isArray(data?.tradeJournal?.recent) ? data.tradeJournal.recent : [];
-  const liveExplanation = basketAddExplanation || liveStatus.detail || "บอทกำลังประเมิน S/R, Order Block, Fibonacci, Structure, Price Action และ Momentum แบบเรียลไทม์";
+  const liveExplanation = rescueActive
+    ? (liveStatus.detail || "Adaptive Rescue กำลังบริหาร Basket ที่เปิดอยู่")
+    : (basketAddExplanation || liveStatus.detail || "บอทกำลังประเมิน S/R, Order Block, Fibonacci, EMA, Structure, Price Action และ Momentum แบบเรียลไทม์");
   const hideModeIrrelevantStatus = String(liveStatus.code || "") === "RISK_LIMIT_TOO_SMALL";
   const visibleLiveStatus = hideModeIrrelevantStatus
     ? { label: "รอสัญญาณเข้า", tone: "good" }
@@ -1352,7 +1377,7 @@ export default function DashboardPage() {
 
               <section className="panel cc-intelligence-v3">
                 <div className="cc-card-head">
-                  <div className="cc-card-title"><span className="cc-card-icon"><ScenovaIcon name="brain" size={20}/></span><div><h2>Intelligence v3.1</h2><small>Price Location · Anti-Chase · Regime · OB · Fib · Pullback Ladder · Dynamic Exit · Journal</small></div></div>
+                  <div className="cc-card-title"><span className="cc-card-icon"><ScenovaIcon name="brain" size={20}/></span><div><h2>Intelligence v4</h2><small>Rescue & Recovery · EMA 9/21/50/200 · Price Action · Anti-Chase · OB · Fib · Ladder · Dynamic Exit</small></div></div>
                   <span className="cc-mini-health good"><i/>ไม่เพิ่ม Hidden Gate</span>
                 </div>
 
@@ -1363,7 +1388,31 @@ export default function DashboardPage() {
                   <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Fib Setup</small><b>{String(metrics.fibSetupGrade||"NONE")} · {Number(metrics.fibSetupScore||0).toFixed(0)}/100</b></span></div>
                   <div className={"cc-signal-item "+(String(metrics.entryQuality||"C")==="A"?"good":String(metrics.entryQuality||"C")==="B"?"warn":"")}><ScenovaIcon name="status" size={20}/><span><small>Entry Quality</small><b>{String(metrics.entryQuality||"—")} · {Number(metrics.entryQualityScore||0).toFixed(0)}/100</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>Pullback-Aware Ladder</small><b>{currentPositions>0 ? "R"+ladderRung+" · "+String(metrics.basketLadderMode||"—")+" · PB "+Math.max(0,ladderPullbackPoints).toFixed(0)+"/"+Math.max(0,ladderPullbackRequiredPoints).toFixed(0) : "ไม้แรกไม่ถูก Ladder ดัก"}</b></span></div>
-                  <div className="cc-signal-item"><ScenovaIcon name="shield" size={20}/><span><small>Dynamic TP / SL</small><b>{Number(metrics.dynamicTakeProfitPrice||0)>0 ? "TP "+Number(metrics.dynamicTakeProfitPrice).toFixed(symbolDigits)+" · SL "+Number(metrics.dynamicStopPrice||0).toFixed(symbolDigits) : "คำนวณตาม Structure + ATR"}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="shield" size={20}/><span><small>Dynamic TP / SL</small><b>{Number(metrics.dynamicTakeProfitPrice||0)>0 ? "TP "+Number(metrics.dynamicTakeProfitPrice).toFixed(symbolDigits)+" · SL "+Number(metrics.dynamicStopPrice||0).toFixed(symbolDigits) : "Structure + ATR + EMA21/50"}</b></span></div>
+
+                  <div className="cc-signal-item good"><ScenovaIcon name="trend" size={20}/><span><small>EMA Stack / Slope</small><b>{emaStack+" · "+emaSlope+" · "+emaVolatilityState}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="trend" size={20}/><span><small>EMA 9 / 21 / 50 / 200</small><b>{[9,21,50,200].map((p,i)=>p+" "+Number([metrics.ema9,metrics.ema21,metrics.ema50,metrics.ema200][i]||0).toFixed(symbolDigits)).join(" · ")}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>EMA Multi-TF</small><b>{"M1 M5 M15 M30 H1 · "+emaTfText+" · "+emaPriceVs200}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="status" size={20}/><span><small>EMA Reclaim / Price Action</small><b>{emaReclaimState+" · BUY "+String(metrics.priceActionBuy||"NONE")+" · SELL "+String(metrics.priceActionSell||"NONE")}</b></span></div>
+                </div>
+
+                <div className={"cc-intel-banner "+(rescueActive?(rescueState==="RECOVERY"?"":"warn"):"")}>
+                  <ScenovaIcon name="shield" size={19}/>
+                  <div>
+                    <b>{"Adaptive Basket Rescue · "+rescueState}</b>
+                    <span>{rescueActive
+                      ? "Primary "+rescueDirectionLabel+" · Hedge "+rescueHedgeLot.toFixed(2)+" lot · Net Exposure "+rescueNetExposure.toFixed(2)+" · Reversal "+rescueReversalScore.toFixed(0)+"/100"
+                      : "NORMAL — Rescue เริ่มทำงานหลังมี Position เท่านั้น และไม่เป็น Gate ของไม้แรก"}</span>
+                  </div>
+                </div>
+
+                <div className="cc-signal-grid">
+                  <div className={"cc-signal-item "+(rescueActive?"warn":"good")}><ScenovaIcon name="shield" size={20}/><span><small>Rescue State</small><b>{rescueState+" · "+rescueReason}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>Weight Balance</small><b>{"Hedge "+rescueHedgeLot.toFixed(2)+" · Net "+rescueNetExposure.toFixed(2)+" lot"}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Recovery Progress</small><b>{"คืนแล้ว $"+rescueRecoveredMoney.toFixed(2)+" · เหลือ $"+rescueRequiredMoney.toFixed(2)}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="target" size={20}/><span><small>Recovery TP</small><b>{rescueRecoveryPrice>0 ? rescueRecoveryPrice.toFixed(symbolDigits)+" · Combined $"+rescueCombinedProfit.toFixed(2) : "รอคำนวณจาก Net Exposure"}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="clock" size={20}/><span><small>Time Rescue</small><b>{rescueOldestMinutes.toFixed(0)+" นาที · Partial Close "+Number(metrics.rescuePartialCloseCount||0)+" ครั้ง"}</b></span></div>
+                  <div className="cc-signal-item"><ScenovaIcon name="status" size={20}/><span><small>Reversal Detection</small><b>{rescueReversalScore.toFixed(0)+"/100 · "+(Boolean(metrics.rescueReversalConfirmed)?"ยืนยันแล้ว":"กำลังประเมิน")}</b></span></div>
                 </div>
 
                 <div className="cc-status-list">
