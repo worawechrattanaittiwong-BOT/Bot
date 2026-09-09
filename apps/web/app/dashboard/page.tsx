@@ -2261,6 +2261,8 @@ function BotSettingsModal(props:any) {
               systemMultiplier={props.hardStopMultiplier}
               systemDistancePoints={props.systemHardStopDistancePoints}
               appliedDistancePoints={props.hardStopDistancePoints}
+              pointSize={props.metrics?.pointSize}
+              symbolDigits={props.metrics?.symbolDigits}
               onModeChange={(mode:string)=>{
                 if (mode === "AUTO") {
                   props.onEdit?.("manualStopLossPoints",0);
@@ -2603,6 +2605,11 @@ function StopLossModeField(props:any) {
   const manualValue = Number(props.manualPoints || 0) > 0
     ? String(props.manualPoints)
     : String(props.suggestedManualPoints || "1000");
+  const pointSize = Number(props.pointSize || 0);
+  const symbolDigits = Math.max(0, Math.min(8, Number(props.symbolDigits ?? 3)));
+  const manualPoints = Number(manualValue || 0);
+  const manualPriceDistance = pointSize > 0 ? manualPoints * pointSize : 0;
+  const tenPricePoints = pointSize > 0 ? Math.round(10 / pointSize) : 0;
   const options = [
     {
       value:"AUTO",
@@ -2612,7 +2619,7 @@ function StopLossModeField(props:any) {
     {
       value:"MANUAL",
       label:"กำหนดเอง",
-      detail:"กำหนดระยะ Stop Loss เป็น points จากราคาเปิดของแต่ละ Position"
+      detail:"กำหนดระยะ Stop Loss เป็น points ของ Broker จากราคาเปิดของแต่ละ Position"
     }
   ];
 
@@ -2639,19 +2646,26 @@ function StopLossModeField(props:any) {
               ? "ATR × "+Number(props.systemMultiplier).toFixed(2)
               : "ระบบกำลังคำนวณ ATR"}</b>
             <small>{systemDistance>0
-              ? "ระยะระบบตอนนี้ "+systemDistance.toFixed(0)+" pt · EA ใช้จริง "+(appliedDistance>0?appliedDistance.toFixed(0)+" pt":"รอ Sync")
+              ? "ระยะระบบตอนนี้ "+systemDistance.toFixed(0)+" points · EA ใช้จริง "+(appliedDistance>0?appliedDistance.toFixed(0)+" points":"รอ Sync")
               : "EA จะคำนวณระยะ SL ตาม ATR และสภาพตลาดทันทีเมื่อข้อมูลพร้อม"}</small>
           </div>
         : <div className="stop-loss-manual-live">
             <b>ระยะ Stop Loss ที่กำหนดเอง</b>
             <NumberInput
               value={manualValue}
-              prefix="PT"
-              suffix="ระยะจากราคาเปิด"
+              prefix="SL"
+              suffix="points จากราคาเปิด"
               ariaLabel="ระยะ Stop Loss ที่กำหนดเอง"
               onCommit={(value:string)=>props.onManualChange?.(value)}
             />
-            <small>ค่าที่บันทึกจะถูกส่งเป็น Broker SL จริงทุก Position และ EA จะไม่ใช้ระยะ ATR เริ่มต้นแทน</small>
+            <div className="stop-loss-point-explain">
+              <span>{pointSize>0
+                ? Number(manualPoints).toLocaleString("en-US")+" points = ระยะราคา "+manualPriceDistance.toFixed(symbolDigits)
+                : Number(manualPoints).toLocaleString("en-US")+" points ของ Broker"}</span>
+              <small>{pointSize>0
+                ? "Point size "+pointSize.toFixed(symbolDigits)+" · ตัวอย่าง ราคา 4300 → 4310 = "+tenPricePoints.toLocaleString("en-US")+" points"
+                : "จำนวน points อ้างอิง _Point ของ Symbol/Broker ไม่ใช่จำนวนดอลลาร์ของราคา"}</small>
+            </div>
           </div>}
     </div>
   );
