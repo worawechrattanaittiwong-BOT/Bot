@@ -243,6 +243,7 @@ string g_emaPriceVs200 = "UNKNOWN";
 string g_emaReclaimState = "NONE";
 datetime g_lastEmaRefreshAt = 0;
 datetime g_lastEmaDrawBar = 0;
+datetime g_lastEmaDrawAt = 0;
 
 // Candlestick / Price Action intelligence. Advisory only for first entries.
 string g_priceActionBuy = "NONE";
@@ -740,9 +741,13 @@ void DrawEmaCurves()
       return;
 
    datetime currentBar = rates[0].time;
-   if(g_lastEmaDrawBar == currentBar)
+   datetime now = TimeCurrent();
+   if(g_lastEmaDrawBar == currentBar &&
+      g_lastEmaDrawAt > 0 &&
+      now - g_lastEmaDrawAt < 5)
       return;
    g_lastEmaDrawBar = currentBar;
+   g_lastEmaDrawAt = now;
 
    string prefix = EmaObjectPrefix();
    for(int p = 0; p < EMA_PERIOD_COUNT; p++)
