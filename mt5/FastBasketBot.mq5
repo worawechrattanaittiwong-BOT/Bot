@@ -1627,7 +1627,7 @@ void SendHeartbeat()
 
       // Market-context telemetry makes every entry auditable on the web.
       string marketContextDiagnostics = StringFormat(
-         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V5\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"m5Support\":%s,\"m5Resistance\":%s,\"supportTimeframe\":\"%s\",\"resistanceTimeframe\":\"%s\",\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
+         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V6\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"m5Support\":%s,\"m5Resistance\":%s,\"supportTimeframe\":\"%s\",\"resistanceTimeframe\":\"%s\",\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
          g_trendM1,
          g_trendM30,
          g_effectiveConfidenceThreshold,
@@ -1715,7 +1715,7 @@ void SendHeartbeat()
          UpdateRescueExposure();
 
       string intelligenceV4Diagnostics = StringFormat(
-         ",\"ema9\":%s,\"ema21\":%s,\"ema50\":%s,\"ema200\":%s,\"emaStack\":\"%s\",\"emaSlope\":\"%s\",\"emaVolatilityState\":\"%s\",\"emaPriceVs200\":\"%s\",\"emaReclaimState\":\"%s\",\"emaDistanceAtr\":%.3f,\"emaTrendM1\":%d,\"emaTrendM5\":%d,\"emaTrendM15\":%d,\"emaTrendM30\":%d,\"emaTrendH1\":%d,\"emaConfluenceBuy\":%.1f,\"emaConfluenceSell\":%.1f,\"priceActionBuy\":\"%s\",\"priceActionSell\":\"%s\",\"priceActionBuyScore\":%.1f,\"priceActionSellScore\":%.1f,\"rescueState\":\"%s\",\"rescuePrimaryDirection\":%d,\"rescueHedgeDirection\":%d,\"rescuePrimaryVolume\":%.4f,\"rescueHedgeLot\":%.4f,\"rescueNetExposure\":%.4f,\"rescueReversalScore\":%.1f,\"rescueReversalConfirmed\":%s,\"rescueReversalReason\":\"%s\",\"rescueRequiredMoney\":%.2f,\"rescueRecoveredMoney\":%.2f,\"rescueTargetMoney\":%.2f,\"rescueRecoveryPrice\":%s,\"rescuePrimaryProfit\":%.2f,\"rescueHedgeProfit\":%.2f,\"rescueCombinedProfit\":%.2f,\"rescuePartialCloseCount\":%d,\"rescueOldestAgeSeconds\":%I64d,\"rescuePositionCount\":%d",
+         ",\"ema9\":%s,\"ema21\":%s,\"ema50\":%s,\"ema200\":%s,\"emaStack\":\"%s\",\"emaSlope\":\"%s\",\"emaVolatilityState\":\"%s\",\"emaPriceVs200\":\"%s\",\"emaReclaimState\":\"%s\",\"emaDistanceAtr\":%.3f,\"emaTrendM1\":%d,\"emaTrendM5\":%d,\"emaTrendM15\":%d,\"emaTrendM30\":%d,\"emaTrendH1\":%d,\"emaConfluenceBuy\":%.1f,\"emaConfluenceSell\":%.1f,\"priceActionBuy\":\"%s\",\"priceActionSell\":\"%s\",\"priceActionBuyScore\":%.1f,\"priceActionSellScore\":%.1f,\"effectiveLadderTargetPositions\":%d,\"performanceRiskMode\":\"%s\",\"consecutiveBasketLosses\":%d,\"rescueState\":\"%s\",\"rescuePrimaryDirection\":%d,\"rescueHedgeDirection\":%d,\"rescuePrimaryVolume\":%.4f,\"rescueHedgeLot\":%.4f,\"rescueNetExposure\":%.4f,\"rescueReversalScore\":%.1f,\"rescueReversalConfirmed\":%s,\"rescueReversalReason\":\"%s\",\"rescueReversalStableSeconds\":%I64d,\"rescueHedgeLockSeconds\":%I64d,\"rescueRequiredMoney\":%.2f,\"rescueRecoveredMoney\":%.2f,\"rescueTargetMoney\":%.2f,\"rescueRecoveryPrice\":%s,\"rescuePrimaryProfit\":%.2f,\"rescueHedgeProfit\":%.2f,\"rescueCombinedProfit\":%.2f,\"rescuePartialCloseCount\":%d,\"rescueOldestAgeSeconds\":%I64d,\"rescuePositionCount\":%d",
          DoubleToString(g_ema9,SymbolDigitsNow()),
          DoubleToString(g_ema21,SymbolDigitsNow()),
          DoubleToString(g_ema50,SymbolDigitsNow()),
@@ -1737,6 +1737,9 @@ void SendHeartbeat()
          g_priceActionSell,
          g_priceActionBuyScore,
          g_priceActionSellScore,
+         g_effectiveLadderTargetPositions,
+         g_performanceRiskMode,
+         g_consecutiveLosses,
          RescueStateName(),
          g_rescuePrimaryDirection,
          g_rescueHedgeDirection,
@@ -1746,6 +1749,8 @@ void SendHeartbeat()
          g_rescueReversalScore,
          g_rescueReversalConfirmed ? "true" : "false",
          g_rescueReversalReason,
+         (long)(g_rescueReversalCandidateSince>0 ? MathMax(0,TimeCurrent()-g_rescueReversalCandidateSince) : 0),
+         (long)(g_rescueHedgeLockedUntil>TimeCurrent() ? g_rescueHedgeLockedUntil-TimeCurrent() : 0),
          g_rescueRequiredMoney,
          g_rescueRecoveredMoney,
          g_rescueTargetMoney,
