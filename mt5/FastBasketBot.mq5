@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.024"
+#property version   "1.025"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -202,6 +202,20 @@ double g_entryQualityScore = 0.0;
 string g_entryQuality = "C";
 string g_entryModel = "NONE";
 string g_entryTrigger = "NONE";
+
+// Anti-chase / price-location intelligence. These states are intentionally
+// visible in telemetry so waiting for a pullback/retest is never a hidden gate.
+bool   g_antiChaseActive = false;
+int    g_antiChaseDirection = 0;
+double g_exhaustionScore = 0.0;
+double g_extensionAtr = 0.0;
+double g_adverseWickRatio = 0.0;
+string g_priceLocationState = "NORMAL";
+string g_antiChaseReason = "NONE";
+bool   g_breakoutRetestRequired = false;
+bool   g_breakoutRetestReady = false;
+double g_breakoutReferenceLevel = 0.0;
+
 datetime g_lastMarketContextUpdate = 0;
 string g_fiboObjectName = "";
 bool   g_fiboVisible = false;
@@ -254,6 +268,11 @@ double g_pyramidRequiredPoints = 0.0;
 int    g_ladderRung = 0;
 double g_ladderProgressPoints = 0.0;
 double g_ladderRequiredPoints = 0.0;
+double g_ladderExtremePrice = 0.0;
+double g_ladderPullbackPoints = 0.0;
+double g_ladderPullbackRequiredPoints = 0.0;
+bool   g_ladderPullbackArmed = false;
+datetime g_ladderPullbackArmedAt = 0;
 string g_ladderMode = "IDLE";
 double g_dynamicStopPrice = 0.0;
 double g_dynamicTakeProfitPrice = 0.0;
@@ -355,7 +374,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.024", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.025", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -976,7 +995,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.024\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.025\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1103,7 +1122,7 @@ void SendHeartbeat()
 
       // Market-context telemetry makes every entry auditable on the web.
       string marketContextDiagnostics = StringFormat(
-         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V4\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"m5Support\":%s,\"m5Resistance\":%s,\"supportTimeframe\":\"%s\",\"resistanceTimeframe\":\"%s\",\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
+         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"SETUP_FIRST_V5\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"m5Support\":%s,\"m5Resistance\":%s,\"supportTimeframe\":\"%s\",\"resistanceTimeframe\":\"%s\",\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
          g_trendM1,
          g_trendM30,
          g_effectiveConfidenceThreshold,
@@ -1141,7 +1160,7 @@ void SendHeartbeat()
          g_fiboVisible ? "true" : "false"
       );
       string intelligenceV3Diagnostics = StringFormat(
-         ",\"marketRegimeDetail\":\"%s\",\"bullishOrderBlockQuality\":%.1f,\"bearishOrderBlockQuality\":%.1f,\"bullishOrderBlockState\":\"%s\",\"bearishOrderBlockState\":\"%s\",\"bullishOrderBlockTimeframe\":\"%s\",\"bearishOrderBlockTimeframe\":\"%s\",\"bullishOrderBlockMitigations\":%d,\"bearishOrderBlockMitigations\":%d,\"bullishOrderBlockAgeBars\":%d,\"bearishOrderBlockAgeBars\":%d,\"fibSetupScore\":%.1f,\"fibSetupGrade\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.1f,\"basketLadderRung\":%d,\"basketLadderProgressPoints\":%.1f,\"basketLadderRequiredPoints\":%.1f,\"basketLadderMode\":\"%s\",\"dynamicStopPrice\":%s,\"dynamicTakeProfitPrice\":%s,\"journalSent\":%d,\"journalFailed\":%d",
+         ",\"marketRegimeDetail\":\"%s\",\"bullishOrderBlockQuality\":%.1f,\"bearishOrderBlockQuality\":%.1f,\"bullishOrderBlockState\":\"%s\",\"bearishOrderBlockState\":\"%s\",\"bullishOrderBlockTimeframe\":\"%s\",\"bearishOrderBlockTimeframe\":\"%s\",\"bullishOrderBlockMitigations\":%d,\"bearishOrderBlockMitigations\":%d,\"bullishOrderBlockAgeBars\":%d,\"bearishOrderBlockAgeBars\":%d,\"fibSetupScore\":%.1f,\"fibSetupGrade\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.1f,\"antiChaseActive\":%s,\"antiChaseDirection\":%d,\"exhaustionScore\":%.1f,\"extensionAtr\":%.2f,\"adverseWickRatio\":%.3f,\"priceLocationState\":\"%s\",\"antiChaseReason\":\"%s\",\"breakoutRetestRequired\":%s,\"breakoutRetestReady\":%s,\"breakoutReferenceLevel\":%s,\"basketLadderRung\":%d,\"basketLadderProgressPoints\":%.1f,\"basketLadderRequiredPoints\":%.1f,\"basketLadderPullbackPoints\":%.1f,\"basketLadderPullbackRequiredPoints\":%.1f,\"basketLadderMode\":\"%s\",\"dynamicStopPrice\":%s,\"dynamicTakeProfitPrice\":%s,\"journalSent\":%d,\"journalFailed\":%d",
          g_marketRegimeDetail,
          g_bullishOrderBlockQuality,
          g_bearishOrderBlockQuality,
@@ -1157,9 +1176,21 @@ void SendHeartbeat()
          g_fibSetupGrade,
          g_entryQuality,
          g_entryQualityScore,
+         g_antiChaseActive ? "true" : "false",
+         g_antiChaseDirection,
+         g_exhaustionScore,
+         g_extensionAtr,
+         g_adverseWickRatio,
+         g_priceLocationState,
+         g_antiChaseReason,
+         g_breakoutRetestRequired ? "true" : "false",
+         g_breakoutRetestReady ? "true" : "false",
+         DoubleToString(g_breakoutReferenceLevel, SymbolDigitsNow()),
          g_ladderRung,
          g_ladderProgressPoints,
          g_ladderRequiredPoints,
+         g_ladderPullbackPoints,
+         g_ladderPullbackRequiredPoints,
          g_ladderMode,
          DoubleToString(g_dynamicStopPrice, SymbolDigitsNow()),
          DoubleToString(g_dynamicTakeProfitPrice, SymbolDigitsNow()),
@@ -2488,6 +2519,337 @@ bool MomentumSupportsDirection(int direction, double momentum, double factor)
    return direction > 0 ? momentum >= threshold : momentum <= -threshold;
 }
 
+int RecentDirectionalRun(int direction, ENUM_TIMEFRAMES timeframe, int bars)
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   int need = MathMax(2, bars);
+   if(CopyRates(_Symbol, timeframe, 1, need, rates) < need)
+      return 0;
+
+   int run = 0;
+   for(int i = 0; i < need; i++)
+   {
+      bool same = direction > 0
+         ? rates[i].close > rates[i].open
+         : rates[i].close < rates[i].open;
+      if(!same)
+         break;
+      run++;
+   }
+   return run;
+}
+
+bool DirectionalExhaustion(
+   int direction,
+   double &scoreOut,
+   double &extensionAtrOut,
+   double &wickRatioOut,
+   string &reasonOut
+)
+{
+   scoreOut = 0.0;
+   extensionAtrOut = 0.0;
+   wickRatioOut = 0.0;
+   reasonOut = "NONE";
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+      return false;
+
+   double price = (tick.bid + tick.ask) * 0.5;
+   double atrPrice = MathMax(
+      _Point * 12.0,
+      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point
+   );
+
+   double terminalRetracement = 2.0;
+   if(g_fibM15Direction == direction)
+      terminalRetracement = MathMin(terminalRetracement, g_fibM15Retracement);
+   if(g_fibM5Direction == direction)
+      terminalRetracement = MathMin(terminalRetracement, g_fibM5Retracement);
+
+   double impulseRange = 0.0;
+   if(g_fibDirection == direction && g_fibSwingHigh > g_fibSwingLow)
+      impulseRange = g_fibSwingHigh - g_fibSwingLow;
+   extensionAtrOut = impulseRange > 0.0
+      ? impulseRange / atrPrice * MathMax(0.0, 1.0 - MathMin(1.0, terminalRetracement))
+      : 0.0;
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 4, rates) >= 4)
+   {
+      double range = MathMax(_Point, rates[0].high - rates[0].low);
+      double lowerWick = MathMin(rates[0].open, rates[0].close) - rates[0].low;
+      double upperWick = rates[0].high - MathMax(rates[0].open, rates[0].close);
+      wickRatioOut = direction < 0 ? lowerWick / range : upperWick / range;
+
+      if(wickRatioOut >= 0.35) scoreOut += 18.0;
+      if(wickRatioOut >= 0.55) scoreOut += 12.0;
+   }
+
+   if(terminalRetracement <= 0.236)
+   {
+      scoreOut += 30.0;
+      reasonOut = "FIB_TERMINAL_ZONE";
+   }
+   if(terminalRetracement <= 0.10)
+      scoreOut += 15.0;
+
+   if(extensionAtrOut >= 1.25)
+   {
+      scoreOut += 18.0;
+      if(reasonOut == "NONE") reasonOut = "EXTENDED_IMPULSE";
+   }
+   if(extensionAtrOut >= 1.80)
+      scoreOut += 12.0;
+
+   int run = RecentDirectionalRun(direction, PERIOD_M5, 4);
+   if(run >= 3)
+      scoreOut += 12.0;
+
+   bool nearTerminalLevel = direction < 0
+      ? (g_nearestSupport > 0.0 && price - g_nearestSupport <= atrPrice * 0.25)
+      : (g_nearestResistance > 0.0 && g_nearestResistance - price <= atrPrice * 0.25);
+   if(nearTerminalLevel)
+   {
+      scoreOut += 18.0;
+      if(reasonOut == "NONE") reasonOut = direction < 0 ? "NEAR_SUPPORT" : "NEAR_RESISTANCE";
+   }
+
+   if(wickRatioOut >= 0.45 && reasonOut == "NONE")
+      reasonOut = "ADVERSE_WICK";
+
+   return scoreOut >= 55.0;
+}
+
+bool PullbackRetestReady(int direction, double momentum)
+{
+   bool fibPullback =
+      (g_fibM15Direction == direction &&
+       g_fibM15Retracement >= 0.236 && g_fibM15Retracement <= 0.786) ||
+      (g_fibM5Direction == direction &&
+       g_fibM5Retracement >= 0.236 && g_fibM5Retracement <= 0.786);
+   bool executionTurn =
+      RecentDirectionalBody(direction, PERIOD_M1) ||
+      RecentDirectionalBody(direction, PERIOD_M5) ||
+      MomentumSupportsDirection(direction, momentum, 0.20);
+
+   if(fibPullback && executionTurn)
+      return true;
+
+   // Fallback when an active Fib cannot be formed: demand a measurable pullback
+   // from the recent M5 extreme, then a fresh directional execution candle.
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 10, rates) < 10)
+      return false;
+
+   double atrPrice = MathMax(
+      _Point * 12.0,
+      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point
+   );
+   double extreme = direction > 0 ? rates[0].high : rates[0].low;
+   for(int i = 1; i < 10; i++)
+      extreme = direction > 0 ? MathMax(extreme, rates[i].high) : MathMin(extreme, rates[i].low);
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+      return false;
+   double current = direction > 0 ? tick.bid : tick.ask;
+   double pullback = direction > 0 ? extreme - current : current - extreme;
+
+   return pullback >= atrPrice * 0.18 && executionTurn;
+}
+
+bool CleanBreakoutImpulse(int direction, double level, double buffer)
+{
+   if(level <= 0.0)
+      return false;
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 2, rates) < 2)
+      return false;
+
+   double atrPrice = MathMax(
+      _Point * 12.0,
+      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point
+   );
+   double range = MathMax(_Point, rates[0].high - rates[0].low);
+   double body = MathAbs(rates[0].close - rates[0].open);
+   double bodyRatio = body / range;
+   double adverseWick = direction > 0
+      ? rates[0].high - MathMax(rates[0].open, rates[0].close)
+      : MathMin(rates[0].open, rates[0].close) - rates[0].low;
+   double adverseWickRatio = adverseWick / range;
+   double closeDistance = MathAbs(rates[0].close - level);
+
+   bool directionalClose = direction > 0
+      ? rates[0].close > level + buffer
+      : rates[0].close < level - buffer;
+
+   return directionalClose &&
+      bodyRatio >= 0.45 &&
+      adverseWickRatio <= 0.30 &&
+      range <= atrPrice * 1.60 &&
+      closeDistance <= atrPrice * 0.80;
+}
+
+bool BreakoutRetestConfirmed(int direction, double level, double buffer)
+{
+   if(level <= 0.0)
+      return false;
+
+   ENUM_TIMEFRAMES timeframes[2] = {PERIOD_M1, PERIOD_M5};
+   for(int t = 0; t < 2; t++)
+   {
+      MqlRates rates[];
+      ArraySetAsSeries(rates, true);
+      if(CopyRates(_Symbol, timeframes[t], 1, 3, rates) < 3)
+         continue;
+
+      if(direction > 0)
+      {
+         bool broke = rates[1].close > level + buffer;
+         bool retested = rates[0].low <= level + buffer * 1.5;
+         bool held = rates[0].close > level && rates[0].close > rates[0].open;
+         if(broke && retested && held)
+            return true;
+      }
+      else
+      {
+         bool broke = rates[1].close < level - buffer;
+         bool retested = rates[0].high >= level - buffer * 1.5;
+         bool held = rates[0].close < level && rates[0].close < rates[0].open;
+         if(broke && retested && held)
+            return true;
+      }
+   }
+   return false;
+}
+
+void RegisterAntiChase(
+   int direction,
+   double score,
+   double extensionAtr,
+   double wickRatio,
+   string reason,
+   double referenceLevel,
+   bool breakoutRetest
+)
+{
+   if(!g_antiChaseActive || score >= g_exhaustionScore)
+   {
+      g_antiChaseActive = true;
+      g_antiChaseDirection = direction;
+      g_exhaustionScore = score;
+      g_extensionAtr = extensionAtr;
+      g_adverseWickRatio = wickRatio;
+      g_antiChaseReason = reason;
+      g_breakoutReferenceLevel = referenceLevel;
+      g_breakoutRetestRequired = breakoutRetest;
+      g_priceLocationState = breakoutRetest ? "WAIT_BREAKOUT_RETEST" : "WAIT_PULLBACK";
+   }
+}
+
+bool AntiChaseLocationReady(
+   int direction,
+   double momentum,
+   bool breakoutModel,
+   double breakoutLevel,
+   double breakoutBuffer,
+   string &triggerOverride
+)
+{
+   triggerOverride = "NONE";
+
+   double exhaustion = 0.0;
+   double extensionAtr = 0.0;
+   double adverseWick = 0.0;
+   string reason = "NONE";
+   bool exhausted = DirectionalExhaustion(
+      direction,
+      exhaustion,
+      extensionAtr,
+      adverseWick,
+      reason
+   );
+
+   if(breakoutModel)
+   {
+      bool retestReady = BreakoutRetestConfirmed(
+         direction,
+         breakoutLevel,
+         breakoutBuffer
+      );
+      bool cleanBreak = CleanBreakoutImpulse(
+         direction,
+         breakoutLevel,
+         breakoutBuffer
+      );
+
+      if(retestReady)
+      {
+         g_breakoutRetestReady = true;
+         g_breakoutRetestRequired = false;
+         g_breakoutReferenceLevel = breakoutLevel;
+         g_exhaustionScore = exhaustion;
+         g_extensionAtr = extensionAtr;
+         g_adverseWickRatio = adverseWick;
+         g_priceLocationState = "BREAKOUT_RETEST_READY";
+         g_antiChaseReason = "RETEST_CONFIRMED";
+         triggerOverride = "BREAKOUT_RETEST";
+         return true;
+      }
+
+      if(cleanBreak && !exhausted)
+      {
+         g_breakoutRetestReady = false;
+         g_breakoutRetestRequired = false;
+         g_breakoutReferenceLevel = breakoutLevel;
+         return true;
+      }
+
+      RegisterAntiChase(
+         direction,
+         MathMax(exhaustion, 55.0),
+         extensionAtr,
+         adverseWick,
+         exhausted ? reason : "BREAKOUT_EXTENDED_OR_WICKY",
+         breakoutLevel,
+         true
+      );
+      return false;
+   }
+
+   if(!exhausted)
+      return true;
+
+   if(PullbackRetestReady(direction, momentum))
+   {
+      g_exhaustionScore = exhaustion;
+      g_extensionAtr = extensionAtr;
+      g_adverseWickRatio = adverseWick;
+      g_priceLocationState = "PULLBACK_RETEST_READY";
+      g_antiChaseReason = reason;
+      triggerOverride = "PULLBACK_RETEST";
+      return true;
+   }
+
+   RegisterAntiChase(
+      direction,
+      exhaustion,
+      extensionAtr,
+      adverseWick,
+      reason,
+      0.0,
+      false
+   );
+   return false;
+}
+
 bool DirectSetupReady(
    int direction,
    double momentum,
@@ -2507,33 +2869,69 @@ bool DirectSetupReady(
       g_marketRegime == "HIGH_VOLATILITY" ? 0.55 : 0.75
    );
 
-   // A confirmed M5 level break is already price-action confirmation.
+   double atrPrice = MathMax(
+      _Point * 20.0,
+      AverageTrueRangePoints(PERIOD_M15, g_atrPeriod) * _Point
+   );
+   double breakoutBuffer = MathMax(_Point * 8.0, atrPrice * 0.18) * 0.18;
+   double breakoutLevel = direction > 0 ? g_majorResistance : g_majorSupport;
+   string locationTrigger = "NONE";
+
+   // Breakout no longer means "sell/buy immediately". A clean, compact break
+   // may execute directly; an extended/wicky break must retest first.
    if(modelOut == "BREAKOUT")
+   {
+      if(!AntiChaseLocationReady(
+         direction,
+         momentum,
+         true,
+         breakoutLevel,
+         breakoutBuffer,
+         locationTrigger
+      ))
+         return false;
+
+      if(locationTrigger != "NONE")
+         modelOut = locationTrigger;
       return true;
+   }
+
+   // All other setups pass through terminal-location awareness. This protects
+   // against selling the bottom / buying the top while preserving valid
+   // pullback, OB, Fib, level and continuation entries.
+   if(!AntiChaseLocationReady(
+      direction,
+      momentum,
+      false,
+      0.0,
+      0.0,
+      locationTrigger
+   ))
+      return false;
+
+   if(locationTrigger != "NONE")
+      modelOut = locationTrigger;
+
+   if(modelOut == "PULLBACK_RETEST")
+      return microSupport || lightMomentum || strongMomentum;
 
    // Pullback/reaction setups only need one lower-timeframe turn or light
-   // directional momentum. No Confidence score is allowed to veto them.
-   if(modelOut == "OB_FIB_PULLBACK" ||
-      modelOut == "ORDER_BLOCK_PULLBACK" ||
-      modelOut == "FIB_PULLBACK" ||
-      modelOut == "LEVEL_REACTION")
+   // directional momentum. Confidence remains optional and separate.
+   if(g_entryModel == "OB_FIB_PULLBACK" ||
+      g_entryModel == "ORDER_BLOCK_PULLBACK" ||
+      g_entryModel == "FIB_PULLBACK" ||
+      g_entryModel == "LEVEL_REACTION")
       return microSupport || lightMomentum;
 
-   // Continuation is valid when the higher structure is aligned and execution
-   // frames are not dead against it.
-   if(modelOut == "CONTINUATION")
+   if(g_entryModel == "CONTINUATION")
       return higherSupport && (microSupport || lightMomentum);
 
-   // During news/high volatility, a real directional impulse can trade even
-   // before a textbook pullback forms, provided market structure is supporting.
    if(g_marketRegime == "HIGH_VOLATILITY" &&
       strongMomentum &&
       (microSupport || g_trendM15 == direction))
       return true;
 
-   // CAUTION_ZONE is not a hard block. It simply needs stronger direct price
-   // action instead of a numeric confidence threshold.
-   if(modelOut == "CAUTION_ZONE")
+   if(g_entryModel == "CAUTION_ZONE")
       return strongMomentum && microSupport && higherSupport;
 
    return strongMomentum && (microSupport || higherSupport);
@@ -2542,6 +2940,16 @@ bool DirectSetupReady(
 int SetupFirstDirection(double momentum)
 {
    g_entryTrigger = "NONE";
+   g_antiChaseActive = false;
+   g_antiChaseDirection = 0;
+   g_exhaustionScore = 0.0;
+   g_extensionAtr = 0.0;
+   g_adverseWickRatio = 0.0;
+   g_priceLocationState = "NORMAL";
+   g_antiChaseReason = "NONE";
+   g_breakoutRetestRequired = false;
+   g_breakoutRetestReady = false;
+   g_breakoutReferenceLevel = 0.0;
 
    if(g_entryMode == ENTRY_BUY_ONLY || g_entryMode == ENTRY_SELL_ONLY)
    {
@@ -2551,16 +2959,29 @@ int SetupFirstDirection(double momentum)
       if(DirectSetupReady(fixedDirection, momentum, fixedModel, fixedScore))
       {
          EvaluateMarketLocationScore(fixedDirection);
-         g_entryTrigger = g_entryModel;
+         g_entryTrigger = fixedModel != "NONE" ? fixedModel : g_entryModel;
          return fixedDirection;
       }
 
       if(HigherTimeframeSupportsDirection(fixedDirection) &&
          LowerTimeframeSupportsDirection(fixedDirection))
       {
-         EvaluateMarketLocationScore(fixedDirection);
-         g_entryTrigger = "STRUCTURE_CONTINUATION";
-         return fixedDirection;
+         string locationTrigger = "NONE";
+         if(AntiChaseLocationReady(
+            fixedDirection,
+            momentum,
+            false,
+            0.0,
+            0.0,
+            locationTrigger
+         ))
+         {
+            EvaluateMarketLocationScore(fixedDirection);
+            g_entryTrigger = locationTrigger != "NONE"
+               ? locationTrigger
+               : "STRUCTURE_CONTINUATION";
+            return fixedDirection;
+         }
       }
       return 0;
    }
@@ -2573,14 +2994,20 @@ int SetupFirstDirection(double momentum)
    bool sellReady = DirectSetupReady(-1, momentum, sellModel, sellScore);
 
    int chosen = 0;
+   string chosenModel = "NONE";
    if(buyReady && !sellReady)
+   {
       chosen = 1;
+      chosenModel = buyModel;
+   }
    else if(sellReady && !buyReady)
+   {
       chosen = -1;
+      chosenModel = sellModel;
+   }
    else if(buyReady && sellReady)
    {
-      // Score selects between two valid setups; it never decides whether a
-      // valid setup is allowed to trade.
+      // Score selects between two already-valid setups. It is not an entry gate.
       if(MathAbs(buyScore - sellScore) >= 4.0)
          chosen = buyScore > sellScore ? 1 : -1;
       else if(momentum > 0.0)
@@ -2591,14 +3018,28 @@ int SetupFirstDirection(double momentum)
          chosen = g_macroTrendDirection;
       else
          chosen = buyScore >= sellScore ? 1 : -1;
+      chosenModel = chosen > 0 ? buyModel : sellModel;
    }
 
    if(chosen == 0 && g_macroTrendDirection != 0 &&
       HigherTimeframeSupportsDirection(g_macroTrendDirection) &&
       LowerTimeframeSupportsDirection(g_macroTrendDirection))
    {
-      chosen = g_macroTrendDirection;
-      g_entryTrigger = "STRUCTURE_CONTINUATION";
+      string locationTrigger = "NONE";
+      if(AntiChaseLocationReady(
+         g_macroTrendDirection,
+         momentum,
+         false,
+         0.0,
+         0.0,
+         locationTrigger
+      ))
+      {
+         chosen = g_macroTrendDirection;
+         chosenModel = locationTrigger != "NONE"
+            ? locationTrigger
+            : "STRUCTURE_CONTINUATION";
+      }
    }
 
    if(chosen == 0)
@@ -2612,18 +3053,68 @@ int SetupFirstDirection(double momentum)
          ) &&
          (g_trendM5 == momentumDirection || g_trendM15 == momentumDirection))
       {
-         chosen = momentumDirection;
-         g_entryTrigger = g_marketRegime == "HIGH_VOLATILITY"
-            ? "NEWS_IMPULSE"
-            : "MOMENTUM_CONTINUATION";
+         string locationTrigger = "NONE";
+         if(AntiChaseLocationReady(
+            momentumDirection,
+            momentum,
+            false,
+            0.0,
+            0.0,
+            locationTrigger
+         ))
+         {
+            chosen = momentumDirection;
+            chosenModel = locationTrigger != "NONE"
+               ? locationTrigger
+               : (g_marketRegime == "HIGH_VOLATILITY"
+                  ? "NEWS_IMPULSE"
+                  : "MOMENTUM_CONTINUATION");
+         }
       }
    }
 
    if(chosen != 0)
    {
+      // If the opposite direction was exhausted but this direction has a valid
+      // setup, do not let the opposite anti-chase state pollute the UI.
+      if(g_antiChaseActive && g_antiChaseDirection != chosen)
+      {
+         g_antiChaseActive = false;
+         g_antiChaseDirection = 0;
+         g_exhaustionScore = 0.0;
+         g_extensionAtr = 0.0;
+         g_adverseWickRatio = 0.0;
+         g_antiChaseReason = "NONE";
+         g_breakoutRetestRequired = false;
+         g_breakoutRetestReady = false;
+         g_breakoutReferenceLevel = 0.0;
+         g_priceLocationState =
+            (chosenModel == "PULLBACK_RETEST" || chosenModel == "BREAKOUT_RETEST")
+            ? "RETEST_READY"
+            : "NORMAL";
+      }
+
+      if(!g_antiChaseActive)
+      {
+         if(chosenModel == "BREAKOUT_RETEST")
+            g_priceLocationState = "BREAKOUT_RETEST_READY";
+         else if(chosenModel == "PULLBACK_RETEST")
+            g_priceLocationState = "PULLBACK_RETEST_READY";
+         else
+         {
+            g_priceLocationState = "NORMAL";
+            g_exhaustionScore = 0.0;
+            g_extensionAtr = 0.0;
+            g_adverseWickRatio = 0.0;
+            g_antiChaseReason = "NONE";
+            g_breakoutRetestRequired = false;
+            g_breakoutRetestReady = false;
+            g_breakoutReferenceLevel = 0.0;
+         }
+      }
+
       EvaluateMarketLocationScore(chosen);
-      if(g_entryTrigger == "NONE")
-         g_entryTrigger = g_entryModel;
+      g_entryTrigger = chosenModel != "NONE" ? chosenModel : g_entryModel;
    }
    return chosen;
 }
@@ -3065,7 +3556,9 @@ int AdaptiveEntryDirection(double momentum)
       g_historicalWinSamples = 0;
       g_confidenceSource = "MODEL";
       g_effectiveConfidenceThreshold = 0.0;
-      g_adaptiveBlockReason = "WAITING_SETUP";
+      g_adaptiveBlockReason = g_antiChaseActive
+         ? (g_breakoutRetestRequired ? "WAITING_BREAKOUT_RETEST" : "WAITING_PULLBACK_RETEST")
+         : "WAITING_SETUP";
       g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
       return 0;
    }
@@ -3631,6 +4124,29 @@ double LadderFractionForRung(int rung)
    return 0.63 + (rung - 10) * 0.08;
 }
 
+bool RecentDirectionalBodyAfter(
+   int direction,
+   ENUM_TIMEFRAMES timeframe,
+   datetime since
+)
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, timeframe, 1, 2, rates) < 2)
+      return false;
+   if(since > 0 && rates[0].time < since)
+      return false;
+
+   double range = MathMax(_Point, rates[0].high - rates[0].low);
+   double body = MathAbs(rates[0].close - rates[0].open);
+   if(body < range * 0.25)
+      return false;
+
+   return direction > 0
+      ? rates[0].close > rates[0].open
+      : rates[0].close < rates[0].open;
+}
+
 bool BasketLadderReady(int direction, int count, int targetPositions)
 {
    int nextRung = count + 1;
@@ -3640,6 +4156,8 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
    if(nextRung <= 1)
    {
       g_ladderRequiredPoints = 0.0;
+      g_ladderPullbackPoints = 0.0;
+      g_ladderPullbackRequiredPoints = 0.0;
       g_ladderMode = "INITIAL";
       return true;
    }
@@ -3660,14 +4178,98 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       3.0,
       atr * LadderFractionForRung(nextRung) * qualityFactor * regimeFactor
    );
-   g_ladderMode =
-      g_marketRegimeDetail == "NEWS_IMPULSE" ? "FAST_NEWS" :
-      g_entryQuality == "A" ? "QUALITY_A" :
-      g_entryQuality == "B" ? "QUALITY_B" : "QUALITY_C";
 
-   // Ladder is an intentional position-management schedule, not an entry
-   // filter. Rung 1 has already traded; this only spaces additional positions.
-   return g_ladderProgressPoints >= g_ladderRequiredPoints;
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+   {
+      g_ladderMode = "NO_TICK";
+      return false;
+   }
+
+   double current = direction > 0 ? tick.bid : tick.ask;
+   if(g_ladderExtremePrice <= 0.0)
+      g_ladderExtremePrice = current;
+
+   // Track the most favorable price after the previous rung.
+   if(direction > 0)
+      g_ladderExtremePrice = MathMax(g_ladderExtremePrice, current);
+   else
+      g_ladderExtremePrice = MathMin(g_ladderExtremePrice, current);
+
+   g_ladderPullbackPoints = direction > 0
+      ? MathMax(0.0, (g_ladderExtremePrice - current) / _Point)
+      : MathMax(0.0, (current - g_ladderExtremePrice) / _Point);
+
+   double pullbackFactor =
+      g_marketRegimeDetail == "NEWS_IMPULSE" ? 0.045 :
+      g_marketRegime == "HIGH_VOLATILITY" ? 0.055 : 0.070;
+   g_ladderPullbackRequiredPoints = MathMax(
+      2.0,
+      MathMin(
+         atr * pullbackFactor,
+         MathMax(2.0, g_ladderRequiredPoints * 0.35)
+      )
+   );
+
+   if(!g_ladderPullbackArmed &&
+      g_ladderProgressPoints < g_ladderRequiredPoints)
+   {
+      g_ladderMode = "WAIT_PROGRESS";
+      return false;
+   }
+
+   // Critical anti-chase change: once the next rung distance is reached, do
+   // not add at the new extreme. Wait for a small pullback first.
+   if(!g_ladderPullbackArmed)
+   {
+      if(g_ladderPullbackPoints < g_ladderPullbackRequiredPoints)
+      {
+         g_ladderMode = "WAIT_PULLBACK";
+         return false;
+      }
+
+      g_ladderPullbackArmed = true;
+      g_ladderPullbackArmedAt = TimeCurrent();
+      g_ladderMode = "WAIT_CONTINUATION";
+      return false;
+   }
+
+   // After the pullback, require a fresh execution turn back in Basket
+   // direction. This converts the Ladder from "add on new low/high" into
+   // "add after pullback + continuation".
+   bool continuation =
+      MomentumSupportsDirection(direction, MomentumPoints(), 0.18) ||
+      RecentDirectionalBodyAfter(
+         direction,
+         PERIOD_M1,
+         g_ladderPullbackArmedAt
+      );
+
+   if(!continuation)
+   {
+      g_ladderMode = "WAIT_CONTINUATION";
+      return false;
+   }
+
+   double exhaustion = 0.0;
+   double extensionAtr = 0.0;
+   double adverseWick = 0.0;
+   string exhaustionReason = "NONE";
+   bool exhausted = DirectionalExhaustion(
+      direction,
+      exhaustion,
+      extensionAtr,
+      adverseWick,
+      exhaustionReason
+   );
+   if(exhausted && !PullbackRetestReady(direction, MomentumPoints()))
+   {
+      g_ladderMode = "EXHAUSTION_PULLBACK";
+      return false;
+   }
+
+   g_ladderMode = "PULLBACK_CONTINUATION_READY";
+   return true;
 }
 
 void ArmBurst(int direction)
@@ -3682,6 +4284,11 @@ void ArmBurst(int direction)
    g_ladderRung = MathMax(1, BasketPositionCount() + 1);
    g_ladderProgressPoints = 0.0;
    g_ladderRequiredPoints = 0.0;
+   g_ladderExtremePrice = 0.0;
+   g_ladderPullbackPoints = 0.0;
+   g_ladderPullbackRequiredPoints = 0.0;
+   g_ladderPullbackArmed = false;
+   g_ladderPullbackArmedAt = 0;
    g_ladderMode = "ARMED";
    g_burstActive = g_burstRequestsSent < g_burstTargetPositions;
    g_burstNeedsRearm = false;
@@ -3731,7 +4338,13 @@ void ProcessBurstQueue()
    // are staged transparently by the Ladder rather than fired in one burst.
    if(!BasketLadderReady(g_burstDirection, count, g_burstTargetPositions))
    {
-      g_executionStatus = "BASKET_LADDER_WAIT";
+      g_executionStatus =
+         g_ladderMode == "WAIT_PULLBACK" ||
+         g_ladderMode == "EXHAUSTION_PULLBACK"
+         ? "BASKET_LADDER_PULLBACK_WAIT"
+         : g_ladderMode == "WAIT_CONTINUATION"
+           ? "BASKET_LADDER_CONTINUATION_WAIT"
+           : "BASKET_LADDER_WAIT";
       return;
    }
 
@@ -3765,6 +4378,11 @@ void ProcessBurstQueue()
    {
       g_executionStatus = "BASKET_LADDER_ADVANCE";
       g_ladderRung = filled + 1;
+      g_ladderExtremePrice = 0.0;
+      g_ladderPullbackPoints = 0.0;
+      g_ladderPullbackRequiredPoints = 0.0;
+      g_ladderPullbackArmed = false;
+      g_ladderPullbackArmedAt = 0;
    }
 }
 
