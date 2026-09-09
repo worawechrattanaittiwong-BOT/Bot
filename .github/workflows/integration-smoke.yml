@@ -1,5 +1,9 @@
 name: Integration Smoke
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+  cancel-in-progress: true
+
 on:
   pull_request:
   push:
@@ -314,10 +318,28 @@ jobs:
           HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"RUNNING\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           test "$(printf '%s' "$HB" | jq -r '.access')" = "true"
 
+          echo "[integration] raising Daily Profit target unlocks stale SAFE_STOP automatically"
+          DAILY_LOCK_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0,\"dailyProfit\":10,\"dailyProfitLocked\":true,\"executionStatus\":\"DAILY_PROFIT_LOCK\"}}")
+          test "$(printf '%s' "$DAILY_LOCK_HB" | jq -r '.desiredState')" = "SAFE_STOP"
+
+          DAILY_RAISE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"dailyProfitTargetMoney":20}')
+          test "$(printf '%s' "$DAILY_RAISE" | jq -r '.settings.dailyProfitTargetMoney')" = "20"
+          test "$(printf '%s' "$DAILY_RAISE" | jq -r '.resumedFromDailyProfitLock')" = "true"
+
+          STALE_UNLOCK_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0,\"dailyProfit\":10,\"dailyProfitLocked\":true,\"executionStatus\":\"DAILY_PROFIT_LOCK\"}}")
+          test "$(printf '%s' "$STALE_UNLOCK_HB" | jq -r '.desiredState')" = "RUNNING"
+          test "$(printf '%s' "$STALE_UNLOCK_HB" | jq -r '.settings.dailyProfitTargetMoney')" = "20"
+
+          CLEAR_LOCK_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"RUNNING\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0,\"dailyProfit\":10,\"dailyProfitLocked\":false,\"executionStatus\":\"EVALUATING\"}}")
+          test "$(printf '%s' "$CLEAR_LOCK_HB" | jq -r '.desiredState')" = "RUNNING"
+
+          DAILY_RESET=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"dailyProfitTargetMoney":10}')
+          test "$(printf '%s' "$DAILY_RESET" | jq -r '.settings.dailyProfitTargetMoney')" = "10"
+
           echo "[integration] trade journal records entries/exits and one Basket result"
           curl -fsS -X POST "$BASE/ea/journal" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"dealTicket\":\"900001\",\"positionId\":\"700001\",\"eventType\":\"ENTRY\",\"direction\":\"BUY\",\"volume\":0.01,\"price\":4400.25,\"entryTrigger\":\"OB_FIB_PULLBACK\",\"entryModel\":\"OB_FIB_PULLBACK\",\"entryQuality\":\"A\",\"entryQualityScore\":87,\"marketRegime\":\"TREND_UP\",\"marketRegimeDetail\":\"TREND_PULLBACK\",\"fibSetupScore\":91,\"orderBlockQuality\":84,\"confidence\":51,\"basketIndex\":1}" >/dev/null
           curl -fsS -X POST "$BASE/ea/journal" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"dealTicket\":\"900002\",\"positionId\":\"700001\",\"eventType\":\"EXIT\",\"direction\":\"BUY\",\"volume\":0.01,\"price\":4412.50,\"netProfit\":12.50,\"entryTrigger\":\"OB_FIB_PULLBACK\",\"entryModel\":\"OB_FIB_PULLBACK\",\"entryQuality\":\"A\",\"entryQualityScore\":87,\"marketRegime\":\"TREND_UP\",\"marketRegimeDetail\":\"TREND_CONTINUATION\",\"fibSetupScore\":91,\"orderBlockQuality\":84,\"confidence\":51,\"basketIndex\":1}" >/dev/null
-          curl -fsS -X POST "$BASE/ea/journal" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"dealTicket\":\"900001\",\"eventType\":\"BASKET\",\"direction\":\"BUY\",\"volume\":0.01,\"netProfit\":12.50,\"entryTrigger\":\"OB_FIB_PULLBACK\",\"entryModel\":\"OB_FIB_PULLBACK\",\"entryQuality\":\"A\",\"entryQualityScore\":87,\"marketRegime\":\"TREND_UP\",\"marketRegimeDetail\":\"TREND_PULLBACK\",\"fibSetupScore\":91,\"orderBlockQuality\":84,\"confidence\":51,\"basketIndex\":1,\"symbol\":\"XAUUSDm\",\"brokerServer\":\"SCENOVA-Demo\",\"startedAt\":100,\"endedAt\":200,\"peakPositions\":1,\"sessionProfile\":\"LONDON\"}" >/dev/null
+          curl -fsS -X POST "$BASE/ea/journal" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"dealTicket\":\"900001\",\"eventType\":\"BASKET\",\"direction\":\"BUY\",\"volume\":0.01,\"netProfit\":12.50,\"entryTrigger\":\"OB_FIB_PULLBACK\",\"entryModel\":\"OB_FIB_PULLBACK\",\"entryQuality\":\"A\",\"entryQualityScore\":87,\"marketRegime\":\"TREND_UP\",\"marketRegimeDetail\":\"TREND_PULLBACK\",\"fibSetupScore\":91,\"orderBlockQuality\":84,\"confidence\":51,\"basketIndex\":1,\"symbol\":\"XAUUSDm\",\"brokerServer\":\"SCENOVA-Demo\",\"startedAt\":100,\"endedAt\":200,\"peakPositions\":1,\"sessionProfile\":\"LONDON\",\"journalSchema\":3}" >/dev/null
           JOURNAL_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$JOURNAL_DASH" | jq -r '.tradeJournal.stats.closedTrades')" = "1"
           test "$(printf '%s' "$JOURNAL_DASH" | jq -r '.tradeJournal.stats.wins')" = "1"

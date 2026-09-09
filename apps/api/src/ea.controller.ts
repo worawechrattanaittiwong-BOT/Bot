@@ -363,8 +363,14 @@ export class EaController {
       instance.slot_id || null
     );
 
-    const dailyProfitLocked = metrics.dailyProfitLocked === true;
+    const dailyProfitUnlockRequested =
+      instance.metrics?.dailyProfitUnlockRequested === true;
+    const dailyProfitLocked =
+      metrics.dailyProfitLocked === true && !dailyProfitUnlockRequested;
 
+    // The first heartbeat after a user raises/disables the Daily Profit target
+    // may still carry the old EA lock bit. Let that one heartbeat deliver the
+    // new settings instead of immediately forcing SAFE_STOP again.
     if ((!access || dailyProfitLocked) && instance.desired_state === "RUNNING") {
       await this.db.query(
         "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1",

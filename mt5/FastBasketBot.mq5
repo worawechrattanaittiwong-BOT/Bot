@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.027"
+#property version   "1.028"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -112,6 +112,10 @@ int    g_dayKey = -1;
 int    g_basketPeakPositionCount = 0;
 double g_basketCycleRealizedProfit = 0.0;
 double g_profitRunPeak = 0.0;
+double g_smartProfitDefenseFloor = 0.0;
+double g_smartProfitDefenseLastProfit = 0.0;
+string g_smartProfitDefenseReason = "NONE";
+bool   g_smartProfitDefenseActive = false;
 ulong  g_lastOrderMs = 0;
 datetime g_orderWindowStart = 0;
 int    g_ordersInWindow = 0;
@@ -455,7 +459,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.027", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.028", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -1056,6 +1060,25 @@ void OnTick()
       double cycleProfit = BasketCycleProfit();
       double effectiveBasketTarget = EffectiveBasketProfitTarget();
 
+      // Protect any genuinely positive Cycle, including explicit Basket target,
+      // per-position mode and auto target. A confirmed graph reversal may bank
+      // profit before the configured target instead of letting a winner turn red.
+      int profitDefenseDirection = BasketDirection();
+      string profitDefenseReason = "NONE";
+      if(profitDefenseDirection != 0 &&
+         SmartProfitReversalDetected(
+            profitDefenseDirection,
+            cycleProfit,
+            profitDefenseReason
+         ))
+      {
+         CloseAllBasket("SMART_PROFIT_REVERSAL");
+         ResetTrail();
+         g_executionStatus = "SMART_PROFIT_REVERSAL";
+         g_adaptiveBlockReason = profitDefenseReason;
+         return;
+      }
+
       // If no manual Basket/per-position target is configured, multi-position
       // trading falls back to an automatic cycle target.
       if(g_basketProfitTarget > 0.0 && g_perPositionProfit <= 0.0)
@@ -1540,7 +1563,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.027\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.028\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1803,9 +1826,17 @@ void SendHeartbeat()
          RescuePositionCount()
       );
 
+      string smartProfitDiagnostics = StringFormat(
+         ",\"smartProfitDefenseActive\":%s,\"smartProfitDefenseReason\":\"%s\",\"smartProfitDefenseFloor\":%.2f,\"smartProfitDefenseLastProfit\":%.2f",
+         g_smartProfitDefenseActive ? "true" : "false",
+         g_smartProfitDefenseReason,
+         g_smartProfitDefenseFloor,
+         g_smartProfitDefenseLastProfit
+      );
+
       string positionDiagnostics =
          marketContextDiagnostics + intelligenceV3Diagnostics + probabilityDiagnostics +
-         intelligenceV4Diagnostics +
+         intelligenceV4Diagnostics + smartProfitDiagnostics +
          ",\"openPositions\":" + OpenPositionsTelemetryJson() + "}}";
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + positionDiagnostics;
    }
@@ -2344,6 +2375,9 @@ void ApplyUnifiedTradingEngine()
 
 void ApplySettings(string json)
 {
+   double previousDailyProfitTarget = g_dailyProfitTarget;
+   bool previousDailyContinueAfterTarget = g_dailyProfitContinueAfterTarget;
+
    g_lot = MathMax(0.01, JsonNumber(json, "lot", g_lot));
    g_maxPositions = (int)MathMax(1.0, JsonNumber(json, "maxPositions", g_maxPositions));
    g_triggerMoney = MathMax(0.0, JsonNumber(json, "basketTriggerMoney", g_triggerMoney));
@@ -2409,6 +2443,15 @@ void ApplySettings(string json)
    else if(mode == "AUTO_MOMENTUM") g_entryMode = ENTRY_AUTO_MOMENTUM;
 
    ApplyUnifiedTradingEngine();
+
+   bool dailyProfitSettingsChanged =
+      MathAbs(previousDailyProfitTarget-g_dailyProfitTarget)>0.0000001 ||
+      previousDailyContinueAfterTarget!=g_dailyProfitContinueAfterTarget;
+
+   if(g_dailyProfitLocked &&
+      dailyProfitSettingsChanged &&
+      (g_dailyProfitTarget<=0.0 || DailyBotProfit()<g_dailyProfitTarget))
+      UnlockDailyProfitLock("DAILY_TARGET_UPDATED");
 
    if(g_dailyProfitTargetArmed &&
       (g_dailyProfitTarget <= 0.0 || DailyBotProfit() < g_dailyProfitTarget))
@@ -4909,7 +4952,21 @@ void EnsureBurstTargets(int plannedPositions)
       }
    }
 
-   g_burstTargetMoney = MathMax(fallbackTarget, dynamicTarget);
+   // Keep the automatic reward meaningful relative to the configured loss
+   // budget. Smart Profit Defense may still bank a smaller positive Cycle when
+   // the graph confirms a reversal.
+   double expectancyFloor = 0.0;
+   if(g_maxBasketLoss > 0.0)
+   {
+      expectancyFloor = g_maxBasketLoss * 0.30;
+      if(equity > 0.0)
+         expectancyFloor = MathMin(expectancyFloor,equity * 0.01);
+   }
+
+   g_burstTargetMoney = MathMax(
+      fallbackTarget,
+      MathMax(dynamicTarget,expectancyFloor)
+   );
 
    // Loss protection is never synthesized. If the user sets Basket Loss to 0,
    // the effective Basket loss is OFF.
@@ -5441,12 +5498,19 @@ void ResetBasketCycleState()
 {
    if(g_basketPeakPositionCount == 0 &&
       MathAbs(g_basketCycleRealizedProfit) < 0.0000001 &&
-      MathAbs(g_profitRunPeak) < 0.0000001)
+      MathAbs(g_profitRunPeak) < 0.0000001 &&
+      !g_smartProfitDefenseActive &&
+      g_smartProfitDefenseReason == "NONE" &&
+      MathAbs(g_smartProfitDefenseLastProfit) < 0.0000001)
       return;
 
    g_basketPeakPositionCount = 0;
    g_basketCycleRealizedProfit = 0.0;
    g_profitRunPeak = 0.0;
+   g_smartProfitDefenseFloor = 0.0;
+   g_smartProfitDefenseLastProfit = 0.0;
+   g_smartProfitDefenseReason = "NONE";
+   g_smartProfitDefenseActive = false;
 
    string peakKey = BasketPeakGlobalKey();
    string realizedKey = BasketRealizedGlobalKey();
@@ -5489,6 +5553,86 @@ double BasketCycleProfit()
 double CurrentPerPositionProfitTarget()
 {
    return MathMax(0.0, g_perPositionProfit);
+}
+
+double SmartProfitProtectionFloor(int direction)
+{
+   double volume = direction == 0
+      ? MathMax(SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),g_lot)
+      : MathMax(
+         SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),
+         VolumeForMagic(InpMagic,direction)
+      );
+
+   // Closing a positive Cycle can still pay commission. Keep a small reserve
+   // so "protect profit" does not intentionally turn a tiny winner negative.
+   double costReserve = CurrentSpreadCost(volume) * 0.35;
+   double configuredReference = g_basketProfitTarget > 0.0
+      ? g_basketProfitTarget * 0.05
+      : 0.0;
+   return MathMax(0.10,MathMax(costReserve,configuredReference));
+}
+
+bool SmartProfitReversalDetected(
+   int direction,
+   double cycleProfit,
+   string &reasonOut
+)
+{
+   reasonOut = "NONE";
+   g_smartProfitDefenseActive = false;
+   g_smartProfitDefenseReason = "NONE";
+   g_smartProfitDefenseLastProfit = cycleProfit;
+
+   if(direction == 0 || cycleProfit <= 0.0)
+      return false;
+
+   double floor = SmartProfitProtectionFloor(direction);
+   g_smartProfitDefenseFloor = floor;
+   if(cycleProfit < floor)
+      return false;
+
+   int opposite = -direction;
+   bool m1Flip = g_trendM1 == opposite;
+   bool m5Flip = g_trendM5 == opposite;
+   bool m15Flip = g_trendM15 == opposite;
+   bool emaFlip =
+      g_emaTrendM5 == opposite ||
+      (direction > 0 && g_emaReclaimState == "LOSE_EMA21_DOWN") ||
+      (direction < 0 && g_emaReclaimState == "RECLAIM_EMA21_UP");
+   bool emaMacroFlip =
+      g_emaTrendM15 == opposite ||
+      g_emaTrendM30 == opposite;
+   double oppositePa = direction > 0
+      ? g_priceActionSellScore
+      : g_priceActionBuyScore;
+   bool momentumFlip = MomentumSupportsDirection(
+      opposite,
+      MomentumPoints(),
+      0.35
+   );
+
+   bool confirmed =
+      (m1Flip && m5Flip && (emaFlip || oppositePa >= 18.0)) ||
+      (m5Flip && emaFlip && oppositePa >= 27.0) ||
+      (oppositePa >= 34.0 && (m1Flip || emaFlip)) ||
+      (m15Flip && emaMacroFlip && momentumFlip);
+
+   if(!confirmed)
+      return false;
+
+   if(m15Flip && emaMacroFlip)
+      reasonOut = "M15_EMA_REVERSAL";
+   else if(oppositePa >= 34.0)
+      reasonOut = "PRICE_ACTION_REVERSAL";
+   else if(m1Flip && m5Flip)
+      reasonOut = "M1_M5_REVERSAL";
+   else
+      reasonOut = "EMA_MOMENTUM_REVERSAL";
+
+   g_smartProfitDefenseActive = true;
+   g_smartProfitDefenseReason = reasonOut;
+   return true;
 }
 
 bool ManagePerPositionTargets()
@@ -5691,6 +5835,34 @@ bool HandleDailyProfitControl(int count)
    }
 
    return false;
+}
+
+void UnlockDailyProfitLock(string reason)
+{
+   if(!g_dailyProfitLocked)
+      return;
+
+   g_dailyProfitLocked=false;
+   DisarmDailyProfitRunOn();
+
+   string key=DailyProfitLockGlobalKey();
+   if(GlobalVariableCheck(key))
+      GlobalVariableDel(key);
+
+   if(g_pendingCloseReason==CLOSE_REASON_DAILY_PROFIT &&
+      BasketPositionCount()==0 &&
+      RescuePositionCount()==0)
+   {
+      g_pendingCloseReason=CLOSE_REASON_NONE;
+      PersistPendingClose();
+   }
+
+   g_executionStatus="DAILY_PROFIT_TARGET_UPDATED";
+   Print(
+      "DAILY_PROFIT_LOCK cleared reason=",reason,
+      " current=",DoubleToString(DailyBotProfit(),2),
+      " newTarget=",DoubleToString(g_dailyProfitTarget,2)
+   );
 }
 
 void LoadDailyProfitLock()
@@ -7131,7 +7303,9 @@ int CloseReasonCode(string reason)
    if(StringFind(reason, "MAX_BASKET_LOSS") == 0) return CLOSE_REASON_BASKET_LOSS;
    if(StringFind(reason, "PROFIT_RUN") == 0 ||
       StringFind(reason, "PROFIT_TRAIL") == 0 ||
-      StringFind(reason, "BASKET_PROFIT") == 0)
+      StringFind(reason, "BASKET_PROFIT") == 0 ||
+      StringFind(reason, "SMART_PROFIT") == 0 ||
+      StringFind(reason, "AUTO_PROFIT") == 0)
       return CLOSE_REASON_TRAIL;
    if(StringFind(reason, "SAFE_STOP") == 0) return CLOSE_REASON_SAFE_STOP;
    if(StringFind(reason, "REMOTE_CLOSE_ALL") == 0) return CLOSE_REASON_REMOTE;
