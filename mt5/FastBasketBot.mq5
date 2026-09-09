@@ -817,6 +817,12 @@ double EmaTrailReference(int direction)
 
 int OnInit()
 {
+   for(int t = 0; t < EMA_TF_COUNT; t++)
+      for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+         g_emaHandles[t][p] = INVALID_HANDLE;
+   for(int p = 0; p < EMA_PERIOD_COUNT; p++)
+      g_emaChartHandles[p] = INVALID_HANDLE;
+
    g_lot = InpLot;
    g_maxPositions = InpMaxPositions;
    g_triggerMoney = InpBasketTriggerMoney;
@@ -867,6 +873,7 @@ int OnInit()
    g_sessionStartHour = MathMax(0, MathMin(23, InpSessionStartHour));
    g_sessionEndHour = MathMax(1, MathMin(24, InpSessionEndHour));
    g_maxAtrPoints = MathMax(0.0, InpMaxAtrPoints);
+   g_rescueEnabled = InpAdaptiveRescueEngine;
    g_adaptiveMomentumThreshold = InpMomentumEntryPoints;
    g_adaptiveMaxPositions = g_maxPositions;
    g_adaptiveEntrySpacingMs = g_minOrderIntervalMs;
@@ -876,6 +883,11 @@ int OnInit()
    RestoreSpreadProfile();
    LoadBasketCycleState();
    ApplyUnifiedTradingEngine();
+
+   if(!InitializeEmaIntelligence())
+      Print("EMA Intelligence: one or more EMA handles are not ready yet.");
+   RefreshEmaIntelligence(true);
+   DrawEmaCurves();
 
    if(!MQLInfoInteger(MQL_TESTER))
    {
@@ -913,6 +925,7 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    DeleteTradingFibonacci();
+   ReleaseEmaIntelligence();
    ClearChartStatus();
 }
 
@@ -920,6 +933,8 @@ void OnTick()
 {
    UpdateMomentum();
    SampleSpread();
+   RefreshEmaIntelligence(false);
+   DrawEmaCurves();
    RefreshDailyBaselineIfNeeded();
 
    if(g_access && g_lastSuccessfulHeartbeat > 0 &&
@@ -1244,6 +1259,8 @@ void OnTick()
 void OnTimer()
 {
    SampleSpread();
+   RefreshEmaIntelligence(false);
+   DrawEmaCurves();
 
    if(MQLInfoInteger(MQL_TESTER))
    {
@@ -2674,6 +2691,7 @@ void RefreshMarketContext(bool force)
    g_trendM15 = TimeframeTrend(PERIOD_M15);
    g_trendM30 = TimeframeTrend(PERIOD_M30);
    g_trendH1 = TimeframeTrend(PERIOD_H1);
+   RefreshEmaIntelligence(false);
 
    double atrM15Price = MathMax(_Point * 20.0, AverageTrueRangePoints(PERIOD_M15, g_atrPeriod) * _Point);
    double atrM5Price = MathMax(_Point * 12.0, AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point);
