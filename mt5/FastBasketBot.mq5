@@ -2692,6 +2692,7 @@ void RefreshMarketContext(bool force)
    g_trendM30 = TimeframeTrend(PERIOD_M30);
    g_trendH1 = TimeframeTrend(PERIOD_H1);
    RefreshEmaIntelligence(false);
+   RefreshPriceActionIntelligence();
 
    double atrM15Price = MathMax(_Point * 20.0, AverageTrueRangePoints(PERIOD_M15, g_atrPeriod) * _Point);
    double atrM5Price = MathMax(_Point * 12.0, AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point);
@@ -2919,6 +2920,114 @@ bool RecentDirectionalBody(int direction, ENUM_TIMEFRAMES timeframe)
          rates[0].close >= rates[0].low + range * 0.58;
    return rates[0].close < rates[0].open &&
       rates[0].close <= rates[0].high - range * 0.58;
+}
+
+string CandlestickPattern(
+   int direction,
+   ENUM_TIMEFRAMES timeframe,
+   double &scoreOut
+)
+{
+   scoreOut = 0.0;
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   if(CopyRates(_Symbol,timeframe,1,4,rates) < 4)
+      return "NONE";
+
+   double range0 = MathMax(_Point,rates[0].high-rates[0].low);
+   double body0 = MathAbs(rates[0].close-rates[0].open);
+   double lowerWick0 = MathMin(rates[0].open,rates[0].close)-rates[0].low;
+   double upperWick0 = rates[0].high-MathMax(rates[0].open,rates[0].close);
+
+   bool bull0 = rates[0].close > rates[0].open;
+   bool bear0 = rates[0].close < rates[0].open;
+   bool bull1 = rates[1].close > rates[1].open;
+   bool bear1 = rates[1].close < rates[1].open;
+
+   bool engulfing = direction > 0
+      ? (bull0 && bear1 &&
+         rates[0].open <= rates[1].close &&
+         rates[0].close >= rates[1].open)
+      : (bear0 && bull1 &&
+         rates[0].open >= rates[1].close &&
+         rates[0].close <= rates[1].open);
+   if(engulfing)
+   {
+      scoreOut = 38.0;
+      return direction > 0 ? "BULL_ENGULFING" : "BEAR_ENGULFING";
+   }
+
+   double wickRatio = direction > 0
+      ? lowerWick0/range0
+      : upperWick0/range0;
+   double oppositeWickRatio = direction > 0
+      ? upperWick0/range0
+      : lowerWick0/range0;
+   bool directionClose = direction > 0 ? bull0 : bear0;
+
+   if(wickRatio >= 0.55 && oppositeWickRatio <= 0.20)
+   {
+      scoreOut = 34.0;
+      return direction > 0 ? "BULL_PINBAR" : "BEAR_PINBAR";
+   }
+
+   if(directionClose && wickRatio >= 0.35)
+   {
+      scoreOut = 27.0;
+      return direction > 0 ? "BULL_REJECTION" : "BEAR_REJECTION";
+   }
+
+   bool breakRetest = direction > 0
+      ? (rates[1].close > rates[2].high &&
+         rates[0].low <= rates[2].high &&
+         rates[0].close > rates[2].high)
+      : (rates[1].close < rates[2].low &&
+         rates[0].high >= rates[2].low &&
+         rates[0].close < rates[2].low);
+   if(breakRetest)
+   {
+      scoreOut = 32.0;
+      return direction > 0 ? "BULL_BREAK_RETEST" : "BEAR_BREAK_RETEST";
+   }
+
+   if(directionClose && body0 >= range0*0.60)
+   {
+      scoreOut = 18.0;
+      return direction > 0 ? "BULL_BODY" : "BEAR_BODY";
+   }
+
+   return "NONE";
+}
+
+void RefreshPriceActionIntelligence()
+{
+   double buyM1=0.0,buyM5=0.0,sellM1=0.0,sellM5=0.0;
+   string buy1 = CandlestickPattern(1,PERIOD_M1,buyM1);
+   string buy5 = CandlestickPattern(1,PERIOD_M5,buyM5);
+   string sell1 = CandlestickPattern(-1,PERIOD_M1,sellM1);
+   string sell5 = CandlestickPattern(-1,PERIOD_M5,sellM5);
+
+   if(buyM5 >= buyM1)
+   {
+      g_priceActionBuy = buy5;
+      g_priceActionBuyScore = buyM5;
+   }
+   else
+   {
+      g_priceActionBuy = buy1;
+      g_priceActionBuyScore = buyM1;
+   }
+
+   if(sellM5 >= sellM1)
+   {
+      g_priceActionSell = sell5;
+      g_priceActionSellScore = sellM5;
+   }
+   else
+   {
+      g_priceActionSell = sell1;
+      g_priceActionSellScore = sellM1;
+   }
 }
 
 bool LowerTimeframeSupportsDirection(int direction)
@@ -3687,10 +3796,19 @@ double EvaluateMarketLocationScore(int direction)
       g_entryModel == "ORDER_BLOCK_PULLBACK" ? 7.0 :
       g_entryModel == "FIB_PULLBACK" ? 6.0 :
       g_entryModel == "LEVEL_REACTION" ? 5.0 : 2.0;
+   double emaQuality = direction > 0
+      ? g_emaConfluenceScoreBuy
+      : g_emaConfluenceScoreSell;
+   double priceActionQuality = direction > 0
+      ? g_priceActionBuyScore
+      : g_priceActionSellScore;
+
    g_entryQualityScore =
-      g_entryScore * 0.55 +
-      g_fibSetupScore * 0.20 +
-      desiredObQuality * 0.15 +
+      g_entryScore * 0.45 +
+      g_fibSetupScore * 0.18 +
+      desiredObQuality * 0.12 +
+      emaQuality * 0.12 +
+      MathMin(100.0,priceActionQuality*2.0) * 0.08 +
       setupBonus;
    if(HigherTimeframeSupportsDirection(direction))
       g_entryQualityScore += 5.0;
