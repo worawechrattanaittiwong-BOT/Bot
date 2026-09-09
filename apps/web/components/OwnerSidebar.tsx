@@ -10,6 +10,7 @@ export const ownerNavItems = [
   { section:"MY TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"control", label:"Control Center", hint:"ภาพรวมและควบคุมบอท" },
   { section:"MY TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account", label:"บัญชี MT5 & EA", hint:"เชื่อมบัญชี Local / Cloud" },
   { section:"MY TRADING", key:"trading-access", href:"/dashboard?view=access", icon:"shield", label:"สิทธิ์ใช้งานของฉัน", hint:"OWNER · Unlimited Access" },
+  { section:"MY TRADING", key:"trading-backtest", href:"/dashboard?view=backtest", icon:"strategy", label:"Backtest & Performance", hint:"ผลย้อนหลัง ดาวน์โหลด และแชร์ตัวอย่าง" },
   { section:"PUBLIC", key:"website", href:"/", icon:"strategy", label:"หน้าเว็บไซต์", hint:"หน้าแรก SCENOVA" }
 ] as const;
 
