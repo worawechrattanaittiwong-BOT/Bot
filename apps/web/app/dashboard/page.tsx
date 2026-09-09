@@ -1219,7 +1219,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="app-wrap">
+    <div className={"app-wrap "+(activeView === "overview" ? "cc-shell-v4" : "")}>
       {isOwner ? (
         <OwnerSidebar activeKey={ownerActiveKey} onLogout={logout} onNavigate={handleOwnerNavigate}/>
       ) : (
@@ -1265,7 +1265,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <header className={"page-head human-head cc-page-head cc-v3-head " + (activeView === "overview" ? "cc-page-head-overview" : "")}>
+        <header className={"page-head human-head cc-page-head cc-v3-head " + (activeView === "overview" ? "cc-page-head-overview cc-v4-page-head" : "")}>
           <div className="cc-v3-title">
             <span className="cc-v3-title-icon"><ScenovaIcon name={activeView === "overview" ? "control" : activeView === "account" ? "account" : activeView === "backtest" ? "strategy" : "shield"} size={24}/></span>
             <div>
@@ -1388,7 +1388,8 @@ export default function DashboardPage() {
           !data.account ? (
             <EmptySetup onNext={()=>setActiveView("account")} />
           ) : (
-            <div className="cc-overview cc-v3">
+            <div className="cc-overview cc-v3 cc-v4">
+              <div className="cc-v4-ambient" aria-hidden="true"><i/><i/><i/></div>
               {!isMt5Online && (
                 <div className="cc-connect-alert">
                   <div className="cc-alert-icon"><ScenovaIcon name="info" size={20}/></div>
@@ -1404,10 +1405,10 @@ export default function DashboardPage() {
                 <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online ? String(currentPositions) : "—"} sub={"เพดาน "+configuredMaxPositions+" ไม้"} />
               </section>
 
-              <div className="cc-workspace cc-v3-workspace">
-                <section className="panel cc-control-card cc-v3-control">
+              <div className="cc-workspace cc-v3-workspace cc-v4-command-grid">
+                <section className={"panel cc-control-card cc-v3-control cc-command-hero "+(state === "RUNNING" ? "is-running" : "is-idle")}>
                   <div className="cc-card-head cc-v3-control-head">
-                    <div className="cc-symbol-title"><span className="cc-gold-icon"><ScenovaIcon name="gold" size={28}/></span><div><h2>{metrics.symbol || settings.symbol}</h2><small>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}</small></div></div>
+                    <div className="cc-symbol-title"><span className="cc-gold-icon"><ScenovaIcon name="gold" size={28}/></span><div><span className="cc-v4-eyebrow">LIVE EXECUTION</span><h2>{metrics.symbol || settings.symbol}</h2><small>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}</small></div></div>
                     <div className="cc-control-head-right">
                       <button
                         type="button"
@@ -1480,7 +1481,7 @@ export default function DashboardPage() {
 
                 </section>
 
-                <section className="panel cc-status-card cc-v3-account">
+                <section className="panel cc-status-card cc-v3-account cc-account-console">
                   <div className="cc-card-head"><div className="cc-card-title"><span className="cc-card-icon alt"><ScenovaIcon name="account" size={20}/></span><div><h2>สถานะบัญชี</h2></div></div><span className={"cc-mini-health "+(isMt5Online?"good":"warn")}><i/>{isMt5Online?"ใช้งานปกติ":isAgentOnline?"Agent เชื่อมแล้ว · รอ EA":"รอเชื่อมต่อ"}</span></div>
                   <div className="cc-status-list">
                     <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+" วินาที · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20?"good":"warn"} dot/><StatusRow label="สถานะบอท" value={controlStateLabel} tone={state==="RUNNING"?"good":state==="SAFE_STOP"?"warn":"bad"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
@@ -1489,13 +1490,12 @@ export default function DashboardPage() {
                 </section>
               </div>
 
-              
-
-              <section className="panel cc-intelligence-v3 cc-customer-intelligence">
+              <section className="panel cc-intelligence-v3 cc-customer-intelligence cc-v4-intelligence">
                 <div className="cc-card-head">
                   <div className="cc-card-title">
                     <span className="cc-card-icon"><ScenovaIcon name="brain" size={20}/></span>
                     <div>
+                      <span className="cc-v4-eyebrow">MARKET INTELLIGENCE</span>
                       <h2>ภาพรวมการวิเคราะห์</h2>
                       <small>สรุปสิ่งที่บอทเห็นในตลาดและสิ่งที่กำลังรอ ก่อนตัดสินใจเปิดหรือดูแลออเดอร์</small>
                     </div>
@@ -1503,6 +1503,7 @@ export default function DashboardPage() {
                   <span className="cc-mini-health good"><i/>อัปเดตตามตลาด</span>
                 </div>
 
+                <div className="cc-v4-section-label"><span>01</span><div><b>สัญญาณตลาดที่สำคัญ</b><small>สรุปให้อ่านง่ายจากการวิเคราะห์หลาย Timeframe</small></div></div>
                 <div className="cc-intel-summary-grid">
                   <div className="cc-intel-summary-card">
                     <span className="cc-summary-icon"><ScenovaIcon name="target" size={19}/></span>
@@ -1531,6 +1532,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="cc-performance-board">
+                  <div className="cc-v4-section-label"><span>02</span><div><b>ประสิทธิภาพการเทรด</b><small>ผลลัพธ์จากรายการที่ปิดแล้วและกิจกรรมล่าสุด</small></div></div>
                   <div className="cc-performance-head">
                     <div><b>ผลการเทรดโดยรวม</b><small>สรุปจากรายการที่ปิดแล้ว เพื่อให้เห็นคุณภาพการทำงานแบบอ่านง่าย</small></div>
                   </div>
