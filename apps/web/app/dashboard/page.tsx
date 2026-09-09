@@ -1491,6 +1491,7 @@ export default function DashboardPage() {
                 manualStopLossPoints={manualStopLossPoints}
                 effectiveBasketLoss={effectiveBasketLoss}
                 effectiveBasketProfit={effectiveBasketProfit}
+                basketCycleProfit={Number(metrics.basketCycleProfit||metrics.basketProfit||0)}
                 profitControlMode={profitControlMode}
                 spreadValueLabel={spreadValueLabel}
                 spreadLimitLabel={spreadLimitLabel}
@@ -2164,6 +2165,7 @@ function BotSettingsModal(props:any) {
                   percentOptions={[5,10,15,20,25,30,40,50]}
                   defaultTarget="10"
                   defaultPercent="20"
+                  currentCycleProfit={props.basketCycleProfit}
                   onTargetChange={(v:string)=>props.onEdit?.("basketProfitTargetMoney",v)}
                   onPercentChange={(v:string)=>props.onEdit?.("profitRunTrailPercent",v)}
                 />
@@ -2541,7 +2543,7 @@ function BasketProfitTargetField(props: any) {
             checked={trailEnabled}
             onChange={e=>props.onPercentChange?.(e.target.checked ? percentValue : "0")}
           />
-          <span>ถึงเป้าแล้วปล่อยกำไรวิ่งต่อ</span>
+          <span>Profit Run — ถึงเป้าแล้วอย่าเพิ่งปิด</span>
         </label>
 
         <select
@@ -2556,8 +2558,10 @@ function BasketProfitTargetField(props: any) {
 
       {enabled&&<div className="basket-profit-explain">
         {trailEnabled
-          ? <>ถึงเป้า <b>{"$"+targetValue}</b> แล้วจะยังไม่ปิดทันที · ระบบจำกำไรสูงสุด และปิดทุกออเดอร์เมื่อกำไรย่อลง <b>{percentValue}%</b></>
-          : <>ถึงกำไรรวม <b>{"$"+targetValue}</b> → ปิดทุกออเดอร์ในชุดทันที</>}
+          ? <><b>Profit Run เปิดอยู่:</b> <b>{"$"+targetValue}</b> คือจุดเริ่มปล่อยกำไรวิ่ง ไม่ใช่จุดปิด · ถ้ากราฟกลับตัว Smart Profit Defense สามารถปิดรักษากำไรก่อน/หลังถึงเป้าได้ · ถ้าต้องการให้ถึง {"$"+targetValue} แล้วปิดทันที ให้ปิด Profit Run</>
+          : <>ถึงกำไรรวม <b>{"$"+targetValue}</b> → ปิดทุกออเดอร์ในชุดทันที · Smart Profit Defense อาจปิดก่อนถึงเป้าเมื่อ Cycle ยังบวกแต่กราฟยืนยันกลับตัว</>}
+        <br/>
+        <small>{"EA ใช้ Basket Cycle P/L รวมผล Partial Close/Rescue · ตอนนี้ $"+Number(props.currentCycleProfit||0).toFixed(2)}</small>
       </div>}
     </div>
   );
@@ -2629,6 +2633,7 @@ function DailyProfitTargetField(props: any) {
           ))}
         </select>
       </div>}
+      {enabled&&<div className="daily-profit-unlock-note">ถ้าเคยถึงเป้าและถูกล็อก แล้วแก้เป้าใหม่ให้สูงกว่ากำไรวันนี้ ระบบจะปลดล็อกอัตโนมัติใน Heartbeat ถัดไป</div>}
     </div>
   );
 }
