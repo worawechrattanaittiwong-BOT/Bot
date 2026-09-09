@@ -2300,6 +2300,14 @@ function TradingViewBotMonitor(props:any) {
   const journal = Array.isArray(props.journalRecent) ? props.journalRecent : [];
   const symbol = String(props.symbol || "XAUUSD");
   const bars = Array.isArray(props.chartBars?.[timeframe]) ? props.chartBars[timeframe] : [];
+  const latestBar = bars.length ? bars[bars.length-1] : null;
+  const previousBar = bars.length > 1 ? bars[bars.length-2] : null;
+  const latestPrice = Number(latestBar?.close || positions[0]?.currentPrice || 0);
+  const previousClose = Number(previousBar?.close || latestBar?.open || latestPrice || 0);
+  const priceDelta = latestPrice - previousClose;
+  const priceDeltaPercent = previousClose > 0 ? priceDelta / previousClose * 100 : 0;
+  const priceDirection = priceDelta > 0 ? "up" : priceDelta < 0 ? "down" : "flat";
+  const priceDigits = Number.isFinite(Number(props.symbolDigits)) ? Number(props.symbolDigits) : 3;
 
   useEffect(()=>{
     const host = chartHostRef.current;
@@ -2338,14 +2346,15 @@ function TradingViewBotMonitor(props:any) {
     });
 
     const series = chart.addCandlestickSeries({
-      upColor:"#20c997",
-      downColor:"#f35d6e",
-      borderUpColor:"#20c997",
-      borderDownColor:"#f35d6e",
-      wickUpColor:"#35d7aa",
-      wickDownColor:"#ff7180",
+      upColor:"#24e6a7",
+      downColor:"#ff5f73",
+      borderUpColor:"#24e6a7",
+      borderDownColor:"#ff5f73",
+      wickUpColor:"#56efbd",
+      wickDownColor:"#ff7b8c",
       priceLineVisible:true,
-      lastValueVisible:true
+      lastValueVisible:true,
+      priceFormat:{type:"price",precision:priceDigits,minMove:Math.pow(10,-priceDigits)}
     });
 
     chartRef.current = chart;
@@ -2387,6 +2396,16 @@ function TradingViewBotMonitor(props:any) {
       .sort((a:any,b:any)=>a.time-b.time);
 
     series.setData(candleData);
+    if(candleData.length){
+      const last=candleData[candleData.length-1];
+      const prev=candleData.length>1?candleData[candleData.length-2]:last;
+      const rising=Number(last.close)>=Number(prev.close);
+      series.applyOptions({
+        priceLineColor:rising?"#24e6a7":"#ff5f73",
+        lastValueVisible:true,
+        priceLineVisible:true
+      });
+    }
 
     const availableTimes = candleData.map((bar:any)=>Number(bar.time));
     const nearestBarTime = (epoch:any)=>{
@@ -2510,11 +2529,16 @@ function TradingViewBotMonitor(props:any) {
     <section ref={monitorRef as any} className={"panel cc-tv-monitor "+(fullscreen?"is-fullscreen":"")}>
       <div className="cc-tv-monitor-head">
         <div className="cc-card-title">
-          <span className="cc-card-icon"><ScenovaIcon name="trend" size={20}/></span>
+          <span className="cc-card-icon"><ScenovaIcon name="trend" size={22}/></span>
           <div>
             <h2>{symbol+" · Live EA Trading"}</h2>
             <small>กราฟราคา MT5 จริง พร้อมจุดเข้า ปิดออเดอร์ SL และ TP ของ EA</small>
           </div>
+        </div>
+        <div className={"cc-tv-live-price "+priceDirection}>
+          <span>ราคาปัจจุบัน</span>
+          <b>{latestPrice>0?latestPrice.toFixed(priceDigits):"—"}</b>
+          <small>{priceDirection==="flat"?"0.00":(priceDelta>0?"+":"")+priceDelta.toFixed(priceDigits)} {previousClose>0?"("+(priceDeltaPercent>0?"+":"")+priceDeltaPercent.toFixed(2)+"%)":""}</small>
         </div>
         <div className="cc-tv-monitor-actions">
           <div className="cc-tv-timeframes" role="group" aria-label="กรอบเวลากราฟ">
@@ -2531,9 +2555,11 @@ function TradingViewBotMonitor(props:any) {
 
       <div className="cc-tv-monitor-grid">
         <div className="cc-tv-chart-shell">
-          <div className="cc-tv-chart-badge">
-            <b>{symbol+" · "+timeframe}</b>
-            <span>{bars.length ? "ราคาโดยตรงจาก MT5 / Broker" : "กำลังรอข้อมูลกราฟจาก EA 1.031"}</span>
+          <div className={"cc-tv-chart-badge "+priceDirection}>
+            <span className="cc-tv-badge-symbol">{symbol+" · "+timeframe}</span>
+            <b>{latestPrice>0?latestPrice.toFixed(priceDigits):"—"}</b>
+            <span className="cc-tv-badge-change">{priceDirection==="flat"?"ทรงตัว":(priceDelta>0?"▲ ":"▼ ")+Math.abs(priceDelta).toFixed(priceDigits)+" · "+Math.abs(priceDeltaPercent).toFixed(2)+"%"}</span>
+            <small>{bars.length ? "ราคาโดยตรงจาก MT5 / Broker" : "กำลังรอข้อมูลกราฟจาก EA 1.031"}</small>
           </div>
           <div ref={chartHostRef} className="cc-tv-widget cc-mt5-chart"/>
           {!bars.length&&(
@@ -2560,16 +2586,16 @@ function TradingViewBotMonitor(props:any) {
 
           <div className="cc-tv-position-list">
             {positions.length ? positions.map((position:any,index:number)=>(
-              <div className="cc-tv-position-card" key={String(position.ticket||index)}>
+              <div className={"cc-tv-position-card "+(String(position.side)==="BUY"?"buy":"sell")} key={String(position.ticket||index)}>
                 <div className="cc-tv-position-top">
                   <span className={String(position.side)==="BUY"?"buy":"sell"}>{String(position.side||"—")}</span>
                   <b>{"#"+(index+1)+" · "+Number(position.volume||0).toFixed(2)+" Lot"}</b>
                   <strong className={Number(position.profit||0)>=0?"text-good":"text-bad"}>{(Number(position.profit||0)>=0?"+$":"-$")+Math.abs(Number(position.profit||0)).toFixed(2)}</strong>
                 </div>
                 <div className="cc-tv-position-prices">
-                  <span><small>เปิด</small><b>{Number(position.openPrice||0).toFixed(props.symbolDigits)}</b></span>
-                  <span><small>ปัจจุบัน</small><b>{Number(position.currentPrice||0).toFixed(props.symbolDigits)}</b></span>
-                  <span><small>SL</small><b>{Number(position.sl||0)>0?Number(position.sl).toFixed(props.symbolDigits):"—"}</b></span>
+                  <span><small>ราคาเปิด</small><b>{Number(position.openPrice||0).toFixed(priceDigits)}</b></span>
+                  <span className={Number(position.currentPrice||0)>=Number(position.openPrice||0)?"up":"down"}><small>ราคาปัจจุบัน</small><b>{Number(position.currentPrice||0).toFixed(priceDigits)}</b></span>
+                  <span className="sl"><small>SL</small><b>{Number(position.sl||0)>0?Number(position.sl).toFixed(priceDigits):"—"}</b></span>
                 </div>
               </div>
             )) : (
@@ -2598,8 +2624,8 @@ function TradingViewBotMonitor(props:any) {
           </div>
 
           <div className="cc-tv-protection">
-            <div><small>TP ระบบ</small><b>{Number(props.dynamicTakeProfitPrice||0)>0?Number(props.dynamicTakeProfitPrice).toFixed(props.symbolDigits):"รอออเดอร์"}</b></div>
-            <div><small>SL ระบบ</small><b>{Number(props.dynamicStopPrice||0)>0?Number(props.dynamicStopPrice).toFixed(props.symbolDigits):"รอออเดอร์"}</b></div>
+            <div className="tp"><small>TP ระบบ</small><b>{Number(props.dynamicTakeProfitPrice||0)>0?Number(props.dynamicTakeProfitPrice).toFixed(priceDigits):"รอออเดอร์"}</b></div>
+            <div className="sl"><small>SL ระบบ</small><b>{Number(props.dynamicStopPrice||0)>0?Number(props.dynamicStopPrice).toFixed(priceDigits):"รอออเดอร์"}</b></div>
           </div>
 
           <p className="cc-tv-note">กราฟและออเดอร์หน้านี้ใช้ข้อมูลจาก MT5/EA ที่เชื่อมกับ SCENOVA โดยตรง จุดเข้าและเส้นราคาอาจขยับตามการแก้ SL/TP ของ EA แบบ Real-time</p>
