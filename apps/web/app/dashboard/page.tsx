@@ -606,29 +606,12 @@ export default function DashboardPage() {
   const rescueStableSeconds = Number(metrics.rescueReversalStableSeconds || 0);
   const rescueHedgeLockSeconds = Number(metrics.rescueHedgeLockSeconds || 0);
 
-  const basketAddExplanation = currentPositions > 0 && currentPositions < effectiveMaxPositions
-    ? "เปิดแล้ว " + currentPositions + "/" + configuredMaxPositions + " ไม้ · " +
-      (String(metrics.basketLadderMode||"").includes("PULLBACK")
-        ? "Ladder rung " + ladderRung + " · รอ Pullback " + Math.max(0,ladderPullbackRequiredPoints-ladderPullbackPoints).toFixed(0) + " points"
-        : String(metrics.basketLadderMode||"")==="WAIT_CONTINUATION"
-          ? "Ladder rung " + ladderRung + " · Pullback มาแล้ว กำลังรอ Continuation"
-          : ladderRequiredPoints > 0
-            ? "Ladder rung " + ladderRung + " · ขาดอีก " + Math.max(0,ladderRequiredPoints-ladderProgressPoints).toFixed(0) + " points"
-        : pyramidRequiredPoints > 0
-          ? "รอราคาเดินต่อฝั่งกำไร " + Math.max(0,pyramidRequiredPoints-pyramidProgressPoints).toFixed(0) + " points ก่อนเพิ่มไม้"
-          : "รอ Setup / โครงสร้าง / Price Action ยืนยันก่อนเพิ่มไม้") +
-      " · ไม้แรกไม่ถูก Ladder ดัก"
-    : "";
   const journalStats = data?.tradeJournal?.stats || {};
   const journalRecent = Array.isArray(data?.tradeJournal?.recent) ? data.tradeJournal.recent : [];
-  const liveExplanation = rescueActive
-    ? (liveStatus.detail || "Adaptive Rescue กำลังบริหาร Basket ที่เปิดอยู่")
-    : (basketAddExplanation || liveStatus.detail || "บอทกำลังประเมิน S/R, Order Block, Fibonacci, EMA, Structure, Price Action และ Momentum แบบเรียลไทม์");
   const hideModeIrrelevantStatus = String(liveStatus.code || "") === "RISK_LIMIT_TOO_SMALL";
   const visibleLiveStatus = hideModeIrrelevantStatus
     ? { label: "รอสัญญาณเข้า", tone: "good" }
     : liveStatus;
-  const showControlAlert = !hideModeIrrelevantStatus && (liveStatus.tone === "bad" || liveStatus.tone === "warn");
 
   const desiredStateLabel =
     desired === "RUNNING" ? "RUNNING — ให้บอททำงาน"
@@ -1403,7 +1386,6 @@ export default function DashboardPage() {
                     <div><span>M5</span><b>{trendText(metrics.trendM5)}</b></div><div><span>M15</span><b>{trendText(metrics.trendM15)}</b></div><div><span>H1</span><b>{trendText(metrics.trendH1)}</b></div><div><span>Setup</span><b>{String(metrics.entryTrigger||metrics.entryModel||"กำลังหา")}</b></div><div><span>Ladder</span><b>{currentPositions>0 ? "R"+ladderRung+" · "+String(metrics.basketLadderMode||"—") : "รอไม้แรก"}</b></div>
                   </div>
 
-                  {showControlAlert&&<div className={"cc-intel-banner "+(liveStatus.tone==="bad"?"bad":"warn")}><ScenovaIcon name="info" size={19}/><div><b>{liveStatus.label||"ตรวจสอบการทำงาน"}</b><span>{liveExplanation}</span></div></div>}
                 </section>
 
                 <section className="panel cc-status-card cc-v3-account">
@@ -1435,16 +1417,6 @@ export default function DashboardPage() {
                   <div className="cc-signal-item"><ScenovaIcon name="layers" size={20}/><span><small>EMA Multi-TF</small><b>{"M1 M5 M15 M30 H1 · "+emaTfText+" · "+emaPriceVs200}</b></span></div>
                   <div className="cc-signal-item"><ScenovaIcon name="status" size={20}/><span><small>EMA Reclaim / Price Action</small><b>{emaReclaimState+" · BUY "+String(metrics.priceActionBuy||"NONE")+" · SELL "+String(metrics.priceActionSell||"NONE")}</b></span></div>
                   <div className={"cc-signal-item "+(performanceRiskMode==="NORMAL"?"good":"warn")}><ScenovaIcon name="shield" size={20}/><span><small>Expectancy / Exposure Control</small><b>{performanceRiskMode+" · Ladder "+effectiveLadderTarget+"/"+configuredMaxPositions+" · แพ้ติดกัน "+consecutiveBasketLosses+" Basket"}</b></span></div>
-                </div>
-
-                <div className={"cc-intel-banner "+(rescueActive?(rescueState==="RECOVERY"?"":"warn"):"")}>
-                  <ScenovaIcon name="shield" size={19}/>
-                  <div>
-                    <b>{"Adaptive Basket Rescue · "+rescueState}</b>
-                    <span>{rescueActive
-                      ? "Primary "+rescueDirectionLabel+" · Hedge "+rescueHedgeLot.toFixed(2)+" lot · Net Exposure "+rescueNetExposure.toFixed(2)+" · Reversal "+rescueReversalScore.toFixed(0)+"/100"
-                      : "NORMAL — Rescue เริ่มทำงานหลังมี Position เท่านั้น และไม่เป็น Gate ของไม้แรก"}</span>
-                  </div>
                 </div>
 
                 <div className="cc-signal-grid">
