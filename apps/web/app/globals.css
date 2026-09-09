@@ -3475,28 +3475,38 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 .cc-live-terminal-mini-grid span{font-size:8px;color:#68738c}
 .cc-live-terminal-mini-grid b{font-size:10px;color:#d2d9e6}
 
-.cc-live-positions{margin:0 14px 10px;border:1px solid #202c46;border-radius:11px;background:#070b12;overflow:hidden}
-.cc-live-subhead{min-height:48px;padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid #1f2940;background:#0a0f18}
+.cc-live-terminal-split{
+  height:460px;
+  padding:0 14px 14px;
+  display:grid;
+  grid-template-rows:minmax(0,1fr) minmax(0,1fr);
+  gap:10px;
+}
+.cc-live-terminal-half{min-height:0}
+.cc-live-terminal-half-positions{display:flex}
+.cc-live-terminal-half-events{display:flex;flex-direction:column;border-top:1px solid #1e2940;padding-top:8px}
+.cc-live-positions{margin:0;width:100%;height:100%;border:1px solid #202c46;border-radius:11px;background:#070b12;overflow:hidden;display:flex;flex-direction:column}
+.cc-live-subhead{min-height:48px;padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid #1f2940;background:#0a0f18;flex:0 0 auto}
 .cc-live-subhead>div{display:flex;flex-direction:column;gap:2px}
 .cc-live-subhead b{font-size:12px;color:#dfe5ef}
 .cc-live-subhead small{font-size:9px;color:#6e7991}
 .cc-live-subhead>span{padding:5px 8px;border:1px solid #343059;border-radius:999px;background:#15132a;color:#b49bf7;font-size:9px;font-weight:800}
-.cc-live-position-table{width:100%;overflow-x:auto}
+.cc-live-position-table{width:100%;min-height:0;overflow:auto;flex:1 1 auto}
 .cc-live-position-row{min-width:940px;display:grid;grid-template-columns:1.35fr .65fr .6fr 1fr 1fr 1fr .75fr .75fr;align-items:center;border-top:1px solid #151f32}
 .cc-live-position-row:first-child{border-top:0}
 .cc-live-position-row>span{min-height:48px;padding:8px 9px;display:flex;flex-direction:column;justify-content:center;gap:2px;border-right:1px solid #151f32;font-size:10px;color:#95a0b6}
 .cc-live-position-row>span:last-child{border-right:0}
 .cc-live-position-row b{font-size:11px;color:#d9e0ec}
 .cc-live-position-row small{font-size:8px;color:#66728a}
-.cc-live-position-row.header{background:#090f18}
+.cc-live-position-row.header{background:#090f18;position:sticky;top:0;z-index:2}
 .cc-live-position-row.header>span{min-height:34px;font-size:9px;color:#6f7a92;font-weight:800}
-.cc-live-position-empty{min-height:74px;display:flex;align-items:center;justify-content:center;gap:9px;color:#65718a}
+.cc-live-position-empty{min-height:0;height:100%;display:flex;align-items:center;justify-content:center;gap:9px;color:#65718a}
 .cc-live-position-empty>div{display:flex;flex-direction:column;gap:2px}
 .cc-live-position-empty b{font-size:11px;color:#8b96ac}
 .cc-live-position-empty small{font-size:9px}
 
-.cc-live-terminal-toolbar{margin:0 14px;padding:8px 0!important;border-top:1px solid #1e2940}
-.cc-live-terminal-window{margin:0 14px 14px;min-height:150px;max-height:230px;overflow:auto;border:1px solid #1f2a42;border-radius:10px;background:#04070c}
+.cc-live-terminal-toolbar{margin:0;padding:0 0 8px!important;border-top:0;flex:0 0 auto}
+.cc-live-terminal-window{margin:0;min-height:0;max-height:none;height:auto;flex:1 1 auto;overflow:auto;border:1px solid #1f2a42;border-radius:10px;background:#04070c}
 .cc-live-terminal-window .cc-terminal-line{font-size:10px;min-height:31px}
 .cc-live-terminal-window .cc-terminal-line time{font-size:9px}
 .cc-live-terminal-window .cc-terminal-line strong{font-size:10px}
@@ -3508,6 +3518,9 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .cc-live-terminal-mini-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 @media(max-width:780px){
+  .cc-live-terminal-split{height:auto;grid-template-rows:auto auto}
+  .cc-live-terminal-half-positions{min-height:220px}
+  .cc-live-terminal-half-events{min-height:260px}
   .cc-bot-settings-launcher-v2{grid-template-columns:auto minmax(0,1fr)!important}
   .cc-bot-settings-launcher-sync{grid-column:1/-1;justify-content:space-between;width:100%}
   .cc-bot-modal-full{width:100%;max-height:97vh}
