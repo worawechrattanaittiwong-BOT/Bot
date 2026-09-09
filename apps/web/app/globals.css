@@ -3373,7 +3373,14 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,.42fr);gap:10px;align-items:stretch
 }
 .profit-target-mode-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.stop-loss-mode-options{grid-template-columns:repeat(2,minmax(0,1fr))}
+.stop-loss-mode-card{
+  height:176px;
+  min-height:176px;
+  grid-template-columns:minmax(0,1fr) minmax(360px,.58fr);
+}
+.stop-loss-mode-options{grid-template-columns:repeat(2,minmax(0,1fr));height:100%}
+.stop-loss-mode-options button{height:100%;min-height:0}
+.stop-loss-auto-live,.stop-loss-manual-live{height:100%;min-height:0;box-sizing:border-box}
 .profit-target-mode-options button{
   position:relative;min-height:76px;padding:11px 12px;border:1px solid #27324c;border-radius:11px;
   background:#080d16;color:#8f99ad;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:5px;
@@ -3405,6 +3412,9 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 .stop-loss-manual-live>small{font-size:9px;line-height:1.45;color:#9188ad}
 .stop-loss-manual-live .money-input-shell{min-height:40px}
 .stop-loss-manual-live .money-input-shell .input{min-height:38px!important}
+.stop-loss-point-explain{display:flex;flex-direction:column;gap:2px;padding-top:1px}
+.stop-loss-point-explain>span{font-size:9px;font-weight:800;color:#d5cff0;font-variant-numeric:tabular-nums}
+.stop-loss-point-explain>small{font-size:8px;line-height:1.4;color:#837a9e}
 @keyframes autoProfitPulse{50%{opacity:.45;transform:scale(.78)}}
 .cc-bot-modal-full .cc-setting-tile{position:relative;min-height:138px;padding:13px;border:1px solid #24304e;border-radius:13px;background:linear-gradient(145deg,#0b101b,#080c14);display:flex;flex-direction:column;gap:11px}
 .cc-bot-modal-full .cc-setting-tile.wide{grid-column:auto}
@@ -3654,6 +3664,10 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 
 @media(max-width:900px){
   .cc-bot-modal-full{width:100%;max-height:97vh}
+  .stop-loss-mode-card{height:auto;min-height:0}
+  .stop-loss-mode-options{height:auto}
+  .stop-loss-mode-options button{height:auto;min-height:76px}
+  .stop-loss-auto-live,.stop-loss-manual-live{height:auto;min-height:92px}
   .cc-bot-settings-nav{grid-template-columns:repeat(2,minmax(0,1fr))}
   .cc-bot-settings-nav button.active::after{display:none}
   .cc-bot-modal-full .cc-smart-engine-badges span:nth-child(n+2){display:none}
