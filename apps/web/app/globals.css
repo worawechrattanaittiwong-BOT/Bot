@@ -5135,3 +5135,116 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .cc-tv-bot-summary{grid-template-columns:1fr 1fr}
   .cc-tv-position-prices{grid-template-columns:1fr 1fr 1fr}
 }
+
+
+/* ===== MT5 native chart markers / fullscreen ===== */
+.cc-tv-fullscreen-btn{
+  min-height:34px;
+  padding:7px 11px;
+  border:1px solid #3d3560;
+  border-radius:9px;
+  background:#121021;
+  color:#cfc4f5;
+  font-size:9px;
+  font-weight:800;
+  cursor:pointer;
+}
+.cc-tv-fullscreen-btn:hover{background:#1b1730;border-color:#6655a3;color:#eee8ff}
+.cc-mt5-chart{position:relative;z-index:1}
+.cc-tv-chart-empty{
+  position:absolute;
+  inset:0;
+  z-index:4;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:24px;
+  text-align:center;
+  background:linear-gradient(180deg,rgba(6,10,17,.82),rgba(6,10,17,.92));
+  color:#73809a;
+  pointer-events:none;
+}
+.cc-tv-chart-empty svg{color:#947bdd}
+.cc-tv-chart-empty b{font-size:12px;color:#aeb7c8}
+.cc-tv-chart-empty span{max-width:440px;font-size:9px;line-height:1.55}
+
+.cc-tv-trade-history{
+  border:1px solid #202a43;
+  border-radius:10px;
+  overflow:hidden;
+  background:#070b12;
+}
+.cc-tv-history-head{
+  min-height:38px;
+  padding:8px 9px;
+  border-bottom:1px solid #19233a;
+  background:#090e17;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.cc-tv-history-head b{font-size:9px;color:#d8dfeb}
+.cc-tv-history-head small{font-size:7.5px;color:#63708a}
+.cc-tv-history-list{display:flex;flex-direction:column}
+.cc-tv-history-row{
+  min-height:43px;
+  padding:7px 8px;
+  border-bottom:1px solid #151f32;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:7px;
+}
+.cc-tv-history-row:last-child{border-bottom:0}
+.cc-tv-history-row>span{
+  min-width:45px;
+  padding:4px 6px;
+  border:1px solid #33455c;
+  border-radius:999px;
+  text-align:center;
+  font-size:7px;
+  font-weight:900;
+  color:#86c7ef;
+  background:#0c151d;
+}
+.cc-tv-history-row>span.buy{border-color:#28513d;color:#6fdfa6;background:#091712}
+.cc-tv-history-row>span.sell{border-color:#57323b;color:#ef8d9b;background:#190f13}
+.cc-tv-history-row>span.good{border-color:#28513d;color:#6fdfa6;background:#091712}
+.cc-tv-history-row>span.bad{border-color:#57323b;color:#ef8d9b;background:#190f13}
+.cc-tv-history-row>div{min-width:0;display:flex;flex-direction:column;gap:1px}
+.cc-tv-history-row b{font-size:8px;color:#cbd3e0}
+.cc-tv-history-row small{font-size:7px;color:#65718a}
+.cc-tv-history-row strong{font-size:8.5px;white-space:nowrap}
+.cc-tv-history-empty{padding:14px 9px;text-align:center;font-size:7.5px;color:#627089}
+
+.cc-tv-monitor:fullscreen{
+  width:100vw!important;
+  height:100vh!important;
+  max-width:none!important;
+  margin:0!important;
+  padding:12px!important;
+  border:0!important;
+  border-radius:0!important;
+  background:#05080d!important;
+  display:flex;
+  flex-direction:column;
+}
+.cc-tv-monitor:fullscreen .cc-tv-monitor-head{flex:0 0 auto}
+.cc-tv-monitor:fullscreen .cc-tv-monitor-grid{
+  flex:1 1 auto;
+  min-height:0;
+  height:auto;
+  grid-template-columns:minmax(0,2.7fr) minmax(320px,.8fr);
+}
+.cc-tv-monitor:fullscreen .cc-tv-chart-shell,
+.cc-tv-monitor:fullscreen .cc-tv-widget,
+.cc-tv-monitor:fullscreen .cc-tv-bot-panel{
+  min-height:0;
+  height:100%;
+}
+.cc-tv-monitor:fullscreen .cc-tv-position-list{
+  max-height:none;
+}
