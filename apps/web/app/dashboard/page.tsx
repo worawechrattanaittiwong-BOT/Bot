@@ -417,13 +417,15 @@ export default function DashboardPage() {
     Boolean(softwareUpdate.required);
   const botStarting = desired === "RUNNING" && state !== "RUNNING";
   const botRunning = state === "RUNNING";
+  const startConnectionReady = isMt5Online || isAgentOnline;
+  // Let the customer press Start whenever SCENOVA has a live connection.
+  // Runtime/update/access/trading blockers are validated by /bot/start and
+  // shown as an explicit warning instead of silently disabling the button.
   const startBlocked =
     busy ||
     botStarting ||
     botRunning ||
-    softwareUpdateRequired ||
-    !entitlement?.allowed ||
-    hardStartBlocks.has(String(liveStatus.code || ""));
+    !startConnectionReady;
   const stopBlocked = busy || (desired !== "RUNNING" && state !== "RUNNING");
   const selectedBroker = brokerCatalog.find((item)=>item.code === brokerCode);
   const selectedBrokerName = brokerCode === "OTHER"
@@ -923,7 +925,8 @@ export default function DashboardPage() {
       setNotice(success);
       await load();
     } catch (e: any) {
-      setError(e.message);
+      const message = String(e?.message || "เกิดข้อผิดพลาด");
+      setError(path.startsWith("/bot/start") ? "เริ่มบอทไม่ได้: " + message : message);
     } finally {
       setBusy(false);
     }
@@ -1360,6 +1363,7 @@ export default function DashboardPage() {
                     <button
                       className={"cc-action start " + (botStarting ? "starting" : botRunning ? "running" : "idle")}
                       disabled={startBlocked}
+                      title={!startConnectionReady ? "รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5" : undefined}
                       onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}
                       aria-live="polite"
                     >
@@ -1516,6 +1520,7 @@ export default function DashboardPage() {
                 <button
                   className={"cc-mobile-command start " + (botStarting ? "starting" : botRunning ? "running" : "idle")}
                   disabled={startBlocked}
+                  title={!startConnectionReady ? "รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5" : undefined}
                   onClick={()=>command("/bot/start","ส่งคำสั่งเริ่มบอทแล้ว")}
                   aria-live="polite"
                 >
