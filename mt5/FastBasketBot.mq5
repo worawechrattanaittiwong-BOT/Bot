@@ -2367,6 +2367,9 @@ void ApplyUnifiedTradingEngine()
 
 void ApplySettings(string json)
 {
+   double previousDailyProfitTarget = g_dailyProfitTarget;
+   bool previousDailyContinueAfterTarget = g_dailyProfitContinueAfterTarget;
+
    g_lot = MathMax(0.01, JsonNumber(json, "lot", g_lot));
    g_maxPositions = (int)MathMax(1.0, JsonNumber(json, "maxPositions", g_maxPositions));
    g_triggerMoney = MathMax(0.0, JsonNumber(json, "basketTriggerMoney", g_triggerMoney));
@@ -2432,6 +2435,19 @@ void ApplySettings(string json)
    else if(mode == "AUTO_MOMENTUM") g_entryMode = ENTRY_AUTO_MOMENTUM;
 
    ApplyUnifiedTradingEngine();
+
+   bool dailyProfitSettingsChanged =
+      MathAbs(previousDailyProfitTarget-g_dailyProfitTarget)>0.0000001 ||
+      previousDailyContinueAfterTarget!=g_dailyProfitContinueAfterTarget;
+
+   // Daily target lock belongs to the target value that produced it. If the
+   // user raises/disables that target and today's P/L is below the new target,
+   // clear the persisted lock immediately so the same RUNNING heartbeat may
+   // authorize trading again.
+   if(g_dailyProfitLocked &&
+      dailyProfitSettingsChanged &&
+      (g_dailyProfitTarget<=0.0 || DailyBotProfit()<g_dailyProfitTarget))
+      UnlockDailyProfitLock("DAILY_TARGET_UPDATED");
 
    if(g_dailyProfitTargetArmed &&
       (g_dailyProfitTarget <= 0.0 || DailyBotProfit() < g_dailyProfitTarget))
@@ -5797,6 +5813,34 @@ bool HandleDailyProfitControl(int count)
    return false;
 }
 
+void UnlockDailyProfitLock(string reason)
+{
+   if(!g_dailyProfitLocked)
+      return;
+
+   g_dailyProfitLocked=false;
+   DisarmDailyProfitRunOn();
+
+   string key=DailyProfitLockGlobalKey();
+   if(GlobalVariableCheck(key))
+      GlobalVariableDel(key);
+
+   if(g_pendingCloseReason==CLOSE_REASON_DAILY_PROFIT &&
+      BasketPositionCount()==0 &&
+      RescuePositionCount()==0)
+   {
+      g_pendingCloseReason=CLOSE_REASON_NONE;
+      PersistPendingClose();
+   }
+
+   g_executionStatus="DAILY_PROFIT_TARGET_UPDATED";
+   Print(
+      "DAILY_PROFIT_LOCK cleared reason=",reason,
+      " current=",DoubleToString(DailyBotProfit(),2),
+      " newTarget=",DoubleToString(g_dailyProfitTarget,2)
+   );
+}
+
 void LoadDailyProfitLock()
 {
    string key = DailyProfitLockGlobalKey();
@@ -7235,7 +7279,9 @@ int CloseReasonCode(string reason)
    if(StringFind(reason, "MAX_BASKET_LOSS") == 0) return CLOSE_REASON_BASKET_LOSS;
    if(StringFind(reason, "PROFIT_RUN") == 0 ||
       StringFind(reason, "PROFIT_TRAIL") == 0 ||
-      StringFind(reason, "BASKET_PROFIT") == 0)
+      StringFind(reason, "BASKET_PROFIT") == 0 ||
+      StringFind(reason, "SMART_PROFIT") == 0 ||
+      StringFind(reason, "AUTO_PROFIT") == 0)
       return CLOSE_REASON_TRAIL;
    if(StringFind(reason, "SAFE_STOP") == 0) return CLOSE_REASON_SAFE_STOP;
    if(StringFind(reason, "REMOTE_CLOSE_ALL") == 0) return CLOSE_REASON_REMOTE;
