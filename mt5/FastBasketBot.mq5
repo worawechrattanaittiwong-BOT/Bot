@@ -4576,15 +4576,21 @@ bool AdaptiveBasketAddAllowed(int direction)
 
 void PersistAdaptiveRiskState()
 {
-   GlobalVariableSet(DailyRiskStateKey("ALOSS"), (double)g_consecutiveLosses);
+   GlobalVariableSet(DailyRiskStateKey("ALOSS2"), (double)g_consecutiveLosses);
 }
 
 void RestoreAdaptiveRiskState()
 {
-   string lossKey = DailyRiskStateKey("ALOSS");
-   if(GlobalVariableCheck(lossKey)) g_consecutiveLosses = (int)GlobalVariableGet(lossKey);
-   // Remove cooldown state left by older EA versions. Loss history may still
-   // reduce risk, but it never delays or blocks the next valid signal.
+   // ALOSS in older builds counted every losing position. v1.027 counts one
+   // completed Basket/Rescue Cycle as one decision, so migrate to a clean key.
+   string lossKey = DailyRiskStateKey("ALOSS2");
+   g_consecutiveLosses = GlobalVariableCheck(lossKey)
+      ? (int)GlobalVariableGet(lossKey)
+      : 0;
+
+   string legacyLossKey = DailyRiskStateKey("ALOSS");
+   if(GlobalVariableCheck(legacyLossKey)) GlobalVariableDel(legacyLossKey);
+
    string cooldownKey = DailyRiskStateKey("ACOOL");
    if(GlobalVariableCheck(cooldownKey)) GlobalVariableDel(cooldownKey);
 }
