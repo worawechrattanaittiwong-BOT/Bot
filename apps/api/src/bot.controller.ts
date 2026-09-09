@@ -200,7 +200,9 @@ export class BotController {
       RESCUE_RECOVERY: { label: "Recovery กำลังพา Basket กลับ", detail: "กำไรจาก Hedge/การฟื้นตัวกำลังลด Deficit ระบบจะใช้ Partial Close และ Recovery TP เพื่อออกจาก Cycle", tone: "good" },
       RESCUE_EXIT: { label: "กำลังปิด Rescue Cycle", detail: "ถึง Recovery target แล้ว ระบบกำลังปิด Primary และ Hedge ให้หมด", tone: "good" },
       RESCUE_CYCLE_CLOSED: { label: "Rescue Cycle ปิดแล้ว", detail: "Primary/Hedge ถูกปิดครบและระบบกลับสู่ NORMAL พร้อมหา Setup ใหม่", tone: "good" },
-      AUTO_PROFIT_DEFENSE: { label: "ป้องกันกำไรอัตโนมัติ", detail: "Basket เคยมีกำไรถึงช่วงสำคัญ แต่ M1/M5 + EMA/Price Action เริ่มกลับทิศ ระบบจึงปิดกำไรที่เหลือก่อน Winner กลายเป็น Loser; ใช้เฉพาะ Auto Basket target", tone: "good" },
+      AUTO_PROFIT_DEFENSE: { label: "ป้องกันกำไรอัตโนมัติ", detail: "Basket เคยมีกำไรถึงช่วงสำคัญ แต่ M1/M5 + EMA/Price Action เริ่มกลับทิศ ระบบจึงปิดกำไรที่เหลือก่อน Winner กลายเป็น Loser", tone: "good" },
+      SMART_PROFIT_REVERSAL: { label: "ปิดรักษากำไรก่อนถึงเป้า", detail: "Cycle ยังเป็นกำไรแต่ M1/M5 + EMA/Momentum/Price Action ยืนยันการกลับตัว ระบบปิดทั้งชุดทันทีเพื่อไม่ให้ Winner กลายเป็น Loser", tone: "good" },
+      DAILY_PROFIT_TARGET_UPDATED: { label: "อัปเดตเป้ากำไรรายวันแล้ว", detail: "เป้าใหม่สูงกว่ากำไรวันนี้หรือถูกปิดใช้งาน ระบบปลด Daily Profit Lock แล้วและพร้อมกลับไป RUNNING", tone: "good" },
       BASKET_LADDER_ADVANCE: { label: "Basket Ladder เพิ่มไม้แล้ว", detail: "ราคาเดินถึง Rung ถัดไปและ Broker รับคำสั่งเพิ่มไม้", tone: "good" },
       BASKET_FILLING: { label: "กำลังเปิดตามจำนวนไม้", detail: "EA กำลังส่งคำสั่งตามจำนวนที่เลือก โดย MT5/Broker เป็นผู้ตอบรับแต่ละคำสั่ง", tone: "good" },
       BASKET_FILL_COMPLETE: { label: "ส่งคำสั่งครบจำนวนแล้ว", detail: "ระบบกำลังดูแล Position ที่ MT5 เปิดสำเร็จ", tone: "good" },
@@ -1520,6 +1522,24 @@ export class BotController {
       [instance.id, JSON.stringify(clean)]
     );
 
+    const savedSettings = saved?.settings || clean;
+    const runtimeMetrics =
+      instance.metrics && typeof instance.metrics === "object"
+        ? instance.metrics
+        : {};
+    const dailyTargetWasEdited =
+      body.dailyProfitTargetMoney !== undefined ||
+      body.dailyProfitContinueAfterTarget !== undefined;
+    const wasDailyProfitLocked =
+      runtimeMetrics.dailyProfitLocked === true ||
+      String(runtimeMetrics.executionStatus || "").startsWith("DAILY_PROFIT");
+    const currentDailyProfit = Number(runtimeMetrics.dailyProfit || 0);
+    const newDailyProfitTarget = Number(savedSettings.dailyProfitTargetMoney || 0);
+    const resumeAfterDailyProfitEdit =
+      dailyTargetWasEdited &&
+      wasDailyProfitLocked &&
+      (newDailyProfitTarget <= 0 || currentDailyProfit < newDailyProfitTarget);
+
     // Only the newest settings command matters. EA also receives the complete
     // latest settings object in every heartbeat.
     await this.db.query(
@@ -1531,7 +1551,34 @@ export class BotController {
       [instance.id, JSON.stringify(clean)]
     );
 
-    return { ok: true, settings: saved?.settings || clean };
+    if (resumeAfterDailyProfitEdit) {
+      await this.db.query(
+        `UPDATE bot_instances
+         SET desired_state='RUNNING',
+             metrics=jsonb_set(
+               COALESCE(metrics,'{}'::jsonb),
+               '{dailyProfitUnlockRequested}',
+               'true'::jsonb,
+               true
+             )
+         WHERE id=$1`,
+        [instance.id]
+      );
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND command IN ('START','SAFE_STOP') AND status IN ('PENDING','DELIVERED')",
+        [instance.id]
+      );
+      await this.db.query(
+        "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'START')",
+        [instance.id]
+      );
+    }
+
+    return {
+      ok: true,
+      settings: savedSettings,
+      resumedFromDailyProfitLock: resumeAfterDailyProfitEdit
+    };
   }
 
   private async getInstance(userId: string, slotId?: string | null) {
