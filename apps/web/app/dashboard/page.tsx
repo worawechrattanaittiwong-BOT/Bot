@@ -2192,7 +2192,7 @@ function BotSettingsModal(props:any) {
                 </select>
               </label>
               <label className="cc-bot-basic-card">
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="lot" size={19}/></span><div><b>Lot สูงสุด</b><small>Adaptive ลดได้ตามความเสี่ยง แต่จะไม่เพิ่มเกินค่านี้</small></div></div>
+                <div className="cc-bot-basic-label"><span><ScenovaIcon name="lot" size={19}/></span><div><b>Lot ต่อไม้</b><small>ใช้ตามค่าที่ลูกค้ากำหนด ระบบจะไม่ลด Lot อัตโนมัติ</small></div></div>
                 <select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>
                   {[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}
                 </select>
