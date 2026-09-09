@@ -360,6 +360,28 @@ jobs:
           test "$(printf '%s' "$JOURNAL_HB" | jq -r '.buyWinProbability')" = "100"
           test "$(printf '%s' "$JOURNAL_HB" | jq -r '.buyWinSamples')" = "1"
 
+          echo "[integration] backtest report sample export and public performance"
+          BACKTEST_SAMPLE=$(curl -fsS -X POST "$BASE/backtest/sample" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "{\"slotId\":\"$SLOT\",\"title\":\"Integration Backtest\",\"symbol\":\"XAUUSDm\",\"timeframe\":\"M5\",\"initialDeposit\":1000,\"lot\":0.01}")
+          BACKTEST_ID=$(printf '%s' "$BACKTEST_SAMPLE" | jq -r '.id')
+          test -n "$BACKTEST_ID"
+          test "$(printf '%s' "$BACKTEST_SAMPLE" | jq -r '.summary.closedTrades')" = "24"
+          test "$(printf '%s' "$BACKTEST_SAMPLE" | jq -r '.source')" = "SAMPLE"
+
+          BACKTEST_LIST=$(curl -fsS "$BASE/backtest/runs?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$BACKTEST_LIST" | jq 'length')" -ge "1"
+          test "$(printf '%s' "$BACKTEST_LIST" | jq -r '.[0].id')" = "$BACKTEST_ID"
+
+          curl -fsS "$BASE/backtest/export.csv?id=$BACKTEST_ID" -H "authorization: Bearer $TOKEN" >/tmp/backtest.csv
+          grep -q "Trade,Opened At,Closed At,Direction" /tmp/backtest.csv
+
+          BACKTEST_PUBLISH=$(curl -fsS -X POST "$BASE/backtest/publish" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "{\"id\":\"$BACKTEST_ID\",\"published\":true}")
+          BACKTEST_SLUG=$(printf '%s' "$BACKTEST_PUBLISH" | jq -r '.public_slug')
+          test -n "$BACKTEST_SLUG"
+          PUBLIC_PERF=$(curl -fsS "$BASE/performance/$BACKTEST_SLUG")
+          test "$(printf '%s' "$PUBLIC_PERF" | jq -r '.label')" = "SIMULATED DEMO"
+          test "$(printf '%s' "$PUBLIC_PERF" | jq -r '.summary.closedTrades')" = "24"
+          test "$(printf '%s' "$PUBLIC_PERF" | jq '.trades | length')" -gt "0"
+
           echo "[integration] entitlement expiry forces SAFE_STOP on the next heartbeat"
           PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update trial_grants set expires_at=now()-interval '1 second' where mt5_account_id='$ACCOUNT_ID';" >/dev/null
           EXPIRED_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"RUNNING\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
