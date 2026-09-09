@@ -201,6 +201,7 @@ export class BotController {
       RESCUE_EXIT: { label: "กำลังปิด Rescue Cycle", detail: "ถึง Recovery target แล้ว ระบบกำลังปิด Primary และ Hedge ให้หมด", tone: "good" },
       RESCUE_CYCLE_CLOSED: { label: "Rescue Cycle ปิดแล้ว", detail: "Primary/Hedge ถูกปิดครบและระบบกลับสู่ NORMAL พร้อมหา Setup ใหม่", tone: "good" },
       AUTO_PROFIT_DEFENSE: { label: "ป้องกันกำไรอัตโนมัติ", detail: "Basket เคยมีกำไรถึงช่วงสำคัญ แต่ M1/M5 + EMA/Price Action เริ่มกลับทิศ ระบบจึงปิดกำไรที่เหลือก่อน Winner กลายเป็น Loser", tone: "good" },
+      AUTO_PROFIT_GIVEBACK: { label: "Auto ปิดรักษากำไร", detail: "กำไรรวมย่อลงจากจุดสูงสุดถึงระยะที่เหมาะกับสภาพตลาด EA จึงปิดทั้งชุดขณะที่รอบยังมีกำไร", tone: "good" },
       SMART_PROFIT_REVERSAL: { label: "ปิดรักษากำไรก่อนถึงเป้า", detail: "Cycle ยังเป็นกำไรแต่ M1/M5 + EMA/Momentum/Price Action ยืนยันการกลับตัว ระบบปิดทั้งชุดทันทีเพื่อไม่ให้ Winner กลายเป็น Loser", tone: "good" },
       DAILY_PROFIT_TARGET_UPDATED: { label: "อัปเดตเป้ากำไรรายวันแล้ว", detail: "เป้าใหม่สูงกว่ากำไรวันนี้หรือถูกปิดใช้งาน ระบบปลด Daily Profit Lock แล้วและพร้อมกลับไป RUNNING", tone: "good" },
       BASKET_LADDER_ADVANCE: { label: "Basket Ladder เพิ่มไม้แล้ว", detail: "ราคาเดินถึง Rung ถัดไปและ Broker รับคำสั่งเพิ่มไม้", tone: "good" },
@@ -1414,6 +1415,13 @@ export class BotController {
     numberSetting("basketProfitTargetMoney", 0, 100000);
     numberSetting("perPositionProfitMoney", 0, 100000);
     numberSetting("profitRunTrailPercent", 0, 95);
+    if (body.profitTargetMode !== undefined) {
+      const profitTargetMode = String(body.profitTargetMode || "").toUpperCase();
+      if (!["AUTO", "MANUAL", "OFF"].includes(profitTargetMode)) {
+        throw new BadRequestException("โหมดเป้ากำไรไม่ถูกต้อง");
+      }
+      clean.profitTargetMode = profitTargetMode;
+    }
     // EA 1.017 replaces floating-money loss closes with a real Broker SL.
     // Keep accepting the legacy key only to let old clients clear it safely.
     numberSetting("perPositionLossMoney", 0, 100000);
@@ -1437,6 +1445,19 @@ export class BotController {
     const requestedBasketProfit = Number(clean.basketProfitTargetMoney ?? 0);
     const requestedPerPositionProfit = Number(clean.perPositionProfitMoney ?? 0);
     const requestedProfitRunPercent = Number(clean.profitRunTrailPercent ?? 0);
+    const requestedProfitMode = String(clean.profitTargetMode || "");
+
+    if (requestedProfitMode === "AUTO" || requestedProfitMode === "OFF") {
+      clean.basketProfitTargetMoney = 0;
+      clean.perPositionProfitMoney = 0;
+      clean.profitRunTrailPercent = 0;
+      clean.basketTriggerMoney = 0;
+      clean.basketTrailMoney = 0;
+    } else if (!requestedProfitMode &&
+               (requestedBasketProfit > 0 || requestedPerPositionProfit > 0)) {
+      // Older clients that edit a numeric target are treated as Manual.
+      clean.profitTargetMode = "MANUAL";
+    }
 
     if (requestedBasketProfit > 0 && requestedPerPositionProfit > 0) {
       throw new BadRequestException(

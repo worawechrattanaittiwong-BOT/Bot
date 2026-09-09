@@ -62,6 +62,8 @@ jobs:
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/010_trade_journal.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/011_basket_intelligence.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/011_basket_intelligence.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/012_auto_profit_target_mode.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/012_auto_profit_target_mode.sql
 
       - name: Build API
         run: npm run build -w @bot/api
@@ -243,6 +245,13 @@ jobs:
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.entryMode')" = "BUY_ONLY"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.allowMinimumLotOverride')" = "true"
+
+          echo "[integration] Auto profit mode clears manual targets"
+          AUTO_PROFIT=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"profitTargetMode":"AUTO"}')
+          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.profitTargetMode')" = "AUTO"
+          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.basketProfitTargetMoney')" = "0"
+          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.perPositionProfitMoney')" = "0"
+          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.profitRunTrailPercent')" = "0"
 
           echo "[integration] verifying invalid settings rejection"
           BAD_SETTINGS_HTTP=$(curl -sS -o /tmp/bad-settings.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"lot":0}')

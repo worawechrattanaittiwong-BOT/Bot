@@ -43,6 +43,7 @@ const defaultSettings = {
   basketProfitTargetMoney: 0,
   perPositionProfitMoney: 0,
   profitRunTrailPercent: 0,
+  profitTargetMode: "AUTO",
   perPositionLossMoney: 0,
   manualStopLossPoints: 0,
   minOrderIntervalMs: 300,
@@ -333,8 +334,6 @@ export default function DashboardPage() {
     terminalWindowRef.current.scrollTop = terminalWindowRef.current.scrollHeight;
   }, [filteredTerminalEntries.length, terminalAutoScroll]);
 
-  const basketProfitEnabled = Number(settings.basketProfitTargetMoney || 0) > 0;
-  const perPositionProfitEnabled = Number(settings.perPositionProfitMoney || 0) > 0;
   const state = data?.instance?.actual_state || "OFFLINE";
   const desired = data?.instance?.desired_state || "STOPPED";
   const eaLastSeen = data?.instance?.last_seen_at
@@ -525,9 +524,14 @@ export default function DashboardPage() {
     metrics.configuredMaxPositions !== undefined &&
     metrics.configuredBasketProfitTarget !== undefined &&
     metrics.configuredMaxBasketLoss !== undefined &&
-    metrics.manualStopLossPoints !== undefined;
+    metrics.manualStopLossPoints !== undefined &&
+    metrics.profitTargetMode !== undefined;
+  const desiredProfitTargetMode = String(settings.profitTargetMode ||
+    (Number(settings.basketProfitTargetMoney || 0) > 0 ||
+     Number(settings.perPositionProfitMoney || 0) > 0 ? "MANUAL" : "AUTO")).toUpperCase();
   const eaSettingsSynced =
     eaSettingsTelemetryReady &&
+    String(metrics.profitTargetMode || "").toUpperCase() === desiredProfitTargetMode &&
     Number(metrics.configuredMaxPositions || 0) === Number(settings.maxPositions || 0) &&
     nearlyEqual(metrics.configuredLot, settings.lot, 0.0001) &&
     nearlyEqual(metrics.configuredBasketProfitTarget, settings.basketProfitTargetMoney) &&
@@ -949,6 +953,22 @@ export default function DashboardPage() {
       const next = { ...current, [key]: value };
       const enabled = Number(value || 0) > 0;
 
+      if (key === "profitTargetMode") {
+        const mode = String(value || "AUTO").toUpperCase();
+        next.profitTargetMode = mode;
+        if (mode === "AUTO" || mode === "OFF") {
+          next.basketProfitTargetMoney = 0;
+          next.perPositionProfitMoney = 0;
+          next.profitRunTrailPercent = 0;
+          next.basketTriggerMoney = 0;
+          next.basketTrailMoney = 0;
+        } else if (mode === "MANUAL" &&
+                   Number(next.basketProfitTargetMoney || 0) <= 0 &&
+                   Number(next.perPositionProfitMoney || 0) <= 0) {
+          next.basketProfitTargetMoney = 10;
+        }
+      }
+
       // Profit mode 1: Basket target. profitRunTrailPercent is now the
       // optional percentage giveback AFTER the Basket target is reached.
       if (key === "basketProfitTargetMoney") {
@@ -1042,6 +1062,15 @@ export default function DashboardPage() {
       payload.sessionStartHour = 0;
       payload.sessionEndHour = 24;
       payload.maxAtrPoints = 0;
+      payload.profitTargetMode = ["AUTO","MANUAL","OFF"].includes(
+        String(settings.profitTargetMode || "AUTO").toUpperCase()
+      ) ? String(settings.profitTargetMode || "AUTO").toUpperCase() : "AUTO";
+
+      if (payload.profitTargetMode === "AUTO" || payload.profitTargetMode === "OFF") {
+        payload.basketProfitTargetMoney = 0;
+        payload.perPositionProfitMoney = 0;
+        payload.profitRunTrailPercent = 0;
+      }
 
       // New profit UX no longer exposes the legacy dollar Basket trailing.
       // Clear hidden legacy values on every save so they cannot affect trades.
@@ -2065,8 +2094,11 @@ function BotSettingsModal(props:any) {
 
   if (!props.open) return null;
 
-  const basketProfitEnabled = Number(props.settings?.basketProfitTargetMoney || 0) > 0;
-  const perPositionProfitEnabled = Number(props.settings?.perPositionProfitMoney || 0) > 0;
+  const profitTargetMode = String(props.settings?.profitTargetMode ||
+    (Number(props.settings?.basketProfitTargetMoney || 0) > 0 ||
+     Number(props.settings?.perPositionProfitMoney || 0) > 0 ? "MANUAL" : "AUTO")).toUpperCase();
+  const basketProfitEnabled = profitTargetMode === "MANUAL" && Number(props.settings?.basketProfitTargetMoney || 0) > 0;
+  const perPositionProfitEnabled = profitTargetMode === "MANUAL" && Number(props.settings?.perPositionProfitMoney || 0) > 0;
   const manualSl = Number(props.settings?.manualStopLossPoints || 0);
 
   return (
@@ -2109,7 +2141,7 @@ function BotSettingsModal(props:any) {
             </button>
             <button type="button" className={activeSection==="profit"?"active":""} onClick={()=>setActiveSection("profit")} aria-current={activeSection==="profit"?"page":undefined}>
               <span><ScenovaIcon name="profit" size={18}/></span>
-              <div><b>เป้าหมายกำไร</b><small>{basketProfitEnabled?"กำไรรวม $"+Number(props.settings.basketProfitTargetMoney).toFixed(2):perPositionProfitEnabled?"ต่อไม้ $"+Number(props.settings.perPositionProfitMoney).toFixed(2):"ยังไม่ได้เปิด"}</small></div>
+              <div><b>เป้าหมายกำไร</b><small>{profitTargetMode==="AUTO"?"Auto · รักษากำไรตามตลาด":profitTargetMode==="OFF"?"ปิดอยู่":basketProfitEnabled?"กำไรรวม $"+Number(props.settings.basketProfitTargetMoney).toFixed(2):perPositionProfitEnabled?"ต่อไม้ $"+Number(props.settings.perPositionProfitMoney).toFixed(2):"กำหนดเอง"}</small></div>
             </button>
             <button type="button" className={activeSection==="risk"?"active":""} onClick={()=>setActiveSection("risk")} aria-current={activeSection==="risk"?"page":undefined}>
               <span><ScenovaIcon name="shield" size={18}/></span>
@@ -2161,8 +2193,14 @@ function BotSettingsModal(props:any) {
           </section>
 
           <section className="cc-modal-settings-section cc-bot-settings-panel" hidden={activeSection!=="profit"}>
-            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">2</span><div><b>เป้าหมายกำไร</b><small>เลือกกำไรรวมทั้งชุด หรือกำไรต่อไม้</small></div></div></div>
-            <div className="cc-modal-setting-grid two">
+            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">2</span><div><b>เป้าหมายกำไร</b><small>เลือกให้ EA ตัดสินใจอัตโนมัติ หรือกำหนดจำนวนเงินเอง</small></div></div></div>
+            <ProfitTargetModeField
+              mode={profitTargetMode}
+              cycleProfit={props.basketCycleProfit}
+              peakProfit={props.metrics?.profitRunPeak}
+              onChange={(mode:string)=>props.onEdit?.("profitTargetMode",mode)}
+            />
+            {profitTargetMode==="MANUAL"&&<div className="cc-modal-setting-grid two">
               <SettingTile icon="profit" title="กำไรทั้งชุดถึงแล้วปิด" description="รวมกำไรทุก Position ใน Basket เดียวกัน" wide accent={basketProfitEnabled}>
                 <BasketProfitTargetField
                   value={props.settings.basketProfitTargetMoney}
@@ -2179,7 +2217,7 @@ function BotSettingsModal(props:any) {
               <SettingTile icon="orders" title="กำไรต่อไม้" description="Position ไหนถึงกำไรที่ตั้ง ปิดเฉพาะไม้นั้น" wide accent={perPositionProfitEnabled}>
                 <ToggleMoneyField label="เปิดกำไรต่อไม้" defaultValue="2" value={props.settings.perPositionProfitMoney} suffix="กำไรต่อ Position" onChange={(v:string)=>props.onEdit?.("perPositionProfitMoney",v)}/>
               </SettingTile>
-            </div>
+            </div>}
             <div className="cc-modal-setting-grid one">
               <SettingTile icon="pnl" title="เป้ากำไรวันนี้" description="ทำงานแยกจากกำไร Basket/ต่อไม้; ถึงเป้าแล้วเลือกหยุดหรือปล่อยต่อ" wide>
                 <DailyProfitTargetField
@@ -2505,6 +2543,38 @@ function ToggleSelectField(props: any) {
   );
 }
 
+function ProfitTargetModeField(props:any) {
+  const mode = String(props.mode || "AUTO").toUpperCase();
+  const options = [
+    { value:"AUTO", label:"Auto", detail:"EA ปิดทั้งชุดเมื่อกำไรย่อลงหรือกราฟยืนยันกลับตัว" },
+    { value:"MANUAL", label:"กำหนดเอง", detail:"ตั้งจำนวนเงินกำไรรวม หรือกำไรต่อไม้ด้วยตัวเอง" },
+    { value:"OFF", label:"ปิด", detail:"ไม่ใช้เป้ากำไร เงินขาดทุนและ Stop Loss ยังทำงาน" }
+  ];
+  return (
+    <div className={"profit-target-mode-card mode-"+mode.toLowerCase()}>
+      <div className="profit-target-mode-options" role="radiogroup" aria-label="โหมดเป้าหมายกำไร">
+        {options.map(option=><button
+          key={option.value}
+          type="button"
+          role="radio"
+          aria-checked={mode===option.value}
+          className={mode===option.value?"active":""}
+          onClick={()=>props.onChange?.(option.value)}
+        >
+          <b>{option.label}</b>
+          <small>{option.detail}</small>
+        </button>)}
+      </div>
+      {mode==="AUTO"&&<div className="auto-profit-live">
+        <span><i/>Auto กำลังดูแลกำไร</span>
+        <b>{"รอบนี้ $"+Number(props.cycleProfit||0).toFixed(2)+" · สูงสุด $"+Number(props.peakProfit||0).toFixed(2)}</b>
+        <small>ระบบจะปิดเฉพาะตอนกำไรรวมยังเป็นบวกและเหลือมากกว่าค่าเผื่อปิดออเดอร์</small>
+      </div>}
+      {mode==="OFF"&&<div className="auto-profit-off-note">ปิดเฉพาะระบบทำกำไรอัตโนมัติ — Stop Loss และตัวควบคุมขาดทุนยังทำงานตามเดิม</div>}
+    </div>
+  );
+}
+
 function BasketProfitTargetField(props: any) {
   const enabled = Number(props.value || 0) > 0;
   const targetValue = enabled ? String(props.value) : String(props.defaultTarget);
@@ -2564,8 +2634,8 @@ function BasketProfitTargetField(props: any) {
 
       {enabled&&<div className="basket-profit-explain">
         {trailEnabled
-          ? <><b>Profit Run เปิดอยู่:</b> <b>{"$"+targetValue}</b> คือจุดเริ่มปล่อยกำไรวิ่ง ไม่ใช่จุดปิด · ถ้ากราฟกลับตัว Smart Profit Defense สามารถปิดรักษากำไรก่อน/หลังถึงเป้าได้ · ถ้าต้องการให้ถึง {"$"+targetValue} แล้วปิดทันที ให้ปิด Profit Run</>
-          : <>ถึงกำไรรวม <b>{"$"+targetValue}</b> → ปิดทุกออเดอร์ในชุดทันที · Smart Profit Defense อาจปิดก่อนถึงเป้าเมื่อ Cycle ยังบวกแต่กราฟยืนยันกลับตัว</>}
+          ? <><b>Profit Run เปิดอยู่:</b> <b>{"$"+targetValue}</b> คือจุดเริ่มปล่อยกำไรวิ่ง ไม่ใช่จุดปิด · EA จะปิดเมื่อกำไรย่อลงตามเปอร์เซ็นต์ที่เลือก</>
+          : <>ถึงกำไรรวม <b>{"$"+targetValue}</b> → ปิดทุกออเดอร์ในชุดทันที</>}
         <br/>
         <small>{"EA ใช้ Basket Cycle P/L รวมผล Partial Close/Rescue · ตอนนี้ $"+Number(props.currentCycleProfit||0).toFixed(2)}</small>
       </div>}

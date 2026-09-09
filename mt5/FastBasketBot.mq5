@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.028"
+#property version   "1.029"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -54,6 +54,9 @@ input double          InpDailyProfitDrawdownPercent = 20.00;
 input double          InpBasketProfitTargetMoney = 0.00;
 input double          InpPerPositionProfitMoney = 0.00;
 input double          InpProfitRunTrailPercent = 0.00;
+// AUTO = EA protects profitable Baskets, MANUAL = use the configured target,
+// OFF = no money-profit exit (Broker SL and risk controls remain active).
+input string          InpProfitTargetMode       = "AUTO";
 // 0 = use the profile/system ATR Stop Loss. Positive = fixed manual SL distance in points.
 input double          InpManualStopLossPoints  = 0.0;
 // Legacy compatibility only. EA 1.017 no longer closes a Position by floating loss money.
@@ -143,6 +146,7 @@ double g_dailyProfitDrawdownPercent;
 double g_basketProfitTarget;
 double g_perPositionProfit;
 double g_profitRunTrailPercent;
+string g_profitTargetMode;
 double g_perPositionLoss;
 double g_manualStopLossPoints;
 int    g_maxSpread;
@@ -459,7 +463,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.028", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.029", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -852,11 +856,27 @@ int OnInit()
    g_basketProfitTarget = InpBasketProfitTargetMoney;
    g_perPositionProfit = InpPerPositionProfitMoney;
    g_profitRunTrailPercent = InpProfitRunTrailPercent;
+   g_profitTargetMode = InpProfitTargetMode;
+   StringToUpper(g_profitTargetMode);
+   if(g_profitTargetMode != "AUTO" &&
+      g_profitTargetMode != "MANUAL" &&
+      g_profitTargetMode != "OFF")
+      g_profitTargetMode =
+         (g_basketProfitTarget > 0.0 || g_perPositionProfit > 0.0)
+         ? "MANUAL" : "AUTO";
 
    // Two mutually-exclusive profit modes:
    // 1) Basket target, optionally followed by percentage giveback from peak.
    // 2) Per-position target, closing each Position independently.
-   if(g_perPositionProfit > 0.0)
+   if(g_profitTargetMode != "MANUAL")
+   {
+      g_basketProfitTarget = 0.0;
+      g_perPositionProfit = 0.0;
+      g_profitRunTrailPercent = 0.0;
+      g_triggerMoney = 0.0;
+      g_trailMoney = 0.0;
+   }
+   else if(g_perPositionProfit > 0.0)
    {
       g_basketProfitTarget = 0.0;
       g_profitRunTrailPercent = 0.0;
@@ -1038,7 +1058,9 @@ void OnTick()
       // Per-position profit/loss controls are evaluated before basket-level
       // controls. Per-position profit and total Basket profit are mutually
       // exclusive settings, enforced by both Server and EA.
-      bool closedIndividual = ManagePerPositionTargets();
+      bool closedIndividual = g_profitTargetMode == "MANUAL"
+         ? ManagePerPositionTargets()
+         : false;
       if(closedIndividual)
       {
          count = BasketPositionCount();
@@ -1060,12 +1082,13 @@ void OnTick()
       double cycleProfit = BasketCycleProfit();
       double effectiveBasketTarget = EffectiveBasketProfitTarget();
 
-      // Protect any genuinely positive Cycle, including explicit Basket target,
-      // per-position mode and auto target. A confirmed graph reversal may bank
-      // profit before the configured target instead of letting a winner turn red.
+      // Auto mode protects a genuinely positive Cycle. A confirmed reversal
+      // may bank profit before the dynamic target instead of letting a winner
+      // turn red. Manual and Off are never overridden by this decision.
       int profitDefenseDirection = BasketDirection();
       string profitDefenseReason = "NONE";
-      if(profitDefenseDirection != 0 &&
+      if(g_profitTargetMode == "AUTO" &&
+         profitDefenseDirection != 0 &&
          SmartProfitReversalDetected(
             profitDefenseDirection,
             cycleProfit,
@@ -1079,9 +1102,19 @@ void OnTick()
          return;
       }
 
+      if(g_profitTargetMode == "AUTO" &&
+         AutoProfitGivebackDetected(profitDefenseDirection,cycleProfit))
+      {
+         CloseAllBasket("AUTO_PROFIT_GIVEBACK");
+         ResetTrail();
+         g_executionStatus = "AUTO_PROFIT_GIVEBACK";
+         return;
+      }
+
       // If no manual Basket/per-position target is configured, multi-position
       // trading falls back to an automatic cycle target.
-      if(g_basketProfitTarget > 0.0 && g_perPositionProfit <= 0.0)
+      if(g_profitTargetMode == "MANUAL" &&
+         g_basketProfitTarget > 0.0 && g_perPositionProfit <= 0.0)
       {
          if(g_profitRunTrailPercent > 0.0)
          {
@@ -1121,7 +1154,7 @@ void OnTick()
             return;
          }
       }
-      else if(BasketFillEnabled() &&
+      else if(g_profitTargetMode == "AUTO" &&
               g_perPositionProfit <= 0.0 &&
               effectiveBasketTarget > 0.0)
       {
@@ -1142,34 +1175,6 @@ void OnTick()
             return;
          }
 
-         int autoDirection = BasketDirection();
-         if(autoDirection != 0 &&
-            g_profitRunPeak >= effectiveBasketTarget * 0.55 &&
-            cycleProfit > 0.0)
-         {
-            bool microReversal =
-               g_trendM1 == -autoDirection &&
-               g_trendM5 == -autoDirection;
-            bool emaReversal =
-               g_emaTrendM5 == -autoDirection ||
-               (autoDirection > 0 && g_emaReclaimState == "LOSE_EMA21_DOWN") ||
-               (autoDirection < 0 && g_emaReclaimState == "RECLAIM_EMA21_UP");
-            double oppositePa = autoDirection > 0
-               ? g_priceActionSellScore
-               : g_priceActionBuyScore;
-            bool executionInvalidated =
-               (microReversal && emaReversal) ||
-               oppositePa >= 27.0;
-
-            double defenseFloor = MathMax(0.10,g_profitRunPeak * 0.45);
-            if(executionInvalidated && cycleProfit <= defenseFloor)
-            {
-               CloseAllBasket("AUTO_PROFIT_DEFENSE");
-               ResetTrail();
-               g_executionStatus = "AUTO_PROFIT_DEFENSE";
-               return;
-            }
-         }
       }
 
       double effectiveBasketLoss = EffectiveBasketLossLimit();
@@ -1563,7 +1568,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.028\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.029\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1628,7 +1633,7 @@ void SendHeartbeat()
          ? (int)MathMax(0, TimeCurrent() - g_lastSuccessfulHeartbeat)
          : -1;
       string diagnostics = StringFormat(
-         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\",\"atrRatio\":%.3f,\"minimumLotOverrideEnabled\":%s,\"minimumLotOverrideActive\":%s,\"trendM5\":%d,\"trendM15\":%d,\"trendH1\":%d,\"entryBias\":\"%s\",\"pyramidProgressPoints\":%.1f,\"pyramidRequiredPoints\":%.1f,\"momentumSamples\":%d,\"momentumSamplesRequired\":%d,\"configuredLot\":%.4f,\"configuredMaxPositions\":%d,\"configuredBasketProfitTarget\":%.2f,\"effectiveBasketProfitTarget\":%.2f,\"configuredMaxBasketLoss\":%.2f,\"effectiveMaxBasketLoss\":%.2f,\"appliedPerPositionProfit\":%.2f,\"appliedPerPositionLoss\":%.2f,\"appliedProfitRunTrailPercent\":%.2f,\"manualStopLossPoints\":%.1f,\"hardStopAtrMultiplier\":%.3f,\"systemHardStopDistancePoints\":%.1f,\"hardStopDistancePoints\":%.1f,\"stopLossMode\":\"%s\",\"profitControlMode\":\"%s\"}}",
+         ",\"heartbeatAgeSeconds\":%d,\"heartbeatLatencyMs\":%I64d,\"heartbeatHttpStatus\":%d,\"lastServerContactAt\":%I64d,\"entryLeaseValid\":%s,\"positionManagementActive\":true,\"spreadSampleCount\":%d,\"spreadMedianPoints\":%.1f,\"spreadP90Points\":%.1f,\"spreadP95Points\":%.1f,\"spreadP99Points\":%.1f,\"adaptiveSpreadLimitPoints\":%.1f,\"adaptiveSpreadLimitPrice\":%s,\"spreadStatus\":\"%s\",\"spreadCost\":%.2f,\"adaptiveMomentumThreshold\":%.1f,\"adaptiveMaxPositions\":%d,\"adaptiveEntrySpacingMs\":%d,\"executionQuality\":%.1f,\"averageSlippagePoints\":%.1f,\"sessionProfile\":\"%s\",\"atrRatio\":%.3f,\"minimumLotOverrideEnabled\":%s,\"minimumLotOverrideActive\":%s,\"trendM5\":%d,\"trendM15\":%d,\"trendH1\":%d,\"entryBias\":\"%s\",\"pyramidProgressPoints\":%.1f,\"pyramidRequiredPoints\":%.1f,\"momentumSamples\":%d,\"momentumSamplesRequired\":%d,\"configuredLot\":%.4f,\"configuredMaxPositions\":%d,\"configuredBasketProfitTarget\":%.2f,\"effectiveBasketProfitTarget\":%.2f,\"configuredMaxBasketLoss\":%.2f,\"effectiveMaxBasketLoss\":%.2f,\"appliedPerPositionProfit\":%.2f,\"appliedPerPositionLoss\":%.2f,\"appliedProfitRunTrailPercent\":%.2f,\"manualStopLossPoints\":%.1f,\"hardStopAtrMultiplier\":%.3f,\"systemHardStopDistancePoints\":%.1f,\"hardStopDistancePoints\":%.1f,\"stopLossMode\":\"%s\",\"profitControlMode\":\"%s\",\"profitTargetMode\":\"%s\"}}",
          heartbeatAge,
          g_lastHeartbeatLatencyMs,
          g_lastHeartbeatHttpStatus,
@@ -1674,7 +1679,8 @@ void SendHeartbeat()
          EffectiveHardStopDistancePoints(),
          EffectiveStopLossDistancePoints(),
          StopLossModeName(),
-         ProfitControlModeName()
+         ProfitControlModeName(),
+         g_profitTargetMode
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + diagnostics;
       string burstDiagnostics = StringFormat(
@@ -2389,12 +2395,33 @@ void ApplySettings(string json)
    g_dailyProfitDrawdownPercent = MathMax(0.0, MathMin(95.0, JsonNumber(json, "dailyProfitDrawdownPercent", g_dailyProfitDrawdownPercent)));
    double previousBasketProfitTarget = g_basketProfitTarget;
    double previousProfitRunTrailPercent = g_profitRunTrailPercent;
+   string previousProfitTargetMode = g_profitTargetMode;
 
    g_basketProfitTarget = MathMax(0.0, JsonNumber(json, "basketProfitTargetMoney", g_basketProfitTarget));
    g_perPositionProfit = MathMax(0.0, JsonNumber(json, "perPositionProfitMoney", g_perPositionProfit));
    g_profitRunTrailPercent = MathMax(0.0, MathMin(95.0, JsonNumber(json, "profitRunTrailPercent", g_profitRunTrailPercent)));
+   string requestedProfitMode = JsonString(json, "profitTargetMode", "");
+   StringToUpper(requestedProfitMode);
+   if(requestedProfitMode == "AUTO" ||
+      requestedProfitMode == "MANUAL" ||
+      requestedProfitMode == "OFF")
+      g_profitTargetMode = requestedProfitMode;
+   else if(g_profitTargetMode == "")
+      g_profitTargetMode =
+         (g_basketProfitTarget > 0.0 || g_perPositionProfit > 0.0)
+         ? "MANUAL" : "AUTO";
 
-   if(g_perPositionProfit > 0.0)
+   if(g_profitTargetMode != "MANUAL")
+   {
+      g_basketProfitTarget = 0.0;
+      g_perPositionProfit = 0.0;
+      g_profitRunTrailPercent = 0.0;
+      g_triggerMoney = 0.0;
+      g_trailMoney = 0.0;
+      if(g_profitTargetMode == "OFF")
+         g_burstTargetMoney = 0.0;
+   }
+   else if(g_perPositionProfit > 0.0)
    {
       g_basketProfitTarget = 0.0;
       g_profitRunTrailPercent = 0.0;
@@ -2411,8 +2438,12 @@ void ApplySettings(string json)
       g_profitRunTrailPercent = 0.0;
    }
 
+   if(g_profitTargetMode != "AUTO")
+      g_burstTargetMoney = 0.0;
+
    // Changing Basket target or giveback percentage starts a fresh peak.
-   if(MathAbs(previousBasketProfitTarget - g_basketProfitTarget) > 0.0000001 ||
+   if(previousProfitTargetMode != g_profitTargetMode ||
+      MathAbs(previousBasketProfitTarget - g_basketProfitTarget) > 0.0000001 ||
       MathAbs(previousProfitRunTrailPercent - g_profitRunTrailPercent) > 0.0000001)
    {
       g_profitRunPeak = 0.0;
@@ -4897,16 +4928,20 @@ double CurrentSpreadCost(double volume)
 
 double EffectiveBasketProfitTarget()
 {
+   if(g_profitTargetMode == "OFF")
+      return 0.0;
+
    // Per-position profit mode is mutually exclusive with Basket profit.
-   if(g_perPositionProfit > 0.0)
+   if(g_profitTargetMode == "MANUAL" && g_perPositionProfit > 0.0)
       return 0.0;
 
    // Explicit website setting always wins.
-   if(g_basketProfitTarget > 0.0)
+   if(g_profitTargetMode == "MANUAL" && g_basketProfitTarget > 0.0)
       return g_basketProfitTarget;
 
    // Automatic Basket target is a fallback when the user left Basket profit off.
-   if(BasketFillEnabled() && g_burstTargetMoney > 0.0)
+   if(g_profitTargetMode == "AUTO" &&
+      BasketFillEnabled() && g_burstTargetMoney > 0.0)
       return g_burstTargetMoney;
 
    return 0.0;
@@ -4921,7 +4956,9 @@ double EffectiveBasketLossLimit()
 
 void EnsureBurstTargets(int plannedPositions)
 {
-   if(!BasketFillEnabled() || g_burstTargetMoney > 0.0)
+   if(g_profitTargetMode != "AUTO" ||
+      !BasketFillEnabled() ||
+      g_burstTargetMoney > 0.0)
       return;
 
    int targetCount = MathMax(1, plannedPositions);
@@ -5632,6 +5669,59 @@ bool SmartProfitReversalDetected(
 
    g_smartProfitDefenseActive = true;
    g_smartProfitDefenseReason = reasonOut;
+   return true;
+}
+
+bool AutoProfitGivebackDetected(int direction,double cycleProfit)
+{
+   if(direction == 0 || cycleProfit <= 0.0)
+      return false;
+
+   double floor = SmartProfitProtectionFloor(direction);
+   g_smartProfitDefenseFloor = floor;
+   g_smartProfitDefenseLastProfit = cycleProfit;
+
+   if(cycleProfit > g_profitRunPeak)
+   {
+      double previousPeak = g_profitRunPeak;
+      g_profitRunPeak = cycleProfit;
+      // Persist only when the peak crosses another $0.05 step. Keeping the
+      // live peak every tick is useful, but disk/global writes every tick are not.
+      if(MathFloor(g_profitRunPeak * 20.0) > MathFloor(previousPeak * 20.0))
+         SaveBasketCycleState();
+      return false;
+   }
+
+   // Do not react to a few cents of noise. Auto arms only after the Cycle has
+   // enough profit left to cover the close reserve with room to spare.
+   double minimumPeak = MathMax(0.20,floor * 1.80);
+   if(g_profitRunPeak < minimumPeak || cycleProfit <= floor)
+      return false;
+
+   bool strongTrend =
+      g_trendM5 == direction &&
+      g_trendM15 == direction &&
+      g_entryQuality == "A";
+   bool fragileMarket =
+      g_marketRegime == "RANGE" ||
+      g_entryQuality == "C" ||
+      g_trendM1 == -direction;
+   double givebackPercent = strongTrend ? 0.32 : fragileMarket ? 0.15 : 0.22;
+
+   double volume = MathMax(
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),
+      VolumeForMagic(InpMagic,direction)
+   );
+   double minimumGiveback = MathMax(0.10,CurrentSpreadCost(volume) * 0.25);
+   double closeLevel = MathMax(
+      floor,
+      g_profitRunPeak - MathMax(minimumGiveback,g_profitRunPeak * givebackPercent)
+   );
+   if(cycleProfit > closeLevel)
+      return false;
+
+   g_smartProfitDefenseActive = true;
+   g_smartProfitDefenseReason = "PROFIT_GIVEBACK";
    return true;
 }
 
@@ -7107,11 +7197,13 @@ void ManageDynamicProtection()
          desiredSL = MathMax(desiredSL, tick.ask + minStopPoints * _Point);
       desiredSL = desiredSL > 0.0 ? NormalizeDouble(desiredSL, digits) : 0.0;
 
-      // For a single-position strategy with no explicit money target, keep a
-      // live Broker TP. Multi-position baskets use the dynamic Basket target
-      // instead so one rung cannot close and be immediately replaced.
+      // Only Auto owns a system-generated Broker TP. Manual follows the money
+      // target selected by the user and Off leaves profit exits disabled.
       double desiredTP = currentTP;
-      if(count == 1 && g_perPositionProfit <= 0.0 && g_basketProfitTarget <= 0.0)
+      if(g_profitTargetMode == "AUTO" &&
+         count == 1 &&
+         g_perPositionProfit <= 0.0 &&
+         g_basketProfitTarget <= 0.0)
       {
          double baseStop = desiredSL > 0.0
             ? desiredSL
@@ -7126,8 +7218,12 @@ void ManageDynamicProtection()
 
       bool slChanged = desiredSL > 0.0 &&
          (currentSL <= 0.0 || MathAbs(desiredSL - currentSL) >= _Point * 2.0);
-      bool tpChanged = desiredTP > 0.0 &&
-         (currentTP <= 0.0 || MathAbs(desiredTP - currentTP) >= _Point * 4.0);
+      bool clearSystemTP = g_profitTargetMode != "AUTO" && currentTP > 0.0;
+      if(clearSystemTP)
+         desiredTP = 0.0;
+      bool tpChanged = clearSystemTP ||
+         (desiredTP > 0.0 &&
+          (currentTP <= 0.0 || MathAbs(desiredTP - currentTP) >= _Point * 4.0));
 
       if(slChanged || tpChanged)
          ModifyPositionProtection(ticket, slChanged ? desiredSL : currentSL, tpChanged ? desiredTP : currentTP);
@@ -7136,15 +7232,17 @@ void ManageDynamicProtection()
 
 string ProfitControlModeName()
 {
+   if(g_profitTargetMode == "AUTO")
+      return "AUTO_SMART";
+   if(g_profitTargetMode == "OFF")
+      return "OFF";
    if(g_perPositionProfit > 0.0)
-      return "PER_POSITION";
+      return "MANUAL_PER_POSITION";
    if(g_basketProfitTarget > 0.0 && g_profitRunTrailPercent > 0.0)
-      return "BASKET_RUN_ON";
+      return "MANUAL_BASKET_RUN_ON";
    if(g_basketProfitTarget > 0.0)
-      return "BASKET_FIXED";
-   if(BasketFillEnabled())
-      return "BASKET_AUTO";
-   return "NONE";
+      return "MANUAL_BASKET_FIXED";
+   return "MANUAL_NONE";
 }
 
 bool SendMarketOrder(int direction)
@@ -7183,7 +7281,8 @@ bool SendMarketOrder(int direction)
 
    double entryPrice = request.price;
    request.sl = DynamicInitialStopPrice(direction, entryPrice);
-   if(request.sl > 0.0 &&
+   if(g_profitTargetMode == "AUTO" &&
+      request.sl > 0.0 &&
       !BasketFillEnabled() &&
       g_perPositionProfit <= 0.0 &&
       g_basketProfitTarget <= 0.0)

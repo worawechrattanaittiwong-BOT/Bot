@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS bot_settings (
     "dailyLossMoney":25.0,
     "perPositionLossMoney":0,
     "manualStopLossPoints":0,
+    "profitTargetMode":"AUTO",
     "maxSpreadPoints":300,
     "minOrderIntervalMs":300,
     "maxOrdersPerMinute":120,
