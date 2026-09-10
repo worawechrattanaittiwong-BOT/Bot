@@ -1,6 +1,6 @@
-# SCENOVA Smart Installer 3.0.0
+# SCENOVA Smart Installer 3.1.0
 
-Smart Installer 3.0.0 upgrades the Windows setup from a file copier into a lifecycle manager for MT5, the SCENOVA EA and Device Agent. It preserves the existing Slot/device security model and does not read or store MT5 passwords.
+Smart Installer 3.1.0 upgrades the Windows setup from a file copier into a lifecycle manager for MT5, the SCENOVA EA and Device Agent. It preserves the existing Slot/device security model and does not read or store MT5 passwords.
 
 ## Architecture
 
@@ -11,6 +11,18 @@ The installer is split conceptually into three brains:
 - **Verification Brain**: checks hash, Agent, EA heartbeat, runtime Account/Server, version compatibility and overall installation health before reporting READY.
 
 The default UI is a no-tech flow. Advanced Mode exposes paths, hashes, versions, profile count, SafeToRestart and diagnostics.
+
+### 3.1 Light UI and release-channel safety
+
+Version 3.1 switches the installer to a white/light interface for clearer status reading. Normal customer mode displays only the resolved release label (for example `Release: Stable`) and hides the Stable/Beta/AdminTest selector. The channel selector becomes visible only in Advanced Mode.
+
+This is a UI safeguard, not a security boundary: the Server still authorizes/downgrades non-Stable channels. Customers cannot obtain an AdminTest artifact merely by changing a local UI value.
+
+Preset migration in 3.1 also adds missing Indicator Intelligence V6 defaults without overwriting existing customer values:
+- `InpIndicatorV6Mode=1` (SOFT_WEIGHT)
+- `InpVolumeProfileBars=144`
+- `InpDonchianPeriod=20`
+- `InpIndicatorMaxWaitSeconds=20`
 
 ## Upgrade coverage
 

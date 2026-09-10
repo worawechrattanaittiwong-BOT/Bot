@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.044"
+#property version   "1.045"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -36,6 +36,14 @@ enum ENUM_RESCUE_STATE
    RESCUE_ACTIVE   = 2,
    RESCUE_RECOVERY = 3,
    RESCUE_EXIT     = 4
+};
+
+enum ENUM_INDICATOR_V6_MODE
+{
+   INDICATOR_V6_SHADOW      = 0,
+   INDICATOR_V6_SOFT_WEIGHT = 1,
+   INDICATOR_V6_TIMING      = 2,
+   INDICATOR_V6_ADAPTIVE    = 3
 };
 
 input string          InpApiBase              = "https://snvea-bot.online/backend";
@@ -101,6 +109,14 @@ input bool            InpAdaptiveRescueEngine  = true;
 input double          InpRescueMaxHedgeRatio   = 0.65;
 input int             InpTimeRescueMinutes     = 20;
 input bool            InpShowEmaOnChart        = true;
+
+// Indicator Intelligence V6. SHADOW only observes; SOFT_WEIGHT is the default
+// production mode; TIMING/ADAPTIVE may briefly wait on multi-factor context
+// but never allow a single indicator to veto a trade.
+input ENUM_INDICATOR_V6_MODE InpIndicatorV6Mode = INDICATOR_V6_SOFT_WEIGHT;
+input int             InpVolumeProfileBars      = 144;
+input int             InpDonchianPeriod         = 20;
+input int             InpIndicatorMaxWaitSeconds = 20;
 
 ENUM_BOT_STATE g_state = STATE_STOPPED;
 bool   g_access = false;
@@ -392,6 +408,84 @@ double g_tacticalCountertrendScore = 0.0;
 string g_tacticalCountertrendReason = "NONE";
 datetime g_localExtremeWaitStartedAt = 0;
 
+// Indicator Intelligence V6 ------------------------------------------------
+// Each family measures a different market dimension. Composite scoring caps
+// every family so correlated indicators cannot masquerade as independent proof.
+ENUM_INDICATOR_V6_MODE g_indicatorV6Mode = INDICATOR_V6_SOFT_WEIGHT;
+string g_indicatorActivationStage = "SOFT_WEIGHT";
+datetime g_lastIndicatorV6RefreshAt = 0;
+int g_indicatorV6Direction = 0;
+double g_volumePoc = 0.0;
+double g_volumeVah = 0.0;
+double g_volumeVal = 0.0;
+double g_volumeHvn = 0.0;
+double g_volumeLvn = 0.0;
+string g_volumeProfileState = "DATA_NOT_READY";
+double g_volumeProfileScore = 50.0;
+double g_swingAnchoredVwap = 0.0;
+double g_impulseAnchoredVwap = 0.0;
+double g_multiVwapScore = 50.0;
+string g_multiVwapState = "NEUTRAL";
+double g_donchianHigh = 0.0;
+double g_donchianLow = 0.0;
+string g_donchianState = "NEUTRAL";
+double g_bbUpper = 0.0;
+double g_bbMiddle = 0.0;
+double g_bbLower = 0.0;
+double g_bbWidthAtr = 0.0;
+double g_keltnerUpper = 0.0;
+double g_keltnerLower = 0.0;
+string g_squeezeState = "NORMAL";
+double g_volatilityExpansionScore = 50.0;
+double g_macdHistogram = 0.0;
+double g_macdHistogramPrevious = 0.0;
+double g_macdHistogramSlope = 0.0;
+string g_macdState = "NEUTRAL";
+double g_stochK = 50.0;
+double g_stochD = 50.0;
+string g_stochState = "NEUTRAL";
+double g_tickVolumeMomentum = 1.0;
+double g_obvFlowScore = 50.0;
+double g_candleEfficiency = 0.0;
+double g_adxSlope = 0.0;
+double g_dmiAcceleration = 0.0;
+double g_rsiRegularDivBuy = 0.0;
+double g_rsiRegularDivSell = 0.0;
+double g_rsiHiddenDivBuy = 0.0;
+double g_rsiHiddenDivSell = 0.0;
+double g_sessionHigh = 0.0;
+double g_sessionLow = 0.0;
+double g_previousDayHigh = 0.0;
+double g_previousDayLow = 0.0;
+double g_previousDayClose = 0.0;
+double g_weekHigh = 0.0;
+double g_weekLow = 0.0;
+double g_flipLevel = 0.0;
+int g_flipDirection = 0;
+string g_levelFlipState = "NONE";
+double g_levelFlipScore = 0.0;
+double g_emaCompressionScore = 0.0;
+string g_premiumDiscountState = "EQUILIBRIUM";
+string g_fvgLifecycleState = "NONE";
+string g_orderBlockLifecycleState = "NONE";
+double g_indicatorLocationScore = 50.0;
+double g_indicatorMomentumScore = 50.0;
+double g_indicatorStructureScore = 50.0;
+double g_indicatorVolatilityScore = 50.0;
+double g_indicatorExecutionScore = 50.0;
+double g_indicatorCostSpaceScore = 50.0;
+double g_indicatorCompositeScore = 50.0;
+double g_indicatorTargetPrice = 0.0;
+string g_indicatorDecision = "OBSERVE";
+string g_indicatorWhy = "DATA_NOT_READY";
+datetime g_indicatorWaitStartedAt = 0;
+int g_indicatorWaitDirection = 0;
+string g_indicatorWaitReason = "NONE";
+double g_indicatorHistoryWinProbability = 0.0;
+int g_indicatorHistorySamples = 0;
+double g_indicatorHistoryExpectedValue = 0.0;
+double g_indicatorHistoryEvScore = 50.0;
+
 double g_fillUrgency = 0.0;
 int    g_fillExpectedPositions = 1;
 string g_fillPhase = "STRICT";
@@ -432,6 +526,11 @@ double g_testAnchorMae60Sum = 0.0;
 double g_testTimeToGreenSum = 0.0;
 int    g_testTimeToGreenSamples = 0;
 int    g_testGreenWithin60 = 0;
+double g_testIndicatorCompositeSum = 0.0;
+int    g_testIndicatorEntrySamples = 0;
+int    g_testIndicatorWaitEvents = 0;
+double g_testIndicatorWaitSecondsSum = 0.0;
+int    g_testIndicatorHighQualityEntries = 0;
 
 // Same-side re-entry after a reversal exit is event-driven, never time-based.
 int      g_marketRearmDirection = 0;
@@ -529,6 +628,18 @@ string   g_basketJournalFvgState = "NONE";
 double   g_basketJournalPrecisionScore = 50.0;
 double   g_basketJournalEntryDistanceAtr = 0.0;
 double   g_basketJournalSetupEvScore = 50.0;
+double   g_basketJournalIndicatorLocation = 50.0;
+double   g_basketJournalIndicatorMomentum = 50.0;
+double   g_basketJournalIndicatorStructure = 50.0;
+double   g_basketJournalIndicatorVolatility = 50.0;
+double   g_basketJournalIndicatorExecution = 50.0;
+double   g_basketJournalIndicatorCostSpace = 50.0;
+double   g_basketJournalIndicatorComposite = 50.0;
+string   g_basketJournalVolumeProfileState = "DATA_NOT_READY";
+string   g_basketJournalSqueezeState = "NORMAL";
+string   g_basketJournalMacdState = "NEUTRAL";
+string   g_basketJournalLevelFlipState = "NONE";
+string   g_basketJournalPremiumDiscountState = "EQUILIBRIUM";
 
 bool     g_pendingBasketJournal = false;
 datetime g_pendingBasketRetryAt = 0;
@@ -557,6 +668,18 @@ string   g_pendingBasketFvgState = "NONE";
 double   g_pendingBasketPrecisionScore = 50.0;
 double   g_pendingBasketEntryDistanceAtr = 0.0;
 double   g_pendingBasketSetupEvScore = 50.0;
+double   g_pendingBasketIndicatorLocation = 50.0;
+double   g_pendingBasketIndicatorMomentum = 50.0;
+double   g_pendingBasketIndicatorStructure = 50.0;
+double   g_pendingBasketIndicatorVolatility = 50.0;
+double   g_pendingBasketIndicatorExecution = 50.0;
+double   g_pendingBasketIndicatorCostSpace = 50.0;
+double   g_pendingBasketIndicatorComposite = 50.0;
+string   g_pendingBasketVolumeProfileState = "DATA_NOT_READY";
+string   g_pendingBasketSqueezeState = "NORMAL";
+string   g_pendingBasketMacdState = "NEUTRAL";
+string   g_pendingBasketLevelFlipState = "NONE";
+string   g_pendingBasketPremiumDiscountState = "EQUILIBRIUM";
 
 bool   g_burstActive = false;
 bool   g_burstNeedsRearm = false;
@@ -614,7 +737,7 @@ void RenderChartStatus(string connectionText, color statusColor, string executio
    SetChartStatusText("ACCOUNT", "Account   " + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), 62, 11, clrWhite);
    SetChartStatusText("STATE", "State       " + StateText(), 88, 11, clrWhite);
    SetChartStatusText("EXECUTION", "Execution  " + executionText, 114, 11, C'177,187,207');
-   SetChartStatusText("VERSION", "EA v1.029", 137, 9, C'104,117,142');
+   SetChartStatusText("VERSION", "EA v1.045", 137, 9, C'104,117,142');
    ChartRedraw(0);
 }
 
@@ -1062,6 +1185,8 @@ int OnInit()
    g_sessionEndHour = MathMax(1, MathMin(24, InpSessionEndHour));
    g_maxAtrPoints = MathMax(0.0, InpMaxAtrPoints);
    g_rescueEnabled = InpAdaptiveRescueEngine;
+   g_indicatorV6Mode = InpIndicatorV6Mode;
+   g_indicatorActivationStage = IndicatorV6ModeName();
    g_adaptiveMomentumThreshold = InpMomentumEntryPoints;
    g_adaptiveMaxPositions = g_maxPositions;
    g_adaptiveEntrySpacingMs = g_minOrderIntervalMs;
@@ -1156,6 +1281,14 @@ void TesterStartCycleIfNeeded(int direction,int positionsBefore)
 
    if(positionsBefore > 0 || g_testCycleStartedAt > 0)
       return;
+
+   // Capture the V6 context at the anchor entry. This is measurement only and
+   // never changes Strategy Tester execution.
+   RefreshIndicatorV6Scores(direction,MomentumPoints());
+   g_testIndicatorCompositeSum += g_indicatorCompositeScore;
+   g_testIndicatorEntrySamples++;
+   if(g_indicatorCompositeScore>=78.0)
+      g_testIndicatorHighQualityEntries++;
 
    if(g_testLastBasketClosedAt > 0 &&
       g_testLastBasketDirection == direction &&
@@ -1292,9 +1425,16 @@ double OnTester()
       ? g_testTimeToGreenSum/g_testTimeToGreenSamples : 0.0;
    double green60Rate = g_testCycleSamples > 0
       ? (double)g_testGreenWithin60/g_testCycleSamples*100.0 : 0.0;
+   double avgIndicatorComposite = g_testIndicatorEntrySamples > 0
+      ? g_testIndicatorCompositeSum/g_testIndicatorEntrySamples : 0.0;
+   double avgIndicatorWaitSeconds = g_testIndicatorWaitEvents > 0
+      ? g_testIndicatorWaitSecondsSum/g_testIndicatorWaitEvents : 0.0;
+   double highQualityEntryPct = g_testIndicatorEntrySamples > 0
+      ? (double)g_testIndicatorHighQualityEntries/
+        g_testIndicatorEntrySamples*100.0 : 0.0;
 
    PrintFormat(
-      "SCENOVA_BACKTEST_V3 cycles=%d orders=%d avgMAE=%.4f avgMFE=%.4f profitCapturePct=%.2f terminalChasePct=%.2f avgFillSeconds=%.1f fillWithin10MinPct=%.2f sameSideChurnPct=%.2f entryMAE5=%.4f entryMAE15=%.4f entryMAE30=%.4f entryMAE60=%.4f avgTimeToGreenSec=%.1f greenWithin60Pct=%.2f",
+      "SCENOVA_BACKTEST_V6 cycles=%d orders=%d avgMAE=%.4f avgMFE=%.4f profitCapturePct=%.2f terminalChasePct=%.2f avgFillSeconds=%.1f fillWithin10MinPct=%.2f sameSideChurnPct=%.2f entryMAE5=%.4f entryMAE15=%.4f entryMAE30=%.4f entryMAE60=%.4f avgTimeToGreenSec=%.1f greenWithin60Pct=%.2f avgIndicatorComposite=%.2f indicatorWaitEvents=%d avgIndicatorWaitSeconds=%.2f highQualityEntryPct=%.2f",
       g_testCycleSamples,
       g_testEntryCount,
       avgMae,
@@ -1309,7 +1449,11 @@ double OnTester()
       entryMae30,
       entryMae60,
       timeToGreen,
-      green60Rate
+      green60Rate,
+      avgIndicatorComposite,
+      g_testIndicatorWaitEvents,
+      avgIndicatorWaitSeconds,
+      highQualityEntryPct
    );
 
    // Native MT5 report remains authoritative for Drawdown, Win Rate and
@@ -2007,7 +2151,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.044\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.045\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -2137,7 +2281,7 @@ void SendHeartbeat()
 
       // Market-context telemetry makes every entry auditable on the web.
       string marketContextDiagnostics = StringFormat(
-         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"LOCAL_EXTREME_V4\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"m5Support\":%s,\"m5Resistance\":%s,\"supportTimeframe\":\"%s\",\"resistanceTimeframe\":\"%s\",\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
+         ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"INDICATOR_INTELLIGENCE_V6\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"m5Support\":%s,\"m5Resistance\":%s,\"supportTimeframe\":\"%s\",\"resistanceTimeframe\":\"%s\",\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
          g_trendM1,
          g_trendM30,
          g_effectiveConfidenceThreshold,
@@ -2319,9 +2463,72 @@ void SendHeartbeat()
          g_lastCloseReason
       );
 
+      string indicatorV6Diagnostics = StringFormat(
+         ",\"indicatorV6Mode\":\"%s\",\"indicatorDecision\":\"%s\",\"indicatorWhy\":\"%s\",\"indicatorLocationScore\":%.1f,\"indicatorMomentumScore\":%.1f,\"indicatorStructureScore\":%.1f,\"indicatorVolatilityScore\":%.1f,\"indicatorExecutionScore\":%.1f,\"indicatorCostSpaceScore\":%.1f,\"indicatorCompositeScore\":%.1f,\"volumePoc\":%s,\"volumeVah\":%s,\"volumeVal\":%s,\"volumeHvn\":%s,\"volumeLvn\":%s,\"volumeProfileState\":\"%s\",\"swingAnchoredVwap\":%s,\"impulseAnchoredVwap\":%s,\"multiVwapState\":\"%s\",\"multiVwapScore\":%.1f,\"donchianHigh\":%s,\"donchianLow\":%s,\"donchianState\":\"%s\",\"bbWidthAtr\":%.3f,\"squeezeState\":\"%s\",\"macdHistogram\":%.6f,\"macdHistogramSlope\":%.6f,\"macdState\":\"%s\",\"stochK\":%.1f,\"stochD\":%.1f,\"stochState\":\"%s\",\"tickVolumeMomentum\":%.3f,\"obvFlowScore\":%.1f,\"candleEfficiency\":%.3f,\"adxSlope\":%.2f,\"dmiAcceleration\":%.2f,\"rsiRegularDivBuy\":%.1f,\"rsiRegularDivSell\":%.1f,\"rsiHiddenDivBuy\":%.1f,\"rsiHiddenDivSell\":%.1f,\"sessionHigh\":%s,\"sessionLow\":%s,\"previousDayHigh\":%s,\"previousDayLow\":%s,\"previousDayClose\":%s,\"weekHigh\":%s,\"weekLow\":%s,\"levelFlipState\":\"%s\",\"flipLevel\":%s,\"emaCompressionScore\":%.1f,\"premiumDiscountState\":\"%s\",\"fvgLifecycleState\":\"%s\",\"orderBlockLifecycleState\":\"%s\",\"indicatorTargetPrice\":%s,\"indicatorHistoryWinProbability\":%.1f,\"indicatorHistorySamples\":%d,\"indicatorHistoryExpectedValue\":%.2f,\"indicatorHistoryEvScore\":%.1f",
+         IndicatorV6ModeName(),
+         g_indicatorDecision,
+         g_indicatorWhy,
+         g_indicatorLocationScore,
+         g_indicatorMomentumScore,
+         g_indicatorStructureScore,
+         g_indicatorVolatilityScore,
+         g_indicatorExecutionScore,
+         g_indicatorCostSpaceScore,
+         g_indicatorCompositeScore,
+         DoubleToString(g_volumePoc,SymbolDigitsNow()),
+         DoubleToString(g_volumeVah,SymbolDigitsNow()),
+         DoubleToString(g_volumeVal,SymbolDigitsNow()),
+         DoubleToString(g_volumeHvn,SymbolDigitsNow()),
+         DoubleToString(g_volumeLvn,SymbolDigitsNow()),
+         g_volumeProfileState,
+         DoubleToString(g_swingAnchoredVwap,SymbolDigitsNow()),
+         DoubleToString(g_impulseAnchoredVwap,SymbolDigitsNow()),
+         g_multiVwapState,
+         g_multiVwapScore,
+         DoubleToString(g_donchianHigh,SymbolDigitsNow()),
+         DoubleToString(g_donchianLow,SymbolDigitsNow()),
+         g_donchianState,
+         g_bbWidthAtr,
+         g_squeezeState,
+         g_macdHistogram,
+         g_macdHistogramSlope,
+         g_macdState,
+         g_stochK,
+         g_stochD,
+         g_stochState,
+         g_tickVolumeMomentum,
+         g_obvFlowScore,
+         g_candleEfficiency,
+         g_adxSlope,
+         g_dmiAcceleration,
+         g_rsiRegularDivBuy,
+         g_rsiRegularDivSell,
+         g_rsiHiddenDivBuy,
+         g_rsiHiddenDivSell,
+         DoubleToString(g_sessionHigh,SymbolDigitsNow()),
+         DoubleToString(g_sessionLow,SymbolDigitsNow()),
+         DoubleToString(g_previousDayHigh,SymbolDigitsNow()),
+         DoubleToString(g_previousDayLow,SymbolDigitsNow()),
+         DoubleToString(g_previousDayClose,SymbolDigitsNow()),
+         DoubleToString(g_weekHigh,SymbolDigitsNow()),
+         DoubleToString(g_weekLow,SymbolDigitsNow()),
+         g_levelFlipState,
+         DoubleToString(g_flipLevel,SymbolDigitsNow()),
+         g_emaCompressionScore,
+         g_premiumDiscountState,
+         g_fvgLifecycleState,
+         g_orderBlockLifecycleState,
+         DoubleToString(g_indicatorTargetPrice,SymbolDigitsNow()),
+         g_indicatorHistoryWinProbability,
+         g_indicatorHistorySamples,
+         g_indicatorHistoryExpectedValue,
+         g_indicatorHistoryEvScore
+      );
+
       string positionDiagnostics =
          marketContextDiagnostics + intelligenceV3Diagnostics + probabilityDiagnostics +
          intelligenceV4Diagnostics + smartProfitDiagnostics + marketCycleV2Diagnostics +
+         indicatorV6Diagnostics +
          StringFormat(
             ",\"marketCycleState\":\"%s\",\"rsiM1\":%.1f,\"rsiM5\":%.1f,\"adxM5\":%.1f,\"plusDiM5\":%.1f,\"minusDiM5\":%.1f,\"vwapM5\":%s,\"demandZoneScore\":%.1f,\"supplyZoneScore\":%.1f,\"reversalOpportunityDirection\":%d,\"reversalOpportunityScore\":%.1f,\"fillExpectedPositions\":%d,\"fillUrgency\":%.3f,\"marketRearmDirection\":%d,\"marketRearmReason\":\"%s\",\"decisionDirection\":%d,\"entryPrecisionState\":\"%s\",\"entryPrecisionReason\":\"%s\",\"entryPrecisionScore\":%.1f,\"entryDistanceAtr\":%.3f,\"expectedMoveAtr\":%.3f,\"executionCostAtr\":%.4f,\"liquidityState\":\"%s\",\"liquidityScore\":%.1f,\"microStructureState\":\"%s\",\"microStructureScore\":%.1f,\"fvgState\":\"%s\",\"fvgScore\":%.1f,\"precisionWaitSeconds\":%I64d,\"precisionWaitMaxSeconds\":%d,\"setupWinProbability\":%.1f,\"setupWinSamples\":%d,\"setupAvgWin\":%.2f,\"setupAvgLoss\":%.2f,\"setupEvScore\":%.1f,\"localExtremeState\":\"%s\",\"localExtremeScore\":%.1f,\"localExtremeLevel\":%s,\"failedBreakoutState\":\"%s\",\"breakoutHoldConfirmed\":%s,\"tacticalCountertrendActive\":%s,\"tacticalCountertrendDirection\":%d,\"tacticalCountertrendScore\":%.1f,\"tacticalCountertrendReason\":\"%s\"",
             g_marketCycleState,
@@ -2437,6 +2644,14 @@ void SendHeartbeat()
    g_setupHistoryDirection = (int)JsonNumber(
       response,"setupDirection",g_setupHistoryDirection
    );
+   g_indicatorHistoryWinProbability = MathMax(0.0,MathMin(100.0,
+      JsonNumber(response,"indicatorWinProbability",g_indicatorHistoryWinProbability)));
+   g_indicatorHistorySamples = (int)MathMax(0.0,
+      JsonNumber(response,"indicatorSamples",g_indicatorHistorySamples));
+   g_indicatorHistoryExpectedValue =
+      JsonNumber(response,"indicatorExpectedValue",g_indicatorHistoryExpectedValue);
+   g_indicatorHistoryEvScore = MathMax(0.0,MathMin(100.0,
+      JsonNumber(response,"indicatorEvScore",g_indicatorHistoryEvScore)));
 
    // desiredState is authoritative. A stale START/SAFE_STOP command must never
    // override the latest state selected on the website.
@@ -2701,6 +2916,18 @@ void ClearActiveBasketJournal()
    g_basketJournalPrecisionScore = 50.0;
    g_basketJournalEntryDistanceAtr = 0.0;
    g_basketJournalSetupEvScore = 50.0;
+   g_basketJournalIndicatorLocation = 50.0;
+   g_basketJournalIndicatorMomentum = 50.0;
+   g_basketJournalIndicatorStructure = 50.0;
+   g_basketJournalIndicatorVolatility = 50.0;
+   g_basketJournalIndicatorExecution = 50.0;
+   g_basketJournalIndicatorCostSpace = 50.0;
+   g_basketJournalIndicatorComposite = 50.0;
+   g_basketJournalVolumeProfileState = "DATA_NOT_READY";
+   g_basketJournalSqueezeState = "NORMAL";
+   g_basketJournalMacdState = "NEUTRAL";
+   g_basketJournalLevelFlipState = "NONE";
+   g_basketJournalPremiumDiscountState = "EQUILIBRIUM";
 }
 
 void CaptureBasketJournalEntry(ulong dealTicket)
@@ -2737,6 +2964,18 @@ void CaptureBasketJournalEntry(ulong dealTicket)
       g_basketJournalPrecisionScore = g_entryPrecisionScore;
       g_basketJournalEntryDistanceAtr = g_entryDistanceAtr;
       g_basketJournalSetupEvScore = g_setupEvScore;
+      g_basketJournalIndicatorLocation = g_indicatorLocationScore;
+      g_basketJournalIndicatorMomentum = g_indicatorMomentumScore;
+      g_basketJournalIndicatorStructure = g_indicatorStructureScore;
+      g_basketJournalIndicatorVolatility = g_indicatorVolatilityScore;
+      g_basketJournalIndicatorExecution = g_indicatorExecutionScore;
+      g_basketJournalIndicatorCostSpace = g_indicatorCostSpaceScore;
+      g_basketJournalIndicatorComposite = g_indicatorCompositeScore;
+      g_basketJournalVolumeProfileState = g_volumeProfileState;
+      g_basketJournalSqueezeState = g_squeezeState;
+      g_basketJournalMacdState = g_macdState;
+      g_basketJournalLevelFlipState = g_levelFlipState;
+      g_basketJournalPremiumDiscountState = g_premiumDiscountState;
    }
    g_basketJournalVolume += HistoryDealGetDouble(dealTicket, DEAL_VOLUME);
    UpdateBasketPeakPositionCount(BasketPositionCount());
@@ -2797,6 +3036,18 @@ void RecoverOpenBasketJournal()
    g_basketJournalPrecisionScore = g_entryPrecisionScore;
    g_basketJournalEntryDistanceAtr = g_entryDistanceAtr;
    g_basketJournalSetupEvScore = g_setupEvScore;
+   g_basketJournalIndicatorLocation = g_indicatorLocationScore;
+   g_basketJournalIndicatorMomentum = g_indicatorMomentumScore;
+   g_basketJournalIndicatorStructure = g_indicatorStructureScore;
+   g_basketJournalIndicatorVolatility = g_indicatorVolatilityScore;
+   g_basketJournalIndicatorExecution = g_indicatorExecutionScore;
+   g_basketJournalIndicatorCostSpace = g_indicatorCostSpaceScore;
+   g_basketJournalIndicatorComposite = g_indicatorCompositeScore;
+   g_basketJournalVolumeProfileState = g_volumeProfileState;
+   g_basketJournalSqueezeState = g_squeezeState;
+   g_basketJournalMacdState = g_macdState;
+   g_basketJournalLevelFlipState = g_levelFlipState;
+   g_basketJournalPremiumDiscountState = g_premiumDiscountState;
 }
 
 void FinalizeBasketJournal()
@@ -2832,6 +3083,18 @@ void FinalizeBasketJournal()
    g_pendingBasketPrecisionScore = g_basketJournalPrecisionScore;
    g_pendingBasketEntryDistanceAtr = g_basketJournalEntryDistanceAtr;
    g_pendingBasketSetupEvScore = g_basketJournalSetupEvScore;
+   g_pendingBasketIndicatorLocation = g_basketJournalIndicatorLocation;
+   g_pendingBasketIndicatorMomentum = g_basketJournalIndicatorMomentum;
+   g_pendingBasketIndicatorStructure = g_basketJournalIndicatorStructure;
+   g_pendingBasketIndicatorVolatility = g_basketJournalIndicatorVolatility;
+   g_pendingBasketIndicatorExecution = g_basketJournalIndicatorExecution;
+   g_pendingBasketIndicatorCostSpace = g_basketJournalIndicatorCostSpace;
+   g_pendingBasketIndicatorComposite = g_basketJournalIndicatorComposite;
+   g_pendingBasketVolumeProfileState = g_basketJournalVolumeProfileState;
+   g_pendingBasketSqueezeState = g_basketJournalSqueezeState;
+   g_pendingBasketMacdState = g_basketJournalMacdState;
+   g_pendingBasketLevelFlipState = g_basketJournalLevelFlipState;
+   g_pendingBasketPremiumDiscountState = g_basketJournalPremiumDiscountState;
    ClearActiveBasketJournal();
 }
 
@@ -2868,7 +3131,7 @@ void FlushPendingBasketJournal()
       return;
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"eventType\":\"BASKET\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":0,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d,\"symbol\":\"%s\",\"brokerServer\":\"%s\",\"startedAt\":%I64d,\"endedAt\":%I64d,\"peakPositions\":%d,\"sessionProfile\":\"%s\",\"journalSchema\":4,\"marketCycleState\":\"%s\",\"entryPrecisionState\":\"%s\",\"liquidityState\":\"%s\",\"microStructureState\":\"%s\",\"fvgState\":\"%s\",\"entryPrecisionScore\":%.2f,\"entryDistanceAtr\":%.4f,\"setupEvScore\":%.2f}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"eventType\":\"BASKET\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":0,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d,\"symbol\":\"%s\",\"brokerServer\":\"%s\",\"startedAt\":%I64d,\"endedAt\":%I64d,\"peakPositions\":%d,\"sessionProfile\":\"%s\",\"journalSchema\":5,\"marketCycleState\":\"%s\",\"entryPrecisionState\":\"%s\",\"liquidityState\":\"%s\",\"microStructureState\":\"%s\",\"fvgState\":\"%s\",\"entryPrecisionScore\":%.2f,\"entryDistanceAtr\":%.4f,\"setupEvScore\":%.2f,\"indicatorLocationScore\":%.2f,\"indicatorMomentumScore\":%.2f,\"indicatorStructureScore\":%.2f,\"indicatorVolatilityScore\":%.2f,\"indicatorExecutionScore\":%.2f,\"indicatorCostSpaceScore\":%.2f,\"indicatorCompositeScore\":%.2f,\"volumeProfileState\":\"%s\",\"squeezeState\":\"%s\",\"macdState\":\"%s\",\"levelFlipState\":\"%s\",\"premiumDiscountState\":\"%s\"}",
       InpInstanceId,
       InpInstallToken,
       g_pendingBasketId,
@@ -2898,7 +3161,19 @@ void FlushPendingBasketJournal()
       g_pendingBasketFvgState,
       g_pendingBasketPrecisionScore,
       g_pendingBasketEntryDistanceAtr,
-      g_pendingBasketSetupEvScore
+      g_pendingBasketSetupEvScore,
+      g_pendingBasketIndicatorLocation,
+      g_pendingBasketIndicatorMomentum,
+      g_pendingBasketIndicatorStructure,
+      g_pendingBasketIndicatorVolatility,
+      g_pendingBasketIndicatorExecution,
+      g_pendingBasketIndicatorCostSpace,
+      g_pendingBasketIndicatorComposite,
+      g_pendingBasketVolumeProfileState,
+      g_pendingBasketSqueezeState,
+      g_pendingBasketMacdState,
+      g_pendingBasketLevelFlipState,
+      g_pendingBasketPremiumDiscountState
    );
 
    string response = "";
@@ -3047,7 +3322,15 @@ void ApplySettings(string json)
    g_sessionStartHour = (int)MathMax(0.0, MathMin(23.0, JsonNumber(json, "sessionStartHour", g_sessionStartHour)));
    g_sessionEndHour = (int)MathMax(1.0, MathMin(24.0, JsonNumber(json, "sessionEndHour", g_sessionEndHour)));
    g_maxAtrPoints = MathMax(0.0, JsonNumber(json, "maxAtrPoints", g_maxAtrPoints));
+   string indicatorMode = JsonString(json, "indicatorV6Mode", "");
+   StringToUpper(indicatorMode);
+   if(indicatorMode=="SHADOW") g_indicatorV6Mode=INDICATOR_V6_SHADOW;
+   else if(indicatorMode=="TIMING") g_indicatorV6Mode=INDICATOR_V6_TIMING;
+   else if(indicatorMode=="ADAPTIVE") g_indicatorV6Mode=INDICATOR_V6_ADAPTIVE;
+   else if(indicatorMode=="SOFT_WEIGHT") g_indicatorV6Mode=INDICATOR_V6_SOFT_WEIGHT;
+   g_indicatorActivationStage=IndicatorV6ModeName();
    g_lastAdaptiveEvaluation = 0;
+   g_lastIndicatorV6RefreshAt = 0;
 
    string mode = JsonString(json, "entryMode", "");
    if(mode == "BUY_ONLY") g_entryMode = ENTRY_BUY_ONLY;
@@ -4222,6 +4505,965 @@ double DemandSupplyZoneScore(int direction)
 }
 
 
+
+string IndicatorV6ModeName()
+{
+   if(g_indicatorV6Mode==INDICATOR_V6_SHADOW) return "SHADOW";
+   if(g_indicatorV6Mode==INDICATOR_V6_TIMING) return "TIMING";
+   if(g_indicatorV6Mode==INDICATOR_V6_ADAPTIVE) return "ADAPTIVE";
+   return "SOFT_WEIGHT";
+}
+
+double ClampScore(double value)
+{
+   return MathMax(0.0,MathMin(100.0,value));
+}
+
+double ScoreContribution(double score,double maxAbs)
+{
+   return MathMax(-maxAbs,MathMin(maxAbs,(score-50.0)/50.0*maxAbs));
+}
+
+bool VolumeProfileSnapshot(
+   int bars,
+   double &pocOut,
+   double &vahOut,
+   double &valOut,
+   double &hvnOut,
+   double &lvnOut
+)
+{
+   pocOut=0.0; vahOut=0.0; valOut=0.0; hvnOut=0.0; lvnOut=0.0;
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   int requested=MathMax(48,MathMin(480,bars));
+   int copied=CopyRates(_Symbol,PERIOD_M5,1,requested,rates);
+   if(copied<32)
+      return false;
+
+   double low=rates[0].low, high=rates[0].high;
+   for(int i=1;i<copied;i++)
+   {
+      low=MathMin(low,rates[i].low);
+      high=MathMax(high,rates[i].high);
+   }
+   double span=high-low;
+   if(span<=_Point*8.0)
+      return false;
+
+   #define VP_BINS 32
+   double bins[VP_BINS];
+   ArrayInitialize(bins,0.0);
+   double total=0.0;
+   for(int i=0;i<copied;i++)
+   {
+      double typical=(rates[i].high+rates[i].low+rates[i].close)/3.0;
+      int index=(int)MathFloor((typical-low)/span*VP_BINS);
+      index=MathMax(0,MathMin(VP_BINS-1,index));
+      double volume=(double)MathMax((long)1,rates[i].tick_volume);
+      bins[index]+=volume;
+      total+=volume;
+   }
+   if(total<=0.0)
+      return false;
+
+   int poc=0;
+   for(int i=1;i<VP_BINS;i++)
+      if(bins[i]>bins[poc]) poc=i;
+
+   double target=total*0.70;
+   double accumulated=bins[poc];
+   int left=poc,right=poc;
+   while(accumulated<target && (left>0 || right<VP_BINS-1))
+   {
+      double leftVol=left>0 ? bins[left-1] : -1.0;
+      double rightVol=right<VP_BINS-1 ? bins[right+1] : -1.0;
+      if(rightVol>leftVol)
+      {
+         right++;
+         accumulated+=bins[right];
+      }
+      else
+      {
+         left--;
+         accumulated+=bins[left];
+      }
+   }
+
+   int hvn=poc;
+   int lvn=-1;
+   double lvnVol=1.0e100;
+   for(int i=0;i<VP_BINS;i++)
+   {
+      if(i!=poc && bins[i]>bins[hvn]*0.72)
+         hvn=i;
+      if(bins[i]>0.0 && bins[i]<lvnVol)
+      {
+         lvnVol=bins[i];
+         lvn=i;
+      }
+   }
+
+   double step=span/VP_BINS;
+   pocOut=low+(poc+0.5)*step;
+   valOut=low+left*step;
+   vahOut=low+(right+1)*step;
+   hvnOut=low+(hvn+0.5)*step;
+   lvnOut=lvn>=0 ? low+(lvn+0.5)*step : 0.0;
+   return true;
+}
+
+double AnchoredVwapFromSwing(int direction)
+{
+   if(direction==0) direction=g_macroTrendDirection;
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   int copied=CopyRates(_Symbol,PERIOD_M5,1,120,rates);
+   if(copied<24)
+      return 0.0;
+
+   int anchor=0;
+   if(direction>=0)
+   {
+      for(int i=1;i<copied;i++)
+         if(rates[i].low<rates[anchor].low) anchor=i;
+   }
+   else
+   {
+      for(int i=1;i<copied;i++)
+         if(rates[i].high>rates[anchor].high) anchor=i;
+   }
+
+   double weighted=0.0,volumeSum=0.0;
+   for(int i=anchor;i>=0;i--)
+   {
+      double volume=(double)MathMax((long)1,rates[i].tick_volume);
+      double typical=(rates[i].high+rates[i].low+rates[i].close)/3.0;
+      weighted+=typical*volume;
+      volumeSum+=volume;
+   }
+   return volumeSum>0.0 ? weighted/volumeSum : 0.0;
+}
+
+double ImpulseAnchoredVwap(int direction)
+{
+   if(direction==0) direction=g_macroTrendDirection;
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   int copied=CopyRates(_Symbol,PERIOD_M5,1,72,rates);
+   if(copied<16)
+      return 0.0;
+
+   double atrPrice=MathMax(
+      _Point*12.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+   int anchor=-1;
+   for(int i=1;i<MathMin(copied,50);i++)
+   {
+      double body=MathAbs(rates[i].close-rates[i].open);
+      bool directional=direction>=0
+         ? rates[i].close>rates[i].open
+         : rates[i].close<rates[i].open;
+      if(directional && body>=atrPrice*0.85)
+      {
+         anchor=i;
+         break;
+      }
+   }
+   if(anchor<0) anchor=MathMin(copied-1,24);
+
+   double weighted=0.0,volumeSum=0.0;
+   for(int i=anchor;i>=0;i--)
+   {
+      double volume=(double)MathMax((long)1,rates[i].tick_volume);
+      double typical=(rates[i].high+rates[i].low+rates[i].close)/3.0;
+      weighted+=typical*volume;
+      volumeSum+=volume;
+   }
+   return volumeSum>0.0 ? weighted/volumeSum : 0.0;
+}
+
+bool DonchianSnapshot(int period,double &highOut,double &lowOut)
+{
+   highOut=0.0; lowOut=0.0;
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   int requested=MathMax(10,MathMin(120,period));
+   int copied=CopyRates(_Symbol,PERIOD_M5,1,requested,rates);
+   if(copied<requested)
+      return false;
+   highOut=rates[0].high;
+   lowOut=rates[0].low;
+   for(int i=1;i<copied;i++)
+   {
+      highOut=MathMax(highOut,rates[i].high);
+      lowOut=MathMin(lowOut,rates[i].low);
+   }
+   return highOut>lowOut;
+}
+
+bool BollingerKeltnerSnapshot()
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   if(CopyRates(_Symbol,PERIOD_M5,1,24,rates)<24)
+      return false;
+
+   double mean=0.0;
+   for(int i=0;i<20;i++) mean+=rates[i].close;
+   mean/=20.0;
+   double variance=0.0;
+   for(int i=0;i<20;i++)
+   {
+      double d=rates[i].close-mean;
+      variance+=d*d;
+   }
+   variance/=20.0;
+   double sd=MathSqrt(MathMax(0.0,variance));
+   double atrPrice=MathMax(
+      _Point*12.0,
+      AverageTrueRangePoints(PERIOD_M5,20)*_Point
+   );
+
+   g_bbMiddle=mean;
+   g_bbUpper=mean+sd*2.0;
+   g_bbLower=mean-sd*2.0;
+   g_keltnerUpper=mean+atrPrice*1.50;
+   g_keltnerLower=mean-atrPrice*1.50;
+   g_bbWidthAtr=(g_bbUpper-g_bbLower)/MathMax(_Point,atrPrice);
+
+   bool squeezed=g_bbUpper<=g_keltnerUpper && g_bbLower>=g_keltnerLower;
+   if(squeezed)
+      g_squeezeState="SQUEEZE";
+   else
+   {
+      double range=MathMax(_Point,rates[0].high-rates[0].low);
+      double body=MathAbs(rates[0].close-rates[0].open);
+      bool efficient=body/range>=0.55;
+      if(efficient && rates[0].close>g_bbUpper)
+         g_squeezeState="SQUEEZE_RELEASE_UP";
+      else if(efficient && rates[0].close<g_bbLower)
+         g_squeezeState="SQUEEZE_RELEASE_DOWN";
+      else
+         g_squeezeState=g_bbWidthAtr>=2.8 ? "VOLATILITY_EXPANSION" : "NORMAL";
+   }
+   g_volatilityExpansionScore=ClampScore(
+      45.0+
+      MathMin(30.0,MathMax(0.0,g_bbWidthAtr-1.2)*14.0)+
+      (StringFind(g_squeezeState,"RELEASE")>=0 ? 18.0 : 0.0)-
+      (g_squeezeState=="SQUEEZE" ? 12.0 : 0.0)
+   );
+   return true;
+}
+
+bool MacdHistogramSnapshot()
+{
+   int handle=iMACD(_Symbol,PERIOD_M5,12,26,9,PRICE_CLOSE);
+   if(handle==INVALID_HANDLE)
+      return false;
+   double mainNow[1],signalNow[1],mainOld[1],signalOld[1];
+   bool ok=
+      CopyBuffer(handle,0,1,1,mainNow)==1 &&
+      CopyBuffer(handle,1,1,1,signalNow)==1 &&
+      CopyBuffer(handle,0,3,1,mainOld)==1 &&
+      CopyBuffer(handle,1,3,1,signalOld)==1;
+   if(ok)
+   {
+      g_macdHistogram=mainNow[0]-signalNow[0];
+      g_macdHistogramPrevious=mainOld[0]-signalOld[0];
+      g_macdHistogramSlope=g_macdHistogram-g_macdHistogramPrevious;
+      if(g_macdHistogram>0.0 && g_macdHistogramSlope>0.0)
+         g_macdState="BULL_ACCELERATION";
+      else if(g_macdHistogram<0.0 && g_macdHistogramSlope<0.0)
+         g_macdState="BEAR_ACCELERATION";
+      else if(g_macdHistogram>0.0)
+         g_macdState="BULL_FADING";
+      else if(g_macdHistogram<0.0)
+         g_macdState="BEAR_FADING";
+      else
+         g_macdState="NEUTRAL";
+   }
+   IndicatorRelease(handle);
+   return ok;
+}
+
+bool StochasticSnapshot()
+{
+   int handle=iStochastic(
+      _Symbol,PERIOD_M5,14,3,3,MODE_SMA,STO_LOWHIGH
+   );
+   if(handle==INVALID_HANDLE)
+      return false;
+   double kNow[1],dNow[1],kOld[1],dOld[1];
+   bool ok=
+      CopyBuffer(handle,0,1,1,kNow)==1 &&
+      CopyBuffer(handle,1,1,1,dNow)==1 &&
+      CopyBuffer(handle,0,2,1,kOld)==1 &&
+      CopyBuffer(handle,1,2,1,dOld)==1;
+   if(ok)
+   {
+      g_stochK=kNow[0];
+      g_stochD=dNow[0];
+      bool crossUp=kOld[0]<=dOld[0] && kNow[0]>dNow[0];
+      bool crossDown=kOld[0]>=dOld[0] && kNow[0]<dNow[0];
+      if(crossUp && kNow[0]<=35.0)
+         g_stochState="OVERSOLD_TURN_UP";
+      else if(crossDown && kNow[0]>=65.0)
+         g_stochState="OVERBOUGHT_TURN_DOWN";
+      else if(kNow[0]>=80.0)
+         g_stochState="OVERBOUGHT";
+      else if(kNow[0]<=20.0)
+         g_stochState="OVERSOLD";
+      else
+         g_stochState="NEUTRAL";
+   }
+   IndicatorRelease(handle);
+   return ok;
+}
+
+void TickVolumeAndFlowSnapshot()
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   int copied=CopyRates(_Symbol,PERIOD_M5,1,24,rates);
+   if(copied<18)
+   {
+      g_tickVolumeMomentum=1.0;
+      g_obvFlowScore=50.0;
+      g_candleEfficiency=0.0;
+      return;
+   }
+
+   double recent=0.0,baseline=0.0;
+   for(int i=0;i<3;i++) recent+=(double)MathMax((long)1,rates[i].tick_volume);
+   for(int i=3;i<15;i++) baseline+=(double)MathMax((long)1,rates[i].tick_volume);
+   recent/=3.0;
+   baseline/=12.0;
+   g_tickVolumeMomentum=baseline>0.0 ? recent/baseline : 1.0;
+
+   double signedVolume=0.0,totalVolume=0.0;
+   for(int i=11;i>=0;i--)
+   {
+      double v=(double)MathMax((long)1,rates[i].tick_volume);
+      totalVolume+=v;
+      if(rates[i].close>rates[i].open) signedVolume+=v;
+      else if(rates[i].close<rates[i].open) signedVolume-=v;
+   }
+   g_obvFlowScore=ClampScore(
+      50.0+(totalVolume>0.0 ? signedVolume/totalVolume*50.0 : 0.0)
+   );
+
+   double range=MathMax(_Point,rates[0].high-rates[0].low);
+   g_candleEfficiency=MathAbs(rates[0].close-rates[0].open)/range;
+}
+
+void DailySessionLevelsSnapshot()
+{
+   MqlRates d1[];
+   ArraySetAsSeries(d1,true);
+   if(CopyRates(_Symbol,PERIOD_D1,0,3,d1)>=3)
+   {
+      g_previousDayHigh=d1[1].high;
+      g_previousDayLow=d1[1].low;
+      g_previousDayClose=d1[1].close;
+   }
+
+   MqlRates w1[];
+   ArraySetAsSeries(w1,true);
+   if(CopyRates(_Symbol,PERIOD_W1,0,2,w1)>=1)
+   {
+      g_weekHigh=w1[0].high;
+      g_weekLow=w1[0].low;
+   }
+
+   MqlRates m5[];
+   ArraySetAsSeries(m5,true);
+   int copied=CopyRates(_Symbol,PERIOD_M5,0,300,m5);
+   if(copied>0)
+   {
+      MqlDateTime nowParts;
+      TimeToStruct(TimeCurrent(),nowParts);
+      g_sessionHigh=0.0;
+      g_sessionLow=0.0;
+      for(int i=0;i<copied;i++)
+      {
+         MqlDateTime p;
+         TimeToStruct(m5[i].time,p);
+         if(p.year!=nowParts.year || p.mon!=nowParts.mon || p.day!=nowParts.day)
+            break;
+         if(g_sessionHigh<=0.0)
+         {
+            g_sessionHigh=m5[i].high;
+            g_sessionLow=m5[i].low;
+         }
+         else
+         {
+            g_sessionHigh=MathMax(g_sessionHigh,m5[i].high);
+            g_sessionLow=MathMin(g_sessionLow,m5[i].low);
+         }
+      }
+   }
+}
+
+void RsiDivergenceV2()
+{
+   g_rsiRegularDivBuy=0.0;
+   g_rsiRegularDivSell=0.0;
+   g_rsiHiddenDivBuy=0.0;
+   g_rsiHiddenDivSell=0.0;
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   if(CopyRates(_Symbol,PERIOD_M5,1,7,rates)<7)
+      return;
+
+   double rsiNow=RsiValue(PERIOD_M5,1);
+   double rsiOld=RsiValue(PERIOD_M5,5);
+
+   if(rates[0].low<rates[4].low && rsiNow>=rsiOld+3.0)
+      g_rsiRegularDivBuy=ClampScore(62.0+(rsiNow-rsiOld)*2.0);
+   if(rates[0].high>rates[4].high && rsiNow<=rsiOld-3.0)
+      g_rsiRegularDivSell=ClampScore(62.0+(rsiOld-rsiNow)*2.0);
+
+   if(rates[0].low>rates[4].low && rsiNow<=rsiOld-3.0)
+      g_rsiHiddenDivBuy=ClampScore(58.0+(rsiOld-rsiNow)*1.8);
+   if(rates[0].high<rates[4].high && rsiNow>=rsiOld+3.0)
+      g_rsiHiddenDivSell=ClampScore(58.0+(rsiNow-rsiOld)*1.8);
+}
+
+void UpdateLevelMemory()
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   if(CopyRates(_Symbol,PERIOD_M5,1,3,rates)<3)
+      return;
+
+   double atrPrice=MathMax(
+      _Point*12.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+
+   if(g_flipLevel<=0.0)
+   {
+      if(g_nearestResistance>0.0 &&
+         rates[0].close>g_nearestResistance &&
+         rates[1].close<=g_nearestResistance)
+      {
+         g_flipLevel=g_nearestResistance;
+         g_flipDirection=1;
+         g_levelFlipState="RESISTANCE_BROKEN";
+         g_levelFlipScore=62.0;
+      }
+      else if(g_nearestSupport>0.0 &&
+              rates[0].close<g_nearestSupport &&
+              rates[1].close>=g_nearestSupport)
+      {
+         g_flipLevel=g_nearestSupport;
+         g_flipDirection=-1;
+         g_levelFlipState="SUPPORT_BROKEN";
+         g_levelFlipScore=62.0;
+      }
+   }
+   else
+   {
+      bool near=MathAbs(rates[0].close-g_flipLevel)<=atrPrice*0.18 ||
+                (rates[0].low<=g_flipLevel && rates[0].high>=g_flipLevel);
+      if(near)
+      {
+         if(g_flipDirection>0 && rates[0].close>=g_flipLevel)
+         {
+            g_levelFlipState="FLIPPED_TO_SUPPORT";
+            g_levelFlipScore=82.0;
+         }
+         else if(g_flipDirection<0 && rates[0].close<=g_flipLevel)
+         {
+            g_levelFlipState="FLIPPED_TO_RESISTANCE";
+            g_levelFlipScore=82.0;
+         }
+         else
+         {
+            g_levelFlipState="FLIP_FAILED";
+            g_levelFlipScore=35.0;
+         }
+      }
+      if(MathAbs(rates[0].close-g_flipLevel)>atrPrice*3.0)
+      {
+         g_flipLevel=0.0;
+         g_flipDirection=0;
+         g_levelFlipState="NONE";
+         g_levelFlipScore=0.0;
+      }
+   }
+}
+
+void RefreshIndicatorV6Context()
+{
+   datetime now=TimeCurrent();
+   if(g_lastIndicatorV6RefreshAt==now)
+      return;
+   g_lastIndicatorV6RefreshAt=now;
+
+   g_indicatorActivationStage=IndicatorV6ModeName();
+
+   VolumeProfileSnapshot(
+      MathMax(48,InpVolumeProfileBars),
+      g_volumePoc,g_volumeVah,g_volumeVal,g_volumeHvn,g_volumeLvn
+   );
+   DonchianSnapshot(MathMax(10,InpDonchianPeriod),g_donchianHigh,g_donchianLow);
+   BollingerKeltnerSnapshot();
+   MacdHistogramSnapshot();
+   StochasticSnapshot();
+   TickVolumeAndFlowSnapshot();
+   DailySessionLevelsSnapshot();
+   RsiDivergenceV2();
+
+   g_adxSlope=g_adxM5-g_adxPreviousM5;
+   g_dmiAcceleration=(g_plusDiM5-g_minusDiM5)-
+      (g_plusDiPreviousM5-g_minusDiPreviousM5);
+
+   double atrPrice=MathMax(
+      _Point*12.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+   g_emaCompressionScore=ClampScore(
+      100.0-MathAbs(g_ema9-g_ema21)/MathMax(_Point,atrPrice)*120.0-
+      MathAbs(g_ema21-g_ema50)/MathMax(_Point,atrPrice)*80.0
+   );
+
+   UpdateLevelMemory();
+}
+
+double DistanceScoreToLevel(
+   int direction,
+   double price,
+   double level,
+   double atrPrice,
+   double idealAtr
+)
+{
+   if(level<=0.0)
+      return 50.0;
+   double signedDistance=direction>0
+      ? (price-level)/MathMax(_Point,atrPrice)
+      : (level-price)/MathMax(_Point,atrPrice);
+   double difference=MathAbs(signedDistance-idealAtr);
+   return ClampScore(100.0-difference*90.0);
+}
+
+double IndicatorTargetCandidate(int direction,double entryPrice)
+{
+   if(direction==0 || entryPrice<=0.0)
+      return 0.0;
+
+   double candidates[10];
+   int count=0;
+   if(direction>0)
+   {
+      if(g_volumeVah>entryPrice) candidates[count++]=g_volumeVah;
+      if(g_volumeHvn>entryPrice) candidates[count++]=g_volumeHvn;
+      if(g_sessionHigh>entryPrice) candidates[count++]=g_sessionHigh;
+      if(g_previousDayHigh>entryPrice) candidates[count++]=g_previousDayHigh;
+      if(g_weekHigh>entryPrice) candidates[count++]=g_weekHigh;
+      if(g_nearestResistance>entryPrice) candidates[count++]=g_nearestResistance;
+      if(g_supplyZoneLow>entryPrice) candidates[count++]=g_supplyZoneLow;
+   }
+   else
+   {
+      if(g_volumeVal>0.0 && g_volumeVal<entryPrice) candidates[count++]=g_volumeVal;
+      if(g_volumeHvn>0.0 && g_volumeHvn<entryPrice) candidates[count++]=g_volumeHvn;
+      if(g_sessionLow>0.0 && g_sessionLow<entryPrice) candidates[count++]=g_sessionLow;
+      if(g_previousDayLow>0.0 && g_previousDayLow<entryPrice) candidates[count++]=g_previousDayLow;
+      if(g_weekLow>0.0 && g_weekLow<entryPrice) candidates[count++]=g_weekLow;
+      if(g_nearestSupport>0.0 && g_nearestSupport<entryPrice) candidates[count++]=g_nearestSupport;
+      if(g_demandZoneHigh>0.0 && g_demandZoneHigh<entryPrice) candidates[count++]=g_demandZoneHigh;
+   }
+   if(count<=0)
+      return 0.0;
+
+   double best=candidates[0];
+   for(int i=1;i<count;i++)
+   {
+      if(direction>0 && candidates[i]<best) best=candidates[i];
+      if(direction<0 && candidates[i]>best) best=candidates[i];
+   }
+   return best;
+}
+
+void RefreshIndicatorV6Scores(int direction,double momentum)
+{
+   RefreshIndicatorV6Context();
+   g_indicatorV6Direction=direction;
+   if(direction==0)
+   {
+      g_indicatorLocationScore=50.0;
+      g_indicatorMomentumScore=50.0;
+      g_indicatorStructureScore=50.0;
+      g_indicatorVolatilityScore=50.0;
+      g_indicatorExecutionScore=50.0;
+      g_indicatorCostSpaceScore=50.0;
+      g_indicatorCompositeScore=50.0;
+      g_indicatorDecision="OBSERVE";
+      g_indicatorWhy="NO_DIRECTION";
+      return;
+   }
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return;
+   double price=(tick.bid+tick.ask)*0.5;
+   double atrPrice=MathMax(
+      _Point*12.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+
+   g_swingAnchoredVwap=AnchoredVwapFromSwing(direction);
+   g_impulseAnchoredVwap=ImpulseAnchoredVwap(direction);
+
+   if(g_volumePoc>0.0)
+   {
+      if(price>=g_volumeVal && price<=g_volumeVah)
+         g_volumeProfileState="VALUE_AREA";
+      else if(price>g_volumeVah)
+         g_volumeProfileState="ABOVE_VAH";
+      else
+         g_volumeProfileState="BELOW_VAL";
+   }
+   else
+      g_volumeProfileState="DATA_NOT_READY";
+
+   double profile=50.0;
+   if(direction>0)
+   {
+      if(price>=g_volumeVal && price<=g_volumePoc) profile=82.0;
+      else if(price>g_volumeVah) profile=38.0;
+      else if(price<g_volumeVal) profile=72.0;
+      else profile=60.0;
+   }
+   else
+   {
+      if(price<=g_volumeVah && price>=g_volumePoc) profile=82.0;
+      else if(price<g_volumeVal) profile=38.0;
+      else if(price>g_volumeVah) profile=72.0;
+      else profile=60.0;
+   }
+   g_volumeProfileScore=profile;
+
+   double vwapDirectional=50.0;
+   int vwapCount=0;
+   double vwaps[3]={g_vwapM5,g_swingAnchoredVwap,g_impulseAnchoredVwap};
+   for(int i=0;i<3;i++)
+   {
+      if(vwaps[i]<=0.0) continue;
+      double distance=(price-vwaps[i])/MathMax(_Point,atrPrice);
+      double score=direction>0
+         ? ClampScore(72.0-distance*32.0)
+         : ClampScore(72.0+distance*32.0);
+      vwapDirectional+=score-50.0;
+      vwapCount++;
+   }
+   if(vwapCount>0)
+      vwapDirectional=ClampScore(50.0+(vwapDirectional-50.0)/vwapCount);
+   g_multiVwapScore=vwapDirectional;
+   g_multiVwapState=vwapDirectional>=68.0
+      ? "VALUE_ALIGNED"
+      : vwapDirectional<=38.0 ? "EXTENDED_FROM_VALUE" : "NEUTRAL";
+
+   if(g_donchianHigh>g_donchianLow)
+   {
+      double edgeBuffer=atrPrice*0.10;
+      if(price>=g_donchianHigh-edgeBuffer)
+         g_donchianState="AT_CHANNEL_HIGH";
+      else if(price<=g_donchianLow+edgeBuffer)
+         g_donchianState="AT_CHANNEL_LOW";
+      else
+         g_donchianState="MID_CHANNEL";
+   }
+
+   double swingLow=g_fibSwingLow>0.0 ? g_fibSwingLow : g_donchianLow;
+   double swingHigh=g_fibSwingHigh>swingLow ? g_fibSwingHigh : g_donchianHigh;
+   if(swingHigh>swingLow)
+   {
+      double midpoint=(swingLow+swingHigh)*0.5;
+      double quarter=(swingHigh-swingLow)*0.10;
+      if(price>midpoint+quarter)
+         g_premiumDiscountState="PREMIUM";
+      else if(price<midpoint-quarter)
+         g_premiumDiscountState="DISCOUNT";
+      else
+         g_premiumDiscountState="EQUILIBRIUM";
+   }
+
+   double levelScore=g_levelFlipScore>0.0
+      ? (g_flipDirection==direction ? g_levelFlipScore : 100.0-g_levelFlipScore)
+      : 50.0;
+   double zoneScore=direction>0 ? g_demandZoneScore : g_supplyZoneScore;
+   double premiumScore=50.0;
+   if(direction>0)
+      premiumScore=g_premiumDiscountState=="DISCOUNT" ? 82.0 :
+                   g_premiumDiscountState=="PREMIUM" ? 36.0 : 62.0;
+   else
+      premiumScore=g_premiumDiscountState=="PREMIUM" ? 82.0 :
+                   g_premiumDiscountState=="DISCOUNT" ? 36.0 : 62.0;
+
+   double dayLevel=50.0;
+   if(direction>0 && g_previousDayLow>0.0)
+      dayLevel=MathMax(dayLevel,DistanceScoreToLevel(direction,price,g_previousDayLow,atrPrice,0.35));
+   if(direction<0 && g_previousDayHigh>0.0)
+      dayLevel=MathMax(dayLevel,DistanceScoreToLevel(direction,price,g_previousDayHigh,atrPrice,0.35));
+
+   g_indicatorLocationScore=ClampScore(
+      50.0+
+      ScoreContribution(profile,13.0)+
+      ScoreContribution(vwapDirectional,13.0)+
+      ScoreContribution(zoneScore,12.0)+
+      ScoreContribution(premiumScore,8.0)+
+      ScoreContribution(levelScore,7.0)+
+      ScoreContribution(dayLevel,5.0)
+   );
+
+   double macdDirectional=50.0;
+   if(direction>0)
+      macdDirectional=g_macdHistogram>0.0
+         ? (g_macdHistogramSlope>0.0 ? 82.0 : 62.0)
+         : (g_macdHistogramSlope>0.0 ? 46.0 : 28.0);
+   else
+      macdDirectional=g_macdHistogram<0.0
+         ? (g_macdHistogramSlope<0.0 ? 82.0 : 62.0)
+         : (g_macdHistogramSlope<0.0 ? 46.0 : 28.0);
+
+   double adxDirectional=ClampScore(
+      50.0+
+      (g_adxSlope>0.0 ? 10.0 : -6.0)+
+      (direction>0 ? g_dmiAcceleration : -g_dmiAcceleration)*0.55
+   );
+   double volumeDirectional=direction>0
+      ? g_obvFlowScore
+      : 100.0-g_obvFlowScore;
+   double divergenceDirectional=50.0;
+   if(direction>0)
+      divergenceDirectional=ClampScore(
+         50.0+g_rsiRegularDivBuy*0.28+g_rsiHiddenDivBuy*0.20-
+         g_rsiRegularDivSell*0.20
+      );
+   else
+      divergenceDirectional=ClampScore(
+         50.0+g_rsiRegularDivSell*0.28+g_rsiHiddenDivSell*0.20-
+         g_rsiRegularDivBuy*0.20
+      );
+
+   g_indicatorMomentumScore=ClampScore(
+      50.0+
+      ScoreContribution(macdDirectional,17.0)+
+      ScoreContribution(adxDirectional,10.0)+
+      ScoreContribution(volumeDirectional,9.0)+
+      ScoreContribution(divergenceDirectional,8.0)+
+      MathMax(-6.0,MathMin(6.0,(g_tickVolumeMomentum-1.0)*14.0))
+   );
+
+   string microState="NEUTRAL";
+   double micro=MicroStructureScore(direction,microState);
+   string liquidityState="NONE";
+   double liquidity=LiquiditySweepScore(direction,liquidityState);
+   double ob=direction>0 ? g_bullishOrderBlockQuality : g_bearishOrderBlockQuality;
+   double existingStructure=ClampScore(g_structureScore);
+   double donchianStructure=50.0;
+   if(direction>0)
+      donchianStructure=g_donchianState=="AT_CHANNEL_HIGH" ? 62.0 :
+                        g_donchianState=="AT_CHANNEL_LOW" ? 70.0 : 55.0;
+   else
+      donchianStructure=g_donchianState=="AT_CHANNEL_LOW" ? 62.0 :
+                        g_donchianState=="AT_CHANNEL_HIGH" ? 70.0 : 55.0;
+
+   g_indicatorStructureScore=ClampScore(
+      50.0+
+      ScoreContribution(existingStructure,13.0)+
+      ScoreContribution(micro,12.0)+
+      ScoreContribution(liquidity,8.0)+
+      ScoreContribution(ob,10.0)+
+      ScoreContribution(levelScore,7.0)+
+      ScoreContribution(donchianStructure,5.0)
+   );
+
+   double vol=50.0;
+   if(g_squeezeState=="SQUEEZE") vol=45.0;
+   else if(g_squeezeState=="SQUEEZE_RELEASE_UP")
+      vol=direction>0 ? 84.0 : 30.0;
+   else if(g_squeezeState=="SQUEEZE_RELEASE_DOWN")
+      vol=direction<0 ? 84.0 : 30.0;
+   else if(g_squeezeState=="VOLATILITY_EXPANSION")
+      vol=68.0;
+   if(g_marketRegime=="HIGH_VOLATILITY" && StringFind(g_squeezeState,"RELEASE")<0)
+      vol=MathMin(vol,58.0);
+   g_indicatorVolatilityScore=ClampScore(vol);
+
+   double stoch=50.0;
+   if(direction>0)
+      stoch=g_stochState=="OVERSOLD_TURN_UP" ? 84.0 :
+            g_stochState=="OVERBOUGHT_TURN_DOWN" ? 28.0 :
+            g_stochState=="OVERBOUGHT" ? 38.0 : 55.0;
+   else
+      stoch=g_stochState=="OVERBOUGHT_TURN_DOWN" ? 84.0 :
+            g_stochState=="OVERSOLD_TURN_UP" ? 28.0 :
+            g_stochState=="OVERSOLD" ? 38.0 : 55.0;
+
+   double fvg=FairValueGapScore(direction,g_fvgLifecycleState);
+   double pa=direction>0 ? g_priceActionBuyScore : g_priceActionSellScore;
+   double executionTurn=ExecutionTurningEvent(direction,momentum) ? 82.0 : 50.0;
+   double efficiency=ClampScore(38.0+g_candleEfficiency*62.0);
+
+   g_indicatorExecutionScore=ClampScore(
+      50.0+
+      ScoreContribution(stoch,10.0)+
+      ScoreContribution(micro,13.0)+
+      ScoreContribution(liquidity,10.0)+
+      ScoreContribution(fvg,8.0)+
+      ScoreContribution(ClampScore(pa*2.0),8.0)+
+      ScoreContribution(executionTurn,9.0)+
+      ScoreContribution(efficiency,5.0)
+   );
+
+   g_spaceToTargetAtr=SpaceToTargetAtr(direction);
+   double spaceScore=g_spaceToTargetAtr>=1.20 ? 90.0 :
+                     g_spaceToTargetAtr>=0.70 ? 78.0 :
+                     g_spaceToTargetAtr>=0.40 ? 64.0 :
+                     g_spaceToTargetAtr>=0.20 ? 48.0 : 25.0;
+   double costScore=g_executionCostAtr<=0.04 ? 90.0 :
+                    g_executionCostAtr<=0.08 ? 76.0 :
+                    g_executionCostAtr<=0.14 ? 58.0 :
+                    g_executionCostAtr<=0.22 ? 42.0 : 24.0;
+   g_indicatorCostSpaceScore=ClampScore(
+      spaceScore*0.65+costScore*0.35
+   );
+
+   // Regime-specific family weights. They sum to one and never permit
+   // correlated sub-indicators to be counted outside their family cap.
+   double wLocation=0.25,wMomentum=0.18,wStructure=0.22,wVol=0.10,wExecution=0.17,wCost=0.08;
+   if(g_marketRegime=="RANGE")
+   {
+      wLocation=0.30; wMomentum=0.12; wStructure=0.17;
+      wVol=0.13; wExecution=0.20; wCost=0.08;
+   }
+   else if(g_marketRegime=="HIGH_VOLATILITY" || g_newsMode!="NORMAL")
+   {
+      wLocation=0.20; wMomentum=0.18; wStructure=0.22;
+      wVol=0.14; wExecution=0.18; wCost=0.08;
+   }
+   else if(StringFind(g_marketRegime,"TREND")>=0)
+   {
+      wLocation=0.22; wMomentum=0.22; wStructure=0.22;
+      wVol=0.09; wExecution=0.17; wCost=0.08;
+   }
+
+   g_indicatorCompositeScore=ClampScore(
+      g_indicatorLocationScore*wLocation+
+      g_indicatorMomentumScore*wMomentum+
+      g_indicatorStructureScore*wStructure+
+      g_indicatorVolatilityScore*wVol+
+      g_indicatorExecutionScore*wExecution+
+      g_indicatorCostSpaceScore*wCost
+   );
+
+   if(g_indicatorHistorySamples>=20)
+      g_indicatorCompositeScore=ClampScore(
+         g_indicatorCompositeScore*0.88+
+         g_indicatorHistoryEvScore*0.12
+      );
+
+   g_indicatorTargetPrice=IndicatorTargetCandidate(direction,price);
+
+   if(g_indicatorCompositeScore>=78.0)
+      g_indicatorDecision="IDEAL";
+   else if(g_indicatorCompositeScore>=60.0)
+      g_indicatorDecision="ACCEPTABLE";
+   else if(g_indicatorCompositeScore>=43.0)
+      g_indicatorDecision="WAIT_BETTER_CONTEXT";
+   else
+      g_indicatorDecision="WEAK_CONTEXT";
+
+   if(g_indicatorLocationScore<=38.0)
+      g_indicatorWhy="LOCATION_WEAK";
+   else if(g_indicatorExecutionScore<=38.0)
+      g_indicatorWhy="EXECUTION_WEAK";
+   else if(g_indicatorCostSpaceScore<=38.0)
+      g_indicatorWhy="COST_OR_SPACE_WEAK";
+   else if(g_indicatorMomentumScore<=38.0)
+      g_indicatorWhy="MOMENTUM_WEAK";
+   else if(g_indicatorStructureScore<=38.0)
+      g_indicatorWhy="STRUCTURE_WEAK";
+   else if(g_squeezeState=="SQUEEZE")
+      g_indicatorWhy="VOLATILITY_COMPRESSED";
+   else
+      g_indicatorWhy="MULTI_FACTOR_CONTEXT";
+
+   g_orderBlockLifecycleState=direction>0
+      ? g_bullishOrderBlockState
+      : g_bearishOrderBlockState;
+}
+
+bool IndicatorV6TimingReady(int direction)
+{
+   if(g_indicatorV6Mode<INDICATOR_V6_TIMING || direction==0)
+      return true;
+
+   bool multiWeak=
+      g_indicatorCompositeScore<40.0 &&
+      g_indicatorLocationScore<40.0 &&
+      g_indicatorExecutionScore<42.0;
+   if(!multiWeak)
+   {
+      if(MQLInfoInteger(MQL_TESTER) && g_indicatorWaitStartedAt>0)
+         g_testIndicatorWaitSecondsSum +=
+            MathMax(0.0,(double)(TimeCurrent()-g_indicatorWaitStartedAt));
+      g_indicatorWaitStartedAt=0;
+      g_indicatorWaitDirection=0;
+      g_indicatorWaitReason="NONE";
+      return true;
+   }
+
+   // Reversal/retest/sweep models already carry location evidence and should
+   // never be starved by the optional indicator timing layer.
+   bool protectedModel=
+      StringFind(g_entryTrigger,"REVERSAL")>=0 ||
+      StringFind(g_entryTrigger,"RETEST")>=0 ||
+      g_liquidityScore>=65.0 ||
+      g_microStructureScore>=75.0;
+   if(protectedModel)
+   {
+      if(MQLInfoInteger(MQL_TESTER) && g_indicatorWaitStartedAt>0)
+         g_testIndicatorWaitSecondsSum +=
+            MathMax(0.0,(double)(TimeCurrent()-g_indicatorWaitStartedAt));
+      g_indicatorWaitStartedAt=0;
+      g_indicatorWaitDirection=0;
+      g_indicatorWaitReason="PROTECTED_MODEL";
+      return true;
+   }
+
+   datetime now=TimeCurrent();
+   if(g_indicatorWaitStartedAt<=0 || g_indicatorWaitDirection!=direction)
+   {
+      g_indicatorWaitStartedAt=now;
+      g_indicatorWaitDirection=direction;
+      g_indicatorWaitReason=g_indicatorWhy;
+      if(MQLInfoInteger(MQL_TESTER))
+         g_testIndicatorWaitEvents++;
+      return false;
+   }
+
+   int maxWait=MathMax(5,MathMin(60,InpIndicatorMaxWaitSeconds));
+   if(now-g_indicatorWaitStartedAt>=maxWait)
+   {
+      if(MQLInfoInteger(MQL_TESTER))
+         g_testIndicatorWaitSecondsSum +=
+            MathMax(0.0,(double)(now-g_indicatorWaitStartedAt));
+      g_indicatorWaitStartedAt=0;
+      g_indicatorWaitDirection=0;
+      g_indicatorWaitReason="BOUNDED_FALLBACK";
+      return true;
+   }
+   return false;
+}
+
 void RefreshCycleIndicators()
 {
    g_rsiM1 = RsiValue(PERIOD_M1,1);
@@ -4229,6 +5471,7 @@ void RefreshCycleIndicators()
    AdxSnapshotAt(PERIOD_M5,1,g_adxM5,g_plusDiM5,g_minusDiM5);
    AdxSnapshotAt(PERIOD_M5,3,g_adxPreviousM5,g_plusDiPreviousM5,g_minusDiPreviousM5);
    g_vwapM5 = SessionVwap(PERIOD_M5,48);
+   RefreshIndicatorV6Context();
 
    MqlTick tick;
    double atrPrice = MathMax(
@@ -4249,6 +5492,9 @@ void RefreshCycleIndicators()
    g_supplyZoneScore = DemandSupplyZoneScore(-1);
    g_demandZoneQuality = ZoneQualityLabel(g_demandZoneScore);
    g_supplyZoneQuality = ZoneQualityLabel(g_supplyZoneScore);
+   // Context-only fields that depend on current Demand/Supply are refreshed
+   // after those zones are available.
+   UpdateLevelMemory();
 }
 
 
@@ -5765,6 +7011,7 @@ void RefreshEntryPrecisionIntelligence(int direction,double momentum)
       AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)
    );
    g_executionCostAtr=CurrentSpreadPoints()/MathMax(1.0,atrPoints);
+   RefreshIndicatorV6Scores(direction,momentum);
 
    double zoneScore=direction>0 ? g_demandZoneScore : g_supplyZoneScore;
    double score=50.0;
@@ -5801,6 +7048,11 @@ void RefreshEntryPrecisionIntelligence(int direction,double momentum)
       g_setupHistoryModel==g_entryModel;
    if(setupHistoryMatches)
       score+=(g_setupEvScore-50.0)*0.16;
+
+   // V6 contributes a bounded family-level soft weight only. SHADOW contributes
+   // zero. No individual indicator can block or dominate Entry Precision.
+   if(g_indicatorV6Mode>=INDICATOR_V6_SOFT_WEIGHT)
+      score+=MathMax(-8.0,MathMin(8.0,(g_indicatorCompositeScore-50.0)*0.16));
 
    g_entryPrecisionScore=MathMax(0.0,MathMin(100.0,score));
    if(g_entryPrecisionScore>=78.0)
@@ -6223,6 +7475,14 @@ bool EntryPrecisionReady(int direction,double momentum,bool firstPosition)
       g_entryPrecisionReason=g_tacticalCountertrendReason;
       ResetPrecisionWait();
       return true;
+   }
+
+   if(!IndicatorV6TimingReady(direction))
+   {
+      g_entryPrecisionState="INDICATOR_CONTEXT_WAIT";
+      g_entryPrecisionReason=g_indicatorWaitReason;
+      g_adaptiveBlockReason="WAIT_INDICATOR_CONTEXT";
+      return false;
    }
 
    // Reversal/retest/sweep entries already contain a better-price thesis and
@@ -7240,6 +8500,17 @@ bool BasketAddLocationAllowed(
    if(direction==0 || count<=0)
       return true;
 
+   RefreshIndicatorV6Scores(direction,MomentumPoints());
+   if(g_indicatorV6Mode==INDICATOR_V6_ADAPTIVE &&
+      g_indicatorCompositeScore<34.0 &&
+      g_indicatorLocationScore<36.0 &&
+      g_indicatorStructureScore<40.0 &&
+      g_indicatorExecutionScore<40.0)
+   {
+      reasonOut="INDICATOR_CONTEXT_ADD_WAIT";
+      return false;
+   }
+
    string extremeState="NONE";
    double extremeLevel=0.0;
    double extremeRisk=LocalExtremeRiskScore(
@@ -8066,6 +9337,21 @@ bool AutoProfitGivebackDetected(int direction,double cycleProfit)
       strongTrend && !trueReversal ? 0.50 :
       fragileMarket ? 0.26 :
       trueReversal ? 0.30 : 0.42;
+
+   RefreshIndicatorV6Scores(direction,MomentumPoints());
+   bool indicatorContinuation=
+      g_indicatorCompositeScore>=72.0 &&
+      g_indicatorMomentumScore>=64.0 &&
+      g_indicatorStructureScore>=60.0 &&
+      g_macdState==(direction>0 ? "BULL_ACCELERATION" : "BEAR_ACCELERATION");
+   bool indicatorFade=
+      g_indicatorMomentumScore<=38.0 &&
+      g_indicatorExecutionScore<=42.0 &&
+      g_macdState==(direction>0 ? "BULL_FADING" : "BEAR_FADING");
+   if(indicatorContinuation && !trueReversal)
+      givebackPercent=MathMin(0.68,givebackPercent+0.06);
+   else if(indicatorFade)
+      givebackPercent=MathMax(0.24,givebackPercent-0.05);
 
    double volume=MathMax(
       SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),
@@ -9445,6 +10731,30 @@ double DynamicTakeProfitPrice(int direction, double entryPrice, double stopPrice
       if(levelTarget < entryPrice - riskDistance * 0.80 &&
          (g_entryQuality != "A" || levelTarget >= target))
          target = levelTarget;
+   }
+
+   // Indicator V6 target engine uses the nearest Profile/Session/Day/Week/
+   // Structure reaction level. It never invents a target behind entry.
+   RefreshIndicatorV6Scores(direction,MomentumPoints());
+   double indicatorTarget=IndicatorTargetCandidate(direction,entryPrice);
+   g_indicatorTargetPrice=indicatorTarget;
+   if(indicatorTarget>0.0)
+   {
+      double indicatorDistance=MathAbs(indicatorTarget-entryPrice);
+      double baseTargetDistance=MathAbs(target-entryPrice);
+      bool validDirection=direction>0
+         ? indicatorTarget>entryPrice
+         : indicatorTarget<entryPrice;
+      if(validDirection && indicatorDistance>=riskDistance*0.75)
+      {
+         if(g_indicatorCompositeScore<78.0 &&
+            indicatorDistance<baseTargetDistance)
+            target=indicatorTarget;
+         else if(g_indicatorCompositeScore>=82.0 &&
+                 indicatorDistance>baseTargetDistance &&
+                 indicatorDistance<=riskDistance*2.60)
+            target=indicatorTarget;
+      }
    }
 
    // A-grade trend/news setups may target the 127.2 Fib extension when it is

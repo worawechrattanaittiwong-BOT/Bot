@@ -58,6 +58,7 @@ const defaultSettings = {
   sessionStartHour: 0,
   sessionEndHour: 24,
   maxAtrPoints: 0,
+  indicatorV6Mode: "SOFT_WEIGHT",
   entryMode: "AUTO_MOMENTUM"
 };
 
@@ -632,6 +633,7 @@ export default function DashboardPage() {
     LOCAL_TOP_ADD_BLOCK: "หยุดเติม BUY บน Local Top · รอ Pullback/Retest/Breakout Hold",
     LOCAL_BOTTOM_ADD_BLOCK: "หยุดเติม SELL ที่ Local Bottom · รอ Pullback/Retest/Breakdown Hold",
     WAIT_ADD_PRICE_SEPARATION: "รอราคาแยกจากไม้ล่าสุด · ไม่กองหลายไม้ราคาเดียวกัน",
+    INDICATOR_CONTEXT_ADD_WAIT: "Indicator V6 หลายหมวดยังอ่อน · ชะลอการเติมไม้",
     EXTREME_SPREAD: "Spread EXTREME",
     WAIT_TERMINAL_DEMAND: "ใกล้ Demand · ไม่ไล่ SELL",
     WAIT_TERMINAL_SUPPLY: "ใกล้ Supply · ไม่ไล่ BUY",
@@ -649,6 +651,54 @@ export default function DashboardPage() {
   const tacticalCountertrendDirection = Number(metrics.tacticalCountertrendDirection || 0);
   const tacticalCountertrendScore = Number(metrics.tacticalCountertrendScore || 0);
   const tacticalCountertrendReason = String(metrics.tacticalCountertrendReason || "NONE");
+
+  const indicatorV6Mode = String(metrics.indicatorV6Mode || "SOFT_WEIGHT");
+  const indicatorDecision = String(metrics.indicatorDecision || "OBSERVE");
+  const indicatorWhy = String(metrics.indicatorWhy || "DATA_NOT_READY");
+  const indicatorLocationScore = Number(metrics.indicatorLocationScore ?? 50);
+  const indicatorMomentumScore = Number(metrics.indicatorMomentumScore ?? 50);
+  const indicatorStructureScore = Number(metrics.indicatorStructureScore ?? 50);
+  const indicatorVolatilityScore = Number(metrics.indicatorVolatilityScore ?? 50);
+  const indicatorExecutionScore = Number(metrics.indicatorExecutionScore ?? 50);
+  const indicatorCostSpaceScore = Number(metrics.indicatorCostSpaceScore ?? 50);
+  const indicatorCompositeScore = Number(metrics.indicatorCompositeScore ?? 50);
+  const volumeProfileState = String(metrics.volumeProfileState || "DATA_NOT_READY");
+  const volumePoc = Number(metrics.volumePoc || 0);
+  const volumeVah = Number(metrics.volumeVah || 0);
+  const volumeVal = Number(metrics.volumeVal || 0);
+  const swingAnchoredVwap = Number(metrics.swingAnchoredVwap || 0);
+  const impulseAnchoredVwap = Number(metrics.impulseAnchoredVwap || 0);
+  const multiVwapState = String(metrics.multiVwapState || "NEUTRAL");
+  const donchianState = String(metrics.donchianState || "NEUTRAL");
+  const squeezeState = String(metrics.squeezeState || "NORMAL");
+  const macdState = String(metrics.macdState || "NEUTRAL");
+  const stochState = String(metrics.stochState || "NEUTRAL");
+  const levelFlipState = String(metrics.levelFlipState || "NONE");
+  const premiumDiscountState = String(metrics.premiumDiscountState || "EQUILIBRIUM");
+  const indicatorHistorySamples = Number(metrics.indicatorHistorySamples || 0);
+  const indicatorHistoryWinProbability = Number(metrics.indicatorHistoryWinProbability || 0);
+  const indicatorHistoryEvScore = Number(metrics.indicatorHistoryEvScore ?? 50);
+  const indicatorTargetPrice = Number(metrics.indicatorTargetPrice || 0);
+
+  const indicatorWhyLabel:Record<string,string> = {
+    DATA_NOT_READY: "กำลังสะสมข้อมูล Indicator",
+    NO_DIRECTION: "ยังไม่มีทิศสำหรับประเมิน",
+    LOCATION_WEAK: "ตำแหน่งราคาไม่คุ้มพอ",
+    EXECUTION_WEAK: "จังหวะ M1/M5 ยังไม่สวย",
+    COST_OR_SPACE_WEAK: "Spread/พื้นที่ทำกำไรยังไม่คุ้ม",
+    MOMENTUM_WEAK: "Momentum ยังไม่สนับสนุน",
+    STRUCTURE_WEAK: "โครงสร้างยังไม่แข็งแรง",
+    VOLATILITY_COMPRESSED: "ตลาดกำลังบีบตัว รอ Release",
+    MULTI_FACTOR_CONTEXT: "หลายปัจจัยสนับสนุนร่วมกัน"
+  };
+  const indicatorDecisionLabel:Record<string,string> = {
+    IDEAL: "IDEAL · จุดเข้าดีมาก",
+    ACCEPTABLE: "ACCEPTABLE · เข้าได้ตามระบบ",
+    WAIT_BETTER_CONTEXT: "WAIT · รอบริบทดีกว่า",
+    WEAK_CONTEXT: "WEAK · ยังไม่ควรเร่งเข้า",
+    OBSERVE: "กำลังประเมิน"
+  };
+
   const latestDecisionReason = String(metrics.lastEntryReason || metrics.adaptiveBlockReason || "NONE");
   const latestCloseReason = String(metrics.lastCloseReason || "NONE");
   const decisionReasonLabel:Record<string,string> = {
@@ -661,6 +711,8 @@ export default function DashboardPage() {
     BUY_WAIT_PULLBACK: "ไม่ไล่ BUY บน Local Top · รอ Pullback หรือ Breakout Hold",
     SELL_WAIT_PULLBACK: "ไม่ไล่ SELL ที่ Local Bottom · รอ Pullback หรือ Breakdown Hold",
     TACTICAL_COUNTERTREND_EXIT: "ปิด Tactical สั้น เพราะ Macro เดิมกลับมายืนยัน",
+    WAIT_INDICATOR_CONTEXT: "Indicator V6 พบ Location + Execution อ่อนพร้อมกัน · รอสั้น ๆ แล้วมี bounded fallback",
+    INDICATOR_CONTEXT_ADD_WAIT: "Basket Add รอหลายหมวดกลับมาสนับสนุนก่อนเติมไม้",
     WAIT_TERMINAL_DEMAND: "ไม่ Sell ต่อ · ราคาอยู่ใกล้ Demand และแรงขายเริ่มหมด",
     WAIT_TERMINAL_SUPPLY: "ไม่ Buy ต่อ · ราคาอยู่ใกล้ Supply และแรงซื้อเริ่มหมด",
     EXTREME_SPREAD: "ยังไม่เปิดไม้ใหม่ · Spread อยู่ระดับ EXTREME",
@@ -1072,7 +1124,11 @@ export default function DashboardPage() {
       "InpConfidenceThreshold=55",
       "InpSessionStartHour=" + settings.sessionStartHour,
       "InpSessionEndHour=" + settings.sessionEndHour,
-      "InpMaxAtrPoints=" + settings.maxAtrPoints
+      "InpMaxAtrPoints=" + settings.maxAtrPoints,
+      "InpIndicatorV6Mode=" + (String(settings.indicatorV6Mode||"SOFT_WEIGHT").toUpperCase()==="SHADOW" ? 0 : String(settings.indicatorV6Mode||"SOFT_WEIGHT").toUpperCase()==="TIMING" ? 2 : String(settings.indicatorV6Mode||"SOFT_WEIGHT").toUpperCase()==="ADAPTIVE" ? 3 : 1),
+      "InpVolumeProfileBars=144",
+      "InpDonchianPeriod=20",
+      "InpIndicatorMaxWaitSeconds=20"
     ].join("\r\n");
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -1600,6 +1656,15 @@ export default function DashboardPage() {
                       <InsightRow label="News Mode" value={newsModeLabel[newsMode]||newsMode}/>
                       <InsightRow label="Local Extreme" value={localExtremeState==="NONE"?"ไม่พบ Local Top/Bottom เสี่ยง":localExtremeState.replace(/_/g," ")+" · "+localExtremeScore.toFixed(0)+"/100"+(breakoutHoldConfirmed?" · Hold ยืนยัน":"")}/>
                       {(tacticalCountertrendActive||tacticalCountertrendScore>0)&&<InsightRow label="Tactical Countertrend" value={(tacticalCountertrendDirection>0?"BUY":tacticalCountertrendDirection<0?"SELL":"รอ")+" · "+tacticalCountertrendScore.toFixed(0)+"/100 · "+tacticalCountertrendReason.replace(/_/g," ")}/>}
+                      <InsightRow label="Indicator Brain V6" value={(indicatorDecisionLabel[indicatorDecision]||indicatorDecision)+" · "+indicatorCompositeScore.toFixed(0)+"/100 · "+indicatorV6Mode}/>
+                      <InsightRow label="Location / Structure" value={indicatorLocationScore.toFixed(0)+" / "+indicatorStructureScore.toFixed(0)+" · "+premiumDiscountState.replace(/_/g," ")+" · "+levelFlipState.replace(/_/g," ")}/>
+                      <InsightRow label="Momentum / Execution" value={indicatorMomentumScore.toFixed(0)+" / "+indicatorExecutionScore.toFixed(0)+" · "+macdState.replace(/_/g," ")+" · "+stochState.replace(/_/g," ")}/>
+                      <InsightRow label="Volatility / Cost" value={indicatorVolatilityScore.toFixed(0)+" / "+indicatorCostSpaceScore.toFixed(0)+" · "+squeezeState.replace(/_/g," ")}/>
+                      <InsightRow label="Volume Profile" value={volumeProfileState.replace(/_/g," ")+(volumePoc>0?" · POC "+Number(volumePoc).toFixed(symbolDigits):"")+(volumeVah>0&&volumeVal>0?" · VA "+Number(volumeVal).toFixed(symbolDigits)+"–"+Number(volumeVah).toFixed(symbolDigits):"")}/>
+                      <InsightRow label="Anchored VWAP" value={multiVwapState.replace(/_/g," ")+(swingAnchoredVwap>0?" · Swing "+Number(swingAnchoredVwap).toFixed(symbolDigits):"")+(impulseAnchoredVwap>0?" · Impulse "+Number(impulseAnchoredVwap).toFixed(symbolDigits):"")}/>
+                      <InsightRow label="Donchian / Target" value={donchianState.replace(/_/g," ")+(indicatorTargetPrice>0?" · เป้าถัดไป "+Number(indicatorTargetPrice).toFixed(symbolDigits):"")}/>
+                      <InsightRow label="เหตุผล Indicator" value={indicatorWhyLabel[indicatorWhy]||indicatorWhy.replace(/_/g," ")}/>
+                      {indicatorHistorySamples>=20&&<InsightRow label="Indicator Outcome Learning" value={"Win "+indicatorHistoryWinProbability.toFixed(1)+"% · EV Score "+indicatorHistoryEvScore.toFixed(0)+" · "+indicatorHistorySamples+" Basket"}/>}
                       <InsightRow label="เหตุผลเข้า/รอล่าสุด" value={latestDecisionCustomerText}/>
                       {latestCloseReason!=="NONE" && <InsightRow label="เหตุผลปิดล่าสุด" value={latestCloseCustomerText}/>}
                     </div>

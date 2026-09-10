@@ -24,6 +24,9 @@ internal static class SmartAgentRunner
     private static string PermissionStampPath(AgentConfig config) =>
         Path.Combine(ScenovaRuntime.BaseDir, "permission-" + SafeKey(config) + ".stamp");
 
+    private static string AccountSwitchStampPath(AgentConfig config) =>
+        Path.Combine(ScenovaRuntime.BaseDir, "account-switch-" + SafeKey(config) + ".stamp");
+
     internal static async Task RunAsync()
     {
         Directory.CreateDirectory(ScenovaRuntime.BaseDir);
@@ -131,8 +134,26 @@ internal static class SmartAgentRunner
 
         await StageOrApplyEaAsync(http, config, token, localHash, heartbeat, logPath);
 
+        // Account switching is intentionally driven by an explicit user action
+        // on the dashboard. If the registered Agent is alive but the EA stopped
+        // heartbeating after the MT5 Login changed, reload the selected Terminal
+        // exactly once for that change request. This never runs while RUNNING or
+        // while positions exist because the server-side SafeToRestart flag is
+        // authoritative.
+        var accountSwitchReloaded = await TryRepairAccountSwitchAsync(
+            http,
+            config,
+            token,
+            logPath);
+        if (accountSwitchReloaded)
+        {
+            startedProfiles.Add(key);
+            repairedPermissions.Remove(key);
+        }
+
         var reloadPending = File.Exists(PendingReloadPath(config));
-        if (reloadPending &&
+        if (!accountSwitchReloaded &&
+            reloadPending &&
             heartbeat.SafeToRestart &&
             CooldownElapsed(RestartStampPath(config), TimeSpan.FromMinutes(3)))
         {
@@ -145,7 +166,10 @@ internal static class SmartAgentRunner
                 await AppendLogAsync(logPath, "Safe EA reload completed. profile=" + key);
             }
         }
-        else if (!heartbeat.EaOnline && heartbeat.SafeToRestart && !startedProfiles.Contains(key))
+        else if (!accountSwitchReloaded &&
+                 !heartbeat.EaOnline &&
+                 heartbeat.SafeToRestart &&
+                 !startedProfiles.Contains(key))
         {
             if (AgentRunner.EnsureMt5RunningWithEa(config, forceReload: false))
             {
@@ -153,7 +177,7 @@ internal static class SmartAgentRunner
                 await AppendLogAsync(logPath, "MT5 auto-start requested. profile=" + key);
             }
         }
-        else if (
+        else if (!accountSwitchReloaded &&
             heartbeat.EaOnline &&
             heartbeat.SafeToRestart &&
             heartbeat.TerminalTradeAllowed == true &&
@@ -192,6 +216,61 @@ internal static class SmartAgentRunner
             " positions=" + heartbeat.Positions +
             " safe=" + heartbeat.SafeToRestart +
             " channel=" + (heartbeat.ReleaseChannel ?? config.ReleaseChannel));
+    }
+
+    private static async Task<bool> TryRepairAccountSwitchAsync(
+        HttpClient http,
+        AgentConfig config,
+        string installToken,
+        string logPath)
+    {
+        try
+        {
+            var action = await ScenovaClient.PostJsonAsync<AgentActionResponse>(
+                http,
+                config.ApiBase.TrimEnd('/') + "/api/ea/agent-actions",
+                new
+                {
+                    instanceId = config.InstanceId,
+                    installToken
+                });
+
+            if (!action.AccountChangeRequested ||
+                action.PendingAccountDetected ||
+                action.EaOnline ||
+                !action.SafeToRestart ||
+                action.Positions > 0)
+                return false;
+
+            var requestId = (action.AccountChangeRequestId ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(requestId))
+                return false;
+
+            var stampPath = AccountSwitchStampPath(config);
+            if (StampMatches(stampPath, requestId))
+                return false;
+
+            if (!AgentRunner.EnsureMt5RunningWithEa(config, forceReload: true))
+                return false;
+
+            WriteStamp(stampPath, requestId);
+            MarkNow(RestartStampPath(config));
+            TryDelete(PendingReloadPath(config));
+            await AppendLogAsync(
+                logPath,
+                "Account switch EA reload requested. profile=" + SafeKey(config));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Account-switch assistance is additive. A server that has not yet
+            // deployed the action endpoint must not interrupt the normal Agent.
+            await AppendLogAsync(
+                logPath,
+                "Account switch action unavailable. profile=" + SafeKey(config) +
+                " " + InstallerDiagnostics.Sanitize(ex.Message));
+            return false;
+        }
     }
 
     internal static bool PendingUpdateExists(AgentConfig config) =>
@@ -322,6 +401,32 @@ internal static class SmartAgentRunner
         {
             return true;
         }
+    }
+
+    private static bool StampMatches(string path, string value)
+    {
+        try
+        {
+            return File.Exists(path) &&
+                   string.Equals(
+                       File.ReadAllText(path).Trim(),
+                       value.Trim(),
+                       StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void WriteStamp(string path, string value)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, value.Trim());
+        }
+        catch { }
     }
 
     private static void MarkNow(string path)

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Mt5AccountSwitchAssistant } from "../components/Mt5AccountSwitchAssistant";
 
 export const metadata: Metadata = {
   title: "SCENOVA — MT5 BOT EA",
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="th">
-      <body>{children}</body>
+      <body>
+        {children}
+        <Mt5AccountSwitchAssistant />
+      </body>
     </html>
   );
 }
