@@ -102,17 +102,20 @@ jobs:
           PRODUCT_VERSION=$(sed -n 's/^#define SCENOVA_PRODUCT_VERSION "\([^"]*\)"/\1/p' mt5/FastBasketBot.mq5)
           INSTALLER_VERSION=$(sed -n 's/^export const DEFAULT_INSTALLER_VERSION = "\([^"]*\)";/\1/p' apps/api/src/release-version.ts)
           SOURCE_EA_VERSION=$(sed -n 's/^#property version[[:space:]]*"\([^"]*\)"/\1/p' mt5/FastBasketBot.mq5)
+          HEARTBEAT_EA_VERSION=$(sed -n 's/^#define SCENOVA_EA_VERSION "\([^"]*\)"/\1/p' mt5/FastBasketBot.mq5)
           API_EA_VERSION=$(sed -n 's/^export const DEFAULT_EA_VERSION = "\([^"]*\)";/\1/p' apps/api/src/release-version.ts)
           MANIFEST_EA_VERSION=$(jq -r '.eaVersion // empty' mt5/release/manifest.json)
           EA_VERSION="$SOURCE_EA_VERSION"
           test -n "$PRODUCT_VERSION"
           test -n "$INSTALLER_VERSION"
           test -n "$SOURCE_EA_VERSION"
+          test -n "$HEARTBEAT_EA_VERSION"
           test -n "$MANIFEST_EA_VERSION"
           test -n "$EA_VERSION"
           # Windows Agent/Installer and EA are independently versioned. Agent
           # fixes must not force an EX5 rebuild when EA trading logic is unchanged.
           test "$SOURCE_EA_VERSION" = "$API_EA_VERSION"
+          test "$SOURCE_EA_VERSION" = "$HEARTBEAT_EA_VERSION"
 
           REGISTER=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration@scenova.test","password":"Integration123!"}')
           TOKEN=$(printf '%s' "$REGISTER" | jq -r '.token')
