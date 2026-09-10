@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,11 +8,39 @@ namespace ScenovaInstaller;
 
 internal static class ScenovaClient
 {
+    // One shared socket pool for the lifetime of the SCENOVA process.
+    // NewHttpClient() may still be disposed by callers, but disposeHandler:false
+    // keeps the underlying TCP/TLS pool alive. This avoids reconnecting/TLS
+    // handshakes every Agent heartbeat loop and makes short network hiccups much
+    // less visible to the EA/dashboard.
+    private static readonly SocketsHttpHandler SharedHandler = new()
+    {
+        AutomaticDecompression =
+            DecompressionMethods.GZip |
+            DecompressionMethods.Deflate |
+            DecompressionMethods.Brotli,
+        ConnectTimeout = TimeSpan.FromSeconds(5),
+        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
+        MaxConnectionsPerServer = 16,
+        EnableMultipleHttp2Connections = true,
+        UseCookies = false
+    };
+
     internal static HttpClient NewHttpClient()
     {
-        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        var http = new HttpClient(SharedHandler, disposeHandler: false)
+        {
+            // Artifact downloads can legitimately take longer than a heartbeat.
+            // PostJsonAsync has its own shorter per-attempt timeout below.
+            Timeout = TimeSpan.FromSeconds(45),
+            DefaultRequestVersion = HttpVersion.Version20,
+            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
+        };
         http.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("SCENOVA-Installer", InstallerConstants.Version));
+        http.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/json"));
         return http;
     }
 
@@ -20,53 +49,134 @@ internal static class ScenovaClient
         string url,
         object payload)
     {
+        var json = JsonSerializer.Serialize(payload, ScenovaRuntime.JsonOptions);
         Exception? last = null;
-        for (var attempt = 1; attempt <= 3; attempt++)
+
+        // Heartbeat/control calls are idempotent from the Agent point of view.
+        // Retry transport errors plus temporary HTTP failures, but never keep
+        // retrying authentication/validation failures such as 400/401/403.
+        for (var attempt = 1; attempt <= 4; attempt++)
         {
             try
             {
-                var json = JsonSerializer.Serialize(payload, ScenovaRuntime.JsonOptions);
-                using var response = await http.PostAsync(
-                    url,
-                    new StringContent(json, Encoding.UTF8, "application/json"));
-                var text = await response.Content.ReadAsStringAsync();
-
-                if (!response.IsSuccessStatusCode)
+                using var request = new HttpRequestMessage(HttpMethod.Post, url)
                 {
-                    try
-                    {
-                        var error = JsonSerializer.Deserialize<ApiError>(
-                            text,
-                            ScenovaRuntime.JsonOptions);
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
+                using var attemptTimeout = new CancellationTokenSource(
+                    TimeSpan.FromSeconds(8));
+                using var response = await http.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseContentRead,
+                    attemptTimeout.Token);
+                var text = await response.Content.ReadAsStringAsync(
+                    attemptTimeout.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = JsonSerializer.Deserialize<T>(
+                        text,
+                        ScenovaRuntime.JsonOptions);
+                    return result ??
                         throw new InvalidOperationException(
-                            error?.Message ?? "SCENOVA server rejected the request");
-                    }
-                    catch (JsonException)
-                    {
-                        throw new InvalidOperationException(
-                            "SCENOVA server error: " + (int)response.StatusCode);
-                    }
+                            "invalid response from SCENOVA server");
                 }
 
-                var result = JsonSerializer.Deserialize<T>(
-                    text,
-                    ScenovaRuntime.JsonOptions);
-                return result ??
-                    throw new InvalidOperationException("invalid response from SCENOVA server");
+                var status = (int)response.StatusCode;
+                if (IsRetryableStatus(status))
+                {
+                    last = new HttpRequestException(
+                        "SCENOVA temporary server response HTTP " + status,
+                        null,
+                        response.StatusCode);
+                    if (attempt < 4)
+                    {
+                        await Task.Delay(RetryDelay(response, attempt));
+                        continue;
+                    }
+                    break;
+                }
+
+                throw ApiFailure(response.StatusCode, text);
             }
             catch (Exception ex) when (
                 ex is HttpRequestException ||
-                ex is TaskCanceledException)
+                ex is TaskCanceledException ||
+                ex is OperationCanceledException)
             {
                 last = ex;
-                if (attempt < 3)
-                    await Task.Delay(TimeSpan.FromMilliseconds(350 * attempt));
+                if (attempt < 4)
+                {
+                    await Task.Delay(RetryDelay(null, attempt));
+                    continue;
+                }
             }
         }
 
         throw new InvalidOperationException(
-            "SCENOVA network request failed after retry",
+            "SCENOVA network request failed after resilient retry",
             last);
+    }
+
+    private static bool IsRetryableStatus(int status) =>
+        status == 408 ||
+        status == 425 ||
+        status == 429 ||
+        status >= 500;
+
+    private static TimeSpan RetryDelay(HttpResponseMessage? response, int attempt)
+    {
+        try
+        {
+            var retryAfter = response?.Headers.RetryAfter;
+            if (retryAfter?.Delta is { } delta && delta > TimeSpan.Zero)
+                return delta > TimeSpan.FromSeconds(5)
+                    ? TimeSpan.FromSeconds(5)
+                    : delta;
+
+            if (retryAfter?.Date is { } date)
+            {
+                var wait = date - DateTimeOffset.UtcNow;
+                if (wait > TimeSpan.Zero)
+                    return wait > TimeSpan.FromSeconds(5)
+                        ? TimeSpan.FromSeconds(5)
+                        : wait;
+            }
+        }
+        catch
+        {
+            // Fall through to bounded exponential backoff.
+        }
+
+        var baseMs = attempt switch
+        {
+            1 => 250,
+            2 => 600,
+            3 => 1200,
+            _ => 2000
+        };
+        return TimeSpan.FromMilliseconds(
+            baseMs + Random.Shared.Next(25, 176));
+    }
+
+    private static InvalidOperationException ApiFailure(
+        HttpStatusCode status,
+        string text)
+    {
+        try
+        {
+            var error = JsonSerializer.Deserialize<ApiError>(
+                text,
+                ScenovaRuntime.JsonOptions);
+            return new InvalidOperationException(
+                error?.Message ??
+                "SCENOVA server rejected the request: HTTP " + (int)status);
+        }
+        catch (JsonException)
+        {
+            return new InvalidOperationException(
+                "SCENOVA server error: HTTP " + (int)status);
+        }
     }
 
     internal static async Task<bool> CanReachApiAsync()
@@ -162,6 +272,12 @@ internal static class ScenovaClient
                 if (!response.IsSuccessStatusCode)
                 {
                     var text = await response.Content.ReadAsStringAsync();
+                    var status = (int)response.StatusCode;
+                    if (IsRetryableStatus(status))
+                        throw new HttpRequestException(
+                            "EA download temporary HTTP " + status,
+                            null,
+                            response.StatusCode);
                     throw new InvalidOperationException(
                         "EA download failed: " + text);
                 }
@@ -214,7 +330,7 @@ internal static class ScenovaClient
             {
                 last = ex;
                 if (attempt < 4)
-                    await Task.Delay(TimeSpan.FromMilliseconds(500 * attempt));
+                    await Task.Delay(RetryDelay(null, attempt));
             }
         }
 
