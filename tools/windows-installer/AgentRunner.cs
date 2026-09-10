@@ -110,6 +110,10 @@ internal static class AgentRunner
     /// - forceReload=true  => UPDATE_EA_RESTART only
     /// - forceReload=false => CONNECT_MT5 only
     /// No pending button action means an immediate no-op.
+    ///
+    /// Success is ACKed only after the Server observes EA heartbeat again. For
+    /// UPDATE_EA_RESTART the reported runtime version must also equal the
+    /// required EA version. Starting terminal64.exe alone is never success.
     /// </summary>
     internal static bool EnsureMt5RunningWithEa(AgentConfig config, bool forceReload)
     {
@@ -122,7 +126,29 @@ internal static class AgentRunner
         var stampPath = ManualActionStampPath(config);
         if (StampMatches(stampPath, actionId))
         {
-            AcknowledgeManualAction(config, actionId, true, "คำสั่งนี้ถูกดำเนินการแล้ว");
+            var verifiedExisting = WaitForManualActionVerification(
+                config,
+                actionId,
+                forceReload,
+                timeoutSeconds: 12,
+                out var existingSnapshot);
+            if (verifiedExisting)
+            {
+                AcknowledgeManualAction(
+                    config,
+                    actionId,
+                    true,
+                    forceReload
+                        ? "EA เวอร์ชันใหม่เชื่อมต่อและตรวจสอบสำเร็จแล้ว"
+                        : "MT5 และ EA เชื่อมต่อกลับมาแล้ว");
+                return true;
+            }
+
+            AcknowledgeManualAction(
+                config,
+                actionId,
+                false,
+                BuildVerificationFailureMessage(forceReload, existingSnapshot));
             return false;
         }
 
@@ -147,13 +173,30 @@ internal static class AgentRunner
 
             StartTargetMt5(config, terminalExe);
             WriteStamp(stampPath, actionId);
+
+            var verified = WaitForManualActionVerification(
+                config,
+                actionId,
+                forceReload,
+                timeoutSeconds: 55,
+                out var snapshot);
+            if (!verified)
+            {
+                AcknowledgeManualAction(
+                    config,
+                    actionId,
+                    false,
+                    BuildVerificationFailureMessage(forceReload, snapshot));
+                return false;
+            }
+
             AcknowledgeManualAction(
                 config,
                 actionId,
                 true,
                 forceReload
-                    ? "อัปเดต EA และรีสตาร์ท MT5 ตามคำสั่งผู้ใช้แล้ว"
-                    : "เปิด/รีสตาร์ท MT5 ตามคำสั่งผู้ใช้แล้ว");
+                    ? "อัปเดต EA สำเร็จ ตรวจพบ Runtime เวอร์ชันล่าสุดแล้ว"
+                    : "เชื่อมต่อ MT5 สำเร็จ ตรวจพบ EA Online แล้ว");
             return true;
         }
         catch (Exception ex)
@@ -167,9 +210,7 @@ internal static class AgentRunner
         }
     }
 
-    private static AgentActionResponse? FetchAuthorizedManualAction(
-        AgentConfig config,
-        bool forceReload)
+    private static AgentActionResponse? FetchActionSnapshot(AgentConfig config)
     {
         try
         {
@@ -177,28 +218,94 @@ internal static class AgentRunner
             if (string.IsNullOrWhiteSpace(token)) return null;
 
             using var http = ScenovaClient.NewHttpClient();
-            var response = ScenovaClient.PostJsonAsync<AgentActionResponse>(
+            return ScenovaClient.PostJsonAsync<AgentActionResponse>(
                 http,
                 config.ApiBase.TrimEnd('/') + "/api/ea/agent-actions",
                 new { instanceId = config.InstanceId, installToken = token })
                 .GetAwaiter().GetResult();
-
-            if (!response.ManualActionPending || !response.ManualActionAllowed ||
-                !response.SafeToRestart || response.Positions > 0)
-                return null;
-
-            var expected = forceReload ? "UPDATE_EA_RESTART" : "CONNECT_MT5";
-            return string.Equals(
-                response.ManualActionName,
-                expected,
-                StringComparison.OrdinalIgnoreCase)
-                ? response
-                : null;
         }
         catch
         {
             return null;
         }
+    }
+
+    private static AgentActionResponse? FetchAuthorizedManualAction(
+        AgentConfig config,
+        bool forceReload)
+    {
+        var response = FetchActionSnapshot(config);
+        if (response is null ||
+            !response.ManualActionPending ||
+            !response.ManualActionAllowed ||
+            !response.SafeToRestart ||
+            response.Positions > 0)
+            return null;
+
+        var expected = forceReload ? "UPDATE_EA_RESTART" : "CONNECT_MT5";
+        return string.Equals(
+            response.ManualActionName,
+            expected,
+            StringComparison.OrdinalIgnoreCase)
+            ? response
+            : null;
+    }
+
+    private static bool WaitForManualActionVerification(
+        AgentConfig config,
+        string actionId,
+        bool forceReload,
+        int timeoutSeconds,
+        out AgentActionResponse? lastSnapshot)
+    {
+        lastSnapshot = null;
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(5, timeoutSeconds));
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            Thread.Sleep(2000);
+            var snapshot = FetchActionSnapshot(config);
+            if (snapshot is null) continue;
+            lastSnapshot = snapshot;
+
+            // A newer click replaced this action. Never ACK the old one.
+            if (!string.Equals(
+                    snapshot.ManualActionId,
+                    actionId,
+                    StringComparison.Ordinal))
+                return false;
+
+            if (!snapshot.EaOnline) continue;
+            if (!forceReload) return true;
+
+            var current = (snapshot.EaVersion ?? "").Trim();
+            var required = (snapshot.EaVersionRequired ?? "").Trim();
+            if (!string.IsNullOrWhiteSpace(current) &&
+                !string.IsNullOrWhiteSpace(required) &&
+                string.Equals(current, required, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private static string BuildVerificationFailureMessage(
+        bool forceReload,
+        AgentActionResponse? snapshot)
+    {
+        if (snapshot is null)
+            return "MT5 ถูกสั่งเปิดแล้ว แต่ Server ยังตรวจการเชื่อมต่อไม่สำเร็จ กรุณากดอีกครั้ง";
+        if (!snapshot.EaOnline)
+            return "MT5 เปิดกลับมาแล้ว แต่ EA ยังไม่เชื่อมต่อ Server กรุณาตรวจ WebRequest/EA แล้วกดอีกครั้ง";
+        if (forceReload)
+        {
+            var current = string.IsNullOrWhiteSpace(snapshot.EaVersion)
+                ? "ไม่ทราบ"
+                : snapshot.EaVersion;
+            var required = string.IsNullOrWhiteSpace(snapshot.EaVersionRequired)
+                ? "ล่าสุด"
+                : snapshot.EaVersionRequired;
+            return $"MT5 เชื่อมต่อแล้ว แต่ EA Runtime ยังเป็น {current} (ต้องการ {required}) กรุณากดอัปเดตอีกครั้ง";
+        }
+        return "MT5 ยังไม่ยืนยันการเชื่อมต่อ กรุณากดเชื่อมต่ออีกครั้ง";
     }
 
     private static void AcknowledgeManualAction(
