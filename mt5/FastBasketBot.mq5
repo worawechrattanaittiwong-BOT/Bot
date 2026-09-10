@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.047"
-#define SCENOVA_EA_VERSION "1.047"
-#define SCENOVA_PRODUCT_VERSION "2.0.9"
+#property version   "1.048"
+#define SCENOVA_EA_VERSION "1.048"
+#define SCENOVA_PRODUCT_VERSION "2.0.10"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -27,7 +27,10 @@ enum ENUM_CLOSE_REASON
    CLOSE_REASON_BASKET_LOSS = 3,
    CLOSE_REASON_TRAIL       = 4,
    CLOSE_REASON_SAFE_STOP   = 5,
-   CLOSE_REASON_REMOTE      = 6
+   CLOSE_REASON_REMOTE      = 6,
+   CLOSE_REASON_BRAIN_REVERSAL = 7,
+   CLOSE_REASON_TACTICAL       = 8,
+   CLOSE_REASON_RESCUE         = 9
 };
 
 enum ENUM_RESCUE_STATE
@@ -88,7 +91,7 @@ input int             InpHeartbeatSeconds     = 3;
 input int             InpMaxOfflineLeaseSeconds = 600;
 
 // Adaptive Engine: deterministic, testable safeguards. The configured lot is
-// always treated as a ceiling; adaptive sizing can reduce it, never increase it.
+// customer-controlled and is used directly after broker volume normalization.
 input bool            InpAdaptiveEngine        = true;
 input double          InpRiskPerOrderPercent   = 0.25;
 // When enabled, a risk-sized volume below the broker minimum may use the
@@ -1216,7 +1219,7 @@ int OnInit()
 
    if(!MQLInfoInteger(MQL_TESTER))
    {
-      bool apiOk = (StringFind(InpApiBase, "https://") == 0 || StringFind(InpApiBase, "http://") == 0);
+      bool apiOk = (StringFind(InpApiBase, "https://") == 0);
       if(!apiOk || StringLen(InpInstanceId) < 8 || StringLen(InpInstallToken) < 8)
       {
          Print("SCENOVA CONFIG ERROR: connection settings are missing. Load SCENOVA-FastBasketBot.set in Inputs.");
@@ -1901,6 +1904,15 @@ void OnTick()
    if(count > 0 && !BasketFillEnabled() && !AdaptiveBasketAddAllowed(direction))
    {
       g_executionStatus = "WAITING_BASKET_ADD";
+      return;
+   }
+
+   if(!UserDirectionAllows(direction))
+   {
+      g_executionStatus = "USER_DIRECTION_LOCK";
+      g_adaptiveBlockReason = direction > 0
+         ? "USER_DIRECTION_LOCK_SELL_ONLY"
+         : "USER_DIRECTION_LOCK_BUY_ONLY";
       return;
    }
 
@@ -2807,7 +2819,7 @@ int HttpPostJsonTimeout(string url, string payload, string &response, int timeou
 
 int HttpPostJson(string url, string payload, string &response)
 {
-   return HttpPostJsonTimeout(url, payload, response, 5000);
+   return HttpPostJsonTimeout(url, payload, response, 1200);
 }
 
 void PostTradeJournalDeal(ulong dealTicket)
@@ -8035,6 +8047,186 @@ bool BrainV8HandleBasketReversal(double momentum)
    return true;
 }
 
+// Brain V9 -----------------------------------------------------------------
+// Scoped hardening layer. It does not replace the established setup engines;
+// it only enforces customer direction, model-aware confirmation and symmetric
+// terminal-exhaustion protection before execution.
+bool UserDirectionAllows(int direction)
+{
+   if(direction == 0)
+      return true;
+   if(g_entryMode == ENTRY_BUY_ONLY)
+      return direction > 0;
+   if(g_entryMode == ENTRY_SELL_ONLY)
+      return direction < 0;
+   return true;
+}
+
+int EnforceUserDirectionLock(int direction)
+{
+   if(UserDirectionAllows(direction))
+      return direction;
+
+   g_adaptiveBlockReason = direction > 0
+      ? "USER_DIRECTION_LOCK_SELL_ONLY"
+      : "USER_DIRECTION_LOCK_BUY_ONLY";
+   return 0;
+}
+
+bool BrainV9StrongUpImpulse(double momentum)
+{
+   double threshold = MathMax(2.0, g_adaptiveMomentumThreshold);
+   int bullishVotes = 0;
+   if(g_trendM1 > 0) bullishVotes++;
+   if(g_trendM5 > 0) bullishVotes++;
+   if(g_emaTrendM5 > 0) bullishVotes++;
+   if(g_emaTrendM15 > 0) bullishVotes++;
+
+   bool momentumStrong = momentum >= threshold * 0.72;
+   bool trendStrong = bullishVotes >= 3;
+   bool directionalPressure = g_plusDiM5 > g_minusDiM5 && g_adxM5 >= 20.0;
+   return momentumStrong && trendStrong && directionalPressure;
+}
+
+bool BrainV9UpsideExhaustion(double momentum)
+{
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+      return false;
+
+   double price = (tick.bid + tick.ask) * 0.5;
+   double atrPrice = MathMax(
+      _Point * 10.0,
+      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point
+   );
+   double extension = BrainV8LatestSwingExtensionAtr(1);
+   bool overbought = g_rsiM1 >= 66.0 || g_rsiM5 >= 63.0;
+   bool supplyTouch = PriceInsideOrNearZone(
+      price, g_supplyZoneLow, g_supplyZoneHigh, atrPrice * 0.16
+   );
+   bool supplyNear = g_supplyZoneLow > price &&
+      (g_supplyZoneLow - price) / atrPrice <= 0.34 &&
+      g_supplyZoneScore >= 48.0;
+   bool extended = extension >= 0.72;
+   bool decelerating = !MomentumSupportsDirection(1, momentum, 0.95) ||
+      BrainV8ConfirmationCandleReady(-1);
+
+   int evidence = 0;
+   if(overbought) evidence++;
+   if(supplyTouch || supplyNear) evidence++;
+   if(extended) evidence++;
+   if(decelerating) evidence++;
+   return evidence >= 2 && (extended || supplyTouch || supplyNear);
+}
+
+bool BrainV9ContrarianSellReady(double momentum)
+{
+   if(!BrainV9StrongUpImpulse(momentum))
+      return false;
+   if(!BrainV9UpsideExhaustion(momentum))
+      return false;
+   if(!BrainV8ConfirmationCandleReady(-1))
+      return false;
+
+   string microState = "NEUTRAL";
+   double micro = MicroStructureScore(-1, microState);
+   bool reclaim = g_emaReclaimState == "LOSE_EMA21_DOWN";
+   bool structureTurn = micro >= 56.0 || g_trendM1 < 0 || reclaim;
+   bool pullback = PullbackRetestReady(-1, momentum) ||
+                   BrainV8RecentPullbackSequence(-1);
+   return structureTurn && pullback;
+}
+
+int BrainV9ApplyExhaustionPolicy(int rawDirection, double momentum)
+{
+   if(BrainV8StrongDownImpulse(momentum))
+   {
+      int candidate = BrainV8ApplyContrarianPolicy(rawDirection, momentum);
+      return EnforceUserDirectionLock(candidate);
+   }
+
+   if(BrainV9StrongUpImpulse(momentum))
+   {
+      if(BrainV9ContrarianSellReady(momentum) && UserDirectionAllows(-1))
+      {
+         g_entryModel = "UPSIDE_EXHAUSTION_REVERSAL";
+         g_entryTrigger = "BEARISH_REVERSAL_CONFIRMATION";
+         g_entryBias = "SELL";
+         g_reversalStatus = "STRONG_UP_SELL_CONFIRMED";
+         g_priceLocationState = "CONTRARIAN_SELL_READY";
+         g_adaptiveBlockReason = "";
+         return -1;
+      }
+
+      g_entryBias = UserDirectionAllows(-1) ? "SELL" : "BUY";
+      g_reversalStatus = "STRONG_UP_WAIT_SELL";
+      g_priceLocationState = "WAIT_SELL_REVERSAL";
+      g_adaptiveBlockReason = UserDirectionAllows(-1)
+         ? "STRONG_UP_NO_BUY_WAIT_SELL"
+         : "BUY_ONLY_STRONG_UP_WAIT_PULLBACK";
+      return 0;
+   }
+
+   return EnforceUserDirectionLock(rawDirection);
+}
+
+bool BrainV9ModelConfirmationReady(int direction, double momentum)
+{
+   bool breakoutModel = StringFind(g_entryModel, "BREAKOUT") >= 0 ||
+                        StringFind(g_entryTrigger, "BREAKOUT") >= 0;
+   if(breakoutModel)
+   {
+      if(!BrainV8ConfirmationCandleReady(direction))
+      {
+         g_adaptiveBlockReason = "WAIT_CONFIRMATION_CANDLE";
+         g_priceLocationState = "WAIT_CONFIRMATION_CANDLE";
+         return false;
+      }
+
+      // DirectSetupReady already classifies a compact clean breakout as safe.
+      // Only an extended/wicky breakout that explicitly armed the retest flag
+      // must wait for a retest here.
+      if(g_breakoutRetestRequired)
+      {
+         double level = direction > 0 ? g_majorResistance : g_majorSupport;
+         if(level <= 0.0)
+            level = direction > 0 ? g_nearestResistance : g_nearestSupport;
+         double atrPrice = MathMax(
+            _Point * 10.0,
+            AverageTrueRangePoints(PERIOD_M5, g_atrPeriod) * _Point
+         );
+         double buffer = MathMax(_Point * 3.0, atrPrice * 0.04);
+         if(level > 0.0 && !BreakoutRetestConfirmed(direction, level, buffer))
+         {
+            g_adaptiveBlockReason = "WAITING_BREAKOUT_RETEST";
+            g_priceLocationState = "WAIT_BREAKOUT_RETEST";
+            return false;
+         }
+      }
+      return true;
+   }
+
+   bool locationModel =
+      StringFind(g_entryModel, "PULLBACK") >= 0 ||
+      StringFind(g_entryModel, "EXHAUSTION_REVERSAL") >= 0 ||
+      StringFind(g_entryTrigger, "REVERSAL") >= 0 ||
+      StringFind(g_entryTrigger, "RETEST") >= 0 ||
+      g_entryModel == "LEVEL_REACTION";
+   if(locationModel)
+      return BrainV8PullbackConfirmationReady(direction, momentum);
+
+   // Continuation/news/caution models were already validated by their own
+   // setup functions. Require a completed direction candle, but do not invent
+   // a pullback requirement that contradicts those models.
+   if(!BrainV8ConfirmationCandleReady(direction))
+   {
+      g_adaptiveBlockReason = "WAIT_CONFIRMATION_CANDLE";
+      g_priceLocationState = "WAIT_CONFIRMATION_CANDLE";
+      return false;
+   }
+   return true;
+}
+
 bool MarketLocationEntryAllowed(int direction, bool fastRevalidation)
 {
    RefreshMarketContext(false);
@@ -8324,7 +8516,7 @@ int AdaptiveEntryDirection(double momentum)
    // path into the market.
    int rawDirection = SetupFirstDirection(momentum);
    rawDirection = ApplyLocalExtremeDecision(rawDirection,momentum);
-   rawDirection = BrainV8ApplyContrarianPolicy(rawDirection, momentum);
+   rawDirection = BrainV9ApplyExhaustionPolicy(rawDirection, momentum);
    g_marketRegimeDetail = DetailedMarketRegime(momentum, rawDirection);
 
    if(rawDirection == 0)
@@ -8435,7 +8627,7 @@ int AdaptiveEntryDirection(double momentum)
       return 0;
    }
 
-   if(!BrainV8PullbackConfirmationReady(rawDirection, momentum))
+   if(!BrainV9ModelConfirmationReady(rawDirection, momentum))
    {
       g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
       return 0;
@@ -8450,10 +8642,8 @@ int AdaptiveEntryDirection(double momentum)
    // Brain V8: confidence is a mandatory execution gate and remains visible for audit.
    // DynamicConfidenceThreshold remains visible as the effective threshold.
    // Pullback + Structure gates are enforced immediately above.
-   if(g_confidenceGateEnabled)
-      DynamicConfidenceThreshold(rawDirection);
-   else
-      g_effectiveConfidenceThreshold = 0.0;
+   // BrainV8QualityGate above owns the authoritative confidence threshold for
+   // this decision. Do not overwrite telemetry with a weaker display value.
 
    g_adaptiveLot = AdaptiveTradeVolume();
    if(g_adaptiveLot <= 0.0)
@@ -10229,6 +10419,50 @@ bool TradeResultAccepted(const MqlTradeResult &result)
    );
 }
 
+int DynamicDeviationPoints()
+{
+   double spread = CurrentSpreadPoints();
+   double atr = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
+   if(spread <= 0.0 || spread >= 999999.0)
+      spread = 5.0;
+   if(atr <= 0.0)
+      atr = spread * 4.0;
+
+   double deviation = MathMax(5.0, MathMax(spread * 1.50, atr * 0.12));
+   return (int)MathRound(MathMin(80.0, deviation));
+}
+
+bool OrderSendWithPriceRetry(MqlTradeRequest &request, MqlTradeResult &result)
+{
+   request.deviation = DynamicDeviationPoints();
+   ResetLastError();
+   bool sent = OrderSend(request, result);
+   if(sent && TradeResultAccepted(result))
+      return true;
+
+   long retcode = (long)result.retcode;
+   bool retryable =
+      retcode == TRADE_RETCODE_PRICE_CHANGED ||
+      retcode == TRADE_RETCODE_REQUOTE ||
+      retcode == TRADE_RETCODE_PRICE_OFF;
+   if(!retryable)
+      return sent;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(request.symbol, tick))
+      return sent;
+   if(request.type == ORDER_TYPE_BUY)
+      request.price = tick.ask;
+   else if(request.type == ORDER_TYPE_SELL)
+      request.price = tick.bid;
+   else
+      return sent;
+
+   request.deviation = DynamicDeviationPoints();
+   ResetLastError();
+   return OrderSend(request, result);
+}
+
 long RescueMagic()
 {
    return InpMagic + 910001;
@@ -10523,7 +10757,7 @@ double RescueReversalScore(int primaryDirection,string &reasonOut)
    return score;
 }
 
-bool SendRescueOrder(int direction,double requestedVolume)
+bool SendRescueOrder(int direction,double requestedVolume) /* V9_RETRY */
 {
    if(!AccountSupportsHedging() ||
       TradePermissionStatus()!="OK" ||
@@ -10554,7 +10788,7 @@ bool SendRescueOrder(int direction,double requestedVolume)
    request.tp=0.0;
 
    ResetLastError();
-   if(!OrderSend(request,result) || !TradeResultAccepted(result))
+   if(!OrderSendWithPriceRetry(request,result) || !TradeResultAccepted(result))
    {
       g_lastOrderError=GetLastError();
       g_lastOrderRetcode=(long)result.retcode;
@@ -10568,7 +10802,7 @@ bool SendRescueOrder(int direction,double requestedVolume)
    return true;
 }
 
-bool ClosePositionVolumeByTicket(ulong ticket,double requestedVolume,string comment)
+bool ClosePositionVolumeByTicket(ulong ticket,double requestedVolume,string comment) /* V9_RETRY */
 {
    if(ticket==0 || !PositionSelectByTicket(ticket))
       return false;
@@ -10613,7 +10847,7 @@ bool ClosePositionVolumeByTicket(ulong ticket,double requestedVolume,string comm
    }
 
    ResetLastError();
-   if(!OrderSend(request,result))
+   if(!OrderSendWithPriceRetry(request,result))
       return false;
    return TradeResultAccepted(result);
 }
@@ -11466,7 +11700,7 @@ string ProfitControlModeName()
    return "MANUAL_NONE";
 }
 
-bool SendMarketOrder(int direction)
+bool SendMarketOrder(int direction) /* V9_RETRY */
 {
    int positionsBefore = BasketPositionCount();
    MqlTick tick;
@@ -11539,7 +11773,7 @@ bool SendMarketOrder(int direction)
    g_adaptiveLot = request.volume;
 
    ResetLastError();
-   if(!OrderSend(request, result))
+   if(!OrderSendWithPriceRetry(request, result))
    {
       RecordExecutionQuality(false, 0.0);
       g_lastOrderError = GetLastError();
@@ -11597,7 +11831,7 @@ bool SendMarketOrder(int direction)
    return true;
 }
 
-bool ClosePositionByTicket(ulong ticket)
+bool ClosePositionByTicket(ulong ticket) /* V9_RETRY */
 {
    if(ticket == 0 || !PositionSelectByTicket(ticket))
       return false;
@@ -11633,7 +11867,7 @@ bool ClosePositionByTicket(ulong ticket)
       request.price = tick.ask;
    }
 
-   if(!OrderSend(request, result))
+   if(!OrderSendWithPriceRetry(request, result))
    {
       Print("Close order failed. ticket=", ticket, " error=", GetLastError(), " retcode=", result.retcode);
       return false;
@@ -11661,6 +11895,13 @@ int CloseReasonCode(string reason)
       return CLOSE_REASON_TRAIL;
    if(StringFind(reason, "SAFE_STOP") == 0) return CLOSE_REASON_SAFE_STOP;
    if(StringFind(reason, "REMOTE_CLOSE_ALL") == 0) return CLOSE_REASON_REMOTE;
+   if(StringFind(reason, "BRAIN_V8_REVERSAL") == 0 ||
+      StringFind(reason, "BRAIN_V9_REVERSAL") == 0)
+      return CLOSE_REASON_BRAIN_REVERSAL;
+   if(StringFind(reason, "TACTICAL_COUNTERTREND") == 0)
+      return CLOSE_REASON_TACTICAL;
+   if(StringFind(reason, "RESCUE_") == 0)
+      return CLOSE_REASON_RESCUE;
    return CLOSE_REASON_NONE;
 }
 
@@ -11672,6 +11913,9 @@ string CloseReasonText(int reasonCode)
    if(reasonCode == CLOSE_REASON_TRAIL) return "PROFIT_TRAIL";
    if(reasonCode == CLOSE_REASON_SAFE_STOP) return "SAFE_STOP_BREAKEVEN";
    if(reasonCode == CLOSE_REASON_REMOTE) return "REMOTE_CLOSE_ALL";
+   if(reasonCode == CLOSE_REASON_BRAIN_REVERSAL) return "BRAIN_REVERSAL_EXIT";
+   if(reasonCode == CLOSE_REASON_TACTICAL) return "TACTICAL_COUNTERTREND_EXIT";
+   if(reasonCode == CLOSE_REASON_RESCUE) return "RESCUE_RECOVERY_EXIT";
    return "CLOSE_ALL";
 }
 
@@ -11682,6 +11926,9 @@ string CloseCompletionStatus(int reasonCode)
    if(reasonCode == CLOSE_REASON_BASKET_LOSS) return "MAX_BASKET_LOSS";
    if(reasonCode == CLOSE_REASON_TRAIL) return "PROFIT_TRAIL";
    if(reasonCode == CLOSE_REASON_SAFE_STOP) return "SAFE_STOP";
+   if(reasonCode == CLOSE_REASON_BRAIN_REVERSAL) return "BASKET_REVERSAL_EXIT";
+   if(reasonCode == CLOSE_REASON_TACTICAL) return "TACTICAL_COUNTERTREND_EXIT";
+   if(reasonCode == CLOSE_REASON_RESCUE) return "RESCUE_EXIT";
    return "STOPPED";
 }
 
@@ -11828,7 +12075,7 @@ void RestoreDailyRiskState()
    {
       int restoredReason = (int)GlobalVariableGet(closeKey);
       g_pendingCloseReason =
-         (restoredReason >= CLOSE_REASON_DAILY_LOSS && restoredReason <= CLOSE_REASON_REMOTE)
+         (restoredReason >= CLOSE_REASON_DAILY_LOSS && restoredReason <= CLOSE_REASON_RESCUE)
          ? restoredReason
          : CLOSE_REASON_NONE;
    }

@@ -1,9 +1,9 @@
 ﻿{
-    "builtAt":  "2026-09-10T14:09:15.6573913Z",
-    "policy":  "STRONG_DOWN_NO_SELL_WAIT_BUY",
-    "brain":  "V8",
-    "sha256":  "2ba7e52105dd12d68874239f6e1fd401e3434ef40cd74b87923457b3deaa4230",
-    "sourceCommit":  "0d053b55fd4f15e8bf996dd8112b6b1c08440c5d",
-    "eaVersion":  "1.047",
+    "builtAt":  "2026-09-10T14:51:43.7103711Z",
+    "policy":  "SYMMETRIC_EXHAUSTION_DIRECTION_LOCK",
+    "brain":  "V9",
+    "sha256":  "8d64addcb0237af47ffa36a54fd95bc1d899c5ebac673b9946ea7084b65a2e90",
+    "sourceCommit":  "602c945a5b00164a4c47a498bc9090569d17465c",
+    "eaVersion":  "1.048",
     "file":  "FastBasketBot.ex5"
 }
