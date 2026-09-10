@@ -1498,6 +1498,13 @@ export class BotController {
     numberSetting("sessionStartHour", 0, 23, true);
     numberSetting("sessionEndHour", 1, 24, true);
     numberSetting("maxAtrPoints", 0, 100000);
+    if (body.indicatorV6Mode !== undefined) {
+      const indicatorV6Mode = String(body.indicatorV6Mode || "").toUpperCase();
+      if (!["SHADOW", "SOFT_WEIGHT", "TIMING", "ADAPTIVE"].includes(indicatorV6Mode)) {
+        throw new BadRequestException("Indicator V6 Mode ไม่ถูกต้อง");
+      }
+      clean.indicatorV6Mode = indicatorV6Mode;
+    }
 
     const requestedBasketProfit = Number(clean.basketProfitTargetMoney ?? 0);
     const requestedPerPositionProfit = Number(clean.perPositionProfitMoney ?? 0);
