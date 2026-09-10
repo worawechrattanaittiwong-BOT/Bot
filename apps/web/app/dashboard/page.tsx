@@ -639,6 +639,13 @@ export default function DashboardPage() {
     BALANCED: "3–7 นาที · ผ่อน Timing",
     COMPLETION: "7–10 นาที · เน้นเติมให้ครบ"
   };
+  const localExtremeState = String(metrics.localExtremeState || "NONE");
+  const localExtremeScore = Number(metrics.localExtremeScore || 0);
+  const breakoutHoldConfirmed = Boolean(metrics.breakoutHoldConfirmed);
+  const tacticalCountertrendActive = Boolean(metrics.tacticalCountertrendActive);
+  const tacticalCountertrendDirection = Number(metrics.tacticalCountertrendDirection || 0);
+  const tacticalCountertrendScore = Number(metrics.tacticalCountertrendScore || 0);
+  const tacticalCountertrendReason = String(metrics.tacticalCountertrendReason || "NONE");
   const latestDecisionReason = String(metrics.lastEntryReason || metrics.adaptiveBlockReason || "NONE");
   const latestCloseReason = String(metrics.lastCloseReason || "NONE");
   const decisionReasonLabel:Record<string,string> = {
@@ -648,6 +655,9 @@ export default function DashboardPage() {
     WAITING_PULLBACK_RETEST: "ราคา Extended · รอ Pullback / Retest ก่อนเข้า",
     WAITING_BREAKOUT_RETEST: "Breakout ยืดเกินไป · รอ Retest ก่อนเข้า",
     WAITING_BETTER_PRICE: "Entry Precision V3 รอราคาที่คุ้มกว่าชั่วคราว แล้วจะ fallback อัตโนมัติ",
+    BUY_WAIT_PULLBACK: "ไม่ไล่ BUY บน Local Top · รอ Pullback หรือ Breakout Hold",
+    SELL_WAIT_PULLBACK: "ไม่ไล่ SELL ที่ Local Bottom · รอ Pullback หรือ Breakdown Hold",
+    TACTICAL_COUNTERTREND_EXIT: "ปิด Tactical สั้น เพราะ Macro เดิมกลับมายืนยัน",
     WAIT_TERMINAL_DEMAND: "ไม่ Sell ต่อ · ราคาอยู่ใกล้ Demand และแรงขายเริ่มหมด",
     WAIT_TERMINAL_SUPPLY: "ไม่ Buy ต่อ · ราคาอยู่ใกล้ Supply และแรงซื้อเริ่มหมด",
     EXTREME_SPREAD: "ยังไม่เปิดไม้ใหม่ · Spread อยู่ระดับ EXTREME",
@@ -722,6 +732,8 @@ export default function DashboardPage() {
       NEWS_RETEST: "แท่งข่าวผ่านแล้วและราคากลับมา Retest",
       REVERSAL_BUY: "Demand + Turning event ยืนยัน Reversal BUY",
       REVERSAL_SELL: "Supply + Turning event ยืนยัน Reversal SELL",
+      TACTICAL_COUNTERTREND_BUY: "สวน BUY สั้นหลัง Failed Breakdown/Bottom Rejection",
+      TACTICAL_COUNTERTREND_SELL: "สวน SELL สั้นหลัง Failed Breakout/Top Rejection",
       CAUTION_ZONE: "จุดเข้าอยู่ในโซนติดตามพิเศษ"
     };
     return labels[code] || "กำลังประเมินจุดเข้า";
@@ -1583,6 +1595,8 @@ export default function DashboardPage() {
                       <InsightRow label="Reversal" value={reversalStatus==="NONE"?"ยังไม่ยืนยัน":reversalStatus.replace(/_/g," ")}/>
                       <InsightRow label="Basket Fill" value={fillPositions+"/"+fillTargetPositions+" · "+(fillPhaseLabel[fillPhase]||fillPhase)+" · "+(fillReasonLabel[fillBlockReason]||fillBlockReason)}/>
                       <InsightRow label="News Mode" value={newsModeLabel[newsMode]||newsMode}/>
+                      <InsightRow label="Local Extreme" value={localExtremeState==="NONE"?"ไม่พบ Local Top/Bottom เสี่ยง":localExtremeState.replace(/_/g," ")+" · "+localExtremeScore.toFixed(0)+"/100"+(breakoutHoldConfirmed?" · Hold ยืนยัน":"")}/>
+                      {(tacticalCountertrendActive||tacticalCountertrendScore>0)&&<InsightRow label="Tactical Countertrend" value={(tacticalCountertrendDirection>0?"BUY":tacticalCountertrendDirection<0?"SELL":"รอ")+" · "+tacticalCountertrendScore.toFixed(0)+"/100 · "+tacticalCountertrendReason.replace(/_/g," ")}/>}
                       <InsightRow label="เหตุผลเข้า/รอล่าสุด" value={latestDecisionCustomerText}/>
                       {latestCloseReason!=="NONE" && <InsightRow label="เหตุผลปิดล่าสุด" value={latestCloseCustomerText}/>}
                     </div>
