@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - "mt5/FastBasketBot.mq5"
+      - "scripts/upgrade-ea-brain-v7.ps1"
       - ".github/workflows/build-mt5-ea.yml"
 
 permissions:
@@ -36,14 +37,44 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Prepare private EA source
+      - name: Apply EA Brain V7 upgrade and prepare private source
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
+          & ".\scripts\upgrade-ea-brain-v7.ps1" -Path "mt5\FastBasketBot.mq5"
+
+          # Compatibility cleanup for the patch generator itself: convert the
+          # one intentional literal newline token to a real CRLF before compile.
+          $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
+          $patchedText = [System.IO.File]::ReadAllText($mq5Path)
+          $literal = '   g_confidenceGateEnabled = true;`r`n   g_confidenceThreshold = (int)MathMax(56.0, (double)g_confidenceThreshold);'
+          $actual = "   g_confidenceGateEnabled = true;`r`n   g_confidenceThreshold = (int)MathMax(56.0, (double)g_confidenceThreshold);"
+          $patchedText = $patchedText.Replace($literal, $actual)
+          [System.IO.File]::WriteAllText($mq5Path, $patchedText, [System.Text.UTF8Encoding]::new($false))
+
+          if ($patchedText -notmatch '#property\s+version\s+"1\.047"') {
+            throw "Brain V7 patch did not produce EA 1.047"
+          }
+          foreach ($sentinel in @(
+            'BrainV7LocalZoneBlocked',
+            'BrainV7PullbackConfirmationReady',
+            'BrainV7QualityGate',
+            'BrainV7BasketAdverseMove',
+            'BrainV7HandleBasketReversal'
+          )) {
+            if (-not $patchedText.Contains($sentinel)) {
+              throw "Brain V7 sentinel missing: $sentinel"
+            }
+          }
+
+          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV7.mq5"
+          Copy-Item -Force $mq5Path $patchedSource
+          "PATCHED_EA_SOURCE=$patchedSource" | Out-File -FilePath $env:GITHUB_ENV -Append
+
           $sourceDir = "C:\SCENOVA-EA-Source"
           New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
           $source = Join-Path $sourceDir "FastBasketBot.mq5"
-          Copy-Item -Force "mt5\FastBasketBot.mq5" $source
+          Copy-Item -Force $mq5Path $source
           "EA_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Compile private MQ5 to EX5
@@ -55,6 +86,12 @@ jobs:
           if (Test-Path $log) { Get-Content $log }
           $ex5 = [System.IO.Path]::ChangeExtension($env:EA_SOURCE, ".ex5")
           if (-not (Test-Path $ex5)) { throw "FastBasketBot.ex5 was not produced" }
+          if (Test-Path $log) {
+            $compileLog = Get-Content $log -Raw
+            if ($compileLog -match '(?i)\b[1-9][0-9]*\s+errors?\b') {
+              throw "MetaEditor reported compile errors"
+            }
+          }
           New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
           Copy-Item -Force $ex5 "mt5\release\FastBasketBot.ex5"
           $hash = (Get-FileHash -Algorithm SHA256 "mt5\release\FastBasketBot.ex5").Hash.ToLowerInvariant()
@@ -68,16 +105,14 @@ jobs:
             eaVersion = $eaVersion
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
+            brain = "V7"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "mt5\release\manifest.json"
 
-      - name: Publish compiled artifact to private repository
+      - name: Publish Brain V7 source and compiled artifact to private repository
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
 
-          # Preserve the compiled bytes outside the working tree. Rebasing a
-          # generated EX5 commit can conflict with another generated EX5 commit
-          # even when the MQ5 source itself did not conflict.
           $compiledEx5 = "$env:RUNNER_TEMP\FastBasketBot.ex5"
           $compiledManifest = "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
           Copy-Item -Force "mt5\release\FastBasketBot.ex5" $compiledEx5
@@ -88,19 +123,17 @@ jobs:
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
-            Write-Host "EA publish attempt $attempt/6"
-
+            Write-Host "EA Brain V7 publish attempt $attempt/6"
             git fetch origin main
             if ($LASTEXITCODE -ne 0) {
               Start-Sleep -Seconds 2
               continue
             }
 
-            # If a newer commit changed the MQ5 source, this build is obsolete.
-            # The newer source push has its own Build MT5 EA run.
+            # Do not overwrite a newer hand-edited MQ5 source.
             git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5
             if ($LASTEXITCODE -eq 1) {
-              Write-Host "A newer FastBasketBot.mq5 exists on main; skipping obsolete EX5 publish."
+              Write-Host "A newer FastBasketBot.mq5 exists on main; skipping obsolete Brain V7 publish."
               exit 0
             }
             if ($LASTEXITCODE -ne 0) {
@@ -110,15 +143,17 @@ jobs:
             git reset --hard origin/main
             if ($LASTEXITCODE -ne 0) { throw "Could not reset to latest main" }
 
+            Copy-Item -Force $env:PATCHED_EA_SOURCE "mt5\FastBasketBot.mq5"
             New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
             Copy-Item -Force $compiledEx5 "mt5\release\FastBasketBot.ex5"
             Copy-Item -Force $compiledManifest "mt5\release\manifest.json"
 
+            git add mt5/FastBasketBot.mq5
             git add -f mt5/release/FastBasketBot.ex5
             git add mt5/release/manifest.json
             git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "Compiled artifact is already current."
+              Write-Host "Brain V7 source and artifact are already current."
               $published = $true
               break
             }
@@ -126,8 +161,8 @@ jobs:
               throw "Could not inspect generated EA changes"
             }
 
-            git commit -m "build: publish private FastBasketBot.ex5 [skip ea build]"
-            if ($LASTEXITCODE -ne 0) { throw "Could not commit compiled EA" }
+            git commit -m "build: publish EA Brain V7 v1.047 [skip ea build]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V7 EA" }
 
             git push origin HEAD:main
             if ($LASTEXITCODE -eq 0) {
@@ -135,10 +170,10 @@ jobs:
               break
             }
 
-            Write-Host "Main moved while publishing EX5; retrying from latest main..."
+            Write-Host "Main moved while publishing Brain V7; retrying..."
             Start-Sleep -Seconds 2
           }
 
           if (-not $published) {
-            throw "Failed to publish FastBasketBot.ex5 after retries"
+            throw "Failed to publish EA Brain V7 after retries"
           }
