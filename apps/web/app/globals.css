@@ -6139,3 +6139,24 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .cc-v4 .cc-v6-market-insight{grid-template-columns:1fr;grid-template-rows:auto auto auto}.cc-v6-market-insight>.cc-v6-panel-head{grid-column:auto}.cc-v6-market-insight .cc-v6-market-bias{margin-top:11px}.cc-v6-market-insight .cc-v6-insight-rows{margin-top:9px}.cc-v4 .cc-live-terminal-head{padding:15px}.cc-v4 .cc-live-terminal-title .cc-terminal-icon{width:46px;height:46px}.cc-v4 .cc-live-terminal-title h2{font-size:17px}.cc-v4 .cc-live-terminal-status-grid,.cc-v4 .cc-live-terminal-mini-grid{padding-left:11px;padding-right:11px}.cc-v4 .cc-live-terminal-split{height:auto;padding:0 11px 12px;grid-template-columns:1fr;grid-template-rows:auto auto;overflow:visible}.cc-v4 .cc-live-terminal-half{height:auto;min-height:285px;overflow:visible}
 }
 @media(prefers-reduced-motion:reduce){.cc-v6-chart-line,.cc-v6-chart-area,.cc-v6-chart-point,.cc-v4 .cc-live-terminal-panel::before{animation:none!important}.cc-v4 .cc-live-status-card{transition:none!important}}
+
+/* ===== Control Center V8 · compact left analytics stack ===== */
+.cc-v6-analytics-grid{
+  grid-template-areas:"left account robot";
+  grid-template-rows:auto;
+  align-items:stretch
+}
+.cc-v8-left-stack{grid-area:left;min-width:0;display:grid;grid-template-rows:350px 224px;gap:14px}
+.cc-v8-left-stack>.cc-v6-hourly-chart,.cc-v8-left-stack>.cc-v6-market-insight{grid-area:auto;min-height:0;height:100%;box-sizing:border-box}
+.cc-v8-left-stack>.cc-v6-hourly-chart{padding:13px!important}.cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-panel-head{min-height:43px;padding-bottom:8px}.cc-v8-left-stack .cc-v6-chart-kpis{margin:9px 0;gap:6px}.cc-v8-left-stack .cc-v6-chart-kpis>div{min-height:49px;padding:7px 9px}.cc-v8-left-stack .cc-v6-chart-kpis b{font-size:14px}.cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-chart-canvas{height:210px}
+.cc-v8-left-stack>.cc-v6-market-insight{grid-template-columns:minmax(225px,.66fr) minmax(0,1.34fr);padding:12px!important}.cc-v8-left-stack .cc-v6-market-insight>.cc-v6-panel-head{min-height:41px;padding-bottom:7px}.cc-v8-left-stack .cc-v6-market-bias{min-height:0;margin-top:8px;padding:9px 11px}.cc-v8-left-stack .cc-v6-market-bias>svg{padding:5px}.cc-v8-left-stack .cc-v6-market-bias b{font-size:13px}.cc-v8-left-stack .cc-v6-insight-rows{margin-top:8px}.cc-v8-left-stack .cc-v6-insight-row{min-height:25px;padding:4px 8px;grid-template-columns:92px minmax(0,1fr)}
+
+@media(max-width:1240px){
+  .cc-v6-analytics-grid{grid-template-areas:"left account" "robot robot";grid-template-rows:auto 300px}.cc-v8-left-stack{grid-template-rows:350px 224px}.cc-v4 .cc-v6-ai-brand{min-height:0!important}
+}
+@media(max-width:880px){
+  .cc-v6-analytics-grid{grid-template-areas:"left" "account" "robot";grid-template-rows:auto}.cc-v8-left-stack{grid-template-rows:auto auto}.cc-v8-left-stack>.cc-v6-hourly-chart,.cc-v8-left-stack>.cc-v6-market-insight{height:auto}.cc-v8-left-stack>.cc-v6-hourly-chart{min-height:350px}.cc-v8-left-stack>.cc-v6-market-insight{min-height:224px}
+}
+@media(max-width:680px){
+  .cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-chart-canvas{height:205px}.cc-v8-left-stack>.cc-v6-market-insight{grid-template-columns:1fr;min-height:0}.cc-v8-left-stack .cc-v6-market-bias,.cc-v8-left-stack .cc-v6-insight-rows{margin-top:8px}
+}
