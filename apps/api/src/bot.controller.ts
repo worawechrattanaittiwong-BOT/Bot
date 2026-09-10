@@ -192,6 +192,8 @@ export class BotController {
       EXTREME_SPREAD: { label: "Spread รุนแรงเกินขอบเขต", detail: "Spread อยู่ระดับ EXTREME จึงหยุดเฉพาะการเปิดไม้ใหม่จนกว่าต้นทุนการส่งคำสั่งกลับสู่ระดับปลอดภัย", tone: "warn" },
       WAITING_EXECUTION_TURN: { label: "รอจังหวะกลับตาม Bias", detail: "Macro H1/M30/M15 ยังอยู่ทิศเดิม แต่ M1/M5 กำลังย่อ ระบบรอ EMA / Price Action / Momentum turning event ก่อนเปิดไม้ใหม่", tone: "good" },
       WAITING_BETTER_PRICE: { label: "รอราคาที่คุ้มกว่า", detail: "Entry Precision V3 พบว่าราคาเริ่มไกล Value จึงรอสั้น ๆ เพื่อหา Pullback/Sweep/Reclaim; มี Max Wait และจะกลับเข้าแบบ Acceptable อัตโนมัติ ไม่ค้างรอไม่สิ้นสุด", tone: "good" },
+      WAIT_INDICATOR_CONTEXT: { label: "Indicator V6 รอบริบทดีขึ้น", detail: "Location + Execution + Composite อ่อนพร้อมกัน ระบบรอสั้น ๆ แบบ bounded wait เท่านั้น ไม่มี Indicator ตัวเดียวมีสิทธิ์บล็อกออเดอร์", tone: "good" },
+      INDICATOR_CONTEXT_ADD_WAIT: { label: "Indicator V6 ชะลอไม้เพิ่ม", detail: "ใช้เฉพาะ Adaptive mode เมื่อ Location + Structure + Execution อ่อนพร้อมกัน เพื่อไม่เติม Basket ในจุดเสียเปรียบ; Max Positions ของผู้ใช้ไม่ถูกเปลี่ยน", tone: "good" },
       BUY_WAIT_PULLBACK: { label: "ไม่ไล่ BUY บนยอด", detail: "Macro อาจยังขึ้น แต่ราคาอยู่ใกล้ Local Top/Failed Breakout/Rejection ระบบรอ Pullback หรือ Breakout Hold จริงก่อน BUY", tone: "warn" },
       SELL_WAIT_PULLBACK: { label: "ไม่ไล่ SELL ที่ก้น", detail: "Macro อาจยังลง แต่ราคาอยู่ใกล้ Local Bottom/Failed Breakdown/Rejection ระบบรอ Pullback หรือ Breakdown Hold จริงก่อน SELL", tone: "warn" },
       TACTICAL_COUNTERTREND_EXIT: { label: "ปิด Tactical Countertrend", detail: "Macro เดิมกลับมายืนยันบน M5/M1 แล้ว ระบบปิดไม้สวนสั้นและไม่ส่งเข้า Rescue/Hedge", tone: "good" },
