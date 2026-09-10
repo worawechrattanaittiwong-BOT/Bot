@@ -49,14 +49,21 @@ validate_generated_ea_shape() {
   subject="$(git log -1 --format=%s "$sha" 2>/dev/null || true)"
   author_email="$(git log -1 --format=%ae "$sha" 2>/dev/null || true)"
 
-  [ "$subject" = "build: publish private FastBasketBot.ex5 [skip ea build]" ] || return 1
+  case "$subject" in
+    "build: publish private FastBasketBot.ex5 [skip ea build]"|\
+    "build: publish EA Brain V"*" [skip ea build]")
+      ;;
+    *)
+      return 1
+      ;;
+  esac
   [ "$author_email" = "actions@users.noreply.github.com" ] || return 1
 
   changed="$(git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null || true)"
   while IFS= read -r file; do
     [ -z "$file" ] && continue
     case "$file" in
-      mt5/release/FastBasketBot.ex5|mt5/release/manifest.json)
+      mt5/FastBasketBot.mq5|mt5/release/FastBasketBot.ex5|mt5/release/manifest.json)
         ;;
       *)
         return 1
@@ -65,6 +72,7 @@ validate_generated_ea_shape() {
   done <<< "$changed"
 
   git cat-file -e "$sha:mt5/release/FastBasketBot.ex5" 2>/dev/null || return 1
+  git cat-file -e "$sha:mt5/release/manifest.json" 2>/dev/null || return 1
   return 0
 }
 
