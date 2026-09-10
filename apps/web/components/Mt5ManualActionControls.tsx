@@ -70,15 +70,10 @@ export function Mt5ManualActionControls() {
     if (typeof document === "undefined") return;
 
     const locate = () => {
-      const updateRow = Array.from(document.querySelectorAll(".cc-update-alert-row"))
-        .find((node) => (node.textContent || "").includes("EA Runtime ไม่ตรงเวอร์ชัน"));
-
-      let updateNode = updateRow?.querySelector(".scenova-manual-ea-update-mount") || null;
-      if (updateRow && !updateNode) {
-        updateNode = document.createElement("div");
-        updateNode.className = "scenova-manual-ea-update-mount";
-        updateRow.appendChild(updateNode);
-      }
+      // Use a stable mount rendered inside the alert action column. The old
+      // text-query/append approach created a fourth grid item in a three-column
+      // row, so the button overlapped the copy and appeared to be missing.
+      const updateNode = document.getElementById("scenova-ea-update-action-mount");
       setUpdateMount(current => current === updateNode ? current : updateNode);
 
       const hero = document.querySelector(".cc-v6-hero-actions");
@@ -268,7 +263,7 @@ export function Mt5ManualActionControls() {
               ? `อัปเดต SCENOVA ${installerVersion} + EA`
               : updatePending || busyAction === "UPDATE_EA_RESTART"
                 ? "กำลังอัปเดต..."
-                : "อัปเดต EA ตอนนี้"}
+                : `อัปเดต EA v${String(update?.latestEaVersion || "ล่าสุด")}`}
           </button>
           {positions > 0 && <small>ปิดออเดอร์ให้หมดก่อน</small>}
           {installerRequired && <small>ติดตั้ง Agent รุ่นล่าสุด 1 ครั้ง แล้ว Auto Recovery จะทำต่อเอง</small>}
@@ -321,7 +316,7 @@ export function Mt5ManualActionControls() {
   return (
     <>
       <style>{`
-        .scenova-manual-ea-update-mount{grid-column:3;align-self:center;justify-self:end}
+        #scenova-ea-update-action-mount{display:flex;justify-content:flex-end;width:100%;margin-top:4px}
         .scenova-manual-action-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
         .scenova-manual-action{border:1px solid rgba(255,118,138,.36);background:linear-gradient(135deg,rgba(174,42,70,.34),rgba(100,32,64,.28));color:#ffd5dc;border-radius:11px;padding:9px 14px;font-size:11px;font-weight:900;cursor:pointer;white-space:nowrap;box-shadow:0 8px 24px rgba(85,20,39,.16)}
         .scenova-manual-action:hover:not(:disabled){border-color:rgba(255,140,158,.64);transform:translateY(-1px)}
@@ -335,7 +330,7 @@ export function Mt5ManualActionControls() {
         .scenova-manual-toast{position:fixed;right:22px;bottom:22px;z-index:9999;max-width:430px;border-radius:14px;padding:12px 15px;font-size:12px;font-weight:750;box-shadow:0 16px 50px rgba(0,0,0,.32)}
         .scenova-manual-toast.ok{background:#102a23;border:1px solid rgba(70,207,158,.35);color:#9aebcc}
         .scenova-manual-toast.err{background:#31161d;border:1px solid rgba(255,98,120,.38);color:#ffb3c0}
-        @media(max-width:980px){.scenova-manual-ea-update-mount{grid-column:2;justify-self:start}.scenova-manual-action-wrap{align-items:flex-start}}
+        @media(max-width:980px){#scenova-ea-update-action-mount{justify-content:flex-start}.scenova-manual-action-wrap{align-items:flex-start}}
         @media(max-width:720px){.scenova-manual-action{width:100%}.scenova-manual-toast{left:14px;right:14px;bottom:14px}}
       `}</style>
       {updateButton}

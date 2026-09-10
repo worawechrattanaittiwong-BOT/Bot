@@ -1538,9 +1538,10 @@ export default function DashboardPage() {
                     <strong>
                       {(state === "RUNNING" || desired === "RUNNING" || currentPositions > 0)
                         ? "หยุดบอท และรอให้ออเดอร์เป็น 0"
-                        : "ไม่ต้องติดตั้งเอง — รอ Agent อัปเดต EA อัตโนมัติ"}
+                        : `พร้อมอัปเดต EA เป็น v${softwareUpdate.latestEaVersion || "ล่าสุด"}`}
                     </strong>
-                    <small>เมื่อปลอดภัย Agent จะโหลด EA รุ่นใหม่และรีโหลด MT5 ให้เอง</small>
+                    <small>กดอัปเดตหนึ่งครั้ง ระบบจะตรวจไฟล์และรีสตาร์ท MT5 เพียงรอบเดียว</small>
+                    <div id="scenova-ea-update-action-mount" />
                   </div>
                 </div>
               )}
@@ -1556,9 +1557,12 @@ export default function DashboardPage() {
                     <strong>
                       {(state === "RUNNING" || desired === "RUNNING" || currentPositions > 0)
                         ? "หยุดบอท และรอให้ออเดอร์เป็น 0"
-                        : "ไม่ต้องติดตั้งเอง — รอ Agent รีโหลด EX5 อัตโนมัติ"}
+                        : "พร้อมตรวจสอบและติดตั้งไฟล์ EA ล่าสุด"}
                     </strong>
-                    <small>ระบบจะไม่บังคับ Restart MT5 ระหว่างที่บอทกำลังทำงานหรือยังมี Position</small>
+                    <small>ระบบจะไม่รีสตาร์ท MT5 ระหว่างบอททำงานหรือยังมี Position</small>
+                    {!(softwareUpdate.eaUpdateRequired || !softwareUpdate.eaVersionMatch) && (
+                      <div id="scenova-ea-update-action-mount" />
+                    )}
                   </div>
                 </div>
               )}
