@@ -5523,8 +5523,26 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       : AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
    atr = MathMax(10.0, atr);
 
+   double fillElapsedSeconds = g_burstStartedAt > 0
+      ? MathMax(0.0,(double)(TimeCurrent()-g_burstStartedAt))
+      : 0.0;
+   double fillWindowSeconds = 600.0;
+   double rungCadenceSeconds = targetPositions > 1
+      ? fillWindowSeconds / (double)(targetPositions-1)
+      : fillWindowSeconds;
+   g_fillExpectedPositions = targetPositions <= 1
+      ? 1
+      : MathMin(
+           targetPositions,
+           1 + (int)MathFloor(fillElapsedSeconds/MathMax(15.0,rungCadenceSeconds))
+        );
+   bool fillBehindSchedule = count < g_fillExpectedPositions;
+   g_fillUrgency = MathMax(0.0,MathMin(1.0,fillElapsedSeconds/fillWindowSeconds));
+
    double qualityFactor = g_entryQuality == "A" ? 0.95 :
                           g_entryQuality == "B" ? 1.10 : 1.30;
+   if(fillBehindSchedule)
+      qualityFactor *= MathMax(0.58,1.0-g_fillUrgency*0.35);
    double regimeFactor =
       g_marketRegimeDetail == "NEWS_IMPULSE" ? 1.15 :
       g_marketRegime == "HIGH_VOLATILITY" ? 1.10 :
@@ -5567,10 +5585,35 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       )
    );
 
+   // Completion-oriented path: when the Basket falls behind the user's target
+   // pace, allow the next rung on a fresh execution turn without waiting for a
+   // large favorable move first. This never fires from time alone.
+   if(fillBehindSchedule)
+   {
+      double scheduledPa = direction > 0
+         ? g_priceActionBuyScore
+         : g_priceActionSellScore;
+      bool scheduledTurn = RecentDirectionalBody(direction,PERIOD_M1);
+      bool scheduledConfirm =
+         LowerTimeframeSupportsDirection(direction) ||
+         (direction > 0 && g_emaReclaimState == "RECLAIM_EMA21_UP") ||
+         (direction < 0 && g_emaReclaimState == "LOSE_EMA21_DOWN") ||
+         scheduledPa >= 20.0 ||
+         MomentumSupportsDirection(direction,MomentumPoints(),0.35);
+
+      if(scheduledTurn && scheduledConfirm)
+      {
+         g_ladderMode = "SCHEDULED_RETEST_READY";
+         return true;
+      }
+   }
+
    if(!g_ladderPullbackArmed &&
       g_ladderProgressPoints < g_ladderRequiredPoints)
    {
-      g_ladderMode = "WAIT_PROGRESS";
+      g_ladderMode = fillBehindSchedule
+         ? "WAIT_SCHEDULED_TURN"
+         : "WAIT_PROGRESS";
       return false;
    }
 
