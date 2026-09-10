@@ -290,6 +290,22 @@ jobs:
           OLD_RUNTIME_START_HTTP=$(curl -sS -o /tmp/outdated-ea-start.json -w "%{http_code}" -X POST "$BASE/bot/start?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$OLD_RUNTIME_START_HTTP" = "409"
 
+          echo "[integration] version mismatch never restarts MT5 without a user action"
+          NO_AUTO_ACTION=$(curl -fsS -X POST "$BASE/ea/agent-actions" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\"}")
+          test "$(printf '%s' "$NO_AUTO_ACTION" | jq -r '.manualActionPending')" = "false"
+          test "$(printf '%s' "$NO_AUTO_ACTION" | jq -r '.manualActionName // empty')" = ""
+
+          echo "[integration] explicit EA update creates one user-authorized action"
+          UPDATE_ACTION=$(curl -fsS -X POST "$BASE/bot/mt5/manual-action?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"action":"UPDATE_EA_RESTART"}')
+          UPDATE_ACTION_ID=$(printf '%s' "$UPDATE_ACTION" | jq -r '.actionId')
+          test -n "$UPDATE_ACTION_ID"
+          UPDATE_POLL=$(curl -fsS -X POST "$BASE/ea/agent-actions" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\"}")
+          test "$(printf '%s' "$UPDATE_POLL" | jq -r '.manualActionPending')" = "true"
+          test "$(printf '%s' "$UPDATE_POLL" | jq -r '.manualActionName')" = "UPDATE_EA_RESTART"
+          curl -fsS -X POST "$BASE/ea/agent-actions/ack" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"actionId\":\"$UPDATE_ACTION_ID\",\"status\":\"FAILED\",\"message\":\"integration cleanup\"}" >/dev/null
+          AFTER_FAILED_ACTION=$(curl -fsS -X POST "$BASE/ea/agent-actions" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\"}")
+          test "$(printf '%s' "$AFTER_FAILED_ACTION" | jq -r '.manualActionPending')" = "false"
+
           CURRENT_RUNTIME=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           CURRENT_RUNTIME_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$CURRENT_RUNTIME_DASH" | jq -r '.softwareUpdate.eaVersionMatch')" = "true"

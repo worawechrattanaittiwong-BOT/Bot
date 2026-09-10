@@ -1,14 +1,10 @@
 import { Body, ConflictException, Controller, Post } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
 import { DbService } from "./db.service";
 import { isEaVersionExact, latestEaRelease } from "./release-version";
 import { CryptoService } from "./security";
 
-const AUTO_ACTION_RETRY_MS = 3 * 60_000;
-const START_RECOVERY_RETRY_MS = 35_000;
 const ACTION_PENDING_TTL_MS = 15 * 60_000;
 
-type AutoMt5Action = "UPDATE_EA_RESTART" | "CONNECT_MT5";
 type AccessState = {
   allowed: boolean;
   source: "OWNER" | "SUBSCRIPTION" | "TRIAL" | "TRIAL_READY" | "NONE";
@@ -176,39 +172,6 @@ export class AgentActionController {
     return true;
   }
 
-  private async queueAutomaticAction(
-    instance: any,
-    action: AutoMt5Action,
-    message: string,
-    source: "AUTO" | "START_RECOVERY" = "AUTO"
-  ) {
-    const actionId = randomUUID();
-    const requestedAt = new Date().toISOString();
-    const previousAttempt = Math.max(
-      0,
-      Number(instance.metrics?.manualMt5ActionAttempt || 0)
-    );
-    const attempt = source === "START_RECOVERY" ? previousAttempt + 1 : 1;
-
-    await this.db.query(
-      `UPDATE bot_instances
-       SET metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
-         'manualMt5ActionName',$2::text,
-         'manualMt5ActionId',$3::text,
-         'manualMt5ActionRequestedAt',$4::text,
-         'manualMt5ActionStatus','PENDING',
-         'manualMt5ActionSource',$5::text,
-         'manualMt5ActionMessage',$6::text,
-         'manualMt5ActionAttempt',$7::int,
-         'startAfterRepairStatus',CASE WHEN $5='START_RECOVERY' THEN 'REPAIRING' ELSE COALESCE(metrics->>'startAfterRepairStatus','IDLE') END
-       )
-       WHERE id=$1`,
-      [instance.id, action, actionId, requestedAt, source, message, attempt]
-    );
-
-    return { actionId, requestedAt, attempt };
-  }
-
   @Post("agent-actions")
   async actions(@Body() body: { instanceId?: string; installToken?: string }) {
     const instanceId = String(body.instanceId || "").trim();
@@ -239,7 +202,7 @@ export class AgentActionController {
     const runtimeReady = isEaVersionExact(currentEaVersion, eaVersionRequired);
     const hashReady = Boolean(requiredEaHash && currentEaHash === requiredEaHash);
     const metrics = instance.metrics || {};
-    const recoveryRequested = metrics.startAfterRepairRequested === true;
+    let recoveryRequested = metrics.startAfterRepairRequested === true;
     const tradingReady =
       metrics.dailyProfitLocked !== true &&
       metrics.terminalConnected !== false &&
@@ -248,11 +211,14 @@ export class AgentActionController {
       metrics.accountTradeAllowed !== false &&
       metrics.accountTradeExpert !== false;
 
-    // A Start click can now survive an EA update/reconnect. Keep desired_state
-    // STOPPED while repair is happening, then atomically issue START only after
-    // the live EA runtime AND the EX5 on disk both match the release.
+    // Complete recovery only after the Agent ACKs the single user-authorized
+    // restart. Completing it while the Agent is still polling PENDING changes
+    // the action id/status underneath verification and previously caused the
+    // Agent to report failure, followed by another restart loop.
     if (
       recoveryRequested &&
+      String(instance.manual_action_source || "") === "START_RECOVERY" &&
+      String(instance.manual_action_status || "").toUpperCase() === "ACKED" &&
       eaOnline &&
       positions <= 0 &&
       runtimeReady &&
@@ -292,7 +258,49 @@ export class AgentActionController {
     const previousAgeMs = previousRequestedAt
       ? Date.now() - previousRequestedAt.getTime()
       : Number.POSITIVE_INFINITY;
+    const actionStatus = String(instance.manual_action_status || "").toUpperCase();
+    const actionSource = String(instance.manual_action_source || "").toUpperCase();
+    const sourceIsUserAuthorized = actionSource === "USER" || actionSource === "START_RECOVERY";
+    const stalePending = Boolean(
+      instance.manual_action_id &&
+      instance.manual_action_name &&
+      previousRequestedAt &&
+      previousAgeMs > ACTION_PENDING_TTL_MS &&
+      actionStatus === "PENDING"
+    );
+    const legacyAutomaticPending = Boolean(
+      instance.manual_action_id &&
+      actionStatus === "PENDING" &&
+      !sourceIsUserAuthorized
+    );
+
+    // Cancel actions created by the retired background auto-recovery logic and
+    // expire a one-time request instead of retrying it forever. A new MT5
+    // restart now always requires a fresh button click from the customer.
+    if (stalePending || legacyAutomaticPending) {
+      const failureMessage = legacyAutomaticPending
+        ? "ยกเลิกคำสั่งควบคุม MT5 อัตโนมัติเดิมแล้ว กรุณากดอัปเดตหรือเชื่อมต่อเมื่อต้องการ"
+        : "คำสั่งหมดเวลารอ ระบบยกเลิกแล้ว กรุณากดใหม่เมื่อต้องการ";
+      await this.db.query(
+        `UPDATE bot_instances
+         SET metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
+           'manualMt5ActionStatus','FAILED',
+           'manualMt5ActionAckAt',$2::text,
+           'manualMt5ActionMessage',$3::text,
+           'startAfterRepairRequested',false,
+           'startAfterRepairStatus','FAILED',
+           'startAfterRepairMessage',$3::text
+         )
+         WHERE id=$1`,
+        [instance.id, new Date().toISOString(), failureMessage]
+      );
+      recoveryRequested = false;
+    }
+
     let manualActionActive = Boolean(
+      sourceIsUserAuthorized &&
+      !stalePending &&
+      !legacyAutomaticPending &&
       instance.manual_action_id &&
       instance.manual_action_name &&
       previousRequestedAt &&
@@ -311,56 +319,6 @@ export class AgentActionController {
       ? previousRequestedAt.toISOString()
       : null;
     let manualActionStatus = String(instance.manual_action_status || "") || null;
-
-    // Automatic repair is always bounded by Server safety: desired state must
-    // not be RUNNING and there must be no open positions. During Start Recovery
-    // failed/ACKed restart attempts are retried more quickly so the user does
-    // not get stuck behind a stale one-time action.
-    if (!manualActionActive && safeToRestart) {
-      const runtimeMismatch = !runtimeReady;
-      const fileMismatch = !hashReady;
-
-      let automaticAction: AutoMt5Action | null = null;
-      let automaticMessage = "";
-      if (runtimeMismatch || fileMismatch || (recoveryRequested && !tradingReady)) {
-        automaticAction = "UPDATE_EA_RESTART";
-        automaticMessage = recoveryRequested
-          ? "Start Recovery: EA/EX5 หรือสิทธิ์ Runtime ยังไม่พร้อม ระบบกำลังอัปเดตและรีโหลด MT5 อัตโนมัติ"
-          : "SCENOVA Auto Update: ตรวจพบ EA/EX5 ไม่ตรง Server ระบบอนุญาตให้ Agent อัปเดตและรีโหลด MT5 อัตโนมัติเมื่อปลอดภัย";
-      } else if (!eaOnline) {
-        automaticAction = "CONNECT_MT5";
-        automaticMessage = recoveryRequested
-          ? "Start Recovery: EA Offline ระบบกำลังเปิด/เชื่อม MT5 และจะ Start ให้อัตโนมัติ"
-          : "SCENOVA Auto Connect: EA Offline ขณะบอทหยุดและไม่มี Position ระบบอนุญาตให้ Agent เปิด/เชื่อม MT5 อัตโนมัติ";
-      }
-
-      const retryMs = recoveryRequested
-        ? START_RECOVERY_RETRY_MS
-        : AUTO_ACTION_RETRY_MS;
-      const recentlyTriedSameAction = Boolean(
-        automaticAction &&
-        String(instance.manual_action_name || "") === automaticAction &&
-        previousAgeMs >= 0 &&
-        previousAgeMs < retryMs &&
-        ["ACKED", "FAILED"].includes(
-          String(instance.manual_action_status || "").toUpperCase()
-        )
-      );
-
-      if (automaticAction && !recentlyTriedSameAction) {
-        const queued = await this.queueAutomaticAction(
-          instance,
-          automaticAction,
-          automaticMessage,
-          recoveryRequested ? "START_RECOVERY" : "AUTO"
-        );
-        manualActionActive = true;
-        manualActionName = automaticAction;
-        manualActionId = queued.actionId;
-        manualActionRequestedAt = queued.requestedAt;
-        manualActionStatus = "PENDING";
-      }
-    }
 
     return {
       ok: true,
@@ -412,8 +370,9 @@ export class AgentActionController {
     }
 
     const recoveryRequested = instance.metrics?.startAfterRepairRequested === true;
-    const recoveryMessage = recoveryRequested && status === "FAILED"
-      ? "Auto Recovery รอบนี้ยังไม่สำเร็จ ระบบจะลองใหม่อัตโนมัติ"
+    const recoveryFailed = recoveryRequested && status === "FAILED";
+    const recoveryMessage = recoveryFailed
+      ? "การซ่อม EA รอบนี้ไม่สำเร็จและหยุดแล้ว กรุณาตรวจ MT5 แล้วกดใหม่เมื่อต้องการ"
       : message;
 
     await this.db.query(
@@ -422,7 +381,13 @@ export class AgentActionController {
          'manualMt5ActionStatus',$2::text,
          'manualMt5ActionAckAt',$3::text,
          'manualMt5ActionMessage',$4::text,
+         'startAfterRepairRequested',CASE
+           WHEN $5::boolean THEN false
+           ELSE COALESCE((metrics->>'startAfterRepairRequested')::boolean,false)
+         END,
          'startAfterRepairStatus',CASE
+           WHEN $5::boolean THEN 'FAILED'
+           WHEN COALESCE((metrics->>'startAfterRepairRequested')::boolean,false) AND $2='ACKED' THEN 'VERIFYING'
            WHEN COALESCE((metrics->>'startAfterRepairRequested')::boolean,false) THEN 'REPAIRING'
            ELSE COALESCE(metrics->>'startAfterRepairStatus','IDLE')
          END,
@@ -432,7 +397,7 @@ export class AgentActionController {
          END
        )
        WHERE id=$1`,
-      [instanceId, status, new Date().toISOString(), recoveryMessage]
+      [instanceId, status, new Date().toISOString(), recoveryMessage, recoveryFailed]
     );
 
     return { ok: true, actionId, status };
