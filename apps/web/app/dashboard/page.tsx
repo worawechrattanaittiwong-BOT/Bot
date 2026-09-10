@@ -1291,7 +1291,9 @@ export default function DashboardPage() {
       payload.riskPerOrderPercent = 0.25;
       payload.allowMinimumLotOverride = true;
       payload.hardStopAtrMultiplier = 2;
-      payload.confidenceGateEnabled = Boolean(settings.confidenceGateEnabled);
+      // The simplified control modes do not expose a hidden entry gate.
+      // Confidence is still calculated by the EA, but it cannot silently block orders.
+      payload.confidenceGateEnabled = false;
       payload.confidenceThreshold = 55;
       payload.sessionStartHour = 0;
       payload.sessionEndHour = 24;
@@ -1299,6 +1301,9 @@ export default function DashboardPage() {
       payload.profitTargetMode = ["AUTO","MANUAL","OFF"].includes(
         String(settings.profitTargetMode || "AUTO").toUpperCase()
       ) ? String(settings.profitTargetMode || "AUTO").toUpperCase() : "AUTO";
+      // Daily target in the compact settings means "stop at target" exactly.
+      // Remove the retired hidden giveback behavior from saved configurations.
+      payload.dailyProfitContinueAfterTarget = false;
 
       if (payload.profitTargetMode === "AUTO" || payload.profitTargetMode === "OFF") {
         payload.basketProfitTargetMoney = 0;
@@ -2640,231 +2645,144 @@ function EmptySetup({onNext}:{onNext:()=>void}) {
 }
 
 function BotSettingsModal(props:any) {
-  const [activeSection,setActiveSection] = useState("basic");
-
-  useEffect(() => {
-    if (props.open) setActiveSection("basic");
-  }, [props.open]);
-
   if (!props.open) return null;
 
-  const profitTargetMode = String(props.settings?.profitTargetMode ||
-    (Number(props.settings?.basketProfitTargetMoney || 0) > 0 ||
-     Number(props.settings?.perPositionProfitMoney || 0) > 0 ? "MANUAL" : "AUTO")).toUpperCase();
-  const basketProfitEnabled = profitTargetMode === "MANUAL" && Number(props.settings?.basketProfitTargetMoney || 0) > 0;
-  const perPositionProfitEnabled = profitTargetMode === "MANUAL" && Number(props.settings?.perPositionProfitMoney || 0) > 0;
+  const entryMode = String(props.settings?.entryMode || "AUTO_MOMENTUM");
+  const profitTargetMode = String(props.settings?.profitTargetMode || "AUTO").toUpperCase();
   const manualSl = Number(props.settings?.manualStopLossPoints || 0);
-  const stopLossMode = manualSl > 0 ? "MANUAL" : "AUTO";
-  const suggestedManualSl = String(Math.max(
-    1,
-    Math.round(Number(
-      props.systemHardStopDistancePoints ||
-      props.hardStopDistancePoints ||
-      1000
-    ))
-  ));
+  const hasManualExit = profitTargetMode === "MANUAL" || manualSl > 0;
+  const controlMode = entryMode === "AUTO_MOMENTUM" ? "AUTO" : hasManualExit ? "MANUAL" : "ASSISTED";
+  const profitKind = Number(props.settings?.perPositionProfitMoney || 0) > 0 ? "POSITION" : "BASKET";
+  const suggestedManualSl = String(Math.max(1, Math.round(Number(
+    props.systemHardStopDistancePoints || props.hardStopDistancePoints || 1000
+  ))));
+  const modeCopy:Record<string,{title:string;subtitle:string}> = {
+    AUTO:{title:"อัตโนมัติ",subtitle:"EA เลือกทิศทาง จุดเข้า และจังหวะปิด"},
+    ASSISTED:{title:"ช่วยตัดสินใจ",subtitle:"คุณกำหนดฝั่ง EA เลือกจุดเข้าและทางออก"},
+    MANUAL:{title:"กำหนดเอง",subtitle:"คุณกำหนดฝั่ง จำนวน Lot เป้ากำไร และ SL"}
+  };
+
+  const applyControlMode = (mode:string) => {
+    const fixedDirection = entryMode === "SELL_ONLY" ? "SELL_ONLY" : "BUY_ONLY";
+    props.onEdit?.("confidenceGateEnabled",false);
+    if (mode === "AUTO") {
+      props.onEdit?.("entryMode","AUTO_MOMENTUM");
+      props.onEdit?.("profitTargetMode","AUTO");
+      props.onEdit?.("manualStopLossPoints",0);
+      return;
+    }
+    props.onEdit?.("entryMode",fixedDirection);
+    if (mode === "ASSISTED") {
+      props.onEdit?.("profitTargetMode","AUTO");
+      props.onEdit?.("manualStopLossPoints",0);
+      return;
+    }
+    props.onEdit?.("profitTargetMode","MANUAL");
+    if (Number(props.settings?.basketProfitTargetMoney || 0) <= 0 && Number(props.settings?.perPositionProfitMoney || 0) <= 0) {
+      props.onEdit?.("basketProfitTargetMoney",10);
+    }
+    if (manualSl <= 0) props.onEdit?.("manualStopLossPoints",suggestedManualSl);
+  };
+
+  const directionLabel = entryMode === "SELL_ONLY" ? "SELL เท่านั้น" : entryMode === "BUY_ONLY" ? "BUY เท่านั้น" : "EA เลือก BUY / SELL";
+  const exitLabel = controlMode === "MANUAL"
+    ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")
+    : "Dynamic Profit Protection";
+  const slLabel = controlMode === "MANUAL" ? Number(manualSl).toFixed(0)+" points" : "ATR × 2.00";
 
   return (
     <div className="cc-bot-modal-backdrop" role="presentation" onMouseDown={e=>{
       if (e.target === e.currentTarget && !props.busy) props.onClose?.();
     }}>
-      <div className="cc-bot-modal cc-bot-modal-full" role="dialog" aria-modal="true" aria-labelledby="cc-bot-modal-title">
-        <div className="cc-bot-modal-head">
+      <div className="cc-bot-modal cc-bot-modal-full cc-bot-v2" role="dialog" aria-modal="true" aria-labelledby="cc-bot-modal-title">
+        <div className="cc-bot-modal-head cc-bot-v2-head">
           <div className="cc-bot-modal-title">
-            <span><ScenovaIcon name="bot" size={26}/></span>
-            <div>
-              <h2 id="cc-bot-modal-title">ตั้งค่าบอททั้งหมด</h2>
-              <small>ตั้งค่าการเข้าออเดอร์ เป้ากำไร ความเสี่ยง และเวลาเทรด</small>
-            </div>
+            <span><ScenovaIcon name="bot" size={25}/></span>
+            <div><small className="cc-bot-v2-kicker">SCENOVA BOT CONTROL</small><h2 id="cc-bot-modal-title">ตั้งค่าบอท</h2></div>
           </div>
           <div className="cc-bot-modal-head-actions">
-            <span className={"cc-bot-modal-dirty "+(props.dirty?"warn":"good")}><i/>{props.dirty?"มีค่าที่ยังไม่บันทึก":"ค่าถูกบันทึกแล้ว"}</span>
+            <span className={"cc-bot-modal-dirty "+(props.dirty?"warn":"good")}><i/>{props.dirty?"รอบันทึก":"บันทึกแล้ว"}</span>
             <button type="button" className="cc-bot-modal-close" onClick={()=>props.onClose?.()} disabled={props.busy} aria-label="ปิดหน้าต่างตั้งค่าบอท">×</button>
           </div>
         </div>
 
-        <div className="cc-bot-modal-body">
-          <section className="cc-smart-engine-banner">
-            <span className="cc-smart-engine-icon"><ScenovaIcon name="brain" size={24}/></span>
-            <div className="cc-smart-engine-copy">
-              <b>Setup-First Intelligence พร้อมทำงาน</b>
-              <small>วิเคราะห์ M1/M5/M15/M30/H1 + แนวรับ–แนวต้าน + Order Block + Fibonacci + Price Action โดย Confidence เป็นตัวกรองเสริมที่เลือกเปิดได้</small>
-            </div>
-            <div className="cc-smart-engine-badges">
-              <span>{"Fib M5 + M15 · หลัก "+String(props.metrics?.fibTimeframe||"กำลังเลือก")}</span>
-              <span>เปิดเป็นชุดอัตโนมัติ</span>
-              <span>{String(props.metrics?.entryModel||"กำลังวิเคราะห์")}</span>
-            </div>
-          </section>
-
-          <nav className="cc-bot-settings-nav" aria-label="หมวดการตั้งค่าบอท">
-            <button type="button" className={activeSection==="basic"?"active":""} onClick={()=>setActiveSection("basic")} aria-current={activeSection==="basic"?"page":undefined}>
-              <span><ScenovaIcon name="settings" size={18}/></span>
-              <div><b>ตั้งค่าพื้นฐาน</b><small>{Number(props.settings.maxPositions||1)} ไม้ · {Number(props.settings.lot||0.01).toFixed(2)} Lot</small></div>
-            </button>
-            <button type="button" className={activeSection==="profit"?"active":""} onClick={()=>setActiveSection("profit")} aria-current={activeSection==="profit"?"page":undefined}>
-              <span><ScenovaIcon name="profit" size={18}/></span>
-              <div><b>เป้าหมายกำไร</b><small>{profitTargetMode==="AUTO"?"Auto · รักษากำไรตามตลาด":profitTargetMode==="OFF"?"ปิดอยู่":basketProfitEnabled?"กำไรรวม $"+Number(props.settings.basketProfitTargetMoney).toFixed(2):perPositionProfitEnabled?"ต่อไม้ $"+Number(props.settings.perPositionProfitMoney).toFixed(2):"กำหนดเอง"}</small></div>
-            </button>
-            <button type="button" className={activeSection==="risk"?"active":""} onClick={()=>setActiveSection("risk")} aria-current={activeSection==="risk"?"page":undefined}>
-              <span><ScenovaIcon name="shield" size={18}/></span>
-              <div><b>ป้องกันขาดทุน</b><small>{stopLossMode==="AUTO"?"Auto · ระบบตั้ง SL":"กำหนดเอง · "+Number(manualSl).toFixed(0)+" pt"}</small></div>
-            </button>
-            <button type="button" className={activeSection==="time"?"active":""} onClick={()=>setActiveSection("time")} aria-current={activeSection==="time"?"page":undefined}>
-              <span><ScenovaIcon name="clock" size={18}/></span>
-              <div><b>เวลาเทรด</b><small>{String(props.settings.sessionStartHour).padStart(2,"0")}:00–{String(props.settings.sessionEndHour).padStart(2,"0")}:00</small></div>
-            </button>
-          </nav>
-
-          <section className="cc-bot-basic-section cc-bot-settings-panel" hidden={activeSection!=="basic"}>
-            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">1</span><div><b>ตั้งค่าพื้นฐาน</b><small>เลือกทิศทาง จำนวนไม้ และ Lot ที่ต้องการ</small></div></div></div>
-            <div className="cc-bot-basic-grid">
-              <div className="cc-bot-basic-card">
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="gold" size={19}/></span><div><b>Symbol</b><small>สินทรัพย์ที่ EA กำลังทำงานอยู่</small></div></div>
-                <div className="cc-bot-basic-readonly">{props.symbol || "—"}</div>
-              </div>
-              <label className="cc-bot-basic-card">
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="bot" size={19}/></span><div><b>ทิศทางออเดอร์</b><small>AUTO ให้ระบบเลือก BUY/SELL อัตโนมัติ</small></div></div>
-                <select className="input" value={String(props.settings.entryMode||"AUTO_MOMENTUM")} onChange={e=>props.onEdit?.("entryMode",e.target.value)}>
-                  <option value="AUTO_MOMENTUM">AUTO SMART — Setup-First เลือก BUY/SELL</option>
-                  <option value="BUY_ONLY">BUY ONLY — เปิดเฉพาะ Buy</option>
-                  <option value="SELL_ONLY">SELL ONLY — เปิดเฉพาะ Sell</option>
-                </select>
-              </label>
-              <label className="cc-bot-basic-card">
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="layers" size={19}/></span><div><b>จำนวนไม้</b><small>เมื่อสัญญาณผ่าน ระบบจะเปิดเป็นชุดตามจำนวนนี้</small></div></div>
-                <select className="input" value={String(props.settings.maxPositions||1)} onChange={e=>props.onEdit?.("maxPositions",e.target.value)}>
-                  {[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}
-                </select>
-              </label>
-              <label className="cc-bot-basic-card">
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="lot" size={19}/></span><div><b>Lot ต่อไม้</b><small>ใช้ตามค่าที่ลูกค้ากำหนด ระบบจะไม่ลด Lot อัตโนมัติ</small></div></div>
-                <select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>
-                  {[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}
-                </select>
-              </label>
-              <div className={"cc-bot-basic-card "+(props.settings.confidenceGateEnabled?"accent":"")}>
-                <div className="cc-bot-basic-label"><span><ScenovaIcon name="target" size={19}/></span><div><b>ตัวกรอง Confidence</b><small>ค่าเริ่มต้นปิด — ถ้าเปิดจะใช้ Dynamic Threshold ตาม Setup (ฐาน 55); ถ้าปิดคะแนนยังคำนวณแต่ไม่บล็อกออเดอร์</small></div></div>
-                <SwitchSetting
-                  checked={Boolean(props.settings.confidenceGateEnabled)}
-                  onChange={(value:boolean)=>props.onEdit?.("confidenceGateEnabled",value)}
-                  onLabel="เปิดใช้ · Dynamic Confidence จะช่วยกรองจุดเข้า"
-                  offLabel="ปิดอยู่ · คะแนนยังคำนวณ แต่ไม่บล็อกออเดอร์"
-                />
-              </div>
+        <div className="cc-bot-modal-body cc-bot-v2-body">
+          <section className="cc-bot-v2-mode-section">
+            <div className="cc-bot-v2-section-title"><span>01</span><div><b>เลือกรูปแบบการควบคุม</b><small>แต่ละโหมดจะเปิดเฉพาะค่าที่เกี่ยวข้องกับการส่งออเดอร์จริง</small></div></div>
+            <div className="cc-bot-v2-modes" role="radiogroup" aria-label="รูปแบบการควบคุมบอท">
+              {[
+                {id:"AUTO",icon:"brain",tag:"แนะนำ"},
+                {id:"ASSISTED",icon:"target",tag:"กึ่งอัตโนมัติ"},
+                {id:"MANUAL",icon:"settings",tag:"ควบคุมละเอียด"}
+              ].map(mode=><button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} className={controlMode===mode.id?"active":""} onClick={()=>applyControlMode(mode.id)}>
+                <span className="cc-bot-v2-mode-icon"><ScenovaIcon name={mode.icon} size={22}/></span>
+                <span><em>{mode.tag}</em><b>{modeCopy[mode.id].title}</b><small>{modeCopy[mode.id].subtitle}</small></span>
+                <i className="cc-bot-v2-radio"/>
+              </button>)}
             </div>
           </section>
 
-          <section className="cc-modal-settings-section cc-bot-settings-panel" hidden={activeSection!=="profit"}>
-            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">2</span><div><b>เป้าหมายกำไร</b><small>เลือกให้ EA ตัดสินใจอัตโนมัติ หรือกำหนดจำนวนเงินเอง</small></div></div></div>
-            <ProfitTargetModeField
-              mode={profitTargetMode}
-              cycleProfit={props.basketCycleProfit}
-              peakProfit={props.metrics?.profitRunPeak}
-              onChange={(mode:string)=>props.onEdit?.("profitTargetMode",mode)}
-            />
-            {profitTargetMode==="MANUAL"&&<div className="cc-modal-setting-grid two">
-              <SettingTile icon="profit" title="กำไรทั้งชุดถึงแล้วปิด" description="รวมกำไรทุก Position ใน Basket เดียวกัน" wide accent={basketProfitEnabled}>
-                <BasketProfitTargetField
-                  value={props.settings.basketProfitTargetMoney}
-                  trailPercent={props.settings.profitRunTrailPercent}
-                  targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                  percentOptions={[5,10,15,20,25,30,40,50]}
-                  defaultTarget="10"
-                  defaultPercent="20"
-                  currentCycleProfit={props.basketCycleProfit}
-                  onTargetChange={(v:string)=>props.onEdit?.("basketProfitTargetMoney",v)}
-                  onPercentChange={(v:string)=>props.onEdit?.("profitRunTrailPercent",v)}
-                />
-              </SettingTile>
-              <SettingTile icon="orders" title="กำไรต่อไม้" description="Position ไหนถึงกำไรที่ตั้ง ปิดเฉพาะไม้นั้น" wide accent={perPositionProfitEnabled}>
-                <ToggleMoneyField label="เปิดกำไรต่อไม้" defaultValue="2" value={props.settings.perPositionProfitMoney} suffix="กำไรต่อ Position" onChange={(v:string)=>props.onEdit?.("perPositionProfitMoney",v)}/>
-              </SettingTile>
-            </div>}
-            <div className="cc-modal-setting-grid one">
-              <SettingTile icon="pnl" title="เป้ากำไรวันนี้" description="ทำงานแยกจากกำไร Basket/ต่อไม้; ถึงเป้าแล้วเลือกหยุดหรือปล่อยต่อ" wide>
-                <DailyProfitTargetField
-                  value={props.settings.dailyProfitTargetMoney}
-                  continueAfterTarget={Boolean(props.settings.dailyProfitContinueAfterTarget)}
-                  drawdownPercent={props.settings.dailyProfitDrawdownPercent}
-                  targetOptions={[0.5,1,2,3,5,10,15,20,25,30,50,75,100,200,300,500,750,1000]}
-                  percentOptions={[5,10,15,20,25,30,40,50]}
-                  defaultTarget="10"
-                  defaultPercent="20"
-                  onTargetChange={(v:string)=>props.onEdit?.("dailyProfitTargetMoney",v)}
-                  onContinueChange={(v:boolean)=>props.onEdit?.("dailyProfitContinueAfterTarget",v)}
-                  onPercentChange={(v:string)=>props.onEdit?.("dailyProfitDrawdownPercent",v)}
-                />
-              </SettingTile>
-            </div>
-          </section>
+          <div className="cc-bot-v2-workspace">
+            <main className="cc-bot-v2-main">
+              <section className="cc-bot-v2-panel">
+                <div className="cc-bot-v2-section-title compact"><span>02</span><div><b>แผนการเปิดออเดอร์</b><small>ค่าชุดนี้ส่งตรงไปยัง EA</small></div></div>
+                <div className="cc-bot-v2-fields">
+                  <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="gold" size={17}/>Symbol</label><strong>{props.symbol || "—"}</strong></div>
+                  {controlMode==="AUTO" ?
+                    <div className="cc-bot-v2-field auto-value"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>วิเคราะห์อัตโนมัติ</strong><small>M1 / M5 / M15 / M30 / H1</small></div> :
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="BUY_ONLY">BUY เท่านั้น</option><option value="SELL_ONLY">SELL เท่านั้น</option></select></label>}
+                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</span><select className="input" value={String(props.settings.maxPositions||1)} onChange={e=>props.onEdit?.("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>
+                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
+                </div>
+                <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>Basket Ladder อัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มไม้ตาม ATR และแรงตลาด</span></div>
+              </section>
 
-          <section className="cc-modal-settings-section cc-bot-settings-panel" hidden={activeSection!=="risk"}>
-            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">3</span><div><b>ป้องกันขาดทุน / Stop Loss</b><small>ค่าเริ่มต้น Auto — ให้ EA คำนวณ SL หรือเลือกกำหนดระยะเอง</small></div></div></div>
+              <section className="cc-bot-v2-panel">
+                <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>เป้ากำไรและ Stop Loss</b><small>{controlMode==="MANUAL"?"ระบุค่าปิดออเดอร์ด้วยตนเอง":"EA ปรับทางออกตามโครงสร้างและความผันผวน"}</small></div></div>
+                {controlMode!=="MANUAL" ? <div className="cc-bot-v2-auto-grid">
+                  <div><ScenovaIcon name="profit" size={20}/><span><small>การรักษากำไร</small><b>Dynamic Profit Protection</b></span></div>
+                  <div><ScenovaIcon name="shield" size={20}/><span><small>Stop Loss ต่อไม้</small><b>ATR × 2.00 + โครงสร้างราคา</b></span></div>
+                </div> : <div className="cc-bot-v2-manual-exit">
+                  <div className="cc-bot-v2-choice-row">
+                    <button type="button" className={profitKind==="BASKET"?"active":""} onClick={()=>{props.onEdit?.("basketProfitTargetMoney",Number(props.settings.basketProfitTargetMoney||10));props.onEdit?.("perPositionProfitMoney",0)}}><ScenovaIcon name="profit" size={18}/><span><b>กำไรรวมทั้งชุด</b><small>ปิด Basket เมื่อถึงเป้า</small></span></button>
+                    <button type="button" className={profitKind==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("perPositionProfitMoney",Number(props.settings.perPositionProfitMoney||2));props.onEdit?.("basketProfitTargetMoney",0)}}><ScenovaIcon name="orders" size={18}/><span><b>กำไรต่อไม้</b><small>ปิดเฉพาะ Position ที่ถึงเป้า</small></span></button>
+                  </div>
+                  <div className="cc-bot-v2-fields exit-fields">
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{profitKind==="BASKET"?"เป้ากำไรทั้งชุด":"เป้ากำไรต่อไม้"}</span><MoneyInput value={profitKind==="BASKET"?props.settings.basketProfitTargetMoney:props.settings.perPositionProfitMoney} suffix="USD" onCommit={(v:string)=>props.onEdit?.(profitKind==="BASKET"?"basketProfitTargetMoney":"perPositionProfitMoney",v)}/></label>
+                    {profitKind==="BASKET"&&<label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ยอมให้กำไรย่อตัว</span><select className="input" value={String(props.settings.profitRunTrailPercent||0)} onChange={e=>props.onEdit?.("profitRunTrailPercent",e.target.value)}><option value="0">ปิดทันทีเมื่อถึงเป้า</option>{[5,10,15,20,25,30,40,50].map(v=><option key={v} value={v}>{v}% จากกำไรสูงสุด</option>)}</select></label>}
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="shield" size={17}/>Stop Loss ต่อไม้</span><NumberInput value={props.settings.manualStopLossPoints} suffix="points" onCommit={(v:string)=>props.onEdit?.("manualStopLossPoints",v)}/></label>
+                  </div>
+                </div>}
+              </section>
 
-            <StopLossModeField
-              mode={stopLossMode}
-              manualPoints={manualSl}
-              suggestedManualPoints={suggestedManualSl}
-              systemMultiplier={props.hardStopMultiplier}
-              systemDistancePoints={props.systemHardStopDistancePoints}
-              appliedDistancePoints={props.hardStopDistancePoints}
-              pointSize={props.metrics?.pointSize}
-              symbolDigits={props.metrics?.symbolDigits}
-              onModeChange={(mode:string)=>{
-                if (mode === "AUTO") {
-                  props.onEdit?.("manualStopLossPoints",0);
-                } else if (manualSl <= 0) {
-                  props.onEdit?.("manualStopLossPoints",suggestedManualSl);
-                }
-              }}
-              onManualChange={(v:string)=>props.onEdit?.("manualStopLossPoints",v)}
-            />
+              <section className="cc-bot-v2-panel">
+                <div className="cc-bot-v2-section-title compact"><span>04</span><div><b>ขีดจำกัดของรอบเทรด</b><small>เปิดเฉพาะวงเงินที่ต้องการใช้</small></div></div>
+                <div className="cc-bot-v2-limit-grid">
+                  <div><div><ScenovaIcon name="risk" size={18}/><span><b>ขาดทุนสูงสุดต่อ Basket</b><small>ปิดทุกไม้ในชุดเมื่อถึงวงเงิน</small></span></div><ToggleMoneyField label="เปิดใช้งาน" defaultValue="10" value={props.settings.maxBasketLossMoney} suffix="USD / Basket" onChange={(v:string)=>props.onEdit?.("maxBasketLossMoney",v)}/></div>
+                  <div><div><ScenovaIcon name="pnl" size={18}/><span><b>ขาดทุนสูงสุดต่อวัน</b><small>หยุดเปิดรอบใหม่เมื่อถึงวงเงิน</small></span></div><ToggleMoneyField label="เปิดใช้งาน" defaultValue="25" value={props.settings.dailyLossMoney} suffix="USD / วัน" onChange={(v:string)=>props.onEdit?.("dailyLossMoney",v)}/></div>
+                  <div><div><ScenovaIcon name="target" size={18}/><span><b>เป้ากำไรต่อวัน</b><small>หยุดเมื่อกำไรรวมวันนี้ถึงเป้า</small></span></div><ToggleMoneyField label="เปิดใช้งาน" defaultValue="10" value={props.settings.dailyProfitTargetMoney} suffix="USD / วัน" onChange={(v:string)=>props.onEdit?.("dailyProfitTargetMoney",v)}/></div>
+                </div>
+              </section>
+            </main>
 
-            <div className="cc-modal-setting-grid two">
-              <SettingTile icon="pnl" title="หยุดเมื่อขาดทุนวันนี้" description="ขาดทุนรวมวันนี้ถึงจำนวนนี้ ระบบหยุดตาม Daily Loss">
-                <ToggleMoneyField label="เปิดขาดทุนรายวัน" defaultValue="25" value={props.settings.dailyLossMoney} suffix="ขาดทุนรวมวันนี้" onChange={(v:string)=>props.onEdit?.("dailyLossMoney",v)}/>
-              </SettingTile>
-              <SettingTile icon="risk" title="ปิดทั้งชุดเมื่อขาดทุน" description="รวมขาดทุนทุกไม้ใน Basket">
-                <ToggleMoneyField label="เปิด Basket Loss" defaultValue="10" value={props.settings.maxBasketLossMoney} suffix="ขาดทุนรวมทั้งชุด" onChange={(v:string)=>props.onEdit?.("maxBasketLossMoney",v)}/>
-              </SettingTile>
-            </div>
-
-            <div className="cc-modal-auto-strip">
-              <span><small>โหมด SL ต่อไม้</small><b>{stopLossMode==="AUTO"?"AUTO · ระบบ ATR":"กำหนดเอง"}</b></span>
-              <span><small>EA ใช้ SL จริง</small><b>{Number(props.hardStopDistancePoints||0)>0?Number(props.hardStopDistancePoints).toFixed(0)+" pt":"รอข้อมูล"}</b></span>
-              <span><small>EA ใช้ Basket Loss</small><b>{"$"+Number(props.effectiveBasketLoss||0).toFixed(2)}</b></span>
-            </div>
-          </section>
-
-          <section className="cc-modal-settings-section cc-bot-settings-panel" hidden={activeSection!=="time"}>
-            <div className="cc-mode-section-head compact"><div><span className="cc-mode-step">4</span><div><b>เวลาเทรด</b><small>อ้างอิงเวลา Server ของ Broker</small></div></div></div>
-            <div className="cc-modal-setting-grid four">
-              <SettingTile icon="clock" title="ช่วงเวลาเทรด" description="Setup-First Engine เปิดวิเคราะห์ตลอด 24 ชั่วโมง">
-                <div className="cc-readout"><b>00:00–24:00</b><small>ไม่ใช้ Session filter มาดักออเดอร์</small></div>
-              </SettingTile>
-              <SettingTile icon="status" title="เทรดช่วงข่าว" description="ไม่มี News Calendar hard block">
-                <div className="cc-readout"><b>เปิดใช้งาน</b><small>หยุดเฉพาะ Spread ระดับ EXTREME / Broker ไม่อนุญาต</small></div>
-              </SettingTile>
-              <SettingTile icon="timer" title="Session ปัจจุบัน" description="อ่านจาก EA"><div className="cc-readout"><b>{String(props.metrics?.sessionProfile||"UNKNOWN")}</b><small>ช่วงเวลาตลาด</small></div></SettingTile>
-              <SettingTile icon="spread" title="Spread ตอนนี้" description={"Adaptive limit "+String(props.spreadLimitLabel||"—")}><div className="cc-readout"><b>{String(props.spreadValueLabel||"—")}</b><small>{String(props.spreadStatusLabel||"—")}</small></div></SettingTile>
-            </div>
-          </section>
-
-          <div className="cc-bot-modal-summary cc-bot-modal-summary-compact">
-            <div><small>ระบบวิเคราะห์</small><b>Setup-First 5 TF</b></div>
-            <div><small>จำนวนไม้</small><b>{Number(props.settings.maxPositions||1)} ไม้</b></div>
-            <div><small>Lot สูงสุด</small><b>{Number(props.settings.lot||0.01).toFixed(2)}</b></div>
-            <div><small>EA Sync</small><b>{props.syncLabel || "รอ EA"}</b></div>
+            <aside className="cc-bot-v2-summary">
+              <div className="cc-bot-v2-summary-head"><span><ScenovaIcon name="status" size={19}/></span><div><small>แผนที่จะบันทึก</small><b>{modeCopy[controlMode].title}</b></div><i/></div>
+              <dl>
+                <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>
+                <div><dt>ทิศทาง</dt><dd>{directionLabel}</dd></div>
+                <div><dt>การเปิดไม้</dt><dd>{Number(props.settings.maxPositions||1)} × {Number(props.settings.lot||0.01).toFixed(2)} Lot</dd></div>
+                <div><dt>เป้ากำไร</dt><dd>{exitLabel}</dd></div>
+                <div><dt>Stop Loss</dt><dd>{slLabel}</dd></div>
+                <div><dt>EA Sync</dt><dd className="good">{props.syncLabel || "พร้อมส่งค่า"}</dd></div>
+              </dl>
+              <div className="cc-bot-v2-summary-note"><ScenovaIcon name="brain" size={17}/><span><b>Setup-First 5 TF</b><small>แนวรับ–แนวต้าน · Order Block · Fibonacci · Momentum</small></span></div>
+            </aside>
           </div>
         </div>
 
-        <div className="cc-bot-modal-footer">
-          <div><ScenovaIcon name="info" size={16}/><span>บันทึกครั้งเดียว ระบบจะนำค่าชุดนี้ไปใช้กับ EA อัตโนมัติ</span></div>
-          <div>
-            <button type="button" className="btn" onClick={()=>props.onClose?.()} disabled={props.busy}>ปิดหน้าต่าง</button>
-            <button type="button" className="btn cc-save-primary" disabled={props.busy||!props.dirty} onClick={props.onSave}><ScenovaIcon name="save" size={17}/>{props.busy?"กำลังบันทึก...":"บันทึกทั้งหมด"}</button>
-          </div>
+        <div className="cc-bot-modal-footer cc-bot-v2-footer">
+          <div><ScenovaIcon name="info" size={16}/><span>ค่าที่แสดงทั้งหมดเชื่อมกับคำสั่งของ EA โดยตรง</span></div>
+          <div><button type="button" className="btn" onClick={()=>props.onClose?.()} disabled={props.busy}>ยกเลิก</button><button type="button" className="btn cc-save-primary" disabled={props.busy||!props.dirty} onClick={props.onSave}><ScenovaIcon name="save" size={17}/>{props.busy?"กำลังบันทึก...":"บันทึกและส่งให้ EA"}</button></div>
         </div>
       </div>
     </div>
