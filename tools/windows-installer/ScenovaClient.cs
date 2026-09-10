@@ -241,6 +241,14 @@ internal static class ScenovaClient
         {
             try
             {
+                // ResponseHeadersRead completes as soon as headers arrive, so
+                // HttpClient.Timeout alone does not protect the subsequent stream
+                // copy. Keep a per-attempt token alive through the entire body
+                // transfer so a stalled server/network cannot hang the installer.
+                using var attemptTimeout = new CancellationTokenSource(
+                    TimeSpan.FromSeconds(45));
+                var cancellationToken = attemptTimeout.Token;
+
                 var offset = File.Exists(destinationPath)
                     ? new FileInfo(destinationPath).Length
                     : 0L;
@@ -267,11 +275,12 @@ internal static class ScenovaClient
 
                 using var response = await http.SendAsync(
                     request,
-                    HttpCompletionOption.ResponseHeadersRead);
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    var text = await response.Content.ReadAsStringAsync();
+                    var text = await response.Content.ReadAsStringAsync(cancellationToken);
                     var status = (int)response.StatusCode;
                     if (IsRetryableStatus(status))
                         throw new HttpRequestException(
@@ -293,7 +302,7 @@ internal static class ScenovaClient
                     ? FileMode.Append
                     : FileMode.Create;
 
-                await using (var source = await response.Content.ReadAsStreamAsync())
+                await using (var source = await response.Content.ReadAsStreamAsync(cancellationToken))
                 await using (var target = new FileStream(
                     destinationPath,
                     mode,
@@ -302,8 +311,8 @@ internal static class ScenovaClient
                     81920,
                     useAsync: true))
                 {
-                    await source.CopyToAsync(target);
-                    await target.FlushAsync();
+                    await source.CopyToAsync(target, 81920, cancellationToken);
+                    await target.FlushAsync(cancellationToken);
                 }
 
                 if (string.IsNullOrWhiteSpace(expectedHash))
@@ -326,6 +335,7 @@ internal static class ScenovaClient
                 ex is IOException ||
                 ex is HttpRequestException ||
                 ex is TaskCanceledException ||
+                ex is OperationCanceledException ||
                 ex is InvalidOperationException)
             {
                 last = ex;
