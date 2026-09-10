@@ -203,7 +203,8 @@ export class EaController {
     symbol: string,
     decisionDirection: number,
     entryModel: string,
-    marketRegime: string
+    marketRegime: string,
+    indicatorCompositeScore: number
   ) {
     const direction = decisionDirection > 0 ? "BUY" : decisionDirection < 0 ? "SELL" : "";
     const model = String(entryModel || "").trim().slice(0, 64);
@@ -215,6 +216,12 @@ export class EaController {
       setupAvgLoss: 0,
       setupExpectedValue: 0,
       setupEvScore: 50,
+      indicatorWinProbability: 0,
+      indicatorSamples: 0,
+      indicatorAvgWin: 0,
+      indicatorAvgLoss: 0,
+      indicatorExpectedValue: 0,
+      indicatorEvScore: 50,
       setupDirection: decisionDirection > 0 ? 1 : decisionDirection < 0 ? -1 : 0,
       setupModel: model || "NONE",
       setupRegime: regime || "UNKNOWN"
@@ -259,6 +266,70 @@ export class EaController {
       ? Math.max(0, Math.min(100, 50 + expectedValue / payoffScale * 100))
       : 50;
 
+    const currentComposite = Number.isFinite(indicatorCompositeScore)
+      ? Math.max(0, Math.min(100, indicatorCompositeScore))
+      : 50;
+    const indicatorMin = Math.max(0, Math.floor(currentComposite / 10) * 10 - 5);
+    const indicatorMax = Math.min(100, Math.floor(currentComposite / 10) * 10 + 15);
+    const indicatorRow = await this.db.one(
+      `SELECT
+         COUNT(*) FILTER (WHERE net_profit<>0)::int AS samples,
+         COUNT(*) FILTER (WHERE net_profit>0)::int AS wins,
+         COALESCE(AVG(net_profit) FILTER (WHERE net_profit>0),0)::float8 AS avg_win,
+         COALESCE(AVG(net_profit) FILTER (WHERE net_profit<0),0)::float8 AS avg_loss
+       FROM (
+         SELECT net_profit
+         FROM trade_journal
+         WHERE bot_instance_id=$1
+           AND event_type='BASKET'
+           AND COALESCE((metadata->>'schema')::int,0) >= 5
+           AND ($2='' OR metadata->>'symbol'=$2)
+           AND direction=$3
+           AND entry_model=$4
+           AND ($5='' OR market_regime=$5)
+           AND NULLIF(metadata->>'indicatorCompositeScore','')::float8
+               BETWEEN $6 AND $7
+         ORDER BY created_at DESC
+         LIMIT 160
+       ) recent_indicator_context`,
+      [
+        instanceId,
+        symbol,
+        direction,
+        model,
+        useRegime ? regime : "",
+        indicatorMin,
+        indicatorMax
+      ]
+    );
+
+    const indicatorSamples = Math.max(0, Number(indicatorRow?.samples || 0));
+    const indicatorWins = Math.max(0, Number(indicatorRow?.wins || 0));
+    const indicatorAvgWin = Math.max(0, Number(indicatorRow?.avg_win || 0));
+    const indicatorAvgLoss = Math.min(0, Number(indicatorRow?.avg_loss || 0));
+    const indicatorWinProbability = indicatorSamples > 0
+      ? indicatorWins / indicatorSamples * 100
+      : 0;
+    const indicatorP = indicatorWinProbability / 100;
+    const indicatorExpectedValue =
+      indicatorP * indicatorAvgWin -
+      (1 - indicatorP) * Math.abs(indicatorAvgLoss);
+    const indicatorScale = Math.max(
+      0.01,
+      indicatorAvgWin + Math.abs(indicatorAvgLoss)
+    );
+    // Shrink small samples toward neutral. The EA also requires >=20 samples
+    // before this score can influence its composite.
+    const reliability = Math.min(1, indicatorSamples / 40);
+    const rawIndicatorEvScore = indicatorSamples > 0
+      ? Math.max(0, Math.min(
+          100,
+          50 + indicatorExpectedValue / indicatorScale * 100
+        ))
+      : 50;
+    const indicatorEvScore =
+      50 + (rawIndicatorEvScore - 50) * reliability;
+
     return {
       ...empty,
       setupWinProbability: winProbability,
@@ -266,7 +337,13 @@ export class EaController {
       setupAvgWin: avgWin,
       setupAvgLoss: avgLoss,
       setupExpectedValue: expectedValue,
-      setupEvScore: evScore
+      setupEvScore: evScore,
+      indicatorWinProbability,
+      indicatorSamples,
+      indicatorAvgWin,
+      indicatorAvgLoss,
+      indicatorExpectedValue,
+      indicatorEvScore
     };
   }
 
@@ -560,7 +637,8 @@ export class EaController {
       String(metrics.symbol || "").trim(),
       Number(metrics.decisionDirection || 0),
       String(metrics.entryModel || ""),
-      String(metrics.marketRegime || "")
+      String(metrics.marketRegime || ""),
+      Number(metrics.indicatorCompositeScore ?? 50)
     );
 
     return {
@@ -613,6 +691,18 @@ export class EaController {
     entryPrecisionScore?: number;
     entryDistanceAtr?: number;
     setupEvScore?: number;
+    indicatorLocationScore?: number;
+    indicatorMomentumScore?: number;
+    indicatorStructureScore?: number;
+    indicatorVolatilityScore?: number;
+    indicatorExecutionScore?: number;
+    indicatorCostSpaceScore?: number;
+    indicatorCompositeScore?: number;
+    volumeProfileState?: string;
+    squeezeState?: string;
+    macdState?: string;
+    levelFlipState?: string;
+    premiumDiscountState?: string;
   }) {
     const instance = await this.instance(body.instanceId, body.installToken);
 
@@ -676,7 +766,7 @@ export class EaController {
         JSON.stringify({
           source: "EA",
           schema: eventType === "BASKET"
-            ? Math.max(2, Math.min(4, Math.trunc(n(body.journalSchema, 2))))
+            ? Math.max(2, Math.min(5, Math.trunc(n(body.journalSchema, 2))))
             : 1,
           symbol: text(body.symbol, 48),
           brokerServer: text(body.brokerServer, 96),
@@ -691,7 +781,19 @@ export class EaController {
           fvgState: text(body.fvgState, 64),
           entryPrecisionScore: Math.max(0, Math.min(100, n(body.entryPrecisionScore, 50))),
           entryDistanceAtr: Math.max(0, n(body.entryDistanceAtr)),
-          setupEvScore: Math.max(0, Math.min(100, n(body.setupEvScore, 50)))
+          setupEvScore: Math.max(0, Math.min(100, n(body.setupEvScore, 50))),
+          indicatorLocationScore: Math.max(0, Math.min(100, n(body.indicatorLocationScore, 50))),
+          indicatorMomentumScore: Math.max(0, Math.min(100, n(body.indicatorMomentumScore, 50))),
+          indicatorStructureScore: Math.max(0, Math.min(100, n(body.indicatorStructureScore, 50))),
+          indicatorVolatilityScore: Math.max(0, Math.min(100, n(body.indicatorVolatilityScore, 50))),
+          indicatorExecutionScore: Math.max(0, Math.min(100, n(body.indicatorExecutionScore, 50))),
+          indicatorCostSpaceScore: Math.max(0, Math.min(100, n(body.indicatorCostSpaceScore, 50))),
+          indicatorCompositeScore: Math.max(0, Math.min(100, n(body.indicatorCompositeScore, 50))),
+          volumeProfileState: text(body.volumeProfileState, 48),
+          squeezeState: text(body.squeezeState, 48),
+          macdState: text(body.macdState, 48),
+          levelFlipState: text(body.levelFlipState, 48),
+          premiumDiscountState: text(body.premiumDiscountState, 32)
         })
       ]
     );
