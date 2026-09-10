@@ -46,6 +46,18 @@ jobs:
           $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
           $patchedText = [System.IO.File]::ReadAllText($mq5Path)
 
+          # Current EA does not expose the experimental RegisterAntiChaseState
+          # helper. Persist the same state directly so Brain V8 stays compatible.
+          $legacyAntiChase = '      RegisterAntiChaseState(direction, "SWING_EXTENSION", false);'
+          $inlineAntiChase = @'
+      g_antiChaseActive = true;
+      g_antiChaseDirection = direction;
+      g_antiChaseReason = "SWING_EXTENSION";
+      g_breakoutRetestRequired = false;
+'@
+          $patchedText = $patchedText.Replace($legacyAntiChase, $inlineAntiChase.TrimEnd())
+          [System.IO.File]::WriteAllText($mq5Path, $patchedText, [System.Text.UTF8Encoding]::new($false))
+
           if ($patchedText -notmatch '#property\s+version\s+"1\.047"') {
             throw "Brain V8 patch did not produce EA 1.047"
           }
