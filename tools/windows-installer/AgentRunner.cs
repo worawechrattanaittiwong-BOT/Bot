@@ -7,6 +7,9 @@ namespace ScenovaInstaller;
 internal static class AgentRunner
 {
     internal static string AgentPath =>
+        Path.Combine(ScenovaRuntime.BaseDir, "SCENOVA-Agent-v3.exe");
+
+    private static string LegacyAgentPath =>
         Path.Combine(ScenovaRuntime.BaseDir, "SCENOVA-Agent-v2.exe");
 
     internal static bool IsMt5Running(AgentConfig config)
@@ -94,12 +97,25 @@ internal static class AgentRunner
 
         var source = Environment.ProcessPath
                      ?? throw new InvalidOperationException("SCENOVA installer path unavailable");
-        var agentPath = Path.Combine(ScenovaRuntime.BaseDir, "SCENOVA-Agent-v2.exe");
+        var agentPath = AgentPath;
 
         if (!string.Equals(source, agentPath, StringComparison.OrdinalIgnoreCase))
         {
             StopExistingAgent(agentPath);
             CopyExecutableWithRetry(source, agentPath);
+        }
+
+        // v3 is a side-by-side filename upgrade. Stop/delete the legacy v2
+        // copy only after the new executable exists so rollback remains safe.
+        if (File.Exists(agentPath))
+        {
+            try
+            {
+                StopExistingAgent(LegacyAgentPath);
+                if (File.Exists(LegacyAgentPath))
+                    File.Delete(LegacyAgentPath);
+            }
+            catch { }
         }
 
         using (var runKey = Registry.CurrentUser.OpenSubKey(
@@ -161,10 +177,11 @@ internal static class AgentRunner
                         normalizedAgentPath,
                         StringComparison.OrdinalIgnoreCase);
 
-                // SCENOVA-Agent-v2.exe is a renamed copy of the single-file
-                // SCENOVA-Setup assembly. Depending on Windows/.NET, the
-                // running process can be reported under either name.
+                // Agent copies are renamed from the single-file SCENOVA-Setup
+                // assembly. Depending on Windows/.NET the running process can
+                // be reported under the v2/v3 name or the original setup name.
                 var nameMatches =
+                    string.Equals(process.ProcessName, "SCENOVA-Agent-v3", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(process.ProcessName, "SCENOVA-Agent-v2", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(process.ProcessName, "SCENOVA-Setup", StringComparison.OrdinalIgnoreCase);
 
