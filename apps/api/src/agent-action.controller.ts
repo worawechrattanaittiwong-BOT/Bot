@@ -1,5 +1,6 @@
 import { Body, ConflictException, Controller, Post } from "@nestjs/common";
 import { DbService } from "./db.service";
+import { latestEaRelease } from "./release-version";
 import { CryptoService } from "./security";
 
 @Controller("ea")
@@ -24,6 +25,7 @@ export class AgentActionController {
          bi.account_change_requested_at,
          bi.pending_account_number,
          bi.pending_broker_server,
+         bi.metrics->>'eaVersion' AS ea_version,
          bi.metrics->>'manualMt5ActionName' AS manual_action_name,
          bi.metrics->>'manualMt5ActionId' AS manual_action_id,
          bi.metrics->>'manualMt5ActionRequestedAt' AS manual_action_requested_at,
@@ -74,9 +76,10 @@ export class AgentActionController {
       instance.manual_action_name &&
       manualRequestedAt &&
       manualAgeMs >= 0 &&
-      manualAgeMs <= 10 * 60_000 &&
+      manualAgeMs <= 15 * 60_000 &&
       String(instance.manual_action_status || "PENDING") === "PENDING"
     );
+    const eaVersionRequired = latestEaRelease().eaVersion;
 
     return {
       ok: true,
@@ -88,6 +91,8 @@ export class AgentActionController {
       pendingAccountNumber: instance.pending_account_number || null,
       pendingServer: instance.pending_broker_server || null,
       eaOnline,
+      eaVersion: String(instance.ea_version || "").trim() || null,
+      eaVersionRequired,
       safeToRestart,
       positions,
       manualActionPending: manualActionActive,
