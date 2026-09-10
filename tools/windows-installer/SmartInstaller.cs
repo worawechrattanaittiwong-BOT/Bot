@@ -8,8 +8,8 @@ namespace ScenovaInstaller;
 
 internal static class InstallerConstants
 {
-    internal const string Version = "3.1.0";
-    internal const string AgentVersion = "3.1.0";
+    internal const string Version = AgentBuildInfo.Version;
+    internal const string AgentVersion = AgentBuildInfo.Version;
     internal const string ProductName = "SCENOVA Smart Installer";
     internal const int BackupRetention = 2;
 }
