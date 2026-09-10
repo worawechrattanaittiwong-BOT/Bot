@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "tools/windows-installer/**"
+      - "apps/api/src/release-version.ts"
       - ".github/workflows/build-windows-installer.yml"
   push:
     branches: [main]
     paths:
       - "tools/windows-installer/**"
+      - "apps/api/src/release-version.ts"
       - ".github/workflows/build-windows-installer.yml"
   workflow_dispatch:
 
@@ -39,6 +41,36 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+
+      - name: Validate installer version consistency
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          [xml]$project = Get-Content "tools/windows-installer/ScenovaInstaller.csproj"
+          $projectVersion = [string]($project.Project.PropertyGroup.Version | Select-Object -First 1)
+
+          $agentText = Get-Content "tools/windows-installer/AgentBuildInfo.cs" -Raw
+          $agentMatch = [regex]::Match($agentText, 'Version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"')
+          if (-not $agentMatch.Success) {
+            throw "AgentBuildInfo.Version was not found"
+          }
+          $agentVersion = $agentMatch.Groups[1].Value
+
+          $apiText = Get-Content "apps/api/src/release-version.ts" -Raw
+          $apiMatch = [regex]::Match($apiText, 'DEFAULT_INSTALLER_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"')
+          if (-not $apiMatch.Success) {
+            throw "DEFAULT_INSTALLER_VERSION was not found"
+          }
+          $apiVersion = $apiMatch.Groups[1].Value
+
+          Write-Host "Project version: $projectVersion"
+          Write-Host "Agent version:   $agentVersion"
+          Write-Host "API version:     $apiVersion"
+
+          if ($projectVersion -ne $agentVersion -or $projectVersion -ne $apiVersion) {
+            throw "Installer version mismatch: csproj=$projectVersion agent=$agentVersion api=$apiVersion"
+          }
 
       - name: Publish self-contained Windows installer
         shell: powershell
@@ -148,6 +180,10 @@ jobs:
           Copy-Item -Force "installer-publish/SCENOVA-Setup.exe" "apps/web/public/downloads/SCENOVA-Setup.exe"
           Copy-Item -Force "installer-publish/SCENOVA-Setup.exe" $versionedPath
 
+          if (-not (Test-Path $versionedPath)) {
+            throw "Versioned installer was not created: $versionedPath"
+          }
+
           git config user.name "scenova-build"
           git config user.email "actions@users.noreply.github.com"
           git add "apps/web/public/downloads/SCENOVA-Setup.exe" $versionedPath
@@ -158,10 +194,13 @@ jobs:
             exit 0
           }
 
+          # Do not use [skip ci] here. The installer workflow is path-filtered and
+          # will not loop on apps/web/public/downloads/**, while the production web
+          # deploy still needs to see this binary publish commit.
           if ($env:SIGNING_ENABLED -eq "true") {
-            git commit -m "build: publish signed SCENOVA Windows installer [skip ci]"
+            git commit -m "build: publish signed SCENOVA Windows installer v$version"
           } else {
-            git commit -m "build: publish SCENOVA Windows installer [skip ci]"
+            git commit -m "build: publish SCENOVA Windows installer v$version"
           }
 
           # Main can advance again between fetch and push while other CI work
