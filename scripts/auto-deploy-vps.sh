@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_DIR="${REPO_DIR:-/opt/Bot}"
-REPO_FULL_NAME="${REPO_FULL_NAME:-worawechrattanaitthiwong-creator/Bot}"
+REPO_FULL_NAME="${REPO_FULL_NAME:-worawechrattanaittiwong-BOT/Bot}"
 LOCK_FILE="/run/lock/scenova-auto-deploy.lock"
 STATE_DIR="/var/lib/scenova"
 DEPLOYED_SHA_FILE="$STATE_DIR/deployed.sha"
@@ -42,20 +42,15 @@ else
   echo "[SCENOVA] new commit detected: $CURRENT_SHA -> $REMOTE_SHA"
 fi
 
-verify_generated_ea_release() {
+validate_generated_ea_shape() {
   local sha="$1"
-  local subject author_email parent parent_ci changed
+  local subject author_email changed
 
   subject="$(git log -1 --format=%s "$sha" 2>/dev/null || true)"
   author_email="$(git log -1 --format=%ae "$sha" 2>/dev/null || true)"
 
-  if [ "$subject" != "build: publish private FastBasketBot.ex5 [skip ea build]" ]; then
-    return 1
-  fi
-  if [ "$author_email" != "actions@users.noreply.github.com" ]; then
-    echo "[SCENOVA] generated EA release rejected: unexpected author $author_email"
-    return 1
-  fi
+  [ "$subject" = "build: publish private FastBasketBot.ex5 [skip ea build]" ] || return 1
+  [ "$author_email" = "actions@users.noreply.github.com" ] || return 1
 
   changed="$(git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null || true)"
   while IFS= read -r file; do
@@ -64,37 +59,18 @@ verify_generated_ea_release() {
       mt5/release/FastBasketBot.ex5|mt5/release/manifest.json)
         ;;
       *)
-        echo "[SCENOVA] generated EA release rejected: unexpected file $file"
         return 1
         ;;
     esac
   done <<< "$changed"
 
-  if ! git cat-file -e "$sha:mt5/release/FastBasketBot.ex5" 2>/dev/null; then
-    echo "[SCENOVA] generated EA release rejected: EX5 artifact missing"
-    return 1
-  fi
-
-  parent="$(git rev-parse "$sha^" 2>/dev/null || true)"
-  [ -n "$parent" ] || return 1
-
-  parent_ci="$(
-    gh run list       --repo "$REPO_FULL_NAME"       --commit "$parent"       --workflow CI       --limit 1       --json status,conclusion       --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end'       2>/dev/null || true
-  )"
-
-  if [ "$parent_ci" != "completed:success" ]; then
-    echo "[SCENOVA] generated EA release waiting for parent CI ($parent_ci)"
-    return 1
-  fi
-
-  echo "[SCENOVA] trusted generated EX5 release verified"
+  git cat-file -e "$sha:mt5/release/FastBasketBot.ex5" 2>/dev/null || return 1
   return 0
 }
 
-
-verify_generated_installer_release() {
+validate_generated_installer_shape() {
   local sha="$1"
-  local subject author_email parent parent_ci changed
+  local subject author_email changed
 
   subject="$(git log -1 --format=%s "$sha" 2>/dev/null || true)"
   author_email="$(git log -1 --format=%ae "$sha" 2>/dev/null || true)"
@@ -107,10 +83,7 @@ verify_generated_installer_release() {
       ;;
   esac
 
-  if [ "$author_email" != "actions@users.noreply.github.com" ]; then
-    echo "[SCENOVA] generated installer release rejected: unexpected author $author_email"
-    return 1
-  fi
+  [ "$author_email" = "actions@users.noreply.github.com" ] || return 1
 
   changed="$(git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null || true)"
   while IFS= read -r file; do
@@ -119,26 +92,97 @@ verify_generated_installer_release() {
       apps/web/public/downloads/SCENOVA-Setup.exe|apps/web/public/downloads/SCENOVA-Setup-v*.exe)
         ;;
       *)
-        echo "[SCENOVA] generated installer release rejected: unexpected file $file"
         return 1
         ;;
     esac
   done <<< "$changed"
 
-  if ! git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-Setup.exe" 2>/dev/null; then
-    echo "[SCENOVA] generated installer release rejected: installer artifact missing"
-    return 1
-  fi
+  git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-Setup.exe" 2>/dev/null || return 1
+  return 0
+}
+
+# Generated release commits can legitimately arrive back-to-back (for example
+# Windows installer publish followed by EA publish). Walk across only commits
+# whose author, subject, changed paths and artifact shape are trusted, then use
+# the first normal source commit as the CI anchor.
+resolve_ci_anchor() {
+  local sha="$1"
+  local parent hops=0
 
   parent="$(git rev-parse "$sha^" 2>/dev/null || true)"
   [ -n "$parent" ] || return 1
 
+  while [ "$hops" -lt 8 ]; do
+    if validate_generated_ea_shape "$parent" >/dev/null 2>&1 || \
+       validate_generated_installer_shape "$parent" >/dev/null 2>&1; then
+      parent="$(git rev-parse "$parent^" 2>/dev/null || true)"
+      [ -n "$parent" ] || return 1
+      hops=$((hops + 1))
+      continue
+    fi
+    break
+  done
+
+  printf '%s\n' "$parent"
+}
+
+verify_generated_ea_release() {
+  local sha="$1"
+  local parent parent_ci
+
+  if ! validate_generated_ea_shape "$sha"; then
+    echo "[SCENOVA] generated EA release rejected: untrusted commit shape"
+    return 1
+  fi
+
+  parent="$(resolve_ci_anchor "$sha" 2>/dev/null || true)"
+  [ -n "$parent" ] || return 1
+
   parent_ci="$(
-    gh run list       --repo "$REPO_FULL_NAME"       --commit "$parent"       --workflow CI       --limit 1       --json status,conclusion       --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end'       2>/dev/null || true
+    gh run list \
+      --repo "$REPO_FULL_NAME" \
+      --commit "$parent" \
+      --workflow CI \
+      --limit 1 \
+      --json status,conclusion \
+      --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' \
+      2>/dev/null || true
   )"
 
   if [ "$parent_ci" != "completed:success" ]; then
-    echo "[SCENOVA] generated installer release waiting for parent CI ($parent_ci)"
+    echo "[SCENOVA] generated EA release waiting for source CI ($parent_ci)"
+    return 1
+  fi
+
+  echo "[SCENOVA] trusted generated EX5 release verified"
+  return 0
+}
+
+verify_generated_installer_release() {
+  local sha="$1"
+  local parent parent_ci
+
+  if ! validate_generated_installer_shape "$sha"; then
+    echo "[SCENOVA] generated installer release rejected: untrusted commit shape"
+    return 1
+  fi
+
+  parent="$(resolve_ci_anchor "$sha" 2>/dev/null || true)"
+  [ -n "$parent" ] || return 1
+
+  parent_ci="$(
+    gh run list \
+      --repo "$REPO_FULL_NAME" \
+      --commit "$parent" \
+      --workflow CI \
+      --limit 1 \
+      --json status,conclusion \
+      --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' \
+      2>/dev/null || true
+  )"
+
+  if [ "$parent_ci" != "completed:success" ]; then
+    echo "[SCENOVA] generated installer release waiting for source CI ($parent_ci)"
     return 1
   fi
 
@@ -148,7 +192,14 @@ verify_generated_installer_release() {
 
 if command -v gh >/dev/null 2>&1; then
   CI_STATE="$(
-    gh run list       --repo "$REPO_FULL_NAME"       --commit "$REMOTE_SHA"       --workflow CI       --limit 1       --json status,conclusion       --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end'       2>/dev/null || true
+    gh run list \
+      --repo "$REPO_FULL_NAME" \
+      --commit "$REMOTE_SHA" \
+      --workflow CI \
+      --limit 1 \
+      --json status,conclusion \
+      --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' \
+      2>/dev/null || true
   )"
 
   case "$CI_STATE" in
