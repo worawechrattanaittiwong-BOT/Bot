@@ -1474,7 +1474,18 @@ export default function DashboardPage() {
                 <section className="panel cc-v6-account-card">
                   <div className="cc-v6-panel-head"><div><span><ScenovaIcon name="account" size={18}/></span><b>สถานะบัญชี</b></div><em className={isMt5Online?"good":"warn"}>{isMt5Online?"LIVE":"WAITING"}</em></div>
                   <div className="cc-v6-account-grid">
-                    <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20?"good":"warn"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
+                    <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
+                  </div>
+                  <div className="cc-v9-account-live">
+                    <div className="cc-v9-account-live-head"><span><i/>สถานะการทำงานสด</span><small>ข้อมูลล่าสุดจาก EA</small></div>
+                    <div className="cc-v9-account-live-grid">
+                      <AccountLiveStat icon="control" label="Web ต้องการ" value={String(desired)} tone={desired==="RUNNING"?"good":desired==="SAFE_STOP"?"warn":"neutral"}/>
+                      <AccountLiveStat icon="bot" label="EA จริง" value={String(state)} tone={state==="RUNNING"?"good":state==="SAFE_STOP"?"warn":"neutral"}/>
+                      <AccountLiveStat icon="orders" label="Position" value={currentPositions+" / "+configuredMaxPositions}/>
+                      <AccountLiveStat icon="status" label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20&&heartbeatHttpStatus>=200&&heartbeatHttpStatus<300?"good":"warn"}/>
+                      <AccountLiveStat icon="clock" label="Latency" value={heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"} tone={heartbeatLatencyMs>2000?"bad":heartbeatLatencyMs>700?"warn":"good"}/>
+                      <AccountLiveStat icon="pnl" label="Daily / Basket P&L" value={(Number(metrics.dailyProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2)+" / "+(Number(metrics.basketCycleProfit||metrics.basketProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.basketCycleProfit||metrics.basketProfit||0)).toFixed(2)} tone={Number(metrics.dailyProfit||0)>=0?"good":"bad"}/>
+                    </div>
                   </div>
                   <button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}><ScenovaIcon name="settings" size={16}/>จัดการบัญชี</button>
                 </section>
@@ -1494,9 +1505,7 @@ export default function DashboardPage() {
                 symbol={String(metrics.symbol||settings.symbol||"")}
                 accountNumber={String(data.account?.account_number||"—")}
                 server={String(metrics.server||data.account?.broker_server||"—")}
-                connectionLabel={connectionLabel}
                 state={String(state)}
-                desired={String(desired)}
                 executionLabel={String(liveStatus.label||"—")}
                 executionDetail={String(liveStatus.detail||"")}
                 marketTradeLabel={marketTradeLabel}
@@ -1506,17 +1515,10 @@ export default function DashboardPage() {
                 spread={spreadValueLabel}
                 spreadStatus={spreadStatusLabel[spreadStatus]||spreadStatus}
                 momentum={Number(metrics.momentumPoints||0)}
-                heartbeatAge={heartbeatAgeSeconds}
-                heartbeatLatency={heartbeatLatencyMs}
-                heartbeatHttp={heartbeatHttpStatus}
                 latestCommand={latestBotCommand ? commandLabel(String(latestBotCommand.command||"")) : "—"}
                 latestCommandStatus={latestCommandStatus}
                 openPositions={openPositions}
-                positionsCount={currentPositions}
-                maxPositions={configuredMaxPositions}
                 symbolDigits={symbolDigits}
-                dailyProfit={Number(metrics.dailyProfit||0)}
-                basketProfit={Number(metrics.basketCycleProfit||metrics.basketProfit||0)}
                 filter={terminalFilter}
                 onFilter={setTerminalFilter}
                 entries={filteredTerminalEntries}
@@ -2225,15 +2227,6 @@ function LiveTerminalPanel(props:any) {
         <TerminalStatusCard icon="spread" label="สัญญาณ / Spread" value={"Confidence "+Number(props.confidence||0).toFixed(0)+"%"} detail={"Spread "+props.spread+" · "+props.spreadStatus+" · Momentum "+Number(props.momentum||0).toFixed(1)} tone={Number(props.confidence||0)>=70?"good":"neutral"}/>
       </div>
 
-      <div className="cc-live-terminal-mini-grid">
-        <div><span>Web ต้องการ</span><b>{props.desired}</b></div>
-        <div><span>EA จริง</span><b>{props.state}</b></div>
-        <div><span>Position</span><b>{props.positionsCount} / {props.maxPositions}</b></div>
-        <div><span>Heartbeat</span><b>{Number(props.heartbeatAge||0).toFixed(0)}s · HTTP {props.heartbeatHttp||"—"}</b></div>
-        <div><span>Latency</span><b>{Number(props.heartbeatLatency||0)>0?Number(props.heartbeatLatency).toFixed(0)+" ms":"—"}</b></div>
-        <div><span>Daily / Basket P&L</span><b className={Number(props.dailyProfit||0)>=0?"text-good":"text-bad"}>{"$"+Number(props.dailyProfit||0).toFixed(2)} / {"$"+Number(props.basketProfit||0).toFixed(2)}</b></div>
-      </div>
-
       <div className="cc-live-terminal-split">
         <div className="cc-live-terminal-half cc-live-terminal-half-positions">
           <div className="cc-live-positions">
@@ -2318,6 +2311,10 @@ function HeroTrendChip({label,value}:{label:string;value:any}) {
 
 function InsightRow({label,value,tone="neutral"}:{label:string;value:string;tone?:"neutral"|"good"|"warn"|"bad"}) {
   return <div className={"cc-v6-insight-row tone-"+tone}><span>{label}</span><b>{value}</b></div>;
+}
+
+function AccountLiveStat({icon,label,value,tone="neutral"}:{icon:string;label:string;value:string;tone?:"neutral"|"good"|"warn"|"bad"}) {
+  return <div className={"cc-v9-account-live-stat tone-"+tone}><span><ScenovaIcon name={icon} size={14}/></span><div><small>{label}</small><b>{value}</b></div></div>;
 }
 
 function HourlyWinRateChart({points}:{points:any[]}) {
