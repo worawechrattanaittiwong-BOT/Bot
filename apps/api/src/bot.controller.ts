@@ -191,6 +191,7 @@ export class BotController {
       SPREAD_TOO_HIGH: { label: "Spread ผิดปกติต่อเนื่อง", detail: "Adaptive Spread ระงับเฉพาะออเดอร์ใหม่ ส่วน Position เดิมยังถูกดูแลตามปกติ", tone: "warn" },
       EXTREME_SPREAD: { label: "Spread รุนแรงเกินขอบเขต", detail: "Spread อยู่ระดับ EXTREME จึงหยุดเฉพาะการเปิดไม้ใหม่จนกว่าต้นทุนการส่งคำสั่งกลับสู่ระดับปลอดภัย", tone: "warn" },
       WAITING_EXECUTION_TURN: { label: "รอจังหวะกลับตาม Bias", detail: "Macro H1/M30/M15 ยังอยู่ทิศเดิม แต่ M1/M5 กำลังย่อ ระบบรอ EMA / Price Action / Momentum turning event ก่อนเปิดไม้ใหม่", tone: "good" },
+      WAITING_BETTER_PRICE: { label: "รอราคาที่คุ้มกว่า", detail: "Entry Precision V3 พบว่าราคาเริ่มไกล Value จึงรอสั้น ๆ เพื่อหา Pullback/Sweep/Reclaim; มี Max Wait และจะกลับเข้าแบบ Acceptable อัตโนมัติ ไม่ค้างรอไม่สิ้นสุด", tone: "good" },
       WAITING_REVERSAL_CONFIRMATION: { label: "กำลังแยก Pullback กับ Reversal", detail: "M1/M5 สวน Bias ใหญ่พร้อมกัน ระบบไม่ให้ Macro บังคับเข้า และกำลังรอหลักฐานว่าเป็นการกลับตัวจริงหรือเพียงการย่อ", tone: "warn" },
       WAIT_TERMINAL_DEMAND: { label: "ไม่ไล่ SELL ใกล้ Demand", detail: "ด้านล่างมี Demand/Support คุณภาพสูงและแรงขายเริ่มหมด จึงหยุดเพิ่ม SELL จนกว่าจะเกิด Retest หรือโครงสร้างใหม่", tone: "warn" },
       WAIT_TERMINAL_SUPPLY: { label: "ไม่ไล่ BUY ใกล้ Supply", detail: "ด้านบนมี Supply/Resistance คุณภาพสูงและแรงซื้อเริ่มหมด จึงหยุดเพิ่ม BUY จนกว่าจะเกิด Retest หรือโครงสร้างใหม่", tone: "warn" },
