@@ -75,8 +75,15 @@ validate_generated_installer_shape() {
   subject="$(git log -1 --format=%s "$sha" 2>/dev/null || true)"
   author_email="$(git log -1 --format=%ae "$sha" 2>/dev/null || true)"
 
+  # Support both the legacy [skip ci] release subject and the current versioned
+  # release subject. Commits pushed by GITHUB_TOKEN do not start another
+  # workflow, so production must be able to validate the generated commit from
+  # its trusted shape plus the successful CI result of the source parent.
   case "$subject" in
-    "build: publish SCENOVA Windows installer [skip ci]"|"build: publish signed SCENOVA Windows installer [skip ci]")
+    "build: publish SCENOVA Windows installer [skip ci]"|\
+    "build: publish signed SCENOVA Windows installer [skip ci]"|\
+    "build: publish SCENOVA Windows installer v"*|\
+    "build: publish signed SCENOVA Windows installer v"*)
       ;;
     *)
       return 1
