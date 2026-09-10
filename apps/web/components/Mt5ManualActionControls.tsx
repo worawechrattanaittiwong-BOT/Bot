@@ -11,6 +11,7 @@ type DashboardSnapshot = {
 };
 
 type ManualAction = "UPDATE_EA_RESTART" | "CONNECT_MT5";
+type BusyAction = ManualAction | "START_RECOVERY" | "";
 
 const UI_PENDING_TIMEOUT_MS = 3 * 60_000;
 
@@ -18,7 +19,7 @@ export function Mt5ManualActionControls() {
   const [data, setData] = useState<DashboardSnapshot | null>(null);
   const [updateMount, setUpdateMount] = useState<Element | null>(null);
   const [connectMount, setConnectMount] = useState<Element | null>(null);
-  const [busyAction, setBusyAction] = useState<ManualAction | "">("");
+  const [busyAction, setBusyAction] = useState<BusyAction>("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -48,7 +49,7 @@ export function Mt5ManualActionControls() {
   const positions = Math.max(0, Number(metrics?.positions || 0));
   const needsEaUpdate = Boolean(update?.eaUpdateRequired || update?.eaVersionMatch === false);
   const installerRequired = Boolean(update?.installerRequired);
-  const installerVersion = String(update?.latestInstallerVersion || update?.installerVersionRequired || "3.1.2");
+  const installerVersion = String(update?.latestVersion || update?.latestInstallerVersion || update?.installerVersionRequired || "3.1.3");
   const installerDownloadPath = String(update?.downloadPath || "/downloads/SCENOVA-Setup.exe");
   const actionName = String(metrics?.manualMt5ActionName || "");
   const actionStatus = String(metrics?.manualMt5ActionStatus || "");
@@ -60,7 +61,10 @@ export function Mt5ManualActionControls() {
   const connectPending = actionName === "CONNECT_MT5" && actionStatus === "PENDING" && actionFresh;
   const staleUpdatePending = actionName === "UPDATE_EA_RESTART" && actionStatus === "PENDING" && !actionFresh;
   const staleConnectPending = actionName === "CONNECT_MT5" && actionStatus === "PENDING" && !actionFresh;
-  const connectNeeded = isLocal && !eaOnline;
+  const startRecoveryRequested = metrics?.startAfterRepairRequested === true;
+  const startRecoveryStatus = String(metrics?.startAfterRepairStatus || "");
+  const startRecoveryMessage = String(metrics?.startAfterRepairMessage || "");
+  const recoveryNeeded = isLocal && (needsEaUpdate || !eaOnline || startRecoveryRequested);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -79,16 +83,16 @@ export function Mt5ManualActionControls() {
 
       const hero = document.querySelector(".cc-v6-hero-actions");
       let connectNode = hero?.querySelector(".scenova-manual-mt5-connect-mount") || null;
-      if (hero && connectNeeded && !connectNode) {
+      if (hero && recoveryNeeded && !connectNode) {
         connectNode = document.createElement("div");
         connectNode.className = "scenova-manual-mt5-connect-mount";
         hero.insertBefore(connectNode, hero.firstChild);
       }
       if (hero) {
-        if (connectNeeded) hero.classList.add("scenova-mt5-connect-mode");
+        if (recoveryNeeded) hero.classList.add("scenova-mt5-connect-mode");
         else hero.classList.remove("scenova-mt5-connect-mode");
       }
-      if (!connectNeeded && connectNode) {
+      if (!recoveryNeeded && connectNode) {
         connectNode.remove();
         connectNode = null;
       }
@@ -98,9 +102,25 @@ export function Mt5ManualActionControls() {
     locate();
     const id = window.setInterval(locate, 500);
     return () => window.clearInterval(id);
-  }, [connectNeeded, needsEaUpdate]);
+  }, [recoveryNeeded, needsEaUpdate]);
 
   useEffect(() => {
+    if (startRecoveryRequested) {
+      setError("");
+      setNotice(startRecoveryMessage || "กำลังซ่อม EA / เชื่อม MT5 และจะเริ่มบอทให้อัตโนมัติ");
+      return;
+    }
+    if (startRecoveryStatus === "STARTED") {
+      setError("");
+      setNotice(startRecoveryMessage || "ซ่อม EA สำเร็จและเริ่มบอทแล้ว");
+      return;
+    }
+    if (startRecoveryStatus === "FAILED") {
+      setNotice("");
+      setError(startRecoveryMessage || "Auto Recovery ไม่สำเร็จ");
+      return;
+    }
+
     if (!actionStatus) return;
     if (staleUpdatePending || staleConnectPending) {
       setNotice("");
@@ -114,7 +134,15 @@ export function Mt5ManualActionControls() {
       setNotice("");
       setError(actionMessage || "ดำเนินการกับ MT5 ไม่สำเร็จ กรุณาลองอีกครั้ง");
     }
-  }, [actionStatus, actionMessage, staleUpdatePending, staleConnectPending]);
+  }, [
+    actionStatus,
+    actionMessage,
+    staleUpdatePending,
+    staleConnectPending,
+    startRecoveryRequested,
+    startRecoveryStatus,
+    startRecoveryMessage
+  ]);
 
   function downloadInstaller() {
     if (typeof document === "undefined") return;
@@ -126,6 +154,41 @@ export function Mt5ManualActionControls() {
     document.body.appendChild(link);
     link.click();
     link.remove();
+  }
+
+  async function requestRecoveryStart() {
+    if (!slotId || busyAction || startRecoveryRequested) return;
+    if (positions > 0) {
+      setError("มี Position ค้างอยู่ ระบบจะไม่รีสตาร์ท MT5 ระหว่างมีออเดอร์");
+      return;
+    }
+    if (installerRequired) {
+      downloadInstaller();
+      setError("");
+      setNotice(`ดาวน์โหลด SCENOVA ${installerVersion} แล้ว กรุณาเปิดไฟล์ติดตั้ง 1 ครั้ง จากนั้นระบบจะซ่อม EA และเริ่มบอทต่อได้`);
+      return;
+    }
+    if (!agentOnline) {
+      setError("Windows Agent ยังไม่ออนไลน์ กรุณาเปิด SCENOVA Agent ก่อน");
+      return;
+    }
+
+    setBusyAction("START_RECOVERY");
+    setError("");
+    setNotice("กำลังส่งคำสั่ง Auto Recovery...");
+    try {
+      const result = await api(
+        "/bot/mt5/recover-start?slotId=" + encodeURIComponent(slotId),
+        { method: "POST" }
+      );
+      setNotice(String(result?.message || "กำลังซ่อม EA และจะเริ่มบอทให้อัตโนมัติ"));
+      await refresh();
+    } catch (e: any) {
+      setNotice("");
+      setError(String(e?.message || "เริ่ม Auto Recovery ไม่สำเร็จ"));
+    } finally {
+      setBusyAction("");
+    }
   }
 
   async function requestAction(action: ManualAction) {
@@ -149,8 +212,6 @@ export function Mt5ManualActionControls() {
     setError("");
     setNotice("");
 
-    // Bootstrap rule: an old/offline Agent cannot understand the new one-time
-    // command. Download the required installer from the same button first.
     if (isUpdate && installerRequired) {
       downloadInstaller();
       if (!agentOnline) {
@@ -179,8 +240,6 @@ export function Mt5ManualActionControls() {
       );
       await refresh();
     } catch (e: any) {
-      // The installer download is still useful even if the old Agent was too
-      // stale to queue the action. Do not leave the UI in a fake pending state.
       if (isUpdate && installerRequired) {
         setNotice(`ดาวน์โหลด SCENOVA ${installerVersion} แล้ว กรุณาเปิดไฟล์ติดตั้ง แล้วกดอัปเดต EA อีกครั้ง`);
       } else {
@@ -212,24 +271,46 @@ export function Mt5ManualActionControls() {
                 : "อัปเดต EA ตอนนี้"}
           </button>
           {positions > 0 && <small>ปิดออเดอร์ให้หมดก่อน</small>}
-          {installerRequired && <small>กดครั้งเดียวเพื่อดาวน์โหลด Agent ที่รองรับการอัปเดต EA</small>}
+          {installerRequired && <small>ติดตั้ง Agent รุ่นล่าสุด 1 ครั้ง แล้ว Auto Recovery จะทำต่อเอง</small>}
           {!agentOnline && !installerRequired && <small>Agent ยังไม่ออนไลน์</small>}
         </div>,
         updateMount
       )
     : null;
 
-  const connectButton = connectMount && connectNeeded
+  const recoveryButton = connectMount && recoveryNeeded
     ? createPortal(
         <button
           type="button"
           className="cc-v6-command scenova-connect-command"
-          disabled={Boolean(busyAction || connectPending || !agentOnline || positions > 0)}
-          onClick={() => requestAction("CONNECT_MT5")}
+          disabled={Boolean(
+            busyAction ||
+            startRecoveryRequested ||
+            !agentOnline ||
+            positions > 0 ||
+            installerRequired
+          )}
+          onClick={requestRecoveryStart}
         >
           <span className="scenova-connect-icon">↻</span>
-          <b>{connectPending || busyAction === "CONNECT_MT5" ? "กำลังเชื่อมต่อ" : "เชื่อมต่อ MT5"}</b>
-          <small>{agentOnline ? "Connect / Restart MT5" : "Windows Agent Offline"}</small>
+          <b>
+            {startRecoveryRequested || busyAction === "START_RECOVERY"
+              ? "กำลังซ่อมและเริ่มบอท"
+              : needsEaUpdate
+                ? "ซ่อม EA + เริ่มบอท"
+                : "เชื่อม MT5 + เริ่มบอท"}
+          </b>
+          <small>
+            {installerRequired
+              ? `ต้องติดตั้ง SCENOVA ${installerVersion} ก่อน`
+              : startRecoveryRequested
+                ? "Auto Recovery · ไม่ต้องกดซ้ำ"
+                : needsEaUpdate
+                  ? `EA ${String(update?.currentEaVersion || "—")} → ${String(update?.latestEaVersion || "ล่าสุด")}`
+                  : agentOnline
+                    ? "Auto Connect / Start"
+                    : "Windows Agent Offline"}
+          </small>
         </button>,
         connectMount
       )
@@ -258,7 +339,7 @@ export function Mt5ManualActionControls() {
         @media(max-width:720px){.scenova-manual-action{width:100%}.scenova-manual-toast{left:14px;right:14px;bottom:14px}}
       `}</style>
       {updateButton}
-      {connectButton}
+      {recoveryButton}
       {notice && <div className="scenova-manual-toast ok">{notice}</div>}
       {error && <div className="scenova-manual-toast err">{error}</div>}
     </>
