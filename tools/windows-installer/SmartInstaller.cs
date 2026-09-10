@@ -136,6 +136,12 @@ internal static class InstallerDiagnostics
             return InstallerErrorCode.EaHashFailed;
         if (msg.Contains("artifact", StringComparison.OrdinalIgnoreCase))
             return InstallerErrorCode.ArtifactUnavailable;
+        if (msg.Contains("account mismatch", StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("บัญชี MT5", StringComparison.OrdinalIgnoreCase))
+            return InstallerErrorCode.AccountMismatch;
+        if (msg.Contains("update pending", StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("Safe Stop", StringComparison.OrdinalIgnoreCase))
+            return InstallerErrorCode.UpdatePending;
         if (msg.Contains("heartbeat", StringComparison.OrdinalIgnoreCase) ||
             msg.Contains("EA ยังไม่เชื่อม", StringComparison.OrdinalIgnoreCase))
             return InstallerErrorCode.EaOffline;
