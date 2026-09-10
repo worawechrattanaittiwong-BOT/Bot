@@ -603,7 +603,7 @@ export default function DashboardPage() {
   const customerSetupLabel = (value:any) => {
     const code = String(value || "NONE").toUpperCase();
     const labels: Record<string,string> = {
-      NONE: "ยังไม่มีจุดเข้าที่ชัดเจน",
+      NONE: "กำลังประเมินจุดเข้าที่เหมาะสม",
       FIB_PULLBACK: "ราคาย่อกลับเข้าโซน Fibonacci",
       ORDER_BLOCK_PULLBACK: "ราคาย่อกลับเข้า Order Block",
       OB_FIB_PULLBACK: "Order Block และ Fibonacci สนับสนุนตรงกัน",
@@ -614,7 +614,7 @@ export default function DashboardPage() {
       CONTINUATION: "มีจังหวะเดินตามแนวโน้มต่อ",
       STRUCTURE_EXECUTION: "โครงสร้างราคาเริ่มยืนยันจุดเข้า",
       NEWS_EXECUTION: "มีแรงส่งระยะสั้นจากตลาด",
-      CAUTION_ZONE: "จุดเข้าอยู่ใกล้โซนที่ต้องระวัง"
+      CAUTION_ZONE: "จุดเข้าอยู่ในโซนติดตามพิเศษ"
     };
     return labels[code] || "กำลังประเมินจุดเข้า";
   };
@@ -624,9 +624,9 @@ export default function DashboardPage() {
   const entryQualityCustomerText =
     entryQualityGrade === "A" ? "A · คุณภาพสูง"
       : entryQualityGrade === "B" ? "B · คุณภาพปานกลาง"
-      : "C · รอเงื่อนไขเพิ่ม";
+      : "C · กำลังสะสมเงื่อนไข";
   const priceLocationCustomerText = antiChaseActive
-    ? "ราคาวิ่งไกลเกินจุดเหมาะสม · รอจังหวะใหม่"
+    ? "ราคานอกโซนประเมิน · ติดตามจังหวะถัดไป"
     : priceLocationState === "BREAKOUT_RETEST_READY"
       ? "ราคากลับมาทดสอบหลังเบรก · พร้อมประเมินเข้า"
       : priceLocationState === "PULLBACK_RETEST_READY" || priceLocationState === "RETEST_READY"
@@ -640,25 +640,25 @@ export default function DashboardPage() {
     : Number(metrics.bullishOrderBlockQuality || 0);
   const orderBlockCustomerText =
     rawOrderBlockState === "NONE" || orderBlockQuality <= 0
-      ? "ยังไม่พบ Order Block ที่เด่น"
+      ? "กำลังประเมิน Order Block"
       : orderBlockQuality >= 75
         ? "พบ Order Block คุณภาพสูง"
         : orderBlockQuality >= 45
           ? "พบ Order Block ที่ใช้งานได้"
-          : "พบ Order Block แต่ยังต้องรอยืนยัน";
+          : "พบ Order Block · อยู่ระหว่างยืนยัน";
   const fibScore = Number(metrics.fibSetupScore || 0);
   const fibCustomerText =
     fibScore >= 70 ? "Fibonacci สนับสนุนจุดเข้าอย่างชัดเจน"
       : fibScore >= 40 ? "Fibonacci เริ่มสนับสนุนจุดเข้า"
-      : "Fibonacci ยังไม่ให้สัญญาณเด่น";
+      : "Fibonacci อยู่ระหว่างประเมิน";
   const emaStackCustomerText =
     emaStack === "BULLISH" ? "เส้นค่าเฉลี่ยเรียงตัวสนับสนุนขาขึ้น"
       : emaStack === "BEARISH" ? "เส้นค่าเฉลี่ยเรียงตัวสนับสนุนขาลง"
-      : "เส้นค่าเฉลี่ยยังผสมกัน · รอทิศทางชัดขึ้น";
+      : "โครงสร้างค่าเฉลี่ยอยู่ระหว่างสร้างทิศทาง";
   const emaReclaimCustomerText =
     emaReclaimState === "RECLAIM_EMA21_UP" ? "ราคากลับยืนเหนือแนวเฉลี่ยระยะสั้น"
       : emaReclaimState === "LOSE_EMA21_DOWN" ? "ราคาหลุดแนวเฉลี่ยระยะสั้น"
-      : "ยังไม่มีสัญญาณกลับตัวจากเส้นค่าเฉลี่ย";
+      : "กำลังติดตามสัญญาณจากเส้นค่าเฉลี่ย";
   const ladderCustomerText = currentPositions > 0
     ? "กำลังจัดจังหวะไม้ถัดไปตามระยะราคา · ไม้ "+currentPositions+"/"+configuredMaxPositions
     : "จะเริ่มเพิ่มไม้หลังจากเปิดไม้แรกแล้ว";
@@ -667,21 +667,21 @@ export default function DashboardPage() {
     : "ระบบจะคำนวณ TP และ SL ตามสภาพตลาดเมื่อมีออเดอร์";
   const riskCustomerText = performanceRiskMode === "NORMAL"
     ? "ระดับความเสี่ยงปกติ · ใช้จำนวนไม้ตามที่ลูกค้ากำหนด"
-    : "ระบบกำลังระมัดระวังมากขึ้นหลังผลการเทรดช่วงล่าสุด";
+    : "ระบบกำลังปรับระดับความเสี่ยงตามผลการเทรดล่าสุด";
   const rescueStateCustomerText =
-    rescueState === "NORMAL" ? "ยังไม่ต้องใช้การฟื้นตัว"
-      : rescueState === "WARNING" ? "กำลังเฝ้าระวัง Basket ที่ติดลบ"
+    rescueState === "NORMAL" ? "ระบบปรับสมดุลพร้อมใช้งาน"
+      : rescueState === "WARNING" ? "กำลังติดตามสถานะ Basket"
       : rescueState === "ACTIVE" ? "กำลังลดความเสี่ยงของ Basket"
-      : rescueState === "RECOVERY" ? "กำลังฟื้นผลขาดทุนของ Basket"
+      : rescueState === "RECOVERY" ? "กำลังปรับสมดุลผลลัพธ์ Basket"
       : "กำลังจัดการ Basket ให้กลับสู่สถานะปกติ";
   const recoveryCustomerText = rescueActive
     ? "ฟื้นแล้ว $"+rescueRecoveredMoney.toFixed(2)+" · เหลือ $"+rescueRequiredMoney.toFixed(2)
-    : "ไม่มีภาระการฟื้นตัวในขณะนี้";
+    : "ระบบบริหาร Basket พร้อมใช้งาน";
   const reversalCustomerText = rescueActive
     ? (Boolean(metrics.rescueReversalConfirmed)
         ? "ยืนยันแรงกลับตัวแล้ว"
         : "กำลังติดตามแรงกลับตัว")
-    : "ยังไม่มีสถานะที่ต้องติดตามการกลับตัว";
+    : "ระบบติดตามการกลับตัวพร้อมใช้งาน";
 
   const desiredStateLabel =
     desired === "RUNNING" ? "RUNNING — ให้บอททำงาน"
@@ -2330,12 +2330,16 @@ function HourlyWinRateChart({points}:{points:any[]}) {
   })).filter((point:any)=>point.trades>0).sort((a:any,b:any)=>a.hour-b.hour);
   const totalTrades = active.reduce((sum,point)=>sum+point.trades,0);
   const totalWins = active.reduce((sum,point)=>sum+point.wins,0);
-  const totalNet = active.reduce((sum,point)=>sum+point.netProfit,0);
   const grossProfit = active.reduce((sum,point)=>sum+point.grossProfit,0);
   const grossLoss = active.reduce((sum,point)=>sum+point.grossLoss,0);
   const overallWinRate = totalTrades>0 ? totalWins/totalTrades*100 : 0;
   const profitFactor = grossLoss>0 ? grossProfit/grossLoss : grossProfit>0 ? grossProfit : 0;
   const best = active.reduce<any>((winner,point)=>!winner||point.winRate>winner.winRate||(point.winRate===winner.winRate&&point.trades>winner.trades)?point:winner,null);
+  const performanceTone = totalTrades===0 ? "neutral" : overallWinRate>=60&&profitFactor>=1 ? "good" : overallWinRate>=45&&profitFactor>=.8 ? "warn" : "bad";
+  const winRateTone = totalTrades===0 ? "neutral" : overallWinRate>=60 ? "good" : overallWinRate>=45 ? "warn" : "bad";
+  const bestHourTone = !best ? "neutral" : best.winRate>=60 ? "good" : best.winRate>=45 ? "warn" : "bad";
+  const sampleTone = totalTrades>=30 ? "good" : totalTrades>=10 ? "warn" : "neutral";
+  const profitFactorTone = totalTrades===0 ? "neutral" : profitFactor>=1.2 ? "good" : profitFactor>=.8 ? "warn" : "bad";
   const width = 940;
   const height = 286;
   const pad = {left:48,right:18,top:20,bottom:38};
@@ -2354,20 +2358,19 @@ function HourlyWinRateChart({points}:{points:any[]}) {
   const axisPoints = plotted.filter((_:any,index:number)=>index===0||index===plotted.length-1||index%labelStep===0);
   const bestPoint = best ? plotted.find((point:any)=>point.hour===best.hour) : null;
   return (
-    <section className="panel cc-v6-hourly-chart">
+    <section className={"panel cc-v6-hourly-chart performance-"+performanceTone}>
       <div className="cc-v6-panel-head">
-        <div><span><ScenovaIcon name="pnl" size={18}/></span><div><b>อัตราชนะรายชั่วโมง</b><small>เฉพาะชั่วโมงที่มี Basket ปิดจริงใน 30 วันล่าสุด · เวลาไทย</small></div></div>
-        <em>ACTIVE HOURS</em>
+        <div><span><ScenovaIcon name="pnl" size={18}/></span><div><b>ผลการดำเนินงานจำแนกตามช่วงเวลา</b><small>ประมวลผลจาก Basket ที่ปิดสมบูรณ์ในช่วง 30 วันล่าสุด · เวลาไทย</small></div></div>
+        <em>HOURLY PERFORMANCE</em>
       </div>
       <div className="cc-v6-chart-kpis">
-        <div><b>{overallWinRate.toFixed(1)}%</b><span>Win Rate</span></div>
-        <div><b>{best?hourLabel(best.hour):"—"}</b><span>Best Hour</span></div>
-        <div><b>{totalTrades}</b><span>Total Baskets</span></div>
-        <div><b>{profitFactor.toFixed(2)}</b><span>Profit Factor</span></div>
-        <div className={totalNet>=0?"good":"bad"}><b>{(totalNet>=0?"+$":"-$")+Math.abs(totalNet).toFixed(2)}</b><span>Net P/L</span></div>
+        <div className={"tone-"+winRateTone}><b>{overallWinRate.toFixed(1)}%</b><span>อัตราชนะ</span></div>
+        <div className={"tone-"+bestHourTone}><b>{best?hourLabel(best.hour):"—"}</b><span>ช่วงเวลาประสิทธิภาพสูงสุด</span></div>
+        <div className={"tone-"+sampleTone}><b>{totalTrades}</b><span>จำนวน Basket ที่ประเมิน</span></div>
+        <div className={"tone-"+profitFactorTone}><b>{profitFactor.toFixed(2)}</b><span>อัตราส่วนผลตอบแทน</span></div>
       </div>
       <div className="cc-v6-chart-canvas">
-        <svg viewBox={"0 0 "+width+" "+height} preserveAspectRatio="none" role="img" aria-label="กราฟอัตราชนะรายชั่วโมง">
+        <svg viewBox={"0 0 "+width+" "+height} preserveAspectRatio="none" role="img" aria-label="กราฟผลการดำเนินงานจำแนกตามช่วงเวลา">
           <defs>
             <linearGradient id="hourlyWinLine" x1="0" x2="1"><stop offset="0" stopColor="#48e8ff"/><stop offset=".55" stopColor="#57a9ff"/><stop offset="1" stopColor="#a978ff"/></linearGradient>
             <linearGradient id="hourlyWinArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4fcfff" stopOpacity=".25"/><stop offset="1" stopColor="#7658ff" stopOpacity="0"/></linearGradient>
@@ -2380,7 +2383,7 @@ function HourlyWinRateChart({points}:{points:any[]}) {
           {plotted.map(point=><g key={point.hour} className={best?.hour===point.hour?"cc-v6-chart-point best":"cc-v6-chart-point"}><circle cx={point.x} cy={point.y} r={best?.hour===point.hour?6:4}/><title>{hourLabel(point.hour)+" · ชนะ "+point.winRate.toFixed(1)+"% · "+point.trades+" Basket"}</title></g>)}
           {bestPoint&&<g className="cc-v6-best-hour"><line x1={bestPoint.x} x2={bestPoint.x} y1={bestPoint.y+10} y2={height-pad.bottom}/><rect x={Math.min(width-155,Math.max(pad.left,bestPoint.x-58))} y={Math.max(3,bestPoint.y-39)} width="116" height="27" rx="7"/><text x={Math.min(width-97,Math.max(pad.left+58,bestPoint.x))} y={Math.max(21,bestPoint.y-21)} textAnchor="middle">ดีที่สุด {hourLabel(bestPoint.hour)} · {bestPoint.winRate.toFixed(0)}%</text></g>}
         </svg>
-        {!active.length&&<div className="cc-v6-chart-empty"><ScenovaIcon name="report" size={24}/><b>ยังไม่มี Basket ที่ปิดใน 30 วันล่าสุด</b><span>กราฟจะเริ่มแสดงทันทีเมื่อ EA ส่งผลการเทรดจริง</span></div>}
+        {!active.length&&<div className="cc-v6-chart-empty"><ScenovaIcon name="report" size={24}/><b>พร้อมประมวลผลสถิติการเทรด</b><span>ข้อมูลจะแสดงอัตโนมัติเมื่อมี Basket ที่ปิดสมบูรณ์</span></div>}
       </div>
     </section>
   );
