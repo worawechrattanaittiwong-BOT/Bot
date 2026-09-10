@@ -12,6 +12,10 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
-        Application.Run(new InstallerForm());
+        var form = new InstallerForm
+        {
+            Text = InstallerConstants.ProductName + " v" + AgentBuildInfo.Version
+        };
+        Application.Run(form);
     }
 }
