@@ -2,7 +2,8 @@ name: Apply EA Heartbeat Resilience
 
 on:
   push:
-    branches: [fix/ea-heartbeat-resilience-1046]
+    branches:
+      - "fix/ea-heartbeat-resilience-1046"
     paths:
       - ".github/workflows/apply-ea-heartbeat-resilience.yml"
 
@@ -10,206 +11,31 @@ permissions:
   contents: write
 
 jobs:
-  patch-compile-commit:
-    runs-on: windows-latest
-    timeout-minutes: 25
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Patch transient heartbeat handling
-        shell: powershell
+      - name: Apply exact source patch
+        run: python tools/patch-ea-heartbeat.py
+
+      - name: Validate patch shape
         run: |
-          $ErrorActionPreference = "Stop"
-          $path = "mt5/FastBasketBot.mq5"
-          $text = [System.IO.File]::ReadAllText($path).Replace("`r`n", "`n")
+          grep -F '#property version   "1.046"' mt5/FastBasketBot.mq5
+          grep -F 'CONTROL_RETRYING' mt5/FastBasketBot.mq5
+          grep -F 'RECONNECTING' mt5/FastBasketBot.mq5
+          grep -F 'DEFAULT_EA_VERSION = "1.046"' apps/api/src/release-version.ts
+          git diff --check
 
-          if (-not $text.Contains('#property version   "1.045"')) {
-            throw "Expected EA version 1.045 was not found"
-          }
-          $text = $text.Replace('#property version   "1.045"', '#property version   "1.046"')
-
-          $oldStatus = @'
-   bool terminalOnline = TerminalConnectedNow();
-   bool serverFresh = g_lastSuccessfulHeartbeat > 0 &&
-      TimeCurrent() - g_lastSuccessfulHeartbeat <= InpMaxOfflineLeaseSeconds;
-   string connectionText = !terminalOnline ? "MT5 OFFLINE" : serverFresh ? "CONNECTED" : "CONNECTING";
-   color statusColor = !terminalOnline ? clrTomato : serverFresh ? clrLimeGreen : clrGold;
-   RenderChartStatus(connectionText, statusColor, g_executionStatus);
-}
-'@.Replace("`r`n", "`n")
-
-          $newStatus = @'
-   bool terminalOnline = TerminalConnectedNow();
-   int heartbeatAge = g_lastSuccessfulHeartbeat > 0
-      ? (int)MathMax(0, TimeCurrent() - g_lastSuccessfulHeartbeat)
-      : -1;
-   int connectedFreshSeconds = MathMax(9, InpHeartbeatSeconds * 4);
-   bool serverFresh = heartbeatAge >= 0 && heartbeatAge <= connectedFreshSeconds;
-   bool serverWithinLease = heartbeatAge >= 0 && heartbeatAge <= InpMaxOfflineLeaseSeconds;
-   string connectionText = !terminalOnline
-      ? "MT5 OFFLINE"
-      : serverFresh
-         ? "CONNECTED"
-         : serverWithinLease ? "RECONNECTING" : "CONNECTING";
-   color statusColor = !terminalOnline
-      ? clrTomato
-      : serverFresh ? clrLimeGreen : clrGold;
-   RenderChartStatus(connectionText, statusColor, g_executionStatus);
-}
-'@.Replace("`r`n", "`n")
-
-          if (-not $text.Contains($oldStatus)) {
-            throw "RefreshChartStatus connection block was not found"
-          }
-          $text = $text.Replace($oldStatus, $newStatus)
-
-          $oldFailure = @'
-   if(code < 200 || code >= 300)
-   {
-      // Fail closed for new entries immediately when control cannot be verified.
-      g_runAuthorized = false;
-      if(g_state == STATE_RUNNING)
-         g_executionStatus = "CONTROL_NOT_FRESH";
-
-      Print("SCENOVA heartbeat failed. HTTP=", code, " error=", webError, " URL=", heartbeatUrl);
-
-      if(code == -1)
-      {
-         RenderChartStatus("NETWORK ERROR", clrTomato, "WebRequest error " + IntegerToString(webError));
-      }
-      else if(code == 401)
-      {
-         RenderChartStatus("AUTH FAILED", clrTomato, "Reload the newest SCENOVA .set file");
-      }
-      else
-      {
-         RenderChartStatus("NOT CONNECTED", clrTomato, "HTTP " + IntegerToString(code));
-      }
-      return;
-   }
-
-   g_lastSuccessfulHeartbeat = TimeCurrent();
-'@.Replace("`r`n", "`n")
-
-          $newFailure = @'
-   if(code < 200 || code >= 300)
-   {
-      // A single Wi-Fi/ISP/API packet loss must not flap RUNNING -> STOPPED ->
-      // RUNNING. Keep the last verified RUNNING authorization only for a short
-      // bounded grace window. Authentication/authorization failures still fail
-      // closed immediately, and the longer offline lease remains the absolute
-      // access limit for all new entries.
-      bool transientFailure =
-         code == -1 || code == 408 || code == 425 || code == 429 || code >= 500;
-      int transientGraceSeconds = MathMax(9, MathMin(20, InpHeartbeatSeconds * 5));
-      bool verifiedControlStillFresh =
-         g_lastSuccessfulHeartbeat > 0 &&
-         TimeCurrent() - g_lastSuccessfulHeartbeat <= transientGraceSeconds;
-
-      Print("SCENOVA heartbeat failed. HTTP=", code, " error=", webError, " URL=", heartbeatUrl,
-            " transient=", transientFailure, " grace=", verifiedControlStillFresh);
-
-      if(transientFailure && verifiedControlStillFresh)
-      {
-         if(g_state == STATE_RUNNING && g_runAuthorized)
-            g_executionStatus = "CONTROL_RETRYING";
-         RenderChartStatus("RECONNECTING", clrGold, g_executionStatus);
-         return;
-      }
-
-      // Beyond the short grace period, or on a real auth/control rejection,
-      // fail closed for NEW entries. Existing Basket risk/profit management
-      // continues locally and MT5 itself is never restarted by this logic.
-      g_runAuthorized = false;
-      if(g_state == STATE_RUNNING)
-         g_executionStatus = "CONTROL_NOT_FRESH";
-
-      if(code == 401 || code == 403)
-      {
-         RenderChartStatus("AUTH FAILED", clrTomato, "Reload the newest SCENOVA .set file");
-      }
-      else if(code == -1)
-      {
-         RenderChartStatus("NETWORK ERROR", clrTomato, "WebRequest error " + IntegerToString(webError));
-      }
-      else
-      {
-         RenderChartStatus("NOT CONNECTED", clrTomato, "HTTP " + IntegerToString(code));
-      }
-      return;
-   }
-
-   g_lastSuccessfulHeartbeat = TimeCurrent();
-'@.Replace("`r`n", "`n")
-
-          if (-not $text.Contains($oldFailure)) {
-            throw "Heartbeat failure block was not found"
-          }
-          $text = $text.Replace($oldFailure, $newFailure)
-
-          [System.IO.File]::WriteAllText(
-            $path,
-            $text,
-            [System.Text.UTF8Encoding]::new($false))
-
-          $releasePath = "apps/api/src/release-version.ts"
-          $release = [System.IO.File]::ReadAllText($releasePath)
-          if (-not $release.Contains('export const DEFAULT_EA_VERSION = "1.045";')) {
-            throw "DEFAULT_EA_VERSION 1.045 was not found"
-          }
-          $release = $release.Replace(
-            'export const DEFAULT_EA_VERSION = "1.045";',
-            'export const DEFAULT_EA_VERSION = "1.046";')
-          [System.IO.File]::WriteAllText(
-            $releasePath,
-            $release,
-            [System.Text.UTF8Encoding]::new($false))
-
-      - name: Install official MetaTrader 5 build environment
-        shell: powershell
+      - name: Commit patched source to feature branch
         run: |
-          $ErrorActionPreference = "Stop"
-          $installer = "$env:RUNNER_TEMP\mt5setup.exe"
-          $installDir = "C:\SCENOVA-MT5-Heartbeat-Check"
-          Invoke-WebRequest -UseBasicParsing -Uri "https://download.terminal.free/cdn/web/metaquotes.ltd/mt5/mt5setup.exe" -OutFile $installer
-          Start-Process -FilePath $installer -ArgumentList "/auto /path:`"$installDir`"" -Wait
-          $metaEditor = Get-ChildItem -Path $installDir -Filter "metaeditor64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
-          "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      - name: Compile patched FastBasketBot.mq5
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          $sourceDir = "$env:RUNNER_TEMP\SCENOVA-EA-Heartbeat-Source"
-          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
-          $source = Join-Path $sourceDir "FastBasketBot.mq5"
-          Copy-Item -Force "mt5\FastBasketBot.mq5" $source
-          $log = "$env:RUNNER_TEMP\FastBasketBot-heartbeat-compile.log"
-          Start-Process -FilePath "$env:METAEDITOR" -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
-          if (Test-Path $log) { Get-Content $log }
-          $ex5 = [System.IO.Path]::ChangeExtension($source, ".ex5")
-          if (-not (Test-Path $ex5)) { throw "FastBasketBot.ex5 was not produced" }
-          if (Test-Path $log) {
-            $logText = Get-Content $log -Raw
-            if ($logText -match "(?im)\b[1-9][0-9]*\s+errors?\b") {
-              throw "MetaEditor reported compile errors"
-            }
-          }
-
-      - name: Commit validated heartbeat hardening to feature branch
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
           git config user.name "SCENOVA Build Bot"
           git config user.email "actions@users.noreply.github.com"
-          git rm ".github/workflows/apply-ea-heartbeat-resilience.yml"
-          git add "mt5/FastBasketBot.mq5" "apps/api/src/release-version.ts"
+          git rm .github/workflows/apply-ea-heartbeat-resilience.yml tools/patch-ea-heartbeat.py
+          git add mt5/FastBasketBot.mq5 apps/api/src/release-version.ts
           git diff --cached --check
-          if ($LASTEXITCODE -ne 0) { throw "git diff validation failed" }
           git commit -m "fix: make EA heartbeat resilient to transient network gaps"
-          if ($LASTEXITCODE -ne 0) { throw "Could not commit heartbeat hardening" }
           git push origin HEAD:fix/ea-heartbeat-resilience-1046
-          if ($LASTEXITCODE -ne 0) { throw "Could not push heartbeat hardening branch" }
