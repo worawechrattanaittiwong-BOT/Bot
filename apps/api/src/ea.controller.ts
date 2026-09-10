@@ -32,12 +32,10 @@ export class EaController {
 
   private artifactPath(channel = "Stable") {
     if (channel === "AdminTest") {
-      const value = String(process.env.EA_ARTIFACT_PATH_ADMIN_TEST || "").trim();
-      if (value) return value;
+      return String(process.env.EA_ARTIFACT_PATH_ADMIN_TEST || "").trim();
     }
     if (channel === "Beta") {
-      const value = String(process.env.EA_ARTIFACT_PATH_BETA || "").trim();
-      if (value) return value;
+      return String(process.env.EA_ARTIFACT_PATH_BETA || "").trim();
     }
     return process.env.EA_ARTIFACT_PATH || "/app/apps/api/artifacts/FastBasketBot.ex5";
   }
