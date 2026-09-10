@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.043"
+#property version   "1.044"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -2007,7 +2007,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.043\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.044\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -7207,6 +7207,121 @@ bool RecentDirectionalBodyAfter(
       : rates[0].close < rates[0].open;
 }
 
+
+double BasketAddDistanceFromLocalExtremeAtr(
+   int direction,
+   double extremeLevel
+)
+{
+   if(direction==0 || extremeLevel<=0.0)
+      return 99.0;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return 99.0;
+
+   double atrPrice=MathMax(
+      _Point*12.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+   double current=direction>0 ? tick.bid : tick.ask;
+   return direction>0
+      ? (extremeLevel-current)/MathMax(_Point,atrPrice)
+      : (current-extremeLevel)/MathMax(_Point,atrPrice);
+}
+
+bool BasketAddLocationAllowed(
+   int direction,
+   int count,
+   string &reasonOut
+)
+{
+   reasonOut="NONE";
+   if(direction==0 || count<=0)
+      return true;
+
+   string extremeState="NONE";
+   double extremeLevel=0.0;
+   double extremeRisk=LocalExtremeRiskScore(
+      direction,extremeState,extremeLevel
+   );
+   bool breakoutHold=BreakoutHoldConfirmed(direction,extremeLevel);
+   double distanceFromExtremeAtr=
+      BasketAddDistanceFromLocalExtremeAtr(direction,extremeLevel);
+
+   // Positive distance means price has pulled away from the directional edge.
+   // Slightly negative values mean a live probe above/below the old extreme.
+   bool nearDirectionalEdge=
+      distanceFromExtremeAtr<=0.18 &&
+      distanceFromExtremeAtr>=-0.12;
+
+   double atrPoints=MathMax(
+      10.0,
+      g_atrPoints>0.0
+         ? g_atrPoints
+         : AverageTrueRangePoints(PERIOD_M15,g_atrPeriod)
+   );
+   double anchorProgressAtr=
+      MathMax(0.0,BasketProgressFromAnchorPoints(direction)) /
+      MathMax(1.0,atrPoints);
+
+   g_spaceToTargetAtr=SpaceToTargetAtr(direction);
+   double exhaustion=0.0,extensionAtr=0.0,adverseWick=0.0;
+   string exhaustionReason="NONE";
+   bool exhausted=DirectionalExhaustion(
+      direction,exhaustion,extensionAtr,adverseWick,exhaustionReason
+   );
+
+   bool retestReady=PullbackRetestReady(direction,MomentumPoints());
+   bool executionTurn=ExecutionTurningEvent(direction,MomentumPoints());
+   bool safePullback=
+      distanceFromExtremeAtr>=0.18 &&
+      (retestReady || executionTurn);
+
+   // Basket completion must never outrank location safety. This specifically
+   // prevents rungs 2..N from being stacked at a local top/bottom simply
+   // because the 10-minute fill schedule is behind.
+   bool localEdgeChase=
+      nearDirectionalEdge &&
+      !breakoutHold &&
+      (
+         extremeRisk>=52.0 ||
+         anchorProgressAtr>=0.35 ||
+         count>=3
+      );
+
+   bool exhaustedAtEdge=
+      exhausted &&
+      nearDirectionalEdge &&
+      !breakoutHold &&
+      !safePullback;
+
+   bool noTargetRoom=
+      g_spaceToTargetAtr<=0.16 &&
+      !breakoutHold &&
+      !safePullback;
+
+   if(localEdgeChase || exhaustedAtEdge || noTargetRoom)
+   {
+      reasonOut=direction>0
+         ? "LOCAL_TOP_ADD_BLOCK"
+         : "LOCAL_BOTTOM_ADD_BLOCK";
+      g_localExtremeState=extremeState;
+      g_localExtremeScore=extremeRisk;
+      g_localExtremeLevel=extremeLevel;
+      g_breakoutHoldConfirmed=false;
+      return false;
+   }
+
+   if(breakoutHold)
+   {
+      g_breakoutHoldConfirmed=true;
+      g_localExtremeState="BREAKOUT_HOLD_CONFIRMED";
+   }
+
+   return true;
+}
+
 bool BasketLadderReady(int direction, int count, int targetPositions)
 {
    int nextRung = count+1;
@@ -7310,6 +7425,14 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       return false;
    }
 
+   string addLocationReason="NONE";
+   if(!BasketAddLocationAllowed(direction,count,addLocationReason))
+   {
+      g_ladderMode="WAIT_LOCAL_EXTREME";
+      g_fillBlockReason=addLocationReason;
+      return false;
+   }
+
    // Better-price add: not Martingale. It is allowed only after a modest
    // pullback, a fresh turn back with the Basket thesis, and all terminal-zone
    // safety checks still run in ProcessBurstQueue.
@@ -7345,12 +7468,33 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
               ? (freshTurn && confirmation)
               : confirmation;
 
-      if(phaseAccept)
+      // Schedule urgency may relax signal quality, but may not stack multiple
+      // positions at nearly the same price. Every continuation add must make
+      // fresh favorable progress from the LAST filled position. A proper
+      // better-price pullback is handled by the path above.
+      double lastEntryProgress=BasketFavorableProgressPoints(direction);
+      double scheduledSpacingFactor =
+         g_fillPhase=="STRICT" ? 0.055 :
+         g_fillPhase=="BALANCED" ? 0.040 : 0.028;
+      double scheduledSpacing=MathMax(
+         2.0,
+         atr*scheduledSpacingFactor*spreadSpacingFactor
+      );
+      bool priceSeparated=lastEntryProgress>=scheduledSpacing;
+
+      if(phaseAccept && priceSeparated)
       {
          g_ladderMode = g_fillPhase=="COMPLETION"
             ? "COMPLETION_TIMING_READY"
             : "SCHEDULED_RETEST_READY";
          return true;
+      }
+
+      if(phaseAccept && !priceSeparated)
+      {
+         g_ladderMode="WAIT_ADD_PRICE_SEPARATION";
+         g_fillBlockReason="WAIT_ADD_PRICE_SEPARATION";
+         return false;
       }
    }
 
@@ -7485,12 +7629,16 @@ void ProcessBurstQueue()
    if(!BasketLadderReady(g_burstDirection,count,g_burstTargetPositions))
    {
       g_executionStatus =
-         g_ladderMode=="WAIT_PULLBACK" ||
-         g_ladderMode=="EXHAUSTION_PULLBACK"
-         ? "BASKET_LADDER_PULLBACK_WAIT"
-         : g_ladderMode=="WAIT_CONTINUATION"
-           ? "BASKET_LADDER_CONTINUATION_WAIT"
-           : "BASKET_LADDER_WAIT";
+         g_ladderMode=="WAIT_LOCAL_EXTREME"
+         ? g_fillBlockReason
+         : g_ladderMode=="WAIT_ADD_PRICE_SEPARATION"
+           ? "WAIT_ADD_PRICE_SEPARATION"
+           : g_ladderMode=="WAIT_PULLBACK" ||
+             g_ladderMode=="EXHAUSTION_PULLBACK"
+             ? "BASKET_LADDER_PULLBACK_WAIT"
+             : g_ladderMode=="WAIT_CONTINUATION"
+               ? "BASKET_LADDER_CONTINUATION_WAIT"
+               : "BASKET_LADDER_WAIT";
       return;
    }
 
@@ -7512,6 +7660,18 @@ void ProcessBurstQueue()
    {
       g_fillBlockReason=g_adaptiveBlockReason;
       g_executionStatus=g_adaptiveBlockReason;
+      return;
+   }
+
+   string finalAddLocationReason="NONE";
+   if(!BasketAddLocationAllowed(
+      g_burstDirection,
+      count,
+      finalAddLocationReason))
+   {
+      g_fillBlockReason=finalAddLocationReason;
+      g_executionStatus=finalAddLocationReason;
+      g_ladderMode="WAIT_LOCAL_EXTREME";
       return;
    }
 
