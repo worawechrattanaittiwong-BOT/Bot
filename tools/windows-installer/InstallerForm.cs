@@ -75,6 +75,7 @@ internal sealed class InstallerForm : Form
 
     private List<TerminalChoice> _terminals = [];
     private InstallationAssessment? _assessment;
+    private readonly Image _brandLogo = BrandAssets.LoadScenovaLogo();
     private bool _busy;
 
     internal InstallerForm()
@@ -165,30 +166,38 @@ internal sealed class InstallerForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
 
         var header = new Panel { Dock = DockStyle.Fill };
-        var brand = new Label
+        var brand = new PictureBox
         {
-            Text = "SCENOVA",
-            Font = new Font("Segoe UI", 27, FontStyle.Bold),
-            ForeColor = Color.FromArgb(41, 176, 255),
-            AutoSize = true,
-            Location = new Point(6, 3)
+            Image = _brandLogo,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            BackColor = Color.Transparent,
+            Location = new Point(4, 4),
+            Size = new Size(205, 68),
+            AccessibleName = "SCENOVA"
+        };
+        var divider = new Panel
+        {
+            BackColor = Color.FromArgb(34, 90, 145),
+            Location = new Point(220, 8),
+            Size = new Size(1, 60)
         };
         var title = new Label
         {
-            Text = "Smart Installer",
+            Text = "SCENOVA Smart Installer",
             Font = new Font("Segoe UI", 20, FontStyle.Bold),
             ForeColor = Color.White,
             AutoSize = true,
-            Location = new Point(220, 10)
+            Location = new Point(240, 7)
         };
         var subtitle = new Label
         {
             Text = "ค้นหา MT5 · ติดตั้ง · ซ่อม · อัปเดตอย่างปลอดภัย · ยืนยันการเชื่อมต่อ",
             ForeColor = Color.FromArgb(155, 189, 225),
             AutoSize = true,
-            Location = new Point(222, 51)
+            Location = new Point(242, 49)
         };
         header.Controls.Add(brand);
+        header.Controls.Add(divider);
         header.Controls.Add(title);
         header.Controls.Add(subtitle);
         root.Controls.Add(header, 0, 0);
@@ -1102,5 +1111,12 @@ internal sealed class InstallerForm : Form
         _rescan.Enabled = !busy;
         _terminal.Enabled = !busy && _terminals.Count > 0;
         _channel.Enabled = !busy;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            _brandLogo.Dispose();
+        base.Dispose(disposing);
     }
 }
