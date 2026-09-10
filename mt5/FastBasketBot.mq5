@@ -358,6 +358,27 @@ string g_fillBlockReason = "NONE";
 string g_lastEntryReason = "NONE";
 string g_lastCloseReason = "NONE";
 
+// Strategy Tester audit counters. These never affect live decisions.
+datetime g_testCycleStartedAt = 0;
+int    g_testCycleDirection = 0;
+int    g_testCycleTarget = 0;
+double g_testCycleMae = 0.0;
+double g_testCycleMfe = 0.0;
+bool   g_testCycleFillRecorded = false;
+int    g_testCycleSamples = 0;
+double g_testMaeSum = 0.0;
+double g_testMfeSum = 0.0;
+double g_testProfitCaptureSum = 0.0;
+int    g_testProfitCaptureSamples = 0;
+double g_testFillSecondsSum = 0.0;
+int    g_testFillSamples = 0;
+int    g_testFillWithin600 = 0;
+int    g_testEntryCount = 0;
+int    g_testTerminalChaseCount = 0;
+int    g_testSameSideChurnCount = 0;
+datetime g_testLastBasketClosedAt = 0;
+int    g_testLastBasketDirection = 0;
+
 // Same-side re-entry after a reversal exit is event-driven, never time-based.
 int      g_marketRearmDirection = 0;
 datetime g_marketRearmAt = 0;
@@ -1027,6 +1048,125 @@ void OnDeinit(const int reason)
    ClearChartStatus();
 }
 
+
+void TesterStartCycleIfNeeded(int direction,int positionsBefore)
+{
+   if(!MQLInfoInteger(MQL_TESTER))
+      return;
+
+   g_testEntryCount++;
+   double adverseZone = direction > 0 ? g_supplyZoneScore : g_demandZoneScore;
+   double space = SpaceToTargetAtr(direction);
+   if(adverseZone >= 75.0 && space <= 0.30)
+      g_testTerminalChaseCount++;
+
+   if(positionsBefore > 0 || g_testCycleStartedAt > 0)
+      return;
+
+   if(g_testLastBasketClosedAt > 0 &&
+      g_testLastBasketDirection == direction &&
+      TimeCurrent()-g_testLastBasketClosedAt <= 120)
+      g_testSameSideChurnCount++;
+
+   g_testCycleStartedAt = TimeCurrent();
+   g_testCycleDirection = direction;
+   g_testCycleTarget = MathMax(1,g_maxPositions);
+   g_testCycleMae = 0.0;
+   g_testCycleMfe = 0.0;
+   g_testCycleFillRecorded = false;
+}
+
+void TesterUpdateCycleMetrics(int count,double cycleProfit)
+{
+   if(!MQLInfoInteger(MQL_TESTER) || count <= 0)
+      return;
+
+   if(g_testCycleStartedAt <= 0)
+   {
+      g_testCycleStartedAt = TimeCurrent();
+      g_testCycleDirection = BasketDirection();
+      g_testCycleTarget = MathMax(1,g_maxPositions);
+      g_testCycleMae = 0.0;
+      g_testCycleMfe = 0.0;
+      g_testCycleFillRecorded = false;
+   }
+
+   g_testCycleMae = MathMax(g_testCycleMae,MathMax(0.0,-cycleProfit));
+   g_testCycleMfe = MathMax(g_testCycleMfe,MathMax(0.0,cycleProfit));
+
+   if(!g_testCycleFillRecorded && count >= MathMax(1,g_testCycleTarget))
+   {
+      double seconds = MathMax(0.0,(double)(TimeCurrent()-g_testCycleStartedAt));
+      g_testFillSecondsSum += seconds;
+      g_testFillSamples++;
+      if(seconds <= 600.0)
+         g_testFillWithin600++;
+      g_testCycleFillRecorded = true;
+   }
+}
+
+void TesterFinalizeCycle(int direction,double closeProfit)
+{
+   if(!MQLInfoInteger(MQL_TESTER) || g_testCycleStartedAt <= 0)
+      return;
+
+   g_testCycleSamples++;
+   g_testMaeSum += g_testCycleMae;
+   g_testMfeSum += g_testCycleMfe;
+   if(g_testCycleMfe > 0.0)
+   {
+      g_testProfitCaptureSum += MathMax(
+         0.0,
+         MathMin(1.0,MathMax(0.0,closeProfit)/g_testCycleMfe)
+      );
+      g_testProfitCaptureSamples++;
+   }
+
+   g_testLastBasketClosedAt = TimeCurrent();
+   g_testLastBasketDirection = direction;
+   g_testCycleStartedAt = 0;
+   g_testCycleDirection = 0;
+   g_testCycleTarget = 0;
+   g_testCycleMae = 0.0;
+   g_testCycleMfe = 0.0;
+   g_testCycleFillRecorded = false;
+}
+
+double OnTester()
+{
+   double avgMae = g_testCycleSamples > 0
+      ? g_testMaeSum/g_testCycleSamples : 0.0;
+   double avgMfe = g_testCycleSamples > 0
+      ? g_testMfeSum/g_testCycleSamples : 0.0;
+   double capture = g_testProfitCaptureSamples > 0
+      ? g_testProfitCaptureSum/g_testProfitCaptureSamples*100.0 : 0.0;
+   double avgFillSeconds = g_testFillSamples > 0
+      ? g_testFillSecondsSum/g_testFillSamples : 0.0;
+   double fill10Rate = g_testFillSamples > 0
+      ? (double)g_testFillWithin600/g_testFillSamples*100.0 : 0.0;
+   double terminalRate = g_testEntryCount > 0
+      ? (double)g_testTerminalChaseCount/g_testEntryCount*100.0 : 0.0;
+   double churnRate = g_testCycleSamples > 0
+      ? (double)g_testSameSideChurnCount/g_testCycleSamples*100.0 : 0.0;
+
+   PrintFormat(
+      "SCENOVA_BACKTEST_V2 cycles=%d orders=%d avgMAE=%.4f avgMFE=%.4f profitCapturePct=%.2f terminalChasePct=%.2f avgFillSeconds=%.1f fillWithin10MinPct=%.2f sameSideChurnPct=%.2f",
+      g_testCycleSamples,
+      g_testEntryCount,
+      avgMae,
+      avgMfe,
+      capture,
+      terminalRate,
+      avgFillSeconds,
+      fill10Rate,
+      churnRate
+   );
+
+   // Native MT5 report remains authoritative for Drawdown, Win Rate and
+   // Profit Factor. Return capture as an optional Custom max criterion.
+   return capture;
+}
+
 void OnTick()
 {
    UpdateMomentum();
@@ -1056,6 +1196,8 @@ void OnTick()
    double profit = BasketProfit();
    double momentum = MomentumPoints();
    double dailyProfit = DailyBotProfit();
+   if(MQLInfoInteger(MQL_TESTER) && count > 0)
+      TesterUpdateCycleMetrics(count,BasketCycleProfit());
    g_executionStatus = "EVALUATING";
 
    if(g_pendingCloseReason != CLOSE_REASON_NONE)
@@ -8268,6 +8410,7 @@ string ProfitControlModeName()
 
 bool SendMarketOrder(int direction)
 {
+   int positionsBefore = BasketPositionCount();
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol, tick))
    {
@@ -8373,6 +8516,8 @@ bool SendMarketOrder(int direction)
    if(g_entryTrigger != "NONE")
       entryReason += " + " + g_entryTrigger;
    g_lastEntryReason = entryReason;
+   TesterStartCycleIfNeeded(direction,positionsBefore);
+   TesterUpdateCycleMetrics(BasketPositionCount(),BasketCycleProfit());
    RecordExecutionQuality(true, slippagePoints);
    g_lastEntryAt = TimeCurrent();
    g_executionStatus = "ORDER_ACCEPTED";
@@ -8475,6 +8620,8 @@ void PersistPendingClose()
 bool CloseAllBasket(string reason)
 {
    g_lastCloseReason = reason;
+   int testerDirection = MQLInfoInteger(MQL_TESTER) ? BasketDirection() : 0;
+   double testerCloseProfit = MQLInfoInteger(MQL_TESTER) ? BasketCycleProfit() : 0.0;
    Print("CloseAllBasket reason=", reason);
    int reasonCode = CloseReasonCode(reason);
    if(reasonCode != CLOSE_REASON_NONE)
@@ -8495,6 +8642,8 @@ bool CloseAllBasket(string reason)
    }
 
    bool closed = BasketPositionCount() == 0 && RescuePositionCount() == 0;
+   if(closed && testerDirection != 0)
+      TesterFinalizeCycle(testerDirection,testerCloseProfit);
    if(closed && reasonCode != CLOSE_REASON_NONE)
    {
       g_pendingCloseReason = CLOSE_REASON_NONE;
