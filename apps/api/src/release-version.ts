@@ -5,6 +5,13 @@ import { dirname, resolve } from "node:path";
 export const DEFAULT_INSTALLER_VERSION = "3.1.3";
 export const DEFAULT_EA_VERSION = "1.046";
 
+// 3.1.2 introduced the Agent protocol used by the current 3.1.x line
+// (agent-heartbeat + resumable EA artifact + one-time MT5 action). Patch
+// releases in the same 3.1 line must not hard-block trading simply because a
+// newer Setup binary exists. This also lets an already-installed 3.1.2 Agent
+// repair/update EA automatically without forcing another browser download.
+export const MIN_COMPATIBLE_INSTALLER_VERSION = "3.1.2";
+
 export function latestInstallerVersion() {
   const configured = String(process.env.SCENOVA_INSTALLER_VERSION || "").trim();
   if (configured && isVersionAtLeast(configured, DEFAULT_INSTALLER_VERSION)) {
@@ -36,14 +43,32 @@ function normalizedExactVersion(version: unknown) {
   return String(version || "").trim().replace(/^v/i, "");
 }
 
+// Historical callers use isVersionExact() for the Windows Agent compatibility
+// gate. Keep exact equality first, then allow compatible PATCH releases inside
+// the 3.1 protocol line. A future 3.2.x release remains a hard upgrade unless
+// its minimum compatibility policy is explicitly changed.
 export function isVersionExact(current: unknown, required: unknown) {
+  const aRaw = normalizedExactVersion(current);
+  const bRaw = normalizedExactVersion(required);
+  if (!aRaw || !bRaw) return false;
+  if (aRaw === bRaw) return true;
+
+  const a = numericParts(aRaw);
+  const b = numericParts(bRaw);
+  const minimum = numericParts(MIN_COMPATIBLE_INSTALLER_VERSION);
+  if (!a || !b || !minimum) return false;
+
+  const sameProtocolLine = a[0] === b[0] && a[1] === b[1];
+  return sameProtocolLine && isVersionAtLeast(aRaw, MIN_COMPATIBLE_INSTALLER_VERSION);
+}
+
+// EA runtime releases are deliberately strict. Unlike the Windows Agent,
+// 1.045 must never be treated as equivalent to 1.046 because the executable
+// loaded in MT5 must exactly match the production release.
+export function isEaVersionExact(current: unknown, required: unknown) {
   const a = normalizedExactVersion(current);
   const b = normalizedExactVersion(required);
   return Boolean(a && b && a === b);
-}
-
-export function isEaVersionExact(current: unknown, required: unknown) {
-  return isVersionExact(current, required);
 }
 
 function artifactPath() {
