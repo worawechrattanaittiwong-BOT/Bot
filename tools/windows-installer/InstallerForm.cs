@@ -312,9 +312,9 @@ internal sealed class InstallerForm : Form
         Controls.Add(root);
     }
 
-    private async Task RefreshAllAsync()
+    private async Task RefreshAllAsync(bool force = false)
     {
-        if (_busy) return;
+        if (_busy && !force) return;
 
         _terminals = TerminalDiscovery.Discover();
         var previous = (_terminal.SelectedItem as TerminalChoice)?.DataPath
@@ -351,12 +351,12 @@ internal sealed class InstallerForm : Form
         var index = _terminals.FindIndex(x =>
             string.Equals(x.DataPath, previous, StringComparison.OrdinalIgnoreCase));
         _terminal.SelectedIndex = index >= 0 ? index : 0;
-        await AssessSelectedAsync();
+        await AssessSelectedAsync(force);
     }
 
-    private async Task AssessSelectedAsync()
+    private async Task AssessSelectedAsync(bool force = false)
     {
-        if (_busy || _terminal.SelectedItem is not TerminalChoice terminal)
+        if ((_busy && !force) || _terminal.SelectedItem is not TerminalChoice terminal)
             return;
 
         _assessment = await SmartHealthEngine.AssessAsync(terminal);
@@ -583,7 +583,7 @@ internal sealed class InstallerForm : Form
                     "ติดตั้งสำเร็จ แต่ EA ยังไม่ Heartbeat · กด “ตรวจและซ่อม” เพื่อให้ระบบแก้การเปิด MT5 / preset / permission";
             }
 
-            await RefreshAllAsync();
+            await RefreshAllAsync(force: true);
         }
         catch (Exception ex)
         {
@@ -729,7 +729,7 @@ internal sealed class InstallerForm : Form
             ScenovaRuntime.SaveState(state);
 
             _status.Text = "ซ่อมเสร็จ · " + string.Join(" · ", actions);
-            await RefreshAllAsync();
+            await RefreshAllAsync(force: true);
         }
         catch (Exception ex)
         {
@@ -779,7 +779,7 @@ internal sealed class InstallerForm : Form
                 "SUCCESS",
                 InstallerErrorCode.None);
             _status.Text = "Rollback สำเร็จ · เปิด MT5 ด้วย Backup ล่าสุดแล้ว";
-            await RefreshAllAsync();
+            await RefreshAllAsync(force: true);
         }
         catch (Exception ex)
         {
@@ -834,7 +834,7 @@ internal sealed class InstallerForm : Form
             }
 
             _status.Text = "ถอน SCENOVA จาก Terminal นี้แล้ว · ไม่แตะ MT5 หรือไฟล์ของระบบอื่น";
-            await RefreshAllAsync();
+            await RefreshAllAsync(force: true);
         }
         finally
         {
