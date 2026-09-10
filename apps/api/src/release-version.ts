@@ -2,11 +2,15 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-export const DEFAULT_INSTALLER_VERSION = "3.1.1";
+export const DEFAULT_INSTALLER_VERSION = "3.1.2";
 export const DEFAULT_EA_VERSION = "1.046";
 
 export function latestInstallerVersion() {
-  return String(process.env.SCENOVA_INSTALLER_VERSION || DEFAULT_INSTALLER_VERSION).trim() || DEFAULT_INSTALLER_VERSION;
+  const configured = String(process.env.SCENOVA_INSTALLER_VERSION || "").trim();
+  if (configured && isVersionAtLeast(configured, DEFAULT_INSTALLER_VERSION)) {
+    return configured;
+  }
+  return DEFAULT_INSTALLER_VERSION;
 }
 
 function numericParts(version: unknown) {
