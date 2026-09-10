@@ -507,7 +507,10 @@ internal sealed class InstallerForm : Form
                 token);
 
             profile.InstallerVersion = InstallerConstants.Version;
-            profile.ReleaseChannel = SelectedReleaseChannel();
+            // Preserve the Server-resolved channel. A requested Beta/AdminTest
+            // channel may have been safely downgraded to Stable by policy.
+            if (string.IsNullOrWhiteSpace(profile.ReleaseChannel))
+                profile.ReleaseChannel = SelectedReleaseChannel();
             profile.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
             ScenovaRuntime.SaveOrUpdateProfile(profile, makePrimary: true);
 
