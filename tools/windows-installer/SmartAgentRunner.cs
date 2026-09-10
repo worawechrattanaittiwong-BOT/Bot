@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Security.Cryptography;
 
 namespace ScenovaInstaller;
@@ -18,15 +17,6 @@ internal static class SmartAgentRunner
     private static string PendingReloadPath(AgentConfig config) =>
         Path.Combine(ScenovaRuntime.StagingDir, "reload-" + SafeKey(config) + ".pending");
 
-    private static string RestartStampPath(AgentConfig config) =>
-        Path.Combine(ScenovaRuntime.BaseDir, "restart-" + SafeKey(config) + ".stamp");
-
-    private static string PermissionStampPath(AgentConfig config) =>
-        Path.Combine(ScenovaRuntime.BaseDir, "permission-" + SafeKey(config) + ".stamp");
-
-    private static string AccountSwitchStampPath(AgentConfig config) =>
-        Path.Combine(ScenovaRuntime.BaseDir, "account-switch-" + SafeKey(config) + ".stamp");
-
     internal static async Task RunAsync()
     {
         Directory.CreateDirectory(ScenovaRuntime.BaseDir);
@@ -39,10 +29,9 @@ internal static class SmartAgentRunner
             out var createdNew);
         if (!createdNew) return;
 
-        var startedProfiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var repairedPermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        await InstallerDiagnostics.LogAsync("AGENT_START", "Smart Agent v" + InstallerConstants.AgentVersion);
+        await InstallerDiagnostics.LogAsync(
+            "AGENT_START",
+            "Smart Agent v" + AgentBuildInfo.Version);
 
         while (true)
         {
@@ -58,11 +47,7 @@ internal static class SmartAgentRunner
             {
                 try
                 {
-                    await ProcessProfileAsync(
-                        profile,
-                        logPath,
-                        startedProfiles,
-                        repairedPermissions);
+                    await ProcessProfileAsync(profile, logPath);
                 }
                 catch (Exception ex)
                 {
@@ -79,9 +64,7 @@ internal static class SmartAgentRunner
 
     private static async Task ProcessProfileAsync(
         AgentConfig config,
-        string logPath,
-        HashSet<string> startedProfiles,
-        HashSet<string> repairedPermissions)
+        string logPath)
     {
         var key = SafeKey(config);
         var token = ScenovaRuntime.TryUnprotect(config.InstallTokenProtected)
@@ -101,7 +84,7 @@ internal static class SmartAgentRunner
             {
                 instanceId = config.InstanceId,
                 installToken = token,
-                agentVersion = InstallerConstants.AgentVersion,
+                agentVersion = AgentBuildInfo.Version,
                 terminalPath = config.TerminalDataPath,
                 eaHash = localHash,
                 hostname = Environment.MachineName,
@@ -110,7 +93,7 @@ internal static class SmartAgentRunner
                 releaseChannel = config.ReleaseChannel,
                 installerStatus = new
                 {
-                    version = InstallerConstants.Version,
+                    version = AgentBuildInfo.Version,
                     channel = config.ReleaseChannel,
                     localHash,
                     stagedUpdate = File.Exists(PendingEaPath(config)),
@@ -132,77 +115,47 @@ internal static class SmartAgentRunner
             config.InstanceId,
             token);
 
+        // The Agent may stage/apply the latest EX5 while the server says it is
+        // safe. This never controls the MT5 process. A loaded runtime is changed
+        // only after an explicit Dashboard action authorizes one restart.
         await StageOrApplyEaAsync(http, config, token, localHash, heartbeat, logPath);
 
-        // Account switching is intentionally driven by an explicit user action
-        // on the dashboard. If the registered Agent is alive but the EA stopped
-        // heartbeating after the MT5 Login changed, reload the selected Terminal
-        // exactly once for that change request. This never runs while RUNNING or
-        // while positions exist because the server-side SafeToRestart flag is
-        // authoritative.
-        var accountSwitchReloaded = await TryRepairAccountSwitchAsync(
-            http,
-            config,
-            token,
-            logPath);
-        if (accountSwitchReloaded)
+        var reloadPending = File.Exists(PendingReloadPath(config));
+        if (reloadPending && heartbeat.SafeToRestart)
         {
-            startedProfiles.Add(key);
-            repairedPermissions.Remove(key);
+            // This call is a no-op unless the customer has pressed
+            // "อัปเดต EA ตอนนี้" and the Server still exposes that one-time
+            // UPDATE_EA_RESTART action.
+            if (AgentRunner.EnsureMt5RunningWithEa(config, forceReload: true))
+            {
+                TryDelete(PendingReloadPath(config));
+                await AppendLogAsync(
+                    logPath,
+                    "Manual EA update restart completed. profile=" + key);
+            }
         }
 
-        var reloadPending = File.Exists(PendingReloadPath(config));
-        if (!accountSwitchReloaded &&
-            reloadPending &&
-            heartbeat.SafeToRestart &&
-            CooldownElapsed(RestartStampPath(config), TimeSpan.FromMinutes(3)))
+        if (!heartbeat.EaOnline && heartbeat.SafeToRestart)
         {
-            if (AgentRunner.EnsureMt5RunningWithEa(config, forceReload: true))
-            {
-                MarkNow(RestartStampPath(config));
-                TryDelete(PendingReloadPath(config));
-                startedProfiles.Add(key);
-                repairedPermissions.Remove(key);
-                await AppendLogAsync(logPath, "Safe EA reload completed. profile=" + key);
-            }
-        }
-        else if (!accountSwitchReloaded &&
-                 !heartbeat.EaOnline &&
-                 heartbeat.SafeToRestart &&
-                 !startedProfiles.Contains(key))
-        {
+            // This call is a no-op unless the customer has pressed
+            // "เชื่อมต่อ MT5". There is intentionally no background auto-start.
             if (AgentRunner.EnsureMt5RunningWithEa(config, forceReload: false))
             {
-                startedProfiles.Add(key);
-                await AppendLogAsync(logPath, "MT5 auto-start requested. profile=" + key);
+                await AppendLogAsync(
+                    logPath,
+                    "Manual MT5 connect/restart completed. profile=" + key);
             }
         }
-        else if (!accountSwitchReloaded &&
-            heartbeat.EaOnline &&
-            heartbeat.SafeToRestart &&
-            heartbeat.TerminalTradeAllowed == true &&
-            heartbeat.MqlTradeAllowed == false &&
-            !repairedPermissions.Contains(key) &&
-            CooldownElapsed(PermissionStampPath(config), TimeSpan.FromHours(6)))
-        {
-            if (AgentRunner.EnsureMt5RunningWithEa(config, forceReload: true))
-            {
-                repairedPermissions.Add(key);
-                MarkNow(PermissionStampPath(config));
-                await AppendLogAsync(logPath, "Trading permission repair requested. profile=" + key);
-            }
-        }
-        else if (heartbeat.MqlTradeAllowed == true)
-        {
-            repairedPermissions.Remove(key);
-            TryDelete(PermissionStampPath(config));
-        }
+
+        // IMPORTANT: account switching, permission repair, normal heartbeat,
+        // Agent repair and background EA update checks are intentionally NOT
+        // allowed to start/stop/restart terminal64.exe.
 
         if (heartbeat.AgentUpdateRequired)
         {
             await AppendLogAsync(
                 logPath,
-                "Installer/Agent update required. local=" + InstallerConstants.AgentVersion +
+                "Installer/Agent update required. local=" + AgentBuildInfo.Version +
                 " required=" + (heartbeat.AgentVersionRequired ?? ""));
         }
 
@@ -216,61 +169,6 @@ internal static class SmartAgentRunner
             " positions=" + heartbeat.Positions +
             " safe=" + heartbeat.SafeToRestart +
             " channel=" + (heartbeat.ReleaseChannel ?? config.ReleaseChannel));
-    }
-
-    private static async Task<bool> TryRepairAccountSwitchAsync(
-        HttpClient http,
-        AgentConfig config,
-        string installToken,
-        string logPath)
-    {
-        try
-        {
-            var action = await ScenovaClient.PostJsonAsync<AgentActionResponse>(
-                http,
-                config.ApiBase.TrimEnd('/') + "/api/ea/agent-actions",
-                new
-                {
-                    instanceId = config.InstanceId,
-                    installToken
-                });
-
-            if (!action.AccountChangeRequested ||
-                action.PendingAccountDetected ||
-                action.EaOnline ||
-                !action.SafeToRestart ||
-                action.Positions > 0)
-                return false;
-
-            var requestId = (action.AccountChangeRequestId ?? "").Trim();
-            if (string.IsNullOrWhiteSpace(requestId))
-                return false;
-
-            var stampPath = AccountSwitchStampPath(config);
-            if (StampMatches(stampPath, requestId))
-                return false;
-
-            if (!AgentRunner.EnsureMt5RunningWithEa(config, forceReload: true))
-                return false;
-
-            WriteStamp(stampPath, requestId);
-            MarkNow(RestartStampPath(config));
-            TryDelete(PendingReloadPath(config));
-            await AppendLogAsync(
-                logPath,
-                "Account switch EA reload requested. profile=" + SafeKey(config));
-            return true;
-        }
-        catch (Exception ex)
-        {
-            // Account-switch assistance is additive. A server that has not yet
-            // deployed the action endpoint must not interrupt the normal Agent.
-            await AppendLogAsync(
-                logPath,
-                "Account switch action unavailable. profile=" + SafeKey(config) +
-                " " + InstallerDiagnostics.Sanitize(ex.Message));
-            return false;
-        }
     }
 
     internal static bool PendingUpdateExists(AgentConfig config) =>
@@ -310,13 +208,30 @@ internal static class SmartAgentRunner
         if (string.Equals(localHash, expected, StringComparison.OrdinalIgnoreCase))
         {
             TryDelete(PendingEaPath(config));
+
+            // The binary on disk can already be current while the EA loaded on
+            // the chart is still an older runtime. Preserve a reload marker when
+            // the Server reports that mismatch so the explicit update button can
+            // authorize a single MT5 restart.
+            if (!string.IsNullOrWhiteSpace(heartbeat.EaVersion) &&
+                !string.IsNullOrWhiteSpace(heartbeat.EaVersionRequired) &&
+                !string.Equals(
+                    heartbeat.EaVersion,
+                    heartbeat.EaVersionRequired,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                File.WriteAllText(PendingReloadPath(config), expected);
+            }
             return;
         }
 
         Directory.CreateDirectory(ScenovaRuntime.StagingDir);
         var pending = PendingEaPath(config);
         if (!File.Exists(pending) ||
-            !string.Equals(BackupManager.HashFile(pending), expected, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(
+                BackupManager.HashFile(pending),
+                expected,
+                StringComparison.OrdinalIgnoreCase))
         {
             TryDelete(pending);
             await ScenovaClient.DownloadArtifactResumableAsync(
@@ -336,7 +251,7 @@ internal static class SmartAgentRunner
 
         File.WriteAllText(PendingReloadPath(config), expected);
 
-        // Safe Update invariant: if the server sees RUNNING state or positions,
+        // Safe Update invariant: if the Server sees RUNNING state or positions,
         // the live EX5 is never replaced. Only the staged copy changes.
         if (!heartbeat.SafeToRestart)
             return;
@@ -363,7 +278,8 @@ internal static class SmartAgentRunner
         TryDelete(pending);
         await AppendLogAsync(
             logPath,
-            "EA staged file applied while safe. profile=" + SafeKey(config));
+            "EA staged file applied while safe. Waiting for explicit update button restart. profile=" +
+            SafeKey(config));
     }
 
     private static void UpdateVerifiedIdentity(
@@ -376,7 +292,7 @@ internal static class SmartAgentRunner
             heartbeat.Server ?? config.VerifiedServer;
         config.ReleaseChannel =
             heartbeat.ReleaseChannel ?? config.ReleaseChannel;
-        config.InstallerVersion = InstallerConstants.Version;
+        config.InstallerVersion = AgentBuildInfo.Version;
         config.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
 
         if (!string.IsNullOrWhiteSpace(heartbeat.EaVersionRequired))
@@ -385,60 +301,6 @@ internal static class SmartAgentRunner
             config.EaHash = heartbeat.ArtifactHash;
 
         ScenovaRuntime.SaveOrUpdateProfile(config, config.IsPrimary);
-    }
-
-    private static bool CooldownElapsed(string path, TimeSpan cooldown)
-    {
-        try
-        {
-            if (!File.Exists(path)) return true;
-            if (!long.TryParse(File.ReadAllText(path).Trim(), out var seconds))
-                return true;
-            return DateTimeOffset.UtcNow -
-                DateTimeOffset.FromUnixTimeSeconds(seconds) >= cooldown;
-        }
-        catch
-        {
-            return true;
-        }
-    }
-
-    private static bool StampMatches(string path, string value)
-    {
-        try
-        {
-            return File.Exists(path) &&
-                   string.Equals(
-                       File.ReadAllText(path).Trim(),
-                       value.Trim(),
-                       StringComparison.Ordinal);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static void WriteStamp(string path, string value)
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, value.Trim());
-        }
-        catch { }
-    }
-
-    private static void MarkNow(string path)
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(
-                path,
-                DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
-        }
-        catch { }
     }
 
     private static void TryDelete(string path)
