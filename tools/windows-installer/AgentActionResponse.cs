@@ -11,4 +11,17 @@ internal sealed class AgentActionResponse
     public bool EaOnline { get; set; }
     public bool SafeToRestart { get; set; }
     public int Positions { get; set; }
+    public bool ManualActionPending { get; set; }
+    public bool ManualActionAllowed { get; set; }
+    public string? ManualActionName { get; set; }
+    public string? ManualActionId { get; set; }
+    public string? ManualActionRequestedAt { get; set; }
+    public string? ManualActionStatus { get; set; }
+}
+
+internal sealed class AgentActionAckResponse
+{
+    public bool Ok { get; set; }
+    public string? ActionId { get; set; }
+    public string? Status { get; set; }
 }
