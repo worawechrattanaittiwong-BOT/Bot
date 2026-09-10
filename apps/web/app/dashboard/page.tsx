@@ -1249,7 +1249,7 @@ export default function DashboardPage() {
 
       <main className="main app-main">
         <div className="mobile-only mobile-app-head">
-          <div className="brand-lockup"><span className="brand-mark">◆</span><span><strong>SCENOVA</strong><small>{isOwner ? "OWNER CONSOLE" : "MT5 BOT EA"}</small></span></div>
+          <div className="brand-lockup"><span className="brand-mark"><ScenovaIcon name="brand" size={24}/></span><span><strong>SCENOVA</strong><small>{isOwner ? "OWNER CONSOLE" : "MT5 BOT EA"}</small></span></div>
           <button className="btn ghost" onClick={logout}>ออก</button>
         </div>
 
@@ -1453,31 +1453,29 @@ export default function DashboardPage() {
               <div className="cc-v6-analytics-grid">
                 <HourlyWinRateChart points={hourlyWinRate}/>
 
-                <div className="cc-v6-insight-stack">
-                  <section className="panel cc-v6-market-insight">
-                    <div className="cc-v6-panel-head"><div><span><ScenovaIcon name="brain" size={18}/></span><b>Market Insight</b></div><em>AI ANALYSIS</em></div>
-                    <div className={"cc-v6-market-bias "+(entryBias==="SELL"?"down":entryBias==="BUY"?"up":"flat")}>
-                      <ScenovaIcon name={entryBias==="SELL"?"arrow-down":"arrow-up"} size={31}/>
-                      <div><small>แนวโน้มปัจจุบัน</small><b>{entryBiasLabel}</b><span>{marketRegimeDetailLabel[String(metrics.marketRegimeDetail||"")]||marketRegimeLabel[String(metrics.marketRegime||"")]||"กำลังวิเคราะห์"}</span></div>
-                    </div>
-                    <div className="cc-v6-insight-rows">
-                      <InsightRow label="คุณภาพจุดเข้า" value={entryQualityCustomerText+" · "+Number(metrics.entryQualityScore||0).toFixed(0)+"/100"}/>
-                      <InsightRow label="Confidence" value={Number(metrics.signalConfidence||0).toFixed(0)+"%"} tone={Number(metrics.signalConfidence||0)>=70?"good":"neutral"}/>
-                      <InsightRow label="Order Block" value={orderBlockCustomerText+" · "+orderBlockQuality.toFixed(0)+"%"}/>
-                      <InsightRow label="Fibonacci" value={fibCustomerText+" · "+fibScore.toFixed(0)+"%"}/>
-                      <InsightRow label="แนวรับ / แนวต้าน" value={(Number(metrics.nearestSupport||0)>0?Number(metrics.nearestSupport).toFixed(symbolDigits):"—")+" / "+(Number(metrics.nearestResistance||0)>0?Number(metrics.nearestResistance).toFixed(symbolDigits):"—")}/>
-                      <InsightRow label="จังหวะเข้า" value={setupCustomerText}/>
-                    </div>
-                  </section>
+                <section className="panel cc-v6-market-insight">
+                  <div className="cc-v6-panel-head"><div><span><ScenovaIcon name="brain" size={18}/></span><b>Market Insight</b></div><em>AI ANALYSIS</em></div>
+                  <div className={"cc-v6-market-bias "+(entryBias==="SELL"?"down":entryBias==="BUY"?"up":"flat")}>
+                    <ScenovaIcon name={entryBias==="SELL"?"arrow-down":"arrow-up"} size={31}/>
+                    <div><small>แนวโน้มปัจจุบัน</small><b>{entryBiasLabel}</b><span>{marketRegimeDetailLabel[String(metrics.marketRegimeDetail||"")]||marketRegimeLabel[String(metrics.marketRegime||"")]||"กำลังวิเคราะห์"}</span></div>
+                  </div>
+                  <div className="cc-v6-insight-rows">
+                    <InsightRow label="คุณภาพจุดเข้า" value={entryQualityCustomerText+" · "+Number(metrics.entryQualityScore||0).toFixed(0)+"/100"}/>
+                    <InsightRow label="Confidence" value={Number(metrics.signalConfidence||0).toFixed(0)+"%"} tone={Number(metrics.signalConfidence||0)>=70?"good":"neutral"}/>
+                    <InsightRow label="Order Block" value={orderBlockCustomerText+" · "+orderBlockQuality.toFixed(0)+"%"}/>
+                    <InsightRow label="Fibonacci" value={fibCustomerText+" · "+fibScore.toFixed(0)+"%"}/>
+                    <InsightRow label="แนวรับ / แนวต้าน" value={(Number(metrics.nearestSupport||0)>0?Number(metrics.nearestSupport).toFixed(symbolDigits):"—")+" / "+(Number(metrics.nearestResistance||0)>0?Number(metrics.nearestResistance).toFixed(symbolDigits):"—")}/>
+                    <InsightRow label="จังหวะเข้า" value={setupCustomerText}/>
+                  </div>
+                </section>
 
-                  <section className="panel cc-v6-account-card">
-                    <div className="cc-v6-panel-head"><div><span><ScenovaIcon name="account" size={18}/></span><b>สถานะบัญชี</b></div><em className={isMt5Online?"good":"warn"}>{isMt5Online?"LIVE":"WAITING"}</em></div>
-                    <div className="cc-v6-account-grid">
-                      <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20?"good":"warn"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
-                    </div>
-                    <button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}><ScenovaIcon name="settings" size={16}/>จัดการบัญชี</button>
-                  </section>
-                </div>
+                <section className="panel cc-v6-account-card">
+                  <div className="cc-v6-panel-head"><div><span><ScenovaIcon name="account" size={18}/></span><b>สถานะบัญชี</b></div><em className={isMt5Online?"good":"warn"}>{isMt5Online?"LIVE":"WAITING"}</em></div>
+                  <div className="cc-v6-account-grid">
+                    <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20?"good":"warn"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
+                  </div>
+                  <button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}><ScenovaIcon name="settings" size={16}/>จัดการบัญชี</button>
+                </section>
 
                 <section className="panel cc-v6-ai-brand">
                   <div className="cc-v6-ai-grid" aria-hidden="true"/>
@@ -2321,22 +2319,16 @@ function InsightRow({label,value,tone="neutral"}:{label:string;value:string;tone
 }
 
 function HourlyWinRateChart({points}:{points:any[]}) {
-  const rows = new Map<number,any>();
-  for (const point of points || []) rows.set(Number(point.hour||0),point);
-  const series = Array.from({length:24},(_,hour)=>{
-    const row = rows.get(hour);
-    return {
-      hour,
-      trades:Number(row?.trades||0),
-      wins:Number(row?.wins||0),
-      losses:Number(row?.losses||0),
-      winRate:Math.max(0,Math.min(100,Number(row?.winRate||0))),
-      netProfit:Number(row?.netProfit||0),
-      grossProfit:Number(row?.grossProfit||0),
-      grossLoss:Number(row?.grossLoss||0)
-    };
-  });
-  const active = series.filter(point=>point.trades>0);
+  const active = (points || []).map((row:any)=>({
+    hour:Number(row?.hour||0),
+    trades:Number(row?.trades||0),
+    wins:Number(row?.wins||0),
+    losses:Number(row?.losses||0),
+    winRate:Math.max(0,Math.min(100,Number(row?.winRate||0))),
+    netProfit:Number(row?.netProfit||0),
+    grossProfit:Number(row?.grossProfit||0),
+    grossLoss:Number(row?.grossLoss||0)
+  })).filter((point:any)=>point.trades>0).sort((a:any,b:any)=>a.hour-b.hour);
   const totalTrades = active.reduce((sum,point)=>sum+point.trades,0);
   const totalWins = active.reduce((sum,point)=>sum+point.wins,0);
   const totalNet = active.reduce((sum,point)=>sum+point.netProfit,0);
@@ -2348,17 +2340,25 @@ function HourlyWinRateChart({points}:{points:any[]}) {
   const width = 940;
   const height = 286;
   const pad = {left:48,right:18,top:20,bottom:38};
-  const xFor = (hour:number)=>pad.left+(hour/23)*(width-pad.left-pad.right);
+  const xForIndex = (index:number)=>active.length<=1 ? (pad.left+width-pad.right)/2 : pad.left+(index/(active.length-1))*(width-pad.left-pad.right);
   const yFor = (value:number)=>pad.top+((100-value)/100)*(height-pad.top-pad.bottom);
-  const plotted = active.map(point=>({...point,x:xFor(point.hour),y:yFor(point.winRate)}));
-  const linePath = plotted.map((point,index)=>(index===0?"M":"L")+point.x.toFixed(1)+" "+point.y.toFixed(1)).join(" ");
+  const plotted = active.map((point:any,index:number)=>({...point,x:xForIndex(index),y:yFor(point.winRate)}));
+  const linePath = plotted.reduce((path:any,point:any,index:number)=>{
+    if(index===0) return "M"+point.x.toFixed(1)+" "+point.y.toFixed(1);
+    const previous = plotted[index-1];
+    const middleX = (previous.x+point.x)/2;
+    return path+" C"+middleX.toFixed(1)+" "+previous.y.toFixed(1)+" "+middleX.toFixed(1)+" "+point.y.toFixed(1)+" "+point.x.toFixed(1)+" "+point.y.toFixed(1);
+  },"");
   const areaPath = plotted.length>1 ? linePath+" L "+plotted[plotted.length-1].x.toFixed(1)+" "+(height-pad.bottom)+" L "+plotted[0].x.toFixed(1)+" "+(height-pad.bottom)+" Z" : "";
   const hourLabel = (hour:number)=>String(hour).padStart(2,"0")+":00";
+  const labelStep = Math.max(1,Math.ceil(plotted.length/7));
+  const axisPoints = plotted.filter((_:any,index:number)=>index===0||index===plotted.length-1||index%labelStep===0);
+  const bestPoint = best ? plotted.find((point:any)=>point.hour===best.hour) : null;
   return (
     <section className="panel cc-v6-hourly-chart">
       <div className="cc-v6-panel-head">
-        <div><span><ScenovaIcon name="pnl" size={18}/></span><div><b>อัตราชนะรายชั่วโมง</b><small>สถิติ Basket ที่ปิดแล้ว 30 วันล่าสุด · เวลาไทย</small></div></div>
-        <em>24 HOURS</em>
+        <div><span><ScenovaIcon name="pnl" size={18}/></span><div><b>อัตราชนะรายชั่วโมง</b><small>เฉพาะชั่วโมงที่มี Basket ปิดจริงใน 30 วันล่าสุด · เวลาไทย</small></div></div>
+        <em>ACTIVE HOURS</em>
       </div>
       <div className="cc-v6-chart-kpis">
         <div><b>{overallWinRate.toFixed(1)}%</b><span>Win Rate</span></div>
@@ -2375,11 +2375,11 @@ function HourlyWinRateChart({points}:{points:any[]}) {
             <filter id="hourlyGlow"><feGaussianBlur stdDeviation="3.2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
           </defs>
           {[0,25,50,75,100].map(value=><g key={value}><line x1={pad.left} x2={width-pad.right} y1={yFor(value)} y2={yFor(value)} className="cc-v6-chart-gridline"/><text x={pad.left-10} y={yFor(value)+4} textAnchor="end" className="cc-v6-chart-axis">{value}%</text></g>)}
-          {[0,4,8,12,16,20,23].map(hour=><g key={hour}><line x1={xFor(hour)} x2={xFor(hour)} y1={pad.top} y2={height-pad.bottom} className="cc-v6-chart-gridline vertical"/><text x={xFor(hour)} y={height-12} textAnchor={hour===0?"start":hour===23?"end":"middle"} className="cc-v6-chart-axis">{hourLabel(hour)}</text></g>)}
+          {axisPoints.map((point:any,index:number)=><g key={point.hour}><line x1={point.x} x2={point.x} y1={pad.top} y2={height-pad.bottom} className="cc-v6-chart-gridline vertical"/><text x={point.x} y={height-12} textAnchor={index===0?"start":index===axisPoints.length-1?"end":"middle"} className="cc-v6-chart-axis">{hourLabel(point.hour)}</text></g>)}
           {areaPath&&<path d={areaPath} className="cc-v6-chart-area"/>}
           {linePath&&<path d={linePath} className="cc-v6-chart-line" filter="url(#hourlyGlow)"/>}
           {plotted.map(point=><g key={point.hour} className={best?.hour===point.hour?"cc-v6-chart-point best":"cc-v6-chart-point"}><circle cx={point.x} cy={point.y} r={best?.hour===point.hour?6:4}/><title>{hourLabel(point.hour)+" · ชนะ "+point.winRate.toFixed(1)+"% · "+point.trades+" Basket"}</title></g>)}
-          {best&&<g className="cc-v6-best-hour"><line x1={xFor(best.hour)} x2={xFor(best.hour)} y1={yFor(best.winRate)+10} y2={height-pad.bottom}/><rect x={Math.min(width-155,Math.max(pad.left,xFor(best.hour)-58))} y={Math.max(3,yFor(best.winRate)-39)} width="116" height="27" rx="7"/><text x={Math.min(width-97,Math.max(pad.left+58,xFor(best.hour)))} y={Math.max(21,yFor(best.winRate)-21)} textAnchor="middle">ดีที่สุด {hourLabel(best.hour)} · {best.winRate.toFixed(0)}%</text></g>}
+          {bestPoint&&<g className="cc-v6-best-hour"><line x1={bestPoint.x} x2={bestPoint.x} y1={bestPoint.y+10} y2={height-pad.bottom}/><rect x={Math.min(width-155,Math.max(pad.left,bestPoint.x-58))} y={Math.max(3,bestPoint.y-39)} width="116" height="27" rx="7"/><text x={Math.min(width-97,Math.max(pad.left+58,bestPoint.x))} y={Math.max(21,bestPoint.y-21)} textAnchor="middle">ดีที่สุด {hourLabel(bestPoint.hour)} · {bestPoint.winRate.toFixed(0)}%</text></g>}
         </svg>
         {!active.length&&<div className="cc-v6-chart-empty"><ScenovaIcon name="report" size={24}/><b>ยังไม่มี Basket ที่ปิดใน 30 วันล่าสุด</b><span>กราฟจะเริ่มแสดงทันทีเมื่อ EA ส่งผลการเทรดจริง</span></div>}
       </div>
