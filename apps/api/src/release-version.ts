@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 export const DEFAULT_INSTALLER_VERSION = "3.0.0";
-export const DEFAULT_EA_VERSION = "1.043";
+export const DEFAULT_EA_VERSION = "1.044";
 
 export function latestInstallerVersion() {
   return String(process.env.SCENOVA_INSTALLER_VERSION || DEFAULT_INSTALLER_VERSION).trim() || DEFAULT_INSTALLER_VERSION;
