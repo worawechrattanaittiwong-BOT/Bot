@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.045"
+#property version   "1.046"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -755,10 +755,20 @@ void RefreshChartStatus(bool force=false)
    }
 
    bool terminalOnline = TerminalConnectedNow();
-   bool serverFresh = g_lastSuccessfulHeartbeat > 0 &&
-      TimeCurrent() - g_lastSuccessfulHeartbeat <= InpMaxOfflineLeaseSeconds;
-   string connectionText = !terminalOnline ? "MT5 OFFLINE" : serverFresh ? "CONNECTED" : "CONNECTING";
-   color statusColor = !terminalOnline ? clrTomato : serverFresh ? clrLimeGreen : clrGold;
+   int heartbeatAge = g_lastSuccessfulHeartbeat > 0
+      ? (int)MathMax(0, TimeCurrent() - g_lastSuccessfulHeartbeat)
+      : -1;
+   int connectedFreshSeconds = MathMax(9, InpHeartbeatSeconds * 4);
+   bool serverFresh = heartbeatAge >= 0 && heartbeatAge <= connectedFreshSeconds;
+   bool serverWithinLease = heartbeatAge >= 0 && heartbeatAge <= InpMaxOfflineLeaseSeconds;
+   string connectionText = !terminalOnline
+      ? "MT5 OFFLINE"
+      : serverFresh
+         ? "CONNECTED"
+         : serverWithinLease ? "RECONNECTING" : "CONNECTING";
+   color statusColor = !terminalOnline
+      ? clrTomato
+      : serverFresh ? clrLimeGreen : clrGold;
    RenderChartStatus(connectionText, statusColor, g_executionStatus);
 }
 
@@ -2592,20 +2602,43 @@ void SendHeartbeat()
 
    if(code < 200 || code >= 300)
    {
-      // Fail closed for new entries immediately when control cannot be verified.
+      // A single Wi-Fi/ISP/API packet loss must not flap RUNNING -> STOPPED ->
+      // RUNNING. Keep the last verified RUNNING authorization only for a short
+      // bounded grace window. Authentication/authorization failures still fail
+      // closed immediately, and the longer offline lease remains the absolute
+      // access limit for all new entries.
+      bool transientFailure =
+         code == -1 || code == 408 || code == 425 || code == 429 || code >= 500;
+      int transientGraceSeconds = MathMax(9, MathMin(20, InpHeartbeatSeconds * 5));
+      bool verifiedControlStillFresh =
+         g_lastSuccessfulHeartbeat > 0 &&
+         TimeCurrent() - g_lastSuccessfulHeartbeat <= transientGraceSeconds;
+
+      Print("SCENOVA heartbeat failed. HTTP=", code, " error=", webError, " URL=", heartbeatUrl,
+            " transient=", transientFailure, " grace=", verifiedControlStillFresh);
+
+      if(transientFailure && verifiedControlStillFresh)
+      {
+         if(g_state == STATE_RUNNING && g_runAuthorized)
+            g_executionStatus = "CONTROL_RETRYING";
+         RenderChartStatus("RECONNECTING", clrGold, g_executionStatus);
+         return;
+      }
+
+      // Beyond the short grace period, or on a real auth/control rejection,
+      // fail closed for NEW entries. Existing Basket risk/profit management
+      // continues locally and MT5 itself is never restarted by this logic.
       g_runAuthorized = false;
       if(g_state == STATE_RUNNING)
          g_executionStatus = "CONTROL_NOT_FRESH";
 
-      Print("SCENOVA heartbeat failed. HTTP=", code, " error=", webError, " URL=", heartbeatUrl);
-
-      if(code == -1)
-      {
-         RenderChartStatus("NETWORK ERROR", clrTomato, "WebRequest error " + IntegerToString(webError));
-      }
-      else if(code == 401)
+      if(code == 401 || code == 403)
       {
          RenderChartStatus("AUTH FAILED", clrTomato, "Reload the newest SCENOVA .set file");
+      }
+      else if(code == -1)
+      {
+         RenderChartStatus("NETWORK ERROR", clrTomato, "WebRequest error " + IntegerToString(webError));
       }
       else
       {
