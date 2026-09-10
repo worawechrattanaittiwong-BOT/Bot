@@ -6,6 +6,42 @@ namespace ScenovaInstaller;
 
 internal static class AgentRunner
 {
+    internal static string AgentPath =>
+        Path.Combine(ScenovaRuntime.BaseDir, "SCENOVA-Agent-v2.exe");
+
+    internal static bool IsMt5Running(AgentConfig config)
+    {
+        var terminalExe = ScenovaRuntime.ResolveTerminalExecutable(config.TerminalDataPath);
+        if (string.IsNullOrWhiteSpace(terminalExe) || !File.Exists(terminalExe))
+            return false;
+        var normalized = Path.GetFullPath(terminalExe);
+        foreach (var process in Process.GetProcessesByName("terminal64"))
+        {
+            using (process)
+            {
+                try
+                {
+                    var path = process.MainModule?.FileName;
+                    if (!string.IsNullOrWhiteSpace(path) &&
+                        string.Equals(Path.GetFullPath(path), normalized, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                catch { }
+            }
+        }
+        return false;
+    }
+
+    internal static void RemoveStartupRegistration()
+    {
+        try
+        {
+            using var runKey = Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Run", true);
+            runKey?.DeleteValue("SCENOVA MT5 Agent", false);
+        }
+        catch { }
+    }
     private static string RestartStampPath =>
         Path.Combine(ScenovaRuntime.BaseDir, "mt5-restart-v2.stamp");
     private static string PermissionRepairStampPath =>
