@@ -571,6 +571,77 @@ export default function DashboardPage() {
   const adverseWickRatio = Number(metrics.adverseWickRatio || 0);
   const antiChaseReason = String(metrics.antiChaseReason || "NONE");
 
+  const marketCycleState = String(metrics.marketCycleState || "TREND_CONTINUATION");
+  const marketCycleLabel:Record<string,string> = {
+    TREND_CONTINUATION: "เทรนกำลังเดินต่อ",
+    PULLBACK: "กำลังย่อในเทรน",
+    EXHAUSTION: "แรงเดิมเริ่มหมด",
+    REVERSAL_SETUP: "เริ่มมีเงื่อนไขกลับตัว",
+    REVERSAL_CONFIRMED: "ยืนยันการกลับตัว",
+    BREAKOUT: "กำลัง Breakout",
+    RETEST: "กำลัง Retest"
+  };
+  const lowerTimeframeState = String(metrics.lowerTimeframeState || "NEUTRAL");
+  const lowerTimeframeLabel:Record<string,string> = {
+    CONFIRMED: "M1/M5 ยืนยันทิศ",
+    PULLBACK: "M1/M5 กำลังย่อ",
+    REVERSAL: "M1/M5 สวนแรง",
+    NEUTRAL: "M1/M5 ยังไม่ชัด"
+  };
+  const demandZoneScore = Number(metrics.demandZoneScore || 0);
+  const supplyZoneScore = Number(metrics.supplyZoneScore || 0);
+  const demandZoneQuality = String(metrics.demandZoneQuality || "WEAK");
+  const supplyZoneQuality = String(metrics.supplyZoneQuality || "WEAK");
+  const zoneQualityLabel:Record<string,string> = {
+    STRONG: "แข็งแรงมาก",
+    GOOD: "ดี",
+    MODERATE: "ปานกลาง",
+    SUPPORTING: "ใช้ประกอบ",
+    WEAK: "ยังอ่อน"
+  };
+  const rsiM5 = Number(metrics.rsiM5 || 0);
+  const rsiBullDiv = Number(metrics.rsiDivergenceBuyScore || 0);
+  const rsiBearDiv = Number(metrics.rsiDivergenceSellScore || 0);
+  const adxM5 = Number(metrics.adxM5 || 0);
+  const plusDiM5 = Number(metrics.plusDiM5 || 0);
+  const minusDiM5 = Number(metrics.minusDiM5 || 0);
+  const vwapDistanceAtr = Number(metrics.vwapDistanceAtr || 0);
+  const spaceToTargetAtr = Number(metrics.spaceToTargetAtr ?? 99);
+  const reversalStatus = String(metrics.reversalStatus || "NONE");
+  const newsMode = String(metrics.newsMode || "NORMAL");
+  const newsModeLabel:Record<string,string> = {
+    NORMAL: "ตลาดปกติ",
+    NEWS_WAIT_IMPULSE: "ข่าว · รอ Impulse ชัด",
+    NEWS_CONTINUATION: "ข่าว · Continuation",
+    NEWS_RETEST: "ข่าว · รอ/เล่น Retest",
+    NEWS_EXHAUSTION: "ข่าว · แรงเริ่มหมด"
+  };
+  const fillTargetPositions = Math.max(1,Number(metrics.basketTargetPositions || configuredMaxPositions));
+  const fillPositions = Math.max(0,Number(metrics.basketFilledPositions ?? currentPositions));
+  const fillPhase = String(metrics.fillPhase || "STRICT");
+  const fillBlockReason = String(metrics.fillBlockReason || "NONE");
+  const fillReasonLabel:Record<string,string> = {
+    NONE: "พร้อมประเมินไม้ถัดไป",
+    COMPLETE: "ครบเป้าหมายแล้ว",
+    WAITING_RETEST: "รอ Pullback / Retest",
+    EXHAUSTION_WAIT_RETEST: "แรงเดิมเริ่มหมด · รอ Retest",
+    WAITING_CONTINUATION: "รอ Continuation กลับมา",
+    WAITING_TIMING_TURN: "รอ Turning event",
+    WAITING_CONTINUATION_SPACE: "รอระยะเพิ่มไม้",
+    LOWER_TF_REVERSAL: "M1/M5 สวนแรง · หยุดเติม",
+    EXTREME_SPREAD: "Spread EXTREME",
+    WAIT_TERMINAL_DEMAND: "ใกล้ Demand · ไม่ไล่ SELL",
+    WAIT_TERMINAL_SUPPLY: "ใกล้ Supply · ไม่ไล่ BUY",
+    ORDER_RATE_LIMIT: "รอจังหวะส่งคำสั่งถัดไป"
+  };
+  const fillPhaseLabel:Record<string,string> = {
+    STRICT: "0–3 นาที · เข้ม",
+    BALANCED: "3–7 นาที · ผ่อน Timing",
+    COMPLETION: "7–10 นาที · เน้นเติมให้ครบ"
+  };
+  const latestDecisionReason = String(metrics.lastEntryReason || metrics.adaptiveBlockReason || "NONE");
+  const latestCloseReason = String(metrics.lastCloseReason || "NONE");
+
   const emaStack = String(metrics.emaStack || "MIXED");
   const emaSlope = String(metrics.emaSlope || "FLAT");
   const emaVolatilityState = String(metrics.emaVolatilityState || "NORMAL");
@@ -614,6 +685,10 @@ export default function DashboardPage() {
       CONTINUATION: "มีจังหวะเดินตามแนวโน้มต่อ",
       STRUCTURE_EXECUTION: "โครงสร้างราคาเริ่มยืนยันจุดเข้า",
       NEWS_EXECUTION: "มีแรงส่งระยะสั้นจากตลาด",
+      NEWS_CONTINUATION: "ข่าวมี Impulse ชัดและ M5 ยืนยัน Continuation",
+      NEWS_RETEST: "แท่งข่าวผ่านแล้วและราคากลับมา Retest",
+      REVERSAL_BUY: "Demand + Turning event ยืนยัน Reversal BUY",
+      REVERSAL_SELL: "Supply + Turning event ยืนยัน Reversal SELL",
       CAUTION_ZONE: "จุดเข้าอยู่ใกล้โซนที่ต้องระวัง"
     };
     return labels[code] || "กำลังประเมินจุดเข้า";
@@ -1466,6 +1541,16 @@ export default function DashboardPage() {
                     <InsightRow label="Fibonacci" value={fibCustomerText+" · "+fibScore.toFixed(0)+"%"}/>
                     <InsightRow label="แนวรับ / แนวต้าน" value={(Number(metrics.nearestSupport||0)>0?Number(metrics.nearestSupport).toFixed(symbolDigits):"—")+" / "+(Number(metrics.nearestResistance||0)>0?Number(metrics.nearestResistance).toFixed(symbolDigits):"—")}/>
                     <InsightRow label="จังหวะเข้า" value={setupCustomerText}/>
+                    <InsightRow label="Market Cycle" value={marketCycleLabel[marketCycleState]||marketCycleState+" · "+(lowerTimeframeLabel[lowerTimeframeState]||lowerTimeframeState)}/>
+                    <InsightRow label="Demand / Supply" value={"D "+demandZoneScore.toFixed(0)+" ("+(zoneQualityLabel[demandZoneQuality]||demandZoneQuality)+") · S "+supplyZoneScore.toFixed(0)+" ("+(zoneQualityLabel[supplyZoneQuality]||supplyZoneQuality)+")"}/>
+                    <InsightRow label="RSI / Divergence" value={"RSI M5 "+rsiM5.toFixed(1)+" · Bull "+rsiBullDiv.toFixed(0)+" · Bear "+rsiBearDiv.toFixed(0)}/>
+                    <InsightRow label="ADX / DMI" value={"ADX "+adxM5.toFixed(1)+" · +DI "+plusDiM5.toFixed(1)+" · -DI "+minusDiM5.toFixed(1)}/>
+                    <InsightRow label="VWAP / Space" value={vwapDistanceAtr.toFixed(2)+" ATR จาก VWAP · พื้นที่ "+(spaceToTargetAtr>=90?"เปิด":spaceToTargetAtr.toFixed(2)+" ATR")}/>
+                    <InsightRow label="Reversal" value={reversalStatus==="NONE"?"ยังไม่ยืนยัน":reversalStatus.replaceAll("_"," ")}/>
+                    <InsightRow label="Basket Fill" value={fillPositions+"/"+fillTargetPositions+" · "+(fillPhaseLabel[fillPhase]||fillPhase)+" · "+(fillReasonLabel[fillBlockReason]||fillBlockReason)}/>
+                    <InsightRow label="News Mode" value={newsModeLabel[newsMode]||newsMode}/>
+                    <InsightRow label="เหตุผลเข้า/รอล่าสุด" value={latestDecisionReason==="NONE"?"กำลังประเมินตลาด":latestDecisionReason}/>
+                    {latestCloseReason!=="NONE" && <InsightRow label="เหตุผลปิดล่าสุด" value={latestCloseReason.replaceAll("_"," ")}/>} 
                   </div>
                 </section>
 
