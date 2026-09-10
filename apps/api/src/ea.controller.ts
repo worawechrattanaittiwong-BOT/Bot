@@ -5,13 +5,14 @@ import {
   Header,
   Post,
   Req,
+  Res,
   ServiceUnavailableException,
   StreamableFile,
   UnauthorizedException
 } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { CryptoService } from "./security";
-import { installerDownloadPath, isVersionExact, latestInstallerVersion } from "./release-version";
+import { installerDownloadPath, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
@@ -22,14 +23,65 @@ export class EaController {
     private readonly crypto: CryptoService
   ) {}
 
-  private artifactPath() {
+  private normalizeReleaseChannel(value: unknown) {
+    const raw = String(value || "Stable").trim().toUpperCase().replace(/[ _-]+/g, "_");
+    if (raw === "BETA") return "Beta";
+    if (raw === "ADMIN_TEST" || raw === "ADMINTEST") return "AdminTest";
+    return "Stable";
+  }
+
+  private artifactPath(channel = "Stable") {
+    if (channel === "AdminTest") {
+      return String(process.env.EA_ARTIFACT_PATH_ADMIN_TEST || "").trim();
+    }
+    if (channel === "Beta") {
+      return String(process.env.EA_ARTIFACT_PATH_BETA || "").trim();
+    }
     return process.env.EA_ARTIFACT_PATH || "/app/apps/api/artifacts/FastBasketBot.ex5";
   }
 
-  private artifactHash() {
-    const path = this.artifactPath();
+  private artifactVersion(channel = "Stable") {
+    if (channel === "AdminTest") {
+      const value = String(process.env.SCENOVA_EA_VERSION_ADMIN_TEST || "").trim();
+      if (value) return value;
+    }
+    if (channel === "Beta") {
+      const value = String(process.env.SCENOVA_EA_VERSION_BETA || "").trim();
+      if (value) return value;
+    }
+    return latestEaRelease().eaVersion;
+  }
+
+  private artifactHash(channel = "Stable") {
+    const path = this.artifactPath(channel);
     if (!existsSync(path)) return null;
     return createHash("sha256").update(readFileSync(path)).digest("hex");
+  }
+
+  private resolveReleaseChannel(requested: unknown, instance: any) {
+    const desired = this.normalizeReleaseChannel(requested);
+    const elevated = ["OWNER", "ADMIN"].includes(String(instance?.user_role || ""));
+
+    if (desired === "AdminTest" && elevated &&
+        existsSync(this.artifactPath("AdminTest"))) {
+      return "AdminTest";
+    }
+    if (desired === "Beta" &&
+        (elevated || String(process.env.SCENOVA_BETA_ENABLED || "").toLowerCase() === "true") &&
+        existsSync(this.artifactPath("Beta"))) {
+      return "Beta";
+    }
+
+    // Optional deterministic canary rollout. Disabled unless both a beta
+    // artifact exists and SCENOVA_CANARY_PERCENT is explicitly configured.
+    const canary = Math.max(0, Math.min(100, Number(process.env.SCENOVA_CANARY_PERCENT || 0)));
+    if (canary > 0 && existsSync(this.artifactPath("Beta"))) {
+      const id = String(instance?.id || "");
+      const bucket = parseInt(createHash("sha256").update(id).digest("hex").slice(0, 8), 16) % 100;
+      if (bucket < canary) return "Beta";
+    }
+
+    return "Stable";
   }
 
   private clientIp(req: any) {
@@ -659,6 +711,15 @@ export class EaController {
       hostname?: string;
       devicePublicId?: string;
       deviceSecret?: string;
+      releaseChannel?: string;
+      installerStatus?: {
+        version?: string;
+        channel?: string;
+        localHash?: string;
+        stagedUpdate?: boolean;
+        healthScore?: number;
+        profileCount?: number;
+      };
     }
   ) {
     const instance = await this.instance(body.instanceId, body.installToken);
@@ -668,6 +729,18 @@ export class EaController {
     const deviceVerified = deviceReported;
 
     const ip = this.clientIp(req);
+    const installerStatus = body.installerStatus && typeof body.installerStatus === "object"
+      ? {
+          version: String(body.installerStatus.version || "").slice(0, 32),
+          channel: this.normalizeReleaseChannel(body.installerStatus.channel),
+          localHash: String(body.installerStatus.localHash || "").slice(0, 128),
+          stagedUpdate: Boolean(body.installerStatus.stagedUpdate),
+          healthScore: Math.max(0, Math.min(100, Number(body.installerStatus.healthScore || 0))),
+          profileCount: Math.max(0, Math.min(50, Math.trunc(Number(body.installerStatus.profileCount || 0)))),
+          reportedAt: new Date().toISOString()
+        }
+      : null;
+
     await this.db.query(
       `UPDATE bot_instances SET
          agent_last_seen_at=now(),
@@ -679,7 +752,11 @@ export class EaController {
          device_secret_hash=CASE WHEN $6::boolean THEN $8 ELSE device_secret_hash END,
          device_status=CASE WHEN $6::boolean THEN 'ACTIVE' ELSE device_status END,
          device_last_seen_at=CASE WHEN $6::boolean THEN now() ELSE device_last_seen_at END,
-         device_last_ip=CASE WHEN $6::boolean THEN $9 ELSE device_last_ip END
+         device_last_ip=CASE WHEN $6::boolean THEN $9 ELSE device_last_ip END,
+         metrics=CASE
+           WHEN $10::jsonb IS NULL THEN metrics
+           ELSE jsonb_set(COALESCE(metrics,'{}'::jsonb),'{installer}', $10::jsonb, true)
+         END
        WHERE id=$1`,
       [
         instance.id,
@@ -690,11 +767,13 @@ export class EaController {
         deviceReported,
         publicId.slice(0, 160),
         deviceReported ? this.crypto.sha256(secret) : null,
-        ip
+        ip,
+        installerStatus ? JSON.stringify(installerStatus) : null
       ]
     );
 
-    const serverEaHash = this.artifactHash();
+    const releaseChannel = this.resolveReleaseChannel(body.releaseChannel, instance);
+    const serverEaHash = this.artifactHash(releaseChannel);
     const runtime = await this.db.one(
       `SELECT
          last_seen_at,
@@ -702,6 +781,9 @@ export class EaController {
          actual_state,
          COALESCE(NULLIF(metrics->>'positions','')::int,0) AS positions,
          metrics->>'eaVersion' AS ea_version,
+         metrics->>'accountNumber' AS reported_account_number,
+         metrics->>'server' AS reported_server,
+         metrics->>'broker' AS reported_broker,
          metrics->>'terminalTradeAllowed' AS terminal_trade_allowed,
          metrics->>'mqlTradeAllowed' AS mql_trade_allowed,
          CASE
@@ -748,6 +830,14 @@ export class EaController {
         String(runtime?.desired_state || "STOPPED") !== "RUNNING" &&
         String(runtime?.actual_state || "STOPPED") !== "RUNNING" &&
         Number(runtime?.positions || 0) <= 0,
+      positions: Number(runtime?.positions || 0),
+      desiredState: String(runtime?.desired_state || "STOPPED"),
+      actualState: String(runtime?.actual_state || "STOPPED"),
+      accountNumber: String(runtime?.reported_account_number || instance?.account_number || ""),
+      server: String(runtime?.reported_server || instance?.broker_server || ""),
+      broker: String(runtime?.reported_broker || instance?.broker || ""),
+      eaVersionRequired: this.artifactVersion(releaseChannel),
+      releaseChannel,
       agentVersion: reportedAgentVersion,
       agentVersionRequired,
       agentUpdateRequired,
@@ -758,18 +848,31 @@ export class EaController {
   @Post("artifact")
   @Header("Content-Type", "application/octet-stream")
   @Header("Content-Disposition", 'attachment; filename="FastBasketBot.ex5"')
-  async artifact(@Body() body: {
-    instanceId: string;
-    installToken: string;
-  }) {
-    await this.instance(body.instanceId, body.installToken);
-
-    const path = this.artifactPath();
+  async artifact(
+    @Body() body: {
+      instanceId: string;
+      installToken: string;
+      offset?: number;
+      releaseChannel?: string;
+    },
+    @Res({ passthrough: true }) res: any
+  ) {
+    const instance = await this.instance(body.instanceId, body.installToken);
+    const releaseChannel = this.resolveReleaseChannel(body.releaseChannel, instance);
+    const path = this.artifactPath(releaseChannel);
     if (!existsSync(path)) {
       throw new ServiceUnavailableException("EA production artifact is not published yet");
     }
 
-    return new StreamableFile(readFileSync(path));
+    const bytes = readFileSync(path);
+    const requestedOffset = Math.max(0, Math.trunc(Number(body.offset || 0)));
+    const offset = Math.min(requestedOffset, bytes.length);
+    res.setHeader("X-SCENOVA-Artifact-Offset", String(offset));
+    res.setHeader("X-SCENOVA-Artifact-Total", String(bytes.length));
+    res.setHeader("X-SCENOVA-Release-Channel", releaseChannel);
+    res.setHeader("X-SCENOVA-EA-Version", this.artifactVersion(releaseChannel));
+
+    return new StreamableFile(bytes.subarray(offset));
   }
 
   @Post("ack")

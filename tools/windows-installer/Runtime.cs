@@ -15,7 +15,12 @@ internal static class ScenovaRuntime
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SCENOVA");
 
     internal static string ConfigPath => Path.Combine(BaseDir, "config-v2.json");
+    internal static string ProfilesPath => Path.Combine(BaseDir, "profiles-v3.json");
     internal static string PendingInstallPath => Path.Combine(BaseDir, "pending-install-v2.json");
+    internal static string StatePath => Path.Combine(BaseDir, "smart-installer-state-v3.json");
+    internal static string BackupDir => Path.Combine(BaseDir, "backups-v3");
+    internal static string StagingDir => Path.Combine(BaseDir, "staging-v3");
+    internal static string DiagnosticsPath => Path.Combine(BaseDir, "smart-installer-v3.log");
 
     internal static string? ResolveTerminalExecutable(string terminalDataPath)
     {
@@ -70,6 +75,13 @@ internal static class ScenovaRuntime
     {
         try
         {
+            var profiles = ReadProfiles();
+            if (profiles.Count > 0)
+            {
+                var selected = profiles.FirstOrDefault(x => x.IsPrimary) ?? profiles[0];
+                return selected;
+            }
+
             if (!File.Exists(ConfigPath)) return null;
             return JsonSerializer.Deserialize<AgentConfig>(File.ReadAllText(ConfigPath), JsonOptions);
         }
@@ -77,6 +89,139 @@ internal static class ScenovaRuntime
         {
             return null;
         }
+    }
+
+    internal static List<AgentConfig> ReadProfiles()
+    {
+        try
+        {
+            if (File.Exists(ProfilesPath))
+            {
+                var store = JsonSerializer.Deserialize<AgentProfileStore>(
+                    File.ReadAllText(ProfilesPath),
+                    JsonOptions);
+                if (store?.Profiles is { Count: > 0 })
+                    return store.Profiles
+                        .Where(x => !string.IsNullOrWhiteSpace(x.InstanceId))
+                        .GroupBy(x => x.InstanceId, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.Last())
+                        .ToList();
+            }
+
+            if (File.Exists(ConfigPath))
+            {
+                var legacy = JsonSerializer.Deserialize<AgentConfig>(
+                    File.ReadAllText(ConfigPath),
+                    JsonOptions);
+                if (legacy is not null && !string.IsNullOrWhiteSpace(legacy.InstanceId))
+                    return [legacy];
+            }
+        }
+        catch { }
+
+        return [];
+    }
+
+    internal static void SaveOrUpdateProfile(AgentConfig config, bool makePrimary = true)
+    {
+        Directory.CreateDirectory(BaseDir);
+        var profiles = ReadProfiles();
+
+        if (makePrimary)
+        {
+            foreach (var item in profiles)
+                item.IsPrimary = false;
+            config.IsPrimary = true;
+        }
+
+        var index = profiles.FindIndex(x =>
+            string.Equals(x.InstanceId, config.InstanceId, StringComparison.OrdinalIgnoreCase));
+        if (index >= 0)
+            profiles[index] = config;
+        else
+            profiles.Add(config);
+
+        var store = new AgentProfileStore
+        {
+            Version = 3,
+            UpdatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            Profiles = profiles
+        };
+        File.WriteAllText(
+            ProfilesPath,
+            JsonSerializer.Serialize(store, JsonOptions),
+            new UTF8Encoding(false));
+
+        // Keep the legacy file synchronized with the primary profile so
+        // pre-v3 tooling and emergency recovery remain compatible.
+        var primary = profiles.FirstOrDefault(x => x.IsPrimary) ?? config;
+        File.WriteAllText(
+            ConfigPath,
+            JsonSerializer.Serialize(primary, JsonOptions),
+            new UTF8Encoding(false));
+    }
+
+    internal static void RemoveProfile(string instanceId)
+    {
+        var profiles = ReadProfiles()
+            .Where(x => !string.Equals(
+                x.InstanceId,
+                instanceId,
+                StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (profiles.Count > 0 && profiles.All(x => !x.IsPrimary))
+            profiles[0].IsPrimary = true;
+
+        Directory.CreateDirectory(BaseDir);
+        var store = new AgentProfileStore
+        {
+            Version = 3,
+            UpdatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            Profiles = profiles
+        };
+        File.WriteAllText(
+            ProfilesPath,
+            JsonSerializer.Serialize(store, JsonOptions),
+            new UTF8Encoding(false));
+
+        var primary = profiles.FirstOrDefault(x => x.IsPrimary) ?? profiles.FirstOrDefault();
+        if (primary is not null)
+        {
+            File.WriteAllText(
+                ConfigPath,
+                JsonSerializer.Serialize(primary, JsonOptions),
+                new UTF8Encoding(false));
+        }
+        else
+        {
+            try { if (File.Exists(ConfigPath)) File.Delete(ConfigPath); } catch { }
+        }
+    }
+
+    internal static SmartInstallerState ReadState()
+    {
+        try
+        {
+            if (!File.Exists(StatePath)) return new SmartInstallerState();
+            return JsonSerializer.Deserialize<SmartInstallerState>(
+                File.ReadAllText(StatePath),
+                JsonOptions) ?? new SmartInstallerState();
+        }
+        catch
+        {
+            return new SmartInstallerState();
+        }
+    }
+
+    internal static void SaveState(SmartInstallerState state)
+    {
+        Directory.CreateDirectory(BaseDir);
+        state.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
+        File.WriteAllText(
+            StatePath,
+            JsonSerializer.Serialize(state, JsonOptions),
+            new UTF8Encoding(false));
     }
 
     internal static string? ReadEnrollmentCode()
@@ -176,6 +321,14 @@ internal sealed class TerminalChoice
 {
     public string DataPath { get; init; } = "";
     public string Display { get; init; } = "";
+    public string ExecutablePath { get; init; } = "";
+    public string BrokerHint { get; init; } = "";
+    public string OriginPath { get; init; } = "";
+    public bool IsRunning { get; init; }
+    public bool IsExistingScenovaTarget { get; init; }
+    public DateTimeOffset LastSeenAt { get; init; }
+    public int MatchScore { get; set; }
+    public string MatchReason { get; set; } = "";
     public override string ToString() => Display;
 }
 
@@ -184,6 +337,34 @@ internal sealed class PendingInstallIdentity
     public string DevicePublicId { get; set; } = "";
     public string DeviceSecretProtected { get; set; } = "";
     public string CreatedAt { get; set; } = "";
+}
+
+internal sealed class AgentProfileStore
+{
+    public int Version { get; set; } = 3;
+    public string UpdatedAt { get; set; } = "";
+    public List<AgentConfig> Profiles { get; set; } = [];
+}
+
+internal sealed class SmartInstallerState
+{
+    public string InstallerVersion { get; set; } = "";
+    public string UpdatedAt { get; set; } = "";
+    public string ReleaseChannel { get; set; } = "Stable";
+    public string LastAction { get; set; } = "";
+    public string LastResult { get; set; } = "";
+    public string LastErrorCode { get; set; } = "";
+    public int LastHealthScore { get; set; }
+    public string LastHealthAt { get; set; } = "";
+    public string LastInstallAt { get; set; } = "";
+    public string LastRepairAt { get; set; } = "";
+    public string LastRollbackAt { get; set; } = "";
+    public string LastTerminalPath { get; set; } = "";
+    public string LastEaVersion { get; set; } = "";
+    public string LastEaHash { get; set; } = "";
+    public string LastAgentVersion { get; set; } = "";
+    public bool SignatureValid { get; set; }
+    public List<string> RecentErrors { get; set; } = [];
 }
 
 internal sealed class AgentConfig
@@ -198,6 +379,18 @@ internal sealed class AgentConfig
     public string EaBinaryPath { get; set; } = "";
     public string StartupSymbol { get; set; } = "";
     public string InstalledAt { get; set; } = "";
+    public string UpdatedAt { get; set; } = "";
+    public string InstallerVersion { get; set; } = "";
+    public string ReleaseChannel { get; set; } = "Stable";
+    public string EaVersion { get; set; } = "";
+    public string EaHash { get; set; } = "";
+    public string PreviousEaHash { get; set; } = "";
+    public bool IsPrimary { get; set; }
+    public string TerminalBrokerHint { get; set; } = "";
+    public string VerifiedAccountNumber { get; set; } = "";
+    public string VerifiedServer { get; set; } = "";
+    public string ExpectedAccountNumber { get; set; } = "";
+    public string ExpectedServer { get; set; } = "";
 }
 
 internal sealed class EnrollResponse
@@ -209,6 +402,11 @@ internal sealed class EnrollResponse
     public string? ArtifactHash { get; set; }
     public string StartupSymbol { get; set; } = "";
     public bool PreservedLegacyToken { get; set; }
+    public string AgentVersionRequired { get; set; } = "";
+    public string EaVersionRequired { get; set; } = "";
+    public string ReleaseChannel { get; set; } = "Stable";
+    public string? ExpectedAccountNumber { get; set; }
+    public string? ExpectedServer { get; set; }
 }
 
 internal sealed class AgentHeartbeatResponse
@@ -222,6 +420,17 @@ internal sealed class AgentHeartbeatResponse
     public bool? TerminalTradeAllowed { get; set; }
     public bool? MqlTradeAllowed { get; set; }
     public bool SafeToRestart { get; set; }
+    public bool AgentUpdateRequired { get; set; }
+    public string? AgentVersionRequired { get; set; }
+    public string? AgentDownloadUrl { get; set; }
+    public string? EaVersionRequired { get; set; }
+    public string? AccountNumber { get; set; }
+    public string? Server { get; set; }
+    public string? Broker { get; set; }
+    public int Positions { get; set; }
+    public string? DesiredState { get; set; }
+    public string? ActualState { get; set; }
+    public string? ReleaseChannel { get; set; }
 }
 
 internal sealed class ApiError

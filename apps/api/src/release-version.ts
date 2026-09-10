@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-export const DEFAULT_INSTALLER_VERSION = "2.0.9";
+export const DEFAULT_INSTALLER_VERSION = "3.0.0";
 export const DEFAULT_EA_VERSION = "1.043";
 
 export function latestInstallerVersion() {

@@ -8,7 +8,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { DbService } from "./db.service";
 import { CryptoService } from "./security";
-import { latestInstallerVersion } from "./release-version";
+import { latestEaRelease, latestInstallerVersion } from "./release-version";
 
 @Controller("installer")
 export class InstallerController {
@@ -36,6 +36,7 @@ export class InstallerController {
     terminalPath?: string;
     legacyInstanceId?: string;
     legacyInstallToken?: string;
+    releaseChannel?: string;
   }) {
     const code = String(body.code || "").trim();
     const devicePublicId = String(body.devicePublicId || "").trim();
@@ -54,7 +55,7 @@ export class InstallerController {
     let retryEnrollment = false;
     let authenticatedReinstall = false;
     let enrollment = await this.db.one(
-      `SELECT ie.*,ls.assigned_user_id,ls.mode,ls.status slot_status,u.status user_status
+      `SELECT ie.*,ls.assigned_user_id,ls.mode,ls.status slot_status,u.status user_status,u.role user_role
        FROM install_enrollments ie
        JOIN license_slots ls ON ls.id=ie.slot_id
        LEFT JOIN users u ON u.id=ls.assigned_user_id
@@ -71,7 +72,7 @@ export class InstallerController {
     // Server authorization.
     if (!enrollment && legacyInstanceId && legacyTokenHash) {
       enrollment = await this.db.one(
-        `SELECT ie.*,ls.assigned_user_id,ls.mode,ls.status slot_status,u.status user_status
+        `SELECT ie.*,ls.assigned_user_id,ls.mode,ls.status slot_status,u.status user_status,u.role user_role
          FROM install_enrollments ie
          JOIN license_slots ls ON ls.id=ie.slot_id
          LEFT JOIN users u ON u.id=ls.assigned_user_id
@@ -92,7 +93,7 @@ export class InstallerController {
     // safely for 24 hours.
     if (!enrollment) {
       enrollment = await this.db.one(
-        `SELECT ie.*,ls.assigned_user_id,ls.mode,ls.status slot_status,u.status user_status
+        `SELECT ie.*,ls.assigned_user_id,ls.mode,ls.status slot_status,u.status user_status,u.role user_role
          FROM install_enrollments ie
          JOIN license_slots ls ON ls.id=ie.slot_id
          LEFT JOIN users u ON u.id=ls.assigned_user_id
@@ -180,6 +181,25 @@ export class InstallerController {
         [enrollment.id]
       );
     }
+    const linkedAccount = await this.db.one(
+      `SELECT a.account_number,a.broker_server
+       FROM bot_instances bi
+       LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
+       WHERE bi.id=$1`,
+      [instance.id]
+    );
+
+    const requestedChannel = String(body.releaseChannel || "Stable").trim().toUpperCase();
+    const elevated = ["OWNER", "ADMIN"].includes(String(enrollment.user_role || ""));
+    const releaseChannel =
+      requestedChannel === "ADMINTEST" || requestedChannel === "ADMIN_TEST"
+        ? (elevated ? "AdminTest" : "Stable")
+        : requestedChannel === "BETA"
+          ? (elevated || String(process.env.SCENOVA_BETA_ENABLED || "").toLowerCase() === "true"
+              ? "Beta"
+              : "Stable")
+          : "Stable";
+
     const startup = await this.db.one(
       `SELECT COALESCE(
            NULLIF(bi.metrics->>'symbol',''),
@@ -219,9 +239,84 @@ export class InstallerController {
       artifactEndpoint: "/api/ea/artifact",
       startupSymbol: String(startup?.startup_symbol || "XAUUSD"),
       agentVersionRequired: latestInstallerVersion(),
+      eaVersionRequired: latestEaRelease().eaVersion,
+      releaseChannel,
+      expectedAccountNumber: String(linkedAccount?.account_number || "") || null,
+      expectedServer: String(linkedAccount?.broker_server || "") || null,
       preservedLegacyToken: canPreserveLegacy,
       retryEnrollment,
       authenticatedReinstall
     };
+  }
+
+  @Post("telemetry")
+  async telemetry(@Body() body: {
+    instanceId: string;
+    installToken: string;
+    installerVersion?: string;
+    action?: string;
+    result?: string;
+    errorCode?: string;
+    healthScore?: number;
+    terminalCount?: number;
+    selectedTerminal?: string;
+    releaseChannel?: string;
+    components?: Record<string, unknown>;
+  }) {
+    const instanceId = String(body.instanceId || "").trim();
+    const token = String(body.installToken || "").trim();
+    if (!instanceId || token.length < 8) {
+      throw new ConflictException("invalid installer telemetry authentication");
+    }
+
+    const instance = await this.db.one(
+      `SELECT bi.id,COALESCE(ls.assigned_user_id,a.user_id) user_id,bi.install_token_hash
+       FROM bot_instances bi
+       LEFT JOIN license_slots ls ON ls.id=bi.slot_id
+       LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
+       WHERE bi.id=$1`,
+      [instanceId]
+    );
+    if (!instance || String(instance.install_token_hash) !== this.crypto.sha256(token)) {
+      throw new ConflictException("invalid installer telemetry authentication");
+    }
+
+    const detail = {
+      installerVersion: String(body.installerVersion || "").slice(0, 32),
+      action: String(body.action || "").slice(0, 64),
+      result: String(body.result || "").slice(0, 64),
+      errorCode: String(body.errorCode || "").slice(0, 64),
+      healthScore: Math.max(0, Math.min(100, Number(body.healthScore || 0))),
+      terminalCount: Math.max(0, Math.min(50, Math.trunc(Number(body.terminalCount || 0)))),
+      selectedTerminal: String(body.selectedTerminal || "").slice(0, 1000),
+      releaseChannel: String(body.releaseChannel || "Stable").slice(0, 32),
+      components: body.components && typeof body.components === "object"
+        ? body.components
+        : {},
+      reportedAt: new Date().toISOString()
+    };
+
+    await this.db.query(
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'INSTALLER_TELEMETRY','bot_instance',$2,$3::jsonb)",
+      [
+        String(instance.user_id || "SYSTEM"),
+        instance.id,
+        JSON.stringify(detail)
+      ]
+    );
+
+    await this.db.query(
+      `UPDATE bot_instances
+       SET metrics=jsonb_set(
+         COALESCE(metrics,'{}'::jsonb),
+         '{installerTelemetry}',
+         $2::jsonb,
+         true
+       )
+       WHERE id=$1`,
+      [instance.id, JSON.stringify(detail)]
+    );
+
+    return { ok: true };
   }
 }

@@ -7,7 +7,7 @@ internal static class Program
     {
         if (args.Any(a => string.Equals(a, "--agent", StringComparison.OrdinalIgnoreCase)))
         {
-            AgentRunner.RunAsync().GetAwaiter().GetResult();
+            SmartAgentRunner.RunAsync().GetAwaiter().GetResult();
             return;
         }
 

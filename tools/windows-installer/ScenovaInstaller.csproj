@@ -14,15 +14,15 @@
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
     <AssemblyName>SCENOVA-Setup</AssemblyName>
-    <AssemblyTitle>SCENOVA Windows Setup</AssemblyTitle>
-    <Product>SCENOVA MT5 BOT EA</Product>
+    <AssemblyTitle>SCENOVA Smart Installer</AssemblyTitle>
+    <Product>SCENOVA Smart Installer</Product>
     <Company>SCENOVA</Company>
     <Authors>SCENOVA</Authors>
-    <Description>SCENOVA MT5 BOT EA Windows Installer and Device Agent</Description>
+    <Description>SCENOVA Smart Installer, Repair, Verification and Device Agent</Description>
     <Copyright>Copyright © SCENOVA</Copyright>
-    <Version>2.0.9</Version>
-    <FileVersion>2.0.9.0</FileVersion>
-    <AssemblyVersion>2.0.9.0</AssemblyVersion>
+    <Version>3.0.0</Version>
+    <FileVersion>3.0.0.0</FileVersion>
+    <AssemblyVersion>3.0.0.0</AssemblyVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
