@@ -8,8 +8,8 @@ namespace ScenovaInstaller;
 
 internal static class InstallerConstants
 {
-    internal const string Version = "3.0.0";
-    internal const string AgentVersion = "3.0.0";
+    internal const string Version = "3.1.0";
+    internal const string AgentVersion = "3.1.0";
     internal const string ProductName = "SCENOVA Smart Installer";
     internal const int BackupRetention = 2;
 }
@@ -439,6 +439,10 @@ internal static class PresetManager
             ["InpSessionStartHour"] = "0",
             ["InpSessionEndHour"] = "24",
             ["InpMaxAtrPoints"] = "0",
+            ["InpIndicatorV6Mode"] = "1",
+            ["InpVolumeProfileBars"] = "144",
+            ["InpDonchianPeriod"] = "20",
+            ["InpIndicatorMaxWaitSeconds"] = "20",
             ["InpCooldownMinutesAfterLoss"] = "5",
             ["InpMaxConsecutiveLosses"] = "3"
         };
