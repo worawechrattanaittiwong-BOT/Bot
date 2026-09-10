@@ -5297,11 +5297,9 @@ int AdaptiveEntryDirection(double momentum)
    }
 
    datetime now = TimeCurrent();
-   if(!AdaptiveSessionAllowed())
-   {
-      g_adaptiveBlockReason = "SESSION_BLOCKED";
-      return 0;
-   }
+
+   // Session is market context, not a hard entry gate. Broker/symbol trading
+   // permission remains authoritative and is checked before order execution.
 
    // Cache expensive multi-timeframe history reads for one second.
    if(g_lastAdaptiveEvaluation == now)
@@ -5479,19 +5477,11 @@ int AdaptiveEntryDirection(double momentum)
       return 0;
    }
 
-   // Confidence is optional. Default OFF means the score is telemetry only and
-   // can never prevent a valid setup-first entry. Users who explicitly enable
-   // the filter get the Dynamic Confidence gate back.
+   // Confidence remains visible for diagnostics and backtests, but Market
+   // Cycle V2 never uses it as a hard gate. Execution is controlled by setup
+   // state, direction lock and terminal safety instead.
    if(g_confidenceGateEnabled)
-   {
-      double liveConfidenceThreshold = DynamicConfidenceThreshold(rawDirection);
-      if(g_signalConfidence < liveConfidenceThreshold)
-      {
-         g_adaptiveBlockReason = "WAITING_CONFIDENCE";
-         g_cachedAdaptiveBlockReason = g_adaptiveBlockReason;
-         return 0;
-      }
-   }
+      DynamicConfidenceThreshold(rawDirection);
    else
       g_effectiveConfidenceThreshold = 0.0;
 
@@ -6063,10 +6053,16 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       g_newsMode=="NEWS_CONTINUATION" ? 1.25 :
       g_marketRegime=="HIGH_VOLATILITY" ? 1.15 :
       g_marketRegimeDetail=="TREND_ACCELERATION" ? 0.92 : 1.0;
+   double spreadToAtr = CurrentSpreadPoints()/MathMax(1.0,atr);
+   double spreadSpacingFactor =
+      (g_newsMode!="NORMAL" || g_spreadStatus=="NEWS_WIDE")
+      ? 1.0+MathMin(0.55,spreadToAtr*3.0)
+      : 1.0;
 
    g_ladderRequiredPoints = MathMax(
       3.0,
-      atr*LadderFractionForRung(nextRung)*qualityFactor*regimeFactor*phaseFactor
+      atr*LadderFractionForRung(nextRung)*qualityFactor*regimeFactor*
+      spreadSpacingFactor*phaseFactor
    );
 
    MqlTick tick;
