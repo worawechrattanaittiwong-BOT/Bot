@@ -430,8 +430,9 @@ internal sealed class InstallerForm : Form
                 profile = await EnrollProfileAsync(terminal, code!, profile);
             }
 
-            profile ??= throw new InvalidOperationException(
-                "ไม่พบ SCENOVA Profile สำหรับ Terminal นี้");
+            if (profile is null)
+                throw new InvalidOperationException(
+                    "ไม่พบ SCENOVA Profile สำหรับ Terminal นี้");
 
             var token = ScenovaRuntime.TryUnprotect(profile.InstallTokenProtected)
                         ?? throw new InvalidOperationException("install token unavailable");
