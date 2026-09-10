@@ -32,8 +32,19 @@ export function Mt5AccountSwitchAssistant() {
         "/bot/dashboard" + (requested ? "?slotId=" + encodeURIComponent(requested) : "")
       );
       setData(result);
+
       const resolved = String(result?.selectedSlot?.id || "");
-      if (!slotId && resolved) setSlotId(resolved);
+      const selectedMode = String(result?.selectedSlot?.mode || "").toUpperCase();
+      const localCandidates = (result?.slots || []).filter(
+        (slot: any) => String(slot?.mode || "").toUpperCase() === "LOCAL"
+      );
+
+      if (!requested && selectedMode !== "LOCAL" && localCandidates.length > 0) {
+        setSlotId(String(localCandidates[0].id || ""));
+      } else if (!slotId && resolved) {
+        setSlotId(resolved);
+      }
+
       setError("");
       return result;
     } catch (e: any) {
@@ -77,11 +88,19 @@ export function Mt5AccountSwitchAssistant() {
   const changeRequestedAt = instance?.account_change_requested_at
     ? new Date(instance.account_change_requested_at)
     : null;
-  const changeRequestActive = Boolean(
-    changeRequestedAt &&
-    Date.now() - changeRequestedAt.getTime() < 30 * 60 * 1000
-  );
+  const requestAgeSeconds = changeRequestedAt
+    ? Math.max(0, (Date.now() - changeRequestedAt.getTime()) / 1000)
+    : 0;
+  const changeRequestActive = Boolean(changeRequestedAt && requestAgeSeconds < 30 * 60);
   const cannotChange = desired === "RUNNING" || state === "RUNNING" || positions > 0;
+  const agentAutoRepairing = Boolean(
+    changeRequestActive && agentOnline && !eaOnline && !pendingAccount && requestAgeSeconds < 45
+  );
+  const showManualRepair = Boolean(
+    softwareUpdateRequired ||
+    !agentOnline ||
+    (changeRequestActive && !eaOnline && requestAgeSeconds >= 45)
+  );
 
   async function startChange() {
     if (!slotId) return;
@@ -170,7 +189,11 @@ export function Mt5AccountSwitchAssistant() {
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          setNotice("");
+          setError("");
+        }}
         style={{
           position: "fixed",
           right: 22,
@@ -181,12 +204,14 @@ export function Mt5AccountSwitchAssistant() {
           padding: "12px 18px",
           fontWeight: 800,
           color: "#fff",
-          background: "linear-gradient(135deg,#5f3cf4,#8a5cff)",
+          background: pendingAccount
+            ? "linear-gradient(135deg,#058c68,#16ad83)"
+            : "linear-gradient(135deg,#5f3cf4,#8a5cff)",
           boxShadow: "0 14px 36px rgba(69,48,160,.34)",
           cursor: "pointer"
         }}
       >
-        ↔ เปลี่ยนบัญชี MT5
+        {pendingAccount ? "✓ ยืนยันบัญชี MT5 ใหม่" : "↔ เปลี่ยนบัญชี MT5"}
       </button>
 
       {open && (
@@ -234,7 +259,7 @@ export function Mt5AccountSwitchAssistant() {
               >×</button>
             </div>
 
-            {localSlots.length > 1 && (
+            {(localSlots.length > 1 || !isLocal) && localSlots.length > 0 && (
               <label style={{ display: "grid", gap: 6, marginTop: 18, fontWeight: 700 }}>
                 Local Slot
                 <select
@@ -255,7 +280,9 @@ export function Mt5AccountSwitchAssistant() {
 
             {!isLocal ? (
               <div style={{ marginTop: 20, padding: 16, borderRadius: 14, background: "#fff7e8", color: "#875b00" }}>
-                ปุ่มนี้ใช้กับ Local MT5 เท่านั้น เลือก Local Slot ก่อน
+                {localSlots.length > 0
+                  ? "กำลังเลือก Local Slot ให้ผู้ช่วยเปลี่ยนบัญชี..."
+                  : "บัญชี SCENOVA นี้ยังไม่มี Local Slot สำหรับเปลี่ยน MT5"}
               </div>
             ) : !account ? (
               <div style={{ marginTop: 20, padding: 16, borderRadius: 14, background: "#eef6ff", color: "#245989" }}>
@@ -306,7 +333,13 @@ export function Mt5AccountSwitchAssistant() {
                 {!cannotChange && changeRequestActive && !pendingAccount && (
                   <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: "#eef6ff", color: "#245989", lineHeight: 1.55 }}>
                     <b>โหมดเปลี่ยนบัญชีทำงานอยู่</b><br/>
-                    ระบบตรวจทุก 2 วินาที · {eaOnline ? "EA เชื่อมแล้ว กำลังอ่าน Login ใหม่" : agentOnline ? "Agent ออนไลน์ แต่ EA ยังไม่ส่ง Heartbeat" : "Agent/EA ยังไม่เชื่อม"}
+                    {eaOnline
+                      ? "EA เชื่อมแล้ว · ระบบกำลังอ่าน Login/Server ใหม่ทุก 2 วินาที"
+                      : agentAutoRepairing
+                        ? "Agent ออนไลน์ · กำลัง Reload/Repair EA อัตโนมัติแบบ Safe เพื่ออ่านบัญชีใหม่ (อาจใช้เวลาประมาณ 15–45 วินาที)"
+                        : agentOnline
+                          ? "Agent ออนไลน์ แต่ EA ยังไม่กลับมา Heartbeat · สามารถใช้ปุ่มซ่อม/อัปเดตด้านล่างได้"
+                          : "Agent/EA ยังไม่เชื่อม · ใช้ปุ่มซ่อม/อัปเดต SCENOVA ด้านล่าง"}
                   </div>
                 )}
 
@@ -316,9 +349,9 @@ export function Mt5AccountSwitchAssistant() {
                   </div>
                 )}
 
-                {(softwareUpdateRequired || (!eaOnline && changeRequestActive)) && !cannotChange && (
+                {showManualRepair && !cannotChange && (
                   <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: "#fff7e8", color: "#875b00", lineHeight: 1.55 }}>
-                    <b>{softwareUpdateRequired ? "พบว่า SCENOVA/EA ควรอัปเดต" : "EA ยังไม่เชื่อมกับ Server"}</b><br/>
+                    <b>{softwareUpdateRequired ? "พบว่า SCENOVA/EA ควรอัปเดต" : "การเชื่อมต่อ EA ยังไม่พร้อม"}</b><br/>
                     กด “ซ่อม/อัปเดต SCENOVA” แล้วเปิดไฟล์ Setup ที่ดาวน์โหลด ระบบจะกลับมาตรวจบัญชีใหม่ต่ออัตโนมัติ
                   </div>
                 )}
@@ -344,7 +377,7 @@ export function Mt5AccountSwitchAssistant() {
                     </button>
                   )}
 
-                  {(softwareUpdateRequired || !eaOnline) && (
+                  {showManualRepair && (
                     <button
                       type="button"
                       disabled={busy || cannotChange}
@@ -367,7 +400,7 @@ export function Mt5AccountSwitchAssistant() {
 
                 <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
                   <StatusBox label="Agent" value={agentOnline ? "ONLINE" : "OFFLINE"} good={agentOnline}/>
-                  <StatusBox label="EA / Heartbeat" value={eaOnline ? "ONLINE" : "WAITING"} good={eaOnline}/>
+                  <StatusBox label="EA / Heartbeat" value={eaOnline ? "ONLINE" : agentAutoRepairing ? "AUTO REPAIR" : "WAITING"} good={eaOnline}/>
                   <StatusBox label="Safe" value={cannotChange ? "NOT READY" : "READY"} good={!cannotChange}/>
                 </div>
               </>
