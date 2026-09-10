@@ -9,6 +9,8 @@ internal sealed class AgentActionResponse
     public string? PendingAccountNumber { get; set; }
     public string? PendingServer { get; set; }
     public bool EaOnline { get; set; }
+    public string? EaVersion { get; set; }
+    public string? EaVersionRequired { get; set; }
     public bool SafeToRestart { get; set; }
     public int Positions { get; set; }
     public bool ManualActionPending { get; set; }
