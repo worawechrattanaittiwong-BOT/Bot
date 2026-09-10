@@ -1156,6 +1156,8 @@ int OnInit()
    g_sessionEndHour = MathMax(1, MathMin(24, InpSessionEndHour));
    g_maxAtrPoints = MathMax(0.0, InpMaxAtrPoints);
    g_rescueEnabled = InpAdaptiveRescueEngine;
+   g_indicatorV6Mode = InpIndicatorV6Mode;
+   g_indicatorActivationStage = IndicatorV6ModeName();
    g_adaptiveMomentumThreshold = InpMomentumEntryPoints;
    g_adaptiveMaxPositions = g_maxPositions;
    g_adaptiveEntrySpacingMs = g_minOrderIntervalMs;
@@ -3141,7 +3143,15 @@ void ApplySettings(string json)
    g_sessionStartHour = (int)MathMax(0.0, MathMin(23.0, JsonNumber(json, "sessionStartHour", g_sessionStartHour)));
    g_sessionEndHour = (int)MathMax(1.0, MathMin(24.0, JsonNumber(json, "sessionEndHour", g_sessionEndHour)));
    g_maxAtrPoints = MathMax(0.0, JsonNumber(json, "maxAtrPoints", g_maxAtrPoints));
+   string indicatorMode = JsonString(json, "indicatorV6Mode", "");
+   StringToUpper(indicatorMode);
+   if(indicatorMode=="SHADOW") g_indicatorV6Mode=INDICATOR_V6_SHADOW;
+   else if(indicatorMode=="TIMING") g_indicatorV6Mode=INDICATOR_V6_TIMING;
+   else if(indicatorMode=="ADAPTIVE") g_indicatorV6Mode=INDICATOR_V6_ADAPTIVE;
+   else if(indicatorMode=="SOFT_WEIGHT") g_indicatorV6Mode=INDICATOR_V6_SOFT_WEIGHT;
+   g_indicatorActivationStage=IndicatorV6ModeName();
    g_lastAdaptiveEvaluation = 0;
+   g_lastIndicatorV6RefreshAt = 0;
 
    string mode = JsonString(json, "entryMode", "");
    if(mode == "BUY_ONLY") g_entryMode = ENTRY_BUY_ONLY;
