@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
+import { ScenovaBrand } from "../../components/ScenovaBrand";
 
 export default function LoginPage() {
   const [register, setRegister] = useState(false);
@@ -72,9 +73,8 @@ export default function LoginPage() {
     return (
       <main className="auth-shell">
         <section className="auth-card auth-session-card">
-          <div className="brand-lockup auth-brand">
-            <span className="brand-mark">◆</span>
-            <span><strong>SCENOVA</strong><small>MT5 BOT EA</small></span>
+          <div className="brand-lockup auth-brand scenova-brand-lockup">
+            <ScenovaBrand className="scenova-brand-logo-auth"/>
           </div>
           <div className="session-loader"><span className="dot green"/> กำลังตรวจสอบการเข้าสู่ระบบ...</div>
           <p className="muted">ถ้าบัญชีของคุณยังอยู่ในระบบ เราจะพาไป Control Center โดยอัตโนมัติ</p>
@@ -86,9 +86,8 @@ export default function LoginPage() {
   return (
     <main className="auth-shell">
       <section className="auth-card auth-card-wide">
-        <a className="brand-lockup auth-brand" href="/">
-          <span className="brand-mark">◆</span>
-          <span><strong>SCENOVA</strong><small>MT5 BOT EA</small></span>
+        <a className="brand-lockup auth-brand scenova-brand-lockup" href="/">
+          <ScenovaBrand className="scenova-brand-logo-auth"/>
         </a>
 
         <div className="auth-heading">

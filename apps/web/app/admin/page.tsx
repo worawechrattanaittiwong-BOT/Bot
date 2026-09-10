@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { adminApi } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
+import { ScenovaBrand } from "../../components/ScenovaBrand";
 
 type Menu = "overview"|"customers"|"workers";
 
@@ -215,7 +216,7 @@ export default function AdminPage() {
 
       <main className="main app-main owner-main">
         <div className="mobile-only mobile-app-head">
-          <div className="brand-lockup"><span className="brand-mark">◆</span><span><strong>SCENOVA</strong><small>OWNER</small></span></div>
+          <div className="brand-lockup scenova-brand-lockup"><ScenovaBrand className="scenova-brand-logo-mobile"/></div>
           <button className="btn ghost" onClick={logout}>ออก</button>
         </div>
         <OwnerMobileNav activeKey={ownerActiveKey} onNavigate={handleOwnerNavigate}/>

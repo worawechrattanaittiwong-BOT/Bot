@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ScenovaIcon } from "./ScenovaIcon";
+import { ScenovaBrand } from "./ScenovaBrand";
 
 export const ownerNavItems = [
   { section:"WORKSPACE", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"ภาพรวมระบบ", hint:"สุขภาพระบบ" },
@@ -28,9 +29,8 @@ export function OwnerSidebar({
   const sections = ["WORKSPACE","MY TRADING","PUBLIC"] as const;
   return (
     <aside className="sidebar app-sidebar owner-sidebar">
-      <div className="brand-lockup side-brand">
-        <span className="brand-emblem" aria-hidden="true"><i/><ScenovaIcon name="brand" size={22}/></span>
-        <span><strong>SCENOVA</strong><small>OWNER CONSOLE</small></span>
+      <div className="brand-lockup side-brand scenova-brand-lockup">
+        <ScenovaBrand className="scenova-brand-logo-sidebar"/>
       </div>
 
       {sections.map(section=>(

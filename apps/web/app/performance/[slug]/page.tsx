@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "../../../lib/api";
 import { ScenovaIcon } from "../../../components/ScenovaIcon";
+import { ScenovaBrand } from "../../../components/ScenovaBrand";
 
 export default function PublicPerformancePage() {
   const params = useParams();
@@ -31,8 +32,7 @@ export default function PublicPerformancePage() {
     <main className="performance-public-shell">
       <header className="performance-public-head">
         <div className="performance-brand">
-          <span><ScenovaIcon name="brand" size={26}/></span>
-          <div><b>SCENOVA</b><small>PERFORMANCE VIEW</small></div>
+          <ScenovaBrand className="scenova-brand-logo-performance"/>
         </div>
         <span className={"performance-type "+(data.source==="SAMPLE"?"sample":"")}>{data.label}</span>
       </header>

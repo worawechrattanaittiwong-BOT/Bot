@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { API_URL } from "../lib/api";
+import { ScenovaBrand } from "./ScenovaBrand";
 
 type SessionUser = {
   id: string;
@@ -50,9 +51,8 @@ export default function SiteHeader() {
   return (
     <header className="topbar">
       <div className="shell topbar-inner">
-        <a className="brand-lockup" href="/">
-          <span className="brand-mark">◆</span>
-          <span><strong>SCENOVA</strong><small>MT5 BOT EA</small></span>
+        <a className="brand-lockup scenova-brand-lockup" href="/">
+          <ScenovaBrand className="scenova-brand-logo-header"/>
         </a>
 
         <nav className="nav site-nav">

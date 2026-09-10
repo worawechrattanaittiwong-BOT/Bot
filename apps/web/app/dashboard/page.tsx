@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { API_URL, api, getToken } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
+import { ScenovaBrand } from "../../components/ScenovaBrand";
 
 type Dashboard = {
   user: any;
@@ -1401,9 +1402,8 @@ export default function DashboardPage() {
         <OwnerSidebar activeKey={ownerActiveKey} onLogout={logout} onNavigate={handleOwnerNavigate}/>
       ) : (
         <aside className="sidebar app-sidebar">
-          <div className="brand-lockup side-brand">
-            <span className="brand-emblem" aria-hidden="true"><i/><b>◆</b></span>
-            <span><strong>SCENOVA</strong><small>MT5 BOT EA</small></span>
+          <div className="brand-lockup side-brand scenova-brand-lockup">
+            <ScenovaBrand className="scenova-brand-logo-sidebar"/>
           </div>
           <div className="side-section-label">เมนูหลัก</div>
           <nav className="side-nav">
@@ -1428,7 +1428,7 @@ export default function DashboardPage() {
 
       <main className="main app-main">
         <div className="mobile-only mobile-app-head">
-          <div className="brand-lockup"><span className="brand-mark"><ScenovaIcon name="brand" size={24}/></span><span><strong>SCENOVA</strong><small>{isOwner ? "OWNER CONSOLE" : "MT5 BOT EA"}</small></span></div>
+          <div className="brand-lockup scenova-brand-lockup"><ScenovaBrand className="scenova-brand-logo-mobile"/></div>
           <button className="btn ghost" onClick={logout}>ออก</button>
         </div>
 
@@ -1694,7 +1694,7 @@ export default function DashboardPage() {
                   <div className="cc-v6-ai-grid" aria-hidden="true"/>
                   <img src="/assets/scenova-ai-operator-v1.png" alt="SCENOVA AI trading operator"/>
                   <div className="cc-v6-ai-brand-copy">
-                    <div className="cc-v6-ai-logo"><span><ScenovaIcon name="brand" size={30}/></span><div><b>SCENOVA</b><small>INTELLIGENT EA ECOSYSTEM</small></div></div>
+                    <div className="cc-v6-ai-logo"><ScenovaBrand className="scenova-brand-logo-operator"/></div>
                     <p>DISCIPLINE<br/>AUTOMATES OPPORTUNITY</p>
                     <div><span><ScenovaIcon name="spark" size={14}/>ANALYZE</span><span><ScenovaIcon name="timer" size={14}/>EXECUTE</span><span><ScenovaIcon name="shield" size={14}/>PROTECT</span></div>
                   </div>
