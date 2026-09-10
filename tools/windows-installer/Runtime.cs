@@ -161,6 +161,44 @@ internal static class ScenovaRuntime
             new UTF8Encoding(false));
     }
 
+    internal static void RemoveProfile(string instanceId)
+    {
+        var profiles = ReadProfiles()
+            .Where(x => !string.Equals(
+                x.InstanceId,
+                instanceId,
+                StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (profiles.Count > 0 && profiles.All(x => !x.IsPrimary))
+            profiles[0].IsPrimary = true;
+
+        Directory.CreateDirectory(BaseDir);
+        var store = new AgentProfileStore
+        {
+            Version = 3,
+            UpdatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            Profiles = profiles
+        };
+        File.WriteAllText(
+            ProfilesPath,
+            JsonSerializer.Serialize(store, JsonOptions),
+            new UTF8Encoding(false));
+
+        var primary = profiles.FirstOrDefault(x => x.IsPrimary) ?? profiles.FirstOrDefault();
+        if (primary is not null)
+        {
+            File.WriteAllText(
+                ConfigPath,
+                JsonSerializer.Serialize(primary, JsonOptions),
+                new UTF8Encoding(false));
+        }
+        else
+        {
+            try { if (File.Exists(ConfigPath)) File.Delete(ConfigPath); } catch { }
+        }
+    }
+
     internal static SmartInstallerState ReadState()
     {
         try
