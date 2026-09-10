@@ -1,7 +1,9 @@
 ﻿{
-    "sourceCommit":  "2c909082190f00abb1239c61827ba06dea4c7cdc",
-    "sha256":  "bae8c9eaa401d10d4389482c5b6e95b78e648d0eaa972dec0d85ff24bb24b90e",
-    "eaVersion":  "1.046",
-    "file":  "FastBasketBot.ex5",
-    "builtAt":  "2026-09-10T12:36:19.7370551Z"
+    "builtAt":  "2026-09-10T14:09:15.6573913Z",
+    "policy":  "STRONG_DOWN_NO_SELL_WAIT_BUY",
+    "brain":  "V8",
+    "sha256":  "2ba7e52105dd12d68874239f6e1fd401e3434ef40cd74b87923457b3deaa4230",
+    "sourceCommit":  "0d053b55fd4f15e8bf996dd8112b6b1c08440c5d",
+    "eaVersion":  "1.047",
+    "file":  "FastBasketBot.ex5"
 }
