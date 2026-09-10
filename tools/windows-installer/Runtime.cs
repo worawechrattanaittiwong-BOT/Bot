@@ -388,6 +388,8 @@ internal sealed class AgentConfig
     public string TerminalBrokerHint { get; set; } = "";
     public string VerifiedAccountNumber { get; set; } = "";
     public string VerifiedServer { get; set; } = "";
+    public string ExpectedAccountNumber { get; set; } = "";
+    public string ExpectedServer { get; set; } = "";
 }
 
 internal sealed class EnrollResponse
