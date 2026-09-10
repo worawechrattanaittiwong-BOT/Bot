@@ -146,6 +146,78 @@ export class EaController {
     };
   }
 
+  private async setupPerformance(
+    instanceId: string,
+    symbol: string,
+    decisionDirection: number,
+    entryModel: string,
+    marketRegime: string
+  ) {
+    const direction = decisionDirection > 0 ? "BUY" : decisionDirection < 0 ? "SELL" : "";
+    const model = String(entryModel || "").trim().slice(0, 64);
+    const regime = String(marketRegime || "").trim().slice(0, 64);
+    const empty = {
+      setupWinProbability: 0,
+      setupWinSamples: 0,
+      setupAvgWin: 0,
+      setupAvgLoss: 0,
+      setupExpectedValue: 0,
+      setupEvScore: 50,
+      setupDirection: decisionDirection > 0 ? 1 : decisionDirection < 0 ? -1 : 0,
+      setupModel: model || "NONE",
+      setupRegime: regime || "UNKNOWN"
+    };
+
+    // Setup intelligence is advisory only. If the EA is between decisions or
+    // the model is not identified, skip the query entirely and return neutral.
+    if (!direction || !model || model === "NONE") return empty;
+
+    const useRegime = regime && !["UNKNOWN", "DISABLED", "DATA_NOT_READY"].includes(regime);
+    const row = await this.db.one(
+      `SELECT
+         COUNT(*) FILTER (WHERE net_profit<>0)::int AS samples,
+         COUNT(*) FILTER (WHERE net_profit>0)::int AS wins,
+         COALESCE(AVG(net_profit) FILTER (WHERE net_profit>0),0)::float8 AS avg_win,
+         COALESCE(AVG(net_profit) FILTER (WHERE net_profit<0),0)::float8 AS avg_loss
+       FROM (
+         SELECT net_profit
+         FROM trade_journal
+         WHERE bot_instance_id=$1
+           AND event_type='BASKET'
+           AND COALESCE((metadata->>'schema')::int,0) >= 3
+           AND ($2='' OR metadata->>'symbol'=$2)
+           AND direction=$3
+           AND entry_model=$4
+           AND ($5='' OR market_regime=$5)
+         ORDER BY created_at DESC
+         LIMIT 120
+       ) recent_setup`,
+      [instanceId, symbol, direction, model, useRegime ? regime : ""]
+    );
+
+    const samples = Math.max(0, Number(row?.samples || 0));
+    const wins = Math.max(0, Number(row?.wins || 0));
+    const avgWin = Math.max(0, Number(row?.avg_win || 0));
+    const avgLoss = Math.min(0, Number(row?.avg_loss || 0));
+    const winProbability = samples > 0 ? wins / samples * 100 : 0;
+    const p = winProbability / 100;
+    const expectedValue = p * avgWin - (1 - p) * Math.abs(avgLoss);
+    const payoffScale = Math.max(0.01, avgWin + Math.abs(avgLoss));
+    const evScore = samples > 0
+      ? Math.max(0, Math.min(100, 50 + expectedValue / payoffScale * 100))
+      : 50;
+
+    return {
+      ...empty,
+      setupWinProbability: winProbability,
+      setupWinSamples: samples,
+      setupAvgWin: avgWin,
+      setupAvgLoss: avgLoss,
+      setupExpectedValue: expectedValue,
+      setupEvScore: evScore
+    };
+  }
+
   @Post("heartbeat")
   async heartbeat(
     @Req() req: any,
@@ -431,6 +503,13 @@ export class EaController {
       instance.id,
       String(metrics.symbol || "").trim()
     );
+    const setupStats = await this.setupPerformance(
+      instance.id,
+      String(metrics.symbol || "").trim(),
+      Number(metrics.decisionDirection || 0),
+      String(metrics.entryModel || ""),
+      String(metrics.marketRegime || "")
+    );
 
     return {
       ok: true,
@@ -441,7 +520,8 @@ export class EaController {
       commandName: cmd?.command || null,
       commandPayload: cmd?.payload || null,
       settings: settings?.settings || {},
-      ...intelligenceStats
+      ...intelligenceStats,
+      ...setupStats
     };
   }
 
@@ -473,6 +553,14 @@ export class EaController {
     peakPositions?: number;
     sessionProfile?: string;
     journalSchema?: number;
+    marketCycleState?: string;
+    entryPrecisionState?: string;
+    liquidityState?: string;
+    microStructureState?: string;
+    fvgState?: string;
+    entryPrecisionScore?: number;
+    entryDistanceAtr?: number;
+    setupEvScore?: number;
   }) {
     const instance = await this.instance(body.instanceId, body.installToken);
 
@@ -536,14 +624,22 @@ export class EaController {
         JSON.stringify({
           source: "EA",
           schema: eventType === "BASKET"
-            ? Math.max(2, Math.min(3, Math.trunc(n(body.journalSchema, 2))))
+            ? Math.max(2, Math.min(4, Math.trunc(n(body.journalSchema, 2))))
             : 1,
           symbol: text(body.symbol, 48),
           brokerServer: text(body.brokerServer, 96),
           startedAt: Math.max(0, Math.trunc(n(body.startedAt))),
           endedAt: Math.max(0, Math.trunc(n(body.endedAt))),
           peakPositions: Math.max(0, Math.trunc(n(body.peakPositions))),
-          sessionProfile: text(body.sessionProfile, 32)
+          sessionProfile: text(body.sessionProfile, 32),
+          marketCycleState: text(body.marketCycleState, 48),
+          entryPrecisionState: text(body.entryPrecisionState, 48),
+          liquidityState: text(body.liquidityState, 64),
+          microStructureState: text(body.microStructureState, 64),
+          fvgState: text(body.fvgState, 64),
+          entryPrecisionScore: Math.max(0, Math.min(100, n(body.entryPrecisionScore, 50))),
+          entryDistanceAtr: Math.max(0, n(body.entryDistanceAtr)),
+          setupEvScore: Math.max(0, Math.min(100, n(body.setupEvScore, 50)))
         })
       ]
     );

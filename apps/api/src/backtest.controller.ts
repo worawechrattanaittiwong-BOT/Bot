@@ -100,6 +100,24 @@ export class BacktestController {
     let breakeven = 0;
     let grossProfit = 0;
     let grossLoss = 0;
+    let maeTotal = 0;
+    let maeSamples = 0;
+    let mfeTotal = 0;
+    let mfeSamples = 0;
+    let capturedProfit = 0;
+    let availableMfeProfit = 0;
+    let captureSamples = 0;
+    let terminalChaseCount = 0;
+    let terminalChaseSamples = 0;
+    let churnCount = 0;
+    let churnSamples = 0;
+    const basketStats = new Map<string, {
+      firstOpenedMs: number | null;
+      lastOpenedMs: number | null;
+      target: number;
+      maxIndex: number;
+      maxElapsedSeconds: number | null;
+    }>();
     const equityCurve: Array<{ index: number; time: string | null; balance: number }> = [];
 
     trades.forEach((trade, index) => {
@@ -112,6 +130,66 @@ export class BacktestController {
         grossLoss += Math.abs(profit);
       } else {
         breakeven += 1;
+      }
+
+      const metadata = trade.metadata || {};
+      const mae = Number(metadata.mae);
+      if (Number.isFinite(mae)) {
+        maeTotal += Math.abs(mae);
+        maeSamples += 1;
+      }
+      const mfe = Number(metadata.mfe);
+      if (Number.isFinite(mfe)) {
+        mfeTotal += Math.abs(mfe);
+        mfeSamples += 1;
+      }
+      const mfeProfit = Number(metadata.mfeProfit);
+      if (Number.isFinite(mfeProfit) && mfeProfit > 0) {
+        availableMfeProfit += mfeProfit;
+        capturedProfit += Math.max(0, profit);
+        captureSamples += 1;
+      }
+
+      if (typeof metadata.terminalChase === "boolean") {
+        terminalChaseSamples += 1;
+        if (metadata.terminalChase) terminalChaseCount += 1;
+      }
+      if (typeof metadata.churn === "boolean") {
+        churnSamples += 1;
+        if (metadata.churn) churnCount += 1;
+      }
+
+      const basketId = metadata.basketId === null || metadata.basketId === undefined
+        ? ""
+        : String(metadata.basketId);
+      if (basketId) {
+        const openedMs = trade.openedAt ? new Date(trade.openedAt).getTime() : NaN;
+        const elapsedSeconds = Number(metadata.basketElapsedSeconds);
+        const target = Math.max(1, Number(metadata.basketTargetPositions || 1));
+        const basketIndex = Math.max(1, Number(metadata.basketIndex || 1));
+        const current = basketStats.get(basketId) || {
+          firstOpenedMs: null,
+          lastOpenedMs: null,
+          target,
+          maxIndex: 0,
+          maxElapsedSeconds: null
+        };
+        if (Number.isFinite(openedMs)) {
+          current.firstOpenedMs = current.firstOpenedMs === null
+            ? openedMs
+            : Math.min(current.firstOpenedMs, openedMs);
+          current.lastOpenedMs = current.lastOpenedMs === null
+            ? openedMs
+            : Math.max(current.lastOpenedMs, openedMs);
+        }
+        current.target = Math.max(current.target, target);
+        current.maxIndex = Math.max(current.maxIndex, basketIndex);
+        if (Number.isFinite(elapsedSeconds) && elapsedSeconds >= 0) {
+          current.maxElapsedSeconds = current.maxElapsedSeconds === null
+            ? elapsedSeconds
+            : Math.max(current.maxElapsedSeconds, elapsedSeconds);
+        }
+        basketStats.set(basketId, current);
       }
 
       const suppliedBalance = Number(trade.balanceAfter);
@@ -128,6 +206,25 @@ export class BacktestController {
         time: trade.closedAt || trade.openedAt || null,
         balance: Number(balance.toFixed(2))
       });
+    });
+
+    let completedBasketFillSeconds = 0;
+    let completedBasketFillSamples = 0;
+    let completedWithin10Minutes = 0;
+    basketStats.forEach((basket) => {
+      if (basket.maxIndex < basket.target) return;
+      let fillSeconds = basket.maxElapsedSeconds;
+      if (
+        fillSeconds === null &&
+        basket.firstOpenedMs !== null &&
+        basket.lastOpenedMs !== null
+      ) {
+        fillSeconds = Math.max(0, (basket.lastOpenedMs - basket.firstOpenedMs) / 1000);
+      }
+      if (fillSeconds === null) return;
+      completedBasketFillSeconds += fillSeconds;
+      completedBasketFillSamples += 1;
+      if (fillSeconds <= 600) completedWithin10Minutes += 1;
     });
 
     const closedTrades = trades.length;
@@ -150,12 +247,36 @@ export class BacktestController {
         maxDrawdownPercent: Number(maxDrawdownPercent.toFixed(2)),
         initialDeposit: Number(startBalance.toFixed(2)),
         finalBalance: Number(balance.toFixed(2)),
-        returnPercent: startBalance > 0 ? Number(((balance - startBalance) / startBalance * 100).toFixed(2)) : 0
+        returnPercent: startBalance > 0 ? Number(((balance - startBalance) / startBalance * 100).toFixed(2)) : 0,
+        avgMae: maeSamples > 0 ? Number((maeTotal / maeSamples).toFixed(4)) : null,
+        maeSamples,
+        avgMfe: mfeSamples > 0 ? Number((mfeTotal / mfeSamples).toFixed(4)) : null,
+        mfeSamples,
+        profitCapturePercent: captureSamples > 0 && availableMfeProfit > 0
+          ? Number((Math.min(1, capturedProfit / availableMfeProfit) * 100).toFixed(2))
+          : null,
+        captureSamples,
+        terminalChaseCount,
+        terminalChaseSamples,
+        terminalChaseRate: terminalChaseSamples > 0
+          ? Number((terminalChaseCount / terminalChaseSamples * 100).toFixed(2))
+          : null,
+        churnCount,
+        churnSamples,
+        churnRate: churnSamples > 0
+          ? Number((churnCount / churnSamples * 100).toFixed(2))
+          : null,
+        avgBasketFillSeconds: completedBasketFillSamples > 0
+          ? Number((completedBasketFillSeconds / completedBasketFillSamples).toFixed(2))
+          : null,
+        basketFillSamples: completedBasketFillSamples,
+        basketFillWithin10MinRate: completedBasketFillSamples > 0
+          ? Number((completedWithin10Minutes / completedBasketFillSamples * 100).toFixed(2))
+          : null
       },
       equityCurve
     };
   }
-
   private async insertRun(
     userId: string,
     body: any,
