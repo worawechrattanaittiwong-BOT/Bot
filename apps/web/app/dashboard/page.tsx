@@ -641,6 +641,38 @@ export default function DashboardPage() {
   };
   const latestDecisionReason = String(metrics.lastEntryReason || metrics.adaptiveBlockReason || "NONE");
   const latestCloseReason = String(metrics.lastCloseReason || "NONE");
+  const decisionReasonLabel:Record<string,string> = {
+    WAITING_SETUP: "รอจุดเข้าที่ชัดเจน",
+    WAITING_EXECUTION_TURN: "รอ Buy/Sell เพราะ M1/M5 ยังอยู่ใน Pullback และยังไม่เกิด Turning event",
+    WAITING_REVERSAL_CONFIRMATION: "M1/M5 สวน Macro แรง · กำลังรอยืนยันว่าเป็น Reversal จริง",
+    WAITING_PULLBACK_RETEST: "ราคา Extended · รอ Pullback / Retest ก่อนเข้า",
+    WAITING_BREAKOUT_RETEST: "Breakout ยืดเกินไป · รอ Retest ก่อนเข้า",
+    WAIT_TERMINAL_DEMAND: "ไม่ Sell ต่อ · ราคาอยู่ใกล้ Demand และแรงขายเริ่มหมด",
+    WAIT_TERMINAL_SUPPLY: "ไม่ Buy ต่อ · ราคาอยู่ใกล้ Supply และแรงซื้อเริ่มหมด",
+    EXTREME_SPREAD: "ยังไม่เปิดไม้ใหม่ · Spread อยู่ระดับ EXTREME",
+    WAIT_FRESH_EXECUTION_EVENT: "รอ EMA reclaim / Price Action / Momentum / Zone reaction ใหม่ก่อนเข้าอีกครั้ง"
+  };
+  const latestDecisionCustomerText = latestDecisionReason === "NONE"
+    ? "กำลังประเมินตลาด"
+    : decisionReasonLabel[latestDecisionReason]
+      || latestDecisionReason
+        .replace("REVERSAL_BUY", "เข้า Reversal BUY")
+        .replace("REVERSAL_SELL", "เข้า Reversal SELL")
+        .replace("BUY · Zone", "เข้า BUY · Demand/Location")
+        .replace("SELL · Zone", "เข้า SELL · Supply/Location")
+        .replace("EMA Turn", "EMA กลับทิศ");
+  const closeReasonLabel:Record<string,string> = {
+    SMART_PROFIT_REVERSAL: "ปิด Basket · M5/Structure/EMA/Price Action ยืนยัน True Reversal",
+    AUTO_PROFIT_GIVEBACK: "ปิด Basket · กำไรย่อจาก Peak ตามบริบทตลาด",
+    BASKET_PROFIT_TARGET: "ปิด Basket · ถึงเป้ากำไรรวม",
+    PROFIT_RUN_PERCENT_TRAIL: "ปิด Basket · กำไรย่อจาก Peak หลังถึงเป้า",
+    MAX_BASKET_LOSS: "ปิด Basket · ถึงขีดจำกัดขาดทุนรวม",
+    DAILY_PROFIT_TARGET: "ปิด Basket · ถึงเป้ากำไรรายวัน",
+    DAILY_PROFIT_GIVEBACK: "ปิด Basket · กำไรรายวันย่อตามเปอร์เซ็นต์ที่ตั้ง",
+    REMOTE_CLOSE_ALL: "ปิด Basket · ผู้ใช้สั่งปิดทั้งหมด"
+  };
+  const latestCloseCustomerText = closeReasonLabel[latestCloseReason]
+    || latestCloseReason.replace(/_/g," ");
 
   const emaStack = String(metrics.emaStack || "MIXED");
   const emaSlope = String(metrics.emaSlope || "FLAT");
@@ -1541,7 +1573,7 @@ export default function DashboardPage() {
                     <InsightRow label="Fibonacci" value={fibCustomerText+" · "+fibScore.toFixed(0)+"%"}/>
                     <InsightRow label="แนวรับ / แนวต้าน" value={(Number(metrics.nearestSupport||0)>0?Number(metrics.nearestSupport).toFixed(symbolDigits):"—")+" / "+(Number(metrics.nearestResistance||0)>0?Number(metrics.nearestResistance).toFixed(symbolDigits):"—")}/>
                     <InsightRow label="จังหวะเข้า" value={setupCustomerText}/>
-                    <InsightRow label="Market Cycle" value={marketCycleLabel[marketCycleState]||marketCycleState+" · "+(lowerTimeframeLabel[lowerTimeframeState]||lowerTimeframeState)}/>
+                    <InsightRow label="Market Cycle" value={(marketCycleLabel[marketCycleState]||marketCycleState)+" · "+(lowerTimeframeLabel[lowerTimeframeState]||lowerTimeframeState)}/>
                     <InsightRow label="Demand / Supply" value={"D "+demandZoneScore.toFixed(0)+" ("+(zoneQualityLabel[demandZoneQuality]||demandZoneQuality)+") · S "+supplyZoneScore.toFixed(0)+" ("+(zoneQualityLabel[supplyZoneQuality]||supplyZoneQuality)+")"}/>
                     <InsightRow label="RSI / Divergence" value={"RSI M5 "+rsiM5.toFixed(1)+" · Bull "+rsiBullDiv.toFixed(0)+" · Bear "+rsiBearDiv.toFixed(0)}/>
                     <InsightRow label="ADX / DMI" value={"ADX "+adxM5.toFixed(1)+" · +DI "+plusDiM5.toFixed(1)+" · -DI "+minusDiM5.toFixed(1)}/>
@@ -1549,8 +1581,8 @@ export default function DashboardPage() {
                     <InsightRow label="Reversal" value={reversalStatus==="NONE"?"ยังไม่ยืนยัน":reversalStatus.replaceAll("_"," ")}/>
                     <InsightRow label="Basket Fill" value={fillPositions+"/"+fillTargetPositions+" · "+(fillPhaseLabel[fillPhase]||fillPhase)+" · "+(fillReasonLabel[fillBlockReason]||fillBlockReason)}/>
                     <InsightRow label="News Mode" value={newsModeLabel[newsMode]||newsMode}/>
-                    <InsightRow label="เหตุผลเข้า/รอล่าสุด" value={latestDecisionReason==="NONE"?"กำลังประเมินตลาด":latestDecisionReason}/>
-                    {latestCloseReason!=="NONE" && <InsightRow label="เหตุผลปิดล่าสุด" value={latestCloseReason.replaceAll("_"," ")}/>} 
+                    <InsightRow label="เหตุผลเข้า/รอล่าสุด" value={latestDecisionCustomerText}/>
+                    {latestCloseReason!=="NONE" && <InsightRow label="เหตุผลปิดล่าสุด" value={latestCloseCustomerText}/>} 
                   </div>
                 </section>
 
@@ -2216,6 +2248,13 @@ function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNo
                 <BacktestKpi label="Profit Factor" value={Number(summary.profitFactor||0).toFixed(2)} />
                 <BacktestKpi label="Max Drawdown" value={Number(summary.maxDrawdownPercent||0).toFixed(2)+"%"} tone="warn"/>
                 <BacktestKpi label="Trades" value={String(summary.closedTrades||0)} />
+                {Number(summary.maeSamples||0)>0&&<BacktestKpi label="Avg MAE" value={Number(summary.avgMae||0).toFixed(2)} tone="warn"/>}
+                {Number(summary.mfeSamples||0)>0&&<BacktestKpi label="Avg MFE" value={Number(summary.avgMfe||0).toFixed(2)} tone="good"/>}
+                {Number(summary.captureSamples||0)>0&&<BacktestKpi label="Profit Capture" value={Number(summary.profitCapturePercent||0).toFixed(1)+"%"}/>}
+                {Number(summary.terminalChaseSamples||0)>0&&<BacktestKpi label="BUY Top / SELL Bottom" value={Number(summary.terminalChaseRate||0).toFixed(1)+"%"} tone="warn"/>}
+                {Number(summary.basketFillSamples||0)>0&&<BacktestKpi label="Avg Basket Fill" value={(Number(summary.avgBasketFillSeconds||0)/60).toFixed(1)+" นาที"}/>}
+                {Number(summary.basketFillSamples||0)>0&&<BacktestKpi label="Fill ≤ 10 นาที" value={Number(summary.basketFillWithin10MinRate||0).toFixed(1)+"%"} tone="good"/>}
+                {Number(summary.churnSamples||0)>0&&<BacktestKpi label="Same-side Churn" value={Number(summary.churnRate||0).toFixed(1)+"%"} tone="warn"/>}
               </div>
 
               <div className="backtest-chart-card">
