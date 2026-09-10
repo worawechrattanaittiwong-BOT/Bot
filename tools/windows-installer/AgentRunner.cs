@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Win32;
+using System.Windows.Forms;
 
 namespace ScenovaInstaller;
 
@@ -114,9 +115,27 @@ internal static class AgentRunner
     /// Success is ACKed only after the Server observes EA heartbeat again. For
     /// UPDATE_EA_RESTART the reported runtime version must also equal the
     /// required EA version. Starting terminal64.exe alone is never success.
+    ///
+    /// The installer historically called this synchronous compatibility method
+    /// from the WinForms UI thread. Manual-action verification can legitimately
+    /// wait up to 55 seconds, which froze the progress bar and made Windows show
+    /// the installer as hung. When called from a WinForms message loop, run the
+    /// blocking work on a worker thread and keep pumping UI messages. Background
+    /// Agent calls keep the original synchronous behavior.
     /// </summary>
     internal static bool EnsureMt5RunningWithEa(AgentConfig config, bool forceReload)
     {
+        if (Application.MessageLoop)
+        {
+            var worker = Task.Run(() => EnsureMt5RunningWithEa(config, forceReload));
+            while (!worker.IsCompleted)
+            {
+                Application.DoEvents();
+                Thread.Sleep(20);
+            }
+            return worker.GetAwaiter().GetResult();
+        }
+
         var action = FetchAuthorizedManualAction(config, forceReload);
         if (action is null) return false;
 
