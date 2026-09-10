@@ -349,6 +349,7 @@ internal sealed class AgentProfileStore
 internal sealed class SmartInstallerState
 {
     public string InstallerVersion { get; set; } = "";
+    public string UpdatedAt { get; set; } = "";
     public string ReleaseChannel { get; set; } = "Stable";
     public string LastAction { get; set; } = "";
     public string LastResult { get; set; } = "";
