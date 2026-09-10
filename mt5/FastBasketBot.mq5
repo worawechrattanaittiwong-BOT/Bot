@@ -526,6 +526,11 @@ double g_testAnchorMae60Sum = 0.0;
 double g_testTimeToGreenSum = 0.0;
 int    g_testTimeToGreenSamples = 0;
 int    g_testGreenWithin60 = 0;
+double g_testIndicatorCompositeSum = 0.0;
+int    g_testIndicatorEntrySamples = 0;
+int    g_testIndicatorWaitEvents = 0;
+double g_testIndicatorWaitSecondsSum = 0.0;
+int    g_testIndicatorHighQualityEntries = 0;
 
 // Same-side re-entry after a reversal exit is event-driven, never time-based.
 int      g_marketRearmDirection = 0;
@@ -1277,6 +1282,14 @@ void TesterStartCycleIfNeeded(int direction,int positionsBefore)
    if(positionsBefore > 0 || g_testCycleStartedAt > 0)
       return;
 
+   // Capture the V6 context at the anchor entry. This is measurement only and
+   // never changes Strategy Tester execution.
+   RefreshIndicatorV6Scores(direction,MomentumPoints());
+   g_testIndicatorCompositeSum += g_indicatorCompositeScore;
+   g_testIndicatorEntrySamples++;
+   if(g_indicatorCompositeScore>=78.0)
+      g_testIndicatorHighQualityEntries++;
+
    if(g_testLastBasketClosedAt > 0 &&
       g_testLastBasketDirection == direction &&
       TimeCurrent()-g_testLastBasketClosedAt <= 120)
@@ -1412,9 +1425,16 @@ double OnTester()
       ? g_testTimeToGreenSum/g_testTimeToGreenSamples : 0.0;
    double green60Rate = g_testCycleSamples > 0
       ? (double)g_testGreenWithin60/g_testCycleSamples*100.0 : 0.0;
+   double avgIndicatorComposite = g_testIndicatorEntrySamples > 0
+      ? g_testIndicatorCompositeSum/g_testIndicatorEntrySamples : 0.0;
+   double avgIndicatorWaitSeconds = g_testIndicatorWaitEvents > 0
+      ? g_testIndicatorWaitSecondsSum/g_testIndicatorWaitEvents : 0.0;
+   double highQualityEntryPct = g_testIndicatorEntrySamples > 0
+      ? (double)g_testIndicatorHighQualityEntries/
+        g_testIndicatorEntrySamples*100.0 : 0.0;
 
    PrintFormat(
-      "SCENOVA_BACKTEST_V3 cycles=%d orders=%d avgMAE=%.4f avgMFE=%.4f profitCapturePct=%.2f terminalChasePct=%.2f avgFillSeconds=%.1f fillWithin10MinPct=%.2f sameSideChurnPct=%.2f entryMAE5=%.4f entryMAE15=%.4f entryMAE30=%.4f entryMAE60=%.4f avgTimeToGreenSec=%.1f greenWithin60Pct=%.2f",
+      "SCENOVA_BACKTEST_V6 cycles=%d orders=%d avgMAE=%.4f avgMFE=%.4f profitCapturePct=%.2f terminalChasePct=%.2f avgFillSeconds=%.1f fillWithin10MinPct=%.2f sameSideChurnPct=%.2f entryMAE5=%.4f entryMAE15=%.4f entryMAE30=%.4f entryMAE60=%.4f avgTimeToGreenSec=%.1f greenWithin60Pct=%.2f avgIndicatorComposite=%.2f indicatorWaitEvents=%d avgIndicatorWaitSeconds=%.2f highQualityEntryPct=%.2f",
       g_testCycleSamples,
       g_testEntryCount,
       avgMae,
@@ -1429,7 +1449,11 @@ double OnTester()
       entryMae30,
       entryMae60,
       timeToGreen,
-      green60Rate
+      green60Rate,
+      avgIndicatorComposite,
+      g_testIndicatorWaitEvents,
+      avgIndicatorWaitSeconds,
+      highQualityEntryPct
    );
 
    // Native MT5 report remains authoritative for Drawdown, Win Rate and
@@ -5388,6 +5412,9 @@ bool IndicatorV6TimingReady(int direction)
       g_indicatorExecutionScore<42.0;
    if(!multiWeak)
    {
+      if(MQLInfoInteger(MQL_TESTER) && g_indicatorWaitStartedAt>0)
+         g_testIndicatorWaitSecondsSum +=
+            MathMax(0.0,(double)(TimeCurrent()-g_indicatorWaitStartedAt));
       g_indicatorWaitStartedAt=0;
       g_indicatorWaitDirection=0;
       g_indicatorWaitReason="NONE";
@@ -5402,7 +5429,15 @@ bool IndicatorV6TimingReady(int direction)
       g_liquidityScore>=65.0 ||
       g_microStructureScore>=75.0;
    if(protectedModel)
+   {
+      if(MQLInfoInteger(MQL_TESTER) && g_indicatorWaitStartedAt>0)
+         g_testIndicatorWaitSecondsSum +=
+            MathMax(0.0,(double)(TimeCurrent()-g_indicatorWaitStartedAt));
+      g_indicatorWaitStartedAt=0;
+      g_indicatorWaitDirection=0;
+      g_indicatorWaitReason="PROTECTED_MODEL";
       return true;
+   }
 
    datetime now=TimeCurrent();
    if(g_indicatorWaitStartedAt<=0 || g_indicatorWaitDirection!=direction)
@@ -5410,12 +5445,17 @@ bool IndicatorV6TimingReady(int direction)
       g_indicatorWaitStartedAt=now;
       g_indicatorWaitDirection=direction;
       g_indicatorWaitReason=g_indicatorWhy;
+      if(MQLInfoInteger(MQL_TESTER))
+         g_testIndicatorWaitEvents++;
       return false;
    }
 
    int maxWait=MathMax(5,MathMin(60,InpIndicatorMaxWaitSeconds));
    if(now-g_indicatorWaitStartedAt>=maxWait)
    {
+      if(MQLInfoInteger(MQL_TESTER))
+         g_testIndicatorWaitSecondsSum +=
+            MathMax(0.0,(double)(now-g_indicatorWaitStartedAt));
       g_indicatorWaitStartedAt=0;
       g_indicatorWaitDirection=0;
       g_indicatorWaitReason="BOUNDED_FALLBACK";
