@@ -105,6 +105,22 @@ Capture these fields with every run:
 - lastEntryReason
 - lastCloseReason
 
+## Backtest import metadata contract
+
+When importing tester trades through the Backtest API, put these optional values inside each trade's `metadata` object so the dashboard can calculate the V2 execution KPIs:
+
+- `mae`: maximum adverse excursion for the trade/Basket sample.
+- `mfe`: maximum favorable excursion.
+- `mfeProfit`: profit-equivalent value at MFE, used for Profit Capture %.
+- `terminalChase`: true when the entry is classified as BUY-top / SELL-bottom.
+- `churn`: true when the trade is a same-side close/reopen without a fresh thesis event.
+- `basketId`: stable Basket/Cycle identifier.
+- `basketIndex`: position number inside the Basket.
+- `basketTargetPositions`: exact customer-selected Basket target.
+- `basketElapsedSeconds`: elapsed seconds from first position to this fill.
+
+The EA also emits a tester-only `SCENOVA_BACKTEST_V2` summary line containing cycles, orders, Avg MAE/MFE, Profit Capture %, terminal-chase %, average fill seconds, ≤10-minute fill rate and same-side churn %. Live trading logic never reads these tester counters.
+
 ## Non-guarantee cases
 
 10/10 is a target, not a forced-order guarantee. A Basket may remain incomplete when:
