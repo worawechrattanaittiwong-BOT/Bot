@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.031"
+#property version   "1.040"
 #define SCENOVA_PRODUCT_VERSION "2.0.8"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -302,6 +302,26 @@ string g_antiChaseReason = "NONE";
 bool   g_breakoutRetestRequired = false;
 bool   g_breakoutRetestReady = false;
 double g_breakoutReferenceLevel = 0.0;
+
+// Market-cycle intelligence. These are advisory inputs, not blanket gates.
+double g_rsiM1 = 50.0;
+double g_rsiM5 = 50.0;
+double g_adxM5 = 0.0;
+double g_plusDiM5 = 0.0;
+double g_minusDiM5 = 0.0;
+double g_vwapM5 = 0.0;
+double g_demandZoneScore = 0.0;
+double g_supplyZoneScore = 0.0;
+double g_reversalOpportunityScore = 0.0;
+int    g_reversalOpportunityDirection = 0;
+string g_marketCycleState = "INITIALIZING";
+double g_fillUrgency = 0.0;
+int    g_fillExpectedPositions = 1;
+
+// Same-side re-entry after a reversal exit is event-driven, never time-based.
+int      g_marketRearmDirection = 0;
+datetime g_marketRearmAt = 0;
+string   g_marketRearmReason = "NONE";
 
 datetime g_lastMarketContextUpdate = 0;
 string g_fiboObjectName = "";
@@ -1096,6 +1116,7 @@ void OnTick()
          ))
       {
          CloseAllBasket("SMART_PROFIT_REVERSAL");
+         ArmMarketRearm(profitDefenseDirection,profitDefenseReason);
          ResetTrail();
          g_executionStatus = "SMART_PROFIT_REVERSAL";
          g_adaptiveBlockReason = profitDefenseReason;
@@ -1106,6 +1127,7 @@ void OnTick()
          AutoProfitGivebackDetected(profitDefenseDirection,cycleProfit))
       {
          CloseAllBasket("AUTO_PROFIT_GIVEBACK");
+         ArmMarketRearm(profitDefenseDirection,"PROFIT_GIVEBACK");
          ResetTrail();
          g_executionStatus = "AUTO_PROFIT_GIVEBACK";
          return;
@@ -1326,6 +1348,19 @@ void OnTick()
    {
       g_executionStatus = g_adaptiveBlockReason == "" ? "WAITING_MOMENTUM" : g_adaptiveBlockReason;
       return;
+   }
+
+   if(g_marketRearmDirection != 0)
+   {
+      if(direction == g_marketRearmDirection &&
+         !MarketRearmReady(direction,momentum))
+      {
+         g_executionStatus = "WAITING_MARKET_REARM";
+         g_adaptiveBlockReason = "WAIT_FRESH_EXECUTION_EVENT";
+         return;
+      }
+      if(direction != g_marketRearmDirection)
+         ClearMarketRearm();
    }
 
    if(count >= (g_adaptiveEngine ? g_adaptiveMaxPositions : g_maxPositions))
@@ -1610,7 +1645,7 @@ void SendHeartbeat()
       : NormalizeTradeVolume(g_lot);
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.031\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"1.040\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -1885,8 +1920,25 @@ void SendHeartbeat()
       string positionDiagnostics =
          marketContextDiagnostics + intelligenceV3Diagnostics + probabilityDiagnostics +
          intelligenceV4Diagnostics + smartProfitDiagnostics +
-         ",\"openPositions\":" + OpenPositionsTelemetryJson() +
-         ",\"chartBars\":" + ChartTelemetryJson() + "}}";
+         StringFormat(
+            ",\"marketCycleState\":\"%s\",\"rsiM1\":%.1f,\"rsiM5\":%.1f,\"adxM5\":%.1f,\"plusDiM5\":%.1f,\"minusDiM5\":%.1f,\"vwapM5\":%s,\"demandZoneScore\":%.1f,\"supplyZoneScore\":%.1f,\"reversalOpportunityDirection\":%d,\"reversalOpportunityScore\":%.1f,\"fillExpectedPositions\":%d,\"fillUrgency\":%.3f,\"marketRearmDirection\":%d,\"marketRearmReason\":\"%s\"",
+            g_marketCycleState,
+            g_rsiM1,
+            g_rsiM5,
+            g_adxM5,
+            g_plusDiM5,
+            g_minusDiM5,
+            DoubleToString(g_vwapM5,SymbolDigitsNow()),
+            g_demandZoneScore,
+            g_supplyZoneScore,
+            g_reversalOpportunityDirection,
+            g_reversalOpportunityScore,
+            g_fillExpectedPositions,
+            g_fillUrgency,
+            g_marketRearmDirection,
+            g_marketRearmReason
+         ) +
+         ",\"openPositions\":" + OpenPositionsTelemetryJson() + "}}";
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + positionDiagnostics;
    }
 
@@ -3189,6 +3241,8 @@ void RefreshMarketContext(bool force)
       g_fibTimeframe = "NONE";
    }
 
+   RefreshCycleIndicators();
+
    if(g_state == STATE_RUNNING)
       DrawTradingFibonacci();
 }
@@ -3377,13 +3431,307 @@ void RefreshPriceActionIntelligence()
    }
 }
 
+double RsiValue(ENUM_TIMEFRAMES timeframe,int shift)
+{
+   int handle = iRSI(_Symbol,timeframe,14,PRICE_CLOSE);
+   if(handle == INVALID_HANDLE)
+      return 50.0;
+
+   double value[1];
+   double result = 50.0;
+   if(CopyBuffer(handle,0,shift,1,value) == 1)
+      result = value[0];
+   IndicatorRelease(handle);
+   return result;
+}
+
+bool AdxSnapshot(
+   ENUM_TIMEFRAMES timeframe,
+   double &adxOut,
+   double &plusDiOut,
+   double &minusDiOut
+)
+{
+   adxOut = 0.0;
+   plusDiOut = 0.0;
+   minusDiOut = 0.0;
+
+   int handle = iADX(_Symbol,timeframe,14);
+   if(handle == INVALID_HANDLE)
+      return false;
+
+   double adx[1], plusDi[1], minusDi[1];
+   bool ok =
+      CopyBuffer(handle,0,1,1,adx) == 1 &&
+      CopyBuffer(handle,1,1,1,plusDi) == 1 &&
+      CopyBuffer(handle,2,1,1,minusDi) == 1;
+   if(ok)
+   {
+      adxOut = adx[0];
+      plusDiOut = plusDi[0];
+      minusDiOut = minusDi[0];
+   }
+   IndicatorRelease(handle);
+   return ok;
+}
+
+double SessionVwap(ENUM_TIMEFRAMES timeframe,int bars)
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   int copied = CopyRates(_Symbol,timeframe,1,MathMax(8,bars),rates);
+   if(copied <= 0)
+      return 0.0;
+
+   double weighted = 0.0;
+   double volumeSum = 0.0;
+   for(int i=0;i<copied;i++)
+   {
+      double volume = (double)rates[i].tick_volume;
+      if(volume <= 0.0) volume = 1.0;
+      double typical = (rates[i].high + rates[i].low + rates[i].close) / 3.0;
+      weighted += typical * volume;
+      volumeSum += volume;
+   }
+   return volumeSum > 0.0 ? weighted / volumeSum : 0.0;
+}
+
+double RsiDivergenceScore(int direction)
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   if(CopyRates(_Symbol,PERIOD_M5,1,5,rates) < 5)
+      return 0.0;
+
+   double rsiNow = RsiValue(PERIOD_M5,1);
+   double rsiOld = RsiValue(PERIOD_M5,4);
+   if(direction > 0 &&
+      rates[0].low < rates[3].low &&
+      rsiNow >= rsiOld + 3.0)
+      return 18.0;
+
+   if(direction < 0 &&
+      rates[0].high > rates[3].high &&
+      rsiNow <= rsiOld - 3.0)
+      return 18.0;
+
+   return 0.0;
+}
+
+double DemandSupplyZoneScore(int direction)
+{
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return 0.0;
+
+   double price = (tick.bid + tick.ask) * 0.5;
+   double atrPrice = MathMax(
+      _Point * 20.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod) * _Point
+   );
+   double score = 0.0;
+   double paScore = direction > 0 ? g_priceActionBuyScore : g_priceActionSellScore;
+
+   if(direction > 0)
+   {
+      if(g_nearestSupport > 0.0 &&
+         MathAbs(price-g_nearestSupport) <= atrPrice*0.45)
+         score += 16.0 + MathMin(12.0,g_supportStrength*0.12);
+
+      if(g_majorSupport > 0.0 &&
+         MathAbs(price-g_majorSupport) <= atrPrice*0.60)
+         score += 10.0;
+
+      if(PriceInsideOrNearZone(
+         price,
+         g_bullishOrderBlockLow,
+         g_bullishOrderBlockHigh,
+         atrPrice*0.16))
+         score += 18.0 + MathMin(14.0,g_bullishOrderBlockQuality*0.14);
+
+      if((g_fibM5Direction < 0 && g_fibM5Retracement <= 0.236) ||
+         (g_fibM15Direction < 0 && g_fibM15Retracement <= 0.236))
+         score += 10.0;
+
+      if(g_rsiM5 <= 38.0) score += 7.0;
+      if(g_vwapM5 > 0.0 && price < g_vwapM5-atrPrice*0.45) score += 7.0;
+      if(g_emaReclaimState == "RECLAIM_EMA21_UP") score += 9.0;
+   }
+   else
+   {
+      if(g_nearestResistance > 0.0 &&
+         MathAbs(price-g_nearestResistance) <= atrPrice*0.45)
+         score += 16.0 + MathMin(12.0,g_resistanceStrength*0.12);
+
+      if(g_majorResistance > 0.0 &&
+         MathAbs(price-g_majorResistance) <= atrPrice*0.60)
+         score += 10.0;
+
+      if(PriceInsideOrNearZone(
+         price,
+         g_bearishOrderBlockLow,
+         g_bearishOrderBlockHigh,
+         atrPrice*0.16))
+         score += 18.0 + MathMin(14.0,g_bearishOrderBlockQuality*0.14);
+
+      if((g_fibM5Direction > 0 && g_fibM5Retracement <= 0.236) ||
+         (g_fibM15Direction > 0 && g_fibM15Retracement <= 0.236))
+         score += 10.0;
+
+      if(g_rsiM5 >= 62.0) score += 7.0;
+      if(g_vwapM5 > 0.0 && price > g_vwapM5+atrPrice*0.45) score += 7.0;
+      if(g_emaReclaimState == "LOSE_EMA21_DOWN") score += 9.0;
+   }
+
+   if(paScore >= 18.0) score += 8.0;
+   if(paScore >= 30.0) score += 6.0;
+   score += RsiDivergenceScore(direction);
+
+   // ADX/DMI measures exhaustion/confluence only; it is not a hard gate.
+   if(g_adxM5 > 0.0 && g_adxM5 < 24.0)
+      score += 5.0;
+   if(direction > 0 && g_plusDiM5 > 0.0 && g_minusDiM5 <= g_plusDiM5*1.25)
+      score += 4.0;
+   if(direction < 0 && g_minusDiM5 > 0.0 && g_plusDiM5 <= g_minusDiM5*1.25)
+      score += 4.0;
+
+   return MathMax(0.0,MathMin(100.0,score));
+}
+
+void RefreshCycleIndicators()
+{
+   g_rsiM1 = RsiValue(PERIOD_M1,1);
+   g_rsiM5 = RsiValue(PERIOD_M5,1);
+   AdxSnapshot(PERIOD_M5,g_adxM5,g_plusDiM5,g_minusDiM5);
+   g_vwapM5 = SessionVwap(PERIOD_M5,48);
+   g_demandZoneScore = DemandSupplyZoneScore(1);
+   g_supplyZoneScore = DemandSupplyZoneScore(-1);
+}
+
+bool ReversalOpportunityReady(int direction,double momentum,double &scoreOut)
+{
+   scoreOut = direction > 0 ? g_demandZoneScore : g_supplyZoneScore;
+   if(direction == 0 || scoreOut < 52.0)
+      return false;
+
+   double paScore = direction > 0 ? g_priceActionBuyScore : g_priceActionSellScore;
+   bool m1Turn =
+      g_trendM1 == direction ||
+      RecentDirectionalBody(direction,PERIOD_M1);
+   bool m5Support =
+      g_trendM5 == direction ||
+      RecentDirectionalBody(direction,PERIOD_M5);
+   bool emaTurn =
+      (direction > 0 && g_emaReclaimState == "RECLAIM_EMA21_UP") ||
+      (direction < 0 && g_emaReclaimState == "LOSE_EMA21_DOWN");
+   bool momentumTurn = MomentumSupportsDirection(direction,momentum,0.30);
+   bool executionConfirmed =
+      (m1Turn && (m5Support || emaTurn || paScore >= 22.0 || momentumTurn)) ||
+      (emaTurn && paScore >= 18.0) ||
+      (m5Support && paScore >= 28.0);
+
+   if(!executionConfirmed)
+      return false;
+
+   if(m1Turn) scoreOut += 7.0;
+   if(m5Support) scoreOut += 8.0;
+   if(emaTurn) scoreOut += 8.0;
+   if(momentumTurn) scoreOut += 5.0;
+   if(paScore >= 28.0) scoreOut += 7.0;
+   scoreOut = MathMin(100.0,scoreOut);
+
+   double threshold = g_macroTrendDirection == -direction ? 70.0 : 60.0;
+   return scoreOut >= threshold;
+}
+
+string MarketCycleStateForDirection(int direction,double momentum)
+{
+   if(direction == 0)
+      return "TRANSITION";
+
+   double reversalScore = 0.0;
+   if(ReversalOpportunityReady(direction,momentum,reversalScore))
+      return "REVERSAL_CONFIRMED";
+
+   bool microAligned = LowerTimeframeSupportsDirection(direction);
+   bool microAgainst = g_trendM1 == -direction && g_trendM5 == -direction;
+   double adverseZone = direction > 0 ? g_supplyZoneScore : g_demandZoneScore;
+
+   if(adverseZone >= 72.0)
+      return direction > 0 ? "SUPPLY_TERMINAL" : "DEMAND_TERMINAL";
+   if(microAgainst)
+      return "PULLBACK_OR_REVERSAL";
+   if(microAligned)
+      return "TREND_CONTINUATION";
+   return "WAIT_EXECUTION_TURN";
+}
+
+void ArmMarketRearm(int direction,string reason)
+{
+   if(direction == 0)
+      return;
+   g_marketRearmDirection = direction;
+   g_marketRearmAt = TimeCurrent();
+   g_marketRearmReason = reason;
+}
+
+void ClearMarketRearm()
+{
+   g_marketRearmDirection = 0;
+   g_marketRearmAt = 0;
+   g_marketRearmReason = "NONE";
+}
+
+bool MarketRearmReady(int direction,double momentum)
+{
+   if(g_marketRearmDirection == 0 || direction != g_marketRearmDirection)
+      return true;
+
+   double reversalScore = 0.0;
+   bool zoneTurn = ReversalOpportunityReady(direction,momentum,reversalScore);
+   bool freshClosedBody = RecentDirectionalBodyAfter(
+      direction,
+      PERIOD_M1,
+      g_marketRearmAt
+   );
+   bool liveTurn =
+      LowerTimeframeSupportsDirection(direction) &&
+      (
+         MomentumSupportsDirection(direction,momentum,0.45) ||
+         (direction > 0 && g_emaReclaimState == "RECLAIM_EMA21_UP") ||
+         (direction < 0 && g_emaReclaimState == "LOSE_EMA21_DOWN")
+      );
+
+   if(freshClosedBody || liveTurn || zoneTurn)
+   {
+      ClearMarketRearm();
+      return true;
+   }
+   return false;
+}
+
 bool LowerTimeframeSupportsDirection(int direction)
 {
-   return
-      g_trendM1 == direction ||
-      g_trendM5 == direction ||
-      RecentDirectionalBody(direction, PERIOD_M1) ||
-      RecentDirectionalBody(direction, PERIOD_M5);
+   if(direction == 0)
+      return false;
+
+   int support = 0;
+   int opposition = 0;
+
+   if(g_trendM1 == direction) support += 1;
+   else if(g_trendM1 == -direction) opposition += 1;
+
+   if(g_trendM5 == direction) support += 2;
+   else if(g_trendM5 == -direction) opposition += 2;
+
+   if(RecentDirectionalBody(direction,PERIOD_M1)) support += 1;
+   if(RecentDirectionalBody(direction,PERIOD_M5)) support += 1;
+
+   if(opposition >= 3)
+      return false;
+   if(support >= 2)
+      return true;
+   return g_trendM5 == direction && g_trendM1 == 0;
 }
 
 bool HigherTimeframeSupportsDirection(int direction)
@@ -3785,12 +4133,16 @@ bool NewsImpulseExecutionReady(int direction,double momentum)
       g_trendM5 == direction &&
       (g_trendM15 == direction || g_trendM30 == direction);
 
-   // News trading remains enabled, but "fast market" alone is no longer a
-   // reason to chase. Demand a real directional impulse plus EMA/structure.
-   return MomentumSupportsDirection(direction,momentum,0.75) &&
-      trendAligned &&
-      emaAligned &&
-      priceAction;
+   // News/high-volatility trading remains active without demanding every
+   // indicator at once. Anti-chase still protects terminal spikes.
+   int evidence = 0;
+   if(trendAligned) evidence++;
+   if(emaAligned) evidence++;
+   if(priceAction) evidence++;
+   if(LowerTimeframeSupportsDirection(direction)) evidence++;
+
+   return MomentumSupportsDirection(direction,momentum,0.70) &&
+      evidence >= 2;
 }
 
 bool DirectSetupReady(
@@ -3981,6 +4333,22 @@ int SetupFirstDirection(double momentum)
       chosenModel = chosen > 0 ? buyModel : sellModel;
    }
 
+   // Demand/Supply reversal can override a late macro continuation, but only
+   // after an actual M1/M5/EMA/PA execution turn confirms it.
+   if(g_macroTrendDirection != 0)
+   {
+      int reversalDirection = -g_macroTrendDirection;
+      double reversalScore = 0.0;
+      if(ReversalOpportunityReady(reversalDirection,momentum,reversalScore) &&
+         (chosen == 0 || chosen == g_macroTrendDirection))
+      {
+         chosen = reversalDirection;
+         chosenModel = "REVERSAL_ZONE";
+         g_reversalOpportunityDirection = reversalDirection;
+         g_reversalOpportunityScore = reversalScore;
+      }
+   }
+
    if(chosen == 0 && g_macroTrendDirection != 0 &&
       ExecutionConfirmationReady(g_macroTrendDirection,momentum,true))
    {
@@ -4067,7 +4435,13 @@ int SetupFirstDirection(double momentum)
 
       EvaluateMarketLocationScore(chosen);
       g_entryTrigger = chosenModel != "NONE" ? chosenModel : g_entryModel;
+      g_marketCycleState = MarketCycleStateForDirection(chosen,momentum);
    }
+   else
+      g_marketCycleState = g_macroTrendDirection == 0
+         ? "TRANSITION"
+         : MarketCycleStateForDirection(g_macroTrendDirection,momentum);
+
    return chosen;
 }
 
@@ -4246,9 +4620,37 @@ bool MarketLocationEntryAllowed(int direction, bool fastRevalidation)
    }
 
    EvaluateMarketLocationScore(direction);
-   // S/R, Fibonacci and Order Block are advisory intelligence. They change the
-   // score/model but never veto an order or interrupt an active Basket queue.
-   // Actual execution constraints remain MT5 permissions, spread and user risk.
+
+   double exhaustion = 0.0;
+   double extensionAtr = 0.0;
+   double adverseWick = 0.0;
+   string exhaustionReason = "NONE";
+   bool exhausted = DirectionalExhaustion(
+      direction,
+      exhaustion,
+      extensionAtr,
+      adverseWick,
+      exhaustionReason
+   );
+
+   double adverseZone = direction > 0
+      ? g_supplyZoneScore
+      : g_demandZoneScore;
+   double terminalThreshold = fastRevalidation ? 82.0 : 74.0;
+
+   // Only a strong terminal-zone + exhaustion combination vetoes execution.
+   // Normal S/R/Fib/OB/RSI/ADX/VWAP remain advisory so the EA keeps trading.
+   if(exhausted && adverseZone >= terminalThreshold)
+   {
+      g_adaptiveBlockReason = direction > 0
+         ? "WAIT_TERMINAL_SUPPLY"
+         : "WAIT_TERMINAL_DEMAND";
+      g_priceLocationState = direction > 0
+         ? "SUPPLY_TERMINAL"
+         : "DEMAND_TERMINAL";
+      return false;
+   }
+
    return true;
 }
 
@@ -4492,21 +4894,21 @@ int AdaptiveEntryDirection(double momentum)
    double momentumStrength = MathMin(2.0, MathAbs(momentum) / MathMax(1.0, g_adaptiveMomentumThreshold));
    double score = 12.0 + momentumStrength * 10.0;
    bool directionalRegime = g_marketRegime == "TREND_UP" || g_marketRegime == "TREND_DOWN";
-   double weightM1 = directionalRegime ? 5.0 : 7.0;
-   double weightM5 = directionalRegime ? 9.0 : 10.0;
+   double weightM1 = directionalRegime ? 8.0 : 8.0;
+   double weightM5 = directionalRegime ? 12.0 : 11.0;
    double weightM15 = directionalRegime ? 14.0 : 11.0;
-   double weightM30 = directionalRegime ? 16.0 : 10.0;
-   double weightH1 = directionalRegime ? 18.0 : 10.0;
+   double weightM30 = directionalRegime ? 14.0 : 10.0;
+   double weightH1 = directionalRegime ? 15.0 : 10.0;
    if(trendM1 == rawDirection) score += weightM1;
-   else if(trendM1 == -rawDirection) score -= weightM1 * 0.25;
+   else if(trendM1 == -rawDirection) score -= weightM1 * 0.70;
    if(trendM5 == rawDirection) score += weightM5;
-   else if(trendM5 == -rawDirection) score -= weightM5 * 0.35;
+   else if(trendM5 == -rawDirection) score -= weightM5 * 0.60;
    if(trendM15 == rawDirection) score += weightM15;
    else if(trendM15 == -rawDirection) score -= weightM15 * 0.45;
    if(trendM30 == rawDirection) score += weightM30;
-   else if(trendM30 == -rawDirection) score -= weightM30 * 0.55;
+   else if(trendM30 == -rawDirection) score -= weightM30 * 0.45;
    if(trendH1 == rawDirection) score += weightH1;
-   else if(trendH1 == -rawDirection) score -= weightH1 * 0.55;
+   else if(trendH1 == -rawDirection) score -= weightH1 * 0.45;
    score += MathMax(0.0, 12.0 - g_spreadConfidencePenalty * 0.60);
    score += g_marketRegime == "HIGH_VOLATILITY" ? 5.0 : g_marketRegime == "QUIET" ? 5.0 : 8.0;
    score += MathMax(0.0, MathMin(8.0, g_executionQuality * 0.08));
@@ -5058,38 +5460,9 @@ double BasketProgressFromAnchorPoints(int direction)
 
 int EffectiveLadderTargetPositions(int direction)
 {
-   int cap = MathMax(1,g_maxPositions);
-   if(cap <= 1)
-   {
-      g_performanceRiskMode = "SINGLE";
-      return 1;
-   }
-
-   if(g_entryQuality == "B")
-      cap = MathMin(cap,MathMax(2,(int)MathCeil(g_maxPositions*0.65)));
-   else if(g_entryQuality == "C")
-      cap = MathMin(cap,MathMax(2,(int)MathCeil(g_maxPositions*0.35)));
-
-   double historyWin = direction > 0 ? g_buyWinProbability : g_sellWinProbability;
-   int historySamples = direction > 0 ? g_buyWinSamples : g_sellWinSamples;
-   if(historySamples >= 20 && historyWin < 45.0)
-      cap = MathMin(cap,MathMax(2,(int)MathCeil(g_maxPositions*0.50)));
-   if(historySamples >= 30 && historyWin < 35.0)
-      cap = MathMin(cap,2);
-
-   if(g_consecutiveLosses >= 4)
-      cap = MathMax(1,cap-2);
-   else if(g_consecutiveLosses >= 2)
-      cap = MathMax(1,cap-1);
-
-   g_performanceRiskMode =
-      g_consecutiveLosses >= 4 ? "DEFENSIVE_STREAK" :
-      (historySamples >= 30 && historyWin < 35.0) ? "DEFENSIVE_HISTORY" :
-      g_entryQuality == "C" ? "QUALITY_C_LIMITED" :
-      g_entryQuality == "B" ? "QUALITY_B_LIMITED" :
-      "NORMAL";
-
-   return MathMax(1,MathMin(g_maxPositions,cap));
+   int target = MathMax(1,g_maxPositions);
+   g_performanceRiskMode = target <= 1 ? "SINGLE" : "USER_TARGET";
+   return target;
 }
 
 double LadderFractionForRung(int rung)
@@ -5657,11 +6030,23 @@ bool SmartProfitReversalDetected(
       0.35
    );
 
+   bool structuralFlip =
+      m5Flip && (m15Flip || emaMacroFlip);
+   bool executionFlip =
+      m5Flip && emaFlip && oppositePa >= 28.0 && momentumFlip;
+   bool strongPriceActionFlip =
+      oppositePa >= 40.0 &&
+      m5Flip &&
+      (emaFlip || momentumFlip);
    bool confirmed =
-      (m1Flip && m5Flip && (emaFlip || oppositePa >= 18.0)) ||
-      (m5Flip && emaFlip && oppositePa >= 27.0) ||
-      (oppositePa >= 34.0 && (m1Flip || emaFlip)) ||
+      (structuralFlip && (oppositePa >= 22.0 || momentumFlip)) ||
+      executionFlip ||
+      strongPriceActionFlip ||
       (m15Flip && emaMacroFlip && momentumFlip);
+
+   // One-minute noise is a warning only, never a profit-close trigger alone.
+   if(m1Flip && !m5Flip && !m15Flip)
+      confirmed = false;
 
    if(!confirmed)
       return false;
@@ -5702,19 +6087,25 @@ bool AutoProfitGivebackDetected(int direction,double cycleProfit)
 
    // Do not react to a few cents of noise. Auto arms only after the Cycle has
    // enough profit left to cover the close reserve with room to spare.
-   double minimumPeak = MathMax(0.20,floor * 1.80);
+   double minimumPeak = MathMax(0.35,floor * 2.20);
    if(g_profitRunPeak < minimumPeak || cycleProfit <= floor)
       return false;
 
    bool strongTrend =
       g_trendM5 == direction &&
       g_trendM15 == direction &&
-      g_entryQuality == "A";
+      (g_entryQuality == "A" || g_adxM5 >= 24.0);
+   double oppositePa = direction > 0
+      ? g_priceActionSellScore
+      : g_priceActionBuyScore;
+   bool confirmedMicroAgainst =
+      g_trendM1 == -direction &&
+      g_trendM5 == -direction;
    bool fragileMarket =
       g_marketRegime == "RANGE" ||
-      g_entryQuality == "C" ||
-      g_trendM1 == -direction;
-   double givebackPercent = strongTrend ? 0.32 : fragileMarket ? 0.15 : 0.22;
+      (g_entryQuality == "C" && confirmedMicroAgainst) ||
+      (confirmedMicroAgainst && oppositePa >= 24.0);
+   double givebackPercent = strongTrend ? 0.45 : fragileMarket ? 0.26 : 0.34;
 
    double volume = MathMax(
       SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),
