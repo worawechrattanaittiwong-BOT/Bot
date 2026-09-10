@@ -58,6 +58,7 @@ const defaultSettings = {
   sessionStartHour: 0,
   sessionEndHour: 24,
   maxAtrPoints: 0,
+  indicatorV6Mode: "SOFT_WEIGHT",
   entryMode: "AUTO_MOMENTUM"
 };
 
@@ -1123,7 +1124,11 @@ export default function DashboardPage() {
       "InpConfidenceThreshold=55",
       "InpSessionStartHour=" + settings.sessionStartHour,
       "InpSessionEndHour=" + settings.sessionEndHour,
-      "InpMaxAtrPoints=" + settings.maxAtrPoints
+      "InpMaxAtrPoints=" + settings.maxAtrPoints,
+      "InpIndicatorV6Mode=" + (String(settings.indicatorV6Mode||"SOFT_WEIGHT").toUpperCase()==="SHADOW" ? 0 : String(settings.indicatorV6Mode||"SOFT_WEIGHT").toUpperCase()==="TIMING" ? 2 : String(settings.indicatorV6Mode||"SOFT_WEIGHT").toUpperCase()==="ADAPTIVE" ? 3 : 1),
+      "InpVolumeProfileBars=144",
+      "InpDonchianPeriod=20",
+      "InpIndicatorMaxWaitSeconds=20"
     ].join("\r\n");
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
