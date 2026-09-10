@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 export const DEFAULT_INSTALLER_VERSION = "3.1.3";
-export const DEFAULT_EA_VERSION = "1.046";
+export const DEFAULT_EA_VERSION = "1.047";
 
 // 3.1.2 introduced the Agent protocol used by the current 3.1.x line
 // (agent-heartbeat + resumable EA artifact + one-time MT5 action). Patch
@@ -62,9 +62,9 @@ export function isVersionExact(current: unknown, required: unknown) {
   return sameProtocolLine && isVersionAtLeast(aRaw, MIN_COMPATIBLE_INSTALLER_VERSION);
 }
 
-// EA runtime releases are deliberately strict. Unlike the Windows Agent,
-// 1.045 must never be treated as equivalent to 1.046 because the executable
-// loaded in MT5 must exactly match the production release.
+// EA runtime releases are deliberately strict. An older EA must never be
+// treated as equivalent to 1.047 because the executable loaded in MT5 must
+// exactly match the promoted production release.
 export function isEaVersionExact(current: unknown, required: unknown) {
   const a = normalizedExactVersion(current);
   const b = normalizedExactVersion(required);
