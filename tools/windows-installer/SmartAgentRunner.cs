@@ -194,6 +194,28 @@ internal static class SmartAgentRunner
             " channel=" + (heartbeat.ReleaseChannel ?? config.ReleaseChannel));
     }
 
+    internal static bool PendingUpdateExists(AgentConfig config) =>
+        File.Exists(PendingEaPath(config)) || File.Exists(PendingReloadPath(config));
+
+    internal static async Task EnsureEaArtifactAsync(
+        HttpClient http,
+        AgentConfig config,
+        string installToken,
+        AgentHeartbeatResponse heartbeat,
+        string logPath)
+    {
+        var localHash = File.Exists(config.EaBinaryPath)
+            ? BackupManager.HashFile(config.EaBinaryPath)
+            : "";
+        await StageOrApplyEaAsync(
+            http,
+            config,
+            installToken,
+            localHash,
+            heartbeat,
+            logPath);
+    }
+
     private static async Task StageOrApplyEaAsync(
         HttpClient http,
         AgentConfig config,
