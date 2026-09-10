@@ -103,7 +103,7 @@ Production API มี idempotent startup migration สำหรับ schema Slo
 4. `npm install`
 5. `npm run dev:api` และ `npm run dev:web`
 
-Windows Installer ปัจจุบัน: **v2.0.7** — อัปเดตล่าสุด **7 กันยายน 2026**
+Windows Installer ปัจจุบัน: **v3.0.0 Smart Installer** — อัปเดตล่าสุด **10 กันยายน 2026**\n\nSmart Installer รองรับ Auto Detect MT5, Health Check, Repair, Safe EA Update, Rollback, Multi-MT5 profiles, SHA-256/Post-install verification และ Stable/Beta/AdminTest release channels. ดูรายละเอียดที่ `docs/SMART-INSTALLER-V3.md`
 
 Windows Installer build:
 
