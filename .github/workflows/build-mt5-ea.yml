@@ -10,8 +10,7 @@ on:
     branches: [main]
     paths:
       - "mt5/FastBasketBot.mq5"
-      - "scripts/upgrade-ea-brain-v17-race.ps1"
-      - "scripts/upgrade-ea-brain-v18-race-harvest.ps1"
+      - "scripts/upgrade-ea-brain-v19-race-m5.ps1"
       - ".github/workflows/build-mt5-ea.yml"
 
 permissions:
@@ -39,46 +38,36 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Apply Brain V18 RACE continuous profit harvesting
+      - name: Apply and validate Brain V19 RACE M5 policy
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          & ".\scripts\upgrade-ea-brain-v17-race.ps1" `
-            -EaPath "mt5\FastBasketBot.mq5" `
-            -ApiPath "apps\api\src\bot.controller.ts" `
-            -WebPath "apps\web\app\dashboard\page.tsx"
-          & ".\scripts\upgrade-ea-brain-v18-race-harvest.ps1" `
-            -EaPath "mt5\FastBasketBot.mq5"
+          & ".\scripts\upgrade-ea-brain-v19-race-m5.ps1" -EaPath "mt5\FastBasketBot.mq5"
 
           $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
           $patchedText = [System.IO.File]::ReadAllText($mq5Path)
-          $apiText = [System.IO.File]::ReadAllText((Resolve-Path "apps\api\src\bot.controller.ts"))
-          $webText = [System.IO.File]::ReadAllText((Resolve-Path "apps\web\app\dashboard\page.tsx"))
-
-          if ($patchedText -notmatch '#property\s+version\s+"1\.057"') {
-            throw "Brain V18 patch did not produce EA 1.057"
+          if ($patchedText -notmatch '#property\s+version\s+"1\.058"') {
+            throw "Brain V19 patch did not produce EA 1.058"
           }
 
           foreach ($sentinel in @(
-            'bool RaceModeEnabled()',
-            'bool BasketHasRacePosition()',
-            'int RaceFilledUnits()',
-            'int RaceAnalysisDirection(double momentum)',
-            'bool RaceWrongDirectionConfirmed(',
+            'int RaceM5CandleDirection()',
+            'CopyRates(_Symbol, PERIOD_M5, 1, 1, rates)',
+            'return RaceM5CandleDirection();',
+            'RACE_DIRECTION_LOCK',
+            'RACE_MIXED_BASKET_BLOCK',
+            'RACE_M5_OPPOSITE_CONFIRMED',
+            'RACE_M5_SEVERE_REVERSAL',
+            'RACE_M5_ONE_CANDLE',
+            'RACE_M5_BUY',
+            'RACE_M5_SELL',
             'int RaceHarvestProfitablePositions()',
-            'bool ProcessRaceFill(int direction)',
-            'bool StartRaceCycle(double momentum)',
-            'bool ManageRaceBasket(double momentum)',
             'RACE_PROFIT_HARVEST',
             'RACE_HARVEST_REFILL',
-            'double floatingProfit = BasketProfit();',
-            'if(floatingProfit >= armMoney)',
-            'RACE_TARGET_FILLED',
-            'RACE_RECOVERY_PROFIT',
-            'RACE_PROFIT_GIVEBACK',
             'SaaSRace',
-            'g_engineMode == "RACE"',
-            'BrainV16RearmExistingBasket();',
+            'if(count > 0 && BasketHasRacePosition())',
+            'if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)',
+            'int direction = AdaptiveEntryDirection(momentum);',
             'TradePermissionStatus',
             'AdaptiveSpreadAllowed',
             'OrderSendWithPriceRetry',
@@ -86,29 +75,7 @@ jobs:
             'NO_ACCESS'
           )) {
             if (-not $patchedText.Contains($sentinel)) {
-              throw "Brain V18 sentinel missing: $sentinel"
-            }
-          }
-
-          if (-not $apiText.Contains('body.engineMode !== undefined') -or
-              -not $apiText.Contains('["AUTO", "RACE"]')) {
-            throw "API engineMode validation was not applied"
-          }
-          if (-not $webText.Contains('engineMode: "AUTO"') -or
-              -not $webText.Contains('props.onEdit?.("engineMode","RACE")') -or
-              -not $webText.Contains('{id:"RACE",icon:"status",tag:')) {
-            throw "Web RACE mode UI was not applied"
-          }
-
-          # AUTO isolation contract: V18 may harvest only SaaSRace positions.
-          foreach ($autoSentinel in @(
-            'int direction = AdaptiveEntryDirection(momentum);',
-            'if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)',
-            'if(count > 0 && BasketHasRacePosition())',
-            'StringFind(PositionGetString(POSITION_COMMENT), "SaaSRace") < 0'
-          )) {
-            if (-not $patchedText.Contains($autoSentinel)) {
-              throw "AUTO/RACE isolation sentinel missing: $autoSentinel"
+              throw "Brain V19 sentinel missing: $sentinel"
             }
           }
 
@@ -116,15 +83,9 @@ jobs:
             throw "Plain HTTP API configuration is still accepted"
           }
 
-          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV18.mq5"
-          $patchedApi = "$env:RUNNER_TEMP\bot.controller-v18.ts"
-          $patchedWeb = "$env:RUNNER_TEMP\dashboard-v18.tsx"
+          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV19.mq5"
           Copy-Item -Force $mq5Path $patchedSource
-          Copy-Item -Force "apps\api\src\bot.controller.ts" $patchedApi
-          Copy-Item -Force "apps\web\app\dashboard\page.tsx" $patchedWeb
           "PATCHED_EA_SOURCE=$patchedSource" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "PATCHED_API_SOURCE=$patchedApi" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "PATCHED_WEB_SOURCE=$patchedWeb" | Out-File -FilePath $env:GITHUB_ENV -Append
 
           $sourceDir = "C:\SCENOVA-EA-Source"
           New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
@@ -151,26 +112,20 @@ jobs:
           New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
           Copy-Item -Force $ex5 "mt5\release\FastBasketBot.ex5"
           $hash = (Get-FileHash -Algorithm SHA256 "mt5\release\FastBasketBot.ex5").Hash.ToLowerInvariant()
-          $sourceText = Get-Content "$env:EA_SOURCE" -Raw
-          $versionMatch = [regex]::Match($sourceText, '#property\s+version\s+"([^"]+)"')
-          if (-not $versionMatch.Success) { throw "EA #property version was not found" }
-          $eaVersion = $versionMatch.Groups[1].Value
-
           @{
             file = "FastBasketBot.ex5"
             sha256 = $hash
-            eaVersion = $eaVersion
+            eaVersion = "1.058"
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
-            brain = "V18"
-            policy = "AUTO_ISOLATED_RACE_CONTINUOUS_WINNER_HARVEST_REFILL"
+            brain = "V19"
+            policy = "AUTO_ISOLATED_RACE_M5_ONE_CANDLE_SINGLE_SIDE_CYCLE_HARVEST_X2"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "mt5\release\manifest.json"
 
-      - name: Publish Brain V18 RACE profit harvesting and compiled artifact
+      - name: Publish Brain V19 source and compiled artifact
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-
           $compiledEx5 = "$env:RUNNER_TEMP\FastBasketBot.ex5"
           $compiledManifest = "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
           Copy-Item -Force "mt5\release\FastBasketBot.ex5" $compiledEx5
@@ -181,63 +136,52 @@ jobs:
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
-            Write-Host "EA Brain V18 RACE publish attempt $attempt/6"
+            Write-Host "EA Brain V19 publish attempt $attempt/6"
             git fetch origin main
             if ($LASTEXITCODE -ne 0) {
               Start-Sleep -Seconds 2
               continue
             }
 
-            git diff --quiet "${{ github.sha }}" origin/main -- `
-              mt5/FastBasketBot.mq5 `
-              apps/api/src/bot.controller.ts `
-              apps/web/app/dashboard/page.tsx
+            git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5
             if ($LASTEXITCODE -eq 1) {
-              Write-Host "A newer RACE-related source exists on main; skipping obsolete V18 publish."
+              Write-Host "A newer EA source exists on main; skipping obsolete V19 publish."
               exit 0
             }
             if ($LASTEXITCODE -ne 0) {
-              throw "Could not compare V18 sources with latest main"
+              throw "Could not compare V19 source with latest main"
             }
 
             git reset --hard origin/main
             if ($LASTEXITCODE -ne 0) { throw "Could not reset to latest main" }
-
             Copy-Item -Force $env:PATCHED_EA_SOURCE "mt5\FastBasketBot.mq5"
-            Copy-Item -Force $env:PATCHED_API_SOURCE "apps\api\src\bot.controller.ts"
-            Copy-Item -Force $env:PATCHED_WEB_SOURCE "apps\web\app\dashboard\page.tsx"
             New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
             Copy-Item -Force $compiledEx5 "mt5\release\FastBasketBot.ex5"
             Copy-Item -Force $compiledManifest "mt5\release\manifest.json"
 
             git add mt5/FastBasketBot.mq5
-            git add apps/api/src/bot.controller.ts
-            git add apps/web/app/dashboard/page.tsx
             git add -f mt5/release/FastBasketBot.ex5
             git add mt5/release/manifest.json
             git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "Brain V18 RACE source and artifact are already current."
+              Write-Host "Brain V19 source and artifact are already current."
               $published = $true
               break
             }
             if ($LASTEXITCODE -ne 1) {
-              throw "Could not inspect generated V18 changes"
+              throw "Could not inspect generated V19 changes"
             }
 
-            git commit -m "build: publish EA Brain V18 RACE v1.057 [skip ea build]"
-            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V18 RACE changes" }
-
+            git commit -m "build: publish EA Brain V19 RACE M5 v1.058 [skip ea build]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V19 changes" }
             git push origin HEAD:main
             if ($LASTEXITCODE -eq 0) {
               $published = $true
               break
             }
-
-            Write-Host "Main moved while publishing Brain V18 RACE; retrying..."
             Start-Sleep -Seconds 2
           }
 
           if (-not $published) {
-            throw "Failed to publish Brain V18 RACE after retries"
+            throw "Failed to publish Brain V19 after retries"
           }
