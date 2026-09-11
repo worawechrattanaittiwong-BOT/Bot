@@ -14,19 +14,21 @@ function Replace-Required([ref]$text,[string]$old,[string]$new,[string]$label) {
 
 # EA: release metadata only. No AUTO/RACE execution body is touched.
 $eaPath = 'mt5/FastBasketBot.mq5'
-$eaBefore = Read-Utf8 $eaPath
-$ea = [ref]$eaBefore
+$eaOriginal = Read-Utf8 $eaPath
+$eaText = Read-Utf8 $eaPath
+$ea = [ref]$eaText
 Replace-Required $ea '#property version   "1.060"' '#property version   "1.0.0"' 'EA property version'
 Replace-Required $ea '#define SCENOVA_EA_VERSION "1.060"' '#define SCENOVA_EA_VERSION "1.0.0"' 'EA runtime version'
 Replace-Required $ea '#define SCENOVA_PRODUCT_VERSION "2.0.22"' '#define SCENOVA_PRODUCT_VERSION "1.0.0"' 'EA product version'
 $eaAfter = $ea.Value
 $eaReverse = $eaAfter.Replace('#property version   "1.0.0"','#property version   "1.060"').Replace('#define SCENOVA_EA_VERSION "1.0.0"','#define SCENOVA_EA_VERSION "1.060"').Replace('#define SCENOVA_PRODUCT_VERSION "1.0.0"','#define SCENOVA_PRODUCT_VERSION "2.0.22"')
-if ($eaReverse -cne $eaBefore) { throw 'EA changed outside the three release metadata lines' }
+if ($eaReverse -cne $eaOriginal) { throw 'EA changed outside the three release metadata lines' }
 Write-Utf8 $eaPath $eaAfter
 
 # API: unify defaults and ignore stale pre-reset 3.x / 1.060 environment values.
 $apiPath = 'apps/api/src/release-version.ts'
-$apiText = [ref](Read-Utf8 $apiPath)
+$apiTextValue = Read-Utf8 $apiPath
+$apiText = [ref]$apiTextValue
 Replace-Required $apiText 'export const DEFAULT_INSTALLER_VERSION = "3.1.3";' 'export const DEFAULT_INSTALLER_VERSION = "1.0.0";' 'API installer default'
 Replace-Required $apiText 'export const DEFAULT_EA_VERSION = "1.060";' 'export const DEFAULT_EA_VERSION = "1.0.0";' 'API EA default'
 Replace-Required $apiText 'export const MIN_COMPATIBLE_INSTALLER_VERSION = "3.1.2";' 'export const MIN_COMPATIBLE_INSTALLER_VERSION = "1.0.0";' 'API minimum compatible installer'
@@ -73,20 +75,23 @@ Write-Utf8 $apiPath $apiText.Value
 
 # Windows Installer + Agent.
 $csprojPath = 'tools/windows-installer/ScenovaInstaller.csproj'
-$csproj = [ref](Read-Utf8 $csprojPath)
+$csprojValue = Read-Utf8 $csprojPath
+$csproj = [ref]$csprojValue
 Replace-Required $csproj '<Version>3.1.3</Version>' '<Version>1.0.0</Version>' 'installer package version'
 Replace-Required $csproj '<FileVersion>3.1.3.0</FileVersion>' '<FileVersion>1.0.0.0</FileVersion>' 'installer file version'
 Replace-Required $csproj '<AssemblyVersion>3.1.3.0</AssemblyVersion>' '<AssemblyVersion>1.0.0.0</AssemblyVersion>' 'installer assembly version'
 Write-Utf8 $csprojPath $csproj.Value
 
 $agentPath = 'tools/windows-installer/AgentBuildInfo.cs'
-$agent = [ref](Read-Utf8 $agentPath)
+$agentValue = Read-Utf8 $agentPath
+$agent = [ref]$agentValue
 Replace-Required $agent 'internal const string Version = "3.1.3";' 'internal const string Version = "1.0.0";' 'Agent version'
 Write-Utf8 $agentPath $agent.Value
 
 # Web fallback shown before dashboard release metadata arrives.
 $webPath = 'apps/web/components/Mt5ManualActionControls.tsx'
-$web = [ref](Read-Utf8 $webPath)
+$webValue = Read-Utf8 $webPath
+$web = [ref]$webValue
 Replace-Required $web 'update?.installerVersionRequired || "3.1.3");' 'update?.installerVersionRequired || "1.0.0");' 'Web installer fallback'
 Write-Utf8 $webPath $web.Value
 
@@ -138,7 +143,8 @@ Write-Host "Unified SCENOVA release version consistency PASS: $release"
 [System.IO.File]::WriteAllText((Join-Path (Get-Location) $testPath),$testContent,[System.Text.UTF8Encoding]::new($false))
 
 $ciPath = '.github/workflows/ci.yml'
-$ci = [ref](Read-Utf8 $ciPath)
+$ciValue = Read-Utf8 $ciPath
+$ci = [ref]$ciValue
 $ciAnchor = '        run: ./tests/auto-v20-policy-regression.ps1'
 $ciReplacement = @'
         run: ./tests/auto-v20-policy-regression.ps1
