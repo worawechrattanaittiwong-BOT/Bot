@@ -10,7 +10,6 @@ on:
     branches: [main]
     paths:
       - "mt5/FastBasketBot.mq5"
-      - "scripts/upgrade-ea-brain-v19-race-m5.ps1"
       - ".github/workflows/build-mt5-ea.yml"
 
 permissions:
@@ -38,54 +37,59 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Apply and validate Brain V19 RACE M5 policy
+      - name: Validate current V20 AUTO and isolated RACE source
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          & ".\scripts\upgrade-ea-brain-v19-race-m5.ps1" -EaPath "mt5\FastBasketBot.mq5"
-
           $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
-          $patchedText = [System.IO.File]::ReadAllText($mq5Path)
-          if ($patchedText -notmatch '#property\s+version\s+"1\.058"') {
-            throw "Brain V19 patch did not produce EA 1.058"
+          $text = [System.IO.File]::ReadAllText($mq5Path)
+
+          $propertyMatch = [regex]::Match($text, '#property\s+version\s+"([^"]+)"')
+          $runtimeMatch = [regex]::Match($text, '#define\s+SCENOVA_EA_VERSION\s+"([^"]+)"')
+          if (-not $propertyMatch.Success -or -not $runtimeMatch.Success) {
+            throw "EA version metadata missing"
           }
+          $eaVersion = $propertyMatch.Groups[1].Value
+          $runtimeVersion = $runtimeMatch.Groups[1].Value
+          if ($eaVersion -ne $runtimeVersion) {
+            throw "EA version mismatch: property=$eaVersion runtime=$runtimeVersion"
+          }
+          "EA_VERSION=$eaVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
 
           foreach ($sentinel in @(
+            'bool AutoV20Enabled()',
+            'return g_engineMode != "RACE" && g_controlMode == "AUTO";',
+            'AUTO_V20_SIDE g_autoV20Buy;',
+            'AUTO_V20_SIDE g_autoV20Sell;',
+            'void AutoV20UpdateTrendPhase(double momentum)',
+            'void AutoV20EvaluateSide(',
+            'autoV20Diagnostics=StringFormat',
+            'g_basketJournalAutoDecisionId',
+            'if(!AutoV20Enabled() && BasketFillEnabled() && g_burstActive)',
             'int RaceM5CandleDirection()',
             'CopyRates(_Symbol, PERIOD_M5, 1, 1, rates)',
-            'return RaceM5CandleDirection();',
             'RACE_DIRECTION_LOCK',
             'RACE_MIXED_BASKET_BLOCK',
             'RACE_M5_OPPOSITE_CONFIRMED',
             'RACE_M5_SEVERE_REVERSAL',
-            'RACE_M5_ONE_CANDLE',
-            'RACE_M5_BUY',
-            'RACE_M5_SELL',
             'int RaceHarvestProfitablePositions()',
             'RACE_PROFIT_HARVEST',
             'RACE_HARVEST_REFILL',
             'SaaSRace',
-            'if(count > 0 && BasketHasRacePosition())',
-            'if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)',
-            'int direction = AdaptiveEntryDirection(momentum);',
             'TradePermissionStatus',
             'AdaptiveSpreadAllowed',
             'OrderSendWithPriceRetry',
             'CONTROL_NOT_FRESH',
             'NO_ACCESS'
           )) {
-            if (-not $patchedText.Contains($sentinel)) {
-              throw "Brain V19 sentinel missing: $sentinel"
+            if (-not $text.Contains($sentinel)) {
+              throw "Required V20/RACE sentinel missing: $sentinel"
             }
           }
 
-          if ($patchedText.Contains('StringFind(InpApiBase, "http://") == 0')) {
+          if ($text.Contains('StringFind(InpApiBase, "http://") == 0')) {
             throw "Plain HTTP API configuration is still accepted"
           }
-
-          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV19.mq5"
-          Copy-Item -Force $mq5Path $patchedSource
-          "PATCHED_EA_SOURCE=$patchedSource" | Out-File -FilePath $env:GITHUB_ENV -Append
 
           $sourceDir = "C:\SCENOVA-EA-Source"
           New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
@@ -93,7 +97,7 @@ jobs:
           Copy-Item -Force $mq5Path $source
           "EA_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Compile private MQ5 to EX5
+      - name: Compile current private MQ5 to EX5
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -108,80 +112,59 @@ jobs:
               throw "MetaEditor reported compile errors"
             }
           }
-
-          New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
-          Copy-Item -Force $ex5 "mt5\release\FastBasketBot.ex5"
-          $hash = (Get-FileHash -Algorithm SHA256 "mt5\release\FastBasketBot.ex5").Hash.ToLowerInvariant()
+          Copy-Item -Force $ex5 "$env:RUNNER_TEMP\FastBasketBot.ex5"
+          $hash = (Get-FileHash -Algorithm SHA256 $ex5).Hash.ToLowerInvariant()
           @{
             file = "FastBasketBot.ex5"
             sha256 = $hash
-            eaVersion = "1.058"
+            eaVersion = $env:EA_VERSION
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
-            brain = "V19"
-            policy = "AUTO_ISOLATED_RACE_M5_ONE_CANDLE_SINGLE_SIDE_CYCLE_HARVEST_X2"
-          } | ConvertTo-Json | Set-Content -Encoding UTF8 "mt5\release\manifest.json"
+            brain = "V20"
+            policy = "AUTO_V20_CENTRAL_DECISION_AUDIT_STATS_RACE_ISOLATED"
+          } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
-      - name: Publish Brain V19 source and compiled artifact
-        shell: powershell
+      - name: Publish current V20 compiled artifact
+        shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $compiledEx5 = "$env:RUNNER_TEMP\FastBasketBot.ex5"
-          $compiledManifest = "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
-          Copy-Item -Force "mt5\release\FastBasketBot.ex5" $compiledEx5
-          Copy-Item -Force "mt5\release\manifest.json" $compiledManifest
-
           git config user.name "SCENOVA Build Bot"
           git config user.email "actions@users.noreply.github.com"
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
-            Write-Host "EA Brain V19 publish attempt $attempt/6"
+            Write-Host "EA Brain V20 publish attempt $attempt/6"
             git fetch origin main
-            if ($LASTEXITCODE -ne 0) {
-              Start-Sleep -Seconds 2
-              continue
-            }
+            if ($LASTEXITCODE -ne 0) { Start-Sleep -Seconds 2; continue }
 
             git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5
             if ($LASTEXITCODE -eq 1) {
-              Write-Host "A newer EA source exists on main; skipping obsolete V19 publish."
+              Write-Host "A newer EA source exists on main; skipping obsolete compiled artifact."
               exit 0
             }
-            if ($LASTEXITCODE -ne 0) {
-              throw "Could not compare V19 source with latest main"
-            }
+            if ($LASTEXITCODE -ne 0) { throw "Could not compare EA source with latest main" }
 
             git reset --hard origin/main
             if ($LASTEXITCODE -ne 0) { throw "Could not reset to latest main" }
-            Copy-Item -Force $env:PATCHED_EA_SOURCE "mt5\FastBasketBot.mq5"
             New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
-            Copy-Item -Force $compiledEx5 "mt5\release\FastBasketBot.ex5"
-            Copy-Item -Force $compiledManifest "mt5\release\manifest.json"
+            Copy-Item -Force "$env:RUNNER_TEMP\FastBasketBot.ex5" "mt5\release\FastBasketBot.ex5"
+            Copy-Item -Force "$env:RUNNER_TEMP\FastBasketBot-manifest.json" "mt5\release\manifest.json"
 
-            git add mt5/FastBasketBot.mq5
             git add -f mt5/release/FastBasketBot.ex5
             git add mt5/release/manifest.json
             git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "Brain V19 source and artifact are already current."
+              Write-Host "V20 compiled artifact is already current."
               $published = $true
               break
             }
-            if ($LASTEXITCODE -ne 1) {
-              throw "Could not inspect generated V19 changes"
-            }
+            if ($LASTEXITCODE -ne 1) { throw "Could not inspect generated V20 changes" }
 
-            git commit -m "build: publish EA Brain V19 RACE M5 v1.058 [skip ea build]"
-            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V19 changes" }
+            git commit -m "build: publish EA Brain V20 v$env:EA_VERSION [skip ea build]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit V20 artifact" }
             git push origin HEAD:main
-            if ($LASTEXITCODE -eq 0) {
-              $published = $true
-              break
-            }
+            if ($LASTEXITCODE -eq 0) { $published = $true; break }
             Start-Sleep -Seconds 2
           }
 
-          if (-not $published) {
-            throw "Failed to publish Brain V19 after retries"
-          }
+          if (-not $published) { throw "Failed to publish Brain V20 after retries" }
