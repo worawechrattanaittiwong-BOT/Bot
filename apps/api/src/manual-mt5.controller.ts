@@ -217,22 +217,22 @@ export class ManualMt5Controller {
       };
     }
 
-    const action: ManualMt5Action =
-      !runtimeReady || !hashReady || !tradingReady
-        ? "UPDATE_EA_RESTART"
-        : "CONNECT_MT5";
+    // Runtime/hash/trading repair must never create an automatic MT5 reload.
+    // The dedicated Update EA button creates the only UPDATE_EA_RESTART action,
+    // so one customer click maps to one action id and at most one restart.
+    if (!runtimeReady || !hashReady || !tradingReady) {
+      throw new ConflictException(
+        "EA ยังไม่พร้อม กรุณากดปุ่ม “อัปเดต EA” 1 ครั้ง ระบบจะติดตั้งและรีโหลด MT5 เพียง 1 รอบ หากไม่สำเร็จระบบจะหยุดรอการกดใหม่"
+      );
+    }
+
+    // At this point the EA binary/runtime is current; recovery is only allowed
+    // to reconnect an offline MT5. It does not perform an EA update/reload.
+    const action: ManualMt5Action = "CONNECT_MT5";
     const actionId = randomUUID();
     const requestedAt = new Date().toISOString();
-    const reason = !runtimeReady
-      ? `EA Runtime ${runningVersion || "ไม่พบ"} ต้องเป็น ${release.eaVersion}`
-      : !hashReady
-        ? "EX5 Hash ในเครื่องยังไม่ตรงกับ Release"
-        : !eaOnline
-          ? "EA/MT5 Offline"
-          : "สิทธิ์การทำงานของ EA ยังไม่พร้อม";
     const message =
-      "Start Recovery: " + reason +
-      " · ระบบกำลังซ่อม/รีโหลด MT5 และจะ Start บอทให้อัตโนมัติเมื่อตรวจสอบผ่าน";
+      "Start Recovery: EA/MT5 Offline · ระบบจะเปิดหรือเชื่อม MT5 1 ครั้ง และจะ Start บอทให้อัตโนมัติเมื่อตรวจสอบผ่าน";
 
     await this.db.query(
       `UPDATE bot_instances
@@ -298,7 +298,7 @@ export class ManualMt5Controller {
     const actionId = randomUUID();
     const requestedAt = new Date().toISOString();
     const message = action === "UPDATE_EA_RESTART"
-      ? "รับคำสั่งอัปเดต EA แล้ว ระบบจะหยุดบอทอย่างปลอดภัยและรีสตาร์ท MT5 1 ครั้ง"
+      ? "รับคำสั่งอัปเดต EA แล้ว ระบบจะหยุดบอทอย่างปลอดภัยและรีสตาร์ท MT5 1 ครั้ง ถ้าไม่สำเร็จจะหยุดรอการกดใหม่"
       : "รับคำสั่งเชื่อมต่อ MT5 แล้ว ระบบจะเปิดหรือรีสตาร์ท MT5 1 ครั้งเพื่อเชื่อมต่อใหม่";
 
     await this.db.query(
