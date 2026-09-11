@@ -6,6 +6,7 @@ import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./login.module.css";
 import refStyles from "./loginReference.module.css";
+import { LOGIN_HERO_DATA_URI } from "./loginHero.generated";
 
 const LOGIN_EMAIL_KEY = "scenova_login_email";
 
@@ -148,9 +149,9 @@ export default function LoginPage() {
             <div className={styles.horizonGlow} />
             <img
               className={`${styles.mascot} ${refStyles.mascot}`}
-              src="/assets/scenova-login-hero-v3.webp"
-              width={600}
-              height={720}
+              src={LOGIN_HERO_DATA_URI}
+              width={400}
+              height={438}
               alt=""
               fetchPriority="high"
             />
