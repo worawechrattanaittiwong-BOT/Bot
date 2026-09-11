@@ -35,6 +35,22 @@ jobs:
             -ApiPath "apps/api/src/bot.controller.ts" `
             -WebPath "apps/web/app/dashboard/page.tsx"
 
+      - name: Preserve legacy saved mode inference
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $path = "apps/web/app/dashboard/page.tsx"
+          $text = [System.IO.File]::ReadAllText((Resolve-Path $path))
+          $old = '  controlMode: "AUTO",'
+          $new = '  controlMode: undefined,'
+          if ($text.Contains($old)) {
+            $text = $text.Replace($old,$new)
+            [System.IO.File]::WriteAllText((Resolve-Path $path),$text,[System.Text.UTF8Encoding]::new($false))
+          }
+          if (-not $text.Contains($new)) {
+            throw "Legacy control-mode fallback was not applied"
+          }
+
       - name: Install dependencies
         run: npm install
 
@@ -55,5 +71,5 @@ jobs:
             echo "Control modes already current."
             exit 0
           fi
-          git commit -m "feat: auto-direction entry for every control mode"
+          git commit -m "fix: preserve mode and auto-direction across all control modes"
           git push origin HEAD:main
