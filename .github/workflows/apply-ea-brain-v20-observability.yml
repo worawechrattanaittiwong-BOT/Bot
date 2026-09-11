@@ -41,6 +41,24 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $eaPath = "mt5\FastBasketBot.mq5"
+          $patchPath = "scripts\upgrade-ea-brain-v20-observability.ps1"
+
+          # Repair the original V20 audit patch anchor. The old line used a
+          # single-quoted PowerShell string containing literal `r`n characters,
+          # so it could never match the real CRLF/LF in the MQ5 source.
+          $patchLines = Get-Content $patchPath
+          $fixedAnchor = $false
+          $patchLines = $patchLines | ForEach-Object {
+            if ($_ -like 'Insert-EaBefore *heartbeatUrl*autoDiag*') {
+              $fixedAnchor = $true
+              'Insert-EaBefore ''   string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";'' $autoDiag ''autoV20Diagnostics=StringFormat'' ''append AUTO V20 heartbeat audit telemetry'''
+            } else {
+              $_
+            }
+          }
+          if (-not $fixedAnchor) { throw "V20 heartbeat audit anchor line was not found" }
+          [System.IO.File]::WriteAllLines((Resolve-Path $patchPath), $patchLines, [System.Text.UTF8Encoding]::new($false))
+
           $before = [System.IO.File]::ReadAllText((Resolve-Path $eaPath))
           function Function-Text([string]$source,[string]$signature) {
             $start=$source.IndexOf($signature,[System.StringComparison]::Ordinal)
@@ -84,14 +102,13 @@ jobs:
           Copy-Item -Force $eaPath "$sourceDir\FastBasketBot.mq5"
           "EA_SOURCE=$sourceDir\FastBasketBot.mq5" | Out-File $env:GITHUB_ENV -Append
 
-      - name: Typecheck API and Web
+      - name: Typecheck and build API and Web
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          corepack enable
-          pnpm install --frozen-lockfile
-          pnpm --filter @scenova/api exec tsc --noEmit
-          pnpm --filter @scenova/web exec tsc --noEmit
+          npm install
+          npm run typecheck
+          npm run build
 
       - name: Compile EA 1.060
         shell: powershell
