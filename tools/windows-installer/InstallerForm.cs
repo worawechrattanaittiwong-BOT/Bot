@@ -7,6 +7,14 @@ namespace ScenovaInstaller;
 
 internal sealed class InstallerForm : Form
 {
+    private static readonly Color PrimaryBlue = Color.FromArgb(15, 112, 230);
+    private static readonly Color AccentCyan = Color.FromArgb(15, 170, 230);
+    private static readonly Color Navy = Color.FromArgb(16, 45, 87);
+    private static readonly Color SoftBackground = Color.FromArgb(244, 248, 253);
+    private static readonly Color CardBackground = Color.White;
+    private static readonly Color BorderBlue = Color.FromArgb(205, 222, 242);
+    private static readonly Color MutedText = Color.FromArgb(83, 105, 133);
+    private static readonly Color SuccessGreen = Color.FromArgb(0, 145, 91);
     private readonly ComboBox _terminal = new()
     {
         DropDownStyle = ComboBoxStyle.DropDownList,
@@ -91,13 +99,15 @@ internal sealed class InstallerForm : Form
     internal InstallerForm()
     {
         Text = InstallerConstants.ProductName + " v" + InstallerConstants.Version;
-        Width = 1080;
-        Height = 760;
-        MinimumSize = new Size(940, 660);
+        Width = 1200;
+        Height = 810;
+        MinimumSize = new Size(1080, 720);
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Color.White;
+        AutoScaleMode = AutoScaleMode.Dpi;
+        DoubleBuffered = true;
+        BackColor = SoftBackground;
         ForeColor = Color.FromArgb(29, 42, 58);
-        Font = new Font("Segoe UI", 9.5f);
+        Font = new Font("Segoe UI", 10f);
 
         _channel.Items.AddRange(["Stable", "Beta", "Admin Test"]);
         var state = ScenovaRuntime.ReadState();
@@ -145,22 +155,37 @@ internal sealed class InstallerForm : Form
         {
             Text = text,
             Width = width,
-            Height = 38,
+            Height = 46,
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(31, 111, 205),
+            BackColor = PrimaryBlue,
             ForeColor = Color.White,
-            Margin = new Padding(4),
-            Cursor = Cursors.Hand
+            Font = new Font("Segoe UI Semibold", 10f),
+            Margin = new Padding(5, 4, 5, 4),
+            Padding = new Padding(8, 0, 8, 0),
+            Cursor = Cursors.Hand,
+            UseCompatibleTextRendering = true
         };
 
     private void ConfigureHealthList()
     {
-        _health.BackColor = Color.White;
+        _health.BackColor = CardBackground;
         _health.ForeColor = Color.FromArgb(32, 47, 65);
         _health.BorderStyle = BorderStyle.FixedSingle;
-        _health.Columns.Add("ระบบ", 220);
-        _health.Columns.Add("สถานะ", 120);
-        _health.Columns.Add("รายละเอียด", 470);
+        _health.Font = new Font("Segoe UI", 10f);
+        _health.Columns.Add("ระบบ");
+        _health.Columns.Add("สถานะ");
+        _health.Columns.Add("รายละเอียด");
+        _health.Resize += (_, _) => ResizeHealthColumns();
+        ResizeHealthColumns();
+    }
+
+    private void ResizeHealthColumns()
+    {
+        if (_health.Columns.Count < 3) return;
+        var width = Math.Max(640, _health.ClientSize.Width - 6);
+        _health.Columns[0].Width = Math.Max(190, (int)(width * 0.29));
+        _health.Columns[1].Width = Math.Max(110, (int)(width * 0.17));
+        _health.Columns[2].Width = Math.Max(300, width - _health.Columns[0].Width - _health.Columns[1].Width);
     }
 
     private void BuildLayout()
@@ -170,46 +195,58 @@ internal sealed class InstallerForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 4,
-            Padding = new Padding(22),
-            BackColor = Color.FromArgb(248, 250, 253)
+            Padding = new Padding(20),
+            BackColor = SoftBackground
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 74));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
 
-        var header = new Panel { Dock = DockStyle.Fill };
+        var header = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            Padding = new Padding(2)
+        };
         var brand = new PictureBox
         {
             Image = _brandLogo,
             SizeMode = PictureBoxSizeMode.Zoom,
-            BackColor = Color.White,
-            Location = new Point(4, 8),
-            Size = new Size(205, 70),
+            BackColor = Color.Transparent,
+            Location = new Point(6, 12),
+            Size = new Size(225, 74),
             AccessibleName = "SCENOVA"
         };
         var divider = new Panel
         {
-            BackColor = Color.FromArgb(206, 220, 237),
-            Location = new Point(220, 12),
-            Size = new Size(1, 60)
+            BackColor = BorderBlue,
+            Location = new Point(244, 18),
+            Size = new Size(2, 62)
         };
         var title = new Label
         {
             Text = "SCENOVA Smart Installer",
-            Font = new Font("Segoe UI", 20, FontStyle.Bold),
-            ForeColor = Color.FromArgb(20, 48, 84),
-            AutoSize = true,
-            Location = new Point(240, 8)
+            Font = new Font("Segoe UI Semibold", 24f, FontStyle.Bold),
+            ForeColor = Navy,
+            AutoSize = false,
+            AutoEllipsis = true,
+            Location = new Point(268, 8),
+            Size = new Size(650, 44),
+            UseCompatibleTextRendering = true
         };
         var subtitle = new Label
         {
             Text = "ค้นหา MT5 · ติดตั้ง · ซ่อม · อัปเดตอย่างปลอดภัย · ยืนยันการเชื่อมต่อ",
-            ForeColor = Color.FromArgb(91, 113, 139),
-            AutoSize = true,
-            Location = new Point(242, 52)
+            Font = new Font("Segoe UI", 10.25f),
+            ForeColor = MutedText,
+            AutoSize = false,
+            AutoEllipsis = true,
+            Location = new Point(270, 55),
+            Size = new Size(690, 32),
+            UseCompatibleTextRendering = true
         };
         header.Controls.Add(brand);
         header.Controls.Add(divider);
@@ -222,18 +259,23 @@ internal sealed class InstallerForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 4,
-            Padding = new Padding(2)
+            Padding = new Padding(12, 8, 10, 8),
+            BackColor = CardBackground,
+            Margin = new Padding(0, 0, 0, 8)
         };
-        selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
+        selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
         selector.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 165));
-        selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
+        selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+        selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
         selector.Controls.Add(new Label
         {
             Text = "MetaTrader 5",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(46, 63, 84)
+            Font = new Font("Segoe UI Semibold", 10.5f),
+            ForeColor = Navy,
+            AutoEllipsis = true,
+            UseCompatibleTextRendering = true
         }, 0, 0);
         selector.Controls.Add(_terminal, 1, 0);
 
@@ -259,10 +301,18 @@ internal sealed class InstallerForm : Form
             RowCount = 4,
             Padding = new Padding(0, 4, 8, 4)
         };
-        center.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
+        center.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
         center.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         center.RowStyles.Add(new RowStyle(SizeType.Absolute, 16));
-        center.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
+        center.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        _score.BackColor = Color.FromArgb(235, 249, 243);
+        _score.Padding = new Padding(18, 0, 12, 0);
+        _score.UseCompatibleTextRendering = true;
+        _status.BackColor = CardBackground;
+        _status.ForeColor = MutedText;
+        _status.Padding = new Padding(12, 4, 12, 4);
+        _status.Font = new Font("Segoe UI", 9.75f);
+        _status.UseCompatibleTextRendering = true;
         center.Controls.Add(_score, 0, 0);
         center.Controls.Add(_health, 0, 1);
         center.Controls.Add(_progress, 0, 2);
@@ -273,20 +323,25 @@ internal sealed class InstallerForm : Form
         {
             Dock = DockStyle.Fill,
             RowCount = 2,
-            Padding = new Padding(8, 4, 0, 4),
-            BackColor = Color.FromArgb(238, 246, 255)
+            Padding = new Padding(10, 4, 0, 4),
+            BackColor = Color.FromArgb(239, 247, 255)
         };
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 138));
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 205));
         right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var liveTitle = new Label
         {
             Text = "Live Status / Verification",
             Dock = DockStyle.Top,
             Height = 28,
-            Font = new Font("Segoe UI", 11, FontStyle.Bold),
-            ForeColor = Color.FromArgb(24, 104, 196)
+            Font = new Font("Segoe UI Semibold", 12f, FontStyle.Bold),
+            ForeColor = PrimaryBlue,
+            UseCompatibleTextRendering = true
         };
-        var livePanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
+        _live.Font = new Font("Segoe UI", 10f);
+        _live.ForeColor = Navy;
+        _live.Padding = new Padding(2, 6, 2, 0);
+        _live.UseCompatibleTextRendering = true;
+        var livePanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12), BackColor = CardBackground };
         livePanel.Controls.Add(_live);
         livePanel.Controls.Add(liveTitle);
         right.Controls.Add(livePanel, 0, 0);
@@ -300,7 +355,20 @@ internal sealed class InstallerForm : Form
             WrapContents = false,
             Padding = new Padding(0, 10, 0, 0)
         };
-        _install.BackColor = Color.FromArgb(22, 132, 224);
+        _install.BackColor = PrimaryBlue;
+        _install.ForeColor = Color.White;
+        _install.FlatAppearance.BorderColor = PrimaryBlue;
+        foreach (var secondary in new[] { _repair, _verify, _rollback })
+        {
+            secondary.BackColor = Color.White;
+            secondary.ForeColor = PrimaryBlue;
+            secondary.FlatAppearance.BorderColor = BorderBlue;
+            secondary.FlatAppearance.BorderSize = 1;
+        }
+        _uninstall.BackColor = Color.White;
+        _uninstall.ForeColor = Color.FromArgb(196, 54, 54);
+        _uninstall.FlatAppearance.BorderColor = Color.FromArgb(240, 196, 196);
+        _uninstall.FlatAppearance.BorderSize = 1;
         actions.Controls.Add(_install);
         actions.Controls.Add(_repair);
         actions.Controls.Add(_verify);
@@ -410,11 +478,11 @@ internal sealed class InstallerForm : Form
 
         _score.Text =
             $"Installation Score: {assessment.Score}/100 · {assessment.Summary}";
-        _score.Font = new Font("Segoe UI", 13, FontStyle.Bold);
+        _score.Font = new Font("Segoe UI Semibold", 15f, FontStyle.Bold);
         _score.ForeColor = assessment.Score >= 90
-            ? Color.FromArgb(8, 140, 93)
+            ? SuccessGreen
             : assessment.Score >= 70
-                ? Color.FromArgb(25, 104, 190)
+                ? PrimaryBlue
                 : Color.FromArgb(183, 112, 0);
     }
 
@@ -977,10 +1045,12 @@ internal sealed class InstallerForm : Form
         if (profile is null)
         {
             _live.Text =
-                "EA: ยังไม่ติดตั้ง\r\n" +
-                "Agent: " + (File.Exists(AgentRunner.AgentPath) ? "พบไฟล์" : "ยังไม่ติดตั้ง") + "\r\n" +
+                "EA Version: ยังไม่ติดตั้ง\r\n" +
+                "Installer: " + InstallerConstants.Version + "\r\n" +
+                "Agent: " + (File.Exists(AgentRunner.AgentPath) ? "Installed" : "ยังไม่ติดตั้ง") + "\r\n" +
                 "Heartbeat: รอการติดตั้ง\r\n" +
-                "Release Channel: " + SelectedReleaseChannel();
+                "Channel: " + SelectedReleaseChannel();
+            _live.ForeColor = PrimaryBlue;
             return;
         }
 
@@ -993,18 +1063,29 @@ internal sealed class InstallerForm : Form
                          localHash,
                          heartbeat.ArtifactHash,
                          StringComparison.OrdinalIgnoreCase);
+        var runtimeVersion = (heartbeat?.EaVersion ?? "").Trim();
+        var requiredVersion = (heartbeat?.EaVersionRequired ?? profile.EaVersion ?? InstallerConstants.Version).Trim();
+        var runtimeMatches = !string.IsNullOrWhiteSpace(runtimeVersion) &&
+                             !string.IsNullOrWhiteSpace(requiredVersion) &&
+                             string.Equals(runtimeVersion, requiredVersion, StringComparison.OrdinalIgnoreCase);
+        var versionLine = runtimeMatches
+            ? "EA Version: " + requiredVersion
+            : "EA Runtime: " + (string.IsNullOrWhiteSpace(runtimeVersion) ? "รอตรวจ" : runtimeVersion) +
+              "  →  ล่าสุด " + (string.IsNullOrWhiteSpace(requiredVersion) ? InstallerConstants.Version : requiredVersion);
 
         _live.Text =
-            "EA Version: " + (heartbeat?.EaVersion ?? profile.EaVersion ?? "—") + "\r\n" +
+            versionLine + "\r\n" +
+            "Installer / Agent: " + InstallerConstants.Version + "\r\n" +
             "Agent: " + (File.Exists(AgentRunner.AgentPath) ? "Installed" : "Missing") + "\r\n" +
             "Heartbeat: " + (heartbeat?.EaOnline == true ? "OK" : "WAITING") + "\r\n" +
             "Hash: " + (hashOk ? "OK" : SmartAgentRunner.PendingUpdateExists(profile) ? "UPDATE PENDING" : "CHECK") + "\r\n" +
             "Account: " + (heartbeat?.AccountNumber ?? profile.VerifiedAccountNumber ?? "—") + "\r\n" +
-            "Server: " + (heartbeat?.Server ?? profile.VerifiedServer ?? "—") + "\r\n" +
-            "Channel: " + (heartbeat?.ReleaseChannel ?? profile.ReleaseChannel);
-        _live.ForeColor = heartbeat?.EaOnline == true
-            ? Color.FromArgb(8, 140, 93)
-            : Color.FromArgb(25, 104, 190);
+            "Server: " + (heartbeat?.Server ?? profile.VerifiedServer ?? "—");
+        _live.ForeColor = heartbeat?.EaOnline == true && runtimeMatches && hashOk
+            ? SuccessGreen
+            : runtimeMatches
+                ? PrimaryBlue
+                : Color.FromArgb(190, 111, 0);
     }
 
     private void RenderAdvancedDetails(AgentHeartbeatResponse? heartbeat)

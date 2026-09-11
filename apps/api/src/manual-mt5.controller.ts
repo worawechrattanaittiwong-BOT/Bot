@@ -303,7 +303,7 @@ export class ManualMt5Controller {
 
     await this.db.query(
       `UPDATE bot_instances
-       SET desired_state='STOPPED',
+       SET desired_state='SAFE_STOP',
            metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
              'startAfterRepairRequested',false,
              'startAfterRepairStatus','IDLE',
@@ -316,6 +316,19 @@ export class ManualMt5Controller {
            )
        WHERE id=$1`,
       [instance.id, action, actionId, requestedAt, message]
+    );
+
+    // The restart gate requires actual_state to leave RUNNING. Merely changing
+    // desired_state was not enough because an online EA could remain RUNNING
+    // indefinitely with no matching control command. Deliver one SAFE_STOP so
+    // the EA acknowledges a restart-safe state; no position is force-closed.
+    await this.db.query(
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+      [instance.id]
+    );
+    await this.db.query(
+      "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
+      [instance.id]
     );
 
     return {

@@ -9,6 +9,60 @@ internal static class BrandAssets
         var bytes = Convert.FromBase64String(ScenovaLogoJpegBase64);
         using var stream = new MemoryStream(bytes);
         using var image = Image.FromStream(stream);
-        return new Bitmap(image);
+        using var source = new Bitmap(image);
+        return RemoveConnectedBackground(source);
+    }
+
+    private static Bitmap RemoveConnectedBackground(Bitmap source)
+    {
+        var result = new Bitmap(source.Width, source.Height);
+        using (var graphics = Graphics.FromImage(result))
+        {
+            graphics.Clear(Color.Transparent);
+            graphics.DrawImageUnscaled(source, 0, 0);
+        }
+
+        var background = result.GetPixel(0, 0);
+        var visited = new bool[result.Width, result.Height];
+        var queue = new Queue<Point>();
+
+        bool SimilarToBackground(Color color)
+        {
+            var dr = color.R - background.R;
+            var dg = color.G - background.G;
+            var db = color.B - background.B;
+            return dr * dr + dg * dg + db * db <= 46 * 46;
+        }
+
+        void Enqueue(int x, int y)
+        {
+            if (x < 0 || y < 0 || x >= result.Width || y >= result.Height) return;
+            if (visited[x, y] || !SimilarToBackground(result.GetPixel(x, y))) return;
+            visited[x, y] = true;
+            queue.Enqueue(new Point(x, y));
+        }
+
+        for (var x = 0; x < result.Width; x++)
+        {
+            Enqueue(x, 0);
+            Enqueue(x, result.Height - 1);
+        }
+        for (var y = 0; y < result.Height; y++)
+        {
+            Enqueue(0, y);
+            Enqueue(result.Width - 1, y);
+        }
+
+        while (queue.Count > 0)
+        {
+            var point = queue.Dequeue();
+            result.SetPixel(point.X, point.Y, Color.Transparent);
+            Enqueue(point.X - 1, point.Y);
+            Enqueue(point.X + 1, point.Y);
+            Enqueue(point.X, point.Y - 1);
+            Enqueue(point.X, point.Y + 1);
+        }
+
+        return result;
     }
 }
