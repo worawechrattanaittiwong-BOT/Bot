@@ -1,0 +1,59 @@
+name: Apply RACE Speed X2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/upgrade-race-speed-x2.ps1"
+      - ".github/workflows/apply-race-speed-x2.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-race-speed-x2-main
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Apply RACE 2x cadence patch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "./scripts/upgrade-race-speed-x2.ps1" `
+            -EaApiPath "apps/api/src/ea.controller.ts" `
+            -WebPath "apps/web/app/dashboard/page.tsx"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish RACE 2x cadence update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/api/src/ea.controller.ts apps/web/app/dashboard/page.tsx
+          if git diff --cached --quiet; then
+            echo "RACE 2x cadence is already current."
+            exit 0
+          fi
+          git commit -m "fix: double RACE order cadence"
+          git push origin HEAD:main
