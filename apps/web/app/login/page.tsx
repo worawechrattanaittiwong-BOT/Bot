@@ -145,35 +145,19 @@ export default function LoginPage() {
             <div className={styles.orbitA} />
             <div className={styles.orbitB} />
             <div className={styles.horizonGlow} />
-
-            <div className={styles.hudCard}>
-              <div className={styles.hudTitle}><strong>MT5</strong><i /></div>
-              <div className={styles.hudBody}>
-                <span>CONNECT</span><span>AUTOMATE</span><span>MONITOR</span><span>PROFIT</span>
-              </div>
-              <div className={styles.hudChart}><i /><i /><i /><i /><i /><i /></div>
-            </div>
-
-            <div className={styles.city}>
-              <i /><i /><i /><i /><i /><i /><i /><i /><i /><i />
-            </div>
-            <div className={styles.mountains}><i /><i /><i /></div>
-
             <img
               className={styles.mascot}
-              src="/assets/scenova-nova-mascot-v1.webp"
-              width={1536}
-              height={1024}
+              src="/assets/scenova-login-hero-v3.webp"
+              width={600}
+              height={720}
               alt=""
               fetchPriority="high"
             />
-
             <div className={styles.partnerPlaque}>
               <small>SCENOVA</small>
               <strong>YOUR INTELLIGENT<br />TRADING PARTNER</strong>
               <span />
             </div>
-
             <div className={styles.verticalTag}>TRADING<br />AUTOMATION<br />A BRIGHTER<br />TOMORROW</div>
           </div>
 
