@@ -13,6 +13,7 @@ on:
       - "scripts/upgrade-ea-brain-v8.ps1"
       - "scripts/upgrade-ea-brain-v9.ps1"
       - "scripts/upgrade-ea-brain-v10.ps1"
+      - "scripts/upgrade-ea-brain-v11.ps1"
       - ".github/workflows/build-mt5-ea.yml"
 
 permissions:
@@ -39,17 +40,18 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Apply scoped EA Brain V10 trend-phase policy and prepare private source
+      - name: Apply EA Brain V10 policy plus V11 starvation fix and prepare private source
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
           & ".\scripts\upgrade-ea-brain-v10.ps1" -Path "mt5\FastBasketBot.mq5"
+          & ".\scripts\upgrade-ea-brain-v11.ps1" -Path "mt5\FastBasketBot.mq5"
 
           $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
           $patchedText = [System.IO.File]::ReadAllText($mq5Path)
 
-          if ($patchedText -notmatch '#property\s+version\s+"1\.049"') {
-            throw "Brain V10 patch did not produce EA 1.049"
+          if ($patchedText -notmatch '#property\s+version\s+"1\.050"') {
+            throw "Brain V11 patch did not produce EA 1.050"
           }
           foreach ($sentinel in @(
             'BrainV8LocalZoneBlocked',
@@ -70,10 +72,12 @@ jobs:
             'USER_DIRECTION_LOCK',
             'OrderSendWithPriceRetry',
             'CLOSE_REASON_BRAIN_REVERSAL',
+            'WAITING_CONFIDENCE_EXTREME',
+            'MathMin(6.0, g_consecutiveLosses * 1.5)',
             'HttpPostJsonTimeout(url, payload, response, 1200)'
           )) {
             if (-not $patchedText.Contains($sentinel)) {
-              throw "Brain V10 sentinel missing: $sentinel"
+              throw "Brain V11 sentinel missing: $sentinel"
             }
           }
 
@@ -89,8 +93,11 @@ jobs:
           if ($patchedText.Contains('if(!BrainV8PullbackConfirmationReady(rawDirection, momentum))')) {
             throw "Legacy global pullback gate still overrides model-aware confirmation"
           }
+          if ($patchedText.Contains('score -= MathMin(15.0, g_consecutiveLosses * 4.0);')) {
+            throw "Legacy self-locking loss-streak penalty is still present"
+          }
 
-          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV10.mq5"
+          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV11.mq5"
           Copy-Item -Force $mq5Path $patchedSource
           "PATCHED_EA_SOURCE=$patchedSource" | Out-File -FilePath $env:GITHUB_ENV -Append
 
@@ -128,11 +135,11 @@ jobs:
             eaVersion = $eaVersion
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
-            brain = "V10"
-            policy = "PULLBACK_CONTINUATION_BOTTOM_TOP_PROTECTION"
+            brain = "V11"
+            policy = "V10_TREND_PHASE_PLUS_CONFIDENCE_STARVATION_FIX"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "mt5\release\manifest.json"
 
-      - name: Publish Brain V10 source and compiled artifact to private repository
+      - name: Publish Brain V11 source and compiled artifact to private repository
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -147,7 +154,7 @@ jobs:
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
-            Write-Host "EA Brain V10 publish attempt $attempt/6"
+            Write-Host "EA Brain V11 publish attempt $attempt/6"
             git fetch origin main
             if ($LASTEXITCODE -ne 0) {
               Start-Sleep -Seconds 2
@@ -156,7 +163,7 @@ jobs:
 
             git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5
             if ($LASTEXITCODE -eq 1) {
-              Write-Host "A newer FastBasketBot.mq5 exists on main; skipping obsolete Brain V10 publish."
+              Write-Host "A newer FastBasketBot.mq5 exists on main; skipping obsolete Brain V11 publish."
               exit 0
             }
             if ($LASTEXITCODE -ne 0) {
@@ -176,7 +183,7 @@ jobs:
             git add mt5/release/manifest.json
             git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "Brain V10 source and artifact are already current."
+              Write-Host "Brain V11 source and artifact are already current."
               $published = $true
               break
             }
@@ -184,8 +191,8 @@ jobs:
               throw "Could not inspect generated EA changes"
             }
 
-            git commit -m "build: publish EA Brain V10 v1.049 [skip ea build]"
-            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V10 EA" }
+            git commit -m "build: publish EA Brain V11 v1.050 [skip ea build]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V11 EA" }
 
             git push origin HEAD:main
             if ($LASTEXITCODE -eq 0) {
@@ -193,10 +200,10 @@ jobs:
               break
             }
 
-            Write-Host "Main moved while publishing Brain V10; retrying..."
+            Write-Host "Main moved while publishing Brain V11; retrying..."
             Start-Sleep -Seconds 2
           }
 
           if (-not $published) {
-            throw "Failed to publish EA Brain V10 after retries"
+            throw "Failed to publish EA Brain V11 after retries"
           }
