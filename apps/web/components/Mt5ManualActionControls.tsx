@@ -49,7 +49,7 @@ export function Mt5ManualActionControls() {
   const positions = Math.max(0, Number(metrics?.positions || 0));
   const needsEaUpdate = Boolean(update?.eaUpdateRequired || update?.eaVersionMatch === false);
   const installerRequired = Boolean(update?.installerRequired);
-  const installerVersion = String(update?.latestVersion || update?.latestInstallerVersion || update?.installerVersionRequired || "3.1.3");
+  const installerVersion = String(update?.latestVersion || update?.latestInstallerVersion || update?.installerVersionRequired || "1.0.0");
   const installerDownloadPath = String(update?.downloadPath || "/downloads/SCENOVA-Setup.exe");
   const actionName = String(metrics?.manualMt5ActionName || "");
   const actionStatus = String(metrics?.manualMt5ActionStatus || "");

@@ -2,19 +2,19 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-export const DEFAULT_INSTALLER_VERSION = "3.1.3";
-export const DEFAULT_EA_VERSION = "1.060";
+export const DEFAULT_INSTALLER_VERSION = "1.0.0";
+export const DEFAULT_EA_VERSION = "1.0.0";
 
-// 3.1.2 introduced the Agent protocol used by the current 3.1.x line
+// 3.1.2 introduced the Agent protocol used by the current 1.0.x line
 // (agent-heartbeat + resumable EA artifact + one-time MT5 action). Patch
-// releases in the same 3.1 line must not hard-block trading simply because a
-// newer Setup binary exists. This also lets an already-installed 3.1.2 Agent
+// releases in the same 1.0 line must not hard-block trading simply because a
+// newer Setup binary exists. This also lets an already-installed 1.0.0 Agent
 // repair/update EA automatically without forcing another browser download.
-export const MIN_COMPATIBLE_INSTALLER_VERSION = "3.1.2";
+export const MIN_COMPATIBLE_INSTALLER_VERSION = "1.0.0";
 
 export function latestInstallerVersion() {
   const configured = String(process.env.SCENOVA_INSTALLER_VERSION || "").trim();
-  if (configured && isVersionAtLeast(configured, DEFAULT_INSTALLER_VERSION)) {
+  if (configured && sameReleaseLine(configured, DEFAULT_INSTALLER_VERSION) && isVersionAtLeast(configured, DEFAULT_INSTALLER_VERSION)) {
     return configured;
   }
   return DEFAULT_INSTALLER_VERSION;
@@ -26,6 +26,12 @@ function numericParts(version: unknown) {
   const parts = raw.split(".").map((part) => Number(part));
   while (parts.length < 4) parts.push(0);
   return parts;
+}
+
+function sameReleaseLine(current: unknown, baseline: unknown) {
+  const a = numericParts(current);
+  const b = numericParts(baseline);
+  return Boolean(a && b && a[0] === b[0] && a[1] === b[1]);
 }
 
 export function isVersionAtLeast(current: unknown, required: unknown) {
@@ -45,7 +51,7 @@ function normalizedExactVersion(version: unknown) {
 
 // Historical callers use isVersionExact() for the Windows Agent compatibility
 // gate. Keep exact equality first, then allow compatible PATCH releases inside
-// the 3.1 protocol line. A future 3.2.x release remains a hard upgrade unless
+// the 3.1 protocol line. A future 1.1.x release remains a hard upgrade unless
 // its minimum compatibility policy is explicitly changed.
 export function isVersionExact(current: unknown, required: unknown) {
   const aRaw = normalizedExactVersion(current);
@@ -110,14 +116,15 @@ function actualArtifactHash() {
 
 export function latestEaRelease() {
   const manifest = readReleaseManifest();
-  const eaVersion =
-    String(process.env.SCENOVA_EA_VERSION || manifest.eaVersion || DEFAULT_EA_VERSION).trim() ||
-    DEFAULT_EA_VERSION;
+  const configuredEaVersion = String(process.env.SCENOVA_EA_VERSION || "").trim();
+  const eaVersion = configuredEaVersion && sameReleaseLine(configuredEaVersion, DEFAULT_EA_VERSION)
+    ? configuredEaVersion
+    : String(manifest.eaVersion || DEFAULT_EA_VERSION).trim() || DEFAULT_EA_VERSION;
   const sha256 =
     String(
-      process.env.SCENOVA_EA_SHA256 ||
       actualArtifactHash() ||
       manifest.sha256 ||
+      process.env.SCENOVA_EA_SHA256 ||
       ""
     ).trim().toLowerCase() || null;
 
