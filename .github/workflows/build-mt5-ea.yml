@@ -1,5 +1,8 @@
 name: Build MT5 EA
 
+# Unified 1.0.0 release rebuild trigger. The workflow compiles the current
+# V20/RACE-isolated source without changing trading logic.
+
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
   cancel-in-progress: true
