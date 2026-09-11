@@ -1,9 +1,9 @@
 ﻿{
-    "builtAt":  "2026-09-10T14:51:43.7103711Z",
-    "policy":  "SYMMETRIC_EXHAUSTION_DIRECTION_LOCK",
-    "brain":  "V9",
-    "sha256":  "8d64addcb0237af47ffa36a54fd95bc1d899c5ebac673b9946ea7084b65a2e90",
-    "sourceCommit":  "602c945a5b00164a4c47a498bc9090569d17465c",
-    "eaVersion":  "1.048",
+    "builtAt":  "2026-09-11T02:08:47.3810019Z",
+    "policy":  "PULLBACK_CONTINUATION_BOTTOM_TOP_PROTECTION",
+    "brain":  "V10",
+    "sha256":  "994603743dbaad91aedb2117566f27f843ab0b418eab2e9094bb4dc6904c7d4d",
+    "sourceCommit":  "837d69ef94499765942f0fe4fd81d2fc8044b03d",
+    "eaVersion":  "1.049",
     "file":  "FastBasketBot.ex5"
 }
