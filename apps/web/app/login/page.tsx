@@ -3,18 +3,28 @@
 import { FormEvent, useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
+import { ScenovaIcon } from "../../components/ScenovaIcon";
+import styles from "./login.module.css";
+
+const LOGIN_EMAIL_KEY = "scenova_login_email";
 
 export default function LoginPage() {
   const [register, setRegister] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberEmail, setRememberEmail] = useState(true);
   const [message, setMessage] = useState("");
+  const [messageKind, setMessageKind] = useState<"error" | "info">("error");
   const [busy, setBusy] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setRegister(params.get("mode") === "register");
+
+    const rememberedEmail = localStorage.getItem(LOGIN_EMAIL_KEY);
+    if (rememberedEmail) setEmail(rememberedEmail);
 
     const token = localStorage.getItem("bot_token");
     if (!token) {
@@ -50,12 +60,17 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "ไม่สามารถเข้าสู่ระบบได้");
+      if (!res.ok) throw new Error(data.message || "Unable to sign in. Please try again.");
+
+      if (!register && rememberEmail) localStorage.setItem(LOGIN_EMAIL_KEY, email.trim());
+      if (!rememberEmail) localStorage.removeItem(LOGIN_EMAIL_KEY);
+
       localStorage.setItem("bot_token", data.token);
       window.location.href = data.user?.role === "OWNER" || data.user?.role === "ADMIN"
         ? "/admin"
         : "/dashboard";
     } catch (err: any) {
+      setMessageKind("error");
       setMessage(err.message);
     } finally {
       setBusy(false);
@@ -65,70 +80,170 @@ export default function LoginPage() {
   function switchMode() {
     const next = !register;
     setRegister(next);
+    setPassword("");
     setMessage("");
     window.history.replaceState({}, "", next ? "/login?mode=register" : "/login");
   }
 
+  function showPasswordRecovery() {
+    setMessageKind("info");
+    setMessage("Password recovery is currently handled by SCENOVA support. Please contact the administrator linked to your account.");
+  }
+
   if (checkingSession) {
     return (
-      <main className="auth-shell">
-        <section className="auth-card auth-session-card">
-          <div className="brand-lockup auth-brand scenova-brand-lockup">
-            <ScenovaBrand className="scenova-brand-logo-auth"/>
-          </div>
-          <div className="session-loader"><span className="dot green"/> กำลังตรวจสอบการเข้าสู่ระบบ...</div>
-          <p className="muted">ถ้าบัญชีของคุณยังอยู่ในระบบ เราจะพาไป Control Center โดยอัตโนมัติ</p>
+      <main className={styles.sessionPage}>
+        <section className={styles.sessionCard}>
+          <ScenovaBrand className={styles.sessionBrand} />
+          <div className={styles.sessionLoader}><span className={styles.pulse} /> Checking your secure session...</div>
+          <p>If your account is still signed in, SCENOVA will take you directly to your Control Center.</p>
         </section>
       </main>
     );
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card auth-card-wide">
-        <a className="brand-lockup auth-brand scenova-brand-lockup" href="/">
-          <ScenovaBrand className="scenova-brand-logo-auth"/>
-        </a>
+    <main className={styles.page}>
+      <div className={styles.shell}>
+        <section className={styles.hero} aria-label="SCENOVA secure access">
+          <a href="/" aria-label="SCENOVA home">
+            <ScenovaBrand className={styles.heroBrand} />
+          </a>
 
-        <div className="auth-heading">
-          <div className="eyebrow">{register ? "CREATE ACCOUNT" : "SECURE ACCESS"}</div>
-          <h1>{register ? "เริ่มใช้งาน SCENOVA" : "ยินดีต้อนรับกลับ"}</h1>
-          <p className="muted">
-            {register
-              ? "สร้างบัญชีเพื่อรับ User ID จากนั้นค่อยเชื่อม MT5 และขอสิทธิ์ใช้งาน"
-              : "เข้าสู่ Control Center เพื่อดูสถานะ MT5 และควบคุมบอท"}
-          </p>
-        </div>
+          <div className={styles.heroCopy}>
+            <div className={styles.eyebrow}>INTELLIGENT MT5 AUTOMATION</div>
+            <h1>Secure Access to Your <span>Trading Control Center</span></h1>
+            <p className={styles.heroLead}>
+              Log in to your SCENOVA account and take full control of your MT5 automation.
+              Manage, monitor, and optimize your trading from one powerful platform.
+            </p>
 
-        {register && (
-          <div className="mini-steps">
-            <span className="active">1 สมัครบัญชี</span>
-            <span>2 เชื่อม MT5</span>
-            <span>3 ขอสิทธิ์</span>
+            <div className={styles.featureList}>
+              <div className={styles.feature}>
+                <span className={styles.featureIcon}><ScenovaIcon name="trend" size={22} /></span>
+                <div><b>Automate Trading</b><small>with Smart EA Systems</small></div>
+              </div>
+              <div className={styles.feature}>
+                <span className={styles.featureIcon}><ScenovaIcon name="clock" size={22} /></span>
+                <div><b>Monitor in Real-Time</b><small>Anytime, Anywhere</small></div>
+              </div>
+              <div className={styles.feature}>
+                <span className={styles.featureIcon}><ScenovaIcon name="spark" size={22} /></span>
+                <div><b>Built for Traders</b><small>Simple. Powerful. Reliable.</small></div>
+              </div>
+            </div>
           </div>
-        )}
 
-        <form className="stack" onSubmit={submit}>
-          <div className="field">
-            <label>อีเมล</label>
-            <input className="input" type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com" required />
+          <div className={styles.heroArt} aria-hidden="true">
+            <img className={styles.mascot} src="/assets/scenova-nova-mascot-v1.webp" width={1536} height={1024} alt="" />
+            <div className={styles.hudCard}><b>MT5</b><span>CONNECT<br />AUTOMATE<br />MONITOR<br />PROFIT</span></div>
           </div>
-          <div className="field">
-            <label>รหัสผ่าน</label>
-            <input className="input" type="password" minLength={8} autoComplete={register ? "new-password" : "current-password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="อย่างน้อย 8 ตัวอักษร" required />
-          </div>
-          {message && <div className="notice bad">{message}</div>}
-          <button className="btn primary full btn-lg" disabled={busy}>
-            {busy ? "กำลังดำเนินการ..." : register ? "สร้างบัญชี" : "เข้าสู่ระบบ"}
-          </button>
-        </form>
+          <div className={styles.heroFoot}>DESIGNED FOR YOUR TRADING JOURNEY</div>
+        </section>
 
-        <div className="auth-divider"><span>หรือ</span></div>
-        <button className="btn ghost full" onClick={switchMode}>
-          {register ? "มีบัญชีแล้ว — เข้าสู่ระบบ" : "ยังไม่มีบัญชี — สร้างบัญชีใหม่"}
-        </button>
-        <a className="auth-back" href="/">← กลับหน้าแรก</a>
-      </section>
+        <section className={styles.panelWrap}>
+          <div className={styles.card}>
+            <a href="/" aria-label="SCENOVA home">
+              <ScenovaBrand className={styles.cardBrand} />
+            </a>
+
+            <div className={styles.cardEyebrow}>{register ? "CREATE ACCOUNT" : "SECURE ACCESS"}</div>
+            <h2>{register ? "Create Your Account" : "Welcome Back"}</h2>
+            <p className={styles.subtitle}>
+              {register
+                ? "Create your SCENOVA account, then connect MT5 and request access to your trading workspace."
+                : "Log in to your Control Center to manage your MT5 and automation systems."}
+            </p>
+
+            {register && (
+              <div className={styles.registerSteps}>
+                <span className={styles.active}>1 · Account</span>
+                <span>2 · Connect MT5</span>
+                <span>3 · Access</span>
+              </div>
+            )}
+
+            <form className={styles.form} onSubmit={submit}>
+              <div className={styles.field}>
+                <label htmlFor="scenova-email">Email Address</label>
+                <div className={styles.inputWrap}>
+                  <span className={styles.inputIcon}><ScenovaIcon name="account" size={18} /></span>
+                  <input
+                    id="scenova-email"
+                    className={styles.input}
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={e=>setEmail(e.target.value)}
+                    placeholder="name@example.com"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className={styles.field}>
+                <label htmlFor="scenova-password">Password</label>
+                <div className={styles.inputWrap}>
+                  <span className={styles.inputIcon}><ScenovaIcon name="shield" size={18} /></span>
+                  <input
+                    id="scenova-password"
+                    className={styles.input}
+                    type={showPassword ? "text" : "password"}
+                    minLength={8}
+                    autoComplete={register ? "new-password" : "current-password"}
+                    value={password}
+                    onChange={e=>setPassword(e.target.value)}
+                    placeholder={register ? "At least 8 characters" : "Enter your password"}
+                    required
+                  />
+                  <button className={styles.visibility} type="button" onClick={()=>setShowPassword(v=>!v)} aria-label={showPassword ? "Hide password" : "Show password"}>
+                    {showPassword ? "HIDE" : "SHOW"}
+                  </button>
+                </div>
+              </div>
+
+              {!register && (
+                <div className={styles.formOptions}>
+                  <label className={styles.remember}>
+                    <input type="checkbox" checked={rememberEmail} onChange={e=>setRememberEmail(e.target.checked)} />
+                    Remember me
+                  </label>
+                  <button className={styles.textAction} type="button" onClick={showPasswordRecovery}>Forgot password?</button>
+                </div>
+              )}
+
+              {message && <p className={`${styles.message} ${messageKind === "info" ? styles.messageInfo : ""}`}>{message}</p>}
+
+              <button className={styles.primary} disabled={busy}>
+                {busy ? "Please wait..." : register ? "Create Account  →" : "Sign In  →"}
+              </button>
+
+              <div className={styles.divider}>or</div>
+              <button className={styles.secondary} type="button" onClick={switchMode}>
+                {register ? "Already have an account? Sign In" : "Create Account"}
+              </button>
+              <a className={styles.back} href="/">← Back to Home</a>
+            </form>
+
+            <div className={styles.trustGrid}>
+              <div className={styles.trustItem}>
+                <span className={styles.trustIcon}><ScenovaIcon name="shield" size={17} /></span>
+                <div><b>Encrypted Session</b><small>Secure access protection</small></div>
+              </div>
+              <div className={styles.trustItem}>
+                <span className={styles.trustIcon}><ScenovaIcon name="spark" size={17} /></span>
+                <div><b>Fast Access</b><small>MT5 & EA dashboard</small></div>
+              </div>
+              <div className={styles.trustItem}>
+                <span className={styles.trustIcon}><ScenovaIcon name="cloud" size={17} /></span>
+                <div><b>Cloud + Local</b><small>Ready for both modes</small></div>
+              </div>
+            </div>
+
+            <div className={styles.securityLine}><ScenovaIcon name="shield" size={14} /> Protected by SCENOVA secure authentication</div>
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
