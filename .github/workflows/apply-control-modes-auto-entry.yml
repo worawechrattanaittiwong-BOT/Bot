@@ -1,4 +1,4 @@
-name: Apply Auto Entry Control Modes
+name: Apply Direction Selector Control Modes
 
 on:
   push:
@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Apply control-mode auto-direction patch
+      - name: Apply selectable direction patch
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -61,7 +61,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Publish web/API runtime auto-direction update
+      - name: Publish selectable direction update
         shell: bash
         run: |
           set -euo pipefail
@@ -69,8 +69,8 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add apps/api/src/bot.controller.ts apps/api/src/ea.controller.ts apps/web/app/dashboard/page.tsx
           if git diff --cached --quiet; then
-            echo "Control-mode auto direction is already current."
+            echo "Selectable direction is already current."
             exit 0
           fi
-          git commit -m "fix: force automatic direction for every control mode"
+          git commit -m "fix: allow auto buy or sell in every control mode"
           git push origin HEAD:main
