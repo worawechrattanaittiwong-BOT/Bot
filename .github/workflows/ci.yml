@@ -20,3 +20,6 @@ jobs:
       - run: npm install
       - run: npm run typecheck
       - run: npm run build
+      - name: AUTO V20 same-dataset policy regression
+        shell: pwsh
+        run: ./tests/auto-v20-policy-regression.ps1
