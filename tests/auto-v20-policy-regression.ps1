@@ -16,25 +16,28 @@ function Case([string]$scenario,[string]$name,[hashtable]$v) {
   $h.scenario=$scenario; $h.name=$name; [pscustomobject]$h
 }
 
+# PowerShell command invocations inside @() are separated by newlines. Do not
+# put commas after the hashtable argument: a trailing comma turns the argument
+# into Object[] and breaks the [hashtable] parameter conversion on pwsh/Linux.
 $cases=@(
-  Case 'STRONG_DOWN_BOUNCE' 'down-impulse' @{h1=-1;m30=-1;m15=-1;m5=-1;m1=-1;ema5=-1;ema15=-1;mom=-1.1;paSell=20;locSell=5;pbSell=60;rrSell=1.5;outSell=1.2;outBuy=-1.0;phase=-1},
-  Case 'STRONG_DOWN_BOUNCE' 'down-bottom-warning' @{h1=-1;m30=-1;m15=-1;m5=-1;m1=1;ema5=-1;ema15=-1;mom=-0.35;paBuy=20;paSell=8;locBuy=14;locSell=-10;pbBuy=65;pbSell=38;rrBuy=1.4;rrSell=0.9;outSell=-1.1;outBuy=0.8;weakening=$true;decel=1},
-  Case 'STRONG_DOWN_BOUNCE' 'down-confirmed-bounce' @{h1=-1;m30=-1;m15=-1;m5=1;m1=1;ema5=1;ema15=-1;mom=0.45;paBuy=30;locBuy=14;locSell=-14;pbBuy=85;pbSell=25;rrBuy=1.6;rrSell=0.8;outBuy=1.0;outSell=-1.2;weakening=$true;turned=1},
-  Case 'STRONG_DOWN_BOUNCE' 'down-bounce-late-loss' @{h1=-1;m30=-1;m15=0;m5=1;m1=1;ema5=1;ema15=-1;mom=0.75;paBuy=25;locBuy=10;locSell=-8;pbBuy=82;pbSell=30;rrBuy=1.5;rrSell=0.9;outBuy=-0.3;outSell=-0.9;weakening=$true;turned=1},
+  Case 'STRONG_DOWN_BOUNCE' 'down-impulse' @{h1=-1;m30=-1;m15=-1;m5=-1;m1=-1;ema5=-1;ema15=-1;mom=-1.1;paSell=20;locSell=5;pbSell=60;rrSell=1.5;outSell=1.2;outBuy=-1.0;phase=-1}
+  Case 'STRONG_DOWN_BOUNCE' 'down-bottom-warning' @{h1=-1;m30=-1;m15=-1;m5=-1;m1=1;ema5=-1;ema15=-1;mom=-0.35;paBuy=20;paSell=8;locBuy=14;locSell=-10;pbBuy=65;pbSell=38;rrBuy=1.4;rrSell=0.9;outSell=-1.1;outBuy=0.8;weakening=$true;decel=1}
+  Case 'STRONG_DOWN_BOUNCE' 'down-confirmed-bounce' @{h1=-1;m30=-1;m15=-1;m5=1;m1=1;ema5=1;ema15=-1;mom=0.45;paBuy=30;locBuy=14;locSell=-14;pbBuy=85;pbSell=25;rrBuy=1.6;rrSell=0.8;outBuy=1.0;outSell=-1.2;weakening=$true;turned=1}
+  Case 'STRONG_DOWN_BOUNCE' 'down-bounce-late-loss' @{h1=-1;m30=-1;m15=0;m5=1;m1=1;ema5=1;ema15=-1;mom=0.75;paBuy=25;locBuy=10;locSell=-8;pbBuy=82;pbSell=30;rrBuy=1.5;rrSell=0.9;outBuy=-0.3;outSell=-0.9;weakening=$true;turned=1}
 
-  Case 'STRONG_UP_PULLBACK' 'up-chase-terminal' @{h1=1;m30=1;m15=1;m5=1;m1=1;ema5=1;ema15=1;mom=1.2;paBuy=20;locBuy=-12;pbBuy=48;rrBuy=0.95;rrSell=1.3;outBuy=-0.8;outSell=0.2;phase=1},
-  Case 'STRONG_UP_PULLBACK' 'up-pullback-running' @{h1=1;m30=1;m15=1;m5=-1;m1=-1;ema5=1;ema15=1;mom=-0.25;paBuy=10;locBuy=8;pbBuy=58;rrBuy=1.45;rrSell=1.0;outBuy=0.9;outSell=-0.7;phase=1},
-  Case 'STRONG_UP_PULLBACK' 'up-pullback-resume' @{h1=1;m30=1;m15=1;m5=1;m1=1;ema5=1;ema15=1;mom=0.45;paBuy=30;locBuy=12;pbBuy=90;rrBuy=1.65;rrSell=0.9;outBuy=1.3;outSell=-1.0;phase=1},
-  Case 'STRONG_UP_PULLBACK' 'up-continuation' @{h1=1;m30=1;m15=1;m5=1;m1=0;ema5=1;ema15=1;mom=0.35;paBuy=20;locBuy=5;pbBuy=75;rrBuy=1.35;rrSell=0.9;outBuy=0.8;outSell=-0.6;phase=1},
+  Case 'STRONG_UP_PULLBACK' 'up-chase-terminal' @{h1=1;m30=1;m15=1;m5=1;m1=1;ema5=1;ema15=1;mom=1.2;paBuy=20;locBuy=-12;pbBuy=48;rrBuy=0.95;rrSell=1.3;outBuy=-0.8;outSell=0.2;phase=1}
+  Case 'STRONG_UP_PULLBACK' 'up-pullback-running' @{h1=1;m30=1;m15=1;m5=-1;m1=-1;ema5=1;ema15=1;mom=-0.25;paBuy=10;locBuy=8;pbBuy=58;rrBuy=1.45;rrSell=1.0;outBuy=0.9;outSell=-0.7;phase=1}
+  Case 'STRONG_UP_PULLBACK' 'up-pullback-resume' @{h1=1;m30=1;m15=1;m5=1;m1=1;ema5=1;ema15=1;mom=0.45;paBuy=30;locBuy=12;pbBuy=90;rrBuy=1.65;rrSell=0.9;outBuy=1.3;outSell=-1.0;phase=1}
+  Case 'STRONG_UP_PULLBACK' 'up-continuation' @{h1=1;m30=1;m15=1;m5=1;m1=0;ema5=1;ema15=1;mom=0.35;paBuy=20;locBuy=5;pbBuy=75;rrBuy=1.35;rrSell=0.9;outBuy=0.8;outSell=-0.6;phase=1}
 
-  Case 'SIDEWAY' 'range-conflict-a' @{m5=1;m1=-1;mom=0.1;paBuy=5;paSell=5;locBuy=2;locSell=2;pbBuy=45;pbSell=45;rrBuy=1.05;rrSell=1.05;outBuy=-0.4;outSell=-0.3},
-  Case 'SIDEWAY' 'range-conflict-b' @{m5=-1;m1=1;mom=-0.12;paBuy=8;paSell=8;locBuy=4;locSell=4;pbBuy=50;pbSell=50;rrBuy=1.05;rrSell=1.05;outBuy=-0.3;outSell=-0.4},
-  Case 'SIDEWAY' 'range-clean-buy' @{m5=1;m1=1;ema5=1;mom=0.3;paBuy=25;locBuy=10;locSell=-8;pbBuy=70;pbSell=35;rrBuy=1.35;rrSell=0.9;outBuy=-0.2;outSell=-0.5;phase=1},
-  Case 'SIDEWAY' 'range-clean-sell' @{m5=-1;m1=-1;ema5=-1;mom=-0.28;paSell=25;locSell=9;locBuy=-8;pbSell=70;pbBuy=35;rrSell=1.3;rrBuy=0.9;outSell=0.55;outBuy=-0.45;phase=-1},
+  Case 'SIDEWAY' 'range-conflict-a' @{m5=1;m1=-1;mom=0.1;paBuy=5;paSell=5;locBuy=2;locSell=2;pbBuy=45;pbSell=45;rrBuy=1.05;rrSell=1.05;outBuy=-0.4;outSell=-0.3}
+  Case 'SIDEWAY' 'range-conflict-b' @{m5=-1;m1=1;mom=-0.12;paBuy=8;paSell=8;locBuy=4;locSell=4;pbBuy=50;pbSell=50;rrBuy=1.05;rrSell=1.05;outBuy=-0.3;outSell=-0.4}
+  Case 'SIDEWAY' 'range-clean-buy' @{m5=1;m1=1;ema5=1;mom=0.3;paBuy=25;locBuy=10;locSell=-8;pbBuy=70;pbSell=35;rrBuy=1.35;rrSell=0.9;outBuy=-0.2;outSell=-0.5;phase=1}
+  Case 'SIDEWAY' 'range-clean-sell' @{m5=-1;m1=-1;ema5=-1;mom=-0.28;paSell=25;locSell=9;locBuy=-8;pbSell=70;pbBuy=35;rrSell=1.3;rrBuy=0.9;outSell=0.55;outBuy=-0.45;phase=-1}
 
-  Case 'FALSE_BREAKOUT' 'fake-up-break' @{h1=1;m30=1;m15=1;m5=1;m1=1;ema5=1;ema15=1;mom=1.4;paBuy=30;locBuy=-16;pbBuy=45;rrBuy=0.75;rrSell=1.5;outBuy=-1.4;outSell=0.9;phase=1},
-  Case 'FALSE_BREAKOUT' 'fake-up-fails' @{h1=1;m30=1;m15=0;m5=-1;m1=-1;ema5=-1;ema15=1;mom=-0.7;paSell=30;locSell=12;locBuy=-10;pbSell=85;pbBuy=25;rrSell=1.6;rrBuy=0.8;outSell=1.1;outBuy=-0.9;weakening=$true;turned=-1},
-  Case 'FALSE_BREAKOUT' 'fake-down-break' @{h1=-1;m30=-1;m15=-1;m5=-1;m1=-1;ema5=-1;ema15=-1;mom=-1.3;paSell=25;locSell=-15;pbSell=45;rrSell=0.8;rrBuy=1.5;outSell=-1.2;outBuy=0.8;phase=-1},
+  Case 'FALSE_BREAKOUT' 'fake-up-break' @{h1=1;m30=1;m15=1;m5=1;m1=1;ema5=1;ema15=1;mom=1.4;paBuy=30;locBuy=-16;pbBuy=45;rrBuy=0.75;rrSell=1.5;outBuy=-1.4;outSell=0.9;phase=1}
+  Case 'FALSE_BREAKOUT' 'fake-up-fails' @{h1=1;m30=1;m15=0;m5=-1;m1=-1;ema5=-1;ema15=1;mom=-0.7;paSell=30;locSell=12;locBuy=-10;pbSell=85;pbBuy=25;rrSell=1.6;rrBuy=0.8;outSell=1.1;outBuy=-0.9;weakening=$true;turned=-1}
+  Case 'FALSE_BREAKOUT' 'fake-down-break' @{h1=-1;m30=-1;m15=-1;m5=-1;m1=-1;ema5=-1;ema15=-1;mom=-1.3;paSell=25;locSell=-15;pbSell=45;rrSell=0.8;rrBuy=1.5;outSell=-1.2;outBuy=0.8;phase=-1}
   Case 'FALSE_BREAKOUT' 'fake-down-fails' @{h1=-1;m30=-1;m15=0;m5=1;m1=1;ema5=1;ema15=-1;mom=0.65;paBuy=30;locBuy=12;locSell=-10;pbBuy=85;pbSell=30;rrBuy=1.6;rrSell=0.8;outBuy=1.0;outSell=-0.8;weakening=$true;turned=1}
 )
 
