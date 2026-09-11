@@ -1,0 +1,192 @@
+name: Apply EA Brain V19 RACE M5
+
+concurrency:
+  group: apply-ea-brain-v19-race-m5
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/upgrade-ea-brain-v19-race-m5.ps1"
+      - ".github/workflows/apply-ea-brain-v19-race-m5.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  compile-publish:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install official MetaTrader 5 build environment
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = "$env:RUNNER_TEMP\mt5setup.exe"
+          $installDir = "C:\SCENOVA-MT5-Build"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://download.terminal.free/cdn/web/metaquotes.ltd/mt5/mt5setup.exe" -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "/auto /path:`"$installDir`"" -Wait
+          $metaEditor = Get-ChildItem -Path $installDir -Filter "metaeditor64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
+          "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Apply Brain V19 M5 one-candle RACE policy
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & ".\scripts\upgrade-ea-brain-v19-race-m5.ps1" -EaPath "mt5\FastBasketBot.mq5"
+
+          $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
+          $patchedText = [System.IO.File]::ReadAllText($mq5Path)
+          if ($patchedText -notmatch '#property\s+version\s+"1\.058"') {
+            throw "Brain V19 patch did not produce EA 1.058"
+          }
+
+          foreach ($sentinel in @(
+            'int RaceM5CandleDirection()',
+            'CopyRates(_Symbol, PERIOD_M5, 1, 1, rates)',
+            'return RaceM5CandleDirection();',
+            'RACE_DIRECTION_LOCK',
+            'RACE_MIXED_BASKET_BLOCK',
+            'RACE_M5_OPPOSITE_CONFIRMED',
+            'RACE_M5_SEVERE_REVERSAL',
+            'RACE_M5_ONE_CANDLE',
+            'RACE_M5_BUY',
+            'RACE_M5_SELL',
+            'int RaceHarvestProfitablePositions()',
+            'RACE_HARVEST_REFILL',
+            'SaaSRace',
+            'if(count > 0 && BasketHasRacePosition())',
+            'if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)',
+            'int direction = AdaptiveEntryDirection(momentum);'
+          )) {
+            if (-not $patchedText.Contains($sentinel)) {
+              throw "Brain V19 sentinel missing: $sentinel"
+            }
+          }
+
+          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV19.mq5"
+          Copy-Item -Force $mq5Path $patchedSource
+          "PATCHED_EA_SOURCE=$patchedSource" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          $sourceDir = "C:\SCENOVA-EA-Source"
+          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
+          $source = Join-Path $sourceDir "FastBasketBot.mq5"
+          Copy-Item -Force $mq5Path $source
+          "EA_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Compile private MQ5 to EX5
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $log = "$env:RUNNER_TEMP\FastBasketBot-compile.log"
+          Start-Process -FilePath "$env:METAEDITOR" -ArgumentList "/compile:`"$env:EA_SOURCE`" /log:`"$log`"" -Wait
+          if (Test-Path $log) { Get-Content $log }
+          $ex5 = [System.IO.Path]::ChangeExtension($env:EA_SOURCE, ".ex5")
+          if (-not (Test-Path $ex5)) { throw "FastBasketBot.ex5 was not produced" }
+          if (Test-Path $log) {
+            $compileLog = Get-Content $log -Raw
+            if ($compileLog -match '(?i)\b[1-9][0-9]*\s+errors?\b') {
+              throw "MetaEditor reported compile errors"
+            }
+          }
+
+          New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
+          Copy-Item -Force $ex5 "mt5\release\FastBasketBot.ex5"
+          $hash = (Get-FileHash -Algorithm SHA256 "mt5\release\FastBasketBot.ex5").Hash.ToLowerInvariant()
+          @{
+            file = "FastBasketBot.ex5"
+            sha256 = $hash
+            eaVersion = "1.058"
+            sourceCommit = "${{ github.sha }}"
+            builtAt = (Get-Date).ToUniversalTime().ToString("o")
+            brain = "V19"
+            policy = "AUTO_ISOLATED_RACE_M5_ONE_CANDLE_SINGLE_SIDE_CYCLE_HARVEST_X2"
+          } | ConvertTo-Json | Set-Content -Encoding UTF8 "mt5\release\manifest.json"
+
+      - name: Publish Brain V19 source artifact and future build policy
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $compiledEx5 = "$env:RUNNER_TEMP\FastBasketBot.ex5"
+          $compiledManifest = "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
+          Copy-Item -Force "mt5\release\FastBasketBot.ex5" $compiledEx5
+          Copy-Item -Force "mt5\release\manifest.json" $compiledManifest
+
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git fetch origin main
+          git reset --hard origin/main
+
+          Copy-Item -Force $env:PATCHED_EA_SOURCE "mt5\FastBasketBot.mq5"
+          New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
+          Copy-Item -Force $compiledEx5 "mt5\release\FastBasketBot.ex5"
+          Copy-Item -Force $compiledManifest "mt5\release\manifest.json"
+
+          # Make the normal EA build workflow V19-aware so future EA changes do
+          # not try to replay the older V17/V18 version patches over EA 1.058.
+          $wfPath = ".github\workflows\build-mt5-ea.yml"
+          $wf = [System.IO.File]::ReadAllText((Resolve-Path $wfPath))
+          if (-not $wf.Contains('scripts/upgrade-ea-brain-v19-race-m5.ps1')) {
+            $wf = $wf.Replace(
+              '      - "scripts/upgrade-ea-brain-v18-race-harvest.ps1"',
+              "      - `"scripts/upgrade-ea-brain-v18-race-harvest.ps1`"`r`n      - `"scripts/upgrade-ea-brain-v19-race-m5.ps1`""
+            )
+          }
+
+          $oldApply = @'
+      - name: Apply Brain V18 RACE continuous profit harvesting
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & ".\scripts\upgrade-ea-brain-v17-race.ps1" `
+            -EaPath "mt5\FastBasketBot.mq5" `
+            -ApiPath "apps\api\src\bot.controller.ts" `
+            -WebPath "apps\web\app\dashboard\page.tsx"
+          & ".\scripts\upgrade-ea-brain-v18-race-harvest.ps1" `
+            -EaPath "mt5\FastBasketBot.mq5"
+'@
+          $newApply = @'
+      - name: Apply Brain V19 RACE M5 one-candle direction lock
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & ".\scripts\upgrade-ea-brain-v19-race-m5.ps1" `
+            -EaPath "mt5\FastBasketBot.mq5"
+'@
+          if ($wf.Contains($oldApply)) {
+            $wf = $wf.Replace($oldApply, $newApply)
+          }
+
+          $wf = $wf.Replace('Brain V18', 'Brain V19')
+          $wf = $wf.Replace('V18 RACE', 'V19 RACE')
+          $wf = $wf.Replace('1\.057', '1\.058')
+          $wf = $wf.Replace('EA 1.057', 'EA 1.058')
+          $wf = $wf.Replace('FastBasketBot-BrainV18.mq5', 'FastBasketBot-BrainV19.mq5')
+          $wf = $wf.Replace('bot.controller-v18.ts', 'bot.controller-v19.ts')
+          $wf = $wf.Replace('dashboard-v18.tsx', 'dashboard-v19.tsx')
+          $wf = $wf.Replace('brain = "V18"', 'brain = "V19"')
+          $wf = $wf.Replace('AUTO_ISOLATED_RACE_CONTINUOUS_WINNER_HARVEST_REFILL', 'AUTO_ISOLATED_RACE_M5_ONE_CANDLE_SINGLE_SIDE_CYCLE_HARVEST_X2')
+          $wf = $wf.Replace('publish EA Brain V18 RACE v1.057', 'publish EA Brain V19 RACE v1.058')
+
+          [System.IO.File]::WriteAllText((Resolve-Path $wfPath), $wf, [System.Text.UTF8Encoding]::new($false))
+
+          git add mt5/FastBasketBot.mq5
+          git add -f mt5/release/FastBasketBot.ex5
+          git add mt5/release/manifest.json
+          git add .github/workflows/build-mt5-ea.yml
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Brain V19 is already current."
+            exit 0
+          }
+          if ($LASTEXITCODE -ne 1) { throw "Could not inspect Brain V19 changes" }
+
+          git commit -m "build: publish EA Brain V19 RACE M5 v1.058 [skip ea build]"
+          git push origin HEAD:main
