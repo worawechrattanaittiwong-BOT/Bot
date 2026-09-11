@@ -39,7 +39,7 @@ jobs:
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Apply Brain V17 isolated RACE mode
-        shell: powershell
+        shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           & ".\scripts\upgrade-ea-brain-v17-race.ps1" `
