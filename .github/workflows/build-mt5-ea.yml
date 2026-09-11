@@ -10,10 +10,7 @@ on:
     branches: [main]
     paths:
       - "mt5/FastBasketBot.mq5"
-      - "scripts/upgrade-ea-brain-v8.ps1"
-      - "scripts/upgrade-ea-brain-v9.ps1"
-      - "scripts/upgrade-ea-brain-v10.ps1"
-      - "scripts/upgrade-ea-brain-v11.ps1"
+      - "scripts/upgrade-ea-brain-v12.ps1"
       - ".github/workflows/build-mt5-ea.yml"
 
 permissions:
@@ -21,6 +18,7 @@ permissions:
 
 jobs:
   compile:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ea build]') }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -40,64 +38,58 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Apply EA Brain V10 policy plus V11 starvation fix and prepare private source
+      - name: Apply Brain V12 direct execution policy and validate
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          & ".\scripts\upgrade-ea-brain-v10.ps1" -Path "mt5\FastBasketBot.mq5"
-          & ".\scripts\upgrade-ea-brain-v11.ps1" -Path "mt5\FastBasketBot.mq5"
+          & ".\scripts\upgrade-ea-brain-v12.ps1" -Path "mt5\FastBasketBot.mq5"
 
           $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
           $patchedText = [System.IO.File]::ReadAllText($mq5Path)
 
-          if ($patchedText -notmatch '#property\s+version\s+"1\.050"') {
-            throw "Brain V11 patch did not produce EA 1.050"
+          if ($patchedText -notmatch '#property\s+version\s+"1\.051"') {
+            throw "Brain V12 patch did not produce EA 1.051"
           }
+
           foreach ($sentinel in @(
-            'BrainV8LocalZoneBlocked',
-            'BrainV8BasketAdverseMove',
-            'BrainV8HandleBasketReversal',
-            'BrainV9ModelConfirmationReady',
-            'BrainV10ApplyTrendPhasePolicy',
-            'BrainV10ContinuationReady',
-            'BrainV10RecentPullbackContinuation',
-            'DOWNTREND_PULLBACK_CONTINUATION',
-            'UPTREND_PULLBACK_CONTINUATION',
-            'STRONG_DOWN_WAIT_PULLBACK_SELL',
-            'STRONG_DOWN_NO_SELL_WAIT_BUY',
-            'STRONG_UP_WAIT_PULLBACK_BUY',
-            'STRONG_UP_NO_BUY_WAIT_SELL',
-            'INSUFFICIENT_TARGET_ROOM',
+            'int BrainV12DirectDirection(double momentum)',
+            'int rawDirection = BrainV12DirectDirection(momentum);',
+            'DIRECT_MOMENTUM',
+            'DIRECT_TREND',
+            'DIRECT_MACRO',
+            'WAITING_DIRECTION',
             'UserDirectionAllows',
-            'USER_DIRECTION_LOCK',
+            'OpenTradingAllowedForDirection',
+            'TradePermissionStatus',
+            'AdaptiveSpreadAllowed',
             'OrderSendWithPriceRetry',
-            'CLOSE_REASON_BRAIN_REVERSAL',
-            'WAITING_CONFIDENCE_EXTREME',
-            'MathMin(6.0, g_consecutiveLosses * 1.5)',
+            'CONTROL_NOT_FRESH',
+            'NO_ACCESS',
             'HttpPostJsonTimeout(url, payload, response, 1200)'
           )) {
             if (-not $patchedText.Contains($sentinel)) {
-              throw "Brain V11 sentinel missing: $sentinel"
+              throw "Brain V12 sentinel missing: $sentinel"
+            }
+          }
+
+          foreach ($forbidden in @(
+            'rawDirection = BrainV10ApplyTrendPhasePolicy(rawDirection, momentum);',
+            'if(!MarketLocationEntryAllowed(rawDirection, false))',
+            'if(!BrainV9ModelConfirmationReady(rawDirection, momentum))',
+            'if(!BrainV8QualityGate(rawDirection, momentum))',
+            'if(!MarketLocationEntryAllowed(direction, false))',
+            'if(!EntryPrecisionReady(direction,momentum,count==0))'
+          )) {
+            if ($patchedText.Contains($forbidden)) {
+              throw "Legacy first-entry hard gate is still active: $forbidden"
             }
           }
 
           if ($patchedText.Contains('StringFind(InpApiBase, "http://") == 0')) {
             throw "Plain HTTP API configuration is still accepted"
           }
-          if ($patchedText.Contains('rawDirection = BrainV8ApplyContrarianPolicy(rawDirection, momentum);')) {
-            throw "Legacy Brain V8 policy still bypasses the direction lock"
-          }
-          if ($patchedText.Contains('rawDirection = BrainV9ApplyExhaustionPolicy(rawDirection, momentum);')) {
-            throw "Legacy Brain V9 policy still bypasses the trend-phase policy"
-          }
-          if ($patchedText.Contains('if(!BrainV8PullbackConfirmationReady(rawDirection, momentum))')) {
-            throw "Legacy global pullback gate still overrides model-aware confirmation"
-          }
-          if ($patchedText.Contains('score -= MathMin(15.0, g_consecutiveLosses * 4.0);')) {
-            throw "Legacy self-locking loss-streak penalty is still present"
-          }
 
-          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV11.mq5"
+          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV12.mq5"
           Copy-Item -Force $mq5Path $patchedSource
           "PATCHED_EA_SOURCE=$patchedSource" | Out-File -FilePath $env:GITHUB_ENV -Append
 
@@ -122,6 +114,7 @@ jobs:
               throw "MetaEditor reported compile errors"
             }
           }
+
           New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
           Copy-Item -Force $ex5 "mt5\release\FastBasketBot.ex5"
           $hash = (Get-FileHash -Algorithm SHA256 "mt5\release\FastBasketBot.ex5").Hash.ToLowerInvariant()
@@ -129,17 +122,18 @@ jobs:
           $versionMatch = [regex]::Match($sourceText, '#property\s+version\s+"([^"]+)"')
           if (-not $versionMatch.Success) { throw "EA #property version was not found" }
           $eaVersion = $versionMatch.Groups[1].Value
+
           @{
             file = "FastBasketBot.ex5"
             sha256 = $hash
             eaVersion = $eaVersion
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
-            brain = "V11"
-            policy = "V10_TREND_PHASE_PLUS_CONFIDENCE_STARVATION_FIX"
+            brain = "V12"
+            policy = "DIRECT_DIRECTION_OPERATIONAL_SAFETY_ONLY"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "mt5\release\manifest.json"
 
-      - name: Publish Brain V11 source and compiled artifact to private repository
+      - name: Publish Brain V12 source and compiled artifact to private repository
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -154,7 +148,7 @@ jobs:
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
-            Write-Host "EA Brain V11 publish attempt $attempt/6"
+            Write-Host "EA Brain V12 publish attempt $attempt/6"
             git fetch origin main
             if ($LASTEXITCODE -ne 0) {
               Start-Sleep -Seconds 2
@@ -163,7 +157,7 @@ jobs:
 
             git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5
             if ($LASTEXITCODE -eq 1) {
-              Write-Host "A newer FastBasketBot.mq5 exists on main; skipping obsolete Brain V11 publish."
+              Write-Host "A newer FastBasketBot.mq5 exists on main; skipping obsolete Brain V12 publish."
               exit 0
             }
             if ($LASTEXITCODE -ne 0) {
@@ -183,7 +177,7 @@ jobs:
             git add mt5/release/manifest.json
             git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "Brain V11 source and artifact are already current."
+              Write-Host "Brain V12 source and artifact are already current."
               $published = $true
               break
             }
@@ -191,8 +185,8 @@ jobs:
               throw "Could not inspect generated EA changes"
             }
 
-            git commit -m "build: publish EA Brain V11 v1.050 [skip ea build]"
-            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V11 EA" }
+            git commit -m "build: publish EA Brain V12 v1.051 [skip ea build]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V12 EA" }
 
             git push origin HEAD:main
             if ($LASTEXITCODE -eq 0) {
@@ -200,10 +194,10 @@ jobs:
               break
             }
 
-            Write-Host "Main moved while publishing Brain V11; retrying..."
+            Write-Host "Main moved while publishing Brain V12; retrying..."
             Start-Sleep -Seconds 2
           }
 
           if (-not $published) {
-            throw "Failed to publish EA Brain V11 after retries"
+            throw "Failed to publish EA Brain V12 after retries"
           }
