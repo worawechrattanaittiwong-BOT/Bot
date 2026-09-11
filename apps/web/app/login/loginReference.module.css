@@ -1,32 +1,194 @@
 .heroCopy{
-  width:min(730px,80%);
-  top:140px;
+  width:min(700px,78%);
+  top:120px;
 }
 .heroCopy h1{
-  max-width:730px;
-  font-size:clamp(44px,3.35vw,58px);
-  line-height:1.03;
+  max-width:700px;
+  font-size:clamp(43px,3.45vw,57px);
+  line-height:1.02;
   letter-spacing:-.045em;
 }
 .heroCopy p{
-  max-width:570px;
+  max-width:550px;
 }
+
 .artScene{
-  right:-42px;
-  bottom:-14px;
-  width:min(735px,72vw);
-  height:735px;
+  right:-38px;
+  bottom:-15px;
+  width:min(748px,72vw);
+  height:742px;
+}
+.artScene::before{
+  content:"";
+  position:absolute;
+  z-index:-6;
+  left:4%;
+  top:2%;
+  width:82%;
+  height:72%;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at 58% 42%,rgba(50,152,255,.24),transparent 31%),
+    radial-gradient(circle at 47% 58%,rgba(35,108,255,.17),transparent 46%);
+  filter:blur(22px);
+  opacity:.95;
+}
+.artScene::after{
+  content:"";
+  position:absolute;
+  z-index:-5;
+  left:-2%;
+  right:-2%;
+  bottom:4%;
+  height:24%;
+  background:
+    linear-gradient(180deg,transparent,rgba(22,93,182,.12)),
+    repeating-linear-gradient(90deg,transparent 0 25px,rgba(68,176,255,.13) 26px 27px,transparent 28px 46px);
+  clip-path:polygon(0 75%,8% 70%,8% 48%,12% 48%,12% 68%,17% 68%,17% 37%,21% 37%,21% 63%,27% 63%,27% 42%,31% 42%,31% 70%,38% 70%,38% 29%,43% 29%,43% 60%,49% 60%,49% 40%,55% 40%,55% 68%,61% 68%,61% 25%,65% 25%,65% 59%,72% 59%,72% 35%,77% 35%,77% 67%,83% 67%,83% 45%,89% 45%,89% 71%,94% 71%,94% 54%,100% 54%,100% 100%,0 100%);
+  opacity:.56;
+  filter:drop-shadow(0 0 10px rgba(52,156,255,.22));
 }
 .mascot{
   right:-1%;
   bottom:-1%;
-  width:96%;
+  width:97%;
   mix-blend-mode:screen;
-  filter:saturate(1.08) contrast(1.07) drop-shadow(0 20px 60px rgba(0,79,190,.48));
-  mask-image:linear-gradient(180deg,rgba(0,0,0,.96) 0,#000 82%,rgba(0,0,0,.72) 93%,transparent 100%);
+  filter:saturate(1.12) contrast(1.09) drop-shadow(0 20px 64px rgba(0,79,190,.52));
+  mask-image:linear-gradient(180deg,rgba(0,0,0,.97) 0,#000 82%,rgba(0,0,0,.76) 93%,transparent 100%);
 }
+
+.hudCluster{
+  position:absolute;
+  z-index:12;
+  top:-72px;
+  right:34px;
+  width:292px;
+  height:205px;
+  pointer-events:none;
+  transform:perspective(900px) rotateY(-5deg) rotateX(1deg);
+  transform-origin:right center;
+}
+.hudPanel{
+  position:absolute;
+  left:0;
+  top:0;
+  width:218px;
+  min-height:165px;
+  padding:15px 16px 14px;
+  border:1px solid rgba(60,158,255,.42);
+  border-radius:12px;
+  background:
+    radial-gradient(circle at 76% 24%,rgba(35,125,255,.12),transparent 34%),
+    linear-gradient(145deg,rgba(9,33,62,.82),rgba(4,15,31,.58));
+  box-shadow:0 17px 45px rgba(0,0,0,.28),0 0 30px rgba(31,134,255,.13),inset 0 0 28px rgba(44,135,255,.045);
+  backdrop-filter:blur(9px);
+}
+.hudHeader{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding-bottom:9px;
+  border-bottom:1px solid rgba(105,179,238,.13);
+  color:#82d6ff;
+  font:700 20px/1 Consolas,"SFMono-Regular",monospace;
+}
+.hudHeader span{
+  width:72px;
+  height:5px;
+  border:1px solid rgba(97,167,226,.19);
+  border-radius:999px;
+}
+.hudRows{
+  display:grid;
+  gap:4px;
+  margin-top:10px;
+  color:#7fb9e3;
+  font:600 8px/1.2 Consolas,"SFMono-Regular",monospace;
+  letter-spacing:.06em;
+}
+.hudChart{
+  position:absolute;
+  right:15px;
+  bottom:15px;
+  display:flex;
+  align-items:flex-end;
+  gap:5px;
+  height:53px;
+}
+.hudChart i{
+  display:block;
+  width:7px;
+  border-radius:1px 1px 0 0;
+  background:linear-gradient(180deg,#70e9ff,#2a8eff);
+  box-shadow:0 0 10px rgba(69,175,255,.35);
+}
+.hudChart i:nth-child(1){height:18px}
+.hudChart i:nth-child(2){height:29px}
+.hudChart i:nth-child(3){height:24px}
+.hudChart i:nth-child(4){height:42px}
+.hudChart i:nth-child(5){height:34px}
+.hudChart i:nth-child(6){height:52px}
+.marketCard{
+  position:absolute;
+  right:0;
+  top:78px;
+  width:82px;
+  height:88px;
+  padding:10px 8px;
+  border:1px solid rgba(59,158,255,.32);
+  border-radius:9px;
+  background:linear-gradient(145deg,rgba(8,31,59,.72),rgba(2,13,28,.48));
+  box-shadow:0 12px 28px rgba(0,0,0,.22),0 0 24px rgba(38,135,255,.08);
+  color:#62b9ff;
+  font:700 6px/1.2 Consolas,"SFMono-Regular",monospace;
+  letter-spacing:.09em;
+  text-align:center;
+  backdrop-filter:blur(7px);
+}
+.marketMap{
+  position:relative;
+  height:42px;
+  margin-top:6px;
+  opacity:.75;
+}
+.marketMap::before,
+.marketMap::after{
+  content:"";
+  position:absolute;
+  border:1px solid rgba(81,174,255,.45);
+  border-radius:50% 45% 55% 40%;
+  box-shadow:13px 2px 0 -5px rgba(66,156,255,.75),27px -3px 0 -5px rgba(66,156,255,.65),40px 4px 0 -6px rgba(66,156,255,.7);
+}
+.marketMap::before{left:9px;top:9px;width:18px;height:12px;transform:rotate(-12deg)}
+.marketMap::after{right:8px;top:14px;width:13px;height:9px;transform:rotate(14deg)}
+.signalTag{
+  position:absolute;
+  z-index:13;
+  top:121px;
+  right:-4px;
+  width:72px;
+  color:#66b7ff;
+  font:700 6px/1.72 Consolas,"SFMono-Regular",monospace;
+  letter-spacing:.17em;
+  text-transform:uppercase;
+  text-align:left;
+  opacity:.88;
+}
+.signalTag::after{
+  content:"";
+  display:block;
+  width:29px;
+  height:1px;
+  margin-top:8px;
+  background:#52dfff;
+  box-shadow:0 0 9px rgba(82,223,255,.7);
+}
+
 .card{
   width:min(548px,100%);
+  border-color:rgba(61,171,255,.58);
+  box-shadow:0 30px 92px rgba(0,0,0,.54),0 0 42px rgba(24,104,220,.12),inset 0 1px rgba(255,255,255,.025);
 }
 .input:-webkit-autofill,
 .input:-webkit-autofill:hover,
@@ -37,16 +199,26 @@
   transition:background-color 9999s ease-out 0s;
 }
 
+@media (min-width:1440px){
+  .heroCopy{top:118px}
+  .artScene{right:-45px;width:min(770px,72vw);height:760px}
+  .hudCluster{top:-78px;right:40px;transform:scale(1.03) perspective(900px) rotateY(-5deg) rotateX(1deg)}
+}
+
 @media (max-width:1240px){
-  .heroCopy{width:min(650px,76%);top:132px}
+  .heroCopy{width:min(650px,76%);top:125px}
   .heroCopy h1{font-size:clamp(40px,4vw,52px)}
   .artScene{right:-70px;width:min(660px,68vw);height:680px}
+  .hudCluster{top:-54px;right:26px;transform:scale(.88);transform-origin:top right}
+  .signalTag{top:112px;right:-12px}
 }
 
 @media (max-width:980px){
   .heroCopy{position:relative;top:auto;width:100%;max-width:700px}
   .heroCopy h1{font-size:clamp(42px,7vw,58px)}
   .artScene{right:-8%;width:68%;height:auto;aspect-ratio:5/6;opacity:.86}
+  .hudCluster{display:none}
+  .signalTag{display:none}
 }
 
 @media (max-width:680px){
