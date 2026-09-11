@@ -5,15 +5,9 @@ import { API_URL } from "../../lib/api";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./login.module.css";
-import { LOGIN_HERO_DATA_URI } from "./loginHero.generated";
 
 const LOGIN_EMAIL_KEY = "scenova_login_email";
-const LOGIN_PAGE_BACKGROUND = {
-  backgroundImage: `url("${LOGIN_HERO_DATA_URI}")`,
-  backgroundSize: "cover",
-  backgroundPosition: "center center",
-  backgroundRepeat: "no-repeat"
-} as const;
+const LOGIN_BACKGROUND_URL = "/assets/scenova-login-landscape-v1.webp";
 
 export default function LoginPage() {
   const [register, setRegister] = useState(false);
@@ -103,7 +97,8 @@ export default function LoginPage() {
 
   if (checkingSession) {
     return (
-      <main className={styles.page} style={LOGIN_PAGE_BACKGROUND}>
+      <main className={styles.page}>
+        <img className={styles.background} src={LOGIN_BACKGROUND_URL} alt="" aria-hidden="true" />
         <section className={styles.sessionCard}>
           <ScenovaBrand className={styles.formLogo} />
           <div className={styles.sessionLoader}><span /> Checking your secure session...</div>
@@ -114,7 +109,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className={styles.page} style={LOGIN_PAGE_BACKGROUND}>
+    <main className={styles.page}>
+      <img className={styles.background} src={LOGIN_BACKGROUND_URL} alt="" aria-hidden="true" />
       <div className={styles.vignette} aria-hidden="true" />
       <a className={styles.skipLink} href="#access-form">Skip to sign in</a>
 
