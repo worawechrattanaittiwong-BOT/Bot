@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/apply-unified-version-1.0.0.yml"
+      - "scripts/unify-release-version-1.0.0.ps1"
 
 permissions:
   contents: write
