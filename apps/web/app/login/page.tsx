@@ -104,7 +104,9 @@ export default function LoginPage() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.gridGlow} aria-hidden="true" />
+      <div className={styles.backdropGrid} aria-hidden="true" />
+      <div className={styles.scanline} aria-hidden="true" />
+
       <div className={styles.shell}>
         <section className={styles.hero} aria-label="SCENOVA secure access">
           <a className={styles.heroBrandLink} href="/" aria-label="SCENOVA home">
@@ -113,48 +115,74 @@ export default function LoginPage() {
 
           <div className={styles.heroCopy}>
             <div className={styles.eyebrow}>INTELLIGENT MT5 AUTOMATION</div>
-            <h1>Secure Access to Your <span>Trading Control Center</span></h1>
+            <h1>
+              Secure Access to Your
+              <span>Trading Control Center</span>
+            </h1>
             <p className={styles.heroLead}>
-              Log in to your SCENOVA account and take full control<br className={styles.desktopOnly} />
-              of your MT5 automation. Manage, monitor, and optimize<br className={styles.desktopOnly} />
-              your trading — all in one powerful platform.
+              Log in to your SCENOVA account and take full control of your MT5 automation.
+              Manage, monitor, and optimize your trading — all in one powerful platform.
             </p>
 
             <div className={styles.featureList}>
               <div className={styles.feature}>
-                <span className={styles.featureIcon}><ScenovaIcon name="trend" size={22} /></span>
+                <span className={styles.featureIcon}><ScenovaIcon name="trend" size={21} /></span>
                 <div><b>Automate Trading</b><small>with Smart EA Systems</small></div>
               </div>
               <div className={styles.feature}>
-                <span className={styles.featureIcon}><ScenovaIcon name="clock" size={22} /></span>
+                <span className={styles.featureIcon}><ScenovaIcon name="clock" size={21} /></span>
                 <div><b>Monitor in Real-Time</b><small>Anytime, Anywhere</small></div>
               </div>
               <div className={styles.feature}>
-                <span className={styles.featureIcon}><ScenovaIcon name="spark" size={22} /></span>
+                <span className={styles.featureIcon}><ScenovaIcon name="spark" size={21} /></span>
                 <div><b>Built for Traders</b><small>Simple. Powerful. Reliable.</small></div>
               </div>
             </div>
           </div>
 
-          <div className={styles.marketBars} aria-hidden="true" />
-          <div className={styles.heroArt} aria-hidden="true">
-            <div className={styles.arcOne} />
-            <div className={styles.arcTwo} />
-            <img className={styles.mascot} src="/assets/scenova-nova-mascot-v1.webp" width={1536} height={1024} alt="" />
+          <div className={styles.artScene} aria-hidden="true">
+            <div className={styles.marketColumns} />
+            <div className={styles.orbitA} />
+            <div className={styles.orbitB} />
+            <div className={styles.horizonGlow} />
+
             <div className={styles.hudCard}>
-              <div className={styles.hudHead}><b>MT5</b><span /></div>
-              <div className={styles.hudBody}><span>CONNECT</span><span>AUTOMATE</span><span>MONITOR</span><span>PROFIT</span></div>
-              <div className={styles.hudChart}><i /><i /><i /><i /><i /></div>
+              <div className={styles.hudTitle}><strong>MT5</strong><i /></div>
+              <div className={styles.hudBody}>
+                <span>CONNECT</span><span>AUTOMATE</span><span>MONITOR</span><span>PROFIT</span>
+              </div>
+              <div className={styles.hudChart}><i /><i /><i /><i /><i /><i /></div>
             </div>
-            <div className={styles.artCaption}>
-              <small>TRADING<br />AUTOMATION<br />A BRIGHTER<br />TOMORROW</small>
+
+            <div className={styles.city}>
+              <i /><i /><i /><i /><i /><i /><i /><i /><i /><i />
             </div>
+            <div className={styles.mountains}><i /><i /><i /></div>
+
+            <img
+              className={styles.mascot}
+              src="/assets/scenova-nova-mascot-v1.webp"
+              width={1536}
+              height={1024}
+              alt=""
+              fetchPriority="high"
+            />
+
+            <div className={styles.partnerPlaque}>
+              <small>SCENOVA</small>
+              <strong>YOUR INTELLIGENT<br />TRADING PARTNER</strong>
+              <span />
+            </div>
+
+            <div className={styles.verticalTag}>TRADING<br />AUTOMATION<br />A BRIGHTER<br />TOMORROW</div>
           </div>
+
           <div className={styles.heroFoot}>DESIGNED FOR YOUR TRADING JOURNEY</div>
         </section>
 
-        <section className={styles.panelWrap}>
+        <section className={styles.panelWrap} aria-label="SCENOVA authentication">
           <div className={styles.precision}>PRECISION IN MOTION.</div>
+
           <div className={styles.card}>
             <a href="/" aria-label="SCENOVA home">
               <ScenovaBrand className={styles.cardBrand} />
@@ -187,7 +215,7 @@ export default function LoginPage() {
                     type="email"
                     autoComplete="email"
                     value={email}
-                    onChange={e=>setEmail(e.target.value)}
+                    onChange={e => setEmail(e.target.value)}
                     placeholder="your@email.com"
                     required
                   />
@@ -205,12 +233,17 @@ export default function LoginPage() {
                     minLength={8}
                     autoComplete={register ? "new-password" : "current-password"}
                     value={password}
-                    onChange={e=>setPassword(e.target.value)}
+                    onChange={e => setPassword(e.target.value)}
                     placeholder={register ? "At least 8 characters" : "Enter your password"}
                     required
                   />
-                  <button className={styles.visibility} type="button" onClick={()=>setShowPassword(v=>!v)} aria-label={showPassword ? "Hide password" : "Show password"}>
-                    <span className={styles.eyeIcon} aria-hidden="true" />
+                  <button
+                    className={styles.visibility}
+                    type="button"
+                    onClick={() => setShowPassword(v => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    <span className={`${styles.eyeIcon} ${showPassword ? styles.eyeOpen : ""}`} aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -218,7 +251,7 @@ export default function LoginPage() {
               {!register && (
                 <div className={styles.formOptions}>
                   <label className={styles.remember}>
-                    <input type="checkbox" checked={rememberEmail} onChange={e=>setRememberEmail(e.target.checked)} />
+                    <input type="checkbox" checked={rememberEmail} onChange={e => setRememberEmail(e.target.checked)} />
                     Remember me
                   </label>
                   <button className={styles.textAction} type="button" onClick={showPasswordRecovery}>Forgot password?</button>
@@ -232,9 +265,11 @@ export default function LoginPage() {
               </button>
 
               <div className={styles.divider}>or</div>
+
               <button className={styles.secondary} type="button" onClick={switchMode}>
                 {register ? "Already have an account? Sign In" : "Create Account"}
               </button>
+
               <a className={styles.back} href="/">←&nbsp;&nbsp; Back to Home</a>
             </form>
 
@@ -256,7 +291,10 @@ export default function LoginPage() {
 
           <div className={styles.securityLine}>
             <ScenovaIcon name="shield" size={17} />
-            <div><span>Protected by SCENOVA secure authentication</span><small>YOUR DATA. OUR PRIORITY.</small></div>
+            <div>
+              <span>Protected by SCENOVA secure authentication</span>
+              <small>YOUR DATA. OUR PRIORITY.</small>
+            </div>
           </div>
         </section>
       </div>
