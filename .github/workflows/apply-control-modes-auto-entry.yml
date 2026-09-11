@@ -1,0 +1,59 @@
+name: Apply Auto Entry Control Modes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/upgrade-control-modes-auto-entry.ps1"
+      - ".github/workflows/apply-control-modes-auto-entry.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-auto-entry-control-modes-main
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Apply control-mode auto-direction patch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "./scripts/upgrade-control-modes-auto-entry.ps1" `
+            -ApiPath "apps/api/src/bot.controller.ts" `
+            -WebPath "apps/web/app/dashboard/page.tsx"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish web/API control-mode update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/api/src/bot.controller.ts apps/web/app/dashboard/page.tsx
+          if git diff --cached --quiet; then
+            echo "Control modes already current."
+            exit 0
+          fi
+          git commit -m "feat: auto-direction entry for every control mode"
+          git push origin HEAD:main
