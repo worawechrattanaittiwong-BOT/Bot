@@ -1,9 +1,9 @@
 ﻿{
-    "builtAt":  "2026-09-11T14:17:04.4251303Z",
+    "builtAt":  "2026-09-11T14:21:32.6019678Z",
     "policy":  "AUTO_ISOLATED_RACE_M5_ONE_CANDLE_SINGLE_SIDE_CYCLE_HARVEST_X2",
     "brain":  "V19",
-    "sha256":  "776e303d9bb820402e19df90cd66a9eb1453f63451cb3c20452facb687848066",
-    "sourceCommit":  "876776e15becdcbe008b1379a6523eb691eeda7a",
+    "sha256":  "5bd892b6bde8b508f48521983e1769be2df137addb28a891985589ab409c969f",
+    "sourceCommit":  "c4bfda85b2c901b1e0d6e39c0243eb33e3cd6ea2",
     "eaVersion":  "1.058",
     "file":  "FastBasketBot.ex5"
 }
