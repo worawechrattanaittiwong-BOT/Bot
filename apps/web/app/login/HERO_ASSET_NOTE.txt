@@ -1,1 +1,0 @@
-SCENOVA login hero cache-bust marker. The runtime hero uses /assets/scenova-login-hero-v4.webp so previous cached 404 responses for v3 cannot suppress the artwork.
