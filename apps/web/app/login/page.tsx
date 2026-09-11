@@ -147,6 +147,35 @@ export default function LoginPage() {
             <div className={styles.orbitA} />
             <div className={styles.orbitB} />
             <div className={styles.horizonGlow} />
+
+            <div className={refStyles.hudCluster}>
+              <div className={refStyles.hudPanel}>
+                <div className={refStyles.hudHeader}>MT5 <span /></div>
+                <div className={refStyles.hudRows}>
+                  <span>CONNECT</span>
+                  <span>AUTOMATE</span>
+                  <span>MONITOR</span>
+                  <span>PROFIT</span>
+                </div>
+                <div className={refStyles.hudChart}>
+                  <i /><i /><i /><i /><i /><i />
+                </div>
+              </div>
+              <div className={refStyles.marketCard}>
+                GLOBAL MARKETS
+                <div className={refStyles.marketMap} />
+              </div>
+            </div>
+
+            <div className={refStyles.signalTag}>
+              FASTER<br />TRADING<br />A BRIGHTER<br />TOMORROW
+            </div>
+
+            <div className={styles.mountains}><i /><i /><i /></div>
+            <div className={styles.city}>
+              <i /><i /><i /><i /><i /><i /><i /><i /><i /><i />
+            </div>
+
             <img
               className={`${styles.mascot} ${refStyles.mascot}`}
               src={LOGIN_HERO_DATA_URI}
@@ -155,12 +184,8 @@ export default function LoginPage() {
               alt=""
               fetchPriority="high"
             />
-            <div className={styles.partnerPlaque}>
-              <small>SCENOVA</small>
-              <strong>YOUR INTELLIGENT<br />TRADING PARTNER</strong>
-              <span />
-            </div>
-            <div className={styles.verticalTag}>TRADING<br />AUTOMATION<br />A BRIGHTER<br />TOMORROW</div>
+
+            <div className={styles.verticalTag}>SCENOVA<br />TRADING<br />AUTOMATION<br />A BRIGHTER<br />TOMORROW</div>
           </div>
 
           <div className={styles.heroFoot}>DESIGNED FOR YOUR TRADING JOURNEY</div>
