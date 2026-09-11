@@ -2,6 +2,8 @@ param(
   [Parameter(Mandatory = $false)]
   [string]$ApiPath = "apps/api/src/bot.controller.ts",
   [Parameter(Mandatory = $false)]
+  [string]$EaApiPath = "apps/api/src/ea.controller.ts",
+  [Parameter(Mandatory = $false)]
   [string]$WebPath = "apps/web/app/dashboard/page.tsx"
 )
 
@@ -26,154 +28,113 @@ function Replace-Required([ref]$textRef, [string]$old, [string]$new, [string]$la
   Write-Host "Applied $label"
 }
 
-function Insert-BeforeRequired([ref]$textRef, [string]$anchor, [string]$block, [string]$sentinel, [string]$label) {
-  if ($textRef.Value.Contains($sentinel)) {
-    Write-Host "$label already applied"
-    return
-  }
-  $index = $textRef.Value.IndexOf($anchor, [System.StringComparison]::Ordinal)
-  if ($index -lt 0) { throw "Patch anchor not found: $label" }
-  $textRef.Value = $textRef.Value.Insert($index, $block + "`r`n")
-  Write-Host "Applied $label"
-}
-
 # ---------------------------------------------------------------------------
-# API: persist the visual/behavioral control mode independently from entryMode.
-# entryMode remains the EA execution direction setting and is AUTO_MOMENTUM for
-# every customer-facing control mode unless a future explicit override exists.
+# Bot API: direction locking is deprecated for every customer-facing mode.
+# Keep accepting legacy clients that still submit BUY_ONLY / SELL_ONLY, but
+# normalize every save to AUTO_MOMENTUM so old UI versions cannot re-lock it.
 # ---------------------------------------------------------------------------
 $api = Read-Utf8 $ApiPath
 $apiRef = [ref]$api
 
-$controlModeBlock = @'
-    if (body.controlMode !== undefined) {
-      const controlMode = String(body.controlMode || "").toUpperCase();
-      if (!["AUTO", "RACE", "ASSISTED", "MANUAL"].includes(controlMode)) {
-        throw new BadRequestException("Control Mode ไม่ถูกต้อง");
-      }
-      clean.controlMode = controlMode;
-    }
+Replace-Required $apiRef @'
+      clean.entryMode = entryMode;
+'@ @'
+      // BUY_ONLY / SELL_ONLY are accepted only for backward compatibility.
+      // All customer-facing control modes now use automatic BUY/SELL analysis.
+      clean.entryMode = "AUTO_MOMENTUM";
+'@ 'normalize saved entryMode to AUTO_MOMENTUM'
 
-'@
-Insert-BeforeRequired $apiRef '    if (body.engineMode !== undefined) {' $controlModeBlock 'body.controlMode !== undefined' 'persist independent controlMode'
 Write-Utf8 $ApiPath $apiRef.Value
 
 # ---------------------------------------------------------------------------
-# Web: every mode uses automatic BUY/SELL analysis. No mode forces BUY_ONLY or
-# SELL_ONLY. controlMode is stored independently so Assisted/Manual remain
-# visually distinct even though entryMode is AUTO_MOMENTUM in all modes.
+# EA heartbeat API: enforce automatic direction at runtime too. This makes any
+# stale BUY_ONLY / SELL_ONLY already stored in bot_settings harmless immediately
+# without requiring the customer to open Settings and save again.
+# ---------------------------------------------------------------------------
+$eaApi = Read-Utf8 $EaApiPath
+$eaApiRef = [ref]$eaApi
+
+$oldSettingsRead = @'
+    const settings = await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+      [instance.id]
+    );
+    const intelligenceStats = await this.basketWinProbability(
+'@
+$newSettingsRead = @'
+    const settings = await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+      [instance.id]
+    );
+    // Runtime contract: every customer-facing mode chooses BUY/SELL itself.
+    // Override stale legacy direction locks before settings reach the EA.
+    const runtimeSettings = {
+      ...(settings?.settings || {}),
+      entryMode: "AUTO_MOMENTUM"
+    };
+    const intelligenceStats = await this.basketWinProbability(
+'@
+Replace-Required $eaApiRef $oldSettingsRead $newSettingsRead 'force heartbeat runtime entryMode AUTO_MOMENTUM'
+
+Replace-Required $eaApiRef @'
+      settings: settings?.settings || {},
+'@ @'
+      settings: runtimeSettings,
+'@ 'send normalized runtime settings to EA'
+
+Write-Utf8 $EaApiPath $eaApiRef.Value
+
+# ---------------------------------------------------------------------------
+# Web: all four modes retain their own behavior, but the direction summary and
+# order-plan UI never expose a BUY/SELL lock. The mode is stored independently.
 # ---------------------------------------------------------------------------
 $web = Read-Utf8 $WebPath
 $webRef = [ref]$web
 
 Replace-Required $webRef @'
-  indicatorV6Mode: "SOFT_WEIGHT",
-  engineMode: "AUTO",
-  entryMode: "AUTO_MOMENTUM"
-};
+  const directionLabel = entryMode === "SELL_ONLY" ? "SELL เท่านั้น" : entryMode === "BUY_ONLY" ? "BUY เท่านั้น" : "EA เลือก BUY / SELL";
 '@ @'
-  indicatorV6Mode: "SOFT_WEIGHT",
-  controlMode: "AUTO",
-  engineMode: "AUTO",
-  entryMode: "AUTO_MOMENTUM"
-};
-'@ 'add controlMode default'
-
-Replace-Required $webRef @'
-  const hasManualExit = profitTargetMode === "MANUAL" || manualSl > 0;
-  const controlMode = engineMode === "RACE" ? "RACE" : entryMode === "AUTO_MOMENTUM" ? "AUTO" : hasManualExit ? "MANUAL" : "ASSISTED";
-  const profitKind = Number(props.settings?.perPositionProfitMoney || 0) > 0 ? "POSITION" : "BASKET";
-'@ @'
-  const hasManualExit = profitTargetMode === "MANUAL" || manualSl > 0;
-  const inferredControlMode = engineMode === "RACE" ? "RACE" : entryMode === "AUTO_MOMENTUM" ? "AUTO" : hasManualExit ? "MANUAL" : "ASSISTED";
-  const requestedControlMode = String(props.settings?.controlMode || inferredControlMode).toUpperCase();
-  const controlMode = ["AUTO","RACE","ASSISTED","MANUAL"].includes(requestedControlMode)
-    ? requestedControlMode
-    : inferredControlMode;
-  const profitKind = Number(props.settings?.perPositionProfitMoney || 0) > 0 ? "POSITION" : "BASKET";
-'@ 'separate controlMode from entry direction'
-
-Replace-Required $webRef @'
-    ASSISTED:{title:"ช่วยตัดสินใจ",subtitle:"คุณกำหนดฝั่ง EA เลือกจุดเข้าและทางออก"},
-    MANUAL:{title:"กำหนดเอง",subtitle:"คุณกำหนดฝั่ง จำนวน Lot เป้ากำไร และ SL"}
-'@ @'
-    ASSISTED:{title:"ช่วยตัดสินใจ",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณเลือกแนวทางบริหารรอบ"},
-    MANUAL:{title:"กำหนดเอง",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณกำหนด Lot เป้ากำไร และ SL"}
-'@ 'explain automatic direction in assisted/manual'
-
-Replace-Required $webRef @'
-  const applyControlMode = (mode:string) => {
-    const fixedDirection = entryMode === "SELL_ONLY" ? "SELL_ONLY" : "BUY_ONLY";
-    props.onEdit?.("confidenceGateEnabled",false);
-    if (mode === "RACE") {
-      props.onEdit?.("engineMode","RACE");
-      props.onEdit?.("entryMode","AUTO_MOMENTUM");
-      props.onEdit?.("profitTargetMode","AUTO");
-      props.onEdit?.("manualStopLossPoints",0);
-      return;
-    }
-    props.onEdit?.("engineMode","AUTO");
-    if (mode === "AUTO") {
-      props.onEdit?.("entryMode","AUTO_MOMENTUM");
-      props.onEdit?.("profitTargetMode","AUTO");
-      props.onEdit?.("manualStopLossPoints",0);
-      return;
-    }
-    props.onEdit?.("entryMode",fixedDirection);
-    if (mode === "ASSISTED") {
-'@ @'
-  const applyControlMode = (mode:string) => {
-    props.onEdit?.("controlMode",mode);
-    props.onEdit?.("confidenceGateEnabled",false);
-    // Every customer-facing mode uses automatic BUY/SELL analysis. Direction
-    // locking is not part of mode selection anymore.
-    props.onEdit?.("entryMode","AUTO_MOMENTUM");
-    if (mode === "RACE") {
-      props.onEdit?.("engineMode","RACE");
-      props.onEdit?.("profitTargetMode","AUTO");
-      props.onEdit?.("manualStopLossPoints",0);
-      return;
-    }
-    props.onEdit?.("engineMode","AUTO");
-    if (mode === "AUTO") {
-      props.onEdit?.("profitTargetMode","AUTO");
-      props.onEdit?.("manualStopLossPoints",0);
-      return;
-    }
-    if (mode === "ASSISTED") {
-'@ 'make every mode auto-direction'
-
-Replace-Required $webRef @'
-                  {controlMode==="AUTO" ?
-                    <div className="cc-bot-v2-field auto-value"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>วิเคราะห์อัตโนมัติ</strong><small>M1 / M5 / M15 / M30 / H1</small></div> :
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="BUY_ONLY">BUY เท่านั้น</option><option value="SELL_ONLY">SELL เท่านั้น</option></select></label>}
-'@ @'
-                  <div className="cc-bot-v2-field auto-value"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>วิเคราะห์ BUY / SELL อัตโนมัติ</strong><small>M1 / M5 / M15 / M30 / H1 · ไม่ล็อกฝั่ง</small></div>
-'@ 'remove BUY/SELL lock selector from every mode'
+  const directionLabel = "EA เลือก BUY / SELL อัตโนมัติ";
+'@ 'make direction summary always automatic'
 
 Write-Utf8 $WebPath $webRef.Value
 
-# Contract checks.
+# ---------------------------------------------------------------------------
+# Contract checks: no customer-facing mode may restore a directional lock.
+# ---------------------------------------------------------------------------
 $finalApi = Read-Utf8 $ApiPath
+$finalEaApi = Read-Utf8 $EaApiPath
 $finalWeb = Read-Utf8 $WebPath
+
 foreach ($sentinel in @(
   'body.controlMode !== undefined',
-  '["AUTO", "RACE", "ASSISTED", "MANUAL"]',
-  'clean.controlMode = controlMode'
+  'clean.controlMode = controlMode',
+  'clean.entryMode = "AUTO_MOMENTUM";'
 )) {
-  if (-not $finalApi.Contains($sentinel)) { throw "API sentinel missing: $sentinel" }
+  if (-not $finalApi.Contains($sentinel)) { throw "Bot API sentinel missing: $sentinel" }
 }
 foreach ($sentinel in @(
-  'controlMode: "AUTO"',
+  'const runtimeSettings = {',
+  'entryMode: "AUTO_MOMENTUM"',
+  'settings: runtimeSettings'
+)) {
+  if (-not $finalEaApi.Contains($sentinel)) { throw "EA API sentinel missing: $sentinel" }
+}
+foreach ($sentinel in @(
   'props.onEdit?.("controlMode",mode)',
   'props.onEdit?.("entryMode","AUTO_MOMENTUM")',
   'วิเคราะห์ BUY / SELL อัตโนมัติ',
-  'ไม่ล็อกฝั่ง'
+  'ไม่ล็อกฝั่ง',
+  'const directionLabel = "EA เลือก BUY / SELL อัตโนมัติ";'
 )) {
   if (-not $finalWeb.Contains($sentinel)) { throw "Web sentinel missing: $sentinel" }
 }
 if ($finalWeb.Contains('props.onEdit?.("entryMode",fixedDirection)')) {
-  throw "Legacy direction lock is still active"
+  throw "Legacy fixedDirection lock is still active"
+}
+if ($finalWeb.Contains('<option value="BUY_ONLY">BUY เท่านั้น</option>') -or
+    $finalWeb.Contains('<option value="SELL_ONLY">SELL เท่านั้น</option>')) {
+  throw "Legacy BUY/SELL selector is still visible in customer control modes"
 }
 
-Write-Host "Control modes now use automatic direction without BUY/SELL mode locking."
+Write-Host "All control modes now use automatic BUY/SELL direction at save, runtime and UI levels."
