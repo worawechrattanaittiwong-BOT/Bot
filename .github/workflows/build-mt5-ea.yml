@@ -10,7 +10,7 @@ on:
     branches: [main]
     paths:
       - "mt5/FastBasketBot.mq5"
-      - "scripts/upgrade-ea-brain-v15.ps1"
+      - "scripts/upgrade-ea-brain-v16.ps1"
       - ".github/workflows/build-mt5-ea.yml"
 
 permissions:
@@ -38,17 +38,17 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Apply Brain V15 balanced basket continuation policy
+      - name: Apply Brain V16 self-healing paced basket policy
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          & ".\scripts\upgrade-ea-brain-v15.ps1" -Path "mt5\FastBasketBot.mq5"
+          & ".\scripts\upgrade-ea-brain-v16.ps1" -Path "mt5\FastBasketBot.mq5"
 
           $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
           $patchedText = [System.IO.File]::ReadAllText($mq5Path)
 
-          if ($patchedText -notmatch '#property\s+version\s+"1\.054"') {
-            throw "Brain V15 patch did not produce EA 1.054"
+          if ($patchedText -notmatch '#property\s+version\s+"1\.055"') {
+            throw "Brain V16 patch did not produce EA 1.055"
           }
 
           foreach ($sentinel in @(
@@ -56,13 +56,19 @@ jobs:
             'bool BrainV13FastWrongEntryCorrection(double momentum)',
             'int rawDirection = BrainV13SmartDirection(momentum);',
             'double BalancedLadderFractionForRung(int rung, int targetPositions)',
-            'bool BrainV15BalancedAddReady(int direction, int count, int targetPositions, double atr)',
-            'V15_BALANCED_ADD_READY',
-            'V15_WAIT_ADD_SPACE',
+            'double BrainV16FillProgressPoints(int direction)',
+            'double BrainV16AnchorProgressPoints(int direction)',
+            'bool BrainV16BasketAdverseMove(int direction, string &reasonOut)',
+            'bool BrainV16BalancedAddReady(',
+            'bool BrainV16RearmExistingBasket()',
+            'V16_PRICE_STEP_READY',
+            'V16_PULLBACK_FILL_READY',
+            'V16_SCHEDULED_FILL_READY',
+            'V16_WAIT_PACING',
+            'V16_WAIT_ADVERSE_DRIFT',
+            'V16_BASKET_FILL_REARMED',
+            'BrainV16RearmExistingBasket();',
             'RESCUE_WARNING_FILL_CONTINUES',
-            'SMART_SETUP_WEIGHTED',
-            'SMART_WEIGHTED_DIRECTION',
-            'RECOVERY_WATCH',
             'FAST_CORRECTION_CONFIRMED',
             'BRAIN_V13_WRONG_ENTRY',
             'UserDirectionAllows',
@@ -75,44 +81,34 @@ jobs:
             'HttpPostJsonTimeout(url, payload, response, 1200)'
           )) {
             if (-not $patchedText.Contains($sentinel)) {
-              throw "Brain V15 sentinel missing: $sentinel"
+              throw "Brain V16 sentinel missing: $sentinel"
             }
           }
 
           foreach ($forbidden in @(
-            'atr*LadderFractionForRung(nextRung)*qualityFactor*regimeFactor*',
-            '1+(int)MathFloor(fillElapsedSeconds/MathMax(15.0,rungCadenceSeconds))',
             'int rawDirection = BrainV12DirectDirection(momentum);',
             'rawDirection = BrainV10ApplyTrendPhasePolicy(rawDirection, momentum);',
             'if(!MarketLocationEntryAllowed(rawDirection, false))',
             'if(!BrainV9ModelConfirmationReady(rawDirection, momentum))',
             'if(!BrainV8QualityGate(rawDirection, momentum))',
             'if(!MarketLocationEntryAllowed(direction, false))',
-            'if(!EntryPrecisionReady(direction,momentum,count==0))'
+            'if(!EntryPrecisionReady(direction,momentum,count==0))',
+            'if(!MarketLocationEntryAllowed(g_burstDirection,true))',
+            'if(!BasketAddLocationAllowed(',
+            'BrainV8BasketAdverseMove(direction, brainV8AddReason)',
+            'BrainV8BasketAdverseMove(direction, brainV8LadderReason)',
+            'if(BrainV15BalancedAddReady(direction,count,targetPositions,atr))'
           )) {
             if ($patchedText.Contains($forbidden)) {
-              throw "Legacy first-entry gate is still active: $forbidden"
+              throw "Legacy gate/pacing path is still active: $forbidden"
             }
-          }
-
-          if ($patchedText.Contains('if(!MarketLocationEntryAllowed(g_burstDirection,true))')) {
-            throw "Continuation MarketLocation veto is still active"
-          }
-          if ($patchedText.Contains('if(!BasketAddLocationAllowed(')) {
-            throw "Continuation BasketAddLocation veto is still active"
-          }
-          if ($patchedText.Contains('if(count > 0 && g_rescueState == RESCUE_WARNING)')) {
-            throw "Rescue warning is still an unconditional basket-fill veto"
-          }
-          if ($patchedText.Contains('g_burstActive=false;\r\n      g_burstNeedsRearm=false;\r\n\r\n      if((g_rescueCombinedProfit>=0.0')) {
-            throw "Rescue warning still clears active basket fill before V15 continuation"
           }
 
           if ($patchedText.Contains('StringFind(InpApiBase, "http://") == 0')) {
             throw "Plain HTTP API configuration is still accepted"
           }
 
-          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV15.mq5"
+          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV16.mq5"
           Copy-Item -Force $mq5Path $patchedSource
           "PATCHED_EA_SOURCE=$patchedSource" | Out-File -FilePath $env:GITHUB_ENV -Append
 
@@ -152,11 +148,11 @@ jobs:
             eaVersion = $eaVersion
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
-            brain = "V15"
-            policy = "SMART_WEIGHTED_ENTRY_FAST_CORRECTION_BALANCED_BASKET_CONTINUATION"
+            brain = "V16"
+            policy = "SMART_ENTRY_FAST_CORRECTION_SELF_HEALING_PACED_BASKET_FILL"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "mt5\release\manifest.json"
 
-      - name: Publish Brain V15 source and compiled artifact to private repository
+      - name: Publish Brain V16 source and compiled artifact to private repository
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -171,7 +167,7 @@ jobs:
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
-            Write-Host "EA Brain V15 publish attempt $attempt/6"
+            Write-Host "EA Brain V16 publish attempt $attempt/6"
             git fetch origin main
             if ($LASTEXITCODE -ne 0) {
               Start-Sleep -Seconds 2
@@ -180,7 +176,7 @@ jobs:
 
             git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5
             if ($LASTEXITCODE -eq 1) {
-              Write-Host "A newer FastBasketBot.mq5 exists on main; skipping obsolete Brain V15 publish."
+              Write-Host "A newer FastBasketBot.mq5 exists on main; skipping obsolete Brain V16 publish."
               exit 0
             }
             if ($LASTEXITCODE -ne 0) {
@@ -200,7 +196,7 @@ jobs:
             git add mt5/release/manifest.json
             git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "Brain V15 source and artifact are already current."
+              Write-Host "Brain V16 source and artifact are already current."
               $published = $true
               break
             }
@@ -208,8 +204,8 @@ jobs:
               throw "Could not inspect generated EA changes"
             }
 
-            git commit -m "build: publish EA Brain V15 v1.054 [skip ea build]"
-            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V15 EA" }
+            git commit -m "build: publish EA Brain V16 v1.055 [skip ea build]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V16 EA" }
 
             git push origin HEAD:main
             if ($LASTEXITCODE -eq 0) {
@@ -217,10 +213,10 @@ jobs:
               break
             }
 
-            Write-Host "Main moved while publishing Brain V15; retrying..."
+            Write-Host "Main moved while publishing Brain V16; retrying..."
             Start-Sleep -Seconds 2
           }
 
           if (-not $published) {
-            throw "Failed to publish Brain V15 after retries"
+            throw "Failed to publish Brain V16 after retries"
           }
