@@ -1568,6 +1568,15 @@ export class BotController {
       }
     }
 
+    if (body.engineMode !== undefined) {
+      const engineMode = String(body.engineMode || "").toUpperCase();
+      if (!["AUTO", "RACE"].includes(engineMode)) {
+        throw new BadRequestException("Engine Mode ไม่ถูกต้อง");
+      }
+      clean.engineMode = engineMode;
+    }
+
+
     if (body.entryMode !== undefined) {
       const entryMode = String(body.entryMode || "");
       if (!["AUTO_MOMENTUM", "BUY_ONLY", "SELL_ONLY"].includes(entryMode)) {

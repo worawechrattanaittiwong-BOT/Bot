@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.055"
-#define SCENOVA_EA_VERSION "1.055"
-#define SCENOVA_PRODUCT_VERSION "2.0.17"
+#property version   "1.056"
+#define SCENOVA_EA_VERSION "1.056"
+#define SCENOVA_PRODUCT_VERSION "2.0.18"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -81,6 +81,9 @@ input int             InpMaxSpreadPoints      = 0;
 input int             InpMinOrderIntervalMs   = 300;
 input int             InpMaxOrdersPerMinute   = 120;
 input ENUM_ENTRY_MODE InpEntryMode            = ENTRY_AUTO_MOMENTUM;
+// AUTO preserves the normal engine exactly. RACE is an isolated high-speed
+// execution mode selected from the web and never changes AUTO entry logic.
+input string          InpEngineMode           = "AUTO";
 
 input int             InpMomentumTicks        = 20;
 input double          InpMomentumEntryPoints  = 8.0;
@@ -173,6 +176,13 @@ int    g_maxSpread;
 int    g_minOrderIntervalMs;
 int    g_maxOrdersPerMinute;
 ENUM_ENTRY_MODE g_entryMode;
+string g_engineMode = "AUTO";
+int    g_raceDirection = 0;
+double g_racePeakProfit = 0.0;
+bool   g_raceProfitArmed = false;
+bool   g_raceRecoveryWatch = false;
+string g_raceState = "IDLE";
+datetime g_raceCycleStartedAt = 0;
 bool   g_adaptiveEngine;
 double g_riskPerOrderPercent;
 bool   g_allowMinimumLotOverride;
@@ -1188,6 +1198,10 @@ int OnInit()
    g_minOrderIntervalMs = InpMinOrderIntervalMs;
    g_maxOrdersPerMinute = InpMaxOrdersPerMinute;
    g_entryMode = InpEntryMode;
+   g_engineMode = InpEngineMode;
+   StringToUpper(g_engineMode);
+   if(g_engineMode != "RACE")
+      g_engineMode = "AUTO";
    g_adaptiveEngine = InpAdaptiveEngine;
    g_riskPerOrderPercent = MathMax(0.01, MathMin(5.0, InpRiskPerOrderPercent));
    g_allowMinimumLotOverride = InpAllowMinimumLotOverride;
@@ -1475,6 +1489,423 @@ double OnTester()
    return capture;
 }
 
+// Brain V17 RACE ------------------------------------------------------------
+// RACE is a separate execution engine. AUTO never calls these functions.
+// Entry scores, confidence, S/R, pullback and model grades are observation
+// only here. The engine chooses a direction from the same live context, then
+// fills to the user Max Positions target subject only to operational controls
+// and explicit risk/exit protections.
+bool RaceModeEnabled()
+{
+   return g_engineMode == "RACE";
+}
+
+bool BasketHasRacePosition()
+{
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
+         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT), "SaaSRace") >= 0)
+         return true;
+   }
+   return false;
+}
+
+void ResetRaceRuntime()
+{
+   g_raceDirection = 0;
+   g_racePeakProfit = 0.0;
+   g_raceProfitArmed = false;
+   g_raceRecoveryWatch = false;
+   g_raceState = "IDLE";
+   g_raceCycleStartedAt = 0;
+}
+
+int RaceFilledUnits()
+{
+   double baseVolume = NormalizeTradeVolume(g_lot);
+   if(baseVolume <= 0.0)
+      return BasketPositionCount();
+
+   double totalVolume = 0.0;
+   int positions = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
+         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+      totalVolume += PositionGetDouble(POSITION_VOLUME);
+      positions++;
+   }
+
+   int volumeUnits = (int)MathRound(totalVolume / baseVolume);
+   return MathMax(positions, MathMax(0, volumeUnits));
+}
+
+int RaceAnalysisDirection(double momentum)
+{
+   // Explicit direction still wins if the user intentionally selected one.
+   if(g_entryMode == ENTRY_BUY_ONLY) return 1;
+   if(g_entryMode == ENTRY_SELL_ONLY) return -1;
+
+   // Weighted direction selection only; there is deliberately NO minimum score
+   // required to trade in RACE mode.
+   int bias = 0;
+   if(momentum > 0.0) bias += 3;
+   else if(momentum < 0.0) bias -= 3;
+   bias += g_trendM1 * 2;
+   bias += g_trendM5 * 3;
+   bias += g_trendM15 * 2;
+   bias += g_emaTrendM5 * 2;
+   bias += g_emaTrendM15 * 2;
+   bias += g_macroTrendDirection * 2;
+
+   if(bias > 0) return 1;
+   if(bias < 0) return -1;
+
+   // Tie-break with the latest closed M1 candle. This is market data, not a
+   // confidence gate, so RACE still gets a deterministic direction.
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, PERIOD_M1, 1, 1, rates) >= 1)
+   {
+      if(rates[0].close > rates[0].open) return 1;
+      if(rates[0].close < rates[0].open) return -1;
+   }
+   return 0;
+}
+
+double RaceMidProgressPoints(int direction)
+{
+   MqlTick tick;
+   double anchor = BasketAnchorEntryPrice(direction);
+   if(anchor <= 0.0 || !SymbolInfoTick(_Symbol, tick))
+      return 0.0;
+   double mid = (tick.bid + tick.ask) * 0.5;
+   return direction > 0
+      ? (mid - anchor) / _Point
+      : (anchor - mid) / _Point;
+}
+
+bool RaceWrongDirectionConfirmed(
+   int direction,
+   double momentum,
+   bool filling,
+   string &reasonOut
+)
+{
+   reasonOut = "NONE";
+   if(direction == 0)
+      return false;
+
+   int opposite = -direction;
+   int confirmations = 0;
+   if(g_trendM1 == opposite) confirmations += 1;
+   if(g_trendM5 == opposite) confirmations += 2;
+   if(g_trendM15 == opposite) confirmations += 2;
+   if(g_emaTrendM5 == opposite) confirmations += 1;
+   if(g_emaTrendM15 == opposite) confirmations += 1;
+   if(g_macroTrendDirection == opposite) confirmations += 1;
+   if((opposite > 0 && momentum > 0.0) ||
+      (opposite < 0 && momentum < 0.0))
+      confirmations += 1;
+
+   double atr = MathMax(
+      10.0,
+      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod)
+   );
+   double progress = RaceMidProgressPoints(direction);
+
+   // While still racing toward Max Positions, only a strong invalidation may
+   // terminate the cycle early. Once full, the exit can react sooner.
+   double adverseThreshold = filling ? atr * 0.45 : atr * 0.22;
+   int requiredConfirmations = filling ? 6 : 5;
+   bool adverse = progress <= -adverseThreshold;
+   bool severe = progress <= -atr * (filling ? 0.75 : 0.50);
+
+   if(adverse && confirmations >= requiredConfirmations)
+   {
+      reasonOut = "RACE_WRONG_DIRECTION_CONFIRMED";
+      return true;
+   }
+   if(severe && confirmations >= MathMax(3, requiredConfirmations - 2))
+   {
+      reasonOut = "RACE_SEVERE_ADVERSE_REVERSAL";
+      return true;
+   }
+   return false;
+}
+
+bool RaceFlowStillRunning(int direction, double momentum)
+{
+   int aligned = 0;
+   if(g_trendM1 == direction) aligned++;
+   if(g_trendM5 == direction) aligned++;
+   if(g_emaTrendM5 == direction) aligned++;
+   if((direction > 0 && momentum > 0.0) ||
+      (direction < 0 && momentum < 0.0))
+      aligned++;
+   return aligned >= 2;
+}
+
+double RaceProfitArmMoney(int filledUnits)
+{
+   // Positive floating P/L already includes spread. This floor simply avoids
+   // closing on microscopic noise while still taking profit quickly.
+   return MathMax(0.10, MathMin(5.00, filledUnits * 0.02));
+}
+
+double RaceGivebackMoney(double peakProfit, double armMoney)
+{
+   return MathMax(
+      0.05,
+      MathMin(MathMax(armMoney, 0.10), peakProfit * 0.25)
+   );
+}
+
+bool RaceCloseCycle(string reason)
+{
+   g_raceState = "CLOSING";
+   g_executionStatus = reason;
+   g_lastCloseReason = reason;
+   bool closed = CloseAllBasket(reason);
+   if(closed)
+      ResetTrail();
+   return closed;
+}
+
+bool ProcessRaceFill(int direction)
+{
+   if(direction == 0)
+      return false;
+
+   int filledUnits = RaceFilledUnits();
+   if(filledUnits >= g_maxPositions)
+   {
+      g_raceState = "FULL";
+      g_executionStatus = "RACE_TARGET_FILLED";
+      return true;
+   }
+
+   if(g_state != STATE_RUNNING || !g_access ||
+      (!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid()))
+   {
+      g_executionStatus = "RACE_CONTROL_NOT_FRESH";
+      return false;
+   }
+   if(TradePermissionStatus() != "OK")
+   {
+      g_executionStatus = "RACE_TRADE_PERMISSION";
+      return false;
+   }
+   if(!CanSendOrder())
+   {
+      g_executionStatus = "RACE_ORDER_RATE_LIMIT";
+      return false;
+   }
+   if(!AdaptiveSpreadAllowed())
+   {
+      g_executionStatus = g_spreadStatus == "EXTREME"
+         ? "RACE_EXTREME_SPREAD" : "RACE_SPREAD_WAIT";
+      return false;
+   }
+   if(!OpenTradingAllowedForDirection(direction))
+   {
+      g_executionStatus = "RACE_SYMBOL_DIRECTION_BLOCKED";
+      return false;
+   }
+
+   // RACE uses the user's configured Lot directly. No adaptive score or risk
+   // sizing calculation is allowed to reduce the requested fill count.
+   g_adaptiveLot = NormalizeTradeVolume(g_lot);
+   if(g_adaptiveLot <= 0.0)
+   {
+      g_executionStatus = "RACE_INVALID_LOT";
+      return false;
+   }
+
+   g_entryModel = "RACE_ANALYSIS";
+   g_entryTrigger = direction > 0 ? "RACE_BUY" : "RACE_SELL";
+   g_entryQuality = "RACE";
+   g_entryQualityScore = 0.0;
+   g_raceDirection = direction;
+   if(g_raceCycleStartedAt <= 0)
+      g_raceCycleStartedAt = TimeCurrent();
+
+   bool accepted = SendMarketOrder(direction);
+   RegisterOrderRequest();
+   if(accepted)
+   {
+      int after = RaceFilledUnits();
+      g_raceState = after >= g_maxPositions ? "FULL" : "FILLING";
+      g_executionStatus = after >= g_maxPositions
+         ? "RACE_TARGET_FILLED"
+         : "RACE_FILLING";
+      Print(
+         "RACE fill accepted direction=",direction,
+         " units=",after,
+         " target=",g_maxPositions,
+         " lot=",DoubleToString(g_adaptiveLot,2)
+      );
+      return true;
+   }
+
+   g_raceState = "FILL_RETRY";
+   return false;
+}
+
+bool StartRaceCycle(double momentum)
+{
+   if(!RaceModeEnabled())
+      return false;
+   if(BasketPositionCount() > 0 || RescuePositionCount() > 0)
+      return false;
+
+   ResetRaceRuntime();
+   RefreshMarketContext(false);
+   int direction = RaceAnalysisDirection(momentum);
+   if(direction == 0)
+   {
+      g_executionStatus = "RACE_WAIT_MARKET_DATA";
+      return false;
+   }
+
+   g_burstActive = false;
+   g_burstNeedsRearm = false;
+   g_burstTargetPositions = 0;
+   return ProcessRaceFill(direction);
+}
+
+bool ManageRaceBasket(double momentum)
+{
+   int positions = BasketPositionCount();
+   if(positions <= 0)
+   {
+      ResetRaceRuntime();
+      return false;
+   }
+
+   if(g_raceState == "CLOSING")
+   {
+      CloseAllBasket("RACE_CLOSE_RETRY");
+      return true;
+   }
+
+   RefreshMarketContext(false);
+   int direction = BasketDirection();
+   if(direction == 0)
+   {
+      g_raceState = "MIXED_BASKET";
+      g_executionStatus = "RACE_MIXED_BASKET";
+      return true;
+   }
+   g_raceDirection = direction;
+
+   int filledUnits = RaceFilledUnits();
+   bool filling = filledUnits < g_maxPositions;
+   double cycleProfit = BasketCycleProfit();
+
+   // Explicit user loss control remains a hard safety boundary in every mode.
+   double lossLimit = EffectiveBasketLossLimit();
+   if(lossLimit > 0.0 && cycleProfit <= -lossLimit)
+   {
+      RaceCloseCycle("RACE_MAX_BASKET_LOSS");
+      return true;
+   }
+
+   string wrongReason = "NONE";
+   if(RaceWrongDirectionConfirmed(direction,momentum,filling,wrongReason))
+   {
+      RaceCloseCycle(wrongReason);
+      return true;
+   }
+
+   // Max Positions means the requested target in RACE mode. Until full, no
+   // profit score/quality/location logic is allowed to stop additional entries.
+   if(filling)
+   {
+      if(cycleProfit < 0.0)
+         g_raceRecoveryWatch = true;
+      g_raceState = "FILLING";
+      ProcessRaceFill(direction);
+      return true;
+   }
+
+   double armMoney = RaceProfitArmMoney(filledUnits);
+
+   // If a dragged cycle was judged recoverable, take the recovered profit
+   // quickly instead of trying to turn it into a long runner.
+   if(g_raceRecoveryWatch)
+   {
+      double recoveryCloseMoney = MathMax(0.02, armMoney * 0.25);
+      if(cycleProfit >= recoveryCloseMoney)
+      {
+         RaceCloseCycle("RACE_RECOVERY_PROFIT");
+         return true;
+      }
+      g_raceState = "RECOVERY_WAIT";
+      g_executionStatus = "RACE_RECOVERY_WAIT";
+      return true;
+   }
+
+   if(cycleProfit >= armMoney)
+   {
+      bool flowing = RaceFlowStillRunning(direction,momentum);
+
+      // Profit arrived but flow is no longer extending: bank it immediately.
+      if(!flowing && !g_raceProfitArmed)
+      {
+         RaceCloseCycle("RACE_QUICK_PROFIT");
+         return true;
+      }
+
+      if(!g_raceProfitArmed)
+      {
+         g_raceProfitArmed = true;
+         g_racePeakProfit = cycleProfit;
+      }
+      if(cycleProfit > g_racePeakProfit)
+         g_racePeakProfit = cycleProfit;
+
+      double giveback = RaceGivebackMoney(g_racePeakProfit, armMoney);
+      if(cycleProfit <= g_racePeakProfit - giveback)
+      {
+         RaceCloseCycle("RACE_PROFIT_GIVEBACK");
+         return true;
+      }
+
+      if(!flowing && cycleProfit > 0.0)
+      {
+         RaceCloseCycle("RACE_FLOW_ENDED_PROFIT");
+         return true;
+      }
+
+      g_raceState = "PROFIT_RUN";
+      g_executionStatus = "RACE_PROFIT_RUN";
+      return true;
+   }
+
+   if(cycleProfit < 0.0)
+   {
+      g_raceRecoveryWatch = true;
+      g_raceState = "RECOVERY_WAIT";
+      g_executionStatus = "RACE_RECOVERY_WAIT";
+      return true;
+   }
+
+   g_raceState = "FULL_WAIT_PROFIT";
+   g_executionStatus = "RACE_FULL_WAIT_PROFIT";
+   return true;
+}
+
 void OnTick()
 {
    UpdateMomentum();
@@ -1534,6 +1965,15 @@ void OnTick()
       RefreshMarketContext(false);
       ManageAdaptiveRescue();
       g_executionStatus = "RESCUE_EXIT";
+      return;
+   }
+
+   // Strict mode ownership: a RACE Basket is always managed by RACE until it
+   // is flat, even if the web switches back to AUTO mid-cycle. Conversely an
+   // AUTO Basket never becomes a RACE Basket just because the setting changed.
+   if(count > 0 && BasketHasRacePosition())
+   {
+      ManageRaceBasket(momentum);
       return;
    }
 
@@ -1830,6 +2270,14 @@ void OnTick()
    if(permissionStatus != "OK")
    {
       g_executionStatus = permissionStatus;
+      return;
+   }
+
+   // RACE starts only from a flat account. AUTO below is intentionally left
+   // untouched and never evaluates this branch unless engineMode=RACE.
+   if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)
+   {
+      StartRaceCycle(momentum);
       return;
    }
 
@@ -3380,6 +3828,12 @@ void ApplySettings(string json)
    g_indicatorActivationStage=IndicatorV6ModeName();
    g_lastAdaptiveEvaluation = 0;
    g_lastIndicatorV6RefreshAt = 0;
+
+   string requestedEngineMode = JsonString(json, "engineMode", "");
+   StringToUpper(requestedEngineMode);
+   if(requestedEngineMode == "AUTO" || requestedEngineMode == "RACE")
+      g_engineMode = requestedEngineMode;
+
 
    string mode = JsonString(json, "entryMode", "");
    if(mode == "BUY_ONLY") g_entryMode = ENTRY_BUY_ONLY;
@@ -12525,9 +12979,9 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    request.volume = g_adaptiveEngine ? g_adaptiveLot : NormalizeTradeVolume(g_lot);
    request.deviation = 30;
    request.type_filling = AllowedFillingMode();
-   request.comment = g_tacticalCountertrendActive
-      ? "SaaSTactical"
-      : "SaaSBasket";
+   request.comment = g_engineMode == "RACE"
+      ? "SaaSRace"
+      : (g_tacticalCountertrendActive ? "SaaSTactical" : "SaaSBasket");
 
    if(direction > 0)
    {

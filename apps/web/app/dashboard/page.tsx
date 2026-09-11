@@ -60,6 +60,7 @@ const defaultSettings = {
   sessionEndHour: 24,
   maxAtrPoints: 0,
   indicatorV6Mode: "SOFT_WEIGHT",
+  engineMode: "AUTO",
   entryMode: "AUTO_MOMENTUM"
 };
 
@@ -1602,7 +1603,7 @@ export default function DashboardPage() {
                     <h2>{metrics.symbol || settings.symbol}</h2>
                     <p>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}<em/>MT5 Expert Advisor</p>
                     <div className="cc-v6-symbol-chips">
-                      <span>{settings.entryMode === "AUTO_MOMENTUM" ? "AUTO SMART" : settings.entryMode}</span>
+                      <span>{String(settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO SMART" : settings.entryMode}</span>
                       <span>{Number(settings.lot||0).toFixed(2)} Lot</span>
                       <span>{configuredMaxPositions} ไม้</span>
                       <HeroTrendChip label="M5" value={metrics.trendM5}/>
@@ -2652,16 +2653,18 @@ function BotSettingsModal(props:any) {
   if (!props.open) return null;
 
   const entryMode = String(props.settings?.entryMode || "AUTO_MOMENTUM");
+  const engineMode = String(props.settings?.engineMode || "AUTO").toUpperCase();
   const profitTargetMode = String(props.settings?.profitTargetMode || "AUTO").toUpperCase();
   const manualSl = Number(props.settings?.manualStopLossPoints || 0);
   const hasManualExit = profitTargetMode === "MANUAL" || manualSl > 0;
-  const controlMode = entryMode === "AUTO_MOMENTUM" ? "AUTO" : hasManualExit ? "MANUAL" : "ASSISTED";
+  const controlMode = engineMode === "RACE" ? "RACE" : entryMode === "AUTO_MOMENTUM" ? "AUTO" : hasManualExit ? "MANUAL" : "ASSISTED";
   const profitKind = Number(props.settings?.perPositionProfitMoney || 0) > 0 ? "POSITION" : "BASKET";
   const suggestedManualSl = String(Math.max(1, Math.round(Number(
     props.systemHardStopDistancePoints || props.hardStopDistancePoints || 1000
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
-    AUTO:{title:"อัตโนมัติ",subtitle:"EA เลือกทิศทาง จุดเข้า และจังหวะปิด"},
+    AUTO:{title:"อัตโนมัติ",subtitle:"EA เลือกทิศทาง จุดเข้า และจังหวะปิดตามระบบปกติ"},
+    RACE:{title:"โหมดซิ่ง",subtitle:"เปิดให้ครบ Max Positions แบบไม่ใช้คะแนนกั้น แล้วบริหารกำไร/การโดนลากแยกจาก AUTO"},
     ASSISTED:{title:"ช่วยตัดสินใจ",subtitle:"คุณกำหนดฝั่ง EA เลือกจุดเข้าและทางออก"},
     MANUAL:{title:"กำหนดเอง",subtitle:"คุณกำหนดฝั่ง จำนวน Lot เป้ากำไร และ SL"}
   };
@@ -2669,6 +2672,14 @@ function BotSettingsModal(props:any) {
   const applyControlMode = (mode:string) => {
     const fixedDirection = entryMode === "SELL_ONLY" ? "SELL_ONLY" : "BUY_ONLY";
     props.onEdit?.("confidenceGateEnabled",false);
+    if (mode === "RACE") {
+      props.onEdit?.("engineMode","RACE");
+      props.onEdit?.("entryMode","AUTO_MOMENTUM");
+      props.onEdit?.("profitTargetMode","AUTO");
+      props.onEdit?.("manualStopLossPoints",0);
+      return;
+    }
+    props.onEdit?.("engineMode","AUTO");
     if (mode === "AUTO") {
       props.onEdit?.("entryMode","AUTO_MOMENTUM");
       props.onEdit?.("profitTargetMode","AUTO");
@@ -2716,6 +2727,7 @@ function BotSettingsModal(props:any) {
             <div className="cc-bot-v2-modes" role="radiogroup" aria-label="รูปแบบการควบคุมบอท">
               {[
                 {id:"AUTO",icon:"brain",tag:"แนะนำ"},
+                {id:"RACE",icon:"status",tag:"เร็วสุด"},
                 {id:"ASSISTED",icon:"target",tag:"กึ่งอัตโนมัติ"},
                 {id:"MANUAL",icon:"settings",tag:"ควบคุมละเอียด"}
               ].map(mode=><button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} className={controlMode===mode.id?"active":""} onClick={()=>applyControlMode(mode.id)}>
