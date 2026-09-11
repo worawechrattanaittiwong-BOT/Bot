@@ -11,6 +11,7 @@ on:
     paths:
       - "mt5/FastBasketBot.mq5"
       - "scripts/upgrade-ea-brain-v17-race.ps1"
+      - "scripts/upgrade-ea-brain-v18-race-harvest.ps1"
       - ".github/workflows/build-mt5-ea.yml"
 
 permissions:
@@ -38,7 +39,7 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Apply Brain V17 isolated RACE mode
+      - name: Apply Brain V18 RACE continuous profit harvesting
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -46,14 +47,16 @@ jobs:
             -EaPath "mt5\FastBasketBot.mq5" `
             -ApiPath "apps\api\src\bot.controller.ts" `
             -WebPath "apps\web\app\dashboard\page.tsx"
+          & ".\scripts\upgrade-ea-brain-v18-race-harvest.ps1" `
+            -EaPath "mt5\FastBasketBot.mq5"
 
           $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
           $patchedText = [System.IO.File]::ReadAllText($mq5Path)
           $apiText = [System.IO.File]::ReadAllText((Resolve-Path "apps\api\src\bot.controller.ts"))
           $webText = [System.IO.File]::ReadAllText((Resolve-Path "apps\web\app\dashboard\page.tsx"))
 
-          if ($patchedText -notmatch '#property\s+version\s+"1\.056"') {
-            throw "Brain V17 patch did not produce EA 1.056"
+          if ($patchedText -notmatch '#property\s+version\s+"1\.057"') {
+            throw "Brain V18 patch did not produce EA 1.057"
           }
 
           foreach ($sentinel in @(
@@ -62,9 +65,14 @@ jobs:
             'int RaceFilledUnits()',
             'int RaceAnalysisDirection(double momentum)',
             'bool RaceWrongDirectionConfirmed(',
+            'int RaceHarvestProfitablePositions()',
             'bool ProcessRaceFill(int direction)',
             'bool StartRaceCycle(double momentum)',
             'bool ManageRaceBasket(double momentum)',
+            'RACE_PROFIT_HARVEST',
+            'RACE_HARVEST_REFILL',
+            'double floatingProfit = BasketProfit();',
+            'if(floatingProfit >= armMoney)',
             'RACE_TARGET_FILLED',
             'RACE_RECOVERY_PROFIT',
             'RACE_PROFIT_GIVEBACK',
@@ -78,7 +86,7 @@ jobs:
             'NO_ACCESS'
           )) {
             if (-not $patchedText.Contains($sentinel)) {
-              throw "Brain V17 sentinel missing: $sentinel"
+              throw "Brain V18 sentinel missing: $sentinel"
             }
           }
 
@@ -92,12 +100,12 @@ jobs:
             throw "Web RACE mode UI was not applied"
           }
 
-          # AUTO isolation contract: the normal AdaptiveEntryDirection path must
-          # remain present and RACE must be entered only through its explicit branch.
+          # AUTO isolation contract: V18 may harvest only SaaSRace positions.
           foreach ($autoSentinel in @(
             'int direction = AdaptiveEntryDirection(momentum);',
             'if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)',
-            'if(count > 0 && BasketHasRacePosition())'
+            'if(count > 0 && BasketHasRacePosition())',
+            'StringFind(PositionGetString(POSITION_COMMENT), "SaaSRace") < 0'
           )) {
             if (-not $patchedText.Contains($autoSentinel)) {
               throw "AUTO/RACE isolation sentinel missing: $autoSentinel"
@@ -108,9 +116,9 @@ jobs:
             throw "Plain HTTP API configuration is still accepted"
           }
 
-          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV17.mq5"
-          $patchedApi = "$env:RUNNER_TEMP\bot.controller-v17.ts"
-          $patchedWeb = "$env:RUNNER_TEMP\dashboard-v17.tsx"
+          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV18.mq5"
+          $patchedApi = "$env:RUNNER_TEMP\bot.controller-v18.ts"
+          $patchedWeb = "$env:RUNNER_TEMP\dashboard-v18.tsx"
           Copy-Item -Force $mq5Path $patchedSource
           Copy-Item -Force "apps\api\src\bot.controller.ts" $patchedApi
           Copy-Item -Force "apps\web\app\dashboard\page.tsx" $patchedWeb
@@ -154,11 +162,11 @@ jobs:
             eaVersion = $eaVersion
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
-            brain = "V17"
-            policy = "AUTO_ISOLATED_RACE_FULL_TARGET_FAST_CYCLE"
+            brain = "V18"
+            policy = "AUTO_ISOLATED_RACE_CONTINUOUS_WINNER_HARVEST_REFILL"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "mt5\release\manifest.json"
 
-      - name: Publish Brain V17 RACE mode and compiled artifact
+      - name: Publish Brain V18 RACE profit harvesting and compiled artifact
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -173,7 +181,7 @@ jobs:
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
-            Write-Host "EA Brain V17 RACE publish attempt $attempt/6"
+            Write-Host "EA Brain V18 RACE publish attempt $attempt/6"
             git fetch origin main
             if ($LASTEXITCODE -ne 0) {
               Start-Sleep -Seconds 2
@@ -185,11 +193,11 @@ jobs:
               apps/api/src/bot.controller.ts `
               apps/web/app/dashboard/page.tsx
             if ($LASTEXITCODE -eq 1) {
-              Write-Host "A newer RACE-related source exists on main; skipping obsolete V17 publish."
+              Write-Host "A newer RACE-related source exists on main; skipping obsolete V18 publish."
               exit 0
             }
             if ($LASTEXITCODE -ne 0) {
-              throw "Could not compare V17 sources with latest main"
+              throw "Could not compare V18 sources with latest main"
             }
 
             git reset --hard origin/main
@@ -209,16 +217,16 @@ jobs:
             git add mt5/release/manifest.json
             git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "Brain V17 RACE source and artifact are already current."
+              Write-Host "Brain V18 RACE source and artifact are already current."
               $published = $true
               break
             }
             if ($LASTEXITCODE -ne 1) {
-              throw "Could not inspect generated V17 changes"
+              throw "Could not inspect generated V18 changes"
             }
 
-            git commit -m "build: publish EA Brain V17 RACE v1.056 [skip ea build]"
-            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V17 RACE changes" }
+            git commit -m "build: publish EA Brain V18 RACE v1.057 [skip ea build]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V18 RACE changes" }
 
             git push origin HEAD:main
             if ($LASTEXITCODE -eq 0) {
@@ -226,10 +234,10 @@ jobs:
               break
             }
 
-            Write-Host "Main moved while publishing Brain V17 RACE; retrying..."
+            Write-Host "Main moved while publishing Brain V18 RACE; retrying..."
             Start-Sleep -Seconds 2
           }
 
           if (-not $published) {
-            throw "Failed to publish Brain V17 RACE after retries"
+            throw "Failed to publish Brain V18 RACE after retries"
           }
