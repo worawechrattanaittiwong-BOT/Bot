@@ -1,0 +1,11 @@
+.mascotMotion{
+  animation:novaDrift 9.5s cubic-bezier(.42,0,.32,1) infinite!important;
+  transform-origin:52% 64%;
+  will-change:transform;
+}
+@keyframes novaDrift{
+  0%,100%{transform:translate3d(0,0,0) rotate(-.12deg) scale(1)}
+  35%{transform:translate3d(2px,-5px,0) rotate(.08deg) scale(1.002)}
+  70%{transform:translate3d(-2px,-8px,0) rotate(.18deg) scale(1.004)}
+}
+@media(prefers-reduced-motion:reduce){.mascotMotion{animation:none!important}}

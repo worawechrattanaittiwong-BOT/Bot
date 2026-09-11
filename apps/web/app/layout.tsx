@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { CustomerNavigationLabels } from "../components/CustomerNavigationLabels";
 import { Mt5AccountSwitchAssistant } from "../components/Mt5AccountSwitchAssistant";
 import { Mt5ManualActionControls } from "../components/Mt5ManualActionControls";
 
@@ -13,6 +14,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="th">
       <body>
         {children}
+        <CustomerNavigationLabels />
         <Mt5AccountSwitchAssistant />
         <Mt5ManualActionControls />
       </body>

@@ -64,7 +64,9 @@ export function Mt5ManualActionControls() {
   const startRecoveryRequested = metrics?.startAfterRepairRequested === true;
   const startRecoveryStatus = String(metrics?.startAfterRepairStatus || "");
   const startRecoveryMessage = String(metrics?.startAfterRepairMessage || "");
-  const recoveryNeeded = isLocal && (needsEaUpdate || !eaOnline || startRecoveryRequested);
+  // When an EA update is required there must be exactly one path that may
+  // restart MT5: the dedicated Update EA button. Recovery remains reconnect-only.
+  const recoveryNeeded = isLocal && !needsEaUpdate && (!eaOnline || startRecoveryRequested);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -100,17 +102,17 @@ export function Mt5ManualActionControls() {
   }, [recoveryNeeded, needsEaUpdate]);
 
   useEffect(() => {
-    if (startRecoveryRequested) {
+    if (startRecoveryRequested && !needsEaUpdate) {
       setError("");
-      setNotice(startRecoveryMessage || "กำลังซ่อม EA / เชื่อม MT5 และจะเริ่มบอทให้อัตโนมัติ");
+      setNotice(startRecoveryMessage || "กำลังเชื่อม MT5 และจะเริ่มบอทให้อัตโนมัติ");
       return;
     }
     if (startRecoveryStatus === "STARTED") {
       setError("");
-      setNotice(startRecoveryMessage || "ซ่อม EA สำเร็จและเริ่มบอทแล้ว");
+      setNotice(startRecoveryMessage || "เชื่อม MT5 สำเร็จและเริ่มบอทแล้ว");
       return;
     }
-    if (startRecoveryStatus === "FAILED") {
+    if (startRecoveryStatus === "FAILED" && !needsEaUpdate) {
       setNotice("");
       setError(startRecoveryMessage || "Auto Recovery ไม่สำเร็จ");
       return;
@@ -119,7 +121,7 @@ export function Mt5ManualActionControls() {
     if (!actionStatus) return;
     if (staleUpdatePending || staleConnectPending) {
       setNotice("");
-      setError("คำสั่งครั้งก่อนหมดเวลารอแล้ว กรุณากดปุ่มอีกครั้ง ระบบจะสร้างคำสั่งใหม่ให้ทันที");
+      setError("คำสั่งครั้งก่อนหมดเวลารอแล้ว ระบบหยุดไว้แล้ว กรุณากดปุ่มอีกครั้งเมื่อต้องการลองใหม่");
       return;
     }
     if (actionStatus === "ACKED") {
@@ -127,7 +129,7 @@ export function Mt5ManualActionControls() {
       setNotice(actionMessage || "ดำเนินการสำเร็จและตรวจการเชื่อมต่อแล้ว");
     } else if (actionStatus === "FAILED") {
       setNotice("");
-      setError(actionMessage || "ดำเนินการกับ MT5 ไม่สำเร็จ กรุณาลองอีกครั้ง");
+      setError(actionMessage || "อัปเดตไม่สำเร็จ ระบบหยุดไว้แล้วและจะไม่รีโหลดซ้ำอัตโนมัติ กรุณากดใหม่เมื่อต้องการลองอีกครั้ง");
     }
   }, [
     actionStatus,
@@ -136,7 +138,8 @@ export function Mt5ManualActionControls() {
     staleConnectPending,
     startRecoveryRequested,
     startRecoveryStatus,
-    startRecoveryMessage
+    startRecoveryMessage,
+    needsEaUpdate
   ]);
 
   function downloadInstaller() {
@@ -152,7 +155,7 @@ export function Mt5ManualActionControls() {
   }
 
   async function requestRecoveryStart() {
-    if (!slotId || busyAction || startRecoveryRequested) return;
+    if (!slotId || busyAction || startRecoveryRequested || needsEaUpdate) return;
     if (positions > 0) {
       setError("มี Position ค้างอยู่ ระบบจะไม่รีสตาร์ท MT5 ระหว่างมีออเดอร์");
       return;
@@ -160,7 +163,7 @@ export function Mt5ManualActionControls() {
     if (installerRequired) {
       downloadInstaller();
       setError("");
-      setNotice(`ดาวน์โหลด SCENOVA ${installerVersion} แล้ว กรุณาเปิดไฟล์ติดตั้ง 1 ครั้ง จากนั้นระบบจะซ่อม EA และเริ่มบอทต่อได้`);
+      setNotice(`ดาวน์โหลด SCENOVA ${installerVersion} แล้ว กรุณาเปิดไฟล์ติดตั้ง 1 ครั้ง จากนั้นจึงเชื่อม MT5 ใหม่`);
       return;
     }
     if (!agentOnline) {
@@ -170,17 +173,17 @@ export function Mt5ManualActionControls() {
 
     setBusyAction("START_RECOVERY");
     setError("");
-    setNotice("กำลังส่งคำสั่ง Auto Recovery...");
+    setNotice("กำลังส่งคำสั่งเชื่อม MT5...");
     try {
       const result = await api(
         "/bot/mt5/recover-start?slotId=" + encodeURIComponent(slotId),
         { method: "POST" }
       );
-      setNotice(String(result?.message || "กำลังซ่อม EA และจะเริ่มบอทให้อัตโนมัติ"));
+      setNotice(String(result?.message || "กำลังเชื่อม MT5 และจะเริ่มบอทให้อัตโนมัติ"));
       await refresh();
     } catch (e: any) {
       setNotice("");
-      setError(String(e?.message || "เริ่ม Auto Recovery ไม่สำเร็จ"));
+      setError(String(e?.message || "เชื่อม MT5 อัตโนมัติไม่สำเร็จ"));
     } finally {
       setBusyAction("");
     }
@@ -197,8 +200,8 @@ export function Mt5ManualActionControls() {
     const confirmed = window.confirm(
       isUpdate
         ? installerRequired
-          ? `อัปเดต SCENOVA ${installerVersion} + EA ตอนนี้? ระบบจะดาวน์โหลด Agent รุ่นใหม่ก่อน และหลังติดตั้งจะรีสตาร์ท MT5 1 ครั้งเพื่อโหลด EA ล่าสุด`
-          : "อัปเดต EA ตอนนี้? ระบบจะหยุดบอทอย่างปลอดภัย แล้วรีสตาร์ท MT5 1 ครั้งเพื่อโหลด EA เวอร์ชันใหม่"
+          ? `อัปเดต SCENOVA ${installerVersion} + EA ตอนนี้? ระบบจะดาวน์โหลด Agent รุ่นใหม่ก่อน และหลังติดตั้งจะรีสตาร์ท MT5 ไม่เกิน 1 ครั้งเพื่อโหลด EA ล่าสุด`
+          : "อัปเดต EA ตอนนี้? ระบบจะหยุดบอทอย่างปลอดภัย แล้วรีสตาร์ท MT5 ไม่เกิน 1 ครั้งเพื่อโหลด EA เวอร์ชันใหม่ หากไม่สำเร็จระบบจะหยุดและไม่ลองซ้ำเอง"
         : "เชื่อมต่อ MT5 ตอนนี้? ระบบอาจเปิดหรือรีสตาร์ท MT5 1 ครั้งเพื่อเชื่อมต่อ EA ใหม่"
     );
     if (!confirmed) return;
@@ -230,7 +233,7 @@ export function Mt5ManualActionControls() {
       );
       setNotice(
         isUpdate && installerRequired
-          ? `ดาวน์โหลด SCENOVA ${installerVersion} แล้ว กรุณาเปิดไฟล์ติดตั้ง ระบบจะรับคำสั่ง EA ต่อให้อัตโนมัติ`
+          ? `ดาวน์โหลด SCENOVA ${installerVersion} แล้ว กรุณาเปิดไฟล์ติดตั้ง จากนั้นกลับมากดอัปเดต EA 1 ครั้ง`
           : String(result?.message || "ส่งคำสั่งแล้ว กำลังดำเนินการ")
       );
       await refresh();
@@ -266,8 +269,9 @@ export function Mt5ManualActionControls() {
                 : `อัปเดต EA v${String(update?.latestEaVersion || "ล่าสุด")}`}
           </button>
           {positions > 0 && <small>ปิดออเดอร์ให้หมดก่อน</small>}
-          {installerRequired && <small>ติดตั้ง Agent รุ่นล่าสุด 1 ครั้ง แล้ว Auto Recovery จะทำต่อเอง</small>}
+          {installerRequired && <small>ติดตั้ง Agent รุ่นล่าสุด 1 ครั้ง แล้วกลับมากดอัปเดต EA</small>}
           {!agentOnline && !installerRequired && <small>Agent ยังไม่ออนไลน์</small>}
+          {!installerRequired && agentOnline && <small>กด 1 ครั้ง = รีโหลด MT5 ไม่เกิน 1 รอบ · ล้มเหลวแล้วจะหยุดรอ</small>}
         </div>,
         updateMount
       )
@@ -290,21 +294,17 @@ export function Mt5ManualActionControls() {
           <span className="scenova-connect-icon">↻</span>
           <b>
             {startRecoveryRequested || busyAction === "START_RECOVERY"
-              ? "กำลังซ่อมและเริ่มบอท"
-              : needsEaUpdate
-                ? "ซ่อม EA + เริ่มบอท"
-                : "เชื่อม MT5 + เริ่มบอท"}
+              ? "กำลังเชื่อมและเริ่มบอท"
+              : "เชื่อม MT5 + เริ่มบอท"}
           </b>
           <small>
             {installerRequired
               ? `ต้องติดตั้ง SCENOVA ${installerVersion} ก่อน`
               : startRecoveryRequested
-                ? "Auto Recovery · ไม่ต้องกดซ้ำ"
-                : needsEaUpdate
-                  ? `EA ${String(update?.currentEaVersion || "—")} → ${String(update?.latestEaVersion || "ล่าสุด")}`
-                  : agentOnline
-                    ? "Auto Connect / Start"
-                    : "Windows Agent Offline"}
+                ? "Auto Connect · ไม่ต้องกดซ้ำ"
+                : agentOnline
+                  ? "Auto Connect / Start"
+                  : "Windows Agent Offline"}
           </small>
         </button>,
         connectMount
