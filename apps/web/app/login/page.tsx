@@ -5,6 +5,7 @@ import { API_URL } from "../../lib/api";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./login.module.css";
+import refStyles from "./loginReference.module.css";
 
 const LOGIN_EMAIL_KEY = "scenova_login_email";
 
@@ -113,7 +114,7 @@ export default function LoginPage() {
             <ScenovaBrand className={styles.heroBrand} />
           </a>
 
-          <div className={styles.heroCopy}>
+          <div className={`${styles.heroCopy} ${refStyles.heroCopy}`}>
             <div className={styles.eyebrow}>INTELLIGENT MT5 AUTOMATION</div>
             <h1>
               Secure Access to Your
@@ -140,13 +141,13 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className={styles.artScene} aria-hidden="true">
+          <div className={`${styles.artScene} ${refStyles.artScene}`} aria-hidden="true">
             <div className={styles.marketColumns} />
             <div className={styles.orbitA} />
             <div className={styles.orbitB} />
             <div className={styles.horizonGlow} />
             <img
-              className={styles.mascot}
+              className={`${styles.mascot} ${refStyles.mascot}`}
               src="/assets/scenova-login-hero-v3.webp"
               width={600}
               height={720}
@@ -167,7 +168,7 @@ export default function LoginPage() {
         <section className={styles.panelWrap} aria-label="SCENOVA authentication">
           <div className={styles.precision}>PRECISION IN MOTION.</div>
 
-          <div className={styles.card}>
+          <div className={`${styles.card} ${refStyles.card}`}>
             <a href="/" aria-label="SCENOVA home">
               <ScenovaBrand className={styles.cardBrand} />
             </a>
@@ -195,7 +196,7 @@ export default function LoginPage() {
                   <span className={styles.inputIcon}><ScenovaIcon name="account" size={18} /></span>
                   <input
                     id="scenova-email"
-                    className={styles.input}
+                    className={`${styles.input} ${refStyles.input}`}
                     type="email"
                     autoComplete="email"
                     value={email}
@@ -212,7 +213,7 @@ export default function LoginPage() {
                   <span className={styles.inputIcon}><ScenovaIcon name="shield" size={18} /></span>
                   <input
                     id="scenova-password"
-                    className={styles.input}
+                    className={`${styles.input} ${refStyles.input}`}
                     type={showPassword ? "text" : "password"}
                     minLength={8}
                     autoComplete={register ? "new-password" : "current-password"}
