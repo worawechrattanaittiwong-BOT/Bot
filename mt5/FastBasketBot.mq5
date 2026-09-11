@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.054"
-#define SCENOVA_EA_VERSION "1.054"
-#define SCENOVA_PRODUCT_VERSION "2.0.16"
+#property version   "1.055"
+#define SCENOVA_EA_VERSION "1.055"
+#define SCENOVA_PRODUCT_VERSION "2.0.17"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -1815,7 +1815,10 @@ void OnTick()
 
    // WARNING pauses only additional positions while Rescue evaluates the open
    // Basket. It is post-entry management, not a first-entry filter.
-   if(count > 0 && g_rescueState == RESCUE_WARNING && !g_burstActive)
+   if(count > 0 &&
+      g_rescueState == RESCUE_WARNING &&
+      !g_burstActive &&
+      (!BasketFillEnabled() || count >= g_maxPositions))
    {
       g_executionStatus = g_rescueOldestAgeSeconds >= RescueTimeThresholdSeconds()
          ? "TIME_RESCUE_WARNING"
@@ -1829,6 +1832,13 @@ void OnTick()
       g_executionStatus = permissionStatus;
       return;
    }
+
+   // V16 self-healing: ProcessBurstQueue can abort on a transient lease or
+   // broker-permission interruption. Once control is healthy again, an open
+   // Basket below Max Positions is automatically re-armed instead of being
+   // stranded forever in BASKET_MANAGING with only one or two positions.
+   if(BasketFillEnabled() && count > 0 && !g_burstActive && count < g_maxPositions)
+      BrainV16RearmExistingBasket();
 
    if(BasketFillEnabled() && g_burstActive)
    {
@@ -1940,6 +1950,7 @@ void OnTimer()
 
    if(MQLInfoInteger(MQL_TESTER))
    {
+      BrainV16RearmExistingBasket();
       ProcessBurstQueue();
       RefreshChartStatus();
       return;
@@ -1953,6 +1964,7 @@ void OnTimer()
       SendHeartbeat();
    }
    FlushPendingBasketJournal();
+   BrainV16RearmExistingBasket();
    ProcessBurstQueue();
    RefreshChartStatus();
 }
@@ -9186,7 +9198,7 @@ bool AdaptiveBasketAddAllowed(int direction)
 {
    int count = BasketPositionCount();
    string brainV8AddReason = "NONE";
-   if(count > 0 && BrainV8BasketAdverseMove(direction, brainV8AddReason))
+   if(count > 0 && BrainV16BasketAdverseMove(direction, brainV8AddReason))
    {
       g_adaptiveBlockReason = brainV8AddReason;
       return false;
@@ -9793,6 +9805,238 @@ bool BasketAddLocationAllowed(
 // and real price separation/progress from the latest filled position.
 // S/R, RSI, pullback, terminal-zone, Entry Precision and continuation-score
 // logic remain telemetry/quality inputs but cannot veto a valid continuation.
+// Brain V16 -----------------------------------------------------------------
+// V15 could still stall at one or two positions for two independent reasons:
+// 1) add/adverse progress used the opposite quote side, so spread looked like
+//    an adverse market move; and 2) a transient lease/permission interruption
+//    could AbortBurst(), after which an existing Basket was never re-armed.
+// V16 uses same-side executable prices, a cumulative adverse guard from the
+// first entry, paced target-aware filling, and self-heals an interrupted burst.
+double BrainV16FillProgressPoints(int direction)
+{
+   MqlTick tick;
+   double lastPrice = LastBasketEntryPrice(direction);
+   if(lastPrice <= 0.0 || !SymbolInfoTick(_Symbol,tick))
+      return 0.0;
+
+   // Compare BUY ask->ask and SELL bid->bid. The broker spread is therefore
+   // not misclassified as favorable/adverse market movement.
+   return direction > 0
+      ? (tick.ask - lastPrice) / _Point
+      : (lastPrice - tick.bid) / _Point;
+}
+
+double BrainV16AnchorProgressPoints(int direction)
+{
+   MqlTick tick;
+   double anchor = BasketAnchorEntryPrice(direction);
+   if(anchor <= 0.0 || !SymbolInfoTick(_Symbol,tick))
+      return 0.0;
+
+   return direction > 0
+      ? (tick.ask - anchor) / _Point
+      : (anchor - tick.bid) / _Point;
+}
+
+bool BrainV16BasketAdverseMove(int direction, string &reasonOut)
+{
+   reasonOut = "NONE";
+   if(direction == 0)
+      return false;
+
+   double atr = MathMax(
+      10.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)
+   );
+   double lastProgress = BrainV16FillProgressPoints(direction);
+   double anchorProgress = BrainV16AnchorProgressPoints(direction);
+   double momentum = MomentumPoints();
+   bool oppositeCandle = BrainV8ConfirmationCandleReady(-direction);
+   bool oppositeMomentum = MomentumSupportsDirection(-direction,momentum,0.22);
+   string lowerState = LowerTimeframeStateForDirection(direction);
+
+   // A micro reversal alone is not enough to freeze a 20/50/100-position
+   // Basket. It must coincide with real same-side adverse displacement.
+   bool meaningfulAdverse =
+      anchorProgress <= -atr * 0.08 ||
+      lastProgress <= -atr * 0.05;
+   bool severeAdverse = anchorProgress <= -atr * 0.22;
+   bool confirmedLowerReversal =
+      lowerState == "REVERSAL" &&
+      anchorProgress <= -atr * 0.05 &&
+      (oppositeCandle || oppositeMomentum);
+   bool confirmedOppositeFlow =
+      oppositeCandle && oppositeMomentum && meaningfulAdverse;
+
+   if(severeAdverse && (oppositeCandle || oppositeMomentum))
+   {
+      reasonOut = "V16_SEVERE_ADVERSE_STOP";
+      return true;
+   }
+   if(confirmedLowerReversal)
+   {
+      reasonOut = "V16_CONFIRMED_LOWER_REVERSAL";
+      return true;
+   }
+   if(confirmedOppositeFlow)
+   {
+      reasonOut = "V16_CONFIRMED_OPPOSITE_FLOW";
+      return true;
+   }
+   return false;
+}
+
+bool BrainV16BalancedAddReady(
+   int direction,
+   int count,
+   int targetPositions,
+   double atr
+)
+{
+   if(direction == 0 || count <= 0 || count >= targetPositions)
+      return false;
+
+   MqlTick tick;
+   double lastEntry = LastBasketEntryPrice(direction);
+   if(lastEntry <= 0.0 || !SymbolInfoTick(_Symbol,tick))
+   {
+      g_ladderMode = "V16_NO_TICK";
+      g_fillBlockReason = "V16_NO_TICK";
+      return false;
+   }
+
+   double progress = BrainV16FillProgressPoints(direction);
+   double currentSameSide = direction > 0 ? tick.ask : tick.bid;
+   double betterPricePoints = direction > 0
+      ? (lastEntry - currentSameSide) / _Point
+      : (currentSameSide - lastEntry) / _Point;
+
+   // Large user targets need denser rungs. This is still price-separated when
+   // the market is moving, but no longer requires 100 independent large moves.
+   double targetScale = targetPositions >= 80 ? 0.010 :
+                        targetPositions >= 50 ? 0.014 :
+                        targetPositions >= 20 ? 0.020 : 0.035;
+   double requiredProgress = MathMax(
+      targetPositions >= 20 ? 2.0 : 3.0,
+      atr * targetScale
+   );
+
+   bool favorableStep = progress >= requiredProgress;
+   bool modestPullback =
+      betterPricePoints >= MathMax(2.0,atr * 0.018) &&
+      betterPricePoints <= MathMax(4.0,atr * 0.20);
+
+   // Target-aware schedule. For a 100-position test the Basket can progress to
+   // the configured ceiling over roughly eight minutes when the market remains
+   // stable, instead of waiting for a fresh 2-3 point move for every position.
+   double fillWindowSeconds = targetPositions >= 80 ? 480.0 :
+                              targetPositions >= 50 ? 360.0 :
+                              targetPositions >= 20 ? 240.0 : 0.0;
+   bool scheduleBehind = false;
+   bool stableForScheduledFill = false;
+   if(fillWindowSeconds > 0.0 && g_burstStartedAt > 0)
+   {
+      double elapsed = MathMax(
+         0.0,
+         (double)(TimeCurrent() - g_burstStartedAt)
+      );
+      double cadence = fillWindowSeconds /
+         (double)MathMax(1,targetPositions - 1);
+      int expected = MathMin(
+         targetPositions,
+         1 + (int)MathFloor(elapsed / MathMax(1.0,cadence))
+      );
+      g_fillExpectedPositions = expected;
+      g_fillUrgency = MathMax(
+         0.0,
+         MathMin(1.0,elapsed / fillWindowSeconds)
+      );
+      scheduleBehind = count < expected;
+
+      // Scheduled fill is allowed only while the latest fill has not moved
+      // meaningfully against us. Cumulative adverse movement is independently
+      // guarded by BrainV16BasketAdverseMove() from the first Basket entry.
+      double scheduledAdverseBand = MathMax(2.0,atr * 0.025);
+      stableForScheduledFill = progress >= -scheduledAdverseBand;
+   }
+
+   if(favorableStep)
+   {
+      g_ladderMode = "V16_PRICE_STEP_READY";
+      g_fillBlockReason = "NONE";
+      g_ladderRequiredPoints = requiredProgress;
+      return true;
+   }
+
+   if(modestPullback)
+   {
+      g_ladderMode = "V16_PULLBACK_FILL_READY";
+      g_fillBlockReason = "NONE";
+      g_ladderRequiredPoints = requiredProgress;
+      return true;
+   }
+
+   if(targetPositions >= 20 && scheduleBehind && stableForScheduledFill)
+   {
+      g_ladderMode = "V16_SCHEDULED_FILL_READY";
+      g_fillBlockReason = "NONE";
+      g_ladderRequiredPoints = requiredProgress;
+      return true;
+   }
+
+   g_ladderRequiredPoints = requiredProgress;
+   if(scheduleBehind && !stableForScheduledFill)
+   {
+      g_ladderMode = "V16_WAIT_ADVERSE_DRIFT";
+      g_fillBlockReason = "V16_WAIT_ADVERSE_DRIFT";
+   }
+   else
+   {
+      g_ladderMode = "V16_WAIT_PACING";
+      g_fillBlockReason = "V16_WAIT_PACING";
+   }
+   return false;
+}
+
+bool BrainV16RearmExistingBasket()
+{
+   if(!BasketFillEnabled() || g_burstActive)
+      return false;
+
+   int count = BasketPositionCount();
+   if(count <= 0 || count >= g_maxPositions)
+      return false;
+   if(g_state != STATE_RUNNING || !g_access)
+      return false;
+   if(!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid())
+      return false;
+   if(TradePermissionStatus() != "OK")
+      return false;
+
+   int direction = BasketDirection();
+   if(direction == 0)
+      return false;
+
+   datetime originalStartedAt = g_burstStartedAt;
+   ArmBurst(direction);
+   if(originalStartedAt > 0)
+      g_burstStartedAt = originalStartedAt;
+   g_burstRequestsSent = count;
+
+   if(g_burstActive)
+   {
+      g_executionStatus = "V16_BASKET_FILL_REARMED";
+      g_fillBlockReason = "NONE";
+      Print(
+         "V16 basket fill rearmed count=",count,
+         " max=",g_maxPositions,
+         " target=",g_burstTargetPositions
+      );
+      return true;
+   }
+   return false;
+}
+
 bool BrainV15BalancedAddReady(int direction, int count, int targetPositions, double atr)
 {
    if(direction == 0 || count <= 0 || count >= targetPositions)
@@ -9837,7 +10081,7 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
    g_ladderProgressPoints = MathMax(0.0,BasketProgressFromAnchorPoints(direction));
    g_fillBlockReason = "NONE";
    string brainV8LadderReason = "NONE";
-   if(BrainV8BasketAdverseMove(direction, brainV8LadderReason))
+   if(BrainV16BasketAdverseMove(direction, brainV8LadderReason))
    {
       g_fillBlockReason = brainV8LadderReason;
       g_ladderMode = "ADVERSE_STOP";
@@ -9942,9 +10186,9 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       MathMin(atr*pullbackFactor,MathMax(2.0,g_ladderRequiredPoints*0.35))
    );
 
-   // V15: do not run the old add-entry intelligence gauntlet. The first entry
-   // remains smart; continuation adds are governed by balanced price spacing.
-   if(BrainV15BalancedAddReady(direction,count,targetPositions,atr))
+   // V16: continuation is target-aware, spread-neutral and paced. First-entry
+   // intelligence remains unchanged; the Basket no longer stalls at 1-2 fills.
+   if(BrainV16BalancedAddReady(direction,count,targetPositions,atr))
       return true;
    return false;
 
@@ -10115,7 +10359,10 @@ void ArmBurst(int direction)
    EnsureBurstTargets(g_burstTargetPositions);
    Print(
       "Basket fill armed direction=", direction,
-      " target=", DoubleToString(g_burstTargetMoney, 2),
+      " positions=", BasketPositionCount(),
+      " max=", g_maxPositions,
+      " targetPositions=", g_burstTargetPositions,
+      " targetMoney=", DoubleToString(g_burstTargetMoney, 2),
       " loss=", DoubleToString(g_burstLossMoney, 2)
    );
 }
