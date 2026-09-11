@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.051"
-#define SCENOVA_EA_VERSION "1.051"
-#define SCENOVA_PRODUCT_VERSION "2.0.13"
+#property version   "1.052"
+#define SCENOVA_EA_VERSION "1.052"
+#define SCENOVA_PRODUCT_VERSION "2.0.14"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -111,7 +111,7 @@ input double          InpMaxAtrPoints          = 0.0;
 // never decide whether the first trade is permitted.
 input bool            InpAdaptiveRescueEngine  = true;
 input double          InpRescueMaxHedgeRatio   = 0.65;
-input int             InpTimeRescueMinutes     = 20;
+input int             InpTimeRescueMinutes     = 5;
 input bool            InpShowEmaOnChart        = true;
 
 // Indicator Intelligence V6. SHADOW only observes; SOFT_WEIGHT is the default
@@ -1568,6 +1568,10 @@ void OnTick()
       if(!tacticalBasket && BrainV8HandleBasketReversal(momentum))
          return;
 
+      // Brain V13: first protect an entry that is objectively wrong. This is
+      // not an entry gate; it only manages an already-open Basket.
+      if(!tacticalBasket && BrainV13FastWrongEntryCorrection(momentum))
+         return;
       bool rescueManaging = tacticalBasket ? false : ManageAdaptiveRescue();
       if(g_rescueState == RESCUE_ACTIVE ||
          g_rescueState == RESCUE_RECOVERY ||
@@ -8760,6 +8764,144 @@ int BrainV12DirectDirection(double momentum)
    return 0;
 }
 
+// Brain V13 ----------------------------------------------------------------
+// Smart entry without entry starvation:
+// - All market intelligence contributes WEIGHT, never a first-entry veto.
+// - Setup, momentum, trend, EMA, DI/ADX, macro, RSI and supply/demand vote.
+// - If evidence is mixed, momentum/macro/M5 provides a deterministic fallback.
+// - A genuinely wrong entry is corrected early from adverse excursion plus
+//   opposite market evidence; ordinary noise is left to Adaptive Rescue.
+int BrainV13SmartDirection(double momentum)
+{
+   double buyScore = 0.0;
+   double sellScore = 0.0;
+
+   int setupDirection = SetupFirstDirection(momentum);
+   if(setupDirection > 0) buyScore += 30.0;
+   else if(setupDirection < 0) sellScore += 30.0;
+
+   double momentumBase = MathMax(2.0, g_adaptiveMomentumThreshold);
+   double momentumWeight = MathMin(28.0, MathAbs(momentum) / momentumBase * 22.0);
+   if(momentum > 0.0) buyScore += momentumWeight;
+   else if(momentum < 0.0) sellScore += momentumWeight;
+
+   if(g_trendM1 > 0) buyScore += 8.0; else if(g_trendM1 < 0) sellScore += 8.0;
+   if(g_trendM5 > 0) buyScore += 14.0; else if(g_trendM5 < 0) sellScore += 14.0;
+   if(g_trendM15 > 0) buyScore += 12.0; else if(g_trendM15 < 0) sellScore += 12.0;
+   if(g_emaTrendM5 > 0) buyScore += 10.0; else if(g_emaTrendM5 < 0) sellScore += 10.0;
+   if(g_emaTrendM15 > 0) buyScore += 8.0; else if(g_emaTrendM15 < 0) sellScore += 8.0;
+
+   if(g_macroTrendDirection > 0) buyScore += 16.0;
+   else if(g_macroTrendDirection < 0) sellScore += 16.0;
+
+   if(g_plusDiM5 > g_minusDiM5 && g_adxM5 >= 18.0) buyScore += 8.0;
+   else if(g_minusDiM5 > g_plusDiM5 && g_adxM5 >= 18.0) sellScore += 8.0;
+
+   // Location/oscillator intelligence is advisory only. It can improve which
+   // side wins the vote, but it can never turn both sides into NO TRADE.
+   if(g_rsiM1 >= 74.0 || g_rsiM5 >= 76.0)
+   {
+      buyScore -= 6.0;
+      sellScore += 3.0;
+   }
+   else if(g_rsiM1 <= 26.0 || g_rsiM5 <= 24.0)
+   {
+      sellScore -= 6.0;
+      buyScore += 3.0;
+   }
+
+   if(g_supplyZoneScore >= 70.0) buyScore -= 5.0;
+   if(g_demandZoneScore >= 70.0) sellScore -= 5.0;
+
+   int direction = 0;
+   double edge = buyScore - sellScore;
+   if(edge > 1.0) direction = 1;
+   else if(edge < -1.0) direction = -1;
+   else if(momentum > 0.0) direction = 1;
+   else if(momentum < 0.0) direction = -1;
+   else if(g_macroTrendDirection != 0) direction = g_macroTrendDirection;
+   else if(g_trendM5 != 0) direction = g_trendM5;
+   else if(g_trendM1 != 0) direction = g_trendM1;
+
+   if(direction == 0)
+   {
+      g_entryModel = "NONE";
+      g_entryTrigger = "NONE";
+      g_entryBias = "BOTH";
+      g_adaptiveBlockReason = "WAITING_DIRECTION";
+      return 0;
+   }
+
+   g_entryModel = setupDirection == direction
+      ? "SMART_SETUP_WEIGHTED"
+      : "SMART_WEIGHTED_DIRECTION";
+   g_entryTrigger = direction > 0 ? "SMART_BUY" : "SMART_SELL";
+   g_entryBias = direction > 0 ? "BUY" : "SELL";
+   g_adaptiveBlockReason = "";
+   return EnforceUserDirectionLock(direction);
+}
+
+bool BrainV13FastWrongEntryCorrection(double momentum)
+{
+   int count = BasketPositionCount();
+   if(count <= 0)
+      return false;
+
+   int direction = BasketDirection();
+   if(direction == 0)
+      return false;
+
+   double atrPoints = MathMax(
+      10.0,
+      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod)
+   );
+   double progress = BasketFavorableProgressPoints(direction);
+
+   // Ignore normal noise. Recovery only arms after a meaningful adverse move.
+   if(progress > -atrPoints * 0.12)
+      return false;
+
+   int opposite = -direction;
+   int oppositeVotes = 0;
+   if(MomentumSupportsDirection(opposite, momentum, 0.18)) oppositeVotes++;
+   if(g_trendM1 == opposite) oppositeVotes++;
+   if(g_trendM5 == opposite) oppositeVotes++;
+   if(g_emaTrendM5 == opposite) oppositeVotes++;
+   if(g_macroTrendDirection == opposite) oppositeVotes++;
+   if(BrainV8ConfirmationCandleReady(opposite)) oppositeVotes++;
+
+   bool severeAdverse = progress <= -atrPoints * 0.35;
+   bool confirmedWrong = oppositeVotes >= 4 || (severeAdverse && oppositeVotes >= 3);
+
+   if(!confirmedWrong)
+   {
+      if(progress <= -atrPoints * 0.18)
+      {
+         g_executionStatus = "RECOVERY_WATCH";
+         g_fillBlockReason = "WRONG_ENTRY_WATCH";
+      }
+      return false;
+   }
+
+   // Do not martingale into a thesis that has already failed. Close the wrong
+   // Basket; on the next tick Brain V13 re-scores the market and may enter the
+   // opposite side immediately if that direction is still real.
+   g_burstActive = false;
+   g_burstNeedsRearm = false;
+   g_fillBlockReason = "FAST_CORRECTION_EXIT";
+   g_reversalStatus = "FAST_CORRECTION_CONFIRMED";
+   g_executionStatus = "FAST_CORRECTION_EXIT";
+   g_lastCloseReason = "BRAIN_V13_WRONG_ENTRY";
+
+   bool closed = CloseAllBasket("BRAIN_V13_WRONG_ENTRY");
+   if(closed)
+   {
+      ResetTrail();
+      ClearMarketRearm();
+   }
+   return closed;
+}
+
 int AdaptiveEntryDirection(double momentum)
 {
    g_minimumLotOverrideActive = false;
@@ -8850,7 +8992,7 @@ int AdaptiveEntryDirection(double momentum)
    // Brain V12: take the real market direction directly. Setup intelligence is
    // preferred, but no price-location or pullback policy is allowed to turn a
    // valid BUY/SELL direction back into zero.
-   int rawDirection = BrainV12DirectDirection(momentum);
+   int rawDirection = BrainV13SmartDirection(momentum);
    g_marketRegimeDetail = DetailedMarketRegime(momentum, rawDirection);
 
    if(rawDirection == 0)
