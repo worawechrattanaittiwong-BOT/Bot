@@ -12,6 +12,7 @@ on:
       - "mt5/FastBasketBot.mq5"
       - "scripts/upgrade-ea-brain-v17-race.ps1"
       - "scripts/upgrade-ea-brain-v18-race-harvest.ps1"
+      - "scripts/upgrade-ea-brain-v19-scalp-reversal.ps1"
       - ".github/workflows/build-mt5-ea.yml"
 
 permissions:
@@ -39,7 +40,7 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Apply Brain V18 RACE continuous profit harvesting
+      - name: Apply Brain V19 AUTO scalp pullback reversal
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -49,14 +50,16 @@ jobs:
             -WebPath "apps\web\app\dashboard\page.tsx"
           & ".\scripts\upgrade-ea-brain-v18-race-harvest.ps1" `
             -EaPath "mt5\FastBasketBot.mq5"
+          & ".\scripts\upgrade-ea-brain-v19-scalp-reversal.ps1" `
+            -Path "mt5\FastBasketBot.mq5"
 
           $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
           $patchedText = [System.IO.File]::ReadAllText($mq5Path)
           $apiText = [System.IO.File]::ReadAllText((Resolve-Path "apps\api\src\bot.controller.ts"))
           $webText = [System.IO.File]::ReadAllText((Resolve-Path "apps\web\app\dashboard\page.tsx"))
 
-          if ($patchedText -notmatch '#property\s+version\s+"1\.057"') {
-            throw "Brain V18 patch did not produce EA 1.057"
+          if ($patchedText -notmatch '#property\s+version\s+"1\.058"') {
+            throw "Brain V19 patch did not produce EA 1.058"
           }
 
           foreach ($sentinel in @(
@@ -83,10 +86,18 @@ jobs:
             'AdaptiveSpreadAllowed',
             'OrderSendWithPriceRetry',
             'CONTROL_NOT_FRESH',
-            'NO_ACCESS'
+            'NO_ACCESS',
+            'int BrainV19ContextScore(int direction)',
+            'bool BrainV19RecentDrive(int direction, double momentum)',
+            'bool BrainV19M1TurnReady(int direction)',
+            'bool BrainV19ScalpReversalReady(int direction, double momentum)',
+            'int BrainV19ScalpDirection(double momentum)',
+            'WAIT_DIP_BUY_CONFIRM',
+            'WAIT_RALLY_SELL_CONFIRM',
+            'int rawDirection = BrainV19ScalpDirection(momentum);'
           )) {
             if (-not $patchedText.Contains($sentinel)) {
-              throw "Brain V18 sentinel missing: $sentinel"
+              throw "Brain V19 sentinel missing: $sentinel"
             }
           }
 
@@ -100,7 +111,8 @@ jobs:
             throw "Web RACE mode UI was not applied"
           }
 
-          # AUTO isolation contract: V18 may harvest only SaaSRace positions.
+          # AUTO/RACE isolation contract: V19 changes AUTO direction only;
+          # V18 harvesting remains limited to SaaSRace positions.
           foreach ($autoSentinel in @(
             'int direction = AdaptiveEntryDirection(momentum);',
             'if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)',
@@ -116,9 +128,9 @@ jobs:
             throw "Plain HTTP API configuration is still accepted"
           }
 
-          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV18.mq5"
-          $patchedApi = "$env:RUNNER_TEMP\bot.controller-v18.ts"
-          $patchedWeb = "$env:RUNNER_TEMP\dashboard-v18.tsx"
+          $patchedSource = "$env:RUNNER_TEMP\FastBasketBot-BrainV19.mq5"
+          $patchedApi = "$env:RUNNER_TEMP\bot.controller-v19.ts"
+          $patchedWeb = "$env:RUNNER_TEMP\dashboard-v19.tsx"
           Copy-Item -Force $mq5Path $patchedSource
           Copy-Item -Force "apps\api\src\bot.controller.ts" $patchedApi
           Copy-Item -Force "apps\web\app\dashboard\page.tsx" $patchedWeb
@@ -162,11 +174,11 @@ jobs:
             eaVersion = $eaVersion
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
-            brain = "V18"
-            policy = "AUTO_ISOLATED_RACE_CONTINUOUS_WINNER_HARVEST_REFILL"
+            brain = "V19"
+            policy = "AUTO_M1_SCALP_PULLBACK_M5_M15_M30_CONTEXT_RACE_ISOLATED_HARVEST"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "mt5\release\manifest.json"
 
-      - name: Publish Brain V18 RACE profit harvesting and compiled artifact
+      - name: Publish Brain V19 AUTO scalp and compiled artifact
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -181,7 +193,7 @@ jobs:
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
-            Write-Host "EA Brain V18 RACE publish attempt $attempt/6"
+            Write-Host "EA Brain V19 AUTO scalp publish attempt $attempt/6"
             git fetch origin main
             if ($LASTEXITCODE -ne 0) {
               Start-Sleep -Seconds 2
@@ -193,11 +205,11 @@ jobs:
               apps/api/src/bot.controller.ts `
               apps/web/app/dashboard/page.tsx
             if ($LASTEXITCODE -eq 1) {
-              Write-Host "A newer RACE-related source exists on main; skipping obsolete V18 publish."
+              Write-Host "A newer EA-related source exists on main; skipping obsolete V19 publish."
               exit 0
             }
             if ($LASTEXITCODE -ne 0) {
-              throw "Could not compare V18 sources with latest main"
+              throw "Could not compare V19 sources with latest main"
             }
 
             git reset --hard origin/main
@@ -217,16 +229,16 @@ jobs:
             git add mt5/release/manifest.json
             git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "Brain V18 RACE source and artifact are already current."
+              Write-Host "Brain V19 AUTO scalp source and artifact are already current."
               $published = $true
               break
             }
             if ($LASTEXITCODE -ne 1) {
-              throw "Could not inspect generated V18 changes"
+              throw "Could not inspect generated V19 changes"
             }
 
-            git commit -m "build: publish EA Brain V18 RACE v1.057 [skip ea build]"
-            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V18 RACE changes" }
+            git commit -m "build: publish EA Brain V19 AUTO scalp v1.058 [skip ea build]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit Brain V19 AUTO scalp changes" }
 
             git push origin HEAD:main
             if ($LASTEXITCODE -eq 0) {
@@ -234,10 +246,10 @@ jobs:
               break
             }
 
-            Write-Host "Main moved while publishing Brain V18 RACE; retrying..."
+            Write-Host "Main moved while publishing Brain V19 AUTO scalp; retrying..."
             Start-Sleep -Seconds 2
           }
 
           if (-not $published) {
-            throw "Failed to publish Brain V18 RACE after retries"
+            throw "Failed to publish Brain V19 AUTO scalp after retries"
           }
