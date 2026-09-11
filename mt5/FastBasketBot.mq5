@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.053"
-#define SCENOVA_EA_VERSION "1.053"
-#define SCENOVA_PRODUCT_VERSION "2.0.15"
+#property version   "1.054"
+#define SCENOVA_EA_VERSION "1.054"
+#define SCENOVA_PRODUCT_VERSION "2.0.16"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -1815,7 +1815,7 @@ void OnTick()
 
    // WARNING pauses only additional positions while Rescue evaluates the open
    // Basket. It is post-entry management, not a first-entry filter.
-   if(count > 0 && g_rescueState == RESCUE_WARNING)
+   if(count > 0 && g_rescueState == RESCUE_WARNING && !g_burstActive)
    {
       g_executionStatus = g_rescueOldestAgeSeconds >= RescueTimeThresholdSeconds()
          ? "TIME_RESCUE_WARNING"
@@ -9786,6 +9786,50 @@ bool BasketAddLocationAllowed(
    return true;
 }
 
+// Brain V15 -----------------------------------------------------------------
+// Basket continuation is deliberately much lighter than first-entry logic.
+// Max Positions is the user's exact ceiling. Once the first position exists,
+// the add engine only needs: same Basket direction, no severe adverse move,
+// and real price separation/progress from the latest filled position.
+// S/R, RSI, pullback, terminal-zone, Entry Precision and continuation-score
+// logic remain telemetry/quality inputs but cannot veto a valid continuation.
+bool BrainV15BalancedAddReady(int direction, int count, int targetPositions, double atr)
+{
+   if(direction == 0 || count <= 0 || count >= targetPositions)
+      return false;
+
+   double targetScale = targetPositions >= 80 ? 0.018 :
+                        targetPositions >= 50 ? 0.022 :
+                        targetPositions >= 20 ? 0.028 : 0.035;
+   double requiredProgress = MathMax(3.0, atr * targetScale);
+   double progress = BasketFavorableProgressPoints(direction);
+
+   double lastEntry = LastBasketEntryPrice(direction);
+   MqlTick tick;
+   if(lastEntry <= 0.0 || !SymbolInfoTick(_Symbol, tick))
+      return false;
+
+   double current = direction > 0 ? tick.bid : tick.ask;
+   double betterPricePoints = direction > 0
+      ? (lastEntry - current) / _Point
+      : (current - lastEntry) / _Point;
+   bool modestPullback =
+      betterPricePoints >= MathMax(2.0, atr * 0.025) &&
+      betterPricePoints <= MathMax(4.0, atr * 0.35);
+
+   if(progress >= requiredProgress || modestPullback)
+   {
+      g_ladderMode = "V15_BALANCED_ADD_READY";
+      g_fillBlockReason = "NONE";
+      return true;
+   }
+
+   g_ladderMode = "V15_WAIT_ADD_SPACE";
+   g_fillBlockReason = "V15_WAIT_ADD_SPACE";
+   g_ladderRequiredPoints = requiredProgress;
+   return false;
+}
+
 bool BasketLadderReady(int direction, int count, int targetPositions)
 {
    int nextRung = count+1;
@@ -9898,6 +9942,12 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       MathMin(atr*pullbackFactor,MathMax(2.0,g_ladderRequiredPoints*0.35))
    );
 
+   // V15: do not run the old add-entry intelligence gauntlet. The first entry
+   // remains smart; continuation adds are governed by balanced price spacing.
+   if(BrainV15BalancedAddReady(direction,count,targetPositions,atr))
+      return true;
+   return false;
+
    string lowerState = LowerTimeframeStateForDirection(direction);
    if(lowerState=="REVERSAL")
    {
@@ -9907,12 +9957,9 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
    }
 
    string addLocationReason="NONE";
-   if(!BasketAddLocationAllowed(direction,count,addLocationReason))
-   {
-      g_ladderMode="WAIT_LOCAL_EXTREME";
-      g_fillBlockReason=addLocationReason;
-      return false;
-   }
+   // V15: local-zone analysis remains observable only; it cannot veto a
+   // balanced continuation add.
+   BasketAddLocationAllowed(direction,count,addLocationReason);
 
    // Better-price add: not Martingale. It is allowed only after a modest
    // pullback, a fresh turn back with the Basket thesis, and all terminal-zone
@@ -10140,24 +10187,17 @@ void ProcessBurstQueue()
       return;
    }
 
-   if(!MarketLocationEntryAllowed(g_burstDirection,true))
-   {
-      g_fillBlockReason=g_adaptiveBlockReason;
-      g_executionStatus=g_adaptiveBlockReason;
-      return;
-   }
+   // V15: MarketLocation is telemetry for continuation adds, not a hard veto.
+   MarketLocationEntryAllowed(g_burstDirection,true);
 
    string finalAddLocationReason="NONE";
-   if(!BasketAddLocationAllowed(
+   // V15: keep the local-extreme calculation visible, but do not let it veto
+   // an otherwise valid balanced continuation add.
+   BasketAddLocationAllowed(
       g_burstDirection,
       count,
-      finalAddLocationReason))
-   {
-      g_fillBlockReason=finalAddLocationReason;
-      g_executionStatus=finalAddLocationReason;
-      g_ladderMode="WAIT_LOCAL_EXTREME";
-      return;
-   }
+      finalAddLocationReason
+   );
 
    bool accepted=SendMarketOrder(g_burstDirection);
    RegisterOrderRequest();
@@ -11654,6 +11694,18 @@ bool ManageAdaptiveRescue()
 
    if(g_rescueState==RESCUE_WARNING)
    {
+      // V15: a warning observes recovery risk but does not freeze a valid
+      // Basket fill before the configured Max Positions target is reached.
+      if(BasketFillEnabled() &&
+         g_burstTargetPositions > BasketPositionCount())
+      {
+         g_executionStatus = g_rescueOldestAgeSeconds >= RescueTimeThresholdSeconds()
+            ? "TIME_RESCUE_WARNING_FILL_CONTINUES"
+            : "RESCUE_WARNING_FILL_CONTINUES";
+         SaveRescueState();
+         return false;
+      }
+
       g_burstActive=false;
       g_burstNeedsRearm=false;
 

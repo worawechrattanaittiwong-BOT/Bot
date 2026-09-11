@@ -1,9 +1,9 @@
 ﻿{
-    "builtAt":  "2026-09-11T09:24:37.6143451Z",
-    "policy":  "SMART_WEIGHTED_ENTRY_FAST_CORRECTION_BALANCED_LADDER",
-    "brain":  "V14",
-    "sha256":  "a92d8a5ecb2b929d65005be250628ea8c6c778b6e7e44e186d77bdb9a8b24f52",
-    "sourceCommit":  "566aa22da488a50e9ba5067f78fa039b8e883390",
-    "eaVersion":  "1.053",
+    "builtAt":  "2026-09-11T10:01:09.2968721Z",
+    "policy":  "SMART_WEIGHTED_ENTRY_FAST_CORRECTION_BALANCED_BASKET_CONTINUATION",
+    "brain":  "V15",
+    "sha256":  "d9f71e98a9d96d3eef6fd2442d710508d6d16763266f1753bee85fcbec74a3d2",
+    "sourceCommit":  "d31b43ba17e428477aec92c988cec21ff550605e",
+    "eaVersion":  "1.054",
     "file":  "FastBasketBot.ex5"
 }
