@@ -70,13 +70,19 @@ jobs:
             echo "main moved while the version reset was validating; refusing to overwrite it"
             exit 1
           fi
+
+          # The preparation script also stages the future permanent CI gate in
+          # the working tree. GitHub Actions' GITHUB_TOKEN cannot update workflow
+          # files, so restore CI here and let the authorized connector commit that
+          # gate immediately after this validated source reset lands.
+          git restore .github/workflows/ci.yml
+
           git add mt5/FastBasketBot.mq5 \
             apps/api/src/release-version.ts \
             apps/web/components/Mt5ManualActionControls.tsx \
             tools/windows-installer/ScenovaInstaller.csproj \
             tools/windows-installer/AgentBuildInfo.cs \
-            tests/release-version-consistency.ps1 \
-            .github/workflows/ci.yml
+            tests/release-version-consistency.ps1
           if git diff --cached --quiet; then
             echo "Unified 1.0.0 reset is already current"
             exit 0
