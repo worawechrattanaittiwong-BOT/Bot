@@ -102,6 +102,28 @@ $replacement = @'
 '@
 Replace-Required $anchor $replacement 'route BasketLadderReady through V15 add policy'
 
+# Remove the legacy local-zone veto from the old ladder tail as well. That tail
+# is bypassed by V15, but keeping an inactive hard-veto signature makes policy
+# validation ambiguous and risks accidental reactivation in a later refactor.
+$oldLadderAddLocation = @'
+   string addLocationReason="NONE";
+   if(!BasketAddLocationAllowed(direction,count,addLocationReason))
+   {
+      g_ladderMode="WAIT_LOCAL_EXTREME";
+      g_fillBlockReason=addLocationReason;
+      return false;
+   }
+
+'@
+$newLadderAddLocation = @'
+   string addLocationReason="NONE";
+   // V15: local-zone analysis remains observable only; it cannot veto a
+   // balanced continuation add.
+   BasketAddLocationAllowed(direction,count,addLocationReason);
+
+'@
+Replace-Required $oldLadderAddLocation $newLadderAddLocation 'remove legacy ladder local-zone veto'
+
 # ProcessBurstQueue must not re-apply first-entry location/zone gates to adds.
 $oldMarketLocation = @'
    if(!MarketLocationEntryAllowed(g_burstDirection,true))
