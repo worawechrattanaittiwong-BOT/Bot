@@ -60,6 +60,7 @@ const defaultSettings = {
   sessionEndHour: 24,
   maxAtrPoints: 0,
   indicatorV6Mode: "SOFT_WEIGHT",
+  controlMode: "AUTO",
   engineMode: "AUTO",
   entryMode: "AUTO_MOMENTUM"
 };
@@ -2657,7 +2658,11 @@ function BotSettingsModal(props:any) {
   const profitTargetMode = String(props.settings?.profitTargetMode || "AUTO").toUpperCase();
   const manualSl = Number(props.settings?.manualStopLossPoints || 0);
   const hasManualExit = profitTargetMode === "MANUAL" || manualSl > 0;
-  const controlMode = engineMode === "RACE" ? "RACE" : entryMode === "AUTO_MOMENTUM" ? "AUTO" : hasManualExit ? "MANUAL" : "ASSISTED";
+  const inferredControlMode = engineMode === "RACE" ? "RACE" : entryMode === "AUTO_MOMENTUM" ? "AUTO" : hasManualExit ? "MANUAL" : "ASSISTED";
+  const requestedControlMode = String(props.settings?.controlMode || inferredControlMode).toUpperCase();
+  const controlMode = ["AUTO","RACE","ASSISTED","MANUAL"].includes(requestedControlMode)
+    ? requestedControlMode
+    : inferredControlMode;
   const profitKind = Number(props.settings?.perPositionProfitMoney || 0) > 0 ? "POSITION" : "BASKET";
   const suggestedManualSl = String(Math.max(1, Math.round(Number(
     props.systemHardStopDistancePoints || props.hardStopDistancePoints || 1000
@@ -2665,28 +2670,28 @@ function BotSettingsModal(props:any) {
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"อัตโนมัติ",subtitle:"EA เลือกทิศทาง จุดเข้า และจังหวะปิดตามระบบปกติ"},
     RACE:{title:"โหมดซิ่ง",subtitle:"เปิดให้ครบ Max Positions แบบไม่ใช้คะแนนกั้น แล้วบริหารกำไร/การโดนลากแยกจาก AUTO"},
-    ASSISTED:{title:"ช่วยตัดสินใจ",subtitle:"คุณกำหนดฝั่ง EA เลือกจุดเข้าและทางออก"},
-    MANUAL:{title:"กำหนดเอง",subtitle:"คุณกำหนดฝั่ง จำนวน Lot เป้ากำไร และ SL"}
+    ASSISTED:{title:"ช่วยตัดสินใจ",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณเลือกแนวทางบริหารรอบ"},
+    MANUAL:{title:"กำหนดเอง",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณกำหนด Lot เป้ากำไร และ SL"}
   };
 
   const applyControlMode = (mode:string) => {
-    const fixedDirection = entryMode === "SELL_ONLY" ? "SELL_ONLY" : "BUY_ONLY";
+    props.onEdit?.("controlMode",mode);
     props.onEdit?.("confidenceGateEnabled",false);
+    // Every customer-facing mode uses automatic BUY/SELL analysis. Direction
+    // locking is not part of mode selection anymore.
+    props.onEdit?.("entryMode","AUTO_MOMENTUM");
     if (mode === "RACE") {
       props.onEdit?.("engineMode","RACE");
-      props.onEdit?.("entryMode","AUTO_MOMENTUM");
       props.onEdit?.("profitTargetMode","AUTO");
       props.onEdit?.("manualStopLossPoints",0);
       return;
     }
     props.onEdit?.("engineMode","AUTO");
     if (mode === "AUTO") {
-      props.onEdit?.("entryMode","AUTO_MOMENTUM");
       props.onEdit?.("profitTargetMode","AUTO");
       props.onEdit?.("manualStopLossPoints",0);
       return;
     }
-    props.onEdit?.("entryMode",fixedDirection);
     if (mode === "ASSISTED") {
       props.onEdit?.("profitTargetMode","AUTO");
       props.onEdit?.("manualStopLossPoints",0);
@@ -2744,9 +2749,7 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-section-title compact"><span>02</span><div><b>แผนการเปิดออเดอร์</b><small>ค่าชุดนี้ส่งตรงไปยัง EA</small></div></div>
                 <div className="cc-bot-v2-fields">
                   <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="gold" size={17}/>Symbol</label><strong>{props.symbol || "—"}</strong></div>
-                  {controlMode==="AUTO" ?
-                    <div className="cc-bot-v2-field auto-value"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>วิเคราะห์อัตโนมัติ</strong><small>M1 / M5 / M15 / M30 / H1</small></div> :
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="BUY_ONLY">BUY เท่านั้น</option><option value="SELL_ONLY">SELL เท่านั้น</option></select></label>}
+                  <div className="cc-bot-v2-field auto-value"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>วิเคราะห์ BUY / SELL อัตโนมัติ</strong><small>M1 / M5 / M15 / M30 / H1 · ไม่ล็อกฝั่ง</small></div>
                   <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</span><select className="input" value={String(props.settings.maxPositions||1)} onChange={e=>props.onEdit?.("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>
                   <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
                 </div>

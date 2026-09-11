@@ -1568,6 +1568,14 @@ export class BotController {
       }
     }
 
+    if (body.controlMode !== undefined) {
+      const controlMode = String(body.controlMode || "").toUpperCase();
+      if (!["AUTO", "RACE", "ASSISTED", "MANUAL"].includes(controlMode)) {
+        throw new BadRequestException("Control Mode ไม่ถูกต้อง");
+      }
+      clean.controlMode = controlMode;
+    }
+
     if (body.engineMode !== undefined) {
       const engineMode = String(body.engineMode || "").toUpperCase();
       if (!["AUTO", "RACE"].includes(engineMode)) {
