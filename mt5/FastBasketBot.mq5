@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.056"
-#define SCENOVA_EA_VERSION "1.056"
-#define SCENOVA_PRODUCT_VERSION "2.0.18"
+#property version   "1.057"
+#define SCENOVA_EA_VERSION "1.057"
+#define SCENOVA_PRODUCT_VERSION "2.0.19"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -1671,6 +1671,63 @@ double RaceGivebackMoney(double peakProfit, double armMoney)
    );
 }
 
+// Brain V18 RACE profit harvest --------------------------------------------
+// RACE only: close every profitable RACE ticket continuously. AUTO never
+// calls this function. On hedging accounts each blue ticket is closed in full;
+// on netting accounts one configured-lot unit is realized per pass because MT5
+// exposes only one aggregate position per symbol.
+int RaceHarvestProfitablePositions()
+{
+   int harvested = 0;
+   bool hedging = ((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE) ==
+                   ACCOUNT_MARGIN_MODE_RETAIL_HEDGING);
+   double baseVolume = NormalizeTradeVolume(g_lot);
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol ||
+         PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT), "SaaSRace") < 0)
+         continue;
+
+      double netFloating = PositionGetDouble(POSITION_PROFIT) +
+                           PositionGetDouble(POSITION_SWAP);
+      if(netFloating <= 0.0)
+         continue;
+
+      double positionVolume = PositionGetDouble(POSITION_VOLUME);
+      double closeVolume = hedging
+         ? positionVolume
+         : MathMin(positionVolume, baseVolume);
+      if(closeVolume <= 0.0)
+         continue;
+
+      if(ClosePositionVolumeByTicket(ticket, closeVolume, "SCNRaceProfit"))
+      {
+         harvested++;
+         g_executionStatus = "RACE_PROFIT_HARVEST";
+         g_lastCloseReason = "RACE_PROFIT_HARVEST";
+         Print(
+            "RACE profit harvest ticket=",ticket,
+            " profit=",DoubleToString(netFloating,2),
+            " closeVolume=",DoubleToString(closeVolume,2)
+         );
+
+         // A netting account has one aggregate position. Realize one unit and
+         // let the next tick harvest/refill again instead of flattening the
+         // whole aggregate position in one request.
+         if(!hedging)
+            break;
+      }
+   }
+
+   return harvested;
+}
+
 bool RaceCloseCycle(string reason)
 {
    g_raceState = "CLOSING";
@@ -1809,8 +1866,36 @@ bool ManageRaceBasket(double momentum)
    }
    g_raceDirection = direction;
 
+   // V18: harvest blue RACE positions first, before any Basket-level profit
+   // logic. Realized winners are then replenished back toward Max Positions.
+   // This path is RACE-only and never changes AUTO position management.
+   int harvested = RaceHarvestProfitablePositions();
+   if(harvested > 0)
+   {
+      g_raceProfitArmed = false;
+      g_racePeakProfit = 0.0;
+
+      int remainingPositions = BasketPositionCount();
+      if(remainingPositions <= 0)
+      {
+         ResetRaceRuntime();
+         g_executionStatus = "RACE_PROFIT_HARVEST_FLAT";
+         return true;
+      }
+
+      int remainingUnits = RaceFilledUnits();
+      if(remainingUnits < g_maxPositions)
+      {
+         g_raceState = "HARVEST_REFILL";
+         g_executionStatus = "RACE_HARVEST_REFILL";
+         ProcessRaceFill(direction);
+         return true;
+      }
+   }
+
    int filledUnits = RaceFilledUnits();
    bool filling = filledUnits < g_maxPositions;
+   double floatingProfit = BasketProfit();
    double cycleProfit = BasketCycleProfit();
 
    // Explicit user loss control remains a hard safety boundary in every mode.
@@ -1832,7 +1917,7 @@ bool ManageRaceBasket(double momentum)
    // profit score/quality/location logic is allowed to stop additional entries.
    if(filling)
    {
-      if(cycleProfit < 0.0)
+      if(floatingProfit < 0.0)
          g_raceRecoveryWatch = true;
       g_raceState = "FILLING";
       ProcessRaceFill(direction);
@@ -1841,8 +1926,8 @@ bool ManageRaceBasket(double momentum)
 
    double armMoney = RaceProfitArmMoney(filledUnits);
 
-   // If a dragged cycle was judged recoverable, take the recovered profit
-   // quickly instead of trying to turn it into a long runner.
+   // If a dragged cycle was judged recoverable, take the recovered NET cycle
+   // profit quickly. Harvested winners count toward that recovery on purpose.
    if(g_raceRecoveryWatch)
    {
       double recoveryCloseMoney = MathMax(0.02, armMoney * 0.25);
@@ -1856,11 +1941,13 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   if(cycleProfit >= armMoney)
+   // Normal RACE profit-run logic now looks only at the still-open Basket.
+   // Realized harvested winners must not accidentally trigger a full-cycle
+   // close immediately after an individual blue ticket was banked.
+   if(floatingProfit >= armMoney)
    {
       bool flowing = RaceFlowStillRunning(direction,momentum);
 
-      // Profit arrived but flow is no longer extending: bank it immediately.
       if(!flowing && !g_raceProfitArmed)
       {
          RaceCloseCycle("RACE_QUICK_PROFIT");
@@ -1870,19 +1957,19 @@ bool ManageRaceBasket(double momentum)
       if(!g_raceProfitArmed)
       {
          g_raceProfitArmed = true;
-         g_racePeakProfit = cycleProfit;
+         g_racePeakProfit = floatingProfit;
       }
-      if(cycleProfit > g_racePeakProfit)
-         g_racePeakProfit = cycleProfit;
+      if(floatingProfit > g_racePeakProfit)
+         g_racePeakProfit = floatingProfit;
 
       double giveback = RaceGivebackMoney(g_racePeakProfit, armMoney);
-      if(cycleProfit <= g_racePeakProfit - giveback)
+      if(floatingProfit <= g_racePeakProfit - giveback)
       {
          RaceCloseCycle("RACE_PROFIT_GIVEBACK");
          return true;
       }
 
-      if(!flowing && cycleProfit > 0.0)
+      if(!flowing && floatingProfit > 0.0)
       {
          RaceCloseCycle("RACE_FLOW_ENDED_PROFIT");
          return true;
@@ -1893,7 +1980,7 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   if(cycleProfit < 0.0)
+   if(floatingProfit < 0.0)
    {
       g_raceRecoveryWatch = true;
       g_raceState = "RECOVERY_WAIT";
