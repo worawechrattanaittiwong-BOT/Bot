@@ -1590,9 +1590,9 @@ export class BotController {
       if (!["AUTO_MOMENTUM", "BUY_ONLY", "SELL_ONLY"].includes(entryMode)) {
         throw new BadRequestException("Entry Mode ไม่ถูกต้อง");
       }
-      // BUY_ONLY / SELL_ONLY are accepted only for backward compatibility.
-      // All customer-facing control modes now use automatic BUY/SELL analysis.
-      clean.entryMode = "AUTO_MOMENTUM";
+      // Direction is user-selectable in every control mode.
+      // AUTO_MOMENTUM lets the EA choose; BUY_ONLY / SELL_ONLY pin the side.
+      clean.entryMode = entryMode;
     }
 
     // One Adaptive engine for every account. Ignore legacy profile values from

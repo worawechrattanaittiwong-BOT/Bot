@@ -628,12 +628,8 @@ export class EaController {
       "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
       [instance.id]
     );
-    // Runtime contract: every customer-facing mode chooses BUY/SELL itself.
-    // Override stale legacy direction locks before settings reach the EA.
-    const runtimeSettings = {
-      ...(settings?.settings || {}),
-      entryMode: "AUTO_MOMENTUM"
-    };
+    // Runtime contract: preserve the direction selected by the customer.
+    const runtimeSettings = settings?.settings || {};
     const intelligenceStats = await this.basketWinProbability(
       instance.id,
       String(metrics.symbol || "").trim()
