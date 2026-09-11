@@ -23,3 +23,6 @@ jobs:
       - name: AUTO V20 same-dataset policy regression
         shell: pwsh
         run: ./tests/auto-v20-policy-regression.ps1
+      - name: Unified release version consistency
+        shell: pwsh
+        run: ./tests/release-version-consistency.ps1
