@@ -1288,8 +1288,9 @@ export default function DashboardPage() {
       const payload:any = { ...settings };
       delete payload.tradingProfile;
       payload.adaptiveEngine = true;
-      payload.minOrderIntervalMs = 300;
-      payload.maxOrdersPerMinute = 120;
+      const raceSpeedX2 = String(payload.engineMode || "").toUpperCase() === "RACE";
+      payload.minOrderIntervalMs = raceSpeedX2 ? 150 : 300;
+      payload.maxOrdersPerMinute = raceSpeedX2 ? 240 : 120;
       payload.riskPerOrderPercent = 0.25;
       payload.allowMinimumLotOverride = true;
       payload.hardStopAtrMultiplier = 2;
@@ -2669,7 +2670,7 @@ function BotSettingsModal(props:any) {
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"อัตโนมัติ",subtitle:"EA เลือกทิศทาง จุดเข้า และจังหวะปิดตามระบบปกติ"},
-    RACE:{title:"โหมดซิ่ง",subtitle:"เปิดให้ครบ Max Positions แบบไม่ใช้คะแนนกั้น แล้วบริหารกำไร/การโดนลากแยกจาก AUTO"},
+    RACE:{title:"โหมดซิ่ง",subtitle:"เร่งจังหวะเปิดไม้ 2× เพื่อไล่ให้ครบ Max Positions เร็วขึ้น โดยยังแยกการบริหารกำไร/การโดนลากจาก AUTO"},
     ASSISTED:{title:"ช่วยตัดสินใจ",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณเลือกแนวทางบริหารรอบ"},
     MANUAL:{title:"กำหนดเอง",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณกำหนด Lot เป้ากำไร และ SL"}
   };

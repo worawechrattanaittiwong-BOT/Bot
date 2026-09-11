@@ -629,7 +629,12 @@ export class EaController {
       [instance.id]
     );
     // Runtime contract: preserve the direction selected by the customer.
-    const runtimeSettings = settings?.settings || {};
+    // RACE runs at exactly 2x the normal order cadence without changing AUTO.
+    const runtimeSettings = { ...(settings?.settings || {}) };
+    if (String(runtimeSettings.engineMode || "").toUpperCase() === "RACE") {
+      runtimeSettings.minOrderIntervalMs = 150;
+      runtimeSettings.maxOrdersPerMinute = 240;
+    }
     const intelligenceStats = await this.basketWinProbability(
       instance.id,
       String(metrics.symbol || "").trim()
