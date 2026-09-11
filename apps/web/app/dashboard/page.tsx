@@ -60,7 +60,7 @@ const defaultSettings = {
   sessionEndHour: 24,
   maxAtrPoints: 0,
   indicatorV6Mode: "SOFT_WEIGHT",
-  controlMode: "AUTO",
+  controlMode: undefined,
   engineMode: "AUTO",
   entryMode: "AUTO_MOMENTUM"
 };
