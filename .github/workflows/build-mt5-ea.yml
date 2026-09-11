@@ -87,8 +87,8 @@ jobs:
             throw "API engineMode validation was not applied"
           }
           if (-not $webText.Contains('engineMode: "AUTO"') -or
-              -not $webText.Contains('RACE:{title:"โหมดซิ่ง"') -or
-              -not $webText.Contains('props.onEdit?.("engineMode","RACE")')) {
+              -not $webText.Contains('props.onEdit?.("engineMode","RACE")') -or
+              -not $webText.Contains('{id:"RACE",icon:"status",tag:')) {
             throw "Web RACE mode UI was not applied"
           }
 
