@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.057"
-#define SCENOVA_EA_VERSION "1.057"
-#define SCENOVA_PRODUCT_VERSION "2.0.19"
+#property version   "1.058"
+#define SCENOVA_EA_VERSION "1.058"
+#define SCENOVA_PRODUCT_VERSION "2.0.20"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -1550,37 +1550,30 @@ int RaceFilledUnits()
    return MathMax(positions, MathMax(0, volumeUnits));
 }
 
+int RaceM5CandleDirection()
+{
+   // RACE AUTO reads one thing only for side selection: the latest completed
+   // M5 candle. Closed-bar data keeps the chosen side stable and prevents an
+   // intrabar flip from opening the opposite direction inside the same cycle.
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 1, rates) < 1)
+      return 0;
+
+   if(rates[0].close > rates[0].open) return 1;
+   if(rates[0].close < rates[0].open) return -1;
+   return 0;
+}
+
 int RaceAnalysisDirection(double momentum)
 {
-   // Explicit direction still wins if the user intentionally selected one.
+   // Manual direction remains available to the customer.
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
    if(g_entryMode == ENTRY_SELL_ONLY) return -1;
 
-   // Weighted direction selection only; there is deliberately NO minimum score
-   // required to trade in RACE mode.
-   int bias = 0;
-   if(momentum > 0.0) bias += 3;
-   else if(momentum < 0.0) bias -= 3;
-   bias += g_trendM1 * 2;
-   bias += g_trendM5 * 3;
-   bias += g_trendM15 * 2;
-   bias += g_emaTrendM5 * 2;
-   bias += g_emaTrendM15 * 2;
-   bias += g_macroTrendDirection * 2;
-
-   if(bias > 0) return 1;
-   if(bias < 0) return -1;
-
-   // Tie-break with the latest closed M1 candle. This is market data, not a
-   // confidence gate, so RACE still gets a deterministic direction.
-   MqlRates rates[];
-   ArraySetAsSeries(rates, true);
-   if(CopyRates(_Symbol, PERIOD_M1, 1, 1, rates) >= 1)
-   {
-      if(rates[0].close > rates[0].open) return 1;
-      if(rates[0].close < rates[0].open) return -1;
-   }
-   return 0;
+   // AUTO RACE deliberately ignores Momentum/M1/M15/EMA/Macro for choosing
+   // the side. One closed M5 candle decides BUY or SELL for the next cycle.
+   return RaceM5CandleDirection();
 }
 
 double RaceMidProgressPoints(int direction)
@@ -1606,39 +1599,30 @@ bool RaceWrongDirectionConfirmed(
    if(direction == 0)
       return false;
 
-   int opposite = -direction;
-   int confirmations = 0;
-   if(g_trendM1 == opposite) confirmations += 1;
-   if(g_trendM5 == opposite) confirmations += 2;
-   if(g_trendM15 == opposite) confirmations += 2;
-   if(g_emaTrendM5 == opposite) confirmations += 1;
-   if(g_emaTrendM15 == opposite) confirmations += 1;
-   if(g_macroTrendDirection == opposite) confirmations += 1;
-   if((opposite > 0 && momentum > 0.0) ||
-      (opposite < 0 && momentum < 0.0))
-      confirmations += 1;
+   // RACE directional invalidation also uses only the latest completed M5
+   // candle. The opposite candle alone is not enough to close; price must also
+   // have moved meaningfully against the active cycle.
+   int m5Direction = RaceM5CandleDirection();
+   if(m5Direction == 0 || m5Direction == direction)
+      return false;
 
    double atr = MathMax(
       10.0,
       AverageTrueRangePoints(PERIOD_M5, g_atrPeriod)
    );
    double progress = RaceMidProgressPoints(direction);
-
-   // While still racing toward Max Positions, only a strong invalidation may
-   // terminate the cycle early. Once full, the exit can react sooner.
    double adverseThreshold = filling ? atr * 0.45 : atr * 0.22;
-   int requiredConfirmations = filling ? 6 : 5;
    bool adverse = progress <= -adverseThreshold;
    bool severe = progress <= -atr * (filling ? 0.75 : 0.50);
 
-   if(adverse && confirmations >= requiredConfirmations)
+   if(severe)
    {
-      reasonOut = "RACE_WRONG_DIRECTION_CONFIRMED";
+      reasonOut = "RACE_M5_SEVERE_REVERSAL";
       return true;
    }
-   if(severe && confirmations >= MathMax(3, requiredConfirmations - 2))
+   if(adverse)
    {
-      reasonOut = "RACE_SEVERE_ADVERSE_REVERSAL";
+      reasonOut = "RACE_M5_OPPOSITE_CONFIRMED";
       return true;
    }
    return false;
@@ -1646,14 +1630,8 @@ bool RaceWrongDirectionConfirmed(
 
 bool RaceFlowStillRunning(int direction, double momentum)
 {
-   int aligned = 0;
-   if(g_trendM1 == direction) aligned++;
-   if(g_trendM5 == direction) aligned++;
-   if(g_emaTrendM5 == direction) aligned++;
-   if((direction > 0 && momentum > 0.0) ||
-      (direction < 0 && momentum < 0.0))
-      aligned++;
-   return aligned >= 2;
+   // Profit-run direction in RACE follows the same single completed M5 candle.
+   return RaceM5CandleDirection() == direction;
 }
 
 double RaceProfitArmMoney(int filledUnits)
@@ -1744,6 +1722,26 @@ bool ProcessRaceFill(int direction)
    if(direction == 0)
       return false;
 
+   // One-way cycle lock: once a RACE cycle has any open position, every new
+   // fill must stay on that same side. A new BUY/SELL decision is allowed only
+   // after the entire RACE basket is flat.
+   int existingPositions = BasketPositionCount();
+   if(existingPositions > 0)
+   {
+      int existingDirection = BasketDirection();
+      if(existingDirection == 0)
+      {
+         g_executionStatus = "RACE_MIXED_BASKET_BLOCK";
+         return false;
+      }
+      if(existingDirection != direction ||
+         (g_raceDirection != 0 && g_raceDirection != direction))
+      {
+         g_executionStatus = "RACE_DIRECTION_LOCK";
+         return false;
+      }
+   }
+
    int filledUnits = RaceFilledUnits();
    if(filledUnits >= g_maxPositions)
    {
@@ -1789,8 +1787,8 @@ bool ProcessRaceFill(int direction)
       return false;
    }
 
-   g_entryModel = "RACE_ANALYSIS";
-   g_entryTrigger = direction > 0 ? "RACE_BUY" : "RACE_SELL";
+   g_entryModel = "RACE_M5_ONE_CANDLE";
+   g_entryTrigger = direction > 0 ? "RACE_M5_BUY" : "RACE_M5_SELL";
    g_entryQuality = "RACE";
    g_entryQualityScore = 0.0;
    g_raceDirection = direction;
