@@ -1,9 +1,9 @@
-﻿{
-    "builtAt":  "2026-09-11T14:21:32.6019678Z",
-    "policy":  "AUTO_ISOLATED_RACE_M5_ONE_CANDLE_SINGLE_SIDE_CYCLE_HARVEST_X2",
-    "brain":  "V19",
-    "sha256":  "5bd892b6bde8b508f48521983e1769be2df137addb28a891985589ab409c969f",
-    "sourceCommit":  "c4bfda85b2c901b1e0d6e39c0243eb33e3cd6ea2",
-    "eaVersion":  "1.058",
-    "file":  "FastBasketBot.ex5"
+{
+  "policy": "AUTO_V20_CENTRAL_DECISION_DIRECTIONAL_MOMENTUM_UNIFIED_PULLBACK_RR_AUDIT_RACE_ISOLATED",
+  "sourceCommit": "fc8f3cb7628574ed359375ffd89791a46f747450",
+  "sha256": "352e450c6a0dedf3933b668d2b0a7b4a833a8f4a81cec34da936aba5e6169362",
+  "brain": "V20",
+  "file": "FastBasketBot.ex5",
+  "eaVersion": "1.059",
+  "builtAt": "2026-09-11T15:04:28.7302819Z"
 }
