@@ -1,9 +1,9 @@
 {
-  "policy": "AUTO_V20_CENTRAL_DECISION_DIRECTIONAL_MOMENTUM_UNIFIED_PULLBACK_RR_AUDIT_RACE_ISOLATED",
-  "sourceCommit": "fc8f3cb7628574ed359375ffd89791a46f747450",
-  "sha256": "352e450c6a0dedf3933b668d2b0a7b4a833a8f4a81cec34da936aba5e6169362",
-  "brain": "V20",
+  "policy": "AUTO_V20_CENTRAL_DECISION_AUDIT_STATS_RACE_ISOLATED",
   "file": "FastBasketBot.ex5",
-  "eaVersion": "1.059",
-  "builtAt": "2026-09-11T15:04:28.7302819Z"
+  "sha256": "aa091de9d5faf60557b2d82cbcb2ad48e815c5cdca9840709b85edaf8c599c93",
+  "sourceCommit": "a50ee7bf2d6a620bccab36e1c3078416ff1a69de",
+  "builtAt": "2026-09-11T15:47:24.9700225Z",
+  "eaVersion": "1.060",
+  "brain": "V20"
 }

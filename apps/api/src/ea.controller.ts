@@ -166,7 +166,8 @@ export class EaController {
       `SELECT
          direction,
          COUNT(*) FILTER (WHERE net_profit<>0)::int AS samples,
-         COUNT(*) FILTER (WHERE net_profit>0)::int AS wins
+         COUNT(*) FILTER (WHERE net_profit>0)::int AS wins,
+         COALESCE(AVG(net_profit),0)::float8 AS avg_net
        FROM trade_journal
        WHERE bot_instance_id=$1
          AND event_type='BASKET'
@@ -175,15 +176,16 @@ export class EaController {
        GROUP BY direction`,
       [instanceId, symbol]
     );
-    const byDirection = new Map<string, { samples: number; wins: number }>();
+    const byDirection = new Map<string, { samples: number; wins: number; averageNet: number }>();
     for (const row of rows.rows) {
       byDirection.set(String(row.direction), {
         samples: Number(row.samples || 0),
-        wins: Number(row.wins || 0)
+        wins: Number(row.wins || 0),
+        averageNet: Number(row.avg_net || 0)
       });
     }
-    const buy = byDirection.get("BUY") || { samples: 0, wins: 0 };
-    const sell = byDirection.get("SELL") || { samples: 0, wins: 0 };
+    const buy = byDirection.get("BUY") || { samples: 0, wins: 0, averageNet: 0 };
+    const sell = byDirection.get("SELL") || { samples: 0, wins: 0, averageNet: 0 };
     const totalSamples = buy.samples + sell.samples;
     const totalWins = buy.wins + sell.wins;
     const rate = (wins: number, samples: number) => samples > 0 ? wins / samples * 100 : 0;
@@ -193,8 +195,10 @@ export class EaController {
       basketWinSamples: totalSamples,
       buyWinProbability: rate(buy.wins, buy.samples),
       buyWinSamples: buy.samples,
+      buyAverageNet: buy.averageNet,
       sellWinProbability: rate(sell.wins, sell.samples),
-      sellWinSamples: sell.samples
+      sellWinSamples: sell.samples,
+      sellAverageNet: sell.averageNet
     };
   }
 
@@ -214,6 +218,7 @@ export class EaController {
       setupWinSamples: 0,
       setupAvgWin: 0,
       setupAvgLoss: 0,
+      setupAverageNet: 0,
       setupExpectedValue: 0,
       setupEvScore: 50,
       indicatorWinProbability: 0,
@@ -237,7 +242,8 @@ export class EaController {
          COUNT(*) FILTER (WHERE net_profit<>0)::int AS samples,
          COUNT(*) FILTER (WHERE net_profit>0)::int AS wins,
          COALESCE(AVG(net_profit) FILTER (WHERE net_profit>0),0)::float8 AS avg_win,
-         COALESCE(AVG(net_profit) FILTER (WHERE net_profit<0),0)::float8 AS avg_loss
+         COALESCE(AVG(net_profit) FILTER (WHERE net_profit<0),0)::float8 AS avg_loss,
+         COALESCE(AVG(net_profit),0)::float8 AS avg_net
        FROM (
          SELECT net_profit
          FROM trade_journal
@@ -258,6 +264,7 @@ export class EaController {
     const wins = Math.max(0, Number(row?.wins || 0));
     const avgWin = Math.max(0, Number(row?.avg_win || 0));
     const avgLoss = Math.min(0, Number(row?.avg_loss || 0));
+    const averageNet = Number(row?.avg_net || 0);
     const winProbability = samples > 0 ? wins / samples * 100 : 0;
     const p = winProbability / 100;
     const expectedValue = p * avgWin - (1 - p) * Math.abs(avgLoss);
@@ -276,7 +283,8 @@ export class EaController {
          COUNT(*) FILTER (WHERE net_profit<>0)::int AS samples,
          COUNT(*) FILTER (WHERE net_profit>0)::int AS wins,
          COALESCE(AVG(net_profit) FILTER (WHERE net_profit>0),0)::float8 AS avg_win,
-         COALESCE(AVG(net_profit) FILTER (WHERE net_profit<0),0)::float8 AS avg_loss
+         COALESCE(AVG(net_profit) FILTER (WHERE net_profit<0),0)::float8 AS avg_loss,
+         COALESCE(AVG(net_profit),0)::float8 AS avg_net
        FROM (
          SELECT net_profit
          FROM trade_journal
@@ -336,6 +344,7 @@ export class EaController {
       setupWinSamples: samples,
       setupAvgWin: avgWin,
       setupAvgLoss: avgLoss,
+      setupAverageNet: averageNet,
       setupExpectedValue: expectedValue,
       setupEvScore: evScore,
       indicatorWinProbability,
@@ -631,6 +640,14 @@ export class EaController {
     // Runtime contract: preserve the direction selected by the customer.
     // RACE runs at exactly 2x the normal order cadence without changing AUTO.
     const runtimeSettings = { ...(settings?.settings || {}) };
+    const savedControlMode = String(runtimeSettings.controlMode || "").toUpperCase();
+    if (!["AUTO", "RACE", "ASSISTED", "MANUAL"].includes(savedControlMode)) {
+      const engineMode = String(runtimeSettings.engineMode || "AUTO").toUpperCase();
+      const entryMode = String(runtimeSettings.entryMode || "AUTO_MOMENTUM").toUpperCase();
+      runtimeSettings.controlMode = engineMode === "RACE"
+        ? "RACE"
+        : entryMode === "AUTO_MOMENTUM" ? "AUTO" : "LEGACY";
+    }
     if (String(runtimeSettings.engineMode || "").toUpperCase() === "RACE") {
       runtimeSettings.minOrderIntervalMs = 150;
       runtimeSettings.maxOrdersPerMinute = 240;
@@ -710,6 +727,34 @@ export class EaController {
     macdState?: string;
     levelFlipState?: string;
     premiumDiscountState?: string;
+    autoDecisionId?: number;
+    autoDecisionKind?: string;
+    autoDecisionReason?: string;
+    autoDirectionChangeReason?: string;
+    autoAddReason?: string;
+    autoBuyScore?: number;
+    autoSellScore?: number;
+    autoMomentumWithPoints?: number;
+    autoMomentumAgainstPoints?: number;
+    autoNearestSupport?: number;
+    autoNearestResistance?: number;
+    autoSupportDistanceAtr?: number;
+    autoResistanceDistanceAtr?: number;
+    autoSwingStart?: number;
+    autoSwingExtreme?: number;
+    autoPullbackRetracement?: number;
+    autoPullbackState?: string;
+    autoTpPrice?: number;
+    autoSlPrice?: number;
+    autoRR?: number;
+    autoKnownCostMoney?: number;
+    autoExpectedProfitMoney?: number;
+    autoExpectedLossMoney?: number;
+    autoAggregateRiskMoney?: number;
+    modelConfidence?: number;
+    winProbability?: number;
+    winSamples?: number;
+    averageNet?: number;
   }) {
     const instance = await this.instance(body.instanceId, body.installToken);
 
@@ -800,7 +845,35 @@ export class EaController {
           squeezeState: text(body.squeezeState, 48),
           macdState: text(body.macdState, 48),
           levelFlipState: text(body.levelFlipState, 48),
-          premiumDiscountState: text(body.premiumDiscountState, 32)
+          premiumDiscountState: text(body.premiumDiscountState, 32),
+          autoDecisionId: Math.max(0, Math.trunc(n(body.autoDecisionId))),
+          autoDecisionKind: text(body.autoDecisionKind, 16),
+          autoDecisionReason: text(body.autoDecisionReason, 96),
+          autoDirectionChangeReason: text(body.autoDirectionChangeReason, 96),
+          autoAddReason: text(body.autoAddReason, 96),
+          autoBuyScore: Math.max(0, Math.min(100, n(body.autoBuyScore))),
+          autoSellScore: Math.max(0, Math.min(100, n(body.autoSellScore))),
+          autoMomentumWithPoints: Math.max(0, n(body.autoMomentumWithPoints)),
+          autoMomentumAgainstPoints: Math.max(0, n(body.autoMomentumAgainstPoints)),
+          autoNearestSupport: Math.max(0, n(body.autoNearestSupport)),
+          autoNearestResistance: Math.max(0, n(body.autoNearestResistance)),
+          autoSupportDistanceAtr: Math.max(0, n(body.autoSupportDistanceAtr)),
+          autoResistanceDistanceAtr: Math.max(0, n(body.autoResistanceDistanceAtr)),
+          autoSwingStart: Math.max(0, n(body.autoSwingStart)),
+          autoSwingExtreme: Math.max(0, n(body.autoSwingExtreme)),
+          autoPullbackRetracement: Math.max(0, n(body.autoPullbackRetracement)),
+          autoPullbackState: text(body.autoPullbackState, 64),
+          autoTpPrice: Math.max(0, n(body.autoTpPrice)),
+          autoSlPrice: Math.max(0, n(body.autoSlPrice)),
+          autoRR: Math.max(0, n(body.autoRR)),
+          autoKnownCostMoney: Math.max(0, n(body.autoKnownCostMoney)),
+          autoExpectedProfitMoney: Math.max(0, n(body.autoExpectedProfitMoney)),
+          autoExpectedLossMoney: Math.max(0, n(body.autoExpectedLossMoney)),
+          autoAggregateRiskMoney: Math.max(0, n(body.autoAggregateRiskMoney)),
+          modelConfidence: Math.max(0, Math.min(100, n(body.modelConfidence))),
+          winProbability: Math.max(0, Math.min(100, n(body.winProbability))),
+          winSamples: Math.max(0, Math.trunc(n(body.winSamples))),
+          averageNet: n(body.averageNet)
         })
       ]
     );

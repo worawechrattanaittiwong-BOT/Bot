@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.059"
-#define SCENOVA_EA_VERSION "1.059"
-#define SCENOVA_PRODUCT_VERSION "2.0.21"
+#property version   "1.060"
+#define SCENOVA_EA_VERSION "1.060"
+#define SCENOVA_PRODUCT_VERSION "2.0.22"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -62,6 +62,10 @@ struct AUTO_V20_SIDE
    double momentumAgainstPoints;
    double locationScore;
    double pullbackScore;
+   double pullbackSwingStart;
+   double pullbackSwingExtreme;
+   double pullbackRetracement;
+   string pullbackState;
    double entryPrice;
    double tpPrice;
    double slPrice;
@@ -245,7 +249,7 @@ int    g_minOrderIntervalMs;
 int    g_maxOrdersPerMinute;
 ENUM_ENTRY_MODE g_entryMode;
 string g_engineMode = "AUTO";
-string g_controlMode = "AUTO";
+string g_controlMode = "LEGACY";
 AUTO_V20_LEVELS g_autoV20Levels;
 AUTO_V20_SIDE g_autoV20Buy;
 AUTO_V20_SIDE g_autoV20Sell;
@@ -488,6 +492,9 @@ double g_setupWinProbability = 0.0;
 int    g_setupWinSamples = 0;
 double g_setupAvgWin = 0.0;
 double g_setupAvgLoss = 0.0;
+double g_setupAverageNet = 0.0;
+double g_buyAverageNet = 0.0;
+double g_sellAverageNet = 0.0;
 string g_setupHistoryModel = "NONE";
 string g_setupHistoryRegime = "UNKNOWN";
 int    g_setupHistoryDirection = 0;
@@ -748,6 +755,8 @@ string   g_basketJournalMacdState = "NEUTRAL";
 string   g_basketJournalLevelFlipState = "NONE";
 string   g_basketJournalPremiumDiscountState = "EQUILIBRIUM";
 
+long     g_basketJournalAutoDecisionId = 0;
+long     g_pendingBasketAutoDecisionId = 0;
 bool     g_pendingBasketJournal = false;
 datetime g_pendingBasketRetryAt = 0;
 long     g_pendingBasketId = 0;
@@ -3248,6 +3257,58 @@ void SendHeartbeat()
    }
 
    string response = "";
+      if(StringLen(payload) >= 2)
+      {
+         int auditDirection=g_cachedAdaptiveDirection;
+         AUTO_V20_SIDE auditSide;
+         AutoV20ResetSide(auditSide,auditDirection);
+         if(auditDirection>0) auditSide=g_autoV20Buy;
+         else if(auditDirection<0) auditSide=g_autoV20Sell;
+         string autoV20Diagnostics=StringFormat(
+            ",\"controlMode\":\"%s\",\"autoV20Active\":%s,\"autoV20DecisionId\":%I64d,\"autoV20DecisionKind\":\"%s\",\"autoV20DecisionReason\":\"%s\",\"autoV20RejectReason\":\"%s\",\"autoV20DirectionChangeReason\":\"%s\",\"autoV20AddReason\":\"%s\",\"autoV20Phase\":\"%s\",\"autoV20BuyScore\":%.2f,\"autoV20SellScore\":%.2f,\"autoV20BuyConfidence\":%.2f,\"autoV20SellConfidence\":%.2f,\"autoV20Confidence\":%.2f,\"autoV20WinProbability\":%.2f,\"autoV20WinSamples\":%d,\"autoV20AverageNet\":%.2f,\"autoV20MomentumWithPoints\":%.2f,\"autoV20MomentumAgainstPoints\":%.2f,\"autoV20NearestSupport\":%s,\"autoV20NearestResistance\":%s,\"autoV20MajorSupport\":%s,\"autoV20MajorResistance\":%s,\"autoV20SupportDistanceAtr\":%.4f,\"autoV20ResistanceDistanceAtr\":%.4f,\"autoV20FormingBase\":%s,\"autoV20FormingCeiling\":%s,\"autoV20RoleFlipState\":\"%s\",\"autoV20SwingStart\":%s,\"autoV20SwingExtreme\":%s,\"autoV20PullbackRetracement\":%.4f,\"autoV20PullbackState\":\"%s\",\"autoV20PlannedEntry\":%s,\"autoV20TpPrice\":%s,\"autoV20SlPrice\":%s,\"autoV20RR\":%.3f,\"autoV20ExpectedProfitMoney\":%.2f,\"autoV20ExpectedLossMoney\":%.2f,\"autoV20KnownCostMoney\":%.2f,\"autoV20AggregateRiskMoney\":%.2f}}",
+            g_controlMode,
+            AutoV20Enabled() ? "true" : "false",
+            g_autoV20DecisionId,
+            g_autoV20DecisionKind,
+            g_autoV20DecisionReason,
+            g_autoV20RejectReason,
+            g_autoV20DirectionChangeReason,
+            g_autoV20AddReason,
+            g_autoV20Phase,
+            g_autoV20Buy.rankScore,
+            g_autoV20Sell.rankScore,
+            g_autoV20Buy.confidence,
+            g_autoV20Sell.confidence,
+            g_autoV20Confidence,
+            g_autoV20WinProbability,
+            g_autoV20WinSamples,
+            g_autoV20AverageNet,
+            auditSide.momentumWithPoints,
+            auditSide.momentumAgainstPoints,
+            DoubleToString(g_autoV20Levels.nearestSupport,SymbolDigitsNow()),
+            DoubleToString(g_autoV20Levels.nearestResistance,SymbolDigitsNow()),
+            DoubleToString(g_autoV20Levels.majorSupport,SymbolDigitsNow()),
+            DoubleToString(g_autoV20Levels.majorResistance,SymbolDigitsNow()),
+            g_autoV20Levels.nearestSupportDistanceAtr,
+            g_autoV20Levels.nearestResistanceDistanceAtr,
+            DoubleToString(g_autoV20Levels.formingBase,SymbolDigitsNow()),
+            DoubleToString(g_autoV20Levels.formingCeiling,SymbolDigitsNow()),
+            g_autoV20Levels.roleFlipState,
+            DoubleToString(auditSide.pullbackSwingStart,SymbolDigitsNow()),
+            DoubleToString(auditSide.pullbackSwingExtreme,SymbolDigitsNow()),
+            auditSide.pullbackRetracement,
+            auditSide.pullbackState,
+            DoubleToString(auditSide.entryPrice,SymbolDigitsNow()),
+            DoubleToString(auditSide.tpPrice,SymbolDigitsNow()),
+            DoubleToString(auditSide.slPrice,SymbolDigitsNow()),
+            auditSide.rr,
+            auditSide.expectedProfitMoney,
+            auditSide.expectedLossMoney,
+            auditSide.knownCostMoney,
+            g_autoV20AggregateRiskMoney
+         );
+         payload=StringSubstr(payload,0,StringLen(payload)-2)+autoV20Diagnostics;
+      }
    string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";
    ulong heartbeatStartedMs = GetTickCount64();
    int code = HttpPostJson(heartbeatUrl, payload, response);
@@ -3319,6 +3380,8 @@ void SendHeartbeat()
       JsonNumber(response, "sellWinProbability", g_sellWinProbability)));
    g_sellWinSamples = (int)MathMax(0.0,
       JsonNumber(response, "sellWinSamples", g_sellWinSamples));
+   g_buyAverageNet = JsonNumber(response, "buyAverageNet", g_buyAverageNet);
+   g_sellAverageNet = JsonNumber(response, "sellAverageNet", g_sellAverageNet);
    g_setupWinProbability = MathMax(0.0,MathMin(100.0,
       JsonNumber(response,"setupWinProbability",g_setupWinProbability)));
    g_setupWinSamples = (int)MathMax(0.0,
@@ -3327,6 +3390,7 @@ void SendHeartbeat()
       JsonNumber(response,"setupAvgWin",g_setupAvgWin));
    g_setupAvgLoss = MathMin(0.0,
       JsonNumber(response,"setupAvgLoss",g_setupAvgLoss));
+   g_setupAverageNet = JsonNumber(response,"setupAverageNet",g_setupAverageNet);
    g_setupEvScore = MathMax(0.0,MathMin(100.0,
       JsonNumber(response,"setupEvScore",g_setupEvScore)));
    g_setupHistoryModel = JsonString(response,"setupModel",g_setupHistoryModel);
@@ -3519,6 +3583,34 @@ void PostTradeJournalDeal(ulong dealTicket)
       basketIndex
    );
 
+   if(!isExit && AutoV20Enabled() && StringLen(payload)>=1)
+   {
+      AUTO_V20_SIDE auditSide;
+      AutoV20ResetSide(auditSide,positionDirection);
+      if(positionDirection>0) auditSide=g_autoV20Buy;
+      else auditSide=g_autoV20Sell;
+      string audit=StringFormat(
+         ",\"autoDecisionId\":%I64d,\"autoDecisionKind\":\"%s\",\"autoDecisionReason\":\"%s\",\"autoDirectionChangeReason\":\"%s\",\"autoAddReason\":\"%s\",\"autoBuyScore\":%.2f,\"autoSellScore\":%.2f,\"autoMomentumWithPoints\":%.2f,\"autoMomentumAgainstPoints\":%.2f,\"autoNearestSupport\":%s,\"autoNearestResistance\":%s,\"autoSupportDistanceAtr\":%.4f,\"autoResistanceDistanceAtr\":%.4f,\"autoSwingStart\":%s,\"autoSwingExtreme\":%s,\"autoPullbackRetracement\":%.4f,\"autoPullbackState\":\"%s\",\"autoTpPrice\":%s,\"autoSlPrice\":%s,\"autoRR\":%.3f,\"autoKnownCostMoney\":%.2f,\"autoExpectedProfitMoney\":%.2f,\"autoExpectedLossMoney\":%.2f,\"autoAggregateRiskMoney\":%.2f,\"modelConfidence\":%.2f,\"winProbability\":%.2f,\"winSamples\":%d,\"averageNet\":%.2f}",
+         g_autoV20DecisionId,g_autoV20DecisionKind,g_autoV20DecisionReason,
+         g_autoV20DirectionChangeReason,g_autoV20AddReason,
+         g_autoV20Buy.rankScore,g_autoV20Sell.rankScore,
+         auditSide.momentumWithPoints,auditSide.momentumAgainstPoints,
+         DoubleToString(g_autoV20Levels.nearestSupport,SymbolDigitsNow()),
+         DoubleToString(g_autoV20Levels.nearestResistance,SymbolDigitsNow()),
+         g_autoV20Levels.nearestSupportDistanceAtr,
+         g_autoV20Levels.nearestResistanceDistanceAtr,
+         DoubleToString(auditSide.pullbackSwingStart,SymbolDigitsNow()),
+         DoubleToString(auditSide.pullbackSwingExtreme,SymbolDigitsNow()),
+         auditSide.pullbackRetracement,auditSide.pullbackState,
+         DoubleToString(auditSide.tpPrice,SymbolDigitsNow()),
+         DoubleToString(auditSide.slPrice,SymbolDigitsNow()),
+         auditSide.rr,auditSide.knownCostMoney,auditSide.expectedProfitMoney,
+         auditSide.expectedLossMoney,g_autoV20AggregateRiskMoney,
+         auditSide.confidence,auditSide.winProbability,auditSide.winSamples,auditSide.averageNet
+      );
+      payload=StringSubstr(payload,0,StringLen(payload)-1)+audit;
+   }
+
    string response = "";
    int code = HttpPostJsonTimeout(InpApiBase + "/api/ea/journal", payload, response, 650);
    if(code >= 200 && code < 300)
@@ -3618,6 +3710,7 @@ void ClearActiveBasketJournal()
    g_basketJournalMacdState = "NEUTRAL";
    g_basketJournalLevelFlipState = "NONE";
    g_basketJournalPremiumDiscountState = "EQUILIBRIUM";
+   g_basketJournalAutoDecisionId = 0;
 }
 
 void CaptureBasketJournalEntry(ulong dealTicket)
@@ -3666,6 +3759,7 @@ void CaptureBasketJournalEntry(ulong dealTicket)
       g_basketJournalMacdState = g_macdState;
       g_basketJournalLevelFlipState = g_levelFlipState;
       g_basketJournalPremiumDiscountState = g_premiumDiscountState;
+      g_basketJournalAutoDecisionId = AutoV20Enabled() ? g_autoV20DecisionId : 0;
    }
    g_basketJournalVolume += HistoryDealGetDouble(dealTicket, DEAL_VOLUME);
    UpdateBasketPeakPositionCount(BasketPositionCount());
@@ -3738,6 +3832,7 @@ void RecoverOpenBasketJournal()
    g_basketJournalMacdState = g_macdState;
    g_basketJournalLevelFlipState = g_levelFlipState;
    g_basketJournalPremiumDiscountState = g_premiumDiscountState;
+   g_basketJournalAutoDecisionId = 0;
 }
 
 void FinalizeBasketJournal()
@@ -3785,6 +3880,7 @@ void FinalizeBasketJournal()
    g_pendingBasketMacdState = g_basketJournalMacdState;
    g_pendingBasketLevelFlipState = g_basketJournalLevelFlipState;
    g_pendingBasketPremiumDiscountState = g_basketJournalPremiumDiscountState;
+   g_pendingBasketAutoDecisionId = g_basketJournalAutoDecisionId;
    ClearActiveBasketJournal();
 }
 
@@ -3865,6 +3961,12 @@ void FlushPendingBasketJournal()
       g_pendingBasketLevelFlipState,
       g_pendingBasketPremiumDiscountState
    );
+
+   if(g_pendingBasketAutoDecisionId>0 && StringLen(payload)>=1)
+   {
+      string audit=StringFormat(",\"autoDecisionId\":%I64d}",g_pendingBasketAutoDecisionId);
+      payload=StringSubstr(payload,0,StringLen(payload)-1)+audit;
+   }
 
    string response = "";
    int code = HttpPostJsonTimeout(InpApiBase + "/api/ea/journal", payload, response, 650);
@@ -4033,7 +4135,8 @@ void ApplySettings(string json)
    string requestedControlMode = JsonString(json, "controlMode", g_controlMode);
    StringToUpper(requestedControlMode);
    if(requestedControlMode == "AUTO" || requestedControlMode == "RACE" ||
-      requestedControlMode == "ASSISTED" || requestedControlMode == "MANUAL")
+      requestedControlMode == "ASSISTED" || requestedControlMode == "MANUAL" ||
+      requestedControlMode == "LEGACY")
       g_controlMode = requestedControlMode;
 
 
@@ -9596,6 +9699,10 @@ void AutoV20ResetSide(AUTO_V20_SIDE &side,int direction)
    side.momentumAgainstPoints=0.0;
    side.locationScore=0.0;
    side.pullbackScore=0.0;
+   side.pullbackSwingStart=0.0;
+   side.pullbackSwingExtreme=0.0;
+   side.pullbackRetracement=0.0;
+   side.pullbackState="NONE";
    side.entryPrice=0.0;
    side.tpPrice=0.0;
    side.slPrice=0.0;
@@ -10021,20 +10128,19 @@ void AutoV20AttachHistory(AUTO_V20_SIDE &side)
    {
       side.winProbability=g_setupWinProbability;
       side.winSamples=g_setupWinSamples;
-      double p=side.winProbability/100.0;
-      side.averageNet=p*g_setupAvgWin+(1.0-p)*g_setupAvgLoss;
+      side.averageNet=g_setupAverageNet;
    }
    else if(side.direction>0)
    {
       side.winProbability=g_buyWinProbability;
       side.winSamples=g_buyWinSamples;
-      side.averageNet=0.0;
+      side.averageNet=g_buyAverageNet;
    }
    else
    {
       side.winProbability=g_sellWinProbability;
       side.winSamples=g_sellWinSamples;
-      side.averageNet=0.0;
+      side.averageNet=g_sellAverageNet;
    }
 
    // Real statistics stay separate from model Confidence. History contributes
@@ -10123,6 +10229,10 @@ void AutoV20EvaluateSide(
    AUTO_V20_PULLBACK pb;
    AutoV20EvaluatePullback(direction,momentum,pb);
    side.pullbackScore=pb.score;
+   side.pullbackSwingStart=pb.swingStart;
+   side.pullbackSwingExtreme=pb.swingExtreme;
+   side.pullbackRetracement=pb.retracement;
+   side.pullbackState=pb.state;
 
    double location=0.0;
    if(direction>0)

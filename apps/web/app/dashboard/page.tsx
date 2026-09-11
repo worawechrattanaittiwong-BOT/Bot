@@ -719,7 +719,12 @@ export default function DashboardPage() {
     WAIT_TERMINAL_DEMAND: "ไม่ Sell ต่อ · ราคาอยู่ใกล้ Demand และแรงขายเริ่มหมด",
     WAIT_TERMINAL_SUPPLY: "ไม่ Buy ต่อ · ราคาอยู่ใกล้ Supply และแรงซื้อเริ่มหมด",
     EXTREME_SPREAD: "ยังไม่เปิดไม้ใหม่ · Spread อยู่ระดับ EXTREME",
-    WAIT_FRESH_EXECUTION_EVENT: "รอ EMA reclaim / Price Action / Momentum / Zone reaction ใหม่ก่อนเข้าอีกครั้ง"
+    WAIT_FRESH_EXECUTION_EVENT: "รอ EMA reclaim / Price Action / Momentum / Zone reaction ใหม่ก่อนเข้าอีกครั้ง",
+    AUTO_V20_WAIT_CONFLICT: "AUTO รอ · คะแนน BUY/SELL ยังใกล้กันเกินไป",
+    AUTO_V20_WAIT_QUALITY: "AUTO รอ · คุณภาพ Setup กลางยังไม่ถึงเกณฑ์",
+    AUTO_V20_WAIT_RR: "AUTO รอ · TP/SL จริงยังไม่คุ้มความเสี่ยง",
+    AUTO_V20_WAIT_ADD: "AUTO รอเพิ่มไม้ · ต้องเดินถูกทางหรือ Pullback กลับไปต่อก่อน",
+    AUTO_V20_RISK_LIMIT: "AUTO ไม่เพิ่มไม้ · ความเสี่ยงรวมถึงขอบเขตที่ตั้งไว้"
   };
   const latestDecisionCustomerText = latestDecisionReason === "NONE"
     ? "กำลังประเมินตลาด"
@@ -738,7 +743,13 @@ export default function DashboardPage() {
     MAX_BASKET_LOSS: "ปิด Basket · ถึงขีดจำกัดขาดทุนรวม",
     DAILY_PROFIT_TARGET: "ปิด Basket · ถึงเป้ากำไรรายวัน",
     DAILY_PROFIT_GIVEBACK: "ปิด Basket · กำไรรายวันย่อตามเปอร์เซ็นต์ที่ตั้ง",
-    REMOTE_CLOSE_ALL: "ปิด Basket · ผู้ใช้สั่งปิดทั้งหมด"
+    REMOTE_CLOSE_ALL: "ปิด Basket · ผู้ใช้สั่งปิดทั้งหมด",
+    AUTO_V20_STRUCTURE_STOP: "AUTO ปิด · ราคาเสียโครงสร้างที่วางไว้",
+    AUTO_V20_CONFIRMED_WRONG: "AUTO ปิด · M5/M1/Momentum ยืนยันว่าเข้าไม่ถูกทาง",
+    AUTO_V20_MODERATE_TARGET: "AUTO ปิด · ถึงเป้ากำไรพอประมาณ",
+    AUTO_V20_PROFIT_GIVEBACK: "AUTO ปิด · กำไรย่อจาก Peak 25%",
+    AUTO_V20_TIME_BANK_PROFIT: "AUTO ปิด · ถือครบช่วงประเมินและแรงเริ่มหมด",
+    AUTO_V20_TIME_STOP: "AUTO ปิด · ถือเกินกรอบเวลาโดยยังไม่ฟื้น"
   };
   const latestCloseCustomerText = closeReasonLabel[latestCloseReason]
     || latestCloseReason.replace(/_/g," ");
@@ -1653,7 +1664,14 @@ export default function DashboardPage() {
                     </div>
                     <div className="cc-v6-insight-rows">
                       <InsightRow label="คุณภาพจุดเข้า" value={entryQualityCustomerText+" · "+Number(metrics.entryQualityScore||0).toFixed(0)+"/100"}/>
-                      <InsightRow label="Confidence" value={Number(metrics.signalConfidence||0).toFixed(0)+"%"} tone={Number(metrics.signalConfidence||0)>=70?"good":"neutral"}/>
+                      <InsightRow label="Confidence (สูตร)" value={Number(metrics.signalConfidence||0).toFixed(0)+"%"} tone={Number(metrics.signalConfidence||0)>=70?"good":"neutral"}/>
+                      {Boolean(metrics.autoV20Active) ? <>
+                        <InsightRow label="Win Probability (Basket จริง)" value={Number(metrics.autoV20WinProbability||0).toFixed(1)+"% · "+Number(metrics.autoV20WinSamples||0)+" รอบ"}/>
+                        <InsightRow label="กำไรเฉลี่ยสุทธิ / Basket" value={Number(metrics.autoV20AverageNet||0).toFixed(2)}/>
+                        <InsightRow label="AUTO BUY / SELL" value={Number(metrics.autoV20BuyScore||0).toFixed(0)+" / "+Number(metrics.autoV20SellScore||0).toFixed(0)}/>
+                        <InsightRow label="R:R แผนเข้า" value={Number(metrics.autoV20RR||0).toFixed(2)+" · Cost "+Number(metrics.autoV20KnownCostMoney||0).toFixed(2)}/>
+                        <InsightRow label="AUTO Phase" value={String(metrics.autoV20Phase||"INITIALIZING")}/>
+                      </> : null}
                       <InsightRow label="Order Block" value={orderBlockCustomerText+" · "+orderBlockQuality.toFixed(0)+"%"}/>
                       <InsightRow label="Fibonacci" value={fibCustomerText+" · "+fibScore.toFixed(0)+"%"}/>
                       <InsightRow label="แนวรับ / แนวต้าน" value={(Number(metrics.nearestSupport||0)>0?Number(metrics.nearestSupport).toFixed(symbolDigits):"—")+" / "+(Number(metrics.nearestResistance||0)>0?Number(metrics.nearestResistance).toFixed(symbolDigits):"—")}/>
