@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.049"
-#define SCENOVA_EA_VERSION "1.049"
-#define SCENOVA_PRODUCT_VERSION "2.0.11"
+#property version   "1.050"
+#define SCENOVA_EA_VERSION "1.050"
+#define SCENOVA_PRODUCT_VERSION "2.0.12"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -7923,9 +7923,19 @@ bool BrainV8QualityGate(int direction, double momentum)
       confidenceFloor = MathMax(confidenceFloor, 60.0);
 
    g_effectiveConfidenceThreshold = confidenceFloor;
-   if(g_signalConfidence < confidenceFloor)
+
+   // Brain V11: confidence is a quality preference, not a permanent deadlock.
+   // Market location, model confirmation and directional structure remain hard
+   // safety gates. Only catastrophically weak confidence can veto an entry.
+   // This lets the EA recover naturally after a losing streak instead of
+   // requiring a trade to reset a streak while simultaneously forbidding it.
+   bool confidenceBelowPreferred = g_signalConfidence < confidenceFloor;
+   double catastrophicFloor = MathMax(38.0, confidenceFloor - 18.0);
+   if(g_confidenceGateEnabled &&
+      confidenceBelowPreferred &&
+      g_signalConfidence < catastrophicFloor)
    {
-      g_adaptiveBlockReason = "WAITING_CONFIDENCE";
+      g_adaptiveBlockReason = "WAITING_CONFIDENCE_EXTREME";
       return false;
    }
 
@@ -8843,7 +8853,9 @@ int AdaptiveEntryDirection(double momentum)
    if(trendM30 == -rawDirection && trendH1 == -rawDirection)
       score -= 12.0;
 
-   score -= MathMin(15.0, g_consecutiveLosses * 4.0);
+   // Brain V11: loss history is advisory and bounded. It may make the engine
+   // more selective, but it must never create a self-locking no-trade state.
+   score -= MathMin(6.0, g_consecutiveLosses * 1.5);
    g_modelConfidence = MathMax(0.0, MathMin(100.0, score));
    g_historicalWinProbability = rawDirection > 0
       ? g_buyWinProbability
@@ -8901,11 +8913,10 @@ int AdaptiveEntryDirection(double momentum)
       return 0;
    }
 
-   // Brain V8: confidence is a mandatory execution gate and remains visible for audit.
-   // DynamicConfidenceThreshold remains visible as the effective threshold.
-   // Pullback + Structure gates are enforced immediately above.
-   // BrainV8QualityGate above owns the authoritative confidence threshold for
-   // this decision. Do not overwrite telemetry with a weaker display value.
+   // Brain V11: confidence remains visible for audit but is no longer allowed
+   // to deadlock the engine after a losing streak. Market Location, model
+   // confirmation and Structure remain the authoritative hard safety gates.
+   // BrainV8QualityGate owns the preferred confidence threshold telemetry.
 
    g_adaptiveLot = AdaptiveTradeVolume();
    if(g_adaptiveLot <= 0.0)
