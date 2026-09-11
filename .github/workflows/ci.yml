@@ -26,3 +26,6 @@ jobs:
       - name: Unified release version consistency
         shell: pwsh
         run: ./tests/release-version-consistency.ps1
+      - name: Manual EA update one-click restart contract
+        shell: pwsh
+        run: ./tests/manual-ea-update-contract.ps1
