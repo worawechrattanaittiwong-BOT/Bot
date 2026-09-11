@@ -211,13 +211,13 @@ export class AgentActionController {
       metrics.accountTradeAllowed !== false &&
       metrics.accountTradeExpert !== false;
 
-    // Complete recovery only after the Agent ACKs the single user-authorized
-    // restart. Completing it while the Agent is still polling PENDING changes
-    // the action id/status underneath verification and previously caused the
-    // Agent to report failure, followed by another restart loop.
+    // START_RECOVERY is now reconnect-only. Completing recovery is allowed only
+    // after its one CONNECT_MT5 action is ACKed; it can never complete or create
+    // an EA update restart path.
     if (
       recoveryRequested &&
       String(instance.manual_action_source || "") === "START_RECOVERY" &&
+      String(instance.manual_action_name || "").toUpperCase() === "CONNECT_MT5" &&
       String(instance.manual_action_status || "").toUpperCase() === "ACKED" &&
       eaOnline &&
       positions <= 0 &&
@@ -260,7 +260,10 @@ export class AgentActionController {
       : Number.POSITIVE_INFINITY;
     const actionStatus = String(instance.manual_action_status || "").toUpperCase();
     const actionSource = String(instance.manual_action_source || "").toUpperCase();
-    const sourceIsUserAuthorized = actionSource === "USER" || actionSource === "START_RECOVERY";
+    const actionName = String(instance.manual_action_name || "").toUpperCase();
+    const sourceIsUserAuthorized =
+      actionSource === "USER" ||
+      (actionSource === "START_RECOVERY" && actionName === "CONNECT_MT5");
     const stalePending = Boolean(
       instance.manual_action_id &&
       instance.manual_action_name &&
@@ -274,12 +277,12 @@ export class AgentActionController {
       !sourceIsUserAuthorized
     );
 
-    // Cancel actions created by the retired background auto-recovery logic and
-    // expire a one-time request instead of retrying it forever. A new MT5
-    // restart now always requires a fresh button click from the customer.
+    // UPDATE_EA_RESTART is valid only when it came from the dedicated USER
+    // button. Cancel old/background update actions and expire one-time requests
+    // instead of retrying them. A new EA reload always needs a fresh click/new id.
     if (stalePending || legacyAutomaticPending) {
       const failureMessage = legacyAutomaticPending
-        ? "ยกเลิกคำสั่งควบคุม MT5 อัตโนมัติเดิมแล้ว กรุณากดอัปเดตหรือเชื่อมต่อเมื่อต้องการ"
+        ? "ยกเลิกคำสั่งรีโหลด EA อัตโนมัติเดิมแล้ว กรุณากดปุ่มอัปเดต EA 1 ครั้งเมื่อต้องการ"
         : "คำสั่งหมดเวลารอ ระบบยกเลิกแล้ว กรุณากดใหม่เมื่อต้องการ";
       await this.db.query(
         `UPDATE bot_instances
@@ -297,7 +300,7 @@ export class AgentActionController {
       recoveryRequested = false;
     }
 
-    let manualActionActive = Boolean(
+    const manualActionActive = Boolean(
       sourceIsUserAuthorized &&
       !stalePending &&
       !legacyAutomaticPending &&
@@ -309,16 +312,16 @@ export class AgentActionController {
       String(instance.manual_action_status || "PENDING") === "PENDING"
     );
 
-    let manualActionName = manualActionActive
+    const manualActionName = manualActionActive
       ? String(instance.manual_action_name || "")
       : "";
-    let manualActionId = manualActionActive
+    const manualActionId = manualActionActive
       ? String(instance.manual_action_id || "")
       : "";
-    let manualActionRequestedAt = manualActionActive && previousRequestedAt
+    const manualActionRequestedAt = manualActionActive && previousRequestedAt
       ? previousRequestedAt.toISOString()
       : null;
-    let manualActionStatus = String(instance.manual_action_status || "") || null;
+    const manualActionStatus = String(instance.manual_action_status || "") || null;
 
     return {
       ok: true,
