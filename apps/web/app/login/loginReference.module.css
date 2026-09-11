@@ -1,0 +1,56 @@
+.heroCopy{
+  width:min(730px,80%);
+  top:140px;
+}
+.heroCopy h1{
+  max-width:730px;
+  font-size:clamp(44px,3.35vw,58px);
+  line-height:1.03;
+  letter-spacing:-.045em;
+}
+.heroCopy p{
+  max-width:570px;
+}
+.artScene{
+  right:-42px;
+  bottom:-14px;
+  width:min(735px,72vw);
+  height:735px;
+}
+.mascot{
+  right:-1%;
+  bottom:-1%;
+  width:96%;
+  mix-blend-mode:screen;
+  filter:saturate(1.08) contrast(1.07) drop-shadow(0 20px 60px rgba(0,79,190,.48));
+  mask-image:linear-gradient(180deg,rgba(0,0,0,.96) 0,#000 82%,rgba(0,0,0,.72) 93%,transparent 100%);
+}
+.card{
+  width:min(548px,100%);
+}
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus{
+  -webkit-text-fill-color:#f6f9ff;
+  caret-color:#f6f9ff;
+  -webkit-box-shadow:0 0 0 1000px #0b182a inset,0 0 0 1px rgba(84,133,184,.6);
+  transition:background-color 9999s ease-out 0s;
+}
+
+@media (max-width:1240px){
+  .heroCopy{width:min(650px,76%);top:132px}
+  .heroCopy h1{font-size:clamp(40px,4vw,52px)}
+  .artScene{right:-70px;width:min(660px,68vw);height:680px}
+}
+
+@media (max-width:980px){
+  .heroCopy{position:relative;top:auto;width:100%;max-width:700px}
+  .heroCopy h1{font-size:clamp(42px,7vw,58px)}
+  .artScene{right:-8%;width:68%;height:auto;aspect-ratio:5/6;opacity:.86}
+}
+
+@media (max-width:680px){
+  .heroCopy h1{font-size:clamp(38px,11vw,52px)}
+  .artScene{right:-18%;width:84%;opacity:.56}
+  .mascot{width:100%}
+}
