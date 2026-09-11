@@ -5,14 +5,14 @@ import { ScenovaIcon } from "./ScenovaIcon";
 import { ScenovaBrand } from "./ScenovaBrand";
 
 export const ownerNavItems = [
-  { section:"WORKSPACE", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"ภาพรวมระบบ", hint:"สุขภาพระบบ" },
-  { section:"WORKSPACE", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"ลูกค้า & สมาชิก", hint:"Trial, Access, แพ็กเกจ" },
-  { section:"WORKSPACE", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud", hint:"Trading Nodes" },
-  { section:"MY TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"control", label:"Control Center", hint:"ภาพรวมและควบคุมบอท" },
-  { section:"MY TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account", label:"บัญชี MT5 & EA", hint:"เชื่อมบัญชี Local / Cloud" },
-  { section:"MY TRADING", key:"trading-access", href:"/dashboard?view=access", icon:"shield", label:"สิทธิ์ใช้งานของฉัน", hint:"OWNER · Unlimited Access" },
-  { section:"MY TRADING", key:"trading-backtest", href:"/dashboard?view=backtest", icon:"strategy", label:"Backtest & Performance", hint:"ผลย้อนหลัง ดาวน์โหลด และแชร์ตัวอย่าง" },
-  { section:"PUBLIC", key:"website", href:"/", icon:"strategy", label:"หน้าเว็บไซต์", hint:"หน้าแรก SCENOVA" }
+  { section:"TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"control", label:"Control Center", hint:"ภาพรวมและควบคุมการทำงานของบอท" },
+  { section:"TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account", label:"MT5 & EA", hint:"เชื่อมต่อและจัดการบัญชี Local / Cloud" },
+  { section:"TRADING", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud Trading", hint:"จัดการ Trading Nodes และระบบประมวลผล" },
+  { section:"TRADING", key:"trading-backtest", href:"/dashboard?view=backtest", icon:"strategy", label:"Backtest & Performance", hint:"ผลทดสอบย้อนหลัง สถิติ และการวิเคราะห์" },
+  { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trial, subscriptions และสิทธิ์การใช้งาน" },
+  { section:"MANAGEMENT", key:"trading-access", href:"/dashboard?view=access", icon:"shield", label:"Access & Permissions", hint:"บทบาทและขอบเขตการเข้าถึงระบบ" },
+  { section:"SYSTEM", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"System Overview", hint:"สถานะและสุขภาพโดยรวมของแพลตฟอร์ม" },
+  { section:"SYSTEM", key:"website", href:"/", icon:"strategy", label:"Main Website", hint:"SCENOVA public website" }
 ] as const;
 
 type OwnerNavigateHandler = (href:string)=>boolean | void;
@@ -26,7 +26,7 @@ export function OwnerSidebar({
   onLogout:()=>void;
   onNavigate?:OwnerNavigateHandler;
 }) {
-  const sections = ["WORKSPACE","MY TRADING","PUBLIC"] as const;
+  const sections = ["TRADING","MANAGEMENT","SYSTEM"] as const;
   return (
     <aside className="sidebar app-sidebar owner-sidebar">
       <div className="brand-lockup side-brand scenova-brand-lockup">
@@ -35,7 +35,7 @@ export function OwnerSidebar({
 
       {sections.map(section=>(
         <div key={section}>
-          <div className={"owner-nav-label " + (section!=="WORKSPACE" ? "owner-nav-label-secondary" : "")}>{section}</div>
+          <div className={"owner-nav-label " + (section!=="TRADING" ? "owner-nav-label-secondary" : "")}>{section}</div>
           <nav className="side-nav owner-nav">
             {ownerNavItems.filter(item=>item.section===section).map(item=>(
               <Link
@@ -59,10 +59,10 @@ export function OwnerSidebar({
 
       <div className="owner-profile">
         <div className="owner-avatar">O</div>
-        <div><small>System role</small><b>OWNER</b></div>
+        <div><small>System Role</small><b>OWNER</b></div>
         <span className="dot green"/>
       </div>
-      <button type="button" className="btn ghost full owner-logout" onClick={onLogout}><ScenovaIcon name="logout" size={18}/>ออกจากระบบ</button>
+      <button type="button" className="btn ghost full owner-logout" onClick={onLogout}><ScenovaIcon name="logout" size={18}/>Sign Out</button>
     </aside>
   );
 }
