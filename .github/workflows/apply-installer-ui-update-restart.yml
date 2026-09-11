@@ -1,0 +1,78 @@
+name: Apply Installer UI Refresh and EA Restart Fix
+
+concurrency:
+  group: apply-installer-ui-update-restart
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/upgrade-installer-ui-update-restart.ps1"
+      - ".github/workflows/apply-installer-ui-update-restart.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Apply source patch
+        shell: pwsh
+        run: ./scripts/upgrade-installer-ui-update-restart.ps1
+
+      - name: Verify manual update contract
+        shell: pwsh
+        run: ./tests/manual-ea-update-contract.ps1
+
+      - name: Verify unified 1.0.0 version remains unchanged
+        shell: pwsh
+        run: ./tests/release-version-consistency.ps1
+
+      - name: Build Windows installer source
+        shell: pwsh
+        run: dotnet build tools/windows-installer/ScenovaInstaller.csproj -c Release
+
+      - name: Typecheck and build API Web
+        shell: pwsh
+        run: |
+          npm install
+          npm run typecheck
+          npm run build
+
+      - name: Publish patched source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git fetch origin main
+          git diff --quiet HEAD origin/main
+          if ($LASTEXITCODE -eq 1) { throw "main moved during validation; rerun on newest main" }
+          if ($LASTEXITCODE -ne 0) { throw "could not compare main" }
+
+          git add tools/windows-installer/BrandAssets.cs
+          git add tools/windows-installer/InstallerForm.cs
+          git add apps/api/src/manual-mt5.controller.ts
+          git add tests/manual-ea-update-contract.ps1
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { Write-Host "Patch already current"; exit 0 }
+          if ($LASTEXITCODE -ne 1) { throw "could not inspect staged source" }
+
+          git commit -m "fix: refresh installer UI and restore one-click EA restart"
+          git push origin HEAD:main
