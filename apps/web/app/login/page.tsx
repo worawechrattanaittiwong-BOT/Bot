@@ -104,9 +104,10 @@ export default function LoginPage() {
 
   return (
     <main className={styles.page}>
+      <div className={styles.gridGlow} aria-hidden="true" />
       <div className={styles.shell}>
         <section className={styles.hero} aria-label="SCENOVA secure access">
-          <a href="/" aria-label="SCENOVA home">
+          <a className={styles.heroBrandLink} href="/" aria-label="SCENOVA home">
             <ScenovaBrand className={styles.heroBrand} />
           </a>
 
@@ -114,8 +115,9 @@ export default function LoginPage() {
             <div className={styles.eyebrow}>INTELLIGENT MT5 AUTOMATION</div>
             <h1>Secure Access to Your <span>Trading Control Center</span></h1>
             <p className={styles.heroLead}>
-              Log in to your SCENOVA account and take full control of your MT5 automation.
-              Manage, monitor, and optimize your trading from one powerful platform.
+              Log in to your SCENOVA account and take full control<br className={styles.desktopOnly} />
+              of your MT5 automation. Manage, monitor, and optimize<br className={styles.desktopOnly} />
+              your trading — all in one powerful platform.
             </p>
 
             <div className={styles.featureList}>
@@ -134,14 +136,25 @@ export default function LoginPage() {
             </div>
           </div>
 
+          <div className={styles.marketBars} aria-hidden="true" />
           <div className={styles.heroArt} aria-hidden="true">
+            <div className={styles.arcOne} />
+            <div className={styles.arcTwo} />
             <img className={styles.mascot} src="/assets/scenova-nova-mascot-v1.webp" width={1536} height={1024} alt="" />
-            <div className={styles.hudCard}><b>MT5</b><span>CONNECT<br />AUTOMATE<br />MONITOR<br />PROFIT</span></div>
+            <div className={styles.hudCard}>
+              <div className={styles.hudHead}><b>MT5</b><span /></div>
+              <div className={styles.hudBody}><span>CONNECT</span><span>AUTOMATE</span><span>MONITOR</span><span>PROFIT</span></div>
+              <div className={styles.hudChart}><i /><i /><i /><i /><i /></div>
+            </div>
+            <div className={styles.artCaption}>
+              <small>TRADING<br />AUTOMATION<br />A BRIGHTER<br />TOMORROW</small>
+            </div>
           </div>
           <div className={styles.heroFoot}>DESIGNED FOR YOUR TRADING JOURNEY</div>
         </section>
 
         <section className={styles.panelWrap}>
+          <div className={styles.precision}>PRECISION IN MOTION.</div>
           <div className={styles.card}>
             <a href="/" aria-label="SCENOVA home">
               <ScenovaBrand className={styles.cardBrand} />
@@ -175,7 +188,7 @@ export default function LoginPage() {
                     autoComplete="email"
                     value={email}
                     onChange={e=>setEmail(e.target.value)}
-                    placeholder="name@example.com"
+                    placeholder="your@email.com"
                     required
                   />
                 </div>
@@ -197,7 +210,7 @@ export default function LoginPage() {
                     required
                   />
                   <button className={styles.visibility} type="button" onClick={()=>setShowPassword(v=>!v)} aria-label={showPassword ? "Hide password" : "Show password"}>
-                    {showPassword ? "HIDE" : "SHOW"}
+                    <span className={styles.eyeIcon} aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -222,25 +235,28 @@ export default function LoginPage() {
               <button className={styles.secondary} type="button" onClick={switchMode}>
                 {register ? "Already have an account? Sign In" : "Create Account"}
               </button>
-              <a className={styles.back} href="/">← Back to Home</a>
+              <a className={styles.back} href="/">←&nbsp;&nbsp; Back to Home</a>
             </form>
 
             <div className={styles.trustGrid}>
               <div className={styles.trustItem}>
                 <span className={styles.trustIcon}><ScenovaIcon name="shield" size={17} /></span>
-                <div><b>Encrypted Session</b><small>Secure access protection</small></div>
+                <div><b>Encrypted<br />session</b><small>Your data stays safe</small></div>
               </div>
               <div className={styles.trustItem}>
                 <span className={styles.trustIcon}><ScenovaIcon name="spark" size={17} /></span>
-                <div><b>Fast Access</b><small>MT5 & EA dashboard</small></div>
+                <div><b>Fast access<br />to MT5 & EA dashboard</b><small>Get started in seconds</small></div>
               </div>
               <div className={styles.trustItem}>
                 <span className={styles.trustIcon}><ScenovaIcon name="cloud" size={17} /></span>
-                <div><b>Cloud + Local</b><small>Ready for both modes</small></div>
+                <div><b>Cloud + Local<br />ready</b><small>Trade anywhere</small></div>
               </div>
             </div>
+          </div>
 
-            <div className={styles.securityLine}><ScenovaIcon name="shield" size={14} /> Protected by SCENOVA secure authentication</div>
+          <div className={styles.securityLine}>
+            <ScenovaIcon name="shield" size={17} />
+            <div><span>Protected by SCENOVA secure authentication</span><small>YOUR DATA. OUR PRIORITY.</small></div>
           </div>
         </section>
       </div>
