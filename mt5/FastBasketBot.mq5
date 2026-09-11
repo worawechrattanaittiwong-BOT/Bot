@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.052"
-#define SCENOVA_EA_VERSION "1.052"
-#define SCENOVA_PRODUCT_VERSION "2.0.14"
+#property version   "1.053"
+#define SCENOVA_EA_VERSION "1.053"
+#define SCENOVA_PRODUCT_VERSION "2.0.15"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -9609,6 +9609,34 @@ double LadderFractionForRung(int rung)
    return 1.28 + (rung - 10) * 0.18;
 }
 
+// Brain V14: target-aware ladder density. Small Baskets keep the original
+// spacing, while large user targets distribute positions across a bounded ATR
+// span instead of demanding an impossible 17+ ATR move for 100 positions.
+// This changes spacing only; adverse-flow, reversal, permission and spread
+// safety still decide whether another position may actually be added.
+double BalancedLadderFractionForRung(int rung, int targetPositions)
+{
+   if(rung <= 1)
+      return 0.0;
+
+   int target = MathMax(2, targetPositions);
+   if(target <= 10)
+      return LadderFractionForRung(rung);
+
+   double progress = (double)(rung - 1) / (double)(target - 1);
+   progress = MathMax(0.0, MathMin(1.0, progress));
+
+   double maxSpanAtr = target <= 20 ? 1.50 :
+                       target <= 50 ? 2.20 :
+                       target <= 100 ? 3.00 :
+                       3.00 + MathMin(2.00, (target - 100) * 0.01);
+
+   // Slightly convex curve: early adds are available without clustering at
+   // one price, later adds need progressively more favorable continuation.
+   double fraction = maxSpanAtr * MathPow(progress, 1.10);
+   return MathMax(0.05, fraction);
+}
+
 bool RecentDirectionalBodyAfter(
    int direction,
    ENUM_TIMEFRAMES timeframe,
@@ -9790,10 +9818,18 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
    double fillElapsedSeconds = g_burstStartedAt > 0
       ? MathMax(0.0,(double)(TimeCurrent()-g_burstStartedAt))
       : 0.0;
-   double fillWindowSeconds = 600.0;
-   if(fillElapsedSeconds < 180.0)
+   // Brain V14: a large target gets a longer but proportionate fill window.
+   // 100 positions are paced across roughly 13 minutes in a sustained valid
+   // move instead of being mathematically limited to ~40 scheduled positions.
+   double fillWindowSeconds = MathMax(
+      600.0,
+      MathMin(1800.0, targetPositions * 8.0)
+   );
+   double strictPhaseSeconds = MathMin(240.0, fillWindowSeconds * 0.30);
+   double balancedPhaseSeconds = MathMin(720.0, fillWindowSeconds * 0.72);
+   if(fillElapsedSeconds < strictPhaseSeconds)
       g_fillPhase = "STRICT";
-   else if(fillElapsedSeconds < 420.0)
+   else if(fillElapsedSeconds < balancedPhaseSeconds)
       g_fillPhase = "BALANCED";
    else
       g_fillPhase = "COMPLETION";
@@ -9801,11 +9837,13 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
    double rungCadenceSeconds = targetPositions > 1
       ? fillWindowSeconds/(double)(targetPositions-1)
       : fillWindowSeconds;
+   double minimumCadenceSeconds = targetPositions >= 50 ? 6.0 :
+                                  targetPositions >= 20 ? 8.0 : 15.0;
    g_fillExpectedPositions = targetPositions <= 1
       ? 1
       : MathMin(
            targetPositions,
-           1+(int)MathFloor(fillElapsedSeconds/MathMax(15.0,rungCadenceSeconds))
+           1+(int)MathFloor(fillElapsedSeconds/MathMax(minimumCadenceSeconds,rungCadenceSeconds))
         );
    bool fillBehindSchedule = count < g_fillExpectedPositions;
    g_fillUrgency = MathMax(0.0,MathMin(1.0,fillElapsedSeconds/fillWindowSeconds));
@@ -9826,7 +9864,7 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
 
    g_ladderRequiredPoints = MathMax(
       3.0,
-      atr*LadderFractionForRung(nextRung)*qualityFactor*regimeFactor*
+      atr*BalancedLadderFractionForRung(nextRung,targetPositions)*qualityFactor*regimeFactor*
       spreadSpacingFactor*phaseFactor
    );
 
@@ -9916,9 +9954,12 @@ bool BasketLadderReady(int direction, int count, int targetPositions)
       // fresh favorable progress from the LAST filled position. A proper
       // better-price pullback is handled by the path above.
       double lastEntryProgress=BasketFavorableProgressPoints(direction);
+      double targetDensityScale = targetPositions >= 80 ? 0.45 :
+                                  targetPositions >= 50 ? 0.55 :
+                                  targetPositions >= 20 ? 0.75 : 1.00;
       double scheduledSpacingFactor =
-         g_fillPhase=="STRICT" ? 0.055 :
-         g_fillPhase=="BALANCED" ? 0.040 : 0.028;
+         (g_fillPhase=="STRICT" ? 0.055 :
+          g_fillPhase=="BALANCED" ? 0.040 : 0.028) * targetDensityScale;
       double scheduledSpacing=MathMax(
          2.0,
          atr*scheduledSpacingFactor*spreadSpacingFactor
