@@ -5,13 +5,13 @@ import { ScenovaIcon } from "./ScenovaIcon";
 import { ScenovaBrand } from "./ScenovaBrand";
 
 export const ownerNavItems = [
-  { section:"TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"control", label:"Control Center", hint:"ภาพรวมและควบคุมการทำงานของบอท" },
-  { section:"TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account", label:"MT5 & EA", hint:"เชื่อมต่อและจัดการบัญชี Local / Cloud" },
-  { section:"TRADING", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud Trading", hint:"จัดการ Trading Nodes และระบบประมวลผล" },
-  { section:"TRADING", key:"trading-backtest", href:"/dashboard?view=backtest", icon:"strategy", label:"Backtest & Performance", hint:"ผลทดสอบย้อนหลัง สถิติ และการวิเคราะห์" },
-  { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trial, subscriptions และสิทธิ์การใช้งาน" },
-  { section:"MANAGEMENT", key:"trading-access", href:"/dashboard?view=access", icon:"shield", label:"Access & Permissions", hint:"บทบาทและขอบเขตการเข้าถึงระบบ" },
-  { section:"SYSTEM", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"System Overview", hint:"สถานะและสุขภาพโดยรวมของแพลตฟอร์ม" },
+  { section:"TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"control", label:"Control Center", hint:"Bot status, controls & live monitoring" },
+  { section:"TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account", label:"MT5 & EA", hint:"Local / Cloud accounts & EA management" },
+  { section:"TRADING", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud Trading", hint:"Trading nodes & execution infrastructure" },
+  { section:"TRADING", key:"trading-backtest", href:"/dashboard?view=backtest", icon:"strategy", label:"Backtest & Performance", hint:"Historical tests, analytics & reports" },
+  { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trials, subscriptions & customer access" },
+  { section:"MANAGEMENT", key:"trading-access", href:"/dashboard?view=access", icon:"shield", label:"Access & Permissions", hint:"Roles, permissions & account access" },
+  { section:"SYSTEM", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"System Overview", hint:"Platform health & system status" },
   { section:"SYSTEM", key:"website", href:"/", icon:"strategy", label:"Main Website", hint:"SCENOVA public website" }
 ] as const;
 
