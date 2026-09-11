@@ -2704,7 +2704,7 @@ function BotSettingsModal(props:any) {
     if (manualSl <= 0) props.onEdit?.("manualStopLossPoints",suggestedManualSl);
   };
 
-  const directionLabel = entryMode === "SELL_ONLY" ? "SELL เท่านั้น" : entryMode === "BUY_ONLY" ? "BUY เท่านั้น" : "EA เลือก BUY / SELL";
+  const directionLabel = "EA เลือก BUY / SELL อัตโนมัติ";
   const exitLabel = controlMode === "MANUAL"
     ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")
     : "Dynamic Profit Protection";
