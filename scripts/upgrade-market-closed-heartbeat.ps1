@@ -16,11 +16,6 @@ function Replace-Required([string]$text, [string]$old, [string]$new, [string]$la
   return $text.Replace($old, $new)
 }
 
-# ---------------------------------------------------------------------------
-# EA heartbeat: use a monotonic local clock so the heartbeat keeps running
-# during weekends / broker session closes when TimeCurrent() may stop moving.
-# Trading decisions remain tick-driven; this changes connectivity telemetry only.
-# ---------------------------------------------------------------------------
 $eaPath = 'mt5/FastBasketBot.mq5'
 $ea = Read-Normalized $eaPath
 
@@ -96,7 +91,6 @@ string MarketSessionStateNow()
       int fromSeconds = fromParts.hour * 3600 + fromParts.min * 60 + fromParts.sec;
       int toSeconds = toParts.hour * 3600 + toParts.min * 60 + toParts.sec;
 
-      // A full-day session is represented by equal endpoints on some brokers.
       if(fromSeconds == toSeconds)
          return "OPEN";
 
@@ -110,9 +104,8 @@ string MarketSessionStateNow()
    if(foundSession)
       return "CLOSED";
 
-   // Brokers commonly publish no Saturday/Sunday session rows at all. Treat
-   // that as closed. On weekdays, missing metadata stays UNKNOWN rather than
-   // falsely blocking a symbol whose server does not expose session tables.
+   // Brokers commonly publish no weekend session rows at all. On weekdays,
+   // missing metadata remains UNKNOWN rather than falsely blocking a symbol.
    if(day == SATURDAY || day == SUNDAY)
       return "CLOSED";
 
@@ -144,8 +137,8 @@ $ea = Replace-Required $ea @'
    string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";
 '@ @'
    // Publish market-session telemetry independently of bot RUNNING/SAFE_STOP.
-   // The dashboard can therefore say "market closed" without pretending MT5
-   // disconnected and without waiting for an OrderSend rejection.
+   // The dashboard can show market closed without pretending MT5 disconnected
+   // and without waiting for an OrderSend rejection.
    if(StringLen(payload) >= 2)
    {
       string marketSessionState = MarketSessionStateNow();
@@ -162,12 +155,6 @@ $ea = Replace-Required $ea @'
 
 Write-Utf8 $eaPath $ea
 
-# ---------------------------------------------------------------------------
-# Dashboard: distinguish three states clearly:
-# 1) market closed but MT5/EA connected,
-# 2) Agent online but EA heartbeat stale,
-# 3) true connection loss.
-# ---------------------------------------------------------------------------
 $webPath = 'apps/web/app/dashboard/page.tsx'
 $web = Read-Normalized $webPath
 
@@ -234,9 +221,6 @@ $web = Replace-Required $web @'
 
 Write-Utf8 $webPath $web
 
-# ---------------------------------------------------------------------------
-# Permanent regression contract.
-# ---------------------------------------------------------------------------
 $testPath = 'tests/market-closed-heartbeat-contract.ps1'
 $test = @'
 $ErrorActionPreference = 'Stop'
@@ -259,12 +243,8 @@ foreach ($required in @(
   if (-not $ea.Contains($required)) { throw "Market-closed EA contract missing: $required" }
 }
 
-$legacyGate = @'
-   datetime now = TimeCurrent();
-   int heartbeatSeconds = MathMax(1, InpHeartbeatSeconds);
-   if(now - g_lastHeartbeat >= heartbeatSeconds)
-'@
-if ($ea.Contains($legacyGate)) { throw 'Legacy tick-time heartbeat gate is still active' }
+$legacyGate = "   datetime now = TimeCurrent();`n   int heartbeatSeconds = MathMax(1, InpHeartbeatSeconds);`n   if(now - g_lastHeartbeat >= heartbeatSeconds)"
+if ($ea.Replace("`r`n", "`n").Contains($legacyGate)) { throw 'Legacy tick-time heartbeat gate is still active' }
 
 foreach ($required in @(
   'const marketSessionClosed =',
@@ -282,7 +262,6 @@ Write-Host 'Market-closed heartbeat/status contract PASS'
 '@
 [System.IO.File]::WriteAllText($testPath, $test.Replace("`r`n", "`n"), [System.Text.UTF8Encoding]::new($false))
 
-# Keep the regression check in normal CI.
 $ciPath = '.github/workflows/ci.yml'
 $ci = Read-Normalized $ciPath
 if (-not $ci.Contains('Market-closed heartbeat and status contract')) {
