@@ -218,6 +218,7 @@ ulong  g_lastOrderMs = 0;
 datetime g_orderWindowStart = 0;
 int    g_ordersInWindow = 0;
 datetime g_lastHeartbeat = 0;
+ulong  g_lastHeartbeatTickMs = 0;
 datetime g_lastSuccessfulHeartbeat = 0;
 datetime g_lastRunAuthorization = 0;
 datetime g_lastServerContactAt = 0;
@@ -2605,11 +2606,17 @@ void OnTimer()
       return;
    }
 
-   datetime now = TimeCurrent();
-   int heartbeatSeconds = MathMax(1, InpHeartbeatSeconds);
-   if(now - g_lastHeartbeat >= heartbeatSeconds)
+   // TimeCurrent() can freeze when a broker is not producing ticks (weekend /
+   // closed session). Drive the transport heartbeat from a monotonic terminal
+   // clock instead. This keeps SaaS connectivity truthful without generating
+   // any trading activity while the market is closed.
+   ulong heartbeatNowMs = GetTickCount64();
+   ulong heartbeatIntervalMs = (ulong)MathMax(1, InpHeartbeatSeconds) * 1000;
+   if(g_lastHeartbeatTickMs == 0 ||
+      heartbeatNowMs - g_lastHeartbeatTickMs >= heartbeatIntervalMs)
    {
-      g_lastHeartbeat = now;
+      g_lastHeartbeatTickMs = heartbeatNowMs;
+      g_lastHeartbeat = TimeCurrent();
       SendHeartbeat();
    }
    FlushPendingBasketJournal();
@@ -3309,6 +3316,20 @@ void SendHeartbeat()
          );
          payload=StringSubstr(payload,0,StringLen(payload)-2)+autoV20Diagnostics;
       }
+   // Publish market-session telemetry independently of bot RUNNING/SAFE_STOP.
+   // The dashboard can show market closed without pretending MT5 disconnected
+   // and without waiting for an OrderSend rejection.
+   if(StringLen(payload) >= 2)
+   {
+      string marketSessionState = MarketSessionStateNow();
+      string marketSessionDiagnostics = StringFormat(
+         ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s}}",
+         marketSessionState,
+         marketSessionState == "OPEN" ? "true" : "false"
+      );
+      payload = StringSubstr(payload, 0, StringLen(payload) - 2) + marketSessionDiagnostics;
+   }
+
    string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";
    ulong heartbeatStartedMs = GetTickCount64();
    int code = HttpPostJson(heartbeatUrl, payload, response);
@@ -13836,6 +13857,62 @@ int SymbolTradeModeNow()
    return (int)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE);
 }
 
+string MarketSessionStateNow()
+{
+   if(!TerminalConnectedNow())
+      return "TERMINAL_OFFLINE";
+
+   // TimeTradeServer() advances between ticks and is therefore suitable for
+   // checking the broker's published trading sessions while the market is idle.
+   datetime serverNow = TimeTradeServer();
+   if(serverNow <= 0)
+      serverNow = TimeCurrent();
+
+   MqlDateTime nowParts;
+   if(serverNow <= 0 || !TimeToStruct(serverNow, nowParts))
+      return "UNKNOWN";
+
+   ENUM_DAY_OF_WEEK day = (ENUM_DAY_OF_WEEK)nowParts.day_of_week;
+   int nowSeconds = nowParts.hour * 3600 + nowParts.min * 60 + nowParts.sec;
+   bool foundSession = false;
+
+   for(uint session = 0; session < 32; session++)
+   {
+      datetime from = 0;
+      datetime to = 0;
+      if(!SymbolInfoSessionTrade(_Symbol, day, session, from, to))
+         break;
+
+      foundSession = true;
+      MqlDateTime fromParts;
+      MqlDateTime toParts;
+      if(!TimeToStruct(from, fromParts) || !TimeToStruct(to, toParts))
+         continue;
+
+      int fromSeconds = fromParts.hour * 3600 + fromParts.min * 60 + fromParts.sec;
+      int toSeconds = toParts.hour * 3600 + toParts.min * 60 + toParts.sec;
+
+      if(fromSeconds == toSeconds)
+         return "OPEN";
+
+      bool active = fromSeconds < toSeconds
+         ? (nowSeconds >= fromSeconds && nowSeconds < toSeconds)
+         : (nowSeconds >= fromSeconds || nowSeconds < toSeconds);
+      if(active)
+         return "OPEN";
+   }
+
+   if(foundSession)
+      return "CLOSED";
+
+   // Brokers commonly publish no weekend session rows at all. On weekdays,
+   // missing metadata remains UNKNOWN rather than falsely blocking a symbol.
+   if(day == SATURDAY || day == SUNDAY)
+      return "CLOSED";
+
+   return "UNKNOWN";
+}
+
 string TradePermissionStatus()
 {
    if(!TerminalConnectedNow()) return "TERMINAL_DISCONNECTED";
@@ -13847,6 +13924,9 @@ string TradePermissionStatus()
    int mode = SymbolTradeModeNow();
    if(mode == SYMBOL_TRADE_MODE_DISABLED || mode == SYMBOL_TRADE_MODE_CLOSEONLY)
       return "SYMBOL_TRADING_DISABLED";
+
+   if(MarketSessionStateNow() == "CLOSED")
+      return "MARKET_CLOSED";
 
    return "OK";
 }

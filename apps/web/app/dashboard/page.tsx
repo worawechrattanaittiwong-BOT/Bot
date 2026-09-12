@@ -379,6 +379,10 @@ export default function DashboardPage() {
   };
   const heartbeatAgeSeconds = Math.max(0, Number(data?.instance?.ea_last_seen_age_seconds ?? metrics.heartbeatAgeSeconds ?? 0));
   const isAgentOnline = Boolean(data?.instance?.agent_online || data?.instance?.device_online);
+  const marketSessionState = String(metrics.marketSessionState || "").toUpperCase();
+  const marketSessionClosed =
+    marketSessionState === "CLOSED" ||
+    String(metrics.executionStatus || "").toUpperCase() === "MARKET_CLOSED";
   const heartbeatLatencyMs = Number(metrics.heartbeatLatencyMs ?? 0);
   const heartbeatHttpStatus = Number(metrics.heartbeatHttpStatus ?? 0);
   const lastServerContactEpoch = Number(metrics.lastServerContactAt || 0);
@@ -506,10 +510,10 @@ export default function DashboardPage() {
     ? (latestCommandStatusLabel[String(latestBotCommand.status||"")] || String(latestBotCommand.status||"—"))
     : "ยังไม่มีคำสั่งล่าสุด";
   const marketTradeLabel =
-    !isMt5Online
-      ? (isAgentOnline ? "Agent เชื่อมแล้ว · รอ EA Heartbeat — ยังส่งออเดอร์ไม่ได้" : "รอ MT5 เชื่อมต่อ")
-      : String(liveStatus.code||"") === "MARKET_CLOSED"
-        ? "ตลาดปิด — รอ Session"
+    marketSessionClosed
+      ? "ตลาดปิด — MT5/EA ยังเชื่อมต่อ · รอ Session เปิด"
+      : !isMt5Online
+        ? (isAgentOnline ? "Agent เชื่อมแล้ว · EA Heartbeat ขาดช่วง — ตรวจ EA โดยไม่สรุปว่า MT5 หลุด" : "รอ MT5 เชื่อมต่อ")
         : metrics.tradeReady === true
           ? "ตลาดเปิด — พร้อมส่งออเดอร์"
           : "มีราคา แต่ยังมีเงื่อนไขที่บล็อกการเทรด";
@@ -1590,16 +1594,25 @@ export default function DashboardPage() {
           ) : (
             <div className="cc-overview cc-v3 cc-v4">
               <div className="cc-v4-ambient" aria-hidden="true"><i/><i/><i/></div>
-              {!isMt5Online && (
+              {marketSessionClosed ? (
+                <div className="cc-connect-alert">
+                  <div className="cc-alert-icon"><ScenovaIcon name="timer" size={20}/></div>
+                  <div className="cc-alert-copy"><b>ตลาดปิดชั่วคราว</b><span>MT5 และ EA ยังเชื่อมต่ออยู่ · ระบบจะรอ Session เปิดโดยอัตโนมัติ</span></div>
+                  <button type="button" className="btn cc-alert-action" disabled>รอเปิดตลาด</button>
+                </div>
+              ) : !isMt5Online && (
                 <div className="cc-connect-alert">
                   <div className="cc-alert-icon"><ScenovaIcon name="info" size={20}/></div>
-                  <div className="cc-alert-copy"><b>ยังไม่ได้เชื่อมต่อ MT5</b><span>{data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span></div>
-                  <button className="btn cc-alert-action" onClick={()=>setActiveView("account")}>ไปหน้าการเชื่อมต่อ →</button>
+                  <div className="cc-alert-copy">
+                    <b>{isAgentOnline ? "EA Heartbeat ขาดช่วง" : "ยังไม่ได้เชื่อมต่อ MT5"}</b>
+                    <span>{isAgentOnline ? "Windows Agent ยังเชื่อมอยู่ · ตรวจว่า EA ยังติดอยู่บนกราฟก่อนเชื่อม MT5 ใหม่" : data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span>
+                  </div>
+                  <button className="btn cc-alert-action" onClick={()=>setActiveView("account")}>{isAgentOnline ? "ตรวจการเชื่อมต่อ →" : "ไปหน้าการเชื่อมต่อ →"}</button>
                 </div>
               )}
 
               <section className="cc-v6-telemetry" aria-label="ข้อมูลสดจาก EA">
-                <div className="cc-v6-telemetry-live"><i/>REALTIME</div>
+                <div className="cc-v6-telemetry-live"><i/>{marketSessionClosed ? "MARKET CLOSED" : "REALTIME"}</div>
                 <LiveTelemetryItem icon="timer" label="ATR (M15)" value={atrValueLabel} tone={atrPoints>0?"good":"neutral"}/>
                 <LiveTelemetryItem icon="spread" label="Spread" value={spreadValueLabel} tone={spreadStatus==="NORMAL"?"good":spreadStatus==="EXTREME"?"bad":"warn"}/>
                 <LiveTelemetryItem icon="spark" label="Momentum" value={Number(metrics.momentumPoints||0).toFixed(1)+" pt"}/>
