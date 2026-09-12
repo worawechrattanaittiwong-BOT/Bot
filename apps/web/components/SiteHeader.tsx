@@ -41,17 +41,15 @@ export default function SiteHeader() {
   function logout() {
     localStorage.removeItem("bot_token");
     setUser(null);
-    window.location.href = "/";
+    window.location.href = "/login";
   }
 
-  const consoleHref = user?.role === "OWNER" || user?.role === "ADMIN"
-    ? "/admin"
-    : "/dashboard";
+  const consoleHref = "/dashboard?view=overview";
 
   return (
     <header className="topbar">
       <div className="shell topbar-inner">
-        <a className="brand-lockup scenova-brand-lockup" href="/">
+        <a className="brand-lockup scenova-brand-lockup" href="/website">
           <ScenovaBrand className="scenova-brand-logo-header"/>
         </a>
 
@@ -62,9 +60,7 @@ export default function SiteHeader() {
             <span className="session-checking">กำลังตรวจสอบบัญชี...</span>
           ) : user ? (
             <>
-              <a className="btn primary" href={consoleHref}>
-                {user.role === "OWNER" || user.role === "ADMIN" ? "Owner Console" : "Control Center"}
-              </a>
+              <a className="btn primary" href={consoleHref}>Control Center</a>
               <button type="button" className="btn ghost" onClick={logout}>ออกจากระบบ</button>
             </>
           ) : (
