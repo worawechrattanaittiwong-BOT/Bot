@@ -40,9 +40,8 @@ export default function LoginPage() {
         if (!res.ok) throw new Error("invalid session");
         return res.json();
       })
-      .then((data) => {
-        const role = data.user?.role;
-        window.location.replace(role === "OWNER" || role === "ADMIN" ? "/admin" : "/dashboard");
+      .then(() => {
+        window.location.replace("/dashboard?view=overview");
       })
       .catch(() => {
         localStorage.removeItem("bot_token");
@@ -69,9 +68,7 @@ export default function LoginPage() {
       if (!rememberEmail) localStorage.removeItem(LOGIN_EMAIL_KEY);
 
       localStorage.setItem("bot_token", data.token);
-      window.location.href = data.user?.role === "OWNER" || data.user?.role === "ADMIN"
-        ? "/admin"
-        : "/dashboard";
+      window.location.href = "/dashboard?view=overview";
     } catch (err: unknown) {
       setMessageKind("error");
       setMessage(err instanceof Error ? err.message : "Unable to sign in. Please try again.");
@@ -116,7 +113,7 @@ export default function LoginPage() {
 
       <div className={styles.frame}>
         <header className={styles.header}>
-          <a href="/" aria-label="SCENOVA home"><ScenovaBrand className={styles.brand} /></a>
+          <a href="/website" aria-label="SCENOVA website"><ScenovaBrand className={styles.brand} /></a>
           <span>PRECISION IN MOTION.</span>
         </header>
 
@@ -147,7 +144,7 @@ export default function LoginPage() {
 
           <div className={styles.formPane}>
             <div className={styles.formCard} id="access-form" aria-labelledby="access-title">
-              <a className={styles.formBrand} href="/" aria-label="SCENOVA home"><ScenovaBrand className={styles.formLogo} /></a>
+              <a className={styles.formBrand} href="/website" aria-label="SCENOVA website"><ScenovaBrand className={styles.formLogo} /></a>
 
               <div className={styles.formHeading}>
                 <div className={styles.cardEyebrow}>{register ? "CREATE ACCOUNT" : "SECURE ACCESS"}</div>
@@ -195,7 +192,7 @@ export default function LoginPage() {
 
               <div className={styles.divider}><span>or</span></div>
               <button type="button" className={styles.switch} disabled={busy} onClick={switchMode}>{register ? "Already have an account? Sign In" : "Create Account"}</button>
-              <a className={styles.back} href="/">← Back to Home</a>
+              <a className={styles.back} href="/website">← Back to Website</a>
 
               <div className={styles.security}>
                 <div><ScenovaIcon name="shield" size={20}/><p>Encrypted<br/>session<small>Your data stays safe</small></p></div>
