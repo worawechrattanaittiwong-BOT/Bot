@@ -68,7 +68,6 @@ jobs:
           git add mt5/FastBasketBot.mq5
           git add apps/web/app/dashboard/page.tsx
           git add tests/market-closed-heartbeat-contract.ps1
-          git add .github/workflows/ci.yml
           git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) { Write-Host "Patch already current"; exit 0 }
           if ($LASTEXITCODE -ne 1) { throw "could not inspect staged source" }
