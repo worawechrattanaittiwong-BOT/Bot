@@ -1,0 +1,9 @@
+/* Fine-tuning for the injected daily win row so five key rows fit the compact Market Insight card. */
+.cc-v8-left-stack .cc-v6-insight-row.cc-daily-win-row{
+  min-height:24px!important;
+  padding:3px 8px!important;
+}
+.cc-v8-left-stack .cc-v6-insight-rows:has(.cc-daily-win-row) .cc-v6-insight-row{
+  min-height:24px!important;
+  padding:3px 8px!important;
+}
