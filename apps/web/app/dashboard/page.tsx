@@ -30,6 +30,7 @@ type BrokerCatalog = {
 };
 
 type View = "overview" | "account" | "access" | "backtest";
+const LIVE_PRICE_WINDOW_MS = 15 * 60 * 1000;
 const defaultSettings = {
   symbol: "XAUUSD",
   lot: 0.01,
@@ -95,6 +96,8 @@ export default function DashboardPage() {
   const settingsDirtyRef = useRef(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [botSettingsOpen, setBotSettingsOpen] = useState(false);
+  const [livePricePoints, setLivePricePoints] = useState<Array<{t:number;price:number}>>([]);
+  const livePriceSlotRef = useRef("");
   const mt5ApiBase =
     process.env.NEXT_PUBLIC_MT5_API_BASE ||
     (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
@@ -190,6 +193,28 @@ export default function DashboardPage() {
   }, [logsOpen, activeView, data?.instance?.id, selectedSlotId]);
 
   const metrics = data?.instance?.metrics || {};
+
+  useEffect(() => {
+    const slotKey = String(data?.selectedSlot?.id || data?.instance?.id || "");
+    if (livePriceSlotRef.current !== slotKey) {
+      livePriceSlotRef.current = slotKey;
+      setLivePricePoints([]);
+    }
+
+    const heartbeatMetrics = data?.instance?.metrics || {};
+    const marketState = String(heartbeatMetrics.marketSessionState || "").toUpperCase();
+    const price = Number(heartbeatMetrics.marketMid || 0);
+    if (!slotKey || marketState === "CLOSED" || !Number.isFinite(price) || price <= 0) return;
+
+    const sampledAt = Date.now();
+    setLivePricePoints(previous => {
+      const cutoff = sampledAt - LIVE_PRICE_WINDOW_MS;
+      const trimmed = previous.filter(point => point.t >= cutoff);
+      const last = trimmed[trimmed.length - 1];
+      if (last && sampledAt - last.t < 1000) return trimmed;
+      return [...trimmed, { t: sampledAt, price }];
+    });
+  }, [data?.instance?.last_seen_at, data?.selectedSlot?.id]);
   const terminalEntries = useMemo(() => {
     const snapshot = botLogs?.snapshot || {};
     const m = snapshot.metrics || metrics || {};
@@ -785,7 +810,7 @@ export default function DashboardPage() {
   const rescueStableSeconds = Number(metrics.rescueReversalStableSeconds || 0);
   const rescueHedgeLockSeconds = Number(metrics.rescueHedgeLockSeconds || 0);
 
-  const hourlyWinRate = Array.isArray(data?.tradeJournal?.hourlyWinRate) ? data.tradeJournal.hourlyWinRate : [];
+
 
   const customerSetupLabel = (value:any) => {
     const code = String(value || "NONE").toUpperCase();
@@ -1667,7 +1692,7 @@ export default function DashboardPage() {
 
               <div className="cc-v6-analytics-grid">
                 <div className="cc-v8-left-stack">
-                  <HourlyWinRateChart points={hourlyWinRate}/>
+                  <LivePriceChart points={livePricePoints} symbol={String(metrics.symbol || settings.symbol || "XAUUSD")} marketClosed={marketSessionClosed}/>
 
                   <section className="panel cc-v6-market-insight">
                     <div className="cc-v6-panel-head"><div><span><ScenovaIcon name="brain" size={18}/></span><b>Market Insight</b></div><em>AI ANALYSIS</em></div>
@@ -2567,73 +2592,70 @@ function AccountLiveStat({icon,label,value,tone="neutral"}:{icon:string;label:st
   return <div className={"cc-v9-account-live-stat tone-"+tone}><span><ScenovaIcon name={icon} size={14}/></span><div><small>{label}</small><b>{value}</b></div></div>;
 }
 
-function HourlyWinRateChart({points}:{points:any[]}) {
-  const active = (points || []).map((row:any)=>({
-    hour:Number(row?.hour||0),
-    trades:Number(row?.trades||0),
-    wins:Number(row?.wins||0),
-    losses:Number(row?.losses||0),
-    winRate:Math.max(0,Math.min(100,Number(row?.winRate||0))),
-    netProfit:Number(row?.netProfit||0),
-    grossProfit:Number(row?.grossProfit||0),
-    grossLoss:Number(row?.grossLoss||0)
-  })).filter((point:any)=>point.trades>0).sort((a:any,b:any)=>a.hour-b.hour);
-  const totalTrades = active.reduce((sum,point)=>sum+point.trades,0);
-  const totalWins = active.reduce((sum,point)=>sum+point.wins,0);
-  const grossProfit = active.reduce((sum,point)=>sum+point.grossProfit,0);
-  const grossLoss = active.reduce((sum,point)=>sum+point.grossLoss,0);
-  const overallWinRate = totalTrades>0 ? totalWins/totalTrades*100 : 0;
-  const profitFactor = grossLoss>0 ? grossProfit/grossLoss : grossProfit>0 ? grossProfit : 0;
-  const best = active.reduce<any>((winner,point)=>!winner||point.winRate>winner.winRate||(point.winRate===winner.winRate&&point.trades>winner.trades)?point:winner,null);
-  const performanceTone = totalTrades===0 ? "neutral" : overallWinRate>=60&&profitFactor>=1 ? "good" : overallWinRate>=45&&profitFactor>=.8 ? "warn" : "bad";
-  const winRateTone = totalTrades===0 ? "neutral" : overallWinRate>=60 ? "good" : overallWinRate>=45 ? "warn" : "bad";
-  const bestHourTone = !best ? "neutral" : best.winRate>=60 ? "good" : best.winRate>=45 ? "warn" : "bad";
-  const sampleTone = totalTrades>=30 ? "good" : totalTrades>=10 ? "warn" : "neutral";
-  const profitFactorTone = totalTrades===0 ? "neutral" : profitFactor>=1.2 ? "good" : profitFactor>=.8 ? "warn" : "bad";
+function LivePriceChart({points,symbol,marketClosed}:{points:Array<{t:number;price:number}>;symbol:string;marketClosed:boolean}) {
+  const [nowMs,setNowMs] = useState(()=>Date.now());
+
+  useEffect(() => {
+    if (marketClosed) {
+      setNowMs(Date.now());
+      return;
+    }
+    const id = window.setInterval(()=>setNowMs(Date.now()),100);
+    return () => window.clearInterval(id);
+  }, [marketClosed]);
+
   const width = 940;
   const height = 286;
-  const pad = {left:48,right:18,top:20,bottom:38};
-  const xForIndex = (index:number)=>active.length<=1 ? (pad.left+width-pad.right)/2 : pad.left+(index/(active.length-1))*(width-pad.left-pad.right);
-  const yFor = (value:number)=>pad.top+((100-value)/100)*(height-pad.top-pad.bottom);
-  const plotted = active.map((point:any,index:number)=>({...point,x:xForIndex(index),y:yFor(point.winRate)}));
-  const linePath = plotted.reduce((path:any,point:any,index:number)=>{
-    if(index===0) return "M"+point.x.toFixed(1)+" "+point.y.toFixed(1);
+  const pad = 10;
+  const cutoff = nowMs - LIVE_PRICE_WINDOW_MS;
+  const visible = points.filter(point=>point.t>=cutoff && point.t<=nowMs+5000);
+  const prices = visible.map(point=>point.price);
+  const low = prices.length ? Math.min(...prices) : 0;
+  const high = prices.length ? Math.max(...prices) : 0;
+  const rawRange = Math.max(0,high-low);
+  const center = prices.length ? (high+low)/2 : 0;
+  const breathingRoom = prices.length
+    ? Math.max(rawRange*0.22,Math.abs(center)*0.00004,0.01)
+    : 1;
+  const minPrice = low-breathingRoom;
+  const maxPrice = high+breathingRoom;
+  const range = Math.max(0.0000001,maxPrice-minPrice);
+  const xFor = (time:number)=>pad+((time-cutoff)/LIVE_PRICE_WINDOW_MS)*(width-pad*2);
+  const yFor = (price:number)=>pad+((maxPrice-price)/range)*(height-pad*2);
+  const plotted = visible.map(point=>({...point,x:xFor(point.t),y:yFor(point.price)}));
+  const linePath = plotted.reduce((path,point,index)=>{
+    if(index===0) return "M"+point.x.toFixed(2)+" "+point.y.toFixed(2);
     const previous = plotted[index-1];
     const middleX = (previous.x+point.x)/2;
-    return path+" C"+middleX.toFixed(1)+" "+previous.y.toFixed(1)+" "+middleX.toFixed(1)+" "+point.y.toFixed(1)+" "+point.x.toFixed(1)+" "+point.y.toFixed(1);
+    return path+" C"+middleX.toFixed(2)+" "+previous.y.toFixed(2)+" "+middleX.toFixed(2)+" "+point.y.toFixed(2)+" "+point.x.toFixed(2)+" "+point.y.toFixed(2);
   },"");
-  const areaPath = plotted.length>1 ? linePath+" L "+plotted[plotted.length-1].x.toFixed(1)+" "+(height-pad.bottom)+" L "+plotted[0].x.toFixed(1)+" "+(height-pad.bottom)+" Z" : "";
-  const hourLabel = (hour:number)=>String(hour).padStart(2,"0")+":00";
-  const labelStep = Math.max(1,Math.ceil(plotted.length/7));
-  const axisPoints = plotted.filter((_:any,index:number)=>index===0||index===plotted.length-1||index%labelStep===0);
-  const bestPoint = best ? plotted.find((point:any)=>point.hour===best.hour) : null;
+  const areaPath = plotted.length>1
+    ? linePath+" L "+plotted[plotted.length-1].x.toFixed(2)+" "+height+" L "+plotted[0].x.toFixed(2)+" "+height+" Z"
+    : "";
+  const latest = plotted[plotted.length-1];
+
   return (
-    <section className={"panel cc-v6-hourly-chart performance-"+performanceTone}>
+    <section className="panel cc-v6-hourly-chart">
       <div className="cc-v6-panel-head">
-        <div><span><ScenovaIcon name="pnl" size={18}/></span><div><b>ผลการดำเนินงานจำแนกตามช่วงเวลา</b><small>ประมวลผลจาก Basket ที่ปิดสมบูรณ์ในช่วง 30 วันล่าสุด · เวลาไทย</small></div></div>
-        <em>HOURLY PERFORMANCE</em>
+        <div><span><ScenovaIcon name="trend" size={18}/></span><div><b>ราคาสด {symbol}</b><small>เส้นราคาไหลแบบ Live · เก็บเฉพาะข้อมูล 15 นาทีล่าสุดในหน้านี้</small></div></div>
+        <em className={marketClosed?"warn":"good"}>{marketClosed?"MARKET CLOSED":"LIVE · 15 MIN"}</em>
       </div>
-      <div className="cc-v6-chart-kpis">
-        <div className={"tone-"+winRateTone}><b>{overallWinRate.toFixed(1)}%</b><span>อัตราชนะ</span></div>
-        <div className={"tone-"+bestHourTone}><b>{best?hourLabel(best.hour):"—"}</b><span>ช่วงเวลาประสิทธิภาพสูงสุด</span></div>
-        <div className={"tone-"+sampleTone}><b>{totalTrades}</b><span>จำนวน Basket ที่ประเมิน</span></div>
-        <div className={"tone-"+profitFactorTone}><b>{profitFactor.toFixed(2)}</b><span>อัตราส่วนผลตอบแทน</span></div>
-      </div>
-      <div className="cc-v6-chart-canvas">
-        <svg viewBox={"0 0 "+width+" "+height} preserveAspectRatio="none" role="img" aria-label="กราฟผลการดำเนินงานจำแนกตามช่วงเวลา">
+      <div className="cc-v6-chart-canvas" style={{height:"278px",marginTop:"10px"}}>
+        <svg viewBox={"0 0 "+width+" "+height} preserveAspectRatio="none" role="img" aria-label="กราฟราคาสด 15 นาทีล่าสุด">
           <defs>
-            <linearGradient id="hourlyWinLine" x1="0" x2="1"><stop offset="0" stopColor="#48e8ff"/><stop offset=".55" stopColor="#57a9ff"/><stop offset="1" stopColor="#a978ff"/></linearGradient>
-            <linearGradient id="hourlyWinArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4fcfff" stopOpacity=".25"/><stop offset="1" stopColor="#7658ff" stopOpacity="0"/></linearGradient>
-            <filter id="hourlyGlow"><feGaussianBlur stdDeviation="3.2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <linearGradient id="hourlyWinLine" x1="0" x2="1"><stop offset="0" stopColor="#48e8ff"/><stop offset=".56" stopColor="#57a9ff"/><stop offset="1" stopColor="#a978ff"/></linearGradient>
+            <linearGradient id="hourlyWinArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4fcfff" stopOpacity=".20"/><stop offset="1" stopColor="#7658ff" stopOpacity="0"/></linearGradient>
+            <filter id="livePriceGlow"><feGaussianBlur stdDeviation="3.4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <radialGradient id="livePriceDot"><stop offset="0" stopColor="#f4fdff"/><stop offset=".35" stopColor="#65e4ff"/><stop offset="1" stopColor="#7f6cff"/></radialGradient>
           </defs>
-          {[0,25,50,75,100].map(value=><g key={value}><line x1={pad.left} x2={width-pad.right} y1={yFor(value)} y2={yFor(value)} className="cc-v6-chart-gridline"/><text x={pad.left-10} y={yFor(value)+4} textAnchor="end" className="cc-v6-chart-axis">{value}%</text></g>)}
-          {axisPoints.map((point:any,index:number)=><g key={point.hour}><line x1={point.x} x2={point.x} y1={pad.top} y2={height-pad.bottom} className="cc-v6-chart-gridline vertical"/><text x={point.x} y={height-12} textAnchor={index===0?"start":index===axisPoints.length-1?"end":"middle"} className="cc-v6-chart-axis">{hourLabel(point.hour)}</text></g>)}
           {areaPath&&<path d={areaPath} className="cc-v6-chart-area"/>}
-          {linePath&&<path d={linePath} className="cc-v6-chart-line" filter="url(#hourlyGlow)"/>}
-          {plotted.map(point=><g key={point.hour} className={best?.hour===point.hour?"cc-v6-chart-point best":"cc-v6-chart-point"}><circle cx={point.x} cy={point.y} r={best?.hour===point.hour?6:4}/><title>{hourLabel(point.hour)+" · ชนะ "+point.winRate.toFixed(1)+"% · "+point.trades+" Basket"}</title></g>)}
-          {bestPoint&&<g className="cc-v6-best-hour"><line x1={bestPoint.x} x2={bestPoint.x} y1={bestPoint.y+10} y2={height-pad.bottom}/><rect x={Math.min(width-155,Math.max(pad.left,bestPoint.x-58))} y={Math.max(3,bestPoint.y-39)} width="116" height="27" rx="7"/><text x={Math.min(width-97,Math.max(pad.left+58,bestPoint.x))} y={Math.max(21,bestPoint.y-21)} textAnchor="middle">ดีที่สุด {hourLabel(bestPoint.hour)} · {bestPoint.winRate.toFixed(0)}%</text></g>}
+          {linePath&&<path d={linePath} className="cc-v6-chart-line" filter="url(#livePriceGlow)"/>}
+          {latest&&<g>
+            <circle cx={latest.x} cy={latest.y} r="5.5" fill="url(#livePriceDot)" stroke="#eafcff" strokeWidth="1.2" vectorEffect="non-scaling-stroke"/>
+            {!marketClosed&&<circle cx={latest.x} cy={latest.y} r="8" fill="none" stroke="#62ddff" strokeWidth="1" opacity=".7" vectorEffect="non-scaling-stroke"><animate attributeName="r" values="7;14;7" dur="1.7s" repeatCount="indefinite"/><animate attributeName="opacity" values=".75;0;.75" dur="1.7s" repeatCount="indefinite"/></circle>}
+          </g>}
         </svg>
-        {!active.length&&<div className="cc-v6-chart-empty"><ScenovaIcon name="report" size={24}/><b>พร้อมประมวลผลสถิติการเทรด</b><span>ข้อมูลจะแสดงอัตโนมัติเมื่อมี Basket ที่ปิดสมบูรณ์</span></div>}
+        {!visible.length&&<div className="cc-v6-chart-empty"><ScenovaIcon name="trend" size={24}/><b>{marketClosed?"ตลาดปิดอยู่":"กำลังรอราคาสด"}</b><span>{marketClosed?"เมื่อ Session เปิด กราฟจะเริ่มไหลจากข้อมูลใหม่ทันที":"ข้อมูลจะเริ่มวาดเมื่อ EA ส่งราคาล่าสุดเข้ามา"}</span></div>}
       </div>
     </section>
   );

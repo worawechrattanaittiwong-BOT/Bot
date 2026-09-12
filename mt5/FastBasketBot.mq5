@@ -3322,10 +3322,19 @@ void SendHeartbeat()
    if(StringLen(payload) >= 2)
    {
       string marketSessionState = MarketSessionStateNow();
+      MqlTick marketTick;
+      bool marketTickReady = SymbolInfoTick(_Symbol, marketTick);
+      int marketDigits = SymbolDigitsNow();
+      string marketBidText = marketTickReady ? DoubleToString(marketTick.bid, marketDigits) : "0";
+      string marketAskText = marketTickReady ? DoubleToString(marketTick.ask, marketDigits) : "0";
+      string marketMidText = marketTickReady ? DoubleToString((marketTick.bid + marketTick.ask) * 0.5, marketDigits) : "0";
       string marketSessionDiagnostics = StringFormat(
-         ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s}}",
+         ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s,\"marketBid\":%s,\"marketAsk\":%s,\"marketMid\":%s}}",
          marketSessionState,
-         marketSessionState == "OPEN" ? "true" : "false"
+         marketSessionState == "OPEN" ? "true" : "false",
+         marketBidText,
+         marketAskText,
+         marketMidText
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + marketSessionDiagnostics;
    }
