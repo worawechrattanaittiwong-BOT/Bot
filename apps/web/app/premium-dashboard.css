@@ -15,11 +15,10 @@
   align-items:stretch!important;
 }
 
-/* Make the combined left stack exactly match the account/robot height.
-   398 + 14 + 176 = 588px. */
+/* The left stack stays exactly the same total height as account/robot: 384 + 14 + 190 = 588px. */
 .cc-v8-left-stack{
   grid-area:left!important;
-  grid-template-rows:398px 176px!important;
+  grid-template-rows:384px 190px!important;
   gap:14px!important;
   height:588px!important;
   min-height:588px!important;
@@ -29,29 +28,68 @@
 .cc-v4 .cc-v6-account-card,
 .cc-v4 .cc-v6-ai-brand{min-width:0!important;box-sizing:border-box!important}
 
-.cc-v8-left-stack>.cc-v6-hourly-chart{height:398px!important;min-height:398px!important}
-.cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-chart-canvas{height:258px!important}
+.cc-v8-left-stack>.cc-v6-hourly-chart{height:384px!important;min-height:384px!important}
+.cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-chart-canvas{height:244px!important}
 .cc-v4 .cc-v6-account-card{height:588px!important;min-height:588px!important}
 .cc-v4 .cc-v6-ai-brand{height:588px!important;min-height:588px!important}
 .cc-v4 .cc-v6-ai-brand>img{width:100%!important;height:100%!important;object-fit:cover!important;object-position:center center!important}
 
-/* Compact Market Insight, without shortening the whole left column */
-.cc-v8-left-stack>.cc-v6-market-insight{min-height:176px!important;height:176px!important;grid-template-columns:minmax(205px,.72fr) minmax(0,1.28fr)!important;grid-template-rows:40px minmax(0,1fr)!important;padding:11px 12px!important;gap:0 11px!important;border-radius:18px!important;border-color:rgba(121,112,225,.46)!important;background:radial-gradient(circle at 95% 0,rgba(120,103,255,.16),transparent 42%),radial-gradient(circle at 7% 100%,rgba(77,151,255,.07),transparent 38%),linear-gradient(155deg,#10162a,#080d18)!important;box-shadow:0 16px 40px rgba(0,0,0,.22),0 0 30px rgba(96,114,255,.07),inset 0 1px 0 rgba(255,255,255,.035)!important}
+/* Compact Market Insight, with enough room for today's real win rate */
+.cc-v8-left-stack>.cc-v6-market-insight{min-height:190px!important;height:190px!important;grid-template-columns:minmax(205px,.72fr) minmax(0,1.28fr)!important;grid-template-rows:40px minmax(0,1fr)!important;padding:11px 12px!important;gap:0 11px!important;border-radius:18px!important;border-color:rgba(121,112,225,.46)!important;background:radial-gradient(circle at 95% 0,rgba(120,103,255,.16),transparent 42%),radial-gradient(circle at 7% 100%,rgba(77,151,255,.07),transparent 38%),linear-gradient(155deg,#10162a,#080d18)!important;box-shadow:0 16px 40px rgba(0,0,0,.22),0 0 30px rgba(96,114,255,.07),inset 0 1px 0 rgba(255,255,255,.035)!important}
 .cc-v8-left-stack .cc-v6-market-insight>.cc-v6-panel-head{min-height:40px!important;padding-bottom:7px!important}
 .cc-v8-left-stack .cc-v6-market-insight>.cc-v6-panel-head b{font-size:15px!important;letter-spacing:.01em!important}
 .cc-v8-left-stack .cc-v6-market-insight>.cc-v6-panel-head em{font-size:10px!important;letter-spacing:.08em!important}
-.cc-v8-left-stack .cc-v6-market-bias{min-height:0!important;height:111px!important;margin:7px 0 0!important;padding:10px 11px!important;border-radius:13px!important;gap:11px!important}
+.cc-v8-left-stack .cc-v6-market-bias{min-height:0!important;height:125px!important;margin:7px 0 0!important;padding:10px 11px!important;border-radius:13px!important;gap:11px!important}
 .cc-v8-left-stack .cc-v6-market-bias>svg{padding:5px!important}
 .cc-v8-left-stack .cc-v6-market-bias small{font-size:10px!important}
 .cc-v8-left-stack .cc-v6-market-bias b{font-size:17px!important;line-height:1.18!important}
 .cc-v8-left-stack .cc-v6-market-bias span{font-size:10px!important;line-height:1.35!important}
 .cc-v8-left-stack .cc-v6-insight-rows{margin-top:7px!important;border-radius:12px!important;overflow:hidden!important;align-self:start!important}
-.cc-v8-left-stack .cc-v6-insight-row{min-height:28px!important;padding:5px 8px!important;grid-template-columns:116px minmax(0,1fr)!important;gap:8px!important}
+.cc-v8-left-stack .cc-v6-insight-row{min-height:27px!important;padding:4px 8px!important;grid-template-columns:116px minmax(0,1fr)!important;gap:8px!important}
 .cc-v8-left-stack .cc-v6-insight-row span{font-size:10px!important;line-height:1.3!important}
 .cc-v8-left-stack .cc-v6-insight-row b{font-size:11px!important;line-height:1.35!important}
 .cc-v8-left-stack .cc-v6-insight-row:nth-child(4),
 .cc-v8-left-stack .cc-v6-insight-row:nth-child(5),
 .cc-v8-left-stack .cc-v6-insight-row:nth-child(n+7){display:none!important}
+.cc-v8-left-stack .cc-v6-insight-row.cc-daily-win-row{display:grid!important}
+.cc-v8-left-stack .cc-daily-win-row.tone-good b{color:#72e6ad!important}
+.cc-v8-left-stack .cc-daily-win-row.tone-warn b{color:#e8c36e!important}
+.cc-v8-left-stack .cc-daily-win-row.tone-bad b{color:#ff8797!important}
+.cc-v8-left-stack .cc-daily-win-row.tone-neutral b{color:#aebbd1!important}
+
+/* Realtime quote card inside the live-price panel */
+.cc-v6-hourly-chart{position:relative!important}
+.cc-realtime-price-card{
+  position:absolute;
+  top:62px;
+  right:14px;
+  z-index:6;
+  width:196px;
+  min-height:91px;
+  padding:9px 11px;
+  border:1px solid #33415f;
+  border-radius:13px;
+  background:linear-gradient(145deg,rgba(10,17,30,.96),rgba(6,11,20,.97));
+  box-shadow:0 12px 30px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.035);
+  backdrop-filter:blur(12px);
+  transition:border-color .16s ease,box-shadow .16s ease,background .16s ease;
+}
+.cc-realtime-price-topline{display:flex;align-items:center;gap:6px;min-width:0}
+.cc-realtime-price-topline small{font-size:8px;font-weight:800;letter-spacing:.09em;color:#8291ab;white-space:nowrap}
+.cc-realtime-price-topline em{margin-left:auto;padding:3px 5px;border-radius:999px;border:1px solid #34506c;background:#0b1b2a;color:#83c8ff;font:800 7px/1 ui-monospace,SFMono-Regular,Menlo,monospace;font-style:normal}
+.cc-realtime-price-dot{width:7px;height:7px;border-radius:50%;background:#99a6bd;box-shadow:0 0 10px currentColor;flex:0 0 auto}
+.cc-realtime-price-main{display:flex;align-items:baseline;gap:7px;margin-top:7px;min-width:0}
+.cc-realtime-price-main b{font-size:22px;line-height:1;font-weight:850;color:#eef4ff;font-variant-numeric:tabular-nums;letter-spacing:-.025em}
+.cc-realtime-price-arrow{font-size:11px;color:#99a6bd}
+.cc-realtime-price-spread{display:flex;gap:10px;margin-top:7px;padding-top:6px;border-top:1px solid rgba(138,159,198,.12)}
+.cc-realtime-price-spread span{font-size:7.5px;color:#72839e;white-space:nowrap}
+.cc-realtime-price-spread strong{font-size:8.5px;color:#aebbd2;font-variant-numeric:tabular-nums}
+.cc-realtime-price-card.up{border-color:rgba(77,222,154,.48);background:linear-gradient(145deg,rgba(8,35,25,.97),rgba(6,17,14,.98));box-shadow:0 12px 30px rgba(0,0,0,.34),0 0 22px rgba(76,222,154,.10),inset 0 1px 0 rgba(255,255,255,.035)}
+.cc-realtime-price-card.up .cc-realtime-price-dot{background:#6fe4a9;color:#6fe4a9}.cc-realtime-price-card.up .cc-realtime-price-main b,.cc-realtime-price-card.up .cc-realtime-price-arrow{color:#74e8b2}
+.cc-realtime-price-card.down{border-color:rgba(255,102,119,.48);background:linear-gradient(145deg,rgba(45,14,21,.97),rgba(20,8,13,.98));box-shadow:0 12px 30px rgba(0,0,0,.34),0 0 22px rgba(255,94,113,.09),inset 0 1px 0 rgba(255,255,255,.035)}
+.cc-realtime-price-card.down .cc-realtime-price-dot{background:#ff7183;color:#ff7183}.cc-realtime-price-card.down .cc-realtime-price-main b,.cc-realtime-price-card.down .cc-realtime-price-arrow{color:#ff8797}
+.cc-realtime-price-card.closed{border-color:rgba(224,185,82,.35);background:linear-gradient(145deg,rgba(35,29,14,.95),rgba(14,13,9,.97))}
+.cc-realtime-price-card.closed .cc-realtime-price-dot{background:#d8b65f;color:#d8b65f}.cc-realtime-price-card.closed .cc-realtime-price-topline em{border-color:#665525;background:#241e0c;color:#e2c46e}
 
 /* Readability only — no layout squeezing */
 .owner-nav-item .owner-nav-copy b{font-size:12px!important;line-height:1.25!important}
@@ -87,11 +125,12 @@
 
 @media(max-width:1500px){
   .cc-v6-analytics-grid{grid-template-columns:minmax(520px,1.4fr) minmax(315px,.72fr) minmax(240px,.5fr)!important}
+  .cc-realtime-price-card{width:184px}
 }
 
 @media(max-width:1240px){
   .cc-v6-analytics-grid{grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr)!important;grid-template-areas:"left account" "robot robot"!important;grid-template-rows:auto 300px!important}
-  .cc-v8-left-stack{grid-template-rows:398px 176px!important;height:588px!important;min-height:588px!important}
+  .cc-v8-left-stack{grid-template-rows:384px 190px!important;height:588px!important;min-height:588px!important}
   .cc-v4 .cc-v6-account-card{height:588px!important;min-height:588px!important}
   .cc-v4 .cc-v6-ai-brand{height:300px!important;min-height:300px!important}
   .cc-v4 .cc-v6-ai-brand>img{object-position:center 38%!important}
@@ -102,7 +141,7 @@
   .cc-v8-left-stack{grid-template-rows:auto auto!important;height:auto!important;min-height:0!important}
   .cc-v8-left-stack>.cc-v6-hourly-chart{height:auto!important;min-height:350px!important}
   .cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-chart-canvas{height:205px!important}
-  .cc-v8-left-stack>.cc-v6-market-insight{height:auto!important;min-height:164px!important}
+  .cc-v8-left-stack>.cc-v6-market-insight{height:auto!important;min-height:178px!important}
   .cc-v4 .cc-v6-account-card{height:auto!important;min-height:340px!important}
   .cc-v4 .cc-v6-ai-brand{height:auto!important;min-height:330px!important}
 }
@@ -112,5 +151,8 @@
   .cc-v8-left-stack .cc-v6-market-bias{height:auto!important;min-height:76px!important}
   .cc-v8-left-stack .cc-v6-market-bias b{font-size:15px!important}
   .cc-v8-left-stack .cc-v6-insight-row{grid-template-columns:110px minmax(0,1fr)!important}
+  .cc-realtime-price-card{top:58px;right:12px;width:168px;padding:8px 9px}
+  .cc-realtime-price-main b{font-size:18px}
+  .cc-realtime-price-spread{gap:7px}
   .notice.good.page-notice{top:68px!important;right:16px!important;left:16px!important;width:auto!important}
 }
