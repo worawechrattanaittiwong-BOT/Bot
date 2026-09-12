@@ -4,6 +4,7 @@ import "./premium-dashboard.css";
 import { CustomerNavigationLabels } from "../components/CustomerNavigationLabels";
 import { Mt5AccountSwitchAssistant } from "../components/Mt5AccountSwitchAssistant";
 import { Mt5ManualActionControls } from "../components/Mt5ManualActionControls";
+import { DashboardLiveEnhancements } from "../components/DashboardLiveEnhancements";
 
 export const metadata: Metadata = {
   title: "SCENOVA — MT5 BOT EA",
@@ -15,6 +16,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="th">
       <body>
         {children}
+        <DashboardLiveEnhancements />
         <CustomerNavigationLabels />
         <Mt5AccountSwitchAssistant />
         <Mt5ManualActionControls />
