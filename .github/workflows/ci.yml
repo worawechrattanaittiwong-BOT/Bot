@@ -29,3 +29,6 @@ jobs:
       - name: Manual EA update one-click restart contract
         shell: pwsh
         run: ./tests/manual-ea-update-contract.ps1
+      - name: Market-closed heartbeat and status contract
+        shell: pwsh
+        run: ./tests/market-closed-heartbeat-contract.ps1
