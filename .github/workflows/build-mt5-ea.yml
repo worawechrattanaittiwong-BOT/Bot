@@ -3,6 +3,8 @@ name: Build MT5 EA
 # Unified 1.0.0 release rebuild trigger. The workflow compiles the current
 # V20/RACE-isolated source without changing trading logic.
 # Rebuild current 1.0.0 binary after the market-closed heartbeat transport fix.
+# Rebuild current 1.0.0 binary after adding current-quote telemetry for the
+# in-memory 15-minute flowing dashboard chart.
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
