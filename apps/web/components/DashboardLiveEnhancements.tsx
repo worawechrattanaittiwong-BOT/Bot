@@ -23,20 +23,31 @@ type LiveSummary = {
 };
 
 type Direction = "up" | "down" | "flat";
+type WinTone = "good" | "warn" | "bad" | "neutral";
 
 export function DashboardLiveEnhancements() {
   const [summary, setSummary] = useState<LiveSummary | null>(null);
   const [direction, setDirection] = useState<Direction>("flat");
   const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
-  const [insightTarget, setInsightTarget] = useState<HTMLElement | null>(null);
   const previousPriceRef = useRef(0);
 
   useEffect(() => {
     if (typeof window === "undefined" || window.location.pathname !== "/dashboard") return;
 
     const bindTargets = () => {
-      setHeaderTarget(document.querySelector<HTMLElement>(".cc-v6-hourly-chart .cc-v6-panel-head"));
-      setInsightTarget(document.querySelector<HTMLElement>(".cc-v6-market-insight .cc-v6-insight-rows"));
+      const header = document.querySelector<HTMLElement>(".cc-v6-hourly-chart .cc-v6-panel-head");
+      setHeaderTarget(header);
+
+      const titleGroup = header?.firstElementChild as HTMLElement | null;
+      const title = titleGroup?.querySelector<HTMLElement>("b");
+      const subtitle = titleGroup?.querySelector<HTMLElement>("small");
+
+      if (title && title.textContent !== "ราคา & อัตราชนะวันนี้") {
+        title.textContent = "ราคา & อัตราชนะวันนี้";
+      }
+      if (subtitle && subtitle.textContent !== "ราคา Live · สถิติ Basket เฉพาะวันนี้") {
+        subtitle.textContent = "ราคา Live · สถิติ Basket เฉพาะวันนี้";
+      }
     };
 
     bindTargets();
@@ -71,7 +82,7 @@ export function DashboardLiveEnhancements() {
         if (nextPrice > 0) previousPriceRef.current = nextPrice;
         setSummary(next);
       } catch {
-        // The dashboard already owns the main error surface. Keep this enhancement quiet.
+        // Keep this enhancement quiet; the dashboard owns the main error surface.
       } finally {
         if (!cancelled) timer = setTimeout(refresh, 1200);
       }
@@ -88,28 +99,28 @@ export function DashboardLiveEnhancements() {
   const price = Number(summary?.price || 0);
   const marketClosed = String(summary?.marketSessionState || "").toUpperCase() === "CLOSED";
   const today = summary?.today || { trades: 0, wins: 0, losses: 0, winRate: 0, netProfit: 0 };
-  const winTone = today.trades === 0 ? "neutral" : today.winRate >= 60 ? "good" : today.winRate >= 50 ? "warn" : "bad";
+  const winTone: WinTone = today.trades === 0 ? "neutral" : today.winRate >= 60 ? "good" : today.winRate >= 50 ? "warn" : "bad";
   const priceTone: Direction = marketClosed ? "flat" : direction;
+  const winRateText = today.trades > 0 ? today.winRate.toFixed(1) + "%" : "0.0%";
+  const winDetail = today.trades > 0 ? "ชนะ " + today.wins + "/" + today.trades + " Basket" : "ยังไม่มี Basket ปิดวันนี้";
 
   return (
     <>
       {headerTarget && createPortal(
-        <div className={"cc-header-live-price " + priceTone} aria-live="polite" aria-label="ราคาจริงแบบเรียลไทม์">
-          <b>{price > 0 ? price.toFixed(digits) : "—"}</b>
+        <div className="cc-header-live-summary" aria-live="polite">
+          <div key={"price-" + price + "-" + priceTone} className={"cc-live-metric cc-live-metric-price " + priceTone}>
+            <small>ราคาจริง</small>
+            <b>{price > 0 ? price.toFixed(digits) : "—"}</b>
+          </div>
+          <div className={"cc-live-metric cc-live-metric-win tone-" + winTone}>
+            <small>อัตราชนะวันนี้</small>
+            <div className="cc-live-win-value">
+              <b>{winRateText}</b>
+              <span>{winDetail}</span>
+            </div>
+          </div>
         </div>,
         headerTarget
-      )}
-
-      {insightTarget && createPortal(
-        <div className={"cc-v6-insight-row cc-daily-win-row tone-" + winTone}>
-          <span>อัตราชนะวันนี้</span>
-          <b>
-            {today.trades > 0
-              ? today.winRate.toFixed(1) + "% · ชนะ " + today.wins + "/" + today.trades + " Basket"
-              : "0.0% · ยังไม่มี Basket ปิดวันนี้"}
-          </b>
-        </div>,
-        insightTarget
       )}
     </>
   );
