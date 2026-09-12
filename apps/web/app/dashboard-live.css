@@ -1,3 +1,12 @@
+/* Restore SCENOVA sidebar logo close to the original artwork: no artificial halo or heavy glow. */
+.owner-sidebar .scenova-brand-lockup::before{
+  display:none!important;
+}
+.owner-sidebar .scenova-brand-logo-sidebar{
+  filter:none!important;
+  opacity:1!important;
+}
+
 /* Fine-tuning for the injected daily win row so five key rows fit the compact Market Insight card. */
 .cc-v8-left-stack .cc-v6-insight-row.cc-daily-win-row{
   min-height:24px!important;
