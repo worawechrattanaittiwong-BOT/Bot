@@ -27,7 +27,7 @@ type Direction = "up" | "down" | "flat";
 export function DashboardLiveEnhancements() {
   const [summary, setSummary] = useState<LiveSummary | null>(null);
   const [direction, setDirection] = useState<Direction>("flat");
-  const [chartTarget, setChartTarget] = useState<HTMLElement | null>(null);
+  const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
   const [insightTarget, setInsightTarget] = useState<HTMLElement | null>(null);
   const previousPriceRef = useRef(0);
 
@@ -35,7 +35,7 @@ export function DashboardLiveEnhancements() {
     if (typeof window === "undefined" || window.location.pathname !== "/dashboard") return;
 
     const bindTargets = () => {
-      setChartTarget(document.querySelector<HTMLElement>(".cc-v6-hourly-chart"));
+      setHeaderTarget(document.querySelector<HTMLElement>(".cc-v6-hourly-chart .cc-v6-panel-head"));
       setInsightTarget(document.querySelector<HTMLElement>(".cc-v6-market-insight .cc-v6-insight-rows"));
     };
 
@@ -86,31 +86,18 @@ export function DashboardLiveEnhancements() {
 
   const digits = Math.max(0, Math.min(8, Number(summary?.digits ?? 2)));
   const price = Number(summary?.price || 0);
-  const bid = Number(summary?.bid || 0);
-  const ask = Number(summary?.ask || 0);
   const marketClosed = String(summary?.marketSessionState || "").toUpperCase() === "CLOSED";
   const today = summary?.today || { trades: 0, wins: 0, losses: 0, winRate: 0, netProfit: 0 };
   const winTone = today.trades === 0 ? "neutral" : today.winRate >= 60 ? "good" : today.winRate >= 50 ? "warn" : "bad";
+  const priceTone: Direction = marketClosed ? "flat" : direction;
 
   return (
     <>
-      {chartTarget && createPortal(
-        <div className={"cc-realtime-price-card " + (marketClosed ? "closed" : direction)} aria-live="polite">
-          <div className="cc-realtime-price-topline">
-            <span className="cc-realtime-price-dot" />
-            <small>ราคาจริง · REALTIME</small>
-            <em>{marketClosed ? "ตลาดปิด" : "LIVE"}</em>
-          </div>
-          <div className="cc-realtime-price-main">
-            <b>{price > 0 ? price.toFixed(digits) : "—"}</b>
-            <span className="cc-realtime-price-arrow">{direction === "up" ? "▲" : direction === "down" ? "▼" : "•"}</span>
-          </div>
-          <div className="cc-realtime-price-spread">
-            <span>BID <strong>{bid > 0 ? bid.toFixed(digits) : "—"}</strong></span>
-            <span>ASK <strong>{ask > 0 ? ask.toFixed(digits) : "—"}</strong></span>
-          </div>
+      {headerTarget && createPortal(
+        <div className={"cc-header-live-price " + priceTone} aria-live="polite" aria-label="ราคาจริงแบบเรียลไทม์">
+          <b>{price > 0 ? price.toFixed(digits) : "—"}</b>
         </div>,
-        chartTarget
+        headerTarget
       )}
 
       {insightTarget && createPortal(
