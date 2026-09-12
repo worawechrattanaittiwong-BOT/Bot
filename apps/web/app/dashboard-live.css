@@ -1,4 +1,4 @@
-/* Restore SCENOVA sidebar logo close to the original artwork: no artificial halo or heavy glow. */
+/* SCENOVA sidebar logo: preserve original artwork without artificial halo. */
 .owner-sidebar .scenova-brand-lockup::before{
   display:none!important;
 }
@@ -7,37 +7,109 @@
   opacity:1!important;
 }
 
-/* Live analytics header: price + today's win rate, compact and premium. */
+/* ===== Price + today's win-rate card: premium blue/violet framing ===== */
+.cc-v8-left-stack>.cc-v6-hourly-chart{
+  position:relative!important;
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+  border:1px solid rgba(91,119,190,.46)!important;
+  background:
+    radial-gradient(760px 250px at 14% -18%,rgba(55,139,255,.10),transparent 60%),
+    radial-gradient(620px 230px at 91% -14%,rgba(138,86,255,.105),transparent 58%),
+    linear-gradient(155deg,#0e1528 0%,#0a101e 52%,#080d17 100%)!important;
+  box-shadow:
+    0 18px 48px rgba(0,0,0,.22),
+    0 0 0 1px rgba(119,148,224,.025) inset,
+    inset 0 1px 0 rgba(255,255,255,.035)!important;
+}
+
+.cc-v8-left-stack>.cc-v6-hourly-chart::before{
+  content:"";
+  position:absolute;
+  z-index:0;
+  top:-1px;
+  left:28px;
+  right:28px;
+  height:2px;
+  pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(72,160,255,.72) 24%,rgba(151,99,255,.82) 62%,transparent);
+  filter:blur(.2px);
+  opacity:.9;
+}
+
+.cc-v8-left-stack>.cc-v6-hourly-chart>*{
+  position:relative;
+  z-index:1;
+}
+
 .cc-v6-hourly-chart .cc-v6-panel-head{
   display:flex!important;
   align-items:center!important;
   justify-content:flex-start!important;
   gap:10px!important;
   flex-wrap:nowrap!important;
-  padding-bottom:10px!important;
+  padding:11px 12px 13px!important;
+  border-bottom:1px solid transparent!important;
+  border-image:linear-gradient(90deg,rgba(76,151,255,.08),rgba(111,130,192,.28),rgba(137,89,255,.12)) 1!important;
+  background:linear-gradient(180deg,rgba(22,31,54,.34),rgba(9,14,25,.08))!important;
 }
+
 .cc-v6-hourly-chart .cc-v6-panel-head>div:first-child{
   min-width:0!important;
   margin-right:auto!important;
 }
+
+.cc-v6-hourly-chart .cc-v6-panel-head>div:first-child>span{
+  width:42px!important;
+  height:42px!important;
+  border:1px solid rgba(132,103,255,.44)!important;
+  border-radius:13px!important;
+  background:
+    radial-gradient(circle at 35% 25%,rgba(119,169,255,.16),transparent 55%),
+    linear-gradient(145deg,rgba(73,54,139,.34),rgba(28,25,60,.68))!important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 8px 18px rgba(44,35,112,.15)!important;
+}
+
 .cc-v6-hourly-chart .cc-v6-panel-head>div:first-child b{
-  font-size:16px!important;
-  letter-spacing:-.01em!important;
+  font-size:17px!important;
+  line-height:1.15!important;
+  letter-spacing:-.015em!important;
+  color:#f2f6ff!important;
+  text-shadow:0 1px 10px rgba(118,151,255,.08)!important;
 }
+
 .cc-v6-hourly-chart .cc-v6-panel-head>div:first-child small{
-  margin-top:2px!important;
+  margin-top:4px!important;
   font-size:9px!important;
-  color:#76849f!important;
+  color:#8090af!important;
 }
+
+/* Market status pill */
 .cc-v6-hourly-chart .cc-v6-panel-head>em{
   order:3!important;
   flex:0 0 auto!important;
-  margin-left:2px!important;
-  min-height:31px!important;
-  padding:7px 11px!important;
+  margin-left:3px!important;
+  min-height:34px!important;
+  padding:8px 13px!important;
   display:inline-flex!important;
   align-items:center!important;
+  justify-content:center!important;
+  border:1px solid rgba(221,174,56,.42)!important;
   border-radius:999px!important;
+  background:
+    radial-gradient(circle at 50% 0,rgba(255,215,102,.10),transparent 64%),
+    linear-gradient(145deg,rgba(50,39,12,.96),rgba(25,21,12,.98))!important;
+  color:#e7c96f!important;
+  box-shadow:
+    0 8px 18px rgba(0,0,0,.20),
+    inset 0 1px 0 rgba(255,234,170,.07)!important;
+  font-size:10px!important;
+  font-weight:900!important;
+  letter-spacing:.055em!important;
+  font-style:normal!important;
 }
 
 .cc-header-live-summary{
@@ -45,143 +117,208 @@
   flex:0 0 auto;
   display:flex;
   align-items:stretch;
-  gap:8px;
+  gap:9px;
 }
+
+/* Shared metric card */
 .cc-live-metric{
   position:relative;
   overflow:hidden;
-  min-height:48px;
-  padding:7px 11px;
-  border:1px solid rgba(90,111,153,.33);
-  border-radius:12px;
-  background:
-    radial-gradient(circle at 100% 0,rgba(116,91,255,.08),transparent 45%),
-    linear-gradient(145deg,rgba(13,20,35,.96),rgba(7,12,22,.98));
+  min-height:52px;
+  padding:8px 12px;
+  border:1px solid rgba(99,122,175,.38);
+  border-radius:13px;
+  background:linear-gradient(145deg,rgba(16,24,42,.97),rgba(8,13,24,.99));
   box-shadow:
-    0 9px 22px rgba(0,0,0,.18),
-    inset 0 1px 0 rgba(255,255,255,.035);
+    0 10px 24px rgba(0,0,0,.20),
+    inset 0 1px 0 rgba(255,255,255,.045);
 }
+
+.cc-live-metric::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  border-radius:inherit;
+  background:linear-gradient(120deg,rgba(255,255,255,.045),transparent 26%,transparent 70%,rgba(130,102,255,.035));
+}
+
 .cc-live-metric::after{
   content:"";
   position:absolute;
-  left:9px;
-  right:9px;
+  left:10px;
+  right:10px;
   bottom:0;
   height:1px;
-  background:linear-gradient(90deg,transparent,rgba(146,124,255,.44),transparent);
-  opacity:.55;
+  background:linear-gradient(90deg,transparent,rgba(131,116,255,.62),transparent);
+  opacity:.72;
 }
+
 .cc-live-metric>small{
+  position:relative;
+  z-index:1;
   display:block;
-  margin-bottom:3px;
-  color:#8290aa;
+  margin-bottom:4px;
+  color:#8c9bb8;
   font-size:8px;
   line-height:1.1;
   font-weight:800;
-  letter-spacing:.08em;
+  letter-spacing:.085em;
   white-space:nowrap;
 }
+
+/* Live price: default is premium cyan/blue */
 .cc-live-metric-price{
-  min-width:118px;
+  min-width:126px;
   display:flex;
   flex-direction:column;
   justify-content:center;
   text-align:right;
+  border-color:rgba(73,157,255,.48);
+  background:
+    radial-gradient(circle at 100% 0,rgba(51,154,255,.17),transparent 52%),
+    linear-gradient(145deg,rgba(10,29,53,.98),rgba(7,15,29,.99));
+  box-shadow:
+    0 10px 24px rgba(0,0,0,.20),
+    0 0 20px rgba(45,128,255,.055),
+    inset 0 1px 0 rgba(160,211,255,.055);
 }
+
+.cc-live-metric-price>small{color:#83b7f4}
+
 .cc-live-metric-price b{
+  position:relative;
+  z-index:1;
   display:block;
-  color:#f0f4fb;
-  font-size:19px;
+  color:#f2f7ff;
+  font-size:20px;
   line-height:1;
   font-weight:900;
   letter-spacing:-.025em;
   font-variant-numeric:tabular-nums;
   white-space:nowrap;
 }
+
+.cc-live-metric-price::after{
+  background:linear-gradient(90deg,transparent,#4da6ff,rgba(130,98,255,.72),transparent);
+}
+
 .cc-live-metric-price.up{
-  border-color:rgba(75,222,156,.45);
+  border-color:rgba(75,222,156,.54);
   background:
-    radial-gradient(circle at 100% 0,rgba(75,222,156,.14),transparent 48%),
-    linear-gradient(145deg,rgba(9,35,27,.97),rgba(7,17,14,.98));
-  box-shadow:0 9px 22px rgba(0,0,0,.18),0 0 19px rgba(75,222,156,.08),inset 0 1px 0 rgba(255,255,255,.035);
+    radial-gradient(circle at 100% 0,rgba(75,222,156,.17),transparent 50%),
+    linear-gradient(145deg,rgba(9,39,29,.98),rgba(6,18,14,.99));
+  box-shadow:0 10px 24px rgba(0,0,0,.20),0 0 20px rgba(75,222,156,.075),inset 0 1px 0 rgba(185,255,224,.05);
   animation:ccLiveMetricTick .38s ease-out;
 }
+.cc-live-metric-price.up>small{color:#80c9a7}
 .cc-live-metric-price.up b{color:#72e6ad}
 .cc-live-metric-price.up::after{background:linear-gradient(90deg,transparent,#60e5a8,transparent)}
+
 .cc-live-metric-price.down{
-  border-color:rgba(255,103,121,.45);
+  border-color:rgba(255,103,121,.52);
   background:
-    radial-gradient(circle at 100% 0,rgba(255,91,113,.13),transparent 48%),
-    linear-gradient(145deg,rgba(43,14,21,.97),rgba(20,8,13,.98));
-  box-shadow:0 9px 22px rgba(0,0,0,.18),0 0 19px rgba(255,91,113,.07),inset 0 1px 0 rgba(255,255,255,.035);
+    radial-gradient(circle at 100% 0,rgba(255,91,113,.16),transparent 50%),
+    linear-gradient(145deg,rgba(46,14,22,.98),rgba(21,8,13,.99));
+  box-shadow:0 10px 24px rgba(0,0,0,.20),0 0 20px rgba(255,91,113,.065),inset 0 1px 0 rgba(255,197,205,.04);
   animation:ccLiveMetricTick .38s ease-out;
 }
+.cc-live-metric-price.down>small{color:#d68d99}
 .cc-live-metric-price.down b{color:#ff8797}
 .cc-live-metric-price.down::after{background:linear-gradient(90deg,transparent,#ff7085,transparent)}
 
+/* Today's win rate: violet when no result, dynamic tone when there are closed baskets */
 .cc-live-metric-win{
-  min-width:154px;
+  min-width:164px;
   display:flex;
   flex-direction:column;
   justify-content:center;
+  border-color:rgba(148,93,255,.48);
+  background:
+    radial-gradient(circle at 100% 0,rgba(137,75,255,.17),transparent 52%),
+    linear-gradient(145deg,rgba(28,18,52,.98),rgba(12,11,26,.99));
+  box-shadow:
+    0 10px 24px rgba(0,0,0,.20),
+    0 0 20px rgba(124,74,255,.05),
+    inset 0 1px 0 rgba(218,199,255,.045);
 }
+.cc-live-metric-win>small{color:#ae91e9}
+
 .cc-live-win-value{
+  position:relative;
+  z-index:1;
   display:flex;
   align-items:baseline;
   gap:7px;
   min-width:0;
 }
+
 .cc-live-win-value b{
   flex:0 0 auto;
-  color:#e8edf7;
-  font-size:17px;
+  color:#eee9ff;
+  font-size:18px;
   line-height:1;
   font-weight:900;
   font-variant-numeric:tabular-nums;
 }
+
 .cc-live-win-value span{
   min-width:0;
-  color:#73809a;
+  color:#85799f;
   font-size:8px;
   line-height:1.2;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
 }
-.cc-live-metric-win.tone-good{
-  border-color:rgba(74,205,145,.32);
-  background:radial-gradient(circle at 100% 0,rgba(58,213,149,.09),transparent 48%),linear-gradient(145deg,#0c1c18,#080f15);
+
+.cc-live-metric-win::after{
+  background:linear-gradient(90deg,transparent,#8e66ff,rgba(74,151,255,.60),transparent);
 }
+
+.cc-live-metric-win.tone-good{
+  border-color:rgba(74,205,145,.43);
+  background:radial-gradient(circle at 100% 0,rgba(58,213,149,.13),transparent 50%),linear-gradient(145deg,#0d241d,#081411);
+}
+.cc-live-metric-win.tone-good>small{color:#7ec3a3}
 .cc-live-metric-win.tone-good b{color:#70e2aa}
 .cc-live-metric-win.tone-good::after{background:linear-gradient(90deg,transparent,#51dda0,transparent)}
+
 .cc-live-metric-win.tone-warn{
-  border-color:rgba(226,185,87,.34);
-  background:radial-gradient(circle at 100% 0,rgba(231,188,86,.09),transparent 48%),linear-gradient(145deg,#191508,#0d0f14);
+  border-color:rgba(226,185,87,.44);
+  background:radial-gradient(circle at 100% 0,rgba(231,188,86,.13),transparent 50%),linear-gradient(145deg,#211b0a,#100f0c);
 }
+.cc-live-metric-win.tone-warn>small{color:#bea45e}
 .cc-live-metric-win.tone-warn b{color:#e8c36e}
 .cc-live-metric-win.tone-warn::after{background:linear-gradient(90deg,transparent,#e5bd61,transparent)}
+
 .cc-live-metric-win.tone-bad{
-  border-color:rgba(243,103,125,.34);
-  background:radial-gradient(circle at 100% 0,rgba(245,95,119,.09),transparent 48%),linear-gradient(145deg,#1c0e14,#0d0d13);
+  border-color:rgba(243,103,125,.44);
+  background:radial-gradient(circle at 100% 0,rgba(245,95,119,.13),transparent 50%),linear-gradient(145deg,#251017,#100d13);
 }
+.cc-live-metric-win.tone-bad>small{color:#c47e8b}
 .cc-live-metric-win.tone-bad b{color:#ff8797}
 .cc-live-metric-win.tone-bad::after{background:linear-gradient(90deg,transparent,#ff7085,transparent)}
-.cc-live-metric-win.tone-neutral b{color:#d7deec}
+
+.cc-live-metric-win.tone-neutral b{color:#eee9ff}
 
 /* Let the graph use the card's remaining vertical space instead of leaving a dead band below it. */
-.cc-v8-left-stack>.cc-v6-hourly-chart{
-  display:flex!important;
-  flex-direction:column!important;
-}
 .cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-panel-head,
 .cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-chart-kpis{
   flex:0 0 auto!important;
 }
+
 .cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-chart-canvas{
   flex:1 1 auto!important;
   height:auto!important;
   min-height:245px!important;
-  margin-top:8px!important;
+  margin:8px 10px 10px!important;
+  border:1px solid rgba(72,99,151,.32)!important;
+  border-radius:14px!important;
+  background:
+    radial-gradient(circle at 50% 0,rgba(53,93,170,.045),transparent 48%),
+    rgba(4,9,17,.72)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.018)!important;
 }
 
 @keyframes ccLiveMetricTick{
@@ -191,8 +328,8 @@
 }
 
 @media(max-width:1240px){
-  .cc-live-metric-price{min-width:108px}
-  .cc-live-metric-win{min-width:144px}
+  .cc-live-metric-price{min-width:112px}
+  .cc-live-metric-win{min-width:146px}
   .cc-live-win-value span{display:none}
 }
 
@@ -218,11 +355,12 @@
 }
 
 @media(max-width:520px){
+  .cc-v6-hourly-chart .cc-v6-panel-head{padding:9px!important}
   .cc-header-live-summary{gap:6px}
-  .cc-live-metric{min-height:45px;padding:6px 8px}
+  .cc-live-metric{min-height:46px;padding:7px 9px}
   .cc-live-metric-price,.cc-live-metric-win{min-width:0}
-  .cc-live-metric-price b{font-size:16px}
-  .cc-live-win-value b{font-size:15px}
+  .cc-live-metric-price b{font-size:17px}
+  .cc-live-win-value b{font-size:16px}
   .cc-live-win-value span{font-size:7px}
   .cc-v6-hourly-chart .cc-v6-panel-head>div:first-child b{font-size:14px!important}
   .cc-v6-hourly-chart .cc-v6-panel-head>div:first-child small{font-size:8px!important}
