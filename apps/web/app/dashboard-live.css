@@ -7,3 +7,54 @@
   min-height:24px!important;
   padding:3px 8px!important;
 }
+
+/* Realtime price: number only, placed in the card header instead of over the chart. */
+.cc-v6-hourly-chart .cc-v6-panel-head{
+  justify-content:flex-start!important;
+}
+.cc-v6-hourly-chart .cc-v6-panel-head>div:first-child{
+  margin-right:auto!important;
+}
+.cc-v6-hourly-chart .cc-v6-panel-head>em{
+  order:3!important;
+  margin-left:10px!important;
+}
+.cc-header-live-price{
+  order:2!important;
+  flex:0 0 auto;
+  min-width:92px;
+  padding:5px 9px;
+  border:1px solid rgba(115,139,184,.28);
+  border-radius:10px;
+  background:linear-gradient(145deg,rgba(12,19,34,.92),rgba(7,12,22,.96));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+  text-align:center;
+  transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;
+}
+.cc-header-live-price b{
+  display:block;
+  font-size:15px;
+  line-height:1;
+  font-weight:850;
+  letter-spacing:-.02em;
+  color:#edf3ff;
+  font-variant-numeric:tabular-nums;
+}
+.cc-header-live-price.up{
+  border-color:rgba(79,222,157,.42);
+  background:linear-gradient(145deg,rgba(9,37,27,.92),rgba(7,18,15,.96));
+  box-shadow:0 0 18px rgba(79,222,157,.08),inset 0 1px 0 rgba(255,255,255,.035);
+}
+.cc-header-live-price.up b{color:#72e6ad}
+.cc-header-live-price.down{
+  border-color:rgba(255,102,119,.42);
+  background:linear-gradient(145deg,rgba(45,15,22,.92),rgba(20,8,13,.96));
+  box-shadow:0 0 18px rgba(255,94,113,.07),inset 0 1px 0 rgba(255,255,255,.035);
+}
+.cc-header-live-price.down b{color:#ff8797}
+
+@media(max-width:680px){
+  .cc-header-live-price{min-width:78px;padding:5px 7px}
+  .cc-header-live-price b{font-size:13px}
+  .cc-v6-hourly-chart .cc-v6-panel-head>em{margin-left:6px!important}
+}
