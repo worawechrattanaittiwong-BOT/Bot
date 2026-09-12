@@ -7,63 +7,227 @@
   opacity:1!important;
 }
 
-/* Fine-tuning for the injected daily win row so five key rows fit the compact Market Insight card. */
-.cc-v8-left-stack .cc-v6-insight-row.cc-daily-win-row{
-  min-height:24px!important;
-  padding:3px 8px!important;
-}
-.cc-v8-left-stack .cc-v6-insight-rows:has(.cc-daily-win-row) .cc-v6-insight-row{
-  min-height:24px!important;
-  padding:3px 8px!important;
-}
-
-/* Realtime price: number only, placed in the card header instead of over the chart. */
+/* Live analytics header: price + today's win rate, compact and premium. */
 .cc-v6-hourly-chart .cc-v6-panel-head{
+  display:flex!important;
+  align-items:center!important;
   justify-content:flex-start!important;
+  gap:10px!important;
+  flex-wrap:nowrap!important;
+  padding-bottom:10px!important;
 }
 .cc-v6-hourly-chart .cc-v6-panel-head>div:first-child{
+  min-width:0!important;
   margin-right:auto!important;
+}
+.cc-v6-hourly-chart .cc-v6-panel-head>div:first-child b{
+  font-size:16px!important;
+  letter-spacing:-.01em!important;
+}
+.cc-v6-hourly-chart .cc-v6-panel-head>div:first-child small{
+  margin-top:2px!important;
+  font-size:9px!important;
+  color:#76849f!important;
 }
 .cc-v6-hourly-chart .cc-v6-panel-head>em{
   order:3!important;
-  margin-left:10px!important;
+  flex:0 0 auto!important;
+  margin-left:2px!important;
+  min-height:31px!important;
+  padding:7px 11px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  border-radius:999px!important;
 }
-.cc-header-live-price{
+
+.cc-header-live-summary{
   order:2!important;
   flex:0 0 auto;
-  min-width:92px;
-  padding:5px 9px;
-  border:1px solid rgba(115,139,184,.28);
-  border-radius:10px;
-  background:linear-gradient(145deg,rgba(12,19,34,.92),rgba(7,12,22,.96));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
-  text-align:center;
-  transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;
+  display:flex;
+  align-items:stretch;
+  gap:8px;
 }
-.cc-header-live-price b{
+.cc-live-metric{
+  position:relative;
+  overflow:hidden;
+  min-height:48px;
+  padding:7px 11px;
+  border:1px solid rgba(90,111,153,.33);
+  border-radius:12px;
+  background:
+    radial-gradient(circle at 100% 0,rgba(116,91,255,.08),transparent 45%),
+    linear-gradient(145deg,rgba(13,20,35,.96),rgba(7,12,22,.98));
+  box-shadow:
+    0 9px 22px rgba(0,0,0,.18),
+    inset 0 1px 0 rgba(255,255,255,.035);
+}
+.cc-live-metric::after{
+  content:"";
+  position:absolute;
+  left:9px;
+  right:9px;
+  bottom:0;
+  height:1px;
+  background:linear-gradient(90deg,transparent,rgba(146,124,255,.44),transparent);
+  opacity:.55;
+}
+.cc-live-metric>small{
   display:block;
-  font-size:15px;
+  margin-bottom:3px;
+  color:#8290aa;
+  font-size:8px;
+  line-height:1.1;
+  font-weight:800;
+  letter-spacing:.08em;
+  white-space:nowrap;
+}
+.cc-live-metric-price{
+  min-width:118px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  text-align:right;
+}
+.cc-live-metric-price b{
+  display:block;
+  color:#f0f4fb;
+  font-size:19px;
   line-height:1;
-  font-weight:850;
-  letter-spacing:-.02em;
-  color:#edf3ff;
+  font-weight:900;
+  letter-spacing:-.025em;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.cc-live-metric-price.up{
+  border-color:rgba(75,222,156,.45);
+  background:
+    radial-gradient(circle at 100% 0,rgba(75,222,156,.14),transparent 48%),
+    linear-gradient(145deg,rgba(9,35,27,.97),rgba(7,17,14,.98));
+  box-shadow:0 9px 22px rgba(0,0,0,.18),0 0 19px rgba(75,222,156,.08),inset 0 1px 0 rgba(255,255,255,.035);
+  animation:ccLiveMetricTick .38s ease-out;
+}
+.cc-live-metric-price.up b{color:#72e6ad}
+.cc-live-metric-price.up::after{background:linear-gradient(90deg,transparent,#60e5a8,transparent)}
+.cc-live-metric-price.down{
+  border-color:rgba(255,103,121,.45);
+  background:
+    radial-gradient(circle at 100% 0,rgba(255,91,113,.13),transparent 48%),
+    linear-gradient(145deg,rgba(43,14,21,.97),rgba(20,8,13,.98));
+  box-shadow:0 9px 22px rgba(0,0,0,.18),0 0 19px rgba(255,91,113,.07),inset 0 1px 0 rgba(255,255,255,.035);
+  animation:ccLiveMetricTick .38s ease-out;
+}
+.cc-live-metric-price.down b{color:#ff8797}
+.cc-live-metric-price.down::after{background:linear-gradient(90deg,transparent,#ff7085,transparent)}
+
+.cc-live-metric-win{
+  min-width:154px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+}
+.cc-live-win-value{
+  display:flex;
+  align-items:baseline;
+  gap:7px;
+  min-width:0;
+}
+.cc-live-win-value b{
+  flex:0 0 auto;
+  color:#e8edf7;
+  font-size:17px;
+  line-height:1;
+  font-weight:900;
   font-variant-numeric:tabular-nums;
 }
-.cc-header-live-price.up{
-  border-color:rgba(79,222,157,.42);
-  background:linear-gradient(145deg,rgba(9,37,27,.92),rgba(7,18,15,.96));
-  box-shadow:0 0 18px rgba(79,222,157,.08),inset 0 1px 0 rgba(255,255,255,.035);
+.cc-live-win-value span{
+  min-width:0;
+  color:#73809a;
+  font-size:8px;
+  line-height:1.2;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
-.cc-header-live-price.up b{color:#72e6ad}
-.cc-header-live-price.down{
-  border-color:rgba(255,102,119,.42);
-  background:linear-gradient(145deg,rgba(45,15,22,.92),rgba(20,8,13,.96));
-  box-shadow:0 0 18px rgba(255,94,113,.07),inset 0 1px 0 rgba(255,255,255,.035);
+.cc-live-metric-win.tone-good{
+  border-color:rgba(74,205,145,.32);
+  background:radial-gradient(circle at 100% 0,rgba(58,213,149,.09),transparent 48%),linear-gradient(145deg,#0c1c18,#080f15);
 }
-.cc-header-live-price.down b{color:#ff8797}
+.cc-live-metric-win.tone-good b{color:#70e2aa}
+.cc-live-metric-win.tone-good::after{background:linear-gradient(90deg,transparent,#51dda0,transparent)}
+.cc-live-metric-win.tone-warn{
+  border-color:rgba(226,185,87,.34);
+  background:radial-gradient(circle at 100% 0,rgba(231,188,86,.09),transparent 48%),linear-gradient(145deg,#191508,#0d0f14);
+}
+.cc-live-metric-win.tone-warn b{color:#e8c36e}
+.cc-live-metric-win.tone-warn::after{background:linear-gradient(90deg,transparent,#e5bd61,transparent)}
+.cc-live-metric-win.tone-bad{
+  border-color:rgba(243,103,125,.34);
+  background:radial-gradient(circle at 100% 0,rgba(245,95,119,.09),transparent 48%),linear-gradient(145deg,#1c0e14,#0d0d13);
+}
+.cc-live-metric-win.tone-bad b{color:#ff8797}
+.cc-live-metric-win.tone-bad::after{background:linear-gradient(90deg,transparent,#ff7085,transparent)}
+.cc-live-metric-win.tone-neutral b{color:#d7deec}
 
-@media(max-width:680px){
-  .cc-header-live-price{min-width:78px;padding:5px 7px}
-  .cc-header-live-price b{font-size:13px}
-  .cc-v6-hourly-chart .cc-v6-panel-head>em{margin-left:6px!important}
+/* Let the graph use the card's remaining vertical space instead of leaving a dead band below it. */
+.cc-v8-left-stack>.cc-v6-hourly-chart{
+  display:flex!important;
+  flex-direction:column!important;
+}
+.cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-panel-head,
+.cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-chart-kpis{
+  flex:0 0 auto!important;
+}
+.cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-chart-canvas{
+  flex:1 1 auto!important;
+  height:auto!important;
+  min-height:245px!important;
+  margin-top:8px!important;
+}
+
+@keyframes ccLiveMetricTick{
+  0%{transform:translateY(1px) scale(.975);filter:brightness(.9)}
+  58%{transform:translateY(-1px) scale(1.025);filter:brightness(1.12)}
+  100%{transform:none;filter:brightness(1)}
+}
+
+@media(max-width:1240px){
+  .cc-live-metric-price{min-width:108px}
+  .cc-live-metric-win{min-width:144px}
+  .cc-live-win-value span{display:none}
+}
+
+@media(max-width:880px){
+  .cc-v6-hourly-chart .cc-v6-panel-head{
+    flex-wrap:wrap!important;
+  }
+  .cc-header-live-summary{
+    order:4!important;
+    width:100%;
+    flex:1 1 100%;
+  }
+  .cc-live-metric{
+    flex:1 1 0;
+  }
+  .cc-live-win-value span{display:block}
+  .cc-v6-hourly-chart .cc-v6-panel-head>em{
+    margin-left:auto!important;
+  }
+  .cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-chart-canvas{
+    min-height:230px!important;
+  }
+}
+
+@media(max-width:520px){
+  .cc-header-live-summary{gap:6px}
+  .cc-live-metric{min-height:45px;padding:6px 8px}
+  .cc-live-metric-price,.cc-live-metric-win{min-width:0}
+  .cc-live-metric-price b{font-size:16px}
+  .cc-live-win-value b{font-size:15px}
+  .cc-live-win-value span{font-size:7px}
+  .cc-v6-hourly-chart .cc-v6-panel-head>div:first-child b{font-size:14px!important}
+  .cc-v6-hourly-chart .cc-v6-panel-head>div:first-child small{font-size:8px!important}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .cc-live-metric-price.up,.cc-live-metric-price.down{animation:none!important}
 }
