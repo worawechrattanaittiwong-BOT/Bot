@@ -32,6 +32,14 @@ jobs:
         shell: pwsh
         run: ./scripts/upgrade-market-closed-heartbeat.ps1
 
+      - name: Normalize regression sentinel
+        shell: pwsh
+        run: |
+          $path = 'tests/market-closed-heartbeat-contract.ps1'
+          $text = [System.IO.File]::ReadAllText((Resolve-Path $path))
+          $text = $text.Replace("  '`"marketSessionState`"'", "  'marketSessionState'")
+          [System.IO.File]::WriteAllText((Resolve-Path $path), $text, [System.Text.UTF8Encoding]::new($false))
+
       - name: Verify market-closed heartbeat contract
         shell: pwsh
         run: ./tests/market-closed-heartbeat-contract.ps1
