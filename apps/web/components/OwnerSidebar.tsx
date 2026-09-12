@@ -12,7 +12,7 @@ export const ownerNavItems = [
   { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trials, subscriptions & customer access" },
   { section:"MANAGEMENT", key:"trading-access", href:"/dashboard?view=access", icon:"shield", label:"Access & Permissions", hint:"Roles, permissions & account access" },
   { section:"SYSTEM", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"System Overview", hint:"Platform health & system status" },
-  { section:"SYSTEM", key:"website", href:"/", icon:"strategy", label:"Main Website", hint:"SCENOVA public website" }
+  { section:"SYSTEM", key:"website", href:"/website", icon:"strategy", label:"Website", hint:"SCENOVA public website" }
 ] as const;
 
 type OwnerNavigateHandler = (href:string)=>boolean | void;
@@ -29,9 +29,9 @@ export function OwnerSidebar({
   const sections = ["TRADING","MANAGEMENT","SYSTEM"] as const;
   return (
     <aside className="sidebar app-sidebar owner-sidebar">
-      <div className="brand-lockup side-brand scenova-brand-lockup">
+      <Link href="/dashboard?view=overview" className="brand-lockup side-brand scenova-brand-lockup" aria-label="SCENOVA Control Center">
         <ScenovaBrand className="scenova-brand-logo-sidebar"/>
-      </div>
+      </Link>
 
       {sections.map(section=>(
         <div key={section}>
