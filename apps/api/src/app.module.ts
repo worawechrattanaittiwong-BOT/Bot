@@ -12,6 +12,7 @@ import { RootController } from "./root.controller";
 import { CatalogController } from "./catalog.controller";
 import { InstallerController } from "./installer.controller";
 import { BacktestController, PerformanceController } from "./backtest.controller";
+import { DashboardLiveController } from "./dashboard-live.controller";
 import { DbService } from "./db.service";
 import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
 
@@ -22,7 +23,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [RootController, CatalogController, AuthController, BotController, ManualMt5Controller, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, HealthController, WorkerController],
+  controllers: [RootController, CatalogController, AuthController, BotController, DashboardLiveController, ManualMt5Controller, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, HealthController, WorkerController],
   providers: [DbService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
 })
 export class AppModule {}
