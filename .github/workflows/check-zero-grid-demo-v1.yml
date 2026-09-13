@@ -1,0 +1,72 @@
+name: Check ZERO GRID Demo V1
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/upgrade-zero-grid-demo-v1.ps1"
+      - ".github/workflows/check-zero-grid-demo-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply ZERO GRID patch in CI workspace
+        shell: pwsh
+        run: |
+          & "./scripts/upgrade-zero-grid-demo-v1.ps1" `
+            -EaPath "mt5/FastBasketBot.mq5" `
+            -ApiPath "apps/api/src/bot.controller.ts" `
+            -WebPath "apps/web/app/dashboard/page.tsx" `
+            -BuildWorkflowPath ".github/workflows/build-mt5-ea.yml"
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run build
+
+  mt5-compile:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply ZERO GRID patch in CI workspace
+        shell: pwsh
+        run: |
+          & "./scripts/upgrade-zero-grid-demo-v1.ps1" `
+            -EaPath "mt5/FastBasketBot.mq5" `
+            -ApiPath "apps/api/src/bot.controller.ts" `
+            -WebPath "apps/web/app/dashboard/page.tsx" `
+            -BuildWorkflowPath ".github/workflows/build-mt5-ea.yml"
+      - name: Install MetaTrader 5 compiler
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = "$env:RUNNER_TEMP\mt5setup.exe"
+          $installDir = "C:\SCENOVA-ZG-MT5"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://download.terminal.free/cdn/web/metaquotes.ltd/mt5/mt5setup.exe" -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "/auto /path:`"$installDir`"" -Wait
+          $metaEditor = Get-ChildItem -Path $installDir -Filter "metaeditor64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
+          "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Compile patched EA
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $source = (Resolve-Path "mt5\FastBasketBot.mq5").Path
+          $log = "$env:RUNNER_TEMP\zero-grid-compile.log"
+          Start-Process -FilePath "$env:METAEDITOR" -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
+          if (Test-Path $log) { Get-Content $log }
+          $ex5 = [System.IO.Path]::ChangeExtension($source, ".ex5")
+          if (-not (Test-Path $ex5)) { throw "FastBasketBot.ex5 was not produced" }
+          if (Test-Path $log) {
+            $compileLog = Get-Content $log -Raw
+            if ($compileLog -match '(?i)\b[1-9][0-9]*\s+errors?\b') { throw "MetaEditor reported compile errors" }
+          }
