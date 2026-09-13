@@ -3,13 +3,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $temp = Join-Path $env:RUNNER_TEMP "zero-grid-patch-inputs"
 New-Item -ItemType Directory -Force -Path $temp | Out-Null
 
+function To-Crlf([string]$text) {
+  return $text.Replace("`r`n","`n").Replace("`n","`r`n")
+}
+
 function Copy-Normalized([string]$source,[string]$name) {
   $target = Join-Path $temp $name
-  $text = [System.IO.File]::ReadAllText((Resolve-Path $source)).Replace("`r`n","`n")
+  $text = To-Crlf ([System.IO.File]::ReadAllText((Resolve-Path $source)))
   [System.IO.File]::WriteAllText($target,$text,[System.Text.UTF8Encoding]::new($false))
   return $target
 }
@@ -17,7 +20,7 @@ function Copy-Normalized([string]$source,[string]$name) {
 $api = Copy-Normalized "apps/api/src/bot.controller.ts" "bot.controller.ts"
 $web = Copy-Normalized "apps/web/app/dashboard/page.tsx" "page.tsx"
 $build = Copy-Normalized ".github/workflows/build-mt5-ea.yml" "build-mt5-ea.yml"
-$eaText = [System.IO.File]::ReadAllText((Resolve-Path $EaPath)).Replace("`r`n","`n")
+$eaText = To-Crlf ([System.IO.File]::ReadAllText((Resolve-Path $EaPath)))
 [System.IO.File]::WriteAllText((Resolve-Path $EaPath),$eaText,[System.Text.UTF8Encoding]::new($false))
 
 & (Join-Path $PSScriptRoot "upgrade-zero-grid-demo-v1.ps1") `
