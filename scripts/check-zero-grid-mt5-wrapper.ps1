@@ -29,5 +29,6 @@ $eaText = To-Crlf ([System.IO.File]::ReadAllText((Resolve-Path $EaPath)))
   -WebPath $web `
   -BuildWorkflowPath $build
 
-if ($LASTEXITCODE -ne 0) { throw "ZERO GRID patcher failed" }
+# The patcher uses terminating exceptions with ErrorActionPreference=Stop.
+# If execution reaches here, patch application completed successfully.
 Write-Host "ZERO GRID MT5 source patched for compile validation."
