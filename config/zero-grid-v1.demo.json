@@ -1,0 +1,29 @@
+{
+  "profileName": "ZERO GRID V1",
+  "mode": "ZERO_GRID",
+  "executionScope": "DEMO_BACKTEST",
+  "symbolExample": "XAUUSD",
+  "gridStepPrice": 3.0,
+  "levelsPerSide": 30,
+  "baseLot": 0.03,
+  "lotProgression": "LINEAR_BY_LEVEL",
+  "lotFormula": "baseLot * level",
+  "buySide": "BUY_STOP_ABOVE_CENTER",
+  "sellSide": "SELL_STOP_BELOW_CENTER",
+  "oneShotLevelPerCycle": true,
+  "recenterAfterCycle": true,
+  "minimumNetProfitAfterKnownCosts": 0.01,
+  "closeRule": "CLOSE_ALL_WHEN_ESTIMATED_POST_CLOSE_NET_AT_LEAST_MINIMUM",
+  "directionBrain": false,
+  "confidenceGate": false,
+  "indicatorEntryFilter": false,
+  "adaptiveRescue": false,
+  "tacticalCountertrend": false,
+  "requiresHedgingAccount": true,
+  "notes": [
+    "Example lot sequence with baseLot 0.03: 0.03, 0.06, 0.09, 0.12, ...",
+    "Example grid with step 3.0: 3003, 3006, 3009 above center and 2997, 2994, 2991 below center.",
+    "Do not close merely because displayed floating profit is +0.01; reserve known remaining close commission/fees first.",
+    "AUTO and RACE configuration must remain unchanged when this preset is selected."
+  ]
+}
