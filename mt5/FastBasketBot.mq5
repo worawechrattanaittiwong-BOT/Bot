@@ -10039,6 +10039,63 @@ double AutoV20ProfitForMove(int direction,double volume,double openPrice,double 
    return result;
 }
 
+// AUTO V20 is allowed to enter only when the projected trade remains
+// economically positive after a conservative allowance for current spread.
+// This is intentionally AUTO-only: RACE/Turbo keeps its own execution rules.
+double AutoV20MinimumNetRR()
+{
+   return 1.25;
+}
+
+double AutoV20NetRewardRisk(double grossReward,double grossRisk,double cost)
+{
+   if(grossReward<=0.0 || grossRisk<=0.0 || grossReward<=cost)
+      return 0.0;
+   return (grossReward-cost)/(grossRisk+cost);
+}
+
+double AutoV20RiskBudgetMoney()
+{
+   double percentageBudget=0.0;
+   double equity=AccountInfoDouble(ACCOUNT_EQUITY);
+   if(equity>0.0 && g_riskPerOrderPercent>0.0)
+      percentageBudget=equity*g_riskPerOrderPercent/100.0;
+
+   if(g_maxBasketLoss>0.0 && percentageBudget>0.0)
+      return MathMin(g_maxBasketLoss,percentageBudget);
+   if(g_maxBasketLoss>0.0)
+      return g_maxBasketLoss;
+   return percentageBudget;
+}
+
+// Unlike NormalizeTradeVolume(), this helper never rounds UP to the broker
+// minimum. A trade whose minimum lot would breach the Auto risk budget must
+// be skipped rather than silently opening an oversized position.
+double AutoV20RiskCappedVolume(
+   double desiredVolume,
+   double lossPerLot,
+   double costPerLot,
+   double riskBudget
+)
+{
+   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+   double maxVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
+   double step=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
+   double riskPerLot=MathMax(0.0,lossPerLot)+MathMax(0.0,costPerLot);
+   if(desiredVolume<=0.0 || minVolume<=0.0 || maxVolume<=0.0 ||
+      step<=0.0 || riskBudget<=0.0 || riskPerLot<=0.0)
+      return 0.0;
+
+   double rawVolume=MathMin(desiredVolume,MathMin(maxVolume,riskBudget/riskPerLot));
+   double volume=MathFloor((rawVolume+1e-12)/step)*step;
+   if(volume<minVolume-1e-12)
+      return 0.0;
+   volume=MathMin(maxVolume,volume);
+   if(volume*riskPerLot>riskBudget+1e-8)
+      return 0.0;
+   return NormalizeDouble(volume,8);
+}
+
 void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
 {
    MqlTick tick;
@@ -10068,21 +10125,24 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    if(configuredStop>_Point)
       stopDistance=MathMin(stopDistance,configuredStop);
 
-   double targetDistance=atrPrice*0.68;
+   // Default target must be meaningfully larger than the protected stop. A
+   // nearby opposing M5 level may shorten it; the net-RR policy then rejects
+   // that setup instead of accepting a trade that can lose more than it earns.
+   double targetDistance=MathMax(atrPrice*0.76,stopDistance*1.55);
    if(side.direction>0 && levels.nearestResistance>side.entryPrice)
    {
       double room=levels.nearestResistance-side.entryPrice-atrPrice*0.05;
-      if(room>=atrPrice*0.28 && room<=atrPrice*1.05)
+      if(room>=atrPrice*0.28 && room<=atrPrice*1.40)
          targetDistance=MathMin(targetDistance,room);
    }
    else if(side.direction<0 && levels.nearestSupport>0.0 &&
            levels.nearestSupport<side.entryPrice)
    {
       double room=side.entryPrice-levels.nearestSupport-atrPrice*0.05;
-      if(room>=atrPrice*0.28 && room<=atrPrice*1.05)
+      if(room>=atrPrice*0.28 && room<=atrPrice*1.40)
          targetDistance=MathMin(targetDistance,room);
    }
-   targetDistance=AutoV20Clamp(targetDistance,atrPrice*0.28,atrPrice*0.90);
+   targetDistance=AutoV20Clamp(targetDistance,atrPrice*0.28,atrPrice*1.35);
 
    side.slPrice=side.direction>0
       ? side.entryPrice-stopDistance
@@ -10091,24 +10151,27 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
       ? side.entryPrice+targetDistance
       : side.entryPrice-targetDistance;
 
-   double grossProfit=MathAbs(AutoV20ProfitForMove(
-      side.direction,g_lot,side.entryPrice,side.tpPrice));
-   double grossLoss=MathAbs(AutoV20ProfitForMove(
-      side.direction,g_lot,side.entryPrice,side.slPrice));
-   side.rr=grossLoss>0.0 ? grossProfit/grossLoss : 0.0;
+   double grossProfitPerLot=MathAbs(AutoV20ProfitForMove(
+      side.direction,1.0,side.entryPrice,side.tpPrice));
+   double grossLossPerLot=MathAbs(AutoV20ProfitForMove(
+      side.direction,1.0,side.entryPrice,side.slPrice));
+   double costPerLot=CurrentSpreadCost(1.0);
+   side.rr=AutoV20NetRewardRisk(grossProfitPerLot,grossLossPerLot,costPerLot);
 
    double sizeFactor=0.50;
    if(side.rr>=1.55 && side.confidence>=76.0) sizeFactor=1.00;
    else if(side.rr>=1.20 && side.confidence>=67.0) sizeFactor=0.75;
-   side.plannedLot=NormalizeTradeVolume(g_lot*sizeFactor);
+   side.plannedLot=AutoV20RiskCappedVolume(
+      g_lot*sizeFactor,
+      grossLossPerLot,
+      costPerLot,
+      AutoV20RiskBudgetMoney()
+   );
+   side.knownCostMoney=costPerLot*side.plannedLot;
+   side.expectedProfitMoney=MathMax(0.0,grossProfitPerLot*side.plannedLot-side.knownCostMoney);
+   side.expectedLossMoney=grossLossPerLot*side.plannedLot+side.knownCostMoney;
    if(side.plannedLot<=0.0)
-      side.plannedLot=NormalizeTradeVolume(g_lot);
-
-   side.expectedProfitMoney=MathAbs(AutoV20ProfitForMove(
-      side.direction,side.plannedLot,side.entryPrice,side.tpPrice));
-   side.expectedLossMoney=MathAbs(AutoV20ProfitForMove(
-      side.direction,side.plannedLot,side.entryPrice,side.slPrice));
-   side.knownCostMoney=CurrentSpreadCost(side.plannedLot);
+      side.rejectReason="MIN_LOT_EXCEEDS_AUTO_RISK";
 }
 
 double AutoV20AggregateRiskAtStop(int direction,double stopPrice,double newLot)
@@ -10449,10 +10512,25 @@ int AutoV20PrecisionDirection(double momentum)
       return 0;
    }
 
-   if(selected.rr<1.05)
+   if(selected.plannedLot<=0.0)
    {
-      g_autoV20RejectReason="RR_BELOW_1_05";
+      g_autoV20RejectReason="MIN_LOT_EXCEEDS_AUTO_RISK";
+      g_adaptiveBlockReason="AUTO_V20_RISK_LIMIT";
+      return 0;
+   }
+
+   if(selected.rr<AutoV20MinimumNetRR())
+   {
+      g_autoV20RejectReason="NET_RR_BELOW_1_25";
       g_adaptiveBlockReason="AUTO_V20_WAIT_RR";
+      return 0;
+   }
+
+   double riskBudget=AutoV20RiskBudgetMoney();
+   if(riskBudget<=0.0)
+   {
+      g_autoV20RejectReason="AUTO_RISK_BUDGET_UNAVAILABLE";
+      g_adaptiveBlockReason="AUTO_V20_RISK_LIMIT";
       return 0;
    }
 
@@ -10483,17 +10561,25 @@ int AutoV20PrecisionDirection(double momentum)
          direction,
          g_autoV20BasketStopPrice>0.0 ? g_autoV20BasketStopPrice : selected.slPrice,
          selected.plannedLot
-      );
+      )+selected.knownCostMoney;
       g_autoV20AggregateRiskMoney=selected.aggregateRiskMoney;
-      if(g_maxBasketLoss>0.0 && selected.aggregateRiskMoney>g_maxBasketLoss)
+      if(selected.aggregateRiskMoney>riskBudget)
       {
-         g_autoV20RejectReason="ADD_EXCEEDS_USER_BASKET_RISK";
+         g_autoV20RejectReason="ADD_EXCEEDS_AUTO_RISK_BUDGET";
          g_adaptiveBlockReason="AUTO_V20_RISK_LIMIT";
          return 0;
       }
    }
    else
+   {
       g_autoV20AggregateRiskMoney=selected.expectedLossMoney;
+      if(g_autoV20AggregateRiskMoney>riskBudget)
+      {
+         g_autoV20RejectReason="FIRST_EXCEEDS_AUTO_RISK_BUDGET";
+         g_adaptiveBlockReason="AUTO_V20_RISK_LIMIT";
+         return 0;
+      }
+   }
 
    if(preliminary!=0 && preliminary!=direction)
       g_autoV20DirectionChangeReason="FINAL_RR_LOCATION_HISTORY_CHANGED_SIDE";
@@ -10610,8 +10696,7 @@ bool AutoV20ManageOpenBasket(double momentum)
    double armProfit=MathMax(0.05,
       MathMax(g_autoV20Buy.expectedProfitMoney,g_autoV20Sell.expectedProfitMoney)*0.35);
    if(g_profitTargetMode=="AUTO" &&
-      g_autoV20PeakProfit>=armProfit &&
-      cycleProfit>0.0)
+      g_autoV20PeakProfit>=armProfit)
    {
       double giveback=MathMax(0.05,g_autoV20PeakProfit*0.25);
       if(cycleProfit<=g_autoV20PeakProfit-giveback)
@@ -14319,16 +14404,29 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
 
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
+   bool autoV20=AutoV20Enabled() && !g_tacticalCountertrendActive;
+   AUTO_V20_SIDE autoPlan;
+   if(autoV20)
+      autoPlan=direction>0 ? g_autoV20Buy : g_autoV20Sell;
 
    request.action = TRADE_ACTION_DEAL;
    request.magic = InpMagic;
    request.symbol = _Symbol;
-   request.volume = g_adaptiveEngine ? g_adaptiveLot : NormalizeTradeVolume(g_lot);
+   request.volume = autoV20
+      ? autoPlan.plannedLot
+      : (g_adaptiveEngine ? g_adaptiveLot : NormalizeTradeVolume(g_lot));
+   if(request.volume<=0.0)
+   {
+      g_executionStatus="AUTO_V20_RISK_VOLUME_ZERO";
+      return false;
+   }
    request.deviation = 30;
    request.type_filling = AllowedFillingMode();
-   request.comment = g_engineMode == "RACE"
+   request.comment = autoV20
+      ? "SaaSAutoV20"
+      : (g_engineMode == "RACE"
       ? "SaaSRace"
-      : (g_tacticalCountertrendActive ? "SaaSTactical" : "SaaSBasket");
+      : (g_tacticalCountertrendActive ? "SaaSTactical" : "SaaSBasket"));
 
    if(direction > 0)
    {
@@ -14342,31 +14440,58 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    }
 
    double entryPrice = request.price;
-   request.sl = DynamicInitialStopPrice(direction, entryPrice);
-   if(g_profitTargetMode == "AUTO" &&
-      request.sl > 0.0 &&
-      (g_tacticalCountertrendActive || !BasketFillEnabled()) &&
-      g_perPositionProfit <= 0.0 &&
-      g_basketProfitTarget <= 0.0)
+   if(autoV20)
    {
-      request.tp = g_tacticalCountertrendActive
-         ? TacticalTakeProfitPrice(direction,entryPrice)
-         : DynamicTakeProfitPrice(direction, entryPrice, request.sl);
-      double minTargetPoints = MathMax(
-         (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
-         0.0
-      ) + 2.0;
-      int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-      if(direction > 0)
-         request.tp = NormalizeDouble(
-            MathMax(request.tp, entryPrice + minTargetPoints * _Point),
-            digits
-         );
-      else
-         request.tp = NormalizeDouble(
-            MathMin(request.tp, entryPrice - minTargetPoints * _Point),
-            digits
-         );
+      double atrPrice=MathMax(_Point*12.0,
+         AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point);
+      if(MathAbs(entryPrice-autoPlan.entryPrice)>MathMax(_Point*2.0,atrPrice*0.08))
+      {
+         g_executionStatus="AUTO_V20_PRICE_MOVED_REEVALUATE";
+         return false;
+      }
+
+      request.sl=autoPlan.slPrice;
+      request.tp=autoPlan.tpPrice;
+      double minimumStopDistance=(double)SymbolInfoInteger(
+         _Symbol,SYMBOL_TRADE_STOPS_LEVEL
+      )*_Point+2.0*_Point;
+      bool protectedOrder=direction>0
+         ? request.sl<tick.bid-minimumStopDistance && request.tp>tick.bid+minimumStopDistance
+         : request.sl>tick.ask+minimumStopDistance && request.tp<tick.ask-minimumStopDistance;
+      if(!protectedOrder)
+      {
+         g_executionStatus="AUTO_V20_BROKER_PROTECTION_INVALID";
+         return false;
+      }
+   }
+   else
+   {
+      request.sl = DynamicInitialStopPrice(direction, entryPrice);
+      if(g_profitTargetMode == "AUTO" &&
+         request.sl > 0.0 &&
+         (g_tacticalCountertrendActive || !BasketFillEnabled()) &&
+         g_perPositionProfit <= 0.0 &&
+         g_basketProfitTarget <= 0.0)
+      {
+         request.tp = g_tacticalCountertrendActive
+            ? TacticalTakeProfitPrice(direction,entryPrice)
+            : DynamicTakeProfitPrice(direction, entryPrice, request.sl);
+         double minTargetPoints = MathMax(
+            (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
+            0.0
+         ) + 2.0;
+         int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+         if(direction > 0)
+            request.tp = NormalizeDouble(
+               MathMax(request.tp, entryPrice + minTargetPoints * _Point),
+               digits
+            );
+         else
+            request.tp = NormalizeDouble(
+               MathMin(request.tp, entryPrice - minTargetPoints * _Point),
+               digits
+            );
+      }
    }
 
    g_dynamicStopPrice = request.sl;
@@ -14377,7 +14502,13 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    g_adaptiveLot = request.volume;
 
    ResetLastError();
-   if(!OrderSendWithPriceRetry(request, result))
+   // A V20 plan binds price, SL and TP together. Retrying only the price would
+   // detach those protections from the approved risk calculation, so V20
+   // declines and re-evaluates on the next tick instead.
+   bool sent=autoV20
+      ? OrderSend(request,result)
+      : OrderSendWithPriceRetry(request,result);
+   if(!sent)
    {
       RecordExecutionQuality(false, 0.0);
       g_lastOrderError = GetLastError();

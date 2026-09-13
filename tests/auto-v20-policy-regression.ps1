@@ -1,5 +1,21 @@
 $ErrorActionPreference = 'Stop'
 
+$sourcePath = Join-Path $PSScriptRoot '..\mt5\FastBasketBot.mq5'
+$source = Get-Content $sourcePath -Raw
+foreach($requiredPolicy in @(
+  'double AutoV20MinimumNetRR\(\)',
+  'return 1\.25;',
+  'double AutoV20RiskCappedVolume\(',
+  'NET_RR_BELOW_1_25',
+  'AUTO_V20_BROKER_PROTECTION_INVALID',
+  'AUTO_V20_PRICE_MOVED_REEVALUATE'
+)) {
+  if($source -notmatch $requiredPolicy) {
+    throw "AUTO V20 source policy missing: $requiredPolicy"
+  }
+}
+$minimumNetRR = 1.25
+
 # Deterministic policy regression, NOT a broker-history MT5 backtest.
 # Both engines consume the exact same canonical market snapshots and the same
 # forward P/L outcome for each direction. This protects the decision policy
@@ -8,7 +24,7 @@ $ErrorActionPreference = 'Stop'
 $defaults = @{
   h1=0;m30=0;m15=0;m5=0;m1=0;ema5=0;ema15=0;mom=0.0;
   paBuy=0.0;paSell=0.0;locBuy=0.0;locSell=0.0;pbBuy=50.0;pbSell=50.0;
-  rrBuy=1.2;rrSell=1.2;outBuy=0.0;outSell=0.0;setup=0;phase=0;
+  rrBuy=1.35;rrSell=1.35;outBuy=0.0;outSell=0.0;setup=0;phase=0;
   weakening=$false;turned=0;decel=0
 }
 function Case([string]$scenario,[string]$name,[hashtable]$v) {
@@ -81,7 +97,7 @@ function V20Decision($r) {
   if([Math]::Abs($edge) -lt 5){return [pscustomobject]@{direction=0;reason='CONFLICT'}}
   $sel=if($edge -gt 0){$b}else{$s}
   if($sel.confidence -lt 60 -or $sel.rank -lt 64){return [pscustomobject]@{direction=0;reason='QUALITY'}}
-  if($sel.rr -lt 1.05){return [pscustomobject]@{direction=0;reason='RR'}}
+  if($sel.rr -lt $minimumNetRR){return [pscustomobject]@{direction=0;reason='RR'}}
   [pscustomobject]@{direction=$sel.direction;reason='TRADE'}
 }
 function Evaluate([string]$engine) {
