@@ -1,0 +1,24 @@
+name: Check ZERO GRID Isolation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/upgrade-zero-grid-demo-v1.ps1"
+      - "scripts/check-zero-grid-isolation.ps1"
+      - "docs/ZERO-GRID-ISOLATION-CONTRACT.md"
+      - "tests/zero-grid-isolation-regression.md"
+      - ".github/workflows/check-zero-grid-isolation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify existing engine isolation
+        shell: pwsh
+        run: ./scripts/check-zero-grid-isolation.ps1
