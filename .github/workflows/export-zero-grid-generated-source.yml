@@ -1,0 +1,38 @@
+name: Export ZERO GRID Generated Source
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/export-zero-grid-generated-source.yml"
+      - "scripts/upgrade-zero-grid-demo-v1.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply ZERO GRID V1 patch
+        shell: pwsh
+        run: |
+          & "./scripts/upgrade-zero-grid-demo-v1.ps1" `
+            -EaPath "mt5/FastBasketBot.mq5" `
+            -ApiPath "apps/api/src/bot.controller.ts" `
+            -WebPath "apps/web/app/dashboard/page.tsx" `
+            -BuildWorkflowPath ".github/workflows/build-mt5-ea.yml"
+      - name: Export patched source files
+        uses: actions/upload-artifact@v4
+        with:
+          name: zero-grid-generated-source
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            mt5/FastBasketBot.mq5
+            apps/api/src/bot.controller.ts
+            apps/web/app/dashboard/page.tsx
+            .github/workflows/build-mt5-ea.yml
