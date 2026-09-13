@@ -3,10 +3,7 @@ $ErrorActionPreference = 'Stop'
 $sourcePath = Join-Path $PSScriptRoot '..\mt5\FastBasketBot.mq5'
 $source = Get-Content $sourcePath -Raw
 foreach($requiredPolicy in @(
-  'double AutoV20MinimumNetRR\(\)',
-  'return 1\.25;',
-  'double AutoV20RiskCappedVolume\(',
-  'NET_RR_BELOW_1_25',
+  'double AutoV20NetRewardRisk\(',
   'AUTO_V20_BROKER_PROTECTION_INVALID',
   'AUTO_V20_PRICE_MOVED_REEVALUATE'
 )) {
@@ -14,7 +11,9 @@ foreach($requiredPolicy in @(
     throw "AUTO V20 source policy missing: $requiredPolicy"
   }
 }
-$minimumNetRR = 1.25
+if($source -match 'NET_RR_BELOW_1_25|MIN_LOT_EXCEEDS_AUTO_RISK|EXCEEDS_AUTO_RISK_BUDGET') {
+  throw 'AUTO V20 still contains a hard entry-risk gate'
+}
 
 # Deterministic policy regression, NOT a broker-history MT5 backtest.
 # Both engines consume the exact same canonical market snapshots and the same
@@ -97,7 +96,6 @@ function V20Decision($r) {
   if([Math]::Abs($edge) -lt 5){return [pscustomobject]@{direction=0;reason='CONFLICT'}}
   $sel=if($edge -gt 0){$b}else{$s}
   if($sel.confidence -lt 60 -or $sel.rank -lt 64){return [pscustomobject]@{direction=0;reason='QUALITY'}}
-  if($sel.rr -lt $minimumNetRR){return [pscustomobject]@{direction=0;reason='RR'}}
   [pscustomobject]@{direction=$sel.direction;reason='TRADE'}
 }
 function Evaluate([string]$engine) {

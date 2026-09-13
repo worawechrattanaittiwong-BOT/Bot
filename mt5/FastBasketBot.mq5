@@ -10039,61 +10039,14 @@ double AutoV20ProfitForMove(int direction,double volume,double openPrice,double 
    return result;
 }
 
-// AUTO V20 is allowed to enter only when the projected trade remains
-// economically positive after a conservative allowance for current spread.
-// This is intentionally AUTO-only: RACE/Turbo keeps its own execution rules.
-double AutoV20MinimumNetRR()
-{
-   return 1.25;
-}
-
+// Net RR remains execution telemetry and a ranking input. It is deliberately
+// not an entry gate: AUTO must evaluate and execute valid market opportunities
+// rather than wait indefinitely for a fixed reward/risk number.
 double AutoV20NetRewardRisk(double grossReward,double grossRisk,double cost)
 {
    if(grossReward<=0.0 || grossRisk<=0.0 || grossReward<=cost)
       return 0.0;
    return (grossReward-cost)/(grossRisk+cost);
-}
-
-double AutoV20RiskBudgetMoney()
-{
-   double percentageBudget=0.0;
-   double equity=AccountInfoDouble(ACCOUNT_EQUITY);
-   if(equity>0.0 && g_riskPerOrderPercent>0.0)
-      percentageBudget=equity*g_riskPerOrderPercent/100.0;
-
-   if(g_maxBasketLoss>0.0 && percentageBudget>0.0)
-      return MathMin(g_maxBasketLoss,percentageBudget);
-   if(g_maxBasketLoss>0.0)
-      return g_maxBasketLoss;
-   return percentageBudget;
-}
-
-// Unlike NormalizeTradeVolume(), this helper never rounds UP to the broker
-// minimum. A trade whose minimum lot would breach the Auto risk budget must
-// be skipped rather than silently opening an oversized position.
-double AutoV20RiskCappedVolume(
-   double desiredVolume,
-   double lossPerLot,
-   double costPerLot,
-   double riskBudget
-)
-{
-   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
-   double maxVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
-   double step=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
-   double riskPerLot=MathMax(0.0,lossPerLot)+MathMax(0.0,costPerLot);
-   if(desiredVolume<=0.0 || minVolume<=0.0 || maxVolume<=0.0 ||
-      step<=0.0 || riskBudget<=0.0 || riskPerLot<=0.0)
-      return 0.0;
-
-   double rawVolume=MathMin(desiredVolume,MathMin(maxVolume,riskBudget/riskPerLot));
-   double volume=MathFloor((rawVolume+1e-12)/step)*step;
-   if(volume<minVolume-1e-12)
-      return 0.0;
-   volume=MathMin(maxVolume,volume);
-   if(volume*riskPerLot>riskBudget+1e-8)
-      return 0.0;
-   return NormalizeDouble(volume,8);
 }
 
 void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
@@ -10161,17 +10114,10 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    double sizeFactor=0.50;
    if(side.rr>=1.55 && side.confidence>=76.0) sizeFactor=1.00;
    else if(side.rr>=1.20 && side.confidence>=67.0) sizeFactor=0.75;
-   side.plannedLot=AutoV20RiskCappedVolume(
-      g_lot*sizeFactor,
-      grossLossPerLot,
-      costPerLot,
-      AutoV20RiskBudgetMoney()
-   );
+   side.plannedLot=NormalizeTradeVolume(g_lot*sizeFactor);
    side.knownCostMoney=costPerLot*side.plannedLot;
    side.expectedProfitMoney=MathMax(0.0,grossProfitPerLot*side.plannedLot-side.knownCostMoney);
    side.expectedLossMoney=grossLossPerLot*side.plannedLot+side.knownCostMoney;
-   if(side.plannedLot<=0.0)
-      side.rejectReason="MIN_LOT_EXCEEDS_AUTO_RISK";
 }
 
 double AutoV20AggregateRiskAtStop(int direction,double stopPrice,double newLot)
@@ -10512,28 +10458,6 @@ int AutoV20PrecisionDirection(double momentum)
       return 0;
    }
 
-   if(selected.plannedLot<=0.0)
-   {
-      g_autoV20RejectReason="MIN_LOT_EXCEEDS_AUTO_RISK";
-      g_adaptiveBlockReason="AUTO_V20_RISK_LIMIT";
-      return 0;
-   }
-
-   if(selected.rr<AutoV20MinimumNetRR())
-   {
-      g_autoV20RejectReason="NET_RR_BELOW_1_25";
-      g_adaptiveBlockReason="AUTO_V20_WAIT_RR";
-      return 0;
-   }
-
-   double riskBudget=AutoV20RiskBudgetMoney();
-   if(riskBudget<=0.0)
-   {
-      g_autoV20RejectReason="AUTO_RISK_BUDGET_UNAVAILABLE";
-      g_adaptiveBlockReason="AUTO_V20_RISK_LIMIT";
-      return 0;
-   }
-
    if(count>0)
    {
       double atrPoints=MathMax(10.0,
@@ -10563,23 +10487,9 @@ int AutoV20PrecisionDirection(double momentum)
          selected.plannedLot
       )+selected.knownCostMoney;
       g_autoV20AggregateRiskMoney=selected.aggregateRiskMoney;
-      if(selected.aggregateRiskMoney>riskBudget)
-      {
-         g_autoV20RejectReason="ADD_EXCEEDS_AUTO_RISK_BUDGET";
-         g_adaptiveBlockReason="AUTO_V20_RISK_LIMIT";
-         return 0;
-      }
    }
    else
-   {
       g_autoV20AggregateRiskMoney=selected.expectedLossMoney;
-      if(g_autoV20AggregateRiskMoney>riskBudget)
-      {
-         g_autoV20RejectReason="FIRST_EXCEEDS_AUTO_RISK_BUDGET";
-         g_adaptiveBlockReason="AUTO_V20_RISK_LIMIT";
-         return 0;
-      }
-   }
 
    if(preliminary!=0 && preliminary!=direction)
       g_autoV20DirectionChangeReason="FINAL_RR_LOCATION_HISTORY_CHANGED_SIDE";
