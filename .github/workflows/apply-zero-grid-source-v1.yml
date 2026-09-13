@@ -1,0 +1,50 @@
+name: Apply ZERO GRID Source V1
+
+on:
+  push:
+    branches: ["feature/zero-grid-source-v1"]
+    paths:
+      - ".github/workflows/apply-zero-grid-source-v1.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-zero-grid-source-v1
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply validated ZERO GRID patch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "./scripts/upgrade-zero-grid-demo-v1.ps1" `
+            -EaPath "mt5/FastBasketBot.mq5" `
+            -ApiPath "apps/api/src/bot.controller.ts" `
+            -WebPath "apps/web/app/dashboard/page.tsx" `
+            -BuildWorkflowPath ".github/workflows/build-mt5-ea.yml"
+      - name: Verify isolation from existing engines
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "./scripts/check-zero-grid-isolation.ps1"
+      - name: Publish generated source to feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 apps/api/src/bot.controller.ts apps/web/app/dashboard/page.tsx .github/workflows/build-mt5-ea.yml
+          if git diff --cached --quiet; then
+            echo "ZERO GRID source already current."
+            exit 0
+          fi
+          git commit -m "feat: apply ZERO GRID source v1"
+          git push origin HEAD:feature/zero-grid-source-v1

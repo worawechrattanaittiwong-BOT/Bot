@@ -64,7 +64,7 @@ jobs:
 
           foreach ($sentinel in @(
             'bool AutoV20Enabled()',
-            'return g_engineMode != "RACE" && g_controlMode == "AUTO";',
+            'return g_engineMode == "AUTO" && g_controlMode == "AUTO";',
             'AUTO_V20_SIDE g_autoV20Buy;',
             'AUTO_V20_SIDE g_autoV20Sell;',
             'void AutoV20UpdateTrendPhase(double momentum)',
@@ -82,6 +82,9 @@ jobs:
             'RACE_PROFIT_HARVEST',
             'RACE_HARVEST_REFILL',
             'SaaSRace',
+            'bool ZeroGridModeEnabled()',
+            'ZERO_GRID_DEMO_ONLY',
+            'SaaSZeroGrid',
             'TradePermissionStatus',
             'AdaptiveSpreadAllowed',
             'OrderSendWithPriceRetry',

@@ -1488,6 +1488,11 @@ export class BotController {
     }
     numberSetting("minOrderIntervalMs", 0, 60000, true);
     numberSetting("maxOrdersPerMinute", 1, 5000, true);
+    numberSetting("zeroGridStepPrice", 0.01, 1000);
+    numberSetting("zeroGridLevelsPerSide", 1, 30, true);
+    numberSetting("zeroGridBaseLot", 0.01, 100);
+    numberSetting("zeroGridMinNetProfitMoney", 0.01, 100000);
+    numberSetting("zeroGridCloseReserveMoney", 0, 100000);
     booleanSetting("adaptiveEngine");
     numberSetting("riskPerOrderPercent", 0.01, 5);
     booleanSetting("allowMinimumLotOverride");
@@ -1570,7 +1575,7 @@ export class BotController {
 
     if (body.controlMode !== undefined) {
       const controlMode = String(body.controlMode || "").toUpperCase();
-      if (!["AUTO", "RACE", "ASSISTED", "MANUAL"].includes(controlMode)) {
+      if (!["AUTO", "RACE", "ZERO_GRID", "ASSISTED", "MANUAL"].includes(controlMode)) {
         throw new BadRequestException("Control Mode ไม่ถูกต้อง");
       }
       clean.controlMode = controlMode;
@@ -1578,7 +1583,7 @@ export class BotController {
 
     if (body.engineMode !== undefined) {
       const engineMode = String(body.engineMode || "").toUpperCase();
-      if (!["AUTO", "RACE"].includes(engineMode)) {
+      if (!["AUTO", "RACE", "ZERO_GRID"].includes(engineMode)) {
         throw new BadRequestException("Engine Mode ไม่ถูกต้อง");
       }
       clean.engineMode = engineMode;
