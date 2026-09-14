@@ -1,5 +1,6 @@
 name: Build MT5 EA
 
+# Release metadata trigger: EA v1.0.9.
 # Official MT5 compile and publish pipeline for the current V20/RACE source.
 # ZERO GRID V3 uses a ~1.00 price first offset (about 100 points on 2-digit XAUUSD),
 # guarantees the required L1 pair before deeper levels, keeps exact per-side spacing,
