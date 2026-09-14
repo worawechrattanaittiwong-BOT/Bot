@@ -1,0 +1,72 @@
+name: Apply EA v1.0.9 Version Fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-ea-version-109-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch EA version metadata and update alert semantics
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_exact(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              if old not in text:
+                  raise SystemExit(f"missing expected text in {path}: {old!r}")
+              p.write_text(text.replace(old, new), encoding="utf-8")
+
+          replace_exact(
+              "mt5/FastBasketBot.mq5",
+              '#property version   "1.0.8"\n#define SCENOVA_EA_VERSION "1.0.8"\n#define SCENOVA_PRODUCT_VERSION "1.0.8"',
+              '#property version   "1.0.9"\n#define SCENOVA_EA_VERSION "1.0.9"\n#define SCENOVA_PRODUCT_VERSION "1.0.9"'
+          )
+
+          replace_exact(
+              "apps/api/src/release-version.ts",
+              'export const DEFAULT_EA_VERSION = "1.0.8";',
+              'export const DEFAULT_EA_VERSION = "1.0.9";'
+          )
+
+          replace_exact(
+              "apps/web/app/dashboard/page.tsx",
+              '{(softwareUpdate.eaUpdateRequired || !softwareUpdate.eaVersionMatch) && (',
+              '{!softwareUpdate.eaVersionMatch && ('
+          )
+
+          replace_exact(
+              "apps/web/app/dashboard/page.tsx",
+              '<small>ไฟล์ EA ในเครื่องไม่ใช่ไฟล์เดียวกับ Release ล่าสุดบน Server</small>',
+              '<small>เวอร์ชัน v{softwareUpdate.currentEaVersion || "—"} ถูกต้อง แต่ไฟล์ EX5 เป็นคนละ Build กับ Release ล่าสุดบน Server</small>'
+          )
+
+          replace_exact(
+              "apps/web/app/dashboard/page.tsx",
+              '{!(softwareUpdate.eaUpdateRequired || !softwareUpdate.eaVersionMatch) && (',
+              '{softwareUpdate.eaVersionMatch && ('
+          )
+
+      - name: Commit patch and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Patch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/apply-ea-version-109-fix.yml
+          git add mt5/FastBasketBot.mq5 apps/api/src/release-version.ts apps/web/app/dashboard/page.tsx
+          git commit -m "fix: bump EA runtime to v1.0.9 and separate version/hash alerts"
+          git pull --rebase origin main
+          git push origin HEAD:main
