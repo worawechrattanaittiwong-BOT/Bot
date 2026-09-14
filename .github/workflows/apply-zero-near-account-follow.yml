@@ -1,0 +1,58 @@
+name: Apply ZERO Near Entry and Account Follow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-zero-near-account-follow.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply targeted patch
+        run: python3 scripts/apply_zero_near_and_account_follow.py
+
+      - name: Verify ZERO near-entry simulation
+        run: node ./tests/zero-grid-v1-simulation.mjs
+
+      - name: Verify customer account-follow contract
+        shell: pwsh
+        run: ./tests/local-account-follow-contract.ps1
+
+      - name: Commit targeted changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Patch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            mt5/FastBasketBot.mq5 \
+            apps/api/src/ea.controller.ts \
+            apps/api/src/bot.controller.ts \
+            apps/api/src/installer.controller.ts \
+            apps/web/app/dashboard/page.tsx \
+            apps/web/app/layout.tsx \
+            apps/web/components/CustomerNavigationLabels.tsx \
+            tests/zero-grid-v1-simulation.mjs \
+            tests/local-account-follow-contract.ps1 \
+            .github/workflows/ci.yml \
+            .github/workflows/build-mt5-ea.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: tighten ZERO entries and follow local MT5 account"
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then exit 0; fi
+            sleep 2
+          done
+          exit 1
