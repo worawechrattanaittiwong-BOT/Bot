@@ -56,7 +56,7 @@ replace_between(
 replace_between(
     "apps/web/components/Mt5ManualActionControls.tsx",
     "  function downloadInstaller() {",
-    "\n\n  async function runOneClickUpdate",
+    "\n\n  async function requestRecoveryStart",
     '''  async function downloadInstaller() {
     if (typeof document === "undefined" || !slotId) return false;
     const result = await api("/bot/installers/windows", {
@@ -89,6 +89,7 @@ replace_between(
 
 controls = Path("apps/web/components/Mt5ManualActionControls.tsx")
 controls_text = controls.read_text(encoding="utf-8")
+controls_text = controls_text.replace("  const installerDownloadPath = String(update?.downloadPath || \"/downloads/SCENOVA-Setup.exe\");\n", "")
 controls_text = controls_text.replace("      downloadInstaller();\n", "      await downloadInstaller();\n")
 controls.write_text(controls_text, encoding="utf-8", newline="\n")
 
