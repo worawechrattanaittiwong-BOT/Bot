@@ -1497,9 +1497,9 @@ export class BotController {
     }
     numberSetting("minOrderIntervalMs", 0, 60000, true);
     numberSetting("maxOrdersPerMinute", 1, 5000, true);
-    numberSetting("zeroGridStepPrice", 0.01, 1000);
+    numberSetting("zeroGridStepPrice", 0.00000001, 1000);
     numberSetting("zeroGridLevelsPerSide", 1, 30, true);
-    numberSetting("zeroGridBaseLot", 0.01, 100);
+    numberSetting("zeroGridBaseLot", 0.0001, 100);
     numberSetting("zeroGridMinNetProfitMoney", 0.01, 100000);
     numberSetting("zeroGridCloseReserveMoney", 0, 100000);
     booleanSetting("adaptiveEngine");

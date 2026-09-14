@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.1"
-#define SCENOVA_EA_VERSION "1.0.1"
-#define SCENOVA_PRODUCT_VERSION "1.0.1"
+#property version   "1.0.2"
+#define SCENOVA_EA_VERSION "1.0.2"
+#define SCENOVA_PRODUCT_VERSION "1.0.2"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -156,7 +156,7 @@ input ENUM_ENTRY_MODE InpEntryMode            = ENTRY_AUTO_MOMENTUM;
 // AUTO preserves the normal engine exactly. RACE is an isolated high-speed
 // execution mode selected from the web and never changes AUTO entry logic.
 input string          InpEngineMode           = "AUTO";
-// ZERO GRID is isolated from AUTO/RACE and hard-locked to Demo/Tester.
+// ZERO GRID is isolated from AUTO/RACE and supports MT5 Demo/Real on Hedging/Netting accounts.
 input double          InpZeroGridStepPrice     = 3.0;
 input int             InpZeroGridLevelsPerSide = 30;
 input double          InpZeroGridBaseLot       = 0.03;
@@ -264,6 +264,7 @@ double g_zeroGridMinNetProfitMoney = 0.01;
 double g_zeroGridCloseReserveMoney = 0.0;
 double g_zeroGridCenter = 0.0;
 double g_zeroGridStartEquity = 0.0;
+datetime g_zeroGridCycleStartedAt = 0;
 bool   g_zeroGridClosing = false;
 AUTO_V20_LEVELS g_autoV20Levels;
 AUTO_V20_SIDE g_autoV20Buy;
@@ -1321,7 +1322,7 @@ int OnInit()
       g_engineMode = "AUTO";
    g_zeroGridStepPrice = MathMax(_Point, InpZeroGridStepPrice);
    g_zeroGridLevelsPerSide = (int)MathMax(1, MathMin(30, InpZeroGridLevelsPerSide));
-   g_zeroGridBaseLot = MathMax(0.01, InpZeroGridBaseLot);
+   g_zeroGridBaseLot = MathMax(0.0001, InpZeroGridBaseLot);
    g_zeroGridMinNetProfitMoney = MathMax(0.01, InpZeroGridMinNetProfitMoney);
    g_zeroGridCloseReserveMoney = MathMax(0.0, InpZeroGridCloseReserveMoney);
    g_adaptiveEngine = InpAdaptiveEngine;
@@ -1611,26 +1612,39 @@ double OnTester()
    return capture;
 }
 
-// ZERO GRID V1 ---------------------------------------------------------------
-// Price-only symmetric pending ladder. Demo/Tester only. No AUTO/RACE brain,
-// confidence, indicators, rescue or tactical logic participates in this mode.
+// ZERO GRID V2 - All MT5 account modes ---------------------------------------
+// Price-only symmetric ladder. Isolated from AUTO/RACE. Supports MT5 Demo,
+// Real and Contest accounts. Hedging keeps both sides live; Netting/Exchange
+// locks to the first triggered side so the broker cannot merge opposite
+// exposure into the same symbol position.
 bool ZeroGridModeEnabled()
 {
    return g_engineMode == "ZERO_GRID" || g_controlMode == "ZERO_GRID";
 }
 
-bool ZeroGridDemoAllowed()
+bool ZeroGridAccountIsHedging()
 {
-   if(MQLInfoInteger(MQL_TESTER))
-      return true;
-   return (ENUM_ACCOUNT_TRADE_MODE)AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO;
+   ENUM_ACCOUNT_MARGIN_MODE mode=(ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE);
+   return mode == ACCOUNT_MARGIN_MODE_RETAIL_HEDGING;
 }
 
-bool ZeroGridHedgingAllowed()
+bool ZeroGridAccountIsNetting()
 {
-   if(MQLInfoInteger(MQL_TESTER))
-      return true;
-   return (ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE) == ACCOUNT_MARGIN_MODE_RETAIL_HEDGING;
+   ENUM_ACCOUNT_MARGIN_MODE mode=(ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE);
+   return mode == ACCOUNT_MARGIN_MODE_RETAIL_NETTING || mode == ACCOUNT_MARGIN_MODE_EXCHANGE;
+}
+
+string ZeroGridAccountModeLabel()
+{
+   if(ZeroGridAccountIsHedging()) return "HEDGING";
+   if(ZeroGridAccountIsNetting()) return "NETTING";
+   return "UNKNOWN";
+}
+
+bool ZeroGridStopOrdersSupported()
+{
+   long orderMode=SymbolInfoInteger(_Symbol,SYMBOL_ORDER_MODE);
+   return (orderMode & SYMBOL_ORDER_STOP) == SYMBOL_ORDER_STOP;
 }
 
 string ZeroGridComment(bool buySide,int level)
@@ -1655,6 +1669,8 @@ void SaveZeroGridCycleState()
       GlobalVariableSet(ZeroGridStateKey("CENTER"),g_zeroGridCenter);
    if(g_zeroGridStartEquity > 0.0)
       GlobalVariableSet(ZeroGridStateKey("EQUITY"),g_zeroGridStartEquity);
+   if(g_zeroGridCycleStartedAt > 0)
+      GlobalVariableSet(ZeroGridStateKey("START"),(double)g_zeroGridCycleStartedAt);
 }
 
 void LoadZeroGridCycleState()
@@ -1663,26 +1679,32 @@ void LoadZeroGridCycleState()
       g_zeroGridCenter=GlobalVariableGet(ZeroGridStateKey("CENTER"));
    if(g_zeroGridStartEquity <= 0.0 && GlobalVariableCheck(ZeroGridStateKey("EQUITY")))
       g_zeroGridStartEquity=GlobalVariableGet(ZeroGridStateKey("EQUITY"));
+   if(g_zeroGridCycleStartedAt <= 0 && GlobalVariableCheck(ZeroGridStateKey("START")))
+      g_zeroGridCycleStartedAt=(datetime)(long)GlobalVariableGet(ZeroGridStateKey("START"));
 }
 
 void ResetZeroGridCycleState()
 {
    g_zeroGridCenter=0.0;
    g_zeroGridStartEquity=0.0;
+   g_zeroGridCycleStartedAt=0;
    g_zeroGridClosing=false;
    if(GlobalVariableCheck(ZeroGridStateKey("CENTER"))) GlobalVariableDel(ZeroGridStateKey("CENTER"));
    if(GlobalVariableCheck(ZeroGridStateKey("EQUITY"))) GlobalVariableDel(ZeroGridStateKey("EQUITY"));
+   if(GlobalVariableCheck(ZeroGridStateKey("START"))) GlobalVariableDel(ZeroGridStateKey("START"));
 }
 
 int ZeroGridPositionCount()
 {
+   LoadZeroGridCycleState();
    int count=0;
    for(int i=PositionsTotal()-1;i>=0;i--)
    {
       ulong ticket=PositionGetTicket(i);
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
-      if(IsZeroGridComment(PositionGetString(POSITION_COMMENT))) count++;
+      string comment=PositionGetString(POSITION_COMMENT);
+      if(IsZeroGridComment(comment) || g_zeroGridCycleStartedAt>0) count++;
    }
    return count;
 }
@@ -1703,12 +1725,21 @@ int ZeroGridPendingCount()
 int ZeroGridForeignPositionCount()
 {
    int count=0;
+   bool netting=ZeroGridAccountIsNetting();
    for(int i=PositionsTotal()-1;i>=0;i--)
    {
       ulong ticket=PositionGetTicket(i);
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
-      if(IsZeroGridComment(PositionGetString(POSITION_COMMENT))) continue;
-      count++;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol) continue;
+
+      long magic=PositionGetInteger(POSITION_MAGIC);
+      string comment=PositionGetString(POSITION_COMMENT);
+      if(magic==InpMagic && IsZeroGridComment(comment)) continue;
+
+      // Netting merges all exposure on one symbol, so any existing position on
+      // this symbol must be treated as foreign. Hedging can safely coexist with
+      // unrelated/manual positions as long as they are not owned by this EA.
+      if(netting || magic==InpMagic) count++;
    }
    return count;
 }
@@ -1730,23 +1761,57 @@ bool ZeroGridLevelExists(bool buySide,int level)
       if(PositionGetString(POSITION_SYMBOL)==_Symbol && PositionGetInteger(POSITION_MAGIC)==InpMagic && PositionGetString(POSITION_COMMENT)==wanted)
          return true;
    }
+
+   // On Netting accounts MT5 may merge multiple fills into one position and the
+   // position comment cannot reliably preserve every triggered level. History
+   // is therefore authoritative for one-shot level recovery after fills/restart.
+   LoadZeroGridCycleState();
+   if(g_zeroGridCycleStartedAt>0 && HistorySelect(g_zeroGridCycleStartedAt,TimeCurrent()+60))
+   {
+      int total=HistoryOrdersTotal();
+      for(int i=0;i<total;i++)
+      {
+         ulong ticket=HistoryOrderGetTicket(i);
+         if(ticket==0) continue;
+         if(HistoryOrderGetString(ticket,ORDER_SYMBOL)!=_Symbol) continue;
+         if(HistoryOrderGetInteger(ticket,ORDER_MAGIC)!=InpMagic) continue;
+         if(HistoryOrderGetString(ticket,ORDER_COMMENT)==wanted) return true;
+      }
+   }
    return false;
 }
 
 double ZeroGridCycleNet()
 {
    LoadZeroGridCycleState();
-   if(g_zeroGridStartEquity > 0.0)
-      return AccountInfoDouble(ACCOUNT_EQUITY) - g_zeroGridStartEquity;
-
    double total=0.0;
+
+   // Floating P/L is isolated to this EA + symbol. Do not use account equity
+   // delta because unrelated trades, deposits or other symbols would corrupt
+   // the ZERO GRID close threshold.
    for(int i=PositionsTotal()-1;i>=0;i--)
    {
       ulong ticket=PositionGetTicket(i);
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
-      if(!IsZeroGridComment(PositionGetString(POSITION_COMMENT))) continue;
       total += PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+   }
+
+   // Include realized profit, swap, commission and fees from this cycle.
+   if(g_zeroGridCycleStartedAt>0 && HistorySelect(g_zeroGridCycleStartedAt,TimeCurrent()+60))
+   {
+      int totalDeals=HistoryDealsTotal();
+      for(int i=0;i<totalDeals;i++)
+      {
+         ulong deal=HistoryDealGetTicket(i);
+         if(deal==0) continue;
+         if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol) continue;
+         if(HistoryDealGetInteger(deal,DEAL_MAGIC)!=InpMagic) continue;
+         total += HistoryDealGetDouble(deal,DEAL_PROFIT);
+         total += HistoryDealGetDouble(deal,DEAL_SWAP);
+         total += HistoryDealGetDouble(deal,DEAL_COMMISSION);
+         total += HistoryDealGetDouble(deal,DEAL_FEE);
+      }
    }
    return total;
 }
@@ -1756,12 +1821,59 @@ double ZeroGridRequiredCloseNet()
    return MathMax(0.01,g_zeroGridMinNetProfitMoney) + MathMax(0.0,g_zeroGridCloseReserveMoney);
 }
 
+double ZeroGridTickSize()
+{
+   double tick=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   if(tick<=0.0) tick=_Point;
+   return MathMax(_Point,tick);
+}
+
+double ZeroGridMinPendingDistancePrice()
+{
+   long stops=SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL);
+   long freeze=SymbolInfoInteger(_Symbol,SYMBOL_TRADE_FREEZE_LEVEL);
+   double brokerDistance=(double)MathMax(stops,freeze)*_Point;
+   return MathMax(ZeroGridTickSize(),brokerDistance);
+}
+
+double ZeroGridEffectiveStepPrice()
+{
+   return MathMax(g_zeroGridStepPrice,ZeroGridMinPendingDistancePrice()+ZeroGridTickSize());
+}
+
+double ZeroGridNormalizePendingPrice(bool buySide,double rawPrice)
+{
+   double tick=ZeroGridTickSize();
+   double units=rawPrice/tick;
+   double price=buySide
+      ? MathCeil(units-1e-10)*tick
+      : MathFloor(units+1e-10)*tick;
+   return NormalizeDouble(price,_Digits);
+}
+
+int ZeroGridPositionDirection()
+{
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
+      return PositionGetInteger(POSITION_TYPE)==POSITION_TYPE_BUY ? 1 : -1;
+   }
+   return 0;
+}
+
 bool ZeroGridSendPending(bool buySide,int level)
 {
    if(level<1 || level>g_zeroGridLevelsPerSide || ZeroGridLevelExists(buySide,level))
       return true;
    if(g_zeroGridCenter<=0.0)
       return false;
+   if(!ZeroGridStopOrdersSupported())
+   {
+      g_executionStatus="ZERO_GRID_STOP_ORDERS_UNSUPPORTED";
+      return false;
+   }
    if(g_orderWindowStart==0 || TimeCurrent()-g_orderWindowStart>=60)
    {
       g_orderWindowStart=TimeCurrent();
@@ -1780,10 +1892,23 @@ bool ZeroGridSendPending(bool buySide,int level)
       return false;
    }
 
-   double price=buySide
-      ? g_zeroGridCenter + g_zeroGridStepPrice * level
-      : g_zeroGridCenter - g_zeroGridStepPrice * level;
-   price=NormalizeDouble(price,_Digits);
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+   {
+      g_executionStatus="ZERO_GRID_WAIT_TICK";
+      return false;
+   }
+
+   double gridStep=ZeroGridEffectiveStepPrice();
+   double minDistance=ZeroGridMinPendingDistancePrice();
+   double rawPrice=buySide
+      ? g_zeroGridCenter + gridStep * level
+      : g_zeroGridCenter - gridStep * level;
+   if(buySide)
+      rawPrice=MathMax(rawPrice,tick.ask+minDistance);
+   else
+      rawPrice=MathMin(rawPrice,tick.bid-minDistance);
+   double price=ZeroGridNormalizePendingPrice(buySide,rawPrice);
 
    MqlTradeRequest request={};
    MqlTradeResult result={};
@@ -1816,13 +1941,39 @@ bool ZeroGridEnsureLadder()
       return false;
 
    bool complete=true;
+   int nettingDirection=ZeroGridAccountIsNetting() ? ZeroGridPositionDirection() : 0;
    for(int level=1;level<=g_zeroGridLevelsPerSide;level++)
    {
-      if(!ZeroGridLevelExists(true,level) && !ZeroGridSendPending(true,level)) complete=false;
-      if(!ZeroGridLevelExists(false,level) && !ZeroGridSendPending(false,level)) complete=false;
+      // Hedging: both sides stay available. Netting: before the first fill both
+      // sides are staged; after the first fill only that side may add levels.
+      if(nettingDirection>=0 && !ZeroGridLevelExists(true,level) && !ZeroGridSendPending(true,level)) complete=false;
+      if(nettingDirection<=0 && !ZeroGridLevelExists(false,level) && !ZeroGridSendPending(false,level)) complete=false;
       if(g_ordersInWindow>=g_maxOrdersPerMinute) break;
    }
    return complete;
+}
+
+void ZeroGridCancelPendingSide(bool buySide)
+{
+   string prefix=buySide ? "SaaSZeroGridB" : "SaaSZeroGridS";
+   for(int i=OrdersTotal()-1;i>=0;i--)
+   {
+      ulong ticket=OrderGetTicket(i);
+      if(ticket==0 || !OrderSelect(ticket)) continue;
+      if(OrderGetString(ORDER_SYMBOL)!=_Symbol || OrderGetInteger(ORDER_MAGIC)!=InpMagic) continue;
+      string comment=OrderGetString(ORDER_COMMENT);
+      if(StringFind(comment,prefix)!=0) continue;
+
+      MqlTradeRequest request={};
+      MqlTradeResult result={};
+      request.action=TRADE_ACTION_REMOVE;
+      request.order=ticket;
+      request.magic=InpMagic;
+      request.symbol=_Symbol;
+      ResetLastError();
+      OrderSend(request,result);
+      RegisterOrderRequest();
+   }
 }
 
 void ZeroGridCancelPending()
@@ -1853,7 +2004,6 @@ void ZeroGridClosePositions()
       ulong ticket=PositionGetTicket(i);
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
-      if(!IsZeroGridComment(PositionGetString(POSITION_COMMENT))) continue;
       ClosePositionByTicket(ticket);
    }
 }
@@ -1861,28 +2011,24 @@ void ZeroGridClosePositions()
 bool StartZeroGridCycle()
 {
    if(!ZeroGridModeEnabled()) return false;
-   if(!ZeroGridDemoAllowed())
-   {
-      g_executionStatus="ZERO_GRID_DEMO_ONLY";
-      return true;
-   }
-   if(!ZeroGridHedgingAllowed())
-   {
-      g_executionStatus="ZERO_GRID_HEDGING_REQUIRED";
-      return true;
-   }
-   if(ZeroGridForeignPositionCount()>0)
-   {
-      g_executionStatus="ZERO_GRID_FOREIGN_POSITION_BLOCK";
-      return true;
-   }
    if(g_state!=STATE_RUNNING || !g_access || (!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid()))
    {
       g_executionStatus="ZERO_GRID_CONTROL_NOT_FRESH";
       return true;
    }
+   if(!ZeroGridStopOrdersSupported())
+   {
+      g_executionStatus="ZERO_GRID_STOP_ORDERS_UNSUPPORTED";
+      return true;
+   }
 
    LoadZeroGridCycleState();
+   if(g_zeroGridCenter<=0.0 && ZeroGridForeignPositionCount()>0)
+   {
+      g_executionStatus="ZERO_GRID_FOREIGN_POSITION_BLOCK";
+      return true;
+   }
+
    if(g_zeroGridCenter<=0.0)
    {
       MqlTick tick;
@@ -1891,29 +2037,27 @@ bool StartZeroGridCycle()
          g_executionStatus="ZERO_GRID_WAIT_TICK";
          return true;
       }
-      g_zeroGridCenter=NormalizeDouble((tick.bid+tick.ask)*0.5,_Digits);
+      double mid=(tick.bid+tick.ask)*0.5;
+      g_zeroGridCenter=ZeroGridNormalizePendingPrice(true,mid);
       g_zeroGridStartEquity=AccountInfoDouble(ACCOUNT_EQUITY);
+      g_zeroGridCycleStartedAt=TimeCurrent();
       g_zeroGridClosing=false;
       SaveZeroGridCycleState();
    }
 
    ZeroGridEnsureLadder();
-   g_executionStatus=ZeroGridPendingCount()>0 ? "ZERO_GRID_LADDER_READY" : "ZERO_GRID_BUILDING_LADDER";
+   if(ZeroGridAccountIsNetting())
+      g_executionStatus=ZeroGridPendingCount()>0 ? "ZERO_GRID_LADDER_READY_NETTING" : "ZERO_GRID_BUILDING_LADDER";
+   else
+      g_executionStatus=ZeroGridPendingCount()>0 ? "ZERO_GRID_LADDER_READY" : "ZERO_GRID_BUILDING_LADDER";
    return true;
 }
 
 bool ManageZeroGrid()
 {
+   LoadZeroGridCycleState();
    int positions=ZeroGridPositionCount();
    int pending=ZeroGridPendingCount();
-   LoadZeroGridCycleState();
-
-   if(!ZeroGridDemoAllowed())
-   {
-      ZeroGridCancelPending();
-      g_executionStatus="ZERO_GRID_DEMO_ONLY";
-      return true;
-   }
 
    if(g_zeroGridClosing)
    {
@@ -1931,6 +2075,8 @@ bool ManageZeroGrid()
       return true;
    }
 
+   // If mode is changed while a ZERO GRID cycle owns positions, cancel pending
+   // entries and let that owned cycle drain safely. Do not hand it to AUTO/RACE.
    if(!ZeroGridModeEnabled())
    {
       ZeroGridCancelPending();
@@ -1940,7 +2086,34 @@ bool ManageZeroGrid()
          g_executionStatus="ZERO_GRID_STOPPED_FLAT";
          return true;
       }
-      g_executionStatus="ZERO_GRID_DRAINING";
+
+      double drainNet=ZeroGridCycleNet();
+      if(drainNet>=ZeroGridRequiredCloseNet())
+      {
+         g_zeroGridClosing=true;
+         g_executionStatus="ZERO_GRID_CLOSING_PROFIT";
+         ZeroGridClosePositions();
+      }
+      else
+         g_executionStatus="ZERO_GRID_DRAINING";
+      return true;
+   }
+
+   // Netting/Exchange account: after the first side triggers, remove the
+   // opposite pending ladder so future fills cannot offset/merge the position.
+   if(ZeroGridAccountIsNetting() && positions>0)
+   {
+      int direction=ZeroGridPositionDirection();
+      if(direction>0)
+      {
+         ZeroGridCancelPendingSide(false);
+         g_executionStatus="ZERO_GRID_NETTING_SIDE_LOCK_BUY";
+      }
+      else if(direction<0)
+      {
+         ZeroGridCancelPendingSide(true);
+         g_executionStatus="ZERO_GRID_NETTING_SIDE_LOCK_SELL";
+      }
    }
 
    if(positions>0)
@@ -1957,17 +2130,16 @@ bool ManageZeroGrid()
       }
    }
 
-   if(!ZeroGridModeEnabled())
-      return true;
-
    if(g_zeroGridCenter<=0.0)
       return StartZeroGridCycle();
 
    ZeroGridEnsureLadder();
-   g_executionStatus=positions>0 ? "ZERO_GRID_ACTIVE" : "ZERO_GRID_LADDER_READY";
+   if(positions>0)
+      g_executionStatus=ZeroGridAccountIsNetting() ? "ZERO_GRID_ACTIVE_NETTING" : "ZERO_GRID_ACTIVE";
+   else
+      g_executionStatus=ZeroGridAccountIsNetting() ? "ZERO_GRID_LADDER_READY_NETTING" : "ZERO_GRID_LADDER_READY";
    return true;
 }
-
 // Brain V17 RACE ------------------------------------------------------------
 // RACE is a separate execution engine. AUTO never calls these functions.
 // Entry scores, confidence, S/R, pullback and model grades are observation
@@ -4549,7 +4721,7 @@ void ApplySettings(string json)
 
    g_zeroGridStepPrice = MathMax(_Point, JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));
    g_zeroGridLevelsPerSide = (int)MathMax(1.0, MathMin(30.0, JsonNumber(json, "zeroGridLevelsPerSide", g_zeroGridLevelsPerSide)));
-   g_zeroGridBaseLot = MathMax(0.01, JsonNumber(json, "zeroGridBaseLot", g_zeroGridBaseLot));
+   g_zeroGridBaseLot = MathMax(0.0001, JsonNumber(json, "zeroGridBaseLot", g_zeroGridBaseLot));
    g_zeroGridMinNetProfitMoney = MathMax(0.01, JsonNumber(json, "zeroGridMinNetProfitMoney", g_zeroGridMinNetProfitMoney));
    g_zeroGridCloseReserveMoney = MathMax(0.0, JsonNumber(json, "zeroGridCloseReserveMoney", g_zeroGridCloseReserveMoney));
 
