@@ -1,5 +1,7 @@
 name: CI
 
+# Re-verify the full repository after the ZERO GRID pending-only runtime fix
+# and v1.0.8 release metadata alignment.
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
   cancel-in-progress: true
