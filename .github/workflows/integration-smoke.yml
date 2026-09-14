@@ -418,14 +418,18 @@ jobs:
           REBIND_BLOCKED_HTTP=$(curl -sS -o /tmp/rebind-open-positions.json -w "%{http_code}" -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$REBIND_BLOCKED_HTTP" = "409"
 
-          echo "[integration] rebind succeeds after old MT5 reports flat"
+          echo "[integration] automatic account-follow succeeds after old MT5 reports flat"
           OLD_FLAT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
           DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
-          test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch')" = "true"
+          test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch // false')" = "false"
+          test "$(printf '%s' "$DETECT_REAL" | jq -r '.access')" = "false"
+          test "$(printf '%s' "$DETECT_REAL" | jq -r '.desiredState')" = "SAFE_STOP"
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.previousBoundPositions')" = "0"
 
-          REBIND_REAL=$(curl -fsS -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
-          test "$(printf '%s' "$REBIND_REAL" | jq -r '.account.account_number')" = "200002"
+          FOLLOW_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.account_number')" = "200002"
+          test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.broker_server')" = "SCENOVA-Real"
+          test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.instance.pending_account_number // empty')" = ""
 
           TRIAL_COUNT=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from trial_grants where user_id=(select id from users where email='integration@scenova.test');")
           test "$TRIAL_COUNT" = "1"
