@@ -144,6 +144,39 @@ export class MaintenanceService {
     );
   }
 
+  private async ensureForceFlatCommands(actor: string) {
+    // FORCE FLAT is stronger than SAFE_STOP: every bound terminal stays STOPPED
+    // and every MT5-bound instance has a durable CLOSE_ALL waiting for it.
+    await this.db.query(
+      "UPDATE bot_instances SET desired_state='STOPPED' WHERE desired_state<>'STOPPED'"
+    );
+    await this.db.query(
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')"
+    );
+
+    const payload = JSON.stringify({
+      source: "OWNER_FORCE_FLAT_ALL",
+      actor: actor.slice(0, 120),
+      requestedAt: new Date().toISOString()
+    });
+    return this.db.query(
+      `${this.runtimeCte()}
+       INSERT INTO bot_commands(bot_instance_id,command,payload)
+       SELECT r.id,'CLOSE_ALL',$1::jsonb
+       FROM runtime r
+       WHERE r.mt5_account_id IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1
+           FROM bot_commands bc
+           WHERE bc.bot_instance_id=r.id
+             AND bc.command='CLOSE_ALL'
+             AND bc.status IN ('PENDING','DELIVERED')
+         )
+       RETURNING bot_instance_id`,
+      [payload]
+    );
+  }
+
   private async liveBlockers() {
     return this.db.one(
       `${this.runtimeCte()}
@@ -196,7 +229,11 @@ export class MaintenanceService {
 
     if (current.status === "DRAINING") {
       await this.reconcileAckedCloseAll();
-      await this.ensureDrainCommands(Boolean(current.force_close));
+      if (current.title === "EMERGENCY FORCE FLAT") {
+        await this.ensureForceFlatCommands(String(current.updated_by || "SYSTEM_MAINTENANCE"));
+      } else {
+        await this.ensureDrainCommands(Boolean(current.force_close));
+      }
       await this.tryFinishDrain();
       current = await this.row();
     }
@@ -323,6 +360,64 @@ export class MaintenanceService {
       brokerServer: instance.broker_server || null,
       positions: Number(instance.positions || 0),
       message: "ส่งคำสั่ง Close All ให้บัญชีนี้แล้ว ระบบจะรอ EA รับคำสั่งและ heartbeat จาก MT5 ยืนยัน Position เป็น 0"
+    };
+  }
+
+  async forceFlatAll(actor: string, confirmation: string) {
+    if (String(confirmation || "").trim() !== "FORCE FLAT ALL") {
+      throw new ConflictException("กรุณาพิมพ์ FORCE FLAT ALL เพื่อยืนยันคำสั่งฉุกเฉิน");
+    }
+
+    const before = await this.liveBlockers();
+    const targets = await this.db.one(
+      `${this.runtimeCte()}
+       SELECT
+         COUNT(*) FILTER (WHERE mt5_account_id IS NOT NULL)::int AS target_instances,
+         COUNT(*) FILTER (WHERE mt5_account_id IS NOT NULL AND mt5_fresh)::int AS fresh_instances,
+         COUNT(*) FILTER (WHERE NOT mt5_fresh AND reported_positions>0)::int AS stale_position_instances
+       FROM runtime`
+    );
+
+    // Freeze new starts before issuing any close commands. If the system is
+    // already in MAINTENANCE we keep it there; otherwise emergency flattening
+    // enters DRAINING so assertStartAllowed() blocks every new trading cycle.
+    await this.db.query(
+      `UPDATE system_maintenance
+       SET status=CASE WHEN status='MAINTENANCE' THEN 'MAINTENANCE' ELSE 'DRAINING' END,
+           title='EMERGENCY FORCE FLAT',
+           message='เจ้าของระบบสั่งหยุดทุก Bot และปิดทุก Position ฉุกเฉิน ระบบจะไม่เปิดรอบใหม่จนกว่าจะยืนยันว่า Position เป็น 0',
+           maintenance_at=now(),
+           force_close_at=now(),
+           expected_resume_at=NULL,
+           force_close=true,
+           announced_at=COALESCE(announced_at,now()),
+           drain_started_at=COALESCE(drain_started_at,now()),
+           maintenance_started_at=CASE WHEN status='MAINTENANCE' THEN maintenance_started_at ELSE NULL END,
+           updated_by=$1,
+           updated_at=now()
+       WHERE id=1`,
+      [actor.slice(0, 120)]
+    );
+
+    const queued = await this.ensureForceFlatCommands(actor);
+    await this.reconcileAckedCloseAll();
+    await this.tryFinishDrain();
+    const snapshot = await this.snapshot();
+
+    return {
+      ...snapshot,
+      emergency: {
+        mode: "FORCE_FLAT_ALL",
+        targetInstances: Number(targets?.target_instances || 0),
+        freshInstances: Number(targets?.fresh_instances || 0),
+        stalePositionInstances: Number(targets?.stale_position_instances || 0),
+        queuedCloseAll: Number(queued.rowCount || 0),
+        runningAtRequest: Number(before?.running || 0),
+        positionsAtRequest: Number(before?.positions || 0),
+        freshPositionsAtRequest: Number(before?.fresh_positions || 0),
+        stalePositionsAtRequest: Number(before?.stale_reported_positions || 0)
+      },
+      message: "FORCE FLAT ALL เริ่มทำงานแล้ว: บล็อก Start, STOP ทุก Bot และคิว Close All ไว้ให้ทุกบัญชี MT5 ระบบจะถือว่าปลอดภัยเมื่อ MT5/EA ยืนยัน Position เป็น 0 เท่านั้น"
     };
   }
 
