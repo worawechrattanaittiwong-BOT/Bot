@@ -1,4 +1,4 @@
-name: Patch Integration Smoke Account Follow
+name: Repair ZERO Settings And Smoke
 
 on:
   push:
@@ -8,29 +8,189 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
-  patch:
+  repair:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Align smoke test with automatic LOCAL MT5 follow
+      - name: Apply targeted ZERO UI API and smoke fixes
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
+          # --- Dashboard ZERO settings: fixed Grid/Pending, safe defaults, no unrelated cards. ---
+          path = Path('apps/web/app/dashboard/page.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace(
+              '  zeroGridStepPrice: 3,\n  zeroGridLevelsPerSide: 30,\n  zeroGridBaseLot: 0.03,\n  zeroGridMinNetProfitMoney: 0.01,\n  zeroGridCloseReserveMoney: 0,',
+              '  zeroGridStepPrice: 2,\n  zeroGridLevelsPerSide: 3,\n  zeroGridBaseLot: 0.01,\n  zeroGridMinNetProfitMoney: 0.5,\n  zeroGridCloseReserveMoney: 0.2,'
+          )
+
+          old_load = '''        setSettings({
+          ...defaultSettings,
+          ...(d.settings || {}),
+          ...(d.instance?.metrics?.symbol ? { symbol: d.instance.metrics.symbol } : {})
+        });'''
+          new_load = '''        const nextSettings:any = {
+          ...defaultSettings,
+          ...(d.settings || {}),
+          ...(d.instance?.metrics?.symbol ? { symbol: d.instance.metrics.symbol } : {})
+        };
+        const loadedControlMode = String(nextSettings.controlMode || nextSettings.engineMode || "AUTO").toUpperCase();
+        if (loadedControlMode === "ZERO_GRID") {
+          nextSettings.zeroGridStepPrice = 2;
+          nextSettings.zeroGridLevelsPerSide = 3;
+          if (!Number.isFinite(Number(nextSettings.zeroGridBaseLot)) || Number(nextSettings.zeroGridBaseLot) <= 0) nextSettings.zeroGridBaseLot = 0.01;
+          if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 0.5;
+          if (!Number.isFinite(Number(nextSettings.zeroGridCloseReserveMoney)) || Number(nextSettings.zeroGridCloseReserveMoney) <= 0) nextSettings.zeroGridCloseReserveMoney = 0.2;
+        }
+        setSettings(nextSettings);'''
+          if old_load not in text:
+              raise SystemExit('dashboard load settings marker not found')
+          text = text.replace(old_load, new_load, 1)
+
+          text = text.replace(
+              '    ZERO_GRID:{title:"ZERO GRID",subtitle:"Pending Order ล้วนตามราคา · ไม่ใช้ Brain/Indicator และไม่เปิด Market Order ตอน Start · กำหนดจำนวน BUY STOP / SELL STOP ต่อฝั่งได้ตรงตัว"},',
+              '    ZERO_GRID:{title:"ZERO GRID",subtitle:"BUY STOP + SELL STOP · 3 ระดับต่อฝั่ง"},',
+              1
+          )
+
+          old_zero_mode = '''    if (mode === "ZERO_GRID") {
+      props.onEdit?.("engineMode","ZERO_GRID");
+      props.onEdit?.("profitTargetMode","OFF");
+      props.onEdit?.("manualStopLossPoints",0);
+      return;
+    }'''
+          new_zero_mode = '''    if (mode === "ZERO_GRID") {
+      props.onEdit?.("engineMode","ZERO_GRID");
+      props.onEdit?.("profitTargetMode","OFF");
+      props.onEdit?.("manualStopLossPoints",0);
+      props.onEdit?.("zeroGridStepPrice",2);
+      props.onEdit?.("zeroGridLevelsPerSide",3);
+      if (!Number.isFinite(Number(props.settings?.zeroGridBaseLot)) || Number(props.settings?.zeroGridBaseLot) <= 0) props.onEdit?.("zeroGridBaseLot",0.01);
+      if (!Number.isFinite(Number(props.settings?.zeroGridMinNetProfitMoney)) || Number(props.settings?.zeroGridMinNetProfitMoney) <= 0.01) props.onEdit?.("zeroGridMinNetProfitMoney",0.5);
+      if (!Number.isFinite(Number(props.settings?.zeroGridCloseReserveMoney)) || Number(props.settings?.zeroGridCloseReserveMoney) <= 0) props.onEdit?.("zeroGridCloseReserveMoney",0.2);
+      return;
+    }'''
+          if old_zero_mode not in text:
+              raise SystemExit('ZERO mode marker not found')
+          text = text.replace(old_zero_mode, new_zero_mode, 1)
+
+          start_marker = '                  {controlMode==="ZERO_GRID" ? <>'
+          else_marker = '                  </> : <>'
+          start = text.index(start_marker)
+          end = text.index(else_marker, start)
+          zero_fields = '''                  {controlMode==="ZERO_GRID" ? <>
+                    <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>BUY STOP + SELL STOP</strong></div>
+                    <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="layers" size={17}/>ระยะ Grid</label><strong>2.00</strong></div>
+                    <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="layers" size={17}/>Pending ต่อฝั่ง</label><strong>3 BUY STOP + 3 SELL STOP</strong></div>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Base Lot</span><NumberInput value={props.settings.zeroGridBaseLot} suffix="Lot" onCommit={(v:string)=>props.onEdit?.("zeroGridBaseLot",v)}/></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>กำไรสุทธิขั้นต่ำ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="shield" size={17}/>สำรองค่าปิด</span><MoneyInput value={props.settings.zeroGridCloseReserveMoney || 0.2} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridCloseReserveMoney",v)}/></label>
+'''
+          text = text[:start] + zero_fields + text[end:]
+
+          engine_line = '                <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>{controlMode==="ZERO_GRID"?"ZERO GRID · รองรับบัญชี MT5":"Basket Ladder อัตโนมัติ"}</b><span>{controlMode==="ZERO_GRID"?"Pending เท่านั้น · Start แล้ววาง BUY STOP / SELL STOP ตามจำนวนที่ตั้ง · ไม่ใช้สมอง EA · รองรับ Hedging/Netting":"EA กระจายจังหวะเพิ่มไม้ตาม ATR และแรงตลาด"}</span></div>'
+          if engine_line not in text:
+              raise SystemExit('engine line marker not found')
+          text = text.replace(engine_line, '                {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>Basket Ladder อัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มไม้ตาม ATR และแรงตลาด</span></div>}', 1)
+
+          # Hide exit/risk sections that belong to the other engines while ZERO is selected.
+          section03_marker = '              <section className="cc-bot-v2-panel">\n                <div className="cc-bot-v2-section-title compact"><span>03</span>'
+          section04_marker = '              <section className="cc-bot-v2-panel">\n                <div className="cc-bot-v2-section-title compact"><span>04</span>'
+          s3 = text.index(section03_marker)
+          s4 = text.index(section04_marker, s3)
+          block3 = text[s3:s4].rstrip()
+          text = text[:s3] + '              {controlMode!=="ZERO_GRID"&&(\n' + block3 + '\n              )}\n\n' + text[s4:]
+          s4 = text.index(section04_marker, s3)
+          main_end = text.index('            </main>', s4)
+          block4 = text[s4:main_end].rstrip()
+          text = text[:s4] + '              {controlMode!=="ZERO_GRID"&&(\n' + block4 + '\n              )}\n' + text[main_end:]
+
+          aside_marker = '            <aside className="cc-bot-v2-summary">'
+          aside = text.index(aside_marker)
+          dl_start = text.index('              <dl>', aside)
+          dl_end = text.index('              </dl>', dl_start) + len('              </dl>')
+          original_dl = text[dl_start:dl_end]
+          zero_dl = '''              {controlMode==="ZERO_GRID" ? <dl>
+                <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>
+                <div><dt>Pending</dt><dd>3 BUY + 3 SELL</dd></div>
+                <div><dt>Grid</dt><dd>2.00</dd></div>
+                <div><dt>Base Lot</dt><dd>{Number(props.settings.zeroGridBaseLot||0.01).toFixed(2)} Lot</dd></div>
+                <div><dt>กำไรสุทธิขั้นต่ำ</dt><dd>${Number(props.settings.zeroGridMinNetProfitMoney||0.5).toFixed(2)}</dd></div>
+                <div><dt>สำรองค่าปิด</dt><dd>${Number(props.settings.zeroGridCloseReserveMoney||0.2).toFixed(2)}</dd></div>
+              </dl> : (
+''' + original_dl + '''
+              )}'''
+          text = text[:dl_start] + zero_dl + text[dl_end:]
+
+          summary_note = '              <div className="cc-bot-v2-summary-note"><ScenovaIcon name="brain" size={17}/><span><b>Setup-First 5 TF</b><small>แนวรับ–แนวต้าน · Order Block · Fibonacci · Momentum</small></span></div>'
+          if summary_note not in text:
+              raise SystemExit('summary note marker not found')
+          text = text.replace(summary_note, '              {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="brain" size={17}/><span><b>Setup-First 5 TF</b><small>แนวรับ–แนวต้าน · Order Block · Fibonacci · Momentum</small></span></div>}', 1)
+
+          footer_note = '          <div><ScenovaIcon name="info" size={16}/><span>ค่าที่แสดงทั้งหมดเชื่อมกับคำสั่งของ EA โดยตรง</span></div>'
+          if footer_note in text:
+              text = text.replace(footer_note, '          <div/>', 1)
+
+          path.write_text(text, encoding='utf-8')
+
+          # --- API: ZERO Grid/Pending are canonical server-side too, not just UI. ---
+          path = Path('apps/api/src/bot.controller.ts')
+          text = path.read_text(encoding='utf-8')
+          anchor = '''    // Canonical DB pair: never persist a stale ZERO/RACE engine next to another mode.
+    if (requestedControlMode !== null) {
+      clean.controlMode = requestedControlMode;
+      clean.engineMode = requestedControlMode === "ZERO_GRID"
+        ? "ZERO_GRID"
+        : requestedControlMode === "RACE"
+          ? "RACE"
+          : "AUTO";
+    } else if (requestedEngineMode !== null) {
+      clean.engineMode = requestedEngineMode;
+      clean.controlMode = requestedEngineMode === "ZERO_GRID"
+        ? "ZERO_GRID"
+        : requestedEngineMode === "RACE"
+          ? "RACE"
+          : "AUTO";
+    }
+'''
+          if anchor not in text:
+              raise SystemExit('API canonical mode marker not found')
+          replacement = anchor + '''
+    // ZERO GRID contract: price spacing and ladder count are intentionally fixed.
+    // Base Lot and the two money guards remain customer-adjustable.
+    const zeroGridSelected =
+      requestedControlMode === "ZERO_GRID" ||
+      (requestedControlMode === null && requestedEngineMode === "ZERO_GRID");
+    if (zeroGridSelected) {
+      clean.zeroGridStepPrice = 2;
+      clean.zeroGridLevelsPerSide = 3;
+      if (body.zeroGridBaseLot === undefined) clean.zeroGridBaseLot = 0.01;
+      if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;
+      if (body.zeroGridCloseReserveMoney === undefined) clean.zeroGridCloseReserveMoney = 0.2;
+    }
+'''
+          text = text.replace(anchor, replacement, 1)
+          path.write_text(text, encoding='utf-8')
+
+          # --- Integration smoke: current LOCAL behavior auto-follows a flat MT5 account. ---
           path = Path('.github/workflows/integration-smoke.yml')
           text = path.read_text(encoding='utf-8')
           start_marker = '          echo "[integration] rebind succeeds after old MT5 reports flat"\n'
           end_marker = '          TRIAL_COUNT='
-          start = text.index(start_marker)
-          end = text.index(end_marker, start)
-          replacement = '''          echo "[integration] LOCAL account follows the new MT5 automatically after old account is flat"
+          if start_marker in text:
+              start = text.index(start_marker)
+              end = text.index(end_marker, start)
+              replacement = '''          echo "[integration] LOCAL account follows the new MT5 automatically after old account is flat"
           OLD_FLAT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\\"instanceId\\":\\"$INSTANCE\\",\\"installToken\\":\\"$INSTALL_TOKEN\\",\\"state\\":\\"SAFE_STOP\\",\\"metrics\\":{\\"accountNumber\\":\\"100001\\",\\"eaVersion\\":\\"$EA_VERSION\\",\\"server\\":\\"SCENOVA-Demo\\",\\"positions\\":0}}")
           DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\\"instanceId\\":\\"$INSTANCE\\",\\"installToken\\":\\"$INSTALL_TOKEN\\",\\"state\\":\\"SAFE_STOP\\",\\"metrics\\":{\\"accountNumber\\":\\"200002\\",\\"eaVersion\\":\\"$EA_VERSION\\",\\"server\\":\\"SCENOVA-Real\\",\\"positions\\":0}}")
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch // false')" = "false"
@@ -42,16 +202,46 @@ jobs:
           test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.instance.pending_account_number // empty')" = ""
 
 '''
-          path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+              text = text[:start] + replacement + text[end:]
+          if 'rebind succeeds after old MT5 reports flat' in text:
+              raise SystemExit('stale manual rebind smoke block remains')
+          if 'LOCAL account follows the new MT5 automatically after old account is flat' not in text:
+              raise SystemExit('automatic account-follow smoke block missing')
+          path.write_text(text, encoding='utf-8')
+
+          # Contract assertions for this patch.
+          web = Path('apps/web/app/dashboard/page.tsx').read_text(encoding='utf-8')
+          api = Path('apps/api/src/bot.controller.ts').read_text(encoding='utf-8')
+          assert 'zeroGridStepPrice: 2' in web
+          assert 'zeroGridLevelsPerSide: 3' in web
+          assert 'zeroGridMinNetProfitMoney: 0.5' in web
+          assert 'zeroGridCloseReserveMoney: 0.2' in web
+          assert '<strong>2.00</strong>' in web
+          assert '<strong>3 BUY STOP + 3 SELL STOP</strong>' in web
+          assert 'clean.zeroGridStepPrice = 2;' in api
+          assert 'clean.zeroGridLevelsPerSide = 3;' in api
           PY
 
-      - name: Commit smoke test repair
+      - name: Build web and API
+        run: |
+          set -euo pipefail
+          npm install
+          npm run build -w @bot/web
+          npm run build -w @bot/api
+
+      - name: Commit fixes and remove obsolete helper
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "SCENOVA CI"
           git config user.email "actions@users.noreply.github.com"
-          git add .github/workflows/integration-smoke.yml
+          git rm .github/workflows/apply-auto-race-profit-lock-v104.yml
+          git add apps/web/app/dashboard/page.tsx apps/api/src/bot.controller.ts .github/workflows/integration-smoke.yml
           git diff --cached --check
-          git commit -m "test: expect automatic LOCAL MT5 account follow"
+          git commit -m "fix: lock ZERO grid defaults and repair smoke test"
           git push origin HEAD:main
+
+      - name: Dispatch repaired integration smoke
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run integration-smoke.yml --ref main
