@@ -10,7 +10,6 @@ export const ownerNavItems = [
   { section:"TRADING", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud Trading", hint:"Trading nodes & execution infrastructure" },
   { section:"TRADING", key:"trading-backtest", href:"/dashboard?view=backtest", icon:"strategy", label:"Backtest & Performance", hint:"Historical tests, analytics & reports" },
   { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trials, subscriptions & customer access" },
-  { section:"MANAGEMENT", key:"trading-access", href:"/dashboard?view=access", icon:"shield", label:"Access & Permissions", hint:"Roles, permissions & account access" },
   { section:"SYSTEM", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"System Overview", hint:"Platform health & system status" },
   { section:"SYSTEM", key:"website", href:"/website", icon:"strategy", label:"Website", hint:"SCENOVA public website" }
 ] as const;
