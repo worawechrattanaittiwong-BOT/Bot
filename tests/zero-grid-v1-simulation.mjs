@@ -5,7 +5,7 @@ function up(value, tick) { return Math.ceil(value / tick - 1e-10) * tick; }
 function down(value, tick) { return Math.floor(value / tick + 1e-10) * tick; }
 
 export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPerSide = 5, brokerMinDistance = 0, tick = 0.01 }) {
-  const safeGap = Math.max(tick, brokerMinDistance) + tick;
+  const safeGap = Math.max(tick, brokerMinDistance);
   const buyAnchor = up(ask + safeGap, tick);
   const sellAnchor = down(bid - safeGap, tick);
   const orders = [];
@@ -55,7 +55,9 @@ assert.match(sendBlock, /request\.action\s*=\s*TRADE_ACTION_PENDING/);
 assert.match(sendBlock, /ORDER_TYPE_BUY_STOP/);
 assert.match(sendBlock, /ORDER_TYPE_SELL_STOP/);
 assert.doesNotMatch(sendBlock, /TRADE_ACTION_DEAL/);
-assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);
+assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double gap=ZeroGridMinPendingDistancePrice\(\)/);
+assert.doesNotMatch(ea, /ZeroGridMinPendingDistancePrice\(\)\+ZeroGridTickSize\(\)/);
+assert.doesNotMatch(ea, /MathMax\(stops,freeze\)/);
 assert.match(ea, /double ZeroGridPendingAnchorPrice\(bool buySide\)[\s\S]*live\.ask\+gap[\s\S]*live\.bid-gap/);
 assert.doesNotMatch(ea, /ZeroGridEffectiveStepPrice\(\)\*1\.5/);
 assert.match(ea, /double ZeroGridEstimatedExitCostMoney\(\)/);
@@ -64,4 +66,4 @@ assert.match(ea, /bool\s+g_settingsSynchronized\s*=\s*false/);
 assert.match(ea, /WAIT_SETTINGS_SYNC/);
 assert.match(api, /\["AUTO",\s*"RACE",\s*"ZERO_GRID",\s*"ASSISTED",\s*"MANUAL"\]/);
 assert.match(web, /ตั้ง 5 = วาง BUY STOP 5 รายการ \+ SELL STOP 5 รายการ/);
-console.log("ZERO GRID near-entry and real-net regression passed");
+console.log("ZERO GRID nearest-legal first-entry and real-net regression passed");

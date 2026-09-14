@@ -1930,9 +1930,11 @@ double ZeroGridTickSize()
 
 double ZeroGridMinPendingDistancePrice()
 {
+   // New pending orders are constrained by StopsLevel. FreezeLevel mainly
+   // limits later modify/delete operations near market and must not push the
+   // first ZERO trigger farther away than the broker requires for placement.
    long stops=SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL);
-   long freeze=SymbolInfoInteger(_Symbol,SYMBOL_TRADE_FREEZE_LEVEL);
-   double brokerDistance=(double)MathMax(stops,freeze)*_Point;
+   double brokerDistance=(double)MathMax((long)0,stops)*_Point;
    return MathMax(ZeroGridTickSize(),brokerDistance);
 }
 
@@ -1962,12 +1964,12 @@ double ZeroGridEffectiveBaseLot()
 
 double ZeroGridEntryGapPrice()
 {
-   // First trigger is independent from Grid Step. One tick beyond the
-   // broker Stops/Freeze boundary is the nearest robust pending distance.
+   // First BUY/SELL triggers hug the live quote at the nearest broker-legal
+   // pending distance. Rounding outward to tick size provides the only buffer.
    double tick=ZeroGridTickSize();
-   double gap=ZeroGridMinPendingDistancePrice()+tick;
+   double gap=ZeroGridMinPendingDistancePrice();
    double units=MathCeil((gap/tick)-1e-10);
-   return NormalizeDouble(units*tick,_Digits);
+   return NormalizeDouble(MathMax(1.0,units)*tick,_Digits);
 }
 
 double ZeroGridNormalizeCenterPrice(double rawPrice)
@@ -2103,7 +2105,7 @@ bool ZeroGridSendPending(bool buySide,int level)
       g_executionStatus="ZERO_GRID_WAIT_TICK";
       return false;
    }
-   double safeDistance=ZeroGridMinPendingDistancePrice()+ZeroGridTickSize();
+   double safeDistance=ZeroGridMinPendingDistancePrice();
    double safeBoundary=buySide
       ? ZeroGridNormalizePendingPrice(true,live.ask+safeDistance)
       : ZeroGridNormalizePendingPrice(false,live.bid-safeDistance);
