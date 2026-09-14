@@ -1,4 +1,4 @@
-name: Repair ZERO And Smoke
+name: Repair ZERO Grid Choices
 
 on:
   push:
@@ -13,6 +13,7 @@ permissions:
 jobs:
   repair:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,13 +38,3 @@ jobs:
             git commit -m "fix: allow ZERO grid 2 or 3 with three pending per side"
             git push origin HEAD:main
           fi
-
-      - name: Generate patched Integration Smoke
-        run: python3 scripts/patch_integration_smoke_only.py
-
-      - name: Upload patched workflow
-        uses: actions/upload-artifact@v4
-        with:
-          name: patched-integration-smoke
-          path: .github/workflows/integration-smoke.yml
-          if-no-files-found: error
