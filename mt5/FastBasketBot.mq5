@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.3"
-#define SCENOVA_EA_VERSION "1.0.3"
-#define SCENOVA_PRODUCT_VERSION "1.0.3"
+#property version   "1.0.5"
+#define SCENOVA_EA_VERSION "1.0.5"
+#define SCENOVA_PRODUCT_VERSION "1.0.5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -1617,9 +1617,26 @@ double OnTester()
 // Real and Contest accounts. Hedging keeps both sides live; Netting/Exchange
 // locks to the first triggered side so the broker cannot merge opposite
 // exposure into the same symbol position.
+string EffectiveExecutionMode()
+{
+   // Website controlMode is the canonical owner after the first settings sync.
+   // InpEngineMode remains only a startup fallback for older/local .set files.
+   string control=g_controlMode;
+   StringToUpper(control);
+   if(control == "ZERO_GRID") return "ZERO_GRID";
+   if(control == "RACE") return "RACE";
+   if(control == "AUTO" || control == "ASSISTED" || control == "MANUAL")
+      return "AUTO";
+
+   string engine=g_engineMode;
+   StringToUpper(engine);
+   if(engine == "ZERO_GRID" || engine == "RACE") return engine;
+   return "AUTO";
+}
+
 bool ZeroGridModeEnabled()
 {
-   return g_engineMode == "ZERO_GRID" || g_controlMode == "ZERO_GRID";
+   return EffectiveExecutionMode() == "ZERO_GRID";
 }
 
 bool ZeroGridAccountIsHedging()
@@ -1697,15 +1714,18 @@ void ResetZeroGridCycleState()
 int ZeroGridPositionCount()
 {
    LoadZeroGridCycleState();
-    LoadZeroGridCycleState();
    int count=0;
+   bool netting=ZeroGridAccountIsNetting();
    for(int i=PositionsTotal()-1;i>=0;i--)
    {
       ulong ticket=PositionGetTicket(i);
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
       string comment=PositionGetString(POSITION_COMMENT);
-      if(IsZeroGridComment(comment) || g_zeroGridCycleStartedAt>0) count++;
+      // Hedging retains per-position comments: only ZERO-tagged positions belong
+      // to ZERO. Netting may merge fills/comments, so persisted cycle ownership
+      // is used there only while an actual ZERO cycle is active.
+      if(IsZeroGridComment(comment) || (netting && g_zeroGridCycleStartedAt>0)) count++;
    }
    return count;
 }
@@ -2234,7 +2254,7 @@ bool ManageZeroGrid()
 // and explicit risk/exit protections.
 bool RaceModeEnabled()
 {
-   return g_engineMode == "RACE";
+   return EffectiveExecutionMode() == "RACE";
 }
 
 bool BasketHasRacePosition()
@@ -3599,7 +3619,8 @@ void SendHeartbeat()
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + diagnostics;
       string burstDiagnostics = StringFormat(
-         ",\"engineMode\":\"ADAPTIVE\",\"basketFillActive\":%s,\"basketTargetPositions\":%d,\"basketRequestsSent\":%d,\"basketFilledPositions\":%d,\"basketFillProgressText\":\"%d/%d\",\"basketAutoTargetMoney\":%.2f,\"basketLossMoney\":%.2f}}",
+         ",\"engineMode\":\"%s\",\"basketFillActive\":%s,\"basketTargetPositions\":%d,\"basketRequestsSent\":%d,\"basketFilledPositions\":%d,\"basketFillProgressText\":\"%d/%d\",\"basketAutoTargetMoney\":%.2f,\"basketLossMoney\":%.2f}}",
+         EffectiveExecutionMode(),
          g_burstActive ? "true" : "false",
          g_burstTargetPositions,
          g_burstRequestsSent,
@@ -4811,21 +4832,33 @@ void ApplySettings(string json)
    g_zeroGridMinNetProfitMoney = MathMax(0.01, JsonNumber(json, "zeroGridMinNetProfitMoney", g_zeroGridMinNetProfitMoney));
    g_zeroGridCloseReserveMoney = MathMax(0.0, JsonNumber(json, "zeroGridCloseReserveMoney", g_zeroGridCloseReserveMoney));
 
-
    string requestedEngineMode = JsonString(json, "engineMode", "");
    StringToUpper(requestedEngineMode);
-   if(requestedEngineMode == "AUTO" || requestedEngineMode == "RACE" || requestedEngineMode == "ZERO_GRID")
-      g_engineMode = requestedEngineMode;
+   bool hasEngineMode = requestedEngineMode == "AUTO" || requestedEngineMode == "RACE" || requestedEngineMode == "ZERO_GRID";
 
-
-   string requestedControlMode = JsonString(json, "controlMode", g_controlMode);
+   string requestedControlMode = JsonString(json, "controlMode", "");
    StringToUpper(requestedControlMode);
-   if(requestedControlMode == "AUTO" || requestedControlMode == "RACE" ||
-      requestedControlMode == "ZERO_GRID" ||
-      requestedControlMode == "ASSISTED" || requestedControlMode == "MANUAL" ||
-      requestedControlMode == "LEGACY")
-      g_controlMode = requestedControlMode;
+   bool hasControlMode =
+      requestedControlMode == "AUTO" || requestedControlMode == "RACE" ||
+      requestedControlMode == "ZERO_GRID" || requestedControlMode == "ASSISTED" ||
+      requestedControlMode == "MANUAL" || requestedControlMode == "LEGACY";
 
+   // Hard isolation: one execution owner at a time. controlMode is authoritative
+   // when both are present; partial/legacy payloads are normalized immediately.
+   if(hasControlMode)
+   {
+      g_controlMode = requestedControlMode;
+      if(g_controlMode == "ZERO_GRID") g_engineMode = "ZERO_GRID";
+      else if(g_controlMode == "RACE") g_engineMode = "RACE";
+      else g_engineMode = "AUTO";
+   }
+   else if(hasEngineMode)
+   {
+      g_engineMode = requestedEngineMode;
+      if(g_engineMode == "ZERO_GRID") g_controlMode = "ZERO_GRID";
+      else if(g_engineMode == "RACE") g_controlMode = "RACE";
+      else if(g_controlMode == "ZERO_GRID" || g_controlMode == "RACE" || g_controlMode == "LEGACY") g_controlMode = "AUTO";
+   }
 
    string mode = JsonString(json, "entryMode", "");
    if(mode == "BUY_ONLY") g_entryMode = ENTRY_BUY_ONLY;

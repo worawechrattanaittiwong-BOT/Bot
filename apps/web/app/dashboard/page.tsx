@@ -551,8 +551,16 @@ export default function DashboardPage() {
 
   const nearlyEqual = (left:any, right:any, tolerance=0.005) =>
     Math.abs(Number(left || 0) - Number(right || 0)) <= tolerance;
+  const desiredControlMode = String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase();
+  const desiredEngineMode = desiredControlMode === "ZERO_GRID"
+    ? "ZERO_GRID"
+    : desiredControlMode === "RACE"
+      ? "RACE"
+      : "AUTO";
   const eaSettingsTelemetryReady =
     isMt5Online &&
+    metrics.controlMode !== undefined &&
+    metrics.engineMode !== undefined &&
     metrics.configuredMaxPositions !== undefined &&
     metrics.configuredBasketProfitTarget !== undefined &&
     metrics.configuredMaxBasketLoss !== undefined &&
@@ -563,6 +571,8 @@ export default function DashboardPage() {
      Number(settings.perPositionProfitMoney || 0) > 0 ? "MANUAL" : "AUTO")).toUpperCase();
   const eaSettingsSynced =
     eaSettingsTelemetryReady &&
+    String(metrics.controlMode || "").toUpperCase() === desiredControlMode &&
+    String(metrics.engineMode || "").toUpperCase() === desiredEngineMode &&
     String(metrics.profitTargetMode || "").toUpperCase() === desiredProfitTargetMode &&
     Number(metrics.configuredMaxPositions || 0) === Number(settings.maxPositions || 0) &&
     nearlyEqual(metrics.configuredLot, settings.lot, 0.0001) &&
@@ -1659,7 +1669,7 @@ export default function DashboardPage() {
                     <h2>{metrics.symbol || settings.symbol}</h2>
                     <p>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}<em/>MT5 Expert Advisor</p>
                     <div className="cc-v6-symbol-chips">
-                      <span>{String(settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO SMART" : settings.entryMode}</span>
+                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO SMART" : settings.entryMode}</span>
                       <span>{Number(settings.lot||0).toFixed(2)} Lot</span>
                       <span>{configuredMaxPositions} ไม้</span>
                       <HeroTrendChip label="M5" value={metrics.trendM5}/>

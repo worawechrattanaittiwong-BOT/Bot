@@ -1582,22 +1582,36 @@ export class BotController {
       }
     }
 
-    if (body.controlMode !== undefined) {
-      const controlMode = String(body.controlMode || "").toUpperCase();
-      if (!["AUTO", "RACE", "ZERO_GRID", "ASSISTED", "MANUAL"].includes(controlMode)) {
-        throw new BadRequestException("Control Mode ไม่ถูกต้อง");
-      }
-      clean.controlMode = controlMode;
+    const requestedControlMode = body.controlMode !== undefined
+      ? String(body.controlMode || "").toUpperCase()
+      : null;
+    const requestedEngineMode = body.engineMode !== undefined
+      ? String(body.engineMode || "").toUpperCase()
+      : null;
+
+    if (requestedControlMode !== null && !["AUTO", "RACE", "ZERO_GRID", "ASSISTED", "MANUAL"].includes(requestedControlMode)) {
+      throw new BadRequestException("Control Mode ไม่ถูกต้อง");
+    }
+    if (requestedEngineMode !== null && !["AUTO", "RACE", "ZERO_GRID"].includes(requestedEngineMode)) {
+      throw new BadRequestException("Engine Mode ไม่ถูกต้อง");
     }
 
-    if (body.engineMode !== undefined) {
-      const engineMode = String(body.engineMode || "").toUpperCase();
-      if (!["AUTO", "RACE", "ZERO_GRID"].includes(engineMode)) {
-        throw new BadRequestException("Engine Mode ไม่ถูกต้อง");
-      }
-      clean.engineMode = engineMode;
+    // Canonical DB pair: never persist a stale ZERO/RACE engine next to another mode.
+    if (requestedControlMode !== null) {
+      clean.controlMode = requestedControlMode;
+      clean.engineMode = requestedControlMode === "ZERO_GRID"
+        ? "ZERO_GRID"
+        : requestedControlMode === "RACE"
+          ? "RACE"
+          : "AUTO";
+    } else if (requestedEngineMode !== null) {
+      clean.engineMode = requestedEngineMode;
+      clean.controlMode = requestedEngineMode === "ZERO_GRID"
+        ? "ZERO_GRID"
+        : requestedEngineMode === "RACE"
+          ? "RACE"
+          : "AUTO";
     }
-
 
     if (body.entryMode !== undefined) {
       const entryMode = String(body.entryMode || "");
