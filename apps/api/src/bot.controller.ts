@@ -541,8 +541,9 @@ export class BotController {
 
   @Get("dashboard")
   @Header("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
-  async dashboard(@Req() req: any, @Query("slotId") slotId = "") {
+  async dashboard(@Req() req: any, @Query("slotId") slotId = "", @Query("light") light = "") {
     const userId = req.user.sub;
+    const lightweight = light === "1" || light.toLowerCase() === "true";
     const user = await this.user(userId);
     const selectedSlot = await this.resolveSlot(userId, slotId || null);
     const slots = await this.slotRows(userId);
@@ -607,7 +608,7 @@ export class BotController {
       }>
     };
 
-    if (instance) {
+    if (instance && !lightweight) {
       const stats = await this.db.one(
         `SELECT
            COUNT(*) FILTER (WHERE event_type='BASKET')::int AS closed_trades,

@@ -109,7 +109,7 @@ export default function DashboardPage() {
     process.env.NEXT_PUBLIC_MT5_API_BASE ||
     (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
 
-  async function load(slotIdArg?: string) {
+  async function load(slotIdArg?: string, light = false) {
     const requestedSlotId = slotIdArg ?? selectedSlotIdRef.current;
     if (dashboardLoadInFlightRef.current) {
       dashboardReloadPendingRef.current = requestedSlotId;
@@ -119,8 +119,15 @@ export default function DashboardPage() {
     dashboardLoadInFlightRef.current = true;
     try {
       const slotId = requestedSlotId;
-      const d = await api("/bot/dashboard" + (slotId ? "?slotId=" + encodeURIComponent(slotId) : ""));
-      setData(d);
+      const query = new URLSearchParams();
+      if (slotId) query.set("slotId", slotId);
+      if (light) query.set("light", "1");
+      const d = await api("/bot/dashboard" + (query.toString() ? "?" + query.toString() : ""));
+      if (light) {
+        setData((previous) => previous ? { ...d, tradeJournal: previous.tradeJournal } : d);
+      } else {
+        setData(d);
+      }
       if (!settingsDirtyRef.current) {
         const nextSettings:any = {
           ...defaultSettings,
@@ -178,7 +185,7 @@ export default function DashboardPage() {
       .catch(()=>setBrokerCatalog([]));
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible" || dashboardLoadInFlightRef.current) return;
-      void load();
+      void load(undefined, true);
     }, 10000);
     return () => clearInterval(id);
   }, []);
@@ -200,8 +207,7 @@ export default function DashboardPage() {
   }, [botSettingsOpen]);
 
   useEffect(() => {
-    const terminalVisible = activeView === "overview";
-    if ((!logsOpen && !terminalVisible) || !data?.instance?.id) return;
+    if (!logsOpen || !data?.instance?.id) return;
     let cancelled = false;
     let requestInFlight = false;
     const refreshLogs = async () => {
