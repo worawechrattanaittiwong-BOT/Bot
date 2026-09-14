@@ -5,6 +5,8 @@ import { Readable } from "node:stream";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Customer downloads are streamed by the server so the browser keeps the
+// personalized enrollment filename instead of buffering a large EXE in JS.
 const VERSION_RE = /^\d+\.\d+\.\d+$/;
 const ENROLLMENT_RE = /^[A-Za-z0-9_-]{12,128}$/;
 
