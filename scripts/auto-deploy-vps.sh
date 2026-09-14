@@ -257,26 +257,40 @@ else
   exit 1
 fi
 
-# Host-level safety gate: never recycle API/Web while a bot is running or the
-# last MT5 heartbeat still reports open positions. Operators should first use
-# Safe Maintenance from Owner Console and wait until all counters reach zero.
+# Host-level safety gate: never recycle API/Web while a live bot is running or
+# fresh MT5 telemetry still reports open positions. A stale cached Position may
+# remain visible while Safe Maintenance is active; the API still blocks resume
+# until MT5/EA confirms every Position is 0.
 COMPOSE_FILE="infrastructure/linux/docker-compose.hostinger.yml"
 ENV_FILE=".env.hostinger"
 if command -v docker >/dev/null 2>&1 && [ -f "$ENV_FILE" ]; then
   POSTGRES_CID="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps -q postgres 2>/dev/null || true)"
   if [ -n "$POSTGRES_CID" ]; then
-    RUNTIME_STATE="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres psql -U bot -d bot -Atc "SELECT (COUNT(*) FILTER (WHERE actual_state='RUNNING' OR desired_state='RUNNING'))::int || ':' || COALESCE(SUM(COALESCE(NULLIF(metrics->>'positions','')::int,0)),0)::int FROM bot_instances;" 2>/dev/null || true)"
+    RUNTIME_STATE="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres psql -U bot -d bot -Atc "WITH runtime AS (SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)::int AS reported_positions,CASE WHEN COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0)>0 THEN COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0)>extract(epoch from now()-interval '20 seconds') ELSE bi.last_seen_at IS NOT NULL AND bi.last_seen_at>now()-interval '20 seconds' END AS mt5_fresh FROM bot_instances bi) SELECT COALESCE((SELECT status::text FROM system_maintenance WHERE id=1),'OFF') || ':' || (COUNT(*) FILTER (WHERE desired_state='RUNNING' OR (mt5_fresh AND actual_state='RUNNING')))::int || ':' || COALESCE(SUM(CASE WHEN mt5_fresh THEN reported_positions ELSE 0 END),0)::int || ':' || COALESCE(SUM(CASE WHEN NOT mt5_fresh THEN reported_positions ELSE 0 END),0)::int FROM runtime;" 2>/dev/null || true)"
     if [ -z "$RUNTIME_STATE" ]; then
       echo "[SCENOVA] unable to verify trading runtime state; deployment blocked for safety"
       exit 0
     fi
-    ACTIVE_BOTS="${RUNTIME_STATE%%:*}"
-    OPEN_POSITIONS="${RUNTIME_STATE##*:}"
-    if [ "${ACTIVE_BOTS:-0}" -gt 0 ] || [ "${OPEN_POSITIONS:-0}" -gt 0 ]; then
-      echo "[SCENOVA] safe-deploy gate: ${ACTIVE_BOTS:-0} running bot(s), ${OPEN_POSITIONS:-0} open position(s); waiting for Safe Maintenance"
+
+    IFS=':' read -r MAINTENANCE_STATUS ACTIVE_BOTS FRESH_OPEN_POSITIONS STALE_REPORTED_POSITIONS <<< "$RUNTIME_STATE"
+    if [ "${ACTIVE_BOTS:-0}" -gt 0 ] || [ "${FRESH_OPEN_POSITIONS:-0}" -gt 0 ]; then
+      echo "[SCENOVA] safe-deploy gate: ${ACTIVE_BOTS:-0} live bot(s), ${FRESH_OPEN_POSITIONS:-0} fresh open position(s); waiting for Safe Maintenance"
       exit 0
     fi
-    echo "[SCENOVA] safe-deploy gate passed: no running bots and no open positions"
+
+    if [ "${STALE_REPORTED_POSITIONS:-0}" -gt 0 ]; then
+      case "${MAINTENANCE_STATUS:-OFF}" in
+        DRAINING|MAINTENANCE)
+          echo "[SCENOVA] safe-deploy gate: allowing maintenance deploy with ${STALE_REPORTED_POSITIONS} stale cached position(s); reopening remains blocked until MT5 confirms 0"
+          ;;
+        *)
+          echo "[SCENOVA] safe-deploy gate: ${STALE_REPORTED_POSITIONS} stale cached position(s) outside Safe Maintenance; deployment blocked"
+          exit 0
+          ;;
+      esac
+    else
+      echo "[SCENOVA] safe-deploy gate passed: no live bots and no fresh open positions"
+    fi
   fi
 fi
 
