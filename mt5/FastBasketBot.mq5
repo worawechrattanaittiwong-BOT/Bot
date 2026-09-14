@@ -169,7 +169,7 @@ input double          InpMomentumEntryPoints  = 8.0;
 input double          InpStrongFlowPoints     = 25.0;
 input double          InpFlowTrailBoost       = 0.60;
 input bool            InpPauseOnManualTrade   = true;
-input int             InpHeartbeatSeconds     = 3;
+input int             InpHeartbeatSeconds     = 5;
 input int             InpMaxOfflineLeaseSeconds = 600;
 
 // Adaptive Engine: deterministic, testable safeguards. The configured lot is
@@ -3167,10 +3167,19 @@ bool ManageRaceBasket(double momentum)
 
 void OnTick()
 {
-   UpdateMomentum();
    SampleSpread();
-   RefreshEmaIntelligence(false);
-   DrawEmaCurves();
+   bool zeroGridFastPath =
+      ZeroGridPositionCount() > 0 ||
+      ZeroGridPendingCount() > 0 ||
+      (ZeroGridModeEnabled() &&
+       BasketPositionCount() <= 0 &&
+       RescuePositionCount() <= 0);
+   if(!zeroGridFastPath)
+   {
+      UpdateMomentum();
+      RefreshEmaIntelligence(false);
+      DrawEmaCurves();
+   }
    RefreshDailyBaselineIfNeeded();
 
    if(g_access && g_lastSuccessfulHeartbeat > 0 &&
@@ -3686,8 +3695,17 @@ void OnTick()
 void OnTimer()
 {
    SampleSpread();
-   RefreshEmaIntelligence(false);
-   DrawEmaCurves();
+   bool zeroGridFastPath =
+      ZeroGridPositionCount() > 0 ||
+      ZeroGridPendingCount() > 0 ||
+      (ZeroGridModeEnabled() &&
+       BasketPositionCount() <= 0 &&
+       RescuePositionCount() <= 0);
+   if(!zeroGridFastPath)
+   {
+      RefreshEmaIntelligence(false);
+      DrawEmaCurves();
+   }
 
    if(MQLInfoInteger(MQL_TESTER))
    {

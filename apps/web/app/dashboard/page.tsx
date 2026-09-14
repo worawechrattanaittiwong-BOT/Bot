@@ -79,6 +79,8 @@ export default function DashboardPage() {
   const [activeView, setActiveView] = useState<View>("overview");
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const selectedSlotIdRef = useRef("");
+  const dashboardLoadInFlightRef = useRef(false);
+  const dashboardReloadPendingRef = useRef<string | null>(null);
   const [lineContact, setLineContact] = useState("");
   const [mode, setMode] = useState<"CLOUD"|"LOCAL">("LOCAL");
   const [accountNumber, setAccountNumber] = useState("");
@@ -108,8 +110,15 @@ export default function DashboardPage() {
     (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
 
   async function load(slotIdArg?: string) {
+    const requestedSlotId = slotIdArg ?? selectedSlotIdRef.current;
+    if (dashboardLoadInFlightRef.current) {
+      dashboardReloadPendingRef.current = requestedSlotId;
+      return;
+    }
+
+    dashboardLoadInFlightRef.current = true;
     try {
-      const slotId = slotIdArg ?? selectedSlotIdRef.current;
+      const slotId = requestedSlotId;
       const d = await api("/bot/dashboard" + (slotId ? "?slotId=" + encodeURIComponent(slotId) : ""));
       setData(d);
       if (!settingsDirtyRef.current) {
@@ -139,6 +148,11 @@ export default function DashboardPage() {
       setError("");
     } catch (e: any) {
       setError(e.message);
+    } finally {
+      dashboardLoadInFlightRef.current = false;
+      const pendingSlotId = dashboardReloadPendingRef.current;
+      dashboardReloadPendingRef.current = null;
+      if (pendingSlotId !== null) void load(pendingSlotId);
     }
   }
 
@@ -162,7 +176,10 @@ export default function DashboardPage() {
     api("/catalog/brokers")
       .then((rows)=>setBrokerCatalog(rows))
       .catch(()=>setBrokerCatalog([]));
-    const id = setInterval(()=>load(""), 2000);
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || dashboardLoadInFlightRef.current) return;
+      void load();
+    }, 10000);
     return () => clearInterval(id);
   }, []);
 
@@ -186,7 +203,10 @@ export default function DashboardPage() {
     const terminalVisible = activeView === "overview";
     if ((!logsOpen && !terminalVisible) || !data?.instance?.id) return;
     let cancelled = false;
+    let requestInFlight = false;
     const refreshLogs = async () => {
+      if (cancelled || requestInFlight || document.visibilityState !== "visible") return;
+      requestInFlight = true;
       try {
         setLogsLoading(true);
         const slotQuery = selectedSlotIdRef.current ? "?slotId=" + encodeURIComponent(selectedSlotIdRef.current) : "";
@@ -195,11 +215,12 @@ export default function DashboardPage() {
       } catch (e: any) {
         if (!cancelled && logsOpen) setError(e.message);
       } finally {
+        requestInFlight = false;
         if (!cancelled) setLogsLoading(false);
       }
     };
     refreshLogs();
-    const id = setInterval(refreshLogs, 5000);
+    const id = window.setInterval(refreshLogs, 15000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -1188,7 +1209,7 @@ export default function DashboardPage() {
       "InpStrongFlowPoints=25.0",
       "InpFlowTrailBoost=0.60",
       "InpPauseOnManualTrade=true",
-      "InpHeartbeatSeconds=3",
+      "InpHeartbeatSeconds=5",
       "InpMaxOfflineLeaseSeconds=600",
       "InpAdaptiveEngine=true",
       "InpRiskPerOrderPercent=0.25",
