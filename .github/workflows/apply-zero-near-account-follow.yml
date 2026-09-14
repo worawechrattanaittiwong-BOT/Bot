@@ -33,6 +33,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The patch script also prepares CI guard edits, but GitHub Actions
+          # tokens cannot push workflow-file changes. Keep application/runtime
+          # changes here; workflow guards are updated separately via GitHub.
+          git checkout -- .github/workflows/ci.yml .github/workflows/build-mt5-ea.yml
           git config user.name "SCENOVA Patch Bot"
           git config user.email "actions@users.noreply.github.com"
           git add \
@@ -44,9 +48,7 @@ jobs:
             apps/web/app/layout.tsx \
             apps/web/components/CustomerNavigationLabels.tsx \
             tests/zero-grid-v1-simulation.mjs \
-            tests/local-account-follow-contract.ps1 \
-            .github/workflows/ci.yml \
-            .github/workflows/build-mt5-ea.yml
+            tests/local-account-follow-contract.ps1
           git diff --cached --quiet && exit 0
           git commit -m "fix: tighten ZERO entries and follow local MT5 account"
           for attempt in 1 2 3 4 5; do
