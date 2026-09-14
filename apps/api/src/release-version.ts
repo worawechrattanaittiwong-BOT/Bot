@@ -5,11 +5,10 @@ import { dirname, resolve } from "node:path";
 export const DEFAULT_INSTALLER_VERSION = "1.0.8";
 export const DEFAULT_EA_VERSION = "1.0.10";
 
-// 3.1.2 introduced the Agent protocol used by the current 1.0.x line
-// (agent-heartbeat + resumable EA artifact + one-time MT5 action). Patch
-// releases in the same 1.0 line must not hard-block trading simply because a
-// newer Setup binary exists. This also lets an already-installed 1.0.0 Agent
-// repair/update EA automatically without forcing another browser download.
+// The current Windows Installer/Device Agent compatibility line is 1.0.x.
+// Patch releases in the same 1.0 line must not hard-block trading simply
+// because a newer Setup binary exists. This lets an already-installed 1.0.0+
+// Agent repair/update EA automatically without forcing another browser download.
 export const MIN_COMPATIBLE_INSTALLER_VERSION = "1.0.0";
 
 export function latestInstallerVersion() {
@@ -51,8 +50,8 @@ function normalizedExactVersion(version: unknown) {
 
 // Historical callers use isVersionExact() for the Windows Agent compatibility
 // gate. Keep exact equality first, then allow compatible PATCH releases inside
-// the 3.1 protocol line. A future 1.1.x release remains a hard upgrade unless
-// its minimum compatibility policy is explicitly changed.
+// the current 1.0 protocol line. A future 1.1.x release remains a hard upgrade
+// unless its minimum compatibility policy is explicitly changed.
 export function isVersionExact(current: unknown, required: unknown) {
   const aRaw = normalizedExactVersion(current);
   const bRaw = normalizedExactVersion(required);
