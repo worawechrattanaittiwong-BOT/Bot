@@ -1,0 +1,73 @@
+name: Apply ZERO GRID V2 All MT5
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/apply-zero-grid-all-mt5-v2.yml"
+      - "scripts/upgrade-zero-grid-all-mt5-v2.ps1"
+      - "tests/zero-grid-all-mt5-contract.ps1"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: apply-zero-grid-all-mt5-v2
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply universal MT5 ZERO GRID patch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "./scripts/upgrade-zero-grid-all-mt5-v2.ps1" `
+            -EaPath "mt5/FastBasketBot.mq5" `
+            -ApiPath "apps/api/src/bot.controller.ts" `
+            -WebPath "apps/web/app/dashboard/page.tsx" `
+            -BuildWorkflowPath ".github/workflows/build-mt5-ea.yml"
+
+      - name: Validate universal account contract
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "./tests/zero-grid-all-mt5-contract.ps1"
+
+      - name: Verify generated diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git status --short
+
+      - name: Publish generated source and settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 apps/api/src/bot.controller.ts apps/web/app/dashboard/page.tsx .github/workflows/build-mt5-ea.yml
+          if git diff --cached --quiet; then
+            echo "ZERO GRID V2 source is already current."
+          else
+            git commit -m "fix: enable ZERO GRID across MT5 account modes [skip ea build]"
+            git push origin HEAD:main
+          fi
+
+      - name: Dispatch official MT5 compile
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run build-mt5-ea.yml --ref main
+          echo "Dispatched Build MT5 EA for the ZERO GRID V2 source on main."
