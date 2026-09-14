@@ -57,3 +57,5 @@ jobs:
           git diff --cached --check
           git commit -m "test: align smoke with automatic MT5 account follow"
           git push origin HEAD:main
+
+# trigger-repair-v1
