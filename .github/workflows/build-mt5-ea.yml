@@ -1,8 +1,8 @@
 name: Build MT5 EA
 
 # Official MT5 compile and publish pipeline for the current V20/RACE source.
-# ZERO GRID V2.2 keeps cycle ownership stable, stages pending levels far-to-near,
-# uses broker-safe first entries, and closes owned positions small-lot-to-large-lot.
+# ZERO GRID V3 uses fixed-cycle symmetric geometry, near-to-far staging,
+# strict mode ownership, and near-to-live-price profit exits.
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
@@ -41,7 +41,7 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Validate current V20 AUTO, isolated RACE and ZERO GRID V2.2 source
+      - name: Validate current V20 AUTO, isolated RACE and ZERO GRID V3 source
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -83,19 +83,23 @@ jobs:
             'SaaSRace',
             'bool ZeroGridModeEnabled()',
             'bool ZeroGridAccountIsNetting()',
-            'ZERO_GRID_LADDER_READY_NETTING',
+            'ZERO GRID V3 - deterministic symmetric breakout ladder',
+            'bool ZeroGridOwnsSelectedPosition()',
+            'ZERO_GRID_V3_READY_NETTING',
             'SYMBOL_TRADE_TICK_SIZE',
             'HistoryOrdersTotal()',
             'SaaSZeroGrid',
-            'ZERO GRID V2.1 geometry',
+            'double ZeroGridEntryGapPrice()',
             'double ZeroGridPendingAnchorPrice(bool buySide)',
             'double ZeroGridPendingLevelPrice(bool buySide,int level)',
-            'for(int level=g_zeroGridLevelsPerSide;level>=1;level--)',
+            'for(int level=1;level<=levels;level++)',
             'const int maxAttemptsPerPass=6;',
             'ulong ZeroGridNearestCloseTicket()',
             'int profitRank=floating>=0.0 ? 0 : 1;',
-            'volume<bestVolume-0.0000001',
-            'ZERO_GRID_CYCLE_OWNER_LOCK',
+            'const int maxCloseRequestsPerPass=8;',
+            'state==ORDER_STATE_FILLED || state==ORDER_STATE_PARTIAL',
+            'ZeroGridEffectiveBaseLot()*level',
+            'ZERO_GRID_MODE_EXIT_DRAIN_ONLY',
             'ZERO_GRID_SAFE_DRAIN',
             'TradePermissionStatus',
             'AdaptiveSpreadAllowed',
@@ -114,11 +118,14 @@ jobs:
           if ($text.Contains('return MathMax(g_zeroGridStepPrice,ZeroGridMinPendingDistancePrice()+ZeroGridTickSize());')) {
             throw "Obsolete ZERO GRID over-wide spacing rule is still present"
           }
-          if ($text.Contains('for(int level=1;level<=g_zeroGridLevelsPerSide;level++)')) {
-            throw "Obsolete ZERO GRID near-to-far staging is still present"
+          if ($text.Contains('for(int level=g_zeroGridLevelsPerSide;level>=1;level--)')) {
+            throw "Obsolete ZERO GRID far-to-near staging is still present"
           }
-          if ($text.Contains('If mode is changed while a ZERO GRID cycle owns positions, cancel pending')) {
-            throw "Obsolete ZERO GRID mode-change cancellation is still present"
+          if ($text.Contains('volume<bestVolume-0.0000001')) {
+            throw "Obsolete ZERO GRID smallest-lot-first close ordering is still present"
+          }
+          if ($text.Contains('ZERO_GRID_CYCLE_OWNER_LOCK')) {
+            throw "Obsolete ZERO GRID mode-owner continuation is still present"
           }
           if ($text.Contains('StringFind(InpApiBase, "http://") == 0')) {
             throw "Plain HTTP API configuration is still accepted"
@@ -154,7 +161,7 @@ jobs:
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
             brain = "V20"
-            policy = "AUTO_V20_CENTRAL_DECISION_AUDIT_STATS_RACE_ZERO_GRID_V2_2_STABLE_PENDING_SMALL_TO_LARGE_CLOSE"
+            policy = "AUTO_V20_CENTRAL_DECISION_AUDIT_STATS_RACE_ZERO_GRID_V3_FIXED_CYCLE_NEAR_TO_FAR_CLOSE_OUTWARD"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
       - name: Publish current V20 compiled artifact
