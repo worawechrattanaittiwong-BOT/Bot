@@ -1,8 +1,8 @@
 name: Build MT5 EA
 
 # Official MT5 compile and publish pipeline for the current V20/RACE source.
-# ZERO GRID V3 uses fixed-cycle symmetric geometry, near-to-far staging,
-# strict mode ownership, and near-to-live-price profit exits.
+# ZERO GRID V3 uses fixed-cycle symmetric pending geometry, exact per-side levels,
+# strict startup/mode ownership, and near-to-live-price profit exits.
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
@@ -93,7 +93,12 @@ jobs:
             'double ZeroGridPendingAnchorPrice(bool buySide)',
             'double ZeroGridPendingLevelPrice(bool buySide,int level)',
             'for(int level=1;level<=levels;level++)',
-            'const int maxAttemptsPerPass=6;',
+            'int maxAttemptsPerPass=MathMin(60,levels*2);',
+            'bool   g_settingsSynchronized = false;',
+            'WAIT_SETTINGS_SYNC',
+            'request.action=TRADE_ACTION_PENDING;',
+            'ORDER_TYPE_BUY_STOP',
+            'ORDER_TYPE_SELL_STOP',
             'ulong ZeroGridNearestCloseTicket()',
             'int profitRank=floating>=0.0 ? 0 : 1;',
             'const int maxCloseRequestsPerPass=8;',
@@ -161,7 +166,7 @@ jobs:
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
             brain = "V20"
-            policy = "AUTO_V20_CENTRAL_DECISION_AUDIT_STATS_RACE_ZERO_GRID_V3_FIXED_CYCLE_NEAR_TO_FAR_CLOSE_OUTWARD"
+            policy = "AUTO_V20_CENTRAL_DECISION_AUDIT_STATS_RACE_ZERO_GRID_V3_PENDING_ONLY_EXACT_LEVELS"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
       - name: Publish current V20 compiled artifact
