@@ -1,4 +1,4 @@
-name: Export Integration Smoke Repair
+name: Repair ZERO And Smoke
 
 on:
   push:
@@ -8,13 +8,35 @@ on:
       - .github/workflows/apply-auto-race-profit-lock-v104.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  repair:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply ZERO Grid choices
+        run: python3 scripts/patch_zero_grid_2_or_3.py
+
+      - name: Build web and API
+        run: |
+          npm install
+          npm run build -w @bot/web
+          npm run build -w @bot/api
+
+      - name: Commit ZERO Grid choices
+        run: |
+          git config user.name "SCENOVA CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/web/app/dashboard/page.tsx apps/api/src/bot.controller.ts
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git commit -m "fix: allow ZERO grid 2 or 3 with three pending per side"
+            git push origin HEAD:main
+          fi
 
       - name: Generate patched Integration Smoke
         run: python3 scripts/patch_integration_smoke_only.py
