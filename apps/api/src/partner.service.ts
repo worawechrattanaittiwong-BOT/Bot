@@ -123,7 +123,7 @@ export class PartnerService {
           `INSERT INTO partner_accounts(
              user_id,status,seat_limit,customer_duration_days,partner_duration_days,
              granted_at,activation_deadline_at,activated_at,expires_at,created_by,updated_at
-           ) VALUES($1,'ACTIVE',$2,$3,$4,now(),now()+($4 || ' days')::interval,now(),now()+($4 || ' days')::interval,$5,now())
+           ) VALUES($1,'ACTIVE',$2,$3,$4,now(),now()+make_interval(days => $4),now(),now()+make_interval(days => $4),$5,now())
            ON CONFLICT(user_id) DO UPDATE SET
              status='ACTIVE',seat_limit=EXCLUDED.seat_limit,
              customer_duration_days=EXCLUDED.customer_duration_days,
@@ -157,8 +157,8 @@ export class PartnerService {
         `UPDATE partner_accounts
          SET status='ACTIVE',partner_duration_days=$2,
              activated_at=CASE WHEN status='ACTIVE' AND expires_at>now() THEN COALESCE(activated_at,now()) ELSE now() END,
-             expires_at=GREATEST(COALESCE(expires_at,now()),now())+($2 || ' days')::interval,
-             activation_deadline_at=GREATEST(COALESCE(expires_at,now()),now())+($2 || ' days')::interval,
+             expires_at=GREATEST(COALESCE(expires_at,now()),now())+make_interval(days => $2),
+             activation_deadline_at=GREATEST(COALESCE(expires_at,now()),now())+make_interval(days => $2),
              updated_at=now()
          WHERE user_id=$1`,
         [userId, days]
@@ -286,7 +286,7 @@ export class PartnerService {
     const durationDays = Number(partner.customer_duration_days || 30);
     const subscription = (await tx.query(
       `INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note)
-       VALUES($1,$2,now(),now()+($3 || ' days')::interval,$4,$5)
+       VALUES($1,$2,now(),now()+make_interval(days => $3),$4,$5)
        RETURNING *`,
       [target.id, plan.id, durationDays, actor.slice(0, 120), `PARTNER_CUSTOMER:${partner.user_id}`]
     )).rows[0];
@@ -378,7 +378,7 @@ export class PartnerService {
       if (current.status === "ACTIVE" && new Date(current.expires_at) > new Date()) {
         const updated = (await tx.query(
           `UPDATE subscriptions
-           SET expires_at=GREATEST(expires_at,now())+($2 || ' days')::interval,status='ACTIVE'
+           SET expires_at=GREATEST(expires_at,now())+make_interval(days => $2),status='ACTIVE'
            WHERE id=$1 RETURNING *`,
           [current.subscription_id, Number(partner.customer_duration_days || 30)]
         )).rows[0];
