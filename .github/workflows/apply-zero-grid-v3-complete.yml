@@ -1,40 +1,14 @@
-name: Apply ZERO GRID V3 Complete Stabilization
+name: Retired ZERO GRID V3 Stabilization Patch
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/apply-zero-grid-v3-complete.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: apply-zero-grid-v3-complete
-  cancel-in-progress: true
+  contents: read
 
 jobs:
-  patch:
+  retired:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Patch and validate ZERO GRID V3
-        run: python3 .github/scripts/apply_zero_grid_v3.py
-
-      - name: Commit ZERO GRID V3
-        shell: bash
-        run: |
-          if git diff --quiet -- mt5/FastBasketBot.mq5; then
-            echo "No source changes needed"
-            exit 0
-          fi
-          git config user.name "SCENOVA Patch Bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add mt5/FastBasketBot.mq5
-          git commit -m "fix: rebuild ZERO GRID as stable V3 breakout ladder"
-          git push
+      - name: Retired one-shot patch
+        run: echo "ZERO GRID V3 has been applied. Current EA source is maintained directly and validated by CI + Build MT5 EA."
