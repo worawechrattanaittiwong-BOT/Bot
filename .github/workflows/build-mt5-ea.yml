@@ -196,7 +196,7 @@ jobs:
             git commit -m "build: publish EA Brain V20 v$env:EA_VERSION [skip ea build]"
             if ($LASTEXITCODE -ne 0) { throw "Could not commit V20 artifact" }
             git push origin HEAD:main
-            if ($LASTEXITCODE -eq 0) { $published = true; break }
+            if ($LASTEXITCODE -eq 0) { $published = $true; break }
             Start-Sleep -Seconds 2
           }
 
