@@ -1612,6 +1612,17 @@ export class BotController {
           : "AUTO";
     }
 
+    const zeroGridSelected =
+      requestedControlMode === "ZERO_GRID" ||
+      (requestedControlMode === null && requestedEngineMode === "ZERO_GRID");
+    if (zeroGridSelected) {
+      clean.zeroGridStepPrice = 2;
+      clean.zeroGridLevelsPerSide = 3;
+      if (body.zeroGridBaseLot === undefined) clean.zeroGridBaseLot = 0.01;
+      if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;
+      if (body.zeroGridCloseReserveMoney === undefined) clean.zeroGridCloseReserveMoney = 0.2;
+    }
+
     if (body.entryMode !== undefined) {
       const entryMode = String(body.entryMode || "");
       if (!["AUTO_MOMENTUM", "BUY_ONLY", "SELL_ONLY"].includes(entryMode)) {

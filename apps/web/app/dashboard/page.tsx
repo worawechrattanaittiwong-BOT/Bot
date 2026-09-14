@@ -63,11 +63,11 @@ const defaultSettings = {
   indicatorV6Mode: "SOFT_WEIGHT",
   controlMode: undefined,
   engineMode: "AUTO",
-  zeroGridStepPrice: 3,
-  zeroGridLevelsPerSide: 30,
-  zeroGridBaseLot: 0.03,
-  zeroGridMinNetProfitMoney: 0.01,
-  zeroGridCloseReserveMoney: 0,
+  zeroGridStepPrice: 2,
+  zeroGridLevelsPerSide: 3,
+  zeroGridBaseLot: 0.01,
+  zeroGridMinNetProfitMoney: 0.5,
+  zeroGridCloseReserveMoney: 0.2,
   entryMode: "AUTO_MOMENTUM"
 };
 
@@ -113,11 +113,20 @@ export default function DashboardPage() {
       const d = await api("/bot/dashboard" + (slotId ? "?slotId=" + encodeURIComponent(slotId) : ""));
       setData(d);
       if (!settingsDirtyRef.current) {
-        setSettings({
+        const nextSettings:any = {
           ...defaultSettings,
           ...(d.settings || {}),
           ...(d.instance?.metrics?.symbol ? { symbol: d.instance.metrics.symbol } : {})
-        });
+        };
+        const loadedControlMode = String(nextSettings.controlMode || nextSettings.engineMode || "AUTO").toUpperCase();
+        if (loadedControlMode === "ZERO_GRID") {
+          nextSettings.zeroGridStepPrice = 2;
+          nextSettings.zeroGridLevelsPerSide = 3;
+          if (!Number.isFinite(Number(nextSettings.zeroGridBaseLot)) || Number(nextSettings.zeroGridBaseLot) <= 0) nextSettings.zeroGridBaseLot = 0.01;
+          if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 0.5;
+          if (!Number.isFinite(Number(nextSettings.zeroGridCloseReserveMoney)) || Number(nextSettings.zeroGridCloseReserveMoney) <= 0) nextSettings.zeroGridCloseReserveMoney = 0.2;
+        }
+        setSettings(nextSettings);
       }
       const resolvedSlotId = String(d.selectedSlot?.id || "");
       if (resolvedSlotId && resolvedSlotId !== selectedSlotIdRef.current) {
@@ -2759,7 +2768,7 @@ function BotSettingsModal(props:any) {
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"อัตโนมัติ",subtitle:"EA เลือกทิศทาง จุดเข้า และจังหวะปิดตามระบบปกติ"},
     RACE:{title:"โหมดซิ่ง",subtitle:"เร่งจังหวะเปิดไม้ 2× เพื่อไล่ให้ครบ Max Positions เร็วขึ้น โดยยังแยกการบริหารกำไร/การโดนลากจาก AUTO"},
-    ZERO_GRID:{title:"ZERO GRID",subtitle:"Pending Order ล้วนตามราคา · ไม่ใช้ Brain/Indicator และไม่เปิด Market Order ตอน Start · กำหนดจำนวน BUY STOP / SELL STOP ต่อฝั่งได้ตรงตัว"},
+    ZERO_GRID:{title:"ZERO GRID",subtitle:"BUY STOP + SELL STOP · 3 ระดับต่อฝั่ง"},
     ASSISTED:{title:"ช่วยตัดสินใจ",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณเลือกแนวทางบริหารรอบ"},
     MANUAL:{title:"กำหนดเอง",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณกำหนด Lot เป้ากำไร และ SL"}
   };
@@ -2772,6 +2781,11 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("engineMode","ZERO_GRID");
       props.onEdit?.("profitTargetMode","OFF");
       props.onEdit?.("manualStopLossPoints",0);
+      props.onEdit?.("zeroGridStepPrice",2);
+      props.onEdit?.("zeroGridLevelsPerSide",3);
+      if (!Number.isFinite(Number(props.settings?.zeroGridBaseLot)) || Number(props.settings?.zeroGridBaseLot) <= 0) props.onEdit?.("zeroGridBaseLot",0.01);
+      if (!Number.isFinite(Number(props.settings?.zeroGridMinNetProfitMoney)) || Number(props.settings?.zeroGridMinNetProfitMoney) <= 0.01) props.onEdit?.("zeroGridMinNetProfitMoney",0.5);
+      if (!Number.isFinite(Number(props.settings?.zeroGridCloseReserveMoney)) || Number(props.settings?.zeroGridCloseReserveMoney) <= 0) props.onEdit?.("zeroGridCloseReserveMoney",0.2);
       return;
     }
     // Keep the currently selected direction when switching control modes.
@@ -2846,21 +2860,22 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-fields">
                   <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="gold" size={17}/>Symbol</label><strong>{props.symbol || "—"}</strong></div>
                   {controlMode==="ZERO_GRID" ? <>
-                    <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>BUY STOP + SELL STOP</strong><small>ไม่ใช้ Brain/Indicator · บัญชี Netting จะล็อกฝั่งแรกหลัง Trigger</small></div>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะ Grid</span><NumberInput value={props.settings.zeroGridStepPrice} suffix="ราคา" onCommit={(v:string)=>props.onEdit?.("zeroGridStepPrice",v)}/><small>ระยะระหว่างระดับ · ไม้แรกหุบเข้าชิดราคาตาม Stops/Freeze และทุกระดับเว้นช่องไฟตาม Tick Size</small></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวน Pending ต่อฝั่ง</span><select className="input" value={String(props.settings.zeroGridLevelsPerSide||30)} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",e.target.value)}>{Array.from({length:30},(_,i)=>i+1).map(v=><option key={v} value={v}>{v} BUY STOP + {v} SELL STOP</option>)}</select><small>ตั้ง 5 = วาง BUY STOP 5 รายการ + SELL STOP 5 รายการ รวม 10 Pending · ไม่มี Market Order ตอนเริ่ม</small></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Base Lot</span><NumberInput value={props.settings.zeroGridBaseLot} suffix="Lot" onCommit={(v:string)=>props.onEdit?.("zeroGridBaseLot",v)}/><small>Level n = Base Lot × n · ปรับตาม Min/Max/Step ของโบรกเกอร์</small></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>กำไรสุทธิขั้นต่ำ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/><small>ค่าเริ่มต้น +0.01 หน่วยเงินบัญชี แล้วปิดทั้ง Basket ทันที</small></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="shield" size={17}/>สำรองค่าปิด</span><MoneyInput value={props.settings.zeroGridCloseReserveMoney} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridCloseReserveMoney",v)}/><small>หน่วยเงินบัญชี · เพิ่มเผื่อ Commission/Fees ตอน Close</small></label>
+                    <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>BUY STOP + SELL STOP</strong></div>
+                    <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="layers" size={17}/>ระยะ Grid</label><strong>2.00</strong></div>
+                    <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="layers" size={17}/>Pending ต่อฝั่ง</label><strong>3 BUY STOP + 3 SELL STOP</strong></div>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Base Lot</span><NumberInput value={props.settings.zeroGridBaseLot || 0.01} suffix="Lot" onCommit={(v:string)=>props.onEdit?.("zeroGridBaseLot",v)}/></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>กำไรสุทธิขั้นต่ำ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="shield" size={17}/>สำรองค่าปิด</span><MoneyInput value={props.settings.zeroGridCloseReserveMoney || 0.2} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridCloseReserveMoney",v)}/></label>
                   </> : <>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ · EA เลือก BUY / SELL</option><option value="BUY_ONLY">BUY เท่านั้น</option><option value="SELL_ONLY">SELL เท่านั้น</option></select><small>{entryMode === "AUTO_MOMENTUM" ? "M1 / M5 / M15 / M30 / H1 วิเคราะห์ทิศทางอัตโนมัติ" : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า"}</small></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</span><select className="input" value={String(props.settings.maxPositions||1)} onChange={e=>props.onEdit?.("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
                   </>}
                 </div>
-                <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>{controlMode==="ZERO_GRID"?"ZERO GRID · รองรับบัญชี MT5":"Basket Ladder อัตโนมัติ"}</b><span>{controlMode==="ZERO_GRID"?"Pending เท่านั้น · Start แล้ววาง BUY STOP / SELL STOP ตามจำนวนที่ตั้ง · ไม่ใช้สมอง EA · รองรับ Hedging/Netting":"EA กระจายจังหวะเพิ่มไม้ตาม ATR และแรงตลาด"}</span></div>
+                {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>Basket Ladder อัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มไม้ตาม ATR และแรงตลาด</span></div>}
               </section>
 
+              {controlMode!=="ZERO_GRID"&&(
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>เป้ากำไรและ Stop Loss</b><small>{controlMode==="MANUAL"?"ระบุค่าปิดออเดอร์ด้วยตนเอง":"EA ปรับทางออกตามโครงสร้างและความผันผวน"}</small></div></div>
                 {controlMode!=="MANUAL" ? <div className="cc-bot-v2-auto-grid">
@@ -2878,7 +2893,9 @@ function BotSettingsModal(props:any) {
                   </div>
                 </div>}
               </section>
+              )}
 
+              {controlMode!=="ZERO_GRID"&&(
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>04</span><div><b>ขีดจำกัดของรอบเทรด</b><small>เปิดเฉพาะวงเงินที่ต้องการใช้</small></div></div>
                 <div className="cc-bot-v2-limit-grid">
@@ -2887,10 +2904,19 @@ function BotSettingsModal(props:any) {
                   <div><div><ScenovaIcon name="target" size={18}/><span><b>เป้ากำไรต่อวัน</b><small>หยุดเมื่อกำไรรวมวันนี้ถึงเป้า</small></span></div><ToggleMoneyField label="เปิดใช้งาน" defaultValue="10" value={props.settings.dailyProfitTargetMoney} suffix="USD / วัน" onChange={(v:string)=>props.onEdit?.("dailyProfitTargetMoney",v)}/></div>
                 </div>
               </section>
+              )}
             </main>
 
             <aside className="cc-bot-v2-summary">
               <div className="cc-bot-v2-summary-head"><span><ScenovaIcon name="status" size={19}/></span><div><small>แผนที่จะบันทึก</small><b>{modeCopy[controlMode].title}</b></div><i/></div>
+              {controlMode==="ZERO_GRID" ? <dl>
+                <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>
+                <div><dt>Pending</dt><dd>3 BUY + 3 SELL</dd></div>
+                <div><dt>Grid</dt><dd>2.00</dd></div>
+                <div><dt>Base Lot</dt><dd>{Number(props.settings.zeroGridBaseLot||0.01).toFixed(2)} Lot</dd></div>
+                <div><dt>กำไรสุทธิขั้นต่ำ</dt><dd>${Number(props.settings.zeroGridMinNetProfitMoney||0.5).toFixed(2)}</dd></div>
+                <div><dt>สำรองค่าปิด</dt><dd>${Number(props.settings.zeroGridCloseReserveMoney||0.2).toFixed(2)}</dd></div>
+              </dl> : (
               <dl>
                 <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>
                 <div><dt>ทิศทาง</dt><dd>{directionLabel}</dd></div>
@@ -2899,13 +2925,14 @@ function BotSettingsModal(props:any) {
                 <div><dt>Stop Loss</dt><dd>{slLabel}</dd></div>
                 <div><dt>EA Sync</dt><dd className="good">{props.syncLabel || "พร้อมส่งค่า"}</dd></div>
               </dl>
-              <div className="cc-bot-v2-summary-note"><ScenovaIcon name="brain" size={17}/><span><b>Setup-First 5 TF</b><small>แนวรับ–แนวต้าน · Order Block · Fibonacci · Momentum</small></span></div>
+              )}
+              {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="brain" size={17}/><span><b>Setup-First 5 TF</b><small>แนวรับ–แนวต้าน · Order Block · Fibonacci · Momentum</small></span></div>}
             </aside>
           </div>
         </div>
 
         <div className="cc-bot-modal-footer cc-bot-v2-footer">
-          <div><ScenovaIcon name="info" size={16}/><span>ค่าที่แสดงทั้งหมดเชื่อมกับคำสั่งของ EA โดยตรง</span></div>
+          <div/>
           <div><button type="button" className="btn" onClick={()=>props.onClose?.()} disabled={props.busy}>ยกเลิก</button><button type="button" className="btn cc-save-primary" disabled={props.busy||!props.dirty} onClick={props.onSave}><ScenovaIcon name="save" size={17}/>{props.busy?"กำลังบันทึก...":"บันทึกและส่งให้ EA"}</button></div>
         </div>
       </div>
