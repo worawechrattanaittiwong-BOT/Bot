@@ -1,4 +1,4 @@
-name: Repair ZERO Settings And Smoke
+name: Repair ZERO Settings
 
 on:
   push:
@@ -18,8 +18,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply repair
-        run: python3 scripts/repair_zero_settings_and_smoke.py
+      - name: Apply ZERO settings repair
+        run: |
+          python3 scripts/repair_zero_settings_and_smoke.py
+          git checkout -- .github/workflows/integration-smoke.yml
 
       - name: Build web and API
         run: |
@@ -27,13 +29,12 @@ jobs:
           npm run build -w @bot/web
           npm run build -w @bot/api
 
-      - name: Commit repaired files
+      - name: Commit ZERO settings repair
         run: |
           git config user.name "SCENOVA CI"
           git config user.email "actions@users.noreply.github.com"
-          git rm .github/workflows/apply-auto-race-profit-lock-v104.yml
-          git rm scripts/repair_zero_settings_and_smoke.py
-          git add apps/web/app/dashboard/page.tsx apps/api/src/bot.controller.ts .github/workflows/integration-smoke.yml
+          git add apps/web/app/dashboard/page.tsx apps/api/src/bot.controller.ts
           git diff --cached --check
-          git commit -m "fix: lock ZERO grid defaults and repair smoke test"
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "fix: lock ZERO grid defaults"
           git push origin HEAD:main
