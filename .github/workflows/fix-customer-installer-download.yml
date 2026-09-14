@@ -1,0 +1,212 @@
+name: Fix Customer Installer Download
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fix-customer-installer-download.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Patch customer installer flow
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              if old not in text:
+                  raise SystemExit(f"target block not found in {path}")
+              text = text.replace(old, new, 1)
+              p.write_text(text, encoding="utf-8", newline="\n")
+
+          page = "apps/web/app/dashboard/page.tsx"
+          old_page = '''  async function downloadInstallerForSlot(slotId: string) {
+              const result = await api("/bot/installers/windows", {
+                method: "POST",
+                body: JSON.stringify({ slotId: slotId || undefined })
+              });
+              if (!result?.downloadPath || !result?.fileName) {
+                throw new Error("ยังไม่มี SCENOVA Windows Installer พร้อมดาวน์โหลด");
+              }
+
+              const response = await fetch(result.downloadPath, { cache: "no-store" });
+              if (!response.ok) {
+                throw new Error("ไฟล์ SCENOVA Installer ยังไม่พร้อม กรุณาลองอีกครั้งหลังระบบ Build เสร็จ");
+              }
+              const blob = await response.blob();
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = result.fileName;
+              link.style.display = "none";
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+              return result;
+            }
+          '''.replace('              ', '    ')
+          new_page = '''  function submitInstallerDownload(code: string, version: string) {
+              if (typeof document === "undefined") {
+                throw new Error("เบราว์เซอร์ยังไม่พร้อมดาวน์โหลด SCENOVA Installer");
+              }
+              const form = document.createElement("form");
+              form.method = "POST";
+              form.action = "/installer-download";
+              form.style.display = "none";
+              const addField = (name: string, value: string) => {
+                const input = document.createElement("input");
+                input.type = "hidden";
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+              };
+              addField("code", code);
+              addField("version", version);
+              document.body.appendChild(form);
+              form.submit();
+              window.setTimeout(() => form.remove(), 1000);
+            }
+
+            async function downloadInstallerForSlot(slotId: string) {
+              const result = await api("/bot/installers/windows", {
+                method: "POST",
+                body: JSON.stringify({ slotId: slotId || undefined })
+              });
+              const code = String(result?.code || "").trim();
+              const version = String(result?.installerVersion || "").trim();
+              if (!code || !version) {
+                throw new Error("ยังไม่มี SCENOVA Windows Installer สำหรับบัญชีนี้");
+              }
+              submitInstallerDownload(code, version);
+              return result;
+            }
+          '''.replace('            ', '  ', 1)
+          # Keep indentation exactly two spaces at function scope.
+          new_page = new_page.replace('\n            ', '\n  ')
+          replace_once(page, old_page, new_page)
+
+          controls = "apps/web/components/Mt5ManualActionControls.tsx"
+          old_controls = '''  function downloadInstaller() {
+            if (typeof document === "undefined") return;
+            const separator = installerDownloadPath.includes("?") ? "&" : "?";
+            const link = document.createElement("a");
+            link.href = installerDownloadPath + separator + "v=" + encodeURIComponent(installerVersion) + "&t=" + Date.now();
+            link.download = "";
+            link.rel = "noopener";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+          }
+          '''.replace('          ', '')
+          new_controls = '''  async function downloadInstaller() {
+            if (typeof document === "undefined" || !slotId) return false;
+            const result = await api("/bot/installers/windows", {
+              method: "POST",
+              body: JSON.stringify({ slotId })
+            });
+            const code = String(result?.code || "").trim();
+            const version = String(result?.installerVersion || installerVersion || "").trim();
+            if (!code || !version) {
+              throw new Error("ยังไม่มี SCENOVA Windows Installer สำหรับบัญชีนี้");
+            }
+
+            const form = document.createElement("form");
+            form.method = "POST";
+            form.action = "/installer-download";
+            form.style.display = "none";
+            for (const [name, value] of [["code", code], ["version", version]]) {
+              const input = document.createElement("input");
+              input.type = "hidden";
+              input.name = name;
+              input.value = value;
+              form.appendChild(input);
+            }
+            document.body.appendChild(form);
+            form.submit();
+            window.setTimeout(() => form.remove(), 1000);
+            return true;
+          }
+          '''.replace('          ', '')
+          replace_once(controls, old_controls, new_controls)
+          p = Path(controls)
+          text = p.read_text(encoding="utf-8")
+          text = text.replace("      downloadInstaller();\n", "      await downloadInstaller();\n")
+          p.write_text(text, encoding="utf-8", newline="\n")
+
+          runtime = "tools/windows-installer/Runtime.cs"
+          old_runtime = '''        if (code.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+        {
+            var separator = code.IndexOf('-');
+            if (separator > 1 &&
+                Version.TryParse(code[1..separator], out _))
+            {
+                code = code[(separator + 1)..].Trim();
+            }
+        }
+
+        return code.Length >= 12 ? code : null;
+          '''.replace('          ', '')
+          new_runtime = '''        if (code.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+        {
+            var separator = code.IndexOf('-');
+            if (separator > 1 &&
+                Version.TryParse(code[1..separator], out _))
+            {
+                code = code[(separator + 1)..].Trim();
+            }
+        }
+
+        // Windows/Chrome/Edge can append " (1)", " (2)", ... when the same
+        // personalized installer is downloaded more than once. Do not send that
+        // local duplicate suffix to the enrollment API.
+        var duplicateMarker = code.LastIndexOf(" (", StringComparison.Ordinal);
+        if (duplicateMarker > 0 && code.EndsWith(")", StringComparison.Ordinal))
+        {
+            var suffix = code[(duplicateMarker + 2)..^1];
+            if (int.TryParse(suffix, out _))
+                code = code[..duplicateMarker].Trim();
+        }
+
+        return code.Length >= 12 ? code : null;
+          '''.replace('          ', '')
+          replace_once(runtime, old_runtime, new_runtime)
+
+      - name: Verify personalized download code paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'form.action = "/installer-download"' apps/web/app/dashboard/page.tsx
+          grep -q 'form.action = "/installer-download"' apps/web/components/Mt5ManualActionControls.tsx
+          grep -q 'duplicateMarker' tools/windows-installer/Runtime.cs
+          test -f apps/web/app/installer-download/route.ts
+          ! grep -A35 'async function downloadInstallerForSlot' apps/web/app/dashboard/page.tsx | grep -q 'response.blob'
+
+      - name: Commit customer installer fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Patch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/web/app/dashboard/page.tsx apps/web/components/Mt5ManualActionControls.tsx tools/windows-installer/Runtime.cs
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: make customer installer download reliable"
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then exit 0; fi
+            sleep 2
+          done
+          exit 1
