@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.5"
-#define SCENOVA_EA_VERSION "1.0.5"
-#define SCENOVA_PRODUCT_VERSION "1.0.5"
+#property version   "1.0.6"
+#define SCENOVA_EA_VERSION "1.0.6"
+#define SCENOVA_PRODUCT_VERSION "1.0.6"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -3151,16 +3151,16 @@ void OnTick()
    // broker-permission interruption. Once control is healthy again, an open
    // Basket below Max Positions is automatically re-armed instead of being
    // stranded forever in BASKET_MANAGING with only one or two positions.
-   if(!AutoV20Enabled() && BasketFillEnabled() && count > 0 && !g_burstActive && count < g_maxPositions)
+   if(LegacyBasketEngineEnabled() && BasketFillEnabled() && count > 0 && !g_burstActive && count < g_maxPositions)
       BrainV16RearmExistingBasket();
 
-   if(!AutoV20Enabled() && BasketFillEnabled() && g_burstActive)
+   if(LegacyBasketEngineEnabled() && BasketFillEnabled() && g_burstActive)
    {
       ProcessBurstQueue();
       return;
    }
 
-   if(!AutoV20Enabled() && BasketFillEnabled() && count > 0)
+   if(LegacyBasketEngineEnabled() && BasketFillEnabled() && count > 0)
    {
       g_executionStatus = g_burstTargetPositions > 0 && g_burstRequestsSent >= g_burstTargetPositions
          ? "BASKET_FILL_COMPLETE"
@@ -3250,10 +3250,10 @@ void OnTick()
    bool sent = SendMarketOrder(direction);
    if(sent && AutoV20Enabled())
       AutoV20OnOrderSent(direction);
-   if(sent || (!AutoV20Enabled() && BasketFillEnabled() && !g_tacticalCountertrendActive))
+   if(sent || (LegacyBasketEngineEnabled() && BasketFillEnabled() && !g_tacticalCountertrendActive))
    {
       RegisterOrderRequest();
-      if(!AutoV20Enabled() && BasketFillEnabled() && !g_tacticalCountertrendActive)
+      if(LegacyBasketEngineEnabled() && BasketFillEnabled() && !g_tacticalCountertrendActive)
          ArmBurst(direction);
    }
 }
@@ -3266,7 +3266,7 @@ void OnTimer()
 
    if(MQLInfoInteger(MQL_TESTER))
    {
-      if(!AutoV20Enabled())
+      if(LegacyBasketEngineEnabled())
       {
          BrainV16RearmExistingBasket();
          ProcessBurstQueue();
@@ -3289,7 +3289,7 @@ void OnTimer()
       SendHeartbeat();
    }
    FlushPendingBasketJournal();
-   if(!AutoV20Enabled())
+   if(LegacyBasketEngineEnabled())
    {
       BrainV16RearmExistingBasket();
       ProcessBurstQueue();
@@ -4690,6 +4690,24 @@ bool BasketFillEnabled()
    return g_maxPositions > 1;
 }
 
+bool LegacyBasketEngineEnabled()
+{
+   // ASSISTED/MANUAL use the legacy basket queue. ZERO and RACE never do.
+   return EffectiveExecutionMode() == "AUTO" && !AutoV20Enabled();
+}
+
+void ResetLegacyBurstStateForIsolatedMode()
+{
+   g_burstActive = false;
+   g_burstNeedsRearm = false;
+   g_burstDirection = 0;
+   g_burstTargetPositions = 0;
+   g_burstRequestsSent = 0;
+   g_burstStartedAt = 0;
+   g_burstTargetMoney = 0.0;
+   g_burstLossMoney = 0.0;
+}
+
 void ApplyUnifiedTradingEngine()
 {
    // One transparent engine for every account. Users control Lot, direction,
@@ -4859,6 +4877,12 @@ void ApplySettings(string json)
       else if(g_engineMode == "RACE") g_controlMode = "RACE";
       else if(g_controlMode == "ZERO_GRID" || g_controlMode == "RACE" || g_controlMode == "LEGACY") g_controlMode = "AUTO";
    }
+
+   // A legacy AUTO burst must never survive a transition into an isolated mode.
+   // Existing non-ZERO/non-RACE positions may still drain under generic safety
+   // management, but no legacy queue can add orders after the mode switch.
+   if(EffectiveExecutionMode() == "ZERO_GRID" || EffectiveExecutionMode() == "RACE")
+      ResetLegacyBurstStateForIsolatedMode();
 
    string mode = JsonString(json, "entryMode", "");
    if(mode == "BUY_ONLY") g_entryMode = ENTRY_BUY_ONLY;
@@ -12427,7 +12451,7 @@ bool BrainV16BalancedAddReady(
 
 bool BrainV16RearmExistingBasket()
 {
-   if(!BasketFillEnabled() || g_burstActive)
+   if(!LegacyBasketEngineEnabled() || !BasketFillEnabled() || g_burstActive)
       return false;
 
    int count = BasketPositionCount();
@@ -12805,7 +12829,7 @@ void AbortBurst(string reason)
 
 void ProcessBurstQueue()
 {
-   if(!BasketFillEnabled() || !g_burstActive)
+   if(!LegacyBasketEngineEnabled() || !BasketFillEnabled() || !g_burstActive)
       return;
 
    if(g_state != STATE_RUNNING || !g_access ||
