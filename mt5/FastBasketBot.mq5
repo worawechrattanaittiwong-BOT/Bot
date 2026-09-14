@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.2"
-#define SCENOVA_EA_VERSION "1.0.2"
-#define SCENOVA_PRODUCT_VERSION "1.0.2"
+#property version   "1.0.3"
+#define SCENOVA_EA_VERSION "1.0.3"
+#define SCENOVA_PRODUCT_VERSION "1.0.3"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -1697,6 +1697,7 @@ void ResetZeroGridCycleState()
 int ZeroGridPositionCount()
 {
    LoadZeroGridCycleState();
+    LoadZeroGridCycleState();
    int count=0;
    for(int i=PositionsTotal()-1;i>=0;i--)
    {
@@ -1836,9 +1837,15 @@ double ZeroGridMinPendingDistancePrice()
    return MathMax(ZeroGridTickSize(),brokerDistance);
 }
 
+// ZERO GRID V2.1 geometry: the first entry hugs the live market at the broker-safe
+// Stops/Freeze boundary, while the configured Grid Step is reserved for spacing
+// BETWEEN levels. This avoids compressed/duplicate pending prices when price moves.
 double ZeroGridEffectiveStepPrice()
 {
-   return MathMax(g_zeroGridStepPrice,ZeroGridMinPendingDistancePrice()+ZeroGridTickSize());
+   double tick=ZeroGridTickSize();
+   double requested=MathMax(g_zeroGridStepPrice,tick);
+   double units=MathCeil((requested/tick)-1e-10);
+   return NormalizeDouble(units*tick,_Digits);
 }
 
 double ZeroGridNormalizePendingPrice(bool buySide,double rawPrice)
@@ -1849,6 +1856,54 @@ double ZeroGridNormalizePendingPrice(bool buySide,double rawPrice)
       ? MathCeil(units-1e-10)*tick
       : MathFloor(units+1e-10)*tick;
    return NormalizeDouble(price,_Digits);
+}
+
+double ZeroGridExistingPendingAnchorPrice(bool buySide)
+{
+   string prefix=buySide ? "SaaSZeroGridB" : "SaaSZeroGridS";
+   double step=ZeroGridEffectiveStepPrice();
+   for(int i=OrdersTotal()-1;i>=0;i--)
+   {
+      ulong ticket=OrderGetTicket(i);
+      if(ticket==0 || !OrderSelect(ticket)) continue;
+      if(OrderGetString(ORDER_SYMBOL)!=_Symbol || OrderGetInteger(ORDER_MAGIC)!=InpMagic) continue;
+      string comment=OrderGetString(ORDER_COMMENT);
+      if(StringFind(comment,prefix)!=0) continue;
+      int level=(int)StringToInteger(StringSubstr(comment,StringLen(prefix)));
+      if(level<1) continue;
+      double orderPrice=OrderGetDouble(ORDER_PRICE_OPEN);
+      double anchor=buySide
+         ? orderPrice-step*(level-1)
+         : orderPrice+step*(level-1);
+      return ZeroGridNormalizePendingPrice(buySide,anchor);
+   }
+   return 0.0;
+}
+
+double ZeroGridPendingAnchorPrice(bool buySide)
+{
+   double existing=ZeroGridExistingPendingAnchorPrice(buySide);
+   if(existing>0.0) return existing;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick)) return 0.0;
+
+   // Opening geometry: level 1 sits as close to live price as the broker permits.
+   double entryBuffer=ZeroGridMinPendingDistancePrice()+ZeroGridTickSize();
+   double raw=buySide ? tick.ask+entryBuffer : tick.bid-entryBuffer;
+   return ZeroGridNormalizePendingPrice(buySide,raw);
+}
+
+double ZeroGridPendingLevelPrice(bool buySide,int level)
+{
+   if(level<1) return 0.0;
+   double anchor=ZeroGridPendingAnchorPrice(buySide);
+   if(anchor<=0.0) return 0.0;
+   double step=ZeroGridEffectiveStepPrice();
+   double raw=buySide
+      ? anchor+step*(level-1)
+      : anchor-step*(level-1);
+   return ZeroGridNormalizePendingPrice(buySide,raw);
 }
 
 int ZeroGridPositionDirection()
@@ -1891,24 +1946,12 @@ bool ZeroGridSendPending(bool buySide,int level)
       g_executionStatus="ZERO_GRID_INVALID_LOT";
       return false;
    }
-
-   MqlTick tick;
-   if(!SymbolInfoTick(_Symbol,tick))
+   double price=ZeroGridPendingLevelPrice(buySide,level);
+   if(price<=0.0)
    {
       g_executionStatus="ZERO_GRID_WAIT_TICK";
       return false;
    }
-
-   double gridStep=ZeroGridEffectiveStepPrice();
-   double minDistance=ZeroGridMinPendingDistancePrice();
-   double rawPrice=buySide
-      ? g_zeroGridCenter + gridStep * level
-      : g_zeroGridCenter - gridStep * level;
-   if(buySide)
-      rawPrice=MathMax(rawPrice,tick.ask+minDistance);
-   else
-      rawPrice=MathMin(rawPrice,tick.bid-minDistance);
-   double price=ZeroGridNormalizePendingPrice(buySide,rawPrice);
 
    MqlTradeRequest request={};
    MqlTradeResult result={};
@@ -1997,15 +2040,58 @@ void ZeroGridCancelPending()
    }
 }
 
-void ZeroGridClosePositions()
+// Profit exit geometry: on Hedging accounts close one owned position at a time,
+// starting with a profitable ticket nearest live price, then progressively outward.
+// Netting naturally has one symbol position, so the same routine is compatible.
+ulong ZeroGridNearestCloseTicket()
 {
+   MqlTick tick;
+   bool hasTick=SymbolInfoTick(_Symbol,tick);
+   double mid=hasTick ? (tick.bid+tick.ask)*0.5 : 0.0;
+   double tolerance=MathMax(ZeroGridTickSize()*0.5,_Point*0.5);
+   ulong bestTicket=0;
+   int bestProfitRank=99;
+   double bestDistance=1.0e100;
+   double bestOpenPrice=-1.0e100;
+
    for(int i=PositionsTotal()-1;i>=0;i--)
    {
       ulong ticket=PositionGetTicket(i);
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
-      ClosePositionByTicket(ticket);
+
+      double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
+      double floating=PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
+      int profitRank=floating>=0.0 ? 0 : 1;
+      double distance=hasTick ? MathAbs(openPrice-mid) : 0.0;
+
+      bool better=false;
+      if(bestTicket==0 || profitRank<bestProfitRank)
+         better=true;
+      else if(profitRank==bestProfitRank)
+      {
+         if(distance<bestDistance-tolerance)
+            better=true;
+         else if(MathAbs(distance-bestDistance)<=tolerance && openPrice>bestOpenPrice)
+            better=true;
+      }
+
+      if(better)
+      {
+         bestTicket=ticket;
+         bestProfitRank=profitRank;
+         bestDistance=distance;
+         bestOpenPrice=openPrice;
+      }
    }
+   return bestTicket;
+}
+
+void ZeroGridClosePositions()
+{
+   ulong ticket=ZeroGridNearestCloseTicket();
+   if(ticket==0) return;
+   ClosePositionByTicket(ticket);
 }
 
 bool StartZeroGridCycle()

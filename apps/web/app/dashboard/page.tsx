@@ -2818,7 +2818,7 @@ function BotSettingsModal(props:any) {
                   <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="gold" size={17}/>Symbol</label><strong>{props.symbol || "—"}</strong></div>
                   {controlMode==="ZERO_GRID" ? <>
                     <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>BUY STOP + SELL STOP</strong><small>ไม่ใช้ Brain/Indicator · บัญชี Netting จะล็อกฝั่งแรกหลัง Trigger</small></div>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะ Grid</span><NumberInput value={props.settings.zeroGridStepPrice} suffix="ราคา" onCommit={(v:string)=>props.onEdit?.("zeroGridStepPrice",v)}/><small>ค่าเริ่มต้น 3.00 หน่วยราคา · ระบบปรับขั้นต่ำตาม Tick/Stops Level ของ Symbol</small></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะ Grid</span><NumberInput value={props.settings.zeroGridStepPrice} suffix="ราคา" onCommit={(v:string)=>props.onEdit?.("zeroGridStepPrice",v)}/><small>ระยะระหว่างระดับ · ไม้แรกหุบเข้าชิดราคาตาม Stops/Freeze และทุกระดับเว้นช่องไฟตาม Tick Size</small></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระดับต่อฝั่ง</span><select className="input" value={String(props.settings.zeroGridLevelsPerSide||30)} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",e.target.value)}>{[5,10,15,20,25,30].map(v=><option key={v} value={v}>{v} ระดับ / ฝั่ง</option>)}</select></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Base Lot</span><NumberInput value={props.settings.zeroGridBaseLot} suffix="Lot" onCommit={(v:string)=>props.onEdit?.("zeroGridBaseLot",v)}/><small>Level n = Base Lot × n · ปรับตาม Min/Max/Step ของโบรกเกอร์</small></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>กำไรสุทธิขั้นต่ำ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/><small>ค่าเริ่มต้น +0.01 หน่วยเงินบัญชี แล้วปิดทั้ง Basket ทันที</small></label>
@@ -2829,7 +2829,7 @@ function BotSettingsModal(props:any) {
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
                   </>}
                 </div>
-                <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>{controlMode==="ZERO_GRID"?"ZERO GRID · รองรับบัญชี MT5":"Basket Ladder อัตโนมัติ"}</b><span>{controlMode==="ZERO_GRID"?"Demo/Real · Hedging/Netting · ปรับ Tick, Stops Level และ Lot Step ตามโบรกเกอร์อัตโนมัติ":"EA กระจายจังหวะเพิ่มไม้ตาม ATR และแรงตลาด"}</span></div>
+                <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>{controlMode==="ZERO_GRID"?"ZERO GRID · รองรับบัญชี MT5":"Basket Ladder อัตโนมัติ"}</b><span>{controlMode==="ZERO_GRID"?"Demo/Real · เปิด Grid หุบเข้าชิดราคา · ปิดจากไม้ใกล้ราคาไล่ออก · รองรับ Hedging/Netting":"EA กระจายจังหวะเพิ่มไม้ตาม ATR และแรงตลาด"}</span></div>
               </section>
 
               <section className="cc-bot-v2-panel">
