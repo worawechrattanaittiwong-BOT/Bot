@@ -1,3 +1,4 @@
+# Trigger the existing one-shot workflow to align the stale smoke test.
 name: Apply Integration Account Follow
 
 on:
