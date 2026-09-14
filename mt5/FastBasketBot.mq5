@@ -156,12 +156,13 @@ input ENUM_ENTRY_MODE InpEntryMode            = ENTRY_AUTO_MOMENTUM;
 // AUTO preserves the normal engine exactly. RACE is an isolated high-speed
 // execution mode selected from the web and never changes AUTO entry logic.
 input string          InpEngineMode           = "AUTO";
-// ZERO GRID is isolated from AUTO/RACE and supports MT5 Demo/Real on Hedging/Netting accounts.
+// ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
+#define ZERO_GRID_MAX_LEVELS 3
 input double          InpZeroGridStepPrice     = 3.0;
-input int             InpZeroGridLevelsPerSide = 30;
-input double          InpZeroGridBaseLot       = 0.03;
-input double          InpZeroGridMinNetProfitMoney = 0.01;
-input double          InpZeroGridCloseReserveMoney = 0.00;
+input int             InpZeroGridLevelsPerSide = ZERO_GRID_MAX_LEVELS;
+input double          InpZeroGridBaseLot       = 0.01;
+input double          InpZeroGridMinNetProfitMoney = 0.50;
+input double          InpZeroGridCloseReserveMoney = 0.20;
 
 input int             InpMomentumTicks        = 20;
 input double          InpMomentumEntryPoints  = 8.0;
@@ -260,10 +261,10 @@ string g_controlMode = "LEGACY";
 // Never allow AUTO/legacy entry before the Server has delivered a real mode.
 bool   g_settingsSynchronized = false;
 double g_zeroGridStepPrice = 3.0;
-int    g_zeroGridLevelsPerSide = 30;
-double g_zeroGridBaseLot = 0.03;
-double g_zeroGridMinNetProfitMoney = 0.01;
-double g_zeroGridCloseReserveMoney = 0.0;
+int    g_zeroGridLevelsPerSide = ZERO_GRID_MAX_LEVELS;
+double g_zeroGridBaseLot = 0.01;
+double g_zeroGridMinNetProfitMoney = 0.50;
+double g_zeroGridCloseReserveMoney = 0.20;
 double g_zeroGridCenter = 0.0;
 double g_zeroGridStartEquity = 0.0;
 datetime g_zeroGridCycleStartedAt = 0;
@@ -1327,9 +1328,9 @@ int OnInit()
    StringToUpper(g_engineMode);
    if(g_engineMode != "RACE" && g_engineMode != "ZERO_GRID")
       g_engineMode = "AUTO";
-   g_zeroGridStepPrice = MathMax(_Point, InpZeroGridStepPrice);
-   g_zeroGridLevelsPerSide = (int)MathMax(1, MathMin(30, InpZeroGridLevelsPerSide));
-   g_zeroGridBaseLot = MathMax(0.0001, InpZeroGridBaseLot);
+   g_zeroGridStepPrice = MathAbs(InpZeroGridStepPrice-2.0)<0.000001 ? 2.0 : 3.0;
+   g_zeroGridLevelsPerSide = ZERO_GRID_MAX_LEVELS;
+   g_zeroGridBaseLot = MathMax(0.01, InpZeroGridBaseLot);
    g_zeroGridMinNetProfitMoney = MathMax(0.01, InpZeroGridMinNetProfitMoney);
    g_zeroGridCloseReserveMoney = MathMax(0.0, InpZeroGridCloseReserveMoney);
    g_adaptiveEngine = InpAdaptiveEngine;
@@ -1650,10 +1651,22 @@ bool ZeroGridModeEnabled()
    return EffectiveExecutionMode() == "ZERO_GRID";
 }
 
+double ZeroGridAllowedStep(double requested)
+{
+   return MathAbs(requested-2.0)<0.000001 ? 2.0 : 3.0;
+}
+
 bool ZeroGridAccountIsHedging()
 {
    ENUM_ACCOUNT_MARGIN_MODE mode=(ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE);
    return mode == ACCOUNT_MARGIN_MODE_RETAIL_HEDGING;
+}
+
+bool ZeroGridHedgingAllowed()
+{
+   if(MQLInfoInteger(MQL_TESTER))
+      return true;
+   return ZeroGridAccountIsHedging();
 }
 
 bool ZeroGridAccountIsNetting()
@@ -1952,8 +1965,7 @@ double ZeroGridEffectiveStepPrice()
 
 int ZeroGridEffectiveLevelsPerSide()
 {
-   int source=g_zeroGridCycleLevelsPerSide>0 ? g_zeroGridCycleLevelsPerSide : g_zeroGridLevelsPerSide;
-   return (int)MathMax(1,MathMin(30,source));
+   return ZERO_GRID_MAX_LEVELS;
 }
 
 double ZeroGridEffectiveBaseLot()
@@ -1988,7 +2000,7 @@ bool ZeroGridRequestedConfigChanged()
    double tick=ZeroGridTickSize();
    double requestedStep=MathMax(g_zeroGridStepPrice,tick);
    requestedStep=NormalizeDouble(MathCeil((requestedStep/tick)-1e-10)*tick,_Digits);
-   int requestedLevels=(int)MathMax(1,MathMin(30,g_zeroGridLevelsPerSide));
+   int requestedLevels=ZERO_GRID_MAX_LEVELS;
    double requestedLot=MathMax(0.0001,g_zeroGridBaseLot);
    return MathAbs(requestedStep-ZeroGridEffectiveStepPrice())>tick*0.5 ||
           requestedLevels!=ZeroGridEffectiveLevelsPerSide() ||
@@ -2470,6 +2482,12 @@ void ZeroGridClosePositions()
 bool StartZeroGridCycle()
 {
    if(!ZeroGridModeEnabled()) return false;
+   if(!ZeroGridHedgingAllowed())
+   {
+      ZeroGridCancelPending();
+      g_executionStatus="ZERO_GRID_HEDGING_REQUIRED";
+      return true;
+   }
    if(g_state!=STATE_RUNNING || !g_access || (!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid()))
    {
       g_executionStatus="ZERO_GRID_CONTROL_NOT_FRESH";
@@ -2501,9 +2519,9 @@ bool StartZeroGridCycle()
       g_zeroGridStartEquity=AccountInfoDouble(ACCOUNT_EQUITY);
       g_zeroGridCycleStartedAt=TimeCurrent();
       g_zeroGridClosing=false;
-      g_zeroGridCycleStepPrice=MathMax(ZeroGridTickSize(),g_zeroGridStepPrice);
-      g_zeroGridCycleLevelsPerSide=(int)MathMax(1,MathMin(30,g_zeroGridLevelsPerSide));
-      g_zeroGridCycleBaseLot=MathMax(0.0001,g_zeroGridBaseLot);
+      g_zeroGridCycleStepPrice=MathMax(ZeroGridTickSize(),ZeroGridAllowedStep(g_zeroGridStepPrice));
+      g_zeroGridCycleLevelsPerSide=ZERO_GRID_MAX_LEVELS;
+      g_zeroGridCycleBaseLot=MathMax(0.01,g_zeroGridBaseLot);
       // ZERO owns its own fresh placement budget. Orders from a previously active
       // AUTO/RACE mode must never prevent BUY L1 / SELL L1 from being staged.
       g_orderWindowStart=TimeCurrent();
@@ -2530,9 +2548,18 @@ bool ManageZeroGrid()
       ZeroGridClosePositions();
       if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)
       {
+         bool canRearm=
+            ZeroGridModeEnabled() && ZeroGridHedgingAllowed() &&
+            g_state==STATE_RUNNING && g_access &&
+            (MQLInfoInteger(MQL_TESTER) || EntryLeaseValid());
          double realized=ZeroGridCycleNet();
          Print("ZERO GRID V3 cycle closed net=",DoubleToString(realized,2));
          ResetZeroGridCycleState();
+         if(canRearm)
+         {
+            g_executionStatus="ZERO_GRID_REARMING";
+            return StartZeroGridCycle();
+         }
          g_executionStatus="ZERO_GRID_V3_CLOSED";
       }
       else
@@ -5242,9 +5269,9 @@ void ApplySettings(string json)
    g_lastAdaptiveEvaluation = 0;
    g_lastIndicatorV6RefreshAt = 0;
 
-   g_zeroGridStepPrice = MathMax(_Point, JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));
-   g_zeroGridLevelsPerSide = (int)MathMax(1.0, MathMin(30.0, JsonNumber(json, "zeroGridLevelsPerSide", g_zeroGridLevelsPerSide)));
-   g_zeroGridBaseLot = MathMax(0.0001, JsonNumber(json, "zeroGridBaseLot", g_zeroGridBaseLot));
+   g_zeroGridStepPrice = ZeroGridAllowedStep(JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));
+   g_zeroGridLevelsPerSide = ZERO_GRID_MAX_LEVELS;
+   g_zeroGridBaseLot = MathMax(0.01, JsonNumber(json, "zeroGridBaseLot", g_zeroGridBaseLot));
    g_zeroGridMinNetProfitMoney = MathMax(0.01, JsonNumber(json, "zeroGridMinNetProfitMoney", g_zeroGridMinNetProfitMoney));
    g_zeroGridCloseReserveMoney = MathMax(0.0, JsonNumber(json, "zeroGridCloseReserveMoney", g_zeroGridCloseReserveMoney));
 

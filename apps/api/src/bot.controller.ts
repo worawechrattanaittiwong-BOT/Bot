@@ -1496,9 +1496,15 @@ export class BotController {
     }
     numberSetting("minOrderIntervalMs", 0, 60000, true);
     numberSetting("maxOrdersPerMinute", 1, 5000, true);
-    numberSetting("zeroGridStepPrice", 0.00000001, 1000);
-    numberSetting("zeroGridLevelsPerSide", 1, 30, true);
-    numberSetting("zeroGridBaseLot", 0.0001, 100);
+    if (body.zeroGridStepPrice !== undefined) {
+      const zeroGridStepPrice = Number(body.zeroGridStepPrice);
+      if (zeroGridStepPrice !== 2 && zeroGridStepPrice !== 3) {
+        throw new BadRequestException("ZERO GRID Step ต้องเป็น 2.00 หรือ 3.00 เท่านั้น");
+      }
+      clean.zeroGridStepPrice = zeroGridStepPrice;
+    }
+    numberSetting("zeroGridLevelsPerSide", 3, 3, true);
+    numberSetting("zeroGridBaseLot", 0.01, 100);
     numberSetting("zeroGridMinNetProfitMoney", 0.01, 100000);
     numberSetting("zeroGridCloseReserveMoney", 0, 100000);
     booleanSetting("adaptiveEngine");
@@ -1616,7 +1622,7 @@ export class BotController {
       requestedControlMode === "ZERO_GRID" ||
       (requestedControlMode === null && requestedEngineMode === "ZERO_GRID");
     if (zeroGridSelected) {
-      clean.zeroGridStepPrice = 2;
+      clean.zeroGridStepPrice = clean.zeroGridStepPrice === 2 ? 2 : 3;
       clean.zeroGridLevelsPerSide = 3;
       if (body.zeroGridBaseLot === undefined) clean.zeroGridBaseLot = 0.01;
       if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;

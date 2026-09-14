@@ -63,7 +63,7 @@ const defaultSettings = {
   indicatorV6Mode: "SOFT_WEIGHT",
   controlMode: undefined,
   engineMode: "AUTO",
-  zeroGridStepPrice: 2,
+  zeroGridStepPrice: 3,
   zeroGridLevelsPerSide: 3,
   zeroGridBaseLot: 0.01,
   zeroGridMinNetProfitMoney: 0.5,
@@ -120,7 +120,7 @@ export default function DashboardPage() {
         };
         const loadedControlMode = String(nextSettings.controlMode || nextSettings.engineMode || "AUTO").toUpperCase();
         if (loadedControlMode === "ZERO_GRID") {
-          nextSettings.zeroGridStepPrice = 2;
+          nextSettings.zeroGridStepPrice = Number(nextSettings.zeroGridStepPrice) === 2 ? 2 : 3;
           nextSettings.zeroGridLevelsPerSide = 3;
           if (!Number.isFinite(Number(nextSettings.zeroGridBaseLot)) || Number(nextSettings.zeroGridBaseLot) <= 0) nextSettings.zeroGridBaseLot = 0.01;
           if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 0.5;
@@ -2781,7 +2781,7 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("engineMode","ZERO_GRID");
       props.onEdit?.("profitTargetMode","OFF");
       props.onEdit?.("manualStopLossPoints",0);
-      props.onEdit?.("zeroGridStepPrice",2);
+      props.onEdit?.("zeroGridStepPrice",Number(props.settings?.zeroGridStepPrice) === 2 ? 2 : 3);
       props.onEdit?.("zeroGridLevelsPerSide",3);
       if (!Number.isFinite(Number(props.settings?.zeroGridBaseLot)) || Number(props.settings?.zeroGridBaseLot) <= 0) props.onEdit?.("zeroGridBaseLot",0.01);
       if (!Number.isFinite(Number(props.settings?.zeroGridMinNetProfitMoney)) || Number(props.settings?.zeroGridMinNetProfitMoney) <= 0.01) props.onEdit?.("zeroGridMinNetProfitMoney",0.5);
@@ -2842,7 +2842,7 @@ function BotSettingsModal(props:any) {
               {[
                 {id:"AUTO",icon:"brain",tag:"แนะนำ"},
                 {id:"RACE",icon:"status",tag:"เร็วสุด"},
-                {id:"ZERO_GRID",icon:"layers",tag:"Demo Grid"},
+                {id:"ZERO_GRID",icon:"layers",tag:"Hedging Grid"},
                 {id:"ASSISTED",icon:"target",tag:"กึ่งอัตโนมัติ"},
                 {id:"MANUAL",icon:"settings",tag:"ควบคุมละเอียด"}
               ].map(mode=><button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} className={controlMode===mode.id?"active":""} onClick={()=>applyControlMode(mode.id)}>
@@ -2860,8 +2860,8 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-fields">
                   <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="gold" size={17}/>Symbol</label><strong>{props.symbol || "—"}</strong></div>
                   {controlMode==="ZERO_GRID" ? <>
-                    <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>BUY STOP + SELL STOP</strong></div>
-                    <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="layers" size={17}/>ระยะ Grid</label><strong>2.00</strong></div>
+                    <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>BUY STOP + SELL STOP</strong><small>บัญชี HEDGING เท่านั้น</small></div>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะ Grid</span><select className="input" value={String(Number(props.settings.zeroGridStepPrice) === 2 ? 2 : 3)} onChange={e=>props.onEdit?.("zeroGridStepPrice",e.target.value)}><option value="2">2.00</option><option value="3">3.00</option></select></label>
                     <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="layers" size={17}/>Pending ต่อฝั่ง</label><strong>3 BUY STOP + 3 SELL STOP</strong></div>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Base Lot</span><NumberInput value={props.settings.zeroGridBaseLot || 0.01} suffix="Lot" onCommit={(v:string)=>props.onEdit?.("zeroGridBaseLot",v)}/></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>กำไรสุทธิขั้นต่ำ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
@@ -2912,7 +2912,7 @@ function BotSettingsModal(props:any) {
               {controlMode==="ZERO_GRID" ? <dl>
                 <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>
                 <div><dt>Pending</dt><dd>3 BUY + 3 SELL</dd></div>
-                <div><dt>Grid</dt><dd>2.00</dd></div>
+                <div><dt>Grid</dt><dd>{Number(props.settings.zeroGridStepPrice) === 2 ? "2.00" : "3.00"}</dd></div>
                 <div><dt>Base Lot</dt><dd>{Number(props.settings.zeroGridBaseLot||0.01).toFixed(2)} Lot</dd></div>
                 <div><dt>กำไรสุทธิขั้นต่ำ</dt><dd>${Number(props.settings.zeroGridMinNetProfitMoney||0.5).toFixed(2)}</dd></div>
                 <div><dt>สำรองค่าปิด</dt><dd>${Number(props.settings.zeroGridCloseReserveMoney||0.2).toFixed(2)}</dd></div>
