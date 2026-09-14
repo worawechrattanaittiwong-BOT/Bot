@@ -217,10 +217,10 @@ export function Mt5AccountSwitchAssistant() {
 
         {localSlots.length > 1 && (
           <label className="mt5-slot-select">
-            <span>เลือก Slot</span>
+            <span>เลือกบัญชี MT5</span>
             <select value={slotId} onChange={e => { setSlotId(e.target.value); setNotice(""); setError(""); }}>
-              {localSlots.map((slot: any) => (
-                <option key={slot.id} value={slot.id}>Slot {slot.slot_number || "—"} · {slot.label || "LOCAL"}</option>
+              {localSlots.map((slot: any, index: number) => (
+                <option key={slot.id} value={slot.id}>{slot.account_number ? "MT5 " + slot.account_number : "บัญชี " + (index + 1)}</option>
               ))}
             </select>
           </label>
