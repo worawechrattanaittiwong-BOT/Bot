@@ -45,4 +45,7 @@ Assert-Equal $assemblyVersion "$installerRelease.0" 'Installer assembly'
 $web = Read-Text 'apps/web/components/Mt5ManualActionControls.tsx'
 Assert-Equal (Match-Version $web 'installerVersionRequired\s*\|\|\s*"([^"]+)"' 'Web installer fallback') $installerRelease 'Web installer fallback'
 
+$readme = Read-Text 'README.md'
+Assert-Equal (Match-Version $readme 'Windows Installer runtime ปัจจุบัน:\s*\*\*v([0-9]+\.[0-9]+\.[0-9]+)\*\*' 'README installer') $installerRelease 'README installer'
+
 Write-Host "SCENOVA release consistency PASS: EA=$eaRelease Installer=$installerRelease"
