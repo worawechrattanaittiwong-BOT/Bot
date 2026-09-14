@@ -1,8 +1,8 @@
 name: Build MT5 EA
 
 # Official MT5 compile and publish pipeline for the current V20/RACE source.
-# ZERO GRID V3 uses fixed-cycle symmetric pending geometry, exact per-side levels,
-# strict startup/mode ownership, and near-to-live-price profit exits.
+# ZERO GRID V3 uses broker-near first triggers, exact per-side levels,
+# strict startup/mode ownership, and cost-aware near-to-live-price profit exits.
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
@@ -90,6 +90,7 @@ jobs:
             'HistoryOrdersTotal()',
             'SaaSZeroGrid',
             'double ZeroGridEntryGapPrice()',
+            'double ZeroGridEstimatedExitCostMoney()',
             'double ZeroGridPendingAnchorPrice(bool buySide)',
             'double ZeroGridPendingLevelPrice(bool buySide,int level)',
             'for(int level=1;level<=levels;level++)',
@@ -122,6 +123,9 @@ jobs:
           }
           if ($text.Contains('return MathMax(g_zeroGridStepPrice,ZeroGridMinPendingDistancePrice()+ZeroGridTickSize());')) {
             throw "Obsolete ZERO GRID over-wide spacing rule is still present"
+          }
+          if ($text.Contains('ZeroGridEffectiveStepPrice()*1.5')) {
+            throw "Obsolete ZERO GRID 1.5-step first-entry gap is still present"
           }
           if ($text.Contains('for(int level=g_zeroGridLevelsPerSide;level>=1;level--)')) {
             throw "Obsolete ZERO GRID far-to-near staging is still present"
