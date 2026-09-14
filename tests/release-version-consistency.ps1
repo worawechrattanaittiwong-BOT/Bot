@@ -13,7 +13,7 @@ function Assert-Equal([string]$actual,[string]$expected,[string]$label) {
   if ($actual -ne $expected) { throw "$label mismatch: expected=$expected actual=$actual" }
 }
 function Assert-SemVer([string]$version,[string]$label) {
-  if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid semantic release version for $label: $version" }
+  if ($version -notmatch '^\d+\.\d+\.\d+$') { throw ("Invalid semantic release version for {0}: {1}" -f $label,$version) }
 }
 
 # EA runtime is strict and may advance independently from the Windows installer.
