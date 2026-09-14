@@ -97,6 +97,49 @@ export class MaintenanceService {
     return result.rowCount || 0;
   }
 
+  // OWNER/ADMIN may reconcile only stale cached Position snapshots during an
+  // explicit maintenance action. Fresh MT5 heartbeats remain authoritative and
+  // are never cleared by this override. Every override is written to audit_logs.
+  private async reconcileAdminStalePositions(actor: string) {
+    const reconciledAt = new Date().toISOString();
+    const reconciledBy = actor.slice(0, 120);
+    const result = await this.db.query(
+      `${this.runtimeCte()}
+       UPDATE bot_instances bi
+       SET desired_state='STOPPED',
+           metrics=COALESCE(bi.metrics,'{}'::jsonb) || jsonb_build_object(
+             'lastKnownPositionsBeforeAdminOverride',r.reported_positions,
+             'positions',0,
+             'positionsReconciledAt',$1::text,
+             'positionsReconcileReason','ADMIN_MAINTENANCE_OVERRIDE_STALE_SNAPSHOT',
+             'positionsReconciledBy',$2::text
+           )
+       FROM runtime r
+       WHERE bi.id=r.id
+         AND NOT r.mt5_fresh
+         AND r.reported_positions>0
+         AND bi.desired_state<>'RUNNING'
+       RETURNING bi.id,r.reported_positions`,
+      [reconciledAt, reconciledBy]
+    );
+
+    for (const row of result.rows) {
+      await this.db.query(
+        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'ADMIN_RECONCILE_STALE_MT5_POSITIONS','bot_instance',$2,$3::jsonb)",
+        [
+          reconciledBy,
+          row.id,
+          JSON.stringify({
+            previousReportedPositions: Number(row.reported_positions || 0),
+            reconciledAt,
+            reason: "ADMIN_MAINTENANCE_OVERRIDE_STALE_SNAPSHOT"
+          })
+        ]
+      );
+    }
+    return result.rowCount || 0;
+  }
+
   private async ensureDrainCommands(forceClose: boolean) {
     await this.db.query(
       `${this.runtimeCte()}
@@ -284,6 +327,7 @@ export class MaintenanceService {
 
     const instance = await this.db.one(
       `SELECT bi.id,bi.actual_state,bi.desired_state,bi.last_seen_at,
+              COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0) AS mt5_report_epoch,
               COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)::int AS positions,
               u.user_code,a.account_number,a.broker_server
        FROM bot_instances bi
@@ -299,6 +343,58 @@ export class MaintenanceService {
     }
 
     await this.db.query("UPDATE bot_instances SET desired_state='STOPPED' WHERE id=$1", [id]);
+
+    const mt5ReportEpoch = Number(instance.mt5_report_epoch || 0);
+    const lastSeenEpoch = instance.last_seen_at
+      ? new Date(instance.last_seen_at).getTime() / 1000
+      : 0;
+    const reportEpoch = mt5ReportEpoch > 0 ? mt5ReportEpoch : lastSeenEpoch;
+    const positionsFresh = reportEpoch > Date.now() / 1000 - 20;
+
+    // The Admin button is authoritative for a stale server snapshot. There is
+    // no live EA to receive CLOSE_ALL in this case, so keeping the cached count
+    // would deadlock Maintenance forever. Clear only the stale cache and audit it.
+    if (!positionsFresh) {
+      const reconciledAt = new Date().toISOString();
+      const reconciledBy = actor.slice(0, 120);
+      await this.db.query(
+        `UPDATE bot_instances
+         SET metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
+           'lastKnownPositionsBeforeAdminOverride',$1::int,
+           'positions',0,
+           'positionsReconciledAt',$2::text,
+           'positionsReconcileReason','ADMIN_MAINTENANCE_OVERRIDE_STALE_SNAPSHOT',
+           'positionsReconciledBy',$3::text
+         )
+         WHERE id=$4`,
+        [Number(instance.positions || 0), reconciledAt, reconciledBy, id]
+      );
+      await this.db.query(
+        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'ADMIN_RECONCILE_STALE_MT5_POSITIONS','bot_instance',$2,$3::jsonb)",
+        [
+          reconciledBy,
+          id,
+          JSON.stringify({
+            previousReportedPositions: Number(instance.positions || 0),
+            reconciledAt,
+            reason: "ADMIN_MAINTENANCE_OVERRIDE_STALE_SNAPSHOT"
+          })
+        ]
+      );
+      await this.tryFinishDrain();
+      return {
+        ok: true,
+        queued: false,
+        reconciled: true,
+        instanceId: id,
+        userCode: instance.user_code || null,
+        accountNumber: instance.account_number || null,
+        brokerServer: instance.broker_server || null,
+        positions: Number(instance.positions || 0),
+        message: "ข้อมูล Position เป็น snapshot เก่าและไม่มี heartbeat สด จึงล้างสถานะค้างด้วยสิทธิ์ Admin แล้ว"
+      };
+    }
+
     await this.db.query(
       "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
       [id]
@@ -391,7 +487,11 @@ export class MaintenanceService {
 
   async shutdownNow(actor: string, message?: string) {
     const existing = await this.current();
-    if (existing.status === "MAINTENANCE") return this.snapshot();
+    if (existing.status === "MAINTENANCE") {
+      const adminReconciledStalePositions = await this.reconcileAdminStalePositions(actor);
+      const snapshot = await this.snapshot();
+      return { ...snapshot, adminReconciledStalePositions };
+    }
     await this.db.query(
       `UPDATE system_maintenance
        SET status='DRAINING',
@@ -410,8 +510,10 @@ export class MaintenanceService {
     );
     await this.reconcileAckedCloseAll();
     await this.ensureDrainCommands(true);
+    const adminReconciledStalePositions = await this.reconcileAdminStalePositions(actor);
     await this.tryFinishDrain();
-    return this.snapshot();
+    const snapshot = await this.snapshot();
+    return { ...snapshot, adminReconciledStalePositions };
   }
 
   async cancel(actor: string) {
@@ -431,11 +533,19 @@ export class MaintenanceService {
 
   async resume(actor: string) {
     const current = await this.current();
+    if (current.status !== "DRAINING" && current.status !== "MAINTENANCE") {
+      throw new ConflictException("ระบบไม่ได้อยู่ในขั้นตอนปิดปรับปรุง");
+    }
+
+    // OWNER/ADMIN can clear stale cached snapshots before reopening, but a fresh
+    // MT5 heartbeat that still reports RUNNING/Position remains a hard safety stop.
+    await this.reconcileAdminStalePositions(actor);
+    const blockers = await this.liveBlockers();
+    if (Number(blockers?.running || 0) > 0 || Number(blockers?.positions || 0) > 0) {
+      throw new ConflictException("ยังมี MT5 ที่ออนไลน์และยืนยัน Bot Running หรือ Position จริง ระบบยังเปิดกลับไม่ได้");
+    }
+
     if (current.status === "DRAINING") {
-      const blockers = await this.liveBlockers();
-      if (Number(blockers?.running || 0) > 0 || Number(blockers?.positions || 0) > 0) {
-        throw new ConflictException("ยังมี Bot Running หรือ Position ที่ MT5 ยังไม่ยืนยันว่าเป็น 0 ระบบยังเปิดกลับไม่ได้");
-      }
       await this.tryFinishDrain();
     }
 

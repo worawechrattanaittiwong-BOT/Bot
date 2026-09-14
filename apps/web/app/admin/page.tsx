@@ -225,16 +225,21 @@ export default function AdminPage() {
 
   async function shutdownForMaintenance() {
     if (!confirm(
-      "ปิดระบบอย่างปลอดภัยตอนนี้หรือไม่?\n\n" +
-      "ระบบจะบล็อก Start ใหม่ สั่งหยุดทุกบอท และส่ง Close All ให้บัญชีที่ยังมี Position ค้างอยู่"
+      "ปิดระบบด้วยสิทธิ์ Admin ตอนนี้หรือไม่?\n\n" +
+      "ระบบจะบล็อก Start ใหม่ สั่งหยุดทุกบอท ส่ง Close All ให้ MT5 ที่ออนไลน์ และล้างเฉพาะ Position snapshot ที่เก่า/ขาด heartbeat เพื่อไม่ให้ Maintenance ค้าง"
     )) return;
     setMaintenanceBusy(true);
     try {
-      await adminApi("/admin/maintenance/shutdown", {
+      const result = await adminApi("/admin/maintenance/shutdown", {
         method: "POST",
         body: JSON.stringify({ message: maintenanceMessage })
       });
-      setMessage("เริ่ม Safe Shutdown แล้ว ระบบกำลังรอ Position ทุกบัญชีเป็น 0");
+      const cleared = Number(result?.adminReconciledStalePositions || 0);
+      setMessage(
+        cleared > 0
+          ? `ปิดระบบแล้ว · ล้างสถานะ Position ค้างแบบ stale ${cleared} บัญชี · MT5 ที่ยังออนไลน์จะต้องยืนยัน Position เป็น 0`
+          : "เริ่มปิดระบบแล้ว ระบบกำลังรอเฉพาะ MT5 ที่ออนไลน์ให้ยืนยัน Position เป็น 0"
+      );
       await search(undefined, true);
     } catch (e:any) {
       setMessage(e.message);
@@ -247,9 +252,13 @@ export default function AdminPage() {
     const positions = Number(item?.positions || 0);
     if (positions <= 0) return setMessage("บัญชีนี้ไม่มี Position ค้างให้ปิด");
     const accountLabel = [item?.user_code, item?.account_number, item?.broker_server].filter(Boolean).join(" · ");
+    const stale = item?.positions_fresh === false;
+    const detail = stale
+      ? "ข้อมูลนี้เป็น Position snapshot เก่าและไม่มี heartbeat สด\nสิทธิ์ Admin จะล้างสถานะค้างบน Server โดยเก็บ Audit ไว้"
+      : "ระบบจะส่งคำสั่ง Close All ไปยัง EA ของบัญชีนี้และหยุดการเปิดรอบใหม่";
     if (!confirm(
-      "ยืนยันบังคับปิด Position ทั้งหมดของบัญชีนี้?\n\n" +
-      accountLabel + "\n" + positions + " Position\n\nระบบจะส่งคำสั่ง Close All ไปยัง EA ของบัญชีนี้และหยุดการเปิดรอบใหม่"
+      "ยืนยันจัดการ Position ของบัญชีนี้?\n\n" +
+      accountLabel + "\n" + positions + " Position\n\n" + detail
     )) return;
     setMaintenanceActionId(String(item.instance_id || ""));
     try {
@@ -257,7 +266,7 @@ export default function AdminPage() {
         method: "POST",
         body: JSON.stringify({ instanceId: item.instance_id })
       });
-      setMessage(result?.message || "ส่งคำสั่ง Close All ให้บัญชีนี้แล้ว");
+      setMessage(result?.message || "จัดการ Position ของบัญชีนี้แล้ว");
       await search(undefined, true);
     } catch (e:any) {
       setMessage(e.message);
@@ -413,7 +422,11 @@ export default function AdminPage() {
                 <button className="btn primary" disabled={maintenanceBusy || maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE"} onClick={announceMaintenance}>ประกาศกำหนดอัปเดต</button>
                 <button className="btn danger" disabled={maintenanceBusy || maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE"} onClick={shutdownForMaintenance}>ปิดระบบอย่างปลอดภัยตอนนี้</button>
                 {maintenance.status === "SCHEDULED" && <button className="btn" disabled={maintenanceBusy} onClick={cancelMaintenance}>ยกเลิกประกาศ</button>}
-                {maintenance.status === "MAINTENANCE" && <button className="btn primary" disabled={maintenanceBusy} onClick={resumeMaintenance}>เปิดระบบหลังอัปเดต</button>}
+                {(maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE") && (
+                  <button className="btn primary" disabled={maintenanceBusy} onClick={resumeMaintenance}>
+                    {maintenance.status === "DRAINING" ? "เปิดระบบ (เคลียร์สถานะค้าง)" : "เปิดระบบหลังอัปเดต"}
+                  </button>
+                )}
               </div>
 
               {maintenanceBlockers.length > 0 && (
@@ -438,7 +451,9 @@ export default function AdminPage() {
                       <div className="owner-maintenance-account-row" key={item.instance_id}>
                         <div className="owner-maintenance-account-name">
                           <b>{item.user_code || "—"} · {item.account_number || "ยังไม่ผูก MT5"}</b>
-                          <small>{item.broker_server || "—"} · {item.actual_state}/{item.desired_state}</small>
+                          <small>
+                            {item.broker_server || "—"} · {item.actual_state}/{item.desired_state} · {item.positions_fresh === false ? "ข้อมูลเก่า/ขาด heartbeat" : "MT5 สด"}
+                          </small>
                         </div>
                         <strong className={Number(item.positions || 0)>0 ? "has-position" : ""}>{item.positions || 0} Position</strong>
                         <button
@@ -446,7 +461,11 @@ export default function AdminPage() {
                           disabled={Boolean(maintenanceActionId) || Number(item.positions || 0) <= 0}
                           onClick={()=>forceCloseMaintenanceAccount(item)}
                         >
-                          {maintenanceActionId === item.instance_id ? "กำลังส่งคำสั่ง..." : "ปิดทุก Position"}
+                          {maintenanceActionId === item.instance_id
+                            ? "กำลังดำเนินการ..."
+                            : item.positions_fresh === false
+                              ? "ล้างสถานะค้าง (Admin)"
+                              : "ปิดทุก Position"}
                         </button>
                       </div>
                     )) : (
