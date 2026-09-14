@@ -23,6 +23,8 @@ jobs:
       - name: AUTO V20 same-dataset policy regression
         shell: pwsh
         run: ./tests/auto-v20-policy-regression.ps1
+      - name: ZERO GRID stability simulation regression
+        run: node ./tests/zero-grid-v1-simulation.mjs
       - name: Unified release version consistency
         shell: pwsh
         run: ./tests/release-version-consistency.ps1
