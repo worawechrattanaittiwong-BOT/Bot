@@ -5,15 +5,17 @@ import {
   Get,
   Post,
   Query,
+  Req,
   UseGuards
 } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { AdminGuard } from "./security";
+import { MaintenanceService } from "./maintenance.service";
 
 @Controller("admin")
 @UseGuards(AdminGuard)
 export class AdminController {
-  constructor(private readonly db: DbService) {}
+  constructor(private readonly db: DbService, private readonly maintenance: MaintenanceService) {}
 
   @Get("users")
   async users(@Query("q") q = "") {
@@ -173,7 +175,8 @@ export class AdminController {
     const workers = await this.db.query(
       "SELECT runner_id,region,hostname,capacity,active_instances,status,last_seen_at, CASE WHEN last_seen_at > now() - interval '30 seconds' THEN 'ONLINE' ELSE 'STALE' END health FROM worker_nodes ORDER BY runner_id"
     );
-    return { users, bots, slots, workers: workers.rows };
+    const maintenance = await this.maintenance.snapshot();
+    return { users, bots, slots, workers: workers.rows, maintenance };
   }
 
   @Post("trials/grant")
@@ -568,6 +571,58 @@ export class AdminController {
     );
     await this.audit("ADMIN", "REACTIVATE_USER", "user", body.userId, {});
     return { ok: true };
+  }
+
+  @Get("maintenance")
+  async maintenanceStatus() {
+    return this.maintenance.snapshot();
+  }
+
+  @Post("maintenance/announce")
+  async announceMaintenance(@Req() req: any, @Body() body: {
+    title?: string;
+    message?: string;
+    maintenanceAt: string;
+    forceCloseAt?: string;
+    expectedResumeAt?: string;
+    forceClose?: boolean;
+  }) {
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    const result = await this.maintenance.schedule(body, actor);
+    await this.audit(actor, "SCHEDULE_MAINTENANCE", "system", "maintenance", {
+      maintenanceAt: result.maintenance_at,
+      forceCloseAt: result.force_close_at,
+      expectedResumeAt: result.expected_resume_at,
+      forceClose: result.force_close
+    });
+    return result;
+  }
+
+  @Post("maintenance/shutdown")
+  async shutdownForMaintenance(@Req() req: any, @Body() body: { message?: string }) {
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    const result = await this.maintenance.shutdownNow(actor, body?.message);
+    await this.audit(actor, "BEGIN_SAFE_MAINTENANCE", "system", "maintenance", {
+      openPositions: result.summary?.openPositions || 0,
+      runningInstances: result.summary?.runningInstances || 0
+    });
+    return result;
+  }
+
+  @Post("maintenance/cancel")
+  async cancelMaintenance(@Req() req: any) {
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    const result = await this.maintenance.cancel(actor);
+    await this.audit(actor, "CANCEL_MAINTENANCE", "system", "maintenance", {});
+    return result;
+  }
+
+  @Post("maintenance/resume")
+  async resumeAfterMaintenance(@Req() req: any) {
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    const result = await this.maintenance.resume(actor);
+    await this.audit(actor, "RESUME_AFTER_MAINTENANCE", "system", "maintenance", {});
+    return result;
   }
 
   private async audit(

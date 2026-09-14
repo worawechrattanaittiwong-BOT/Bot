@@ -143,7 +143,7 @@ resolve_ci_anchor() {
 
 verify_generated_ea_release() {
   local sha="$1"
-  local parent parent_ci
+  local parent parent_ci parent_smoke
 
   if ! validate_generated_ea_shape "$sha"; then
     echo "[SCENOVA] generated EA release rejected: untrusted commit shape"
@@ -168,6 +168,11 @@ verify_generated_ea_release() {
     echo "[SCENOVA] generated EA release waiting for source CI ($parent_ci)"
     return 1
   fi
+  parent_smoke="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow "Integration Smoke" --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
+  if [ "$parent_smoke" != "completed:success" ]; then
+    echo "[SCENOVA] generated EA release waiting for source Integration Smoke ($parent_smoke)"
+    return 1
+  fi
 
   echo "[SCENOVA] trusted generated EX5 release verified"
   return 0
@@ -175,7 +180,7 @@ verify_generated_ea_release() {
 
 verify_generated_installer_release() {
   local sha="$1"
-  local parent parent_ci
+  local parent parent_ci parent_smoke
 
   if ! validate_generated_installer_shape "$sha"; then
     echo "[SCENOVA] generated installer release rejected: untrusted commit shape"
@@ -200,6 +205,11 @@ verify_generated_installer_release() {
     echo "[SCENOVA] generated installer release waiting for source CI ($parent_ci)"
     return 1
   fi
+  parent_smoke="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow "Integration Smoke" --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
+  if [ "$parent_smoke" != "completed:success" ]; then
+    echo "[SCENOVA] generated installer release waiting for source Integration Smoke ($parent_smoke)"
+    return 1
+  fi
 
   echo "[SCENOVA] trusted generated Windows installer release verified"
   return 0
@@ -220,6 +230,12 @@ if command -v gh >/dev/null 2>&1; then
   case "$CI_STATE" in
     completed:success)
       echo "[SCENOVA] CI passed"
+      SMOKE_STATE="$(gh run list --repo "$REPO_FULL_NAME" --commit "$REMOTE_SHA" --workflow "Integration Smoke" --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
+      if [ "$SMOKE_STATE" != "completed:success" ]; then
+        echo "[SCENOVA] Integration Smoke not ready/passed ($SMOKE_STATE); deployment blocked"
+        exit 0
+      fi
+      echo "[SCENOVA] Integration Smoke passed"
       ;;
     completed:failure|completed:cancelled|completed:timed_out|completed:action_required)
       echo "[SCENOVA] CI did not pass ($CI_STATE); deployment blocked"
@@ -239,6 +255,29 @@ if command -v gh >/dev/null 2>&1; then
 else
   echo "[SCENOVA] gh CLI unavailable; refusing to deploy without CI verification"
   exit 1
+fi
+
+# Host-level safety gate: never recycle API/Web while a bot is running or the
+# last MT5 heartbeat still reports open positions. Operators should first use
+# Safe Maintenance from Owner Console and wait until all counters reach zero.
+COMPOSE_FILE="infrastructure/linux/docker-compose.hostinger.yml"
+ENV_FILE=".env.hostinger"
+if command -v docker >/dev/null 2>&1 && [ -f "$ENV_FILE" ]; then
+  POSTGRES_CID="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps -q postgres 2>/dev/null || true)"
+  if [ -n "$POSTGRES_CID" ]; then
+    RUNTIME_STATE="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres psql -U bot -d bot -Atc "SELECT (COUNT(*) FILTER (WHERE actual_state='RUNNING' OR desired_state='RUNNING'))::int || ':' || COALESCE(SUM(COALESCE(NULLIF(metrics->>'positions','')::int,0)),0)::int FROM bot_instances;" 2>/dev/null || true)"
+    if [ -z "$RUNTIME_STATE" ]; then
+      echo "[SCENOVA] unable to verify trading runtime state; deployment blocked for safety"
+      exit 0
+    fi
+    ACTIVE_BOTS="${RUNTIME_STATE%%:*}"
+    OPEN_POSITIONS="${RUNTIME_STATE##*:}"
+    if [ "${ACTIVE_BOTS:-0}" -gt 0 ] || [ "${OPEN_POSITIONS:-0}" -gt 0 ]; then
+      echo "[SCENOVA] safe-deploy gate: ${ACTIVE_BOTS:-0} running bot(s), ${OPEN_POSITIONS:-0} open position(s); waiting for Safe Maintenance"
+      exit 0
+    fi
+    echo "[SCENOVA] safe-deploy gate passed: no running bots and no open positions"
+  fi
 fi
 
 echo "[SCENOVA] updating working tree..."

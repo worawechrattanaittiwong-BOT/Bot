@@ -15,13 +15,15 @@ import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
 import { installerDownloadPath, isEaVersionExact, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { CryptoService, JwtGuard } from "./security";
+import { MaintenanceService } from "./maintenance.service";
 
 @Controller("bot")
 @UseGuards(JwtGuard)
 export class BotController {
   constructor(
     private readonly db: DbService,
-    private readonly crypto: CryptoService
+    private readonly crypto: CryptoService,
+    private readonly maintenance: MaintenanceService
   ) {}
 
   private supportedEaRuntime(version: any) {
@@ -699,6 +701,7 @@ export class BotController {
     );
     const liveStatus = this.buildLiveStatus(instance, settings, entitlement);
     const softwareUpdate = this.installerUpdateState(instance, selectedSlot.mode);
+    const maintenance = await this.maintenance.current();
 
     return {
       user,
@@ -711,6 +714,7 @@ export class BotController {
       entitlement,
       liveStatus,
       softwareUpdate,
+      maintenance,
       tradeJournal
     };
   }
@@ -1349,6 +1353,7 @@ export class BotController {
 
   @Post("start")
   async start(@Req() req: any, @Query("slotId") slotId = "") {
+    await this.maintenance.assertStartAllowed();
     const instance = await this.getInstance(req.user.sub, slotId || null);
     if (!instance.mt5_account_id) throw new ConflictException("เชื่อมบัญชี MT5 ก่อนเริ่มบอท");
     const access: any = await this.entitlement(
