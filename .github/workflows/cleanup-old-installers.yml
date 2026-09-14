@@ -1,0 +1,89 @@
+name: Cleanup obsolete SCENOVA installers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/public/downloads/SCENOVA-Setup-v*.exe"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scenova-installer-cleanup-main
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Keep only the current versioned installer
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          [xml]$project = Get-Content "tools/windows-installer/ScenovaInstaller.csproj"
+          $version = [string]($project.Project.PropertyGroup.Version | Select-Object -First 1)
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Installer version was not found in ScenovaInstaller.csproj"
+          }
+
+          $downloadDir = "apps/web/public/downloads"
+          $currentName = "SCENOVA-Setup-v$version.exe"
+          $currentPath = Join-Path $downloadDir $currentName
+          if (-not (Test-Path $currentPath)) {
+            throw "Current installer is missing: $currentPath"
+          }
+
+          $obsolete = Get-ChildItem -Path $downloadDir -Filter "SCENOVA-Setup-v*.exe" -File |
+            Where-Object { $_.Name -ne $currentName }
+
+          foreach ($file in $obsolete) {
+            Write-Host "Removing obsolete installer: $($file.Name)"
+            Remove-Item -Force $file.FullName
+          }
+
+          git config user.name "scenova-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A $downloadDir
+
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "No obsolete installers found."
+            exit 0
+          }
+
+          git commit -m "build: remove obsolete SCENOVA installer binaries"
+
+          $published = $false
+          for ($attempt = 1; $attempt -le 6; $attempt++) {
+            git fetch origin main
+            if ($LASTEXITCODE -ne 0) {
+              Start-Sleep -Seconds 2
+              continue
+            }
+
+            git rebase origin/main
+            if ($LASTEXITCODE -ne 0) {
+              git rebase --abort
+              throw "Could not rebase installer cleanup onto latest main"
+            }
+
+            git push origin HEAD:main
+            if ($LASTEXITCODE -eq 0) {
+              $published = $true
+              break
+            }
+
+            Start-Sleep -Seconds 2
+          }
+
+          if (-not $published) {
+            throw "Failed to publish installer cleanup after retries"
+          }
