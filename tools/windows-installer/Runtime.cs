@@ -249,6 +249,17 @@ internal static class ScenovaRuntime
             }
         }
 
+        // Browsers may append " (1)", " (2)", ... when the same
+        // personalized installer is downloaded more than once. Strip only that
+        // local duplicate suffix so the original enrollment code stays valid.
+        var duplicateMarker = code.LastIndexOf(" (", StringComparison.Ordinal);
+        if (duplicateMarker > 0 && code.EndsWith(")", StringComparison.Ordinal))
+        {
+            var suffix = code[(duplicateMarker + 2)..^1];
+            if (int.TryParse(suffix, out _))
+                code = code[..duplicateMarker].Trim();
+        }
+
         return code.Length >= 12 ? code : null;
     }
 

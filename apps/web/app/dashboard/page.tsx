@@ -987,29 +987,39 @@ export default function DashboardPage() {
     }
   }
 
+  function submitInstallerDownload(code: string, version: string) {
+    if (typeof document === "undefined") {
+      throw new Error("เบราว์เซอร์ยังไม่พร้อมดาวน์โหลด SCENOVA Installer");
+    }
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/installer-download";
+    form.style.display = "none";
+    const addField = (name: string, value: string) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    };
+    addField("code", code);
+    addField("version", version);
+    document.body.appendChild(form);
+    form.submit();
+    window.setTimeout(() => form.remove(), 1000);
+  }
+
   async function downloadInstallerForSlot(slotId: string) {
     const result = await api("/bot/installers/windows", {
       method: "POST",
       body: JSON.stringify({ slotId: slotId || undefined })
     });
-    if (!result?.downloadPath || !result?.fileName) {
-      throw new Error("ยังไม่มี SCENOVA Windows Installer พร้อมดาวน์โหลด");
+    const code = String(result?.code || "").trim();
+    const version = String(result?.installerVersion || "").trim();
+    if (!code || !version) {
+      throw new Error("ยังไม่มี SCENOVA Windows Installer สำหรับบัญชีนี้");
     }
-
-    const response = await fetch(result.downloadPath, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error("ไฟล์ SCENOVA Installer ยังไม่พร้อม กรุณาลองอีกครั้งหลังระบบ Build เสร็จ");
-    }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = result.fileName;
-    link.style.display = "none";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    submitInstallerDownload(code, version);
     return result;
   }
 

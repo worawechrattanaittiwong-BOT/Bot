@@ -50,7 +50,6 @@ export function Mt5ManualActionControls() {
   const needsEaUpdate = Boolean(update?.eaUpdateRequired || update?.eaVersionMatch === false);
   const installerRequired = Boolean(update?.installerRequired);
   const installerVersion = String(update?.latestVersion || update?.latestInstallerVersion || update?.installerVersionRequired || "1.0.8");
-  const installerDownloadPath = String(update?.downloadPath || "/downloads/SCENOVA-Setup.exe");
   const actionName = String(metrics?.manualMt5ActionName || "");
   const actionStatus = String(metrics?.manualMt5ActionStatus || "");
   const actionMessage = String(metrics?.manualMt5ActionMessage || "");
@@ -142,16 +141,33 @@ export function Mt5ManualActionControls() {
     needsEaUpdate
   ]);
 
-  function downloadInstaller() {
-    if (typeof document === "undefined") return;
-    const separator = installerDownloadPath.includes("?") ? "&" : "?";
-    const link = document.createElement("a");
-    link.href = installerDownloadPath + separator + "v=" + encodeURIComponent(installerVersion) + "&t=" + Date.now();
-    link.download = "";
-    link.rel = "noopener";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+  async function downloadInstaller() {
+    if (typeof document === "undefined" || !slotId) return false;
+    const result = await api("/bot/installers/windows", {
+      method: "POST",
+      body: JSON.stringify({ slotId })
+    });
+    const code = String(result?.code || "").trim();
+    const version = String(result?.installerVersion || installerVersion || "").trim();
+    if (!code || !version) {
+      throw new Error("ยังไม่มี SCENOVA Windows Installer สำหรับบัญชีนี้");
+    }
+
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/installer-download";
+    form.style.display = "none";
+    for (const [name, value] of [["code", code], ["version", version]]) {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
+    window.setTimeout(() => form.remove(), 1000);
+    return true;
   }
 
   async function requestRecoveryStart() {
@@ -161,7 +177,7 @@ export function Mt5ManualActionControls() {
       return;
     }
     if (installerRequired) {
-      downloadInstaller();
+      await downloadInstaller();
       setError("");
       setNotice(`ดาวน์โหลด SCENOVA ${installerVersion} แล้ว กรุณาเปิดไฟล์ติดตั้ง 1 ครั้ง จากนั้นจึงเชื่อม MT5 ใหม่`);
       return;
@@ -211,7 +227,7 @@ export function Mt5ManualActionControls() {
     setNotice("");
 
     if (isUpdate && installerRequired) {
-      downloadInstaller();
+      await downloadInstaller();
       if (!agentOnline) {
         setNotice(`ดาวน์โหลด SCENOVA ${installerVersion} แล้ว กรุณาเปิดไฟล์ติดตั้ง 1 ครั้ง จากนั้นกลับมากดอัปเดต EA อีกครั้ง`);
         setBusyAction("");
