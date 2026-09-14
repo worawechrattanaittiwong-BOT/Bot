@@ -609,6 +609,19 @@ export class AdminController {
     return result;
   }
 
+  @Post("maintenance/close-instance")
+  async closeMaintenanceInstance(@Req() req: any, @Body() body: { instanceId: string }) {
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    const result = await this.maintenance.forceCloseInstance(body?.instanceId, actor);
+    await this.audit(actor, "FORCE_CLOSE_ACCOUNT_POSITIONS", "bot_instance", result.instanceId, {
+      userCode: result.userCode,
+      accountNumber: result.accountNumber,
+      brokerServer: result.brokerServer,
+      positionsAtRequest: result.positions
+    });
+    return result;
+  }
+
   @Post("maintenance/cancel")
   async cancelMaintenance(@Req() req: any) {
     const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";

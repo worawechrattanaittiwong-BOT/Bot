@@ -138,7 +138,7 @@ export class MaintenanceService {
           OR bi.desired_state='RUNNING'
           OR COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
        ORDER BY COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) DESC,bi.last_seen_at DESC NULLS LAST
-       LIMIT 50`
+       LIMIT 1000`
     );
     return {
       ...current,
@@ -149,6 +149,48 @@ export class MaintenanceService {
         openPositions: Number(summary?.open_positions || 0)
       },
       blockers: blockers.rows
+    };
+  }
+
+  async forceCloseInstance(instanceId: string, actor: string) {
+    const id = String(instanceId || "").trim();
+    if (!id) throw new ConflictException("ไม่พบ Bot Instance ที่ต้องการปิด Position");
+
+    const instance = await this.db.one(
+      `SELECT bi.id,bi.actual_state,bi.desired_state,bi.last_seen_at,
+              COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)::int AS positions,
+              u.user_code,a.account_number,a.broker_server
+       FROM bot_instances bi
+       LEFT JOIN license_slots ls ON ls.id=bi.slot_id
+       LEFT JOIN users u ON u.id=COALESCE(ls.assigned_user_id,ls.owner_user_id)
+       LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
+       WHERE bi.id=$1`,
+      [id]
+    );
+    if (!instance) throw new ConflictException("ไม่พบบัญชี/บอทนี้ในระบบ");
+    if (Number(instance.positions || 0) <= 0) {
+      throw new ConflictException("บัญชีนี้ไม่มี Position ค้างให้ปิด");
+    }
+
+    await this.db.query("UPDATE bot_instances SET desired_state='STOPPED' WHERE id=$1", [id]);
+    await this.db.query(
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+      [id]
+    );
+    await this.db.query(
+      "INSERT INTO bot_commands(bot_instance_id,command,payload) VALUES($1,'CLOSE_ALL',$2::jsonb)",
+      [id, JSON.stringify({ source: "OWNER_MAINTENANCE", actor: actor.slice(0, 120) })]
+    );
+
+    return {
+      ok: true,
+      queued: true,
+      instanceId: id,
+      userCode: instance.user_code || null,
+      accountNumber: instance.account_number || null,
+      brokerServer: instance.broker_server || null,
+      positions: Number(instance.positions || 0),
+      message: "ส่งคำสั่ง Close All ให้บัญชีนี้แล้ว ระบบจะรอ EA รับคำสั่งและรายงาน Position เป็น 0"
     };
   }
 

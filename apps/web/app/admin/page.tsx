@@ -28,6 +28,8 @@ export default function AdminPage() {
   const [expectedResumeAt, setExpectedResumeAt] = useState("");
   const [maintenanceForceClose, setMaintenanceForceClose] = useState(true);
   const [maintenanceBusy, setMaintenanceBusy] = useState(false);
+  const [maintenanceQuery, setMaintenanceQuery] = useState("");
+  const [maintenanceActionId, setMaintenanceActionId] = useState("");
 
   async function search(e?: FormEvent, preserveMessage = false) {
     e?.preventDefault();
@@ -241,6 +243,29 @@ export default function AdminPage() {
     }
   }
 
+  async function forceCloseMaintenanceAccount(item:any) {
+    const positions = Number(item?.positions || 0);
+    if (positions <= 0) return setMessage("บัญชีนี้ไม่มี Position ค้างให้ปิด");
+    const accountLabel = [item?.user_code, item?.account_number, item?.broker_server].filter(Boolean).join(" · ");
+    if (!confirm(
+      "ยืนยันบังคับปิด Position ทั้งหมดของบัญชีนี้?\n\n" +
+      accountLabel + "\n" + positions + " Position\n\nระบบจะส่งคำสั่ง Close All ไปยัง EA ของบัญชีนี้และหยุดการเปิดรอบใหม่"
+    )) return;
+    setMaintenanceActionId(String(item.instance_id || ""));
+    try {
+      const result = await adminApi("/admin/maintenance/close-instance", {
+        method: "POST",
+        body: JSON.stringify({ instanceId: item.instance_id })
+      });
+      setMessage(result?.message || "ส่งคำสั่ง Close All ให้บัญชีนี้แล้ว");
+      await search(undefined, true);
+    } catch (e:any) {
+      setMessage(e.message);
+    } finally {
+      setMaintenanceActionId("");
+    }
+  }
+
   async function cancelMaintenance() {
     if (!confirm("ยกเลิกประกาศ Maintenance ที่ยังไม่เริ่มหรือไม่?")) return;
     setMaintenanceBusy(true);
@@ -287,6 +312,14 @@ export default function AdminPage() {
     memberships(user).some((m:any)=>m.mode===mode && m.active);
 
   const maintenance = system?.maintenance || { status:"OFF", summary:{ openPositions:0, runningInstances:0 }, blockers:[] };
+  const maintenanceBlockers = Array.isArray(maintenance.blockers) ? maintenance.blockers : [];
+  const maintenanceQueryNormalized = maintenanceQuery.trim().toLowerCase();
+  const filteredMaintenanceBlockers = maintenanceQueryNormalized
+    ? maintenanceBlockers.filter((item:any)=>[
+        item?.user_code, item?.account_number, item?.broker_server,
+        item?.actual_state, item?.desired_state
+      ].some(value=>String(value || "").toLowerCase().includes(maintenanceQueryNormalized)))
+    : maintenanceBlockers;
   const workersOnline = system?.workers?.filter((w:any)=>w.health === "ONLINE").length || 0;
   const workersTotal = system?.workers?.length || 0;
   const maintenanceAttention = maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE" ? 1 : 0;
@@ -383,16 +416,43 @@ export default function AdminPage() {
                 {maintenance.status === "MAINTENANCE" && <button className="btn primary" disabled={maintenanceBusy} onClick={resumeMaintenance}>เปิดระบบหลังอัปเดต</button>}
               </div>
 
-              {Array.isArray(maintenance.blockers) && maintenance.blockers.length > 0 && (
+              {maintenanceBlockers.length > 0 && (
                 <div className="owner-maintenance-blockers">
-                  <b>บัญชีที่ยังต้องเคลียร์ก่อนอัปเดต</b>
-                  {maintenance.blockers.slice(0,8).map((item:any)=>(
-                    <div key={item.instance_id}>
-                      <span>{item.user_code || "—"} · {item.account_number || "ยังไม่ผูก MT5"}</span>
-                      <small>{item.broker_server || "—"} · {item.actual_state}/{item.desired_state}</small>
-                      <strong>{item.positions || 0} Position</strong>
+                  <div className="owner-maintenance-blockers-head">
+                    <div>
+                      <b>บัญชีที่ยังต้องเคลียร์ก่อนอัปเดต</b>
+                      <small>ค้นหาด้วย User ID, เลข MT5, Broker Server หรือสถานะ</small>
                     </div>
-                  ))}
+                    <div className="owner-maintenance-search">
+                      <input
+                        className="input"
+                        value={maintenanceQuery}
+                        onChange={e=>setMaintenanceQuery(e.target.value)}
+                        placeholder="ค้นหาบัญชี เช่น 279754215"
+                      />
+                      <span>{filteredMaintenanceBlockers.length}/{maintenanceBlockers.length}</span>
+                    </div>
+                  </div>
+                  <div className="owner-maintenance-account-list">
+                    {filteredMaintenanceBlockers.length > 0 ? filteredMaintenanceBlockers.map((item:any)=>(
+                      <div className="owner-maintenance-account-row" key={item.instance_id}>
+                        <div className="owner-maintenance-account-name">
+                          <b>{item.user_code || "—"} · {item.account_number || "ยังไม่ผูก MT5"}</b>
+                          <small>{item.broker_server || "—"} · {item.actual_state}/{item.desired_state}</small>
+                        </div>
+                        <strong className={Number(item.positions || 0)>0 ? "has-position" : ""}>{item.positions || 0} Position</strong>
+                        <button
+                          className="btn danger owner-account-close"
+                          disabled={Boolean(maintenanceActionId) || Number(item.positions || 0) <= 0}
+                          onClick={()=>forceCloseMaintenanceAccount(item)}
+                        >
+                          {maintenanceActionId === item.instance_id ? "กำลังส่งคำสั่ง..." : "ปิดทุก Position"}
+                        </button>
+                      </div>
+                    )) : (
+                      <div className="owner-maintenance-empty">ไม่พบบัญชีที่ตรงกับคำค้นหา</div>
+                    )}
+                  </div>
                 </div>
               )}
             </section>
