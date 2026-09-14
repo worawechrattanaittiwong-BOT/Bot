@@ -1,14 +1,57 @@
-name: Retired AUTO RACE Profit Lock V104
+name: Patch Integration Smoke Account Follow
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-auto-race-profit-lock-v104.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  retired:
+  patch:
     runs-on: ubuntu-latest
     steps:
-      - name: Retired one-shot patch
-        run: echo "This one-shot V1.0.4 patch is retired. Current EA source is maintained directly and validated by CI + Build MT5 EA."
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Align smoke test with automatic LOCAL MT5 follow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/integration-smoke.yml')
+          text = path.read_text(encoding='utf-8')
+          start_marker = '          echo "[integration] rebind succeeds after old MT5 reports flat"\n'
+          end_marker = '          TRIAL_COUNT='
+          start = text.index(start_marker)
+          end = text.index(end_marker, start)
+          replacement = '''          echo "[integration] LOCAL account follows the new MT5 automatically after old account is flat"
+          OLD_FLAT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\\"instanceId\\":\\"$INSTANCE\\",\\"installToken\\":\\"$INSTALL_TOKEN\\",\\"state\\":\\"SAFE_STOP\\",\\"metrics\\":{\\"accountNumber\\":\\"100001\\",\\"eaVersion\\":\\"$EA_VERSION\\",\\"server\\":\\"SCENOVA-Demo\\",\\"positions\\":0}}")
+          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\\"instanceId\\":\\"$INSTANCE\\",\\"installToken\\":\\"$INSTALL_TOKEN\\",\\"state\\":\\"SAFE_STOP\\",\\"metrics\\":{\\"accountNumber\\":\\"200002\\",\\"eaVersion\\":\\"$EA_VERSION\\",\\"server\\":\\"SCENOVA-Real\\",\\"positions\\":0}}")
+          test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch // false')" = "false"
+          test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountChangeBlocked // false')" = "false"
+
+          FOLLOW_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.account_number')" = "200002"
+          test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.broker_server')" = "SCENOVA-Real"
+          test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.instance.pending_account_number // empty')" = ""
+
+'''
+          path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+          PY
+
+      - name: Commit smoke test repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/workflows/integration-smoke.yml
+          git diff --cached --check
+          git commit -m "test: expect automatic LOCAL MT5 account follow"
+          git push origin HEAD:main
