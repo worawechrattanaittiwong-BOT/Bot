@@ -30,7 +30,7 @@ type BrokerCatalog = {
   }>;
 };
 
-type View = "overview" | "account" | "access" | "backtest";
+type View = "overview" | "account" | "backtest";
 const LIVE_PRICE_WINDOW_MS = 15 * 60 * 1000;
 const defaultSettings = {
   symbol: "XAUUSD",
@@ -171,8 +171,13 @@ export default function DashboardPage() {
     }
 
     const requestedView = new URLSearchParams(window.location.search).get("view");
-    if (requestedView === "account" || requestedView === "access" || requestedView === "backtest") {
+    if (requestedView === "account" || requestedView === "backtest") {
       setActiveView(requestedView);
+    } else if (requestedView === "access") {
+      // Access & Permissions was retired as a standalone page. Keep old bookmarks
+      // working by taking the user to MT5 & EA, where membership/trial actions now live.
+      setActiveView("account");
+      window.history.replaceState({}, "", "/dashboard?view=account");
     } else {
       setActiveView("overview");
       if (requestedView === "settings") {
@@ -1504,7 +1509,15 @@ export default function DashboardPage() {
   function handleOwnerNavigate(href:string) {
     if (!href.startsWith("/dashboard?view=")) return false;
     const requested = new URL(href, window.location.origin).searchParams.get("view");
-    if (requested === "overview" || requested === "account" || requested === "access" || requested === "backtest" || requested === "settings") {
+    if (requested === "access") {
+      setActiveView("account");
+      setError("");
+      setNotice("");
+      window.history.pushState({}, "", "/dashboard?view=account");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return true;
+    }
+    if (requested === "overview" || requested === "account" || requested === "backtest" || requested === "settings") {
       const targetView: View = requested === "settings" ? "overview" : requested;
       setActiveView(targetView);
       setError("");
@@ -1532,14 +1545,12 @@ export default function DashboardPage() {
   const isOwner = data.user?.role === "OWNER" || data.user?.role === "ADMIN";
   const ownerActiveKey =
     activeView === "account" ? "trading-account" :
-    activeView === "access" ? "trading-access" :
     activeView === "backtest" ? "trading-backtest" :
     "trading-overview";
 
   const navItems: Array<{id:View;label:string;hint:string}> = [
     { id:"overview", label:"บอท", hint:"สถานะ ควบคุม และตั้งค่า" },
-    { id:"account", label:"บัญชี MT5", hint:"MT5, Device และการเชื่อมต่อ" },
-    { id:"access", label:"สิทธิ์ใช้งาน", hint:"Trial และสมาชิก" },
+    { id:"account", label:"บัญชี MT5", hint:"MT5, Device, สมาชิก และ Trial" },
     { id:"backtest", label:"Backtest", hint:"ผลย้อนหลัง ดาวน์โหลด และแชร์ตัวอย่าง" }
   ];
 
@@ -1591,10 +1602,10 @@ export default function DashboardPage() {
 
         <header className={"page-head human-head cc-page-head cc-v3-head " + (activeView === "overview" ? "cc-page-head-overview cc-v4-page-head" : "")}>
           <div className="cc-v3-title">
-            <span className="cc-v3-title-icon"><ScenovaIcon name={activeView === "overview" ? "control" : activeView === "account" ? "account" : activeView === "backtest" ? "strategy" : "shield"} size={24}/></span>
+            <span className="cc-v3-title-icon"><ScenovaIcon name={activeView === "overview" ? "control" : activeView === "account" ? "account" : "strategy"} size={24}/></span>
             <div>
-              <h1>{activeView === "overview" ? "Control Center" : activeView === "account" ? "บัญชีและการเชื่อมต่อ MT5" : activeView === "backtest" ? "Backtest & Performance" : "สิทธิ์ใช้งาน"}</h1>
-              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "ติดตั้ง อัปเดต และตรวจการเชื่อมต่อ MT5 / EA" : activeView === "backtest" ? "ดูผลทดสอบย้อนหลัง ดาวน์โหลดรายงาน และสร้างหน้าพอร์ตตัวอย่างแบบอ่านอย่างเดียว" : "ตรวจสถานะ Trial สมาชิก และสิทธิ์ใช้งาน"}</p>
+              <h1>{activeView === "overview" ? "Control Center" : activeView === "account" ? "บัญชีและการเชื่อมต่อ MT5" : "Backtest & Performance"}</h1>
+              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "ติดตั้ง อัปเดต ตรวจ MT5 / EA และจัดการสมาชิกหรือ Trial ที่จำเป็น" : "ดูผลทดสอบย้อนหลัง ดาวน์โหลดรายงาน และสร้างหน้าพอร์ตตัวอย่างแบบอ่านอย่างเดียว"}</p>
             </div>
           </div>
           <div className="cc-v3-head-actions">
@@ -2141,19 +2152,9 @@ export default function DashboardPage() {
                 </section>
               )
             )}
-          </div>
-        )}
 
-        {activeView === "backtest" && (
-          <BacktestCenter
-            slotId={selectedSlotId || data.selectedSlot?.id || ""}
-            onError={(message:string)=>setError(message)}
-            onNotice={(message:string)=>setNotice(message)}
-          />
-        )}
-
-        {activeView === "access" && (
-          <div className="access-workspace">
+          {!isOwner && (
+            <div className="access-workspace account-access-summary" id="membership-and-trial">
             <section className="panel purple"><div className="eyebrow">CLOUD MEMBERSHIP</div><h2>ให้ Cloud ดูแล MT5 ของคุณ</h2><p className="muted">เลือก 1 / 3 / 6 / 12 เดือน ชำระผ่าน QR และติดตามการเปิดใช้งานได้จากหน้าเดียว</p><a className="btn primary" href={"/cloud"+(data.selectedSlot?.mode==="CLOUD"?"?slotId="+encodeURIComponent(data.selectedSlot.id):"")}>ซื้อ / ต่ออายุ Cloud →</a></section>
             <div className="grid2 access-grid">
               <section className="panel purple">
@@ -2243,7 +2244,17 @@ export default function DashboardPage() {
                 </div>
               </section>
             )}
+            </div>
+          )}
           </div>
+        )}
+
+        {activeView === "backtest" && (
+          <BacktestCenter
+            slotId={selectedSlotId || data.selectedSlot?.id || ""}
+            onError={(message:string)=>setError(message)}
+            onNotice={(message:string)=>setNotice(message)}
+          />
         )}
 
         {logsOpen && (
