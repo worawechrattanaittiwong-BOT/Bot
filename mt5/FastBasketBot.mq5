@@ -2092,11 +2092,6 @@ bool ZeroGridSendPending(bool buySide,int level)
       g_orderWindowStart=TimeCurrent();
       g_ordersInWindow=0;
    }
-   if(g_ordersInWindow>=g_maxOrdersPerMinute)
-   {
-      g_executionStatus="ZERO_GRID_RATE_LIMIT";
-      return false;
-   }
 
    double volume=NormalizeTradeVolume(ZeroGridEffectiveBaseLot()*level);
    if(volume<=0.0)
@@ -2104,53 +2099,102 @@ bool ZeroGridSendPending(bool buySide,int level)
       g_executionStatus="ZERO_GRID_INVALID_LOT";
       return false;
    }
-   double price=ZeroGridPendingLevelPrice(buySide,level);
-   if(price<=0.0)
+
+   // L1 is the critical trigger pair. Retry it immediately with a fresh tick
+   // and slightly more broker headroom instead of allowing L2+ to leapfrog it.
+   // Deeper levels need fewer retries because their anchor is already fixed by L1.
+   int maxPlacementAttempts=(level==1 ? 3 : 2);
+   for(int attempt=0;attempt<maxPlacementAttempts;attempt++)
    {
-      g_executionStatus="ZERO_GRID_WAIT_TICK";
-      return false;
+      if(g_ordersInWindow>=g_maxOrdersPerMinute)
+      {
+         g_executionStatus="ZERO_GRID_RATE_LIMIT";
+         return false;
+      }
+
+      MqlTick live;
+      if(!SymbolInfoTick(_Symbol,live))
+      {
+         g_executionStatus="ZERO_GRID_WAIT_TICK";
+         return false;
+      }
+
+      double price=ZeroGridPendingLevelPrice(buySide,level);
+      if(price<=0.0)
+      {
+         g_executionStatus="ZERO_GRID_WAIT_TICK";
+         return false;
+      }
+
+      // First try keeps the intended ~100-point geometry. If the quote moves
+      // while the request is being staged, later L1 attempts add only 1 tick
+      // at a time and clamp outward to the latest broker-safe boundary.
+      double tickSize=ZeroGridTickSize();
+      double retryHeadroom=tickSize*(attempt+1);
+      double safeDistance=ZeroGridMinPendingDistancePrice()+retryHeadroom;
+      double safeBoundary=buySide
+         ? ZeroGridNormalizePendingPrice(true,live.ask+safeDistance)
+         : ZeroGridNormalizePendingPrice(false,live.bid-safeDistance);
+
+      bool unsafe=(buySide && price<safeBoundary) || (!buySide && price>safeBoundary);
+      if(unsafe)
+      {
+         // Before L1 exists there is no valid ladder geometry to preserve, so
+         // move L1 itself to the nearest legal live boundary. Once L1 exists,
+         // never distort the configured spacing of L2+.
+         if(level==1 && ZeroGridExistingPendingAnchorPrice(buySide)<=0.0)
+            price=safeBoundary;
+         else
+         {
+            g_executionStatus="ZERO_GRID_WAIT_SAFE_GEOMETRY";
+            return false;
+         }
+      }
+
+      MqlTradeRequest request={};
+      MqlTradeResult result={};
+      request.action=TRADE_ACTION_PENDING;
+      request.magic=InpMagic;
+      request.symbol=_Symbol;
+      request.volume=volume;
+      request.price=price;
+      request.type=buySide ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
+      request.type_time=ORDER_TIME_GTC;
+      request.type_filling=ORDER_FILLING_RETURN;
+      request.comment=ZeroGridComment(buySide,level);
+
+      ResetLastError();
+      bool sent=OrderSend(request,result);
+      RegisterOrderRequest();
+      g_lastOrderRetcode=(long)result.retcode;
+      g_lastOrderError=GetLastError();
+      g_lastOrderAt=TimeCurrent();
+
+      if(sent && (result.retcode==TRADE_RETCODE_DONE || result.retcode==TRADE_RETCODE_PLACED))
+         return true;
+
+      PrintFormat(
+         "ZERO pending retry side=%s level=%d attempt=%d price=%.*f bid=%.*f ask=%.*f retcode=%u error=%d",
+         buySide ? "BUY" : "SELL",
+         level,
+         attempt+1,
+         _Digits,price,
+         _Digits,live.bid,
+         _Digits,live.ask,
+         result.retcode,
+         g_lastOrderError
+      );
+
+      bool retryable=
+         result.retcode==TRADE_RETCODE_INVALID_PRICE ||
+         result.retcode==TRADE_RETCODE_INVALID_STOPS ||
+         result.retcode==TRADE_RETCODE_PRICE_CHANGED ||
+         result.retcode==TRADE_RETCODE_REQUOTE;
+      if(!retryable)
+         break;
    }
 
-   MqlTick live;
-   if(!SymbolInfoTick(_Symbol,live))
-   {
-      g_executionStatus="ZERO_GRID_WAIT_TICK";
-      return false;
-   }
-   // Keep one tick of placement headroom so BUY/SELL L1 can both be
-   // accepted even while the quote moves during the same fast staging pass.
-   double safeDistance=ZeroGridMinPendingDistancePrice()+ZeroGridTickSize();
-   double safeBoundary=buySide
-      ? ZeroGridNormalizePendingPrice(true,live.ask+safeDistance)
-      : ZeroGridNormalizePendingPrice(false,live.bid-safeDistance);
-   if((buySide && price<safeBoundary) || (!buySide && price>safeBoundary))
-   {
-      g_executionStatus="ZERO_GRID_WAIT_SAFE_GEOMETRY";
-      return false;
-   }
-
-   MqlTradeRequest request={};
-   MqlTradeResult result={};
-   request.action=TRADE_ACTION_PENDING;
-   request.magic=InpMagic;
-   request.symbol=_Symbol;
-   request.volume=volume;
-   request.price=price;
-   request.type=buySide ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
-   request.type_time=ORDER_TIME_GTC;
-   request.type_filling=ORDER_FILLING_RETURN;
-   request.comment=ZeroGridComment(buySide,level);
-
-   ResetLastError();
-   bool sent=OrderSend(request,result);
-   RegisterOrderRequest();
-   g_lastOrderRetcode=(long)result.retcode;
-   g_lastOrderError=GetLastError();
-   g_lastOrderAt=TimeCurrent();
-   if(sent && (result.retcode==TRADE_RETCODE_DONE || result.retcode==TRADE_RETCODE_PLACED))
-      return true;
-
-   g_executionStatus="ZERO_GRID_PENDING_RETRY";
+   g_executionStatus=(level==1 ? "ZERO_GRID_L1_RETRY" : "ZERO_GRID_PENDING_RETRY");
    return false;
 }
 
@@ -2163,25 +2207,79 @@ bool ZeroGridEnsureLadder()
    int nettingDirection=ZeroGridAccountIsNetting() ? ZeroGridPositionDirection() : 0;
    int attemptsThisPass=0;
    int levels=ZeroGridEffectiveLevelsPerSide();
-   // Build the requested ladder in one pass when possible. Example: 5 means
-   // exactly 5 BUY STOP + 5 SELL STOP pending requests. A broker rejection on
-   // one level must not block the other valid levels; missing levels retry.
-   int maxAttemptsPerPass=MathMin(60,levels*2);
+   int maxAttemptsPerPass=MathMin(60,levels*2+4);
 
-   for(int level=1;level<=levels;level++)
+   // Repair ladders created by the previous bug: if L2+ is active on a side
+   // while that side has no active L1 and the cycle is still flat, discard the
+   // malformed pending set. The next tick starts a clean pair from live price.
+   if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()>0)
    {
-      if(nettingDirection>=0 && !ZeroGridLevelExists(true,level))
+      bool buyL1Active=false;
+      bool sellL1Active=false;
+      bool buyHigherActive=false;
+      bool sellHigherActive=false;
+      string buyL1=ZeroGridComment(true,1);
+      string sellL1=ZeroGridComment(false,1);
+
+      for(int i=OrdersTotal()-1;i>=0;i--)
+      {
+         ulong ticket=OrderGetTicket(i);
+         if(ticket==0 || !OrderSelect(ticket)) continue;
+         if(OrderGetString(ORDER_SYMBOL)!=_Symbol || OrderGetInteger(ORDER_MAGIC)!=InpMagic) continue;
+         string comment=OrderGetString(ORDER_COMMENT);
+         if(comment==buyL1) buyL1Active=true;
+         else if(comment==sellL1) sellL1Active=true;
+         else if(StringFind(comment,"SaaSZeroGridB")==0) buyHigherActive=true;
+         else if(StringFind(comment,"SaaSZeroGridS")==0) sellHigherActive=true;
+      }
+
+      if((buyHigherActive && !buyL1Active) || (sellHigherActive && !sellL1Active))
+      {
+         ZeroGridCancelPending();
+         ResetZeroGridCycleState();
+         g_executionStatus="ZERO_GRID_REBUILD_MISSING_L1";
+         return false;
+      }
+   }
+
+   bool needBuy=nettingDirection>=0;
+   bool needSell=nettingDirection<=0;
+
+   // Stage the trigger pair FIRST. Never allow L2/L3/... to exist while a
+   // required L1 is missing. This is the key guarantee for fast symmetric ZERO.
+   if(needBuy && !ZeroGridLevelExists(true,1))
+   {
+      attemptsThisPass++;
+      if(!ZeroGridSendPending(true,1)) complete=false;
+   }
+   if(needSell && !ZeroGridLevelExists(false,1))
+   {
+      attemptsThisPass++;
+      if(!ZeroGridSendPending(false,1)) complete=false;
+   }
+
+   bool firstPairReady=
+      (!needBuy || ZeroGridLevelExists(true,1)) &&
+      (!needSell || ZeroGridLevelExists(false,1));
+   if(!firstPairReady)
+   {
+      g_executionStatus="ZERO_GRID_WAIT_FIRST_PAIR";
+      return false;
+   }
+
+   // Once L1 is confirmed, fill the rest as fast as the broker/rate limit allows.
+   for(int level=2;level<=levels;level++)
+   {
+      if(needBuy && !ZeroGridLevelExists(true,level))
       {
          attemptsThisPass++;
-         if(!ZeroGridSendPending(true,level))
-            complete=false;
+         if(!ZeroGridSendPending(true,level)) complete=false;
          if(attemptsThisPass>=maxAttemptsPerPass) break;
       }
-      if(nettingDirection<=0 && !ZeroGridLevelExists(false,level))
+      if(needSell && !ZeroGridLevelExists(false,level))
       {
          attemptsThisPass++;
-         if(!ZeroGridSendPending(false,level))
-            complete=false;
+         if(!ZeroGridSendPending(false,level)) complete=false;
          if(attemptsThisPass>=maxAttemptsPerPass) break;
       }
       if(g_ordersInWindow>=g_maxOrdersPerMinute)

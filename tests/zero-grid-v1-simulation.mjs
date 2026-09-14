@@ -66,4 +66,8 @@ assert.match(ea, /bool\s+g_settingsSynchronized\s*=\s*false/);
 assert.match(ea, /WAIT_SETTINGS_SYNC/);
 assert.match(api, /\["AUTO",\s*"RACE",\s*"ZERO_GRID",\s*"ASSISTED",\s*"MANUAL"\]/);
 assert.match(web, /ตั้ง 5 = วาง BUY STOP 5 รายการ \+ SELL STOP 5 รายการ/);
+assert.match(ea, /int maxPlacementAttempts=\(level==1 \? 3 : 2\)/, "L1 must retry immediately");
+assert.match(ea, /ZERO_GRID_WAIT_FIRST_PAIR/, "deeper ladder must wait for both required L1 orders");
+assert.match(ea, /ZERO_GRID_REBUILD_MISSING_L1/, "legacy malformed ladders must rebuild");
+assert.match(ea, /for\(int level=2;level<=levels;level\+\+\)/, "deeper staging must begin at level 2 after L1 pair");
 console.log("ZERO GRID ~100-point first-offset, fast paired staging and real-net regression passed");
