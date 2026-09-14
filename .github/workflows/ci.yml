@@ -39,6 +39,9 @@ jobs:
       - name: Market-closed heartbeat and status contract
         shell: pwsh
         run: ./tests/market-closed-heartbeat-contract.ps1
+      - name: Admin maintenance stale-position override contract
+        shell: pwsh
+        run: ./tests/admin-maintenance-stale-override-contract.ps1
       - name: Live price chart 15-minute contract
         shell: pwsh
         run: ./tests/live-price-chart-15m-contract.ps1

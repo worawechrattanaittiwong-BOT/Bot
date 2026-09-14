@@ -602,7 +602,7 @@ export class AdminController {
   async shutdownForMaintenance(@Req() req: any, @Body() body: { message?: string }) {
     const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
     const result = await this.maintenance.shutdownNow(actor, body?.message);
-    await this.audit(actor, "BEGIN_SAFE_MAINTENANCE", "system", "maintenance", {
+    await this.audit(actor, "BEGIN_HARD_MAINTENANCE", "system", "maintenance", {
       openPositions: result.summary?.openPositions || 0,
       runningInstances: result.summary?.runningInstances || 0
     });

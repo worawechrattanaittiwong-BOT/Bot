@@ -26,7 +26,6 @@ export default function AdminPage() {
   const [maintenanceAt, setMaintenanceAt] = useState("");
   const [forceCloseAt, setForceCloseAt] = useState("");
   const [expectedResumeAt, setExpectedResumeAt] = useState("");
-  const [maintenanceForceClose, setMaintenanceForceClose] = useState(true);
   const [maintenanceBusy, setMaintenanceBusy] = useState(false);
   const [maintenanceQuery, setMaintenanceQuery] = useState("");
   const [maintenanceActionId, setMaintenanceActionId] = useState("");
@@ -211,7 +210,7 @@ export default function AdminPage() {
           maintenanceAt: new Date(maintenanceAt).toISOString(),
           forceCloseAt: forceCloseAt ? new Date(forceCloseAt).toISOString() : undefined,
           expectedResumeAt: expectedResumeAt ? new Date(expectedResumeAt).toISOString() : undefined,
-          forceClose: maintenanceForceClose
+          forceClose: true
         })
       });
       setMessage("ประกาศ Maintenance ให้ทุกบัญชีแล้ว");
@@ -225,16 +224,17 @@ export default function AdminPage() {
 
   async function shutdownForMaintenance() {
     if (!confirm(
-      "ปิดระบบอย่างปลอดภัยตอนนี้หรือไม่?\n\n" +
-      "ระบบจะบล็อก Start ใหม่ สั่งหยุดทุกบอท และส่ง Close All ให้บัญชีที่ยังมี Position ค้างอยู่"
+      "ปิดระบบทั้งแพลตฟอร์มด้วยสิทธิ์ Admin ตอนนี้หรือไม่?\n\n" +
+      "Server จะเข้า Maintenance ทันที ตัดสิทธิ์ Start ทุกบัญชี ตั้ง Bot ทุกตัวเป็น STOPPED และส่ง Close All ให้ทุก Instance โดยไม่รอ heartbeat ของลูกค้า"
     )) return;
     setMaintenanceBusy(true);
     try {
-      await adminApi("/admin/maintenance/shutdown", {
+      const result = await adminApi("/admin/maintenance/shutdown", {
         method: "POST",
         body: JSON.stringify({ message: maintenanceMessage })
       });
-      setMessage("เริ่ม Safe Shutdown แล้ว ระบบกำลังรอ Position ทุกบัญชีเป็น 0");
+      const affected = Number(result?.hardStop?.totalInstances || 0);
+      setMessage(`ปิดระบบแล้วทันที · บังคับ STOPPED ${affected} Bot · ส่ง Close All แล้ว · ไม่รอลูกค้าตอบกลับ`);
       await search(undefined, true);
     } catch (e:any) {
       setMessage(e.message);
@@ -245,11 +245,11 @@ export default function AdminPage() {
 
   async function forceCloseMaintenanceAccount(item:any) {
     const positions = Number(item?.positions || 0);
-    if (positions <= 0) return setMessage("บัญชีนี้ไม่มี Position ค้างให้ปิด");
     const accountLabel = [item?.user_code, item?.account_number, item?.broker_server].filter(Boolean).join(" · ");
     if (!confirm(
-      "ยืนยันบังคับปิด Position ทั้งหมดของบัญชีนี้?\n\n" +
-      accountLabel + "\n" + positions + " Position\n\nระบบจะส่งคำสั่ง Close All ไปยัง EA ของบัญชีนี้และหยุดการเปิดรอบใหม่"
+      "ยืนยันบังคับปิดบัญชีนี้ด้วยสิทธิ์ Admin?\n\n" +
+      accountLabel + "\nServer รายงาน " + positions + " Position\n\n" +
+      "ระบบจะตั้งบัญชีเป็น STOPPED / 0 Position ทันที ยกเลิกคำสั่ง Start เก่า และส่ง Close All ให้ EA โดยไม่รอ heartbeat"
     )) return;
     setMaintenanceActionId(String(item.instance_id || ""));
     try {
@@ -257,7 +257,7 @@ export default function AdminPage() {
         method: "POST",
         body: JSON.stringify({ instanceId: item.instance_id })
       });
-      setMessage(result?.message || "ส่งคำสั่ง Close All ให้บัญชีนี้แล้ว");
+      setMessage(result?.message || "Admin บังคับปิดบัญชีนี้แล้ว");
       await search(undefined, true);
     } catch (e:any) {
       setMessage(e.message);
@@ -380,7 +380,7 @@ export default function AdminPage() {
                 <div>
                   <span className="owner-card-kicker">SAFE UPDATE CONTROL</span>
                   <h3>ประกาศและปิดระบบเพื่ออัปเดตอย่างปลอดภัย</h3>
-                  <p className="muted">แจ้งลูกค้าล่วงหน้า → ถึงเวลาระบบบล็อก Start → ปิด Position ที่ยังค้าง → รอทุกบัญชีหยุด → จึงเข้าสู่ Maintenance</p>
+                  <p className="muted">แจ้งลูกค้าล่วงหน้า → ถึงกำหนด Server เข้า Maintenance ทันที → ทุก Bot STOPPED → ส่ง Close All โดยไม่รอทุกบัญชีตอบกลับ</p>
                 </div>
                 <span className={"owner-maintenance-state " + String(maintenance.status || "OFF").toLowerCase()}>{maintenance.status || "OFF"}</span>
               </div>
@@ -388,7 +388,7 @@ export default function AdminPage() {
               <div className="owner-maintenance-summary">
                 <div><small>เวลา Maintenance</small><b>{maintenanceDateLabel(maintenance.maintenance_at)}</b></div>
                 <div><small>บังคับปิด Position</small><b>{maintenanceDateLabel(maintenance.force_close_at)}</b></div>
-                <div><small>Position คงเหลือ</small><b>{maintenance.summary?.openPositions || 0}</b></div>
+                <div><small>Position ที่ Server รายงานล่าสุด</small><b>{maintenance.summary?.openPositions || 0}</b></div>
                 <div><small>Bot ยัง Running</small><b>{maintenance.summary?.runningInstances || 0}</b></div>
               </div>
 
@@ -406,22 +406,26 @@ export default function AdminPage() {
                 <div className="field"><label>วัน/เวลา Maintenance</label><input className="input" type="datetime-local" value={maintenanceAt} onChange={e=>setMaintenanceAt(e.target.value)} /></div>
                 <div className="field"><label>เวลาบังคับ Close All</label><input className="input" type="datetime-local" value={forceCloseAt} onChange={e=>setForceCloseAt(e.target.value)} /><div className="help">เว้นว่าง = เวลาเดียวกับ Maintenance</div></div>
                 <div className="field"><label>คาดว่าจะเปิดระบบ</label><input className="input" type="datetime-local" value={expectedResumeAt} onChange={e=>setExpectedResumeAt(e.target.value)} /></div>
-                <label className="owner-maintenance-check"><input type="checkbox" checked={maintenanceForceClose} onChange={e=>setMaintenanceForceClose(e.target.checked)} /><span><b>บังคับปิด Position ที่ยังค้าง</b><small>เมื่อถึงกำหนด ระบบส่ง Close All และไม่เปิดรอบใหม่</small></span></label>
+                <label className="owner-maintenance-check"><input type="checkbox" checked readOnly disabled /><span><b>Global Close All (บังคับ)</b><small>เมื่อถึงกำหนด Server จะ STOPPED ทุก Bot และส่ง Close All ทุกบัญชีเสมอ</small></span></label>
               </div>
 
               <div className="owner-maintenance-actions">
                 <button className="btn primary" disabled={maintenanceBusy || maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE"} onClick={announceMaintenance}>ประกาศกำหนดอัปเดต</button>
-                <button className="btn danger" disabled={maintenanceBusy || maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE"} onClick={shutdownForMaintenance}>ปิดระบบอย่างปลอดภัยตอนนี้</button>
+                <button className="btn danger" disabled={maintenanceBusy || maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE"} onClick={shutdownForMaintenance}>ปิดระบบทันที (Admin)</button>
                 {maintenance.status === "SCHEDULED" && <button className="btn" disabled={maintenanceBusy} onClick={cancelMaintenance}>ยกเลิกประกาศ</button>}
-                {maintenance.status === "MAINTENANCE" && <button className="btn primary" disabled={maintenanceBusy} onClick={resumeMaintenance}>เปิดระบบหลังอัปเดต</button>}
+                {(maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE") && (
+                  <button className="btn primary" disabled={maintenanceBusy} onClick={resumeMaintenance}>
+                    เปิดระบบหลังอัปเดต
+                  </button>
+                )}
               </div>
 
               {maintenanceBlockers.length > 0 && (
                 <div className="owner-maintenance-blockers">
                   <div className="owner-maintenance-blockers-head">
                     <div>
-                      <b>บัญชีที่ยังต้องเคลียร์ก่อนอัปเดต</b>
-                      <small>ค้นหาด้วย User ID, เลข MT5, Broker Server หรือสถานะ</small>
+                      <b>บัญชีที่ Server ยังรายงาน Running / Position</b>
+                      <small>รายการนี้เป็นข้อมูลติดตามเท่านั้น ไม่สามารถบล็อก Global Maintenance ได้</small>
                     </div>
                     <div className="owner-maintenance-search">
                       <input
@@ -438,15 +442,19 @@ export default function AdminPage() {
                       <div className="owner-maintenance-account-row" key={item.instance_id}>
                         <div className="owner-maintenance-account-name">
                           <b>{item.user_code || "—"} · {item.account_number || "ยังไม่ผูก MT5"}</b>
-                          <small>{item.broker_server || "—"} · {item.actual_state}/{item.desired_state}</small>
+                          <small>
+                            {item.broker_server || "—"} · {item.actual_state}/{item.desired_state} · {item.positions_fresh === false ? "ข้อมูลเก่า/ขาด heartbeat" : "MT5 สด"}
+                          </small>
                         </div>
                         <strong className={Number(item.positions || 0)>0 ? "has-position" : ""}>{item.positions || 0} Position</strong>
                         <button
                           className="btn danger owner-account-close"
-                          disabled={Boolean(maintenanceActionId) || Number(item.positions || 0) <= 0}
+                          disabled={Boolean(maintenanceActionId)}
                           onClick={()=>forceCloseMaintenanceAccount(item)}
                         >
-                          {maintenanceActionId === item.instance_id ? "กำลังส่งคำสั่ง..." : "ปิดทุก Position"}
+                          {maintenanceActionId === item.instance_id
+                            ? "กำลังบังคับปิด..."
+                            : "บังคับปิดทั้งหมด (Admin)"}
                         </button>
                       </div>
                     )) : (
