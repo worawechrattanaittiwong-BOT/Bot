@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate patched Integration Smoke
-        run: python3 scripts/repair_zero_settings_and_smoke.py
+        run: python3 scripts/patch_integration_smoke_only.py
 
       - name: Upload patched workflow
         uses: actions/upload-artifact@v4
