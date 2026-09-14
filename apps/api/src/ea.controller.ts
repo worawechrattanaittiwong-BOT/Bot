@@ -389,7 +389,7 @@ export class EaController {
     const instance = await this.instance(body.instanceId, body.installToken);
     // A due maintenance window must block new rounds and enqueue the safe
     // shutdown/close commands before this heartbeat chooses desired state.
-    await this.maintenance.current();
+    const maintenanceState = await this.maintenance.current();
     const eaIp = this.clientIp(req);
     const metrics = body.metrics || {};
 
@@ -679,12 +679,15 @@ export class EaController {
       };
     }
 
-    const access = await this.hasAccess(
+    const entitlementAccess = await this.hasAccess(
       instance.user_id,
       instance.mt5_account_id || null,
       instance.mode,
       instance.slot_id || null
     );
+    // Global Maintenance is Server-authoritative: entitlement alone is not enough.
+    // Every EA loses trading access immediately until OWNER/ADMIN reopens the system.
+    const access = entitlementAccess && !Boolean(maintenanceState.blockStarts);
 
     const dailyProfitUnlockRequested =
       instance.metrics?.dailyProfitUnlockRequested === true;
@@ -721,9 +724,11 @@ export class EaController {
       "SELECT desired_state FROM bot_instances WHERE id=$1",
       [instance.id]
     );
-    const effectiveDesired = access
-      ? String(latestControl?.desired_state || "STOPPED")
-      : "SAFE_STOP";
+    const effectiveDesired = maintenanceState.blockStarts
+      ? "STOPPED"
+      : access
+        ? String(latestControl?.desired_state || "STOPPED")
+        : "SAFE_STOP";
     const cmd = await this.db.one(
       `SELECT id,command,payload
        FROM bot_commands

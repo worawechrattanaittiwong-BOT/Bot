@@ -37,184 +37,69 @@ export class MaintenanceService {
     )`;
   }
 
-  // A stale cached Position is never silently discarded. It is reconciled to
-  // zero only when the EA has ACKed CLOSE_ALL after the last full MT5 snapshot.
-  // Otherwise it remains an unresolved maintenance blocker until a fresh MT5
-  // heartbeat reports the real Position count.
-  private async reconcileAckedCloseAll() {
-    const reconciledAt = new Date().toISOString();
-    const result = await this.db.query(
-      `WITH candidates AS (
-         SELECT
-           bi.id,
-           COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)::int AS reported_positions,
-           COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0) AS mt5_report_epoch,
-           (
-             SELECT MAX(bc.acked_at)
-             FROM bot_commands bc
-             WHERE bc.bot_instance_id=bi.id
-               AND bc.command='CLOSE_ALL'
-               AND bc.status='ACKED'
-           ) AS close_acked_at
-         FROM bot_instances bi
-         WHERE bi.desired_state<>'RUNNING'
-           AND COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
-       ), eligible AS (
-         SELECT *
-         FROM candidates
-         WHERE mt5_report_epoch>0
-           AND mt5_report_epoch <= extract(epoch from now() - interval '20 seconds')
-           AND close_acked_at IS NOT NULL
-           AND close_acked_at > to_timestamp(mt5_report_epoch)
-           AND close_acked_at < now() - interval '5 seconds'
-       )
-       UPDATE bot_instances bi
-       SET metrics=COALESCE(bi.metrics,'{}'::jsonb) || jsonb_build_object(
-         'lastKnownPositionsBeforeClose',e.reported_positions,
-         'positions',0,
-         'positionsReconciledAt',$1::text,
-         'positionsReconcileReason','ACKED_CLOSE_ALL_AFTER_LAST_MT5_SNAPSHOT'
-       )
-       FROM eligible e
-       WHERE bi.id=e.id
-       RETURNING bi.id,e.reported_positions`,
-      [reconciledAt]
-    );
-
-    for (const row of result.rows) {
-      await this.db.query(
-        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES('SYSTEM_MAINTENANCE','RECONCILE_STALE_MT5_POSITIONS','bot_instance',$1,$2::jsonb)",
-        [
-          row.id,
-          JSON.stringify({
-            previousReportedPositions: Number(row.reported_positions || 0),
-            reconciledAt,
-            reason: "ACKED_CLOSE_ALL_AFTER_LAST_MT5_SNAPSHOT"
-          })
-        ]
-      );
-    }
-    return result.rowCount || 0;
-  }
-
-  // OWNER/ADMIN may reconcile only stale cached Position snapshots during an
-  // explicit maintenance action. Fresh MT5 heartbeats remain authoritative and
-  // are never cleared by this override. Every override is written to audit_logs.
-  private async reconcileAdminStalePositions(actor: string) {
-    const reconciledAt = new Date().toISOString();
-    const reconciledBy = actor.slice(0, 120);
-    const result = await this.db.query(
-      `${this.runtimeCte()}
-       UPDATE bot_instances bi
-       SET desired_state='STOPPED',
-           metrics=COALESCE(bi.metrics,'{}'::jsonb) || jsonb_build_object(
-             'lastKnownPositionsBeforeAdminOverride',r.reported_positions,
-             'positions',0,
-             'positionsReconciledAt',$1::text,
-             'positionsReconcileReason','ADMIN_MAINTENANCE_OVERRIDE_STALE_SNAPSHOT',
-             'positionsReconciledBy',$2::text
-           )
-       FROM runtime r
-       WHERE bi.id=r.id
-         AND NOT r.mt5_fresh
-         AND r.reported_positions>0
-         AND bi.desired_state<>'RUNNING'
-       RETURNING bi.id,r.reported_positions`,
-      [reconciledAt, reconciledBy]
-    );
-
-    for (const row of result.rows) {
-      await this.db.query(
-        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'ADMIN_RECONCILE_STALE_MT5_POSITIONS','bot_instance',$2,$3::jsonb)",
-        [
-          reconciledBy,
-          row.id,
-          JSON.stringify({
-            previousReportedPositions: Number(row.reported_positions || 0),
-            reconciledAt,
-            reason: "ADMIN_MAINTENANCE_OVERRIDE_STALE_SNAPSHOT"
-          })
-        ]
-      );
-    }
-    return result.rowCount || 0;
-  }
-
-  private async ensureDrainCommands(forceClose: boolean) {
-    await this.db.query(
-      `${this.runtimeCte()}
-       UPDATE bot_instances bi
-       SET desired_state = CASE
-         WHEN $1 AND r.mt5_fresh AND r.reported_positions>0 THEN 'STOPPED'
-         ELSE 'SAFE_STOP'
-       END
-       FROM runtime r
-       WHERE r.id=bi.id
-         AND (
-           bi.desired_state='RUNNING' OR
-           (r.mt5_fresh AND bi.actual_state='RUNNING') OR
-           (r.mt5_fresh AND r.reported_positions>0)
-         )`,
-      [forceClose]
-    );
-
-    await this.db.query(
-      `${this.runtimeCte()}
-       INSERT INTO bot_commands(bot_instance_id,command)
-       SELECT
-         r.id,
-         CASE
-           WHEN $1 AND r.mt5_fresh AND r.reported_positions>0 THEN 'CLOSE_ALL'
-           ELSE 'SAFE_STOP'
-         END
-       FROM runtime r
-       WHERE (
-         (r.mt5_fresh AND r.actual_state='RUNNING') OR
-         (r.mt5_fresh AND r.reported_positions>0) OR
-         (r.desired_state='SAFE_STOP' AND r.mt5_fresh)
-       )
-       AND NOT EXISTS (
-         SELECT 1
-         FROM bot_commands bc
-         WHERE bc.bot_instance_id=r.id
-           AND bc.command=CASE
-             WHEN $1 AND r.mt5_fresh AND r.reported_positions>0 THEN 'CLOSE_ALL'
-             ELSE 'SAFE_STOP'
-           END
-           AND bc.created_at>now()-interval '12 seconds'
-       )`,
-      [forceClose]
-    );
-  }
-
-  private async liveBlockers() {
-    return this.db.one(
+  /**
+   * Global Hard Maintenance is Server-authoritative. Once OWNER/ADMIN closes the
+   * platform, no Bot instance may keep the platform in DRAINING. We revoke all
+   * RUNNING desires in one DB operation and queue CLOSE_ALL for every instance.
+   * Offline terminals cannot veto Maintenance; when they reconnect the pending
+   * CLOSE_ALL plus desired_state=STOPPED prevents a new trading round.
+   */
+  private async hardStopAll(actor: string, reason: string) {
+    const forcedAt = new Date().toISOString();
+    const forcedBy = actor.slice(0, 120);
+    const before = await this.db.one(
       `${this.runtimeCte()}
        SELECT
-         COUNT(*) FILTER (
-           WHERE desired_state='RUNNING'
-              OR (mt5_fresh AND actual_state='RUNNING')
-         )::int AS running,
-         COALESCE(SUM(reported_positions),0)::int AS positions,
-         COUNT(*) FILTER (
-           WHERE NOT mt5_fresh AND reported_positions>0
-         )::int AS stale_position_instances,
-         COALESCE(SUM(CASE WHEN NOT mt5_fresh THEN reported_positions ELSE 0 END),0)::int AS stale_reported_positions
+         COUNT(*)::int AS total_instances,
+         COUNT(*) FILTER (WHERE desired_state='RUNNING' OR actual_state='RUNNING')::int AS running_instances,
+         COALESCE(SUM(reported_positions),0)::int AS reported_positions
        FROM runtime`
     );
-  }
 
-  private async tryFinishDrain() {
-    const blockers = await this.liveBlockers();
-    if (Number(blockers?.running || 0) === 0 && Number(blockers?.positions || 0) === 0) {
-      await this.db.query(
-        `UPDATE system_maintenance
-         SET status='MAINTENANCE',maintenance_started_at=COALESCE(maintenance_started_at,now()),updated_at=now()
-         WHERE id=1 AND status='DRAINING'`
-      );
-      return true;
-    }
-    return false;
+    // Invalidate every old control command first so a stale START can never win
+    // after the Admin has closed the platform.
+    await this.db.query(
+      `UPDATE bot_commands
+       SET status='ACKED',acked_at=COALESCE(acked_at,now())
+       WHERE status IN ('PENDING','DELIVERED')
+         AND command IN ('START','SAFE_STOP','CLOSE_ALL')`
+    );
+
+    await this.db.query(
+      "UPDATE bot_instances SET desired_state='STOPPED' WHERE desired_state<>'STOPPED'"
+    );
+
+    await this.db.query(
+      `INSERT INTO bot_commands(bot_instance_id,command,payload)
+       SELECT id,'CLOSE_ALL',$1::jsonb
+       FROM bot_instances`,
+      [JSON.stringify({
+        source: "SYSTEM_HARD_MAINTENANCE",
+        actor: forcedBy,
+        reason,
+        forcedAt
+      })]
+    );
+
+    await this.db.query(
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'GLOBAL_HARD_MAINTENANCE_STOP','system','maintenance',$2::jsonb)",
+      [
+        forcedBy,
+        JSON.stringify({
+          reason,
+          forcedAt,
+          totalInstances: Number(before?.total_instances || 0),
+          runningInstances: Number(before?.running_instances || 0),
+          reportedPositions: Number(before?.reported_positions || 0)
+        })
+      ]
+    );
+
+    return {
+      totalInstances: Number(before?.total_instances || 0),
+      runningInstances: Number(before?.running_instances || 0),
+      reportedPositions: Number(before?.reported_positions || 0)
+    };
   }
 
   async current() {
@@ -224,19 +109,44 @@ export class MaintenanceService {
     if (current.status === "SCHEDULED") {
       const triggerAt = current.force_close_at || current.maintenance_at;
       if (triggerAt && new Date(triggerAt).getTime() <= Date.now()) {
-        await this.db.query(
+        const transitioned = await this.db.one(
           `UPDATE system_maintenance
-           SET status='DRAINING',drain_started_at=COALESCE(drain_started_at,now()),updated_at=now()
-           WHERE id=1 AND status='SCHEDULED'`
+           SET status='MAINTENANCE',
+               title='ปิดระบบเพื่ออัปเดต',
+               message=COALESCE(NULLIF(message,''),'ระบบปิดปรับปรุงชั่วคราว'),
+               drain_started_at=COALESCE(drain_started_at,now()),
+               maintenance_started_at=COALESCE(maintenance_started_at,now()),
+               updated_at=now()
+           WHERE id=1 AND status='SCHEDULED'
+           RETURNING updated_by`
         );
+        if (transitioned) {
+          await this.hardStopAll(
+            String(transitioned.updated_by || "SYSTEM_MAINTENANCE"),
+            "SCHEDULED_MAINTENANCE_DUE"
+          );
+        }
         current = await this.row();
       }
     }
 
+    // Compatibility recovery for an older deployment that is already stuck in
+    // DRAINING. The first request upgrades it to hard MAINTENANCE immediately.
     if (current.status === "DRAINING") {
-      await this.reconcileAckedCloseAll();
-      await this.ensureDrainCommands(Boolean(current.force_close));
-      await this.tryFinishDrain();
+      const transitioned = await this.db.one(
+        `UPDATE system_maintenance
+         SET status='MAINTENANCE',
+             maintenance_started_at=COALESCE(maintenance_started_at,now()),
+             updated_at=now()
+         WHERE id=1 AND status='DRAINING'
+         RETURNING updated_by`
+      );
+      if (transitioned) {
+        await this.hardStopAll(
+          String(transitioned.updated_by || "SYSTEM_MAINTENANCE"),
+          "LEGACY_DRAINING_RECOVERY"
+        );
+      }
       current = await this.row();
     }
 
@@ -263,6 +173,7 @@ export class MaintenanceService {
        FROM runtime`
     );
 
+    // This list is telemetry only. It never blocks global Maintenance anymore.
     const blockers = await this.db.query(
       `${this.runtimeCte()}
        SELECT
@@ -286,26 +197,6 @@ export class MaintenanceService {
        LIMIT 1000`
     );
 
-    const staleReports = await this.db.query(
-      `${this.runtimeCte()}
-       SELECT
-         r.id AS instance_id,
-         u.user_code,
-         a.account_number,
-         a.broker_server,
-         r.actual_state,
-         r.desired_state,
-         r.last_seen_at,
-         r.reported_positions AS reported_positions
-       FROM runtime r
-       LEFT JOIN license_slots ls ON ls.id=r.slot_id
-       LEFT JOIN users u ON u.id=COALESCE(ls.assigned_user_id,ls.owner_user_id)
-       LEFT JOIN mt5_accounts a ON a.id=r.mt5_account_id
-       WHERE NOT r.mt5_fresh AND r.reported_positions>0
-       ORDER BY r.last_seen_at DESC NULLS LAST
-       LIMIT 1000`
-    );
-
     return {
       ...current,
       summary: {
@@ -317,17 +208,24 @@ export class MaintenanceService {
         staleReportedPositions: Number(summary?.stale_reported_positions || 0)
       },
       blockers: blockers.rows,
-      staleReports: staleReports.rows
+      // Kept for API compatibility with the existing Owner UI.
+      staleReports: blockers.rows.filter((row: any) => row.positions_fresh === false && Number(row.positions || 0) > 0)
     };
   }
 
+  /**
+   * OWNER/ADMIN force-close is authoritative per account. It immediately puts
+   * the Server-side control state at STOPPED/0 and still queues CLOSE_ALL so an
+   * online or later-reconnecting EA closes anything that really exists at MT5.
+   * A later heartbeat may report a real non-zero Position again; desired_state
+   * remains STOPPED and CLOSE_ALL remains the authoritative command.
+   */
   async forceCloseInstance(instanceId: string, actor: string) {
     const id = String(instanceId || "").trim();
-    if (!id) throw new ConflictException("ไม่พบ Bot Instance ที่ต้องการปิด Position");
+    if (!id) throw new ConflictException("ไม่พบ Bot Instance ที่ต้องการบังคับปิด");
 
     const instance = await this.db.one(
       `SELECT bi.id,bi.actual_state,bi.desired_state,bi.last_seen_at,
-              COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0) AS mt5_report_epoch,
               COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)::int AS positions,
               u.user_code,a.account_number,a.broker_server
        FROM bot_instances bi
@@ -338,81 +236,68 @@ export class MaintenanceService {
       [id]
     );
     if (!instance) throw new ConflictException("ไม่พบบัญชี/บอทนี้ในระบบ");
-    if (Number(instance.positions || 0) <= 0) {
-      throw new ConflictException("บัญชีนี้ไม่มี Position ค้างให้ปิด");
-    }
 
-    await this.db.query("UPDATE bot_instances SET desired_state='STOPPED' WHERE id=$1", [id]);
-
-    const mt5ReportEpoch = Number(instance.mt5_report_epoch || 0);
-    const lastSeenEpoch = instance.last_seen_at
-      ? new Date(instance.last_seen_at).getTime() / 1000
-      : 0;
-    const reportEpoch = mt5ReportEpoch > 0 ? mt5ReportEpoch : lastSeenEpoch;
-    const positionsFresh = reportEpoch > Date.now() / 1000 - 20;
-
-    // The Admin button is authoritative for a stale server snapshot. There is
-    // no live EA to receive CLOSE_ALL in this case, so keeping the cached count
-    // would deadlock Maintenance forever. Clear only the stale cache and audit it.
-    if (!positionsFresh) {
-      const reconciledAt = new Date().toISOString();
-      const reconciledBy = actor.slice(0, 120);
-      await this.db.query(
-        `UPDATE bot_instances
-         SET metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
-           'lastKnownPositionsBeforeAdminOverride',$1::int,
-           'positions',0,
-           'positionsReconciledAt',$2::text,
-           'positionsReconcileReason','ADMIN_MAINTENANCE_OVERRIDE_STALE_SNAPSHOT',
-           'positionsReconciledBy',$3::text
-         )
-         WHERE id=$4`,
-        [Number(instance.positions || 0), reconciledAt, reconciledBy, id]
-      );
-      await this.db.query(
-        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'ADMIN_RECONCILE_STALE_MT5_POSITIONS','bot_instance',$2,$3::jsonb)",
-        [
-          reconciledBy,
-          id,
-          JSON.stringify({
-            previousReportedPositions: Number(instance.positions || 0),
-            reconciledAt,
-            reason: "ADMIN_MAINTENANCE_OVERRIDE_STALE_SNAPSHOT"
-          })
-        ]
-      );
-      await this.tryFinishDrain();
-      return {
-        ok: true,
-        queued: false,
-        reconciled: true,
-        instanceId: id,
-        userCode: instance.user_code || null,
-        accountNumber: instance.account_number || null,
-        brokerServer: instance.broker_server || null,
-        positions: Number(instance.positions || 0),
-        message: "ข้อมูล Position เป็น snapshot เก่าและไม่มี heartbeat สด จึงล้างสถานะค้างด้วยสิทธิ์ Admin แล้ว"
-      };
-    }
+    const forcedAt = new Date().toISOString();
+    const forcedBy = actor.slice(0, 120);
+    const previousPositions = Number(instance.positions || 0);
 
     await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+      `UPDATE bot_instances
+       SET desired_state='STOPPED',
+           metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
+             'lastKnownPositionsBeforeAdminForceClose',$1::int,
+             'positions',0,
+             'positionsReconciledAt',$2::text,
+             'positionsReconcileReason','ADMIN_FORCE_CLOSE_ACCOUNT',
+             'positionsReconciledBy',$3::text
+           )
+       WHERE id=$4`,
+      [previousPositions, forcedAt, forcedBy, id]
+    );
+
+    await this.db.query(
+      `UPDATE bot_commands
+       SET status='ACKED',acked_at=COALESCE(acked_at,now())
+       WHERE bot_instance_id=$1
+         AND status IN ('PENDING','DELIVERED')
+         AND command IN ('START','SAFE_STOP','CLOSE_ALL')`,
       [id]
     );
     await this.db.query(
       "INSERT INTO bot_commands(bot_instance_id,command,payload) VALUES($1,'CLOSE_ALL',$2::jsonb)",
-      [id, JSON.stringify({ source: "OWNER_MAINTENANCE", actor: actor.slice(0, 120) })]
+      [id, JSON.stringify({
+        source: "ADMIN_FORCE_CLOSE_ACCOUNT",
+        actor: forcedBy,
+        forcedAt,
+        previousPositions
+      })]
+    );
+    await this.db.query(
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'ADMIN_FORCE_CLOSE_ACCOUNT','bot_instance',$2,$3::jsonb)",
+      [
+        forcedBy,
+        id,
+        JSON.stringify({
+          previousReportedPositions: previousPositions,
+          forcedAt,
+          serverStateAfter: "STOPPED/0",
+          closeAllQueued: true
+        })
+      ]
     );
 
     return {
       ok: true,
       queued: true,
+      forced: true,
+      reconciled: true,
       instanceId: id,
       userCode: instance.user_code || null,
       accountNumber: instance.account_number || null,
       brokerServer: instance.broker_server || null,
-      positions: Number(instance.positions || 0),
-      message: "ส่งคำสั่ง Close All ให้บัญชีนี้แล้ว ระบบจะรอ EA รับคำสั่งและ heartbeat จาก MT5 ยืนยัน Position เป็น 0"
+      positions: previousPositions,
+      positionsAfter: 0,
+      message: "Admin บังคับปิดบัญชีแล้ว: Server เป็น STOPPED / 0 Position ทันที และส่ง Close All ให้ EA โดยไม่รอ heartbeat"
     };
   }
 
@@ -420,9 +305,7 @@ export class MaintenanceService {
     const current = await this.current();
     if (current.blockStarts) {
       throw new ServiceUnavailableException(
-        current.status === "DRAINING"
-          ? "ระบบกำลังปิดอย่างปลอดภัยเพื่ออัปเดต ไม่อนุญาตให้เริ่มรอบใหม่"
-          : "ระบบอยู่ระหว่างปิดปรับปรุง กรุณารอประกาศเปิดระบบอีกครั้ง"
+        "ระบบอยู่ระหว่างปิดปรับปรุง Owner/Admin ปิดสิทธิ์ Start ทั้งระบบชั่วคราว"
       );
     }
     return current;
@@ -450,7 +333,7 @@ export class MaintenanceService {
       throw new ConflictException("กรุณากำหนดเวลา Maintenance ล่วงหน้าอย่างน้อย 30 วินาที");
     }
     if (forceCloseAt.getTime() > maintenanceAt.getTime()) {
-      throw new ConflictException("เวลาบังคับปิด Position ต้องไม่ช้ากว่าเวลาเริ่ม Maintenance");
+      throw new ConflictException("เวลาบังคับ Close All ต้องไม่ช้ากว่าเวลาเริ่ม Maintenance");
     }
     if (expectedResumeAt && expectedResumeAt.getTime() <= maintenanceAt.getTime()) {
       throw new ConflictException("เวลาคาดว่าจะเปิดระบบต้องอยู่หลังเวลาเริ่ม Maintenance");
@@ -474,7 +357,7 @@ export class MaintenanceService {
        WHERE id=1`,
       [
         String(input.title || "แจ้งปิดปรับปรุงระบบ").trim().slice(0, 160),
-        String(input.message || "กรุณาปิด Position ทั้งหมดก่อนเวลาที่กำหนด").trim().slice(0, 2000),
+        String(input.message || "เมื่อถึงกำหนดระบบจะปิดสิทธิ์เทรดและส่ง Close All ให้ทุกบัญชี").trim().slice(0, 2000),
         maintenanceAt,
         forceCloseAt,
         expectedResumeAt,
@@ -486,34 +369,29 @@ export class MaintenanceService {
   }
 
   async shutdownNow(actor: string, message?: string) {
-    const existing = await this.current();
-    if (existing.status === "MAINTENANCE") {
-      const adminReconciledStalePositions = await this.reconcileAdminStalePositions(actor);
-      const snapshot = await this.snapshot();
-      return { ...snapshot, adminReconciledStalePositions };
-    }
+    const existing = await this.row();
+    if (!existing) throw new Error("system_maintenance row missing");
+
     await this.db.query(
       `UPDATE system_maintenance
-       SET status='DRAINING',
-           title='กำลังปิดระบบเพื่ออัปเดต',
-           message=COALESCE(NULLIF($1,''),'ระบบกำลังหยุดบอทและปิด Position ที่ยังค้างอย่างปลอดภัย'),
+       SET status='MAINTENANCE',
+           title='ปิดระบบเพื่ออัปเดต',
+           message=COALESCE(NULLIF($1,''),'Owner/Admin ปิดระบบชั่วคราวเพื่ออัปเดต'),
            maintenance_at=now(),
            force_close_at=now(),
            force_close=true,
            announced_at=COALESCE(announced_at,now()),
-           drain_started_at=now(),
-           maintenance_started_at=NULL,
+           drain_started_at=COALESCE(drain_started_at,now()),
+           maintenance_started_at=COALESCE(maintenance_started_at,now()),
            updated_by=$2,
            updated_at=now()
        WHERE id=1`,
       [String(message || "").trim().slice(0, 2000), actor.slice(0, 120)]
     );
-    await this.reconcileAckedCloseAll();
-    await this.ensureDrainCommands(true);
-    const adminReconciledStalePositions = await this.reconcileAdminStalePositions(actor);
-    await this.tryFinishDrain();
+
+    const hardStop = await this.hardStopAll(actor, "ADMIN_SHUTDOWN_NOW");
     const snapshot = await this.snapshot();
-    return { ...snapshot, adminReconciledStalePositions };
+    return { ...snapshot, hardStop };
   }
 
   async cancel(actor: string) {
@@ -534,28 +412,20 @@ export class MaintenanceService {
   async resume(actor: string) {
     const current = await this.current();
     if (current.status !== "DRAINING" && current.status !== "MAINTENANCE") {
-      throw new ConflictException("ระบบไม่ได้อยู่ในขั้นตอนปิดปรับปรุง");
+      throw new ConflictException("ระบบไม่ได้อยู่ในโหมดปิดปรับปรุง");
     }
 
-    // OWNER/ADMIN can clear stale cached snapshots before reopening, but a fresh
-    // MT5 heartbeat that still reports RUNNING/Position remains a hard safety stop.
-    await this.reconcileAdminStalePositions(actor);
-    const blockers = await this.liveBlockers();
-    if (Number(blockers?.running || 0) > 0 || Number(blockers?.positions || 0) > 0) {
-      throw new ConflictException("ยังมี MT5 ที่ออนไลน์และยืนยัน Bot Running หรือ Position จริง ระบบยังเปิดกลับไม่ได้");
-    }
-
-    if (current.status === "DRAINING") {
-      await this.tryFinishDrain();
-    }
-
-    const refreshed = await this.row();
-    if (refreshed?.status !== "MAINTENANCE") {
-      throw new ConflictException("ระบบไม่ได้อยู่ในโหมด Maintenance");
-    }
-
+    // Reopening is also Server-authoritative. Do not wait for 1, 1000 or more
+    // clients. Every Bot stays STOPPED; customers explicitly Start again later.
     await this.db.query(
-      "UPDATE bot_instances SET desired_state='STOPPED' WHERE desired_state<>'RUNNING'"
+      "UPDATE bot_instances SET desired_state='STOPPED' WHERE desired_state<>'STOPPED'"
+    );
+    await this.db.query(
+      `UPDATE bot_commands
+       SET status='ACKED',acked_at=COALESCE(acked_at,now())
+       WHERE status IN ('PENDING','DELIVERED')
+         AND command='CLOSE_ALL'
+         AND payload->>'source'='SYSTEM_HARD_MAINTENANCE'`
     );
     await this.db.query(
       `UPDATE system_maintenance
@@ -563,6 +433,10 @@ export class MaintenanceService {
            expected_resume_at=NULL,force_close=true,resumed_at=now(),updated_by=$1,updated_at=now()
        WHERE id=1`,
       [actor.slice(0, 120)]
+    );
+    await this.db.query(
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'GLOBAL_MAINTENANCE_RESUME','system','maintenance',$2::jsonb)",
+      [actor.slice(0, 120), JSON.stringify({ botsRemainStopped: true })]
     );
     return this.snapshot();
   }

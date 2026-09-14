@@ -2,16 +2,20 @@ $ErrorActionPreference = 'Stop'
 
 $service = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/maintenance.service.ts'))
 $ui = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/app/admin/page.tsx'))
+$ea = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/ea.controller.ts'))
 
 $checks = @(
-  @{ Name = 'admin stale reconcile reason'; Text = $service; Pattern = 'ADMIN_MAINTENANCE_OVERRIDE_STALE_SNAPSHOT' },
-  @{ Name = 'admin stale reconcile audit'; Text = $service; Pattern = 'ADMIN_RECONCILE_STALE_MT5_POSITIONS' },
-  @{ Name = 'shutdown invokes admin stale reconcile'; Text = $service; Pattern = 'const adminReconciledStalePositions = await this.reconcileAdminStalePositions(actor);' },
-  @{ Name = 'resume reconciles stale cache'; Text = $service; Pattern = 'await this.reconcileAdminStalePositions(actor);' },
-  @{ Name = 'fresh MT5 remains safety blocker'; Text = $service; Pattern = 'ยังมี MT5 ที่ออนไลน์และยืนยัน Bot Running หรือ Position จริง' },
-  @{ Name = 'draining exposes reopen button'; Text = $ui; Pattern = 'เปิดระบบ (เคลียร์สถานะค้าง)' },
-  @{ Name = 'stale account action is explicit'; Text = $ui; Pattern = 'ล้างสถานะค้าง (Admin)' },
-  @{ Name = 'freshness is visible to Admin'; Text = $ui; Pattern = 'ข้อมูลเก่า/ขาด heartbeat' }
+  @{ Name = 'global shutdown enters maintenance directly'; Text = $service; Pattern = "SET status='MAINTENANCE'" },
+  @{ Name = 'global hard stop audit exists'; Text = $service; Pattern = 'GLOBAL_HARD_MAINTENANCE_STOP' },
+  @{ Name = 'global hard stop revokes bot desires'; Text = $service; Pattern = "UPDATE bot_instances SET desired_state='STOPPED'" },
+  @{ Name = 'global close all source exists'; Text = $service; Pattern = 'SYSTEM_HARD_MAINTENANCE' },
+  @{ Name = 'per account admin force close exists'; Text = $service; Pattern = 'ADMIN_FORCE_CLOSE_ACCOUNT' },
+  @{ Name = 'per account server snapshot becomes zero'; Text = $service; Pattern = "'positions',0" },
+  @{ Name = 'owner UI hard shutdown label'; Text = $ui; Pattern = 'ปิดระบบทันที (Admin)' },
+  @{ Name = 'owner UI per-account force label'; Text = $ui; Pattern = 'บังคับปิดทั้งหมด (Admin)' },
+  @{ Name = 'owner UI explains non-blocking telemetry'; Text = $ui; Pattern = 'ไม่สามารถบล็อก Global Maintenance ได้' },
+  @{ Name = 'owner UI reopen exists'; Text = $ui; Pattern = 'เปิดระบบหลังอัปเดต' },
+  @{ Name = 'EA entitlement is revoked during maintenance'; Text = $ea; Pattern = 'entitlementAccess && !Boolean(maintenanceState.blockStarts)' }
 )
 
 foreach ($check in $checks) {
@@ -20,4 +24,4 @@ foreach ($check in $checks) {
   }
 }
 
-Write-Host 'Admin maintenance stale-position override contract PASS'
+Write-Host 'Admin Global Hard Maintenance contract PASS'
