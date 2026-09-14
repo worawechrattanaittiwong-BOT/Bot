@@ -1964,10 +1964,13 @@ double ZeroGridEffectiveBaseLot()
 
 double ZeroGridEntryGapPrice()
 {
-   // First BUY/SELL triggers hug the live quote at the nearest broker-legal
-   // pending distance. Rounding outward to tick size provides the only buffer.
+   // Preferred first offset is 1.00 price unit. For 2-digit XAUUSD this is
+   // about 100 points: center 4001.00 -> BUY ~4002.00 / SELL ~4000.00.
+   // A broker requiring a wider StopsLevel always takes priority.
    double tick=ZeroGridTickSize();
-   double gap=ZeroGridMinPendingDistancePrice();
+   double preferredGap=1.0;
+   double brokerSafeGap=ZeroGridMinPendingDistancePrice()+tick;
+   double gap=MathMax(preferredGap,brokerSafeGap);
    double units=MathCeil((gap/tick)-1e-10);
    return NormalizeDouble(MathMax(1.0,units)*tick,_Digits);
 }
@@ -2035,8 +2038,17 @@ double ZeroGridPendingAnchorPrice(bool buySide)
 
    MqlTick live;
    if(!SymbolInfoTick(_Symbol,live)) return 0.0;
+
    double gap=ZeroGridEntryGapPrice();
-   double raw=buySide ? live.ask+gap : live.bid-gap;
+   double raw=buySide ? g_zeroGridCenter+gap : g_zeroGridCenter-gap;
+
+   // Guard the request against a fast quote move while keeping the intended
+   // center +/- first-gap geometry whenever the broker allows it.
+   double brokerSafe=ZeroGridMinPendingDistancePrice()+ZeroGridTickSize();
+   double legal=buySide ? live.ask+brokerSafe : live.bid-brokerSafe;
+   if(buySide && raw<legal) raw=legal;
+   if(!buySide && raw>legal) raw=legal;
+
    return ZeroGridNormalizePendingPrice(buySide,raw);
 }
 
@@ -2105,7 +2117,9 @@ bool ZeroGridSendPending(bool buySide,int level)
       g_executionStatus="ZERO_GRID_WAIT_TICK";
       return false;
    }
-   double safeDistance=ZeroGridMinPendingDistancePrice();
+   // Keep one tick of placement headroom so BUY/SELL L1 can both be
+   // accepted even while the quote moves during the same fast staging pass.
+   double safeDistance=ZeroGridMinPendingDistancePrice()+ZeroGridTickSize();
    double safeBoundary=buySide
       ? ZeroGridNormalizePendingPrice(true,live.ask+safeDistance)
       : ZeroGridNormalizePendingPrice(false,live.bid-safeDistance);
