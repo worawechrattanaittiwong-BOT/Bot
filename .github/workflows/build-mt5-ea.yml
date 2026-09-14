@@ -69,7 +69,7 @@ jobs:
             'void AutoV20EvaluateSide(',
             'autoV20Diagnostics=StringFormat',
             'g_basketJournalAutoDecisionId',
-            'if(!AutoV20Enabled() && BasketFillEnabled() && g_burstActive)',
+            'if(LegacyBasketEngineEnabled() && BasketFillEnabled() && g_burstActive)',
             'int RaceM5CandleDirection()',
             'CopyRates(_Symbol, PERIOD_M5, 1, 1, rates)',
             'RACE_DIRECTION_LOCK',
