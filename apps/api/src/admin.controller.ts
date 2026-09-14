@@ -2,6 +2,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Query,
@@ -618,6 +619,24 @@ export class AdminController {
       accountNumber: result.accountNumber,
       brokerServer: result.brokerServer,
       positionsAtRequest: result.positions
+    });
+    return result;
+  }
+
+  @Post("maintenance/force-flat-all")
+  async forceFlatAllAccounts(@Req() req: any, @Body() body: { confirmation?: string }) {
+    if (req.user?.role && req.user.role !== "OWNER") {
+      throw new ForbiddenException("คำสั่ง FORCE FLAT ALL ใช้ได้เฉพาะ OWNER เท่านั้น");
+    }
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    const result = await this.maintenance.forceFlatAll(actor, body?.confirmation || "");
+    await this.audit(actor, "FORCE_FLAT_ALL_ACCOUNTS", "system", "maintenance", {
+      targetInstances: result.emergency?.targetInstances || 0,
+      queuedCloseAll: result.emergency?.queuedCloseAll || 0,
+      runningAtRequest: result.emergency?.runningAtRequest || 0,
+      positionsAtRequest: result.emergency?.positionsAtRequest || 0,
+      freshPositionsAtRequest: result.emergency?.freshPositionsAtRequest || 0,
+      stalePositionsAtRequest: result.emergency?.stalePositionsAtRequest || 0
     });
     return result;
   }

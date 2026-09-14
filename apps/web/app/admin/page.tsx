@@ -266,6 +266,42 @@ export default function AdminPage() {
     }
   }
 
+  async function forceFlatAllAccounts() {
+    const typed = window.prompt(
+      "คำสั่งนี้เป็นสิทธิ์ OWNER สูงสุด\n\n" +
+      "ระบบจะบล็อก Start ใหม่ทันที, STOP ทุก Bot และส่ง CLOSE_ALL ไปยังทุกบัญชีที่เกี่ยวข้อง\n" +
+      "บัญชี Local ที่ออฟไลน์จะรับคำสั่งเมื่อ EA กลับมาออนไลน์\n\n" +
+      "พิมพ์ FORCE FLAT ALL เพื่อยืนยัน"
+    );
+    if (typed === null) return;
+    if (typed.trim() !== "FORCE FLAT ALL") {
+      setMessage("ยกเลิกคำสั่ง: ข้อความยืนยันไม่ตรงกับ FORCE FLAT ALL");
+      return;
+    }
+    if (!window.confirm(
+      "ยืนยัน FORCE FLAT ALL ACCOUNTS จริงหรือไม่?\n\n" +
+      "หลังยืนยัน ระบบจะเข้าสู่โหมดปิดฉุกเฉินและจะไม่ถือว่าสำเร็จจนกว่า MT5/EA จะยืนยัน Position = 0"
+    )) return;
+
+    setMaintenanceBusy(true);
+    try {
+      const result = await adminApi("/admin/maintenance/force-flat-all", {
+        method: "POST",
+        body: JSON.stringify({ confirmation: typed.trim() })
+      });
+      const emergency = result?.emergency || {};
+      setMessage(
+        result?.message ||
+        `FORCE FLAT ALL เริ่มแล้ว · เป้าหมาย ${emergency.targetInstances || 0} บัญชี · คิว Close All ${emergency.queuedCloseAll || 0}`
+      );
+      await search(undefined, true);
+    } catch (e:any) {
+      setMessage(e.message);
+    } finally {
+      setMaintenanceBusy(false);
+    }
+  }
+
   async function cancelMaintenance() {
     if (!confirm("ยกเลิกประกาศ Maintenance ที่ยังไม่เริ่มหรือไม่?")) return;
     setMaintenanceBusy(true);
@@ -399,6 +435,18 @@ export default function AdminPage() {
                   {maintenance.expected_resume_at && <small>คาดว่าจะเปิดระบบ: {maintenanceDateLabel(maintenance.expected_resume_at)}</small>}
                 </div>
               )}
+
+              <div className="owner-force-flat-panel">
+                <div>
+                  <span className="owner-card-kicker">OWNER EMERGENCY CONTROL</span>
+                  <b>🚨 FORCE FLAT ALL ACCOUNTS</b>
+                  <small>บล็อก Start ทันที → STOP ทุก Bot → ส่ง CLOSE_ALL → Retry ระหว่าง DRAINING → รอ MT5/EA ยืนยัน Position = 0</small>
+                  <small>คำสั่ง CLOSE_ALL จะไม่ถูกทำเครื่องหมายว่าสำเร็จจากฝั่ง Server เอง และบัญชี Local ที่ออฟไลน์จะยังคงรอคำสั่งเมื่อกลับมาออนไลน์</small>
+                </div>
+                <button className="btn danger owner-force-flat-button" disabled={maintenanceBusy} onClick={forceFlatAllAccounts}>
+                  {maintenanceBusy ? "กำลังดำเนินการ..." : "🚨 FORCE FLAT ALL ACCOUNTS"}
+                </button>
+              </div>
 
               <div className="owner-maintenance-form">
                 <div className="field"><label>หัวข้อประกาศ</label><input className="input" value={maintenanceTitle} onChange={e=>setMaintenanceTitle(e.target.value)} /></div>
