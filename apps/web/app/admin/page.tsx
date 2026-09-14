@@ -379,9 +379,6 @@ export default function AdminPage() {
 
   const planOptions = [
     { code:"LOCAL_30D", label:"LOCAL 30D", mode:"LOCAL" },
-    { code:"PARTNER_LOCAL_10", label:"PARTNER LOCAL · 10 Customer Seats", mode:"LOCAL" },
-    { code:"PARTNER_LOCAL_25", label:"PARTNER LOCAL · 25 Customer Seats", mode:"LOCAL" },
-    { code:"PARTNER_LOCAL_50", label:"PARTNER LOCAL · 50 Customer Seats", mode:"LOCAL" },
     { code:"CLOUD_30D", label:"CLOUD 30D", mode:"CLOUD" }
   ];
   const selectedPlan = planOptions.find(p=>p.code===plan) || planOptions[0];
@@ -601,9 +598,6 @@ export default function AdminPage() {
               <div className="owner-plan-inline">
                 <div className="field"><label>แพ็กเกจ</label><select className="input" value={plan} onChange={e=>setPlan(e.target.value)}>
                   <option value="LOCAL_30D">LOCAL 30D</option>
-                  <option value="PARTNER_LOCAL_10">PARTNER LOCAL · 10 Customer Seats</option>
-                  <option value="PARTNER_LOCAL_25">PARTNER LOCAL · 25 Customer Seats</option>
-                  <option value="PARTNER_LOCAL_50">PARTNER LOCAL · 50 Customer Seats</option>
                   <option value="CLOUD_30D">CLOUD 30D</option>
                 </select></div>
                 <div className="field"><label>วันเริ่ม <span className="muted">(ว่าง = เริ่มทันที)</span></label><input className="input" type="datetime-local" value={startsAt} onChange={e=>setStartsAt(e.target.value)}/><div className="help">Owner Console รุ่นนี้เปิดสิทธิ์ทันทีเท่านั้น ถ้ากำหนดเวลาอนาคตระบบจะแจ้งเตือน</div></div>
