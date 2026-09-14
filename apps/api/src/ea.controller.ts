@@ -641,14 +641,26 @@ export class EaController {
     // RACE runs at exactly 2x the normal order cadence without changing AUTO.
     const runtimeSettings = { ...(settings?.settings || {}) };
     const savedControlMode = String(runtimeSettings.controlMode || "").toUpperCase();
-    if (!["AUTO", "RACE", "ASSISTED", "MANUAL"].includes(savedControlMode)) {
+    if (!["AUTO", "RACE", "ZERO_GRID", "ASSISTED", "MANUAL"].includes(savedControlMode)) {
       const engineMode = String(runtimeSettings.engineMode || "AUTO").toUpperCase();
       const entryMode = String(runtimeSettings.entryMode || "AUTO_MOMENTUM").toUpperCase();
-      runtimeSettings.controlMode = engineMode === "RACE"
-        ? "RACE"
-        : entryMode === "AUTO_MOMENTUM" ? "AUTO" : "LEGACY";
+      runtimeSettings.controlMode = engineMode === "ZERO_GRID"
+        ? "ZERO_GRID"
+        : engineMode === "RACE"
+          ? "RACE"
+          : entryMode === "AUTO_MOMENTUM" ? "AUTO" : "LEGACY";
     }
-    if (String(runtimeSettings.engineMode || "").toUpperCase() === "RACE") {
+
+    // Canonical heartbeat pair. ZERO_GRID must reach the EA unchanged; otherwise
+    // the EA can fall into AUTO and open a market position instead of pending orders.
+    const runtimeControlMode = String(runtimeSettings.controlMode || "AUTO").toUpperCase();
+    runtimeSettings.engineMode = runtimeControlMode === "ZERO_GRID"
+      ? "ZERO_GRID"
+      : runtimeControlMode === "RACE"
+        ? "RACE"
+        : "AUTO";
+
+    if (runtimeSettings.engineMode === "RACE") {
       runtimeSettings.minOrderIntervalMs = 150;
       runtimeSettings.maxOrdersPerMinute = 240;
     }

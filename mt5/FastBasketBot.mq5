@@ -257,6 +257,8 @@ int    g_maxOrdersPerMinute;
 ENUM_ENTRY_MODE g_entryMode;
 string g_engineMode = "AUTO";
 string g_controlMode = "LEGACY";
+// Never allow AUTO/legacy entry before the Server has delivered a real mode.
+bool   g_settingsSynchronized = false;
 double g_zeroGridStepPrice = 3.0;
 int    g_zeroGridLevelsPerSide = 30;
 double g_zeroGridBaseLot = 0.03;
@@ -1624,8 +1626,12 @@ double OnTester()
 // keeps both sides available; Netting/Exchange locks to the first triggered side.
 string EffectiveExecutionMode()
 {
-   // Website controlMode is the canonical owner after the first settings sync.
-   // InpEngineMode remains only a startup fallback for older/local .set files.
+   // Live MT5 must never guess an execution mode at startup. The first valid
+   // settings heartbeat selects the owner. Strategy Tester keeps the input
+   // fallback so historical tests remain deterministic/offline.
+   if(!MQLInfoInteger(MQL_TESTER) && !g_settingsSynchronized)
+      return "UNSYNCED";
+
    string control=g_controlMode;
    StringToUpper(control);
    if(control == "ZERO_GRID") return "ZERO_GRID";
@@ -2090,8 +2096,11 @@ bool ZeroGridEnsureLadder()
    bool complete=true;
    int nettingDirection=ZeroGridAccountIsNetting() ? ZeroGridPositionDirection() : 0;
    int attemptsThisPass=0;
-   const int maxAttemptsPerPass=6;
    int levels=ZeroGridEffectiveLevelsPerSide();
+   // Build the requested ladder in one pass when possible. Example: 5 means
+   // exactly 5 BUY STOP + 5 SELL STOP pending requests. A broker rejection on
+   // one level must not block the other valid levels; missing levels retry.
+   int maxAttemptsPerPass=MathMin(60,levels*2);
 
    for(int level=1;level<=levels;level++)
    {
@@ -2099,23 +2108,21 @@ bool ZeroGridEnsureLadder()
       {
          attemptsThisPass++;
          if(!ZeroGridSendPending(true,level))
-         {
             complete=false;
-            break;
-         }
          if(attemptsThisPass>=maxAttemptsPerPass) break;
       }
       if(nettingDirection<=0 && !ZeroGridLevelExists(false,level))
       {
          attemptsThisPass++;
          if(!ZeroGridSendPending(false,level))
-         {
             complete=false;
-            break;
-         }
          if(attemptsThisPass>=maxAttemptsPerPass) break;
       }
-      if(g_ordersInWindow>=g_maxOrdersPerMinute) break;
+      if(g_ordersInWindow>=g_maxOrdersPerMinute)
+      {
+         complete=false;
+         break;
+      }
    }
    return complete;
 }
@@ -3241,6 +3248,14 @@ void OnTick()
    if(!g_access)
    {
       g_executionStatus = "NO_ACCESS";
+      return;
+   }
+
+   // Hard startup isolation: no execution engine may create a new order
+   // until the Server has explicitly selected AUTO/RACE/ZERO_GRID.
+   if(!MQLInfoInteger(MQL_TESTER) && !g_settingsSynchronized)
+   {
+      g_executionStatus = "WAIT_SETTINGS_SYNC";
       return;
    }
 
@@ -5017,6 +5032,10 @@ void ApplySettings(string json)
       else if(g_engineMode == "RACE") g_controlMode = "RACE";
       else if(g_controlMode == "ZERO_GRID" || g_controlMode == "RACE" || g_controlMode == "LEGACY") g_controlMode = "AUTO";
    }
+
+   // A valid Server-delivered mode is the startup ownership latch.
+   if(hasControlMode || hasEngineMode)
+      g_settingsSynchronized = true;
 
    // A legacy AUTO burst must never survive a transition into an isolated mode.
    // Existing non-ZERO/non-RACE positions may still drain under generic safety

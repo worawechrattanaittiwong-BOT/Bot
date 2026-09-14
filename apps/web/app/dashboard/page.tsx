@@ -1219,6 +1219,11 @@ export default function DashboardPage() {
   }
 
   async function command(path: string, success: string) {
+    if (path.startsWith("/bot/start") && settingsDirtyRef.current) {
+      setError("มีการตั้งค่าที่ยังไม่ได้บันทึก กรุณากดบันทึกก่อนเริ่มบอท");
+      setBotSettingsOpen(true);
+      return;
+    }
     setBusy(true);
     setError("");
     setNotice("");
@@ -1323,7 +1328,12 @@ export default function DashboardPage() {
         "confidenceThreshold",
         "sessionStartHour",
         "sessionEndHour",
-        "maxAtrPoints"
+        "maxAtrPoints",
+        "zeroGridStepPrice",
+        "zeroGridLevelsPerSide",
+        "zeroGridBaseLot",
+        "zeroGridMinNetProfitMoney",
+        "zeroGridCloseReserveMoney"
       ];
       const requiredNumericKeys = new Set([
         "lot",
@@ -1337,13 +1347,31 @@ export default function DashboardPage() {
       const integerKeys = new Set([
         "maxPositions",
         "minOrderIntervalMs",
-        "maxOrdersPerMinute"
+        "maxOrdersPerMinute",
+        "zeroGridLevelsPerSide"
       ]);
 
       const payload:any = { ...settings };
       delete payload.tradingProfile;
       payload.adaptiveEngine = true;
-      const raceSpeedX2 = String(payload.engineMode || "").toUpperCase() === "RACE";
+
+      // Keep controlMode/engineMode atomic. ZERO GRID is a pending-order engine,
+      // never an AUTO entry mode.
+      const requestedControlMode = String(payload.controlMode || payload.engineMode || "AUTO").toUpperCase();
+      if (requestedControlMode === "ZERO_GRID") {
+        payload.controlMode = "ZERO_GRID";
+        payload.engineMode = "ZERO_GRID";
+      } else if (requestedControlMode === "RACE") {
+        payload.controlMode = "RACE";
+        payload.engineMode = "RACE";
+      } else {
+        payload.controlMode = ["ASSISTED", "MANUAL"].includes(requestedControlMode)
+          ? requestedControlMode
+          : "AUTO";
+        payload.engineMode = "AUTO";
+      }
+
+      const raceSpeedX2 = payload.engineMode === "RACE";
       payload.minOrderIntervalMs = raceSpeedX2 ? 150 : 300;
       payload.maxOrdersPerMinute = raceSpeedX2 ? 240 : 120;
       payload.riskPerOrderPercent = 0.25;
@@ -1671,7 +1699,7 @@ export default function DashboardPage() {
                     <div className="cc-v6-symbol-chips">
                       <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO SMART" : settings.entryMode}</span>
                       <span>{Number(settings.lot||0).toFixed(2)} Lot</span>
-                      <span>{configuredMaxPositions} ไม้</span>
+                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? Number(settings.zeroGridLevelsPerSide||30)+" BUY STOP + "+Number(settings.zeroGridLevelsPerSide||30)+" SELL STOP" : configuredMaxPositions+" ไม้"}</span>
                       <HeroTrendChip label="M5" value={metrics.trendM5}/>
                       <HeroTrendChip label="M15" value={metrics.trendM15}/>
                       <HeroTrendChip label="M30" value={metrics.trendM30}/>
@@ -2740,7 +2768,7 @@ function BotSettingsModal(props:any) {
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"อัตโนมัติ",subtitle:"EA เลือกทิศทาง จุดเข้า และจังหวะปิดตามระบบปกติ"},
     RACE:{title:"โหมดซิ่ง",subtitle:"เร่งจังหวะเปิดไม้ 2× เพื่อไล่ให้ครบ Max Positions เร็วขึ้น โดยยังแยกการบริหารกำไร/การโดนลากจาก AUTO"},
-    ZERO_GRID:{title:"ZERO GRID",subtitle:"รองรับ MT5 Demo/Real · Hedging วางสองฝั่ง และ Netting ล็อกฝั่งแรกอัตโนมัติ พร้อมปรับ Lot/ราคาให้ตรงข้อกำหนดโบรกเกอร์"},
+    ZERO_GRID:{title:"ZERO GRID",subtitle:"Pending Order ล้วนตามราคา · ไม่ใช้ Brain/Indicator และไม่เปิด Market Order ตอน Start · กำหนดจำนวน BUY STOP / SELL STOP ต่อฝั่งได้ตรงตัว"},
     ASSISTED:{title:"ช่วยตัดสินใจ",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณเลือกแนวทางบริหารรอบ"},
     MANUAL:{title:"กำหนดเอง",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณกำหนด Lot เป้ากำไร และ SL"}
   };
@@ -2829,7 +2857,7 @@ function BotSettingsModal(props:any) {
                   {controlMode==="ZERO_GRID" ? <>
                     <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="trend" size={17}/>ทิศทาง</label><strong>BUY STOP + SELL STOP</strong><small>ไม่ใช้ Brain/Indicator · บัญชี Netting จะล็อกฝั่งแรกหลัง Trigger</small></div>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะ Grid</span><NumberInput value={props.settings.zeroGridStepPrice} suffix="ราคา" onCommit={(v:string)=>props.onEdit?.("zeroGridStepPrice",v)}/><small>ระยะระหว่างระดับ · ไม้แรกหุบเข้าชิดราคาตาม Stops/Freeze และทุกระดับเว้นช่องไฟตาม Tick Size</small></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระดับต่อฝั่ง</span><select className="input" value={String(props.settings.zeroGridLevelsPerSide||30)} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",e.target.value)}>{[5,10,15,20,25,30].map(v=><option key={v} value={v}>{v} ระดับ / ฝั่ง</option>)}</select></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวน Pending ต่อฝั่ง</span><select className="input" value={String(props.settings.zeroGridLevelsPerSide||30)} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",e.target.value)}>{Array.from({length:30},(_,i)=>i+1).map(v=><option key={v} value={v}>{v} BUY STOP + {v} SELL STOP</option>)}</select><small>ตั้ง 5 = วาง BUY STOP 5 รายการ + SELL STOP 5 รายการ รวม 10 Pending · ไม่มี Market Order ตอนเริ่ม</small></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Base Lot</span><NumberInput value={props.settings.zeroGridBaseLot} suffix="Lot" onCommit={(v:string)=>props.onEdit?.("zeroGridBaseLot",v)}/><small>Level n = Base Lot × n · ปรับตาม Min/Max/Step ของโบรกเกอร์</small></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>กำไรสุทธิขั้นต่ำ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/><small>ค่าเริ่มต้น +0.01 หน่วยเงินบัญชี แล้วปิดทั้ง Basket ทันที</small></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="shield" size={17}/>สำรองค่าปิด</span><MoneyInput value={props.settings.zeroGridCloseReserveMoney} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridCloseReserveMoney",v)}/><small>หน่วยเงินบัญชี · เพิ่มเผื่อ Commission/Fees ตอน Close</small></label>
@@ -2839,7 +2867,7 @@ function BotSettingsModal(props:any) {
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
                   </>}
                 </div>
-                <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>{controlMode==="ZERO_GRID"?"ZERO GRID · รองรับบัญชี MT5":"Basket Ladder อัตโนมัติ"}</b><span>{controlMode==="ZERO_GRID"?"Demo/Real · เปิด Grid หุบเข้าชิดราคา · ปิดจากไม้ใกล้ราคาไล่ออก · รองรับ Hedging/Netting":"EA กระจายจังหวะเพิ่มไม้ตาม ATR และแรงตลาด"}</span></div>
+                <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>{controlMode==="ZERO_GRID"?"ZERO GRID · รองรับบัญชี MT5":"Basket Ladder อัตโนมัติ"}</b><span>{controlMode==="ZERO_GRID"?"Pending เท่านั้น · Start แล้ววาง BUY STOP / SELL STOP ตามจำนวนที่ตั้ง · ไม่ใช้สมอง EA · รองรับ Hedging/Netting":"EA กระจายจังหวะเพิ่มไม้ตาม ATR และแรงตลาด"}</span></div>
               </section>
 
               <section className="cc-bot-v2-panel">
