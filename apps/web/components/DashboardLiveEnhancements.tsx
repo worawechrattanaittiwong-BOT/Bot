@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import { api } from "../lib/api";
 
 type LiveSummary = {
-  slotId: string | null;
   symbol?: string;
   price: number;
   bid: number;
@@ -64,10 +63,9 @@ export function DashboardLiveEnhancements() {
 
     const refresh = async () => {
       try {
-        const slotSelect = document.querySelector<HTMLSelectElement>(".slot-switcher-select");
-        const slotId = String(slotSelect?.value || "");
-        const path = "/dashboard-live/summary" + (slotId ? "?slotId=" + encodeURIComponent(slotId) : "");
-        const next = await api(path) as LiveSummary;
+        // Customer UI is account-follow based. The backend resolves the active
+        // installation/account automatically; no customer-facing Slot selector.
+        const next = await api("/dashboard-live/summary") as LiveSummary;
         if (cancelled) return;
 
         const nextPrice = Number(next.price || 0);
