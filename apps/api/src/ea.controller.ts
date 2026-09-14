@@ -132,6 +132,24 @@ export class EaController {
       return true;
     }
 
+    // LOCAL membership belongs to the SCENOVA customer, not a visible Slot.
+    // Trial grants remain account-specific.
+    const customerSubscription = await this.db.one(
+      `SELECT 1
+       FROM subscriptions s
+       JOIN plans p ON p.id=s.plan_id
+       WHERE s.user_id=$1
+         AND p.mode=$2
+         AND s.status='ACTIVE'
+         AND s.starts_at<=now()
+         AND s.expires_at>now()
+       ORDER BY s.expires_at DESC
+       LIMIT 1`,
+      [userId, mode]
+    );
+    if (customerSubscription) return true;
+
+    // Compatibility fallback for already-issued legacy slot-linked records.
     if (slotId) {
       const sub = await this.db.one(
         `SELECT 1
@@ -387,18 +405,14 @@ export class EaController {
       reportedServer
     ) {
       const conflict = await this.db.one(
-        `SELECT a.id,a.user_id,bi.slot_id
+        `SELECT a.id,a.user_id
          FROM mt5_accounts a
-         LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
          WHERE lower(a.account_number)=lower($1)
            AND lower(a.broker_server)=lower($2)
            AND a.status='ACTIVE'
-           AND (
-             a.user_id<>$3
-             OR (bi.slot_id IS NOT NULL AND bi.slot_id<>$4)
-           )
+           AND a.user_id<>$3
          LIMIT 1`,
-        [reportedAccount, reportedServer, instance.user_id, instance.slot_id]
+        [reportedAccount, reportedServer, instance.user_id]
       );
 
       if (conflict) {
@@ -432,7 +446,7 @@ export class EaController {
           detectedAccount: reportedAccount,
           detectedBroker: reportedBroker || null,
           detectedServer: reportedServer,
-          message: "MT5 นี้ถูกผูกกับ SCENOVA Slot อื่นอยู่แล้ว",
+          message: "MT5 นี้ถูกผูกกับบัญชี SCENOVA อื่นอยู่แล้ว",
           settings: {}
         };
       }
@@ -511,13 +525,105 @@ export class EaController {
       instance.desired_state = "STOPPED";
     }
 
-    const accountMismatch =
+    let accountMismatch =
       Boolean(reportedAccount) &&
       (
         !instance.mt5_account_id ||
         reportedAccount !== String(instance.account_number || "") ||
         (reportedServer && instance.broker_server && reportedServer !== String(instance.broker_server))
       );
+
+    // LOCAL account-follow: changing the MT5 login switches SCENOVA to the new
+    // account automatically only while the previously-bound account is flat.
+    if (accountMismatch && instance.mode === "LOCAL" && reportedAccount && reportedServer) {
+      const previousBoundPositions = Number(
+        instance.metrics?.previousBoundPositions ??
+        instance.metrics?.positions ??
+        0
+      );
+
+      if (previousBoundPositions <= 0) {
+        const foreignAccount = await this.db.one(
+          `SELECT id,user_id
+           FROM mt5_accounts
+           WHERE lower(account_number)=lower($1)
+             AND lower(broker_server)=lower($2)
+             AND status='ACTIVE'
+             AND user_id<>$3
+           LIMIT 1`,
+          [reportedAccount, reportedServer, instance.user_id]
+        );
+
+        if (!foreignAccount) {
+          let nextAccount = await this.db.one(
+            `SELECT *
+             FROM mt5_accounts
+             WHERE user_id=$1
+               AND lower(account_number)=lower($2)
+               AND lower(broker_server)=lower($3)
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [instance.user_id, reportedAccount, reportedServer]
+          );
+
+          if (nextAccount) {
+            nextAccount = await this.db.one(
+              "UPDATE mt5_accounts SET broker=$2,mode='LOCAL',status='ACTIVE' WHERE id=$1 RETURNING *",
+              [nextAccount.id, reportedBroker || nextAccount.broker || "Detected MT5"]
+            );
+          } else {
+            nextAccount = await this.db.one(
+              "INSERT INTO mt5_accounts(user_id,account_number,broker,broker_server,mode,status) VALUES($1,$2,$3,$4,'LOCAL','ACTIVE') RETURNING *",
+              [instance.user_id, reportedAccount, reportedBroker || "Detected MT5", reportedServer]
+            );
+          }
+
+          const previousAccountId = instance.mt5_account_id || null;
+          const nextActualState = String(body.state || "STOPPED").slice(0, 24);
+          await this.db.query(
+            `UPDATE bot_instances SET
+               mt5_account_id=$2,
+               desired_state='STOPPED',
+               actual_state=$3,
+               last_seen_at=now(),
+               ea_last_ip=$4,
+               metrics=$5::jsonb,
+               pending_account_number=NULL,
+               pending_broker=NULL,
+               pending_broker_server=NULL,
+               pending_account_ip=NULL,
+               pending_account_seen_at=NULL,
+               account_change_requested_at=NULL
+             WHERE id=$1`,
+            [instance.id, nextAccount.id, nextActualState, eaIp, JSON.stringify(metrics)]
+          );
+
+          await this.db.query(
+            "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'AUTO_FOLLOW_MT5_ACCOUNT','bot_instance',$2,$3::jsonb)",
+            [
+              "EA:" + String(instance.user_id),
+              instance.id,
+              JSON.stringify({
+                previousAccountId,
+                nextAccountId: nextAccount.id,
+                accountNumber: reportedAccount,
+                brokerServer: reportedServer,
+                source: "LOCAL_RUNTIME"
+              })
+            ]
+          );
+
+          instance.mt5_account_id = nextAccount.id;
+          instance.account_number = nextAccount.account_number;
+          instance.broker = nextAccount.broker;
+          instance.broker_server = nextAccount.broker_server;
+          instance.account_status = "ACTIVE";
+          instance.desired_state = "STOPPED";
+          instance.actual_state = nextActualState;
+          accountMismatch = false;
+        }
+      }
+    }
 
     if (accountMismatch) {
       const previousBoundPositions = Number(

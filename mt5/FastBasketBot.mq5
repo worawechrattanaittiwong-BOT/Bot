@@ -1621,8 +1621,8 @@ double OnTester()
 
 // ZERO GRID V3 - deterministic symmetric breakout ladder -------------------
 // Mirrors the intended floating-stop-grid concept without allowing mode leakage:
-// a fixed cycle center, 1.5-step first trigger gap, exact step spacing, linear
-// lot ladder, near-to-far staging, and near-to-live-price profit exit. Hedging
+// a fixed cycle identity, nearest broker-legal live-price first triggers, exact
+// inter-level step spacing, linear lot ladder, and cost-aware net-profit exit. Hedging
 // keeps both sides available; Netting/Exchange locks to the first triggered side.
 string EffectiveExecutionMode()
 {
@@ -1874,9 +1874,51 @@ double ZeroGridCycleNet()
    return total;
 }
 
+double ZeroGridEstimatedExitCostMoney()
+{
+   LoadZeroGridCycleState();
+   if(g_zeroGridCycleStartedAt<=0) return 0.0;
+
+   double openVolume=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+      if(!ZeroGridOwnsSelectedPosition()) continue;
+      openVolume += MathMax(0.0,PositionGetDouble(POSITION_VOLUME));
+   }
+   if(openVolume<=0.0) return 0.0;
+
+   if(!HistorySelect(g_zeroGridCycleStartedAt,TimeCurrent()+60)) return 0.0;
+   double entryCost=0.0;
+   double entryVolume=0.0;
+   int totalDeals=HistoryDealsTotal();
+   for(int i=0;i<totalDeals;i++)
+   {
+      ulong deal=HistoryDealGetTicket(i);
+      if(deal==0) continue;
+      if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol) continue;
+      if(HistoryDealGetInteger(deal,DEAL_MAGIC)!=InpMagic) continue;
+      long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+      if(entry!=DEAL_ENTRY_IN && entry!=DEAL_ENTRY_INOUT) continue;
+      double volume=HistoryDealGetDouble(deal,DEAL_VOLUME);
+      if(volume<=0.0) continue;
+      entryVolume += volume;
+      entryCost += MathAbs(HistoryDealGetDouble(deal,DEAL_COMMISSION));
+      entryCost += MathAbs(HistoryDealGetDouble(deal,DEAL_FEE));
+   }
+   if(entryVolume<=0.0 || entryCost<=0.0) return 0.0;
+
+   // MT5 does not expose future closing commission in advance. Estimate it
+   // from observed entry cost per lot. Spread is already in POSITION_PROFIT.
+   return (entryCost/entryVolume)*openVolume;
+}
+
 double ZeroGridRequiredCloseNet()
 {
-   return MathMax(0.01,g_zeroGridMinNetProfitMoney) + MathMax(0.0,g_zeroGridCloseReserveMoney);
+   return MathMax(0.01,g_zeroGridMinNetProfitMoney)
+      + MathMax(0.0,g_zeroGridCloseReserveMoney)
+      + ZeroGridEstimatedExitCostMoney();
 }
 
 double ZeroGridTickSize()
@@ -1920,9 +1962,10 @@ double ZeroGridEffectiveBaseLot()
 
 double ZeroGridEntryGapPrice()
 {
+   // First trigger is independent from Grid Step. One tick beyond the
+   // broker Stops/Freeze boundary is the nearest robust pending distance.
    double tick=ZeroGridTickSize();
-   double gap=MathMax(ZeroGridEffectiveStepPrice()*1.5,
-                      ZeroGridMinPendingDistancePrice()+tick);
+   double gap=ZeroGridMinPendingDistancePrice()+tick;
    double units=MathCeil((gap/tick)-1e-10);
    return NormalizeDouble(units*tick,_Digits);
 }
@@ -1983,8 +2026,15 @@ double ZeroGridPendingAnchorPrice(bool buySide)
 {
    LoadZeroGridCycleState();
    if(g_zeroGridCenter<=0.0) return 0.0;
+
+   // Preserve exact ladder geometry after the first level exists.
+   double existing=ZeroGridExistingPendingAnchorPrice(buySide);
+   if(existing>0.0) return existing;
+
+   MqlTick live;
+   if(!SymbolInfoTick(_Symbol,live)) return 0.0;
    double gap=ZeroGridEntryGapPrice();
-   double raw=buySide ? g_zeroGridCenter+gap : g_zeroGridCenter-gap;
+   double raw=buySide ? live.ask+gap : live.bid-gap;
    return ZeroGridNormalizePendingPrice(buySide,raw);
 }
 

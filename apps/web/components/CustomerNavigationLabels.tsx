@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 const customerNavigation = [
   { label: "Control Center", hint: "Bot status, controls & settings" },
-  { label: "MT5 & EA", hint: "Accounts, slots, devices & connections" },
+  { label: "MT5 & EA", hint: "Accounts, devices & connections" },
   { label: "Access & Membership", hint: "Trial, subscription & access" },
   { label: "Backtest & Performance", hint: "Historical results, analytics & reports" }
 ] as const;

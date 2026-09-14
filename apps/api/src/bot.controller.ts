@@ -122,30 +122,26 @@ export class BotController {
     userId: string,
     accountNumber: string,
     brokerServer: string,
-    slotId: string
+    _slotId: string
   ) {
     const conflict = await this.db.one(
-      `SELECT a.id,a.user_id,bi.slot_id,u.user_code,u.role
+      `SELECT a.id,a.user_id,u.user_code,u.role
        FROM mt5_accounts a
        JOIN users u ON u.id=a.user_id
-       LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
        WHERE lower(a.account_number)=lower($1)
          AND lower(a.broker_server)=lower($2)
          AND a.status='ACTIVE'
-         AND (
-           a.user_id<>$3
-           OR (bi.slot_id IS NOT NULL AND bi.slot_id<>$4)
-         )
+         AND a.user_id<>$3
        ORDER BY
          CASE WHEN u.role IN ('OWNER','ADMIN') THEN 0 ELSE 1 END,
          a.created_at ASC
        LIMIT 1`,
-      [accountNumber, brokerServer, userId, slotId]
+      [accountNumber, brokerServer, userId]
     );
     if (conflict) {
       throw new ConflictException(
         "MT5 " + accountNumber + " / " + brokerServer +
-        " ถูกผูกกับ SCENOVA Slot อื่นอยู่แล้ว"
+        " ถูกผูกกับบัญชี SCENOVA อื่นอยู่แล้ว"
       );
     }
   }
@@ -162,7 +158,7 @@ export class BotController {
       ACCOUNT_TRADING_DISABLED: { label: "บัญชีนี้ไม่อนุญาตให้เทรด", detail: "ตรวจสิทธิ์ Trading ของบัญชีกับ Broker", tone: "bad" },
       ACCOUNT_EXPERT_DISABLED: { label: "บัญชีไม่อนุญาต Expert Advisor", detail: "Broker/บัญชีปิดการเทรดด้วย EA", tone: "bad" },
       SYMBOL_TRADING_DISABLED: { label: "Symbol นี้เปิดออเดอร์ไม่ได้", detail: "Broker ปิดการเปิดออเดอร์ใหม่บน Symbol นี้", tone: "bad" },
-      NO_ACCESS: { label: "ไม่มีสิทธิ์ใช้งาน", detail: "ต้องมี Trial หรือ Subscription ที่ตรงกับ Slot", tone: "bad" },
+      NO_ACCESS: { label: "ไม่มีสิทธิ์ใช้งาน", detail: "ต้องมี Trial หรือ Subscription ที่ใช้งานได้กับบัญชี SCENOVA นี้", tone: "bad" },
       STOPPED: { label: "บอทหยุดอยู่", detail: "พร้อมรับคำสั่งเริ่มจากเว็บ", tone: "neutral" },
       SAFE_STOP: { label: "Safe Stop", detail: "บอทจะไม่เปิดรอบใหม่", tone: "warn" },
       DAILY_PROFIT_LOCK: { label: "ถึงเป้ากำไรประจำวันแล้ว", detail: "EA ปิด Position และล็อกไม่เปิดรอบใหม่จนกว่าจะขึ้นวันใหม่", tone: "good" },
@@ -464,10 +460,13 @@ export class BotController {
       `SELECT ls.*
        FROM license_slots ls
        LEFT JOIN subscriptions s ON s.id=ls.subscription_id
+       LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
        WHERE ls.assigned_user_id=$1 AND ls.status IN ('ACTIVE','AVAILABLE')
        ORDER BY
+         CASE WHEN bi.last_seen_at IS NOT NULL AND bi.last_seen_at>now()-interval '30 seconds' THEN 0 ELSE 1 END,
          CASE WHEN s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() THEN 0 ELSE 1 END,
          CASE WHEN ls.mode='LOCAL' THEN 0 ELSE 1 END,
+         bi.last_seen_at DESC NULLS LAST,
          ls.slot_number,ls.created_at
        LIMIT 1`,
       [userId]
@@ -524,7 +523,7 @@ export class BotController {
       "SELECT s.id,s.expires_at,p.code,p.mode,p.max_mt5_accounts,p.allow_resale FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
       [userId, mode]
     );
-    if (legacySub && !slotId) {
+    if (legacySub) {
       return { allowed: true, source: "SUBSCRIPTION", expiresAt: legacySub.expires_at };
     }
 

@@ -114,10 +114,10 @@ export class InstallerController {
       );
     }
     if (!enrollment.assigned_user_id || enrollment.user_status !== "ACTIVE") {
-      throw new ConflictException("slot is not assigned to an active SCENOVA user");
+      throw new ConflictException("SCENOVA account is not active for this installer");
     }
     if (enrollment.mode !== "LOCAL" || !["ACTIVE", "AVAILABLE"].includes(String(enrollment.slot_status))) {
-      throw new ConflictException("this installer code is not valid for a LOCAL slot");
+      throw new ConflictException("this installer code is not valid for LOCAL mode");
     }
 
     // Device identity is installation telemetry only. A valid Slot enrollment

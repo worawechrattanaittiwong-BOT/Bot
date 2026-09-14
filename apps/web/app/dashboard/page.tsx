@@ -149,11 +149,11 @@ export default function DashboardPage() {
       }
     }
 
-    load(new URLSearchParams(window.location.search).get("slotId") || "");
+    load("");
     api("/catalog/brokers")
       .then((rows)=>setBrokerCatalog(rows))
       .catch(()=>setBrokerCatalog([]));
-    const id = setInterval(()=>load(selectedSlotIdRef.current), 2000);
+    const id = setInterval(()=>load(""), 2000);
     return () => clearInterval(id);
   }, []);
 
@@ -1492,7 +1492,7 @@ export default function DashboardPage() {
 
   const navItems: Array<{id:View;label:string;hint:string}> = [
     { id:"overview", label:"บอท", hint:"สถานะ ควบคุม และตั้งค่า" },
-    { id:"account", label:"บัญชี MT5", hint:"Slots, Device และการเชื่อมต่อ" },
+    { id:"account", label:"บัญชี MT5", hint:"MT5, Device และการเชื่อมต่อ" },
     { id:"access", label:"สิทธิ์ใช้งาน", hint:"Trial และสมาชิก" },
     { id:"backtest", label:"Backtest", hint:"ผลย้อนหลัง ดาวน์โหลด และแชร์ตัวอย่าง" }
   ];
@@ -1548,7 +1548,7 @@ export default function DashboardPage() {
             <span className="cc-v3-title-icon"><ScenovaIcon name={activeView === "overview" ? "control" : activeView === "account" ? "account" : activeView === "backtest" ? "strategy" : "shield"} size={24}/></span>
             <div>
               <h1>{activeView === "overview" ? "Control Center" : activeView === "account" ? "บัญชีและการเชื่อมต่อ MT5" : activeView === "backtest" ? "Backtest & Performance" : "สิทธิ์ใช้งาน"}</h1>
-              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "ติดตั้ง อัปเดต และตรวจการเชื่อมต่อ MT5 / EA" : activeView === "backtest" ? "ดูผลทดสอบย้อนหลัง ดาวน์โหลดรายงาน และสร้างหน้าพอร์ตตัวอย่างแบบอ่านอย่างเดียว" : "ตรวจสถานะ Trial สมาชิก และสิทธิ์ของ Slot"}</p>
+              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "ติดตั้ง อัปเดต และตรวจการเชื่อมต่อ MT5 / EA" : activeView === "backtest" ? "ดูผลทดสอบย้อนหลัง ดาวน์โหลดรายงาน และสร้างหน้าพอร์ตตัวอย่างแบบอ่านอย่างเดียว" : "ตรวจสถานะ Trial สมาชิก และสิทธิ์ใช้งาน"}</p>
             </div>
           </div>
           <div className="cc-v3-head-actions">
@@ -1558,25 +1558,6 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {(data.slots || []).filter((slot:any)=>slot.can_control).length > 1 && (
-          <section className="slot-switcher">
-            <div>
-              <span className="slot-switcher-label">ACTIVE SLOT</span>
-              <b>เลือก Slot ที่ต้องการควบคุม</b>
-            </div>
-            <select
-              className="input slot-switcher-select"
-              value={selectedSlotId || data.selectedSlot?.id || ""}
-              onChange={e=>selectSlot(e.target.value)}
-            >
-              {(data.slots || []).filter((slot:any)=>slot.can_control).map((slot:any)=>(
-                <option key={slot.id} value={slot.id}>
-                  Slot {slot.slot_number} · {slot.mode} · {slot.account_number || "ยังไม่เชื่อม MT5"}
-                </option>
-              ))}
-            </select>
-          </section>
-        )}
 
         {error && <div className="notice bad page-notice">{error}</div>}
         {notice && <div className="notice good page-notice">{notice}</div>}

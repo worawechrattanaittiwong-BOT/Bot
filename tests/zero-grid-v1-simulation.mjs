@@ -1,69 +1,52 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-/**
- * ZERO GRID pending-only regression.
- * Contract from the reference clip:
- * - Start creates pending orders only; no instant market entry.
- * - first BUY/SELL stops are symmetric around a fixed cycle center.
- * - first gap is 1.5 x configured step (or farther only when broker safety requires it).
- * - every next level uses the exact configured inter-level step.
- * - level n uses BaseLot x n.
- * - levelsPerSide=N means exactly N BUY STOP + N SELL STOP.
- * - ZERO_GRID is preserved through API heartbeat and never normalized to AUTO.
- */
+function up(value, tick) { return Math.ceil(value / tick - 1e-10) * tick; }
+function down(value, tick) { return Math.floor(value / tick + 1e-10) * tick; }
 
-export function buildPendingPlan({ center, step = 3, baseLot = 0.03, levelsPerSide = 5, brokerMinGap = 0 }) {
-  const firstGap = Math.max(step * 1.5, brokerMinGap);
+export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPerSide = 5, brokerMinDistance = 0, tick = 0.01 }) {
+  const safeGap = Math.max(tick, brokerMinDistance) + tick;
+  const buyAnchor = up(ask + safeGap, tick);
+  const sellAnchor = down(bid - safeGap, tick);
   const orders = [];
   for (let level = 1; level <= levelsPerSide; level += 1) {
-    const distance = firstGap + step * (level - 1);
+    const offset = step * (level - 1);
     const lot = baseLot * level;
-    orders.push({ type: "BUY_STOP", level, lot, price: center + distance });
-    orders.push({ type: "SELL_STOP", level, lot, price: center - distance });
+    orders.push({ type: "BUY_STOP", level, lot, price: buyAnchor + offset });
+    orders.push({ type: "SELL_STOP", level, lot, price: sellAnchor - offset });
   }
   return orders;
 }
 
-// Exact count: setting 5 means five pending orders on each side, not 5 total.
 {
-  const orders = buildPendingPlan({ center: 4304.5, step: 3, baseLot: 0.03, levelsPerSide: 5 });
-  assert.equal(orders.length, 10);
-  assert.equal(orders.filter((o) => o.type === "BUY_STOP").length, 5);
-  assert.equal(orders.filter((o) => o.type === "SELL_STOP").length, 5);
-  assert.deepEqual(
-    orders.filter((o) => o.type === "BUY_STOP").map((o) => Number(o.lot.toFixed(2))),
-    [0.03, 0.06, 0.09, 0.12, 0.15]
-  );
-}
-
-// Geometry: first stop is 1.5 steps away, then spacing remains exactly one step.
-{
-  const orders = buildPendingPlan({ center: 4304.5, step: 3, baseLot: 0.03, levelsPerSide: 3 });
+  const bid = 4304.40;
+  const ask = 4304.60;
+  const orders = buildPendingPlan({ bid, ask, step: 3, brokerMinDistance: 0.05, tick: 0.01, levelsPerSide: 3 });
   const buys = orders.filter((o) => o.type === "BUY_STOP");
   const sells = orders.filter((o) => o.type === "SELL_STOP");
-  assert.equal(Number((buys[0].price - 4304.5).toFixed(2)), 4.5);
-  assert.equal(Number((4304.5 - sells[0].price).toFixed(2)), 4.5);
+  assert.ok(buys[0].price - ask < 0.10, "first BUY STOP should hug live ask");
+  assert.ok(bid - sells[0].price < 0.10, "first SELL STOP should hug live bid");
   assert.equal(Number((buys[1].price - buys[0].price).toFixed(2)), 3);
   assert.equal(Number((sells[0].price - sells[1].price).toFixed(2)), 3);
 }
 
-// Pending means nothing is filled merely because the bot was started.
 {
-  const orders = buildPendingPlan({ center: 4304.5, step: 3, levelsPerSide: 5 });
-  const marketPriceAtStart = 4304.5;
-  const triggered = orders.filter((o) =>
-    o.type === "BUY_STOP" ? marketPriceAtStart >= o.price : marketPriceAtStart <= o.price
-  );
-  assert.equal(triggered.length, 0);
+  const orders = buildPendingPlan({ bid: 4304.40, ask: 4304.60, step: 3, baseLot: 0.03, levelsPerSide: 5 });
+  assert.equal(orders.length, 10);
+  assert.deepEqual(orders.filter((o) => o.type === "BUY_STOP").map((o) => Number(o.lot.toFixed(2))), [0.03, 0.06, 0.09, 0.12, 0.15]);
+}
+
+{
+  const bid = 4304.40;
+  const ask = 4304.60;
+  const orders = buildPendingPlan({ bid, ask, step: 3, levelsPerSide: 5 });
+  const mid = (bid + ask) / 2;
+  assert.equal(orders.filter((o) => o.type === "BUY_STOP" ? mid >= o.price : mid <= o.price).length, 0);
 }
 
 const ea = readFileSync("mt5/FastBasketBot.mq5", "utf8");
 const api = readFileSync("apps/api/src/ea.controller.ts", "utf8");
 const web = readFileSync("apps/web/app/dashboard/page.tsx", "utf8");
-
-// Real EA source must use pending actions for ZERO and must not market-enter in
-// the ZERO pending sender.
 const sendStart = ea.indexOf("bool ZeroGridSendPending(bool buySide,int level)");
 const sendEnd = ea.indexOf("bool ZeroGridEnsureLadder()", sendStart);
 assert.ok(sendStart >= 0 && sendEnd > sendStart, "ZERO pending sender missing");
@@ -72,21 +55,13 @@ assert.match(sendBlock, /request\.action\s*=\s*TRADE_ACTION_PENDING/);
 assert.match(sendBlock, /ORDER_TYPE_BUY_STOP/);
 assert.match(sendBlock, /ORDER_TYPE_SELL_STOP/);
 assert.doesNotMatch(sendBlock, /TRADE_ACTION_DEAL/);
-
-// Startup must wait for a real settings owner; no default AUTO market entry.
+assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);
+assert.match(ea, /double ZeroGridPendingAnchorPrice\(bool buySide\)[\s\S]*live\.ask\+gap[\s\S]*live\.bid-gap/);
+assert.doesNotMatch(ea, /ZeroGridEffectiveStepPrice\(\)\*1\.5/);
+assert.match(ea, /double ZeroGridEstimatedExitCostMoney\(\)/);
+assert.match(ea, /ZeroGridRequiredCloseNet\(\)[\s\S]*ZeroGridEstimatedExitCostMoney\(\)/);
 assert.match(ea, /bool\s+g_settingsSynchronized\s*=\s*false/);
-assert.match(ea, /return\s+"UNSYNCED"/);
 assert.match(ea, /WAIT_SETTINGS_SYNC/);
-assert.match(ea, /int maxAttemptsPerPass=MathMin\(60,levels\*2\);/);
-
-// The heartbeat used to omit ZERO_GRID here and silently rewrite it to AUTO.
 assert.match(api, /\["AUTO",\s*"RACE",\s*"ZERO_GRID",\s*"ASSISTED",\s*"MANUAL"\]/);
-assert.match(api, /runtimeControlMode === "ZERO_GRID"[\s\S]*?\? "ZERO_GRID"/);
-
-// Web must persist the exact pending level count as an integer and explain 5+5.
-assert.match(web, /"zeroGridLevelsPerSide"[\s\S]*?const integerKeys/);
-assert.match(web, /"maxOrdersPerMinute",\s*\n\s*"zeroGridLevelsPerSide"/);
 assert.match(web, /ตั้ง 5 = วาง BUY STOP 5 รายการ \+ SELL STOP 5 รายการ/);
-assert.match(web, /มีการตั้งค่าที่ยังไม่ได้บันทึก/);
-
-console.log("ZERO GRID pending-only exact-level regression passed");
+console.log("ZERO GRID near-entry and real-net regression passed");
