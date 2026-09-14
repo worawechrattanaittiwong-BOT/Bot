@@ -425,6 +425,12 @@ jobs:
 
           echo "[integration] account change is blocked while old MT5 has open positions"
           OLD_WITH_POS=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Demo\",\"positions\":2}}")
+          echo "[integration] owner can queue per-account Close All from maintenance control"
+          CLOSE_ONE=$(curl -fsS -X POST "$BASE/admin/maintenance/close-instance" -H 'x-admin-key: integration-admin' -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\"}")
+          test "$(printf '%s' "$CLOSE_ONE" | jq -r '.queued')" = "true"
+          test "$(printf '%s' "$CLOSE_ONE" | jq -r '.positions')" = "2"
+          CLOSE_ONE_CMD=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select command from bot_commands where bot_instance_id='$INSTANCE' and status='PENDING' order by id desc limit 1;")
+          test "$CLOSE_ONE_CMD" = "CLOSE_ALL"
           DETECT_REAL_BLOCKED=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
           test "$(printf '%s' "$DETECT_REAL_BLOCKED" | jq -r '.accountMismatch')" = "true"
           test "$(printf '%s' "$DETECT_REAL_BLOCKED" | jq -r '.previousBoundPositions')" = "2"
