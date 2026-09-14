@@ -1,6 +1,6 @@
 name: Build MT5 EA
 
-# Release metadata trigger: EA v1.0.9.
+# Release metadata trigger: EA v1.0.10 atomic ZERO first pair.
 # Official MT5 compile and publish pipeline for the current V20/RACE source.
 # ZERO GRID V3 uses a ~1.00 price first offset (about 100 points on 2-digit XAUUSD),
 # guarantees the required L1 pair before deeper levels, keeps exact per-side spacing,
@@ -95,6 +95,10 @@ jobs:
             'double ZeroGridEstimatedExitCostMoney()',
             'double ZeroGridPendingAnchorPrice(bool buySide)',
             'double ZeroGridPendingLevelPrice(bool buySide,int level)',
+            'bool ZeroGridRecenterFlatCycle()',
+            'ZERO_GRID_RETRY_FIRST_PAIR',
+            'request.type_time=ZeroGridPendingTimeType();',
+            'int zeroRateLimit=(int)MathMax(2,MathMin(120,ZeroGridEffectiveLevelsPerSide()*2+8));',
             'int maxPlacementAttempts=(level==1 ? 3 : 2);',
             'ZERO_GRID_WAIT_FIRST_PAIR',
             'ZERO_GRID_REBUILD_MISSING_L1',
