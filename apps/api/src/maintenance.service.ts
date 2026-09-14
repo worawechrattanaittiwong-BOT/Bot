@@ -153,6 +153,7 @@ export class MaintenanceService {
               OR (mt5_fresh AND actual_state='RUNNING')
          )::int AS running,
          COALESCE(SUM(reported_positions),0)::int AS positions,
+         COALESCE(SUM(CASE WHEN mt5_fresh THEN reported_positions ELSE 0 END),0)::int AS fresh_positions,
          COUNT(*) FILTER (
            WHERE NOT mt5_fresh AND reported_positions>0
          )::int AS stale_position_instances,
@@ -163,7 +164,10 @@ export class MaintenanceService {
 
   private async tryFinishDrain() {
     const blockers = await this.liveBlockers();
-    if (Number(blockers?.running || 0) === 0 && Number(blockers?.positions || 0) === 0) {
+    // An offline EA can leave a stale cached Position forever. That must remain
+    // visible and must block reopening, but it must not deadlock entry into
+    // MAINTENANCE once every live MT5 session is stopped and fresh Positions are 0.
+    if (Number(blockers?.running || 0) === 0 && Number(blockers?.fresh_positions || 0) === 0) {
       await this.db.query(
         `UPDATE system_maintenance
          SET status='MAINTENANCE',maintenance_started_at=COALESCE(maintenance_started_at,now()),updated_at=now()
@@ -299,8 +303,10 @@ export class MaintenanceService {
     }
 
     await this.db.query("UPDATE bot_instances SET desired_state='STOPPED' WHERE id=$1", [id]);
+    // Supersede obsolete start/stop controls, but never fake a CLOSE_ALL ACK.
+    // reconcileAckedCloseAll() must only trust an acknowledgement sent by the EA.
     await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
       [id]
     );
     await this.db.query(
@@ -432,16 +438,26 @@ export class MaintenanceService {
   async resume(actor: string) {
     const current = await this.current();
     if (current.status === "DRAINING") {
-      const blockers = await this.liveBlockers();
-      if (Number(blockers?.running || 0) > 0 || Number(blockers?.positions || 0) > 0) {
-        throw new ConflictException("ยังมี Bot Running หรือ Position ที่ MT5 ยังไม่ยืนยันว่าเป็น 0 ระบบยังเปิดกลับไม่ได้");
-      }
       await this.tryFinishDrain();
     }
 
     const refreshed = await this.row();
     if (refreshed?.status !== "MAINTENANCE") {
       throw new ConflictException("ระบบไม่ได้อยู่ในโหมด Maintenance");
+    }
+
+    // Stale snapshots are allowed to enter MAINTENANCE so the owner can upgrade,
+    // but reopening must stay blocked until MT5/EA proves every Position is 0.
+    const blockers = await this.liveBlockers();
+    const running = Number(blockers?.running || 0);
+    const positions = Number(blockers?.positions || 0);
+    const stalePositions = Number(blockers?.stale_reported_positions || 0);
+    if (running > 0 || positions > 0) {
+      throw new ConflictException(
+        stalePositions > 0
+          ? "ยังมี Position จากข้อมูล MT5 ล่าสุดที่ยังไม่ได้ยืนยันว่าเป็น 0 กรุณาเปิด EA/MT5 ให้ heartbeat ยืนยัน หรือส่ง Close All ให้สำเร็จก่อนเปิดระบบ"
+          : "ยังมี Bot Running หรือ Position ค้างอยู่ ระบบยังเปิดกลับไม่ได้"
+      );
     }
 
     await this.db.query(
