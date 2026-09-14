@@ -149,7 +149,7 @@ export default function DashboardPage() {
       }
     }
 
-    load("");
+    load(new URLSearchParams(window.location.search).get("slotId") || "");
     api("/catalog/brokers")
       .then((rows)=>setBrokerCatalog(rows))
       .catch(()=>setBrokerCatalog([]));
@@ -2064,6 +2064,7 @@ export default function DashboardPage() {
 
         {activeView === "access" && (
           <div className="access-workspace">
+            <section className="panel purple"><div className="eyebrow">CLOUD MEMBERSHIP</div><h2>ให้ Cloud ดูแล MT5 ของคุณ</h2><p className="muted">เลือก 1 / 3 / 6 / 12 เดือน ชำระผ่าน QR และติดตามการเปิดใช้งานได้จากหน้าเดียว</p><a className="btn primary" href={"/cloud"+(data.selectedSlot?.mode==="CLOUD"?"?slotId="+encodeURIComponent(data.selectedSlot.id):"")}>ซื้อ / ต่ออายุ Cloud →</a></section>
             <div className="grid2 access-grid">
               <section className="panel purple">
                 <div className="eyebrow">ACCESS STATUS · SLOT {data.selectedSlot?.slot_number || "—"}</div>

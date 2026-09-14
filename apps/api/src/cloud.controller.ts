@@ -1,0 +1,240 @@
+import { BadRequestException, Body, ConflictException, Controller, Get, Injectable, OnApplicationBootstrap, OnModuleDestroy, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { randomBytes } from "crypto";
+import { DbService } from "./db.service";
+import { AdminGuard, CryptoService, JwtGuard } from "./security";
+
+export function paymentMode() {
+  const key = process.env.OMISE_SECRET_KEY || "";
+  return key.startsWith("skey_live_") ? "LIVE" : key.startsWith("skey_test_") ? "TEST" : "UNCONFIGURED";
+}
+export function validateCharge(charge: any, order: any) {
+  if (charge.object !== "charge" || charge.metadata?.order_id !== order.id ||
+      charge.amount !== order.amount || charge.currency?.toLowerCase() !== "thb" ||
+      charge.livemode !== (paymentMode() === "LIVE") ||
+      (order.charge_id && order.charge_id !== charge.id)) {
+    throw new ConflictException("ข้อมูลการชำระเงินไม่ตรงกับรายการ");
+  }
+}
+
+@Injectable()
+export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
+  constructor(private readonly db: DbService) {}
+  private timer?: ReturnType<typeof setInterval>;
+  private checking = false;
+  onApplicationBootstrap() {
+    this.timer = setInterval(() => { void this.reconcilePending(); }, 60000);
+    this.timer.unref();
+  }
+  onModuleDestroy() { if (this.timer) clearInterval(this.timer); }
+  async reconcilePending() {
+    if (this.checking || paymentMode() === "UNCONFIGURED") return;
+    this.checking = true;
+    try {
+      const orders = await this.db.query(`UPDATE cloud_orders SET checked_at=now() WHERE id IN (
+        SELECT id FROM cloud_orders WHERE status IN ('PENDING','REVIEW') AND charge_id IS NOT NULL
+        AND (checked_at IS NULL OR checked_at<now()-interval '1 minute')
+        ORDER BY checked_at NULLS FIRST LIMIT 10 FOR UPDATE SKIP LOCKED) RETURNING charge_id`);
+      for (const order of orders.rows) {
+        try { await this.reconcile(order.charge_id); } catch { /* Retain reservation and retry; never infer a payment failure from a timeout. */ }
+      }
+    } catch { /* Database temporarily unavailable; next interval retries. */ }
+    finally { this.checking = false; }
+  }
+
+  async gateway(path: string, fields?: URLSearchParams) {
+    if (paymentMode() === "UNCONFIGURED") throw new ConflictException("ยังไม่ได้เชื่อมระบบชำระเงิน");
+    const response = await fetch("https://api.omise.co" + path, {
+      method: fields ? "POST" : "GET",
+      headers: { Authorization: "Basic " + Buffer.from(process.env.OMISE_SECRET_KEY + ":").toString("base64"),
+        "Content-Type": "application/x-www-form-urlencoded", "Omise-Version": "2019-05-29" },
+      body: fields, signal: AbortSignal.timeout(15000)
+    });
+    if (!response.ok) throw new ConflictException("ติดต่อผู้ให้บริการชำระเงินไม่สำเร็จ กรุณาตรวจสอบรายการก่อนลองใหม่");
+    return response.json();
+  }
+
+  async nodes() {
+    return (await this.db.query(`SELECT w.runner_id,w.region,w.hostname,w.capacity,w.active_instances,
+      w.accepting_jobs,w.monthly_cost,w.spec,w.telemetry,w.last_seen_at,l.occupied,
+      CASE WHEN w.last_seen_at>now()-interval '30 seconds' THEN 'ONLINE' ELSE 'OFFLINE' END health
+      FROM worker_nodes w JOIN cloud_node_load l USING(runner_id) ORDER BY w.created_at`)).rows;
+  }
+
+  async catalog() {
+    const nodes = await this.nodes();
+    const available = nodes.filter(n => n.health === "ONLINE" && n.accepting_jobs && n.telemetry?.templateReady === true)
+      .reduce((sum, n) => sum + Math.max(0, n.capacity - Math.max(n.occupied, n.active_instances)), 0);
+    return { packages: (await this.db.query("SELECT * FROM cloud_packages ORDER BY months")).rows,
+      available, paymentMode: paymentMode(), checkoutEnabled: process.env.CLOUD_CHECKOUT_ENABLED === "true" && paymentMode() !== "UNCONFIGURED" };
+  }
+
+  // Never trust webhook status/amount. Retrieve the charge with the merchant's secret.
+  async reconcile(chargeId: string) {
+    if (!/^chrg_[a-zA-Z0-9_]+$/.test(chargeId)) throw new BadRequestException("Invalid charge");
+    const charge = await this.gateway("/charges/" + chargeId);
+    const orderId = charge.metadata?.order_id;
+    if (!/^[0-9a-f-]{36}$/i.test(orderId || "")) return;
+    return this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740091)");
+      const order = (await tx.query("SELECT * FROM cloud_orders WHERE id=$1 FOR UPDATE", [orderId])).rows[0];
+      if (!order) return;
+      validateCharge(charge, order);
+      if (order.status === "PAID") return order;
+      if (charge.status !== "successful" || charge.paid !== true) {
+        const failed = ["failed", "expired", "reversed"].includes(charge.status);
+        await tx.query("UPDATE cloud_orders SET charge_id=$2,status=$3,qr_url=$4,expires_at=$5 WHERE id=$1",
+          [order.id, charge.id, failed ? "FAILED" : "PENDING", charge.source?.scannable_code?.image?.download_uri || null, charge.expires_at || null]);
+        return;
+      }
+      const user = (await tx.query("SELECT status FROM users WHERE id=$1 FOR UPDATE", [order.user_id])).rows[0];
+      if (user?.status !== "ACTIVE" || order.status === "FAILED") {
+        await tx.query("UPDATE cloud_orders SET status='REVIEW',charge_id=$2 WHERE id=$1", [order.id, charge.id]);
+        return;
+      }
+      let slot = order.slot_id ? (await tx.query("SELECT * FROM license_slots WHERE id=$1 FOR UPDATE", [order.slot_id])).rows[0] : null;
+      if (slot && (slot.owner_user_id !== order.user_id || slot.assigned_user_id !== order.user_id || slot.status === "DELETED")) {
+        throw new ConflictException("Slot เปลี่ยนแปลง กรุณาติดต่อผู้ดูแล");
+      }
+      // Calendar months; renewing preserves the unused time of this exact slot.
+      const subscription = (await tx.query(`INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note)
+        SELECT $1,p.id,now(),GREATEST(now(),COALESCE((SELECT expires_at FROM subscriptions WHERE id=$3 AND status='ACTIVE'),now()))
+          + make_interval(months=>$2::int),'PAYMENT', $4 FROM plans p WHERE p.code='CLOUD_' || $2::text || 'M' RETURNING *`,
+        [order.user_id, order.months, slot?.subscription_id || null, "Order " + order.id])).rows[0];
+      if (slot) {
+        await tx.query("UPDATE license_slots SET subscription_id=$2,status='ACTIVE',updated_at=now() WHERE id=$1", [slot.id, subscription.id]);
+      } else {
+        slot = (await tx.query(`INSERT INTO license_slots(owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label)
+          SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,'PERSONAL','ACTIVE','Cloud Trading'
+          FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' RETURNING *`, [order.user_id, subscription.id])).rows[0];
+      }
+      await tx.query("UPDATE cloud_orders SET status='PAID',charge_id=$2,slot_id=$3,subscription_id=$4,paid_at=now() WHERE id=$1",
+        [order.id, charge.id, slot.id, subscription.id]);
+      await tx.query("INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES('PAYMENT','CLOUD_ACTIVATED','order',$1,$2)",
+        [order.id, JSON.stringify({ chargeId, slotId: slot.id, runnerId: order.runner_id })]);
+      return { ...order, status: "PAID", slot_id: slot.id };
+    });
+  }
+}
+
+@Controller("cloud")
+@UseGuards(JwtGuard)
+export class CloudCustomerController {
+  constructor(private readonly db: DbService, private readonly cloud: CloudService) {}
+  @Get("catalog") catalog() { return this.cloud.catalog(); }
+  @Get("orders") async orders(@Req() req: any) {
+    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,
+      s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number
+      FROM cloud_orders o LEFT JOIN subscriptions s ON s.id=o.subscription_id
+      LEFT JOIN bot_instances b ON b.slot_id=o.slot_id LEFT JOIN mt5_accounts a ON a.id=b.mt5_account_id
+      WHERE o.user_id=$1 ORDER BY o.created_at DESC LIMIT 50`, [req.user.sub])).rows;
+  }
+  @Post("orders/:id/refresh") async refresh(@Req() req: any, @Param("id") id: string) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new BadRequestException("Invalid order");
+    const order = await this.db.one("SELECT * FROM cloud_orders WHERE id=$1 AND user_id=$2", [id, req.user.sub]);
+    if (!order) throw new BadRequestException("ไม่พบรายการ");
+    if (order.charge_id && order.status !== "PAID") await this.cloud.reconcile(order.charge_id);
+    return { ok: true };
+  }
+  @Post("checkout") async checkout(@Req() req: any, @Body() body: { months: number; slotId?: string }) {
+    if (process.env.CLOUD_CHECKOUT_ENABLED !== "true" || paymentMode() === "UNCONFIGURED") throw new ConflictException("ยังไม่เปิดรับชำระเงิน");
+    if (![1,3,6,12].includes(body.months)) throw new BadRequestException("Invalid package");
+    if (body.slotId && !/^[0-9a-f-]{36}$/i.test(body.slotId)) throw new BadRequestException("Invalid slot");
+    const order = await this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740091)");
+      const user = (await tx.query("SELECT * FROM users WHERE id=$1 FOR UPDATE", [req.user.sub])).rows[0];
+      if (user?.status !== "ACTIVE") throw new ConflictException("บัญชีไม่พร้อมใช้งาน");
+      const pending = (await tx.query("SELECT id FROM cloud_orders WHERE user_id=$1 AND status IN ('CREATING','PENDING','REVIEW')", [req.user.sub])).rows[0];
+      if (pending) throw new ConflictException("มีรายการรอชำระอยู่แล้ว กรุณาตรวจสอบรายการเดิม");
+      const pack = (await tx.query("SELECT * FROM cloud_packages WHERE months=$1 AND enabled=true AND price_satang>0", [body.months])).rows[0];
+      if (!pack) throw new ConflictException("แพ็กเกจยังไม่เปิดขาย");
+      const slot = body.slotId ? (await tx.query("SELECT * FROM license_slots WHERE id=$1 AND owner_user_id=$2 AND assigned_user_id=$2 AND mode='CLOUD' AND status<>'DELETED'", [body.slotId,req.user.sub])).rows[0] : null;
+      if (body.slotId && !slot) throw new ConflictException("ไม่พบ Cloud Slot ของคุณ");
+      const reserved = slot ? (await tx.query(`SELECT runner_id FROM cloud_orders WHERE slot_id=$1 AND status='PAID'
+        UNION SELECT runner_id FROM bot_instances WHERE slot_id=$1 AND runner_id IS NOT NULL LIMIT 1`, [slot.id])).rows[0] : null;
+      const node = reserved || (await tx.query(`SELECT w.runner_id FROM worker_nodes w JOIN cloud_node_load l USING(runner_id)
+        WHERE w.accepting_jobs AND w.last_seen_at>now()-interval '30 seconds' AND w.telemetry->>'templateReady'='true'
+        AND GREATEST(l.occupied,w.active_instances)<w.capacity
+        ORDER BY GREATEST(l.occupied,w.active_instances)::float/w.capacity,w.runner_id LIMIT 1`)).rows[0];
+      if (!node) throw new ConflictException("Cloud เต็มหรือยังไม่มี VPS พร้อมให้บริการ กรุณาลองภายหลัง");
+      return (await tx.query("INSERT INTO cloud_orders(user_id,months,amount,runner_id,slot_id) VALUES($1,$2,$3,$4,$5) RETURNING *",
+        [req.user.sub, pack.months, pack.price_satang, node.runner_id, slot?.id || null])).rows[0];
+    });
+    try {
+      const charge = await this.cloud.gateway("/charges", new URLSearchParams({ amount: String(order.amount), currency: "thb",
+        "source[type]": "promptpay", "metadata[order_id]": order.id, description: "SCENOVA Cloud " + order.months + " months",
+        expires_at: new Date(Date.now()+15*60000).toISOString() }));
+      validateCharge(charge, order);
+      await this.db.query("UPDATE cloud_orders SET charge_id=$2,qr_url=$3,expires_at=$4,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=$1",
+        [order.id,charge.id,charge.source?.scannable_code?.image?.download_uri || null,charge.expires_at || null]);
+      return { id: order.id };
+    } catch {
+      // A timeout may have created a charge. Keep capacity reserved until reconciled.
+      await this.db.query("UPDATE cloud_orders SET status='REVIEW' WHERE id=$1 AND status='CREATING'", [order.id]);
+      throw new ConflictException("กำลังตรวจสอบการสร้าง QR กรุณาติดต่อผู้ดูแลพร้อมเลขรายการ " + order.id);
+    }
+  }
+}
+
+@Controller("payments/omise")
+export class CloudPaymentController {
+  constructor(private readonly cloud: CloudService) {}
+  @Post("webhook") async webhook(@Body() body: any) {
+    if (body?.key === "charge.complete" || body?.key === "charge.create" || body?.key === "charge.expire") {
+      await this.cloud.reconcile(String(body.data?.id || ""));
+    }
+    return { received: true };
+  }
+}
+
+@Controller("admin/cloud")
+@UseGuards(AdminGuard)
+export class CloudAdminController {
+  constructor(private readonly db: DbService, private readonly cloud: CloudService, private readonly crypto: CryptoService) {}
+  @Get() async overview() {
+    const [catalog, nodes, instances, orders] = await Promise.all([
+      this.cloud.catalog(),this.cloud.nodes(),
+      this.db.query(`SELECT b.id,b.runner_id,b.actual_state,b.desired_state,b.last_seen_at,b.provisioning_error,a.account_number,u.user_code,
+        CASE WHEN c.mt5_account_id IS NULL THEN false ELSE true END credential_ready
+        FROM bot_instances b LEFT JOIN mt5_accounts a ON a.id=b.mt5_account_id LEFT JOIN users u ON u.id=a.user_id
+        LEFT JOIN mt5_credentials c ON c.mt5_account_id=a.id WHERE b.mode='CLOUD' ORDER BY b.created_at DESC LIMIT 100`),
+      this.db.query(`SELECT o.id,o.months,o.amount,o.status,o.charge_id,o.runner_id,o.slot_id,o.created_at,u.user_code
+        FROM cloud_orders o JOIN users u ON u.id=o.user_id ORDER BY o.created_at DESC LIMIT 100`)
+    ]);
+    return { ...catalog,nodes,instances:instances.rows,orders:orders.rows };
+  }
+  @Post("nodes") async addNode(@Body() body: { runnerId: string; region: string; capacity: number; monthlyCost: number; spec: string }) {
+    if (!/^[a-zA-Z0-9_-]{3,80}$/.test(body.runnerId || "")) throw new BadRequestException("Runner ID ใช้ a-z, 0-9, - หรือ _ ความยาว 3–80 ตัว");
+    if (!Number.isInteger(body.capacity) || body.capacity<1 || body.capacity>200) throw new BadRequestException("Capacity ต้องเป็น 1–200");
+    if (!Number.isInteger(body.monthlyCost) || body.monthlyCost<0 || body.monthlyCost>1000000) throw new BadRequestException("Invalid monthly cost");
+    const key = randomBytes(32).toString("hex");
+    const result = await this.db.query(`INSERT INTO worker_nodes(runner_id,region,capacity,monthly_cost,spec,worker_key_hash,status)
+      VALUES($1,$2,$3,$4,$5,$6,'OFFLINE') ON CONFLICT(runner_id) DO NOTHING RETURNING runner_id`,
+      [body.runnerId,String(body.region||"Thailand").slice(0,80),body.capacity,body.monthlyCost,String(body.spec||"").slice(0,300),this.crypto.sha256(key)]);
+    if (!result.rowCount) throw new ConflictException("Runner ID นี้มีแล้ว");
+    return { runnerId: body.runnerId, workerKey: key };
+  }
+  @Post("nodes/:id") async updateNode(@Param("id") id: string, @Body() body: { capacity: number; acceptingJobs: boolean }) {
+    if (!Number.isInteger(body.capacity) || body.capacity<1 || body.capacity>200 || typeof body.acceptingJobs!=="boolean") throw new BadRequestException("Invalid settings");
+    return this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740091)");
+      const node = (await tx.query("SELECT w.*,l.occupied FROM worker_nodes w JOIN cloud_node_load l USING(runner_id) WHERE w.runner_id=$1 FOR UPDATE OF w",[id])).rows[0];
+      if (!node) throw new BadRequestException("ไม่พบ VPS");
+      if (body.capacity<Math.max(node.occupied,node.active_instances)) throw new ConflictException("ความจุต้องไม่น้อยกว่าที่ใช้อยู่และที่จองไว้");
+      if (body.acceptingJobs && (!node.last_seen_at || Date.now()-new Date(node.last_seen_at).getTime()>30000 || node.telemetry?.templateReady!==true)) throw new ConflictException("เชื่อม Worker และตรวจ MT5 Template ก่อนเปิดรับลูกค้า");
+      await tx.query("UPDATE worker_nodes SET capacity=$2,accepting_jobs=$3 WHERE runner_id=$1",[id,body.capacity,body.acceptingJobs]);
+      return { ok:true };
+    });
+  }
+  @Post("nodes/:id/rotate-key") async rotateKey(@Param("id") id: string) {
+    const key = randomBytes(32).toString("hex");
+    const result = await this.db.query("UPDATE worker_nodes SET worker_key_hash=$2,accepting_jobs=false WHERE runner_id=$1 RETURNING runner_id", [id,this.crypto.sha256(key)]);
+    if (!result.rowCount) throw new BadRequestException("ไม่พบ VPS");
+    return { runnerId:id,workerKey:key };
+  }
+  @Post("packages") async packages(@Body() body: { months: number; priceSatang: number; enabled: boolean }) {
+    if (![1,3,6,12].includes(body.months) || !Number.isInteger(body.priceSatang) || body.priceSatang<0 || body.priceSatang>15000000 || typeof body.enabled!=="boolean" || (body.enabled && body.priceSatang<2000)) throw new BadRequestException("ตรวจราคาแพ็กเกจ เปิดขายได้ตั้งแต่ 20 ถึง 150,000 บาท");
+    await this.db.query("UPDATE cloud_packages SET price_satang=$2,enabled=$3,updated_at=now() WHERE months=$1",[body.months,body.priceSatang,body.enabled]);
+    return { ok:true };
+  }
+  @Post("reconcile") async reconcile(@Body() body: { chargeId: string }) { await this.cloud.reconcile(body.chargeId); return { ok:true }; }
+}

@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { adminApi } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
+import { CloudConsole } from "../../components/CloudConsole";
 
 type Menu = "overview"|"customers"|"workers";
 
@@ -487,35 +488,7 @@ export default function AdminPage() {
           </>
         )}
 
-        {activeMenu === "workers" && (
-          <>
-            <section className="owner-pulse compact">
-              <div><span className="owner-pulse-kicker">CLOUD CAPACITY</span><h2>{workersOnline} / {workersTotal} Nodes Online</h2><p>Trading Nodes ที่พร้อมรับ Cloud MT5 ในขณะนี้</p></div>
-              <button className="btn" onClick={()=>search()} disabled={loading}>↻ รีเฟรชสถานะ</button>
-            </section>
-
-            <section className="owner-card owner-table-card">
-              <div className="owner-card-head"><div><span className="owner-card-kicker">TRADING NODES</span><h3>Cloud Workers</h3></div></div>
-              <div className="table-wrap owner-table-wrap">
-                <table>
-                  <thead><tr><th>Runner</th><th>Region</th><th>Load</th><th>Health</th><th>Last Seen</th></tr></thead>
-                  <tbody>
-                    {(system?.workers || []).map((worker:any)=>(
-                      <tr key={worker.runner_id}>
-                        <td><b>{worker.runner_id}</b><br/><span className="muted">{worker.hostname || "—"}</span></td>
-                        <td>{worker.region}</td>
-                        <td>{worker.active_instances} / {worker.capacity}</td>
-                        <td><span className={"owner-state-chip "+(worker.health==="ONLINE"?"good":"bad")}>{worker.health}</span></td>
-                        <td>{worker.last_seen_at ? new Date(worker.last_seen_at).toLocaleString("th-TH") : "—"}</td>
-                      </tr>
-                    ))}
-                    {!system?.workers?.length && <tr><td colSpan={5}><div className="owner-empty">ยังไม่มี Cloud Worker เชื่อมต่อระบบ</div></td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </>
-        )}
+        {activeMenu === "workers" && <CloudConsole/>}
       </main>
     </div>
   );

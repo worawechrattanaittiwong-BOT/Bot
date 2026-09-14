@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
+import { DbService } from "./db.service";
 
 @Injectable()
 export class JwtGuard implements CanActivate {
@@ -57,11 +58,18 @@ export class AdminGuard implements CanActivate {
 
 @Injectable()
 export class WorkerGuard implements CanActivate {
-  canActivate(context: ExecutionContext) {
+  constructor(private readonly db: DbService) {}
+
+  async canActivate(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest();
     const supplied = String(req.headers["x-worker-key"] || "");
     const expected = String(process.env.WORKER_KEY || "");
-    if (!expected || supplied !== expected) throw new ForbiddenException("worker key invalid");
+    const runnerId = String(req.body?.runnerId || "");
+    if (!/^[a-zA-Z0-9_-]{3,80}$/.test(runnerId)) throw new ForbiddenException("runner ID required");
+    const node = await this.db.one("SELECT worker_key_hash FROM worker_nodes WHERE runner_id=$1", [runnerId]);
+    if (node?.worker_key_hash) {
+      if (createHash("sha256").update(supplied).digest("hex") !== node.worker_key_hash) throw new ForbiddenException("worker key invalid");
+    } else if (!expected || supplied !== expected) throw new ForbiddenException("worker key invalid");
     return true;
   }
 }

@@ -1221,6 +1221,8 @@ export class BotController {
       ? await this.resolveSlot(req.user.sub, body.slotId)
       : await this.ensureModeSlot(req.user.sub, mode);
     if (slot.mode !== mode) throw new ConflictException("slot mode does not match MT5 mode");
+    const boundCloud = await this.db.one("SELECT id FROM bot_instances WHERE slot_id=$1 AND mode='CLOUD' AND runner_id IS NOT NULL", [slot.id]);
+    if (boundCloud) throw new ConflictException("Cloud นี้ผูก VPS แล้ว กรุณาติดต่อผู้ดูแลเพื่อเปลี่ยนบัญชี");
     if (mode === "LOCAL") {
       throw new ConflictException("LOCAL mode must be installed from the SCENOVA website; MT5 will be detected automatically");
     }
@@ -1307,6 +1309,10 @@ export class BotController {
       [slot.id]
     );
     if (!instance) return { ok: true };
+    if (slot.mode === "CLOUD") {
+      const bound = await this.db.one("SELECT runner_id FROM bot_instances WHERE id=$1", [instance.id]);
+      if (bound?.runner_id) throw new ConflictException("Cloud นี้ผูก VPS แล้ว กรุณาติดต่อผู้ดูแลเพื่อหยุด MT5 ก่อนเปลี่ยนบัญชี");
+    }
     if (instance.actual_state === "RUNNING" || instance.desired_state === "RUNNING" || Number(instance.positions || 0) > 0) {
       throw new ConflictException("stop the bot and close positions before changing MT5 account");
     }
@@ -1330,6 +1336,9 @@ export class BotController {
       [body.mt5AccountId, req.user.sub]
     );
     if (!account) throw new ConflictException("cloud MT5 account not found");
+    if (!body.tradingPassword || /[\r\n\x00]/.test(body.tradingPassword)) throw new ConflictException("Trading Password ไม่ถูกต้อง");
+    const bound = await this.db.one("SELECT id FROM bot_instances WHERE mt5_account_id=$1 AND runner_id IS NOT NULL", [account.id]);
+    if (bound) throw new ConflictException("กรุณาติดต่อผู้ดูแลเพื่อเปลี่ยนรหัสผ่านบน VPS");
     const enc = this.crypto.encrypt(String(body.tradingPassword || ""));
     await this.db.query(
       "INSERT INTO mt5_credentials(mt5_account_id,ciphertext,iv,auth_tag) VALUES($1,$2,$3,$4) ON CONFLICT(mt5_account_id) DO UPDATE SET ciphertext=EXCLUDED.ciphertext,iv=EXCLUDED.iv,auth_tag=EXCLUDED.auth_tag,updated_at=now()",

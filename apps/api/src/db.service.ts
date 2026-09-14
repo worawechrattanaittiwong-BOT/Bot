@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import { Pool, QueryResultRow } from "pg";
+import { Pool, PoolClient, QueryResultRow } from "pg";
+import { CLOUD_SCHEMA } from "./cloud-schema";
 
 @Injectable()
 export class DbService implements OnModuleInit, OnModuleDestroy {
@@ -395,6 +396,20 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
           updated_at=now()
       WHERE NOT settings ? 'profitTargetMode';
     `);
+    await this.pool.query(CLOUD_SCHEMA);
+  }
+
+  async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const value = await work(client);
+      await client.query("COMMIT");
+      return value;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
   }
 
   async query<T extends QueryResultRow = any>(text: string, params: any[] = []) {
