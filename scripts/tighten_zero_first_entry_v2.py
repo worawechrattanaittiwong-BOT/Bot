@@ -1,66 +1,266 @@
 from pathlib import Path
+import re
 
 
-def replace_once(path: str, old: str, new: str) -> None:
-    file = Path(path)
-    text = file.read_text(encoding="utf-8")
-    if old not in text:
-        raise SystemExit(f"target block not found in {path}")
-    file.write_text(text.replace(old, new, 1), encoding="utf-8", newline="\n")
+ea_path = Path("mt5/FastBasketBot.mq5")
+test_path = Path("tests/zero-grid-v1-simulation.mjs")
+ea = ea_path.read_text(encoding="utf-8")
 
+if "double preferredGap=1.0;" not in ea:
+    raise SystemExit("ZERO ~100-point first-offset patch is missing; aborting targeted L1 repair")
 
-ea = "mt5/FastBasketBot.mq5"
+# Root cause of the missing first order:
+# the old ladder loop could continue with L2/L3/... when L1 was rejected for a
+# fast quote/stops-level change. Once a deeper pending existed, that side's
+# anchor became frozen and the missing L1 could remain broker-invalid forever.
+# Fix it in two layers:
+# 1) L1 gets a few immediate broker-safe retries with fresh prices.
+# 2) Both required L1 orders must exist before any deeper level is staged.
+#    A legacy broken ladder (L2+ exists while active L1 is missing) is rebuilt.
 
-# Keep the first ZERO pending pair around 1.00 price away from the cycle center.
-# On a 2-digit XAUUSD quote this is about 100 MT5 points, e.g. center 4001.00
-# => BUY STOP ~4002.00 / SELL STOP ~4000.00. If the broker requires a larger
-# StopsLevel, the broker-safe distance wins. One extra tick protects against a
-# moving quote rejecting the opposite-side pending while the ladder is staged.
-replace_once(
-    ea,
-    '''double ZeroGridEntryGapPrice()\n{\n   // First BUY/SELL triggers hug the live quote at the nearest broker-legal\n   // pending distance. Rounding outward to tick size provides the only buffer.\n   double tick=ZeroGridTickSize();\n   double gap=ZeroGridMinPendingDistancePrice();\n   double units=MathCeil((gap/tick)-1e-10);\n   return NormalizeDouble(MathMax(1.0,units)*tick,_Digits);\n}\n''',
-    '''double ZeroGridEntryGapPrice()\n{\n   // Preferred first offset is 1.00 price unit. For 2-digit XAUUSD this is\n   // about 100 points: center 4001.00 -> BUY ~4002.00 / SELL ~4000.00.\n   // A broker requiring a wider StopsLevel always takes priority.\n   double tick=ZeroGridTickSize();\n   double preferredGap=1.0;\n   double brokerSafeGap=ZeroGridMinPendingDistancePrice()+tick;\n   double gap=MathMax(preferredGap,brokerSafeGap);\n   double units=MathCeil((gap/tick)-1e-10);\n   return NormalizeDouble(MathMax(1.0,units)*tick,_Digits);\n}\n'''
-)
+send_fn = r'''bool ZeroGridSendPending\(bool buySide,int level\)\n\{[\s\S]*?\n\}\n\nbool ZeroGridEnsureLadder\(\)'''
+new_send = '''bool ZeroGridSendPending(bool buySide,int level)
+{
+   if(level<1 || level>ZeroGridEffectiveLevelsPerSide() || ZeroGridLevelExists(buySide,level))
+      return true;
+   if(g_zeroGridCenter<=0.0)
+      return false;
+   if(!ZeroGridStopOrdersSupported())
+   {
+      g_executionStatus="ZERO_GRID_STOP_ORDERS_UNSUPPORTED";
+      return false;
+   }
+   if(g_orderWindowStart==0 || TimeCurrent()-g_orderWindowStart>=60)
+   {
+      g_orderWindowStart=TimeCurrent();
+      g_ordersInWindow=0;
+   }
 
-# Build the first pair symmetrically around the recorded cycle mid-price rather
-# than directly from bid/ask. Only clamp outward when live price has moved far
-# enough that the broker would reject the pending request.
-replace_once(
-    ea,
-    '''double ZeroGridPendingAnchorPrice(bool buySide)\n{\n   LoadZeroGridCycleState();\n   if(g_zeroGridCenter<=0.0) return 0.0;\n\n   // Preserve exact ladder geometry after the first level exists.\n   double existing=ZeroGridExistingPendingAnchorPrice(buySide);\n   if(existing>0.0) return existing;\n\n   MqlTick live;\n   if(!SymbolInfoTick(_Symbol,live)) return 0.0;\n   double gap=ZeroGridEntryGapPrice();\n   double raw=buySide ? live.ask+gap : live.bid-gap;\n   return ZeroGridNormalizePendingPrice(buySide,raw);\n}\n''',
-    '''double ZeroGridPendingAnchorPrice(bool buySide)\n{\n   LoadZeroGridCycleState();\n   if(g_zeroGridCenter<=0.0) return 0.0;\n\n   // Preserve exact ladder geometry after the first level exists.\n   double existing=ZeroGridExistingPendingAnchorPrice(buySide);\n   if(existing>0.0) return existing;\n\n   MqlTick live;\n   if(!SymbolInfoTick(_Symbol,live)) return 0.0;\n\n   double gap=ZeroGridEntryGapPrice();\n   double raw=buySide ? g_zeroGridCenter+gap : g_zeroGridCenter-gap;\n\n   // Guard the request against a fast quote move while keeping the intended\n   // center +/- first-gap geometry whenever the broker allows it.\n   double brokerSafe=ZeroGridMinPendingDistancePrice()+ZeroGridTickSize();\n   double legal=buySide ? live.ask+brokerSafe : live.bid-brokerSafe;\n   if(buySide && raw<legal) raw=legal;\n   if(!buySide && raw>legal) raw=legal;\n\n   return ZeroGridNormalizePendingPrice(buySide,raw);\n}\n'''
-)
+   double volume=NormalizeTradeVolume(ZeroGridEffectiveBaseLot()*level);
+   if(volume<=0.0)
+   {
+      g_executionStatus="ZERO_GRID_INVALID_LOT";
+      return false;
+   }
 
-replace_once(
-    ea,
-    '''   double safeDistance=ZeroGridMinPendingDistancePrice();\n   double safeBoundary=buySide\n''',
-    '''   // Keep one tick of placement headroom so BUY/SELL L1 can both be\n   // accepted even while the quote moves during the same fast staging pass.\n   double safeDistance=ZeroGridMinPendingDistancePrice()+ZeroGridTickSize();\n   double safeBoundary=buySide\n'''
-)
+   // L1 is the critical trigger pair. Retry it immediately with a fresh tick
+   // and slightly more broker headroom instead of allowing L2+ to leapfrog it.
+   // Deeper levels need fewer retries because their anchor is already fixed by L1.
+   int maxPlacementAttempts=(level==1 ? 3 : 2);
+   for(int attempt=0;attempt<maxPlacementAttempts;attempt++)
+   {
+      if(g_ordersInWindow>=g_maxOrdersPerMinute)
+      {
+         g_executionStatus="ZERO_GRID_RATE_LIMIT";
+         return false;
+      }
 
-# Regression model mirrors the EA: first pair around center +/- 1.00, then exact
-# configured spacing between levels, with broker-safe clamping only if required.
-test = Path("tests/zero-grid-v1-simulation.mjs")
-text = test.read_text(encoding="utf-8")
-start = text.index("export function buildPendingPlan")
-end = text.index("\n\n{\n  const bid = 4304.40;", start)
-new_function = '''export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPerSide = 5, brokerMinDistance = 0, tick = 0.01, firstOffsetPrice = 1.0 }) {\n  const center = (bid + ask) / 2;\n  const brokerSafe = Math.max(tick, brokerMinDistance) + tick;\n  const buyAnchor = up(Math.max(center + firstOffsetPrice, ask + brokerSafe), tick);\n  const sellAnchor = down(Math.min(center - firstOffsetPrice, bid - brokerSafe), tick);\n  const orders = [];\n  for (let level = 1; level <= levelsPerSide; level += 1) {\n    const offset = step * (level - 1);\n    const lot = baseLot * level;\n    orders.push({ type: "BUY_STOP", level, lot, price: buyAnchor + offset });\n    orders.push({ type: "SELL_STOP", level, lot, price: sellAnchor - offset });\n  }\n  return orders;\n}'''
-text = text[:start] + new_function + text[end:]
+      MqlTick live;
+      if(!SymbolInfoTick(_Symbol,live))
+      {
+         g_executionStatus="ZERO_GRID_WAIT_TICK";
+         return false;
+      }
 
-old_case = '''{\n  const bid = 4304.40;\n  const ask = 4304.60;\n  const orders = buildPendingPlan({ bid, ask, step: 3, brokerMinDistance: 0.05, tick: 0.01, levelsPerSide: 3 });\n  const buys = orders.filter((o) => o.type === "BUY_STOP");\n  const sells = orders.filter((o) => o.type === "SELL_STOP");\n  assert.ok(buys[0].price - ask < 0.10, "first BUY STOP should hug live ask");\n  assert.ok(bid - sells[0].price < 0.10, "first SELL STOP should hug live bid");\n  assert.equal(Number((buys[1].price - buys[0].price).toFixed(2)), 3);\n  assert.equal(Number((sells[0].price - sells[1].price).toFixed(2)), 3);\n}\n'''
-new_case = '''{\n  const bid = 4000.95;\n  const ask = 4001.05;\n  const orders = buildPendingPlan({ bid, ask, step: 3, brokerMinDistance: 0.05, tick: 0.01, levelsPerSide: 3 });\n  const buys = orders.filter((o) => o.type === "BUY_STOP");\n  const sells = orders.filter((o) => o.type === "SELL_STOP");\n  assert.equal(Number(buys[0].price.toFixed(2)), 4002.00, "first BUY STOP should be about +1.00 from center");\n  assert.equal(Number(sells[0].price.toFixed(2)), 4000.00, "first SELL STOP should be about -1.00 from center");\n  assert.equal(Number((buys[1].price - buys[0].price).toFixed(2)), 3);\n  assert.equal(Number((sells[0].price - sells[1].price).toFixed(2)), 3);\n}\n'''
-if old_case not in text:
-    raise SystemExit("ZERO test first-offset case not found")
-text = text.replace(old_case, new_case, 1)
-text = text.replace(
-    'assert.match(ea, /double ZeroGridEntryGapPrice\\(\\)[\\s\\S]*double gap=ZeroGridMinPendingDistancePrice\\(\\)/);\nassert.doesNotMatch(ea, /ZeroGridMinPendingDistancePrice\\(\\)\\+ZeroGridTickSize\\(\\)/);\nassert.doesNotMatch(ea, /MathMax\\(stops,freeze\\)/);\nassert.match(ea, /double ZeroGridPendingAnchorPrice\\(bool buySide\\)[\\s\\S]*live\\.ask\\+gap[\\s\\S]*live\\.bid-gap/);\n',
-    'assert.match(ea, /double ZeroGridEntryGapPrice\\(\\)[\\s\\S]*double preferredGap=1\\.0;[\\s\\S]*ZeroGridMinPendingDistancePrice\\(\\)\\+tick/);\nassert.doesNotMatch(ea, /MathMax\\(stops,freeze\\)/);\nassert.match(ea, /double ZeroGridPendingAnchorPrice\\(bool buySide\\)[\\s\\S]*g_zeroGridCenter\\+gap[\\s\\S]*g_zeroGridCenter-gap[\\s\\S]*live\\.ask\\+brokerSafe[\\s\\S]*live\\.bid-brokerSafe/);\n',
-    1,
-)
-text = text.replace(
-    'console.log("ZERO GRID nearest-legal first-entry and real-net regression passed");',
-    'console.log("ZERO GRID ~100-point first-offset, fast paired staging and real-net regression passed");',
-    1,
-)
-test.write_text(text, encoding="utf-8", newline="\n")
+      double price=ZeroGridPendingLevelPrice(buySide,level);
+      if(price<=0.0)
+      {
+         g_executionStatus="ZERO_GRID_WAIT_TICK";
+         return false;
+      }
 
-print("ZERO first pair set around center +/- 1.00 with broker-safe one-tick headroom")
+      // First try keeps the intended ~100-point geometry. If the quote moves
+      // while the request is being staged, later L1 attempts add only 1 tick
+      // at a time and clamp outward to the latest broker-safe boundary.
+      double tickSize=ZeroGridTickSize();
+      double retryHeadroom=tickSize*(attempt+1);
+      double safeDistance=ZeroGridMinPendingDistancePrice()+retryHeadroom;
+      double safeBoundary=buySide
+         ? ZeroGridNormalizePendingPrice(true,live.ask+safeDistance)
+         : ZeroGridNormalizePendingPrice(false,live.bid-safeDistance);
+
+      bool unsafe=(buySide && price<safeBoundary) || (!buySide && price>safeBoundary);
+      if(unsafe)
+      {
+         // Before L1 exists there is no valid ladder geometry to preserve, so
+         // move L1 itself to the nearest legal live boundary. Once L1 exists,
+         // never distort the configured spacing of L2+.
+         if(level==1 && ZeroGridExistingPendingAnchorPrice(buySide)<=0.0)
+            price=safeBoundary;
+         else
+         {
+            g_executionStatus="ZERO_GRID_WAIT_SAFE_GEOMETRY";
+            return false;
+         }
+      }
+
+      MqlTradeRequest request={};
+      MqlTradeResult result={};
+      request.action=TRADE_ACTION_PENDING;
+      request.magic=InpMagic;
+      request.symbol=_Symbol;
+      request.volume=volume;
+      request.price=price;
+      request.type=buySide ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
+      request.type_time=ORDER_TIME_GTC;
+      request.type_filling=ORDER_FILLING_RETURN;
+      request.comment=ZeroGridComment(buySide,level);
+
+      ResetLastError();
+      bool sent=OrderSend(request,result);
+      RegisterOrderRequest();
+      g_lastOrderRetcode=(long)result.retcode;
+      g_lastOrderError=GetLastError();
+      g_lastOrderAt=TimeCurrent();
+
+      if(sent && (result.retcode==TRADE_RETCODE_DONE || result.retcode==TRADE_RETCODE_PLACED))
+         return true;
+
+      PrintFormat(
+         "ZERO pending retry side=%s level=%d attempt=%d price=%.*f bid=%.*f ask=%.*f retcode=%u error=%d",
+         buySide ? "BUY" : "SELL",
+         level,
+         attempt+1,
+         _Digits,price,
+         _Digits,live.bid,
+         _Digits,live.ask,
+         result.retcode,
+         g_lastOrderError
+      );
+
+      bool retryable=
+         result.retcode==TRADE_RETCODE_INVALID_PRICE ||
+         result.retcode==TRADE_RETCODE_INVALID_STOPS ||
+         result.retcode==TRADE_RETCODE_PRICE_CHANGED ||
+         result.retcode==TRADE_RETCODE_REQUOTE;
+      if(!retryable)
+         break;
+   }
+
+   g_executionStatus=(level==1 ? "ZERO_GRID_L1_RETRY" : "ZERO_GRID_PENDING_RETRY");
+   return false;
+}
+
+bool ZeroGridEnsureLadder()'''
+ea2, count = re.subn(send_fn, new_send, ea, count=1)
+if count != 1:
+    raise SystemExit(f"ZeroGridSendPending block replacement count={count}")
+ea = ea2
+
+ensure_fn = r'''bool ZeroGridEnsureLadder\(\)\n\{[\s\S]*?\n\}\n\nvoid ZeroGridCancelPendingSide'''
+new_ensure = '''bool ZeroGridEnsureLadder()
+{
+   if(g_zeroGridCenter<=0.0)
+      return false;
+
+   bool complete=true;
+   int nettingDirection=ZeroGridAccountIsNetting() ? ZeroGridPositionDirection() : 0;
+   int attemptsThisPass=0;
+   int levels=ZeroGridEffectiveLevelsPerSide();
+   int maxAttemptsPerPass=MathMin(60,levels*2+4);
+
+   // Repair ladders created by the previous bug: if L2+ is active on a side
+   // while that side has no active L1 and the cycle is still flat, discard the
+   // malformed pending set. The next tick starts a clean pair from live price.
+   if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()>0)
+   {
+      bool buyL1Active=false;
+      bool sellL1Active=false;
+      bool buyHigherActive=false;
+      bool sellHigherActive=false;
+      string buyL1=ZeroGridComment(true,1);
+      string sellL1=ZeroGridComment(false,1);
+
+      for(int i=OrdersTotal()-1;i>=0;i--)
+      {
+         ulong ticket=OrderGetTicket(i);
+         if(ticket==0 || !OrderSelect(ticket)) continue;
+         if(OrderGetString(ORDER_SYMBOL)!=_Symbol || OrderGetInteger(ORDER_MAGIC)!=InpMagic) continue;
+         string comment=OrderGetString(ORDER_COMMENT);
+         if(comment==buyL1) buyL1Active=true;
+         else if(comment==sellL1) sellL1Active=true;
+         else if(StringFind(comment,"SaaSZeroGridB")==0) buyHigherActive=true;
+         else if(StringFind(comment,"SaaSZeroGridS")==0) sellHigherActive=true;
+      }
+
+      if((buyHigherActive && !buyL1Active) || (sellHigherActive && !sellL1Active))
+      {
+         ZeroGridCancelPending();
+         ResetZeroGridCycleState();
+         g_executionStatus="ZERO_GRID_REBUILD_MISSING_L1";
+         return false;
+      }
+   }
+
+   bool needBuy=nettingDirection>=0;
+   bool needSell=nettingDirection<=0;
+
+   // Stage the trigger pair FIRST. Never allow L2/L3/... to exist while a
+   // required L1 is missing. This is the key guarantee for fast symmetric ZERO.
+   if(needBuy && !ZeroGridLevelExists(true,1))
+   {
+      attemptsThisPass++;
+      if(!ZeroGridSendPending(true,1)) complete=false;
+   }
+   if(needSell && !ZeroGridLevelExists(false,1))
+   {
+      attemptsThisPass++;
+      if(!ZeroGridSendPending(false,1)) complete=false;
+   }
+
+   bool firstPairReady=
+      (!needBuy || ZeroGridLevelExists(true,1)) &&
+      (!needSell || ZeroGridLevelExists(false,1));
+   if(!firstPairReady)
+   {
+      g_executionStatus="ZERO_GRID_WAIT_FIRST_PAIR";
+      return false;
+   }
+
+   // Once L1 is confirmed, fill the rest as fast as the broker/rate limit allows.
+   for(int level=2;level<=levels;level++)
+   {
+      if(needBuy && !ZeroGridLevelExists(true,level))
+      {
+         attemptsThisPass++;
+         if(!ZeroGridSendPending(true,level)) complete=false;
+         if(attemptsThisPass>=maxAttemptsPerPass) break;
+      }
+      if(needSell && !ZeroGridLevelExists(false,level))
+      {
+         attemptsThisPass++;
+         if(!ZeroGridSendPending(false,level)) complete=false;
+         if(attemptsThisPass>=maxAttemptsPerPass) break;
+      }
+      if(g_ordersInWindow>=g_maxOrdersPerMinute)
+      {
+         complete=false;
+         break;
+      }
+   }
+   return complete;
+}
+
+void ZeroGridCancelPendingSide'''
+ea2, count = re.subn(ensure_fn, new_ensure, ea, count=1)
+if count != 1:
+    raise SystemExit(f"ZeroGridEnsureLadder block replacement count={count}")
+ea = ea2
+
+ea_path.write_text(ea, encoding="utf-8", newline="\n")
+
+# Add regression assertions without disturbing the existing price/profit model.
+test = test_path.read_text(encoding="utf-8")
+marker = 'console.log("ZERO GRID ~100-point first-offset, fast paired staging and real-net regression passed");'
+assertions = '''assert.match(ea, /int maxPlacementAttempts=\\(level==1 \\? 3 : 2\\)/, "L1 must retry immediately");
+assert.match(ea, /ZERO_GRID_WAIT_FIRST_PAIR/, "deeper ladder must wait for both required L1 orders");
+assert.match(ea, /ZERO_GRID_REBUILD_MISSING_L1/, "legacy malformed ladders must rebuild");
+assert.match(ea, /for\\(int level=2;level<=levels;level\\+\\+\\)/, "deeper staging must begin at level 2 after L1 pair");
+'''
+if assertions not in test:
+    if marker not in test:
+        raise SystemExit("ZERO regression console marker not found")
+    test = test.replace(marker, assertions + marker, 1)
+    test_path.write_text(test, encoding="utf-8", newline="\n")
+
+print("ZERO L1 repair applied: immediate retry, first-pair gate, malformed-ladder rebuild")
