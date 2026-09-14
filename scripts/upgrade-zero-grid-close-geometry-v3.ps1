@@ -16,27 +16,22 @@ function Write-Lf([string]$path,[string]$text) {
   [System.IO.File]::WriteAllText((Resolve-Path $path),$normalized,$utf8)
 }
 
-function Replace-Required([ref]$textRef,[string]$old,[string]$new,[string]$label) {
-  if ($textRef.Value.Contains($new)) {
-    Write-Host "$label already applied"
-    return
-  }
-  if (-not $textRef.Value.Contains($old)) { throw "Patch anchor not found: $label" }
-  $textRef.Value = $textRef.Value.Replace($old,$new)
-  Write-Host "Applied $label"
-}
-
 function Replace-IfPresent([ref]$textRef,[string]$old,[string]$new,[string]$label) {
-  if ($textRef.Value.Contains($new)) {
-    Write-Host "$label already applied"
-    return
-  }
+  if ($textRef.Value.Contains($new)) { Write-Host "$label already applied"; return }
   if ($textRef.Value.Contains($old)) {
     $textRef.Value = $textRef.Value.Replace($old,$new)
     Write-Host "Applied $label"
     return
   }
   Write-Host "$label skipped (anchor not present)"
+}
+
+function Replace-RegexRequired([ref]$textRef,[string]$pattern,[string]$replacement,[string]$sentinel,[string]$label) {
+  if ($textRef.Value.Contains($sentinel)) { Write-Host "$label already applied"; return }
+  $regex = [regex]::new($pattern,[System.Text.RegularExpressions.RegexOptions]::Singleline)
+  if (-not $regex.IsMatch($textRef.Value)) { throw "Patch anchor not found: $label" }
+  $textRef.Value = $regex.Replace($textRef.Value,[System.Text.RegularExpressions.MatchEvaluator]{ param($m) $replacement },1)
+  Write-Host "Applied $label"
 }
 
 $ea = Read-Text $EaPath
@@ -46,23 +41,6 @@ $eaRef = [ref]$ea
 Replace-IfPresent $eaRef '#property version   "1.0.2"' '#property version   "1.0.3"' 'EA version 1.0.3'
 Replace-IfPresent $eaRef '#define SCENOVA_EA_VERSION "1.0.2"' '#define SCENOVA_EA_VERSION "1.0.3"' 'runtime version 1.0.3'
 Replace-IfPresent $eaRef '#define SCENOVA_PRODUCT_VERSION "1.0.2"' '#define SCENOVA_PRODUCT_VERSION "1.0.3"' 'product version 1.0.3'
-
-$oldSpacing = @'
-double ZeroGridEffectiveStepPrice()
-{
-   return MathMax(g_zeroGridStepPrice,ZeroGridMinPendingDistancePrice()+ZeroGridTickSize());
-}
-
-double ZeroGridNormalizePendingPrice(bool buySide,double rawPrice)
-{
-   double tick=ZeroGridTickSize();
-   double units=rawPrice/tick;
-   double price=buySide
-      ? MathCeil(units-1e-10)*tick
-      : MathFloor(units+1e-10)*tick;
-   return NormalizeDouble(price,_Digits);
-}
-'@
 
 $newSpacing = @'
 // ZERO GRID V2.1 geometry: the first entry hugs the live market at the broker-safe
@@ -116,8 +94,7 @@ double ZeroGridPendingAnchorPrice(bool buySide)
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol,tick)) return 0.0;
 
-   // Opening geometry "hubs inward": level 1 sits as close to live price as
-   // the broker permits, with one extra tick of safety beyond Stops/Freeze.
+   // Opening geometry: level 1 sits as close to live price as the broker permits.
    double entryBuffer=ZeroGridMinPendingDistancePrice()+ZeroGridTickSize();
    double raw=buySide ? tick.ask+entryBuffer : tick.bid-entryBuffer;
    return ZeroGridNormalizePendingPrice(buySide,raw);
@@ -135,29 +112,10 @@ double ZeroGridPendingLevelPrice(bool buySide,int level)
    return ZeroGridNormalizePendingPrice(buySide,raw);
 }
 '@
-Replace-Required $eaRef $oldSpacing $newSpacing 'ZERO GRID inward entry geometry and even spacing'
-
-$oldSendPrice = @'
-   MqlTick tick;
-   if(!SymbolInfoTick(_Symbol,tick))
-   {
-      g_executionStatus="ZERO_GRID_WAIT_TICK";
-      return false;
-   }
-
-   double gridStep=ZeroGridEffectiveStepPrice();
-   double minDistance=ZeroGridMinPendingDistancePrice();
-   double rawPrice=buySide
-      ? g_zeroGridCenter + gridStep * level
-      : g_zeroGridCenter - gridStep * level;
-   if(buySide)
-      rawPrice=MathMax(rawPrice,tick.ask+minDistance);
-   else
-      rawPrice=MathMin(rawPrice,tick.bid-minDistance);
-   double price=ZeroGridNormalizePendingPrice(buySide,rawPrice);
-'@
+Replace-RegexRequired $eaRef 'double\s+ZeroGridEffectiveStepPrice\(\)\s*\{.*?\}\s*double\s+ZeroGridNormalizePendingPrice\(bool\s+buySide\s*,\s*double\s+rawPrice\)\s*\{.*?return\s+NormalizeDouble\(price,_Digits\);\s*\}' $newSpacing 'ZERO GRID V2.1 geometry' 'ZERO GRID inward entry geometry and even spacing'
 
 $newSendPrice = @'
+
    double price=ZeroGridPendingLevelPrice(buySide,level);
    if(price<=0.0)
    {
@@ -165,26 +123,12 @@ $newSendPrice = @'
       return false;
    }
 '@
-Replace-Required $eaRef $oldSendPrice $newSendPrice 'ZERO GRID broker-safe evenly spaced pending placement'
-
-$oldClose = @'
-void ZeroGridClosePositions()
-{
-   for(int i=PositionsTotal()-1;i>=0;i--)
-   {
-      ulong ticket=PositionGetTicket(i);
-      if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
-      if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
-      ClosePositionByTicket(ticket);
-   }
-}
-'@
+Replace-RegexRequired $eaRef '\s*MqlTick\s+tick;\s*if\(!SymbolInfoTick\(_Symbol,tick\)\)\s*\{\s*g_executionStatus="ZERO_GRID_WAIT_TICK";\s*return false;\s*\}\s*double\s+gridStep=ZeroGridEffectiveStepPrice\(\);\s*double\s+minDistance=ZeroGridMinPendingDistancePrice\(\);\s*double\s+rawPrice=buySide\s*\?\s*g_zeroGridCenter\s*\+\s*gridStep\s*\*\s*level\s*:\s*g_zeroGridCenter\s*-\s*gridStep\s*\*\s*level;\s*if\(buySide\)\s*rawPrice=MathMax\(rawPrice,tick.ask\+minDistance\);\s*else\s*rawPrice=MathMin\(rawPrice,tick.bid-minDistance\);\s*double\s+price=ZeroGridNormalizePendingPrice\(buySide,rawPrice\);' $newSendPrice 'double price=ZeroGridPendingLevelPrice(buySide,level);' 'ZERO GRID broker-safe evenly spaced pending placement'
 
 $newClose = @'
-// Profit exit geometry "hubs outward": on Hedging accounts close one owned
-// position at a time, starting with the profitable ticket nearest live price,
-// then progressively moving farther away. Netting naturally has one symbol
-// position, so the same routine remains compatible there.
+// Profit exit geometry: on Hedging accounts close one owned position at a time,
+// starting with a profitable ticket nearest live price, then progressively outward.
+// Netting naturally has one symbol position, so the same routine is compatible.
 ulong ZeroGridNearestCloseTicket()
 {
    MqlTick tick;
@@ -236,7 +180,7 @@ void ZeroGridClosePositions()
    ClosePositionByTicket(ticket);
 }
 '@
-Replace-Required $eaRef $oldClose $newClose 'ZERO GRID nearest-price outward close sequence'
+Replace-RegexRequired $eaRef 'void\s+ZeroGridClosePositions\(\)\s*\{\s*for\(int\s+i=PositionsTotal\(\)-1;i>=0;i--\)\s*\{\s*ulong\s+ticket=PositionGetTicket\(i\);\s*if\(ticket==0\s*\|\|\s*!PositionSelectByTicket\(ticket\)\)\s*continue;\s*if\(PositionGetString\(POSITION_SYMBOL\)!=_Symbol\s*\|\|\s*PositionGetInteger\(POSITION_MAGIC\)!=InpMagic\)\s*continue;\s*ClosePositionByTicket\(ticket\);\s*\}\s*\}' $newClose 'ulong ZeroGridNearestCloseTicket()' 'ZERO GRID nearest-price outward close sequence'
 
 Write-Lf $EaPath $eaRef.Value
 
