@@ -68,6 +68,8 @@ jobs:
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/013_backtest_performance.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/014_maintenance_mode.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/014_maintenance_mode.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/015_partner_program.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/015_partner_program.sql
 
       - name: Build API
         run: npm run build -w @bot/api
@@ -94,6 +96,12 @@ jobs:
           done
           cat /tmp/scenova-api.log
           exit 1
+
+      - name: Partner program v3 lifecycle
+        env:
+          BASE: http://127.0.0.1:4000/api
+          ADMIN_KEY: integration-admin
+        run: bash ./tests/partner-program-v3.sh
 
       - name: Exercise signup device enrollment MT5 rebind Trial and Start
         env:

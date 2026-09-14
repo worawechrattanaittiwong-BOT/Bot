@@ -30,6 +30,10 @@ export default function AdminPage() {
   const [maintenanceBusy, setMaintenanceBusy] = useState(false);
   const [maintenanceQuery, setMaintenanceQuery] = useState("");
   const [maintenanceActionId, setMaintenanceActionId] = useState("");
+  const [partnerSeats, setPartnerSeats] = useState(10);
+  const [partnerDurationDays, setPartnerDurationDays] = useState(30);
+  const [partnerCustomerDays, setPartnerCustomerDays] = useState(30);
+  const [partnerBusy, setPartnerBusy] = useState(false);
 
   async function search(e?: FormEvent, preserveMessage = false) {
     e?.preventDefault();
@@ -143,6 +147,48 @@ export default function AdminPage() {
     } catch (e: any) {
       setMessage(e.message);
     }
+  }
+
+  async function grantPartner(user:any) {
+    setPartnerBusy(true);
+    try {
+      await adminApi("/admin/partners/grant", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: user.id,
+          seatLimit: partnerSeats,
+          partnerDurationDays,
+          customerDurationDays: partnerCustomerDays
+        })
+      });
+      setMessage(`เปิด/อัปเดต Partner ${partnerSeats} Seats ให้ ${user.user_code} แล้ว`);
+      await search(undefined, true);
+    } catch (e:any) { setMessage(e.message); }
+    finally { setPartnerBusy(false); }
+  }
+
+  async function renewPartner(user:any) {
+    setPartnerBusy(true);
+    try {
+      await adminApi("/admin/partners/renew", {
+        method: "POST",
+        body: JSON.stringify({ userId: user.id, durationDays: partnerDurationDays })
+      });
+      setMessage(`ต่อสิทธิ์ Partner ให้ ${user.user_code} +${partnerDurationDays} วันแล้ว`);
+      await search(undefined, true);
+    } catch (e:any) { setMessage(e.message); }
+    finally { setPartnerBusy(false); }
+  }
+
+  async function suspendPartner(user:any) {
+    if (!confirm(`ระงับสิทธิ์ Partner ของ ${user.user_code} หรือไม่? ลูกค้าที่เปิดไปแล้วจะยังใช้ได้ถึงวันหมดอายุของตัวเอง`)) return;
+    setPartnerBusy(true);
+    try {
+      await adminApi("/admin/partners/suspend", { method:"POST", body:JSON.stringify({ userId:user.id }) });
+      setMessage(`ระงับ Partner ${user.user_code} แล้ว ลูกค้าเดิมยังคงวันหมดอายุเดิม`);
+      await search(undefined, true);
+    } catch (e:any) { setMessage(e.message); }
+    finally { setPartnerBusy(false); }
   }
 
   async function reactivate(user: any) {
@@ -577,6 +623,35 @@ export default function AdminPage() {
                   <button className="btn" onClick={()=>setSelectedCustomerId("")}>ปิดรายละเอียด</button>
                 </div>
 
+                <div className="owner-partner-program">
+                  <div className="owner-partner-program-head">
+                    <div>
+                      <span className="owner-card-kicker">PARTNER PROGRAM</span>
+                      <h3>สิทธิ์ Partner / Customer Seats</h3>
+                      <p className="muted">Partner เริ่มอายุทันทีเมื่อ Owner เปิดสิทธิ์ ใช้ EA ของตัวเองได้ 1 บัญชีโดยไม่กิน Customer Seat; ลูกค้าแต่ละรายมีอายุของตัวเองและเปลี่ยน MT5 ได้โดยไม่กิน Seat เพิ่ม</p>
+                    </div>
+                    <span className={"owner-state-chip "+(selectedCustomer.partner_status === "ACTIVE" || selectedCustomer.partner_status === "READY" ? "good" : selectedCustomer.partner_status ? "bad" : "")}>{selectedCustomer.partner_status || "NOT PARTNER"}</span>
+                  </div>
+                  <div className="owner-partner-grid">
+                    <div className="field"><label>จำนวน Customer Seats</label><select className="input" value={partnerSeats} onChange={e=>setPartnerSeats(Number(e.target.value))}><option value={10}>10 Seats</option><option value={25}>25 Seats</option><option value={50}>50 Seats</option></select></div>
+                    <div className="field"><label>อายุ Partner</label><input className="input" type="number" min={1} value={partnerDurationDays} onChange={e=>setPartnerDurationDays(Number(e.target.value))}/><div className="help">วัน · เริ่มนับทันทีเมื่อเปิดสิทธิ์ Partner</div></div>
+                    <div className="field"><label>อายุลูกค้าแต่ละราย</label><input className="input" type="number" min={1} value={partnerCustomerDays} onChange={e=>setPartnerCustomerDays(Number(e.target.value))}/><div className="help">วันเต็มต่อคน นับจากวันที่ Partner เปิดสิทธิ์ให้ลูกค้ารายนั้น</div></div>
+                  </div>
+                  {selectedCustomer.partner_status && (
+                    <div className="owner-partner-summary">
+                      <span>ใช้อยู่ <b>{selectedCustomer.partner_active_customers || 0}/{selectedCustomer.partner_seat_limit || 0}</b> Seats</span>
+                      <span>เริ่ม: <b>{selectedCustomer.partner_activated_at ? new Date(selectedCustomer.partner_activated_at).toLocaleDateString("th-TH") : "ยังไม่เริ่ม"}</b></span>
+                      <span>หมดอายุ: <b>{selectedCustomer.partner_expires_at ? new Date(selectedCustomer.partner_expires_at).toLocaleDateString("th-TH") : "—"}</b></span>
+                    </div>
+                  )}
+                  <div className="owner-maintenance-actions">
+                    <button className="btn primary" disabled={partnerBusy} onClick={()=>grantPartner(selectedCustomer)}>{selectedCustomer.partner_status === "ACTIVE" || selectedCustomer.partner_status === "READY" ? "อัปเดต Partner / Seats" : "เปิดสิทธิ์ Partner"}</button>
+                    {selectedCustomer.partner_status && <button className="btn" disabled={partnerBusy} onClick={()=>renewPartner(selectedCustomer)}>ต่อ Partner +{partnerDurationDays} วัน</button>}
+                    {(selectedCustomer.partner_status === "ACTIVE" || selectedCustomer.partner_status === "READY") && <button className="btn danger" disabled={partnerBusy} onClick={()=>suspendPartner(selectedCustomer)}>ระงับ Partner</button>}
+                  </div>
+                  <div className="help">การระงับ/หมดอายุ Partner จะหยุด EA ของ Partner และหยุดการเพิ่ม/ต่ออายุลูกค้าใหม่ แต่ลูกค้าที่เปิดไปแล้วใช้ต่อถึงวันหมดอายุของตัวเองได้ การลด Seats ต่ำกว่าจำนวนลูกค้า Active จะไม่ตัดลูกค้าเดิม เพียงแต่เพิ่มลูกค้าใหม่ไม่ได้จนกว่าจำนวน Active จะต่ำกว่าขีดจำกัดใหม่</div>
+                </div>
+
                 <div className="owner-plan-inline">
                   <div className="field">
                     <label>บัญชี MT5</label>
@@ -688,6 +763,7 @@ export default function AdminPage() {
                                 : <><b>ยังไม่มี Trial</b><br/><span className="muted">รอลูกค้าส่งคำขอพร้อม LINE</span></>}
                         </td>
                         <td>
+                          {user.partner_status && <div style={{marginBottom:6}}><span className={"owner-state-chip "+(user.partner_status === "ACTIVE" || user.partner_status === "READY" ? "good" : "bad")}>PARTNER {user.partner_active_customers || 0}/{user.partner_seat_limit || 0}</span></div>}
                           {user.role === "OWNER" || user.role === "ADMIN"
                             ? <><b className="text-good">OWNER UNLIMITED</b><br/><span className="muted">ไม่ต้องเปิด Trial / สมาชิก</span></>
                             : memberships(user).length

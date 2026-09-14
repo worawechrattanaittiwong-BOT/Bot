@@ -16,6 +16,7 @@ import { DbService } from "./db.service";
 import { installerDownloadPath, isEaVersionExact, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
+import { PartnerService } from "./partner.service";
 
 @Controller("bot")
 @UseGuards(JwtGuard)
@@ -23,7 +24,8 @@ export class BotController {
   constructor(
     private readonly db: DbService,
     private readonly crypto: CryptoService,
-    private readonly maintenance: MaintenanceService
+    private readonly maintenance: MaintenanceService,
+    private readonly partner: PartnerService
   ) {}
 
   private supportedEaRuntime(version: any) {
@@ -491,6 +493,11 @@ export class BotController {
       return { allowed: true, source: "OWNER", unlimited: true, expiresAt: null };
     }
 
+    if (user?.status === "ACTIVE" && slotId) {
+      const partnerAccess = await this.partner.ownTradingEntitlement(userId, slotId, mode);
+      if (partnerAccess) return partnerAccess;
+    }
+
     if (slotId) {
       const sub = await this.db.one(
         `SELECT s.id,s.expires_at,p.code,p.mode,p.allow_resale,p.max_mt5_accounts
@@ -702,6 +709,7 @@ export class BotController {
     const liveStatus = this.buildLiveStatus(instance, settings, entitlement);
     const softwareUpdate = this.installerUpdateState(instance, selectedSlot.mode);
     const maintenance = await this.maintenance.current();
+    const partner = await this.partner.dashboardSummary(userId);
 
     return {
       user,
@@ -715,6 +723,7 @@ export class BotController {
       liveStatus,
       softwareUpdate,
       maintenance,
+      partner,
       tradeJournal
     };
   }

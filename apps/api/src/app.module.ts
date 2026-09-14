@@ -13,6 +13,8 @@ import { CatalogController } from "./catalog.controller";
 import { InstallerController } from "./installer.controller";
 import { BacktestController, PerformanceController } from "./backtest.controller";
 import { DashboardLiveController } from "./dashboard-live.controller";
+import { PartnerController } from "./partner.controller";
+import { PartnerService } from "./partner.service";
 import { DbService } from "./db.service";
 import { MaintenanceService } from "./maintenance.service";
 import { CloudService, CloudAdminController, CloudCustomerController, CloudPaymentController } from "./cloud.controller";
@@ -25,7 +27,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, ManualMt5Controller, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, HealthController, WorkerController],
-  providers: [CloudService, DbService, MaintenanceService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
+  controllers: [CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, HealthController, WorkerController],
+  providers: [CloudService, DbService, MaintenanceService, PartnerService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
 })
 export class AppModule {}
