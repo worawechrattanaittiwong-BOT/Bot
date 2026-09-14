@@ -7,5 +7,5 @@ namespace ScenovaInstaller;
 /// </summary>
 internal static class AgentBuildInfo
 {
-    internal const string Version = "1.0.1";
+    internal const string Version = "1.0.6";
 }
