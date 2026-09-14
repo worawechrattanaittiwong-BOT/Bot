@@ -33,6 +33,17 @@ export function DashboardLiveEnhancements() {
   useEffect(() => {
     if (typeof window === "undefined" || window.location.pathname !== "/dashboard") return;
 
+    const setText = (element: Element | null | undefined, value: string) => {
+      if (element && element.textContent !== value) element.textContent = value;
+    };
+
+    const readZeroGridValue = (modal: HTMLElement, label: string) => {
+      const fields = Array.from(modal.querySelectorAll<HTMLElement>(".cc-bot-v2-field"));
+      const field = fields.find(item => String(item.textContent || "").includes(label));
+      const control = field?.querySelector<HTMLInputElement | HTMLSelectElement>("input,select");
+      return String(control?.value || "").trim();
+    };
+
     const bindTargets = () => {
       const header = document.querySelector<HTMLElement>(".cc-v6-hourly-chart .cc-v6-panel-head");
       setHeaderTarget(header);
@@ -41,18 +52,60 @@ export function DashboardLiveEnhancements() {
       const title = titleGroup?.querySelector<HTMLElement>("b");
       const subtitle = titleGroup?.querySelector<HTMLElement>("small");
 
-      if (title && title.textContent !== "ราคา & อัตราชนะวันนี้") {
-        title.textContent = "ราคา & อัตราชนะวันนี้";
-      }
-      if (subtitle && subtitle.textContent !== "ราคา Live · สถิติ Basket เฉพาะวันนี้") {
-        subtitle.textContent = "ราคา Live · สถิติ Basket เฉพาะวันนี้";
-      }
+      setText(title, "ราคา & อัตราชนะวันนี้");
+      setText(subtitle, "ราคา Live · สถิติ Basket เฉพาะวันนี้");
+
+      const modal = document.querySelector<HTMLElement>(".cc-bot-v2");
+      if (!modal) return;
+
+      modal.classList.add("cc-bot-v2-clean");
+      const activeMode = modal.querySelector<HTMLElement>(".cc-bot-v2-modes button.active");
+      const zeroGrid = String(activeMode?.textContent || "").toUpperCase().includes("ZERO GRID");
+      modal.classList.toggle("cc-zero-grid-clean", zeroGrid);
+
+      const panels = modal.querySelectorAll<HTMLElement>(".cc-bot-v2-main > .cc-bot-v2-panel");
+      const limitsNumber = panels[2]?.querySelector<HTMLElement>(".cc-bot-v2-section-title > span");
+      setText(limitsNumber, zeroGrid ? "03" : "04");
+
+      if (!zeroGrid) return;
+
+      const summaryRows = Array.from(modal.querySelectorAll<HTMLElement>(".cc-bot-v2-summary dl > div"));
+      const step = readZeroGridValue(modal, "ระยะ Grid") || "—";
+      const levels = readZeroGridValue(modal, "จำนวน Pending ต่อฝั่ง") || "—";
+      const baseLot = readZeroGridValue(modal, "Base Lot") || "—";
+      const minProfit = readZeroGridValue(modal, "กำไรสุทธิขั้นต่ำ") || "—";
+
+      setText(summaryRows[1]?.querySelector("dt"), "ทิศทาง");
+      setText(summaryRows[1]?.querySelector("dd"), "BUY STOP + SELL STOP");
+      setText(summaryRows[2]?.querySelector("dt"), "Pending");
+      setText(summaryRows[2]?.querySelector("dd"), levels === "—" ? "—" : levels + " / ฝั่ง");
+      setText(summaryRows[3]?.querySelector("dt"), "ระยะ Grid");
+      setText(summaryRows[3]?.querySelector("dd"), step === "—" ? "—" : step + " ราคา");
+      setText(summaryRows[4]?.querySelector("dt"), "Lot / ปิด Basket");
+      setText(
+        summaryRows[4]?.querySelector("dd"),
+        baseLot === "—" || minProfit === "—"
+          ? "—"
+          : "Base " + baseLot + " Lot · Net +$" + minProfit
+      );
     };
 
     bindTargets();
     const observer = new MutationObserver(bindTargets);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class"]
+    });
+    document.addEventListener("input", bindTargets, true);
+    document.addEventListener("change", bindTargets, true);
+
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("input", bindTargets, true);
+      document.removeEventListener("change", bindTargets, true);
+    };
   }, []);
 
   useEffect(() => {
@@ -104,6 +157,24 @@ export function DashboardLiveEnhancements() {
 
   return (
     <>
+      <style>{`
+        .cc-bot-v2-clean .cc-bot-v2-section-title small,
+        .cc-bot-v2-clean .cc-bot-v2-modes button small,
+        .cc-bot-v2-clean .cc-bot-v2-field > small,
+        .cc-bot-v2-clean .cc-bot-v2-engine-line,
+        .cc-bot-v2-clean .cc-bot-v2-footer > div:first-child {
+          display:none!important;
+        }
+        .cc-bot-v2-clean .cc-bot-v2-footer {
+          justify-content:flex-end!important;
+        }
+        .cc-bot-v2-clean.cc-zero-grid-clean .cc-bot-v2-main > .cc-bot-v2-panel:nth-child(2),
+        .cc-bot-v2-clean.cc-zero-grid-clean .cc-bot-v2-summary-note,
+        .cc-bot-v2-clean.cc-zero-grid-clean .cc-bot-v2-summary dl > div:last-child {
+          display:none!important;
+        }
+      `}</style>
+
       {headerTarget && createPortal(
         <div className="cc-header-live-summary" aria-live="polite">
           <div key={"price-" + price + "-" + priceTone} className={"cc-live-metric cc-live-metric-price " + priceTone}>
