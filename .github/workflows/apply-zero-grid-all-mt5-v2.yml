@@ -8,7 +8,9 @@ on:
       - ".github/workflows/apply-zero-grid-all-mt5-v2.yml"
       - "scripts/upgrade-zero-grid-all-mt5-v2.ps1"
       - "scripts/finalize-zero-grid-all-mt5-v2.ps1"
+      - "scripts/upgrade-zero-grid-close-geometry-v3.ps1"
       - "tests/zero-grid-all-mt5-contract.ps1"
+      - "tests/zero-grid-close-geometry-contract.ps1"
 
 permissions:
   contents: write
@@ -40,12 +42,16 @@ jobs:
             -ApiPath "apps/api/src/bot.controller.ts" `
             -WebPath "apps/web/app/dashboard/page.tsx" `
             -BuildWorkflowPath ".github/workflows/build-mt5-ea.yml"
+          & "./scripts/upgrade-zero-grid-close-geometry-v3.ps1" `
+            -EaPath "mt5/FastBasketBot.mq5" `
+            -WebPath "apps/web/app/dashboard/page.tsx"
 
       - name: Validate universal account contract
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           & "./tests/zero-grid-all-mt5-contract.ps1"
+          & "./tests/zero-grid-close-geometry-contract.ps1"
 
       - name: Verify generated diff
         shell: bash
@@ -62,13 +68,13 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add mt5/FastBasketBot.mq5 apps/api/src/bot.controller.ts apps/web/app/dashboard/page.tsx
           if git diff --cached --quiet; then
-            echo "ZERO GRID V2 source is already current."
+            echo "ZERO GRID source is already current."
           else
-            git commit -m "fix: enable ZERO GRID across MT5 account modes [skip ea build]"
+            git commit -m "fix: ZERO GRID inward entries and nearest-out closes"
             git push origin HEAD:main
           fi
 
       - name: Note official compile handoff
         shell: bash
         run: |
-          echo "Source published. build-mt5-ea.yml is updated separately with repository workflow permission, then its push compiles the official EX5."
+          echo "Source publish changes mt5/FastBasketBot.mq5, so Build MT5 EA is triggered automatically for the official EX5."
