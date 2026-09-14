@@ -30,6 +30,7 @@ export class MaintenanceService {
       SELECT
         bi.*,
         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)::int AS reported_positions,
+        COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0) AS mt5_report_epoch,
         CASE
           WHEN COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0)>0
             THEN COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0)
@@ -38,6 +39,66 @@ export class MaintenanceService {
         END AS mt5_fresh
       FROM bot_instances bi
     )`;
+  }
+
+  // If MT5/EA accepted CLOSE_ALL after the last full MT5 snapshot but no next
+  // heartbeat arrived, the old positions value is not current truth. Keep the
+  // previous value for audit, then clear only this stale cache. We never do this
+  // without an ACKED CLOSE_ALL newer than the MT5 snapshot.
+  private async reconcileAckedCloseAll() {
+    const reconciledAt = new Date().toISOString();
+    const result = await this.db.query(
+      `WITH candidates AS (
+         SELECT
+           bi.id,
+           COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)::int AS reported_positions,
+           COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0) AS mt5_report_epoch,
+           (
+             SELECT MAX(bc.acked_at)
+             FROM bot_commands bc
+             WHERE bc.bot_instance_id=bi.id
+               AND bc.command='CLOSE_ALL'
+               AND bc.status='ACKED'
+           ) AS close_acked_at
+         FROM bot_instances bi
+         WHERE bi.desired_state<>'RUNNING'
+           AND COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
+       ), eligible AS (
+         SELECT *
+         FROM candidates
+         WHERE mt5_report_epoch>0
+           AND mt5_report_epoch <= extract(epoch from now() - interval '20 seconds')
+           AND close_acked_at IS NOT NULL
+           AND close_acked_at > to_timestamp(mt5_report_epoch)
+           AND close_acked_at < now() - interval '5 seconds'
+       )
+       UPDATE bot_instances bi
+       SET metrics=COALESCE(bi.metrics,'{}'::jsonb) || jsonb_build_object(
+         'lastKnownPositionsBeforeClose',e.reported_positions,
+         'positions',0,
+         'positionsReconciledAt',$1::text,
+         'positionsReconcileReason','ACKED_CLOSE_ALL_AFTER_LAST_MT5_SNAPSHOT'
+       )
+       FROM eligible e
+       WHERE bi.id=e.id
+       RETURNING bi.id,e.reported_positions`,
+      [reconciledAt]
+    );
+
+    for (const row of result.rows) {
+      await this.db.query(
+        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES('SYSTEM_MAINTENANCE','RECONCILE_STALE_MT5_POSITIONS','bot_instance',$1,$2::jsonb)",
+        [
+          row.id,
+          JSON.stringify({
+            previousReportedPositions: Number(row.reported_positions || 0),
+            reconciledAt,
+            reason: "ACKED_CLOSE_ALL_AFTER_LAST_MT5_SNAPSHOT"
+          })
+        ]
+      );
+    }
+    return result.rowCount || 0;
   }
 
   private async ensureDrainCommands(forceClose: boolean) {
@@ -134,6 +195,7 @@ export class MaintenanceService {
     }
 
     if (current.status === "DRAINING") {
+      await this.reconcileAckedCloseAll();
       await this.ensureDrainCommands(Boolean(current.force_close));
       await this.tryFinishDrain();
       current = await this.row();
@@ -350,6 +412,7 @@ export class MaintenanceService {
        WHERE id=1`,
       [String(message || "").trim().slice(0, 2000), actor.slice(0, 120)]
     );
+    await this.reconcileAckedCloseAll();
     await this.ensureDrainCommands(true);
     await this.tryFinishDrain();
     return this.snapshot();
