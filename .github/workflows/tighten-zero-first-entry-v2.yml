@@ -1,0 +1,44 @@
+name: Tighten ZERO First Entry V2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/tighten-zero-first-entry-v2.yml"
+      - "scripts/tighten_zero_first_entry_v2.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply targeted ZERO patch
+        run: python3 scripts/tighten_zero_first_entry_v2.py
+
+      - name: Verify ZERO first-entry and net-profit contract
+        run: node ./tests/zero-grid-v1-simulation.mjs
+
+      - name: Commit ZERO patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Patch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 tests/zero-grid-v1-simulation.mjs
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: move ZERO first orders nearest to live price"
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then exit 0; fi
+            sleep 2
+          done
+          exit 1
