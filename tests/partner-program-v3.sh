@@ -38,7 +38,7 @@ CUSTOMER2_CODE=$(printf '%s' "$CUSTOMER2_DASH" | jq -r '.user.user_code')
 echo '[partner-v3] grant starts immediately and includes own LOCAL EA'
 GRANT=$(curl -fsS -X POST "$BASE/admin/partners/grant" \
   -H "x-admin-key: $ADMIN_KEY" -H 'content-type: application/json' \
-  -d "{\"userId\":\"$PARTNER_ID\",\"seatLimit\":10,\"partnerDurationDays\":30,\"customerDurationDays\":30}")
+  -d "{\"userId\":\"$PARTNER_ID\",\"seatLimit\":25,\"partnerDurationDays\":30,\"customerDurationDays\":30}")
 test "$(printf '%s' "$GRANT" | jq -r '.account.status')" = 'ACTIVE'
 test "$(printf '%s' "$GRANT" | jq -r '.account.ownTradingIncluded')" = 'true'
 test "$(printf '%s' "$GRANT" | jq -r '.account.usedSeats')" = '0'
@@ -68,23 +68,35 @@ CUSTOMER2_ACCESS=$(dashboard "$CUSTOMER2_TOKEN")
 test "$(printf '%s' "$CUSTOMER1_ACCESS" | jq -r '.entitlement.allowed')" = 'true'
 test "$(printf '%s' "$CUSTOMER2_ACCESS" | jq -r '.entitlement.allowed')" = 'true'
 
-CUSTOMER3_REG=$(register_user 'partner-customer3@scenova.test')
-CUSTOMER3_TOKEN=$(printf '%s' "$CUSTOMER3_REG" | jq -r '.token')
-CUSTOMER3_DASH=$(dashboard "$CUSTOMER3_TOKEN")
-CUSTOMER3_CODE=$(printf '%s' "$CUSTOMER3_DASH" | jq -r '.user.user_code')
+echo '[partner-v3] build usage above the lower approved tier'
+for N in $(seq 3 11); do
+  REG=$(register_user "partner-customer${N}@scenova.test")
+  TOKEN=$(printf '%s' "$REG" | jq -r '.token')
+  DASH=$(dashboard "$TOKEN")
+  CODE=$(printf '%s' "$DASH" | jq -r '.user.user_code')
+  curl -fsS -X POST "$BASE/partner/customers/activate" \
+    -H "authorization: Bearer $PARTNER_TOKEN" -H 'content-type: application/json' \
+    -d "{\"target\":\"$CODE\"}" >/dev/null
+done
+BEFORE_DOWNGRADE=$(curl -fsS "$BASE/partner" -H "authorization: Bearer $PARTNER_TOKEN")
+test "$(printf '%s' "$BEFORE_DOWNGRADE" | jq -r '.account.usedSeats')" = '11'
 
-echo '[partner-v3] downgrade never cuts active customers'
+echo '[partner-v3] downgrade to an approved tier never cuts active customers'
 REDUCE=$(curl -fsS -X POST "$BASE/admin/partners/grant" \
   -H "x-admin-key: $ADMIN_KEY" -H 'content-type: application/json' \
-  -d "{\"userId\":\"$PARTNER_ID\",\"seatLimit\":1,\"partnerDurationDays\":30,\"customerDurationDays\":30}")
-test "$(printf '%s' "$REDUCE" | jq -r '.account.seat_limit')" = '1'
-test "$(printf '%s' "$REDUCE" | jq -r '.account.usedSeats')" = '2'
+  -d "{\"userId\":\"$PARTNER_ID\",\"seatLimit\":10,\"partnerDurationDays\":30,\"customerDurationDays\":30}")
+test "$(printf '%s' "$REDUCE" | jq -r '.account.seat_limit')" = '10'
+test "$(printf '%s' "$REDUCE" | jq -r '.account.usedSeats')" = '11'
 test "$(printf '%s' "$REDUCE" | jq -r '.account.availableSeats')" = '0'
-THIRD_HTTP=$(curl -sS -o /tmp/partner-third.json -w '%{http_code}' \
+CUSTOMER12_REG=$(register_user 'partner-customer12@scenova.test')
+CUSTOMER12_TOKEN=$(printf '%s' "$CUSTOMER12_REG" | jq -r '.token')
+CUSTOMER12_DASH=$(dashboard "$CUSTOMER12_TOKEN")
+CUSTOMER12_CODE=$(printf '%s' "$CUSTOMER12_DASH" | jq -r '.user.user_code')
+TWELFTH_HTTP=$(curl -sS -o /tmp/partner-twelfth.json -w '%{http_code}' \
   -X POST "$BASE/partner/customers/activate" \
   -H "authorization: Bearer $PARTNER_TOKEN" -H 'content-type: application/json' \
-  -d "{\"target\":\"$CUSTOMER3_CODE\"}")
-test "$THIRD_HTTP" = '409'
+  -d "{\"target\":\"$CUSTOMER12_CODE\"}")
+test "$TWELFTH_HTTP" = '409'
 
 echo '[partner-v3] direct renewal preserves remaining time and frees Partner Seat'
 OLD_EXP=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc \
@@ -98,7 +110,7 @@ REL_STATUS=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc \
   "select status from partner_customers where customer_user_id='$CUSTOMER1_ID' order by created_at desc limit 1;")
 test "$REL_STATUS" = 'DIRECT'
 PARTNER_AFTER_DIRECT=$(curl -fsS "$BASE/partner" -H "authorization: Bearer $PARTNER_TOKEN")
-test "$(printf '%s' "$PARTNER_AFTER_DIRECT" | jq -r '.account.usedSeats')" = '1'
+test "$(printf '%s' "$PARTNER_AFTER_DIRECT" | jq -r '.account.usedSeats')" = '10'
 
 echo '[partner-v3] Partner expiry stops own entitlement but never cuts active customer'
 PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 \
