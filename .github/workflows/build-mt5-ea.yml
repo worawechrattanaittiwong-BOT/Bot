@@ -1,8 +1,8 @@
 name: Build MT5 EA
 
 # Official MT5 compile and publish pipeline for the current V20/RACE source.
-# ZERO GRID V3 uses broker-near first triggers, exact per-side levels,
-# strict startup/mode ownership, and cost-aware near-to-live-price profit exits.
+# ZERO GRID V3 uses a ~1.00 price first offset (about 100 points on 2-digit XAUUSD),
+# exact per-side levels, strict startup/mode ownership, and cost-aware exits.
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
