@@ -1,6 +1,6 @@
 name: Build SCENOVA Windows Installer
 
-# Unified 1.0.0 release rebuild trigger. Installer/Agent/API version metadata
+# Unified 1.0.8 release rebuild trigger. Installer/Agent/API version metadata
 # is validated before publishing the website binary.
 
 on:
