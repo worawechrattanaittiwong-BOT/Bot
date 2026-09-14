@@ -18,10 +18,29 @@ import { MaintenanceService } from "./maintenance.service";
 import { CloudService, CloudAdminController, CloudCustomerController, CloudPaymentController } from "./cloud.controller";
 import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
 
+const INSECURE_JWT_SECRETS = new Set([
+  "development-only-change-me",
+  "replace-with-long-random-secret"
+]);
+
+function jwtSecret() {
+  const secret = String(process.env.JWT_SECRET || "").trim();
+  const isProduction = String(process.env.NODE_ENV || "").toLowerCase() === "production";
+
+  if (isProduction && (!secret || secret.length < 32 || INSECURE_JWT_SECRETS.has(secret))) {
+    throw new Error(
+      "JWT_SECRET must be configured in production with a unique random value of at least 32 characters"
+    );
+  }
+
+  // Keep local development convenient, but never allow this fallback in production.
+  return secret || "development-only-change-me";
+}
+
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env.JWT_SECRET || "development-only-change-me",
+      secret: jwtSecret(),
       signOptions: { expiresIn: "7d" }
     })
   ],
