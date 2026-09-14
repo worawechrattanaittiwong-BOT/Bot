@@ -17,6 +17,7 @@ type Dashboard = {
   trialRequest: any;
   liveStatus: any;
   softwareUpdate: any;
+  maintenance: any;
   tradeJournal: any;
 };
 
@@ -481,6 +482,14 @@ export default function DashboardPage() {
   const softwareUpdateRequired =
     data?.selectedSlot?.mode === "LOCAL" &&
     Boolean(softwareUpdate.required);
+  const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };
+  const maintenanceBlocksStart = Boolean(maintenance.blockStarts);
+  const maintenanceTimeLabel = maintenance.maintenance_at
+    ? new Date(maintenance.maintenance_at).toLocaleString("th-TH", { timeZone:"Asia/Bangkok", dateStyle:"medium", timeStyle:"short" })
+    : "—";
+  const maintenanceForceCloseLabel = maintenance.force_close_at
+    ? new Date(maintenance.force_close_at).toLocaleString("th-TH", { timeZone:"Asia/Bangkok", dateStyle:"medium", timeStyle:"short" })
+    : maintenanceTimeLabel;
   const botStarting = desired === "RUNNING" && state !== "RUNNING";
   const botRunning = state === "RUNNING";
   const startConnectionReady = isMt5Online || isAgentOnline;
@@ -491,6 +500,7 @@ export default function DashboardPage() {
     busy ||
     botStarting ||
     botRunning ||
+    maintenanceBlocksStart ||
     !startConnectionReady;
   const stopBlocked = busy || (desired !== "RUNNING" && state !== "RUNNING");
   const selectedBroker = brokerCatalog.find((item)=>item.code === brokerCode);
@@ -1595,6 +1605,21 @@ export default function DashboardPage() {
         </header>
 
 
+        {maintenance.status !== "OFF" && (
+          <div className={"system-maintenance-banner status-" + String(maintenance.status).toLowerCase()} role="alert">
+            <div className="system-maintenance-icon">!</div>
+            <div className="system-maintenance-copy">
+              <b>{maintenance.title || (maintenance.status === "SCHEDULED" ? "ประกาศปิดปรับปรุงระบบ" : "ระบบกำลังปิดเพื่ออัปเดต")}</b>
+              <span>{maintenance.message || "กรุณาปิด Position ที่ยังค้างก่อนเวลาที่กำหนด"}</span>
+              <small>Maintenance: {maintenanceTimeLabel} · Close All deadline: {maintenanceForceCloseLabel}{maintenance.expected_resume_at ? " · คาดว่าเปิด: " + new Date(maintenance.expected_resume_at).toLocaleString("th-TH", { timeZone:"Asia/Bangkok", dateStyle:"medium", timeStyle:"short" }) : ""}</small>
+            </div>
+            <div className="system-maintenance-side">
+              <strong>{maintenance.status}</strong>
+              <small>{maintenanceBlocksStart ? "ปิด Start ใหม่แล้ว" : "โปรดเตรียมปิด Position"}</small>
+            </div>
+          </div>
+        )}
+
         {error && <div className="notice bad page-notice">{error}</div>}
         {notice && <div className="notice good page-notice">{notice}</div>}
 
@@ -1741,7 +1766,7 @@ export default function DashboardPage() {
                     <div><b>{state==="RUNNING"?"กำลังทำงาน":state==="SAFE_STOP"?"หยุดอย่างปลอดภัย":"บอทหยุดอยู่"}</b><small>{controlStateLabel} · อัปเดต {heartbeatAgeSeconds.toFixed(0)} วินาที</small></div>
                   </div>
                   <div className="cc-v6-hero-actions">
-                    <button className={"cc-v6-command start "+(botStarting?"starting":botRunning?"running":"idle")} disabled={startBlocked} title={!startConnectionReady?"รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5":undefined} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
+                    <button className={"cc-v6-command start "+(botStarting?"starting":botRunning?"running":"idle")} disabled={startBlocked} title={maintenanceBlocksStart?"ระบบปิด Start ใหม่ระหว่าง Safe Maintenance":!startConnectionReady?"รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5":undefined} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
                       <span>{botStarting?<i className="cc-start-spinner"/>:botRunning?<i className="cc-start-pulse"/>:<ScenovaIcon name="play" size={22}/>}</span><b>{botStarting?"กำลังเริ่ม":botRunning?"ทำงานอยู่":"เริ่มบอท"}</b><small>Start Trading</small>
                     </button>
                     <button className="cc-v6-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}><span><ScenovaIcon name="stop" size={21}/></span><b>หยุดบอท</b><small>Safe Stop</small></button>

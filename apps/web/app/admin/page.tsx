@@ -21,6 +21,13 @@ export default function AdminPage() {
   const [activeMenu, setActiveMenu] = useState<Menu>("overview");
   const [loading, setLoading] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [maintenanceTitle, setMaintenanceTitle] = useState("แจ้งปิดปรับปรุงระบบ");
+  const [maintenanceMessage, setMaintenanceMessage] = useState("กรุณาปิด Position ทั้งหมดก่อนเวลาที่กำหนด เพื่อให้อัปเดตระบบได้อย่างปลอดภัย");
+  const [maintenanceAt, setMaintenanceAt] = useState("");
+  const [forceCloseAt, setForceCloseAt] = useState("");
+  const [expectedResumeAt, setExpectedResumeAt] = useState("");
+  const [maintenanceForceClose, setMaintenanceForceClose] = useState(true);
+  const [maintenanceBusy, setMaintenanceBusy] = useState(false);
 
   async function search(e?: FormEvent, preserveMessage = false) {
     e?.preventDefault();
@@ -179,6 +186,89 @@ export default function AdminPage() {
     }
   }
 
+  function maintenanceDateLabel(value:any) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "—";
+    return date.toLocaleString("th-TH", {
+      timeZone: "Asia/Bangkok",
+      dateStyle: "medium",
+      timeStyle: "short"
+    });
+  }
+
+  async function announceMaintenance() {
+    if (!maintenanceAt) return setMessage("กรุณากำหนดวันและเวลา Maintenance");
+    setMaintenanceBusy(true);
+    try {
+      await adminApi("/admin/maintenance/announce", {
+        method: "POST",
+        body: JSON.stringify({
+          title: maintenanceTitle,
+          message: maintenanceMessage,
+          maintenanceAt: new Date(maintenanceAt).toISOString(),
+          forceCloseAt: forceCloseAt ? new Date(forceCloseAt).toISOString() : undefined,
+          expectedResumeAt: expectedResumeAt ? new Date(expectedResumeAt).toISOString() : undefined,
+          forceClose: maintenanceForceClose
+        })
+      });
+      setMessage("ประกาศ Maintenance ให้ทุกบัญชีแล้ว");
+      await search(undefined, true);
+    } catch (e:any) {
+      setMessage(e.message);
+    } finally {
+      setMaintenanceBusy(false);
+    }
+  }
+
+  async function shutdownForMaintenance() {
+    if (!confirm(
+      "ปิดระบบอย่างปลอดภัยตอนนี้หรือไม่?\n\n" +
+      "ระบบจะบล็อก Start ใหม่ สั่งหยุดทุกบอท และส่ง Close All ให้บัญชีที่ยังมี Position ค้างอยู่"
+    )) return;
+    setMaintenanceBusy(true);
+    try {
+      await adminApi("/admin/maintenance/shutdown", {
+        method: "POST",
+        body: JSON.stringify({ message: maintenanceMessage })
+      });
+      setMessage("เริ่ม Safe Shutdown แล้ว ระบบกำลังรอ Position ทุกบัญชีเป็น 0");
+      await search(undefined, true);
+    } catch (e:any) {
+      setMessage(e.message);
+    } finally {
+      setMaintenanceBusy(false);
+    }
+  }
+
+  async function cancelMaintenance() {
+    if (!confirm("ยกเลิกประกาศ Maintenance ที่ยังไม่เริ่มหรือไม่?")) return;
+    setMaintenanceBusy(true);
+    try {
+      await adminApi("/admin/maintenance/cancel", { method: "POST" });
+      setMessage("ยกเลิกประกาศ Maintenance แล้ว");
+      await search(undefined, true);
+    } catch (e:any) {
+      setMessage(e.message);
+    } finally {
+      setMaintenanceBusy(false);
+    }
+  }
+
+  async function resumeMaintenance() {
+    if (!confirm("ยืนยันว่าอัปเดตเสร็จแล้วและต้องการเปิดให้ลูกค้ากด Start ได้อีกครั้ง?")) return;
+    setMaintenanceBusy(true);
+    try {
+      await adminApi("/admin/maintenance/resume", { method: "POST" });
+      setMessage("เปิดระบบหลัง Maintenance แล้ว บอทจะยังคง STOPPED จนกว่าผู้ใช้จะกด Start เอง");
+      await search(undefined, true);
+    } catch (e:any) {
+      setMessage(e.message);
+    } finally {
+      setMaintenanceBusy(false);
+    }
+  }
+
   const planOptions = [
     { code:"LOCAL_30D", label:"LOCAL 30D", mode:"LOCAL" },
     { code:"LOCAL_3SLOT", label:"LOCAL 30D · 3 Slots", mode:"LOCAL" },
@@ -196,9 +286,11 @@ export default function AdminPage() {
   const hasActiveMode = (user:any, mode:string) =>
     memberships(user).some((m:any)=>m.mode===mode && m.active);
 
+  const maintenance = system?.maintenance || { status:"OFF", summary:{ openPositions:0, runningInstances:0 }, blockers:[] };
   const workersOnline = system?.workers?.filter((w:any)=>w.health === "ONLINE").length || 0;
   const workersTotal = system?.workers?.length || 0;
-  const attentionCount = (system?.bots?.offline || 0) + Math.max(0, workersTotal - workersOnline);
+  const maintenanceAttention = maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE" ? 1 : 0;
+  const attentionCount = (system?.bots?.offline || 0) + Math.max(0, workersTotal - workersOnline) + maintenanceAttention;
 
   const title = useMemo(() => ({
     overview: ["ภาพรวมระบบ","เห็นสุขภาพระบบและสิ่งที่ต้องจัดการในหน้าจอเดียว"],
@@ -248,6 +340,61 @@ export default function AdminPage() {
                 <span className={"owner-health-ring "+(attentionCount>0?"warn":"ok")}>{attentionCount}</span>
                 <small>ATTENTION</small>
               </div>
+            </section>
+
+            <section className={"owner-card owner-maintenance-card status-" + String(maintenance.status || "OFF").toLowerCase()}>
+              <div className="owner-card-head owner-maintenance-head">
+                <div>
+                  <span className="owner-card-kicker">SAFE UPDATE CONTROL</span>
+                  <h3>ประกาศและปิดระบบเพื่ออัปเดตอย่างปลอดภัย</h3>
+                  <p className="muted">แจ้งลูกค้าล่วงหน้า → ถึงเวลาระบบบล็อก Start → ปิด Position ที่ยังค้าง → รอทุกบัญชีหยุด → จึงเข้าสู่ Maintenance</p>
+                </div>
+                <span className={"owner-maintenance-state " + String(maintenance.status || "OFF").toLowerCase()}>{maintenance.status || "OFF"}</span>
+              </div>
+
+              <div className="owner-maintenance-summary">
+                <div><small>เวลา Maintenance</small><b>{maintenanceDateLabel(maintenance.maintenance_at)}</b></div>
+                <div><small>บังคับปิด Position</small><b>{maintenanceDateLabel(maintenance.force_close_at)}</b></div>
+                <div><small>Position คงเหลือ</small><b>{maintenance.summary?.openPositions || 0}</b></div>
+                <div><small>Bot ยัง Running</small><b>{maintenance.summary?.runningInstances || 0}</b></div>
+              </div>
+
+              {maintenance.status !== "OFF" && (
+                <div className="owner-maintenance-current">
+                  <b>{maintenance.title || "ประกาศ Maintenance"}</b>
+                  <span>{maintenance.message || "—"}</span>
+                  {maintenance.expected_resume_at && <small>คาดว่าจะเปิดระบบ: {maintenanceDateLabel(maintenance.expected_resume_at)}</small>}
+                </div>
+              )}
+
+              <div className="owner-maintenance-form">
+                <div className="field"><label>หัวข้อประกาศ</label><input className="input" value={maintenanceTitle} onChange={e=>setMaintenanceTitle(e.target.value)} /></div>
+                <div className="field maintenance-message"><label>ข้อความแจ้งลูกค้า</label><input className="input" value={maintenanceMessage} onChange={e=>setMaintenanceMessage(e.target.value)} /></div>
+                <div className="field"><label>วัน/เวลา Maintenance</label><input className="input" type="datetime-local" value={maintenanceAt} onChange={e=>setMaintenanceAt(e.target.value)} /></div>
+                <div className="field"><label>เวลาบังคับ Close All</label><input className="input" type="datetime-local" value={forceCloseAt} onChange={e=>setForceCloseAt(e.target.value)} /><div className="help">เว้นว่าง = เวลาเดียวกับ Maintenance</div></div>
+                <div className="field"><label>คาดว่าจะเปิดระบบ</label><input className="input" type="datetime-local" value={expectedResumeAt} onChange={e=>setExpectedResumeAt(e.target.value)} /></div>
+                <label className="owner-maintenance-check"><input type="checkbox" checked={maintenanceForceClose} onChange={e=>setMaintenanceForceClose(e.target.checked)} /><span><b>บังคับปิด Position ที่ยังค้าง</b><small>เมื่อถึงกำหนด ระบบส่ง Close All และไม่เปิดรอบใหม่</small></span></label>
+              </div>
+
+              <div className="owner-maintenance-actions">
+                <button className="btn primary" disabled={maintenanceBusy || maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE"} onClick={announceMaintenance}>ประกาศกำหนดอัปเดต</button>
+                <button className="btn danger" disabled={maintenanceBusy || maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE"} onClick={shutdownForMaintenance}>ปิดระบบอย่างปลอดภัยตอนนี้</button>
+                {maintenance.status === "SCHEDULED" && <button className="btn" disabled={maintenanceBusy} onClick={cancelMaintenance}>ยกเลิกประกาศ</button>}
+                {maintenance.status === "MAINTENANCE" && <button className="btn primary" disabled={maintenanceBusy} onClick={resumeMaintenance}>เปิดระบบหลังอัปเดต</button>}
+              </div>
+
+              {Array.isArray(maintenance.blockers) && maintenance.blockers.length > 0 && (
+                <div className="owner-maintenance-blockers">
+                  <b>บัญชีที่ยังต้องเคลียร์ก่อนอัปเดต</b>
+                  {maintenance.blockers.slice(0,8).map((item:any)=>(
+                    <div key={item.instance_id}>
+                      <span>{item.user_code || "—"} · {item.account_number || "ยังไม่ผูก MT5"}</span>
+                      <small>{item.broker_server || "—"} · {item.actual_state}/{item.desired_state}</small>
+                      <strong>{item.positions || 0} Position</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
 
             <section className="owner-kpi-grid">

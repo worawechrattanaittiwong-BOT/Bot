@@ -66,6 +66,8 @@ jobs:
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/012_auto_profit_target_mode.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/013_backtest_performance.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/013_backtest_performance.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/014_maintenance_mode.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/014_maintenance_mode.sql
 
       - name: Build API
         run: npm run build -w @bot/api
@@ -127,6 +129,18 @@ jobs:
           test -n "$USER1_ID"
           test -n "$SLOT"
           test "$(printf '%s' "$DASH" | jq -r '.account')" = "null"
+
+          echo "[integration] scheduled maintenance is announced and can be cancelled before drain"
+          FORCE_AT=$(date -u -d '+5 minutes' '+%Y-%m-%dT%H:%M:%SZ')
+          MAINT_AT=$(date -u -d '+10 minutes' '+%Y-%m-%dT%H:%M:%SZ')
+          RESUME_AT=$(date -u -d '+20 minutes' '+%Y-%m-%dT%H:%M:%SZ')
+          MAINT_SCHEDULE=$(curl -fsS -X POST "$BASE/admin/maintenance/announce" -H 'x-admin-key: integration-admin' -H 'content-type: application/json' -d "{\"title\":\"CI Maintenance\",\"message\":\"Close positions before update\",\"maintenanceAt\":\"$MAINT_AT\",\"forceCloseAt\":\"$FORCE_AT\",\"expectedResumeAt\":\"$RESUME_AT\",\"forceClose\":true}")
+          test "$(printf '%s' "$MAINT_SCHEDULE" | jq -r '.status')" = "SCHEDULED"
+          test "$(printf '%s' "$MAINT_SCHEDULE" | jq -r '.blockStarts')" = "false"
+          DASH_MAINT=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$DASH_MAINT" | jq -r '.maintenance.status')" = "SCHEDULED"
+          MAINT_CANCEL=$(curl -fsS -X POST "$BASE/admin/maintenance/cancel" -H 'x-admin-key: integration-admin')
+          test "$(printf '%s' "$MAINT_CANCEL" | jq -r '.status')" = "OFF"
 
           PREP=$(curl -fsS -X POST "$BASE/bot/installers/windows" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "{\"slotId\":\"$SLOT\"}")
           CODE=$(printf '%s' "$PREP" | jq -r '.code')

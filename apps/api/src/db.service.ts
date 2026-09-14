@@ -395,6 +395,28 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
           ),
           updated_at=now()
       WHERE NOT settings ? 'profitTargetMode';
+
+      -- System-wide safe maintenance / update coordination. This singleton is
+      -- also created by database/014_maintenance_mode.sql for fresh installs.
+      CREATE TABLE IF NOT EXISTS system_maintenance (
+        id smallint PRIMARY KEY CHECK (id=1),
+        status varchar(20) NOT NULL DEFAULT 'OFF' CHECK (status IN ('OFF','SCHEDULED','DRAINING','MAINTENANCE')),
+        title varchar(160),
+        message text,
+        maintenance_at timestamptz,
+        force_close_at timestamptz,
+        expected_resume_at timestamptz,
+        force_close boolean NOT NULL DEFAULT true,
+        announced_at timestamptz,
+        drain_started_at timestamptz,
+        maintenance_started_at timestamptz,
+        resumed_at timestamptz,
+        updated_by varchar(120),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+      INSERT INTO system_maintenance(id,status,force_close)
+      VALUES(1,'OFF',true)
+      ON CONFLICT (id) DO NOTHING;
     `);
     await this.pool.query(CLOUD_SCHEMA);
   }

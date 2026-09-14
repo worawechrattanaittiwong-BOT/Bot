@@ -15,12 +15,14 @@ import { CryptoService } from "./security";
 import { installerDownloadPath, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { MaintenanceService } from "./maintenance.service";
 
 @Controller("ea")
 export class EaController {
   constructor(
     private readonly db: DbService,
-    private readonly crypto: CryptoService
+    private readonly crypto: CryptoService,
+    private readonly maintenance: MaintenanceService
   ) {}
 
   private normalizeReleaseChannel(value: unknown) {
@@ -385,6 +387,9 @@ export class EaController {
     }
   ) {
     const instance = await this.instance(body.instanceId, body.installToken);
+    // A due maintenance window must block new rounds and enqueue the safe
+    // shutdown/close commands before this heartbeat chooses desired state.
+    await this.maintenance.current();
     const eaIp = this.clientIp(req);
     const metrics = body.metrics || {};
 
@@ -525,6 +530,7 @@ export class EaController {
       instance.desired_state = "STOPPED";
     }
 
+    let accountFollowPreviousPositions: number | null = null;
     let accountMismatch =
       Boolean(reportedAccount) &&
       (
@@ -620,6 +626,7 @@ export class EaController {
           instance.account_status = "ACTIVE";
           instance.desired_state = "STOPPED";
           instance.actual_state = nextActualState;
+          accountFollowPreviousPositions = previousBoundPositions;
           accountMismatch = false;
         }
       }
@@ -791,6 +798,7 @@ export class EaController {
       commandId: cmd?.id || null,
       commandName: cmd?.command || null,
       commandPayload: cmd?.payload || null,
+      previousBoundPositions: accountFollowPreviousPositions,
       settings: runtimeSettings,
       ...intelligenceStats,
       ...setupStats
