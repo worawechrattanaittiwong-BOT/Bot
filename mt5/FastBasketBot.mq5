@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.9"
-#define SCENOVA_EA_VERSION "1.0.9"
-#define SCENOVA_PRODUCT_VERSION "1.0.9"
+#property version   "1.0.10"
+#define SCENOVA_EA_VERSION "1.0.10"
+#define SCENOVA_PRODUCT_VERSION "1.0.10"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -1964,15 +1964,15 @@ double ZeroGridEffectiveBaseLot()
 
 double ZeroGridEntryGapPrice()
 {
-   // Preferred first offset is 1.00 price unit. For 2-digit XAUUSD this is
-   // about 100 points: center 4001.00 -> BUY ~4002.00 / SELL ~4000.00.
-   // A broker requiring a wider StopsLevel always takes priority.
+   // Customer geometry is explicit: current/center 4000.00 -> BUY STOP
+   // 4001.00 and SELL STOP 3999.00. Keep exactly 1.00 price unit whenever
+   // the broker permits it; widen only when StopsLevel genuinely requires it.
    double tick=ZeroGridTickSize();
    double preferredGap=1.0;
-   double brokerSafeGap=ZeroGridMinPendingDistancePrice()+tick;
+   double brokerSafeGap=ZeroGridMinPendingDistancePrice()+tick*2.0;
    double gap=MathMax(preferredGap,brokerSafeGap);
    double units=MathCeil((gap/tick)-1e-10);
-   return NormalizeDouble(MathMax(1.0,units)*tick,_Digits);
+   return NormalizeDouble(units*tick,_Digits);
 }
 
 double ZeroGridNormalizeCenterPrice(double rawPrice)
@@ -2076,6 +2076,42 @@ int ZeroGridPositionDirection()
    return 0;
 }
 
+ENUM_ORDER_TYPE_TIME ZeroGridPendingTimeType()
+{
+   long modes=SymbolInfoInteger(_Symbol,SYMBOL_EXPIRATION_MODE);
+   if((modes & SYMBOL_EXPIRATION_GTC)==SYMBOL_EXPIRATION_GTC)
+      return ORDER_TIME_GTC;
+   if((modes & SYMBOL_EXPIRATION_DAY)==SYMBOL_EXPIRATION_DAY)
+      return ORDER_TIME_DAY;
+   if((modes & SYMBOL_EXPIRATION_SPECIFIED)==SYMBOL_EXPIRATION_SPECIFIED)
+      return ORDER_TIME_SPECIFIED;
+   if((modes & SYMBOL_EXPIRATION_SPECIFIED_DAY)==SYMBOL_EXPIRATION_SPECIFIED_DAY)
+      return ORDER_TIME_SPECIFIED_DAY;
+   return ORDER_TIME_GTC;
+}
+
+datetime ZeroGridPendingExpiration(ENUM_ORDER_TYPE_TIME typeTime)
+{
+   if(typeTime==ORDER_TIME_SPECIFIED || typeTime==ORDER_TIME_SPECIFIED_DAY)
+      return TimeCurrent()+30*24*60*60;
+   return 0;
+}
+
+bool ZeroGridRecenterFlatCycle()
+{
+   if(ZeroGridPositionCount()>0 || ZeroGridPendingCount()>0)
+      return false;
+   MqlTick live;
+   if(!SymbolInfoTick(_Symbol,live))
+      return false;
+   double mid=(live.bid+live.ask)*0.5;
+   g_zeroGridCenter=ZeroGridNormalizeCenterPrice(mid);
+   g_zeroGridCycleStartedAt=TimeCurrent();
+   g_zeroGridClosing=false;
+   SaveZeroGridCycleState();
+   return g_zeroGridCenter>0.0;
+}
+
 bool ZeroGridSendPending(bool buySide,int level)
 {
    if(level<1 || level>ZeroGridEffectiveLevelsPerSide() || ZeroGridLevelExists(buySide,level))
@@ -2106,7 +2142,11 @@ bool ZeroGridSendPending(bool buySide,int level)
    int maxPlacementAttempts=(level==1 ? 3 : 2);
    for(int attempt=0;attempt<maxPlacementAttempts;attempt++)
    {
-      if(g_ordersInWindow>=g_maxOrdersPerMinute)
+      // ZERO is a dedicated pending-order engine. Do not let the generic AUTO/RACE
+      // order-rate setting starve its mandatory first pair. Still keep a bounded
+      // per-minute budget large enough to stage the configured ladder quickly.
+      int zeroRateLimit=(int)MathMax(2,MathMin(120,ZeroGridEffectiveLevelsPerSide()*2+8));
+      if(g_ordersInWindow>=zeroRateLimit)
       {
          g_executionStatus="ZERO_GRID_RATE_LIMIT";
          return false;
@@ -2159,7 +2199,8 @@ bool ZeroGridSendPending(bool buySide,int level)
       request.volume=volume;
       request.price=price;
       request.type=buySide ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
-      request.type_time=ORDER_TIME_GTC;
+      request.type_time=ZeroGridPendingTimeType();
+      request.expiration=ZeroGridPendingExpiration(request.type_time);
       request.type_filling=ORDER_FILLING_RETURN;
       request.comment=ZeroGridComment(buySide,level);
 
@@ -2245,17 +2286,51 @@ bool ZeroGridEnsureLadder()
    bool needBuy=nettingDirection>=0;
    bool needSell=nettingDirection<=0;
 
-   // Stage the trigger pair FIRST. Never allow L2/L3/... to exist while a
-   // required L1 is missing. This is the key guarantee for fast symmetric ZERO.
-   if(needBuy && !ZeroGridLevelExists(true,1))
+   // Stage the trigger pair FIRST. On a flat cycle both sides are treated as one
+   // atomic pair around a fresh center: center 4000 -> BUY 4001 / SELL 3999.
+   // If one side is rejected while the quote is moving, remove the orphan side,
+   // recenter, and retry the pair immediately instead of leaving a broken ladder.
+   if(needBuy && needSell && ZeroGridPositionCount()==0 &&
+      !ZeroGridLevelExists(true,1) && !ZeroGridLevelExists(false,1))
    {
-      attemptsThisPass++;
-      if(!ZeroGridSendPending(true,1)) complete=false;
+      bool pairReady=false;
+      for(int pairAttempt=0;pairAttempt<3 && !pairReady;pairAttempt++)
+      {
+         if(ZeroGridPendingCount()==0)
+            ZeroGridRecenterFlatCycle();
+
+         attemptsThisPass++;
+         bool buyOk=ZeroGridSendPending(true,1);
+         attemptsThisPass++;
+         bool sellOk=ZeroGridSendPending(false,1);
+         pairReady=buyOk && sellOk &&
+            ZeroGridLevelExists(true,1) && ZeroGridLevelExists(false,1);
+
+         if(!pairReady)
+         {
+            ZeroGridCancelPending();
+            ZeroGridRecenterFlatCycle();
+            g_executionStatus="ZERO_GRID_RETRY_FIRST_PAIR";
+         }
+      }
+      if(!pairReady)
+      {
+         g_executionStatus="ZERO_GRID_WAIT_FIRST_PAIR";
+         return false;
+      }
    }
-   if(needSell && !ZeroGridLevelExists(false,1))
+   else
    {
-      attemptsThisPass++;
-      if(!ZeroGridSendPending(false,1)) complete=false;
+      if(needBuy && !ZeroGridLevelExists(true,1))
+      {
+         attemptsThisPass++;
+         if(!ZeroGridSendPending(true,1)) complete=false;
+      }
+      if(needSell && !ZeroGridLevelExists(false,1))
+      {
+         attemptsThisPass++;
+         if(!ZeroGridSendPending(false,1)) complete=false;
+      }
    }
 
    bool firstPairReady=
@@ -2429,6 +2504,10 @@ bool StartZeroGridCycle()
       g_zeroGridCycleStepPrice=MathMax(ZeroGridTickSize(),g_zeroGridStepPrice);
       g_zeroGridCycleLevelsPerSide=(int)MathMax(1,MathMin(30,g_zeroGridLevelsPerSide));
       g_zeroGridCycleBaseLot=MathMax(0.0001,g_zeroGridBaseLot);
+      // ZERO owns its own fresh placement budget. Orders from a previously active
+      // AUTO/RACE mode must never prevent BUY L1 / SELL L1 from being staged.
+      g_orderWindowStart=TimeCurrent();
+      g_ordersInWindow=0;
       SaveZeroGridCycleState();
    }
 
