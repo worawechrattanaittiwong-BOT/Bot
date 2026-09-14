@@ -21,10 +21,6 @@ export class MaintenanceService {
     return status === "DRAINING" || status === "MAINTENANCE";
   }
 
-  // Position truth comes from a recent EA heartbeat, not from the last cached
-  // metrics object forever. metrics.lastServerContactAt is written by the EA
-  // heartbeat path and is intentionally not refreshed by command ACKs. This
-  // prevents a CLOSE_ALL ACK from keeping an old positions=1 snapshot alive.
   private runtimeCte() {
     return `WITH runtime AS (
       SELECT
@@ -41,10 +37,10 @@ export class MaintenanceService {
     )`;
   }
 
-  // If MT5/EA accepted CLOSE_ALL after the last full MT5 snapshot but no next
-  // heartbeat arrived, the old positions value is not current truth. Keep the
-  // previous value for audit, then clear only this stale cache. We never do this
-  // without an ACKED CLOSE_ALL newer than the MT5 snapshot.
+  // A stale cached Position is never silently discarded. It is reconciled to
+  // zero only when the EA has ACKed CLOSE_ALL after the last full MT5 snapshot.
+  // Otherwise it remains an unresolved maintenance blocker until a fresh MT5
+  // heartbeat reports the real Position count.
   private async reconcileAckedCloseAll() {
     const reconciledAt = new Date().toISOString();
     const result = await this.db.query(
@@ -156,7 +152,7 @@ export class MaintenanceService {
            WHERE desired_state='RUNNING'
               OR (mt5_fresh AND actual_state='RUNNING')
          )::int AS running,
-         COALESCE(SUM(CASE WHEN mt5_fresh THEN reported_positions ELSE 0 END),0)::int AS positions,
+         COALESCE(SUM(reported_positions),0)::int AS positions,
          COUNT(*) FILTER (
            WHERE NOT mt5_fresh AND reported_positions>0
          )::int AS stale_position_instances,
@@ -217,8 +213,8 @@ export class MaintenanceService {
            WHERE desired_state='RUNNING'
               OR (mt5_fresh AND actual_state='RUNNING')
          )::int AS running_instances,
-         COUNT(*) FILTER (WHERE mt5_fresh AND reported_positions>0)::int AS instances_with_positions,
-         COALESCE(SUM(CASE WHEN mt5_fresh THEN reported_positions ELSE 0 END),0)::int AS open_positions,
+         COUNT(*) FILTER (WHERE reported_positions>0)::int AS instances_with_positions,
+         COALESCE(SUM(reported_positions),0)::int AS open_positions,
          COUNT(*) FILTER (WHERE NOT mt5_fresh AND reported_positions>0)::int AS stale_position_instances,
          COALESCE(SUM(CASE WHEN NOT mt5_fresh THEN reported_positions ELSE 0 END),0)::int AS stale_reported_positions
        FROM runtime`
@@ -242,7 +238,7 @@ export class MaintenanceService {
        LEFT JOIN mt5_accounts a ON a.id=r.mt5_account_id
        WHERE r.desired_state='RUNNING'
           OR (r.mt5_fresh AND r.actual_state='RUNNING')
-          OR (r.mt5_fresh AND r.reported_positions>0)
+          OR r.reported_positions>0
        ORDER BY r.reported_positions DESC,r.last_seen_at DESC NULLS LAST
        LIMIT 1000`
     );
@@ -438,7 +434,7 @@ export class MaintenanceService {
     if (current.status === "DRAINING") {
       const blockers = await this.liveBlockers();
       if (Number(blockers?.running || 0) > 0 || Number(blockers?.positions || 0) > 0) {
-        throw new ConflictException("ยังมี Bot Running หรือ Position ที่ MT5 ยืนยันว่าค้างอยู่ ระบบยังเปิดกลับไม่ได้");
+        throw new ConflictException("ยังมี Bot Running หรือ Position ที่ MT5 ยังไม่ยืนยันว่าเป็น 0 ระบบยังเปิดกลับไม่ได้");
       }
       await this.tryFinishDrain();
     }
