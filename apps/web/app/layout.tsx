@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./premium-dashboard.css";
 import "./dashboard-live.css";
-import { Mt5ManualActionControls } from "../components/Mt5ManualActionControls";
-import { DashboardLiveEnhancements } from "../components/DashboardLiveEnhancements";
 
 export const metadata: Metadata = {
   title: "SCENOVA — MT5 BOT EA",
@@ -13,11 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="th">
-      <body>
-        {children}
-        <DashboardLiveEnhancements />
-        <Mt5ManualActionControls />
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
