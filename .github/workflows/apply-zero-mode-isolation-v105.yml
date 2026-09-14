@@ -1,0 +1,341 @@
+name: Apply ZERO Mode Isolation V105
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-zero-mode-isolation-v105.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch strict execution-mode isolation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f"missing source block: {label}")
+              return text.replace(old, new, 1)
+
+          ea_path = Path("mt5/FastBasketBot.mq5")
+          ea = ea_path.read_text(encoding="utf-8")
+
+          # Version this behavioral change so Local agents can detect/reinstall it.
+          ea = re.sub(r'#property version\s+"1\.0\.[34]"', '#property version   "1.0.5"', ea, count=1)
+          ea = re.sub(r'#define SCENOVA_EA_VERSION "1\.0\.[34]"', '#define SCENOVA_EA_VERSION "1.0.5"', ea, count=1)
+          ea = re.sub(r'#define SCENOVA_PRODUCT_VERSION "1\.0\.[34]"', '#define SCENOVA_PRODUCT_VERSION "1.0.5"', ea, count=1)
+
+          old_zero_mode = '''bool ZeroGridModeEnabled()
+          {
+             return g_engineMode == "ZERO_GRID" || g_controlMode == "ZERO_GRID";
+          }
+          '''
+          new_zero_mode = '''string EffectiveExecutionMode()
+          {
+             // Website controlMode is authoritative once present. Legacy .set
+             // files can still fall back to InpEngineMode before the first
+             // server settings response arrives.
+             string control=g_controlMode;
+             StringToUpper(control);
+             if(control == "ZERO_GRID") return "ZERO_GRID";
+             if(control == "RACE") return "RACE";
+             if(control == "AUTO" || control == "ASSISTED" || control == "MANUAL")
+                return "AUTO";
+
+             string engine=g_engineMode;
+             StringToUpper(engine);
+             if(engine == "ZERO_GRID" || engine == "RACE") return engine;
+             return "AUTO";
+          }
+
+          bool ZeroGridModeEnabled()
+          {
+             return EffectiveExecutionMode() == "ZERO_GRID";
+          }
+          '''
+          ea = replace_once(ea, old_zero_mode, new_zero_mode, "ZERO mode authority")
+
+          old_zero_count = '''int ZeroGridPositionCount()
+          {
+             LoadZeroGridCycleState();
+              LoadZeroGridCycleState();
+             int count=0;
+             for(int i=PositionsTotal()-1;i>=0;i--)
+             {
+                ulong ticket=PositionGetTicket(i);
+                if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+                if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
+                string comment=PositionGetString(POSITION_COMMENT);
+                if(IsZeroGridComment(comment) || g_zeroGridCycleStartedAt>0) count++;
+             }
+             return count;
+          }
+          '''
+          new_zero_count = '''int ZeroGridPositionCount()
+          {
+             LoadZeroGridCycleState();
+             int count=0;
+             bool netting=ZeroGridAccountIsNetting();
+             for(int i=PositionsTotal()-1;i>=0;i--)
+             {
+                ulong ticket=PositionGetTicket(i);
+                if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+                if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
+                string comment=PositionGetString(POSITION_COMMENT);
+                // Hedging positions retain their ZERO tag and must never be
+                // claimed just because an old ZERO cycle state still exists.
+                // Netting can lose per-level comments after broker merges, so
+                // only that account type may use the persisted cycle fallback.
+                if(IsZeroGridComment(comment) || (netting && g_zeroGridCycleStartedAt>0)) count++;
+             }
+             return count;
+          }
+          '''
+          ea = replace_once(ea, old_zero_count, new_zero_count, "ZERO position ownership")
+
+          old_race = '''bool RaceModeEnabled()
+          {
+             return g_engineMode == "RACE";
+          }
+          '''
+          new_race = '''bool RaceModeEnabled()
+          {
+             return EffectiveExecutionMode() == "RACE";
+          }
+          '''
+          ea = replace_once(ea, old_race, new_race, "RACE mode authority")
+
+          old_modes = '''   string requestedEngineMode = JsonString(json, "engineMode", "");
+             StringToUpper(requestedEngineMode);
+             if(requestedEngineMode == "AUTO" || requestedEngineMode == "RACE" || requestedEngineMode == "ZERO_GRID")
+                g_engineMode = requestedEngineMode;
+
+
+             string requestedControlMode = JsonString(json, "controlMode", g_controlMode);
+             StringToUpper(requestedControlMode);
+             if(requestedControlMode == "AUTO" || requestedControlMode == "RACE" ||
+                requestedControlMode == "ZERO_GRID" ||
+                requestedControlMode == "ASSISTED" || requestedControlMode == "MANUAL" ||
+                requestedControlMode == "LEGACY")
+                g_controlMode = requestedControlMode;
+          '''
+          new_modes = '''   string requestedEngineMode = JsonString(json, "engineMode", "");
+             StringToUpper(requestedEngineMode);
+             bool hasEngineMode =
+                requestedEngineMode == "AUTO" || requestedEngineMode == "RACE" || requestedEngineMode == "ZERO_GRID";
+
+             string requestedControlMode = JsonString(json, "controlMode", "");
+             StringToUpper(requestedControlMode);
+             bool hasControlMode =
+                requestedControlMode == "AUTO" || requestedControlMode == "RACE" ||
+                requestedControlMode == "ZERO_GRID" ||
+                requestedControlMode == "ASSISTED" || requestedControlMode == "MANUAL" ||
+                requestedControlMode == "LEGACY";
+
+             // One canonical execution owner at a time. controlMode wins when
+             // both fields are present; partial/older payloads are normalized
+             // so a stale ZERO_GRID or RACE value cannot reactivate itself.
+             if(hasControlMode)
+             {
+                g_controlMode = requestedControlMode;
+                if(g_controlMode == "ZERO_GRID") g_engineMode = "ZERO_GRID";
+                else if(g_controlMode == "RACE") g_engineMode = "RACE";
+                else g_engineMode = "AUTO";
+             }
+             else if(hasEngineMode)
+             {
+                g_engineMode = requestedEngineMode;
+                if(g_engineMode == "ZERO_GRID") g_controlMode = "ZERO_GRID";
+                else if(g_engineMode == "RACE") g_controlMode = "RACE";
+                else if(g_controlMode == "ZERO_GRID" || g_controlMode == "RACE" || g_controlMode == "LEGACY")
+                   g_controlMode = "AUTO";
+             }
+          '''
+          ea = replace_once(ea, old_modes, new_modes, "server mode normalization")
+
+          old_telemetry = '''      string burstDiagnostics = StringFormat(
+             ",\\"engineMode\\":\\"ADAPTIVE\\",\\"basketFillActive\\":%s,\\"basketTargetPositions\\":%d,\\"basketRequestsSent\\":%d,\\"basketFilledPositions\\":%d,\\"basketFillProgressText\\":\\"%d/%d\\",\\"basketAutoTargetMoney\\":%.2f,\\"basketLossMoney\\":%.2f}}",
+             g_burstActive ? "true" : "false",
+          '''
+          new_telemetry = '''      string burstDiagnostics = StringFormat(
+             ",\\"engineMode\\":\\"%s\\",\\"basketFillActive\\":%s,\\"basketTargetPositions\\":%d,\\"basketRequestsSent\\":%d,\\"basketFilledPositions\\":%d,\\"basketFillProgressText\\":\\"%d/%d\\",\\"basketAutoTargetMoney\\":%.2f,\\"basketLossMoney\\":%.2f}}",
+             EffectiveExecutionMode(),
+             g_burstActive ? "true" : "false",
+          '''
+          ea = replace_once(ea, old_telemetry, new_telemetry, "mode telemetry")
+          ea_path.write_text(ea, encoding="utf-8", newline="\n")
+
+          api_path = Path("apps/api/src/bot.controller.ts")
+          api = api_path.read_text(encoding="utf-8")
+          old_api = '''    if (body.controlMode !== undefined) {
+                const controlMode = String(body.controlMode || "").toUpperCase();
+                if (!["AUTO", "RACE", "ZERO_GRID", "ASSISTED", "MANUAL"].includes(controlMode)) {
+                  throw new BadRequestException("Control Mode ไม่ถูกต้อง");
+                }
+                clean.controlMode = controlMode;
+              }
+
+              if (body.engineMode !== undefined) {
+                const engineMode = String(body.engineMode || "").toUpperCase();
+                if (!["AUTO", "RACE", "ZERO_GRID"].includes(engineMode)) {
+                  throw new BadRequestException("Engine Mode ไม่ถูกต้อง");
+                }
+                clean.engineMode = engineMode;
+              }
+          '''
+          new_api = '''    const requestedControlMode = body.controlMode !== undefined
+                ? String(body.controlMode || "").toUpperCase()
+                : null;
+              const requestedEngineMode = body.engineMode !== undefined
+                ? String(body.engineMode || "").toUpperCase()
+                : null;
+
+              if (requestedControlMode !== null && !["AUTO", "RACE", "ZERO_GRID", "ASSISTED", "MANUAL"].includes(requestedControlMode)) {
+                throw new BadRequestException("Control Mode ไม่ถูกต้อง");
+              }
+              if (requestedEngineMode !== null && !["AUTO", "RACE", "ZERO_GRID"].includes(requestedEngineMode)) {
+                throw new BadRequestException("Engine Mode ไม่ถูกต้อง");
+              }
+
+              // Persist a canonical pair so the database can never retain a
+              // stale ZERO_GRID/RACE engine beside another selected mode.
+              if (requestedControlMode !== null) {
+                clean.controlMode = requestedControlMode;
+                clean.engineMode = requestedControlMode === "ZERO_GRID"
+                  ? "ZERO_GRID"
+                  : requestedControlMode === "RACE"
+                    ? "RACE"
+                    : "AUTO";
+              } else if (requestedEngineMode !== null) {
+                clean.engineMode = requestedEngineMode;
+                clean.controlMode = requestedEngineMode === "ZERO_GRID"
+                  ? "ZERO_GRID"
+                  : requestedEngineMode === "RACE"
+                    ? "RACE"
+                    : "AUTO";
+              }
+          '''
+          api = replace_once(api, old_api, new_api, "API canonical mode pair")
+          api_path.write_text(api, encoding="utf-8", newline="\n")
+
+          web_path = Path("apps/web/app/dashboard/page.tsx")
+          web = web_path.read_text(encoding="utf-8")
+          old_sync = '''  const eaSettingsTelemetryReady =
+              isMt5Online &&
+              metrics.configuredMaxPositions !== undefined &&
+              metrics.configuredBasketProfitTarget !== undefined &&
+              metrics.configuredMaxBasketLoss !== undefined &&
+              metrics.manualStopLossPoints !== undefined &&
+              metrics.profitTargetMode !== undefined;
+            const desiredProfitTargetMode = String(settings.profitTargetMode ||
+          '''
+          new_sync = '''  const desiredControlMode = String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase();
+            const desiredEngineMode = desiredControlMode === "ZERO_GRID"
+              ? "ZERO_GRID"
+              : desiredControlMode === "RACE"
+                ? "RACE"
+                : "AUTO";
+            const eaSettingsTelemetryReady =
+              isMt5Online &&
+              metrics.controlMode !== undefined &&
+              metrics.engineMode !== undefined &&
+              metrics.configuredMaxPositions !== undefined &&
+              metrics.configuredBasketProfitTarget !== undefined &&
+              metrics.configuredMaxBasketLoss !== undefined &&
+              metrics.manualStopLossPoints !== undefined &&
+              metrics.profitTargetMode !== undefined;
+            const desiredProfitTargetMode = String(settings.profitTargetMode ||
+          '''
+          web = replace_once(web, old_sync, new_sync, "dashboard mode sync readiness")
+
+          old_compare = '''  const eaSettingsSynced =
+              eaSettingsTelemetryReady &&
+              String(metrics.profitTargetMode || "").toUpperCase() === desiredProfitTargetMode &&
+          '''
+          new_compare = '''  const eaSettingsSynced =
+              eaSettingsTelemetryReady &&
+              String(metrics.controlMode || "").toUpperCase() === desiredControlMode &&
+              String(metrics.engineMode || "").toUpperCase() === desiredEngineMode &&
+              String(metrics.profitTargetMode || "").toUpperCase() === desiredProfitTargetMode &&
+          '''
+          web = replace_once(web, old_compare, new_compare, "dashboard mode sync comparison")
+
+          old_chip = '''<span>{String(settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO SMART" : settings.entryMode}</span>'''
+          new_chip = '''<span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO SMART" : settings.entryMode}</span>'''
+          web = replace_once(web, old_chip, new_chip, "dashboard canonical mode chip")
+          web_path.write_text(web, encoding="utf-8", newline="\n")
+          PY
+
+      - name: Validate isolation contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ea = Path("mt5/FastBasketBot.mq5").read_text(encoding="utf-8")
+          api = Path("apps/api/src/bot.controller.ts").read_text(encoding="utf-8")
+          web = Path("apps/web/app/dashboard/page.tsx").read_text(encoding="utf-8")
+
+          required_ea = [
+              '#property version   "1.0.5"',
+              'string EffectiveExecutionMode()',
+              'return EffectiveExecutionMode() == "ZERO_GRID";',
+              'return EffectiveExecutionMode() == "RACE";',
+              '(netting && g_zeroGridCycleStartedAt>0)',
+              'bool hasControlMode =',
+              'bool hasEngineMode =',
+              'EffectiveExecutionMode(),',
+          ]
+          for item in required_ea:
+              if item not in ea:
+                  raise SystemExit(f"EA isolation sentinel missing: {item}")
+          if 'g_engineMode == "ZERO_GRID" || g_controlMode == "ZERO_GRID"' in ea:
+              raise SystemExit("stale ZERO OR ownership still present")
+          if '\\"engineMode\\":\\"ADAPTIVE\\"' in ea:
+              raise SystemExit("telemetry still reports fake ADAPTIVE engineMode")
+          if 'LoadZeroGridCycleState();\n    LoadZeroGridCycleState();' in ea:
+              raise SystemExit("duplicate ZERO state load still present")
+
+          for item in [
+              'Persist a canonical pair',
+              'clean.controlMode = requestedControlMode;',
+              'clean.engineMode = requestedControlMode === "ZERO_GRID"',
+          ]:
+              if item not in api:
+                  raise SystemExit(f"API mode sentinel missing: {item}")
+
+          for item in [
+              'const desiredControlMode = String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase();',
+              'String(metrics.controlMode || "").toUpperCase() === desiredControlMode',
+              'String(metrics.engineMode || "").toUpperCase() === desiredEngineMode',
+          ]:
+              if item not in web:
+                  raise SystemExit(f"web mode sentinel missing: {item}")
+          PY
+
+      - name: Commit isolated-mode fix
+        shell: bash
+        run: |
+          git config user.name "SCENOVA Patch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 apps/api/src/bot.controller.ts apps/web/app/dashboard/page.tsx
+          if git diff --cached --quiet; then
+            echo "Mode isolation already applied."
+            exit 0
+          fi
+          git commit -m "fix: isolate ZERO GRID from AUTO and RACE"
+          git push origin HEAD:main
