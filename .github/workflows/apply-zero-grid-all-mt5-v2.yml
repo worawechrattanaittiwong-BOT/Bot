@@ -12,7 +12,6 @@ on:
 
 permissions:
   contents: write
-  actions: write
 
 concurrency:
   group: apply-zero-grid-all-mt5-v2
@@ -55,13 +54,13 @@ jobs:
           git diff --check
           git status --short
 
-      - name: Publish generated source and settings
+      - name: Publish generated EA, API and Bot Settings
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "SCENOVA Build Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add mt5/FastBasketBot.mq5 apps/api/src/bot.controller.ts apps/web/app/dashboard/page.tsx .github/workflows/build-mt5-ea.yml
+          git add mt5/FastBasketBot.mq5 apps/api/src/bot.controller.ts apps/web/app/dashboard/page.tsx
           if git diff --cached --quiet; then
             echo "ZERO GRID V2 source is already current."
           else
@@ -69,11 +68,7 @@ jobs:
             git push origin HEAD:main
           fi
 
-      - name: Dispatch official MT5 compile
+      - name: Note official compile handoff
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          gh workflow run build-mt5-ea.yml --ref main
-          echo "Dispatched Build MT5 EA for the ZERO GRID V2 source on main."
+          echo "Source published. build-mt5-ea.yml is updated separately with repository workflow permission, then its push compiles the official EX5."
