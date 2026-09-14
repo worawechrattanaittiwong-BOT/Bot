@@ -24,6 +24,9 @@ type LiveSummary = {
 type Direction = "up" | "down" | "flat";
 type WinTone = "good" | "warn" | "bad" | "neutral";
 
+const LIVE_SUMMARY_REFRESH_MS = 5_000;
+const DOM_REBIND_INTERVAL_MS = 5_000;
+
 export function DashboardLiveEnhancements() {
   const [summary, setSummary] = useState<LiveSummary | null>(null);
   const [direction, setDirection] = useState<Direction>("flat");
@@ -32,6 +35,9 @@ export function DashboardLiveEnhancements() {
 
   useEffect(() => {
     if (typeof window === "undefined" || window.location.pathname !== "/dashboard") return;
+
+    let rafId = 0;
+    const delayedBinds: number[] = [];
 
     const setText = (element: Element | null | undefined, value: string) => {
       if (element && element.textContent !== value) element.textContent = value;
@@ -46,7 +52,7 @@ export function DashboardLiveEnhancements() {
 
     const bindTargets = () => {
       const header = document.querySelector<HTMLElement>(".cc-v6-hourly-chart .cc-v6-panel-head");
-      setHeaderTarget(header);
+      setHeaderTarget(current => current === header ? current : header);
 
       const titleGroup = header?.firstElementChild as HTMLElement | null;
       const title = titleGroup?.querySelector<HTMLElement>("b");
@@ -90,21 +96,37 @@ export function DashboardLiveEnhancements() {
       );
     };
 
-    bindTargets();
-    const observer = new MutationObserver(bindTargets);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["class"]
-    });
-    document.addEventListener("input", bindTargets, true);
-    document.addEventListener("change", bindTargets, true);
+    const scheduleBind = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        bindTargets();
+      });
+    };
+
+    scheduleBind();
+    for (const delay of [100, 400, 1_200]) {
+      delayedBinds.push(window.setTimeout(scheduleBind, delay));
+    }
+
+    const rebindId = window.setInterval(() => {
+      if (document.visibilityState === "visible") scheduleBind();
+    }, DOM_REBIND_INTERVAL_MS);
+
+    // Rebind after user interactions that can open/switch the settings modal.
+    // This avoids a document.body MutationObserver, which previously scanned
+    // the whole dashboard on every chart/React DOM update and could starve clicks.
+    document.addEventListener("click", scheduleBind, true);
+    document.addEventListener("input", scheduleBind, true);
+    document.addEventListener("change", scheduleBind, true);
 
     return () => {
-      observer.disconnect();
-      document.removeEventListener("input", bindTargets, true);
-      document.removeEventListener("change", bindTargets, true);
+      if (rafId) window.cancelAnimationFrame(rafId);
+      delayedBinds.forEach(id => window.clearTimeout(id));
+      window.clearInterval(rebindId);
+      document.removeEventListener("click", scheduleBind, true);
+      document.removeEventListener("input", scheduleBind, true);
+      document.removeEventListener("change", scheduleBind, true);
     };
   }, []);
 
@@ -112,9 +134,21 @@ export function DashboardLiveEnhancements() {
     if (typeof window === "undefined" || window.location.pathname !== "/dashboard") return;
 
     let cancelled = false;
+    let requestInFlight = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
+    const scheduleNext = () => {
+      if (!cancelled) timer = setTimeout(refresh, LIVE_SUMMARY_REFRESH_MS);
+    };
+
     const refresh = async () => {
+      if (cancelled || requestInFlight) return;
+      if (document.visibilityState !== "visible") {
+        scheduleNext();
+        return;
+      }
+
+      requestInFlight = true;
       try {
         // Customer UI is account-follow based. The backend resolves the active
         // installation/account automatically; no customer-facing Slot selector.
@@ -135,7 +169,8 @@ export function DashboardLiveEnhancements() {
       } catch {
         // Keep this enhancement quiet; the dashboard owns the main error surface.
       } finally {
-        if (!cancelled) timer = setTimeout(refresh, 1200);
+        requestInFlight = false;
+        scheduleNext();
       }
     };
 
