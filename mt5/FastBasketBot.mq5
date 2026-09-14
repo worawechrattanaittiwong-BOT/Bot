@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.6"
-#define SCENOVA_EA_VERSION "1.0.6"
-#define SCENOVA_PRODUCT_VERSION "1.0.6"
+#property version   "1.0.7"
+#define SCENOVA_EA_VERSION "1.0.7"
+#define SCENOVA_PRODUCT_VERSION "1.0.7"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -2005,12 +2005,27 @@ bool ZeroGridEnsureLadder()
 
    bool complete=true;
    int nettingDirection=ZeroGridAccountIsNetting() ? ZeroGridPositionDirection() : 0;
-   for(int level=1;level<=g_zeroGridLevelsPerSide;level++)
+   int attemptsThisPass=0;
+   const int maxAttemptsPerPass=6;
+
+   // Stage far/high-lot -> near/low-lot. Price still triggers naturally
+   // near -> far; this order only controls stable Broker submission.
+   // A small per-tick batch avoids flooding the trade server with all
+   // 60 pending requests at once and retries missing levels next tick.
+   for(int level=g_zeroGridLevelsPerSide;level>=1;level--)
    {
-      // Hedging: both sides stay available. Netting: before the first fill both
-      // sides are staged; after the first fill only that side may add levels.
-      if(nettingDirection>=0 && !ZeroGridLevelExists(true,level) && !ZeroGridSendPending(true,level)) complete=false;
-      if(nettingDirection<=0 && !ZeroGridLevelExists(false,level) && !ZeroGridSendPending(false,level)) complete=false;
+      if(nettingDirection>=0 && !ZeroGridLevelExists(true,level))
+      {
+         if(!ZeroGridSendPending(true,level)) complete=false;
+         attemptsThisPass++;
+         if(attemptsThisPass>=maxAttemptsPerPass) break;
+      }
+      if(nettingDirection<=0 && !ZeroGridLevelExists(false,level))
+      {
+         if(!ZeroGridSendPending(false,level)) complete=false;
+         attemptsThisPass++;
+         if(attemptsThisPass>=maxAttemptsPerPass) break;
+      }
       if(g_ordersInWindow>=g_maxOrdersPerMinute) break;
    }
    return complete;
@@ -2070,9 +2085,9 @@ ulong ZeroGridNearestCloseTicket()
    double mid=hasTick ? (tick.bid+tick.ask)*0.5 : 0.0;
    double tolerance=MathMax(ZeroGridTickSize()*0.5,_Point*0.5);
    ulong bestTicket=0;
+   double bestVolume=1.0e100;
    int bestProfitRank=99;
    double bestDistance=1.0e100;
-   double bestOpenPrice=-1.0e100;
 
    for(int i=PositionsTotal()-1;i>=0;i--)
    {
@@ -2080,28 +2095,33 @@ ulong ZeroGridNearestCloseTicket()
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
 
+      double volume=PositionGetDouble(POSITION_VOLUME);
       double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
       double floating=PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
       int profitRank=floating>=0.0 ? 0 : 1;
       double distance=hasTick ? MathAbs(openPrice-mid) : 0.0;
 
+      // Deterministic close order: smallest lot first. Profit/distance
+      // are only tie-breakers between equal-volume tickets.
       bool better=false;
-      if(bestTicket==0 || profitRank<bestProfitRank)
+      if(bestTicket==0 || volume<bestVolume-0.0000001)
          better=true;
-      else if(profitRank==bestProfitRank)
+      else if(MathAbs(volume-bestVolume)<=0.0000001)
       {
-         if(distance<bestDistance-tolerance)
+         if(profitRank<bestProfitRank)
             better=true;
-         else if(MathAbs(distance-bestDistance)<=tolerance && openPrice>bestOpenPrice)
+         else if(profitRank==bestProfitRank && distance<bestDistance-tolerance)
+            better=true;
+         else if(profitRank==bestProfitRank && MathAbs(distance-bestDistance)<=tolerance && ticket<bestTicket)
             better=true;
       }
 
       if(better)
       {
          bestTicket=ticket;
+         bestVolume=volume;
          bestProfitRank=profitRank;
          bestDistance=distance;
-         bestOpenPrice=openPrice;
       }
    }
    return bestTicket;
@@ -2181,9 +2201,13 @@ bool ManageZeroGrid()
       return true;
    }
 
-   // If mode is changed while a ZERO GRID cycle owns positions, cancel pending
-   // entries and let that owned cycle drain safely. Do not hand it to AUTO/RACE.
-   if(!ZeroGridModeEnabled())
+   // Explicit Stop/Safe-Stop/lease loss still cancels future entries.
+   // A settings-mode change alone does NOT steal an active ZERO GRID cycle:
+   // keep its pending ladder and owned positions until the cycle is flat.
+   bool zeroControlReady =
+      g_state==STATE_RUNNING && g_access &&
+      (MQLInfoInteger(MQL_TESTER) || EntryLeaseValid());
+   if(!zeroControlReady)
    {
       ZeroGridCancelPending();
       if(positions<=0)
@@ -2201,9 +2225,12 @@ bool ManageZeroGrid()
          ZeroGridClosePositions();
       }
       else
-         g_executionStatus="ZERO_GRID_DRAINING";
+         g_executionStatus="ZERO_GRID_SAFE_DRAIN";
       return true;
    }
+
+   if(!ZeroGridModeEnabled())
+      g_executionStatus="ZERO_GRID_CYCLE_OWNER_LOCK";
 
    // Netting/Exchange account: after the first side triggers, remove the
    // opposite pending ladder so future fills cannot offset/merge the position.
@@ -2621,33 +2648,6 @@ bool ManageRaceBasket(double momentum)
    }
    g_raceDirection = direction;
 
-   // V18: harvest blue RACE positions first, before any Basket-level profit
-   // logic. Realized winners are then replenished back toward Max Positions.
-   // This path is RACE-only and never changes AUTO position management.
-   int harvested = RaceHarvestProfitablePositions();
-   if(harvested > 0)
-   {
-      g_raceProfitArmed = false;
-      g_racePeakProfit = 0.0;
-
-      int remainingPositions = BasketPositionCount();
-      if(remainingPositions <= 0)
-      {
-         ResetRaceRuntime();
-         g_executionStatus = "RACE_PROFIT_HARVEST_FLAT";
-         return true;
-      }
-
-      int remainingUnits = RaceFilledUnits();
-      if(remainingUnits < g_maxPositions)
-      {
-         g_raceState = "HARVEST_REFILL";
-         g_executionStatus = "RACE_HARVEST_REFILL";
-         ProcessRaceFill(direction);
-         return true;
-      }
-   }
-
    int filledUnits = RaceFilledUnits();
    bool filling = filledUnits < g_maxPositions;
    double floatingProfit = BasketProfit();
@@ -2677,6 +2677,33 @@ bool ManageRaceBasket(double momentum)
       g_raceState = "FILLING";
       ProcessRaceFill(direction);
       return true;
+   }
+
+   // Stability: complete the requested RACE fill first. Harvesting starts
+   // only after Max Positions is reached, preventing open/close/refill churn
+   // while the Basket is still being built. Entry/exit signals are unchanged.
+   int harvested = RaceHarvestProfitablePositions();
+   if(harvested > 0)
+   {
+      g_raceProfitArmed = false;
+      g_racePeakProfit = 0.0;
+
+      int remainingPositions = BasketPositionCount();
+      if(remainingPositions <= 0)
+      {
+         ResetRaceRuntime();
+         g_executionStatus = "RACE_PROFIT_HARVEST_FLAT";
+         return true;
+      }
+
+      int remainingUnits = RaceFilledUnits();
+      if(remainingUnits < g_maxPositions)
+      {
+         g_raceState = "HARVEST_REFILL";
+         g_executionStatus = "RACE_HARVEST_REFILL";
+         ProcessRaceFill(direction);
+         return true;
+      }
    }
 
    double armMoney = RaceProfitArmMoney(filledUnits);
