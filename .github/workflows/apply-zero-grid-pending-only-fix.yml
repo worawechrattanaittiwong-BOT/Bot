@@ -1,0 +1,43 @@
+name: Apply ZERO GRID Pending-Only Fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-zero-grid-pending-only-fix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-zero-grid-pending-only-fix
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch ZERO GRID pending-only runtime
+        run: python3 .github/scripts/apply_zero_grid_pending_only_fix.py
+
+      - name: Run ZERO GRID regression
+        run: node tests/zero-grid-v1-simulation.mjs
+
+      - name: Commit runtime fix
+        shell: bash
+        run: |
+          if git diff --quiet -- mt5/FastBasketBot.mq5 apps/api/src/ea.controller.ts apps/web/app/dashboard/page.tsx tests/zero-grid-v1-simulation.mjs .github/workflows/build-mt5-ea.yml; then
+            echo "No source changes needed"
+            exit 0
+          fi
+          git config user.name "SCENOVA Patch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 apps/api/src/ea.controller.ts apps/web/app/dashboard/page.tsx tests/zero-grid-v1-simulation.mjs .github/workflows/build-mt5-ea.yml
+          git commit -m "fix: make ZERO GRID pending-only with exact levels"
+          git push origin HEAD:main
