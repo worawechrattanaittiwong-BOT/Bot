@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.8"
-#define SCENOVA_EA_VERSION "1.0.8"
-#define SCENOVA_PRODUCT_VERSION "1.0.8"
+#property version   "1.0.9"
+#define SCENOVA_EA_VERSION "1.0.9"
+#define SCENOVA_PRODUCT_VERSION "1.0.9"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 

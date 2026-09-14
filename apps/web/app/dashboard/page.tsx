@@ -1602,7 +1602,7 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {(softwareUpdate.eaUpdateRequired || !softwareUpdate.eaVersionMatch) && (
+              {!softwareUpdate.eaVersionMatch && (
                 <div className="cc-update-alert-row">
                   <span className="cc-update-row-dot">!</span>
                   <div className="cc-update-row-copy">
@@ -1628,7 +1628,7 @@ export default function DashboardPage() {
                   <span className="cc-update-row-dot">!</span>
                   <div className="cc-update-row-copy">
                     <b>EX5 Hash ไม่ตรง Server</b>
-                    <small>ไฟล์ EA ในเครื่องไม่ใช่ไฟล์เดียวกับ Release ล่าสุดบน Server</small>
+                    <small>เวอร์ชัน v{softwareUpdate.currentEaVersion || "—"} ถูกต้อง แต่ไฟล์ EX5 เป็นคนละ Build กับ Release ล่าสุดบน Server</small>
                   </div>
                   <div className="cc-update-row-action">
                     <strong>
@@ -1637,7 +1637,7 @@ export default function DashboardPage() {
                         : "พร้อมตรวจสอบและติดตั้งไฟล์ EA ล่าสุด"}
                     </strong>
                     <small>ระบบจะไม่รีสตาร์ท MT5 ระหว่างบอททำงานหรือยังมี Position</small>
-                    {!(softwareUpdate.eaUpdateRequired || !softwareUpdate.eaVersionMatch) && (
+                    {softwareUpdate.eaVersionMatch && (
                       <div id="scenova-ea-update-action-mount" />
                     )}
                   </div>
