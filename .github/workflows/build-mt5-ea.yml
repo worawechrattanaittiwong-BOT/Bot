@@ -1,10 +1,8 @@
 name: Build MT5 EA
 
-# Unified 1.0.0 release rebuild trigger. The workflow compiles the current
-# V20/RACE-isolated source without changing trading logic.
-# Rebuild current 1.0.0 binary after the market-closed heartbeat transport fix.
-# Rebuild current 1.0.0 binary after adding current-quote telemetry for the
-# in-memory 15-minute flowing dashboard chart.
+# Official MT5 compile and publish pipeline for the current V20/RACE source.
+# ZERO GRID V2 is isolated from AUTO/RACE and supports MT5 Hedging/Netting
+# account modes with broker tick/stop/volume normalization.
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
@@ -43,7 +41,7 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Validate current V20 AUTO and isolated RACE source
+      - name: Validate current V20 AUTO, isolated RACE and universal ZERO GRID source
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -83,7 +81,10 @@ jobs:
             'RACE_HARVEST_REFILL',
             'SaaSRace',
             'bool ZeroGridModeEnabled()',
-            'ZERO_GRID_DEMO_ONLY',
+            'bool ZeroGridAccountIsNetting()',
+            'ZERO_GRID_LADDER_READY_NETTING',
+            'SYMBOL_TRADE_TICK_SIZE',
+            'HistoryOrdersTotal()',
             'SaaSZeroGrid',
             'TradePermissionStatus',
             'AdaptiveSpreadAllowed',
@@ -92,10 +93,13 @@ jobs:
             'NO_ACCESS'
           )) {
             if (-not $text.Contains($sentinel)) {
-              throw "Required V20/RACE sentinel missing: $sentinel"
+              throw "Required V20/RACE/ZERO GRID sentinel missing: $sentinel"
             }
           }
 
+          if ($text.Contains('ZERO_GRID_DEMO_ONLY') -or $text.Contains('bool ZeroGridDemoAllowed()')) {
+            throw "Obsolete ZERO GRID Demo-only gate is still present"
+          }
           if ($text.Contains('StringFind(InpApiBase, "http://") == 0')) {
             throw "Plain HTTP API configuration is still accepted"
           }
@@ -130,7 +134,7 @@ jobs:
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
             brain = "V20"
-            policy = "AUTO_V20_CENTRAL_DECISION_AUDIT_STATS_RACE_ISOLATED"
+            policy = "AUTO_V20_CENTRAL_DECISION_AUDIT_STATS_RACE_ZERO_GRID_V2_ISOLATED"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
       - name: Publish current V20 compiled artifact
