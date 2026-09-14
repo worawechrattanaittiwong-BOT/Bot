@@ -1,0 +1,54 @@
+name: Apply Admin Maintenance Stale Override
+
+on:
+  push:
+    branches: [fix/admin-maintenance-stale-override]
+    paths:
+      - "scripts/patch_admin_maintenance_stale_override.py"
+      - ".github/workflows/apply-admin-maintenance-stale-override.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-admin-maintenance-stale-override
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/admin-maintenance-stale-override
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Apply source patch
+        run: python3 scripts/patch_admin_maintenance_stale_override.py
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify Admin maintenance contract
+        shell: pwsh
+        run: ./tests/admin-maintenance-stale-override-contract.ps1
+
+      - name: Commit patched sources
+        run: |
+          git config user.name "scenova-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Fix Admin maintenance stale position blockers"
+          git push origin HEAD:fix/admin-maintenance-stale-override
