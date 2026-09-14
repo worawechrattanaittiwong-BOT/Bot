@@ -1083,8 +1083,8 @@ export default function DashboardPage() {
 
     if (!confirm(
       firstBind
-        ? "ผูก MT5 " + accountText + " เข้ากับ Slot นี้เป็นบัญชีแรกใช่หรือไม่?"
-        : "เปลี่ยน Slot นี้มาใช้ MT5 " + accountText + " ใช่หรือไม่?"
+        ? "ผูก MT5 " + accountText + " เป็นบัญชีที่ใช้งานใช่หรือไม่?"
+        : "เปลี่ยนมาใช้ MT5 " + accountText + " ใช่หรือไม่?"
     )) return;
 
     setBusy(true);
@@ -1097,8 +1097,8 @@ export default function DashboardPage() {
       );
       setNotice(
         result?.firstBind
-          ? "ผูกบัญชี MT5 แรกให้ Slot นี้แล้ว"
-          : "เปลี่ยนบัญชี MT5 ให้ Slot นี้แล้ว ไม่ต้องเปลี่ยน .set หรือ Install Token"
+          ? "ผูกบัญชี MT5 แรกเรียบร้อยแล้ว"
+          : "เปลี่ยนบัญชี MT5 เรียบร้อยแล้ว ไม่ต้องเปลี่ยน .set หรือ Install Token"
       );
       await load(selectedSlotIdRef.current);
     } catch (e: any) {
@@ -1958,7 +1958,7 @@ export default function DashboardPage() {
             <section className="panel account-card">
               <div className="panel-head">
                 <div>
-                  <div className="eyebrow">SLOT {data.selectedSlot?.slot_number || "—"} · {data.selectedSlot?.mode || "LOCAL"}</div>
+                  <div className="eyebrow">MT5 ACCOUNT · {data.selectedSlot?.mode || "LOCAL"}</div>
                   <h2>
                     {data.account
                       ? (data.account.broker + " · " + data.account.account_number)
@@ -1966,7 +1966,7 @@ export default function DashboardPage() {
                   </h2>
                   <p className="muted">
                     {data.account
-                      ? (data.account.broker_server + " · บัญชีนี้เป็น Active MT5 ของ Slot")
+                      ? (data.account.broker_server + " · บัญชีนี้เป็น MT5 ที่กำลังใช้งาน")
                       : data.selectedSlot?.mode === "LOCAL"
                         ? "ไม่ต้องกรอกเลขบัญชี MT5 · เปิด MT5 ที่ Login บัญชีที่ต้องการ แล้วติดตั้ง SCENOVA ระบบจะอ่านบัญชีจาก Terminal และผูกให้อัตโนมัติ"
                         : "Cloud ต้องใช้ MT5 Login และ Trading Password เพื่อให้ Trading Node Login แทนคุณ"}
@@ -2058,7 +2058,7 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <div className="mt5-change-arrow">
-                      <div><span>{data.account ? "บัญชีเดิม" : "สถานะ Slot"}</span><b>{data.account?.account_number || "ยังไม่มีบัญชี"}</b></div>
+                      <div><span>{data.account ? "บัญชีเดิม" : "บัญชีปัจจุบัน"}</span><b>{data.account?.account_number || "ยังไม่มีบัญชี"}</b></div>
                       <span>→</span>
                       <div><span>บัญชีที่ MT5 กำลัง Login</span><b>{data.instance.pending_account_number}</b></div>
                     </div>
@@ -2098,7 +2098,7 @@ export default function DashboardPage() {
                     <div><span>3</span><div><b>อนุญาต WebRequest ถ้า MT5 ยังบล็อก</b><small>MT5 → Tools → Options → Expert Advisors → เพิ่ม <code>{mt5ApiBase}</code> แล้วระบบจะเชื่อมและผูกบัญชีให้เอง</small></div></div>
                   </div>
                   <div className="notice good">
-                    ครั้งแรกระบบจะผูก MT5 ที่ตรวจพบเข้ากับ Slot อัตโนมัติ หาก MT5 Login + Server ยังไม่ถูก SCENOVA Slot อื่นใช้อยู่
+                    ครั้งแรกระบบจะผูก MT5 ที่ตรวจพบกับบัญชี SCENOVA นี้ให้อัตโนมัติ หาก MT5 Login + Server ยังไม่ถูกบัญชี SCENOVA อื่นใช้อยู่
                   </div>
                   <div className="notice">
                     ถ้าจะเปลี่ยน Demo → Real หรือเปลี่ยนบัญชีภายหลัง: ปิด Position เดิม → Login บัญชีใหม่ใน MT5 → ระบบ Safe Stop อัตโนมัติ → กลับมากดยืนยัน <b>“ใช้บัญชีนี้”</b> ครั้งเดียว
@@ -2112,7 +2112,7 @@ export default function DashboardPage() {
                 <section className="panel purple setup-panel">
                   <div className="setup-heading">
                     <div>
-                      <div className="eyebrow">CLOUD SLOT {data.selectedSlot?.slot_number || "—"}</div>
+                      <div className="eyebrow">CLOUD MT5</div>
                       <h2>เชื่อม MT5 Login สำหรับ Cloud</h2>
                       <p className="muted">เฉพาะ Cloud เท่านั้นที่ต้องกรอก MT5 Login + Trading Password เพราะ Trading Node ต้อง Login Terminal แทนลูกค้า; LOCAL ไม่ต้องกรอกเลขบัญชี</p>
                     </div>
@@ -2158,7 +2158,7 @@ export default function DashboardPage() {
             <section className="panel purple"><div className="eyebrow">CLOUD MEMBERSHIP</div><h2>ให้ Cloud ดูแล MT5 ของคุณ</h2><p className="muted">เลือก 1 / 3 / 6 / 12 เดือน ชำระผ่าน QR และติดตามการเปิดใช้งานได้จากหน้าเดียว</p><a className="btn primary" href={"/cloud"+(data.selectedSlot?.mode==="CLOUD"?"?slotId="+encodeURIComponent(data.selectedSlot.id):"")}>ซื้อ / ต่ออายุ Cloud →</a></section>
             <div className="grid2 access-grid">
               <section className="panel purple">
-                <div className="eyebrow">ACCESS STATUS · SLOT {data.selectedSlot?.slot_number || "—"}</div>
+                <div className="eyebrow">ACCESS STATUS</div>
                 <h2 style={{marginTop:8}}>{accessLabel}</h2>
                 {entitlement?.source === "OWNER" ? (
                   <div className="notice good owner-unlimited-access">
@@ -2168,13 +2168,13 @@ export default function DashboardPage() {
                 ) : remainingText ? (
                   <div className="time-card"><span>เวลาคงเหลือ</span><b className="mono">{remainingText}</b><small>หมดอายุ {accessExpiry?.toLocaleString("th-TH")}</small></div>
                 ) : (
-                  <p className="muted">ยังไม่มีสิทธิ์ที่กำลังใช้งานกับ Slot นี้</p>
+                  <p className="muted">ยังไม่มีสิทธิ์สมาชิกที่กำลังใช้งาน</p>
                 )}
                 {data.selectedSlot?.plan_code && (
                   <div className="slot-plan-summary">
                     <span>แพ็กเกจ</span>
                     <b>{data.selectedSlot.plan_code}</b>
-                    <small>{data.selectedSlot.plan_slots || 1} Slots{data.selectedSlot.allow_resale ? " · Partner / Reseller" : ""}</small>
+                    <small>{data.selectedSlot.allow_resale ? (data.selectedSlot.plan_slots || 1) + " Customer Seats · Partner / Reseller" : data.selectedSlot.mode}</small>
                   </div>
                 )}
               </section>

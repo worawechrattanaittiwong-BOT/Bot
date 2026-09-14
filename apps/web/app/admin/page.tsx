@@ -119,10 +119,11 @@ export default function AdminPage() {
           activatedBy: "OWNER"
         })
       });
-      const slotCount = Array.isArray(result?.slots) ? result.slots.length : (result?.plan?.slots || 1);
+      const seatCount = Array.isArray(result?.slots) ? result.slots.length : (result?.plan?.slots || 1);
+      const partnerSeatText = result?.plan?.reseller ? " · " + seatCount + " Customer Seats" : "";
       setMessage(
         "เปิดสิทธิ์ " + (result?.plan?.code || planCode) +
-        " ให้ " + user.user_code + " แล้ว · " + slotCount + " Slot"
+        " ให้ " + user.user_code + " แล้ว" + partnerSeatText
       );
       await search(undefined, true);
     } catch (e: any) {
@@ -332,11 +333,9 @@ export default function AdminPage() {
 
   const planOptions = [
     { code:"LOCAL_30D", label:"LOCAL 30D", mode:"LOCAL" },
-    { code:"LOCAL_3SLOT", label:"LOCAL 30D · 3 Slots", mode:"LOCAL" },
-    { code:"LOCAL_5SLOT", label:"LOCAL 30D · 5 Slots", mode:"LOCAL" },
-    { code:"PARTNER_LOCAL_10", label:"PARTNER LOCAL · 10 Slots", mode:"LOCAL" },
-    { code:"PARTNER_LOCAL_25", label:"PARTNER LOCAL · 25 Slots", mode:"LOCAL" },
-    { code:"PARTNER_LOCAL_50", label:"PARTNER LOCAL · 50 Slots", mode:"LOCAL" },
+    { code:"PARTNER_LOCAL_10", label:"PARTNER LOCAL · 10 Customer Seats", mode:"LOCAL" },
+    { code:"PARTNER_LOCAL_25", label:"PARTNER LOCAL · 25 Customer Seats", mode:"LOCAL" },
+    { code:"PARTNER_LOCAL_50", label:"PARTNER LOCAL · 50 Customer Seats", mode:"LOCAL" },
     { code:"CLOUD_30D", label:"CLOUD 30D", mode:"CLOUD" }
   ];
   const selectedPlan = planOptions.find(p=>p.code===plan) || planOptions[0];
@@ -509,7 +508,7 @@ export default function AdminPage() {
               <OwnerKpi label="ผู้ใช้ทั้งหมด" value={system?.users?.total ?? "—"} meta="บัญชีที่ยังใช้งานในระบบ" tone="blue"/>
               <OwnerKpi label="ผู้ใช้ Active" value={system?.users?.active ?? "—"} meta="พร้อมใช้งาน" tone="green"/>
               <OwnerKpi label="Bots Running" value={system?.bots?.running ?? "—"} meta="กำลังทำงาน" tone="purple"/>
-              <OwnerKpi label="Bots Offline" value={system?.bots?.offline ?? "—"} meta={"Slots " + (system?.slots?.active ?? 0) + " active"} tone={(system?.bots?.offline||0)>0?"red":"neutral"}/>
+              <OwnerKpi label="Bots Offline" value={system?.bots?.offline ?? "—"} meta={(system?.slots?.active ?? 0) + " access records active"} tone={(system?.bots?.offline||0)>0?"red":"neutral"}/>
             </section>
 
             <div className="owner-overview-grid">
@@ -550,18 +549,16 @@ export default function AdminPage() {
 
             <section className="owner-card owner-plan-inline-card">
               <div className="owner-card-head">
-                <div><span className="owner-card-kicker">MEMBERSHIP SETUP</span><h3>เปิดสิทธิ์จากบัญชี SCENOVA</h3><p className="muted">ไม่ต้องรอเลขบัญชี MT5 เลือกแพ็กเกจแล้วกด “เปิดสมาชิก” ที่ลูกค้าได้เลย ระบบจะสร้าง/อัปเดต Slot ตามโหมดของแพ็กเกจ</p></div>
+                <div><span className="owner-card-kicker">MEMBERSHIP SETUP</span><h3>เปิดสิทธิ์จากบัญชี SCENOVA</h3><p className="muted">ไม่ต้องรอเลขบัญชี MT5 เลือกแพ็กเกจแล้วกด “เปิดสมาชิก” ที่ลูกค้าได้เลย ระบบจะจัดสิทธิ์ตามโหมดของแพ็กเกจให้อัตโนมัติ</p></div>
                 <span className="owner-count">ใช้กับลูกค้าที่เลือกด้านล่าง</span>
               </div>
               <div className="owner-plan-inline">
                 <div className="field"><label>แพ็กเกจ</label><select className="input" value={plan} onChange={e=>setPlan(e.target.value)}>
-                  <option value="LOCAL_30D">LOCAL 30D · 1 Slot</option>
-                  <option value="LOCAL_3SLOT">LOCAL 30D · 3 Slots</option>
-                  <option value="LOCAL_5SLOT">LOCAL 30D · 5 Slots</option>
-                  <option value="PARTNER_LOCAL_10">PARTNER LOCAL · 10 Slots</option>
-                  <option value="PARTNER_LOCAL_25">PARTNER LOCAL · 25 Slots</option>
-                  <option value="PARTNER_LOCAL_50">PARTNER LOCAL · 50 Slots</option>
-                  <option value="CLOUD_30D">CLOUD 30D · 1 Slot</option>
+                  <option value="LOCAL_30D">LOCAL 30D</option>
+                  <option value="PARTNER_LOCAL_10">PARTNER LOCAL · 10 Customer Seats</option>
+                  <option value="PARTNER_LOCAL_25">PARTNER LOCAL · 25 Customer Seats</option>
+                  <option value="PARTNER_LOCAL_50">PARTNER LOCAL · 50 Customer Seats</option>
+                  <option value="CLOUD_30D">CLOUD 30D</option>
                 </select></div>
                 <div className="field"><label>วันเริ่ม <span className="muted">(ว่าง = เริ่มทันที)</span></label><input className="input" type="datetime-local" value={startsAt} onChange={e=>setStartsAt(e.target.value)}/><div className="help">Owner Console รุ่นนี้เปิดสิทธิ์ทันทีเท่านั้น ถ้ากำหนดเวลาอนาคตระบบจะแจ้งเตือน</div></div>
                 <div className="field"><label>จำนวนวัน</label><input className="input" type="number" min={1} value={days} onChange={e=>setDays(Number(e.target.value))}/></div>
@@ -625,8 +622,7 @@ export default function AdminPage() {
                   {(Array.isArray(selectedCustomer.customer_slots) ? selectedCustomer.customer_slots : []).map((slot:any)=>(
                     <div key={slot.id}>
                       <span>
-                        Slot #{slot.slot_number} · {slot.mode}
-                        {slot.account_number ? " · MT5 " + slot.account_number : ""}
+                        {slot.mode}{slot.account_number ? " · MT5 " + slot.account_number : ""}
                       </span>
                       <b>
                         {slot.mode === "LOCAL"
@@ -640,7 +636,7 @@ export default function AdminPage() {
                     </div>
                   ))}
                   {!(Array.isArray(selectedCustomer.customer_slots) && selectedCustomer.customer_slots.length) && (
-                    <div><span>Slots</span><b>ยังไม่มี Slot ที่ใช้งาน</b></div>
+                    <div><span>บัญชี MT5</span><b>ยังไม่มีบัญชีที่เชื่อมต่อ</b></div>
                   )}
                 </div>
 
@@ -698,7 +694,7 @@ export default function AdminPage() {
                               ? memberships(user).map((m:any)=>(
                                   <div key={m.subscription_id} style={{marginBottom:4}}>
                                     <b className={m.active ? "text-good" : ""}>{m.plan_code}</b><br/>
-                                    <span className="muted">{m.mode} · {m.slots || 1} Slots · {m.active ? "ACTIVE" : m.status} · ถึง {new Date(m.expires_at).toLocaleDateString("th-TH")}</span>
+                                    <span className="muted">{m.mode}{m.allow_resale ? " · " + (m.slots || 1) + " Customer Seats" : ""} · {m.active ? "ACTIVE" : m.status} · ถึง {new Date(m.expires_at).toLocaleDateString("th-TH")}</span>
                                   </div>
                                 ))
                               : <><b>ยังไม่มีสมาชิก</b><br/><span className="muted">เลือกแพ็กเกจด้านบนแล้วกดเปิดสมาชิก</span></>}
