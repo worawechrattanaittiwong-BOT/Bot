@@ -1,0 +1,132 @@
+name: Apply Isolated Runtime Guards V106
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-isolated-runtime-guards-v106.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch runtime queue isolation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def sub1(text, pattern, replacement, label, flags=0):
+              out, count = re.subn(pattern, replacement, text, count=1, flags=flags)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected 1 replacement, got {count}")
+              return out
+
+          path = Path("mt5/FastBasketBot.mq5")
+          ea = path.read_text(encoding="utf-8")
+
+          ea = sub1(ea, r'#property\s+version\s+"1\.0\.5"', '#property version   "1.0.6"', 'property version')
+          ea = sub1(ea, r'#define\s+SCENOVA_EA_VERSION\s+"1\.0\.5"', '#define SCENOVA_EA_VERSION "1.0.6"', 'runtime version')
+          ea = sub1(ea, r'#define\s+SCENOVA_PRODUCT_VERSION\s+"1\.0\.5"', '#define SCENOVA_PRODUCT_VERSION "1.0.6"', 'product version')
+
+          ea = sub1(
+              ea,
+              r'bool BasketFillEnabled\(\)\s*\{\s*return g_maxPositions > 1;\s*\}',
+              '''bool BasketFillEnabled()\n{\n   return g_maxPositions > 1;\n}\n\nbool LegacyBasketEngineEnabled()\n{\n   // ASSISTED/MANUAL use the legacy basket queue. ZERO and RACE never do.\n   return EffectiveExecutionMode() == "AUTO" && !AutoV20Enabled();\n}\n\nvoid ResetLegacyBurstStateForIsolatedMode()\n{\n   g_burstActive = false;\n   g_burstNeedsRearm = false;\n   g_burstDirection = 0;\n   g_burstTargetPositions = 0;\n   g_burstRequestsSent = 0;\n   g_burstStartedAt = 0;\n   g_burstTargetMoney = 0.0;\n   g_burstLossMoney = 0.0;\n}''',
+              'legacy engine helper',
+              re.S,
+          )
+
+          ea = sub1(
+              ea,
+              r'bool BrainV16RearmExistingBasket\(\)\s*\{\s*if\(!BasketFillEnabled\(\) \|\| g_burstActive\)',
+              'bool BrainV16RearmExistingBasket()\n{\n   if(!LegacyBasketEngineEnabled() || !BasketFillEnabled() || g_burstActive)',
+              'V16 rearm guard',
+              re.S,
+          )
+
+          ea = sub1(
+              ea,
+              r'void ProcessBurstQueue\(\)\s*\{\s*if\(!BasketFillEnabled\(\) \|\| !g_burstActive\)',
+              'void ProcessBurstQueue()\n{\n   if(!LegacyBasketEngineEnabled() || !BasketFillEnabled() || !g_burstActive)',
+              'burst queue guard',
+              re.S,
+          )
+
+          old = '!AutoV20Enabled() && BasketFillEnabled()'
+          count = ea.count(old)
+          if count < 1:
+              raise SystemExit('no legacy basket-fill call sites found')
+          ea = ea.replace(old, 'LegacyBasketEngineEnabled() && BasketFillEnabled()')
+
+          ea = sub1(
+              ea,
+              r'if\(MQLInfoInteger\(MQL_TESTER\)\)\s*\{\s*if\(!AutoV20Enabled\(\)\)\s*\{\s*BrainV16RearmExistingBasket\(\);\s*ProcessBurstQueue\(\);\s*\}\s*RefreshChartStatus\(\);\s*return;\s*\}',
+              '''if(MQLInfoInteger(MQL_TESTER))\n   {\n      if(LegacyBasketEngineEnabled())\n      {\n         BrainV16RearmExistingBasket();\n         ProcessBurstQueue();\n      }\n      RefreshChartStatus();\n      return;\n   }''',
+              'tester timer legacy guard',
+              re.S,
+          )
+
+          ea = sub1(
+              ea,
+              r'FlushPendingBasketJournal\(\);\s*if\(!AutoV20Enabled\(\)\)\s*\{\s*BrainV16RearmExistingBasket\(\);\s*ProcessBurstQueue\(\);\s*\}',
+              '''FlushPendingBasketJournal();\n   if(LegacyBasketEngineEnabled())\n   {\n      BrainV16RearmExistingBasket();\n      ProcessBurstQueue();\n   }''',
+              'live timer legacy guard',
+              re.S,
+          )
+
+          mode_tail = '''      else if(g_controlMode == "ZERO_GRID" || g_controlMode == "RACE" || g_controlMode == "LEGACY") g_controlMode = "AUTO";\n   }\n\n   string mode = JsonString(json, "entryMode", "");'''
+          mode_tail_new = '''      else if(g_controlMode == "ZERO_GRID" || g_controlMode == "RACE" || g_controlMode == "LEGACY") g_controlMode = "AUTO";\n   }\n\n   // A legacy AUTO burst must never survive a transition into an isolated mode.\n   // Existing non-ZERO/non-RACE positions may still drain under generic safety\n   // management, but no legacy queue can add orders after the mode switch.\n   if(EffectiveExecutionMode() == "ZERO_GRID" || EffectiveExecutionMode() == "RACE")\n      ResetLegacyBurstStateForIsolatedMode();\n\n   string mode = JsonString(json, "entryMode", "");'''
+          if mode_tail not in ea:
+              raise SystemExit('mode normalization tail not found')
+          ea = ea.replace(mode_tail, mode_tail_new, 1)
+
+          path.write_text(ea, encoding="utf-8")
+          print(f"replaced legacy basket-fill call sites: {count}")
+          PY
+
+      - name: Validate hard runtime isolation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          ea = Path("mt5/FastBasketBot.mq5").read_text(encoding="utf-8")
+          required = [
+            '#property version   "1.0.6"',
+            'bool LegacyBasketEngineEnabled()',
+            'return EffectiveExecutionMode() == "AUTO" && !AutoV20Enabled();',
+            'void ResetLegacyBurstStateForIsolatedMode()',
+            'if(!LegacyBasketEngineEnabled() || !BasketFillEnabled() || g_burstActive)',
+            'if(!LegacyBasketEngineEnabled() || !BasketFillEnabled() || !g_burstActive)',
+            'if(LegacyBasketEngineEnabled())',
+            'ResetLegacyBurstStateForIsolatedMode();',
+          ]
+          for marker in required:
+              if marker not in ea:
+                  raise SystemExit('missing runtime isolation sentinel: ' + marker)
+          if '!AutoV20Enabled() && BasketFillEnabled()' in ea:
+              raise SystemExit('legacy basket fill still reachable by isolated modes')
+          PY
+
+      - name: Commit runtime isolation guards
+        shell: bash
+        run: |
+          git config user.name "SCENOVA Patch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5
+          if git diff --cached --quiet; then
+            echo "Runtime isolation already applied."
+            exit 0
+          fi
+          git commit -m "fix: block legacy queues in ZERO and RACE modes"
+          git push origin HEAD:main
