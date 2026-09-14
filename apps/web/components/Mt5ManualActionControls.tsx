@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../lib/api";
 
@@ -14,6 +14,8 @@ type ManualAction = "UPDATE_EA_RESTART" | "CONNECT_MT5";
 type BusyAction = ManualAction | "START_RECOVERY" | "";
 
 const UI_PENDING_TIMEOUT_MS = 3 * 60_000;
+const DASHBOARD_REFRESH_MS = 10_000;
+const MOUNT_RECHECK_MS = 2_000;
 
 export function Mt5ManualActionControls() {
   const [data, setData] = useState<DashboardSnapshot | null>(null);
@@ -22,20 +24,28 @@ export function Mt5ManualActionControls() {
   const [busyAction, setBusyAction] = useState<BusyAction>("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const refreshInFlightRef = useRef(false);
 
-  async function refresh() {
+  async function refresh(light = false) {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
     try {
-      const result = await api("/bot/dashboard");
-      setData(result);
+      const result = await api("/bot/dashboard" + (light ? "?light=1" : ""));
+      setData(previous => light && previous ? { ...previous, ...result } : result);
     } catch {
       // The dashboard owns its own auth/error UI. Do not create a second one.
+    } finally {
+      refreshInFlightRef.current = false;
     }
   }
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.location.pathname.includes("/dashboard")) return;
-    refresh();
-    const id = window.setInterval(refresh, 2000);
+    void refresh(false);
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void refresh(true);
+    }, DASHBOARD_REFRESH_MS);
     return () => window.clearInterval(id);
   }, []);
 
@@ -96,7 +106,9 @@ export function Mt5ManualActionControls() {
     };
 
     locate();
-    const id = window.setInterval(locate, 500);
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") locate();
+    }, MOUNT_RECHECK_MS);
     return () => window.clearInterval(id);
   }, [recoveryNeeded, needsEaUpdate]);
 

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./premium-dashboard.css";
 import "./dashboard-live.css";
-import { CustomerNavigationLabels } from "../components/CustomerNavigationLabels";
 import { Mt5ManualActionControls } from "../components/Mt5ManualActionControls";
 import { DashboardLiveEnhancements } from "../components/DashboardLiveEnhancements";
 
@@ -17,7 +16,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         {children}
         <DashboardLiveEnhancements />
-        <CustomerNavigationLabels />
         <Mt5ManualActionControls />
       </body>
     </html>
