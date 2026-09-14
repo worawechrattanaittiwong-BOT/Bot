@@ -48,7 +48,7 @@ jobs:
         run: |
           git config user.name "scenova-build"
           git config user.email "actions@users.noreply.github.com"
-          git add -A
+          git add apps/api/src/maintenance.service.ts apps/web/app/admin/page.tsx tests/admin-maintenance-stale-override-contract.ps1
           git diff --cached --quiet && exit 0
           git commit -m "Fix Admin maintenance stale position blockers"
           git push origin HEAD:fix/admin-maintenance-stale-override
