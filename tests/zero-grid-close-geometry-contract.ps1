@@ -15,7 +15,7 @@ function Require-NotContains([string]$text,[string]$needle,[string]$label) {
 
 $ea = [System.IO.File]::ReadAllText((Resolve-Path $EaPath))
 
-Require-Contains $ea '#property version   "1.0.16"' 'EA version bump'
+Require-Contains $ea '#property version   "1.0.17"' 'EA version bump'
 Require-Contains $ea 'ZERO GRID V2.1 geometry' 'geometry marker'
 Require-Contains $ea 'double ZeroGridExistingPendingAnchorPrice(bool buySide)' 'persistent pending anchor'
 Require-Contains $ea 'double ZeroGridPendingAnchorPrice(bool buySide)' 'live-price inward anchor'
@@ -26,7 +26,7 @@ Require-Contains $ea 'double bestVolume=1.0e100;' 'smallest-lot close priority'
 Require-Contains $ea 'volume<bestVolume-lotTolerance' 'ascending lot close ordering'
 Require-Contains $ea 'int profitRank=floating>=0.0 ? 0 : 1;' 'same-lot profitable-ticket tie-break'
 Require-Contains $ea 'MathAbs(openPrice-livePrice)' 'same-lot nearest-price tie-break'
-Require-Contains $ea 'ZERO_PAIR_ATOMIC_V116' 'flat ladder requires exact BUY/SELL pairs'
+Require-Contains $ea 'ZERO_SIMPLE_STABLE_V117' 'simple stable ZERO pending engine'
 Require-Contains $ea 'g_executionStatus="ZERO_GRID_REARMING";' 'same-pass flat-cycle rearm'
 Require-Contains $ea 'return StartZeroGridCycle();' 'immediate ZERO cycle restart path'
 Require-Contains $ea 'ClosePositionByTicket(ticket);' 'selected ticket close'
