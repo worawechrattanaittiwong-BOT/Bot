@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.12"
-#define SCENOVA_EA_VERSION "1.0.12"
-#define SCENOVA_PRODUCT_VERSION "1.0.12"
+#property version   "1.0.13"
+#define SCENOVA_EA_VERSION "1.0.13"
+#define SCENOVA_PRODUCT_VERSION "1.0.13"
 #define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -2301,33 +2301,38 @@ bool ZeroGridEnsureLadder()
    bool needBuy=nettingDirection>=0;
    bool needSell=nettingDirection<=0;
 
-   // Stage the trigger pair FIRST. On a flat cycle both sides are treated as one
-   // atomic pair around a fresh center: center 4000 -> BUY 4001 / SELL 3999.
-   // If one side is rejected while the quote is moving, remove the orphan side,
-   // recenter, and retry the pair immediately instead of leaving a broken ladder.
-   if(needBuy && needSell && ZeroGridPositionCount()==0 &&
-      !ZeroGridLevelExists(true,1) && !ZeroGridLevelExists(false,1))
+   // Stage the trigger pair FIRST. On a flat cycle preserve any L1 that
+   // the broker already accepted and retry ONLY the missing side. This avoids
+   // place -> cancel -> recenter -> place churn when one side is accepted a few
+   // hundred milliseconds before the other side.
+   if(needBuy && needSell && ZeroGridPositionCount()==0)
    {
-      bool pairReady=false;
+      bool pairReady=
+         ZeroGridLevelExists(true,1) && ZeroGridLevelExists(false,1);
+
       for(int pairAttempt=0;pairAttempt<3 && !pairReady;pairAttempt++)
       {
-         if(ZeroGridPendingCount()==0)
-            ZeroGridRecenterFlatCycle();
+         bool buyReady=ZeroGridLevelExists(true,1);
+         bool sellReady=ZeroGridLevelExists(false,1);
 
-         attemptsThisPass++;
-         bool buyOk=ZeroGridSendPending(true,1);
-         attemptsThisPass++;
-         bool sellOk=ZeroGridSendPending(false,1);
-         pairReady=buyOk && sellOk &&
-            ZeroGridLevelExists(true,1) && ZeroGridLevelExists(false,1);
-
-         if(!pairReady)
+         if(!buyReady)
          {
-            ZeroGridCancelPending();
-            ZeroGridRecenterFlatCycle();
-            g_executionStatus="ZERO_GRID_RETRY_FIRST_PAIR";
+            attemptsThisPass++;
+            ZeroGridSendPending(true,1);
          }
+         if(!sellReady)
+         {
+            attemptsThisPass++;
+            ZeroGridSendPending(false,1);
+         }
+
+         buyReady=ZeroGridLevelExists(true,1);
+         sellReady=ZeroGridLevelExists(false,1);
+         pairReady=buyReady && sellReady;
+         if(!pairReady)
+            g_executionStatus="ZERO_GRID_RETRY_MISSING_L1";
       }
+
       if(!pairReady)
       {
          g_executionStatus="ZERO_GRID_WAIT_FIRST_PAIR";
@@ -2425,15 +2430,19 @@ void ZeroGridCancelPending()
    }
 }
 
-// Profit exit geometry: on Hedging accounts close one owned position at a time,
-// starting with a profitable ticket nearest live price, then progressively outward.
-// Netting naturally has one symbol position, so the same routine is compatible.
+// Profit exit geometry: close the smallest owned lot first so a ZERO basket
+// exits in a predictable 0.02 -> 0.04 -> 0.06 style sequence. For equal lots,
+// prefer a profitable ticket, then the ticket nearest live price. Netting has
+// one aggregate symbol position, so the same selector remains compatible.
 ulong ZeroGridNearestCloseTicket()
 {
    MqlTick tick;
    bool hasTick=SymbolInfoTick(_Symbol,tick);
-   double tolerance=MathMax(ZeroGridTickSize()*0.5,_Point*0.5);
+   double priceTolerance=MathMax(ZeroGridTickSize()*0.5,_Point*0.5);
+   double volumeStep=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
+   double lotTolerance=MathMax(0.0000001,volumeStep*0.25);
    ulong bestTicket=0;
+   double bestVolume=1.0e100;
    int bestProfitRank=99;
    double bestDistance=1.0e100;
 
@@ -2444,6 +2453,7 @@ ulong ZeroGridNearestCloseTicket()
       if(!ZeroGridOwnsSelectedPosition()) continue;
 
       long type=PositionGetInteger(POSITION_TYPE);
+      double volume=PositionGetDouble(POSITION_VOLUME);
       double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
       double floating=PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
       int profitRank=floating>=0.0 ? 0 : 1;
@@ -2452,17 +2462,22 @@ ulong ZeroGridNearestCloseTicket()
          : openPrice;
       double distance=MathAbs(openPrice-livePrice);
 
+      bool sameLot=bestTicket!=0 && MathAbs(volume-bestVolume)<=lotTolerance;
       bool better=false;
-      if(bestTicket==0 || profitRank<bestProfitRank)
+      if(bestTicket==0 || volume<bestVolume-lotTolerance)
          better=true;
-      else if(profitRank==bestProfitRank && distance<bestDistance-tolerance)
+      else if(sameLot && profitRank<bestProfitRank)
          better=true;
-      else if(profitRank==bestProfitRank && MathAbs(distance-bestDistance)<=tolerance && ticket<bestTicket)
+      else if(sameLot && profitRank==bestProfitRank && distance<bestDistance-priceTolerance)
+         better=true;
+      else if(sameLot && profitRank==bestProfitRank &&
+              MathAbs(distance-bestDistance)<=priceTolerance && ticket<bestTicket)
          better=true;
 
       if(better)
       {
          bestTicket=ticket;
+         bestVolume=volume;
          bestProfitRank=profitRank;
          bestDistance=distance;
       }
