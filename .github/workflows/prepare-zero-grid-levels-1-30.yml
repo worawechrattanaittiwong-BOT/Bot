@@ -26,6 +26,9 @@ jobs:
       - name: Apply isolated ZERO GRID levels patch
         run: python3 .github/scripts/prepare_zero_grid_levels_1_30.py
 
+      - name: Update existing ZERO GRID simulation expectation
+        run: python3 .github/scripts/update_zero_grid_simulation_for_configurable_levels.py
+
       - name: Run focused configurable-level contract
         run: node tests/zero-grid-configurable-levels-contract.mjs
 
@@ -50,6 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -f .github/scripts/prepare_zero_grid_levels_1_30.py
+          rm -f .github/scripts/update_zero_grid_simulation_for_configurable_levels.py
           rm -f .github/workflows/prepare-zero-grid-levels-1-30.yml
           git config user.name "SCENOVA Patch Bot"
           git config user.email "actions@users.noreply.github.com"
