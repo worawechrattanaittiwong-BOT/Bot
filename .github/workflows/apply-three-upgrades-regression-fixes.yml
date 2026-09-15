@@ -1,0 +1,70 @@
+name: Apply Three Upgrade Regression Fixes
+
+on:
+  push:
+    branches: [fix/three-upgrades-regression]
+    paths:
+      - "scripts/apply-three-upgrades-regression-fixes.py"
+      - ".github/workflows/apply-three-upgrades-regression-fixes.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-three-upgrades-regression-fixes
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Normalize patcher deploy newline
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/apply-three-upgrades-regression-fixes.py')
+          s = p.read_text(encoding='utf-8')
+          bad = r'"database/015_partner_program.sql\\n", "database/015_partner_program.sql   database/016_upgrade_regression_safety.sql\\n"'
+          good = r'"database/015_partner_program.sql\n", "database/015_partner_program.sql   database/016_upgrade_regression_safety.sql\n"'
+          if bad not in s:
+              raise SystemExit('expected deploy newline pattern not found')
+          p.write_text(s.replace(bad, good, 1), encoding='utf-8')
+          PY
+
+      - name: Apply scoped fixes
+        run: python scripts/apply-three-upgrades-regression-fixes.py
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Diff safety check
+        run: git diff --check
+
+      - name: Publish validated patch to branch
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          rm -f scripts/apply-three-upgrades-regression-fixes.py .github/workflows/apply-three-upgrades-regression-fixes.yml
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No patch changes to publish."
+            exit 0
+          fi
+          git commit -m "fix: harden three upgraded systems"
+          git push origin HEAD:fix/three-upgrades-regression
