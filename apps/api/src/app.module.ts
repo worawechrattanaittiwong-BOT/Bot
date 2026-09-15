@@ -19,6 +19,8 @@ import { DbService } from "./db.service";
 import { MaintenanceService } from "./maintenance.service";
 import { CloudService, CloudAdminController, CloudCustomerController, CloudPaymentController } from "./cloud.controller";
 import { CloudTestController } from "./cloud-test.controller";
+import { RuntimeSafetyController } from "./runtime-safety.controller";
+import { RuntimeSafetyService } from "./runtime-safety.service";
 import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
 
 @Module({
@@ -28,7 +30,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, HealthController, WorkerController],
-  providers: [CloudService, DbService, MaintenanceService, PartnerService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
+  controllers: [RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, HealthController, WorkerController],
+  providers: [RuntimeSafetyService, CloudService, DbService, MaintenanceService, PartnerService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
 })
 export class AppModule {}
