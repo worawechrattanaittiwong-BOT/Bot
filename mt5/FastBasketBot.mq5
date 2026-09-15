@@ -3756,8 +3756,11 @@ void OnTradeTransaction(
 
    string symbol = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
    long magic = HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
+   long ownerMagic = IsScenovaMagic(magic)
+      ? magic
+      : ScenovaOwnerMagicForDeal(trans.deal);
 
-   if(symbol == _Symbol && magic == RescueMagic())
+   if(symbol == _Symbol && ownerMagic == RescueMagic())
    {
       double rescueDealNet =
          HistoryDealGetDouble(trans.deal,DEAL_PROFIT) +
@@ -3782,7 +3785,7 @@ void OnTradeTransaction(
       return;
    }
 
-   if(symbol == _Symbol && magic == InpMagic)
+   if(symbol == _Symbol && ownerMagic == InpMagic)
    {
       RecordBasketDeal(trans.deal);
       RecalculateDailyClosedProfit();
@@ -13579,8 +13582,8 @@ void RecordBasketDeal(ulong deal)
       return;
 
    if(HistoryDealGetString(deal, DEAL_SYMBOL) != _Symbol ||
-      HistoryDealGetInteger(deal, DEAL_MAGIC) != InpMagic)
-      return;
+   ScenovaOwnerMagicForDeal(deal) != InpMagic)
+   return;
 
    g_basketCycleRealizedProfit += HistoryDealGetDouble(deal, DEAL_PROFIT);
    g_basketCycleRealizedProfit += HistoryDealGetDouble(deal, DEAL_SWAP);
@@ -13839,15 +13842,36 @@ void RecalculateDailyClosedProfit()
    if(!HistorySelect(from, to))
       return;
 
-   int deals = (int)HistoryDealsTotal();
-   for(int i = 0; i < deals; i++)
+   // Keep the ticket list before ownership lookups. HistorySelectByPosition()
+   // changes the active history selection, so iterating the original index
+   // directly would otherwise skip or duplicate deals.
+   int totalDeals = HistoryDealsTotal();
+   ulong dealTickets[];
+   ArrayResize(dealTickets, totalDeals);
+   for(int i = 0; i < totalDeals; i++)
+      dealTickets[i] = HistoryDealGetTicket(i);
+
+   for(int i = 0; i < totalDeals; i++)
    {
-      ulong deal = HistoryDealGetTicket(i);
-      if(deal == 0)
+      ulong deal = dealTickets[i];
+      if(deal == 0 || !HistoryDealSelect(deal))
+         continue;
+      if(HistoryDealGetString(deal, DEAL_SYMBOL) != _Symbol)
          continue;
 
-      if(HistoryDealGetString(deal, DEAL_SYMBOL) != _Symbol ||
-         !IsScenovaMagic(HistoryDealGetInteger(deal, DEAL_MAGIC)))
+      long magic = HistoryDealGetInteger(deal, DEAL_MAGIC);
+      bool scenovaDeal = IsScenovaMagic(magic);
+      if(!scenovaDeal)
+      {
+         long entry = HistoryDealGetInteger(deal, DEAL_ENTRY);
+         if(entry == DEAL_ENTRY_OUT ||
+            entry == DEAL_ENTRY_OUT_BY ||
+            entry == DEAL_ENTRY_INOUT)
+            scenovaDeal = IsScenovaMagic(
+               ScenovaOwnerMagicForDeal(deal)
+            );
+      }
+      if(!scenovaDeal)
          continue;
 
       g_dailyClosedProfit += HistoryDealGetDouble(deal, DEAL_PROFIT);
@@ -14162,6 +14186,58 @@ long RescueMagic()
 bool IsScenovaMagic(long magic)
 {
    return magic == InpMagic || magic == RescueMagic();
+}
+
+// A manual/mobile close can create an EXIT deal with magic=0 even though
+// the position was opened by SCENOVA. Resolve ownership from the original
+// position history, but only use this fallback for closing deals.
+long ScenovaOwnerMagicForPosition(ulong positionId)
+{
+   if(positionId == 0 || !HistorySelectByPosition(positionId))
+      return 0;
+
+   int totalDeals = HistoryDealsTotal();
+   for(int i = 0; i < totalDeals; i++)
+   {
+      ulong ticket = HistoryDealGetTicket(i);
+      if(ticket == 0)
+         continue;
+
+      long entry = HistoryDealGetInteger(ticket, DEAL_ENTRY);
+      if(entry != DEAL_ENTRY_IN && entry != DEAL_ENTRY_INOUT)
+         continue;
+      if(HistoryDealGetString(ticket, DEAL_SYMBOL) != _Symbol)
+         continue;
+
+      long magic = HistoryDealGetInteger(ticket, DEAL_MAGIC);
+      if(IsScenovaMagic(magic))
+         return magic;
+   }
+   return 0;
+}
+
+long ScenovaOwnerMagicForDeal(ulong dealTicket)
+{
+   if(dealTicket == 0 || !HistoryDealSelect(dealTicket))
+      return 0;
+   if(HistoryDealGetString(dealTicket, DEAL_SYMBOL) != _Symbol)
+      return 0;
+
+   long magic = HistoryDealGetInteger(dealTicket, DEAL_MAGIC);
+   if(IsScenovaMagic(magic))
+      return magic;
+
+   long entry = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+   if(entry != DEAL_ENTRY_OUT &&
+      entry != DEAL_ENTRY_OUT_BY &&
+      entry != DEAL_ENTRY_INOUT)
+      return 0;
+
+   ulong positionId = (ulong)HistoryDealGetInteger(
+      dealTicket,
+      DEAL_POSITION_ID
+   );
+   return ScenovaOwnerMagicForPosition(positionId);
 }
 
 string RescueStateName()
