@@ -20,6 +20,7 @@ jobs:
           ref: fix/zero-fast-rearm-close-order
           fetch-depth: 0
 
+      # Candidate generation is isolated to ZERO source + its regression contract.
       - name: Apply ZERO-only patch
         run: python3 .github/scripts/apply-zero-fast-rearm-close-order.py
 
