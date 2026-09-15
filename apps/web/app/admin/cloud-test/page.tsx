@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "../../lib/api";
 import s from "./cloud-test.module.css";
 
@@ -32,6 +32,7 @@ const labels:Record<string,string> = {
 export default function CloudTestPage() {
   const [data,setData]=useState<State|null>(null);
   const [runnerId,setRunnerId]=useState("");
+  const runnerRef=useRef("");
   const [accountNumber,setAccountNumber]=useState("");
   const [broker,setBroker]=useState("Demo MT5");
   const [brokerServer,setBrokerServer]=useState("");
@@ -43,10 +44,14 @@ export default function CloudTestPage() {
 
   async function load(preferredRunner?:string) {
     try {
-      const selected=preferredRunner || runnerId;
+      const selected=preferredRunner ?? runnerRef.current;
       const result=await adminApi("/admin/cloud-test"+(selected?"?runnerId="+encodeURIComponent(selected):""));
       setData(result);
-      if (!runnerId && result.selectedRunnerId) setRunnerId(result.selectedRunnerId);
+      setRunnerId(prev=>{
+        const next=prev || result.selectedRunnerId || "";
+        runnerRef.current=next;
+        return next;
+      });
       setError("");
     } catch(e:any) { setError(e.message); }
   }
@@ -54,7 +59,7 @@ export default function CloudTestPage() {
   useEffect(()=>{
     if (!localStorage.getItem("bot_token")) { window.location.href="/login"; return; }
     load();
-    const timer=window.setInterval(()=>{ if(!document.hidden) load(); },5000);
+    const timer=window.setInterval(()=>{ if(!document.hidden) load(runnerRef.current); },5000);
     return()=>window.clearInterval(timer);
   },[]);
 
@@ -71,6 +76,7 @@ export default function CloudTestPage() {
       });
       setTradingPassword("");
       setMessage("ส่ง Demo Provisioning แล้ว · สถานะเริ่มต้น STOPPED และยังไม่ได้สั่งเทรด");
+      runnerRef.current=result.runnerId;
       await load(result.runnerId);
     } catch(e:any) { setError(e.message); }
     finally { setBusy(false); }
@@ -88,9 +94,9 @@ export default function CloudTestPage() {
 
     <div className={s.grid}>
       <section className={s.card}>
-        <div className={s.cardHead}><div><span className={s.kicker}>WORKER HEALTH</span><h2>VPS / Worker</h2></div><button onClick={()=>load()} disabled={busy}>รีเฟรช</button></div>
+        <div className={s.cardHead}><div><span className={s.kicker}>WORKER HEALTH</span><h2>VPS / Worker</h2></div><button onClick={()=>load(runnerRef.current)} disabled={busy}>รีเฟรช</button></div>
         <label className={s.field}>เลือก Runner
-          <select value={runnerId} onChange={e=>{setRunnerId(e.target.value);load(e.target.value)}}>
+          <select value={runnerId} onChange={e=>{const value=e.target.value;setRunnerId(value);runnerRef.current=value;load(value)}}>
             <option value="">เลือก VPS</option>
             {data?.nodes.map(n=><option key={n.runner_id} value={n.runner_id}>{n.runner_id} · {n.region} · {n.health}</option>)}
           </select>
