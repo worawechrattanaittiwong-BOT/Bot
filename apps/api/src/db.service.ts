@@ -18,11 +18,11 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
 
       INSERT INTO plans(code,name_th,mode,max_mt5_accounts,active,allow_resale)
       VALUES
-        ('LOCAL_3SLOT','Local MT5 3 Slots','LOCAL',3,true,false),
-        ('LOCAL_5SLOT','Local MT5 5 Slots','LOCAL',5,true,false),
-        ('PARTNER_LOCAL_10','Partner Local 10 Slots','LOCAL',10,true,true),
-        ('PARTNER_LOCAL_25','Partner Local 25 Slots','LOCAL',25,true,true),
-        ('PARTNER_LOCAL_50','Partner Local 50 Slots','LOCAL',50,true,true)
+        ('LOCAL_3SLOT','Local MT5 3 Slots','LOCAL',3,false,false),
+        ('LOCAL_5SLOT','Local MT5 5 Slots','LOCAL',5,false,false),
+        ('PARTNER_LOCAL_10','Partner Local 10 Slots','LOCAL',10,false,true),
+        ('PARTNER_LOCAL_25','Partner Local 25 Slots','LOCAL',25,false,true),
+        ('PARTNER_LOCAL_50','Partner Local 50 Slots','LOCAL',50,false,true)
       ON CONFLICT (code) DO UPDATE SET
         name_th=EXCLUDED.name_th,
         mode=EXCLUDED.mode,
@@ -50,7 +50,7 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       -- Partner Program v2 keeps Partner capacity separate from each customer membership.
       UPDATE plans
       SET active=false
-      WHERE code IN ('PARTNER_LOCAL_10','PARTNER_LOCAL_25','PARTNER_LOCAL_50');
+      WHERE code IN ('LOCAL_3SLOT','LOCAL_5SLOT','PARTNER_LOCAL_10','PARTNER_LOCAL_25','PARTNER_LOCAL_50');
 
       CREATE TABLE IF NOT EXISTS partner_accounts (
         user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -89,6 +89,13 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         ON partner_customers(customer_user_id,status,expires_at);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_partner_customer_one_active
         ON partner_customers(customer_user_id) WHERE status='ACTIVE';
+
+      ALTER TABLE partner_customers
+        ADD COLUMN IF NOT EXISTS direct_subscription_id uuid REFERENCES subscriptions(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS ended_at timestamptz,
+        ADD COLUMN IF NOT EXISTS end_reason varchar(64);
+      CREATE INDEX IF NOT EXISTS idx_partner_customers_direct_subscription
+        ON partner_customers(direct_subscription_id) WHERE direct_subscription_id IS NOT NULL;
 
       CREATE TABLE IF NOT EXISTS install_enrollments (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

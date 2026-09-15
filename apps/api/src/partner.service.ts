@@ -14,9 +14,39 @@ export class PartnerService {
 
   private async refreshLifecycle(q: any = this.db) {
     await q.query(
-      `UPDATE partner_customers
-       SET status='EXPIRED',updated_at=now()
-       WHERE status='ACTIVE' AND expires_at<=now()`
+      `UPDATE partner_customers pc
+       SET status=CASE
+             WHEN pc.direct_subscription_id IS NOT NULL
+              AND EXISTS (
+                SELECT 1 FROM subscriptions ds
+                WHERE ds.id=pc.direct_subscription_id
+                  AND ds.status='ACTIVE'
+                  AND ds.starts_at<=now()
+                  AND ds.expires_at>now()
+              ) THEN 'DIRECT'
+             ELSE 'EXPIRED'
+           END,
+           ended_at=COALESCE(pc.ended_at,pc.expires_at),
+           end_reason=CASE
+             WHEN pc.direct_subscription_id IS NOT NULL THEN 'CUSTOMER_DIRECT'
+             ELSE 'TERM_EXPIRED'
+           END,
+           updated_at=now()
+       WHERE pc.status='ACTIVE' AND pc.expires_at<=now()`
+    );
+    await q.query(
+      `UPDATE license_slots ls
+       SET subscription_id=pc.direct_subscription_id,status='ACTIVE',updated_at=now()
+       FROM partner_customers pc
+       JOIN subscriptions ds ON ds.id=pc.direct_subscription_id
+       WHERE pc.customer_user_id=ls.owner_user_id
+         AND ls.assigned_user_id=pc.customer_user_id
+         AND ls.mode='LOCAL'
+         AND ls.status<>'DELETED'
+         AND pc.status='DIRECT'
+         AND ds.status='ACTIVE'
+         AND ds.starts_at<=now()
+         AND ds.expires_at>now()`
     );
     await q.query(
       `UPDATE partner_accounts
@@ -59,8 +89,8 @@ export class PartnerService {
     const account = await this.dashboardSummary(userId);
     if (!account) throw new ConflictException("บัญชีนี้ยังไม่ได้รับสิทธิ์ Partner");
     const customers = await this.db.query(
-      `SELECT pc.id,pc.customer_user_id,pc.subscription_id,pc.status,
-              pc.starts_at,pc.expires_at,pc.created_at,pc.updated_at,
+      `SELECT pc.id,pc.customer_user_id,pc.subscription_id,pc.direct_subscription_id,pc.status,
+              pc.starts_at,pc.expires_at,pc.ended_at,pc.end_reason,pc.created_at,pc.updated_at,
               u.user_code,u.email,
               s.status AS subscription_status,
               p.code AS plan_code
@@ -374,6 +404,9 @@ export class PartnerService {
       if (!current || current.status === "DIRECT" || current.status === "REVOKED") {
         throw new ConflictException("ลูกค้ารายนี้ไม่ได้อยู่ภายใต้ Partner นี้แล้ว");
       }
+      if (current.direct_subscription_id) {
+        throw new ConflictException("ลูกค้ารายนี้ต่อสมาชิกกับ SCENOVA โดยตรงแล้ว ระบบจะรักษาสิทธิ์เดิมถึงวันหมดอายุและคืน Seat อัตโนมัติ");
+      }
 
       if (current.status === "ACTIVE" && new Date(current.expires_at) > new Date()) {
         const updated = (await tx.query(
@@ -420,15 +453,15 @@ export class PartnerService {
   async detachCustomerToDirect(customerUserId: string, directSubscriptionId: string, actor: string) {
     const rows = await this.db.query(
       `UPDATE partner_customers
-       SET status='DIRECT',updated_at=now()
-       WHERE customer_user_id=$1 AND status='ACTIVE'
-       RETURNING id,partner_user_id,expires_at`,
-      [customerUserId]
+       SET direct_subscription_id=$2,updated_at=now()
+       WHERE customer_user_id=$1 AND status='ACTIVE' AND expires_at>now()
+       RETURNING id,partner_user_id,subscription_id,expires_at`,
+      [customerUserId, directSubscriptionId]
     );
     for (const row of rows.rows) {
       await this.db.query(
-        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'PARTNER_CUSTOMER_TO_DIRECT','partner_customer',$2,$3::jsonb)",
-        [actor, row.id, JSON.stringify({ customerUserId, partnerUserId: row.partner_user_id, directSubscriptionId, previousExpiresAt: row.expires_at })]
+        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'PARTNER_CUSTOMER_DIRECT_SCHEDULED','partner_customer',$2,$3::jsonb)",
+        [actor, row.id, JSON.stringify({ customerUserId, partnerUserId: row.partner_user_id, directSubscriptionId, partnerSubscriptionId: row.subscription_id, partnerFundedUntil: row.expires_at })]
       );
     }
     return rows.rowCount || 0;

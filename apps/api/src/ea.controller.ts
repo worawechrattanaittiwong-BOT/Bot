@@ -1214,7 +1214,7 @@ export class EaController {
     }
 
     await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE id=$1 AND bot_instance_id=$2",
+      "UPDATE bot_commands SET status='ACKED',acked_at=now(),payload=COALESCE(payload,'{}'::jsonb) || jsonb_build_object('ackSource','EA') WHERE id=$1 AND bot_instance_id=$2",
       [body.commandId, body.instanceId]
     );
     return { ok: true };

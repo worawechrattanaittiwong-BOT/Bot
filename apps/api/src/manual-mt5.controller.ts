@@ -17,19 +17,25 @@ import {
   latestInstallerVersion
 } from "./release-version";
 import { JwtGuard } from "./security";
+import { MaintenanceService } from "./maintenance.service";
+import { PartnerService } from "./partner.service";
 
 type ManualMt5Action = "UPDATE_EA_RESTART" | "CONNECT_MT5";
 
 type AccessState = {
   allowed: boolean;
-  source: "OWNER" | "SUBSCRIPTION" | "TRIAL" | "TRIAL_READY" | "NONE";
+  source: "OWNER" | "PARTNER" | "SUBSCRIPTION" | "TRIAL" | "TRIAL_READY" | "NONE";
   trialId?: string;
 };
 
 @Controller("bot/mt5")
 @UseGuards(JwtGuard)
 export class ManualMt5Controller {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly maintenance: MaintenanceService,
+    private readonly partner: PartnerService
+  ) {}
 
   private async accessState(
     userId: string,
@@ -46,6 +52,11 @@ export class ManualMt5Controller {
       (user.role === "OWNER" || user.role === "ADMIN")
     ) {
       return { allowed: true, source: "OWNER" };
+    }
+
+    const partnerAccess = await this.partner.ownTradingEntitlement(userId, slotId, mode);
+    if (partnerAccess) {
+      return { allowed: true, source: "PARTNER" };
     }
 
     const subscription = await this.db.one(
@@ -90,6 +101,7 @@ export class ManualMt5Controller {
   }
 
   private async activateStart(instanceId: string, access: AccessState) {
+    await this.maintenance.assertStartAllowed();
     if (access.source === "TRIAL_READY" && access.trialId) {
       await this.db.query(
         "UPDATE trial_grants SET status='ACTIVE',started_at=now(),expires_at=now() + (duration_minutes || ' minutes')::interval WHERE id=$1 AND status='APPROVED'",
@@ -111,7 +123,7 @@ export class ManualMt5Controller {
       [instanceId, new Date().toISOString()]
     );
     await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
       [instanceId]
     );
     await this.db.query(
@@ -147,14 +159,15 @@ export class ManualMt5Controller {
 
   @Post("recover-start")
   async recoverAndStart(@Req() req: any, @Query("slotId") slotId = "") {
-    if (!slotId) throw new BadRequestException("ไม่พบ Slot ที่เลือก");
+    await this.maintenance.assertStartAllowed();
+    if (!slotId) throw new BadRequestException("ไม่พบบัญชี MT5 ที่เลือก");
     const instance = await this.localInstance(req.user.sub, slotId);
-    if (!instance) throw new ConflictException("ไม่พบการติดตั้ง SCENOVA ของ Slot นี้");
+    if (!instance) throw new ConflictException("ไม่พบการติดตั้ง SCENOVA ของบัญชี MT5 นี้");
     if (String(instance.mode || "").toUpperCase() !== "LOCAL") {
       throw new ConflictException("Auto Recovery ใช้กับ Local MT5 เท่านั้น");
     }
     if (!instance.mt5_account_id) {
-      throw new ConflictException("ยังไม่พบบัญชี MT5 ของ Slot นี้");
+      throw new ConflictException("ยังไม่พบบัญชี MT5 ที่เชื่อมต่อ");
     }
 
     const access = await this.accessState(
@@ -254,7 +267,7 @@ export class ManualMt5Controller {
       [instance.id, requestedAt, message, action, actionId]
     );
     await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
       [instance.id]
     );
 
@@ -275,14 +288,15 @@ export class ManualMt5Controller {
     @Query("slotId") slotId = "",
     @Body() body: { action?: string }
   ) {
+    await this.maintenance.assertStartAllowed();
     const action = String(body?.action || "").trim().toUpperCase() as ManualMt5Action;
     if (action !== "UPDATE_EA_RESTART" && action !== "CONNECT_MT5") {
       throw new BadRequestException("คำสั่ง MT5 ไม่ถูกต้อง");
     }
-    if (!slotId) throw new BadRequestException("ไม่พบ Slot ที่เลือก");
+    if (!slotId) throw new BadRequestException("ไม่พบบัญชี MT5 ที่เลือก");
 
     const instance = await this.localInstance(req.user.sub, slotId);
-    if (!instance) throw new ConflictException("ไม่พบการติดตั้ง SCENOVA ของ Slot นี้");
+    if (!instance) throw new ConflictException("ไม่พบการติดตั้ง SCENOVA ของบัญชี MT5 นี้");
     if (String(instance.mode || "").toUpperCase() !== "LOCAL") {
       throw new ConflictException("ปุ่มนี้ใช้กับ Local MT5 เท่านั้น");
     }
@@ -323,7 +337,7 @@ export class ManualMt5Controller {
     // indefinitely with no matching control command. Deliver one SAFE_STOP so
     // the EA acknowledges a restart-safe state; no position is force-closed.
     await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
       [instance.id]
     );
     await this.db.query(

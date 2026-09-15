@@ -291,18 +291,18 @@ export class AdminController {
     }
 
     const days = Math.max(1, Number(body.durationDays || 30));
-    const startsAt = body.startsAt ? new Date(body.startsAt) : new Date();
+    const requestedStartsAt = body.startsAt ? new Date(body.startsAt) : new Date();
     const partnerSource = plan.mode === "LOCAL" && !plan.allow_resale
       ? await this.partner.activeCustomerSource(body.userId)
       : null;
-    const carryForwardAt = partnerSource?.expires_at
-      ? Math.max(startsAt.getTime(), new Date(partnerSource.expires_at).getTime())
-      : startsAt.getTime();
+    const startsAt = partnerSource?.expires_at
+      ? new Date(Math.max(requestedStartsAt.getTime(), new Date(partnerSource.expires_at).getTime()))
+      : requestedStartsAt;
     const expiresAt = body.expiresAt
       ? new Date(body.expiresAt)
-      : new Date(carryForwardAt + days * 86400000);
+      : new Date(startsAt.getTime() + days * 86400000);
     if (expiresAt <= startsAt) throw new ConflictException("expiresAt must be after startsAt");
-    if (startsAt.getTime() > Date.now() + 60_000) {
+    if (!partnerSource && startsAt.getTime() > Date.now() + 60_000) {
       throw new ConflictException("ตอนนี้การเปิดสมาชิกจาก Owner Console ต้องเริ่มทันที กรุณาเว้นวันเริ่มว่างไว้");
     }
 
@@ -313,27 +313,31 @@ export class AdminController {
        WHERE sub.plan_id=p.id
          AND sub.user_id=$1
          AND p.mode=$2
-         AND sub.status='ACTIVE'`,
-      [body.userId, plan.mode]
+         AND sub.status='ACTIVE'
+         AND ($3::uuid IS NULL OR sub.id<>$3)`,
+      [body.userId, plan.mode, partnerSource?.subscription_id || null]
     );
 
     const row = await this.db.one(
       "INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
       [body.userId, plan.id, startsAt, expiresAt, body.activatedBy || "ADMIN", body.note || null]
     );
-    await this.syncSlotsForSubscription(body.userId, row.id, plan);
     if (partnerSource) {
       await this.partner.detachCustomerToDirect(body.userId, row.id, body.activatedBy || "ADMIN");
+    } else {
+      await this.syncSlotsForSubscription(body.userId, row.id, plan);
     }
     await this.audit("ADMIN", "ACTIVATE_SUBSCRIPTION", "subscription", row.id, {
       plan: body.planCode,
+      startsAt,
       expiresAt,
+      partnerCarryForwardUntil: partnerSource?.expires_at || null,
       slots: Number(plan.max_mt5_accounts || 1),
       reseller: Boolean(plan.allow_resale)
     });
     const slots = await this.db.query(
-      "SELECT id,slot_number,mode,status,assigned_user_id,subscription_id FROM license_slots WHERE owner_user_id=$1 AND mode=$2 AND subscription_id=$3 ORDER BY slot_number",
-      [body.userId, plan.mode, row.id]
+      "SELECT id,slot_number,mode,status,assigned_user_id,subscription_id FROM license_slots WHERE owner_user_id=$1 AND mode=$2 AND status<>'DELETED' ORDER BY slot_number",
+      [body.userId, plan.mode]
     );
     return {
       subscription: row,
@@ -419,8 +423,27 @@ export class AdminController {
       [body.subscriptionId, Math.max(1, Number(body.days))]
     );
     if (!row) throw new ConflictException("subscription not found");
+
+    const relation = await this.db.one(
+      `UPDATE partner_customers
+       SET expires_at=$2,updated_at=now()
+       WHERE subscription_id=$1 AND status='ACTIVE'
+       RETURNING id,direct_subscription_id`,
+      [row.id, row.expires_at]
+    );
+    if (relation?.direct_subscription_id) {
+      await this.db.query(
+        `UPDATE subscriptions
+         SET expires_at=$2 + (expires_at-starts_at),starts_at=$2
+         WHERE id=$1 AND status='ACTIVE'`,
+        [relation.direct_subscription_id, row.expires_at]
+      );
+    }
+
     await this.audit("ADMIN", "EXTEND_SUBSCRIPTION", "subscription", row.id, {
-      days: body.days
+      days: body.days,
+      partnerRelationUpdated: Boolean(relation?.id),
+      queuedDirectShifted: Boolean(relation?.direct_subscription_id)
     });
     return row;
   }
