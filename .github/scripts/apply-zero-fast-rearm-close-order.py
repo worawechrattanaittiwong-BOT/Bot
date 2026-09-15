@@ -173,6 +173,11 @@ EA.write_text(text, encoding="utf-8", newline="\n")
 # Extend the contract that CI already runs. This stays ZERO-only and makes the
 # no-churn + small-lot-first behavior regression-protected.
 test = TEST.read_text(encoding="utf-8")
+test = test.replace(
+    "Require-Contains $ea '#property version   \"1.0.3\"' 'EA version bump'",
+    "Require-Contains $ea '#property version   \"1.0.13\"' 'EA version bump'",
+    1,
+)
 old = """Require-Contains $ea 'ulong ZeroGridNearestCloseTicket()' 'nearest-price close selector'\nRequire-Contains $ea 'int profitRank=floating>=0.0 ? 0 : 1;' 'profitable tickets close first'\nRequire-Contains $ea 'MathAbs(openPrice-mid)' 'distance-from-live-price close ordering'\nRequire-Contains $ea 'ClosePositionByTicket(ticket);' 'selected ticket close'\n"""
 new = """Require-Contains $ea 'ulong ZeroGridNearestCloseTicket()' 'ZERO close selector'\nRequire-Contains $ea 'double bestVolume=1.0e100;' 'smallest-lot close priority'\nRequire-Contains $ea 'volume<bestVolume-lotTolerance' 'ascending lot close ordering'\nRequire-Contains $ea 'int profitRank=floating>=0.0 ? 0 : 1;' 'same-lot profitable-ticket tie-break'\nRequire-Contains $ea 'MathAbs(openPrice-livePrice)' 'same-lot nearest-price tie-break'\nRequire-Contains $ea 'ZERO_GRID_RETRY_MISSING_L1' 'retry only missing first-side trigger'\nRequire-NotContains $ea 'ZERO_GRID_RETRY_FIRST_PAIR' 'destructive first-pair cancel/rebuild loop'\nRequire-Contains $ea 'ClosePositionByTicket(ticket);' 'selected ticket close'\n"""
 if new not in test:
