@@ -104,6 +104,18 @@ internal static class SmartAgentRunner
 
         UpdateVerifiedIdentity(config, heartbeat);
 
+        // Migration stop has higher priority than every normal/manual Agent action.
+        // If the Server asks this Local runtime to stop, do not stage/reload or
+        // run CONNECT_MT5 later in the same cycle because that could reopen the
+        // old runtime after ownership has moved to Cloud.
+        if (await RuntimeMigrationAgent.ProcessAsync(config, token, logPath))
+        {
+            await AppendLogAsync(
+                logPath,
+                "Runtime migration stop handled; skipping normal MT5 actions. profile=" + key);
+            return;
+        }
+
         var presetPath = Path.Combine(
             config.TerminalDataPath,
             "MQL5",

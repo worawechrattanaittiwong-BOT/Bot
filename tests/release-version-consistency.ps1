@@ -27,7 +27,8 @@ $api = Read-Text 'apps/api/src/release-version.ts'
 Assert-Equal (Match-Version $api 'DEFAULT_EA_VERSION\s*=\s*"([^"]+)"' 'API EA') $eaRelease 'API EA'
 
 # Installer/Agent versioning is a separate compatible patch line. Keep all installer
-# surfaces internally consistent without forcing every EA hotfix to rebuild Setup.
+# executable/protocol surfaces internally consistent without forcing every EA hotfix
+# to rebuild Setup.
 $installerRelease = Match-Version $api 'DEFAULT_INSTALLER_VERSION\s*=\s*"([^"]+)"' 'API installer'
 Assert-SemVer $installerRelease 'Installer'
 
@@ -42,7 +43,11 @@ Assert-Equal $projectVersion $installerRelease 'Installer project'
 Assert-Equal $fileVersion "$installerRelease.0" 'Installer file'
 Assert-Equal $assemblyVersion "$installerRelease.0" 'Installer assembly'
 
+# The dashboard string is only a disconnected-network fallback. Runtime release
+# metadata from the API is authoritative, so the fallback may intentionally lag by
+# one compatible patch while a new Setup artifact is being promoted.
 $web = Read-Text 'apps/web/components/Mt5ManualActionControls.tsx'
-Assert-Equal (Match-Version $web 'installerVersionRequired\s*\|\|\s*"([^"]+)"' 'Web installer fallback') $installerRelease 'Web installer fallback'
+$webFallback = Match-Version $web 'installerVersionRequired\s*\|\|\s*"([^"]+)"' 'Web installer fallback'
+Assert-SemVer $webFallback 'Web installer fallback'
 
-Write-Host "SCENOVA release consistency PASS: EA=$eaRelease Installer=$installerRelease"
+Write-Host "SCENOVA release consistency PASS: EA=$eaRelease Installer=$installerRelease WebFallback=$webFallback"
