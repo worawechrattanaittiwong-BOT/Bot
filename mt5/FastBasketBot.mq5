@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.15"
-#define SCENOVA_EA_VERSION "1.0.15"
-#define SCENOVA_PRODUCT_VERSION "1.0.15"
+#property version   "1.0.16"
+#define SCENOVA_EA_VERSION "1.0.16"
+#define SCENOVA_PRODUCT_VERSION "1.0.16"
 #define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1745,6 +1745,7 @@ void ResetZeroGridCycleState()
    g_zeroGridStartEquity=0.0;
    g_zeroGridCycleStartedAt=0;
    g_zeroGridClosing=false;
+   g_zeroGridLastExitBurstMs=0;
    g_zeroGridCycleStepPrice=0.0;
    g_zeroGridCycleLevelsPerSide=0;
    g_zeroGridCycleBaseLot=0.0;
@@ -2246,6 +2247,7 @@ bool ZeroGridSendPending(bool buySide,int level)
          result.retcode==TRADE_RETCODE_INVALID_PRICE ||
          result.retcode==TRADE_RETCODE_INVALID_STOPS ||
          result.retcode==TRADE_RETCODE_PRICE_CHANGED ||
+         result.retcode==TRADE_RETCODE_PRICE_OFF ||
          result.retcode==TRADE_RETCODE_REQUOTE;
       if(!retryable)
          break;
@@ -2255,115 +2257,146 @@ bool ZeroGridSendPending(bool buySide,int level)
    return false;
 }
 
+double ZeroGridPendingLevelVolume(bool buySide,int level)
+{
+   string wanted=ZeroGridComment(buySide,level);
+   for(int i=OrdersTotal()-1;i>=0;i--)
+   {
+      ulong ticket=OrderGetTicket(i);
+      if(ticket==0 || !OrderSelect(ticket)) continue;
+      if(OrderGetString(ORDER_SYMBOL)!=_Symbol || OrderGetInteger(ORDER_MAGIC)!=InpMagic) continue;
+      if(OrderGetString(ORDER_COMMENT)!=wanted) continue;
+      return OrderGetDouble(ORDER_VOLUME_INITIAL);
+   }
+   return 0.0;
+}
+
+bool ZeroGridCancelPendingLevel(bool buySide,int level)
+{
+   string wanted=ZeroGridComment(buySide,level);
+   bool ok=true;
+   for(int i=OrdersTotal()-1;i>=0;i--)
+   {
+      ulong ticket=OrderGetTicket(i);
+      if(ticket==0 || !OrderSelect(ticket)) continue;
+      if(OrderGetString(ORDER_SYMBOL)!=_Symbol || OrderGetInteger(ORDER_MAGIC)!=InpMagic) continue;
+      if(OrderGetString(ORDER_COMMENT)!=wanted) continue;
+
+      MqlTradeRequest request={};
+      MqlTradeResult result={};
+      request.action=TRADE_ACTION_REMOVE;
+      request.order=ticket;
+      request.magic=InpMagic;
+      request.symbol=_Symbol;
+      ResetLastError();
+      bool sent=OrderSend(request,result);
+      if(sent && TradeResultAccepted(result))
+         RegisterOrderRequest();
+      else
+         ok=false;
+   }
+   return ok;
+}
+
+bool ZeroGridFlatLevelPairValid(int level)
+{
+   double expected=NormalizeTradeVolume(ZeroGridEffectiveBaseLot()*level);
+   double buyVolume=ZeroGridPendingLevelVolume(true,level);
+   double sellVolume=ZeroGridPendingLevelVolume(false,level);
+   double volumeStep=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
+   double tolerance=MathMax(0.0000001,volumeStep*0.25);
+   if(expected<=0.0 || buyVolume<=0.0 || sellVolume<=0.0) return false;
+   return MathAbs(buyVolume-sellVolume)<=tolerance &&
+          MathAbs(buyVolume-expected)<=tolerance &&
+          MathAbs(sellVolume-expected)<=tolerance;
+}
+
 bool ZeroGridEnsureLadder()
 {
    if(g_zeroGridCenter<=0.0)
       return false;
 
-   bool complete=true;
+   int positions=ZeroGridPositionCount();
    int nettingDirection=ZeroGridAccountIsNetting() ? ZeroGridPositionDirection() : 0;
-   int attemptsThisPass=0;
    int levels=ZeroGridEffectiveLevelsPerSide();
-   int maxAttemptsPerPass=MathMin(60,levels*2+4);
-
-   // Repair ladders created by the previous bug: if L2+ is active on a side
-   // while that side has no active L1 and the cycle is still flat, discard the
-   // malformed pending set. The next tick starts a clean pair from live price.
-   if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()>0)
-   {
-      bool buyL1Active=false;
-      bool sellL1Active=false;
-      bool buyHigherActive=false;
-      bool sellHigherActive=false;
-      string buyL1=ZeroGridComment(true,1);
-      string sellL1=ZeroGridComment(false,1);
-
-      for(int i=OrdersTotal()-1;i>=0;i--)
-      {
-         ulong ticket=OrderGetTicket(i);
-         if(ticket==0 || !OrderSelect(ticket)) continue;
-         if(OrderGetString(ORDER_SYMBOL)!=_Symbol || OrderGetInteger(ORDER_MAGIC)!=InpMagic) continue;
-         string comment=OrderGetString(ORDER_COMMENT);
-         if(comment==buyL1) buyL1Active=true;
-         else if(comment==sellL1) sellL1Active=true;
-         else if(StringFind(comment,"SaaSZeroGridB")==0) buyHigherActive=true;
-         else if(StringFind(comment,"SaaSZeroGridS")==0) sellHigherActive=true;
-      }
-
-      if((buyHigherActive && !buyL1Active) || (sellHigherActive && !sellL1Active))
-      {
-         ZeroGridCancelPending();
-         ResetZeroGridCycleState();
-         g_executionStatus="ZERO_GRID_REBUILD_MISSING_L1";
-         return false;
-      }
-   }
-
    bool needBuy=nettingDirection>=0;
    bool needSell=nettingDirection<=0;
 
-   // Stage the trigger pair FIRST. On a flat cycle preserve any L1 that
-   // the broker already accepted and retry ONLY the missing side. This avoids
-   // place -> cancel -> recenter -> place churn when one side is accepted a few
-   // hundred milliseconds before the other side.
-   if(needBuy && needSell && ZeroGridPositionCount()==0)
+   // ZERO_PAIR_ATOMIC_V116: while the cycle is flat, BUY and SELL pending
+   // orders are allowed to exist only as an exact level pair. The expected
+   // volume for both sides is the ZERO base lot multiplied by the same level.
+   // If the broker accepts only one side, roll that side back immediately and
+   // retry the pair on the next ZERO maintenance pass. Never leave a lopsided
+   // BUY/SELL ladder such as 0.06 versus 0.03 while flat.
+   if(positions==0 && needBuy && needSell)
    {
-      bool pairReady=
-         ZeroGridLevelExists(true,1) && ZeroGridLevelExists(false,1);
-
-      for(int pairAttempt=0;pairAttempt<3 && !pairReady;pairAttempt++)
+      for(int level=1;level<=levels;level++)
       {
-         bool buyReady=ZeroGridLevelExists(true,1);
-         bool sellReady=ZeroGridLevelExists(false,1);
+         double buyVolume=ZeroGridPendingLevelVolume(true,level);
+         double sellVolume=ZeroGridPendingLevelVolume(false,level);
+         bool buyExists=buyVolume>0.0;
+         bool sellExists=sellVolume>0.0;
 
-         if(!buyReady)
+         if((buyExists || sellExists) && !ZeroGridFlatLevelPairValid(level))
          {
-            attemptsThisPass++;
-            ZeroGridSendPending(true,1);
-         }
-         if(!sellReady)
-         {
-            attemptsThisPass++;
-            ZeroGridSendPending(false,1);
+            if(buyExists) ZeroGridCancelPendingLevel(true,level);
+            if(sellExists) ZeroGridCancelPendingLevel(false,level);
+            g_executionStatus="ZERO_GRID_PAIR_REPAIR";
+            return false;
          }
 
-         buyReady=ZeroGridLevelExists(true,1);
-         sellReady=ZeroGridLevelExists(false,1);
-         pairReady=buyReady && sellReady;
-         if(!pairReady)
-            g_executionStatus="ZERO_GRID_RETRY_MISSING_L1";
+         if(!buyExists && !sellExists)
+         {
+            bool buySent=ZeroGridSendPending(true,level);
+            bool sellSent=buySent && ZeroGridSendPending(false,level);
+            if(!buySent || !sellSent || !ZeroGridFlatLevelPairValid(level))
+            {
+               if(ZeroGridPendingLevelVolume(true,level)>0.0)
+                  ZeroGridCancelPendingLevel(true,level);
+               if(ZeroGridPendingLevelVolume(false,level)>0.0)
+                  ZeroGridCancelPendingLevel(false,level);
+               g_executionStatus="ZERO_GRID_PAIR_ROLLBACK";
+               return false;
+            }
+         }
       }
 
-      if(!pairReady)
+      // Flat ZERO is READY only when the full configured ladder exists and
+      // every level is a valid BUY/SELL pair with equal configured volume.
+      if(ZeroGridPendingCount()!=levels*2)
       {
-         g_executionStatus="ZERO_GRID_WAIT_FIRST_PAIR";
+         g_executionStatus="ZERO_GRID_WAIT_FULL_LADDER";
          return false;
       }
-   }
-   else
-   {
-      if(needBuy && !ZeroGridLevelExists(true,1))
+      for(int level=1;level<=levels;level++)
       {
-         attemptsThisPass++;
-         if(!ZeroGridSendPending(true,1)) complete=false;
+         if(!ZeroGridFlatLevelPairValid(level))
+         {
+            g_executionStatus="ZERO_GRID_WAIT_FULL_LADDER";
+            return false;
+         }
       }
-      if(needSell && !ZeroGridLevelExists(false,1))
-      {
-         attemptsThisPass++;
-         if(!ZeroGridSendPending(false,1)) complete=false;
-      }
+      return true;
    }
 
-   bool firstPairReady=
-      (!needBuy || ZeroGridLevelExists(true,1)) &&
-      (!needSell || ZeroGridLevelExists(false,1));
-   if(!firstPairReady)
+   // Once a level has triggered into a Position, normal ZERO ladder ownership
+   // continues. At that point pending counts can differ naturally because one
+   // side has become a live Position; this is not a flat-ladder imbalance.
+   bool complete=true;
+   int attemptsThisPass=0;
+   int maxAttemptsPerPass=MathMin(60,levels*2+4);
+
+   if(needBuy && !ZeroGridLevelExists(true,1))
    {
-      g_executionStatus="ZERO_GRID_WAIT_FIRST_PAIR";
-      return false;
+      attemptsThisPass++;
+      if(!ZeroGridSendPending(true,1)) complete=false;
+   }
+   if(needSell && !ZeroGridLevelExists(false,1))
+   {
+      attemptsThisPass++;
+      if(!ZeroGridSendPending(false,1)) complete=false;
    }
 
-   // Once L1 is confirmed, fill the rest as fast as the broker/rate limit allows.
    for(int level=2;level<=levels;level++)
    {
       if(needBuy && !ZeroGridLevelExists(true,level))
@@ -2378,14 +2411,10 @@ bool ZeroGridEnsureLadder()
          if(!ZeroGridSendPending(false,level)) complete=false;
          if(attemptsThisPass>=maxAttemptsPerPass) break;
       }
-      if(g_ordersInWindow>=g_maxOrdersPerMinute)
-      {
-         complete=false;
-         break;
-      }
    }
    return complete;
 }
+
 
 void ZeroGridCancelPendingSide(bool buySide)
 {
@@ -2619,7 +2648,8 @@ bool StartZeroGridCycle()
       SaveZeroGridCycleState();
    }
 
-   ZeroGridEnsureLadder();
+   bool ladderReady=ZeroGridEnsureLadder();
+   if(!ladderReady) return true;
    if(ZeroGridAccountIsNetting())
       g_executionStatus=ZeroGridPendingCount()>0 ? "ZERO_GRID_V3_READY_NETTING" : "ZERO_GRID_V3_BUILDING";
    else
@@ -2742,7 +2772,8 @@ bool ManageZeroGrid()
    if(g_zeroGridCenter<=0.0)
       return StartZeroGridCycle();
 
-   ZeroGridEnsureLadder();
+   bool ladderReady=ZeroGridEnsureLadder();
+   if(!ladderReady) return true;
    if(positions>0)
       g_executionStatus=ZeroGridAccountIsNetting() ? "ZERO_GRID_V3_ACTIVE_NETTING" : "ZERO_GRID_V3_ACTIVE";
    else
@@ -3144,8 +3175,29 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   // Max Positions means the requested target in RACE mode. Until full, no
-   // profit score/quality/location logic is allowed to stop additional entries.
+   // RACE_PROFIT_FIRST_V116: profitable RACE tickets are harvested before
+   // the Max Positions fill gate. Profit exit is never delayed just because the
+   // basket is still building. Refill, if needed, happens on a later pass.
+   int harvested = RaceHarvestProfitablePositions();
+   if(harvested > 0)
+   {
+      g_raceProfitArmed = false;
+      g_racePeakProfit = 0.0;
+
+      if(BasketPositionCount() <= 0)
+      {
+         ResetRaceRuntime();
+         g_executionStatus = "RACE_PROFIT_HARVEST_FLAT";
+         return true;
+      }
+
+      g_raceState = "HARVESTED_PROFIT";
+      g_executionStatus = "RACE_PROFIT_HARVEST";
+      return true;
+   }
+
+   // Max Positions remains the requested RACE fill target, but it can no longer
+   // block an already-profitable ticket from being banked first.
    if(filling)
    {
       if(floatingProfit < 0.0)
@@ -3153,33 +3205,6 @@ bool ManageRaceBasket(double momentum)
       g_raceState = "FILLING";
       ProcessRaceFill(direction);
       return true;
-   }
-
-   // Stability: complete the requested RACE fill first. Harvesting starts
-   // only after Max Positions is reached, preventing open/close/refill churn
-   // while the Basket is still being built. Entry/exit signals are unchanged.
-   int harvested = RaceHarvestProfitablePositions();
-   if(harvested > 0)
-   {
-      g_raceProfitArmed = false;
-      g_racePeakProfit = 0.0;
-
-      int remainingPositions = BasketPositionCount();
-      if(remainingPositions <= 0)
-      {
-         ResetRaceRuntime();
-         g_executionStatus = "RACE_PROFIT_HARVEST_FLAT";
-         return true;
-      }
-
-      int remainingUnits = RaceFilledUnits();
-      if(remainingUnits < g_maxPositions)
-      {
-         g_raceState = "HARVEST_REFILL";
-         g_executionStatus = "RACE_HARVEST_REFILL";
-         ProcessRaceFill(direction);
-         return true;
-      }
    }
 
    double armMoney = RaceProfitArmMoney(filledUnits);
@@ -3324,7 +3349,7 @@ void OnTick()
 
    // ZERO GRID owns its tagged positions and pending orders until flat. This
    // branch executes before AUTO/RACE management so the engines never mix.
-   if(ZeroGridPositionCount()>0 || ZeroGridPendingCount()>0)
+   if(g_zeroGridClosing || ZeroGridPositionCount()>0 || ZeroGridPendingCount()>0)
    {
       ManageZeroGrid();
       return;
@@ -3818,6 +3843,22 @@ void OnTimer()
       SendHeartbeat();
    }
    FlushPendingBasketJournal();
+
+   // ZERO_GRID_TIMER_MAINTENANCE_V116: ZERO is isolated from AUTO/RACE and may
+   // finalize an async close or finish/retry its exact paired ladder from the
+   // 200ms timer instead of waiting for another market tick.
+   bool zeroTimerOwnsRuntime =
+      g_zeroGridClosing ||
+      ZeroGridPositionCount()>0 ||
+      ZeroGridPendingCount()>0 ||
+      (ZeroGridModeEnabled() && BasketPositionCount()<=0 && RescuePositionCount()<=0);
+   if(g_settingsSynchronized && zeroTimerOwnsRuntime)
+   {
+      if(g_zeroGridClosing ||
+         (ZeroGridModeEnabled() && g_state==STATE_RUNNING && g_access && TradePermissionStatus()=="OK"))
+         ManageZeroGrid();
+   }
+
    if(LegacyBasketEngineEnabled())
    {
       BrainV16RearmExistingBasket();

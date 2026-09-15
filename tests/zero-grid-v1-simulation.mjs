@@ -68,7 +68,8 @@ assert.match(api, /\["AUTO",\s*"RACE",\s*"ZERO_GRID",\s*"ASSISTED",\s*"MANUAL"\]
 assert.match(web, /Array\.from\(\{length:30\},\(_,i\)=>i\+1\)/, "ZERO UI must expose 1..30 levels per side");
 assert.match(web, /เลือกได้ 1–30 (?:BUY STOP และ 1–30 SELL STOP|Pending ต่อฝั่ง)/, "ZERO UI must explain the 1..30 per-side range");
 assert.match(ea, /int maxPlacementAttempts=\(level==1 \? 3 : 2\)/, "L1 must retry immediately");
-assert.match(ea, /ZERO_GRID_WAIT_FIRST_PAIR/, "deeper ladder must wait for both required L1 orders");
-assert.match(ea, /ZERO_GRID_REBUILD_MISSING_L1/, "legacy malformed ladders must rebuild");
-assert.match(ea, /for\(int level=2;level<=levels;level\+\+\)/, "deeper staging must begin at level 2 after L1 pair");
+assert.match(ea, /ZERO_PAIR_ATOMIC_V116/, "flat ZERO ladder must be atomic BUY\/SELL pairs");
+assert.match(ea, /ZERO_GRID_PAIR_ROLLBACK/, "one-sided accepted pair must roll back");
+assert.match(ea, /ZeroGridPendingCount\(\)!=levels\*2/, "flat ZERO must require the full configured ladder");
+assert.match(ea, /for\(int level=1;level<=levels;level\+\+\)/, "flat ZERO must validate every configured level pair");
 console.log("ZERO GRID ~100-point first-offset, fast paired staging and real-net regression passed");
