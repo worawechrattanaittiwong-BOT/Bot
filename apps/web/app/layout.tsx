@@ -3,6 +3,7 @@ import "./globals.css";
 import "./premium-dashboard.css";
 import "./dashboard-live.css";
 import { CustomerNavigationLabels } from "../components/CustomerNavigationLabels";
+import { Mt5ManualActionControls } from "../components/Mt5ManualActionControls";
 
 export const metadata: Metadata = {
   title: "SCENOVA — MT5 BOT EA",
@@ -14,6 +15,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="th">
       <body>
         <CustomerNavigationLabels />
+        <Mt5ManualActionControls />
         {children}
       </body>
     </html>
