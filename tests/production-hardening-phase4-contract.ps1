@@ -9,6 +9,7 @@ $service=Read-Text 'apps/api/src/production-hardening.service.ts'
 $workerApi=Read-Text 'apps/api/src/worker.controller.ts'
 $worker=Read-Text 'apps/web/public/downloads/SCENOVA-CloudWorker.ps1'
 $cloud=Read-Text 'apps/api/src/cloud.controller.ts'
+$security=Read-Text 'apps/api/src/security.ts'
 $app=Read-Text 'apps/api/src/app.module.ts'
 $page=Read-Text 'apps/web/app/admin/cloud-hardening/page.tsx'
 
@@ -34,6 +35,10 @@ Require $workerApi '@Post\("recovery-check"\)' 'worker asks server before recove
 Require $workerApi '@Post\("recovery-result"\)' 'worker reports recovery result'
 Require $workerApi 'cloud_provisioning_paused' 'claim-next obeys global provisioning pause'
 Require $workerApi 'node\.quarantined \|\| node\.capacity_blocked' 'claim-next obeys automatic guard'
+
+Require $security 'Cloud Worker v1\.2\.0\+ required for provisioning and recovery' 'old Worker fails closed for provisioning/recovery'
+Require $security '"/assigned".*"/claim-next".*"/recovery-check".*"/recovery-result"' 'hardening protocol gates assigned claim and recovery routes'
+Require $security 'versionAtLeast\(node\?\.telemetry\?\.version, "1\.2\.0"\)' 'hardening protocol requires Worker 1.2.0+'
 
 Require $worker "version='1\.2\.0'" 'worker protocol version 1.2.0'
 Require $worker 'diskFreeGb' 'disk free telemetry'
