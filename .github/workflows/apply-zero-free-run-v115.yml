@@ -1,0 +1,72 @@
+name: Apply ZERO Free Run v1.0.15
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-zero-free-run-v115.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-zero-free-run-v115
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply ZERO-only free-run patch
+        run: python3 .github/scripts/apply_zero_free_run_v115.py
+
+      - name: Verify patch touches only approved files
+        shell: bash
+        run: |
+          set -euo pipefail
+          allowed='^(mt5/FastBasketBot\.mq5|apps/api/src/release-version\.ts|\.github/workflows/build-mt5-ea\.yml|tests/zero-grid-close-geometry-contract\.ps1|tests/zero-grid-free-run-contract\.ps1)$'
+          changed="$(git diff --name-only)"
+          printf '%s\n' "$changed"
+          if [ -z "$changed" ]; then
+            echo "No source changes needed"
+            exit 0
+          fi
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            if ! printf '%s\n' "$file" | grep -Eq "$allowed"; then
+              echo "Unexpected file changed: $file" >&2
+              exit 1
+            fi
+          done <<< "$changed"
+          git diff --check
+
+      - name: Run ZERO free-run isolation contract
+        shell: pwsh
+        run: ./tests/zero-grid-free-run-contract.ps1
+
+      - name: Run existing ZERO close/geometry contract
+        shell: pwsh
+        run: ./tests/zero-grid-close-geometry-contract.ps1
+
+      - name: Run ZERO GRID simulation regression
+        run: node tests/zero-grid-v1-simulation.mjs
+
+      - name: Commit ZERO-only runtime fix to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- mt5/FastBasketBot.mq5 apps/api/src/release-version.ts .github/workflows/build-mt5-ea.yml tests/zero-grid-close-geometry-contract.ps1 tests/zero-grid-free-run-contract.ps1; then
+            echo "No source changes needed"
+            exit 0
+          fi
+          git config user.name "SCENOVA Patch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 apps/api/src/release-version.ts .github/workflows/build-mt5-ea.yml tests/zero-grid-close-geometry-contract.ps1 tests/zero-grid-free-run-contract.ps1
+          git commit -m "fix(mt5): free-run ZERO rearm v1.0.15"
+          git push origin HEAD:main
