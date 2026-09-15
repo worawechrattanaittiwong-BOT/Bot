@@ -27,17 +27,26 @@ jobs:
         with:
           node-version: 20
 
-      - name: Normalize patcher deploy newline
+      - name: Normalize patcher compatibility
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('scripts/apply-three-upgrades-regression-fixes.py')
           s = p.read_text(encoding='utf-8')
+
           bad = r'"database/015_partner_program.sql\\n", "database/015_partner_program.sql   database/016_upgrade_regression_safety.sql\\n"'
           good = r'"database/015_partner_program.sql\n", "database/015_partner_program.sql   database/016_upgrade_regression_safety.sql\n"'
           if bad not in s:
               raise SystemExit('expected deploy newline pattern not found')
-          p.write_text(s.replace(bad, good, 1), encoding='utf-8')
+          s = s.replace(bad, good, 1)
+
+          old = '''text = replace_once(text, "command IN ('START','SAFE_STOP','CLOSE_ALL')", "command IN ('START','SAFE_STOP')", "start no fake close ack")'''
+          new = '''text = text.replace("command IN ('START','SAFE_STOP','CLOSE_ALL')", "command IN ('START','SAFE_STOP')", 1)'''
+          if old not in s:
+              raise SystemExit('expected close-all patch pattern not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding='utf-8')
           PY
 
       - name: Apply scoped fixes
