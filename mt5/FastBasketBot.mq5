@@ -157,9 +157,10 @@ input ENUM_ENTRY_MODE InpEntryMode            = ENTRY_AUTO_MOMENTUM;
 // execution mode selected from the web and never changes AUTO entry logic.
 input string          InpEngineMode           = "AUTO";
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
-#define ZERO_GRID_MAX_LEVELS 3
+#define ZERO_GRID_MAX_LEVELS 30
+#define ZERO_GRID_DEFAULT_LEVELS 3
 input double          InpZeroGridStepPrice     = 3.0;
-input int             InpZeroGridLevelsPerSide = ZERO_GRID_MAX_LEVELS;
+input int             InpZeroGridLevelsPerSide = ZERO_GRID_DEFAULT_LEVELS;
 input double          InpZeroGridBaseLot       = 0.01;
 input double          InpZeroGridMinNetProfitMoney = 0.50;
 input double          InpZeroGridCloseReserveMoney = 0.20;
@@ -261,7 +262,7 @@ string g_controlMode = "LEGACY";
 // Never allow AUTO/legacy entry before the Server has delivered a real mode.
 bool   g_settingsSynchronized = false;
 double g_zeroGridStepPrice = 3.0;
-int    g_zeroGridLevelsPerSide = ZERO_GRID_MAX_LEVELS;
+int    g_zeroGridLevelsPerSide = ZERO_GRID_DEFAULT_LEVELS;
 double g_zeroGridBaseLot = 0.01;
 double g_zeroGridMinNetProfitMoney = 0.50;
 double g_zeroGridCloseReserveMoney = 0.20;
@@ -1329,7 +1330,7 @@ int OnInit()
    if(g_engineMode != "RACE" && g_engineMode != "ZERO_GRID")
       g_engineMode = "AUTO";
    g_zeroGridStepPrice = MathAbs(InpZeroGridStepPrice-2.0)<0.000001 ? 2.0 : 3.0;
-   g_zeroGridLevelsPerSide = ZERO_GRID_MAX_LEVELS;
+   g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)InpZeroGridLevelsPerSide));
    g_zeroGridBaseLot = MathMax(0.01, InpZeroGridBaseLot);
    g_zeroGridMinNetProfitMoney = MathMax(0.01, InpZeroGridMinNetProfitMoney);
    g_zeroGridCloseReserveMoney = MathMax(0.0, InpZeroGridCloseReserveMoney);
@@ -1965,7 +1966,8 @@ double ZeroGridEffectiveStepPrice()
 
 int ZeroGridEffectiveLevelsPerSide()
 {
-   return ZERO_GRID_MAX_LEVELS;
+   int source=g_zeroGridCycleLevelsPerSide>0 ? g_zeroGridCycleLevelsPerSide : g_zeroGridLevelsPerSide;
+   return (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)source));
 }
 
 double ZeroGridEffectiveBaseLot()
@@ -2000,7 +2002,7 @@ bool ZeroGridRequestedConfigChanged()
    double tick=ZeroGridTickSize();
    double requestedStep=MathMax(g_zeroGridStepPrice,tick);
    requestedStep=NormalizeDouble(MathCeil((requestedStep/tick)-1e-10)*tick,_Digits);
-   int requestedLevels=ZERO_GRID_MAX_LEVELS;
+   int requestedLevels=(int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)g_zeroGridLevelsPerSide));
    double requestedLot=MathMax(0.0001,g_zeroGridBaseLot);
    return MathAbs(requestedStep-ZeroGridEffectiveStepPrice())>tick*0.5 ||
           requestedLevels!=ZeroGridEffectiveLevelsPerSide() ||
@@ -2520,7 +2522,7 @@ bool StartZeroGridCycle()
       g_zeroGridCycleStartedAt=TimeCurrent();
       g_zeroGridClosing=false;
       g_zeroGridCycleStepPrice=MathMax(ZeroGridTickSize(),ZeroGridAllowedStep(g_zeroGridStepPrice));
-      g_zeroGridCycleLevelsPerSide=ZERO_GRID_MAX_LEVELS;
+      g_zeroGridCycleLevelsPerSide=(int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)g_zeroGridLevelsPerSide));
       g_zeroGridCycleBaseLot=MathMax(0.01,g_zeroGridBaseLot);
       // ZERO owns its own fresh placement budget. Orders from a previously active
       // AUTO/RACE mode must never prevent BUY L1 / SELL L1 from being staged.
@@ -5288,7 +5290,7 @@ void ApplySettings(string json)
    g_lastIndicatorV6RefreshAt = 0;
 
    g_zeroGridStepPrice = ZeroGridAllowedStep(JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));
-   g_zeroGridLevelsPerSide = ZERO_GRID_MAX_LEVELS;
+   g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,MathRound(JsonNumber(json, "zeroGridLevelsPerSide", g_zeroGridLevelsPerSide))));
    g_zeroGridBaseLot = MathMax(0.01, JsonNumber(json, "zeroGridBaseLot", g_zeroGridBaseLot));
    g_zeroGridMinNetProfitMoney = MathMax(0.01, JsonNumber(json, "zeroGridMinNetProfitMoney", g_zeroGridMinNetProfitMoney));
    g_zeroGridCloseReserveMoney = MathMax(0.0, JsonNumber(json, "zeroGridCloseReserveMoney", g_zeroGridCloseReserveMoney));
