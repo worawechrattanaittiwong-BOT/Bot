@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.16"
-#define SCENOVA_EA_VERSION "1.0.16"
-#define SCENOVA_PRODUCT_VERSION "1.0.16"
+#property version   "1.0.17"
+#define SCENOVA_EA_VERSION "1.0.17"
+#define SCENOVA_PRODUCT_VERSION "1.0.17"
 #define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -2159,15 +2159,9 @@ bool ZeroGridSendPending(bool buySide,int level)
    int maxPlacementAttempts=(level==1 ? 3 : 2);
    for(int attempt=0;attempt<maxPlacementAttempts;attempt++)
    {
-      // ZERO is a dedicated pending-order engine. Do not let the generic AUTO/RACE
-      // order-rate setting starve its mandatory first pair. Still keep a bounded
-      // per-minute budget large enough to stage the configured ladder quickly.
-      int zeroRateLimit=(int)MathMax(2,MathMin(120,ZeroGridEffectiveLevelsPerSide()*2+8));
-      if(g_ordersInWindow>=zeroRateLimit)
-      {
-         g_executionStatus="ZERO_GRID_RATE_LIMIT";
-         return false;
-      }
+      // ZERO_SIMPLE_STABLE_V117: no strategy/rate gate decides whether a
+      // configured pending level may be placed. Broker validity checks below
+      // are execution requirements, not market/trend filters.
 
       MqlTick live;
       if(!SymbolInfoTick(_Symbol,live))
@@ -2317,104 +2311,69 @@ bool ZeroGridEnsureLadder()
       return false;
 
    int positions=ZeroGridPositionCount();
-   int nettingDirection=ZeroGridAccountIsNetting() ? ZeroGridPositionDirection() : 0;
    int levels=ZeroGridEffectiveLevelsPerSide();
-   bool needBuy=nettingDirection>=0;
-   bool needSell=nettingDirection<=0;
 
-   // ZERO_PAIR_ATOMIC_V116: while the cycle is flat, BUY and SELL pending
-   // orders are allowed to exist only as an exact level pair. The expected
-   // volume for both sides is the ZERO base lot multiplied by the same level.
-   // If the broker accepts only one side, roll that side back immediately and
-   // retry the pair on the next ZERO maintenance pass. Never leave a lopsided
-   // BUY/SELL ladder such as 0.06 versus 0.03 while flat.
-   if(positions==0 && needBuy && needSell)
+   // ZERO_SIMPLE_STABLE_V117
+   // Flat cycle = one simple job: make the configured BUY STOP and SELL STOP
+   // ladder complete. Keep every accepted correct pending order and retry only
+   // the missing/invalid side. Never tear down a good side just because the
+   // broker was slower on its mate.
+   if(positions==0)
    {
       for(int level=1;level<=levels;level++)
       {
+         double expected=NormalizeTradeVolume(ZeroGridEffectiveBaseLot()*level);
+         double volumeStep=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
+         double tolerance=MathMax(0.0000001,volumeStep*0.25);
          double buyVolume=ZeroGridPendingLevelVolume(true,level);
          double sellVolume=ZeroGridPendingLevelVolume(false,level);
-         bool buyExists=buyVolume>0.0;
-         bool sellExists=sellVolume>0.0;
 
-         if((buyExists || sellExists) && !ZeroGridFlatLevelPairValid(level))
+         if(buyVolume>0.0 && MathAbs(buyVolume-expected)>tolerance)
          {
-            if(buyExists) ZeroGridCancelPendingLevel(true,level);
-            if(sellExists) ZeroGridCancelPendingLevel(false,level);
-            g_executionStatus="ZERO_GRID_PAIR_REPAIR";
-            return false;
+            ZeroGridCancelPendingLevel(true,level);
+            buyVolume=0.0;
+         }
+         if(sellVolume>0.0 && MathAbs(sellVolume-expected)>tolerance)
+         {
+            ZeroGridCancelPendingLevel(false,level);
+            sellVolume=0.0;
          }
 
-         if(!buyExists && !sellExists)
-         {
-            bool buySent=ZeroGridSendPending(true,level);
-            bool sellSent=buySent && ZeroGridSendPending(false,level);
-            if(!buySent || !sellSent || !ZeroGridFlatLevelPairValid(level))
-            {
-               if(ZeroGridPendingLevelVolume(true,level)>0.0)
-                  ZeroGridCancelPendingLevel(true,level);
-               if(ZeroGridPendingLevelVolume(false,level)>0.0)
-                  ZeroGridCancelPendingLevel(false,level);
-               g_executionStatus="ZERO_GRID_PAIR_ROLLBACK";
-               return false;
-            }
-         }
+         if(buyVolume<=0.0)
+            ZeroGridSendPending(true,level);
+         if(sellVolume<=0.0)
+            ZeroGridSendPending(false,level);
       }
 
-      // Flat ZERO is READY only when the full configured ladder exists and
-      // every level is a valid BUY/SELL pair with equal configured volume.
       if(ZeroGridPendingCount()!=levels*2)
       {
-         g_executionStatus="ZERO_GRID_WAIT_FULL_LADDER";
+         g_executionStatus="ZERO_GRID_BUILDING";
          return false;
       }
       for(int level=1;level<=levels;level++)
       {
          if(!ZeroGridFlatLevelPairValid(level))
          {
-            g_executionStatus="ZERO_GRID_WAIT_FULL_LADDER";
+            g_executionStatus="ZERO_GRID_BUILDING";
             return false;
          }
       }
       return true;
    }
 
-   // Once a level has triggered into a Position, normal ZERO ladder ownership
-   // continues. At that point pending counts can differ naturally because one
-   // side has become a live Position; this is not a flat-ladder imbalance.
+   // Active cycle: a filled level is never recreated. ZeroGridLevelExists()
+   // already treats live positions and cycle history as consumed levels. Only
+   // a genuinely missing, still-unfilled pending level is repaired.
    bool complete=true;
-   int attemptsThisPass=0;
-   int maxAttemptsPerPass=MathMin(60,levels*2+4);
-
-   if(needBuy && !ZeroGridLevelExists(true,1))
+   for(int level=1;level<=levels;level++)
    {
-      attemptsThisPass++;
-      if(!ZeroGridSendPending(true,1)) complete=false;
-   }
-   if(needSell && !ZeroGridLevelExists(false,1))
-   {
-      attemptsThisPass++;
-      if(!ZeroGridSendPending(false,1)) complete=false;
-   }
-
-   for(int level=2;level<=levels;level++)
-   {
-      if(needBuy && !ZeroGridLevelExists(true,level))
-      {
-         attemptsThisPass++;
+      if(!ZeroGridLevelExists(true,level))
          if(!ZeroGridSendPending(true,level)) complete=false;
-         if(attemptsThisPass>=maxAttemptsPerPass) break;
-      }
-      if(needSell && !ZeroGridLevelExists(false,level))
-      {
-         attemptsThisPass++;
+      if(!ZeroGridLevelExists(false,level))
          if(!ZeroGridSendPending(false,level)) complete=false;
-         if(attemptsThisPass>=maxAttemptsPerPass) break;
-      }
    }
    return complete;
 }
-
 
 void ZeroGridCancelPendingSide(bool buySide)
 {
@@ -2598,18 +2557,27 @@ void ZeroGridClosePositions()
 
 bool StartZeroGridCycle()
 {
-   if(!ZeroGridModeEnabled()) return false;
+   if(!ZeroGridModeEnabled())
+      return false;
+
+   // ZERO has no trend, momentum, confidence, ATR, session, spread or heartbeat
+   // freshness entry filter. Only explicit RUN/access and real broker ability
+   // to trade are allowed to stop a new pending ladder.
+   if(g_state!=STATE_RUNNING || !g_access)
+   {
+      g_executionStatus="ZERO_GRID_STOPPED";
+      return true;
+   }
    if(!ZeroGridHedgingAllowed())
    {
       ZeroGridCancelPending();
       g_executionStatus="ZERO_GRID_HEDGING_REQUIRED";
       return true;
    }
-   // ZERO_GRID_FREE_RUN: heartbeat freshness must never delay a ZERO pending
-   // ladder. Explicit STOP/access revocation and broker permissions still apply.
-   if(g_state!=STATE_RUNNING || !g_access)
+   string permissionStatus=TradePermissionStatus();
+   if(permissionStatus!="OK")
    {
-      g_executionStatus="ZERO_GRID_CONTROL_NOT_FRESH";
+      g_executionStatus=permissionStatus;
       return true;
    }
    if(!ZeroGridStopOrdersSupported())
@@ -2627,33 +2595,34 @@ bool StartZeroGridCycle()
 
    if(g_zeroGridCenter<=0.0)
    {
+      // A new cycle always starts from one fresh center and locks only the ZERO
+      // settings that define the pending ladder. Nothing from AUTO/RACE is read.
+      if(ZeroGridPendingCount()>0)
+         ZeroGridCancelPending();
+
       MqlTick tick;
       if(!SymbolInfoTick(_Symbol,tick))
       {
          g_executionStatus="ZERO_GRID_WAIT_TICK";
          return true;
       }
+
       double mid=(tick.bid+tick.ask)*0.5;
       g_zeroGridCenter=ZeroGridNormalizeCenterPrice(mid);
       g_zeroGridStartEquity=AccountInfoDouble(ACCOUNT_EQUITY);
       g_zeroGridCycleStartedAt=TimeCurrent();
       g_zeroGridClosing=false;
+      g_zeroGridLastExitBurstMs=0;
       g_zeroGridCycleStepPrice=MathMax(ZeroGridTickSize(),ZeroGridAllowedStep(g_zeroGridStepPrice));
       g_zeroGridCycleLevelsPerSide=(int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)g_zeroGridLevelsPerSide));
       g_zeroGridCycleBaseLot=MathMax(0.01,g_zeroGridBaseLot);
-      // ZERO owns its own fresh placement budget. Orders from a previously active
-      // AUTO/RACE mode must never prevent BUY L1 / SELL L1 from being staged.
       g_orderWindowStart=TimeCurrent();
       g_ordersInWindow=0;
       SaveZeroGridCycleState();
    }
 
-   bool ladderReady=ZeroGridEnsureLadder();
-   if(!ladderReady) return true;
-   if(ZeroGridAccountIsNetting())
-      g_executionStatus=ZeroGridPendingCount()>0 ? "ZERO_GRID_V3_READY_NETTING" : "ZERO_GRID_V3_BUILDING";
-   else
-      g_executionStatus=ZeroGridPendingCount()>0 ? "ZERO_GRID_V3_READY" : "ZERO_GRID_V3_BUILDING";
+   bool ready=ZeroGridEnsureLadder();
+   g_executionStatus=ready ? "ZERO_GRID_READY" : "ZERO_GRID_BUILDING";
    return true;
 }
 
@@ -2661,33 +2630,33 @@ bool ManageZeroGrid()
 {
    LoadZeroGridCycleState();
    int positions=ZeroGridPositionCount();
+   int pending=ZeroGridPendingCount();
 
+   // Once profit close begins, finish it first. When the account is flat,
+   // immediately reset and build the next ZERO pending ladder in the same
+   // runtime path. The 200 ms timer also calls this path, so rearm does not
+   // depend on receiving another market tick.
    if(g_zeroGridClosing)
    {
       ZeroGridClosePositions();
       if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)
       {
-         bool canRearm=
-            ZeroGridModeEnabled() && ZeroGridHedgingAllowed() &&
-            g_state==STATE_RUNNING && g_access;
-         double realized=ZeroGridCycleNet();
-         Print("ZERO GRID V3 cycle closed net=",DoubleToString(realized,2));
          ResetZeroGridCycleState();
-         if(canRearm)
+         if(ZeroGridModeEnabled() && g_state==STATE_RUNNING && g_access &&
+            ZeroGridHedgingAllowed() && TradePermissionStatus()=="OK")
          {
             g_executionStatus="ZERO_GRID_REARMING";
             return StartZeroGridCycle();
          }
-         g_executionStatus="ZERO_GRID_V3_CLOSED";
+         g_executionStatus="ZERO_GRID_STOPPED_FLAT";
       }
-      else
-         g_executionStatus="ZERO_GRID_V3_CLOSE_RETRY";
       return true;
    }
 
-   bool zeroControlReady =
-      g_state==STATE_RUNNING && g_access;
-   if(!zeroControlReady)
+   // Explicit mode exit / Stop / revoked access stops NEW pending triggers.
+   // Existing ZERO positions are not mixed into another engine; they are kept
+   // isolated and may close only when their ZERO net-profit close condition is met.
+   if(!ZeroGridModeEnabled() || g_state!=STATE_RUNNING || !g_access)
    {
       ZeroGridCancelPending();
       positions=ZeroGridPositionCount();
@@ -2697,11 +2666,10 @@ bool ManageZeroGrid()
          g_executionStatus="ZERO_GRID_STOPPED_FLAT";
          return true;
       }
-
-      double drainNet=ZeroGridCycleNet();
-      if(drainNet>=ZeroGridRequiredCloseNet())
+      if(ZeroGridCycleNet()>=ZeroGridRequiredCloseNet())
       {
          g_zeroGridClosing=true;
+         SaveZeroGridCycleState();
          g_executionStatus="ZERO_GRID_CLOSING_PROFIT";
          ZeroGridClosePositions();
       }
@@ -2710,76 +2678,57 @@ bool ManageZeroGrid()
       return true;
    }
 
-   if(!ZeroGridModeEnabled())
+   if(!ZeroGridHedgingAllowed())
    {
       ZeroGridCancelPending();
-      positions=ZeroGridPositionCount();
-      if(positions<=0)
-      {
-         ResetZeroGridCycleState();
-         g_executionStatus="ZERO_GRID_MODE_EXIT_FLAT";
-         return true;
-      }
-
-      double drainNet=ZeroGridCycleNet();
-      if(drainNet>=ZeroGridRequiredCloseNet())
-      {
-         g_zeroGridClosing=true;
-         g_executionStatus="ZERO_GRID_MODE_EXIT_CLOSING";
-         ZeroGridClosePositions();
-      }
-      else
-         g_executionStatus="ZERO_GRID_MODE_EXIT_DRAIN_ONLY";
+      g_executionStatus="ZERO_GRID_HEDGING_REQUIRED";
+      return true;
+   }
+   string permissionStatus=TradePermissionStatus();
+   if(permissionStatus!="OK")
+   {
+      g_executionStatus=permissionStatus;
+      return true;
+   }
+   if(!ZeroGridStopOrdersSupported())
+   {
+      g_executionStatus="ZERO_GRID_STOP_ORDERS_UNSUPPORTED";
       return true;
    }
 
-   if(positions<=0 && ZeroGridRequestedConfigChanged())
+   // Fresh runtime or a fully empty cycle: start/recenter immediately.
+   if(g_zeroGridCenter<=0.0 || (positions==0 && pending==0))
    {
-      ZeroGridCancelPending();
-      ResetZeroGridCycleState();
-      g_executionStatus="ZERO_GRID_REBUILD_NEW_SETTINGS";
+      if(positions==0 && pending==0 && g_zeroGridCenter>0.0)
+         ResetZeroGridCycleState();
       return StartZeroGridCycle();
    }
 
-   if(ZeroGridAccountIsNetting() && positions>0)
+   // The only trading decision inside ZERO: close the ZERO cycle when its own
+   // configured real net-profit target is reached. No market opinion is used.
+   if(positions>0 && ZeroGridCycleNet()>=ZeroGridRequiredCloseNet())
    {
-      int direction=ZeroGridPositionDirection();
-      if(direction>0)
+      g_zeroGridClosing=true;
+      SaveZeroGridCycleState();
+      g_executionStatus="ZERO_GRID_CLOSING_PROFIT";
+      ZeroGridClosePositions();
+      if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)
       {
-         ZeroGridCancelPendingSide(false);
-         g_executionStatus="ZERO_GRID_NETTING_SIDE_LOCK_BUY";
+         ResetZeroGridCycleState();
+         g_executionStatus="ZERO_GRID_REARMING";
+         return StartZeroGridCycle();
       }
-      else if(direction<0)
-      {
-         ZeroGridCancelPendingSide(true);
-         g_executionStatus="ZERO_GRID_NETTING_SIDE_LOCK_SELL";
-      }
+      return true;
    }
-
-   if(positions>0)
-   {
-      double cycleNet=ZeroGridCycleNet();
-      double required=ZeroGridRequiredCloseNet();
-      if(cycleNet>=required)
-      {
-         g_zeroGridClosing=true;
-         g_executionStatus="ZERO_GRID_CLOSING_PROFIT";
-         ZeroGridClosePositions();
-         return true;
-      }
-   }
-
-   if(g_zeroGridCenter<=0.0)
-      return StartZeroGridCycle();
 
    bool ladderReady=ZeroGridEnsureLadder();
-   if(!ladderReady) return true;
    if(positions>0)
-      g_executionStatus=ZeroGridAccountIsNetting() ? "ZERO_GRID_V3_ACTIVE_NETTING" : "ZERO_GRID_V3_ACTIVE";
+      g_executionStatus="ZERO_GRID_ACTIVE";
    else
-      g_executionStatus=ZeroGridAccountIsNetting() ? "ZERO_GRID_V3_READY_NETTING" : "ZERO_GRID_V3_READY";
+      g_executionStatus=ladderReady ? "ZERO_GRID_READY" : "ZERO_GRID_BUILDING";
    return true;
 }
+
 // Brain V17 RACE ------------------------------------------------------------
 // RACE is a separate execution engine. AUTO never calls these functions.
 // Entry scores, confidence, S/R, pullback and model grades are observation
