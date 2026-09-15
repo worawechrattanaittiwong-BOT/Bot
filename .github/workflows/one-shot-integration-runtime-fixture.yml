@@ -1,0 +1,55 @@
+name: One-shot prepare Integration Smoke runtime fixture
+
+on:
+  push:
+    branches: [hotfix/zero-runtime-contract-complete]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: ${{ !contains(github.event.head_commit.message, '[integration-runtime-fixture-prepared]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare patched workflow copy
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('.github/workflows/integration-smoke.yml')
+          text = source.read_text(encoding='utf-8')
+
+          if 'RUNTIME_CONTRACT=$(sed -n' not in text:
+              anchor = "          API_EA_VERSION=$(sed -n 's/^export const DEFAULT_EA_VERSION = \\\"\\([^\\\"]*\\)\\\";/\\1/p' apps/api/src/release-version.ts)\n"
+              if anchor not in text:
+                  raise SystemExit('API_EA_VERSION anchor not found')
+              runtime_line = "          RUNTIME_CONTRACT=$(sed -n 's/^#define SCENOVA_RUNTIME_CONTRACT \\\"\\([^\\\"]*\\)\\\"/\\1/p' mt5/FastBasketBot.mq5)\n"
+              text = text.replace(anchor, anchor + runtime_line, 1)
+
+              check_anchor = '          test -n "$EA_VERSION"\n'
+              if check_anchor not in text:
+                  raise SystemExit('EA_VERSION check anchor not found')
+              text = text.replace(check_anchor, check_anchor + '          test -n "$RUNTIME_CONTRACT"\n', 1)
+
+          old = '\\\"eaVersion\\\":\\\"$EA_VERSION\\\"'
+          new = '\\\"eaVersion\\\":\\\"$EA_VERSION\\\",\\\"runtimeContract\\\":\\\"$RUNTIME_CONTRACT\\\"'
+          replacements = text.count(old)
+          if replacements < 8:
+              raise SystemExit(f'expected current-runtime heartbeat fixtures, found only {replacements}')
+          text = text.replace(old, new)
+
+          out = Path('patches/integration-smoke-runtime-contract.yml')
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_text(text, encoding='utf-8')
+          print(f'Prepared {out} with {replacements} runtime heartbeat fixture updates')
+          PY
+      - name: Publish patched copy for guarded tree update
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Runtime Hardening"
+          git config user.email "actions@users.noreply.github.com"
+          git add patches/integration-smoke-runtime-contract.yml
+          git commit -m "chore: prepare integration runtime fixture [integration-runtime-fixture-prepared]"
+          git push origin HEAD:${GITHUB_REF_NAME}
