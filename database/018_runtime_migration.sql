@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS runtime_migrations (
   target_slot_id uuid NOT NULL REFERENCES license_slots(id) ON DELETE RESTRICT,
   source_mode varchar(16) NOT NULL CHECK (source_mode IN ('LOCAL','CLOUD')),
   target_mode varchar(16) NOT NULL CHECK (target_mode IN ('LOCAL','CLOUD')),
-  state varchar(32) NOT NULL CHECK (state IN (
+  state text NOT NULL CHECK (state IN (
     'REQUESTED',
     'STOPPING_LOCAL',
     'STOPPING_CLOUD',
@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS runtime_migrations (
   CHECK (source_mode<>target_mode),
   CHECK (source_slot_id<>target_slot_id)
 );
+
+ALTER TABLE runtime_migrations ALTER COLUMN state TYPE text USING state::text;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_migration_one_active
   ON runtime_migrations(bot_instance_id)
