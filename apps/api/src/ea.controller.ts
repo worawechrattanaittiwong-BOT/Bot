@@ -16,13 +16,15 @@ import { installerDownloadPath, isVersionExact, latestEaRelease, latestInstaller
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { MaintenanceService } from "./maintenance.service";
+import { PartnerService } from "./partner.service";
 
 @Controller("ea")
 export class EaController {
   constructor(
     private readonly db: DbService,
     private readonly crypto: CryptoService,
-    private readonly maintenance: MaintenanceService
+    private readonly maintenance: MaintenanceService,
+    private readonly partner: PartnerService
   ) {}
 
   private normalizeReleaseChannel(value: unknown) {
@@ -132,6 +134,11 @@ export class EaController {
     );
     if (user?.status === "ACTIVE" && (user.role === "OWNER" || user.role === "ADMIN")) {
       return true;
+    }
+
+    if (user?.status === "ACTIVE" && slotId) {
+      const partnerAccess = await this.partner.ownTradingEntitlement(userId, slotId, mode);
+      if (partnerAccess) return true;
     }
 
     // LOCAL membership belongs to the SCENOVA customer, not a visible Slot.

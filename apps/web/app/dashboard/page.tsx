@@ -18,6 +18,7 @@ type Dashboard = {
   liveStatus: any;
   softwareUpdate: any;
   maintenance: any;
+  partner: any;
   tradeJournal: any;
 };
 
@@ -1128,42 +1129,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function assignPartnerSlot(slot: any) {
-    const target = prompt("กรอก Email หรือ User ID ของลูกค้าที่จะใช้ Slot #" + slot.slot_number);
-    if (!target) return;
-    setBusy(true);
-    setError("");
-    try {
-      await api("/bot/slots/assign", {
-        method: "POST",
-        body: JSON.stringify({ slotId: slot.id, target })
-      });
-      setNotice("เปิด Slot #" + slot.slot_number + " ให้ " + target + " แล้ว");
-      await load(selectedSlotIdRef.current);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function releasePartnerSlot(slot: any) {
-    if (!confirm("คืน Slot #" + slot.slot_number + " และยกเลิกเครื่อง/MT5 ที่ผูกกับ Slot นี้ใช่หรือไม่?")) return;
-    setBusy(true);
-    setError("");
-    try {
-      await api("/bot/slots/release", {
-        method: "POST",
-        body: JSON.stringify({ slotId: slot.id })
-      });
-      setNotice("คืน Slot #" + slot.slot_number + " แล้ว พร้อมนำไปเปิดให้ผู้ใช้อื่น");
-      await load(selectedSlotIdRef.current);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   function selectSlot(slotId: string) {
     if (!slotId || slotId === selectedSlotIdRef.current) return;
@@ -1576,6 +1541,12 @@ export default function DashboardPage() {
                 <small>{item.hint}</small>
               </button>
             ))}
+            {data.partner && (
+              <a className="side-link side-link-rich partner-dashboard-link" href="/partner">
+                <span>Partner Dashboard</span>
+                <small>{data.partner.usedSeats || 0}/{data.partner.seat_limit || 0} Seats · {data.partner.status}</small>
+              </a>
+            )}
           </nav>
           <div className="sidebar-user">
             <div><small>User ID</small><b>{data.user?.user_code}</b></div>
@@ -1597,6 +1568,7 @@ export default function DashboardPage() {
             {navItems.map(item=>(
               <button key={item.id} className={activeView===item.id ? "active" : ""} onClick={()=>setActiveView(item.id)}>{item.label}</button>
             ))}
+            {data.partner && <a href="/partner">Partner</a>}
           </div>
         )}
 
@@ -2207,43 +2179,6 @@ export default function DashboardPage() {
                 )}
               </section>
             </div>
-
-            {(data.slots || []).some((slot:any)=>slot.can_manage && slot.slot_type === "PARTNER") && (
-              <section className="panel partner-slots-panel">
-                <div className="panel-head">
-                  <div>
-                    <div className="eyebrow">PARTNER / RESELLER</div>
-                    <h2>จัดการ Slots ที่เปิดให้ผู้อื่น</h2>
-                    <p className="muted">ผู้รับ Slot ต้องมีบัญชี SCENOVA ของตัวเอง ไม่ต้องแชร์ Email/Password, EX5 หรือ .set</p>
-                  </div>
-                  <span className="badge">{(data.slots || []).filter((slot:any)=>slot.can_manage && slot.slot_type === "PARTNER").length} SLOTS</span>
-                </div>
-                <div className="partner-slot-list">
-                  {(data.slots || []).filter((slot:any)=>slot.can_manage && slot.slot_type === "PARTNER").map((slot:any)=>(
-                    <div className="partner-slot-row" key={slot.id}>
-                      <div className="partner-slot-number"><span>SLOT</span><b>{slot.slot_number}</b></div>
-                      <div className="partner-slot-user">
-                        <b>{slot.assigned_user_code || "ว่าง — พร้อมเปิดให้ลูกค้า"}</b>
-                        <small>{slot.assigned_email || slot.label || "AVAILABLE"}</small>
-                      </div>
-                      <div className="partner-slot-meta">
-                        <span>{slot.account_number ? "MT5 " + slot.account_number : "ยังไม่เชื่อม MT5"}</span>
-                        <small>{slot.subscription_expires_at ? "แพ็กหมด " + new Date(slot.subscription_expires_at).toLocaleDateString("th-TH") : ""}</small>
-                      </div>
-                      <div className="partner-slot-actions">
-                        {slot.assigned_user_id && slot.assigned_user_id !== data.user.id ? (
-                          <button className="btn danger" disabled={busy} onClick={()=>releasePartnerSlot(slot)}>คืน Slot</button>
-                        ) : slot.assigned_user_id === data.user.id ? (
-                          <span className="owner-state-chip good">ใช้เอง</span>
-                        ) : (
-                          <button className="btn primary" disabled={busy} onClick={()=>assignPartnerSlot(slot)}>เปิดให้ลูกค้า</button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
             </div>
           )}
           </div>

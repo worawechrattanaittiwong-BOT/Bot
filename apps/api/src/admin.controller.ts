@@ -12,11 +12,16 @@ import {
 import { DbService } from "./db.service";
 import { AdminGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
+import { PartnerService } from "./partner.service";
 
 @Controller("admin")
 @UseGuards(AdminGuard)
 export class AdminController {
-  constructor(private readonly db: DbService, private readonly maintenance: MaintenanceService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly maintenance: MaintenanceService,
+    private readonly partner: PartnerService
+  ) {}
 
   @Get("users")
   async users(@Query("q") q = "") {
@@ -35,7 +40,19 @@ export class AdminController {
          COALESCE(ss.partner_slots,0)::int partner_slots,
          COALESCE(cs.customer_slots,'[]'::jsonb) customer_slots,
          COALESCE(ip.ip_user_count,0)::int ip_user_count,
-         COALESCE(ip.ip_trial_count,0)::int ip_trial_count
+         COALESCE(ip.ip_trial_count,0)::int ip_trial_count,
+         CASE
+           WHEN pa.status='READY' AND pa.activation_deadline_at<=now() THEN 'EXPIRED'
+           WHEN pa.status='ACTIVE' AND pa.expires_at IS NOT NULL AND pa.expires_at<=now() THEN 'EXPIRED'
+           ELSE pa.status
+         END AS partner_status,
+         pa.seat_limit AS partner_seat_limit,
+         pa.customer_duration_days AS partner_customer_duration_days,
+         pa.partner_duration_days,
+         pa.activation_deadline_at AS partner_activation_deadline_at,
+         pa.activated_at AS partner_activated_at,
+         pa.expires_at AS partner_expires_at,
+         COALESCE(pc.active_customers,0)::int AS partner_active_customers
        FROM users u
        LEFT JOIN LATERAL (
          SELECT
@@ -149,6 +166,14 @@ export class AdminController {
          FROM auth_events ae
          WHERE tr.request_ip IS NOT NULL AND ae.ip_address=tr.request_ip
        ) ip ON true
+       LEFT JOIN partner_accounts pa ON pa.user_id=u.id
+       LEFT JOIN LATERAL (
+         SELECT count(*)::int AS active_customers
+         FROM partner_customers pc2
+         WHERE pc2.partner_user_id=u.id
+           AND pc2.status='ACTIVE'
+           AND pc2.expires_at>now()
+       ) pc ON true
        WHERE u.status<>'DELETED'
          AND (
            u.user_code ILIKE $1 OR u.email ILIKE $1 OR
@@ -267,9 +292,15 @@ export class AdminController {
 
     const days = Math.max(1, Number(body.durationDays || 30));
     const startsAt = body.startsAt ? new Date(body.startsAt) : new Date();
+    const partnerSource = plan.mode === "LOCAL" && !plan.allow_resale
+      ? await this.partner.activeCustomerSource(body.userId)
+      : null;
+    const carryForwardAt = partnerSource?.expires_at
+      ? Math.max(startsAt.getTime(), new Date(partnerSource.expires_at).getTime())
+      : startsAt.getTime();
     const expiresAt = body.expiresAt
       ? new Date(body.expiresAt)
-      : new Date(startsAt.getTime() + days * 86400000);
+      : new Date(carryForwardAt + days * 86400000);
     if (expiresAt <= startsAt) throw new ConflictException("expiresAt must be after startsAt");
     if (startsAt.getTime() > Date.now() + 60_000) {
       throw new ConflictException("ตอนนี้การเปิดสมาชิกจาก Owner Console ต้องเริ่มทันที กรุณาเว้นวันเริ่มว่างไว้");
@@ -291,6 +322,9 @@ export class AdminController {
       [body.userId, plan.id, startsAt, expiresAt, body.activatedBy || "ADMIN", body.note || null]
     );
     await this.syncSlotsForSubscription(body.userId, row.id, plan);
+    if (partnerSource) {
+      await this.partner.detachCustomerToDirect(body.userId, row.id, body.activatedBy || "ADMIN");
+    }
     await this.audit("ADMIN", "ACTIVATE_SUBSCRIPTION", "subscription", row.id, {
       plan: body.planCode,
       expiresAt,
@@ -577,6 +611,29 @@ export class AdminController {
   @Get("maintenance")
   async maintenanceStatus() {
     return this.maintenance.snapshot();
+  }
+
+  @Post("partners/grant")
+  async grantPartner(@Req() req: any, @Body() body: {
+    userId: string;
+    seatLimit?: number;
+    partnerDurationDays?: number;
+    customerDurationDays?: number;
+  }) {
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    return this.partner.grantPartner(body, actor);
+  }
+
+  @Post("partners/renew")
+  async renewPartner(@Req() req: any, @Body() body: { userId: string; durationDays?: number }) {
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    return this.partner.renewPartner(body.userId, Number(body.durationDays || 30), actor);
+  }
+
+  @Post("partners/suspend")
+  async suspendPartner(@Req() req: any, @Body() body: { userId: string }) {
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    return this.partner.suspendPartner(body.userId, actor);
   }
 
   @Post("maintenance/announce")
