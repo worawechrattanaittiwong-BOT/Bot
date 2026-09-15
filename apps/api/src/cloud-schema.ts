@@ -7,11 +7,49 @@ ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS runtime_stop_state varchar(24
 ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS runtime_stop_requested_at timestamptz;
 ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS runtime_stop_confirmed_at timestamptz;
 ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS runtime_stop_error varchar(64);
+ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS cloud_recovery_state varchar(24) NOT NULL DEFAULT 'IDLE';
+ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS cloud_recovery_attempts integer NOT NULL DEFAULT 0;
+ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS cloud_recovery_window_started_at timestamptz;
+ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS cloud_recovery_next_at timestamptz;
+ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS cloud_recovery_last_at timestamptz;
+ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS cloud_recovery_last_error varchar(64);
 ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS accepting_jobs boolean NOT NULL DEFAULT false;
 ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS worker_key_hash text;
 ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS monthly_cost integer NOT NULL DEFAULT 0;
 ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS spec text NOT NULL DEFAULT '';
 ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS telemetry jsonb NOT NULL DEFAULT '{}';
+ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS health_state varchar(24) NOT NULL DEFAULT 'UNKNOWN';
+ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS capacity_blocked boolean NOT NULL DEFAULT false;
+ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS capacity_block_reason varchar(64);
+ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS last_healthy_at timestamptz;
+ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS quarantined boolean NOT NULL DEFAULT false;
+ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS quarantine_reason varchar(160);
+ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS recovery_paused boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS production_controls (
+ id smallint PRIMARY KEY CHECK(id=1),
+ cloud_provisioning_paused boolean NOT NULL DEFAULT false,
+ cloud_recovery_paused boolean NOT NULL DEFAULT false,
+ reason varchar(240),
+ updated_by varchar(120),
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO production_controls(id) VALUES(1) ON CONFLICT(id) DO NOTHING;
+CREATE TABLE IF NOT EXISTS runtime_incidents (
+ id bigserial PRIMARY KEY,
+ incident_key varchar(220) NOT NULL,
+ category varchar(48) NOT NULL,
+ severity varchar(16) NOT NULL CHECK(severity IN ('INFO','WARN','CRITICAL')),
+ runner_id varchar(120),
+ bot_instance_id uuid REFERENCES bot_instances(id) ON DELETE CASCADE,
+ state varchar(16) NOT NULL DEFAULT 'OPEN' CHECK(state IN ('OPEN','RESOLVED')),
+ detail jsonb NOT NULL DEFAULT '{}'::jsonb,
+ opened_at timestamptz NOT NULL DEFAULT now(),
+ last_seen_at timestamptz NOT NULL DEFAULT now(),
+ resolved_at timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_incident_open_key ON runtime_incidents(incident_key) WHERE state='OPEN';
+CREATE INDEX IF NOT EXISTS idx_runtime_incident_recent ON runtime_incidents(state,severity,last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runtime_incident_instance ON runtime_incidents(bot_instance_id,last_seen_at DESC);
 CREATE TABLE IF NOT EXISTS cloud_packages (
  months integer PRIMARY KEY CHECK(months IN (1,3,6,12)),
  price_satang integer NOT NULL DEFAULT 0 CHECK(price_satang>=0),
