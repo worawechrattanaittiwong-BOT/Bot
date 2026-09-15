@@ -19,7 +19,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply isolated ZERO simplification
-        run: python3 .github/scripts/apply_zero_simple_v117.py
+        run: |
+          python3 .github/scripts/apply_zero_simple_v117.py
+          python3 .github/scripts/fix_zero_v117_contract.py
 
       - name: Verify ZERO simple stable contract
         run: node tests/zero-simple-stable-v117.mjs
