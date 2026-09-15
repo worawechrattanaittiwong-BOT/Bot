@@ -1,13 +1,14 @@
 BEGIN;
 
 ALTER TABLE worker_nodes
-  ADD COLUMN IF NOT EXISTS health_state varchar(24) NOT NULL DEFAULT 'UNKNOWN',
+  ADD COLUMN IF NOT EXISTS health_state text NOT NULL DEFAULT 'UNKNOWN',
   ADD COLUMN IF NOT EXISTS capacity_blocked boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS capacity_block_reason varchar(64),
   ADD COLUMN IF NOT EXISTS last_healthy_at timestamptz,
   ADD COLUMN IF NOT EXISTS quarantined boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS quarantine_reason varchar(160),
   ADD COLUMN IF NOT EXISTS recovery_paused boolean NOT NULL DEFAULT false;
+ALTER TABLE worker_nodes ALTER COLUMN health_state TYPE text USING health_state::text;
 
 ALTER TABLE bot_instances
   ADD COLUMN IF NOT EXISTS cloud_recovery_state varchar(24) NOT NULL DEFAULT 'IDLE',
