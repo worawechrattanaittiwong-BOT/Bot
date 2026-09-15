@@ -15,7 +15,7 @@ function Require-NotContains([string]$text,[string]$needle,[string]$label) {
 
 $ea = [System.IO.File]::ReadAllText((Resolve-Path $EaPath))
 
-Require-Contains $ea '#property version   "1.0.14"' 'EA version bump'
+Require-Contains $ea '#property version   "1.0.15"' 'EA version bump'
 Require-Contains $ea 'ZERO GRID V2.1 geometry' 'geometry marker'
 Require-Contains $ea 'double ZeroGridExistingPendingAnchorPrice(bool buySide)' 'persistent pending anchor'
 Require-Contains $ea 'double ZeroGridPendingAnchorPrice(bool buySide)' 'live-price inward anchor'

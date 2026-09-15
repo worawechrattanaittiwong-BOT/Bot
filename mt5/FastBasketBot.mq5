@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.14"
-#define SCENOVA_EA_VERSION "1.0.14"
-#define SCENOVA_PRODUCT_VERSION "1.0.14"
+#property version   "1.0.15"
+#define SCENOVA_EA_VERSION "1.0.15"
+#define SCENOVA_PRODUCT_VERSION "1.0.15"
 #define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -2576,7 +2576,9 @@ bool StartZeroGridCycle()
       g_executionStatus="ZERO_GRID_HEDGING_REQUIRED";
       return true;
    }
-   if(g_state!=STATE_RUNNING || !g_access || (!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid()))
+   // ZERO_GRID_FREE_RUN: heartbeat freshness must never delay a ZERO pending
+   // ladder. Explicit STOP/access revocation and broker permissions still apply.
+   if(g_state!=STATE_RUNNING || !g_access)
    {
       g_executionStatus="ZERO_GRID_CONTROL_NOT_FRESH";
       return true;
@@ -2637,8 +2639,7 @@ bool ManageZeroGrid()
       {
          bool canRearm=
             ZeroGridModeEnabled() && ZeroGridHedgingAllowed() &&
-            g_state==STATE_RUNNING && g_access &&
-            (MQLInfoInteger(MQL_TESTER) || EntryLeaseValid());
+            g_state==STATE_RUNNING && g_access;
          double realized=ZeroGridCycleNet();
          Print("ZERO GRID V3 cycle closed net=",DoubleToString(realized,2));
          ResetZeroGridCycleState();
@@ -2655,8 +2656,7 @@ bool ManageZeroGrid()
    }
 
    bool zeroControlReady =
-      g_state==STATE_RUNNING && g_access &&
-      (MQLInfoInteger(MQL_TESTER) || EntryLeaseValid());
+      g_state==STATE_RUNNING && g_access;
    if(!zeroControlReady)
    {
       ZeroGridCancelPending();
@@ -3624,9 +3624,9 @@ void OnTick()
       return;
    }
 
-   // New orders are allowed only while the website has very recently
-   // confirmed desiredState=RUNNING. Existing positions can still be managed.
-   if(!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid())
+   // AUTO/RACE keep the fresh-control entry lease. ZERO GRID is intentionally
+   // free-running once Server settings selected ZERO and explicit RUNNING/access hold.
+   if(!MQLInfoInteger(MQL_TESTER) && !ZeroGridModeEnabled() && !EntryLeaseValid())
    {
       g_executionStatus = "CONTROL_NOT_FRESH";
       return;
