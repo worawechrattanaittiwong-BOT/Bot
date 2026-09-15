@@ -20,7 +20,7 @@ Assert-Contains $schema 'CREATE TABLE IF NOT EXISTS worker_commands' 'worker_com
 Assert-Contains $schema 'idx_worker_stop_one_active' 'active STOP_INSTANCE uniqueness guard missing'
 
 # Server must fail closed before asking a Worker to stop a terminal.
-Assert-Contains $controller 'Cloud Worker v1.1.0 or newer is required for verified stop' 'Worker version gate missing'
+Assert-Contains $controller 'Cloud Worker v1.1.0 or newer is required for verified stop' 'Worker verified-stop version gate missing'
 Assert-Contains $controller 'EA heartbeat is not fresh' 'fresh EA heartbeat guard missing'
 Assert-Contains $controller 'Stop the bot before stopping the Cloud terminal' 'RUNNING state guard missing'
 Assert-Contains $controller 'Close all positions before stopping the Cloud terminal' 'open-position guard missing'
@@ -40,7 +40,9 @@ Assert-Contains $workerApi "runtime_stop_state='STOP_CONFIRMED'" 'server STOP_CO
 Assert-Contains $workerApi 'Automatic release is disabled' 'automatic runner release must remain disabled in Phase 2'
 
 # Windows Worker may terminate only the exact portable terminal belonging to this instance.
-Assert-Contains $worker "version='1.1.0'" 'Worker telemetry version must be 1.1.0'
+# Phase 4 raises the control-plane Worker protocol to v1.2.0 while preserving
+# the v1.1.0 verified STOP_INSTANCE/STOP_CONFIRMED safety invariant.
+Assert-Contains $worker "version='1.2.0'" 'Worker telemetry version must be 1.2.0'
 Assert-Contains $worker 'function Get-ExactTerminalProcesses' 'exact process matcher missing'
 Assert-Contains $worker '$terminal = "$path\terminal64.exe"' 'instance terminal path guard missing'
 Assert-Contains $worker '$_.ExecutablePath.Equals($TerminalPath, [StringComparison]::OrdinalIgnoreCase)' 'exact executable path comparison missing'
