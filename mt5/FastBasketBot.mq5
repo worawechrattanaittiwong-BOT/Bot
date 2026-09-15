@@ -2488,6 +2488,8 @@ ulong ZeroGridNearestCloseTicket()
 
 bool ZeroGridClosePositionAsync(ulong ticket)
 {
+   if(MQLInfoInteger(MQL_TESTER))
+      return ClosePositionByTicket(ticket);
    if(ticket==0 || !PositionSelectByTicket(ticket)) return false;
    if(!ZeroGridOwnsSelectedPosition()) return false;
    string symbol=PositionGetString(POSITION_SYMBOL);
@@ -2519,6 +2521,11 @@ bool ZeroGridClosePositionAsync(ulong ticket)
 
 void ZeroGridCancelPendingAsync()
 {
+   if(MQLInfoInteger(MQL_TESTER))
+   {
+      ZeroGridCancelPending();
+      return;
+   }
    for(int i=OrdersTotal()-1;i>=0;i--)
    {
       ulong ticket=OrderGetTicket(i);
