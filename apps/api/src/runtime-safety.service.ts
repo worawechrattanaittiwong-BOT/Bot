@@ -44,6 +44,8 @@ export class RuntimeSafetyService {
            execution_generation=$2,
            install_token_hash=$3,
            lease_rotated_at=now(),
+           runtime_stop_state='LEASE_REVOKED',
+           runtime_stop_error=NULL,
            desired_state='STOPPED',
            actual_state='OFFLINE',
            last_seen_at=NULL,
@@ -85,7 +87,8 @@ export class RuntimeSafetyService {
             previousGeneration: Number(instance.execution_generation || 1),
             executionGeneration: nextGeneration,
             runnerId: instance.runner_id || null,
-            runtimeStopState: instance.runtime_stop_state || "NONE"
+            previousRuntimeStopState: instance.runtime_stop_state || "NONE",
+            runtimeStopState: "LEASE_REVOKED"
           })
         ]
       );
@@ -95,7 +98,7 @@ export class RuntimeSafetyService {
         instanceId: instance.id,
         executionGeneration: nextGeneration,
         runnerId: instance.runner_id || null,
-        runtimeStopState: instance.runtime_stop_state || "NONE",
+        runtimeStopState: "LEASE_REVOKED",
         note: "The old execution token is revoked. The new token remains encrypted server-side."
       };
     });
