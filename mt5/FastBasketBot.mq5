@@ -1,7 +1,8 @@
 #property strict
-#property version   "1.0.11"
-#define SCENOVA_EA_VERSION "1.0.11"
-#define SCENOVA_PRODUCT_VERSION "1.0.11"
+#property version   "1.0.12"
+#define SCENOVA_EA_VERSION "1.0.12"
+#define SCENOVA_PRODUCT_VERSION "1.0.12"
+#define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -4447,12 +4448,17 @@ void SendHeartbeat()
       string marketAskText = marketTickReady ? DoubleToString(marketTick.ask, marketDigits) : "0";
       string marketMidText = marketTickReady ? DoubleToString((marketTick.bid + marketTick.ask) * 0.5, marketDigits) : "0";
       string marketSessionDiagnostics = StringFormat(
-         ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s,\"marketBid\":%s,\"marketAsk\":%s,\"marketMid\":%s}}",
+         ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s,\"marketBid\":%s,\"marketAsk\":%s,\"marketMid\":%s,\"runtimeContract\":\"%s\",\"zeroGridConfiguredLevelsPerSide\":%d,\"zeroGridEffectiveLevelsPerSide\":%d,\"zeroGridMaxLevelsPerSide\":%d,\"zeroGridCycleActive\":%s}}",
          marketSessionState,
          marketSessionState == "OPEN" ? "true" : "false",
          marketBidText,
          marketAskText,
-         marketMidText
+         marketMidText,
+         SCENOVA_RUNTIME_CONTRACT,
+         g_zeroGridLevelsPerSide,
+         ZeroGridEffectiveLevelsPerSide(),
+         ZERO_GRID_MAX_LEVELS,
+         g_zeroGridCycleStartedAt > 0 ? "true" : "false"
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + marketSessionDiagnostics;
    }

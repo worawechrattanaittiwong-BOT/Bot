@@ -13,7 +13,7 @@ import {
 } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
-import { installerDownloadPath, isEaVersionExact, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";
+import { EA_RUNTIME_CONTRACT, ZERO_GRID_MAX_LEVELS_PER_SIDE, installerDownloadPath, isEaVersionExact, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
@@ -49,6 +49,9 @@ export class BotController {
         latestEaHash: release.sha256,
         eaVersionMatch: true,
         eaHashMatch: true,
+        currentRuntimeContract: null,
+        requiredRuntimeContract: EA_RUNTIME_CONTRACT,
+        runtimeContractMatch: true,
         downloadPath: installerDownloadPath(latestVersion),
         reason: null
       };
@@ -58,6 +61,9 @@ export class BotController {
     const currentEaVersion = String(instance.metrics?.eaVersion || "").trim() || null;
     const currentEaHash = String(instance.agent_ea_hash || "").trim().toLowerCase() || null;
     const latestEaHash = String(release.sha256 || "").trim().toLowerCase() || null;
+    const currentRuntimeContract = String(instance.metrics?.runtimeContract || "").trim() || null;
+    const requiredRuntimeContract = EA_RUNTIME_CONTRACT;
+    const runtimeContractMatch = currentRuntimeContract === requiredRuntimeContract;
 
     const installerRequired =
       !currentVersion ||
@@ -69,7 +75,7 @@ export class BotController {
       currentEaHash &&
       currentEaHash === latestEaHash
     );
-    const eaUpdateRequired = !eaVersionMatch || !eaHashMatch;
+    const eaUpdateRequired = !eaVersionMatch || !eaHashMatch || !runtimeContractMatch;
     const required = installerRequired || eaUpdateRequired;
 
     let reason: string | null = null;
@@ -82,6 +88,10 @@ export class BotController {
         "FastBasketBot เวอร์ชันไม่ตรงกับ Server: เครื่องนี้ v" +
         (currentEaVersion || "ไม่ทราบ") +
         " · Server v" + release.eaVersion;
+    } else if (!runtimeContractMatch) {
+      reason = currentRuntimeContract
+        ? "EA ที่กำลังรันยังเป็น Runtime เก่า แม้ไฟล์ EX5 บนเครื่องอาจอัปเดตแล้ว กรุณากดอัปเดต EA และให้ MT5 รีโหลด Runtime ล่าสุด"
+        : "ยังไม่ได้รับ Runtime Contract จาก EA ที่กำลังรัน กรุณาอัปเดต EA และให้ MT5 รีโหลดก่อนเริ่มบอท";
     } else if (!latestEaHash) {
       reason = "Server ยังตรวจสอบ EX5 ล่าสุดไม่ได้ จึงยังไม่อนุญาตให้เริ่มบอท";
     } else if (!eaHashMatch) {
@@ -102,6 +112,9 @@ export class BotController {
       latestEaHash,
       eaVersionMatch,
       eaHashMatch,
+      currentRuntimeContract,
+      requiredRuntimeContract,
+      runtimeContractMatch,
       sourceCommit: release.sourceCommit,
       builtAt: release.builtAt,
       downloadPath: installerDownloadPath(latestVersion),
@@ -1386,7 +1399,7 @@ export class BotController {
         throw new ConflictException(
           "ยังเริ่มบอทไม่ได้: " +
           (softwareUpdate.reason || "เวอร์ชัน SCENOVA / EA ยังไม่ตรงกับ Server") +
-          " · ต้องอัปเดตให้ Agent, EA Version และ EX5 Hash ตรงกันก่อน"
+          " · ต้องอัปเดตให้ Agent, EA Version, Runtime และ EX5 Hash ตรงกันก่อน"
         );
       }
 
@@ -1412,6 +1425,42 @@ export class BotController {
       }
       if (metrics.accountTradeExpert === false) {
         throw new ConflictException("บัญชี MT5 นี้ไม่อนุญาตให้ Expert Advisor เทรด");
+      }
+
+      // ZERO GRID may start only after a fresh heartbeat proves that the loaded
+      // EA has actually applied the saved per-side count. The first heartbeat
+      // after Save receives the new settings; the next one confirms they are live.
+      const settingRow = await this.db.one(
+        "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+        [instance.id]
+      );
+      const savedSettings = settingRow?.settings || {};
+      const savedControlMode = String(
+        savedSettings.controlMode || savedSettings.engineMode || "AUTO"
+      ).toUpperCase();
+      if (savedControlMode === "ZERO_GRID") {
+        const requestedRaw = Number(savedSettings.zeroGridLevelsPerSide ?? 3);
+        const requestedLevels = Math.max(
+          1,
+          Math.min(
+            ZERO_GRID_MAX_LEVELS_PER_SIDE,
+            Math.trunc(Number.isFinite(requestedRaw) ? requestedRaw : 3)
+          )
+        );
+        const appliedLevels = Number(metrics.zeroGridConfiguredLevelsPerSide);
+        const appliedMax = Number(metrics.zeroGridMaxLevelsPerSide);
+        const appliedMode = String(metrics.controlMode || "").toUpperCase();
+        if (
+          appliedMode !== "ZERO_GRID" ||
+          !Number.isInteger(appliedLevels) ||
+          appliedLevels !== requestedLevels ||
+          appliedMax !== ZERO_GRID_MAX_LEVELS_PER_SIDE
+        ) {
+          throw new ConflictException(
+            "ZERO GRID ยังไม่พร้อมเริ่ม: ตั้งไว้ " + requestedLevels +
+            " Pending ต่อฝั่ง แต่ EA ที่กำลังรันยังไม่ยืนยันค่านี้ · กรุณารอ Heartbeat ถัดไป 5–10 วินาที แล้วกดเริ่มอีกครั้ง"
+          );
+        }
       }
 
       const runningEaVersion = String(instance.metrics?.eaVersion || "");
