@@ -55,6 +55,7 @@ export class MaintenanceService {
              WHERE bc.bot_instance_id=bi.id
                AND bc.command='CLOSE_ALL'
                AND bc.status='ACKED'
+               AND bc.payload->>'ackSource'='EA'
            ) AS close_acked_at
          FROM bot_instances bi
          WHERE bi.desired_state<>'RUNNING'

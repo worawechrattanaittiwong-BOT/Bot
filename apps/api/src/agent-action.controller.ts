@@ -2,12 +2,14 @@ import { Body, ConflictException, Controller, Post } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { isEaVersionExact, latestEaRelease } from "./release-version";
 import { CryptoService } from "./security";
+import { MaintenanceService } from "./maintenance.service";
+import { PartnerService } from "./partner.service";
 
 const ACTION_PENDING_TTL_MS = 15 * 60_000;
 
 type AccessState = {
   allowed: boolean;
-  source: "OWNER" | "SUBSCRIPTION" | "TRIAL" | "TRIAL_READY" | "NONE";
+  source: "OWNER" | "PARTNER" | "SUBSCRIPTION" | "TRIAL" | "TRIAL_READY" | "NONE";
   trialId?: string;
 };
 
@@ -15,7 +17,9 @@ type AccessState = {
 export class AgentActionController {
   constructor(
     private readonly db: DbService,
-    private readonly crypto: CryptoService
+    private readonly crypto: CryptoService,
+    private readonly maintenance: MaintenanceService,
+    private readonly partner: PartnerService
   ) {}
 
   private async authenticatedInstance(instanceId: string, installToken: string) {
@@ -76,6 +80,15 @@ export class AgentActionController {
     }
 
     if (instance.slot_id) {
+      const partnerAccess = await this.partner.ownTradingEntitlement(
+        userId,
+        instance.slot_id,
+        instance.mode
+      );
+      if (partnerAccess) return { allowed: true, source: "PARTNER" };
+    }
+
+    if (instance.slot_id) {
       const subscription = await this.db.one(
         `SELECT 1
          FROM license_slots ls
@@ -122,6 +135,21 @@ export class AgentActionController {
   }
 
   private async completeRecoveredStart(instance: any) {
+    const maintenance = await this.maintenance.current();
+    if (maintenance.blockStarts) {
+      await this.db.query(
+        `UPDATE bot_instances
+         SET metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
+           'startAfterRepairRequested',false,
+           'startAfterRepairStatus','FAILED',
+           'startAfterRepairMessage','ระบบอยู่ระหว่าง Maintenance / FORCE FLAT จึงยกเลิก Auto Recovery'
+         )
+         WHERE id=$1`,
+        [instance.id]
+      );
+      return false;
+    }
+
     const access = await this.accessState(instance);
     if (!access.allowed) {
       await this.db.query(
@@ -162,7 +190,7 @@ export class AgentActionController {
       [instance.id, completedAt]
     );
     await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
       [instance.id]
     );
     await this.db.query(

@@ -98,19 +98,36 @@ TWELFTH_HTTP=$(curl -sS -o /tmp/partner-twelfth.json -w '%{http_code}' \
   -d "{\"target\":\"$CUSTOMER12_CODE\"}")
 test "$TWELFTH_HTTP" = '409'
 
-echo '[partner-v3] direct renewal preserves remaining time and frees Partner Seat'
+echo '[partner-v3] direct renewal preserves remaining time and keeps Partner Seat until funded term ends'
 OLD_EXP=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc \
   "select expires_at from partner_customers where customer_user_id='$CUSTOMER1_ID' and status='ACTIVE' order by created_at desc limit 1;")
 DIRECT=$(curl -fsS -X POST "$BASE/admin/subscriptions/activate" \
   -H "x-admin-key: $ADMIN_KEY" -H 'content-type: application/json' \
   -d "{\"userId\":\"$CUSTOMER1_ID\",\"planCode\":\"LOCAL_30D\",\"durationDays\":30,\"activatedBy\":\"CI-DIRECT\"}")
+DIRECT_ID=$(printf '%s' "$DIRECT" | jq -r '.subscription.id')
+DIRECT_START=$(printf '%s' "$DIRECT" | jq -r '.subscription.starts_at')
 NEW_EXP=$(printf '%s' "$DIRECT" | jq -r '.subscription.expires_at')
-test "$(date -d "$NEW_EXP" +%s)" -gt "$(date -d "$OLD_EXP" +%s)"
+test "$(date -d "$DIRECT_START" +%s)" -ge "$(date -d "$OLD_EXP" +%s)"
+test "$(date -d "$NEW_EXP" +%s)" -gt "$(date -d "$DIRECT_START" +%s)"
+REL_STATE=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc \
+  "select status||':'||coalesce(direct_subscription_id::text,'') from partner_customers where customer_user_id='$CUSTOMER1_ID' order by created_at desc limit 1;")
+test "$REL_STATE" = "ACTIVE:$DIRECT_ID"
+PARTNER_AFTER_DIRECT=$(curl -fsS "$BASE/partner" -H "authorization: Bearer $PARTNER_TOKEN")
+test "$(printf '%s' "$PARTNER_AFTER_DIRECT" | jq -r '.account.usedSeats')" = '11'
+
+# Simulate the funded term reaching its boundary. Direct entitlement starts exactly then.
+PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 <<SQL >/dev/null
+update subscriptions set starts_at=now()-interval '1 second',expires_at=now()+interval '30 days' where id='$DIRECT_ID';
+update partner_customers set expires_at=now()-interval '1 second' where customer_user_id='$CUSTOMER1_ID' and status='ACTIVE';
+SQL
+PARTNER_AFTER_TRANSITION=$(curl -fsS "$BASE/partner" -H "authorization: Bearer $PARTNER_TOKEN")
+test "$(printf '%s' "$PARTNER_AFTER_TRANSITION" | jq -r '.account.usedSeats')" = '10'
 REL_STATUS=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc \
   "select status from partner_customers where customer_user_id='$CUSTOMER1_ID' order by created_at desc limit 1;")
 test "$REL_STATUS" = 'DIRECT'
-PARTNER_AFTER_DIRECT=$(curl -fsS "$BASE/partner" -H "authorization: Bearer $PARTNER_TOKEN")
-test "$(printf '%s' "$PARTNER_AFTER_DIRECT" | jq -r '.account.usedSeats')" = '10'
+SLOT_DIRECT=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc \
+  "select subscription_id from license_slots where owner_user_id='$CUSTOMER1_ID' and assigned_user_id='$CUSTOMER1_ID' and mode='LOCAL' and status<>'DELETED' order by slot_number limit 1;")
+test "$SLOT_DIRECT" = "$DIRECT_ID"
 
 echo '[partner-v3] Partner expiry stops own entitlement but never cuts active customer'
 PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 \

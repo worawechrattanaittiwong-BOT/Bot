@@ -1072,7 +1072,7 @@ export class BotController {
       released: true,
       slotId: slot.id,
       preservedMt5Account: Boolean(instance.mt5_account_id),
-      message: "ปลดเครื่องเดิมแล้ว Slot นี้พร้อมติดตั้งบนเครื่องใหม่"
+      message: "ปลดเครื่องเดิมแล้ว บัญชีนี้พร้อมติดตั้งบนเครื่องใหม่"
     };
   }
 
@@ -1080,7 +1080,7 @@ export class BotController {
   async requestMt5Change(@Req() req: any, @Query("slotId") slotId = "") {
     const slot = await this.resolveSlot(req.user.sub, slotId || null);
     if (slot.mode !== "LOCAL") {
-      throw new ConflictException("ปุ่มเปลี่ยน MT5 แบบไม่เปลี่ยน .set ใช้กับ LOCAL Slot เท่านั้น");
+      throw new ConflictException("ปุ่มเปลี่ยน MT5 แบบไม่เปลี่ยน .set ใช้กับ LOCAL เท่านั้น");
     }
 
     const instance = await this.db.one(
@@ -1088,7 +1088,7 @@ export class BotController {
       [slot.id]
     );
     if (!instance) throw new ConflictException("ติดตั้ง SCENOVA จากเว็บไซต์ก่อน");
-    if (!instance.mt5_account_id) throw new ConflictException("Slot นี้ยังไม่มี MT5 เดิมให้เปลี่ยน");
+    if (!instance.mt5_account_id) throw new ConflictException("บัญชีนี้ยังไม่มี MT5 เดิมให้เปลี่ยน");
     if (
       instance.actual_state === "RUNNING" ||
       instance.desired_state === "RUNNING" ||
@@ -1365,6 +1365,13 @@ export class BotController {
     await this.maintenance.assertStartAllowed();
     const instance = await this.getInstance(req.user.sub, slotId || null);
     if (!instance.mt5_account_id) throw new ConflictException("เชื่อมบัญชี MT5 ก่อนเริ่มบอท");
+    const unresolvedCloseAll = await this.db.one(
+      "SELECT id FROM bot_commands WHERE bot_instance_id=$1 AND command='CLOSE_ALL' AND status IN ('PENDING','DELIVERED') ORDER BY id DESC LIMIT 1",
+      [instance.id]
+    );
+    if (unresolvedCloseAll) {
+      throw new ConflictException("ยังมีคำสั่ง Close All รอ EA ยืนยัน กรุณารอให้ Position เป็น 0 ก่อนเริ่มบอท");
+    }
     const access: any = await this.entitlement(
       req.user.sub,
       instance.mt5_account_id,
@@ -1424,7 +1431,7 @@ export class BotController {
       [instance.id]
     );
     await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
       [instance.id]
     );
     await this.db.query(
@@ -1717,6 +1724,7 @@ export class BotController {
     );
 
     if (resumeAfterDailyProfitEdit) {
+      await this.maintenance.assertStartAllowed();
       await this.db.query(
         `UPDATE bot_instances
          SET desired_state='RUNNING',
@@ -1755,18 +1763,29 @@ export class BotController {
        WHERE bi.slot_id=$1`,
       [slot.id]
     );
-    if (!instance) throw new ConflictException("install SCENOVA for this slot first");
+    if (!instance) throw new ConflictException("ติดตั้ง SCENOVA สำหรับบัญชี MT5 นี้ก่อน");
     return instance;
   }
 
   private async commandForUser(userId: string, command: string, slotId?: string | null) {
     const instance = await this.getInstance(userId, slotId || null);
-    const desired = command === "CLOSE_ALL" ? "STOPPED" : "SAFE_STOP";
-    await this.db.query("UPDATE bot_instances SET desired_state=$2 WHERE id=$1", [instance.id, desired]);
-    await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP','CLOSE_ALL')",
+    const pendingCloseAll = await this.db.one(
+      "SELECT id FROM bot_commands WHERE bot_instance_id=$1 AND command='CLOSE_ALL' AND status IN ('PENDING','DELIVERED') ORDER BY id DESC LIMIT 1",
       [instance.id]
     );
+
+    await this.db.query(
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
+      [instance.id]
+    );
+
+    if (pendingCloseAll) {
+      await this.db.query("UPDATE bot_instances SET desired_state='STOPPED' WHERE id=$1", [instance.id]);
+      return { ok: true, state: "STOPPED", closeAllPending: true };
+    }
+
+    const desired = command === "CLOSE_ALL" ? "STOPPED" : "SAFE_STOP";
+    await this.db.query("UPDATE bot_instances SET desired_state=$2 WHERE id=$1", [instance.id, desired]);
     await this.db.query(
       "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,$2)",
       [instance.id, command]
