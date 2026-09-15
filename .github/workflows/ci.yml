@@ -42,3 +42,6 @@ jobs:
       - name: Live price chart 15-minute contract
         shell: pwsh
         run: ./tests/live-price-chart-15m-contract.ps1
+      - name: Cloud runtime safety contract
+        shell: pwsh
+        run: ./tests/cloud-runtime-safety-contract.ps1
