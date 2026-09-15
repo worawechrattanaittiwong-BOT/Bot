@@ -1,0 +1,83 @@
+name: Apply isolated ZERO smallest-lot close patch
+
+on:
+  push:
+    branches:
+      - fix/zero-close-smallest-one-by-one
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[skip zero patch]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/zero-close-smallest-one-by-one
+          fetch-depth: 0
+
+      - name: Patch only ZERO close sequencing and required release metadata
+        shell: python
+        run: |
+          from pathlib import Path
+
+          ea_path = Path('mt5/FastBasketBot.mq5')
+          ea = ea_path.read_text(encoding='utf-8-sig')
+          old_top = '''#property version   "1.0.13"\n#define SCENOVA_EA_VERSION "1.0.13"\n#define SCENOVA_PRODUCT_VERSION "1.0.13"'''
+          new_top = '''#property version   "1.0.14"\n#define SCENOVA_EA_VERSION "1.0.14"\n#define SCENOVA_PRODUCT_VERSION "1.0.14"'''
+          if old_top not in ea:
+              raise SystemExit('EA version block not found')
+          ea = ea.replace(old_top, new_top, 1)
+
+          old_close = '''void ZeroGridClosePositions()\n{\n   const int maxCloseRequestsPerPass=8;\n   for(int i=0;i<maxCloseRequestsPerPass;i++)\n   {\n      ulong ticket=ZeroGridNearestCloseTicket();\n      if(ticket==0) return;\n      if(!ClosePositionByTicket(ticket))\n         return;\n   }\n}'''
+          new_close = '''void ZeroGridClosePositions()\n{\n   const int maxCloseRequestsPerPass=8;\n   for(int i=0;i<maxCloseRequestsPerPass;i++)\n   {\n      ulong ticket=ZeroGridNearestCloseTicket();\n      if(ticket==0) return;\n      if(!ClosePositionByTicket(ticket))\n         return;\n\n      // ZERO_GRID_ONE_CLOSE_PER_PASS: after the smallest-lot ticket is sent,\n      // wait for MT5 to refresh the position book before selecting the next one.\n      // This keeps the realized sequence strictly smallest lot -> larger lot.\n      return;\n   }\n}'''
+          if old_close not in ea:
+              raise SystemExit('ZERO close function not found')
+          ea = ea.replace(old_close, new_close, 1)
+          ea_path.write_text(ea, encoding='utf-8')
+
+          api_path = Path('apps/api/src/release-version.ts')
+          api = api_path.read_text(encoding='utf-8')
+          old_api = 'export const DEFAULT_EA_VERSION = "1.0.13";'
+          new_api = 'export const DEFAULT_EA_VERSION = "1.0.14";'
+          if old_api not in api:
+              raise SystemExit('API EA version marker not found')
+          api_path.write_text(api.replace(old_api, new_api, 1), encoding='utf-8')
+
+          test_path = Path('tests/zero-grid-close-geometry-contract.ps1')
+          test = test_path.read_text(encoding='utf-8')
+          old_test = 'Require-Contains $ea \'#property version   "1.0.13"\' \'EA version bump\''
+          new_test = 'Require-Contains $ea \'#property version   "1.0.14"\' \'EA version bump\''
+          if old_test not in test:
+              raise SystemExit('ZERO contract version marker not found')
+          test = test.replace(old_test, new_test, 1)
+          anchor = "Require-Contains $ea 'ClosePositionByTicket(ticket);' 'selected ticket close'"
+          addition = anchor + "\nRequire-Contains $ea 'ZERO_GRID_ONE_CLOSE_PER_PASS' 'one confirmed smallest-lot close per pass'"
+          if anchor not in test:
+              raise SystemExit('ZERO contract close marker not found')
+          test = test.replace(anchor, addition, 1)
+          test_path.write_text(test, encoding='utf-8')
+
+      - name: Verify isolated scope and contracts
+        shell: pwsh
+        run: |
+          ./tests/zero-grid-close-geometry-contract.ps1
+          ./tests/release-version-consistency.ps1
+          ./tests/ea-version-bump-required.ps1
+          $changed = @(git diff --name-only HEAD)
+          $allowed = @('mt5/FastBasketBot.mq5','apps/api/src/release-version.ts','tests/zero-grid-close-geometry-contract.ps1')
+          foreach ($path in $changed) {
+            if ($allowed -notcontains $path) { throw "Unexpected changed file: $path" }
+          }
+          if ($changed.Count -ne 3) { throw "Expected exactly 3 changed files, got $($changed.Count)" }
+
+      - name: Commit isolated candidate
+        shell: bash
+        run: |
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 apps/api/src/release-version.ts tests/zero-grid-close-geometry-contract.ps1
+          git commit -m "fix(mt5): close ZERO smallest lots one by one [skip zero patch]"
+          git push origin HEAD:fix/zero-close-smallest-one-by-one
