@@ -15,7 +15,7 @@ function Require-NotContains([string]$text,[string]$needle,[string]$label) {
 
 $ea = [System.IO.File]::ReadAllText((Resolve-Path $EaPath))
 
-Require-Contains $ea '#property version   "1.0.13"' 'EA version bump'
+Require-Contains $ea '#property version   "1.0.14"' 'EA version bump'
 Require-Contains $ea 'ZERO GRID V2.1 geometry' 'geometry marker'
 Require-Contains $ea 'double ZeroGridExistingPendingAnchorPrice(bool buySide)' 'persistent pending anchor'
 Require-Contains $ea 'double ZeroGridPendingAnchorPrice(bool buySide)' 'live-price inward anchor'
@@ -32,6 +32,8 @@ Require-Contains $ea 'return StartZeroGridCycle();' 'immediate ZERO cycle restar
 Require-Contains $ea 'ClosePositionByTicket(ticket);' 'selected ticket close'
 Require-NotContains $ea 'ZERO_GRID_RETRY_FIRST_PAIR' 'destructive first-pair cancel/rebuild loop'
 Require-NotContains $ea 'return MathMax(g_zeroGridStepPrice,ZeroGridMinPendingDistancePrice()+ZeroGridTickSize());' 'over-wide grid step rule'
-Require-NotContains $ea 'OrderSendAsync' 'async trade race expansion'
+Require-Contains $ea 'ZERO_GRID_CLOSE_ALL_BURST' 'ZERO profit close-all burst'
+Require-Contains $ea 'OrderSendAsync(request,result)' 'async ZERO close/cancel dispatch'
+Require-Contains $ea 'g_zeroGridLastExitBurstMs' 'duplicate burst cooldown'
 
 Write-Host 'ZERO GRID fast rearm / close-order contract: PASS'
