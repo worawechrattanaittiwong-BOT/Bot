@@ -56,16 +56,28 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
   async nodes() {
     return (await this.db.query(`SELECT w.runner_id,w.region,w.hostname,w.capacity,w.active_instances,
       w.accepting_jobs,w.monthly_cost,w.spec,w.telemetry,w.last_seen_at,l.occupied,
+      w.health_state,w.capacity_blocked,w.capacity_block_reason,w.quarantined,w.quarantine_reason,w.recovery_paused,
       CASE WHEN w.last_seen_at>now()-interval '30 seconds' THEN 'ONLINE' ELSE 'OFFLINE' END health
       FROM worker_nodes w JOIN cloud_node_load l USING(runner_id) ORDER BY w.created_at`)).rows;
   }
 
   async catalog() {
-    const nodes = await this.nodes();
-    const available = nodes.filter(n => n.health === "ONLINE" && n.accepting_jobs && n.telemetry?.templateReady === true)
-      .reduce((sum, n) => sum + Math.max(0, n.capacity - Math.max(n.occupied, n.active_instances)), 0);
-    return { packages: (await this.db.query("SELECT * FROM cloud_packages ORDER BY months")).rows,
-      available, paymentMode: paymentMode(), checkoutEnabled: process.env.CLOUD_CHECKOUT_ENABLED === "true" && paymentMode() !== "UNCONFIGURED" };
+    const [nodes, controls] = await Promise.all([
+      this.nodes(),
+      this.db.one("SELECT cloud_provisioning_paused FROM production_controls WHERE id=1")
+    ]);
+    const provisioningPaused = Boolean(controls?.cloud_provisioning_paused);
+    const available = provisioningPaused ? 0 : nodes.filter(n =>
+      n.health === "ONLINE" && n.accepting_jobs && n.telemetry?.templateReady === true &&
+      !n.capacity_blocked && !n.quarantined
+    ).reduce((sum, n) => sum + Math.max(0, n.capacity - Math.max(n.occupied, n.active_instances)), 0);
+    return {
+      packages: (await this.db.query("SELECT * FROM cloud_packages ORDER BY months")).rows,
+      available,
+      provisioningPaused,
+      paymentMode: paymentMode(),
+      checkoutEnabled: process.env.CLOUD_CHECKOUT_ENABLED === "true" && paymentMode() !== "UNCONFIGURED" && !provisioningPaused
+    };
   }
 
   // Never trust webhook status/amount. Retrieve the charge with the merchant's secret.
@@ -141,6 +153,8 @@ export class CloudCustomerController {
     if (body.slotId && !/^[0-9a-f-]{36}$/i.test(body.slotId)) throw new BadRequestException("Invalid slot");
     const order = await this.db.transaction(async tx => {
       await tx.query("SELECT pg_advisory_xact_lock(740091)");
+      const controls = (await tx.query("SELECT cloud_provisioning_paused FROM production_controls WHERE id=1 FOR UPDATE")).rows[0];
+      if (controls?.cloud_provisioning_paused) throw new ConflictException("Cloud provisioning ถูกพักชั่วคราวโดยผู้ดูแล");
       const user = (await tx.query("SELECT * FROM users WHERE id=$1 FOR UPDATE", [req.user.sub])).rows[0];
       if (user?.status !== "ACTIVE") throw new ConflictException("บัญชีไม่พร้อมใช้งาน");
       const pending = (await tx.query("SELECT id FROM cloud_orders WHERE user_id=$1 AND status IN ('CREATING','PENDING','REVIEW')", [req.user.sub])).rows[0];
@@ -151,11 +165,15 @@ export class CloudCustomerController {
       if (body.slotId && !slot) throw new ConflictException("ไม่พบ Cloud Slot ของคุณ");
       const reserved = slot ? (await tx.query(`SELECT runner_id FROM cloud_orders WHERE slot_id=$1 AND status='PAID'
         UNION SELECT runner_id FROM bot_instances WHERE slot_id=$1 AND runner_id IS NOT NULL LIMIT 1`, [slot.id])).rows[0] : null;
-      const node = reserved || (await tx.query(`SELECT w.runner_id FROM worker_nodes w JOIN cloud_node_load l USING(runner_id)
+      const reservedHealthy = reserved ? (await tx.query(`SELECT runner_id FROM worker_nodes
+        WHERE runner_id=$1 AND last_seen_at>now()-interval '30 seconds'
+          AND telemetry->>'templateReady'='true' AND NOT capacity_blocked AND NOT quarantined`, [reserved.runner_id])).rows[0] : null;
+      const node = reservedHealthy || (await tx.query(`SELECT w.runner_id FROM worker_nodes w JOIN cloud_node_load l USING(runner_id)
         WHERE w.accepting_jobs AND w.last_seen_at>now()-interval '30 seconds' AND w.telemetry->>'templateReady'='true'
+        AND NOT w.capacity_blocked AND NOT w.quarantined
         AND GREATEST(l.occupied,w.active_instances)<w.capacity
         ORDER BY GREATEST(l.occupied,w.active_instances)::float/w.capacity,w.runner_id LIMIT 1`)).rows[0];
-      if (!node) throw new ConflictException("Cloud เต็มหรือยังไม่มี VPS พร้อมให้บริการ กรุณาลองภายหลัง");
+      if (!node) throw new ConflictException("Cloud เต็มหรือ VPS ยังไม่ผ่าน Health Guard กรุณาลองภายหลัง");
       return (await tx.query("INSERT INTO cloud_orders(user_id,months,amount,runner_id,slot_id) VALUES($1,$2,$3,$4,$5) RETURNING *",
         [req.user.sub, pack.months, pack.price_satang, node.runner_id, slot?.id || null])).rows[0];
     });
@@ -168,7 +186,6 @@ export class CloudCustomerController {
         [order.id,charge.id,charge.source?.scannable_code?.image?.download_uri || null,charge.expires_at || null]);
       return { id: order.id };
     } catch {
-      // A timeout may have created a charge. Keep capacity reserved until reconciled.
       await this.db.query("UPDATE cloud_orders SET status='REVIEW' WHERE id=$1 AND status='CREATING'", [order.id]);
       throw new ConflictException("กำลังตรวจสอบการสร้าง QR กรุณาติดต่อผู้ดูแลพร้อมเลขรายการ " + order.id);
     }
@@ -193,8 +210,9 @@ export class CloudAdminController {
   @Get() async overview() {
     const [catalog, nodes, instances, orders] = await Promise.all([
       this.cloud.catalog(),this.cloud.nodes(),
-      this.db.query(`SELECT b.id,b.runner_id,b.actual_state,b.desired_state,b.last_seen_at,b.provisioning_error,a.account_number,u.user_code,
-        CASE WHEN c.mt5_account_id IS NULL THEN false ELSE true END credential_ready
+      this.db.query(`SELECT b.id,b.runner_id,b.actual_state,b.desired_state,b.last_seen_at,b.provisioning_error,
+        b.cloud_recovery_state,b.cloud_recovery_attempts,b.cloud_recovery_next_at,b.cloud_recovery_last_error,
+        a.account_number,u.user_code,CASE WHEN c.mt5_account_id IS NULL THEN false ELSE true END credential_ready
         FROM bot_instances b LEFT JOIN mt5_accounts a ON a.id=b.mt5_account_id LEFT JOIN users u ON u.id=a.user_id
         LEFT JOIN mt5_credentials c ON c.mt5_account_id=a.id WHERE b.mode='CLOUD' ORDER BY b.created_at DESC LIMIT 100`),
       this.db.query(`SELECT o.id,o.months,o.amount,o.status,o.charge_id,o.runner_id,o.slot_id,o.created_at,u.user_code
@@ -220,6 +238,9 @@ export class CloudAdminController {
       const node = (await tx.query("SELECT w.*,l.occupied FROM worker_nodes w JOIN cloud_node_load l USING(runner_id) WHERE w.runner_id=$1 FOR UPDATE OF w",[id])).rows[0];
       if (!node) throw new BadRequestException("ไม่พบ VPS");
       if (body.capacity<Math.max(node.occupied,node.active_instances)) throw new ConflictException("ความจุต้องไม่น้อยกว่าที่ใช้อยู่และที่จองไว้");
+      const controls = (await tx.query("SELECT cloud_provisioning_paused FROM production_controls WHERE id=1")).rows[0];
+      if (body.acceptingJobs && controls?.cloud_provisioning_paused) throw new ConflictException("ระบบพัก Cloud provisioning อยู่");
+      if (body.acceptingJobs && (node.capacity_blocked || node.quarantined)) throw new ConflictException("VPS ถูก Health Guard/Quarantine บล็อกอยู่");
       if (body.acceptingJobs && (!node.last_seen_at || Date.now()-new Date(node.last_seen_at).getTime()>30000 || node.telemetry?.templateReady!==true)) throw new ConflictException("เชื่อม Worker และตรวจ MT5 Template ก่อนเปิดรับลูกค้า");
       await tx.query("UPDATE worker_nodes SET capacity=$2,accepting_jobs=$3 WHERE runner_id=$1",[id,body.capacity,body.acceptingJobs]);
       return { ok:true };

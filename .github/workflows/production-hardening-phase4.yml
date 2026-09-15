@@ -1,0 +1,106 @@
+name: Production Hardening Phase 4
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/src/production-hardening.*"
+      - "apps/api/src/worker.controller.ts"
+      - "apps/api/src/cloud.controller.ts"
+      - "apps/api/src/cloud-schema.ts"
+      - "apps/web/public/downloads/SCENOVA-CloudWorker.ps1"
+      - "database/019_production_hardening.sql"
+      - "tests/production-hardening-phase4-*"
+      - ".github/workflows/production-hardening-phase4.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/src/production-hardening.*"
+      - "apps/api/src/worker.controller.ts"
+      - "apps/api/src/cloud.controller.ts"
+      - "apps/api/src/cloud-schema.ts"
+      - "apps/web/public/downloads/SCENOVA-CloudWorker.ps1"
+      - "database/019_production_hardening.sql"
+      - "tests/production-hardening-phase4-*"
+      - ".github/workflows/production-hardening-phase4.yml"
+  workflow_dispatch:
+
+jobs:
+  hardening-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bot
+          POSTGRES_PASSWORD: bot
+          POSTGRES_DB: bot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U bot -d bot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Apply baseline schema
+        env:
+          PGPASSWORD: bot
+        run: |
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/001_init.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/002_slots_devices.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/002_cloud_worker.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/003_unique_mt5_identity.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/014_maintenance_mode.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/015_partner_program.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/019_production_hardening.sql
+      - name: Build API
+        run: npm run build -w @bot/api
+      - name: Start isolated API
+        env:
+          DATABASE_URL: postgresql://bot:bot@localhost:5432/bot
+          JWT_SECRET: phase4-integration-jwt
+          ADMIN_KEY: phase4-admin
+          CREDENTIAL_MASTER_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          EA_ARTIFACT_PATH: /tmp/FastBasketBot.ex5
+          PUBLIC_API_BASE: http://127.0.0.1:4000
+          PUBLIC_WEB_BASE: http://127.0.0.1:3000
+          PORT: 4000
+        run: |
+          printf 'phase4-integration-ea-artifact' > /tmp/FastBasketBot.ex5
+          node apps/api/dist/main.js > /tmp/phase4-api.log 2>&1 &
+          echo $! > /tmp/phase4-api.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4000/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/phase4-api.log
+          exit 1
+      - name: Production hardening integration
+        env:
+          BASE: http://127.0.0.1:4000/api
+          ADMIN_KEY: phase4-admin
+          WORKER_KEY: phase4-worker-key
+          PGHOST: localhost
+          PGUSER: bot
+          PGDATABASE: bot
+          PGPASSWORD: bot
+        run: bash ./tests/production-hardening-phase4-integration.sh
+      - name: Show API log on failure
+        if: failure()
+        run: cat /tmp/phase4-api.log || true
+      - name: Stop API
+        if: always()
+        run: |
+          if [ -f /tmp/phase4-api.pid ]; then kill "$(cat /tmp/phase4-api.pid)" || true; fi
