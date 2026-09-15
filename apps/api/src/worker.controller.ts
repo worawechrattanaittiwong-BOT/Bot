@@ -49,12 +49,21 @@ export class WorkerController {
         WHERE w.runner_id=$1 AND w.last_seen_at>now()-interval '30 seconds' FOR UPDATE OF w`, [body.runnerId])).rows[0];
       if (!node || node.telemetry?.templateReady!==true) return null;
       // Paid reservations can finish provisioning even after new sales are paused.
-      return (await tx.query(`UPDATE bot_instances SET runner_id=$1,lock_owner=$1 WHERE id=(
+      // Runtime-stop states are never claimable; a stopped instance must be
+      // deliberately re-armed by a later migration/reprovision workflow.
+      return (await tx.query(`UPDATE bot_instances SET
+          runner_id=$1,
+          lock_owner=$1,
+          runtime_stop_state='NONE',
+          runtime_stop_requested_at=NULL,
+          runtime_stop_confirmed_at=NULL,
+          runtime_stop_error=NULL
+        WHERE id=(
         SELECT bi.id FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id
         JOIN users u ON u.id=a.user_id JOIN mt5_credentials c ON c.mt5_account_id=a.id
         JOIN bot_instance_secrets secret ON secret.bot_instance_id=bi.id
         LEFT JOIN license_slots ls ON ls.id=bi.slot_id LEFT JOIN subscriptions sub ON sub.id=ls.subscription_id
-        WHERE bi.mode='CLOUD' AND bi.runner_id IS NULL AND u.status='ACTIVE'
+        WHERE bi.mode='CLOUD' AND bi.runner_id IS NULL AND COALESCE(bi.runtime_stop_state,'NONE')='NONE' AND u.status='ACTIVE'
         AND (u.role IN ('OWNER','ADMIN') OR (sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now())
           OR EXISTS(SELECT 1 FROM trial_grants t WHERE t.mt5_account_id=a.id AND (t.status='APPROVED' OR t.expires_at>now())))
         AND (EXISTS(SELECT 1 FROM cloud_orders o WHERE o.slot_id=bi.slot_id AND o.status='PAID' AND o.runner_id=$1)
@@ -69,7 +78,10 @@ export class WorkerController {
 
   @Post("assigned")
   async assigned(@Body() body: { runnerId: string }) {
-    const rows = await this.db.query("SELECT id FROM bot_instances WHERE runner_id=$1 AND mode='CLOUD' ORDER BY created_at", [body.runnerId]);
+    const rows = await this.db.query(
+      "SELECT id FROM bot_instances WHERE runner_id=$1 AND mode='CLOUD' AND COALESCE(runtime_stop_state,'NONE')='NONE' ORDER BY created_at",
+      [body.runnerId]
+    );
     const jobs = [];
     for (const row of rows.rows) jobs.push(await this.job(row.id));
     return { jobs: jobs.filter(Boolean) };
@@ -77,7 +89,18 @@ export class WorkerController {
 
   private async job(instanceId: string) {
     const job = await this.db.one(
-      "SELECT bi.id instance_id,bi.desired_state,(bi.last_seen_at>now()-interval '30 seconds') ea_online,a.id mt5_account_id,a.account_number,a.broker,a.broker_server,a.mode,c.ciphertext credential_ciphertext,c.iv credential_iv,c.auth_tag credential_tag,s.ciphertext token_ciphertext,s.iv token_iv,s.auth_tag token_tag,bs.settings FROM bot_instances bi JOIN mt5_accounts a ON a.id=bi.mt5_account_id JOIN mt5_credentials c ON c.mt5_account_id=a.id JOIN bot_instance_secrets s ON s.bot_instance_id=bi.id LEFT JOIN bot_settings bs ON bs.bot_instance_id=bi.id WHERE bi.id=$1",
+      `SELECT
+         bi.id instance_id,bi.desired_state,bi.execution_generation,bi.runtime_stop_state,
+         (bi.last_seen_at>now()-interval '30 seconds') ea_online,
+         a.id mt5_account_id,a.account_number,a.broker,a.broker_server,a.mode,
+         c.ciphertext credential_ciphertext,c.iv credential_iv,c.auth_tag credential_tag,
+         s.ciphertext token_ciphertext,s.iv token_iv,s.auth_tag token_tag,bs.settings
+       FROM bot_instances bi
+       JOIN mt5_accounts a ON a.id=bi.mt5_account_id
+       JOIN mt5_credentials c ON c.mt5_account_id=a.id
+       JOIN bot_instance_secrets s ON s.bot_instance_id=bi.id
+       LEFT JOIN bot_settings bs ON bs.bot_instance_id=bi.id
+       WHERE bi.id=$1 AND COALESCE(bi.runtime_stop_state,'NONE')='NONE'`,
       [instanceId]
     );
 
@@ -91,6 +114,8 @@ export class WorkerController {
         brokerServer: job.broker_server,
         mode: job.mode,
         desiredState: job.desired_state,
+        executionGeneration: Number(job.execution_generation || 1),
+        runtimeStopState: job.runtime_stop_state || "NONE",
         tradingPassword: this.crypto.decrypt({
           ciphertext: job.credential_ciphertext,
           iv: job.credential_iv,
@@ -105,11 +130,150 @@ export class WorkerController {
     };
   }
 
+  @Post("commands")
+  async commands(@Body() body: { runnerId: string }) {
+    const command = await this.db.transaction(async tx => {
+      await tx.query(
+        `UPDATE worker_commands wc
+         SET status='CANCELLED',result_code='STALE_GENERATION',acked_at=now()
+         FROM bot_instances bi
+         WHERE wc.bot_instance_id=bi.id
+           AND wc.runner_id=$1
+           AND wc.status IN ('PENDING','DELIVERED')
+           AND wc.execution_generation<>bi.execution_generation`,
+        [body.runnerId]
+      );
+
+      const row = (await tx.query(
+        `SELECT wc.id,wc.bot_instance_id,wc.execution_generation,wc.command
+         FROM worker_commands wc
+         JOIN bot_instances bi ON bi.id=wc.bot_instance_id
+         WHERE wc.runner_id=$1
+           AND wc.execution_generation=bi.execution_generation
+           AND (wc.status='PENDING' OR (wc.status='DELIVERED' AND wc.delivered_at<now()-interval '15 seconds'))
+         ORDER BY wc.id
+         LIMIT 1
+         FOR UPDATE OF wc SKIP LOCKED`,
+        [body.runnerId]
+      )).rows[0];
+      if (!row) return null;
+
+      await tx.query(
+        "UPDATE worker_commands SET status='DELIVERED',delivered_at=now() WHERE id=$1",
+        [row.id]
+      );
+      return row;
+    });
+
+    if (!command) return { command: null };
+    return {
+      command: {
+        id: Number(command.id),
+        instanceId: command.bot_instance_id,
+        executionGeneration: Number(command.execution_generation),
+        name: command.command
+      }
+    };
+  }
+
+  @Post("command-result")
+  async commandResult(@Body() body: {
+    runnerId: string;
+    commandId: number;
+    instanceId: string;
+    executionGeneration: number;
+    result: "STOP_CONFIRMED" | "STOP_FAILED";
+    errorCode?: string;
+  }) {
+    if (!Number.isInteger(body.commandId) || body.commandId < 1) throw new BadRequestException("Invalid command ID");
+    if (!/^[0-9a-f-]{36}$/i.test(body.instanceId || "")) throw new BadRequestException("Invalid instance ID");
+    if (!Number.isInteger(body.executionGeneration) || body.executionGeneration < 1) throw new BadRequestException("Invalid execution generation");
+    if (!["STOP_CONFIRMED","STOP_FAILED"].includes(body.result)) throw new BadRequestException("Invalid command result");
+    const errorCode = String(body.errorCode || "").replace(/[^A-Z0-9_]/g, "").slice(0,64) || null;
+
+    return this.db.transaction(async tx => {
+      const command = (await tx.query(
+        `SELECT * FROM worker_commands
+         WHERE id=$1
+         FOR UPDATE`,
+        [body.commandId]
+      )).rows[0];
+      if (!command || command.runner_id !== body.runnerId || command.bot_instance_id !== body.instanceId) {
+        throw new BadRequestException("Worker command does not match this runtime");
+      }
+      if (command.command !== "STOP_INSTANCE") throw new BadRequestException("Unsupported worker command");
+      if (Number(command.execution_generation) !== body.executionGeneration) {
+        throw new BadRequestException("Worker command generation mismatch");
+      }
+
+      const instance = (await tx.query(
+        "SELECT id,runner_id,execution_generation FROM bot_instances WHERE id=$1 FOR UPDATE",
+        [body.instanceId]
+      )).rows[0];
+      if (!instance || instance.runner_id !== body.runnerId) {
+        throw new BadRequestException("Cloud runtime ownership changed");
+      }
+      if (Number(instance.execution_generation) !== body.executionGeneration) {
+        await tx.query(
+          "UPDATE worker_commands SET status='CANCELLED',result_code='STALE_GENERATION',acked_at=now() WHERE id=$1",
+          [command.id]
+        );
+        return { ok:true, stale:true };
+      }
+
+      if (body.result === "STOP_CONFIRMED") {
+        await tx.query(
+          "UPDATE worker_commands SET status='ACKED',result_code='STOP_CONFIRMED',acked_at=now() WHERE id=$1",
+          [command.id]
+        );
+        await tx.query(
+          `UPDATE bot_instances SET
+             runtime_stop_state='STOP_CONFIRMED',
+             runtime_stop_confirmed_at=now(),
+             runtime_stop_error=NULL,
+             desired_state='STOPPED',
+             actual_state='OFFLINE',
+             last_seen_at=NULL
+           WHERE id=$1`,
+          [instance.id]
+        );
+      } else {
+        await tx.query(
+          "UPDATE worker_commands SET status='FAILED',result_code=$2,acked_at=now() WHERE id=$1",
+          [command.id,errorCode || "STOP_FAILED"]
+        );
+        await tx.query(
+          `UPDATE bot_instances SET
+             runtime_stop_state='STOP_FAILED',
+             runtime_stop_error=$2
+           WHERE id=$1`,
+          [instance.id,errorCode || "STOP_FAILED"]
+        );
+      }
+
+      await tx.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES($1,$2,'bot_instance',$3,$4::jsonb)`,
+        [
+          "WORKER:" + body.runnerId,
+          body.result === "STOP_CONFIRMED" ? "CLOUD_RUNTIME_STOP_CONFIRMED" : "CLOUD_RUNTIME_STOP_FAILED",
+          instance.id,
+          JSON.stringify({
+            commandId: Number(command.id),
+            executionGeneration: body.executionGeneration,
+            errorCode: errorCode || null
+          })
+        ]
+      );
+      return { ok:true, state:body.result };
+    });
+  }
+
   @Post("release")
-  async release(@Body() body: { runnerId: string; instanceId: string }) {
-    // An API request alone cannot prove that the old terminal has stopped.
-    // Keep ownership until an operator verifies shutdown; prevent duplicate execution.
-    throw new BadRequestException("Automatic release is disabled; verify terminal shutdown before operator reassignment");
+  async release(@Body() _body: { runnerId: string; instanceId: string }) {
+    // Phase 2 deliberately keeps runner ownership even after STOP_CONFIRMED.
+    // Phase 3 migration may release only after verified stop + lease rotation.
+    throw new BadRequestException("Automatic release is disabled; verified stop and controlled migration are required");
   }
 
   @Post("provision-result")
