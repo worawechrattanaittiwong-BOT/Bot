@@ -1,7 +1,8 @@
 name: CI
 
-# Re-verify the full repository after runtime-safety and controlled Local/Cloud
-# migration changes. Trading strategy regressions remain part of the same gate.
+# Re-verify the full repository after runtime-safety, controlled Local/Cloud
+# migration and production-hardening changes. Trading strategy regressions remain
+# part of the same gate.
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
   cancel-in-progress: true
@@ -48,3 +49,6 @@ jobs:
       - name: Runtime migration Phase 3 contract
         shell: pwsh
         run: ./tests/runtime-migration-phase3-contract.ps1
+      - name: Production hardening Phase 4 contract
+        shell: pwsh
+        run: ./tests/production-hardening-phase4-contract.ps1
