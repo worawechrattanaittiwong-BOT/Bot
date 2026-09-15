@@ -1,0 +1,51 @@
+name: Apply ZERO Fast Rearm Fix
+
+on:
+  push:
+    branches:
+      - fix/zero-fast-rearm-close-order
+    paths:
+      - .github/scripts/apply-zero-fast-rearm-close-order.py
+      - .github/workflows/apply-zero-fast-rearm-close-order.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/zero-fast-rearm-close-order
+          fetch-depth: 0
+
+      - name: Apply ZERO-only patch
+        run: python3 .github/scripts/apply-zero-fast-rearm-close-order.py
+
+      - name: Verify ZERO contract
+        shell: pwsh
+        run: ./tests/zero-grid-close-geometry-contract.ps1
+
+      - name: Scope guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          changed="$(git diff --name-only)"
+          printf '%s\n' "$changed"
+          test "$(printf '%s\n' "$changed" | grep -Ev '^(mt5/FastBasketBot\.mq5|tests/zero-grid-close-geometry-contract\.ps1)$' | wc -l)" -eq 0
+
+      - name: Commit candidate patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No patch changes to commit"
+            exit 0
+          fi
+          git config user.name "SCENOVA-AI"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 tests/zero-grid-close-geometry-contract.ps1
+          git commit -m "fix(mt5): speed ZERO rearm and close small lots first"
+          git push origin HEAD:fix/zero-fast-rearm-close-order
