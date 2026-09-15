@@ -1,0 +1,272 @@
+name: One-shot ZERO runtime hardening patch
+
+on:
+  push:
+    branches: [hotfix/zero-runtime-contract-complete]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[zero-runtime-patched]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Apply guarded runtime/version/ZERO patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8-sig')
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8', newline='\n')
+
+          def replace_once(path, old, new, label):
+              text = read(path)
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match in {path}, found {count}')
+              write(path, text.replace(old, new, 1))
+
+          # 1) Every EA runtime change gets a new runtime version. This patch is
+          # intentionally 1.0.12 because main changed MQ5 again after 1.0.11.
+          replace_once(
+              'mt5/FastBasketBot.mq5',
+              '#property version   "1.0.11"\n#define SCENOVA_EA_VERSION "1.0.11"\n#define SCENOVA_PRODUCT_VERSION "1.0.11"',
+              '#property version   "1.0.12"\n#define SCENOVA_EA_VERSION "1.0.12"\n#define SCENOVA_PRODUCT_VERSION "1.0.12"\n#define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"',
+              'EA version/runtime contract'
+          )
+
+          replace_once(
+              'apps/api/src/release-version.ts',
+              'export const DEFAULT_EA_VERSION = "1.0.11";',
+              'export const DEFAULT_EA_VERSION = "1.0.12";\nexport const EA_RUNTIME_CONTRACT = "ZERO_GRID_LEVELS_1_30_V1";\nexport const ZERO_GRID_MAX_LEVELS_PER_SIDE = 30;',
+              'API EA version/runtime contract'
+          )
+
+          # 2) The loaded EA itself reports a contract and the ZERO values it has
+          # actually applied. Hash-on-disk alone cannot prove MT5 reloaded the EX5.
+          old_market = r'''      string marketSessionDiagnostics = StringFormat(
+         ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s,\"marketBid\":%s,\"marketAsk\":%s,\"marketMid\":%s}}",
+         marketSessionState,
+         marketSessionState == "OPEN" ? "true" : "false",
+         marketBidText,
+         marketAskText,
+         marketMidText
+      );'''
+          new_market = r'''      string marketSessionDiagnostics = StringFormat(
+         ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s,\"marketBid\":%s,\"marketAsk\":%s,\"marketMid\":%s,\"runtimeContract\":\"%s\",\"zeroGridConfiguredLevelsPerSide\":%d,\"zeroGridEffectiveLevelsPerSide\":%d,\"zeroGridMaxLevelsPerSide\":%d,\"zeroGridCycleActive\":%s}}",
+         marketSessionState,
+         marketSessionState == "OPEN" ? "true" : "false",
+         marketBidText,
+         marketAskText,
+         marketMidText,
+         SCENOVA_RUNTIME_CONTRACT,
+         g_zeroGridLevelsPerSide,
+         ZeroGridEffectiveLevelsPerSide(),
+         ZERO_GRID_MAX_LEVELS,
+         g_zeroGridCycleStartedAt > 0 ? "true" : "false"
+      );'''
+          replace_once('mt5/FastBasketBot.mq5', old_market, new_market, 'EA heartbeat loaded-runtime telemetry')
+
+          # 3) Server update state now requires the loaded-runtime contract in
+          # addition to exact EA version and EX5 hash.
+          replace_once(
+              'apps/api/src/bot.controller.ts',
+              'import { installerDownloadPath, isEaVersionExact, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";',
+              'import { EA_RUNTIME_CONTRACT, ZERO_GRID_MAX_LEVELS_PER_SIDE, installerDownloadPath, isEaVersionExact, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";',
+              'BotController release imports'
+          )
+
+          replace_once(
+              'apps/api/src/bot.controller.ts',
+              '''        eaVersionMatch: true,\n        eaHashMatch: true,\n        downloadPath: installerDownloadPath(latestVersion),''',
+              '''        eaVersionMatch: true,\n        eaHashMatch: true,\n        currentRuntimeContract: null,\n        requiredRuntimeContract: EA_RUNTIME_CONTRACT,\n        runtimeContractMatch: true,\n        downloadPath: installerDownloadPath(latestVersion),''',
+              'Cloud/non-local software update state'
+          )
+
+          replace_once(
+              'apps/api/src/bot.controller.ts',
+              '''    const currentEaHash = String(instance.agent_ea_hash || "").trim().toLowerCase() || null;\n    const latestEaHash = String(release.sha256 || "").trim().toLowerCase() || null;''',
+              '''    const currentEaHash = String(instance.agent_ea_hash || "").trim().toLowerCase() || null;\n    const latestEaHash = String(release.sha256 || "").trim().toLowerCase() || null;\n    const currentRuntimeContract = String(instance.metrics?.runtimeContract || "").trim() || null;\n    const requiredRuntimeContract = EA_RUNTIME_CONTRACT;\n    const runtimeContractMatch = currentRuntimeContract === requiredRuntimeContract;''',
+              'Local runtime contract state'
+          )
+
+          replace_once(
+              'apps/api/src/bot.controller.ts',
+              '    const eaUpdateRequired = !eaVersionMatch || !eaHashMatch;',
+              '    const eaUpdateRequired = !eaVersionMatch || !eaHashMatch || !runtimeContractMatch;',
+              'Runtime contract update requirement'
+          )
+
+          replace_once(
+              'apps/api/src/bot.controller.ts',
+              '''    } else if (!latestEaHash) {\n      reason = "Server ยังตรวจสอบ EX5 ล่าสุดไม่ได้ จึงยังไม่อนุญาตให้เริ่มบอท";''',
+              '''    } else if (!runtimeContractMatch) {\n      reason = currentRuntimeContract\n        ? "EA ที่กำลังรันยังเป็น Runtime เก่า แม้ไฟล์ EX5 บนเครื่องอาจอัปเดตแล้ว กรุณากดอัปเดต EA และให้ MT5 รีโหลด Runtime ล่าสุด"\n        : "ยังไม่ได้รับ Runtime Contract จาก EA ที่กำลังรัน กรุณาอัปเดต EA และให้ MT5 รีโหลดก่อนเริ่มบอท";\n    } else if (!latestEaHash) {\n      reason = "Server ยังตรวจสอบ EX5 ล่าสุดไม่ได้ จึงยังไม่อนุญาตให้เริ่มบอท";''',
+              'Runtime contract mismatch reason'
+          )
+
+          replace_once(
+              'apps/api/src/bot.controller.ts',
+              '''      eaVersionMatch,\n      eaHashMatch,\n      sourceCommit: release.sourceCommit,''',
+              '''      eaVersionMatch,\n      eaHashMatch,\n      currentRuntimeContract,\n      requiredRuntimeContract,\n      runtimeContractMatch,\n      sourceCommit: release.sourceCommit,''',
+              'Runtime contract dashboard fields'
+          )
+
+          replace_once(
+              'apps/api/src/bot.controller.ts',
+              '          " · ต้องอัปเดตให้ Agent, EA Version และ EX5 Hash ตรงกันก่อน"',
+              '          " · ต้องอัปเดตให้ Agent, EA Version, Runtime และ EX5 Hash ตรงกันก่อน"',
+              'Start software update message'
+          )
+
+          old_zero_start = '''      if (metrics.accountTradeExpert === false) {\n        throw new ConflictException("บัญชี MT5 นี้ไม่อนุญาตให้ Expert Advisor เทรด");\n      }\n\n      const runningEaVersion = String(instance.metrics?.eaVersion || "");'''
+          new_zero_start = '''      if (metrics.accountTradeExpert === false) {\n        throw new ConflictException("บัญชี MT5 นี้ไม่อนุญาตให้ Expert Advisor เทรด");\n      }\n\n      // ZERO GRID may start only after a fresh heartbeat proves that the loaded\n      // EA has actually applied the saved per-side count. The first heartbeat\n      // after Save receives the new settings; the next one confirms they are live.\n      const settingRow = await this.db.one(\n        "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",\n        [instance.id]\n      );\n      const savedSettings = settingRow?.settings || {};\n      const savedControlMode = String(\n        savedSettings.controlMode || savedSettings.engineMode || "AUTO"\n      ).toUpperCase();\n      if (savedControlMode === "ZERO_GRID") {\n        const requestedRaw = Number(savedSettings.zeroGridLevelsPerSide ?? 3);\n        const requestedLevels = Math.max(\n          1,\n          Math.min(\n            ZERO_GRID_MAX_LEVELS_PER_SIDE,\n            Math.trunc(Number.isFinite(requestedRaw) ? requestedRaw : 3)\n          )\n        );\n        const appliedLevels = Number(metrics.zeroGridConfiguredLevelsPerSide);\n        const appliedMax = Number(metrics.zeroGridMaxLevelsPerSide);\n        const appliedMode = String(metrics.controlMode || "").toUpperCase();\n        if (\n          appliedMode !== "ZERO_GRID" ||\n          !Number.isInteger(appliedLevels) ||\n          appliedLevels !== requestedLevels ||\n          appliedMax !== ZERO_GRID_MAX_LEVELS_PER_SIDE\n        ) {\n          throw new ConflictException(\n            "ZERO GRID ยังไม่พร้อมเริ่ม: ตั้งไว้ " + requestedLevels +\n            " Pending ต่อฝั่ง แต่ EA ที่กำลังรันยังไม่ยืนยันค่านี้ · กรุณารอ Heartbeat ถัดไป 5–10 วินาที แล้วกดเริ่มอีกครั้ง"\n          );\n        }\n      }\n\n      const runningEaVersion = String(instance.metrics?.eaVersion || "");'''
+          replace_once('apps/api/src/bot.controller.ts', old_zero_start, new_zero_start, 'ZERO saved-vs-applied start guard')
+
+          # 4) Dashboard explains both the runtime reload and ZERO applied value.
+          replace_once(
+              'apps/web/app/dashboard/page.tsx',
+              '    ZERO_GRID:{title:"ZERO GRID",subtitle:"BUY STOP + SELL STOP · 3 ระดับต่อฝั่ง"},',
+              '    ZERO_GRID:{title:"ZERO GRID",subtitle:"BUY STOP + SELL STOP · เลือกได้ 1–30 Pending ต่อฝั่ง"},',
+              'ZERO mode copy'
+          )
+
+          replace_once(
+              'apps/web/app/dashboard/page.tsx',
+              '''  const slLabel = controlMode === "MANUAL" ? Number(manualSl).toFixed(0)+" points" : "ATR × 2.00";''',
+              '''  const slLabel = controlMode === "MANUAL" ? Number(manualSl).toFixed(0)+" points" : "ATR × 2.00";\n  const selectedZeroLevels = Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||3));\n  const appliedZeroLevels = Number(props.metrics?.zeroGridConfiguredLevelsPerSide);\n  const zeroGridSettingsSynced =\n    controlMode === "ZERO_GRID" &&\n    String(props.metrics?.controlMode || "").toUpperCase() === "ZERO_GRID" &&\n    Number.isInteger(appliedZeroLevels) &&\n    appliedZeroLevels === selectedZeroLevels &&\n    Number(props.metrics?.zeroGridMaxLevelsPerSide) === 30;''',
+              'ZERO applied status variables'
+          )
+
+          replace_once(
+              'apps/web/app/dashboard/page.tsx',
+              '<small>เลือกได้ 1–30 BUY STOP และ 1–30 SELL STOP</small>',
+              '<small>{zeroGridSettingsSynced ? `EA รับค่าแล้ว: ${appliedZeroLevels} BUY + ${appliedZeroLevels} SELL` : `เลือกได้ 1–30 ต่อฝั่ง · หลังบันทึก รอ EA ยืนยัน ${selectedZeroLevels} ต่อฝั่งก่อน Start`}</small>',
+              'ZERO applied status copy'
+          )
+
+          runtime_alert_marker = '''              {!softwareUpdate.eaHashMatch && (\n                <div className="cc-update-alert-row">'''
+          runtime_alert_block = '''              {softwareUpdate.runtimeContractMatch === false && softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch && (\n                <div className="cc-update-alert-row">\n                  <span className="cc-update-row-dot">!</span>\n                  <div className="cc-update-row-copy">\n                    <b>EA ใน MT5 ยังไม่ได้โหลด Runtime ล่าสุด</b>\n                    <small>ไฟล์บนเครื่องอาจอัปเดตแล้ว แต่ MT5 ยังรัน Runtime เก่า · ต้องรีโหลด EA ก่อนเริ่มบอท</small>\n                  </div>\n                  <div className="cc-update-row-action">\n                    <strong>{(state === "RUNNING" || desired === "RUNNING" || currentPositions > 0) ? "หยุดบอท และรอให้ออเดอร์เป็น 0" : "พร้อมรีโหลด EA Runtime ล่าสุด"}</strong>\n                    <small>กดอัปเดต EA หนึ่งครั้ง ระบบจะตรวจไฟล์และรีสตาร์ท MT5 อย่างปลอดภัย</small>\n                    <div id="scenova-ea-update-action-mount" />\n                  </div>\n                </div>\n              )}\n\n              {!softwareUpdate.eaHashMatch && (\n                <div className="cc-update-alert-row">'''
+          replace_once('apps/web/app/dashboard/page.tsx', runtime_alert_marker, runtime_alert_block, 'Loaded runtime dashboard alert')
+
+          # 5) CI permanently prevents another MQ5 logic change from reusing the
+          # same EA version, and asserts the ZERO runtime contract end-to-end.
+          ci_path = '.github/workflows/ci.yml'
+          ci = read(ci_path)
+          old_checkout = '      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4'
+          new_checkout = '      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 2\n      - uses: actions/setup-node@v4'
+          if ci.count(old_checkout) != 1:
+              raise SystemExit('CI checkout pattern mismatch')
+          ci = ci.replace(old_checkout, new_checkout, 1)
+          old_release_step = '''      - name: Unified release version consistency\n        shell: pwsh\n        run: ./tests/release-version-consistency.ps1\n'''
+          new_release_step = old_release_step + '''      - name: EA source change requires version bump\n        shell: pwsh\n        run: ./tests/ea-version-bump-required.ps1\n      - name: ZERO GRID loaded-runtime contract\n        shell: pwsh\n        run: ./tests/zero-grid-runtime-contract.ps1\n'''
+          if ci.count(old_release_step) != 1:
+              raise SystemExit('CI release step pattern mismatch')
+          ci = ci.replace(old_release_step, new_release_step, 1)
+          write(ci_path, ci)
+
+          build_path = '.github/workflows/build-mt5-ea.yml'
+          build = read(build_path)
+          build = build.replace('# Release metadata trigger: EA v1.0.10 atomic ZERO first pair.', '# Release metadata trigger: EA v1.0.12 loaded-runtime + ZERO settings contract.', 1)
+          sentinel = "            'bool ZeroGridModeEnabled()',\n"
+          if build.count(sentinel) != 1:
+              raise SystemExit('MT5 workflow sentinel insertion point mismatch')
+          build = build.replace(
+              sentinel,
+              sentinel + "            '#define SCENOVA_RUNTIME_CONTRACT \"ZERO_GRID_LEVELS_1_30_V1\"',\n            'zeroGridConfiguredLevelsPerSide',\n            'zeroGridEffectiveLevelsPerSide',\n            'zeroGridMaxLevelsPerSide',\n",
+              1
+          )
+          write(build_path, build)
+
+          bump_test = r'''$ErrorActionPreference = 'Stop'
+
+$parent = 'HEAD^'
+$changed = git diff --name-only $parent HEAD -- mt5/FastBasketBot.mq5
+if ($LASTEXITCODE -ne 0) { throw 'Unable to compare EA source with parent commit' }
+if (-not $changed) {
+  Write-Host 'EA version bump gate PASS: MQ5 source unchanged.'
+  exit 0
+}
+
+$currentText = [System.IO.File]::ReadAllText((Resolve-Path 'mt5/FastBasketBot.mq5'))
+$currentMatch = [regex]::Match($currentText, '#property\s+version\s+"([0-9]+\.[0-9]+\.[0-9]+)"')
+if (-not $currentMatch.Success) { throw 'Current EA version marker missing' }
+$current = [version]$currentMatch.Groups[1].Value
+
+$previousText = git show "$parent`:mt5/FastBasketBot.mq5"
+if ($LASTEXITCODE -ne 0 -or -not $previousText) { throw 'Previous EA source/version unavailable; fetch-depth must be >= 2' }
+$previousMatch = [regex]::Match(($previousText -join "`n"), '#property\s+version\s+"([0-9]+\.[0-9]+\.[0-9]+)"')
+if (-not $previousMatch.Success) { throw 'Previous EA version marker missing' }
+$previous = [version]$previousMatch.Groups[1].Value
+
+if ($current.CompareTo($previous) -le 0) {
+  throw "mt5/FastBasketBot.mq5 changed but EA version did not increase: previous=$previous current=$current"
+}
+Write-Host "EA version bump gate PASS: $previous -> $current"
+'''
+          write('tests/ea-version-bump-required.ps1', bump_test)
+
+          contract_test = r'''$ErrorActionPreference = 'Stop'
+
+function Read-Text([string]$path) {
+  if (-not (Test-Path $path)) { throw "Missing contract source: $path" }
+  return [System.IO.File]::ReadAllText((Resolve-Path $path))
+}
+function Assert-Contains([string]$text,[string]$needle,[string]$label) {
+  if (-not $text.Contains($needle)) { throw "ZERO runtime contract missing: $label" }
+}
+
+$mq5 = Read-Text 'mt5/FastBasketBot.mq5'
+$apiRelease = Read-Text 'apps/api/src/release-version.ts'
+$bot = Read-Text 'apps/api/src/bot.controller.ts'
+$web = Read-Text 'apps/web/app/dashboard/page.tsx'
+
+Assert-Contains $mq5 '#define ZERO_GRID_MAX_LEVELS 30' 'EA max 30 per side'
+Assert-Contains $mq5 'JsonNumber(json, "zeroGridLevelsPerSide", g_zeroGridLevelsPerSide)' 'EA consumes saved per-side levels'
+Assert-Contains $mq5 'for(int level=2;level<=levels;level++)' 'EA stages deeper configured levels'
+Assert-Contains $mq5 '#define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"' 'EA loaded-runtime contract'
+Assert-Contains $mq5 '\"runtimeContract\":\"%s\"' 'heartbeat runtime contract telemetry'
+Assert-Contains $mq5 '\"zeroGridConfiguredLevelsPerSide\":%d' 'heartbeat configured ZERO levels telemetry'
+Assert-Contains $mq5 '\"zeroGridEffectiveLevelsPerSide\":%d' 'heartbeat effective ZERO levels telemetry'
+Assert-Contains $mq5 '\"zeroGridMaxLevelsPerSide\":%d' 'heartbeat max ZERO levels telemetry'
+
+Assert-Contains $apiRelease 'EA_RUNTIME_CONTRACT = "ZERO_GRID_LEVELS_1_30_V1"' 'API required runtime contract'
+Assert-Contains $apiRelease 'ZERO_GRID_MAX_LEVELS_PER_SIDE = 30' 'API ZERO max 30'
+Assert-Contains $bot 'runtimeContractMatch = currentRuntimeContract === requiredRuntimeContract' 'API loaded-runtime verification'
+Assert-Contains $bot 'appliedLevels !== requestedLevels' 'ZERO saved-vs-applied start guard'
+Assert-Contains $bot 'appliedMode !== "ZERO_GRID"' 'ZERO mode applied guard'
+Assert-Contains $web 'EA รับค่าแล้ว:' 'ZERO UI applied confirmation'
+Assert-Contains $web 'เลือกได้ 1–30 Pending ต่อฝั่ง' 'ZERO UI 1-30 explanation'
+Assert-Contains $web 'EA ใน MT5 ยังไม่ได้โหลด Runtime ล่าสุด' 'loaded-runtime update alert'
+
+Write-Host 'ZERO GRID loaded-runtime contract PASS: 1-30 selection, applied-value telemetry, runtime reload gate, and Start synchronization verified.'
+'''
+          write('tests/zero-grid-runtime-contract.ps1', contract_test)
+          PY
+
+      - name: Commit guarded patch and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Runtime Hardening"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/one-shot-zero-runtime-contract.yml
+          git add mt5/FastBasketBot.mq5 \
+                  apps/api/src/release-version.ts \
+                  apps/api/src/bot.controller.ts \
+                  apps/web/app/dashboard/page.tsx \
+                  .github/workflows/ci.yml \
+                  .github/workflows/build-mt5-ea.yml \
+                  tests/ea-version-bump-required.ps1 \
+                  tests/zero-grid-runtime-contract.ps1
+          git diff --cached --check
+          git commit -m "fix: complete ZERO GRID runtime synchronization [zero-runtime-patched]"
+          git push origin HEAD:${GITHUB_REF_NAME}
