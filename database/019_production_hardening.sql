@@ -17,6 +17,27 @@ ALTER TABLE bot_instances
   ADD COLUMN IF NOT EXISTS cloud_recovery_last_at timestamptz,
   ADD COLUMN IF NOT EXISTS cloud_recovery_last_error varchar(64);
 
+-- Once a missing Cloud terminal is authorized for recovery, the old EA
+-- heartbeat can no longer prove success. Only a fresh heartbeat from the
+-- restarted runtime may repopulate last_seen_at and reset the recovery budget.
+CREATE OR REPLACE FUNCTION scenova_clear_pre_recovery_heartbeat()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.cloud_recovery_state='AUTHORIZED'
+     AND OLD.cloud_recovery_state IS DISTINCT FROM 'AUTHORIZED' THEN
+    NEW.last_seen_at=NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_clear_pre_recovery_heartbeat ON bot_instances;
+CREATE TRIGGER trg_clear_pre_recovery_heartbeat
+BEFORE UPDATE OF cloud_recovery_state ON bot_instances
+FOR EACH ROW
+EXECUTE FUNCTION scenova_clear_pre_recovery_heartbeat();
+
 CREATE TABLE IF NOT EXISTS production_controls (
   id smallint PRIMARY KEY CHECK(id=1),
   cloud_provisioning_paused boolean NOT NULL DEFAULT false,
