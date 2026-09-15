@@ -86,6 +86,13 @@ jobs:
           cat /tmp/phase3-api.log
           exit 1
 
+      - name: Adapt Phase 3 fixture to required Cloud Worker protocol
+        run: |
+          # Phase 4 raises the minimum control-plane Worker protocol to 1.2.0.
+          # The migration scenario itself is unchanged; only its Worker fixture
+          # is upgraded so assigned/provision/recovery calls exercise the current protocol.
+          sed -i 's/1\.1\.0/1.2.0/g' tests/runtime-migration-phase3-integration.sh
+
       - name: Local Cloud round-trip migration
         env:
           BASE: http://127.0.0.1:4000/api
