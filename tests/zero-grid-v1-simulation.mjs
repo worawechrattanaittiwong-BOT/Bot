@@ -65,7 +65,8 @@ assert.match(ea, /ZeroGridRequiredCloseNet\(\)[\s\S]*ZeroGridEstimatedExitCostMo
 assert.match(ea, /bool\s+g_settingsSynchronized\s*=\s*false/);
 assert.match(ea, /WAIT_SETTINGS_SYNC/);
 assert.match(api, /\["AUTO",\s*"RACE",\s*"ZERO_GRID",\s*"ASSISTED",\s*"MANUAL"\]/);
-assert.match(web, /3 BUY STOP \+ 3 SELL STOP/);
+assert.match(web, /Array\.from\(\{length:30\},\(_,i\)=>i\+1\)/, "ZERO UI must expose 1..30 levels per side");
+assert.match(web, /เลือกได้ 1–30 BUY STOP และ 1–30 SELL STOP/, "ZERO UI must explain the per-side range");
 assert.match(ea, /int maxPlacementAttempts=\(level==1 \? 3 : 2\)/, "L1 must retry immediately");
 assert.match(ea, /ZERO_GRID_WAIT_FIRST_PAIR/, "deeper ladder must wait for both required L1 orders");
 assert.match(ea, /ZERO_GRID_REBUILD_MISSING_L1/, "legacy malformed ladders must rebuild");
