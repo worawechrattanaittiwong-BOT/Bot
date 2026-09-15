@@ -19,17 +19,28 @@ ACCOUNT_ID=$(psqlq "insert into mt5_accounts(user_id,account_number,broker,broke
 INSTANCE_ID=$(psqlq "insert into bot_instances(mt5_account_id,mode,install_token_hash,desired_state,actual_state,runner_id,lock_owner,slot_id,execution_generation,runtime_stop_state,metrics) values('$ACCOUNT_ID','CLOUD','phase4-token-anchor','STOPPED','OFFLINE','$RUNNER','$RUNNER','$CLOUD_SLOT',5,'NONE','{\"positions\":0}'::jsonb) returning id;")
 psqlq "insert into worker_nodes(runner_id,region,hostname,capacity,active_instances,status,last_seen_at,accepting_jobs,worker_key_hash,telemetry) values('$RUNNER','Thailand','PH4-VPS',4,1,'ONLINE',now(),true,encode(digest('$WORKER_KEY','sha256'),'hex'),'{}'::jsonb);" >/dev/null
 
+printf '[phase4] Worker v1.1 may heartbeat but cannot receive assigned/provision/recovery work\n'
+OLD='{"runnerId":"phase4-runner","hostname":"PH4-VPS","activeInstances":1,"telemetry":{"templateReady":true,"version":"1.1.0","cpuPercent":20,"ramUsedGb":4,"ramTotalGb":16,"diskFreeGb":40,"diskTotalGb":80}}'
+worker_post heartbeat "$OLD" >/dev/null
+OLD_HTTP=$(curl -sS -o /tmp/phase4-old-worker.json -w "%{http_code}" -X POST "$BASE/worker/assigned" -H "x-worker-key: $WORKER_KEY" -H 'content-type: application/json' -d "{\"runnerId\":\"$RUNNER\"}")
+test "$OLD_HTTP" = "403"
+
+echo '[phase4] upgrade Worker protocol to v1.2.0'
 HEALTHY='{"runnerId":"phase4-runner","hostname":"PH4-VPS","activeInstances":1,"telemetry":{"templateReady":true,"version":"1.2.0","cpuPercent":20,"ramUsedGb":4,"ramTotalGb":16,"diskFreeGb":40,"diskTotalGb":80}}'
 worker_post heartbeat "$HEALTHY" >/dev/null
 test "$(psqlq "select health_state from worker_nodes where runner_id='$RUNNER';")" = "HEALTHY"
 test "$(psqlq "select capacity_blocked from worker_nodes where runner_id='$RUNNER';")" = "f"
 
-printf '[phase4] bounded recovery keeps lease/generation unchanged\n'
+printf '[phase4] bounded recovery keeps lease/generation unchanged and rejects pre-crash heartbeat\n'
+psqlq "update bot_instances set last_seen_at=now() where id='$INSTANCE_ID';" >/dev/null
 for attempt in 1 2 3; do
   if [ "$attempt" -gt 1 ]; then psqlq "update bot_instances set cloud_recovery_next_at=now()-interval '1 second' where id='$INSTANCE_ID';" >/dev/null; fi
   R=$(worker_post recovery-check "{\"runnerId\":\"$RUNNER\",\"instanceId\":\"$INSTANCE_ID\",\"executionGeneration\":5}")
   test "$(printf '%s' "$R" | json '.allow')" = "true"
   test "$(printf '%s' "$R" | json '.attempt')" = "$attempt"
+  if [ "$attempt" = "1" ]; then
+    test -z "$(psqlq "select coalesce(last_seen_at::text,'') from bot_instances where id='$INSTANCE_ID';")"
+  fi
 done
 
 test "$(psqlq "select execution_generation from bot_instances where id='$INSTANCE_ID';")" = "5"
