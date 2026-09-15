@@ -1,13 +1,15 @@
 import { BadRequestException, Body, Controller, Post, UseGuards } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { CryptoService, WorkerGuard } from "./security";
+import { ProductionHardeningService } from "./production-hardening.service";
 
 @Controller("worker")
 @UseGuards(WorkerGuard)
 export class WorkerController {
   constructor(
     private readonly db: DbService,
-    private readonly crypto: CryptoService
+    private readonly crypto: CryptoService,
+    private readonly hardening: ProductionHardeningService
   ) {}
 
   @Post("heartbeat")
@@ -17,9 +19,19 @@ export class WorkerController {
     hostname?: string;
     capacity?: number;
     activeInstances?: number;
-    telemetry?: { cpuPercent?: number; ramUsedGb?: number; ramTotalGb?: number; templateReady?: boolean; version?: string };
+    telemetry?: {
+      cpuPercent?: number;
+      ramUsedGb?: number;
+      ramTotalGb?: number;
+      diskFreeGb?: number;
+      diskTotalGb?: number;
+      templateReady?: boolean;
+      version?: string;
+    };
   }) {
-    if (body.activeInstances != null && (!Number.isInteger(body.activeInstances) || body.activeInstances<0 || body.activeInstances>200)) throw new BadRequestException("invalid instance count");
+    if (body.activeInstances != null && (!Number.isInteger(body.activeInstances) || body.activeInstances<0 || body.activeInstances>200)) {
+      throw new BadRequestException("invalid instance count");
+    }
     await this.db.query(
       "INSERT INTO worker_nodes(runner_id,region,hostname,capacity,active_instances,status,last_seen_at) VALUES($1,$2,$3,$4,$5,'ONLINE',now()) ON CONFLICT(runner_id) DO UPDATE SET hostname=EXCLUDED.hostname,active_instances=EXCLUDED.active_instances,status='ONLINE',last_seen_at=now()",
       [
@@ -33,10 +45,17 @@ export class WorkerController {
     if (body.telemetry) {
       const t = body.telemetry;
       const finite = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0 ? n : null;
-      await this.db.query("UPDATE worker_nodes SET telemetry=$2 WHERE runner_id=$1", [body.runnerId, JSON.stringify({
-        cpuPercent: finite(t.cpuPercent),ramUsedGb: finite(t.ramUsedGb),ramTotalGb: finite(t.ramTotalGb),
-        templateReady: t.templateReady === true,version: String(t.version || "").slice(0,32)
-      })]);
+      const telemetry = {
+        cpuPercent: finite(t.cpuPercent),
+        ramUsedGb: finite(t.ramUsedGb),
+        ramTotalGb: finite(t.ramTotalGb),
+        diskFreeGb: finite(t.diskFreeGb),
+        diskTotalGb: finite(t.diskTotalGb),
+        templateReady: t.templateReady === true,
+        version: String(t.version || "").slice(0,32)
+      };
+      await this.db.query("UPDATE worker_nodes SET telemetry=$2 WHERE runner_id=$1", [body.runnerId, JSON.stringify(telemetry)]);
+      await this.hardening.recordWorkerHeartbeat(body.runnerId, telemetry);
     }
     return { ok: true };
   }
@@ -45,12 +64,14 @@ export class WorkerController {
   async claimNext(@Body() body: { runnerId: string }) {
     const claimed = await this.db.transaction(async tx => {
       await tx.query("SELECT pg_advisory_xact_lock(740091)");
+      const controls = (await tx.query("SELECT cloud_provisioning_paused FROM production_controls WHERE id=1")).rows[0];
+      if (controls?.cloud_provisioning_paused) return null;
       const node = (await tx.query(`SELECT w.*,l.occupied FROM worker_nodes w JOIN cloud_node_load l USING(runner_id)
         WHERE w.runner_id=$1 AND w.last_seen_at>now()-interval '30 seconds' FOR UPDATE OF w`, [body.runnerId])).rows[0];
-      if (!node || node.telemetry?.templateReady!==true) return null;
-      // Paid reservations can finish provisioning even after new sales are paused.
-      // Runtime-stop states are never claimable; a stopped instance must be
-      // deliberately re-armed by a later migration/reprovision workflow.
+      if (!node || node.telemetry?.templateReady!==true || node.quarantined || node.capacity_blocked) return null;
+      // Paid reservations can finish provisioning when the operator merely pauses
+      // new sales. Automatic capacity/quarantine/global guards are stronger and
+      // block provisioning until the infrastructure is healthy again.
       return (await tx.query(`UPDATE bot_instances SET
           runner_id=$1,
           lock_owner=$1,
@@ -91,6 +112,7 @@ export class WorkerController {
     const job = await this.db.one(
       `SELECT
          bi.id instance_id,bi.desired_state,bi.execution_generation,bi.runtime_stop_state,
+         bi.cloud_recovery_state,bi.cloud_recovery_attempts,bi.cloud_recovery_next_at,
          (bi.last_seen_at>now()-interval '30 seconds') ea_online,
          a.id mt5_account_id,a.account_number,a.broker,a.broker_server,a.mode,
          c.ciphertext credential_ciphertext,c.iv credential_iv,c.auth_tag credential_tag,
@@ -106,28 +128,58 @@ export class WorkerController {
 
     if (!job) return null;
     return {
-        instanceId: job.instance_id,
-        eaOnline: Boolean(job.ea_online),
-        mt5AccountId: job.mt5_account_id,
-        accountNumber: job.account_number,
-        broker: job.broker,
-        brokerServer: job.broker_server,
-        mode: job.mode,
-        desiredState: job.desired_state,
-        executionGeneration: Number(job.execution_generation || 1),
-        runtimeStopState: job.runtime_stop_state || "NONE",
-        tradingPassword: this.crypto.decrypt({
-          ciphertext: job.credential_ciphertext,
-          iv: job.credential_iv,
-          authTag: job.credential_tag
-        }),
-        installToken: this.crypto.decrypt({
-          ciphertext: job.token_ciphertext,
-          iv: job.token_iv,
-          authTag: job.token_tag
-        }),
-        settings: job.settings || {}
+      instanceId: job.instance_id,
+      eaOnline: Boolean(job.ea_online),
+      mt5AccountId: job.mt5_account_id,
+      accountNumber: job.account_number,
+      broker: job.broker,
+      brokerServer: job.broker_server,
+      mode: job.mode,
+      desiredState: job.desired_state,
+      executionGeneration: Number(job.execution_generation || 1),
+      runtimeStopState: job.runtime_stop_state || "NONE",
+      recoveryState: job.cloud_recovery_state || "IDLE",
+      recoveryAttempts: Number(job.cloud_recovery_attempts || 0),
+      recoveryNextAt: job.cloud_recovery_next_at || null,
+      tradingPassword: this.crypto.decrypt({
+        ciphertext: job.credential_ciphertext,
+        iv: job.credential_iv,
+        authTag: job.credential_tag
+      }),
+      installToken: this.crypto.decrypt({
+        ciphertext: job.token_ciphertext,
+        iv: job.token_iv,
+        authTag: job.token_tag
+      }),
+      settings: job.settings || {}
     };
+  }
+
+  @Post("recovery-check")
+  async recoveryCheck(@Body() body: { runnerId: string; instanceId: string; executionGeneration: number }) {
+    if (!/^[0-9a-f-]{36}$/i.test(body.instanceId || "")) throw new BadRequestException("Invalid instance ID");
+    if (!Number.isInteger(body.executionGeneration) || body.executionGeneration < 1) throw new BadRequestException("Invalid execution generation");
+    return this.hardening.recoveryCheck(body.runnerId, body.instanceId, body.executionGeneration);
+  }
+
+  @Post("recovery-result")
+  async recoveryResult(@Body() body: {
+    runnerId: string;
+    instanceId: string;
+    executionGeneration: number;
+    result: "STARTED" | "FAILED";
+    errorCode?: string;
+  }) {
+    if (!/^[0-9a-f-]{36}$/i.test(body.instanceId || "")) throw new BadRequestException("Invalid instance ID");
+    if (!Number.isInteger(body.executionGeneration) || body.executionGeneration < 1) throw new BadRequestException("Invalid execution generation");
+    if (!["STARTED","FAILED"].includes(body.result)) throw new BadRequestException("Invalid recovery result");
+    return this.hardening.recoveryResult(
+      body.runnerId,
+      body.instanceId,
+      body.executionGeneration,
+      body.result,
+      body.errorCode
+    );
   }
 
   @Post("commands")
@@ -193,9 +245,7 @@ export class WorkerController {
 
     return this.db.transaction(async tx => {
       const command = (await tx.query(
-        `SELECT * FROM worker_commands
-         WHERE id=$1
-         FOR UPDATE`,
+        `SELECT * FROM worker_commands WHERE id=$1 FOR UPDATE`,
         [body.commandId]
       )).rows[0];
       if (!command || command.runner_id !== body.runnerId || command.bot_instance_id !== body.instanceId) {
@@ -243,10 +293,7 @@ export class WorkerController {
           [command.id,errorCode || "STOP_FAILED"]
         );
         await tx.query(
-          `UPDATE bot_instances SET
-             runtime_stop_state='STOP_FAILED',
-             runtime_stop_error=$2
-           WHERE id=$1`,
+          `UPDATE bot_instances SET runtime_stop_state='STOP_FAILED',runtime_stop_error=$2 WHERE id=$1`,
           [instance.id,errorCode || "STOP_FAILED"]
         );
       }
@@ -258,11 +305,7 @@ export class WorkerController {
           "WORKER:" + body.runnerId,
           body.result === "STOP_CONFIRMED" ? "CLOUD_RUNTIME_STOP_CONFIRMED" : "CLOUD_RUNTIME_STOP_FAILED",
           instance.id,
-          JSON.stringify({
-            commandId: Number(command.id),
-            executionGeneration: body.executionGeneration,
-            errorCode: errorCode || null
-          })
+          JSON.stringify({ commandId: Number(command.id), executionGeneration: body.executionGeneration, errorCode: errorCode || null })
         ]
       );
       return { ok:true, state:body.result };
@@ -271,15 +314,18 @@ export class WorkerController {
 
   @Post("release")
   async release(@Body() _body: { runnerId: string; instanceId: string }) {
-    // Phase 2 deliberately keeps runner ownership even after STOP_CONFIRMED.
-    // Phase 3 migration may release only after verified stop + lease rotation.
     throw new BadRequestException("Automatic release is disabled; verified stop and controlled migration are required");
   }
 
   @Post("provision-result")
   async provisionResult(@Body() body: { runnerId: string; instanceId: string; errorCode: string }) {
-    if (!/^[0-9a-f-]{36}$/i.test(body.instanceId) || !["","CHECK_TEMPLATE_OR_TERMINAL"].includes(body.errorCode)) throw new BadRequestException("Invalid result");
-    await this.db.query("UPDATE bot_instances SET provisioning_error=$3 WHERE id=$1 AND runner_id=$2", [body.instanceId,body.runnerId,body.errorCode||null]);
+    if (!/^[0-9a-f-]{36}$/i.test(body.instanceId) || !["","CHECK_TEMPLATE_OR_TERMINAL"].includes(body.errorCode)) {
+      throw new BadRequestException("Invalid result");
+    }
+    await this.db.query(
+      "UPDATE bot_instances SET provisioning_error=$3 WHERE id=$1 AND runner_id=$2",
+      [body.instanceId,body.runnerId,body.errorCode||null]
+    );
     return { ok:true };
   }
 }
