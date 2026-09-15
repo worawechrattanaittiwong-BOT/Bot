@@ -2,8 +2,6 @@ from pathlib import Path
 import re
 
 EA = Path("mt5/FastBasketBot.mq5")
-TEST = Path("tests/zero-grid-close-geometry-contract.ps1")
-
 text = EA.read_text(encoding="utf-8")
 
 # Version bump is required whenever the MT5 source changes. Release publication
@@ -19,7 +17,7 @@ for old, new in [
         raise SystemExit(f"missing version anchor: {old}")
     text = text.replace(old, new, 1)
 
-# 1) Preserve a successfully placed first-side L1 while retrying only the side
+# Preserve a successfully placed first-side L1 while retrying only the side
 # that is missing. The old logic cancelled the successful side and rebuilt both,
 # which created visible place/cancel/place churn and extra broker round-trips.
 first_pair_pattern = re.compile(
@@ -83,7 +81,7 @@ text, n = first_pair_pattern.subn(first_pair_replacement, text, count=1)
 if n != 1:
     raise SystemExit(f"first-pair patch count={n}, expected 1")
 
-# 2) Profit close order: smallest lot first (0.02 -> 0.04 -> 0.06 ...).
+# Profit close order: smallest lot first (0.02 -> 0.04 -> 0.06 ...).
 # For equal lot sizes, preserve the previous safety preference: profitable first,
 # then nearest-to-live price, then deterministic ticket order.
 close_selector_pattern = re.compile(
@@ -169,21 +167,4 @@ if 'ZERO_GRID_RETRY_FIRST_PAIR' in text:
     raise SystemExit("obsolete destructive first-pair retry still present")
 
 EA.write_text(text, encoding="utf-8", newline="\n")
-
-# Extend the contract that CI already runs. This stays ZERO-only and makes the
-# no-churn + small-lot-first behavior regression-protected.
-test = TEST.read_text(encoding="utf-8")
-test = test.replace(
-    "Require-Contains $ea '#property version   \"1.0.3\"' 'EA version bump'",
-    "Require-Contains $ea '#property version   \"1.0.13\"' 'EA version bump'",
-    1,
-)
-old = """Require-Contains $ea 'ulong ZeroGridNearestCloseTicket()' 'nearest-price close selector'\nRequire-Contains $ea 'int profitRank=floating>=0.0 ? 0 : 1;' 'profitable tickets close first'\nRequire-Contains $ea 'MathAbs(openPrice-mid)' 'distance-from-live-price close ordering'\nRequire-Contains $ea 'ClosePositionByTicket(ticket);' 'selected ticket close'\n"""
-new = """Require-Contains $ea 'ulong ZeroGridNearestCloseTicket()' 'ZERO close selector'\nRequire-Contains $ea 'double bestVolume=1.0e100;' 'smallest-lot close priority'\nRequire-Contains $ea 'volume<bestVolume-lotTolerance' 'ascending lot close ordering'\nRequire-Contains $ea 'int profitRank=floating>=0.0 ? 0 : 1;' 'same-lot profitable-ticket tie-break'\nRequire-Contains $ea 'MathAbs(openPrice-livePrice)' 'same-lot nearest-price tie-break'\nRequire-Contains $ea 'ZERO_GRID_RETRY_MISSING_L1' 'retry only missing first-side trigger'\nRequire-NotContains $ea 'ZERO_GRID_RETRY_FIRST_PAIR' 'destructive first-pair cancel/rebuild loop'\nRequire-Contains $ea 'ClosePositionByTicket(ticket);' 'selected ticket close'\n"""
-if new not in test:
-    if old not in test:
-        raise SystemExit("test contract anchor not found")
-    test = test.replace(old, new, 1)
-TEST.write_text(test, encoding="utf-8", newline="\n")
-
-print("ZERO fast-rearm / small-lot-first patch applied")
+print("ZERO fast-rearm / small-lot-first source patch applied")
