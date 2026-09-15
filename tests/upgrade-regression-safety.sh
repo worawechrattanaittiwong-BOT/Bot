@@ -41,9 +41,9 @@ SLOT_ID=$(printf '%s' "$DASH" | jq -r '.selectedSlot.id')
 test -n "$USER_ID"
 test -n "$SLOT_ID"
 
-MT5_ID=$(psql -h localhost -U bot -d bot -Atc "insert into mt5_accounts(user_id,account_number,broker,broker_server,mode,status) values('$USER_ID','990001','CI','CI-Reg-Safety','LOCAL','ACTIVE') returning id;")
+MT5_ID=$(psql -h localhost -U bot -d bot -Atq -c "insert into mt5_accounts(user_id,account_number,broker,broker_server,mode,status) values('$USER_ID','990001','CI','CI-Reg-Safety','LOCAL','ACTIVE') returning id;" | head -n1)
 INSTALL_TOKEN='regression-install-token-1234567890'
-INSTANCE=$(psql -h localhost -U bot -d bot -Atc "insert into bot_instances(mt5_account_id,mode,install_token_hash,desired_state,actual_state,slot_id,metrics) values('$MT5_ID','LOCAL',encode(digest('$INSTALL_TOKEN','sha256'),'hex'),'STOPPED','OFFLINE','$SLOT_ID','{\"positions\":0}'::jsonb) returning id;")
+INSTANCE=$(psql -h localhost -U bot -d bot -Atq -c "insert into bot_instances(mt5_account_id,mode,install_token_hash,desired_state,actual_state,slot_id,metrics) values('$MT5_ID','LOCAL',encode(digest('$INSTALL_TOKEN','sha256'),'hex'),'STOPPED','OFFLINE','$SLOT_ID','{\"positions\":0}'::jsonb) returning id;" | head -n1)
 test -n "$INSTANCE"
 
 echo '[regression] ADMIN JWT cannot invoke FORCE FLAT ALL'
