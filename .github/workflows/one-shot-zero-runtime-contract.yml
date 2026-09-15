@@ -9,27 +9,25 @@ permissions:
 
 jobs:
   patch:
+    if: ${{ !contains(github.event.head_commit.message, '[zero-runtime-patched]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      - name: Apply guarded patch
+      - name: Apply guarded source patch
         run: python3 scripts/one-shot-zero-runtime-contract.py
-      - name: Commit patch
+      - name: Commit source patch
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "SCENOVA Runtime Hardening"
           git config user.email "actions@users.noreply.github.com"
-          git rm .github/workflows/one-shot-zero-runtime-contract.yml
           git rm scripts/one-shot-zero-runtime-contract.py
           git add mt5/FastBasketBot.mq5 \
                   apps/api/src/release-version.ts \
                   apps/api/src/bot.controller.ts \
                   apps/web/app/dashboard/page.tsx \
-                  .github/workflows/ci.yml \
-                  .github/workflows/build-mt5-ea.yml \
                   tests/ea-version-bump-required.ps1 \
                   tests/zero-grid-runtime-contract.ps1
           git diff --cached --check
