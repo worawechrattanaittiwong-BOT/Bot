@@ -1,4 +1,4 @@
-name: One-shot apply Integration Smoke runtime fixture
+name: One-shot prepare Integration Smoke runtime fixture
 
 on:
   push:
@@ -8,13 +8,13 @@ permissions:
   contents: write
 
 jobs:
-  apply:
-    if: ${{ !contains(github.event.head_commit.message, '[integration-runtime-fixture-applied]') }}
+  prepare:
+    if: ${{ !contains(github.event.head_commit.message, '[integration-runtime-copy-prepared]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Patch Integration Smoke fixture only
+      - name: Prepare patched Integration Smoke copy
         shell: bash
         run: |
           set -euo pipefail
@@ -24,7 +24,6 @@ jobs:
           source = Path('.github/workflows/integration-smoke.yml')
           text = source.read_text(encoding='utf-8')
 
-          # Add the runtime-contract value read from the real EA source.
           if 'RUNTIME_CONTRACT=$(sed -n' not in text:
               lines = text.splitlines(keepends=True)
               for i, line in enumerate(lines):
@@ -45,8 +44,6 @@ jobs:
                   raise SystemExit('EA_VERSION non-empty check not found')
               text = text.replace(marker, marker + '          test -n "$RUNTIME_CONTRACT"\n', 1)
 
-          # Integration Smoke must model the loaded EA v1.0.12 heartbeat.
-          # This changes test fixture telemetry only; no production/trading logic.
           old = r'\"eaVersion\":\"$EA_VERSION\"'
           new = old + r',\"runtimeContract\":\"$RUNTIME_CONTRACT\"'
           replacements = text.count(old)
@@ -54,20 +51,22 @@ jobs:
               raise SystemExit(f'expected at least 8 current-runtime heartbeat fixtures, found {replacements}')
           text = text.replace(old, new)
 
-          source.write_text(text, encoding='utf-8')
-          print(f'Updated Integration Smoke with {replacements} runtime-contract heartbeat fixtures')
+          out = Path('patches/integration-smoke-runtime-contract.yml')
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_text(text, encoding='utf-8')
+          print(f'Prepared {out} with {replacements} runtime-contract heartbeat fixtures')
           PY
 
-          git diff --check -- .github/workflows/integration-smoke.yml
-          CHANGED="$(git diff --name-only)"
-          test "$CHANGED" = ".github/workflows/integration-smoke.yml"
+          diff -u .github/workflows/integration-smoke.yml patches/integration-smoke-runtime-contract.yml > /tmp/integration-runtime.diff || true
+          grep -q 'runtimeContract' /tmp/integration-runtime.diff
+          grep -q 'RUNTIME_CONTRACT' /tmp/integration-runtime.diff
 
-      - name: Commit Integration Smoke fixture
+      - name: Commit prepared copy
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "SCENOVA Runtime Hardening"
           git config user.email "actions@users.noreply.github.com"
-          git add .github/workflows/integration-smoke.yml
-          git commit -m "test: align Integration Smoke with EA runtime contract [integration-runtime-fixture-applied]"
+          git add patches/integration-smoke-runtime-contract.yml
+          git commit -m "chore: prepare Integration Smoke runtime copy [integration-runtime-copy-prepared]"
           git push origin HEAD:${GITHUB_REF_NAME}
