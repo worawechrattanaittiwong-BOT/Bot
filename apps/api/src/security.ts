@@ -60,16 +60,45 @@ export class AdminGuard implements CanActivate {
 export class WorkerGuard implements CanActivate {
   constructor(private readonly db: DbService) {}
 
+  private versionAtLeast(current: unknown, required: string) {
+    const parse = (value: unknown) => {
+      const raw = String(value || "").trim().replace(/^v/i, "");
+      if (!/^\d+(?:\.\d+){0,3}$/.test(raw)) return null;
+      const parts = raw.split(".").map(Number);
+      while (parts.length < 4) parts.push(0);
+      return parts;
+    };
+    const a = parse(current);
+    const b = parse(required);
+    if (!a || !b) return false;
+    for (let i = 0; i < 4; i++) {
+      if (a[i] > b[i]) return true;
+      if (a[i] < b[i]) return false;
+    }
+    return true;
+  }
+
   async canActivate(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest();
     const supplied = String(req.headers["x-worker-key"] || "");
     const expected = String(process.env.WORKER_KEY || "");
     const runnerId = String(req.body?.runnerId || "");
     if (!/^[a-zA-Z0-9_-]{3,80}$/.test(runnerId)) throw new ForbiddenException("runner ID required");
-    const node = await this.db.one("SELECT worker_key_hash FROM worker_nodes WHERE runner_id=$1", [runnerId]);
+    const node = await this.db.one("SELECT worker_key_hash,telemetry FROM worker_nodes WHERE runner_id=$1", [runnerId]);
     if (node?.worker_key_hash) {
       if (createHash("sha256").update(supplied).digest("hex") !== node.worker_key_hash) throw new ForbiddenException("worker key invalid");
     } else if (!expected || supplied !== expected) throw new ForbiddenException("worker key invalid");
+
+    // Worker v1.1.0 can still heartbeat and execute STOP_INSTANCE so existing
+    // terminals remain manageable during a rolling upgrade. It may not receive
+    // assigned/provision/recovery work because that version can auto-restart a
+    // missing terminal without Phase 4 server authorization.
+    const controlPath = String(req.path || req.url || "");
+    const requiresHardeningProtocol = ["/assigned", "/claim-next", "/recovery-check", "/recovery-result"]
+      .some(suffix => controlPath.endsWith(suffix));
+    if (requiresHardeningProtocol && !this.versionAtLeast(node?.telemetry?.version, "1.2.0")) {
+      throw new ForbiddenException("Cloud Worker v1.2.0+ required for provisioning and recovery");
+    }
     return true;
   }
 }
