@@ -1,4 +1,4 @@
-name: Apply ZERO Free Run v1.0.15
+name: Apply ZERO Pair + RACE Profit v1.0.16
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: apply-zero-free-run-v115
+  group: apply-zero-race-v116
   cancel-in-progress: true
 
 jobs:
@@ -23,14 +23,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply ZERO-only free-run patch
-        run: python3 .github/scripts/apply_zero_free_run_v115.py
+      - name: Apply ZERO pair + RACE profit runtime patch
+        run: python3 .github/scripts/apply_zero_race_runtime_v116.py
 
       - name: Verify patch touches only approved files
         shell: bash
         run: |
           set -euo pipefail
-          allowed='^(mt5/FastBasketBot\.mq5|apps/api/src/release-version\.ts|tests/zero-grid-close-geometry-contract\.ps1|tests/zero-grid-free-run-contract\.ps1)$'
+          allowed='^(mt5/FastBasketBot\.mq5|apps/api/src/release-version\.ts|tests/zero-grid-close-geometry-contract\.ps1|tests/zero-race-runtime-v116-contract\.ps1)$'
           changed="$(git diff --name-only)"
           printf '%s\n' "$changed"
           if [ -z "$changed" ]; then
@@ -50,23 +50,27 @@ jobs:
         shell: pwsh
         run: ./tests/zero-grid-free-run-contract.ps1
 
-      - name: Run existing ZERO close/geometry contract
+      - name: Run ZERO close/geometry contract
         shell: pwsh
         run: ./tests/zero-grid-close-geometry-contract.ps1
+
+      - name: Run ZERO pair + RACE profit v1.0.16 contract
+        shell: pwsh
+        run: ./tests/zero-race-runtime-v116-contract.ps1
 
       - name: Run ZERO GRID simulation regression
         run: node tests/zero-grid-v1-simulation.mjs
 
-      - name: Commit ZERO-only runtime fix to main
+      - name: Commit isolated runtime fix to main
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- mt5/FastBasketBot.mq5 apps/api/src/release-version.ts tests/zero-grid-close-geometry-contract.ps1 tests/zero-grid-free-run-contract.ps1; then
+          if git diff --quiet -- mt5/FastBasketBot.mq5 apps/api/src/release-version.ts tests/zero-grid-close-geometry-contract.ps1 tests/zero-race-runtime-v116-contract.ps1; then
             echo "No source changes needed"
             exit 0
           fi
           git config user.name "SCENOVA Patch Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add mt5/FastBasketBot.mq5 apps/api/src/release-version.ts tests/zero-grid-close-geometry-contract.ps1 tests/zero-grid-free-run-contract.ps1
-          git commit -m "fix(mt5): free-run ZERO rearm v1.0.15"
+          git add mt5/FastBasketBot.mq5 apps/api/src/release-version.ts tests/zero-grid-close-geometry-contract.ps1 tests/zero-race-runtime-v116-contract.ps1
+          git commit -m "fix(mt5): pair ZERO ladder and harvest RACE profit v1.0.16"
           git push origin HEAD:main
