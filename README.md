@@ -103,7 +103,9 @@ Production API มี idempotent startup migration สำหรับ schema Slo
 4. `npm install`
 5. `npm run dev:api` และ `npm run dev:web`
 
-Windows Installer ปัจจุบัน: **v3.1.0 Smart Installer** — อัปเดตล่าสุด **10 กันยายน 2026**\n\nSmart Installer 3.1 ใช้ Light UI พื้นหลังขาว, ซ่อน Beta/AdminTest ไว้ในโหมดขั้นสูง, รองรับ Auto Detect MT5, Health Check, Repair, Safe EA Update, Rollback, Multi-MT5 profiles, SHA-256/Post-install verification และ Preset Migration สำหรับ Indicator Intelligence V6. ดูรายละเอียดที่ `docs/SMART-INSTALLER-V3.md` และ `docs/INDICATOR-INTELLIGENCE-V6.md`
+Windows Installer runtime ปัจจุบัน: **v1.0.8** — อัปเดตล่าสุด **14 กันยายน 2026**
+
+คำว่า **Smart Installer V3** เป็นชื่อ generation/ชุดความสามารถของตัวติดตั้ง ไม่ใช่ runtime semantic version. Runtime compatibility ใช้ release line `1.0.x` และ CI ตรวจให้ API, Device Agent และ Windows project ใช้ version ตรงกัน. ดูรายละเอียดที่ `docs/SMART-INSTALLER-V3.md` และ `docs/INDICATOR-INTELLIGENCE-V6.md`
 
 Windows Installer build:
 
