@@ -1,4 +1,4 @@
-# SCENOVA Cloud Worker v1.0.0 - Windows PowerShell 5.1 / Windows Server 2019.
+# SCENOVA Cloud Worker v1.1.0 - Windows PowerShell 5.1 / Windows Server 2019.
 # Install under the dedicated Windows account that will run the MT5 terminals.
 param(
   [switch]$Install,
@@ -77,10 +77,58 @@ function Get-InstancePath([string]$InstanceId) {
   if (!$path.StartsWith($instancesPath+'\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid instance path' }
   return $path
 }
+function Get-ExactTerminalProcesses([string]$TerminalPath) {
+  return @(Get-CimInstance Win32_Process -Filter "name='terminal64.exe'" | Where-Object {
+    $_.ExecutablePath -and $_.ExecutablePath.Equals($TerminalPath, [StringComparison]::OrdinalIgnoreCase)
+  })
+}
+function Stop-CloudInstance([string]$InstanceId) {
+  $path = Get-InstancePath $InstanceId
+  $terminal = "$path\terminal64.exe"
+  $processes = Get-ExactTerminalProcesses $terminal
+  foreach ($process in $processes) {
+    Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
+  }
+
+  $deadline = [DateTime]::UtcNow.AddSeconds(15)
+  while ([DateTime]::UtcNow -lt $deadline) {
+    if ((Get-ExactTerminalProcesses $terminal).Count -eq 0) { return $true }
+    Start-Sleep -Milliseconds 500
+  }
+  return (Get-ExactTerminalProcesses $terminal).Count -eq 0
+}
+function Process-WorkerCommand($Command) {
+  if (!$Command) { return }
+  if ([string]$Command.name -ne 'STOP_INSTANCE') { return }
+
+  $result = 'STOP_FAILED'
+  $errorCode = 'STOP_FAILED'
+  try {
+    if (Stop-CloudInstance ([string]$Command.instanceId)) {
+      $result = 'STOP_CONFIRMED'
+      $errorCode = ''
+    } else {
+      $errorCode = 'PROCESS_STILL_RUNNING'
+    }
+  } catch {
+    # Never return exception text; paths and process details stay local to the Worker.
+    $result = 'STOP_FAILED'
+    $errorCode = 'STOP_FAILED'
+  }
+
+  Invoke-Worker 'command-result' @{
+    commandId=[int64]$Command.id
+    instanceId=[string]$Command.instanceId
+    executionGeneration=[int64]$Command.executionGeneration
+    result=$result
+    errorCode=$errorCode
+  } | Out-Null
+}
 function Start-CloudInstance($Job, $Processes) {
+  if ([string]$Job.runtimeStopState -ne '' -and [string]$Job.runtimeStopState -ne 'NONE') { return }
   $path = Get-InstancePath $Job.instanceId
   $terminal = "$path\terminal64.exe"
-  $running = @($Processes | Where-Object { $_.ExecutablePath -eq $terminal }).Count -gt 0
+  $running = @($Processes | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.Equals($terminal,[StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
   if ($running) {
     if ($Job.eaOnline -and (Test-Path -LiteralPath "$path\cloud-start.ini")) { Remove-Item -LiteralPath "$path\cloud-start.ini" -Force }
     return
@@ -121,9 +169,16 @@ try {
       $os = Get-CimInstance Win32_OperatingSystem
       $cpu = (Get-CimInstance Win32_Processor | Measure-Object LoadPercentage -Average).Average
       Invoke-Worker 'heartbeat' @{hostname=$env:COMPUTERNAME;activeInstances=$active;telemetry=@{
-        templateReady=$script:templateReady;version='1.0.0';cpuPercent=[math]::Round($cpu,1);
+        templateReady=$script:templateReady;version='1.1.0';cpuPercent=[math]::Round($cpu,1);
         ramTotalGb=[math]::Round($os.TotalVisibleMemorySize/1MB,1);ramUsedGb=[math]::Round(($os.TotalVisibleMemorySize-$os.FreePhysicalMemory)/1MB,1)
       }} | Out-Null
+
+      # Safety commands are processed before any provisioning/start work.
+      $commandResponse = Invoke-Worker 'commands' @{}
+      if ($commandResponse.command) { Process-WorkerCommand $commandResponse.command }
+
+      # Refresh process data after a possible STOP_INSTANCE before considering starts.
+      $processes = @(Get-CimInstance Win32_Process -Filter "name='terminal64.exe'")
       $assigned = Invoke-Worker 'assigned' @{}
       foreach ($job in $assigned.jobs) { Start-CloudInstance $job $processes }
       if ($script:templateReady) {
