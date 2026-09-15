@@ -1,0 +1,29 @@
+name: ZERO GRID API version hotfix
+
+on:
+  push:
+    branches:
+      - hotfix/zero-grid-ea-version-1-0-11
+
+permissions:
+  contents: write
+
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Align API EA release version to 1.0.11
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -c '^export const DEFAULT_EA_VERSION = "1\.0\.10";$' apps/api/src/release-version.ts)" = "1"
+          sed -i 's/^export const DEFAULT_EA_VERSION = "1\.0\.10";$/export const DEFAULT_EA_VERSION = "1.0.11";/' apps/api/src/release-version.ts
+          git rm .github/workflows/zero-grid-api-version-hotfix.yml
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/api/src/release-version.ts
+          git commit -m "fix: align API EA version with ZERO GRID hotfix"
+          git push origin HEAD:hotfix/zero-grid-ea-version-1-0-11
