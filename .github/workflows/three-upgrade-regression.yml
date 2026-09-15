@@ -101,6 +101,11 @@ jobs:
           ADMIN_KEY: integration-admin
         run: bash ./tests/upgrade-regression-safety.sh
 
+      - name: CLOSE_ALL flat-heartbeat reconcile regression
+        env:
+          BASE: http://127.0.0.1:4000/api
+        run: bash ./tests/closeall-flat-heartbeat-reconcile.sh
+
       - name: Show API log on failure
         if: failure()
         run: cat /tmp/scenova-three-upgrades-api.log || true
