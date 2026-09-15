@@ -1,6 +1,6 @@
 name: Build MT5 EA
 
-# Release metadata trigger: EA v1.0.10 atomic ZERO first pair.
+# Release metadata trigger: EA v1.0.12 loaded-runtime + ZERO settings contract.
 # Official MT5 compile and publish pipeline for the current V20/RACE source.
 # ZERO GRID V3 uses a ~1.00 price first offset (about 100 points on 2-digit XAUUSD),
 # guarantees the required L1 pair before deeper levels, keeps exact per-side spacing,
@@ -17,13 +17,17 @@ on:
     paths:
       - "mt5/FastBasketBot.mq5"
       - ".github/workflows/build-mt5-ea.yml"
+  pull_request:
+    paths:
+      - "mt5/FastBasketBot.mq5"
+      - ".github/workflows/build-mt5-ea.yml"
 
 permissions:
   contents: write
 
 jobs:
   compile:
-    if: ${{ !contains(github.event.head_commit.message, '[skip ea build]') }}
+    if: ${{ github.event_name == 'pull_request' || !contains(github.event.head_commit.message, '[skip ea build]') }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -84,6 +88,10 @@ jobs:
             'complete the requested RACE fill first',
             'SaaSRace',
             'bool ZeroGridModeEnabled()',
+            '#define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"',
+            'zeroGridConfiguredLevelsPerSide',
+            'zeroGridEffectiveLevelsPerSide',
+            'zeroGridMaxLevelsPerSide',
             'bool ZeroGridAccountIsNetting()',
             'ZERO GRID V3 - deterministic symmetric breakout ladder',
             'bool ZeroGridOwnsSelectedPosition()',
@@ -183,6 +191,7 @@ jobs:
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
       - name: Publish current V20 compiled artifact
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
