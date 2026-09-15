@@ -138,6 +138,8 @@ write(ea_path, ea)
 
 # ---------------------------------------------------------------------------
 # Release metadata. EA releases are exact-version gated, so promote 1.0.15.
+# The official MT5 build workflow reads the version dynamically from the MQ5;
+# do not rewrite workflow metadata from this runtime patch.
 # ---------------------------------------------------------------------------
 release_path = "apps/api/src/release-version.ts"
 release = read(release_path)
@@ -148,24 +150,6 @@ release = replace_once_or_assert(
     "API EA default version",
 )
 write(release_path, release)
-
-
-# Keep the official build metadata/sentinel aligned with the runtime source.
-build_path = ".github/workflows/build-mt5-ea.yml"
-build = read(build_path)
-build = replace_once_or_assert(
-    build,
-    "# Release metadata trigger: EA v1.0.14 loaded-runtime + ZERO settings contract.",
-    "# Release metadata trigger: EA v1.0.15 loaded-runtime + ZERO settings contract.",
-    "build workflow release comment",
-)
-build = replace_once_or_assert(
-    build,
-    "            'WAIT_SETTINGS_SYNC',\n            'request.action=TRADE_ACTION_PENDING;',",
-    "            'WAIT_SETTINGS_SYNC',\n            'ZERO_GRID_FREE_RUN',\n            'request.action=TRADE_ACTION_PENDING;',",
-    "build workflow ZERO free-run sentinel",
-)
-write(build_path, build)
 
 
 # Existing ZERO regression tracks the promoted EA version.
