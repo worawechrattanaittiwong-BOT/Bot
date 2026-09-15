@@ -17,8 +17,8 @@ def replace_once(path: str, old: str, new: str, label: str) -> None:
     write(path, text.replace(old, new, 1))
 
 
-# 1) New runtime version. Main changed MQ5 again after 1.0.11, so keeping
-# 1.0.11 would recreate the exact stale-in-memory bug this hardening fixes.
+# Every changed EA runtime gets a new runtime version. Main changed MQ5 after
+# 1.0.11, so 1.0.12 is required to prevent stale in-memory MT5 code appearing current.
 replace_once(
     "mt5/FastBasketBot.mq5",
     '#property version   "1.0.11"\n#define SCENOVA_EA_VERSION "1.0.11"\n#define SCENOVA_PRODUCT_VERSION "1.0.11"',
@@ -32,8 +32,8 @@ replace_once(
     "API EA version/runtime contract",
 )
 
-# 2) The loaded EA reports its own runtime contract and the ZERO count it has
-# actually applied. An EX5 hash on disk alone cannot prove MT5 reloaded it.
+# Loaded-EA telemetry proves what MT5 is actually running, not merely which EX5
+# happens to be present on disk.
 old_market = r'''      string marketSessionDiagnostics = StringFormat(
          ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s,\"marketBid\":%s,\"marketAsk\":%s,\"marketMid\":%s}}",
          marketSessionState,
@@ -57,7 +57,7 @@ new_market = r'''      string marketSessionDiagnostics = StringFormat(
       );'''
 replace_once("mt5/FastBasketBot.mq5", old_market, new_market, "EA loaded-runtime telemetry")
 
-# 3) API requires the loaded runtime contract as well as exact version/hash.
+# Server release/update gate: version + on-disk hash + loaded runtime contract.
 replace_once(
     "apps/api/src/bot.controller.ts",
     'import { installerDownloadPath, isEaVersionExact, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";',
@@ -125,6 +125,8 @@ replace_once(
     '          " · ต้องอัปเดตให้ Agent, EA Version, Runtime และ EX5 Hash ตรงกันก่อน"',
     "Start software update message",
 )
+
+# ZERO Start guard: saved count must match the count applied by the fresh loaded EA.
 old_zero_start = '''      if (metrics.accountTradeExpert === false) {
         throw new ConflictException("บัญชี MT5 นี้ไม่อนุญาตให้ Expert Advisor เทรด");
       }
@@ -173,7 +175,8 @@ new_zero_start = '''      if (metrics.accountTradeExpert === false) {
       const runningEaVersion = String(instance.metrics?.eaVersion || "");'''
 replace_once("apps/api/src/bot.controller.ts", old_zero_start, new_zero_start, "ZERO saved-vs-applied start guard")
 
-# 4) UI makes the applied value and stale loaded runtime visible.
+# Dashboard: explain 1-30, show what loaded EA has actually applied, and surface
+# stale in-memory runtime even when version/hash alone would look current.
 replace_once(
     "apps/web/app/dashboard/page.tsx",
     '    ZERO_GRID:{title:"ZERO GRID",subtitle:"BUY STOP + SELL STOP · 3 ระดับต่อฝั่ง"},',
@@ -221,41 +224,8 @@ runtime_alert_block = '''              {softwareUpdate.runtimeContractMatch === 
                 <div className="cc-update-alert-row">'''
 replace_once("apps/web/app/dashboard/page.tsx", runtime_alert_marker, runtime_alert_block, "Loaded runtime dashboard alert")
 
-# 5) CI permanently blocks EA source changes that reuse an old runtime version.
-ci_path = ".github/workflows/ci.yml"
-ci = read(ci_path)
-old_checkout = "      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4"
-new_checkout = "      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 2\n      - uses: actions/setup-node@v4"
-if ci.count(old_checkout) != 1:
-    raise SystemExit("CI checkout pattern mismatch")
-ci = ci.replace(old_checkout, new_checkout, 1)
-old_release_step = "      - name: Unified release version consistency\n        shell: pwsh\n        run: ./tests/release-version-consistency.ps1\n"
-new_release_step = old_release_step + "      - name: EA source change requires version bump\n        shell: pwsh\n        run: ./tests/ea-version-bump-required.ps1\n      - name: ZERO GRID loaded-runtime contract\n        shell: pwsh\n        run: ./tests/zero-grid-runtime-contract.ps1\n"
-if ci.count(old_release_step) != 1:
-    raise SystemExit("CI release step pattern mismatch")
-write(ci_path, ci.replace(old_release_step, new_release_step, 1))
-
-build_path = ".github/workflows/build-mt5-ea.yml"
-build = read(build_path)
-build = build.replace(
-    "# Release metadata trigger: EA v1.0.10 atomic ZERO first pair.",
-    "# Release metadata trigger: EA v1.0.12 loaded-runtime + ZERO settings contract.",
-    1,
-)
-sentinel = "            'bool ZeroGridModeEnabled()',\n"
-if build.count(sentinel) != 1:
-    raise SystemExit("MT5 workflow sentinel insertion point mismatch")
-build = build.replace(
-    sentinel,
-    sentinel
-    + "            '#define SCENOVA_RUNTIME_CONTRACT \"ZERO_GRID_LEVELS_1_30_V1\"',\n"
-    + "            'zeroGridConfiguredLevelsPerSide',\n"
-    + "            'zeroGridEffectiveLevelsPerSide',\n"
-    + "            'zeroGridMaxLevelsPerSide',\n",
-    1,
-)
-write(build_path, build)
-
+# Permanent contract tests are added now; CI wiring is updated separately through
+# the GitHub connector because Actions tokens cannot modify workflow files.
 bump_test = r'''$ErrorActionPreference = 'Stop'
 
 $parent = 'HEAD^'
@@ -265,18 +235,15 @@ if (-not $changed) {
   Write-Host 'EA version bump gate PASS: MQ5 source unchanged.'
   exit 0
 }
-
 $currentText = [System.IO.File]::ReadAllText((Resolve-Path 'mt5/FastBasketBot.mq5'))
 $currentMatch = [regex]::Match($currentText, '#property\s+version\s+"([0-9]+\.[0-9]+\.[0-9]+)"')
 if (-not $currentMatch.Success) { throw 'Current EA version marker missing' }
 $current = [version]$currentMatch.Groups[1].Value
-
 $previousText = git show "$parent`:mt5/FastBasketBot.mq5"
 if ($LASTEXITCODE -ne 0 -or -not $previousText) { throw 'Previous EA source/version unavailable; fetch-depth must be >= 2' }
 $previousMatch = [regex]::Match(($previousText -join "`n"), '#property\s+version\s+"([0-9]+\.[0-9]+\.[0-9]+)"')
 if (-not $previousMatch.Success) { throw 'Previous EA version marker missing' }
 $previous = [version]$previousMatch.Groups[1].Value
-
 if ($current.CompareTo($previous) -le 0) {
   throw "mt5/FastBasketBot.mq5 changed but EA version did not increase: previous=$previous current=$current"
 }
@@ -285,7 +252,6 @@ Write-Host "EA version bump gate PASS: $previous -> $current"
 write("tests/ea-version-bump-required.ps1", bump_test)
 
 contract_test = r'''$ErrorActionPreference = 'Stop'
-
 function Read-Text([string]$path) {
   if (-not (Test-Path $path)) { throw "Missing contract source: $path" }
   return [System.IO.File]::ReadAllText((Resolve-Path $path))
@@ -293,12 +259,10 @@ function Read-Text([string]$path) {
 function Assert-Contains([string]$text,[string]$needle,[string]$label) {
   if (-not $text.Contains($needle)) { throw "ZERO runtime contract missing: $label" }
 }
-
 $mq5 = Read-Text 'mt5/FastBasketBot.mq5'
 $apiRelease = Read-Text 'apps/api/src/release-version.ts'
 $bot = Read-Text 'apps/api/src/bot.controller.ts'
 $web = Read-Text 'apps/web/app/dashboard/page.tsx'
-
 Assert-Contains $mq5 '#define ZERO_GRID_MAX_LEVELS 30' 'EA max 30 per side'
 Assert-Contains $mq5 'JsonNumber(json, "zeroGridLevelsPerSide", g_zeroGridLevelsPerSide)' 'EA consumes saved per-side levels'
 Assert-Contains $mq5 'for(int level=2;level<=levels;level++)' 'EA stages deeper configured levels'
@@ -307,7 +271,6 @@ Assert-Contains $mq5 '\"runtimeContract\":\"%s\"' 'heartbeat runtime contract te
 Assert-Contains $mq5 '\"zeroGridConfiguredLevelsPerSide\":%d' 'heartbeat configured ZERO levels telemetry'
 Assert-Contains $mq5 '\"zeroGridEffectiveLevelsPerSide\":%d' 'heartbeat effective ZERO levels telemetry'
 Assert-Contains $mq5 '\"zeroGridMaxLevelsPerSide\":%d' 'heartbeat max ZERO levels telemetry'
-
 Assert-Contains $apiRelease 'EA_RUNTIME_CONTRACT = "ZERO_GRID_LEVELS_1_30_V1"' 'API required runtime contract'
 Assert-Contains $apiRelease 'ZERO_GRID_MAX_LEVELS_PER_SIDE = 30' 'API ZERO max 30'
 Assert-Contains $bot 'runtimeContractMatch = currentRuntimeContract === requiredRuntimeContract' 'API loaded-runtime verification'
@@ -316,9 +279,8 @@ Assert-Contains $bot 'appliedMode !== "ZERO_GRID"' 'ZERO mode applied guard'
 Assert-Contains $web 'EA รับค่าแล้ว:' 'ZERO UI applied confirmation'
 Assert-Contains $web 'เลือกได้ 1–30 Pending ต่อฝั่ง' 'ZERO UI 1-30 explanation'
 Assert-Contains $web 'EA ใน MT5 ยังไม่ได้โหลด Runtime ล่าสุด' 'loaded-runtime update alert'
-
-Write-Host 'ZERO GRID loaded-runtime contract PASS: 1-30 selection, applied-value telemetry, runtime reload gate, and Start synchronization verified.'
+Write-Host 'ZERO GRID loaded-runtime contract PASS.'
 '''
 write("tests/zero-grid-runtime-contract.ps1", contract_test)
 
-print("Guarded ZERO/runtime patch prepared successfully")
+print("Guarded ZERO/runtime source patch prepared successfully")
