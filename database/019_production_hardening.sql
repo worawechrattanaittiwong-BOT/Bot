@@ -1,0 +1,50 @@
+BEGIN;
+
+ALTER TABLE worker_nodes
+  ADD COLUMN IF NOT EXISTS health_state varchar(24) NOT NULL DEFAULT 'UNKNOWN',
+  ADD COLUMN IF NOT EXISTS capacity_blocked boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS capacity_block_reason varchar(64),
+  ADD COLUMN IF NOT EXISTS last_healthy_at timestamptz,
+  ADD COLUMN IF NOT EXISTS quarantined boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS quarantine_reason varchar(160),
+  ADD COLUMN IF NOT EXISTS recovery_paused boolean NOT NULL DEFAULT false;
+
+ALTER TABLE bot_instances
+  ADD COLUMN IF NOT EXISTS cloud_recovery_state varchar(24) NOT NULL DEFAULT 'IDLE',
+  ADD COLUMN IF NOT EXISTS cloud_recovery_attempts integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS cloud_recovery_window_started_at timestamptz,
+  ADD COLUMN IF NOT EXISTS cloud_recovery_next_at timestamptz,
+  ADD COLUMN IF NOT EXISTS cloud_recovery_last_at timestamptz,
+  ADD COLUMN IF NOT EXISTS cloud_recovery_last_error varchar(64);
+
+CREATE TABLE IF NOT EXISTS production_controls (
+  id smallint PRIMARY KEY CHECK(id=1),
+  cloud_provisioning_paused boolean NOT NULL DEFAULT false,
+  cloud_recovery_paused boolean NOT NULL DEFAULT false,
+  reason varchar(240),
+  updated_by varchar(120),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO production_controls(id) VALUES(1) ON CONFLICT(id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS runtime_incidents (
+  id bigserial PRIMARY KEY,
+  incident_key varchar(220) NOT NULL,
+  category varchar(48) NOT NULL,
+  severity varchar(16) NOT NULL CHECK(severity IN ('INFO','WARN','CRITICAL')),
+  runner_id varchar(120),
+  bot_instance_id uuid REFERENCES bot_instances(id) ON DELETE CASCADE,
+  state varchar(16) NOT NULL DEFAULT 'OPEN' CHECK(state IN ('OPEN','RESOLVED')),
+  detail jsonb NOT NULL DEFAULT '{}'::jsonb,
+  opened_at timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  resolved_at timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_incident_open_key
+  ON runtime_incidents(incident_key) WHERE state='OPEN';
+CREATE INDEX IF NOT EXISTS idx_runtime_incident_recent
+  ON runtime_incidents(state,severity,last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runtime_incident_instance
+  ON runtime_incidents(bot_instance_id,last_seen_at DESC);
+
+COMMIT;
