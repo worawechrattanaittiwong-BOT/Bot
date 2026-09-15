@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { adminApi } from "../../lib/api";
+import { adminApi } from "../../../lib/api";
 import s from "./cloud-test.module.css";
 
 type Node = {
