@@ -21,6 +21,8 @@ import { CloudService, CloudAdminController, CloudCustomerController, CloudPayme
 import { CloudTestController } from "./cloud-test.controller";
 import { RuntimeSafetyController } from "./runtime-safety.controller";
 import { RuntimeSafetyService } from "./runtime-safety.service";
+import { RuntimeMigrationController, RuntimeMigrationAgentController } from "./runtime-migration.controller";
+import { RuntimeMigrationService } from "./runtime-migration.service";
 import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
 
 @Module({
@@ -30,7 +32,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, HealthController, WorkerController],
-  providers: [RuntimeSafetyService, CloudService, DbService, MaintenanceService, PartnerService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
+  controllers: [RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, HealthController, WorkerController],
+  providers: [RuntimeMigrationService, RuntimeSafetyService, CloudService, DbService, MaintenanceService, PartnerService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
 })
 export class AppModule {}
