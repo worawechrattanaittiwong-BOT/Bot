@@ -12,6 +12,7 @@ import { RootController } from "./root.controller";
 import { CatalogController } from "./catalog.controller";
 import { InstallerController } from "./installer.controller";
 import { BacktestController, PerformanceController } from "./backtest.controller";
+import { PerformanceAnalyticsController } from "./performance-analytics.controller";
 import { DashboardLiveController } from "./dashboard-live.controller";
 import { PartnerController } from "./partner.controller";
 import { PartnerService } from "./partner.service";
@@ -34,7 +35,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, HealthController, WorkerController],
+  controllers: [ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, HealthController, WorkerController],
   providers: [ProductionHardeningService, RuntimeMigrationService, RuntimeSafetyService, CloudService, DbService, MaintenanceService, PartnerService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
 })
 export class AppModule {}

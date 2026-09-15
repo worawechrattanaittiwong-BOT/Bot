@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./premium-dashboard.css";
 import "./dashboard-live.css";
+import { CustomerNavigationLabels } from "../components/CustomerNavigationLabels";
 
 export const metadata: Metadata = {
   title: "SCENOVA — MT5 BOT EA",
@@ -11,7 +12,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="th">
-      <body>{children}</body>
+      <body>
+        <CustomerNavigationLabels />
+        {children}
+      </body>
     </html>
   );
 }
