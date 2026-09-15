@@ -13,6 +13,23 @@ ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS cloud_recovery_window_started
 ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS cloud_recovery_next_at timestamptz;
 ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS cloud_recovery_last_at timestamptz;
 ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS cloud_recovery_last_error varchar(64);
+CREATE OR REPLACE FUNCTION scenova_clear_pre_recovery_heartbeat()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+ IF NEW.cloud_recovery_state='AUTHORIZED'
+    AND OLD.cloud_recovery_state IS DISTINCT FROM 'AUTHORIZED' THEN
+   NEW.last_seen_at=NULL;
+ END IF;
+ RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_clear_pre_recovery_heartbeat ON bot_instances;
+CREATE TRIGGER trg_clear_pre_recovery_heartbeat
+BEFORE UPDATE OF cloud_recovery_state ON bot_instances
+FOR EACH ROW
+EXECUTE FUNCTION scenova_clear_pre_recovery_heartbeat();
 ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS accepting_jobs boolean NOT NULL DEFAULT false;
 ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS worker_key_hash text;
 ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS monthly_cost integer NOT NULL DEFAULT 0;
