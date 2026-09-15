@@ -1,7 +1,7 @@
 name: CI
 
-# Re-verify the full repository after the ZERO GRID pending-only runtime fix
-# and v1.0.8 release metadata alignment.
+# Re-verify the full repository after runtime-safety and controlled Local/Cloud
+# migration changes. Trading strategy regressions remain part of the same gate.
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
   cancel-in-progress: true
@@ -45,3 +45,6 @@ jobs:
       - name: Cloud runtime safety contract
         shell: pwsh
         run: ./tests/cloud-runtime-safety-contract.ps1
+      - name: Runtime migration Phase 3 contract
+        shell: pwsh
+        run: ./tests/runtime-migration-phase3-contract.ps1
