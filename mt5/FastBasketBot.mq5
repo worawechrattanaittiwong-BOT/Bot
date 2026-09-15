@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.13"
-#define SCENOVA_EA_VERSION "1.0.13"
-#define SCENOVA_PRODUCT_VERSION "1.0.13"
+#property version   "1.0.14"
+#define SCENOVA_EA_VERSION "1.0.14"
+#define SCENOVA_PRODUCT_VERSION "1.0.14"
 #define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -271,6 +271,7 @@ double g_zeroGridCenter = 0.0;
 double g_zeroGridStartEquity = 0.0;
 datetime g_zeroGridCycleStartedAt = 0;
 bool   g_zeroGridClosing = false;
+ulong  g_zeroGridLastExitBurstMs = 0;
 // V3 locks geometry for the lifetime of one cycle. Web setting changes are
 // applied only while flat, never halfway through a filled ladder.
 double g_zeroGridCycleStepPrice = 0.0;
@@ -2485,16 +2486,78 @@ ulong ZeroGridNearestCloseTicket()
    return bestTicket;
 }
 
+bool ZeroGridClosePositionAsync(ulong ticket)
+{
+   if(ticket==0 || !PositionSelectByTicket(ticket)) return false;
+   if(!ZeroGridOwnsSelectedPosition()) return false;
+   string symbol=PositionGetString(POSITION_SYMBOL);
+   double volume=PositionGetDouble(POSITION_VOLUME);
+   long positionType=PositionGetInteger(POSITION_TYPE);
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol,tick)) return false;
+   MqlTradeRequest request={};
+   MqlTradeResult result={};
+   request.action=TRADE_ACTION_DEAL;
+   request.position=ticket;
+   request.magic=PositionGetInteger(POSITION_MAGIC);
+   request.symbol=symbol;
+   request.volume=NormalizeTradeVolume(volume);
+   request.deviation=DynamicDeviationPoints();
+   request.type_filling=AllowedFillingMode();
+   request.comment="SaaSZeroCloseAll";
+   if(positionType==POSITION_TYPE_BUY) { request.type=ORDER_TYPE_SELL; request.price=tick.bid; }
+   else { request.type=ORDER_TYPE_BUY; request.price=tick.ask; }
+   ResetLastError();
+   bool sent=OrderSendAsync(request,result);
+   if(!sent || !TradeResultAccepted(result))
+   {
+      Print("ZERO close-all async rejected ticket=",ticket," error=",GetLastError()," retcode=",result.retcode);
+      return false;
+   }
+   return true;
+}
+
+void ZeroGridCancelPendingAsync()
+{
+   for(int i=OrdersTotal()-1;i>=0;i--)
+   {
+      ulong ticket=OrderGetTicket(i);
+      if(ticket==0 || !OrderSelect(ticket)) continue;
+      if(OrderGetString(ORDER_SYMBOL)!=_Symbol || OrderGetInteger(ORDER_MAGIC)!=InpMagic) continue;
+      if(!IsZeroGridComment(OrderGetString(ORDER_COMMENT))) continue;
+      MqlTradeRequest request={};
+      MqlTradeResult result={};
+      request.action=TRADE_ACTION_REMOVE;
+      request.order=ticket;
+      request.magic=InpMagic;
+      request.symbol=_Symbol;
+      ResetLastError();
+      if(OrderSendAsync(request,result) && TradeResultAccepted(result)) RegisterOrderRequest();
+      else Print("ZERO cancel-all async rejected order=",ticket," error=",GetLastError()," retcode=",result.retcode);
+   }
+}
+
 void ZeroGridClosePositions()
 {
-   const int maxCloseRequestsPerPass=8;
-   for(int i=0;i<maxCloseRequestsPerPass;i++)
+   // ZERO_GRID_CLOSE_ALL_BURST: queue every owned position exit first, then
+   // cancel remaining ZERO pending orders without waiting one network round trip per ticket.
+   ulong nowMs=GetTickCount64();
+   if(g_zeroGridLastExitBurstMs>0 && nowMs-g_zeroGridLastExitBurstMs<750) return;
+   g_zeroGridLastExitBurstMs=nowMs;
+   ulong tickets[];
+   int ticketCount=0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
    {
-      ulong ticket=ZeroGridNearestCloseTicket();
-      if(ticket==0) return;
-      if(!ClosePositionByTicket(ticket))
-         return;
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+      if(!ZeroGridOwnsSelectedPosition()) continue;
+      ArrayResize(tickets,ticketCount+1);
+      tickets[ticketCount++]=ticket;
    }
+   int sent=0;
+   for(int i=0;i<ticketCount;i++) if(ZeroGridClosePositionAsync(tickets[i])) sent++;
+   ZeroGridCancelPendingAsync();
+   if(sent>0) g_executionStatus="ZERO_GRID_CLOSE_ALL_BURST";
 }
 
 bool StartZeroGridCycle()
@@ -2562,7 +2625,6 @@ bool ManageZeroGrid()
 
    if(g_zeroGridClosing)
    {
-      ZeroGridCancelPending();
       ZeroGridClosePositions();
       if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)
       {
@@ -2665,7 +2727,6 @@ bool ManageZeroGrid()
       {
          g_zeroGridClosing=true;
          g_executionStatus="ZERO_GRID_CLOSING_PROFIT";
-         ZeroGridCancelPending();
          ZeroGridClosePositions();
          return true;
       }
