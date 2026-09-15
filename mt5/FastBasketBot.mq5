@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.13"
-#define SCENOVA_EA_VERSION "1.0.13"
-#define SCENOVA_PRODUCT_VERSION "1.0.13"
+#property version   "1.0.14"
+#define SCENOVA_EA_VERSION "1.0.14"
+#define SCENOVA_PRODUCT_VERSION "1.0.14"
 #define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -2494,6 +2494,11 @@ void ZeroGridClosePositions()
       if(ticket==0) return;
       if(!ClosePositionByTicket(ticket))
          return;
+
+      // ZERO_GRID_ONE_CLOSE_PER_PASS: after the smallest-lot ticket is sent,
+      // wait for MT5 to refresh the position book before selecting the next one.
+      // This keeps the realized sequence strictly smallest lot -> larger lot.
+      return;
    }
 }
 

@@ -15,7 +15,7 @@ function Require-NotContains([string]$text,[string]$needle,[string]$label) {
 
 $ea = [System.IO.File]::ReadAllText((Resolve-Path $EaPath))
 
-Require-Contains $ea '#property version   "1.0.13"' 'EA version bump'
+Require-Contains $ea '#property version   "1.0.14"' 'EA version bump'
 Require-Contains $ea 'ZERO GRID V2.1 geometry' 'geometry marker'
 Require-Contains $ea 'double ZeroGridExistingPendingAnchorPrice(bool buySide)' 'persistent pending anchor'
 Require-Contains $ea 'double ZeroGridPendingAnchorPrice(bool buySide)' 'live-price inward anchor'
@@ -30,6 +30,7 @@ Require-Contains $ea 'ZERO_GRID_RETRY_MISSING_L1' 'retry only missing first-side
 Require-Contains $ea 'g_executionStatus="ZERO_GRID_REARMING";' 'same-pass flat-cycle rearm'
 Require-Contains $ea 'return StartZeroGridCycle();' 'immediate ZERO cycle restart path'
 Require-Contains $ea 'ClosePositionByTicket(ticket);' 'selected ticket close'
+Require-Contains $ea 'ZERO_GRID_ONE_CLOSE_PER_PASS' 'one confirmed smallest-lot close per pass'
 Require-NotContains $ea 'ZERO_GRID_RETRY_FIRST_PAIR' 'destructive first-pair cancel/rebuild loop'
 Require-NotContains $ea 'return MathMax(g_zeroGridStepPrice,ZeroGridMinPendingDistancePrice()+ZeroGridTickSize());' 'over-wide grid step rule'
 Require-NotContains $ea 'OrderSendAsync' 'async trade race expansion'
