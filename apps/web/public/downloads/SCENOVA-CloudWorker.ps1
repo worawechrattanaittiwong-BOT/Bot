@@ -1,4 +1,4 @@
-# SCENOVA Cloud Worker v1.1.0 - Windows PowerShell 5.1 / Windows Server 2019.
+# SCENOVA Cloud Worker v1.2.0 - Windows PowerShell 5.1 / Windows Server 2019.
 # Install under the dedicated Windows account that will run the MT5 terminals.
 param(
   [switch]$Install,
@@ -111,7 +111,6 @@ function Process-WorkerCommand($Command) {
       $errorCode = 'PROCESS_STILL_RUNNING'
     }
   } catch {
-    # Never return exception text; paths and process details stay local to the Worker.
     $result = 'STOP_FAILED'
     $errorCode = 'STOP_FAILED'
   }
@@ -122,6 +121,20 @@ function Process-WorkerCommand($Command) {
     executionGeneration=[int64]$Command.executionGeneration
     result=$result
     errorCode=$errorCode
+  } | Out-Null
+}
+function Request-RecoveryAuthorization($Job) {
+  return Invoke-Worker 'recovery-check' @{
+    instanceId=[string]$Job.instanceId
+    executionGeneration=[int64]$Job.executionGeneration
+  }
+}
+function Report-RecoveryResult($Job, [string]$Result, [string]$ErrorCode='') {
+  Invoke-Worker 'recovery-result' @{
+    instanceId=[string]$Job.instanceId
+    executionGeneration=[int64]$Job.executionGeneration
+    result=$Result
+    errorCode=$ErrorCode
   } | Out-Null
 }
 function Start-CloudInstance($Job, $Processes) {
@@ -135,9 +148,24 @@ function Start-CloudInstance($Job, $Processes) {
   }
   if ($retryAfter.ContainsKey($Job.instanceId) -and $retryAfter[$Job.instanceId] -gt [DateTime]::UtcNow) { return }
   $retryAfter[$Job.instanceId] = [DateTime]::UtcNow.AddSeconds(60)
+
+  $alreadyProvisioned = Test-Path -LiteralPath "$path\cloud-provisioned"
+  $recoveryAuthorized = $false
+  if ($alreadyProvisioned) {
+    try {
+      $decision = Request-RecoveryAuthorization $Job
+      if (!$decision.allow) { return }
+      $recoveryAuthorized = $true
+      # Re-check exact process after Server authorization. This is the duplicate-runtime guard.
+      if ((Get-ExactTerminalProcesses $terminal).Count -gt 0) { return }
+    } catch {
+      return
+    }
+  }
+
   try {
     # Never mirror/delete existing account data. A failed initial copy is retried.
-    if (!(Test-Path -LiteralPath "$path\cloud-provisioned")) {
+    if (!$alreadyProvisioned) {
       if (!$script:templateReady) { throw 'Template is not verified' }
       New-Item -ItemType Directory -Force -Path $path | Out-Null
       & robocopy.exe $templatePath $path /E /R:1 /W:1 /NFL /NDL /NJH /NJS /XF cloud-template.ready *> $null
@@ -152,10 +180,16 @@ function Start-CloudInstance($Job, $Processes) {
     @('[Common]',"Login=$(Safe-IniValue $Job.accountNumber)","Password=$(Safe-IniValue $Job.tradingPassword)","Server=$(Safe-IniValue $Job.brokerServer)",'KeepPrivate=1','NewsEnable=0',
       '[Charts]','MaxBars=5000','[Experts]','Enabled=1','AllowLiveTrading=1','AllowDllImport=0',
       '[StartUp]','Expert=FastBasketBot','ExpertParameters=SCENOVA-Cloud.set',"Symbol=$symbol",'Period=M5') | Set-Content -LiteralPath "$path\cloud-start.ini" -Encoding Unicode
-    Start-Process -FilePath $terminal -ArgumentList "/portable /config:`"$path\cloud-start.ini`"" -WorkingDirectory $path -WindowStyle Hidden | Out-Null
+    # Last exact-path check before spawn prevents a second terminal if another Worker loop recovered it.
+    if ((Get-ExactTerminalProcesses $terminal).Count -eq 0) {
+      Start-Process -FilePath $terminal -ArgumentList "/portable /config:`"$path\cloud-start.ini`"" -WorkingDirectory $path -WindowStyle Hidden | Out-Null
+    }
+    if ($recoveryAuthorized) { Report-RecoveryResult $Job 'STARTED' '' }
     Invoke-Worker 'provision-result' @{instanceId=$Job.instanceId;errorCode=''} | Out-Null
   } catch {
-    # Do not log exceptions: configuration and network payloads contain credentials.
+    if ($recoveryAuthorized) {
+      try { Report-RecoveryResult $Job 'FAILED' 'RECOVERY_START_FAILED' } catch { }
+    }
     Invoke-Worker 'provision-result' @{instanceId=$Job.instanceId;errorCode='CHECK_TEMPLATE_OR_TERMINAL'} | Out-Null
   }
 }
@@ -168,9 +202,11 @@ try {
       $active = @($processes | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($instancesPath+'\',[StringComparison]::OrdinalIgnoreCase) }).Count
       $os = Get-CimInstance Win32_OperatingSystem
       $cpu = (Get-CimInstance Win32_Processor | Measure-Object LoadPercentage -Average).Average
+      $disk = Get-PSDrive -Name C
       Invoke-Worker 'heartbeat' @{hostname=$env:COMPUTERNAME;activeInstances=$active;telemetry=@{
-        templateReady=$script:templateReady;version='1.1.0';cpuPercent=[math]::Round($cpu,1);
-        ramTotalGb=[math]::Round($os.TotalVisibleMemorySize/1MB,1);ramUsedGb=[math]::Round(($os.TotalVisibleMemorySize-$os.FreePhysicalMemory)/1MB,1)
+        templateReady=$script:templateReady;version='1.2.0';cpuPercent=[math]::Round($cpu,1);
+        ramTotalGb=[math]::Round($os.TotalVisibleMemorySize/1MB,1);ramUsedGb=[math]::Round(($os.TotalVisibleMemorySize-$os.FreePhysicalMemory)/1MB,1);
+        diskFreeGb=[math]::Round($disk.Free/1GB,1);diskTotalGb=[math]::Round(($disk.Free+$disk.Used)/1GB,1)
       }} | Out-Null
 
       # Safety commands are processed before any provisioning/start work.
