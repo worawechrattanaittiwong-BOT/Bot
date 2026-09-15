@@ -24,7 +24,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply ZERO pair + RACE profit runtime patch
-        run: python3 .github/scripts/apply_zero_race_runtime_v116.py
+        run: |
+          python3 .github/scripts/apply_zero_race_runtime_v116.py
+          python3 .github/scripts/fix_v116_zero_contract.py
 
       - name: Verify patch touches only approved files
         shell: bash
