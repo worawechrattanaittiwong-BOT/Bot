@@ -1,0 +1,60 @@
+name: Prepare ZERO GRID Levels 1-30
+
+on:
+  push:
+    branches: [feat/zero-grid-levels-1-30]
+    paths:
+      - ".github/workflows/prepare-zero-grid-levels-1-30.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prepare-zero-grid-levels-1-30
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply isolated ZERO GRID levels patch
+        run: python3 .github/scripts/prepare_zero_grid_levels_1_30.py
+
+      - name: Run focused configurable-level contract
+        run: node tests/zero-grid-configurable-levels-contract.mjs
+
+      - name: Run existing ZERO GRID simulation
+        run: node tests/zero-grid-v1-simulation.mjs
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit only product changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/scripts/prepare_zero_grid_levels_1_30.py
+          rm -f .github/workflows/prepare-zero-grid-levels-1-30.yml
+          git config user.name "SCENOVA Patch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m "feat: restore ZERO GRID configurable levels up to 30"
+          git push origin HEAD:feat/zero-grid-levels-1-30
