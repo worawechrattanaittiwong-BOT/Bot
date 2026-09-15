@@ -1,0 +1,129 @@
+name: Build MT5 EA v1.0.16
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-mt5-ea-v116.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-mt5-ea-v116
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate isolated v1.0.16 runtime contract
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
+          $text = [System.IO.File]::ReadAllText($mq5Path)
+          foreach ($sentinel in @(
+            '#property version   "1.0.16"',
+            '#define SCENOVA_EA_VERSION "1.0.16"',
+            'bool AutoV20Enabled()',
+            'int RaceHarvestProfitablePositions()',
+            'RACE_PROFIT_FIRST_V116',
+            'RACE_PROFIT_HARVEST',
+            'ZERO_PAIR_ATOMIC_V116',
+            'ZERO_GRID_PAIR_ROLLBACK',
+            'ZERO_GRID_WAIT_FULL_LADDER',
+            'ZeroGridPendingCount()!=levels*2',
+            'ZERO_GRID_TIMER_MAINTENANCE_V116',
+            'g_zeroGridClosing || ZeroGridPositionCount()>0 || ZeroGridPendingCount()>0',
+            'g_zeroGridLastExitBurstMs=0;',
+            'TRADE_RETCODE_PRICE_OFF',
+            'ZeroGridEffectiveBaseLot()*level',
+            'request.action=TRADE_ACTION_PENDING;',
+            'ORDER_TYPE_BUY_STOP',
+            'ORDER_TYPE_SELL_STOP'
+          )) {
+            if (-not $text.Contains($sentinel)) {
+              throw "Required v1.0.16 sentinel missing: $sentinel"
+            }
+          }
+          if ($text.Contains('Harvesting starts only after Max Positions is reached')) {
+            throw "Obsolete RACE profit delay still present"
+          }
+          "EA_VERSION=1.0.16" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install official MetaTrader 5 build environment
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = "$env:RUNNER_TEMP\mt5setup.exe"
+          $installDir = "C:\SCENOVA-MT5-Build"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://download.terminal.free/cdn/web/metaquotes.ltd/mt5/mt5setup.exe" -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "/auto /path:`"$installDir`"" -Wait
+          $metaEditor = Get-ChildItem -Path $installDir -Filter "metaeditor64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
+          "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Compile FastBasketBot v1.0.16
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sourceDir = "C:\SCENOVA-EA-Source"
+          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
+          $source = Join-Path $sourceDir "FastBasketBot.mq5"
+          Copy-Item -Force "mt5\FastBasketBot.mq5" $source
+          $log = "$env:RUNNER_TEMP\FastBasketBot-compile.log"
+          Start-Process -FilePath "$env:METAEDITOR" -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
+          if (Test-Path $log) { Get-Content $log }
+          $ex5 = [System.IO.Path]::ChangeExtension($source, ".ex5")
+          if (-not (Test-Path $ex5)) { throw "FastBasketBot.ex5 was not produced" }
+          if (Test-Path $log) {
+            $compileLog = Get-Content $log -Raw
+            if ($compileLog -match '(?i)\b[1-9][0-9]*\s+errors?\b') {
+              throw "MetaEditor reported compile errors"
+            }
+          }
+          Copy-Item -Force $ex5 "$env:RUNNER_TEMP\FastBasketBot.ex5"
+          $hash = (Get-FileHash -Algorithm SHA256 $ex5).Hash.ToLowerInvariant()
+          @{
+            file = "FastBasketBot.ex5"
+            sha256 = $hash
+            eaVersion = "1.0.16"
+            sourceCommit = "${{ github.sha }}"
+            builtAt = (Get-Date).ToUniversalTime().ToString("o")
+            brain = "V20"
+            policy = "AUTO_V20_RACE_PROFIT_FIRST_ZERO_ATOMIC_PAIR_FREE_RUN_V116"
+          } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
+
+      - name: Publish compiled v1.0.16 artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          $published = $false
+          for ($attempt = 1; $attempt -le 6; $attempt++) {
+            git fetch origin main
+            if ($LASTEXITCODE -ne 0) { Start-Sleep -Seconds 2; continue }
+            git reset --hard origin/main
+            if ($LASTEXITCODE -ne 0) { throw "Could not reset to latest main" }
+            New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
+            Copy-Item -Force "$env:RUNNER_TEMP\FastBasketBot.ex5" "mt5\release\FastBasketBot.ex5"
+            Copy-Item -Force "$env:RUNNER_TEMP\FastBasketBot-manifest.json" "mt5\release\manifest.json"
+            git add -f mt5/release/FastBasketBot.ex5
+            git add mt5/release/manifest.json
+            git diff --cached --quiet
+            if ($LASTEXITCODE -eq 0) { $published = $true; break }
+            git commit -m "build: publish EA Brain V20 v1.0.16 [skip ea build]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit v1.0.16 artifact" }
+            git push origin HEAD:main
+            if ($LASTEXITCODE -eq 0) { $published = $true; break }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $published) { throw "Failed to publish v1.0.16 after retries" }
