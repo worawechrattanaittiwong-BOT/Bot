@@ -1275,7 +1275,12 @@ export default function DashboardPage() {
     }
     setBusy(true);
     setError("");
-    setNotice("");
+    const commandPendingNotice = path.startsWith("/bot/start")
+      ? "กำลังส่งคำสั่งเริ่มบอท..."
+      : path.startsWith("/bot/stop")
+        ? "กำลังส่งคำสั่ง Safe Stop..."
+        : "";
+    setNotice(commandPendingNotice);
     try {
       const suffix = selectedSlotIdRef.current
         ? (path.includes("?") ? "&" : "?") + "slotId=" + encodeURIComponent(selectedSlotIdRef.current)
@@ -1803,7 +1808,7 @@ export default function DashboardPage() {
                     <button className={"cc-v6-command start "+(botStarting?"starting":botRunning?"running":"idle")} disabled={startBlocked} title={maintenanceBlocksStart?"ระบบปิด Start ใหม่ระหว่าง Safe Maintenance":!startConnectionReady?"รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5":undefined} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
                       <span>{botStarting?<i className="cc-start-spinner"/>:botRunning?<i className="cc-start-pulse"/>:<ScenovaIcon name="play" size={22}/>}</span><b>{botStarting?"กำลังเริ่ม":botRunning?"ทำงานอยู่":"เริ่มบอท"}</b><small>Start Trading</small>
                     </button>
-                    <button className="cc-v6-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")}><span><ScenovaIcon name="stop" size={21}/></span><b>หยุดบอท</b><small>Safe Stop</small></button>
+                    <button className="cc-v6-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><span><ScenovaIcon name="stop" size={21}/></span><b>หยุดบอท</b><small>Safe Stop</small></button>
                     <button className="cc-v6-command close" disabled={busy||currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?")&&command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span><ScenovaIcon name="close" size={22}/></span><b>ปิดทุกไม้</b><small>Close All</small></button>
                     <button className="cc-v6-command settings" onClick={()=>setBotSettingsOpen(true)}><span><ScenovaIcon name="settings" size={21}/></span><b>ตั้งค่า</b><small>Settings</small></button>
                   </div>
@@ -1968,7 +1973,7 @@ export default function DashboardPage() {
                   <span>{botStarting ? <i className="cc-start-spinner" aria-hidden="true"/> : botRunning ? <i className="cc-start-pulse" aria-hidden="true"/> : "▶"}</span>
                   <b>{botStarting ? "กำลังเริ่ม" : botRunning ? "กำลังทำงาน" : "เริ่ม"}</b>
                 </button>
-                <button className="cc-mobile-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","ส่งคำสั่งหยุดบอทแล้ว")}>
+                <button className="cc-mobile-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}>
                   <span>■</span><b>หยุด</b>
                 </button>
               </div>

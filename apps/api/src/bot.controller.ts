@@ -177,7 +177,7 @@ export class BotController {
       SYMBOL_TRADING_DISABLED: { label: "Symbol นี้เปิดออเดอร์ไม่ได้", detail: "Broker ปิดการเปิดออเดอร์ใหม่บน Symbol นี้", tone: "bad" },
       NO_ACCESS: { label: "ไม่มีสิทธิ์ใช้งาน", detail: "ต้องมี Trial หรือ Subscription ที่ใช้งานได้กับบัญชี SCENOVA นี้", tone: "bad" },
       STOPPED: { label: "บอทหยุดอยู่", detail: "พร้อมรับคำสั่งเริ่มจากเว็บ", tone: "neutral" },
-      SAFE_STOP: { label: "Safe Stop", detail: "บอทจะไม่เปิดรอบใหม่", tone: "warn" },
+      SAFE_STOP: { label: "Safe Stop", detail: "ไม่เปิดรอบใหม่ · รอบที่กำลังทำงานอยู่ยังจัดการและปิดตามเงื่อนไขเดิม", tone: "warn" },
       DAILY_PROFIT_LOCK: { label: "ถึงเป้ากำไรประจำวันแล้ว", detail: "EA ปิด Position และล็อกไม่เปิดรอบใหม่จนกว่าจะขึ้นวันใหม่", tone: "good" },
       DAILY_PROFIT_RUN_ON: { label: "ถึงเป้ากำไรแล้ว · รันต่อ", detail: "บอทยังทำงานต่อและรอเงื่อนไข % ที่ตั้งไว้", tone: "good" },
       DAILY_PROFIT_GIVEBACK_LOCK: { label: "ปิดบอทตาม % กำไรต่อวัน", detail: "กำไรลดลงจากเป้าหมายถึงเปอร์เซ็นต์ที่กำหนด ระบบปิดทั้งหมดและหยุด", tone: "good" },
