@@ -4,15 +4,17 @@ import { readFileSync } from "node:fs";
 function up(value, tick) { return Math.ceil(value / tick - 1e-10) * tick; }
 function down(value, tick) { return Math.floor(value / tick + 1e-10) * tick; }
 
-export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPerSide = 5, brokerMinDistance = 0, tick = 0.01, firstOffsetPrice = 1.0 }) {
+export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPerSide = 5, brokerMinDistance = 0, tick = 0.01, firstOffsetPrice = 1.0, lowVolatility = false }) {
   const center = (bid + ask) / 2;
+  const effectiveStep = lowVolatility ? 0.30 : step;
+  const effectiveFirstOffset = lowVolatility ? 0.10 : firstOffsetPrice;
   const brokerSafe = Math.max(tick, brokerMinDistance) + tick;
-  const buyAnchor = up(Math.max(center + firstOffsetPrice, ask + brokerSafe), tick);
-  const sellAnchor = down(Math.min(center - firstOffsetPrice, bid - brokerSafe), tick);
+  const buyAnchor = up(Math.max(center + effectiveFirstOffset, ask + brokerSafe), tick);
+  const sellAnchor = down(Math.min(center - effectiveFirstOffset, bid - brokerSafe), tick);
   const orders = [];
   for (let level = 1; level <= levelsPerSide; level += 1) {
-    const offset = step * (level - 1);
-    const lot = baseLot * level;
+    const offset = effectiveStep * (level - 1);
+    const lot = lowVolatility ? baseLot : baseLot * level;
     orders.push({ type: "BUY_STOP", level, lot, price: buyAnchor + offset });
     orders.push({ type: "SELL_STOP", level, lot, price: sellAnchor - offset });
   }
@@ -38,6 +40,16 @@ export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPer
 }
 
 {
+  const orders = buildPendingPlan({ bid: 3999.99, ask: 4000.01, baseLot: 0.01, levelsPerSide: 3, tick: 0.01, lowVolatility: true });
+  const buys = orders.filter((o) => o.type === "BUY_STOP");
+  const sells = orders.filter((o) => o.type === "SELL_STOP");
+  assert.deepEqual(buys.map((o) => Number(o.price.toFixed(2))), [4000.10, 4000.40, 4000.70]);
+  assert.deepEqual(sells.map((o) => Number(o.price.toFixed(2))), [3999.90, 3999.60, 3999.30]);
+  assert.deepEqual(buys.map((o) => Number(o.lot.toFixed(2))), [0.01, 0.01, 0.01]);
+  assert.deepEqual(sells.map((o) => Number(o.lot.toFixed(2))), [0.01, 0.01, 0.01]);
+}
+
+{
   const bid = 4304.40;
   const ask = 4304.60;
   const orders = buildPendingPlan({ bid, ask, step: 3, levelsPerSide: 5 });
@@ -56,7 +68,7 @@ assert.match(sendBlock, /request\.action\s*=\s*TRADE_ACTION_PENDING/);
 assert.match(sendBlock, /ORDER_TYPE_BUY_STOP/);
 assert.match(sendBlock, /ORDER_TYPE_SELL_STOP/);
 assert.doesNotMatch(sendBlock, /TRADE_ACTION_DEAL/);
-assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=1\.0;[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);
+assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=ZeroGridEffectiveLowVolatilityEnabled\(\) \? 0\.10 : 1\.0;[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);
 assert.doesNotMatch(ea, /MathMax\(stops,freeze\)/);
 assert.match(ea, /double ZeroGridPendingAnchorPrice\(bool buySide\)[\s\S]*g_zeroGridCenter\+gap[\s\S]*g_zeroGridCenter-gap[\s\S]*live\.ask\+brokerSafe[\s\S]*live\.bid-brokerSafe/);
 assert.doesNotMatch(ea, /ZeroGridEffectiveStepPrice\(\)\*1\.5/);
@@ -66,13 +78,18 @@ assert.match(ea, /bool\s+g_settingsSynchronized\s*=\s*false/);
 assert.match(ea, /WAIT_SETTINGS_SYNC/);
 assert.match(api, /\["AUTO",\s*"RACE",\s*"ZERO_GRID",\s*"ASSISTED",\s*"MANUAL"\]/);
 assert.match(web, /Array\.from\(\{length:30\},\(_,i\)=>i\+1\)/, "ZERO UI must expose 1..30 levels per side");
-assert.match(web, /เลือกได้ 1–30 (?:BUY STOP และ 1–30 SELL STOP|Pending ต่อฝั่ง)/, "ZERO UI must explain the 1..30 per-side range");
+assert.match(web, /เลือกได้ 1–30 ระดับต่อฝั่ง/, "ZERO UI must explain the 1..30 per-side range");
 assert.match(ea, /int maxPlacementAttempts=\(level==1 \? 3 : 2\)/, "L1 must retry immediately");
 assert.match(ea, /ZERO_SIMPLE_STABLE_V117/, "ZERO must use the simple stable pending engine");
+assert.match(ea, /InpZeroGridLowVolatilityEnabled\s*=\s*false/, "low-volatility switch must default OFF");
+assert.match(ea, /ZeroGridEffectiveLowVolatilityEnabled\(\) \? 0\.10 : 1\.0/, "low-volatility first gap must be 0.10");
+assert.match(ea, /g_zeroGridLowVolatilityEnabled \? 0\.30/, "low-volatility level spacing must be 0.30");
+assert.match(ea, /ZeroGridEffectiveLevelLot\(int level\)/, "ZERO must isolate fixed-vs-ladder lot calculation");
+assert.match(web, /กริดตลาดความผันผวนต่ำ/, "ZERO UI must expose the professional low-volatility switch");
 assert.doesNotMatch(ea, /ZERO_GRID_PAIR_ROLLBACK/, "ZERO must not churn accepted orders with pair rollback");
 assert.match(ea, /ZeroGridPendingCount\(\)!=levels\*2/, "flat ZERO must require the full configured ladder");
 assert.match(ea, /g_safeStopDrainRequested\s*=\s*\(g_access && desired == "SAFE_STOP"\)/, "ZERO graceful drain must be armed only by explicit website SAFE_STOP");
 assert.match(ea, /bool safeStopDrain\s*=\s*[\s\S]*g_state==STATE_SAFE_STOP[\s\S]*g_safeStopDrainRequested[\s\S]*if\(!safeStopDrain\)[\s\S]*ZeroGridCancelPending\(\)/, "ZERO Safe Stop must preserve the already-staged pending ladder only for explicit Safe Stop");
 assert.match(ea, /pending=ZeroGridPendingCount\(\);[\s\S]*if\(positions<=0 && pending<=0\)/, "ZERO Safe Stop must not mark the cycle flat while pending orders still belong to it");
 assert.match(ea, /for\(int level=1;level<=levels;level\+\+\)/, "flat ZERO must validate every configured level pair");
-console.log("ZERO GRID ~100-point first-offset, fast paired staging and real-net regression passed");
+console.log("ZERO GRID standard + low-volatility geometry, paired staging and real-net regression passed");

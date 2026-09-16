@@ -1574,6 +1574,7 @@ export class BotController {
       }
       clean.zeroGridStepPrice = zeroGridStepPrice;
     }
+    booleanSetting("zeroGridLowVolatilityEnabled");
     numberSetting("zeroGridLevelsPerSide", 1, 30, true);
     numberSetting("zeroGridBaseLot", 0.01, 100);
     numberSetting("zeroGridMinNetProfitMoney", 0.01, 100000);
@@ -1696,6 +1697,7 @@ export class BotController {
       (requestedControlMode === null && requestedEngineMode === "ZERO_GRID");
     if (zeroGridSelected) {
       clean.zeroGridStepPrice = clean.zeroGridStepPrice === 2 ? 2 : 3;
+      if (body.zeroGridLowVolatilityEnabled === undefined) clean.zeroGridLowVolatilityEnabled = false;
       if (body.zeroGridBaseLot === undefined) clean.zeroGridBaseLot = 0.01;
       if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;
       if (body.zeroGridCloseReserveMoney === undefined) clean.zeroGridCloseReserveMoney = 0.2;
