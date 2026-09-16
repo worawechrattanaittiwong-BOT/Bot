@@ -22,20 +22,16 @@ jobs:
           from pathlib import Path
           path = Path('apps/web/app/dashboard/page.tsx')
           text = path.read_text(encoding='utf-8')
-          old = '''                      <span className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch ? "ok" : "warn")} title="EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server">
-                        EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}
-                      </span>'''
-          new = '''                      <span
-                        className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch !== false && softwareUpdate.runtimeContractMatch !== false ? "ok" : "warn")}
-                        title={softwareUpdate.eaUpdateRequired ? "EA มี Build ใหม่หรือ Runtime ใหม่พร้อมอัปเดต" : "EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server"}
-                      >
-                        EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}
-                        {softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch === false ? " · Build ใหม่พร้อมอัปเดต" : softwareUpdate.eaVersionMatch && softwareUpdate.runtimeContractMatch === false ? " · Runtime ใหม่พร้อมอัปเดต" : ""}
-                      </span>'''
-          count = text.count(old)
-          if count != 1:
-              raise SystemExit(f'expected exactly one version chip block, found {count}')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          old_class = 'className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch ? "ok" : "warn")} title="EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server"'
+          new_class = 'className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch !== false && softwareUpdate.runtimeContractMatch !== false ? "ok" : "warn")} title={softwareUpdate.eaUpdateRequired ? "EA มี Build ใหม่หรือ Runtime ใหม่พร้อมอัปเดต" : "EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server"}'
+          old_text = 'EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}'
+          new_text = old_text + '{softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch === false ? " · Build ใหม่พร้อมอัปเดต" : softwareUpdate.eaVersionMatch && softwareUpdate.runtimeContractMatch === false ? " · Runtime ใหม่พร้อมอัปเดต" : ""}'
+          if text.count(old_class) != 1:
+              raise SystemExit(f'expected one version chip class, found {text.count(old_class)}')
+          if text.count(old_text) != 1:
+              raise SystemExit(f'expected one version chip text, found {text.count(old_text)}')
+          text = text.replace(old_class, new_class, 1).replace(old_text, new_text, 1)
+          path.write_text(text, encoding='utf-8')
       - name: Remove one-shot workflow
         run: rm .github/workflows/quick-ea-build-chip-hotfix.yml
       - name: Commit hotfix
