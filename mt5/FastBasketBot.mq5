@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.19"
-#define SCENOVA_EA_VERSION "1.0.19"
-#define SCENOVA_PRODUCT_VERSION "1.0.19"
+#property version   "1.0.20"
+#define SCENOVA_EA_VERSION "1.0.20"
+#define SCENOVA_PRODUCT_VERSION "1.0.20"
 #define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -2653,14 +2653,20 @@ bool ManageZeroGrid()
       return true;
    }
 
-   // Explicit mode exit / Stop / revoked access stops NEW pending triggers.
-   // Existing ZERO positions are not mixed into another engine; they are kept
-   // isolated and may close only when their ZERO net-profit close condition is met.
+   // Explicit mode exit / revoked access still removes pending orders immediately.
+   // SAFE_STOP is intentionally different: preserve only the pending ladder that
+   // already belongs to the current ZERO cycle, let it drain under the normal
+   // ZERO profit rule, and never build/replenish another pending order while stopped.
    if(!ZeroGridModeEnabled() || g_state!=STATE_RUNNING || !g_access)
    {
-      ZeroGridCancelPending();
+      bool safeStopDrain =
+         ZeroGridModeEnabled() && g_state==STATE_SAFE_STOP && g_access;
+      if(!safeStopDrain)
+         ZeroGridCancelPending();
+
       positions=ZeroGridPositionCount();
-      if(positions<=0)
+      pending=ZeroGridPendingCount();
+      if(positions<=0 && pending<=0)
       {
          ResetZeroGridCycleState();
          g_executionStatus="ZERO_GRID_STOPPED_FLAT";
