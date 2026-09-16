@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.18"
-#define SCENOVA_EA_VERSION "1.0.18"
-#define SCENOVA_PRODUCT_VERSION "1.0.18"
+#property version   "1.0.19"
+#define SCENOVA_EA_VERSION "1.0.19"
+#define SCENOVA_PRODUCT_VERSION "1.0.19"
 #define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -4035,6 +4035,26 @@ string ChartTelemetryJson()
       ",\"H1\":"  + ChartBarsTelemetryJson(PERIOD_H1, 80) + "}";
 }
 
+string MarketWatchSymbolsJson()
+{
+   int total = SymbolsTotal(true);
+   string json = "[";
+   int added = 0;
+   for(int i = 0; i < total; i++)
+   {
+      string symbolName = SymbolName(i, true);
+      if(StringLen(symbolName) <= 0)
+         continue;
+      StringReplace(symbolName, "\\", "\\\\");
+      StringReplace(symbolName, "\"", "\\\"");
+      if(added > 0)
+         json += ",";
+      json += "\"" + symbolName + "\"";
+      added++;
+   }
+   return json + "]";
+}
+
 void SendHeartbeat()
 {
    if(StringLen(InpApiBase) < 8 || StringLen(InpInstanceId) < 8 || StringLen(InpInstallToken) < 8)
@@ -4571,6 +4591,16 @@ void SendHeartbeat()
          g_zeroGridCycleStartedAt > 0 ? "true" : "false"
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + marketSessionDiagnostics;
+   }
+
+   // UI-only snapshot of the symbols selected in MT5 Market Watch.
+   if(StringLen(payload) >= 2)
+   {
+      string marketWatchDiagnostics =
+         ",\"marketWatchSymbols\":" + MarketWatchSymbolsJson() +
+         ",\"marketWatchCapturedAt\":" +
+         StringFormat("%I64d", (long)TimeCurrent()) + "}}";
+      payload = StringSubstr(payload, 0, StringLen(payload) - 2) + marketWatchDiagnostics;
    }
 
    string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";

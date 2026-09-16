@@ -38,6 +38,21 @@ function symbolTradeAllowed(mode: unknown) {
   return n !== 0 && n !== 3;
 }
 
+function marketWatchSymbols(metrics: any) {
+  const source = Array.isArray(metrics?.marketWatchSymbols)
+    ? metrics.marketWatchSymbols
+    : [];
+  const unique = new Map<string, string>();
+  for (const raw of source) {
+    const symbol = normalizeSymbol(raw);
+    if (!symbol) continue;
+    const key = symbol.toUpperCase();
+    if (!unique.has(key)) unique.set(key, symbol);
+    if (unique.size >= 512) break;
+  }
+  return Array.from(unique.values());
+}
+
 @Controller("bot/trading-symbol")
 @UseGuards(JwtGuard)
 export class TradingSymbolController {
@@ -89,6 +104,8 @@ export class TradingSymbolController {
       activeSymbol: activeSymbol || null,
       brokerSymbolTradeMode: tradeMode,
       brokerTradingAllowed: tradingAllowed,
+      marketWatchSymbols: marketWatchSymbols(metrics),
+      marketWatchCapturedAt: Number(metrics.marketWatchCapturedAt || 0) || null,
       symbolReady: matches && tradingAllowed !== false,
       pendingRestart: Boolean(explicitSymbol && !matches),
       positions: Math.max(0, Number(instance.positions || 0)),
