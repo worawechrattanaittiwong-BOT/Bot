@@ -24,11 +24,14 @@ jobs:
           $sha = (git hash-object "mt5/FastBasketBot.mq5").Trim()
           if ($sha -ne "284167076a7ec47892a7ef69a9b0c14e0683166f") { throw "Source SHA changed unexpectedly: $sha" }
           $text = Get-Content "mt5/FastBasketBot.mq5" -Raw
-          if (($text.Split("double fastCycleProfit = BasketCycleProfit();").Length - 1) -ne 1) { throw "Fast path marker count is not 1" }
+          $markerCount = ([regex]::Matches($text, [regex]::Escape('double fastCycleProfit = BasketCycleProfit();'))).Count
+          if ($markerCount -ne 1) { throw "Fast path marker count is $markerCount, expected 1" }
           if (-not $text.Contains('else if(cycleProfit >= g_basketProfitTarget)')) { throw "Existing fixed-target fallback missing" }
           if (-not $text.Contains('if(g_profitRunTrailPercent > 0.0)')) { throw "Run-on behavior missing" }
           if (-not $text.Contains('bool CloseAllBasket(string reason)')) { throw "CloseAllBasket implementation missing" }
           if (-not $text.Contains('void SendHeartbeat()')) { throw "Heartbeat implementation missing" }
+          if (-not $text.Contains('if(count > 0 && BasketHasRacePosition())')) { throw "RACE ownership guard missing" }
+          if (-not $text.Contains('if(g_zeroGridClosing || ZeroGridPositionCount()>0 || ZeroGridPendingCount()>0)')) { throw "ZERO GRID ownership guard missing" }
 
       - name: Install official MetaTrader 5 build environment
         shell: powershell
