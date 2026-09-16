@@ -1,0 +1,47 @@
+name: Quick EA Build Chip Hotfix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/quick-ea-build-chip-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch EA build status chip
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('apps/web/app/dashboard/page.tsx')
+          text = path.read_text(encoding='utf-8')
+          old = '''                      <span className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch ? "ok" : "warn")} title="EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server">
+                        EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}
+                      </span>'''
+          new = '''                      <span
+                        className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch !== false && softwareUpdate.runtimeContractMatch !== false ? "ok" : "warn")}
+                        title={softwareUpdate.eaUpdateRequired ? "EA มี Build ใหม่หรือ Runtime ใหม่พร้อมอัปเดต" : "EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server"}
+                      >
+                        EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}
+                        {softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch === false ? " · Build ใหม่พร้อมอัปเดต" : softwareUpdate.eaVersionMatch && softwareUpdate.runtimeContractMatch === false ? " · Runtime ใหม่พร้อมอัปเดต" : ""}
+                      </span>'''
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one version chip block, found {count}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+      - name: Remove one-shot workflow
+        run: rm .github/workflows/quick-ea-build-chip-hotfix.yml
+      - name: Commit hotfix
+        run: |
+          git config user.name "SCENOVA-AI"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/web/app/dashboard/page.tsx .github/workflows/quick-ea-build-chip-hotfix.yml
+          git commit -m "fix: show EA build mismatch on version chip"
+          git push origin HEAD:main
