@@ -17,6 +17,21 @@ jobs:
         with:
           ref: main
           fetch-depth: 2
+      - name: Align ZERO GRID regression expectations
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('tests/zero-grid-v1-simulation.mjs')
+          text = path.read_text(encoding='utf-8-sig')
+          old_gap = r'''assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=1\.0;[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);'''
+          new_gap = r'''assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=ZeroGridEffectiveLowVolatilityEnabled\(\) \? 0\.10 : 1\.0;[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);'''
+          old_range = r'''assert.match(web, /เลือกได้ 1–30 (?:BUY STOP และ 1–30 SELL STOP|Pending ต่อฝั่ง)/, "ZERO UI must explain the 1..30 per-side range");'''
+          new_range = r'''assert.match(web, /เลือกได้ 1–30 ระดับต่อฝั่ง/, "ZERO UI must explain the 1..30 per-side range");'''
+          if text.count(old_gap) != 1:
+              raise SystemExit('old first-gap regression anchor missing')
+          if text.count(old_range) != 1:
+              raise SystemExit('old UI range regression anchor missing')
+          path.write_text(text.replace(old_gap, new_gap, 1).replace(old_range, new_range, 1), encoding='utf-8')
       - name: Apply and validate feature patch
         run: python scripts/apply-zero-grid-low-volatility.py
       - name: Commit feature to main
