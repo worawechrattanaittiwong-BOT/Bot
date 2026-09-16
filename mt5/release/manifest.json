@@ -1,9 +1,9 @@
 ﻿{
-    "builtAt":  "2026-09-15T14:21:09.2463114Z",
+    "builtAt":  "2026-09-16T04:43:38.8188860Z",
     "policy":  "AUTO_V20_RACE_ZERO_SIMPLE_PENDING_CONTINUOUS_V117",
     "brain":  "V20",
-    "sha256":  "9e253738d1aa74198b40c88d09a0aaebbb1e4241562bcd377f71a881cf476929",
-    "sourceCommit":  "2497c6ff85fe6ce12c61ae67267d8247e273f7d8",
-    "eaVersion":  "1.0.17",
+    "sha256":  "6647b8c61d2e51702e10cd92743e69820a097a487ffb29b4592f730b7802c74b",
+    "sourceCommit":  "9d16a0e2c72eb6f8e41878fba128f823c09dc536",
+    "eaVersion":  "1.0.18",
     "file":  "FastBasketBot.ex5"
 }
