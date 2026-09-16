@@ -202,6 +202,7 @@ export class InstallerController {
 
     const startup = await this.db.one(
       `SELECT COALESCE(
+           NULLIF(bs.settings->>'startupSymbol',''),
            NULLIF(bi.metrics->>'symbol',''),
            NULLIF(bs.settings->>'symbol',''),
            'XAUUSD'

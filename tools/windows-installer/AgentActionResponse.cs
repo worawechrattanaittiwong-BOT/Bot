@@ -27,3 +27,14 @@ internal sealed class AgentActionAckResponse
     public string? ActionId { get; set; }
     public string? Status { get; set; }
 }
+
+internal sealed class TradingSymbolAgentResponse
+{
+    public bool Ok { get; set; }
+    public string? DesiredSymbol { get; set; }
+    public bool ExplicitSymbolSelected { get; set; }
+    public string? CurrentSymbol { get; set; }
+    public int? SymbolTradeMode { get; set; }
+    public bool? SymbolTradingAllowed { get; set; }
+    public bool SymbolReady { get; set; }
+}
