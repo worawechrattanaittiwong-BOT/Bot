@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.20"
-#define SCENOVA_EA_VERSION "1.0.20"
-#define SCENOVA_PRODUCT_VERSION "1.0.20"
+#property version   "1.0.21"
+#define SCENOVA_EA_VERSION "1.0.21"
+#define SCENOVA_PRODUCT_VERSION "1.0.21"
 #define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -157,6 +157,10 @@ input ENUM_ENTRY_MODE InpEntryMode            = ENTRY_AUTO_MOMENTUM;
 // AUTO preserves the normal engine exactly. RACE is an isolated high-speed
 // execution mode selected from the web and never changes AUTO entry logic.
 input string          InpEngineMode           = "AUTO";
+// RACE can bank the entire cycle at a small net-money target. Enabled by
+// default so the web's 0.50 close-all target also has a safe EA fallback.
+input bool            InpRaceCloseAllProfitEnabled = true;
+input double          InpRaceCloseAllProfitMoney = 0.50;
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
 #define ZERO_GRID_MAX_LEVELS 30
 #define ZERO_GRID_DEFAULT_LEVELS 3
@@ -308,6 +312,8 @@ bool   g_raceProfitArmed = false;
 bool   g_raceRecoveryWatch = false;
 string g_raceState = "IDLE";
 datetime g_raceCycleStartedAt = 0;
+bool   g_raceCloseAllProfitEnabled = true;
+double g_raceCloseAllProfitMoney = 0.50;
 bool   g_adaptiveEngine;
 double g_riskPerOrderPercent;
 bool   g_allowMinimumLotOverride;
@@ -1328,6 +1334,8 @@ int OnInit()
    g_minOrderIntervalMs = InpMinOrderIntervalMs;
    g_maxOrdersPerMinute = InpMaxOrdersPerMinute;
    g_entryMode = InpEntryMode;
+   g_raceCloseAllProfitEnabled = InpRaceCloseAllProfitEnabled;
+   g_raceCloseAllProfitMoney = MathMax(0.01, InpRaceCloseAllProfitMoney);
    g_engineMode = InpEngineMode;
    StringToUpper(g_engineMode);
    if(g_engineMode != "RACE" && g_engineMode != "ZERO_GRID")
@@ -3126,6 +3134,17 @@ bool ManageRaceBasket(double momentum)
    if(lossLimit > 0.0 && cycleProfit <= -lossLimit)
    {
       RaceCloseCycle("RACE_MAX_BASKET_LOSS");
+      return true;
+   }
+
+   // User-controlled RACE close-all target. This check intentionally runs
+   // before wrong-direction analysis and per-ticket profit harvesting so a
+   // reached target is acted on immediately with the existing close command.
+   if(g_raceCloseAllProfitEnabled &&
+      g_raceCloseAllProfitMoney > 0.0 &&
+      cycleProfit >= g_raceCloseAllProfitMoney)
+   {
+      RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET");
       return true;
    }
 
@@ -5450,6 +5469,9 @@ void ApplySettings(string json)
    g_indicatorActivationStage=IndicatorV6ModeName();
    g_lastAdaptiveEvaluation = 0;
    g_lastIndicatorV6RefreshAt = 0;
+
+   g_raceCloseAllProfitEnabled = JsonBool(json, "raceCloseAllProfitEnabled", g_raceCloseAllProfitEnabled);
+   g_raceCloseAllProfitMoney = MathMax(0.01, JsonNumber(json, "raceCloseAllProfitMoney", g_raceCloseAllProfitMoney));
 
    g_zeroGridStepPrice = ZeroGridAllowedStep(JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));
    g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,MathRound(JsonNumber(json, "zeroGridLevelsPerSide", g_zeroGridLevelsPerSide))));

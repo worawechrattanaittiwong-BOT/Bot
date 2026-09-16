@@ -1578,6 +1578,8 @@ export class BotController {
     numberSetting("zeroGridBaseLot", 0.01, 100);
     numberSetting("zeroGridMinNetProfitMoney", 0.01, 100000);
     numberSetting("zeroGridCloseReserveMoney", 0, 100000);
+    booleanSetting("raceCloseAllProfitEnabled");
+    numberSetting("raceCloseAllProfitMoney", 0.01, 100000);
     booleanSetting("adaptiveEngine");
     numberSetting("riskPerOrderPercent", 0.01, 5);
     booleanSetting("allowMinimumLotOverride");
@@ -1697,6 +1699,14 @@ export class BotController {
       if (body.zeroGridBaseLot === undefined) clean.zeroGridBaseLot = 0.01;
       if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;
       if (body.zeroGridCloseReserveMoney === undefined) clean.zeroGridCloseReserveMoney = 0.2;
+    }
+
+    const raceSelected =
+      requestedControlMode === "RACE" ||
+      (requestedControlMode === null && requestedEngineMode === "RACE");
+    if (raceSelected) {
+      if (body.raceCloseAllProfitEnabled === undefined) clean.raceCloseAllProfitEnabled = true;
+      if (body.raceCloseAllProfitMoney === undefined) clean.raceCloseAllProfitMoney = 0.5;
     }
 
     if (body.entryMode !== undefined) {

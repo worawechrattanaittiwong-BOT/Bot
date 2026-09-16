@@ -65,6 +65,8 @@ const defaultSettings = {
   indicatorV6Mode: "SOFT_WEIGHT",
   controlMode: undefined,
   engineMode: "AUTO",
+  raceCloseAllProfitEnabled: true,
+  raceCloseAllProfitMoney: 0.5,
   zeroGridStepPrice: 3,
   zeroGridLevelsPerSide: 10,
   zeroGridBaseLot: 0.01,
@@ -145,6 +147,10 @@ export default function DashboardPage() {
           if (!Number.isFinite(Number(nextSettings.zeroGridBaseLot)) || Number(nextSettings.zeroGridBaseLot) <= 0) nextSettings.zeroGridBaseLot = 0.01;
           if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 0.5;
           if (!Number.isFinite(Number(nextSettings.zeroGridCloseReserveMoney)) || Number(nextSettings.zeroGridCloseReserveMoney) <= 0) nextSettings.zeroGridCloseReserveMoney = 0.2;
+        }
+        if (loadedControlMode === "RACE") {
+          if (typeof nextSettings.raceCloseAllProfitEnabled !== "boolean") nextSettings.raceCloseAllProfitEnabled = true;
+          if (!Number.isFinite(Number(nextSettings.raceCloseAllProfitMoney)) || Number(nextSettings.raceCloseAllProfitMoney) <= 0) nextSettings.raceCloseAllProfitMoney = 0.5;
         }
         setSettings(nextSettings);
       }
@@ -2866,6 +2872,8 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("engineMode","RACE");
       props.onEdit?.("profitTargetMode","AUTO");
       props.onEdit?.("manualStopLossPoints",0);
+      if (typeof props.settings?.raceCloseAllProfitEnabled !== "boolean") props.onEdit?.("raceCloseAllProfitEnabled",true);
+      if (!Number.isFinite(Number(props.settings?.raceCloseAllProfitMoney)) || Number(props.settings?.raceCloseAllProfitMoney) <= 0) props.onEdit?.("raceCloseAllProfitMoney",0.5);
       return;
     }
     props.onEdit?.("engineMode","AUTO");
@@ -2882,9 +2890,13 @@ function BotSettingsModal(props:any) {
   };
 
   const directionLabel = entryMode === "SELL_ONLY" ? "SELL เท่านั้น" : entryMode === "BUY_ONLY" ? "BUY เท่านั้น" : "อัตโนมัติ · EA เลือก BUY / SELL";
-  const exitLabel = controlMode === "MANUAL"
-    ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")
-    : "Dynamic Profit Protection";
+  const raceCloseAllProfitEnabled = props.settings?.raceCloseAllProfitEnabled !== false;
+  const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 0.5);
+  const exitLabel = controlMode === "RACE"
+    ? (raceCloseAllProfitEnabled ? "ปิดทั้งหมดที่ +$"+raceCloseAllProfitMoney.toFixed(2) : "Dynamic Profit Protection")
+    : controlMode === "MANUAL"
+      ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")
+      : "Dynamic Profit Protection";
   const slLabel = controlMode === "MANUAL" ? Number(manualSl).toFixed(0)+" points" : "ATR × 2.00";
   const selectedZeroLevels = Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||10));
   const appliedZeroLevels = Number(props.metrics?.zeroGridConfiguredLevelsPerSide);
@@ -2953,10 +2965,18 @@ function BotSettingsModal(props:any) {
               {controlMode!=="ZERO_GRID"&&(
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>เป้ากำไรและ Stop Loss</b><small>{controlMode==="MANUAL"?"ระบุค่าปิดออเดอร์ด้วยตนเอง":"EA ปรับทางออกตามโครงสร้างและความผันผวน"}</small></div></div>
-                {controlMode!=="MANUAL" ? <div className="cc-bot-v2-auto-grid">
+                {controlMode!=="MANUAL" ? <>
+                <div className="cc-bot-v2-auto-grid">
                   <div><ScenovaIcon name="profit" size={20}/><span><small>การรักษากำไร</small><b>Dynamic Profit Protection</b></span></div>
                   <div><ScenovaIcon name="shield" size={20}/><span><small>Stop Loss ต่อไม้</small><b>ATR × 2.00 + โครงสร้างราคา</b></span></div>
-                </div> : <div className="cc-bot-v2-manual-exit">
+                </div>
+                {controlMode==="RACE"&&<div className="cc-bot-v2-manual-exit">
+                  <div className="cc-bot-v2-fields exit-fields">
+                    <div className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>ปิดไม้ทั้งหมดที่กำไร</span><SwitchSetting checked={raceCloseAllProfitEnabled} onChange={(value:boolean)=>props.onEdit?.("raceCloseAllProfitEnabled",value)} onLabel="เปิด · ปิดทั้งหมดเมื่อถึงเป้า" offLabel="ปิด · ใช้ระบบกำไรโหมดซิ่งเดิม"/><small>เมื่อกำไรรวมของรอบซิ่งถึงเป้า EA จะสั่งปิดทุก Position ในรอบทันที</small></div>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="target" size={17}/>กำไรรวมเพื่อปิดทั้งหมด</span><MoneyInput value={raceCloseAllProfitMoney} disabled={!raceCloseAllProfitEnabled} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("raceCloseAllProfitMoney",v)}/><small>ค่าเริ่มต้น 0.50 · ใช้สกุลเงินของบัญชี MT5</small></label>
+                  </div>
+                </div>}
+                </> : <div className="cc-bot-v2-manual-exit">
                   <div className="cc-bot-v2-choice-row">
                     <button type="button" className={profitKind==="BASKET"?"active":""} onClick={()=>{props.onEdit?.("basketProfitTargetMoney",Number(props.settings.basketProfitTargetMoney||10));props.onEdit?.("perPositionProfitMoney",0)}}><ScenovaIcon name="profit" size={18}/><span><b>กำไรรวมทั้งชุด</b><small>ปิด Basket เมื่อถึงเป้า</small></span></button>
                     <button type="button" className={profitKind==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("perPositionProfitMoney",Number(props.settings.perPositionProfitMoney||2));props.onEdit?.("basketProfitTargetMoney",0)}}><ScenovaIcon name="orders" size={18}/><span><b>กำไรต่อไม้</b><small>ปิดเฉพาะ Position ที่ถึงเป้า</small></span></button>

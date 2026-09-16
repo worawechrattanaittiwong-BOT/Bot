@@ -98,6 +98,8 @@ CREATE TABLE IF NOT EXISTS bot_settings (
     "symbol":"XAUUSD",
     "lot":0.01,
     "maxPositions":10,
+    "raceCloseAllProfitEnabled":true,
+    "raceCloseAllProfitMoney":0.5,
     "basketTriggerMoney":2.0,
     "basketTrailMoney":0.5,
     "maxBasketLossMoney":10.0,

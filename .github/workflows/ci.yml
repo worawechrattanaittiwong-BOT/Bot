@@ -28,6 +28,9 @@ jobs:
       - name: AUTO V20 same-dataset policy regression
         shell: pwsh
         run: ./tests/auto-v20-policy-regression.ps1
+      - name: RACE close-all profit contract
+        shell: pwsh
+        run: ./tests/race-close-all-profit-contract.ps1
       - name: ZERO GRID stability simulation regression
         run: node ./tests/zero-grid-v1-simulation.mjs
       - name: LOCAL account-follow no customer Slot contract
