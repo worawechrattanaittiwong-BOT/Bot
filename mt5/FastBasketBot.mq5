@@ -3313,6 +3313,27 @@ void OnTick()
       return;
    }
 
+   // Fast path for the existing MANUAL fixed Basket target only. Keep all
+   // safety/ownership priorities above unchanged, and do not interfere with
+   // an active Rescue cycle. The close command itself remains unchanged.
+   if(count > 0 &&
+      rescueCount <= 0 &&
+      g_rescueState == RESCUE_NORMAL &&
+      g_profitTargetMode == "MANUAL" &&
+      g_basketProfitTarget > 0.0 &&
+      g_perPositionProfit <= 0.0 &&
+      g_profitRunTrailPercent <= 0.0)
+   {
+      double fastCycleProfit = BasketCycleProfit();
+      if(fastCycleProfit >= g_basketProfitTarget)
+      {
+         CloseAllBasket("BASKET_PROFIT_TARGET");
+         ResetTrail();
+         g_executionStatus = "BASKET_PROFIT_TARGET";
+         return;
+      }
+   }
+
    if(count > 0)
    {
       // Dynamic protection never decides whether an entry is allowed. It only
