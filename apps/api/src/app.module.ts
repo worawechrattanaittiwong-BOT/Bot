@@ -1,11 +1,14 @@
 import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
+import { APP_INTERCEPTOR } from "@nestjs/core";
 import { AuthController } from "./auth.controller";
 import { BotController } from "./bot.controller";
 import { AdminController } from "./admin.controller";
 import { EaController } from "./ea.controller";
 import { AgentActionController } from "./agent-action.controller";
 import { ManualMt5Controller } from "./manual-mt5.controller";
+import { TradingSymbolController, EaTradingSymbolController } from "./trading-symbol.controller";
+import { TradingSymbolStartInterceptor } from "./trading-symbol.interceptor";
 import { HealthController } from "./health.controller";
 import { WorkerController } from "./worker.controller";
 import { RootController } from "./root.controller";
@@ -35,7 +38,20 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, HealthController, WorkerController],
-  providers: [ProductionHardeningService, RuntimeMigrationService, RuntimeSafetyService, CloudService, DbService, MaintenanceService, PartnerService, JwtGuard, AdminGuard, WorkerGuard, CryptoService]
+  controllers: [ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, HealthController, WorkerController],
+  providers: [
+    ProductionHardeningService,
+    RuntimeMigrationService,
+    RuntimeSafetyService,
+    CloudService,
+    DbService,
+    MaintenanceService,
+    PartnerService,
+    JwtGuard,
+    AdminGuard,
+    WorkerGuard,
+    CryptoService,
+    { provide: APP_INTERCEPTOR, useClass: TradingSymbolStartInterceptor }
+  ]
 })
 export class AppModule {}
