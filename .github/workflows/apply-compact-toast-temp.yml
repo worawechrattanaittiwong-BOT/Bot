@@ -1,0 +1,41 @@
+name: Apply Compact Dashboard Toast Temporary
+
+on:
+  push:
+    branches: [fix/compact-dashboard-toast]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/compact-dashboard-toast
+          fetch-depth: 0
+      - name: Apply narrow toast CSS patch
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('apps/web/app/globals.css')
+          text = path.read_text(encoding='utf-8')
+          old = '.page-notice{position:fixed;right:22px;bottom:22px;z-index:1400;width:min(390px,calc(100vw - 32px));margin:0;box-shadow:0 18px 52px rgba(0,0,0,.42);animation:scnToastIn .18s ease-out}'
+          new = '.page-notice{position:fixed!important;top:auto!important;right:22px!important;bottom:22px!important;left:auto!important;z-index:1400;width:min(360px,calc(100vw - 32px));height:auto!important;min-height:0!important;max-height:96px;overflow:auto;margin:0!important;padding:10px 12px!important;display:block!important;align-self:auto!important;font-size:12px;line-height:1.4;box-shadow:0 14px 38px rgba(0,0,0,.38);animation:scnToastIn .18s ease-out}'
+          if old not in text:
+              raise SystemExit('Target .page-notice rule not found; refusing broad edit')
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one .page-notice rule, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+      - name: Remove temporary workflow and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/apply-compact-toast-temp.yml
+          git config user.name 'scenova-build'
+          git config user.email 'actions@users.noreply.github.com'
+          git add apps/web/app/globals.css .github/workflows/apply-compact-toast-temp.yml
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: keep dashboard toast compact'
+          git push origin HEAD:fix/compact-dashboard-toast
