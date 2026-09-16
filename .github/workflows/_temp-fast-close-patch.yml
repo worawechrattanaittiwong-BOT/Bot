@@ -1,0 +1,114 @@
+name: TEMP manual basket fast-close patch
+
+on:
+  push:
+    branches:
+      - fix/manual-basket-fast-close-20260916
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch only the existing MANUAL fixed Basket close path
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("mt5/FastBasketBot.mq5")
+          text = path.read_text(encoding="utf-8")
+
+          old = '''   if(count > 0 && BasketHasRacePosition())
+   {
+      ManageRaceBasket(momentum);
+      return;
+   }
+
+   if(count > 0)
+   {
+      // Dynamic protection never decides whether an entry is allowed. It only
+'''
+
+          new = '''   if(count > 0 && BasketHasRacePosition())
+   {
+      ManageRaceBasket(momentum);
+      return;
+   }
+
+   // Fast path for the existing MANUAL fixed Basket target only. Keep all
+   // safety/ownership priorities above unchanged, and do not interfere with
+   // an active Rescue cycle. The close command itself remains unchanged.
+   if(count > 0 &&
+      rescueCount <= 0 &&
+      g_rescueState == RESCUE_NORMAL &&
+      g_profitTargetMode == "MANUAL" &&
+      g_basketProfitTarget > 0.0 &&
+      g_perPositionProfit <= 0.0 &&
+      g_profitRunTrailPercent <= 0.0)
+   {
+      double fastCycleProfit = BasketCycleProfit();
+      if(fastCycleProfit >= g_basketProfitTarget)
+      {
+         CloseAllBasket("BASKET_PROFIT_TARGET");
+         ResetTrail();
+         g_executionStatus = "BASKET_PROFIT_TARGET";
+         return;
+      }
+   }
+
+   if(count > 0)
+   {
+      // Dynamic protection never decides whether an entry is allowed. It only
+'''
+
+          matches = text.count(old)
+          if matches != 1:
+              raise SystemExit(f"Refusing unsafe patch: expected exactly one anchor, found {matches}")
+
+          patched = text.replace(old, new, 1)
+          if patched.count("double fastCycleProfit = BasketCycleProfit();") != 1:
+              raise SystemExit("Fast-path marker validation failed")
+          if patched.count('CloseAllBasket("BASKET_PROFIT_TARGET")') < 2:
+              raise SystemExit("Existing fixed-target fallback appears missing")
+
+          path.write_text(patched, encoding="utf-8")
+
+      - name: Verify scope and invariants
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+
+          text = Path("mt5/FastBasketBot.mq5").read_text(encoding="utf-8")
+          checks = {
+              "one fast path": text.count("double fastCycleProfit = BasketCycleProfit();") == 1,
+              "existing fixed-target fallback retained": text.count("else if(cycleProfit >= g_basketProfitTarget)") == 1,
+              "run-on logic retained": text.count("if(g_profitRunTrailPercent > 0.0)") >= 1,
+              "CloseAllBasket implementation retained": text.count("bool CloseAllBasket(string reason)") == 1,
+              "heartbeat implementation retained": text.count("void SendHeartbeat()") == 1,
+              "OnTick implementation singular": text.count("void OnTick()") == 1,
+          }
+          failed = [name for name, ok in checks.items() if not ok]
+          if failed:
+              raise SystemExit("Invariant checks failed: " + ", ".join(failed))
+
+          changed = subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines()
+          if changed != ["mt5/FastBasketBot.mq5"]:
+              raise SystemExit(f"Unexpected working-tree changes: {changed}")
+
+      - name: Commit source-only result and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Fast Close Patch"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5
+          git rm .github/workflows/_temp-fast-close-patch.yml
+          git commit -m "fix(mt5): fast-path manual fixed basket profit close"
+          git push origin HEAD:fix/manual-basket-fast-close-20260916
