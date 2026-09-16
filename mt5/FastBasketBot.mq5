@@ -1,8 +1,8 @@
 #property strict
-#property version   "1.0.22"
-#define SCENOVA_EA_VERSION "1.0.22"
-#define SCENOVA_PRODUCT_VERSION "1.0.22"
-#define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LOW_VOLATILITY_V2"
+#property version   "1.0.23"
+#define SCENOVA_EA_VERSION "1.0.23"
+#define SCENOVA_PRODUCT_VERSION "1.0.23"
+#define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -161,6 +161,7 @@ input string          InpEngineMode           = "AUTO";
 // default so the web's 0.50 close-all target also has a safe EA fallback.
 input bool            InpRaceCloseAllProfitEnabled = true;
 input double          InpRaceCloseAllProfitMoney = 0.50;
+#define RACE_VOLUME_WINDOW_SECONDS 10
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
 #define ZERO_GRID_MAX_LEVELS 30
 #define ZERO_GRID_DEFAULT_LEVELS 3
@@ -317,6 +318,16 @@ string g_raceState = "IDLE";
 datetime g_raceCycleStartedAt = 0;
 bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
+// RACE uses a rolling 10-second order-flow window. Exchange/deal-side flags
+// are used when the broker publishes them; quote-only symbols fall back to
+// uptick/downtick tick-volume counts. No trend/EMA/timeframe signal decides side.
+datetime g_raceVolumeBucketSecond[RACE_VOLUME_WINDOW_SECONDS];
+double   g_raceVolumeBucketBuy[RACE_VOLUME_WINDOW_SECONDS];
+double   g_raceVolumeBucketSell[RACE_VOLUME_WINDOW_SECONDS];
+int      g_raceVolumeBucketSamples[RACE_VOLUME_WINDOW_SECONDS];
+datetime g_raceVolumeWarmupStartedAt = 0;
+datetime g_raceVolumeLastSampleAt = 0;
+double   g_raceVolumeLastMid = 0.0;
 bool   g_adaptiveEngine;
 double g_riskPerOrderPercent;
 bool   g_allowMinimumLotOverride;
@@ -2844,6 +2855,124 @@ int RaceFilledUnits()
    return MathMax(positions, MathMax(0, volumeUnits));
 }
 
+
+void RaceResetVolumeWindow(datetime now)
+{
+   for(int i=0;i<RACE_VOLUME_WINDOW_SECONDS;i++)
+   {
+      g_raceVolumeBucketSecond[i]=0;
+      g_raceVolumeBucketBuy[i]=0.0;
+      g_raceVolumeBucketSell[i]=0.0;
+      g_raceVolumeBucketSamples[i]=0;
+   }
+   g_raceVolumeWarmupStartedAt=now;
+   g_raceVolumeLastSampleAt=0;
+   g_raceVolumeLastMid=0.0;
+}
+
+void RaceSampleVolumePressure()
+{
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return;
+
+   datetime now=(tick.time>0 ? (datetime)tick.time : TimeCurrent());
+   if(now<=0)
+      return;
+
+   if(g_raceVolumeWarmupStartedAt<=0 ||
+      (g_raceVolumeLastSampleAt>0 && now-g_raceVolumeLastSampleAt>RACE_VOLUME_WINDOW_SECONDS))
+      RaceResetVolumeWindow(now);
+
+   int slot=(int)((long)now % RACE_VOLUME_WINDOW_SECONDS);
+   if(g_raceVolumeBucketSecond[slot]!=now)
+   {
+      g_raceVolumeBucketSecond[slot]=now;
+      g_raceVolumeBucketBuy[slot]=0.0;
+      g_raceVolumeBucketSell[slot]=0.0;
+      g_raceVolumeBucketSamples[slot]=0;
+   }
+
+   double mid=(tick.bid+tick.ask)*0.5;
+   int side=0;
+   double weight=1.0;
+   bool flaggedBuy=((tick.flags & TICK_FLAG_BUY)!=0);
+   bool flaggedSell=((tick.flags & TICK_FLAG_SELL)!=0);
+
+   // Prefer real deal-side volume when the broker publishes it. Most OTC FX/
+   // metal feeds expose quote ticks instead, so classify those by uptick/down-
+   // tick and count one unit of tick volume per directional price update.
+   if(flaggedBuy!=flaggedSell)
+   {
+      side=flaggedBuy ? 1 : -1;
+      double reported=(tick.volume_real>0.0 ? tick.volume_real : (double)tick.volume);
+      if(reported>0.0)
+         weight=reported;
+   }
+   else if(g_raceVolumeLastMid>0.0)
+   {
+      double epsilon=MathMax(_Point*0.05,0.00000001);
+      if(mid>g_raceVolumeLastMid+epsilon) side=1;
+      else if(mid<g_raceVolumeLastMid-epsilon) side=-1;
+   }
+
+   if(side>0)
+   {
+      g_raceVolumeBucketBuy[slot]+=weight;
+      g_raceVolumeBucketSamples[slot]++;
+   }
+   else if(side<0)
+   {
+      g_raceVolumeBucketSell[slot]+=weight;
+      g_raceVolumeBucketSamples[slot]++;
+   }
+
+   g_raceVolumeLastMid=mid;
+   g_raceVolumeLastSampleAt=now;
+}
+
+void RaceVolumeSnapshot(double &buyPressure,double &sellPressure,int &samples)
+{
+   buyPressure=0.0;
+   sellPressure=0.0;
+   samples=0;
+   datetime now=TimeCurrent();
+   for(int i=0;i<RACE_VOLUME_WINDOW_SECONDS;i++)
+   {
+      datetime stamp=g_raceVolumeBucketSecond[i];
+      if(stamp<=0 || stamp>now || now-stamp>=RACE_VOLUME_WINDOW_SECONDS)
+         continue;
+      buyPressure+=g_raceVolumeBucketBuy[i];
+      sellPressure+=g_raceVolumeBucketSell[i];
+      samples+=g_raceVolumeBucketSamples[i];
+   }
+}
+
+bool RaceVolumeWindowReady()
+{
+   if(g_raceVolumeWarmupStartedAt<=0 ||
+      TimeCurrent()-g_raceVolumeWarmupStartedAt<RACE_VOLUME_WINDOW_SECONDS)
+      return false;
+   double buyPressure=0.0;
+   double sellPressure=0.0;
+   int samples=0;
+   RaceVolumeSnapshot(buyPressure,sellPressure,samples);
+   return samples>0;
+}
+
+int RaceVolumeDirection()
+{
+   if(!RaceVolumeWindowReady())
+      return 0;
+   double buyPressure=0.0;
+   double sellPressure=0.0;
+   int samples=0;
+   RaceVolumeSnapshot(buyPressure,sellPressure,samples);
+   if(samples<=0 || MathAbs(buyPressure-sellPressure)<=0.00000001)
+      return 0;
+   return buyPressure>sellPressure ? 1 : -1;
+}
+
 int RaceM5CandleDirection()
 {
    // RACE AUTO reads one thing only for side selection: the latest completed
@@ -2861,13 +2990,11 @@ int RaceM5CandleDirection()
 
 int RaceAnalysisDirection(double momentum)
 {
-   // Manual direction remains available to the customer.
+   // Explicit customer direction remains an override. AUTO RACE ignores
+   // trend/EMA/timeframes and follows only the rolling 10-second volume side.
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
    if(g_entryMode == ENTRY_SELL_ONLY) return -1;
-
-   // AUTO RACE deliberately ignores Momentum/M1/M15/EMA/Macro for choosing
-   // the side. One closed M5 candle decides BUY or SELL for the next cycle.
-   return RaceM5CandleDirection();
+   return RaceVolumeDirection();
 }
 
 double RaceMidProgressPoints(int direction)
@@ -2924,8 +3051,9 @@ bool RaceWrongDirectionConfirmed(
 
 bool RaceFlowStillRunning(int direction, double momentum)
 {
-   // Profit-run direction in RACE follows the same single completed M5 candle.
-   return RaceM5CandleDirection() == direction;
+   // RACE profit-run continuation follows the same 10-second volume majority
+   // used for entry. Trend, EMA and candle direction do not participate.
+   return RaceVolumeDirection() == direction;
 }
 
 double RaceProfitArmMoney(int filledUnits)
@@ -2954,6 +3082,10 @@ int RaceHarvestProfitablePositions()
    bool hedging = ((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE) ==
                    ACCOUNT_MARGIN_MODE_RETAIL_HEDGING);
    double baseVolume = NormalizeTradeVolume(g_lot);
+   double perPositionTarget =
+      (g_profitTargetMode == "MANUAL" && g_perPositionProfit > 0.0)
+      ? g_perPositionProfit
+      : 0.0;
 
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
@@ -2968,7 +3100,12 @@ int RaceHarvestProfitablePositions()
 
       double netFloating = PositionGetDouble(POSITION_PROFIT) +
                            PositionGetDouble(POSITION_SWAP);
-      if(netFloating <= 0.0)
+      if(perPositionTarget > 0.0)
+      {
+         if(netFloating + 0.00000001 < perPositionTarget)
+            continue;
+      }
+      else if(netFloating <= 0.0)
          continue;
 
       double positionVolume = PositionGetDouble(POSITION_VOLUME);
@@ -3119,11 +3256,12 @@ bool StartRaceCycle(double momentum)
       return false;
 
    ResetRaceRuntime();
-   RefreshMarketContext(false);
    int direction = RaceAnalysisDirection(momentum);
    if(direction == 0)
    {
-      g_executionStatus = "RACE_WAIT_MARKET_DATA";
+      g_executionStatus = RaceVolumeWindowReady()
+         ? "RACE_VOLUME_BALANCED"
+         : "RACE_VOLUME_WARMUP";
       return false;
    }
 
@@ -3184,13 +3322,6 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   string wrongReason = "NONE";
-   if(RaceWrongDirectionConfirmed(direction,momentum,filling,wrongReason))
-   {
-      RaceCloseCycle(wrongReason);
-      return true;
-   }
-
    // RACE_PROFIT_FIRST_V116: profitable RACE tickets are harvested before
    // the Max Positions fill gate. Profit exit is never delayed just because the
    // basket is still building. Refill, if needed, happens on a later pass.
@@ -3212,10 +3343,39 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
+
+   // RACE_VOLUME_10S_ROLLOVER_V1: direction comes only from the rolling
+   // 10-second BUY/SELL pressure window. If pressure flips, never add another
+   // order on the stale side. The old cycle is flattened only when its realized
+   // + floating net P/L is non-negative; otherwise existing positions keep
+   // their normal per-position profit exits and hard loss protection.
+   int volumeDirection = RaceAnalysisDirection(momentum);
+   if(volumeDirection != 0 && volumeDirection != direction)
+   {
+      if(cycleProfit >= 0.0)
+      {
+         RaceCloseCycle("RACE_VOLUME_ROLLOVER");
+         return true;
+      }
+      g_raceRecoveryWatch = true;
+      g_raceState = "ROLLOVER_WAIT";
+      g_executionStatus = volumeDirection > 0
+         ? "RACE_VOLUME_ROLLOVER_WAIT_BUY"
+         : "RACE_VOLUME_ROLLOVER_WAIT_SELL";
+      return true;
+   }
    // Max Positions remains the requested RACE fill target, but it can no longer
    // block an already-profitable ticket from being banked first.
    if(filling)
    {
+      if(volumeDirection == 0)
+      {
+         g_raceState = "VOLUME_WAIT";
+         g_executionStatus = RaceVolumeWindowReady()
+            ? "RACE_VOLUME_BALANCED"
+            : "RACE_VOLUME_WARMUP";
+         return true;
+      }
       if(floatingProfit < 0.0)
          g_raceRecoveryWatch = true;
       g_raceState = "FILLING";
@@ -3300,6 +3460,7 @@ bool ManageRaceBasket(double momentum)
 void OnTick()
 {
    SampleSpread();
+   RaceSampleVolumePressure();
    bool zeroGridFastPath =
       ZeroGridPositionCount() > 0 ||
       ZeroGridPendingCount() > 0 ||
