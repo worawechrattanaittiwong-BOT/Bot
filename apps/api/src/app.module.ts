@@ -7,6 +7,7 @@ import { AdminController } from "./admin.controller";
 import { EaController } from "./ea.controller";
 import { AgentActionController } from "./agent-action.controller";
 import { ManualMt5Controller } from "./manual-mt5.controller";
+import { ManualEaUpdateStopInterceptor } from "./manual-ea-update.interceptor";
 import { TradingSymbolController, EaTradingSymbolController } from "./trading-symbol.controller";
 import { TradingSymbolStartInterceptor } from "./trading-symbol.interceptor";
 import { HealthController } from "./health.controller";
@@ -51,7 +52,8 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
     AdminGuard,
     WorkerGuard,
     CryptoService,
-    { provide: APP_INTERCEPTOR, useClass: TradingSymbolStartInterceptor }
+    { provide: APP_INTERCEPTOR, useClass: TradingSymbolStartInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: ManualEaUpdateStopInterceptor }
   ]
 })
 export class AppModule {}
