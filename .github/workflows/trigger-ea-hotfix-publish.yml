@@ -1,0 +1,37 @@
+name: Trigger EA Hotfix Publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/trigger-ea-hotfix-publish.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Touch EA source without changing version
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker='// Hotfix rebuild marker: RACE Close-All Profit exclusivity, EA remains v1.0.23.'
+          if ! grep -Fq "$marker" mt5/FastBasketBot.mq5; then
+            printf '\n%s\n' "$marker" >> mt5/FastBasketBot.mq5
+          fi
+          grep -F '#property version   "1.0.23"' mt5/FastBasketBot.mq5
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5
+          if git diff --cached --quiet; then
+            echo "Publish trigger marker already present."
+            exit 0
+          fi
+          git commit -m "chore: republish RACE close-all hotfix v1.0.23"
+          git push origin HEAD:main
