@@ -54,3 +54,5 @@ jobs:
           git add mt5/FastBasketBot.mq5
           git commit -m 'fix: make RACE close-all profit exclusive [skip ea build]'
           git push origin HEAD:main
+
+# trigger: 2026-09-16
