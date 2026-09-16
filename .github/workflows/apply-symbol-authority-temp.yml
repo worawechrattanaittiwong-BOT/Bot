@@ -28,6 +28,7 @@ jobs:
           if old not in text:
               raise SystemExit('dashboard settings symbol override anchor not found')
           text = text.replace(old, new, 1)
+
           old = '      const payload:any = { ...settings };\n      delete payload.tradingProfile;'
           new = '      const payload:any = { ...settings };\n      // Trading Symbol page is the only authority allowed to change the configured symbol.\n      delete payload.symbol;\n      delete payload.tradingProfile;'
           if old not in text:
@@ -46,11 +47,17 @@ jobs:
 
           controller = Path('apps/api/src/trading-symbol.controller.ts')
           text = controller.read_text(encoding='utf-8')
-          old_desired = 'const desiredSymbol = explicitSymbol || activeSymbol || fallbackSymbol || "XAUUSD";'
-          new_desired = 'const desiredSymbol = explicitSymbol || fallbackSymbol || activeSymbol || "XAUUSD";'
-          if text.count(old_desired) != 2:
-              raise SystemExit(f'expected 2 desired symbol anchors, found {text.count(old_desired)}')
-          text = text.replace(old_desired, new_desired, 2)
+          first_old = 'const desiredSymbol = explicitSymbol || activeSymbol || fallbackSymbol || "XAUUSD";'
+          first_new = 'const desiredSymbol = explicitSymbol || fallbackSymbol || activeSymbol || "XAUUSD";'
+          second_old = 'const desiredSymbol = explicitSymbol || currentSymbol || legacySavedSymbol || "XAUUSD";'
+          second_new = 'const desiredSymbol = explicitSymbol || legacySavedSymbol || currentSymbol || "XAUUSD";'
+          if first_old not in text:
+              raise SystemExit('customer desired symbol precedence anchor not found')
+          if second_old not in text:
+              raise SystemExit('agent desired symbol precedence anchor not found')
+          text = text.replace(first_old, first_new, 1)
+          text = text.replace(second_old, second_new, 1)
+
           old = '''      `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)\n       VALUES($1,jsonb_build_object('startupSymbol',$2::text),now())\n       ON CONFLICT(bot_instance_id)\n       DO UPDATE SET\n         settings=jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),\n         updated_at=now()`,'''
           new = '''      `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)\n       VALUES($1,jsonb_build_object('startupSymbol',$2::text,'symbol',$2::text),now())\n       ON CONFLICT(bot_instance_id)\n       DO UPDATE SET\n         settings=jsonb_set(\n           jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),\n           '{symbol}',to_jsonb($2::text),true\n         ),\n         updated_at=now()`,'''
           if old not in text:
@@ -66,7 +73,7 @@ jobs:
               raise SystemExit('test source anchor not found')
           text = text.replace(old, new, 1)
           anchor = "Assert-Contains $controller 'startupSymbol' 'explicit desired symbol is stored separately from live metrics'\n"
-          add = anchor + "Assert-Contains $controller \"jsonb_build_object('startupSymbol',$2::text,'symbol',$2::text)\" 'dedicated symbol selection synchronizes canonical configured symbol'\nAssert-Contains $botController 'Trading Symbol is intentionally not writable through generic bot settings.' 'generic settings cannot change symbol'\nAssert-Contains $dashboard 'delete payload.symbol;' 'dashboard settings cannot submit a symbol override'\n"
+          add = anchor + "Assert-Contains $controller \"'{symbol}',to_jsonb\" 'dedicated symbol selection synchronizes canonical configured symbol'\nAssert-Contains $controller 'explicitSymbol || fallbackSymbol || activeSymbol' 'stored configured symbol wins over live telemetry fallback'\nAssert-Contains $controller 'explicitSymbol || legacySavedSymbol || currentSymbol' 'Agent follows stored configured symbol before runtime telemetry'\nAssert-Contains $botController 'Trading Symbol is intentionally not writable through generic bot settings.' 'generic settings cannot change symbol'\nAssert-Contains $dashboard 'delete payload.symbol;' 'dashboard settings cannot submit a symbol override'\n"
           if anchor not in text:
               raise SystemExit('test assertion anchor not found')
           text = text.replace(anchor, add, 1)
