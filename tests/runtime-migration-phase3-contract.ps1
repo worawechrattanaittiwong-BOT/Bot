@@ -67,7 +67,13 @@ Require $smart 'RuntimeMigrationAgent\.ProcessAsync' 'migration stop is polled b
 Require $smart 'Runtime migration stop handled; skipping normal MT5 actions' 'normal Agent actions are skipped after migration stop'
 Require $smart 'RuntimeMigrationAgent\.ProcessAsync\(config, token, logPath\)\)\s*\{.*?return;' 'migration stop returns before manual MT5 restart flow'
 
-Require $agentVersion 'Version\s*=\s*"1\.0\.9"' 'new Agent protocol version is explicit'
+$versionMatch = [regex]::Match($agentVersion, 'Version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"')
+if (-not $versionMatch.Success) {
+  throw 'Phase 3 contract missing: current Agent protocol version is explicit'
+}
+if ([version]$versionMatch.Groups[1].Value -lt [version]'1.0.9') {
+  throw 'Phase 3 contract violated: current Agent protocol must remain 1.0.9 or newer'
+}
 Require $page 'ZERO DUAL-RUNTIME' 'customer UI explains no dual runtime invariant'
 Require $page 'confirmFlat' 'customer must confirm flat positions'
 Require $page 'confirmSwitch' 'customer must confirm lease handoff'
