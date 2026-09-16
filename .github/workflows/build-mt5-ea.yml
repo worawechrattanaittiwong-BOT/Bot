@@ -1,6 +1,6 @@
 name: Build MT5 EA
 
-# Release metadata trigger: EA v1.0.17 simple stable ZERO pending runtime.
+# Release metadata trigger: EA v1.0.22 ZERO GRID low-volatility runtime.
 # Official MT5 compile and publish pipeline for the current V20/RACE source.
 # ZERO is a dedicated pending-only engine: build the configured symmetric ladder,
 # close on its own net-profit rule, then immediately rearm without market filters.
@@ -87,7 +87,12 @@ jobs:
             'RACE_PROFIT_FIRST_V116',
             'SaaSRace',
             'bool ZeroGridModeEnabled()',
-            '#define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"',
+            '#define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LOW_VOLATILITY_V2"',
+            'input bool            InpZeroGridLowVolatilityEnabled = false;',
+            'bool ZeroGridEffectiveLowVolatilityEnabled()',
+            'double ZeroGridEffectiveLevelLot(int level)',
+            'ZeroGridEffectiveLowVolatilityEnabled() ? 0.10 : 1.0',
+            'g_zeroGridLowVolatilityEnabled ? 0.30 : g_zeroGridStepPrice',
             'zeroGridConfiguredLevelsPerSide',
             'zeroGridEffectiveLevelsPerSide',
             'zeroGridMaxLevelsPerSide',
@@ -119,7 +124,7 @@ jobs:
             'OrderSendAsync(request,result)',
             'g_zeroGridLastExitBurstMs',
             'state==ORDER_STATE_FILLED || state==ORDER_STATE_PARTIAL',
-            'ZeroGridEffectiveBaseLot()*level',
+            'ZeroGridEffectiveLevelLot(level)',
             'ZERO_GRID_STOPPED_FLAT',
             'ZERO_GRID_SAFE_DRAIN',
             'TradePermissionStatus',
@@ -182,7 +187,7 @@ jobs:
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
             brain = "V20"
-            policy = "AUTO_V20_RACE_ZERO_SIMPLE_PENDING_CONTINUOUS_V117"
+            policy = "AUTO_V20_RACE_ZERO_LOW_VOLATILITY_V2"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
       - name: Publish current V20 compiled artifact
