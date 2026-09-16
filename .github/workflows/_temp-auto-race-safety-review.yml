@@ -1,0 +1,133 @@
+name: TEMP AUTO RACE fast-close safety review
+
+on:
+  push:
+    branches:
+      - fix/fast-close-auto-race-latency
+
+permissions:
+  contents: write
+
+jobs:
+  harden-and-verify:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply safety-only follow-up
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sourceSha = (git hash-object "mt5/FastBasketBot.mq5").Trim()
+          if ($sourceSha -ne "8f7f664f90344c7641435c1475d6cd6a326d2de0") { throw "Unexpected EA source SHA: $sourceSha" }
+          @'
+          from pathlib import Path
+
+          path = Path('mt5/FastBasketBot.mq5')
+          text = path.read_text(encoding='utf-8')
+
+          def once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1, found {count}')
+              text = text.replace(old, new, 1)
+
+          # Preserve the old non-close RACE behavior for a mixed basket. Only
+          # genuine close paths are allowed to skip the context refresh.
+          once(
+              '   if(direction == 0)\n   {\n      g_raceState = "MIXED_BASKET";',
+              '   if(direction == 0)\n   {\n      RefreshMarketContext(false);\n      g_raceState = "MIXED_BASKET";',
+              'RACE mixed-basket context preservation')
+
+          # Journal recovery is normally already complete and this is a no-op.
+          # On terminal restart, recover it before any newly-early normal-basket
+          # close so the existing trade journal/finalization behavior is preserved.
+          once(
+              '   // Fast path for the existing MANUAL fixed Basket target only. Keep all',
+              '   if(g_basketJournalId == 0)\n      RecoverOpenBasketJournal();\n\n   // Fast path for the existing MANUAL fixed Basket target only. Keep all',
+              'normal-basket journal recovery before fast exits')
+
+          # Do not mutate the V20 cycle start time merely because the new early
+          # price check ran. Preserve the original state mutation on the normal
+          # AutoV20ManageOpenBasket path; a fast close does not need the timer.
+          once(
+              '   if(g_autoV20BasketStartedAt<=0)\n      g_autoV20BasketStartedAt=TimeCurrent();\n\n   if(g_autoV20BasketStopPrice>0.0)',
+              '   if(g_autoV20BasketStopPrice>0.0)',
+              'remove early V20 timer mutation')
+          once(
+              '   if(AutoV20FastPriceExit())\n      return true;\n\n   double atrPoints=MathMax(10.0,',
+              '   if(AutoV20FastPriceExit())\n      return true;\n\n   if(g_autoV20BasketStartedAt<=0)\n      g_autoV20BasketStartedAt=TimeCurrent();\n\n   double atrPoints=MathMax(10.0,',
+              'restore V20 timer mutation at original manage path')
+
+          checks = {
+              'version unchanged 1.0.18': text.count('#property version   "1.0.18"') == 1,
+              'manual fast path retained': text.count('double fastCycleProfit = BasketCycleProfit();') == 1,
+              'AUTO fast helper retained': text.count('bool AutoV20FastPriceExit()') == 1,
+              'AUTO fast dispatch retained': text.count('AutoV20Enabled() && AutoV20FastPriceExit()') == 1,
+              'journal recovery guard singular': text.count('if(g_basketJournalId == 0)\n      RecoverOpenBasketJournal();') == 1,
+              'RACE manage singular': text.count('bool ManageRaceBasket(double momentum)') == 1,
+              'RACE harvest retained': text.count('int harvested = RaceHarvestProfitablePositions();') == 1,
+              'generic close retained': text.count('bool CloseAllBasket(string reason)') == 1,
+              'ZERO ownership retained': text.count('if(g_zeroGridClosing || ZeroGridPositionCount()>0 || ZeroGridPendingCount()>0)') == 1,
+          }
+          failed = [k for k,v in checks.items() if not v]
+          if failed:
+              raise SystemExit('Invariant checks failed: ' + ', '.join(failed))
+
+          path.write_text(text, encoding='utf-8')
+          '@ | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\harden.py"
+          python "$env:RUNNER_TEMP\harden.py"
+
+          $changed = @(git diff --name-only)
+          if (($changed -join "`n") -ne 'mt5/FastBasketBot.mq5') { throw "Unexpected changed files: $($changed -join ', ')" }
+
+      - name: Verify release consistency
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          ./tests/release-version-consistency.ps1
+
+      - name: Install official MetaTrader 5 build environment
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = "$env:RUNNER_TEMP\mt5setup.exe"
+          $installDir = "C:\SCENOVA-MT5-AutoRace-Safety-Check"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://download.terminal.free/cdn/web/metaquotes.ltd/mt5/mt5setup.exe" -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "/auto /path:`"$installDir`"" -Wait
+          $metaEditor = Get-ChildItem -Path $installDir -Filter "metaeditor64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
+          "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Compile safety-reviewed EA
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sourceDir = "$env:RUNNER_TEMP\SCENOVA-AutoRace-Safety"
+          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
+          $source = Join-Path $sourceDir "FastBasketBot.mq5"
+          Copy-Item -Force "mt5\FastBasketBot.mq5" $source
+          $log = "$env:RUNNER_TEMP\FastBasketBot-auto-race-safety.log"
+          Start-Process -FilePath "$env:METAEDITOR" -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
+          if (Test-Path $log) { Get-Content $log }
+          $ex5 = [System.IO.Path]::ChangeExtension($source, ".ex5")
+          if (-not (Test-Path $ex5)) { throw "FastBasketBot.ex5 was not produced" }
+          if (Test-Path $log) {
+            $logText = Get-Content $log -Raw
+            if ($logText -match "(?im)\b[1-9][0-9]*\s+errors?\b") { throw "MetaEditor reported compile errors" }
+          }
+
+      - name: Commit safety review and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Latency Safety"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5
+          git rm .github/workflows/_temp-auto-race-safety-review.yml
+          git commit -m "fix(mt5): preserve fast-close safety invariants"
+          git push origin HEAD:fix/fast-close-auto-race-latency
