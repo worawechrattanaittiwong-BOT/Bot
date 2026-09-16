@@ -13,8 +13,8 @@ jobs:
           ref: fix/zero-grid-safe-stop-drain-feedback
           fetch-depth: 0
       - name: Apply narrow safe-stop patch
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           ea_path = Path('mt5/FastBasketBot.mq5')
@@ -66,13 +66,24 @@ jobs:
 
           web_path = Path('apps/web/app/dashboard/page.tsx')
           web = web_path.read_text(encoding='utf-8')
-          old_cmd = '''    setBusy(true);
+          old_cmd = '''  async function command(path: string, success: string) {
+    if (path.startsWith("/bot/start") && settingsDirtyRef.current) {
+      setError("มีการตั้งค่าที่ยังไม่ได้บันทึก กรุณากดบันทึกก่อนเริ่มบอท");
+      setBotSettingsOpen(true);
+      return;
+    }
+    setBusy(true);
     setError("");
     setNotice("");
     try {
-      const suffix = selectedSlotIdRef.current
 '''
-          new_cmd = '''    setBusy(true);
+          new_cmd = '''  async function command(path: string, success: string) {
+    if (path.startsWith("/bot/start") && settingsDirtyRef.current) {
+      setError("มีการตั้งค่าที่ยังไม่ได้บันทึก กรุณากดบันทึกก่อนเริ่มบอท");
+      setBotSettingsOpen(true);
+      return;
+    }
+    setBusy(true);
     setError("");
     const commandPendingNotice = path.startsWith("/bot/start")
       ? "กำลังส่งคำสั่งเริ่มบอท..."
@@ -81,7 +92,6 @@ jobs:
         : "";
     setNotice(commandPendingNotice);
     try {
-      const suffix = selectedSlotIdRef.current
 '''
           if old_cmd not in web:
               raise SystemExit('Dashboard command feedback block not found')
@@ -114,6 +124,7 @@ assert.match(ea, /pending=ZeroGridPendingCount\\(\\);[\\s\\S]*if\\(positions<=0 
               raise SystemExit('ZERO regression insertion anchor not found')
           test = test.replace(anchor, anchor + addition, 1)
           test_path.write_text(test, encoding='utf-8')
+          PY
       - name: Validate narrow diff
         run: |
           node ./tests/zero-grid-v1-simulation.mjs
