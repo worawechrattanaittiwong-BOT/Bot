@@ -3099,6 +3099,7 @@ bool ManageRaceBasket(double momentum)
    int direction = BasketDirection();
    if(direction == 0)
    {
+      RefreshMarketContext(false);
       g_raceState = "MIXED_BASKET";
       g_executionStatus = "RACE_MIXED_BASKET";
       return true;
@@ -3318,6 +3319,9 @@ void OnTick()
       ManageRaceBasket(momentum);
       return;
    }
+
+   if(g_basketJournalId == 0)
+      RecoverOpenBasketJournal();
 
    // Fast path for the existing MANUAL fixed Basket target only. Keep all
    // safety/ownership priorities above unchanged, and do not interfere with
@@ -11830,9 +11834,6 @@ bool AutoV20FastPriceExit()
       return false;
    double exitPrice=direction>0 ? tick.bid : tick.ask;
 
-   if(g_autoV20BasketStartedAt<=0)
-      g_autoV20BasketStartedAt=TimeCurrent();
-
    if(g_autoV20BasketStopPrice>0.0)
    {
       bool stopHit=direction>0
@@ -11874,6 +11875,9 @@ bool AutoV20ManageOpenBasket(double momentum)
    // Preserve the original V20 stop/target precedence at the original call site.
    if(AutoV20FastPriceExit())
       return true;
+
+   if(g_autoV20BasketStartedAt<=0)
+      g_autoV20BasketStartedAt=TimeCurrent();
 
    double atrPoints=MathMax(10.0,
       AverageTrueRangePoints(PERIOD_M5,g_atrPeriod));
