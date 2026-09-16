@@ -78,6 +78,7 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [checkingVersion, setCheckingVersion] = useState(false);
   const [activeView, setActiveView] = useState<View>("overview");
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const selectedSlotIdRef = useRef("");
@@ -196,6 +197,15 @@ export default function DashboardPage() {
     }, 10000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!notice && !error) return;
+    const timer = window.setTimeout(() => {
+      setNotice("");
+      setError("");
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [notice, error]);
 
   useEffect(() => {
     if (!botSettingsOpen) return;
@@ -1018,6 +1028,19 @@ export default function DashboardPage() {
     }
   }
 
+  async function checkSoftwareVersions() {
+    if (checkingVersion) return;
+    setCheckingVersion(true);
+    setError("");
+    setNotice("");
+    try {
+      await load(selectedSlotIdRef.current);
+      setNotice("ตรวจสอบเวอร์ชันล่าสุดแล้ว");
+    } finally {
+      setCheckingVersion(false);
+    }
+  }
+
   async function downloadWindowsInstaller() {
     setBusy(true);
     setError("");
@@ -1754,6 +1777,19 @@ export default function DashboardPage() {
                       <HeroTrendChip label="M15" value={metrics.trendM15}/>
                       <HeroTrendChip label="M30" value={metrics.trendM30}/>
                       <HeroTrendChip label="H1" value={metrics.trendH1}/>
+                    </div>
+                    <div className="cc-v6-version-row">
+                      <span className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch ? "ok" : "warn")} title="EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server">
+                        EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}
+                      </span>
+                      {data.selectedSlot?.mode === "LOCAL" && (
+                        <span className={"cc-v6-version-chip "+(!softwareUpdate.installerRequired ? "ok" : "warn")} title="Windows Agent ปัจจุบัน → เวอร์ชันล่าสุดบน Server">
+                          Agent {softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : "—"}<em>→</em>{softwareUpdate.latestVersion ? "v"+softwareUpdate.latestVersion : "—"}
+                        </span>
+                      )}
+                      <button type="button" className="cc-v6-version-check" disabled={checkingVersion || busy} onClick={checkSoftwareVersions}>
+                        <ScenovaIcon name="refresh" size={12}/>{checkingVersion ? "กำลังตรวจ..." : "ตรวจสอบเวอร์ชัน"}
+                      </button>
                     </div>
                   </div>
                 </div>
