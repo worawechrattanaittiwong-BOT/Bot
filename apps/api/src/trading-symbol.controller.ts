@@ -24,9 +24,15 @@ function normalizeSymbol(value: unknown) {
   return symbol;
 }
 
+function parseTradeMode(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function symbolTradeAllowed(mode: unknown) {
-  const n = Number(mode);
-  if (!Number.isFinite(n)) return null;
+  const n = parseTradeMode(mode);
+  if (n === null) return null;
   // MQL5: DISABLED=0, LONGONLY=1, SHORTONLY=2, CLOSEONLY=3, FULL=4.
   // LONGONLY/SHORTONLY remain valid; the EA already enforces direction.
   return n !== 0 && n !== 3;
@@ -69,8 +75,7 @@ export class TradingSymbolController {
     const activeSymbol = normalizeSymbol(metrics.symbol);
     const fallbackSymbol = normalizeSymbol(settings.symbol);
     const desiredSymbol = explicitSymbol || activeSymbol || fallbackSymbol || "XAUUSD";
-    const tradeModeRaw = Number(metrics.symbolTradeMode);
-    const tradeMode = Number.isFinite(tradeModeRaw) ? tradeModeRaw : null;
+    const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const matches = Boolean(
       activeSymbol &&
@@ -155,6 +160,7 @@ export class TradingSymbolController {
       activeSymbol && activeSymbol.toUpperCase() === symbol.toUpperCase()
     );
     const requestedAt = new Date().toISOString();
+    const requiresReconnect = changed || !activeMatches;
 
     await this.db.query(
       `UPDATE bot_instances
@@ -168,7 +174,7 @@ export class TradingSymbolController {
       [
         instance.id,
         symbol,
-        activeMatches ? "READY" : "PENDING_RESTART",
+        requiresReconnect ? "PENDING_RESTART" : "READY",
         requestedAt
       ]
     );
@@ -194,10 +200,10 @@ export class TradingSymbolController {
       ok: true,
       symbol,
       changed,
-      symbolChangeRequiresReconnect: !activeMatches,
-      message: activeMatches
-        ? "Symbol ที่เลือกตรงกับ EA ที่กำลังรันแล้ว"
-        : "บันทึก Symbol แล้ว ต้องเชื่อม MT5 ใหม่ 1 ครั้งเพื่อโหลด Chart/EA บน Symbol นี้"
+      symbolChangeRequiresReconnect: requiresReconnect,
+      message: requiresReconnect
+        ? "บันทึก Symbol แล้ว ต้องเชื่อม MT5 ใหม่ 1 ครั้งเพื่อโหลด Chart/EA บน Symbol นี้"
+        : "Symbol ที่เลือกตรงกับ EA และ Startup Profile แล้ว"
     };
   }
 }
@@ -234,8 +240,7 @@ export class EaTradingSymbolController {
     const currentSymbol = normalizeSymbol(metrics.symbol);
     const legacySavedSymbol = normalizeSymbol(settings.symbol);
     const desiredSymbol = explicitSymbol || currentSymbol || legacySavedSymbol || "XAUUSD";
-    const tradeModeRaw = Number(metrics.symbolTradeMode);
-    const tradeMode = Number.isFinite(tradeModeRaw) ? tradeModeRaw : null;
+    const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const currentMatchesDesired = Boolean(
       currentSymbol && currentSymbol.toUpperCase() === desiredSymbol.toUpperCase()
