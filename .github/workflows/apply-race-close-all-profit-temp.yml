@@ -1,0 +1,212 @@
+name: Apply RACE Close-All Profit Temporary
+
+on:
+  push:
+    branches:
+      - feat/race-close-all-profit
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/race-close-all-profit
+          fetch-depth: 0
+      - name: Apply RACE close-all profit feature
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8-sig')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 anchor, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # ---------------- Web dashboard ----------------
+          web = 'apps/web/app/dashboard/page.tsx'
+          replace_once(
+              web,
+              '  engineMode: "AUTO",\n  zeroGridStepPrice: 3,',
+              '  engineMode: "AUTO",\n  raceCloseAllProfitEnabled: true,\n  raceCloseAllProfitMoney: 0.5,\n  zeroGridStepPrice: 3,',
+              'web defaults'
+          )
+          replace_once(
+              web,
+              '''        if (loadedControlMode === "ZERO_GRID") {\n          nextSettings.zeroGridStepPrice = Number(nextSettings.zeroGridStepPrice) === 2 ? 2 : 3;\n          nextSettings.zeroGridLevelsPerSide = Math.max(1, Math.min(30, Number(nextSettings.zeroGridLevelsPerSide) || 10));\n          if (!Number.isFinite(Number(nextSettings.zeroGridBaseLot)) || Number(nextSettings.zeroGridBaseLot) <= 0) nextSettings.zeroGridBaseLot = 0.01;\n          if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 0.5;\n          if (!Number.isFinite(Number(nextSettings.zeroGridCloseReserveMoney)) || Number(nextSettings.zeroGridCloseReserveMoney) <= 0) nextSettings.zeroGridCloseReserveMoney = 0.2;\n        }\n        setSettings(nextSettings);''',
+              '''        if (loadedControlMode === "ZERO_GRID") {\n          nextSettings.zeroGridStepPrice = Number(nextSettings.zeroGridStepPrice) === 2 ? 2 : 3;\n          nextSettings.zeroGridLevelsPerSide = Math.max(1, Math.min(30, Number(nextSettings.zeroGridLevelsPerSide) || 10));\n          if (!Number.isFinite(Number(nextSettings.zeroGridBaseLot)) || Number(nextSettings.zeroGridBaseLot) <= 0) nextSettings.zeroGridBaseLot = 0.01;\n          if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 0.5;\n          if (!Number.isFinite(Number(nextSettings.zeroGridCloseReserveMoney)) || Number(nextSettings.zeroGridCloseReserveMoney) <= 0) nextSettings.zeroGridCloseReserveMoney = 0.2;\n        }\n        if (loadedControlMode === "RACE") {\n          if (typeof nextSettings.raceCloseAllProfitEnabled !== "boolean") nextSettings.raceCloseAllProfitEnabled = true;\n          if (!Number.isFinite(Number(nextSettings.raceCloseAllProfitMoney)) || Number(nextSettings.raceCloseAllProfitMoney) <= 0) nextSettings.raceCloseAllProfitMoney = 0.5;\n        }\n        setSettings(nextSettings);''',
+              'web load normalization'
+          )
+          replace_once(
+              web,
+              '''    if (mode === "RACE") {\n      props.onEdit?.("engineMode","RACE");\n      props.onEdit?.("profitTargetMode","AUTO");\n      props.onEdit?.("manualStopLossPoints",0);\n      return;\n    }''',
+              '''    if (mode === "RACE") {\n      props.onEdit?.("engineMode","RACE");\n      props.onEdit?.("profitTargetMode","AUTO");\n      props.onEdit?.("manualStopLossPoints",0);\n      if (typeof props.settings?.raceCloseAllProfitEnabled !== "boolean") props.onEdit?.("raceCloseAllProfitEnabled",true);\n      if (!Number.isFinite(Number(props.settings?.raceCloseAllProfitMoney)) || Number(props.settings?.raceCloseAllProfitMoney) <= 0) props.onEdit?.("raceCloseAllProfitMoney",0.5);\n      return;\n    }''',
+              'web RACE selection defaults'
+          )
+          replace_once(
+              web,
+              '''  const directionLabel = entryMode === "SELL_ONLY" ? "SELL เท่านั้น" : entryMode === "BUY_ONLY" ? "BUY เท่านั้น" : "อัตโนมัติ · EA เลือก BUY / SELL";\n  const exitLabel = controlMode === "MANUAL"\n    ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")\n    : "Dynamic Profit Protection";''',
+              '''  const directionLabel = entryMode === "SELL_ONLY" ? "SELL เท่านั้น" : entryMode === "BUY_ONLY" ? "BUY เท่านั้น" : "อัตโนมัติ · EA เลือก BUY / SELL";\n  const raceCloseAllProfitEnabled = props.settings?.raceCloseAllProfitEnabled !== false;\n  const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 0.5);\n  const exitLabel = controlMode === "RACE"\n    ? (raceCloseAllProfitEnabled ? "ปิดทั้งหมดที่ +$"+raceCloseAllProfitMoney.toFixed(2) : "Dynamic Profit Protection")\n    : controlMode === "MANUAL"\n      ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")\n      : "Dynamic Profit Protection";''',
+              'web RACE summary label'
+          )
+          replace_once(
+              web,
+              '''                {controlMode!=="MANUAL" ? <div className="cc-bot-v2-auto-grid">\n                  <div><ScenovaIcon name="profit" size={20}/><span><small>การรักษากำไร</small><b>Dynamic Profit Protection</b></span></div>\n                  <div><ScenovaIcon name="shield" size={20}/><span><small>Stop Loss ต่อไม้</small><b>ATR × 2.00 + โครงสร้างราคา</b></span></div>\n                </div> : <div className="cc-bot-v2-manual-exit">''',
+              '''                {controlMode!=="MANUAL" ? <>\n                <div className="cc-bot-v2-auto-grid">\n                  <div><ScenovaIcon name="profit" size={20}/><span><small>การรักษากำไร</small><b>Dynamic Profit Protection</b></span></div>\n                  <div><ScenovaIcon name="shield" size={20}/><span><small>Stop Loss ต่อไม้</small><b>ATR × 2.00 + โครงสร้างราคา</b></span></div>\n                </div>\n                {controlMode==="RACE"&&<div className="cc-bot-v2-manual-exit">\n                  <div className="cc-bot-v2-fields exit-fields">\n                    <div className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>ปิดไม้ทั้งหมดที่กำไร</span><SwitchSetting checked={raceCloseAllProfitEnabled} onChange={(value:boolean)=>props.onEdit?.("raceCloseAllProfitEnabled",value)} onLabel="เปิด · ปิดทั้งหมดเมื่อถึงเป้า" offLabel="ปิด · ใช้ระบบกำไรโหมดซิ่งเดิม"/><small>เมื่อกำไรรวมของรอบซิ่งถึงเป้า EA จะสั่งปิดทุก Position ในรอบทันที</small></div>\n                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="target" size={17}/>กำไรรวมเพื่อปิดทั้งหมด</span><MoneyInput value={raceCloseAllProfitMoney} disabled={!raceCloseAllProfitEnabled} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("raceCloseAllProfitMoney",v)}/><small>ค่าเริ่มต้น 0.50 · ใช้สกุลเงินของบัญชี MT5</small></label>\n                  </div>\n                </div>}\n                </> : <div className="cc-bot-v2-manual-exit">''',
+              'web RACE controls'
+          )
+
+          # ---------------- API settings ----------------
+          api = 'apps/api/src/bot.controller.ts'
+          replace_once(
+              api,
+              '''    numberSetting("zeroGridMinNetProfitMoney", 0.01, 100000);\n    numberSetting("zeroGridCloseReserveMoney", 0, 100000);\n    booleanSetting("adaptiveEngine");''',
+              '''    numberSetting("zeroGridMinNetProfitMoney", 0.01, 100000);\n    numberSetting("zeroGridCloseReserveMoney", 0, 100000);\n    booleanSetting("raceCloseAllProfitEnabled");\n    numberSetting("raceCloseAllProfitMoney", 0.01, 100000);\n    booleanSetting("adaptiveEngine");''',
+              'api RACE validation'
+          )
+          replace_once(
+              api,
+              '''    if (zeroGridSelected) {\n      clean.zeroGridStepPrice = clean.zeroGridStepPrice === 2 ? 2 : 3;\n      if (body.zeroGridBaseLot === undefined) clean.zeroGridBaseLot = 0.01;\n      if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;\n      if (body.zeroGridCloseReserveMoney === undefined) clean.zeroGridCloseReserveMoney = 0.2;\n    }\n\n    if (body.entryMode !== undefined) {''',
+              '''    if (zeroGridSelected) {\n      clean.zeroGridStepPrice = clean.zeroGridStepPrice === 2 ? 2 : 3;\n      if (body.zeroGridBaseLot === undefined) clean.zeroGridBaseLot = 0.01;\n      if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;\n      if (body.zeroGridCloseReserveMoney === undefined) clean.zeroGridCloseReserveMoney = 0.2;\n    }\n\n    const raceSelected =\n      requestedControlMode === "RACE" ||\n      (requestedControlMode === null && requestedEngineMode === "RACE");\n    if (raceSelected) {\n      if (body.raceCloseAllProfitEnabled === undefined) clean.raceCloseAllProfitEnabled = true;\n      if (body.raceCloseAllProfitMoney === undefined) clean.raceCloseAllProfitMoney = 0.5;\n    }\n\n    if (body.entryMode !== undefined) {''',
+              'api RACE defaults'
+          )
+
+          # ---------------- Database defaults ----------------
+          db = 'database/001_init.sql'
+          replace_once(
+              db,
+              '''    "maxPositions":10,\n    "basketTriggerMoney":2.0,''',
+              '''    "maxPositions":10,\n    "raceCloseAllProfitEnabled":true,\n    "raceCloseAllProfitMoney":0.5,\n    "basketTriggerMoney":2.0,''',
+              'database RACE defaults'
+          )
+
+          # ---------------- EA runtime ----------------
+          ea = 'mt5/FastBasketBot.mq5'
+          p = Path(ea)
+          text = p.read_text(encoding='utf-8-sig')
+          for old, new in [
+              ('#property version   "1.0.20"', '#property version   "1.0.21"'),
+              ('#define SCENOVA_EA_VERSION "1.0.20"', '#define SCENOVA_EA_VERSION "1.0.21"'),
+              ('#define SCENOVA_PRODUCT_VERSION "1.0.20"', '#define SCENOVA_PRODUCT_VERSION "1.0.21"'),
+          ]:
+              if text.count(old) != 1:
+                  raise SystemExit(f'EA version anchor not found exactly once: {old}')
+              text = text.replace(old, new, 1)
+          p.write_text(text, encoding='utf-8')
+
+          replace_once(
+              ea,
+              '''input string          InpEngineMode           = "AUTO";\n// ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.''',
+              '''input string          InpEngineMode           = "AUTO";\n// RACE can bank the entire cycle at a small net-money target. Enabled by\n// default so the web's 0.50 close-all target also has a safe EA fallback.\ninput bool            InpRaceCloseAllProfitEnabled = true;\ninput double          InpRaceCloseAllProfitMoney = 0.50;\n// ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.''',
+              'EA RACE inputs'
+          )
+          replace_once(
+              ea,
+              '''string g_raceState = "IDLE";\ndatetime g_raceCycleStartedAt = 0;\nbool   g_adaptiveEngine;''',
+              '''string g_raceState = "IDLE";\ndatetime g_raceCycleStartedAt = 0;\nbool   g_raceCloseAllProfitEnabled = true;\ndouble g_raceCloseAllProfitMoney = 0.50;\nbool   g_adaptiveEngine;''',
+              'EA RACE globals'
+          )
+          replace_once(
+              ea,
+              '''   g_entryMode = InpEntryMode;\n   g_engineMode = InpEngineMode;''',
+              '''   g_entryMode = InpEntryMode;\n   g_raceCloseAllProfitEnabled = InpRaceCloseAllProfitEnabled;\n   g_raceCloseAllProfitMoney = MathMax(0.01, InpRaceCloseAllProfitMoney);\n   g_engineMode = InpEngineMode;''',
+              'EA RACE init'
+          )
+          replace_once(
+              ea,
+              '''   g_zeroGridStepPrice = ZeroGridAllowedStep(JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));''',
+              '''   g_raceCloseAllProfitEnabled = JsonBool(json, "raceCloseAllProfitEnabled", g_raceCloseAllProfitEnabled);\n   g_raceCloseAllProfitMoney = MathMax(0.01, JsonNumber(json, "raceCloseAllProfitMoney", g_raceCloseAllProfitMoney));\n\n   g_zeroGridStepPrice = ZeroGridAllowedStep(JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));''',
+              'EA ApplySettings RACE fields'
+          )
+          replace_once(
+              ea,
+              '''   if(lossLimit > 0.0 && cycleProfit <= -lossLimit)\n   {\n      RaceCloseCycle("RACE_MAX_BASKET_LOSS");\n      return true;\n   }\n\n   string wrongReason = "NONE";''',
+              '''   if(lossLimit > 0.0 && cycleProfit <= -lossLimit)\n   {\n      RaceCloseCycle("RACE_MAX_BASKET_LOSS");\n      return true;\n   }\n\n   // User-controlled RACE close-all target. This check intentionally runs\n   // before wrong-direction analysis and per-ticket profit harvesting so a\n   // reached target is acted on immediately with the existing close command.\n   if(g_raceCloseAllProfitEnabled &&\n      g_raceCloseAllProfitMoney > 0.0 &&\n      cycleProfit >= g_raceCloseAllProfitMoney)\n   {\n      RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET");\n      return true;\n   }\n\n   string wrongReason = "NONE";''',
+              'EA RACE close-all target'
+          )
+
+          # ---------------- API release version ----------------
+          release = 'apps/api/src/release-version.ts'
+          replace_once(
+              release,
+              'export const DEFAULT_EA_VERSION = "1.0.20";',
+              'export const DEFAULT_EA_VERSION = "1.0.21";',
+              'API EA version'
+          )
+
+          # ---------------- Contract test ----------------
+          test = Path('tests/race-close-all-profit-contract.ps1')
+          test.write_text(r'''$ErrorActionPreference = "Stop"
+
+function Read-Text([string]$path) {
+  if (-not (Test-Path $path)) { throw "Missing source: $path" }
+  return [System.IO.File]::ReadAllText((Resolve-Path $path))
+}
+function Block([string]$text,[string]$sig) {
+  $s=$text.IndexOf($sig); if($s -lt 0){throw "Missing $sig"}
+  $b=$text.IndexOf("{",$s); $d=0
+  for($i=$b;$i -lt $text.Length;$i++){
+    if($text[$i] -eq "{"){$d++}
+    elseif($text[$i] -eq "}"){$d--; if($d -eq 0){return $text.Substring($s,$i-$s+1)}}
+  }
+  throw "Unclosed $sig"
+}
+function Need([string]$text,[string]$needle,[string]$message) {
+  if(-not $text.Contains($needle)){throw $message}
+}
+
+$ea = Read-Text 'mt5/FastBasketBot.mq5'
+$api = Read-Text 'apps/api/src/bot.controller.ts'
+$web = Read-Text 'apps/web/app/dashboard/page.tsx'
+$db = Read-Text 'database/001_init.sql'
+$race = Block $ea 'bool ManageRaceBasket(double momentum)'
+
+Need $ea 'InpRaceCloseAllProfitEnabled = true;' 'RACE close-all switch must default ON in EA'
+Need $ea 'InpRaceCloseAllProfitMoney = 0.50;' 'RACE close-all target must default to 0.50 in EA'
+Need $ea 'JsonBool(json, "raceCloseAllProfitEnabled"' 'EA must receive the RACE close-all switch from settings'
+Need $ea 'JsonNumber(json, "raceCloseAllProfitMoney"' 'EA must receive the RACE close-all money target from settings'
+Need $race 'RACE_CLOSE_ALL_PROFIT_TARGET' 'RACE close-all profit exit is missing'
+Need $race 'cycleProfit >= g_raceCloseAllProfitMoney' 'RACE close-all must use net cycle profit'
+$closeAll = $race.IndexOf('RACE_CLOSE_ALL_PROFIT_TARGET')
+$harvest = $race.IndexOf('RaceHarvestProfitablePositions()')
+if($closeAll -lt 0 -or $harvest -lt 0 -or $closeAll -gt $harvest){throw 'RACE close-all target must run before individual profit harvest'}
+
+Need $api 'booleanSetting("raceCloseAllProfitEnabled")' 'API must validate the RACE close-all switch'
+Need $api 'numberSetting("raceCloseAllProfitMoney", 0.01, 100000)' 'API must validate the RACE close-all target'
+Need $api 'clean.raceCloseAllProfitEnabled = true' 'API RACE default switch must be ON'
+Need $api 'clean.raceCloseAllProfitMoney = 0.5' 'API RACE default target must be 0.5'
+
+Need $web 'raceCloseAllProfitEnabled: true' 'Dashboard default switch must be ON'
+Need $web 'raceCloseAllProfitMoney: 0.5' 'Dashboard default target must be 0.5'
+Need $web 'ปิดไม้ทั้งหมดที่กำไร' 'RACE close-all switch must be visible in the dashboard'
+Need $web 'ปิดทั้งหมดเมื่อถึงเป้า' 'RACE switch copy is missing'
+
+Need $db '"raceCloseAllProfitEnabled":true' 'New bot settings must default RACE close-all to ON'
+Need $db '"raceCloseAllProfitMoney":0.5' 'New bot settings must default RACE close-all target to 0.5'
+
+Write-Host 'RACE close-all profit switch/target contract: PASS'
+''', encoding='utf-8')
+
+          # Run the contract in normal CI.
+          ci = '.github/workflows/ci.yml'
+          replace_once(
+              ci,
+              '''      - name: AUTO V20 same-dataset policy regression\n        shell: pwsh\n        run: ./tests/auto-v20-policy-regression.ps1\n      - name: ZERO GRID stability simulation regression''',
+              '''      - name: AUTO V20 same-dataset policy regression\n        shell: pwsh\n        run: ./tests/auto-v20-policy-regression.ps1\n      - name: RACE close-all profit contract\n        shell: pwsh\n        run: ./tests/race-close-all-profit-contract.ps1\n      - name: ZERO GRID stability simulation regression''',
+              'CI RACE contract step'
+          )
+
+      - name: Remove temporary workflow and commit
+        run: |
+          rm .github/workflows/apply-race-close-all-profit-temp.yml
+          git config user.name "scenova-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/web/app/dashboard/page.tsx apps/api/src/bot.controller.ts apps/api/src/release-version.ts database/001_init.sql mt5/FastBasketBot.mq5 tests/race-close-all-profit-contract.ps1 .github/workflows/ci.yml .github/workflows/apply-race-close-all-profit-temp.yml
+          git commit -m "feat: add RACE close-all profit target"
+          git push origin HEAD:feat/race-close-all-profit
