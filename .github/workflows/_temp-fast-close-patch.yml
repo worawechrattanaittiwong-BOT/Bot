@@ -1,0 +1,104 @@
+name: TEMP manual basket fast-close patch
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply guarded source-only patch
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="$(git hash-object mt5/FastBasketBot.mq5)"
+          test "$SOURCE_SHA" = "73807b208b04d7f1265c2f57d5fcb05721c9dc67"
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          path = Path('mt5/FastBasketBot.mq5')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''   if(count > 0 && BasketHasRacePosition())
+   {
+      ManageRaceBasket(momentum);
+      return;
+   }
+
+   if(count > 0)
+   {
+      // Dynamic protection never decides whether an entry is allowed. It only
+'''
+          new = '''   if(count > 0 && BasketHasRacePosition())
+   {
+      ManageRaceBasket(momentum);
+      return;
+   }
+
+   // Fast path for the existing MANUAL fixed Basket target only. Keep all
+   // safety/ownership priorities above unchanged, and do not interfere with
+   // an active Rescue cycle. The close command itself remains unchanged.
+   if(count > 0 &&
+      rescueCount <= 0 &&
+      g_rescueState == RESCUE_NORMAL &&
+      g_profitTargetMode == "MANUAL" &&
+      g_basketProfitTarget > 0.0 &&
+      g_perPositionProfit <= 0.0 &&
+      g_profitRunTrailPercent <= 0.0)
+   {
+      double fastCycleProfit = BasketCycleProfit();
+      if(fastCycleProfit >= g_basketProfitTarget)
+      {
+         CloseAllBasket("BASKET_PROFIT_TARGET");
+         ResetTrail();
+         g_executionStatus = "BASKET_PROFIT_TARGET";
+         return;
+      }
+   }
+
+   if(count > 0)
+   {
+      // Dynamic protection never decides whether an entry is allowed. It only
+'''
+
+          if text.count(old) != 1:
+              raise SystemExit(f'Refusing unsafe patch: anchor count={text.count(old)}')
+
+          patched = text.replace(old, new, 1)
+          checks = {
+              'one fast path': patched.count('double fastCycleProfit = BasketCycleProfit();') == 1,
+              'existing fixed-target fallback retained': patched.count('else if(cycleProfit >= g_basketProfitTarget)') == 1,
+              'run-on logic retained': patched.count('if(g_profitRunTrailPercent > 0.0)') >= 1,
+              'CloseAllBasket implementation retained': patched.count('bool CloseAllBasket(string reason)') == 1,
+              'SendHeartbeat implementation retained': patched.count('void SendHeartbeat()') == 1,
+              'OnTick singular': patched.count('void OnTick()') == 1,
+              'RACE ownership retained': patched.count('if(count > 0 && BasketHasRacePosition())') == 1,
+          }
+          failed = [name for name, ok in checks.items() if not ok]
+          if failed:
+              raise SystemExit('Invariant checks failed: ' + ', '.join(failed))
+
+          path.write_text(patched, encoding='utf-8')
+          changed = subprocess.check_output(['git','diff','--name-only'], text=True).splitlines()
+          if changed != ['mt5/FastBasketBot.mq5']:
+              raise SystemExit(f'Unexpected working-tree changes: {changed}')
+          PY
+
+      - name: Commit source-only result and remove temporary workflow
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Fast Close Patch"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5
+          git rm .github/workflows/_temp-fast-close-patch.yml
+          git commit -m "fix(mt5): fast-path manual fixed basket profit close"
+          git push origin HEAD:main
