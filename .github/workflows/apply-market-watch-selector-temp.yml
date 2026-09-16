@@ -1,0 +1,144 @@
+name: Apply Market Watch Selector Temporary
+
+on:
+  push:
+    branches: [fix/mt5-market-watch-selector]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/mt5-market-watch-selector
+          fetch-depth: 2
+      - name: Apply narrow Market Watch selector patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def one(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if text.count(old) != 1:
+                  raise SystemExit(f'{path}: anchor count={text.count(old)} for {old[:80]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # EA telemetry only: no entry/exit/order behavior changes.
+          ea = Path('mt5/FastBasketBot.mq5')
+          text = ea.read_text(encoding='utf-8')
+          for old, new in [
+              ('#property version   "1.0.18"', '#property version   "1.0.19"'),
+              ('#define SCENOVA_EA_VERSION "1.0.18"', '#define SCENOVA_EA_VERSION "1.0.19"'),
+              ('#define SCENOVA_PRODUCT_VERSION "1.0.18"', '#define SCENOVA_PRODUCT_VERSION "1.0.19"'),
+          ]:
+              if text.count(old) != 1:
+                  raise SystemExit(f'EA version anchor mismatch: {old}')
+              text = text.replace(old, new, 1)
+
+          helper_anchor = 'void SendHeartbeat()\n{'
+          helper = '''string MarketWatchSymbolsJson()\n{\n   int total = SymbolsTotal(true);\n   string json = "[";\n   int added = 0;\n   for(int i = 0; i < total; i++)\n   {\n      string symbolName = SymbolName(i, true);\n      if(StringLen(symbolName) <= 0)\n         continue;\n      StringReplace(symbolName, "\\\\", "\\\\\\\\");\n      StringReplace(symbolName, "\\\"", "\\\\\\\"");\n      if(added > 0)\n         json += ",";\n      json += "\\\"" + symbolName + "\\\"";\n      added++;\n   }\n   return json + "]";\n}\n\nvoid SendHeartbeat()\n{'''
+          if text.count(helper_anchor) != 1:
+              raise SystemExit('EA SendHeartbeat anchor mismatch')
+          text = text.replace(helper_anchor, helper, 1)
+
+          hb_anchor = '   string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";'
+          hb_new = '''   // UI-only snapshot of the symbols selected in MT5 Market Watch.\n   if(StringLen(payload) >= 2)\n   {\n      string marketWatchDiagnostics =\n         ",\\\"marketWatchSymbols\\\":" + MarketWatchSymbolsJson() +\n         ",\\\"marketWatchCapturedAt\\\":" +\n         StringFormat("%I64d", (long)TimeCurrent()) + "}}";\n      payload = StringSubstr(payload, 0, StringLen(payload) - 2) + marketWatchDiagnostics;\n   }\n\n   string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";'''
+          if text.count(hb_anchor) != 1:
+              raise SystemExit('EA heartbeat anchor mismatch')
+          text = text.replace(hb_anchor, hb_new, 1)
+          ea.write_text(text, encoding='utf-8')
+
+          one('apps/api/src/release-version.ts',
+              'export const DEFAULT_EA_VERSION = "1.0.18";',
+              'export const DEFAULT_EA_VERSION = "1.0.19";')
+
+          controller = Path('apps/api/src/trading-symbol.controller.ts')
+          text = controller.read_text(encoding='utf-8')
+          anchor = '''function symbolTradeAllowed(mode: unknown) {\n  const n = parseTradeMode(mode);\n  if (n === null) return null;\n  // MQL5: DISABLED=0, LONGONLY=1, SHORTONLY=2, CLOSEONLY=3, FULL=4.\n  // LONGONLY/SHORTONLY remain valid; the EA already enforces direction.\n  return n !== 0 && n !== 3;\n}\n'''
+          addition = anchor + '''\nfunction marketWatchSymbols(metrics: any) {\n  const source = Array.isArray(metrics?.marketWatchSymbols)\n    ? metrics.marketWatchSymbols\n    : [];\n  const unique = new Map<string, string>();\n  for (const raw of source) {\n    const symbol = normalizeSymbol(raw);\n    if (!symbol) continue;\n    const key = symbol.toUpperCase();\n    if (!unique.has(key)) unique.set(key, symbol);\n    if (unique.size >= 512) break;\n  }\n  return Array.from(unique.values());\n}\n'''
+          if text.count(anchor) != 1:
+              raise SystemExit('controller symbolTradeAllowed anchor mismatch')
+          text = text.replace(anchor, addition, 1)
+          anchor = '''      brokerSymbolTradeMode: tradeMode,\n      brokerTradingAllowed: tradingAllowed,\n'''
+          addition = '''      brokerSymbolTradeMode: tradeMode,\n      brokerTradingAllowed: tradingAllowed,\n      marketWatchSymbols: marketWatchSymbols(metrics),\n      marketWatchCapturedAt: Number(metrics.marketWatchCapturedAt || 0) || null,\n'''
+          if text.count(anchor) != 1:
+              raise SystemExit('controller snapshot anchor mismatch')
+          controller.write_text(text.replace(anchor, addition, 1), encoding='utf-8')
+
+          page = Path('apps/web/app/trading-symbol/page.tsx')
+          text = page.read_text(encoding='utf-8')
+          if text.count('  const [busy, setBusy] = useState(false);') != 1:
+              raise SystemExit('page busy anchor mismatch')
+          text = text.replace('  const [busy, setBusy] = useState(false);',
+                              '  const [busy, setBusy] = useState(false);\n  const [refreshing, setRefreshing] = useState(false);', 1)
+
+          init_old = '        setStatus(symbolStatus);\n        if (!dirty) setSymbol(String(symbolStatus.desiredSymbol || symbolStatus.activeSymbol || ""));'
+          init_new = '''        setStatus(symbolStatus);\n        if (!dirty) {\n          const reported = Array.isArray(symbolStatus.marketWatchSymbols)\n            ? symbolStatus.marketWatchSymbols.map((item:any)=>String(item || "")).filter(Boolean)\n            : [];\n          const desired = String(symbolStatus.desiredSymbol || "");\n          const active = String(symbolStatus.activeSymbol || "");\n          const match = (value:string) => reported.find((item:string)=>item.toUpperCase() === value.toUpperCase());\n          setSymbol(match(desired) || match(active) || reported[0] || desired || active || "");\n        }'''
+          if text.count(init_old) != 1:
+              raise SystemExit('page load init anchor mismatch')
+          text = text.replace(init_old, init_new, 1)
+
+          ready_old = '  const ready = exactMatch && brokerAllowed !== false;'
+          ready_new = '''  const ready = exactMatch && brokerAllowed !== false;\n  const marketWatchSymbols = Array.isArray(status?.marketWatchSymbols)\n    ? status.marketWatchSymbols.map((item:any)=>String(item || "")).filter(Boolean)\n    : [];\n  const symbolOptions = marketWatchSymbols.length > 0\n    ? marketWatchSymbols\n    : [desiredSymbol || activeSymbol].filter(Boolean);'''
+          if text.count(ready_old) != 1:
+              raise SystemExit('page ready anchor mismatch')
+          text = text.replace(ready_old, ready_new, 1)
+
+          save_anchor = '  async function saveAndApply() {'
+          refresh_code = '''  async function refreshSymbols() {\n    if (!slotId || refreshing) return;\n    setRefreshing(true);\n    setError("");\n    try {\n      const symbolStatus = await api("/bot/trading-symbol?slotId=" + encodeURIComponent(slotId));\n      setStatus(symbolStatus);\n      const reported = Array.isArray(symbolStatus.marketWatchSymbols)\n        ? symbolStatus.marketWatchSymbols.map((item:any)=>String(item || "")).filter(Boolean)\n        : [];\n      const desired = String(symbolStatus.desiredSymbol || "");\n      const active = String(symbolStatus.activeSymbol || "");\n      const current = symbol.trim();\n      const match = (value:string) => reported.find((item:string)=>item.toUpperCase() === value.toUpperCase());\n      const selected = match(current) || match(desired) || match(active) || reported[0] || current || desired || active || "";\n      setSymbol(selected);\n      if (!current || selected.toUpperCase() !== current.toUpperCase()) setDirty(false);\n      setNotice(reported.length > 0\n        ? "รีเฟรชรายการ Symbol จาก MT5 Market Watch แล้ว"\n        : "ยังไม่ได้รับรายการ Market Watch จาก EA เวอร์ชันล่าสุด");\n    } catch (e:any) {\n      setError(String(e?.message || "รีเฟรชรายการ Symbol ไม่สำเร็จ"));\n    } finally {\n      setRefreshing(false);\n    }\n  }\n\n  async function saveAndApply() {'''
+          if text.count(save_anchor) != 1:
+              raise SystemExit('page save anchor mismatch')
+          text = text.replace(save_anchor, refresh_code, 1)
+
+          input_old = '''                <input\n                  value={symbol}\n                  maxLength={64}\n                  spellCheck={false}\n                  autoComplete="off"\n                  placeholder="เช่น XAUUSDm / EURUSDm / BTCUSDm"\n                  onChange={(e)=>{ setSymbol(e.target.value.trim()); setDirty(true); setNotice(""); }}\n                />\n                <button onClick={saveAndApply} disabled={busy || !stopped || positions > 0 || !status?.agentOnline}>\n                  {busy ? "กำลังตรวจ..." : "บันทึกและใช้ Symbol นี้"}\n                </button>'''
+          input_new = '''                <select\n                  value={symbol}\n                  onChange={(e)=>{ setSymbol(e.target.value); setDirty(true); setNotice(""); }}\n                  disabled={busy || refreshing || symbolOptions.length === 0}\n                >\n                  {symbolOptions.length === 0\n                    ? <option value="">กำลังรอรายการ Symbol จาก MT5...</option>\n                    : symbolOptions.map((item:string)=><option key={item} value={item}>{item}</option>)}\n                </select>\n                <button type="button" className={styles.refreshButton} onClick={refreshSymbols} disabled={busy || refreshing || !slotId}>\n                  {refreshing ? "กำลังรีเฟรช..." : "↻ Refresh"}\n                </button>\n                <button onClick={saveAndApply} disabled={busy || refreshing || !stopped || positions > 0 || !status?.agentOnline || !symbol}>\n                  {busy ? "กำลังตรวจ..." : "บันทึกและใช้ Symbol นี้"}\n                </button>'''
+          if text.count(input_old) != 1:
+              raise SystemExit('page input block anchor mismatch')
+          text = text.replace(input_old, input_new, 1)
+          text = text.replace('<span>Trading Symbol</span>', '<span>Trading Symbol · จาก MT5 Market Watch</span>', 1)
+          help_old = 'เปิด MT5 → Market Watch → ดูชื่อ Symbol จริงของ Broker → คัดชื่อตรง ๆ มาใส่ที่นี่ → หยุดบอท/ไม่มี Position → กด “บันทึกและใช้ Symbol นี้” ระบบจะรีสตาร์ท MT5 เพียง 1 รอบและยืนยัน Symbol จาก Heartbeat ก่อนอนุญาต Start'
+          help_new = 'เปิด MT5 → Market Watch → เพิ่ม Symbol ที่ต้องการให้แสดง → กลับมาหน้านี้แล้วกด Refresh → เลือก Symbol จากรายการ → หยุดบอท/ไม่มี Position → กด “บันทึกและใช้ Symbol นี้” ระบบจะรีสตาร์ท MT5 เพียง 1 รอบและยืนยัน Symbol จาก Heartbeat ก่อนอนุญาต Start'
+          if text.count(help_old) != 1:
+              raise SystemExit('page help anchor mismatch')
+          page.write_text(text.replace(help_old, help_new, 1), encoding='utf-8')
+
+          css = Path('apps/web/app/trading-symbol/trading-symbol.module.css')
+          text = css.read_text(encoding='utf-8')
+          old = '.symbolInputRow{display:grid;grid-template-columns:1fr auto;gap:10px}'
+          new = '.symbolInputRow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px}'
+          if text.count(old) != 1:
+              raise SystemExit('CSS row anchor mismatch')
+          text = text.replace(old, new, 1)
+          old = '.symbolInputRow button:disabled{opacity:.45;cursor:not-allowed}'
+          new = '.symbolInputRow button:disabled{opacity:.45;cursor:not-allowed}.refreshButton{background:rgba(68,85,129,.22)!important;border-color:rgba(139,156,207,.32)!important;color:#d9e2ff!important}'
+          if text.count(old) != 1:
+              raise SystemExit('CSS button anchor mismatch')
+          css.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          test = Path('tests/trading-symbol-selection-contract.ps1')
+          text = test.read_text(encoding='utf-8')
+          old = "$page = Read-Text 'apps/web/app/trading-symbol/page.tsx'\n"
+          new = "$page = Read-Text 'apps/web/app/trading-symbol/page.tsx'\n$ea = Read-Text 'mt5/FastBasketBot.mq5'\n"
+          if text.count(old) != 1:
+              raise SystemExit('test page anchor mismatch')
+          text = text.replace(old, new, 1)
+          old = "Assert-Contains $page 'USDC / THB' 'web explains broker-provided currency/crypto coverage'\n"
+          new = old + "Assert-Contains $page 'marketWatchSymbols' 'web selector is populated from MT5 Market Watch telemetry'\nAssert-Contains $page 'refreshSymbols' 'web exposes an explicit Market Watch refresh action'\nAssert-Contains $page '↻ Refresh' 'web renders the requested Refresh button'\nAssert-Contains $ea 'SymbolsTotal(true)' 'EA enumerates selected MT5 Market Watch symbols'\nAssert-Contains $ea 'SymbolName(i, true)' 'EA publishes exact broker symbol names from Market Watch'\nAssert-Contains $ea 'marketWatchSymbols' 'EA heartbeat publishes Market Watch telemetry'\n"
+          if text.count(old) != 1:
+              raise SystemExit('test USDC anchor mismatch')
+          test.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          Path('.github/workflows/apply-market-watch-selector-temp.yml').unlink()
+      - name: Commit patched sources
+        run: |
+          git config user.name "scenova-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: select Trading Symbol from MT5 Market Watch"
+          git push origin HEAD:fix/mt5-market-watch-selector
