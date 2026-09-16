@@ -1802,7 +1802,7 @@ export default function DashboardPage() {
                     <h2>{metrics.symbol || settings.symbol}</h2>
                     <p>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}<em/>MT5 Expert Advisor</p>
                     <div className="cc-v6-symbol-chips">
-                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "กริดสองทิศทาง" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "เร่งจังหวะ" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "MANUAL" ? "กำหนดค่าเอง" : settings.entryMode === "AUTO_MOMENTUM" ? "อัตโนมัติ" : settings.entryMode}</span>
+                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO" : settings.entryMode}</span>
                       <span>{Number(settings.lot||0).toFixed(2)} Lot</span>
                       <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" BUY STOP + "+Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" SELL STOP" : configuredMaxPositions+" ไม้"}</span>
                       <HeroTrendChip label="M5" value={metrics.trendM5}/>
@@ -2848,10 +2848,10 @@ function BotSettingsModal(props:any) {
     props.systemHardStopDistancePoints || props.hardStopDistancePoints || 1000
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
-    AUTO:{title:"โหมดอัตโนมัติ",subtitle:"ระบบวิเคราะห์ทิศทาง จุดเข้า และการบริหารสถานะตามเงื่อนไขของกลยุทธ์"},
-    RACE:{title:"โหมดเร่งจังหวะ",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
-    ZERO_GRID:{title:"โหมดกริดสองทิศทาง",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
-    MANUAL:{title:"โหมดกำหนดค่าเอง",subtitle:"ระบบวิเคราะห์ทิศทางและจุดเข้าอัตโนมัติ โดยผู้ใช้กำหนด Lot เป้าหมายกำไร และจุดหยุดขาดทุน"}
+    AUTO:{title:"AUTO",subtitle:"ระบบวิเคราะห์ทิศทาง จุดเข้า และการบริหารสถานะตามเงื่อนไขของกลยุทธ์"},
+    RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
+    ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
+    MANUAL:{title:"MANUAL",subtitle:"ระบบวิเคราะห์ทิศทางและจุดเข้าอัตโนมัติ โดยผู้ใช้กำหนด Lot เป้าหมายกำไร และจุดหยุดขาดทุน"}
   };
 
   const applyControlMode = (mode:string) => {
