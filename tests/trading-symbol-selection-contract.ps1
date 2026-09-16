@@ -9,6 +9,8 @@ function Assert-Contains([string]$text,[string]$needle,[string]$label) {
 }
 
 $controller = Read-Text 'apps/api/src/trading-symbol.controller.ts'
+$botController = Read-Text 'apps/api/src/bot.controller.ts'
+$dashboard = Read-Text 'apps/web/app/dashboard/page.tsx'
 $interceptor = Read-Text 'apps/api/src/trading-symbol.interceptor.ts'
 $app = Read-Text 'apps/api/src/app.module.ts'
 $installer = Read-Text 'apps/api/src/installer.controller.ts'
@@ -22,6 +24,11 @@ $ea = Read-Text 'mt5/FastBasketBot.mq5'
 $sidebar = Read-Text 'apps/web/components/OwnerSidebar.tsx'
 
 Assert-Contains $controller 'startupSymbol' 'explicit desired symbol is stored separately from live metrics'
+Assert-Contains $controller "'{symbol}',to_jsonb" 'dedicated symbol selection synchronizes canonical configured symbol'
+Assert-Contains $controller 'explicitSymbol || fallbackSymbol || activeSymbol' 'stored configured symbol wins over live telemetry fallback'
+Assert-Contains $controller 'explicitSymbol || legacySavedSymbol || currentSymbol' 'Agent follows stored configured symbol before runtime telemetry'
+Assert-Contains $botController 'Trading Symbol is intentionally not writable through generic bot settings.' 'generic settings cannot change symbol'
+Assert-Contains $dashboard 'delete payload.symbol;' 'dashboard settings cannot submit a symbol override'
 Assert-Contains $controller 'SYMBOL_AGENT_VERSION = "1.0.10"' 'safe symbol switching requires the symbol-aware Agent'
 Assert-Contains $controller 'isVersionAtLeast(instance.agent_version, SYMBOL_AGENT_VERSION)' 'old Agent cannot perform symbol switching'
 Assert-Contains $controller "positions > 0" 'symbol change is blocked while positions exist'

@@ -1531,13 +1531,9 @@ export class BotController {
       clean[key] = body[key];
     };
 
-    if (body.symbol !== undefined) {
-      const symbol = String(body.symbol || "").trim();
-      if (!symbol || symbol.length > 64 || !/^[A-Za-z0-9._#-]+$/.test(symbol)) {
-        throw new BadRequestException("Symbol ไม่ถูกต้อง");
-      }
-      clean.symbol = symbol;
-    }
+    // Trading Symbol is intentionally not writable through generic bot settings.
+    // /bot/trading-symbol is the single authority so runtime telemetry or other
+    // settings screens cannot silently move an account to another market.
 
     numberSetting("lot", 0.01, 100);
     numberSetting("maxPositions", 1, 100, true);

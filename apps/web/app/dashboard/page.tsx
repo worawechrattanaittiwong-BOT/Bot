@@ -135,8 +135,7 @@ export default function DashboardPage() {
       if (!settingsDirtyRef.current) {
         const nextSettings:any = {
           ...defaultSettings,
-          ...(d.settings || {}),
-          ...(d.instance?.metrics?.symbol ? { symbol: d.instance.metrics.symbol } : {})
+          ...(d.settings || {})
         };
         const loadedControlMode = String(nextSettings.controlMode || nextSettings.engineMode || "AUTO").toUpperCase();
         if (loadedControlMode === "ZERO_GRID") {
@@ -1427,6 +1426,8 @@ export default function DashboardPage() {
       ]);
 
       const payload:any = { ...settings };
+      // Trading Symbol page is the only authority allowed to change the configured symbol.
+      delete payload.symbol;
       delete payload.tradingProfile;
       payload.adaptiveEngine = true;
 
