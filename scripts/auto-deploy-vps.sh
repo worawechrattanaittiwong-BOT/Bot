@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_DIR="${REPO_DIR:-/opt/Bot}"
-REPO_FULL_NAME="${REPO_FULL_NAME:-worawechrattanaittiwong-BOT/Bot}"
+REPO_FULL_NAME="${REPO_FULL_NAME:-SCENOVA-AI/Bot}"
 LOCK_FILE="/run/lock/scenova-auto-deploy.lock"
 STATE_DIR="/var/lib/scenova"
 DEPLOYED_SHA_FILE="$STATE_DIR/deployed.sha"
@@ -257,42 +257,13 @@ else
   exit 1
 fi
 
-# Host-level safety gate: never recycle API/Web while a live bot is running or
-# fresh MT5 telemetry still reports open positions. A stale cached Position may
-# remain visible while Safe Maintenance is active; the API still blocks resume
-# until MT5/EA confirms every Position is 0.
-COMPOSE_FILE="infrastructure/linux/docker-compose.hostinger.yml"
-ENV_FILE=".env.hostinger"
-if command -v docker >/dev/null 2>&1 && [ -f "$ENV_FILE" ]; then
-  POSTGRES_CID="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps -q postgres 2>/dev/null || true)"
-  if [ -n "$POSTGRES_CID" ]; then
-    RUNTIME_STATE="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres psql -U bot -d bot -Atc "WITH runtime AS (SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)::int AS reported_positions,CASE WHEN COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0)>0 THEN COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0)>extract(epoch from now()-interval '20 seconds') ELSE bi.last_seen_at IS NOT NULL AND bi.last_seen_at>now()-interval '20 seconds' END AS mt5_fresh FROM bot_instances bi) SELECT COALESCE((SELECT status::text FROM system_maintenance WHERE id=1),'OFF') || ':' || (COUNT(*) FILTER (WHERE desired_state='RUNNING' OR (mt5_fresh AND actual_state='RUNNING')))::int || ':' || COALESCE(SUM(CASE WHEN mt5_fresh THEN reported_positions ELSE 0 END),0)::int || ':' || COALESCE(SUM(CASE WHEN NOT mt5_fresh THEN reported_positions ELSE 0 END),0)::int FROM runtime;" 2>/dev/null || true)"
-    if [ -z "$RUNTIME_STATE" ]; then
-      echo "[SCENOVA] unable to verify trading runtime state; deployment blocked for safety"
-      exit 0
-    fi
-
-    IFS=':' read -r MAINTENANCE_STATUS ACTIVE_BOTS FRESH_OPEN_POSITIONS STALE_REPORTED_POSITIONS <<< "$RUNTIME_STATE"
-    if [ "${ACTIVE_BOTS:-0}" -gt 0 ] || [ "${FRESH_OPEN_POSITIONS:-0}" -gt 0 ]; then
-      echo "[SCENOVA] safe-deploy gate: ${ACTIVE_BOTS:-0} live bot(s), ${FRESH_OPEN_POSITIONS:-0} fresh open position(s); waiting for Safe Maintenance"
-      exit 0
-    fi
-
-    if [ "${STALE_REPORTED_POSITIONS:-0}" -gt 0 ]; then
-      case "${MAINTENANCE_STATUS:-OFF}" in
-        DRAINING|MAINTENANCE)
-          echo "[SCENOVA] safe-deploy gate: allowing maintenance deploy with ${STALE_REPORTED_POSITIONS} stale cached position(s); reopening remains blocked until MT5 confirms 0"
-          ;;
-        *)
-          echo "[SCENOVA] safe-deploy gate: ${STALE_REPORTED_POSITIONS} stale cached position(s) outside Safe Maintenance; deployment blocked"
-          exit 0
-          ;;
-      esac
-    else
-      echo "[SCENOVA] safe-deploy gate passed: no live bots and no fresh open positions"
-    fi
-  fi
-fi
+# Platform Web/API releases are independent from customer MT5 trading runtime.
+# A green main deploy must not stop, restart, or force-close customer EAs, and
+# active bots/open positions must not block a platform release. Global
+# Maintenance remains an explicit owner control for major maintenance only.
+# Per-customer EA reload/update safety is enforced separately by the Local MT5
+# update flow (bot stopped + no open positions before UPDATE_EA_RESTART).
+echo "[SCENOVA] hot-deploy policy: customer bots/positions do not block platform Web/API deployment"
 
 echo "[SCENOVA] updating working tree..."
 git reset --hard "$REMOTE_SHA"
