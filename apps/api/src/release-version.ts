@@ -119,9 +119,16 @@ function actualArtifactHash() {
 export function latestEaRelease() {
   const manifest = readReleaseManifest();
   const configuredEaVersion = String(process.env.SCENOVA_EA_VERSION || "").trim();
-  const eaVersion = configuredEaVersion && sameReleaseLine(configuredEaVersion, DEFAULT_EA_VERSION)
+  const promotedEaVersion = String(manifest.eaVersion || DEFAULT_EA_VERSION).trim() || DEFAULT_EA_VERSION;
+
+  // A production .env may retain the previous PATCH after a small EA hotfix.
+  // Never allow that stale override to move the promoted runtime backwards,
+  // otherwise the dashboard can incorrectly hide an available EA update.
+  const eaVersion = configuredEaVersion &&
+    sameReleaseLine(configuredEaVersion, promotedEaVersion) &&
+    isVersionAtLeast(configuredEaVersion, promotedEaVersion)
     ? configuredEaVersion
-    : String(manifest.eaVersion || DEFAULT_EA_VERSION).trim() || DEFAULT_EA_VERSION;
+    : promotedEaVersion;
   const sha256 =
     String(
       actualArtifactHash() ||
