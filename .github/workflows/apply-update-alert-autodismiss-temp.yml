@@ -1,0 +1,64 @@
+name: Apply Update Alert Auto Dismiss Temporary
+
+on:
+  push:
+    branches:
+      - fix/settings-limit-controls-ui
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ github.actor != 'scenova-build' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/settings-limit-controls-ui
+          fetch-depth: 0
+
+      - name: Make persistent software update alert auto-dismiss
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('apps/web/app/dashboard/page.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          state_old = '  const [checkingVersion, setCheckingVersion] = useState(false);\n'
+          state_new = state_old + '  const [softwareUpdateAlertVisible, setSoftwareUpdateAlertVisible] = useState(false);\n'
+          if text.count(state_old) != 1:
+              raise SystemExit('state anchor mismatch')
+          text = text.replace(state_old, state_new, 1)
+
+          required_old = '''  const softwareUpdateRequired =\n    data?.selectedSlot?.mode === "LOCAL" &&\n    Boolean(softwareUpdate.required);\n  const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };'''
+          required_new = '''  const softwareUpdateRequired =\n    data?.selectedSlot?.mode === "LOCAL" &&\n    Boolean(softwareUpdate.required);\n  const softwareUpdateAlertKey = [\n    softwareUpdateRequired ? "required" : "clear",\n    softwareUpdate.currentVersion || "",\n    softwareUpdate.latestVersion || "",\n    softwareUpdate.currentEaVersion || "",\n    softwareUpdate.latestEaVersion || "",\n    softwareUpdate.eaHashMatch === false ? "hash-mismatch" : "hash-ok",\n    softwareUpdate.runtimeContractMatch === false ? "runtime-mismatch" : "runtime-ok"\n  ].join("|");\n\n  useEffect(() => {\n    if (!softwareUpdateRequired) {\n      setSoftwareUpdateAlertVisible(false);\n      return;\n    }\n    setSoftwareUpdateAlertVisible(true);\n    const timer = window.setTimeout(() => setSoftwareUpdateAlertVisible(false), 3000);\n    return () => window.clearTimeout(timer);\n  }, [softwareUpdateAlertKey]);\n\n  const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };'''
+          if text.count(required_old) != 1:
+              raise SystemExit('software update anchor mismatch')
+          text = text.replace(required_old, required_new, 1)
+
+          render_old = '        {activeView === "overview" && data.account && data.selectedSlot?.mode === "LOCAL" && softwareUpdateRequired && (\n'
+          render_new = '        {activeView === "overview" && data.account && data.selectedSlot?.mode === "LOCAL" && softwareUpdateRequired && softwareUpdateAlertVisible && (\n'
+          if text.count(render_old) != 1:
+              raise SystemExit('render anchor mismatch')
+          text = text.replace(render_old, render_new, 1)
+
+          if 'window.setTimeout(() => setSoftwareUpdateAlertVisible(false), 3000)' not in text:
+              raise SystemExit('auto-dismiss timer missing')
+          if 'softwareUpdateRequired && softwareUpdateAlertVisible' not in text:
+              raise SystemExit('alert visibility guard missing')
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Remove temporary workflow and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/apply-update-alert-autodismiss-temp.yml
+          git config user.name "scenova-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/web/app/dashboard/page.tsx .github/workflows/apply-update-alert-autodismiss-temp.yml
+          git diff --cached --check
+          git commit -m "fix: auto-dismiss software update alert"
+          git push origin HEAD:fix/settings-limit-controls-ui
