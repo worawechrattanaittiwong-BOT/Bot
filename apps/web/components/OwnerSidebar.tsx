@@ -7,6 +7,7 @@ import { ScenovaBrand } from "./ScenovaBrand";
 export const ownerNavItems = [
   { section:"TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"control", label:"Control Center", hint:"Bot status, controls & live monitoring" },
   { section:"TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account", label:"MT5 & EA", hint:"Local / Cloud accounts & EA management" },
+  { section:"TRADING", key:"trading-symbol", href:"/trading-symbol", icon:"trend", label:"Trading Symbol", hint:"Choose the exact Broker / MT5 symbol" },
   { section:"TRADING", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud Trading", hint:"Trading nodes & execution infrastructure" },
   { section:"TRADING", key:"trading-backtest", href:"/performance", icon:"strategy", label:"Backtest & Performance", hint:"Real performance, backtests & reports" },
   { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trials, subscriptions & customer access" },
