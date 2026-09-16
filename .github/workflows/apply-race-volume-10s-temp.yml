@@ -1,0 +1,36 @@
+name: Apply RACE Volume 10s Rollover Temp
+
+on:
+  push:
+    branches:
+      - feat/race-volume-10s-rollover
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/race-volume-10s-rollover
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply scoped RACE patch
+        run: python scripts/apply-race-volume-10s-rollover.py
+      - name: Remove temporary patch files
+        run: |
+          rm -f scripts/apply-race-volume-10s-rollover.py
+          rm -f .github/workflows/apply-race-volume-10s-temp.yml
+      - name: Commit patch
+        run: |
+          git config user.name 'SCENOVA Build Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m 'feat: drive RACE with 10s volume rollover'
+          git push origin HEAD:feat/race-volume-10s-rollover
