@@ -3325,7 +3325,7 @@ bool ManageRaceBasket(double momentum)
    // RACE_PROFIT_FIRST_V116: profitable RACE tickets are harvested before
    // the Max Positions fill gate. Profit exit is never delayed just because the
    // basket is still building. Refill, if needed, happens on a later pass.
-   int harvested = RaceHarvestProfitablePositions();
+   int harvested = g_raceCloseAllProfitEnabled ? 0 : RaceHarvestProfitablePositions();
    if(harvested > 0)
    {
       g_raceProfitArmed = false;
