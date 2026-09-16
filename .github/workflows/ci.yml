@@ -45,6 +45,9 @@ jobs:
       - name: Manual EA update one-click restart contract
         shell: pwsh
         run: ./tests/manual-ea-update-contract.ps1
+      - name: Platform hot-deploy independent-runtime contract
+        shell: pwsh
+        run: ./tests/platform-hot-deploy-contract.ps1
       - name: Trading symbol selection safety contract
         shell: pwsh
         run: ./tests/trading-symbol-selection-contract.ps1
