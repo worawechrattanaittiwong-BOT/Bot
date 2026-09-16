@@ -28,6 +28,7 @@ export default function TradingSymbolPage() {
   const [symbol, setSymbol] = useState("");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -48,7 +49,15 @@ export default function TradingSymbolPage() {
       if (selected && String(dashboard.selectedSlot?.mode || "").toUpperCase() === "LOCAL") {
         const symbolStatus = await api("/bot/trading-symbol?slotId=" + encodeURIComponent(selected));
         setStatus(symbolStatus);
-        if (!dirty) setSymbol(String(symbolStatus.desiredSymbol || symbolStatus.activeSymbol || ""));
+        if (!dirty) {
+          const reported = Array.isArray(symbolStatus.marketWatchSymbols)
+            ? symbolStatus.marketWatchSymbols.map((item:any)=>String(item || "")).filter(Boolean)
+            : [];
+          const desired = String(symbolStatus.desiredSymbol || "");
+          const active = String(symbolStatus.activeSymbol || "");
+          const match = (value:string) => reported.find((item:string)=>item.toUpperCase() === value.toUpperCase());
+          setSymbol(match(desired) || match(active) || reported[0] || desired || active || "");
+        }
       } else {
         setStatus(null);
       }
@@ -79,6 +88,39 @@ export default function TradingSymbolPage() {
   const brokerAllowed = status?.brokerTradingAllowed;
   const exactMatch = Boolean(activeSymbol && desiredSymbol && activeSymbol.toUpperCase() === desiredSymbol.toUpperCase());
   const ready = exactMatch && brokerAllowed !== false;
+  const marketWatchSymbols = Array.isArray(status?.marketWatchSymbols)
+    ? status.marketWatchSymbols.map((item:any)=>String(item || "")).filter(Boolean)
+    : [];
+  const symbolOptions = marketWatchSymbols.length > 0
+    ? marketWatchSymbols
+    : [desiredSymbol || activeSymbol].filter(Boolean);
+
+  async function refreshSymbols() {
+    if (!slotId || refreshing) return;
+    setRefreshing(true);
+    setError("");
+    try {
+      const symbolStatus = await api("/bot/trading-symbol?slotId=" + encodeURIComponent(slotId));
+      setStatus(symbolStatus);
+      const reported = Array.isArray(symbolStatus.marketWatchSymbols)
+        ? symbolStatus.marketWatchSymbols.map((item:any)=>String(item || "")).filter(Boolean)
+        : [];
+      const desired = String(symbolStatus.desiredSymbol || "");
+      const active = String(symbolStatus.activeSymbol || "");
+      const current = symbol.trim();
+      const match = (value:string) => reported.find((item:string)=>item.toUpperCase() === value.toUpperCase());
+      const selected = match(current) || match(desired) || match(active) || reported[0] || current || desired || active || "";
+      setSymbol(selected);
+      if (!current || selected.toUpperCase() !== current.toUpperCase()) setDirty(false);
+      setNotice(reported.length > 0
+        ? "รีเฟรชรายการ Symbol จาก MT5 Market Watch แล้ว"
+        : "ยังไม่ได้รับรายการ Market Watch จาก EA เวอร์ชันล่าสุด");
+    } catch (e:any) {
+      setError(String(e?.message || "รีเฟรชรายการ Symbol ไม่สำเร็จ"));
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function saveAndApply() {
     const next = symbol.trim();
@@ -161,17 +203,21 @@ export default function TradingSymbolPage() {
             </label>
 
             <label className={styles.field}>
-              <span>Trading Symbol</span>
+              <span>Trading Symbol · จาก MT5 Market Watch</span>
               <div className={styles.symbolInputRow}>
-                <input
+                <select
                   value={symbol}
-                  maxLength={64}
-                  spellCheck={false}
-                  autoComplete="off"
-                  placeholder="เช่น XAUUSDm / EURUSDm / BTCUSDm"
-                  onChange={(e)=>{ setSymbol(e.target.value.trim()); setDirty(true); setNotice(""); }}
-                />
-                <button onClick={saveAndApply} disabled={busy || !stopped || positions > 0 || !status?.agentOnline}>
+                  onChange={(e)=>{ setSymbol(e.target.value); setDirty(true); setNotice(""); }}
+                  disabled={busy || refreshing || symbolOptions.length === 0}
+                >
+                  {symbolOptions.length === 0
+                    ? <option value="">กำลังรอรายการ Symbol จาก MT5...</option>
+                    : symbolOptions.map((item:string)=><option key={item} value={item}>{item}</option>)}
+                </select>
+                <button type="button" className={styles.refreshButton} onClick={refreshSymbols} disabled={busy || refreshing || !slotId}>
+                  {refreshing ? "กำลังรีเฟรช..." : "↻ Refresh"}
+                </button>
+                <button onClick={saveAndApply} disabled={busy || refreshing || !stopped || positions > 0 || !status?.agentOnline || !symbol}>
                   {busy ? "กำลังตรวจ..." : "บันทึกและใช้ Symbol นี้"}
                 </button>
               </div>
@@ -204,7 +250,7 @@ export default function TradingSymbolPage() {
 
         <section className={styles.help}>
           <h2>วิธีใช้</h2>
-          <p>เปิด MT5 → Market Watch → ดูชื่อ Symbol จริงของ Broker → คัดชื่อตรง ๆ มาใส่ที่นี่ → หยุดบอท/ไม่มี Position → กด “บันทึกและใช้ Symbol นี้” ระบบจะรีสตาร์ท MT5 เพียง 1 รอบและยืนยัน Symbol จาก Heartbeat ก่อนอนุญาต Start</p>
+          <p>เปิด MT5 → Market Watch → เพิ่ม Symbol ที่ต้องการให้แสดง → กลับมาหน้านี้แล้วกด Refresh → เลือก Symbol จากรายการ → หยุดบอท/ไม่มี Position → กด “บันทึกและใช้ Symbol นี้” ระบบจะรีสตาร์ท MT5 เพียง 1 รอบและยืนยัน Symbol จาก Heartbeat ก่อนอนุญาต Start</p>
         </section>
       </section>
     </main>
