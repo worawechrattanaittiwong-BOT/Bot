@@ -16426,3 +16426,5 @@ bool JsonBool(string json, string key, bool fallback)
    if(StringFind(tail, "false") == 0) return false;
    return fallback;
 }
+
+// Hotfix rebuild marker: RACE Close-All Profit exclusivity, EA remains v1.0.23.
