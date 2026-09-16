@@ -1,0 +1,31 @@
+name: Apply ZERO GRID Low Volatility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-zero-grid-low-volatility.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 2
+      - name: Apply and validate feature patch
+        run: python scripts/apply-zero-grid-low-volatility.py
+      - name: Commit feature to main
+        shell: bash
+        run: |
+          git config user.name "scenova-build"
+          git config user.email "actions@users.noreply.github.com"
+          rm -f scripts/apply-zero-grid-low-volatility.py
+          git add -A
+          git status --short
+          git commit -m "feat: add ZERO GRID low-volatility profile"
+          git push origin HEAD:main
