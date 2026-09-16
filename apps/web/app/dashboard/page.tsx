@@ -135,7 +135,8 @@ export default function DashboardPage() {
       if (!settingsDirtyRef.current) {
         const nextSettings:any = {
           ...defaultSettings,
-          ...(d.settings || {})
+          ...(d.settings || {}),
+          ...(d.settings?.startupSymbol ? { symbol: d.settings.startupSymbol } : {})
         };
         const loadedControlMode = String(nextSettings.controlMode || nextSettings.engineMode || "AUTO").toUpperCase();
         if (loadedControlMode === "ZERO_GRID") {
