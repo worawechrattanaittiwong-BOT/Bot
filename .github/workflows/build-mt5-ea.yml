@@ -1,6 +1,6 @@
 name: Build MT5 EA
 
-# Release metadata trigger: EA v1.0.22 ZERO GRID low-volatility runtime.
+# Release metadata trigger: EA v1.0.23 RACE 10-second volume rollover runtime.
 # Official MT5 compile and publish pipeline for the current V20/RACE source.
 # ZERO is a dedicated pending-only engine: build the configured symmetric ladder,
 # close on its own net-profit rule, then immediately rearm without market filters.
@@ -46,7 +46,7 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Validate current V20 AUTO, isolated RACE and simple ZERO source
+      - name: Validate current V20 AUTO, volume-driven RACE and simple ZERO source
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -75,19 +75,23 @@ jobs:
             'autoV20Diagnostics=StringFormat',
             'g_basketJournalAutoDecisionId',
             'if(LegacyBasketEngineEnabled() && BasketFillEnabled() && g_burstActive)',
-            'int RaceM5CandleDirection()',
-            'CopyRates(_Symbol, PERIOD_M5, 1, 1, rates)',
+            '#define RACE_VOLUME_WINDOW_SECONDS 10',
+            'void RaceSampleVolumePressure()',
+            'int RaceVolumeDirection()',
+            'return RaceVolumeDirection();',
             'RACE_DIRECTION_LOCK',
             'RACE_MIXED_BASKET_BLOCK',
-            'RACE_M5_OPPOSITE_CONFIRMED',
-            'RACE_M5_SEVERE_REVERSAL',
+            'RACE_VOLUME_WARMUP',
+            'RACE_VOLUME_ROLLOVER',
+            'RACE_VOLUME_ROLLOVER_WAIT_BUY',
+            'RACE_VOLUME_ROLLOVER_WAIT_SELL',
             'int RaceHarvestProfitablePositions()',
             'RACE_PROFIT_HARVEST',
             'RACE_PROFIT_HARVEST_FLAT',
             'RACE_PROFIT_FIRST_V116',
             'SaaSRace',
             'bool ZeroGridModeEnabled()',
-            '#define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LOW_VOLATILITY_V2"',
+            '#define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V1"',
             'input bool            InpZeroGridLowVolatilityEnabled = false;',
             'bool ZeroGridEffectiveLowVolatilityEnabled()',
             'double ZeroGridEffectiveLevelLot(int level)',
@@ -187,7 +191,7 @@ jobs:
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
             brain = "V20"
-            policy = "AUTO_V20_RACE_ZERO_LOW_VOLATILITY_V2"
+            policy = "AUTO_V20_RACE_VOLUME_10S_ZERO_LOW_VOLATILITY_V3"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
       - name: Publish current V20 compiled artifact
