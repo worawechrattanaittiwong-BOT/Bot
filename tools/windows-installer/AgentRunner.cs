@@ -32,6 +32,17 @@ internal static class AgentRunner
     private static string ManualActionStampPath(AgentConfig config) =>
         Path.Combine(ScenovaRuntime.BaseDir, "manual-mt5-action-" + SafeKey(config) + ".stamp");
 
+    private static string NormalizeStartupSymbol(string? value)
+    {
+        var symbol = (value ?? "").Trim();
+        if (symbol.Length == 0 || symbol.Length > 64) return "";
+        return symbol.All(ch =>
+            char.IsLetterOrDigit(ch) ||
+            ch == '.' || ch == '_' || ch == '#' || ch == '-')
+            ? symbol
+            : "";
+    }
+
     internal static bool IsMt5Running(AgentConfig config)
     {
         var terminalExe = ScenovaRuntime.ResolveTerminalExecutable(config.TerminalDataPath);
@@ -115,13 +126,6 @@ internal static class AgentRunner
     /// Success is ACKed only after the Server observes EA heartbeat again. For
     /// UPDATE_EA_RESTART the reported runtime version must also equal the
     /// required EA version. Starting terminal64.exe alone is never success.
-    ///
-    /// The installer historically called this synchronous compatibility method
-    /// from the WinForms UI thread. Manual-action verification can legitimately
-    /// wait up to 55 seconds, which froze the progress bar and made Windows show
-    /// the installer as hung. When called from a WinForms message loop, run the
-    /// blocking work on a worker thread and keep pumping UI messages. Background
-    /// Agent calls keep the original synchronous behavior.
     /// </summary>
     internal static bool EnsureMt5RunningWithEa(AgentConfig config, bool forceReload)
     {
@@ -142,6 +146,30 @@ internal static class AgentRunner
         var actionId = (action.ManualActionId ?? "").Trim();
         if (string.IsNullOrWhiteSpace(actionId)) return false;
 
+        var requestedSymbol = FetchTradingSymbolSnapshot(config);
+        var rawDesiredSymbol = (requestedSymbol?.DesiredSymbol ?? "").Trim();
+        var expectedSymbol = NormalizeStartupSymbol(rawDesiredSymbol);
+        if (!string.IsNullOrWhiteSpace(rawDesiredSymbol) && string.IsNullOrWhiteSpace(expectedSymbol))
+        {
+            AcknowledgeManualAction(
+                config,
+                actionId,
+                false,
+                "Symbol ที่เลือกไม่ถูกต้อง ระบบไม่ได้รีสตาร์ท MT5");
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedSymbol) &&
+            !string.Equals(
+                NormalizeStartupSymbol(config.StartupSymbol),
+                expectedSymbol,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            config.StartupSymbol = expectedSymbol;
+            config.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
+            ScenovaRuntime.SaveOrUpdateProfile(config, config.IsPrimary);
+        }
+
         var stampPath = ManualActionStampPath(config);
         if (StampMatches(stampPath, actionId))
         {
@@ -149,8 +177,10 @@ internal static class AgentRunner
                 config,
                 actionId,
                 forceReload,
+                expectedSymbol,
                 timeoutSeconds: 12,
-                out var existingSnapshot);
+                out var existingSnapshot,
+                out var existingSymbolSnapshot);
             if (verifiedExisting)
             {
                 AcknowledgeManualAction(
@@ -159,7 +189,7 @@ internal static class AgentRunner
                     true,
                     forceReload
                         ? "EA เวอร์ชันใหม่เชื่อมต่อและตรวจสอบสำเร็จแล้ว"
-                        : "MT5 และ EA เชื่อมต่อกลับมาแล้ว");
+                        : "MT5 และ EA เชื่อมต่อกลับมาบน Symbol ที่เลือกแล้ว");
                 return true;
             }
 
@@ -167,7 +197,11 @@ internal static class AgentRunner
                 config,
                 actionId,
                 false,
-                BuildVerificationFailureMessage(forceReload, existingSnapshot));
+                BuildVerificationFailureMessage(
+                    forceReload,
+                    expectedSymbol,
+                    existingSnapshot,
+                    existingSymbolSnapshot));
             return false;
         }
 
@@ -197,15 +231,21 @@ internal static class AgentRunner
                 config,
                 actionId,
                 forceReload,
+                expectedSymbol,
                 timeoutSeconds: 55,
-                out var snapshot);
+                out var snapshot,
+                out var symbolSnapshot);
             if (!verified)
             {
                 AcknowledgeManualAction(
                     config,
                     actionId,
                     false,
-                    BuildVerificationFailureMessage(forceReload, snapshot));
+                    BuildVerificationFailureMessage(
+                        forceReload,
+                        expectedSymbol,
+                        snapshot,
+                        symbolSnapshot));
                 return false;
             }
 
@@ -215,7 +255,7 @@ internal static class AgentRunner
                 true,
                 forceReload
                     ? "อัปเดต EA สำเร็จ ตรวจพบ Runtime เวอร์ชันล่าสุดแล้ว"
-                    : "เชื่อมต่อ MT5 สำเร็จ ตรวจพบ EA Online แล้ว");
+                    : "เชื่อมต่อ MT5 สำเร็จ EA โหลด Symbol ที่เลือกและ Broker อนุญาตให้เปิดออเดอร์แล้ว");
             return true;
         }
         catch (Exception ex)
@@ -240,6 +280,26 @@ internal static class AgentRunner
             return ScenovaClient.PostJsonAsync<AgentActionResponse>(
                 http,
                 config.ApiBase.TrimEnd('/') + "/api/ea/agent-actions",
+                new { instanceId = config.InstanceId, installToken = token })
+                .GetAwaiter().GetResult();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static TradingSymbolAgentResponse? FetchTradingSymbolSnapshot(AgentConfig config)
+    {
+        try
+        {
+            var token = ScenovaRuntime.TryUnprotect(config.InstallTokenProtected);
+            if (string.IsNullOrWhiteSpace(token)) return null;
+
+            using var http = ScenovaClient.NewHttpClient();
+            return ScenovaClient.PostJsonAsync<TradingSymbolAgentResponse>(
+                http,
+                config.ApiBase.TrimEnd('/') + "/api/ea/trading-symbol/status",
                 new { instanceId = config.InstanceId, installToken = token })
                 .GetAwaiter().GetResult();
         }
@@ -274,10 +334,13 @@ internal static class AgentRunner
         AgentConfig config,
         string actionId,
         bool forceReload,
+        string expectedSymbol,
         int timeoutSeconds,
-        out AgentActionResponse? lastSnapshot)
+        out AgentActionResponse? lastSnapshot,
+        out TradingSymbolAgentResponse? lastSymbolSnapshot)
     {
         lastSnapshot = null;
+        lastSymbolSnapshot = null;
         var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(5, timeoutSeconds));
         while (DateTimeOffset.UtcNow < deadline)
         {
@@ -294,6 +357,25 @@ internal static class AgentRunner
                 return false;
 
             if (!snapshot.EaOnline) continue;
+
+            var symbolSnapshot = FetchTradingSymbolSnapshot(config);
+            if (symbolSnapshot is not null)
+                lastSymbolSnapshot = symbolSnapshot;
+
+            if (!string.IsNullOrWhiteSpace(expectedSymbol))
+            {
+                var currentSymbol = NormalizeStartupSymbol(symbolSnapshot?.CurrentSymbol);
+                if (!string.Equals(currentSymbol, expectedSymbol, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // CONNECT is also the explicit Symbol-change action. Refuse to
+                // ACK success when the Broker exposes the symbol as disabled or
+                // close-only. LONGONLY/SHORTONLY remain valid and are enforced
+                // by the EA per direction.
+                if (!forceReload && symbolSnapshot?.SymbolTradingAllowed == false)
+                    return false;
+            }
+
             if (!forceReload) return true;
 
             var current = (snapshot.EaVersion ?? "").Trim();
@@ -308,12 +390,31 @@ internal static class AgentRunner
 
     private static string BuildVerificationFailureMessage(
         bool forceReload,
-        AgentActionResponse? snapshot)
+        string expectedSymbol,
+        AgentActionResponse? snapshot,
+        TradingSymbolAgentResponse? symbolSnapshot)
     {
         if (snapshot is null)
             return "MT5 ถูกสั่งเปิดแล้ว แต่ Server ยังตรวจการเชื่อมต่อไม่สำเร็จ กรุณากดอีกครั้ง";
         if (!snapshot.EaOnline)
             return "MT5 เปิดกลับมาแล้ว แต่ EA ยังไม่เชื่อมต่อ Server กรุณาตรวจ WebRequest/EA แล้วกดอีกครั้ง";
+
+        if (!string.IsNullOrWhiteSpace(expectedSymbol))
+        {
+            var currentSymbol = NormalizeStartupSymbol(symbolSnapshot?.CurrentSymbol);
+            if (!string.Equals(currentSymbol, expectedSymbol, StringComparison.OrdinalIgnoreCase))
+            {
+                return "MT5 เชื่อมต่อแล้ว แต่ EA ยังไม่ได้โหลด Symbol " + expectedSymbol +
+                       " (ปัจจุบัน " + (currentSymbol.Length > 0 ? currentSymbol : "ไม่ทราบ") +
+                       ") กรุณาตรวจชื่อ Symbol ให้ตรงกับ Market Watch ของ Broker";
+            }
+            if (!forceReload && symbolSnapshot?.SymbolTradingAllowed == false)
+            {
+                return "Broker ไม่อนุญาตเปิดออเดอร์ใหม่บน Symbol " + expectedSymbol +
+                       " (Disabled/Close Only) กรุณาเลือก Symbol อื่นที่บัญชีนี้เทรดได้";
+            }
+        }
+
         if (forceReload)
         {
             var current = string.IsNullOrWhiteSpace(snapshot.EaVersion)
@@ -371,8 +472,9 @@ internal static class AgentRunner
             "Expert=SCENOVA\\FastBasketBot",
             "ExpertParameters=SCENOVA-FastBasketBot.set"
         };
-        if (!string.IsNullOrWhiteSpace(config.StartupSymbol))
-            lines.Add("Symbol=" + config.StartupSymbol.Trim());
+        var startupSymbol = NormalizeStartupSymbol(config.StartupSymbol);
+        if (!string.IsNullOrWhiteSpace(startupSymbol))
+            lines.Add("Symbol=" + startupSymbol);
         lines.Add("Period=M5");
         File.WriteAllLines(startupConfig, lines, new System.Text.UTF8Encoding(false));
 
