@@ -1419,9 +1419,7 @@ export default function DashboardPage() {
         payload.controlMode = "RACE";
         payload.engineMode = "RACE";
       } else {
-        payload.controlMode = ["ASSISTED", "MANUAL"].includes(requestedControlMode)
-          ? requestedControlMode
-          : "AUTO";
+        payload.controlMode = requestedControlMode === "MANUAL" ? "MANUAL" : "AUTO";
         payload.engineMode = "AUTO";
       }
 
@@ -2810,9 +2808,10 @@ function BotSettingsModal(props:any) {
   const profitTargetMode = String(props.settings?.profitTargetMode || "AUTO").toUpperCase();
   const manualSl = Number(props.settings?.manualStopLossPoints || 0);
   const hasManualExit = profitTargetMode === "MANUAL" || manualSl > 0;
-  const inferredControlMode = engineMode === "ZERO_GRID" ? "ZERO_GRID" : engineMode === "RACE" ? "RACE" : entryMode === "AUTO_MOMENTUM" ? "AUTO" : hasManualExit ? "MANUAL" : "ASSISTED";
-  const requestedControlMode = String(props.settings?.controlMode || inferredControlMode).toUpperCase();
-  const controlMode = ["AUTO","RACE","ZERO_GRID","ASSISTED","MANUAL"].includes(requestedControlMode)
+  const inferredControlMode = engineMode === "ZERO_GRID" ? "ZERO_GRID" : engineMode === "RACE" ? "RACE" : hasManualExit ? "MANUAL" : "AUTO";
+  const requestedControlModeRaw = String(props.settings?.controlMode || inferredControlMode).toUpperCase();
+  const requestedControlMode = requestedControlModeRaw === "ASSISTED" ? "AUTO" : requestedControlModeRaw;
+  const controlMode = ["AUTO","RACE","ZERO_GRID","MANUAL"].includes(requestedControlMode)
     ? requestedControlMode
     : inferredControlMode;
   const profitKind = Number(props.settings?.perPositionProfitMoney || 0) > 0 ? "POSITION" : "BASKET";
@@ -2822,9 +2821,8 @@ function BotSettingsModal(props:any) {
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"อัตโนมัติ",subtitle:"EA เลือกทิศทาง จุดเข้า และจังหวะปิดตามระบบปกติ"},
     RACE:{title:"โหมดซิ่ง",subtitle:"เร่งจังหวะเปิดไม้ 2× เพื่อไล่ให้ครบ Max Positions เร็วขึ้น โดยยังแยกการบริหารกำไร/การโดนลากจาก AUTO"},
-    ZERO_GRID:{title:"ZERO GRID",subtitle:"BUY STOP + SELL STOP · เลือกได้ 10–30 Pending ต่อฝั่ง"},
-    ASSISTED:{title:"ช่วยตัดสินใจ",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณเลือกแนวทางบริหารรอบ"},
-    MANUAL:{title:"กำหนดเอง",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณกำหนด Lot เป้ากำไร และ SL"}
+    ZERO_GRID:{title:"ZERO GRID",subtitle:"BUY STOP + SELL STOP · เลือกได้ 1–30 Pending Orders ต่อฝั่ง"},
+    MANUAL:{title:"กำหนดเอง",subtitle:"EA วิเคราะห์ BUY / SELL และเข้าไม้อัตโนมัติ คุณกำหนด Lot Size, Profit Target และ Stop Loss"}
   };
 
   const applyControlMode = (mode:string) => {
@@ -2851,11 +2849,6 @@ function BotSettingsModal(props:any) {
     }
     props.onEdit?.("engineMode","AUTO");
     if (mode === "AUTO") {
-      props.onEdit?.("profitTargetMode","AUTO");
-      props.onEdit?.("manualStopLossPoints",0);
-      return;
-    }
-    if (mode === "ASSISTED") {
       props.onEdit?.("profitTargetMode","AUTO");
       props.onEdit?.("manualStopLossPoints",0);
       return;
@@ -2905,7 +2898,6 @@ function BotSettingsModal(props:any) {
                 {id:"AUTO",icon:"brain",tag:"แนะนำ"},
                 {id:"RACE",icon:"status",tag:"เร็วสุด"},
                 {id:"ZERO_GRID",icon:"layers",tag:"Hedging Grid"},
-                {id:"ASSISTED",icon:"target",tag:"กึ่งอัตโนมัติ"},
                 {id:"MANUAL",icon:"settings",tag:"ควบคุมละเอียด"}
               ].map(mode=><button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} className={controlMode===mode.id?"active":""} onClick={()=>applyControlMode(mode.id)}>
                 <span className="cc-bot-v2-mode-icon"><ScenovaIcon name={mode.icon} size={22}/></span>
@@ -2934,7 +2926,7 @@ function BotSettingsModal(props:any) {
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
                   </>}
                 </div>
-                {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>Basket Ladder อัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มไม้ตาม ATR และแรงตลาด</span></div>}
+                {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>Automatic Basket Ladder</b><span>EA กระจายจังหวะเพิ่มไม้ตาม ATR และแรงตลาด</span></div>}
               </section>
 
               {controlMode!=="ZERO_GRID"&&(
@@ -2988,7 +2980,7 @@ function BotSettingsModal(props:any) {
                 <div><dt>EA Sync</dt><dd className="good">{props.syncLabel || "พร้อมส่งค่า"}</dd></div>
               </dl>
               )}
-              {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="brain" size={17}/><span><b>Setup-First 5 TF</b><small>แนวรับ–แนวต้าน · Order Block · Fibonacci · Momentum</small></span></div>}
+              {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="brain" size={17}/><span><b>5-Timeframe Setup</b><small>แนวรับ–แนวต้าน · Order Block · Fibonacci · Momentum</small></span></div>}
             </aside>
           </div>
         </div>
