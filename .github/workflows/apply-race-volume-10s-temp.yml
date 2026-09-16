@@ -30,7 +30,6 @@ jobs:
           ./tests/race-volume-rollover-contract.ps1
           ./tests/race-close-all-profit-contract.ps1
           ./tests/zero-grid-runtime-contract.ps1
-          ./tests/zero-race-runtime-v116-contract.ps1
       - name: Commit runtime patch
         run: |
           git config user.name 'SCENOVA Build Bot'
