@@ -21,17 +21,26 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          path = Path('tests/zero-grid-v1-simulation.mjs')
-          text = path.read_text(encoding='utf-8-sig')
+
+          sim_path = Path('tests/zero-grid-v1-simulation.mjs')
+          sim = sim_path.read_text(encoding='utf-8-sig')
           old_gap = r'''assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=1\.0;[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);'''
           new_gap = r'''assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=ZeroGridEffectiveLowVolatilityEnabled\(\) \? 0\.10 : 1\.0;[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);'''
           old_range = r'''assert.match(web, /เลือกได้ 1–30 (?:BUY STOP และ 1–30 SELL STOP|Pending ต่อฝั่ง)/, "ZERO UI must explain the 1..30 per-side range");'''
           new_range = r'''assert.match(web, /เลือกได้ 1–30 ระดับต่อฝั่ง/, "ZERO UI must explain the 1..30 per-side range");'''
-          if text.count(old_gap) != 1:
+          if sim.count(old_gap) != 1:
               raise SystemExit('old first-gap regression anchor missing')
-          if text.count(old_range) != 1:
+          if sim.count(old_range) != 1:
               raise SystemExit('old UI range regression anchor missing')
-          path.write_text(text.replace(old_gap, new_gap, 1).replace(old_range, new_range, 1), encoding='utf-8')
+          sim_path.write_text(sim.replace(old_gap, new_gap, 1).replace(old_range, new_range, 1), encoding='utf-8')
+
+          runtime_path = Path('tests/zero-grid-runtime-contract.ps1')
+          runtime = runtime_path.read_text(encoding='utf-8-sig')
+          old_runtime_range = "Assert-Contains $web 'เลือกได้ 1–30 Pending ต่อฝั่ง' 'ZERO UI 1-30 explanation'"
+          new_runtime_range = "Assert-Contains $web 'เลือกได้ 1–30 ระดับต่อฝั่ง' 'ZERO UI 1-30 explanation'"
+          if runtime.count(old_runtime_range) != 1:
+              raise SystemExit('old runtime UI range anchor missing')
+          runtime_path.write_text(runtime.replace(old_runtime_range, new_runtime_range, 1), encoding='utf-8')
       - name: Apply and validate feature patch
         run: python scripts/apply-zero-grid-low-volatility.py
       - name: Commit feature to main
