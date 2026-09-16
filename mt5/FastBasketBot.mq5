@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.17"
-#define SCENOVA_EA_VERSION "1.0.17"
-#define SCENOVA_PRODUCT_VERSION "1.0.17"
+#property version   "1.0.18"
+#define SCENOVA_EA_VERSION "1.0.18"
+#define SCENOVA_PRODUCT_VERSION "1.0.18"
 #define SCENOVA_RUNTIME_CONTRACT "ZERO_GRID_LEVELS_1_30_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -3094,7 +3094,8 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   RefreshMarketContext(false);
+   // RACE close decisions use direct P/L, current price and completed M5 data.
+   // Defer expensive market-context refresh to non-close paths only.
    int direction = BasketDirection();
    if(direction == 0)
    {
@@ -3152,6 +3153,7 @@ bool ManageRaceBasket(double momentum)
       if(floatingProfit < 0.0)
          g_raceRecoveryWatch = true;
       g_raceState = "FILLING";
+      RefreshMarketContext(false);
       ProcessRaceFill(direction);
       return true;
    }
@@ -3168,6 +3170,7 @@ bool ManageRaceBasket(double momentum)
          RaceCloseCycle("RACE_RECOVERY_PROFIT");
          return true;
       }
+      RefreshMarketContext(false);
       g_raceState = "RECOVERY_WAIT";
       g_executionStatus = "RACE_RECOVERY_WAIT";
       return true;
@@ -3207,6 +3210,7 @@ bool ManageRaceBasket(double momentum)
          return true;
       }
 
+      RefreshMarketContext(false);
       g_raceState = "PROFIT_RUN";
       g_executionStatus = "RACE_PROFIT_RUN";
       return true;
@@ -3215,11 +3219,13 @@ bool ManageRaceBasket(double momentum)
    if(floatingProfit < 0.0)
    {
       g_raceRecoveryWatch = true;
+      RefreshMarketContext(false);
       g_raceState = "RECOVERY_WAIT";
       g_executionStatus = "RACE_RECOVERY_WAIT";
       return true;
    }
 
+   RefreshMarketContext(false);
    g_raceState = "FULL_WAIT_PROFIT";
    g_executionStatus = "RACE_FULL_WAIT_PROFIT";
    return true;
@@ -3336,13 +3342,19 @@ void OnTick()
 
    if(count > 0)
    {
+      bool tacticalBasket=BasketHasTacticalPosition();
+
+      // The existing V20 locked price stop/target can be checked before
+      // market-context, journal and protection work without changing its rule.
+      if(!tacticalBasket && AutoV20Enabled() && AutoV20FastPriceExit())
+         return;
+
       // Dynamic protection never decides whether an entry is allowed. It only
       // manages exits after a Position exists.
       RefreshMarketContext(false);
       RecoverOpenBasketJournal();
       ManageDynamicProtection();
 
-      bool tacticalBasket=BasketHasTacticalPosition();
       if(tacticalBasket)
       {
          g_tacticalCountertrendActive=true;
@@ -11805,7 +11817,7 @@ void AutoV20OnOrderSent(int direction)
    }
 }
 
-bool AutoV20ManageOpenBasket(double momentum)
+bool AutoV20FastPriceExit()
 {
    if(!AutoV20Enabled() || BasketPositionCount()<=0 || BasketHasRacePosition())
       return false;
@@ -11813,8 +11825,6 @@ bool AutoV20ManageOpenBasket(double momentum)
    if(direction==0)
       return false;
 
-   double atrPoints=MathMax(10.0,
-      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod));
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol,tick))
       return false;
@@ -11850,6 +11860,23 @@ bool AutoV20ManageOpenBasket(double momentum)
          return true;
       }
    }
+   return false;
+}
+
+bool AutoV20ManageOpenBasket(double momentum)
+{
+   if(!AutoV20Enabled() || BasketPositionCount()<=0 || BasketHasRacePosition())
+      return false;
+   int direction=BasketDirection();
+   if(direction==0)
+      return false;
+
+   // Preserve the original V20 stop/target precedence at the original call site.
+   if(AutoV20FastPriceExit())
+      return true;
+
+   double atrPoints=MathMax(10.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod));
 
    double progress=BasketFavorableProgressPoints(direction);
    int opposite=-direction;
