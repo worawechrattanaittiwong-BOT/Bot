@@ -22,7 +22,11 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import subprocess, textwrap
+          import subprocess
+
+          error_file = Path('.race-patch-error.txt')
+          if error_file.exists():
+              error_file.unlink()
 
           try:
               workflow = Path('.github/workflows/apply-race-close-all-profit-temp.yml').read_text(encoding='utf-8')
@@ -34,11 +38,12 @@ jobs:
               end = body.find('\n      - name:')
               if end < 0:
                   raise RuntimeError('staged patch end marker missing')
-              script = textwrap.dedent(body[:end])
+              raw_lines = body[:end].splitlines()
+              script = '\n'.join(line[10:] if line.startswith('          ') else line for line in raw_lines)
               exec(compile(script, '<race-close-all-profit-patch>', 'exec'))
           except BaseException as exc:
               subprocess.run(['git','reset','--hard','HEAD'], check=True)
-              Path('.race-patch-error.txt').write_text(type(exc).__name__ + ': ' + str(exc), encoding='utf-8')
+              error_file.write_text(type(exc).__name__ + ': ' + str(exc), encoding='utf-8')
 
       - name: Commit diagnostic or feature
         shell: bash
@@ -54,6 +59,7 @@ jobs:
           pwsh ./tests/race-close-all-profit-contract.ps1
           rm -f .github/workflows/apply-race-close-all-profit-temp.yml
           rm -f .github/workflows/apply-race-close-all-profit-main.yml
-          git add apps/web/app/dashboard/page.tsx apps/api/src/bot.controller.ts apps/api/src/release-version.ts database/001_init.sql mt5/FastBasketBot.mq5 tests/race-close-all-profit-contract.ps1 .github/workflows/ci.yml .github/workflows/apply-race-close-all-profit-temp.yml .github/workflows/apply-race-close-all-profit-main.yml
+          rm -f .race-patch-error.txt
+          git add apps/web/app/dashboard/page.tsx apps/api/src/bot.controller.ts apps/api/src/release-version.ts database/001_init.sql mt5/FastBasketBot.mq5 tests/race-close-all-profit-contract.ps1 .github/workflows/ci.yml .github/workflows/apply-race-close-all-profit-temp.yml .github/workflows/apply-race-close-all-profit-main.yml .race-patch-error.txt
           git commit -m "feat: add RACE close-all profit target"
           git push origin HEAD:main
