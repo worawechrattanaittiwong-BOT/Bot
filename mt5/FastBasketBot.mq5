@@ -209,6 +209,7 @@ input int             InpIndicatorMaxWaitSeconds = 20;
 ENUM_BOT_STATE g_state = STATE_STOPPED;
 bool   g_access = false;
 bool   g_runAuthorized = false;
+bool   g_safeStopDrainRequested = false;
 bool   g_trailArmed = false;
 double g_peakProfit = 0.0;
 double g_dayStartEquity = 0.0;
@@ -2660,7 +2661,10 @@ bool ManageZeroGrid()
    if(!ZeroGridModeEnabled() || g_state!=STATE_RUNNING || !g_access)
    {
       bool safeStopDrain =
-         ZeroGridModeEnabled() && g_state==STATE_SAFE_STOP && g_access;
+         ZeroGridModeEnabled() &&
+         g_state==STATE_SAFE_STOP &&
+         g_access &&
+         g_safeStopDrainRequested;
       if(!safeStopDrain)
          ZeroGridCancelPending();
 
@@ -4709,6 +4713,9 @@ void SendHeartbeat()
 
    // desiredState is authoritative. A stale START/SAFE_STOP command must never
    // override the latest state selected on the website.
+   // Only an explicit website SAFE_STOP is allowed to preserve the active ZERO
+   // ladder. Internal safety stops keep their original immediate-stop behavior.
+   g_safeStopDrainRequested = (g_access && desired == "SAFE_STOP");
    if(!g_access)
    {
       g_state = STATE_SAFE_STOP;
