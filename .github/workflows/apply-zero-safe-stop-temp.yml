@@ -1,0 +1,129 @@
+name: Apply ZERO GRID Safe Stop Temporary
+on:
+  push:
+    branches: [fix/zero-grid-safe-stop-drain-feedback]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/zero-grid-safe-stop-drain-feedback
+          fetch-depth: 0
+      - name: Apply narrow safe-stop patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          ea_path = Path('mt5/FastBasketBot.mq5')
+          ea = ea_path.read_text(encoding='utf-8-sig')
+          old = '''   // Explicit mode exit / Stop / revoked access stops NEW pending triggers.
+   // Existing ZERO positions are not mixed into another engine; they are kept
+   // isolated and may close only when their ZERO net-profit close condition is met.
+   if(!ZeroGridModeEnabled() || g_state!=STATE_RUNNING || !g_access)
+   {
+      ZeroGridCancelPending();
+      positions=ZeroGridPositionCount();
+      if(positions<=0)
+'''
+          new = '''   // Explicit mode exit / revoked access still removes pending orders immediately.
+   // SAFE_STOP is intentionally different: preserve only the pending ladder that
+   // already belongs to the current ZERO cycle, let it drain under the normal
+   // ZERO profit rule, and never build/replenish another pending order while stopped.
+   if(!ZeroGridModeEnabled() || g_state!=STATE_RUNNING || !g_access)
+   {
+      bool safeStopDrain =
+         ZeroGridModeEnabled() && g_state==STATE_SAFE_STOP && g_access;
+      if(!safeStopDrain)
+         ZeroGridCancelPending();
+
+      positions=ZeroGridPositionCount();
+      pending=ZeroGridPendingCount();
+      if(positions<=0 && pending<=0)
+'''
+          if old not in ea:
+              raise SystemExit('Expected ManageZeroGrid stop block not found')
+          ea = ea.replace(old, new, 1)
+          for oldv, newv in [
+              ('#property version   "1.0.19"', '#property version   "1.0.20"'),
+              ('#define SCENOVA_EA_VERSION "1.0.19"', '#define SCENOVA_EA_VERSION "1.0.20"'),
+              ('#define SCENOVA_PRODUCT_VERSION "1.0.19"', '#define SCENOVA_PRODUCT_VERSION "1.0.20"'),
+          ]:
+              if oldv not in ea:
+                  raise SystemExit(f'Missing EA version marker: {oldv}')
+              ea = ea.replace(oldv, newv, 1)
+          ea_path.write_text(ea, encoding='utf-8')
+
+          release_path = Path('apps/api/src/release-version.ts')
+          release = release_path.read_text(encoding='utf-8')
+          marker = 'export const DEFAULT_EA_VERSION = "1.0.19";'
+          if marker not in release:
+              raise SystemExit('Expected API EA version marker not found')
+          release = release.replace(marker, 'export const DEFAULT_EA_VERSION = "1.0.20";', 1)
+          release_path.write_text(release, encoding='utf-8')
+
+          web_path = Path('apps/web/app/dashboard/page.tsx')
+          web = web_path.read_text(encoding='utf-8')
+          old_cmd = '''    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const suffix = selectedSlotIdRef.current
+'''
+          new_cmd = '''    setBusy(true);
+    setError("");
+    const commandPendingNotice = path.startsWith("/bot/start")
+      ? "กำลังส่งคำสั่งเริ่มบอท..."
+      : path.startsWith("/bot/stop")
+        ? "กำลังส่งคำสั่ง Safe Stop..."
+        : "";
+    setNotice(commandPendingNotice);
+    try {
+      const suffix = selectedSlotIdRef.current
+'''
+          if old_cmd not in web:
+              raise SystemExit('Dashboard command feedback block not found')
+          web = web.replace(old_cmd, new_cmd, 1)
+          old_hero_stop = 'command("/bot/stop","ส่งคำสั่งหยุดอย่างปลอดภัยแล้ว")'
+          old_mobile_stop = 'command("/bot/stop","ส่งคำสั่งหยุดบอทแล้ว")'
+          if old_hero_stop not in web or old_mobile_stop not in web:
+              raise SystemExit('Dashboard Safe Stop buttons not found')
+          success = 'command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")'
+          web = web.replace(old_hero_stop, success, 1)
+          web = web.replace(old_mobile_stop, success, 1)
+          web_path.write_text(web, encoding='utf-8')
+
+          bot_path = Path('apps/api/src/bot.controller.ts')
+          bot = bot_path.read_text(encoding='utf-8')
+          old_meta = 'SAFE_STOP: { label: "Safe Stop", detail: "บอทจะไม่เปิดรอบใหม่", tone: "warn" },'
+          new_meta = 'SAFE_STOP: { label: "Safe Stop", detail: "ไม่เปิดรอบใหม่ · รอบที่กำลังทำงานอยู่ยังจัดการและปิดตามเงื่อนไขเดิม", tone: "warn" },'
+          if old_meta not in bot:
+              raise SystemExit('SAFE_STOP status metadata not found')
+          bot = bot.replace(old_meta, new_meta, 1)
+          bot_path.write_text(bot, encoding='utf-8')
+
+          test_path = Path('tests/zero-grid-v1-simulation.mjs')
+          test = test_path.read_text(encoding='utf-8')
+          anchor = 'assert.match(ea, /ZeroGridPendingCount\\(\\)!=levels\\*2/, "flat ZERO must require the full configured ladder");\n'
+          addition = '''assert.match(ea, /bool safeStopDrain\\s*=\\s*[\\s\\S]*g_state==STATE_SAFE_STOP[\\s\\S]*if\\(!safeStopDrain\\)[\\s\\S]*ZeroGridCancelPending\\(\\)/, "ZERO Safe Stop must preserve the already-staged pending ladder");
+assert.match(ea, /pending=ZeroGridPendingCount\\(\\);[\\s\\S]*if\\(positions<=0 && pending<=0\\)/, "ZERO Safe Stop must not mark the cycle flat while pending orders still belong to it");
+'''
+          if anchor not in test:
+              raise SystemExit('ZERO regression insertion anchor not found')
+          test = test.replace(anchor, anchor + addition, 1)
+          test_path.write_text(test, encoding='utf-8')
+      - name: Validate narrow diff
+        run: |
+          node ./tests/zero-grid-v1-simulation.mjs
+          git diff --check
+          git diff -- mt5/FastBasketBot.mq5 apps/api/src/release-version.ts apps/api/src/bot.controller.ts apps/web/app/dashboard/page.tsx tests/zero-grid-v1-simulation.mjs
+      - name: Remove temporary workflow and commit
+        run: |
+          rm -f .github/workflows/apply-zero-safe-stop-temp.yml
+          git config user.name "scenova-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 apps/api/src/release-version.ts apps/api/src/bot.controller.ts apps/web/app/dashboard/page.tsx tests/zero-grid-v1-simulation.mjs .github/workflows/apply-zero-safe-stop-temp.yml
+          git commit -m "fix: let ZERO GRID drain safely on stop"
+          git push origin HEAD:fix/zero-grid-safe-stop-drain-feedback
