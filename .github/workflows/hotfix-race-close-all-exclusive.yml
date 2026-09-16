@@ -1,0 +1,56 @@
+name: Hotfix RACE Close-All Exclusivity
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-race-close-all-exclusive.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply tiny RACE close-all hotfix
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('mt5/FastBasketBot.mq5')
+          s = p.read_text(encoding='utf-8')
+          old = '''   int harvested = RaceHarvestProfitablePositions();
+   if(harvested > 0)
+'''
+          new = '''   // Close-All Profit and per-position harvesting are mutually exclusive.
+   // When the user enables Close-All Profit, keep the whole RACE basket intact
+   // until the configured net cycle target is reached, then close the basket.
+   int harvested = g_raceCloseAllProfitEnabled ? 0 : RaceHarvestProfitablePositions();
+   if(harvested > 0)
+'''
+          if old not in s:
+              raise SystemExit('target snippet not found; refusing to patch')
+          if '#property version   "1.0.23"' not in s:
+              raise SystemExit('EA version changed unexpectedly; refusing to patch')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+      - name: Verify hotfix scope
+        shell: bash
+        run: |
+          grep -F 'int harvested = g_raceCloseAllProfitEnabled ? 0 : RaceHarvestProfitablePositions();' mt5/FastBasketBot.mq5
+          grep -F '#property version   "1.0.23"' mt5/FastBasketBot.mq5
+          git diff --check
+          git diff -- mt5/FastBasketBot.mq5
+      - name: Commit directly to main and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name 'SCENOVA Build Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git rm .github/workflows/hotfix-race-close-all-exclusive.yml
+          git add mt5/FastBasketBot.mq5
+          git commit -m 'fix: make RACE close-all profit exclusive [skip ea build]'
+          git push origin HEAD:main
