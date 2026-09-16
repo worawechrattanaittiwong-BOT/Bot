@@ -79,6 +79,7 @@ export default function DashboardPage() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [checkingVersion, setCheckingVersion] = useState(false);
+  const [softwareUpdateAlertVisible, setSoftwareUpdateAlertVisible] = useState(false);
   const [activeView, setActiveView] = useState<View>("overview");
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const selectedSlotIdRef = useRef("");
@@ -498,6 +499,26 @@ export default function DashboardPage() {
   const softwareUpdateRequired =
     data?.selectedSlot?.mode === "LOCAL" &&
     Boolean(softwareUpdate.required);
+  const softwareUpdateAlertKey = [
+    softwareUpdateRequired ? "required" : "clear",
+    softwareUpdate.currentVersion || "",
+    softwareUpdate.latestVersion || "",
+    softwareUpdate.currentEaVersion || "",
+    softwareUpdate.latestEaVersion || "",
+    softwareUpdate.eaHashMatch === false ? "hash-mismatch" : "hash-ok",
+    softwareUpdate.runtimeContractMatch === false ? "runtime-mismatch" : "runtime-ok"
+  ].join("|");
+
+  useEffect(() => {
+    if (!softwareUpdateRequired) {
+      setSoftwareUpdateAlertVisible(false);
+      return;
+    }
+    setSoftwareUpdateAlertVisible(true);
+    const timer = window.setTimeout(() => setSoftwareUpdateAlertVisible(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [softwareUpdateAlertKey]);
+
   const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };
   const maintenanceBlocksStart = Boolean(maintenance.blockStarts);
   const maintenanceTimeLabel = maintenance.maintenance_at
@@ -1632,7 +1653,7 @@ export default function DashboardPage() {
         {error && <div className="notice bad page-notice">{error}</div>}
         {notice && <div className="notice good page-notice">{notice}</div>}
 
-        {activeView === "overview" && data.account && data.selectedSlot?.mode === "LOCAL" && softwareUpdateRequired && (
+        {activeView === "overview" && data.account && data.selectedSlot?.mode === "LOCAL" && softwareUpdateRequired && softwareUpdateAlertVisible && (
           <div className="cc-update-alert" role="alert">
             <div className="cc-update-alert-head">
               <span className="cc-update-alert-icon">!</span>
