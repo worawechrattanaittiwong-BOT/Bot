@@ -8,8 +8,7 @@ def replace_once(path: str, old: str, new: str):
         return
     if old not in text:
         raise SystemExit(f"anchor missing in {path}: {old[:120]!r}")
-    text = text.replace(old, new, 1)
-    p.write_text(text, encoding="utf-8")
+    p.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
 def replace_all(path: str, old: str, new: str):
@@ -26,8 +25,6 @@ ea = "mt5/FastBasketBot.mq5"
 web = "apps/web/app/dashboard/page.tsx"
 bot = "apps/api/src/bot.controller.ts"
 ea_api = "apps/api/src/ea.controller.ts"
-build = ".github/workflows/build-mt5-ea.yml"
-check = ".github/workflows/check-mt5-ea.yml"
 
 # ---- MT5 live runtime ----------------------------------------------------
 replace_all(ea, '#property version   "1.0.23"', '#property version   "1.0.24"')
@@ -124,25 +121,4 @@ replace_once(
     'String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "FLIP_LOCK" ? "FLIP LOCK" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "PARALLEL_UNIVERSE" ? "PARALLEL UNIVERSE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO · VECTOR" : settings.entryMode'
 )
 
-# ---- Official MT5 compile workflows must preserve include/ ----------------
-replace_once(
-    check,
-    '          $sourceDir = "$env:RUNNER_TEMP\\SCENOVA-EA-Source"\n          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null\n          $source = Join-Path $sourceDir "FastBasketBot.mq5"\n          Copy-Item -Force "mt5\\FastBasketBot.mq5" $source',
-    '          $source = (Resolve-Path "mt5\\FastBasketBot.mq5").Path'
-)
-
-replace_once(
-    build,
-    '            \'return g_engineMode == "AUTO" && g_controlMode == "AUTO";\',',
-    '            \'g_controlMode == "FLIP_LOCK" ||\',\n            \'g_controlMode == "PARALLEL_UNIVERSE";\',\n            \'#include "include\\\\AutoVectorEdgeLiveV1.mqh"\',\n            \'#include "include\\\\ParallelUniverseV1.mqh"\',\n            \'#include "include\\\\FlipLockV1.mqh"\','
-)
-
-replace_once(
-    build,
-    '          $sourceDir = "C:\\SCENOVA-EA-Source"\n          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null\n          $source = Join-Path $sourceDir "FastBasketBot.mq5"\n          Copy-Item -Force $mq5Path $source\n          "EA_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Append',
-    '          $source = $mq5Path\n          "EA_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Append'
-)
-
-replace_all(build, 'policy = "AUTO_V20_RACE_VOLUME_10S_ZERO_LOW_VOLATILITY_V3"', 'policy = "AUTO_VECTOR_EDGE_FLIP_LOCK_PARALLEL_UNIVERSE_V1"')
-
-print("live AUTO/VECTOR + FLIP LOCK + PARALLEL UNIVERSE patch applied")
+print("live AUTO/VECTOR + FLIP LOCK + PARALLEL UNIVERSE source patch applied")
