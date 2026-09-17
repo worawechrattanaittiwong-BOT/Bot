@@ -8,6 +8,7 @@ on:
   pull_request:
     paths:
       - "mt5/FastBasketBot.mq5"
+      - "mt5/include/**"
       - ".github/workflows/check-mt5-ea.yml"
 
 permissions:
@@ -36,10 +37,8 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          $sourceDir = "$env:RUNNER_TEMP\SCENOVA-EA-Source"
-          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
-          $source = Join-Path $sourceDir "FastBasketBot.mq5"
-          Copy-Item -Force "mt5\FastBasketBot.mq5" $source
+          # Compile from the repository so relative mt5/include/*.mqh imports resolve.
+          $source = (Resolve-Path "mt5\FastBasketBot.mq5").Path
           $log = "$env:RUNNER_TEMP\FastBasketBot-compile.log"
           Start-Process -FilePath "$env:METAEDITOR" -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
           if (Test-Path $log) { Get-Content $log }
