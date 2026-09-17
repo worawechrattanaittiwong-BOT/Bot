@@ -4,7 +4,7 @@ from pathlib import Path
 def replace_once(path: str, old: str, new: str):
     p = Path(path)
     text = p.read_text(encoding="utf-8")
-    if new in text:
+    if new and new in text:
         return
     count = text.count(old)
     if count != 1:
@@ -16,7 +16,7 @@ def replace_all(path: str, old: str, new: str):
     p = Path(path)
     text = p.read_text(encoding="utf-8")
     if old not in text:
-        if new in text:
+        if new and new in text:
             return
         raise SystemExit(f"anchor missing in {path}: {old[:140]!r}")
     p.write_text(text.replace(old, new), encoding="utf-8")
