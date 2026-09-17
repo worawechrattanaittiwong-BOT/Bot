@@ -46,9 +46,10 @@ jobs:
           grep -q 'TRADE_ACTION_SLTP' mt5/include/FlipLockV1.mqh
           grep -q 'STARTER_OPENED' mt5/include/FlipLockV1.mqh
           grep -q 'profitTargetMode","OFF' apps/web/app/dashboard/page.tsx
-          # FLIP implementation must not own RACE/ZERO execution functions.
-          if grep -Eq 'StartRaceCycle|ZeroGridPlace|ZeroGridArm|SaaSRace' mt5/include/FlipLockV1.mqh; then
-            echo "FLIP LOCK module leaked into RACE/ZERO ownership" >&2
+          # Reading/ignoring foreign comments is allowed. Calling another mode's
+          # execution functions from FLIP LOCK is not.
+          if grep -Eq 'StartRaceCycle\(|ZeroGridPlace|ZeroGridArm' mt5/include/FlipLockV1.mqh; then
+            echo "FLIP LOCK module leaked into RACE/ZERO execution ownership" >&2
             exit 1
           fi
 
