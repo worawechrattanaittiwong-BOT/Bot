@@ -724,10 +724,38 @@ export class EaController {
 
     // Re-read the control state immediately before responding so a Start/Stop
     // click that happened during this heartbeat cannot be overwritten by stale data.
-    const latestControl = await this.db.one(
+    let latestControl = await this.db.one(
       "SELECT desired_state FROM bot_instances WHERE id=$1",
       [instance.id]
     );
+
+    // SAFE_STOP is a drain transition, not a terminal state. When the EA has
+    // positively reported that it is flat and already in SAFE_STOP/STOPPED,
+    // finish the lifecycle by moving the Server control state to STOPPED.
+    // Internal risk/access locks keep their own executionStatus and are not
+    // collapsed into STOPPED here.
+    const heartbeatPositions = Number(metrics.positions);
+    const heartbeatExecutionStatus = String(metrics.executionStatus || "").toUpperCase();
+    const safeStopDrainComplete =
+      access &&
+      String(latestControl?.desired_state || "") === "SAFE_STOP" &&
+      Number.isFinite(heartbeatPositions) &&
+      heartbeatPositions <= 0 &&
+      (heartbeatExecutionStatus === "SAFE_STOP" || heartbeatExecutionStatus === "STOPPED") &&
+      !dailyProfitLocked;
+
+    if (safeStopDrainComplete) {
+      await this.db.query(
+        "UPDATE bot_instances SET desired_state='STOPPED' WHERE id=$1 AND desired_state='SAFE_STOP'",
+        [instance.id]
+      );
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=COALESCE(acked_at,now()) WHERE bot_instance_id=$1 AND command='SAFE_STOP' AND status IN ('PENDING','DELIVERED')",
+        [instance.id]
+      );
+      latestControl = { desired_state: "STOPPED" };
+    }
+
     const effectiveDesired = access
       ? String(latestControl?.desired_state || "STOPPED")
       : "SAFE_STOP";

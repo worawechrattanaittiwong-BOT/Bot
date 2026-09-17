@@ -548,13 +548,16 @@ export default function DashboardPage() {
     IDLE: "พร้อมรับคำสั่ง"
   };
   const startConnectionReady = isMt5Online || isAgentOnline;
-  // Let the customer press Start whenever SCENOVA has a live connection.
-  // Runtime/update/access/trading blockers are validated by /bot/start and
-  // shown as an explicit warning instead of silently disabling the button.
+  const safeStopInProgress =
+    desired === "SAFE_STOP" ||
+    (state === "SAFE_STOP" && Number(metrics.positions || 0) > 0);
+  // Let the customer press Start whenever SCENOVA has a live connection, but
+  // never race an in-flight Safe Stop drain. The Server also enforces this.
   const startBlocked =
     busy ||
     botStarting ||
     botRunning ||
+    safeStopInProgress ||
     maintenanceBlocksStart ||
     !startConnectionReady;
   const stopBlocked = busy || (desired !== "RUNNING" && state !== "RUNNING");
@@ -596,7 +599,9 @@ export default function DashboardPage() {
       : desired === "RUNNING"
         ? (state === "RUNNING" ? "บอทกำลังทำงาน" : (startPhaseLabel[startPhase] || "กำลังเริ่มบอท"))
         : desired === "SAFE_STOP"
-          ? "Safe Stop — ไม่เปิดออเดอร์ใหม่"
+          ? Number(metrics.positions || 0) > 0
+            ? `กำลังหยุดอย่างปลอดภัย — รอจัดการ ${Math.max(0, Number(metrics.positions || 0))} Position`
+            : "กำลังยืนยันการหยุดกับ EA — ไม่มี Position ค้าง"
           : "บอทหยุดอยู่";
   const actualStateLabel =
     state === "RUNNING" ? "RUNNING — กำลังทำงาน"
@@ -1855,12 +1860,12 @@ export default function DashboardPage() {
                   <div className={"cc-v6-run-state "+(state==="RUNNING"?"running":state==="SAFE_STOP"?"safe":"stopped")}>
                     <span className="cc-state-dot"/>
                     <div>
-                      <b>{startTimedOut?"เริ่มบอทไม่สำเร็จ":botStarting?"กำลังเริ่มบอท":state==="RUNNING"?"กำลังทำงาน":state==="SAFE_STOP"?"หยุดอย่างปลอดภัย":"บอทหยุดอยู่"}</b>
+                      <b>{startTimedOut?"เริ่มบอทไม่สำเร็จ":botStarting?"กำลังเริ่มบอท":state==="RUNNING"?"กำลังทำงาน":desired==="SAFE_STOP"?"กำลังหยุดอย่างปลอดภัย":state==="SAFE_STOP"?"หยุดอย่างปลอดภัย":"บอทหยุดอยู่"}</b>
                       <small>{startTimedOut ? String(startTransition.message || startPhaseLabel.TIMEOUT) : botStarting ? (startPhaseLabel[startPhase] || controlStateLabel) : controlStateLabel} · Heartbeat {heartbeatAgeSeconds.toFixed(0)} วินาที</small>
                     </div>
                   </div>
                   <div className="cc-v6-hero-actions">
-                    <button className={"cc-v6-command start "+(botStarting?"starting":botRunning?"running":"idle")} disabled={startBlocked} title={maintenanceBlocksStart?"ระบบปิด Start ใหม่ระหว่าง Safe Maintenance":!startConnectionReady?"รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5":undefined} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
+                    <button className={"cc-v6-command start "+(botStarting?"starting":botRunning?"running":"idle")} disabled={startBlocked} title={maintenanceBlocksStart?"ระบบปิด Start ใหม่ระหว่าง Safe Maintenance":safeStopInProgress?"กำลัง Safe Stop · รอให้ Position เป็น 0 และ EA ยืนยัน STOPPED":!startConnectionReady?"รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5":undefined} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
                       <span>{botStarting?<i className="cc-start-spinner"/>:botRunning?<i className="cc-start-pulse"/>:<ScenovaIcon name="play" size={22}/>}</span><b>{botStarting?"กำลังเริ่ม":botRunning?"ทำงานอยู่":"เริ่มบอท"}</b><small>Start Trading</small>
                     </button>
                     <button className="cc-v6-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><span><ScenovaIcon name="stop" size={21}/></span><b>หยุดบอท</b><small>Safe Stop</small></button>

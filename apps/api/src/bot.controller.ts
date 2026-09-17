@@ -1450,6 +1450,15 @@ export class BotController {
     if (unresolvedCloseAll) {
       throw new ConflictException("ยังมีคำสั่ง Close All รอ EA ยืนยัน กรุณารอให้ Position เป็น 0 ก่อนเริ่มบอท");
     }
+    const livePositions = Math.max(0, Number(instance.metrics?.positions || 0));
+    if (
+      String(instance.desired_state || "") === "SAFE_STOP" ||
+      (String(instance.actual_state || "") === "SAFE_STOP" && livePositions > 0)
+    ) {
+      throw new ConflictException(
+        "Safe Stop กำลังทำงานอยู่ กรุณารอให้ Position เป็น 0 และสถานะเป็น STOPPED ก่อนเริ่มบอทอีกครั้ง"
+      );
+    }
     const access: any = await this.entitlement(
       req.user.sub,
       instance.mt5_account_id,
