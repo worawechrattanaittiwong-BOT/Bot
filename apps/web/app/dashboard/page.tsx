@@ -1802,9 +1802,9 @@ export default function DashboardPage() {
                     <h2>{metrics.symbol || settings.symbol}</h2>
                     <p>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}<em/>MT5 Expert Advisor</p>
                     <div className="cc-v6-symbol-chips">
-                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO" : settings.entryMode}</span>
+                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "FLIP_LOCK" ? "FLIP LOCK" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "PARALLEL_UNIVERSE" ? "PARALLEL UNIVERSE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO + VECTOR EDGE" : settings.entryMode}</span>
                       <span>{Number(settings.lot||0).toFixed(2)} Lot</span>
-                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" BUY STOP + "+Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" SELL STOP" : configuredMaxPositions+" ไม้"}</span>
+                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" BUY STOP + "+Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" SELL STOP" : ["FLIP_LOCK","PARALLEL_UNIVERSE"].includes(String(settings.controlMode || "").toUpperCase()) ? "1 ไม้" : configuredMaxPositions+" ไม้"}</span>
                       <HeroTrendChip label="M5" value={metrics.trendM5}/>
                       <HeroTrendChip label="M15" value={metrics.trendM15}/>
                       <HeroTrendChip label="M30" value={metrics.trendM30}/>
@@ -2848,7 +2848,9 @@ function BotSettingsModal(props:any) {
     props.systemHardStopDistancePoints || props.hardStopDistancePoints || 1000
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
-    AUTO:{title:"AUTO",subtitle:"ระบบวิเคราะห์ทิศทาง จุดเข้า และการบริหารสถานะตามเงื่อนไขของกลยุทธ์"},
+    AUTO:{title:"AUTO + VECTOR EDGE",subtitle:"สมอง AUTO รวม Probability, Expected Value, Entropy, ต้นทุน และแรงเคลื่อนไหวเพื่อคัดจังหวะที่มี Edge"},
+    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"ถือครั้งละ 1 Position ล็อกกำไรด้วยเส้นกลับตัวแบบไดนามิก แล้วปิดขาเดิมก่อนสลับ BUY ↔ SELL"},
+    PARALLEL_UNIVERSE:{title:"PARALLEL UNIVERSE",subtitle:"เทียบสถิติ BUY/SELL จากเหตุการณ์ย้อนหลังที่คล้ายกันและไม่เข้าเมื่อข้อมูลหรือ Expected Value ไม่พอ"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
     MANUAL:{title:"MANUAL",subtitle:"ระบบวิเคราะห์ทิศทางและจุดเข้าอัตโนมัติ โดยผู้ใช้กำหนด Lot เป้าหมายกำไร และจุดหยุดขาดทุน"}
@@ -2857,6 +2859,9 @@ function BotSettingsModal(props:any) {
   const applyControlMode = (mode:string) => {
     props.onEdit?.("controlMode",mode);
     props.onEdit?.("confidenceGateEnabled",false);
+    if (mode === "FLIP_LOCK" || mode === "PARALLEL_UNIVERSE" || mode === "AUTO") {
+      props.onEdit?.("engineMode","AUTO");
+    }
     // ZERO GRID is price-only and does not use AUTO direction/brain settings.
     if (mode === "ZERO_GRID") {
       props.onEdit?.("engineMode","ZERO_GRID");
@@ -2932,7 +2937,9 @@ function BotSettingsModal(props:any) {
             <div className="cc-bot-v2-section-title"><span>01</span><div><b>เลือกรูปแบบการควบคุม</b><small>แต่ละโหมดจะเปิดเฉพาะค่าที่เกี่ยวข้องกับการส่งออเดอร์จริง</small></div></div>
             <div className="cc-bot-v2-modes" role="radiogroup" aria-label="รูปแบบการควบคุมบอท">
               {[
-                {id:"AUTO",icon:"brain",tag:"แนะนำ"},
+                {id:"AUTO",icon:"brain",tag:"VECTOR EDGE รวมแล้ว"},
+                {id:"FLIP_LOCK",icon:"status",tag:"ล็อกกำไร · สลับทิศ"},
+                {id:"PARALLEL_UNIVERSE",icon:"brain",tag:"Historical Worlds"},
                 {id:"RACE",icon:"status",tag:"ดำเนินการเร็ว"},
                 {id:"ZERO_GRID",icon:"layers",tag:"กริดแบบ Hedging"},
                 {id:"MANUAL",icon:"settings",tag:"กำหนดรายละเอียด"}
@@ -2970,11 +2977,11 @@ function BotSettingsModal(props:any) {
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="shield" size={17}/>เงินสำรองสำหรับค่าปิด</span><MoneyInput value={props.settings.zeroGridCloseReserveMoney || 0.2} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridCloseReserveMoney",v)}/></label>
                   </> : <>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ · EA เลือก BUY / SELL</option><option value="BUY_ONLY">BUY เท่านั้น</option><option value="SELL_ONLY">SELL เท่านั้น</option></select><small>{entryMode === "AUTO_MOMENTUM" ? "M1 / M5 / M15 / M30 / H1 วิเคราะห์ทิศทางอัตโนมัติ" : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า"}</small></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</span><select className="input" value={String(props.settings.maxPositions||1)} onChange={e=>props.onEdit?.("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>
+                    {(controlMode==="FLIP_LOCK"||controlMode==="PARALLEL_UNIVERSE") ? <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</label><strong>1 ไม้</strong><small>โหมดนี้บังคับ 1 Position / 1 Direction / 1 Risk Budget</small></div> : <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</span><select className="input" value={String(props.settings.maxPositions||1)} onChange={e=>props.onEdit?.("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>}
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
                   </>}
                 </div>
-                {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>}
+                {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>{controlMode==="FLIP_LOCK"?"1 Position · Flip เมื่อกำไรย้อน":controlMode==="PARALLEL_UNIVERSE"?"1 Position · เข้าเมื่อสถิติยืนยัน":"การเพิ่มสถานะอัตโนมัติ"}</b><span>{controlMode==="FLIP_LOCK"?"ปิดขาเดิมให้ Flat ก่อนเปิดฝั่งตรงข้าม · ไม่ Martingale / ไม่ Grid":controlMode==="PARALLEL_UNIVERSE"?"ต้องมี Historical Samples สองฝั่งและ Expected Value เป็นบวกก่อนส่งออเดอร์":"EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด"}</span></div>}
               </section>
 
               {controlMode!=="ZERO_GRID"&&(
@@ -3018,7 +3025,7 @@ function BotSettingsModal(props:any) {
             </main>
 
             <aside className="cc-bot-v2-summary">
-              <div className="cc-bot-v2-summary-head"><span><ScenovaIcon name="status" size={19}/></span><div><small>แผนที่จะบันทึก</small><b>{modeCopy[controlMode].title}</b></div><i/></div>
+              <div className="cc-bot-v2-summary-head"><span><ScenovaIcon name="status" size={19}/></span><div><small>แผนที่จะบันทึก</small><b>{(modeCopy[controlMode]||modeCopy.AUTO).title}</b></div><i/></div>
               {controlMode==="ZERO_GRID" ? <dl>
                 <div><dt>คู่เทรด</dt><dd>{props.symbol || "—"}</dd></div>
                 <div><dt>รูปแบบกริด</dt><dd>{zeroGridLowVolatilityEnabled?"ตลาดความผันผวนต่ำ":"กริดมาตรฐาน"}</dd></div>
