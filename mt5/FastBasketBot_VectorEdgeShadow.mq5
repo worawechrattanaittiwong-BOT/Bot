@@ -1,25 +1,35 @@
 // SCENOVA AUTO + VECTOR EDGE — Phase 2 Shadow Harness
 // ----------------------------------------------------
-// This is a branch-only observation build. It deliberately leaves
-// FastBasketBot.mq5 unchanged.
-//
-// Safety design:
-// 1) The production EA is included unchanged.
-// 2) Only OnTimer is wrapped.
-// 3) The original OnTimer runs FIRST and preserves all existing behavior.
-// 4) VECTOR EDGE runs AFTERWARD and only reads AUTO V20 diagnostics.
-// 5) VECTOR EDGE output is written to the Experts/Tester log only.
-// 6) No VECTOR EDGE value is fed back into trading decisions.
-//
-// DO NOT publish this harness as the normal production EA until shadow
-// telemetry has been reviewed and an explicit later rollout is approved.
+// Branch-only observation build. Production FastBasketBot.mq5 stays unchanged.
+// The base engine executes first; VECTOR EDGE only reads diagnostics afterward.
 
+#define OnInit  ScenovaBaseOnInit
 #define OnTimer ScenovaBaseOnTimer
 #include "FastBasketBot.mq5"
+#undef OnInit
 #undef OnTimer
 
 #include "include\AutoVectorEdgeV1.mqh"
 #include "include\AutoVectorEdgeShadowV1.mqh"
+
+bool VectorEdgeShadowHarnessRealAccount()
+{
+   if(MQLInfoInteger(MQL_TESTER))
+      return false;
+   return (ENUM_ACCOUNT_TRADE_MODE)AccountInfoInteger(ACCOUNT_TRADE_MODE) ==
+          ACCOUNT_TRADE_MODE_REAL;
+}
+
+int OnInit()
+{
+   // Shadow validation must never be attached accidentally to a REAL account.
+   if(VectorEdgeShadowHarnessRealAccount())
+   {
+      Print("VECTOR EDGE SHADOW HARNESS BLOCKED: real account is not permitted.");
+      return INIT_FAILED;
+   }
+   return ScenovaBaseOnInit();
+}
 
 void OnTimer()
 {
