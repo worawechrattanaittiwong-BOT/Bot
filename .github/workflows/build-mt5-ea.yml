@@ -2,6 +2,7 @@ name: Build MT5 EA
 
 # Official compile/publish pipeline for AUTO + VECTOR EDGE, FLIP LOCK,
 # PARALLEL UNIVERSE, RACE and ZERO GRID.
+# Modular FastBasketBot.Part*.mqh source is validated and compiled as one EA.
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
   cancel-in-progress: true
