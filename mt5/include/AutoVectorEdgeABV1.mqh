@@ -22,13 +22,6 @@ struct VECTOR_EDGE_AB_RESULT
    string variantBReason;
 };
 
-long g_vectorEdgeABLastDecisionId = -1;
-long g_vectorEdgeABDecisions = 0;
-long g_vectorEdgeABVariantAEntries = 0;
-long g_vectorEdgeABVariantBKeep = 0;
-long g_vectorEdgeABVariantBBlock = 0;
-long g_vectorEdgeABDirectionMismatch = 0;
-
 VECTOR_EDGE_AB_RESULT VectorEdgeABEvaluate(const bool variantAAccepted,
                                            const int variantADirection,
                                            const VECTOR_EDGE_OUTPUT &edge)
@@ -79,6 +72,15 @@ VECTOR_EDGE_AB_RESULT VectorEdgeABEvaluate(const bool variantAAccepted,
    result.variantBReason = "KEEP_AUTO_DECISION";
    return result;
 }
+
+#ifndef VECTOR_EDGE_AB_PURE_ONLY
+
+long g_vectorEdgeABLastDecisionId = -1;
+long g_vectorEdgeABDecisions = 0;
+long g_vectorEdgeABVariantAEntries = 0;
+long g_vectorEdgeABVariantBKeep = 0;
+long g_vectorEdgeABVariantBBlock = 0;
+long g_vectorEdgeABDirectionMismatch = 0;
 
 string VectorEdgeABSummaryJson()
 {
@@ -152,5 +154,7 @@ void AutoVectorEdgeABObserve()
    if(g_vectorEdgeABDecisions % 25 == 0)
       Print("VECTOR_EDGE_AB_SUMMARY ",VectorEdgeABSummaryJson());
 }
+
+#endif // VECTOR_EDGE_AB_PURE_ONLY
 
 #endif // SCENOVA_AUTO_VECTOR_EDGE_AB_V1_MQH
