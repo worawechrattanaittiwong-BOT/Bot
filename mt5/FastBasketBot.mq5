@@ -5732,6 +5732,8 @@ void ApplySettings(string json)
       g_maxPositions = 1;
       g_rescueEnabled = false;
       g_profitTargetMode = "OFF";
+      g_dailyProfitContinueAfterTarget = false;
+      g_dailyProfitDrawdownPercent = 0.0;
    }
    else
       g_rescueEnabled = InpAdaptiveRescueEngine;

@@ -2886,6 +2886,8 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("profitTargetMode","OFF");
       props.onEdit?.("manualStopLossPoints",0);
       props.onEdit?.("maxPositions",1);
+      props.onEdit?.("dailyProfitContinueAfterTarget",false);
+      props.onEdit?.("dailyProfitDrawdownPercent",0);
       return;
     }
     if (mode === "AUTO" || mode === "PARALLEL_UNIVERSE") {
