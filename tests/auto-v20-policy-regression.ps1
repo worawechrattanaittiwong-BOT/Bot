@@ -2,6 +2,10 @@ $ErrorActionPreference = 'Stop'
 
 $sourcePath = Join-Path $PSScriptRoot '..\mt5\FastBasketBot.mq5'
 $source = Get-Content $sourcePath -Raw
+$sourceDir = Split-Path $sourcePath -Parent
+Get-ChildItem $sourceDir -Filter 'FastBasketBot.Part*.mqh' -File -ErrorAction SilentlyContinue |
+  Sort-Object Name |
+  ForEach-Object { $source += "`n" + (Get-Content $_.FullName -Raw) }
 foreach($requiredPolicy in @(
   'double AutoV20NetRewardRisk\(',
   'AUTO_V20_BROKER_PROTECTION_INVALID',
