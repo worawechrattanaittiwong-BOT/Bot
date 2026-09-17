@@ -58,18 +58,18 @@ jobs:
       - name: Build web and API
         run: npm run build
 
-      - name: Commit validated patch to feature branch
+      - name: Commit validated source patch to feature branch
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "SCENOVA Build Bot"
           git config user.email "actions@users.noreply.github.com"
+          # Workflow files are maintained directly through the GitHub connector.
+          # GITHUB_TOKEN intentionally does not receive workflow-write authority.
           git add mt5/FastBasketBot.mq5 \
             apps/api/src/bot.controller.ts \
             apps/api/src/ea.controller.ts \
-            apps/web/app/dashboard/page.tsx \
-            .github/workflows/build-mt5-ea.yml \
-            .github/workflows/check-mt5-ea.yml
+            apps/web/app/dashboard/page.tsx
           if git diff --cached --quiet; then
             echo "Patch already current."
             exit 0
