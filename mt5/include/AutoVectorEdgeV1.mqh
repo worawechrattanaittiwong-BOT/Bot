@@ -4,7 +4,7 @@
 // SCENOVA AUTO VECTOR EDGE V1
 // Pure decision-support math for AUTO. No trade/order APIs are allowed here.
 
-#define VECTOR_EDGE_V1_VERSION "1.2.2-shadow"
+#define VECTOR_EDGE_V1_VERSION "1.2.3-live-compatible"
 
 struct VECTOR_EDGE_INPUT
 {
@@ -97,7 +97,7 @@ double VectorDirectionalAgreement(const int direction,
    return VectorClamp01(velocityScore * 0.60 + accelerationScore * 0.40);
 }
 
-VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
+VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &edgeInput)
 {
    VECTOR_EDGE_OUTPUT out;
    out.valid = false;
@@ -113,8 +113,8 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
    out.exitEdgeLost = true;
    out.reason = "INVALID";
 
-   double buyP = VectorClamp01(input.buyProbability);
-   double sellP = VectorClamp01(input.sellProbability);
+   double buyP = VectorClamp01(edgeInput.buyProbability);
+   double sellP = VectorClamp01(edgeInput.sellProbability);
    double probabilitySum = buyP + sellP;
 
    // Entropy is relative-direction ambiguity only. 0%/0% is valid evidence
@@ -126,10 +126,10 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
       out.entropy = 1.0;
 
    // EV/Kelly keep each side's absolute probability; never normalize them.
-   out.buyEV = VectorExpectedValue(buyP,input.buyExpectedWinMoney,
-                                   input.buyExpectedLossMoney,input.buyKnownCostMoney);
-   out.sellEV = VectorExpectedValue(sellP,input.sellExpectedWinMoney,
-                                    input.sellExpectedLossMoney,input.sellKnownCostMoney);
+   out.buyEV = VectorExpectedValue(buyP,edgeInput.buyExpectedWinMoney,
+                                   edgeInput.buyExpectedLossMoney,edgeInput.buyKnownCostMoney);
+   out.sellEV = VectorExpectedValue(sellP,edgeInput.sellExpectedWinMoney,
+                                    edgeInput.sellExpectedLossMoney,edgeInput.sellKnownCostMoney);
 
    if(out.buyEV > out.sellEV)
       out.preferredDirection = 1;
@@ -139,22 +139,22 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
    double bestEV = MathMax(out.buyEV,out.sellEV);
    double chosenProbability = out.preferredDirection > 0 ? buyP :
                               out.preferredDirection < 0 ? sellP : 0.5;
-   double chosenWin = out.preferredDirection > 0 ? input.buyExpectedWinMoney :
-                      out.preferredDirection < 0 ? input.sellExpectedWinMoney : 0.0;
-   double chosenLoss = out.preferredDirection > 0 ? input.buyExpectedLossMoney :
-                       out.preferredDirection < 0 ? input.sellExpectedLossMoney : 0.0;
-   double chosenCost = out.preferredDirection > 0 ? input.buyKnownCostMoney :
-                       out.preferredDirection < 0 ? input.sellKnownCostMoney : 0.0;
+   double chosenWin = out.preferredDirection > 0 ? edgeInput.buyExpectedWinMoney :
+                      out.preferredDirection < 0 ? edgeInput.sellExpectedWinMoney : 0.0;
+   double chosenLoss = out.preferredDirection > 0 ? edgeInput.buyExpectedLossMoney :
+                       out.preferredDirection < 0 ? edgeInput.sellExpectedLossMoney : 0.0;
+   double chosenCost = out.preferredDirection > 0 ? edgeInput.buyKnownCostMoney :
+                       out.preferredDirection < 0 ? edgeInput.sellKnownCostMoney : 0.0;
 
    out.directionalAgreement = VectorDirectionalAgreement(
-      out.preferredDirection,input.velocity,input.acceleration
+      out.preferredDirection,edgeInput.velocity,edgeInput.acceleration
    );
 
-   double uncertainty = VectorClamp01(input.modelUncertainty);
-   double persistence = VectorClamp01(input.persistence);
+   double uncertainty = VectorClamp01(edgeInput.modelUncertainty);
+   double persistence = VectorClamp01(edgeInput.persistence);
    double structure = 1.0 - out.entropy;
-   double noisePenalty = MathMax(0.0,input.volatilityNoise) +
-                         MathMax(0.0,input.spreadPenalty) + uncertainty;
+   double noisePenalty = MathMax(0.0,edgeInput.volatilityNoise) +
+                         MathMax(0.0,edgeInput.spreadPenalty) + uncertainty;
 
    if(bestEV > 0.0 && out.preferredDirection != 0)
    {

@@ -1,0 +1,78 @@
+name: Apply Live AUTO Vector Flip Parallel
+
+on:
+  push:
+    branches: [feature/live-auto-flip-parallel]
+    paths:
+      - "scripts/upgrade-live-auto-flip-parallel.py"
+      - ".github/workflows/apply-live-auto-flip-parallel.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-live-auto-flip-parallel
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Apply production mode patch
+        run: python3 scripts/upgrade-live-auto-flip-parallel.py
+
+      - name: Static isolation checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'g_controlMode == "FLIP_LOCK"' mt5/FastBasketBot.mq5
+          grep -q 'g_controlMode == "PARALLEL_UNIVERSE"' mt5/FastBasketBot.mq5
+          grep -q 'AutoVectorEdgeLiveAllow' mt5/FastBasketBot.mq5
+          grep -q 'ParallelUniverseLiveAllow' mt5/FastBasketBot.mq5
+          grep -q 'FlipLockManage' mt5/FastBasketBot.mq5
+          grep -q 'FLIP_LOCK' apps/api/src/bot.controller.ts
+          grep -q 'PARALLEL_UNIVERSE' apps/api/src/ea.controller.ts
+          grep -q 'AUTO · VECTOR EDGE' apps/web/app/dashboard/page.tsx
+          grep -q 'FLIP LOCK' apps/web/app/dashboard/page.tsx
+          grep -q 'PARALLEL UNIVERSE' apps/web/app/dashboard/page.tsx
+          if grep -Eq 'SaaSRace|ZERO_GRID' mt5/include/AutoVectorEdgeLiveV1.mqh; then
+            echo "Vector live module must not own RACE/ZERO" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build web and API
+        run: npm run build
+
+      - name: Commit validated source patch to feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          # Workflow files are maintained directly through the GitHub connector.
+          # GITHUB_TOKEN intentionally does not receive workflow-write authority.
+          git add mt5/FastBasketBot.mq5 \
+            apps/api/src/bot.controller.ts \
+            apps/api/src/ea.controller.ts \
+            apps/web/app/dashboard/page.tsx
+          if git diff --cached --quiet; then
+            echo "Patch already current."
+            exit 0
+          fi
+          git commit -m "feat: enable AUTO Vector Edge, Flip Lock and Parallel Universe"
+          git push origin HEAD:feature/live-auto-flip-parallel

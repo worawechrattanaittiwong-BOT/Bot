@@ -1668,7 +1668,7 @@ export class BotController {
       ? String(body.engineMode || "").toUpperCase()
       : null;
 
-    if (requestedControlMode !== null && !["AUTO", "RACE", "ZERO_GRID", "ASSISTED", "MANUAL"].includes(requestedControlMode)) {
+    if (requestedControlMode !== null && !["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "PARALLEL_UNIVERSE", "ASSISTED", "MANUAL"].includes(requestedControlMode)) {
       throw new BadRequestException("Control Mode ไม่ถูกต้อง");
     }
     if (requestedEngineMode !== null && !["AUTO", "RACE", "ZERO_GRID"].includes(requestedEngineMode)) {

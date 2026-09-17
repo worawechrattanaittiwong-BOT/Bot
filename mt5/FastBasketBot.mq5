@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.23"
-#define SCENOVA_EA_VERSION "1.0.23"
-#define SCENOVA_PRODUCT_VERSION "1.0.23"
+#property version   "1.0.24"
+#define SCENOVA_EA_VERSION "1.0.24"
+#define SCENOVA_PRODUCT_VERSION "1.0.24"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1664,7 +1664,8 @@ string EffectiveExecutionMode()
    StringToUpper(control);
    if(control == "ZERO_GRID") return "ZERO_GRID";
    if(control == "RACE") return "RACE";
-   if(control == "AUTO" || control == "ASSISTED" || control == "MANUAL")
+   if(control == "AUTO" || control == "FLIP_LOCK" || control == "PARALLEL_UNIVERSE" ||
+      control == "ASSISTED" || control == "MANUAL")
       return "AUTO";
 
    string engine=g_engineMode;
@@ -4056,6 +4057,10 @@ void OnTimer()
    }
    FlushPendingBasketJournal();
 
+   // FLIP LOCK supplements AUTO V20 only and is a no-op in every other mode.
+   if(FlipLockModeEnabled())
+      FlipLockManage();
+
    // ZERO_GRID_TIMER_MAINTENANCE_V116: ZERO is isolated from AUTO/RACE and may
    // finalize an async close or finish/retry its exact paired ladder from the
    // 200ms timer instead of waiting for another market tick.
@@ -5685,7 +5690,8 @@ void ApplySettings(string json)
    StringToUpper(requestedControlMode);
    bool hasControlMode =
       requestedControlMode == "AUTO" || requestedControlMode == "RACE" ||
-      requestedControlMode == "ZERO_GRID" || requestedControlMode == "ASSISTED" ||
+      requestedControlMode == "ZERO_GRID" || requestedControlMode == "FLIP_LOCK" ||
+      requestedControlMode == "PARALLEL_UNIVERSE" || requestedControlMode == "ASSISTED" ||
       requestedControlMode == "MANUAL" || requestedControlMode == "LEGACY";
 
    // Hard isolation: one execution owner at a time. controlMode is authoritative
@@ -5708,6 +5714,11 @@ void ApplySettings(string json)
    // A valid Server-delivered mode is the startup ownership latch.
    if(hasControlMode || hasEngineMode)
       g_settingsSynchronized = true;
+
+   // FLIP LOCK is intentionally single-position to prevent accidental basket
+   // averaging while a baton-switch cycle is active.
+   if(g_controlMode == "FLIP_LOCK")
+      g_maxPositions = 1;
 
    // A legacy AUTO burst must never survive a transition into an isolated mode.
    // Existing non-ZERO/non-RACE positions may still drain under generic safety
@@ -11254,8 +11265,15 @@ bool BrainV13FastWrongEntryCorrection(double momentum)
 // legacy V19/V18/V16 paths below this block.
 bool AutoV20Enabled()
 {
-   return g_engineMode == "AUTO" && g_controlMode == "AUTO";
+   if(g_engineMode != "AUTO") return false;
+   return g_controlMode == "AUTO" ||
+          g_controlMode == "FLIP_LOCK" ||
+          g_controlMode == "PARALLEL_UNIVERSE";
 }
+
+#include "include\\AutoVectorEdgeLiveV1.mqh"
+#include "include\\ParallelUniverseV1.mqh"
+#include "include\\FlipLockV1.mqh"
 
 double AutoV20Clamp(double value,double minimum,double maximum)
 {
@@ -12038,6 +12056,26 @@ int AutoV20PrecisionDirection(double momentum)
 
    if(preliminary!=0 && preliminary!=direction)
       g_autoV20DirectionChangeReason="FINAL_RR_LOCATION_HISTORY_CHANGED_SIDE";
+
+   string vectorLiveReason="NONE";
+   if(!AutoVectorEdgeLiveAllow(direction,vectorLiveReason))
+   {
+      g_autoV20RejectReason=vectorLiveReason;
+      g_adaptiveBlockReason="AUTO_VECTOR_EDGE_WAIT";
+      g_cachedAdaptiveDirection=0;
+      g_cachedAdaptiveBlockReason=g_adaptiveBlockReason;
+      return 0;
+   }
+
+   string parallelReason="NONE";
+   if(!ParallelUniverseLiveAllow(direction,parallelReason))
+   {
+      g_autoV20RejectReason=parallelReason;
+      g_adaptiveBlockReason="PARALLEL_UNIVERSE_WAIT";
+      g_cachedAdaptiveDirection=0;
+      g_cachedAdaptiveBlockReason=g_adaptiveBlockReason;
+      return 0;
+   }
 
    g_autoV20DecisionReason=selected.reason;
    g_autoV20RejectReason="NONE";
