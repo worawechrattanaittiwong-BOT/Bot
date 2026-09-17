@@ -1,20 +1,21 @@
-# AUTO + VECTOR EDGE V1 — Shadow Integration Contract
+# AUTO + VECTOR EDGE V1 — Isolation / Shadow / A-B Contract
 
 ## Goal
 
-VECTOR EDGE V1 is a mathematical decision-support module for `AUTO` only. It is deliberately introduced as a pure/shadow component before any live decision integration.
+VECTOR EDGE V1 is a mathematical decision-support module for `AUTO` only. It is introduced in isolated stages before any live decision integration.
 
-The first releases **must not change live trading behavior**.
+Phases 1–3 **must not change live trading behavior**.
 
 ## Non-negotiable isolation rules
 
 1. VECTOR EDGE V1 must not call any MT5 trade function.
 2. It must not send, modify, cancel, or close orders.
 3. It must not change `AUTO`, `RACE`, `ZERO_GRID`, `ASSISTED`, or `MANUAL` ownership/state.
-4. It must not alter existing confidence gates, setup grades, rescue logic, ladder logic, profit defense, SL/TP, or sizing in V1.
-5. It may only consume copies of already-available AUTO diagnostics and return diagnostics of its own.
+4. It must not alter existing confidence gates, setup grades, rescue logic, ladder logic, profit defense, SL/TP, or sizing in Phases 1–3.
+5. It may only consume copies of already-available AUTO diagnostics and return/log diagnostics of its own.
 6. Any future behavior-changing integration must be separately feature-gated and default OFF until validated by backtest + forward/shadow telemetry.
-7. The production `mt5/FastBasketBot.mq5` remains unchanged during Phase 1 and Phase 2.
+7. The production `mt5/FastBasketBot.mq5` remains unchanged during Phases 1–3.
+8. Variant B in Phase 3 is filter-only: it can never create a trade that Variant A did not already accept.
 
 ## V1 outputs
 
@@ -48,7 +49,7 @@ Binary Shannon entropy is used as an uncertainty diagnostic over normalized BUY/
 - near `0` = one direction strongly dominates
 - near `1` = BUY/SELL probability is close to 50/50
 
-Entropy is not a hard gate in V1.
+Entropy is not a live hard gate in V1.
 
 ### Motion agreement
 
@@ -91,8 +92,6 @@ It uses the unchanged production EA source and renames only its `OnTimer` handle
 4. emits one JSON-line shadow record roughly every five seconds;
 5. never sends VECTOR EDGE output back into entry, exit, sizing, SL/TP, rescue, ladder, ownership, or any execution path.
 
-This ordering is intentional: VECTOR EDGE cannot run before the existing timer and therefore cannot influence what the original timer already decided.
-
 ### Scope gate
 
 Shadow evaluation runs only when `AutoV20Enabled()` is true, which requires:
@@ -126,38 +125,69 @@ The adapter consumes copies of existing diagnostics only:
 
 None of these source values are modified.
 
-### Shadow telemetry
+## Phase 3 — DONE as counterfactual A/B harness
 
-Phase 2 intentionally writes JSON telemetry only to the MT5 Experts / Strategy Tester log:
+Files:
 
-`VECTOR_EDGE_SHADOW { ... }`
+- `mt5/include/AutoVectorEdgeABV1.mqh`
+- `mt5/FastBasketBot_VectorEdgeAB.mq5`
+- `mt5/tests/AutoVectorEdgeABV1SelfTest.mq5`
 
-Fields include:
+### A/B design
 
-- `preferredDirection`
-- `entropy`
-- `directionalAgreement`
-- `buyEV`
-- `sellEV`
-- `edgeRatio`
-- `fractionalKelly`
-- `riskMultiplier`
-- `positiveExpectancy`
-- `exitEdgeLost`
-- `reason`
-- `probabilitySource`
-- sample count and version
+- **Variant A** = existing AUTO V20 and remains the only real execution path.
+- **Variant B** = hypothetical VECTOR EDGE filter over decisions already accepted by Variant A.
+- Variant B has no order execution path.
+- `VECTOR_EDGE_AB_EXECUTION_ENABLED` is hard-coded `false`.
+- Variant B can only classify an accepted AUTO decision as `KEEP_AUTO_DECISION` or `WOULD_BLOCK` with a reason.
+- Variant B can never promote an AUTO rejection/no-trade into a new trade.
+- Existing AUTO orders still execute exactly as Variant A decided.
 
-The production SaaS heartbeat payload is deliberately untouched in Phase 2. Dashboard/server telemetry can be considered later only after the shadow build is compile-tested and reviewed.
+This design deliberately measures the counterfactual question:
 
-## Phase 3 — Decision A/B test — NOT STARTED
+> If VECTOR EDGE had been used only as an additional conservative filter, which existing AUTO trades would it have kept or filtered?
 
-Only after shadow evidence:
+Because Variant A still takes the real trades, actual trade outcomes can later be compared against the logged Variant B KEEP/BLOCK labels without exposing capital to an unvalidated filter.
 
-- feature flag default OFF
-- compare current AUTO vs AUTO + VECTOR EDGE filter
-- validate expectancy, drawdown, missed winners, order count, and cost sensitivity
-- no merge to `main` without explicit review
+### Phase 3 filter profile
+
+The first counterfactual profile is intentionally simple and fixed for reproducibility:
+
+- positive expected value required
+- VECTOR preferred direction must match AUTO direction
+- `edgeRatio >= 40`
+- `directionalAgreement >= 0.35`
+- `entropy <= 0.98`
+
+These are experiment thresholds only. They are **not production trading rules** and must not be tuned on a single profitable backtest.
+
+### Decision-scoped logging
+
+The observer samples only when `g_autoV20DecisionId` changes. Each record includes:
+
+- AUTO decision ID and FIRST/ADD kind
+- whether AUTO accepted the decision
+- AUTO direction/reason/reject reason
+- hypothetical Variant B KEEP/BLOCK result and reason
+- VECTOR preferred direction
+- edge ratio
+- entropy
+- directional agreement
+- BUY EV / SELL EV
+
+A rolling summary is printed every 25 observed AUTO decisions.
+
+### Phase 3 output
+
+Logs:
+
+`VECTOR_EDGE_AB { ... }`
+
+and periodically:
+
+`VECTOR_EDGE_AB_SUMMARY { ... }`
+
+The production SaaS heartbeat remains untouched.
 
 ## Phase 4 — Optional dynamic exit — NOT STARTED
 
@@ -173,31 +203,37 @@ Only if Phase 3 improves out-of-sample results:
 1. Production `mt5/FastBasketBot.mq5` remains unchanged.
 2. Existing `main` branch remains unchanged.
 3. RACE / ZERO GRID / ASSISTED / MANUAL code remains untouched.
-4. Shadow observer is hard-gated by `AutoV20Enabled()`.
-5. Original `OnTimer` executes before VECTOR EDGE shadow observation.
+4. Shadow and A/B observers are hard-gated by `AutoV20Enabled()`.
+5. Original `OnTimer` executes before VECTOR EDGE observation.
 6. Negative EV never produces a positive edge classification.
 7. 50/50 probabilities produce high entropy.
 8. Strongly one-sided probability produces lower entropy.
 9. Higher execution costs reduce EV.
 10. Higher uncertainty/noise reduces edge ratio.
 11. Kelly output never exceeds `0.25`.
-12. VECTOR EDGE module and adapter contain no trade request/action calls.
+12. VECTOR EDGE modules/adapters contain no trade request/action calls.
 13. No VECTOR EDGE output is assigned to an existing execution variable.
+14. Variant B never promotes an AUTO no-trade/rejection.
+15. Variant B execution flag remains hard OFF.
+16. A/B harness order/deal history must remain identical to base AUTO history for the same tester run.
 
-## Manual validation sequence
+## Manual validation sequence before any Phase 4 or live gate
 
-Before any Phase 3 work:
-
-1. Compile `mt5/tests/AutoVectorEdgeV1SelfTest.mq5` and require zero compiler errors.
-2. Run the script and require `failed=0`.
-3. Compile `mt5/FastBasketBot_VectorEdgeShadow.mq5` and require zero compiler errors.
-4. Run Strategy Tester on the same settings/data used for the normal EA.
-5. Compare order/deal history between base EA and shadow harness; it must be identical.
-6. Review `VECTOR_EDGE_SHADOW` log records against AUTO decisions.
-7. Do not use shadow results to alter live trading until the comparison is reviewed.
+1. Compile `mt5/tests/AutoVectorEdgeV1SelfTest.mq5`; require zero compiler errors.
+2. Run it; require `failed=0`.
+3. Compile `mt5/tests/AutoVectorEdgeABV1SelfTest.mq5`; require zero compiler errors.
+4. Run it; require `failed=0`.
+5. Compile `mt5/FastBasketBot_VectorEdgeShadow.mq5`; require zero compiler errors.
+6. Compile `mt5/FastBasketBot_VectorEdgeAB.mq5`; require zero compiler errors.
+7. Run Strategy Tester on base EA and A/B harness using identical settings/data.
+8. Compare order/deal histories; they must be identical.
+9. Join actual AUTO outcomes to `VECTOR_EDGE_AB` labels by decision/time and compare KEEP vs WOULD_BLOCK cohorts.
+10. Evaluate expectancy, drawdown, winner-block rate, loser-block rate, order count, FIRST vs ADD behavior, and cost sensitivity.
+11. Repeat on out-of-sample periods and different volatility regimes.
+12. Do not create a live gate or merge to `main` until those results are reviewed explicitly.
 
 ## Branch
 
 Development branch: `feature/auto-vector-edge-v1`
 
-Do not merge to `main` until shadow results are reviewed and an explicit merge is requested.
+Do not merge to `main` until validation results are reviewed and an explicit merge is requested.
