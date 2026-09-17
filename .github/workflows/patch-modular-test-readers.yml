@@ -1,0 +1,50 @@
+name: Patch Modular MQ5 Test Readers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/patch-modular-test-readers.py"
+      - ".github/workflows/patch-modular-test-readers.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-modular-test-readers
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch tests that read the MQ5 runtime source
+        run: python3 scripts/patch-modular-test-readers.py
+
+      - name: Run AUTO V20 deterministic policy regression
+        shell: pwsh
+        run: ./tests/auto-v20-policy-regression.ps1
+
+      - name: Commit validated test readers to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add tests/*.ps1
+          git diff --cached --quiet && exit 0
+          git commit -m "test: make MQ5 regressions modular-source aware"
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            git fetch origin main
+            git rebase origin/main
+            sleep 2
+          done
+          exit 1
