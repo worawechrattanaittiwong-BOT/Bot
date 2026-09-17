@@ -70,7 +70,7 @@ jobs:
           test_path = Path('tests/production-hardening-phase4-contract.ps1')
           test = test_path.read_text()
           old_test = "Require $dashboard 'กำลังยืนยันการหยุดกับ EA' 'dashboard explains flat Safe Stop acknowledgement phase'"
-          new_test = """Reject $dashboard 'กำลังยืนยันการหยุดกับ EA' 'dashboard must not keep a flat Safe Stop acknowledgement banner'\nRequire $dashboard 'startPhase === \"TIMEOUT\" && desired === \"RUNNING\"' 'stale Start timeout is hidden after Server releases RUNNING'\nRequire $botApi 'dashboardPositions' 'dashboard has flat Safe Stop recovery fallback'\nRequire $botApi \"UPDATE bot_instances SET desired_state='STOPPED',lock_owner=NULL WHERE id=\\$1 AND desired_state='SAFE_STOP'\" 'dashboard canonicalizes a flat stale Safe Stop to STOPPED'"""
+          new_test = """Reject $dashboard 'กำลังยืนยันการหยุดกับ EA' 'dashboard must not keep a flat Safe Stop acknowledgement banner'\nRequire $dashboard 'startPhase === \"TIMEOUT\" && desired === \"RUNNING\"' 'stale Start timeout is hidden after Server releases RUNNING'\nRequire $botApi 'dashboardPositions' 'dashboard has flat Safe Stop recovery fallback'\nRequire $botApi \"desired_state='STOPPED',lock_owner=NULL\" 'dashboard canonicalizes a flat stale Safe Stop to STOPPED'"""
           test = replace_once(test, old_test, new_test, 'flat Safe Stop UI regression expectation')
           test_path.write_text(test)
           PY
