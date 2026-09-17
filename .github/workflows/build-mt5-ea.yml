@@ -12,11 +12,13 @@ on:
     branches: [main]
     paths:
       - "mt5/FastBasketBot.mq5"
+      - "mt5/FastBasketBot.Part*.mqh"
       - "mt5/include/**"
       - ".github/workflows/build-mt5-ea.yml"
   pull_request:
     paths:
       - "mt5/FastBasketBot.mq5"
+      - "mt5/FastBasketBot.Part*.mqh"
       - "mt5/include/**"
       - ".github/workflows/build-mt5-ea.yml"
 
@@ -51,6 +53,13 @@ jobs:
           $ErrorActionPreference = "Stop"
           $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
           $text = [System.IO.File]::ReadAllText($mq5Path)
+          $runtimeText = $text
+          Get-ChildItem "mt5" -Filter "FastBasketBot.Part*.mqh" -File -ErrorAction SilentlyContinue |
+            Sort-Object Name |
+            ForEach-Object { $runtimeText += "`n" + [System.IO.File]::ReadAllText($_.FullName) }
+          Get-ChildItem "mt5\include" -Filter "*.mqh" -File -ErrorAction SilentlyContinue |
+            Sort-Object Name |
+            ForEach-Object { $runtimeText += "`n" + [System.IO.File]::ReadAllText($_.FullName) }
 
           $propertyMatch = [regex]::Match($text, '#property\s+version\s+"([^"]+)"')
           $runtimeMatch = [regex]::Match($text, '#define\s+SCENOVA_EA_VERSION\s+"([^"]+)"')
@@ -80,7 +89,7 @@ jobs:
             'TradePermissionStatus',
             'AdaptiveSpreadAllowed'
           )) {
-            if (-not $text.Contains($sentinel)) { throw "Required runtime sentinel missing: $sentinel" }
+            if (-not $runtimeText.Contains($sentinel)) { throw "Required runtime sentinel missing: $sentinel" }
           }
 
           foreach ($module in @(
@@ -92,7 +101,7 @@ jobs:
             if (-not (Test-Path $module)) { throw "Required module missing: $module" }
           }
 
-          if ($text.Contains('StringFind(InpApiBase, "http://") == 0')) {
+          if ($runtimeText.Contains('StringFind(InpApiBase, "http://") == 0')) {
             throw "Plain HTTP API configuration is still accepted"
           }
 
@@ -133,7 +142,7 @@ jobs:
             git fetch origin main
             if ($LASTEXITCODE -ne 0) { Start-Sleep -Seconds 2; continue }
 
-            git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5 mt5/include
+            git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5 mt5/FastBasketBot.Part*.mqh mt5/include
             if ($LASTEXITCODE -eq 1) {
               Write-Host "A newer EA source exists on main; skipping obsolete compiled artifact."
               exit 0
