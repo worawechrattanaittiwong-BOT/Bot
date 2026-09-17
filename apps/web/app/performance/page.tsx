@@ -10,12 +10,13 @@ import styles from "./performance.module.css";
 
 type Scope = "SYSTEM" | "ACCOUNT";
 type Mode = "LIVE" | "BACKTEST";
-
 type Options = {
   user: { id: string; user_code: string; email: string; role: string } | null;
   elevated: boolean;
   accounts: Array<any>;
 };
+
+const DAY = 24 * 60 * 60 * 1000;
 
 function isoDate(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -28,7 +29,7 @@ function money(value: any, signed = false) {
   return `${sign}$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function number(value: any, digits = 2) {
+function num(value: any, digits = 2) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(digits) : "—";
 }
@@ -40,103 +41,78 @@ function percent(value: any) {
 
 function tone(value: any) {
   const n = Number(value || 0);
-  return n > 0 ? styles.good : n < 0 ? styles.bad : styles.muted;
+  return n > 0 ? styles.good : n < 0 ? styles.bad : "";
 }
 
-function withDrawdown(points: any[]) {
+function closedDrawdown(points: any[], key = "balance") {
   let peak = 0;
   return (points || []).map((point) => {
-    const balance = Number(point.balance ?? point.cumulative ?? 0);
-    peak = Math.max(peak, balance);
-    const drawdownPercent = peak > 0 ? Math.max(0, (peak - balance) / peak * 100) : 0;
-    return { ...point, balance, equity: Number(point.equity ?? balance), drawdownPercent };
+    const value = Number(point[key] ?? point.cumulative ?? 0);
+    peak = Math.max(peak, value);
+    const amount = Math.max(0, peak - value);
+    const pct = peak > 0 ? amount / peak * 100 : 0;
+    return { ...point, value, drawdownMoney: amount, drawdownPercent: pct };
   });
 }
 
-function Kpi({ label, value, sub, className = "" }:{ label:string; value:string; sub?:string; className?:string }) {
-  return (
-    <div className={`${styles.kpi} ${className}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      {sub ? <small>{sub}</small> : null}
-    </div>
-  );
+function systemDrawdown(points: any[]) {
+  let peak = 0;
+  let max = 0;
+  const rows = (points || []).map((point) => {
+    const value = Number(point.cumulative || 0);
+    peak = Math.max(peak, value);
+    const dd = Math.max(0, peak - value);
+    max = Math.max(max, dd);
+    return { ...point, drawdownMoney: dd, drawdownPercent: 0 };
+  });
+  return { rows, max };
 }
 
-function LineChart({ points, valueKey = "balance", secondaryKey = "equity" }:{ points:any[]; valueKey?:string; secondaryKey?:string }) {
-  const width = 900;
-  const height = 260;
+function PremiumChart({ points, valueKey, drawdown = false, id }:{ points:any[]; valueKey:string; drawdown?:boolean; id:string }) {
+  const width = 1000;
+  const height = 290;
   if (!points?.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลในช่วงเวลานี้</div>;
-  const primary = points.map((point) => Number(point[valueKey] ?? point.cumulative ?? 0));
-  const secondary = points.map((point) => Number(point[secondaryKey] ?? point[valueKey] ?? point.cumulative ?? 0));
-  const values = [...primary, ...secondary].filter(Number.isFinite);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = Math.max(1, max - min);
-  const coords = (series:number[]) => series.map((value, index) => {
-    const x = series.length <= 1 ? 0 : index / (series.length - 1) * width;
-    const y = height - 16 - ((value - min) / range) * (height - 32);
+  const values = points.map((p) => drawdown ? -Math.abs(Number(p[valueKey] || 0)) : Number(p[valueKey] || 0));
+  const min = Math.min(...values, drawdown ? -1 : Infinity);
+  const max = Math.max(...values, drawdown ? 0 : -Infinity);
+  const safeMin = Number.isFinite(min) ? min : 0;
+  const safeMax = Number.isFinite(max) ? max : 1;
+  const range = Math.max(1, safeMax - safeMin);
+  const coords = values.map((value, index) => {
+    const x = values.length <= 1 ? 0 : index / (values.length - 1) * width;
+    const y = height - 18 - ((value - safeMin) / range) * (height - 36);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+  });
+  const last = coords[coords.length - 1];
+  const area = `0,${height} ${coords.join(" ")} ${width},${height}`;
   return (
-    <svg className={styles.lineChart} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label="Performance chart">
-      <polyline className={styles.lineSecondary} points={coords(secondary)} fill="none" vectorEffect="non-scaling-stroke" />
-      <polyline className={styles.linePrimary} points={coords(primary)} fill="none" vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
-
-function DrawdownChart({ points }:{ points:any[] }) {
-  const normalized = (points || []).map((point) => ({ ...point, dd: -Math.abs(Number(point.drawdownPercent || 0)) }));
-  return <LineChart points={normalized} valueKey="dd" secondaryKey="dd"/>;
-}
-
-function MonthlyBars({ rows }:{ rows:any[] }) {
-  const max = Math.max(1, ...(rows || []).map((row) => Math.abs(Number(row.returnPercent ?? row.profit ?? 0))));
-  if (!rows?.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลรายเดือน</div>;
-  return (
-    <div className={styles.monthBars}>
-      {rows.map((row) => {
-        const value = Number(row.returnPercent ?? row.profit ?? 0);
-        return (
-          <div className={styles.monthBarItem} key={row.month}>
-            <div className={styles.monthBarTrack}>
-              <div className={value >= 0 ? styles.monthBarPositive : styles.monthBarNegative} style={{ height: `${Math.max(4, Math.abs(value) / max * 100)}%` }} />
-            </div>
-            <b className={value >= 0 ? styles.good : styles.bad}>{row.returnPercent === null || row.returnPercent === undefined ? money(row.profit, true) : `${value.toFixed(1)}%`}</b>
-            <small>{row.month}</small>
-          </div>
-        );
-      })}
+    <div className={styles.chartWrap}>
+      <svg className={`${styles.chart} ${drawdown ? styles.chartDanger : ""}`} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img">
+        <defs>
+          <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={drawdown ? "#ff4668" : "#8a63ff"} stopOpacity="0.42" />
+            <stop offset="100%" stopColor={drawdown ? "#ff4668" : "#5e3de0"} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <polygon points={area} fill={`url(#${id}-fill)`} />
+        <polyline points={coords.join(" ")} fill="none" vectorEffect="non-scaling-stroke" />
+        {last ? <circle cx={last.split(",")[0]} cy={last.split(",")[1]} r="5" vectorEffect="non-scaling-stroke" /> : null}
+      </svg>
     </div>
   );
 }
 
-function QualityCard({ quality }:{ quality:any }) {
-  const rows = [
-    ["Stability", "ความเสถียร", quality?.stability],
-    ["Risk Control", "การควบคุมความเสี่ยง", quality?.riskControl],
-    ["Consistency", "ความสม่ำเสมอ", quality?.consistency],
-    ["Drawdown Discipline", "วินัยด้าน Drawdown", quality?.drawdownDiscipline],
-    ["Execution Quality", "คุณภาพการส่งคำสั่ง", quality?.executionQuality]
-  ];
-  const score = Number(quality?.score || 0);
-  const stars = Math.max(0, Math.min(5, Number(quality?.stars || 0)));
+function MetricCard({ icon, label, en, value, sub, className = "" }:{ icon:string; label:string; en:string; value:string; sub?:string; className?:string }) {
   return (
-    <section className={`${styles.card} ${styles.qualityCard}`}>
-      <div className={styles.cardTitle}><div><b>Risk & Quality Score</b><small>SCENOVA Quality Score · แบบประเมินเชิงสถิติ</small></div></div>
-      <div className={styles.qualityTop}>
-        <div className={styles.scoreRing}><strong>{score}</strong><span>/100</span></div>
-        <div><span className={styles.scoreLabel}>{score >= 85 ? "ยอดเยี่ยม" : score >= 70 ? "ดี" : score >= 55 ? "ปานกลาง" : "ต้องติดตาม"}</span><div className={styles.stars}>{[1,2,3,4,5].map((n)=><span key={n} className={n <= Math.round(stars) ? styles.starOn : styles.starOff}>★</span>)}</div><small>คะแนนนี้เป็น heuristic เพื่อช่วยอ่านคุณภาพ ไม่ใช่การรับประกันผลตอบแทน</small></div>
-      </div>
-      <div className={styles.scoreRows}>
-        {rows.map(([en, th, raw]) => {
-          const value = Math.max(0, Math.min(100, Number(raw || 0)));
-          return <div className={styles.scoreRow} key={String(en)}><div><span>{en}</span><small>{th}</small></div><div className={styles.scoreTrack}><i style={{ width:`${value}%` }}/></div><b>{value.toFixed(0)}</b></div>;
-        })}
-      </div>
-    </section>
+    <div className={`${styles.metricCard} ${className}`}>
+      <span className={styles.metricIcon}>{icon}</span>
+      <div><span className={styles.metricLabel}>{label}<small>{en}</small></span><strong>{value}</strong>{sub ? <em>{sub}</em> : null}</div>
+    </div>
   );
+}
+
+function StatusBadge({ children, green = false }:{ children:any; green?:boolean }) {
+  return <span className={`${styles.statusBadge} ${green ? styles.statusGreen : ""}`}>{children}</span>;
 }
 
 function CustomerSidebar({ onLogout }:{ onLogout:()=>void }) {
@@ -153,32 +129,32 @@ function CustomerSidebar({ onLogout }:{ onLogout:()=>void }) {
   );
 }
 
-export default function PerformanceDashboardPage() {
+export default function PerformancePage() {
   const today = useMemo(() => new Date(), []);
   const [options, setOptions] = useState<Options | null>(null);
-  const [scope, setScope] = useState<Scope>("ACCOUNT");
+  const [scope, setScope] = useState<Scope>("SYSTEM");
   const [mode, setMode] = useState<Mode>("LIVE");
   const [accountId, setAccountId] = useState("");
   const [userId, setUserId] = useState("");
-  const [from, setFrom] = useState(isoDate(new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)));
+  const [from, setFrom] = useState(isoDate(new Date(today.getTime() - 30 * DAY)));
   const [to, setTo] = useState(isoDate(today));
-  const [report, setReport] = useState<any>(null);
   const [system, setSystem] = useState<any>(null);
-  const [selectedBacktestId, setSelectedBacktestId] = useState("");
+  const [report, setReport] = useState<any>(null);
   const [backtest, setBacktest] = useState<any>(null);
+  const [selectedBacktestId, setSelectedBacktestId] = useState("");
+  const [shareResult, setShareResult] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [sharing, setSharing] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [shareResult, setShareResult] = useState<any>(null);
   const [error, setError] = useState("");
 
   const elevated = Boolean(options?.elevated);
   const users = useMemo(() => {
     const map = new Map<string, any>();
-    (options?.accounts || []).forEach((account) => map.set(account.userId, { id:account.userId, userCode:account.userCode, email:account.email }));
+    (options?.accounts || []).forEach((a) => map.set(a.userId, { id:a.userId, userCode:a.userCode, email:a.email }));
     return Array.from(map.values());
   }, [options]);
-  const visibleAccounts = useMemo(() => (options?.accounts || []).filter((account) => !userId || account.userId === userId), [options, userId]);
+  const visibleAccounts = useMemo(() => (options?.accounts || []).filter((a) => !userId || a.userId === userId), [options, userId]);
 
   function logout() {
     localStorage.removeItem("bot_token");
@@ -186,19 +162,11 @@ export default function PerformanceDashboardPage() {
   }
 
   async function loadOptions() {
-    try {
-      const next = await api("/performance-analytics/options");
-      setOptions(next);
-      const first = next.accounts?.[0];
-      if (first) {
-        setAccountId(first.id);
-        setUserId(first.userId || "");
-      }
-      if (next.elevated) setScope("SYSTEM");
-      setError("");
-    } catch (e:any) {
-      setError(String(e?.message || "โหลดข้อมูลไม่สำเร็จ"));
-    }
+    const next = await api("/performance-analytics/options");
+    setOptions(next);
+    const first = next.accounts?.[0];
+    if (first) { setAccountId(first.id); setUserId(first.userId || ""); }
+    setScope(next.elevated ? "SYSTEM" : "ACCOUNT");
   }
 
   async function refresh() {
@@ -211,10 +179,9 @@ export default function PerformanceDashboardPage() {
         const next = await api(`/performance-analytics/report?accountId=${encodeURIComponent(accountId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
         setReport(next);
         if (mode === "BACKTEST") {
-          const firstId = selectedBacktestId || next.backtests?.[0]?.id || "";
-          setSelectedBacktestId(firstId);
-          if (firstId) setBacktest(await api(`/performance-analytics/backtest?id=${encodeURIComponent(firstId)}`));
-          else setBacktest(null);
+          const id = selectedBacktestId || next.backtests?.[0]?.id || "";
+          setSelectedBacktestId(id);
+          setBacktest(id ? await api(`/performance-analytics/backtest?id=${encodeURIComponent(id)}`) : null);
         }
       }
       setError("");
@@ -227,7 +194,7 @@ export default function PerformanceDashboardPage() {
 
   useEffect(() => {
     if (!getToken()) { window.location.href = "/login"; return; }
-    loadOptions().finally(() => setLoading(false));
+    loadOptions().catch((e:any)=>setError(String(e?.message || "โหลดข้อมูลไม่สำเร็จ"))).finally(()=>setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -238,247 +205,166 @@ export default function PerformanceDashboardPage() {
 
   async function chooseBacktest(id:string) {
     setSelectedBacktestId(id);
-    if (!id) { setBacktest(null); return; }
-    try { setBacktest(await api(`/performance-analytics/backtest?id=${encodeURIComponent(id)}`)); }
-    catch (e:any) { setError(String(e?.message || "โหลด Backtest ไม่สำเร็จ")); }
+    setBacktest(id ? await api(`/performance-analytics/backtest?id=${encodeURIComponent(id)}`) : null);
   }
 
-  async function downloadCsv() {
-    if (!accountId) return;
-    const response = await fetch(`${API_URL}/api/performance-analytics/export.csv?accountId=${encodeURIComponent(accountId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
-      headers: { Authorization: `Bearer ${getToken()}` }, cache:"no-store"
-    });
-    if (!response.ok) { setError("ดาวน์โหลด CSV ไม่สำเร็จ"); return; }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `scenova-performance-${report?.account?.accountNumber || "report"}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function createShareSnapshot() {
+  async function createShare() {
     if (!accountId || mode !== "LIVE") return;
     setSharing(true);
     try {
-      const result = await api("/performance-actions/share-live", {
-        method: "POST",
-        body: JSON.stringify({ accountId, from, to })
-      });
-      setShareResult(result);
-      setError("");
-    } catch (e:any) {
-      setError(String(e?.message || "สร้างลิงก์แชร์ไม่สำเร็จ"));
-    } finally {
-      setSharing(false);
-    }
+      setShareResult(await api("/performance-actions/share-live", { method:"POST", body:JSON.stringify({ accountId, from, to }) }));
+    } catch (e:any) { setError(String(e?.message || "สร้างลิงก์แชร์ไม่สำเร็จ")); }
+    finally { setSharing(false); }
   }
 
-  async function copyShareLink() {
+  async function copyShare() {
     if (!shareResult?.path) return;
-    const url = `${window.location.origin}${shareResult.path}`;
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(`${window.location.origin}${shareResult.path}`);
   }
 
   async function resetTestData() {
     if (!elevated) return;
-    const typed = window.prompt("ล้างข้อมูลทดสอบ Performance ทั้งระบบ\n\nจะลบ Trade Journal, Backtest และลิงก์แชร์ทั้งหมด แต่จะไม่ลบลูกค้า บัญชี MT5 สมาชิก หรือการตั้งค่าบอท\n\nพิมพ์ RESET เพื่อยืนยัน");
-    if (typed !== "RESET") return;
-    if (!window.confirm("ยืนยันอีกครั้ง: ต้องการล้างข้อมูลทดสอบ Performance ทั้งระบบใช่หรือไม่?")) return;
+    const typed = window.prompt("ล้างข้อมูลทดสอบ Performance ทั้งระบบ\n\nลบ Trade Journal, Backtest และลิงก์แชร์ แต่ไม่ลบลูกค้า/บัญชี MT5/สมาชิก/การตั้งค่าบอท\n\nพิมพ์ RESET เพื่อยืนยัน");
+    if (typed !== "RESET" || !window.confirm("ยืนยันล้างข้อมูลทดสอบ Performance ทั้งระบบ?")) return;
     setResetting(true);
     try {
-      const result = await api("/performance-actions/reset-test-data", {
-        method: "POST",
-        body: JSON.stringify({ confirm: "RESET" })
-      });
-      setShareResult(null);
-      setBacktest(null);
-      setSelectedBacktestId("");
+      await api("/performance-actions/reset-test-data", { method:"POST", body:JSON.stringify({ confirm:"RESET" }) });
+      setShareResult(null); setBacktest(null); setSelectedBacktestId("");
       await refresh();
-      window.alert(`ล้างข้อมูลทดสอบแล้ว\nTrade Journal: ${result?.deleted?.tradeJournal || 0}\nBacktest: ${result?.deleted?.backtestRuns || 0}\nShare: ${result?.deleted?.performanceShares || 0}`);
-    } catch (e:any) {
-      setError(String(e?.message || "ล้างข้อมูลไม่สำเร็จ"));
-    } finally {
-      setResetting(false);
-    }
+    } catch (e:any) { setError(String(e?.message || "ล้างข้อมูลไม่สำเร็จ")); }
+    finally { setResetting(false); }
   }
 
-  function drillAccount(nextAccountId:string, nextUserId:string) {
-    setUserId(nextUserId);
-    setAccountId(nextAccountId);
-    setScope("ACCOUNT");
-    setMode("LIVE");
+  async function downloadCsv() {
+    if (!accountId) return;
+    const response = await fetch(`${API_URL}/api/performance-analytics/export.csv?accountId=${encodeURIComponent(accountId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { headers:{ Authorization:`Bearer ${getToken()}` }, cache:"no-store" });
+    if (!response.ok) return setError("ดาวน์โหลด CSV ไม่สำเร็จ");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a"); link.href=url; link.download=`scenova-performance-${report?.account?.accountNumber || "report"}.csv`; link.click(); URL.revokeObjectURL(url);
   }
 
-  const activeBacktest = mode === "BACKTEST" ? backtest : null;
+  function drill(account:string, user:string) {
+    setUserId(user); setAccountId(account); setScope("ACCOUNT"); setMode("LIVE");
+  }
+
   const liveSummary = report?.summary || {};
-  const backSummary = activeBacktest?.summary || {};
+  const backSummary = backtest?.summary || {};
   const summary = mode === "BACKTEST" ? {
-    netProfit: backSummary.netProfit,
-    returnPercent: backSummary.returnPercent,
-    winRate: backSummary.winRate,
-    profitFactor: backSummary.profitFactor,
-    maxDrawdownPercent: backSummary.maxDrawdownPercent,
-    maxDrawdownMoney: backSummary.maxDrawdownMoney,
-    sharpeRatio: null,
-    recoveryFactor: backSummary.maxDrawdownMoney ? Number(backSummary.netProfit || 0) / Number(backSummary.maxDrawdownMoney || 1) : null,
-    trades: backSummary.closedTrades,
-    grossProfit: backSummary.grossProfit,
-    grossLoss: backSummary.grossLoss,
-    wins: backSummary.wins,
-    losses: backSummary.losses
+    netProfit: backSummary.netProfit, returnPercent: backSummary.returnPercent, winRate: backSummary.winRate,
+    profitFactor: backSummary.profitFactor, maxDrawdownPercent: backSummary.maxDrawdownPercent,
+    maxDrawdownMoney: backSummary.maxDrawdownMoney, trades: backSummary.closedTrades,
+    grossProfit: backSummary.grossProfit, grossLoss: backSummary.grossLoss, wins: backSummary.wins,
+    losses: backSummary.losses, averageWin: backSummary.averageWin, averageLoss: backSummary.averageLoss,
+    recoveryFactor: backSummary.maxDrawdownMoney ? Number(backSummary.netProfit || 0) / Number(backSummary.maxDrawdownMoney || 1) : null
   } : liveSummary;
-  const curve = mode === "BACKTEST"
-    ? withDrawdown((activeBacktest?.equity_curve || []).map((p:any) => ({ ...p, balance:Number(p.balance||0), equity:Number(p.balance||0) })))
+  const accountCurve = mode === "BACKTEST"
+    ? closedDrawdown((backtest?.equity_curve || []).map((p:any)=>({ ...p, balance:Number(p.balance || 0) })))
     : (report?.curve || []);
-  const monthly = mode === "BACKTEST" ? [] : (report?.monthly || []);
-  const initialBalance = mode === "BACKTEST" ? backSummary.initialDeposit : report?.balance?.derivedStart;
 
   return (
     <div className={styles.shell}>
       {elevated ? <OwnerSidebar activeKey="trading-backtest" onLogout={logout}/> : <CustomerSidebar onLogout={logout}/>} 
       <main className={styles.main}>
-        <header className={styles.header}>
-          <div className={styles.headerTitle}><span className={styles.headerIcon}><ScenovaIcon name="strategy" size={24}/></span><div><h1>Trading Performance & Backtest</h1><p>ใช้ข้อมูลจริงที่ SCENOVA เก็บจากแต่ละบัญชี MT5 พร้อม Drawdown, รายงานย้อนหลัง และลิงก์แชร์แบบ Read-only</p></div></div>
-          <div className={styles.headerMeta}><span className={styles.onlineDot}/><div><b>{options?.user?.user_code || "SCENOVA"}</b><small>{elevated ? "Owner / Admin Analytics" : "ข้อมูลเฉพาะบัญชีของคุณ"}</small></div></div>
-        </header>
-
         {error ? <div className={styles.error}>{error}</div> : null}
 
-        {elevated ? (
-          <div className={styles.scopeTabs}>
-            <button className={scope === "SYSTEM" ? styles.tabActive : ""} onClick={()=>setScope("SYSTEM")}>ภาพรวมทั้งระบบ</button>
-            <button className={scope === "ACCOUNT" ? styles.tabActive : ""} onClick={()=>setScope("ACCOUNT")}>รายลูกค้า / รายบัญชี</button>
+        <section className={styles.controlDock}>
+          {elevated ? <div className={styles.tabs}><button className={scope==="SYSTEM"?styles.tabActive:""} onClick={()=>setScope("SYSTEM")}>ภาพรวมทั้งระบบ</button><button className={scope==="ACCOUNT"?styles.tabActive:""} onClick={()=>setScope("ACCOUNT")}>รายลูกค้า / รายบัญชี</button></div> : <div/>}
+          <div className={styles.filters}>
+            {scope === "ACCOUNT" && elevated ? <select value={userId} onChange={(e)=>{ const id=e.target.value; setUserId(id); const first=(options?.accounts||[]).find((a)=>a.userId===id); if(first)setAccountId(first.id); }}><option value="">ทุกลูกค้า</option>{users.map((u)=><option key={u.id} value={u.id}>{u.userCode} · {u.email}</option>)}</select> : null}
+            {scope === "ACCOUNT" ? <select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>{visibleAccounts.map((a)=><option key={a.id} value={a.id}>{a.accountNumber} · {a.broker}</option>)}</select> : null}
+            {scope === "ACCOUNT" ? <select value={mode} onChange={(e)=>setMode(e.target.value as Mode)}><option value="LIVE">Live Performance</option><option value="BACKTEST">Backtest</option></select> : null}
+            <input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/>
+            <button className={styles.refreshBtn} onClick={refresh} disabled={loading}><ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด":"Refresh"}</button>
+            {elevated ? <button className={styles.resetBtn} onClick={resetTestData} disabled={resetting}>{resetting?"กำลังล้าง":"ล้างข้อมูลทดสอบ"}</button> : null}
           </div>
-        ) : null}
-
-        <section className={styles.filters}>
-          {elevated && scope === "ACCOUNT" ? (
-            <label><span>ลูกค้า</span><select value={userId} onChange={(e)=>{ const id=e.target.value; setUserId(id); const first=(options?.accounts||[]).find((a)=>a.userId===id); if(first)setAccountId(first.id); }}><option value="">ทุกคน</option>{users.map((user)=><option value={user.id} key={user.id}>{user.userCode} · {user.email}</option>)}</select></label>
-          ) : null}
-          {scope === "ACCOUNT" ? (
-            <label className={styles.accountSelect}><span>{elevated ? "บัญชีที่ต้องการดู" : "บัญชีของฉัน"}</span><select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>{visibleAccounts.map((account)=><option value={account.id} key={account.id}>{account.accountNumber} · {account.broker} · {account.mode}</option>)}</select></label>
-          ) : null}
-          <label><span>ตั้งแต่วันที่</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
-          <label><span>ถึงวันที่</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
-          {scope === "ACCOUNT" ? <label><span>โหมดข้อมูล</span><select value={mode} onChange={(e)=>setMode(e.target.value as Mode)}><option value="LIVE">Live Performance</option><option value="BACKTEST">Backtest</option></select></label> : null}
-          <button className={styles.refreshButton} onClick={refresh} disabled={loading}><ScenovaIcon name="refresh" size={16}/>{loading ? "กำลังโหลด..." : "Refresh ข้อมูล"}</button>
-          {elevated ? <button className={styles.resetButton} onClick={resetTestData} disabled={resetting}>{resetting ? "กำลังล้าง..." : "Refresh / ล้างข้อมูลทดสอบ"}</button> : null}
         </section>
 
-        {scope === "SYSTEM" && elevated ? (
-          <SystemOverview data={system} loading={loading} onDrill={drillAccount}/>
-        ) : (
-          <>
-            <section className={styles.syncBar}>
-              <div><span className={report?.status?.online ? styles.syncGreen : styles.syncGray}/><b>{mode === "LIVE" ? "ข้อมูลจริงจากบัญชีลูกค้า" : "ผล Backtest ที่บันทึกในระบบ"}</b><small>{mode === "LIVE" ? `${report?.account?.accountNumber || "—"} · ${report?.account?.brokerServer || "—"}` : "ข้อมูล Backtest แยกจาก Live Performance"}</small></div>
-              <div><span>อัปเดตล่าสุด</span><b>{report?.status?.lastSeenAt ? new Date(report.status.lastSeenAt).toLocaleString("th-TH") : "—"}</b></div>
-            </section>
-
-            {mode === "LIVE" ? (
-              <section className={styles.sharePanel}>
-                <div><b>แชร์ Performance ให้คนอื่นดู</b><small>ระบบจะสร้าง Snapshot จากข้อมูลจริงในช่วงวันที่เลือก ข้อมูลในลิงก์จะไม่เปลี่ยนตามหลัง</small></div>
-                <div className={styles.shareButtons}>
-                  <button onClick={createShareSnapshot} disabled={sharing || !Number(summary.trades || 0)}>{sharing ? "กำลังสร้าง..." : "สร้างลิงก์แชร์"}</button>
-                  {shareResult?.path ? <><input className={styles.shareLink} readOnly value={`${typeof window !== "undefined" ? window.location.origin : ""}${shareResult.path}`}/><button onClick={copyShareLink}>คัดลอกลิงก์</button><a href={shareResult.path} target="_blank" rel="noreferrer">เปิดหน้าสาธารณะ</a></> : null}
-                </div>
-              </section>
-            ) : null}
-
-            {mode === "BACKTEST" ? (
-              <section className={styles.backtestPicker}><div><b>เลือกรายงาน Backtest</b><small>Admin ดูของบัญชีที่เลือกได้ ลูกค้าดูเฉพาะของตัวเอง</small></div><select value={selectedBacktestId} onChange={(e)=>chooseBacktest(e.target.value)}><option value="">เลือกรายงาน</option>{(report?.backtests || []).map((run:any)=><option value={run.id} key={run.id}>{run.title} · {run.symbol} · {run.timeframe}</option>)}</select></section>
-            ) : null}
-
-            <section className={styles.kpis}>
-              <Kpi label="Initial Balance" value={money(initialBalance)} sub={mode === "LIVE" ? "คำนวณย้อนจาก Balance + Bot P/L" : "เงินเริ่มต้น Backtest"}/>
-              <Kpi label="Net Profit" value={money(summary.netProfit, true)} sub="กำไร/ขาดทุนสุทธิ" className={tone(summary.netProfit)}/>
-              <Kpi label="Profit Factor" value={number(summary.profitFactor, 2)} sub="Gross Profit / Gross Loss"/>
-              <Kpi label="Win Rate" value={percent(summary.winRate)} sub={`${summary.wins ?? 0} ชนะ · ${summary.losses ?? 0} แพ้`}/>
-              <Kpi label="Max Drawdown" value={percent(summary.maxDrawdownPercent)} sub={`${money(summary.maxDrawdownMoney)} · Closed Performance`} className={styles.bad}/>
-              <Kpi label="Total Trades" value={String(summary.trades ?? 0)} sub="Basket ที่ปิดแล้ว"/>
-              <Kpi label="Recovery Factor" value={number(summary.recoveryFactor, 2)} sub="Net Profit / Max DD"/>
-              <Kpi label="Return %" value={percent(summary.returnPercent)} sub="ผลตอบแทนช่วงที่เลือก" className={tone(summary.returnPercent)}/>
-            </section>
-
-            <section className={styles.statsStrip}>
-              <div><span>Gross Profit</span><b className={styles.good}>{money(summary.grossProfit)}</b></div>
-              <div><span>Gross Loss</span><b className={styles.bad}>{money(-Math.abs(Number(summary.grossLoss || 0)))}</b></div>
-              <div><span>Sharpe Ratio</span><b>{number(summary.sharpeRatio,2)}</b></div>
-              <div><span>Buy Trades</span><b>{String(liveSummary.buyTrades ?? "—")}</b></div>
-              <div><span>Sell Trades</span><b>{String(liveSummary.sellTrades ?? "—")}</b></div>
-              <div><span>Balance ล่าสุด</span><b>{money(report?.balance?.current)}</b></div>
-              <div><span>Equity ล่าสุด</span><b>{money(report?.balance?.equity)}</b></div>
-            </section>
-
-            <div className={styles.analyticsGrid}>
-              <section className={`${styles.card} ${styles.equityCard}`}>
-                <div className={styles.cardTitle}><div><b>{mode === "LIVE" ? "Equity & Balance Curve" : "Backtest Balance Curve"}</b><small>{mode === "LIVE" ? "Balance สร้างจาก Basket ที่ปิดจริง · Equity ล่าสุดจาก Heartbeat" : "ผลตามลำดับรายการใน Backtest"}</small></div><strong className={tone(summary.netProfit)}>{money(summary.netProfit, true)}</strong></div>
-                <LineChart points={curve}/>
-              </section>
-              <section className={`${styles.card} ${styles.drawdownCard}`}><div className={styles.cardTitle}><div><b>Drawdown</b><small>Closed-performance drawdown จาก Peak Balance</small></div><strong className={styles.bad}>{percent(summary.maxDrawdownPercent)}</strong></div><DrawdownChart points={curve}/></section>
-              {mode === "LIVE" ? <QualityCard quality={report?.quality}/> : <section className={`${styles.card} ${styles.qualityCard}`}><div className={styles.cardTitle}><div><b>Backtest Summary</b><small>ค่าจากรายงานที่เลือก</small></div></div><div className={styles.backtestSummary}><span>Initial Balance <b>{money(backSummary.initialDeposit)}</b></span><span>Final Balance <b>{money(backSummary.finalBalance)}</b></span><span>Average Win <b>{money(backSummary.averageWin)}</b></span><span>Average Loss <b>{money(backSummary.averageLoss)}</b></span></div></section>}
-              <section className={`${styles.card} ${styles.monthlyCard}`}><div className={styles.cardTitle}><div><b>ผลตอบแทนรายเดือน</b><small>Monthly Returns</small></div></div>{mode === "LIVE" ? <MonthlyBars rows={monthly}/> : <div className={styles.emptyChart}>Backtest รุ่นปัจจุบันยังไม่เก็บ Monthly Bucket แยก</div>}</section>
-              <section className={`${styles.card} ${styles.distributionCard}`}><div className={styles.cardTitle}><div><b>การกระจายการเทรด</b><small>Buy vs Sell</small></div></div><TradeDistribution buy={Number(liveSummary.buyTrades || 0)} sell={Number(liveSummary.sellTrades || 0)} total={Number(summary.trades || 0)}/></section>
-              <section className={`${styles.card} ${styles.strategyCard}`}><div className={styles.cardTitle}><div><b>ข้อมูลบัญชีและช่วงรายงาน</b><small>Report Context</small></div></div><StrategySummary report={report} mode={mode} backtest={activeBacktest} from={from} to={to}/></section>
-            </div>
-
-            <section className={`${styles.card} ${styles.tradesCard}`}>
-              <div className={styles.cardTitle}><div><b>{mode === "LIVE" ? "รายการเทรดที่ปิดแล้ว" : "Backtest Trades"}</b><small>{mode === "LIVE" ? "Closed Trades จาก MT5 Trade Journal" : "รายการจาก Backtest ที่บันทึก"}</small></div><div className={styles.exportActions}>{mode === "LIVE" ? <button onClick={downloadCsv}>ดาวน์โหลด CSV</button> : null}<button onClick={()=>window.print()}>พิมพ์ / PDF</button></div></div>
-              <TradesTable rows={mode === "LIVE" ? (report?.closedTrades || []) : (activeBacktest?.trades || [])} backtest={mode === "BACKTEST"}/>
-            </section>
-          </>
-        )}
+        {scope === "SYSTEM" && elevated
+          ? <SystemReport data={system} from={from} to={to} loading={loading} onDrill={drill}/>
+          : <AccountReport report={report} mode={mode} backtest={backtest} selectedBacktestId={selectedBacktestId} chooseBacktest={chooseBacktest} summary={summary} curve={accountCurve} from={from} to={to} loading={loading} sharing={sharing} shareResult={shareResult} createShare={createShare} copyShare={copyShare} downloadCsv={downloadCsv}/>
+        }
       </main>
     </div>
   );
 }
 
-function TradeDistribution({ buy, sell, total }:{ buy:number; sell:number; total:number }) {
-  const decided = buy + sell;
-  const buyPct = decided > 0 ? buy / decided * 100 : 0;
-  const sellPct = decided > 0 ? 100 - buyPct : 0;
-  return <div className={styles.distribution}><div className={styles.donut} style={{ background:`conic-gradient(#45d69a 0 ${buyPct}%, #ff6678 ${buyPct}% 100%)` }}><div><b>{total}</b><span>Trades</span></div></div><div className={styles.legend}><span><i className={styles.buyDot}/>Buy <b>{buy} ({buyPct.toFixed(1)}%)</b></span><span><i className={styles.sellDot}/>Sell <b>{sell} ({sellPct.toFixed(1)}%)</b></span></div></div>;
+function SystemReport({ data, from, to, loading, onDrill }:{ data:any; from:string; to:string; loading:boolean; onDrill:(a:string,u:string)=>void }) {
+  const s = data?.summary || {};
+  const dd = systemDrawdown(data?.curve || []);
+  const wins = Number(s.wins || 0);
+  const losses = Number(s.losses || 0);
+  return <>
+    <section className={styles.hero}>
+      <div className={styles.heroIdentity}><span className={styles.heroIcon}>▰</span><div><span className={styles.eyebrow}>ภาพรวมผลการเทรดทั้งระบบ</span><h1>SCENOVA System Performance</h1><p>ข้อมูลจริงจาก Trade Journal ของบัญชีลูกค้า · สรุปผลแบบอ่านง่ายในหน้าเดียว</p><div className={styles.metaLine}><span>◉ {s.customers || 0} Customers</span><span>▣ {s.accounts || 0} MT5 Accounts</span><span>◷ {from} – {to}</span></div></div></div>
+      <div className={styles.heroBadges}><StatusBadge green>✓ Live Data</StatusBadge><StatusBadge>{s.onlineAccounts || 0} Online</StatusBadge><StatusBadge>{loading?"Updating…":"Updated"}</StatusBadge><div className={styles.quote}>“ภาพรวมนี้ใช้เฉพาะข้อมูลผลการเทรดจริงที่ SCENOVA บันทึกไว้”</div></div>
+    </section>
+
+    <section className={styles.metricsRow}>
+      <MetricCard icon="◎" label="ลูกค้า" en="Customers" value={String(s.customers || 0)} sub="ลูกค้าในระบบ"/>
+      <MetricCard icon="↗" label="กำไรสุทธิ" en="Net Profit" value={money(s.netProfit,true)} sub="รวม Closed P/L" className={tone(s.netProfit)}/>
+      <MetricCard icon="◒" label="อัตรากำไร" en="Profit Factor" value={num(s.profitFactor)} sub="ทั้งระบบ"/>
+      <MetricCard icon="♜" label="อัตราชนะ" en="Win Rate" value={percent(s.winRate)} sub={`${wins} / ${Number(s.trades || 0)} ไม้`}/>
+      <MetricCard icon="⬡" label="ขาดทุนสูงสุด" en="Closed Drawdown" value={money(dd.max)} sub="จาก System P/L Curve" className={styles.bad}/>
+      <MetricCard icon="☷" label="จำนวนการเทรด" en="Total Trades" value={String(s.trades || 0)} sub="Basket ที่ปิดแล้ว"/>
+      <MetricCard icon="▣" label="บัญชี MT5" en="MT5 Accounts" value={String(s.accounts || 0)} sub={`${s.profitableAccounts || 0} บัญชีกำไร`}/>
+    </section>
+
+    <section className={styles.chartsGrid}>
+      <div className={`${styles.panel} ${styles.equityPanel}`}><div className={styles.panelHead}><div><span className={styles.panelIcon}>▰</span><b>กราฟผลการเทรดรวม <em>(System P/L Curve)</em></b></div><strong className={tone(s.netProfit)}>{money(s.netProfit,true)}</strong></div><PremiumChart points={data?.curve || []} valueKey="cumulative" id="system-equity"/></div>
+      <div className={`${styles.panel} ${styles.ddPanel}`}><div className={styles.panelHead}><div><span className={styles.panelIcon}>⌁</span><b>กราฟการขาดทุน <em>(Drawdown)</em></b></div><strong className={styles.bad}>{money(dd.max)}</strong></div><PremiumChart points={dd.rows} valueKey="drawdownMoney" drawdown id="system-dd"/></div>
+    </section>
+
+    <section className={`${styles.panel} ${styles.statsPanel}`}><div className={styles.sectionTitle}><span>▮▮</span><b>สถิติผลการเทรดโดยละเอียด</b></div><div className={styles.statsColumns}>
+      <div><Stat label="กำไร/ขาดทุนสุทธิ (Net P/L)" value={money(s.netProfit,true)} className={tone(s.netProfit)}/><Stat label="Profit Factor" value={num(s.profitFactor)}/><Stat label="บัญชีที่มีกำไร" value={`${s.profitableAccounts || 0} (${num(s.profitableAccountRate,1)}%)`}/></div>
+      <div><Stat label="จำนวนการเทรดทั้งหมด" value={String(s.trades || 0)}/><Stat label="อัตราชนะ (Win Rate)" value={percent(s.winRate)} className={styles.good}/><Stat label="ชนะ / แพ้" value={`${wins} / ${losses}`}/></div>
+      <div><Stat label="บัญชีออนไลน์" value={`${s.onlineAccounts || 0} / ${s.accounts || 0}`}/><Stat label="System Closed Drawdown" value={money(dd.max)} className={styles.bad}/><Stat label="ช่วงข้อมูล" value={`${from} → ${to}`}/></div>
+    </div></section>
+
+    <section className={styles.bottomGrid}><div className={`${styles.panel} ${styles.aboutPanel}`}><div className={styles.sectionTitle}><span>▣</span><b>เกี่ยวกับรายงาน</b></div><p>Admin System Performance รวมข้อมูลบัญชีลูกค้าทั้งหมดและตัดบัญชี OWNER / ADMIN ภายในออก เพื่อให้เห็นภาพการใช้งานจริงของระบบอย่างชัดเจน</p></div><div className={`${styles.panel} ${styles.conditionsPanel}`}><div className={styles.sectionTitle}><span>⚙</span><b>เงื่อนไขข้อมูล</b></div><ul><li>แหล่งข้อมูล: SCENOVA Trade Journal</li><li>นับเฉพาะ Basket ที่ปิดแล้ว</li><li>Drawdown ระบบเป็น Closed P/L Drawdown</li></ul></div><div className={styles.riskPanel}><b>⚠ คำเตือนข้อมูล</b><p>System Drawdown ไม่มีฐาน Equity รวมของทุกบัญชี จึงแสดงเป็นมูลค่า Closed Drawdown ไม่ใช่ Floating Equity Drawdown</p></div></section>
+
+    <section className={`${styles.panel} ${styles.accountsPanel}`}><div className={styles.panelHead}><div><span className={styles.panelIcon}>☷</span><b>รายลูกค้า / รายบัญชี</b></div><small>กดดูรายงานเพื่อเปิด Performance Detail</small></div><div className={styles.tableWrap}><table><thead><tr><th>ลูกค้า</th><th>MT5</th><th>Mode</th><th>Status</th><th>Trades</th><th>Win Rate</th><th>Net P/L</th><th></th></tr></thead><tbody>{(data?.accounts || []).map((r:any)=><tr key={r.accountId}><td><b>{r.userCode}</b><small>{r.email}</small></td><td>{r.accountNumber}</td><td>{r.mode}</td><td><span className={r.online?styles.online:styles.offline}>{r.online?"ONLINE":"OFFLINE"}</span></td><td>{r.trades}</td><td>{percent(r.winRate)}</td><td className={tone(r.netProfit)}>{money(r.netProfit,true)}</td><td><button onClick={()=>onDrill(r.accountId,r.userId)}>ดูรายงาน →</button></td></tr>)}{!data?.accounts?.length?<tr><td colSpan={8} className={styles.emptyCell}>ยังไม่มีบัญชีลูกค้า</td></tr>:null}</tbody></table></div></section>
+  </>;
 }
 
-function StrategySummary({ report, mode, backtest, from, to }:{ report:any; mode:Mode; backtest:any; from:string; to:string }) {
-  const rows = mode === "LIVE" ? [
-    ["ลูกค้า", report?.account?.userCode || report?.account?.email || "—"],
-    ["บัญชี", report?.account?.accountNumber || "—"],
-    ["โบรกเกอร์", report?.account?.broker || "—"],
-    ["โหมด", `${report?.account?.mode || "—"} · Live`],
-    ["สัญลักษณ์", report?.account?.symbol || "—"],
-    ["กรอบเวลา", report?.account?.timeframe || "—"],
-    ["ช่วงข้อมูล", `${from} → ${to}`],
-    ["Balance ล่าสุด", money(report?.balance?.current)],
-    ["Equity ล่าสุด", money(report?.balance?.equity)]
-  ] : [
-    ["ชื่อรายงาน", backtest?.title || "—"], ["Source", backtest?.source || "—"], ["สัญลักษณ์", backtest?.symbol || "—"], ["กรอบเวลา", backtest?.timeframe || "—"], ["เงินเริ่มต้น", money(backtest?.initial_deposit)], ["Lot", String(backtest?.lot ?? "—")]
-  ];
-  return <div className={styles.summaryRows}>{rows.map(([label,value])=><div key={label}><span>{label}</span><b>{value}</b></div>)}</div>;
+function AccountReport({ report, mode, backtest, selectedBacktestId, chooseBacktest, summary, curve, from, to, loading, sharing, shareResult, createShare, copyShare, downloadCsv }:{ report:any; mode:Mode; backtest:any; selectedBacktestId:string; chooseBacktest:(id:string)=>void; summary:any; curve:any[]; from:string; to:string; loading:boolean; sharing:boolean; shareResult:any; createShare:()=>void; copyShare:()=>void; downloadCsv:()=>void }) {
+  const title = mode === "BACKTEST" ? (backtest?.title || "Backtest Report") : `${report?.account?.accountNumber || "MT5"} Performance`;
+  const initial = mode === "BACKTEST" ? (backtest?.initial_deposit ?? summary.initialDeposit) : report?.balance?.derivedStart;
+  const ddCurve = curve || [];
+  return <>
+    <section className={styles.hero}>
+      <div className={styles.heroIdentity}><span className={styles.heroIcon}>▰</span><div><span className={styles.eyebrow}>{mode === "BACKTEST" ? "ผลการทดสอบย้อนหลัง (Backtest)" : "ผลการเทรดจริง (Live Performance)"}</span><h1>{title}</h1><p>{mode === "BACKTEST" ? "รายงาน Backtest ที่บันทึกในระบบ SCENOVA" : "ผลจริงจากบัญชี MT5 พร้อมระบบวิเคราะห์ Drawdown และรายงานย้อนหลัง"}</p><div className={styles.metaLine}><span>♙ {report?.account?.userCode || report?.account?.email || "—"}</span><span>▣ {report?.account?.symbol || backtest?.symbol || "—"}</span><span>⚙ MetaTrader 5</span><span>▤ {report?.account?.timeframe || backtest?.timeframe || "—"}</span></div></div></div>
+      <div className={styles.heroBadges}><StatusBadge green>✓ Verified Data</StatusBadge><StatusBadge>{mode === "LIVE" ? "Public Share Ready" : "Backtest"}</StatusBadge><StatusBadge>{loading?"Updating…":"Updated"}</StatusBadge><div className={styles.quote}>“ข้อมูลชุดนี้ดึงจากระบบ SCENOVA โดยตรง ไม่มีการสร้างตัวเลขจำลองเพื่อเติมหน้าจอ”</div></div>
+    </section>
+
+    {mode === "BACKTEST" ? <section className={styles.backtestPicker}><span>เลือกรายงาน Backtest</span><select value={selectedBacktestId} onChange={(e)=>chooseBacktest(e.target.value)}><option value="">เลือกรายงาน</option>{(report?.backtests || []).map((r:any)=><option key={r.id} value={r.id}>{r.title} · {r.symbol} · {r.timeframe}</option>)}</select></section> : null}
+
+    <section className={styles.metricsRow}>
+      <MetricCard icon="▣" label="เงินเริ่มต้น" en="Initial Balance" value={money(initial)} sub={mode==="LIVE"?"คำนวณจาก Balance และ Closed P/L":"Backtest deposit"}/>
+      <MetricCard icon="↗" label="กำไรสุทธิ" en="Net Profit" value={money(summary.netProfit,true)} sub={summary.returnPercent!==null&&summary.returnPercent!==undefined?`${Number(summary.returnPercent)>=0?"▲":"▼"} ${percent(Math.abs(Number(summary.returnPercent)))}`:"ผลสุทธิ"} className={tone(summary.netProfit)}/>
+      <MetricCard icon="◒" label="อัตรากำไร" en="Profit Factor" value={num(summary.profitFactor)} sub="Gross Profit / Gross Loss"/>
+      <MetricCard icon="♜" label="อัตราชนะ" en="Win Rate" value={percent(summary.winRate)} sub={`${summary.wins ?? 0} / ${summary.trades ?? 0} ไม้`}/>
+      <MetricCard icon="⬡" label="การขาดทุนสูงสุด" en="Max Drawdown" value={percent(summary.maxDrawdownPercent)} sub={`${money(summary.maxDrawdownMoney)} · Closed`} className={styles.bad}/>
+      <MetricCard icon="☷" label="จำนวนการเทรด" en="Total Trades" value={String(summary.trades ?? 0)} sub="รายการที่ปิดแล้ว"/>
+      <MetricCard icon="◷" label="ช่วงเวลาที่ดู" en="Period" value={`${Math.max(1,Math.round((new Date(to).getTime()-new Date(from).getTime())/DAY))} วัน`} sub={`${from} – ${to}`}/>
+    </section>
+
+    <section className={styles.chartsGrid}><div className={`${styles.panel} ${styles.equityPanel}`}><div className={styles.panelHead}><div><span className={styles.panelIcon}>▰</span><b>{mode==="LIVE"?"กราฟเส้นทุน (Balance Curve)":"Backtest Balance Curve"}</b></div><strong className={tone(summary.netProfit)}>{money(summary.netProfit,true)}</strong></div><PremiumChart points={curve} valueKey="balance" id="account-equity"/></div><div className={`${styles.panel} ${styles.ddPanel}`}><div className={styles.panelHead}><div><span className={styles.panelIcon}>⌁</span><b>กราฟการขาดทุน <em>(Drawdown)</em></b></div><strong className={styles.bad}>{percent(summary.maxDrawdownPercent)}</strong></div><PremiumChart points={ddCurve} valueKey="drawdownPercent" drawdown id="account-dd"/></div></section>
+
+    <section className={`${styles.panel} ${styles.statsPanel}`}><div className={styles.sectionTitle}><span>▮▮</span><b>สถิติผลการทดสอบโดยละเอียด</b></div><div className={styles.statsColumns}><div><Stat label="กำไรรวม (Gross Profit)" value={money(summary.grossProfit)}/><Stat label="ขาดทุนรวม (Gross Loss)" value={money(-Math.abs(Number(summary.grossLoss || 0)))} className={styles.bad}/><Stat label="อัตราการฟื้นตัว (Recovery Factor)" value={num(summary.recoveryFactor)}/></div><div><Stat label="จำนวนการเทรดทั้งหมด" value={String(summary.trades ?? 0)}/><Stat label="อัตราชนะ (Win Rate)" value={`${percent(summary.winRate)} (${summary.wins ?? 0} / ${summary.trades ?? 0})`} className={styles.good}/><Stat label="แพ้" value={String(summary.losses ?? 0)}/></div><div><Stat label="กำไรเฉลี่ยต่อไม้" value={money(summary.averageWin)}/><Stat label="ขาดทุนเฉลี่ยต่อไม้" value={money(summary.averageLoss)} className={styles.bad}/><Stat label="Max Drawdown" value={`${percent(summary.maxDrawdownPercent)} (${money(summary.maxDrawdownMoney)})`} className={styles.bad}/></div></div></section>
+
+    <section className={styles.bottomGrid}><div className={`${styles.panel} ${styles.aboutPanel}`}><div className={styles.sectionTitle}><span>▣</span><b>เกี่ยวกับรายงาน</b></div><p>{mode==="LIVE"?`รายงานนี้สรุปผลจริงของบัญชี ${report?.account?.accountNumber || "MT5"} จากข้อมูล Trade Journal ที่ SCENOVA บันทึกไว้ สามารถเลือกช่วงเวลาและแชร์ Snapshot แบบ Read-only ได้`:`รายงาน Backtest ${backtest?.title || "ที่เลือก"} แสดงผลตามข้อมูลที่ถูกบันทึกไว้ในระบบ โดยแยกออกจาก Live Performance อย่างชัดเจน`}</p></div><div className={`${styles.panel} ${styles.conditionsPanel}`}><div className={styles.sectionTitle}><span>⚙</span><b>เงื่อนไขรายงาน</b></div><ul><li>บัญชี: {report?.account?.accountNumber || "—"}</li><li>Symbol: {report?.account?.symbol || backtest?.symbol || "—"}</li><li>Timeframe: {report?.account?.timeframe || backtest?.timeframe || "—"}</li><li>ช่วงข้อมูล: {from} → {to}</li></ul></div><div className={styles.riskPanel}><b>⚠ คำเตือนความเสี่ยง</b><p>ผลการเทรดในอดีตไม่ได้รับประกันผลในอนาคต ค่า Drawdown หน้านี้เป็น Closed-performance Drawdown จนกว่าจะมี Equity Snapshot แบบต่อเนื่อง</p></div></section>
+
+    <section className={styles.actionBar}><div><b>{mode==="LIVE"?"แชร์ Performance":"Export Report"}</b><span>{mode==="LIVE"?"สร้าง Snapshot แล้วส่งลิงก์ให้ผู้อื่นดูได้":"ดาวน์โหลดหรือพิมพ์รายงาน"}</span></div><div>{mode==="LIVE"?<button className={styles.secondaryBtn} onClick={createShare} disabled={sharing || !Number(summary.trades||0)}>{sharing?"กำลังสร้าง…":"🔗 สร้างลิงก์"}</button>:null}{shareResult?.path?<><button className={styles.secondaryBtn} onClick={copyShare}>คัดลอกลิงก์</button><a className={styles.secondaryBtn} href={shareResult.path} target="_blank" rel="noreferrer">เปิด Public Page</a></>:null}<button className={styles.secondaryBtn} onClick={downloadCsv}>CSV</button><button className={styles.primaryBtn} onClick={()=>window.print()}>ดูสถิติ / PDF →</button></div></section>
+
+    <section className={`${styles.panel} ${styles.tradesPanel}`}><div className={styles.panelHead}><div><span className={styles.panelIcon}>☷</span><b>รายการเทรด</b></div><small>แสดงสูงสุด 100 รายการ</small></div><TradesTable rows={mode==="LIVE"?(report?.closedTrades||[]):(backtest?.trades||[])} backtest={mode==="BACKTEST"}/></section>
+  </>;
+}
+
+function Stat({ label, value, className="" }:{ label:string; value:string; className?:string }) {
+  return <div className={styles.stat}><span>{label}</span><b className={className}>{value}</b></div>;
 }
 
 function TradesTable({ rows, backtest }:{ rows:any[]; backtest:boolean }) {
-  return <div className={styles.tableWrap}><table><thead><tr><th>#</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Lot</th><th>Entry</th><th>Exit</th><th>P/L</th><th>Close Time</th></tr></thead><tbody>{(rows || []).slice(0,100).map((row:any,index:number)=>{ const side=String(backtest?row.direction:row.side||"").toUpperCase(); const profit=Number(row.profit||0); const dateValue=backtest?(row.closed_at||row.opened_at):row.closedAt; return <tr key={String(row.ticket||row.trade_index||index)}><td>{index+1}</td><td>{backtest?row.trade_index:row.ticket}</td><td>{backtest?(row.metadata?.symbol||"—"):row.symbol}</td><td><span className={side==="BUY"?styles.buyBadge:styles.sellBadge}>{side||"—"}</span></td><td>{number(backtest?row.volume:row.lot,2)}</td><td>{number(backtest?row.open_price:row.entryPrice,3)}</td><td>{number(backtest?row.close_price:row.exitPrice,3)}</td><td className={tone(profit)}>{money(profit,true)}</td><td>{dateValue?new Date(dateValue).toLocaleString("th-TH"):"—"}</td></tr>;})}{!rows?.length?<tr><td colSpan={9} className={styles.emptyCell}>ยังไม่มีรายการในช่วงเวลาที่เลือก</td></tr>:null}</tbody></table></div>;
-}
-
-function SystemOverview({ data, loading, onDrill }:{ data:any; loading:boolean; onDrill:(accountId:string,userId:string)=>void }) {
-  const summary = data?.summary || {};
-  return <>
-    <section className={styles.systemNotice}><div><b>Admin System Performance</b><span>ภาพรวมนี้รวมเฉพาะบัญชีลูกค้า ไม่รวมบัญชี OWNER / ADMIN ภายใน · ข้อมูลมาจาก Trade Journal จริง</span></div><strong>{loading?"กำลังอัปเดต...":"ข้อมูลจริงจาก SCENOVA"}</strong></section>
-    <section className={styles.kpis}>
-      <Kpi label="Customers" value={String(summary.customers||0)} sub="ลูกค้าที่มีในระบบ"/>
-      <Kpi label="MT5 Accounts" value={String(summary.accounts||0)} sub="บัญชีลูกค้าทั้งหมด"/>
-      <Kpi label="Online" value={String(summary.onlineAccounts||0)} sub="Heartbeat ≤ 35 วินาที" className={styles.good}/>
-      <Kpi label="System Net P/L" value={money(summary.netProfit,true)} sub="รวม Basket P/L" className={tone(summary.netProfit)}/>
-      <Kpi label="Win Rate" value={percent(summary.winRate)} sub="ทั้งระบบ"/>
-      <Kpi label="Profit Factor" value={number(summary.profitFactor,2)} sub="ทั้งระบบ"/>
-      <Kpi label="Total Trades" value={String(summary.trades||0)} sub="Basket ที่ปิด"/>
-      <Kpi label="Profitable Accounts" value={`${summary.profitableAccounts||0} (${number(summary.profitableAccountRate,1)}%)`} sub="บัญชีที่ P/L เป็นบวก"/>
-    </section>
-    <div className={styles.systemGrid}>
-      <section className={`${styles.card} ${styles.systemCurve}`}><div className={styles.cardTitle}><div><b>System Cumulative P/L</b><small>ผลรวมรายวันจากบัญชีลูกค้าทั้งระบบ</small></div><strong className={tone(summary.netProfit)}>{money(summary.netProfit,true)}</strong></div><LineChart points={data?.curve||[]} valueKey="cumulative" secondaryKey="cumulative"/></section>
-      <section className={`${styles.card} ${styles.systemAccounts}`}><div className={styles.cardTitle}><div><b>รายบุคคล / รายบัญชี</b><small>กดดูเพื่อ Drill-down รายละเอียดและสร้าง Share Snapshot</small></div></div><div className={styles.tableWrap}><table><thead><tr><th>ลูกค้า</th><th>MT5</th><th>Mode</th><th>Status</th><th>Trades</th><th>Win Rate</th><th>Net P/L</th><th></th></tr></thead><tbody>{(data?.accounts||[]).map((row:any)=><tr key={row.accountId}><td><b>{row.userCode}</b><small className={styles.tableSub}>{row.email}</small></td><td>{row.accountNumber}</td><td>{row.mode}</td><td><span className={row.online?styles.statusOnline:styles.statusOffline}>{row.online?"ONLINE":"OFFLINE"}</span></td><td>{row.trades}</td><td>{percent(row.winRate)}</td><td className={tone(row.netProfit)}>{money(row.netProfit,true)}</td><td><button className={styles.drillButton} onClick={()=>onDrill(row.accountId,row.userId)}>ดูรายบัญชี</button></td></tr>)}</tbody></table></div></section>
-    </div>
-  </>;
+  return <div className={styles.tableWrap}><table><thead><tr><th>#</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Lot</th><th>Entry</th><th>Exit</th><th>P/L</th><th>Close Time</th></tr></thead><tbody>{(rows||[]).slice(0,100).map((r:any,i:number)=>{const side=String(backtest?r.direction:r.side||"").toUpperCase(); const profit=Number(backtest?r.profit:r.profit||0); const dt=backtest?(r.closed_at||r.opened_at):r.closedAt; return <tr key={String(r.ticket||r.trade_index||i)}><td>{i+1}</td><td>{backtest?r.trade_index:r.ticket}</td><td>{backtest?(r.metadata?.symbol||"—"):r.symbol}</td><td><span className={side==="BUY"?styles.buy:styles.sell}>{side||"—"}</span></td><td>{num(backtest?r.volume:r.lot)}</td><td>{num(backtest?r.open_price:r.entryPrice,3)}</td><td>{num(backtest?r.close_price:r.exitPrice,3)}</td><td className={tone(profit)}>{money(profit,true)}</td><td>{dt?new Date(dt).toLocaleString("th-TH"):"—"}</td></tr>})}{!rows?.length?<tr><td colSpan={9} className={styles.emptyCell}>ยังไม่มีรายการในช่วงเวลาที่เลือก</td></tr>:null}</tbody></table></div>;
 }
