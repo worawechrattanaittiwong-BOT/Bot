@@ -25,18 +25,20 @@ def replace_all(path: str, old: str, new: str):
 ea = "mt5/FastBasketBot.mq5"
 flip = "mt5/include/FlipLockV1.mqh"
 web = "apps/web/app/dashboard/page.tsx"
+release = "apps/api/src/release-version.ts"
 
 # EA release version: this is a behavior-changing execution release.
 replace_all(ea, '#property version   "1.0.24"', '#property version   "1.0.25"')
 replace_all(ea, '#define SCENOVA_EA_VERSION "1.0.24"', '#define SCENOVA_EA_VERSION "1.0.25"')
 replace_all(ea, '#define SCENOVA_PRODUCT_VERSION "1.0.24"', '#define SCENOVA_PRODUCT_VERSION "1.0.25"')
+replace_all(release, 'export const DEFAULT_EA_VERSION = "1.0.24";', 'export const DEFAULT_EA_VERSION = "1.0.25";')
 
 # FLIP LOCK must own its runtime.  It starts independently instead of falling
 # through to AUTO/VECTOR entry selection.  RACE/ZERO/AUTO remain untouched.
 replace_once(
     ea,
     '''   // RACE starts only from a flat account. AUTO below is intentionally left\n   // untouched and never evaluates this branch unless engineMode=RACE.\n   if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)''',
-    '''   // FLIP LOCK V2 owns its entry + opposite-pending baton lifecycle.\n   // It deliberately bypasses AUTO/VECTOR/PARALLEL entry gates while keeping\n   // the common authorization, daily-risk and broker safety checks above.\n   if(FlipLockModeEnabled())\n   {\n      FlipLockManage();\n      return;\n   }\n\n   // RACE starts only from a flat account. AUTO below is intentionally left\n   // untouched and never evaluates this branch unless engineMode=RACE.\n   if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)'''
+    '''   // FLIP LOCK V2 owns its entry + opposite-pending baton lifecycle.\n   // It deliberately bypasses AUTO/VECTOR/PARALLEL entry gates while keeping\n   // the common authorization, hard daily-loss and broker safety checks above.\n   if(FlipLockModeEnabled())\n   {\n      FlipLockManage();\n      return;\n   }\n\n   // RACE starts only from a flat account. AUTO below is intentionally left\n   // untouched and never evaluates this branch unless engineMode=RACE.\n   if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)'''
 )
 
 # Call the FLIP manager on every timer, even immediately after a mode switch,
@@ -57,6 +59,15 @@ replace_once(
     '''   // FLIP LOCK V2 is intentionally single-position.  Its paired STOP\n   // order is the only reversal mechanism; AUTO rescue/profit exits stay out.\n   if(g_controlMode == "FLIP_LOCK")\n   {\n      g_maxPositions = 1;\n      g_rescueEnabled = false;\n      g_profitTargetMode = "OFF";\n   }\n   else\n      g_rescueEnabled = InpAdaptiveRescueEngine;'''
 )
 
+# User contract: Daily Profit Drawdown/Giveback must not interrupt FLIP LOCK.
+# Hard daily-loss and max-basket-loss protections remain unchanged.  Other
+# modes keep the existing Run-On drawdown behaviour exactly as before.
+replace_once(
+    ea,
+    '''   bool continueAfterTarget =\n      g_dailyProfitContinueAfterTarget &&\n      g_dailyProfitDrawdownPercent > 0.0;''',
+    '''   bool continueAfterTarget =\n      !FlipLockModeEnabled() &&\n      g_dailyProfitContinueAfterTarget &&\n      g_dailyProfitDrawdownPercent > 0.0;'''
+)
+
 # EA removal/restart must never strand a real broker-side pending order.
 replace_once(
     ea,
@@ -65,7 +76,7 @@ replace_once(
 )
 
 # Continuous baton is intentionally not capped by an arbitrary flip count.
-# Existing daily/basket risk protections remain the circuit breaker.
+# Hard daily-loss and max-basket-loss protections remain the circuit breaker.
 replace_once(
     flip,
     '#define FLIP_LOCK_MAX_FLIPS_PER_RUN 100\n',
@@ -82,7 +93,7 @@ replace_once(
 replace_once(
     web,
     'FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เข้าแบบ AUTO แล้วล็อกกำไรด้วยเส้น Flip เสมือน เมื่อราคาย้อนถึงจุดล็อกจะปิดฝั่งเดิมก่อนสลับฝั่งใหม่"},',
-    'FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เปิดไม้แรกได้ทันที แล้ววาง Pending ฝั่งตรงข้ามที่ระดับเดียวกับ Stop ของไม้ปัจจุบัน จากนั้นเลื่อนตามราคาและสลับ BUY / SELL ต่อเนื่อง"},'
+    'FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เปิดไม้แรกได้ทันที แล้ววาง Pending ฝั่งตรงข้ามที่ระดับเดียวกับ Stop ของไม้ปัจจุบัน จากนั้นเลื่อนตามราคาและสลับ BUY / SELL ต่อเนื่อง โดยไม่ใช้ Daily Profit Drawdown"},'
 )
 replace_once(
     web,
