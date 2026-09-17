@@ -89,3 +89,5 @@ for path in (ROOT / 'apps/api').rglob('*.ts'):
     if 'PARALLEL_UNIVERSE' in path.read_text(encoding='utf-8'):
         raise RuntimeError(f'PARALLEL_UNIVERSE remains in API runtime: {path}')
 print('Removed PARALLEL UNIVERSE runtime mode and repaired drawdown validation.')
+
+# workflow trigger after workflow file exists
