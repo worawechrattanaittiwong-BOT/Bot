@@ -6,7 +6,7 @@
 // Variant B = hypothetical VECTOR EDGE filter over those actual entries.
 // B is filter-only and has no execution authority.
 
-#define VECTOR_EDGE_AB_V1_VERSION "1.1.0-actual-entry-counterfactual"
+#define VECTOR_EDGE_AB_V1_VERSION "1.2.0-actual-entry-counterfactual"
 
 const bool VECTOR_EDGE_AB_EXECUTION_ENABLED = false;
 const double VECTOR_EDGE_AB_MIN_EDGE_RATIO = 40.0;
@@ -33,7 +33,6 @@ VECTOR_EDGE_AB_RESULT VectorEdgeABEvaluate(const bool variantAAccepted,
    result.variantBWouldAllow = false;
    result.variantBReason = "A_DID_NOT_ENTER";
 
-   // B can only remove an A entry. It can never create/promote one.
    if(!variantAAccepted || variantADirection == 0)
       return result;
 
@@ -76,29 +75,41 @@ VECTOR_EDGE_AB_RESULT VectorEdgeABEvaluate(const bool variantAAccepted,
 #ifndef VECTOR_EDGE_AB_PURE_ONLY
 
 long g_vectorEdgeABActualEntries = 0;
+long g_vectorEdgeABEvaluatedEntries = 0;
 long g_vectorEdgeABVariantBKeep = 0;
 long g_vectorEdgeABVariantBBlock = 0;
 long g_vectorEdgeABDirectionMismatch = 0;
 long g_vectorEdgeABInvalidSnapshots = 0;
+long g_vectorEdgeABInsufficientEvidence = 0;
+
+bool VectorEdgeABEvidenceReady()
+{
+   // Preferred direction compares BUY vs SELL EV. Do not mix a historical win
+   // probability on one side with an uncalibrated model-score proxy on the other.
+   return g_autoV20Buy.winSamples >= 20 && g_autoV20Sell.winSamples >= 20;
+}
 
 string VectorEdgeABSummaryJson()
 {
    return StringFormat(
-      "{\"version\":\"%s\",\"executionEnabled\":false,\"actualAEntries\":%I64d,\"variantBKeep\":%I64d,\"variantBBlock\":%I64d,\"directionMismatch\":%I64d,\"invalidSnapshots\":%I64d}",
+      "{\"version\":\"%s\",\"executionEnabled\":false,\"actualAEntries\":%I64d,\"evaluatedEntries\":%I64d,\"variantBKeep\":%I64d,\"variantBBlock\":%I64d,\"directionMismatch\":%I64d,\"invalidSnapshots\":%I64d,\"insufficientEvidence\":%I64d}",
       VECTOR_EDGE_AB_V1_VERSION,
       g_vectorEdgeABActualEntries,
+      g_vectorEdgeABEvaluatedEntries,
       g_vectorEdgeABVariantBKeep,
       g_vectorEdgeABVariantBBlock,
       g_vectorEdgeABDirectionMismatch,
-      g_vectorEdgeABInvalidSnapshots
+      g_vectorEdgeABInvalidSnapshots,
+      g_vectorEdgeABInsufficientEvidence
    );
 }
 
 void AutoVectorEdgeABObserveActualEntry(const int actualDirection)
 {
-   // Hard mode isolation: only real AUTO V20 entries are eligible.
    if(!AutoV20Enabled() || actualDirection == 0)
       return;
+
+   g_vectorEdgeABActualEntries++;
 
    VECTOR_EDGE_INPUT input;
    VECTOR_EDGE_OUTPUT edge;
@@ -118,29 +129,47 @@ void AutoVectorEdgeABObserveActualEntry(const int actualDirection)
    if(AutoVectorEdgeShadowBuildInput(input))
       edge = VectorEvaluateEdge(input);
 
-   VECTOR_EDGE_AB_RESULT ab = VectorEdgeABEvaluate(true,actualDirection,edge);
+   bool evidenceReady = VectorEdgeABEvidenceReady();
+   if(!evidenceReady)
+   {
+      g_vectorEdgeABInsufficientEvidence++;
+      PrintFormat(
+         "VECTOR_EDGE_AB_ENTRY {\"version\":\"%s\",\"executionEnabled\":false,\"actualEntry\":true,\"evaluated\":false,\"decisionId\":%I64d,\"aDirection\":%d,\"probabilitySource\":\"%s\",\"bReason\":\"INSUFFICIENT_TWO_SIDE_HISTORY\"}",
+         VECTOR_EDGE_AB_V1_VERSION,g_autoV20DecisionId,actualDirection,
+         g_vectorEdgeShadowProbabilitySource
+      );
+      return;
+   }
 
-   g_vectorEdgeABActualEntries++;
    if(!edge.valid)
+   {
       g_vectorEdgeABInvalidSnapshots++;
+      PrintFormat(
+         "VECTOR_EDGE_AB_ENTRY {\"version\":\"%s\",\"executionEnabled\":false,\"actualEntry\":true,\"evaluated\":false,\"decisionId\":%I64d,\"aDirection\":%d,\"bReason\":\"VECTOR_INVALID\"}",
+         VECTOR_EDGE_AB_V1_VERSION,g_autoV20DecisionId,actualDirection
+      );
+      return;
+   }
+
+   g_vectorEdgeABEvaluatedEntries++;
+   VECTOR_EDGE_AB_RESULT ab = VectorEdgeABEvaluate(true,actualDirection,edge);
 
    if(ab.variantBWouldAllow)
       g_vectorEdgeABVariantBKeep++;
    else
       g_vectorEdgeABVariantBBlock++;
 
-   if(edge.valid && edge.preferredDirection != 0 &&
-      edge.preferredDirection != actualDirection)
+   if(edge.preferredDirection != 0 && edge.preferredDirection != actualDirection)
       g_vectorEdgeABDirectionMismatch++;
 
-   // Counterfactual log only. Nothing here is assigned back to execution.
    PrintFormat(
-      "VECTOR_EDGE_AB_ENTRY {\"version\":\"%s\",\"executionEnabled\":false,\"actualEntry\":true,\"decisionId\":%I64d,\"decisionKind\":\"%s\",\"aDirection\":%d,\"aReason\":\"%s\",\"bWouldAllow\":%s,\"bReason\":\"%s\",\"vectorDirection\":%d,\"edgeRatio\":%.2f,\"entropy\":%.4f,\"agreement\":%.4f,\"buyEV\":%.4f,\"sellEV\":%.4f}",
+      "VECTOR_EDGE_AB_ENTRY {\"version\":\"%s\",\"executionEnabled\":false,\"actualEntry\":true,\"evaluated\":true,\"decisionId\":%I64d,\"decisionKind\":\"%s\",\"aDirection\":%d,\"aReason\":\"%s\",\"probabilitySource\":\"%s\",\"bWouldAllow\":%s,\"bReason\":\"%s\",\"vectorDirection\":%d,\"edgeRatio\":%.2f,\"entropy\":%.4f,\"agreement\":%.4f,\"buyEV\":%.4f,\"sellEV\":%.4f}",
       VECTOR_EDGE_AB_V1_VERSION,
       g_autoV20DecisionId,
       g_autoV20DecisionKind,
       actualDirection,
       g_autoV20DecisionReason,
+      g_vectorEdgeShadowProbabilitySource,
       ab.variantBWouldAllow ? "true" : "false",
       ab.variantBReason,
       edge.preferredDirection,
