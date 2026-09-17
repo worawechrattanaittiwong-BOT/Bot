@@ -5,7 +5,7 @@
 // IMPORTANT: reads existing AUTO V20 diagnostics only. It must never send,
 // modify, cancel, close, resize, or gate any order.
 
-#define VECTOR_EDGE_SHADOW_V1_VERSION "1.2.0"
+#define VECTOR_EDGE_SHADOW_V1_VERSION "1.3.0"
 #define VECTOR_EDGE_SHADOW_SAMPLE_MS 1000
 #define VECTOR_EDGE_SHADOW_LOG_MS 5000
 
@@ -76,6 +76,41 @@ double VectorShadowVolatilityNoise()
    return MathMin(1.0,MathAbs(g_atrRatio - 1.0));
 }
 
+double VectorShadowGrossProfitMoney(const AUTO_V20_SIDE &side)
+{
+   if(side.direction != 0 && side.plannedLot > 0.0 && side.entryPrice > 0.0 &&
+      side.tpPrice > 0.0)
+   {
+      double gross = MathAbs(AutoV20ProfitForMove(
+         side.direction,side.plannedLot,side.entryPrice,side.tpPrice
+      ));
+      if(gross > 0.0)
+         return gross;
+   }
+
+   // Conservative fallback when OrderCalcProfit context is unavailable.
+   if(side.expectedProfitMoney <= 0.0)
+      return 0.0;
+   return side.expectedProfitMoney + MathMax(0.0,side.knownCostMoney);
+}
+
+double VectorShadowGrossLossMoney(const AUTO_V20_SIDE &side)
+{
+   if(side.direction != 0 && side.plannedLot > 0.0 && side.entryPrice > 0.0 &&
+      side.slPrice > 0.0)
+   {
+      double gross = MathAbs(AutoV20ProfitForMove(
+         side.direction,side.plannedLot,side.entryPrice,side.slPrice
+      ));
+      if(gross > 0.0)
+         return gross;
+   }
+
+   return MathMax(0.0,
+      side.expectedLossMoney - MathMax(0.0,side.knownCostMoney)
+   );
+}
+
 bool AutoVectorEdgeShadowBuildInput(VECTOR_EDGE_INPUT &input)
 {
    // Hard scope boundary: AUTO V20 only.
@@ -94,24 +129,17 @@ bool AutoVectorEdgeShadowBuildInput(VECTOR_EDGE_INPUT &input)
       ? buySource
       : buySource + "+" + sellSource;
 
-   // AUTO V20 stores expectedProfitMoney NET of cost and expectedLossMoney
-   // INCLUDING cost. VECTOR EDGE expects gross economics + one explicit cost,
-   // so reconstruct gross values here to avoid subtracting cost twice.
+   // Use exact AUTO entry/TP/SL geometry when available. AUTO's stored
+   // expectedProfitMoney is already net of cost and expectedLossMoney already
+   // includes cost, so feeding them directly into a second cost-aware EV would
+   // double-count execution cost.
    input.buyKnownCostMoney = MathMax(0.0,g_autoV20Buy.knownCostMoney);
-   input.buyExpectedWinMoney = MathMax(
-      0.0,g_autoV20Buy.expectedProfitMoney + input.buyKnownCostMoney
-   );
-   input.buyExpectedLossMoney = MathMax(
-      0.0,g_autoV20Buy.expectedLossMoney - input.buyKnownCostMoney
-   );
+   input.buyExpectedWinMoney = VectorShadowGrossProfitMoney(g_autoV20Buy);
+   input.buyExpectedLossMoney = VectorShadowGrossLossMoney(g_autoV20Buy);
 
    input.sellKnownCostMoney = MathMax(0.0,g_autoV20Sell.knownCostMoney);
-   input.sellExpectedWinMoney = MathMax(
-      0.0,g_autoV20Sell.expectedProfitMoney + input.sellKnownCostMoney
-   );
-   input.sellExpectedLossMoney = MathMax(
-      0.0,g_autoV20Sell.expectedLossMoney - input.sellKnownCostMoney
-   );
+   input.sellExpectedWinMoney = VectorShadowGrossProfitMoney(g_autoV20Sell);
+   input.sellExpectedLossMoney = VectorShadowGrossLossMoney(g_autoV20Sell);
 
    input.volatilityNoise = VectorShadowVolatilityNoise();
    input.spreadPenalty = VectorShadowSpreadPenalty();
