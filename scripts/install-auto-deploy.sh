@@ -7,6 +7,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 REPO_DIR="${REPO_DIR:-/opt/Bot}"
+REPO_FULL_NAME="${REPO_FULL_NAME:-SCENOVA-EA/Bot}"
 
 if [ ! -d "$REPO_DIR/.git" ]; then
   echo "Git repository not found at $REPO_DIR"
@@ -40,6 +41,7 @@ Type=oneshot
 User=root
 Environment=HOME=/root
 Environment=REPO_DIR=$REPO_DIR
+Environment=REPO_FULL_NAME=$REPO_FULL_NAME
 ExecStart=/bin/bash $REPO_DIR/scripts/auto-deploy-vps.sh
 Nice=10
 IOSchedulingClass=best-effort
@@ -75,6 +77,7 @@ systemctl start scenova-auto-deploy.service || {
 echo ""
 echo "================================================"
 echo "SCENOVA AUTO DEPLOY ENABLED"
+echo "Repository: $REPO_FULL_NAME"
 echo "Checks GitHub main every 60 seconds"
 echo "Deploys only after CI succeeds"
 echo "================================================"
