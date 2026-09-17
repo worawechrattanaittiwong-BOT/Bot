@@ -1,0 +1,38 @@
+name: Apply Symbol Authority Integration Temporary
+
+on:
+  push:
+    branches:
+      - fix/symbol-authority-single-source
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/symbol-authority-single-source
+          fetch-depth: 0
+      - name: Align Integration Smoke with dedicated Trading Symbol authority
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('.github/workflows/integration-smoke.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '''          echo "[integration] saving bot settings with Basket profit mode"\n          SETTINGS_HTTP=$(curl -sS -o /tmp/settings-save.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"symbol":"XAUUSDm","lot":0.02,"maxPositions":7,"basketTriggerMoney":3.5,"basketTrailMoney":0.75,"maxBasketLossMoney":12,"dailyLossMoney":30,"dailyProfitTargetMoney":10,"dailyProfitContinueAfterTarget":true,"dailyProfitDrawdownPercent":20,"basketProfitTargetMoney":10,"perPositionProfitMoney":0,"perPositionLossMoney":2,"manualStopLossPoints":900,"minOrderIntervalMs":450,"maxOrdersPerMinute":90,"entryMode":"BUY_ONLY","allowMinimumLotOverride":true}')\n          if [ "$SETTINGS_HTTP" != "200" ]; then cat /tmp/settings-save.json; exit 1; fi\n          SETTINGS=$(cat /tmp/settings-save.json)\n          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.symbol')" = "XAUUSDm"\n'''
+          new = '''          echo "[integration] Trading Symbol is selected only through the dedicated authority"\n          SYMBOL_SELECT=$(curl -fsS -X PUT "$BASE/bot/trading-symbol?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"symbol":"XAUUSDm"}')\n          test "$(printf '%s' "$SYMBOL_SELECT" | jq -r '.symbol')" = "XAUUSDm"\n\n          echo "[integration] generic bot settings cannot override Trading Symbol"\n          SYMBOL_OVERRIDE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"symbol":"BTCUSDm","maxPositions":10}')\n          test "$(printf '%s' "$SYMBOL_OVERRIDE" | jq -r '.settings.symbol')" = "XAUUSDm"\n\n          echo "[integration] saving bot settings with Basket profit mode"\n          SETTINGS_HTTP=$(curl -sS -o /tmp/settings-save.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"lot":0.02,"maxPositions":7,"basketTriggerMoney":3.5,"basketTrailMoney":0.75,"maxBasketLossMoney":12,"dailyLossMoney":30,"dailyProfitTargetMoney":10,"dailyProfitContinueAfterTarget":true,"dailyProfitDrawdownPercent":20,"basketProfitTargetMoney":10,"perPositionProfitMoney":0,"perPositionLossMoney":2,"manualStopLossPoints":900,"minOrderIntervalMs":450,"maxOrdersPerMinute":90,"entryMode":"BUY_ONLY","allowMinimumLotOverride":true}')\n          if [ "$SETTINGS_HTTP" != "200" ]; then cat /tmp/settings-save.json; exit 1; fi\n          SETTINGS=$(cat /tmp/settings-save.json)\n          test "$(printf '%s' "$SETTINGS" | jq -r '.settings.symbol')" = "XAUUSDm"\n'''
+          if old not in text:
+              raise SystemExit('integration settings block anchor not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+      - name: Remove temporary workflow and commit
+        run: |
+          rm .github/workflows/apply-symbol-authority-integration-temp.yml
+          git config user.name "scenova-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/workflows/integration-smoke.yml .github/workflows/apply-symbol-authority-integration-temp.yml
+          git commit -m "test: use dedicated Trading Symbol authority in integration"
+          git push origin HEAD:fix/symbol-authority-single-source

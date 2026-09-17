@@ -89,7 +89,7 @@ export class TradingSymbolController {
     const explicitSymbol = normalizeSymbol(settings.startupSymbol);
     const activeSymbol = normalizeSymbol(metrics.symbol);
     const fallbackSymbol = normalizeSymbol(settings.symbol);
-    const desiredSymbol = explicitSymbol || activeSymbol || fallbackSymbol || "XAUUSD";
+    const desiredSymbol = explicitSymbol || fallbackSymbol || activeSymbol || "XAUUSD";
     const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const matches = Boolean(
@@ -164,10 +164,13 @@ export class TradingSymbolController {
 
     await this.db.query(
       `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
-       VALUES($1,jsonb_build_object('startupSymbol',$2::text),now())
+       VALUES($1,jsonb_build_object('startupSymbol',$2::text,'symbol',$2::text),now())
        ON CONFLICT(bot_instance_id)
        DO UPDATE SET
-         settings=jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
+         settings=jsonb_set(
+           jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
+           '{symbol}',to_jsonb($2::text),true
+         ),
          updated_at=now()`,
       [instance.id, symbol]
     );
@@ -256,7 +259,7 @@ export class EaTradingSymbolController {
     const explicitSymbol = normalizeSymbol(settings.startupSymbol);
     const currentSymbol = normalizeSymbol(metrics.symbol);
     const legacySavedSymbol = normalizeSymbol(settings.symbol);
-    const desiredSymbol = explicitSymbol || currentSymbol || legacySavedSymbol || "XAUUSD";
+    const desiredSymbol = explicitSymbol || legacySavedSymbol || currentSymbol || "XAUUSD";
     const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const currentMatchesDesired = Boolean(
