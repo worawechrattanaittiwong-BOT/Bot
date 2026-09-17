@@ -1,114 +1,72 @@
 from pathlib import Path
 
 
+def text(path: str) -> str:
+    return Path(path).read_text(encoding="utf-8")
+
+
 def replace_once(path: str, old: str, new: str):
     p = Path(path)
-    text = p.read_text(encoding="utf-8")
-    if new and new in text:
+    current = p.read_text(encoding="utf-8")
+    if new in current:
         return
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"expected exactly one anchor in {path}, found {count}: {old[:140]!r}")
-    p.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-
-def replace_all(path: str, old: str, new: str):
-    p = Path(path)
-    text = p.read_text(encoding="utf-8")
-    if old not in text:
-        if new and new in text:
-            return
+    if old not in current:
         raise SystemExit(f"anchor missing in {path}: {old[:140]!r}")
-    p.write_text(text.replace(old, new), encoding="utf-8")
+    p.write_text(current.replace(old, new, 1), encoding="utf-8")
 
 
 ea = "mt5/FastBasketBot.mq5"
-flip = "mt5/include/FlipLockV1.mqh"
 web = "apps/web/app/dashboard/page.tsx"
 release = "apps/api/src/release-version.ts"
 
-# EA release version: this is a behavior-changing execution release.
-replace_all(ea, '#property version   "1.0.24"', '#property version   "1.0.25"')
-replace_all(ea, '#define SCENOVA_EA_VERSION "1.0.24"', '#define SCENOVA_EA_VERSION "1.0.25"')
-replace_all(ea, '#define SCENOVA_PRODUCT_VERSION "1.0.24"', '#define SCENOVA_PRODUCT_VERSION "1.0.25"')
-replace_all(release, 'export const DEFAULT_EA_VERSION = "1.0.24";', 'export const DEFAULT_EA_VERSION = "1.0.25";')
+# This branch already contains the clip-style FLIP LOCK V2 runtime.  Keep this
+# patcher intentionally idempotent: validate the baseline, then apply only the
+# missing Drawdown-disable state requested for FLIP LOCK.
+ea_text = text(ea)
+required_baseline = [
+    'FLIP LOCK V2 owns its entry',
+    'FlipLockManage();',
+    'FlipLockRemoveAllPending();',
+    '#property version   "1.0.25"',
+]
+for marker in required_baseline:
+    if marker not in ea_text:
+        raise SystemExit(f"FLIP LOCK V2 baseline missing: {marker}")
 
-# FLIP LOCK must own its runtime. It starts independently instead of falling
-# through to AUTO/VECTOR entry selection. RACE/ZERO/AUTO remain untouched.
-replace_once(
-    ea,
-    '''   // RACE starts only from a flat account. AUTO below is intentionally left\n   // untouched and never evaluates this branch unless engineMode=RACE.\n   if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)''',
-    '''   // FLIP LOCK V2 owns its entry + opposite-pending baton lifecycle.\n   // It deliberately bypasses AUTO/VECTOR/PARALLEL entry gates while keeping\n   // the common authorization, hard daily-loss and broker safety checks above.\n   if(FlipLockModeEnabled())\n   {\n      FlipLockManage();\n      return;\n   }\n\n   // RACE starts only from a flat account. AUTO below is intentionally left\n   // untouched and never evaluates this branch unless engineMode=RACE.\n   if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)'''
-)
+# Runtime hard-disable of Daily Profit Drawdown/Giveback for FLIP LOCK only.
+if 'g_dailyProfitDrawdownPercent = 0.0;' not in ea_text:
+    replace_once(
+        ea,
+        '''      g_maxPositions = 1;\n      g_rescueEnabled = false;\n      g_profitTargetMode = "OFF";\n   }\n   else\n      g_rescueEnabled = InpAdaptiveRescueEngine;''',
+        '''      g_maxPositions = 1;\n      g_rescueEnabled = false;\n      g_profitTargetMode = "OFF";\n      g_dailyProfitContinueAfterTarget = false;\n      g_dailyProfitDrawdownPercent = 0.0;\n   }\n   else\n      g_rescueEnabled = InpAdaptiveRescueEngine;'''
+    )
 
-# Call the FLIP manager on every timer, even immediately after a mode switch,
-# so any broker-side FLIP pending order is removed outside FLIP_LOCK.
-replace_once(
-    ea,
-    '''   // FLIP LOCK supplements AUTO V20 only and is a no-op in every other mode.\n   if(FlipLockModeEnabled())\n      FlipLockManage();''',
-    '''   // FLIP LOCK V2 also owns cleanup. Always call it so a mode switch\n   // cannot leave an orphan BUY STOP / SELL STOP at the broker.\n   FlipLockManage();'''
-)
+# The Run-On/giveback function must also have an explicit mode guard so stale
+# persisted state cannot interrupt FLIP LOCK after a restart.
+ea_text = text(ea)
+if '!FlipLockModeEnabled() &&' not in ea_text:
+    replace_once(
+        ea,
+        '''   bool continueAfterTarget =\n      g_dailyProfitContinueAfterTarget &&\n      g_dailyProfitDrawdownPercent > 0.0;''',
+        '''   bool continueAfterTarget =\n      !FlipLockModeEnabled() &&\n      g_dailyProfitContinueAfterTarget &&\n      g_dailyProfitDrawdownPercent > 0.0;'''
+    )
 
-# Exact clip behaviour is one live position + one opposite STOP. Rescue and
-# money-profit exits would add/close positions behind the baton, so FLIP LOCK
-# disables those features only while this control mode is active.
-replace_once(
-    ea,
-    '''   // FLIP LOCK is intentionally single-position to prevent accidental basket\n   // averaging while a baton-switch cycle is active.\n   if(g_controlMode == "FLIP_LOCK")\n      g_maxPositions = 1;''',
-    '''   // FLIP LOCK V2 is intentionally single-position. Its paired STOP\n   // order is the only reversal mechanism; AUTO rescue/profit exits stay out.\n   if(g_controlMode == "FLIP_LOCK")\n   {\n      g_maxPositions = 1;\n      g_rescueEnabled = false;\n      g_profitTargetMode = "OFF";\n   }\n   else\n      g_rescueEnabled = InpAdaptiveRescueEngine;'''
-)
+# UI: selecting FLIP LOCK stores no Drawdown state.  Other modes are untouched.
+web_text = text(web)
+if 'props.onEdit?.("dailyProfitDrawdownPercent",0);' not in web_text:
+    replace_once(
+        web,
+        '''    if (mode === "FLIP_LOCK") {\n      props.onEdit?.("profitTargetMode","OFF");\n      props.onEdit?.("manualStopLossPoints",0);\n      props.onEdit?.("maxPositions",1);\n      return;\n    }''',
+        '''    if (mode === "FLIP_LOCK") {\n      props.onEdit?.("profitTargetMode","OFF");\n      props.onEdit?.("manualStopLossPoints",0);\n      props.onEdit?.("maxPositions",1);\n      props.onEdit?.("dailyProfitContinueAfterTarget",false);\n      props.onEdit?.("dailyProfitDrawdownPercent",0);\n      return;\n    }'''
+    )
 
-# If the first FLIP patch is already present, hard-disable Daily Profit
-# Drawdown/Giveback state as well so stale saved settings cannot reactivate it.
-replace_once(
-    ea,
-    '''      g_maxPositions = 1;\n      g_rescueEnabled = false;\n      g_profitTargetMode = "OFF";\n   }\n   else\n      g_rescueEnabled = InpAdaptiveRescueEngine;''',
-    '''      g_maxPositions = 1;\n      g_rescueEnabled = false;\n      g_profitTargetMode = "OFF";\n      g_dailyProfitContinueAfterTarget = false;\n      g_dailyProfitDrawdownPercent = 0.0;\n   }\n   else\n      g_rescueEnabled = InpAdaptiveRescueEngine;'''
-)
+# Release authority must stay aligned with the behavior-changing EA release.
+release_text = text(release)
+if 'DEFAULT_EA_VERSION = "1.0.25"' not in release_text:
+    replace_once(
+        release,
+        'DEFAULT_EA_VERSION = "1.0.24"',
+        'DEFAULT_EA_VERSION = "1.0.25"'
+    )
 
-# Daily Profit Drawdown/Giveback must never interrupt FLIP LOCK. Hard daily
-# loss and max-basket-loss protections remain unchanged for circuit breaking.
-replace_once(
-    ea,
-    '''   bool continueAfterTarget =\n      g_dailyProfitContinueAfterTarget &&\n      g_dailyProfitDrawdownPercent > 0.0;''',
-    '''   bool continueAfterTarget =\n      !FlipLockModeEnabled() &&\n      g_dailyProfitContinueAfterTarget &&\n      g_dailyProfitDrawdownPercent > 0.0;'''
-)
-
-# EA removal/restart must never strand a real broker-side pending order.
-replace_once(
-    ea,
-    '''void OnDeinit(const int reason)\n{\n   EventKillTimer();''',
-    '''void OnDeinit(const int reason)\n{\n   FlipLockRemoveAllPending();\n   EventKillTimer();'''
-)
-
-# Continuous baton is intentionally not capped by an arbitrary flip count.
-replace_once(
-    flip,
-    '#define FLIP_LOCK_MAX_FLIPS_PER_RUN 100\n',
-    ''
-)
-replace_once(
-    flip,
-    '''   if(g_flipLockFlipCount>=FLIP_LOCK_MAX_FLIPS_PER_RUN)\n   {\n      FlipLockRemoveAllPending();\n      g_flipLockReason="MAX_FLIPS_REACHED";\n      g_executionStatus="FLIP_LOCK_MAX_FLIPS";\n      return;\n   }\n\n''',
-    ''
-)
-
-# UI describes the actual live behaviour and stores OFF / no Drawdown for
-# FLIP_LOCK only. AUTO and PARALLEL_UNIVERSE keep their existing settings.
-replace_once(
-    web,
-    'FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เข้าแบบ AUTO แล้วล็อกกำไรด้วยเส้น Flip เสมือน เมื่อราคาย้อนถึงจุดล็อกจะปิดฝั่งเดิมก่อนสลับฝั่งใหม่"},',
-    'FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เปิดไม้แรกได้ทันที แล้ววาง Pending ฝั่งตรงข้ามที่ระดับเดียวกับ Stop ของไม้ปัจจุบัน จากนั้นเลื่อนตามราคาและสลับ BUY / SELL ต่อเนื่อง โดยไม่ใช้ Daily Profit Drawdown"},'
-)
-replace_once(
-    web,
-    '''    if (mode === "AUTO" || mode === "FLIP_LOCK" || mode === "PARALLEL_UNIVERSE") {\n      props.onEdit?.("profitTargetMode","AUTO");\n      props.onEdit?.("manualStopLossPoints",0);\n      if (mode === "FLIP_LOCK") props.onEdit?.("maxPositions",1);\n      return;\n    }''',
-    '''    if (mode === "FLIP_LOCK") {\n      props.onEdit?.("profitTargetMode","OFF");\n      props.onEdit?.("manualStopLossPoints",0);\n      props.onEdit?.("maxPositions",1);\n      return;\n    }\n    if (mode === "AUTO" || mode === "PARALLEL_UNIVERSE") {\n      props.onEdit?.("profitTargetMode","AUTO");\n      props.onEdit?.("manualStopLossPoints",0);\n      return;\n    }'''
-)
-replace_once(
-    web,
-    '''    if (mode === "FLIP_LOCK") {\n      props.onEdit?.("profitTargetMode","OFF");\n      props.onEdit?.("manualStopLossPoints",0);\n      props.onEdit?.("maxPositions",1);\n      return;\n    }''',
-    '''    if (mode === "FLIP_LOCK") {\n      props.onEdit?.("profitTargetMode","OFF");\n      props.onEdit?.("manualStopLossPoints",0);\n      props.onEdit?.("maxPositions",1);\n      props.onEdit?.("dailyProfitContinueAfterTarget",false);\n      props.onEdit?.("dailyProfitDrawdownPercent",0);\n      return;\n    }'''
-)
-
-print("FLIP LOCK V2 clip-style isolated patch applied")
+print("FLIP LOCK V2 Drawdown-disable patch is current")
