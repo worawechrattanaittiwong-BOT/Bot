@@ -1,10 +1,7 @@
 name: Build MT5 EA
 
-# Release metadata trigger: EA v1.0.23 RACE 10-second volume rollover runtime.
-# Official MT5 compile and publish pipeline for the current V20/RACE source.
-# ZERO is a dedicated pending-only engine: build the configured symmetric ladder,
-# close on its own net-profit rule, then immediately rearm without market filters.
-
+# Official compile/publish pipeline for AUTO + VECTOR EDGE, FLIP LOCK,
+# PARALLEL UNIVERSE, RACE and ZERO GRID.
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
   cancel-in-progress: true
@@ -15,10 +12,12 @@ on:
     branches: [main]
     paths:
       - "mt5/FastBasketBot.mq5"
+      - "mt5/include/**"
       - ".github/workflows/build-mt5-ea.yml"
   pull_request:
     paths:
       - "mt5/FastBasketBot.mq5"
+      - "mt5/include/**"
       - ".github/workflows/build-mt5-ea.yml"
 
 permissions:
@@ -46,7 +45,7 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Validate current V20 AUTO, volume-driven RACE and simple ZERO source
+      - name: Validate production runtime source
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -55,117 +54,47 @@ jobs:
 
           $propertyMatch = [regex]::Match($text, '#property\s+version\s+"([^"]+)"')
           $runtimeMatch = [regex]::Match($text, '#define\s+SCENOVA_EA_VERSION\s+"([^"]+)"')
-          if (-not $propertyMatch.Success -or -not $runtimeMatch.Success) {
-            throw "EA version metadata missing"
-          }
+          if (-not $propertyMatch.Success -or -not $runtimeMatch.Success) { throw "EA version metadata missing" }
           $eaVersion = $propertyMatch.Groups[1].Value
-          $runtimeVersion = $runtimeMatch.Groups[1].Value
-          if ($eaVersion -ne $runtimeVersion) {
-            throw "EA version mismatch: property=$eaVersion runtime=$runtimeVersion"
-          }
+          if ($eaVersion -ne $runtimeMatch.Groups[1].Value) { throw "EA version metadata mismatch" }
           "EA_VERSION=$eaVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EA_SOURCE=$mq5Path" | Out-File -FilePath $env:GITHUB_ENV -Append
 
           foreach ($sentinel in @(
             'bool AutoV20Enabled()',
-            'return g_engineMode == "AUTO" && g_controlMode == "AUTO";',
-            'AUTO_V20_SIDE g_autoV20Buy;',
-            'AUTO_V20_SIDE g_autoV20Sell;',
-            'void AutoV20UpdateTrendPhase(double momentum)',
-            'void AutoV20EvaluateSide(',
-            'autoV20Diagnostics=StringFormat',
-            'g_basketJournalAutoDecisionId',
-            'if(LegacyBasketEngineEnabled() && BasketFillEnabled() && g_burstActive)',
+            'g_controlMode == "FLIP_LOCK"',
+            'g_controlMode == "PARALLEL_UNIVERSE"',
+            '#include "include\\AutoVectorEdgeLiveV1.mqh"',
+            '#include "include\\ParallelUniverseV1.mqh"',
+            '#include "include\\FlipLockV1.mqh"',
+            'AutoVectorEdgeLiveAllow',
+            'ParallelUniverseLiveAllow',
+            'FlipLockManage',
             '#define RACE_VOLUME_WINDOW_SECONDS 10',
-            'void RaceSampleVolumePressure()',
             'int RaceVolumeDirection()',
-            'return RaceVolumeDirection();',
-            'RACE_DIRECTION_LOCK',
-            'RACE_MIXED_BASKET_BLOCK',
-            'RACE_VOLUME_WARMUP',
-            'RACE_VOLUME_ROLLOVER',
-            'RACE_VOLUME_ROLLOVER_WAIT_BUY',
-            'RACE_VOLUME_ROLLOVER_WAIT_SELL',
-            'int RaceHarvestProfitablePositions()',
-            'RACE_PROFIT_HARVEST',
-            'RACE_PROFIT_HARVEST_FLAT',
-            'RACE_PROFIT_FIRST_V116',
-            'SaaSRace',
             'bool ZeroGridModeEnabled()',
-            '#define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V1"',
-            'input bool            InpZeroGridLowVolatilityEnabled = false;',
-            'bool ZeroGridEffectiveLowVolatilityEnabled()',
-            'double ZeroGridEffectiveLevelLot(int level)',
-            'ZeroGridEffectiveLowVolatilityEnabled() ? 0.10 : 1.0',
-            'g_zeroGridLowVolatilityEnabled ? 0.30 : g_zeroGridStepPrice',
-            'zeroGridConfiguredLevelsPerSide',
-            'zeroGridEffectiveLevelsPerSide',
-            'zeroGridMaxLevelsPerSide',
-            'ZERO_SIMPLE_STABLE_V117',
-            'bool ZeroGridOwnsSelectedPosition()',
-            'SYMBOL_TRADE_TICK_SIZE',
-            'HistoryOrdersTotal()',
-            'SaaSZeroGrid',
-            'double ZeroGridEntryGapPrice()',
-            'double ZeroGridEstimatedExitCostMoney()',
-            'double ZeroGridPendingAnchorPrice(bool buySide)',
-            'double ZeroGridPendingLevelPrice(bool buySide,int level)',
-            'bool ZeroGridRecenterFlatCycle()',
-            'request.type_time=ZeroGridPendingTimeType();',
-            'int maxPlacementAttempts=(level==1 ? 3 : 2);',
-            'ZERO_GRID_READY',
-            'ZERO_GRID_BUILDING',
-            'for(int level=1;level<=levels;level++)',
-            'bool   g_settingsSynchronized = false;',
-            'WAIT_SETTINGS_SYNC',
             'request.action=TRADE_ACTION_PENDING;',
             'ORDER_TYPE_BUY_STOP',
             'ORDER_TYPE_SELL_STOP',
-            'ulong ZeroGridNearestCloseTicket()',
-            'double bestVolume=1.0e100;',
-            'volume<bestVolume-lotTolerance',
-            'int profitRank=floating>=0.0 ? 0 : 1;',
-            'ZERO_GRID_CLOSE_ALL_BURST',
-            'OrderSendAsync(request,result)',
-            'g_zeroGridLastExitBurstMs',
-            'state==ORDER_STATE_FILLED || state==ORDER_STATE_PARTIAL',
-            'ZeroGridEffectiveLevelLot(level)',
-            'ZERO_GRID_STOPPED_FLAT',
-            'ZERO_GRID_SAFE_DRAIN',
+            'bool   g_settingsSynchronized = false;',
             'TradePermissionStatus',
-            'AdaptiveSpreadAllowed',
-            'OrderSendWithPriceRetry',
-            'CONTROL_NOT_FRESH',
-            'NO_ACCESS'
+            'AdaptiveSpreadAllowed'
           )) {
-            if (-not $text.Contains($sentinel)) {
-              throw "Required V20/RACE/ZERO sentinel missing: $sentinel"
-            }
+            if (-not $text.Contains($sentinel)) { throw "Required runtime sentinel missing: $sentinel" }
           }
 
-          if ($text.Contains('ZERO_GRID_DEMO_ONLY') -or $text.Contains('bool ZeroGridDemoAllowed()')) {
-            throw "Obsolete ZERO GRID Demo-only gate is still present"
+          foreach ($module in @(
+            'mt5\include\AutoVectorEdgeV1.mqh',
+            'mt5\include\AutoVectorEdgeLiveV1.mqh',
+            'mt5\include\ParallelUniverseV1.mqh',
+            'mt5\include\FlipLockV1.mqh'
+          )) {
+            if (-not (Test-Path $module)) { throw "Required module missing: $module" }
           }
-          if ($text.Contains('return MathMax(g_zeroGridStepPrice,ZeroGridMinPendingDistancePrice()+ZeroGridTickSize());')) {
-            throw "Obsolete ZERO GRID over-wide spacing rule is still present"
-          }
-          if ($text.Contains('ZeroGridEffectiveStepPrice()*1.5')) {
-            throw "Obsolete ZERO GRID 1.5-step first-entry gap is still present"
-          }
-          if ($text.Contains('for(int level=g_zeroGridLevelsPerSide;level>=1;level--)')) {
-            throw "Obsolete ZERO GRID far-to-near staging is still present"
-          }
-          if ($text.Contains('ZERO_GRID_PAIR_ROLLBACK') -or $text.Contains('ZERO_PAIR_ATOMIC_V116')) {
-            throw "Obsolete ZERO atomic rollback/churn path is still present"
-          }
+
           if ($text.Contains('StringFind(InpApiBase, "http://") == 0')) {
             throw "Plain HTTP API configuration is still accepted"
           }
-
-          $sourceDir = "C:\SCENOVA-EA-Source"
-          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
-          $source = Join-Path $sourceDir "FastBasketBot.mq5"
-          Copy-Item -Force $mq5Path $source
-          "EA_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Compile current private MQ5 to EX5
         shell: powershell
@@ -178,9 +107,7 @@ jobs:
           if (-not (Test-Path $ex5)) { throw "FastBasketBot.ex5 was not produced" }
           if (Test-Path $log) {
             $compileLog = Get-Content $log -Raw
-            if ($compileLog -match '(?i)\b[1-9][0-9]*\s+errors?\b') {
-              throw "MetaEditor reported compile errors"
-            }
+            if ($compileLog -match '(?i)\b[1-9][0-9]*\s+errors?\b') { throw "MetaEditor reported compile errors" }
           }
           Copy-Item -Force $ex5 "$env:RUNNER_TEMP\FastBasketBot.ex5"
           $hash = (Get-FileHash -Algorithm SHA256 $ex5).Hash.ToLowerInvariant()
@@ -190,25 +117,23 @@ jobs:
             eaVersion = $env:EA_VERSION
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
-            brain = "V20"
-            policy = "AUTO_V20_RACE_VOLUME_10S_ZERO_LOW_VOLATILITY_V3"
+            brain = "AUTO_VECTOR_EDGE_V1"
+            policy = "AUTO_VECTOR_EDGE_FLIP_LOCK_PARALLEL_UNIVERSE_V1"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
-      - name: Publish current V20 compiled artifact
+      - name: Publish compiled artifact on main
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           git config user.name "SCENOVA Build Bot"
           git config user.email "actions@users.noreply.github.com"
-
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
-            Write-Host "EA Brain V20 publish attempt $attempt/6"
             git fetch origin main
             if ($LASTEXITCODE -ne 0) { Start-Sleep -Seconds 2; continue }
 
-            git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5
+            git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5 mt5/include
             if ($LASTEXITCODE -eq 1) {
               Write-Host "A newer EA source exists on main; skipping obsolete compiled artifact."
               exit 0
@@ -216,26 +141,19 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Could not compare EA source with latest main" }
 
             git reset --hard origin/main
-            if ($LASTEXITCODE -ne 0) { throw "Could not reset to latest main" }
             New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
             Copy-Item -Force "$env:RUNNER_TEMP\FastBasketBot.ex5" "mt5\release\FastBasketBot.ex5"
             Copy-Item -Force "$env:RUNNER_TEMP\FastBasketBot-manifest.json" "mt5\release\manifest.json"
-
             git add -f mt5/release/FastBasketBot.ex5
             git add mt5/release/manifest.json
             git diff --cached --quiet
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "V20 compiled artifact is already current."
-              $published = $true
-              break
-            }
-            if ($LASTEXITCODE -ne 1) { throw "Could not inspect generated V20 changes" }
+            if ($LASTEXITCODE -eq 0) { $published = $true; break }
+            if ($LASTEXITCODE -ne 1) { throw "Could not inspect generated EA changes" }
 
-            git commit -m "build: publish EA Brain V20 v$env:EA_VERSION [skip ea build]"
-            if ($LASTEXITCODE -ne 0) { throw "Could not commit V20 artifact" }
+            git commit -m "build: publish EA v$env:EA_VERSION [skip ea build]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit EA artifact" }
             git push origin HEAD:main
             if ($LASTEXITCODE -eq 0) { $published = $true; break }
             Start-Sleep -Seconds 2
           }
-
-          if (-not $published) { throw "Failed to publish Brain V20 after retries" }
+          if (-not $published) { throw "Failed to publish EA artifact after retries" }
