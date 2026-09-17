@@ -6,22 +6,18 @@
 // cancel, or close orders. It is intentionally isolated so it can run in
 // SHADOW mode before any future AUTO integration.
 
-#define VECTOR_EDGE_V1_VERSION "1.1.0-shadow"
+#define VECTOR_EDGE_V1_VERSION "1.2.0-shadow"
 
 struct VECTOR_EDGE_INPUT
 {
-   double buyProbability;       // 0..1, supplied by the existing AUTO model/history
-   double sellProbability;      // 0..1, supplied by the existing AUTO model/history
-
-   // BUY and SELL economics stay separate. This prevents the shadow observer
-   // from accidentally assuming both directions have identical RR/costs.
+   double buyProbability;       // absolute 0..1 probability/proxy for BUY
+   double sellProbability;      // absolute 0..1 probability/proxy for SELL
    double buyExpectedWinMoney;
    double buyExpectedLossMoney;
    double buyKnownCostMoney;
    double sellExpectedWinMoney;
    double sellExpectedLossMoney;
    double sellKnownCostMoney;
-
    double volatilityNoise;      // normalized >= 0
    double spreadPenalty;        // normalized >= 0
    double modelUncertainty;     // 0..1
@@ -59,7 +55,6 @@ double VectorSafeLog2(const double value)
    return MathLog(value) / MathLog(2.0);
 }
 
-// Binary information entropy. 0 means one side dominates, 1 means 50/50.
 double VectorBinaryEntropy(const double probability)
 {
    double p = VectorClamp01(probability);
@@ -68,7 +63,6 @@ double VectorBinaryEntropy(const double probability)
    return -(p * VectorSafeLog2(p) + q * VectorSafeLog2(q));
 }
 
-// Expected value after known execution costs. Loss magnitude must be positive.
 double VectorExpectedValue(const double winProbability,
                            const double expectedWinMoney,
                            const double expectedLossMoney,
@@ -81,8 +75,6 @@ double VectorExpectedValue(const double winProbability,
    return (p * win) - ((1.0 - p) * loss) - cost;
 }
 
-// Conservative Kelly diagnostic. It is NEVER an order-size instruction.
-// Cap at 0.25 so a future integration cannot accidentally expose full Kelly.
 double VectorFractionalKelly(const double winProbability,
                              const double expectedWinMoney,
                              const double expectedLossMoney)
@@ -95,12 +87,9 @@ double VectorFractionalKelly(const double winProbability,
    double q = 1.0 - p;
    double fullKelly = (b * p - q) / b;
    if(fullKelly <= 0.0) return 0.0;
-
-   // Quarter-Kelly only for diagnostic use.
    return MathMin(0.25, fullKelly * 0.25);
 }
 
-// Directional agreement rewards velocity/acceleration that point the same way.
 double VectorDirectionalAgreement(const int direction,
                                   const double velocity,
                                   const double acceleration)
@@ -130,6 +119,9 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
    out.exitEdgeLost = false;
    out.reason = "INVALID";
 
+   // Keep absolute side probabilities for EV/Kelly. BUY and SELL historical
+   // win rates are independent conditional estimates and must not be forced
+   // to sum to 1. Only the directional entropy comparison uses normalized mass.
    double buyP = VectorClamp01(input.buyProbability);
    double sellP = VectorClamp01(input.sellProbability);
    double probabilitySum = buyP + sellP;
@@ -139,11 +131,9 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
       return out;
    }
 
-   // Normalize BUY/SELL probability mass so entropy is comparable.
-   buyP /= probabilitySum;
-   sellP /= probabilitySum;
+   double buyDirectionalMass = buyP / probabilitySum;
+   out.entropy = VectorBinaryEntropy(buyDirectionalMass);
 
-   out.entropy = VectorBinaryEntropy(buyP);
    out.buyEV = VectorExpectedValue(buyP,
                                    input.buyExpectedWinMoney,
                                    input.buyExpectedLossMoney,
@@ -181,8 +171,7 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
                          MathMax(0.0, input.spreadPenalty) +
                          uncertainty;
 
-   // Diagnostic score only. Positive expectancy is required before any score.
-   if(bestEV > 0.0)
+   if(bestEV > 0.0 && out.preferredDirection != 0)
    {
       double evScale = bestEV / MathMax(0.01,
                                        MathMax(chosenLoss,
@@ -200,20 +189,18 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
                                                chosenWin,
                                                chosenLoss);
 
-   // Conservative diagnostic multiplier. Never used directly by execution V1.
    out.riskMultiplier = VectorClamp01((out.edgeRatio / 100.0) *
                                       (1.0 - uncertainty) *
                                       (0.5 + 0.5 * persistence));
 
-   // Edge-loss diagnostic for a future dynamic-exit shadow observer.
-   // It deliberately does not close anything in V1.
    out.exitEdgeLost = (bestEV <= 0.0 ||
+                       out.preferredDirection == 0 ||
                        out.edgeRatio < 20.0 ||
                        out.directionalAgreement < 0.35);
 
    out.valid = true;
    if(!out.positiveExpectancy)
-      out.reason = "NEGATIVE_EXPECTANCY";
+      out.reason = "NEGATIVE_OR_AMBIGUOUS_EXPECTANCY";
    else if(out.edgeRatio < 20.0)
       out.reason = "WEAK_EDGE";
    else if(out.edgeRatio < 40.0)
