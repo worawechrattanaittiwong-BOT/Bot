@@ -17,6 +17,7 @@ type Dashboard = {
   trialRequest: any;
   liveStatus: any;
   softwareUpdate: any;
+  startTransition: any;
   maintenance: any;
   partner: any;
   tradeJournal: any;
@@ -518,14 +519,11 @@ export default function DashboardPage() {
   ].join("|");
 
   useEffect(() => {
-    if (!softwareUpdateRequired) {
-      setSoftwareUpdateAlertVisible(false);
-      return;
-    }
-    setSoftwareUpdateAlertVisible(true);
-    const timer = window.setTimeout(() => setSoftwareUpdateAlertVisible(false), 3000);
-    return () => window.clearTimeout(timer);
-  }, [softwareUpdateAlertKey]);
+    // Version mismatch is an actionable state, not a toast. Keep it visible
+    // until Agent / EA / EX5 actually match the server again. Updates remain
+    // manual: detection only shows the persistent action; it never clicks it.
+    setSoftwareUpdateAlertVisible(softwareUpdateRequired);
+  }, [softwareUpdateAlertKey, softwareUpdateRequired]);
 
   const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };
   const maintenanceBlocksStart = Boolean(maintenance.blockStarts);
@@ -537,6 +535,18 @@ export default function DashboardPage() {
     : maintenanceTimeLabel;
   const botStarting = desired === "RUNNING" && state !== "RUNNING";
   const botRunning = state === "RUNNING";
+  const startTransition = data?.startTransition || {};
+  const startPhase = String(startTransition.phase || (botRunning ? "RUNNING" : botStarting ? "COMMAND_QUEUED" : "IDLE"));
+  const startTimedOut = startPhase === "TIMEOUT";
+  const settingsLocked = botStarting || botRunning || desired === "RUNNING";
+  const startPhaseLabel: Record<string,string> = {
+    COMMAND_QUEUED: "ส่งคำสั่ง Start แล้ว · รอ EA รับคำสั่ง",
+    DELIVERED_TO_EA: "EA ได้รับคำสั่งแล้ว · รอยืนยัน RUNNING",
+    WAITING_HEARTBEAT: "EA รับคำสั่งแล้ว · รอ Heartbeat ยืนยัน",
+    RUNNING: "EA ยืนยัน RUNNING · ระบบกำลังทำงาน",
+    TIMEOUT: "Start Timeout · ยกเลิกคำสั่งค้างแล้ว",
+    IDLE: "พร้อมรับคำสั่ง"
+  };
   const startConnectionReady = isMt5Online || isAgentOnline;
   // Let the customer press Start whenever SCENOVA has a live connection.
   // Runtime/update/access/trading blockers are validated by /bot/start and
@@ -581,11 +591,13 @@ export default function DashboardPage() {
         ? "รอ Windows Agent / MT5"
         : "ยังไม่ได้เชื่อมบัญชี";
   const controlStateLabel =
-    desired === "RUNNING"
-      ? (state === "RUNNING" ? "บอทกำลังทำงาน" : "กำลังเริ่มบอท")
-      : desired === "SAFE_STOP"
-        ? "Safe Stop — ไม่เปิดออเดอร์ใหม่"
-        : "บอทหยุดอยู่";
+    startTimedOut
+      ? "เริ่มบอทไม่สำเร็จ — พร้อมให้ลองใหม่"
+      : desired === "RUNNING"
+        ? (state === "RUNNING" ? "บอทกำลังทำงาน" : (startPhaseLabel[startPhase] || "กำลังเริ่มบอท"))
+        : desired === "SAFE_STOP"
+          ? "Safe Stop — ไม่เปิดออเดอร์ใหม่"
+          : "บอทหยุดอยู่";
   const actualStateLabel =
     state === "RUNNING" ? "RUNNING — กำลังทำงาน"
       : state === "SAFE_STOP" ? "SAFE_STOP — ไม่เปิดออเดอร์ใหม่"
@@ -1317,6 +1329,11 @@ export default function DashboardPage() {
       await api(path + suffix, { method: "POST" });
       setNotice(success);
       await load();
+      if (path.startsWith("/bot/start")) {
+        // Pull the START transition sooner than the normal 10s dashboard poll.
+        window.setTimeout(() => void load(selectedSlotIdRef.current, true), 2500);
+        window.setTimeout(() => void load(selectedSlotIdRef.current, true), 6500);
+      }
     } catch (e: any) {
       const message = String(e?.message || "เกิดข้อผิดพลาด");
       setError(path.startsWith("/bot/start") ? "เริ่มบอทไม่ได้: " + message : message);
@@ -1326,6 +1343,10 @@ export default function DashboardPage() {
   }
 
   function editSetting(key: string, value: any) {
+    if (settingsLocked) {
+      setError("การตั้งค่าถูกล็อกขณะบอทกำลังเริ่มหรือกำลังทำงาน · หยุดบอทก่อนแก้ไข");
+      return;
+    }
     settingsDirtyRef.current = true;
     setSettingsDirty(true);
     setSettings((current:any)=>{
@@ -1385,6 +1406,10 @@ export default function DashboardPage() {
 
   async function saveSettings(e: FormEvent) {
     e.preventDefault();
+    if (settingsLocked) {
+      setError("การตั้งค่าถูกล็อกขณะบอทกำลังเริ่มหรือกำลังทำงาน · หยุดบอทก่อนบันทึก");
+      return;
+    }
     setBusy(true);
     setError("");
     setNotice("");
@@ -1667,7 +1692,7 @@ export default function DashboardPage() {
               <span className="cc-update-alert-icon">!</span>
               <div>
                 <b>ต้องดำเนินการก่อนเริ่มบอท</b>
-                <small>กล่องนี้จะแสดงเฉพาะเมื่อ Agent / EA / EX5 ไม่ตรงกับ Server เท่านั้น</small>
+                <small>ตรวจพบเวอร์ชันไม่ตรง · แจ้งเตือนนี้จะค้างจนกว่าจะอัปเดตสำเร็จ และระบบจะไม่อัปเดตอัตโนมัติ</small>
               </div>
               <button className="btn cc-update-refresh" disabled={busy} onClick={()=>load(selectedSlotIdRef.current)}>
                 <ScenovaIcon name="refresh" size={15}/>ตรวจสอบอีกครั้ง
@@ -1829,7 +1854,10 @@ export default function DashboardPage() {
                 <div className="cc-v6-command-center">
                   <div className={"cc-v6-run-state "+(state==="RUNNING"?"running":state==="SAFE_STOP"?"safe":"stopped")}>
                     <span className="cc-state-dot"/>
-                    <div><b>{state==="RUNNING"?"กำลังทำงาน":state==="SAFE_STOP"?"หยุดอย่างปลอดภัย":"บอทหยุดอยู่"}</b><small>{controlStateLabel} · อัปเดต {heartbeatAgeSeconds.toFixed(0)} วินาที</small></div>
+                    <div>
+                      <b>{startTimedOut?"เริ่มบอทไม่สำเร็จ":botStarting?"กำลังเริ่มบอท":state==="RUNNING"?"กำลังทำงาน":state==="SAFE_STOP"?"หยุดอย่างปลอดภัย":"บอทหยุดอยู่"}</b>
+                      <small>{startTimedOut ? String(startTransition.message || startPhaseLabel.TIMEOUT) : botStarting ? (startPhaseLabel[startPhase] || controlStateLabel) : controlStateLabel} · Heartbeat {heartbeatAgeSeconds.toFixed(0)} วินาที</small>
+                    </div>
                   </div>
                   <div className="cc-v6-hero-actions">
                     <button className={"cc-v6-command start "+(botStarting?"starting":botRunning?"running":"idle")} disabled={startBlocked} title={maintenanceBlocksStart?"ระบบปิด Start ใหม่ระหว่าง Safe Maintenance":!startConnectionReady?"รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5":undefined} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
@@ -1837,7 +1865,7 @@ export default function DashboardPage() {
                     </button>
                     <button className="cc-v6-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><span><ScenovaIcon name="stop" size={21}/></span><b>หยุดบอท</b><small>Safe Stop</small></button>
                     <button className="cc-v6-command close" disabled={busy||currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?")&&command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span><ScenovaIcon name="close" size={22}/></span><b>ปิดทุกไม้</b><small>Close All</small></button>
-                    <button className="cc-v6-command settings" onClick={()=>setBotSettingsOpen(true)}><span><ScenovaIcon name="settings" size={21}/></span><b>ตั้งค่า</b><small>Settings</small></button>
+                    <button className="cc-v6-command settings" disabled={settingsLocked} title={settingsLocked?"หยุดบอทก่อนแก้ไขการตั้งค่า":"เปิดการตั้งค่า"} onClick={()=>!settingsLocked&&setBotSettingsOpen(true)}><span><ScenovaIcon name="settings" size={21}/></span><b>{settingsLocked?"ล็อกการตั้งค่า":"ตั้งค่า"}</b><small>{settingsLocked?"Stop bot to edit":"Settings"}</small></button>
                   </div>
                 </div>
               </section>

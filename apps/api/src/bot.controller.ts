@@ -590,6 +590,70 @@ export class BotController {
       [selectedSlot.id]
     );
 
+    let startTransition: any = {
+      phase: "IDLE",
+      message: "พร้อมรับคำสั่ง",
+      ageSeconds: 0,
+      commandStatus: null,
+      commandId: null
+    };
+
+    if (instance) {
+      const latestStartCommand = await this.db.one(
+        `SELECT id,status,created_at,delivered_at,acked_at
+         FROM bot_commands
+         WHERE bot_instance_id=$1 AND command='START'
+         ORDER BY id DESC
+         LIMIT 1`,
+        [instance.id]
+      );
+      const startAgeSeconds = latestStartCommand?.created_at
+        ? Math.max(0, (Date.now() - new Date(latestStartCommand.created_at).getTime()) / 1000)
+        : 0;
+
+      if (String(instance.actual_state || "") === "RUNNING") {
+        startTransition = {
+          phase: "RUNNING",
+          message: "EA ยืนยันแล้ว · บอทกำลังทำงาน",
+          ageSeconds: startAgeSeconds,
+          commandStatus: latestStartCommand?.status || null,
+          commandId: latestStartCommand?.id || null
+        };
+      } else if (String(instance.desired_state || "") === "RUNNING" && latestStartCommand) {
+        if (startAgeSeconds >= 20) {
+          await this.db.query(
+            "UPDATE bot_instances SET desired_state='STOPPED',lock_owner=NULL WHERE id=$1 AND desired_state='RUNNING' AND actual_state<>'RUNNING'",
+            [instance.id]
+          );
+          await this.db.query(
+            "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE id=$1 AND status IN ('PENDING','DELIVERED')",
+            [latestStartCommand.id]
+          );
+          instance.desired_state = "STOPPED";
+          startTransition = {
+            phase: "TIMEOUT",
+            message: "เริ่มบอทไม่สำเร็จภายใน 20 วินาที · คำสั่งถูกยกเลิกเพื่อไม่ให้ค้าง กรุณาตรวจ Agent / EA แล้วกดเริ่มอีกครั้ง",
+            ageSeconds: startAgeSeconds,
+            commandStatus: latestStartCommand.status,
+            commandId: latestStartCommand.id
+          };
+        } else {
+          const status = String(latestStartCommand.status || "PENDING").toUpperCase();
+          startTransition = {
+            phase: status === "DELIVERED" ? "DELIVERED_TO_EA" : status === "ACKED" ? "WAITING_HEARTBEAT" : "COMMAND_QUEUED",
+            message: status === "DELIVERED"
+              ? "ส่งคำสั่งถึง EA แล้ว · รอ EA เปลี่ยนเป็น RUNNING"
+              : status === "ACKED"
+                ? "EA รับคำสั่งแล้ว · รอ Heartbeat ยืนยัน RUNNING"
+                : "บันทึกคำสั่ง Start แล้ว · รอ EA มารับคำสั่ง",
+            ageSeconds: startAgeSeconds,
+            commandStatus: status,
+            commandId: latestStartCommand.id
+          };
+        }
+      }
+    }
+
     let account = null;
     let settings = null;
     if (instance?.mt5_account_id) {
@@ -735,6 +799,7 @@ export class BotController {
       entitlement,
       liveStatus,
       softwareUpdate,
+      startTransition,
       maintenance,
       partner,
       tradeJournal
@@ -1507,6 +1572,11 @@ export class BotController {
     @Body() body: Record<string, any>
   ) {
     const instance = await this.getInstance(req.user.sub, slotId || null);
+    if (instance.desired_state === "RUNNING" || instance.actual_state === "RUNNING") {
+      throw new ConflictException(
+        "การตั้งค่าถูกล็อกขณะบอทกำลังเริ่มหรือกำลังทำงาน · กดหยุดบอทและรอให้สถานะหยุดก่อนแก้ไข"
+      );
+    }
     const clean: Record<string, any> = {};
 
     const numberSetting = (
