@@ -1,7 +1,7 @@
 #ifndef SCENOVA_PARALLEL_UNIVERSE_V1_MQH
 #define SCENOVA_PARALLEL_UNIVERSE_V1_MQH
 
-#define PARALLEL_UNIVERSE_V1_VERSION "1.0.0"
+#define PARALLEL_UNIVERSE_V1_VERSION "1.0.1"
 
 string g_parallelUniverseReason="IDLE";
 double g_parallelUniverseExpectedValue=0.0;
@@ -48,11 +48,9 @@ bool ParallelUniverseLiveAllow(const int direction,string &reason)
          return false;
       }
 
-      // A second empirical family (indicator context) may veto only when it has
-      // enough observations and is independently negative.
       if(g_indicatorHistorySamples>=20 &&
          g_indicatorHistoryWinProbability<42.0 &&
-         g_indicatorExpectedValue<0.0)
+         g_indicatorHistoryExpectedValue<0.0)
       {
          g_parallelUniverseReason="MATCHED_INDICATOR_HISTORY_NEGATIVE";
          reason=g_parallelUniverseReason;
@@ -64,8 +62,6 @@ bool ParallelUniverseLiveAllow(const int direction,string &reason)
       return true;
    }
 
-   // Fallback to side history only when there is meaningful evidence. During
-   // warm-up, PARALLEL UNIVERSE never invents a statistical veto.
    if(side.winSamples>=30)
    {
       g_parallelUniverseSamples=side.winSamples;
