@@ -1,0 +1,76 @@
+name: Apply FLIP LOCK Clip V2
+
+on:
+  push:
+    branches: [feature/flip-lock-clip-v2]
+    paths:
+      - "scripts/patch-flip-lock-clip-v2.py"
+      - "mt5/include/FlipLockV1.mqh"
+      - ".github/workflows/apply-flip-lock-clip-v2.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-flip-lock-clip-v2
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Apply isolated FLIP LOCK patch
+        run: python3 scripts/patch-flip-lock-clip-v2.py
+
+      - name: Static FLIP LOCK isolation checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'FLIP_LOCK V2 owns its entry' mt5/FastBasketBot.mq5
+          grep -q 'FlipLockManage();' mt5/FastBasketBot.mq5
+          grep -q 'FlipLockRemoveAllPending();' mt5/FastBasketBot.mq5
+          grep -q 'g_profitTargetMode = "OFF"' mt5/FastBasketBot.mq5
+          grep -q 'FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"' mt5/include/FlipLockV1.mqh
+          grep -q 'TRADE_ACTION_PENDING' mt5/include/FlipLockV1.mqh
+          grep -q 'ORDER_TYPE_BUY_STOP' mt5/include/FlipLockV1.mqh
+          grep -q 'ORDER_TYPE_SELL_STOP' mt5/include/FlipLockV1.mqh
+          grep -q 'TRADE_ACTION_SLTP' mt5/include/FlipLockV1.mqh
+          grep -q 'STARTER_OPENED' mt5/include/FlipLockV1.mqh
+          grep -q 'profitTargetMode","OFF' apps/web/app/dashboard/page.tsx
+          # FLIP implementation must not own RACE/ZERO execution functions.
+          if grep -Eq 'StartRaceCycle|ZeroGridPlace|ZeroGridArm|SaaSRace' mt5/include/FlipLockV1.mqh; then
+            echo "FLIP LOCK module leaked into RACE/ZERO ownership" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build web and API
+        run: npm run build
+
+      - name: Commit validated source patch to feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 mt5/include/FlipLockV1.mqh apps/web/app/dashboard/page.tsx
+          if git diff --cached --quiet; then
+            echo "Patch already current."
+            exit 0
+          fi
+          git commit -m "feat: make FLIP LOCK immediate pending baton mode"
+          git push origin HEAD:feature/flip-lock-clip-v2
