@@ -537,7 +537,9 @@ export default function DashboardPage() {
   const botRunning = state === "RUNNING";
   const startTransition = data?.startTransition || {};
   const startPhase = String(startTransition.phase || (botRunning ? "RUNNING" : botStarting ? "COMMAND_QUEUED" : "IDLE"));
-  const startTimedOut = startPhase === "TIMEOUT";
+  // A timeout is only an active UI state while the Server is still trying RUNNING.
+  // Once the Server has released control back to STOPPED/SAFE_STOP, do not keep an old red banner.
+  const startTimedOut = startPhase === "TIMEOUT" && desired === "RUNNING";
   const settingsLocked = botStarting || botRunning || desired === "RUNNING";
   const startPhaseLabel: Record<string,string> = {
     COMMAND_QUEUED: "ส่งคำสั่ง Start แล้ว · รอ EA รับคำสั่ง",
@@ -552,8 +554,6 @@ export default function DashboardPage() {
   const safeStopInProgress =
     safeStopPositionCount > 0 &&
     (desired === "SAFE_STOP" || state === "SAFE_STOP");
-  const safeStopAwaitingAck =
-    desired === "SAFE_STOP" && safeStopPositionCount === 0;
   // Let the customer press Start whenever SCENOVA has a live connection, but
   // never race an in-flight Safe Stop drain. The Server also enforces this.
   const startBlocked =
@@ -601,12 +601,8 @@ export default function DashboardPage() {
       ? "เริ่มบอทไม่สำเร็จ — พร้อมให้ลองใหม่"
       : desired === "RUNNING"
         ? (state === "RUNNING" ? "บอทกำลังทำงาน" : (startPhaseLabel[startPhase] || "กำลังเริ่มบอท"))
-        : desired === "SAFE_STOP"
-          ? Number(metrics.positions || 0) > 0
-            ? `กำลังหยุดอย่างปลอดภัย — รอจัดการ ${Math.max(0, Number(metrics.positions || 0))} Position`
-            : safeStopAwaitingAck
-              ? "กำลังยืนยันการหยุดกับ EA — ไม่มี Position ค้าง · เริ่มใหม่ได้หากต้องการ"
-              : "หยุดอย่างปลอดภัยแล้ว — ไม่มี Position ค้าง"
+        : safeStopInProgress
+          ? `กำลังหยุดอย่างปลอดภัย — รอจัดการ ${safeStopPositionCount} Position`
           : "บอทหยุดอยู่";
   const actualStateLabel =
     state === "RUNNING" ? "RUNNING — กำลังทำงาน"
@@ -1862,10 +1858,10 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="cc-v6-command-center">
-                  <div className={"cc-v6-run-state "+(state==="RUNNING"?"running":state==="SAFE_STOP"?"safe":"stopped")}>
+                  <div className={"cc-v6-run-state "+(state==="RUNNING"?"running":safeStopInProgress?"safe":"stopped")}>
                     <span className="cc-state-dot"/>
                     <div>
-                      <b>{startTimedOut?"เริ่มบอทไม่สำเร็จ":botStarting?"กำลังเริ่มบอท":state==="RUNNING"?"กำลังทำงาน":desired==="SAFE_STOP"?"กำลังหยุดอย่างปลอดภัย":state==="SAFE_STOP"?"หยุดอย่างปลอดภัย":"บอทหยุดอยู่"}</b>
+                      <b>{startTimedOut?"เริ่มบอทไม่สำเร็จ":botStarting?"กำลังเริ่มบอท":state==="RUNNING"?"กำลังทำงาน":safeStopInProgress?"กำลังหยุดอย่างปลอดภัย":"บอทหยุดอยู่"}</b>
                       <small>{startTimedOut ? String(startTransition.message || startPhaseLabel.TIMEOUT) : botStarting ? (startPhaseLabel[startPhase] || controlStateLabel) : controlStateLabel} · Heartbeat {heartbeatAgeSeconds.toFixed(0)} วินาที</small>
                     </div>
                   </div>

@@ -590,6 +590,28 @@ export class BotController {
       [selectedSlot.id]
     );
 
+    // Dashboard-side recovery for a completed Safe Stop. Heartbeat normally finalizes
+    // this transition; this fallback prevents a flat account from staying visually stuck.
+    const dashboardPositions = Number(instance?.metrics?.positions);
+    const dashboardActualState = String(instance?.actual_state || "").toUpperCase();
+    if (
+      instance &&
+      String(instance.desired_state || "").toUpperCase() === "SAFE_STOP" &&
+      Number.isFinite(dashboardPositions) &&
+      dashboardPositions <= 0 &&
+      (dashboardActualState === "SAFE_STOP" || dashboardActualState === "STOPPED")
+    ) {
+      await this.db.query(
+        "UPDATE bot_instances SET desired_state='STOPPED',lock_owner=NULL WHERE id=$1 AND desired_state='SAFE_STOP'",
+        [instance.id]
+      );
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=COALESCE(acked_at,now()) WHERE bot_instance_id=$1 AND command='SAFE_STOP' AND status IN ('PENDING','DELIVERED')",
+        [instance.id]
+      );
+      instance.desired_state = "STOPPED";
+    }
+
     let startTransition: any = {
       phase: "IDLE",
       message: "พร้อมรับคำสั่ง",

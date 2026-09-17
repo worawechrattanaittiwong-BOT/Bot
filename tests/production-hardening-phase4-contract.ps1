@@ -72,6 +72,9 @@ Require $botApi 'livePositions > 0.*desired_state.*SAFE_STOP.*actual_state.*SAFE
 Require $dashboard 'safeStopPositionCount > 0.*safeStopInProgress' 'dashboard only blocks Start while positions are draining'
 Require $eaApi "desired_state='STOPPED'.*desired_state='SAFE_STOP'" 'flat Safe Stop canonicalizes Server desired state to STOPPED'
 Require $dashboard 'safeStopInProgress' 'dashboard blocks Start while Safe Stop is draining'
-Require $dashboard 'กำลังยืนยันการหยุดกับ EA' 'dashboard explains flat Safe Stop acknowledgement phase'
+Reject $dashboard 'กำลังยืนยันการหยุดกับ EA' 'dashboard must not keep a flat Safe Stop acknowledgement banner'
+Require $dashboard 'startPhase === "TIMEOUT" && desired === "RUNNING"' 'stale Start timeout is hidden after Server releases RUNNING'
+Require $botApi 'dashboardPositions' 'dashboard has flat Safe Stop recovery fallback'
+Require $botApi "desired_state='STOPPED',lock_owner=NULL" 'dashboard canonicalizes a flat stale Safe Stop to STOPPED'
 
 Write-Host 'SCENOVA Phase 4 production hardening contract PASS'
