@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.23"
-#define SCENOVA_EA_VERSION "1.0.23"
-#define SCENOVA_PRODUCT_VERSION "1.0.23"
+#property version   "1.0.24"
+#define SCENOVA_EA_VERSION "1.0.24"
+#define SCENOVA_PRODUCT_VERSION "1.0.24"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1664,6 +1664,8 @@ string EffectiveExecutionMode()
    StringToUpper(control);
    if(control == "ZERO_GRID") return "ZERO_GRID";
    if(control == "RACE") return "RACE";
+   if(control == "FLIP_LOCK") return "FLIP_LOCK";
+   if(control == "PARALLEL_UNIVERSE") return "PARALLEL_UNIVERSE";
    if(control == "AUTO" || control == "ASSISTED" || control == "MANUAL")
       return "AUTO";
 
@@ -3457,6 +3459,8 @@ bool ManageRaceBasket(double momentum)
    return true;
 }
 
+#include "include\\LiveExecutionModesV1.mqh"
+
 void OnTick()
 {
    SampleSpread();
@@ -3893,6 +3897,19 @@ void OnTick()
    if(ZeroGridModeEnabled() && count<=0 && rescueCount<=0)
    {
       StartZeroGridCycle();
+      return;
+   }
+
+   // Dedicated live intelligence owners. Each handler fully owns the tick
+   // and returns before RACE/AUTO, preventing cross-mode entry leakage.
+   if(FlipLockModeEnabled())
+   {
+      HandleFlipLockMode(momentum);
+      return;
+   }
+   if(ParallelUniverseModeEnabled())
+   {
+      HandleParallelUniverseMode(momentum);
       return;
    }
 
@@ -5686,7 +5703,8 @@ void ApplySettings(string json)
    bool hasControlMode =
       requestedControlMode == "AUTO" || requestedControlMode == "RACE" ||
       requestedControlMode == "ZERO_GRID" || requestedControlMode == "ASSISTED" ||
-      requestedControlMode == "MANUAL" || requestedControlMode == "LEGACY";
+      requestedControlMode == "MANUAL" || requestedControlMode == "FLIP_LOCK" ||
+      requestedControlMode == "PARALLEL_UNIVERSE" || requestedControlMode == "LEGACY";
 
    // Hard isolation: one execution owner at a time. controlMode is authoritative
    // when both are present; partial/legacy payloads are normalized immediately.
@@ -11917,6 +11935,9 @@ void AutoV20PublishSelected(AUTO_V20_SIDE &side)
    g_effectiveConfidenceThreshold=0.0;
 }
 
+#include "include\\AutoVectorEdgeV1.mqh"
+#include "include\\AutoVectorEdgeLiveV1.mqh"
+
 int AutoV20PrecisionDirection(double momentum)
 {
    g_autoV20DecisionId++;
@@ -12039,7 +12060,23 @@ int AutoV20PrecisionDirection(double momentum)
    if(preliminary!=0 && preliminary!=direction)
       g_autoV20DirectionChangeReason="FINAL_RR_LOCATION_HISTORY_CHANGED_SIDE";
 
-   g_autoV20DecisionReason=selected.reason;
+   string vectorLiveReason="NONE";
+   if(!AutoVectorEdgeLiveAllow(direction,vectorLiveReason))
+   {
+      g_autoV20RejectReason=vectorLiveReason;
+      g_adaptiveBlockReason=vectorLiveReason;
+      g_cachedAdaptiveDirection=0;
+      g_cachedAdaptiveBlockReason=g_adaptiveBlockReason;
+      Print("AUTO VECTOR EDGE veto id=",g_autoV20DecisionId,
+            " side=",direction>0 ? "BUY" : "SELL",
+            " edge=",DoubleToString(g_vectorLiveEdgeRatio,1),
+            " buyEV=",DoubleToString(g_vectorLiveBuyEV,2),
+            " sellEV=",DoubleToString(g_vectorLiveSellEV,2),
+            " reason=",vectorLiveReason);
+      return 0;
+   }
+
+   g_autoV20DecisionReason=selected.reason+"|"+vectorLiveReason;
    g_autoV20RejectReason="NONE";
    g_adaptiveBlockReason="";
    AutoV20PublishSelected(selected);
