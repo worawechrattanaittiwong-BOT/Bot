@@ -1,0 +1,71 @@
+name: Apply Production Modes V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/production-modes-vector-flip-parallel]
+    paths:
+      - ".github/scripts/apply_production_modes_v1.py"
+      - ".github/workflows/apply-production-modes-v1.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-production-modes-v1
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/production-modes-vector-flip-parallel
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply guarded source patch
+        run: python .github/scripts/apply_production_modes_v1.py
+      - name: Install dependencies
+        run: npm install
+      - name: Typecheck API and Web
+        run: npm run typecheck
+      - name: Build API and Web
+        run: npm run build
+      - name: Static mode isolation assertions
+        shell: python
+        run: |
+          from pathlib import Path
+          ea=Path('mt5/FastBasketBot.mq5').read_text(encoding='utf-8')
+          api=Path('apps/api/src/bot.controller.ts').read_text(encoding='utf-8')
+          web=Path('apps/web/app/dashboard/page.tsx').read_text(encoding='utf-8')
+          required=[
+            'AutoVectorEdgeApply(momentum);',
+            'bool FlipLockModeEnabled()',
+            'void ManageFlipLock(double momentum)',
+            'bool ParallelUniverseModeEnabled()',
+            'void ManageParallelUniverse(double momentum)',
+            'VECTOR_FLIP_PARALLEL_V1',
+          ]
+          missing=[x for x in required if x not in ea]
+          if missing: raise SystemExit('EA missing: '+repr(missing))
+          for mode in ['FLIP_LOCK','PARALLEL_UNIVERSE']:
+            if mode not in api: raise SystemExit('API missing '+mode)
+            if mode not in web: raise SystemExit('Web missing '+mode)
+          if '#property version   "1.0.24"' not in ea:
+            raise SystemExit('EA version not bumped')
+          print('static production-mode assertions passed')
+      - name: Commit generated production changes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git config user.name "SCENOVA-AI"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 apps/api/src/bot.controller.ts apps/api/src/ea.controller.ts apps/api/src/release-version.ts apps/web/app/dashboard/page.tsx .github/workflows/build-mt5-ea.yml
+          git commit -m "feat: activate AUTO Vector Edge, Flip Lock and Parallel Universe"
+          git push origin HEAD:feature/production-modes-vector-flip-parallel
