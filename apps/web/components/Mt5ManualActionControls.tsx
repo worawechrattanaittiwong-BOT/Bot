@@ -203,7 +203,7 @@ export function Mt5ManualActionControls() {
       const runState = document.querySelector(".cc-v6-run-state");
       const runStateParent = runState?.parentElement || null;
       let runtimeNode = runStateParent?.querySelector(".scenova-runtime-status-mount") || null;
-      if (runStateParent && !runtimeNode) {
+      if (runState && runStateParent && !runtimeNode) {
         runtimeNode = document.createElement("div");
         runtimeNode.className = "scenova-runtime-status-mount";
         runState.insertAdjacentElement("afterend", runtimeNode);
@@ -213,7 +213,7 @@ export function Mt5ManualActionControls() {
       const versionRow = document.querySelector(".cc-v6-version-row");
       const versionParent = versionRow?.parentElement || null;
       let persistentNode = versionParent?.querySelector(".scenova-persistent-update-mount") || null;
-      if (softwareUpdateRequired && versionParent && !persistentNode) {
+      if (softwareUpdateRequired && versionRow && versionParent && !persistentNode) {
         persistentNode = document.createElement("div");
         persistentNode.className = "scenova-persistent-update-mount";
         versionRow.insertAdjacentElement("afterend", persistentNode);
