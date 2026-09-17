@@ -1,0 +1,72 @@
+name: Remove Parallel Universe once
+
+on:
+  push:
+    branches: [remove/parallel-universe]
+    paths:
+      - "scripts/remove-parallel-universe-once.py"
+      - ".github/workflows/remove-parallel-universe-once.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: remove-parallel-universe-once
+  cancel-in-progress: false
+
+jobs:
+  remove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Remove Parallel Universe
+        run: python3 scripts/remove-parallel-universe-once.py
+
+      - name: Verify no active Parallel Universe references
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'PARALLEL_UNIVERSE|ParallelUniverse|PARALLEL UNIVERSE' apps mt5 tests --exclude='*.ex5'; then
+            echo 'Parallel Universe reference remains in active source.' >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Release consistency
+        shell: pwsh
+        run: ./tests/release-version-consistency.ps1
+
+      - name: AUTO V20 regression
+        shell: pwsh
+        run: ./tests/auto-v20-policy-regression.ps1
+
+      - name: ZERO GRID isolation regression
+        shell: pwsh
+        run: ./scripts/check-zero-grid-isolation.ps1
+
+      - name: Commit validated removal
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git rm -f scripts/remove-parallel-universe-once.py .github/workflows/remove-parallel-universe-once.yml
+          git add -A
+          git commit -m "refactor: remove Parallel Universe mode"
+          git push origin HEAD:remove/parallel-universe
