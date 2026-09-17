@@ -26,6 +26,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Repair guarded insertion anchor
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('.github/scripts/apply_production_modes_v1.py')
+          s=p.read_text(encoding='utf-8')
+          replacement = '''# Hard owner branches before generic AUTO/legacy position management.\npatch(\n    "mt5/FastBasketBot.mq5",\n    \'''   if(count > 0)\\n   {\\n      bool tacticalBasket=BasketHasTacticalPosition();\''',\n    \'''   // FLIP LOCK and PARALLEL UNIVERSE own all entry/position behavior when selected.\\n   // Shared global stop/daily-loss logic has already run above this owner boundary.\\n   if(FlipLockModeEnabled())\\n   {\\n      ManageFlipLock(momentum);\\n      return;\\n   }\\n   if(ParallelUniverseModeEnabled())\\n   {\\n      ManageParallelUniverse(momentum);\\n      return;\\n   }\\n\\n   if(count > 0)\\n   {\\n      bool tacticalBasket=BasketHasTacticalPosition();\'''\n)\n\n'''
+          pattern=r'# Hard owner branches before generic AUTO/legacy position management\.\npatch\(.*?\n\)\n\n# Ensure the order comment identifies mode ownership in broker history\.'
+          updated,n=re.subn(pattern,replacement+'# Ensure the order comment identifies mode ownership in broker history.',s,flags=re.S)
+          if n != 1:
+              raise SystemExit(f'anchor repair expected 1 block, found {n}')
+          p.write_text(updated,encoding='utf-8')
       - name: Apply guarded source patch
         run: python .github/scripts/apply_production_modes_v1.py
       - name: Install dependencies
@@ -56,6 +69,10 @@ jobs:
             if mode not in web: raise SystemExit('Web missing '+mode)
           if '#property version   "1.0.24"' not in ea:
             raise SystemExit('EA version not bumped')
+          if ea.count('void ManageFlipLock(double momentum)') != 1:
+            raise SystemExit('FLIP LOCK manager duplicated')
+          if ea.count('void ManageParallelUniverse(double momentum)') != 1:
+            raise SystemExit('PARALLEL manager duplicated')
           print('static production-mode assertions passed')
       - name: Commit generated production changes
         shell: bash
