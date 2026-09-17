@@ -1,0 +1,68 @@
+name: Apply drawdown disabled-value fix
+
+on:
+  push:
+    branches: [fix/drawdown-zero-disabled-all-modes-v2]
+    paths:
+      - "scripts/fix-drawdown-zero-disabled-all-modes.py"
+      - ".github/workflows/apply-drawdown-zero-disabled-all-modes.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-drawdown-zero-disabled-all-modes
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply isolated drawdown fix
+        run: python3 scripts/fix-drawdown-zero-disabled-all-modes.py
+
+      - name: Verify scope and contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          api = Path('apps/api/src/bot.controller.ts').read_text(encoding='utf-8')
+          web = Path('apps/web/app/dashboard/page.tsx').read_text(encoding='utf-8')
+          assert 'numberSetting("dailyProfitDrawdownPercent", 1, 95);' not in api
+          assert 'numberSetting("dailyProfitDrawdownPercent", 0, 95);' in api
+          assert 'if (clean.dailyProfitContinueAfterTarget === true)' in api
+          assert 'drawdown <= 0 || drawdown > 95' in api
+          assert 'props.onEdit?.("dailyProfitDrawdownPercent",0);' not in web
+          print('drawdown contract checks passed')
+          PY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit validated source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/api/src/bot.controller.ts apps/web/app/dashboard/page.tsx
+          if git diff --cached --quiet; then
+            echo "Patch already current."
+            exit 0
+          fi
+          git commit -m "fix: allow disabled daily profit drawdown in all modes"
+          git push origin HEAD:fix/drawdown-zero-disabled-all-modes-v2
