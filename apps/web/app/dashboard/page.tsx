@@ -67,6 +67,13 @@ const defaultSettings = {
   engineMode: "AUTO",
   raceCloseAllProfitEnabled: true,
   raceCloseAllProfitMoney: 0.5,
+  flipLockMinProfitMoney: 1.0,
+  flipLockGivebackMoney: 0.3,
+  flipLockMaxFlips: 3,
+  flipLockCooldownSeconds: 10,
+  parallelUniverseMinSamples: 30,
+  parallelUniverseMinWinRate: 52,
+  parallelUniverseRequirePositiveSetup: true,
   zeroGridStepPrice: 3,
   zeroGridLowVolatilityEnabled: false,
   zeroGridLevelsPerSide: 10,
@@ -1802,7 +1809,7 @@ export default function DashboardPage() {
                     <h2>{metrics.symbol || settings.symbol}</h2>
                     <p>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}<em/>MT5 Expert Advisor</p>
                     <div className="cc-v6-symbol-chips">
-                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO" : settings.entryMode}</span>
+                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "FLIP_LOCK" ? "FLIP LOCK" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "PARALLEL_UNIVERSE" ? "PARALLEL UNIVERSE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO + VECTOR" : settings.entryMode}</span>
                       <span>{Number(settings.lot||0).toFixed(2)} Lot</span>
                       <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" BUY STOP + "+Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" SELL STOP" : configuredMaxPositions+" ไม้"}</span>
                       <HeroTrendChip label="M5" value={metrics.trendM5}/>
@@ -2840,7 +2847,7 @@ function BotSettingsModal(props:any) {
   const inferredControlMode = engineMode === "ZERO_GRID" ? "ZERO_GRID" : engineMode === "RACE" ? "RACE" : hasManualExit ? "MANUAL" : "AUTO";
   const requestedControlModeRaw = String(props.settings?.controlMode || inferredControlMode).toUpperCase();
   const requestedControlMode = requestedControlModeRaw === "ASSISTED" ? "AUTO" : requestedControlModeRaw;
-  const controlMode = ["AUTO","RACE","ZERO_GRID","MANUAL"].includes(requestedControlMode)
+  const controlMode = ["AUTO","RACE","ZERO_GRID","FLIP_LOCK","PARALLEL_UNIVERSE","MANUAL"].includes(requestedControlMode)
     ? requestedControlMode
     : inferredControlMode;
   const profitKind = Number(props.settings?.perPositionProfitMoney || 0) > 0 ? "POSITION" : "BASKET";
@@ -2851,6 +2858,8 @@ function BotSettingsModal(props:any) {
     AUTO:{title:"AUTO",subtitle:"ระบบวิเคราะห์ทิศทาง จุดเข้า และการบริหารสถานะตามเงื่อนไขของกลยุทธ์"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
+    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"ล็อกกำไรของสถานะเดิม แล้วสลับ BUY ↔ SELL เมื่อราคาย้อนผ่านเส้น Flip ที่ระบบคำนวณ"},
+    PARALLEL_UNIVERSE:{title:"PARALLEL UNIVERSE",subtitle:"ใช้ AUTO + VECTOR EDGE แล้วกรองด้วยผลลัพธ์จากเหตุการณ์ย้อนหลังที่มีบริบทใกล้เคียงก่อนเข้า"},
     MANUAL:{title:"MANUAL",subtitle:"ระบบวิเคราะห์ทิศทางและจุดเข้าอัตโนมัติ โดยผู้ใช้กำหนด Lot เป้าหมายกำไร และจุดหยุดขาดทุน"}
   };
 
@@ -2880,6 +2889,25 @@ function BotSettingsModal(props:any) {
       return;
     }
     props.onEdit?.("engineMode","AUTO");
+    if (mode === "FLIP_LOCK") {
+      props.onEdit?.("profitTargetMode","OFF");
+      props.onEdit?.("manualStopLossPoints",0);
+      props.onEdit?.("maxPositions",1);
+      if (!Number.isFinite(Number(props.settings?.flipLockMinProfitMoney)) || Number(props.settings?.flipLockMinProfitMoney)<=0) props.onEdit?.("flipLockMinProfitMoney",1.0);
+      if (!Number.isFinite(Number(props.settings?.flipLockGivebackMoney)) || Number(props.settings?.flipLockGivebackMoney)<=0) props.onEdit?.("flipLockGivebackMoney",0.3);
+      if (!Number.isFinite(Number(props.settings?.flipLockMaxFlips)) || Number(props.settings?.flipLockMaxFlips)<1) props.onEdit?.("flipLockMaxFlips",3);
+      if (!Number.isFinite(Number(props.settings?.flipLockCooldownSeconds)) || Number(props.settings?.flipLockCooldownSeconds)<1) props.onEdit?.("flipLockCooldownSeconds",10);
+      return;
+    }
+    if (mode === "PARALLEL_UNIVERSE") {
+      props.onEdit?.("profitTargetMode","AUTO");
+      props.onEdit?.("manualStopLossPoints",0);
+      props.onEdit?.("maxPositions",1);
+      if (!Number.isFinite(Number(props.settings?.parallelUniverseMinSamples)) || Number(props.settings?.parallelUniverseMinSamples)<20) props.onEdit?.("parallelUniverseMinSamples",30);
+      if (!Number.isFinite(Number(props.settings?.parallelUniverseMinWinRate))) props.onEdit?.("parallelUniverseMinWinRate",52);
+      if (typeof props.settings?.parallelUniverseRequirePositiveSetup !== "boolean") props.onEdit?.("parallelUniverseRequirePositiveSetup",true);
+      return;
+    }
     if (mode === "AUTO") {
       props.onEdit?.("profitTargetMode","AUTO");
       props.onEdit?.("manualStopLossPoints",0);
@@ -2935,6 +2963,8 @@ function BotSettingsModal(props:any) {
                 {id:"AUTO",icon:"brain",tag:"แนะนำ"},
                 {id:"RACE",icon:"status",tag:"ดำเนินการเร็ว"},
                 {id:"ZERO_GRID",icon:"layers",tag:"กริดแบบ Hedging"},
+                {id:"FLIP_LOCK",icon:"trend",tag:"สลับทิศล็อกกำไร"},
+                {id:"PARALLEL_UNIVERSE",icon:"brain",tag:"สถิติหลายจักรวาล"},
                 {id:"MANUAL",icon:"settings",tag:"กำหนดรายละเอียด"}
               ].map(mode=><button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} className={controlMode===mode.id?"active":""} onClick={()=>applyControlMode(mode.id)}>
                 <span className="cc-bot-v2-mode-icon"><ScenovaIcon name={mode.icon} size={22}/></span>
@@ -2958,6 +2988,24 @@ function BotSettingsModal(props:any) {
                     {zeroGridLowVolatilityEnabled&&<div className="cc-bot-v2-lowvol-specs"><span>ระยะแรก <b>0.10</b></span><span>ระยะต่อระดับ <b>0.30</b></span><span>Lot <b>คงที่</b></span></div>}
                   </div>
                   <div className="cc-bot-v2-lowvol-note">การเปลี่ยนรูปแบบระหว่างมีรอบที่กำลังทำงาน จะมีผลกับรอบใหม่หลังรอบเดิมสิ้นสุด เพื่อไม่ย้ายคำสั่ง Pending กลางรอบ</div>
+                </div>}
+
+                {controlMode==="FLIP_LOCK"&&<div className="cc-bot-v2-lowvol-card active">
+                  <div className="cc-bot-v2-lowvol-copy"><span className="cc-bot-v2-lowvol-icon"><ScenovaIcon name="trend" size={22}/></span><div><small>FLIP LOCK ENGINE</small><b>ล็อกกำไรแล้วสลับทิศแบบ 1 Position</b><p>เมื่อกำไรทำจุดสูงสุดแล้วถอยกลับตามระยะที่กำหนด ระบบจะปิดสถานะเดิมก่อน แล้วเปิดฝั่งตรงข้ามด้วย Lot เดิม ไม่มี Martingale และไม่ถัวเพิ่ม</p></div></div>
+                  <div className="cc-bot-v2-fields">
+                    <label className="cc-bot-v2-field"><span>กำไรขั้นต่ำก่อน Arm</span><MoneyInput value={props.settings.flipLockMinProfitMoney||1} suffix="USD" onCommit={(v:string)=>props.onEdit?.("flipLockMinProfitMoney",v)}/></label>
+                    <label className="cc-bot-v2-field"><span>ยอมให้กำไรย่อก่อน Flip</span><MoneyInput value={props.settings.flipLockGivebackMoney||0.3} suffix="USD" onCommit={(v:string)=>props.onEdit?.("flipLockGivebackMoney",v)}/></label>
+                    <label className="cc-bot-v2-field"><span>Flip สูงสุดต่อ Cycle</span><select className="input" value={String(props.settings.flipLockMaxFlips||3)} onChange={e=>props.onEdit?.("flipLockMaxFlips",Number(e.target.value))}>{[1,2,3,4,5,6].map(v=><option key={v} value={v}>{v} ครั้ง</option>)}</select></label>
+                    <label className="cc-bot-v2-field"><span>Cooldown หลัง Flip</span><select className="input" value={String(props.settings.flipLockCooldownSeconds||10)} onChange={e=>props.onEdit?.("flipLockCooldownSeconds",Number(e.target.value))}>{[5,10,15,30,60].map(v=><option key={v} value={v}>{v} วินาที</option>)}</select></label>
+                  </div>
+                </div>}
+                {controlMode==="PARALLEL_UNIVERSE"&&<div className="cc-bot-v2-lowvol-card active">
+                  <div className="cc-bot-v2-lowvol-copy"><span className="cc-bot-v2-lowvol-icon"><ScenovaIcon name="brain" size={22}/></span><div><small>PARALLEL UNIVERSE ENGINE</small><b>ให้ประวัติช่วยยืนยันก่อนเข้า</b><p>AUTO + VECTOR EDGE เลือกทิศก่อน จากนั้นระบบต้องพบจำนวนเคสย้อนหลังและผลเฉลี่ยตามเกณฑ์ จึงจะอนุญาต 1 Position</p></div></div>
+                  <div className="cc-bot-v2-fields">
+                    <label className="cc-bot-v2-field"><span>ตัวอย่างขั้นต่ำ</span><select className="input" value={String(props.settings.parallelUniverseMinSamples||30)} onChange={e=>props.onEdit?.("parallelUniverseMinSamples",Number(e.target.value))}>{[20,30,40,60,100].map(v=><option key={v} value={v}>{v} เคส</option>)}</select></label>
+                    <label className="cc-bot-v2-field"><span>Win rate ขั้นต่ำ</span><select className="input" value={String(props.settings.parallelUniverseMinWinRate||52)} onChange={e=>props.onEdit?.("parallelUniverseMinWinRate",Number(e.target.value))}>{[50,52,55,58,60,65].map(v=><option key={v} value={v}>{v}%</option>)}</select></label>
+                    <div className="cc-bot-v2-field"><span>Setup EV</span><SwitchSetting checked={props.settings.parallelUniverseRequirePositiveSetup!==false} onChange={(v:boolean)=>props.onEdit?.("parallelUniverseRequirePositiveSetup",v)} onLabel="ต้องเป็นบวกเมื่อมีข้อมูล" offLabel="ไม่บังคับ Setup EV"/></div>
+                  </div>
                 </div>}
                 <div className="cc-bot-v2-fields">
                   <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="gold" size={17}/>Symbol</label><strong>{props.symbol || "—"}</strong></div>

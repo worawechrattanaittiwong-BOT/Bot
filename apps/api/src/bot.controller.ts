@@ -1581,6 +1581,13 @@ export class BotController {
     numberSetting("zeroGridCloseReserveMoney", 0, 100000);
     booleanSetting("raceCloseAllProfitEnabled");
     numberSetting("raceCloseAllProfitMoney", 0.01, 100000);
+    numberSetting("flipLockMinProfitMoney", 0.01, 100000);
+    numberSetting("flipLockGivebackMoney", 0.01, 100000);
+    numberSetting("flipLockMaxFlips", 1, 20, true);
+    numberSetting("flipLockCooldownSeconds", 1, 3600, true);
+    numberSetting("parallelUniverseMinSamples", 20, 500, true);
+    numberSetting("parallelUniverseMinWinRate", 40, 90);
+    booleanSetting("parallelUniverseRequirePositiveSetup");
     booleanSetting("adaptiveEngine");
     numberSetting("riskPerOrderPercent", 0.01, 5);
     booleanSetting("allowMinimumLotOverride");
@@ -1668,7 +1675,7 @@ export class BotController {
       ? String(body.engineMode || "").toUpperCase()
       : null;
 
-    if (requestedControlMode !== null && !["AUTO", "RACE", "ZERO_GRID", "ASSISTED", "MANUAL"].includes(requestedControlMode)) {
+    if (requestedControlMode !== null && !["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "PARALLEL_UNIVERSE", "ASSISTED", "MANUAL"].includes(requestedControlMode)) {
       throw new BadRequestException("Control Mode ไม่ถูกต้อง");
     }
     if (requestedEngineMode !== null && !["AUTO", "RACE", "ZERO_GRID"].includes(requestedEngineMode)) {
@@ -1709,6 +1716,23 @@ export class BotController {
     if (raceSelected) {
       if (body.raceCloseAllProfitEnabled === undefined) clean.raceCloseAllProfitEnabled = true;
       if (body.raceCloseAllProfitMoney === undefined) clean.raceCloseAllProfitMoney = 0.5;
+    }
+
+    if (requestedControlMode === "FLIP_LOCK") {
+      clean.engineMode = "AUTO";
+      clean.profitTargetMode = "OFF";
+      clean.maxPositions = 1;
+      if (body.flipLockMinProfitMoney === undefined) clean.flipLockMinProfitMoney = 1.0;
+      if (body.flipLockGivebackMoney === undefined) clean.flipLockGivebackMoney = 0.3;
+      if (body.flipLockMaxFlips === undefined) clean.flipLockMaxFlips = 3;
+      if (body.flipLockCooldownSeconds === undefined) clean.flipLockCooldownSeconds = 10;
+    }
+    if (requestedControlMode === "PARALLEL_UNIVERSE") {
+      clean.engineMode = "AUTO";
+      clean.maxPositions = 1;
+      if (body.parallelUniverseMinSamples === undefined) clean.parallelUniverseMinSamples = 30;
+      if (body.parallelUniverseMinWinRate === undefined) clean.parallelUniverseMinWinRate = 52;
+      if (body.parallelUniverseRequirePositiveSetup === undefined) clean.parallelUniverseRequirePositiveSetup = true;
     }
 
     if (body.entryMode !== undefined) {

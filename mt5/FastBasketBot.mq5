@@ -1,10 +1,12 @@
 #property strict
-#property version   "1.0.23"
-#define SCENOVA_EA_VERSION "1.0.23"
-#define SCENOVA_PRODUCT_VERSION "1.0.23"
-#define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V1"
+#property version   "1.0.24"
+#define SCENOVA_EA_VERSION "1.0.24"
+#define SCENOVA_PRODUCT_VERSION "1.0.24"
+#define SCENOVA_RUNTIME_CONTRACT "VECTOR_FLIP_PARALLEL_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
+
+#include "include\AutoVectorEdgeV1.mqh"
 
 enum ENUM_ENTRY_MODE
 {
@@ -172,6 +174,17 @@ input double          InpZeroGridBaseLot       = 0.01;
 input double          InpZeroGridMinNetProfitMoney = 0.50;
 input double          InpZeroGridCloseReserveMoney = 0.20;
 
+// FLIP LOCK: one position, lock a profitable move, then reverse only after
+// a confirmed giveback from the cycle peak. No martingale or averaging.
+input double          InpFlipLockMinProfitMoney = 1.00;
+input double          InpFlipLockGivebackMoney  = 0.30;
+input int             InpFlipLockMaxFlips       = 3;
+input int             InpFlipLockCooldownSeconds = 10;
+// PARALLEL UNIVERSE: empirical-history gate over the shared AUTO+VECTOR brain.
+input int             InpParallelMinSamples     = 30;
+input double          InpParallelMinWinRate      = 52.0;
+input bool            InpParallelRequirePositiveSetup = true;
+
 input int             InpMomentumTicks        = 20;
 input double          InpMomentumEntryPoints  = 8.0;
 input double          InpStrongFlowPoints     = 25.0;
@@ -318,6 +331,23 @@ string g_raceState = "IDLE";
 datetime g_raceCycleStartedAt = 0;
 bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
+
+// Isolated production-mode runtime state.
+double g_flipLockMinProfitMoney = 1.00;
+double g_flipLockGivebackMoney = 0.30;
+int    g_flipLockMaxFlips = 3;
+int    g_flipLockCooldownSeconds = 10;
+double g_flipLockPeakProfit = 0.0;
+bool   g_flipLockArmed = false;
+int    g_flipLockFlips = 0;
+datetime g_flipLockLastFlipAt = 0;
+int    g_parallelMinSamples = 30;
+double g_parallelMinWinRate = 52.0;
+bool   g_parallelRequirePositiveSetup = true;
+VECTOR_EDGE_OUTPUT g_autoVectorEdge;
+bool   g_autoVectorEdgeValid = false;
+bool   g_autoVectorEdgeMature = false;
+string g_autoVectorEdgeProbabilitySource = "NONE";
 // RACE uses a rolling 10-second order-flow window. Exchange/deal-side flags
 // are used when the broker publishes them; quote-only symbols fall back to
 // uptick/downtick tick-volume counts. No trend/EMA/timeframe signal decides side.
@@ -1350,6 +1380,13 @@ int OnInit()
    g_entryMode = InpEntryMode;
    g_raceCloseAllProfitEnabled = InpRaceCloseAllProfitEnabled;
    g_raceCloseAllProfitMoney = MathMax(0.01, InpRaceCloseAllProfitMoney);
+   g_flipLockMinProfitMoney = MathMax(0.01, InpFlipLockMinProfitMoney);
+   g_flipLockGivebackMoney = MathMax(0.01, InpFlipLockGivebackMoney);
+   g_flipLockMaxFlips = (int)MathMax(1.0,MathMin(20.0,(double)InpFlipLockMaxFlips));
+   g_flipLockCooldownSeconds = (int)MathMax(1.0,MathMin(3600.0,(double)InpFlipLockCooldownSeconds));
+   g_parallelMinSamples = (int)MathMax(20.0,MathMin(500.0,(double)InpParallelMinSamples));
+   g_parallelMinWinRate = MathMax(40.0,MathMin(90.0,InpParallelMinWinRate));
+   g_parallelRequirePositiveSetup = InpParallelRequirePositiveSetup;
    g_engineMode = InpEngineMode;
    StringToUpper(g_engineMode);
    if(g_engineMode != "RACE" && g_engineMode != "ZERO_GRID")
@@ -1664,6 +1701,8 @@ string EffectiveExecutionMode()
    StringToUpper(control);
    if(control == "ZERO_GRID") return "ZERO_GRID";
    if(control == "RACE") return "RACE";
+   if(control == "FLIP_LOCK") return "FLIP_LOCK";
+   if(control == "PARALLEL_UNIVERSE") return "PARALLEL_UNIVERSE";
    if(control == "AUTO" || control == "ASSISTED" || control == "MANUAL")
       return "AUTO";
 
@@ -1676,6 +1715,16 @@ string EffectiveExecutionMode()
 bool ZeroGridModeEnabled()
 {
    return EffectiveExecutionMode() == "ZERO_GRID";
+}
+
+bool FlipLockModeEnabled()
+{
+   return EffectiveExecutionMode() == "FLIP_LOCK";
+}
+
+bool ParallelUniverseModeEnabled()
+{
+   return EffectiveExecutionMode() == "PARALLEL_UNIVERSE";
 }
 
 double ZeroGridAllowedStep(double requested)
@@ -3457,6 +3506,242 @@ bool ManageRaceBasket(double momentum)
    return true;
 }
 
+
+// FLIP LOCK + PARALLEL UNIVERSE production engines -------------------------
+void ResetFlipLockRuntime(bool fullReset)
+{
+   g_flipLockPeakProfit=0.0;
+   g_flipLockArmed=false;
+   if(fullReset)
+   {
+      g_flipLockFlips=0;
+      g_flipLockLastFlipAt=0;
+   }
+}
+
+bool NewModeOperationalEntryAllowed()
+{
+   if(g_state!=STATE_RUNNING || !g_access)
+      return false;
+   if(!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid())
+      return false;
+   if(TradePermissionStatus()!="OK")
+      return false;
+   if(!CanSendOrder() || !AdaptiveSpreadAllowed())
+      return false;
+   return true;
+}
+
+bool NewModeOpenInitial(int direction,string acceptedStatus)
+{
+   if(direction==0 || !NewModeOperationalEntryAllowed())
+      return false;
+   AUTO_V20_SIDE selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
+   g_adaptiveLot=selected.plannedLot>0.0 ? selected.plannedLot : NormalizeTradeVolume(g_lot);
+   if(g_adaptiveLot<=0.0)
+      return false;
+   if(!SendMarketOrder(direction))
+      return false;
+   RegisterOrderRequest();
+   g_executionStatus=acceptedStatus;
+   return true;
+}
+
+void ManageFlipLock(double momentum)
+{
+   int count=BasketPositionCount();
+   int rescue=RescuePositionCount();
+   if(rescue>0)
+   {
+      g_executionStatus="FLIP_LOCK_RESCUE_BLOCK";
+      return;
+   }
+
+   if(count<=0)
+   {
+      // A just-completed flip gets a cooldown before a brand-new cycle may start.
+      if(g_flipLockLastFlipAt>0 && TimeCurrent()-g_flipLockLastFlipAt<g_flipLockCooldownSeconds)
+      {
+         g_executionStatus="FLIP_LOCK_COOLDOWN";
+         return;
+      }
+      ResetFlipLockRuntime(true);
+      if(!NewModeOperationalEntryAllowed())
+      {
+         g_executionStatus="FLIP_LOCK_WAIT_CONTROL";
+         return;
+      }
+      int direction=AutoV20PrecisionDirection(momentum);
+      if(direction==0)
+      {
+         g_executionStatus="FLIP_LOCK_WAIT_SETUP";
+         return;
+      }
+      if(NewModeOpenInitial(direction,"FLIP_LOCK_ACTIVE"))
+      {
+         g_flipLockPeakProfit=0.0;
+         g_flipLockArmed=false;
+      }
+      return;
+   }
+
+   int direction=BasketDirection();
+   if(direction==0 || count!=1)
+   {
+      g_executionStatus="FLIP_LOCK_SINGLE_POSITION_REQUIRED";
+      return;
+   }
+
+   double profit=BasketCycleProfit();
+   if(profit>g_flipLockPeakProfit)
+      g_flipLockPeakProfit=profit;
+   if(!g_flipLockArmed && g_flipLockPeakProfit>=g_flipLockMinProfitMoney)
+      g_flipLockArmed=true;
+
+   if(!g_flipLockArmed)
+   {
+      g_executionStatus="FLIP_LOCK_BUILDING_PROFIT";
+      return;
+   }
+
+   double dynamicGiveback=MathMax(
+      g_flipLockGivebackMoney,
+      CurrentSpreadCost(VolumeForMagic(InpMagic,direction))*1.50
+   );
+   double triggerProfit=g_flipLockPeakProfit-dynamicGiveback;
+   double protectedFloor=MathMax(0.01,g_flipLockMinProfitMoney*0.20);
+   if(profit<protectedFloor)
+   {
+      if(CloseAllBasket("FLIP_LOCK_PROTECTED_FLOOR"))
+      {
+         ResetTrail();
+         ResetFlipLockRuntime(true);
+         g_executionStatus="FLIP_LOCK_PROFIT_BANKED";
+      }
+      else
+         g_executionStatus="FLIP_LOCK_FLOOR_CLOSE_RETRY";
+      return;
+   }
+   if(profit>triggerProfit)
+   {
+      g_executionStatus="FLIP_LOCK_ARMED";
+      return;
+   }
+   if(TimeCurrent()-g_flipLockLastFlipAt<g_flipLockCooldownSeconds)
+   {
+      g_executionStatus="FLIP_LOCK_COOLDOWN";
+      return;
+   }
+
+   double previousVolume=VolumeForMagic(InpMagic,direction);
+   int opposite=-direction;
+   if(!CloseAllBasket("FLIP_LOCK_SWITCH") || BasketPositionCount()!=0 || RescuePositionCount()!=0)
+   {
+      g_executionStatus="FLIP_LOCK_CLOSE_RETRY";
+      return;
+   }
+
+   g_flipLockLastFlipAt=TimeCurrent();
+   ResetTrail();
+   g_flipLockPeakProfit=0.0;
+   g_flipLockArmed=false;
+
+   if(g_flipLockFlips>=g_flipLockMaxFlips)
+   {
+      g_executionStatus="FLIP_LOCK_MAX_FLIPS_BANKED";
+      return;
+   }
+   g_flipLockFlips++;
+   if(!NewModeOperationalEntryAllowed())
+   {
+      g_executionStatus="FLIP_LOCK_CLOSED_NO_REOPEN";
+      return;
+   }
+
+   g_adaptiveLot=NormalizeTradeVolume(previousVolume>0.0 ? previousVolume : g_lot);
+   if(SendMarketOrder(opposite))
+   {
+      RegisterOrderRequest();
+      g_executionStatus="FLIP_LOCK_SWITCHED";
+   }
+   else
+      g_executionStatus="FLIP_LOCK_REOPEN_FAILED";
+}
+
+bool ParallelUniverseEvidenceAllows(int direction,string &reason)
+{
+   reason="NONE";
+   AUTO_V20_SIDE side=direction>0 ? g_autoV20Buy : g_autoV20Sell;
+   if(side.winSamples<g_parallelMinSamples)
+   {
+      reason="PARALLEL_NEEDS_HISTORY";
+      return false;
+   }
+   if(side.winProbability<g_parallelMinWinRate)
+   {
+      reason="PARALLEL_WIN_RATE_LOW";
+      return false;
+   }
+   if(side.averageNet<=0.0)
+   {
+      reason="PARALLEL_AVERAGE_NET_NONPOSITIVE";
+      return false;
+   }
+
+   bool setupMatches=g_setupWinSamples>=12 &&
+      g_setupHistoryDirection==direction &&
+      g_setupHistoryModel==side.model;
+   if(g_parallelRequirePositiveSetup && setupMatches &&
+      (g_setupAverageNet<=0.0 || g_setupEvScore<50.0))
+   {
+      reason="PARALLEL_SETUP_EV_NONPOSITIVE";
+      return false;
+   }
+   if(g_autoVectorEdgeValid && g_autoVectorEdgeMature)
+   {
+      double ev=direction>0 ? g_autoVectorEdge.buyEV : g_autoVectorEdge.sellEV;
+      if(ev<=0.0)
+      {
+         reason="PARALLEL_VECTOR_EV_NONPOSITIVE";
+         return false;
+      }
+   }
+   return true;
+}
+
+void ManageParallelUniverse(double momentum)
+{
+   if(RescuePositionCount()>0)
+   {
+      g_executionStatus="PARALLEL_RESCUE_BLOCK";
+      return;
+   }
+   if(BasketPositionCount()>0)
+   {
+      g_executionStatus="PARALLEL_MANAGING";
+      return;
+   }
+   if(!NewModeOperationalEntryAllowed())
+   {
+      g_executionStatus="PARALLEL_WAIT_CONTROL";
+      return;
+   }
+
+   int direction=AutoV20PrecisionDirection(momentum);
+   if(direction==0)
+   {
+      g_executionStatus="PARALLEL_WAIT_AUTO_VECTOR";
+      return;
+   }
+   string reason="NONE";
+   if(!ParallelUniverseEvidenceAllows(direction,reason))
+   {
+      g_executionStatus=reason;
+      return;
+   }
+   NewModeOpenInitial(direction,"PARALLEL_ENTRY_ACCEPTED");
+}
+
 void OnTick()
 {
    SampleSpread();
@@ -3568,6 +3853,19 @@ void OnTick()
          g_executionStatus = "BASKET_PROFIT_TARGET";
          return;
       }
+   }
+
+   // FLIP LOCK and PARALLEL UNIVERSE own all entry/position behavior when selected.
+   // Shared global stop/daily-loss logic has already run above this owner boundary.
+   if(FlipLockModeEnabled())
+   {
+      ManageFlipLock(momentum);
+      return;
+   }
+   if(ParallelUniverseModeEnabled())
+   {
+      ManageParallelUniverse(momentum);
+      return;
    }
 
    if(count > 0)
@@ -5670,6 +5968,14 @@ void ApplySettings(string json)
    g_raceCloseAllProfitEnabled = JsonBool(json, "raceCloseAllProfitEnabled", g_raceCloseAllProfitEnabled);
    g_raceCloseAllProfitMoney = MathMax(0.01, JsonNumber(json, "raceCloseAllProfitMoney", g_raceCloseAllProfitMoney));
 
+   g_flipLockMinProfitMoney = MathMax(0.01,JsonNumber(json,"flipLockMinProfitMoney",g_flipLockMinProfitMoney));
+   g_flipLockGivebackMoney = MathMax(0.01,JsonNumber(json,"flipLockGivebackMoney",g_flipLockGivebackMoney));
+   g_flipLockMaxFlips = (int)MathMax(1.0,MathMin(20.0,MathRound(JsonNumber(json,"flipLockMaxFlips",g_flipLockMaxFlips))));
+   g_flipLockCooldownSeconds = (int)MathMax(1.0,MathMin(3600.0,MathRound(JsonNumber(json,"flipLockCooldownSeconds",g_flipLockCooldownSeconds))));
+   g_parallelMinSamples = (int)MathMax(20.0,MathMin(500.0,MathRound(JsonNumber(json,"parallelUniverseMinSamples",g_parallelMinSamples))));
+   g_parallelMinWinRate = MathMax(40.0,MathMin(90.0,JsonNumber(json,"parallelUniverseMinWinRate",g_parallelMinWinRate)));
+   g_parallelRequirePositiveSetup = JsonBool(json,"parallelUniverseRequirePositiveSetup",g_parallelRequirePositiveSetup);
+
    g_zeroGridStepPrice = ZeroGridAllowedStep(JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));
    g_zeroGridLowVolatilityEnabled = JsonBool(json, "zeroGridLowVolatilityEnabled", g_zeroGridLowVolatilityEnabled);
    g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,MathRound(JsonNumber(json, "zeroGridLevelsPerSide", g_zeroGridLevelsPerSide))));
@@ -5685,7 +5991,8 @@ void ApplySettings(string json)
    StringToUpper(requestedControlMode);
    bool hasControlMode =
       requestedControlMode == "AUTO" || requestedControlMode == "RACE" ||
-      requestedControlMode == "ZERO_GRID" || requestedControlMode == "ASSISTED" ||
+      requestedControlMode == "ZERO_GRID" || requestedControlMode == "FLIP_LOCK" ||
+      requestedControlMode == "PARALLEL_UNIVERSE" || requestedControlMode == "ASSISTED" ||
       requestedControlMode == "MANUAL" || requestedControlMode == "LEGACY";
 
    // Hard isolation: one execution owner at a time. controlMode is authoritative
@@ -11917,6 +12224,114 @@ void AutoV20PublishSelected(AUTO_V20_SIDE &side)
    g_effectiveConfidenceThreshold=0.0;
 }
 
+
+// AUTO + VECTOR EDGE production layer ---------------------------------------
+double AutoVectorEdgeProbability(const AUTO_V20_SIDE &side,string &source)
+{
+   if(side.winSamples>=20)
+   {
+      source="HISTORY";
+      return VectorClamp01(side.winProbability/100.0);
+   }
+   source="MODEL_PROXY";
+   return VectorClamp01(side.confidence/100.0);
+}
+
+double AutoVectorEdgeGrossMove(const AUTO_V20_SIDE &side,bool win)
+{
+   double target=win ? side.tpPrice : side.slPrice;
+   if(side.direction==0 || side.plannedLot<=0.0 || side.entryPrice<=0.0 || target<=0.0)
+      return 0.0;
+   return MathAbs(AutoV20ProfitForMove(side.direction,side.plannedLot,side.entryPrice,target));
+}
+
+bool AutoVectorEdgeBuildInput(double momentum,VECTOR_EDGE_INPUT &input)
+{
+   string buySource="NONE",sellSource="NONE";
+   input.buyProbability=AutoVectorEdgeProbability(g_autoV20Buy,buySource);
+   input.sellProbability=AutoVectorEdgeProbability(g_autoV20Sell,sellSource);
+   g_autoVectorEdgeProbabilitySource=buySource==sellSource ? buySource : buySource+"+"+sellSource;
+
+   input.buyKnownCostMoney=MathMax(0.0,g_autoV20Buy.knownCostMoney);
+   input.sellKnownCostMoney=MathMax(0.0,g_autoV20Sell.knownCostMoney);
+   input.buyExpectedWinMoney=AutoVectorEdgeGrossMove(g_autoV20Buy,true);
+   input.buyExpectedLossMoney=AutoVectorEdgeGrossMove(g_autoV20Buy,false);
+   input.sellExpectedWinMoney=AutoVectorEdgeGrossMove(g_autoV20Sell,true);
+   input.sellExpectedLossMoney=AutoVectorEdgeGrossMove(g_autoV20Sell,false);
+
+   if(input.buyExpectedWinMoney<=0.0 || input.buyExpectedLossMoney<=0.0 ||
+      input.sellExpectedWinMoney<=0.0 || input.sellExpectedLossMoney<=0.0)
+      return false;
+
+   double spread=CurrentSpreadPoints();
+   double reference=g_adaptiveSpreadLimit>0.0 ? g_adaptiveSpreadLimit :
+      (g_spreadP95>0.0 ? g_spreadP95 : g_spreadMedian);
+   input.spreadPenalty=reference>0.0
+      ? MathMin(2.0,MathMax(0.0,spread/reference-1.0)) : 0.25;
+   input.volatilityNoise=g_atrRatio>0.0
+      ? MathMin(1.0,MathAbs(g_atrRatio-1.0)) : 0.25;
+   double bestConfidence=MathMax(g_autoV20Buy.confidence,g_autoV20Sell.confidence);
+   input.modelUncertainty=1.0-VectorClamp01(bestConfidence/100.0);
+   input.persistence=g_autoV20PhaseSince>0
+      ? VectorClamp01((double)MathMax(0,TimeCurrent()-g_autoV20PhaseSince)/30.0) : 0.0;
+   double scale=MathMax(1.0,InpStrongFlowPoints);
+   input.velocity=MathMax(-1.0,MathMin(1.0,momentum/scale));
+   input.acceleration=MathMax(-1.0,MathMin(1.0,(momentum-g_autoV20PreviousMomentum)/scale));
+   return true;
+}
+
+void AutoVectorEdgeApply(double momentum)
+{
+   g_autoVectorEdgeValid=false;
+   g_autoVectorEdgeMature=g_autoV20Buy.winSamples>=20 && g_autoV20Sell.winSamples>=20;
+   VECTOR_EDGE_INPUT input;
+   if(!AutoVectorEdgeBuildInput(momentum,input))
+      return;
+   g_autoVectorEdge=VectorEvaluateEdge(input);
+   g_autoVectorEdgeValid=g_autoVectorEdge.valid;
+   if(!g_autoVectorEdgeValid || !g_autoVectorEdge.positiveExpectancy ||
+      g_autoVectorEdge.preferredDirection==0)
+      return;
+
+   double reliability=g_autoVectorEdgeMature
+      ? MathMin(1.0,(double)MathMin(g_autoV20Buy.winSamples,g_autoV20Sell.winSamples)/60.0)
+      : 0.20;
+   double boost=MathMin(6.0,g_autoVectorEdge.edgeRatio*0.06)*reliability;
+   double penalty=MathMin(4.0,g_autoVectorEdge.edgeRatio*0.04)*reliability;
+   if(g_autoVectorEdge.preferredDirection>0)
+   {
+      g_autoV20Buy.rankScore+=boost;
+      g_autoV20Sell.rankScore-=penalty;
+   }
+   else
+   {
+      g_autoV20Sell.rankScore+=boost;
+      g_autoV20Buy.rankScore-=penalty;
+   }
+}
+
+bool AutoVectorEdgeDirectionAllowed(int direction,string &reason)
+{
+   reason="OK";
+   if(!g_autoVectorEdgeValid || !g_autoVectorEdgeMature)
+      return true;
+   double ownEv=direction>0 ? g_autoVectorEdge.buyEV : g_autoVectorEdge.sellEV;
+   double otherEv=direction>0 ? g_autoVectorEdge.sellEV : g_autoVectorEdge.buyEV;
+   if(ownEv<=0.0 && otherEv>0.0)
+   {
+      reason="VECTOR_NEGATIVE_EV";
+      return false;
+   }
+   if(g_autoVectorEdge.preferredDirection!=0 &&
+      g_autoVectorEdge.preferredDirection!=direction &&
+      g_autoVectorEdge.edgeRatio>=60.0)
+   {
+      reason="VECTOR_STRONG_OPPOSITE_EDGE";
+      return false;
+   }
+   return true;
+}
+
 int AutoV20PrecisionDirection(double momentum)
 {
    g_autoV20DecisionId++;
@@ -11931,6 +12346,7 @@ int AutoV20PrecisionDirection(double momentum)
    AutoV20ScanM5Levels(g_autoV20Levels);
    AutoV20EvaluateSide(1,momentum,g_autoV20Levels,g_autoV20Buy);
    AutoV20EvaluateSide(-1,momentum,g_autoV20Levels,g_autoV20Sell);
+   AutoVectorEdgeApply(momentum);
    g_autoV20LastMomentum=momentum;
 
    int count=BasketPositionCount();
@@ -11990,6 +12406,14 @@ int AutoV20PrecisionDirection(double momentum)
    }
    else if(g_marketRegime=="RANGE")
       minimumRank+=2.0;
+
+   string vectorGateReason="OK";
+   if(!AutoVectorEdgeDirectionAllowed(direction,vectorGateReason))
+   {
+      g_autoV20RejectReason=vectorGateReason;
+      g_adaptiveBlockReason=vectorGateReason;
+      return 0;
+   }
 
    if(selected.confidence<minimumConfidence || selected.rankScore<minimumRank)
    {
@@ -15966,10 +16390,14 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    request.deviation = 30;
    request.type_filling = AllowedFillingMode();
    request.comment = autoV20
-      ? "SaaSAutoV20"
+      ? "SaaSAutoVector"
+      : (FlipLockModeEnabled()
+      ? "SaaSFlipLock"
+      : (ParallelUniverseModeEnabled()
+      ? "SaaSParallel"
       : (g_engineMode == "RACE"
       ? "SaaSRace"
-      : (g_tacticalCountertrendActive ? "SaaSTactical" : "SaaSBasket"));
+      : (g_tacticalCountertrendActive ? "SaaSTactical" : "SaaSBasket"))));
 
    if(direction > 0)
    {
