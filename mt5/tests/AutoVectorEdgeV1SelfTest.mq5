@@ -58,10 +58,12 @@ void OnStart()
    VectorTestCheck(directionalOut.preferredDirection == 1,
                    "strong BUY economics prefer BUY");
 
+   VECTOR_EDGE_INPUT baseInput = VectorTestBaseInput();
+   VECTOR_EDGE_OUTPUT baseOut = VectorEvaluateEdge(baseInput);
+
    VECTOR_EDGE_INPUT expensive = VectorTestBaseInput();
    expensive.buyKnownCostMoney = 5.0;
    VECTOR_EDGE_OUTPUT expensiveOut = VectorEvaluateEdge(expensive);
-   VECTOR_EDGE_OUTPUT baseOut = VectorEvaluateEdge(VectorTestBaseInput());
    VectorTestCheck(expensiveOut.buyEV < baseOut.buyEV,
                    "higher known cost reduces BUY EV");
 
