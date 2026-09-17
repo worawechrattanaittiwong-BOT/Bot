@@ -1,0 +1,55 @@
+{
+  "format": "SCENOVA_ORDER_PRESERVING_MQ5_MODULES_V1",
+  "source": "mt5/FastBasketBot.mq5",
+  "originalSha256": "4772403b8a98c8db737436eac617ffa0d897e982e60683d97c03d5ca9e409394",
+  "expandedSha256": "4772403b8a98c8db737436eac617ffa0d897e982e60683d97c03d5ca9e409394",
+  "originalLines": 16487,
+  "rootLines": 20,
+  "parts": [
+    {
+      "file": "mt5/FastBasketBot.Part01.mqh",
+      "lines": 1801,
+      "sha256": "af1c36a9057769118b4f1b94d1f29095fa3027044b1a6ee2f67ad01e16fcc855"
+    },
+    {
+      "file": "mt5/FastBasketBot.Part02.mqh",
+      "lines": 2218,
+      "sha256": "9a4daf36a32935e6e1b08e3488285d500cf1254fed161381d1a23153b27cbb3b"
+    },
+    {
+      "file": "mt5/FastBasketBot.Part03.mqh",
+      "lines": 1805,
+      "sha256": "c2e94eb6682ce5d0beec139a00fa9cfa44407aee735a01a534616c8571a5f73d"
+    },
+    {
+      "file": "mt5/FastBasketBot.Part04.mqh",
+      "lines": 1982,
+      "sha256": "19053b9f58cc2d5b76ca4c7c2a4f30f8526cc6136a98c9e15c80075d93cca763"
+    },
+    {
+      "file": "mt5/FastBasketBot.Part05.mqh",
+      "lines": 1804,
+      "sha256": "bba2be5ef34e05805aef1c177e3ce97c733b198a3926f21ac65315a3763690db"
+    },
+    {
+      "file": "mt5/FastBasketBot.Part06.mqh",
+      "lines": 1842,
+      "sha256": "38e06b4192fd32059c0692de68ef363bc7103edd704977cd565097d316f661bc"
+    },
+    {
+      "file": "mt5/FastBasketBot.Part07.mqh",
+      "lines": 1892,
+      "sha256": "39f8bf821e2058f8f523571b52b8089b0d453da173b3584688c139f9eda15704"
+    },
+    {
+      "file": "mt5/FastBasketBot.Part08.mqh",
+      "lines": 1823,
+      "sha256": "bddd6f134942278e725ef1d0b3e943d2644b1b3ff9e7517337b7514c9f7e7b63"
+    },
+    {
+      "file": "mt5/FastBasketBot.Part09.mqh",
+      "lines": 1312,
+      "sha256": "da5e073aa438a0f1eebcaefc803e29a5c66f986bdbc0cce569ea410d569d476d"
+    }
+  ]
+}
