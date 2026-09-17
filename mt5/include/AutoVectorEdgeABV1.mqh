@@ -2,11 +2,11 @@
 #define SCENOVA_AUTO_VECTOR_EDGE_AB_V1_MQH
 
 // Phase 3 counterfactual A/B observer.
-// Variant A = existing AUTO V20 (always remains the real execution path).
-// Variant B = hypothetical VECTOR EDGE filter over A's accepted decisions.
-// This module MUST NOT send/modify/cancel/close orders or write execution state.
+// Variant A = actual existing AUTO V20 entries.
+// Variant B = hypothetical VECTOR EDGE filter over those actual entries.
+// B is filter-only and has no execution authority.
 
-#define VECTOR_EDGE_AB_V1_VERSION "1.0.0-counterfactual"
+#define VECTOR_EDGE_AB_V1_VERSION "1.1.0-actual-entry-counterfactual"
 
 const bool VECTOR_EDGE_AB_EXECUTION_ENABLED = false;
 const double VECTOR_EDGE_AB_MIN_EDGE_RATIO = 40.0;
@@ -33,7 +33,7 @@ VECTOR_EDGE_AB_RESULT VectorEdgeABEvaluate(const bool variantAAccepted,
    result.variantBWouldAllow = false;
    result.variantBReason = "A_DID_NOT_ENTER";
 
-   // B is filter-only. It can never promote a rejected/no-trade A decision.
+   // B can only remove an A entry. It can never create/promote one.
    if(!variantAAccepted || variantADirection == 0)
       return result;
 
@@ -69,78 +69,78 @@ VECTOR_EDGE_AB_RESULT VectorEdgeABEvaluate(const bool variantAAccepted,
    }
 
    result.variantBWouldAllow = true;
-   result.variantBReason = "KEEP_AUTO_DECISION";
+   result.variantBReason = "KEEP_AUTO_ENTRY";
    return result;
 }
 
 #ifndef VECTOR_EDGE_AB_PURE_ONLY
 
-long g_vectorEdgeABLastDecisionId = -1;
-long g_vectorEdgeABDecisions = 0;
-long g_vectorEdgeABVariantAEntries = 0;
+long g_vectorEdgeABActualEntries = 0;
 long g_vectorEdgeABVariantBKeep = 0;
 long g_vectorEdgeABVariantBBlock = 0;
 long g_vectorEdgeABDirectionMismatch = 0;
+long g_vectorEdgeABInvalidSnapshots = 0;
 
 string VectorEdgeABSummaryJson()
 {
    return StringFormat(
-      "{\"version\":\"%s\",\"executionEnabled\":false,\"decisions\":%I64d,\"variantAEntries\":%I64d,\"variantBKeep\":%I64d,\"variantBBlock\":%I64d,\"directionMismatch\":%I64d}",
+      "{\"version\":\"%s\",\"executionEnabled\":false,\"actualAEntries\":%I64d,\"variantBKeep\":%I64d,\"variantBBlock\":%I64d,\"directionMismatch\":%I64d,\"invalidSnapshots\":%I64d}",
       VECTOR_EDGE_AB_V1_VERSION,
-      g_vectorEdgeABDecisions,
-      g_vectorEdgeABVariantAEntries,
+      g_vectorEdgeABActualEntries,
       g_vectorEdgeABVariantBKeep,
       g_vectorEdgeABVariantBBlock,
-      g_vectorEdgeABDirectionMismatch
+      g_vectorEdgeABDirectionMismatch,
+      g_vectorEdgeABInvalidSnapshots
    );
 }
 
-void AutoVectorEdgeABObserve()
+void AutoVectorEdgeABObserveActualEntry(const int actualDirection)
 {
-   // Same hard scope as Phase 2: AUTO V20 only.
-   if(!AutoV20Enabled())
+   // Hard mode isolation: only real AUTO V20 entries are eligible.
+   if(!AutoV20Enabled() || actualDirection == 0)
       return;
 
-   // A/B samples are decision-scoped, not timer-scoped.
-   if(g_autoV20DecisionId <= 0 || g_autoV20DecisionId == g_vectorEdgeABLastDecisionId)
-      return;
-
-   g_vectorEdgeABLastDecisionId = g_autoV20DecisionId;
-   g_vectorEdgeABDecisions++;
-
-   int aDirection = g_cachedAdaptiveDirection;
-   bool aAccepted = (aDirection != 0 && g_autoV20RejectReason == "NONE");
-
-   // Refresh the read-only VECTOR EDGE snapshot from the same AUTO diagnostics.
    VECTOR_EDGE_INPUT input;
-   VECTOR_EDGE_OUTPUT edge = g_vectorEdgeShadowOutput;
+   VECTOR_EDGE_OUTPUT edge;
+   edge.valid = false;
+   edge.preferredDirection = 0;
+   edge.entropy = 1.0;
+   edge.directionalAgreement = 0.0;
+   edge.buyEV = 0.0;
+   edge.sellEV = 0.0;
+   edge.edgeRatio = 0.0;
+   edge.fractionalKelly = 0.0;
+   edge.riskMultiplier = 0.0;
+   edge.positiveExpectancy = false;
+   edge.exitEdgeLost = true;
+   edge.reason = "SNAPSHOT_UNAVAILABLE";
+
    if(AutoVectorEdgeShadowBuildInput(input))
       edge = VectorEvaluateEdge(input);
 
-   VECTOR_EDGE_AB_RESULT ab = VectorEdgeABEvaluate(aAccepted,aDirection,edge);
+   VECTOR_EDGE_AB_RESULT ab = VectorEdgeABEvaluate(true,actualDirection,edge);
 
-   if(aAccepted)
-   {
-      g_vectorEdgeABVariantAEntries++;
-      if(ab.variantBWouldAllow)
-         g_vectorEdgeABVariantBKeep++;
-      else
-         g_vectorEdgeABVariantBBlock++;
-   }
-   if(aAccepted && edge.valid && edge.preferredDirection != 0 &&
-      edge.preferredDirection != aDirection)
+   g_vectorEdgeABActualEntries++;
+   if(!edge.valid)
+      g_vectorEdgeABInvalidSnapshots++;
+
+   if(ab.variantBWouldAllow)
+      g_vectorEdgeABVariantBKeep++;
+   else
+      g_vectorEdgeABVariantBBlock++;
+
+   if(edge.valid && edge.preferredDirection != 0 &&
+      edge.preferredDirection != actualDirection)
       g_vectorEdgeABDirectionMismatch++;
 
-   // Counterfactual log only. No value below is assigned back to AUTO execution.
+   // Counterfactual log only. Nothing here is assigned back to execution.
    PrintFormat(
-      "VECTOR_EDGE_AB {\"version\":\"%s\",\"executionEnabled\":false,\"decisionId\":%I64d,\"decisionKind\":\"%s\",\"aAccepted\":%s,\"aDirection\":%d,\"aReason\":\"%s\",\"aRejectReason\":\"%s\",\"bWouldAllow\":%s,\"bReason\":\"%s\",\"vectorDirection\":%d,\"edgeRatio\":%.2f,\"entropy\":%.4f,\"agreement\":%.4f,\"buyEV\":%.4f,\"sellEV\":%.4f}",
+      "VECTOR_EDGE_AB_ENTRY {\"version\":\"%s\",\"executionEnabled\":false,\"actualEntry\":true,\"decisionId\":%I64d,\"decisionKind\":\"%s\",\"aDirection\":%d,\"aReason\":\"%s\",\"bWouldAllow\":%s,\"bReason\":\"%s\",\"vectorDirection\":%d,\"edgeRatio\":%.2f,\"entropy\":%.4f,\"agreement\":%.4f,\"buyEV\":%.4f,\"sellEV\":%.4f}",
       VECTOR_EDGE_AB_V1_VERSION,
       g_autoV20DecisionId,
       g_autoV20DecisionKind,
-      aAccepted ? "true" : "false",
-      aDirection,
+      actualDirection,
       g_autoV20DecisionReason,
-      g_autoV20RejectReason,
       ab.variantBWouldAllow ? "true" : "false",
       ab.variantBReason,
       edge.preferredDirection,
@@ -151,7 +151,7 @@ void AutoVectorEdgeABObserve()
       edge.sellEV
    );
 
-   if(g_vectorEdgeABDecisions % 25 == 0)
+   if(g_vectorEdgeABActualEntries % 25 == 0)
       Print("VECTOR_EDGE_AB_SUMMARY ",VectorEdgeABSummaryJson());
 }
 
