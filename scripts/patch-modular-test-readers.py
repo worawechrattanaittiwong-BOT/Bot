@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Compatibility patcher for regression tests after the order-preserving MQ5 split.
 needle = "$source = Get-Content $sourcePath -Raw"
 insert = """$source = Get-Content $sourcePath -Raw
 $sourceDir = Split-Path $sourcePath -Parent
