@@ -5,7 +5,7 @@
 // IMPORTANT: reads existing AUTO V20 diagnostics only. It must never send,
 // modify, cancel, close, resize, or gate any order.
 
-#define VECTOR_EDGE_SHADOW_V1_VERSION "1.1.0"
+#define VECTOR_EDGE_SHADOW_V1_VERSION "1.2.0"
 #define VECTOR_EDGE_SHADOW_SAMPLE_MS 1000
 #define VECTOR_EDGE_SHADOW_LOG_MS 5000
 
@@ -26,8 +26,6 @@ double VectorShadowClampSigned(const double value)
 double VectorShadowSideProbability(const AUTO_V20_SIDE &side,
                                    string &source)
 {
-   // A historical 0% win rate is still real history. Do not silently replace
-   // it with model confidence merely because the value is zero.
    if(side.winSamples >= 20)
    {
       source = "HISTORY";
@@ -49,7 +47,7 @@ double VectorShadowPersistence()
    if(g_autoV20PhaseSince <= 0)
       return 0.0;
 
-   long ageSeconds = (long)MathMax(0, TimeCurrent() - g_autoV20PhaseSince);
+   long ageSeconds = (long)MathMax(0,TimeCurrent() - g_autoV20PhaseSince);
    return VectorClamp01((double)ageSeconds / 30.0);
 }
 
@@ -64,26 +62,23 @@ double VectorShadowSpreadPenalty()
       : (g_spreadP95 > 0.0 ? g_spreadP95 : g_spreadMedian);
 
    if(reference <= 0.0)
-      return 0.25; // profile not ready: conservative diagnostic uncertainty
+      return 0.25;
 
-   // Normal spread should have zero excess penalty. Only widening above the
-   // learned reference is penalized.
    double ratio = spread / reference;
-   return MathMin(2.0, MathMax(0.0, ratio - 1.0));
+   return MathMin(2.0,MathMax(0.0,ratio - 1.0));
 }
 
 double VectorShadowVolatilityNoise()
 {
    if(g_atrRatio <= 0.0)
-      return 0.25; // unknown is not the same as perfectly normal
+      return 0.25;
 
-   return MathMin(1.0, MathAbs(g_atrRatio - 1.0));
+   return MathMin(1.0,MathAbs(g_atrRatio - 1.0));
 }
 
 bool AutoVectorEdgeShadowBuildInput(VECTOR_EDGE_INPUT &input)
 {
-   // Hard scope boundary: AUTO V20 only. ASSISTED/MANUAL may share the AUTO
-   // engine family but AutoV20Enabled() is false for those control modes.
+   // Hard scope boundary: AUTO V20 only.
    if(!AutoV20Enabled())
       return false;
 
@@ -99,12 +94,24 @@ bool AutoVectorEdgeShadowBuildInput(VECTOR_EDGE_INPUT &input)
       ? buySource
       : buySource + "+" + sellSource;
 
-   input.buyExpectedWinMoney = MathMax(0.0,g_autoV20Buy.expectedProfitMoney);
-   input.buyExpectedLossMoney = MathMax(0.0,g_autoV20Buy.expectedLossMoney);
+   // AUTO V20 stores expectedProfitMoney NET of cost and expectedLossMoney
+   // INCLUDING cost. VECTOR EDGE expects gross economics + one explicit cost,
+   // so reconstruct gross values here to avoid subtracting cost twice.
    input.buyKnownCostMoney = MathMax(0.0,g_autoV20Buy.knownCostMoney);
-   input.sellExpectedWinMoney = MathMax(0.0,g_autoV20Sell.expectedProfitMoney);
-   input.sellExpectedLossMoney = MathMax(0.0,g_autoV20Sell.expectedLossMoney);
+   input.buyExpectedWinMoney = MathMax(
+      0.0,g_autoV20Buy.expectedProfitMoney + input.buyKnownCostMoney
+   );
+   input.buyExpectedLossMoney = MathMax(
+      0.0,g_autoV20Buy.expectedLossMoney - input.buyKnownCostMoney
+   );
+
    input.sellKnownCostMoney = MathMax(0.0,g_autoV20Sell.knownCostMoney);
+   input.sellExpectedWinMoney = MathMax(
+      0.0,g_autoV20Sell.expectedProfitMoney + input.sellKnownCostMoney
+   );
+   input.sellExpectedLossMoney = MathMax(
+      0.0,g_autoV20Sell.expectedLossMoney - input.sellKnownCostMoney
+   );
 
    input.volatilityNoise = VectorShadowVolatilityNoise();
    input.spreadPenalty = VectorShadowSpreadPenalty();
@@ -169,7 +176,6 @@ void AutoVectorEdgeShadowObserve()
       return;
    }
 
-   // Pure diagnostic call. No VECTOR EDGE output is assigned to execution.
    g_vectorEdgeShadowOutput = VectorEvaluateEdge(input);
    g_vectorEdgeShadowActive = g_vectorEdgeShadowOutput.valid;
    g_vectorEdgeShadowSamples++;
