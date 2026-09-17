@@ -36,10 +36,12 @@ int OnInit()
 
 void VectorEdgeABPostBaseEvent(const ulong orderMarkerBefore)
 {
-   // g_lastOrderMs is changed by RegisterOrderRequest() after a successful AUTO
-   // SendMarketOrder path. Therefore this observes actual A execution, not just
-   // a non-zero cached direction/decision candidate.
-   if(g_lastOrderMs == orderMarkerBefore || !AutoV20Enabled())
+   // Other execution modes are completely outside VECTOR EDGE ownership.
+   if(!AutoV20Enabled())
+      return;
+
+   // g_lastOrderMs changes after the successful AUTO SendMarketOrder path.
+   if(g_lastOrderMs == orderMarkerBefore)
       return;
 
    int actualDirection = BasketDirection();
@@ -53,6 +55,8 @@ void OnTick()
 {
    ulong orderMarkerBefore = g_lastOrderMs;
    ScenovaBaseOnTick();
+
+   // Post-processing only; the base tick has already completed its decisions.
    VectorEdgeABPostBaseEvent(orderMarkerBefore);
 }
 
@@ -63,9 +67,10 @@ void OnTimer()
    // Existing timer logic always runs first and remains authoritative.
    ScenovaBaseOnTimer();
 
-   // Phase 2 read-only snapshot/logging.
-   AutoVectorEdgeShadowObserve();
+   // Outside AUTO V20, do nothing beyond the unchanged base engine.
+   if(!AutoV20Enabled())
+      return;
 
-   // Phase 3 only reacts if the base event actually registered an order.
+   AutoVectorEdgeShadowObserve();
    VectorEdgeABPostBaseEvent(orderMarkerBefore);
 }
