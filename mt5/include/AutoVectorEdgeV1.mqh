@@ -6,37 +6,37 @@
 // cancel, or close orders. It is intentionally isolated so it can run in
 // SHADOW mode before any future AUTO integration.
 
-#define VECTOR_EDGE_V1_VERSION "1.2.0-shadow"
+#define VECTOR_EDGE_V1_VERSION "1.2.1-shadow"
 
 struct VECTOR_EDGE_INPUT
 {
    double buyProbability;       // absolute 0..1 probability/proxy for BUY
    double sellProbability;      // absolute 0..1 probability/proxy for SELL
-   double buyExpectedWinMoney;
-   double buyExpectedLossMoney;
+   double buyExpectedWinMoney;  // gross win before known execution cost
+   double buyExpectedLossMoney; // gross loss magnitude before known cost
    double buyKnownCostMoney;
    double sellExpectedWinMoney;
    double sellExpectedLossMoney;
    double sellKnownCostMoney;
-   double volatilityNoise;      // normalized >= 0
-   double spreadPenalty;        // normalized >= 0
-   double modelUncertainty;     // 0..1
-   double persistence;          // 0..1
-   double velocity;             // signed normalized short-horizon velocity
-   double acceleration;         // signed normalized short-horizon acceleration
+   double volatilityNoise;
+   double spreadPenalty;
+   double modelUncertainty;
+   double persistence;
+   double velocity;
+   double acceleration;
 };
 
 struct VECTOR_EDGE_OUTPUT
 {
    bool   valid;
-   int    preferredDirection;   // +1 BUY, -1 SELL, 0 NONE
-   double entropy;              // 0 structured .. 1 uncertain
-   double directionalAgreement; // 0..1
+   int    preferredDirection;
+   double entropy;
+   double directionalAgreement;
    double buyEV;
    double sellEV;
-   double edgeRatio;            // normalized 0..100 diagnostic score
-   double fractionalKelly;      // diagnostic only, 0..0.25 hard capped
-   double riskMultiplier;       // diagnostic only, 0..1
+   double edgeRatio;
+   double fractionalKelly;
+   double riskMultiplier;
    bool   positiveExpectancy;
    bool   exitEdgeLost;
    string reason;
@@ -95,7 +95,6 @@ double VectorDirectionalAgreement(const int direction,
                                   const double acceleration)
 {
    if(direction == 0) return 0.0;
-
    double v = direction * velocity;
    double a = direction * acceleration;
    double velocityScore = VectorClamp01(0.5 + 0.5 * v);
@@ -119,9 +118,8 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
    out.exitEdgeLost = false;
    out.reason = "INVALID";
 
-   // Keep absolute side probabilities for EV/Kelly. BUY and SELL historical
-   // win rates are independent conditional estimates and must not be forced
-   // to sum to 1. Only the directional entropy comparison uses normalized mass.
+   // Absolute side probabilities drive EV/Kelly. Only directional entropy
+   // normalizes the BUY/SELL mass for a relative ambiguity measurement.
    double buyP = VectorClamp01(input.buyProbability);
    double sellP = VectorClamp01(input.sellProbability);
    double probabilitySum = buyP + sellP;
@@ -134,23 +132,17 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
    double buyDirectionalMass = buyP / probabilitySum;
    out.entropy = VectorBinaryEntropy(buyDirectionalMass);
 
-   out.buyEV = VectorExpectedValue(buyP,
-                                   input.buyExpectedWinMoney,
-                                   input.buyExpectedLossMoney,
-                                   input.buyKnownCostMoney);
-   out.sellEV = VectorExpectedValue(sellP,
-                                    input.sellExpectedWinMoney,
-                                    input.sellExpectedLossMoney,
-                                    input.sellKnownCostMoney);
+   out.buyEV = VectorExpectedValue(buyP,input.buyExpectedWinMoney,
+                                   input.buyExpectedLossMoney,input.buyKnownCostMoney);
+   out.sellEV = VectorExpectedValue(sellP,input.sellExpectedWinMoney,
+                                    input.sellExpectedLossMoney,input.sellKnownCostMoney);
 
    if(out.buyEV > out.sellEV)
       out.preferredDirection = 1;
    else if(out.sellEV > out.buyEV)
       out.preferredDirection = -1;
-   else
-      out.preferredDirection = 0;
 
-   double bestEV = MathMax(out.buyEV, out.sellEV);
+   double bestEV = MathMax(out.buyEV,out.sellEV);
    double chosenProbability = out.preferredDirection > 0 ? buyP :
                               out.preferredDirection < 0 ? sellP : 0.5;
    double chosenWin = out.preferredDirection > 0 ? input.buyExpectedWinMoney :
@@ -167,36 +159,36 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
    double uncertainty = VectorClamp01(input.modelUncertainty);
    double persistence = VectorClamp01(input.persistence);
    double structure = 1.0 - out.entropy;
-   double noisePenalty = MathMax(0.0, input.volatilityNoise) +
-                         MathMax(0.0, input.spreadPenalty) +
-                         uncertainty;
+   double noisePenalty = MathMax(0.0,input.volatilityNoise) +
+                         MathMax(0.0,input.spreadPenalty) + uncertainty;
 
    if(bestEV > 0.0 && out.preferredDirection != 0)
    {
-      double evScale = bestEV / MathMax(0.01,
-                                       MathMax(chosenLoss,
-                                               chosenCost + 0.01));
+      // Normalize edge by the net losing outcome, including execution cost.
+      double netLoss = MathMax(0.01,chosenLoss + chosenCost);
+      double evScale = bestEV / netLoss;
       double rawEdge = evScale *
                        (0.35 + 0.65 * persistence) *
                        (0.35 + 0.65 * out.directionalAgreement) *
                        (0.50 + 0.50 * structure);
       rawEdge /= (1.0 + noisePenalty);
-      out.edgeRatio = MathMin(100.0, MathMax(0.0, rawEdge * 100.0));
+      out.edgeRatio = MathMin(100.0,MathMax(0.0,rawEdge * 100.0));
       out.positiveExpectancy = true;
    }
 
+   // Kelly uses the actual net win/loss after cost, not gross economics.
+   double netWinForKelly = MathMax(0.0,chosenWin - chosenCost);
+   double netLossForKelly = MathMax(0.0000001,chosenLoss + chosenCost);
    out.fractionalKelly = VectorFractionalKelly(chosenProbability,
-                                               chosenWin,
-                                               chosenLoss);
+                                               netWinForKelly,
+                                               netLossForKelly);
 
    out.riskMultiplier = VectorClamp01((out.edgeRatio / 100.0) *
                                       (1.0 - uncertainty) *
                                       (0.5 + 0.5 * persistence));
 
-   out.exitEdgeLost = (bestEV <= 0.0 ||
-                       out.preferredDirection == 0 ||
-                       out.edgeRatio < 20.0 ||
-                       out.directionalAgreement < 0.35);
+   out.exitEdgeLost = (bestEV <= 0.0 || out.preferredDirection == 0 ||
+                       out.edgeRatio < 20.0 || out.directionalAgreement < 0.35);
 
    out.valid = true;
    if(!out.positiveExpectancy)
