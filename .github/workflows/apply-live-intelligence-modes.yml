@@ -1,0 +1,67 @@
+name: Apply Live Intelligence Modes
+
+on:
+  push:
+    branches: [feature/live-intelligence-modes]
+    paths:
+      - ".github/workflows/apply-live-intelligence-modes.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply guarded source patch
+        run: python3 .github/scripts/apply_live_intelligence_modes.py
+
+      - name: Static isolation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'AutoVectorEdgeLiveAllow(direction,vectorLiveReason)' mt5/FastBasketBot.mq5
+          grep -q 'if(control == "FLIP_LOCK") return "FLIP_LOCK";' mt5/FastBasketBot.mq5
+          grep -q 'if(control == "PARALLEL_UNIVERSE") return "PARALLEL_UNIVERSE";' mt5/FastBasketBot.mq5
+          grep -q 'HandleFlipLockMode(momentum);' mt5/FastBasketBot.mq5
+          grep -q 'HandleParallelUniverseMode(momentum);' mt5/FastBasketBot.mq5
+          grep -q 'VECTOR_EDGE_LIVE_MIN_HISTORY 20' mt5/include/AutoVectorEdgeLiveV1.mqh
+          grep -q 'FLIP_LOCK_MAX_FLIPS_PER_CYCLE 6' mt5/include/LiveExecutionModesV1.mqh
+          grep -q 'PARALLEL_UNIVERSE_MIN_SAMPLES 30' mt5/include/LiveExecutionModesV1.mqh
+          grep -q 'DEFAULT_EA_VERSION = "1.0.24"' apps/api/src/release-version.ts
+          grep -q 'EA_RUNTIME_CONTRACT = "LIVE_INTELLIGENCE_MODES_V1"' apps/api/src/release-version.ts
+          grep -q 'FLIP_LOCK:{title:"FLIP LOCK"' apps/web/app/dashboard/page.tsx
+          grep -q 'PARALLEL_UNIVERSE:{title:"PARALLEL UNIVERSE"' apps/web/app/dashboard/page.tsx
+
+      - name: Guard legacy mode isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'return EffectiveExecutionMode() == "RACE";' mt5/FastBasketBot.mq5
+          grep -q 'return EffectiveExecutionMode() == "ZERO_GRID";' mt5/FastBasketBot.mq5
+          grep -q 'return g_engineMode == "AUTO" && g_controlMode == "AUTO";' mt5/FastBasketBot.mq5
+          ! grep -q 'EffectiveExecutionMode() == "FLIP_LOCK".*RACE' mt5/FastBasketBot.mq5
+
+      - name: Commit patched production sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No patch changes to commit"
+            exit 0
+          fi
+          git config user.name "SCENOVA Integration Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 \
+                  apps/api/src/bot.controller.ts \
+                  apps/api/src/ea.controller.ts \
+                  apps/api/src/release-version.ts \
+                  apps/web/app/dashboard/page.tsx \
+                  .github/workflows/build-mt5-ea.yml
+          git commit -m "feat: enable AUTO Vector Edge, Flip Lock and Parallel Universe"
+          git push origin HEAD:feature/live-intelligence-modes
