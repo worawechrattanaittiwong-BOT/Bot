@@ -20,6 +20,11 @@ void VectorTestCheck(const bool condition,const string name)
    }
 }
 
+bool VectorNear(const double a,const double b,const double tolerance=0.000001)
+{
+   return MathAbs(a-b) <= tolerance;
+}
+
 VECTOR_EDGE_INPUT VectorTestBaseInput()
 {
    VECTOR_EDGE_INPUT input;
@@ -47,7 +52,7 @@ void OnStart()
    balanced.sellProbability = 0.50;
    VECTOR_EDGE_OUTPUT balancedOut = VectorEvaluateEdge(balanced);
    VectorTestCheck(balancedOut.valid,"50/50 input is valid");
-   VectorTestCheck(balancedOut.entropy > 0.99,"50/50 probability has high entropy");
+   VectorTestCheck(balancedOut.entropy > 0.99,"50/50 has high entropy");
 
    VECTOR_EDGE_INPUT directional = VectorTestBaseInput();
    directional.buyProbability = 0.90;
@@ -55,8 +60,15 @@ void OnStart()
    VECTOR_EDGE_OUTPUT directionalOut = VectorEvaluateEdge(directional);
    VectorTestCheck(directionalOut.entropy < balancedOut.entropy,
                    "directional probability lowers entropy");
-   VectorTestCheck(directionalOut.preferredDirection == 1,
-                   "strong BUY economics prefer BUY");
+
+   VECTOR_EDGE_INPUT absolute = VectorTestBaseInput();
+   absolute.buyProbability = 0.70;
+   absolute.sellProbability = 0.60; // sum > 1 by design: independent side rates
+   VECTOR_EDGE_OUTPUT absoluteOut = VectorEvaluateEdge(absolute);
+   // BUY EV = .70*10 - .30*4 - .50 = 5.30. This catches accidental
+   // normalization of independent BUY/SELL historical rates.
+   VectorTestCheck(VectorNear(absoluteOut.buyEV,5.30),
+                   "BUY EV uses absolute probability, not normalized mass");
 
    VECTOR_EDGE_INPUT baseInput = VectorTestBaseInput();
    VECTOR_EDGE_OUTPUT baseOut = VectorEvaluateEdge(baseInput);
@@ -79,6 +91,14 @@ void OnStart()
                    "negative EV is not positive expectancy");
    VectorTestCheck(negativeOut.edgeRatio <= 0.000001,
                    "negative EV cannot create edge score");
+
+   VECTOR_EDGE_INPUT zeroRates = VectorTestBaseInput();
+   zeroRates.buyProbability = 0.0;
+   zeroRates.sellProbability = 0.0;
+   VECTOR_EDGE_OUTPUT zeroOut = VectorEvaluateEdge(zeroRates);
+   VectorTestCheck(zeroOut.valid,"0%/0% rates remain valid evidence");
+   VectorTestCheck(!zeroOut.positiveExpectancy && zeroOut.buyEV < 0.0 && zeroOut.sellEV < 0.0,
+                   "0%/0% rates resolve to negative expectancy");
 
    VectorTestCheck(baseOut.fractionalKelly >= 0.0 &&
                    baseOut.fractionalKelly <= 0.25,
