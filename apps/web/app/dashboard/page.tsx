@@ -2849,7 +2849,7 @@ function BotSettingsModal(props:any) {
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"สมอง AUTO รวม Probability, Expected Value, Entropy และตัวกรองต้นทุน เพื่อคัดจังหวะที่มี Edge ก่อนเข้า"},
-    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เข้าแบบ AUTO แล้วล็อกกำไรด้วยเส้น Flip เสมือน เมื่อราคาย้อนถึงจุดล็อกจะปิดฝั่งเดิมก่อนสลับฝั่งใหม่"},
+    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เปิดไม้แรกได้ทันที แล้ววาง Pending ฝั่งตรงข้ามที่ระดับเดียวกับ Stop ของไม้ปัจจุบัน จากนั้นเลื่อนตามราคาและสลับ BUY / SELL ต่อเนื่อง โดยไม่ใช้ Daily Profit Drawdown"},
     PARALLEL_UNIVERSE:{title:"PARALLEL UNIVERSE",subtitle:"ใช้สถิติ Setup / Model / Regime ในอดีตเทียบกับสภาพปัจจุบันก่อนยืนยันออเดอร์"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
@@ -2882,10 +2882,17 @@ function BotSettingsModal(props:any) {
       return;
     }
     props.onEdit?.("engineMode","AUTO");
-    if (mode === "AUTO" || mode === "FLIP_LOCK" || mode === "PARALLEL_UNIVERSE") {
+    if (mode === "FLIP_LOCK") {
+      props.onEdit?.("profitTargetMode","OFF");
+      props.onEdit?.("manualStopLossPoints",0);
+      props.onEdit?.("maxPositions",1);
+      props.onEdit?.("dailyProfitContinueAfterTarget",false);
+      props.onEdit?.("dailyProfitDrawdownPercent",0);
+      return;
+    }
+    if (mode === "AUTO" || mode === "PARALLEL_UNIVERSE") {
       props.onEdit?.("profitTargetMode","AUTO");
       props.onEdit?.("manualStopLossPoints",0);
-      if (mode === "FLIP_LOCK") props.onEdit?.("maxPositions",1);
       return;
     }
     props.onEdit?.("profitTargetMode","MANUAL");

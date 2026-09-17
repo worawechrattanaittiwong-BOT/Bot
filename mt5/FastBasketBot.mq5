@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.24"
-#define SCENOVA_EA_VERSION "1.0.24"
-#define SCENOVA_PRODUCT_VERSION "1.0.24"
+#property version   "1.0.25"
+#define SCENOVA_EA_VERSION "1.0.25"
+#define SCENOVA_PRODUCT_VERSION "1.0.25"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1423,6 +1423,7 @@ int OnInit()
 
 void OnDeinit(const int reason)
 {
+   FlipLockRemoveAllPending();
    EventKillTimer();
    DeleteTradingFibonacci();
    ReleaseEmaIntelligence();
@@ -3897,6 +3898,15 @@ void OnTick()
       return;
    }
 
+   // FLIP LOCK V2 owns its entry + opposite-pending baton lifecycle.
+   // It deliberately bypasses AUTO/VECTOR/PARALLEL entry gates while keeping
+   // the common authorization, hard daily-loss and broker safety checks above.
+   if(FlipLockModeEnabled())
+   {
+      FlipLockManage();
+      return;
+   }
+
    // RACE starts only from a flat account. AUTO below is intentionally left
    // untouched and never evaluates this branch unless engineMode=RACE.
    if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)
@@ -4057,9 +4067,9 @@ void OnTimer()
    }
    FlushPendingBasketJournal();
 
-   // FLIP LOCK supplements AUTO V20 only and is a no-op in every other mode.
-   if(FlipLockModeEnabled())
-      FlipLockManage();
+   // FLIP LOCK V2 also owns cleanup.  Always call it so a mode switch
+   // cannot leave an orphan BUY STOP / SELL STOP at the broker.
+   FlipLockManage();
 
    // ZERO_GRID_TIMER_MAINTENANCE_V116: ZERO is isolated from AUTO/RACE and may
    // finalize an async close or finish/retry its exact paired ladder from the
@@ -5715,10 +5725,18 @@ void ApplySettings(string json)
    if(hasControlMode || hasEngineMode)
       g_settingsSynchronized = true;
 
-   // FLIP LOCK is intentionally single-position to prevent accidental basket
-   // averaging while a baton-switch cycle is active.
+   // FLIP LOCK V2 is intentionally single-position.  Its paired STOP
+   // order is the only reversal mechanism; AUTO rescue/profit exits stay out.
    if(g_controlMode == "FLIP_LOCK")
+   {
       g_maxPositions = 1;
+      g_rescueEnabled = false;
+      g_profitTargetMode = "OFF";
+      g_dailyProfitContinueAfterTarget = false;
+      g_dailyProfitDrawdownPercent = 0.0;
+   }
+   else
+      g_rescueEnabled = InpAdaptiveRescueEngine;
 
    // A legacy AUTO burst must never survive a transition into an isolated mode.
    // Existing non-ZERO/non-RACE positions may still drain under generic safety
@@ -14388,6 +14406,7 @@ bool HandleDailyProfitControl(int count)
    }
 
    bool continueAfterTarget =
+      !FlipLockModeEnabled() &&
       g_dailyProfitContinueAfterTarget &&
       g_dailyProfitDrawdownPercent > 0.0;
 
