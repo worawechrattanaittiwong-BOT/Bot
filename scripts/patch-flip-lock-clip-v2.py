@@ -33,8 +33,8 @@ replace_all(ea, '#define SCENOVA_EA_VERSION "1.0.24"', '#define SCENOVA_EA_VERSI
 replace_all(ea, '#define SCENOVA_PRODUCT_VERSION "1.0.24"', '#define SCENOVA_PRODUCT_VERSION "1.0.25"')
 replace_all(release, 'export const DEFAULT_EA_VERSION = "1.0.24";', 'export const DEFAULT_EA_VERSION = "1.0.25";')
 
-# FLIP LOCK must own its runtime.  It starts independently instead of falling
-# through to AUTO/VECTOR entry selection.  RACE/ZERO/AUTO remain untouched.
+# FLIP LOCK must own its runtime. It starts independently instead of falling
+# through to AUTO/VECTOR entry selection. RACE/ZERO/AUTO remain untouched.
 replace_once(
     ea,
     '''   // RACE starts only from a flat account. AUTO below is intentionally left\n   // untouched and never evaluates this branch unless engineMode=RACE.\n   if(RaceModeEnabled() && count <= 0 && rescueCount <= 0)''',
@@ -46,22 +46,28 @@ replace_once(
 replace_once(
     ea,
     '''   // FLIP LOCK supplements AUTO V20 only and is a no-op in every other mode.\n   if(FlipLockModeEnabled())\n      FlipLockManage();''',
-    '''   // FLIP LOCK V2 also owns cleanup.  Always call it so a mode switch\n   // cannot leave an orphan BUY STOP / SELL STOP at the broker.\n   FlipLockManage();'''
+    '''   // FLIP LOCK V2 also owns cleanup. Always call it so a mode switch\n   // cannot leave an orphan BUY STOP / SELL STOP at the broker.\n   FlipLockManage();'''
 )
 
-# Exact clip behaviour is one live position + one opposite STOP.  Rescue and
+# Exact clip behaviour is one live position + one opposite STOP. Rescue and
 # money-profit exits would add/close positions behind the baton, so FLIP LOCK
-# disables those features only while this control mode is active.  Switching
-# away restores the normal rescue input and server profit mode on next settings.
+# disables those features only while this control mode is active.
 replace_once(
     ea,
     '''   // FLIP LOCK is intentionally single-position to prevent accidental basket\n   // averaging while a baton-switch cycle is active.\n   if(g_controlMode == "FLIP_LOCK")\n      g_maxPositions = 1;''',
-    '''   // FLIP LOCK V2 is intentionally single-position.  Its paired STOP\n   // order is the only reversal mechanism; AUTO rescue/profit exits stay out.\n   if(g_controlMode == "FLIP_LOCK")\n   {\n      g_maxPositions = 1;\n      g_rescueEnabled = false;\n      g_profitTargetMode = "OFF";\n   }\n   else\n      g_rescueEnabled = InpAdaptiveRescueEngine;'''
+    '''   // FLIP LOCK V2 is intentionally single-position. Its paired STOP\n   // order is the only reversal mechanism; AUTO rescue/profit exits stay out.\n   if(g_controlMode == "FLIP_LOCK")\n   {\n      g_maxPositions = 1;\n      g_rescueEnabled = false;\n      g_profitTargetMode = "OFF";\n   }\n   else\n      g_rescueEnabled = InpAdaptiveRescueEngine;'''
 )
 
-# User contract: Daily Profit Drawdown/Giveback must not interrupt FLIP LOCK.
-# Hard daily-loss and max-basket-loss protections remain unchanged.  Other
-# modes keep the existing Run-On drawdown behaviour exactly as before.
+# If the first FLIP patch is already present, hard-disable Daily Profit
+# Drawdown/Giveback state as well so stale saved settings cannot reactivate it.
+replace_once(
+    ea,
+    '''      g_maxPositions = 1;\n      g_rescueEnabled = false;\n      g_profitTargetMode = "OFF";\n   }\n   else\n      g_rescueEnabled = InpAdaptiveRescueEngine;''',
+    '''      g_maxPositions = 1;\n      g_rescueEnabled = false;\n      g_profitTargetMode = "OFF";\n      g_dailyProfitContinueAfterTarget = false;\n      g_dailyProfitDrawdownPercent = 0.0;\n   }\n   else\n      g_rescueEnabled = InpAdaptiveRescueEngine;'''
+)
+
+# Daily Profit Drawdown/Giveback must never interrupt FLIP LOCK. Hard daily
+# loss and max-basket-loss protections remain unchanged for circuit breaking.
 replace_once(
     ea,
     '''   bool continueAfterTarget =\n      g_dailyProfitContinueAfterTarget &&\n      g_dailyProfitDrawdownPercent > 0.0;''',
@@ -76,7 +82,6 @@ replace_once(
 )
 
 # Continuous baton is intentionally not capped by an arbitrary flip count.
-# Hard daily-loss and max-basket-loss protections remain the circuit breaker.
 replace_once(
     flip,
     '#define FLIP_LOCK_MAX_FLIPS_PER_RUN 100\n',
@@ -88,8 +93,8 @@ replace_once(
     ''
 )
 
-# UI describes the actual live behaviour and stores OFF for money-profit exits
-# in FLIP_LOCK only.  AUTO and PARALLEL_UNIVERSE keep their existing settings.
+# UI describes the actual live behaviour and stores OFF / no Drawdown for
+# FLIP_LOCK only. AUTO and PARALLEL_UNIVERSE keep their existing settings.
 replace_once(
     web,
     'FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เข้าแบบ AUTO แล้วล็อกกำไรด้วยเส้น Flip เสมือน เมื่อราคาย้อนถึงจุดล็อกจะปิดฝั่งเดิมก่อนสลับฝั่งใหม่"},',
@@ -99,6 +104,11 @@ replace_once(
     web,
     '''    if (mode === "AUTO" || mode === "FLIP_LOCK" || mode === "PARALLEL_UNIVERSE") {\n      props.onEdit?.("profitTargetMode","AUTO");\n      props.onEdit?.("manualStopLossPoints",0);\n      if (mode === "FLIP_LOCK") props.onEdit?.("maxPositions",1);\n      return;\n    }''',
     '''    if (mode === "FLIP_LOCK") {\n      props.onEdit?.("profitTargetMode","OFF");\n      props.onEdit?.("manualStopLossPoints",0);\n      props.onEdit?.("maxPositions",1);\n      return;\n    }\n    if (mode === "AUTO" || mode === "PARALLEL_UNIVERSE") {\n      props.onEdit?.("profitTargetMode","AUTO");\n      props.onEdit?.("manualStopLossPoints",0);\n      return;\n    }'''
+)
+replace_once(
+    web,
+    '''    if (mode === "FLIP_LOCK") {\n      props.onEdit?.("profitTargetMode","OFF");\n      props.onEdit?.("manualStopLossPoints",0);\n      props.onEdit?.("maxPositions",1);\n      return;\n    }''',
+    '''    if (mode === "FLIP_LOCK") {\n      props.onEdit?.("profitTargetMode","OFF");\n      props.onEdit?.("manualStopLossPoints",0);\n      props.onEdit?.("maxPositions",1);\n      props.onEdit?.("dailyProfitContinueAfterTarget",false);\n      props.onEdit?.("dailyProfitDrawdownPercent",0);\n      return;\n    }'''
 )
 
 print("FLIP LOCK V2 clip-style isolated patch applied")
