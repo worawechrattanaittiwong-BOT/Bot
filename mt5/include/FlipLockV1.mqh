@@ -1,7 +1,7 @@
 #ifndef SCENOVA_FLIP_LOCK_V1_MQH
 #define SCENOVA_FLIP_LOCK_V1_MQH
 
-#define FLIP_LOCK_V1_VERSION "1.0.0"
+#define FLIP_LOCK_V1_VERSION "1.0.1"
 #define FLIP_LOCK_MAX_FLIPS 6
 #define FLIP_LOCK_COOLDOWN_SECONDS 8
 
@@ -84,6 +84,18 @@ bool FlipLockOpenOpposite(const int oldDirection)
       g_flipLockTriggerPrice=0.0;
       g_flipLockArmed=false;
       g_flipLockReason="FLIPPED";
+
+      // The flip is a dedicated position-management action, not a fresh AUTO
+      // model decision. Reset stale basket geometry so the next AUTO evaluation
+      // rebuilds it for the new side instead of reusing the previous direction.
+      g_cachedAdaptiveDirection=nextDirection;
+      g_cachedAdaptiveBlockReason="";
+      g_autoV20BasketStartedAt=TimeCurrent();
+      g_autoV20BasketStopPrice=0.0;
+      g_autoV20BasketTargetPrice=0.0;
+      g_autoV20AggregateRiskMoney=0.0;
+      g_autoV20PeakProfit=0.0;
+      g_autoV20DecisionReason="FLIP_LOCK";
       g_executionStatus=nextDirection>0 ? "FLIP_LOCK_BUY" : "FLIP_LOCK_SELL";
    }
    return sent;
