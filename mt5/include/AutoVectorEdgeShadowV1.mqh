@@ -2,11 +2,10 @@
 #define SCENOVA_AUTO_VECTOR_EDGE_SHADOW_V1_MQH
 
 // Phase 2 shadow adapter.
-// IMPORTANT: this file reads existing AUTO V20 diagnostics only.
-// It must never send/modify/cancel/close an order and must never change
-// execution ownership, sizing, SL/TP, rescue, ladder, or entry decisions.
+// IMPORTANT: reads existing AUTO V20 diagnostics only. It must never send,
+// modify, cancel, close, resize, or gate any order.
 
-#define VECTOR_EDGE_SHADOW_V1_VERSION "1.0.0"
+#define VECTOR_EDGE_SHADOW_V1_VERSION "1.1.0"
 #define VECTOR_EDGE_SHADOW_SAMPLE_MS 1000
 #define VECTOR_EDGE_SHADOW_LOG_MS 5000
 
@@ -27,9 +26,9 @@ double VectorShadowClampSigned(const double value)
 double VectorShadowSideProbability(const AUTO_V20_SIDE &side,
                                    string &source)
 {
-   // Prefer real historical outcomes only when the sample has some weight.
-   // Otherwise fall back to the already-computed AUTO model confidence.
-   if(side.winSamples >= 20 && side.winProbability > 0.0)
+   // A historical 0% win rate is still real history. Do not silently replace
+   // it with model confidence merely because the value is zero.
+   if(side.winSamples >= 20)
    {
       source = "HISTORY";
       return VectorClamp01(side.winProbability / 100.0);
@@ -37,7 +36,7 @@ double VectorShadowSideProbability(const AUTO_V20_SIDE &side,
 
    if(side.confidence > 0.0)
    {
-      source = "MODEL_CONFIDENCE";
+      source = "MODEL_SCORE_PROXY";
       return VectorClamp01(side.confidence / 100.0);
    }
 
@@ -51,7 +50,6 @@ double VectorShadowPersistence()
       return 0.0;
 
    long ageSeconds = (long)MathMax(0, TimeCurrent() - g_autoV20PhaseSince);
-   // 30 seconds of stable phase context reaches full diagnostic persistence.
    return VectorClamp01((double)ageSeconds / 30.0);
 }
 
@@ -66,24 +64,26 @@ double VectorShadowSpreadPenalty()
       : (g_spreadP95 > 0.0 ? g_spreadP95 : g_spreadMedian);
 
    if(reference <= 0.0)
-      return 0.0;
+      return 0.25; // profile not ready: conservative diagnostic uncertainty
 
-   return MathMin(2.0, MathMax(0.0, spread / reference));
+   // Normal spread should have zero excess penalty. Only widening above the
+   // learned reference is penalized.
+   double ratio = spread / reference;
+   return MathMin(2.0, MathMax(0.0, ratio - 1.0));
 }
 
 double VectorShadowVolatilityNoise()
 {
    if(g_atrRatio <= 0.0)
-      return 0.0;
+      return 0.25; // unknown is not the same as perfectly normal
 
-   // Distance from the learned/normal ATR ratio is treated only as uncertainty.
    return MathMin(1.0, MathAbs(g_atrRatio - 1.0));
 }
 
 bool AutoVectorEdgeShadowBuildInput(VECTOR_EDGE_INPUT &input)
 {
-   // Hard scope boundary: AUTO V20 only. ASSISTED/MANUAL use AUTO engine
-   // ownership internally but AutoV20Enabled() is false for those modes.
+   // Hard scope boundary: AUTO V20 only. ASSISTED/MANUAL may share the AUTO
+   // engine family but AutoV20Enabled() is false for those control modes.
    if(!AutoV20Enabled())
       return false;
 
@@ -92,29 +92,28 @@ bool AutoVectorEdgeShadowBuildInput(VECTOR_EDGE_INPUT &input)
 
    string buySource = "NONE";
    string sellSource = "NONE";
-   input.buyProbability = VectorShadowSideProbability(g_autoV20Buy, buySource);
-   input.sellProbability = VectorShadowSideProbability(g_autoV20Sell, sellSource);
+   input.buyProbability = VectorShadowSideProbability(g_autoV20Buy,buySource);
+   input.sellProbability = VectorShadowSideProbability(g_autoV20Sell,sellSource);
 
    g_vectorEdgeShadowProbabilitySource = buySource == sellSource
       ? buySource
       : buySource + "+" + sellSource;
 
-   input.buyExpectedWinMoney = MathMax(0.0, g_autoV20Buy.expectedProfitMoney);
-   input.buyExpectedLossMoney = MathMax(0.0, g_autoV20Buy.expectedLossMoney);
-   input.buyKnownCostMoney = MathMax(0.0, g_autoV20Buy.knownCostMoney);
-   input.sellExpectedWinMoney = MathMax(0.0, g_autoV20Sell.expectedProfitMoney);
-   input.sellExpectedLossMoney = MathMax(0.0, g_autoV20Sell.expectedLossMoney);
-   input.sellKnownCostMoney = MathMax(0.0, g_autoV20Sell.knownCostMoney);
+   input.buyExpectedWinMoney = MathMax(0.0,g_autoV20Buy.expectedProfitMoney);
+   input.buyExpectedLossMoney = MathMax(0.0,g_autoV20Buy.expectedLossMoney);
+   input.buyKnownCostMoney = MathMax(0.0,g_autoV20Buy.knownCostMoney);
+   input.sellExpectedWinMoney = MathMax(0.0,g_autoV20Sell.expectedProfitMoney);
+   input.sellExpectedLossMoney = MathMax(0.0,g_autoV20Sell.expectedLossMoney);
+   input.sellKnownCostMoney = MathMax(0.0,g_autoV20Sell.knownCostMoney);
 
    input.volatilityNoise = VectorShadowVolatilityNoise();
    input.spreadPenalty = VectorShadowSpreadPenalty();
 
-   double bestConfidence = MathMax(g_autoV20Buy.confidence,
-                                   g_autoV20Sell.confidence);
+   double bestConfidence = MathMax(g_autoV20Buy.confidence,g_autoV20Sell.confidence);
    input.modelUncertainty = 1.0 - VectorClamp01(bestConfidence / 100.0);
    input.persistence = VectorShadowPersistence();
 
-   double motionScale = MathMax(1.0, InpStrongFlowPoints);
+   double motionScale = MathMax(1.0,InpStrongFlowPoints);
    input.velocity = VectorShadowClampSigned(g_autoV20LastMomentum / motionScale);
    input.acceleration = VectorShadowClampSigned(
       (g_autoV20LastMomentum - g_autoV20PreviousMomentum) / motionScale
@@ -149,7 +148,6 @@ string AutoVectorEdgeShadowTelemetryJson()
 
 void AutoVectorEdgeShadowObserve()
 {
-   // Never observe outside AUTO V20. No state from another execution mode is read.
    if(!AutoV20Enabled())
    {
       g_vectorEdgeShadowActive = false;
@@ -171,19 +169,16 @@ void AutoVectorEdgeShadowObserve()
       return;
    }
 
-   // Pure function call. Its output is diagnostic only and is never fed back
-   // into any AUTO/RACE/ZERO_GRID/ASSISTED/MANUAL execution variable.
+   // Pure diagnostic call. No VECTOR EDGE output is assigned to execution.
    g_vectorEdgeShadowOutput = VectorEvaluateEdge(input);
    g_vectorEdgeShadowActive = g_vectorEdgeShadowOutput.valid;
    g_vectorEdgeShadowSamples++;
 
-   // JSON-line telemetry goes only to the EA/Strategy Tester log in Phase 2.
-   // Production heartbeat payload is intentionally untouched.
    if(g_vectorEdgeShadowLastLogMs == 0 ||
       nowMs - g_vectorEdgeShadowLastLogMs >= VECTOR_EDGE_SHADOW_LOG_MS)
    {
       g_vectorEdgeShadowLastLogMs = nowMs;
-      Print("VECTOR_EDGE_SHADOW ", AutoVectorEdgeShadowTelemetryJson());
+      Print("VECTOR_EDGE_SHADOW ",AutoVectorEdgeShadowTelemetryJson());
    }
 }
 
