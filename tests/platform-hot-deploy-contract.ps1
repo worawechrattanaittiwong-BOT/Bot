@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $deploy = [System.IO.File]::ReadAllText((Resolve-Path 'scripts/auto-deploy-vps.sh'))
 
 foreach ($required in @(
-  'REPO_FULL_NAME="${REPO_FULL_NAME:-SCENOVA-AI/Bot}"',
+  'REPO_FULL_NAME="${REPO_FULL_NAME:-SCENOVA-EA/Bot}"',
   '[SCENOVA] CI passed',
   '[SCENOVA] Integration Smoke passed',
   'customer bots/positions do not block platform Web/API deployment',
