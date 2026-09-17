@@ -2,7 +2,14 @@ $ErrorActionPreference = "Stop"
 
 function Read-Text([string]$path) {
   if (-not (Test-Path $path)) { throw "Missing source: $path" }
-  return [System.IO.File]::ReadAllText((Resolve-Path $path))
+  $text = [System.IO.File]::ReadAllText((Resolve-Path $path))
+  if ([System.IO.Path]::GetFileName($path) -eq 'FastBasketBot.mq5') {
+    $dir = Split-Path (Resolve-Path $path) -Parent
+    Get-ChildItem $dir -Filter 'FastBasketBot.Part*.mqh' -File -ErrorAction SilentlyContinue |
+      Sort-Object Name |
+      ForEach-Object { $text += "`n" + [System.IO.File]::ReadAllText($_.FullName) }
+  }
+  return $text
 }
 function Block([string]$text,[string]$sig) {
   $s=$text.IndexOf($sig); if($s -lt 0){throw "Missing $sig"}
