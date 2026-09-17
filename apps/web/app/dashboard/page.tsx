@@ -1858,13 +1858,6 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="cc-v6-command-center">
-                  <div className={"cc-v6-run-state "+(state==="RUNNING"?"running":safeStopInProgress?"safe":"stopped")}>
-                    <span className="cc-state-dot"/>
-                    <div>
-                      <b>{startTimedOut?"เริ่มบอทไม่สำเร็จ":botStarting?"กำลังเริ่มบอท":state==="RUNNING"?"กำลังทำงาน":safeStopInProgress?"กำลังหยุดอย่างปลอดภัย":"บอทหยุดอยู่"}</b>
-                      <small>{startTimedOut ? String(startTransition.message || startPhaseLabel.TIMEOUT) : botStarting ? (startPhaseLabel[startPhase] || controlStateLabel) : controlStateLabel} · Heartbeat {heartbeatAgeSeconds.toFixed(0)} วินาที</small>
-                    </div>
-                  </div>
                   <div className="cc-v6-hero-actions">
                     <button className={"cc-v6-command start "+(botStarting?"starting":botRunning?"running":"idle")} disabled={startBlocked} title={maintenanceBlocksStart?"ระบบปิด Start ใหม่ระหว่าง Safe Maintenance":safeStopInProgress?"กำลัง Safe Stop · รอให้ Position เป็น 0 และ EA ยืนยัน STOPPED":!startConnectionReady?"รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5":undefined} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
                       <span>{botStarting?<i className="cc-start-spinner"/>:botRunning?<i className="cc-start-pulse"/>:<ScenovaIcon name="play" size={22}/>}</span><b>{botStarting?"กำลังเริ่ม":botRunning?"ทำงานอยู่":"เริ่มบอท"}</b><small>Start Trading</small>
