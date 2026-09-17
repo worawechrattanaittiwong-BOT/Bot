@@ -761,7 +761,7 @@ export class EaController {
     // RACE runs at exactly 2x the normal order cadence without changing AUTO.
     const runtimeSettings = { ...(settings?.settings || {}) };
     const savedControlMode = String(runtimeSettings.controlMode || "").toUpperCase();
-    if (!["AUTO", "RACE", "ZERO_GRID", "ASSISTED", "MANUAL"].includes(savedControlMode)) {
+    if (!["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "PARALLEL_UNIVERSE", "ASSISTED", "MANUAL"].includes(savedControlMode)) {
       const engineMode = String(runtimeSettings.engineMode || "AUTO").toUpperCase();
       const entryMode = String(runtimeSettings.entryMode || "AUTO_MOMENTUM").toUpperCase();
       runtimeSettings.controlMode = engineMode === "ZERO_GRID"
