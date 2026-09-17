@@ -21,6 +21,17 @@ jobs:
       - name: Apply guarded source patch
         run: python3 .github/scripts/apply_live_intelligence_modes.py
 
+      - name: Preserve official build workflow and runtime contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The integration patch intentionally does not require Actions workflow
+          # write permission. EA 1.0.24 exact-version gating forces old runtimes
+          # to update, while the established runtime-contract string stays stable.
+          git checkout -- .github/workflows/build-mt5-ea.yml
+          sed -i 's/LIVE_INTELLIGENCE_MODES_V1/RACE_VOLUME_10S_ROLLOVER_V1/g' mt5/FastBasketBot.mq5
+          sed -i 's/LIVE_INTELLIGENCE_MODES_V1/RACE_VOLUME_10S_ROLLOVER_V1/g' apps/api/src/release-version.ts
+
       - name: Static isolation contract
         shell: bash
         run: |
@@ -34,7 +45,7 @@ jobs:
           grep -q 'FLIP_LOCK_MAX_FLIPS_PER_CYCLE 6' mt5/include/LiveExecutionModesV1.mqh
           grep -q 'PARALLEL_UNIVERSE_MIN_SAMPLES 30' mt5/include/LiveExecutionModesV1.mqh
           grep -q 'DEFAULT_EA_VERSION = "1.0.24"' apps/api/src/release-version.ts
-          grep -q 'EA_RUNTIME_CONTRACT = "LIVE_INTELLIGENCE_MODES_V1"' apps/api/src/release-version.ts
+          grep -q 'EA_RUNTIME_CONTRACT = "RACE_VOLUME_10S_ROLLOVER_V1"' apps/api/src/release-version.ts
           grep -q 'FLIP_LOCK:{title:"FLIP LOCK"' apps/web/app/dashboard/page.tsx
           grep -q 'PARALLEL_UNIVERSE:{title:"PARALLEL UNIVERSE"' apps/web/app/dashboard/page.tsx
 
@@ -61,7 +72,6 @@ jobs:
                   apps/api/src/bot.controller.ts \
                   apps/api/src/ea.controller.ts \
                   apps/api/src/release-version.ts \
-                  apps/web/app/dashboard/page.tsx \
-                  .github/workflows/build-mt5-ea.yml
+                  apps/web/app/dashboard/page.tsx
           git commit -m "feat: enable AUTO Vector Edge, Flip Lock and Parallel Universe"
           git push origin HEAD:feature/live-intelligence-modes
