@@ -1547,7 +1547,7 @@ export class BotController {
     numberSetting("dailyLossMoney", 0, 100000);
     numberSetting("dailyProfitTargetMoney", 0, 100000);
     booleanSetting("dailyProfitContinueAfterTarget");
-    numberSetting("dailyProfitDrawdownPercent", 1, 95);
+    numberSetting("dailyProfitDrawdownPercent", 0, 95);
     numberSetting("basketProfitTargetMoney", 0, 100000);
     numberSetting("perPositionProfitMoney", 0, 100000);
     numberSetting("profitRunTrailPercent", 0, 95);
