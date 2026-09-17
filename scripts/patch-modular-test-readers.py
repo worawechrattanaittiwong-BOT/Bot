@@ -20,7 +20,8 @@ for path in sorted(Path('tests').glob('*.ps1')):
     changed.append(str(path))
 
 if not changed:
-    raise SystemExit('No modular MQ5 test readers needed patching')
-print('Patched modular MQ5 readers:')
-for path in changed:
-    print(' -', path)
+    print('All MQ5 regression readers are already modular-source aware.')
+else:
+    print('Patched modular MQ5 readers:')
+    for path in changed:
+        print(' -', path)
