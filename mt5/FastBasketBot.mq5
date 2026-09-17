@@ -5708,7 +5708,22 @@ void ApplySettings(string json)
 
    // Hard isolation: one execution owner at a time. controlMode is authoritative
    // when both are present; partial/legacy payloads are normalized immediately.
-   if(hasControlMode)
+   bool requestedIntelligenceMode = requestedControlMode=="FLIP_LOCK" ||
+      requestedControlMode=="PARALLEL_UNIVERSE";
+   bool currentIntelligenceMode = g_controlMode=="FLIP_LOCK" ||
+      g_controlMode=="PARALLEL_UNIVERSE";
+   bool intelligenceOwnerChange = hasControlMode &&
+      requestedControlMode!=g_controlMode &&
+      (requestedIntelligenceMode || currentIntelligenceMode);
+   bool intelligenceExposure = BasketPositionCount()>0 ||
+      RescuePositionCount()>0 || ZeroGridPositionCount()>0 ||
+      ZeroGridPendingCount()>0;
+   bool deferIntelligenceOwnerChange = intelligenceOwnerChange && intelligenceExposure;
+   if(deferIntelligenceOwnerChange)
+   {
+      g_executionStatus="MODE_CHANGE_WAIT_FLAT";
+   }
+   else if(hasControlMode)
    {
       g_controlMode = requestedControlMode;
       if(g_controlMode == "ZERO_GRID") g_engineMode = "ZERO_GRID";
@@ -5724,7 +5739,7 @@ void ApplySettings(string json)
    }
 
    // A valid Server-delivered mode is the startup ownership latch.
-   if(hasControlMode || hasEngineMode)
+   if((hasControlMode || hasEngineMode) && !deferIntelligenceOwnerChange)
       g_settingsSynchronized = true;
 
    // A legacy AUTO burst must never survive a transition into an isolated mode.
@@ -15984,7 +15999,8 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
 
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
-   bool autoV20=AutoV20Enabled() && !g_tacticalCountertrendActive;
+   bool autoV20=(AutoV20Enabled() || g_controlMode=="PARALLEL_UNIVERSE") &&
+      !g_tacticalCountertrendActive;
    AUTO_V20_SIDE autoPlan;
    if(autoV20)
       autoPlan=direction>0 ? g_autoV20Buy : g_autoV20Sell;
@@ -16002,11 +16018,15 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    }
    request.deviation = 30;
    request.type_filling = AllowedFillingMode();
-   request.comment = autoV20
+   request.comment = g_controlMode=="FLIP_LOCK"
+      ? "SaaSFlipLock"
+      : (g_controlMode=="PARALLEL_UNIVERSE"
+      ? "SaaSParallelUniverse"
+      : (autoV20
       ? "SaaSAutoV20"
       : (g_engineMode == "RACE"
       ? "SaaSRace"
-      : (g_tacticalCountertrendActive ? "SaaSTactical" : "SaaSBasket"));
+      : (g_tacticalCountertrendActive ? "SaaSTactical" : "SaaSBasket"))));
 
    if(direction > 0)
    {

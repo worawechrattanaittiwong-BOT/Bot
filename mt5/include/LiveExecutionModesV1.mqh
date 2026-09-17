@@ -15,6 +15,7 @@ int    g_flipLockFlips = 0;
 double g_flipLockExtremePrice = 0.0;
 double g_flipLockTriggerPrice = 0.0;
 double g_flipLockPendingLot = 0.0;
+bool   g_flipLockArmed = false;
 ulong  g_flipLockLastActionMs = 0;
 
 string g_parallelUniverseState = "IDLE";
@@ -54,6 +55,7 @@ void FlipLockResetCycle()
    g_flipLockExtremePrice=0.0;
    g_flipLockTriggerPrice=0.0;
    g_flipLockPendingLot=0.0;
+   g_flipLockArmed=false;
    g_flipLockLastActionMs=0;
 }
 
@@ -83,6 +85,7 @@ bool FlipLockOpenDirection(const int direction,const double requestedLot,const s
       g_flipLockDirection=direction;
       g_flipLockExtremePrice=0.0;
       g_flipLockTriggerPrice=0.0;
+      g_flipLockArmed=false;
       g_flipLockLastActionMs=GetTickCount64();
       g_flipLockState="ACTIVE";
    }
@@ -182,12 +185,14 @@ bool HandleFlipLockMode(const double momentum)
 
    double cycleProfit=BasketCycleProfit();
    double protectedProfit=FlipLockMinimumProtectedProfit();
-   if(cycleProfit<protectedProfit)
+   if(!g_flipLockArmed && cycleProfit<protectedProfit)
    {
       g_flipLockState="ACTIVE_WAIT_PROFIT";
       g_executionStatus="FLIP_LOCK_WAIT_PROFIT";
       return true;
    }
+   if(cycleProfit>=protectedProfit)
+      g_flipLockArmed=true;
 
    double distance=FlipLockDistancePoints()*_Point;
    g_flipLockTriggerPrice=direction>0
