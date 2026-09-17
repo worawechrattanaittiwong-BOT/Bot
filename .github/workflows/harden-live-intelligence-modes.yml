@@ -1,0 +1,44 @@
+name: Harden Live Intelligence Modes
+
+on:
+  push:
+    branches: [feature/live-intelligence-modes]
+    paths:
+      - ".github/workflows/harden-live-intelligence-modes.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply ownership and execution hardening
+        run: python3 .github/scripts/harden_live_intelligence_modes.py
+
+      - name: Verify hardening sentinels
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'g_controlMode=="PARALLEL_UNIVERSE"' mt5/FastBasketBot.mq5
+          grep -q 'SaaSFlipLock' mt5/FastBasketBot.mq5
+          grep -q 'SaaSParallelUniverse' mt5/FastBasketBot.mq5
+          grep -q 'MODE_CHANGE_WAIT_FLAT' mt5/FastBasketBot.mq5
+          grep -q 'deferIntelligenceOwnerChange' mt5/FastBasketBot.mq5
+          grep -q 'g_flipLockArmed' mt5/include/LiveExecutionModesV1.mqh
+
+      - name: Commit hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Integration Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 mt5/include/LiveExecutionModesV1.mqh
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: harden live mode ownership and flip profit lock"
+          git push origin HEAD:feature/live-intelligence-modes
