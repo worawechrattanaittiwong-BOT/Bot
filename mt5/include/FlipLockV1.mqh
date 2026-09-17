@@ -9,7 +9,6 @@
 // not wait for AUTO/VECTOR/Parallel-Universe approval.
 #define FLIP_LOCK_V1_VERSION "2.0.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
-#define FLIP_LOCK_MAX_FLIPS_PER_RUN 100
 #define FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS 2
 
 int g_flipLockDirection=0;
@@ -498,14 +497,6 @@ void FlipLockManage()
       g_flipLockPeakPrice=executablePrice;
       g_flipLockTriggerPrice=0.0;
       g_flipLockArmed=false;
-   }
-
-   if(g_flipLockFlipCount>=FLIP_LOCK_MAX_FLIPS_PER_RUN)
-   {
-      FlipLockRemoveAllPending();
-      g_flipLockReason="MAX_FLIPS_REACHED";
-      g_executionStatus="FLIP_LOCK_MAX_FLIPS";
-      return;
    }
 
    if(direction>0)
