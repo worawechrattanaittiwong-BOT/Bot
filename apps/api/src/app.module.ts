@@ -17,6 +17,7 @@ import { CatalogController } from "./catalog.controller";
 import { InstallerController } from "./installer.controller";
 import { BacktestController, PerformanceController } from "./backtest.controller";
 import { PerformanceAnalyticsController } from "./performance-analytics.controller";
+import { PerformanceActionsController, SharedPerformanceController } from "./performance-actions.controller";
 import { DashboardLiveController } from "./dashboard-live.controller";
 import { PartnerController } from "./partner.controller";
 import { PartnerService } from "./partner.service";
@@ -39,7 +40,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, HealthController, WorkerController],
+  controllers: [ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
     ProductionHardeningService,
     RuntimeMigrationService,
