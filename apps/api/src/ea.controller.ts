@@ -736,12 +736,20 @@ export class EaController {
     // collapsed into STOPPED here.
     const heartbeatPositions = Number(metrics.positions);
     const heartbeatExecutionStatus = String(metrics.executionStatus || "").toUpperCase();
+    const heartbeatState = String(body.state || "").toUpperCase();
+    const heartbeatConfirmsSafeStop =
+      heartbeatExecutionStatus === "SAFE_STOP" ||
+      heartbeatExecutionStatus === "STOPPED" ||
+      (
+        heartbeatExecutionStatus === "" &&
+        (heartbeatState === "SAFE_STOP" || heartbeatState === "STOPPED")
+      );
     const safeStopDrainComplete =
       access &&
       String(latestControl?.desired_state || "") === "SAFE_STOP" &&
       Number.isFinite(heartbeatPositions) &&
       heartbeatPositions <= 0 &&
-      (heartbeatExecutionStatus === "SAFE_STOP" || heartbeatExecutionStatus === "STOPPED") &&
+      heartbeatConfirmsSafeStop &&
       !dailyProfitLocked;
 
     if (safeStopDrainComplete) {

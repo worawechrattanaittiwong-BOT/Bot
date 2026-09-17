@@ -548,9 +548,12 @@ export default function DashboardPage() {
     IDLE: "พร้อมรับคำสั่ง"
   };
   const startConnectionReady = isMt5Online || isAgentOnline;
+  const safeStopPositionCount = Math.max(0, Number(metrics.positions || 0));
   const safeStopInProgress =
-    desired === "SAFE_STOP" ||
-    (state === "SAFE_STOP" && Number(metrics.positions || 0) > 0);
+    safeStopPositionCount > 0 &&
+    (desired === "SAFE_STOP" || state === "SAFE_STOP");
+  const safeStopAwaitingAck =
+    desired === "SAFE_STOP" && safeStopPositionCount === 0;
   // Let the customer press Start whenever SCENOVA has a live connection, but
   // never race an in-flight Safe Stop drain. The Server also enforces this.
   const startBlocked =
@@ -601,7 +604,9 @@ export default function DashboardPage() {
         : desired === "SAFE_STOP"
           ? Number(metrics.positions || 0) > 0
             ? `กำลังหยุดอย่างปลอดภัย — รอจัดการ ${Math.max(0, Number(metrics.positions || 0))} Position`
-            : "กำลังยืนยันการหยุดกับ EA — ไม่มี Position ค้าง"
+            : safeStopAwaitingAck
+              ? "กำลังยืนยันการหยุดกับ EA — ไม่มี Position ค้าง · เริ่มใหม่ได้หากต้องการ"
+              : "หยุดอย่างปลอดภัยแล้ว — ไม่มี Position ค้าง"
           : "บอทหยุดอยู่";
   const actualStateLabel =
     state === "RUNNING" ? "RUNNING — กำลังทำงาน"
