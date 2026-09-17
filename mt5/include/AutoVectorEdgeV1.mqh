@@ -6,15 +6,22 @@
 // cancel, or close orders. It is intentionally isolated so it can run in
 // SHADOW mode before any future AUTO integration.
 
-#define VECTOR_EDGE_V1_VERSION "1.0.0-shadow"
+#define VECTOR_EDGE_V1_VERSION "1.1.0-shadow"
 
 struct VECTOR_EDGE_INPUT
 {
-   double buyProbability;       // 0..1, supplied by the existing AUTO model
-   double sellProbability;      // 0..1, supplied by the existing AUTO model
-   double expectedWinMoney;     // expected gross winner in account currency
-   double expectedLossMoney;    // positive magnitude of expected loser
-   double knownCostMoney;       // spread/commission/fees reserve
+   double buyProbability;       // 0..1, supplied by the existing AUTO model/history
+   double sellProbability;      // 0..1, supplied by the existing AUTO model/history
+
+   // BUY and SELL economics stay separate. This prevents the shadow observer
+   // from accidentally assuming both directions have identical RR/costs.
+   double buyExpectedWinMoney;
+   double buyExpectedLossMoney;
+   double buyKnownCostMoney;
+   double sellExpectedWinMoney;
+   double sellExpectedLossMoney;
+   double sellKnownCostMoney;
+
    double volatilityNoise;      // normalized >= 0
    double spreadPenalty;        // normalized >= 0
    double modelUncertainty;     // 0..1
@@ -138,13 +145,13 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
 
    out.entropy = VectorBinaryEntropy(buyP);
    out.buyEV = VectorExpectedValue(buyP,
-                                   input.expectedWinMoney,
-                                   input.expectedLossMoney,
-                                   input.knownCostMoney);
+                                   input.buyExpectedWinMoney,
+                                   input.buyExpectedLossMoney,
+                                   input.buyKnownCostMoney);
    out.sellEV = VectorExpectedValue(sellP,
-                                    input.expectedWinMoney,
-                                    input.expectedLossMoney,
-                                    input.knownCostMoney);
+                                    input.sellExpectedWinMoney,
+                                    input.sellExpectedLossMoney,
+                                    input.sellKnownCostMoney);
 
    if(out.buyEV > out.sellEV)
       out.preferredDirection = 1;
@@ -156,6 +163,12 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
    double bestEV = MathMax(out.buyEV, out.sellEV);
    double chosenProbability = out.preferredDirection > 0 ? buyP :
                               out.preferredDirection < 0 ? sellP : 0.5;
+   double chosenWin = out.preferredDirection > 0 ? input.buyExpectedWinMoney :
+                      out.preferredDirection < 0 ? input.sellExpectedWinMoney : 0.0;
+   double chosenLoss = out.preferredDirection > 0 ? input.buyExpectedLossMoney :
+                       out.preferredDirection < 0 ? input.sellExpectedLossMoney : 0.0;
+   double chosenCost = out.preferredDirection > 0 ? input.buyKnownCostMoney :
+                       out.preferredDirection < 0 ? input.sellKnownCostMoney : 0.0;
 
    out.directionalAgreement = VectorDirectionalAgreement(out.preferredDirection,
                                                          input.velocity,
@@ -172,8 +185,8 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
    if(bestEV > 0.0)
    {
       double evScale = bestEV / MathMax(0.01,
-                                       MathMax(input.expectedLossMoney,
-                                               input.knownCostMoney + 0.01));
+                                       MathMax(chosenLoss,
+                                               chosenCost + 0.01));
       double rawEdge = evScale *
                        (0.35 + 0.65 * persistence) *
                        (0.35 + 0.65 * out.directionalAgreement) *
@@ -184,8 +197,8 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &input)
    }
 
    out.fractionalKelly = VectorFractionalKelly(chosenProbability,
-                                               input.expectedWinMoney,
-                                               input.expectedLossMoney);
+                                               chosenWin,
+                                               chosenLoss);
 
    // Conservative diagnostic multiplier. Never used directly by execution V1.
    out.riskMultiplier = VectorClamp01((out.edgeRatio / 100.0) *
