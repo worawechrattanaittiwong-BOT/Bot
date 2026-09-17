@@ -1,0 +1,108 @@
+name: Refactor MQ5 Structural Main
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/refactor-mq5-structural.py"
+      - ".github/workflows/refactor-mq5-structural-main.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refactor-mq5-structural-main
+  cancel-in-progress: false
+
+jobs:
+  modularize-compile-commit:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Guard against already modularized source
+        shell: pwsh
+        run: |
+          $text = [System.IO.File]::ReadAllText("mt5\FastBasketBot.mq5")
+          if ($text.Contains('#include "FastBasketBot.Part01.mqh"')) {
+            Write-Host "Source is already modularized. Nothing to do."
+            "SCENOVA_ALREADY_MODULAR=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+          } else {
+            "SCENOVA_ALREADY_MODULAR=0" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+
+      - name: Partition source without changing runtime text
+        if: env.SCENOVA_ALREADY_MODULAR == '0'
+        shell: pwsh
+        run: python scripts/refactor-mq5-structural.py
+
+      - name: Verify exact source equivalence contract
+        if: env.SCENOVA_ALREADY_MODULAR == '0'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $manifest = Get-Content "mt5\FastBasketBot.modules.json" -Raw | ConvertFrom-Json
+          if ($manifest.format -ne "SCENOVA_ORDER_PRESERVING_MQ5_MODULES_V1") { throw "Unexpected module manifest format" }
+          if ($manifest.originalSha256 -ne $manifest.expandedSha256) { throw "Expanded source hash differs from original" }
+          if ([int]$manifest.rootLines -gt 80) { throw "Root MQ5 remained unexpectedly large" }
+          if ([int]$manifest.originalLines -lt 10000) { throw "Original source size was unexpectedly small; refusing structural rewrite" }
+          if ($manifest.parts.Count -lt 5 -or $manifest.parts.Count -gt 16) { throw "Unexpected generated module count" }
+          foreach ($part in $manifest.parts) {
+            if (-not (Test-Path $part.file)) { throw "Generated module missing: $($part.file)" }
+          }
+          Write-Host "Exact source equivalence verified. Original lines=$($manifest.originalLines), root lines=$($manifest.rootLines), parts=$($manifest.parts.Count)"
+
+      - name: Install official MetaTrader 5 build environment
+        if: env.SCENOVA_ALREADY_MODULAR == '0'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = "$env:RUNNER_TEMP\mt5setup.exe"
+          $installDir = "C:\SCENOVA-MT5-Refactor-Build"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://download.terminal.free/cdn/web/metaquotes.ltd/mt5/mt5setup.exe" -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "/auto /path:`"$installDir`"" -Wait
+          $metaEditor = Get-ChildItem -Path $installDir -Filter "metaeditor64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
+          "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: MetaEditor compile modular source
+        if: env.SCENOVA_ALREADY_MODULAR == '0'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $source = (Resolve-Path "mt5\FastBasketBot.mq5").Path
+          $log = "$env:RUNNER_TEMP\FastBasketBot-refactor-compile.log"
+          $ex5 = [System.IO.Path]::ChangeExtension($source, ".ex5")
+          if (Test-Path $ex5) { Remove-Item -Force $ex5 }
+          Start-Process -FilePath "$env:METAEDITOR" -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
+          if (Test-Path $log) { Get-Content $log }
+          if (-not (Test-Path $ex5)) { throw "Modular FastBasketBot.ex5 was not produced" }
+          if (Test-Path $log) {
+            $compileLog = Get-Content $log -Raw
+            if ($compileLog -match '(?i)\b[1-9][0-9]*\s+errors?\b') { throw "MetaEditor reported compile errors" }
+          }
+
+      - name: Commit modular source directly to main
+        if: env.SCENOVA_ALREADY_MODULAR == '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SCENOVA Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mt5/FastBasketBot.mq5 mt5/FastBasketBot.Part*.mqh mt5/FastBasketBot.modules.json
+          git diff --cached --quiet && exit 0
+          git commit -m "refactor: split FastBasketBot source into order-preserving modules"
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            git fetch origin main
+            git rebase origin/main
+            sleep 2
+          done
+          echo "Failed to push guarded MQ5 refactor" >&2
+          exit 1
