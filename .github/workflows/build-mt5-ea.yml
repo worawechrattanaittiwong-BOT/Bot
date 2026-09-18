@@ -114,6 +114,7 @@ jobs:
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
             brain = "AUTO_VECTOR_EDGE_V1"
+            policy = "AUTO_VECTOR_EDGE_FLIP_LOCK_V1"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
       - name: Publish compiled artifact on main
