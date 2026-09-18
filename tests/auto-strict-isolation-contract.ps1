@@ -72,6 +72,8 @@ Need $onTick '!autoFamilyOwnedBasket && g_profitTargetMode == "MANUAL"' 'MANUAL 
 Need $onTick 'if(autoV20OwnedBasket &&' 'AUTO V20 smart exits must be gated by V20 ownership'
 Need $onTick 'AUTO_POSITION_OWNERSHIP_LOCK' 'AUTO basket must stay with AUTO while another mode waits'
 Need $onTick 'AUTO_WAIT_FOREIGN_POSITION' 'AUTO must wait instead of adopting a foreign MANUAL/legacy position'
+Need $onTick 'bool zeroGridCanStart =' 'ZERO selection must not preempt a live AUTO/MANUAL owner'
+Need $onTick 'BasketPositionCount()<=0' 'ZERO may start only after the previous live owner is flat'
 
 Need $api 'const autoSelected = requestedControlMode === "AUTO";' 'API must canonicalize AUTO independently'
 Need $api 'clean.profitTargetMode = "AUTO";' 'AUTO selection must clear stale MANUAL profit semantics'
