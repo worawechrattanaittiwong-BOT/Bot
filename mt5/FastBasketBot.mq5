@@ -3654,7 +3654,8 @@ void OnTick()
       return;
    }
 
-   bool autoOwnedBasket = count > 0 && BasketHasAutoPosition();
+   bool autoV20OwnedBasket = count > 0 && BasketHasAutoPosition();
+   bool autoFamilyOwnedBasket = count > 0 && BasketHasAutoFamilyPosition();
    bool manualOwnedBasket = count > 0 && BasketHasManualPosition();
 
    if(g_basketJournalId == 0)
@@ -3664,7 +3665,7 @@ void OnTick()
    // safety/ownership priorities above unchanged, and do not interfere with
    // an active Rescue cycle. The close command itself remains unchanged.
    if(count > 0 &&
-      !autoOwnedBasket &&
+      !autoFamilyOwnedBasket &&
       rescueCount <= 0 &&
       g_rescueState == RESCUE_NORMAL &&
       g_profitTargetMode == "MANUAL" &&
@@ -3689,7 +3690,7 @@ void OnTick()
       // AUTO ownership follows the broker tag, not the currently selected web
       // mode. A mode switch can stop new AUTO entries but cannot hand its live
       // position to MANUAL/RACE/FLIP management.
-      if(!tacticalBasket && autoOwnedBasket && AutoV20FastPriceExit())
+      if(!tacticalBasket && autoV20OwnedBasket && AutoV20FastPriceExit())
          return;
 
       // Dynamic protection never decides whether an entry is allowed. It only
@@ -3717,7 +3718,7 @@ void OnTick()
          }
       }
 
-      if(!tacticalBasket && autoOwnedBasket)
+      if(!tacticalBasket && autoV20OwnedBasket)
       {
          if(AutoV20ManageOpenBasket(momentum))
             return;
@@ -3754,7 +3755,7 @@ void OnTick()
       // Per-position profit/loss controls are evaluated before basket-level
       // controls. Per-position profit and total Basket profit are mutually
       // exclusive settings, enforced by both Server and EA.
-      bool closedIndividual = !autoOwnedBasket && g_profitTargetMode == "MANUAL"
+      bool closedIndividual = !autoFamilyOwnedBasket && g_profitTargetMode == "MANUAL"
          ? ManagePerPositionTargets()
          : false;
       if(closedIndividual)
@@ -3776,7 +3777,7 @@ void OnTick()
       }
 
       double cycleProfit = BasketCycleProfit();
-      double effectiveBasketTarget = autoOwnedBasket
+      double effectiveBasketTarget = autoV20OwnedBasket
          ? (BasketFillEnabled() ? MathMax(0.0,g_burstTargetMoney) : 0.0)
          : EffectiveBasketProfitTarget();
 
@@ -3785,7 +3786,7 @@ void OnTick()
       // turn red. Manual and Off are never overridden by this decision.
       int profitDefenseDirection = BasketDirection();
       string profitDefenseReason = "NONE";
-      if(autoOwnedBasket &&
+      if(autoV20OwnedBasket &&
          profitDefenseDirection != 0 &&
          SmartProfitReversalDetected(
             profitDefenseDirection,
@@ -3801,7 +3802,7 @@ void OnTick()
          return;
       }
 
-      if(autoOwnedBasket &&
+      if(autoV20OwnedBasket &&
          AutoProfitGivebackDetected(profitDefenseDirection,cycleProfit))
       {
          CloseAllBasket("AUTO_PROFIT_GIVEBACK");
@@ -3813,7 +3814,7 @@ void OnTick()
 
       // If no manual Basket/per-position target is configured, multi-position
       // trading falls back to an automatic cycle target.
-      if(!autoOwnedBasket &&
+      if(!autoFamilyOwnedBasket &&
          g_profitTargetMode == "MANUAL" &&
          g_basketProfitTarget > 0.0 && g_perPositionProfit <= 0.0)
       {
@@ -3855,7 +3856,7 @@ void OnTick()
             return;
          }
       }
-      else if(autoOwnedBasket &&
+      else if(autoV20OwnedBasket &&
               g_perPositionProfit <= 0.0 &&
               effectiveBasketTarget > 0.0)
       {
@@ -3890,7 +3891,7 @@ void OnTick()
          return;
       }
 
-      if(!autoOwnedBasket &&
+      if(!autoFamilyOwnedBasket &&
          g_triggerMoney > 0.0 && g_trailMoney > 0.0 &&
          !g_trailArmed && profit >= g_triggerMoney)
       {
@@ -3898,7 +3899,7 @@ void OnTick()
          g_peakProfit = profit;
       }
 
-      if(!autoOwnedBasket && g_trailArmed)
+      if(!autoFamilyOwnedBasket && g_trailArmed)
       {
          if(profit > g_peakProfit) g_peakProfit = profit;
 
@@ -3944,7 +3945,7 @@ void OnTick()
          return;
       }
 
-      if(autoOwnedBasket && !AutoV20Enabled())
+      if(autoFamilyOwnedBasket && EffectiveExecutionMode()!="AUTO")
       {
          // The user selected another mode while an AUTO-owned basket is still
          // alive. Continue AUTO exit/risk management only; never add orders from
@@ -11458,6 +11459,23 @@ bool BasketHasManualPosition()
    return false;
 }
 
+bool BasketHasAutoFamilyPosition()
+{
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
+
+      string comment=PositionGetString(POSITION_COMMENT);
+      if(StringFind(comment,AUTO_V20_LIVE_COMMENT)>=0 ||
+         StringFind(comment,"SaaSTactical")>=0)
+         return true;
+   }
+   return false;
+}
+
 bool AutoV20OwnsOpenBasket()
 {
    return BasketPositionCount()>0 && BasketHasAutoPosition();
@@ -16052,6 +16070,7 @@ void ManageDynamicProtection()
       string positionComment=PositionGetString(POSITION_COMMENT);
       bool tacticalPosition=StringFind(positionComment,"SaaSTactical")>=0;
       bool autoPosition=StringFind(positionComment,AUTO_V20_LIVE_COMMENT)>=0;
+      bool autoFamilyPosition=autoPosition || tacticalPosition;
       double marketPrice = direction > 0 ? tick.bid : tick.ask;
       double profitPoints = direction > 0
          ? (marketPrice - openPrice) / _Point
@@ -16108,8 +16127,7 @@ void ManageDynamicProtection()
       // Only Auto owns a system-generated Broker TP. Manual follows the money
       // target selected by the user and Off leaves profit exits disabled.
       double desiredTP = currentTP;
-      bool positionUsesAutoProtection =
-         autoPosition || (tacticalPosition && g_profitTargetMode=="AUTO");
+      bool positionUsesAutoProtection=autoFamilyPosition;
       if(positionUsesAutoProtection &&
          count == 1 &&
          (autoPosition ||
@@ -16131,7 +16149,7 @@ void ManageDynamicProtection()
       bool slChanged = desiredSL > 0.0 &&
          (currentSL <= 0.0 || MathAbs(desiredSL - currentSL) >= _Point * 2.0);
       bool clearSystemTP =
-         !autoPosition && g_profitTargetMode != "AUTO" && currentTP > 0.0;
+         !autoFamilyPosition && g_profitTargetMode != "AUTO" && currentTP > 0.0;
       if(clearSystemTP)
          desiredTP = 0.0;
       bool tpChanged = clearSystemTP ||
