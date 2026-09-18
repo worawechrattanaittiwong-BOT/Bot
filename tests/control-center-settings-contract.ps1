@@ -13,6 +13,10 @@ $css = Read-Text 'apps/web/app/premium-dashboard.css'
 $bot = Read-Text 'apps/api/src/bot.controller.ts'
 $eaApi = Read-Text 'apps/api/src/ea.controller.ts'
 $db = Read-Text 'database/001_init.sql'
+$layout = Read-Text 'apps/web/app/layout.tsx'
+$popup = Read-Text 'apps/web/components/SystemPopupProvider.tsx'
+$manualActions = Read-Text 'apps/web/components/Mt5ManualActionControls.tsx'
+$globals = Read-Text 'apps/web/app/globals.css'
 
 Need $page 'cc-v19-three-card-grid' 'Three-card Control Center grid missing'
 Need $page '<BotSettingsModal' 'Bot Settings workspace missing'
@@ -142,3 +146,25 @@ Need $css '.cc-v19-settings-card .cc-bot-mode-manual{' 'MANUAL-specific compact 
 Need $css '--settings-row:38px' 'MANUAL row height must be compact'
 Need $css 'height:520px!important;' 'Workspace cards must remain at the original compact height'
 Need $css 'height:474px!important;' 'Bot Settings body must remain at the original compact height'
+
+Need $layout 'SystemPopupProvider' 'Global System Popup provider must wrap the web app'
+Need $popup 'export function SystemPopupProvider' 'System Popup provider component missing'
+Need $popup 'export function useSystemPopup' 'System Popup hook missing'
+Need $popup 'kind: "confirm"' 'System Popup confirm mode missing'
+Need $globals 'SCENOVA System Popup · global UI standard' 'Global System Popup visual standard missing'
+Need $globals '.sc-system-popup-layer.is-confirm' 'Centered confirm overlay styling missing'
+Need $page 'useSystemPopup' 'Dashboard must use the global System Popup'
+Need $page 'confirmPopup({tone:"warning",title:"ปิดออเดอร์ทั้งหมด"' 'Close All must use the centered system confirm popup'
+if($page.Contains('page-notice">{error}')) { throw 'Dashboard must not render the legacy floating error notice' }
+if($page.Contains('page-notice">{notice}')) { throw 'Dashboard must not render the legacy floating success notice' }
+Need $manualActions 'useSystemPopup' 'Manual MT5 actions must use the global System Popup'
+if($manualActions.Contains('window.confirm(')) { throw 'Manual MT5 actions must not use native browser confirm' }
+if($manualActions.Contains('scenova-manual-toast ok')) { throw 'Manual MT5 actions must not render the legacy corner toast' }
+if($page.Contains('Low Volatility</small>')) { throw 'ZERO GRID embedded controls must not show helper descriptions' }
+if($page.Contains('เลือกได้ 1–30 ระดับต่อฝั่ง · รอ EA Sync หลังบันทึก')) { throw 'ZERO GRID level helper copy must be removed' }
+if($page.Contains('ใช้ Lot เท่ากันทุกระดับ')) { throw 'ZERO GRID lot helper copy must be removed' }
+Need $css 'Control Center V26 · content-fit compact workspace' 'Content-fit workspace marker missing'
+Need $css 'height:auto!important;' 'Workspace cards must auto-fit active mode content'
+Need $css 'overflow:visible!important;' 'Bot Settings must grow naturally with visible controls'
+Need $css 'max-height:180px!important;' 'Running Positions must scroll internally in the compact card'
+Need $css 'max-height:210px!important;' 'Performance by Mode must stay compact inside the matched card'

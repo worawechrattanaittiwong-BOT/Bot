@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../lib/api";
+import { useSystemPopup } from "./SystemPopupProvider";
 
 type DashboardSnapshot = {
   selectedSlot?: any;
@@ -20,6 +21,7 @@ const DASHBOARD_REFRESH_MS = 3_000;
 const MOUNT_RECHECK_MS = 750;
 
 export function Mt5ManualActionControls() {
+  const { showPopup, confirmPopup } = useSystemPopup();
   const [data, setData] = useState<DashboardSnapshot | null>(null);
   const [updateMount, setUpdateMount] = useState<Element | null>(null);
   const [connectMount, setConnectMount] = useState<Element | null>(null);
@@ -31,6 +33,17 @@ export function Mt5ManualActionControls() {
   const [startIntentAt, setStartIntentAt] = useState<number | null>(null);
   const [updateIntentAt, setUpdateIntentAt] = useState<number | null>(null);
   const refreshInFlightRef = useRef(false);
+
+  useEffect(() => {
+    if (!notice && !error) return;
+    const pending = !error && /^กำลัง/.test(notice);
+    showPopup({
+      tone: error ? "error" : pending ? "info" : "success",
+      title: error ? "ดำเนินการไม่สำเร็จ" : pending ? "กำลังดำเนินการ" : "ดำเนินการสำเร็จ",
+      message: error || notice,
+      duration: pending ? 5000 : 3000
+    });
+  }, [notice, error, showPopup]);
 
   async function refresh(light = false) {
     if (refreshInFlightRef.current) return;
@@ -346,13 +359,17 @@ export function Mt5ManualActionControls() {
     }
 
     const isUpdate = action === "UPDATE_EA_RESTART";
-    const confirmed = window.confirm(
-      isUpdate
+    const confirmed = await confirmPopup({
+      tone:"warning",
+      title:isUpdate ? "ยืนยันการอัปเดต" : "ยืนยันการเชื่อมต่อ MT5",
+      message:isUpdate
         ? installerRequired
-          ? `อัปเดต SCENOVA ${installerVersion} + EA ตอนนี้? ระบบจะดาวน์โหลด Agent รุ่นใหม่ก่อน และหลังติดตั้งจะรีสตาร์ท MT5 ไม่เกิน 1 ครั้งเพื่อโหลด EA ล่าสุด`
-          : "อัปเดต EA ตอนนี้? ระบบจะหยุดบอทอย่างปลอดภัย แล้วรีสตาร์ท MT5 ไม่เกิน 1 ครั้งเพื่อโหลด EA เวอร์ชันใหม่ หากไม่สำเร็จระบบจะหยุดและไม่ลองซ้ำเอง"
-        : "เชื่อมต่อ MT5 ตอนนี้? ระบบอาจเปิดหรือรีสตาร์ท MT5 1 ครั้งเพื่อเชื่อมต่อ EA ใหม่"
-    );
+          ? `อัปเดต SCENOVA ${installerVersion} + EA ตอนนี้? ระบบจะดาวน์โหลด Agent รุ่นใหม่ก่อน และรีสตาร์ท MT5 ไม่เกิน 1 ครั้ง`
+          : "ระบบจะหยุดบอทอย่างปลอดภัยและรีสตาร์ท MT5 ไม่เกิน 1 ครั้งเพื่อโหลด EA เวอร์ชันใหม่"
+        : "ระบบอาจเปิดหรือรีสตาร์ท MT5 1 ครั้งเพื่อเชื่อมต่อ EA ใหม่",
+      confirmLabel:isUpdate ? "อัปเดตตอนนี้" : "เชื่อมต่อ",
+      cancelLabel:"ยกเลิก"
+    });
     if (!confirmed) return;
 
     setBusyAction(action);
@@ -620,18 +637,13 @@ export function Mt5ManualActionControls() {
         .scenova-persistent-update{display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;border:1px solid rgba(242,191,86,.32);background:linear-gradient(110deg,rgba(85,60,18,.38),rgba(33,22,18,.42));border-radius:12px;padding:9px 10px}
         .scenova-persistent-update-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:2px}.scenova-persistent-update-copy b{font-size:10px;color:#ffe09a}.scenova-persistent-update-copy small{font-size:8px;color:#bfa97f}.scenova-persistent-update-copy .manual-only{color:#d3b9ff}
         .scenova-persistent-update button{flex:none;border:1px solid rgba(242,191,86,.42);background:linear-gradient(135deg,rgba(116,82,20,.62),rgba(73,46,20,.52));color:#ffe5a7;border-radius:10px;padding:8px 11px;font-size:9px;font-weight:900;cursor:pointer;white-space:nowrap}.scenova-persistent-update button:disabled{opacity:.45;cursor:not-allowed}
-        .scenova-manual-toast{position:fixed;right:22px;bottom:22px;z-index:9999;max-width:430px;border-radius:14px;padding:12px 15px;font-size:12px;font-weight:750;box-shadow:0 16px 50px rgba(0,0,0,.32)}
-        .scenova-manual-toast.ok{background:#102a23;border:1px solid rgba(70,207,158,.35);color:#9aebcc}
-        .scenova-manual-toast.err{background:#31161d;border:1px solid rgba(255,98,120,.38);color:#ffb3c0}
         @media(max-width:980px){#scenova-ea-update-action-mount{justify-content:flex-start}.scenova-manual-action-wrap{align-items:flex-start}.scenova-persistent-update{align-items:flex-start;flex-direction:column}.scenova-persistent-update button{width:100%}}
-        @media(max-width:720px){.scenova-manual-action{width:100%}.scenova-manual-toast{left:14px;right:14px;bottom:14px}.scenova-runtime-status{align-items:flex-start;flex-wrap:wrap}.scenova-runtime-status em{margin-left:18px}}
+        @media(max-width:720px){.scenova-manual-action{width:100%}.scenova-runtime-status{align-items:flex-start;flex-wrap:wrap}.scenova-runtime-status em{margin-left:18px}}
       `}</style>
       {updateButton}
       {recoveryButton}
       {runtimeStatus}
       {persistentUpdatePanel}
-      {notice && <div className="scenova-manual-toast ok">{notice}</div>}
-      {error && <div className="scenova-manual-toast err">{error}</div>}
     </>
   );
 }
