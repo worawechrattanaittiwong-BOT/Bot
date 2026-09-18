@@ -24,7 +24,9 @@ Need $page 'Win Rate วันนี้' 'Daily Win Rate KPI missing'
 Need $page 'Drawdown วันนี้' 'Daily Drawdown KPI missing'
 Need $page 'PERFORMANCE BY MODE' 'Per-mode performance card missing'
 Need $page 'modePerformanceToday.map' 'Per-mode performance rows must use real API data'
-Need $page 'AI EXECUTION CONTROL' 'Single AI execution control card missing'
+Need $page 'cc-v17-action-row' 'Compact bot action row missing'
+if($page.Contains('cc-v17-control-identity')) { throw 'Removed Control Center identity header must not render' }
+if($page.Contains('cc-v17-control-meta')) { throw 'Removed Symbol/Lot/EA Sync header must not render' }
 Need $page 'SCENOVA INTELLIGENCE CORE' 'AI/Genetic intelligence card missing'
 Need $page 'AI-driven & Genetic Algorithm' 'AI-driven Genetic Algorithm identity missing'
 if($page.Contains('<LivePriceChart points={livePricePoints}')) { throw 'Price chart must not render on V12 Control Center' }
@@ -72,3 +74,7 @@ Need $page 'raceCloseAllProfitEnabled&&<label' 'RACE target amount must hide whe
 Need $css 'grid-template-columns:minmax(0,1fr) minmax(0,1fr)' 'Desktop Settings / Running Positions must be a true 50/50 left-right split'
 Need $css '.cc-v17-running-table .row' 'Running Positions table styling missing'
 Need $css '.cc-bot-v17-contract-copy{display:none!important' 'Ownership/safety contract copy must stay hidden from the concise settings UI'
+
+Need $css '.cc-v17-settings-column .cc-bot-v2-main{grid-template-columns:1fr!important' 'Bot Settings panels must stack in one vertical column'
+Need $css '.cc-v17-settings-column .cc-bot-v2-fields{' 'Bot Settings two-column row override missing'
+Need $css 'grid-template-columns:1fr!important;' 'Bot Settings fields must render one row per setting (name/control)'
