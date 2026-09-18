@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.28"
-#define SCENOVA_EA_VERSION "1.0.28"
-#define SCENOVA_PRODUCT_VERSION "1.0.28"
+#property version   "1.0.29"
+#define SCENOVA_EA_VERSION "1.0.29"
+#define SCENOVA_PRODUCT_VERSION "1.0.29"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V2"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1665,8 +1665,8 @@ string EffectiveExecutionMode()
    StringToUpper(control);
    if(control == "ZERO_GRID") return "ZERO_GRID";
    if(control == "RACE") return "RACE";
-   if(control == "AUTO" || control == "FLIP_LOCK" ||
-      control == "ASSISTED" || control == "MANUAL")
+   if(control == "FLIP_LOCK") return "FLIP_LOCK";
+   if(control == "AUTO" || control == "ASSISTED" || control == "MANUAL")
       return "AUTO";
 
    string engine=g_engineMode;
@@ -3573,6 +3573,7 @@ void OnTick()
    {
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
+      if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
       bool closed = CloseAllBasket(CloseReasonText(g_pendingCloseReason));
       g_executionStatus = closed ? CloseCompletionStatus(g_pendingCloseReason) : "CLOSE_RETRY";
       return;
@@ -3598,6 +3599,7 @@ void OnTick()
 
    if(g_dailyLoss > 0.0 && AccountInfoDouble(ACCOUNT_EQUITY) <= g_dayStartEquity - g_dailyLoss)
    {
+      if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
       if(count > 0 || rescueCount > 0) CloseAllBasket("DAILY_LOSS");
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
@@ -3610,6 +3612,29 @@ void OnTick()
       RefreshMarketContext(false);
       ManageAdaptiveRescue();
       g_executionStatus = "RESCUE_EXIT";
+      return;
+   }
+
+   // FLIP LOCK V3 owns its live position + opposite pending baton before any
+   // generic AUTO basket protection/reversal logic can touch it. Hard daily
+   // controls above remain authoritative; the configured Basket loss remains
+   // the only generic per-cycle loss boundary used by FLIP LOCK.
+   if(FlipLockModeEnabled() && (count <= 0 || BasketHasFlipLockPosition()))
+   {
+      if(count > 0)
+      {
+         double flipLossLimit = EffectiveBasketLossLimit();
+         if(flipLossLimit > 0.0 && BasketProfit() <= -flipLossLimit)
+         {
+            FlipLockRemoveAllPending();
+            CloseAllBasket("FLIP_LOCK_MAX_BASKET_LOSS");
+            ResetTrail();
+            g_executionStatus = "FLIP_LOCK_MAX_BASKET_LOSS";
+            return;
+         }
+      }
+
+      FlipLockManage();
       return;
    }
 
@@ -3965,12 +3990,13 @@ void OnTick()
       return;
    }
 
-   // FLIP LOCK V2 owns its entry + opposite-pending baton lifecycle.
-   // It deliberately bypasses AUTO/VECTOR/PARALLEL entry gates while keeping
-   // the common authorization, hard daily-loss and broker safety checks above.
+   // If FLIP LOCK was selected while a foreign AUTO/MANUAL position is still
+   // open, never seize that position. Let the previous owner's generic safety
+   // management drain it, then FLIP LOCK may start only after the account is flat.
    if(FlipLockModeEnabled())
    {
-      FlipLockManage();
+      FlipLockRemoveAllPending();
+      g_executionStatus = "FLIP_LOCK_WAIT_EXISTING_POSITION";
       return;
    }
 
@@ -5808,7 +5834,9 @@ void ApplySettings(string json)
    // A legacy AUTO burst must never survive a transition into an isolated mode.
    // Existing non-ZERO/non-RACE positions may still drain under generic safety
    // management, but no legacy queue can add orders after the mode switch.
-   if(EffectiveExecutionMode() == "ZERO_GRID" || EffectiveExecutionMode() == "RACE")
+   if(EffectiveExecutionMode() == "ZERO_GRID" ||
+      EffectiveExecutionMode() == "RACE" ||
+      EffectiveExecutionMode() == "FLIP_LOCK")
       ResetLegacyBurstStateForIsolatedMode();
 
    string mode = JsonString(json, "entryMode", "");
@@ -11357,9 +11385,11 @@ bool BrainV13FastWrongEntryCorrection(double momentum)
 // legacy V19/V18/V16 paths below this block.
 bool AutoV20Enabled()
 {
+   // Strict execution ownership: Vector Edge/V20 belongs to AUTO only.
+   // FLIP LOCK chooses only its starter direction, then owns SL + opposite
+   // pending baton management without AUTO plan/TP/reversal intervention.
    if(g_engineMode != "AUTO") return false;
-   return g_controlMode == "AUTO" ||
-          g_controlMode == "FLIP_LOCK";
+   return g_controlMode == "AUTO";
 }
 
 #include "include\\AutoVectorEdgeLiveV1.mqh"
@@ -14450,6 +14480,7 @@ bool HandleDailyProfitControl(int count)
 
    if(g_dailyProfitLocked)
    {
+      if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
       if(count > 0)
          CloseAllBasket("DAILY_PROFIT_LOCK");
 
@@ -14483,6 +14514,7 @@ bool HandleDailyProfitControl(int count)
          if(dailyProfit <= floor)
          {
             LockDailyProfitGiveback();
+            if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
             if(count > 0)
                CloseAllBasket("DAILY_PROFIT_GIVEBACK");
 
@@ -14503,6 +14535,7 @@ bool HandleDailyProfitControl(int count)
    if(dailyProfit >= g_dailyProfitTarget)
    {
       LockDailyProfitTarget();
+      if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
       if(count > 0)
          CloseAllBasket("DAILY_PROFIT_TARGET");
 
@@ -16068,6 +16101,7 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    MqlTradeResult result = {};
    bool autoV20=AutoV20Enabled() && !g_tacticalCountertrendActive;
    bool raceOrder = RaceModeEnabled() || BasketHasRacePosition();
+   bool flipLockOrder = FlipLockModeEnabled();
    AUTO_V20_SIDE autoPlan;
    if(autoV20)
       autoPlan=direction>0 ? g_autoV20Buy : g_autoV20Sell;
@@ -16075,9 +16109,11 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    request.action = TRADE_ACTION_DEAL;
    request.magic = InpMagic;
    request.symbol = _Symbol;
-   request.volume = autoV20
-      ? autoPlan.plannedLot
-      : (g_adaptiveEngine ? g_adaptiveLot : NormalizeTradeVolume(g_lot));
+   request.volume = flipLockOrder
+      ? NormalizeTradeVolume(g_lot)
+      : (autoV20
+         ? autoPlan.plannedLot
+         : (g_adaptiveEngine ? g_adaptiveLot : NormalizeTradeVolume(g_lot)));
    if(request.volume<=0.0)
    {
       g_executionStatus="AUTO_V20_RISK_VOLUME_ZERO";
@@ -16089,7 +16125,9 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
       ? "SaaSAutoV20"
       : (raceOrder
       ? "SaaSRace"
-      : (g_tacticalCountertrendActive ? "SaaSTactical" : "SaaSBasket"));
+      : (flipLockOrder
+         ? FLIP_LOCK_LIVE_COMMENT
+         : (g_tacticalCountertrendActive ? "SaaSTactical" : "SaaSBasket")));
 
    if(direction > 0)
    {
@@ -16131,7 +16169,9 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    {
       request.sl = raceOrder
          ? RaceInitialStopPrice(direction, entryPrice)
-         : DynamicInitialStopPrice(direction, entryPrice);
+         : (flipLockOrder
+            ? FlipLockCandidateTrigger(direction,tick)
+            : DynamicInitialStopPrice(direction, entryPrice));
       if(raceOrder && request.sl <= 0.0)
       {
          g_executionStatus = "RACE_ATR_NOT_READY";
@@ -16165,7 +16205,7 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    }
 
    g_dynamicStopPrice = request.sl;
-   g_dynamicTakeProfitPrice = raceOrder
+   g_dynamicTakeProfitPrice = (raceOrder || flipLockOrder)
       ? 0.0
       : (request.tp > 0.0
          ? request.tp
