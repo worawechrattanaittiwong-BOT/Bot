@@ -91,10 +91,11 @@ assert.match(ea, /ZeroGridEffectiveLevelLot\(int level\)/, "ZERO must isolate fi
 assert.match(web, /กริดตลาดความผันผวนต่ำ/, "ZERO UI must expose the professional low-volatility switch");
 assert.doesNotMatch(ea, /ZERO_GRID_PAIR_ROLLBACK/, "ZERO must not churn accepted orders with pair rollback");
 assert.match(ea, /ZeroGridPendingCount\(\)!=levels\*2/, "flat ZERO must require the full configured ladder");
-const zeroOwnerGuard = ea.indexOf("if(ZeroGridModeEnabled() || g_zeroGridClosing || ZeroGridPositionCount()>0 || ZeroGridPendingCount()>0)");
+const zeroOwnerGuard = ea.indexOf("if(zeroGridOwnsRuntime || zeroGridCanStart)");
 const dailyProfitGuard = ea.indexOf("if(HandleDailyProfitControl(count))");
 const dailyLossGuard = ea.indexOf("if(g_dailyLoss > 0.0 && AccountInfoDouble(ACCOUNT_EQUITY) <= g_dayStartEquity - g_dailyLoss)");
-assert.ok(zeroOwnerGuard >= 0, "ZERO must own runtime before shared risk controls");
+assert.ok(zeroOwnerGuard >= 0, "ZERO must own an existing ZERO runtime before shared risk controls");
+assert.match(ea, /bool zeroGridCanStart\s*=\s*[\s\S]*ZeroGridModeEnabled\(\)[\s\S]*BasketPositionCount\(\)<=0[\s\S]*RescuePositionCount\(\)<=0/, "selected ZERO must wait until a foreign live owner is flat");
 assert.ok(zeroOwnerGuard < dailyProfitGuard && zeroOwnerGuard < dailyLossGuard, "hidden AUTO/RACE daily controls must not liquidate ZERO cycles");
 assert.doesNotMatch(ea, /ZERO GRID starts only when selected and the EA-owned basket is flat/, "ZERO must not have a second late dispatch path after shared risk controls");
 assert.match(ea, /g_safeStopDrainRequested\s*=\s*\(g_access && desired == "SAFE_STOP"\)/, "ZERO graceful drain must be armed only by explicit website SAFE_STOP");
