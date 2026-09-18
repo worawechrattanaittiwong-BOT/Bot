@@ -2875,11 +2875,11 @@ function BotSettingsModal(props:any) {
     props.systemHardStopDistancePoints || props.hardStopDistancePoints || 1000
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
-    AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"สมอง AUTO รวม Probability, Expected Value, Entropy และตัวกรองต้นทุน เพื่อคัดจังหวะที่มี Edge ก่อนเข้า"},
+    AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง ไม่รับช่วง Position จาก FLIP LOCK, RACE, ZERO GRID หรือ MANUAL"},
     FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เปิดไม้แรกด้วย Safety Stop แยกก่อน เมื่อราคาเดินเข้ากำไรจนจุด Baton พ้น Break-even จึงวาง Pending ฝั่งตรงข้ามและเริ่มสลับ BUY / SELL"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
-    MANUAL:{title:"MANUAL",subtitle:"ระบบวิเคราะห์ทิศทางและจุดเข้าอัตโนมัติ โดยผู้ใช้กำหนด Lot เป้าหมายกำไร และจุดหยุดขาดทุน"}
+    MANUAL:{title:"MANUAL",subtitle:"โหมดตั้งค่าด้วยตนเอง ใช้เป้ากำไรและ Stop ของ MANUAL เอง และไม่ส่ง Position ให้ AUTO V20 จัดการ"}
   };
 
   const applyControlMode = (mode:string) => {
@@ -3026,7 +3026,11 @@ function BotSettingsModal(props:any) {
                 </div>
                 {controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
                   ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position · ไม้แรกมี Safety Stop · Pending STOP ฝั่งตรงข้ามจะสร้างเมื่อ Baton ล็อกกำไรพ้น Break-even แล้วเท่านั้น</span></div>
-                  : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}
+                  : controlMode==="AUTO"
+                    ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO Ownership</b><span>Vector Edge / V20 จัดการเฉพาะ Position ที่ติดแท็ก AUTO เท่านั้น · ไม่รับไม้ของโหมดอื่นมาจัดการต่อ</span></div>
+                    : controlMode==="MANUAL"
+                      ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="settings" size={16}/><b>MANUAL Ownership</b><span>ใช้เป้ากำไร / Stop / จำนวนไม้ของ MANUAL เอง · AUTO V20 จะไม่เข้ามาปิดหรือกลับทิศ Position นี้</span></div>
+                      : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}
               </section>
 
               {controlMode!=="ZERO_GRID"&&(
