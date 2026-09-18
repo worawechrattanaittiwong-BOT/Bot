@@ -1,8 +1,8 @@
 #property strict
-#property version   "1.0.33"
-#define SCENOVA_EA_VERSION "1.0.33"
-#define SCENOVA_PRODUCT_VERSION "1.0.33"
-#define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V2"
+#property version   "1.0.34"
+#define SCENOVA_EA_VERSION "1.0.34"
+#define SCENOVA_PRODUCT_VERSION "1.0.34"
+#define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ADVERSE_EXIT_V3"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -3023,32 +3023,122 @@ bool RaceWrongDirectionConfirmed(
    if(direction == 0)
       return false;
 
-   // RACE directional invalidation also uses only the latest completed M5
-   // candle. The opposite candle alone is not enough to close; price must also
-   // have moved meaningfully against the active cycle.
-   int m5Direction = RaceM5CandleDirection();
-   if(m5Direction == 0 || m5Direction == direction)
+   // Never convert ordinary spread/noise into an instant loss exit. A RACE
+   // cycle gets a short grace period, then must show meaningful adverse travel
+   // from the basket anchor before any directional invalidation is considered.
+   if(g_raceCycleStartedAt <= 0 ||
+      TimeCurrent() - g_raceCycleStartedAt < 5)
       return false;
 
-   double atr = MathMax(
-      10.0,
-      AverageTrueRangePoints(PERIOD_M5, g_atrPeriod)
-   );
    double progress = RaceMidProgressPoints(direction);
-   double adverseThreshold = filling ? atr * 0.45 : atr * 0.22;
-   bool adverse = progress <= -adverseThreshold;
-   bool severe = progress <= -atr * (filling ? 0.75 : 0.50);
+   double adversePoints = -progress;
+   if(adversePoints <= 0.0)
+      return false;
 
-   if(severe)
+   double atrM1 = AverageTrueRangePoints(PERIOD_M1, g_atrPeriod);
+   double atrM5 = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
+   if(atrM1 <= 0.0 || atrM5 <= 0.0)
+      return false;
+
+   double spread = CurrentSpreadPoints();
+   if(spread <= 0.0 || spread >= 999999.0)
+      return false;
+
+   double adverseFloor = MathMax(
+      spread * 2.50,
+      MathMax(atrM1 * 0.45, atrM5 * 0.16)
+   );
+   if(filling)
+      adverseFloor *= 1.10;
+   if(adversePoints < adverseFloor)
+      return false;
+
+   // The rolling 10-second pressure must have genuinely flipped against the
+   // open basket. Requiring several directional ticks plus a clear majority
+   // prevents one quote update from forcing a close.
+   double buyPressure = 0.0;
+   double sellPressure = 0.0;
+   int samples = 0;
+   RaceVolumeSnapshot(buyPressure, sellPressure, samples);
+   double totalPressure = buyPressure + sellPressure;
+   if(samples < 6 || totalPressure <= 0.0)
+      return false;
+
+   double oppositePressure = direction > 0 ? sellPressure : buyPressure;
+   double samePressure = direction > 0 ? buyPressure : sellPressure;
+   double oppositeShare = oppositePressure / totalPressure;
+   if(oppositePressure <= samePressure || oppositeShare < 0.62)
+      return false;
+
+   // Live M1 force: the body must point against the RACE side, occupy a
+   // meaningful part of the current candle range, and exceed spread/ATR noise.
+   double open0 = iOpen(_Symbol, PERIOD_M1, 0);
+   double close0 = iClose(_Symbol, PERIOD_M1, 0);
+   double high0 = iHigh(_Symbol, PERIOD_M1, 0);
+   double low0 = iLow(_Symbol, PERIOD_M1, 0);
+   double bodyPoints = (open0 > 0.0 && close0 > 0.0)
+      ? (close0 - open0) / _Point
+      : 0.0;
+   double rangePoints = (high0 > 0.0 && low0 > 0.0 && high0 >= low0)
+      ? (high0 - low0) / _Point
+      : 0.0;
+   double adverseBodyPoints = -direction * bodyPoints;
+   double bodyRatio = rangePoints > 0.0
+      ? MathMin(1.0, MathMax(0.0, adverseBodyPoints / rangePoints))
+      : 0.0;
+   bool m1OppositeForce =
+      adverseBodyPoints >= MathMax(spread * 0.75, atrM1 * 0.22) &&
+      bodyRatio >= 0.50;
+
+   // Tick momentum is independent evidence. A flat market cannot satisfy this.
+   double adverseMomentum = -direction * momentum;
+   bool momentumOpposite =
+      adverseMomentum >= MathMax(spread * 0.50, atrM1 * 0.18);
+
+   // Completed M5 is deliberately slower and is used as confirmation, not as
+   // the sole trigger, so a genuinely violent live reversal need not wait for
+   // the next five-minute close.
+   bool m5Opposite = RaceM5CandleDirection() == -direction;
+
+   double severeFloor = MathMax(
+      spread * 4.00,
+      MathMax(atrM1 * 0.85, atrM5 * 0.30)
+   );
+   if(filling)
+      severeFloor *= 1.05;
+
+   if(adversePoints >= severeFloor &&
+      oppositeShare >= 0.68 &&
+      (momentumOpposite || m1OppositeForce))
    {
-      reasonOut = "RACE_M5_SEVERE_REVERSAL";
+      reasonOut = "RACE_ADVERSE_IMPULSE_SEVERE";
+      Print(
+         "RACE adverse exit severe adversePts=",DoubleToString(adversePoints,1),
+         " floor=",DoubleToString(severeFloor,1),
+         " oppShare=",DoubleToString(oppositeShare,2),
+         " momentumOpp=",momentumOpposite,
+         " m1Opp=",m1OppositeForce
+      );
       return true;
    }
-   if(adverse)
+
+   int confirmations = 0;
+   if(momentumOpposite) confirmations++;
+   if(m1OppositeForce) confirmations++;
+   if(m5Opposite) confirmations++;
+
+   if(confirmations >= 2)
    {
-      reasonOut = "RACE_M5_OPPOSITE_CONFIRMED";
+      reasonOut = "RACE_ADVERSE_IMPULSE_CONFIRMED";
+      Print(
+         "RACE adverse exit confirmed adversePts=",DoubleToString(adversePoints,1),
+         " floor=",DoubleToString(adverseFloor,1),
+         " oppShare=",DoubleToString(oppositeShare,2),
+         " confirmations=",confirmations
+      );
       return true;
    }
+
    return false;
 }
 
@@ -3367,6 +3457,8 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
    g_raceDirection = direction;
+   if(g_raceCycleStartedAt <= 0)
+      g_raceCycleStartedAt = TimeCurrent();
 
    int filledUnits = RaceFilledUnits();
    bool filling = filledUnits < g_maxPositions;
@@ -3378,6 +3470,18 @@ bool ManageRaceBasket(double momentum)
    if(lossLimit > 0.0 && cycleProfit <= -lossLimit)
    {
       RaceCloseCycle("RACE_MAX_BASKET_LOSS");
+      return true;
+   }
+
+   // RACE_ADVERSE_IMPULSE_EXIT_V3: being negative is never enough by itself.
+   // Close a losing basket early only after price has travelled materially
+   // against the anchor AND the rolling 10-second pressure has flipped AND
+   // multiple live/closed-bar force signals confirm that the move is real.
+   string wrongDirectionReason = "NONE";
+   if(cycleProfit < 0.0 && floatingProfit < 0.0 &&
+      RaceWrongDirectionConfirmed(direction,momentum,filling,wrongDirectionReason))
+   {
+      RaceCloseCycle(wrongDirectionReason);
       return true;
    }
 
@@ -3414,11 +3518,11 @@ bool ManageRaceBasket(double momentum)
    }
 
 
-   // RACE_VOLUME_10S_ROLLOVER_V2: direction comes only from the rolling
-   // 10-second BUY/SELL pressure window. If pressure flips, never add another
-   // order on the stale side. The old cycle is flattened only when its realized
-   // + floating net P/L is non-negative; otherwise existing positions keep
-   // their normal per-position profit exits and hard loss protection.
+   // RACE_VOLUME_10S_ADVERSE_EXIT_V3: direction still comes from the rolling
+   // 10-second BUY/SELL pressure window. A simple pressure flip never adds on
+   // the stale side. A negative cycle normally waits, but the adverse-impulse
+   // guard above may cut it when price travel + pressure + force all confirm
+   // that the market is genuinely accelerating against the basket.
    int volumeDirection = RaceAnalysisDirection(momentum);
    if(volumeDirection != 0 && volumeDirection != direction)
    {
