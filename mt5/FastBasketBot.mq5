@@ -1,8 +1,8 @@
 #property strict
-#property version   "1.0.27"
-#define SCENOVA_EA_VERSION "1.0.27"
-#define SCENOVA_PRODUCT_VERSION "1.0.27"
-#define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V1"
+#property version   "1.0.28"
+#define SCENOVA_EA_VERSION "1.0.28"
+#define SCENOVA_PRODUCT_VERSION "1.0.28"
+#define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V2"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -3058,6 +3058,67 @@ bool RaceFlowStillRunning(int direction, double momentum)
    return RaceVolumeDirection() == direction;
 }
 
+double RaceAtrStopPoints()
+{
+   // RACE must use the customer's visible ATR stop contract directly. Do not
+   // depend on the AUTO market-context cache because the first RACE fill may
+   // happen before that cache has been refreshed.
+   double atr = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   if(atr <= 0.0 && g_atrPoints > 0.0)
+      atr = g_atrPoints;
+   if(atr <= 0.0)
+      return 0.0;
+
+   double brokerMinimumPoints = MathMax(
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
+   ) + 2.0;
+
+   double multiplier = MathMax(0.5, MathMin(10.0, g_hardStopAtrMultiplier));
+   return MathMax(atr * multiplier, brokerMinimumPoints);
+}
+
+double RaceInitialStopPrice(int direction, double entryPrice)
+{
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   double brokerMinimumPoints = MathMax(
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
+   ) + 2.0;
+
+   double points = 0.0;
+   if(g_manualStopLossPoints > 0.0)
+      points = MathMax(g_manualStopLossPoints, brokerMinimumPoints);
+   else
+      points = RaceAtrStopPoints();
+
+   if(points <= 0.0)
+      return 0.0;
+
+   double stop = direction > 0
+      ? entryPrice - points * _Point
+      : entryPrice + points * _Point;
+   return NormalizeDouble(stop, digits);
+}
+
+bool RaceStopReady()
+{
+   if(g_manualStopLossPoints > 0.0)
+      return true;
+
+   double atr = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   if(atr <= 0.0)
+   {
+      g_executionStatus = "RACE_ATR_NOT_READY";
+      return false;
+   }
+
+   // Publish the exact ATR used by the RACE stop so dashboard telemetry and the
+   // actual Broker SL agree on the same source value.
+   g_atrPoints = atr;
+   return true;
+}
+
 double RaceProfitArmMoney(int filledUnits)
 {
    // Positive floating P/L already includes spread. This floor simply avoids
@@ -3211,6 +3272,12 @@ bool ProcessRaceFill(int direction)
       return false;
    }
 
+   // Never open RACE with a broker-minimum placeholder SL. If ATR is not ready,
+   // wait for the next tick instead of creating a position that can be stopped
+   // almost immediately by spread/noise.
+   if(!RaceStopReady())
+      return false;
+
    // RACE uses the user's configured Lot directly. No adaptive score or risk
    // sizing calculation is allowed to reduce the requested fill count.
    g_adaptiveLot = NormalizeTradeVolume(g_lot);
@@ -3346,7 +3413,7 @@ bool ManageRaceBasket(double momentum)
    }
 
 
-   // RACE_VOLUME_10S_ROLLOVER_V1: direction comes only from the rolling
+   // RACE_VOLUME_10S_ROLLOVER_V2: direction comes only from the rolling
    // 10-second BUY/SELL pressure window. If pressure flips, never add another
    // order on the stale side. The old cycle is flattened only when its realized
    // + floating net P/L is non-negative; otherwise existing positions keep
@@ -10979,6 +11046,13 @@ double DynamicConfidenceThreshold(int direction)
 double EffectiveHardStopMultiplier()
 {
    double multiplier = g_hardStopAtrMultiplier;
+
+   // RACE presents ATR x multiplier as an explicit user contract. AUTO may
+   // adapt that multiplier to market regime, but RACE must not silently widen
+   // or tighten it behind the Settings value.
+   if(RaceModeEnabled() || BasketHasRacePosition())
+      return MathMax(0.5, MathMin(10.0, multiplier));
+
    if(g_marketRegime == "HIGH_VOLATILITY") multiplier *= 1.25;
    else if(g_marketRegime == "QUIET") multiplier *= 0.85;
    return MathMax(0.5, MathMin(10.0, multiplier));
@@ -15993,6 +16067,7 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
    bool autoV20=AutoV20Enabled() && !g_tacticalCountertrendActive;
+   bool raceOrder = RaceModeEnabled() || BasketHasRacePosition();
    AUTO_V20_SIDE autoPlan;
    if(autoV20)
       autoPlan=direction>0 ? g_autoV20Buy : g_autoV20Sell;
@@ -16012,7 +16087,7 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    request.type_filling = AllowedFillingMode();
    request.comment = autoV20
       ? "SaaSAutoV20"
-      : (g_engineMode == "RACE"
+      : (raceOrder
       ? "SaaSRace"
       : (g_tacticalCountertrendActive ? "SaaSTactical" : "SaaSBasket"));
 
@@ -16054,8 +16129,15 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    }
    else
    {
-      request.sl = DynamicInitialStopPrice(direction, entryPrice);
-      if(g_profitTargetMode == "AUTO" &&
+      request.sl = raceOrder
+         ? RaceInitialStopPrice(direction, entryPrice)
+         : DynamicInitialStopPrice(direction, entryPrice);
+      if(raceOrder && request.sl <= 0.0)
+      {
+         g_executionStatus = "RACE_ATR_NOT_READY";
+         return false;
+      }
+      if(!raceOrder && g_profitTargetMode == "AUTO" &&
          request.sl > 0.0 &&
          (g_tacticalCountertrendActive || !BasketFillEnabled()) &&
          g_perPositionProfit <= 0.0 &&
@@ -16083,9 +16165,11 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    }
 
    g_dynamicStopPrice = request.sl;
-   g_dynamicTakeProfitPrice = request.tp > 0.0
-      ? request.tp
-      : DynamicTakeProfitPrice(direction, entryPrice, request.sl);
+   g_dynamicTakeProfitPrice = raceOrder
+      ? 0.0
+      : (request.tp > 0.0
+         ? request.tp
+         : DynamicTakeProfitPrice(direction, entryPrice, request.sl));
 
    g_adaptiveLot = request.volume;
 
