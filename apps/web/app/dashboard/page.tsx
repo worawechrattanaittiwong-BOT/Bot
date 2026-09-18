@@ -3039,7 +3039,7 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>เป้าหมายกำไรและจุดหยุดขาดทุน</b><small>{controlMode==="MANUAL"?"ระบุค่าปิดออเดอร์ด้วยตนเอง":"EA ปรับทางออกตามโครงสร้างและความผันผวน"}</small></div></div>
                 {controlMode!=="MANUAL" ? <>
                 {controlMode==="FLIP_LOCK" ? <div className="cc-bot-v2-auto-grid">
-                  <div><ScenovaIcon name="profit" size={20}/><span><small>เริ่มกักกำไร</small><b>$0.25 ต่อ 0.01 Lot · ตอนนี้ประมาณ ${flipLockArmMoney.toFixed(2)}</b></span></div>
+                  <div><ScenovaIcon name="profit" size={20}/><span><small>เริ่มกักกำไร</small><b>$0.25 ต่อ 0.01 Lot · ตอนนี้ประมาณ {"$"+flipLockArmMoney.toFixed(2)}</b></span></div>
                   <div><ScenovaIcon name="shield" size={20}/><span><small>การป้องกัน/ติดตาม</small><b>Safety Stop → Trailing SL ขยับตามราคาอย่างเดียว</b></span></div>
                 </div> : <div className="cc-bot-v2-auto-grid">
                   <div><ScenovaIcon name="profit" size={20}/><span><small>การรักษากำไร</small><b>ระบบรักษากำไรแบบไดนามิก</b></span></div>
