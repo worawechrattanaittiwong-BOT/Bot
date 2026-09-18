@@ -486,3 +486,592 @@
   .cc-v12 .cc-v6-hero{grid-template-columns:1fr!important}
   .cc-v13-hero-intelligence{display:none}
 }
+
+
+/* ===== Control Center V14 · concise reference-style Bot Settings ===== */
+.cc-bot-v2-embedded .cc-bot-v2-kicker,
+.cc-bot-v2-embedded .cc-bot-v2-section-title small,
+.cc-bot-v2-embedded .cc-bot-v2-field>small,
+.cc-bot-v2-embedded .cc-bot-v2-engine-line,
+.cc-bot-v2-embedded .cc-bot-v2-lowvol-copy small,
+.cc-bot-v2-embedded .cc-bot-v2-lowvol-copy p,
+.cc-bot-v2-embedded .cc-bot-v2-lowvol-note,
+.cc-bot-v2-embedded .cc-bot-v2-lowvol-specs,
+.cc-bot-v2-embedded .cc-bot-v2-choice-row small,
+.cc-bot-v2-embedded .cc-bot-v2-limit-grid small,
+.cc-bot-v2-embedded .cc-bot-v2-summary-note,
+.cc-bot-v2-embedded .cc-bot-v12-footer-state{
+  display:none!important;
+}
+
+.cc-bot-v2-embedded .cc-bot-v2-head{
+  min-height:58px!important;
+  padding:9px 12px!important;
+  background:linear-gradient(180deg,rgba(12,19,33,.98),rgba(8,13,23,.98))!important;
+  border-bottom:1px solid rgba(75,94,139,.34)!important
+}
+.cc-bot-v2-embedded .cc-bot-modal-title>span{
+  width:34px!important;height:34px!important;border-radius:9px!important
+}
+.cc-bot-v2-embedded .cc-bot-modal-title h2{
+  font-size:17px!important;letter-spacing:0!important
+}
+.cc-bot-v14-head-save{
+  min-width:145px!important;min-height:35px!important;padding:7px 12px!important;
+  border:1px solid rgba(116,102,219,.62)!important;border-radius:8px!important;
+  background:linear-gradient(145deg,#342668,#231946)!important;
+  color:#eeeaff!important;font-size:10px!important;font-weight:850!important;
+  box-shadow:0 0 18px rgba(105,79,223,.12),inset 0 1px 0 rgba(255,255,255,.05)!important
+}
+.cc-bot-v14-head-save:disabled{opacity:.38!important;box-shadow:none!important}
+
+/* Mode row = label + dropdown only. */
+.cc-bot-v2-embedded .cc-bot-v2-mode-section{
+  padding:7px 10px!important;border-radius:9px!important;
+  border-color:rgba(65,83,128,.34)!important;
+  background:#090f19!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-mode-section>.cc-bot-v2-section-title{display:none!important}
+.cc-bot-v12-mode-select-wrap{
+  grid-template-columns:minmax(130px,.32fr) minmax(220px,.68fr)!important;
+  gap:12px!important;align-items:center!important
+}
+.cc-bot-v12-mode-select-wrap>label{
+  display:contents!important
+}
+.cc-bot-v12-mode-select-wrap>label>span{
+  min-width:0!important;display:flex!important;flex-direction:row!important;align-items:center!important;
+  gap:7px!important;color:#dce4f2!important;font-size:11px!important;font-weight:800!important
+}
+.cc-bot-v12-mode-select-wrap>label>span small{display:none!important}
+.cc-bot-v12-mode-select{
+  width:100%!important;height:37px!important;min-height:37px!important;
+  font-size:11px!important;border-radius:7px!important;
+  border:1px solid rgba(83,102,153,.58)!important;
+  background:#080d15!important;color:#eef3fc!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025)!important
+}
+
+/* Plain section panels: title + simple rows, no explanatory cards. */
+.cc-bot-v2-embedded .cc-bot-v2-panel{
+  padding:8px 10px!important;border-radius:9px!important;
+  border:1px solid rgba(62,81,125,.34)!important;
+  background:linear-gradient(180deg,#0a101a,#080d15)!important;
+  box-shadow:none!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-section-title.compact{
+  min-height:30px!important;margin:0 0 3px!important;padding:0 0 7px!important;
+  border-bottom:1px solid rgba(67,84,126,.32)!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-section-title.compact>span{
+  width:22px!important;height:22px!important;border-radius:6px!important;
+  border-color:rgba(106,87,201,.44)!important;background:#151329!important;
+  font-size:7px!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-section-title b{
+  font-size:11px!important;color:#edf2fb!important
+}
+
+/* Field rows: label left, control/value right. */
+.cc-bot-v2-embedded .cc-bot-v2-fields{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:0 12px!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-fields.exit-fields{
+  grid-template-columns:1fr!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-field{
+  min-height:43px!important;padding:5px 2px!important;
+  display:grid!important;grid-template-columns:minmax(120px,1fr) minmax(120px,.9fr)!important;
+  align-items:center!important;gap:10px!important;
+  border:0!important;border-bottom:1px solid rgba(65,82,121,.24)!important;
+  border-radius:0!important;background:transparent!important;
+  box-shadow:none!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-field>span,
+.cc-bot-v2-embedded .cc-bot-v2-field>label{
+  font-size:10px!important;color:#cbd5e5!important;font-weight:750!important;line-height:1.2!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-field svg{width:14px!important;height:14px!important;color:#8f82d9!important}
+.cc-bot-v2-embedded .cc-bot-v2-field .input,
+.cc-bot-v2-embedded .cc-bot-v2-field .money-input-shell{
+  width:100%!important;min-width:0!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-field .input{
+  height:32px!important;min-height:32px!important;padding:5px 9px!important;
+  border-radius:6px!important;background:#070c13!important;
+  border:1px solid rgba(76,94,136,.52)!important;color:#edf2fb!important;
+  font-size:10px!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-field strong{
+  justify-self:stretch!important;text-align:left!important;
+  padding:7px 9px!important;border:1px solid rgba(75,88,119,.30)!important;border-radius:6px!important;
+  background:#090d13!important;color:#dfe7f3!important;font-size:10px!important
+}
+
+/* ZERO GRID option becomes one concise setting row. */
+.cc-bot-v2-embedded .cc-bot-v2-lowvol-card{
+  min-height:44px!important;margin:0 0 3px!important;padding:5px 2px!important;
+  display:grid!important;grid-template-columns:minmax(150px,1fr) minmax(130px,.9fr)!important;
+  align-items:center!important;gap:10px!important;
+  border:0!important;border-bottom:1px solid rgba(65,82,121,.24)!important;
+  border-radius:0!important;background:transparent!important;box-shadow:none!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-lowvol-main{display:block!important}
+.cc-bot-v2-embedded .cc-bot-v2-lowvol-icon{display:none!important}
+.cc-bot-v2-embedded .cc-bot-v2-lowvol-copy b{font-size:10px!important;color:#cbd5e5!important}
+.cc-bot-v2-embedded .cc-bot-v2-lowvol-action{justify-self:stretch!important}
+.cc-bot-v2-embedded .cc-bot-v2-lowvol-action .cc-switch{width:100%!important}
+
+/* Exit choices: names only, no descriptions. */
+.cc-bot-v2-embedded .cc-bot-v2-choice-row{
+  gap:7px!important;margin:2px 0 5px!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-choice-row>button{
+  min-height:37px!important;padding:6px 9px!important;border-radius:7px!important;
+  background:#090f19!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-choice-row b{font-size:9.5px!important}
+
+/* AUTO / FLIP computed values become clean name-value rows. */
+.cc-bot-v2-embedded .cc-bot-v2-auto-grid{
+  grid-template-columns:1fr!important;gap:0!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-auto-grid>div{
+  min-height:43px!important;padding:5px 2px!important;
+  display:grid!important;grid-template-columns:minmax(125px,.7fr) minmax(0,1.3fr)!important;
+  align-items:center!important;gap:10px!important;
+  border:0!important;border-bottom:1px solid rgba(65,82,121,.24)!important;
+  border-radius:0!important;background:transparent!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-auto-grid>div>span{
+  display:contents!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-auto-grid small{
+  display:block!important;color:#cbd5e5!important;font-size:10px!important;font-weight:750!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-auto-grid b{
+  padding:7px 9px!important;border:1px solid rgba(75,88,119,.30)!important;border-radius:6px!important;
+  background:#090d13!important;color:#dfe7f3!important;font-size:9.5px!important;font-weight:750!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-auto-grid svg{display:none!important}
+
+/* Risk Controls match the supplied reference: one setting per row. */
+.cc-bot-v2-embedded .cc-bot-v2-limit-grid{
+  grid-template-columns:1fr!important;gap:0!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-limit-grid>div{
+  min-height:46px!important;padding:5px 2px!important;
+  display:grid!important;grid-template-columns:minmax(155px,1fr) minmax(150px,.95fr)!important;
+  align-items:center!important;gap:10px!important;
+  border:0!important;border-bottom:1px solid rgba(65,82,121,.24)!important;
+  border-radius:0!important;background:transparent!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-limit-grid>div>div:first-child{
+  margin:0!important;padding:0!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-limit-grid b{
+  font-size:10px!important;color:#cbd5e5!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-limit-grid svg{width:14px!important;height:14px!important}
+.cc-bot-v2-embedded .cc-bot-v2-limit-grid .toggle-setting-label{
+  position:static!important;min-height:0!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-limit-grid .money-input-shell{
+  min-height:32px!important
+}
+
+/* Cleaner switches. */
+.cc-bot-v2-embedded .cc-switch{font-size:9px!important}
+.cc-bot-v2-embedded .cc-switch b{font-size:9px!important;color:#cfd8e7!important}
+
+/* Embedded form owns no bottom footer; save is top-right. */
+.cc-bot-v2-embedded .cc-bot-v2-footer{display:none!important}
+
+@media(max-width:900px){
+  .cc-bot-v2-embedded .cc-bot-v2-fields{grid-template-columns:1fr!important}
+  .cc-bot-v12-mode-select-wrap{grid-template-columns:1fr!important}
+}
+
+
+/* ===== Control Center V15 · production-readable typography + full-height workspace =====
+   Target: normal desktop reading sizes (12–14px controls/labels), no microcopy,
+   and no artificial max-height that leaves a dead band at the bottom of the viewport. */
+.cc-v15{
+  font-size:13px!important;
+}
+
+/* Fill the desktop viewport instead of capping the workspace at 525/540px. */
+@media(min-width:1280px) and (min-height:700px){
+  .cc-v15 .cc-v12-control-grid{
+    height:auto!important;
+    min-height:calc(100vh - 300px)!important;
+    max-height:none!important;
+    align-items:stretch!important;
+  }
+  .cc-v15 .cc-v12-settings-column,
+  .cc-v15 .cc-v12-side-column,
+  .cc-v15 .cc-bot-embedded-frame,
+  .cc-v15 .cc-bot-v2-embedded{
+    min-height:100%!important;
+    height:100%!important;
+  }
+  .cc-v15 .cc-bot-v2-embedded .cc-bot-v2-body{
+    flex:1 1 auto!important;
+  }
+}
+
+/* Header / symbol area: still compact, but no text below readable size. */
+.cc-v15 .cc-v4-eyebrow{font-size:11px!important}
+.cc-v15 .cc-v6-symbol-copy h2{font-size:28px!important}
+.cc-v15 .cc-v6-symbol-copy p{font-size:12px!important}
+.cc-v15 .cc-v6-symbol-chips>span{
+  font-size:11px!important;
+  padding:5px 8px!important;
+}
+.cc-v15 .cc-v6-version-chip,
+.cc-v15 .cc-v6-version-check{
+  font-size:10.5px!important;
+}
+
+/* AI hero summary. */
+.cc-v15 .cc-v13-ai-copy small,
+.cc-v15 .cc-v13-ai-stats small{
+  font-size:10px!important;
+}
+.cc-v15 .cc-v13-ai-copy b{font-size:14px!important}
+.cc-v15 .cc-v13-ai-copy span{font-size:11.5px!important}
+.cc-v15 .cc-v13-ai-stats b{font-size:12px!important}
+
+/* KPI cards: standard readable labels and values. */
+.cc-v15 .cc-v13-kpis>div{
+  min-height:82px!important;
+  padding:11px 13px!important;
+}
+.cc-v15 .cc-v13-kpis span{font-size:12px!important}
+.cc-v15 .cc-v13-kpis b{font-size:20px!important}
+.cc-v15 .cc-v13-kpis small{font-size:10.5px!important}
+
+/* Bot Settings header and Save button. */
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-head{
+  min-height:64px!important;
+  padding:10px 14px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-modal-title h2{
+  font-size:18px!important;
+}
+.cc-v15 .cc-bot-v14-head-save{
+  min-width:160px!important;
+  min-height:39px!important;
+  padding:8px 14px!important;
+  font-size:12px!important;
+}
+
+/* Mode selector: clearly readable, reference-style row. */
+.cc-v15 .cc-bot-v12-mode-select-wrap>label>span{
+  font-size:13px!important;
+}
+.cc-v15 .cc-bot-v12-mode-select{
+  height:41px!important;
+  min-height:41px!important;
+  font-size:13px!important;
+  padding:7px 34px 7px 11px!important;
+}
+
+/* Settings section headings. */
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-section-title.compact{
+  min-height:36px!important;
+  padding-bottom:8px!important;
+  margin-bottom:4px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-section-title.compact>span{
+  width:26px!important;height:26px!important;
+  font-size:10px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-section-title b{
+  font-size:14px!important;
+}
+
+/* Settings rows: 13px label, 13px value/control; taller hit targets. */
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-field{
+  min-height:50px!important;
+  padding:7px 3px!important;
+  grid-template-columns:minmax(145px,1fr) minmax(150px,.95fr)!important;
+  gap:14px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-field>span,
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-field>label{
+  font-size:13px!important;
+  line-height:1.3!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-field svg{
+  width:16px!important;height:16px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-field .input{
+  height:38px!important;
+  min-height:38px!important;
+  padding:7px 10px!important;
+  font-size:13px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-field strong{
+  min-height:38px!important;
+  display:flex!important;
+  align-items:center!important;
+  padding:7px 10px!important;
+  font-size:13px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .money-input,
+.cc-v15 .cc-bot-v2-embedded .number-input,
+.cc-v15 .cc-bot-v2-embedded input{
+  font-size:13px!important;
+}
+
+/* Computed AUTO/FLIP values. */
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-auto-grid>div{
+  min-height:50px!important;
+  grid-template-columns:minmax(145px,.75fr) minmax(0,1.25fr)!important;
+  gap:14px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-auto-grid small{
+  font-size:13px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-auto-grid b{
+  min-height:38px!important;
+  display:flex!important;
+  align-items:center!important;
+  padding:7px 10px!important;
+  font-size:12.5px!important;
+}
+
+/* ZERO GRID concise row. */
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-lowvol-card{
+  min-height:50px!important;
+  grid-template-columns:minmax(170px,1fr) minmax(160px,.95fr)!important;
+  gap:14px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-lowvol-copy b{
+  font-size:13px!important;
+}
+
+/* Manual exit selectors. */
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-choice-row>button{
+  min-height:43px!important;
+  padding:8px 11px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-choice-row b{
+  font-size:12.5px!important;
+}
+
+/* Risk Controls, matching the reference proportions. */
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-limit-grid>div{
+  min-height:52px!important;
+  padding:7px 3px!important;
+  grid-template-columns:minmax(185px,1fr) minmax(180px,.95fr)!important;
+  gap:14px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-limit-grid b{
+  font-size:13px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-limit-grid svg{
+  width:16px!important;height:16px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-switch,
+.cc-v15 .cc-bot-v2-embedded .cc-switch b{
+  font-size:12px!important;
+}
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-limit-grid .money-input-shell{
+  min-height:38px!important;
+}
+
+/* Right rail typography: no 6–9px text. */
+.cc-v15 .cc-v12-card-head small{font-size:10.5px!important}
+.cc-v15 .cc-v12-card-head b{font-size:13px!important}
+.cc-v15 .cc-v12-card-head em{font-size:10px!important}
+.cc-v15 .cc-v12-strategy-meta small{font-size:10px!important}
+.cc-v15 .cc-v12-strategy-meta b{font-size:12px!important}
+.cc-v15 .cc-v12-quick-actions button{
+  min-height:50px!important;
+  padding:8px 10px!important;
+}
+.cc-v15 .cc-v12-quick-actions button b{font-size:12px!important}
+.cc-v15 .cc-v12-quick-actions button small{font-size:10px!important}
+
+/* Performance table is data, so it must be readable at normal zoom. */
+.cc-v15 .cc-v12-mode-table .head{
+  min-height:34px!important;
+  padding:7px 9px!important;
+  font-size:11px!important;
+}
+.cc-v15 .cc-v12-mode-table .row{
+  min-height:49px!important;
+  padding:7px 9px!important;
+  font-size:12px!important;
+}
+.cc-v15 .cc-v12-mode-table .row>span small{
+  font-size:10px!important;
+}
+
+/* System / account panel. */
+.cc-v15 .cc-v13-system-grid>span{
+  min-height:36px!important;
+  padding:7px 9px!important;
+}
+.cc-v15 .cc-v13-system-grid small{font-size:10.5px!important}
+.cc-v15 .cc-v13-system-grid b{font-size:11.5px!important}
+.cc-v15 .cc-v13-ai-tags span{
+  font-size:10px!important;
+  padding:4px 7px!important;
+}
+
+/* Keep the reference-style "name + control" visual; explanations remain hidden. */
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-field>small,
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-engine-line,
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-lowvol-copy p,
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-lowvol-note,
+.cc-v15 .cc-bot-v2-embedded .cc-bot-v2-summary-note{
+  display:none!important;
+}
+
+@media(max-width:1450px){
+  .cc-v15 .cc-v12-control-grid{
+    grid-template-columns:minmax(0,1.55fr) minmax(365px,.75fr)!important;
+  }
+}
+@media(max-width:1100px){
+  .cc-v15 .cc-v12-control-grid{min-height:0!important}
+}
+
+
+/* ===== Control Center V17 · true left/right 50/50 settings + live positions ===== */
+.cc-v17-control-strip{
+  min-height:68px!important;
+  margin:0 0 9px!important;
+  padding:9px 11px!important;
+  display:grid!important;
+  grid-template-columns:minmax(220px,.75fr) minmax(260px,.8fr) minmax(430px,1.35fr)!important;
+  gap:10px!important;
+  align-items:center!important;
+  border-color:rgba(79,95,175,.52)!important;
+  background:
+    radial-gradient(circle at 0 50%,rgba(63,131,255,.09),transparent 38%),
+    radial-gradient(circle at 100% 0,rgba(126,72,255,.11),transparent 42%),
+    linear-gradient(150deg,#0e1628,#080e18)!important;
+}
+.cc-v17-control-identity{display:flex;align-items:center;gap:8px;min-width:0}
+.cc-v17-control-identity>span{width:34px;height:34px;border:1px solid #4f478f;border-radius:9px;background:#15152f;color:#a995f5;display:grid;place-items:center}
+.cc-v17-control-identity>div{min-width:0;display:flex;flex-direction:column;gap:1px}
+.cc-v17-control-identity small{font-size:9px;color:#7182a4;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-v17-control-identity b{font-size:13px;color:#eef2fb}
+.cc-v17-control-identity em{margin-left:auto;padding:5px 7px;border:1px solid #34415e;border-radius:999px;background:#0a111c;color:#8290aa;font-size:9px;font-style:normal;font-weight:850}
+.cc-v17-control-identity em.good{border-color:#2d654d;color:#60e0a1;background:#0a1b15}
+.cc-v17-control-identity em.warn{border-color:#65512e;color:#e3bd68}
+
+.cc-v17-control-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.cc-v17-control-meta>span{min-width:0;padding:6px 8px;border:1px solid rgba(69,88,139,.32);border-radius:8px;background:#09111c;display:flex;flex-direction:column;gap:1px}
+.cc-v17-control-meta small{font-size:9px;color:#697a98}
+.cc-v17-control-meta b{font-size:11px;color:#dce4f2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-v17-control-meta b.good{color:#5de0a1}.cc-v17-control-meta b.warn{color:#e3bd68}
+
+.cc-v17-quick-actions{
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:6px!important
+}
+.cc-v17-quick-actions button{
+  min-height:44px!important;
+  justify-content:center!important
+}
+
+.cc-v17-split-grid{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:10px;
+  min-height:0;
+  height:calc(100vh - 390px);
+  min-height:430px;
+}
+.cc-v17-settings-column,.cc-v17-activity-column{min-width:0;min-height:0;height:100%}
+.cc-v17-settings-column>.cc-bot-embedded-frame,
+.cc-v17-settings-column .cc-bot-v2-embedded{height:100%!important;min-height:0!important}
+.cc-v17-settings-column .cc-bot-v2-embedded .cc-bot-v2-body{
+  min-height:0!important;
+  overflow:auto!important;
+  scrollbar-width:thin;
+}
+.cc-v17-settings-column .cc-bot-v2-workspace{grid-template-columns:1fr!important}
+.cc-v17-settings-column .cc-bot-v2-summary{display:none!important}
+.cc-v17-settings-column .cc-bot-v2-main{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+.cc-v17-settings-column .cc-bot-v2-main>.cc-bot-v2-panel:first-child{grid-column:1/-1!important}
+.cc-v17-settings-column .cc-bot-v2-panel{align-self:start!important}
+.cc-v17-settings-column .cc-bot-v17-hidden-engine,
+.cc-bot-v17-contract-copy{display:none!important}
+
+.cc-v17-activity-column{
+  display:grid;
+  grid-template-rows:minmax(0,1fr) auto;
+  gap:9px;
+}
+.cc-v17-running-positions{
+  min-height:0!important;
+  height:100%!important;
+  padding:0!important;
+  overflow:hidden!important;
+  border-color:rgba(84,97,147,.52)!important;
+  background:
+    radial-gradient(circle at 100% 0,rgba(149,56,82,.08),transparent 42%),
+    linear-gradient(155deg,#0b111b,#070c13)!important;
+}
+.cc-v17-running-head{
+  min-height:52px;padding:9px 13px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border-bottom:1px solid rgba(75,90,132,.34);
+  background:linear-gradient(90deg,rgba(81,25,40,.11),transparent 42%);
+}
+.cc-v17-running-head>div{display:flex;align-items:center;gap:8px;min-width:0}
+.cc-v17-running-head>div>span{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;border:1px solid rgba(185,70,97,.38);background:#211019;color:#ff7188}
+.cc-v17-running-head>div>div{display:flex;flex-direction:column;gap:1px}
+.cc-v17-running-head small{font-size:9px;color:#7786a2;letter-spacing:.08em}
+.cc-v17-running-head b{font-size:14px;color:#eef2fa}
+.cc-v17-running-head em{padding:5px 8px;border-radius:999px;font-size:10px;font-style:normal;font-weight:850;border:1px solid #34425f;background:#0a1019;color:#8190aa}
+.cc-v17-running-head em.live{border-color:#2d684f;background:#0a1d16;color:#5be0a2}
+.cc-v17-running-table{height:calc(100% - 53px);min-height:0}
+.cc-v17-running-table>.head,.cc-v17-running-table .row{display:grid;grid-template-columns:.72fr 1fr .7fr .62fr 1fr .82fr;align-items:center;gap:8px}
+.cc-v17-running-table>.head{min-height:38px;padding:7px 13px;color:#8997ae;font-size:11px;font-weight:800;background:#0d141e;border-bottom:1px solid rgba(66,79,113,.38)}
+.cc-v17-running-table .body{height:calc(100% - 38px);min-height:0;overflow:auto;scrollbar-width:thin}
+.cc-v17-running-table .row{min-height:50px;padding:7px 13px;color:#dce4ef;font-size:13px;font-weight:700;border-bottom:1px solid rgba(61,74,105,.24)}
+.cc-v17-running-table .row:hover{background:rgba(92,111,167,.055)}
+.cc-v17-running-table .symbol{font-weight:850;color:#f1f4fb}
+.cc-v17-running-table .side{display:inline-flex;min-width:48px;justify-content:center;padding:5px 8px;border-radius:7px;font-style:normal;font-weight:900;font-size:11px}
+.cc-v17-running-table .side.buy{color:#65e3a6;background:#0e2a1d;border:1px solid #245a42}
+.cc-v17-running-table .side.sell{color:#ff788b;background:#2a1117;border:1px solid #6b2937}
+.cc-v17-running-table .pnl{font-weight:900}.cc-v17-running-table .pnl.good{color:#61e1a3}.cc-v17-running-table .pnl.bad{color:#ff7188}
+.cc-v17-running-table .empty{height:100%;min-height:120px;display:flex;align-items:center;justify-content:center;gap:8px;color:#697991;font-size:12px}
+
+.cc-v17-mode-performance{padding:9px 10px!important}
+.cc-v17-mode-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+.cc-v17-mode-title small{font-size:9px;color:#71809c;letter-spacing:.08em}.cc-v17-mode-title b{font-size:12px;color:#e5eaf4}
+.cc-v17-mode-chips{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
+.cc-v17-mode-chips>span{min-width:0;padding:6px 7px;border:1px solid rgba(67,83,126,.35);border-radius:7px;background:#09101a;display:grid;grid-template-columns:1fr auto;gap:1px 5px}
+.cc-v17-mode-chips>span.active{border-color:#6d5bd7;background:linear-gradient(145deg,#171433,#0b111d);box-shadow:inset 2px 0 #8b70ff}
+.cc-v17-mode-chips b{font-size:9px;color:#dbe3f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-v17-mode-chips em{font-size:9px;color:#5cdfa0;font-style:normal;font-weight:850}
+.cc-v17-mode-chips small{grid-column:1/-1;font-size:8px;color:#72809b}
+
+.cc-bot-v17-add-setting{
+  min-height:48px;padding:6px 3px;
+  display:grid;grid-template-columns:minmax(150px,1fr) minmax(140px,.95fr);
+  align-items:center;gap:12px;
+  border-bottom:1px solid rgba(65,82,121,.24)
+}
+.cc-bot-v17-add-setting>span{display:flex;align-items:center;gap:6px;color:#cbd5e5;font-size:13px;font-weight:750}
+.cc-bot-v17-add-setting .input{height:38px;min-height:38px;font-size:13px;background:#070c13;color:#edf2fb;border:1px solid rgba(76,94,136,.52);border-radius:6px;padding:7px 10px}
+
+/* The V17 split owns the viewport fill; neutralize older V15 grid sizing. */
+@media(min-width:1280px) and (min-height:700px){
+  .cc-v15 .cc-v17-split-grid{height:calc(100vh - 390px)!important;max-height:none!important}
+}
+@media(max-width:1279px){
+  .cc-v17-control-strip{grid-template-columns:1fr!important}
+  .cc-v17-split-grid{grid-template-columns:1fr!important;height:auto!important;min-height:0!important}
+  .cc-v17-settings-column,.cc-v17-activity-column{height:auto!important}
+  .cc-v17-running-positions{min-height:360px!important}
+}
