@@ -91,6 +91,12 @@ assert.match(ea, /ZeroGridEffectiveLevelLot\(int level\)/, "ZERO must isolate fi
 assert.match(web, /กริดตลาดความผันผวนต่ำ/, "ZERO UI must expose the professional low-volatility switch");
 assert.doesNotMatch(ea, /ZERO_GRID_PAIR_ROLLBACK/, "ZERO must not churn accepted orders with pair rollback");
 assert.match(ea, /ZeroGridPendingCount\(\)!=levels\*2/, "flat ZERO must require the full configured ladder");
+const zeroOwnerGuard = ea.indexOf("if(ZeroGridModeEnabled() || g_zeroGridClosing || ZeroGridPositionCount()>0 || ZeroGridPendingCount()>0)");
+const dailyProfitGuard = ea.indexOf("if(HandleDailyProfitControl(count))");
+const dailyLossGuard = ea.indexOf("if(g_dailyLoss > 0.0 && AccountInfoDouble(ACCOUNT_EQUITY) <= g_dayStartEquity - g_dailyLoss)");
+assert.ok(zeroOwnerGuard >= 0, "ZERO must own runtime before shared risk controls");
+assert.ok(zeroOwnerGuard < dailyProfitGuard && zeroOwnerGuard < dailyLossGuard, "hidden AUTO/RACE daily controls must not liquidate ZERO cycles");
+assert.doesNotMatch(ea, /ZERO GRID starts only when selected and the EA-owned basket is flat/, "ZERO must not have a second late dispatch path after shared risk controls");
 assert.match(ea, /g_safeStopDrainRequested\s*=\s*\(g_access && desired == "SAFE_STOP"\)/, "ZERO graceful drain must be armed only by explicit website SAFE_STOP");
 assert.match(ea, /bool safeStopDrain\s*=\s*[\s\S]*g_state==STATE_SAFE_STOP[\s\S]*g_safeStopDrainRequested[\s\S]*if\(!safeStopDrain\)[\s\S]*ZeroGridCancelPending\(\)/, "ZERO Safe Stop must preserve the already-staged pending ladder only for explicit Safe Stop");
 assert.match(ea, /pending=ZeroGridPendingCount\(\);[\s\S]*if\(positions<=0 && pending<=0\)/, "ZERO Safe Stop must not mark the cycle flat while pending orders still belong to it");
