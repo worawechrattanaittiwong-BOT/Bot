@@ -3627,7 +3627,7 @@ void OnTick()
          if(flipLossLimit > 0.0 && BasketProfit() <= -flipLossLimit)
          {
             FlipLockRemoveAllPending();
-            CloseAllBasket("FLIP_LOCK_MAX_BASKET_LOSS");
+            CloseAllBasket("MAX_BASKET_LOSS");
             ResetTrail();
             g_executionStatus = "FLIP_LOCK_MAX_BASKET_LOSS";
             return;
@@ -16390,9 +16390,12 @@ bool CloseAllBasket(string reason)
    int testerDirection = MQLInfoInteger(MQL_TESTER) ? BasketDirection() : 0;
    double testerCloseProfit = MQLInfoInteger(MQL_TESTER) ? BasketCycleProfit() : 0.0;
    Print("CloseAllBasket reason=", reason);
-   // Any global/safety close must also remove ZERO GRID pending orders.
+   // Any global/safety close must also remove pending orders owned by isolated
+   // execution modes. This prevents a FLIP LOCK baton from firing after a user
+   // Close All / daily lock / hard loss has already flattened the live position.
    if(ZeroGridPendingCount()>0)
       ZeroGridCancelPending();
+   FlipLockRemoveAllPending();
    int reasonCode = CloseReasonCode(reason);
    if(reasonCode != CLOSE_REASON_NONE)
    {
