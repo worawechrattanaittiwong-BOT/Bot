@@ -1829,6 +1829,18 @@ export class BotController {
       if (body.raceCloseAllProfitMoney === undefined) clean.raceCloseAllProfitMoney = 0.5;
     }
 
+    const flipLockSelected = requestedControlMode === "FLIP_LOCK";
+    if (flipLockSelected) {
+      // Canonical FLIP LOCK contract. Persist only values that the isolated
+      // baton engine actually uses so the dashboard cannot display stale AUTO
+      // exit controls as if they were active.
+      clean.maxPositions = 1;
+      clean.profitTargetMode = "OFF";
+      clean.manualStopLossPoints = 0;
+      clean.dailyProfitContinueAfterTarget = false;
+      clean.dailyProfitDrawdownPercent = 0;
+    }
+
     if (body.entryMode !== undefined) {
       const entryMode = String(body.entryMode || "");
       if (!["AUTO_MOMENTUM", "BUY_ONLY", "SELL_ONLY"].includes(entryMode)) {
