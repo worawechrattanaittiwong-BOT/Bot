@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.26"
-#define SCENOVA_EA_VERSION "1.0.26"
-#define SCENOVA_PRODUCT_VERSION "1.0.26"
+#property version   "1.0.27"
+#define SCENOVA_EA_VERSION "1.0.27"
+#define SCENOVA_PRODUCT_VERSION "1.0.27"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -3511,6 +3511,21 @@ void OnTick()
       return;
    }
 
+   // ZERO GRID is a self-contained execution owner. Its visible close contract
+   // is zeroGridMinNetProfitMoney + zeroGridCloseReserveMoney + estimated exit
+   // cost. Hidden/stale AUTO/RACE daily-profit or daily-loss settings must never
+   // liquidate a ZERO cycle before that contract is reached.
+   //
+   // Route ZERO before the generic daily controls even while the cycle is flat,
+   // so switching into ZERO after losses in another mode cannot immediately
+   // force SAFE_STOP. Explicit user Close All / pending close reasons above still
+   // remain authoritative.
+   if(ZeroGridModeEnabled() || g_zeroGridClosing || ZeroGridPositionCount()>0 || ZeroGridPendingCount()>0)
+   {
+      ManageZeroGrid();
+      return;
+   }
+
    if(HandleDailyProfitControl(count))
       return;
 
@@ -3528,14 +3543,6 @@ void OnTick()
       RefreshMarketContext(false);
       ManageAdaptiveRescue();
       g_executionStatus = "RESCUE_EXIT";
-      return;
-   }
-
-   // ZERO GRID owns its tagged positions and pending orders until flat. This
-   // branch executes before AUTO/RACE management so the engines never mix.
-   if(g_zeroGridClosing || ZeroGridPositionCount()>0 || ZeroGridPendingCount()>0)
-   {
-      ManageZeroGrid();
       return;
    }
 
@@ -3888,13 +3895,6 @@ void OnTick()
    if(permissionStatus != "OK")
    {
       g_executionStatus = permissionStatus;
-      return;
-   }
-
-   // ZERO GRID starts only when selected and the EA-owned basket is flat.
-   if(ZeroGridModeEnabled() && count<=0 && rescueCount<=0)
-   {
-      StartZeroGridCycle();
       return;
    }
 
