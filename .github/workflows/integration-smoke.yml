@@ -326,6 +326,10 @@ jobs:
           UPDATE_ACTION=$(curl -fsS -X POST "$BASE/bot/mt5/manual-action?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"action":"UPDATE_EA_RESTART"}')
           UPDATE_ACTION_ID=$(printf '%s' "$UPDATE_ACTION" | jq -r '.actionId')
           test -n "$UPDATE_ACTION_ID"
+          echo "[integration] repeated update click reuses the same pending action id"
+          UPDATE_ACTION_REPEAT=$(curl -fsS -X POST "$BASE/bot/mt5/manual-action?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"action":"UPDATE_EA_RESTART"}')
+          test "$(printf '%s' "$UPDATE_ACTION_REPEAT" | jq -r '.actionId')" = "$UPDATE_ACTION_ID"
+          test "$(printf '%s' "$UPDATE_ACTION_REPEAT" | jq -r '.deduplicated')" = "true"
           UPDATE_POLL=$(curl -fsS -X POST "$BASE/ea/agent-actions" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\"}")
           test "$(printf '%s' "$UPDATE_POLL" | jq -r '.manualActionPending')" = "true"
           test "$(printf '%s' "$UPDATE_POLL" | jq -r '.manualActionName')" = "UPDATE_EA_RESTART"

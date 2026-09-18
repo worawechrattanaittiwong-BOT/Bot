@@ -29,6 +29,7 @@ export function Mt5ManualActionControls() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [startIntentAt, setStartIntentAt] = useState<number | null>(null);
+  const [updateIntentAt, setUpdateIntentAt] = useState<number | null>(null);
   const refreshInFlightRef = useRef(false);
 
   async function refresh(light = false) {
@@ -77,6 +78,9 @@ export function Mt5ManualActionControls() {
   const actionAgeMs = Number.isFinite(actionRequestedAt) ? Date.now() - actionRequestedAt : Number.POSITIVE_INFINITY;
   const actionFresh = actionAgeMs >= 0 && actionAgeMs <= UI_PENDING_TIMEOUT_MS;
   const updatePending = actionName === "UPDATE_EA_RESTART" && actionStatus === "PENDING" && actionFresh;
+  const actionAckAt = Date.parse(String(metrics?.manualMt5ActionAckAt || ""));
+  const actionAckAgeMs = Number.isFinite(actionAckAt) ? Date.now() - actionAckAt : Number.POSITIVE_INFINITY;
+  const updateSettling = actionName === "UPDATE_EA_RESTART" && actionStatus === "ACKED" && needsEaUpdate && actionAckAgeMs >= 0 && actionAckAgeMs <= 30_000;
   const connectPending = actionName === "CONNECT_MT5" && actionStatus === "PENDING" && actionFresh;
   const staleUpdatePending = actionName === "UPDATE_EA_RESTART" && actionStatus === "PENDING" && !actionFresh;
   const staleConnectPending = actionName === "CONNECT_MT5" && actionStatus === "PENDING" && !actionFresh;
@@ -107,6 +111,22 @@ export function Mt5ManualActionControls() {
     );
     return () => window.clearTimeout(timer);
   }, [startIntentAt, desiredState, actualState]);
+
+  useEffect(() => {
+    if (!updateIntentAt) return;
+    if (!needsEaUpdate || actionStatus === "FAILED") {
+      setUpdateIntentAt(null);
+      return;
+    }
+    if (updatePending || updateSettling) return;
+
+    const elapsed = Date.now() - updateIntentAt;
+    const timer = window.setTimeout(
+      () => setUpdateIntentAt(null),
+      Math.max(0, 20_000 - elapsed)
+    );
+    return () => window.clearTimeout(timer);
+  }, [updateIntentAt, needsEaUpdate, actionStatus, updatePending, updateSettling]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -319,6 +339,7 @@ export function Mt5ManualActionControls() {
 
   async function requestAction(action: ManualAction) {
     if (!slotId || busyAction) return;
+    if (action === "UPDATE_EA_RESTART" && (updatePending || updateSettling || updateIntentAt)) return;
     if (positions > 0) {
       setError("มีออเดอร์ค้างอยู่ กรุณาปิดออเดอร์ให้หมดก่อน");
       return;
@@ -335,6 +356,7 @@ export function Mt5ManualActionControls() {
     if (!confirmed) return;
 
     setBusyAction(action);
+    if (isUpdate) setUpdateIntentAt(Date.now());
     setError("");
     setNotice("");
 
@@ -371,6 +393,7 @@ export function Mt5ManualActionControls() {
       } else {
         setError(String(e?.message || "ส่งคำสั่งไม่สำเร็จ"));
       }
+      if (isUpdate) setUpdateIntentAt(null);
     } finally {
       setBusyAction("");
     }
@@ -395,8 +418,8 @@ export function Mt5ManualActionControls() {
   }
 
   const updateDisabled = useMemo(
-    () => Boolean(busyAction || updatePending || positions > 0 || (!agentOnline && !installerRequired)),
-    [busyAction, updatePending, positions, agentOnline, installerRequired]
+    () => Boolean(busyAction || updatePending || updateSettling || updateIntentAt || positions > 0 || (!agentOnline && !installerRequired)),
+    [busyAction, updatePending, updateSettling, updateIntentAt, positions, agentOnline, installerRequired]
   );
 
   const startStage = useMemo(() => {
@@ -471,8 +494,8 @@ export function Mt5ManualActionControls() {
           >
             {installerRequired
               ? `อัปเดต SCENOVA ${installerVersion} + EA`
-              : updatePending || busyAction === "UPDATE_EA_RESTART"
-                ? "กำลังอัปเดต..."
+              : updatePending || updateSettling || updateIntentAt || busyAction === "UPDATE_EA_RESTART"
+                ? (updateSettling ? "กำลังยืนยันเวอร์ชัน..." : "กำลังอัปเดต...")
                 : `อัปเดต EA v${String(update?.latestEaVersion || "ล่าสุด")}`}
           </button>
           {positions > 0 && <small>ปิดออเดอร์ให้หมดก่อน</small>}
@@ -545,15 +568,15 @@ export function Mt5ManualActionControls() {
                 ? ` · EA ${String(update?.currentEaVersion || "—")} → ${String(update?.latestEaVersion || "—")}`
                 : " · EA ตรงเวอร์ชัน"}
             </small>
-            <small className="manual-only">Manual Update เท่านั้น · ระบบจะไม่อัปเดตหรือรีสตาร์ทเอง</small>
+            <small className="manual-only">{updatePending || updateIntentAt ? "คำสั่งกำลังทำงาน · ไม่ต้องกดซ้ำ" : updateSettling ? "Agent ทำเสร็จแล้ว · กำลังรอ EA รายงานเวอร์ชันใหม่" : "Manual Update เท่านั้น · ระบบจะไม่อัปเดตหรือรีสตาร์ทเอง"}</small>
           </div>
           <button
             type="button"
             disabled={updateDisabled || botRunning || botStarting}
             onClick={requestPersistentUpdate}
           >
-            {busyAction === "UPDATE_EA_RESTART" || updatePending
-              ? "กำลังดำเนินการ..."
+            {busyAction === "UPDATE_EA_RESTART" || updatePending || updateSettling || updateIntentAt
+              ? (updateSettling ? "กำลังยืนยันเวอร์ชัน..." : "กำลังดำเนินการ...")
               : installerRequired && !needsEaUpdate
                 ? `ดาวน์โหลด Agent v${installerVersion}`
                 : installerRequired

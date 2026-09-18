@@ -21,6 +21,7 @@ import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
 
 type ManualMt5Action = "UPDATE_EA_RESTART" | "CONNECT_MT5";
+const MANUAL_ACTION_ACTIVE_TTL_MS = 15 * 60_000;
 
 type AccessState = {
   allowed: boolean;
@@ -307,6 +308,35 @@ export class ManualMt5Controller {
     const positions = Math.max(0, Number(instance.positions || 0));
     if (positions > 0) {
       throw new ConflictException("มีออเดอร์ค้างอยู่ กรุณาปิดออเดอร์ให้หมดก่อนดำเนินการ");
+    }
+
+    // Manual MT5 actions are one-click / one-action. A second browser click
+    // while the first action is still pending must never replace its action id,
+    // otherwise the Agent's eventual ACK becomes invalid (HTTP 409) and the user
+    // is forced to click repeatedly until timing happens to line up.
+    const metrics = instance.metrics || {};
+    const existingActionName = String(metrics.manualMt5ActionName || "").trim().toUpperCase();
+    const existingActionStatus = String(metrics.manualMt5ActionStatus || "").trim().toUpperCase();
+    const existingActionId = String(metrics.manualMt5ActionId || "").trim();
+    const existingRequestedAtMs = Date.parse(String(metrics.manualMt5ActionRequestedAt || ""));
+    const existingActionFresh = Number.isFinite(existingRequestedAtMs) &&
+      Date.now() - existingRequestedAtMs >= 0 &&
+      Date.now() - existingRequestedAtMs <= MANUAL_ACTION_ACTIVE_TTL_MS;
+
+    if (existingActionId && existingActionStatus === "PENDING" && existingActionFresh) {
+      if (existingActionName === action) {
+        return {
+          ok: true,
+          action,
+          actionId: existingActionId,
+          status: "PENDING",
+          deduplicated: true,
+          message: action === "UPDATE_EA_RESTART"
+            ? "คำสั่งอัปเดต EA กำลังทำงานอยู่ ไม่ต้องกดซ้ำ ระบบจะใช้คำสั่งเดิมจนเสร็จ"
+            : "คำสั่งเชื่อม MT5 กำลังทำงานอยู่ ไม่ต้องกดซ้ำ"
+        };
+      }
+      throw new ConflictException("มีคำสั่ง MT5 อื่นกำลังทำงานอยู่ กรุณารอให้เสร็จก่อน");
     }
 
     const actionId = randomUUID();
