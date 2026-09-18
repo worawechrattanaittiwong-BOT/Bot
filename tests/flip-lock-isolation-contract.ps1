@@ -57,8 +57,8 @@ Need $findPosition 'StringFind(comment,FLIP_LOCK_PENDING_COMMENT)<0' 'FLIP LOCK 
 Need $starter 'g_entryModel="FLIP_LOCK_BATON";' 'FLIP LOCK journal metadata must identify its own entry model'
 Need $manage 'FLIP_LOCK_WAIT_EXISTING_POSITION' 'FLIP LOCK must wait instead of seizing a foreign open position'
 Need $manage 'FlipLockSyncBaton' 'FLIP LOCK must manage its own trailing SL lifecycle'
-Need $flip 'int fallbackDirection =' 'FLIP LOCK must preserve opposite baton direction if broker settlement briefly goes flat'
-Need $flip '? -g_flipLockDirection' 'flat fallback must reopen the opposite side instead of re-running AUTO direction analysis'
+Need $flip 'int FlipLockReactiveDirection()' 'FLIP LOCK must defer the next BUY/SELL decision until after exit'
+Need $flip 'if(g_flipLockDirection!=0) return -g_flipLockDirection;' 'a perfectly neutral candle may use the prior side only as the final immediate fallback'
 
 $ownerIndex = $onTick.IndexOf('FLIP LOCK V4 owns every position')
 $genericIndex = $onTick.IndexOf('ManageDynamicProtection();')
@@ -94,7 +94,7 @@ Need $api 'clean.dailyProfitDrawdownPercent = 0;' 'API must disable FLIP LOCK da
 
 Need $web '$0.25 ต่อ 0.01 Lot' 'FLIP LOCK UI must expose the lot-scaled money arm threshold'
 Need $web 'Safety Stop จาก ATR + Spread' 'FLIP LOCK UI must expose the starter Safety Stop'
-Need $web 'หลังจากนั้นสลับ BUY / SELL ด้วย Pending STOP' 'FLIP LOCK UI must explain that analysis chooses only the starter side'
+Need $web 'ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า' 'FLIP LOCK UI must state that no opposite pending direction is pre-placed'
 
 Need $release 'DEFAULT_EA_VERSION = "1.0.33"' 'EA release version must match the FLIP LOCK safe-start runtime'
 
