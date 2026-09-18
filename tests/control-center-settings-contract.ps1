@@ -78,3 +78,8 @@ Need $css '.cc-bot-v17-contract-copy{display:none!important' 'Ownership/safety c
 Need $css '.cc-v17-settings-column .cc-bot-v2-main{grid-template-columns:1fr!important' 'Bot Settings panels must stack in one vertical column'
 Need $css '.cc-v17-settings-column .cc-bot-v2-fields{' 'Bot Settings two-column row override missing'
 Need $css 'grid-template-columns:1fr!important;' 'Bot Settings fields must render one row per setting (name/control)'
+
+Need $css 'Control Center V18 · single-card Bot Settings' 'Single-card Bot Settings marker missing'
+Need $css '.cc-v17-settings-column .cc-bot-v2-panel{' 'Single-card section override missing'
+Need $css 'background:transparent!important;' 'Nested settings panels must be visually merged into one card'
+Need $css '.cc-v17-settings-column .cc-bot-v2-panel:last-child{' 'Single-card final section rule missing'
