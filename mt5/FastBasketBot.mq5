@@ -3413,7 +3413,7 @@ bool ManageRaceBasket(double momentum)
    }
 
 
-   // RACE_VOLUME_10S_ROLLOVER_V1: direction comes only from the rolling
+   // RACE_VOLUME_10S_ROLLOVER_V2: direction comes only from the rolling
    // 10-second BUY/SELL pressure window. If pressure flips, never add another
    // order on the stale side. The old cycle is flattened only when its realized
    // + floating net P/L is non-negative; otherwise existing positions keep
