@@ -94,3 +94,10 @@ Need $css '.cc-v19-settings-card .cc-bot-v2-section-title.compact{' 'Flat settin
 Need $css 'display:none!important;' 'Numbered settings section headers must be hidden'
 Need $css '.cc-v19-settings-card .cc-bot-v2-mode-section,' 'Merged settings panel override missing'
 Need $css 'border-bottom:0!important;' 'Internal settings section dividers must be removed'
+
+Need $css 'Control Center V21 · compact fixed-height settings' 'Compact fixed-height Bot Settings marker missing'
+Need $css 'height:560px!important;' 'Bot Settings must use the fixed longest-mode height'
+Need $css 'height:514px!important;' 'Fixed settings body height missing'
+Need $css '.cc-v19-settings-card .cc-bot-v2-limit-grid>div{' 'Compact Risk Controls rows missing'
+Need $css 'grid-template-columns:minmax(126px,.88fr) minmax(160px,1.12fr)!important;' 'Compact label-control row layout missing'
+Need $css '.cc-v19-settings-card .cc-bot-v2-lowvol-note{' 'ZERO GRID compact embedded treatment missing'
