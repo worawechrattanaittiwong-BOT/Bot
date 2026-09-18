@@ -1516,3 +1516,259 @@
   min-height:560px!important;
   height:560px!important;
 }
+
+
+/* ===== Control Center V22 · professional settings form =====
+   One consistent label | control system across every bot mode. */
+.cc-v19-settings-card{
+  --settings-label:178px;
+  --settings-row:42px;
+  --settings-control-h:34px;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  padding:5px 14px 10px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-mode-section,
+.cc-v19-settings-card .cc-bot-v2-panel{
+  padding:0!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label,
+.cc-v19-settings-card .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-v17-add-setting,
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+  display:grid!important;
+  grid-template-columns:var(--settings-label) minmax(0,1fr)!important;
+  gap:14px!important;
+  align-items:center!important;
+  min-height:var(--settings-row)!important;
+  padding:4px 2px!important;
+  border-bottom:1px solid rgba(76,91,128,.22)!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field>span,
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span,
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child{
+  min-width:0!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:8px!important;
+  font-size:12.5px!important;
+  font-weight:800!important;
+  line-height:1.2!important;
+  color:#dce4f2!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field>span svg,
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span svg,
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child svg{
+  width:15px!important;
+  height:15px!important;
+  flex:0 0 15px!important;
+  color:#9d8cff!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field>select.input,
+.cc-v19-settings-card .cc-bot-v17-add-setting>select.input,
+.cc-v19-settings-card .cc-bot-v2-control-stack>select.input{
+  width:100%!important;
+  height:var(--settings-control-h)!important;
+  min-height:var(--settings-control-h)!important;
+  padding:4px 38px 4px 12px!important;
+  border:1px solid rgba(82,101,145,.58)!important;
+  border-radius:8px!important;
+  background:#080d15!important;
+  color:#edf2fb!important;
+  font-size:12.5px!important;
+  font-weight:750!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025)!important;
+}
+.cc-v19-settings-card select.input:hover{
+  border-color:rgba(130,111,255,.72)!important;
+}
+.cc-v19-settings-card select.input:focus{
+  border-color:#779dff!important;
+  box-shadow:0 0 0 2px rgba(75,134,236,.28),inset 0 1px 0 rgba(255,255,255,.04)!important;
+  outline:none!important;
+}
+
+/* Trading mode is the primary selector: larger, brighter and unmistakable. */
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
+  margin:1px 0 3px!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
+  min-height:52px!important;
+  border-bottom:1px solid rgba(100,91,172,.34)!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select{
+  width:100%!important;
+  height:42px!important;
+  min-height:42px!important;
+  padding:5px 42px 5px 14px!important;
+  border:1px solid rgba(128,104,255,.9)!important;
+  border-radius:10px!important;
+  background:linear-gradient(135deg,#161331,#0a1019 72%)!important;
+  color:#fff!important;
+  font-size:14px!important;
+  font-weight:900!important;
+  letter-spacing:.02em!important;
+  box-shadow:0 0 0 1px rgba(112,91,236,.26),0 7px 22px rgba(54,39,131,.18)!important;
+}
+
+/* Every compound control occupies the same control column width. */
+.cc-v19-settings-card .cc-bot-v2-control-cell,
+.cc-v19-settings-card .cc-bot-v2-control-stack,
+.cc-v19-settings-card .cc-bot-v2-inline-toggle-value,
+.cc-v19-settings-card .toggle-money-field,
+.cc-v19-settings-card .cc-bot-v2-choice-inline,
+.cc-v19-settings-card .cc-bot-v2-readonly-control{
+  width:100%!important;
+  min-width:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-control-stack{
+  display:grid!important;
+  gap:3px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-control-stack>small{
+  display:block!important;
+  padding:0 2px!important;
+  color:#6f7e99!important;
+  font-size:8.5px!important;
+  line-height:1.2!important;
+}
+.cc-v19-settings-card .cc-bot-v2-inline-toggle-value,
+.cc-v19-settings-card .toggle-money-field{
+  display:grid!important;
+  grid-template-columns:76px minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:9px!important;
+}
+.cc-v19-settings-card .toggle-money-field .toggle-setting-label{
+  width:76px!important;
+  min-width:76px!important;
+  margin:0!important;
+}
+.cc-v19-settings-card .money-input-shell,
+.cc-v19-settings-card .number-input-shell{
+  width:100%!important;
+  min-width:0!important;
+  height:var(--settings-control-h)!important;
+  min-height:var(--settings-control-h)!important;
+  display:grid!important;
+  grid-template-columns:auto minmax(0,1fr) auto!important;
+  align-items:center!important;
+  border:1px solid rgba(82,101,145,.50)!important;
+  border-radius:8px!important;
+  background:#080d15!important;
+  overflow:hidden!important;
+}
+.cc-v19-settings-card .money-input-shell .input,
+.cc-v19-settings-card .number-input-shell .input{
+  width:100%!important;
+  height:32px!important;
+  min-height:32px!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  padding:4px 8px!important;
+  font-size:12.5px!important;
+  font-weight:750!important;
+}
+.cc-v19-settings-card .money-input-shell small,
+.cc-v19-settings-card .number-input-shell small{
+  white-space:nowrap!important;
+  padding:0 8px 0 2px!important;
+  font-size:8px!important;
+  color:#77859d!important;
+}
+.cc-v19-settings-card .money-prefix{
+  min-width:24px!important;
+  padding-left:8px!important;
+  font-size:13px!important;
+  font-weight:900!important;
+}
+.cc-v19-settings-card .money-input-shell.disabled,
+.cc-v19-settings-card .number-input-shell.disabled,
+.cc-v19-settings-card .toggle-money-field:not(.enabled) .money-input-shell,
+.cc-v19-settings-card .toggle-money-field:not(.enabled) .number-input-shell{
+  opacity:.55!important;
+}
+
+/* Manual profit type uses two equal segmented options inside the control column. */
+.cc-v19-settings-card .cc-bot-v2-choice-inline{
+  display:grid!important;
+  grid-template-columns:1fr 1fr!important;
+  gap:6px!important;
+  margin:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-inline button{
+  width:100%!important;
+  min-height:var(--settings-control-h)!important;
+  height:var(--settings-control-h)!important;
+  padding:4px 9px!important;
+  justify-content:center!important;
+  border-radius:8px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-inline button.active{
+  border-color:#8f74ff!important;
+  background:linear-gradient(135deg,#28204f,#11162a)!important;
+  box-shadow:inset 0 0 0 1px rgba(143,116,255,.20)!important;
+}
+
+/* ZERO GRID low-volatility is a normal row, not a special card. */
+.cc-v19-settings-card .cc-bot-v2-toggle-row{
+  margin:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-readonly-control{
+  min-height:var(--settings-control-h)!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  padding:4px 11px!important;
+  border:1px solid rgba(82,101,145,.45)!important;
+  border-radius:8px!important;
+  background:#090e16!important;
+}
+.cc-v19-settings-card .cc-bot-v2-readonly-control b{
+  color:#edf2fb!important;
+  font-size:12.5px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-readonly-control small{
+  color:#72dca8!important;
+  font-size:8px!important;
+}
+
+/* Remove any old add-setting presentation from the active dashboard form. */
+.cc-v19-settings-card .cc-bot-v17-add-setting{
+  display:none!important;
+}
+
+/* Risk rows are identical to ordinary rows, including disabled values. */
+.cc-v19-settings-card .cc-bot-v2-limit-grid{
+  margin:0!important;
+  gap:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child{
+  margin:0!important;
+  padding:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field{
+  justify-self:stretch!important;
+}
+
+/* Keep fixed-card behavior while using the space for real controls. */
+.cc-v19-settings-card,
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  height:560px!important;
+  min-height:560px!important;
+  max-height:560px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  height:514px!important;
+  overflow-y:auto!important;
+  scrollbar-width:thin;
+}
+@media(max-width:1500px){
+  .cc-v19-settings-card{--settings-label:160px}
+}
+@media(max-width:1180px){
+  .cc-v19-settings-card{--settings-label:190px}
+}
