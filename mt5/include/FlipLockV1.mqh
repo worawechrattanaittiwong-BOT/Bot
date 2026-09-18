@@ -419,8 +419,12 @@ bool FlipLockOpenStarter(const int forcedDirection=0)
 
 double FlipLockCandidateTrigger(const int direction,const MqlTick &tick)
 {
+   double distancePoints=FlipLockTrailDistancePoints();
+   if(direction==0 || distancePoints<=0.0)
+      return 0.0;
+
    double executablePrice=direction>0 ? tick.bid : tick.ask;
-   double distance=FlipLockTrailDistancePoints()*_Point;
+   double distance=distancePoints*_Point;
    double candidate=direction>0
       ? executablePrice-distance
       : executablePrice+distance;
