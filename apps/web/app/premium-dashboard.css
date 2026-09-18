@@ -1836,3 +1836,40 @@
 .cc-v19-settings-card .cc-bot-v2-field>select.input{
   justify-self:stretch!important;
 }
+
+
+/* ===== Control Center V24 · MANUAL reveal-all + no idle scroll ===== */
+.cc-v19-settings-card .cc-bot-manual-risk-add-all{
+  width:100%!important;
+  height:34px!important;
+  min-height:34px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+  border:1px solid rgba(132,106,255,.62)!important;
+  border-radius:8px!important;
+  background:linear-gradient(135deg,rgba(40,31,82,.92),rgba(10,15,25,.96))!important;
+  color:#e8e2ff!important;
+  font-size:11px!important;
+  font-weight:800!important;
+  cursor:pointer!important;
+}
+.cc-v19-settings-card .cc-bot-manual-risk-add-all:hover{
+  border-color:rgba(157,136,255,.9)!important;
+  background:linear-gradient(135deg,rgba(53,41,103,.96),rgba(13,19,31,.98))!important;
+}
+.cc-v19-settings-card,
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded,
+.cc-v19-three-card-grid .cc-v17-running-positions,
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  height:545px!important;
+  min-height:545px!important;
+  max-height:545px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  height:499px!important;
+  min-height:499px!important;
+  max-height:499px!important;
+}
