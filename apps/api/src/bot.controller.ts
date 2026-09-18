@@ -1829,6 +1829,22 @@ export class BotController {
       if (body.raceCloseAllProfitMoney === undefined) clean.raceCloseAllProfitMoney = 0.5;
     }
 
+    const autoSelected = requestedControlMode === "AUTO";
+    if (autoSelected) {
+      // AUTO owns Vector Edge/V20 exits. Never carry MANUAL target/SL semantics
+      // into a newly selected AUTO cycle.
+      clean.profitTargetMode = "AUTO";
+      clean.manualStopLossPoints = 0;
+    }
+
+    const manualSelected =
+      requestedControlMode === "MANUAL" || requestedControlMode === "ASSISTED";
+    if (manualSelected) {
+      // MANUAL/ASSISTED use their own explicit money/stop controls and must not
+      // inherit AUTO smart-exit semantics from a previous selection.
+      clean.profitTargetMode = "MANUAL";
+    }
+
     const flipLockSelected = requestedControlMode === "FLIP_LOCK";
     if (flipLockSelected) {
       // Canonical FLIP LOCK contract. Persist only values that the isolated
