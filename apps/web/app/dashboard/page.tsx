@@ -3064,7 +3064,7 @@ function BotSettingsModal(props:any) {
         if (!embedded && e.target === e.currentTarget && !props.busy) props.onClose?.();
       }}
     >
-      <div className={"cc-bot-modal cc-bot-modal-full cc-bot-v2 "+(embedded?"cc-bot-v2-embedded ":"")+(props.locked?"is-locked":"")} role={embedded?"group":"dialog"} aria-modal={embedded?undefined:true} aria-labelledby="cc-bot-modal-title">
+      <div className={"cc-bot-modal cc-bot-modal-full cc-bot-v2 "+(embedded?"cc-bot-v2-embedded ":"")+"cc-bot-mode-"+controlMode.toLowerCase()+" "+(props.locked?"is-locked":"")} role={embedded?"group":"dialog"} aria-modal={embedded?undefined:true} aria-labelledby="cc-bot-modal-title">
         <div className="cc-bot-modal-head cc-bot-v2-head">
           <div className="cc-bot-modal-title">
             <span><ScenovaIcon name="bot" size={25}/></span>
