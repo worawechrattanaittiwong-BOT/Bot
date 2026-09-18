@@ -2752,7 +2752,7 @@ function LivePriceChart({points,symbol,marketClosed}:{points:Array<{t:number;pri
       setNowMs(Date.now());
       return;
     }
-    const id = window.setInterval(()=>setNowMs(Date.now()),100);
+    const id = window.setInterval(()=>setNowMs(Date.now()),1000);
     return () => window.clearInterval(id);
   }, [marketClosed]);
 
