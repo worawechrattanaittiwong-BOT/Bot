@@ -1341,3 +1341,178 @@
 .cc-v19-settings-card .cc-bot-v2-embedded{
   max-height:525px!important;
 }
+
+
+/* ===== Control Center V21 · compact fixed-height settings =====
+   Fixed to the fully-expanded MANUAL footprint so switching modes never
+   changes the card height. Rows follow a dense label | control layout. */
+.cc-v19-settings-card,
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  height:560px!important;
+  min-height:560px!important;
+  max-height:560px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
+  height:46px!important;
+  min-height:46px!important;
+  padding:5px 10px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  height:514px!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding:3px 10px 8px!important;
+  scrollbar-width:thin;
+}
+.cc-v19-settings-card .cc-bot-v2-mode-section>.cc-bot-v2-section-title{
+  display:none!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
+  display:block!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
+  display:grid!important;
+  grid-template-columns:minmax(126px,.88fr) minmax(160px,1.12fr)!important;
+  gap:9px!important;
+  align-items:center!important;
+  min-height:35px!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span{
+  min-width:0!important;
+  flex-direction:row!important;
+  align-items:center!important;
+  gap:7px!important;
+  font-size:12px!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select{
+  width:100%!important;
+  height:31px!important;
+  min-height:31px!important;
+  padding:4px 9px!important;
+  font-size:12px!important;
+  border-radius:7px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-v17-add-setting{
+  min-height:35px!important;
+  padding:2px 1px!important;
+  grid-template-columns:minmax(126px,.88fr) minmax(160px,1.12fr)!important;
+  gap:9px!important;
+  border-bottom:1px solid rgba(65,82,121,.20)!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field>span,
+.cc-v19-settings-card .cc-bot-v17-add-setting>span{
+  min-width:0!important;
+  gap:6px!important;
+  font-size:12px!important;
+  line-height:1.15!important;
+  white-space:normal!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field>span svg,
+.cc-v19-settings-card .cc-bot-v17-add-setting>span svg{
+  width:14px!important;
+  height:14px!important;
+  flex:0 0 14px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field .input,
+.cc-v19-settings-card .cc-bot-v17-add-setting .input,
+.cc-v19-settings-card .money-input-shell,
+.cc-v19-settings-card .number-input-shell{
+  width:100%!important;
+  min-height:30px!important;
+  height:30px!important;
+  font-size:12px!important;
+  border-radius:7px!important;
+}
+.cc-v19-settings-card .money-input-shell input,
+.cc-v19-settings-card .number-input-shell input{
+  font-size:12px!important;
+}
+.cc-v19-settings-card .cc-bot-v17-add-setting .input{
+  padding:4px 9px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row{
+  min-height:36px!important;
+  margin:3px 0!important;
+  gap:6px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row button{
+  min-height:32px!important;
+  padding:4px 8px!important;
+  border-radius:7px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row button svg{
+  width:14px!important;
+  height:14px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row button b{
+  font-size:11px!important;
+}
+
+/* Risk rows use the same compact label | control rhythm as the main form. */
+.cc-v19-settings-card .cc-bot-v2-limit-grid{
+  margin:0!important;
+  gap:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+  min-height:38px!important;
+  padding:2px 1px!important;
+  grid-template-columns:minmax(126px,.88fr) minmax(160px,1.12fr)!important;
+  gap:9px!important;
+  border-bottom:1px solid rgba(65,82,121,.20)!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child{
+  min-width:0!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:6px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid b{
+  font-size:12px!important;
+  line-height:1.15!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field{
+  display:grid!important;
+  grid-template-columns:auto minmax(90px,1fr)!important;
+  align-items:center!important;
+  gap:7px!important;
+  min-height:30px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-setting-label{
+  min-width:max-content!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid .money-input-shell{
+  min-width:0!important;
+  min-height:30px!important;
+}
+
+/* ZERO GRID keeps its special controls but drops long explanatory copy in
+   the embedded dashboard so it remains inside the same fixed footprint. */
+.cc-v19-settings-card .cc-bot-v2-lowvol-card{
+  margin:3px 0!important;
+  padding:6px 7px!important;
+  border-radius:8px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-lowvol-copy p,
+.cc-v19-settings-card .cc-bot-v2-lowvol-note{
+  display:none!important;
+}
+.cc-v19-settings-card .cc-bot-v2-lowvol-copy b{
+  font-size:11px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-lowvol-copy small,
+.cc-v19-settings-card .cc-bot-v2-lowvol-specs{
+  font-size:9px!important;
+}
+.cc-v19-settings-card .cc-switch{
+  min-height:28px!important;
+}
+
+/* Keep the three desktop cards visually aligned. */
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  min-height:560px!important;
+  height:560px!important;
+}
