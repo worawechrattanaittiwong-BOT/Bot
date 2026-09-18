@@ -93,7 +93,7 @@ Need $api 'clean.profitTargetMode = "OFF";' 'API must keep AUTO profit targets o
 Need $api 'clean.dailyProfitDrawdownPercent = 0;' 'API must disable FLIP LOCK daily giveback drawdown'
 
 Need $web '$0.25 ต่อ 0.01 Lot' 'FLIP LOCK UI must expose the lot-scaled money arm threshold'
-Need $web 'Safety Stop จาก ATR + Spread' 'FLIP LOCK UI must expose the starter Safety Stop'
+Need $web 'Safety Stop → Trailing SL ขยับตามราคาอย่างเดียว' 'FLIP LOCK UI must expose the starter Safety Stop and one-way trailing behavior'
 Need $web 'ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า' 'FLIP LOCK UI must state that no opposite pending direction is pre-placed'
 
 Need $release 'DEFAULT_EA_VERSION = "1.0.33"' 'EA release version must match the FLIP LOCK safe-start runtime'
