@@ -16,8 +16,8 @@ type ManualAction = "UPDATE_EA_RESTART" | "CONNECT_MT5";
 type BusyAction = ManualAction | "START_RECOVERY" | "";
 
 const UI_PENDING_TIMEOUT_MS = 3 * 60_000;
-const DASHBOARD_REFRESH_MS = 3_000;
-const MOUNT_RECHECK_MS = 750;
+const DASHBOARD_REFRESH_MS = 10_000;
+const MOUNT_RECHECK_MS = 1_500;
 
 export function Mt5ManualActionControls() {
   const [data, setData] = useState<DashboardSnapshot | null>(null);
