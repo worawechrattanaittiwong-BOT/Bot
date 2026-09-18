@@ -1161,3 +1161,130 @@
     gap:10px!important;
   }
 }
+
+
+/* ===== Control Center V19 · 3-column workspace ===== */
+/* Remove the redundant top Control Center title header on overview only. */
+.cc-page-head-overview{display:none!important}
+
+/* Replace the old Adaptive Algorithmic Engine summary with live bot actions. */
+.cc-v13-hero-actions{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  padding:10px 12px;
+  border:1px solid rgba(91,76,171,.56);
+  border-radius:14px;
+  background:linear-gradient(150deg,rgba(25,31,67,.94),rgba(16,15,45,.94));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+}
+.cc-v13-hero-actions .cc-v19-hero-quick-actions{
+  width:100%;
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:8px!important;
+}
+.cc-v13-hero-actions .cc-v19-hero-quick-actions button{
+  min-width:0!important;
+  min-height:48px!important;
+  padding:7px 8px!important;
+  justify-content:center!important;
+}
+
+/* Three real cards: Settings | Running Positions | Performance by Mode. */
+.cc-v19-three-card-grid{
+  display:grid;
+  grid-template-columns:minmax(330px,.92fr) minmax(390px,1.08fr) minmax(330px,.92fr);
+  gap:10px;
+  align-items:start;
+  min-width:0;
+}
+.cc-v19-three-card-grid>section{min-width:0}
+
+/* Settings stays one card, compact and only as tall as needed. */
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  height:auto!important;
+  min-height:0!important;
+  max-height:560px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
+  min-height:48px!important;
+  padding:6px 10px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  max-height:505px!important;
+  overflow:auto!important;
+  padding:0 10px 8px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-mode-section{
+  padding:7px 2px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-panel{
+  padding:7px 2px 6px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-section-title.compact{
+  min-height:24px!important;
+  padding-bottom:4px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field{
+  min-height:39px!important;
+  padding:3px 1px!important;
+  grid-template-columns:minmax(125px,.88fr) minmax(155px,1.12fr)!important;
+  gap:9px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field .input{
+  min-height:31px!important;
+  height:31px!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select{
+  min-height:33px!important;
+  height:33px!important;
+}
+
+/* Running orders card uses the available column without stretching the whole page. */
+.cc-v19-three-card-grid .cc-v17-running-positions{
+  height:560px!important;
+  min-height:0!important;
+}
+.cc-v19-three-card-grid .cc-v17-running-table .body{
+  max-height:495px!important;
+  overflow:auto!important;
+}
+
+/* Restore the older per-mode win-rate card as the third column. */
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  height:auto!important;
+  min-height:0!important;
+  padding:0!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-performance .cc-v12-card-head{
+  min-height:52px;
+  padding:9px 12px;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table{
+  padding:4px 10px 10px;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table .head,
+.cc-v19-three-card-grid .cc-v12-mode-table .row{
+  grid-template-columns:1.1fr .85fr .95fr .7fr!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table .row{
+  min-height:54px;
+}
+
+@media(max-width:1500px){
+  .cc-v19-three-card-grid{
+    grid-template-columns:minmax(310px,.9fr) minmax(360px,1.1fr) minmax(300px,.9fr);
+  }
+}
+@media(max-width:1180px){
+  .cc-v19-three-card-grid{grid-template-columns:1fr 1fr}
+  .cc-v19-settings-card{grid-column:1/-1}
+}
+@media(max-width:760px){
+  .cc-v19-three-card-grid{grid-template-columns:1fr}
+  .cc-v19-settings-card{grid-column:auto}
+  .cc-v13-hero-actions .cc-v19-hero-quick-actions{grid-template-columns:1fr 1fr!important}
+}
