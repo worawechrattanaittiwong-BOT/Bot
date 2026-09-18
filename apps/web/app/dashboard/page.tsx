@@ -1901,24 +1901,14 @@ export default function DashboardPage() {
                 <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
               </section>
 
-              <section className="panel cc-v17-control-strip" aria-label="ควบคุมบอท">
-                <div className="cc-v17-control-identity">
-                  <span><ScenovaIcon name="brain" size={18}/></span>
-                  <div><small>SCENOVA INTELLIGENCE CORE · AI-driven & Genetic Algorithm · AI EXECUTION CONTROL</small><b>{activeControlMode}</b></div>
-                  <em className={botRunning?"good":botStarting?"warn":"neutral"}>{botRunning?"RUNNING":botStarting?"STARTING":"READY"}</em>
-                </div>
-                <div className="cc-v17-control-meta">
-                  <span><small>Symbol</small><b>{String(metrics.symbol||settings.symbol||"—")}</b></span>
-                  <span><small>Lot</small><b>{activeControlMode==="ZERO_GRID"?Number(settings.zeroGridBaseLot||0.01).toFixed(2):Number(settings.lot||0.01).toFixed(2)}</b></span>
-                  <span><small>EA Sync</small><b className={settingsSyncTone}>{settingsSyncLabel}</b></span>
-                </div>
+              <div className="cc-v17-action-row" aria-label="ควบคุมบอท">
                 <div className="cc-v12-quick-actions cc-v17-quick-actions">
                   <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
                   <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
                   <button className="close" disabled={busy||currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?")&&command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><ScenovaIcon name="close" size={15}/><span><b>ปิดทุกไม้</b><small>Close All</small></span></button>
                   <button className="terminal" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={15}/><span><b>Terminal</b><small>Live Logs</small></span></button>
                 </div>
-              </section>
+              </div>
 
               <div className="cc-v17-split-grid">
                 <section className="cc-v17-settings-column" aria-label="ตั้งค่าบอท">
