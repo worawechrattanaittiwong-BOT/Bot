@@ -1877,17 +1877,12 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <div className="cc-v13-hero-intelligence" aria-label="AI execution summary">
-                  <div className="cc-v13-ai-orb"><ScenovaIcon name="brain" size={24}/><i/></div>
-                  <div className="cc-v13-ai-copy">
-                    <small>AI / GENETIC EXECUTION CORE</small>
-                    <b>Adaptive Algorithmic Engine</b>
-                    <span>AI-driven · Genetic Optimization · Risk Adaptive</span>
-                  </div>
-                  <div className="cc-v13-ai-stats">
-                    <span><small>MODE</small><b>{activeControlMode}</b></span>
-                    <span><small>LATENCY</small><b className={heartbeatLatencyMs>700?"warn":"good"}>{heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"}</b></span>
-                    <span><small>SYSTEM</small><b className={isMt5Online&&heartbeatAgeSeconds<=20?"good":"warn"}>{isMt5Online&&heartbeatAgeSeconds<=20?"READY":isAgentOnline?"WAIT EA":"OFFLINE"}</b></span>
+                <div className="cc-v13-hero-actions" aria-label="ควบคุมบอท">
+                  <div className="cc-v12-quick-actions cc-v19-hero-quick-actions">
+                    <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
+                    <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
+                    <button className="close" disabled={busy||currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?")&&command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><ScenovaIcon name="close" size={15}/><span><b>ปิดทุกไม้</b><small>Close All</small></span></button>
+                    <button className="terminal" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={15}/><span><b>Terminal</b><small>Live Logs</small></span></button>
                   </div>
                 </div>
               </section>
@@ -1901,17 +1896,8 @@ export default function DashboardPage() {
                 <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
               </section>
 
-              <div className="cc-v17-action-row" aria-label="ควบคุมบอท">
-                <div className="cc-v12-quick-actions cc-v17-quick-actions">
-                  <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
-                  <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
-                  <button className="close" disabled={busy||currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?")&&command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><ScenovaIcon name="close" size={15}/><span><b>ปิดทุกไม้</b><small>Close All</small></span></button>
-                  <button className="terminal" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={15}/><span><b>Terminal</b><small>Live Logs</small></span></button>
-                </div>
-              </div>
-
-              <div className="cc-v17-split-grid">
-                <section className="cc-v17-settings-column" aria-label="ตั้งค่าบอท">
+              <div className="cc-v19-three-card-grid">
+                <section className="cc-v17-settings-column cc-v19-settings-card" aria-label="ตั้งค่าบอท">
                   <BotSettingsModal
                     embedded
                     open
@@ -1938,64 +1924,59 @@ export default function DashboardPage() {
                   />
                 </section>
 
-                <aside className="cc-v17-activity-column">
-                  <section className="panel cc-v17-running-positions" aria-label="ออเดอร์ที่บอทกำลังรัน">
-                    <div className="cc-v17-running-head">
-                      <div><span><ScenovaIcon name="orders" size={18}/></span><div><small>LIVE EXECUTION</small><b>ออเดอร์ที่กำลังรัน</b></div></div>
-                      <em className={currentPositions>0?"live":"idle"}>{currentPositions>0?currentPositions+" Running":"No Position"}</em>
+                <section className="panel cc-v17-running-positions" aria-label="ออเดอร์ที่บอทกำลังรัน">
+                  <div className="cc-v17-running-head">
+                    <div><span><ScenovaIcon name="orders" size={18}/></span><div><small>LIVE EXECUTION</small><b>ออเดอร์ที่กำลังรัน</b></div></div>
+                    <em className={currentPositions>0?"live":"idle"}>{currentPositions>0?currentPositions+" Running":"No Position"}</em>
+                  </div>
+                  <div className="cc-v17-running-table">
+                    <div className="head"><span>เวลา</span><span>Symbol</span><span>Type</span><span>Lot</span><span>ราคาเปิด</span><span>P&L</span></div>
+                    <div className="body">
+                      {openPositions.length ? [...openPositions].reverse().map((position:any,index:number)=>{
+                        const openedAt=Number(position.openedAt||0);
+                        const openedLabel=openedAt>0
+                          ? new Date(openedAt*1000).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit",hour12:false})
+                          : "—";
+                        const side=String(position.side||"").toUpperCase()==="SELL"?"SELL":"BUY";
+                        const pnl=Number(position.profit||0);
+                        return <div className="row" key={String(position.ticket||openedAt||index)}>
+                          <span>{openedLabel}</span>
+                          <span className="symbol">{String(metrics.symbol||settings.symbol||"—")}</span>
+                          <span><i className={"side "+side.toLowerCase()}>{side}</i></span>
+                          <span>{Number(position.volume||0).toFixed(2)}</span>
+                          <span>{Number(position.openPrice||0).toFixed(Math.max(2,Math.min(5,Number(metrics.symbolDigits||3))))}</span>
+                          <span className={pnl>0?"pnl good":pnl<0?"pnl bad":"pnl"}>{pnl>0?"+$":"$"}{pnl.toFixed(2)}</span>
+                        </div>;
+                      }) : <div className="empty"><ScenovaIcon name="orders" size={20}/><span>ยังไม่มีออเดอร์ที่กำลังถือ</span></div>}
                     </div>
-                    <div className="cc-v17-running-table">
-                      <div className="head"><span>เวลา</span><span>Symbol</span><span>Type</span><span>Lot</span><span>ราคาเปิด</span><span>P&L</span></div>
-                      <div className="body">
-                        {openPositions.length ? [...openPositions].reverse().map((position:any,index:number)=>{
-                          const openedAt=Number(position.openedAt||0);
-                          const openedLabel=openedAt>0
-                            ? new Date(openedAt*1000).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit",hour12:false})
-                            : "—";
-                          const side=String(position.side||"").toUpperCase()==="SELL"?"SELL":"BUY";
-                          const pnl=Number(position.profit||0);
-                          return <div className="row" key={String(position.ticket||openedAt||index)}>
-                            <span>{openedLabel}</span>
-                            <span className="symbol">{String(metrics.symbol||settings.symbol||"—")}</span>
-                            <span><i className={"side "+side.toLowerCase()}>{side}</i></span>
-                            <span>{Number(position.volume||0).toFixed(2)}</span>
-                            <span>{Number(position.openPrice||0).toFixed(Math.max(2,Math.min(5,Number(metrics.symbolDigits||3))))}</span>
-                            <span className={pnl>0?"pnl good":pnl<0?"pnl bad":"pnl"}>{pnl>0?"+$":"$"}{pnl.toFixed(2)}</span>
-                          </div>;
-                        }) : <div className="empty"><ScenovaIcon name="orders" size={20}/><span>ยังไม่มีออเดอร์ที่กำลังถือ</span></div>}
-                      </div>
-                    </div>
-                  </section>
+                  </div>
+                </section>
 
-                  <section className="panel cc-v17-mode-performance">
-                    <div className="cc-v17-mode-title"><small>PERFORMANCE BY MODE</small><b>สถิติวันนี้</b></div>
-                    <div className="cc-v17-mode-chips">
-                      {modePerformanceToday.map((row:any)=>{
-                        const mode=String(row.mode||"AUTO");
-                        const active=mode===activeControlMode;
-                        return <span key={mode} className={active?"active":""}>
-                          <b>{mode}</b>
-                          <em>{Number(row.trades||0)>0?Number(row.winRate||0).toFixed(1)+"%":"—"}</em>
-                          <small>{"DD "+Number(row.drawdownPercent||0).toFixed(2)+"%"}</small>
-                        </span>;
-                      })}
-                    </div>
-                  </section>
 
-                  <section className="panel cc-v13-system-intelligence">
-                    <div className="cc-v12-card-head">
-                      <div><span><ScenovaIcon name="brain" size={17}/></span><div><small>SCENOVA INTELLIGENCE CORE</small><b>AI-driven & Genetic Algorithm Trading Platform</b></div></div>
-                      <em className={isMt5Online?"good":"warn"}>{isMt5Online?"LIVE":"WAIT"}</em>
-                    </div>
-                    <div className="cc-v13-system-grid">
-                      <span><small>บัญชี MT5</small><b>{data.account.account_number}</b></span>
-                      <span><small>Server</small><b>{metrics.server||data.account.broker_server}</b></span>
-                      <span><small>Latency</small><b className={heartbeatLatencyMs>700?"warn":"good"}>{heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"}</b></span>
-                      <span><small>Heartbeat</small><b>{heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")}</b></span>
-                    </div>
-                    <div className="cc-v13-ai-tags"><span>AI Market Analysis</span><span>Genetic Optimization</span><span>Adaptive Risk</span></div>
-                  </section>
-                </aside>
+
+                <section className="panel cc-v12-mode-performance">
+                  <div className="cc-v12-card-head">
+                    <div><span><ScenovaIcon name="pnl" size={17}/></span><div><small>PERFORMANCE BY MODE</small><b>สถิติรายโหมดวันนี้</b></div></div>
+                    <em>Today</em>
+                  </div>
+                  <div className="cc-v12-mode-table">
+                    <div className="head"><span>โหมด</span><span>Win Rate</span><span>Drawdown</span><span>Trades</span></div>
+                    {modePerformanceToday.map((row:any)=>{
+                      const mode=String(row.mode||"AUTO");
+                      const active=mode===activeControlMode;
+                      const win=Number(row.winRate||0);
+                      const dd=Number(row.drawdownPercent||0);
+                      return <div key={mode} className={"row "+(active?"active":"")}>
+                        <span className="mode"><i/>{mode}</span>
+                        <span className={Number(row.trades||0)>0?(win>=60?"good":win>=45?"warn":"bad"):"neutral"}>{Number(row.trades||0)>0?win.toFixed(1)+"%":"—"}</span>
+                        <span className={dd>=5?"bad":dd>=2?"warn":"good"}>{dd.toFixed(2)+"%"}<small>{"-$"+Number(row.drawdownMoney||0).toFixed(2)}</small></span>
+                        <span>{Number(row.trades||0)}<small>{active?(botRunning?"Active":"Selected"):"Idle"}</small></span>
+                      </div>;
+                    })}
+                  </div>
+                </section>
+
+
               </div>
 
               <div className="cc-mobile-command-dock mobile-only" aria-label="ควบคุมบอท">
