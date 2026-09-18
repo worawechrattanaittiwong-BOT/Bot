@@ -43,7 +43,7 @@ Need $manage 'RACE_VOLUME_ROLLOVER_WAIT_SELL' 'RACE SELL rollover wait state mis
 Need $harvest 'g_perPositionProfit > 0.0' 'RACE per-position exit must honor configured target'
 Need $harvest 'netFloating + 0.00000001 < perPositionTarget' 'RACE must wait until each ticket reaches its money target'
 Need $ea 'RACE_DIRECTION_LOCK' 'RACE must keep mixed BUY/SELL baskets blocked'
-Need $release 'DEFAULT_EA_VERSION = "1.0.25"' 'EA release version must match the promoted live intelligence runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.26"' 'EA release version must match the promoted live intelligence runtime'
 Need $release 'EA_RUNTIME_CONTRACT = "RACE_VOLUME_10S_ROLLOVER_V1"' 'API runtime contract must match EA'
 
 Write-Host 'RACE 10-second volume + safe rollover contract: PASS'

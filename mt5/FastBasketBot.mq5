@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.25"
-#define SCENOVA_EA_VERSION "1.0.25"
-#define SCENOVA_PRODUCT_VERSION "1.0.25"
+#property version   "1.0.26"
+#define SCENOVA_EA_VERSION "1.0.26"
+#define SCENOVA_PRODUCT_VERSION "1.0.26"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1665,7 +1665,7 @@ string EffectiveExecutionMode()
    StringToUpper(control);
    if(control == "ZERO_GRID") return "ZERO_GRID";
    if(control == "RACE") return "RACE";
-   if(control == "AUTO" || control == "FLIP_LOCK" || control == "PARALLEL_UNIVERSE" ||
+   if(control == "AUTO" || control == "FLIP_LOCK" ||
       control == "ASSISTED" || control == "MANUAL")
       return "AUTO";
 
@@ -5701,7 +5701,7 @@ void ApplySettings(string json)
    bool hasControlMode =
       requestedControlMode == "AUTO" || requestedControlMode == "RACE" ||
       requestedControlMode == "ZERO_GRID" || requestedControlMode == "FLIP_LOCK" ||
-      requestedControlMode == "PARALLEL_UNIVERSE" || requestedControlMode == "ASSISTED" ||
+      requestedControlMode == "ASSISTED" ||
       requestedControlMode == "MANUAL" || requestedControlMode == "LEGACY";
 
    // Hard isolation: one execution owner at a time. controlMode is authoritative
@@ -11285,12 +11285,10 @@ bool AutoV20Enabled()
 {
    if(g_engineMode != "AUTO") return false;
    return g_controlMode == "AUTO" ||
-          g_controlMode == "FLIP_LOCK" ||
-          g_controlMode == "PARALLEL_UNIVERSE";
+          g_controlMode == "FLIP_LOCK";
 }
 
 #include "include\\AutoVectorEdgeLiveV1.mqh"
-#include "include\\ParallelUniverseV1.mqh"
 #include "include\\FlipLockV1.mqh"
 
 double AutoV20Clamp(double value,double minimum,double maximum)
@@ -12080,16 +12078,6 @@ int AutoV20PrecisionDirection(double momentum)
    {
       g_autoV20RejectReason=vectorLiveReason;
       g_adaptiveBlockReason="AUTO_VECTOR_EDGE_WAIT";
-      g_cachedAdaptiveDirection=0;
-      g_cachedAdaptiveBlockReason=g_adaptiveBlockReason;
-      return 0;
-   }
-
-   string parallelReason="NONE";
-   if(!ParallelUniverseLiveAllow(direction,parallelReason))
-   {
-      g_autoV20RejectReason=parallelReason;
-      g_adaptiveBlockReason="PARALLEL_UNIVERSE_WAIT";
       g_cachedAdaptiveDirection=0;
       g_cachedAdaptiveBlockReason=g_adaptiveBlockReason;
       return 0;

@@ -1479,7 +1479,7 @@ export default function DashboardPage() {
         payload.controlMode = "RACE";
         payload.engineMode = "RACE";
       } else {
-        payload.controlMode = ["AUTO","FLIP_LOCK","PARALLEL_UNIVERSE","MANUAL"].includes(requestedControlMode) ? requestedControlMode : "AUTO";
+        payload.controlMode = ["AUTO","FLIP_LOCK","MANUAL"].includes(requestedControlMode) ? requestedControlMode : "AUTO";
         payload.engineMode = "AUTO";
       }
 
@@ -1833,7 +1833,7 @@ export default function DashboardPage() {
                     <h2>{metrics.symbol || settings.symbol}</h2>
                     <p>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}<em/>MT5 Expert Advisor</p>
                     <div className="cc-v6-symbol-chips">
-                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "FLIP_LOCK" ? "FLIP LOCK" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "PARALLEL_UNIVERSE" ? "PARALLEL UNIVERSE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO · VECTOR" : settings.entryMode}</span>
+                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "FLIP_LOCK" ? "FLIP LOCK" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO · VECTOR" : settings.entryMode}</span>
                       <span>{Number(settings.lot||0).toFixed(2)} Lot</span>
                       <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" BUY STOP + "+Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" SELL STOP" : configuredMaxPositions+" ไม้"}</span>
                       <HeroTrendChip label="M5" value={metrics.trendM5}/>
@@ -2867,7 +2867,7 @@ function BotSettingsModal(props:any) {
   const inferredControlMode = engineMode === "ZERO_GRID" ? "ZERO_GRID" : engineMode === "RACE" ? "RACE" : hasManualExit ? "MANUAL" : "AUTO";
   const requestedControlModeRaw = String(props.settings?.controlMode || inferredControlMode).toUpperCase();
   const requestedControlMode = requestedControlModeRaw === "ASSISTED" ? "AUTO" : requestedControlModeRaw;
-  const controlMode = ["AUTO","FLIP_LOCK","PARALLEL_UNIVERSE","RACE","ZERO_GRID","MANUAL"].includes(requestedControlMode)
+  const controlMode = ["AUTO","FLIP_LOCK","RACE","ZERO_GRID","MANUAL"].includes(requestedControlMode)
     ? requestedControlMode
     : inferredControlMode;
   const profitKind = Number(props.settings?.perPositionProfitMoney || 0) > 0 ? "POSITION" : "BASKET";
@@ -2877,7 +2877,6 @@ function BotSettingsModal(props:any) {
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"สมอง AUTO รวม Probability, Expected Value, Entropy และตัวกรองต้นทุน เพื่อคัดจังหวะที่มี Edge ก่อนเข้า"},
     FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เปิดไม้แรกได้ทันที แล้ววาง Pending ฝั่งตรงข้ามที่ระดับเดียวกับ Stop ของไม้ปัจจุบัน จากนั้นเลื่อนตามราคาและสลับ BUY / SELL ต่อเนื่อง โดยไม่ใช้ Daily Profit Drawdown"},
-    PARALLEL_UNIVERSE:{title:"PARALLEL UNIVERSE",subtitle:"ใช้สถิติ Setup / Model / Regime ในอดีตเทียบกับสภาพปัจจุบันก่อนยืนยันออเดอร์"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
     MANUAL:{title:"MANUAL",subtitle:"ระบบวิเคราะห์ทิศทางและจุดเข้าอัตโนมัติ โดยผู้ใช้กำหนด Lot เป้าหมายกำไร และจุดหยุดขาดทุน"}
@@ -2916,7 +2915,7 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("dailyProfitContinueAfterTarget",false);
       return;
     }
-    if (mode === "AUTO" || mode === "PARALLEL_UNIVERSE") {
+    if (mode === "AUTO") {
       props.onEdit?.("profitTargetMode","AUTO");
       props.onEdit?.("manualStopLossPoints",0);
       return;
@@ -2970,7 +2969,6 @@ function BotSettingsModal(props:any) {
               {[
                 {id:"AUTO",icon:"brain",tag:"AUTO + VECTOR"},
                 {id:"FLIP_LOCK",icon:"trend",tag:"ล็อกกำไร + สลับฝั่ง"},
-                {id:"PARALLEL_UNIVERSE",icon:"spark",tag:"สถิติหลายเหตุการณ์"},
                 {id:"RACE",icon:"status",tag:"ดำเนินการเร็ว"},
                 {id:"ZERO_GRID",icon:"layers",tag:"กริดแบบ Hedging"},
                 {id:"MANUAL",icon:"settings",tag:"กำหนดรายละเอียด"}
