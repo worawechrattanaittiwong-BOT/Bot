@@ -7,13 +7,13 @@ namespace ScenovaInstaller;
 
 internal sealed class InstallerForm : Form
 {
-    private static readonly Color PrimaryBlue = Color.FromArgb(15, 112, 230);
-    private static readonly Color AccentCyan = Color.FromArgb(15, 170, 230);
-    private static readonly Color Navy = Color.FromArgb(16, 45, 87);
-    private static readonly Color SoftBackground = Color.FromArgb(244, 248, 253);
-    private static readonly Color CardBackground = Color.White;
-    private static readonly Color BorderBlue = Color.FromArgb(205, 222, 242);
-    private static readonly Color MutedText = Color.FromArgb(83, 105, 133);
+    private static readonly Color PrimaryBlue = Color.FromArgb(255, 36, 56);
+    private static readonly Color AccentCyan = Color.FromArgb(255, 82, 98);
+    private static readonly Color Navy = Color.FromArgb(243, 245, 248);
+    private static readonly Color SoftBackground = Color.FromArgb(5, 5, 6);
+    private static readonly Color CardBackground = Color.FromArgb(13, 14, 17);
+    private static readonly Color BorderBlue = Color.FromArgb(73, 32, 40);
+    private static readonly Color MutedText = Color.FromArgb(146, 153, 163);
     private static readonly Color SuccessGreen = Color.FromArgb(0, 145, 91);
     private readonly ComboBox _terminal = new()
     {
@@ -72,7 +72,7 @@ internal sealed class InstallerForm : Form
     {
         Text = "โหมดขั้นสูง",
         AutoSize = true,
-        ForeColor = Color.FromArgb(46, 63, 84)
+        ForeColor = Color.FromArgb(154, 160, 170)
     };
     private readonly Label _channelSummary = new()
     {
@@ -80,8 +80,8 @@ internal sealed class InstallerForm : Form
         Width = 150,
         Height = 30,
         TextAlign = ContentAlignment.MiddleCenter,
-        ForeColor = Color.FromArgb(28, 93, 171),
-        BackColor = Color.FromArgb(235, 245, 255)
+        ForeColor = Color.FromArgb(255, 82, 98),
+        BackColor = Color.FromArgb(37, 12, 17)
     };
 
     private readonly Button _install = MakeButton("ติดตั้ง / อัปเดตอัตโนมัติ", 230);
@@ -106,8 +106,14 @@ internal sealed class InstallerForm : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         DoubleBuffered = true;
         BackColor = SoftBackground;
-        ForeColor = Color.FromArgb(29, 42, 58);
+        ForeColor = Color.FromArgb(239, 242, 246);
         Font = new Font("Segoe UI", 10f);
+
+        _terminal.BackColor = Color.FromArgb(9, 10, 12);
+        _terminal.ForeColor = Color.FromArgb(238, 241, 245);
+        _channel.BackColor = Color.FromArgb(9, 10, 12);
+        _channel.ForeColor = Color.FromArgb(238, 241, 245);
+        _advancedDetails.BorderStyle = BorderStyle.FixedSingle;
 
         _channel.Items.AddRange(["Stable", "Beta", "Admin Test"]);
         var state = ScenovaRuntime.ReadState();
@@ -169,7 +175,7 @@ internal sealed class InstallerForm : Form
     private void ConfigureHealthList()
     {
         _health.BackColor = CardBackground;
-        _health.ForeColor = Color.FromArgb(32, 47, 65);
+        _health.ForeColor = Color.FromArgb(224, 228, 234);
         _health.BorderStyle = BorderStyle.FixedSingle;
         _health.Font = new Font("Segoe UI", 10f);
         _health.Columns.Add("ระบบ");
@@ -305,7 +311,7 @@ internal sealed class InstallerForm : Form
         center.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         center.RowStyles.Add(new RowStyle(SizeType.Absolute, 16));
         center.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
-        _score.BackColor = Color.FromArgb(235, 249, 243);
+        _score.BackColor = Color.FromArgb(9, 26, 20);
         _score.Padding = new Padding(18, 0, 12, 0);
         _score.UseCompatibleTextRendering = true;
         _status.BackColor = CardBackground;
@@ -324,7 +330,7 @@ internal sealed class InstallerForm : Form
             Dock = DockStyle.Fill,
             RowCount = 2,
             Padding = new Padding(10, 4, 0, 4),
-            BackColor = Color.FromArgb(239, 247, 255)
+            BackColor = Color.FromArgb(20, 10, 13)
         };
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 205));
         right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -360,14 +366,14 @@ internal sealed class InstallerForm : Form
         _install.FlatAppearance.BorderColor = PrimaryBlue;
         foreach (var secondary in new[] { _repair, _verify, _rollback })
         {
-            secondary.BackColor = Color.White;
+            secondary.BackColor = CardBackground;
             secondary.ForeColor = PrimaryBlue;
             secondary.FlatAppearance.BorderColor = BorderBlue;
             secondary.FlatAppearance.BorderSize = 1;
         }
-        _uninstall.BackColor = Color.White;
-        _uninstall.ForeColor = Color.FromArgb(196, 54, 54);
-        _uninstall.FlatAppearance.BorderColor = Color.FromArgb(240, 196, 196);
+        _uninstall.BackColor = CardBackground;
+        _uninstall.ForeColor = Color.FromArgb(255, 99, 113);
+        _uninstall.FlatAppearance.BorderColor = Color.FromArgb(109, 35, 45);
         _uninstall.FlatAppearance.BorderSize = 1;
         actions.Controls.Add(_install);
         actions.Controls.Add(_repair);
@@ -470,8 +476,8 @@ internal sealed class InstallerForm : Form
                 HealthState.Ready => Color.FromArgb(8, 140, 93),
                 HealthState.NeedAction => Color.FromArgb(193, 62, 46),
                 HealthState.Warning => Color.FromArgb(183, 112, 0),
-                HealthState.AutoFix => Color.FromArgb(25, 104, 190),
-                _ => Color.FromArgb(65, 82, 101)
+                HealthState.AutoFix => Color.FromArgb(255, 82, 98),
+                _ => Color.FromArgb(144, 151, 161)
             };
             _health.Items.Add(item);
         }
@@ -1097,8 +1103,8 @@ internal sealed class InstallerForm : Form
         }
 
         _advancedDetails.Visible = true;
-        _advancedDetails.BackColor = Color.White;
-        _advancedDetails.ForeColor = Color.FromArgb(46, 63, 84);
+        _advancedDetails.BackColor = Color.FromArgb(8, 9, 11);
+        _advancedDetails.ForeColor = Color.FromArgb(154, 160, 170);
 
         var terminal = _terminal.SelectedItem as TerminalChoice;
         var profile = SelectedProfile();
