@@ -1932,3 +1932,110 @@
   height:32px!important;
   min-height:32px!important;
 }
+
+
+/* ===== Control Center V26 · content-fit compact workspace =====
+   Settings height follows the active mode's visible rows. Adjacent cards
+   stretch to the same grid row instead of forcing a fixed 520/545px shell. */
+.cc-v19-three-card-grid{
+  align-items:stretch!important;
+}
+.cc-v19-settings-card,
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded,
+.cc-v19-three-card-grid .cc-v17-running-positions,
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  --settings-row:38px;
+  --settings-control-h:32px;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
+  height:46px!important;
+  min-height:46px!important;
+  padding:5px 10px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  padding:2px 12px 7px!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
+  margin:0 0 1px!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
+  min-height:46px!important;
+  padding-top:2px!important;
+  padding-bottom:2px!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select{
+  height:38px!important;
+  min-height:38px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+  min-height:38px!important;
+  padding-top:2px!important;
+  padding-bottom:2px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row{
+  min-height:34px!important;
+  margin:1px 0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row button,
+.cc-v19-settings-card .money-input-shell,
+.cc-v19-settings-card .number-input-shell,
+.cc-v19-settings-card .cc-bot-v2-field>select.input{
+  height:32px!important;
+  min-height:32px!important;
+}
+
+/* ZERO GRID: controls only, no secondary helper copy consuming height. */
+.cc-v19-settings-card .cc-bot-mode-zero_grid .cc-bot-v2-control-stack>small,
+.cc-v19-settings-card .cc-bot-mode-zero_grid .cc-bot-v2-readonly-control>small{
+  display:none!important;
+}
+
+/* The neighboring cards follow the settings card height and scroll internally. */
+.cc-v19-three-card-grid .cc-v17-running-positions,
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  align-self:stretch!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v17-running-positions{
+  display:flex!important;
+  flex-direction:column!important;
+}
+.cc-v19-three-card-grid .cc-v17-running-table{
+  min-height:0!important;
+  flex:1 1 auto!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v17-running-table .body{
+  max-height:180px!important;
+  overflow:auto!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  display:flex!important;
+  flex-direction:column!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table{
+  min-height:0!important;
+  max-height:210px!important;
+  overflow:auto!important;
+  flex:1 1 auto!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table .row{
+  min-height:36px!important;
+}
+
+/* Keep the reveal-all row as the natural bottom of MANUAL before expansion. */
+.cc-v19-settings-card .cc-bot-manual-risk-add{
+  margin-bottom:0!important;
+  border-bottom:0!important;
+}
