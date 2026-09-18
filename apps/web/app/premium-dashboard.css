@@ -1873,3 +1873,62 @@
   min-height:499px!important;
   max-height:499px!important;
 }
+
+
+/* ===== Control Center V25 · compact MANUAL within original card height =====
+   Keep the 520px workspace footprint. MANUAL alone uses a slightly denser
+   rhythm so its normal state fits without an internal scrollbar. */
+.cc-v19-settings-card,
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded,
+.cc-v19-three-card-grid .cc-v17-running-positions,
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  height:520px!important;
+  min-height:520px!important;
+  max-height:520px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  height:474px!important;
+  min-height:474px!important;
+  max-height:474px!important;
+}
+.cc-v19-settings-card .cc-bot-mode-manual{
+  --settings-row:38px;
+  --settings-control-h:32px;
+}
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-body{
+  padding-top:2px!important;
+  padding-bottom:5px!important;
+}
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v12-mode-select-wrap{
+  margin:0 0 1px!important;
+}
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v12-mode-select-wrap>label{
+  min-height:46px!important;
+  padding-top:2px!important;
+  padding-bottom:2px!important;
+}
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v12-mode-select{
+  height:38px!important;
+  min-height:38px!important;
+}
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-limit-grid>div{
+  min-height:38px!important;
+  padding-top:2px!important;
+  padding-bottom:2px!important;
+}
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-choice-row{
+  min-height:34px!important;
+  margin:1px 0!important;
+}
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-choice-row button{
+  height:32px!important;
+  min-height:32px!important;
+}
+.cc-v19-settings-card .cc-bot-mode-manual .money-input-shell,
+.cc-v19-settings-card .cc-bot-mode-manual .number-input-shell,
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-field>select.input{
+  height:32px!important;
+  min-height:32px!important;
+}
