@@ -1772,3 +1772,67 @@
 @media(max-width:1180px){
   .cc-v19-settings-card{--settings-label:190px}
 }
+
+
+/* ===== Control Center V23 · mode profiles + equal-height cards =====
+   Keep switches inside their rows, give MANUAL optional risk an explicit
+   add-control, and align all three workspace cards to the same footprint. */
+.cc-v19-settings-card .toggle-setting-label{
+  position:static!important;
+  top:auto!important;
+  right:auto!important;
+  z-index:auto!important;
+  margin:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:7px!important;
+}
+.cc-v19-settings-card .toggle-setting-label .setting-toggle-text{
+  display:inline!important;
+  min-width:20px!important;
+  font-size:9px!important;
+}
+.cc-v19-settings-card .cc-bot-manual-risk-add{
+  display:grid!important;
+}
+.cc-v19-settings-card .cc-bot-manual-risk-add>select.input{
+  width:100%!important;
+  height:var(--settings-control-h)!important;
+  min-height:var(--settings-control-h)!important;
+  border-color:rgba(132,106,255,.62)!important;
+  background:linear-gradient(135deg,rgba(31,25,62,.86),#080d15 70%)!important;
+}
+.cc-v19-settings-card .cc-bot-manual-risk-add>span{
+  color:#b9a8ff!important;
+}
+
+.cc-v19-settings-card,
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded,
+.cc-v19-three-card-grid .cc-v17-running-positions,
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  height:520px!important;
+  min-height:520px!important;
+  max-height:520px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  height:474px!important;
+  min-height:474px!important;
+  max-height:474px!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v17-running-table .body{
+  max-height:455px!important;
+  overflow:auto!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table{
+  max-height:458px!important;
+  overflow:auto!important;
+}
+
+/* Mode sizing selectors share the same professional control width. */
+.cc-v19-settings-card .cc-bot-v2-field>select.input{
+  justify-self:stretch!important;
+}
