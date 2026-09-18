@@ -2948,28 +2948,29 @@ function BotSettingsModal(props:any) {
             <div><small className="cc-bot-v2-kicker">SCENOVA BOT CONTROL</small><h2 id="cc-bot-modal-title">ตั้งค่าบอท</h2></div>
           </div>
           <div className="cc-bot-modal-head-actions">
-            {props.locked&&<span className="cc-bot-v12-lock"><ScenovaIcon name="shield" size={12}/>กำลังทำงาน · ดูค่าได้</span>}
-            <span className={"cc-bot-modal-dirty "+(props.dirty?"warn":"good")}><i/>{props.dirty?"รอบันทึก":"บันทึกแล้ว"}</span>
+            {props.locked&&<span className="cc-bot-v12-lock"><ScenovaIcon name="shield" size={12}/>กำลังทำงาน</span>}
+            {embedded&&<button type="button" className="btn cc-save-primary cc-bot-v14-head-save" disabled={props.busy||props.locked||!props.dirty} onClick={props.onSave}><ScenovaIcon name="save" size={15}/>{props.busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button>}
+            {!embedded&&<span className={"cc-bot-modal-dirty "+(props.dirty?"warn":"good")}><i/>{props.dirty?"รอบันทึก":"บันทึกแล้ว"}</span>}
             {!embedded&&<button type="button" className="cc-bot-modal-close" onClick={()=>props.onClose?.()} disabled={props.busy} aria-label="ปิดหน้าต่างตั้งค่าบอท">×</button>}
           </div>
         </div>
 
         <div className="cc-bot-modal-body cc-bot-v2-body">
           <section className="cc-bot-v2-mode-section">
-            <div className="cc-bot-v2-section-title"><span>01</span><div><b>เลือกรูปแบบการควบคุม</b><small>แต่ละโหมดจะเปิดเฉพาะค่าที่เกี่ยวข้องกับการส่งออเดอร์จริง</small></div></div>
+            <div className="cc-bot-v2-section-title"><span>01</span><div><b>โหมดการเทรด</b></div></div>
             {embedded ? (
               <div className="cc-bot-v12-mode-select-wrap">
                 <label>
                   <span><ScenovaIcon name="brain" size={17}/>โหมดการเทรด <small>Trading Mode</small></span>
                   <select className="input cc-bot-v12-mode-select" value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)} style={{colorScheme:"dark"}}>
-                    <option value="AUTO">AUTO · Vector Edge</option>
-                    <option value="RACE">RACE · High Speed</option>
-                    <option value="FLIP_LOCK">FLIP LOCK · Reactive Profit Lock</option>
-                    <option value="ZERO_GRID">ZERO GRID · Pending Grid</option>
-                    <option value="MANUAL">MANUAL · Custom Controls</option>
+                    <option value="AUTO">AUTO</option>
+                    <option value="RACE">RACE</option>
+                    <option value="FLIP_LOCK">FLIP LOCK</option>
+                    <option value="ZERO_GRID">ZERO GRID</option>
+                    <option value="MANUAL">MANUAL</option>
                   </select>
                 </label>
-                <div className="cc-bot-v12-mode-copy"><b>{modeCopy[controlMode].title}</b><span>{modeCopy[controlMode].subtitle}</span></div>
+
               </div>
             ) : (
               <div className="cc-bot-v2-modes" role="radiogroup" aria-label="รูปแบบการควบคุมบอท">
@@ -2991,14 +2992,14 @@ function BotSettingsModal(props:any) {
           <div className="cc-bot-v2-workspace">
             <main className="cc-bot-v2-main">
               <section className="cc-bot-v2-panel">
-                <div className="cc-bot-v2-section-title compact"><span>02</span><div><b>แผนการเปิดออเดอร์</b><small>ค่าชุดนี้ส่งตรงไปยัง EA</small></div></div>
+                <div className="cc-bot-v2-section-title compact"><span>02</span><div><b>การเปิดออเดอร์</b></div></div>
                 {controlMode==="ZERO_GRID"&&<div className={"cc-bot-v2-lowvol-card "+(zeroGridLowVolatilityEnabled?"active":"standard")}>
                   <div className="cc-bot-v2-lowvol-copy">
                     <span className="cc-bot-v2-lowvol-icon"><ScenovaIcon name="layers" size={22}/></span>
                     <div><small>รูปแบบเสริมสำหรับ ZERO GRID</small><b>กริดตลาดความผันผวนต่ำ</b><p>{zeroGridLowVolatilityEnabled?"ลดระยะห่างระหว่างระดับเป็น 0.30 หน่วยราคา ใช้ระยะแรกประมาณ 0.10 และใช้ Lot คงที่ทุกระดับ":"ใช้โครงสร้างกริดมาตรฐาน ระยะ 2.00/3.00 และเพิ่ม Lot ตามลำดับระดับ"}</p></div>
                   </div>
                   <div className="cc-bot-v2-lowvol-action">
-                    <SwitchSetting checked={zeroGridLowVolatilityEnabled} onChange={(value:boolean)=>props.onEdit?.("zeroGridLowVolatilityEnabled",value)} onLabel="เปิดใช้งานกริดตลาดนิ่ง" offLabel="ใช้กริดมาตรฐาน"/>
+                    <SwitchSetting checked={zeroGridLowVolatilityEnabled} onChange={(value:boolean)=>props.onEdit?.("zeroGridLowVolatilityEnabled",value)} onLabel="เปิด" offLabel="ปิด"/>
                     {zeroGridLowVolatilityEnabled&&<div className="cc-bot-v2-lowvol-specs"><span>ระยะแรก <b>0.10</b></span><span>ระยะต่อระดับ <b>0.30</b></span><span>Lot <b>คงที่</b></span></div>}
                   </div>
                   <div className="cc-bot-v2-lowvol-note">การเปลี่ยนรูปแบบระหว่างมีรอบที่กำลังทำงาน จะมีผลกับรอบใหม่หลังรอบเดิมสิ้นสุด เพื่อไม่ย้ายคำสั่ง Pending กลางรอบ</div>
@@ -3029,7 +3030,7 @@ function BotSettingsModal(props:any) {
 
               {controlMode!=="ZERO_GRID"&&(
               <section className="cc-bot-v2-panel">
-                <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>เป้าหมายกำไรและจุดหยุดขาดทุน</b><small>{controlMode==="MANUAL"?"ระบุค่าปิดออเดอร์ด้วยตนเอง":"EA ปรับทางออกตามโครงสร้างและความผันผวน"}</small></div></div>
+                <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>กำไร / Stop Loss</b></div></div>
                 {controlMode!=="MANUAL" ? <>
                 {controlMode==="FLIP_LOCK" ? <div className="cc-bot-v2-auto-grid">
                   <div><ScenovaIcon name="profit" size={20}/><span><small>เริ่มกักกำไร</small><b>$0.25 ต่อ 0.01 Lot · ตอนนี้ประมาณ {"$"+flipLockArmMoney.toFixed(2)}</b></span></div>
@@ -3043,7 +3044,7 @@ function BotSettingsModal(props:any) {
                 </div>}
                 {controlMode==="RACE"&&<div className="cc-bot-v2-manual-exit">
                   <div className="cc-bot-v2-fields exit-fields">
-                    <div className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>ปิดไม้ทั้งหมดที่กำไร</span><SwitchSetting checked={raceCloseAllProfitEnabled} onChange={(value:boolean)=>props.onEdit?.("raceCloseAllProfitEnabled",value)} onLabel="เปิด · ปิดทั้งหมดเมื่อถึงเป้า" offLabel="ปิด · ใช้การบริหารกำไรของโหมดเร่งจังหวะ"/><small>เมื่อกำไรรวมของรอบเร่งจังหวะถึงเป้าหมาย EA จะสั่งปิดทุกสถานะในรอบทันที</small></div>
+                    <div className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>ปิดไม้ทั้งหมดที่กำไร</span><SwitchSetting checked={raceCloseAllProfitEnabled} onChange={(value:boolean)=>props.onEdit?.("raceCloseAllProfitEnabled",value)} onLabel="เปิด" offLabel="ปิด"/><small>เมื่อกำไรรวมของรอบเร่งจังหวะถึงเป้าหมาย EA จะสั่งปิดทุกสถานะในรอบทันที</small></div>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="target" size={17}/>กำไรรวมเพื่อปิดทั้งหมด</span><MoneyInput value={raceCloseAllProfitMoney} disabled={!raceCloseAllProfitEnabled} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("raceCloseAllProfitMoney",v)}/><small>ค่าเริ่มต้น 0.50 · ใช้สกุลเงินของบัญชี MT5</small></label>
                   </div>
                 </div>}
@@ -3063,7 +3064,7 @@ function BotSettingsModal(props:any) {
 
               {controlMode!=="ZERO_GRID"&&(
               <section className="cc-bot-v2-panel">
-                <div className="cc-bot-v2-section-title compact"><span>04</span><div><b>ขีดจำกัดของรอบเทรด</b><small>เปิดเฉพาะวงเงินที่ต้องการใช้</small></div></div>
+                <div className="cc-bot-v2-section-title compact"><span>04</span><div><b>Risk Controls</b></div></div>
                 <div className="cc-bot-v2-limit-grid">
                   <div><div><ScenovaIcon name="risk" size={18}/><span><b>ขาดทุนสูงสุดต่อรอบ</b><small>ปิดทุกไม้ในชุดเมื่อถึงวงเงิน</small></span></div><ToggleMoneyField label="เปิดใช้งาน" defaultValue="10" value={props.settings.maxBasketLossMoney} suffix="USD / รอบ" onChange={(v:string)=>props.onEdit?.("maxBasketLossMoney",v)}/></div>
                   <div><div><ScenovaIcon name="pnl" size={18}/><span><b>ขาดทุนสูงสุดต่อวัน</b><small>หยุดเปิดรอบใหม่เมื่อถึงวงเงิน</small></span></div><ToggleMoneyField label="เปิดใช้งาน" defaultValue="25" value={props.settings.dailyLossMoney} suffix="USD / วัน" onChange={(v:string)=>props.onEdit?.("dailyLossMoney",v)}/></div>
@@ -3098,10 +3099,10 @@ function BotSettingsModal(props:any) {
           </div>
         </div>
 
-        <div className="cc-bot-modal-footer cc-bot-v2-footer">
-          <div className="cc-bot-v12-footer-state">{embedded?<><i className={props.locked?"warn":"good"}/><span>{props.locked?"หยุดบอทก่อนแก้ไข · ค่าปัจจุบันยังดูได้":"พร้อมแก้ไขและส่งค่าไปยัง EA"}</span></>:null}</div>
-          <div>{!embedded&&<button type="button" className="btn" onClick={()=>props.onClose?.()} disabled={props.busy}>ยกเลิก</button>}<button type="button" className="btn cc-save-primary" disabled={props.busy||props.locked||!props.dirty} onClick={props.onSave}><ScenovaIcon name="save" size={17}/>{props.busy?"กำลังบันทึก...":props.locked?"หยุดบอทเพื่อบันทึก":"บันทึกและส่งให้ EA"}</button></div>
-        </div>
+        {!embedded&&<div className="cc-bot-modal-footer cc-bot-v2-footer">
+          <div/>
+          <div><button type="button" className="btn" onClick={()=>props.onClose?.()} disabled={props.busy}>ยกเลิก</button><button type="button" className="btn cc-save-primary" disabled={props.busy||!props.dirty} onClick={props.onSave}><ScenovaIcon name="save" size={17}/>{props.busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button></div>
+        </div>}
       </div>
     </div>
   );
