@@ -9,13 +9,13 @@ type DashboardSnapshot = {
   instance?: any;
   softwareUpdate?: any;
   liveStatus?: any;
+  startTransition?: any;
 };
 
 type ManualAction = "UPDATE_EA_RESTART" | "CONNECT_MT5";
 type BusyAction = ManualAction | "START_RECOVERY" | "";
 
 const UI_PENDING_TIMEOUT_MS = 3 * 60_000;
-const START_COMMAND_TIMEOUT_MS = 20_000;
 const DASHBOARD_REFRESH_MS = 3_000;
 const MOUNT_RECHECK_MS = 750;
 
@@ -28,11 +28,8 @@ export function Mt5ManualActionControls() {
   const [busyAction, setBusyAction] = useState<BusyAction>("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [runtimeError, setRuntimeError] = useState("");
-  const [latestStartCommand, setLatestStartCommand] = useState<any>(null);
   const [startIntentAt, setStartIntentAt] = useState<number | null>(null);
   const refreshInFlightRef = useRef(false);
-  const timedOutStartRef = useRef("");
 
   async function refresh(light = false) {
     if (refreshInFlightRef.current) return;
@@ -41,25 +38,6 @@ export function Mt5ManualActionControls() {
       const result = await api("/bot/dashboard" + (light ? "?light=1" : ""));
       setData(previous => light && previous ? { ...previous, ...result } : result);
 
-      const resultSlotId = String(result?.selectedSlot?.id || "");
-      const resultDesired = String(result?.instance?.desired_state || "STOPPED").toUpperCase();
-      const resultActual = String(result?.instance?.actual_state || "STOPPED").toUpperCase();
-      if (resultSlotId && resultDesired === "RUNNING" && resultActual !== "RUNNING") {
-        try {
-          const logs = await api("/bot/logs?slotId=" + encodeURIComponent(resultSlotId));
-          const starts = Array.isArray(logs?.events)
-            ? logs.events.filter((event: any) => String(event?.command || "").toUpperCase() === "START")
-            : [];
-          starts.sort((a: any, b: any) => Number(b?.id || 0) - Number(a?.id || 0));
-          setLatestStartCommand(starts[0] || null);
-        } catch {
-          // Keep the last known command snapshot so a temporary log failure does
-          // not erase the start-stage explanation.
-        }
-      } else {
-        setLatestStartCommand(null);
-        timedOutStartRef.current = "";
-      }
     } catch {
       // The dashboard owns its own auth/error UI. Do not create a second one.
     } finally {
@@ -107,6 +85,9 @@ export function Mt5ManualActionControls() {
   const startRecoveryMessage = String(metrics?.startAfterRepairMessage || "");
   const botStarting = desiredState === "RUNNING" && actualState !== "RUNNING";
   const botRunning = actualState === "RUNNING";
+  const startTransition = data?.startTransition || {};
+  const startPhase = String(startTransition?.phase || "").toUpperCase();
+  const startCommandStatus = String(startTransition?.commandStatus || "").toUpperCase();
   const settingsLocked = Boolean(startIntentAt || desiredState === "RUNNING" || actualState === "RUNNING");
 
   // When an EA update is required there must be exactly one path that may
@@ -152,7 +133,6 @@ export function Mt5ManualActionControls() {
 
       const startButton = target.closest(".cc-v6-command.start, .cc-mobile-command.start") as HTMLButtonElement | null;
       if (startButton && !startButton.disabled) {
-        setRuntimeError("");
         setStartIntentAt(Date.now());
         window.setTimeout(() => void refresh(true), 250);
         window.setTimeout(() => void refresh(true), 1_250);
@@ -231,48 +211,6 @@ export function Mt5ManualActionControls() {
     }, MOUNT_RECHECK_MS);
     return () => window.clearInterval(id);
   }, [recoveryNeeded, needsEaUpdate, softwareUpdateRequired]);
-
-  useEffect(() => {
-    if (!botStarting || !slotId || !latestStartCommand) return;
-
-    const commandId = String(latestStartCommand?.id || "");
-    if (!commandId || timedOutStartRef.current === commandId) return;
-
-    const createdAt = Date.parse(String(latestStartCommand?.created_at || ""));
-    if (!Number.isFinite(createdAt)) return;
-    const remaining = Math.max(0, START_COMMAND_TIMEOUT_MS - (Date.now() - createdAt));
-
-    const timer = window.setTimeout(async () => {
-      if (timedOutStartRef.current === commandId) return;
-      timedOutStartRef.current = commandId;
-
-      const delivered = Boolean(latestStartCommand?.delivered_at);
-      const acked = Boolean(latestStartCommand?.acked_at);
-      const reason = !delivered
-        ? "คำสั่ง START ยังอยู่ในคิวและ EA ไม่ได้ดึงคำสั่งจาก Server"
-        : !acked
-          ? "Server ส่ง START ถึง EA แล้ว แต่ EA ยังไม่ยืนยันการทำงาน"
-          : "EA ยืนยัน START แล้ว แต่ Runtime ยังไม่เปลี่ยนเป็น RUNNING";
-      setRuntimeError(`Start Timeout · ${reason} · ระบบยกเลิกคำสั่งที่ค้างและเข้าสู่ Safe Stop แล้ว`);
-
-      try {
-        await api("/bot/stop?slotId=" + encodeURIComponent(slotId), { method: "POST" });
-      } catch (e: any) {
-        setRuntimeError(`Start Timeout · ${reason} · ส่ง Safe Stop ไม่สำเร็จ: ${String(e?.message || "unknown error")}`);
-      } finally {
-        await refresh(true);
-      }
-    }, remaining);
-
-    return () => window.clearTimeout(timer);
-  }, [botStarting, slotId, latestStartCommand]);
-
-  useEffect(() => {
-    if (botRunning) {
-      setRuntimeError("");
-      timedOutStartRef.current = "";
-    }
-  }, [botRunning]);
 
   useEffect(() => {
     if (startRecoveryRequested && !needsEaUpdate) {
@@ -462,13 +400,6 @@ export function Mt5ManualActionControls() {
   );
 
   const startStage = useMemo(() => {
-    if (runtimeError) {
-      return {
-        tone: "bad",
-        label: "เริ่มบอทไม่สำเร็จ",
-        detail: runtimeError
-      };
-    }
     if (botRunning) {
       const execution = String(metrics?.executionStatus || liveStatus?.code || "RUNNING");
       return {
@@ -478,21 +409,14 @@ export function Mt5ManualActionControls() {
       };
     }
     if (botStarting) {
-      if (!latestStartCommand) {
-        return {
-          tone: "warn",
-          label: "กำลังส่งคำสั่ง Start",
-          detail: "Server รับคำสั่งแล้ว · กำลังตรวจคิวคำสั่งและรอ EA Heartbeat"
-        };
-      }
-      if (latestStartCommand?.acked_at) {
+      if (startCommandStatus === "ACKED" || startPhase === "WAITING_HEARTBEAT") {
         return {
           tone: "warn",
           label: "EA รับและยืนยันคำสั่งแล้ว",
           detail: "START = ACKED · กำลังรอ Runtime เปลี่ยนเป็น RUNNING"
         };
       }
-      if (latestStartCommand?.delivered_at) {
+      if (startCommandStatus === "DELIVERED" || startPhase === "DELIVERED_TO_EA") {
         return {
           tone: "warn",
           label: "ส่งคำสั่งถึง EA แล้ว",
@@ -502,7 +426,7 @@ export function Mt5ManualActionControls() {
       return {
         tone: "warn",
         label: "คำสั่ง Start อยู่ในคิว",
-        detail: "START = PENDING · รอ Heartbeat จาก EA มารับคำสั่ง"
+        detail: "START = PENDING · Server จะคง RUNNING ไว้จนกว่า EA จะรับหรือผู้ใช้กดหยุดเอง"
       };
     }
     if (desiredState === "SAFE_STOP" || actualState === "SAFE_STOP") {
@@ -522,10 +446,10 @@ export function Mt5ManualActionControls() {
         : "รอ Windows Agent / EA เชื่อมต่อ"
     };
   }, [
-    runtimeError,
     botRunning,
     botStarting,
-    latestStartCommand,
+    startCommandStatus,
+    startPhase,
     metrics?.executionStatus,
     liveStatus?.code,
     liveStatus?.label,
