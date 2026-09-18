@@ -34,6 +34,9 @@ jobs:
       - name: RACE 10-second volume and safe rollover contract
         shell: pwsh
         run: ./tests/race-volume-rollover-contract.ps1
+      - name: FLIP LOCK strict isolation contract
+        shell: pwsh
+        run: ./tests/flip-lock-isolation-contract.ps1
       - name: ZERO GRID stability simulation regression
         run: node ./tests/zero-grid-v1-simulation.mjs
       - name: LOCAL account-follow no customer Slot contract
