@@ -689,6 +689,17 @@ export class BotController {
       settings = row?.settings || null;
     }
 
+    const blankTodayPerformance = () => ({
+      trades: 0,
+      wins: 0,
+      losses: 0,
+      winRate: 0,
+      netProfit: 0,
+      drawdownMoney: 0,
+      drawdownPercent: 0
+    });
+    const controlModes = ["AUTO", "RACE", "FLIP_LOCK", "ZERO_GRID", "MANUAL"];
+
     let tradeJournal = {
       stats: {
         closedTrades: 0,
@@ -700,6 +711,8 @@ export class BotController {
         averageLoss: 0,
         profitFactor: 0
       },
+      today: blankTodayPerformance(),
+      modeToday: controlModes.map(mode => ({ mode, ...blankTodayPerformance() })),
       recent: [] as any[],
       hourlyWinRate: [] as Array<{
         hour: number;
@@ -712,6 +725,88 @@ export class BotController {
         grossLoss: number;
       }>
     };
+
+    if (instance) {
+      // "Today" is Bangkok-local trading day. Pull only closed Basket events;
+      // this keeps the query small enough for the lightweight 10-second refresh.
+      const todayRows = await this.db.query(
+        `SELECT
+           net_profit::float8 AS net_profit,
+           metadata->>'controlMode' AS control_mode,
+           entry_model,
+           entry_trigger,
+           created_at
+         FROM trade_journal
+         WHERE bot_instance_id=$1
+           AND event_type='BASKET'
+           AND created_at >= (
+             date_trunc('day', now() AT TIME ZONE 'Asia/Bangkok')
+             AT TIME ZONE 'Asia/Bangkok'
+           )
+         ORDER BY created_at ASC`,
+        [instance.id]
+      );
+
+      const rows = todayRows.rows || [];
+      const totalTodayNet = rows.reduce(
+        (sum:any,row:any) => sum + Number(row.net_profit || 0),
+        0
+      );
+      const currentBalance = Number(instance?.metrics?.balance || 0);
+      const dayStartBalance = Math.max(0, currentBalance - totalTodayNet);
+
+      const resolveMode = (row:any) => {
+        const saved = String(row.control_mode || "").toUpperCase();
+        if (controlModes.includes(saved)) return saved;
+        // Backward-compatible classification for journal rows created before
+        // controlMode was stored in metadata.
+        const fingerprint = (
+          String(row.entry_model || "") + " " +
+          String(row.entry_trigger || "")
+        ).toUpperCase();
+        if (fingerprint.includes("RACE")) return "RACE";
+        if (fingerprint.includes("FLIP")) return "FLIP_LOCK";
+        if (fingerprint.includes("ZERO")) return "ZERO_GRID";
+        if (fingerprint.includes("MANUAL")) return "MANUAL";
+        return "AUTO";
+      };
+
+      const summarize = (selected:any[]) => {
+        let equityCurve = 0;
+        let peak = 0;
+        let maxDrawdown = 0;
+        let wins = 0;
+        let losses = 0;
+        let netProfit = 0;
+        for (const row of selected) {
+          const pnl = Number(row.net_profit || 0);
+          netProfit += pnl;
+          if (pnl > 0) wins++;
+          if (pnl < 0) losses++;
+          equityCurve += pnl;
+          peak = Math.max(peak, equityCurve);
+          maxDrawdown = Math.max(maxDrawdown, peak - equityCurve);
+        }
+        const trades = selected.length;
+        return {
+          trades,
+          wins,
+          losses,
+          winRate: trades > 0 ? wins / trades * 100 : 0,
+          netProfit,
+          drawdownMoney: maxDrawdown,
+          drawdownPercent: dayStartBalance > 0
+            ? maxDrawdown / dayStartBalance * 100
+            : 0
+        };
+      };
+
+      tradeJournal.today = summarize(rows);
+      tradeJournal.modeToday = controlModes.map(mode => ({
+        mode,
+        ...summarize(rows.filter((row:any) => resolveMode(row) === mode))
+      }));
+    }
 
     if (instance && !lightweight) {
       const stats = await this.db.one(

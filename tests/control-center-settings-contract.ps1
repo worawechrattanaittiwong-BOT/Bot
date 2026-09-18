@@ -1,0 +1,41 @@
+$ErrorActionPreference = 'Stop'
+
+function Read-Text([string]$path) {
+  if (-not (Test-Path $path)) { throw "Missing source: $path" }
+  return [System.IO.File]::ReadAllText((Resolve-Path $path))
+}
+function Need([string]$text,[string]$needle,[string]$message) {
+  if (-not $text.Contains($needle)) { throw $message }
+}
+
+$page = Read-Text 'apps/web/app/dashboard/page.tsx'
+$css = Read-Text 'apps/web/app/premium-dashboard.css'
+$bot = Read-Text 'apps/api/src/bot.controller.ts'
+$eaApi = Read-Text 'apps/api/src/ea.controller.ts'
+
+Need $page 'cc-v12-control-grid' 'V12 compact control grid missing'
+Need $page '<BotSettingsModal' 'Bot Settings workspace missing'
+Need $page 'embedded' 'Bot Settings must be embedded on the Control Center'
+Need $page 'cc-bot-v12-mode-select' 'Trading Mode dropdown missing'
+foreach($mode in @('AUTO · Vector Edge','RACE · High Speed','FLIP LOCK · Reactive Profit Lock','ZERO GRID · Pending Grid','MANUAL · Custom Controls')) {
+  Need $page $mode "Mode dropdown option missing: $mode"
+}
+Need $page 'Win Rate วันนี้' 'Daily Win Rate KPI missing'
+Need $page 'Drawdown วันนี้' 'Daily Drawdown KPI missing'
+Need $page 'PERFORMANCE BY MODE' 'Per-mode performance card missing'
+Need $page 'modePerformanceToday.map' 'Per-mode performance rows must use real API data'
+Need $page 'STRATEGY & BOT CONTROL' 'Compact bot controls missing'
+Need $page 'SCENOVA AI ENGINE' 'AI/Genetic platform card missing'
+Need $page 'AI-driven & Genetic Algorithm' 'AI-driven Genetic Algorithm identity missing'
+if($page.Contains('<LivePriceChart points={livePricePoints}')) { throw 'Price chart must not render on V12 Control Center' }
+
+Need $bot 'modeToday: controlModes.map' 'Dashboard per-mode stats payload missing'
+Need $bot "AT TIME ZONE 'Asia/Bangkok'" 'Today stats must use Bangkok-local day'
+Need $bot 'drawdownMoney: maxDrawdown' 'Realized daily drawdown calculation missing'
+Need $bot 'drawdownPercent:' 'Daily drawdown percent missing'
+Need $eaApi 'controlMode: journalControlMode' 'Journal must persist execution mode ownership'
+Need $css '.cc-v12-control-grid' 'V12 layout styling missing'
+Need $css '.cc-bot-v2-embedded' 'Inline settings styling missing'
+Need $css 'grid-template-columns:repeat(8' 'Desktop KPI row must fit all eight cards'
+
+Write-Host 'Control Center V12 inline-settings/per-mode-performance contract PASS'

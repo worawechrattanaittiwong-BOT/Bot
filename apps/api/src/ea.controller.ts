@@ -952,6 +952,28 @@ export class EaController {
     const text = (value: unknown, max = 64) =>
       String(value ?? "").trim().slice(0, max) || null;
 
+    // Persist execution ownership with each journal event so dashboard
+    // performance can report real Win Rate / Drawdown by control mode.
+    const journalSettingsRow = await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+      [instance.id]
+    );
+    const journalSettings = { ...(journalSettingsRow?.settings || {}) };
+    const rawJournalMode = String(journalSettings.controlMode || "").toUpperCase();
+    const journalEngineMode = String(journalSettings.engineMode || "AUTO").toUpperCase();
+    const journalProfitMode = String(journalSettings.profitTargetMode || "AUTO").toUpperCase();
+    const journalManualStop = Number(journalSettings.manualStopLossPoints || 0);
+    const journalControlMode =
+      ["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "MANUAL"].includes(rawJournalMode)
+        ? rawJournalMode
+        : journalEngineMode === "ZERO_GRID"
+          ? "ZERO_GRID"
+          : journalEngineMode === "RACE"
+            ? "RACE"
+            : (journalProfitMode === "MANUAL" || journalManualStop > 0)
+              ? "MANUAL"
+              : "AUTO";
+
     await this.db.query(
       `INSERT INTO trade_journal(
          bot_instance_id,mt5_account_id,deal_ticket,position_id,event_type,direction,
@@ -986,6 +1008,7 @@ export class EaController {
         Math.max(0, Math.trunc(n(body.basketIndex))),
         JSON.stringify({
           source: "EA",
+          controlMode: journalControlMode,
           schema: eventType === "BASKET"
             ? Math.max(2, Math.min(5, Math.trunc(n(body.journalSchema, 2))))
             : 1,

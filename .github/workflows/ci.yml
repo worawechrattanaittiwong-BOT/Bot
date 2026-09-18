@@ -25,6 +25,9 @@ jobs:
       - run: npm install
       - run: npm run typecheck
       - run: npm run build
+      - name: Control Center V12 inline settings and per-mode performance
+        shell: pwsh
+        run: ./tests/control-center-settings-contract.ps1
       - name: AUTO V20 same-dataset policy regression
         shell: pwsh
         run: ./tests/auto-v20-policy-regression.ps1

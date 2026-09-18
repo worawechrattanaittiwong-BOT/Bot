@@ -132,7 +132,15 @@ export default function DashboardPage() {
       if (light) query.set("light", "1");
       const d = await api("/bot/dashboard" + (query.toString() ? "?" + query.toString() : ""));
       if (light) {
-        setData((previous) => previous ? { ...d, tradeJournal: previous.tradeJournal } : d);
+        setData((previous) => previous ? {
+          ...d,
+          tradeJournal: {
+            ...(previous.tradeJournal || {}),
+            ...(d.tradeJournal || {}),
+            recent: previous.tradeJournal?.recent || [],
+            hourlyWinRate: previous.tradeJournal?.hourlyWinRate || []
+          }
+        } : d);
       } else {
         setData(d);
       }
@@ -632,6 +640,18 @@ export default function DashboardPage() {
   };
   const currentPositions = Math.max(0, Number(metrics.positions || 0));
   const configuredMaxPositions = Math.max(1, Number(settings.maxPositions || 1));
+  const activeControlModeRaw = String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase();
+  const activeControlMode = ["AUTO","RACE","FLIP_LOCK","ZERO_GRID","MANUAL"].includes(activeControlModeRaw)
+    ? activeControlModeRaw
+    : "AUTO";
+  const todayPerformance = data?.tradeJournal?.today || {
+    trades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
+  };
+  const modePerformanceToday = Array.isArray(data?.tradeJournal?.modeToday)
+    ? data.tradeJournal.modeToday
+    : ["AUTO","RACE","FLIP_LOCK","ZERO_GRID","MANUAL"].map(mode=>({
+        mode,trades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
+      }));
 
   const openPositions = Array.isArray(metrics.openPositions)
     ? [...metrics.openPositions].sort((a:any,b:any)=>Number(a.openedAt||0)-Number(b.openedAt||0))
@@ -1796,7 +1816,7 @@ export default function DashboardPage() {
           !data.account ? (
             <EmptySetup onNext={()=>setActiveView("account")} />
           ) : (
-            <div className="cc-overview cc-v3 cc-v4">
+            <div className="cc-overview cc-v3 cc-v4 cc-v12">
               <div className="cc-v4-ambient" aria-hidden="true"><i/><i/><i/></div>
               {marketSessionClosed ? (
                 <div className="cc-connect-alert">
@@ -1864,157 +1884,111 @@ export default function DashboardPage() {
                     </button>
                     <button className="cc-v6-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><span><ScenovaIcon name="stop" size={21}/></span><b>หยุดบอท</b><small>Safe Stop</small></button>
                     <button className="cc-v6-command close" disabled={busy||currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?")&&command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span><ScenovaIcon name="close" size={22}/></span><b>ปิดทุกไม้</b><small>Close All</small></button>
-                    <button className="cc-v6-command settings" disabled={settingsLocked} title={settingsLocked?"หยุดบอทก่อนแก้ไขการตั้งค่า":"เปิดการตั้งค่า"} onClick={()=>!settingsLocked&&setBotSettingsOpen(true)}><span><ScenovaIcon name="settings" size={21}/></span><b>{settingsLocked?"ล็อกการตั้งค่า":"ตั้งค่า"}</b><small>{settingsLocked?"Stop bot to edit":"Settings"}</small></button>
+                    <button className="cc-v6-command settings" title={settingsLocked?"ดูค่าได้ · หยุดบอทก่อนแก้ไข":"ไปยังการตั้งค่าบอท"} onClick={()=>document.getElementById("bot-settings")?.scrollIntoView({behavior:"smooth",block:"center"})}><span><ScenovaIcon name="settings" size={21}/></span><b>{settingsLocked?"ดูการตั้งค่า":"ตั้งค่า"}</b><small>{settingsLocked?"View settings":"Bot Settings"}</small></button>
                   </div>
                 </div>
               </section>
 
-              <section className="cc-kpi-grid cc-v3-kpis cc-v6-kpis">
+              <section className="cc-kpi-grid cc-v3-kpis cc-v6-kpis cc-v12-kpis">
                 <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online?"$"+Number(metrics.balance||0).toFixed(2):"—"} sub="Balance" />
                 <DashboardMetric icon="equity" label="มูลค่ารวม" value={isMt5Online?"$"+Number(metrics.equity||0).toFixed(2):"—"} sub="Equity" />
                 <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2):"—"} sub="Daily P/L" tone={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"good":"bad"):"neutral"} />
+                <DashboardMetric icon="target" label="Win Rate วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.winRate||0).toFixed(1)+"%":"—"} sub={Number(todayPerformance.trades||0)>0?Number(todayPerformance.wins||0)+" / "+Number(todayPerformance.trades||0)+" Basket":"ยังไม่มี Basket ปิดวันนี้"} tone={Number(todayPerformance.trades||0)>0?(Number(todayPerformance.winRate||0)>=60?"good":Number(todayPerformance.winRate||0)>=45?"warn":"bad"):"neutral"} />
+                <DashboardMetric icon="risk" label="Drawdown วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.drawdownPercent||0).toFixed(2)+"%":"0.00%"} sub={"-$"+Number(todayPerformance.drawdownMoney||0).toFixed(2)+" Realized DD"} tone={Number(todayPerformance.drawdownPercent||0)>=5?"bad":Number(todayPerformance.drawdownPercent||0)>=2?"warn":"good"} />
                 <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
                 <DashboardMetric icon="clock" label="ความหน่วง MT5" value={isMt5Online&&heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"} sub="Heartbeat Latency" tone={heartbeatLatencyMs>2000?"bad":heartbeatLatencyMs>700?"warn":"good"} />
                 <DashboardMetric icon="shield" label="สถานะระบบ" value={isMt5Online&&heartbeatAgeSeconds<=20?"พร้อมใช้งาน":isAgentOnline?"รอ EA":"ออฟไลน์"} sub={"HTTP "+(heartbeatHttpStatus||"—")+" · "+heartbeatAgeSeconds.toFixed(0)+"s"} tone={isMt5Online&&heartbeatAgeSeconds<=20?"good":"warn"} />
               </section>
 
-              <div className="cc-v6-analytics-grid">
-                <div className="cc-v8-left-stack">
-                  <LivePriceChart points={livePricePoints} symbol={String(metrics.symbol || settings.symbol || "XAUUSD")} marketClosed={marketSessionClosed}/>
+              <div className="cc-v12-control-grid">
+                <section className="cc-v12-settings-column" aria-label="ตั้งค่าบอท">
+                  <BotSettingsModal
+                    embedded
+                    open
+                    locked={settingsLocked}
+                    settings={settings}
+                    symbol={String(metrics.symbol||settings.symbol||"")}
+                    dirty={settingsDirty}
+                    busy={busy}
+                    syncLabel={settingsSyncLabel}
+                    metrics={metrics}
+                    hardStopMultiplier={hardStopMultiplier}
+                    systemHardStopDistancePoints={systemHardStopDistancePoints}
+                    hardStopDistancePoints={hardStopDistancePoints}
+                    manualStopLossPoints={manualStopLossPoints}
+                    effectiveBasketLoss={effectiveBasketLoss}
+                    effectiveBasketProfit={effectiveBasketProfit}
+                    basketCycleProfit={Number(metrics.basketCycleProfit||metrics.basketProfit||0)}
+                    profitControlMode={profitControlMode}
+                    spreadValueLabel={spreadValueLabel}
+                    spreadLimitLabel={spreadLimitLabel}
+                    spreadStatusLabel={spreadStatusLabel[spreadStatus]||spreadStatus}
+                    onEdit={editSetting}
+                    onSave={async(e:any)=>{ await saveSettings(e); }}
+                  />
+                </section>
 
-                  <section className="panel cc-v6-market-insight">
-                    <div className="cc-v6-panel-head"><div><span><ScenovaIcon name="brain" size={18}/></span><b>Market Insight</b></div><em>AI ANALYSIS</em></div>
-                    <div className={"cc-v6-market-bias "+(entryBias==="SELL"?"down":entryBias==="BUY"?"up":"flat")}>
-                      <ScenovaIcon name={entryBias==="SELL"?"arrow-down":"arrow-up"} size={31}/>
-                      <div><small>แนวโน้มปัจจุบัน</small><b>{entryBiasLabel}</b><span>{marketRegimeDetailLabel[String(metrics.marketRegimeDetail||"")]||marketRegimeLabel[String(metrics.marketRegime||"")]||"กำลังวิเคราะห์"}</span></div>
+                <aside className="cc-v12-side-column">
+                  <section className="panel cc-v12-strategy-card">
+                    <div className="cc-v12-card-head">
+                      <div><span><ScenovaIcon name="brain" size={17}/></span><div><small>STRATEGY & BOT CONTROL</small><b>{activeControlMode}</b></div></div>
+                      <em className={botRunning?"good":botStarting?"warn":"neutral"}>{botRunning?"RUNNING":botStarting?"STARTING":"READY"}</em>
                     </div>
-                    <div className="cc-v6-insight-rows">
-                      <InsightRow label="คุณภาพจุดเข้า" value={entryQualityCustomerText+" · "+Number(metrics.entryQualityScore||0).toFixed(0)+"/100"}/>
-                      <InsightRow label="Confidence (สูตร)" value={Number(metrics.signalConfidence||0).toFixed(0)+"%"} tone={Number(metrics.signalConfidence||0)>=70?"good":"neutral"}/>
-                      {Boolean(metrics.autoV20Active) ? <>
-                        <InsightRow label="Win Probability (Basket จริง)" value={Number(metrics.autoV20WinProbability||0).toFixed(1)+"% · "+Number(metrics.autoV20WinSamples||0)+" รอบ"}/>
-                        <InsightRow label="กำไรเฉลี่ยสุทธิ / Basket" value={Number(metrics.autoV20AverageNet||0).toFixed(2)}/>
-                        <InsightRow label="AUTO BUY / SELL" value={Number(metrics.autoV20BuyScore||0).toFixed(0)+" / "+Number(metrics.autoV20SellScore||0).toFixed(0)}/>
-                        <InsightRow label="R:R แผนเข้า" value={Number(metrics.autoV20RR||0).toFixed(2)+" · Cost "+Number(metrics.autoV20KnownCostMoney||0).toFixed(2)}/>
-                        <InsightRow label="AUTO Phase" value={String(metrics.autoV20Phase||"INITIALIZING")}/>
-                      </> : null}
-                      <InsightRow label="Order Block" value={orderBlockCustomerText+" · "+orderBlockQuality.toFixed(0)+"%"}/>
-                      <InsightRow label="Fibonacci" value={fibCustomerText+" · "+fibScore.toFixed(0)+"%"}/>
-                      <InsightRow label="แนวรับ / แนวต้าน" value={(Number(metrics.nearestSupport||0)>0?Number(metrics.nearestSupport).toFixed(symbolDigits):"—")+" / "+(Number(metrics.nearestResistance||0)>0?Number(metrics.nearestResistance).toFixed(symbolDigits):"—")}/>
-                      <InsightRow label="จังหวะเข้า" value={setupCustomerText}/>
-                      <InsightRow label="Market Cycle" value={(marketCycleLabel[marketCycleState]||marketCycleState)+" · "+(lowerTimeframeLabel[lowerTimeframeState]||lowerTimeframeState)}/>
-                      <InsightRow label="Demand / Supply" value={"D "+demandZoneScore.toFixed(0)+" ("+(zoneQualityLabel[demandZoneQuality]||demandZoneQuality)+") · S "+supplyZoneScore.toFixed(0)+" ("+(zoneQualityLabel[supplyZoneQuality]||supplyZoneQuality)+")"}/>
-                      <InsightRow label="RSI / Divergence" value={"RSI M5 "+rsiM5.toFixed(1)+" · Bull "+rsiBullDiv.toFixed(0)+" · Bear "+rsiBearDiv.toFixed(0)}/>
-                      <InsightRow label="ADX / DMI" value={"ADX "+adxM5.toFixed(1)+" · +DI "+plusDiM5.toFixed(1)+" · -DI "+minusDiM5.toFixed(1)}/>
-                      <InsightRow label="VWAP / Space" value={vwapDistanceAtr.toFixed(2)+" ATR จาก VWAP · พื้นที่ "+(spaceToTargetAtr>=90?"เปิด":spaceToTargetAtr.toFixed(2)+" ATR")}/>
-                      <InsightRow label="Reversal" value={reversalStatus==="NONE"?"ยังไม่ยืนยัน":reversalStatus.replace(/_/g," ")}/>
-                      <InsightRow label="Basket Fill" value={fillPositions+"/"+fillTargetPositions+" · "+(fillPhaseLabel[fillPhase]||fillPhase)+" · "+(fillReasonLabel[fillBlockReason]||fillBlockReason)}/>
-                      <InsightRow label="News Mode" value={newsModeLabel[newsMode]||newsMode}/>
-                      <InsightRow label="Local Extreme" value={localExtremeState==="NONE"?"ไม่พบ Local Top/Bottom เสี่ยง":localExtremeState.replace(/_/g," ")+" · "+localExtremeScore.toFixed(0)+"/100"+(breakoutHoldConfirmed?" · Hold ยืนยัน":"")}/>
-                      {(tacticalCountertrendActive||tacticalCountertrendScore>0)&&<InsightRow label="Tactical Countertrend" value={(tacticalCountertrendDirection>0?"BUY":tacticalCountertrendDirection<0?"SELL":"รอ")+" · "+tacticalCountertrendScore.toFixed(0)+"/100 · "+tacticalCountertrendReason.replace(/_/g," ")}/>}
-                      <InsightRow label="Indicator Brain V6" value={(indicatorDecisionLabel[indicatorDecision]||indicatorDecision)+" · "+indicatorCompositeScore.toFixed(0)+"/100 · "+indicatorV6Mode}/>
-                      <InsightRow label="Location / Structure" value={indicatorLocationScore.toFixed(0)+" / "+indicatorStructureScore.toFixed(0)+" · "+premiumDiscountState.replace(/_/g," ")+" · "+levelFlipState.replace(/_/g," ")}/>
-                      <InsightRow label="Momentum / Execution" value={indicatorMomentumScore.toFixed(0)+" / "+indicatorExecutionScore.toFixed(0)+" · "+macdState.replace(/_/g," ")+" · "+stochState.replace(/_/g," ")}/>
-                      <InsightRow label="Volatility / Cost" value={indicatorVolatilityScore.toFixed(0)+" / "+indicatorCostSpaceScore.toFixed(0)+" · "+squeezeState.replace(/_/g," ")}/>
-                      <InsightRow label="Volume Profile" value={volumeProfileState.replace(/_/g," ")+(volumePoc>0?" · POC "+Number(volumePoc).toFixed(symbolDigits):"")+(volumeVah>0&&volumeVal>0?" · VA "+Number(volumeVal).toFixed(symbolDigits)+"–"+Number(volumeVah).toFixed(symbolDigits):"")}/>
-                      <InsightRow label="Anchored VWAP" value={multiVwapState.replace(/_/g," ")+(swingAnchoredVwap>0?" · Swing "+Number(swingAnchoredVwap).toFixed(symbolDigits):"")+(impulseAnchoredVwap>0?" · Impulse "+Number(impulseAnchoredVwap).toFixed(symbolDigits):"")}/>
-                      <InsightRow label="Donchian / Target" value={donchianState.replace(/_/g," ")+(indicatorTargetPrice>0?" · เป้าถัดไป "+Number(indicatorTargetPrice).toFixed(symbolDigits):"")}/>
-                      <InsightRow label="เหตุผล Indicator" value={indicatorWhyLabel[indicatorWhy]||indicatorWhy.replace(/_/g," ")}/>
-                      {indicatorHistorySamples>=20&&<InsightRow label="Indicator Outcome Learning" value={"Win "+indicatorHistoryWinProbability.toFixed(1)+"% · EV Score "+indicatorHistoryEvScore.toFixed(0)+" · "+indicatorHistorySamples+" Basket"}/>}
-                      <InsightRow label="เหตุผลเข้า/รอล่าสุด" value={latestDecisionCustomerText}/>
-                      {latestCloseReason!=="NONE" && <InsightRow label="เหตุผลปิดล่าสุด" value={latestCloseCustomerText}/>}
+                    <div className="cc-v12-strategy-meta">
+                      <span><small>Symbol</small><b>{String(metrics.symbol||settings.symbol||"—")}</b></span>
+                      <span><small>Lot</small><b>{activeControlMode==="ZERO_GRID"?Number(settings.zeroGridBaseLot||0.01).toFixed(2):Number(settings.lot||0.01).toFixed(2)}</b></span>
+                      <span><small>EA Sync</small><b className={settingsSyncTone}>{settingsSyncLabel}</b></span>
+                    </div>
+                    <div className="cc-v12-quick-actions">
+                      <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
+                      <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
+                      <button className="close" disabled={busy||currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?")&&command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><ScenovaIcon name="close" size={15}/><span><b>ปิดทุกไม้</b><small>Close All</small></span></button>
+                      <button className="terminal" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={15}/><span><b>Terminal</b><small>Live Logs</small></span></button>
                     </div>
                   </section>
-                </div>
 
-                <section className="panel cc-v6-account-card">
-                  <div className="cc-v6-panel-head"><div><span><ScenovaIcon name="account" size={18}/></span><b>สถานะบัญชี</b></div><em className={isMt5Online?"good":"warn"}>{isMt5Online?"LIVE":"WAITING"}</em></div>
-                  <div className="cc-v6-account-grid">
-                    <StatusRow label="เลขบัญชี" value={data.account.account_number}/><StatusRow label="โบรกเกอร์" value={data.account.broker}/><StatusRow label="เซิร์ฟเวอร์" value={metrics.server||data.account.broker_server}/><StatusRow label="การเชื่อมต่อ" value={connectionLabel} tone={isMt5Online?"good":"warn"} dot/><StatusRow label="สิทธิ์ใช้งาน" value={accessLabel}/>
-                  </div>
-                  <div className="cc-v9-account-live">
-                    <div className="cc-v9-account-live-head"><span><i/>สถานะการทำงานสด</span><small>ข้อมูลล่าสุดจาก EA</small></div>
-                    <div className="cc-v9-account-live-grid">
-                      <AccountLiveStat icon="control" label="Web ต้องการ" value={String(desired)} tone={desired==="RUNNING"?"good":desired==="SAFE_STOP"?"warn":"neutral"}/>
-                      <AccountLiveStat icon="bot" label="EA จริง" value={String(state)} tone={state==="RUNNING"?"good":state==="SAFE_STOP"?"warn":"neutral"}/>
-                      <AccountLiveStat icon="orders" label="Position" value={currentPositions+" / "+configuredMaxPositions}/>
-                      <AccountLiveStat icon="status" label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20&&heartbeatHttpStatus>=200&&heartbeatHttpStatus<300?"good":"warn"}/>
-                      <AccountLiveStat icon="clock" label="Latency" value={heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"} tone={heartbeatLatencyMs>2000?"bad":heartbeatLatencyMs>700?"warn":"good"}/>
-                      <AccountLiveStat icon="pnl" label="Daily / Basket P&L" value={(Number(metrics.dailyProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2)+" / "+(Number(metrics.basketCycleProfit||metrics.basketProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.basketCycleProfit||metrics.basketProfit||0)).toFixed(2)} tone={Number(metrics.dailyProfit||0)>=0?"good":"bad"}/>
+                  <section className="panel cc-v12-mode-performance">
+                    <div className="cc-v12-card-head">
+                      <div><span><ScenovaIcon name="pnl" size={17}/></span><div><small>PERFORMANCE BY MODE</small><b>สถิติรายโหมดวันนี้</b></div></div>
+                      <em>Today</em>
                     </div>
-                  </div>
-                  <button className="btn full cc-status-detail" onClick={()=>setActiveView("account")}><ScenovaIcon name="settings" size={16}/>จัดการบัญชี</button>
-                </section>
+                    <div className="cc-v12-mode-table">
+                      <div className="head"><span>โหมด</span><span>Win Rate</span><span>Drawdown</span><span>Trades</span></div>
+                      {modePerformanceToday.map((row:any)=>{
+                        const mode=String(row.mode||"AUTO");
+                        const active=mode===activeControlMode;
+                        const win=Number(row.winRate||0);
+                        const dd=Number(row.drawdownPercent||0);
+                        return <div key={mode} className={"row "+(active?"active":"")}>
+                          <span className="mode"><i/>{mode}</span>
+                          <span className={Number(row.trades||0)>0?(win>=60?"good":win>=45?"warn":"bad"):"neutral"}>{Number(row.trades||0)>0?win.toFixed(1)+"%":"—"}</span>
+                          <span className={dd>=5?"bad":dd>=2?"warn":"good"}>{dd.toFixed(2)+"%"}<small>{"-$"+Number(row.drawdownMoney||0).toFixed(2)}</small></span>
+                          <span>{Number(row.trades||0)}<small>{active?(botRunning?"Active":"Selected"):"Idle"}</small></span>
+                        </div>;
+                      })}
+                    </div>
+                  </section>
 
-                <section className="panel cc-v6-ai-brand">
-                  <div className="cc-v6-ai-grid" aria-hidden="true"/>
-                  <img src="/assets/scenova-ai-operator-v1.png" alt="SCENOVA AI trading operator"/>
-                  <div className="cc-v6-ai-brand-copy">
-                    <div className="cc-v6-ai-logo"><ScenovaBrand className="scenova-brand-logo-operator"/></div>
-                    <p>DISCIPLINE<br/>AUTOMATES OPPORTUNITY</p>
-                    <div><span><ScenovaIcon name="spark" size={14}/>ANALYZE</span><span><ScenovaIcon name="timer" size={14}/>EXECUTE</span><span><ScenovaIcon name="shield" size={14}/>PROTECT</span></div>
+                  <div className="cc-v12-side-bottom">
+                    <section className="panel cc-v12-account-mini">
+                      <div className="cc-v12-card-head">
+                        <div><span><ScenovaIcon name="account" size={16}/></span><div><small>ACCOUNT DETAILS</small><b>สถานะบัญชี</b></div></div>
+                        <em className={isMt5Online?"good":"warn"}>{isMt5Online?"LIVE":"WAIT"}</em>
+                      </div>
+                      <dl>
+                        <div><dt>บัญชี</dt><dd>{data.account.account_number}</dd></div>
+                        <div><dt>Server</dt><dd>{metrics.server||data.account.broker_server}</dd></div>
+                        <div><dt>Position</dt><dd>{currentPositions+" / "+configuredMaxPositions}</dd></div>
+                        <div><dt>Daily P/L</dt><dd className={Number(metrics.dailyProfit||0)>=0?"good":"bad"}>{(Number(metrics.dailyProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2)}</dd></div>
+                      </dl>
+                    </section>
+                    <section className="panel cc-v12-ai-engine">
+                      <div><ScenovaIcon name="brain" size={24}/><span><small>SCENOVA AI ENGINE</small><b>AI-driven & Genetic Algorithm</b><em>Algorithmic Trading Platform</em></span></div>
+                      <p><span>AI Market Analysis</span><span>Genetic Optimization</span><span>Adaptive Risk</span></p>
+                    </section>
                   </div>
-                </section>
+                </aside>
               </div>
-
-              <LiveTerminalPanel
-                symbol={String(metrics.symbol||settings.symbol||"")}
-                accountNumber={String(data.account?.account_number||"—")}
-                server={String(metrics.server||data.account?.broker_server||"—")}
-                state={String(state)}
-                executionLabel={String(liveStatus.label||"—")}
-                executionDetail={String(liveStatus.detail||"")}
-                marketTradeLabel={marketTradeLabel}
-                marketRegime={marketRegimeLabel[String(metrics.marketRegime||"")]||String(metrics.marketRegime||"รอข้อมูล")}
-                entryBias={entryBiasLabel}
-                confidence={Number(metrics.signalConfidence||0)}
-                spread={spreadValueLabel}
-                spreadStatus={spreadStatusLabel[spreadStatus]||spreadStatus}
-                momentum={Number(metrics.momentumPoints||0)}
-                latestCommand={latestBotCommand ? commandLabel(String(latestBotCommand.command||"")) : "—"}
-                latestCommandStatus={latestCommandStatus}
-                openPositions={openPositions}
-                symbolDigits={symbolDigits}
-                filter={terminalFilter}
-                onFilter={setTerminalFilter}
-                entries={filteredTerminalEntries}
-                loading={logsLoading}
-                autoScroll={terminalAutoScroll}
-                onAutoScroll={setTerminalAutoScroll}
-                terminalRef={terminalWindowRef}
-                onOpenFull={()=>setLogsOpen(true)}
-              />
-
-              <BotSettingsModal
-                open={botSettingsOpen}
-                onClose={() => {
-                  setBotSettingsOpen(false);
-                }}
-                settings={settings}
-                symbol={String(metrics.symbol||settings.symbol||"")}
-                dirty={settingsDirty}
-                busy={busy}
-                syncLabel={settingsSyncLabel}
-                metrics={metrics}
-                hardStopMultiplier={hardStopMultiplier}
-                systemHardStopDistancePoints={systemHardStopDistancePoints}
-                hardStopDistancePoints={hardStopDistancePoints}
-                manualStopLossPoints={manualStopLossPoints}
-                effectiveBasketLoss={effectiveBasketLoss}
-                effectiveBasketProfit={effectiveBasketProfit}
-                basketCycleProfit={Number(metrics.basketCycleProfit||metrics.basketProfit||0)}
-                profitControlMode={profitControlMode}
-                spreadValueLabel={spreadValueLabel}
-                spreadLimitLabel={spreadLimitLabel}
-                spreadStatusLabel={spreadStatusLabel[spreadStatus]||spreadStatus}
-                onEdit={editSetting}
-                onSave={async(e:any)=>{
-                  await saveSettings(e);
-                  if (!settingsDirtyRef.current) {
-                    setBotSettingsOpen(false);
-                  }
-                }}
-              />
 
               <div className="cc-mobile-command-dock mobile-only" aria-label="ควบคุมบอท">
                 <button
@@ -2857,7 +2831,8 @@ function EmptySetup({onNext}:{onNext:()=>void}) {
 }
 
 function BotSettingsModal(props:any) {
-  if (!props.open) return null;
+  if (!props.open && !props.embedded) return null;
+  const embedded = Boolean(props.embedded);
 
   const entryMode = String(props.settings?.entryMode || "AUTO_MOMENTUM");
   const engineMode = String(props.settings?.engineMode || "AUTO").toUpperCase();
@@ -2962,37 +2937,59 @@ function BotSettingsModal(props:any) {
     Number(props.metrics?.zeroGridMaxLevelsPerSide) === 30;
 
   return (
-    <div className="cc-bot-modal-backdrop" role="presentation" onMouseDown={e=>{
-      if (e.target === e.currentTarget && !props.busy) props.onClose?.();
-    }}>
-      <div className="cc-bot-modal cc-bot-modal-full cc-bot-v2" role="dialog" aria-modal="true" aria-labelledby="cc-bot-modal-title">
+    <div
+      id={embedded ? "bot-settings" : undefined}
+      className={embedded ? "cc-bot-embedded-frame" : "cc-bot-modal-backdrop"}
+      role={embedded ? "region" : "presentation"}
+      onMouseDown={e=>{
+        if (!embedded && e.target === e.currentTarget && !props.busy) props.onClose?.();
+      }}
+    >
+      <div className={"cc-bot-modal cc-bot-modal-full cc-bot-v2 "+(embedded?"cc-bot-v2-embedded ":"")+(props.locked?"is-locked":"")} role={embedded?"group":"dialog"} aria-modal={embedded?undefined:true} aria-labelledby="cc-bot-modal-title">
         <div className="cc-bot-modal-head cc-bot-v2-head">
           <div className="cc-bot-modal-title">
             <span><ScenovaIcon name="bot" size={25}/></span>
             <div><small className="cc-bot-v2-kicker">SCENOVA BOT CONTROL</small><h2 id="cc-bot-modal-title">ตั้งค่าบอท</h2></div>
           </div>
           <div className="cc-bot-modal-head-actions">
+            {props.locked&&<span className="cc-bot-v12-lock"><ScenovaIcon name="shield" size={12}/>กำลังทำงาน · ดูค่าได้</span>}
             <span className={"cc-bot-modal-dirty "+(props.dirty?"warn":"good")}><i/>{props.dirty?"รอบันทึก":"บันทึกแล้ว"}</span>
-            <button type="button" className="cc-bot-modal-close" onClick={()=>props.onClose?.()} disabled={props.busy} aria-label="ปิดหน้าต่างตั้งค่าบอท">×</button>
+            {!embedded&&<button type="button" className="cc-bot-modal-close" onClick={()=>props.onClose?.()} disabled={props.busy} aria-label="ปิดหน้าต่างตั้งค่าบอท">×</button>}
           </div>
         </div>
 
         <div className="cc-bot-modal-body cc-bot-v2-body">
           <section className="cc-bot-v2-mode-section">
             <div className="cc-bot-v2-section-title"><span>01</span><div><b>เลือกรูปแบบการควบคุม</b><small>แต่ละโหมดจะเปิดเฉพาะค่าที่เกี่ยวข้องกับการส่งออเดอร์จริง</small></div></div>
-            <div className="cc-bot-v2-modes" role="radiogroup" aria-label="รูปแบบการควบคุมบอท">
-              {[
-                {id:"AUTO",icon:"brain",tag:"AUTO + VECTOR"},
-                {id:"FLIP_LOCK",icon:"trend",tag:"ล็อกกำไร + สลับฝั่ง"},
-                {id:"RACE",icon:"status",tag:"ดำเนินการเร็ว"},
-                {id:"ZERO_GRID",icon:"layers",tag:"กริดแบบ Hedging"},
-                {id:"MANUAL",icon:"settings",tag:"กำหนดรายละเอียด"}
-              ].map(mode=><button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} className={controlMode===mode.id?"active":""} onClick={()=>applyControlMode(mode.id)}>
-                <span className="cc-bot-v2-mode-icon"><ScenovaIcon name={mode.icon} size={22}/></span>
-                <span><em>{mode.tag}</em><b>{modeCopy[mode.id].title}</b><small>{modeCopy[mode.id].subtitle}</small></span>
-                <i className="cc-bot-v2-radio"/>
-              </button>)}
-            </div>
+            {embedded ? (
+              <div className="cc-bot-v12-mode-select-wrap">
+                <label>
+                  <span><ScenovaIcon name="brain" size={17}/>โหมดการเทรด <small>Trading Mode</small></span>
+                  <select className="input cc-bot-v12-mode-select" value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)}>
+                    <option value="AUTO">AUTO · Vector Edge</option>
+                    <option value="RACE">RACE · High Speed</option>
+                    <option value="FLIP_LOCK">FLIP LOCK · Reactive Profit Lock</option>
+                    <option value="ZERO_GRID">ZERO GRID · Pending Grid</option>
+                    <option value="MANUAL">MANUAL · Custom Controls</option>
+                  </select>
+                </label>
+                <div className="cc-bot-v12-mode-copy"><b>{modeCopy[controlMode].title}</b><span>{modeCopy[controlMode].subtitle}</span></div>
+              </div>
+            ) : (
+              <div className="cc-bot-v2-modes" role="radiogroup" aria-label="รูปแบบการควบคุมบอท">
+                {[
+                  {id:"AUTO",icon:"brain",tag:"AUTO + VECTOR"},
+                  {id:"FLIP_LOCK",icon:"trend",tag:"ล็อกกำไร + สลับฝั่ง"},
+                  {id:"RACE",icon:"status",tag:"ดำเนินการเร็ว"},
+                  {id:"ZERO_GRID",icon:"layers",tag:"กริดแบบ Hedging"},
+                  {id:"MANUAL",icon:"settings",tag:"กำหนดรายละเอียด"}
+                ].map(mode=><button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} className={controlMode===mode.id?"active":""} onClick={()=>applyControlMode(mode.id)}>
+                  <span className="cc-bot-v2-mode-icon"><ScenovaIcon name={mode.icon} size={22}/></span>
+                  <span><em>{mode.tag}</em><b>{modeCopy[mode.id].title}</b><small>{modeCopy[mode.id].subtitle}</small></span>
+                  <i className="cc-bot-v2-radio"/>
+                </button>)}
+              </div>
+            )}
           </section>
 
           <div className="cc-bot-v2-workspace">
@@ -3094,7 +3091,7 @@ function BotSettingsModal(props:any) {
               <dl>
                 <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>
                 <div><dt>ทิศทาง</dt><dd>{directionLabel}</dd></div>
-                <div><dt>การเปิดไม้</dt><dd>{controlMode==="FLIP_LOCK" ? "1 Position + 1 Pending" : Number(props.settings.maxPositions||1)+" × "+Number(props.settings.lot||0.01).toFixed(2)+" Lot"}</dd></div>
+                <div><dt>การเปิดไม้</dt><dd>{controlMode==="FLIP_LOCK" ? "1 Position · Reactive Market Re-entry" : Number(props.settings.maxPositions||1)+" × "+Number(props.settings.lot||0.01).toFixed(2)+" Lot"}</dd></div>
                 <div><dt>เป้ากำไร</dt><dd>{exitLabel}</dd></div>
                 <div><dt>Stop Loss</dt><dd>{slLabel}</dd></div>
                 <div><dt>EA Sync</dt><dd className="good">{props.syncLabel || "พร้อมส่งค่า"}</dd></div>
@@ -3106,8 +3103,8 @@ function BotSettingsModal(props:any) {
         </div>
 
         <div className="cc-bot-modal-footer cc-bot-v2-footer">
-          <div/>
-          <div><button type="button" className="btn" onClick={()=>props.onClose?.()} disabled={props.busy}>ยกเลิก</button><button type="button" className="btn cc-save-primary" disabled={props.busy||!props.dirty} onClick={props.onSave}><ScenovaIcon name="save" size={17}/>{props.busy?"กำลังบันทึก...":"บันทึกและส่งให้ EA"}</button></div>
+          <div className="cc-bot-v12-footer-state">{embedded?<><i className={props.locked?"warn":"good"}/><span>{props.locked?"หยุดบอทก่อนแก้ไข · ค่าปัจจุบันยังดูได้":"พร้อมแก้ไขและส่งค่าไปยัง EA"}</span></>:null}</div>
+          <div>{!embedded&&<button type="button" className="btn" onClick={()=>props.onClose?.()} disabled={props.busy}>ยกเลิก</button>}<button type="button" className="btn cc-save-primary" disabled={props.busy||props.locked||!props.dirty} onClick={props.onSave}><ScenovaIcon name="save" size={17}/>{props.busy?"กำลังบันทึก...":props.locked?"หยุดบอทเพื่อบันทึก":"บันทึกและส่งให้ EA"}</button></div>
         </div>
       </div>
     </div>
