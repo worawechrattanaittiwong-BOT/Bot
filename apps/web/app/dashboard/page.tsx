@@ -3029,7 +3029,7 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>กำไร / Stop Loss</b></div></div>
                 {controlMode==="RACE" ? <div className="cc-bot-v2-fields exit-fields">
                   <div className="cc-bot-v2-field">
-                    <span><ScenovaIcon name="profit" size={17}/>ปิดทั้งหมดเมื่อถึงกำไร</span>
+                    <span><ScenovaIcon name="profit" size={17}/>ปิดไม้ทั้งหมดที่กำไร</span>
                     <div className="cc-bot-v2-inline-toggle-value">
                       <SwitchSetting checked={raceCloseAllProfitEnabled} onChange={(value:boolean)=>props.onEdit?.("raceCloseAllProfitEnabled",value)} onLabel="เปิด" offLabel="ปิด"/>
                       <MoneyInput value={raceCloseAllProfitMoney} disabled={!raceCloseAllProfitEnabled} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("raceCloseAllProfitMoney",v)}/>
