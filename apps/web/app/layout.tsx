@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./premium-dashboard.css";
 import "./dashboard-live.css";
+import "./scenova-red-system.css";
 import { CustomerNavigationLabels } from "../components/CustomerNavigationLabels";
 import { Mt5ManualActionControls } from "../components/Mt5ManualActionControls";
 
