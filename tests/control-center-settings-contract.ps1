@@ -131,3 +131,10 @@ Need $db '"manualDailyProfitTargetMoney":0.0' 'New accounts must default MANUAL 
 Need $css 'Control Center V23 · mode profiles + equal-height cards' 'V23 settings/card polish marker missing'
 Need $css 'position:static!important;' 'Embedded setting toggles must not float over the header'
 Need $css '.cc-v19-settings-card .cc-bot-manual-risk-add{' 'MANUAL optional-risk add-control styling missing'
+
+Need $page 'cc-bot-manual-risk-add-all' 'MANUAL reveal-all button missing'
+Need $page '[riskProfile.basket]:true,[riskProfile.dailyLoss]:true,[riskProfile.dailyProfit]:true' 'MANUAL reveal-all must show all three hidden risk controls together'
+if($page.Contains('<select className="input" value="" onChange={e=>{if(e.target.value)setRevealedManualRisk')) { throw 'MANUAL optional risk must not use one-by-one selector' }
+Need $css 'Control Center V24 · MANUAL reveal-all + no idle scroll' 'V24 MANUAL reveal-all marker missing'
+Need $css 'height:545px!important;' 'Workspace cards must use the slightly taller no-idle-scroll height'
+Need $css 'height:499px!important;' 'Bot Settings body must use the no-idle-scroll height'
