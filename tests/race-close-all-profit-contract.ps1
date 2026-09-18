@@ -41,7 +41,9 @@ Need $api 'clean.raceCloseAllProfitMoney = 0.5' 'API RACE default target must be
 Need $web 'raceCloseAllProfitEnabled: true' 'Dashboard default switch must be ON'
 Need $web 'raceCloseAllProfitMoney: 0.5' 'Dashboard default target must be 0.5'
 Need $web 'ปิดไม้ทั้งหมดที่กำไร' 'RACE close-all switch must be visible in the dashboard'
-Need $web 'ปิดทั้งหมดเมื่อถึงเป้า' 'RACE switch copy is missing'
+Need $web 'raceCloseAllProfitEnabled' 'RACE switch setting key is missing from the dashboard'
+Need $web 'onChange={(value:boolean)=>props.onEdit?.("raceCloseAllProfitEnabled",value)}' 'RACE switch must still write the close-all setting'
+Need $web 'onLabel="เปิด" offLabel="ปิด"' 'RACE switch must use the concise ON/OFF copy'
 
 Need $db '"raceCloseAllProfitEnabled":true' 'New bot settings must default RACE close-all to ON'
 Need $db '"raceCloseAllProfitMoney":0.5' 'New bot settings must default RACE close-all target to 0.5'
