@@ -1288,3 +1288,56 @@
   .cc-v19-settings-card{grid-column:auto}
   .cc-v13-hero-actions .cc-v19-hero-quick-actions{grid-template-columns:1fr 1fr!important}
 }
+
+
+/* ===== Control Center V20 · flat single-form Bot Settings =====
+   One continuous settings form: no numbered section cards or section gaps. */
+.cc-v19-settings-card .cc-bot-v2-section-title.compact{
+  display:none!important;
+}
+.cc-v19-settings-card .cc-bot-v2-mode-section,
+.cc-v19-settings-card .cc-bot-v2-panel{
+  margin:0!important;
+  padding:0 2px!important;
+  border:0!important;
+  border-bottom:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+.cc-v19-settings-card .cc-bot-v2-workspace,
+.cc-v19-settings-card .cc-bot-v2-main{
+  margin:0!important;
+  padding:0!important;
+  gap:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-fields{
+  gap:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-mode-section{
+  padding:5px 2px 4px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-panel:first-child{
+  padding-top:1px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field{
+  min-height:36px!important;
+  padding:3px 1px!important;
+  border-radius:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field .input{
+  min-height:30px!important;
+  height:30px!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select{
+  min-height:31px!important;
+  height:31px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  max-height:470px!important;
+  padding:0 10px 6px!important;
+}
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  max-height:525px!important;
+}
