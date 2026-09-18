@@ -1,12 +1,13 @@
 #ifndef SCENOVA_FLIP_LOCK_V1_MQH
 #define SCENOVA_FLIP_LOCK_V1_MQH
 
-// FLIP LOCK V2 mirrors the mobile-MT5 baton pattern:
-//   1 live market position + 1 opposite STOP pending order.
-// The current position SL and the opposite pending order share the same
-// trigger price.  As price moves in the position's favour the pair only
-// tightens; it never loosens.  FLIP LOCK owns its own starter entry and does
-// not wait for AUTO/VECTOR/Parallel-Universe approval.
+// FLIP LOCK V5 is a reactive one-position profit-lock engine:
+//   1 FLIP-owned market position, no pre-placed opposite STOP order.
+// The starter uses a wide ATR/spread Safety Stop.  Profit trailing begins only
+// after floating profit reaches $0.25 per 0.01 lot (scaled by actual volume).
+// The SL then tightens with price and never loosens.  After that position exits,
+// FLIP LOCK reads the live M1 candle + momentum and re-enters immediately with
+// a market order in the stronger direction. Foreign/manual positions are ignored.
 #define FLIP_LOCK_V1_VERSION "5.0.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
