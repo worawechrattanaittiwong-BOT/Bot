@@ -43,8 +43,8 @@ Need $effective 'if(control == "FLIP_LOCK") return "FLIP_LOCK";' 'FLIP LOCK must
 Need $autoV20 'EffectiveExecutionMode() == "AUTO"' 'AUTO V20 must be enabled only for AUTO ownership'
 Need $autoV20 'g_controlMode == "AUTO"' 'AUTO V20 must require AUTO controlMode'
 Forbid $autoV20 'FLIP_LOCK' 'FLIP LOCK must not enable AUTO V20'
-Need $legacy 'EffectiveExecutionMode() == "AUTO"' 'legacy basket engine must depend on effective AUTO ownership'
-Need $apply 'EffectiveExecutionMode() == "FLIP_LOCK"' 'FLIP LOCK must clear legacy burst state on mode selection'
+Need $legacy 'EffectiveExecutionMode() == "MANUAL"' 'legacy basket engine must belong to MANUAL and stay out of AUTO/FLIP'
+Need $apply 'EffectiveExecutionMode() != "MANUAL"' 'FLIP LOCK and other non-MANUAL owners must clear the legacy burst queue'
 
 Need $send 'bool flipLockOrder = FlipLockModeEnabled();' 'shared sender must identify FLIP LOCK explicitly'
 Need $send '? NormalizeTradeVolume(g_lot)' 'FLIP LOCK must use the user configured Lot directly'
