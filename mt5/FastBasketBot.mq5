@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.29"
-#define SCENOVA_EA_VERSION "1.0.29"
-#define SCENOVA_PRODUCT_VERSION "1.0.29"
+#property version   "1.0.30"
+#define SCENOVA_EA_VERSION "1.0.30"
+#define SCENOVA_PRODUCT_VERSION "1.0.30"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V2"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -3559,7 +3559,7 @@ void OnTick()
       UpdateBasketPeakPositionCount(count);
       EnsureBurstTargets(g_burstActive ? MathMax(1, g_burstTargetPositions) : count);
    }
-   else if(rescueCount <= 0)
+   else if(rescueCount <= 0 && !FlipLockModeEnabled())
       ResetBasketCycleState();
 
    double profit = BasketProfit();
@@ -3621,17 +3621,24 @@ void OnTick()
    // the only generic per-cycle loss boundary used by FLIP LOCK.
    if(FlipLockModeEnabled() && (count <= 0 || BasketHasFlipLockPosition()))
    {
-      if(count > 0)
+      // One FLIP LOCK run spans every BUY<->SELL handoff. Preserve realized
+      // losses across the broker's brief flat settlement window so the visible
+      // "Max Basket Loss" setting is enforced on the whole baton run, not only
+      // on the currently-open side.
+      double flipLossLimit = EffectiveBasketLossLimit();
+      double flipCycleProfit = BasketCycleProfit();
+      if(flipLossLimit > 0.0 && flipCycleProfit <= -flipLossLimit)
       {
-         double flipLossLimit = EffectiveBasketLossLimit();
-         if(flipLossLimit > 0.0 && BasketProfit() <= -flipLossLimit)
+         FlipLockRemoveAllPending();
+         bool flipClosed = count <= 0 ? true : CloseAllBasket("MAX_BASKET_LOSS");
+         ResetTrail();
+         if(flipClosed)
          {
-            FlipLockRemoveAllPending();
-            CloseAllBasket("MAX_BASKET_LOSS");
-            ResetTrail();
-            g_executionStatus = "FLIP_LOCK_MAX_BASKET_LOSS";
-            return;
+            FlipLockResetTracking(true);
+            ResetBasketCycleState();
          }
+         g_executionStatus = "FLIP_LOCK_MAX_BASKET_LOSS";
+         return;
       }
 
       FlipLockManage();

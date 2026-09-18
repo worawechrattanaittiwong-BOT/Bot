@@ -7,7 +7,7 @@
 // trigger price.  As price moves in the position's favour the pair only
 // tightens; it never loosens.  FLIP LOCK owns its own starter entry and does
 // not wait for AUTO/VECTOR/Parallel-Universe approval.
-#define FLIP_LOCK_V1_VERSION "3.0.0"
+#define FLIP_LOCK_V1_VERSION "3.1.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS 2
@@ -458,6 +458,12 @@ void FlipLockManageFlatState()
 
    g_flipLockFlatPendingSince=0;
 
+   // A deliberate Start after a fully stopped/flat run begins a new risk cycle.
+   // Temporary flat settlement during a BUY<->SELL handoff keeps the previous
+   // direction/armed state and therefore does not reset accumulated run P/L.
+   if(!g_flipLockArmed && g_flipLockDirection==0 && g_flipLockFlipCount==0)
+      ResetBasketCycleState();
+
    // If the broker reports the protective SL fill before/without the paired
    // pending fill, preserve the baton direction. Re-analyzing the market here
    // could reopen the same side and break the BUY<->SELL lock shown in the
@@ -484,6 +490,13 @@ void FlipLockManage()
    if(g_state!=STATE_RUNNING || !g_access || !g_runAuthorized)
    {
       FlipLockRemoveAllPending();
+      if(BasketPositionCount()<=0)
+      {
+         // Stop/authorization loss ends the current baton run. A later Start
+         // must choose a fresh starter side and begin a fresh per-run loss budget.
+         FlipLockResetTracking(true);
+         ResetBasketCycleState();
+      }
       g_flipLockReason="WAIT_RUN_AUTHORIZATION";
       return;
    }
