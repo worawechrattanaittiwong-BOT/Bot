@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.31"
-#define SCENOVA_EA_VERSION "1.0.31"
-#define SCENOVA_PRODUCT_VERSION "1.0.31"
+#property version   "1.0.32"
+#define SCENOVA_EA_VERSION "1.0.32"
+#define SCENOVA_PRODUCT_VERSION "1.0.32"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V2"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1666,8 +1666,9 @@ string EffectiveExecutionMode()
    if(control == "ZERO_GRID") return "ZERO_GRID";
    if(control == "RACE") return "RACE";
    if(control == "FLIP_LOCK") return "FLIP_LOCK";
-   if(control == "AUTO" || control == "ASSISTED" || control == "MANUAL")
-      return "AUTO";
+   if(control == "AUTO") return "AUTO";
+   if(control == "MANUAL" || control == "ASSISTED" || control == "LEGACY")
+      return "MANUAL";
 
    string engine=g_engineMode;
    StringToUpper(engine);
@@ -5629,8 +5630,9 @@ bool BasketFillEnabled()
 
 bool LegacyBasketEngineEnabled()
 {
-   // ASSISTED/MANUAL use the legacy basket queue. ZERO and RACE never do.
-   return EffectiveExecutionMode() == "AUTO" && !AutoV20Enabled();
+   // MANUAL/ASSISTED own the legacy basket queue. AUTO V20 is a different
+   // execution owner and must never share the queue with them.
+   return EffectiveExecutionMode() == "MANUAL";
 }
 
 void ResetLegacyBurstStateForIsolatedMode()
@@ -5837,12 +5839,9 @@ void ApplySettings(string json)
    else
       g_rescueEnabled = InpAdaptiveRescueEngine;
 
-   // A legacy AUTO burst must never survive a transition into an isolated mode.
-   // Existing non-ZERO/non-RACE positions may still drain under generic safety
-   // management, but no legacy queue can add orders after the mode switch.
-   if(EffectiveExecutionMode() == "ZERO_GRID" ||
-      EffectiveExecutionMode() == "RACE" ||
-      EffectiveExecutionMode() == "FLIP_LOCK")
+   // AUTO V20 and each isolated engine are distinct owners. The MANUAL legacy
+   // queue must never survive a transition into AUTO/RACE/ZERO/FLIP.
+   if(EffectiveExecutionMode() != "MANUAL")
       ResetLegacyBurstStateForIsolatedMode();
 
    string mode = JsonString(json, "entryMode", "");
@@ -11389,13 +11388,53 @@ bool BrainV13FastWrongEntryCorrection(double momentum)
 // Scope contract: V20 runs ONLY when the website controlMode is AUTO and the
 // isolated RACE engine is not active. Other modes continue through the exact
 // legacy V19/V18/V16 paths below this block.
+#define AUTO_V20_LIVE_COMMENT "SaaSAutoV20"
+#define MANUAL_LIVE_COMMENT "SaaSManual"
+#define LEGACY_BASKET_COMMENT "SaaSBasket"
+
 bool AutoV20Enabled()
 {
-   // Strict execution ownership: Vector Edge/V20 belongs to AUTO only.
-   // FLIP LOCK chooses only its starter direction, then owns SL + opposite
-   // pending baton management without AUTO plan/TP/reversal intervention.
+   // Entry selection only: Vector Edge/V20 belongs to AUTO and AUTO alone.
+   // Open-position ownership is determined from the broker comment so a later
+   // settings change cannot hand an AUTO position to MANUAL/RACE/FLIP.
    if(g_engineMode != "AUTO") return false;
-   return g_controlMode == "AUTO";
+   return EffectiveExecutionMode() == "AUTO" && g_controlMode == "AUTO";
+}
+
+bool BasketHasAutoPosition()
+{
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_V20_LIVE_COMMENT)>=0)
+         return true;
+   }
+   return false;
+}
+
+bool BasketHasManualPosition()
+{
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
+
+      string comment=PositionGetString(POSITION_COMMENT);
+      if(StringFind(comment,MANUAL_LIVE_COMMENT)>=0 ||
+         StringFind(comment,LEGACY_BASKET_COMMENT)>=0)
+         return true;
+   }
+   return false;
+}
+
+bool AutoV20OwnsOpenBasket()
+{
+   return BasketPositionCount()>0 && BasketHasAutoPosition();
 }
 
 #include "include\\AutoVectorEdgeLiveV1.mqh"
@@ -12240,7 +12279,7 @@ void AutoV20OnOrderSent(int direction)
 
 bool AutoV20FastPriceExit()
 {
-   if(!AutoV20Enabled() || BasketPositionCount()<=0 || BasketHasRacePosition())
+   if(!AutoV20OwnsOpenBasket() || BasketHasRacePosition() || BasketHasFlipLockPosition())
       return false;
    int direction=BasketDirection();
    if(direction==0)
@@ -12265,7 +12304,7 @@ bool AutoV20FastPriceExit()
       }
    }
 
-   if(g_autoV20BasketTargetPrice>0.0 && g_profitTargetMode=="AUTO")
+   if(g_autoV20BasketTargetPrice>0.0)
    {
       bool targetHit=direction>0
          ? exitPrice>=g_autoV20BasketTargetPrice
@@ -12283,7 +12322,7 @@ bool AutoV20FastPriceExit()
 
 bool AutoV20ManageOpenBasket(double momentum)
 {
-   if(!AutoV20Enabled() || BasketPositionCount()<=0 || BasketHasRacePosition())
+   if(!AutoV20OwnsOpenBasket() || BasketHasRacePosition() || BasketHasFlipLockPosition())
       return false;
    int direction=BasketDirection();
    if(direction==0)
@@ -12319,8 +12358,7 @@ bool AutoV20ManageOpenBasket(double momentum)
       g_autoV20PeakProfit=cycleProfit;
    double armProfit=MathMax(0.05,
       MathMax(g_autoV20Buy.expectedProfitMoney,g_autoV20Sell.expectedProfitMoney)*0.35);
-   if(g_profitTargetMode=="AUTO" &&
-      g_autoV20PeakProfit>=armProfit)
+   if(g_autoV20PeakProfit>=armProfit)
    {
       double giveback=MathMax(0.05,g_autoV20PeakProfit*0.25);
       if(cycleProfit<=g_autoV20PeakProfit-giveback)
@@ -16108,6 +16146,7 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    bool autoV20=AutoV20Enabled() && !g_tacticalCountertrendActive;
    bool raceOrder = RaceModeEnabled() || BasketHasRacePosition();
    bool flipLockOrder = FlipLockModeEnabled();
+   bool manualOrder = EffectiveExecutionMode()=="MANUAL";
    AUTO_V20_SIDE autoPlan;
    if(autoV20)
       autoPlan=direction>0 ? g_autoV20Buy : g_autoV20Sell;
@@ -16128,12 +16167,14 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    request.deviation = 30;
    request.type_filling = AllowedFillingMode();
    request.comment = autoV20
-      ? "SaaSAutoV20"
+      ? AUTO_V20_LIVE_COMMENT
       : (raceOrder
       ? "SaaSRace"
       : (flipLockOrder
          ? FLIP_LOCK_LIVE_COMMENT
-         : (g_tacticalCountertrendActive ? "SaaSTactical" : "SaaSBasket")));
+         : (g_tacticalCountertrendActive
+            ? "SaaSTactical"
+            : (manualOrder ? MANUAL_LIVE_COMMENT : LEGACY_BASKET_COMMENT))));
 
    if(direction > 0)
    {
