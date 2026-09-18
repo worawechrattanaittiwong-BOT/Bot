@@ -642,37 +642,34 @@ export class BotController {
           commandId: latestStartCommand?.id || null
         };
       } else if (String(instance.desired_state || "") === "RUNNING" && latestStartCommand) {
-        if (startAgeSeconds >= 20) {
-          await this.db.query(
-            "UPDATE bot_instances SET desired_state='STOPPED',lock_owner=NULL WHERE id=$1 AND desired_state='RUNNING' AND actual_state<>'RUNNING'",
-            [instance.id]
-          );
-          await this.db.query(
-            "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE id=$1 AND status IN ('PENDING','DELIVERED')",
-            [latestStartCommand.id]
-          );
-          instance.desired_state = "STOPPED";
-          startTransition = {
-            phase: "TIMEOUT",
-            message: "เริ่มบอทไม่สำเร็จภายใน 20 วินาที · คำสั่งถูกยกเลิกเพื่อไม่ให้ค้าง กรุณาตรวจ Agent / EA แล้วกดเริ่มอีกครั้ง",
-            ageSeconds: startAgeSeconds,
-            commandStatus: latestStartCommand.status,
-            commandId: latestStartCommand.id
-          };
-        } else {
-          const status = String(latestStartCommand.status || "PENDING").toUpperCase();
-          startTransition = {
-            phase: status === "DELIVERED" ? "DELIVERED_TO_EA" : status === "ACKED" ? "WAITING_HEARTBEAT" : "COMMAND_QUEUED",
-            message: status === "DELIVERED"
+        // START is user-authoritative. A slow Agent/EA acknowledgement must never
+        // cause a dashboard read to silently turn the bot back to STOPPED.
+        // Keep RUNNING requested until the EA confirms it or the user explicitly
+        // presses Safe Stop. We only expose that the acknowledgement is delayed.
+        const status = String(latestStartCommand.status || "PENDING").toUpperCase();
+        const delayed = startAgeSeconds >= 20;
+        startTransition = {
+          phase: status === "DELIVERED"
+            ? "DELIVERED_TO_EA"
+            : status === "ACKED"
+              ? "WAITING_HEARTBEAT"
+              : "COMMAND_QUEUED",
+          message: delayed
+            ? status === "DELIVERED"
+              ? "ส่งคำสั่งถึง EA แล้ว · ยังรอ EA ยืนยัน RUNNING · Server จะไม่ยกเลิก Start อัตโนมัติ"
+              : status === "ACKED"
+                ? "EA รับคำสั่งแล้ว · ยังรอ Heartbeat ยืนยัน RUNNING · Server จะคงคำสั่ง Start ไว้"
+                : "คำสั่ง Start ยังรอ EA รับ · Server จะคง RUNNING ไว้จนกว่าจะรับคำสั่งหรือผู้ใช้กดหยุด"
+            : status === "DELIVERED"
               ? "ส่งคำสั่งถึง EA แล้ว · รอ EA เปลี่ยนเป็น RUNNING"
               : status === "ACKED"
                 ? "EA รับคำสั่งแล้ว · รอ Heartbeat ยืนยัน RUNNING"
                 : "บันทึกคำสั่ง Start แล้ว · รอ EA มารับคำสั่ง",
-            ageSeconds: startAgeSeconds,
-            commandStatus: status,
-            commandId: latestStartCommand.id
-          };
-        }
+          ageSeconds: startAgeSeconds,
+          commandStatus: status,
+          commandId: latestStartCommand.id,
+          delayed
+        };
       }
     }
 
