@@ -25,7 +25,7 @@ Need $page 'Drawdown วันนี้' 'Daily Drawdown KPI missing'
 Need $page 'PERFORMANCE BY MODE' 'Per-mode performance card missing'
 Need $page 'modePerformanceToday.map' 'Per-mode performance rows must use real API data'
 Need $page 'AI EXECUTION CONTROL' 'Single AI execution control card missing'
-Need $page 'SCENOVA AI ENGINE' 'AI/Genetic platform card missing'
+Need $page 'SCENOVA INTELLIGENCE CORE' 'AI/Genetic intelligence card missing'
 Need $page 'AI-driven & Genetic Algorithm' 'AI-driven Genetic Algorithm identity missing'
 if($page.Contains('<LivePriceChart points={livePricePoints}')) { throw 'Price chart must not render on V12 Control Center' }
 
