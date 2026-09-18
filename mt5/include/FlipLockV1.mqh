@@ -7,10 +7,11 @@
 // trigger price.  As price moves in the position's favour the pair only
 // tightens; it never loosens.  FLIP LOCK owns its own starter entry and does
 // not wait for AUTO/VECTOR/Parallel-Universe approval.
-#define FLIP_LOCK_V1_VERSION "3.1.0"
+#define FLIP_LOCK_V1_VERSION "4.0.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS 2
+#define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
 
 int g_flipLockDirection=0;
 double g_flipLockPeakPrice=0.0;
@@ -56,20 +57,97 @@ double FlipLockBrokerMinDistancePoints()
    return MathMax(2.0,MathMax(stops,freeze)+2.0);
 }
 
+double FlipLockAtrPoints()
+{
+   double m1=AverageTrueRangePoints(PERIOD_M1,MathMax(5,g_atrPeriod));
+   if(m1>0.0) return m1;
+
+   // M1 can be unavailable for a few ticks immediately after attach/restart.
+   // Use a real higher-timeframe ATR as fallback; never manufacture volatility
+   // from Spread because that produced a dangerously tight starter stop.
+   double m5=AverageTrueRangePoints(PERIOD_M5,MathMax(5,g_atrPeriod));
+   if(m5>0.0) return m5;
+   return 0.0;
+}
+
+bool FlipLockStartReady()
+{
+   if(FlipLockAtrPoints()>0.0)
+      return true;
+
+   g_flipLockReason="WAIT_ATR";
+   g_executionStatus="FLIP_LOCK_WAIT_ATR";
+   return false;
+}
+
 double FlipLockTrailDistancePoints()
 {
    double spread=CurrentSpreadPoints();
-   if(spread<=0.0 || spread>=999999.0) spread=5.0;
-   double atr=AverageTrueRangePoints(PERIOD_M1,MathMax(5,g_atrPeriod));
-   if(atr<=0.0) atr=spread*4.0;
+   if(spread<=0.0 || spread>=999999.0) return 0.0;
 
-   // Normal markets keep the baton close.  During a fast candle ATR expands
-   // the distance automatically, matching the wide trailing gap visible in
-   // the reference clip without using a fixed-dollar stop.
+   double atr=FlipLockAtrPoints();
+   if(atr<=0.0) return 0.0;
+
+   // The baton is a PROFIT-lock trail, not the starter safety stop. Keep enough
+   // room for live spread/noise while still following a profitable move.
    return MathMax(
       FlipLockBrokerMinDistancePoints(),
-      MathMax(10.0,MathMax(spread*3.0,atr*0.25))
+      MathMax(spread*3.0,atr*0.35)
    );
+}
+
+double FlipLockSafetyDistancePoints()
+{
+   double spread=CurrentSpreadPoints();
+   if(spread<=0.0 || spread>=999999.0) return 0.0;
+   double atr=FlipLockAtrPoints();
+   if(atr<=0.0) return 0.0;
+
+   // Starter protection must be materially wider than the baton. It exists only
+   // as catastrophic broker-side protection until the trade has moved far
+   // enough in profit for the true lock/flip baton to arm.
+   return MathMax(
+      FlipLockBrokerMinDistancePoints(),
+      MathMax(spread*8.0,atr*1.25)
+   );
+}
+
+double FlipLockInitialSafetyStopPrice(const int direction,const double entryPrice,const MqlTick &tick)
+{
+   double points=FlipLockSafetyDistancePoints();
+   if(direction==0 || entryPrice<=0.0 || points<=0.0) return 0.0;
+
+   double stop=direction>0
+      ? entryPrice-points*_Point
+      : entryPrice+points*_Point;
+
+   // Keep the stop broker-legal even if spread changes between quote capture and
+   // request send.
+   double minimum=FlipLockBrokerMinDistancePoints()*_Point;
+   if(direction>0)
+      stop=MathMin(stop,tick.bid-minimum);
+   else
+      stop=MathMax(stop,tick.ask+minimum);
+   return FlipLockNormalizePrice(stop);
+}
+
+double FlipLockProfitReservePoints()
+{
+   double spread=CurrentSpreadPoints();
+   if(spread<=0.0 || spread>=999999.0) return FlipLockBrokerMinDistancePoints();
+   return MathMax(FlipLockBrokerMinDistancePoints(),spread*0.50);
+}
+
+bool FlipLockProfitLockReady(const int direction,const double openPrice,const double triggerPrice)
+{
+   if(direction==0 || openPrice<=0.0 || triggerPrice<=0.0) return false;
+   double reserve=FlipLockProfitReservePoints()*_Point;
+
+   // Arm only after the trailing trigger is beyond break-even. This makes the
+   // first baton a genuine profit lock; a fresh position can no longer be
+   // flipped/closed immediately for spread loss.
+   if(direction>0) return triggerPrice>=openPrice+reserve;
+   return triggerPrice<=openPrice-reserve;
 }
 
 double FlipLockNormalizePrice(const double price)
@@ -306,6 +384,9 @@ bool FlipLockOpenStarter(const int forcedDirection=0)
       return false;
    }
 
+   if(!FlipLockStartReady())
+      return false;
+
    int direction=forcedDirection!=0 ? forcedDirection : FlipLockStarterDirection();
    if(direction==0) return false;
 
@@ -356,8 +437,29 @@ bool FlipLockTriggerIsLegal(const int direction,const double trigger,const MqlTi
 bool FlipLockSyncBaton(const ulong positionTicket,const int direction,const double positionVolume,const double currentSl,const MqlTick &tick)
 {
    if(positionTicket==0 || direction==0 || positionVolume<=0.0) return false;
+   if(!PositionSelectByTicket(positionTicket)) return false;
 
+   double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
    double candidate=FlipLockCandidateTrigger(direction,tick);
+   if(candidate<=0.0)
+   {
+      g_flipLockReason="WAIT_ATR";
+      g_executionStatus="FLIP_LOCK_WAIT_ATR";
+      return false;
+   }
+
+   if(!g_flipLockArmed && !FlipLockProfitLockReady(direction,openPrice,candidate))
+   {
+      // Before break-even: keep only the wide starter Safety Stop. No opposite
+      // pending exists yet, so normal spread/noise cannot instantly flip the
+      // strategy into a realized loss.
+      FlipLockRemoveAllPending();
+      g_flipLockTriggerPrice=0.0;
+      g_flipLockReason="WAIT_PROFIT_LOCK";
+      g_executionStatus="FLIP_LOCK_WAIT_PROFIT_LOCK";
+      return true;
+   }
+
    if(g_flipLockTriggerPrice<=0.0)
       g_flipLockTriggerPrice=candidate;
    else if(direction>0)
@@ -464,6 +566,23 @@ void FlipLockManageFlatState()
    if(!g_flipLockArmed && g_flipLockDirection==0 && g_flipLockFlipCount==0)
       ResetBasketCycleState();
 
+   if(!g_flipLockArmed && g_flipLockDirection!=0)
+   {
+      // The starter hit its wide Safety Stop before profit-lock arming. Do not
+      // churn straight back into the market on the same spread/tick.
+      if(g_flipLockLastFlatAt>0 &&
+         TimeCurrent()-g_flipLockLastFlatAt<FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS)
+      {
+         g_flipLockReason="WAIT_RESTART_COOLDOWN";
+         g_executionStatus="FLIP_LOCK_WAIT_RESTART_COOLDOWN";
+         return;
+      }
+
+      FlipLockResetTracking(false);
+      FlipLockOpenStarter();
+      return;
+   }
+
    // If the broker reports the protective SL fill before/without the paired
    // pending fill, preserve the baton direction. Re-analyzing the market here
    // could reopen the same side and break the BUY<->SELL lock shown in the
@@ -477,13 +596,26 @@ void FlipLockManageFlatState()
 
 void FlipLockManage()
 {
-   if(!FlipLockModeEnabled())
+   bool selected=FlipLockModeEnabled();
+   bool ownsLivePosition=BasketHasFlipLockPosition();
+
+   if(!selected && !ownsLivePosition)
    {
-      // This cleanup path is intentionally safe to call on every timer.  The EA
-      // wrapper should invoke FlipLockManage() even after a mode switch so a
-      // broker-side pending order can never survive outside FLIP LOCK.
+      // No FLIP-owned live exposure remains. Cleanup is safe now.
       FlipLockRemoveAllPending();
       FlipLockResetTracking(true);
+      return;
+   }
+
+   if(!selected && ownsLivePosition)
+   {
+      // A transient/stale settings heartbeat must never hand a tagged FLIP
+      // position to AUTO/RACE generic management. Remove the reversal pending
+      // and leave the live position protected by its own broker-side SL until
+      // FLIP mode is restored or the user explicitly closes/stops it.
+      FlipLockRemoveAllPending();
+      g_flipLockReason="WAIT_MODE_RESTORE";
+      g_executionStatus="FLIP_LOCK_WAIT_MODE_RESTORE";
       return;
    }
 
