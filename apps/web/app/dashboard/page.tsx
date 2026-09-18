@@ -3077,8 +3077,6 @@ function BotSettingsModal(props:any) {
 
               {controlMode!=="ZERO_GRID"&&(
               <section className="cc-bot-v2-panel">
-                <div className="cc-bot-v2-section-title compact"><span>04</span><div><b>Risk Controls</b></div></div>              {controlMode!=="ZERO_GRID"&&(
-              <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>04</span><div><b>Risk Controls</b></div></div>
                 <div className="cc-bot-v2-limit-grid">
                   {maxBasketLossEnabled&&<div><div><ScenovaIcon name="risk" size={18}/><span><b>ขาดทุนสูงสุดต่อรอบ</b></span></div><ToggleMoneyField label="เปิด" defaultValue="10" value={props.settings.maxBasketLossMoney} suffix="USD" onChange={(v:string)=>hideOptionalWhenOff("maxBasketLossMoney",v)}/></div>}
