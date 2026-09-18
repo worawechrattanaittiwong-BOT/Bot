@@ -1877,27 +1877,28 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <div className="cc-v6-command-center">
-                  <div className="cc-v6-hero-actions">
-                    <button className={"cc-v6-command start "+(botStarting?"starting":botRunning?"running":"idle")} disabled={startBlocked} title={maintenanceBlocksStart?"ระบบปิด Start ใหม่ระหว่าง Safe Maintenance":safeStopInProgress?"กำลัง Safe Stop · รอให้ Position เป็น 0 และ EA ยืนยัน STOPPED":!startConnectionReady?"รอการเชื่อมต่อจาก Windows Agent หรือ EA/MT5":undefined} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
-                      <span>{botStarting?<i className="cc-start-spinner"/>:botRunning?<i className="cc-start-pulse"/>:<ScenovaIcon name="play" size={22}/>}</span><b>{botStarting?"กำลังเริ่ม":botRunning?"ทำงานอยู่":"เริ่มบอท"}</b><small>Start Trading</small>
-                    </button>
-                    <button className="cc-v6-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><span><ScenovaIcon name="stop" size={21}/></span><b>หยุดบอท</b><small>Safe Stop</small></button>
-                    <button className="cc-v6-command close" disabled={busy||currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?")&&command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><span><ScenovaIcon name="close" size={22}/></span><b>ปิดทุกไม้</b><small>Close All</small></button>
-                    <button className="cc-v6-command settings" title={settingsLocked?"ดูค่าได้ · หยุดบอทก่อนแก้ไข":"ไปยังการตั้งค่าบอท"} onClick={()=>document.getElementById("bot-settings")?.scrollIntoView({behavior:"smooth",block:"center"})}><span><ScenovaIcon name="settings" size={21}/></span><b>{settingsLocked?"ดูการตั้งค่า":"ตั้งค่า"}</b><small>{settingsLocked?"View settings":"Bot Settings"}</small></button>
+                <div className="cc-v13-hero-intelligence" aria-label="AI execution summary">
+                  <div className="cc-v13-ai-orb"><ScenovaIcon name="brain" size={24}/><i/></div>
+                  <div className="cc-v13-ai-copy">
+                    <small>AI / GENETIC EXECUTION CORE</small>
+                    <b>Adaptive Algorithmic Engine</b>
+                    <span>AI-driven · Genetic Optimization · Risk Adaptive</span>
+                  </div>
+                  <div className="cc-v13-ai-stats">
+                    <span><small>MODE</small><b>{activeControlMode}</b></span>
+                    <span><small>LATENCY</small><b className={heartbeatLatencyMs>700?"warn":"good"}>{heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"}</b></span>
+                    <span><small>SYSTEM</small><b className={isMt5Online&&heartbeatAgeSeconds<=20?"good":"warn"}>{isMt5Online&&heartbeatAgeSeconds<=20?"READY":isAgentOnline?"WAIT EA":"OFFLINE"}</b></span>
                   </div>
                 </div>
               </section>
 
-              <section className="cc-kpi-grid cc-v3-kpis cc-v6-kpis cc-v12-kpis">
+              <section className="cc-kpi-grid cc-v3-kpis cc-v6-kpis cc-v12-kpis cc-v13-kpis">
                 <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online?"$"+Number(metrics.balance||0).toFixed(2):"—"} sub="Balance" />
                 <DashboardMetric icon="equity" label="มูลค่ารวม" value={isMt5Online?"$"+Number(metrics.equity||0).toFixed(2):"—"} sub="Equity" />
                 <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2):"—"} sub="Daily P/L" tone={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"good":"bad"):"neutral"} />
                 <DashboardMetric icon="target" label="Win Rate วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.winRate||0).toFixed(1)+"%":"—"} sub={Number(todayPerformance.trades||0)>0?Number(todayPerformance.wins||0)+" / "+Number(todayPerformance.trades||0)+" Basket":"ยังไม่มี Basket ปิดวันนี้"} tone={Number(todayPerformance.trades||0)>0?(Number(todayPerformance.winRate||0)>=60?"good":Number(todayPerformance.winRate||0)>=45?"warn":"bad"):"neutral"} />
                 <DashboardMetric icon="risk" label="Drawdown วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.drawdownPercent||0).toFixed(2)+"%":"0.00%"} sub={"-$"+Number(todayPerformance.drawdownMoney||0).toFixed(2)+" Realized DD"} tone={Number(todayPerformance.drawdownPercent||0)>=5?"bad":Number(todayPerformance.drawdownPercent||0)>=2?"warn":"good"} />
                 <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
-                <DashboardMetric icon="clock" label="ความหน่วง MT5" value={isMt5Online&&heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"} sub="Heartbeat Latency" tone={heartbeatLatencyMs>2000?"bad":heartbeatLatencyMs>700?"warn":"good"} />
-                <DashboardMetric icon="shield" label="สถานะระบบ" value={isMt5Online&&heartbeatAgeSeconds<=20?"พร้อมใช้งาน":isAgentOnline?"รอ EA":"ออฟไลน์"} sub={"HTTP "+(heartbeatHttpStatus||"—")+" · "+heartbeatAgeSeconds.toFixed(0)+"s"} tone={isMt5Online&&heartbeatAgeSeconds<=20?"good":"warn"} />
               </section>
 
               <div className="cc-v12-control-grid">
@@ -1931,7 +1932,7 @@ export default function DashboardPage() {
                 <aside className="cc-v12-side-column">
                   <section className="panel cc-v12-strategy-card">
                     <div className="cc-v12-card-head">
-                      <div><span><ScenovaIcon name="brain" size={17}/></span><div><small>STRATEGY & BOT CONTROL</small><b>{activeControlMode}</b></div></div>
+                      <div><span><ScenovaIcon name="brain" size={17}/></span><div><small>AI EXECUTION CONTROL</small><b>{activeControlMode}</b></div></div>
                       <em className={botRunning?"good":botStarting?"warn":"neutral"}>{botRunning?"RUNNING":botStarting?"STARTING":"READY"}</em>
                     </div>
                     <div className="cc-v12-strategy-meta">
@@ -1969,24 +1970,19 @@ export default function DashboardPage() {
                     </div>
                   </section>
 
-                  <div className="cc-v12-side-bottom">
-                    <section className="panel cc-v12-account-mini">
-                      <div className="cc-v12-card-head">
-                        <div><span><ScenovaIcon name="account" size={16}/></span><div><small>ACCOUNT DETAILS</small><b>สถานะบัญชี</b></div></div>
-                        <em className={isMt5Online?"good":"warn"}>{isMt5Online?"LIVE":"WAIT"}</em>
-                      </div>
-                      <dl>
-                        <div><dt>บัญชี</dt><dd>{data.account.account_number}</dd></div>
-                        <div><dt>Server</dt><dd>{metrics.server||data.account.broker_server}</dd></div>
-                        <div><dt>Position</dt><dd>{currentPositions+" / "+configuredMaxPositions}</dd></div>
-                        <div><dt>Daily P/L</dt><dd className={Number(metrics.dailyProfit||0)>=0?"good":"bad"}>{(Number(metrics.dailyProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2)}</dd></div>
-                      </dl>
-                    </section>
-                    <section className="panel cc-v12-ai-engine">
-                      <div><ScenovaIcon name="brain" size={24}/><span><small>SCENOVA AI ENGINE</small><b>AI-driven & Genetic Algorithm</b><em>Algorithmic Trading Platform</em></span></div>
-                      <p><span>AI Market Analysis</span><span>Genetic Optimization</span><span>Adaptive Risk</span></p>
-                    </section>
-                  </div>
+                  <section className="panel cc-v13-system-intelligence">
+                    <div className="cc-v12-card-head">
+                      <div><span><ScenovaIcon name="brain" size={17}/></span><div><small>SCENOVA INTELLIGENCE CORE</small><b>AI-driven & Genetic Algorithm Trading Platform</b></div></div>
+                      <em className={isMt5Online?"good":"warn"}>{isMt5Online?"LIVE":"WAIT"}</em>
+                    </div>
+                    <div className="cc-v13-system-grid">
+                      <span><small>บัญชี MT5</small><b>{data.account.account_number}</b></span>
+                      <span><small>Server</small><b>{metrics.server||data.account.broker_server}</b></span>
+                      <span><small>Latency</small><b className={heartbeatLatencyMs>700?"warn":"good"}>{heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"}</b></span>
+                      <span><small>Heartbeat</small><b>{heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")}</b></span>
+                    </div>
+                    <div className="cc-v13-ai-tags"><span>AI Market Analysis</span><span>Genetic Optimization</span><span>Adaptive Risk</span></div>
+                  </section>
                 </aside>
               </div>
 
@@ -2965,7 +2961,7 @@ function BotSettingsModal(props:any) {
               <div className="cc-bot-v12-mode-select-wrap">
                 <label>
                   <span><ScenovaIcon name="brain" size={17}/>โหมดการเทรด <small>Trading Mode</small></span>
-                  <select className="input cc-bot-v12-mode-select" value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)}>
+                  <select className="input cc-bot-v12-mode-select" value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)} style={{colorScheme:"dark"}}>
                     <option value="AUTO">AUTO · Vector Edge</option>
                     <option value="RACE">RACE · High Speed</option>
                     <option value="FLIP_LOCK">FLIP LOCK · Reactive Profit Lock</option>

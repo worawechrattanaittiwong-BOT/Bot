@@ -326,3 +326,163 @@
   .cc-bot-v12-mode-select-wrap{grid-template-columns:1fr}.cc-bot-v12-mode-copy{border-left:0;border-top:1px solid #293858}
   .cc-bot-v2-embedded .cc-bot-v2-main{grid-template-columns:1fr}.cc-bot-v2-embedded .cc-bot-v2-main>.cc-bot-v2-panel:first-child{grid-column:auto}
 }
+
+
+/* ===== Control Center V13 · readable one-screen AI / Genetic terminal ===== */
+.cc-v12.cc-v4{
+  padding-bottom:0!important;
+}
+.cc-v12 .cc-v6-hero{
+  min-height:96px!important;
+  padding:10px 13px!important;
+  grid-template-columns:minmax(0,1fr) minmax(380px,.72fr)!important;
+  gap:14px!important;
+}
+.cc-v12 .cc-v6-gold-stage{width:64px!important;height:64px!important;min-width:64px!important}
+.cc-v12 .cc-v6-gold-stage svg{width:40px!important;height:40px!important}
+.cc-v12 .cc-v6-symbol-copy h2{font-size:25px!important;margin:1px 0 3px!important}
+.cc-v12 .cc-v4-eyebrow{font-size:8px!important}
+.cc-v12 .cc-v6-symbol-copy p{font-size:9px!important}
+.cc-v12 .cc-v6-symbol-chips{margin-top:5px!important}
+.cc-v12 .cc-v6-symbol-chips>span{padding:3px 6px!important;font-size:8px!important}
+.cc-v12 .cc-v6-version-row{margin-top:4px!important}
+.cc-v12 .cc-v6-version-chip,.cc-v12 .cc-v6-version-check{min-height:22px!important;font-size:7.5px!important}
+
+/* No duplicate trading buttons in the hero: this is intelligence-only. */
+.cc-v13-hero-intelligence{
+  position:relative;overflow:hidden;min-height:72px;padding:10px 12px;
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;
+  border:1px solid rgba(93,91,202,.48);border-radius:13px;
+  background:
+    radial-gradient(circle at 4% 50%,rgba(74,149,255,.14),transparent 43%),
+    radial-gradient(circle at 90% 0,rgba(133,77,255,.17),transparent 46%),
+    linear-gradient(145deg,rgba(16,23,45,.96),rgba(8,13,25,.98));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 12px 28px rgba(0,0,0,.20),0 0 24px rgba(91,77,230,.055)
+}
+.cc-v13-hero-intelligence::after{
+  content:"";position:absolute;left:14%;right:4%;bottom:0;height:1px;
+  background:linear-gradient(90deg,transparent,#5ca8ff,#8d6cff,transparent);opacity:.75
+}
+.cc-v13-ai-orb{position:relative;width:42px;height:42px;border:1px solid #4b5093;border-radius:12px;background:linear-gradient(145deg,#182549,#17153d);color:#9dbbff;display:grid;place-items:center;box-shadow:0 0 20px rgba(95,89,239,.12)}
+.cc-v13-ai-orb i{position:absolute;inset:7px;border:1px solid rgba(105,218,255,.18);border-radius:50%;box-shadow:0 0 12px rgba(94,204,255,.08)}
+.cc-v13-ai-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
+.cc-v13-ai-copy small{font-size:7px;letter-spacing:.14em;color:#7c8fb8;font-weight:900}
+.cc-v13-ai-copy b{font-size:12px;color:#f0f4ff}
+.cc-v13-ai-copy span{font-size:8px;color:#7f8da8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-v13-ai-stats{display:grid;grid-template-columns:repeat(3,minmax(72px,1fr));gap:5px}
+.cc-v13-ai-stats>span{padding:6px 7px;border:1px solid rgba(70,91,143,.34);border-radius:8px;background:rgba(6,13,24,.72);display:flex;flex-direction:column;gap:2px}
+.cc-v13-ai-stats small{font-size:6px;color:#657695;letter-spacing:.08em}.cc-v13-ai-stats b{font-size:8.5px;color:#dce6f7}.cc-v13-ai-stats b.good{color:#5ce2a3}.cc-v13-ai-stats b.warn{color:#e4be68}
+
+/* Six readable KPI cards, one row on desktop. */
+.cc-v12 .cc-v13-kpis{
+  grid-template-columns:repeat(6,minmax(0,1fr))!important;
+  gap:7px!important;margin:7px 0 8px!important
+}
+.cc-v12 .cc-v13-kpis>div{min-height:70px!important;padding:9px 11px!important}
+.cc-v12 .cc-v13-kpis b{font-size:18px!important;line-height:1.05!important}
+.cc-v12 .cc-v13-kpis span{font-size:9px!important}
+.cc-v12 .cc-v13-kpis small{font-size:8px!important}
+
+/* Main workspace: prioritize readable settings over decorative density. */
+.cc-v12-control-grid{
+  grid-template-columns:minmax(0,1.7fr) minmax(390px,.72fr)!important;
+  gap:9px!important;min-height:0!important;
+}
+.cc-v12-side-column{
+  grid-template-rows:auto minmax(0,1fr) auto!important;
+  gap:8px!important
+}
+.cc-bot-v2-embedded .cc-bot-v2-head{min-height:52px!important;padding:7px 11px!important}
+.cc-bot-v2-embedded .cc-bot-v2-head h2{font-size:17px!important}
+.cc-bot-v2-embedded .cc-bot-v2-kicker{font-size:7.5px!important}
+.cc-bot-v2-embedded .cc-bot-modal-dirty,.cc-bot-v12-lock{font-size:8.5px!important}
+.cc-bot-v2-embedded .cc-bot-v2-body{padding:8px 9px!important;gap:7px!important}
+.cc-bot-v12-mode-select-wrap{grid-template-columns:minmax(310px,.72fr) minmax(0,1fr)!important}
+.cc-bot-v12-mode-select-wrap>label>span{font-size:10.5px!important;min-width:96px!important}
+.cc-bot-v12-mode-select-wrap>label>span small{font-size:7.5px!important}
+.cc-bot-v12-mode-select{height:38px!important;min-height:38px!important;font-size:11.5px!important;padding:7px 32px 7px 10px!important;color-scheme:dark!important}
+.cc-bot-v12-mode-select option{background:#0b1120!important;color:#edf2ff!important}
+.cc-bot-v12-mode-copy b{font-size:10.5px!important}.cc-bot-v12-mode-copy span{font-size:8.5px!important}
+.cc-bot-v2-embedded .cc-bot-v2-main{gap:7px!important}
+.cc-bot-v2-embedded .cc-bot-v2-panel{padding:8px 9px!important}
+.cc-bot-v2-embedded .cc-bot-v2-section-title.compact{margin-bottom:6px!important;padding-bottom:5px!important}
+.cc-bot-v2-embedded .cc-bot-v2-section-title b{font-size:11.5px!important}
+.cc-bot-v2-embedded .cc-bot-v2-section-title small{font-size:8px!important}
+.cc-bot-v2-embedded .cc-bot-v2-field{min-height:63px!important;padding:7px 8px!important}
+.cc-bot-v2-embedded .cc-bot-v2-field>span,.cc-bot-v2-embedded .cc-bot-v2-field>label{font-size:9.5px!important}
+.cc-bot-v2-embedded .cc-bot-v2-field .input{min-height:30px!important;height:30px!important;font-size:10.5px!important}
+.cc-bot-v2-embedded .cc-bot-v2-field strong{font-size:11px!important}
+.cc-bot-v2-embedded .cc-bot-v2-field small{font-size:7.6px!important;line-height:1.25!important}
+.cc-bot-v2-embedded .cc-bot-v2-engine-line{font-size:8px!important}
+.cc-bot-v2-embedded .cc-bot-v2-engine-line span{font-size:7.5px!important}
+.cc-bot-v2-embedded .cc-bot-v2-auto-grid small{font-size:7.5px!important}
+.cc-bot-v2-embedded .cc-bot-v2-auto-grid b{font-size:9.5px!important}
+.cc-bot-v2-embedded .cc-bot-v2-limit-grid>div{min-height:82px!important}
+.cc-bot-v2-embedded .cc-bot-v2-limit-grid b{font-size:9px!important}
+.cc-bot-v2-embedded .cc-bot-v2-limit-grid small{font-size:7px!important}
+.cc-bot-v2-embedded .cc-bot-v2-footer{min-height:44px!important}
+.cc-bot-v12-footer-state{font-size:8.5px!important}
+.cc-bot-v2-embedded .cc-save-primary{min-width:160px!important;font-size:9.5px!important}
+
+/* The only trading-control surface. Medium buttons, readable labels. */
+.cc-v12-strategy-card{
+  padding:10px!important;border-color:rgba(87,93,185,.52)!important;
+  background:
+    radial-gradient(circle at 100% 0,rgba(118,72,255,.12),transparent 44%),
+    linear-gradient(150deg,#10162a,#080e18)!important
+}
+.cc-v12-card-head{min-height:41px!important}
+.cc-v12-card-head small{font-size:7.5px!important}.cc-v12-card-head b{font-size:11.5px!important}
+.cc-v12-card-head em{font-size:7.5px!important}
+.cc-v12-strategy-meta{gap:6px!important;margin:7px 0!important}
+.cc-v12-strategy-meta span{padding:6px 7px!important}.cc-v12-strategy-meta small{font-size:7px!important}.cc-v12-strategy-meta b{font-size:9px!important}
+.cc-v12-quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:6px!important}
+.cc-v12-quick-actions button{
+  min-height:45px!important;padding:7px 9px!important;border-radius:9px!important;
+  justify-content:flex-start!important;gap:7px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03)
+}
+.cc-v12-quick-actions button b{font-size:9.5px!important}
+.cc-v12-quick-actions button small{font-size:7px!important}
+.cc-v12-quick-actions button.start{border-color:rgba(66,219,151,.48)!important;background:radial-gradient(circle at 0 50%,rgba(70,224,156,.11),transparent 58%),linear-gradient(145deg,#0d251c,#08130f)!important;box-shadow:0 0 20px rgba(61,222,151,.06),inset 0 1px 0 rgba(138,255,208,.05)!important}
+.cc-v12-quick-actions button.stop{border-color:rgba(122,93,232,.48)!important;background:radial-gradient(circle at 0 50%,rgba(132,94,245,.11),transparent 58%),linear-gradient(145deg,#19152f,#0b101c)!important}
+.cc-v12-quick-actions button.close{border-color:rgba(238,80,111,.43)!important;background:radial-gradient(circle at 0 50%,rgba(244,75,109,.10),transparent 58%),linear-gradient(145deg,#251016,#100c13)!important}
+.cc-v12-quick-actions button.terminal{border-color:rgba(73,158,246,.44)!important;background:radial-gradient(circle at 0 50%,rgba(76,164,255,.10),transparent 58%),linear-gradient(145deg,#0d1b2b,#09101b)!important}
+
+/* Readable performance matrix. */
+.cc-v12-mode-performance{padding:10px!important}
+.cc-v12-mode-table{margin-top:7px!important}
+.cc-v12-mode-table .head,.cc-v12-mode-table .row{grid-template-columns:1.18fr .76fr .92fr .58fr!important}
+.cc-v12-mode-table .head{min-height:27px!important;padding:5px 8px!important;font-size:7.5px!important}
+.cc-v12-mode-table .row{min-height:42px!important;padding:5px 8px!important;font-size:9px!important}
+.cc-v12-mode-table .row>span small{font-size:6.8px!important}
+
+/* Merged readable account + system + AI identity card. */
+.cc-v13-system-intelligence{
+  min-height:112px;padding:9px 10px!important;position:relative;overflow:hidden;
+  border-color:rgba(82,98,184,.52)!important;
+  background:
+    radial-gradient(circle at 100% 0,rgba(125,73,255,.15),transparent 48%),
+    radial-gradient(circle at 0 100%,rgba(56,150,255,.08),transparent 50%),
+    linear-gradient(150deg,#10162a,#080e18)!important
+}
+.cc-v13-system-intelligence::after{content:"AI";position:absolute;right:-6px;bottom:-31px;color:rgba(123,91,255,.045);font-size:100px;font-weight:950;letter-spacing:-.08em;pointer-events:none}
+.cc-v13-system-grid{position:relative;z-index:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-top:7px}
+.cc-v13-system-grid>span{padding:5px 7px;border:1px solid rgba(67,87,137,.3);border-radius:7px;background:rgba(7,13,24,.58);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.cc-v13-system-grid small{font-size:7px;color:#71809b}.cc-v13-system-grid b{font-size:8px;color:#dde5f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cc-v13-system-grid b.good{color:#58dfa1}.cc-v13-system-grid b.warn{color:#e4bd68}
+.cc-v13-ai-tags{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.cc-v13-ai-tags span{padding:3px 6px;border:1px solid #3e3a76;border-radius:999px;background:#12142b;color:#a49ae7;font-size:6.8px;font-weight:750}
+
+/* Fit a 1080p-style desktop viewport without a page-level scroll. */
+@media(min-width:1280px) and (min-height:780px){
+  .cc-v12-control-grid{height:calc(100vh - 345px)!important;max-height:525px!important;min-height:450px!important}
+  .cc-bot-v2-embedded{min-height:0!important}
+}
+@media(min-width:1600px) and (min-height:850px){
+  .cc-v12-control-grid{height:calc(100vh - 348px)!important;max-height:540px!important}
+}
+@media(max-width:1279px){
+  .cc-v12 .cc-v13-kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .cc-v12 .cc-v6-hero{grid-template-columns:1fr!important}
+  .cc-v13-hero-intelligence{display:none}
+}
