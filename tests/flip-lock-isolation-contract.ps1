@@ -52,6 +52,8 @@ Need $findPosition 'StringFind(comment,FLIP_LOCK_PENDING_COMMENT)<0' 'FLIP LOCK 
 Need $starter 'g_entryModel="FLIP_LOCK_BATON";' 'FLIP LOCK journal metadata must identify its own entry model'
 Need $manage 'FLIP_LOCK_WAIT_EXISTING_POSITION' 'FLIP LOCK must wait instead of seizing a foreign open position'
 Need $manage 'FlipLockSyncBaton' 'FLIP LOCK must manage its own SL + pending baton'
+Need $flip 'int fallbackDirection =' 'FLIP LOCK must preserve opposite baton direction if broker settlement briefly goes flat'
+Need $flip '? -g_flipLockDirection' 'flat fallback must reopen the opposite side instead of re-running AUTO direction analysis'
 
 $ownerIndex = $onTick.IndexOf('FLIP LOCK V3 owns its live position')
 $genericIndex = $onTick.IndexOf('ManageDynamicProtection();')
