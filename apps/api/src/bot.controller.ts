@@ -1754,6 +1754,21 @@ export class BotController {
 
     numberSetting("lot", 0.01, 100);
     numberSetting("maxPositions", 1, 100, true);
+    // UI mode profiles remember sizing independently while the EA continues
+    // to consume the canonical lot/maxPositions pair for the active mode.
+    numberSetting("autoLot", 0.01, 100);
+    numberSetting("autoMaxPositions", 1, 100, true);
+    numberSetting("raceLot", 0.01, 100);
+    numberSetting("raceMaxPositions", 1, 100, true);
+    numberSetting("flipLockLot", 0.01, 100);
+    numberSetting("manualLot", 0.01, 100);
+    numberSetting("manualMaxPositions", 1, 100, true);
+    numberSetting("standardMaxBasketLossMoney", 0, 100000);
+    numberSetting("standardDailyLossMoney", 0, 100000);
+    numberSetting("standardDailyProfitTargetMoney", 0, 100000);
+    numberSetting("manualMaxBasketLossMoney", 0, 100000);
+    numberSetting("manualDailyLossMoney", 0, 100000);
+    numberSetting("manualDailyProfitTargetMoney", 0, 100000);
     numberSetting("basketTriggerMoney", 0, 100000);
     numberSetting("basketTrailMoney", 0, 100000);
     numberSetting("maxBasketLossMoney", 0, 100000);
@@ -1903,6 +1918,37 @@ export class BotController {
         : requestedEngineMode === "RACE"
           ? "RACE"
           : "AUTO";
+    }
+
+    const activeProfileMode = requestedControlMode || (
+      requestedEngineMode === "RACE" ? "RACE" :
+      requestedEngineMode === "ZERO_GRID" ? "ZERO_GRID" :
+      requestedEngineMode === "AUTO" ? "AUTO" : null
+    );
+    if (activeProfileMode === "AUTO") {
+      if (clean.autoLot !== undefined) clean.lot = clean.autoLot;
+      if (clean.autoMaxPositions !== undefined) clean.maxPositions = clean.autoMaxPositions;
+      if (clean.standardMaxBasketLossMoney !== undefined) clean.maxBasketLossMoney = clean.standardMaxBasketLossMoney;
+      if (clean.standardDailyLossMoney !== undefined) clean.dailyLossMoney = clean.standardDailyLossMoney;
+      if (clean.standardDailyProfitTargetMoney !== undefined) clean.dailyProfitTargetMoney = clean.standardDailyProfitTargetMoney;
+    } else if (activeProfileMode === "RACE") {
+      if (clean.raceLot !== undefined) clean.lot = clean.raceLot;
+      if (clean.raceMaxPositions !== undefined) clean.maxPositions = clean.raceMaxPositions;
+      if (clean.standardMaxBasketLossMoney !== undefined) clean.maxBasketLossMoney = clean.standardMaxBasketLossMoney;
+      if (clean.standardDailyLossMoney !== undefined) clean.dailyLossMoney = clean.standardDailyLossMoney;
+      if (clean.standardDailyProfitTargetMoney !== undefined) clean.dailyProfitTargetMoney = clean.standardDailyProfitTargetMoney;
+    } else if (activeProfileMode === "FLIP_LOCK") {
+      if (clean.flipLockLot !== undefined) clean.lot = clean.flipLockLot;
+      clean.maxPositions = 1;
+      if (clean.standardMaxBasketLossMoney !== undefined) clean.maxBasketLossMoney = clean.standardMaxBasketLossMoney;
+      if (clean.standardDailyLossMoney !== undefined) clean.dailyLossMoney = clean.standardDailyLossMoney;
+      if (clean.standardDailyProfitTargetMoney !== undefined) clean.dailyProfitTargetMoney = clean.standardDailyProfitTargetMoney;
+    } else if (activeProfileMode === "MANUAL") {
+      if (clean.manualLot !== undefined) clean.lot = clean.manualLot;
+      if (clean.manualMaxPositions !== undefined) clean.maxPositions = clean.manualMaxPositions;
+      if (clean.manualMaxBasketLossMoney !== undefined) clean.maxBasketLossMoney = clean.manualMaxBasketLossMoney;
+      if (clean.manualDailyLossMoney !== undefined) clean.dailyLossMoney = clean.manualDailyLossMoney;
+      if (clean.manualDailyProfitTargetMoney !== undefined) clean.dailyProfitTargetMoney = clean.manualDailyProfitTargetMoney;
     }
 
     const zeroGridSelected =
