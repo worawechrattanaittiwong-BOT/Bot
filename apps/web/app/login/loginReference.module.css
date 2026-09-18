@@ -90,7 +90,7 @@
   gap:12px;
   padding-bottom:9px;
   border-bottom:1px solid rgba(105,179,238,.13);
-  color:#82d6ff;
+  color:#ff7a88;
   font:700 20px/1 Consolas,"SFMono-Regular",monospace;
 }
 .hudHeader span{
@@ -103,7 +103,7 @@
   display:grid;
   gap:4px;
   margin-top:10px;
-  color:#7fb9e3;
+  color:#d65c69;
   font:600 8px/1.2 Consolas,"SFMono-Regular",monospace;
   letter-spacing:.06em;
 }
@@ -120,7 +120,7 @@
   display:block;
   width:7px;
   border-radius:1px 1px 0 0;
-  background:linear-gradient(180deg,#70e9ff,#2a8eff);
+  background:linear-gradient(180deg,#ff5262,#ff2438);
   box-shadow:0 0 10px rgba(69,175,255,.35);
 }
 .hudChart i:nth-child(1){height:18px}
@@ -140,7 +140,7 @@
   border-radius:9px;
   background:linear-gradient(145deg,rgba(8,31,59,.72),rgba(2,13,28,.48));
   box-shadow:0 12px 28px rgba(0,0,0,.22),0 0 24px rgba(38,135,255,.08);
-  color:#62b9ff;
+  color:#ff6574;
   font:700 6px/1.2 Consolas,"SFMono-Regular",monospace;
   letter-spacing:.09em;
   text-align:center;
@@ -168,7 +168,7 @@
   top:121px;
   right:-4px;
   width:72px;
-  color:#66b7ff;
+  color:#ff6070;
   font:700 6px/1.72 Consolas,"SFMono-Regular",monospace;
   letter-spacing:.17em;
   text-transform:uppercase;
@@ -181,7 +181,7 @@
   width:29px;
   height:1px;
   margin-top:8px;
-  background:#52dfff;
+  background:#ff4052;
   box-shadow:0 0 9px rgba(82,223,255,.7);
 }
 
@@ -195,7 +195,7 @@
 .input:-webkit-autofill:focus{
   -webkit-text-fill-color:#f6f9ff;
   caret-color:#f6f9ff;
-  -webkit-box-shadow:0 0 0 1000px #0b182a inset,0 0 0 1px rgba(84,133,184,.6);
+  -webkit-box-shadow:0 0 0 1000px #120a0d inset,0 0 0 1px rgba(84,133,184,.6);
   transition:background-color 9999s ease-out 0s;
 }
 
