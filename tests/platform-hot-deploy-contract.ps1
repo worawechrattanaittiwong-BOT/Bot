@@ -6,6 +6,7 @@ foreach ($required in @(
   'REPO_FULL_NAME="${REPO_FULL_NAME:-SCENOVA-EA/Bot}"',
   '[SCENOVA] CI passed',
   '[SCENOVA] Integration Smoke passed',
+  '"build: publish EA v"*" [skip ea build]"',
   'customer bots/positions do not block platform Web/API deployment',
   'bash scripts/deploy-hostinger.sh',
   'curl --fail --silent --show-error --max-time 20'
