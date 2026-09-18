@@ -2835,9 +2835,9 @@ function EmptySetup({onNext}:{onNext:()=>void}) {
 }
 
 function BotSettingsModal(props:any) {
+  const [revealedOptional,setRevealedOptional] = useState<Record<string,boolean>>({});
   if (!props.open && !props.embedded) return null;
   const embedded = Boolean(props.embedded);
-  const [revealedOptional,setRevealedOptional] = useState<Record<string,boolean>>({});
 
   const entryMode = String(props.settings?.entryMode || "AUTO_MOMENTUM");
   const engineMode = String(props.settings?.engineMode || "AUTO").toUpperCase();

@@ -13,7 +13,7 @@ $css = Read-Text 'apps/web/app/premium-dashboard.css'
 $bot = Read-Text 'apps/api/src/bot.controller.ts'
 $eaApi = Read-Text 'apps/api/src/ea.controller.ts'
 
-Need $page 'cc-v12-control-grid' 'V12 compact control grid missing'
+Need $page 'cc-v17-split-grid' 'V17 left/right Control Center grid missing'
 Need $page '<BotSettingsModal' 'Bot Settings workspace missing'
 Need $page 'embedded' 'Bot Settings must be embedded on the Control Center'
 Need $page 'cc-bot-v12-mode-select' 'Trading Mode dropdown missing'
