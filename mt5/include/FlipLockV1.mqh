@@ -7,8 +7,9 @@
 // trigger price.  As price moves in the position's favour the pair only
 // tightens; it never loosens.  FLIP LOCK owns its own starter entry and does
 // not wait for AUTO/VECTOR/Parallel-Universe approval.
-#define FLIP_LOCK_V1_VERSION "2.0.0"
+#define FLIP_LOCK_V1_VERSION "3.0.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
+#define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS 2
 
 int g_flipLockDirection=0;
@@ -93,7 +94,10 @@ bool FlipLockFindPosition(ulong &ticket,int &direction,double &volume,double &sl
          PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
 
       string comment=PositionGetString(POSITION_COMMENT);
-      if(StringFind(comment,"SaaSRace")>=0 || StringFind(comment,"SCNRescue")>=0)
+      // Strict ownership: FLIP LOCK may manage only positions created by its
+      // own starter or opposite pending baton. Never seize an AUTO/MANUAL/RACE
+      // position merely because the website switched control modes.
+      if(StringFind(comment,FLIP_LOCK_PENDING_COMMENT)<0)
          continue;
 
       long type=PositionGetInteger(POSITION_TYPE);
@@ -105,6 +109,20 @@ bool FlipLockFindPosition(ulong &ticket,int &direction,double &volume,double &sl
       sl=PositionGetDouble(POSITION_SL);
       tp=PositionGetDouble(POSITION_TP);
       return true;
+   }
+   return false;
+}
+
+bool BasketHasFlipLockPosition()
+{
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong current=PositionGetTicket(i);
+      if(current==0 || !PositionSelectByTicket(current)) continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),FLIP_LOCK_PENDING_COMMENT)>=0)
+         return true;
    }
    return false;
 }
@@ -291,6 +309,13 @@ bool FlipLockOpenStarter(const int forcedDirection=0)
    int direction=forcedDirection!=0 ? forcedDirection : FlipLockStarterDirection();
    if(direction==0) return false;
 
+   // Publish FLIP LOCK-specific entry metadata before entering the shared
+   // broker sender. This keeps trade journals and execution ownership truthful.
+   g_entryModel="FLIP_LOCK_BATON";
+   g_entryTrigger=direction>0 ? "FLIP_LOCK_START_BUY" : "FLIP_LOCK_START_SELL";
+   g_entryQuality="FLIP_LOCK";
+   g_entryQualityScore=0.0;
+
    bool sent=SendMarketOrder(direction);
    if(sent)
    {
@@ -463,6 +488,16 @@ void FlipLockManage()
    }
    g_flipLockLastFlatAt=0;
    g_flipLockFlatPendingSince=0;
+
+   if(!BasketHasFlipLockPosition())
+   {
+      // A foreign AUTO/MANUAL position is not converted into a FLIP LOCK
+      // position. Remove any stale baton and wait until the prior owner is flat.
+      FlipLockRemoveAllPending();
+      g_flipLockReason="WAIT_FOREIGN_POSITION";
+      g_executionStatus="FLIP_LOCK_WAIT_EXISTING_POSITION";
+      return;
+   }
 
    // The reference behaviour is exactly one live market position.  During the
    // few milliseconds in which a broker reports both sides, do not add or trail
