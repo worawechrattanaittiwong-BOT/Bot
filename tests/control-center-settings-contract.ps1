@@ -66,7 +66,7 @@ Need $page 'openPositions.length ? [...openPositions].reverse().map' 'Running Po
 Need $page 'position.openPrice' 'Running Positions must expose the actual open price'
 Need $page 'position.profit' 'Running Positions must expose live P&L'
 if($page.Contains('cc-bot-v17-add-setting')) { throw 'Dashboard must expose optional settings instead of Add Setting rows' }
-Need $page 'raceCloseAllProfitEnabled&&<label' 'RACE target amount must hide when Close-All Profit is disabled'
+Need $page 'disabled={!raceCloseAllProfitEnabled}' 'RACE target amount must remain visible but disabled when Close-All Profit is off'
 Need $css 'grid-template-columns:minmax(330px,.92fr) minmax(390px,1.08fr) minmax(330px,.92fr)' 'Desktop workspace must use three columns'
 Need $css '.cc-v17-running-table .row' 'Running Positions table styling missing'
 Need $css '.cc-bot-v17-contract-copy{display:none!important' 'Ownership/safety contract copy must stay hidden from the concise settings UI'
