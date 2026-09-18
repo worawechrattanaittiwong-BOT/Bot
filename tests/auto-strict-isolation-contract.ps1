@@ -84,6 +84,6 @@ Need $web 'AUTO Ownership' 'dashboard must explain AUTO ownership'
 Need $web 'ไม่รับไม้ของโหมดอื่นมาจัดการต่อ' 'dashboard must explain that AUTO cannot adopt another mode position'
 Need $web 'MANUAL Ownership' 'dashboard must explain MANUAL ownership'
 
-Need $release 'DEFAULT_EA_VERSION = "1.0.32"' 'EA release version must match strict AUTO isolation runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.33"' 'EA release version must match strict AUTO isolation runtime'
 
 Write-Host 'AUTO strict isolation contract: PASS'

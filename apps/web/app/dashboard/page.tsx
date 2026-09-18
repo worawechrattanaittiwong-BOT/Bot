@@ -2876,7 +2876,7 @@ function BotSettingsModal(props:any) {
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง ไม่รับช่วง Position จาก FLIP LOCK, RACE, ZERO GRID หรือ MANUAL"},
-    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เปิดไม้แรกด้วย Safety Stop แยกก่อน เมื่อราคาเดินเข้ากำไรจนจุด Baton พ้น Break-even จึงวาง Pending ฝั่งตรงข้ามและเริ่มสลับ BUY / SELL"},
+    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เริ่มกักกำไรที่ $0.25 ต่อ 0.01 Lot แล้วเลื่อน SL ตามราคา · หลังปิดกำไร/ชน Trailing SL จะอ่านแรงแท่งก่อนเข้า Market ใหม่ทันที"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
     MANUAL:{title:"MANUAL",subtitle:"โหมดตั้งค่าด้วยตนเอง ใช้เป้ากำไรและ Stop ของ MANUAL เอง และไม่ส่ง Position ให้ AUTO V20 จัดการ"}
@@ -2931,22 +2931,23 @@ function BotSettingsModal(props:any) {
   const directionLabel = entryMode === "SELL_ONLY" ? "SELL เท่านั้น" : entryMode === "BUY_ONLY" ? "BUY เท่านั้น" : "อัตโนมัติ · EA เลือก BUY / SELL";
   const directionHelp = controlMode === "FLIP_LOCK"
     ? (entryMode === "AUTO_MOMENTUM"
-        ? "ใช้ Momentum/โครงสร้างเพื่อเลือกเฉพาะไม้แรกเท่านั้น · หลังจากนั้นสลับ BUY / SELL ด้วย Pending STOP"
-        : "กำหนดทิศทางของไม้แรก · หลังจากนั้น FLIP LOCK สลับฝั่งด้วย Pending STOP")
+        ? "ไม้แรกใช้ Momentum/โครงสร้าง · หลังไม้ปิด ระบบอ่านแรงแท่ง M1 + Momentum ใหม่แล้วเข้า Market ทันที"
+        : "กำหนดทิศทางของไม้แรก · หลังจากไม้ปิด ระบบประเมินแรงแท่งใหม่ก่อนเข้า Market รอบถัดไป")
     : (entryMode === "AUTO_MOMENTUM"
         ? "M1 / M5 / M15 / M30 / H1 วิเคราะห์ทิศทางอัตโนมัติ"
         : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า");
   const raceCloseAllProfitEnabled = props.settings?.raceCloseAllProfitEnabled !== false;
   const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 0.5);
+  const flipLockArmMoney = 0.25 * (Math.max(0.01, Number(props.settings?.lot || 0.01)) / 0.01);
   const exitLabel = controlMode === "FLIP_LOCK"
-    ? "สลับฝั่งด้วย Pending STOP"
+    ? "Trailing SL หลังถึง $"+flipLockArmMoney.toFixed(2)
     : controlMode === "RACE"
       ? (raceCloseAllProfitEnabled ? "ปิดทั้งหมดที่ +$"+raceCloseAllProfitMoney.toFixed(2) : "ระบบรักษากำไรแบบไดนามิก")
       : controlMode === "MANUAL"
         ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")
         : "ระบบรักษากำไรแบบไดนามิก";
   const slLabel = controlMode === "FLIP_LOCK"
-    ? "Safety Stop ก่อน · Baton หลัง Break-even"
+    ? "Safety Stop ก่อน · Trailing หลังถึงเป้ากำไร"
     : controlMode === "MANUAL"
       ? Number(manualSl).toFixed(0)+" points"
       : "ATR × 2.00";
@@ -3025,7 +3026,7 @@ function BotSettingsModal(props:any) {
                   </>}
                 </div>
                 {controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
-                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position · ไม้แรกมี Safety Stop · Pending STOP ฝั่งตรงข้ามจะสร้างเมื่อ Baton ล็อกกำไรพ้น Break-even แล้วเท่านั้น</span></div>
+                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position เท่านั้น · ไม่มี Pending BUY/SELL STOP ล่วงหน้า · เริ่ม Trail เมื่อกำไรถึง $0.25 ต่อ 0.01 Lot และประเมินแรงแท่งก่อนเข้า Market รอบถัดไป</span></div>
                   : controlMode==="AUTO"
                     ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO Ownership</b><span>Vector Edge / V20 จัดการเฉพาะ Position ที่ติดแท็ก AUTO เท่านั้น · ไม่รับไม้ของโหมดอื่นมาจัดการต่อ</span></div>
                     : controlMode==="MANUAL"
@@ -3038,14 +3039,14 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>เป้าหมายกำไรและจุดหยุดขาดทุน</b><small>{controlMode==="MANUAL"?"ระบุค่าปิดออเดอร์ด้วยตนเอง":"EA ปรับทางออกตามโครงสร้างและความผันผวน"}</small></div></div>
                 {controlMode!=="MANUAL" ? <>
                 {controlMode==="FLIP_LOCK" ? <div className="cc-bot-v2-auto-grid">
-                  <div><ScenovaIcon name="trend" size={20}/><span><small>การกลับฝั่ง</small><b>เริ่มเมื่อ Baton พ้น Break-even แล้ว</b></span></div>
-                  <div><ScenovaIcon name="shield" size={20}/><span><small>การป้องกันไม้แรก</small><b>Safety Stop จาก ATR + Spread</b></span></div>
+                  <div><ScenovaIcon name="profit" size={20}/><span><small>เริ่มกักกำไร</small><b>$0.25 ต่อ 0.01 Lot · ตอนนี้ประมาณ {"$"+flipLockArmMoney.toFixed(2)}</b></span></div>
+                  <div><ScenovaIcon name="shield" size={20}/><span><small>การป้องกัน/ติดตาม</small><b>Safety Stop → Trailing SL ขยับตามราคาอย่างเดียว</b></span></div>
                 </div> : <div className="cc-bot-v2-auto-grid">
                   <div><ScenovaIcon name="profit" size={20}/><span><small>การรักษากำไร</small><b>ระบบรักษากำไรแบบไดนามิก</b></span></div>
                   <div><ScenovaIcon name="shield" size={20}/><span><small>จุดหยุดขาดทุนต่อสถานะ</small><b>ATR × 2.00 + โครงสร้างราคา</b></span></div>
                 </div>}
                 {controlMode==="FLIP_LOCK"&&<div className="cc-bot-v2-manual-exit">
-                  <div className="cc-bot-v2-lowvol-note">FLIP LOCK ใช้ค่าของตัวเอง: ไม้แรกเปิดด้วย Safety Stop ที่กว้างกว่า Baton และยังไม่สร้าง Pending ฝั่งตรงข้าม จนกว่าราคาจะเดินเข้ากำไรและจุด Baton อยู่เหนือ Break-even จริง หลังจากนั้น SL + Pending STOP จะเลื่อนเป็นคู่และสลับฝั่งต่อเนื่อง โดย AUTO / RACE / ZERO GRID จะไม่เข้ามาจัดการ Position นี้</div>
+                  <div className="cc-bot-v2-lowvol-note">FLIP LOCK ใช้เฉพาะ Position ที่ตัวเองเปิด: ก่อนถึงกำไรขั้นต่ำจะมีเพียง Safety Stop; เมื่อกำไรถึง $0.25 ต่อ 0.01 Lot (คูณตาม Lot จริง) จะเริ่มเลื่อน SL ตามราคาและไม่ถอยกลับ ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า หลังไม้ปิดกำไรหรือโดน Trailing SL ระบบจะอ่านแรงแท่ง M1 + Momentum แล้วเข้า Market ใหม่ทันที โดย AUTO / RACE / ZERO GRID / MANUAL จะไม่เข้ามาจัดการ Position นี้</div>
                 </div>}
                 {controlMode==="RACE"&&<div className="cc-bot-v2-manual-exit">
                   <div className="cc-bot-v2-fields exit-fields">
