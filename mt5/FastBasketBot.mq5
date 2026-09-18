@@ -3776,7 +3776,9 @@ void OnTick()
       }
 
       double cycleProfit = BasketCycleProfit();
-      double effectiveBasketTarget = EffectiveBasketProfitTarget();
+      double effectiveBasketTarget = autoOwnedBasket
+         ? (BasketFillEnabled() ? MathMax(0.0,g_burstTargetMoney) : 0.0)
+         : EffectiveBasketProfitTarget();
 
       // Auto mode protects a genuinely positive Cycle. A confirmed reversal
       // may bank profit before the dynamic target instead of letting a winner
@@ -16110,8 +16112,8 @@ void ManageDynamicProtection()
          autoPosition || (tacticalPosition && g_profitTargetMode=="AUTO");
       if(positionUsesAutoProtection &&
          count == 1 &&
-         g_perPositionProfit <= 0.0 &&
-         g_basketProfitTarget <= 0.0)
+         (autoPosition ||
+          (g_perPositionProfit <= 0.0 && g_basketProfitTarget <= 0.0)))
       {
          double baseStop = desiredSL > 0.0
             ? desiredSL
