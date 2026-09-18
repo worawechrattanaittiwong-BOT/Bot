@@ -73,7 +73,9 @@ Require $dashboard 'safeStopPositionCount > 0.*safeStopInProgress' 'dashboard on
 Require $eaApi "desired_state='STOPPED'.*desired_state='SAFE_STOP'" 'flat Safe Stop canonicalizes Server desired state to STOPPED'
 Require $dashboard 'safeStopInProgress' 'dashboard blocks Start while Safe Stop is draining'
 Reject $dashboard 'กำลังยืนยันการหยุดกับ EA' 'dashboard must not keep a flat Safe Stop acknowledgement banner'
-Require $dashboard 'startPhase === "TIMEOUT" && desired === "RUNNING"' 'stale Start timeout is hidden after Server releases RUNNING'
+Require $botApi 'const delayed = startAgeSeconds >= 20' 'slow START acknowledgement is diagnostic only'
+Reject $botApi "desired_state='STOPPED',lock_owner=NULL WHERE id=\$1 AND desired_state='RUNNING' AND actual_state<>'RUNNING'" 'dashboard must never cancel a user START because acknowledgement is slow'
+Require $botApi 'Server จะคง RUNNING ไว้จนกว่าจะรับคำสั่งหรือผู้ใช้กดหยุด' 'START remains user-authoritative until EA acknowledgement or explicit Stop'
 Require $botApi 'dashboardPositions' 'dashboard has flat Safe Stop recovery fallback'
 Require $botApi "desired_state='STOPPED',lock_owner=NULL" 'dashboard canonicalizes a flat stale Safe Stop to STOPPED'
 
