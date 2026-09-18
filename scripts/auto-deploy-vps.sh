@@ -78,7 +78,8 @@ validate_generated_ea_shape() {
 
   case "$subject" in
     "build: publish private FastBasketBot.ex5 [skip ea build]"|\
-    "build: publish EA Brain V"*" [skip ea build]")
+    "build: publish EA Brain V"*" [skip ea build]"|\
+    "build: publish EA v"*" [skip ea build]")
       ;;
     *)
       return 1
