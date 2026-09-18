@@ -117,6 +117,38 @@ export default function DashboardPage() {
     process.env.NEXT_PUBLIC_MT5_API_BASE ||
     (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
 
+  useEffect(() => {
+    let cancelled = false;
+    const currentDashboardChunk = () => {
+      const scripts = Array.from(document.scripts).map(script => script.getAttribute("src") || "");
+      return scripts.find(src => /\/_next\/static\/chunks\/app\/dashboard\/page-[^/]+\.js/.test(src)) || "";
+    };
+    const checkForNewBuild = async () => {
+      try {
+        const response = await fetch("/dashboard?__build_check=" + Date.now(), {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: { "x-scenova-build-check": "1" }
+        });
+        if (!response.ok || cancelled) return;
+        const html = await response.text();
+        const match = html.match(/\/_next\/static\/chunks\/app\/dashboard\/page-[^"'<> ]+\.js/);
+        const current = currentDashboardChunk();
+        const latest = match?.[0] || "";
+        if (current && latest && current !== latest && !cancelled) {
+          window.location.reload();
+        }
+      } catch {
+        // Keep the active session usable even when a transient build check fails.
+      }
+    };
+    const timer = window.setInterval(checkForNewBuild, 60000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   async function load(slotIdArg?: string, light = false) {
     const requestedSlotId = slotIdArg ?? selectedSlotIdRef.current;
     if (dashboardLoadInFlightRef.current) {
