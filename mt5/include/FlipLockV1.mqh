@@ -7,7 +7,7 @@
 // trigger price.  As price moves in the position's favour the pair only
 // tightens; it never loosens.  FLIP LOCK owns its own starter entry and does
 // not wait for AUTO/VECTOR/Parallel-Universe approval.
-#define FLIP_LOCK_V1_VERSION "4.1.0"
+#define FLIP_LOCK_V1_VERSION "5.0.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS 2
@@ -392,6 +392,58 @@ int FlipLockStarterDirection()
    return 1;
 }
 
+int FlipLockReactiveDirection()
+{
+   // Re-entry happens only AFTER the previous FLIP-owned position has closed.
+   // Read the live M1 candle first so we do not pre-commit to BUY/SELL with a
+   // pending order before the candle shows its current force.
+   double open0=iOpen(_Symbol,PERIOD_M1,0);
+   double close0=iClose(_Symbol,PERIOD_M1,0);
+   double high0=iHigh(_Symbol,PERIOD_M1,0);
+   double low0=iLow(_Symbol,PERIOD_M1,0);
+   double spread=CurrentSpreadPoints();
+   if(spread<=0.0 || spread>=999999.0) spread=1.0;
+
+   double bodyPoints=(open0>0.0 && close0>0.0)
+      ? (close0-open0)/_Point
+      : 0.0;
+   double rangePoints=(high0>0.0 && low0>0.0 && high0>=low0)
+      ? (high0-low0)/_Point
+      : 0.0;
+   double bodyRatio=rangePoints>0.0
+      ? MathMin(1.0,MathAbs(bodyPoints)/rangePoints)
+      : 0.0;
+   double momentum=MomentumPoints();
+
+   double score=0.0;
+   double bodyGate=MathMax(1.0,spread*0.20);
+   if(MathAbs(bodyPoints)>=bodyGate)
+      score+=(bodyPoints>0.0 ? 1.0 : -1.0)*(1.0+bodyRatio*2.0);
+
+   double momentumGate=MathMax(1.0,spread*0.15);
+   if(MathAbs(momentum)>=momentumGate)
+      score+=(momentum>0.0 ? 1.0 : -1.0)*1.50;
+
+   // Small tie-breakers only; the current candle + momentum dominate.
+   if(g_trendM1>0) score+=0.35;
+   else if(g_trendM1<0) score-=0.35;
+   if(g_trendM5>0) score+=0.15;
+   else if(g_trendM5<0) score-=0.15;
+
+   if(score>0.0) return 1;
+   if(score<0.0) return -1;
+
+   if(bodyPoints>0.0) return 1;
+   if(bodyPoints<0.0) return -1;
+   if(momentum>0.0) return 1;
+   if(momentum<0.0) return -1;
+
+   // The user requested immediate re-entry. If the live candle is perfectly
+   // neutral, continue opposite the previous side rather than staying flat.
+   if(g_flipLockDirection!=0) return -g_flipLockDirection;
+   return FlipLockStarterDirection();
+}
+
 bool FlipLockOpenStarter(const int forcedDirection=0)
 {
    if(BasketPositionCount()!=0 || RescuePositionCount()!=0) return false;
@@ -517,91 +569,34 @@ bool FlipLockSyncBaton(const ulong positionTicket,const int direction,const doub
       return false;
    }
 
-   ulong pendingTicket=0;
-   int pendingDirection=0;
-   double pendingPrice=0.0;
-   double pendingVolume=0.0;
-   bool hasPending=FlipLockFindPending(pendingTicket,pendingDirection,pendingPrice,pendingVolume);
-   int wantedPendingDirection=-direction;
-
-   if(hasPending && pendingDirection!=wantedPendingDirection)
-   {
-      FlipLockRemovePendingTicket(pendingTicket);
-      pendingTicket=0;
-      pendingDirection=0;
-      pendingPrice=0.0;
-      pendingVolume=0.0;
-      hasPending=false;
-   }
+   // V5 is reactive: never pre-place BUY STOP / SELL STOP. Any stale pending
+   // left by an older runtime is removed before the trailing lock is managed.
+   FlipLockRemoveAllPending();
 
    double trigger=g_flipLockTriggerPrice;
    double moveThreshold=MathMax(2.0,FlipLockTrailDistancePoints()*0.10)*_Point;
    bool stopNeedsUpdate=currentSl<=0.0 || MathAbs(currentSl-trigger)>=moveThreshold;
-   bool pendingNeedsUpdate=!hasPending || MathAbs(pendingPrice-trigger)>=moveThreshold;
 
-   // Tighten the protective SL first.  If the pending update is rejected the
-   // position is still protected; this is safer than creating an unpaired hedge.
+   // Once armed, the SL follows price in one direction only because
+   // g_flipLockTriggerPrice is monotonic (MathMax for BUY / MathMin for SELL).
    if(stopNeedsUpdate && !FlipLockSetPositionStop(positionTicket,trigger))
    {
-      g_flipLockReason="SL_SYNC_RETRY";
-      g_executionStatus="FLIP_LOCK_SL_SYNC_RETRY";
-      return false;
-   }
-
-   if(!hasPending)
-   {
-      if(!FlipLockPlacePending(wantedPendingDirection,trigger,positionVolume))
-      {
-         g_flipLockReason="PENDING_CREATE_RETRY";
-         g_executionStatus="FLIP_LOCK_PENDING_RETRY";
-         return false;
-      }
-   }
-   else if(pendingNeedsUpdate && !FlipLockModifyPending(pendingTicket,trigger))
-   {
-      g_flipLockReason="PENDING_TRAIL_RETRY";
-      g_executionStatus="FLIP_LOCK_PENDING_TRAIL_RETRY";
+      g_flipLockReason="SL_TRAIL_RETRY";
+      g_executionStatus="FLIP_LOCK_SL_TRAIL_RETRY";
       return false;
    }
 
    g_flipLockArmed=true;
-   g_flipLockReason="BATON_ARMED";
-   g_executionStatus=direction>0 ? "FLIP_LOCK_BUY_SELL_STOP" : "FLIP_LOCK_SELL_BUY_STOP";
+   g_flipLockReason="PROFIT_TRAIL_ARMED";
+   g_executionStatus=direction>0 ? "FLIP_LOCK_BUY_TRAILING" : "FLIP_LOCK_SELL_TRAILING";
    return true;
 }
 
 void FlipLockManageFlatState()
 {
-   ulong pendingTicket=0;
-   int pendingDirection=0;
-   double pendingPrice=0.0;
-   double pendingVolume=0.0;
-   bool hasPending=FlipLockFindPending(pendingTicket,pendingDirection,pendingPrice,pendingVolume);
-
-   if(hasPending)
-   {
-      // A paired SL and STOP can be reported in either order by the broker.
-      // Give the pending deal a short grace window.  If the account is still
-      // flat afterwards, convert the intended baton direction to a market entry
-      // and remove the orphan pending so FLIP LOCK never stays flat indefinitely.
-      if(g_flipLockFlatPendingSince<=0)
-         g_flipLockFlatPendingSince=TimeCurrent();
-
-      if(TimeCurrent()-g_flipLockFlatPendingSince<FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS)
-      {
-         g_flipLockReason="WAIT_PENDING_FILL";
-         g_executionStatus="FLIP_LOCK_WAIT_PENDING_FILL";
-         return;
-      }
-
-      FlipLockRemovePendingTicket(pendingTicket);
-      g_flipLockFlipCount++;
-      g_flipLockLastFlipAt=TimeCurrent();
-      g_flipLockFlatPendingSince=0;
-      FlipLockOpenStarter(pendingDirection);
-      return;
-   }
-
+   // V5 has no pre-placed direction order. Clean any stale pending from an older
+   // build, then decide the next side from the live candle only after exit.
+   FlipLockRemoveAllPending();
    g_flipLockFlatPendingSince=0;
 
    // A deliberate Start after a fully stopped/flat run begins a new risk cycle.
@@ -627,15 +622,18 @@ void FlipLockManageFlatState()
       return;
    }
 
-   // If the broker reports the protective SL fill before/without the paired
-   // pending fill, preserve the baton direction. Re-analyzing the market here
-   // could reopen the same side and break the BUY<->SELL lock shown in the
-   // reference behaviour.
-   int fallbackDirection =
-      (g_flipLockArmed && g_flipLockDirection!=0)
-      ? -g_flipLockDirection
-      : 0;
-   FlipLockOpenStarter(fallbackDirection);
+   if(g_flipLockArmed)
+   {
+      // Profit close / trailing-SL exit: evaluate the just-forming candle NOW,
+      // then re-enter immediately with a market order in the stronger direction.
+      int reactiveDirection=FlipLockReactiveDirection();
+      g_flipLockFlipCount++;
+      g_flipLockLastFlipAt=TimeCurrent();
+      FlipLockOpenStarter(reactiveDirection);
+      return;
+   }
+
+   FlipLockOpenStarter();
 }
 
 void FlipLockManage()
