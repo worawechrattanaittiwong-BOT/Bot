@@ -13,7 +13,7 @@ $css = Read-Text 'apps/web/app/premium-dashboard.css'
 $bot = Read-Text 'apps/api/src/bot.controller.ts'
 $eaApi = Read-Text 'apps/api/src/ea.controller.ts'
 
-Need $page 'cc-v17-split-grid' 'V17 left/right Control Center grid missing'
+Need $page 'cc-v19-three-card-grid' 'Three-card Control Center grid missing'
 Need $page '<BotSettingsModal' 'Bot Settings workspace missing'
 Need $page 'embedded' 'Bot Settings must be embedded on the Control Center'
 Need $page 'cc-bot-v12-mode-select' 'Trading Mode dropdown missing'
@@ -24,11 +24,9 @@ Need $page 'Win Rate วันนี้' 'Daily Win Rate KPI missing'
 Need $page 'Drawdown วันนี้' 'Daily Drawdown KPI missing'
 Need $page 'PERFORMANCE BY MODE' 'Per-mode performance card missing'
 Need $page 'modePerformanceToday.map' 'Per-mode performance rows must use real API data'
-Need $page 'cc-v17-action-row' 'Compact bot action row missing'
+Need $page 'cc-v13-hero-actions' 'Hero bot action deck missing'
 if($page.Contains('cc-v17-control-identity')) { throw 'Removed Control Center identity header must not render' }
 if($page.Contains('cc-v17-control-meta')) { throw 'Removed Symbol/Lot/EA Sync header must not render' }
-Need $page 'SCENOVA INTELLIGENCE CORE' 'AI/Genetic intelligence card missing'
-Need $page 'AI-driven & Genetic Algorithm' 'AI-driven Genetic Algorithm identity missing'
 if($page.Contains('<LivePriceChart points={livePricePoints}')) { throw 'Price chart must not render on V12 Control Center' }
 
 Need $bot 'modeToday: controlModes.map' 'Dashboard per-mode stats payload missing'
@@ -39,10 +37,8 @@ Need $eaApi 'controlMode: journalControlMode' 'Journal must persist execution mo
 Need $css '.cc-v12-control-grid' 'V12 layout styling missing'
 Need $css '.cc-bot-v2-embedded' 'Inline settings styling missing'
 Need $css 'grid-template-columns:repeat(6' 'Desktop KPI row must fit the six decision-critical cards'
-Need $page 'cc-v13-hero-intelligence' 'Hero AI/Genetic execution summary missing'
-Need $page 'SCENOVA INTELLIGENCE CORE' 'Merged system intelligence card missing'
-Need $css '.cc-v13-system-intelligence' 'Readable merged system card styling missing'
-Need $css '.cc-v12-quick-actions{grid-template-columns:repeat(2' 'Control buttons must use a compact two-column deck'
+Need $page 'cc-v13-hero-actions' 'Hero bot action deck missing'
+Need $css '.cc-v13-hero-actions .cc-v19-hero-quick-actions' 'Hero control buttons styling missing'
 if($page.Contains('cc-v6-command start')) { throw 'Duplicate oversized hero Start button still exists' }
 
 Write-Host 'Control Center V12 inline-settings/per-mode-performance contract PASS'
@@ -63,7 +59,7 @@ Need $css 'min-height:calc(100vh - 300px)!important' 'V15 viewport-filling works
 Need $css 'max-height:none!important' 'V15 must remove the old desktop workspace max-height cap'
 if($css.Contains('cc-v15 .cc-v12-control-grid{height:calc(100vh - 345px)')) { throw 'V15 still uses the old capped workspace height' }
 
-Need $page 'cc-v17-split-grid' 'V17 left/right split grid missing'
+Need $page 'cc-v19-three-card-grid' 'V19 three-column workspace missing'
 Need $page 'cc-v17-settings-column' 'V17 left settings column missing'
 Need $page 'cc-v17-running-positions' 'V17 right Running Positions card missing'
 Need $page 'openPositions.length ? [...openPositions].reverse().map' 'Running Positions must use live MT5 openPositions'
@@ -71,7 +67,7 @@ Need $page 'position.openPrice' 'Running Positions must expose the actual open p
 Need $page 'position.profit' 'Running Positions must expose live P&L'
 Need $page 'cc-bot-v17-add-setting' 'Inactive optional settings must collapse behind Add Setting'
 Need $page 'raceCloseAllProfitEnabled&&<label' 'RACE target amount must hide when Close-All Profit is disabled'
-Need $css 'grid-template-columns:minmax(0,1fr) minmax(0,1fr)' 'Desktop Settings / Running Positions must be a true 50/50 left-right split'
+Need $css 'grid-template-columns:minmax(330px,.92fr) minmax(390px,1.08fr) minmax(330px,.92fr)' 'Desktop workspace must use three columns'
 Need $css '.cc-v17-running-table .row' 'Running Positions table styling missing'
 Need $css '.cc-bot-v17-contract-copy{display:none!important' 'Ownership/safety contract copy must stay hidden from the concise settings UI'
 
