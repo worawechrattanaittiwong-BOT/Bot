@@ -11046,6 +11046,13 @@ double DynamicConfidenceThreshold(int direction)
 double EffectiveHardStopMultiplier()
 {
    double multiplier = g_hardStopAtrMultiplier;
+
+   // RACE presents ATR x multiplier as an explicit user contract. AUTO may
+   // adapt that multiplier to market regime, but RACE must not silently widen
+   // or tighten it behind the Settings value.
+   if(RaceModeEnabled() || BasketHasRacePosition())
+      return MathMax(0.5, MathMin(10.0, multiplier));
+
    if(g_marketRegime == "HIGH_VOLATILITY") multiplier *= 1.25;
    else if(g_marketRegime == "QUIET") multiplier *= 0.85;
    return MathMax(0.5, MathMin(10.0, multiplier));
@@ -16060,7 +16067,7 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
    bool autoV20=AutoV20Enabled() && !g_tacticalCountertrendActive;
-   bool raceOrder = g_entryModel == "RACE_M5_ONE_CANDLE";
+   bool raceOrder = RaceModeEnabled() || BasketHasRacePosition();
    AUTO_V20_SIDE autoPlan;
    if(autoV20)
       autoPlan=direction>0 ? g_autoV20Buy : g_autoV20Sell;
@@ -16158,9 +16165,11 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    }
 
    g_dynamicStopPrice = request.sl;
-   g_dynamicTakeProfitPrice = request.tp > 0.0
-      ? request.tp
-      : DynamicTakeProfitPrice(direction, entryPrice, request.sl);
+   g_dynamicTakeProfitPrice = raceOrder
+      ? 0.0
+      : (request.tp > 0.0
+         ? request.tp
+         : DynamicTakeProfitPrice(direction, entryPrice, request.sl));
 
    g_adaptiveLot = request.volume;
 
