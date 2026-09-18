@@ -63,6 +63,9 @@ if($ownerIndex -lt 0 -or $genericIndex -lt 0 -or $ownerIndex -gt $genericIndex) 
 Need $onTick 'BasketHasFlipLockPosition()' 'OnTick must distinguish FLIP LOCK-owned positions'
 Need $onTick 'FLIP_LOCK_MAX_BASKET_LOSS' 'FLIP LOCK must keep the configured hard Basket loss boundary'
 Need $onTick 'FLIP_LOCK_WAIT_EXISTING_POSITION' 'mode switch must wait for a foreign position to drain'
+Need $onTick 'double flipCycleProfit = BasketCycleProfit();' 'FLIP LOCK Max Basket Loss must include realized P/L across BUY/SELL handoffs'
+Need $onTick 'rescueCount <= 0 && !FlipLockModeEnabled()' 'temporary flat settlement must not reset the FLIP LOCK run P/L'
+Need $manage 'ResetBasketCycleState();' 'a stopped and flat FLIP LOCK run must reset before the next Start'
 
 Need $api 'const flipLockSelected = requestedControlMode === "FLIP_LOCK";' 'API must canonicalize FLIP LOCK settings'
 Need $api 'clean.maxPositions = 1;' 'API must force one live FLIP LOCK position'
@@ -73,6 +76,6 @@ Need $web '1 Position + 1 Pending STOP ฝั่งตรงข้าม' 'FLIP 
 Need $web 'M1 ATR / Spread · ขยับเข้าอย่างเดียว' 'FLIP LOCK UI must describe its real trailing distance'
 Need $web 'หลังจากนั้นสลับ BUY / SELL ด้วย Pending STOP' 'FLIP LOCK UI must explain that analysis chooses only the starter side'
 
-Need $release 'DEFAULT_EA_VERSION = "1.0.29"' 'EA release version must match the FLIP LOCK isolation runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.30"' 'EA release version must match the FLIP LOCK isolation runtime'
 
 Write-Host 'FLIP LOCK strict isolation contract: PASS'
