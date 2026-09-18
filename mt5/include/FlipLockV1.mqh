@@ -457,7 +457,16 @@ void FlipLockManageFlatState()
    }
 
    g_flipLockFlatPendingSince=0;
-   FlipLockOpenStarter();
+
+   // If the broker reports the protective SL fill before/without the paired
+   // pending fill, preserve the baton direction. Re-analyzing the market here
+   // could reopen the same side and break the BUY<->SELL lock shown in the
+   // reference behaviour.
+   int fallbackDirection =
+      (g_flipLockArmed && g_flipLockDirection!=0)
+      ? -g_flipLockDirection
+      : 0;
+   FlipLockOpenStarter(fallbackDirection);
 }
 
 void FlipLockManage()
