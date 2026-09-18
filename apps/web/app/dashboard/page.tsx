@@ -2876,7 +2876,7 @@ function BotSettingsModal(props:any) {
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"สมอง AUTO รวม Probability, Expected Value, Entropy และตัวกรองต้นทุน เพื่อคัดจังหวะที่มี Edge ก่อนเข้า"},
-    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เปิดไม้แรกได้ทันที แล้ววาง Pending ฝั่งตรงข้ามที่ระดับเดียวกับ Stop ของไม้ปัจจุบัน จากนั้นเลื่อนตามราคาและสลับ BUY / SELL ต่อเนื่อง โดยไม่ใช้ Daily Profit Drawdown"},
+    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เปิดไม้แรกด้วย Safety Stop แยกก่อน เมื่อราคาเดินเข้ากำไรจนจุด Baton พ้น Break-even จึงวาง Pending ฝั่งตรงข้ามและเริ่มสลับ BUY / SELL"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
     MANUAL:{title:"MANUAL",subtitle:"ระบบวิเคราะห์ทิศทางและจุดเข้าอัตโนมัติ โดยผู้ใช้กำหนด Lot เป้าหมายกำไร และจุดหยุดขาดทุน"}
@@ -2946,7 +2946,7 @@ function BotSettingsModal(props:any) {
         ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")
         : "ระบบรักษากำไรแบบไดนามิก";
   const slLabel = controlMode === "FLIP_LOCK"
-    ? "Baton M1 ATR / Spread · เลื่อนตามราคา"
+    ? "Safety Stop ก่อน · Baton หลัง Break-even"
     : controlMode === "MANUAL"
       ? Number(manualSl).toFixed(0)+" points"
       : "ATR × 2.00";
@@ -3025,7 +3025,7 @@ function BotSettingsModal(props:any) {
                   </>}
                 </div>
                 {controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
-                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position + 1 Pending STOP ฝั่งตรงข้าม · ไม่ถัว ไม่เพิ่มไม้จาก AUTO และไม่ใช้ Vector Edge หลังไม้แรก</span></div>
+                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position · ไม้แรกมี Safety Stop · Pending STOP ฝั่งตรงข้ามจะสร้างเมื่อ Baton ล็อกกำไรพ้น Break-even แล้วเท่านั้น</span></div>
                   : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}
               </section>
 
@@ -3034,14 +3034,14 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>เป้าหมายกำไรและจุดหยุดขาดทุน</b><small>{controlMode==="MANUAL"?"ระบุค่าปิดออเดอร์ด้วยตนเอง":"EA ปรับทางออกตามโครงสร้างและความผันผวน"}</small></div></div>
                 {controlMode!=="MANUAL" ? <>
                 {controlMode==="FLIP_LOCK" ? <div className="cc-bot-v2-auto-grid">
-                  <div><ScenovaIcon name="trend" size={20}/><span><small>การกลับฝั่ง</small><b>SL + Pending STOP ราคาเดียวกัน</b></span></div>
-                  <div><ScenovaIcon name="shield" size={20}/><span><small>ระยะ Baton</small><b>M1 ATR / Spread · ขยับเข้าอย่างเดียว</b></span></div>
+                  <div><ScenovaIcon name="trend" size={20}/><span><small>การกลับฝั่ง</small><b>เริ่มเมื่อ Baton พ้น Break-even แล้ว</b></span></div>
+                  <div><ScenovaIcon name="shield" size={20}/><span><small>การป้องกันไม้แรก</small><b>Safety Stop จาก ATR + Spread</b></span></div>
                 </div> : <div className="cc-bot-v2-auto-grid">
                   <div><ScenovaIcon name="profit" size={20}/><span><small>การรักษากำไร</small><b>ระบบรักษากำไรแบบไดนามิก</b></span></div>
                   <div><ScenovaIcon name="shield" size={20}/><span><small>จุดหยุดขาดทุนต่อสถานะ</small><b>ATR × 2.00 + โครงสร้างราคา</b></span></div>
                 </div>}
                 {controlMode==="FLIP_LOCK"&&<div className="cc-bot-v2-manual-exit">
-                  <div className="cc-bot-v2-lowvol-note">FLIP LOCK ใช้ค่าของตัวเอง: ไม้แรกเปิดตามทิศทางที่เลือก จากนั้น SL และ Pending STOP ฝั่งตรงข้ามจะเลื่อนเป็นคู่ตามราคา เมื่อ Trigger ทำงาน ระบบจะส่งต่อ Baton ไปยังฝั่งใหม่ โดย AUTO / RACE / ZERO GRID จะไม่เข้ามาจัดการ Position นี้</div>
+                  <div className="cc-bot-v2-lowvol-note">FLIP LOCK ใช้ค่าของตัวเอง: ไม้แรกเปิดด้วย Safety Stop ที่กว้างกว่า Baton และยังไม่สร้าง Pending ฝั่งตรงข้าม จนกว่าราคาจะเดินเข้ากำไรและจุด Baton อยู่เหนือ Break-even จริง หลังจากนั้น SL + Pending STOP จะเลื่อนเป็นคู่และสลับฝั่งต่อเนื่อง โดย AUTO / RACE / ZERO GRID จะไม่เข้ามาจัดการ Position นี้</div>
                 </div>}
                 {controlMode==="RACE"&&<div className="cc-bot-v2-manual-exit">
                   <div className="cc-bot-v2-fields exit-fields">
