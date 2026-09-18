@@ -1939,14 +1939,14 @@ export default function DashboardPage() {
                     <div className="cc-v16-running-table">
                       <div className="head"><span>เวลา</span><span>Symbol</span><span>Type</span><span>Lot</span><span>ราคาเปิด</span><span>P&L</span></div>
                       <div className="body">
-                        {openPositions.length ? [...openPositions].reverse().map((position:any)=>{
+                        {openPositions.length ? [...openPositions].reverse().map((position:any,index:number)=>{
                           const openedAt=Number(position.openedAt||0);
                           const openedLabel=openedAt>0
                             ? new Date(openedAt*1000).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit",hour12:false})
                             : "—";
                           const side=String(position.side||"").toUpperCase()==="SELL"?"SELL":"BUY";
                           const pnl=Number(position.profit||0);
-                          return <div className="row" key={String(position.ticket||openedAt||Math.random())}>
+                          return <div className="row" key={String(position.ticket||openedAt||index)}>
                             <span>{openedLabel}</span>
                             <span className="symbol">{String(metrics.symbol||settings.symbol||"—")}</span>
                             <span><i className={"side "+side.toLowerCase()}>{side}</i></span>
