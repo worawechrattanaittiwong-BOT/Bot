@@ -53,3 +53,10 @@ Need $css '.cc-bot-v2-embedded .cc-bot-v2-field>small' 'Embedded helper-text sup
 Need $css '.cc-bot-v2-embedded .cc-bot-v2-limit-grid{' 'Reference-style risk rows missing'
 Need $css '.cc-bot-v14-head-save{' 'Reference-style top save button styling missing'
 if($page.Contains('onLabel="เปิด · ปิดทั้งหมดเมื่อถึงเป้า"')) { throw 'RACE toggle still contains explanatory label' }
+
+Need $page 'cc-v15' 'V15 readable Control Center marker missing'
+Need $css 'font-size:13px!important' 'V15 standard 13px settings typography missing'
+Need $css 'font-size:14px!important' 'V15 section-title typography missing'
+Need $css 'min-height:calc(100vh - 300px)!important' 'V15 viewport-filling workspace rule missing'
+Need $css 'max-height:none!important' 'V15 must remove the old desktop workspace max-height cap'
+if($css.Contains('cc-v15 .cc-v12-control-grid{height:calc(100vh - 345px)')) { throw 'V15 still uses the old capped workspace height' }

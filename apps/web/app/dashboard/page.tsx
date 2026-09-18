@@ -1816,7 +1816,7 @@ export default function DashboardPage() {
           !data.account ? (
             <EmptySetup onNext={()=>setActiveView("account")} />
           ) : (
-            <div className="cc-overview cc-v3 cc-v4 cc-v12">
+            <div className="cc-overview cc-v3 cc-v4 cc-v12 cc-v15">
               <div className="cc-v4-ambient" aria-hidden="true"><i/><i/><i/></div>
               {marketSessionClosed ? (
                 <div className="cc-connect-alert">
