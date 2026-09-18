@@ -15,6 +15,7 @@ $page=Read-Text 'apps/web/app/admin/cloud-hardening/page.tsx'
 $botApi=Read-Text 'apps/api/src/bot.controller.ts'
 $eaApi=Read-Text 'apps/api/src/ea.controller.ts'
 $dashboard=Read-Text 'apps/web/app/dashboard/page.tsx'
+$manualControls=Read-Text 'apps/web/components/Mt5ManualActionControls.tsx'
 
 Require $schema 'CREATE TABLE IF NOT EXISTS production_controls' 'global production controls'
 Require $schema 'CREATE TABLE IF NOT EXISTS runtime_incidents' 'runtime incident ledger'
@@ -76,6 +77,9 @@ Reject $dashboard 'กำลังยืนยันการหยุดกั�
 Require $botApi 'const delayed = startAgeSeconds >= 20' 'slow START acknowledgement is diagnostic only'
 Reject $botApi "desired_state='STOPPED',lock_owner=NULL WHERE id=\$1 AND desired_state='RUNNING' AND actual_state<>'RUNNING'" 'dashboard must never cancel a user START because acknowledgement is slow'
 Require $botApi 'Server จะคง RUNNING ไว้จนกว่าจะรับคำสั่งหรือผู้ใช้กดหยุด' 'START remains user-authoritative until EA acknowledgement or explicit Stop'
+Reject $manualControls 'START_COMMAND_TIMEOUT_MS' 'browser must not own a START timeout that can cancel the user request'
+Reject $manualControls '/bot/stop\?slotId=' 'manual controls must never auto Safe Stop a pending START'
+Require $manualControls 'data\?\.startTransition' 'manual controls use the canonical Server START transition instead of stale command logs'
 Require $botApi 'dashboardPositions' 'dashboard has flat Safe Stop recovery fallback'
 Require $botApi "desired_state='STOPPED',lock_owner=NULL" 'dashboard canonicalizes a flat stale Safe Stop to STOPPED'
 
