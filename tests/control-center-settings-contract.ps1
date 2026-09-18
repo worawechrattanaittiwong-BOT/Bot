@@ -101,3 +101,13 @@ Need $css 'height:514px!important;' 'Fixed settings body height missing'
 Need $css '.cc-v19-settings-card .cc-bot-v2-limit-grid>div{' 'Compact Risk Controls rows missing'
 Need $css 'grid-template-columns:minmax(126px,.88fr) minmax(160px,1.12fr)!important;' 'Compact label-control row layout missing'
 Need $css '.cc-v19-settings-card .cc-bot-v2-lowvol-note{' 'ZERO GRID compact embedded treatment missing'
+
+Need $page 'alwaysShowInput' 'Always-visible optional setting controls missing'
+Need $page 'cc-bot-v2-inline-toggle-value' 'Aligned RACE toggle/value control missing'
+Need $page 'cc-bot-v2-choice-inline' 'Aligned MANUAL profit selector missing'
+if($page.Contains('revealedOptional')) { throw 'Dashboard must not hide settings behind reveal state' }
+if($page.Contains('เพิ่มการตั้งค่า</span><select')) { throw 'Dashboard must not render Add Setting selector rows' }
+Need $css 'Control Center V22 · professional settings form' 'Professional settings form marker missing'
+Need $css '--settings-label:178px' 'Shared settings label column missing'
+Need $css '.cc-v19-settings-card .cc-bot-v12-mode-select{' 'Primary trading mode styling missing'
+Need $css 'grid-template-columns:76px minmax(0,1fr)!important;' 'Toggle/value alignment missing'
