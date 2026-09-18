@@ -65,7 +65,7 @@ Need $page 'cc-v17-running-positions' 'V17 right Running Positions card missing'
 Need $page 'openPositions.length ? [...openPositions].reverse().map' 'Running Positions must use live MT5 openPositions'
 Need $page 'position.openPrice' 'Running Positions must expose the actual open price'
 Need $page 'position.profit' 'Running Positions must expose live P&L'
-Need $page 'cc-bot-v17-add-setting' 'Inactive optional settings must collapse behind Add Setting'
+if($page.Contains('cc-bot-v17-add-setting')) { throw 'Dashboard must expose optional settings instead of Add Setting rows' }
 Need $page 'raceCloseAllProfitEnabled&&<label' 'RACE target amount must hide when Close-All Profit is disabled'
 Need $css 'grid-template-columns:minmax(330px,.92fr) minmax(390px,1.08fr) minmax(330px,.92fr)' 'Desktop workspace must use three columns'
 Need $css '.cc-v17-running-table .row' 'Running Positions table styling missing'
