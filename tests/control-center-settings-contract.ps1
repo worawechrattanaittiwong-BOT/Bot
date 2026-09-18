@@ -60,13 +60,3 @@ Need $css 'font-size:14px!important' 'V15 section-title typography missing'
 Need $css 'min-height:calc(100vh - 300px)!important' 'V15 viewport-filling workspace rule missing'
 Need $css 'max-height:none!important' 'V15 must remove the old desktop workspace max-height cap'
 if($css.Contains('cc-v15 .cc-v12-control-grid{height:calc(100vh - 345px)')) { throw 'V15 still uses the old capped workspace height' }
-
-Need $page 'cc-v16-settings-stack' 'V16 50/50 settings/running stack missing'
-Need $page 'cc-v16-running-positions' 'Running Positions card missing'
-Need $page 'openPositions.length ? [...openPositions].reverse().map' 'Running Positions must render real MT5 openPositions telemetry'
-Need $page 'position.openPrice' 'Running Positions must show the real open price'
-Need $page 'position.profit' 'Running Positions must show live P&L'
-Need $page 'disabledRiskControls.length>0' 'Disabled risk settings must collapse into Add Setting'
-Need $page 'raceCloseAllProfitEnabled&&<label' 'RACE target value must hide when its switch is off'
-Need $css 'grid-template-rows:minmax(0,1fr) minmax(0,1fr)' 'Settings and running positions must split the column approximately 50/50'
-Need $css '.cc-v16-running-table .row{' 'Running Positions table styling missing'
