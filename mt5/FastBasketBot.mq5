@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.30"
-#define SCENOVA_EA_VERSION "1.0.30"
-#define SCENOVA_PRODUCT_VERSION "1.0.30"
+#property version   "1.0.31"
+#define SCENOVA_EA_VERSION "1.0.31"
+#define SCENOVA_PRODUCT_VERSION "1.0.31"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ROLLOVER_V2"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -3615,11 +3615,10 @@ void OnTick()
       return;
    }
 
-   // FLIP LOCK V3 owns its live position + opposite pending baton before any
-   // generic AUTO basket protection/reversal logic can touch it. Hard daily
-   // controls above remain authoritative; the configured Basket loss remains
-   // the only generic per-cycle loss boundary used by FLIP LOCK.
-   if(FlipLockModeEnabled() && (count <= 0 || BasketHasFlipLockPosition()))
+   // FLIP LOCK V4 owns every position carrying its broker tag even if a stale
+   // settings heartbeat momentarily reports another mode. A tagged position
+   // must never fall through into AUTO/RACE generic management.
+   if((FlipLockModeEnabled() && count <= 0) || BasketHasFlipLockPosition())
    {
       // One FLIP LOCK run spans every BUY<->SELL handoff. Preserve realized
       // losses across the broker's brief flat settlement window so the visible
@@ -16177,14 +16176,19 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
       request.sl = raceOrder
          ? RaceInitialStopPrice(direction, entryPrice)
          : (flipLockOrder
-            ? FlipLockCandidateTrigger(direction,tick)
+            ? FlipLockInitialSafetyStopPrice(direction,entryPrice,tick)
             : DynamicInitialStopPrice(direction, entryPrice));
       if(raceOrder && request.sl <= 0.0)
       {
          g_executionStatus = "RACE_ATR_NOT_READY";
          return false;
       }
-      if(!raceOrder && g_profitTargetMode == "AUTO" &&
+      if(flipLockOrder && request.sl <= 0.0)
+      {
+         g_executionStatus = "FLIP_LOCK_WAIT_ATR";
+         return false;
+      }
+      if(!raceOrder && !flipLockOrder && g_profitTargetMode == "AUTO" &&
          request.sl > 0.0 &&
          (g_tacticalCountertrendActive || !BasketFillEnabled()) &&
          g_perPositionProfit <= 0.0 &&
