@@ -2913,6 +2913,7 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("manualStopLossPoints",0);
       props.onEdit?.("maxPositions",1);
       props.onEdit?.("dailyProfitContinueAfterTarget",false);
+      props.onEdit?.("dailyProfitDrawdownPercent",0);
       return;
     }
     if (mode === "AUTO") {
@@ -2928,14 +2929,27 @@ function BotSettingsModal(props:any) {
   };
 
   const directionLabel = entryMode === "SELL_ONLY" ? "SELL เท่านั้น" : entryMode === "BUY_ONLY" ? "BUY เท่านั้น" : "อัตโนมัติ · EA เลือก BUY / SELL";
+  const directionHelp = controlMode === "FLIP_LOCK"
+    ? (entryMode === "AUTO_MOMENTUM"
+        ? "ใช้ Momentum/โครงสร้างเพื่อเลือกเฉพาะไม้แรกเท่านั้น · หลังจากนั้นสลับ BUY / SELL ด้วย Pending STOP"
+        : "กำหนดทิศทางของไม้แรก · หลังจากนั้น FLIP LOCK สลับฝั่งด้วย Pending STOP")
+    : (entryMode === "AUTO_MOMENTUM"
+        ? "M1 / M5 / M15 / M30 / H1 วิเคราะห์ทิศทางอัตโนมัติ"
+        : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า");
   const raceCloseAllProfitEnabled = props.settings?.raceCloseAllProfitEnabled !== false;
   const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 0.5);
-  const exitLabel = controlMode === "RACE"
-    ? (raceCloseAllProfitEnabled ? "ปิดทั้งหมดที่ +$"+raceCloseAllProfitMoney.toFixed(2) : "ระบบรักษากำไรแบบไดนามิก")
+  const exitLabel = controlMode === "FLIP_LOCK"
+    ? "สลับฝั่งด้วย Pending STOP"
+    : controlMode === "RACE"
+      ? (raceCloseAllProfitEnabled ? "ปิดทั้งหมดที่ +$"+raceCloseAllProfitMoney.toFixed(2) : "ระบบรักษากำไรแบบไดนามิก")
+      : controlMode === "MANUAL"
+        ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")
+        : "ระบบรักษากำไรแบบไดนามิก";
+  const slLabel = controlMode === "FLIP_LOCK"
+    ? "Baton M1 ATR / Spread · เลื่อนตามราคา"
     : controlMode === "MANUAL"
-      ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")
-      : "ระบบรักษากำไรแบบไดนามิก";
-  const slLabel = controlMode === "MANUAL" ? Number(manualSl).toFixed(0)+" points" : "ATR × 2.00";
+      ? Number(manualSl).toFixed(0)+" points"
+      : "ATR × 2.00";
   const selectedZeroLevels = Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||10));
   const zeroGridLowVolatilityEnabled = props.settings?.zeroGridLowVolatilityEnabled === true;
   const appliedZeroLevels = Number(props.metrics?.zeroGridConfiguredLevelsPerSide);
@@ -3005,22 +3019,30 @@ function BotSettingsModal(props:any) {
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไรสุทธิขั้นต่ำ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="shield" size={17}/>เงินสำรองสำหรับค่าปิด</span><MoneyInput value={props.settings.zeroGridCloseReserveMoney || 0.2} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridCloseReserveMoney",v)}/></label>
                   </> : <>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ · EA เลือก BUY / SELL</option><option value="BUY_ONLY">BUY เท่านั้น</option><option value="SELL_ONLY">SELL เท่านั้น</option></select><small>{entryMode === "AUTO_MOMENTUM" ? "M1 / M5 / M15 / M30 / H1 วิเคราะห์ทิศทางอัตโนมัติ" : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า"}</small></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ · EA เลือก BUY / SELL</option><option value="BUY_ONLY">BUY เท่านั้น</option><option value="SELL_ONLY">SELL เท่านั้น</option></select><small>{directionHelp}</small></label>
                     {controlMode==="FLIP_LOCK" ? <div className="cc-bot-v2-field readonly"><label><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</label><strong>1 ไม้</strong><small>FLIP LOCK ล็อก 1 Position ต่อรอบเพื่อป้องกันการถัวและการ Flip ซ้อน</small></div> : <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</span><select className="input" value={String(props.settings.maxPositions||1)} onChange={e=>props.onEdit?.("maxPositions",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>}
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input" value={String(props.settings.lot||0.01)} onChange={e=>props.onEdit?.("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
                   </>}
                 </div>
-                {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>}
+                {controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
+                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position + 1 Pending STOP ฝั่งตรงข้าม · ไม่ถัว ไม่เพิ่มไม้จาก AUTO และไม่ใช้ Vector Edge หลังไม้แรก</span></div>
+                  : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}
               </section>
 
               {controlMode!=="ZERO_GRID"&&(
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>เป้าหมายกำไรและจุดหยุดขาดทุน</b><small>{controlMode==="MANUAL"?"ระบุค่าปิดออเดอร์ด้วยตนเอง":"EA ปรับทางออกตามโครงสร้างและความผันผวน"}</small></div></div>
                 {controlMode!=="MANUAL" ? <>
-                <div className="cc-bot-v2-auto-grid">
+                {controlMode==="FLIP_LOCK" ? <div className="cc-bot-v2-auto-grid">
+                  <div><ScenovaIcon name="trend" size={20}/><span><small>การกลับฝั่ง</small><b>SL + Pending STOP ราคาเดียวกัน</b></span></div>
+                  <div><ScenovaIcon name="shield" size={20}/><span><small>ระยะ Baton</small><b>M1 ATR / Spread · ขยับเข้าอย่างเดียว</b></span></div>
+                </div> : <div className="cc-bot-v2-auto-grid">
                   <div><ScenovaIcon name="profit" size={20}/><span><small>การรักษากำไร</small><b>ระบบรักษากำไรแบบไดนามิก</b></span></div>
                   <div><ScenovaIcon name="shield" size={20}/><span><small>จุดหยุดขาดทุนต่อสถานะ</small><b>ATR × 2.00 + โครงสร้างราคา</b></span></div>
-                </div>
+                </div>}
+                {controlMode==="FLIP_LOCK"&&<div className="cc-bot-v2-manual-exit">
+                  <div className="cc-bot-v2-lowvol-note">FLIP LOCK ใช้ค่าของตัวเอง: ไม้แรกเปิดตามทิศทางที่เลือก จากนั้น SL และ Pending STOP ฝั่งตรงข้ามจะเลื่อนเป็นคู่ตามราคา เมื่อ Trigger ทำงาน ระบบจะส่งต่อ Baton ไปยังฝั่งใหม่ โดย AUTO / RACE / ZERO GRID จะไม่เข้ามาจัดการ Position นี้</div>
+                </div>}
                 {controlMode==="RACE"&&<div className="cc-bot-v2-manual-exit">
                   <div className="cc-bot-v2-fields exit-fields">
                     <div className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>ปิดไม้ทั้งหมดที่กำไร</span><SwitchSetting checked={raceCloseAllProfitEnabled} onChange={(value:boolean)=>props.onEdit?.("raceCloseAllProfitEnabled",value)} onLabel="เปิด · ปิดทั้งหมดเมื่อถึงเป้า" offLabel="ปิด · ใช้การบริหารกำไรของโหมดเร่งจังหวะ"/><small>เมื่อกำไรรวมของรอบเร่งจังหวะถึงเป้าหมาย EA จะสั่งปิดทุกสถานะในรอบทันที</small></div>
@@ -3067,7 +3089,7 @@ function BotSettingsModal(props:any) {
               <dl>
                 <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>
                 <div><dt>ทิศทาง</dt><dd>{directionLabel}</dd></div>
-                <div><dt>การเปิดไม้</dt><dd>{Number(props.settings.maxPositions||1)} × {Number(props.settings.lot||0.01).toFixed(2)} Lot</dd></div>
+                <div><dt>การเปิดไม้</dt><dd>{controlMode==="FLIP_LOCK" ? "1 Position + 1 Pending" : Number(props.settings.maxPositions||1)+" × "+Number(props.settings.lot||0.01).toFixed(2)+" Lot"}</dd></div>
                 <div><dt>เป้ากำไร</dt><dd>{exitLabel}</dd></div>
                 <div><dt>Stop Loss</dt><dd>{slLabel}</dd></div>
                 <div><dt>EA Sync</dt><dd className="good">{props.syncLabel || "พร้อมส่งค่า"}</dd></div>
