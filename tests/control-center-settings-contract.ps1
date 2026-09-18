@@ -88,3 +88,9 @@ Need $page 'cc-v12-mode-performance' 'Per-mode win-rate performance card missing
 if($page.Contains('cc-v13-system-intelligence')) { throw 'Redundant Intelligence Core card must not remain in the lower workspace' }
 Need $css '.cc-page-head-overview{display:none!important}' 'Overview Control Center title header must be hidden'
 Need $css 'grid-template-columns:minmax(330px,.92fr) minmax(390px,1.08fr) minmax(330px,.92fr)' 'Three-column desktop layout missing'
+
+Need $css 'Control Center V20 · flat single-form Bot Settings' 'Flat single-form Bot Settings marker missing'
+Need $css '.cc-v19-settings-card .cc-bot-v2-section-title.compact{' 'Flat settings section-title override missing'
+Need $css 'display:none!important;' 'Numbered settings section headers must be hidden'
+Need $css '.cc-v19-settings-card .cc-bot-v2-mode-section,' 'Merged settings panel override missing'
+Need $css 'border-bottom:0!important;' 'Internal settings section dividers must be removed'
