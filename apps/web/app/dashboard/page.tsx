@@ -1991,6 +1991,20 @@ export default function DashboardPage() {
                       })}
                     </div>
                   </section>
+
+                  <section className="panel cc-v13-system-intelligence">
+                    <div className="cc-v12-card-head">
+                      <div><span><ScenovaIcon name="brain" size={17}/></span><div><small>SCENOVA INTELLIGENCE CORE</small><b>AI-driven & Genetic Algorithm Trading Platform</b></div></div>
+                      <em className={isMt5Online?"good":"warn"}>{isMt5Online?"LIVE":"WAIT"}</em>
+                    </div>
+                    <div className="cc-v13-system-grid">
+                      <span><small>บัญชี MT5</small><b>{data.account.account_number}</b></span>
+                      <span><small>Server</small><b>{metrics.server||data.account.broker_server}</b></span>
+                      <span><small>Latency</small><b className={heartbeatLatencyMs>700?"warn":"good"}>{heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"}</b></span>
+                      <span><small>Heartbeat</small><b>{heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")}</b></span>
+                    </div>
+                    <div className="cc-v13-ai-tags"><span>AI Market Analysis</span><span>Genetic Optimization</span><span>Adaptive Risk</span></div>
+                  </section>
                 </aside>
               </div>
 
