@@ -87,6 +87,6 @@ Need $web 'Pending STOP ฝั่งตรงข้ามจะสร้าง�
 Need $web 'Safety Stop จาก ATR + Spread' 'FLIP LOCK UI must expose the starter Safety Stop'
 Need $web 'หลังจากนั้นสลับ BUY / SELL ด้วย Pending STOP' 'FLIP LOCK UI must explain that analysis chooses only the starter side'
 
-Need $release 'DEFAULT_EA_VERSION = "1.0.31"' 'EA release version must match the FLIP LOCK safe-start runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.32"' 'EA release version must match the FLIP LOCK safe-start runtime'
 
 Write-Host 'FLIP LOCK strict isolation contract: PASS'
