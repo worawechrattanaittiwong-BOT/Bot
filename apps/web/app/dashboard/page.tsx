@@ -5,6 +5,7 @@ import { API_URL, api, getToken } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
+import { useSystemPopup } from "../../components/SystemPopupProvider";
 
 type Dashboard = {
   user: any;
@@ -91,6 +92,7 @@ const defaultSettings = {
 };
 
 export default function DashboardPage() {
+  const { showPopup, confirmPopup } = useSystemPopup();
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -258,12 +260,20 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!notice && !error) return;
+    const text = error || notice;
+    const pending = !error && /^กำลัง/.test(notice);
+    showPopup({
+      tone: error ? "error" : pending ? "info" : "success",
+      title: error ? "ดำเนินการไม่สำเร็จ" : pending ? "กำลังดำเนินการ" : "ดำเนินการสำเร็จ",
+      message: text,
+      duration: pending ? 5000 : 2800
+    });
     const timer = window.setTimeout(() => {
       setNotice("");
       setError("");
-    }, 3000);
+    }, pending ? 5000 : 3000);
     return () => window.clearTimeout(timer);
-  }, [notice, error]);
+  }, [notice, error, showPopup]);
 
   useEffect(() => {
     if (!botSettingsOpen) return;
@@ -1786,8 +1796,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {error && <div className="notice bad page-notice">{error}</div>}
-        {notice && <div className="notice good page-notice">{notice}</div>}
 
         {activeView === "overview" && data.account && data.selectedSlot?.mode === "LOCAL" && softwareUpdateRequired && softwareUpdateAlertVisible && (
           <div className="cc-update-alert" role="alert">
@@ -1958,7 +1966,7 @@ export default function DashboardPage() {
                   <div className="cc-v12-quick-actions cc-v19-hero-quick-actions">
                     <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
                     <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
-                    <button className="close" disabled={busy||currentPositions===0} onClick={()=>confirm("ยืนยันปิดออเดอร์ทั้งหมดทันที?")&&command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}><ScenovaIcon name="close" size={15}/><span><b>ปิดทุกไม้</b><small>Close All</small></span></button>
+                    <button className="close" disabled={busy||currentPositions===0} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ปิดออเดอร์ทั้งหมด",message:"ยืนยันปิดออเดอร์ที่กำลังเปิดทั้งหมดทันที?",confirmLabel:"ปิดทุกไม้",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ปิดทุกไม้</b><small>Close All</small></span></button>
                     <button className="terminal" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={15}/><span><b>Terminal</b><small>Live Logs</small></span></button>
                   </div>
                 </div>
@@ -3130,10 +3138,10 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-fields">
                   {controlMode==="ZERO_GRID" ? <>
                     {zeroGridLowVolatilityEnabled
-                      ? <div className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><div className="cc-bot-v2-readonly-control"><b>0.30</b><small>Low Volatility</small></div></div>
+                      ? <div className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><div className="cc-bot-v2-readonly-control"><b>0.30</b></div></div>
                       : <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><select className="input" value={String(Number(props.settings.zeroGridStepPrice) === 2 ? 2 : 3)} onChange={e=>props.onEdit?.("zeroGridStepPrice",e.target.value)}><option value="2">2.00</option><option value="3">3.00</option></select></label>}
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนคำสั่งรอต่อฝั่ง</span><div className="cc-bot-v2-control-stack"><select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select><small>{zeroGridSettingsSynced ? `EA รับค่าแล้ว: ${appliedZeroLevels} BUY + ${appliedZeroLevels} SELL` : `เลือกได้ 1–30 ระดับต่อฝั่ง · รอ EA Sync หลังบันทึก`}</small></div></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>{zeroGridLowVolatilityEnabled?"Lot คงที่ต่อระดับ":"Lot เริ่มต้น"}</span><div className="cc-bot-v2-control-stack"><NumberInput value={props.settings.zeroGridBaseLot || 0.01} suffix="Lot" onCommit={(v:string)=>props.onEdit?.("zeroGridBaseLot",v)}/><small>{zeroGridLowVolatilityEnabled?"ใช้ Lot เท่ากันทุกระดับ":"เพิ่ม Lot ตามลำดับระดับ"}</small></div></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนคำสั่งรอต่อฝั่ง</span><select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>{zeroGridLowVolatilityEnabled?"Lot คงที่ต่อระดับ":"Lot เริ่มต้น"}</span><NumberInput value={props.settings.zeroGridBaseLot || 0.01} suffix="Lot" onCommit={(v:string)=>props.onEdit?.("zeroGridBaseLot",v)}/></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไรสุทธิขั้นต่ำ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="shield" size={17}/>เงินสำรองสำหรับค่าปิด</span><MoneyInput value={props.settings.zeroGridCloseReserveMoney || 0.2} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridCloseReserveMoney",v)}/></label>
                   </> : <>
