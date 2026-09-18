@@ -1904,7 +1904,7 @@ export default function DashboardPage() {
               <section className="panel cc-v17-control-strip" aria-label="ควบคุมบอท">
                 <div className="cc-v17-control-identity">
                   <span><ScenovaIcon name="brain" size={18}/></span>
-                  <div><small>SCENOVA INTELLIGENCE CORE · AI EXECUTION CONTROL</small><b>{activeControlMode}</b></div>
+                  <div><small>SCENOVA INTELLIGENCE CORE · AI-driven & Genetic Algorithm · AI EXECUTION CONTROL</small><b>{activeControlMode}</b></div>
                   <em className={botRunning?"good":botStarting?"warn":"neutral"}>{botRunning?"RUNNING":botStarting?"STARTING":"READY"}</em>
                 </div>
                 <div className="cc-v17-control-meta">
