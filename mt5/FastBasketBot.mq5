@@ -3589,7 +3589,15 @@ void OnTick()
    // so switching into ZERO after losses in another mode cannot immediately
    // force SAFE_STOP. Explicit user Close All / pending close reasons above still
    // remain authoritative.
-   if(ZeroGridModeEnabled() || g_zeroGridClosing || ZeroGridPositionCount()>0 || ZeroGridPendingCount()>0)
+   bool zeroGridOwnsRuntime =
+      g_zeroGridClosing ||
+      ZeroGridPositionCount()>0 ||
+      ZeroGridPendingCount()>0;
+   bool zeroGridCanStart =
+      ZeroGridModeEnabled() &&
+      BasketPositionCount()<=0 &&
+      RescuePositionCount()<=0;
+   if(zeroGridOwnsRuntime || zeroGridCanStart)
    {
       ManageZeroGrid();
       return;
