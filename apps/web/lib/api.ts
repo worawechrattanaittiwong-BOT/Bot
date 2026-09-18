@@ -28,6 +28,13 @@ async function requestJson(path: string, init: RequestInit, emergencyAdminKey = 
       cache: "no-store"
     });
     const data = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      localStorage.removeItem("bot_token");
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.replace("/login?reason=session-expired");
+      }
+      throw new Error(data.message || "Session expired");
+    }
     if (!response.ok) throw new Error(data.message || "Request failed");
     return data;
   } catch (error: any) {
