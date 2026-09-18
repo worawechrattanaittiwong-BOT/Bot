@@ -1,7 +1,7 @@
 name: Build MT5 EA
 
 # Official compile/publish pipeline for AUTO + VECTOR EDGE, FLIP LOCK,
-# PARALLEL UNIVERSE, RACE and ZERO GRID.
+# RACE and ZERO GRID.
 concurrency:
   group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
   cancel-in-progress: true
@@ -63,12 +63,9 @@ jobs:
           foreach ($sentinel in @(
             'bool AutoV20Enabled()',
             'g_controlMode == "FLIP_LOCK"',
-            'g_controlMode == "PARALLEL_UNIVERSE"',
             '#include "include\\AutoVectorEdgeLiveV1.mqh"',
-            '#include "include\\ParallelUniverseV1.mqh"',
             '#include "include\\FlipLockV1.mqh"',
             'AutoVectorEdgeLiveAllow',
-            'ParallelUniverseLiveAllow',
             'FlipLockManage',
             '#define RACE_VOLUME_WINDOW_SECONDS 10',
             'int RaceVolumeDirection()',
@@ -86,7 +83,6 @@ jobs:
           foreach ($module in @(
             'mt5\include\AutoVectorEdgeV1.mqh',
             'mt5\include\AutoVectorEdgeLiveV1.mqh',
-            'mt5\include\ParallelUniverseV1.mqh',
             'mt5\include\FlipLockV1.mqh'
           )) {
             if (-not (Test-Path $module)) { throw "Required module missing: $module" }
@@ -118,7 +114,6 @@ jobs:
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
             brain = "AUTO_VECTOR_EDGE_V1"
-            policy = "AUTO_VECTOR_EDGE_FLIP_LOCK_PARALLEL_UNIVERSE_V1"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
       - name: Publish compiled artifact on main
