@@ -83,3 +83,12 @@ Need $css 'Control Center V18 · single-card Bot Settings' 'Single-card Bot Sett
 Need $css '.cc-v17-settings-column .cc-bot-v2-panel{' 'Single-card section override missing'
 Need $css 'background:transparent!important;' 'Nested settings panels must be visually merged into one card'
 Need $css '.cc-v17-settings-column .cc-bot-v2-panel:last-child{' 'Single-card final section rule missing'
+
+Need $page 'cc-v13-hero-actions' 'Bot controls must live inside the hero card'
+if($page.Contains('Adaptive Algorithmic Engine')) { throw 'Adaptive Algorithmic Engine hero copy must be removed' }
+if($page.Contains('cc-v17-action-row')) { throw 'Separate action row below KPI cards must be removed' }
+Need $page 'cc-v19-three-card-grid' 'Three-column Control Center workspace missing'
+Need $page 'cc-v12-mode-performance' 'Per-mode win-rate performance card missing'
+if($page.Contains('cc-v13-system-intelligence')) { throw 'Redundant Intelligence Core card must not remain in the lower workspace' }
+Need $css '.cc-page-head-overview{display:none!important}' 'Overview Control Center title header must be hidden'
+Need $css 'grid-template-columns:minmax(330px,.92fr) minmax(390px,1.08fr) minmax(330px,.92fr)' 'Three-column desktop layout missing'
