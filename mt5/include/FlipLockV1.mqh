@@ -7,11 +7,12 @@
 // trigger price.  As price moves in the position's favour the pair only
 // tightens; it never loosens.  FLIP LOCK owns its own starter entry and does
 // not wait for AUTO/VECTOR/Parallel-Universe approval.
-#define FLIP_LOCK_V1_VERSION "4.0.0"
+#define FLIP_LOCK_V1_VERSION "4.1.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS 2
 #define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
+#define FLIP_LOCK_ARM_USD_PER_001_LOT 0.25
 
 int g_flipLockDirection=0;
 double g_flipLockPeakPrice=0.0;
@@ -138,16 +139,36 @@ double FlipLockProfitReservePoints()
    return MathMax(FlipLockBrokerMinDistancePoints(),spread*0.50);
 }
 
-bool FlipLockProfitLockReady(const int direction,const double openPrice,const double triggerPrice)
+double FlipLockArmProfitMoney(const double volume)
 {
-   if(direction==0 || openPrice<=0.0 || triggerPrice<=0.0) return false;
-   double reserve=FlipLockProfitReservePoints()*_Point;
+   if(volume<=0.0) return 0.0;
+   // User contract: start profit locking at approximately $0.25 for 0.01 lot
+   // and scale linearly with the actual FLIP LOCK position volume.
+   return FLIP_LOCK_ARM_USD_PER_001_LOT*(volume/0.01);
+}
 
-   // Arm only after the trailing trigger is beyond break-even. This makes the
-   // first baton a genuine profit lock; a fresh position can no longer be
-   // flipped/closed immediately for spread loss.
-   if(direction>0) return triggerPrice>=openPrice+reserve;
-   return triggerPrice<=openPrice-reserve;
+double FlipLockPositionProfitMoney(const ulong positionTicket)
+{
+   if(positionTicket==0 || !PositionSelectByTicket(positionTicket))
+      return -DBL_MAX;
+   return PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
+}
+
+double FlipLockBreakEvenFloorPrice(const int direction,const double openPrice)
+{
+   if(direction==0 || openPrice<=0.0) return 0.0;
+   double reserve=FlipLockProfitReservePoints()*_Point;
+   return FlipLockNormalizePrice(
+      direction>0 ? openPrice+reserve : openPrice-reserve
+   );
+}
+
+bool FlipLockProfitLockReady(const ulong positionTicket,const double positionVolume)
+{
+   if(positionTicket==0 || positionVolume<=0.0) return false;
+   double target=FlipLockArmProfitMoney(positionVolume);
+   double current=FlipLockPositionProfitMoney(positionTicket);
+   return target>0.0 && current>=target;
 }
 
 double FlipLockNormalizePrice(const double price)
@@ -452,16 +473,35 @@ bool FlipLockSyncBaton(const ulong positionTicket,const int direction,const doub
       return false;
    }
 
-   if(!g_flipLockArmed && !FlipLockProfitLockReady(direction,openPrice,candidate))
+   if(!g_flipLockArmed)
    {
-      // Before break-even: keep only the wide starter Safety Stop. No opposite
-      // pending exists yet, so normal spread/noise cannot instantly flip the
-      // strategy into a realized loss.
-      FlipLockRemoveAllPending();
-      g_flipLockTriggerPrice=0.0;
-      g_flipLockReason="WAIT_PROFIT_LOCK";
-      g_executionStatus="FLIP_LOCK_WAIT_PROFIT_LOCK";
-      return true;
+      if(!FlipLockProfitLockReady(positionTicket,positionVolume))
+      {
+         // Before the money threshold: keep only the wide starter Safety Stop.
+         // Manual / other-EA positions are ignored by ownership filtering and
+         // do not contribute to this threshold.
+         FlipLockRemoveAllPending();
+         g_flipLockTriggerPrice=0.0;
+         g_flipLockReason="WAIT_PROFIT_LOCK_MONEY";
+         g_executionStatus="FLIP_LOCK_WAIT_PROFIT_LOCK";
+         return true;
+      }
+
+      // At the user's money threshold start locking immediately, but never
+      // create a baton below break-even. The wider ATR trail takes over once it
+      // has moved further into profit.
+      double breakEvenFloor=FlipLockBreakEvenFloorPrice(direction,openPrice);
+      if(direction>0)
+         candidate=MathMax(candidate,breakEvenFloor);
+      else
+         candidate=MathMin(candidate,breakEvenFloor);
+
+      if(!FlipLockTriggerIsLegal(direction,candidate,tick))
+      {
+         g_flipLockReason="WAIT_PROFIT_LOCK_DISTANCE";
+         g_executionStatus="FLIP_LOCK_WAIT_PROFIT_LOCK";
+         return true;
+      }
    }
 
    if(g_flipLockTriggerPrice<=0.0)
