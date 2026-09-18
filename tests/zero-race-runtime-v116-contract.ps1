@@ -37,6 +37,7 @@ $f=$race.IndexOf("if(filling)")
 if($h -lt 0 -or $f -lt 0 -or $h -gt $f){throw "RACE profit harvest must happen before fill gate"}
 if($race.Contains("Harvesting starts only after Max Positions is reached")){throw "obsolete RACE profit delay still present"}
 if(-not $race.Contains("RACE_PROFIT_FIRST_V116")){throw "RACE v1.0.16 marker missing"}
-if(-not $ea.Contains('EffectiveExecutionMode() == "AUTO"')){throw "AUTO isolation unexpectedly changed"}
+if(-not $ea.Contains('if(control == "AUTO") return "AUTO";')){throw "AUTO effective owner missing"}
+if(-not $ea.Contains('return EffectiveExecutionMode() == "MANUAL";')){throw "MANUAL must stay separate from AUTO ownership"}
 
 Write-Host "ZERO paired full ladder + async rearm + RACE profit-first contract: PASS"

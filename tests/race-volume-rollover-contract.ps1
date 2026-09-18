@@ -57,7 +57,7 @@ Need $fill 'if(!RaceStopReady())' 'RACE must verify ATR stop readiness before se
 Need $send 'bool raceOrder = RaceModeEnabled() || BasketHasRacePosition();' 'shared order sender must identify RACE orders from execution ownership, not stale entry metadata'
 Need $send 'RaceInitialStopPrice(direction, entryPrice)' 'RACE orders must use their dedicated ATR stop'
 Need $send 'if(!raceOrder && !flipLockOrder && g_profitTargetMode == "AUTO"' 'AUTO TP logic must not override RACE or FLIP LOCK profit controls'
-Need $release 'DEFAULT_EA_VERSION = "1.0.31"' 'EA release version must match the promoted live intelligence runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.32"' 'EA release version must match the promoted live intelligence runtime'
 Need $release 'EA_RUNTIME_CONTRACT = "RACE_VOLUME_10S_ROLLOVER_V2"' 'API runtime contract must match EA'
 
 Write-Host 'RACE 10-second volume + safe rollover contract: PASS'

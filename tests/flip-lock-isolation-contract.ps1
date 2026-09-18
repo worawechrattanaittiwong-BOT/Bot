@@ -40,10 +40,11 @@ $safety = Block $flip 'double FlipLockSafetyDistancePoints()'
 $sync = Block $flip 'bool FlipLockSyncBaton('
 
 Need $effective 'if(control == "FLIP_LOCK") return "FLIP_LOCK";' 'FLIP LOCK must be its own effective execution owner'
-Need $autoV20 'return g_controlMode == "AUTO";' 'AUTO V20 must be enabled only for AUTO'
+Need $autoV20 'EffectiveExecutionMode() == "AUTO"' 'AUTO V20 must be enabled only for AUTO ownership'
+Need $autoV20 'g_controlMode == "AUTO"' 'AUTO V20 must require AUTO controlMode'
 Forbid $autoV20 'FLIP_LOCK' 'FLIP LOCK must not enable AUTO V20'
-Need $legacy 'EffectiveExecutionMode() == "AUTO"' 'legacy basket engine must depend on effective AUTO ownership'
-Need $apply 'EffectiveExecutionMode() == "FLIP_LOCK"' 'FLIP LOCK must clear legacy burst state on mode selection'
+Need $legacy 'EffectiveExecutionMode() == "MANUAL"' 'legacy basket engine must belong to MANUAL and stay out of AUTO/FLIP'
+Need $apply 'EffectiveExecutionMode() != "MANUAL"' 'FLIP LOCK and other non-MANUAL owners must clear the legacy burst queue'
 
 Need $send 'bool flipLockOrder = FlipLockModeEnabled();' 'shared sender must identify FLIP LOCK explicitly'
 Need $send '? NormalizeTradeVolume(g_lot)' 'FLIP LOCK must use the user configured Lot directly'
@@ -87,6 +88,6 @@ Need $web 'Pending STOP ฝั่งตรงข้ามจะสร้าง�
 Need $web 'Safety Stop จาก ATR + Spread' 'FLIP LOCK UI must expose the starter Safety Stop'
 Need $web 'หลังจากนั้นสลับ BUY / SELL ด้วย Pending STOP' 'FLIP LOCK UI must explain that analysis chooses only the starter side'
 
-Need $release 'DEFAULT_EA_VERSION = "1.0.31"' 'EA release version must match the FLIP LOCK safe-start runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.32"' 'EA release version must match the FLIP LOCK safe-start runtime'
 
 Write-Host 'FLIP LOCK strict isolation contract: PASS'
