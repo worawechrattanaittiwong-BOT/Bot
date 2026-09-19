@@ -2025,7 +2025,7 @@ export default function DashboardPage() {
                     </div>
                   </section>
 
-                  <section className="cc-v41-command-dock" aria-label="ควบคุมบอท">
+                  <section className="cc-v41-command-dock cc-v13-hero-actions cc-v19-hero-quick-actions" aria-label="ควบคุมบอท">
                     <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
                       <ScenovaIcon name="play" size={24}/><span><b>เริ่มบอท</b><small>Start</small></span>
                     </button>
