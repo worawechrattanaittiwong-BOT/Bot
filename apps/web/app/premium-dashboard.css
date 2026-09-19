@@ -2421,3 +2421,132 @@
   min-height:38px!important;
   height:38px!important;
 }
+
+
+/* ===== Control Center V31 · 380px cards + MANUAL spacing for every mode =====
+   Shorten the three cards slightly, keep the settings scrollbar, and force
+   AUTO/RACE/FLIP_LOCK/ZERO_GRID/MANUAL to share the exact MANUAL rhythm. */
+.cc-v19-three-card-grid{
+  align-items:start!important;
+}
+.cc-v19-three-card-grid>section,
+.cc-v19-settings-card,
+.cc-v19-three-card-grid .cc-v17-running-positions,
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  align-self:start!important;
+  height:380px!important;
+  min-height:380px!important;
+  max-height:380px!important;
+}
+
+/* Same card shell in every mode. */
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  height:380px!important;
+  min-height:380px!important;
+  max-height:380px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  --settings-row:38px;
+  --settings-control-h:32px;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
+  height:44px!important;
+  min-height:44px!important;
+  max-height:44px!important;
+  padding:4px 9px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  height:336px!important;
+  min-height:336px!important;
+  max-height:336px!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding:2px 11px 5px!important;
+}
+
+/* Exact MANUAL spacing applied globally to every mode. */
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
+  margin:0 0 1px!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
+  min-height:46px!important;
+  padding-top:2px!important;
+  padding-bottom:2px!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select{
+  height:38px!important;
+  min-height:38px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-mode-section,
+.cc-v19-settings-card .cc-bot-v2-panel{
+  margin:0!important;
+  padding:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-fields{
+  gap:0!important;
+  margin:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+  min-height:38px!important;
+  padding-top:2px!important;
+  padding-bottom:2px!important;
+  margin:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid{
+  gap:0!important;
+  margin:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row{
+  min-height:34px!important;
+  margin:1px 0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row button,
+.cc-v19-settings-card .money-input-shell,
+.cc-v19-settings-card .number-input-shell,
+.cc-v19-settings-card .cc-bot-v2-field>select.input,
+.cc-v19-settings-card .cc-bot-manual-risk-add-all{
+  height:32px!important;
+  min-height:32px!important;
+}
+.cc-v19-settings-card .cc-bot-manual-risk-add{
+  min-height:38px!important;
+  margin:0!important;
+  padding:2px 1px!important;
+  border-bottom:0!important;
+}
+
+/* The other two cards follow the same shortened shell and scroll internally. */
+.cc-v19-three-card-grid .cc-v17-running-positions{
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v17-running-table{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v17-running-table .body{
+  height:auto!important;
+  min-height:0!important;
+  max-height:298px!important;
+  overflow:auto!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  height:auto!important;
+  max-height:318px!important;
+  overflow:auto!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table .row{
+  min-height:38px!important;
+  height:38px!important;
+}
