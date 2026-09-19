@@ -4668,3 +4668,245 @@
   }
 }
 
+/* ===== Control Center V47 · equal lower cards and clean readable copy =====
+   Presentation-only pass for the five lower monitoring cards:
+   equal desktop widths, larger standard text, and no explanatory micro-copy. */
+@media(min-width:1280px){
+  .cc-shell-v4 .cc-v42-bottom-suite{
+    grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    gap:10px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-bottom-suite>.cc-v42-card{
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+  }
+
+  /* Remove helper/explanatory copy while keeping live values and labels. */
+  .cc-shell-v4 .cc-v42-card-head small,
+  .cc-shell-v4 .cc-v42-log-row small,
+  .cc-shell-v4 .cc-v42-news-status>b,
+  .cc-shell-v4 .cc-v42-news-list small,
+  .cc-shell-v4 .cc-v42-news-note,
+  .cc-shell-v4 .cc-v42-risk>p{
+    display:none!important;
+  }
+
+  .cc-shell-v4 .cc-v42-card-head{
+    height:42px!important;
+    min-height:42px!important;
+    padding:0 10px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-card-head>div>div{
+    justify-content:center!important;
+  }
+
+  .cc-shell-v4 .cc-v42-card-head b{
+    font-size:13px!important;
+    line-height:1.15!important;
+    letter-spacing:0!important;
+  }
+
+  .cc-shell-v4 .cc-v42-card-head em,
+  .cc-shell-v4 .cc-v42-card-head button{
+    min-height:24px!important;
+    padding:0 9px!important;
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-head-icon{
+    width:29px!important;
+    height:29px!important;
+    flex-basis:29px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-table{
+    padding:7px 10px 0!important;
+  }
+
+  .cc-shell-v4 .cc-v42-table-head{
+    height:24px!important;
+    font-size:9.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-table-row{
+    min-height:32px!important;
+    font-size:11px!important;
+    line-height:1.15!important;
+  }
+
+  .cc-shell-v4 .cc-v42-side{
+    min-width:34px!important;
+    padding:3px 7px!important;
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-mini-stats{
+    margin:8px 10px 9px!important;
+    gap:6px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-mini-stats>div{
+    min-height:44px!important;
+    padding:6px 5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-mini-stats b{
+    font-size:12.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-mini-stats small{
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-log-list{
+    height:calc(100% - 42px)!important;
+    padding:5px 10px 7px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-log-row{
+    min-height:34px!important;
+    grid-template-columns:7px 50px minmax(0,1fr)!important;
+    gap:7px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-log-row time{
+    font-size:9.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-log-row b{
+    font-size:10.5px!important;
+    line-height:1.15!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-main{
+    height:calc(100% - 82px)!important;
+    min-height:0!important;
+    padding:10px!important;
+    grid-template-columns:88px minmax(0,1fr)!important;
+    gap:10px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-ring{
+    width:82px!important;
+    height:82px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-ring b{
+    font-size:18px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-ring small{
+    font-size:8.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-copy{
+    gap:7px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-copy>div{
+    padding-bottom:6px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-copy span{
+    font-size:9.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-copy b{
+    font-size:12.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-foot{
+    min-height:40px!important;
+    margin:0 10px 7px!important;
+    padding:7px 9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-foot span,
+  .cc-shell-v4 .cc-v42-goal-foot small{
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-foot b{
+    font-size:11.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-status{
+    padding:8px 10px!important;
+    gap:0!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-status span{
+    padding:3px 8px!important;
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-list{
+    padding:0 10px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-list>div{
+    min-height:43px!important;
+    grid-template-columns:50px minmax(0,1fr) auto!important;
+    gap:8px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-list time{
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-list b{
+    font-size:10.5px!important;
+    line-height:1.15!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-list em{
+    max-width:90px!important;
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-risk-level{
+    padding:12px 11px 8px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-risk-level b{
+    font-size:10.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-risk-level span{
+    padding:3px 8px!important;
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-risk ul{
+    padding:4px 11px 0!important;
+    gap:8px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-risk li{
+    grid-template-columns:8px minmax(0,1fr)!important;
+    gap:7px!important;
+    font-size:10px!important;
+    line-height:1.2!important;
+  }
+
+  .cc-shell-v4 .cc-v42-risk li i{
+    width:6px!important;
+    height:6px!important;
+  }
+}
+
+/* Below desktop width, keep the existing responsive stacking behavior. */
+@media(max-width:1279px){
+  .cc-v42-card-head small,
+  .cc-v42-log-row small,
+  .cc-v42-news-status>b,
+  .cc-v42-news-list small,
+  .cc-v42-news-note,
+  .cc-v42-risk>p{
+    display:none!important;
+  }
+}
+
