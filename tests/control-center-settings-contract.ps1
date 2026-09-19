@@ -214,3 +214,11 @@ Need $css 'height:34px!important;' 'Field rows must have a fixed height, not onl
 Need $css 'max-height:34px!important;' 'Field rows must not expand vertically'
 Need $css '.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-body{' 'MANUAL no-scroll override missing'
 Need $css 'overflow-y:hidden!important;' 'MANUAL must not render a scrollbar at baseline'
+
+Need $css 'Control Center V33 · fit card to MANUAL, do not compress content' 'V33 MANUAL-fit marker missing'
+Need $css 'height:402px!important;' 'All three cards must match the MANUAL-fit shell'
+Need $css 'height:358px!important;' 'Settings body must fit normal MANUAL content without scroll'
+Need $css '--settings-row:38px' 'MANUAL row spacing must remain uncompressed'
+Need $css '--settings-control-h:32px' 'MANUAL controls must remain uncompressed'
+Need $css 'height:auto!important;' 'Rows must not be forcibly compressed'
+Need $css '.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-body{' 'MANUAL no-scroll rule missing'
