@@ -206,3 +206,11 @@ Need $css '--settings-control-h:32px' 'Every mode must use the MANUAL 32px contr
 Need $css '.cc-v19-settings-card .cc-bot-v2-fields{' 'All mode field containers must share zero-gap compact layout'
 Need $css 'max-height:298px!important;' 'Running Positions must scroll inside shortened card'
 Need $css 'max-height:318px!important;' 'Performance must scroll inside shortened card'
+
+Need $css 'Control Center V32 · MANUAL no-scroll + exact compact rows' 'V32 exact compact row marker missing'
+Need $css '--settings-row:34px' 'All modes must use exact 34px compact rows'
+Need $css '--settings-control-h:28px' 'All modes must use 28px controls'
+Need $css 'height:34px!important;' 'Field rows must have a fixed height, not only min-height'
+Need $css 'max-height:34px!important;' 'Field rows must not expand vertically'
+Need $css '.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-body{' 'MANUAL no-scroll override missing'
+Need $css 'overflow-y:hidden!important;' 'MANUAL must not render a scrollbar at baseline'
