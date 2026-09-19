@@ -2333,3 +2333,91 @@
   min-height:38px!important;
   height:38px!important;
 }
+
+
+/* ===== Control Center V30 · measured MANUAL baseline 400px =====
+   The visible bottom of MANUAL's "การตั้งค่าเพิ่มเติม" defines the card baseline.
+   All three cards are locked to this measured height. */
+.cc-v19-three-card-grid{
+  align-items:start!important;
+}
+.cc-v19-three-card-grid>section,
+.cc-v19-settings-card,
+.cc-v19-three-card-grid .cc-v17-running-positions,
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  align-self:start!important;
+  height:400px!important;
+  min-height:400px!important;
+  max-height:400px!important;
+}
+
+/* Settings: fixed MANUAL baseline, identical compact rhythm in every mode. */
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  height:400px!important;
+  min-height:400px!important;
+  max-height:400px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  --settings-row:36px;
+  --settings-control-h:31px;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
+  height:44px!important;
+  min-height:44px!important;
+  max-height:44px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  height:356px!important;
+  min-height:356px!important;
+  max-height:356px!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding:1px 11px 4px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+  min-height:36px!important;
+  padding-top:1px!important;
+  padding-bottom:1px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row{
+  min-height:31px!important;
+  margin:0!important;
+}
+
+/* Running Positions: same 400px shell; rows scroll inside instead of stretching card. */
+.cc-v19-three-card-grid .cc-v17-running-positions{
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v17-running-table{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v17-running-table .body{
+  height:auto!important;
+  min-height:0!important;
+  max-height:318px!important;
+  overflow:auto!important;
+}
+
+/* Performance: same 400px shell; compact rows, internal scroll only when required. */
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  height:auto!important;
+  max-height:338px!important;
+  overflow:auto!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table .row{
+  min-height:38px!important;
+  height:38px!important;
+}
