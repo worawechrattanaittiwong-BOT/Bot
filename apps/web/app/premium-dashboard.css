@@ -2251,3 +2251,85 @@
   min-height:0!important;
   max-height:none!important;
 }
+
+
+/* ===== Control Center V29 · all three cards fixed to MANUAL baseline =====
+   One immutable baseline: Settings, Running Positions, Performance = 520px.
+   Switching mode changes only visible fields, never card height or row spacing. */
+.cc-v19-three-card-grid{
+  align-items:start!important;
+}
+.cc-v19-three-card-grid>section,
+.cc-v19-settings-card,
+.cc-v19-three-card-grid .cc-v17-running-positions,
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  align-self:start!important;
+  height:520px!important;
+  min-height:520px!important;
+  max-height:520px!important;
+}
+
+/* Settings keeps the MANUAL baseline and the same compact rhythm in every mode. */
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  height:520px!important;
+  min-height:520px!important;
+  max-height:520px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  --settings-row:36px;
+  --settings-control-h:31px;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  height:476px!important;
+  min-height:476px!important;
+  max-height:476px!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+  min-height:36px!important;
+  padding-top:1px!important;
+  padding-bottom:1px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row{
+  min-height:31px!important;
+  margin:0!important;
+}
+
+/* Running Positions is fixed to the same 520px shell; rows never stretch. */
+.cc-v19-three-card-grid .cc-v17-running-positions{
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v17-running-table{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v17-running-table .body{
+  height:auto!important;
+  min-height:0!important;
+  max-height:438px!important;
+  overflow:auto!important;
+}
+
+/* Performance is fixed to the same 520px shell; mode rows stay compact. */
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  height:auto!important;
+  max-height:458px!important;
+  overflow:auto!important;
+}
+.cc-v19-three-card-grid .cc-v12-mode-table .row{
+  min-height:38px!important;
+  height:38px!important;
+}

@@ -181,3 +181,10 @@ Need $css 'height:520px!important;' 'Bot Settings must stay at the MANUAL baseli
 Need $css 'height:476px!important;' 'Fixed Bot Settings body height missing'
 Need $css '--settings-row:36px' 'All modes must share MANUAL-style compact row spacing'
 Need $css 'align-items:start!important;' 'Changing modes must not stretch the grid row'
+
+Need $css 'Control Center V29 · all three cards fixed to MANUAL baseline' 'V29 equal-card baseline marker missing'
+Need $css '.cc-v19-three-card-grid>section,' 'All three workspace cards must share one sizing rule'
+Need $css 'height:520px!important;' 'All three cards must stay at the MANUAL baseline height'
+Need $css 'max-height:520px!important;' 'All three cards must never stretch beyond the MANUAL baseline'
+Need $css '--settings-row:36px' 'All modes must keep MANUAL-style compact row spacing'
+Need $css 'height:38px!important;' 'Performance rows must stay compact instead of stretching'
