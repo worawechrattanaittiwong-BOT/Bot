@@ -534,9 +534,6 @@ export default function DashboardPage() {
   const marketSessionClosed =
     marketSessionState === "CLOSED" ||
     String(metrics.executionStatus || "").toUpperCase() === "MARKET_CLOSED";
-  // Retain the market-session UI contract used by CI while the V41 studio layout
-  // renders the status in the left rail.
-  const marketSessionBadgeLabel = marketSessionClosed ? "MARKET CLOSED" : "REALTIME";
   const heartbeatLatencyMs = Number(metrics.heartbeatLatencyMs ?? 0);
   const heartbeatHttpStatus = Number(metrics.heartbeatHttpStatus ?? 0);
   const lastServerContactEpoch = Number(metrics.lastServerContactAt || 0);
@@ -1904,169 +1901,85 @@ export default function DashboardPage() {
           !data.account ? (
             <EmptySetup onNext={()=>setActiveView("account")} />
           ) : (
-            <div className="cc-overview cc-v3 cc-v4 cc-v12 cc-v15 cc-v41">
+            <div className="cc-overview cc-v3 cc-v4 cc-v12 cc-v15">
               <div className="cc-v4-ambient" aria-hidden="true"><i/><i/><i/></div>
-              <div className="cc-v41-studio-layout">
-                <aside className="cc-v41-status-rail" aria-label="สถานะการเชื่อมต่อ">
-                  <div className="cc-v41-rail-brand">
-                    <b>SCENOVA</b>
-                    <span>TRADING STUDIO · {marketSessionBadgeLabel}</span>
+              {marketSessionClosed ? (
+                <div className="cc-connect-alert">
+                  <div className="cc-alert-icon"><ScenovaIcon name="timer" size={20}/></div>
+                  <div className="cc-alert-copy"><b>ตลาดปิดชั่วคราว</b><span>MT5 และ EA ยังเชื่อมต่ออยู่ · ระบบจะรอ Session เปิดโดยอัตโนมัติ</span></div>
+                  <button type="button" className="btn cc-alert-action" disabled>รอเปิดตลาด</button>
+                </div>
+              ) : !isMt5Online && (
+                <div className="cc-connect-alert">
+                  <div className="cc-alert-icon"><ScenovaIcon name="info" size={20}/></div>
+                  <div className="cc-alert-copy">
+                    <b>{isAgentOnline ? "EA Heartbeat ขาดช่วง" : "ยังไม่ได้เชื่อมต่อ MT5"}</b>
+                    <span>{isAgentOnline ? "Windows Agent ยังเชื่อมอยู่ · ตรวจว่า EA ยังติดอยู่บนกราฟก่อนเชื่อม MT5 ใหม่" : data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span>
                   </div>
+                  <button className="btn cc-alert-action" onClick={()=>setActiveView("account")}>{isAgentOnline ? "ตรวจการเชื่อมต่อ →" : "ไปหน้าการเชื่อมต่อ →"}</button>
+                </div>
+              )}
 
-                  <div className={"cc-v41-heartbeat "+(marketSessionClosed?"market":isMt5Online?"good":"warn")}>
-                    <div className="cc-v41-heartbeat-head">
-                      <span><ScenovaIcon name={marketSessionClosed?"timer":isMt5Online?"status":"info"} size={20}/></span>
-                      <div>
-                        <small>EA Heartbeat</small>
-                        <b>{marketSessionClosed?"ตลาดปิดชั่วคราว":isMt5Online?"เชื่อมต่อแล้ว":isAgentOnline?"ขาดช่วง":"ยังไม่เชื่อม"}</b>
-                      </div>
+              <section className="cc-v6-telemetry" aria-label="ข้อมูลสดจาก EA">
+                <div className="cc-v6-telemetry-live"><i/>{marketSessionClosed ? "MARKET CLOSED" : "REALTIME"}</div>
+                <LiveTelemetryItem icon="timer" label="ATR (M15)" value={atrValueLabel} tone={atrPoints>0?"good":"neutral"}/>
+                <LiveTelemetryItem icon="spread" label="Spread" value={spreadValueLabel} tone={spreadStatus==="NORMAL"?"good":spreadStatus==="EXTREME"?"bad":"warn"}/>
+                <LiveTelemetryItem icon="spark" label="Momentum" value={Number(metrics.momentumPoints||0).toFixed(1)+" pt"}/>
+                <LiveTelemetryItem icon="clock" label="Latency" value={heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"} tone={heartbeatLatencyMs>2000?"bad":heartbeatLatencyMs>700?"warn":"good"}/>
+                <LiveTelemetryItem icon="status" label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20&&heartbeatHttpStatus>=200&&heartbeatHttpStatus<300?"good":"warn"}/>
+                <LiveTelemetryItem icon="shield" label="Execution" value={Number(metrics.executionQuality||0)>0?Number(metrics.executionQuality).toFixed(0)+"%":"—"} tone={Number(metrics.executionQuality||0)>=80?"good":"neutral"}/>
+              </section>
+
+              <section className={"panel cc-v6-hero "+(state === "RUNNING" ? "is-running" : "is-idle")}>
+                <div className="cc-v6-hero-main">
+                  <div className="cc-v6-gold-stage"><ScenovaIcon name="gold" size={52}/><i/><i/></div>
+                  <div className="cc-v6-symbol-copy">
+                    <span className="cc-v4-eyebrow">SCENOVA · LIVE EXECUTION</span>
+                    <h2>{metrics.symbol || settings.symbol}</h2>
+                    <p>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}<em/>MT5 Expert Advisor</p>
+                    <div className="cc-v6-symbol-chips">
+                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "FLIP_LOCK" ? "FLIP LOCK" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO · VECTOR" : settings.entryMode}</span>
+                      <span>{Number(settings.lot||0).toFixed(2)} Lot</span>
+                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" BUY STOP + "+Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" SELL STOP" : configuredMaxPositions+" ไม้"}</span>
+                      <HeroTrendChip label="M5" value={metrics.trendM5}/>
+                      <HeroTrendChip label="M15" value={metrics.trendM15}/>
+                      <HeroTrendChip label="M30" value={metrics.trendM30}/>
+                      <HeroTrendChip label="H1" value={metrics.trendH1}/>
                     </div>
-                    <p>
-                      {marketSessionClosed
-                        ? "MT5 และ EA ยังเชื่อมต่ออยู่ · ระบบจะรอ Session เปิดโดยอัตโนมัติ"
-                        : isMt5Online
-                          ? "EA และ MT5 พร้อมใช้งาน · Heartbeat กำลังอัปเดตตามปกติ"
-                          : isAgentOnline
-                            ? "Windows Agent ยังเชื่อมอยู่ · ตรวจว่า EA ยังติดอยู่บนกราฟก่อนเชื่อม MT5 ใหม่"
-                            : data.account.mode === "LOCAL"
-                              ? "เปิด MetaTrader 5 และตรวจว่า SCENOVA EA ยังติดอยู่บนกราฟ"
-                              : "กำลังรอการเชื่อมต่อ Cloud MT5"}
-                    </p>
-                    <button
-                      type="button"
-                      className="cc-v41-rail-action"
-                      disabled={marketSessionClosed}
-                      onClick={()=>setActiveView("account")}
-                    >
-                      {marketSessionClosed?"รอเปิดตลาด":isMt5Online?"ดูสถานะการเชื่อมต่อ →":"ตรวจการเชื่อมต่อ →"}
-                    </button>
-                  </div>
-
-                  <div className="cc-v41-asset-emblem" aria-hidden="true">
-                    <div className="cc-v41-orbit"><i/><i/><ScenovaIcon name="gold" size={48}/></div>
-                    <b>{metrics.symbol || settings.symbol}</b>
-                    <span>PRECISION · AUTOMATION</span>
-                    <small>HIGHER STANDARDS</small>
-                  </div>
-
-                  <div className={"cc-v41-agent-card "+(isAgentOnline?"online":"offline")}>
-                    <div className="cc-v41-agent-line">
-                      <i/>
-                      <div><b>{isAgentOnline?"Agent Connected":"Agent Offline"}</b><small>{softwareUpdate.currentVersion?"v"+softwareUpdate.currentVersion:"—"}</small></div>
-                    </div>
-                    <div className="cc-v41-agent-ea">
-                      <ScenovaIcon name="refresh" size={13}/>
-                      <span>EA {softwareUpdate.currentEaVersion?"v"+softwareUpdate.currentEaVersion:"—"}</span>
-                      <em>{isMt5Online?"LIVE":"WAIT"}</em>
-                    </div>
-                  </div>
-                </aside>
-
-                <main className="cc-v41-center-stage">
-                  <section className="cc-v41-hero" aria-label="สินทรัพย์และสถานะบอท">
-                    <div className="cc-v41-hero-copy">
-                      <span className="cc-v41-eyebrow">SCENOVA · LIVE EXECUTION</span>
-                      <h2>{metrics.symbol || settings.symbol}</h2>
-                      <p>
-                        {String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}
-                        <em/>MT5 Expert Advisor
-                      </p>
-                      <div className="cc-v41-motto">TRADE FASTER <i/> TRADE SMARTER <i/> STAY IN CONTROL</div>
-                    </div>
-                    <div className="cc-v41-gold-scene" aria-hidden="true">
-                      <div className="cc-v41-gold-glow"/>
-                      <div className="cc-v41-gold-icon"><ScenovaIcon name="gold" size={72}/></div>
-                      <div className="cc-v41-result-copy"><span>DISCIPLINE</span><span>DRIVES</span><span>RESULTS</span><i/></div>
-                    </div>
-                  </section>
-
-                  <section className="cc-v41-config-panel" aria-label="ค่าการเทรดปัจจุบัน">
-                    <div className="cc-v41-config-top">
-                      <div className="cc-v41-config-card">
-                        <span><ScenovaIcon name="settings" size={18}/></span>
-                        <div><small>MODE</small><b>{activeControlMode==="ZERO_GRID"?"ZERO GRID":activeControlMode==="FLIP_LOCK"?"FLIP LOCK":activeControlMode}</b></div>
-                      </div>
-                      <div className="cc-v41-config-card">
-                        <span><ScenovaIcon name="orders" size={18}/></span>
-                        <div><small>LOT SIZE</small><b>{Number(settings.lot||0).toFixed(2)} Lot</b></div>
-                      </div>
-                      <div className="cc-v41-config-card">
-                        <span><ScenovaIcon name="clock" size={18}/></span>
-                        <div>
-                          <small>จำนวนไม้</small>
-                          <b>{activeControlMode==="ZERO_GRID"
-                            ? Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" / ฝั่ง"
-                            : configuredMaxPositions+" ไม้"}</b>
-                        </div>
-                      </div>
-
-                      <div className="cc-v41-trend-row">
-                        <HeroTrendChip label="M5" value={metrics.trendM5}/>
-                        <HeroTrendChip label="M15" value={metrics.trendM15}/>
-                        <HeroTrendChip label="M30" value={metrics.trendM30}/>
-                        <HeroTrendChip label="H1" value={metrics.trendH1}/>
-                      </div>
-                    </div>
-
-                    <div className="cc-v41-version-row">
-                      <span className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch !== false && softwareUpdate.runtimeContractMatch !== false ? "ok" : "warn")}>
-                        EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}
-                        <em>→</em>
-                        {softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}
+                    <div className="cc-v6-version-row">
+                      <span className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch !== false && softwareUpdate.runtimeContractMatch !== false ? "ok" : "warn")} title={softwareUpdate.eaUpdateRequired ? "EA มี Build ใหม่หรือ Runtime ใหม่พร้อมอัปเดต" : "EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server"}>
+                        EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}{softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch === false ? " · Build ใหม่พร้อมอัปเดต" : softwareUpdate.eaVersionMatch && softwareUpdate.runtimeContractMatch === false ? " · Runtime ใหม่พร้อมอัปเดต" : ""}
                       </span>
                       {data.selectedSlot?.mode === "LOCAL" && (
-                        <span className={"cc-v6-version-chip "+(!softwareUpdate.installerRequired ? "ok" : "warn")}>
-                          Agent {softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : "—"}
-                          <em>→</em>
-                          {softwareUpdate.latestVersion ? "v"+softwareUpdate.latestVersion : "—"}
+                        <span className={"cc-v6-version-chip "+(!softwareUpdate.installerRequired ? "ok" : "warn")} title="Windows Agent ปัจจุบัน → เวอร์ชันล่าสุดบน Server">
+                          Agent {softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : "—"}<em>→</em>{softwareUpdate.latestVersion ? "v"+softwareUpdate.latestVersion : "—"}
                         </span>
                       )}
                       <button type="button" className="cc-v6-version-check" disabled={checkingVersion || busy} onClick={checkSoftwareVersions}>
                         <ScenovaIcon name="refresh" size={12}/>{checkingVersion ? "กำลังตรวจ..." : "ตรวจสอบเวอร์ชัน"}
                       </button>
-                      <span className="cc-v41-system-copy">STABLE · SECURE · ALWAYS ON</span>
                     </div>
-                  </section>
-
-                  <section className="cc-v41-command-dock cc-v13-hero-actions cc-v19-hero-quick-actions" aria-label="ควบคุมบอท">
-                    <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}>
-                      <ScenovaIcon name="play" size={24}/><span><b>เริ่มบอท</b><small>Start</small></span>
-                    </button>
-                    <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}>
-                      <ScenovaIcon name="stop" size={22}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span>
-                    </button>
-                    <button className="close" disabled={busy||currentPositions===0} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ปิดออเดอร์ทั้งหมด",message:"ยืนยันปิดออเดอร์ที่กำลังเปิดทั้งหมดทันที?",confirmLabel:"ปิดทุกไม้",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}}>
-                      <ScenovaIcon name="close" size={22}/><span><b>ปิดทุกไม้</b><small>Close All</small></span>
-                    </button>
-                    <button className="terminal" onClick={()=>setLogsOpen(true)}>
-                      <ScenovaIcon name="terminal" size={22}/><span><b>Terminal</b><small>Live Logs</small></span>
-                    </button>
-                  </section>
-                </main>
-
-                <aside className="cc-v41-overview-panel" aria-label="Trading Overview">
-                  <div className="cc-v41-overview-head">
-                    <div><ScenovaIcon name="pnl" size={18}/><b>TRADING OVERVIEW</b></div>
-                    <small>REAL DATA. REAL DISCIPLINE.</small>
                   </div>
+                </div>
 
-                  <div className="cc-kpi-grid cc-v41-kpis">
-                    <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online?"$"+Number(metrics.balance||0).toFixed(2):"—"} sub="Balance" />
-                    <DashboardMetric icon="equity" label="มูลค่ารวม" value={isMt5Online?"$"+Number(metrics.equity||0).toFixed(2):"—"} sub="Equity" />
-                    <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2):"—"} sub="Daily P/L" tone={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"good":"bad"):"neutral"} />
-                    <DashboardMetric icon="target" label="Win Rate วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.winRate||0).toFixed(1)+"%":"—"} sub={Number(todayPerformance.trades||0)>0?Number(todayPerformance.wins||0)+" / "+Number(todayPerformance.trades||0)+" Basket":"ยังไม่มี Basket ปิดวันนี้"} tone={Number(todayPerformance.trades||0)>0?(Number(todayPerformance.winRate||0)>=60?"good":Number(todayPerformance.winRate||0)>=45?"warn":"bad"):"neutral"} />
-                    <DashboardMetric icon="risk" label="Drawdown วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.drawdownPercent||0).toFixed(2)+"%":"0.00%"} sub={"-$"+Number(todayPerformance.drawdownMoney||0).toFixed(2)+" Realized DD"} tone={Number(todayPerformance.drawdownPercent||0)>=5?"bad":Number(todayPerformance.drawdownPercent||0)>=2?"warn":"good"} />
-                    <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
+                <div className="cc-v13-hero-actions" aria-label="ควบคุมบอท">
+                  <div className="cc-v12-quick-actions cc-v19-hero-quick-actions">
+                    <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
+                    <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
+                    <button className="close" disabled={busy||currentPositions===0} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ปิดออเดอร์ทั้งหมด",message:"ยืนยันปิดออเดอร์ที่กำลังเปิดทั้งหมดทันที?",confirmLabel:"ปิดทุกไม้",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ปิดทุกไม้</b><small>Close All</small></span></button>
+                    <button className="terminal" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={15}/><span><b>Terminal</b><small>Live Logs</small></span></button>
                   </div>
+                </div>
+              </section>
 
-                  <div className="cc-v41-overview-footer">
-                    <span>“</span>
-                    <div><b>ให้ระบบทำงาน</b><small>เพื่ออนาคตที่ดีกว่า</small></div>
-                    <i/>
-                    <div className="cc-v41-overview-brand"><b>SCENOVA</b><small>TRADING STUDIO</small></div>
-                  </div>
-                </aside>
-              </div>
+              <section className="cc-kpi-grid cc-v3-kpis cc-v6-kpis cc-v12-kpis cc-v13-kpis">
+                <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online?"$"+Number(metrics.balance||0).toFixed(2):"—"} sub="Balance" />
+                <DashboardMetric icon="equity" label="มูลค่ารวม" value={isMt5Online?"$"+Number(metrics.equity||0).toFixed(2):"—"} sub="Equity" />
+                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2):"—"} sub="Daily P/L" tone={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"good":"bad"):"neutral"} />
+                <DashboardMetric icon="target" label="Win Rate วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.winRate||0).toFixed(1)+"%":"—"} sub={Number(todayPerformance.trades||0)>0?Number(todayPerformance.wins||0)+" / "+Number(todayPerformance.trades||0)+" Basket":"ยังไม่มี Basket ปิดวันนี้"} tone={Number(todayPerformance.trades||0)>0?(Number(todayPerformance.winRate||0)>=60?"good":Number(todayPerformance.winRate||0)>=45?"warn":"bad"):"neutral"} />
+                <DashboardMetric icon="risk" label="Drawdown วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.drawdownPercent||0).toFixed(2)+"%":"0.00%"} sub={"-$"+Number(todayPerformance.drawdownMoney||0).toFixed(2)+" Realized DD"} tone={Number(todayPerformance.drawdownPercent||0)>=5?"bad":Number(todayPerformance.drawdownPercent||0)>=2?"warn":"good"} />
+                <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
+              </section>
 
               <div className="cc-v19-three-card-grid">
                 <section className="cc-v17-settings-column cc-v19-settings-card" aria-label="ตั้งค่าบอท">
