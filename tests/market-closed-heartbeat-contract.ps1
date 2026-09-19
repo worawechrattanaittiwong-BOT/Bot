@@ -3,10 +3,15 @@ $ErrorActionPreference = 'Stop'
 $ea = [System.IO.File]::ReadAllText((Resolve-Path 'mt5/FastBasketBot.mq5'))
 $web = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/app/dashboard/page.tsx'))
 
+foreach ($pattern in @(
+  'ulong\s+g_lastHeartbeatTickMs\s*=\s*0;',
+  'ulong\s+heartbeatNowMs\s*=\s*GetTickCount64\(\);',
+  'heartbeatNowMs\s*-\s*g_lastHeartbeatTickMs\s*>=\s*heartbeatIntervalMs'
+)) {
+  if ($ea -notmatch $pattern) { throw "Market-closed EA heartbeat regex missing: $pattern" }
+}
+
 foreach ($required in @(
-  'ulong  g_lastHeartbeatTickMs = 0;',
-  'ulong heartbeatNowMs=GetTickCount64();',
-  'heartbeatNowMs - g_lastHeartbeatTickMs >= heartbeatIntervalMs',
   'string MarketSessionStateNow()',
   'TimeTradeServer()',
   'SymbolInfoSessionTrade(_Symbol, day, session, from, to)',
