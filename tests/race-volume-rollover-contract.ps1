@@ -48,6 +48,7 @@ Need $manage 'cycleProfit < 0.0 && floatingProfit < 0.0' 'RACE adverse exit must
 Need $manage 'RaceWrongDirectionConfirmed(direction,momentum,filling,wrongDirectionReason)' 'RACE must evaluate confirmed adverse impulse before recovery wait'
 Need $manage 'RaceCloseCycle(wrongDirectionReason)' 'confirmed adverse impulse must close the full RACE basket'
 Need $ea '#define RACE_VOLUME_HISTORY_SECONDS 30' 'RACE must retain a 30-second confirmation history while entry stays 10 seconds'
+Need $ea 'now-g_raceVolumeLastSampleAt>RACE_VOLUME_WINDOW_SECONDS' 'RACE stalled-feed reset must preserve the original 10-second entry warmup'
 Need $wrong 'RACE_EXIT_CYCLE_GRACE_SECONDS' 'RACE soft-loss exit must honor cycle startup grace'
 Need $wrong 'RACE_EXIT_LAST_FILL_GRACE_SECONDS' 'RACE soft-loss exit must honor grace after the latest accepted fill'
 Need $wrong 'spread * 5.00' 'RACE normal adverse floor must reject ordinary spread noise'
@@ -87,7 +88,7 @@ Need $fill 'if(!RaceStopReady())' 'RACE must verify ATR stop readiness before se
 Need $send 'bool raceOrder = RaceModeEnabled() || BasketHasRacePosition();' 'shared order sender must identify RACE orders from execution ownership, not stale entry metadata'
 Need $send 'RaceInitialStopPrice(direction, entryPrice)' 'RACE orders must use their dedicated ATR stop'
 Need $send 'if(!raceOrder && !flipLockOrder && g_profitTargetMode == "AUTO"' 'AUTO TP logic must not override RACE or FLIP LOCK profit controls'
-Need $release 'DEFAULT_EA_VERSION = "1.0.36"' 'EA release version must match the promoted live intelligence runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.37"' 'EA release version must match the promoted live intelligence runtime'
 Need $release 'EA_RUNTIME_CONTRACT = "RACE_PERSISTENT_REVERSAL_EXIT_V4"' 'API runtime contract must match EA'
 
 Write-Host 'RACE 10-second volume + persistent reversal V4 contract: PASS'
