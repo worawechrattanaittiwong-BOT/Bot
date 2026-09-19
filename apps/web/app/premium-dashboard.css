@@ -3380,3 +3380,58 @@
 .cc-v19-settings-card .cc-bot-profit-kind-field .cc-bot-v2-choice-inline>button b{
   line-height:1!important;
 }
+
+/* ===== Control Center V40 · balanced save button =====
+   Keep the header action comfortably inside the card edge and vertically centered. */
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
+  box-sizing:border-box!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  height:44px!important;
+  min-height:44px!important;
+  max-height:44px!important;
+  padding:5px 12px!important;
+}
+
+.cc-v19-settings-card .cc-bot-modal-head-actions{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  min-width:0!important;
+  margin:0!important;
+  padding:0!important;
+}
+
+.cc-v19-settings-card .cc-bot-v14-head-save{
+  box-sizing:border-box!important;
+  width:auto!important;
+  min-width:190px!important;
+  max-width:210px!important;
+  height:34px!important;
+  min-height:34px!important;
+  max-height:34px!important;
+  margin:0 4px 0 12px!important;
+  padding:0 18px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:8px!important;
+  line-height:1!important;
+  border-radius:9px!important;
+  font-size:11.5px!important;
+  white-space:nowrap!important;
+}
+
+.cc-v19-settings-card .cc-bot-v14-head-save svg{
+  flex:0 0 auto!important;
+}
+
+@media(max-width:1180px){
+  .cc-v19-settings-card .cc-bot-v14-head-save{
+    min-width:170px!important;
+    max-width:190px!important;
+    margin-right:2px!important;
+    padding:0 14px!important;
+  }
+}
