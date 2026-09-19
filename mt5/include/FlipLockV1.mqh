@@ -7,7 +7,7 @@
 // enough positive distance to place a broker-legal lock above/below entry, the
 // SL arms locally and then follows every meaningful price step without waiting
 // for SaaS price/commands. Server state controls NEW risk only.
-#define FLIP_LOCK_V1_VERSION "6.0.0"
+#define FLIP_LOCK_V1_VERSION "6.0.1"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS 2
@@ -700,6 +700,10 @@ void FlipLockManage()
       if(!canOpenNewCycle)
       {
          FlipLockRemoveAllPending();
+         // A stopped/unauthorized FLIP with no live position is a finished run.
+         // Clear the baton/P&L state so a later authorized Start begins clean.
+         FlipLockResetTracking(true);
+         ResetBasketCycleState();
          g_flipLockReason="WAIT_RUN_AUTHORIZATION";
          g_executionStatus=selected
             ? "FLIP_LOCK_WAIT_RUN_AUTHORIZATION"

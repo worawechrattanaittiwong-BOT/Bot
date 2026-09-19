@@ -44,5 +44,5 @@ Need $rescue 'if(BasketHasAutoPosition()) return;' 'legacy AUTO Rescue may not a
 Need $vec 'SELECTED_SIDE_WARMUP_ALLOW' 'Vector warmup must be selected-side based'
 Need $vec 'AutoVectorEdgeLiveExitLost' 'Vector exit confirmation helper missing'
 Need $vec 'never a direct close and never a lot-sizing signal' 'Vector Kelly/risk must not increase customer Lot'
-Need $release 'DEFAULT_EA_VERSION = "1.0.40"' 'EA release version mismatch'
+Need $release 'DEFAULT_EA_VERSION = "1.0.41"' 'EA release version mismatch'
 Write-Host 'AUTO V21 balanced exit / canonical TP / no-rescue / no-lot-increase contract PASS'

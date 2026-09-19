@@ -68,6 +68,6 @@ Forbid $ea 'JsonNumber(response, "marketBid"' 'server marketBid must never be an
 Forbid $ea 'JsonNumber(response, "marketAsk"' 'server marketAsk must never be an execution input'
 Need $ea '\"executionPriceSource\":\"MT5_LOCAL_TICK\"' 'heartbeat must identify MT5 as execution price source'
 Need $ea '\"serverPriceControl\":false' 'heartbeat must declare server price is telemetry-only'
-Need $release 'DEFAULT_EA_VERSION = "1.0.40"' 'EA release version must match local execution runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.41"' 'EA release version must match local execution runtime'
 
 Write-Host 'MT5 local execution plane contract PASS'
