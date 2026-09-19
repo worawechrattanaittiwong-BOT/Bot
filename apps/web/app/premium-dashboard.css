@@ -3009,3 +3009,100 @@
   padding-bottom:0!important;
   gap:0!important;
 }
+
+/* ===== Control Center V36 · hard grid-track lock to MANUAL spacing =====
+   The previous rules sized the field boxes, but AUTO/RACE/FLIP could still
+   inherit taller grid tracks from older responsive rules. Lock the tracks
+   themselves so every visible row has the same vertical rhythm as MANUAL. */
+.cc-v19-settings-card .cc-bot-v2-fields{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  grid-auto-flow:row!important;
+  grid-auto-rows:38px!important;
+  align-content:start!important;
+  gap:0!important;
+  row-gap:0!important;
+  column-gap:0!important;
+  margin:0!important;
+  padding:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field{
+  box-sizing:border-box!important;
+  block-size:38px!important;
+  height:38px!important;
+  min-height:38px!important;
+  max-height:38px!important;
+  margin:0!important;
+  padding:2px!important;
+  align-self:stretch!important;
+  overflow:hidden!important;
+}
+
+.cc-v19-settings-card .cc-bot-v2-limit-grid{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  grid-auto-flow:row!important;
+  grid-auto-rows:38px!important;
+  align-content:start!important;
+  gap:0!important;
+  row-gap:0!important;
+  column-gap:0!important;
+  margin:0!important;
+  padding:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+  box-sizing:border-box!important;
+  block-size:38px!important;
+  height:38px!important;
+  min-height:38px!important;
+  max-height:38px!important;
+  margin:0!important;
+  padding:2px!important;
+  align-self:stretch!important;
+  overflow:hidden!important;
+}
+
+/* Prevent old responsive panel/grid rules from inserting vertical space. */
+.cc-v19-settings-card .cc-bot-v2-workspace,
+.cc-v19-settings-card .cc-bot-v2-main,
+.cc-v19-settings-card .cc-bot-v2-panel{
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  margin:0!important;
+  padding-top:0!important;
+  padding-bottom:0!important;
+  align-content:start!important;
+  row-gap:0!important;
+  gap:0!important;
+}
+
+/* Keep the mode selector on MANUAL's 46px row, then pack all rows directly below it. */
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
+  height:46px!important;
+  min-height:46px!important;
+  max-height:46px!important;
+  margin:0!important;
+  padding:0!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
+  box-sizing:border-box!important;
+  height:46px!important;
+  min-height:46px!important;
+  max-height:46px!important;
+  margin:0!important;
+  padding:2px!important;
+}
+
+/* Controls fit inside the 38px row without growing its track. */
+.cc-v19-settings-card .cc-bot-v2-field>select.input,
+.cc-v19-settings-card .money-input-shell,
+.cc-v19-settings-card .number-input-shell,
+.cc-v19-settings-card .cc-bot-v2-inline-toggle-value,
+.cc-v19-settings-card .toggle-money-field{
+  box-sizing:border-box!important;
+  height:32px!important;
+  min-height:32px!important;
+  max-height:32px!important;
+  margin:0!important;
+}
