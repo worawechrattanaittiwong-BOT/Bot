@@ -11,8 +11,19 @@ foreach($requiredPolicy in @(
     throw "AUTO V20 source policy missing: $requiredPolicy"
   }
 }
-if($source -match 'NET_RR_BELOW_1_25|MIN_LOT_EXCEEDS_AUTO_RISK|EXCEEDS_AUTO_RISK_BUDGET') {
-  throw 'AUTO V20 still contains a hard entry-risk gate'
+foreach($requiredV21 in @(
+  'AUTO_V21_BALANCED_EXIT_V1',
+  'AUTO_V21_ORDER_RISK_BUDGET',
+  'AUTO_V21_AGGREGATE_RISK_BUDGET',
+  'AutoV21ApplyNoIncreaseLotCap',
+  'AutoV21WrongDirectionConfirmed'
+)) {
+  if($source -notmatch [regex]::Escape($requiredV21)) {
+    throw "AUTO V21 safety policy missing: $requiredV21"
+  }
+}
+if($source -match 'MIN_LOT_EXCEEDS_AUTO_RISK|EXCEEDS_AUTO_RISK_BUDGET') {
+  throw 'obsolete AUTO risk-resizing contract remains'
 }
 
 # Deterministic policy regression, NOT a broker-history MT5 backtest.

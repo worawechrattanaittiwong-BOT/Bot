@@ -64,6 +64,8 @@ Forbid $fastExit 'g_autoV20BasketTargetPrice>0.0 && g_profitTargetMode=="AUTO"' 
 
 Need $dynamic 'bool autoPosition=StringFind(positionComment,AUTO_V20_LIVE_COMMENT)>=0;' 'dynamic protection must detect AUTO V20 ownership per position'
 Need $dynamic 'bool autoFamilyPosition=autoPosition || tacticalPosition;' 'dynamic protection must keep Tactical positions inside AUTO ownership'
+Need $dynamic 'g_autoV20BasketTargetPrice' 'AUTO V21 broker TP must follow the canonical V20 Basket target'
+Need $dynamic 'g_autoV20BasketStopPrice' 'AUTO V21 dynamic protection may only tighten the canonical Basket stop'
 Need $dynamic '!autoFamilyPosition && g_profitTargetMode != "AUTO"' 'MANUAL settings must never clear an AUTO-family broker TP'
 
 Need $onTick 'bool autoV20OwnedBasket = count > 0 && BasketHasAutoPosition();' 'OnTick must resolve AUTO V20 ownership before generic management'
@@ -72,6 +74,7 @@ Need $onTick '!autoFamilyOwnedBasket && g_profitTargetMode == "MANUAL"' 'MANUAL 
 Need $onTick 'if(autoV20OwnedBasket &&' 'AUTO V20 smart exits must be gated by V20 ownership'
 Need $onTick 'AUTO_POSITION_OWNERSHIP_LOCK' 'AUTO basket must stay with AUTO while another mode waits'
 Need $onTick 'AUTO_WAIT_FOREIGN_POSITION' 'AUTO must wait instead of adopting a foreign MANUAL/legacy position'
+Need $onTick 'bool autoV21NoRescue=autoV20OwnedBasket && rescueCount<=0;' 'AUTO V21 must not open new Rescue hedge/recovery volume'
 Need $onTick 'bool zeroGridCanStart =' 'ZERO selection must not preempt a live AUTO/MANUAL owner'
 Need $onTick 'BasketPositionCount()<=0' 'ZERO may start only after the previous live owner is flat'
 
@@ -84,6 +87,6 @@ Need $web 'AUTO Ownership' 'dashboard must explain AUTO ownership'
 Need $web 'ไม่รับไม้ของโหมดอื่นมาจัดการต่อ' 'dashboard must explain that AUTO cannot adopt another mode position'
 Need $web 'MANUAL Ownership' 'dashboard must explain MANUAL ownership'
 
-Need $release 'DEFAULT_EA_VERSION = "1.0.37"' 'EA release version must match strict AUTO isolation runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.38"' 'EA release version must match strict AUTO isolation runtime'
 
 Write-Host 'AUTO strict isolation contract: PASS'

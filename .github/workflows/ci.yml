@@ -34,6 +34,9 @@ jobs:
       - name: AUTO strict ownership isolation contract
         shell: pwsh
         run: ./tests/auto-strict-isolation-contract.ps1
+      - name: AUTO V21 balanced exit and lot-safety contract
+        shell: pwsh
+        run: ./tests/auto-v21-balanced-exit-contract.ps1
       - name: RACE close-all profit contract
         shell: pwsh
         run: ./tests/race-close-all-profit-contract.ps1

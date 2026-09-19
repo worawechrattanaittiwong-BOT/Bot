@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.37"
-#define SCENOVA_EA_VERSION "1.0.37"
-#define SCENOVA_PRODUCT_VERSION "1.0.37"
+#property version   "1.0.38"
+#define SCENOVA_EA_VERSION "1.0.38"
+#define SCENOVA_PRODUCT_VERSION "1.0.38"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -161,6 +161,11 @@ input string          InpEngineMode           = "AUTO";
 // default so the web's 0.50 close-all target also has a safe EA fallback.
 input bool            InpRaceCloseAllProfitEnabled = true;
 input double          InpRaceCloseAllProfitMoney = 0.50;
+#define AUTO_V21_POLICY "AUTO_V21_BALANCED_EXIT_V1"
+#define AUTO_V21_EXIT_CYCLE_GRACE_SECONDS 30
+#define AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS 15
+#define AUTO_V21_EXIT_CONFIRM_SECONDS 10
+#define AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS 6
 #define RACE_VOLUME_WINDOW_SECONDS 10
 #define RACE_VOLUME_HISTORY_SECONDS 30
 #define RACE_EXIT_CYCLE_GRACE_SECONDS 20
@@ -310,6 +315,10 @@ double g_autoV20AggregateRiskMoney = 0.0;
 double g_autoV20BasketStopPrice = 0.0;
 double g_autoV20BasketTargetPrice = 0.0;
 datetime g_autoV20BasketStartedAt = 0;
+datetime g_autoV20LastFillAt = 0;
+datetime g_autoV20ExitCandidateSince = 0;
+double g_autoV20ExitCandidatePeakAdverse = 0.0;
+double g_autoV20LotCeiling = 0.0;
 double g_autoV20PeakProfit = 0.0;
 double g_autoV20Confidence = 0.0;
 double g_autoV20WinProbability = 0.0;
@@ -3954,7 +3963,9 @@ void OnTick()
          if(!tacticalBasket && BrainV13FastWrongEntryCorrection(momentum))
             return;
       }
-      bool rescueManaging = tacticalBasket ? false : ManageAdaptiveRescue();
+      bool autoV21NoRescue=autoV20OwnedBasket && rescueCount<=0;
+      if(autoV21NoRescue && g_rescueState!=RESCUE_NORMAL) ResetRescueState();
+      bool rescueManaging=(tacticalBasket || autoV21NoRescue) ? false : ManageAdaptiveRescue();
       if(g_rescueState == RESCUE_ACTIVE ||
          g_rescueState == RESCUE_RECOVERY ||
          g_rescueState == RESCUE_EXIT)
@@ -3999,40 +4010,9 @@ void OnTick()
       }
 
       double cycleProfit = BasketCycleProfit();
-      double effectiveBasketTarget = autoV20OwnedBasket
-         ? (BasketFillEnabled() ? MathMax(0.0,g_burstTargetMoney) : 0.0)
-         : EffectiveBasketProfitTarget();
+      double effectiveBasketTarget = autoV20OwnedBasket ? 0.0 : EffectiveBasketProfitTarget();
 
-      // Auto mode protects a genuinely positive Cycle. A confirmed reversal
-      // may bank profit before the dynamic target instead of letting a winner
-      // turn red. Manual and Off are never overridden by this decision.
-      int profitDefenseDirection = BasketDirection();
-      string profitDefenseReason = "NONE";
-      if(autoV20OwnedBasket &&
-         profitDefenseDirection != 0 &&
-         SmartProfitReversalDetected(
-            profitDefenseDirection,
-            cycleProfit,
-            profitDefenseReason
-         ))
-      {
-         CloseAllBasket("SMART_PROFIT_REVERSAL");
-         ArmMarketRearm(profitDefenseDirection,profitDefenseReason);
-         ResetTrail();
-         g_executionStatus = "SMART_PROFIT_REVERSAL";
-         g_adaptiveBlockReason = profitDefenseReason;
-         return;
-      }
-
-      if(autoV20OwnedBasket &&
-         AutoProfitGivebackDetected(profitDefenseDirection,cycleProfit))
-      {
-         CloseAllBasket("AUTO_PROFIT_GIVEBACK");
-         ArmMarketRearm(profitDefenseDirection,"PROFIT_GIVEBACK");
-         ResetTrail();
-         g_executionStatus = "AUTO_PROFIT_GIVEBACK";
-         return;
-      }
+      // AUTO V21 owns target-first early-profit decisions inside AutoV20ManageOpenBasket().
 
       // If no manual Basket/per-position target is configured, multi-position
       // trading falls back to an automatic cycle target.
@@ -4078,29 +4058,6 @@ void OnTick()
             return;
          }
       }
-      else if(autoV20OwnedBasket &&
-              g_perPositionProfit <= 0.0 &&
-              effectiveBasketTarget > 0.0)
-      {
-         // Automatic Basket mode protects a meaningful unrealized winner when
-         // the execution structure rolls over before the full target. Explicit
-         // user Basket/position targets are never overridden by this logic.
-         if(cycleProfit > g_profitRunPeak + 0.05)
-         {
-            g_profitRunPeak = cycleProfit;
-            SaveBasketCycleState();
-         }
-
-         if(cycleProfit >= effectiveBasketTarget)
-         {
-            CloseAllBasket("BASKET_PROFIT_TARGET");
-            ResetTrail();
-            g_executionStatus = "BASKET_PROFIT_TARGET";
-            return;
-         }
-
-      }
-
       double effectiveBasketLoss = EffectiveBasketLossLimit();
       double lossControlProfit =
          (g_rescueState != RESCUE_NORMAL || RescuePositionCount() > 0)
@@ -11745,14 +11702,23 @@ void AutoV20ResetSide(AUTO_V20_SIDE &side,int direction)
    side.reversal=false;
 }
 
+void AutoV21ResetExitCandidate()
+{
+   g_autoV20ExitCandidateSince=0;
+   g_autoV20ExitCandidatePeakAdverse=0.0;
+}
+
 void AutoV20ResetCycle()
 {
    g_autoV20BasketStopPrice=0.0;
    g_autoV20BasketTargetPrice=0.0;
    g_autoV20BasketStartedAt=0;
+   g_autoV20LastFillAt=0;
+   g_autoV20LotCeiling=0.0;
    g_autoV20PeakProfit=0.0;
    g_autoV20AggregateRiskMoney=0.0;
    g_autoV20AddReason="NONE";
+   AutoV21ResetExitCandidate();
 }
 
 void AutoV20ScanM5Levels(AUTO_V20_LEVELS &levels)
@@ -12454,6 +12420,8 @@ int AutoV20PrecisionDirection(double momentum)
 
    if(count>0)
    {
+      AutoV21ApplyNoIncreaseLotCap(selected);
+      if(direction>0) g_autoV20Buy=selected; else g_autoV20Sell=selected;
       double atrPoints=MathMax(10.0,
          AverageTrueRangePoints(PERIOD_M5,g_atrPeriod));
       double progress=BasketFavorableProgressPoints(direction);
@@ -12483,7 +12451,19 @@ int AutoV20PrecisionDirection(double momentum)
       g_autoV20AggregateRiskMoney=selected.aggregateRiskMoney;
    }
    else
+   {
+      AutoV21ApplyNoIncreaseLotCap(selected);
+      if(direction>0) g_autoV20Buy=selected; else g_autoV20Sell=selected;
       g_autoV20AggregateRiskMoney=selected.expectedLossMoney;
+   }
+
+   string riskReason="NONE";
+   if(!AutoV21RiskBudgetAllows(selected,count,riskReason))
+   {
+      g_autoV20RejectReason=riskReason;
+      g_adaptiveBlockReason="AUTO_V21_RISK_BUDGET";
+      return 0;
+   }
 
    if(preliminary!=0 && preliminary!=direction)
       g_autoV20DirectionChangeReason="FINAL_RR_LOCATION_HISTORY_CHANGED_SIDE";
@@ -12520,27 +12500,231 @@ int AutoV20PrecisionDirection(double momentum)
    return direction;
 }
 
+double AutoV21ExistingLotCeiling()
+{
+   double ceiling=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_V20_LIVE_COMMENT)<0) continue;
+      double volume=PositionGetDouble(POSITION_VOLUME);
+      if(volume>0.0 && (ceiling<=0.0 || volume<ceiling)) ceiling=volume;
+   }
+   return ceiling;
+}
+
+double AutoV21WeightedEntryPrice(int direction)
+{
+   double weighted=0.0,total=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_V20_LIVE_COMMENT)<0) continue;
+      long type=PositionGetInteger(POSITION_TYPE);
+      int posDirection=type==POSITION_TYPE_BUY ? 1 : -1;
+      if(posDirection!=direction) continue;
+      double volume=PositionGetDouble(POSITION_VOLUME);
+      if(volume<=0.0) continue;
+      weighted+=PositionGetDouble(POSITION_PRICE_OPEN)*volume;
+      total+=volume;
+   }
+   return total>0.0 ? weighted/total : 0.0;
+}
+
+void AutoV21RecoverCanonicalProtection(int direction)
+{
+   if(direction==0) return;
+   double stop=0.0,target=0.0,lotCeiling=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_V20_LIVE_COMMENT)<0) continue;
+      long type=PositionGetInteger(POSITION_TYPE);
+      int posDirection=type==POSITION_TYPE_BUY ? 1 : -1;
+      if(posDirection!=direction) continue;
+      double sl=PositionGetDouble(POSITION_SL);
+      double tp=PositionGetDouble(POSITION_TP);
+      double volume=PositionGetDouble(POSITION_VOLUME);
+      if(sl>0.0) stop=stop<=0.0 ? sl : (direction>0 ? MathMax(stop,sl) : MathMin(stop,sl));
+      if(tp>0.0 && target<=0.0) target=tp;
+      if(volume>0.0 && (lotCeiling<=0.0 || volume<lotCeiling)) lotCeiling=volume;
+   }
+   if(g_autoV20BasketStopPrice<=0.0) g_autoV20BasketStopPrice=stop;
+   if(g_autoV20BasketTargetPrice<=0.0) g_autoV20BasketTargetPrice=target;
+   if(g_autoV20LotCeiling<=0.0) g_autoV20LotCeiling=lotCeiling;
+}
+
+void AutoV21ApplyNoIncreaseLotCap(AUTO_V20_SIDE &side)
+{
+   double ceiling=g_autoV20LotCeiling>0.0 ? g_autoV20LotCeiling : AutoV21ExistingLotCeiling();
+   if(ceiling<=0.0 || side.plannedLot<=ceiling+1e-12) return;
+   double oldLot=side.plannedLot;
+   double cappedLot=NormalizeTradeVolume(ceiling);
+   if(cappedLot<=0.0 || cappedLot>=oldLot) return;
+   double ratio=cappedLot/oldLot;
+   side.plannedLot=cappedLot;
+   side.knownCostMoney*=ratio;
+   side.expectedProfitMoney*=ratio;
+   side.expectedLossMoney*=ratio;
+}
+
+double AutoV21PerOrderRiskBudgetMoney()
+{
+   double equity=MathMax(1.0,AccountInfoDouble(ACCOUNT_EQUITY));
+   return equity*MathMax(0.01,MathMin(5.0,g_riskPerOrderPercent))/100.0;
+}
+
+bool AutoV21RiskBudgetAllows(AUTO_V20_SIDE &side,int existingCount,string &reasonOut)
+{
+   reasonOut="NONE";
+   double perOrderBudget=AutoV21PerOrderRiskBudgetMoney();
+   if(side.expectedLossMoney>perOrderBudget+0.0000001)
+   {
+      reasonOut="AUTO_V21_ORDER_RISK_BUDGET";
+      return false;
+   }
+   if(existingCount>0)
+   {
+      double aggregateBudget=perOrderBudget*(existingCount+1);
+      if(side.aggregateRiskMoney>aggregateBudget+0.0000001)
+      {
+         reasonOut="AUTO_V21_AGGREGATE_RISK_BUDGET";
+         return false;
+      }
+   }
+   return true;
+}
+
+bool AutoV21WrongDirectionConfirmed(int direction,double momentum,string &reasonOut)
+{
+   reasonOut="NONE";
+   if(direction==0) return false;
+   datetime now=TimeCurrent();
+   bool candidateActive=g_autoV20ExitCandidateSince>0;
+
+   if(g_autoV20BasketStartedAt<=0 ||
+      now-g_autoV20BasketStartedAt<AUTO_V21_EXIT_CYCLE_GRACE_SECONDS ||
+      g_autoV20LastFillAt<=0 ||
+      now-g_autoV20LastFillAt<AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS)
+   {
+      AutoV21ResetExitCandidate();
+      return false;
+   }
+
+   double entry=AutoV21WeightedEntryPrice(direction);
+   MqlTick tick;
+   if(entry<=0.0 || !SymbolInfoTick(_Symbol,tick))
+   {
+      AutoV21ResetExitCandidate();
+      return false;
+   }
+   double marketPrice=direction>0 ? tick.bid : tick.ask;
+   double progressPoints=direction>0 ? (marketPrice-entry)/_Point : (entry-marketPrice)/_Point;
+   double adversePoints=-progressPoints;
+   if(adversePoints<=0.0)
+   {
+      AutoV21ResetExitCandidate();
+      return false;
+   }
+
+   double atrM1=AverageTrueRangePoints(PERIOD_M1,g_atrPeriod);
+   double atrM5=AverageTrueRangePoints(PERIOD_M5,g_atrPeriod);
+   double spread=CurrentSpreadPoints();
+   if(atrM1<=0.0 || atrM5<=0.0 || spread<=0.0 || spread>=999999.0)
+   {
+      AutoV21ResetExitCandidate();
+      return false;
+   }
+
+   double normalFloor=MathMax(spread*3.50,MathMax(atrM1*0.65,atrM5*0.32));
+   double severeFloor=MathMax(spread*6.00,MathMax(atrM1*1.10,atrM5*0.60));
+   if(!candidateActive && adversePoints<normalFloor) return false;
+
+   int opposite=-direction;
+   bool m5Opposite=g_trendM5==opposite;
+   bool m15Opposite=g_trendM15==opposite;
+   bool emaM5Opposite=g_emaTrendM5==opposite;
+   bool m1Opposite=g_trendM1==opposite;
+   bool momentumOpposite=MomentumSupportsDirection(opposite,momentum,0.40);
+   bool vectorExitLost=AutoVectorEdgeLiveExitLost(direction);
+   int confirmations=0;
+   if(m5Opposite) confirmations++;
+   if(m15Opposite) confirmations++;
+   if(emaM5Opposite) confirmations++;
+   if(m1Opposite) confirmations++;
+   if(momentumOpposite) confirmations++;
+   if(vectorExitLost) confirmations++;
+
+   bool structureConfirmed=
+      m5Opposite &&
+      (emaM5Opposite || m15Opposite) &&
+      (m1Opposite || momentumOpposite || vectorExitLost);
+   bool severe=
+      adversePoints>=severeFloor &&
+      m5Opposite &&
+      (emaM5Opposite || m15Opposite) &&
+      confirmations>=3;
+   if(!structureConfirmed && !severe)
+   {
+      AutoV21ResetExitCandidate();
+      return false;
+   }
+
+   if(!candidateActive)
+   {
+      g_autoV20ExitCandidateSince=now;
+      g_autoV20ExitCandidatePeakAdverse=adversePoints;
+      return false;
+   }
+
+   if(adversePoints>g_autoV20ExitCandidatePeakAdverse)
+      g_autoV20ExitCandidatePeakAdverse=adversePoints;
+   bool rebound=
+      adversePoints<=g_autoV20ExitCandidatePeakAdverse*0.70 ||
+      adversePoints<normalFloor*0.75;
+   if(rebound)
+   {
+      AutoV21ResetExitCandidate();
+      return false;
+   }
+
+   int requiredSeconds=severe ? AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS : AUTO_V21_EXIT_CONFIRM_SECONDS;
+   if((int)(now-g_autoV20ExitCandidateSince)<requiredSeconds) return false;
+   reasonOut=severe ? "AUTO_V21_BALANCED_WRONG_SEVERE" : "AUTO_V21_BALANCED_WRONG_CONFIRMED";
+   return true;
+}
+
 void AutoV20OnOrderSent(int direction)
 {
    AUTO_V20_SIDE selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
+   datetime now=TimeCurrent();
    if(g_autoV20BasketStartedAt<=0)
    {
-      g_autoV20BasketStartedAt=TimeCurrent();
+      g_autoV20BasketStartedAt=now;
       g_autoV20BasketStopPrice=selected.slPrice;
       g_autoV20BasketTargetPrice=selected.tpPrice;
+      g_autoV20LotCeiling=selected.plannedLot;
       g_autoV20PeakProfit=0.0;
    }
    else
    {
-      // Adds may tighten risk, never widen the original Auto thesis.
       if(direction>0 && selected.slPrice>0.0)
          g_autoV20BasketStopPrice=MathMax(g_autoV20BasketStopPrice,selected.slPrice);
       else if(direction<0 && selected.slPrice>0.0)
-         g_autoV20BasketStopPrice=
-            g_autoV20BasketStopPrice<=0.0
-               ? selected.slPrice
-               : MathMin(g_autoV20BasketStopPrice,selected.slPrice);
+         g_autoV20BasketStopPrice=g_autoV20BasketStopPrice<=0.0 ? selected.slPrice : MathMin(g_autoV20BasketStopPrice,selected.slPrice);
+      g_autoV20LotCeiling=g_autoV20LotCeiling<=0.0 ? selected.plannedLot : MathMin(g_autoV20LotCeiling,selected.plannedLot);
    }
+   g_autoV20LastFillAt=now;
+   AutoV21ResetExitCandidate();
 }
 
 bool AutoV20FastPriceExit()
@@ -12588,70 +12772,87 @@ bool AutoV20FastPriceExit()
 
 bool AutoV20ManageOpenBasket(double momentum)
 {
-   if(!AutoV20OwnsOpenBasket() || BasketHasRacePosition() || BasketHasFlipLockPosition())
-      return false;
+   if(!AutoV20OwnsOpenBasket() || BasketHasRacePosition() || BasketHasFlipLockPosition()) return false;
    int direction=BasketDirection();
-   if(direction==0)
-      return false;
+   if(direction==0) return false;
 
-   // Preserve the original V20 stop/target precedence at the original call site.
-   if(AutoV20FastPriceExit())
-      return true;
+   if(AutoV20FastPriceExit()) return true;
 
    if(g_autoV20BasketStartedAt<=0)
-      g_autoV20BasketStartedAt=TimeCurrent();
-
-   double atrPoints=MathMax(10.0,
-      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod));
-
-   double progress=BasketFavorableProgressPoints(direction);
-   int opposite=-direction;
-   int oppositeEvidence=0;
-   if(g_trendM5==opposite) oppositeEvidence++;
-   if(g_trendM1==opposite) oppositeEvidence++;
-   if(g_emaTrendM5==opposite) oppositeEvidence++;
-   if(MomentumSupportsDirection(opposite,momentum,0.35)) oppositeEvidence++;
-   if(progress<=-atrPoints*0.18 && oppositeEvidence>=3)
    {
-      bool closed=CloseAllBasket("AUTO_V20_CONFIRMED_WRONG");
+      g_autoV20BasketStartedAt=TimeCurrent();
+      g_autoV20LastFillAt=g_autoV20BasketStartedAt;
+   }
+   AutoV21RecoverCanonicalProtection(direction);
+   if(g_autoV20LastFillAt<=0) g_autoV20LastFillAt=TimeCurrent();
+
+   double cycleProfit=BasketCycleProfit();
+   double floatingProfit=BasketProfit();
+   double hardLoss=EffectiveBasketLossLimit();
+   if(hardLoss>0.0 && cycleProfit<=-hardLoss)
+   {
+      bool closed=CloseAllBasket("MAX_BASKET_LOSS");
       if(closed) AutoV20ResetCycle();
-      g_executionStatus="AUTO_V20_CONFIRMED_WRONG";
+      g_executionStatus="MAX_BASKET_LOSS";
       return true;
    }
 
-   double cycleProfit=BasketCycleProfit();
-   if(cycleProfit>g_autoV20PeakProfit)
-      g_autoV20PeakProfit=cycleProfit;
-   double armProfit=MathMax(0.05,
-      MathMax(g_autoV20Buy.expectedProfitMoney,g_autoV20Sell.expectedProfitMoney)*0.35);
-   if(g_autoV20PeakProfit>=armProfit)
+   string wrongReason="NONE";
+   if(cycleProfit<0.0 && floatingProfit<0.0)
    {
-      double giveback=MathMax(0.05,g_autoV20PeakProfit*0.25);
-      if(cycleProfit<=g_autoV20PeakProfit-giveback)
+      if(AutoV21WrongDirectionConfirmed(direction,momentum,wrongReason))
       {
-         bool closed=CloseAllBasket("AUTO_V20_PROFIT_GIVEBACK");
+         bool closed=CloseAllBasket(wrongReason);
          if(closed) AutoV20ResetCycle();
-         g_executionStatus="AUTO_V20_PROFIT_GIVEBACK";
+         g_executionStatus=wrongReason;
+         return true;
+      }
+      if(g_autoV20ExitCandidateSince>0)
+      {
+         g_executionStatus="AUTO_V21_EXIT_CANDIDATE";
+         return true;
+      }
+   }
+   else AutoV21ResetExitCandidate();
+
+   if(cycleProfit>g_autoV20PeakProfit) g_autoV20PeakProfit=cycleProfit;
+
+   // TP is the primary objective. Early profit is allowed only when the market
+   // materially deteriorates or a protected winner gives back enough to justify banking.
+   if(cycleProfit>0.0)
+   {
+      string profitReason="NONE";
+      if(SmartProfitReversalDetected(direction,cycleProfit,profitReason))
+      {
+         bool closed=CloseAllBasket("AUTO_V21_EARLY_PROFIT_REVERSAL");
+         if(closed) AutoV20ResetCycle();
+         g_executionStatus="AUTO_V21_EARLY_PROFIT_REVERSAL";
+         g_adaptiveBlockReason=profitReason;
+         return true;
+      }
+      if(AutoProfitGivebackDetected(direction,cycleProfit))
+      {
+         bool closed=CloseAllBasket("AUTO_V21_EARLY_PROFIT_GIVEBACK");
+         if(closed) AutoV20ResetCycle();
+         g_executionStatus="AUTO_V21_EARLY_PROFIT_GIVEBACK";
          return true;
       }
    }
 
    long ageSeconds=(long)MathMax(0,TimeCurrent()-g_autoV20BasketStartedAt);
-   bool flowStillValid=
-      g_trendM5==direction ||
-      MomentumSupportsDirection(direction,momentum,0.20);
+   bool flowStillValid=g_trendM5==direction || MomentumSupportsDirection(direction,momentum,0.20);
    if(ageSeconds>=12*60 && cycleProfit>0.0 && !flowStillValid)
    {
-      bool closed=CloseAllBasket("AUTO_V20_TIME_BANK_PROFIT");
+      bool closed=CloseAllBasket("AUTO_V21_TIME_BANK_PROFIT");
       if(closed) AutoV20ResetCycle();
-      g_executionStatus="AUTO_V20_TIME_BANK_PROFIT";
+      g_executionStatus="AUTO_V21_TIME_BANK_PROFIT";
       return true;
    }
    if(ageSeconds>=25*60 && cycleProfit<=0.0)
    {
-      bool closed=CloseAllBasket("AUTO_V20_TIME_STOP");
+      bool closed=CloseAllBasket("AUTO_V21_TIME_STOP");
       if(closed) AutoV20ResetCycle();
-      g_executionStatus="AUTO_V20_TIME_STOP";
+      g_executionStatus="AUTO_V21_TIME_STOP";
       return true;
    }
    return false;
@@ -15647,6 +15848,7 @@ void AdjustRescueHedge()
 
    if(current+minVolume*0.50<desired)
    {
+      if(BasketHasAutoPosition()) return;
       double add=NormalizeRescueVolume(desired-current);
       if(add>0.0 && SendRescueOrder(-g_rescuePrimaryDirection,add))
       {
@@ -16299,6 +16501,10 @@ void ManageDynamicProtection()
          : (openPrice - marketPrice) / _Point;
 
       double desiredSL = currentSL;
+      if(autoPosition && g_autoV20BasketStopPrice>0.0)
+         desiredSL=direction>0
+            ? (currentSL<=0.0 ? g_autoV20BasketStopPrice : MathMax(currentSL,g_autoV20BasketStopPrice))
+            : (currentSL<=0.0 ? g_autoV20BasketStopPrice : MathMin(currentSL,g_autoV20BasketStopPrice));
       if(profitPoints >= atr * 0.55)
       {
          double breakEven = direction > 0
@@ -16350,22 +16556,19 @@ void ManageDynamicProtection()
       // target selected by the user and Off leaves profit exits disabled.
       double desiredTP = currentTP;
       bool positionUsesAutoProtection=autoFamilyPosition;
-      if(positionUsesAutoProtection &&
-         count == 1 &&
-         (autoPosition ||
-          (g_perPositionProfit <= 0.0 && g_basketProfitTarget <= 0.0)))
+      if(autoPosition && g_autoV20BasketTargetPrice>0.0)
       {
-         double baseStop = desiredSL > 0.0
-            ? desiredSL
-            : DynamicInitialStopPrice(direction, openPrice);
-         desiredTP = tacticalPosition
-            ? TacticalTakeProfitPrice(direction,openPrice)
-            : DynamicTakeProfitPrice(direction, openPrice, baseStop);
-         if(direction > 0)
-            desiredTP = MathMax(desiredTP, tick.ask + minStopPoints * _Point);
-         else
-            desiredTP = MathMin(desiredTP, tick.bid - minStopPoints * _Point);
-         desiredTP = NormalizeDouble(desiredTP, digits);
+         desiredTP=NormalizeDouble(g_autoV20BasketTargetPrice,digits);
+      }
+      else if(tacticalPosition &&
+              count == 1 &&
+              g_perPositionProfit <= 0.0 &&
+              g_basketProfitTarget <= 0.0)
+      {
+         desiredTP=TacticalTakeProfitPrice(direction,openPrice);
+         if(direction > 0) desiredTP=MathMax(desiredTP,tick.ask+minStopPoints*_Point);
+         else desiredTP=MathMin(desiredTP,tick.bid-minStopPoints*_Point);
+         desiredTP=NormalizeDouble(desiredTP,digits);
       }
 
       bool slChanged = desiredSL > 0.0 &&
@@ -16470,6 +16673,13 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
 
       request.sl=autoPlan.slPrice;
       request.tp=autoPlan.tpPrice;
+      if(positionsBefore>0)
+      {
+         if(g_autoV20BasketStopPrice>0.0)
+            request.sl=direction>0 ? MathMax(g_autoV20BasketStopPrice,request.sl) : MathMin(g_autoV20BasketStopPrice,request.sl);
+         if(g_autoV20BasketTargetPrice>0.0)
+            request.tp=g_autoV20BasketTargetPrice;
+      }
       double minimumStopDistance=(double)SymbolInfoInteger(
          _Symbol,SYMBOL_TRADE_STOPS_LEVEL
       )*_Point+2.0*_Point;

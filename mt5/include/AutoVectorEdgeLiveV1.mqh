@@ -3,7 +3,7 @@
 
 #include "AutoVectorEdgeV1.mqh"
 
-#define VECTOR_EDGE_LIVE_V1_VERSION "1.0.1"
+#define VECTOR_EDGE_LIVE_V1_VERSION "1.1.0"
 
 double g_vectorEdgeLiveBuyEV = 0.0;
 double g_vectorEdgeLiveSellEV = 0.0;
@@ -52,10 +52,11 @@ bool AutoVectorEdgeLiveAllow(const int direction,string &reason)
    reason="VECTOR_ALLOW";
    if(direction==0 || !AutoV20Enabled()) return direction!=0;
 
-   // Do not let an uncalibrated warm-up sample change live trading behavior.
-   if(g_autoV20Buy.winSamples<20 || g_autoV20Sell.winSamples<20)
+   int selectedSamples=direction>0 ? g_autoV20Buy.winSamples : g_autoV20Sell.winSamples;
+   int oppositeSamples=direction>0 ? g_autoV20Sell.winSamples : g_autoV20Buy.winSamples;
+   if(selectedSamples<20)
    {
-      g_vectorEdgeLiveReason="WARMUP_ALLOW";
+      g_vectorEdgeLiveReason="SELECTED_SIDE_WARMUP_ALLOW";
       reason=g_vectorEdgeLiveReason;
       return true;
    }
@@ -79,28 +80,48 @@ bool AutoVectorEdgeLiveAllow(const int direction,string &reason)
       reason=g_vectorEdgeLiveReason;
       return true;
    }
-   if(!edge.positiveExpectancy)
+   double selectedEV=direction>0 ? edge.buyEV : edge.sellEV;
+   if(selectedEV<=0.0)
    {
-      g_vectorEdgeLiveReason="VECTOR_NEGATIVE_EV";
+      g_vectorEdgeLiveReason="VECTOR_SELECTED_NEGATIVE_EV";
       reason=g_vectorEdgeLiveReason;
       return false;
    }
-   if(edge.preferredDirection!=0 && edge.preferredDirection!=direction)
+   if(oppositeSamples>=20)
    {
-      g_vectorEdgeLiveReason="VECTOR_DIRECTION_DISAGREE";
-      reason=g_vectorEdgeLiveReason;
-      return false;
-   }
-   if(edge.edgeRatio<15.0)
-   {
-      g_vectorEdgeLiveReason="VECTOR_EDGE_TOO_WEAK";
-      reason=g_vectorEdgeLiveReason;
-      return false;
+      if(edge.preferredDirection!=0 && edge.preferredDirection!=direction)
+      {
+         g_vectorEdgeLiveReason="VECTOR_DIRECTION_DISAGREE";
+         reason=g_vectorEdgeLiveReason;
+         return false;
+      }
+      if(edge.edgeRatio<15.0)
+      {
+         g_vectorEdgeLiveReason="VECTOR_EDGE_TOO_WEAK";
+         reason=g_vectorEdgeLiveReason;
+         return false;
+      }
    }
 
    g_vectorEdgeLiveReason="VECTOR_CONFIRMED";
    reason=g_vectorEdgeLiveReason;
    return true;
+}
+
+bool AutoVectorEdgeLiveExitLost(const int direction)
+{
+   if(direction==0 || !AutoV20Enabled()) return false;
+   int selectedSamples=direction>0 ? g_autoV20Buy.winSamples : g_autoV20Sell.winSamples;
+   if(selectedSamples<20) return false;
+   VECTOR_EDGE_INPUT edgeInput;
+   if(!VectorEdgeLiveBuildInput(edgeInput)) return false;
+   VECTOR_EDGE_OUTPUT edge=VectorEvaluateEdge(edgeInput);
+   if(!edge.valid) return false;
+   double selectedEV=direction>0 ? edge.buyEV : edge.sellEV;
+   int oppositeSamples=direction>0 ? g_autoV20Sell.winSamples : g_autoV20Buy.winSamples;
+   if(selectedEV<=0.0) return true;
+   // Confirmation only: never a direct close and never a lot-sizing signal.
+   return oppositeSamples>=20 && edge.exitEdgeLost && edge.preferredDirection==-direction;
 }
 
 #endif
