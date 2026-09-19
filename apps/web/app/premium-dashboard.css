@@ -4476,3 +4476,195 @@
   }
 }
 
+/* ===== Control Center V46 · system status inside mode performance =====
+   Move Platform / MT5 / EA Status into the unused lower area of the existing
+   performance card. V42 lower monitoring keeps the same five-column footprint
+   with AI Risk occupying the former side-stack column. */
+.cc-v19-three-card-grid .cc-v12-mode-performance{
+  display:flex!important;
+  flex-direction:column!important;
+}
+
+.cc-v19-three-card-grid .cc-v12-mode-performance .cc-v12-mode-table{
+  flex:0 0 auto!important;
+}
+
+.cc-v46-performance-system{
+  margin:auto 10px 10px!important;
+  padding:0!important;
+  overflow:hidden;
+  border:1px solid rgba(72,88,137,.56);
+  border-radius:11px;
+  background:
+    radial-gradient(circle at 100% 0,rgba(95,72,223,.08),transparent 42%),
+    linear-gradient(145deg,rgba(10,17,31,.96),rgba(7,11,21,.98));
+}
+
+.cc-v46-performance-system-head{
+  min-height:46px;
+  padding:7px 9px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  border-bottom:1px solid rgba(61,74,116,.42);
+  background:linear-gradient(180deg,rgba(18,24,43,.76),rgba(10,15,28,.60));
+}
+
+.cc-v46-performance-system-head>div{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.cc-v46-performance-system-head>div>span{
+  width:28px;
+  height:28px;
+  flex:0 0 28px;
+  display:grid;
+  place-items:center;
+  color:#a185ff;
+  border:1px solid rgba(101,82,193,.55);
+  border-radius:8px;
+  background:linear-gradient(145deg,rgba(57,43,124,.56),rgba(25,25,65,.54));
+}
+
+.cc-v46-performance-system-head>div>div{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.cc-v46-performance-system-head b{
+  color:#e8edf8;
+  font-size:11px;
+  line-height:1.15;
+  white-space:nowrap;
+}
+
+.cc-v46-performance-system-head small{
+  color:#6e7890;
+  font-size:8px;
+  line-height:1.15;
+}
+
+.cc-v46-performance-system-head em{
+  flex:0 0 auto;
+  min-height:24px;
+  padding:0 9px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid rgba(80,96,145,.45);
+  border-radius:999px;
+  background:rgba(18,25,42,.72);
+  color:#8995ac;
+  font-size:8px;
+  font-style:normal;
+  font-weight:850;
+}
+
+.cc-v46-performance-system-head em.good{
+  color:#72e5ac;
+  border-color:rgba(56,169,113,.45);
+  background:rgba(15,67,46,.30);
+}
+
+.cc-v46-performance-system-head em.warn{
+  color:#e8bd64;
+  border-color:rgba(176,126,43,.42);
+  background:rgba(72,50,16,.27);
+}
+
+.cc-v46-performance-system-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:6px;
+  padding:8px;
+}
+
+.cc-v46-performance-system-grid>div{
+  min-width:0;
+  min-height:58px;
+  padding:8px 7px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:3px;
+  border:1px solid rgba(55,69,106,.46);
+  border-radius:8px;
+  background:rgba(9,16,29,.72);
+}
+
+.cc-v46-performance-system-grid span{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  color:#7c879e;
+  font-size:8px;
+}
+
+.cc-v46-performance-system-grid i{
+  width:6px;
+  height:6px;
+  flex:0 0 6px;
+  border-radius:50%;
+  background:#758098;
+}
+
+.cc-v46-performance-system-grid i.good{
+  background:#58e1a0;
+  box-shadow:0 0 7px rgba(88,225,160,.30);
+}
+
+.cc-v46-performance-system-grid i.warn{
+  background:#e8ba5e;
+}
+
+.cc-v46-performance-system-grid b{
+  overflow:hidden;
+  color:#dce3ef;
+  font-size:10px;
+  line-height:1.15;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.cc-v46-performance-system-grid small{
+  overflow:hidden;
+  color:#647087;
+  font-size:7.5px;
+  line-height:1.15;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+/* AI Risk now owns the former fifth lower-suite column directly. */
+.cc-v42-bottom-suite>.cc-v42-risk{
+  height:100%!important;
+  min-height:0!important;
+  max-height:100%!important;
+}
+
+/* Retire legacy side-stack sizing after the status card move. */
+.cc-v42-side-stack{
+  display:contents!important;
+}
+
+@media(max-width:1180px){
+  .cc-v46-performance-system{
+    margin-top:10px!important;
+  }
+}
+
+@media(max-width:760px){
+  .cc-v46-performance-system-grid{
+    grid-template-columns:1fr;
+  }
+  .cc-v46-performance-system-head b{
+    white-space:normal;
+  }
+}
+

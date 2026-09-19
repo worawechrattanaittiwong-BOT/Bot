@@ -2059,6 +2059,33 @@ export default function DashboardPage() {
                       </div>;
                     })}
                   </div>
+
+                  <div className="cc-v46-performance-system">
+                    <div className="cc-v46-performance-system-head">
+                      <div>
+                        <span><ScenovaIcon name="status" size={16}/></span>
+                        <div><b>Platform / MT5 / EA Status</b><small>สถานะการเชื่อมต่อระบบ</small></div>
+                      </div>
+                      <em className={isMt5Online&&isAgentOnline?"good":"warn"}>{isMt5Online&&isAgentOnline?"All Online":"Check"}</em>
+                    </div>
+                    <div className="cc-v46-performance-system-grid">
+                      <div>
+                        <span><i className="good"/>SCENOVA</span>
+                        <b>Online</b>
+                        <small>Web Dashboard</small>
+                      </div>
+                      <div>
+                        <span><i className={isAgentOnline?"good":"warn"}/>Agent</span>
+                        <b>{isAgentOnline?"Connected":"Waiting"}</b>
+                        <small>{heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"}</small>
+                      </div>
+                      <div>
+                        <span><i className={isMt5Online?"good":"warn"}/>MT5 / EA</span>
+                        <b>{isMt5Online?"Connected":"Waiting"}</b>
+                        <small>{heartbeatAgeSeconds.toFixed(0)}s heartbeat</small>
+                      </div>
+                    </div>
+                  </div>
                 </section>
 
 
@@ -2174,42 +2201,25 @@ export default function DashboardPage() {
                   <div className="cc-v42-news-note"><ScenovaIcon name="info" size={13}/>ส่วนนี้แสดงเฉพาะข้อมูลที่ระบบมีจริง และไม่สร้างข่าวจำลอง</div>
                 </section>
 
-                <div className="cc-v42-side-stack">
-                  <section className="panel cc-v42-card cc-v42-risk">
-                    <div className="cc-v42-card-head">
-                      <div>
-                        <span className="cc-v42-head-icon green"><ScenovaIcon name="shield" size={15}/></span>
-                        <div><b>AI Risk Commentary</b><small>มุมมองความเสี่ยงจากระบบ</small></div>
-                      </div>
-                      <em>AI</em>
+                <section className="panel cc-v42-card cc-v42-risk">
+                  <div className="cc-v42-card-head">
+                    <div>
+                      <span className="cc-v42-head-icon green"><ScenovaIcon name="shield" size={15}/></span>
+                      <div><b>AI Risk Commentary</b><small>มุมมองความเสี่ยงจากระบบ</small></div>
                     </div>
-                    <div className="cc-v42-risk-level">
-                      <b>สถานะความเสี่ยง</b>
-                      <span className={performanceRiskMode==="NORMAL"?"good":"warn"}>{performanceRiskMode==="NORMAL"?"ปกติ":"กำลังปรับความเสี่ยง"}</span>
-                    </div>
-                    <p>{riskCustomerText}</p>
-                    <ul>
-                      <li><i className={isMt5Online?"good":"warn"}/><span>{connectionLabel}</span></li>
-                      <li><i className={spreadStatus==="NORMAL"?"good":"warn"}/><span>Spread: {spreadStatusLabel[spreadStatus]||spreadStatus}</span></li>
-                      <li><i className={Number(todayPerformance.drawdownPercent||0)<2?"good":"warn"}/><span>Drawdown วันนี้ {Number(todayPerformance.drawdownPercent||0).toFixed(2)}%</span></li>
-                    </ul>
-                  </section>
-
-                  <section className="panel cc-v42-card cc-v42-system">
-                    <div className="cc-v42-card-head">
-                      <div>
-                        <span className="cc-v42-head-icon"><ScenovaIcon name="status" size={15}/></span>
-                        <div><b>Platform / MT5 / EA Status</b><small>สถานะการเชื่อมต่อระบบ</small></div>
-                      </div>
-                      <em className={isMt5Online&&isAgentOnline?"good":"warn"}>{isMt5Online&&isAgentOnline?"All Online":"Check"}</em>
-                    </div>
-                    <div className="cc-v42-system-grid">
-                      <div><span><i className="good"/>SCENOVA</span><b>Online</b><small>Web Dashboard</small></div>
-                      <div><span><i className={isAgentOnline?"good":"warn"}/>Agent</span><b>{isAgentOnline?"Connected":"Waiting"}</b><small>{heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"}</small></div>
-                      <div><span><i className={isMt5Online?"good":"warn"}/>MT5 / EA</span><b>{isMt5Online?"Connected":"Waiting"}</b><small>{heartbeatAgeSeconds.toFixed(0)}s heartbeat</small></div>
-                    </div>
-                  </section>
-                </div>
+                    <em>AI</em>
+                  </div>
+                  <div className="cc-v42-risk-level">
+                    <b>สถานะความเสี่ยง</b>
+                    <span className={performanceRiskMode==="NORMAL"?"good":"warn"}>{performanceRiskMode==="NORMAL"?"ปกติ":"กำลังปรับความเสี่ยง"}</span>
+                  </div>
+                  <p>{riskCustomerText}</p>
+                  <ul>
+                    <li><i className={isMt5Online?"good":"warn"}/><span>{connectionLabel}</span></li>
+                    <li><i className={spreadStatus==="NORMAL"?"good":"warn"}/><span>Spread: {spreadStatusLabel[spreadStatus]||spreadStatus}</span></li>
+                    <li><i className={Number(todayPerformance.drawdownPercent||0)<2?"good":"warn"}/><span>Drawdown วันนี้ {Number(todayPerformance.drawdownPercent||0).toFixed(2)}%</span></li>
+                  </ul>
+                </section>
               </section>
 
               <div className="cc-mobile-command-dock mobile-only" aria-label="ควบคุมบอท">
