@@ -5042,3 +5042,188 @@
   }
 }
 
+/* ===== Control Center V48 · standard readable typography ===== */
+/* Match the dashboard's normal 12–14px reading scale and remove 6–9px microcopy
+   from the lower Market Intelligence / AI Signal workspace. */
+.cc-v48-bottom-intelligence{
+  height:460px;
+  font-size:13px;
+}
+
+.cc-v48-panel-head{
+  height:56px;
+  padding:0 15px;
+}
+.cc-v48-title{gap:10px}
+.cc-v48-title>span{
+  width:34px;
+  height:34px;
+  flex-basis:34px;
+}
+.cc-v48-title b{
+  font-size:14px;
+  line-height:1.15;
+  letter-spacing:.075em;
+}
+.cc-v48-title small{
+  margin-top:2px;
+  font-size:11px;
+  line-height:1.25;
+}
+.cc-v48-panel-head>em{
+  padding:5px 10px;
+  font-size:11px;
+  line-height:1;
+}
+
+.cc-v48-market-strip{
+  height:62px;
+  padding:0 15px;
+  grid-template-columns:minmax(190px,.85fr) minmax(300px,1.2fr) minmax(185px,.75fr);
+  gap:14px;
+}
+.cc-v48-symbol{gap:9px}
+.cc-v48-symbol b{font-size:15px}
+.cc-v48-symbol small{
+  margin-top:2px;
+  font-size:11px;
+  line-height:1.2;
+}
+.cc-v48-timeframes{gap:7px}
+.cc-v48-timeframes>span{
+  min-width:44px;
+  height:31px;
+  padding:0 9px;
+  gap:5px;
+  font-size:11px;
+}
+.cc-v48-price{gap:1px 9px}
+.cc-v48-price small{font-size:10.5px}
+.cc-v48-price b{font-size:22px}
+.cc-v48-price em{font-size:11px}
+.cc-v48-chart-shell{
+  height:calc(100% - 118px);
+  min-height:250px;
+}
+.cc-v48-zone-label,
+.cc-v48-level-label{
+  padding:3px 7px;
+  font-size:10px;
+  line-height:1.1;
+}
+.cc-v48-chart-empty b{font-size:13px}
+.cc-v48-chart-empty small{font-size:11px}
+
+.cc-v48-signal-split{
+  height:78px;
+  padding:10px 13px 12px;
+  gap:9px;
+}
+.cc-v48-signal-split small{font-size:11px}
+.cc-v48-signal-split b{font-size:20px}
+
+.cc-v48-signal-grid{
+  padding:0 13px 9px;
+  gap:8px;
+}
+.cc-v48-signal-grid>div{
+  height:54px;
+  padding:8px 10px;
+  gap:3px;
+}
+.cc-v48-signal-grid span{
+  gap:6px;
+  font-size:10.5px;
+  line-height:1.15;
+}
+.cc-v48-signal-grid b{
+  font-size:12.5px;
+  line-height:1.2;
+}
+
+.cc-v48-trend-row{padding:0 13px 9px}
+.cc-v48-trend-row>span{
+  margin-bottom:5px;
+  font-size:10.5px;
+}
+.cc-v48-trend-row>div{gap:7px}
+.cc-v48-trend-row i{
+  height:42px;
+  padding:6px 7px;
+  gap:2px;
+}
+.cc-v48-trend-row i small{font-size:10px}
+.cc-v48-trend-row i b{
+  font-size:11.5px;
+  line-height:1.1;
+}
+
+.cc-v48-context-grid{
+  padding:0 13px 9px;
+  gap:8px;
+}
+.cc-v48-context-grid>div{
+  height:58px;
+  padding:8px;
+  grid-template-columns:30px minmax(0,1fr);
+  column-gap:8px;
+}
+.cc-v48-context-grid>div>span{
+  width:30px;
+  height:30px;
+}
+.cc-v48-context-grid small{font-size:10.5px}
+.cc-v48-context-grid b{
+  font-size:11.5px;
+  line-height:1.2;
+}
+
+.cc-v48-session-row{
+  margin:0 13px;
+  height:42px;
+  padding:0 10px;
+  gap:8px;
+}
+.cc-v48-session-row span{font-size:10.5px}
+.cc-v48-session-row b{font-size:11.5px}
+.cc-v48-session-row em{
+  font-size:10.5px;
+  line-height:1.15;
+}
+
+@media(max-width:1279px){
+  .cc-v48-bottom-intelligence{height:auto}
+  .cc-v48-bottom-intelligence>.panel{height:460px}
+}
+
+@media(max-width:720px){
+  .cc-v48-bottom-intelligence>.panel{
+    height:auto;
+    min-height:420px;
+  }
+  .cc-v48-market-strip{
+    min-height:108px;
+    padding:10px 12px;
+    grid-template-columns:1fr auto;
+  }
+  .cc-v48-timeframes{
+    padding-bottom:2px;
+    gap:6px;
+  }
+  .cc-v48-chart-shell{
+    height:260px;
+    min-height:260px;
+  }
+  .cc-v48-title b{font-size:13px}
+  .cc-v48-title small{display:none}
+  .cc-v48-panel-head>em{font-size:10.5px}
+  .cc-v48-signal-panel{min-height:510px}
+  .cc-v48-context-grid{grid-template-columns:1fr}
+  .cc-v48-context-grid>div{height:58px}
+  .cc-v48-session-row{
+    min-height:46px;
+    height:auto;
+    padding:7px 10px;
+  }
+}
+/* ===== /Control Center V48 · standard readable typography ===== */
