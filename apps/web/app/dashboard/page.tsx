@@ -2064,6 +2064,154 @@ export default function DashboardPage() {
 
               </div>
 
+
+              <section className="cc-v42-bottom-suite" aria-label="ข้อมูลติดตามเพิ่มเติม">
+                <section className="panel cc-v42-card cc-v42-position-monitor">
+                  <div className="cc-v42-card-head">
+                    <div>
+                      <span className="cc-v42-head-icon"><ScenovaIcon name="orders" size={15}/></span>
+                      <div><b>Position Monitor</b><small>สถานะการถือครองปัจจุบัน</small></div>
+                    </div>
+                    <em>{currentPositions} Positions</em>
+                  </div>
+                  <div className="cc-v42-table cc-v42-position-table">
+                    <div className="cc-v42-table-head"><span>Symbol</span><span>Type</span><span>Lot</span><span>P&amp;L</span></div>
+                    <div className="cc-v42-table-body">
+                      {openPositions.length ? [...openPositions].reverse().slice(0,5).map((position:any,index:number)=>{
+                        const side=String(position.side||"").toUpperCase()==="SELL"?"SELL":"BUY";
+                        const pnl=Number(position.profit||0);
+                        return <div className="cc-v42-table-row" key={"monitor-"+String(position.ticket||position.openedAt||index)}>
+                          <span className="symbol">{String(metrics.symbol||settings.symbol||"—")}</span>
+                          <span><i className={"cc-v42-side "+side.toLowerCase()}>{side}</i></span>
+                          <span>{Number(position.volume||0).toFixed(2)}</span>
+                          <span className={pnl>0?"good":pnl<0?"bad":"neutral"}>{pnl>0?"+$":"$"}{pnl.toFixed(2)}</span>
+                        </div>;
+                      }) : <div className="cc-v42-empty">ยังไม่มี Position ที่เปิดอยู่</div>}
+                    </div>
+                  </div>
+                  <div className="cc-v42-mini-stats">
+                    <div><b>{currentPositions}</b><small>Positions</small></div>
+                    <div><b>{openPositions.reduce((sum:number,p:any)=>sum+Number(p.volume||0),0).toFixed(2)}</b><small>Total Lot</small></div>
+                    <div><b className={Number(metrics.basketProfit||0)>=0?"good":"bad"}>{Number(metrics.basketProfit||0)>=0?"+$":"-$"}{Math.abs(Number(metrics.basketProfit||0)).toFixed(2)}</b><small>Floating P/L</small></div>
+                  </div>
+                </section>
+
+                <section className="panel cc-v42-card cc-v42-live-logs">
+                  <div className="cc-v42-card-head">
+                    <div>
+                      <span className="cc-v42-head-icon"><ScenovaIcon name="terminal" size={15}/></span>
+                      <div><b>Live Logs</b><small>บันทึกการทำงานแบบเรียลไทม์</small></div>
+                    </div>
+                    <button type="button" onClick={()=>setLogsOpen(true)}>View All</button>
+                  </div>
+                  <div className="cc-v42-log-list">
+                    {terminalEntries.length ? [...terminalEntries].reverse().slice(0,7).map((entry:any,index:number)=>{
+                      const time=entry.time ? new Date(entry.time).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}) : "—";
+                      const tone=String(entry.level||"").toUpperCase();
+                      return <div className="cc-v42-log-row" key={"quick-log-"+String(entry.id||index)}>
+                        <span className={"cc-v42-log-dot "+(tone==="SUCCESS"?"good":tone==="WARN"||tone==="ERROR"?"bad":"info")}/>
+                        <time>{time}</time>
+                        <div><b>{entry.text||entry.category||"Event"}</b>{entry.detail?<small>{entry.detail}</small>:null}</div>
+                      </div>;
+                    }) : <div className="cc-v42-empty">ยังไม่มี Log ล่าสุด</div>}
+                  </div>
+                </section>
+
+                <section className="panel cc-v42-card cc-v42-goals">
+                  <div className="cc-v42-card-head">
+                    <div>
+                      <span className="cc-v42-head-icon"><ScenovaIcon name="target" size={15}/></span>
+                      <div><b>Bot Goals / Daily Target</b><small>เป้าหมายกำไรรายวัน</small></div>
+                    </div>
+                    <em>{Number(settings.dailyProfitTargetMoney||0)>0?"Active":"Not set"}</em>
+                  </div>
+                  <div className="cc-v42-goal-main">
+                    <div
+                      className="cc-v42-goal-ring"
+                      style={{background:Number(settings.dailyProfitTargetMoney||0)>0
+                        ? `conic-gradient(#62dfa6 ${Math.max(0,Math.min(100,(Math.max(0,Number(metrics.dailyProfit||0))/Math.max(0.01,Number(settings.dailyProfitTargetMoney||0)))*100))}% , rgba(78,91,128,.28) 0)`
+                        : "conic-gradient(#5f6b8a 0%, rgba(78,91,128,.28) 0)"}}
+                    >
+                      <div>
+                        <b>{Number(settings.dailyProfitTargetMoney||0)>0
+                          ? Math.max(0,Math.min(100,(Math.max(0,Number(metrics.dailyProfit||0))/Math.max(0.01,Number(settings.dailyProfitTargetMoney||0)))*100)).toFixed(0)+"%"
+                          : "—"}</b>
+                        <small>{Number(settings.dailyProfitTargetMoney||0)>0
+                          ? "$"+Math.max(0,Number(metrics.dailyProfit||0)).toFixed(2)+" / $"+Number(settings.dailyProfitTargetMoney||0).toFixed(2)
+                          : "ยังไม่ตั้งเป้า"}</small>
+                      </div>
+                    </div>
+                    <div className="cc-v42-goal-copy">
+                      <div><span>เป้าหมายวันนี้</span><b>{Number(settings.dailyProfitTargetMoney||0)>0?"$"+Number(settings.dailyProfitTargetMoney||0).toFixed(2):"—"}</b></div>
+                      <div><span>กำไรปัจจุบัน</span><b className={Number(metrics.dailyProfit||0)>=0?"good":"bad"}>{Number(metrics.dailyProfit||0)>=0?"+$":"-$"}{Math.abs(Number(metrics.dailyProfit||0)).toFixed(2)}</b></div>
+                      <div><span>คงเหลือ</span><b>{Number(settings.dailyProfitTargetMoney||0)>0?"$"+Math.max(0,Number(settings.dailyProfitTargetMoney||0)-Math.max(0,Number(metrics.dailyProfit||0))).toFixed(2):"—"}</b></div>
+                    </div>
+                  </div>
+                  <div className="cc-v42-goal-foot">
+                    <span>Win Rate วันนี้</span>
+                    <b>{Number(todayPerformance.trades||0)>0?Number(todayPerformance.winRate||0).toFixed(1)+"%":"—"}</b>
+                    <small>{Number(todayPerformance.trades||0)} Basket</small>
+                  </div>
+                </section>
+
+                <section className="panel cc-v42-card cc-v42-news">
+                  <div className="cc-v42-card-head">
+                    <div>
+                      <span className="cc-v42-head-icon"><ScenovaIcon name="calendar" size={15}/></span>
+                      <div><b>News &amp; High-impact Events</b><small>ข่าวสารและเหตุการณ์สำคัญ</small></div>
+                    </div>
+                    <em>Live status</em>
+                  </div>
+                  <div className="cc-v42-news-status">
+                    <span className={marketSessionClosed?"warn":isMt5Online?"good":"neutral"}>{marketSessionClosed?"Market Closed":isMt5Online?"Market Online":"Waiting MT5"}</span>
+                    <b>{marketTradeLabel}</b>
+                  </div>
+                  <div className="cc-v42-news-list">
+                    <div><time>MARKET</time><span><b>Economic Calendar Feed</b><small>ยังไม่ได้เชื่อมแหล่งข่าวเข้ากับ Dashboard นี้</small></span><em>—</em></div>
+                    <div><time>SPREAD</time><span><b>Spread Status</b><small>{spreadStatusLabel[spreadStatus]||spreadStatus}</small></span><em className={spreadStatus==="NORMAL"?"good":"warn"}>{spreadValueLabel}</em></div>
+                    <div><time>SESSION</time><span><b>Execution Status</b><small>{controlStateLabel}</small></span><em>{String(metrics.executionStatus||state||"—")}</em></div>
+                  </div>
+                  <div className="cc-v42-news-note"><ScenovaIcon name="info" size={13}/>ส่วนนี้แสดงเฉพาะข้อมูลที่ระบบมีจริง และไม่สร้างข่าวจำลอง</div>
+                </section>
+
+                <div className="cc-v42-side-stack">
+                  <section className="panel cc-v42-card cc-v42-risk">
+                    <div className="cc-v42-card-head">
+                      <div>
+                        <span className="cc-v42-head-icon green"><ScenovaIcon name="shield" size={15}/></span>
+                        <div><b>AI Risk Commentary</b><small>มุมมองความเสี่ยงจากระบบ</small></div>
+                      </div>
+                      <em>AI</em>
+                    </div>
+                    <div className="cc-v42-risk-level">
+                      <b>สถานะความเสี่ยง</b>
+                      <span className={performanceRiskMode==="NORMAL"?"good":"warn"}>{performanceRiskMode==="NORMAL"?"ปกติ":"กำลังปรับความเสี่ยง"}</span>
+                    </div>
+                    <p>{riskCustomerText}</p>
+                    <ul>
+                      <li><i className={isMt5Online?"good":"warn"}/><span>{connectionLabel}</span></li>
+                      <li><i className={spreadStatus==="NORMAL"?"good":"warn"}/><span>Spread: {spreadStatusLabel[spreadStatus]||spreadStatus}</span></li>
+                      <li><i className={Number(todayPerformance.drawdownPercent||0)<2?"good":"warn"}/><span>Drawdown วันนี้ {Number(todayPerformance.drawdownPercent||0).toFixed(2)}%</span></li>
+                    </ul>
+                  </section>
+
+                  <section className="panel cc-v42-card cc-v42-system">
+                    <div className="cc-v42-card-head">
+                      <div>
+                        <span className="cc-v42-head-icon"><ScenovaIcon name="status" size={15}/></span>
+                        <div><b>Platform / MT5 / EA Status</b><small>สถานะการเชื่อมต่อระบบ</small></div>
+                      </div>
+                      <em className={isMt5Online&&isAgentOnline?"good":"warn"}>{isMt5Online&&isAgentOnline?"All Online":"Check"}</em>
+                    </div>
+                    <div className="cc-v42-system-grid">
+                      <div><span><i className="good"/>SCENOVA</span><b>Online</b><small>Web Dashboard</small></div>
+                      <div><span><i className={isAgentOnline?"good":"warn"}/>Agent</span><b>{isAgentOnline?"Connected":"Waiting"}</b><small>{heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"}</small></div>
+                      <div><span><i className={isMt5Online?"good":"warn"}/>MT5 / EA</span><b>{isMt5Online?"Connected":"Waiting"}</b><small>{heartbeatAgeSeconds.toFixed(0)}s heartbeat</small></div>
+                    </div>
+                  </section>
+                </div>
+              </section>
+
               <div className="cc-mobile-command-dock mobile-only" aria-label="ควบคุมบอท">
                 <button
                   className={"cc-mobile-command start " + (botStarting ? "starting" : botRunning ? "running" : "idle")}
