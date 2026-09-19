@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.38"
-#define SCENOVA_EA_VERSION "1.0.38"
-#define SCENOVA_PRODUCT_VERSION "1.0.38"
+#property version   "1.0.39"
+#define SCENOVA_EA_VERSION "1.0.39"
+#define SCENOVA_PRODUCT_VERSION "1.0.39"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -12541,6 +12541,7 @@ void AutoV21RecoverCanonicalProtection(int direction)
 {
    if(direction==0) return;
    double stop=0.0,target=0.0,lotCeiling=0.0;
+   long targetOpenedAt=0;
    for(int i=PositionsTotal()-1;i>=0;i--)
    {
       ulong ticket=PositionGetTicket(i);
@@ -12554,8 +12555,15 @@ void AutoV21RecoverCanonicalProtection(int direction)
       double sl=PositionGetDouble(POSITION_SL);
       double tp=PositionGetDouble(POSITION_TP);
       double volume=PositionGetDouble(POSITION_VOLUME);
+      long openedAt=(long)PositionGetInteger(POSITION_TIME_MSC);
       if(sl>0.0) stop=stop<=0.0 ? sl : (direction>0 ? MathMax(stop,sl) : MathMin(stop,sl));
-      if(tp>0.0 && target<=0.0) target=tp;
+      // Upgrade/restart migration: the oldest AUTO position owns the original
+      // V20 Basket TP. Never recover a later add's historical rewritten TP.
+      if(tp>0.0 && (targetOpenedAt==0 || openedAt<targetOpenedAt))
+      {
+         target=tp;
+         targetOpenedAt=openedAt;
+      }
       if(volume>0.0 && (lotCeiling<=0.0 || volume<lotCeiling)) lotCeiling=volume;
    }
    if(g_autoV20BasketStopPrice<=0.0) g_autoV20BasketStopPrice=stop;

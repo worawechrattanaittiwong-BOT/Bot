@@ -96,6 +96,6 @@ Need $web '$0.25 ต่อ 0.01 Lot' 'FLIP LOCK UI must expose the lot-scaled mo
 Need $web 'Safety Stop → Trailing SL ขยับตามราคาอย่างเดียว' 'FLIP LOCK UI must expose the starter Safety Stop and one-way trailing behavior'
 Need $web 'ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า' 'FLIP LOCK UI must state that no opposite pending direction is pre-placed'
 
-Need $release 'DEFAULT_EA_VERSION = "1.0.38"' 'EA release version must match the FLIP LOCK safe-start runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.39"' 'EA release version must match the FLIP LOCK safe-start runtime'
 
 Write-Host 'FLIP LOCK strict isolation contract: PASS'
