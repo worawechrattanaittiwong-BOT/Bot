@@ -3328,3 +3328,55 @@
   max-height:30px!important;
   line-height:30px!important;
 }
+
+/* ===== Control Center V39 · MANUAL profit selector breathing room =====
+   Center the two profit-type buttons cleanly, add a little space below them,
+   and open the gap between the two choices without loosening every other row. */
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-fields>.cc-bot-profit-kind-field{
+  box-sizing:border-box!important;
+  height:42px!important;
+  min-height:42px!important;
+  max-height:42px!important;
+  padding:3px 2px!important;
+  align-items:center!important;
+  overflow:visible!important;
+}
+
+.cc-v19-settings-card .cc-bot-profit-kind-field .cc-bot-v2-choice-inline{
+  box-sizing:border-box!important;
+  display:grid!important;
+  grid-template-columns:1fr 1fr!important;
+  align-items:center!important;
+  gap:10px!important;
+  width:100%!important;
+  height:32px!important;
+  min-height:32px!important;
+  max-height:32px!important;
+  margin:0!important;
+  padding:0!important;
+}
+
+.cc-v19-settings-card .cc-bot-profit-kind-field .cc-bot-v2-choice-inline>button{
+  box-sizing:border-box!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:8px!important;
+  height:30px!important;
+  min-height:30px!important;
+  max-height:30px!important;
+  margin:0!important;
+  padding:0 12px!important;
+  line-height:1!important;
+}
+
+.cc-v19-settings-card .cc-bot-profit-kind-field .cc-bot-v2-choice-inline>button span{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  line-height:1!important;
+}
+
+.cc-v19-settings-card .cc-bot-profit-kind-field .cc-bot-v2-choice-inline>button b{
+  line-height:1!important;
+}
