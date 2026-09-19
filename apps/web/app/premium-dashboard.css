@@ -3288,31 +3288,33 @@
   max-height:430px!important;
 }
 
-/* ===== Control Center V38 · slimmer dropdown controls =====
-   Keep the compact MANUAL row spacing, but make dropdowns shorter so each
-   option has visible breathing room inside the 38px row. Applied to all modes. */
+/* ===== Control Center V38 · centered dropdown text =====
+   Keep the compact row rhythm, but center dropdown text vertically so it is
+   never clipped. Applied consistently to every bot mode. */
 
-/* Primary trading-mode selector stays visually important, but is slightly slimmer. */
+/* Primary trading-mode selector: slightly taller and visually prominent. */
 .cc-v19-settings-card .cc-bot-v12-mode-select{
   box-sizing:border-box!important;
   height:34px!important;
   min-height:34px!important;
   max-height:34px!important;
-  padding-top:3px!important;
-  padding-bottom:3px!important;
+  line-height:34px!important;
+  padding:0 38px 0 14px!important;
+  margin:0!important;
 }
 
-/* Normal dropdowns: 28px control inside a 38px row = ~5px breathing room top/bottom. */
+/* Normal dropdowns: centered text with enough vertical room. */
 .cc-v19-settings-card .cc-bot-v2-field>select.input,
 .cc-v19-settings-card .cc-bot-v17-add-setting>select.input,
 .cc-v19-settings-card .cc-bot-v2-control-stack>select.input{
   box-sizing:border-box!important;
-  height:28px!important;
-  min-height:28px!important;
-  max-height:28px!important;
-  padding-top:2px!important;
-  padding-bottom:2px!important;
+  height:30px!important;
+  min-height:30px!important;
+  max-height:30px!important;
+  line-height:30px!important;
+  padding:0 34px 0 14px!important;
   margin:0!important;
+  vertical-align:middle!important;
 }
 
 /* Explicitly normalize dropdown height across every bot mode. */
@@ -3321,7 +3323,8 @@
 .cc-v19-settings-card .cc-bot-mode-flip_lock .cc-bot-v2-field>select.input,
 .cc-v19-settings-card .cc-bot-mode-zero_grid .cc-bot-v2-field>select.input,
 .cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-field>select.input{
-  height:28px!important;
-  min-height:28px!important;
-  max-height:28px!important;
+  height:30px!important;
+  min-height:30px!important;
+  max-height:30px!important;
+  line-height:30px!important;
 }
