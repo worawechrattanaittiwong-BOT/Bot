@@ -1080,6 +1080,23 @@ export default function DashboardPage() {
   const riskCustomerText = performanceRiskMode === "NORMAL"
     ? "ระดับความเสี่ยงปกติ · ใช้จำนวนไม้ตามที่ลูกค้ากำหนด"
     : "ระบบกำลังปรับระดับความเสี่ยงตามผลการเทรดล่าสุด";
+  const marketMidPrice = Number(metrics.marketMid || livePricePoints[livePricePoints.length-1]?.price || 0);
+  const marketDemandLow = Number(metrics.demandZoneLow || 0);
+  const marketDemandHigh = Number(metrics.demandZoneHigh || 0);
+  const marketSupplyLow = Number(metrics.supplyZoneLow || 0);
+  const marketSupplyHigh = Number(metrics.supplyZoneHigh || 0);
+  const marketSupport = Number(metrics.autoV20NearestSupport || metrics.nearestSupport || 0);
+  const marketResistance = Number(metrics.autoV20NearestResistance || metrics.nearestResistance || 0);
+  const rawBuySignalScore = Math.max(0, Number(metrics.autoV20BuyScore || 0));
+  const rawSellSignalScore = Math.max(0, Number(metrics.autoV20SellScore || 0));
+  const signalScoreTotal = rawBuySignalScore + rawSellSignalScore;
+  const signalScoreReady = signalScoreTotal > 0;
+  const buySignalPercent = signalScoreReady ? Math.round((rawBuySignalScore / signalScoreTotal) * 100) : 50;
+  const sellSignalPercent = signalScoreReady ? 100 - buySignalPercent : 50;
+  const liquidityState = String(metrics.liquidityState || "NONE");
+  const marketRegime = String(metrics.marketRegime || "DATA_NOT_READY");
+  const marketRegimeText = marketRegimeLabel[marketRegime] || marketRegime.replace(/_/g," ");
+  const sessionProfile = String(metrics.sessionProfile || "—").replace(/_/g," ");
   const rescueStateCustomerText =
     rescueState === "NORMAL" ? "ระบบปรับสมดุลพร้อมใช้งาน"
       : rescueState === "WARNING" ? "กำลังติดตามสถานะ Basket"
@@ -2105,7 +2122,82 @@ export default function DashboardPage() {
               </div>
 
 
-              <section className="cc-v42-bottom-suite" aria-label="ข้อมูลติดตามเพิ่มเติม">
+              <section className="cc-v48-bottom-intelligence" aria-label="SCENOVA market intelligence">
+                <section className="panel cc-v48-market-panel">
+                  <div className="cc-v48-panel-head">
+                    <div className="cc-v48-title">
+                      <span><ScenovaIcon name="brain" size={19}/></span>
+                      <div><b>SCENOVA MARKET INTELLIGENCE</b><small>Real-time market data, key levels and AI trading context</small></div>
+                    </div>
+                    <em className={marketSessionClosed?"warn":isMt5Online?"live":"idle"}><i/>{marketSessionClosed?"Market Closed":isMt5Online?"Live":"Waiting MT5"}</em>
+                  </div>
+
+                  <div className="cc-v48-market-strip">
+                    <div className="cc-v48-symbol"><ScenovaIcon name="trend" size={17}/><span><b>{String(metrics.symbol||settings.symbol||"—")}</b><small>{String(metrics.symbol||settings.symbol||"").startsWith("XAU")?"Gold Spot / US Dollar":"Live Trading Symbol"}</small></span></div>
+                    <div className="cc-v48-timeframes" aria-label="แนวโน้มหลายกรอบเวลา">
+                      {[{label:"M1",value:metrics.trendM1},{label:"M5",value:metrics.trendM5},{label:"M15",value:metrics.trendM15},{label:"M30",value:metrics.trendM30},{label:"H1",value:metrics.trendH1}].map(item=>{
+                        const direction=Number(item.value)>0?"up":Number(item.value)<0?"down":"flat";
+                        return <span key={item.label} className={direction}>{item.label}<i>{direction==="up"?"↑":direction==="down"?"↓":"·"}</i></span>;
+                      })}
+                    </div>
+                    <div className="cc-v48-price"><small>ราคากลาง</small><b>{marketMidPrice>0?marketMidPrice.toFixed(symbolDigits):"—"}</b><em>{Number(metrics.momentumPoints||0)>0?"+":""}{Number(metrics.momentumPoints||0).toFixed(1)} pt</em></div>
+                  </div>
+
+                  <MarketIntelligenceChart
+                    points={livePricePoints}
+                    currentPrice={marketMidPrice}
+                    digits={symbolDigits}
+                    demandLow={marketDemandLow}
+                    demandHigh={marketDemandHigh}
+                    supplyLow={marketSupplyLow}
+                    supplyHigh={marketSupplyHigh}
+                    support={marketSupport}
+                    resistance={marketResistance}
+                    marketClosed={marketSessionClosed}
+                  />
+                </section>
+
+                <section className="panel cc-v48-signal-panel">
+                  <div className="cc-v48-panel-head">
+                    <div className="cc-v48-title">
+                      <span><ScenovaIcon name="spark" size={19}/></span>
+                      <div><b>AI SIGNAL COCKPIT</b><small>Multi-timeframe analysis &amp; institutional order flow</small></div>
+                    </div>
+                    <em className={isMt5Online?"live":"idle"}><i/>{isMt5Online?"Live":"Offline"}</em>
+                  </div>
+
+                  <div className={"cc-v48-signal-split "+(!signalScoreReady?"waiting":"")}>
+                    <div className="buy"><small>BUY</small><b>{signalScoreReady?buySignalPercent+"%":"—"}</b></div>
+                    <div className="sell"><small>SELL</small><b>{signalScoreReady?sellSignalPercent+"%":"—"}</b></div>
+                    <span><i style={{width:buySignalPercent+"%"}}/><i style={{width:sellSignalPercent+"%"}}/></span>
+                  </div>
+
+                  <div className="cc-v48-signal-grid">
+                    <div><span><ScenovaIcon name="trend" size={15}/>Market Regime</span><b>{marketRegimeText}</b></div>
+                    <div><span><ScenovaIcon name="pnl" size={15}/>ATR (M15)</span><b>{atrValueLabel}</b></div>
+                    <div><span><ScenovaIcon name="spread" size={15}/>Spread</span><b className={spreadStatus==="NORMAL"?"good":"warn"}>{spreadValueLabel}</b></div>
+                    <div><span><ScenovaIcon name="arrow-up" size={15}/>Momentum</span><b className={Number(metrics.momentumPoints||0)>=0?"good":"bad"}>{Number(metrics.momentumPoints||0).toFixed(1)} pt</b></div>
+                  </div>
+
+                  <div className="cc-v48-trend-row">
+                    <span>Timeframe Trend</span>
+                    <div>{[{label:"M5",value:metrics.trendM5},{label:"M15",value:metrics.trendM15},{label:"M30",value:metrics.trendM30},{label:"H1",value:metrics.trendH1}].map(item=>{
+                      const direction=Number(item.value)>0?"up":Number(item.value)<0?"down":"flat";
+                      return <i key={item.label} className={direction}><small>{item.label}</small><b>{direction==="up"?"▲ Buy":direction==="down"?"▼ Sell":"• Flat"}</b></i>;
+                    })}</div>
+                  </div>
+
+                  <div className="cc-v48-context-grid">
+                    <div><span><ScenovaIcon name="layers" size={16}/></span><small>Order Block</small><b>{orderBlockCustomerText}</b></div>
+                    <div><span><ScenovaIcon name="spark" size={16}/></span><small>Liquidity</small><b>{liquidityState==="NONE"?"กำลังติดตาม":liquidityState.replace(/_/g," ")}</b></div>
+                    <div><span><ScenovaIcon name="target" size={16}/></span><small>Entry Context</small><b>{indicatorDecisionLabel[indicatorDecision]||indicatorDecision}</b></div>
+                  </div>
+
+                  <div className="cc-v48-session-row"><span>Session</span><b>{sessionProfile}</b><em className={metrics.tradeReady===true?"good":"warn"}>{metrics.tradeReady===true?"พร้อมส่งออเดอร์":latestDecisionCustomerText}</em></div>
+                </section>
+              </section>
+
+              <section className="cc-v42-bottom-suite cc-v48-legacy-hidden" aria-hidden="true">
                 <section className="panel cc-v42-card cc-v42-position-monitor">
                   <div className="cc-v42-card-head">
                     <div>
@@ -3030,6 +3122,80 @@ function LivePriceChart({points,symbol,marketClosed}:{points:Array<{t:number;pri
       </div>
     </section>
   );
+}
+
+function MarketIntelligenceChart({
+  points,currentPrice,digits,demandLow,demandHigh,supplyLow,supplyHigh,support,resistance,marketClosed
+}:{
+  points:Array<{t:number;price:number}>;
+  currentPrice:number;
+  digits:number;
+  demandLow:number;
+  demandHigh:number;
+  supplyLow:number;
+  supplyHigh:number;
+  support:number;
+  resistance:number;
+  marketClosed:boolean;
+}) {
+  const width=980;
+  const height=205;
+  const padX=14;
+  const padY=12;
+  const visible=points.slice(-120);
+  const prices=visible.map(point=>Number(point.price)).filter(price=>Number.isFinite(price)&&price>0);
+  const levelPrices=[currentPrice,demandLow,demandHigh,supplyLow,supplyHigh,support,resistance].filter(price=>Number.isFinite(price)&&price>0);
+  const allPrices=[...prices,...levelPrices];
+  const rawLow=allPrices.length?Math.min(...allPrices):0;
+  const rawHigh=allPrices.length?Math.max(...allPrices):0;
+  const margin=allPrices.length?Math.max((rawHigh-rawLow)*.14,Math.abs((rawHigh+rawLow)/2)*.00008,.01):1;
+  const minPrice=rawLow-margin;
+  const maxPrice=rawHigh+margin;
+  const range=Math.max(.0000001,maxPrice-minPrice);
+  const xFor=(index:number)=>padX+(index/Math.max(1,visible.length-1))*(width-padX*2);
+  const yFor=(price:number)=>padY+((maxPrice-price)/range)*(height-padY*2);
+  const plotted=visible.map((point,index)=>({x:xFor(index),y:yFor(Number(point.price))})).filter(point=>Number.isFinite(point.y));
+  const linePath=plotted.reduce((path,point,index)=>{
+    if(index===0)return `M${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
+    const previous=plotted[index-1];
+    const middle=(previous.x+point.x)/2;
+    return `${path} C${middle.toFixed(2)} ${previous.y.toFixed(2)} ${middle.toFixed(2)} ${point.y.toFixed(2)} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
+  },"");
+  const areaPath=plotted.length>1?`${linePath} L${plotted[plotted.length-1].x.toFixed(2)} ${height} L${plotted[0].x.toFixed(2)} ${height} Z`:"";
+  const band=(low:number,high:number)=>{
+    if(low<=0||high<=0)return null;
+    const top=yFor(Math.max(low,high));
+    const bottom=yFor(Math.min(low,high));
+    return {y:top,height:Math.max(3,bottom-top)};
+  };
+  const demandBand=band(demandLow,demandHigh);
+  const supplyBand=band(supplyLow,supplyHigh);
+  const latest=plotted[plotted.length-1];
+  const priceLabel=(value:number)=>value>0?value.toFixed(digits):"—";
+
+  return <div className="cc-v48-chart-shell">
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label="กราฟราคาสดพร้อม Demand Supply และแนวรับแนวต้าน">
+      <defs>
+        <linearGradient id="v48PriceLine" x1="0" x2="1"><stop offset="0" stopColor="#62e7ff"/><stop offset=".58" stopColor="#55c6d9"/><stop offset="1" stopColor="#72f0b1"/></linearGradient>
+        <linearGradient id="v48PriceArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4ad9f3" stopOpacity=".2"/><stop offset="1" stopColor="#4ad9f3" stopOpacity="0"/></linearGradient>
+        <filter id="v48Glow"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      {[.2,.4,.6,.8].map(step=><line key={"h"+step} x1="0" x2={width} y1={height*step} y2={height*step} className="grid"/>)}
+      {[.16,.32,.48,.64,.8].map(step=><line key={"v"+step} x1={width*step} x2={width*step} y1="0" y2={height} className="grid"/>)}
+      {supplyBand&&<rect x="0" width={width} y={supplyBand.y} height={supplyBand.height} className="supply-zone"/>}
+      {demandBand&&<rect x="0" width={width} y={demandBand.y} height={demandBand.height} className="demand-zone"/>}
+      {resistance>0&&<line x1="0" x2={width} y1={yFor(resistance)} y2={yFor(resistance)} className="resistance-line"/>}
+      {support>0&&<line x1="0" x2={width} y1={yFor(support)} y2={yFor(support)} className="support-line"/>}
+      {areaPath&&<path d={areaPath} className="price-area"/>}
+      {linePath&&<path d={linePath} className="price-line" filter="url(#v48Glow)"/>}
+      {latest&&<><line x1="0" x2={width} y1={latest.y} y2={latest.y} className="current-line"/><circle cx={latest.x} cy={latest.y} r="4" className="current-dot"/></>}
+    </svg>
+    {supplyBand&&<span className="cc-v48-zone-label supply" style={{top:`${(supplyBand.y/height)*100}%`}}>SUPPLY {priceLabel(supplyLow)}–{priceLabel(supplyHigh)}</span>}
+    {demandBand&&<span className="cc-v48-zone-label demand" style={{top:`${(demandBand.y/height)*100}%`}}>DEMAND {priceLabel(demandLow)}–{priceLabel(demandHigh)}</span>}
+    {resistance>0&&<span className="cc-v48-level-label resistance" style={{top:`${(yFor(resistance)/height)*100}%`}}>Resistance {priceLabel(resistance)}</span>}
+    {support>0&&<span className="cc-v48-level-label support" style={{top:`${(yFor(support)/height)*100}%`}}>Support {priceLabel(support)}</span>}
+    {!plotted.length&&<div className="cc-v48-chart-empty"><ScenovaIcon name="trend" size={22}/><b>{marketClosed?"ตลาดปิดอยู่":"กำลังรอราคาสดจาก EA"}</b><small>กราฟและโซนจะแสดงเมื่อได้รับข้อมูลจริง</small></div>}
+  </div>;
 }
 
 function StatusRow({label,value,tone="neutral",dot=false}:{label:string;value:any;tone?:"neutral"|"good"|"warn"|"bad";dot?:boolean}) {
