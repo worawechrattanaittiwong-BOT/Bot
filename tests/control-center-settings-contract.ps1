@@ -188,3 +188,11 @@ Need $css 'height:520px!important;' 'All three cards must stay at the MANUAL bas
 Need $css 'max-height:520px!important;' 'All three cards must never stretch beyond the MANUAL baseline'
 Need $css '--settings-row:36px' 'All modes must keep MANUAL-style compact row spacing'
 Need $css 'height:38px!important;' 'Performance rows must stay compact instead of stretching'
+
+Need $css 'Control Center V30 · measured MANUAL baseline 400px' 'V30 measured MANUAL baseline marker missing'
+Need $css 'height:400px!important;' 'All three Control Center cards must end at the measured MANUAL baseline'
+Need $css 'max-height:400px!important;' 'No Control Center card may stretch beyond the MANUAL baseline'
+Need $css 'height:356px!important;' 'Bot Settings body must fit the 400px MANUAL baseline'
+Need $css '--settings-row:36px' 'All modes must keep MANUAL-style compact spacing'
+Need $css 'max-height:318px!important;' 'Running Positions must scroll inside the 400px card'
+Need $css 'max-height:338px!important;' 'Performance must scroll inside the 400px card'
