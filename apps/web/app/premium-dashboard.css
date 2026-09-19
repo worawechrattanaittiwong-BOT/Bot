@@ -2550,3 +2550,97 @@
   min-height:38px!important;
   height:38px!important;
 }
+
+
+/* ===== Control Center V32 · MANUAL no-scroll + exact compact rows =====
+   Keep the existing 380px card. Make every mode use exact row heights so
+   AUTO/RACE/FLIP_LOCK/ZERO_GRID cannot open larger vertical gaps than MANUAL. */
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  --settings-row:34px;
+  --settings-control-h:28px;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
+  height:44px!important;
+  min-height:44px!important;
+  max-height:44px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  height:336px!important;
+  min-height:336px!important;
+  max-height:336px!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding:1px 11px 3px!important;
+}
+
+/* Mode selector row uses a fixed compact height everywhere. */
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
+  margin:0!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
+  height:38px!important;
+  min-height:38px!important;
+  max-height:38px!important;
+  padding:1px 0!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select{
+  height:34px!important;
+  min-height:34px!important;
+  max-height:34px!important;
+}
+
+/* Ordinary fields and risk rows are exact-height, not just min-height. */
+.cc-v19-settings-card .cc-bot-v2-fields{
+  gap:0!important;
+  margin:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-mode-section,
+.cc-v19-settings-card .cc-bot-v2-panel{
+  margin:0!important;
+  padding:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+  height:34px!important;
+  min-height:34px!important;
+  max-height:34px!important;
+  padding:1px!important;
+  margin:0!important;
+  overflow:hidden!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid{
+  gap:0!important;
+  margin:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row{
+  height:30px!important;
+  min-height:30px!important;
+  max-height:30px!important;
+  margin:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row button,
+.cc-v19-settings-card .money-input-shell,
+.cc-v19-settings-card .number-input-shell,
+.cc-v19-settings-card .cc-bot-v2-field>select.input,
+.cc-v19-settings-card .cc-bot-manual-risk-add-all{
+  height:28px!important;
+  min-height:28px!important;
+  max-height:28px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-inline-toggle-value,
+.cc-v19-settings-card .toggle-money-field{
+  min-height:28px!important;
+  height:28px!important;
+}
+.cc-v19-settings-card .cc-bot-manual-risk-add{
+  height:34px!important;
+  min-height:34px!important;
+  max-height:34px!important;
+  margin:0!important;
+  padding:1px!important;
+}
+
+/* MANUAL baseline must fit naturally with no visible scrollbar. */
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-body{
+  overflow-y:hidden!important;
+}
