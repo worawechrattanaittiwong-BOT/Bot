@@ -46,6 +46,9 @@ jobs:
       - name: FLIP LOCK strict isolation contract
         shell: pwsh
         run: ./tests/flip-lock-isolation-contract.ps1
+      - name: MT5 local execution plane contract
+        shell: pwsh
+        run: ./tests/local-execution-plane-contract.ps1
       - name: ZERO GRID stability simulation regression
         run: node ./tests/zero-grid-v1-simulation.mjs
       - name: LOCAL account-follow no customer Slot contract

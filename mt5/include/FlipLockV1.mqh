@@ -1,19 +1,19 @@
 #ifndef SCENOVA_FLIP_LOCK_V1_MQH
 #define SCENOVA_FLIP_LOCK_V1_MQH
 
-// FLIP LOCK V5 is a reactive one-position profit-lock engine:
+// FLIP LOCK V6 is a local tick-driven one-position profit-lock engine:
 //   1 FLIP-owned market position, no pre-placed opposite STOP order.
-// The starter uses a wide ATR/spread Safety Stop.  Profit trailing begins only
-// after floating profit reaches $0.25 per 0.01 lot (scaled by actual volume).
-// The SL then tightens with price and never loosens.  After that position exits,
-// FLIP LOCK reads the live M1 candle + momentum and re-enters immediately with
-// a market order in the stronger direction. Foreign/manual positions are ignored.
-#define FLIP_LOCK_V1_VERSION "5.0.0"
+// The starter uses a wide ATR/spread Safety Stop. As soon as the MT5 quote has
+// enough positive distance to place a broker-legal lock above/below entry, the
+// SL arms locally and then follows every meaningful price step without waiting
+// for SaaS price/commands. Server state controls NEW risk only.
+#define FLIP_LOCK_V1_VERSION "6.0.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS 2
 #define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
 #define FLIP_LOCK_ARM_USD_PER_001_LOT 0.25
+#define FLIP_LOCK_STOP_SYNC_MIN_MS 120
 
 int g_flipLockDirection=0;
 double g_flipLockPeakPrice=0.0;
@@ -24,6 +24,7 @@ datetime g_flipLockLastFlipAt=0;
 datetime g_flipLockLastFlatAt=0;
 datetime g_flipLockFlatPendingSince=0;
 string g_flipLockReason="IDLE";
+ulong g_flipLockLastStopSyncMs=0;
 
 bool FlipLockModeEnabled()
 {
@@ -48,6 +49,7 @@ void FlipLockResetTracking(const bool resetCounter)
    g_flipLockArmed=false;
    g_flipLockLastFlatAt=0;
    g_flipLockFlatPendingSince=0;
+   g_flipLockLastStopSyncMs=0;
    g_flipLockReason="IDLE";
    if(resetCounter) g_flipLockFlipCount=0;
 }
@@ -164,12 +166,27 @@ double FlipLockBreakEvenFloorPrice(const int direction,const double openPrice)
    );
 }
 
-bool FlipLockProfitLockReady(const ulong positionTicket,const double positionVolume)
+bool FlipLockProfitLockReady(
+   const ulong positionTicket,
+   const int direction,
+   const double openPrice,
+   const MqlTick &tick
+)
 {
-   if(positionTicket==0 || positionVolume<=0.0) return false;
-   double target=FlipLockArmProfitMoney(positionVolume);
+   if(positionTicket==0 || direction==0 || openPrice<=0.0)
+      return false;
+
    double current=FlipLockPositionProfitMoney(positionTicket);
-   return target>0.0 && current>=target;
+   if(current<=0.0)
+      return false;
+
+   // Do not wait for a SaaS/money threshold. Arm at the first MT5 tick where a
+   // positive break-even reserve is actually legal at the broker.
+   double floor=FlipLockBreakEvenFloorPrice(direction,openPrice);
+   double minimum=FlipLockBrokerMinDistancePoints()*_Point;
+   if(direction>0)
+      return floor>openPrice && floor<=tick.bid-minimum;
+   return floor<openPrice && floor>=tick.ask+minimum;
 }
 
 double FlipLockNormalizePrice(const double price)
@@ -512,7 +529,13 @@ bool FlipLockTriggerIsLegal(const int direction,const double trigger,const MqlTi
    return trigger>=tick.ask+minDistance;
 }
 
-bool FlipLockSyncBaton(const ulong positionTicket,const int direction,const double positionVolume,const double currentSl,const MqlTick &tick)
+bool FlipLockSyncBaton(
+   const ulong positionTicket,
+   const int direction,
+   const double positionVolume,
+   const double currentSl,
+   const MqlTick &tick
+)
 {
    if(positionTicket==0 || direction==0 || positionVolume<=0.0) return false;
    if(!PositionSelectByTicket(positionTicket)) return false;
@@ -528,21 +551,17 @@ bool FlipLockSyncBaton(const ulong positionTicket,const int direction,const doub
 
    if(!g_flipLockArmed)
    {
-      if(!FlipLockProfitLockReady(positionTicket,positionVolume))
+      if(!FlipLockProfitLockReady(positionTicket,direction,openPrice,tick))
       {
-         // Before the money threshold: keep only the wide starter Safety Stop.
-         // Manual / other-EA positions are ignored by ownership filtering and
-         // do not contribute to this threshold.
+         // Safety Stop stays broker-side until the current MT5 quote can support
+         // a genuinely positive, broker-legal stop. No server price is involved.
          FlipLockRemoveAllPending();
          g_flipLockTriggerPrice=0.0;
-         g_flipLockReason="WAIT_PROFIT_LOCK_MONEY";
+         g_flipLockReason="WAIT_LOCAL_PROFIT_LOCK";
          g_executionStatus="FLIP_LOCK_WAIT_PROFIT_LOCK";
          return true;
       }
 
-      // At the user's money threshold start locking immediately, but never
-      // create a baton below break-even. The wider ATR trail takes over once it
-      // has moved further into profit.
       double breakEvenFloor=FlipLockBreakEvenFloorPrice(direction,openPrice);
       if(direction>0)
          candidate=MathMax(candidate,breakEvenFloor);
@@ -570,25 +589,38 @@ bool FlipLockSyncBaton(const ulong positionTicket,const int direction,const doub
       return false;
    }
 
-   // V5 is reactive: never pre-place BUY STOP / SELL STOP. Any stale pending
-   // left by an older runtime is removed before the trailing lock is managed.
    FlipLockRemoveAllPending();
 
    double trigger=g_flipLockTriggerPrice;
-   double moveThreshold=MathMax(2.0,FlipLockTrailDistancePoints()*0.10)*_Point;
-   bool stopNeedsUpdate=currentSl<=0.0 || MathAbs(currentSl-trigger)>=moveThreshold;
+   double tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   if(tickSize<=0.0) tickSize=_Point;
+   double moveThreshold=MathMax(_Point,tickSize);
+   bool stopImproved=currentSl<=0.0 ||
+      (direction>0
+         ? trigger>=currentSl+moveThreshold-1e-12
+         : trigger<=currentSl-moveThreshold+1e-12);
 
-   // Once armed, the SL follows price in one direction only because
-   // g_flipLockTriggerPrice is monotonic (MathMax for BUY / MathMin for SELL).
-   if(stopNeedsUpdate && !FlipLockSetPositionStop(positionTicket,trigger))
+   ulong nowMs=GetTickCount64();
+   bool syncReady=
+      g_flipLockLastStopSyncMs==0 ||
+      nowMs-g_flipLockLastStopSyncMs>=FLIP_LOCK_STOP_SYNC_MIN_MS;
+   bool urgentMove=currentSl<=0.0 || MathAbs(currentSl-trigger)>=moveThreshold*3.0;
+
+   // Track the MT5 quote aggressively, but avoid flooding the broker with
+   // multiple SLTP requests inside the same ~120 ms burst.
+   if(stopImproved && (syncReady || urgentMove))
    {
-      g_flipLockReason="SL_TRAIL_RETRY";
-      g_executionStatus="FLIP_LOCK_SL_TRAIL_RETRY";
-      return false;
+      if(!FlipLockSetPositionStop(positionTicket,trigger))
+      {
+         g_flipLockReason="SL_TRAIL_RETRY";
+         g_executionStatus="FLIP_LOCK_SL_TRAIL_RETRY";
+         return false;
+      }
+      g_flipLockLastStopSyncMs=nowMs;
    }
 
    g_flipLockArmed=true;
-   g_flipLockReason="PROFIT_TRAIL_ARMED";
+   g_flipLockReason="LOCAL_PROFIT_TRAIL_ARMED";
    g_executionStatus=direction>0 ? "FLIP_LOCK_BUY_TRAILING" : "FLIP_LOCK_SELL_TRAILING";
    return true;
 }
@@ -644,61 +676,55 @@ void FlipLockManage()
 
    if(!selected && !ownsLivePosition)
    {
-      // No FLIP-owned live exposure remains. Cleanup is safe now.
       FlipLockRemoveAllPending();
       FlipLockResetTracking(true);
       return;
    }
 
-   if(!selected && ownsLivePosition)
-   {
-      // A transient/stale settings heartbeat must never hand a tagged FLIP
-      // position to AUTO/RACE generic management. Remove the reversal pending
-      // and leave the live position protected by its own broker-side SL until
-      // FLIP mode is restored or the user explicitly closes/stops it.
-      FlipLockRemoveAllPending();
-      g_flipLockReason="WAIT_MODE_RESTORE";
-      g_executionStatus="FLIP_LOCK_WAIT_MODE_RESTORE";
-      return;
-   }
-
-   if(g_state!=STATE_RUNNING || !g_access || !g_runAuthorized)
-   {
-      FlipLockRemoveAllPending();
-      if(BasketPositionCount()<=0)
-      {
-         // Stop/authorization loss ends the current baton run. A later Start
-         // must choose a fresh starter side and begin a fresh per-run loss budget.
-         FlipLockResetTracking(true);
-         ResetBasketCycleState();
-      }
-      g_flipLockReason="WAIT_RUN_AUTHORIZATION";
-      return;
-   }
-
    int count=BasketPositionCount();
+   bool canOpenNewCycle=
+      selected &&
+      g_state==STATE_RUNNING &&
+      g_access &&
+      g_runAuthorized &&
+      g_settingsSynchronized &&
+      EntryLeaseValid() &&
+      TradePermissionStatus()=="OK";
+
    if(count<=0)
    {
       if(g_flipLockLastFlatAt<=0) g_flipLockLastFlatAt=TimeCurrent();
+
+      // Server/control state governs NEW exposure only. Never create a new FLIP
+      // position while stopped/offline/not selected.
+      if(!canOpenNewCycle)
+      {
+         FlipLockRemoveAllPending();
+         g_flipLockReason="WAIT_RUN_AUTHORIZATION";
+         g_executionStatus=selected
+            ? "FLIP_LOCK_WAIT_RUN_AUTHORIZATION"
+            : "FLIP_LOCK_STOPPED_FLAT";
+         return;
+      }
+
       FlipLockManageFlatState();
       return;
    }
+
    g_flipLockLastFlatAt=0;
    g_flipLockFlatPendingSince=0;
 
-   if(!BasketHasFlipLockPosition())
+   if(!ownsLivePosition)
    {
-      // A foreign AUTO/MANUAL position is not converted into a FLIP LOCK
-      // position. Remove any stale baton and wait until the prior owner is flat.
       FlipLockRemoveAllPending();
       g_flipLockReason="WAIT_FOREIGN_POSITION";
       g_executionStatus="FLIP_LOCK_WAIT_EXISTING_POSITION";
       return;
    }
 
-   // The reference behaviour is exactly one live market position.  During the
-   // few milliseconds in which a broker reports both sides, do not add or trail
-   // anything; the paired SL/pending settlement is allowed to finish first.
+   // A live FLIP-owned position is always protected from the local MT5 quote.
+   // Mode switches, heartbeat latency, lost SaaS access or stale authorization
+   // may block RE-ENTRY, but must never freeze the current broker SL.
    if(count!=1)
    {
       g_flipLockReason="WAIT_SINGLE_POSITION";
@@ -729,6 +755,7 @@ void FlipLockManage()
       g_flipLockPeakPrice=executablePrice;
       g_flipLockTriggerPrice=0.0;
       g_flipLockArmed=false;
+      g_flipLockLastStopSyncMs=0;
    }
 
    if(direction>0)

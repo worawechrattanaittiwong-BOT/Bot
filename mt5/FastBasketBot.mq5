@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.39"
-#define SCENOVA_EA_VERSION "1.0.39"
-#define SCENOVA_PRODUCT_VERSION "1.0.39"
+#property version   "1.0.40"
+#define SCENOVA_EA_VERSION "1.0.40"
+#define SCENOVA_PRODUCT_VERSION "1.0.40"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -161,6 +161,12 @@ input string          InpEngineMode           = "AUTO";
 // default so the web's 0.50 close-all target also has a safe EA fallback.
 input bool            InpRaceCloseAllProfitEnabled = true;
 input double          InpRaceCloseAllProfitMoney = 0.50;
+#define LOCAL_EXECUTION_PLANE_V1 "MT5_TICK_DIRECT_V1"
+#define LOCAL_EXECUTION_NETWORK_QUIET_MS 300
+#define LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS 5000
+#define LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS 250
+#define LOCAL_DYNAMIC_PROTECTION_INTERVAL_MS 150
+#define DEFERRED_DEAL_JOURNAL_MAX 256
 #define AUTO_V21_POLICY "AUTO_V21_BALANCED_EXIT_V1"
 #define AUTO_V21_EXIT_CYCLE_GRACE_SECONDS 30
 #define AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS 15
@@ -245,6 +251,7 @@ datetime g_orderWindowStart = 0;
 int    g_ordersInWindow = 0;
 datetime g_lastHeartbeat = 0;
 ulong  g_lastHeartbeatTickMs = 0;
+ulong  g_lastMarketTickMs = 0;
 datetime g_lastSuccessfulHeartbeat = 0;
 datetime g_lastRunAuthorization = 0;
 datetime g_lastServerContactAt = 0;
@@ -778,8 +785,12 @@ datetime g_ladderPullbackArmedAt = 0;
 string g_ladderMode = "IDLE";
 double g_dynamicStopPrice = 0.0;
 double g_dynamicTakeProfitPrice = 0.0;
-datetime g_lastDynamicProtectionAt = 0;
+ulong  g_lastDynamicProtectionTickMs = 0;
 int    g_journalSent = 0;
+ulong  g_deferredJournalTickets[DEFERRED_DEAL_JOURNAL_MAX];
+bool   g_deferredJournalRescue[DEFERRED_DEAL_JOURNAL_MAX];
+int    g_deferredJournalHead = 0;
+int    g_deferredJournalCount = 0;
 int    g_journalFailed = 0;
 string g_sessionProfile = "UNKNOWN";
 bool   g_spreadProfileRestored = false;
@@ -3752,6 +3763,9 @@ bool ManageRaceBasket(double momentum)
 
 void OnTick()
 {
+   // Local execution clock: all price-sensitive management reads the MT5 tick
+   // directly. SaaS heartbeat/telemetry is never a price source for trading.
+   g_lastMarketTickMs=GetTickCount64();
    SampleSpread();
    RaceSampleVolumePressure();
    bool zeroGridFastPath =
@@ -4358,45 +4372,84 @@ void OnTimer()
       return;
    }
 
-   // TimeCurrent() can freeze when a broker is not producing ticks (weekend /
-   // closed session). Drive the transport heartbeat from a monotonic terminal
-   // clock instead. This keeps SaaS connectivity truthful without generating
-   // any trading activity while the market is closed.
-   ulong heartbeatNowMs = GetTickCount64();
-   ulong heartbeatIntervalMs = (ulong)MathMax(1, InpHeartbeatSeconds) * 1000;
-   if(g_lastHeartbeatTickMs == 0 ||
-      heartbeatNowMs - g_lastHeartbeatTickMs >= heartbeatIntervalMs)
-   {
-      g_lastHeartbeatTickMs = heartbeatNowMs;
-      g_lastHeartbeat = TimeCurrent();
-      SendHeartbeat();
-   }
-   FlushPendingBasketJournal();
+   // LOCAL EXECUTION PLANE: broker/price management always runs before any
+   // synchronous HTTP. Existing FLIP exposure is protected locally even when
+   // SaaS is slow; flat FLIP entries remain tick-driven in OnTick.
+   if(BasketHasFlipLockPosition())
+      FlipLockManage();
 
-   // FLIP LOCK V2 also owns cleanup.  Always call it so a mode switch
-   // cannot leave an orphan BUY STOP / SELL STOP at the broker.
-   FlipLockManage();
-
-   // ZERO_GRID_TIMER_MAINTENANCE_V116: ZERO is isolated from AUTO/RACE and may
-   // finalize an async close or finish/retry its exact paired ladder from the
-   // 200ms timer instead of waiting for another market tick.
-   bool zeroTimerOwnsRuntime =
+   // Existing ZERO exposure/pending ladder also gets local maintenance before
+   // transport work. Starting a brand-new flat ZERO cycle still waits for the
+   // normal control/authorization path below/OnTick.
+   bool zeroTimerOwnsExposure =
       g_zeroGridClosing ||
       ZeroGridPositionCount()>0 ||
-      ZeroGridPendingCount()>0 ||
-      (ZeroGridModeEnabled() && BasketPositionCount()<=0 && RescuePositionCount()<=0);
-   if(g_settingsSynchronized && zeroTimerOwnsRuntime)
+      ZeroGridPendingCount()>0;
+   if(g_settingsSynchronized && zeroTimerOwnsExposure)
+      ManageZeroGrid();
+
+   ulong heartbeatNowMs=GetTickCount64();
+   ulong heartbeatIntervalMs=(ulong)MathMax(1,InpHeartbeatSeconds)*1000;
+   bool heartbeatDue =
+      g_lastHeartbeatTickMs==0 ||
+      heartbeatNowMs-g_lastHeartbeatTickMs>=heartbeatIntervalMs;
+   bool localExposure=LocalExecutionExposureActive();
+   bool marketBusy =
+      localExposure &&
+      g_lastMarketTickMs>0 &&
+      heartbeatNowMs>=g_lastMarketTickMs &&
+      heartbeatNowMs-g_lastMarketTickMs<LOCAL_EXECUTION_NETWORK_QUIET_MS;
+   bool heartbeatOverdue =
+      g_lastHeartbeatTickMs==0 ||
+      heartbeatNowMs-g_lastHeartbeatTickMs>=
+         heartbeatIntervalMs+LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS;
+   bool allowNetworkNow=!marketBusy || heartbeatOverdue;
+   bool networkUsed=false;
+
+   // Heartbeat is control/telemetry only. During active execution it yields to
+   // fast ticks for a bounded defer window, then uses a short HTTP timeout.
+   if(heartbeatDue && allowNetworkNow)
    {
-      if(g_zeroGridClosing ||
-         (ZeroGridModeEnabled() && g_state==STATE_RUNNING && g_access && TradePermissionStatus()=="OK"))
-         ManageZeroGrid();
+      g_lastHeartbeatTickMs=heartbeatNowMs;
+      g_lastHeartbeat=TimeCurrent();
+      SendHeartbeat();
+      networkUsed=true;
    }
 
+   // Journals are best-effort observability. Never stack multiple HTTP calls in
+   // one timer pass and never send them while the market tick stream is busy.
+   if(!networkUsed && allowNetworkNow)
+   {
+      if(g_deferredJournalCount>0)
+      {
+         FlushOneDeferredDealJournal();
+         networkUsed=true;
+      }
+      else if(g_pendingBasketJournal)
+      {
+         FlushPendingBasketJournal();
+         networkUsed=true;
+      }
+   }
+
+   // New MANUAL/legacy exposure remains server-authorized. Unlike local
+   // protection above, never move basket fill/rearm ahead of the latest control work.
    if(LegacyBasketEngineEnabled())
    {
       BrainV16RearmExistingBasket();
       ProcessBurstQueue();
    }
+
+   // Flat ZERO may be started/rearmed only after the latest control work.
+   bool zeroTimerCanStart =
+      !zeroTimerOwnsExposure &&
+      ZeroGridModeEnabled() &&
+      BasketPositionCount()<=0 &&
+      RescuePositionCount()<=0;
+   if(g_settingsSynchronized && zeroTimerCanStart &&
+      g_state==STATE_RUNNING && g_access && TradePermissionStatus()=="OK")
+      ManageZeroGrid();
+
    RefreshChartStatus();
 }
 
@@ -4431,7 +4484,7 @@ void OnTradeTransaction(
 
       RecalculateDailyClosedProfit();
       SaveRescueState();
-      PostRescueJournalDeal(trans.deal);
+      QueueDeferredDealJournal(trans.deal,true);
 
       long rescueEntry = HistoryDealGetInteger(trans.deal,DEAL_ENTRY);
       if((rescueEntry == DEAL_ENTRY_OUT ||
@@ -4449,9 +4502,9 @@ void OnTradeTransaction(
       RecalculateDailyClosedProfit();
       TrackBasketJournalDeal(trans.deal);
 
-      // Journal is best-effort observability only. A network/database failure
-      // must never change trading state or block order execution.
-      PostTradeJournalDeal(trans.deal);
+      // Journal is best-effort observability only. Queue the immutable deal
+      // ticket and return immediately; HTTP is flushed later from OnTimer.
+      QueueDeferredDealJournal(trans.deal,false);
 
       long dealEntry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
       if(BasketFillEnabled() &&
@@ -4600,6 +4653,62 @@ string MarketWatchSymbolsJson()
       added++;
    }
    return json + "]";
+}
+
+bool LocalExecutionExposureActive()
+{
+   return BasketPositionCount()>0 ||
+          RescuePositionCount()>0 ||
+          ZeroGridPositionCount()>0 ||
+          ZeroGridPendingCount()>0 ||
+          g_zeroGridClosing;
+}
+
+int ExecutionAwareHttpTimeoutMs(const int flatTimeoutMs)
+{
+   if(LocalExecutionExposureActive())
+      return LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS;
+   return MathMax(LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS,flatTimeoutMs);
+}
+
+void QueueDeferredDealJournal(const ulong dealTicket,const bool rescueDeal)
+{
+   if(dealTicket==0 || MQLInfoInteger(MQL_TESTER))
+      return;
+
+   if(g_deferredJournalCount>=DEFERRED_DEAL_JOURNAL_MAX)
+   {
+      // Telemetry must never back-pressure execution. Drop the oldest event if
+      // the network has been unavailable for an unusually long active run.
+      g_deferredJournalHead=(g_deferredJournalHead+1)%DEFERRED_DEAL_JOURNAL_MAX;
+      g_deferredJournalCount--;
+      g_journalFailed++;
+   }
+
+   int slot=(g_deferredJournalHead+g_deferredJournalCount)%DEFERRED_DEAL_JOURNAL_MAX;
+   g_deferredJournalTickets[slot]=dealTicket;
+   g_deferredJournalRescue[slot]=rescueDeal;
+   g_deferredJournalCount++;
+}
+
+void FlushOneDeferredDealJournal()
+{
+   if(g_deferredJournalCount<=0)
+      return;
+
+   int slot=g_deferredJournalHead;
+   ulong ticket=g_deferredJournalTickets[slot];
+   bool rescueDeal=g_deferredJournalRescue[slot];
+
+   g_deferredJournalTickets[slot]=0;
+   g_deferredJournalRescue[slot]=false;
+   g_deferredJournalHead=(g_deferredJournalHead+1)%DEFERRED_DEAL_JOURNAL_MAX;
+   g_deferredJournalCount--;
+
+   if(rescueDeal)
+      PostRescueJournalDeal(ticket);
+   else
+      PostTradeJournalDeal(ticket);
 }
 
 void SendHeartbeat()
@@ -5125,7 +5234,7 @@ void SendHeartbeat()
       string marketAskText = marketTickReady ? DoubleToString(marketTick.ask, marketDigits) : "0";
       string marketMidText = marketTickReady ? DoubleToString((marketTick.bid + marketTick.ask) * 0.5, marketDigits) : "0";
       string marketSessionDiagnostics = StringFormat(
-         ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s,\"marketBid\":%s,\"marketAsk\":%s,\"marketMid\":%s,\"runtimeContract\":\"%s\",\"zeroGridConfiguredLevelsPerSide\":%d,\"zeroGridEffectiveLevelsPerSide\":%d,\"zeroGridMaxLevelsPerSide\":%d,\"zeroGridCycleActive\":%s}}",
+         ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s,\"marketBid\":%s,\"marketAsk\":%s,\"marketMid\":%s,\"executionPriceSource\":\"MT5_LOCAL_TICK\",\"serverPriceControl\":false,\"runtimeContract\":\"%s\",\"zeroGridConfiguredLevelsPerSide\":%d,\"zeroGridEffectiveLevelsPerSide\":%d,\"zeroGridMaxLevelsPerSide\":%d,\"zeroGridCycleActive\":%s}}",
          marketSessionState,
          marketSessionState == "OPEN" ? "true" : "false",
          marketBidText,
@@ -5152,7 +5261,12 @@ void SendHeartbeat()
 
    string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";
    ulong heartbeatStartedMs = GetTickCount64();
-   int code = HttpPostJson(heartbeatUrl, payload, response);
+   int code=HttpPostJsonTimeout(
+      heartbeatUrl,
+      payload,
+      response,
+      ExecutionAwareHttpTimeoutMs(1200)
+   );
    g_lastHeartbeatLatencyMs = (long)(GetTickCount64() - heartbeatStartedMs);
    g_lastHeartbeatHttpStatus = code;
    if(code > 0)
@@ -5337,7 +5451,12 @@ void AckCommand(long commandId)
       g_executionStatus
    );
    string response = "";
-   HttpPostJson(InpApiBase + "/api/ea/ack", payload, response);
+   HttpPostJsonTimeout(
+      InpApiBase + "/api/ea/ack",
+      payload,
+      response,
+      ExecutionAwareHttpTimeoutMs(500)
+   );
 }
 
 int HttpPostJsonTimeout(string url, string payload, string &response, int timeoutMs)
@@ -5456,7 +5575,12 @@ void PostTradeJournalDeal(ulong dealTicket)
    }
 
    string response = "";
-   int code = HttpPostJsonTimeout(InpApiBase + "/api/ea/journal", payload, response, 650);
+   int code=HttpPostJsonTimeout(
+      InpApiBase + "/api/ea/journal",
+      payload,
+      response,
+      ExecutionAwareHttpTimeoutMs(650)
+   );
    if(code >= 200 && code < 300)
       g_journalSent++;
    else
@@ -5510,7 +5634,12 @@ void PostRescueJournalDeal(ulong dealTicket)
    );
 
    string response="";
-   int code=HttpPostJsonTimeout(InpApiBase+"/api/ea/journal",payload,response,650);
+   int code=HttpPostJsonTimeout(
+      InpApiBase+"/api/ea/journal",
+      payload,
+      response,
+      ExecutionAwareHttpTimeoutMs(650)
+   );
    if(code>=200 && code<300)
       g_journalSent++;
    else
@@ -5813,7 +5942,12 @@ void FlushPendingBasketJournal()
    }
 
    string response = "";
-   int code = HttpPostJsonTimeout(InpApiBase + "/api/ea/journal", payload, response, 650);
+   int code=HttpPostJsonTimeout(
+      InpApiBase + "/api/ea/journal",
+      payload,
+      response,
+      ExecutionAwareHttpTimeoutMs(650)
+   );
    if(code >= 200 && code < 300)
    {
       g_journalSent++;
@@ -16456,10 +16590,11 @@ bool ModifyPositionProtection(ulong ticket, double sl, double tp)
 
 void ManageDynamicProtection()
 {
-   datetime now = TimeCurrent();
-   if(g_lastDynamicProtectionAt > 0 && now - g_lastDynamicProtectionAt < 2)
+   ulong nowMs=GetTickCount64();
+   if(g_lastDynamicProtectionTickMs>0 &&
+      nowMs-g_lastDynamicProtectionTickMs<LOCAL_DYNAMIC_PROTECTION_INTERVAL_MS)
       return;
-   g_lastDynamicProtectionAt = now;
+   g_lastDynamicProtectionTickMs=nowMs;
 
    int count = BasketPositionCount();
    if(count <= 0)

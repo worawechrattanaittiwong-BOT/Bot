@@ -3293,7 +3293,7 @@ function BotSettingsModal(props:any) {
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง ไม่รับช่วง Position จาก FLIP LOCK, RACE, ZERO GRID หรือ MANUAL"},
-    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"เริ่มกักกำไรที่ $0.25 ต่อ 0.01 Lot แล้วเลื่อน SL ตามราคา · หลังปิดกำไร/ชน Trailing SL จะอ่านแรงแท่งก่อนเข้า Market ใหม่ทันที"},
+    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"อ่านราคา MT5 โดยตรง · เมื่อกำไรบวกมากพอให้ Broker วาง SL ฝั่งกำไรได้ จะยก SL และไล่ตาม Tick โดยไม่รอราคา/คำสั่งจาก Server"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
     MANUAL:{title:"MANUAL",subtitle:"โหมดตั้งค่าด้วยตนเอง ใช้เป้ากำไรและ Stop ของ MANUAL เอง และไม่ส่ง Position ให้ AUTO V20 จัดการ"}
@@ -3377,16 +3377,15 @@ function BotSettingsModal(props:any) {
   const manualTrailEnabled = Number(props.settings?.profitRunTrailPercent || 0) > 0;
   const manualStopEnabled = Number(props.settings?.manualStopLossPoints || 0) > 0;
   const updateOptionalValue = (key:string,value:any) => props.onEdit?.(key,value);
-  const flipLockArmMoney = 0.25 * (Math.max(0.01, activeLot) / 0.01);
   const exitLabel = controlMode === "FLIP_LOCK"
-    ? "Trailing SL หลังถึง $"+flipLockArmMoney.toFixed(2)
+    ? "Trailing SL จากราคา MT5 โดยตรง"
     : controlMode === "RACE"
       ? (raceCloseAllProfitEnabled ? "ปิดทั้งหมดที่ +$"+raceCloseAllProfitMoney.toFixed(2) : "ระบบรักษากำไรแบบไดนามิก")
       : controlMode === "MANUAL"
         ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")
         : "ระบบรักษากำไรแบบไดนามิก";
   const slLabel = controlMode === "FLIP_LOCK"
-    ? "Safety Stop ก่อน · Trailing หลังถึงเป้ากำไร"
+    ? "Safety Stop ก่อน · ยก SL เมื่อ Broker ล็อกกำไรได้"
     : controlMode === "MANUAL"
       ? Number(manualSl).toFixed(0)+" points"
       : "ATR × 2.00";
@@ -3427,8 +3426,9 @@ function BotSettingsModal(props:any) {
           <div className="cc-bot-v17-contract-copy" aria-hidden="true">
             <span>AUTO Ownership · ไม่รับไม้ของโหมดอื่นมาจัดการต่อ</span>
             <span>MANUAL Ownership</span>
-            <span>$0.25 ต่อ 0.01 Lot</span>
-            <span>Safety Stop → Trailing SL ขยับตามราคาอย่างเดียว</span>
+            <span>MT5 Local Tick · Server ไม่กำหนดราคา SL</span>
+            <span>ราคา / SL / TP / Exit บริหารใน MT5 โดยตรงทุกโหมด</span>
+            <span>Safety Stop → Trailing SL ขยับตามราคา MT5</span>
             <span>ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า</span>
           </div>
           <section className="cc-bot-v2-mode-section">
@@ -3488,7 +3488,7 @@ function BotSettingsModal(props:any) {
                   </>}
                 </div>
                 <div className="cc-bot-v17-hidden-engine">{controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
-                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position เท่านั้น · ไม่มี Pending BUY/SELL STOP ล่วงหน้า · เริ่ม Trail เมื่อกำไรถึง $0.25 ต่อ 0.01 Lot และประเมินแรงแท่งก่อนเข้า Market รอบถัดไป</span></div>
+                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position เท่านั้น · ไม่มี Pending BUY/SELL STOP ล่วงหน้า · SL อ่านราคา MT5 โดยตรงและเริ่มล็อกกำไรทันทีที่ Broker อนุญาต · Server ควบคุมเฉพาะ Start/Stop/Settings</span></div>
                   : controlMode==="AUTO"
                     ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO Ownership</b><span>Vector Edge / V20 จัดการเฉพาะ Position ที่ติดแท็ก AUTO เท่านั้น · ไม่รับไม้ของโหมดอื่นมาจัดการต่อ</span></div>
                     : controlMode==="MANUAL"
