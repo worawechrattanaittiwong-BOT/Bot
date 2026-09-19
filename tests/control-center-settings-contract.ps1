@@ -196,3 +196,13 @@ Need $css 'height:356px!important;' 'Bot Settings body must fit the 400px MANUAL
 Need $css '--settings-row:36px' 'All modes must keep MANUAL-style compact spacing'
 Need $css 'max-height:318px!important;' 'Running Positions must scroll inside the 400px card'
 Need $css 'max-height:338px!important;' 'Performance must scroll inside the 400px card'
+
+Need $css 'Control Center V31 · 380px cards + MANUAL spacing for every mode' 'V31 compact-all-modes marker missing'
+Need $css 'height:380px!important;' 'All three cards must use the shortened 380px shell'
+Need $css 'max-height:380px!important;' 'No card may stretch beyond 380px'
+Need $css 'height:336px!important;' 'Settings body must retain a scrollable 336px viewport'
+Need $css '--settings-row:38px' 'Every mode must use the MANUAL 38px row rhythm'
+Need $css '--settings-control-h:32px' 'Every mode must use the MANUAL 32px control height'
+Need $css '.cc-v19-settings-card .cc-bot-v2-fields{' 'All mode field containers must share zero-gap compact layout'
+Need $css 'max-height:298px!important;' 'Running Positions must scroll inside shortened card'
+Need $css 'max-height:318px!important;' 'Performance must scroll inside shortened card'
