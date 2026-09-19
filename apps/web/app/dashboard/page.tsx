@@ -1901,7 +1901,7 @@ export default function DashboardPage() {
           !data.account ? (
             <EmptySetup onNext={()=>setActiveView("account")} />
           ) : (
-            <div className="cc-overview cc-v3 cc-v4 cc-v12 cc-v15">
+            <div className="cc-overview cc-v3 cc-v4 cc-v12 cc-v15 cc-v47">
               <div className="cc-v4-ambient" aria-hidden="true"><i/><i/><i/></div>
               {marketSessionClosed ? (
                 <div className="cc-connect-alert">
@@ -1930,7 +1930,12 @@ export default function DashboardPage() {
                 <LiveTelemetryItem icon="shield" label="Execution" value={Number(metrics.executionQuality||0)>0?Number(metrics.executionQuality).toFixed(0)+"%":"—"} tone={Number(metrics.executionQuality||0)>=80?"good":"neutral"}/>
               </section>
 
-              <section className={"panel cc-v6-hero "+(state === "RUNNING" ? "is-running" : "is-idle")}>
+              <section className={"panel cc-v6-hero cc-v47-command-bar "+(state === "RUNNING" ? "is-running" : "is-idle")}>
+                <div className="cc-v47-brand-lockup">
+                  <ScenovaBrand className="cc-v47-brand-logo"/>
+                  <span>LIVE EXECUTION</span>
+                </div>
+
                 <div className="cc-v6-hero-main">
                   <div className="cc-v6-gold-stage"><ScenovaIcon name="gold" size={52}/><i/><i/></div>
                   <div className="cc-v6-symbol-copy">
@@ -1959,6 +1964,14 @@ export default function DashboardPage() {
                         <ScenovaIcon name="refresh" size={12}/>{checkingVersion ? "กำลังตรวจ..." : "ตรวจสอบเวอร์ชัน"}
                       </button>
                     </div>
+                  </div>
+                </div>
+
+                <div className={"cc-v47-live-state "+(state === "RUNNING" ? "running" : marketSessionClosed ? "waiting" : "idle")}>
+                  <i/>
+                  <div>
+                    <b>{state === "RUNNING" ? "Live Execution" : marketSessionClosed ? "Waiting Session" : "Ready"}</b>
+                    <small>{isMt5Online ? "Connected · "+(state === "RUNNING" ? "Trading" : "Standby") : "Waiting for MT5"}</small>
                   </div>
                 </div>
 
@@ -2930,7 +2943,7 @@ function Metric({label,value,positive}:{label:string;value:string;positive?:bool
 }
 
 function DashboardMetric({icon,label,value,sub,tone="neutral"}:{icon:string;label:string;value:string;sub?:string;tone?:"neutral"|"good"|"warn"|"bad"}) {
-  return <div className={"cc-kpi cc-tone-"+tone}><span className="cc-kpi-icon"><ScenovaIcon name={icon} size={22}/></span><div><span className="cc-kpi-label">{label}</span><b>{value}</b>{sub?<small>{sub}</small>:null}</div></div>;
+  return <div className={"cc-kpi cc-tone-"+tone}><span className="cc-kpi-icon"><ScenovaIcon name={icon} size={22}/></span><div><span className="cc-kpi-label">{label}</span><b>{value}</b>{sub?<small>{sub}</small>:null}</div><i className="cc-kpi-trace" aria-hidden="true"/></div>;
 }
 
 function LiveTelemetryItem({icon,label,value,tone="neutral"}:{icon:string;label:string;value:string;tone?:"neutral"|"good"|"warn"|"bad"}) {
