@@ -1,8 +1,8 @@
 #property strict
-#property version   "1.0.34"
-#define SCENOVA_EA_VERSION "1.0.34"
-#define SCENOVA_PRODUCT_VERSION "1.0.34"
-#define SCENOVA_RUNTIME_CONTRACT "RACE_VOLUME_10S_ADVERSE_EXIT_V3"
+#property version   "1.0.35"
+#define SCENOVA_EA_VERSION "1.0.35"
+#define SCENOVA_PRODUCT_VERSION "1.0.35"
+#define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -162,6 +162,11 @@ input string          InpEngineMode           = "AUTO";
 input bool            InpRaceCloseAllProfitEnabled = true;
 input double          InpRaceCloseAllProfitMoney = 0.50;
 #define RACE_VOLUME_WINDOW_SECONDS 10
+#define RACE_VOLUME_HISTORY_SECONDS 30
+#define RACE_EXIT_CYCLE_GRACE_SECONDS 20
+#define RACE_EXIT_LAST_FILL_GRACE_SECONDS 15
+#define RACE_EXIT_CONFIRM_SECONDS 12
+#define RACE_EXIT_SEVERE_CONFIRM_SECONDS 8
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
 #define ZERO_GRID_MAX_LEVELS 30
 #define ZERO_GRID_DEFAULT_LEVELS 3
@@ -316,15 +321,18 @@ bool   g_raceProfitArmed = false;
 bool   g_raceRecoveryWatch = false;
 string g_raceState = "IDLE";
 datetime g_raceCycleStartedAt = 0;
+datetime g_raceLastFillAt = 0;
+datetime g_raceExitCandidateSince = 0;
+double g_raceExitCandidatePeakAdverse = 0.0;
 bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
 // RACE uses a rolling 10-second order-flow window. Exchange/deal-side flags
 // are used when the broker publishes them; quote-only symbols fall back to
 // uptick/downtick tick-volume counts. No trend/EMA/timeframe signal decides side.
-datetime g_raceVolumeBucketSecond[RACE_VOLUME_WINDOW_SECONDS];
-double   g_raceVolumeBucketBuy[RACE_VOLUME_WINDOW_SECONDS];
-double   g_raceVolumeBucketSell[RACE_VOLUME_WINDOW_SECONDS];
-int      g_raceVolumeBucketSamples[RACE_VOLUME_WINDOW_SECONDS];
+datetime g_raceVolumeBucketSecond[RACE_VOLUME_HISTORY_SECONDS];
+double   g_raceVolumeBucketBuy[RACE_VOLUME_HISTORY_SECONDS];
+double   g_raceVolumeBucketSell[RACE_VOLUME_HISTORY_SECONDS];
+int      g_raceVolumeBucketSamples[RACE_VOLUME_HISTORY_SECONDS];
 datetime g_raceVolumeWarmupStartedAt = 0;
 datetime g_raceVolumeLastSampleAt = 0;
 double   g_raceVolumeLastMid = 0.0;
@@ -2824,6 +2832,12 @@ bool BasketHasRacePosition()
    return false;
 }
 
+void RaceResetExitCandidate()
+{
+   g_raceExitCandidateSince = 0;
+   g_raceExitCandidatePeakAdverse = 0.0;
+}
+
 void ResetRaceRuntime()
 {
    g_raceDirection = 0;
@@ -2832,6 +2846,8 @@ void ResetRaceRuntime()
    g_raceRecoveryWatch = false;
    g_raceState = "IDLE";
    g_raceCycleStartedAt = 0;
+   g_raceLastFillAt = 0;
+   RaceResetExitCandidate();
 }
 
 int RaceFilledUnits()
@@ -2861,7 +2877,7 @@ int RaceFilledUnits()
 
 void RaceResetVolumeWindow(datetime now)
 {
-   for(int i=0;i<RACE_VOLUME_WINDOW_SECONDS;i++)
+   for(int i=0;i<RACE_VOLUME_HISTORY_SECONDS;i++)
    {
       g_raceVolumeBucketSecond[i]=0;
       g_raceVolumeBucketBuy[i]=0.0;
@@ -2884,10 +2900,10 @@ void RaceSampleVolumePressure()
       return;
 
    if(g_raceVolumeWarmupStartedAt<=0 ||
-      (g_raceVolumeLastSampleAt>0 && now-g_raceVolumeLastSampleAt>RACE_VOLUME_WINDOW_SECONDS))
+      (g_raceVolumeLastSampleAt>0 && now-g_raceVolumeLastSampleAt>RACE_VOLUME_HISTORY_SECONDS))
       RaceResetVolumeWindow(now);
 
-   int slot=(int)((long)now % RACE_VOLUME_WINDOW_SECONDS);
+   int slot=(int)((long)now % RACE_VOLUME_HISTORY_SECONDS);
    if(g_raceVolumeBucketSecond[slot]!=now)
    {
       g_raceVolumeBucketSecond[slot]=now;
@@ -2934,21 +2950,27 @@ void RaceSampleVolumePressure()
    g_raceVolumeLastSampleAt=now;
 }
 
-void RaceVolumeSnapshot(double &buyPressure,double &sellPressure,int &samples)
+void RaceVolumeSnapshotWindow(int windowSeconds,double &buyPressure,double &sellPressure,int &samples)
 {
    buyPressure=0.0;
    sellPressure=0.0;
    samples=0;
+   int effectiveWindow=MathMax(1,MathMin(RACE_VOLUME_HISTORY_SECONDS,windowSeconds));
    datetime now=TimeCurrent();
-   for(int i=0;i<RACE_VOLUME_WINDOW_SECONDS;i++)
+   for(int i=0;i<RACE_VOLUME_HISTORY_SECONDS;i++)
    {
       datetime stamp=g_raceVolumeBucketSecond[i];
-      if(stamp<=0 || stamp>now || now-stamp>=RACE_VOLUME_WINDOW_SECONDS)
+      if(stamp<=0 || stamp>now || now-stamp>=effectiveWindow)
          continue;
       buyPressure+=g_raceVolumeBucketBuy[i];
       sellPressure+=g_raceVolumeBucketSell[i];
       samples+=g_raceVolumeBucketSamples[i];
    }
+}
+
+void RaceVolumeSnapshot(double &buyPressure,double &sellPressure,int &samples)
+{
+   RaceVolumeSnapshotWindow(RACE_VOLUME_WINDOW_SECONDS,buyPressure,sellPressure,samples);
 }
 
 bool RaceVolumeWindowReady()
@@ -3023,123 +3045,188 @@ bool RaceWrongDirectionConfirmed(
    if(direction == 0)
       return false;
 
-   // Never convert ordinary spread/noise into an instant loss exit. A RACE
-   // cycle gets a short grace period, then must show meaningful adverse travel
-   // from the basket anchor before any directional invalidation is considered.
+   datetime now = TimeCurrent();
+   bool candidateActive = g_raceExitCandidateSince > 0;
+
+   // V4 separates a temporary pullback from a persistent reversal. Broker SL
+   // and Max Basket Loss remain authoritative hard protection; this soft exit
+   // is disabled during startup and after every newly accepted RACE fill.
    if(g_raceCycleStartedAt <= 0 ||
-      TimeCurrent() - g_raceCycleStartedAt < 5)
+      now - g_raceCycleStartedAt < RACE_EXIT_CYCLE_GRACE_SECONDS ||
+      g_raceLastFillAt <= 0 ||
+      now - g_raceLastFillAt < RACE_EXIT_LAST_FILL_GRACE_SECONDS)
+   {
+      RaceResetExitCandidate();
       return false;
+   }
 
    double progress = RaceMidProgressPoints(direction);
    double adversePoints = -progress;
    if(adversePoints <= 0.0)
+   {
+      RaceResetExitCandidate();
       return false;
+   }
 
    double atrM1 = AverageTrueRangePoints(PERIOD_M1, g_atrPeriod);
    double atrM5 = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
    if(atrM1 <= 0.0 || atrM5 <= 0.0)
+   {
+      RaceResetExitCandidate();
       return false;
+   }
 
    double spread = CurrentSpreadPoints();
    if(spread <= 0.0 || spread >= 999999.0)
+   {
+      RaceResetExitCandidate();
       return false;
+   }
 
    double adverseFloor = MathMax(
-      spread * 2.50,
-      MathMax(atrM1 * 0.45, atrM5 * 0.16)
+      spread * 5.00,
+      MathMax(atrM1 * 0.90, atrM5 * 0.35)
    );
    if(filling)
       adverseFloor *= 1.10;
-   if(adversePoints < adverseFloor)
+
+   if(!candidateActive && adversePoints < adverseFloor)
       return false;
 
-   // The rolling 10-second pressure must have genuinely flipped against the
-   // open basket. Requiring several directional ticks plus a clear majority
-   // prevents one quote update from forcing a close.
-   double buyPressure = 0.0;
-   double sellPressure = 0.0;
-   int samples = 0;
-   RaceVolumeSnapshot(buyPressure, sellPressure, samples);
-   double totalPressure = buyPressure + sellPressure;
-   if(samples < 6 || totalPressure <= 0.0)
+   // Preserve the 10-second RACE entry side, but require a separate 30-second
+   // pressure history before a soft-loss exit can even become a candidate.
+   if(g_raceVolumeWarmupStartedAt <= 0 ||
+      now - g_raceVolumeWarmupStartedAt < RACE_VOLUME_HISTORY_SECONDS)
+   {
+      RaceResetExitCandidate();
       return false;
+   }
 
-   double oppositePressure = direction > 0 ? sellPressure : buyPressure;
-   double samePressure = direction > 0 ? buyPressure : sellPressure;
-   double oppositeShare = oppositePressure / totalPressure;
-   if(oppositePressure <= samePressure || oppositeShare < 0.62)
+   double fastBuy = 0.0;
+   double fastSell = 0.0;
+   int fastSamples = 0;
+   RaceVolumeSnapshotWindow(RACE_VOLUME_WINDOW_SECONDS,fastBuy,fastSell,fastSamples);
+
+   double slowBuy = 0.0;
+   double slowSell = 0.0;
+   int slowSamples = 0;
+   RaceVolumeSnapshotWindow(RACE_VOLUME_HISTORY_SECONDS,slowBuy,slowSell,slowSamples);
+
+   double fastTotal = fastBuy + fastSell;
+   double slowTotal = slowBuy + slowSell;
+   if(fastSamples < 8 || slowSamples < 18 || fastTotal <= 0.0 || slowTotal <= 0.0)
+   {
+      RaceResetExitCandidate();
       return false;
+   }
 
-   // Live M1 force: the body must point against the RACE side, occupy a
-   // meaningful part of the current candle range, and exceed spread/ATR noise.
-   double open0 = iOpen(_Symbol, PERIOD_M1, 0);
-   double close0 = iClose(_Symbol, PERIOD_M1, 0);
-   double high0 = iHigh(_Symbol, PERIOD_M1, 0);
-   double low0 = iLow(_Symbol, PERIOD_M1, 0);
-   double bodyPoints = (open0 > 0.0 && close0 > 0.0)
-      ? (close0 - open0) / _Point
+   double fastOpposite = direction > 0 ? fastSell : fastBuy;
+   double slowOpposite = direction > 0 ? slowSell : slowBuy;
+   double fastOppositeShare = fastOpposite / fastTotal;
+   double slowOppositeShare = slowOpposite / slowTotal;
+
+   // Entry into candidate state is strict; once active, hysteresis allows a
+   // modest pressure fade without instantly resetting or closing the basket.
+   double fastRequired = candidateActive ? 0.62 : 0.70;
+   double slowRequired = candidateActive ? 0.56 : 0.60;
+   if(fastOppositeShare < fastRequired || slowOppositeShare < slowRequired)
+   {
+      RaceResetExitCandidate();
+      return false;
+   }
+
+   // Use only the completed M1 candle. The mutable live candle was correlated
+   // with tick momentum and could falsely classify a short pullback as reversal.
+   double open1 = iOpen(_Symbol, PERIOD_M1, 1);
+   double close1 = iClose(_Symbol, PERIOD_M1, 1);
+   double high1 = iHigh(_Symbol, PERIOD_M1, 1);
+   double low1 = iLow(_Symbol, PERIOD_M1, 1);
+   double bodyPoints = (open1 > 0.0 && close1 > 0.0)
+      ? (close1 - open1) / _Point
       : 0.0;
-   double rangePoints = (high0 > 0.0 && low0 > 0.0 && high0 >= low0)
-      ? (high0 - low0) / _Point
+   double rangePoints = (high1 > 0.0 && low1 > 0.0 && high1 >= low1)
+      ? (high1 - low1) / _Point
       : 0.0;
    double adverseBodyPoints = -direction * bodyPoints;
    double bodyRatio = rangePoints > 0.0
       ? MathMin(1.0, MathMax(0.0, adverseBodyPoints / rangePoints))
       : 0.0;
-   bool m1OppositeForce =
-      adverseBodyPoints >= MathMax(spread * 0.75, atrM1 * 0.22) &&
-      bodyRatio >= 0.50;
+   bool m1ClosedOpposite =
+      adverseBodyPoints >= MathMax(spread * 1.00, atrM1 * 0.28) &&
+      bodyRatio >= 0.55;
 
-   // Tick momentum is independent evidence. A flat market cannot satisfy this.
    double adverseMomentum = -direction * momentum;
    bool momentumOpposite =
-      adverseMomentum >= MathMax(spread * 0.50, atrM1 * 0.18);
-
-   // Completed M5 is deliberately slower and is used as confirmation, not as
-   // the sole trigger, so a genuinely violent live reversal need not wait for
-   // the next five-minute close.
+      adverseMomentum >= MathMax(spread * 0.75, atrM1 * 0.25);
    bool m5Opposite = RaceM5CandleDirection() == -direction;
 
+   if(!m1ClosedOpposite || (!momentumOpposite && !m5Opposite))
+   {
+      RaceResetExitCandidate();
+      return false;
+   }
+
    double severeFloor = MathMax(
-      spread * 4.00,
-      MathMax(atrM1 * 0.85, atrM5 * 0.30)
+      spread * 8.00,
+      MathMax(atrM1 * 1.35, atrM5 * 0.65)
    );
-   if(filling)
-      severeFloor *= 1.05;
+   bool severe =
+      adversePoints >= severeFloor &&
+      fastOppositeShare >= 0.78 &&
+      slowOppositeShare >= 0.68;
 
-   if(adversePoints >= severeFloor &&
-      oppositeShare >= 0.68 &&
-      (momentumOpposite || m1OppositeForce))
+   if(!candidateActive)
    {
-      reasonOut = "RACE_ADVERSE_IMPULSE_SEVERE";
+      g_raceExitCandidateSince = now;
+      g_raceExitCandidatePeakAdverse = adversePoints;
+      g_raceRecoveryWatch = true;
       Print(
-         "RACE adverse exit severe adversePts=",DoubleToString(adversePoints,1),
-         " floor=",DoubleToString(severeFloor,1),
-         " oppShare=",DoubleToString(oppositeShare,2),
-         " momentumOpp=",momentumOpposite,
-         " m1Opp=",m1OppositeForce
-      );
-      return true;
-   }
-
-   int confirmations = 0;
-   if(momentumOpposite) confirmations++;
-   if(m1OppositeForce) confirmations++;
-   if(m5Opposite) confirmations++;
-
-   if(confirmations >= 2)
-   {
-      reasonOut = "RACE_ADVERSE_IMPULSE_CONFIRMED";
-      Print(
-         "RACE adverse exit confirmed adversePts=",DoubleToString(adversePoints,1),
+         "RACE reversal candidate adversePts=",DoubleToString(adversePoints,1),
          " floor=",DoubleToString(adverseFloor,1),
-         " oppShare=",DoubleToString(oppositeShare,2),
-         " confirmations=",confirmations
+         " fastOpp=",DoubleToString(fastOppositeShare,2),
+         " slowOpp=",DoubleToString(slowOppositeShare,2),
+         " severe=",severe
       );
-      return true;
+      return false;
    }
 
-   return false;
+   if(adversePoints > g_raceExitCandidatePeakAdverse)
+      g_raceExitCandidatePeakAdverse = adversePoints;
+
+   // Cancel when price reclaims 30% of the worst adverse excursion or moves
+   // materially back inside the adverse trigger floor.
+   bool rebound =
+      adversePoints <= g_raceExitCandidatePeakAdverse * 0.70 ||
+      adversePoints < adverseFloor * 0.75;
+   if(rebound)
+   {
+      Print(
+         "RACE reversal candidate cancelled by rebound adversePts=",
+         DoubleToString(adversePoints,1),
+         " peak=",DoubleToString(g_raceExitCandidatePeakAdverse,1)
+      );
+      RaceResetExitCandidate();
+      return false;
+   }
+
+   int requiredSeconds = severe
+      ? RACE_EXIT_SEVERE_CONFIRM_SECONDS
+      : RACE_EXIT_CONFIRM_SECONDS;
+   int candidateAge = (int)(now - g_raceExitCandidateSince);
+   if(candidateAge < requiredSeconds)
+      return false;
+
+   reasonOut = severe
+      ? "RACE_PERSISTENT_REVERSAL_SEVERE"
+      : "RACE_PERSISTENT_REVERSAL_CONFIRMED";
+   Print(
+      "RACE persistent reversal exit adversePts=",DoubleToString(adversePoints,1),
+      " fastOpp=",DoubleToString(fastOppositeShare,2),
+      " slowOpp=",DoubleToString(slowOppositeShare,2),
+      " candidateAge=",candidateAge,
+      " severe=",severe
+   );
+   return true;
 }
 
 bool RaceFlowStillRunning(int direction, double momentum)
@@ -3378,8 +3465,8 @@ bool ProcessRaceFill(int direction)
       return false;
    }
 
-   g_entryModel = "RACE_M5_ONE_CANDLE";
-   g_entryTrigger = direction > 0 ? "RACE_M5_BUY" : "RACE_M5_SELL";
+   g_entryModel = "RACE_VOLUME_10S";
+   g_entryTrigger = direction > 0 ? "RACE_VOLUME_BUY" : "RACE_VOLUME_SELL";
    g_entryQuality = "RACE";
    g_entryQualityScore = 0.0;
    g_raceDirection = direction;
@@ -3390,6 +3477,8 @@ bool ProcessRaceFill(int direction)
    RegisterOrderRequest();
    if(accepted)
    {
+      g_raceLastFillAt = TimeCurrent();
+      RaceResetExitCandidate();
       int after = RaceFilledUnits();
       g_raceState = after >= g_maxPositions ? "FULL" : "FILLING";
       g_executionStatus = after >= g_maxPositions
@@ -3473,16 +3562,29 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   // RACE_ADVERSE_IMPULSE_EXIT_V3: being negative is never enough by itself.
-   // Close a losing basket early only after price has travelled materially
-   // against the anchor AND the rolling 10-second pressure has flipped AND
-   // multiple live/closed-bar force signals confirm that the move is real.
+   // RACE_PERSISTENT_REVERSAL_EXIT_V4: a temporary pullback never closes the
+   // basket by itself. Hard loss/SL stay authoritative above; soft loss exit
+   // requires post-fill grace, fast+slow pressure, closed-bar confirmation and
+   // a persistent candidate window with rebound cancellation.
    string wrongDirectionReason = "NONE";
-   if(cycleProfit < 0.0 && floatingProfit < 0.0 &&
-      RaceWrongDirectionConfirmed(direction,momentum,filling,wrongDirectionReason))
+   if(cycleProfit < 0.0 && floatingProfit < 0.0)
    {
-      RaceCloseCycle(wrongDirectionReason);
-      return true;
+      if(RaceWrongDirectionConfirmed(direction,momentum,filling,wrongDirectionReason))
+      {
+         RaceCloseCycle(wrongDirectionReason);
+         return true;
+      }
+      if(g_raceExitCandidateSince > 0)
+      {
+         g_raceRecoveryWatch = true;
+         g_raceState = "EXIT_CANDIDATE";
+         g_executionStatus = "RACE_EXIT_CANDIDATE";
+         return true;
+      }
+   }
+   else
+   {
+      RaceResetExitCandidate();
    }
 
    // User-controlled RACE close-all target. This check intentionally runs
@@ -3518,11 +3620,10 @@ bool ManageRaceBasket(double momentum)
    }
 
 
-   // RACE_VOLUME_10S_ADVERSE_EXIT_V3: direction still comes from the rolling
+   // RACE_PERSISTENT_REVERSAL_EXIT_V4: direction still comes from the rolling
    // 10-second BUY/SELL pressure window. A simple pressure flip never adds on
-   // the stale side. A negative cycle normally waits, but the adverse-impulse
-   // guard above may cut it when price travel + pressure + force all confirm
-   // that the market is genuinely accelerating against the basket.
+   // the stale side. A negative cycle waits in recovery unless the persistent
+   // reversal guard above survives grace, slow confirmation and hysteresis.
    int volumeDirection = RaceAnalysisDirection(momentum);
    if(volumeDirection != 0 && volumeDirection != direction)
    {
