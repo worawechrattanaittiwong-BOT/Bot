@@ -3955,3 +3955,290 @@
   }
 }
 
+/* ===== Control Center V43 · fit lower suite to desktop viewport =====
+   Desktop-only sizing pass for the added V42 section. No bot logic or upper
+   Control Center layout is changed. The lower suite uses the exact remaining
+   viewport height and typography is raised to match the main workspace. */
+@media(min-width:1280px) and (min-height:760px){
+  .cc-v42-bottom-suite{
+    height:clamp(210px,calc(100vh - 680px),300px)!important;
+    min-height:210px!important;
+    max-height:300px!important;
+    align-items:stretch!important;
+    overflow:hidden!important;
+  }
+
+  .cc-v42-bottom-suite>.cc-v42-card,
+  .cc-v42-side-stack{
+    height:100%!important;
+    min-height:0!important;
+    max-height:none!important;
+  }
+
+  .cc-v42-side-stack{
+    grid-template-rows:minmax(0,1.7fr) minmax(72px,.8fr)!important;
+  }
+
+  .cc-v42-side-stack>.cc-v42-card{
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+  }
+
+  .cc-v42-card-head{
+    height:42px!important;
+    min-height:42px!important;
+    padding:0 10px!important;
+  }
+
+  .cc-v42-card-head b{
+    font-size:10.5px!important;
+    line-height:1.15!important;
+  }
+
+  .cc-v42-card-head small{
+    font-size:7.5px!important;
+    line-height:1.2!important;
+  }
+
+  .cc-v42-card-head em,
+  .cc-v42-card-head button{
+    min-height:22px!important;
+    padding:0 8px!important;
+    font-size:7.5px!important;
+  }
+
+  .cc-v42-head-icon{
+    width:27px!important;
+    height:27px!important;
+    flex-basis:27px!important;
+  }
+
+  .cc-v42-table{
+    padding:5px 8px 0!important;
+  }
+
+  .cc-v42-table-head{
+    height:20px!important;
+    font-size:7.5px!important;
+  }
+
+  .cc-v42-table-row{
+    min-height:28px!important;
+    font-size:8.5px!important;
+  }
+
+  .cc-v42-side{
+    min-width:32px!important;
+    padding:2px 6px!important;
+    font-size:7.5px!important;
+  }
+
+  .cc-v42-mini-stats{
+    margin:6px 8px 8px!important;
+    gap:5px!important;
+  }
+
+  .cc-v42-mini-stats>div{
+    min-height:38px!important;
+    padding:5px 4px!important;
+  }
+
+  .cc-v42-mini-stats b{
+    font-size:10.5px!important;
+  }
+
+  .cc-v42-mini-stats small{
+    font-size:7px!important;
+  }
+
+  .cc-v42-log-list{
+    height:calc(100% - 42px)!important;
+    padding:4px 8px 6px!important;
+  }
+
+  .cc-v42-log-row{
+    min-height:29px!important;
+    grid-template-columns:6px 43px minmax(0,1fr)!important;
+    gap:6px!important;
+  }
+
+  .cc-v42-log-row time{
+    font-size:7.5px!important;
+  }
+
+  .cc-v42-log-row b{
+    font-size:8.5px!important;
+  }
+
+  .cc-v42-log-row small{
+    font-size:7.2px!important;
+  }
+
+  .cc-v42-goal-main{
+    min-height:0!important;
+    height:calc(100% - 84px)!important;
+    padding:8px 10px!important;
+    grid-template-columns:86px minmax(0,1fr)!important;
+    gap:9px!important;
+  }
+
+  .cc-v42-goal-ring{
+    width:78px!important;
+    height:78px!important;
+  }
+
+  .cc-v42-goal-ring::after{
+    inset:9px!important;
+  }
+
+  .cc-v42-goal-ring b{
+    font-size:16px!important;
+  }
+
+  .cc-v42-goal-ring small{
+    font-size:6.8px!important;
+  }
+
+  .cc-v42-goal-copy{
+    gap:5px!important;
+  }
+
+  .cc-v42-goal-copy>div{
+    padding-bottom:4px!important;
+    gap:1px!important;
+  }
+
+  .cc-v42-goal-copy span{
+    font-size:7.5px!important;
+  }
+
+  .cc-v42-goal-copy b{
+    font-size:10.5px!important;
+  }
+
+  .cc-v42-goal-foot{
+    min-height:36px!important;
+    margin:0 10px 6px!important;
+    padding:6px 8px!important;
+  }
+
+  .cc-v42-goal-foot span,
+  .cc-v42-goal-foot small{
+    font-size:7.2px!important;
+  }
+
+  .cc-v42-goal-foot b{
+    font-size:10px!important;
+  }
+
+  .cc-v42-news-status{
+    padding:6px 9px!important;
+    gap:2px!important;
+  }
+
+  .cc-v42-news-status span{
+    padding:2px 6px!important;
+    font-size:7px!important;
+  }
+
+  .cc-v42-news-status b{
+    font-size:7.8px!important;
+    line-height:1.25!important;
+  }
+
+  .cc-v42-news-list{
+    padding:0 9px!important;
+  }
+
+  .cc-v42-news-list>div{
+    min-height:34px!important;
+    grid-template-columns:43px minmax(0,1fr) auto!important;
+    gap:6px!important;
+  }
+
+  .cc-v42-news-list time{
+    font-size:7px!important;
+  }
+
+  .cc-v42-news-list b{
+    font-size:8px!important;
+  }
+
+  .cc-v42-news-list small,
+  .cc-v42-news-list em{
+    font-size:7px!important;
+  }
+
+  .cc-v42-news-note{
+    margin:5px 9px 0!important;
+    padding:5px 7px!important;
+    font-size:7px!important;
+  }
+
+  .cc-v42-risk-level{
+    padding:7px 9px 4px!important;
+  }
+
+  .cc-v42-risk-level b{
+    font-size:8.5px!important;
+  }
+
+  .cc-v42-risk-level span{
+    padding:2px 6px!important;
+    font-size:7px!important;
+  }
+
+  .cc-v42-risk p{
+    margin:0 9px 5px!important;
+    font-size:7.6px!important;
+    line-height:1.32!important;
+  }
+
+  .cc-v42-risk ul{
+    padding:0 9px!important;
+    gap:3px!important;
+  }
+
+  .cc-v42-risk li{
+    font-size:7.3px!important;
+  }
+
+  .cc-v42-system .cc-v42-card-head{
+    height:39px!important;
+    min-height:39px!important;
+  }
+
+  .cc-v42-system-grid{
+    height:calc(100% - 39px)!important;
+    padding:5px!important;
+    gap:4px!important;
+  }
+
+  .cc-v42-system-grid>div{
+    padding:5px!important;
+  }
+
+  .cc-v42-system-grid span{
+    font-size:6.5px!important;
+  }
+
+  .cc-v42-system-grid b{
+    font-size:7.5px!important;
+  }
+
+  .cc-v42-system-grid small{
+    font-size:6.4px!important;
+  }
+}
+
+/* At the common 900px-ish desktop viewport, consume the remaining space
+   without forcing a vertical scroll bar. */
+@media(min-width:1280px) and (min-height:840px) and (max-height:940px){
+  .cc-v42-bottom-suite{
+    height:calc(100vh - 675px)!important;
+    min-height:205px!important;
+    max-height:265px!important;
+  }
+}
+
