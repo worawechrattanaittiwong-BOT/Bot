@@ -5,7 +5,7 @@ $web = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/app/dashboard/page.
 
 foreach ($required in @(
   'ulong  g_lastHeartbeatTickMs = 0;',
-  'ulong heartbeatNowMs = GetTickCount64();',
+  'ulong heartbeatNowMs=GetTickCount64();',
   'heartbeatNowMs - g_lastHeartbeatTickMs >= heartbeatIntervalMs',
   'string MarketSessionStateNow()',
   'TimeTradeServer()',
