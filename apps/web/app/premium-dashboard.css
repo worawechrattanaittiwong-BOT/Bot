@@ -4242,3 +4242,93 @@
   }
 }
 
+/* ===== Control Center V44 · true one-screen desktop fit =====
+   Desktop overview only. Turn the main viewport into a fixed-height flex
+   column so the added monitoring suite consumes exactly the remaining space.
+   This removes document scrolling without touching bot/business logic. */
+@media(min-width:1280px) and (min-height:760px){
+  .cc-shell-v4{
+    height:100dvh!important;
+    min-height:100dvh!important;
+    max-height:100dvh!important;
+    overflow:hidden!important;
+  }
+
+  .cc-shell-v4 .app-main{
+    box-sizing:border-box!important;
+    display:flex!important;
+    flex-direction:column!important;
+    height:100dvh!important;
+    min-height:0!important;
+    max-height:100dvh!important;
+    padding:18px 22px 8px!important;
+    overflow:hidden!important;
+  }
+
+  /* Header is hidden on Overview already. Any real banner/notice still takes
+     its natural space; the dashboard itself flexes into what remains. */
+  .cc-shell-v4 .cc-overview.cc-v15{
+    box-sizing:border-box!important;
+    display:flex!important;
+    flex:1 1 auto!important;
+    flex-direction:column!important;
+    gap:10px!important;
+    width:100%!important;
+    min-height:0!important;
+    height:auto!important;
+    max-height:none!important;
+    margin:0!important;
+    padding-bottom:0!important;
+    overflow:hidden!important;
+  }
+
+  .cc-shell-v4 .cc-overview.cc-v15>.cc-v6-hero,
+  .cc-shell-v4 .cc-overview.cc-v15>.cc-v13-kpis,
+  .cc-shell-v4 .cc-overview.cc-v15>.cc-v19-three-card-grid,
+  .cc-shell-v4 .cc-overview.cc-v15>.cc-connect-alert{
+    flex:0 0 auto!important;
+  }
+
+  /* Remove legacy KPI margins; parent gap is now the single vertical rhythm. */
+  .cc-shell-v4 .cc-overview.cc-v15>.cc-v13-kpis{
+    margin:0!important;
+  }
+
+  /* The lower suite is the elastic row. It fills the exact remaining viewport
+     instead of adding fixed pixels beneath the existing dashboard. */
+  .cc-shell-v4 .cc-v42-bottom-suite{
+    box-sizing:border-box!important;
+    flex:1 1 0!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    margin-top:0!important;
+    overflow:hidden!important;
+    align-items:stretch!important;
+  }
+
+  .cc-shell-v4 .cc-v42-bottom-suite>.cc-v42-card,
+  .cc-shell-v4 .cc-v42-side-stack{
+    box-sizing:border-box!important;
+    height:100%!important;
+    min-height:0!important;
+    max-height:100%!important;
+    overflow:hidden!important;
+  }
+
+  .cc-shell-v4 .cc-v42-side-stack{
+    grid-template-rows:minmax(0,1.65fr) minmax(64px,.72fr)!important;
+  }
+
+  .cc-shell-v4 .cc-v42-side-stack>.cc-v42-card{
+    min-height:0!important;
+    max-height:none!important;
+  }
+
+  /* Make the right-side system card genuinely fit its allocated row. */
+  .cc-shell-v4 .cc-v42-system-grid{
+    min-height:0!important;
+    overflow:hidden!important;
+  }
+}
+
