@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.35"
-#define SCENOVA_EA_VERSION "1.0.35"
-#define SCENOVA_PRODUCT_VERSION "1.0.35"
+#property version   "1.0.36"
+#define SCENOVA_EA_VERSION "1.0.36"
+#define SCENOVA_PRODUCT_VERSION "1.0.36"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -2955,7 +2955,9 @@ void RaceVolumeSnapshotWindow(int windowSeconds,double &buyPressure,double &sell
    buyPressure=0.0;
    sellPressure=0.0;
    samples=0;
-   int effectiveWindow=MathMax(1,MathMin(RACE_VOLUME_HISTORY_SECONDS,windowSeconds));
+   int effectiveWindow=windowSeconds;
+   if(effectiveWindow<1) effectiveWindow=1;
+   if(effectiveWindow>RACE_VOLUME_HISTORY_SECONDS) effectiveWindow=RACE_VOLUME_HISTORY_SECONDS;
    datetime now=TimeCurrent();
    for(int i=0;i<RACE_VOLUME_HISTORY_SECONDS;i++)
    {
@@ -3547,7 +3549,14 @@ bool ManageRaceBasket(double momentum)
    }
    g_raceDirection = direction;
    if(g_raceCycleStartedAt <= 0)
+   {
       g_raceCycleStartedAt = TimeCurrent();
+      // After an EA/terminal restart an already-open RACE basket has no local
+      // last-fill timestamp. Rebase it to now so V4 gets fresh grace instead of
+      // disabling soft reversal protection for the entire recovered cycle.
+      if(g_raceLastFillAt <= 0)
+         g_raceLastFillAt = g_raceCycleStartedAt;
+   }
 
    int filledUnits = RaceFilledUnits();
    bool filling = filledUnits < g_maxPositions;
