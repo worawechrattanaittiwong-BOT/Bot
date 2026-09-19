@@ -13,7 +13,6 @@ $onTrade=Block $ea 'void OnTradeTransaction('
 $dynamic=Block $ea 'void ManageDynamicProtection()'
 $race=Block $ea 'bool ManageRaceBasket(double momentum)'
 $zero=Block $ea 'bool ManageZeroGrid()'
-$heartbeat=Block $ea 'void SendHeartbeat()'
 $flipManage=Block $flip 'void FlipLockManage()'
 $flipSync=Block $flip 'bool FlipLockSyncBaton('
 
@@ -57,7 +56,7 @@ if($flipTimer -lt 0 -or $zeroTimer -lt 0 -or $heartbeatTimer -lt 0 -or
 }
 Need $onTimer 'LOCAL_EXECUTION_NETWORK_QUIET_MS' 'heartbeat must yield while local ticks are busy'
 Need $onTimer 'LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS' 'heartbeat defer must remain bounded'
-Need $heartbeat 'ExecutionAwareHttpTimeoutMs(1200)' 'live heartbeat must use execution-aware short timeout'
+Need $ea 'ExecutionAwareHttpTimeoutMs(1200)' 'live heartbeat must use execution-aware short timeout'
 
 Need $onTrade 'QueueDeferredDealJournal(trans.deal,false);' 'normal deal journal must be queued'
 Need $onTrade 'QueueDeferredDealJournal(trans.deal,true);' 'rescue deal journal must be queued'
