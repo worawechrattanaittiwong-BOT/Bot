@@ -3106,3 +3106,184 @@
   max-height:32px!important;
   margin:0!important;
 }
+
+/* ===== Control Center V37 · one flow layout for every bot mode =====
+   Final normalization: AUTO / RACE / FLIP LOCK / ZERO GRID / MANUAL all use
+   the same top-packed document flow. This removes old grid/flex track
+   stretching completely instead of only overriding min-heights. */
+.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+  display:block!important;
+  height:386px!important;
+  min-height:386px!important;
+  max-height:386px!important;
+  padding:2px 12px 4px!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+}
+
+.cc-v19-settings-card .cc-bot-v2-mode-section,
+.cc-v19-settings-card .cc-bot-v2-workspace,
+.cc-v19-settings-card .cc-bot-v2-main,
+.cc-v19-settings-card .cc-bot-v2-panel,
+.cc-v19-settings-card .cc-bot-v2-fields,
+.cc-v19-settings-card .cc-bot-v2-limit-grid{
+  display:block!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  margin:0!important;
+  padding:0!important;
+  gap:0!important;
+}
+
+/* Trading-mode selector: identical in all five modes. */
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
+  display:block!important;
+  width:100%!important;
+  height:46px!important;
+  min-height:46px!important;
+  max-height:46px!important;
+  margin:0!important;
+  padding:0!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
+  box-sizing:border-box!important;
+  display:grid!important;
+  grid-template-columns:var(--settings-label) minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:14px!important;
+  width:100%!important;
+  height:46px!important;
+  min-height:46px!important;
+  max-height:46px!important;
+  margin:0!important;
+  padding:2px!important;
+}
+
+/* Every standard setting row uses exactly the MANUAL row height. */
+.cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field{
+  box-sizing:border-box!important;
+  display:grid!important;
+  grid-template-columns:var(--settings-label) minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:14px!important;
+  width:100%!important;
+  height:38px!important;
+  min-height:38px!important;
+  max-height:38px!important;
+  margin:0!important;
+  padding:2px!important;
+  border-bottom:1px solid rgba(76,91,128,.22)!important;
+  overflow:hidden!important;
+}
+
+/* Every risk row uses the same 38px rhythm too. */
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+  box-sizing:border-box!important;
+  display:grid!important;
+  grid-template-columns:var(--settings-label) minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:14px!important;
+  width:100%!important;
+  height:38px!important;
+  min-height:38px!important;
+  max-height:38px!important;
+  margin:0!important;
+  padding:2px!important;
+  border-bottom:1px solid rgba(76,91,128,.22)!important;
+  overflow:hidden!important;
+}
+
+/* Section boundaries must not add hidden vertical space. */
+.cc-v19-settings-card .cc-bot-v2-panel + .cc-bot-v2-panel{
+  margin-top:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-section-title,
+.cc-v19-settings-card .cc-bot-v17-hidden-engine{
+  display:none!important;
+}
+
+/* Compound controls are constrained inside the same row height. */
+.cc-v19-settings-card .cc-bot-v2-control-cell,
+.cc-v19-settings-card .cc-bot-v2-control-stack,
+.cc-v19-settings-card .cc-bot-v2-inline-toggle-value,
+.cc-v19-settings-card .toggle-money-field,
+.cc-v19-settings-card .money-input-shell,
+.cc-v19-settings-card .number-input-shell,
+.cc-v19-settings-card .cc-bot-v2-field>select.input,
+.cc-v19-settings-card .cc-bot-v2-readonly-control{
+  box-sizing:border-box!important;
+  height:32px!important;
+  min-height:32px!important;
+  max-height:32px!important;
+  margin:0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-control-stack{
+  display:block!important;
+}
+.cc-v19-settings-card .cc-bot-v2-control-stack>small{
+  display:none!important;
+}
+
+/* MANUAL segmented profit selector stays compact and matches one normal row. */
+.cc-v19-settings-card .cc-bot-v2-choice-row{
+  box-sizing:border-box!important;
+  display:grid!important;
+  grid-template-columns:1fr 1fr!important;
+  align-items:center!important;
+  gap:6px!important;
+  width:100%!important;
+  height:38px!important;
+  min-height:38px!important;
+  max-height:38px!important;
+  margin:0!important;
+  padding:2px 0!important;
+}
+.cc-v19-settings-card .cc-bot-v2-choice-row>button{
+  height:32px!important;
+  min-height:32px!important;
+  max-height:32px!important;
+  margin:0!important;
+}
+
+/* MANUAL's reveal/additional-settings row also uses one normal row. */
+.cc-v19-settings-card .cc-bot-manual-risk-add{
+  box-sizing:border-box!important;
+  width:100%!important;
+  height:38px!important;
+  min-height:38px!important;
+  max-height:38px!important;
+  margin:0!important;
+  padding:2px!important;
+}
+.cc-v19-settings-card .cc-bot-manual-risk-add-all{
+  height:32px!important;
+  min-height:32px!important;
+  max-height:32px!important;
+}
+
+/* Explicitly apply the same flow to every mode class. */
+.cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-mode-race .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-mode-flip_lock .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-mode-zero_grid .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-field,
+.cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v2-limit-grid>div,
+.cc-v19-settings-card .cc-bot-mode-race .cc-bot-v2-limit-grid>div,
+.cc-v19-settings-card .cc-bot-mode-flip_lock .cc-bot-v2-limit-grid>div,
+.cc-v19-settings-card .cc-bot-mode-zero_grid .cc-bot-v2-limit-grid>div,
+.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-limit-grid>div{
+  height:38px!important;
+  min-height:38px!important;
+  max-height:38px!important;
+}
+
+/* Fixed 430px settings shell remains unchanged. */
+.cc-v19-settings-card,
+.cc-v19-settings-card .cc-bot-embedded-frame,
+.cc-v19-settings-card .cc-bot-v2-embedded{
+  height:430px!important;
+  min-height:430px!important;
+  max-height:430px!important;
+}
