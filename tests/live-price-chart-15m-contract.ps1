@@ -20,6 +20,12 @@ if($page.Contains('localStorage.setItem("livePrice')) {
   throw 'Live price history must not persist browser history'
 }
 foreach($needle in @('marketBid','marketAsk','marketMid')) {
-  if(-not $ea.Contains($needle)) { throw "EA heartbeat quote field missing: $needle" }
+  if(-not $ea.Contains($needle)) { throw "EA flat-state heartbeat quote field missing: $needle" }
 }
-Write-Host 'Control Center no-chart contract PASS'
+if(-not $ea.Contains('bool suppressLivePriceTelemetry=LocalExecutionExposureActive();')) {
+  throw 'Live exposure must suppress raw quote telemetry'
+}
+if(-not $ea.Contains('if(StringLen(payload) >= 2 && !suppressLivePriceTelemetry)')) {
+  throw 'Price/chart telemetry must be flat-state only'
+}
+Write-Host 'Control Center no-chart / flat-only quote telemetry contract PASS'

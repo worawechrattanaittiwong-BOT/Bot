@@ -101,6 +101,6 @@ Need $web 'MT5 Local Tick · Server ไม่กำหนดราคา SL' 'FL
 Need $web 'Safety Stop → Trailing SL ขยับตามราคา MT5' 'FLIP LOCK UI must expose direct MT5 trailing behavior'
 Need $web 'ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า' 'FLIP LOCK UI must state that no opposite pending direction is pre-placed'
 
-Need $release 'DEFAULT_EA_VERSION = "1.0.41"' 'EA release version must match the FLIP LOCK safe-start runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.42"' 'EA release version must match the FLIP LOCK safe-start runtime'
 
 Write-Host 'FLIP LOCK strict isolation contract: PASS'

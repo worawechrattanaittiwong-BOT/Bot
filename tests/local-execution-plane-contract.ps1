@@ -56,7 +56,11 @@ if($flipTimer -lt 0 -or $zeroTimer -lt 0 -or $heartbeatTimer -lt 0 -or
 }
 Need $onTimer 'LOCAL_EXECUTION_NETWORK_QUIET_MS' 'heartbeat must yield while local ticks are busy'
 Need $onTimer 'LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS' 'heartbeat defer must remain bounded'
+Need $ea '#define LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS 120' 'live heartbeat timeout must stay below one local management burst'
 Need $ea 'ExecutionAwareHttpTimeoutMs(1200)' 'live heartbeat must use execution-aware short timeout'
+Need $ea 'bool suppressLivePriceTelemetry=LocalExecutionExposureActive();' 'active exposure must suppress price-heavy heartbeat telemetry'
+Need $ea '\"livePriceTelemetrySuppressed\":true' 'live control heartbeat must declare price telemetry suppression'
+Need $ea 'if(StringLen(payload) >= 2 && !suppressLivePriceTelemetry)' 'price-heavy diagnostics must be flat-state only'
 
 Need $onTrade 'QueueDeferredDealJournal(trans.deal,false);' 'normal deal journal must be queued'
 Need $onTrade 'QueueDeferredDealJournal(trans.deal,true);' 'rescue deal journal must be queued'
@@ -67,6 +71,6 @@ Forbid $ea 'JsonNumber(response, "marketBid"' 'server marketBid must never be an
 Forbid $ea 'JsonNumber(response, "marketAsk"' 'server marketAsk must never be an execution input'
 Need $ea '\"executionPriceSource\":\"MT5_LOCAL_TICK\"' 'heartbeat must identify MT5 as execution price source'
 Need $ea '\"serverPriceControl\":false' 'heartbeat must declare server price is telemetry-only'
-Need $release 'DEFAULT_EA_VERSION = "1.0.41"' 'EA release version must match local execution runtime'
+Need $release 'DEFAULT_EA_VERSION = "1.0.42"' 'EA release version must match local execution runtime'
 
 Write-Host 'MT5 local execution plane contract PASS'

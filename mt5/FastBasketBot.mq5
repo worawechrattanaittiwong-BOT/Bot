@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.41"
-#define SCENOVA_EA_VERSION "1.0.41"
-#define SCENOVA_PRODUCT_VERSION "1.0.41"
+#property version   "1.0.42"
+#define SCENOVA_EA_VERSION "1.0.42"
+#define SCENOVA_PRODUCT_VERSION "1.0.42"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -164,7 +164,7 @@ input double          InpRaceCloseAllProfitMoney = 0.50;
 #define LOCAL_EXECUTION_PLANE_V1 "MT5_TICK_DIRECT_V1"
 #define LOCAL_EXECUTION_NETWORK_QUIET_MS 300
 #define LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS 5000
-#define LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS 250
+#define LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS 120
 #define LOCAL_DYNAMIC_PROTECTION_INTERVAL_MS 150
 #define DEFERRED_DEAL_JOURNAL_MAX 256
 #define AUTO_V21_POLICY "AUTO_V21_BALANCED_EXIT_V1"
@@ -4795,9 +4795,17 @@ void SendHeartbeat()
       (long)g_lastOrderAt
    );
 
+   bool suppressLivePriceTelemetry=LocalExecutionExposureActive();
+   if(suppressLivePriceTelemetry && StringLen(payload)>=2)
+   {
+      string liveControlOnly=
+         ",\"executionPriceSource\":\"MT5_LOCAL_TICK\",\"serverPriceControl\":false,\"livePriceTelemetrySuppressed\":true}}";
+      payload=StringSubstr(payload,0,StringLen(payload)-2)+liveControlOnly;
+   }
+
    // Add diagnostics separately so the stable heartbeat format remains easy to
    // audit and new telemetry cannot shift StringFormat arguments accidentally.
-   if(StringLen(payload) >= 2)
+   if(StringLen(payload) >= 2 && !suppressLivePriceTelemetry)
    {
       int heartbeatAge = g_lastSuccessfulHeartbeat > 0
          ? (int)MathMax(0, TimeCurrent() - g_lastSuccessfulHeartbeat)
@@ -5169,7 +5177,7 @@ void SendHeartbeat()
    }
 
    string response = "";
-      if(StringLen(payload) >= 2)
+      if(StringLen(payload) >= 2 && !suppressLivePriceTelemetry)
       {
          int auditDirection=g_cachedAdaptiveDirection;
          AUTO_V20_SIDE auditSide;
@@ -5224,7 +5232,7 @@ void SendHeartbeat()
    // Publish market-session telemetry independently of bot RUNNING/SAFE_STOP.
    // The dashboard can show market closed without pretending MT5 disconnected
    // and without waiting for an OrderSend rejection.
-   if(StringLen(payload) >= 2)
+   if(StringLen(payload) >= 2 && !suppressLivePriceTelemetry)
    {
       string marketSessionState = MarketSessionStateNow();
       MqlTick marketTick;
@@ -5250,7 +5258,7 @@ void SendHeartbeat()
    }
 
    // UI-only snapshot of the symbols selected in MT5 Market Watch.
-   if(StringLen(payload) >= 2)
+   if(StringLen(payload) >= 2 && !suppressLivePriceTelemetry)
    {
       string marketWatchDiagnostics =
          ",\"marketWatchSymbols\":" + MarketWatchSymbolsJson() +
