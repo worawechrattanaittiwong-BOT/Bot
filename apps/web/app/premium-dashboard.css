@@ -4332,3 +4332,147 @@
   }
 }
 
+/* ===== Control Center V45 · standard readable lower-suite typography =====
+   Readability pass only for the V42 monitoring suite. Keep the V44 one-screen
+   layout, but use normal desktop dashboard text sizes instead of micro text. */
+@media(min-width:1280px){
+  .cc-shell-v4 .cc-v42-card-head b{
+    font-size:12px!important;
+    line-height:1.15!important;
+  }
+
+  .cc-shell-v4 .cc-v42-card-head small{
+    font-size:9px!important;
+    line-height:1.2!important;
+  }
+
+  .cc-shell-v4 .cc-v42-card-head em,
+  .cc-shell-v4 .cc-v42-card-head button{
+    font-size:8.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-empty{
+    font-size:10px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-table-head{
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-table-row{
+    font-size:10.5px!important;
+    line-height:1.2!important;
+  }
+
+  .cc-shell-v4 .cc-v42-side{
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-mini-stats b{
+    font-size:12px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-mini-stats small{
+    font-size:8.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-log-row time{
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-log-row b{
+    font-size:10px!important;
+    line-height:1.2!important;
+  }
+
+  .cc-shell-v4 .cc-v42-log-row small{
+    font-size:8.5px!important;
+    line-height:1.2!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-ring b{
+    font-size:18px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-ring small{
+    font-size:8.5px!important;
+    line-height:1.2!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-copy span{
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-copy b{
+    font-size:12px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-foot span,
+  .cc-shell-v4 .cc-v42-goal-foot small{
+    font-size:8.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-goal-foot b{
+    font-size:11px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-status span{
+    font-size:8.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-status b{
+    font-size:9.5px!important;
+    line-height:1.3!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-list time{
+    font-size:8.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-list b{
+    font-size:10px!important;
+    line-height:1.2!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-list small,
+  .cc-shell-v4 .cc-v42-news-list em{
+    font-size:8.5px!important;
+    line-height:1.2!important;
+  }
+
+  .cc-shell-v4 .cc-v42-news-note{
+    font-size:8.5px!important;
+    line-height:1.25!important;
+  }
+
+  .cc-shell-v4 .cc-v42-risk-level b{
+    font-size:10px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-risk-level span{
+    font-size:8.5px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-risk p{
+    font-size:9px!important;
+    line-height:1.35!important;
+  }
+
+  .cc-shell-v4 .cc-v42-risk li{
+    font-size:8.8px!important;
+    line-height:1.2!important;
+  }
+
+  .cc-shell-v4 .cc-v42-system-grid span{
+    font-size:8px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-system-grid b{
+    font-size:9px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-system-grid small{
+    font-size:7.5px!important;
+  }
+}
+
