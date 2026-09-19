@@ -3171,7 +3171,7 @@ function BotSettingsModal(props:any) {
                     </div>
                   </div>
                 </div> : <div className="cc-bot-v2-fields exit-fields">
-                  <div className="cc-bot-v2-field">
+                  <div className="cc-bot-v2-field cc-bot-profit-kind-field">
                     <span><ScenovaIcon name="profit" size={17}/>รูปแบบกำไร</span>
                     <div className="cc-bot-v2-choice-row cc-bot-v2-choice-inline">
                       <button type="button" className={profitKind==="BASKET"?"active":""} onClick={()=>{props.onEdit?.("basketProfitTargetMoney",Number(props.settings.basketProfitTargetMoney||10));props.onEdit?.("perPositionProfitMoney",0)}}><ScenovaIcon name="profit" size={16}/><span><b>ทั้งชุด</b></span></button>
