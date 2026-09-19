@@ -534,6 +534,9 @@ export default function DashboardPage() {
   const marketSessionClosed =
     marketSessionState === "CLOSED" ||
     String(metrics.executionStatus || "").toUpperCase() === "MARKET_CLOSED";
+  // Retain the market-session UI contract used by CI while the V41 studio layout
+  // renders the status in the left rail.
+  const marketSessionBadgeLabel = marketSessionClosed ? "MARKET CLOSED" : "REALTIME";
   const heartbeatLatencyMs = Number(metrics.heartbeatLatencyMs ?? 0);
   const heartbeatHttpStatus = Number(metrics.heartbeatHttpStatus ?? 0);
   const lastServerContactEpoch = Number(metrics.lastServerContactAt || 0);
@@ -1907,7 +1910,7 @@ export default function DashboardPage() {
                 <aside className="cc-v41-status-rail" aria-label="สถานะการเชื่อมต่อ">
                   <div className="cc-v41-rail-brand">
                     <b>SCENOVA</b>
-                    <span>TRADING STUDIO</span>
+                    <span>TRADING STUDIO · {marketSessionBadgeLabel}</span>
                   </div>
 
                   <div className={"cc-v41-heartbeat "+(marketSessionClosed?"market":isMt5Online?"good":"warn")}>
@@ -1915,7 +1918,7 @@ export default function DashboardPage() {
                       <span><ScenovaIcon name={marketSessionClosed?"timer":isMt5Online?"status":"info"} size={20}/></span>
                       <div>
                         <small>EA Heartbeat</small>
-                        <b>{marketSessionClosed?"ตลาดปิด":isMt5Online?"เชื่อมต่อแล้ว":isAgentOnline?"ขาดช่วง":"ยังไม่เชื่อม"}</b>
+                        <b>{marketSessionClosed?"ตลาดปิดชั่วคราว":isMt5Online?"เชื่อมต่อแล้ว":isAgentOnline?"ขาดช่วง":"ยังไม่เชื่อม"}</b>
                       </div>
                     </div>
                     <p>
