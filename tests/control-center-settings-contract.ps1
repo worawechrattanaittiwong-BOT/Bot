@@ -175,3 +175,9 @@ Need $css 'align-self:start!important;' 'Each workspace card must keep its own c
 Need $css '--settings-row:36px' 'All Bot Settings modes must use the same compact row rhythm'
 Need $css 'max-height:260px!important;' 'Running Positions must scroll internally only when rows exceed compact height'
 Need $css 'max-height:272px!important;' 'Performance card must scroll internally only when needed'
+
+Need $css 'Control Center V28 · MANUAL-height fixed settings card' 'V28 MANUAL-height fixed card marker missing'
+Need $css 'height:520px!important;' 'Bot Settings must stay at the MANUAL baseline height across modes'
+Need $css 'height:476px!important;' 'Fixed Bot Settings body height missing'
+Need $css '--settings-row:36px' 'All modes must share MANUAL-style compact row spacing'
+Need $css 'align-items:start!important;' 'Changing modes must not stretch the grid row'
