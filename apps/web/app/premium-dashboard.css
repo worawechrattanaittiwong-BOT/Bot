@@ -5229,23 +5229,23 @@
 /* ===== /Control Center V48 · standard readable typography ===== */
 
 /* ===== Settings control spacing fix · scoped UI only ===== */
-/* Center the selected text inside the settings dropdowns. */
+/* Center selected text horizontally and lift the glyph baseline slightly so
+   it sits visually in the middle of each dropdown instead of hugging the bottom. */
 .cc-v19-settings-card .cc-bot-v12-mode-select,
 .cc-v19-settings-card .cc-bot-v2-field>select.input,
 .cc-v19-settings-card .cc-bot-v17-add-setting>select.input,
 .cc-v19-settings-card .cc-bot-v2-control-stack>select.input{
   text-align:center!important;
   text-align-last:center!important;
+  line-height:1.15!important;
 }
 .cc-v19-settings-card .cc-bot-v12-mode-select{
-  padding-left:38px!important;
-  padding-right:38px!important;
+  padding:0 38px 2px!important;
 }
 .cc-v19-settings-card .cc-bot-v2-field>select.input,
 .cc-v19-settings-card .cc-bot-v17-add-setting>select.input,
 .cc-v19-settings-card .cc-bot-v2-control-stack>select.input{
-  padding-left:34px!important;
-  padding-right:34px!important;
+  padding:0 34px 2px!important;
 }
 
 /* Keep money-field suffix text inside its own grid cell. */
@@ -5264,7 +5264,14 @@
   min-width:max-content!important;
 }
 
-/* Give risk controls more breathing room without changing their behavior. */
+/* Give the risk controls real vertical breathing room while keeping the
+   switch/value layout and all trading behavior unchanged. */
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+  height:44px!important;
+  min-height:44px!important;
+  max-height:44px!important;
+  padding:6px 2px!important;
+}
 .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field{
   grid-template-columns:84px minmax(0,1fr)!important;
   gap:16px!important;
@@ -5277,6 +5284,6 @@
   gap:10px!important;
 }
 .cc-v19-settings-card .cc-bot-v2-limit-grid>div+div{
-  margin-top:4px!important;
+  margin-top:0!important;
 }
 /* ===== /Settings control spacing fix · scoped UI only ===== */
