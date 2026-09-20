@@ -1801,9 +1801,20 @@ export class BotController {
     numberSetting("flipLockLot", 0.01, 100);
     numberSetting("manualLot", 0.01, 100);
     numberSetting("manualMaxPositions", 1, 100, true);
+    // Risk controls are remembered independently by control mode. The legacy
+    // standard* keys remain accepted only as migration fallbacks.
     numberSetting("standardMaxBasketLossMoney", 0, 100000);
     numberSetting("standardDailyLossMoney", 0, 100000);
     numberSetting("standardDailyProfitTargetMoney", 0, 100000);
+    numberSetting("autoMaxBasketLossMoney", 0, 100000);
+    numberSetting("autoDailyLossMoney", 0, 100000);
+    numberSetting("autoDailyProfitTargetMoney", 0, 100000);
+    numberSetting("raceMaxBasketLossMoney", 0, 100000);
+    numberSetting("raceDailyLossMoney", 0, 100000);
+    numberSetting("raceDailyProfitTargetMoney", 0, 100000);
+    numberSetting("flipLockMaxBasketLossMoney", 0, 100000);
+    numberSetting("flipLockDailyLossMoney", 0, 100000);
+    numberSetting("flipLockDailyProfitTargetMoney", 0, 100000);
     numberSetting("manualMaxBasketLossMoney", 0, 100000);
     numberSetting("manualDailyLossMoney", 0, 100000);
     numberSetting("manualDailyProfitTargetMoney", 0, 100000);
@@ -1852,6 +1863,14 @@ export class BotController {
     numberSetting("zeroGridCloseReserveMoney", 0, 100000);
     booleanSetting("raceCloseAllProfitEnabled");
     numberSetting("raceCloseAllProfitMoney", 0.01, 100000);
+    numberSetting("racePerPositionProfitMoney", 0.01, 100000);
+    if (body.raceProfitTargetMode !== undefined) {
+      const raceProfitTargetMode = String(body.raceProfitTargetMode || "").toUpperCase();
+      if (!["BASKET", "POSITION", "OFF"].includes(raceProfitTargetMode)) {
+        throw new BadRequestException("รูปแบบกำไร RACE ไม่ถูกต้อง");
+      }
+      clean.raceProfitTargetMode = raceProfitTargetMode;
+    }
     booleanSetting("adaptiveEngine");
     numberSetting("riskPerOrderPercent", 0.01, 5);
     booleanSetting("allowMinimumLotOverride");
@@ -2028,30 +2047,51 @@ export class BotController {
       requestedEngineMode === "ZERO_GRID" ? "ZERO_GRID" :
       requestedEngineMode === "AUTO" ? "AUTO" : null
     );
+    const storedNumber = (primary: string, legacy: string, fallback = 0) => {
+      const value = clean[primary] ??
+        currentSettings[primary] ??
+        currentSettings[legacy] ??
+        fallback;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
     if (activeProfileMode === "AUTO") {
-      if (clean.autoLot !== undefined) clean.lot = clean.autoLot;
-      if (clean.autoMaxPositions !== undefined) clean.maxPositions = clean.autoMaxPositions;
-      if (clean.standardMaxBasketLossMoney !== undefined) clean.maxBasketLossMoney = clean.standardMaxBasketLossMoney;
-      if (clean.standardDailyLossMoney !== undefined) clean.dailyLossMoney = clean.standardDailyLossMoney;
-      if (clean.standardDailyProfitTargetMoney !== undefined) clean.dailyProfitTargetMoney = clean.standardDailyProfitTargetMoney;
+      clean.lot = storedNumber("autoLot", "lot", 0.01);
+      clean.maxPositions = Math.max(1, Math.trunc(storedNumber("autoMaxPositions", "maxPositions", 1)));
+      clean.maxBasketLossMoney = storedNumber("autoMaxBasketLossMoney", "standardMaxBasketLossMoney",
+        Number(currentSettings.maxBasketLossMoney || 0));
+      clean.dailyLossMoney = storedNumber("autoDailyLossMoney", "standardDailyLossMoney",
+        Number(currentSettings.dailyLossMoney || 0));
+      clean.dailyProfitTargetMoney = storedNumber("autoDailyProfitTargetMoney", "standardDailyProfitTargetMoney",
+        Number(currentSettings.dailyProfitTargetMoney || 0));
+      clean.manualStopLossPoints = 0;
     } else if (activeProfileMode === "RACE") {
-      if (clean.raceLot !== undefined) clean.lot = clean.raceLot;
-      if (clean.raceMaxPositions !== undefined) clean.maxPositions = clean.raceMaxPositions;
-      if (clean.standardMaxBasketLossMoney !== undefined) clean.maxBasketLossMoney = clean.standardMaxBasketLossMoney;
-      if (clean.standardDailyLossMoney !== undefined) clean.dailyLossMoney = clean.standardDailyLossMoney;
-      if (clean.standardDailyProfitTargetMoney !== undefined) clean.dailyProfitTargetMoney = clean.standardDailyProfitTargetMoney;
+      clean.lot = storedNumber("raceLot", "lot", 0.01);
+      clean.maxPositions = Math.max(1, Math.trunc(storedNumber("raceMaxPositions", "maxPositions", 1)));
+      clean.maxBasketLossMoney = storedNumber("raceMaxBasketLossMoney", "standardMaxBasketLossMoney",
+        Number(currentSettings.maxBasketLossMoney || 0));
+      clean.dailyLossMoney = storedNumber("raceDailyLossMoney", "standardDailyLossMoney",
+        Number(currentSettings.dailyLossMoney || 0));
+      clean.dailyProfitTargetMoney = storedNumber("raceDailyProfitTargetMoney", "standardDailyProfitTargetMoney",
+        Number(currentSettings.dailyProfitTargetMoney || 0));
+      // RACE owns ATR Stop only. MANUAL points must never survive a mode switch.
+      clean.manualStopLossPoints = 0;
     } else if (activeProfileMode === "FLIP_LOCK") {
-      if (clean.flipLockLot !== undefined) clean.lot = clean.flipLockLot;
+      clean.lot = storedNumber("flipLockLot", "lot", 0.01);
       clean.maxPositions = 1;
-      if (clean.standardMaxBasketLossMoney !== undefined) clean.maxBasketLossMoney = clean.standardMaxBasketLossMoney;
-      if (clean.standardDailyLossMoney !== undefined) clean.dailyLossMoney = clean.standardDailyLossMoney;
-      if (clean.standardDailyProfitTargetMoney !== undefined) clean.dailyProfitTargetMoney = clean.standardDailyProfitTargetMoney;
+      clean.maxBasketLossMoney = storedNumber("flipLockMaxBasketLossMoney", "standardMaxBasketLossMoney",
+        Number(currentSettings.maxBasketLossMoney || 0));
+      clean.dailyLossMoney = storedNumber("flipLockDailyLossMoney", "standardDailyLossMoney",
+        Number(currentSettings.dailyLossMoney || 0));
+      clean.dailyProfitTargetMoney = storedNumber("flipLockDailyProfitTargetMoney", "standardDailyProfitTargetMoney",
+        Number(currentSettings.dailyProfitTargetMoney || 0));
+      clean.manualStopLossPoints = 0;
     } else if (activeProfileMode === "MANUAL") {
-      if (clean.manualLot !== undefined) clean.lot = clean.manualLot;
-      if (clean.manualMaxPositions !== undefined) clean.maxPositions = clean.manualMaxPositions;
-      if (clean.manualMaxBasketLossMoney !== undefined) clean.maxBasketLossMoney = clean.manualMaxBasketLossMoney;
-      if (clean.manualDailyLossMoney !== undefined) clean.dailyLossMoney = clean.manualDailyLossMoney;
-      if (clean.manualDailyProfitTargetMoney !== undefined) clean.dailyProfitTargetMoney = clean.manualDailyProfitTargetMoney;
+      clean.lot = storedNumber("manualLot", "lot", 0.01);
+      clean.maxPositions = Math.max(1, Math.trunc(storedNumber("manualMaxPositions", "maxPositions", 1)));
+      clean.maxBasketLossMoney = storedNumber("manualMaxBasketLossMoney", "maxBasketLossMoney", 0);
+      clean.dailyLossMoney = storedNumber("manualDailyLossMoney", "dailyLossMoney", 0);
+      clean.dailyProfitTargetMoney = storedNumber("manualDailyProfitTargetMoney", "dailyProfitTargetMoney", 0);
     }
 
     const zeroGridSelected =
@@ -2076,8 +2116,28 @@ export class BotController {
       requestedControlMode === "RACE" ||
       (requestedControlMode === null && requestedEngineMode === "RACE");
     if (raceSelected) {
-      if (body.raceCloseAllProfitEnabled === undefined) clean.raceCloseAllProfitEnabled = true;
-      if (body.raceCloseAllProfitMoney === undefined) clean.raceCloseAllProfitMoney = 0.5;
+      const storedRaceMode = String(
+        clean.raceProfitTargetMode ??
+        currentSettings.raceProfitTargetMode ??
+        ""
+      ).toUpperCase();
+      let raceMode = ["BASKET", "POSITION", "OFF"].includes(storedRaceMode)
+        ? storedRaceMode
+        : ((body.raceCloseAllProfitEnabled ?? currentSettings.raceCloseAllProfitEnabled) === false
+            ? "OFF" : "BASKET");
+      if (body.raceProfitTargetMode !== undefined) {
+        raceMode = String(body.raceProfitTargetMode).toUpperCase();
+      } else if (body.raceCloseAllProfitEnabled !== undefined) {
+        raceMode = body.raceCloseAllProfitEnabled ? "BASKET" : "OFF";
+      }
+      clean.raceProfitTargetMode = raceMode;
+      clean.raceCloseAllProfitEnabled = raceMode === "BASKET";
+      if (body.raceCloseAllProfitMoney === undefined &&
+          currentSettings.raceCloseAllProfitMoney === undefined)
+        clean.raceCloseAllProfitMoney = 0.5;
+      if (body.racePerPositionProfitMoney === undefined &&
+          currentSettings.racePerPositionProfitMoney === undefined)
+        clean.racePerPositionProfitMoney = 0.5;
     }
 
     const autoSelected = effectiveProfitProfileMode === "AUTO";
@@ -2107,7 +2167,8 @@ export class BotController {
     // RACE and ZERO GRID own their dedicated target fields. Clear the generic
     // mirror so a target from AUTO/MANUAL can never leak into those engines.
     if (effectiveProfitProfileMode === "RACE" ||
-        effectiveProfitProfileMode === "ZERO_GRID") {
+        effectiveProfitProfileMode === "ZERO_GRID" ||
+        effectiveProfitProfileMode === "FLIP_LOCK") {
       clean.profitTargetMode = "OFF";
       clean.basketProfitTargetMoney = 0;
       clean.perPositionProfitMoney = 0;

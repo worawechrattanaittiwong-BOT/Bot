@@ -46,9 +46,19 @@ const defaultSettings = {
   flipLockLot: 0.01,
   manualLot: 0.01,
   manualMaxPositions: 10,
+  // Per-mode risk profiles. standard* remains only for backward compatibility.
   standardMaxBasketLossMoney: 10,
   standardDailyLossMoney: 25,
   standardDailyProfitTargetMoney: 0,
+  autoMaxBasketLossMoney: 10,
+  autoDailyLossMoney: 25,
+  autoDailyProfitTargetMoney: 0,
+  raceMaxBasketLossMoney: 10,
+  raceDailyLossMoney: 25,
+  raceDailyProfitTargetMoney: 0,
+  flipLockMaxBasketLossMoney: 10,
+  flipLockDailyLossMoney: 25,
+  flipLockDailyProfitTargetMoney: 0,
   manualMaxBasketLossMoney: 0,
   manualDailyLossMoney: 0,
   manualDailyProfitTargetMoney: 0,
@@ -86,7 +96,9 @@ const defaultSettings = {
   controlMode: undefined,
   engineMode: "AUTO",
   raceCloseAllProfitEnabled: true,
+  raceProfitTargetMode: "BASKET",
   raceCloseAllProfitMoney: 0.5,
+  racePerPositionProfitMoney: 0.5,
   zeroGridStepPrice: 3,
   zeroGridLowVolatilityEnabled: false,
   zeroGridLevelsPerSide: 10,
@@ -193,10 +205,18 @@ export default function DashboardPage() {
           if (storedSettings.manualMaxBasketLossMoney === undefined) nextSettings.manualMaxBasketLossMoney = legacyMaxBasketLoss;
           if (storedSettings.manualDailyLossMoney === undefined) nextSettings.manualDailyLossMoney = legacyDailyLoss;
           if (storedSettings.manualDailyProfitTargetMoney === undefined) nextSettings.manualDailyProfitTargetMoney = legacyDailyProfit;
-        } else if (loadedControlMode !== "ZERO_GRID") {
-          if (storedSettings.standardMaxBasketLossMoney === undefined) nextSettings.standardMaxBasketLossMoney = legacyMaxBasketLoss;
-          if (storedSettings.standardDailyLossMoney === undefined) nextSettings.standardDailyLossMoney = legacyDailyLoss;
-          if (storedSettings.standardDailyProfitTargetMoney === undefined) nextSettings.standardDailyProfitTargetMoney = legacyDailyProfit;
+        } else if (loadedControlMode === "AUTO") {
+          if (storedSettings.autoMaxBasketLossMoney === undefined) nextSettings.autoMaxBasketLossMoney = Number(storedSettings.standardMaxBasketLossMoney ?? legacyMaxBasketLoss);
+          if (storedSettings.autoDailyLossMoney === undefined) nextSettings.autoDailyLossMoney = Number(storedSettings.standardDailyLossMoney ?? legacyDailyLoss);
+          if (storedSettings.autoDailyProfitTargetMoney === undefined) nextSettings.autoDailyProfitTargetMoney = Number(storedSettings.standardDailyProfitTargetMoney ?? legacyDailyProfit);
+        } else if (loadedControlMode === "RACE") {
+          if (storedSettings.raceMaxBasketLossMoney === undefined) nextSettings.raceMaxBasketLossMoney = Number(storedSettings.standardMaxBasketLossMoney ?? legacyMaxBasketLoss);
+          if (storedSettings.raceDailyLossMoney === undefined) nextSettings.raceDailyLossMoney = Number(storedSettings.standardDailyLossMoney ?? legacyDailyLoss);
+          if (storedSettings.raceDailyProfitTargetMoney === undefined) nextSettings.raceDailyProfitTargetMoney = Number(storedSettings.standardDailyProfitTargetMoney ?? legacyDailyProfit);
+        } else if (loadedControlMode === "FLIP_LOCK") {
+          if (storedSettings.flipLockMaxBasketLossMoney === undefined) nextSettings.flipLockMaxBasketLossMoney = Number(storedSettings.standardMaxBasketLossMoney ?? legacyMaxBasketLoss);
+          if (storedSettings.flipLockDailyLossMoney === undefined) nextSettings.flipLockDailyLossMoney = Number(storedSettings.standardDailyLossMoney ?? legacyDailyLoss);
+          if (storedSettings.flipLockDailyProfitTargetMoney === undefined) nextSettings.flipLockDailyProfitTargetMoney = Number(storedSettings.standardDailyProfitTargetMoney ?? legacyDailyProfit);
         }
         if (loadedControlMode === "ZERO_GRID") {
           nextSettings.zeroGridStepPrice = Number(nextSettings.zeroGridStepPrice) === 2 ? 2 : 3;
@@ -207,8 +227,13 @@ export default function DashboardPage() {
           nextSettings.zeroGridCloseReserveMoney = 0;
         }
         if (loadedControlMode === "RACE") {
-          if (typeof nextSettings.raceCloseAllProfitEnabled !== "boolean") nextSettings.raceCloseAllProfitEnabled = true;
+          const raceProfitMode = String(nextSettings.raceProfitTargetMode || "").toUpperCase();
+          nextSettings.raceProfitTargetMode = ["BASKET","POSITION","OFF"].includes(raceProfitMode)
+            ? raceProfitMode
+            : (nextSettings.raceCloseAllProfitEnabled === false ? "OFF" : "BASKET");
+          nextSettings.raceCloseAllProfitEnabled = nextSettings.raceProfitTargetMode === "BASKET";
           if (!Number.isFinite(Number(nextSettings.raceCloseAllProfitMoney)) || Number(nextSettings.raceCloseAllProfitMoney) <= 0) nextSettings.raceCloseAllProfitMoney = 0.5;
+          if (!Number.isFinite(Number(nextSettings.racePerPositionProfitMoney)) || Number(nextSettings.racePerPositionProfitMoney) <= 0) nextSettings.racePerPositionProfitMoney = 0.5;
         }
 
         // One-time migration from the old shared target. Only the currently
@@ -1542,6 +1567,15 @@ export default function DashboardPage() {
         "standardMaxBasketLossMoney",
         "standardDailyLossMoney",
         "standardDailyProfitTargetMoney",
+        "autoMaxBasketLossMoney",
+        "autoDailyLossMoney",
+        "autoDailyProfitTargetMoney",
+        "raceMaxBasketLossMoney",
+        "raceDailyLossMoney",
+        "raceDailyProfitTargetMoney",
+        "flipLockMaxBasketLossMoney",
+        "flipLockDailyLossMoney",
+        "flipLockDailyProfitTargetMoney",
         "manualMaxBasketLossMoney",
         "manualDailyLossMoney",
         "manualDailyProfitTargetMoney",
@@ -1590,7 +1624,8 @@ export default function DashboardPage() {
         "manualMaxPositions",
         "minOrderIntervalMs",
         "maxOrdersPerMinute",
-        "zeroGridLevelsPerSide"
+        "zeroGridLevelsPerSide",
+        "racePerPositionProfitMoney"
       ]);
 
       const payload:any = { ...settings };
@@ -1622,14 +1657,17 @@ export default function DashboardPage() {
         payload.lot = payload[activeSizingProfile.lot];
         payload.maxPositions = payload.controlMode === "FLIP_LOCK" ? 1 : payload[activeSizingProfile.max || "maxPositions"];
       }
-      if (payload.controlMode === "MANUAL") {
-        payload.maxBasketLossMoney = payload.manualMaxBasketLossMoney;
-        payload.dailyLossMoney = payload.manualDailyLossMoney;
-        payload.dailyProfitTargetMoney = payload.manualDailyProfitTargetMoney;
-      } else if (payload.controlMode !== "ZERO_GRID") {
-        payload.maxBasketLossMoney = payload.standardMaxBasketLossMoney;
-        payload.dailyLossMoney = payload.standardDailyLossMoney;
-        payload.dailyProfitTargetMoney = payload.standardDailyProfitTargetMoney;
+      const modeRiskProfiles:Record<string,{basket:string;dailyLoss:string;dailyProfit:string}> = {
+        AUTO:{basket:"autoMaxBasketLossMoney",dailyLoss:"autoDailyLossMoney",dailyProfit:"autoDailyProfitTargetMoney"},
+        RACE:{basket:"raceMaxBasketLossMoney",dailyLoss:"raceDailyLossMoney",dailyProfit:"raceDailyProfitTargetMoney"},
+        FLIP_LOCK:{basket:"flipLockMaxBasketLossMoney",dailyLoss:"flipLockDailyLossMoney",dailyProfit:"flipLockDailyProfitTargetMoney"},
+        MANUAL:{basket:"manualMaxBasketLossMoney",dailyLoss:"manualDailyLossMoney",dailyProfit:"manualDailyProfitTargetMoney"}
+      };
+      const activeRiskProfile = modeRiskProfiles[payload.controlMode];
+      if (activeRiskProfile) {
+        payload.maxBasketLossMoney = Number(payload[activeRiskProfile.basket] || 0);
+        payload.dailyLossMoney = Number(payload[activeRiskProfile.dailyLoss] || 0);
+        payload.dailyProfitTargetMoney = Number(payload[activeRiskProfile.dailyProfit] || 0);
       }
 
       const raceSpeedX2 = payload.engineMode === "RACE";
@@ -1647,6 +1685,11 @@ export default function DashboardPage() {
       payload.maxAtrPoints = 0;
       // Build the legacy/runtime target mirror from the ACTIVE profile only.
       // Persisted profile fields remain untouched when another mode is selected.
+      if (payload.controlMode === "RACE") {
+        const raceMode = String(payload.raceProfitTargetMode || "BASKET").toUpperCase();
+        payload.raceProfitTargetMode = ["BASKET","POSITION","OFF"].includes(raceMode) ? raceMode : "BASKET";
+        payload.raceCloseAllProfitEnabled = payload.raceProfitTargetMode === "BASKET";
+      }
       if (payload.controlMode === "AUTO") {
         payload.profitTargetMode = "AUTO";
         payload.basketProfitTargetMoney = Number(payload.autoProfitTargetMoney || 0);
@@ -3263,9 +3306,13 @@ function BotSettingsModal(props:any) {
     if (profileKey) props.onEdit?.(profileKey,value);
     props.onEdit?.(kind === "lot" ? "lot" : "maxPositions",value);
   };
-  const riskProfile = controlMode === "MANUAL"
-    ? {basket:"manualMaxBasketLossMoney",dailyLoss:"manualDailyLossMoney",dailyProfit:"manualDailyProfitTargetMoney"}
-    : {basket:"standardMaxBasketLossMoney",dailyLoss:"standardDailyLossMoney",dailyProfit:"standardDailyProfitTargetMoney"};
+  const riskProfiles:Record<string,{basket:string;dailyLoss:string;dailyProfit:string}> = {
+    AUTO:{basket:"autoMaxBasketLossMoney",dailyLoss:"autoDailyLossMoney",dailyProfit:"autoDailyProfitTargetMoney"},
+    RACE:{basket:"raceMaxBasketLossMoney",dailyLoss:"raceDailyLossMoney",dailyProfit:"raceDailyProfitTargetMoney"},
+    FLIP_LOCK:{basket:"flipLockMaxBasketLossMoney",dailyLoss:"flipLockDailyLossMoney",dailyProfit:"flipLockDailyProfitTargetMoney"},
+    MANUAL:{basket:"manualMaxBasketLossMoney",dailyLoss:"manualDailyLossMoney",dailyProfit:"manualDailyProfitTargetMoney"}
+  };
+  const riskProfile = riskProfiles[controlMode] || riskProfiles.AUTO;
   const riskValue = (profileKey:string,genericKey:string) => Number(props.settings?.[profileKey] ?? props.settings?.[genericKey] ?? 0);
   const updateRiskValue = (profileKey:string,genericKey:string,value:any) => {
     props.onEdit?.(profileKey,value);
@@ -3279,7 +3326,7 @@ function BotSettingsModal(props:any) {
     props.systemHardStopDistancePoints || props.hardStopDistancePoints || 1000
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
-    AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง ไม่รับช่วง Position จาก FLIP LOCK, RACE, ZERO GRID หรือ MANUAL"},
+    AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง · Lot ต่อไม้ใช้ค่าที่ตั้งแบบตายตัว · ไม่รับช่วง Position จากโหมดอื่น"},
     FLIP_LOCK:{title:"FLIP LOCK",subtitle:"อ่านราคา MT5 โดยตรง · เมื่อกำไรบวกมากพอให้ Broker วาง SL ฝั่งกำไรได้ จะยก SL และไล่ตาม Tick โดยไม่รอราคา/คำสั่งจาก Server"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
@@ -3300,14 +3347,11 @@ function BotSettingsModal(props:any) {
         props.onEdit?.("maxPositions",Math.max(1,Number(props.settings?.[targetSizing.max] ?? 1)));
       }
     }
-    if (mode === "MANUAL") {
-      props.onEdit?.("maxBasketLossMoney",Number(props.settings?.manualMaxBasketLossMoney || 0));
-      props.onEdit?.("dailyLossMoney",Number(props.settings?.manualDailyLossMoney || 0));
-      props.onEdit?.("dailyProfitTargetMoney",Number(props.settings?.manualDailyProfitTargetMoney || 0));
-    } else if (mode !== "ZERO_GRID") {
-      props.onEdit?.("maxBasketLossMoney",Number(props.settings?.standardMaxBasketLossMoney ?? props.settings?.maxBasketLossMoney ?? 0));
-      props.onEdit?.("dailyLossMoney",Number(props.settings?.standardDailyLossMoney ?? props.settings?.dailyLossMoney ?? 0));
-      props.onEdit?.("dailyProfitTargetMoney",Number(props.settings?.standardDailyProfitTargetMoney ?? props.settings?.dailyProfitTargetMoney ?? 0));
+    const nextRiskProfile = riskProfiles[mode];
+    if (nextRiskProfile) {
+      props.onEdit?.("maxBasketLossMoney",Number(props.settings?.[nextRiskProfile.basket] ?? 0));
+      props.onEdit?.("dailyLossMoney",Number(props.settings?.[nextRiskProfile.dailyLoss] ?? 0));
+      props.onEdit?.("dailyProfitTargetMoney",Number(props.settings?.[nextRiskProfile.dailyProfit] ?? 0));
     }
     // ZERO GRID is price-only and does not use AUTO direction/brain settings.
     if (mode === "ZERO_GRID") {
@@ -3325,10 +3369,12 @@ function BotSettingsModal(props:any) {
     // Keep the currently selected direction when switching control modes.
     if (mode === "RACE") {
       props.onEdit?.("engineMode","RACE");
-      props.onEdit?.("profitTargetMode","AUTO");
+      props.onEdit?.("profitTargetMode","OFF");
       props.onEdit?.("manualStopLossPoints",0);
-      if (typeof props.settings?.raceCloseAllProfitEnabled !== "boolean") props.onEdit?.("raceCloseAllProfitEnabled",true);
+      const raceMode = String(props.settings?.raceProfitTargetMode || "BASKET").toUpperCase();
+      props.onEdit?.("raceProfitTargetMode",["BASKET","POSITION","OFF"].includes(raceMode) ? raceMode : "BASKET");
       if (!Number.isFinite(Number(props.settings?.raceCloseAllProfitMoney)) || Number(props.settings?.raceCloseAllProfitMoney) <= 0) props.onEdit?.("raceCloseAllProfitMoney",0.5);
+      if (!Number.isFinite(Number(props.settings?.racePerPositionProfitMoney)) || Number(props.settings?.racePerPositionProfitMoney) <= 0) props.onEdit?.("racePerPositionProfitMoney",0.5);
       return;
     }
     props.onEdit?.("engineMode","AUTO");
@@ -3362,14 +3408,20 @@ function BotSettingsModal(props:any) {
     : (entryMode === "AUTO_MOMENTUM"
         ? "M1 / M5 / M15 / M30 / H1 วิเคราะห์ทิศทางอัตโนมัติ"
         : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า");
-  const raceCloseAllProfitEnabled = props.settings?.raceCloseAllProfitEnabled !== false;
+  const raceProfitTargetMode = String(props.settings?.raceProfitTargetMode || "BASKET").toUpperCase();
+  const raceCloseAllProfitEnabled = raceProfitTargetMode === "BASKET";
   const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 0.5);
+  const racePerPositionProfitMoney = Number(props.settings?.racePerPositionProfitMoney || 0.5);
   const manualStopEnabled = Number(props.settings?.manualStopLossPoints || 0) > 0;
   const updateOptionalValue = (key:string,value:any) => props.onEdit?.(key,value);
   const exitLabel = controlMode === "FLIP_LOCK"
     ? "Trailing SL จากราคา MT5 โดยตรง"
     : controlMode === "RACE"
-      ? (raceCloseAllProfitEnabled ? "ปิดทั้งหมดที่ +$"+raceCloseAllProfitMoney.toFixed(2) : "ปิดกำไร RACE ปิดอยู่")
+      ? (raceProfitTargetMode === "POSITION"
+          ? "ปิดแต่ละไม้ที่ +"+racePerPositionProfitMoney.toFixed(2)+" เงินบัญชี"
+          : raceProfitTargetMode === "BASKET"
+            ? "ปิดทั้งชุดที่ +"+raceCloseAllProfitMoney.toFixed(2)+" เงินบัญชี"
+            : "ไม่ได้ตั้งเป้ากำไร RACE")
       : controlMode === "AUTO"
         ? (Number(props.settings.autoProfitTargetMoney||0) > 0
             ? "$"+Number(props.settings.autoProfitTargetMoney||0).toFixed(2)+" ทั้งชุด · ถึงแล้วปิดทันที"
@@ -3496,15 +3548,16 @@ function BotSettingsModal(props:any) {
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>กำไร / Stop Loss</b></div></div>
                 {controlMode==="RACE" ? <div className="cc-bot-v2-fields exit-fields">
-                  <div className="cc-bot-v2-field">
-                    <span><ScenovaIcon name="profit" size={17}/>ปิดไม้ทั้งหมดที่กำไร</span>
-                    <div className="cc-bot-v2-inline-toggle-value">
-                      <SwitchSetting checked={raceCloseAllProfitEnabled} onChange={(value:boolean)=>props.onEdit?.("raceCloseAllProfitEnabled",value)} onLabel="เปิด" offLabel="ปิด"/>
-                      <MoneyInput value={raceCloseAllProfitMoney} disabled={!raceCloseAllProfitEnabled} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("raceCloseAllProfitMoney",v)}/>
+                  <div className="cc-bot-v2-field cc-bot-profit-kind-field">
+                    <span><ScenovaIcon name="profit" size={17}/>รูปแบบกำไร RACE</span>
+                    <div className="cc-bot-v2-choice-row cc-bot-v2-choice-inline">
+                      <button type="button" className={raceProfitTargetMode==="BASKET"?"active":""} onClick={()=>{props.onEdit?.("raceProfitTargetMode","BASKET");props.onEdit?.("raceCloseAllProfitEnabled",true)}}><ScenovaIcon name="profit" size={16}/><span><b>ทั้งชุด</b></span></button>
+                      <button type="button" className={raceProfitTargetMode==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("raceProfitTargetMode","POSITION");props.onEdit?.("raceCloseAllProfitEnabled",false)}}><ScenovaIcon name="orders" size={16}/><span><b>ต่อไม้</b></span></button>
                     </div>
                   </div>
+                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{raceProfitTargetMode==="POSITION"?"เป้ากำไร RACE ต่อไม้":"เป้ากำไร RACE ทั้งชุด"}</span><MoneyInput value={raceProfitTargetMode==="POSITION"?racePerPositionProfitMoney:raceCloseAllProfitMoney} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(raceProfitTargetMode==="POSITION"?"racePerPositionProfitMoney":"raceCloseAllProfitMoney",v)}/><small>ใช้เฉพาะ RACE · ถึงเป้าที่เลือกแล้วจึงปิดกำไร</small></label>
                 </div> : controlMode==="AUTO" ? <div className="cc-bot-v2-fields exit-fields">
-                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไร AUTO</span><MoneyInput value={props.settings.autoProfitTargetMoney || 0} suffix="USD" onCommit={(v:string)=>props.onEdit?.("autoProfitTargetMoney",v)}/><small>ใช้เฉพาะ AUTO · ถึงแล้วปิด Basket ทันที</small></label>
+                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไร AUTO</span><MoneyInput value={props.settings.autoProfitTargetMoney || 0} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("autoProfitTargetMoney",v)}/><small>ใช้เฉพาะ AUTO · ถึงแล้วปิด Basket ทันที</small></label>
                   <div className="cc-bot-v2-engine-line"><ScenovaIcon name="target" size={16}/><b>Hard Profit Target</b><span>ถึงจำนวนเงินที่ตั้งไว้แล้วปิดทั้งชุดทันที ไม่รอ Reversal / Giveback / EMA</span></div>
                 </div> : <div className="cc-bot-v2-fields exit-fields">
                   <div className="cc-bot-v2-field cc-bot-profit-kind-field">
@@ -3514,7 +3567,7 @@ function BotSettingsModal(props:any) {
                       <button type="button" className={profitKind==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("manualPerPositionProfitMoney",Number(props.settings.manualPerPositionProfitMoney||2));props.onEdit?.("manualBasketProfitTargetMoney",0)}}><ScenovaIcon name="orders" size={16}/><span><b>ต่อไม้</b></span></button>
                     </div>
                   </div>
-                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{profitKind==="BASKET"?"เป้ากำไร MANUAL ทั้งชุด":"เป้ากำไร MANUAL ต่อไม้"}</span><MoneyInput value={profitKind==="BASKET"?props.settings.manualBasketProfitTargetMoney:props.settings.manualPerPositionProfitMoney} suffix="USD" onCommit={(v:string)=>props.onEdit?.(profitKind==="BASKET"?"manualBasketProfitTargetMoney":"manualPerPositionProfitMoney",v)}/><small>ใช้เฉพาะ MANUAL · ไม่เปลี่ยนค่า AUTO/RACE/ZERO</small></label>
+                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{profitKind==="BASKET"?"เป้ากำไร MANUAL ทั้งชุด":"เป้ากำไร MANUAL ต่อไม้"}</span><MoneyInput value={profitKind==="BASKET"?props.settings.manualBasketProfitTargetMoney:props.settings.manualPerPositionProfitMoney} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(profitKind==="BASKET"?"manualBasketProfitTargetMoney":"manualPerPositionProfitMoney",v)}/><small>ใช้เฉพาะ MANUAL · ไม่เปลี่ยนค่า AUTO/RACE/ZERO</small></label>
                   <div className="cc-bot-v2-field">
                     <span><ScenovaIcon name="shield" size={17}/>Stop Loss</span>
                     <ToggleNumberField alwaysShowInput label="เปิด" defaultValue={suggestedManualSl} value={props.settings.manualStopLossPoints} suffix="points" onChange={(v:string)=>updateOptionalValue("manualStopLossPoints",v)}/>
@@ -3527,9 +3580,9 @@ function BotSettingsModal(props:any) {
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>04</span><div><b>Risk Controls</b></div></div>
                 <div className="cc-bot-v2-limit-grid">
-                  {(controlMode!=="MANUAL" || riskValue(riskProfile.basket,"maxBasketLossMoney")>0 || revealedManualRisk[riskProfile.basket])&&<div><div><ScenovaIcon name="risk" size={18}/><span><b>ขาดทุนสูงสุดต่อรอบ</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.basket,"maxBasketLossMoney")} suffix="USD" onChange={(v:string)=>updateRiskValue(riskProfile.basket,"maxBasketLossMoney",v)}/></div>}
-                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyLoss,"dailyLossMoney")>0 || revealedManualRisk[riskProfile.dailyLoss])&&<div><div><ScenovaIcon name="pnl" size={18}/><span><b>ขาดทุนสูงสุดต่อวัน</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="25" value={riskValue(riskProfile.dailyLoss,"dailyLossMoney")} suffix="USD" onChange={(v:string)=>updateRiskValue(riskProfile.dailyLoss,"dailyLossMoney",v)}/></div>}
-                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")>0 || revealedManualRisk[riskProfile.dailyProfit])&&<div><div><ScenovaIcon name="target" size={18}/><span><b>เป้ากำไรต่อวัน</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")} suffix="USD" onChange={(v:string)=>updateRiskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney",v)}/></div>}
+                  {(controlMode!=="MANUAL" || riskValue(riskProfile.basket,"maxBasketLossMoney")>0 || revealedManualRisk[riskProfile.basket])&&<div><div><ScenovaIcon name="risk" size={18}/><span><b>ขาดทุนสูงสุดต่อรอบ</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.basket,"maxBasketLossMoney")} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.basket,"maxBasketLossMoney",v)}/></div>}
+                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyLoss,"dailyLossMoney")>0 || revealedManualRisk[riskProfile.dailyLoss])&&<div><div><ScenovaIcon name="pnl" size={18}/><span><b>ขาดทุนสูงสุดต่อวัน</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="25" value={riskValue(riskProfile.dailyLoss,"dailyLossMoney")} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyLoss,"dailyLossMoney",v)}/></div>}
+                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")>0 || revealedManualRisk[riskProfile.dailyProfit])&&<div><div><ScenovaIcon name="target" size={18}/><span><b>เป้ากำไรต่อวัน</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney",v)}/></div>}
                   {controlMode==="MANUAL"&&(
                     (riskValue(riskProfile.basket,"maxBasketLossMoney")<=0&&!revealedManualRisk[riskProfile.basket]) ||
                     (riskValue(riskProfile.dailyLoss,"dailyLossMoney")<=0&&!revealedManualRisk[riskProfile.dailyLoss]) ||
