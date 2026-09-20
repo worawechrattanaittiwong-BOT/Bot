@@ -688,9 +688,23 @@ export default function DashboardPage() {
         mode,trades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
       }));
 
-  const openPositions = Array.isArray(metrics.openPositions)
-    ? [...metrics.openPositions].sort((a:any,b:any)=>Number(a.openedAt||0)-Number(b.openedAt||0))
-    : [];
+  const rawOpenPositions = (() => {
+    if (Array.isArray(metrics.openPositions)) return metrics.openPositions;
+    if (typeof metrics.openPositions === "string") {
+      try {
+        const parsed = JSON.parse(metrics.openPositions);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  })();
+  const openPositions = [...rawOpenPositions]
+    .sort((a:any,b:any)=>Number(a.openedAt||0)-Number(b.openedAt||0));
+  const livePositionTelemetryMissing = currentPositions > 0 && openPositions.length === 0;
+  const livePositionEaVersion = String(metrics.eaVersion || softwareUpdate.currentEaVersion || "—");
+  const livePositionRequiredVersion = String(softwareUpdate.latestEaVersion || "1.0.43");
   const latestBotCommand = Array.isArray(botLogs?.events) && botLogs.events.length
     ? botLogs.events[0]
     : null;
@@ -1985,7 +1999,15 @@ export default function DashboardPage() {
                           <span>{Number(position.openPrice||0).toFixed(Math.max(2,Math.min(5,Number(metrics.symbolDigits||3))))}</span>
                           <span className={pnl>0?"pnl good":pnl<0?"pnl bad":"pnl"}>{pnl>0?"+$":"$"}{pnl.toFixed(2)}</span>
                         </div>;
-                      }) : <div className="empty"><ScenovaIcon name="orders" size={20}/><span>ยังไม่มีออเดอร์ที่กำลังถือ</span></div>}
+                      }) : livePositionTelemetryMissing ? (
+                        <div className="empty telemetry-missing">
+                          <ScenovaIcon name="warning" size={20}/>
+                          <span>
+                            พบ {currentPositions} Position ใน MT5 แต่ EA ยังไม่ส่งรายละเอียดออเดอร์
+                            <small>EA v{livePositionEaVersion} · Runtime ที่รองรับรายการสด v{livePositionRequiredVersion}</small>
+                          </span>
+                        </div>
+                      ) : <div className="empty"><ScenovaIcon name="orders" size={20}/><span>ยังไม่มีออเดอร์ที่กำลังถือ</span></div>}
                     </div>
                   </div>
                 </section>
