@@ -1860,6 +1860,11 @@ export default function DashboardPage() {
                       </span>
                     )}
                   </div>
+                  {softwareUpdate.runtimeContractMatch === false && (
+                    <div className="cc-runtime-contract-warning" role="status">
+                      EA ใน MT5 ยังไม่ได้โหลด Runtime ล่าสุด
+                    </div>
+                  )}
                   <div id="scenova-status-update-mount" className="cc-status-update-slot"/>
                 </section>
                 </div>
