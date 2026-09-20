@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 export const DEFAULT_INSTALLER_VERSION = "1.0.10";
-export const DEFAULT_EA_VERSION = "1.0.46";
+export const DEFAULT_EA_VERSION = "1.0.47";
 export const EA_RUNTIME_CONTRACT = "RACE_PERSISTENT_REVERSAL_EXIT_V4";
 export const ZERO_GRID_MAX_LEVELS_PER_SIDE = 30;
 
