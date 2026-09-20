@@ -161,6 +161,7 @@ input string          InpEngineMode           = "AUTO";
 // default so the web's 0.50 close-all target also has a safe EA fallback.
 input bool            InpRaceCloseAllProfitEnabled = true;
 input double          InpRaceCloseAllProfitMoney = 0.50;
+input double          InpRacePerPositionProfitMoney = 0.50;
 #define LOCAL_EXECUTION_PLANE_V1 "MT5_TICK_DIRECT_V1"
 #define LOCAL_EXECUTION_NETWORK_QUIET_MS 300
 #define LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS 5000
@@ -342,6 +343,8 @@ datetime g_raceExitCandidateSince = 0;
 double g_raceExitCandidatePeakAdverse = 0.0;
 bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
+string g_raceProfitTargetMode = "BASKET";
+double g_racePerPositionProfitMoney = 0.50;
 // RACE uses a rolling 60-second order-flow window. Exchange/deal-side flags
 // are used when the broker publishes them; quote-only symbols fall back to
 // uptick/downtick tick-volume counts. No trend/EMA/timeframe signal decides side.
@@ -1390,6 +1393,8 @@ int OnInit()
    g_entryMode = InpEntryMode;
    g_raceCloseAllProfitEnabled = InpRaceCloseAllProfitEnabled;
    g_raceCloseAllProfitMoney = MathMax(0.01, InpRaceCloseAllProfitMoney);
+   g_raceProfitTargetMode = g_raceCloseAllProfitEnabled ? "BASKET" : "OFF";
+   g_racePerPositionProfitMoney = MathMax(0.01, InpRacePerPositionProfitMoney);
    g_engineMode = InpEngineMode;
    StringToUpper(g_engineMode);
    if(g_engineMode != "RACE" && g_engineMode != "ZERO_GRID")
@@ -3300,11 +3305,8 @@ double RaceInitialStopPrice(int direction, double entryPrice)
       (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
    ) + 2.0;
 
-   double points = 0.0;
-   if(g_manualStopLossPoints > 0.0)
-      points = MathMax(g_manualStopLossPoints, brokerMinimumPoints);
-   else
-      points = RaceAtrStopPoints();
+   // RACE owns its ATR stop. A MANUAL stop value must never leak into RACE.
+   double points = RaceAtrStopPoints();
 
    if(points <= 0.0)
       return 0.0;
@@ -3317,9 +3319,6 @@ double RaceInitialStopPrice(int direction, double entryPrice)
 
 bool RaceStopReady()
 {
-   if(g_manualStopLossPoints > 0.0)
-      return true;
-
    double atr = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
    if(atr <= 0.0)
    {
@@ -3360,8 +3359,8 @@ int RaceHarvestProfitablePositions()
                    ACCOUNT_MARGIN_MODE_RETAIL_HEDGING);
    double baseVolume = NormalizeTradeVolume(g_lot);
    double perPositionTarget =
-      (g_profitTargetMode == "MANUAL" && g_perPositionProfit > 0.0)
-      ? g_perPositionProfit
+      (g_raceProfitTargetMode == "POSITION" && g_racePerPositionProfitMoney > 0.0)
+      ? g_racePerPositionProfitMoney
       : 0.0;
 
    for(int i = PositionsTotal() - 1; i >= 0; i--)
@@ -3377,12 +3376,8 @@ int RaceHarvestProfitablePositions()
 
       double netFloating = PositionGetDouble(POSITION_PROFIT) +
                            PositionGetDouble(POSITION_SWAP);
-      if(perPositionTarget > 0.0)
-      {
-         if(netFloating + 0.00000001 < perPositionTarget)
-            continue;
-      }
-      else if(netFloating <= 0.0)
+      if(perPositionTarget <= 0.0 ||
+         netFloating + 0.00000001 < perPositionTarget)
          continue;
 
       double positionVolume = PositionGetDouble(POSITION_VOLUME);
@@ -3633,18 +3628,27 @@ bool ManageRaceBasket(double momentum)
    // User-controlled RACE close-all target. This check intentionally runs
    // before wrong-direction analysis and per-ticket profit harvesting so a
    // reached target is acted on immediately with the existing close command.
-   if(g_raceCloseAllProfitEnabled &&
-      g_raceCloseAllProfitMoney > 0.0 &&
+   bool raceBasketProfitTarget =
+      g_raceProfitTargetMode == "BASKET" &&
+      g_raceCloseAllProfitMoney > 0.0;
+   bool racePerPositionProfitTarget =
+      g_raceProfitTargetMode == "POSITION" &&
+      g_racePerPositionProfitMoney > 0.0;
+   bool raceStrictProfitTarget =
+      raceBasketProfitTarget || racePerPositionProfitTarget;
+
+   if(raceBasketProfitTarget &&
       cycleProfit >= g_raceCloseAllProfitMoney)
    {
       RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET");
       return true;
    }
 
-   // RACE_PROFIT_FIRST_V116: profitable RACE tickets are harvested before
-   // the Max Positions fill gate. Profit exit is never delayed just because the
-   // basket is still building. Refill, if needed, happens on a later pass.
-   int harvested = g_raceCloseAllProfitEnabled ? 0 : RaceHarvestProfitablePositions();
+   // Per-position mode closes only the RACE ticket that reached its configured
+   // money target. Other RACE tickets continue under the same 60-second engine.
+   int harvested = racePerPositionProfitTarget
+      ? RaceHarvestProfitablePositions()
+      : 0;
    if(harvested > 0)
    {
       g_raceProfitArmed = false;
@@ -3670,7 +3674,7 @@ bool ManageRaceBasket(double momentum)
    int volumeDirection = RaceAnalysisDirection(momentum);
    if(volumeDirection != 0 && volumeDirection != direction)
    {
-      if(cycleProfit >= 0.0)
+      if(cycleProfit >= 0.0 && !raceStrictProfitTarget)
       {
          RaceCloseCycle("RACE_VOLUME_ROLLOVER");
          return true;
@@ -3709,7 +3713,7 @@ bool ManageRaceBasket(double momentum)
    if(g_raceRecoveryWatch)
    {
       double recoveryCloseMoney = MathMax(0.02, armMoney * 0.25);
-      if(cycleProfit >= recoveryCloseMoney)
+      if(!raceStrictProfitTarget && cycleProfit >= recoveryCloseMoney)
       {
          RaceCloseCycle("RACE_RECOVERY_PROFIT");
          return true;
@@ -3717,6 +3721,21 @@ bool ManageRaceBasket(double momentum)
       RefreshMarketContext(false);
       g_raceState = "RECOVERY_WAIT";
       g_executionStatus = "RACE_RECOVERY_WAIT";
+      return true;
+   }
+
+   // A configured RACE money target owns every profitable exit. Loss/reversal
+   // protection above remains active, but quick-profit/giveback cannot bank
+   // profit early before the selected Basket/per-position target.
+   if(raceStrictProfitTarget)
+   {
+      RefreshMarketContext(false);
+      g_raceState = filling ? "FILLING" : "FULL_WAIT_PROFIT";
+      g_executionStatus = racePerPositionProfitTarget
+         ? "RACE_WAIT_PER_POSITION_TARGET"
+         : "RACE_WAIT_BASKET_TARGET";
+      if(filling && volumeDirection == direction)
+         ProcessRaceFill(direction);
       return true;
    }
 
@@ -3981,11 +4000,17 @@ void OnTick()
          g_tacticalCountertrendActive=true;
          g_tacticalCountertrendDirection=BasketDirection();
          string tacticalExitReason="NONE";
-         if(TacticalCountertrendExitReady(
-            g_tacticalCountertrendDirection,
-            momentum,
-            BasketCycleProfit(),
-            tacticalExitReason))
+         double tacticalCycleProfit=BasketCycleProfit();
+         bool strictTacticalProfitTarget=
+            g_profitTargetMode=="AUTO" &&
+            g_basketProfitTarget>0.0 &&
+            tacticalCycleProfit>0.0;
+         if(!strictTacticalProfitTarget &&
+            TacticalCountertrendExitReady(
+               g_tacticalCountertrendDirection,
+               momentum,
+               tacticalCycleProfit,
+               tacticalExitReason))
          {
             CloseAllBasket("TACTICAL_COUNTERTREND_EXIT");
             ResetTrail();
@@ -4002,12 +4027,15 @@ void OnTick()
       }
       else
       {
-         if(!tacticalBasket && BrainV8HandleBasketReversal(momentum))
-            return;
-
-         // Legacy correction belongs only to MANUAL/legacy-owned baskets.
-         if(!tacticalBasket && BrainV13FastWrongEntryCorrection(momentum))
-            return;
+         // MANUAL is user-owned. Do not let AUTO/legacy reversal brains close
+         // the user's basket before its own SL/profit/risk settings are hit.
+         if(!manualOwnedBasket)
+         {
+            if(!tacticalBasket && BrainV8HandleBasketReversal(momentum))
+               return;
+            if(!tacticalBasket && BrainV13FastWrongEntryCorrection(momentum))
+               return;
+         }
       }
       bool autoV21NoRescue=autoV20OwnedBasket && rescueCount<=0;
       if(autoV21NoRescue && g_rescueState!=RESCUE_NORMAL) ResetRescueState();
@@ -6177,6 +6205,16 @@ void ApplySettings(string json)
 
    g_raceCloseAllProfitEnabled = JsonBool(json, "raceCloseAllProfitEnabled", g_raceCloseAllProfitEnabled);
    g_raceCloseAllProfitMoney = MathMax(0.01, JsonNumber(json, "raceCloseAllProfitMoney", g_raceCloseAllProfitMoney));
+   g_racePerPositionProfitMoney = MathMax(0.01, JsonNumber(json, "racePerPositionProfitMoney", g_racePerPositionProfitMoney));
+   string requestedRaceProfitMode = JsonString(json, "raceProfitTargetMode", "");
+   StringToUpper(requestedRaceProfitMode);
+   if(requestedRaceProfitMode == "BASKET" ||
+      requestedRaceProfitMode == "POSITION" ||
+      requestedRaceProfitMode == "OFF")
+      g_raceProfitTargetMode = requestedRaceProfitMode;
+   else
+      g_raceProfitTargetMode = g_raceCloseAllProfitEnabled ? "BASKET" : "OFF";
+   g_raceCloseAllProfitEnabled = g_raceProfitTargetMode == "BASKET";
 
    g_zeroGridStepPrice = ZeroGridAllowedStep(JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));
    g_zeroGridLowVolatilityEnabled = JsonBool(json, "zeroGridLowVolatilityEnabled", g_zeroGridLowVolatilityEnabled);
@@ -12257,10 +12295,9 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    double costPerLot=CurrentSpreadCost(1.0);
    side.rr=AutoV20NetRewardRisk(grossProfitPerLot,grossLossPerLot,costPerLot);
 
-   double sizeFactor=0.50;
-   if(side.rr>=1.55 && side.confidence>=76.0) sizeFactor=1.00;
-   else if(side.rr>=1.20 && side.confidence>=67.0) sizeFactor=0.75;
-   side.plannedLot=NormalizeTradeVolume(g_lot*sizeFactor);
+   // AUTO Lot is customer-owned and fixed. Intelligence decides whether/when
+   // to enter, but never scales 50%/75% behind the value shown on the website.
+   side.plannedLot=NormalizeTradeVolume(g_lot);
    side.knownCostMoney=costPerLot*side.plannedLot;
    side.expectedProfitMoney=MathMax(0.0,grossProfitPerLot*side.plannedLot-side.knownCostMoney);
    side.expectedLossMoney=grossLossPerLot*side.plannedLot+side.knownCostMoney;
@@ -12759,16 +12796,9 @@ void AutoV21RecoverCanonicalProtection(int direction)
 
 void AutoV21ApplyNoIncreaseLotCap(AUTO_V20_SIDE &side)
 {
-   double ceiling=g_autoV20LotCeiling>0.0 ? g_autoV20LotCeiling : AutoV21ExistingLotCeiling();
-   if(ceiling<=0.0 || side.plannedLot<=ceiling+1e-12) return;
-   double oldLot=side.plannedLot;
-   double cappedLot=NormalizeTradeVolume(ceiling);
-   if(cappedLot<=0.0 || cappedLot>=oldLot) return;
-   double ratio=cappedLot/oldLot;
-   side.plannedLot=cappedLot;
-   side.knownCostMoney*=ratio;
-   side.expectedProfitMoney*=ratio;
-   side.expectedLossMoney*=ratio;
+   // Fixed-Lot contract: every new AUTO order uses the configured AUTO Lot.
+   // Existing/legacy positions are never allowed to silently cap a new order.
+   side.plannedLot=NormalizeTradeVolume(g_lot);
 }
 
 double AutoV21PerOrderRiskBudgetMoney()
@@ -15866,7 +15896,7 @@ bool ClosePositionVolumeByTicket(ulong ticket,double requestedVolume,string comm
    request.magic=magic;
    request.symbol=symbol;
    request.volume=volume;
-   request.deviation=30;
+   request.deviation=DynamicDeviationPoints();
    request.type_filling=AllowedFillingMode();
    request.comment=comment;
    if(positionType==POSITION_TYPE_BUY)
@@ -16472,18 +16502,32 @@ void ManageDynamicProtection()
       string positionComment=PositionGetString(POSITION_COMMENT);
       bool tacticalPosition=StringFind(positionComment,"SaaSTactical")>=0;
       bool autoPosition=StringFind(positionComment,AUTO_V20_LIVE_COMMENT)>=0;
+      bool manualPosition=
+         StringFind(positionComment,MANUAL_LIVE_COMMENT)>=0 ||
+         StringFind(positionComment,LEGACY_BASKET_COMMENT)>=0;
       bool autoFamilyPosition=autoPosition || tacticalPosition;
+
+      // MANUAL means MANUAL: its broker SL, explicit money targets and explicit
+      // risk controls are the only owners. Never add hidden BE/ATR/EMA trailing.
+      if(manualPosition)
+         continue;
+
       double marketPrice = direction > 0 ? tick.bid : tick.ask;
       double profitPoints = direction > 0
          ? (marketPrice - openPrice) / _Point
          : (openPrice - marketPrice) / _Point;
+
+      bool strictAutoHardTarget =
+         autoFamilyPosition &&
+         g_profitTargetMode=="AUTO" &&
+         g_basketProfitTarget>0.0;
 
       double desiredSL = currentSL;
       if(autoPosition && g_autoV20BasketStopPrice>0.0)
          desiredSL=direction>0
             ? (currentSL<=0.0 ? g_autoV20BasketStopPrice : MathMax(currentSL,g_autoV20BasketStopPrice))
             : (currentSL<=0.0 ? g_autoV20BasketStopPrice : MathMin(currentSL,g_autoV20BasketStopPrice));
-      if(profitPoints >= atr * 0.55)
+      if(!strictAutoHardTarget && profitPoints >= atr * 0.55)
       {
          double breakEven = direction > 0
             ? openPrice + atr * 0.04 * _Point
@@ -16494,7 +16538,7 @@ void ManageDynamicProtection()
             desiredSL = currentSL <= 0.0 ? breakEven : MathMin(currentSL, breakEven);
       }
 
-      if(profitPoints >= atr * 1.10)
+      if(!strictAutoHardTarget && profitPoints >= atr * 1.10)
       {
          double trail = direction > 0
             ? marketPrice - atr * 0.55 * _Point
@@ -16507,7 +16551,7 @@ void ManageDynamicProtection()
 
       // EMA Dynamic Trailing: once profit is established, EMA21/50 becomes a
       // structural trailing reference. It only tightens SL; it never widens it.
-      if(profitPoints >= atr * 0.70)
+      if(!strictAutoHardTarget && profitPoints >= atr * 0.70)
       {
          double emaRef = EmaTrailReference(direction);
          if(emaRef > 0.0)
@@ -16819,7 +16863,7 @@ bool ClosePositionByTicket(ulong ticket) /* V9_RETRY */
    request.magic = PositionGetInteger(POSITION_MAGIC);
    request.symbol = symbol;
    request.volume = NormalizeTradeVolume(volume);
-   request.deviation = 30;
+   request.deviation = DynamicDeviationPoints();
    request.type_filling = AllowedFillingMode();
    request.comment = "SaaSBasketClose";
 
