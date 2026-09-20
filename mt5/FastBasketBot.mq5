@@ -3376,11 +3376,20 @@ int RaceHarvestProfitablePositions()
 
       double netFloating = PositionGetDouble(POSITION_PROFIT) +
                            PositionGetDouble(POSITION_SWAP);
+      double positionVolume = PositionGetDouble(POSITION_VOLUME);
+      double targetComparableProfit = netFloating;
+      if(!hedging && positionVolume > 0.0 && baseVolume > 0.0)
+      {
+         // Netting exposes one aggregate position. Compare the proportional
+         // profit of one configured-Lot unit to the user's per-position target,
+         // then realize exactly one unit per pass.
+         targetComparableProfit =
+            netFloating * MathMin(1.0, baseVolume / positionVolume);
+      }
       if(perPositionTarget <= 0.0 ||
-         netFloating + 0.00000001 < perPositionTarget)
+         targetComparableProfit + 0.00000001 < perPositionTarget)
          continue;
 
-      double positionVolume = PositionGetDouble(POSITION_VOLUME);
       double closeVolume = hedging
          ? positionVolume
          : MathMin(positionVolume, baseVolume);
