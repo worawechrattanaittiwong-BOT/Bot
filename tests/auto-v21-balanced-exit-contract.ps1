@@ -35,7 +35,9 @@ Need $manage 'AUTO_V21_EARLY_PROFIT_GIVEBACK' 'early profit giveback reason miss
 Need $ea 'targetOpenedAt' 'restart migration must recover the oldest AUTO position target'
 Need $send 'g_autoV20BasketTargetPrice' 'AUTO add must inherit canonical TP'
 Need $send 'g_autoV20BasketStopPrice' 'AUTO add must inherit canonical/tighter SL'
-Need $dynamic 'desiredTP=NormalizeDouble(g_autoV20BasketTargetPrice,digits);' 'Dynamic engine must not replace canonical AUTO TP'
+Need $dynamic 'desiredTP=NormalizeTargetPriceToTick(g_autoV20BasketTargetPrice,direction);' 'Dynamic engine must keep canonical AUTO TP broker-tick aligned when no hard money target is active'
+Need $dynamic 'bool clearAutoMoneyTargetTP =' 'AUTO hard money target must explicitly clear any old Broker TP'
+Need $dynamic 'g_basketProfitTarget > 0.0 && currentTP > 0.0' 'AUTO hard money target must own profit exit instead of Broker TP'
 Need $precision 'AutoV21ApplyNoIncreaseLotCap(selected);' 'AUTO add must never increase Lot above established ceiling'
 Need $precision 'AutoV21RiskBudgetAllows(selected,count,riskReason)' 'AUTO risk ceiling must block instead of resizing Lot'
 Need $onTick 'autoV21NoRescue' 'AUTO must skip new Rescue engine'
@@ -52,4 +54,4 @@ if(-not $eaVersionMatch.Success -or -not $releaseVersionMatch.Success){
 if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
   throw ("EA release version mismatch: EA={0} API={1}" -f $eaVersionMatch.Groups[1].Value,$releaseVersionMatch.Groups[1].Value)
 }
-Write-Host 'AUTO V21 balanced exit / canonical TP / no-rescue / no-lot-increase contract PASS'
+Write-Host 'AUTO V21 balanced exit / hard-target TP / no-rescue / no-lot-increase contract PASS'
