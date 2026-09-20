@@ -2087,7 +2087,10 @@ export class BotController {
       clean.basketProfitTargetMoney = autoProfitTargetMoney;
       clean.perPositionProfitMoney = 0;
       clean.profitRunTrailPercent = 0;
-      clean.manualStopLossPoints = 0;
+      // Profit-profile synchronization must not mutate unrelated MANUAL risk
+      // settings during a partial API update. Clear Manual SL only when the
+      // caller explicitly switches control ownership to AUTO.
+      if (requestedControlMode === "AUTO") clean.manualStopLossPoints = 0;
     }
 
     const manualSelected =
