@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.44"
-#define SCENOVA_EA_VERSION "1.0.44"
-#define SCENOVA_PRODUCT_VERSION "1.0.44"
+#property version   "1.0.45"
+#define SCENOVA_EA_VERSION "1.0.45"
+#define SCENOVA_PRODUCT_VERSION "1.0.45"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -215,7 +215,7 @@ input double          InpMaxAtrPoints          = 0.0;
 
 // Intelligence v4: post-entry recovery and EMA intelligence. These features
 // never decide whether the first trade is permitted.
-input bool            InpAdaptiveRescueEngine  = true;
+input bool            InpAdaptiveRescueEngine  = false; // Disabled: no recovery hedge/opposite rescue orders
 input double          InpRescueMaxHedgeRatio   = 0.65;
 input int             InpTimeRescueMinutes     = 5;
 input bool            InpShowEmaOnChart        = true;
@@ -459,7 +459,7 @@ double g_priceActionBuyScore = 0.0;
 double g_priceActionSellScore = 0.0;
 
 // Adaptive Basket Rescue & Recovery ---------------------------------------
-bool g_rescueEnabled = true;
+bool g_rescueEnabled = false;
 ENUM_RESCUE_STATE g_rescueState = RESCUE_NORMAL;
 datetime g_rescueStartedAt = 0;
 datetime g_rescueWarningAt = 0;
@@ -1410,7 +1410,7 @@ int OnInit()
    g_sessionStartHour = MathMax(0, MathMin(23, InpSessionStartHour));
    g_sessionEndHour = MathMax(1, MathMin(24, InpSessionEndHour));
    g_maxAtrPoints = MathMax(0.0, InpMaxAtrPoints);
-   g_rescueEnabled = InpAdaptiveRescueEngine;
+   g_rescueEnabled = false; // Recovery/hedge engine permanently disabled.
    g_indicatorV6Mode = InpIndicatorV6Mode;
    g_indicatorActivationStage = IndicatorV6ModeName();
    g_adaptiveMomentumThreshold = InpMomentumEntryPoints;
@@ -6207,18 +6207,18 @@ void ApplySettings(string json)
    if(hasControlMode || hasEngineMode)
       g_settingsSynchronized = true;
 
-   // FLIP LOCK V2 is intentionally single-position.  Its paired STOP
-   // order is the only reversal mechanism; AUTO rescue/profit exits stay out.
+   // Adaptive Rescue / Recovery is disabled for every control mode.
+   // AUTO/RACE/MANUAL must never open an opposite-side SCNRescue position.
+   g_rescueEnabled = false;
+
+   // FLIP LOCK remains its own intentional reversal engine.
    if(g_controlMode == "FLIP_LOCK")
    {
       g_maxPositions = 1;
-      g_rescueEnabled = false;
       g_profitTargetMode = "OFF";
       g_dailyProfitContinueAfterTarget = false;
       g_dailyProfitDrawdownPercent = 0.0;
    }
-   else
-      g_rescueEnabled = InpAdaptiveRescueEngine;
 
    // AUTO V20 and each isolated engine are distinct owners. The MANUAL legacy
    // queue must never survive a transition into AUTO/RACE/ZERO/FLIP.
@@ -15768,47 +15768,11 @@ double RescueReversalScore(int primaryDirection,string &reasonOut)
 
 bool SendRescueOrder(int direction,double requestedVolume) /* V9_RETRY */
 {
-   if(!AccountSupportsHedging() ||
-      TradePermissionStatus()!="OK" ||
-      !OpenTradingAllowedForDirection(direction) ||
-      g_spreadStatus=="EXTREME")
-      return false;
-
-   double volume=NormalizeRescueVolume(requestedVolume);
-   if(volume<=0.0 || !CanSendOrder())
-      return false;
-
-   MqlTick tick;
-   if(!SymbolInfoTick(_Symbol,tick))
-      return false;
-
-   MqlTradeRequest request={};
-   MqlTradeResult result={};
-   request.action=TRADE_ACTION_DEAL;
-   request.magic=RescueMagic();
-   request.symbol=_Symbol;
-   request.volume=volume;
-   request.deviation=30;
-   request.type_filling=AllowedFillingMode();
-   request.comment="SCNRescue";
-   request.type=direction>0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
-   request.price=direction>0 ? tick.ask : tick.bid;
-   request.sl=DynamicInitialStopPrice(direction,request.price);
-   request.tp=0.0;
-
-   ResetLastError();
-   if(!OrderSendWithPriceRetry(request,result) || !TradeResultAccepted(result))
-   {
-      g_lastOrderError=GetLastError();
-      g_lastOrderRetcode=(long)result.retcode;
-      g_lastOrderAt=TimeCurrent();
-      return false;
-   }
-
-   RegisterOrderRequest();
-   g_lastRescueOrderAt=TimeCurrent();
-   g_executionStatus="RESCUE_HEDGE_OPENED";
-   return true;
+   // Recovery hedge orders are intentionally disabled. Keep this hard gate in
+   // the execution function so stale settings or future callers cannot open an
+   // opposite-side SCNRescue position.
+   g_executionStatus="RESCUE_DISABLED";
+   return false;
 }
 
 bool ClosePositionVolumeByTicket(ulong ticket,double requestedVolume,string comment) /* V9_RETRY */
@@ -16017,43 +15981,8 @@ double RescueDesiredHedgeRatio()
 
 void AdjustRescueHedge()
 {
-   if(g_rescuePrimaryDirection==0 || g_rescuePrimaryVolume<=0.0)
-      return;
-
-   datetime now=TimeCurrent();
-   // Do not rebalance every few ticks in a sideways market. Spread/commission
-   // from Hedge churn can be more expensive than the protection itself.
-   if(g_lastRescueOrderAt>0 && now-g_lastRescueOrderAt<60)
-      return;
-
-   double ratio=RescueDesiredHedgeRatio();
-   double desired=g_rescuePrimaryVolume*ratio;
-   double current=VolumeForMagic(RescueMagic(),-g_rescuePrimaryDirection);
-   double minVolume=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
-
-   if(current+minVolume*0.50<desired)
-   {
-      if(BasketHasAutoPosition()) return;
-      double add=NormalizeRescueVolume(desired-current);
-      if(add>0.0 && SendRescueOrder(-g_rescuePrimaryDirection,add))
-      {
-         g_rescueHedgeLockedUntil=now+120;
-         g_rescueLastAdjustedScore=g_rescueReversalScore;
-      }
-   }
-   else if(current>desired+minVolume*0.75)
-   {
-      // Never trim a freshly opened Hedge on a one-minute noise reversal.
-      if(now<g_rescueHedgeLockedUntil)
-         return;
-
-      double trim=NormalizeRescueVolume(current-desired);
-      if(trim>0.0 && ReduceRescueVolume(trim))
-      {
-         g_lastRescueOrderAt=now;
-         g_rescueLastAdjustedScore=g_rescueReversalScore;
-      }
-   }
+   // No hedge rebalancing or opposite-side recovery positions are allowed.
+   g_executionStatus="RESCUE_DISABLED";
 }
 
 bool CloseRecoveryCycle(string reason)
@@ -16075,242 +16004,29 @@ bool CloseRecoveryCycle(string reason)
 
 bool ManageAdaptiveRescue()
 {
-   if(!g_rescueEnabled)
-      return false;
+   // Recovery/hedge mode is fully disabled. If an older EA left SCNRescue
+   // positions open, unwind only those legacy rescue positions and reset the
+   // rescue state. Primary AUTO/RACE/MANUAL positions remain under their normal
+   // owner and exit rules.
+   g_rescueEnabled=false;
 
-   datetime now=TimeCurrent();
-   if(g_lastRescueEvaluationAt>0 && now-g_lastRescueEvaluationAt<2)
-      return g_rescueState!=RESCUE_NORMAL;
-   g_lastRescueEvaluationAt=now;
-
-   int primaryCount=BasketPositionCount();
    int rescueCount=RescuePositionCount();
-
-   if(primaryCount<=0)
+   if(rescueCount>0)
    {
-      if(rescueCount>0)
-      {
-         g_rescueState=RESCUE_EXIT;
-         g_executionStatus="RESCUE_EXIT";
-         CloseRescuePositions();
+      g_executionStatus="RESCUE_DISABLED_CLEANUP";
+      CloseRescuePositions();
+      if(RescuePositionCount()>0)
          return true;
-      }
-      if(g_rescueState!=RESCUE_NORMAL || g_rescueRealizedProfit!=0.0)
-         ResetRescueState();
-      return false;
    }
 
-   UpdateRescueExposure();
-   int direction=g_rescuePrimaryDirection;
-   if(direction==0)
-      return false;
+   if(g_rescueState!=RESCUE_NORMAL ||
+      g_rescueRealizedProfit!=0.0 ||
+      g_rescuePrimaryDirection!=0 ||
+      g_rescueHedgeDirection!=0)
+      ResetRescueState();
 
-   string reversalReason="NONE";
-   g_rescueReversalScore=RescueReversalScore(direction,reversalReason);
-   g_rescueReversalReason=reversalReason;
-
-   long timeLimit=RescueTimeThresholdSeconds();
-   bool timeRescue=g_rescueOldestAgeSeconds>=timeLimit && g_rescueCombinedProfit<0.0;
-
-   bool reversalCandidate =
-      g_rescueReversalScore>=70.0 ||
-      (timeRescue && g_rescueReversalScore>=58.0);
-   if(reversalCandidate)
-   {
-      if(g_rescueReversalCandidateSince==0)
-         g_rescueReversalCandidateSince=now;
-   }
-   else
-      g_rescueReversalCandidateSince=0;
-
-   long confirmationSeconds=timeRescue ? 15 : 25;
-   g_rescueReversalConfirmed=
-      g_rescueReversalCandidateSince>0 &&
-      now-g_rescueReversalCandidateSince>=confirmationSeconds;
-
-   double rescueThreshold=RescueThresholdMoney();
-   double warningThreshold=MathMax(0.50,rescueThreshold*0.55);
-   bool lossWarning=g_rescueCombinedProfit<=-warningThreshold;
-   bool rescueLoss=g_rescueCombinedProfit<=-rescueThreshold;
-   bool severeLoss=false;
-   if(g_maxBasketLoss>0.0 &&
-      g_rescueCombinedProfit<=-g_maxBasketLoss*0.65)
-   {
-      rescueLoss=true;
-      severeLoss=true;
-   }
-
-   // A normal pullback should not pause the Basket just because P/L is red.
-   // WARNING requires evidence that the market is actually building a reversal,
-   // a time-stalled trade, or a loss already approaching the user's hard limit.
-   bool warningEvidence=
-      g_rescueReversalScore>=40.0 ||
-      timeRescue ||
-      severeLoss;
-
-   if(g_rescueState==RESCUE_NORMAL &&
-      ((lossWarning && warningEvidence) ||
-       (timeRescue && g_rescueCombinedProfit<0.0)))
-   {
-      g_rescueState=RESCUE_WARNING;
-      g_rescueWarningAt=now;
-      g_executionStatus="RESCUE_WARNING";
-      SaveRescueState();
-   }
-
-   if(g_rescueState==RESCUE_WARNING)
-   {
-      // V15: a warning observes recovery risk but does not freeze a valid
-      // Basket fill before the configured Max Positions target is reached.
-      if(BasketFillEnabled() &&
-         g_burstTargetPositions > BasketPositionCount())
-      {
-         g_executionStatus = g_rescueOldestAgeSeconds >= RescueTimeThresholdSeconds()
-            ? "TIME_RESCUE_WARNING_FILL_CONTINUES"
-            : "RESCUE_WARNING_FILL_CONTINUES";
-         SaveRescueState();
-         return false;
-      }
-
-      g_burstActive=false;
-      g_burstNeedsRearm=false;
-
-      if((g_rescueCombinedProfit>=0.0 && rescueCount==0) ||
-         (!timeRescue && !severeLoss &&
-          g_rescueReversalScore<35.0 &&
-          g_rescueCombinedProfit>-rescueThreshold))
-      {
-         ResetRescueState();
-         return false;
-      }
-
-      if(g_rescueReversalConfirmed && (rescueLoss || timeRescue))
-      {
-         g_rescueState=RESCUE_ACTIVE;
-         g_rescueStartedAt=now;
-         g_rescueHedgeLockedUntil=now+120;
-         g_rescuePrimaryRecoverySince=0;
-         g_rescueLastAdjustedScore=g_rescueReversalScore;
-         g_rescueTargetMoney=MathMax(
-            0.20,
-            CurrentSpreadCost(MathMax(SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),g_lot))*0.50
-         );
-         g_rescueInitialDeficit=MathMax(
-            g_rescueTargetMoney,
-            g_rescueTargetMoney-g_rescueCombinedProfit
-         );
-         SaveRescueState();
-      }
-      else
-      {
-         g_executionStatus=timeRescue ? "TIME_RESCUE_WARNING" : "RESCUE_WARNING";
-         return true;
-      }
-   }
-
-   if(g_rescueState==RESCUE_ACTIVE || g_rescueState==RESCUE_RECOVERY)
-   {
-      g_burstActive=false;
-      g_burstNeedsRearm=false;
-
-      if(g_rescueState==RESCUE_ACTIVE && g_rescueReversalConfirmed)
-      {
-         if(RescueHedgeGranularityAvailable())
-            AdjustRescueHedge();
-         else
-         {
-            // Netting accounts or very small positions cannot create a
-            // fractional opposite Hedge. Fall back to controlled exposure
-            // reduction rather than over-hedging beyond the configured ratio.
-            g_rescueState=RESCUE_RECOVERY;
-            g_rescueReversalReason=AccountSupportsHedging()
-               ? "RECOVERY_NO_HEDGE_GRANULARITY"
-               : "RECOVERY_NETTING_ACCOUNT";
-
-            if(now-g_lastRescueOrderAt>=60 &&
-               g_rescueReversalScore>=70.0)
-            {
-               if(PartialCloseWorstPrimary())
-                  g_lastRescueOrderAt=now;
-               else if(timeRescue && g_rescueReversalScore>=82.0)
-               {
-                  CloseRecoveryCycle("RESCUE_CONTROLLED_EXIT");
-                  return true;
-               }
-            }
-            SaveRescueState();
-         }
-      }
-
-      UpdateRescueExposure();
-
-      double currentDeficit=MathMax(0.0,g_rescueTargetMoney-g_rescueCombinedProfit);
-      g_rescueRequiredMoney=currentDeficit;
-      g_rescueRecoveredMoney=MathMax(0.0,g_rescueInitialDeficit-currentDeficit);
-
-      if(g_rescueCombinedProfit>=g_rescueTargetMoney)
-      {
-         CloseRecoveryCycle("RESCUE_RECOVERY_EXIT");
-         return true;
-      }
-
-      if(g_rescueInitialDeficit>0.0 &&
-         currentDeficit<=g_rescueInitialDeficit*0.35)
-      {
-         g_rescueState=RESCUE_RECOVERY;
-         SaveRescueState();
-      }
-
-      // Original-structure recovery must persist before unwinding a Hedge.
-      // This hysteresis prevents Hedge -> close -> Hedge loops in chop.
-      bool primaryRecoveryCandidate =
-         g_rescueReversalScore<35.0 &&
-         g_rescueCombinedProfit>-warningThreshold;
-      if(primaryRecoveryCandidate)
-      {
-         if(g_rescuePrimaryRecoverySince==0)
-            g_rescuePrimaryRecoverySince=now;
-      }
-      else
-         g_rescuePrimaryRecoverySince=0;
-
-      if(g_rescuePrimaryRecoverySince>0 &&
-         now-g_rescuePrimaryRecoverySince>=60 &&
-         now>=g_rescueHedgeLockedUntil)
-      {
-         CloseRescuePositions();
-         if(RescuePositionCount()==0)
-         {
-            g_rescueState=RESCUE_WARNING;
-            g_rescueReversalReason="PRIMARY_STRUCTURE_RECOVERED_STABLE";
-            g_rescueReversalCandidateSince=0;
-            g_rescuePrimaryRecoverySince=0;
-            SaveRescueState();
-         }
-      }
-
-      // Partial close is funded by Rescue profit and never increases lot.
-      double hedgeAvailable=MathMax(0.0,g_rescueHedgeProfit);
-      double worstLoss=WorstPrimaryLossAbs();
-      if(worstLoss>0.0 &&
-         hedgeAvailable>=worstLoss*0.70 &&
-         g_rescueCombinedProfit>-g_rescueInitialDeficit*0.70 &&
-         g_rescuePartialCloseCount<MathMax(1,g_maxPositions/2))
-      {
-         PartialCloseWorstPrimary();
-         UpdateRescueExposure();
-         if(g_rescueState==RESCUE_ACTIVE)
-            AdjustRescueHedge();
-      }
-
-      g_executionStatus=g_rescueState==RESCUE_RECOVERY
-         ? "RESCUE_RECOVERY"
-         : "RESCUE_ACTIVE";
-      SaveRescueState();
-      return true;
-   }
-
-   return g_rescueState!=RESCUE_NORMAL;
+   g_executionStatus="RESCUE_DISABLED";
+   return false;
 }
 
 bool TerminalConnectedNow()
