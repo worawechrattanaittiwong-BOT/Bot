@@ -11634,9 +11634,7 @@ double EffectiveStopLossDistancePoints()
       return MathMax(g_manualStopLossPoints, brokerMinimumPoints + 1.0);
    }
 
-   if(g_manualStopLossPoints > 0.0)
-      return MathMax(g_manualStopLossPoints, brokerMinimumPoints + 1.0);
-
+   // Other modes never consume the saved MANUAL stop profile.
    return EffectiveHardStopDistancePoints();
 }
 
@@ -11644,7 +11642,7 @@ string StopLossModeName()
 {
    if(EffectiveExecutionMode()=="MANUAL")
       return g_manualStopLossPoints > 0.0 ? "MANUAL_POINTS" : "OFF";
-   return g_manualStopLossPoints > 0.0 ? "MANUAL_POINTS" : "SYSTEM_ATR";
+   return "SYSTEM_ATR";
 }
 
 double AdaptiveTradeVolume()
@@ -16664,7 +16662,7 @@ double DynamicInitialStopPrice(int direction, double entryPrice)
 
    // When enabled, preserve the customer's requested distance except for the
    // Broker's mandatory Stops Level.
-   if(g_manualStopLossPoints>0.0)
+   if(EffectiveExecutionMode()=="MANUAL" && g_manualStopLossPoints>0.0)
    {
       double points=MathMax(g_manualStopLossPoints,minStopPoints);
       double manualStop=direction>0
