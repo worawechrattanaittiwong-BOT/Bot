@@ -15043,6 +15043,16 @@ string ProfitRunPeakGlobalKey()
    );
 }
 
+string LegacyDailyProfitArmedGlobalKey()
+{
+   return StringFormat(
+      "SCN_DPA_%I64d_%I64d_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),
+      InpMagic,
+      _Symbol
+   );
+}
+
 string DailyProfitArmedGlobalKey()
 {
    return StringFormat(
@@ -15051,6 +15061,16 @@ string DailyProfitArmedGlobalKey()
       InpMagic,
       _Symbol,
       DailyRiskMode()
+   );
+}
+
+string LegacyDailyProfitLockGlobalKey()
+{
+   return StringFormat(
+      "SCN_DPL_%I64d_%I64d_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),
+      InpMagic,
+      _Symbol
    );
 }
 
@@ -15574,17 +15594,36 @@ void UnlockDailyLossLock(string reason)
 
 void LoadDailyProfitRunOnState()
 {
-   string key = DailyProfitArmedGlobalKey();
-   g_dailyProfitTargetArmed = false;
+   string key=DailyProfitArmedGlobalKey();
+   g_dailyProfitTargetArmed=false;
 
-   if(!GlobalVariableCheck(key))
+   if(GlobalVariableCheck(key))
+   {
+      int armedDay=(int)GlobalVariableGet(key);
+      if(armedDay==g_dayKey)
+         g_dailyProfitTargetArmed=true;
+      else
+         GlobalVariableDel(key);
       return;
+   }
 
-   int armedDay = (int)GlobalVariableGet(key);
-   if(armedDay == g_dayKey)
-      g_dailyProfitTargetArmed = true;
-   else
-      GlobalVariableDel(key);
+   // Migrate the pre-1.0.49 shared key only after the execution owner is known.
+   string mode=DailyRiskMode();
+   if((g_settingsSynchronized || BasketPositionCount()>0) &&
+      mode!="ZERO_GRID")
+   {
+      string legacyKey=LegacyDailyProfitArmedGlobalKey();
+      if(GlobalVariableCheck(legacyKey))
+      {
+         int legacyDay=(int)GlobalVariableGet(legacyKey);
+         if(legacyDay==g_dayKey)
+         {
+            g_dailyProfitTargetArmed=true;
+            GlobalVariableSet(key,(double)g_dayKey);
+         }
+         GlobalVariableDel(legacyKey);
+      }
+   }
 }
 
 void ArmDailyProfitRunOn()
@@ -15720,17 +15759,36 @@ void UnlockDailyProfitLock(string reason)
 
 void LoadDailyProfitLock()
 {
-   string key = DailyProfitLockGlobalKey();
-   g_dailyProfitLocked = false;
+   string key=DailyProfitLockGlobalKey();
+   g_dailyProfitLocked=false;
 
-   if(!GlobalVariableCheck(key))
+   if(GlobalVariableCheck(key))
+   {
+      int lockedDay=(int)GlobalVariableGet(key);
+      if(lockedDay==g_dayKey)
+         g_dailyProfitLocked=true;
+      else
+         GlobalVariableDel(key);
       return;
+   }
 
-   int lockedDay = (int)GlobalVariableGet(key);
-   if(lockedDay == g_dayKey)
-      g_dailyProfitLocked = true;
-   else
-      GlobalVariableDel(key);
+   // Migrate the pre-1.0.49 shared lock to the resolved owner exactly once.
+   string mode=DailyRiskMode();
+   if((g_settingsSynchronized || BasketPositionCount()>0) &&
+      mode!="ZERO_GRID")
+   {
+      string legacyKey=LegacyDailyProfitLockGlobalKey();
+      if(GlobalVariableCheck(legacyKey))
+      {
+         int legacyDay=(int)GlobalVariableGet(legacyKey);
+         if(legacyDay==g_dayKey)
+         {
+            g_dailyProfitLocked=true;
+            GlobalVariableSet(key,(double)g_dayKey);
+         }
+         GlobalVariableDel(legacyKey);
+      }
+   }
 }
 
 void LockDailyProfitTarget()
