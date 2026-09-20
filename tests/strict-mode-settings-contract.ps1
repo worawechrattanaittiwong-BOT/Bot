@@ -72,7 +72,8 @@ Need $web 'AUTO:{basket:"autoMaxBasketLossMoney"' 'AUTO risk profile mapping mis
 Need $web 'RACE:{basket:"raceMaxBasketLossMoney"' 'RACE risk profile mapping missing'
 Need $web 'FLIP_LOCK:{basket:"flipLockMaxBasketLossMoney"' 'FLIP risk profile mapping missing'
 Need $web 'MANUAL:{basket:"manualMaxBasketLossMoney"' 'MANUAL risk profile mapping missing'
-Need $api 'clean.manualStopLossPoints = 0;' 'Non-MANUAL modes must clear MANUAL stop mirror'
+Forbid $api 'clean.manualStopLossPoints = 0;' 'Mode switching must not erase the saved MANUAL stop profile'
+Need $web 'ปิด = ไม่มี Broker Stop Loss' 'Dashboard must explain that MANUAL Stop Loss OFF is truly off'
 Need $db '"raceProfitTargetMode":"BASKET"' 'RACE target default missing from DB'
 
 Write-Host 'Strict mode settings / fixed AUTO Lot / dynamic close contract PASS'

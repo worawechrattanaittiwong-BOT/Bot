@@ -289,7 +289,7 @@ jobs:
           test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.maxBasketLossMoney')" = "11"
           test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.dailyLossMoney')" = "21"
           test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.dailyProfitTargetMoney')" = "31"
-          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.manualStopLossPoints')" = "0"
+          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.manualStopLossPoints')" = "900"
 
           RACE_PROFIT=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"RACE","raceProfitTargetMode":"POSITION","racePerPositionProfitMoney":0.75,"raceCloseAllProfitMoney":2.5,"raceMaxBasketLossMoney":12,"raceDailyLossMoney":22,"raceDailyProfitTargetMoney":32}')
           test "$(printf '%s' "$RACE_PROFIT" | jq -r '.settings.autoProfitTargetMoney')" = "1.5"
@@ -302,7 +302,7 @@ jobs:
           test "$(printf '%s' "$RACE_PROFIT" | jq -r '.settings.maxBasketLossMoney')" = "12"
           test "$(printf '%s' "$RACE_PROFIT" | jq -r '.settings.dailyLossMoney')" = "22"
           test "$(printf '%s' "$RACE_PROFIT" | jq -r '.settings.dailyProfitTargetMoney')" = "32"
-          test "$(printf '%s' "$RACE_PROFIT" | jq -r '.settings.manualStopLossPoints')" = "0"
+          test "$(printf '%s' "$RACE_PROFIT" | jq -r '.settings.manualStopLossPoints')" = "900"
 
           MANUAL_PROFIT=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"MANUAL","manualBasketProfitTargetMoney":3.5,"manualPerPositionProfitMoney":0,"manualStopLossPoints":900,"manualMaxBasketLossMoney":13,"manualDailyLossMoney":23,"manualDailyProfitTargetMoney":33}')
           test "$(printf '%s' "$MANUAL_PROFIT" | jq -r '.settings.autoProfitTargetMoney')" = "1.5"
@@ -317,7 +317,7 @@ jobs:
           test "$(printf '%s' "$FLIP_RISK" | jq -r '.settings.maxBasketLossMoney')" = "14"
           test "$(printf '%s' "$FLIP_RISK" | jq -r '.settings.dailyLossMoney')" = "24"
           test "$(printf '%s' "$FLIP_RISK" | jq -r '.settings.dailyProfitTargetMoney')" = "34"
-          test "$(printf '%s' "$FLIP_RISK" | jq -r '.settings.manualStopLossPoints')" = "0"
+          test "$(printf '%s' "$FLIP_RISK" | jq -r '.settings.manualStopLossPoints')" = "900"
 
           ZERO_PROFIT=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"ZERO_GRID","zeroGridMinNetProfitMoney":4.5}')
           test "$(printf '%s' "$ZERO_PROFIT" | jq -r '.settings.autoProfitTargetMoney')" = "1.5"
@@ -336,7 +336,15 @@ jobs:
           test "$(printf '%s' "$AUTO_PROFIT_RESTORED" | jq -r '.settings.maxBasketLossMoney')" = "11"
           test "$(printf '%s' "$AUTO_PROFIT_RESTORED" | jq -r '.settings.dailyLossMoney')" = "21"
           test "$(printf '%s' "$AUTO_PROFIT_RESTORED" | jq -r '.settings.dailyProfitTargetMoney')" = "31"
-          test "$(printf '%s' "$AUTO_PROFIT_RESTORED" | jq -r '.settings.manualStopLossPoints')" = "0"
+          test "$(printf '%s' "$AUTO_PROFIT_RESTORED" | jq -r '.settings.manualStopLossPoints')" = "900"
+
+          echo "[integration] MANUAL Stop Loss OFF persists across mode switches"
+          MANUAL_SL_OFF=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"MANUAL","manualStopLossPoints":0}')
+          test "$(printf '%s' "$MANUAL_SL_OFF" | jq -r '.settings.manualStopLossPoints')" = "0"
+          AUTO_AFTER_SL_OFF=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"AUTO"}')
+          test "$(printf '%s' "$AUTO_AFTER_SL_OFF" | jq -r '.settings.manualStopLossPoints')" = "0"
+          MANUAL_AFTER_SL_OFF=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"MANUAL"}')
+          test "$(printf '%s' "$MANUAL_AFTER_SL_OFF" | jq -r '.settings.manualStopLossPoints')" = "0"
 
           echo "[integration] verifying invalid settings rejection"
           BAD_SETTINGS_HTTP=$(curl -sS -o /tmp/bad-settings.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"lot":0}')

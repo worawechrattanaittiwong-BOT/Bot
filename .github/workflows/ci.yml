@@ -49,6 +49,9 @@ jobs:
       - name: Strict mode settings and fixed AUTO Lot contract
         shell: pwsh
         run: ./tests/strict-mode-settings-contract.ps1
+      - name: MANUAL and per-mode daily risk isolation contract
+        shell: pwsh
+        run: ./tests/manual-daily-mode-isolation-contract.ps1
       - name: RACE close-all profit contract
         shell: pwsh
         run: ./tests/race-close-all-profit-contract.ps1
