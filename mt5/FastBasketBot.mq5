@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.43"
-#define SCENOVA_EA_VERSION "1.0.43"
-#define SCENOVA_PRODUCT_VERSION "1.0.43"
+#property version   "1.0.44"
+#define SCENOVA_EA_VERSION "1.0.44"
+#define SCENOVA_PRODUCT_VERSION "1.0.44"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1344,9 +1344,19 @@ int OnInit()
    // Two mutually-exclusive profit modes:
    // 1) Basket target, optionally followed by percentage giveback from peak.
    // 2) Per-position target, closing each Position independently.
-   if(g_profitTargetMode != "MANUAL")
+   if(g_profitTargetMode == "OFF")
    {
       g_basketProfitTarget = 0.0;
+      g_perPositionProfit = 0.0;
+      g_profitRunTrailPercent = 0.0;
+      g_triggerMoney = 0.0;
+      g_trailMoney = 0.0;
+   }
+   else if(g_profitTargetMode == "AUTO")
+   {
+      // AUTO may use an explicit money Basket target. When configured, that
+      // target is authoritative and closes immediately; smart profit exits
+      // are bypassed until the target or a risk/loss exit is reached.
       g_perPositionProfit = 0.0;
       g_profitRunTrailPercent = 0.0;
       g_triggerMoney = 0.0;
@@ -1361,6 +1371,8 @@ int OnInit()
    }
    else if(g_basketProfitTarget > 0.0)
    {
+      // Hard Basket target means no run-on/giveback after the target.
+      g_profitRunTrailPercent = 0.0;
       g_triggerMoney = 0.0;
       g_trailMoney = 0.0;
    }
@@ -1998,9 +2010,9 @@ double ZeroGridEstimatedExitCostMoney()
 
 double ZeroGridRequiredCloseNet()
 {
-   return MathMax(0.01,g_zeroGridMinNetProfitMoney)
-      + MathMax(0.0,g_zeroGridCloseReserveMoney)
-      + ZeroGridEstimatedExitCostMoney();
+   // User target is absolute: once ZERO cycle net P/L reaches the configured
+   // amount, close immediately. No hidden reserve or estimated exit-cost buffer.
+   return MathMax(0.01,g_zeroGridMinNetProfitMoney);
 }
 
 double ZeroGridTickSize()
@@ -3906,24 +3918,33 @@ void OnTick()
    if(g_basketJournalId == 0)
       RecoverOpenBasketJournal();
 
-   // Fast path for the existing MANUAL fixed Basket target only. Keep all
-   // safety/ownership priorities above unchanged, and do not interfere with
-   // an active Rescue cycle. The close command itself remains unchanged.
+   // HARD PROFIT TARGET CONTRACT:
+   // AUTO and MANUAL Basket targets are absolute user instructions. Once the
+   // full owned cycle reaches the configured money target, close immediately
+   // before reversal, giveback, Rescue management or any other profit logic.
+   bool hardBasketProfitOwner =
+      (autoFamilyOwnedBasket && g_profitTargetMode == "AUTO") ||
+      (!autoFamilyOwnedBasket && g_profitTargetMode == "MANUAL");
    if(count > 0 &&
-      !autoFamilyOwnedBasket &&
-      rescueCount <= 0 &&
-      g_rescueState == RESCUE_NORMAL &&
-      g_profitTargetMode == "MANUAL" &&
+      hardBasketProfitOwner &&
       g_basketProfitTarget > 0.0 &&
-      g_perPositionProfit <= 0.0 &&
-      g_profitRunTrailPercent <= 0.0)
+      g_perPositionProfit <= 0.0)
    {
-      double fastCycleProfit = BasketCycleProfit();
-      if(fastCycleProfit >= g_basketProfitTarget)
+      double hardCycleProfit =
+         (rescueCount > 0 || g_rescueState != RESCUE_NORMAL)
+         ? RescueCombinedCycleProfit()
+         : BasketCycleProfit();
+
+      if(hardCycleProfit >= g_basketProfitTarget)
       {
-         CloseAllBasket("BASKET_PROFIT_TARGET");
+         string hardReason = autoFamilyOwnedBasket
+            ? "AUTO_PROFIT_TARGET"
+            : "BASKET_PROFIT_TARGET";
+         bool hardClosed = CloseAllBasket(hardReason);
          ResetTrail();
-         g_executionStatus = "BASKET_PROFIT_TARGET";
+         if(hardClosed && autoV20OwnedBasket)
+            AutoV20ResetCycle();
+         g_executionStatus = hardReason;
          return;
       }
    }
@@ -6067,15 +6088,23 @@ void ApplySettings(string json)
          (g_basketProfitTarget > 0.0 || g_perPositionProfit > 0.0)
          ? "MANUAL" : "AUTO";
 
-   if(g_profitTargetMode != "MANUAL")
+   if(g_profitTargetMode == "OFF")
    {
       g_basketProfitTarget = 0.0;
       g_perPositionProfit = 0.0;
       g_profitRunTrailPercent = 0.0;
       g_triggerMoney = 0.0;
       g_trailMoney = 0.0;
-      if(g_profitTargetMode == "OFF")
-         g_burstTargetMoney = 0.0;
+      g_burstTargetMoney = 0.0;
+   }
+   else if(g_profitTargetMode == "AUTO")
+   {
+      // Preserve the explicit Basket money target in AUTO. It is checked as a
+      // hard close condition before any Vector Edge/smart-profit management.
+      g_perPositionProfit = 0.0;
+      g_profitRunTrailPercent = 0.0;
+      g_triggerMoney = 0.0;
+      g_trailMoney = 0.0;
    }
    else if(g_perPositionProfit > 0.0)
    {
@@ -6086,6 +6115,9 @@ void ApplySettings(string json)
    }
    else if(g_basketProfitTarget > 0.0)
    {
+      // Reaching a MANUAL Basket target closes immediately. No percentage
+      // giveback/run-on is allowed to delay the close.
+      g_profitRunTrailPercent = 0.0;
       g_triggerMoney = 0.0;
       g_trailMoney = 0.0;
    }
@@ -12862,7 +12894,7 @@ void AutoV20OnOrderSent(int direction)
    {
       g_autoV20BasketStartedAt=now;
       g_autoV20BasketStopPrice=selected.slPrice;
-      g_autoV20BasketTargetPrice=selected.tpPrice;
+      g_autoV20BasketTargetPrice=g_basketProfitTarget>0.0 ? 0.0 : selected.tpPrice;
       g_autoV20LotCeiling=selected.plannedLot;
       g_autoV20PeakProfit=0.0;
    }
@@ -12905,7 +12937,7 @@ bool AutoV20FastPriceExit()
       }
    }
 
-   if(g_autoV20BasketTargetPrice>0.0)
+   if(g_basketProfitTarget<=0.0 && g_autoV20BasketTargetPrice>0.0)
    {
       bool targetHit=direction>0
          ? exitPrice>=g_autoV20BasketTargetPrice
@@ -12968,9 +13000,11 @@ bool AutoV20ManageOpenBasket(double momentum)
 
    if(cycleProfit>g_autoV20PeakProfit) g_autoV20PeakProfit=cycleProfit;
 
-   // TP is the primary objective. Early profit is allowed only when the market
-   // materially deteriorates or a protected winner gives back enough to justify banking.
-   if(cycleProfit>0.0)
+   // When the user configured a hard money target, no smart profit rule may
+   // close a winner early or wait for giveback. Profit exits are owned solely
+   // by the hard target check in OnTick; risk/loss exits remain active.
+   bool hardMoneyProfitTarget=g_basketProfitTarget>0.0;
+   if(cycleProfit>0.0 && !hardMoneyProfitTarget)
    {
       string profitReason="NONE";
       if(SmartProfitReversalDetected(direction,cycleProfit,profitReason))
@@ -12992,7 +13026,7 @@ bool AutoV20ManageOpenBasket(double momentum)
 
    long ageSeconds=(long)MathMax(0,TimeCurrent()-g_autoV20BasketStartedAt);
    bool flowStillValid=g_trendM5==direction || MomentumSupportsDirection(direction,momentum,0.20);
-   if(ageSeconds>=12*60 && cycleProfit>0.0 && !flowStillValid)
+   if(ageSeconds>=12*60 && cycleProfit>0.0 && !hardMoneyProfitTarget && !flowStillValid)
    {
       bool closed=CloseAllBasket("AUTO_V21_TIME_BANK_PROFIT");
       if(closed) AutoV20ResetCycle();
@@ -16725,11 +16759,13 @@ void ManageDynamicProtection()
 
       bool slChanged = desiredSL > 0.0 &&
          (currentSL <= 0.0 || MathAbs(desiredSL - currentSL) >= _Point * 2.0);
+      bool clearAutoMoneyTargetTP =
+         autoPosition && g_basketProfitTarget > 0.0 && currentTP > 0.0;
       bool clearSystemTP =
          !autoFamilyPosition && g_profitTargetMode != "AUTO" && currentTP > 0.0;
-      if(clearSystemTP)
+      if(clearAutoMoneyTargetTP || clearSystemTP)
          desiredTP = 0.0;
-      bool tpChanged = clearSystemTP ||
+      bool tpChanged = clearAutoMoneyTargetTP || clearSystemTP ||
          (desiredTP > 0.0 &&
           (currentTP <= 0.0 || MathAbs(desiredTP - currentTP) >= _Point * 4.0));
 
@@ -16823,21 +16859,24 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
          return false;
       }
 
+      bool hardMoneyProfitTarget=g_basketProfitTarget>0.0;
       request.sl=autoPlan.slPrice;
-      request.tp=autoPlan.tpPrice;
+      request.tp=hardMoneyProfitTarget ? 0.0 : autoPlan.tpPrice;
       if(positionsBefore>0)
       {
          if(g_autoV20BasketStopPrice>0.0)
             request.sl=direction>0 ? MathMax(g_autoV20BasketStopPrice,request.sl) : MathMin(g_autoV20BasketStopPrice,request.sl);
-         if(g_autoV20BasketTargetPrice>0.0)
+         if(!hardMoneyProfitTarget && g_autoV20BasketTargetPrice>0.0)
             request.tp=g_autoV20BasketTargetPrice;
       }
       double minimumStopDistance=(double)SymbolInfoInteger(
          _Symbol,SYMBOL_TRADE_STOPS_LEVEL
       )*_Point+2.0*_Point;
       bool protectedOrder=direction>0
-         ? request.sl<tick.bid-minimumStopDistance && request.tp>tick.bid+minimumStopDistance
-         : request.sl>tick.ask+minimumStopDistance && request.tp<tick.ask-minimumStopDistance;
+         ? request.sl<tick.bid-minimumStopDistance &&
+           (hardMoneyProfitTarget || request.tp>tick.bid+minimumStopDistance)
+         : request.sl>tick.ask+minimumStopDistance &&
+           (hardMoneyProfitTarget || request.tp<tick.ask-minimumStopDistance);
       if(!protectedOrder)
       {
          g_executionStatus="AUTO_V20_BROKER_PROTECTION_INVALID";
