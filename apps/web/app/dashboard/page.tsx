@@ -1881,11 +1881,6 @@ export default function DashboardPage() {
               </section>
 
               <section className={"panel cc-v6-hero cc-v47-command-bar "+(state === "RUNNING" ? "is-running" : "is-idle")}>
-                <div className="cc-v47-brand-lockup">
-                  <ScenovaBrand className="cc-v47-brand-logo"/>
-                  <span>LIVE EXECUTION</span>
-                </div>
-
                 <div className="cc-v6-hero-main">
                   <div className="cc-v6-gold-stage"><ScenovaIcon name="gold" size={52}/><i/><i/></div>
                   <div className="cc-v6-symbol-copy">
