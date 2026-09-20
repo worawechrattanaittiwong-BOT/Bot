@@ -1096,20 +1096,13 @@ export default function DashboardPage() {
   const marketRegime = String(metrics.marketRegime || "DATA_NOT_READY");
   const marketRegimeText = marketRegimeLabel[marketRegime] || marketRegime.replace(/_/g," ");
   const sessionProfile = String(metrics.sessionProfile || "—").replace(/_/g," ");
-  const rescueStateCustomerText =
-    rescueState === "NORMAL" ? "ระบบปรับสมดุลพร้อมใช้งาน"
-      : rescueState === "WARNING" ? "กำลังติดตามสถานะ Basket"
-      : rescueState === "ACTIVE" ? "กำลังลดความเสี่ยงของ Basket"
-      : rescueState === "RECOVERY" ? "กำลังปรับสมดุลผลลัพธ์ Basket"
-      : "กำลังจัดการ Basket ให้กลับสู่สถานะปกติ";
+  const rescueStateCustomerText = rescueActive
+    ? "กำลังปิด Rescue เดิมที่ค้างจากเวอร์ชันก่อน"
+    : "ปิดระบบแก้ไม้แล้ว";
   const recoveryCustomerText = rescueActive
-    ? "ฟื้นแล้ว $"+rescueRecoveredMoney.toFixed(2)+" · เหลือ $"+rescueRequiredMoney.toFixed(2)
-    : "ระบบบริหาร Basket พร้อมใช้งาน";
-  const reversalCustomerText = rescueActive
-    ? (Boolean(metrics.rescueReversalConfirmed)
-        ? "ยืนยันแรงกลับตัวแล้ว"
-        : "กำลังติดตามแรงกลับตัว")
-    : "ระบบติดตามการกลับตัวพร้อมใช้งาน";
+    ? "กำลังเคลียร์ไม้ Rescue เดิม · จะไม่เปิดไม้แก้ใหม่"
+    : "ไม่เปิด Hedge / Recovery สวนฝั่งหลัก";
+  const reversalCustomerText = "สัญญาณกลับตัวใช้เพื่อวิเคราะห์เท่านั้น · ไม่ใช้เปิดไม้แก้";
 
   const desiredStateLabel =
     desired === "RUNNING" ? "RUNNING — ให้บอททำงาน"
@@ -3948,7 +3941,7 @@ function BasketProfitTargetField(props: any) {
           ? <><b>Profit Run เปิดอยู่:</b> <b>{"$"+targetValue}</b> คือจุดเริ่มปล่อยกำไรวิ่ง ไม่ใช่จุดปิด · EA จะปิดเมื่อกำไรย่อลงตามเปอร์เซ็นต์ที่เลือก</>
           : <>ถึงกำไรรวม <b>{"$"+targetValue}</b> → ปิดทุกออเดอร์ในชุดทันที</>}
         <br/>
-        <small>{"EA ใช้ Basket Cycle P/L รวมผล Partial Close/Rescue · ตอนนี้ $"+Number(props.currentCycleProfit||0).toFixed(2)}</small>
+        <small>{"EA ใช้ Basket Cycle P/L ของรอบเทรด · ตอนนี้ $"+Number(props.currentCycleProfit||0).toFixed(2)}</small>
       </div>}
     </div>
   );
