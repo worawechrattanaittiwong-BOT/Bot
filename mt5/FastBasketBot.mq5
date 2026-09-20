@@ -1,5 +1,5 @@
 #property strict
-#property version   "1.0.48"
+#property version   "1.0.49"
 #define SCENOVA_EA_VERSION "1.0.48"
 #define SCENOVA_PRODUCT_VERSION "1.0.48"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
@@ -236,7 +236,13 @@ bool   g_safeStopDrainRequested = false;
 bool   g_trailArmed = false;
 double g_peakProfit = 0.0;
 double g_dayStartEquity = 0.0;
+// Daily P/L is accounted by execution owner. g_dailyClosedProfit remains a
+// compatibility/telemetry mirror of the currently active owner only.
 double g_dailyClosedProfit = 0.0;
+double g_dailyClosedProfitAuto = 0.0;
+double g_dailyClosedProfitRace = 0.0;
+double g_dailyClosedProfitFlipLock = 0.0;
+double g_dailyClosedProfitManual = 0.0;
 bool   g_dailyProfitLocked = false;
 bool   g_dailyProfitTargetArmed = false;
 int    g_dayKey = -1;
@@ -271,6 +277,23 @@ double g_trailMoney;
 double g_maxBasketLoss;
 double g_dailyLoss;
 double g_dailyProfitTarget;
+
+// Runtime mirrors above keep backward compatibility. These are the authoritative
+// per-mode risk profiles delivered by the Server and are selected from the live
+// Basket owner, not merely the currently clicked website mode.
+double g_autoMaxBasketLoss;
+double g_autoDailyLoss;
+double g_autoDailyProfitTarget;
+double g_raceMaxBasketLoss;
+double g_raceDailyLoss;
+double g_raceDailyProfitTarget;
+double g_flipLockMaxBasketLoss;
+double g_flipLockDailyLoss;
+double g_flipLockDailyProfitTarget;
+double g_manualMaxBasketLoss;
+double g_manualDailyLoss;
+double g_manualDailyProfitTarget;
+
 bool   g_dailyProfitContinueAfterTarget;
 double g_dailyProfitDrawdownPercent;
 double g_basketProfitTarget;
@@ -1330,6 +1353,20 @@ int OnInit()
    g_maxBasketLoss = InpMaxBasketLossMoney;
    g_dailyLoss = InpDailyLossMoney;
    g_dailyProfitTarget = InpDailyProfitTargetMoney;
+
+   g_autoMaxBasketLoss = g_maxBasketLoss;
+   g_autoDailyLoss = g_dailyLoss;
+   g_autoDailyProfitTarget = g_dailyProfitTarget;
+   g_raceMaxBasketLoss = g_maxBasketLoss;
+   g_raceDailyLoss = g_dailyLoss;
+   g_raceDailyProfitTarget = g_dailyProfitTarget;
+   g_flipLockMaxBasketLoss = g_maxBasketLoss;
+   g_flipLockDailyLoss = g_dailyLoss;
+   g_flipLockDailyProfitTarget = g_dailyProfitTarget;
+   g_manualMaxBasketLoss = g_maxBasketLoss;
+   g_manualDailyLoss = g_dailyLoss;
+   g_manualDailyProfitTarget = g_dailyProfitTarget;
+
    g_dailyProfitContinueAfterTarget = InpDailyProfitContinueAfterTarget;
    g_dailyProfitDrawdownPercent = MathMax(0.0, MathMin(95.0, InpDailyProfitDrawdownPercent));
    g_basketProfitTarget = InpBasketProfitTargetMoney;
@@ -3894,7 +3931,8 @@ void OnTick()
    if(HandleDailyProfitControl(count))
       return;
 
-   if(g_dailyLoss > 0.0 && AccountInfoDouble(ACCOUNT_EQUITY) <= g_dayStartEquity - g_dailyLoss)
+   double effectiveDailyLoss = EffectiveDailyLossLimit();
+   if(effectiveDailyLoss > 0.0 && DailyBotProfit() <= -effectiveDailyLoss)
    {
       if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
       if(count > 0 || rescueCount > 0) CloseAllBasket("DAILY_LOSS");
@@ -6116,6 +6154,20 @@ void ApplySettings(string json)
    g_maxBasketLoss = MathMax(0.0, JsonNumber(json, "maxBasketLossMoney", g_maxBasketLoss));
    g_dailyLoss = MathMax(0.0, JsonNumber(json, "dailyLossMoney", g_dailyLoss));
    g_dailyProfitTarget = MathMax(0.0, JsonNumber(json, "dailyProfitTargetMoney", g_dailyProfitTarget));
+
+   g_autoMaxBasketLoss = MathMax(0.0, JsonNumber(json, "autoMaxBasketLossMoney", g_autoMaxBasketLoss));
+   g_autoDailyLoss = MathMax(0.0, JsonNumber(json, "autoDailyLossMoney", g_autoDailyLoss));
+   g_autoDailyProfitTarget = MathMax(0.0, JsonNumber(json, "autoDailyProfitTargetMoney", g_autoDailyProfitTarget));
+   g_raceMaxBasketLoss = MathMax(0.0, JsonNumber(json, "raceMaxBasketLossMoney", g_raceMaxBasketLoss));
+   g_raceDailyLoss = MathMax(0.0, JsonNumber(json, "raceDailyLossMoney", g_raceDailyLoss));
+   g_raceDailyProfitTarget = MathMax(0.0, JsonNumber(json, "raceDailyProfitTargetMoney", g_raceDailyProfitTarget));
+   g_flipLockMaxBasketLoss = MathMax(0.0, JsonNumber(json, "flipLockMaxBasketLossMoney", g_flipLockMaxBasketLoss));
+   g_flipLockDailyLoss = MathMax(0.0, JsonNumber(json, "flipLockDailyLossMoney", g_flipLockDailyLoss));
+   g_flipLockDailyProfitTarget = MathMax(0.0, JsonNumber(json, "flipLockDailyProfitTargetMoney", g_flipLockDailyProfitTarget));
+   g_manualMaxBasketLoss = MathMax(0.0, JsonNumber(json, "manualMaxBasketLossMoney", g_manualMaxBasketLoss));
+   g_manualDailyLoss = MathMax(0.0, JsonNumber(json, "manualDailyLossMoney", g_manualDailyLoss));
+   g_manualDailyProfitTarget = MathMax(0.0, JsonNumber(json, "manualDailyProfitTargetMoney", g_manualDailyProfitTarget));
+
    g_dailyProfitContinueAfterTarget = JsonBool(json, "dailyProfitContinueAfterTarget", g_dailyProfitContinueAfterTarget);
    g_dailyProfitDrawdownPercent = MathMax(0.0, MathMin(95.0, JsonNumber(json, "dailyProfitDrawdownPercent", g_dailyProfitDrawdownPercent)));
    double previousBasketProfitTarget = g_basketProfitTarget;
@@ -11548,6 +11600,13 @@ double EffectiveStopLossDistancePoints()
    double brokerMinimumPoints =
       (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
 
+   if(EffectiveExecutionMode()=="MANUAL")
+   {
+      if(g_manualStopLossPoints <= 0.0)
+         return 0.0;
+      return MathMax(g_manualStopLossPoints, brokerMinimumPoints + 1.0);
+   }
+
    if(g_manualStopLossPoints > 0.0)
       return MathMax(g_manualStopLossPoints, brokerMinimumPoints + 1.0);
 
@@ -11556,6 +11615,8 @@ double EffectiveStopLossDistancePoints()
 
 string StopLossModeName()
 {
+   if(EffectiveExecutionMode()=="MANUAL")
+      return g_manualStopLossPoints > 0.0 ? "MANUAL_POINTS" : "OFF";
    return g_manualStopLossPoints > 0.0 ? "MANUAL_POINTS" : "SYSTEM_ATR";
 }
 
@@ -15116,6 +15177,9 @@ bool ManagePerPositionTargets()
 {
    double profitTarget = CurrentPerPositionProfitTarget();
    bool closedAny = false;
+   bool hedging = ((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE) ==
+                   ACCOUNT_MARGIN_MODE_RETAIL_HEDGING);
+   double baseVolume = NormalizeTradeVolume(g_lot);
 
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
@@ -15127,28 +15191,53 @@ bool ManagePerPositionTargets()
          PositionGetInteger(POSITION_MAGIC) != InpMagic)
          continue;
 
+      string comment = PositionGetString(POSITION_COMMENT);
+      if(StringFind(comment,MANUAL_LIVE_COMMENT)<0 &&
+         StringFind(comment,LEGACY_BASKET_COMMENT)<0)
+         continue;
+
       double positionProfit =
          PositionGetDouble(POSITION_PROFIT) +
          PositionGetDouble(POSITION_SWAP);
+      double positionVolume = PositionGetDouble(POSITION_VOLUME);
+
+      // Hedging exposes each order as its own Position. Netting exposes one
+      // aggregate Position, so compare the proportional P/L of one configured
+      // MANUAL lot-unit and close exactly one unit per pass.
+      double targetComparableProfit = positionProfit;
+      if(!hedging && positionVolume > 0.0 && baseVolume > 0.0)
+         targetComparableProfit =
+            positionProfit * MathMin(1.0, baseVolume / positionVolume);
 
       bool closeForProfit =
          profitTarget > 0.0 &&
-         positionProfit >= profitTarget;
+         targetComparableProfit >= profitTarget;
 
       if(!closeForProfit)
          continue;
+
+      double closeVolume = hedging
+         ? positionVolume
+         : MathMin(positionVolume,baseVolume);
 
       Print(
          "POSITION_PROFIT_TARGET",
          " ticket=", ticket,
          " pnl=", DoubleToString(positionProfit, 2),
-         " target=", DoubleToString(profitTarget, 2)
+         " unitPnl=", DoubleToString(targetComparableProfit, 2),
+         " target=", DoubleToString(profitTarget, 2),
+         " closeVolume=", DoubleToString(closeVolume, 2)
       );
 
-      if(ClosePositionByTicket(ticket))
+      bool closed = hedging
+         ? ClosePositionByTicket(ticket)
+         : ClosePositionVolumeByTicket(ticket,closeVolume,"SCNManualProfit");
+      if(closed)
       {
          closedAny = true;
          g_executionStatus = "POSITION_PROFIT_CLOSED";
+         if(!hedging)
+            break;
       }
    }
 
@@ -16303,8 +16392,13 @@ double DynamicInitialStopPrice(int direction, double entryPrice)
       0.0
    )+2.0;
 
-   // Manual means manual: preserve the customer's requested distance except
-   // for the Broker's mandatory Stops Level.
+   // MANUAL Stop Loss is an explicit switch. Zero means no Broker SL at all;
+   // never substitute a hidden ATR stop behind a disabled website control.
+   if(EffectiveExecutionMode()=="MANUAL" && g_manualStopLossPoints<=0.0)
+      return 0.0;
+
+   // When enabled, preserve the customer's requested distance except for the
+   // Broker's mandatory Stops Level.
    if(g_manualStopLossPoints>0.0)
    {
       double points=MathMax(g_manualStopLossPoints,minStopPoints);
