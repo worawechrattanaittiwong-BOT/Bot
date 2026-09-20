@@ -222,7 +222,7 @@ jobs:
           test "$(printf '%s' "$CONF_OFF" | jq -r '.settings.confidenceGateEnabled')" = "false"
 
           echo "[integration] MANUAL per-position target is isolated and disables MANUAL Basket target"
-          PER_POSITION=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"MANUAL","manualPerPositionProfitMoney":2,"manualBasketProfitTargetMoney":0}')
+          PER_POSITION=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"MANUAL","manualLot":0.02,"manualMaxPositions":7,"manualPerPositionProfitMoney":2,"manualBasketProfitTargetMoney":0,"manualStopLossPoints":900,"manualMaxBasketLossMoney":12,"manualDailyLossMoney":30,"manualDailyProfitTargetMoney":10}')
           test "$(printf '%s' "$PER_POSITION" | jq -r '.settings.manualPerPositionProfitMoney')" = "2"
           test "$(printf '%s' "$PER_POSITION" | jq -r '.settings.manualBasketProfitTargetMoney')" = "0"
           test "$(printf '%s' "$PER_POSITION" | jq -r '.settings.perPositionProfitMoney')" = "2"
