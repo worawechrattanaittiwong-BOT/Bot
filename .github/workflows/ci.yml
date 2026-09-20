@@ -43,6 +43,9 @@ jobs:
       - name: Hard profit target contract
         shell: pwsh
         run: ./tests/hard-profit-target-contract.ps1
+      - name: Per-mode profit target isolation contract
+        shell: pwsh
+        run: ./tests/per-mode-profit-target-contract.ps1
       - name: RACE close-all profit contract
         shell: pwsh
         run: ./tests/race-close-all-profit-contract.ps1

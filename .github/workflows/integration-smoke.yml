@@ -221,18 +221,23 @@ jobs:
           CONF_OFF=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"confidenceGateEnabled":false}')
           test "$(printf '%s' "$CONF_OFF" | jq -r '.settings.confidenceGateEnabled')" = "false"
 
-          echo "[integration] enabling per-position profit automatically disables Basket profit"
-          PER_POSITION=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"perPositionProfitMoney":2}')
+          echo "[integration] MANUAL per-position target is isolated and disables MANUAL Basket target"
+          PER_POSITION=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"MANUAL","manualPerPositionProfitMoney":2,"manualBasketProfitTargetMoney":0}')
+          test "$(printf '%s' "$PER_POSITION" | jq -r '.settings.manualPerPositionProfitMoney')" = "2"
+          test "$(printf '%s' "$PER_POSITION" | jq -r '.settings.manualBasketProfitTargetMoney')" = "0"
           test "$(printf '%s' "$PER_POSITION" | jq -r '.settings.perPositionProfitMoney')" = "2"
           test "$(printf '%s' "$PER_POSITION" | jq -r '.settings.basketProfitTargetMoney')" = "0"
 
-          echo "[integration] enabling Basket profit automatically disables per-position profit"
-          BASKET_MODE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"basketProfitTargetMoney":10}')
+          echo "[integration] MANUAL Basket target is isolated and disables MANUAL per-position target"
+          BASKET_MODE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"MANUAL","manualBasketProfitTargetMoney":10,"manualPerPositionProfitMoney":0}')
+          test "$(printf '%s' "$BASKET_MODE" | jq -r '.settings.manualBasketProfitTargetMoney')" = "10"
+          test "$(printf '%s' "$BASKET_MODE" | jq -r '.settings.manualPerPositionProfitMoney')" = "0"
           test "$(printf '%s' "$BASKET_MODE" | jq -r '.settings.basketProfitTargetMoney')" = "10"
           test "$(printf '%s' "$BASKET_MODE" | jq -r '.settings.perPositionProfitMoney')" = "0"
-          echo "[integration] Basket target run-on preserves target and daily profit target"
+
+          echo "[integration] hard MANUAL Basket target rejects hidden run-on semantics"
           PROFIT_RUN=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"profitRunTrailPercent":20}')
-          test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.profitRunTrailPercent')" = "20"
+          test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.profitRunTrailPercent')" = "0"
           test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.dailyProfitTargetMoney')" = "10"
           test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.dailyProfitContinueAfterTarget')" = "true"
           test "$(printf '%s' "$PROFIT_RUN" | jq -r '.settings.dailyProfitDrawdownPercent')" = "20"
@@ -254,7 +259,7 @@ jobs:
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.dailyProfitDrawdownPercent')" = "20"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.basketProfitTargetMoney')" = "10"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.perPositionProfitMoney')" = "0"
-          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.profitRunTrailPercent')" = "20"
+          test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.profitRunTrailPercent')" = "0"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.perPositionLossMoney')" = "0"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS_DASH" | jq -r '.settings.entryMode')" = "BUY_ONLY"
@@ -269,18 +274,46 @@ jobs:
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.dailyProfitDrawdownPercent')" = "20"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.basketProfitTargetMoney')" = "10"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.perPositionProfitMoney')" = "0"
-          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.profitRunTrailPercent')" = "20"
+          test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.profitRunTrailPercent')" = "0"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.perPositionLossMoney')" = "0"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.manualStopLossPoints')" = "900"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.entryMode')" = "BUY_ONLY"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
-          echo "[integration] Auto profit mode preserves hard Basket target and clears MANUAL-only semantics"
-          AUTO_PROFIT=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"profitTargetMode":"AUTO"}')
-          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.profitTargetMode')" = "AUTO"
-          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.basketProfitTargetMoney')" = "10"
+          echo "[integration] profit targets stay isolated per control mode"
+          AUTO_PROFIT=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"AUTO","autoProfitTargetMoney":1.5}')
+          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.autoProfitTargetMoney')" = "1.5"
+          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.basketProfitTargetMoney')" = "1.5"
           test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.perPositionProfitMoney')" = "0"
-          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.profitRunTrailPercent')" = "0"
+          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.profitTargetMode')" = "AUTO"
+
+          RACE_PROFIT=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"RACE","raceCloseAllProfitEnabled":true,"raceCloseAllProfitMoney":2.5}')
+          test "$(printf '%s' "$RACE_PROFIT" | jq -r '.settings.autoProfitTargetMoney')" = "1.5"
+          test "$(printf '%s' "$RACE_PROFIT" | jq -r '.settings.raceCloseAllProfitMoney')" = "2.5"
+          test "$(printf '%s' "$RACE_PROFIT" | jq -r '.settings.basketProfitTargetMoney')" = "0"
+          test "$(printf '%s' "$RACE_PROFIT" | jq -r '.settings.profitTargetMode')" = "OFF"
+
+          MANUAL_PROFIT=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"MANUAL","manualBasketProfitTargetMoney":3.5,"manualPerPositionProfitMoney":0}')
+          test "$(printf '%s' "$MANUAL_PROFIT" | jq -r '.settings.autoProfitTargetMoney')" = "1.5"
+          test "$(printf '%s' "$MANUAL_PROFIT" | jq -r '.settings.raceCloseAllProfitMoney')" = "2.5"
+          test "$(printf '%s' "$MANUAL_PROFIT" | jq -r '.settings.manualBasketProfitTargetMoney')" = "3.5"
+          test "$(printf '%s' "$MANUAL_PROFIT" | jq -r '.settings.basketProfitTargetMoney')" = "3.5"
+          test "$(printf '%s' "$MANUAL_PROFIT" | jq -r '.settings.profitTargetMode')" = "MANUAL"
+
+          ZERO_PROFIT=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"ZERO_GRID","zeroGridMinNetProfitMoney":4.5}')
+          test "$(printf '%s' "$ZERO_PROFIT" | jq -r '.settings.autoProfitTargetMoney')" = "1.5"
+          test "$(printf '%s' "$ZERO_PROFIT" | jq -r '.settings.manualBasketProfitTargetMoney')" = "3.5"
+          test "$(printf '%s' "$ZERO_PROFIT" | jq -r '.settings.zeroGridMinNetProfitMoney')" = "4.5"
+          test "$(printf '%s' "$ZERO_PROFIT" | jq -r '.settings.basketProfitTargetMoney')" = "0"
+          test "$(printf '%s' "$ZERO_PROFIT" | jq -r '.settings.profitTargetMode')" = "OFF"
+
+          AUTO_PROFIT_RESTORED=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"controlMode":"AUTO"}')
+          test "$(printf '%s' "$AUTO_PROFIT_RESTORED" | jq -r '.settings.autoProfitTargetMoney')" = "1.5"
+          test "$(printf '%s' "$AUTO_PROFIT_RESTORED" | jq -r '.settings.manualBasketProfitTargetMoney')" = "3.5"
+          test "$(printf '%s' "$AUTO_PROFIT_RESTORED" | jq -r '.settings.raceCloseAllProfitMoney')" = "2.5"
+          test "$(printf '%s' "$AUTO_PROFIT_RESTORED" | jq -r '.settings.zeroGridMinNetProfitMoney')" = "4.5"
+          test "$(printf '%s' "$AUTO_PROFIT_RESTORED" | jq -r '.settings.basketProfitTargetMoney')" = "1.5"
+          test "$(printf '%s' "$AUTO_PROFIT_RESTORED" | jq -r '.settings.profitTargetMode')" = "AUTO"
 
           echo "[integration] verifying invalid settings rejection"
           BAD_SETTINGS_HTTP=$(curl -sS -o /tmp/bad-settings.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"lot":0}')
