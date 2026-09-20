@@ -3397,7 +3397,8 @@ function BotSettingsModal(props:any) {
         Number(props.settings?.manualPerPositionProfitMoney || 0) <= 0) {
       props.onEdit?.("manualBasketProfitTargetMoney",10);
     }
-    if (manualSl <= 0) props.onEdit?.("manualStopLossPoints",suggestedManualSl);
+    // Keep MANUAL Stop Loss exactly as the user left it. Zero means OFF;
+    // switching away and back must never silently re-enable a suggested ATR/point stop.
   };
 
   const directionLabel = entryMode === "SELL_ONLY" ? "SELL เท่านั้น" : entryMode === "BUY_ONLY" ? "BUY เท่านั้น" : "อัตโนมัติ · EA เลือก BUY / SELL";
@@ -3570,7 +3571,7 @@ function BotSettingsModal(props:any) {
                   <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{profitKind==="BASKET"?"เป้ากำไร MANUAL ทั้งชุด":"เป้ากำไร MANUAL ต่อไม้"}</span><MoneyInput value={profitKind==="BASKET"?props.settings.manualBasketProfitTargetMoney:props.settings.manualPerPositionProfitMoney} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(profitKind==="BASKET"?"manualBasketProfitTargetMoney":"manualPerPositionProfitMoney",v)}/><small>ใช้เฉพาะ MANUAL · ไม่เปลี่ยนค่า AUTO/RACE/ZERO</small></label>
                   <div className="cc-bot-v2-field">
                     <span><ScenovaIcon name="shield" size={17}/>Stop Loss</span>
-                    <ToggleNumberField alwaysShowInput label="เปิด" defaultValue={suggestedManualSl} value={props.settings.manualStopLossPoints} suffix="points" onChange={(v:string)=>updateOptionalValue("manualStopLossPoints",v)}/>
+                    <ToggleNumberField alwaysShowInput label="เปิด" defaultValue={suggestedManualSl} value={props.settings.manualStopLossPoints} suffix="points" onChange={(v:string)=>updateOptionalValue("manualStopLossPoints",v)}/><small>ปิด = ไม่มี Broker Stop Loss · เปิด = ใช้ระยะ points ที่ตั้งไว้ตรง ๆ</small>
                   </div>
                 </div>}
               </section>
