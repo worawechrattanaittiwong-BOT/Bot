@@ -132,7 +132,7 @@ double FlipLockInitialSafetyStopPrice(const int direction,const double entryPric
       stop=MathMin(stop,tick.bid-minimum);
    else
       stop=MathMax(stop,tick.ask+minimum);
-   return FlipLockNormalizePrice(stop);
+   return NormalizeStopPriceToTick(stop,direction);
 }
 
 double FlipLockProfitReservePoints()
@@ -161,8 +161,9 @@ double FlipLockBreakEvenFloorPrice(const int direction,const double openPrice)
 {
    if(direction==0 || openPrice<=0.0) return 0.0;
    double reserve=FlipLockProfitReservePoints()*_Point;
-   return FlipLockNormalizePrice(
-      direction>0 ? openPrice+reserve : openPrice-reserve
+   return NormalizeTargetPriceToTick(
+      direction>0 ? openPrice+reserve : openPrice-reserve,
+      direction
    );
 }
 
@@ -191,8 +192,7 @@ bool FlipLockProfitLockReady(
 
 double FlipLockNormalizePrice(const double price)
 {
-   int digits=(int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS);
-   return NormalizeDouble(price,MathMax(0,digits));
+   return NormalizePriceToTick(price);
 }
 
 bool FlipLockFindPosition(ulong &ticket,int &direction,double &volume,double &sl,double &tp)
@@ -337,7 +337,7 @@ bool FlipLockPlacePending(const int direction,const double triggerPrice,const do
    request.magic=InpMagic;
    request.symbol=_Symbol;
    request.volume=volume;
-   request.price=FlipLockNormalizePrice(triggerPrice);
+   request.price=NormalizeTargetPriceToTick(triggerPrice,direction);
    request.type=direction>0 ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
    request.type_time=ORDER_TIME_GTC;
    request.type_filling=ORDER_FILLING_RETURN;
@@ -359,13 +359,18 @@ bool FlipLockModifyPending(const ulong ticket,const double triggerPrice)
 {
    if(ticket==0 || !OrderSelect(ticket)) return false;
 
+   ENUM_ORDER_TYPE pendingType=(ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+   int direction=pendingType==ORDER_TYPE_BUY_STOP ? 1 :
+                 pendingType==ORDER_TYPE_SELL_STOP ? -1 : 0;
+   if(direction==0) return false;
+
    MqlTradeRequest request={};
    MqlTradeResult result={};
    request.action=TRADE_ACTION_MODIFY;
    request.order=ticket;
    request.symbol=_Symbol;
    request.magic=InpMagic;
-   request.price=FlipLockNormalizePrice(triggerPrice);
+   request.price=NormalizeTargetPriceToTick(triggerPrice,direction);
    request.stoplimit=OrderGetDouble(ORDER_PRICE_STOPLIMIT);
    request.sl=OrderGetDouble(ORDER_SL);
    request.tp=OrderGetDouble(ORDER_TP);
@@ -519,7 +524,7 @@ double FlipLockCandidateTrigger(const int direction,const MqlTick &tick)
    double candidate=direction>0
       ? executablePrice-distance
       : executablePrice+distance;
-   return FlipLockNormalizePrice(candidate);
+   return NormalizeStopPriceToTick(candidate,direction);
 }
 
 bool FlipLockTriggerIsLegal(const int direction,const double trigger,const MqlTick &tick)

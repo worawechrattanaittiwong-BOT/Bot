@@ -37,10 +37,16 @@ jobs:
       - name: AUTO V21 balanced exit and lot-safety contract
         shell: pwsh
         run: ./tests/auto-v21-balanced-exit-contract.ps1
+      - name: Adaptive Rescue disabled contract
+        shell: pwsh
+        run: ./tests/rescue-disabled-contract.ps1
+      - name: Hard profit target contract
+        shell: pwsh
+        run: ./tests/hard-profit-target-contract.ps1
       - name: RACE close-all profit contract
         shell: pwsh
         run: ./tests/race-close-all-profit-contract.ps1
-      - name: RACE 10-second volume and safe rollover contract
+      - name: RACE 60-second volume and safe rollover contract
         shell: pwsh
         run: ./tests/race-volume-rollover-contract.ps1
       - name: FLIP LOCK strict isolation contract
@@ -72,6 +78,9 @@ jobs:
       - name: Trading symbol selection safety contract
         shell: pwsh
         run: ./tests/trading-symbol-selection-contract.ps1
+      - name: BTC symbol support and mode gate contract
+        shell: pwsh
+        run: ./tests/btc-symbol-mode-contract.ps1
       - name: Market-closed heartbeat and status contract
         shell: pwsh
         run: ./tests/market-closed-heartbeat-contract.ps1

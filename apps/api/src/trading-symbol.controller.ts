@@ -24,6 +24,11 @@ function normalizeSymbol(value: unknown) {
   return symbol;
 }
 
+function isBitcoinSymbol(value: unknown) {
+  const symbol = normalizeSymbol(value).toUpperCase();
+  return Boolean(symbol && (symbol.includes("BTC") || symbol.includes("XBT")));
+}
+
 function parseTradeMode(value: unknown) {
   if (value === undefined || value === null || value === "") return null;
   const n = Number(value);
@@ -98,10 +103,17 @@ export class TradingSymbolController {
       activeSymbol.toUpperCase() === desiredSymbol.toUpperCase()
     );
 
+    const bitcoin = isBitcoinSymbol(desiredSymbol);
+
     return {
       desiredSymbol,
       explicitSymbol: explicitSymbol || null,
       activeSymbol: activeSymbol || null,
+      instrumentProfile: bitcoin ? "BTC" : "STANDARD",
+      supportedControlModes: bitcoin
+        ? ["AUTO", "RACE", "FLIP_LOCK", "MANUAL"]
+        : ["AUTO", "RACE", "FLIP_LOCK", "ZERO_GRID", "MANUAL"],
+      blockedControlModes: bitcoin ? ["ZERO_GRID"] : [],
       brokerSymbolTradeMode: tradeMode,
       brokerTradingAllowed: tradingAllowed,
       marketWatchSymbols: marketWatchSymbols(metrics),
@@ -137,6 +149,14 @@ export class TradingSymbolController {
     }
 
     const instance = await this.localInstance(req.user.sub, slotId);
+    const savedControlMode = String(
+      instance.settings?.controlMode || instance.settings?.engineMode || "AUTO"
+    ).toUpperCase();
+    if (isBitcoinSymbol(symbol) && savedControlMode === "ZERO_GRID") {
+      throw new ConflictException(
+        "เปลี่ยนโหมดจาก ZERO GRID เป็น AUTO, RACE, FLIP LOCK หรือ MANUAL ก่อนเลือก BTC/XBT"
+      );
+    }
     const positions = Math.max(0, Number(instance.positions || 0));
     if (
       positions > 0 ||

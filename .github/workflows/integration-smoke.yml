@@ -275,10 +275,10 @@ jobs:
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.entryMode')" = "BUY_ONLY"
           test "$(printf '%s' "$SETTINGS_HB" | jq -r '.settings.allowMinimumLotOverride')" = "true"
 
-          echo "[integration] Auto profit mode clears manual targets"
+          echo "[integration] Auto profit mode preserves hard Basket target and clears MANUAL-only semantics"
           AUTO_PROFIT=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"profitTargetMode":"AUTO"}')
           test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.profitTargetMode')" = "AUTO"
-          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.basketProfitTargetMoney')" = "0"
+          test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.basketProfitTargetMoney')" = "10"
           test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.perPositionProfitMoney')" = "0"
           test "$(printf '%s' "$AUTO_PROFIT" | jq -r '.settings.profitRunTrailPercent')" = "0"
 

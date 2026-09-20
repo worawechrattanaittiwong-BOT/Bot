@@ -67,7 +67,7 @@ jobs:
             '#include "include\\FlipLockV1.mqh"',
             'AutoVectorEdgeLiveAllow',
             'FlipLockManage',
-            '#define RACE_VOLUME_WINDOW_SECONDS 10',
+            '#define RACE_VOLUME_WINDOW_SECONDS 60',
             'int RaceVolumeDirection()',
             'bool ZeroGridModeEnabled()',
             'request.action=TRADE_ACTION_PENDING;',

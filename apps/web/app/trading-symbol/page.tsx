@@ -81,6 +81,12 @@ export default function TradingSymbolPage() {
   const metrics = data?.instance?.metrics || {};
   const activeSymbol = String(status?.activeSymbol || metrics.symbol || "");
   const desiredSymbol = String(status?.desiredSymbol || symbol || "");
+  const selectedSymbolUpper = String(symbol || desiredSymbol || "").toUpperCase();
+  const selectedIsBitcoin = selectedSymbolUpper.includes("BTC") || selectedSymbolUpper.includes("XBT");
+  const savedControlMode = String(
+    data?.settings?.controlMode || data?.settings?.engineMode || "AUTO"
+  ).toUpperCase();
+  const btcModeBlocked = selectedIsBitcoin && savedControlMode === "ZERO_GRID";
   const positions = Number(status?.positions ?? metrics.positions ?? 0);
   const actualState = String(status?.actualState || data?.instance?.actual_state || "STOPPED").toUpperCase();
   const desiredState = String(status?.desiredState || data?.instance?.desired_state || "STOPPED").toUpperCase();
@@ -217,7 +223,7 @@ export default function TradingSymbolPage() {
                 <button type="button" className={styles.refreshButton} onClick={refreshSymbols} disabled={busy || refreshing || !slotId}>
                   {refreshing ? "กำลังรีเฟรช..." : "↻ Refresh"}
                 </button>
-                <button onClick={saveAndApply} disabled={busy || refreshing || !stopped || positions > 0 || !status?.agentOnline || !symbol}>
+                <button onClick={saveAndApply} disabled={busy || refreshing || !stopped || positions > 0 || !status?.agentOnline || !symbol || btcModeBlocked}>
                   {busy ? "กำลังตรวจ..." : "บันทึกและใช้ Symbol นี้"}
                 </button>
               </div>
@@ -229,6 +235,12 @@ export default function TradingSymbolPage() {
             <div className={styles.warning}>
               SCENOVA จะไม่สร้าง Symbol ที่ Broker ไม่มี และจะไม่ Start บอทถ้า Chart/EA ยังไม่ตรงกับ Symbol ที่เลือก หรือ Broker ตั้ง Symbol เป็น Disabled / Close Only
             </div>
+            {selectedIsBitcoin ? <div className={styles.warning}>
+              BTC/XBT รองรับ AUTO, RACE, FLIP LOCK และ MANUAL · ZERO GRID ถูกบล็อกสำหรับ BTC
+            </div> : null}
+            {btcModeBlocked ? <div className={styles.blocker}>
+              ตอนนี้ตั้งโหมด ZERO GRID อยู่ · เปลี่ยนเป็น AUTO, RACE, FLIP LOCK หรือ MANUAL ก่อนบันทึก BTC/XBT
+            </div> : null}
           </div>
 
           <div className={styles.panel}>

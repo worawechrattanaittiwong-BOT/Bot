@@ -87,7 +87,7 @@ const defaultSettings = {
   zeroGridLevelsPerSide: 10,
   zeroGridBaseLot: 0.01,
   zeroGridMinNetProfitMoney: 0.5,
-  zeroGridCloseReserveMoney: 0.2,
+  zeroGridCloseReserveMoney: 0,
   entryMode: "AUTO_MOMENTUM"
 };
 
@@ -199,7 +199,7 @@ export default function DashboardPage() {
           nextSettings.zeroGridLevelsPerSide = Math.max(1, Math.min(30, Number(nextSettings.zeroGridLevelsPerSide) || 10));
           if (!Number.isFinite(Number(nextSettings.zeroGridBaseLot)) || Number(nextSettings.zeroGridBaseLot) <= 0) nextSettings.zeroGridBaseLot = 0.01;
           if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 0.5;
-          if (!Number.isFinite(Number(nextSettings.zeroGridCloseReserveMoney)) || Number(nextSettings.zeroGridCloseReserveMoney) <= 0) nextSettings.zeroGridCloseReserveMoney = 0.2;
+          nextSettings.zeroGridCloseReserveMoney = 0;
         }
         if (loadedControlMode === "RACE") {
           if (typeof nextSettings.raceCloseAllProfitEnabled !== "boolean") nextSettings.raceCloseAllProfitEnabled = true;
@@ -1096,20 +1096,13 @@ export default function DashboardPage() {
   const marketRegime = String(metrics.marketRegime || "DATA_NOT_READY");
   const marketRegimeText = marketRegimeLabel[marketRegime] || marketRegime.replace(/_/g," ");
   const sessionProfile = String(metrics.sessionProfile || "—").replace(/_/g," ");
-  const rescueStateCustomerText =
-    rescueState === "NORMAL" ? "ระบบปรับสมดุลพร้อมใช้งาน"
-      : rescueState === "WARNING" ? "กำลังติดตามสถานะ Basket"
-      : rescueState === "ACTIVE" ? "กำลังลดความเสี่ยงของ Basket"
-      : rescueState === "RECOVERY" ? "กำลังปรับสมดุลผลลัพธ์ Basket"
-      : "กำลังจัดการ Basket ให้กลับสู่สถานะปกติ";
+  const rescueStateCustomerText = rescueActive
+    ? "กำลังปิด Rescue เดิมที่ค้างจากเวอร์ชันก่อน"
+    : "ปิดระบบแก้ไม้แล้ว";
   const recoveryCustomerText = rescueActive
-    ? "ฟื้นแล้ว $"+rescueRecoveredMoney.toFixed(2)+" · เหลือ $"+rescueRequiredMoney.toFixed(2)
-    : "ระบบบริหาร Basket พร้อมใช้งาน";
-  const reversalCustomerText = rescueActive
-    ? (Boolean(metrics.rescueReversalConfirmed)
-        ? "ยืนยันแรงกลับตัวแล้ว"
-        : "กำลังติดตามแรงกลับตัว")
-    : "ระบบติดตามการกลับตัวพร้อมใช้งาน";
+    ? "กำลังเคลียร์ไม้ Rescue เดิม · จะไม่เปิดไม้แก้ใหม่"
+    : "ไม่เปิด Hedge / Recovery สวนฝั่งหลัก";
+  const reversalCustomerText = "สัญญาณกลับตัวใช้เพื่อวิเคราะห์เท่านั้น · ไม่ใช้เปิดไม้แก้";
 
   const desiredStateLabel =
     desired === "RUNNING" ? "RUNNING — ให้บอททำงาน"
@@ -1448,8 +1441,15 @@ export default function DashboardPage() {
       if (key === "profitTargetMode") {
         const mode = String(value || "AUTO").toUpperCase();
         next.profitTargetMode = mode;
-        if (mode === "AUTO" || mode === "OFF") {
+        if (mode === "OFF") {
           next.basketProfitTargetMoney = 0;
+          next.perPositionProfitMoney = 0;
+          next.profitRunTrailPercent = 0;
+          next.basketTriggerMoney = 0;
+          next.basketTrailMoney = 0;
+        } else if (mode === "AUTO") {
+          // AUTO keeps the Basket money target. It is a hard close target,
+          // while per-position/run-on settings remain MANUAL-only.
           next.perPositionProfitMoney = 0;
           next.profitRunTrailPercent = 0;
           next.basketTriggerMoney = 0;
@@ -1461,11 +1461,11 @@ export default function DashboardPage() {
         }
       }
 
-      // Profit mode 1: Basket target. profitRunTrailPercent is now the
-      // optional percentage giveback AFTER the Basket target is reached.
+      // Basket target is absolute: reaching it closes the Basket immediately.
       if (key === "basketProfitTargetMoney") {
         if (enabled) {
           next.perPositionProfitMoney = 0;
+          next.profitRunTrailPercent = 0;
           next.basketTriggerMoney = 0;
           next.basketTrailMoney = 0;
         } else {
@@ -1626,8 +1626,13 @@ export default function DashboardPage() {
       // Remove the retired hidden giveback behavior from saved configurations.
       payload.dailyProfitContinueAfterTarget = false;
 
-      if (payload.profitTargetMode === "AUTO" || payload.profitTargetMode === "OFF") {
+      if (payload.profitTargetMode === "OFF") {
         payload.basketProfitTargetMoney = 0;
+        payload.perPositionProfitMoney = 0;
+        payload.profitRunTrailPercent = 0;
+      } else if (payload.profitTargetMode === "AUTO") {
+        // Preserve AUTO Basket money target. The EA closes immediately once
+        // that amount is reached.
         payload.perPositionProfitMoney = 0;
         payload.profitRunTrailPercent = 0;
       }
@@ -1639,9 +1644,8 @@ export default function DashboardPage() {
       // EA 1.017 uses a real Broker SL. Never send the retired floating-money
       // per-position loss control from the web.
       payload.perPositionLossMoney = 0;
-      if (Number(payload.basketProfitTargetMoney || 0) <= 0) {
-        payload.profitRunTrailPercent = 0;
-      }
+      // Basket money targets never use giveback/run-on.
+      payload.profitRunTrailPercent = 0;
       if (Number(payload.perPositionProfitMoney || 0) > 0) {
         payload.basketProfitTargetMoney = 0;
         payload.profitRunTrailPercent = 0;
@@ -3190,6 +3194,15 @@ function BotSettingsModal(props:any) {
   const [revealedManualRisk,setRevealedManualRisk] = useState<Record<string,boolean>>({});
   if (!props.open && !props.embedded) return null;
   const embedded = Boolean(props.embedded);
+  const tradingSymbol = String(
+    props.symbol ||
+    props.metrics?.symbol ||
+    props.settings?.startupSymbol ||
+    props.settings?.symbol ||
+    ""
+  ).toUpperCase();
+  const isBitcoinSymbol = tradingSymbol.includes("BTC") || tradingSymbol.includes("XBT");
+  const zeroGridBlockedForSymbol = isBitcoinSymbol;
 
   const entryMode = String(props.settings?.entryMode || "AUTO_MOMENTUM");
   const engineMode = String(props.settings?.engineMode || "AUTO").toUpperCase();
@@ -3245,6 +3258,7 @@ function BotSettingsModal(props:any) {
   };
 
   const applyControlMode = (mode:string) => {
+    if (mode === "ZERO_GRID" && zeroGridBlockedForSymbol) return;
     props.onEdit?.("controlMode",mode);
     props.onEdit?.("confidenceGateEnabled",false);
     const targetSizing = sizingProfiles[mode];
@@ -3276,7 +3290,7 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("zeroGridLevelsPerSide",Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||10)));
       if (!Number.isFinite(Number(props.settings?.zeroGridBaseLot)) || Number(props.settings?.zeroGridBaseLot) <= 0) props.onEdit?.("zeroGridBaseLot",0.01);
       if (!Number.isFinite(Number(props.settings?.zeroGridMinNetProfitMoney)) || Number(props.settings?.zeroGridMinNetProfitMoney) <= 0.01) props.onEdit?.("zeroGridMinNetProfitMoney",0.5);
-      if (!Number.isFinite(Number(props.settings?.zeroGridCloseReserveMoney)) || Number(props.settings?.zeroGridCloseReserveMoney) <= 0) props.onEdit?.("zeroGridCloseReserveMoney",0.2);
+      props.onEdit?.("zeroGridCloseReserveMoney",0);
       return;
     }
     // Keep the currently selected direction when switching control modes.
@@ -3300,6 +3314,7 @@ function BotSettingsModal(props:any) {
     if (mode === "AUTO") {
       props.onEdit?.("profitTargetMode","AUTO");
       props.onEdit?.("manualStopLossPoints",0);
+      // Keep any Basket target already entered by the user.
       return;
     }
     props.onEdit?.("profitTargetMode","MANUAL");
@@ -3319,16 +3334,19 @@ function BotSettingsModal(props:any) {
         : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า");
   const raceCloseAllProfitEnabled = props.settings?.raceCloseAllProfitEnabled !== false;
   const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 0.5);
-  const manualTrailEnabled = Number(props.settings?.profitRunTrailPercent || 0) > 0;
   const manualStopEnabled = Number(props.settings?.manualStopLossPoints || 0) > 0;
   const updateOptionalValue = (key:string,value:any) => props.onEdit?.(key,value);
   const exitLabel = controlMode === "FLIP_LOCK"
     ? "Trailing SL จากราคา MT5 โดยตรง"
     : controlMode === "RACE"
-      ? (raceCloseAllProfitEnabled ? "ปิดทั้งหมดที่ +$"+raceCloseAllProfitMoney.toFixed(2) : "ระบบรักษากำไรแบบไดนามิก")
-      : controlMode === "MANUAL"
-        ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด")
-        : "ระบบรักษากำไรแบบไดนามิก";
+      ? (raceCloseAllProfitEnabled ? "ปิดทั้งหมดที่ +$"+raceCloseAllProfitMoney.toFixed(2) : "ปิดกำไร RACE ปิดอยู่")
+      : controlMode === "AUTO"
+        ? (Number(props.settings.basketProfitTargetMoney||0) > 0
+            ? "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด · ถึงแล้วปิดทันที"
+            : "ยังไม่ได้ตั้งเป้ากำไร")
+        : controlMode === "MANUAL"
+          ? (profitKind === "POSITION" ? "$"+Number(props.settings.perPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.basketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด · ถึงแล้วปิดทันที")
+          : "—";
   const slLabel = controlMode === "FLIP_LOCK"
     ? "Safety Stop ก่อน · ยก SL เมื่อ Broker ล็อกกำไรได้"
     : controlMode === "MANUAL"
@@ -3378,6 +3396,7 @@ function BotSettingsModal(props:any) {
           </div>
           <section className="cc-bot-v2-mode-section">
             <div className="cc-bot-v2-section-title"><span>01</span><div><b>โหมดการเทรด</b></div></div>
+            {isBitcoinSymbol&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="status" size={17}/><span><b>BTC Mode Support</b><small>AUTO · RACE · FLIP LOCK · MANUAL ใช้งานได้ · ZERO GRID ถูกบล็อก</small></span></div>}
             {embedded ? (
               <div className="cc-bot-v12-mode-select-wrap">
                 <label>
@@ -3386,7 +3405,7 @@ function BotSettingsModal(props:any) {
                     <option value="AUTO">AUTO</option>
                     <option value="RACE">RACE</option>
                     <option value="FLIP_LOCK">FLIP LOCK</option>
-                    <option value="ZERO_GRID">ZERO GRID</option>
+                    <option value="ZERO_GRID" disabled={zeroGridBlockedForSymbol}>ZERO GRID{zeroGridBlockedForSymbol ? " · ไม่รองรับ BTC" : ""}</option>
                     <option value="MANUAL">MANUAL</option>
                   </select>
                 </label>
@@ -3398,13 +3417,16 @@ function BotSettingsModal(props:any) {
                   {id:"AUTO",icon:"brain",tag:"AUTO + VECTOR"},
                   {id:"FLIP_LOCK",icon:"trend",tag:"ล็อกกำไร + สลับฝั่ง"},
                   {id:"RACE",icon:"status",tag:"ดำเนินการเร็ว"},
-                  {id:"ZERO_GRID",icon:"layers",tag:"กริดแบบ Hedging"},
+                  {id:"ZERO_GRID",icon:"layers",tag:zeroGridBlockedForSymbol?"ไม่รองรับ BTC":"กริดแบบ Hedging"},
                   {id:"MANUAL",icon:"settings",tag:"กำหนดรายละเอียด"}
-                ].map(mode=><button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} className={controlMode===mode.id?"active":""} onClick={()=>applyControlMode(mode.id)}>
-                  <span className="cc-bot-v2-mode-icon"><ScenovaIcon name={mode.icon} size={22}/></span>
-                  <span><em>{mode.tag}</em><b>{modeCopy[mode.id].title}</b><small>{modeCopy[mode.id].subtitle}</small></span>
-                  <i className="cc-bot-v2-radio"/>
-                </button>)}
+                ].map(mode=>{
+                  const blocked = mode.id === "ZERO_GRID" && zeroGridBlockedForSymbol;
+                  return <button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} disabled={blocked} className={(controlMode===mode.id?"active ":"")+(blocked?"is-disabled":"")} onClick={()=>applyControlMode(mode.id)}>
+                    <span className="cc-bot-v2-mode-icon"><ScenovaIcon name={mode.icon} size={22}/></span>
+                    <span><em>{mode.tag}</em><b>{modeCopy[mode.id].title}</b><small>{blocked?"BTC/XBT ใช้ ZERO GRID ไม่ได้ · เลือก AUTO, RACE, FLIP LOCK หรือ MANUAL":modeCopy[mode.id].subtitle}</small></span>
+                    <i className="cc-bot-v2-radio"/>
+                  </button>;
+                })}
               </div>
             )}
           </section>
@@ -3424,8 +3446,7 @@ function BotSettingsModal(props:any) {
                       : <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><select className="input" value={String(Number(props.settings.zeroGridStepPrice) === 2 ? 2 : 3)} onChange={e=>props.onEdit?.("zeroGridStepPrice",e.target.value)}><option value="2">2.00</option><option value="3">3.00</option></select></label>}
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนคำสั่งรอต่อฝั่ง</span><select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>{zeroGridLowVolatilityEnabled?"Lot คงที่ต่อระดับ":"Lot เริ่มต้น"}</span><NumberInput value={props.settings.zeroGridBaseLot || 0.01} suffix="Lot" onCommit={(v:string)=>props.onEdit?.("zeroGridBaseLot",v)}/></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไรสุทธิขั้นต่ำ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="shield" size={17}/>เงินสำรองสำหรับค่าปิด</span><MoneyInput value={props.settings.zeroGridCloseReserveMoney || 0.2} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridCloseReserveMoney",v)}/></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไรสุทธิ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
                   </> : <>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ</option><option value="BUY_ONLY">BUY</option><option value="SELL_ONLY">SELL</option></select></label>
                     {controlMode!=="FLIP_LOCK"&&<label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</span><select className="input" value={String(activeMaxPositions)} onChange={e=>editModeSizing("max",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>}
@@ -3441,7 +3462,7 @@ function BotSettingsModal(props:any) {
                       : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}</div>
               </section>
 
-              {(controlMode==="RACE"||controlMode==="MANUAL")&&(
+              {(controlMode==="AUTO"||controlMode==="RACE"||controlMode==="MANUAL")&&(
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>กำไร / Stop Loss</b></div></div>
                 {controlMode==="RACE" ? <div className="cc-bot-v2-fields exit-fields">
@@ -3452,6 +3473,9 @@ function BotSettingsModal(props:any) {
                       <MoneyInput value={raceCloseAllProfitMoney} disabled={!raceCloseAllProfitEnabled} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("raceCloseAllProfitMoney",v)}/>
                     </div>
                   </div>
+                </div> : controlMode==="AUTO" ? <div className="cc-bot-v2-fields exit-fields">
+                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>ปิดทั้งชุดเมื่อกำไรถึง</span><MoneyInput value={props.settings.basketProfitTargetMoney || 0} suffix="USD" onCommit={(v:string)=>props.onEdit?.("basketProfitTargetMoney",v)}/></label>
+                  <div className="cc-bot-v2-engine-line"><ScenovaIcon name="target" size={16}/><b>Hard Profit Target</b><span>ถึงจำนวนเงินที่ตั้งไว้แล้วปิดทั้งชุดทันที ไม่รอ Reversal / Giveback / EMA</span></div>
                 </div> : <div className="cc-bot-v2-fields exit-fields">
                   <div className="cc-bot-v2-field cc-bot-profit-kind-field">
                     <span><ScenovaIcon name="profit" size={17}/>รูปแบบกำไร</span>
@@ -3461,7 +3485,6 @@ function BotSettingsModal(props:any) {
                     </div>
                   </div>
                   <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{profitKind==="BASKET"?"เป้ากำไรทั้งชุด":"เป้ากำไรต่อไม้"}</span><MoneyInput value={profitKind==="BASKET"?props.settings.basketProfitTargetMoney:props.settings.perPositionProfitMoney} suffix="USD" onCommit={(v:string)=>props.onEdit?.(profitKind==="BASKET"?"basketProfitTargetMoney":"perPositionProfitMoney",v)}/></label>
-                  {profitKind==="BASKET"&&<label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ยอมให้กำไรย่อตัว</span><select className="input" value={String(props.settings.profitRunTrailPercent||0)} onChange={e=>updateOptionalValue("profitRunTrailPercent",e.target.value)}><option value="0">ปิด</option>{[5,10,15,20,25,30,40,50].map(v=><option key={v} value={v}>{v}%</option>)}</select></label>}
                   <div className="cc-bot-v2-field">
                     <span><ScenovaIcon name="shield" size={17}/>Stop Loss</span>
                     <ToggleNumberField alwaysShowInput label="เปิด" defaultValue={suggestedManualSl} value={props.settings.manualStopLossPoints} suffix="points" onChange={(v:string)=>updateOptionalValue("manualStopLossPoints",v)}/>
@@ -3495,8 +3518,7 @@ function BotSettingsModal(props:any) {
                 <div><dt>คำสั่งรอ</dt><dd>{Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} BUY + {Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} SELL</dd></div>
                 <div><dt>ระยะห่างกริด</dt><dd>{zeroGridLowVolatilityEnabled?"0.30":(Number(props.settings.zeroGridStepPrice) === 2 ? "2.00" : "3.00")}</dd></div>
                 <div><dt>{zeroGridLowVolatilityEnabled?"Lot คงที่":"Lot เริ่มต้น"}</dt><dd>{Number(props.settings.zeroGridBaseLot||0.01).toFixed(2)} Lot</dd></div>
-                <div><dt>เป้ากำไรสุทธิขั้นต่ำ</dt><dd>${Number(props.settings.zeroGridMinNetProfitMoney||0.5).toFixed(2)}</dd></div>
-                <div><dt>เงินสำรองสำหรับค่าปิด</dt><dd>${Number(props.settings.zeroGridCloseReserveMoney||0.2).toFixed(2)}</dd></div>
+                <div><dt>เป้ากำไรสุทธิ</dt><dd>${Number(props.settings.zeroGridMinNetProfitMoney||0.5).toFixed(2)} · ถึงแล้วปิดทันที</dd></div>
               </dl> : (
               <dl>
                 <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>
@@ -3933,7 +3955,7 @@ function BasketProfitTargetField(props: any) {
           ? <><b>Profit Run เปิดอยู่:</b> <b>{"$"+targetValue}</b> คือจุดเริ่มปล่อยกำไรวิ่ง ไม่ใช่จุดปิด · EA จะปิดเมื่อกำไรย่อลงตามเปอร์เซ็นต์ที่เลือก</>
           : <>ถึงกำไรรวม <b>{"$"+targetValue}</b> → ปิดทุกออเดอร์ในชุดทันที</>}
         <br/>
-        <small>{"EA ใช้ Basket Cycle P/L รวมผล Partial Close/Rescue · ตอนนี้ $"+Number(props.currentCycleProfit||0).toFixed(2)}</small>
+        <small>{"EA ใช้ Basket Cycle P/L ของรอบเทรด · ตอนนี้ $"+Number(props.currentCycleProfit||0).toFixed(2)}</small>
       </div>}
     </div>
   );

@@ -18,6 +18,11 @@ import { CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
 
+function isBitcoinTradingSymbol(value: unknown) {
+  const symbol = String(value || "").trim().toUpperCase();
+  return symbol.includes("BTC") || symbol.includes("XBT");
+}
+
 @Controller("bot")
 @UseGuards(JwtGuard)
 export class BotController {
@@ -221,6 +226,8 @@ export class BotController {
       BASKET_LADDER_WAIT: { label: "Basket Ladder กำลังรอ Rung ถัดไป", detail: "นี่เป็นระยะห่างของไม้ 2–10 หลังไม้แรก ไม่ใช่เงื่อนไขดักไม้แรก", tone: "good" },
       BASKET_LADDER_PULLBACK_WAIT: { label: "Ladder รอ Pullback ก่อนเพิ่มไม้", detail: "ราคาวิ่งถึงระยะ Rung แล้ว แต่ระบบจะไม่เพิ่มไม้ตรง New High/New Low; รอ Pullback เล็กน้อยก่อน", tone: "good" },
       BASKET_LADDER_CONTINUATION_WAIT: { label: "Ladder รอ Continuation หลัง Pullback", detail: "เห็น Pullback แล้ว กำลังรอ M1/Momentum กลับไปทิศ Basket ก่อนเพิ่มไม้ เพื่อไม่กองออเดอร์ที่ปลายทาง", tone: "good" },
+      RESCUE_DISABLED: { label: "ปิดระบบแก้ไม้", detail: "EA จะไม่เปิด Hedge หรือ Recovery สวนฝั่งหลัก", tone: "good" },
+      RESCUE_DISABLED_CLEANUP: { label: "กำลังปิด Rescue เดิม", detail: "กำลังเคลียร์ไม้ Rescue ที่ค้างจากเวอร์ชันเก่า และจะไม่เปิดไม้แก้ใหม่", tone: "warn" },
       RESCUE_WARNING: { label: "Rescue กำลังเฝ้าการกลับตัว", detail: "Basket ติดลบและเริ่มมีสัญญาณ Reversal ระบบหยุดเพิ่มไม้ชั่วคราวเพื่อตรวจว่าควร Hedge หรือปล่อยโครงสร้างเดิมทำงานต่อ", tone: "warn" },
       TIME_RESCUE_WARNING: { label: "Time Rescue กำลังประเมิน", detail: "Position ติดลบนานเกินกรอบเวลาปรับตาม Regime ระบบกำลังตรวจ Structure / EMA / Price Action ก่อนเข้า Recovery", tone: "warn" },
       RESCUE_ACTIVE: { label: "Adaptive Rescue กำลังทำงาน", detail: "ระบบยืนยัน Reversal แล้วและกำลัง Weight Balance / Smart Hedge โดยไม่เพิ่ม Lot แบบ Martingale", tone: "warn" },
@@ -1629,6 +1636,20 @@ export class BotController {
       const savedControlMode = String(
         savedSettings.controlMode || savedSettings.engineMode || "AUTO"
       ).toUpperCase();
+      const savedTradingSymbol = String(
+        savedSettings.startupSymbol ||
+        metrics.symbol ||
+        savedSettings.symbol ||
+        ""
+      ).trim();
+      if (
+        savedControlMode === "ZERO_GRID" &&
+        isBitcoinTradingSymbol(savedTradingSymbol)
+      ) {
+        throw new ConflictException(
+          "BTC/XBT รองรับ AUTO, RACE, FLIP LOCK และ MANUAL เท่านั้น · ZERO GRID ถูกบล็อกสำหรับ BTC"
+        );
+      }
       if (savedControlMode === "ZERO_GRID") {
         const requestedRaw = Number(savedSettings.zeroGridLevelsPerSide ?? 3);
         const requestedLevels = Math.max(
@@ -1698,6 +1719,23 @@ export class BotController {
     @Body() body: Record<string, any>
   ) {
     const instance = await this.getInstance(req.user.sub, slotId || null);
+    const currentSettingsRow = await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+      [instance.id]
+    );
+    const currentSettings = currentSettingsRow?.settings || {};
+    const currentMetrics =
+      instance.metrics && typeof instance.metrics === "object"
+        ? instance.metrics
+        : {};
+    const effectiveTradingSymbol = String(
+      currentSettings.startupSymbol ||
+      body.symbol ||
+      currentMetrics.symbol ||
+      currentSettings.symbol ||
+      ""
+    ).trim();
+    const bitcoinTradingSymbol = isBitcoinTradingSymbol(effectiveTradingSymbol);
 
     // Keep strategy/risk settings immutable while Start is pending or the EA is
     // RUNNING. Daily Profit Target is the one intentional live exception: the
@@ -1832,8 +1870,15 @@ export class BotController {
     const requestedProfitRunPercent = Number(clean.profitRunTrailPercent ?? 0);
     const requestedProfitMode = String(clean.profitTargetMode || "");
 
-    if (requestedProfitMode === "AUTO" || requestedProfitMode === "OFF") {
+    if (requestedProfitMode === "OFF") {
       clean.basketProfitTargetMoney = 0;
+      clean.perPositionProfitMoney = 0;
+      clean.profitRunTrailPercent = 0;
+      clean.basketTriggerMoney = 0;
+      clean.basketTrailMoney = 0;
+    } else if (requestedProfitMode === "AUTO") {
+      // AUTO may carry a hard Basket money target. Keep it; only MANUAL
+      // per-position/run-on semantics are removed.
       clean.perPositionProfitMoney = 0;
       clean.profitRunTrailPercent = 0;
       clean.basketTriggerMoney = 0;
@@ -1850,10 +1895,10 @@ export class BotController {
       );
     }
 
-    // New semantics:
-    // basketProfitTargetMoney = Basket target
-    // profitRunTrailPercent = optional giveback AFTER Basket target is reached
-    // perPositionProfitMoney = mutually-exclusive per-position mode
+    // Hard-target semantics:
+    // basketProfitTargetMoney = absolute Basket target for AUTO or MANUAL
+    // profitRunTrailPercent = retired when a Basket target is configured
+    // perPositionProfitMoney = MANUAL-only per-position target
     if (requestedPerPositionProfit > 0) {
       clean.basketProfitTargetMoney = 0;
       clean.profitRunTrailPercent = 0;
@@ -1861,6 +1906,7 @@ export class BotController {
       clean.basketTrailMoney = 0;
     } else if (requestedBasketProfit > 0) {
       clean.perPositionProfitMoney = 0;
+      clean.profitRunTrailPercent = 0;
       clean.basketTriggerMoney = 0;
       clean.basketTrailMoney = 0;
     }
@@ -1954,12 +2000,19 @@ export class BotController {
     const zeroGridSelected =
       requestedControlMode === "ZERO_GRID" ||
       (requestedControlMode === null && requestedEngineMode === "ZERO_GRID");
+    if (zeroGridSelected && bitcoinTradingSymbol) {
+      throw new BadRequestException(
+        "ZERO GRID ไม่รองรับ BTC/XBT · ใช้ AUTO, RACE, FLIP LOCK หรือ MANUAL"
+      );
+    }
     if (zeroGridSelected) {
       clean.zeroGridStepPrice = clean.zeroGridStepPrice === 2 ? 2 : 3;
       if (body.zeroGridLowVolatilityEnabled === undefined) clean.zeroGridLowVolatilityEnabled = false;
       if (body.zeroGridBaseLot === undefined) clean.zeroGridBaseLot = 0.01;
       if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;
-      if (body.zeroGridCloseReserveMoney === undefined) clean.zeroGridCloseReserveMoney = 0.2;
+      // ZERO closes exactly at zeroGridMinNetProfitMoney. Keep legacy reserve
+      // field normalized to zero so old clients cannot add a hidden buffer.
+      clean.zeroGridCloseReserveMoney = 0;
     }
 
     const raceSelected =
@@ -1972,9 +2025,11 @@ export class BotController {
 
     const autoSelected = requestedControlMode === "AUTO";
     if (autoSelected) {
-      // AUTO owns Vector Edge/V20 exits. Never carry MANUAL target/SL semantics
-      // into a newly selected AUTO cycle.
+      // AUTO keeps an explicit Basket money target when supplied. Vector Edge
+      // still owns entries/risk, but reaching the money target closes immediately.
       clean.profitTargetMode = "AUTO";
+      clean.perPositionProfitMoney = 0;
+      clean.profitRunTrailPercent = 0;
       clean.manualStopLossPoints = 0;
     }
 
