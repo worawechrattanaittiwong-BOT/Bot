@@ -3194,6 +3194,15 @@ function BotSettingsModal(props:any) {
   const [revealedManualRisk,setRevealedManualRisk] = useState<Record<string,boolean>>({});
   if (!props.open && !props.embedded) return null;
   const embedded = Boolean(props.embedded);
+  const tradingSymbol = String(
+    props.symbol ||
+    props.metrics?.symbol ||
+    props.settings?.startupSymbol ||
+    props.settings?.symbol ||
+    ""
+  ).toUpperCase();
+  const isBitcoinSymbol = tradingSymbol.includes("BTC") || tradingSymbol.includes("XBT");
+  const zeroGridBlockedForSymbol = isBitcoinSymbol;
 
   const entryMode = String(props.settings?.entryMode || "AUTO_MOMENTUM");
   const engineMode = String(props.settings?.engineMode || "AUTO").toUpperCase();
@@ -3249,6 +3258,7 @@ function BotSettingsModal(props:any) {
   };
 
   const applyControlMode = (mode:string) => {
+    if (mode === "ZERO_GRID" && zeroGridBlockedForSymbol) return;
     props.onEdit?.("controlMode",mode);
     props.onEdit?.("confidenceGateEnabled",false);
     const targetSizing = sizingProfiles[mode];
@@ -3386,6 +3396,7 @@ function BotSettingsModal(props:any) {
           </div>
           <section className="cc-bot-v2-mode-section">
             <div className="cc-bot-v2-section-title"><span>01</span><div><b>โหมดการเทรด</b></div></div>
+            {isBitcoinSymbol&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="status" size={17}/><span><b>BTC Mode Support</b><small>AUTO · RACE · FLIP LOCK · MANUAL ใช้งานได้ · ZERO GRID ถูกบล็อก</small></span></div>}
             {embedded ? (
               <div className="cc-bot-v12-mode-select-wrap">
                 <label>
@@ -3394,7 +3405,7 @@ function BotSettingsModal(props:any) {
                     <option value="AUTO">AUTO</option>
                     <option value="RACE">RACE</option>
                     <option value="FLIP_LOCK">FLIP LOCK</option>
-                    <option value="ZERO_GRID">ZERO GRID</option>
+                    <option value="ZERO_GRID" disabled={zeroGridBlockedForSymbol}>ZERO GRID{zeroGridBlockedForSymbol ? " · ไม่รองรับ BTC" : ""}</option>
                     <option value="MANUAL">MANUAL</option>
                   </select>
                 </label>
@@ -3406,13 +3417,16 @@ function BotSettingsModal(props:any) {
                   {id:"AUTO",icon:"brain",tag:"AUTO + VECTOR"},
                   {id:"FLIP_LOCK",icon:"trend",tag:"ล็อกกำไร + สลับฝั่ง"},
                   {id:"RACE",icon:"status",tag:"ดำเนินการเร็ว"},
-                  {id:"ZERO_GRID",icon:"layers",tag:"กริดแบบ Hedging"},
+                  {id:"ZERO_GRID",icon:"layers",tag:zeroGridBlockedForSymbol?"ไม่รองรับ BTC":"กริดแบบ Hedging"},
                   {id:"MANUAL",icon:"settings",tag:"กำหนดรายละเอียด"}
-                ].map(mode=><button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} className={controlMode===mode.id?"active":""} onClick={()=>applyControlMode(mode.id)}>
-                  <span className="cc-bot-v2-mode-icon"><ScenovaIcon name={mode.icon} size={22}/></span>
-                  <span><em>{mode.tag}</em><b>{modeCopy[mode.id].title}</b><small>{modeCopy[mode.id].subtitle}</small></span>
-                  <i className="cc-bot-v2-radio"/>
-                </button>)}
+                ].map(mode=>{
+                  const blocked = mode.id === "ZERO_GRID" && zeroGridBlockedForSymbol;
+                  return <button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} disabled={blocked} className={(controlMode===mode.id?"active ":"")+(blocked?"is-disabled":"")} onClick={()=>applyControlMode(mode.id)}>
+                    <span className="cc-bot-v2-mode-icon"><ScenovaIcon name={mode.icon} size={22}/></span>
+                    <span><em>{mode.tag}</em><b>{modeCopy[mode.id].title}</b><small>{blocked?"BTC/XBT ใช้ ZERO GRID ไม่ได้ · เลือก AUTO, RACE, FLIP LOCK หรือ MANUAL":modeCopy[mode.id].subtitle}</small></span>
+                    <i className="cc-bot-v2-radio"/>
+                  </button>;
+                })}
               </div>
             )}
           </section>
