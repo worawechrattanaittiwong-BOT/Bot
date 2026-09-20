@@ -88,6 +88,13 @@ Need $web 'AUTO Ownership' 'dashboard must explain AUTO ownership'
 Need $web 'ไม่รับไม้ของโหมดอื่นมาจัดการต่อ' 'dashboard must explain that AUTO cannot adopt another mode position'
 Need $web 'MANUAL Ownership' 'dashboard must explain MANUAL ownership'
 
-Need $release 'DEFAULT_EA_VERSION = "1.0.42"' 'EA release version must match strict AUTO isolation runtime'
+$eaVersionMatch = [regex]::Match($ea, '#property\s+version\s+"([^"]+)"')
+$releaseVersionMatch = [regex]::Match($release, 'DEFAULT_EA_VERSION\s*=\s*"([^"]+)"')
+if(-not $eaVersionMatch.Success -or -not $releaseVersionMatch.Success){
+  throw 'EA release version marker missing for strict AUTO isolation runtime'
+}
+if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
+  throw ("EA release version must match strict AUTO isolation runtime: EA={0} API={1}" -f $eaVersionMatch.Groups[1].Value,$releaseVersionMatch.Groups[1].Value)
+}
 
 Write-Host 'AUTO strict isolation contract: PASS'
