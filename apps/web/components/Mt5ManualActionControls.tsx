@@ -593,11 +593,16 @@ export function Mt5ManualActionControls() {
                 : " · EA ตรงเวอร์ชัน"}
             </small>
             <small className="manual-only">{updatePending || updateIntentAt ? "คำสั่งกำลังทำงาน · ไม่ต้องกดซ้ำ" : updateSettling ? "Agent ทำเสร็จแล้ว · กำลังรอ EA รายงานเวอร์ชันใหม่" : "Manual Update เท่านั้น · ระบบจะไม่อัปเดตหรือรีสตาร์ทเอง"}</small>
+            {(botRunning || botStarting || positions > 0) && <small>หยุดบอทและรอให้ออเดอร์เป็น 0 ก่อนอัปเดต</small>}
           </div>
           <button
             type="button"
             disabled={updateDisabled || botRunning || botStarting}
-            onClick={requestPersistentUpdate}
+            onClick={event => {
+              // Let the existing confirmation popup receive focus after opening it.
+              event.currentTarget.closest("dialog")?.close();
+              void requestPersistentUpdate();
+            }}
           >
             {busyAction === "UPDATE_EA_RESTART" || updatePending || updateSettling || updateIntentAt
               ? (updateSettling ? "กำลังยืนยันเวอร์ชัน..." : "กำลังดำเนินการ...")

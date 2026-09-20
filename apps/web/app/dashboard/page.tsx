@@ -98,7 +98,7 @@ export default function DashboardPage() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [checkingVersion, setCheckingVersion] = useState(false);
-  const [softwareUpdateAlertVisible, setSoftwareUpdateAlertVisible] = useState(false);
+  const statusDialogRef = useRef<HTMLDialogElement | null>(null);
   const [activeView, setActiveView] = useState<View>("overview");
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const selectedSlotIdRef = useRef("");
@@ -566,22 +566,7 @@ export default function DashboardPage() {
   const softwareUpdateRequired =
     data?.selectedSlot?.mode === "LOCAL" &&
     Boolean(softwareUpdate.required);
-  const softwareUpdateAlertKey = [
-    softwareUpdateRequired ? "required" : "clear",
-    softwareUpdate.currentVersion || "",
-    softwareUpdate.latestVersion || "",
-    softwareUpdate.currentEaVersion || "",
-    softwareUpdate.latestEaVersion || "",
-    softwareUpdate.eaHashMatch === false ? "hash-mismatch" : "hash-ok",
-    softwareUpdate.runtimeContractMatch === false ? "runtime-mismatch" : "runtime-ok"
-  ].join("|");
-
-  useEffect(() => {
-    // Version mismatch is an actionable state, not a toast. Keep it visible
-    // until Agent / EA / EX5 actually match the server again. Updates remain
-    // manual: detection only shows the persistent action; it never clicks it.
-    setSoftwareUpdateAlertVisible(softwareUpdateRequired);
-  }, [softwareUpdateAlertKey, softwareUpdateRequired]);
+  const statusNoticeCount = Number(marketSessionClosed || !isMt5Online) + Number(softwareUpdateRequired);
 
   const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };
   const maintenanceBlocksStart = Boolean(maintenance.blockStarts);
@@ -1814,113 +1799,30 @@ export default function DashboardPage() {
         )}
 
 
-        {activeView === "overview" && data.account && data.selectedSlot?.mode === "LOCAL" && softwareUpdateRequired && softwareUpdateAlertVisible && (
-          <div className="cc-update-alert" role="alert">
-            <div className="cc-update-alert-head">
-              <span className="cc-update-alert-icon">!</span>
-              <div>
-                <b>ต้องดำเนินการก่อนเริ่มบอท</b>
-                <small>ตรวจพบเวอร์ชันไม่ตรง · แจ้งเตือนนี้จะค้างจนกว่าจะอัปเดตสำเร็จ และระบบจะไม่อัปเดตอัตโนมัติ</small>
-              </div>
-              <button className="btn cc-update-refresh" disabled={busy} onClick={()=>load(selectedSlotIdRef.current)}>
-                <ScenovaIcon name="refresh" size={15}/>ตรวจสอบอีกครั้ง
-              </button>
-            </div>
-
-            <div className="cc-update-alert-list">
-              {softwareUpdate.installerRequired && (
-                <div className="cc-update-alert-row">
-                  <span className="cc-update-row-dot">!</span>
-                  <div className="cc-update-row-copy">
-                    <b>Windows Agent ไม่ตรงเวอร์ชัน</b>
-                    <small>
-                      ปัจจุบัน {softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : "ไม่พบเวอร์ชัน"} · Server ต้องการ v{softwareUpdate.latestVersion || "—"}
-                    </small>
-                  </div>
-                  <div className="cc-update-row-action">
-                    <strong>
-                      {(state === "RUNNING" || desired === "RUNNING" || currentPositions > 0)
-                        ? "หยุดบอทและรอให้ออเดอร์เป็น 0 ก่อนติดตั้งใหม่"
-                        : "ต้องติดตั้ง Windows Agent ใหม่"}
-                    </strong>
-                    <button
-                      className="btn danger-outline"
-                      disabled={busy || state === "RUNNING" || desired === "RUNNING" || currentPositions > 0}
-                      onClick={downloadWindowsInstaller}
-                    >
-                      ติดตั้ง v{softwareUpdate.latestVersion || "ล่าสุด"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {!softwareUpdate.eaVersionMatch && (
-                <div className="cc-update-alert-row">
-                  <span className="cc-update-row-dot">!</span>
-                  <div className="cc-update-row-copy">
-                    <b>EA Runtime ไม่ตรงเวอร์ชัน</b>
-                    <small>
-                      ปัจจุบัน {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "ไม่พบเวอร์ชัน"} · Server ต้องการ v{softwareUpdate.latestEaVersion || "—"}
-                    </small>
-                  </div>
-                  <div className="cc-update-row-action">
-                    <strong>
-                      {(state === "RUNNING" || desired === "RUNNING" || currentPositions > 0)
-                        ? "หยุดบอท และรอให้ออเดอร์เป็น 0"
-                        : `พร้อมอัปเดต EA เป็น v${softwareUpdate.latestEaVersion || "ล่าสุด"}`}
-                    </strong>
-                    <small>กดอัปเดตหนึ่งครั้ง ระบบจะตรวจไฟล์และรีสตาร์ท MT5 เพียงรอบเดียว</small>
-                    <div id="scenova-ea-update-action-mount" />
-                  </div>
-                </div>
-              )}
-
-              {softwareUpdate.runtimeContractMatch === false && softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch && (
-                <div className="cc-update-alert-row">
-                  <span className="cc-update-row-dot">!</span>
-                  <div className="cc-update-row-copy">
-                    <b>EA ใน MT5 ยังไม่ได้โหลด Runtime ล่าสุด</b>
-                    <small>ไฟล์บนเครื่องอาจอัปเดตแล้ว แต่ MT5 ยังรัน Runtime เก่า · ต้องรีโหลด EA ก่อนเริ่มบอท</small>
-                  </div>
-                  <div className="cc-update-row-action">
-                    <strong>{(state === "RUNNING" || desired === "RUNNING" || currentPositions > 0) ? "หยุดบอท และรอให้ออเดอร์เป็น 0" : "พร้อมรีโหลด EA Runtime ล่าสุด"}</strong>
-                    <small>กดอัปเดต EA หนึ่งครั้ง ระบบจะตรวจไฟล์และรีสตาร์ท MT5 อย่างปลอดภัย</small>
-                    <div id="scenova-ea-update-action-mount" />
-                  </div>
-                </div>
-              )}
-
-              {!softwareUpdate.eaHashMatch && (
-                <div className="cc-update-alert-row">
-                  <span className="cc-update-row-dot">!</span>
-                  <div className="cc-update-row-copy">
-                    <b>EX5 Hash ไม่ตรง Server</b>
-                    <small>เวอร์ชัน v{softwareUpdate.currentEaVersion || "—"} ถูกต้อง แต่ไฟล์ EX5 เป็นคนละ Build กับ Release ล่าสุดบน Server</small>
-                  </div>
-                  <div className="cc-update-row-action">
-                    <strong>
-                      {(state === "RUNNING" || desired === "RUNNING" || currentPositions > 0)
-                        ? "หยุดบอท และรอให้ออเดอร์เป็น 0"
-                        : "พร้อมตรวจสอบและติดตั้งไฟล์ EA ล่าสุด"}
-                    </strong>
-                    <small>ระบบจะไม่รีสตาร์ท MT5 ระหว่างบอททำงานหรือยังมี Position</small>
-                    {softwareUpdate.eaVersionMatch && (
-                      <div id="scenova-ea-update-action-mount" />
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {activeView === "overview" && (
           !data.account ? (
             <EmptySetup onNext={()=>setActiveView("account")} />
           ) : (
             <div className="cc-overview cc-v3 cc-v4 cc-v12 cc-v15 cc-v47">
               <div className="cc-v4-ambient" aria-hidden="true"><i/><i/><i/></div>
-              <div className="cc-status-center" aria-label="การเชื่อมต่อและเวอร์ชันระบบ">
+              <dialog
+                ref={statusDialogRef}
+                id="cc-system-status"
+                className="cc-status-dialog"
+                aria-labelledby="cc-system-status-title"
+                onClick={event => {
+                  if (event.target !== event.currentTarget) return;
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+                    event.currentTarget.close();
+                  }
+                }}
+              >
+                <header className="cc-status-dialog-head">
+                  <div><ScenovaIcon name="bell" size={18}/><h3 id="cc-system-status-title">สถานะระบบ</h3></div>
+                  <button type="button" autoFocus className="cc-status-dismiss" aria-label="ปิดสถานะระบบ" onClick={()=>statusDialogRef.current?.close()}><ScenovaIcon name="close" size={18}/></button>
+                </header>
+                <div className="cc-status-center" aria-label="การเชื่อมต่อและเวอร์ชันระบบ">
               {marketSessionClosed ? (
                 <div className="cc-connect-alert cc-status-connection" role="status">
                   <div className="cc-alert-icon"><ScenovaIcon name="timer" size={20}/></div>
@@ -1934,14 +1836,17 @@ export default function DashboardPage() {
                     <b>{isAgentOnline ? "EA Heartbeat ขาดช่วง" : "ยังไม่ได้เชื่อมต่อ MT5"}</b>
                     <span>{isAgentOnline ? "Windows Agent ยังเชื่อมอยู่ · ตรวจว่า EA ยังติดอยู่บนกราฟก่อนเชื่อม MT5 ใหม่" : data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span>
                   </div>
-                  <button className="btn cc-alert-action" onClick={()=>setActiveView("account")}>{isAgentOnline ? "ตรวจการเชื่อมต่อ →" : "ไปหน้าการเชื่อมต่อ →"}</button>
+                  <button type="button" className="btn cc-alert-action" onClick={()=>{statusDialogRef.current?.close();setActiveView("account");}}>{isAgentOnline ? "ตรวจการเชื่อมต่อ →" : "ไปหน้าการเชื่อมต่อ →"}</button>
                 </div>
               )}
+                {!marketSessionClosed && isMt5Online && (
+                  <div className="cc-status-connected"><ScenovaIcon name="status" size={18}/><span>MT5 และ EA เชื่อมต่อแล้ว</span></div>
+                )}
                 <section className="cc-status-software" aria-label="เวอร์ชันระบบ">
                   <div className="cc-status-software-head">
                     <span className="cc-status-software-icon"><ScenovaIcon name="layers" size={19}/></span>
                     <div><b>เวอร์ชันระบบ</b><small>EA &amp; Windows Agent</small></div>
-                    <button type="button" className="cc-status-version-check" disabled={checkingVersion || busy} onClick={checkSoftwareVersions}>
+                    <button type="button" className="cc-status-version-check" disabled={checkingVersion || busy} onClick={()=>{statusDialogRef.current?.close();void checkSoftwareVersions();}}>
                       <ScenovaIcon name="refresh" size={14}/>{checkingVersion ? "กำลังตรวจ..." : "ตรวจสอบเวอร์ชัน"}
                     </button>
                   </div>
@@ -1957,7 +1862,8 @@ export default function DashboardPage() {
                   </div>
                   <div id="scenova-status-update-mount" className="cc-status-update-slot"/>
                 </section>
-              </div>
+                </div>
+              </dialog>
 
               <section className="cc-v6-telemetry" aria-label="ข้อมูลสดจาก EA">
                 <div className="cc-v6-telemetry-live"><i/>{marketSessionClosed ? "MARKET CLOSED" : "REALTIME"}</div>
@@ -1993,13 +1899,21 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <div className={"cc-v47-live-state "+(!isMt5Online || marketSessionClosed ? "waiting" : state === "RUNNING" ? "running" : "idle")}>
+                <button
+                  type="button"
+                  className={"cc-v47-live-state cc-status-trigger "+(!isMt5Online || marketSessionClosed ? "waiting" : state === "RUNNING" ? "running" : "idle")}
+                  aria-haspopup="dialog"
+                  aria-controls="cc-system-status"
+                  aria-label={"เปิดสถานะระบบ"+(statusNoticeCount ? " · "+statusNoticeCount+" รายการแจ้งเตือน" : "")}
+                  onClick={()=>statusDialogRef.current?.showModal()}
+                >
                   <i/>
-                  <div>
+                  <span className="cc-status-trigger-copy">
                     <b>{!isMt5Online ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
-                    <small>{isMt5Online ? "Connected · "+(state === "RUNNING" ? "Trading" : "Standby") : "Waiting for MT5"}</small>
-                  </div>
-                </div>
+                    <small>สถานะและอัปเดต</small>
+                  </span>
+                  <span className="cc-status-trigger-bell"><ScenovaIcon name="bell" size={16}/>{statusNoticeCount > 0 && <em>{statusNoticeCount}</em>}</span>
+                </button>
 
                 <div className="cc-v13-hero-actions" aria-label="ควบคุมบอท">
                   <div className="cc-v12-quick-actions cc-v19-hero-quick-actions">
