@@ -18,6 +18,11 @@ import { CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
 
+function isBitcoinTradingSymbol(value: unknown) {
+  const symbol = String(value || "").trim().toUpperCase();
+  return symbol.includes("BTC") || symbol.includes("XBT");
+}
+
 @Controller("bot")
 @UseGuards(JwtGuard)
 export class BotController {
@@ -1631,6 +1636,20 @@ export class BotController {
       const savedControlMode = String(
         savedSettings.controlMode || savedSettings.engineMode || "AUTO"
       ).toUpperCase();
+      const savedTradingSymbol = String(
+        savedSettings.startupSymbol ||
+        metrics.symbol ||
+        savedSettings.symbol ||
+        ""
+      ).trim();
+      if (
+        savedControlMode === "ZERO_GRID" &&
+        isBitcoinTradingSymbol(savedTradingSymbol)
+      ) {
+        throw new ConflictException(
+          "BTC/XBT รองรับ AUTO, RACE, FLIP LOCK และ MANUAL เท่านั้น · ZERO GRID ถูกบล็อกสำหรับ BTC"
+        );
+      }
       if (savedControlMode === "ZERO_GRID") {
         const requestedRaw = Number(savedSettings.zeroGridLevelsPerSide ?? 3);
         const requestedLevels = Math.max(
@@ -1700,6 +1719,23 @@ export class BotController {
     @Body() body: Record<string, any>
   ) {
     const instance = await this.getInstance(req.user.sub, slotId || null);
+    const currentSettingsRow = await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+      [instance.id]
+    );
+    const currentSettings = currentSettingsRow?.settings || {};
+    const currentMetrics =
+      instance.metrics && typeof instance.metrics === "object"
+        ? instance.metrics
+        : {};
+    const effectiveTradingSymbol = String(
+      currentSettings.startupSymbol ||
+      body.symbol ||
+      currentMetrics.symbol ||
+      currentSettings.symbol ||
+      ""
+    ).trim();
+    const bitcoinTradingSymbol = isBitcoinTradingSymbol(effectiveTradingSymbol);
 
     // Keep strategy/risk settings immutable while Start is pending or the EA is
     // RUNNING. Daily Profit Target is the one intentional live exception: the
@@ -1964,6 +2000,11 @@ export class BotController {
     const zeroGridSelected =
       requestedControlMode === "ZERO_GRID" ||
       (requestedControlMode === null && requestedEngineMode === "ZERO_GRID");
+    if (zeroGridSelected && bitcoinTradingSymbol) {
+      throw new BadRequestException(
+        "ZERO GRID ไม่รองรับ BTC/XBT · ใช้ AUTO, RACE, FLIP LOCK หรือ MANUAL"
+      );
+    }
     if (zeroGridSelected) {
       clean.zeroGridStepPrice = clean.zeroGridStepPrice === 2 ? 2 : 3;
       if (body.zeroGridLowVolatilityEnabled === undefined) clean.zeroGridLowVolatilityEnabled = false;
