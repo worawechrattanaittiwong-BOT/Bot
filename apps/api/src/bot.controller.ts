@@ -2064,7 +2064,6 @@ export class BotController {
         Number(currentSettings.dailyLossMoney || 0));
       clean.dailyProfitTargetMoney = storedNumber("autoDailyProfitTargetMoney", "standardDailyProfitTargetMoney",
         Number(currentSettings.dailyProfitTargetMoney || 0));
-      clean.manualStopLossPoints = 0;
     } else if (activeProfileMode === "RACE") {
       clean.lot = storedNumber("raceLot", "lot", 0.01);
       clean.maxPositions = Math.max(1, Math.trunc(storedNumber("raceMaxPositions", "maxPositions", 1)));
@@ -2074,8 +2073,8 @@ export class BotController {
         Number(currentSettings.dailyLossMoney || 0));
       clean.dailyProfitTargetMoney = storedNumber("raceDailyProfitTargetMoney", "standardDailyProfitTargetMoney",
         Number(currentSettings.dailyProfitTargetMoney || 0));
-      // RACE owns ATR Stop only. MANUAL points must never survive a mode switch.
-      clean.manualStopLossPoints = 0;
+      // RACE owns ATR Stop only. The saved MANUAL points profile is preserved
+      // but is ignored by the isolated RACE engine.
     } else if (activeProfileMode === "FLIP_LOCK") {
       clean.lot = storedNumber("flipLockLot", "lot", 0.01);
       clean.maxPositions = 1;
@@ -2085,7 +2084,6 @@ export class BotController {
         Number(currentSettings.dailyLossMoney || 0));
       clean.dailyProfitTargetMoney = storedNumber("flipLockDailyProfitTargetMoney", "standardDailyProfitTargetMoney",
         Number(currentSettings.dailyProfitTargetMoney || 0));
-      clean.manualStopLossPoints = 0;
     } else if (activeProfileMode === "MANUAL") {
       clean.lot = storedNumber("manualLot", "lot", 0.01);
       clean.maxPositions = Math.max(1, Math.trunc(storedNumber("manualMaxPositions", "maxPositions", 1)));
@@ -2147,10 +2145,8 @@ export class BotController {
       clean.basketProfitTargetMoney = autoProfitTargetMoney;
       clean.perPositionProfitMoney = 0;
       clean.profitRunTrailPercent = 0;
-      // Profit-profile synchronization must not mutate unrelated MANUAL risk
-      // settings during a partial API update. Clear Manual SL only when the
-      // caller explicitly switches control ownership to AUTO.
-      if (requestedControlMode === "AUTO") clean.manualStopLossPoints = 0;
+      // Profit-profile synchronization must not mutate the saved MANUAL stop
+      // profile. AUTO ignores that profile inside the EA.
     }
 
     const manualSelected =
@@ -2185,7 +2181,6 @@ export class BotController {
       clean.basketProfitTargetMoney = 0;
       clean.perPositionProfitMoney = 0;
       clean.profitRunTrailPercent = 0;
-      clean.manualStopLossPoints = 0;
       clean.dailyProfitContinueAfterTarget = false;
       clean.dailyProfitDrawdownPercent = 0;
     }
