@@ -72,7 +72,9 @@ Need $page 'openPositions.length ? [...openPositions].reverse().map' 'Running Po
 Need $page 'position.openPrice' 'Running Positions must expose the actual open price'
 Need $page 'position.profit' 'Running Positions must expose live P&L'
 if($page.Contains('cc-bot-v17-add-setting')) { throw 'Dashboard must expose optional settings instead of Add Setting rows' }
-Need $page 'disabled={!raceCloseAllProfitEnabled}' 'RACE target amount must remain visible but disabled when Close-All Profit is off'
+Need $page 'raceProfitTargetMode==="BASKET"' 'RACE Basket profit selector missing'
+Need $page 'raceProfitTargetMode==="POSITION"' 'RACE per-position profit selector missing'
+Need $page 'racePerPositionProfitMoney' 'RACE per-position profit amount missing'
 Need $css 'grid-template-columns:minmax(330px,.92fr) minmax(390px,1.08fr) minmax(330px,.92fr)' 'Desktop workspace must use three columns'
 Need $css '.cc-v17-running-table .row' 'Running Positions table styling missing'
 Need $css '.cc-bot-v17-contract-copy{display:none!important' 'Ownership/safety contract copy must stay hidden from the concise settings UI'
@@ -109,7 +111,7 @@ Need $css 'grid-template-columns:minmax(126px,.88fr) minmax(160px,1.12fr)!import
 Need $css '.cc-v19-settings-card .cc-bot-v2-lowvol-note{' 'ZERO GRID compact embedded treatment missing'
 
 Need $page 'alwaysShowInput' 'Always-visible optional setting controls missing'
-Need $page 'cc-bot-v2-inline-toggle-value' 'Aligned RACE toggle/value control missing'
+Need $page 'รูปแบบกำไร RACE' 'Aligned RACE Basket/per-position selector missing'
 Need $page 'cc-bot-v2-choice-inline' 'Aligned MANUAL profit selector missing'
 if($page.Contains('revealedOptional')) { throw 'Legacy global optional reveal state must stay removed' }
 Need $page 'cc-bot-manual-risk-add' 'MANUAL must provide a single optional-risk add control'
