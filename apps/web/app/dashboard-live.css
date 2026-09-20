@@ -658,14 +658,19 @@
 .cc-v47 .cc-status-trigger-bell em{position:absolute;top:-4px;right:-4px;display:grid;place-items:center;min-width:15px;height:15px;padding:0 3px;border:2px solid #111827;border-radius:8px;background:#e2bd62;color:#17150f;font-family:inherit;font-size:9px;font-weight:800;line-height:1;font-style:normal}
 .cc-v47 .cc-status-dialog{
   position:fixed!important;
-  inset:0!important;
+  inset:auto!important;
+  top:50%!important;
+  left:50%!important;
+  right:auto!important;
+  bottom:auto!important;
+  transform:translate(-50%,-50%);
   box-sizing:border-box;
   width:min(460px,calc(100vw - 32px))!important;
   min-width:0!important;
   min-height:0!important;
-  height:auto!important;
-  max-height:calc(100dvh - 40px)!important;
-  margin:auto!important;
+  height:max-content!important;
+  max-height:min(680px,calc(100dvh - 32px))!important;
+  margin:0!important;
   padding:0!important;
   border:1px solid rgba(133,121,207,.4);
   border-radius:18px;

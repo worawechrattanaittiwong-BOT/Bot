@@ -1991,7 +1991,7 @@ export default function DashboardPage() {
 
                 <button
                   type="button"
-                  className={"cc-v47-live-state cc-status-trigger "+(!isMt5Online || marketSessionClosed ? "waiting" : state === "RUNNING" ? "running" : "idle")}
+                  className={"cc-v47-live-state cc-status-trigger "+(statusNoticeCount > 0 ? "waiting" : state === "RUNNING" ? "running" : "idle")}
                   aria-haspopup="dialog"
                   aria-controls="cc-system-status"
                   aria-label={"เปิดสถานะระบบ"+(statusNoticeCount ? " · "+statusNoticeCount+" รายการแจ้งเตือน" : "")}

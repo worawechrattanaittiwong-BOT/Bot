@@ -12,7 +12,7 @@ import {
 } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { CryptoService } from "./security";
-import { installerDownloadPath, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";
+import { EA_RUNTIME_CONTRACT, installerDownloadPath, isEaVersionExact, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { MaintenanceService } from "./maintenance.service";
@@ -1155,6 +1155,7 @@ export class EaController {
          actual_state,
          COALESCE(NULLIF(metrics->>'positions','')::int,0) AS positions,
          metrics->>'eaVersion' AS ea_version,
+         metrics->>'runtimeContract' AS runtime_contract,
          metrics->>'accountNumber' AS reported_account_number,
          metrics->>'server' AS reported_server,
          metrics->>'broker' AS reported_broker,
@@ -1176,6 +1177,22 @@ export class EaController {
     const agentVersionRequired = latestInstallerVersion();
     const reportedAgentVersion = String(body.agentVersion || "").trim();
     const agentUpdateRequired = !isVersionExact(reportedAgentVersion, agentVersionRequired);
+    const eaVersionRequired = this.artifactVersion(releaseChannel);
+    const currentRuntimeContract = String(runtime?.runtime_contract || "").trim();
+    const runtimeContractMatch = currentRuntimeContract === EA_RUNTIME_CONTRACT;
+
+    // Compatibility bridge for already-installed 1.0.x Agents:
+    // when the EX5/version are already current but MT5 still has an older
+    // runtime loaded, the existing Agent only needs a temporary version
+    // mismatch signal to create its one-time pending-reload marker. The actual
+    // release version remains unchanged everywhere else, and MT5 still restarts
+    // only after the customer's explicit UPDATE_EA_RESTART action.
+    const runtimeReloadOnly =
+      isEaVersionExact(runtime?.ea_version, eaVersionRequired) &&
+      !runtimeContractMatch;
+    const agentEaVersionRequired = runtimeReloadOnly
+      ? `${eaVersionRequired}-runtime-reload`
+      : eaVersionRequired;
 
     return {
       ok: true,
@@ -1210,7 +1227,10 @@ export class EaController {
       accountNumber: String(runtime?.reported_account_number || instance?.account_number || ""),
       server: String(runtime?.reported_server || instance?.broker_server || ""),
       broker: String(runtime?.reported_broker || instance?.broker || ""),
-      eaVersionRequired: this.artifactVersion(releaseChannel),
+      eaVersionRequired: agentEaVersionRequired,
+      runtimeContract: currentRuntimeContract || null,
+      runtimeContractRequired: EA_RUNTIME_CONTRACT,
+      runtimeContractMatch,
       releaseChannel,
       agentVersion: reportedAgentVersion,
       agentVersionRequired,
