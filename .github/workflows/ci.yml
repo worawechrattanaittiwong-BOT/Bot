@@ -78,6 +78,9 @@ jobs:
       - name: Trading symbol selection safety contract
         shell: pwsh
         run: ./tests/trading-symbol-selection-contract.ps1
+      - name: BTC symbol support and mode gate contract
+        shell: pwsh
+        run: ./tests/btc-symbol-mode-contract.ps1
       - name: Market-closed heartbeat and status contract
         shell: pwsh
         run: ./tests/market-closed-heartbeat-contract.ps1
