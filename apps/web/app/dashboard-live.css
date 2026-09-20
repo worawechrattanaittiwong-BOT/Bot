@@ -718,3 +718,128 @@
   .cc-v47 .cc-status-update-slot .scenova-persistent-update{grid-template-columns:minmax(0,1fr)}
   .cc-v47 .cc-status-update-slot .scenova-persistent-update button{justify-self:start}
 }
+
+/* ===== V47 header + execution bar · standard readable typography ===== */
+/* Remove 7–10px microcopy from the top status cards and live execution bar.
+   Keep the same visual hierarchy while matching the normal dashboard reading scale. */
+.cc-v47 .cc-status-connection .cc-alert-copy b{
+  font-size:14px!important;
+  line-height:1.4!important;
+}
+.cc-v47 .cc-status-connection .cc-alert-copy span{
+  font-size:12px!important;
+  line-height:1.55!important;
+}
+.cc-v47 .cc-status-connection .cc-alert-action{
+  min-height:36px!important;
+  padding:7px 13px!important;
+  font-size:12px!important;
+}
+
+.cc-v47 .cc-status-software-head b{
+  font-size:14px!important;
+  line-height:1.35!important;
+}
+.cc-v47 .cc-status-software-head small{
+  font-size:12px!important;
+  line-height:1.4!important;
+}
+.cc-v47 .cc-status-version-check{
+  min-height:36px!important;
+  padding:7px 12px!important;
+  font-size:12px!important;
+}
+.cc-v47 .cc-status-software .cc-v6-version-chip{
+  min-height:31px!important;
+  padding:6px 10px!important;
+  font-size:11.5px!important;
+  line-height:1.35!important;
+}
+.cc-v47 .cc-status-update-slot .scenova-persistent-update-copy b{
+  font-size:13px!important;
+  line-height:1.45!important;
+}
+.cc-v47 .cc-status-update-slot .scenova-persistent-update-copy small{
+  font-size:11.5px!important;
+  line-height:1.5!important;
+}
+.cc-v47 .cc-status-update-slot .scenova-persistent-update button{
+  min-height:40px!important;
+  padding:8px 14px!important;
+  font-size:12px!important;
+}
+
+.cc-v47 .cc-v47-command-bar{
+  min-height:146px!important;
+}
+.cc-v47 .cc-v47-brand-lockup>span{
+  font-size:11px!important;
+  line-height:1.1!important;
+  letter-spacing:.19em!important;
+}
+.cc-v47 .cc-v6-symbol-copy h2{
+  font-size:30px!important;
+}
+.cc-v47 .cc-v6-symbol-copy p{
+  font-size:12px!important;
+  line-height:1.35!important;
+}
+.cc-v47 .cc-v6-symbol-chips{
+  gap:6px!important;
+  margin-top:8px!important;
+}
+.cc-v47 .cc-v6-symbol-chips>span{
+  min-height:28px!important;
+  padding:5px 8px!important;
+  font-size:10.5px!important;
+  line-height:1.15!important;
+}
+.cc-v47 .cc-v47-live-state{
+  min-height:72px!important;
+  padding:11px 13px!important;
+}
+.cc-v47 .cc-v47-live-state b{
+  font-size:14px!important;
+  line-height:1.25!important;
+}
+.cc-v47 .cc-v47-live-state small{
+  font-size:11px!important;
+  line-height:1.3!important;
+}
+.cc-v47 .cc-v13-hero-actions .cc-v19-hero-quick-actions button{
+  min-height:62px!important;
+  padding:8px 9px!important;
+}
+.cc-v47 .cc-v13-hero-actions button b{
+  font-size:12.5px!important;
+  line-height:1.2!important;
+}
+.cc-v47 .cc-v13-hero-actions button small{
+  font-size:10.5px!important;
+  line-height:1.2!important;
+}
+
+@media(max-width:1500px){
+  .cc-v47 .cc-v47-brand-lockup>span{
+    font-size:10.5px!important;
+    letter-spacing:.16em!important;
+  }
+  .cc-v47 .cc-v6-symbol-copy h2{font-size:28px!important}
+  .cc-v47 .cc-v6-symbol-chips>span{font-size:10px!important}
+}
+
+@media(max-width:700px){
+  .cc-v47 .cc-status-connection .cc-alert-copy b{font-size:13.5px!important}
+  .cc-v47 .cc-status-connection .cc-alert-copy span{font-size:11.5px!important}
+  .cc-v47 .cc-status-version-check{font-size:11.5px!important}
+  .cc-v47 .cc-status-software .cc-v6-version-chip{font-size:11px!important}
+  .cc-v47 .cc-v47-command-bar{min-height:0!important}
+  .cc-v47 .cc-v6-symbol-copy h2{font-size:27px!important}
+  .cc-v47 .cc-v6-symbol-copy p{font-size:11.5px!important}
+  .cc-v47 .cc-v6-symbol-chips>span{font-size:10px!important}
+  .cc-v47 .cc-v47-live-state b{font-size:13.5px!important}
+  .cc-v47 .cc-v47-live-state small{font-size:10.5px!important}
+  .cc-v47 .cc-v13-hero-actions button b{font-size:12px!important}
+  .cc-v47 .cc-v13-hero-actions button small{font-size:10px!important}
+}
+/* ===== /V47 header + execution bar · standard readable typography ===== */
