@@ -5363,3 +5363,26 @@
   align-self:center!important;
 }
 /* ===== /Settings final alignment · exact requested UI ===== */
+
+/* ===== Settings selector compact width · requested UI ===== */
+/* Desktop: keep selectors compact instead of stretching across the whole card. */
+.cc-v19-settings-card .cc-bot-v12-mode-select,
+.cc-v19-settings-card .cc-bot-v2-field>select.input{
+  width:min(100%,360px)!important;
+  justify-self:end!important;
+}
+
+/* The selector row keeps the label column fixed; only the control itself is compact. */
+.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label,
+.cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field{
+  grid-template-columns:var(--settings-label) minmax(0,1fr)!important;
+}
+
+/* Narrow screens still use the full available control width. */
+@media(max-width:900px){
+  .cc-v19-settings-card .cc-bot-v12-mode-select,
+  .cc-v19-settings-card .cc-bot-v2-field>select.input{
+    width:100%!important;
+  }
+}
+/* ===== /Settings selector compact width · requested UI ===== */
