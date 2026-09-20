@@ -101,6 +101,13 @@ Need $web 'MT5 Local Tick · Server ไม่กำหนดราคา SL' 'FL
 Need $web 'Safety Stop → Trailing SL ขยับตามราคา MT5' 'FLIP LOCK UI must expose direct MT5 trailing behavior'
 Need $web 'ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า' 'FLIP LOCK UI must state that no opposite pending direction is pre-placed'
 
-Need $release 'DEFAULT_EA_VERSION = "1.0.42"' 'EA release version must match the FLIP LOCK safe-start runtime'
+$eaVersionMatch = [regex]::Match($ea, '#property\s+version\s+"([^"]+)"')
+$releaseVersionMatch = [regex]::Match($release, 'DEFAULT_EA_VERSION\s*=\s*"([^"]+)"')
+if(-not $eaVersionMatch.Success -or -not $releaseVersionMatch.Success){
+  throw 'EA release version marker missing'
+}
+if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
+  throw ("EA release version mismatch: EA={0} API={1}" -f $eaVersionMatch.Groups[1].Value,$releaseVersionMatch.Groups[1].Value)
+}
 
 Write-Host 'FLIP LOCK strict isolation contract: PASS'

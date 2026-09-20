@@ -88,7 +88,14 @@ Need $fill 'if(!RaceStopReady())' 'RACE must verify ATR stop readiness before se
 Need $send 'bool raceOrder = RaceModeEnabled() || BasketHasRacePosition();' 'shared order sender must identify RACE orders from execution ownership, not stale entry metadata'
 Need $send 'RaceInitialStopPrice(direction, entryPrice)' 'RACE orders must use their dedicated ATR stop'
 Need $send 'if(!raceOrder && !flipLockOrder && g_profitTargetMode == "AUTO"' 'AUTO TP logic must not override RACE or FLIP LOCK profit controls'
-Need $release 'DEFAULT_EA_VERSION = "1.0.42"' 'EA release version must match the promoted live intelligence runtime'
+$eaVersionMatch = [regex]::Match($ea, '#property\s+version\s+"([^"]+)"')
+$releaseVersionMatch = [regex]::Match($release, 'DEFAULT_EA_VERSION\s*=\s*"([^"]+)"')
+if(-not $eaVersionMatch.Success -or -not $releaseVersionMatch.Success){
+  throw 'EA release version marker missing'
+}
+if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
+  throw ("EA release version mismatch: EA={0} API={1}" -f $eaVersionMatch.Groups[1].Value,$releaseVersionMatch.Groups[1].Value)
+}
 Need $release 'EA_RUNTIME_CONTRACT = "RACE_PERSISTENT_REVERSAL_EXIT_V4"' 'API runtime contract must match EA'
 
 Write-Host 'RACE 10-second volume + persistent reversal V4 contract: PASS'
