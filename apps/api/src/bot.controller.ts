@@ -221,6 +221,8 @@ export class BotController {
       BASKET_LADDER_WAIT: { label: "Basket Ladder กำลังรอ Rung ถัดไป", detail: "นี่เป็นระยะห่างของไม้ 2–10 หลังไม้แรก ไม่ใช่เงื่อนไขดักไม้แรก", tone: "good" },
       BASKET_LADDER_PULLBACK_WAIT: { label: "Ladder รอ Pullback ก่อนเพิ่มไม้", detail: "ราคาวิ่งถึงระยะ Rung แล้ว แต่ระบบจะไม่เพิ่มไม้ตรง New High/New Low; รอ Pullback เล็กน้อยก่อน", tone: "good" },
       BASKET_LADDER_CONTINUATION_WAIT: { label: "Ladder รอ Continuation หลัง Pullback", detail: "เห็น Pullback แล้ว กำลังรอ M1/Momentum กลับไปทิศ Basket ก่อนเพิ่มไม้ เพื่อไม่กองออเดอร์ที่ปลายทาง", tone: "good" },
+      RESCUE_DISABLED: { label: "ปิดระบบแก้ไม้", detail: "EA จะไม่เปิด Hedge หรือ Recovery สวนฝั่งหลัก", tone: "good" },
+      RESCUE_DISABLED_CLEANUP: { label: "กำลังปิด Rescue เดิม", detail: "กำลังเคลียร์ไม้ Rescue ที่ค้างจากเวอร์ชันเก่า และจะไม่เปิดไม้แก้ใหม่", tone: "warn" },
       RESCUE_WARNING: { label: "Rescue กำลังเฝ้าการกลับตัว", detail: "Basket ติดลบและเริ่มมีสัญญาณ Reversal ระบบหยุดเพิ่มไม้ชั่วคราวเพื่อตรวจว่าควร Hedge หรือปล่อยโครงสร้างเดิมทำงานต่อ", tone: "warn" },
       TIME_RESCUE_WARNING: { label: "Time Rescue กำลังประเมิน", detail: "Position ติดลบนานเกินกรอบเวลาปรับตาม Regime ระบบกำลังตรวจ Structure / EMA / Price Action ก่อนเข้า Recovery", tone: "warn" },
       RESCUE_ACTIVE: { label: "Adaptive Rescue กำลังทำงาน", detail: "ระบบยืนยัน Reversal แล้วและกำลัง Weight Balance / Smart Hedge โดยไม่เพิ่ม Lot แบบ Martingale", tone: "warn" },
