@@ -301,8 +301,22 @@ bash scripts/deploy-hostinger.sh
 
 PUBLIC_WEB_URL="$(grep '^PUBLIC_WEB_URL=' .env.hostinger 2>/dev/null | cut -d= -f2- || true)"
 if [ -n "$PUBLIC_WEB_URL" ] && command -v curl >/dev/null 2>&1; then
-  echo "[SCENOVA] health check: $PUBLIC_WEB_URL/backend/api/health"
-  curl --fail --silent --show-error --max-time 20 "$PUBLIC_WEB_URL/backend/api/health" >/dev/null
+  HEALTH_URL="$PUBLIC_WEB_URL/backend/api/health"
+  echo "[SCENOVA] health check: $HEALTH_URL"
+  HEALTH_OK=0
+  for ((attempt=1; attempt<=30; attempt++)); do
+    if curl --fail --silent --show-error --max-time 5 "$HEALTH_URL" >/dev/null; then
+      HEALTH_OK=1
+      echo "[SCENOVA] health check passed on attempt $attempt"
+      break
+    fi
+    echo "[SCENOVA] health check not ready ($attempt/30); retrying in 2s"
+    sleep 2
+  done
+  if [ "$HEALTH_OK" -ne 1 ]; then
+    echo "[SCENOVA] health check failed after 30 attempts"
+    exit 1
+  fi
 fi
 
 mkdir -p "$STATE_DIR"
