@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.46"
-#define SCENOVA_EA_VERSION "1.0.46"
-#define SCENOVA_PRODUCT_VERSION "1.0.46"
+#property version   "1.0.47"
+#define SCENOVA_EA_VERSION "1.0.47"
+#define SCENOVA_PRODUCT_VERSION "1.0.47"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1718,7 +1718,9 @@ string EffectiveExecutionMode()
 
 bool ZeroGridModeEnabled()
 {
-   return EffectiveExecutionMode() == "ZERO_GRID";
+   // BTC/XBT is intentionally excluded from ZERO GRID. Its fixed-price ladder
+   // geometry was designed for metals and must never create a new crypto grid.
+   return !IsBitcoinSymbol() && EffectiveExecutionMode() == "ZERO_GRID";
 }
 
 double ZeroGridAllowedStep(double requested)
@@ -3310,7 +3312,7 @@ double RaceInitialStopPrice(int direction, double entryPrice)
    double stop = direction > 0
       ? entryPrice - points * _Point
       : entryPrice + points * _Point;
-   return NormalizeDouble(stop, digits);
+   return NormalizeStopPriceToTick(stop,direction);
 }
 
 bool RaceStopReady()
@@ -3499,7 +3501,7 @@ bool ProcessRaceFill(int direction)
       return false;
    }
 
-   g_entryModel = "RACE_VOLUME_10S";
+   g_entryModel = "RACE_VOLUME_60S";
    g_entryTrigger = direction > 0 ? "RACE_VOLUME_BUY" : "RACE_VOLUME_SELL";
    g_entryQuality = "RACE";
    g_entryQualityScore = 0.0;
@@ -3842,6 +3844,15 @@ void OnTick()
       g_zeroGridClosing ||
       ZeroGridPositionCount()>0 ||
       ZeroGridPendingCount()>0;
+
+   if(IsBitcoinSymbol() &&
+      EffectiveExecutionMode()=="ZERO_GRID" &&
+      !zeroGridOwnsRuntime)
+   {
+      g_executionStatus="BTC_ZERO_GRID_BLOCKED";
+      return;
+   }
+
    bool zeroGridCanStart =
       ZeroGridModeEnabled() &&
       BasketPositionCount()<=0 &&
@@ -14620,6 +14631,50 @@ void ProcessBurstQueue()
 }
 
 
+bool IsBitcoinSymbol()
+{
+   string symbol=_Symbol;
+   StringToUpper(symbol);
+   return StringFind(symbol,"BTC")>=0 || StringFind(symbol,"XBT")>=0;
+}
+
+double SymbolTickSizeNow()
+{
+   double tick=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   if(tick<=0.0) tick=_Point;
+   return MathMax(_Point,tick);
+}
+
+double NormalizePriceToTick(double price)
+{
+   if(price<=0.0) return 0.0;
+   double tick=SymbolTickSizeNow();
+   double units=MathRound(price/tick);
+   return NormalizeDouble(units*tick,(int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS));
+}
+
+double NormalizeStopPriceToTick(double price,int direction)
+{
+   if(price<=0.0 || direction==0) return 0.0;
+   double tick=SymbolTickSizeNow();
+   double units=price/tick;
+   // BUY stop-loss sits below market -> round down. SELL stop-loss sits above
+   // market -> round up. This preserves broker minimum distance.
+   units=direction>0 ? MathFloor(units+1e-10) : MathCeil(units-1e-10);
+   return NormalizeDouble(units*tick,(int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS));
+}
+
+double NormalizeTargetPriceToTick(double price,int direction)
+{
+   if(price<=0.0 || direction==0) return 0.0;
+   double tick=SymbolTickSizeNow();
+   double units=price/tick;
+   // BUY target/pending trigger sits above market -> round up. SELL target sits
+   // below market -> round down.
+   units=direction>0 ? MathCeil(units-1e-10) : MathFloor(units+1e-10);
+   return NormalizeDouble(units*tick,(int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS));
+}
+
 int SymbolDigitsNow()
 {
    return (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
@@ -15386,7 +15441,13 @@ int DynamicDeviationPoints()
       atr = spread * 4.0;
 
    double deviation = MathMax(5.0, MathMax(spread * 1.50, atr * 0.12));
-   return (int)MathRound(MathMin(80.0, deviation));
+   // BTC CFD symbols can quote with very small point sizes, making an 80-point
+   // cap far tighter than one live spread. Keep XAU/FX behavior unchanged while
+   // sizing crypto deviation from the broker's own spread/ATR.
+   double cap = IsBitcoinSymbol()
+      ? MathMin(100000.0,MathMax(500.0,MathMax(spread*3.0,atr*0.50)))
+      : 80.0;
+   return (int)MathRound(MathMin(cap, deviation));
 }
 
 bool OrderSendWithPriceRetry(MqlTradeRequest &request, MqlTradeResult &result)
@@ -16107,8 +16168,21 @@ string MarketSessionStateNow()
    if(foundSession)
       return "CLOSED";
 
-   // Brokers commonly publish no weekend session rows at all. On weekdays,
-   // missing metadata remains UNKNOWN rather than falsely blocking a symbol.
+   // Crypto brokers may trade BTC/XBT through weekends without publishing
+   // SymbolInfoSessionTrade rows. A fresh broker tick is authoritative enough
+   // to allow trading; a stale/missing tick remains UNKNOWN and therefore
+   // cannot be mistaken for a confirmed open session.
+   if(IsBitcoinSymbol())
+   {
+      MqlTick cryptoTick;
+      if(SymbolInfoTick(_Symbol,cryptoTick) &&
+         cryptoTick.time>0 &&
+         MathAbs((double)(serverNow-(datetime)cryptoTick.time))<=120.0)
+         return "OPEN";
+      return "UNKNOWN";
+   }
+
+   // Non-crypto symbols with no weekend session metadata are treated closed.
    if(day == SATURDAY || day == SUNDAY)
       return "CLOSED";
 
@@ -16198,7 +16272,7 @@ double DynamicInitialStopPrice(int direction, double entryPrice)
       double manualStop=direction>0
          ? entryPrice-points*_Point
          : entryPrice+points*_Point;
-      return NormalizeDouble(manualStop,digits);
+      return NormalizeStopPriceToTick(manualStop,direction);
    }
 
    double atrPoints=g_atrPoints>0.0
@@ -16245,7 +16319,7 @@ double DynamicInitialStopPrice(int direction, double entryPrice)
       stop=MathMax(stop,entryPrice+minStopPoints*_Point);
    }
 
-   return NormalizeDouble(stop,digits);
+   return NormalizeStopPriceToTick(stop,direction);
 }
 
 
@@ -16324,7 +16398,7 @@ double DynamicTakeProfitPrice(int direction, double entryPrice, double stopPrice
          target = extension;
    }
 
-   return NormalizeDouble(target, digits);
+   return NormalizeTargetPriceToTick(target,direction);
 }
 
 bool ModifyPositionProtection(ulong ticket, double sl, double tp)
@@ -16338,8 +16412,10 @@ bool ModifyPositionProtection(ulong ticket, double sl, double tp)
    request.position = ticket;
    request.magic = InpMagic;
    request.symbol = PositionGetString(POSITION_SYMBOL);
-   request.sl = sl;
-   request.tp = tp;
+   long positionType=PositionGetInteger(POSITION_TYPE);
+   int direction=positionType==POSITION_TYPE_BUY ? 1 : -1;
+   request.sl = sl>0.0 ? NormalizeStopPriceToTick(sl,direction) : 0.0;
+   request.tp = tp>0.0 ? NormalizeTargetPriceToTick(tp,direction) : 0.0;
 
    ResetLastError();
    if(!OrderSend(request, result))
@@ -16452,7 +16528,7 @@ void ManageDynamicProtection()
          desiredSL = MathMin(desiredSL, tick.bid - minStopPoints * _Point);
       else if(direction < 0 && desiredSL > 0.0)
          desiredSL = MathMax(desiredSL, tick.ask + minStopPoints * _Point);
-      desiredSL = desiredSL > 0.0 ? NormalizeDouble(desiredSL, digits) : 0.0;
+      desiredSL = desiredSL > 0.0 ? NormalizeStopPriceToTick(desiredSL,direction) : 0.0;
 
       // Only Auto owns a system-generated Broker TP. Manual follows the money
       // target selected by the user and Off leaves profit exits disabled.
@@ -16460,7 +16536,7 @@ void ManageDynamicProtection()
       bool positionUsesAutoProtection=autoFamilyPosition;
       if(autoPosition && g_autoV20BasketTargetPrice>0.0)
       {
-         desiredTP=NormalizeDouble(g_autoV20BasketTargetPrice,digits);
+         desiredTP=NormalizeTargetPriceToTick(g_autoV20BasketTargetPrice,direction);
       }
       else if(tacticalPosition &&
               count == 1 &&
@@ -16470,7 +16546,7 @@ void ManageDynamicProtection()
          desiredTP=TacticalTakeProfitPrice(direction,openPrice);
          if(direction > 0) desiredTP=MathMax(desiredTP,tick.ask+minStopPoints*_Point);
          else desiredTP=MathMin(desiredTP,tick.bid-minStopPoints*_Point);
-         desiredTP=NormalizeDouble(desiredTP,digits);
+         desiredTP=NormalizeTargetPriceToTick(desiredTP,direction);
       }
 
       bool slChanged = desiredSL > 0.0 &&
@@ -16541,7 +16617,7 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
       g_executionStatus="AUTO_V20_RISK_VOLUME_ZERO";
       return false;
    }
-   request.deviation = 30;
+   request.deviation = DynamicDeviationPoints();
    request.type_filling = AllowedFillingMode();
    request.comment = autoV20
       ? AUTO_V20_LIVE_COMMENT
@@ -16642,6 +16718,11 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
             );
       }
    }
+
+   if(request.sl>0.0)
+      request.sl=NormalizeStopPriceToTick(request.sl,direction);
+   if(request.tp>0.0)
+      request.tp=NormalizeTargetPriceToTick(request.tp,direction);
 
    g_dynamicStopPrice = request.sl;
    g_dynamicTakeProfitPrice = (raceOrder || flipLockOrder)
