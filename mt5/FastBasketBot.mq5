@@ -244,6 +244,7 @@ double g_dailyClosedProfitRace = 0.0;
 double g_dailyClosedProfitFlipLock = 0.0;
 double g_dailyClosedProfitManual = 0.0;
 bool   g_dailyProfitLocked = false;
+bool   g_dailyLossLocked = false;
 bool   g_dailyProfitTargetArmed = false;
 int    g_dayKey = -1;
 int    g_basketPeakPositionCount = 0;
@@ -3931,9 +3932,15 @@ void OnTick()
    if(HandleDailyProfitControl(count))
       return;
 
+   LoadDailyLossLock();
    double effectiveDailyLoss = EffectiveDailyLossLimit();
-   if(effectiveDailyLoss > 0.0 && DailyBotProfit() <= -effectiveDailyLoss)
+   bool dailyLossReached =
+      effectiveDailyLoss > 0.0 &&
+      DailyBotProfit() <= -effectiveDailyLoss;
+   if(g_dailyLossLocked || dailyLossReached)
    {
+      if(dailyLossReached && !g_dailyLossLocked)
+         LockDailyLoss();
       if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
       if(count > 0 || rescueCount > 0) CloseAllBasket("DAILY_LOSS");
       g_state = STATE_SAFE_STOP;
@@ -5491,11 +5498,13 @@ void SendHeartbeat()
    }
    else if(desired == "RUNNING")
    {
-      if(g_dailyProfitLocked)
+      if(g_dailyProfitLocked || g_dailyLossLocked)
       {
          g_state = STATE_SAFE_STOP;
          g_runAuthorized = false;
-         g_executionStatus = "DAILY_PROFIT_LOCK";
+         g_executionStatus = g_dailyLossLocked
+            ? "DAILY_LOSS_LOCK"
+            : "DAILY_PROFIT_LOCK";
       }
       else
       {
@@ -6146,6 +6155,7 @@ void ApplySettings(string json)
 {
    string previousDailyRiskMode=DailyRiskMode();
    double previousDailyProfitTarget=EffectiveDailyProfitTarget();
+   double previousDailyLossLimit=EffectiveDailyLossLimit();
    bool previousDailyContinueAfterTarget = g_dailyProfitContinueAfterTarget;
 
    g_lot = MathMax(0.01, JsonNumber(json, "lot", g_lot));
@@ -6346,8 +6356,11 @@ void ApplySettings(string json)
    RecalculateDailyClosedProfit();
    LoadDailyProfitRunOnState();
    LoadDailyProfitLock();
+   LoadDailyLossLock();
+   LoadDailyLossLock();
 
    double activeDailyProfitTarget=EffectiveDailyProfitTarget();
+   double activeDailyLossLimit=EffectiveDailyLossLimit();
    bool dailyProfitSettingsChanged =
       previousDailyRiskMode!=DailyRiskMode() ||
       MathAbs(previousDailyProfitTarget-activeDailyProfitTarget)>0.0000001 ||
@@ -6361,6 +6374,14 @@ void ApplySettings(string json)
    if(g_dailyProfitTargetArmed &&
       (activeDailyProfitTarget<=0.0 || DailyBotProfit()<activeDailyProfitTarget))
       DisarmDailyProfitRunOn();
+
+   bool dailyLossSettingsChanged =
+      previousDailyRiskMode!=DailyRiskMode() ||
+      MathAbs(previousDailyLossLimit-activeDailyLossLimit)>0.0000001;
+   if(g_dailyLossLocked &&
+      dailyLossSettingsChanged &&
+      (activeDailyLossLimit<=0.0 || DailyBotProfit()>-activeDailyLossLimit))
+      UnlockDailyLossLock("DAILY_LOSS_LIMIT_UPDATED");
 }
 
 int EntryDirection(double momentum)
@@ -15047,6 +15068,17 @@ string DailyProfitLockGlobalKey()
    );
 }
 
+string DailyLossLockGlobalKey()
+{
+   return StringFormat(
+      "SCN_DLL_%I64d_%I64d_%s_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),
+      InpMagic,
+      _Symbol,
+      DailyRiskMode()
+   );
+}
+
 void SaveBasketCycleState()
 {
    GlobalVariableSet(BasketPeakGlobalKey(), (double)g_basketPeakPositionCount);
@@ -15486,6 +15518,61 @@ double DailyProfitGivebackFloor()
 
    double percent = MathMax(0.0, MathMin(95.0, g_dailyProfitDrawdownPercent));
    return target * (1.0 - percent / 100.0);
+}
+
+void LoadDailyLossLock()
+{
+   string key=DailyLossLockGlobalKey();
+   g_dailyLossLocked=false;
+
+   if(!GlobalVariableCheck(key))
+      return;
+
+   int lockedDay=(int)GlobalVariableGet(key);
+   if(lockedDay==g_dayKey)
+      g_dailyLossLocked=true;
+   else
+      GlobalVariableDel(key);
+}
+
+void LockDailyLoss()
+{
+   if(g_dailyLossLocked)
+      return;
+
+   g_dailyLossLocked=true;
+   GlobalVariableSet(DailyLossLockGlobalKey(),(double)g_dayKey);
+   Print(
+      "DAILY_LOSS reached. Mode=",DailyRiskMode(),
+      " Daily bot P/L=",DoubleToString(DailyBotProfit(),2),
+      " limit=",DoubleToString(EffectiveDailyLossLimit(),2)
+   );
+}
+
+void UnlockDailyLossLock(string reason)
+{
+   if(!g_dailyLossLocked)
+      return;
+
+   g_dailyLossLocked=false;
+   string key=DailyLossLockGlobalKey();
+   if(GlobalVariableCheck(key))
+      GlobalVariableDel(key);
+
+   if(g_pendingCloseReason==CLOSE_REASON_DAILY_LOSS &&
+      BasketPositionCount()==0 &&
+      RescuePositionCount()==0)
+   {
+      g_pendingCloseReason=CLOSE_REASON_NONE;
+      PersistPendingClose();
+   }
+
+   Print(
+      "DAILY_LOSS_LOCK cleared reason=",reason,
+      " mode=",DailyRiskMode(),
+      " current=",DoubleToString(DailyBotProfit(),2),
+      " newLimit=",DoubleToString(EffectiveDailyLossLimit(),2)
+   );
 }
 
 void LoadDailyProfitRunOnState()
@@ -17363,6 +17450,7 @@ void RestoreDailyRiskState()
       RecalculateDailyClosedProfit();
       LoadDailyProfitRunOnState();
       LoadDailyProfitLock();
+      LoadDailyLossLock();
    }
    else
    {
