@@ -6357,7 +6357,6 @@ void ApplySettings(string json)
    LoadDailyProfitRunOnState();
    LoadDailyProfitLock();
    LoadDailyLossLock();
-   LoadDailyLossLock();
 
    double activeDailyProfitTarget=EffectiveDailyProfitTarget();
    double activeDailyLossLimit=EffectiveDailyLossLimit();
@@ -17411,6 +17410,7 @@ void ResetDailyBaseline()
    RecalculateDailyClosedProfit();
    LoadDailyProfitRunOnState();
    LoadDailyProfitLock();
+   LoadDailyLossLock();
 }
 
 string DailyRiskStateKey(string suffix)
