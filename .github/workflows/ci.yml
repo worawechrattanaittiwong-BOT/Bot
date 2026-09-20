@@ -46,7 +46,7 @@ jobs:
       - name: RACE close-all profit contract
         shell: pwsh
         run: ./tests/race-close-all-profit-contract.ps1
-      - name: RACE 10-second volume and safe rollover contract
+      - name: RACE 60-second volume and safe rollover contract
         shell: pwsh
         run: ./tests/race-volume-rollover-contract.ps1
       - name: FLIP LOCK strict isolation contract
