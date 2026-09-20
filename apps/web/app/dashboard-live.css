@@ -376,7 +376,7 @@
   min-height:132px!important;
   padding:12px 14px!important;
   display:grid!important;
-  grid-template-columns:minmax(185px,.56fr) minmax(350px,1.03fr) minmax(170px,.52fr) minmax(475px,1.26fr)!important;
+  grid-template-columns:minmax(650px,1.45fr) minmax(170px,.48fr) minmax(475px,1.12fr)!important;
   align-items:center!important;
   gap:13px!important;
   border:1px solid rgba(72,123,179,.58)!important;
@@ -443,8 +443,9 @@
 
 .cc-v47 .cc-v6-hero-main{
   min-width:0;
-  gap:12px!important;
+  gap:14px!important;
   align-items:center!important;
+  justify-content:flex-start!important;
 }
 
 .cc-v47 .cc-v6-gold-stage{
@@ -475,8 +476,13 @@
 .cc-v47 .cc-v6-symbol-copy p em{height:10px!important}
 .cc-v47 .cc-v6-symbol-chips{
   margin-top:7px!important;
-  gap:4px!important;
+  gap:6px!important;
+  flex-wrap:nowrap!important;
+  white-space:nowrap!important;
+  overflow-x:auto!important;
+  scrollbar-width:none;
 }
+.cc-v47 .cc-v6-symbol-chips::-webkit-scrollbar{display:none}
 .cc-v47 .cc-v6-symbol-chips>span{
   min-height:22px!important;
   padding:4px 7px!important;
@@ -607,10 +613,10 @@
 
 @media(max-width:1180px){
   .cc-v47 .cc-v47-command-bar{
-    grid-template-columns:minmax(190px,.58fr) minmax(0,1.42fr)!important;
+    grid-template-columns:minmax(0,1fr) minmax(300px,.8fr)!important;
     min-height:0!important;
   }
-  .cc-v47 .cc-v47-brand-lockup{border-right:1px solid rgba(75,96,144,.44)}
+  .cc-v47 .cc-v6-hero-main{grid-column:1/-1}
   .cc-v47 .cc-v47-live-state{min-height:58px}
   .cc-v47 .cc-v13-hero-actions{align-self:stretch}
   .cc-v47 .cc-v13-hero-actions .cc-v19-hero-quick-actions button{min-height:50px!important}
