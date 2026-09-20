@@ -359,6 +359,11 @@ bool FlipLockModifyPending(const ulong ticket,const double triggerPrice)
 {
    if(ticket==0 || !OrderSelect(ticket)) return false;
 
+   ENUM_ORDER_TYPE pendingType=(ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+   int direction=pendingType==ORDER_TYPE_BUY_STOP ? 1 :
+                 pendingType==ORDER_TYPE_SELL_STOP ? -1 : 0;
+   if(direction==0) return false;
+
    MqlTradeRequest request={};
    MqlTradeResult result={};
    request.action=TRADE_ACTION_MODIFY;
