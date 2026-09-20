@@ -1920,14 +1920,15 @@ export default function DashboardPage() {
           ) : (
             <div className="cc-overview cc-v3 cc-v4 cc-v12 cc-v15 cc-v47">
               <div className="cc-v4-ambient" aria-hidden="true"><i/><i/><i/></div>
+              <div className="cc-status-center" aria-label="การเชื่อมต่อและเวอร์ชันระบบ">
               {marketSessionClosed ? (
-                <div className="cc-connect-alert">
+                <div className="cc-connect-alert cc-status-connection" role="status">
                   <div className="cc-alert-icon"><ScenovaIcon name="timer" size={20}/></div>
                   <div className="cc-alert-copy"><b>ตลาดปิดชั่วคราว</b><span>MT5 และ EA ยังเชื่อมต่ออยู่ · ระบบจะรอ Session เปิดโดยอัตโนมัติ</span></div>
                   <button type="button" className="btn cc-alert-action" disabled>รอเปิดตลาด</button>
                 </div>
               ) : !isMt5Online && (
-                <div className="cc-connect-alert">
+                <div className="cc-connect-alert cc-status-connection" role="status">
                   <div className="cc-alert-icon"><ScenovaIcon name="info" size={20}/></div>
                   <div className="cc-alert-copy">
                     <b>{isAgentOnline ? "EA Heartbeat ขาดช่วง" : "ยังไม่ได้เชื่อมต่อ MT5"}</b>
@@ -1936,6 +1937,27 @@ export default function DashboardPage() {
                   <button className="btn cc-alert-action" onClick={()=>setActiveView("account")}>{isAgentOnline ? "ตรวจการเชื่อมต่อ →" : "ไปหน้าการเชื่อมต่อ →"}</button>
                 </div>
               )}
+                <section className="cc-status-software" aria-label="เวอร์ชันระบบ">
+                  <div className="cc-status-software-head">
+                    <span className="cc-status-software-icon"><ScenovaIcon name="layers" size={19}/></span>
+                    <div><b>เวอร์ชันระบบ</b><small>EA &amp; Windows Agent</small></div>
+                    <button type="button" className="cc-status-version-check" disabled={checkingVersion || busy} onClick={checkSoftwareVersions}>
+                      <ScenovaIcon name="refresh" size={14}/>{checkingVersion ? "กำลังตรวจ..." : "ตรวจสอบเวอร์ชัน"}
+                    </button>
+                  </div>
+                  <div className="cc-v6-version-row">
+                    <span className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch !== false && softwareUpdate.runtimeContractMatch !== false ? "ok" : "warn")} title={softwareUpdate.eaUpdateRequired ? "EA มี Build ใหม่หรือ Runtime ใหม่พร้อมอัปเดต" : "EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server"}>
+                      EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}{softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch === false ? " · Build ใหม่พร้อมอัปเดต" : softwareUpdate.eaVersionMatch && softwareUpdate.runtimeContractMatch === false ? " · Runtime ใหม่พร้อมอัปเดต" : ""}
+                    </span>
+                    {data.selectedSlot?.mode === "LOCAL" && (
+                      <span className={"cc-v6-version-chip "+(!softwareUpdate.installerRequired ? "ok" : "warn")} title="Windows Agent ปัจจุบัน → เวอร์ชันล่าสุดบน Server">
+                        Agent {softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : "—"}<em>→</em>{softwareUpdate.latestVersion ? "v"+softwareUpdate.latestVersion : "—"}
+                      </span>
+                    )}
+                  </div>
+                  <div id="scenova-status-update-mount" className="cc-status-update-slot"/>
+                </section>
+              </div>
 
               <section className="cc-v6-telemetry" aria-label="ข้อมูลสดจาก EA">
                 <div className="cc-v6-telemetry-live"><i/>{marketSessionClosed ? "MARKET CLOSED" : "REALTIME"}</div>
@@ -1968,26 +1990,13 @@ export default function DashboardPage() {
                       <HeroTrendChip label="M30" value={metrics.trendM30}/>
                       <HeroTrendChip label="H1" value={metrics.trendH1}/>
                     </div>
-                    <div className="cc-v6-version-row">
-                      <span className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch !== false && softwareUpdate.runtimeContractMatch !== false ? "ok" : "warn")} title={softwareUpdate.eaUpdateRequired ? "EA มี Build ใหม่หรือ Runtime ใหม่พร้อมอัปเดต" : "EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server"}>
-                        EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}{softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch === false ? " · Build ใหม่พร้อมอัปเดต" : softwareUpdate.eaVersionMatch && softwareUpdate.runtimeContractMatch === false ? " · Runtime ใหม่พร้อมอัปเดต" : ""}
-                      </span>
-                      {data.selectedSlot?.mode === "LOCAL" && (
-                        <span className={"cc-v6-version-chip "+(!softwareUpdate.installerRequired ? "ok" : "warn")} title="Windows Agent ปัจจุบัน → เวอร์ชันล่าสุดบน Server">
-                          Agent {softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : "—"}<em>→</em>{softwareUpdate.latestVersion ? "v"+softwareUpdate.latestVersion : "—"}
-                        </span>
-                      )}
-                      <button type="button" className="cc-v6-version-check" disabled={checkingVersion || busy} onClick={checkSoftwareVersions}>
-                        <ScenovaIcon name="refresh" size={12}/>{checkingVersion ? "กำลังตรวจ..." : "ตรวจสอบเวอร์ชัน"}
-                      </button>
-                    </div>
                   </div>
                 </div>
 
-                <div className={"cc-v47-live-state "+(state === "RUNNING" ? "running" : marketSessionClosed ? "waiting" : "idle")}>
+                <div className={"cc-v47-live-state "+(!isMt5Online || marketSessionClosed ? "waiting" : state === "RUNNING" ? "running" : "idle")}>
                   <i/>
                   <div>
-                    <b>{state === "RUNNING" ? "Live Execution" : marketSessionClosed ? "Waiting Session" : "Ready"}</b>
+                    <b>{!isMt5Online ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
                     <small>{isMt5Online ? "Connected · "+(state === "RUNNING" ? "Trading" : "Standby") : "Waiting for MT5"}</small>
                   </div>
                 </div>

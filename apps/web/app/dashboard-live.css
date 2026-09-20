@@ -631,3 +631,90 @@
   .cc-v47 .cc-v6-hero-main{display:flex!important}
   .cc-v47 .cc-v13-kpis{grid-template-columns:1fr!important}
 }
+
+/* Header notifications: dedicated connection and software cards. */
+.cc-v47 .cc-status-center{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));
+  align-items:stretch;
+  gap:12px;
+  min-width:0;
+}
+.cc-v47 .cc-status-center>.cc-status-connection,
+.cc-v47 .cc-status-center>.cc-status-software{
+  position:relative;
+  min-width:0;
+  margin:0!important;
+  padding:16px!important;
+  border:1px solid rgba(103,117,164,.32);
+  border-radius:16px;
+  background:linear-gradient(120deg,rgba(24,29,51,.95),rgba(10,15,27,.98));
+  box-shadow:inset 0 1px 0 rgba(230,236,255,.045),0 8px 24px rgba(0,0,0,.12);
+}
+.cc-v47 .cc-status-center>.cc-status-connection{
+  display:grid!important;
+  grid-template-columns:38px minmax(0,1fr);
+  align-content:center;
+  align-items:start;
+  gap:10px 12px!important;
+  border-color:rgba(211,171,82,.3);
+  background:linear-gradient(115deg,rgba(58,44,19,.5),rgba(12,16,27,.98) 72%);
+}
+.cc-v47 .cc-status-connection .cc-alert-icon{
+  width:38px!important;
+  height:38px!important;
+  margin:0!important;
+  border:1px solid rgba(228,185,90,.3);
+  border-radius:11px;
+  display:grid;
+  place-items:center;
+  background:rgba(198,148,49,.08);
+  color:#e7c474;
+}
+.cc-v47 .cc-status-connection .cc-alert-copy{min-width:0;display:flex;flex-direction:column;gap:5px}
+.cc-v47 .cc-status-connection .cc-alert-copy b{font-size:13px!important;line-height:1.45;color:#f0d493}
+.cc-v47 .cc-status-connection .cc-alert-copy span{font-size:11px!important;line-height:1.65;color:#b6ac95;white-space:normal;overflow-wrap:anywhere}
+.cc-v47 .cc-status-connection .cc-alert-action{
+  grid-column:2;
+  justify-self:start;
+  min-height:32px!important;
+  width:auto!important;
+  margin:0!important;
+  padding:6px 12px!important;
+  border:1px solid rgba(226,179,75,.3);
+  border-radius:9px;
+  background:rgba(206,156,49,.07);
+  color:#efd497;
+  font-size:11px!important;
+  line-height:1.4;
+}
+.cc-v47 .cc-status-software-head{display:flex;align-items:center;gap:11px;min-width:0}
+.cc-v47 .cc-status-software-icon{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border:1px solid rgba(153,130,244,.28);border-radius:11px;background:rgba(114,85,208,.1);color:#baa7fc}
+.cc-v47 .cc-status-software-head>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cc-v47 .cc-status-software-head b{color:#e3e9f7;font-size:13px;line-height:1.35}
+.cc-v47 .cc-status-software-head small{color:#8d9bb5;font-size:10px;line-height:1.4}
+.cc-v47 .cc-status-version-check{display:inline-flex;align-items:center;justify-content:center;gap:7px;margin-left:auto;min-height:32px;padding:6px 11px;border:1px solid rgba(154,132,236,.32);border-radius:9px;background:rgba(108,80,187,.1);color:#c3b3fb;font:inherit;font-size:11px;font-weight:700;cursor:pointer}
+.cc-v47 .cc-status-version-check svg{flex-shrink:0}
+.cc-v47 .cc-status-version-check:hover:not(:disabled){background:rgba(121,95,207,.2);border-color:rgba(181,157,255,.55)}
+.cc-v47 .cc-status-version-check:disabled{opacity:.5;cursor:wait}
+.cc-v47 .cc-status-software .cc-v6-version-row{display:flex;flex-wrap:wrap;gap:7px!important;margin:12px 0 0!important}
+.cc-v47 .cc-status-software .cc-v6-version-chip{min-height:27px!important;padding:5px 9px!important;font-size:10px!important;line-height:1.4;white-space:normal;border-radius:8px!important}
+.cc-v47 .cc-status-update-slot:empty{display:none}
+.cc-v47 .cc-status-update-slot:not(:empty){margin-top:12px;padding-top:12px;border-top:1px solid rgba(118,130,170,.2)}
+.cc-v47 .cc-status-update-slot .scenova-persistent-update{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.cc-v47 .cc-status-update-slot .scenova-persistent-update-copy{gap:5px}
+.cc-v47 .cc-status-update-slot .scenova-persistent-update-copy b{font-size:12px;line-height:1.45;color:#eaca85}
+.cc-v47 .cc-status-update-slot .scenova-persistent-update-copy small{font-size:10px;line-height:1.5;color:#a6b0c4;white-space:normal;overflow-wrap:anywhere}
+.cc-v47 .cc-status-update-slot .scenova-persistent-update-copy .manual-only{color:#ab9dcc}
+.cc-v47 .cc-status-update-slot .scenova-persistent-update button{width:auto;max-width:100%;min-height:36px;padding:8px 13px;border:1px solid rgba(211,172,84,.38);border-radius:10px;background:linear-gradient(135deg,rgba(127,90,28,.35),rgba(62,45,23,.35));color:#f4d994;font-size:11px;line-height:1.5;white-space:normal}
+.cc-v47 .cc-status-update-slot .scenova-persistent-update button:hover:not(:disabled){border-color:#c4a161;background:rgba(126,92,35,.4)}
+.cc-v47 .cc-status-center button:focus-visible{outline:2px solid #c0acff;outline-offset:3px}
+@media(max-width:700px){
+  .cc-v47 .cc-status-center{grid-template-columns:minmax(0,1fr);gap:10px}
+  .cc-v47 .cc-status-center>.cc-status-connection,
+  .cc-v47 .cc-status-center>.cc-status-software{padding:13px!important;border-radius:13px}
+  .cc-v47 .cc-status-software-head{flex-wrap:wrap}
+  .cc-v47 .cc-status-version-check{font-size:10px;padding:6px 8px}
+  .cc-v47 .cc-status-update-slot .scenova-persistent-update{grid-template-columns:minmax(0,1fr)}
+  .cc-v47 .cc-status-update-slot .scenova-persistent-update button{justify-self:start}
+}

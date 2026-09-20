@@ -223,6 +223,13 @@ export function Mt5ManualActionControls() {
       }
       setRuntimeStatusMount(current => current === runtimeNode ? current : runtimeNode);
 
+      // The dashboard owns this slot so update notices stay out of the symbol header.
+      const statusUpdateNode = document.getElementById("scenova-status-update-mount");
+      if (statusUpdateNode) {
+        setPersistentUpdateMount(current => current === statusUpdateNode ? current : statusUpdateNode);
+        return;
+      }
+
       const versionRow = document.querySelector(".cc-v6-version-row");
       const versionParent = versionRow?.parentElement || null;
       let persistentNode = versionParent?.querySelector(".scenova-persistent-update-mount") || null;
