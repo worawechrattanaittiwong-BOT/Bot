@@ -4865,7 +4865,7 @@ void SendHeartbeat()
       g_profitRunPeak,
       g_perPositionLoss,
       DailyBotProfit(),
-      g_dailyProfitTarget,
+      EffectiveDailyProfitTarget(),
       dailyProfitContinueText,
       g_dailyProfitDrawdownPercent,
       dailyProfitTargetArmedText,
@@ -6144,7 +6144,8 @@ void ApplyUnifiedTradingEngine()
 
 void ApplySettings(string json)
 {
-   double previousDailyProfitTarget = g_dailyProfitTarget;
+   string previousDailyRiskMode=DailyRiskMode();
+   double previousDailyProfitTarget=EffectiveDailyProfitTarget();
    bool previousDailyContinueAfterTarget = g_dailyProfitContinueAfterTarget;
 
    g_lot = MathMax(0.01, JsonNumber(json, "lot", g_lot));
@@ -6342,17 +6343,23 @@ void ApplySettings(string json)
 
    ApplyUnifiedTradingEngine();
 
+   RecalculateDailyClosedProfit();
+   LoadDailyProfitRunOnState();
+   LoadDailyProfitLock();
+
+   double activeDailyProfitTarget=EffectiveDailyProfitTarget();
    bool dailyProfitSettingsChanged =
-      MathAbs(previousDailyProfitTarget-g_dailyProfitTarget)>0.0000001 ||
+      previousDailyRiskMode!=DailyRiskMode() ||
+      MathAbs(previousDailyProfitTarget-activeDailyProfitTarget)>0.0000001 ||
       previousDailyContinueAfterTarget!=g_dailyProfitContinueAfterTarget;
 
    if(g_dailyProfitLocked &&
       dailyProfitSettingsChanged &&
-      (g_dailyProfitTarget<=0.0 || DailyBotProfit()<g_dailyProfitTarget))
+      (activeDailyProfitTarget<=0.0 || DailyBotProfit()<activeDailyProfitTarget))
       UnlockDailyProfitLock("DAILY_TARGET_UPDATED");
 
    if(g_dailyProfitTargetArmed &&
-      (g_dailyProfitTarget <= 0.0 || DailyBotProfit() < g_dailyProfitTarget))
+      (activeDailyProfitTarget<=0.0 || DailyBotProfit()<activeDailyProfitTarget))
       DisarmDailyProfitRunOn();
 }
 
@@ -11957,6 +11964,146 @@ bool AutoV20OwnsOpenBasket()
 #include "include\\AutoVectorEdgeLiveV1.mqh"
 #include "include\\FlipLockV1.mqh"
 
+// Per-mode risk/P&L ownership ------------------------------------------------
+// A live Broker-tagged Basket always owns its own risk profile even if the
+// website switches to another mode before that Basket is flat.
+string TradeModeFromComment(string comment)
+{
+   if(StringFind(comment,AUTO_V20_LIVE_COMMENT)>=0 ||
+      StringFind(comment,"SaaSTactical")>=0)
+      return "AUTO";
+   if(StringFind(comment,"SaaSRace")>=0)
+      return "RACE";
+   if(StringFind(comment,FLIP_LOCK_LIVE_COMMENT)>=0 ||
+      StringFind(comment,FLIP_LOCK_PENDING_COMMENT)>=0)
+      return "FLIP_LOCK";
+   if(StringFind(comment,MANUAL_LIVE_COMMENT)>=0 ||
+      StringFind(comment,LEGACY_BASKET_COMMENT)>=0)
+      return "MANUAL";
+   if(IsZeroGridComment(comment))
+      return "ZERO_GRID";
+   return "";
+}
+
+string TradeModeForPositionHistory(ulong positionId)
+{
+   if(positionId==0 || !HistorySelectByPosition(positionId))
+      return "";
+
+   int total=HistoryDealsTotal();
+   for(int i=0;i<total;i++)
+   {
+      ulong ticket=HistoryDealGetTicket(i);
+      if(ticket==0) continue;
+      long entry=HistoryDealGetInteger(ticket,DEAL_ENTRY);
+      if(entry!=DEAL_ENTRY_IN && entry!=DEAL_ENTRY_INOUT) continue;
+      if(HistoryDealGetString(ticket,DEAL_SYMBOL)!=_Symbol) continue;
+
+      string mode=TradeModeFromComment(
+         HistoryDealGetString(ticket,DEAL_COMMENT)
+      );
+      if(mode!="")
+         return mode;
+   }
+   return "";
+}
+
+string TradeModeForDeal(ulong dealTicket)
+{
+   if(dealTicket==0 || !HistoryDealSelect(dealTicket))
+      return "";
+   if(HistoryDealGetString(dealTicket,DEAL_SYMBOL)!=_Symbol)
+      return "";
+
+   string directMode=TradeModeFromComment(
+      HistoryDealGetString(dealTicket,DEAL_COMMENT)
+   );
+   if(directMode!="")
+      return directMode;
+
+   ulong positionId=(ulong)HistoryDealGetInteger(
+      dealTicket,DEAL_POSITION_ID
+   );
+   return TradeModeForPositionHistory(positionId);
+}
+
+string DailyRiskMode()
+{
+   if(BasketHasFlipLockPosition()) return "FLIP_LOCK";
+   if(BasketHasRacePosition()) return "RACE";
+   if(BasketHasAutoFamilyPosition()) return "AUTO";
+   if(BasketHasManualPosition()) return "MANUAL";
+   if(ZeroGridPositionCount()>0) return "ZERO_GRID";
+
+   string mode=EffectiveExecutionMode();
+   if(mode=="RACE" || mode=="FLIP_LOCK" ||
+      mode=="MANUAL" || mode=="ZERO_GRID")
+      return mode;
+   return "AUTO";
+}
+
+double ModeBasketLossLimit(string mode)
+{
+   if(mode=="AUTO") return g_autoMaxBasketLoss;
+   if(mode=="RACE") return g_raceMaxBasketLoss;
+   if(mode=="FLIP_LOCK") return g_flipLockMaxBasketLoss;
+   if(mode=="MANUAL") return g_manualMaxBasketLoss;
+   return 0.0;
+}
+
+double EffectiveDailyLossLimit()
+{
+   string mode=DailyRiskMode();
+   if(mode=="AUTO") return MathMax(0.0,g_autoDailyLoss);
+   if(mode=="RACE") return MathMax(0.0,g_raceDailyLoss);
+   if(mode=="FLIP_LOCK") return MathMax(0.0,g_flipLockDailyLoss);
+   if(mode=="MANUAL") return MathMax(0.0,g_manualDailyLoss);
+   return 0.0;
+}
+
+double EffectiveDailyProfitTarget()
+{
+   string mode=DailyRiskMode();
+   if(mode=="AUTO") return MathMax(0.0,g_autoDailyProfitTarget);
+   if(mode=="RACE") return MathMax(0.0,g_raceDailyProfitTarget);
+   if(mode=="FLIP_LOCK") return MathMax(0.0,g_flipLockDailyProfitTarget);
+   if(mode=="MANUAL") return MathMax(0.0,g_manualDailyProfitTarget);
+   return 0.0;
+}
+
+double DailyClosedProfitForMode(string mode)
+{
+   if(mode=="AUTO") return g_dailyClosedProfitAuto;
+   if(mode=="RACE") return g_dailyClosedProfitRace;
+   if(mode=="FLIP_LOCK") return g_dailyClosedProfitFlipLock;
+   if(mode=="MANUAL") return g_dailyClosedProfitManual;
+   return 0.0;
+}
+
+double DailyFloatingProfitForMode(string mode)
+{
+   double total=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+
+      string positionMode=TradeModeFromComment(
+         PositionGetString(POSITION_COMMENT)
+      );
+      if(positionMode!=mode)
+         continue;
+
+      total+=PositionGetDouble(POSITION_PROFIT);
+      total+=PositionGetDouble(POSITION_SWAP);
+   }
+   return total;
+}
+
 double AutoV20Clamp(double value,double minimum,double maximum)
 {
    return MathMax(minimum,MathMin(maximum,value));
@@ -13752,9 +13899,9 @@ double EffectiveBasketProfitTarget()
 
 double EffectiveBasketLossLimit()
 {
-   // 0 means OFF exactly. Never invent a hidden Basket loss behind the user's
-   // setting in every workflow.
-   return MathMax(0.0, g_maxBasketLoss);
+   // 0 means OFF exactly. The Broker-tagged live owner keeps its own profile
+   // even if the website switches modes before the Basket is flat.
+   return MathMax(0.0,ModeBasketLossLimit(DailyRiskMode()));
 }
 
 void EnsureBurstTargets(int plannedPositions)
@@ -13796,9 +13943,10 @@ void EnsureBurstTargets(int plannedPositions)
    // budget. Smart Profit Defense may still bank a smaller positive Cycle when
    // the graph confirms a reversal.
    double expectancyFloor = 0.0;
-   if(g_maxBasketLoss > 0.0)
+   double effectiveBasketLoss=EffectiveBasketLossLimit();
+   if(effectiveBasketLoss > 0.0)
    {
-      expectancyFloor = g_maxBasketLoss * 0.30;
+      expectancyFloor = effectiveBasketLoss * 0.30;
       if(equity > 0.0)
          expectancyFloor = MathMin(expectancyFloor,equity * 0.01);
    }
@@ -14880,20 +15028,22 @@ string ProfitRunPeakGlobalKey()
 string DailyProfitArmedGlobalKey()
 {
    return StringFormat(
-      "SCN_DPA_%I64d_%I64d_%s",
+      "SCN_DPA_%I64d_%I64d_%s_%s",
       (long)AccountInfoInteger(ACCOUNT_LOGIN),
       InpMagic,
-      _Symbol
+      _Symbol,
+      DailyRiskMode()
    );
 }
 
 string DailyProfitLockGlobalKey()
 {
    return StringFormat(
-      "SCN_DPL_%I64d_%I64d_%s",
+      "SCN_DPL_%I64d_%I64d_%s_%s",
       (long)AccountInfoInteger(ACCOUNT_LOGIN),
       InpMagic,
-      _Symbol
+      _Symbol,
+      DailyRiskMode()
    );
 }
 
@@ -15256,63 +15406,86 @@ datetime BrokerDayStart()
 
 void RecalculateDailyClosedProfit()
 {
-   g_dailyClosedProfit = 0.0;
+   g_dailyClosedProfitAuto=0.0;
+   g_dailyClosedProfitRace=0.0;
+   g_dailyClosedProfitFlipLock=0.0;
+   g_dailyClosedProfitManual=0.0;
+   g_dailyClosedProfit=0.0;
 
-   datetime from = BrokerDayStart();
-   datetime to = TimeCurrent();
-   if(!HistorySelect(from, to))
+   datetime from=BrokerDayStart();
+   datetime to=TimeCurrent();
+   if(!HistorySelect(from,to))
       return;
 
-   // Keep the ticket list before ownership lookups. HistorySelectByPosition()
-   // changes the active history selection, so iterating the original index
-   // directly would otherwise skip or duplicate deals.
-   int totalDeals = HistoryDealsTotal();
+   // Keep immutable tickets because HistorySelectByPosition() inside mode
+   // resolution changes the active history selection.
+   int totalDeals=HistoryDealsTotal();
    ulong dealTickets[];
-   ArrayResize(dealTickets, totalDeals);
-   for(int i = 0; i < totalDeals; i++)
-      dealTickets[i] = HistoryDealGetTicket(i);
+   ArrayResize(dealTickets,totalDeals);
+   for(int i=0;i<totalDeals;i++)
+      dealTickets[i]=HistoryDealGetTicket(i);
 
-   for(int i = 0; i < totalDeals; i++)
+   for(int i=0;i<totalDeals;i++)
    {
-      ulong deal = dealTickets[i];
-      if(deal == 0 || !HistoryDealSelect(deal))
+      ulong deal=dealTickets[i];
+      if(deal==0 || !HistoryDealSelect(deal))
          continue;
-      if(HistoryDealGetString(deal, DEAL_SYMBOL) != _Symbol)
+      if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol)
          continue;
 
-      long magic = HistoryDealGetInteger(deal, DEAL_MAGIC);
-      bool scenovaDeal = IsScenovaMagic(magic);
-      if(!scenovaDeal)
-      {
-         long entry = HistoryDealGetInteger(deal, DEAL_ENTRY);
-         if(entry == DEAL_ENTRY_OUT ||
-            entry == DEAL_ENTRY_OUT_BY ||
-            entry == DEAL_ENTRY_INOUT)
-            scenovaDeal = IsScenovaMagic(
-               ScenovaOwnerMagicForDeal(deal)
-            );
-      }
+      long magic=HistoryDealGetInteger(deal,DEAL_MAGIC);
+      bool scenovaDeal=IsScenovaMagic(magic);
+      long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+      if(!scenovaDeal &&
+         (entry==DEAL_ENTRY_OUT ||
+          entry==DEAL_ENTRY_OUT_BY ||
+          entry==DEAL_ENTRY_INOUT))
+         scenovaDeal=IsScenovaMagic(ScenovaOwnerMagicForDeal(deal));
       if(!scenovaDeal)
          continue;
 
-      g_dailyClosedProfit += HistoryDealGetDouble(deal, DEAL_PROFIT);
-      g_dailyClosedProfit += HistoryDealGetDouble(deal, DEAL_SWAP);
-      g_dailyClosedProfit += HistoryDealGetDouble(deal, DEAL_COMMISSION);
+      // Re-select after ownership lookup because it may select position history.
+      if(!HistoryDealSelect(deal))
+         continue;
+      double net=
+         HistoryDealGetDouble(deal,DEAL_PROFIT)+
+         HistoryDealGetDouble(deal,DEAL_SWAP)+
+         HistoryDealGetDouble(deal,DEAL_COMMISSION);
+
+      string mode=TradeModeForDeal(deal);
+      if(mode=="AUTO") g_dailyClosedProfitAuto+=net;
+      else if(mode=="RACE") g_dailyClosedProfitRace+=net;
+      else if(mode=="FLIP_LOCK") g_dailyClosedProfitFlipLock+=net;
+      else if(mode=="MANUAL") g_dailyClosedProfitManual+=net;
    }
+
+   g_dailyClosedProfit=DailyClosedProfitForMode(DailyRiskMode());
 }
 
 double DailyBotProfit()
 {
-   return g_dailyClosedProfit + BasketProfit() + RescueProfit();
+   string mode=DailyRiskMode();
+   double total=
+      DailyClosedProfitForMode(mode)+
+      DailyFloatingProfitForMode(mode);
+
+   // Rescue is disabled in current production. If a legacy rescue remains open,
+   // attribute its floating P/L to the live owning mode rather than another mode.
+   if(mode!="ZERO_GRID" && RescuePositionCount()>0)
+      total+=RescueProfit();
+
+   g_dailyClosedProfit=DailyClosedProfitForMode(mode);
+   return total;
 }
 
 double DailyProfitGivebackFloor()
 {
-   if(g_dailyProfitTarget <= 0.0)
+   double target=EffectiveDailyProfitTarget();
+   if(target <= 0.0)
       return 0.0;
 
    double percent = MathMax(0.0, MathMin(95.0, g_dailyProfitDrawdownPercent));
-   return g_dailyProfitTarget * (1.0 - percent / 100.0);
+   return target * (1.0 - percent / 100.0);
 }
 
 void LoadDailyProfitRunOnState()
@@ -15339,7 +15512,7 @@ void ArmDailyProfitRunOn()
    GlobalVariableSet(DailyProfitArmedGlobalKey(), (double)g_dayKey);
    Print(
       "DAILY_PROFIT_RUN_ON armed. Target=",
-      DoubleToString(g_dailyProfitTarget, 2),
+      DoubleToString(EffectiveDailyProfitTarget(), 2),
       " floor=",
       DoubleToString(DailyProfitGivebackFloor(), 2)
    );
@@ -15355,7 +15528,12 @@ void DisarmDailyProfitRunOn()
 
 bool HandleDailyProfitControl(int count)
 {
+   // Lock/armed state is isolated by the current live Basket owner.
+   LoadDailyProfitRunOnState();
+   LoadDailyProfitLock();
+
    double dailyProfit = DailyBotProfit();
+   double dailyProfitTarget = EffectiveDailyProfitTarget();
 
    if(g_dailyProfitLocked)
    {
@@ -15370,7 +15548,7 @@ bool HandleDailyProfitControl(int count)
       return true;
    }
 
-   if(g_dailyProfitTarget <= 0.0)
+   if(dailyProfitTarget <= 0.0)
    {
       if(g_dailyProfitTargetArmed)
          DisarmDailyProfitRunOn();
@@ -15384,7 +15562,7 @@ bool HandleDailyProfitControl(int count)
 
    if(continueAfterTarget)
    {
-      if(!g_dailyProfitTargetArmed && dailyProfit >= g_dailyProfitTarget)
+      if(!g_dailyProfitTargetArmed && dailyProfit >= dailyProfitTarget)
          ArmDailyProfitRunOn();
 
       if(g_dailyProfitTargetArmed)
@@ -15411,7 +15589,7 @@ bool HandleDailyProfitControl(int count)
    if(g_dailyProfitTargetArmed)
       DisarmDailyProfitRunOn();
 
-   if(dailyProfit >= g_dailyProfitTarget)
+   if(dailyProfit >= dailyProfitTarget)
    {
       LockDailyProfitTarget();
       if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
@@ -15452,7 +15630,7 @@ void UnlockDailyProfitLock(string reason)
    Print(
       "DAILY_PROFIT_LOCK cleared reason=",reason,
       " current=",DoubleToString(DailyBotProfit(),2),
-      " newTarget=",DoubleToString(g_dailyProfitTarget,2)
+      " newTarget=",DoubleToString(EffectiveDailyProfitTarget(),2)
    );
 }
 
@@ -15483,7 +15661,7 @@ void LockDailyProfitTarget()
       "DAILY_PROFIT_TARGET reached. Daily bot P/L=",
       DoubleToString(DailyBotProfit(), 2),
       " target=",
-      DoubleToString(g_dailyProfitTarget, 2)
+      DoubleToString(EffectiveDailyProfitTarget(), 2)
    );
 }
 
@@ -15876,8 +16054,9 @@ double RescueThresholdMoney()
    int count=MathMax(1,BasketPositionCount());
    double spreadReserve=CurrentSpreadCost(MathMax(SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN),g_lot))*count*3.0;
    double threshold=MathMax(1.0,MathMax(spreadReserve,equity*0.0035));
-   if(g_maxBasketLoss>0.0)
-      threshold=MathMin(threshold,MathMax(1.0,g_maxBasketLoss*0.45));
+   double effectiveBasketLoss=EffectiveBasketLossLimit();
+   if(effectiveBasketLoss>0.0)
+      threshold=MathMin(threshold,MathMax(1.0,effectiveBasketLoss*0.45));
    return threshold;
 }
 
