@@ -16179,7 +16179,7 @@ string MarketSessionStateNow()
          cryptoTick.time>0 &&
          MathAbs((double)(serverNow-(datetime)cryptoTick.time))<=120.0)
          return "OPEN";
-      return "UNKNOWN";
+      return "CLOSED";
    }
 
    // Non-crypto symbols with no weekend session metadata are treated closed.
