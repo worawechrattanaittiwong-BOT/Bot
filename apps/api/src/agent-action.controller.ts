@@ -1,6 +1,6 @@
 import { Body, ConflictException, Controller, Post } from "@nestjs/common";
 import { DbService } from "./db.service";
-import { isEaVersionExact, latestEaRelease } from "./release-version";
+import { EA_RUNTIME_CONTRACT, isEaVersionExact, latestEaRelease } from "./release-version";
 import { CryptoService } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
@@ -230,6 +230,8 @@ export class AgentActionController {
     const runtimeReady = isEaVersionExact(currentEaVersion, eaVersionRequired);
     const hashReady = Boolean(requiredEaHash && currentEaHash === requiredEaHash);
     const metrics = instance.metrics || {};
+    const currentRuntimeContract = String(metrics.runtimeContract || "").trim();
+    const runtimeContractMatch = currentRuntimeContract === EA_RUNTIME_CONTRACT;
     let recoveryRequested = metrics.startAfterRepairRequested === true;
     const tradingReady =
       metrics.dailyProfitLocked !== true &&
@@ -350,6 +352,11 @@ export class AgentActionController {
       ? previousRequestedAt.toISOString()
       : null;
     const manualActionStatus = String(instance.manual_action_status || "") || null;
+    const actionEaOnline =
+      manualActionActive &&
+      String(manualActionName || "").toUpperCase() === "UPDATE_EA_RESTART"
+        ? eaOnline && runtimeContractMatch
+        : eaOnline;
 
     return {
       ok: true,
@@ -360,9 +367,12 @@ export class AgentActionController {
       pendingAccountDetected: Boolean(instance.pending_account_number),
       pendingAccountNumber: instance.pending_account_number || null,
       pendingServer: instance.pending_broker_server || null,
-      eaOnline,
+      eaOnline: actionEaOnline,
       eaVersion: currentEaVersion || null,
       eaVersionRequired,
+      runtimeContract: currentRuntimeContract || null,
+      runtimeContractRequired: EA_RUNTIME_CONTRACT,
+      runtimeContractMatch,
       safeToRestart,
       positions,
       manualActionPending: manualActionActive,
