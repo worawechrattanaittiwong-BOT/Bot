@@ -1814,6 +1814,11 @@ export class BotController {
     numberSetting("dailyProfitTargetMoney", 0, 100000);
     booleanSetting("dailyProfitContinueAfterTarget");
     numberSetting("dailyProfitDrawdownPercent", 0, 95);
+    // Per-mode profit profiles are persisted independently. The legacy
+    // basket/per-position keys remain runtime mirrors for older EA builds.
+    numberSetting("autoProfitTargetMoney", 0, 100000);
+    numberSetting("manualBasketProfitTargetMoney", 0, 100000);
+    numberSetting("manualPerPositionProfitMoney", 0, 100000);
     numberSetting("basketProfitTargetMoney", 0, 100000);
     numberSetting("perPositionProfitMoney", 0, 100000);
     numberSetting("profitRunTrailPercent", 0, 95);
@@ -1942,6 +1947,58 @@ export class BotController {
       ? String(body.engineMode || "").toUpperCase()
       : null;
 
+    const storedControlMode = String(
+      currentSettings.controlMode || currentSettings.engineMode || "AUTO"
+    ).toUpperCase();
+    const effectiveProfitProfileMode = requestedControlMode || (
+      requestedEngineMode === "RACE" ? "RACE" :
+      requestedEngineMode === "ZERO_GRID" ? "ZERO_GRID" :
+      requestedEngineMode === "AUTO" ? "AUTO" :
+      storedControlMode === "ASSISTED" ? "MANUAL" : storedControlMode
+    );
+
+    const storedProfitMode = String(currentSettings.profitTargetMode || "").toUpperCase();
+    const storedLegacyBasket = Math.max(0, Number(currentSettings.basketProfitTargetMoney || 0));
+    const storedLegacyPerPosition = Math.max(0, Number(currentSettings.perPositionProfitMoney || 0));
+
+    // Migrate the currently-active legacy profile once, then keep every mode's
+    // target independent. Old clients may still write the legacy mirror and
+    // are mapped into the active profile for backward compatibility.
+    const autoProfitTargetMoney = Math.max(0, Number(
+      clean.autoProfitTargetMoney ??
+      (effectiveProfitProfileMode === "AUTO" && body.basketProfitTargetMoney !== undefined
+        ? requestedBasketProfit
+        : undefined) ??
+      currentSettings.autoProfitTargetMoney ??
+      (storedControlMode === "AUTO" && storedProfitMode === "AUTO" ? storedLegacyBasket : 0)
+    ));
+    const manualBasketProfitTargetMoney = Math.max(0, Number(
+      clean.manualBasketProfitTargetMoney ??
+      (effectiveProfitProfileMode === "MANUAL" && body.basketProfitTargetMoney !== undefined
+        ? requestedBasketProfit
+        : undefined) ??
+      currentSettings.manualBasketProfitTargetMoney ??
+      (storedControlMode === "MANUAL" && storedProfitMode === "MANUAL" ? storedLegacyBasket : 0)
+    ));
+    const manualPerPositionProfitMoney = Math.max(0, Number(
+      clean.manualPerPositionProfitMoney ??
+      (effectiveProfitProfileMode === "MANUAL" && body.perPositionProfitMoney !== undefined
+        ? requestedPerPositionProfit
+        : undefined) ??
+      currentSettings.manualPerPositionProfitMoney ??
+      (storedControlMode === "MANUAL" && storedProfitMode === "MANUAL" ? storedLegacyPerPosition : 0)
+    ));
+
+    if (manualBasketProfitTargetMoney > 0 && manualPerPositionProfitMoney > 0) {
+      throw new BadRequestException(
+        "MANUAL เลือกกำไรต่อไม้หรือกำไรรวมทั้งชุดได้อย่างใดอย่างหนึ่งเท่านั้น"
+      );
+    }
+
+    clean.autoProfitTargetMoney = autoProfitTargetMoney;
+    clean.manualBasketProfitTargetMoney = manualBasketProfitTargetMoney;
+    clean.manualPerPositionProfitMoney = manualPerPositionProfitMoney;
+
     if (requestedControlMode !== null && !["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "ASSISTED", "MANUAL"].includes(requestedControlMode)) {
       throw new BadRequestException("Control Mode ไม่ถูกต้อง");
     }
@@ -2023,22 +2080,35 @@ export class BotController {
       if (body.raceCloseAllProfitMoney === undefined) clean.raceCloseAllProfitMoney = 0.5;
     }
 
-    const autoSelected = requestedControlMode === "AUTO";
+    const autoSelected = effectiveProfitProfileMode === "AUTO";
     if (autoSelected) {
-      // AUTO keeps an explicit Basket money target when supplied. Vector Edge
-      // still owns entries/risk, but reaching the money target closes immediately.
+      // Runtime mirror: AUTO reads only its own persisted target.
       clean.profitTargetMode = "AUTO";
+      clean.basketProfitTargetMoney = autoProfitTargetMoney;
       clean.perPositionProfitMoney = 0;
       clean.profitRunTrailPercent = 0;
       clean.manualStopLossPoints = 0;
     }
 
     const manualSelected =
-      requestedControlMode === "MANUAL" || requestedControlMode === "ASSISTED";
+      effectiveProfitProfileMode === "MANUAL" ||
+      effectiveProfitProfileMode === "ASSISTED";
     if (manualSelected) {
-      // MANUAL/ASSISTED use their own explicit money/stop controls and must not
-      // inherit AUTO smart-exit semantics from a previous selection.
+      // Runtime mirror: MANUAL reads only the MANUAL profile.
       clean.profitTargetMode = "MANUAL";
+      clean.basketProfitTargetMoney = manualBasketProfitTargetMoney;
+      clean.perPositionProfitMoney = manualPerPositionProfitMoney;
+      clean.profitRunTrailPercent = 0;
+    }
+
+    // RACE and ZERO GRID own their dedicated target fields. Clear the generic
+    // mirror so a target from AUTO/MANUAL can never leak into those engines.
+    if (effectiveProfitProfileMode === "RACE" ||
+        effectiveProfitProfileMode === "ZERO_GRID") {
+      clean.profitTargetMode = "OFF";
+      clean.basketProfitTargetMoney = 0;
+      clean.perPositionProfitMoney = 0;
+      clean.profitRunTrailPercent = 0;
     }
 
     const flipLockSelected = requestedControlMode === "FLIP_LOCK";
@@ -2048,6 +2118,9 @@ export class BotController {
       // exit controls as if they were active.
       clean.maxPositions = 1;
       clean.profitTargetMode = "OFF";
+      clean.basketProfitTargetMoney = 0;
+      clean.perPositionProfitMoney = 0;
+      clean.profitRunTrailPercent = 0;
       clean.manualStopLossPoints = 0;
       clean.dailyProfitContinueAfterTarget = false;
       clean.dailyProfitDrawdownPercent = 0;
