@@ -9,7 +9,10 @@ foreach ($required in @(
   '"build: publish EA v"*" [skip ea build]"',
   'customer bots/positions do not block platform Web/API deployment',
   'bash scripts/deploy-hostinger.sh',
-  'curl --fail --silent --show-error --max-time 20'
+  'for ((attempt=1; attempt<=30; attempt++))',
+  'curl --fail --silent --show-error --max-time 5',
+  '[SCENOVA] health check passed on attempt',
+  '[SCENOVA] health check failed after 30 attempts'
 )) {
   if (-not $deploy.Contains($required)) { throw "Platform hot-deploy contract missing: $required" }
 }
