@@ -22,9 +22,10 @@ Need $page 'cc-v19-three-card-grid' 'Three-card Control Center grid missing'
 Need $page '<BotSettingsModal' 'Bot Settings workspace missing'
 Need $page 'embedded' 'Bot Settings must be embedded on the Control Center'
 Need $page 'cc-bot-v12-mode-select' 'Trading Mode dropdown missing'
-foreach($mode in @('<option value="AUTO">AUTO</option>','<option value="RACE">RACE</option>','<option value="FLIP_LOCK">FLIP LOCK</option>','<option value="ZERO_GRID">ZERO GRID</option>','<option value="MANUAL">MANUAL</option>')) {
+foreach($mode in @('<option value="AUTO">AUTO</option>','<option value="RACE">RACE</option>','<option value="FLIP_LOCK">FLIP LOCK</option>','<option value="MANUAL">MANUAL</option>')) {
   Need $page $mode "Concise mode dropdown option missing: $mode"
 }
+Need $page '<option value="ZERO_GRID" disabled={zeroGridBlockedForSymbol}>' 'ZERO GRID dropdown option must remain available for supported symbols and disable on BTC/XBT'
 Need $page 'Win Rate วันนี้' 'Daily Win Rate KPI missing'
 Need $page 'Drawdown วันนี้' 'Daily Drawdown KPI missing'
 Need $page 'PERFORMANCE BY MODE' 'Per-mode performance card missing'
