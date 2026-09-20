@@ -37,6 +37,9 @@ jobs:
       - name: AUTO V21 balanced exit and lot-safety contract
         shell: pwsh
         run: ./tests/auto-v21-balanced-exit-contract.ps1
+      - name: Adaptive Rescue disabled contract
+        shell: pwsh
+        run: ./tests/rescue-disabled-contract.ps1
       - name: Hard profit target contract
         shell: pwsh
         run: ./tests/hard-profit-target-contract.ps1
