@@ -79,7 +79,7 @@ Need $onTick 'bool autoV21NoRescue=autoV20OwnedBasket && rescueCount<=0;' 'AUTO 
 Need $onTick 'bool zeroGridCanStart =' 'ZERO selection must not preempt a live AUTO/MANUAL owner'
 Need $onTick 'BasketPositionCount()<=0' 'ZERO may start only after the previous live owner is flat'
 
-Need $api 'const autoSelected = requestedControlMode === "AUTO";' 'API must canonicalize AUTO independently'
+Need $api 'const autoSelected = effectiveProfitProfileMode === "AUTO";' 'API must canonicalize the active AUTO profit profile independently'
 Need $api 'clean.profitTargetMode = "AUTO";' 'AUTO selection must clear stale MANUAL profit semantics'
 Need $api 'const manualSelected =' 'API must canonicalize MANUAL independently'
 Need $api 'clean.profitTargetMode = "MANUAL";' 'MANUAL selection must not inherit AUTO smart-profit semantics'
