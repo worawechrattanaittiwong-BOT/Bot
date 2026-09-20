@@ -46,6 +46,9 @@ jobs:
       - name: Per-mode profit target isolation contract
         shell: pwsh
         run: ./tests/per-mode-profit-target-contract.ps1
+      - name: Strict mode settings and fixed AUTO Lot contract
+        shell: pwsh
+        run: ./tests/strict-mode-settings-contract.ps1
       - name: RACE close-all profit contract
         shell: pwsh
         run: ./tests/race-close-all-profit-contract.ps1
