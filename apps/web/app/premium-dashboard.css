@@ -5229,8 +5229,26 @@
 /* ===== /Control Center V48 · standard readable typography ===== */
 
 /* ===== Settings control spacing fix · scoped UI only ===== */
-/* Keep money-field suffix text inside its own grid cell instead of letting
-   the editable input grow over it. */
+/* Center the selected text inside the settings dropdowns. */
+.cc-v19-settings-card .cc-bot-v12-mode-select,
+.cc-v19-settings-card .cc-bot-v2-field>select.input,
+.cc-v19-settings-card .cc-bot-v17-add-setting>select.input,
+.cc-v19-settings-card .cc-bot-v2-control-stack>select.input{
+  text-align:center!important;
+  text-align-last:center!important;
+}
+.cc-v19-settings-card .cc-bot-v12-mode-select{
+  padding-left:38px!important;
+  padding-right:38px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-field>select.input,
+.cc-v19-settings-card .cc-bot-v17-add-setting>select.input,
+.cc-v19-settings-card .cc-bot-v2-control-stack>select.input{
+  padding-left:34px!important;
+  padding-right:34px!important;
+}
+
+/* Keep money-field suffix text inside its own grid cell. */
 .cc-v19-settings-card .money-input-shell .money-input,
 .cc-v19-settings-card .number-input-shell .money-input{
   box-sizing:border-box!important;
@@ -5246,11 +5264,10 @@
   min-width:max-content!important;
 }
 
-/* Risk controls: give the switch/text breathing room and center that selector
-   within its own column without changing any setting behavior. */
+/* Give risk controls more breathing room without changing their behavior. */
 .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field{
   grid-template-columns:84px minmax(0,1fr)!important;
-  gap:12px!important;
+  gap:16px!important;
 }
 .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-setting-label{
   box-sizing:border-box!important;
@@ -5258,5 +5275,8 @@
   min-width:84px!important;
   justify-content:center!important;
   gap:10px!important;
+}
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div+div{
+  margin-top:4px!important;
 }
 /* ===== /Settings control spacing fix · scoped UI only ===== */
