@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.45"
-#define SCENOVA_EA_VERSION "1.0.45"
-#define SCENOVA_PRODUCT_VERSION "1.0.45"
+#property version   "1.0.46"
+#define SCENOVA_EA_VERSION "1.0.46"
+#define SCENOVA_PRODUCT_VERSION "1.0.46"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -172,8 +172,8 @@ input double          InpRaceCloseAllProfitMoney = 0.50;
 #define AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS 15
 #define AUTO_V21_EXIT_CONFIRM_SECONDS 10
 #define AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS 6
-#define RACE_VOLUME_WINDOW_SECONDS 10
-#define RACE_VOLUME_HISTORY_SECONDS 30
+#define RACE_VOLUME_WINDOW_SECONDS 60
+#define RACE_VOLUME_HISTORY_SECONDS 60
 #define RACE_EXIT_CYCLE_GRACE_SECONDS 20
 #define RACE_EXIT_LAST_FILL_GRACE_SECONDS 15
 #define RACE_EXIT_CONFIRM_SECONDS 12
@@ -342,7 +342,7 @@ datetime g_raceExitCandidateSince = 0;
 double g_raceExitCandidatePeakAdverse = 0.0;
 bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
-// RACE uses a rolling 10-second order-flow window. Exchange/deal-side flags
+// RACE uses a rolling 60-second order-flow window. Exchange/deal-side flags
 // are used when the broker publishes them; quote-only symbols fall back to
 // uptick/downtick tick-volume counts. No trend/EMA/timeframe signal decides side.
 datetime g_raceVolumeBucketSecond[RACE_VOLUME_HISTORY_SECONDS];
@@ -3050,7 +3050,7 @@ int RaceM5CandleDirection()
 int RaceAnalysisDirection(double momentum)
 {
    // Explicit customer direction remains an override. AUTO RACE ignores
-   // trend/EMA/timeframes and follows only the rolling 10-second volume side.
+   // trend/EMA/timeframes and follows only the rolling 60-second volume side.
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
    if(g_entryMode == ENTRY_SELL_ONLY) return -1;
    return RaceVolumeDirection();
@@ -3127,8 +3127,8 @@ bool RaceWrongDirectionConfirmed(
    if(!candidateActive && adversePoints < adverseFloor)
       return false;
 
-   // Preserve the 10-second RACE entry side, but require a separate 30-second
-   // pressure history before a soft-loss exit can even become a candidate.
+   // Use the same rolling 60-second RACE pressure window for entry and soft-loss
+   // confirmation so every RACE order-flow decision observes one full minute.
    if(g_raceVolumeWarmupStartedAt <= 0 ||
       now - g_raceVolumeWarmupStartedAt < RACE_VOLUME_HISTORY_SECONDS)
    {
@@ -3265,7 +3265,7 @@ bool RaceWrongDirectionConfirmed(
 
 bool RaceFlowStillRunning(int direction, double momentum)
 {
-   // RACE profit-run continuation follows the same 10-second volume majority
+   // RACE profit-run continuation follows the same 60-second volume majority
    // used for entry. Trend, EMA and candle direction do not participate.
    return RaceVolumeDirection() == direction;
 }
@@ -3662,7 +3662,7 @@ bool ManageRaceBasket(double momentum)
 
 
    // RACE_PERSISTENT_REVERSAL_EXIT_V4: direction still comes from the rolling
-   // 10-second BUY/SELL pressure window. A simple pressure flip never adds on
+   // 60-second BUY/SELL pressure window. A simple pressure flip never adds on
    // the stale side. A negative cycle waits in recovery unless the persistent
    // reversal guard above survives grace, slow confirmation and hysteresis.
    int volumeDirection = RaceAnalysisDirection(momentum);
