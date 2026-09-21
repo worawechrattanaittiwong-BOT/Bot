@@ -346,6 +346,60 @@ export class PerformanceActionsController {
     return updated;
   }
 
+  @Post("clear-own-data")
+  async clearOwnData(@Req() req: any, @Body() body: { confirm?: string }) {
+    const actor = req.user as Actor;
+    if (String(body?.confirm || "") !== "CLEAR") {
+      throw new BadRequestException("confirmation token CLEAR required");
+    }
+
+    return this.db.transaction(async tx => {
+      const before = (await tx.query(
+        `SELECT
+           (SELECT COUNT(*)::int
+              FROM trade_journal tj
+              JOIN mt5_accounts a ON a.id=tj.mt5_account_id
+             WHERE a.user_id=$1) AS trade_journal,
+           (SELECT COUNT(*)::int FROM backtest_runs WHERE owner_user_id=$1) AS backtest_runs,
+           (SELECT COUNT(*)::int FROM performance_shares WHERE owner_user_id=$1) AS performance_shares`,
+        [String(actor.sub)]
+      )).rows[0];
+
+      await tx.query("DELETE FROM performance_shares WHERE owner_user_id=$1", [String(actor.sub)]);
+      await tx.query("DELETE FROM backtest_runs WHERE owner_user_id=$1", [String(actor.sub)]);
+      await tx.query(
+        `DELETE FROM trade_journal
+         WHERE mt5_account_id IN (
+           SELECT id FROM mt5_accounts WHERE user_id=$1
+         )`,
+        [String(actor.sub)]
+      );
+      await tx.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES($1,'PERFORMANCE_OWN_DATA_RESET','user',$1,$2::jsonb)`,
+        [
+          String(actor.sub),
+          JSON.stringify({
+            before,
+            scope: "OWN",
+            preserved: ["users","mt5_accounts","bot_instances","subscriptions","settings"]
+          })
+        ]
+      );
+
+      return {
+        ok: true,
+        scope: "OWN",
+        deleted: {
+          tradeJournal: Number(before?.trade_journal || 0),
+          backtestRuns: Number(before?.backtest_runs || 0),
+          performanceShares: Number(before?.performance_shares || 0)
+        },
+        preserved: ["users", "mt5_accounts", "bot_instances", "subscriptions", "settings"]
+      };
+    });
+  }
+
   @Post("reset-test-data")
   async resetTestData(@Req() req: any, @Body() body: { confirm?: string }) {
     const actor = req.user as Actor;
@@ -373,6 +427,7 @@ export class PerformanceActionsController {
 
       return {
         ok: true,
+        scope: "SYSTEM",
         deleted: {
           tradeJournal: Number(before?.trade_journal || 0),
           backtestRuns: Number(before?.backtest_runs || 0),
