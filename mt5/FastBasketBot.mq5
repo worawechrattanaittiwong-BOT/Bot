@@ -5636,10 +5636,19 @@ void PostTradeJournalDeal(ulong dealTicket)
    int dealDirection = dealType == DEAL_TYPE_BUY ? 1 : -1;
    int positionDirection = isExit ? -dealDirection : dealDirection;
 
+   // Journal ownership must come from the actual MT5 deal/position history,
+   // never from the mode currently selected on the website. A queued journal
+   // can be flushed after the user has already changed modes.
+   string journalControlMode = TradeModeForDeal(dealTicket);
+   if(journalControlMode == "")
+      journalControlMode = DailyRiskMode();
+   HistoryDealSelect(dealTicket);
+
    double net =
       HistoryDealGetDouble(dealTicket, DEAL_PROFIT) +
       HistoryDealGetDouble(dealTicket, DEAL_SWAP) +
-      HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
+      HistoryDealGetDouble(dealTicket, DEAL_COMMISSION) +
+      HistoryDealGetDouble(dealTicket, DEAL_FEE);
 
    double obQuality = positionDirection > 0
       ? g_bullishOrderBlockQuality
@@ -5649,12 +5658,13 @@ void PostTradeJournalDeal(ulong dealTicket)
       : MathMax(1, BasketPositionCount());
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"controlMode\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d}",
       InpInstanceId,
       InpInstallToken,
       (long)dealTicket,
       (long)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID),
       isExit ? "EXIT" : "ENTRY",
+      journalControlMode,
       positionDirection > 0 ? "BUY" : "SELL",
       HistoryDealGetDouble(dealTicket, DEAL_VOLUME),
       DoubleToString(HistoryDealGetDouble(dealTicket, DEAL_PRICE), SymbolDigitsNow()),
@@ -5737,15 +5747,18 @@ void PostRescueJournalDeal(ulong dealTicket)
    double net=
       HistoryDealGetDouble(dealTicket,DEAL_PROFIT)+
       HistoryDealGetDouble(dealTicket,DEAL_SWAP)+
-      HistoryDealGetDouble(dealTicket,DEAL_COMMISSION);
+      HistoryDealGetDouble(dealTicket,DEAL_COMMISSION)+
+      HistoryDealGetDouble(dealTicket,DEAL_FEE);
+   string journalControlMode=DailyRiskMode();
 
    string payload=StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"RESCUE_HEDGE\",\"entryModel\":\"WEIGHT_BALANCE\",\"entryQuality\":\"R\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":0}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"controlMode\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"RESCUE_HEDGE\",\"entryModel\":\"WEIGHT_BALANCE\",\"entryQuality\":\"R\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":0}",
       InpInstanceId,
       InpInstallToken,
       (long)dealTicket,
       (long)HistoryDealGetInteger(dealTicket,DEAL_POSITION_ID),
       isExit ? "EXIT" : "ENTRY",
+      journalControlMode,
       positionDirection>0 ? "BUY" : "SELL",
       HistoryDealGetDouble(dealTicket,DEAL_VOLUME),
       DoubleToString(HistoryDealGetDouble(dealTicket,DEAL_PRICE),SymbolDigitsNow()),
@@ -6014,11 +6027,16 @@ void FlushPendingBasketJournal()
    if(g_pendingBasketRetryAt > now)
       return;
 
+   string pendingControlMode=TradeModeForDeal((ulong)g_pendingBasketId);
+   if(pendingControlMode=="")
+      pendingControlMode=DailyRiskMode();
+
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"eventType\":\"BASKET\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":0,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d,\"symbol\":\"%s\",\"brokerServer\":\"%s\",\"startedAt\":%I64d,\"endedAt\":%I64d,\"peakPositions\":%d,\"sessionProfile\":\"%s\",\"journalSchema\":5,\"marketCycleState\":\"%s\",\"entryPrecisionState\":\"%s\",\"liquidityState\":\"%s\",\"microStructureState\":\"%s\",\"fvgState\":\"%s\",\"entryPrecisionScore\":%.2f,\"entryDistanceAtr\":%.4f,\"setupEvScore\":%.2f,\"indicatorLocationScore\":%.2f,\"indicatorMomentumScore\":%.2f,\"indicatorStructureScore\":%.2f,\"indicatorVolatilityScore\":%.2f,\"indicatorExecutionScore\":%.2f,\"indicatorCostSpaceScore\":%.2f,\"indicatorCompositeScore\":%.2f,\"volumeProfileState\":\"%s\",\"squeezeState\":\"%s\",\"macdState\":\"%s\",\"levelFlipState\":\"%s\",\"premiumDiscountState\":\"%s\"}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"eventType\":\"BASKET\",\"controlMode\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":0,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d,\"symbol\":\"%s\",\"brokerServer\":\"%s\",\"startedAt\":%I64d,\"endedAt\":%I64d,\"peakPositions\":%d,\"sessionProfile\":\"%s\",\"journalSchema\":5,\"marketCycleState\":\"%s\",\"entryPrecisionState\":\"%s\",\"liquidityState\":\"%s\",\"microStructureState\":\"%s\",\"fvgState\":\"%s\",\"entryPrecisionScore\":%.2f,\"entryDistanceAtr\":%.4f,\"setupEvScore\":%.2f,\"indicatorLocationScore\":%.2f,\"indicatorMomentumScore\":%.2f,\"indicatorStructureScore\":%.2f,\"indicatorVolatilityScore\":%.2f,\"indicatorExecutionScore\":%.2f,\"indicatorCostSpaceScore\":%.2f,\"indicatorCompositeScore\":%.2f,\"volumeProfileState\":\"%s\",\"squeezeState\":\"%s\",\"macdState\":\"%s\",\"levelFlipState\":\"%s\",\"premiumDiscountState\":\"%s\"}",
       InpInstanceId,
       InpInstallToken,
       g_pendingBasketId,
+      pendingControlMode,
       g_pendingBasketDirection > 0 ? "BUY" : "SELL",
       g_pendingBasketVolume,
       g_pendingBasketProfit,
