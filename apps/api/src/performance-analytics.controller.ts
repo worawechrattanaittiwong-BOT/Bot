@@ -337,7 +337,7 @@ export class PerformanceAnalyticsController {
         slotLabel: account.slot_label,
         symbol: String(metrics.symbol || "XAUUSD"),
         timeframe: String(metrics.timeframe || "M5"),
-        currency: String(metrics.currency || "USD").trim().toUpperCase() || "USD"
+        currency: String(metrics.currency || "UNKNOWN").trim().toUpperCase() || "UNKNOWN"
       },
       status: {
         online,
