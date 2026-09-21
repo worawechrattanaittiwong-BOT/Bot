@@ -228,7 +228,7 @@ export class PerformanceActionsController {
         mode: account.mode,
         symbol: String(metrics.symbol || "XAUUSD"),
         timeframe: String(metrics.timeframe || "M5"),
-        currency: String(metrics.currency || "USD").trim().toUpperCase() || "USD"
+        currency: String(metrics.currency || "UNKNOWN").trim().toUpperCase() || "UNKNOWN"
       },
       range: { from: from.toISOString(), to: to.toISOString() },
       balance: {
