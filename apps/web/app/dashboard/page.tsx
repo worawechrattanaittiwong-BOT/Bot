@@ -150,6 +150,7 @@ export default function DashboardPage() {
   const [installToken, setInstallToken] = useState("");
   const [installInstanceId, setInstallInstanceId] = useState("");
   const [activationMessage, setActivationMessage] = useState("");
+  const [installGuideOpen, setInstallGuideOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
   const [botLogs, setBotLogs] = useState<any>(null);
@@ -2345,7 +2346,7 @@ export default function DashboardPage() {
                   <button
                     className="btn primary btn-lg"
                     disabled={busy || desired==="RUNNING" || (state==="RUNNING" && isMt5Online)}
-                    onClick={downloadWindowsInstaller}
+                    onClick={()=>setInstallGuideOpen(true)}
                   >
                     {busy ? "กำลังเตรียม..." : data.instance?.id ? "ติดตั้ง / อัปเดต" : "เริ่มเชื่อมต่อ"} <span aria-hidden="true">→</span>
                   </button>
@@ -2650,6 +2651,37 @@ export default function DashboardPage() {
                   <div className="cc-terminal-empty">No events in this filter</div>
                 )}
               </div>
+            </section>
+          </div>
+        )}
+
+        {installGuideOpen && activeView === "account" && data.selectedSlot?.mode === "LOCAL" && (
+          <div className="scenova-install-guide-backdrop" onClick={()=>setInstallGuideOpen(false)}>
+            <section className="scenova-install-guide" role="dialog" aria-modal="true" aria-labelledby="scenova-install-guide-title" onClick={e=>e.stopPropagation()}>
+              <div className="scenova-install-guide-head">
+                <div>
+                  <div className="eyebrow">SCENOVA · INSTALL GUIDE</div>
+                  <h2 id="scenova-install-guide-title">ติดตั้ง SCENOVA ให้พร้อมใช้งาน</h2>
+                  <p>ทำตามทีละขั้นตอนได้เลยครับ ใช้เวลาไม่กี่นาที และไม่ต้องพิมพ์คำสั่งใน CMD</p>
+                </div>
+                <button className="scenova-install-guide-close" onClick={()=>setInstallGuideOpen(false)} aria-label="ปิดคำแนะนำ">×</button>
+              </div>
+
+              <div className="scenova-install-guide-download">
+                <div><span className="scenova-install-guide-file">EXE</span><div><b>ขั้นแรก: ดาวน์โหลดตัวติดตั้ง</b><small>กดปุ่มนี้เพื่อดาวน์โหลด SCENOVA Windows Setup แล้วเปิดไฟล์ที่ดาวน์โหลด</small></div></div>
+                <button className="btn primary" disabled={busy || desired==="RUNNING" || (state==="RUNNING" && isMt5Online)} onClick={downloadWindowsInstaller}>{busy ? "กำลังเตรียม..." : "ดาวน์โหลดตัวติดตั้ง"}</button>
+              </div>
+
+              <div className="scenova-install-guide-steps">
+                <article><span>01</span><div><h3>เปิด MT5 และเข้าสู่ระบบ</h3><p>เปิด MetaTrader 5 แล้ว Login บัญชีที่ต้องการใช้ให้เรียบร้อย ตรวจชื่อ Broker และ Server ให้ถูกต้อง</p><small>แนะนำให้เปิดกราฟ XAUUSD หรือสัญลักษณ์ที่ต้องการเทรดไว้ก่อน</small></div></article>
+                <article><span>02</span><div><h3>ติดตั้ง SCENOVA Windows Setup</h3><p>ดับเบิลคลิกไฟล์ที่ดาวน์โหลด กดติดตั้งตามหน้าจอ แล้วรอให้ระบบลง EA และไฟล์ตั้งค่าให้อัตโนมัติ</p><small>ไม่ต้องแก้ไขไฟล์ระบบ และไม่ต้องเปิด CMD หรือ PowerShell</small></div></article>
+                <article><span>03</span><div><h3>เปิดหน้าต่างตั้งค่า EA</h3><p>ใน MT5 ไปที่ Navigator → Expert Advisors → SCENOVA แล้วลาก <b>FastBasketBot</b> ลงบนกราฟ</p><small>ถ้าไม่เห็น Navigator ให้กด View → Navigator หรือกด Ctrl+N</small></div></article>
+                <article><span>04</span><div><h3>เปิดสิทธิ์ให้ EA ทำงาน</h3><p>ในแท็บ Common ให้ติ๊ก <b>Allow Algo Trading</b> จากนั้นตรวจปุ่ม Algo Trading ด้านบนของ MT5 ให้เป็นสีเขียว</p><small>หาก MT5 ถามเรื่อง WebRequest ให้กดอนุญาต และใช้ที่อยู่ที่ระบบแสดงให้เท่านั้น</small></div></article>
+                <article><span>05</span><div><h3>โหลดไฟล์ตั้งค่าในแท็บ Inputs</h3><p>ไปที่แท็บ Inputs กด <b>Load</b> แล้วเลือกไฟล์ <b>SCENOVA-FastBasketBot.set</b> ในโฟลเดอร์ Presets</p><small>ค่าที่ขึ้นต้นด้วย InpApiBase, InpInstanceId และ InpInstallToken ต้องมาจากระบบ ห้ามส่งต่อให้ผู้อื่น</small></div></article>
+                <article><span>06</span><div><h3>กด OK และตรวจการเชื่อมต่อ</h3><p>กด OK แล้วรอสักครู่ มุมขวาบนของกราฟควรแสดง <b>SCENOVA · CONNECTED</b> และสถานะ EA เปลี่ยนเป็นพร้อมทำงาน</p><small>กลับมาหน้านี้เพื่อดูสถานะบัญชีและยืนยันว่าระบบเชื่อมต่อสำเร็จ</small></div></article>
+              </div>
+
+              <div className="scenova-install-guide-footer"><span>หากยังไม่เชื่อมต่อ</span> ตรวจว่า MT5 เปิดอยู่, Algo Trading เป็นสีเขียว และ EA อยู่บนกราฟ จากนั้นรอ Heartbeat อีกครั้ง</div>
             </section>
           </div>
         )}
