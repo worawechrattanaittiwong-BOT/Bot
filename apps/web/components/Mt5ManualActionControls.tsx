@@ -128,10 +128,9 @@ export function Mt5ManualActionControls() {
   useEffect(() => {
     if (!updateIntentAt) return;
 
-    // One click owns the whole update UX. Once the Agent has loaded the new EA
-    // and the dashboard confirms Version/Hash/Runtime all match, refresh the
-    // page automatically so the customer never has to press F5 or reopen the
-    // status dialog to see the completed version.
+    // Keep the click intent alive for the full update window. The Agent can take
+    // longer than 20-30 seconds to restart MT5 and publish a fresh EA heartbeat;
+    // clearing this intent early made a successful update miss the auto-refresh.
     if (!needsEaUpdate) {
       setError("");
       setNotice("อัปเดต EA สำเร็จแล้ว · กำลังรีเฟรชสถานะล่าสุด...");
@@ -145,15 +144,19 @@ export function Mt5ManualActionControls() {
       setUpdateIntentAt(null);
       return;
     }
-    if (updatePending || updateSettling) return;
 
     const elapsed = Date.now() - updateIntentAt;
-    const timer = window.setTimeout(
+    if (elapsed >= UI_PENDING_TIMEOUT_MS) {
+      setUpdateIntentAt(null);
+      return;
+    }
+
+    const timeoutTimer = window.setTimeout(
       () => setUpdateIntentAt(null),
-      Math.max(0, 20_000 - elapsed)
+      Math.max(0, UI_PENDING_TIMEOUT_MS - elapsed)
     );
-    return () => window.clearTimeout(timer);
-  }, [updateIntentAt, needsEaUpdate, actionStatus, updatePending, updateSettling]);
+    return () => window.clearTimeout(timeoutTimer);
+  }, [updateIntentAt, needsEaUpdate, actionStatus]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
