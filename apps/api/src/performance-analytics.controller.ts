@@ -252,12 +252,13 @@ export class PerformanceAnalyticsController {
       `SELECT direction,net_profit,created_at,metadata,entry_quality_score,confidence
        FROM trade_journal
        WHERE bot_instance_id=$1
+         AND mt5_account_id=$4
          AND event_type='BASKET'
          AND created_at >= $2
          AND created_at <= $3
        ORDER BY created_at ASC
        LIMIT 20000`,
-      [account.instance_id, from.toISOString(), to.toISOString()]
+      [account.instance_id, from.toISOString(), to.toISOString(), account.id]
     );
     const baskets = basketsResult.rows as BasketRow[];
 
@@ -265,9 +266,10 @@ export class PerformanceAnalyticsController {
       `SELECT COALESCE(SUM(net_profit),0)::float8 AS net
        FROM trade_journal
        WHERE bot_instance_id=$1
+         AND mt5_account_id=$3
          AND event_type='BASKET'
          AND created_at >= $2`,
-      [account.instance_id, from.toISOString()]
+      [account.instance_id, from.toISOString(), account.id]
     );
     const derivedStart = currentBalance > 0
       ? Number((currentBalance - Number(pnlSinceFrom?.net || 0)).toFixed(2))
@@ -277,13 +279,14 @@ export class PerformanceAnalyticsController {
     const exits = await this.db.query(
       `SELECT
          x.deal_ticket,x.position_id,x.direction,x.volume,x.price AS exit_price,x.net_profit,
-         x.created_at AS closed_at,COALESCE(x.metadata->>'symbol',$4) AS symbol,
+         x.created_at AS closed_at,COALESCE(x.metadata->>'symbol',$5) AS symbol,
          e.price AS entry_price,e.created_at AS opened_at
        FROM trade_journal x
        LEFT JOIN LATERAL (
          SELECT price,created_at
          FROM trade_journal e
          WHERE e.bot_instance_id=x.bot_instance_id
+           AND e.mt5_account_id=x.mt5_account_id
            AND e.event_type='ENTRY'
            AND e.position_id=x.position_id
            AND e.created_at<=x.created_at
@@ -291,12 +294,13 @@ export class PerformanceAnalyticsController {
          LIMIT 1
        ) e ON true
        WHERE x.bot_instance_id=$1
+         AND x.mt5_account_id=$4
          AND x.event_type='EXIT'
          AND x.created_at >= $2
          AND x.created_at <= $3
        ORDER BY x.created_at DESC
        LIMIT 500`,
-      [account.instance_id, from.toISOString(), to.toISOString(), String(metrics.symbol || "XAUUSD")]
+      [account.instance_id, from.toISOString(), to.toISOString(), account.id, String(metrics.symbol || "XAUUSD")]
     );
 
     const backtests = await this.db.query(
@@ -332,7 +336,8 @@ export class PerformanceAnalyticsController {
         slotNumber: account.slot_number,
         slotLabel: account.slot_label,
         symbol: String(metrics.symbol || "XAUUSD"),
-        timeframe: String(metrics.timeframe || "M5")
+        timeframe: String(metrics.timeframe || "M5"),
+        currency: String(metrics.currency || "USD").trim().toUpperCase() || "USD"
       },
       status: {
         online,
@@ -448,7 +453,7 @@ export class PerformanceAnalyticsController {
        FROM users u
        LEFT JOIN mt5_accounts a ON a.user_id=u.id
        LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
-       LEFT JOIN trade_journal tj ON tj.bot_instance_id=bi.id
+       LEFT JOIN trade_journal tj ON tj.mt5_account_id=a.id
          AND tj.event_type='BASKET'
          AND tj.created_at >= $1
          AND tj.created_at <= $2
@@ -460,6 +465,7 @@ export class PerformanceAnalyticsController {
       `SELECT
          u.id AS user_id,u.user_code,u.email,a.id AS account_id,a.account_number,a.broker,a.broker_server,a.mode,
          bi.id AS instance_id,bi.last_seen_at,
+         COALESCE(NULLIF(bi.metrics->>'currency',''),NULLIF(MAX(tj.metadata->>'currency'),''),'UNKNOWN') AS currency,
          COUNT(tj.id)::int AS trades,
          COUNT(tj.id) FILTER (WHERE tj.net_profit>0)::int AS wins,
          COUNT(tj.id) FILTER (WHERE tj.net_profit<0)::int AS losses,
@@ -467,12 +473,12 @@ export class PerformanceAnalyticsController {
        FROM users u
        JOIN mt5_accounts a ON a.user_id=u.id
        LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
-       LEFT JOIN trade_journal tj ON tj.bot_instance_id=bi.id
+       LEFT JOIN trade_journal tj ON tj.mt5_account_id=a.id
          AND tj.event_type='BASKET'
          AND tj.created_at >= $1
          AND tj.created_at <= $2
        WHERE u.role NOT IN ('OWNER','ADMIN')
-       GROUP BY u.id,u.user_code,u.email,a.id,a.account_number,a.broker,a.broker_server,a.mode,bi.id,bi.last_seen_at
+       GROUP BY u.id,u.user_code,u.email,a.id,a.account_number,a.broker,a.broker_server,a.mode,bi.id,bi.last_seen_at,bi.metrics
        ORDER BY net_profit DESC,u.user_code,a.account_number`,
       [from.toISOString(), to.toISOString()]
     );
@@ -480,12 +486,35 @@ export class PerformanceAnalyticsController {
     const daily = await this.db.query(
       `SELECT
          (date_trunc('day',tj.created_at AT TIME ZONE 'Asia/Bangkok') AT TIME ZONE 'Asia/Bangkok') AS day,
+         COALESCE(NULLIF(tj.metadata->>'currency',''),NULLIF(bi.metrics->>'currency',''),'UNKNOWN') AS currency,
          COALESCE(SUM(tj.net_profit),0)::float8 AS profit,
          COUNT(*)::int AS trades
        FROM trade_journal tj
-       JOIN bot_instances bi ON bi.id=tj.bot_instance_id
-       JOIN mt5_accounts a ON a.id=bi.mt5_account_id
+       JOIN mt5_accounts a ON a.id=tj.mt5_account_id
        JOIN users u ON u.id=a.user_id
+       LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
+       WHERE tj.event_type='BASKET'
+         AND tj.created_at >= $1
+         AND tj.created_at <= $2
+         AND u.role NOT IN ('OWNER','ADMIN')
+       GROUP BY 1,2
+       ORDER BY 2,1`,
+      [from.toISOString(), to.toISOString()]
+    );
+
+    const currencyTotals = await this.db.query(
+      `SELECT
+         COALESCE(NULLIF(tj.metadata->>'currency',''),NULLIF(bi.metrics->>'currency',''),'UNKNOWN') AS currency,
+         COUNT(*)::int AS trades,
+         COUNT(*) FILTER (WHERE tj.net_profit>0)::int AS wins,
+         COUNT(*) FILTER (WHERE tj.net_profit<0)::int AS losses,
+         COALESCE(SUM(tj.net_profit),0)::float8 AS net_profit,
+         COALESCE(SUM(tj.net_profit) FILTER (WHERE tj.net_profit>0),0)::float8 AS gross_profit,
+         COALESCE(ABS(SUM(tj.net_profit) FILTER (WHERE tj.net_profit<0)),0)::float8 AS gross_loss
+       FROM trade_journal tj
+       JOIN mt5_accounts a ON a.id=tj.mt5_account_id
+       JOIN users u ON u.id=a.user_id
+       LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
        WHERE tj.event_type='BASKET'
          AND tj.created_at >= $1
          AND tj.created_at <= $2
@@ -495,11 +524,40 @@ export class PerformanceAnalyticsController {
       [from.toISOString(), to.toISOString()]
     );
 
-    let cumulative = 0;
-    const curve = daily.rows.map((row: any) => {
-      cumulative += Number(row.profit || 0);
-      return { time: row.day, profit: Number(row.profit || 0), cumulative: Number(cumulative.toFixed(2)), trades: Number(row.trades || 0) };
+    const curveMap = new Map<string, any[]>();
+    const cumulativeByCurrency = new Map<string, number>();
+    for (const row of daily.rows) {
+      const currency = String(row.currency || "UNKNOWN").toUpperCase();
+      const cumulative = Number(cumulativeByCurrency.get(currency) || 0) + Number(row.profit || 0);
+      cumulativeByCurrency.set(currency, cumulative);
+      const points = curveMap.get(currency) || [];
+      points.push({
+        time: row.day,
+        currency,
+        profit: Number(row.profit || 0),
+        cumulative: Number(cumulative.toFixed(2)),
+        trades: Number(row.trades || 0)
+      });
+      curveMap.set(currency, points);
+    }
+    const currencySummaries = currencyTotals.rows.map((row: any) => {
+      const trades = Number(row.trades || 0);
+      const wins = Number(row.wins || 0);
+      const grossProfit = Number(row.gross_profit || 0);
+      const grossLoss = Number(row.gross_loss || 0);
+      return {
+        currency: String(row.currency || "UNKNOWN").toUpperCase(),
+        trades,
+        wins,
+        losses: Number(row.losses || 0),
+        winRate: trades > 0 ? Number((wins / trades * 100).toFixed(2)) : 0,
+        netProfit: Number(row.net_profit || 0),
+        profitFactor: grossLoss > 0 ? Number((grossProfit / grossLoss).toFixed(3)) : grossProfit > 0 ? 999 : 0
+      };
     });
+    const singleCurrency = currencySummaries.length === 1 ? currencySummaries[0] : null;
+    const curvesByCurrency = Array.from(curveMap.entries()).map(([currency, points]) => ({ currency, points }));
+    const curve = singleCurrency ? (curveMap.get(singleCurrency.currency) || []) : [];
     const trades = Number(kpis?.trades || 0);
     const wins = Number(kpis?.wins || 0);
     const grossProfit = Number(kpis?.gross_profit || 0);
@@ -517,12 +575,15 @@ export class PerformanceAnalyticsController {
         wins,
         losses: Number(kpis?.losses || 0),
         winRate: trades > 0 ? Number((wins / trades * 100).toFixed(2)) : 0,
-        netProfit: Number(kpis?.net_profit || 0),
-        profitFactor: grossLoss > 0 ? Number((grossProfit / grossLoss).toFixed(3)) : grossProfit > 0 ? 999 : 0,
+        currency: singleCurrency?.currency || (currencySummaries.length > 1 ? "MULTI" : "UNKNOWN"),
+        netProfit: singleCurrency ? singleCurrency.netProfit : null,
+        profitFactor: singleCurrency ? singleCurrency.profitFactor : null,
         profitableAccounts,
         profitableAccountRate: accounts.rows.length > 0 ? Number((profitableAccounts / accounts.rows.length * 100).toFixed(2)) : 0
       },
       curve,
+      curvesByCurrency,
+      currencySummaries,
       accounts: accounts.rows.map((row: any) => ({
         userId: row.user_id,
         userCode: row.user_code,
@@ -533,6 +594,7 @@ export class PerformanceAnalyticsController {
         brokerServer: row.broker_server,
         mode: row.mode,
         instanceId: row.instance_id,
+        currency: String(row.currency || "UNKNOWN").toUpperCase(),
         online: row.last_seen_at ? new Date(row.last_seen_at).getTime() > Date.now() - 35_000 : false,
         trades: Number(row.trades || 0),
         wins: Number(row.wins || 0),
