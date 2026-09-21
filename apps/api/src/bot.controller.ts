@@ -1780,6 +1780,36 @@ export class BotController {
         "การตั้งค่าถูกล็อกขณะบอทกำลังเริ่มหรือกำลังทำงาน · กดหยุดบอทและรอให้สถานะหยุดก่อนแก้ไข"
       );
     }
+    const moneyReviewKeys = [
+      "autoMaxBasketLossMoney",
+      "autoDailyLossMoney",
+      "autoDailyProfitTargetMoney",
+      "raceMaxBasketLossMoney",
+      "raceDailyLossMoney",
+      "raceDailyProfitTargetMoney",
+      "flipLockMaxBasketLossMoney",
+      "flipLockDailyLossMoney",
+      "flipLockDailyProfitTargetMoney",
+      "manualMaxBasketLossMoney",
+      "manualDailyLossMoney",
+      "manualDailyProfitTargetMoney",
+      "autoProfitTargetMoney",
+      "raceCloseAllProfitMoney",
+      "racePerPositionProfitMoney",
+      "manualBasketProfitTargetMoney",
+      "manualPerPositionProfitMoney",
+      "zeroGridMinNetProfitMoney"
+    ];
+    const currencyReviewRequired = currentSettings.accountCurrencyReviewRequired === true;
+    const currencyReviewComplete =
+      !currencyReviewRequired ||
+      moneyReviewKeys.every((key) => body[key] !== undefined);
+    if (currencyReviewRequired && !currencyReviewComplete) {
+      throw new ConflictException(
+        "สกุลเงินบัญชี MT5 เปลี่ยน กรุณาเปิดหน้าตั้งค่าบอท ตรวจค่าเงินทุกโหมด แล้วกดบันทึกจากหน้า Settings"
+      );
+    }
+
     const clean: Record<string, any> = {};
 
     const numberSetting = (
@@ -2235,7 +2265,9 @@ export class BotController {
     const settingsCurrency = String(currentMetrics.currency || "").trim().toUpperCase();
     if (settingsCurrency) {
       clean.accountCurrency = settingsCurrency;
-      clean.accountCurrencyReviewRequired = false;
+      if (currencyReviewComplete) {
+        clean.accountCurrencyReviewRequired = false;
+      }
     }
 
     if (Object.keys(clean).length === 0) {
