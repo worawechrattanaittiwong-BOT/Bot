@@ -5644,6 +5644,14 @@ void PostTradeJournalDeal(ulong dealTicket)
       journalControlMode = DailyRiskMode();
    HistoryDealSelect(dealTicket);
 
+   // A customer can manually close a SCENOVA-opened position. The ownership
+   // fallback above is still needed to identify the mode, but performance must
+   // distinguish who actually executed this deal.
+   bool executedByBot = IsScenovaMagic(
+      HistoryDealGetInteger(dealTicket, DEAL_MAGIC)
+   );
+   string executedByBotText = executedByBot ? "true" : "false";
+
    double net =
       HistoryDealGetDouble(dealTicket, DEAL_PROFIT) +
       HistoryDealGetDouble(dealTicket, DEAL_SWAP) +
@@ -5658,13 +5666,14 @@ void PostTradeJournalDeal(ulong dealTicket)
       : MathMax(1, BasketPositionCount());
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"controlMode\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"controlMode\":\"%s\",\"executedByBot\":%s,\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d}",
       InpInstanceId,
       InpInstallToken,
       (long)dealTicket,
       (long)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID),
       isExit ? "EXIT" : "ENTRY",
       journalControlMode,
+      executedByBotText,
       positionDirection > 0 ? "BUY" : "SELL",
       HistoryDealGetDouble(dealTicket, DEAL_VOLUME),
       DoubleToString(HistoryDealGetDouble(dealTicket, DEAL_PRICE), SymbolDigitsNow()),
@@ -5752,7 +5761,7 @@ void PostRescueJournalDeal(ulong dealTicket)
    string journalControlMode=DailyRiskMode();
 
    string payload=StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"controlMode\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"RESCUE_HEDGE\",\"entryModel\":\"WEIGHT_BALANCE\",\"entryQuality\":\"R\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":0}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"controlMode\":\"%s\",\"executedByBot\":true,\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"RESCUE_HEDGE\",\"entryModel\":\"WEIGHT_BALANCE\",\"entryQuality\":\"R\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":0}",
       InpInstanceId,
       InpInstallToken,
       (long)dealTicket,
