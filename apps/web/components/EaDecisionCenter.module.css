@@ -81,21 +81,26 @@
 .marketContext { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--dc-border); }
 .marketContext > span { display: flex; flex-direction: column; gap: 3px; min-width: 0; color: #8396b0; font-size: 9px; }
 .marketContext b { color: #c0cde1; font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
-.readiness { display: grid; grid-template-columns: 1.25fr 1.2fr 1fr .8fr 1fr 1fr; min-width: 0; padding: 10px 12px; border: 1px solid rgba(90, 141, 186, .32); border-radius: 11px; background: linear-gradient(100deg, rgba(13, 39, 60, .5), rgba(25, 25, 54, .45)); }
-.readinessTitle, .readinessItem { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.readinessTitle { padding-right: 10px; color: var(--dc-cyan); }
-.readinessItem { padding: 0 12px; border-left: 1px solid var(--dc-border); color: #719ac5; }
-.readiness svg { flex-shrink: 0; }
-.readinessTitle > div, .readinessItem > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.readinessTitle span { color: #abc8dd; font-size: 9px; font-weight: 750; letter-spacing: .035em; }
-.readinessTitle b { font-size: 14px; line-height: 1.2; }
-.readinessItem span { color: #93a7c3; font-size: 10px; }
-.readinessItem b { font-size: 11px; font-weight: 650; line-height: 1.4; overflow-wrap: anywhere; }
-.timeline { display: flex; align-items: center; gap: 15px; min-width: 0; padding: 11px 12px; border: 1px solid var(--dc-border); border-radius: 11px; background: rgba(9, 20, 34, .5); }
-.timelineTitle { display: flex; align-items: center; gap: 8px; flex: 0 0 200px; color: var(--dc-cyan); }
+.timeline { display: grid; grid-template-columns: 1.05fr 1fr 1.8fr; align-items: center; gap: 14px; min-width: 0; padding: 11px 12px; border: 1px solid var(--dc-border); border-radius: 11px; background: rgba(9, 20, 34, .5); }
+.timelineTitle { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--dc-cyan); }
 .timelineTitle > svg { flex-shrink: 0; }
 .timelineTitle h3 { margin: 0 0 4px; font-size: 10px; letter-spacing: .03em; }
 .timelineTitle small { color: #8296b0; font-size: 9px; }
+.sessionSummary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; min-width: 0; padding: 8px 11px; border: 1px solid rgba(117, 221, 176, .2); border-radius: 9px; background: rgba(27, 73, 60, .18); }
+.sessionSummary span { width: 100%; color: #8296b0; font-size: 9px; }
+.sessionSummary strong { font-size: 16px; line-height: 1.2; }
+.sessionSummary small { color: #b4c5d9; font-size: 10px; }
+.sessionSummary em { width: 100%; color: #8d9bb2; font-size: 9px; font-style: normal; }
+.sessionRail { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; min-width: 0; }
+.sessionItem { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 7px 6px; border: 1px solid rgba(94, 120, 160, .17); border-radius: 7px; background: rgba(8, 19, 32, .42); }
+.sessionItem b, .sessionItem small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sessionItem b { color: #c8d4e7; font-size: 9px; }
+.sessionItem small { margin-top: 2px; color: #8296b0; font-size: 8px; }
+.sessionDot { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: #64748d; }
+.sessionActive { border-color: rgba(117, 221, 176, .48); background: rgba(33, 89, 72, .3); }
+.sessionActive .sessionDot { background: var(--dc-green); box-shadow: 0 0 8px rgba(117, 221, 176, .85); }
+.eventHistory { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; min-width: 0; padding-top: 9px; border-top: 1px solid var(--dc-border); }
+.eventHistoryLabel { flex: 0 0 auto; color: #8296b0; font-size: 9px; font-weight: 750; letter-spacing: .08em; }
 .events { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 1; gap: 14px; min-width: 0; margin: 0; padding: 0; list-style: none; }
 .event { position: relative; display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .event::before { content: ""; position: absolute; z-index: 0; top: 11px; right: 0; left: 30px; border-top: 1px dashed rgba(99, 143, 182, .26); }
@@ -109,25 +114,21 @@
   .center { padding: 16px; gap: 12px; }
   .card { padding: 14px; }
   .cardHeading h3 { font-size: 12px; }
-  .reason p, .readinessItem b, .planRows dt, .planRows dd { font-size: 12px; }
+  .reason p, .planRows dt, .planRows dd { font-size: 12px; }
 }
 @media (max-width: 1500px) {
   .reason { grid-template-columns: 19px minmax(0, 1fr); }
   .reasonBadge { display: none; }
   .cardHeading h3 { font-size: 10px; }
   .signalLine .badge { font-size: 8px; padding: 4px 6px; }
-  .readinessTitle > svg, .readinessItem > svg { width: 16px; height: 16px; }
-  .readinessItem { padding: 0 8px; gap: 6px; }
 }
 @media (max-width: 1200px) {
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cardHeading h3 { font-size: 12px; }
   .reason { grid-template-columns: 22px minmax(0, 1fr) auto; }
   .reasonBadge { display: block; }
-  .readiness { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 0; }
-  .readinessItem:nth-child(4) { border-left: 0; padding-left: 0; }
-  .timeline { align-items: stretch; flex-direction: column; }
-  .timelineTitle { flex-basis: auto; }
+  .timeline { grid-template-columns: 1fr; align-items: stretch; }
+  .eventHistory { grid-column: auto; }
   .headerMeta > span:first-child { display: none; }
 }
 @media (max-width: 640px) {
@@ -142,9 +143,8 @@
   .card { padding: 13px; }
   .signal { font-size: 36px; }
   .signalFoot { margin-top: 0; }
-  .readiness { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .readinessItem:nth-child(4) { border-left: 1px solid var(--dc-border); padding-left: 8px; }
-  .readinessItem:nth-child(odd) { border-left: 0; padding-left: 0; }
+  .sessionRail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eventHistory { align-items: flex-start; flex-direction: column; }
   .events { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .event::before { top: 24px; bottom: -12px; left: 11px; right: auto; border-top: 0; border-left: 1px dashed rgba(99, 143, 182, .3); }
   .event:last-child::before { display: none; }

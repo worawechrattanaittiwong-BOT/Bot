@@ -23,6 +23,20 @@ type Props = {
   liveStatus: { tradeReady?: boolean; label?: string; detail?: string };
 };
 type Observation = { key: string; time: number; title: string; detail: string; tone: Tone };
+type MarketSessionCode = "ASIAN" | "LONDON" | "NEW_YORK" | "ROLLOVER";
+
+const marketSessions: Array<{
+  code: MarketSessionCode;
+  label: string;
+  hours: string;
+  start: number;
+  end: number;
+}> = [
+  { code: "ASIAN", label: "เอเชีย", hours: "07:00–14:00", start: 7, end: 14 },
+  { code: "LONDON", label: "ลอนดอน", hours: "14:00–20:00", start: 14, end: 20 },
+  { code: "NEW_YORK", label: "นิวยอร์ก", hours: "20:00–05:00", start: 20, end: 29 },
+  { code: "ROLLOVER", label: "ช่วงเปลี่ยนวัน", hours: "05:00–07:00", start: 5, end: 7 }
+];
 
 function numberValue(value: unknown): number | null {
   if (typeof value !== "number" && typeof value !== "string") return null;
@@ -52,6 +66,23 @@ function clockLabel(time: number): string {
   return new Date(time).toLocaleTimeString("th-TH", { timeZone: "Asia/Bangkok", hour12: false });
 }
 
+function bangkokHour(time: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Bangkok",
+    hour: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(new Date(time));
+  return Number(parts.find(part => part.type === "hour")?.value || 0);
+}
+
+function currentThaiSession(time: number): MarketSessionCode {
+  const hour = bangkokHour(time);
+  if (hour >= 7 && hour < 14) return "ASIAN";
+  if (hour >= 14 && hour < 20) return "LONDON";
+  if (hour >= 20 || hour < 5) return "NEW_YORK";
+  return "ROLLOVER";
+}
+
 function CardHeading({ icon, title, detail }: { icon: string; title: string; detail?: string }) {
   return <div className={styles.cardHeading}>
     <ScenovaIcon name={icon} size={17}/>
@@ -63,6 +94,7 @@ function CardHeading({ icon, title, detail }: { icon: string; title: string; det
 export function EaDecisionCenter(props: Props) {
   const { metrics, online, marketClosed, state, liveStatus } = props;
   const [observations, setObservations] = useState<Observation[]>([]);
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const mode = (textValue(metrics.controlMode) || props.mode).toUpperCase();
   const running = state === "RUNNING";
   const analyzing = online && running && !marketClosed;
@@ -152,21 +184,18 @@ export function EaDecisionCenter(props: Props) {
     : buyFrames > 0 ? "แนวโน้มหลายกรอบเวลายังต่างกัน" : "แนวโน้มยังเป็นกลาง";
   const regime = online && meaningfulCode(metrics.marketRegime) ? props.marketRegimeLabel : "—";
   const momentum = online ? numberValue(metrics.momentumPoints) : null;
-  const positionCount = online ? numberValue(metrics.positions) : null;
-  const maxPositions = numberValue(metrics.configuredMaxPositions) ?? props.maxPositions;
-  const freeMargin = online ? numberValue(metrics.freeMargin) : null;
-  const riskMode = online ? meaningfulCode(metrics.performanceRiskMode).toUpperCase() : "";
-  const session = online ? meaningfulCode(metrics.sessionProfile).replace(/_/g, " ") : "";
-  const readiness = !online ? "OFFLINE" : !running ? "PAUSED"
-    : marketClosed ? "CLOSED" : platformReady ? "READY" : "WAIT";
-  const readinessTone: Tone = readiness === "READY" ? "good" : readiness === "WAIT" || readiness === "CLOSED" ? "warn" : "muted";
-  const readinessItems = [
-    { icon: "spread", label: "Spread", value: spread, tone: spreadTone },
-    { icon: "wallet", label: "Free Margin", value: freeMargin !== null ? freeMargin.toLocaleString("en-US", { maximumFractionDigits: 2 }) + " " + props.currency : "—", tone: "muted" as Tone },
-    { icon: "layers", label: "Positions", value: positionCount !== null ? positionCount + " / " + maxPositions : "—", tone: "muted" as Tone },
-    { icon: "shield", label: "Risk Mode", value: riskMode.replace(/_/g, " ") || "—", tone: (riskMode === "NORMAL" ? "good" : riskMode ? "warn" : "muted") as Tone },
-    { icon: "clock", label: "Session", value: marketClosed ? "MARKET CLOSED" : session || "—", tone: (marketClosed ? "warn" : "muted") as Tone }
-  ];
+  const currentSession = currentThaiSession(clockNow);
+  const reportedSession = meaningfulCode(metrics.sessionProfile).toUpperCase() as MarketSessionCode | "";
+  const currentSessionInfo = marketSessions.find(item => item.code === currentSession) || marketSessions[0];
+  const reportedSessionInfo = marketSessions.find(item => item.code === reportedSession);
+  const sessionStatus = !online ? "รอ EA เชื่อมต่อ"
+    : marketClosed ? "ตลาดปิดตามสถานะจาก EA"
+    : "ตลาดที่กำลังอยู่ในช่วงเวลาไทย";
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // A bounded history of status changes received by this page, not invented EA events.
   const observationKey = [state, execution, signal, visibleReason, marketClosed].join("|");
@@ -253,23 +282,35 @@ export function EaDecisionCenter(props: Props) {
       </article>
     </div>
 
-    <section className={styles.readiness} aria-label="ความพร้อมที่ระบบรายงาน">
-      <div className={styles.readinessTitle} title={liveStatus.detail || liveStatus.label}>
-        <ScenovaIcon name="settings" size={23}/><div><span>EXECUTION READINESS</span><b className={styles[readinessTone]}>{readiness}</b></div>
+    <section className={styles.timeline} aria-label="ช่วงเวลาตลาดและประวัติการตัดสินใจ">
+      <div className={styles.timelineTitle}>
+        <ScenovaIcon name="clock" size={19}/>
+        <div>
+          <h3>MARKET SESSION · DECISION TIMELINE</h3>
+          <small>เวลาไทย {clockLabel(clockNow)} · {sessionStatus}</small>
+        </div>
       </div>
-      {readinessItems.map(item => <div className={styles.readinessItem} key={item.label} title={item.value === "—" ? "รอข้อมูลจาก EA" : item.value}>
-        <ScenovaIcon name={item.icon} size={20}/><div><span>{item.label}</span><b className={styles[item.tone]}>{item.value}</b></div>
-      </div>)}
-    </section>
-
-    <section className={styles.timeline} aria-label="ประวัติการเปลี่ยนสถานะที่หน้าเว็บรับ">
-      <div className={styles.timelineTitle}><ScenovaIcon name="clock" size={19}/><div><h3>DECISION TIMELINE</h3><small>สถานะที่รับตั้งแต่เปิดหน้านี้ · เวลาไทย</small></div></div>
-      {observations.length ? <ol className={styles.events}>
-        {observations.map((event, index) => <li key={event.key + event.time} className={styles.event + " " + styles[event.tone]}>
-          <span className={styles.eventDot}><ScenovaIcon name={index === observations.length - 1 ? "clock" : "status"} size={15}/></span>
-          <div><time dateTime={new Date(event.time).toISOString()}>{clockLabel(event.time)}</time><b>{event.title}</b><p title={event.detail}>{event.detail}</p></div>
-        </li>)}
-      </ol> : <p className={styles.timelineEmpty}>เหตุการณ์จะแสดงเมื่อได้รับสถานะจาก EA</p>}
+      <div className={styles.sessionSummary}>
+        <span>ตลาดปัจจุบัน</span>
+        <strong className={marketClosed ? styles.warn : styles.good}>{marketClosed ? "ตลาดปิด" : currentSessionInfo.label}</strong>
+        <small>{currentSessionInfo.hours} น.</small>
+        {reportedSessionInfo && reportedSessionInfo.code !== currentSessionInfo.code && <em title="ค่า Session ที่ EA รายงานล่าสุด">EA: {reportedSessionInfo.label}</em>}
+      </div>
+      <div className={styles.sessionRail} aria-label="ตารางช่วงเวลาตลาด">
+        {marketSessions.map(sessionItem => <div key={sessionItem.code} className={styles.sessionItem + " " + (sessionItem.code === currentSession ? styles.sessionActive : "")}>
+          <span className={styles.sessionDot}/>
+          <div><b>{sessionItem.label}</b><small>{sessionItem.hours} น.</small></div>
+        </div>)}
+      </div>
+      <div className={styles.eventHistory}>
+        <span className={styles.eventHistoryLabel}>EA STATUS</span>
+        {observations.length ? <ol className={styles.events}>
+          {observations.map((event, index) => <li key={event.key + event.time} className={styles.event + " " + styles[event.tone]}>
+            <span className={styles.eventDot}><ScenovaIcon name={index === observations.length - 1 ? "clock" : "status"} size={15}/></span>
+            <div><time dateTime={new Date(event.time).toISOString()}>{clockLabel(event.time)}</time><b>{event.title}</b><p title={event.detail}>{event.detail}</p></div>
+          </li>)}
+        </ol> : <p className={styles.timelineEmpty}>รอเหตุการณ์จาก EA</p>}
+      </div>
     </section>
   </section>;
 }

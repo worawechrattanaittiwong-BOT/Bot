@@ -4936,7 +4936,7 @@ void SendHeartbeat()
    if(suppressLivePriceTelemetry && StringLen(payload)>=2)
    {
       string liveControlOnly=
-         ",\"executionPriceSource\":\"MT5_LOCAL_TICK\",\"serverPriceControl\":false,\"livePriceTelemetrySuppressed\":true,\"openPositions\":" +
+         ",\"sessionProfile\":\"" + g_sessionProfile + "\",\"marketSessionState\":\"" + MarketSessionStateNow() + "\",\"executionPriceSource\":\"MT5_LOCAL_TICK\",\"serverPriceControl\":false,\"livePriceTelemetrySuppressed\":true,\"openPositions\":" +
          OpenPositionsTelemetryJson() + "}}";
       payload=StringSubstr(payload,0,StringLen(payload)-2)+liveControlOnly;
    }
