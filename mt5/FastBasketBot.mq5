@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.51"
-#define SCENOVA_EA_VERSION "1.0.51"
-#define SCENOVA_PRODUCT_VERSION "1.0.51"
+#property version   "1.0.52"
+#define SCENOVA_EA_VERSION "1.0.52"
+#define SCENOVA_PRODUCT_VERSION "1.0.52"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -3929,6 +3929,19 @@ void OnTick()
    if(zeroGridOwnsRuntime || zeroGridCanStart)
    {
       ManageZeroGrid();
+      return;
+   }
+
+   // RACE restart safety: an already-open RACE Basket must never inherit the
+   // EA input defaults for money loss/profit controls while the Server settings
+   // are still unsynchronized. Keep the Position untouched until the first
+   // valid settings heartbeat arrives; the Broker-side SL remains active.
+   if(!MQLInfoInteger(MQL_TESTER) &&
+      !g_settingsSynchronized &&
+      count > 0 &&
+      BasketHasRacePosition())
+   {
+      g_executionStatus = "RACE_WAIT_SETTINGS_SYNC";
       return;
    }
 

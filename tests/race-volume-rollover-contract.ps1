@@ -37,6 +37,14 @@ Need $ea '#define RACE_VOLUME_WINDOW_SECONDS 60' 'RACE volume window must be exa
 Need $ea 'void RaceSampleVolumePressure()' 'RACE volume sampler missing'
 Need $ea 'int RaceVolumeDirection()' 'RACE volume direction helper missing'
 Need $onTick 'RaceSampleVolumePressure();' 'RACE volume must be sampled on every tick'
+Need $onTick 'RACE_WAIT_SETTINGS_SYNC' 'RACE restart must wait for Server settings before applying money controls to an existing Basket'
+$raceSyncGate = $onTick.IndexOf('RACE_WAIT_SETTINGS_SYNC')
+$dailyControl = $onTick.IndexOf('HandleDailyProfitControl(count)')
+$raceManager = $onTick.IndexOf('ManageRaceBasket(momentum)')
+if($raceSyncGate -lt 0 -or $dailyControl -lt 0 -or $raceManager -lt 0 -or
+   $raceSyncGate -gt $dailyControl -or $raceSyncGate -gt $raceManager){
+  throw 'RACE settings-sync guard must execute before daily money controls and RACE Basket management'
+}
 Need $analysis 'return RaceVolumeDirection();' 'AUTO RACE direction must use volume only'
 if($analysis.Contains('RaceM5CandleDirection()')){throw 'RACE entry must not use M5 candle direction'}
 Need $flow 'RaceVolumeDirection() == direction' 'RACE profit flow must follow 60-second volume side'
