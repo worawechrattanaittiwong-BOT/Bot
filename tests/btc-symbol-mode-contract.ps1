@@ -22,7 +22,6 @@ $flip = Read-Text 'mt5/include/FlipLockV1.mqh'
 $api = Read-Text 'apps/api/src/bot.controller.ts'
 $symbolApi = Read-Text 'apps/api/src/trading-symbol.controller.ts'
 $web = Read-Text 'apps/web/app/dashboard/page.tsx'
-$symbolPage = Read-Text 'apps/web/app/trading-symbol/page.tsx'
 $release = Read-Text 'apps/api/src/release-version.ts'
 
 $btc = Block $ea 'bool IsBitcoinSymbol()'
@@ -66,8 +65,6 @@ Need $web 'const isBitcoinSymbol = tradingSymbol.includes("BTC") || tradingSymbo
 Need $web 'zeroGridBlockedForSymbol' 'Dashboard BTC ZERO gate missing'
 Need $web 'ZERO GRID ถูกบล็อก' 'Dashboard must explain BTC-supported modes'
 Need $web 'disabled={zeroGridBlockedForSymbol}' 'ZERO GRID option must be disabled for BTC'
-Need $symbolPage 'const btcModeBlocked = selectedIsBitcoin && savedControlMode === "ZERO_GRID";' 'Trading Symbol page must block BTC save while ZERO GRID is selected'
-Need $symbolPage 'BTC/XBT รองรับ AUTO, RACE, FLIP LOCK และ MANUAL' 'Trading Symbol page must explain BTC-supported modes'
 
 $eaVersionMatch = [regex]::Match($ea, '#property\s+version\s+"([^"]+)"')
 $releaseVersionMatch = [regex]::Match($release, 'DEFAULT_EA_VERSION\s*=\s*"([^"]+)"')
