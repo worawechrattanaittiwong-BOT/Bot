@@ -6,6 +6,13 @@ import { api } from "../../../lib/api";
 import { ScenovaIcon } from "../../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../../components/ScenovaBrand";
 
+function money(value:any,currency:any,signed=false){
+  const n=Number(value||0);
+  const code=String(currency||"USD").trim().toUpperCase()||"USD";
+  const sign=signed&&n>0?"+":"";
+  return sign+n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+" "+code;
+}
+
 export default function PublicPerformancePage() {
   const params = useParams();
   const slug = String(params?.slug || "");
@@ -28,6 +35,7 @@ export default function PublicPerformancePage() {
 
   const summary=data.summary||{};
   const points=Array.isArray(data.equity_curve)?data.equity_curve:[];
+  const currency=String(data.currency||"USD").trim().toUpperCase()||"USD";
   return (
     <main className="performance-public-shell">
       <header className="performance-public-head">
@@ -41,7 +49,7 @@ export default function PublicPerformancePage() {
         <div>
           <span className="eyebrow">READ-ONLY PERFORMANCE</span>
           <h1>{data.title}</h1>
-          <p>{data.symbol+" · "+data.timeframe+" · Lot "+Number(data.lot||0).toFixed(2)+" · เงินเริ่มต้น $"+Number(data.initial_deposit||0).toFixed(2)}</p>
+          <p>{data.symbol+" · "+data.timeframe+" · Lot "+Number(data.lot||0).toFixed(2)+" · เงินเริ่มต้น "+money(data.initial_deposit,currency)}</p>
         </div>
         <div className="performance-public-badge">
           <ScenovaIcon name="shield" size={20}/>
@@ -52,7 +60,7 @@ export default function PublicPerformancePage() {
       <div className="performance-disclaimer">{data.disclaimer}</div>
 
       <section className="performance-public-kpis">
-        <PublicKpi label="Net P/L" value={(Number(summary.netProfit||0)>=0?"+$":"-$")+Math.abs(Number(summary.netProfit||0)).toFixed(2)} tone={Number(summary.netProfit||0)>=0?"good":"bad"}/>
+        <PublicKpi label="Net P/L" value={money(summary.netProfit,currency,true)} tone={Number(summary.netProfit||0)>=0?"good":"bad"}/>
         <PublicKpi label="Return" value={Number(summary.returnPercent||0).toFixed(2)+"%"} tone={Number(summary.returnPercent||0)>=0?"good":"bad"}/>
         <PublicKpi label="Win Rate" value={Number(summary.winRate||0).toFixed(1)+"%"}/>
         <PublicKpi label="Profit Factor" value={Number(summary.profitFactor||0).toFixed(2)}/>
@@ -61,7 +69,7 @@ export default function PublicPerformancePage() {
       </section>
 
       <section className="performance-public-card">
-        <div className="performance-card-head"><div><b>Equity Curve</b><small>Balance หลังรายการที่ปิด</small></div><strong>{"$"+Number(summary.finalBalance||0).toFixed(2)}</strong></div>
+        <div className="performance-card-head"><div><b>Equity Curve</b><small>Balance หลังรายการที่ปิด</small></div><strong>{money(summary.finalBalance,currency)}</strong></div>
         <PublicEquityChart points={points}/>
       </section>
 
@@ -76,8 +84,8 @@ export default function PublicPerformancePage() {
               <span>{Number(trade.volume||0).toFixed(2)}</span>
               <span>{Number(trade.open_price||0).toFixed(3)}</span>
               <span>{Number(trade.close_price||0).toFixed(3)}</span>
-              <span className={Number(trade.profit||0)>=0?"text-good":"text-bad"}>{Number(trade.profit||0)>=0?"+$":"-$"}{Math.abs(Number(trade.profit||0)).toFixed(2)}</span>
-              <span>{"$"+Number(trade.balance_after||0).toFixed(2)}</span>
+              <span className={Number(trade.profit||0)>=0?"text-good":"text-bad"}>{money(trade.profit,currency,true)}</span>
+              <span>{money(trade.balance_after,currency)}</span>
             </div>
           ))}
         </div>
