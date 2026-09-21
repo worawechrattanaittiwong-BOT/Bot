@@ -1,5 +1,7 @@
 import fs from "node:fs";
 
+// Final gate: Cent/Standard values stay broker-native and account-scoped.
+
 function read(path) {
   return fs.readFileSync(path, "utf8");
 }
