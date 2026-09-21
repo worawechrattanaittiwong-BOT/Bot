@@ -1640,8 +1640,7 @@ export default function DashboardPage() {
         "manualMaxPositions",
         "minOrderIntervalMs",
         "maxOrdersPerMinute",
-        "zeroGridLevelsPerSide",
-        "racePerPositionProfitMoney"
+        "zeroGridLevelsPerSide"
       ]);
 
       const payload:any = { ...settings };
