@@ -1099,7 +1099,7 @@ export class EaController {
           schema: eventType === "BASKET"
             ? Math.max(2, Math.min(5, Math.trunc(n(body.journalSchema, 2))))
             : 1,
-          symbol: text(body.symbol || instance.metrics?.symbol, 48),
+          symbol: text(instance.metrics?.symbol || body.symbol, 48),
           brokerServer: text(instance.broker_server || body.brokerServer, 96),
           currency: text(instance.metrics?.currency, 16),
           startedAt: Math.max(0, Math.trunc(n(body.startedAt))),
