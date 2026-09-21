@@ -553,6 +553,16 @@ jobs:
           test "$(printf '%s' "$CENT_JOURNAL_DASH" | jq -r '.tradeJournal.stats.closedTrades')" = "1"
           test "$(printf '%s' "$CENT_JOURNAL_DASH" | jq -r '.tradeJournal.stats.netProfit')" = "5"
 
+          echo "[integration] historical account performance survives MT5 rebind without mixing currencies"
+          FOLLOW_ACCOUNT_ID=$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.id')
+          test -n "$FOLLOW_ACCOUNT_ID"
+          OLD_ACCOUNT_PERF=$(curl -fsS "$BASE/performance-analytics/report?accountId=$ACCOUNT_ID" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$OLD_ACCOUNT_PERF" | jq -r '.summary.netProfit')" = "12.5"
+          test "$(printf '%s' "$OLD_ACCOUNT_PERF" | jq -r '.summary.trades')" = "1"
+          NEW_ACCOUNT_PERF=$(curl -fsS "$BASE/performance-analytics/report?accountId=$FOLLOW_ACCOUNT_ID" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$NEW_ACCOUNT_PERF" | jq -r '.summary.netProfit')" = "5"
+          test "$(printf '%s' "$NEW_ACCOUNT_PERF" | jq -r '.summary.trades')" = "1"
+
           TRIAL_COUNT=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from trial_grants where user_id=(select id from users where email='integration@scenova.test');")
           test "$TRIAL_COUNT" = "1"
           OLD_TRIAL=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from trial_grants where account_number='100001';")
