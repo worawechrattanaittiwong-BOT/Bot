@@ -294,7 +294,7 @@ export default function PerformanceDashboardPage() {
 
   async function clearOwnPerformanceData(){
     const token=window.prompt(
-      "คำสั่งนี้จะล้าง Trade Journal, Backtest และลิงก์ Performance ของบัญชีผู้ใช้ของคุณทั้งหมด\\n\\nบัญชี MT5, Settings และ Subscription จะไม่ถูกลบ\\n\\nพิมพ์ CLEAR เพื่อยืนยัน"
+      "คำสั่งนี้จะล้าง Trade Journal, Backtest และลิงก์ Performance ของบัญชีผู้ใช้ของคุณทั้งหมด\n\nบัญชี MT5, Settings และ Subscription จะไม่ถูกลบ\n\nพิมพ์ CLEAR เพื่อยืนยัน"
     );
     if(token!=="CLEAR") return;
     if(!window.confirm("ยืนยันล้างข้อมูล Performance ของคุณทั้งหมดตอนนี้หรือไม่?")) return;
@@ -312,9 +312,9 @@ export default function PerformanceDashboardPage() {
       await loadOptions();
       if(accountId) await refresh(accountId,mode);
       window.alert(
-        "ล้างข้อมูลของคุณสำเร็จ\\nTrade Journal: "+String(result?.deleted?.tradeJournal||0)+
-        "\\nBacktest: "+String(result?.deleted?.backtestRuns||0)+
-        "\\nShare links: "+String(result?.deleted?.performanceShares||0)
+        "ล้างข้อมูลของคุณสำเร็จ\nTrade Journal: "+String(result?.deleted?.tradeJournal||0)+
+        "\nBacktest: "+String(result?.deleted?.backtestRuns||0)+
+        "\nShare links: "+String(result?.deleted?.performanceShares||0)
       );
     }catch(e:any){
       setError(String(e?.message||"ล้างข้อมูลของคุณไม่สำเร็จ"));
