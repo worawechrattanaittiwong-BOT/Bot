@@ -35,6 +35,21 @@ type BrokerCatalog = {
 
 type View = "overview" | "account" | "backtest";
 const LIVE_PRICE_WINDOW_MS = 15 * 60 * 1000;
+
+function normalizeAccountCurrency(value: unknown) {
+  const currency = String(value || "").trim().toUpperCase();
+  return currency || "USD";
+}
+
+function formatAccountMoney(value: unknown, currency: unknown, signed = false) {
+  const amount = Number(value || 0);
+  const safeAmount = Number.isFinite(amount) ? amount : 0;
+  const prefix = signed && safeAmount > 0 ? "+" : "";
+  return prefix + safeAmount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }) + " " + normalizeAccountCurrency(currency);
+}
 const defaultSettings = {
   symbol: "XAUUSD",
   lot: 0.01,
@@ -367,6 +382,7 @@ export default function DashboardPage() {
   }, [logsOpen, activeView, data?.instance?.id, selectedSlotId]);
 
   const metrics = data?.instance?.metrics || {};
+  const accountCurrency = normalizeAccountCurrency(metrics.currency);
 
   useEffect(() => {
     const slotKey = String(data?.selectedSlot?.id || data?.instance?.id || "");
@@ -433,7 +449,7 @@ export default function DashboardPage() {
       heartbeatTime,
       Number(m.basketProfit || 0) >= 0 ? "MARKET" : "WARN",
       "MARKET",
-      "Floating $" + Number(m.basketProfit || 0).toFixed(2) +
+      "Floating " + formatAccountMoney(m.basketProfit, m.currency || metrics.currency, true) +
       " · Positions " + Number(m.positions || 0),
       "Spread " + (Number(m.spreadPrice || 0) > 0
         ? Number(m.spreadPrice).toFixed(Math.max(0,Math.min(8,Number(m.symbolDigits ?? 3))))
@@ -445,15 +461,15 @@ export default function DashboardPage() {
       heartbeatTime,
       "RISK",
       "RISK",
-      "Daily P/L $" + Number(m.dailyProfit || 0).toFixed(2) +
+      "Daily P/L " + formatAccountMoney(m.dailyProfit, m.currency || metrics.currency, true) +
       (Number(m.dailyProfitTarget || settings.dailyProfitTargetMoney || 0) > 0
-        ? " / Target $" + Number(m.dailyProfitTarget || settings.dailyProfitTargetMoney || 0).toFixed(2)
+        ? " / Target " + formatAccountMoney(m.dailyProfitTarget || settings.dailyProfitTargetMoney, m.currency || metrics.currency)
         : ""),
       Number(m.dailyProfitGivebackFloor || 0) > 0
-        ? "Giveback floor $" + Number(m.dailyProfitGivebackFloor).toFixed(2) +
+        ? "Giveback floor " + formatAccountMoney(m.dailyProfitGivebackFloor, m.currency || metrics.currency) +
           " · " + Number(m.dailyProfitDrawdownPercent || settings.dailyProfitDrawdownPercent || 0).toFixed(0) + "%"
         : (Number(settings.maxBasketLossMoney || 0) > 0
-            ? "Max Basket Loss $" + Number(settings.maxBasketLossMoney).toFixed(2)
+            ? "Max Basket Loss " + formatAccountMoney(settings.maxBasketLossMoney, m.currency || metrics.currency)
             : "Risk guard active")
     );
 
@@ -463,8 +479,8 @@ export default function DashboardPage() {
         "TRAIL",
         "RISK",
         "Basket Run-On · ย่อ " + Number(m.profitRunTrailPercent || settings.profitRunTrailPercent).toFixed(0) + "%",
-        "Peak $" + Number(m.profitRunPeak || 0).toFixed(2) +
-        " · Basket cycle $" + Number(m.basketCycleProfit || m.basketProfit || 0).toFixed(2)
+        "Peak " + formatAccountMoney(m.profitRunPeak, m.currency || metrics.currency, true) +
+        " · Basket cycle " + formatAccountMoney(m.basketCycleProfit || m.basketProfit, m.currency || metrics.currency, true)
       );
     }
 
@@ -2016,11 +2032,11 @@ export default function DashboardPage() {
               </section>
 
               <section className="cc-kpi-grid cc-v3-kpis cc-v6-kpis cc-v12-kpis cc-v13-kpis">
-                <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online?"$"+Number(metrics.balance||0).toFixed(2):"—"} sub="Balance" />
-                <DashboardMetric icon="equity" label="มูลค่ารวม" value={isMt5Online?"$"+Number(metrics.equity||0).toFixed(2):"—"} sub="Equity" />
-                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"+$":"-$")+Math.abs(Number(metrics.dailyProfit||0)).toFixed(2):"—"} sub="Daily P/L" tone={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"good":"bad"):"neutral"} />
+                <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online?formatAccountMoney(metrics.balance,accountCurrency):"—"} sub={"Balance · "+accountCurrency} />
+                <DashboardMetric icon="equity" label="มูลค่ารวม" value={isMt5Online?formatAccountMoney(metrics.equity,accountCurrency):"—"} sub={"Equity · "+accountCurrency} />
+                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?formatAccountMoney(metrics.dailyProfit,accountCurrency,true):"—"} sub={"Daily P/L · "+accountCurrency} tone={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"good":"bad"):"neutral"} />
                 <DashboardMetric icon="target" label="Win Rate วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.winRate||0).toFixed(1)+"%":"—"} sub={Number(todayPerformance.trades||0)>0?Number(todayPerformance.wins||0)+" / "+Number(todayPerformance.trades||0)+" Basket":"ยังไม่มี Basket ปิดวันนี้"} tone={Number(todayPerformance.trades||0)>0?(Number(todayPerformance.winRate||0)>=60?"good":Number(todayPerformance.winRate||0)>=45?"warn":"bad"):"neutral"} />
-                <DashboardMetric icon="risk" label="Drawdown วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.drawdownPercent||0).toFixed(2)+"%":"0.00%"} sub={"-$"+Number(todayPerformance.drawdownMoney||0).toFixed(2)+" Realized DD"} tone={Number(todayPerformance.drawdownPercent||0)>=5?"bad":Number(todayPerformance.drawdownPercent||0)>=2?"warn":"good"} />
+                <DashboardMetric icon="risk" label="Drawdown วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.drawdownPercent||0).toFixed(2)+"%":"0.00%"} sub={formatAccountMoney(-Math.abs(Number(todayPerformance.drawdownMoney||0)),accountCurrency)+" Realized DD"} tone={Number(todayPerformance.drawdownPercent||0)>=5?"bad":Number(todayPerformance.drawdownPercent||0)>=2?"warn":"good"} />
                 <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
               </section>
 
@@ -2073,7 +2089,7 @@ export default function DashboardPage() {
                           <span><i className={"side "+side.toLowerCase()}>{side}</i></span>
                           <span>{Number(position.volume||0).toFixed(2)}</span>
                           <span>{Number(position.openPrice||0).toFixed(Math.max(2,Math.min(5,Number(metrics.symbolDigits||3))))}</span>
-                          <span className={pnl>0?"pnl good":pnl<0?"pnl bad":"pnl"}>{pnl>0?"+$":"$"}{pnl.toFixed(2)}</span>
+                          <span className={pnl>0?"pnl good":pnl<0?"pnl bad":"pnl"}>{formatAccountMoney(pnl,accountCurrency,true)}</span>
                         </div>;
                       }) : livePositionTelemetryMissing ? (
                         <div className="empty telemetry-missing">
@@ -2105,7 +2121,7 @@ export default function DashboardPage() {
                       return <div key={mode} className={"row "+(active?"active":"")}>
                         <span className="mode"><i/>{mode}</span>
                         <span className={Number(row.trades||0)>0?(win>=60?"good":win>=45?"warn":"bad"):"neutral"}>{Number(row.trades||0)>0?win.toFixed(1)+"%":"—"}</span>
-                        <span className={dd>=5?"bad":dd>=2?"warn":"good"}>{dd.toFixed(2)+"%"}<small>{"-$"+Number(row.drawdownMoney||0).toFixed(2)}</small></span>
+                        <span className={dd>=5?"bad":dd>=2?"warn":"good"}>{dd.toFixed(2)+"%"}<small>{formatAccountMoney(-Math.abs(Number(row.drawdownMoney||0)),accountCurrency)}</small></span>
                         <span>{Number(row.trades||0)}<small>{active?(botRunning?"Active":"Selected"):"Idle"}</small></span>
                       </div>;
                     })}
@@ -2237,7 +2253,7 @@ export default function DashboardPage() {
                           <span className="symbol">{String(metrics.symbol||settings.symbol||"—")}</span>
                           <span><i className={"cc-v42-side "+side.toLowerCase()}>{side}</i></span>
                           <span>{Number(position.volume||0).toFixed(2)}</span>
-                          <span className={pnl>0?"good":pnl<0?"bad":"neutral"}>{pnl>0?"+$":"$"}{pnl.toFixed(2)}</span>
+                          <span className={pnl>0?"good":pnl<0?"bad":"neutral"}>{formatAccountMoney(pnl,accountCurrency,true)}</span>
                         </div>;
                       }) : <div className="cc-v42-empty">ยังไม่มี Position ที่เปิดอยู่</div>}
                     </div>
@@ -2245,7 +2261,7 @@ export default function DashboardPage() {
                   <div className="cc-v42-mini-stats">
                     <div><b>{currentPositions}</b><small>Positions</small></div>
                     <div><b>{openPositions.reduce((sum:number,p:any)=>sum+Number(p.volume||0),0).toFixed(2)}</b><small>Total Lot</small></div>
-                    <div><b className={Number(metrics.basketProfit||0)>=0?"good":"bad"}>{Number(metrics.basketProfit||0)>=0?"+$":"-$"}{Math.abs(Number(metrics.basketProfit||0)).toFixed(2)}</b><small>Floating P/L</small></div>
+                    <div><b className={Number(metrics.basketProfit||0)>=0?"good":"bad"}>{formatAccountMoney(metrics.basketProfit,accountCurrency,true)}</b><small>{"Floating P/L · "+accountCurrency}</small></div>
                   </div>
                 </section>
 
@@ -2290,14 +2306,14 @@ export default function DashboardPage() {
                           ? Math.max(0,Math.min(100,(Math.max(0,Number(metrics.dailyProfit||0))/Math.max(0.01,Number(settings.dailyProfitTargetMoney||0)))*100)).toFixed(0)+"%"
                           : "—"}</b>
                         <small>{Number(settings.dailyProfitTargetMoney||0)>0
-                          ? "$"+Math.max(0,Number(metrics.dailyProfit||0)).toFixed(2)+" / $"+Number(settings.dailyProfitTargetMoney||0).toFixed(2)
+                          ? formatAccountMoney(Math.max(0,Number(metrics.dailyProfit||0)),accountCurrency)+" / "+formatAccountMoney(settings.dailyProfitTargetMoney,accountCurrency)
                           : "ยังไม่ตั้งเป้า"}</small>
                       </div>
                     </div>
                     <div className="cc-v42-goal-copy">
-                      <div><span>เป้าหมายวันนี้</span><b>{Number(settings.dailyProfitTargetMoney||0)>0?"$"+Number(settings.dailyProfitTargetMoney||0).toFixed(2):"—"}</b></div>
-                      <div><span>กำไรปัจจุบัน</span><b className={Number(metrics.dailyProfit||0)>=0?"good":"bad"}>{Number(metrics.dailyProfit||0)>=0?"+$":"-$"}{Math.abs(Number(metrics.dailyProfit||0)).toFixed(2)}</b></div>
-                      <div><span>คงเหลือ</span><b>{Number(settings.dailyProfitTargetMoney||0)>0?"$"+Math.max(0,Number(settings.dailyProfitTargetMoney||0)-Math.max(0,Number(metrics.dailyProfit||0))).toFixed(2):"—"}</b></div>
+                      <div><span>เป้าหมายวันนี้</span><b>{Number(settings.dailyProfitTargetMoney||0)>0?formatAccountMoney(settings.dailyProfitTargetMoney,accountCurrency):"—"}</b></div>
+                      <div><span>กำไรปัจจุบัน</span><b className={Number(metrics.dailyProfit||0)>=0?"good":"bad"}>{formatAccountMoney(metrics.dailyProfit,accountCurrency,true)}</b></div>
+                      <div><span>คงเหลือ</span><b>{Number(settings.dailyProfitTargetMoney||0)>0?formatAccountMoney(Math.max(0,Number(settings.dailyProfitTargetMoney||0)-Math.max(0,Number(metrics.dailyProfit||0))),accountCurrency):"—"}</b></div>
                     </div>
                   </div>
                   <div className="cc-v42-goal-foot">
@@ -2664,11 +2680,11 @@ export default function DashboardPage() {
 
               <div className="cc-terminal-drawer-meta">
                 <div><span>Execution</span><b>{liveStatus.label}</b></div>
-                <div><span>Daily P/L</span><b className={Number(metrics.dailyProfit || 0)>=0 ? "text-good" : "text-bad"}>{"$"+Number(metrics.dailyProfit || 0).toFixed(2)}</b></div>
-                <div><span>Basket P/L</span><b className={Number(metrics.basketCycleProfit || metrics.basketProfit || 0)>=0 ? "text-good" : "text-bad"}>{"$"+Number(metrics.basketCycleProfit || metrics.basketProfit || 0).toFixed(2)}</b></div>
+                <div><span>Daily P/L</span><b className={Number(metrics.dailyProfit || 0)>=0 ? "text-good" : "text-bad"}>{formatAccountMoney(metrics.dailyProfit,accountCurrency,true)}</b></div>
+                <div><span>Basket P/L</span><b className={Number(metrics.basketCycleProfit || metrics.basketProfit || 0)>=0 ? "text-good" : "text-bad"}>{formatAccountMoney(metrics.basketCycleProfit || metrics.basketProfit,accountCurrency,true)}</b></div>
                 <div><span>Last order</span><b>retcode {String(metrics.lastOrderRetcode || "—")} / error {String(metrics.lastOrderError || 0)}</b></div>
                 <div><span>Adaptive Spread</span><b>{spreadStatusLabel[spreadStatus] || spreadStatus} · P95 {spreadMetricLabel(metrics.spreadP95Points)}</b></div>
-                <div><span>Spread cost</span><b>${Number(metrics.spreadCost || 0).toFixed(2)} · {Number(metrics.adaptiveLot || settings.lot).toFixed(2)} lot</b></div>
+                <div><span>Spread cost</span><b>{formatAccountMoney(metrics.spreadCost,accountCurrency)} · {Number(metrics.adaptiveLot || settings.lot).toFixed(2)} lot</b></div>
                 <div><span>Adaptive limits</span><b>{Number(metrics.adaptiveMaxPositions || settings.maxPositions)} positions · {Number(metrics.adaptiveEntrySpacingMs || settings.minOrderIntervalMs)} ms</b></div>
                 <div><span>Execution quality</span><b>{Number(metrics.executionQuality || 0).toFixed(0)}% · slip {Number(metrics.averageSlippagePoints || 0).toFixed(1)} pt</b></div>
               </div>
@@ -2868,7 +2884,7 @@ function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNo
                 <div>
                   <div className="eyebrow">{selected.source==="SAMPLE"?"SIMULATED SAMPLE":"BACKTEST REPORT"}</div>
                   <h2>{selected.title}</h2>
-                  <p>{selected.symbol+" · "+selected.timeframe+" · Lot "+Number(selected.lot||0).toFixed(2)+" · เงินเริ่มต้น $"+Number(selected.initial_deposit||0).toFixed(2)}</p>
+                  <p>{selected.symbol+" · "+selected.timeframe+" · Lot "+Number(selected.lot||0).toFixed(2)+" · เงินเริ่มต้น "+formatAccountMoney(selected.initial_deposit,selected.currency)}</p>
                 </div>
                 <div className="backtest-actions">
                   <button className="btn" onClick={downloadCsv}>ดาวน์โหลด CSV</button>
@@ -2881,7 +2897,7 @@ function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNo
               {selected.source==="SAMPLE"&&<div className="notice warn backtest-disclaimer"><b>ผลจำลองตัวอย่าง</b><span>ข้อมูลชุดนี้สร้างขึ้นเพื่อสาธิตหน้ารายงานเท่านั้น ไม่ใช่ผลการเทรดจริง</span></div>}
 
               <div className="backtest-kpis">
-                <BacktestKpi label="Net P/L" value={(Number(summary.netProfit||0)>=0?"+$":"-$")+Math.abs(Number(summary.netProfit||0)).toFixed(2)} tone={Number(summary.netProfit||0)>=0?"good":"bad"}/>
+                  <BacktestKpi label="Net P/L" value={formatAccountMoney(summary.netProfit,selected.currency,true)} tone={Number(summary.netProfit||0)>=0?"good":"bad"}/>
                 <BacktestKpi label="Return" value={Number(summary.returnPercent||0).toFixed(2)+"%"} tone={Number(summary.returnPercent||0)>=0?"good":"bad"}/>
                 <BacktestKpi label="Win Rate" value={Number(summary.winRate||0).toFixed(1)+"%"} />
                 <BacktestKpi label="Profit Factor" value={Number(summary.profitFactor||0).toFixed(2)} />
@@ -2897,7 +2913,7 @@ function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNo
               </div>
 
               <div className="backtest-chart-card">
-                <div className="backtest-chart-head"><div><b>Equity Curve</b><small>การเปลี่ยนแปลง Balance หลังแต่ละรายการ</small></div><strong>{"$"+Number(summary.finalBalance||0).toFixed(2)}</strong></div>
+                  <div className="backtest-chart-head"><div><b>Equity Curve</b><small>การเปลี่ยนแปลง Balance หลังแต่ละรายการ</small></div><strong>{formatAccountMoney(summary.finalBalance,selected.currency)}</strong></div>
                 <BacktestEquityChart points={equity}/>
               </div>
 
@@ -2918,8 +2934,8 @@ function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNo
                     <span>{Number(trade.volume||0).toFixed(2)}</span>
                     <span>{Number(trade.open_price||0).toFixed(3)}</span>
                     <span>{Number(trade.close_price||0).toFixed(3)}</span>
-                    <span className={Number(trade.profit||0)>=0?"text-good":"text-bad"}>{Number(trade.profit||0)>=0?"+$":"-$"}{Math.abs(Number(trade.profit||0)).toFixed(2)}</span>
-                    <span>{"$"+Number(trade.balance_after||0).toFixed(2)}</span>
+                          <span className={Number(trade.profit||0)>=0?"text-good":"text-bad"}>{formatAccountMoney(trade.profit,selected.currency,true)}</span>
+                          <span>{formatAccountMoney(trade.balance_after,selected.currency)}</span>
                   </div>
                 ))}
               </div>
@@ -3006,7 +3022,7 @@ function LiveTerminalPanel(props:any) {
                     <span><b>{Number(position.openPrice||0).toFixed(props.symbolDigits)}</b></span>
                     <span><b>{Number(position.currentPrice||0).toFixed(props.symbolDigits)}</b></span>
                     <span><b>{Number(position.sl||0)>0?Number(position.sl).toFixed(props.symbolDigits):"ไม่มี"}</b><small>{Number(position.slDistancePoints||0)>0?Number(position.slDistancePoints).toFixed(0)+" pt ถึง SL":""}</small></span>
-                    <span><b className={Number(position.profit||0)>=0?"text-good":"text-bad"}>{Number(position.profit||0)>=0?"+$":"-$"}{Math.abs(Number(position.profit||0)).toFixed(2)}</b></span>
+                    <span><b className={Number(position.profit||0)>=0?"text-good":"text-bad"}>{formatAccountMoney(position.profit,props.currency,true)}</b></span>
                     <span><b className={Number(position.movePoints||0)>=0?"text-good":"text-bad"}>{Number(position.movePoints||0)>=0?"+":""}{Number(position.movePoints||0).toFixed(0)} pt</b></span>
                   </div>
                 ))}
@@ -3264,6 +3280,7 @@ function EmptySetup({onNext}:{onNext:()=>void}) {
 
 function BotSettingsModal(props:any) {
   const [revealedManualRisk,setRevealedManualRisk] = useState<Record<string,boolean>>({});
+  const accountCurrency = normalizeAccountCurrency(props.metrics?.currency);
   if (!props.open && !props.embedded) return null;
   const embedded = Boolean(props.embedded);
   const tradingSymbol = String(
@@ -3415,16 +3432,16 @@ function BotSettingsModal(props:any) {
     ? "Trailing SL จากราคา MT5 โดยตรง"
     : controlMode === "RACE"
       ? (raceProfitTargetMode === "POSITION"
-          ? "ปิดแต่ละไม้ที่ +"+racePerPositionProfitMoney.toFixed(2)+" เงินบัญชี"
+          ? "ปิดแต่ละไม้ที่ "+formatAccountMoney(racePerPositionProfitMoney,accountCurrency,true)
           : raceProfitTargetMode === "BASKET"
-            ? "ปิดทั้งชุดที่ +"+raceCloseAllProfitMoney.toFixed(2)+" เงินบัญชี"
+            ? "ปิดทั้งชุดที่ "+formatAccountMoney(raceCloseAllProfitMoney,accountCurrency,true)
             : "ไม่ได้ตั้งเป้ากำไร RACE")
       : controlMode === "AUTO"
         ? (Number(props.settings.autoProfitTargetMoney||0) > 0
-            ? "$"+Number(props.settings.autoProfitTargetMoney||0).toFixed(2)+" ทั้งชุด · ถึงแล้วปิดทันที"
+            ? formatAccountMoney(props.settings.autoProfitTargetMoney,accountCurrency)+" ทั้งชุด · ถึงแล้วปิดทันที"
             : "ยังไม่ได้ตั้งเป้ากำไร")
         : controlMode === "MANUAL"
-          ? (profitKind === "POSITION" ? "$"+Number(props.settings.manualPerPositionProfitMoney||0).toFixed(2)+" ต่อไม้" : "$"+Number(props.settings.manualBasketProfitTargetMoney||0).toFixed(2)+" ทั้งชุด · ถึงแล้วปิดทันที")
+          ? (profitKind === "POSITION" ? formatAccountMoney(props.settings.manualPerPositionProfitMoney,accountCurrency)+" ต่อไม้" : formatAccountMoney(props.settings.manualBasketProfitTargetMoney,accountCurrency)+" ทั้งชุด · ถึงแล้วปิดทันที")
           : "—";
   const slLabel = controlMode === "FLIP_LOCK"
     ? "Safety Stop ก่อน · ยก SL เมื่อ Broker ล็อกกำไรได้"
@@ -3525,7 +3542,7 @@ function BotSettingsModal(props:any) {
                       : <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><select className="input" value={String(Number(props.settings.zeroGridStepPrice) === 2 ? 2 : 3)} onChange={e=>props.onEdit?.("zeroGridStepPrice",e.target.value)}><option value="2">2.00</option><option value="3">3.00</option></select></label>}
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนคำสั่งรอต่อฝั่ง</span><select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>{zeroGridLowVolatilityEnabled?"Lot คงที่ต่อระดับ":"Lot เริ่มต้น"}</span><NumberInput value={props.settings.zeroGridBaseLot || 0.01} suffix="Lot" onCommit={(v:string)=>props.onEdit?.("zeroGridBaseLot",v)}/></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไรสุทธิ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไรสุทธิ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
                   </> : <>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ</option><option value="BUY_ONLY">BUY</option><option value="SELL_ONLY">SELL</option></select></label>
                     {controlMode!=="FLIP_LOCK"&&<label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</span><select className="input" value={String(activeMaxPositions)} onChange={e=>editModeSizing("max",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>}
@@ -3552,9 +3569,9 @@ function BotSettingsModal(props:any) {
                       <button type="button" className={raceProfitTargetMode==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("raceProfitTargetMode","POSITION");props.onEdit?.("raceCloseAllProfitEnabled",false)}}><ScenovaIcon name="orders" size={16}/><span><b>ต่อไม้</b></span></button>
                     </div>
                   </div>
-                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{raceProfitTargetMode==="POSITION"?"เป้ากำไร RACE ต่อไม้":"เป้ากำไร RACE ทั้งชุด"}</span><MoneyInput value={raceProfitTargetMode==="POSITION"?racePerPositionProfitMoney:raceCloseAllProfitMoney} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(raceProfitTargetMode==="POSITION"?"racePerPositionProfitMoney":"raceCloseAllProfitMoney",v)}/><small>ใช้เฉพาะ RACE · ถึงเป้าที่เลือกแล้วจึงปิดกำไร</small></label>
+                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{raceProfitTargetMode==="POSITION"?"เป้ากำไร RACE ต่อไม้":"เป้ากำไร RACE ทั้งชุด"}</span><MoneyInput value={raceProfitTargetMode==="POSITION"?racePerPositionProfitMoney:raceCloseAllProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(raceProfitTargetMode==="POSITION"?"racePerPositionProfitMoney":"raceCloseAllProfitMoney",v)}/><small>ใช้เฉพาะ RACE · ถึงเป้าที่เลือกแล้วจึงปิดกำไร</small></label>
                 </div> : controlMode==="AUTO" ? <div className="cc-bot-v2-fields exit-fields">
-                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไร AUTO</span><MoneyInput value={props.settings.autoProfitTargetMoney || 0} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("autoProfitTargetMoney",v)}/><small>ใช้เฉพาะ AUTO · ถึงแล้วปิด Basket ทันที</small></label>
+                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไร AUTO</span><MoneyInput value={props.settings.autoProfitTargetMoney || 0} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("autoProfitTargetMoney",v)}/><small>ใช้เฉพาะ AUTO · ถึงแล้วปิด Basket ทันที</small></label>
                   <div className="cc-bot-v2-engine-line"><ScenovaIcon name="target" size={16}/><b>Hard Profit Target</b><span>ถึงจำนวนเงินที่ตั้งไว้แล้วปิดทั้งชุดทันที ไม่รอ Reversal / Giveback / EMA</span></div>
                 </div> : <div className="cc-bot-v2-fields exit-fields">
                   <div className="cc-bot-v2-field cc-bot-profit-kind-field">
@@ -3564,7 +3581,7 @@ function BotSettingsModal(props:any) {
                       <button type="button" className={profitKind==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("manualPerPositionProfitMoney",Number(props.settings.manualPerPositionProfitMoney||2));props.onEdit?.("manualBasketProfitTargetMoney",0)}}><ScenovaIcon name="orders" size={16}/><span><b>ต่อไม้</b></span></button>
                     </div>
                   </div>
-                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{profitKind==="BASKET"?"เป้ากำไร MANUAL ทั้งชุด":"เป้ากำไร MANUAL ต่อไม้"}</span><MoneyInput value={profitKind==="BASKET"?props.settings.manualBasketProfitTargetMoney:props.settings.manualPerPositionProfitMoney} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(profitKind==="BASKET"?"manualBasketProfitTargetMoney":"manualPerPositionProfitMoney",v)}/><small>ใช้เฉพาะ MANUAL · ไม่เปลี่ยนค่า AUTO/RACE/ZERO</small></label>
+                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{profitKind==="BASKET"?"เป้ากำไร MANUAL ทั้งชุด":"เป้ากำไร MANUAL ต่อไม้"}</span><MoneyInput value={profitKind==="BASKET"?props.settings.manualBasketProfitTargetMoney:props.settings.manualPerPositionProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(profitKind==="BASKET"?"manualBasketProfitTargetMoney":"manualPerPositionProfitMoney",v)}/><small>ใช้เฉพาะ MANUAL · ไม่เปลี่ยนค่า AUTO/RACE/ZERO</small></label>
                   <div className="cc-bot-v2-field">
                     <span><ScenovaIcon name="shield" size={17}/>Stop Loss</span>
                     <ToggleNumberField alwaysShowInput label="เปิด" defaultValue={suggestedManualSl} value={props.settings.manualStopLossPoints} suffix="points" onChange={(v:string)=>updateOptionalValue("manualStopLossPoints",v)}/><small>ปิด = ไม่มี Broker Stop Loss · เปิด = ใช้ระยะ points ที่ตั้งไว้ตรง ๆ</small>
@@ -3577,9 +3594,9 @@ function BotSettingsModal(props:any) {
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>04</span><div><b>Risk Controls</b></div></div>
                 <div className="cc-bot-v2-limit-grid">
-                  {(controlMode!=="MANUAL" || riskValue(riskProfile.basket,"maxBasketLossMoney")>0 || revealedManualRisk[riskProfile.basket])&&<div><div><ScenovaIcon name="risk" size={18}/><span><b>ขาดทุนสูงสุดต่อรอบ</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.basket,"maxBasketLossMoney")} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.basket,"maxBasketLossMoney",v)}/></div>}
-                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyLoss,"dailyLossMoney")>0 || revealedManualRisk[riskProfile.dailyLoss])&&<div><div><ScenovaIcon name="pnl" size={18}/><span><b>ขาดทุนสูงสุดต่อวัน</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="25" value={riskValue(riskProfile.dailyLoss,"dailyLossMoney")} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyLoss,"dailyLossMoney",v)}/></div>}
-                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")>0 || revealedManualRisk[riskProfile.dailyProfit])&&<div><div><ScenovaIcon name="target" size={18}/><span><b>เป้ากำไรต่อวัน</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney",v)}/></div>}
+                  {(controlMode!=="MANUAL" || riskValue(riskProfile.basket,"maxBasketLossMoney")>0 || revealedManualRisk[riskProfile.basket])&&<div><div><ScenovaIcon name="risk" size={18}/><span><b>ขาดทุนสูงสุดต่อรอบ</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.basket,"maxBasketLossMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.basket,"maxBasketLossMoney",v)}/></div>}
+                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyLoss,"dailyLossMoney")>0 || revealedManualRisk[riskProfile.dailyLoss])&&<div><div><ScenovaIcon name="pnl" size={18}/><span><b>ขาดทุนสูงสุดต่อวัน</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="25" value={riskValue(riskProfile.dailyLoss,"dailyLossMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyLoss,"dailyLossMoney",v)}/></div>}
+                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")>0 || revealedManualRisk[riskProfile.dailyProfit])&&<div><div><ScenovaIcon name="target" size={18}/><span><b>เป้ากำไรต่อวัน</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney",v)}/></div>}
                   {controlMode==="MANUAL"&&(
                     (riskValue(riskProfile.basket,"maxBasketLossMoney")<=0&&!revealedManualRisk[riskProfile.basket]) ||
                     (riskValue(riskProfile.dailyLoss,"dailyLossMoney")<=0&&!revealedManualRisk[riskProfile.dailyLoss]) ||
@@ -3598,7 +3615,7 @@ function BotSettingsModal(props:any) {
                 <div><dt>คำสั่งรอ</dt><dd>{Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} BUY + {Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} SELL</dd></div>
                 <div><dt>ระยะห่างกริด</dt><dd>{zeroGridLowVolatilityEnabled?"0.30":(Number(props.settings.zeroGridStepPrice) === 2 ? "2.00" : "3.00")}</dd></div>
                 <div><dt>{zeroGridLowVolatilityEnabled?"Lot คงที่":"Lot เริ่มต้น"}</dt><dd>{Number(props.settings.zeroGridBaseLot||0.01).toFixed(2)} Lot</dd></div>
-                <div><dt>เป้ากำไรสุทธิ</dt><dd>${Number(props.settings.zeroGridMinNetProfitMoney||0.5).toFixed(2)} · ถึงแล้วปิดทันที</dd></div>
+                <div><dt>เป้ากำไรสุทธิ</dt><dd>{formatAccountMoney(props.settings.zeroGridMinNetProfitMoney||0.5,accountCurrency)} · ถึงแล้วปิดทันที</dd></div>
               </dl> : (
               <dl>
                 <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>
@@ -3668,6 +3685,7 @@ function SelectField(props: any) {
 
 function MoneyInput(props: any) {
   const externalValue = String(props.value ?? "");
+  const currency = normalizeAccountCurrency(props.currency);
   const [draft, setDraft] = useState(externalValue);
 
   useEffect(() => {
@@ -3688,7 +3706,7 @@ function MoneyInput(props: any) {
 
   return (
     <div className={"money-input-shell " + (props.disabled ? "disabled" : "")}>
-      <span className="money-prefix">$</span>
+      <span className="money-prefix">{currency}</span>
       <input
         className="input money-input"
         type="text"
@@ -3820,6 +3838,7 @@ function ToggleMoneyField(props: any) {
         <MoneyInput
           value={selectedValue}
           disabled={!enabled || Boolean(props.disabled)}
+          currency={props.currency}
           suffix={props.suffix}
           ariaLabel={props.label}
           onCommit={(value:string)=>props.onChange?.(value)}
@@ -3892,7 +3911,7 @@ function ProfitTargetModeField(props:any) {
       </div>
       {mode==="AUTO"&&<div className="auto-profit-live">
         <span><i/>Auto กำลังดูแลกำไร</span>
-        <b>{"รอบนี้ $"+Number(props.cycleProfit||0).toFixed(2)+" · สูงสุด $"+Number(props.peakProfit||0).toFixed(2)}</b>
+        <b>{"รอบนี้ "+formatAccountMoney(props.cycleProfit,props.currency,true)+" · สูงสุด "+formatAccountMoney(props.peakProfit,props.currency,true)}</b>
         <small>ระบบจะปิดเฉพาะตอนกำไรรวมยังเป็นบวกและเหลือมากกว่าค่าเผื่อปิดออเดอร์</small>
       </div>}
       {mode==="OFF"&&<div className="auto-profit-off-note">ปิดเฉพาะระบบทำกำไรอัตโนมัติ — Stop Loss และตัวควบคุมขาดทุนยังทำงานตามเดิม</div>}
@@ -4006,6 +4025,7 @@ function BasketProfitTargetField(props: any) {
       {enabled&&<div className="daily-profit-main-row basket-profit-main-row">
         <MoneyInput
           value={targetValue}
+          currency={props.currency}
           suffix="กำไรรวมทั้ง Basket"
           ariaLabel="เป้ากำไรรวมทั้งชุด"
           onCommit={(value:string)=>props.onTargetChange?.(value)}
@@ -4032,10 +4052,10 @@ function BasketProfitTargetField(props: any) {
 
       {enabled&&<div className="basket-profit-explain">
         {trailEnabled
-          ? <><b>Profit Run เปิดอยู่:</b> <b>{"$"+targetValue}</b> คือจุดเริ่มปล่อยกำไรวิ่ง ไม่ใช่จุดปิด · EA จะปิดเมื่อกำไรย่อลงตามเปอร์เซ็นต์ที่เลือก</>
-          : <>ถึงกำไรรวม <b>{"$"+targetValue}</b> → ปิดทุกออเดอร์ในชุดทันที</>}
+          ? <><b>Profit Run เปิดอยู่:</b> <b>{formatAccountMoney(targetValue,props.currency)}</b> คือจุดเริ่มปล่อยกำไรวิ่ง ไม่ใช่จุดปิด · EA จะปิดเมื่อกำไรย่อลงตามเปอร์เซ็นต์ที่เลือก</>
+          : <>ถึงกำไรรวม <b>{formatAccountMoney(targetValue,props.currency)}</b> → ปิดทุกออเดอร์ในชุดทันที</>}
         <br/>
-        <small>{"EA ใช้ Basket Cycle P/L ของรอบเทรด · ตอนนี้ $"+Number(props.currentCycleProfit||0).toFixed(2)}</small>
+        <small>{"EA ใช้ Basket Cycle P/L ของรอบเทรด · ตอนนี้ "+formatAccountMoney(props.currentCycleProfit,props.currency,true)}</small>
       </div>}
     </div>
   );
@@ -4082,7 +4102,7 @@ function DailyProfitTargetField(props: any) {
           onChange={e=>props.onTargetChange?.(e.target.value)}
         >
           {targetValues.map((value:string)=>(
-            <option key={value} value={value}>${value}</option>
+            <option key={value} value={value}>{formatAccountMoney(value,props.currency)}</option>
           ))}
         </select>
 
