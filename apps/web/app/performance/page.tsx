@@ -292,13 +292,44 @@ export default function PerformanceDashboardPage() {
     await navigator.clipboard.writeText(window.location.origin+shareResult.path);
   }
 
+  async function clearOwnPerformanceData(){
+    const token=window.prompt(
+      "คำสั่งนี้จะล้าง Trade Journal, Backtest และลิงก์ Performance ของบัญชีผู้ใช้ของคุณทั้งหมด\\n\\nบัญชี MT5, Settings และ Subscription จะไม่ถูกลบ\\n\\nพิมพ์ CLEAR เพื่อยืนยัน"
+    );
+    if(token!=="CLEAR") return;
+    if(!window.confirm("ยืนยันล้างข้อมูล Performance ของคุณทั้งหมดตอนนี้หรือไม่?")) return;
+    setLoading(true);
+    try{
+      const result=await api("/performance-actions/clear-own-data",{
+        method:"POST",
+        body:JSON.stringify({confirm:"CLEAR"})
+      });
+      setReport(null);
+      setBacktest(null);
+      setSelectedBacktestId("");
+      setShareResult(null);
+      setError("");
+      await loadOptions();
+      if(accountId) await refresh(accountId,mode);
+      window.alert(
+        "ล้างข้อมูลของคุณสำเร็จ\\nTrade Journal: "+String(result?.deleted?.tradeJournal||0)+
+        "\\nBacktest: "+String(result?.deleted?.backtestRuns||0)+
+        "\\nShare links: "+String(result?.deleted?.performanceShares||0)
+      );
+    }catch(e:any){
+      setError(String(e?.message||"ล้างข้อมูลของคุณไม่สำเร็จ"));
+    }finally{
+      setLoading(false);
+    }
+  }
+
   async function clearAllPerformanceData(){
     if(!options?.elevated) return;
     const token=window.prompt(
-      "คำสั่งนี้จะล้าง Trade Journal, Backtest และลิงก์ Performance ที่เป็นข้อมูลทดสอบทั้งหมด\n\nบัญชี MT5, Settings และ Subscription จะไม่ถูกลบ\n\nพิมพ์ RESET เพื่อยืนยัน"
+      "คำสั่งนี้จะล้าง Trade Journal, Backtest และลิงก์ Performance ของผู้ใช้ทุกคนทั้งระบบ\n\nบัญชี MT5, Settings และ Subscription จะไม่ถูกลบ\n\nพิมพ์ RESET เพื่อยืนยัน"
     );
     if(token!=="RESET") return;
-    if(!window.confirm("ยืนยันล้างข้อมูล Performance ทั้งหมดตอนนี้หรือไม่?")) return;
+    if(!window.confirm("ยืนยันล้างข้อมูล Performance ทั้งระบบตอนนี้หรือไม่?")) return;
     setLoading(true);
     try{
       const result=await api("/performance-actions/reset-test-data",{
@@ -370,7 +401,8 @@ export default function PerformanceDashboardPage() {
               <div className={styles.toolbarActions}>
                 {mode==="LIVE"?<button type="button" className={styles.shareButton} onClick={createShare} disabled={sharing||!Number(summary.trades||0)}><ScenovaIcon name="share" size={14}/>{sharing?"กำลังสร้าง...":"แชร์ Read-only"}</button>:null}
                 {shareResult?.path&&mode==="LIVE"?<><input className={styles.shareInput} readOnly value={window.location.origin+shareResult.path}/><button type="button" className={styles.minorButton} onClick={copyShare}>คัดลอก</button><a className={styles.minorButton} href={shareResult.path} target="_blank" rel="noreferrer">เปิด</a></>:null}
-                {options?.elevated?<button type="button" className={styles.clearButton} onClick={clearAllPerformanceData} disabled={loading}><ScenovaIcon name="delete" size={14}/>ล้างข้อมูลทดสอบ</button>:null}
+                <button type="button" className={styles.clearOwnButton} onClick={clearOwnPerformanceData} disabled={loading}><ScenovaIcon name="delete" size={14}/>ล้างข้อมูลของฉัน</button>
+                {options?.elevated?<button type="button" className={styles.clearButton} onClick={clearAllPerformanceData} disabled={loading}><ScenovaIcon name="delete" size={14}/>ล้างข้อมูลทั้งระบบ</button>:null}
               </div>
             </div>
 
