@@ -23,10 +23,10 @@ function isoDate(date: Date) {
 
 function currencyCode(value: any) {
   const code = String(value || "").trim().toUpperCase();
-  return code || "USD";
+  return code || "UNKNOWN";
 }
 
-function money(value: any, signed = false, currency: any = "USD") {
+function money(value: any, signed = false, currency: any = "UNKNOWN") {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
   const sign = signed && n > 0 ? "+" : "";
