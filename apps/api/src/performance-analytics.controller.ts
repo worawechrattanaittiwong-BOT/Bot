@@ -446,10 +446,7 @@ export class PerformanceAnalyticsController {
          COUNT(DISTINCT a.id) FILTER (WHERE bi.last_seen_at>now()-interval '35 seconds')::int AS online_accounts,
          COUNT(tj.id)::int AS trades,
          COUNT(tj.id) FILTER (WHERE tj.net_profit>0)::int AS wins,
-         COUNT(tj.id) FILTER (WHERE tj.net_profit<0)::int AS losses,
-         COALESCE(SUM(tj.net_profit),0)::float8 AS net_profit,
-         COALESCE(SUM(tj.net_profit) FILTER (WHERE tj.net_profit>0),0)::float8 AS gross_profit,
-         COALESCE(ABS(SUM(tj.net_profit) FILTER (WHERE tj.net_profit<0)),0)::float8 AS gross_loss
+         COUNT(tj.id) FILTER (WHERE tj.net_profit<0)::int AS losses
        FROM users u
        LEFT JOIN mt5_accounts a ON a.user_id=u.id
        LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
@@ -560,8 +557,6 @@ export class PerformanceAnalyticsController {
     const curve = singleCurrency ? (curveMap.get(singleCurrency.currency) || []) : [];
     const trades = Number(kpis?.trades || 0);
     const wins = Number(kpis?.wins || 0);
-    const grossProfit = Number(kpis?.gross_profit || 0);
-    const grossLoss = Number(kpis?.gross_loss || 0);
     const profitableAccounts = accounts.rows.filter((row: any) => Number(row.net_profit || 0) > 0).length;
 
     return {
