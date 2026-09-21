@@ -8,7 +8,7 @@ import { ScenovaBrand } from "../../../components/ScenovaBrand";
 
 function money(value:any,currency:any,signed=false){
   const n=Number(value||0);
-  const code=String(currency||"USD").trim().toUpperCase()||"USD";
+  const code=String(currency||"UNKNOWN").trim().toUpperCase()||"UNKNOWN";
   const sign=signed&&n>0?"+":"";
   return sign+n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+" "+code;
 }
@@ -35,7 +35,7 @@ export default function PublicPerformancePage() {
 
   const summary=data.summary||{};
   const points=Array.isArray(data.equity_curve)?data.equity_curve:[];
-  const currency=String(data.currency||"USD").trim().toUpperCase()||"USD";
+  const currency=String(data.currency||"UNKNOWN").trim().toUpperCase()||"UNKNOWN";
   return (
     <main className="performance-public-shell">
       <header className="performance-public-head">
