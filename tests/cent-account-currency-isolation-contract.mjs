@@ -181,9 +181,11 @@ for (const [name, source] of [
 }
 
 must(
-  performance.includes("currencySummaries") &&
-  performance.includes("หลายสกุลเงินจะแยกยอด"),
-  "System Performance UI must not combine unlike currencies into one monetary total"
+  performance.includes("ownAccounts") &&
+  performance.includes("account.userId===options?.user?.id") &&
+  !performance.includes("ภาพรวมทั้งระบบ") &&
+  !performance.includes("รายลูกค้า / รายบัญชี"),
+  "Trading Performance UI must stay own-account scoped so unlike currencies are never combined across customers"
 );
 
 console.log("Cent/Standard account currency isolation contract: OK");
