@@ -405,6 +405,27 @@ export class EaController {
     const eaIp = this.clientIp(req);
     const metrics = body.metrics || {};
 
+    // Active local execution intentionally suppresses heavy telemetry in the EA.
+    // Runtime identity is NOT optional, but older 1.0.53 builds placed
+    // runtimeContract inside the suppressed diagnostics block. Preserve the last
+    // verified contract only for that explicit suppression path and only while
+    // the same EA version is reporting. As soon as the account is flat, a normal
+    // heartbeat must report the contract again or the update gate will fail.
+    const incomingEaVersion = String(metrics.eaVersion || "").trim();
+    const previousEaVersion = String(instance.metrics?.eaVersion || "").trim();
+    const previousRuntimeContract = String(instance.metrics?.runtimeContract || "").trim();
+    const incomingRuntimeContract = String(metrics.runtimeContract || "").trim();
+    if (
+      metrics.livePriceTelemetrySuppressed === true &&
+      !incomingRuntimeContract &&
+      previousRuntimeContract &&
+      incomingEaVersion &&
+      previousEaVersion &&
+      isEaVersionExact(incomingEaVersion, previousEaVersion)
+    ) {
+      metrics.runtimeContract = previousRuntimeContract;
+    }
+
     // Device/Agent metadata is not a trading permission. The authenticated
     // instance token, live MT5 identity and Server entitlement are authoritative.
     const reportedAccount = String(metrics.accountNumber || "").trim();
