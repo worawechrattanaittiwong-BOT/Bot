@@ -16,7 +16,6 @@ foreach ($required in @(
 }
 
 foreach ($required in @(
-  'DATE SELECTABLE',
   'publicShare(',
   'availableRange',
   'detailedExits',
