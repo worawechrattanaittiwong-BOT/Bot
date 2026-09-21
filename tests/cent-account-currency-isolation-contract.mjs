@@ -39,6 +39,12 @@ must(
 );
 
 must(
+  dashboard.includes("currencyReviewRequired") &&
+  dashboard.includes("ตรวจหน่วยเงินก่อนเริ่มบอท"),
+  "Dashboard must visibly explain the currency review gate before Start"
+);
+
+must(
   !dashboard.includes('money-prefix">$') &&
   !dashboard.includes('"+$') &&
   !dashboard.includes('"$"+'),
