@@ -34,9 +34,9 @@ export class PerformanceAnalyticsController {
 
   private range(fromRaw = "", toRaw = "") {
     const now = new Date();
-    const to = toRaw ? new Date(toRaw + (toRaw.length <= 10 ? "T23:59:59.999Z" : "")) : now;
+    const to = toRaw ? new Date(toRaw + (toRaw.length <= 10 ? "T23:59:59.999+07:00" : "")) : now;
     const from = fromRaw
-      ? new Date(fromRaw + (fromRaw.length <= 10 ? "T00:00:00.000Z" : ""))
+      ? new Date(fromRaw + (fromRaw.length <= 10 ? "T00:00:00.000+07:00" : ""))
       : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
     if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from > to) {
       throw new BadRequestException("invalid performance date range");
@@ -260,6 +260,44 @@ export class PerformanceAnalyticsController {
       ? Number((currentBalance - Number(pnlSinceFrom?.net || 0)).toFixed(2))
       : null;
     const computed = this.summarize(baskets, derivedStart);
+
+    const curveExits = await this.db.query(
+      `SELECT net_profit::float8 AS net_profit,created_at
+       FROM trade_journal
+       WHERE mt5_account_id=$1
+         AND event_type='EXIT'
+         AND lower(COALESCE(metadata->>'executedByBot','true')) <> 'false'
+         AND created_at >= $2
+         AND created_at <= $3
+       ORDER BY created_at ASC,id ASC
+       LIMIT 20000`,
+      [account.id, from.toISOString(), to.toISOString()]
+    );
+    if (derivedStart !== null && curveExits.rows.length > 0) {
+      let curveBalance = derivedStart;
+      let curvePeak = curveBalance;
+      let curveMaxDdMoney = 0;
+      let curveMaxDdPercent = 0;
+      computed.curve = curveExits.rows.map((row:any) => {
+        curveBalance += Number(row.net_profit || 0);
+        curvePeak = Math.max(curvePeak, curveBalance);
+        const ddMoney = Math.max(0, curvePeak - curveBalance);
+        const ddPercent = curvePeak > 0 ? ddMoney / curvePeak * 100 : 0;
+        curveMaxDdMoney = Math.max(curveMaxDdMoney, ddMoney);
+        curveMaxDdPercent = Math.max(curveMaxDdPercent, ddPercent);
+        return {
+          time: row.created_at,
+          balance: Number(curveBalance.toFixed(2)),
+          equity: Number(curveBalance.toFixed(2)),
+          drawdownPercent: Number(ddPercent.toFixed(3))
+        };
+      });
+      computed.summary.maxDrawdownMoney = Number(curveMaxDdMoney.toFixed(2));
+      computed.summary.maxDrawdownPercent = Number(curveMaxDdPercent.toFixed(2));
+      computed.summary.recoveryFactor = curveMaxDdMoney > 0
+        ? Number((computed.summary.netProfit / curveMaxDdMoney).toFixed(2))
+        : computed.summary.netProfit > 0 ? 999 : null;
+    }
 
     const exits = await this.db.query(
       `SELECT

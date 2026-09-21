@@ -33,9 +33,9 @@ export class PerformanceActionsController {
 
   private parseRange(fromRaw = "", toRaw = "") {
     const now = new Date();
-    const to = toRaw ? new Date(toRaw + (toRaw.length <= 10 ? "T23:59:59.999Z" : "")) : now;
+    const to = toRaw ? new Date(toRaw + (toRaw.length <= 10 ? "T23:59:59.999+07:00" : "")) : now;
     const from = fromRaw
-      ? new Date(fromRaw + (fromRaw.length <= 10 ? "T00:00:00.000Z" : ""))
+      ? new Date(fromRaw + (fromRaw.length <= 10 ? "T00:00:00.000+07:00" : ""))
       : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
     if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from > to) {
       throw new BadRequestException("invalid performance date range");
@@ -378,17 +378,284 @@ export class PerformanceActionsController {
 export class SharedPerformanceController {
   constructor(private readonly db: DbService) {}
 
+  private parsePublicRange(fromRaw: string, toRaw: string, fallbackFrom: string, fallbackTo: string) {
+    const fromText = String(fromRaw || "").trim();
+    const toText = String(toRaw || "").trim();
+    const from = fromText
+      ? new Date(fromText + (fromText.length <= 10 ? "T00:00:00.000+07:00" : ""))
+      : new Date(fallbackFrom);
+    const to = toText
+      ? new Date(toText + (toText.length <= 10 ? "T23:59:59.999+07:00" : ""))
+      : new Date(fallbackTo);
+    if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from > to) {
+      throw new BadRequestException("invalid performance date range");
+    }
+    if (to.getTime() - from.getTime() > 730 * 24 * 60 * 60 * 1000) {
+      throw new BadRequestException("performance range cannot exceed 730 days");
+    }
+    return { from, to };
+  }
+
+  private summarize(rows: BasketRow[], startBalance: number | null) {
+    const values = rows.map((row) => Number(row.net_profit || 0));
+    const wins = values.filter((value) => value > 0).length;
+    const losses = values.filter((value) => value < 0).length;
+    const breakeven = values.length - wins - losses;
+    const grossProfit = values.reduce((sum, value) => sum + Math.max(0, value), 0);
+    const grossLoss = values.reduce((sum, value) => sum + Math.abs(Math.min(0, value)), 0);
+    const netProfit = grossProfit - grossLoss;
+    const decided = wins + losses;
+    let running = startBalance ?? 0;
+    let peak = running;
+    let maxDrawdownMoney = 0;
+    let maxDrawdownPercent = 0;
+    const curve: Array<{ time:string; balance:number; equity:number; drawdownPercent:number }> = [];
+    for (const row of rows) {
+      running += Number(row.net_profit || 0);
+      peak = Math.max(peak, running);
+      const ddMoney = Math.max(0, peak - running);
+      const ddPercent = peak > 0 ? ddMoney / peak * 100 : 0;
+      maxDrawdownMoney = Math.max(maxDrawdownMoney, ddMoney);
+      maxDrawdownPercent = Math.max(maxDrawdownPercent, ddPercent);
+      curve.push({
+        time: row.created_at,
+        balance: Number(running.toFixed(2)),
+        equity: Number(running.toFixed(2)),
+        drawdownPercent: Number(ddPercent.toFixed(3))
+      });
+    }
+    return {
+      summary: {
+        trades: rows.length,
+        closedTrades: rows.length,
+        wins,
+        losses,
+        breakeven,
+        winRate: decided > 0 ? Number((wins / decided * 100).toFixed(2)) : 0,
+        netProfit: Number(netProfit.toFixed(2)),
+        grossProfit: Number(grossProfit.toFixed(2)),
+        grossLoss: Number(grossLoss.toFixed(2)),
+        profitFactor: grossLoss > 0 ? Number((grossProfit / grossLoss).toFixed(3)) : grossProfit > 0 ? 999 : 0,
+        maxDrawdownMoney: Number(maxDrawdownMoney.toFixed(2)),
+        maxDrawdownPercent: startBalance !== null ? Number(maxDrawdownPercent.toFixed(2)) : null,
+        recoveryFactor: maxDrawdownMoney > 0 ? Number((netProfit / maxDrawdownMoney).toFixed(2)) : null,
+        initialDeposit: startBalance === null ? null : Number(startBalance.toFixed(2)),
+        finalBalance: Number(running.toFixed(2)),
+        returnPercent: startBalance && startBalance > 0
+          ? Number(((running - startBalance) / startBalance * 100).toFixed(2))
+          : null
+      },
+      curve
+    };
+  }
+
   @Get(":slug")
-  @Header("Cache-Control", "public, max-age=60")
-  async publicShare(@Param("slug") slug: string) {
+  @Header("Cache-Control", "public, max-age=15")
+  async publicShare(
+    @Param("slug") slug: string,
+    @Query("from") fromRaw = "",
+    @Query("to") toRaw = ""
+  ) {
     const row = await this.db.one(
-      `SELECT id,title,public_slug,from_at,to_at,snapshot,created_at
+      `SELECT id,title,public_slug,from_at,to_at,snapshot,created_at,mt5_account_id
        FROM performance_shares
        WHERE public_slug=$1 AND is_active=true
        LIMIT 1`,
       [slug]
     );
     if (!row) throw new BadRequestException("public performance report not found");
-    return row;
+
+    const frozen = row.snapshot || {};
+    if (!row.mt5_account_id) {
+      return {
+        ...row,
+        dynamic: false,
+        defaultRange: { from: row.from_at, to: row.to_at },
+        availableRange: { from: row.from_at, to: row.to_at }
+      };
+    }
+
+    const account = await this.db.one(
+      `SELECT a.id,a.account_number,a.broker,a.broker_server,a.mode,
+              bi.metrics,bi.last_seen_at
+       FROM mt5_accounts a
+       LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
+       WHERE a.id=$1
+       LIMIT 1`,
+      [row.mt5_account_id]
+    );
+    if (!account) {
+      return {
+        ...row,
+        dynamic: false,
+        defaultRange: { from: row.from_at, to: row.to_at },
+        availableRange: { from: row.from_at, to: row.to_at }
+      };
+    }
+
+    const { from, to } = this.parsePublicRange(
+      fromRaw,
+      toRaw,
+      new Date(row.from_at).toISOString(),
+      new Date(row.to_at).toISOString()
+    );
+
+    const available = await this.db.one(
+      `SELECT MIN(created_at) AS min_at,MAX(created_at) AS max_at
+       FROM trade_journal
+       WHERE mt5_account_id=$1 AND event_type='BASKET'`,
+      [account.id]
+    );
+
+    const basketsResult = await this.db.query(
+      `SELECT direction,net_profit,created_at
+       FROM trade_journal
+       WHERE mt5_account_id=$1
+         AND event_type='BASKET'
+         AND created_at >= $2
+         AND created_at <= $3
+       ORDER BY created_at ASC,id ASC
+       LIMIT 20000`,
+      [account.id, from.toISOString(), to.toISOString()]
+    );
+    const baskets = basketsResult.rows as BasketRow[];
+    const currentBalance = Number(account.metrics?.balance || 0);
+    const pnlSinceFrom = await this.db.one(
+      `SELECT COALESCE(SUM(net_profit),0)::float8 AS net
+       FROM trade_journal
+       WHERE mt5_account_id=$1
+         AND event_type='BASKET'
+         AND created_at >= $2`,
+      [account.id, from.toISOString()]
+    );
+    const derivedStart = currentBalance > 0
+      ? Number((currentBalance - Number(pnlSinceFrom?.net || 0)).toFixed(2))
+      : null;
+    const computed = this.summarize(baskets, derivedStart);
+
+    const detailedExits = await this.db.query(
+      `SELECT net_profit::float8 AS net_profit,created_at
+       FROM trade_journal
+       WHERE mt5_account_id=$1
+         AND event_type='EXIT'
+         AND lower(COALESCE(metadata->>'executedByBot','true')) <> 'false'
+         AND created_at >= $2
+         AND created_at <= $3
+       ORDER BY created_at ASC,id ASC
+       LIMIT 20000`,
+      [account.id, from.toISOString(), to.toISOString()]
+    );
+    if (derivedStart !== null && detailedExits.rows.length > 0) {
+      let balance = derivedStart;
+      let peak = balance;
+      let maxDdMoney = 0;
+      let maxDdPercent = 0;
+      computed.curve = detailedExits.rows.map((exit:any) => {
+        balance += Number(exit.net_profit || 0);
+        peak = Math.max(peak, balance);
+        const ddMoney = Math.max(0, peak - balance);
+        const ddPercent = peak > 0 ? ddMoney / peak * 100 : 0;
+        maxDdMoney = Math.max(maxDdMoney, ddMoney);
+        maxDdPercent = Math.max(maxDdPercent, ddPercent);
+        return {
+          time: exit.created_at,
+          balance: Number(balance.toFixed(2)),
+          equity: Number(balance.toFixed(2)),
+          drawdownPercent: Number(ddPercent.toFixed(3))
+        };
+      });
+      computed.summary.maxDrawdownMoney = Number(maxDdMoney.toFixed(2));
+      computed.summary.maxDrawdownPercent = Number(maxDdPercent.toFixed(2));
+      computed.summary.recoveryFactor = maxDdMoney > 0
+        ? Number((computed.summary.netProfit / maxDdMoney).toFixed(2))
+        : computed.summary.netProfit > 0 ? 999 : null;
+    }
+
+    const exits = await this.db.query(
+      `SELECT
+         x.deal_ticket,x.position_id,x.direction,x.volume,x.price AS exit_price,x.net_profit,
+         x.created_at AS closed_at,COALESCE(x.metadata->>'symbol',$4) AS symbol,
+         e.price AS entry_price,e.created_at AS opened_at
+       FROM trade_journal x
+       LEFT JOIN LATERAL (
+         SELECT price,created_at
+         FROM trade_journal e
+         WHERE e.mt5_account_id=x.mt5_account_id
+           AND e.event_type='ENTRY'
+           AND e.position_id=x.position_id
+           AND e.created_at<=x.created_at
+         ORDER BY e.created_at DESC
+         LIMIT 1
+       ) e ON true
+       WHERE x.mt5_account_id=$1
+         AND x.event_type='EXIT'
+         AND x.created_at >= $2
+         AND x.created_at <= $3
+       ORDER BY x.created_at DESC
+       LIMIT 500`,
+      [
+        account.id,
+        from.toISOString(),
+        to.toISOString(),
+        String(account.metrics?.symbol || frozen.account?.symbol || "XAUUSD")
+      ]
+    );
+
+    const accountCurrency = String(
+      account.metrics?.currency || frozen.account?.currency || "UNKNOWN"
+    ).trim().toUpperCase() || "UNKNOWN";
+    const accountSymbol = String(
+      account.metrics?.symbol || frozen.account?.symbol || "XAUUSD"
+    );
+
+    const snapshot = {
+      kind: "LIVE_PERFORMANCE_PUBLIC",
+      frozenAt: frozen.frozenAt || row.created_at,
+      liveUpdatedAt: new Date().toISOString(),
+      account: {
+        ...(frozen.account || {}),
+        accountNumber: frozen.account?.accountNumber || account.account_number,
+        broker: frozen.account?.broker || account.broker,
+        brokerServer: frozen.account?.brokerServer || account.broker_server,
+        mode: frozen.account?.mode || account.mode,
+        symbol: accountSymbol,
+        timeframe: String(account.metrics?.timeframe || frozen.account?.timeframe || "M5"),
+        currency: accountCurrency
+      },
+      range: { from: from.toISOString(), to: to.toISOString() },
+      balance: {
+        current: currentBalance > 0 ? currentBalance : null,
+        equity: Number(account.metrics?.equity || 0) > 0 ? Number(account.metrics.equity) : null,
+        derivedStart
+      },
+      summary: computed.summary,
+      curve: computed.curve,
+      closedTrades: exits.rows.map((trade:any) => ({
+        ticket: String(trade.deal_ticket),
+        positionId: trade.position_id ? String(trade.position_id) : null,
+        symbol: trade.symbol || accountSymbol,
+        side: trade.direction,
+        lot: Number(trade.volume || 0),
+        entryPrice: trade.entry_price === null ? null : Number(trade.entry_price),
+        exitPrice: Number(trade.exit_price || 0),
+        profit: Number(trade.net_profit || 0),
+        openedAt: trade.opened_at || null,
+        closedAt: trade.closed_at
+      }))
+    };
+
+    return {
+      id: row.id,
+      title: row.title,
+      public_slug: row.public_slug,
+      created_at: row.created_at,
+      dynamic: true,
+      defaultRange: { from: row.from_at, to: row.to_at },
+      availableRange: {
+        from: available?.min_at || row.from_at,
+        to: available?.max_at || new Date().toISOString()
+      },
+      snapshot
+    };
   }
 }

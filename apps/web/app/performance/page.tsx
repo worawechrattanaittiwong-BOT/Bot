@@ -21,6 +21,20 @@ function isoDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function inclusiveDays(from:string,to:string) {
+  const start = new Date(from + "T00:00:00+07:00").getTime();
+  const end = new Date(to + "T00:00:00+07:00").getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0;
+  return Math.floor((end - start) / 86400000) + 1;
+}
+
+function rangeFromDays(endRaw:string,daysRaw:number) {
+  const days = Math.max(1,Math.min(730,Math.trunc(daysRaw || 1)));
+  const end = new Date((endRaw || isoDate(new Date())) + "T12:00:00+07:00");
+  const start = new Date(end.getTime() - (days - 1) * 86400000);
+  return { from: isoDate(start), to: isoDate(end) };
+}
+
 function currencyCode(value: any) {
   const code = String(value || "").trim().toUpperCase();
   return code || "UNKNOWN";
@@ -68,32 +82,78 @@ function Kpi({ label, value, sub, className = "" }:{ label:string; value:string;
   );
 }
 
-function LineChart({ points, valueKey = "balance", secondaryKey = "equity" }:{ points:any[]; valueKey?:string; secondaryKey?:string }) {
+function chartPointTime(point:any) {
+  return point?.time || point?.closedAt || point?.closed_at || point?.day || point?.date || null;
+}
+
+function chartAxisLabel(value:any, singleDay:boolean) {
+  const date = value ? new Date(value) : null;
+  if (!date || !Number.isFinite(date.getTime())) return "";
+  return singleDay
+    ? date.toLocaleTimeString("th-TH", { timeZone:"Asia/Bangkok", hour:"2-digit", minute:"2-digit", hour12:false })
+    : date.toLocaleDateString("th-TH", { timeZone:"Asia/Bangkok", day:"2-digit", month:"2-digit" });
+}
+
+function LineChart({
+  points,
+  valueKey = "balance",
+  secondaryKey = "equity",
+  from = "",
+  to = ""
+}:{ points:any[]; valueKey?:string; secondaryKey?:string; from?:string; to?:string }) {
   const width = 900;
-  const height = 260;
+  const height = 278;
+  const left = 26;
+  const right = 10;
+  const top = 10;
+  const bottom = 34;
   if (!points?.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลในช่วงเวลานี้</div>;
   const primary = points.map((point) => Number(point[valueKey] ?? point.cumulative ?? 0));
   const secondary = points.map((point) => Number(point[secondaryKey] ?? point[valueKey] ?? point.cumulative ?? 0));
   const values = [...primary, ...secondary].filter(Number.isFinite);
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const range = Math.max(1, max - min);
+  const pad = Math.max(1, (max - min) * .06);
+  const low = min - pad;
+  const high = max + pad;
+  const range = Math.max(1, high - low);
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
   const coords = (series:number[]) => series.map((value, index) => {
-    const x = series.length <= 1 ? 0 : index / (series.length - 1) * width;
-    const y = height - 16 - ((value - min) / range) * (height - 32);
+    const x = left + (series.length <= 1 ? 0 : index / (series.length - 1) * plotWidth);
+    const y = top + (high - value) / range * plotHeight;
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(" ");
+  const fromDate = from ? new Date(from + "T00:00:00+07:00") : null;
+  const toDate = to ? new Date(to + "T23:59:59+07:00") : null;
+  const firstTime = chartPointTime(points[0]);
+  const lastTime = chartPointTime(points[points.length - 1]);
+  const firstDate = fromDate || (firstTime ? new Date(firstTime) : null);
+  const lastDate = toDate || (lastTime ? new Date(lastTime) : null);
+  const singleDay = Boolean(firstDate && lastDate &&
+    new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(firstDate) ===
+    new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(lastDate));
+  const tickCount = Math.min(7, Math.max(2, points.length));
+  const tickIndexes = Array.from({length:tickCount},(_,i)=>Math.round(i*(points.length-1)/Math.max(1,tickCount-1)))
+    .filter((index,pos,arr)=>pos===0||index!==arr[pos-1]);
+
   return (
     <svg className={styles.lineChart} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label="Performance chart">
+      {tickIndexes.map((index) => {
+        const x = left + (points.length <= 1 ? 0 : index / (points.length - 1) * plotWidth);
+        const rawTime = chartPointTime(points[index]);
+        const label = rawTime ? chartAxisLabel(rawTime,singleDay) : String(index+1);
+        return <g key={index}><line className={styles.chartTickLine} x1={x} x2={x} y1={top} y2={top+plotHeight}/><text className={styles.chartTickLabel} x={x} y={height-8} textAnchor="middle">{label}</text></g>;
+      })}
       <polyline className={styles.lineSecondary} points={coords(secondary)} fill="none" vectorEffect="non-scaling-stroke" />
       <polyline className={styles.linePrimary} points={coords(primary)} fill="none" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
 
-function DrawdownChart({ points }:{ points:any[] }) {
+function DrawdownChart({ points, from = "", to = "" }:{ points:any[]; from?:string; to?:string }) {
   const normalized = (points || []).map((point) => ({ ...point, dd: -Math.abs(Number(point.drawdownPercent || 0)) }));
-  return <LineChart points={normalized} valueKey="dd" secondaryKey="dd"/>;
+  return <LineChart points={normalized} valueKey="dd" secondaryKey="dd" from={from} to={to}/>;
 }
 
 function MonthlyBars({ rows, currency }:{ rows:any[]; currency:any }) {
@@ -165,8 +225,9 @@ export default function PerformanceDashboardPage() {
   const [mode, setMode] = useState<Mode>("LIVE");
   const [accountId, setAccountId] = useState("");
   const [userId, setUserId] = useState("");
-  const [from, setFrom] = useState(isoDate(new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)));
+  const [from, setFrom] = useState(isoDate(new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000)));
   const [to, setTo] = useState(isoDate(today));
+  const [customDays, setCustomDays] = useState("30");
   const [report, setReport] = useState<any>(null);
   const [system, setSystem] = useState<any>(null);
   const [selectedBacktestId, setSelectedBacktestId] = useState("");
@@ -240,6 +301,13 @@ export default function PerformanceDashboardPage() {
     setShareResult(null);
     refresh();
   }, [options, scope, mode, accountId, from, to]);
+
+  function applyDays(days:number) {
+    const range = rangeFromDays(to || isoDate(today), days);
+    setFrom(range.from);
+    setTo(range.to);
+    setCustomDays(String(days));
+  }
 
   async function chooseBacktest(id:string) {
     setSelectedBacktestId(id);
@@ -375,6 +443,22 @@ export default function PerformanceDashboardPage() {
           {elevated ? <button className={styles.resetButton} onClick={resetTestData} disabled={resetting}>{resetting ? "กำลังล้าง..." : "Refresh / ล้างข้อมูลทดสอบ"}</button> : null}
         </section>
 
+        <section className={styles.rangeTools}>
+          <div className={styles.rangePresetButtons}>
+            <button type="button" onClick={()=>applyDays(1)}>วันนี้</button>
+            <button type="button" onClick={()=>applyDays(7)}>7 วัน</button>
+            <button type="button" onClick={()=>applyDays(30)}>30 วัน</button>
+            <button type="button" onClick={()=>applyDays(90)}>90 วัน</button>
+          </div>
+          <div className={styles.customDays}>
+            <span>กำหนดเอง</span>
+            <input type="number" min="1" max="730" value={customDays} onChange={(e)=>setCustomDays(e.target.value.replace(/\D/g,"").slice(0,3))}/>
+            <span>วันย้อนหลังจากวันที่สิ้นสุด</span>
+            <button type="button" onClick={()=>applyDays(Number(customDays||1))}>ใช้ช่วงนี้</button>
+          </div>
+          <strong>{inclusiveDays(from,to)} วัน · {from} → {to}</strong>
+        </section>
+
         {scope === "SYSTEM" && elevated ? (
           <SystemOverview data={system} loading={loading} onDrill={drillAccount}/>
         ) : (
@@ -386,7 +470,7 @@ export default function PerformanceDashboardPage() {
 
             {mode === "LIVE" ? (
               <section className={styles.sharePanel}>
-                <div><b>แชร์ Performance ให้คนอื่นดู</b><small>ระบบจะสร้าง Snapshot จากข้อมูลจริงในช่วงวันที่เลือก ข้อมูลในลิงก์จะไม่เปลี่ยนตามหลัง</small></div>
+                <div><b>แชร์ Trading Performance แบบ Read-only</b><small>คนที่มีลิงก์สามารถเลือกวันที่, 7/30/90 วัน หรือกำหนดจำนวนวันเองได้ โดยไม่มีสิทธิ์สั่งเทรดหรือเข้าบัญชี</small></div>
                 <div className={styles.shareButtons}>
                   <button onClick={createShareSnapshot} disabled={sharing || !Number(summary.trades || 0)}>{sharing ? "กำลังสร้าง..." : "สร้างลิงก์แชร์"}</button>
                   {shareResult?.path ? <><input className={styles.shareLink} readOnly value={`${typeof window !== "undefined" ? window.location.origin : ""}${shareResult.path}`}/><button onClick={copyShareLink}>คัดลอกลิงก์</button><a href={shareResult.path} target="_blank" rel="noreferrer">เปิดหน้าสาธารณะ</a></> : null}
@@ -421,10 +505,10 @@ export default function PerformanceDashboardPage() {
 
             <div className={styles.analyticsGrid}>
               <section className={`${styles.card} ${styles.equityCard}`}>
-                <div className={styles.cardTitle}><div><b>{mode === "LIVE" ? "Equity & Balance Curve" : "Backtest Balance Curve"}</b><small>{mode === "LIVE" ? "Balance สร้างจาก Basket ที่ปิดจริง · Equity ล่าสุดจาก Heartbeat" : "ผลตามลำดับรายการใน Backtest"}</small></div><strong className={tone(summary.netProfit)}>{money(summary.netProfit,true,activeCurrency)}</strong></div>
-                <LineChart points={curve}/>
+                <div className={styles.cardTitle}><div><b>{mode === "LIVE" ? "Equity & Balance Curve" : "Backtest Balance Curve"}</b><small>{mode === "LIVE" ? "Balance แสดงตาม EXIT ที่บอทปิดจริง · ใต้กราฟเป็นเวลาเมื่อเลือก 1 วัน และเป็นวันที่เมื่อเลือกหลายวัน" : "ผลตามลำดับรายการใน Backtest"}</small></div><strong className={tone(summary.netProfit)}>{money(summary.netProfit,true,activeCurrency)}</strong></div>
+                <LineChart points={curve} from={from} to={to}/>
               </section>
-              <section className={`${styles.card} ${styles.drawdownCard}`}><div className={styles.cardTitle}><div><b>Drawdown</b><small>Closed-performance drawdown จาก Peak Balance</small></div><strong className={styles.bad}>{percent(summary.maxDrawdownPercent)}</strong></div><DrawdownChart points={curve}/></section>
+              <section className={`${styles.card} ${styles.drawdownCard}`}><div className={styles.cardTitle}><div><b>Drawdown</b><small>Closed-performance drawdown จาก Peak Balance</small></div><strong className={styles.bad}>{percent(summary.maxDrawdownPercent)}</strong></div><DrawdownChart points={curve} from={from} to={to}/></section>
               {mode === "LIVE" ? <QualityCard quality={report?.quality}/> : <section className={`${styles.card} ${styles.qualityCard}`}><div className={styles.cardTitle}><div><b>Backtest Summary</b><small>ค่าจากรายงานที่เลือก</small></div></div><div className={styles.backtestSummary}><span>Initial Balance <b>{money(backSummary.initialDeposit,false,activeCurrency)}</b></span><span>Final Balance <b>{money(backSummary.finalBalance,false,activeCurrency)}</b></span><span>Average Win <b>{money(backSummary.averageWin,false,activeCurrency)}</b></span><span>Average Loss <b>{money(backSummary.averageLoss,false,activeCurrency)}</b></span></div></section>}
               <section className={`${styles.card} ${styles.monthlyCard}`}><div className={styles.cardTitle}><div><b>ผลตอบแทนรายเดือน</b><small>Monthly Returns</small></div></div>{mode === "LIVE" ? <MonthlyBars rows={monthly} currency={activeCurrency}/> : <div className={styles.emptyChart}>Backtest รุ่นปัจจุบันยังไม่เก็บ Monthly Bucket แยก</div>}</section>
               <section className={`${styles.card} ${styles.distributionCard}`}><div className={styles.cardTitle}><div><b>การกระจายการเทรด</b><small>Buy vs Sell</small></div></div><TradeDistribution buy={Number(liveSummary.buyTrades || 0)} sell={Number(liveSummary.sellTrades || 0)} total={Number(summary.trades || 0)}/></section>
