@@ -555,6 +555,19 @@ jobs:
           test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.settings.accountCurrencyReviewRequired')" = "true"
           test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.settings.previousAccountCurrency')" = "USD"
 
+          echo "[integration] currency review overrides a stale RUNNING intent before START delivery"
+          FOLLOW_ACCOUNT_ID=$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.id')
+          FOLLOW_USER_ID=$(printf '%s' "$FOLLOW_DASH" | jq -r '.user.id')
+          LOCAL_PLAN_ID=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select id from plans where code='LOCAL_30D' limit 1;")
+          REVIEW_SUB_ID=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "insert into subscriptions(user_id,plan_id,status,starts_at,expires_at) values('$FOLLOW_USER_ID','$LOCAL_PLAN_ID','ACTIVE',now()-interval '1 minute',now()+interval '1 day') returning id;")
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set desired_state='RUNNING' where id='$INSTANCE'; insert into bot_commands(bot_instance_id,command) values('$INSTANCE','START');" >/dev/null
+          REVIEW_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"symbol\":\"XAUUSDc\",\"positions\":0,\"pendingBasketJournal\":false}}")
+          test "$(printf '%s' "$REVIEW_HB" | jq -r '.access')" = "true"
+          test "$(printf '%s' "$REVIEW_HB" | jq -r '.desiredState')" = "SAFE_STOP"
+          REVIEW_START_PENDING=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from bot_commands where bot_instance_id='$INSTANCE' and command='START' and status in ('PENDING','DELIVERED');")
+          test "$REVIEW_START_PENDING" = "0"
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "delete from subscriptions where id='$REVIEW_SUB_ID';" >/dev/null
+
           echo "[integration] currency change blocks partial settings save until full money review"
           PARTIAL_CURRENCY_SAVE_HTTP=$(curl -sS -o /tmp/currency-review-partial.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"maxPositions":7}')
           test "$PARTIAL_CURRENCY_SAVE_HTTP" = "409"
