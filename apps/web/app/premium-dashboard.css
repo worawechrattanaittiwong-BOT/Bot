@@ -5297,3 +5297,11 @@
   margin-bottom:4px!important;
 }
 /* ===== /Risk money box breathing room only ===== */
+
+/* Let the decision center remain reachable on shorter desktop viewports. */
+.cc-shell-v4 .cc-overview.cc-v15:has(>.cc-decision-center){
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(129,115,186,.4) transparent;
+}

@@ -5,6 +5,7 @@ import { API_URL, api, getToken } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
+import { EaDecisionCenter } from "../../components/EaDecisionCenter";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
 
 type Dashboard = {
@@ -2161,80 +2162,24 @@ export default function DashboardPage() {
               </div>
 
 
-              <section className="cc-v48-bottom-intelligence" aria-label="SCENOVA market intelligence">
-                <section className="panel cc-v48-market-panel">
-                  <div className="cc-v48-panel-head">
-                    <div className="cc-v48-title">
-                      <span><ScenovaIcon name="brain" size={19}/></span>
-                      <div><b>SCENOVA MARKET INTELLIGENCE</b><small>Real-time market data, key levels and AI trading context</small></div>
-                    </div>
-                    <em className={marketSessionClosed?"warn":isMt5Online?"live":"idle"}><i/>{marketSessionClosed?"Market Closed":isMt5Online?"Live":"Waiting MT5"}</em>
-                  </div>
-
-                  <div className="cc-v48-market-strip">
-                    <div className="cc-v48-symbol"><ScenovaIcon name="trend" size={17}/><span><b>{String(metrics.symbol||settings.symbol||"—")}</b><small>{String(metrics.symbol||settings.symbol||"").startsWith("XAU")?"Gold Spot / US Dollar":"Live Trading Symbol"}</small></span></div>
-                    <div className="cc-v48-timeframes" aria-label="แนวโน้มหลายกรอบเวลา">
-                      {[{label:"M1",value:metrics.trendM1},{label:"M5",value:metrics.trendM5},{label:"M15",value:metrics.trendM15},{label:"M30",value:metrics.trendM30},{label:"H1",value:metrics.trendH1}].map(item=>{
-                        const direction=Number(item.value)>0?"up":Number(item.value)<0?"down":"flat";
-                        return <span key={item.label} className={direction}>{item.label}<i>{direction==="up"?"↑":direction==="down"?"↓":"·"}</i></span>;
-                      })}
-                    </div>
-                    <div className="cc-v48-price"><small>ราคากลาง</small><b>{marketMidPrice>0?marketMidPrice.toFixed(symbolDigits):"—"}</b><em>{Number(metrics.momentumPoints||0)>0?"+":""}{Number(metrics.momentumPoints||0).toFixed(1)} pt</em></div>
-                  </div>
-
-                  <MarketIntelligenceChart
-                    points={livePricePoints}
-                    currentPrice={marketMidPrice}
-                    digits={symbolDigits}
-                    demandLow={marketDemandLow}
-                    demandHigh={marketDemandHigh}
-                    supplyLow={marketSupplyLow}
-                    supplyHigh={marketSupplyHigh}
-                    support={marketSupport}
-                    resistance={marketResistance}
-                    marketClosed={marketSessionClosed}
-                  />
-                </section>
-
-                <section className="panel cc-v48-signal-panel">
-                  <div className="cc-v48-panel-head">
-                    <div className="cc-v48-title">
-                      <span><ScenovaIcon name="spark" size={19}/></span>
-                      <div><b>AI SIGNAL COCKPIT</b><small>Multi-timeframe analysis &amp; institutional order flow</small></div>
-                    </div>
-                    <em className={isMt5Online?"live":"idle"}><i/>{isMt5Online?"Live":"Offline"}</em>
-                  </div>
-
-                  <div className={"cc-v48-signal-split "+(!signalScoreReady?"waiting":"")}>
-                    <div className="buy"><small>BUY</small><b>{signalScoreReady?buySignalPercent+"%":"—"}</b></div>
-                    <div className="sell"><small>SELL</small><b>{signalScoreReady?sellSignalPercent+"%":"—"}</b></div>
-                    <span><i style={{width:buySignalPercent+"%"}}/><i style={{width:sellSignalPercent+"%"}}/></span>
-                  </div>
-
-                  <div className="cc-v48-signal-grid">
-                    <div><span><ScenovaIcon name="trend" size={15}/>Market Regime</span><b>{marketRegimeText}</b></div>
-                    <div><span><ScenovaIcon name="pnl" size={15}/>ATR (M15)</span><b>{atrValueLabel}</b></div>
-                    <div><span><ScenovaIcon name="spread" size={15}/>Spread</span><b className={spreadStatus==="NORMAL"?"good":"warn"}>{spreadValueLabel}</b></div>
-                    <div><span><ScenovaIcon name="arrow-up" size={15}/>Momentum</span><b className={Number(metrics.momentumPoints||0)>=0?"good":"bad"}>{Number(metrics.momentumPoints||0).toFixed(1)} pt</b></div>
-                  </div>
-
-                  <div className="cc-v48-trend-row">
-                    <span>Timeframe Trend</span>
-                    <div>{[{label:"M5",value:metrics.trendM5},{label:"M15",value:metrics.trendM15},{label:"M30",value:metrics.trendM30},{label:"H1",value:metrics.trendH1}].map(item=>{
-                      const direction=Number(item.value)>0?"up":Number(item.value)<0?"down":"flat";
-                      return <i key={item.label} className={direction}><small>{item.label}</small><b>{direction==="up"?"▲ Buy":direction==="down"?"▼ Sell":"• Flat"}</b></i>;
-                    })}</div>
-                  </div>
-
-                  <div className="cc-v48-context-grid">
-                    <div><span><ScenovaIcon name="layers" size={16}/></span><small>Order Block</small><b>{orderBlockCustomerText}</b></div>
-                    <div><span><ScenovaIcon name="spark" size={16}/></span><small>Liquidity</small><b>{liquidityState==="NONE"?"กำลังติดตาม":liquidityState.replace(/_/g," ")}</b></div>
-                    <div><span><ScenovaIcon name="target" size={16}/></span><small>Entry Context</small><b>{indicatorDecisionLabel[indicatorDecision]||indicatorDecision}</b></div>
-                  </div>
-
-                  <div className="cc-v48-session-row"><span>Session</span><b>{sessionProfile}</b><em className={metrics.tradeReady===true?"good":"warn"}>{metrics.tradeReady===true?"พร้อมส่งออเดอร์":latestDecisionCustomerText}</em></div>
-                </section>
-              </section>
+              <EaDecisionCenter
+                key={[data.selectedSlot?.id || data.instance?.id, metrics.symbol || settings.symbol, metrics.controlMode || activeControlMode].join(":")}
+                metrics={metrics}
+                mode={activeControlMode}
+                symbol={String(metrics.symbol || settings.symbol || "—")}
+                state={state}
+                online={isMt5Online}
+                marketClosed={marketSessionClosed}
+                observedAt={data.instance?.last_seen_at || null}
+                digits={symbolDigits}
+                lot={settings.lot}
+                maxPositions={configuredMaxPositions}
+                currency={accountCurrency}
+                decisionLabel={latestDecisionCustomerText}
+                marketRegimeLabel={marketRegimeText}
+                spreadLabel={spreadValueLabel}
+                liveStatus={liveStatus}
+              />
 
               <section className="cc-v42-bottom-suite cc-v48-legacy-hidden" aria-hidden="true">
                 <section className="panel cc-v42-card cc-v42-position-monitor">
