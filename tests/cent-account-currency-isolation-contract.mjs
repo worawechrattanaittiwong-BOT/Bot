@@ -20,6 +20,8 @@ const dashboard = read("apps/web/app/dashboard/page.tsx");
 const performance = read("apps/web/app/performance/page.tsx");
 const publicPerformance = read("apps/web/app/performance/[slug]/page.tsx");
 const sharedPerformance = read("apps/web/app/shared-performance/[slug]/page.tsx");
+const journalSchema = read("database/010_trade_journal.sql");
+const currencyMigration = read("database/021_cent_account_currency_isolation.sql");
 
 must(
   ea.includes("AccountInfoString(ACCOUNT_CURRENCY)"),
@@ -52,6 +54,12 @@ must(
   eaApi.includes("AND mt5_account_id=$2") &&
   botApi.includes("AND mt5_account_id=$2"),
   "EA intelligence and dashboard journal stats must be isolated by MT5 account"
+);
+must(
+  eaApi.includes("ON CONFLICT(bot_instance_id,mt5_account_id,deal_ticket,event_type) DO NOTHING") &&
+  journalSchema.includes("UNIQUE(bot_instance_id, mt5_account_id, deal_ticket, event_type)") &&
+  currencyMigration.includes("trade_journal_instance_account_deal_event_key"),
+  "Trade Journal deal identity must include MT5 account to avoid ticket collisions after rebind"
 );
 must(
   perfApi.includes("AND mt5_account_id=$4") &&
