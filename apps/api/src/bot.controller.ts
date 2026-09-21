@@ -1024,6 +1024,7 @@ export class BotController {
              event_type,
              direction,
              net_profit::float8 AS net_profit,
+             metadata->>'executedByBot' AS executed_by_bot,
              created_at
            FROM trade_journal
            WHERE bot_instance_id=$1
@@ -1056,10 +1057,8 @@ export class BotController {
         let equity = 0;
         let peak = 0;
         let maxDrawdownMoney = 0;
-        const cumulativeProfit = [0];
         for (const value of pnlValues) {
           equity += value;
-          cumulativeProfit.push(equity);
           peak = Math.max(peak, equity);
           maxDrawdownMoney = Math.max(maxDrawdownMoney, peak - equity);
         }
@@ -1158,9 +1157,29 @@ export class BotController {
           }
         }
 
-        const balanceSeries = cumulativeProfit.map(
-          (value:number) => startCapital + value
+        // The visual balance curve uses every bot-executed EXIT deal, not only
+        // one point per completed Basket. This preserves the detailed MT5-like
+        // jagged shape while the headline win/drawdown statistics keep their
+        // existing Basket semantics.
+        const botExitRows = sessionRows.filter(
+          (row:any) =>
+            String(row.event_type || "").toUpperCase() === "EXIT" &&
+            String(row.executed_by_bot ?? "true").toLowerCase() !== "false"
         );
+        const curvePnlValues = botExitRows.length > 0
+          ? botExitRows.map((row:any) => Number(row.net_profit || 0))
+          : pnlValues;
+        const balanceSeries = [startCapital];
+        let curveBalance = startCapital;
+        for (const value of curvePnlValues) {
+          curveBalance += value;
+          balanceSeries.push(curveBalance);
+        }
+        const expectedSessionEndBalance = startCapital + netProfit;
+        const lastCurveBalance = balanceSeries[balanceSeries.length - 1] ?? startCapital;
+        if (Math.abs(lastCurveBalance - expectedSessionEndBalance) > 0.005) {
+          balanceSeries.push(expectedSessionEndBalance);
+        }
 
         runSummary = {
           running: runningNow,

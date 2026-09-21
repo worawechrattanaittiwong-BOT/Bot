@@ -10,6 +10,9 @@ foreach ($required in @(
   "command IN ('SAFE_STOP','CLOSE_ALL')",
   'maxDrawdownPercent',
   'balanceSeries',
+  "metadata->>'executedByBot'",
+  'botExitRows',
+  'curvePnlValues',
   'sharpeRatio',
   'maxWinStreak',
   'maxLossStreak'
@@ -24,7 +27,10 @@ foreach ($required in @(
   'End Balance',
   'Max Drawdown',
   'Win Rate',
-  'BalanceChart'
+  'BalanceChart',
+  'ScenovaIcon',
+  'bps-title-mark',
+  'bps-end-dot'
 )) {
   if (-not $web.Contains($required)) { throw "Bot performance summary UI contract missing: $required" }
 }
