@@ -1,10 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api, getToken } from "../../lib/api";
-import { OwnerSidebar } from "../../components/OwnerSidebar";
-import { ScenovaBrand } from "../../components/ScenovaBrand";
+import { CustomerSidebar, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./performance.module.css";
 
@@ -85,20 +83,6 @@ function chartTickLabel(value:any,singleDay:boolean) {
   return singleDay
     ? date.toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit",hour12:false})
     : date.toLocaleDateString("th-TH",{timeZone:"Asia/Bangkok",day:"2-digit",month:"2-digit"});
-}
-
-function CustomerSidebar({onLogout}:{onLogout:()=>void}) {
-  return (
-    <aside className={styles.customerSidebar}>
-      <Link href="/dashboard?view=overview" className={styles.brand}><ScenovaBrand className={styles.brandLogo}/></Link>
-      <nav>
-        <Link href="/dashboard?view=overview"><ScenovaIcon name="control" size={18}/>Control Center</Link>
-        <Link href="/dashboard?view=account"><ScenovaIcon name="account" size={18}/>MT5 & EA</Link>
-        <Link href="/performance" className={styles.activeNav}><ScenovaIcon name="strategy" size={18}/>Trading Performance</Link>
-      </nav>
-      <button className={styles.logout} onClick={onLogout}><ScenovaIcon name="logout" size={18}/>Sign Out</button>
-    </aside>
-  );
 }
 
 function InfoRow({icon,label,value}:{icon:string;label:string;value:string}) {
@@ -376,7 +360,9 @@ export default function PerformanceDashboardPage() {
 
   return (
     <div className={styles.shell}>
-      {options?.elevated?<OwnerSidebar activeKey="trading-backtest" onLogout={logout}/>:<CustomerSidebar onLogout={logout}/>}
+      {options?.elevated
+        ? <OwnerSidebar activeKey="trading-backtest" onLogout={logout} role={String(options?.user?.role || "OWNER")}/>
+        : <CustomerSidebar activeKey="trading-backtest" onLogout={logout} userCode={options?.user?.user_code}/>} 
       <main className={`${styles.main} ${options?.elevated ? styles.mainOwner : styles.mainCustomer}`}>
         {error?<div className={styles.error}>{error}</div>:null}
 
