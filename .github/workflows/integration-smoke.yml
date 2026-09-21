@@ -570,7 +570,8 @@ jobs:
           test "$REVIEW_START_PENDING" = "0"
           PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "delete from subscriptions where id='$REVIEW_SUB_ID';" >/dev/null
 
-          echo "[integration] currency change blocks partial settings save until full money review"
+          echo "[integration] currency mismatch blocks partial settings save even if the explicit review flag is missing"
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_settings set settings=settings-'accountCurrencyReviewRequired' where bot_instance_id='$INSTANCE';" >/dev/null
           PARTIAL_CURRENCY_SAVE_HTTP=$(curl -sS -o /tmp/currency-review-partial.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"maxPositions":7}')
           test "$PARTIAL_CURRENCY_SAVE_HTTP" = "409"
 
