@@ -79,7 +79,6 @@ export class PerformanceAnalyticsController {
     const grossProfit = rows.reduce((sum, row) => sum + Math.max(0, Number(row.net_profit || 0)), 0);
     const grossLoss = rows.reduce((sum, row) => sum + Math.abs(Math.min(0, Number(row.net_profit || 0))), 0);
     const netProfit = grossProfit - grossLoss;
-    const decided = wins + losses;
 
     let running = startBalance ?? 0;
     let peak = running;
@@ -227,7 +226,7 @@ export class PerformanceAnalyticsController {
 
     const positiveMonths = monthly.filter((item) => item.profit > 0).length;
     const positiveMonthRate = monthly.length > 0 ? positiveMonths / monthly.length * 100 : 50;
-    const winRate = decided > 0 ? wins / decided * 100 : 0;
+    const winRate = trades > 0 ? wins / trades * 100 : 0;
     const stability = this.clamp(positiveMonthRate * 0.7 + Math.min(100, trades * 2) * 0.3);
     const riskControl = startBalance !== null ? this.clamp(100 - maxDrawdownPercent * 5) : 50;
     const consistency = this.clamp(winRate * 0.65 + positiveMonthRate * 0.35);
