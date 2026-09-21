@@ -70,6 +70,8 @@ jobs:
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/014_maintenance_mode.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/015_partner_program.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/015_partner_program.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/021_cent_account_currency_isolation.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/021_cent_account_currency_isolation.sql
 
       - name: Build API
         run: npm run build -w @bot/api
@@ -173,7 +175,7 @@ jobs:
           test "$(printf '%s' "$AGENT" | jq -r '.deviceVerified')" = "true"
 
           echo "[integration] auto-binding first LOCAL MT5 from EA runtime"
-          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"productVersion\":\"2.0.8\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
+          DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"100001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"productVersion\":\"2.0.8\",\"server\":\"SCENOVA-Demo\",\"currency\":\"USD\",\"positions\":0}}")
           test "$(printf '%s' "$DETECT" | jq -r '.accountMismatch // false')" = "false"
 
           DASH2=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
@@ -517,8 +519,8 @@ jobs:
           test "$REBIND_BLOCKED_HTTP" = "409"
 
           echo "[integration] automatic account-follow succeeds after old MT5 reports flat"
-          OLD_FLAT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}")
-          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"positions\":0}}")
+          OLD_FLAT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Demo\",\"currency\":\"USD\",\"positions\":0}}")
+          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"positions\":0}}")
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch // false')" = "false"
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.access')" = "false"
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.desiredState')" = "SAFE_STOP"
@@ -528,6 +530,18 @@ jobs:
           test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.account_number')" = "200002"
           test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.broker_server')" = "SCENOVA-Real"
           test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.instance.pending_account_number // empty')" = ""
+          test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.instance.metrics.currency')" = "USC"
+          test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.settings.accountCurrencyReviewRequired')" = "true"
+          test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.settings.previousAccountCurrency')" = "USD"
+
+          echo "[integration] currency change blocks partial settings save until full money review"
+          PARTIAL_CURRENCY_SAVE_HTTP=$(curl -sS -o /tmp/currency-review-partial.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"maxPositions":7}')
+          test "$PARTIAL_CURRENCY_SAVE_HTTP" = "409"
+
+          REVIEW_PAYLOAD=$(printf '%s' "$FOLLOW_DASH" | jq -c '.settings')
+          FULL_CURRENCY_SAVE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "$REVIEW_PAYLOAD")
+          test "$(printf '%s' "$FULL_CURRENCY_SAVE" | jq -r '.settings.accountCurrency')" = "USC"
+          test "$(printf '%s' "$FULL_CURRENCY_SAVE" | jq -r '.settings.accountCurrencyReviewRequired')" = "false"
 
           TRIAL_COUNT=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from trial_grants where user_id=(select id from users where email='integration@scenova.test');")
           test "$TRIAL_COUNT" = "1"
