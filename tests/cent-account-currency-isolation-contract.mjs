@@ -23,6 +23,7 @@ const publicPerformance = read("apps/web/app/performance/[slug]/page.tsx");
 const sharedPerformance = read("apps/web/app/shared-performance/[slug]/page.tsx");
 const journalSchema = read("database/010_trade_journal.sql");
 const currencyMigration = read("database/021_cent_account_currency_isolation.sql");
+const deployHostinger = read("scripts/deploy-hostinger.sh");
 
 must(
   ea.includes("AccountInfoString(ACCOUNT_CURRENCY)"),
@@ -61,6 +62,10 @@ must(
   journalSchema.includes("UNIQUE(bot_instance_id, mt5_account_id, deal_ticket, event_type)") &&
   currencyMigration.includes("trade_journal_instance_account_deal_event_key"),
   "Trade Journal deal identity must include MT5 account to avoid ticket collisions after rebind"
+);
+must(
+  deployHostinger.includes("database/021_cent_account_currency_isolation.sql"),
+  "Production deployment must apply the Cent account currency isolation migration"
 );
 must(
   perfApi.includes("AND mt5_account_id=$4") &&
