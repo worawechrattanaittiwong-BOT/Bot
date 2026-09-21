@@ -1381,6 +1381,11 @@ export class BotController {
     ) {
       throw new ConflictException("หยุดบอทและปิด Position ให้เรียบร้อยก่อนเปลี่ยนบัญชี MT5");
     }
+    if (instance.metrics?.pendingBasketJournal === true) {
+      throw new ConflictException(
+        "ยังมีข้อมูล Basket ของบัญชี MT5 เดิมรอส่งเข้า Server กรุณารอ Heartbeat/Journal ส่งสำเร็จก่อนเปลี่ยนบัญชี"
+      );
+    }
     await this.db.query(
       `UPDATE bot_instances SET
          desired_state='SAFE_STOP',
@@ -1430,6 +1435,11 @@ export class BotController {
     if (Number(instance.previous_bound_positions || 0) > 0) {
       throw new ConflictException(
         "บัญชี MT5 เดิมยังมี Position ค้างจากสถานะล่าสุด กรุณา Login กลับบัญชีเดิม ปิด Position ให้หมด แล้วค่อย Login บัญชีใหม่อีกครั้ง"
+      );
+    }
+    if (instance.metrics?.pendingBasketJournal === true) {
+      throw new ConflictException(
+        "ยังมี Basket Journal ของบัญชีเดิมรอส่ง กรุณารอให้ระบบส่งสำเร็จก่อนยืนยันบัญชี MT5 ใหม่"
       );
     }
     const isFirstBind = !instance.old_account_id;
@@ -1532,6 +1542,31 @@ export class BotController {
       slot.id
     );
 
+    const existingInstance = await this.db.one(
+      "SELECT * FROM bot_instances WHERE slot_id=$1",
+      [slot.id]
+    );
+    if (existingInstance) {
+      const existingPositions = Math.max(
+        0,
+        Number(existingInstance.metrics?.positions || 0)
+      );
+      if (
+        existingInstance.actual_state === "RUNNING" ||
+        existingInstance.desired_state === "RUNNING" ||
+        existingPositions > 0
+      ) {
+        throw new ConflictException(
+          "หยุดบอทและปิด Position ให้หมดก่อนเปลี่ยนบัญชี Cloud MT5"
+        );
+      }
+      if (existingInstance.metrics?.pendingBasketJournal === true) {
+        throw new ConflictException(
+          "ยังมี Basket Journal ของบัญชี Cloud เดิมรอส่ง กรุณารอให้ส่งสำเร็จก่อนเปลี่ยนบัญชี"
+        );
+      }
+    }
+
     let account = await this.db.one(
       "SELECT * FROM mt5_accounts WHERE user_id=$1 AND lower(account_number)=lower($2) AND lower(broker_server)=lower($3) LIMIT 1",
       [req.user.sub, String(body.accountNumber), String(body.brokerServer)]
@@ -1549,10 +1584,10 @@ export class BotController {
     }
 
     const installToken = randomBytes(32).toString("hex");
-    let instance = await this.db.one("SELECT * FROM bot_instances WHERE slot_id=$1", [slot.id]);
+    let instance = existingInstance;
     if (instance) {
       instance = await this.db.one(
-        "UPDATE bot_instances SET mt5_account_id=$2,mode=$3,install_token_hash=$4,actual_state='OFFLINE',last_seen_at=NULL WHERE id=$1 RETURNING id,mode,desired_state,actual_state",
+        "UPDATE bot_instances SET mt5_account_id=$2,mode=$3,install_token_hash=$4,desired_state='STOPPED',actual_state='OFFLINE',last_seen_at=NULL WHERE id=$1 RETURNING id,mode,desired_state,actual_state",
         [instance.id, account.id, mode, this.crypto.sha256(installToken)]
       );
     } else {
@@ -1613,6 +1648,11 @@ export class BotController {
     }
     if (instance.actual_state === "RUNNING" || instance.desired_state === "RUNNING" || Number(instance.positions || 0) > 0) {
       throw new ConflictException("stop the bot and close positions before changing MT5 account");
+    }
+    if (instance.metrics?.pendingBasketJournal === true) {
+      throw new ConflictException(
+        "ยังมี Basket Journal รอส่งจากบัญชี MT5 เดิม กรุณารอให้ส่งสำเร็จก่อนรีเซ็ตบัญชี"
+      );
     }
     if (instance.mt5_account_id) {
       await this.db.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [instance.mt5_account_id]);
