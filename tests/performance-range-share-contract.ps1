@@ -33,7 +33,11 @@ foreach ($required in @(
   'customDays',
   'inclusiveDays',
   'chartTickLabel',
-  'from={from} to={to}'
+  'from={from} to={to}',
+  'TRADING PERFORMANCE & BACKTEST',
+  'PerformanceSummaryReport',
+  'reportResultsGrid',
+  'reportChartPanel'
 )) {
   if (-not $web.Contains($required)) { throw "Trading Performance date/chart contract missing: $required" }
 }

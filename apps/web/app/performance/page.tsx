@@ -415,10 +415,12 @@ export default function PerformanceDashboardPage() {
     <div className={styles.shell}>
       {elevated ? <OwnerSidebar activeKey="trading-backtest" onLogout={logout}/> : <CustomerSidebar onLogout={logout}/>} 
       <main className={styles.main}>
-        <header className={styles.header}>
-          <div className={styles.headerTitle}><span className={styles.headerIcon}><ScenovaIcon name="strategy" size={24}/></span><div><h1>Trading Performance & Backtest</h1><p>ใช้ข้อมูลจริงที่ SCENOVA เก็บจากแต่ละบัญชี MT5 พร้อม Drawdown, รายงานย้อนหลัง และลิงก์แชร์แบบ Read-only</p></div></div>
-          <div className={styles.headerMeta}><span className={styles.onlineDot}/><div><b>{options?.user?.user_code || "SCENOVA"}</b><small>{elevated ? "Owner / Admin Analytics" : "ข้อมูลเฉพาะบัญชีของคุณ"}</small></div></div>
-        </header>
+        {scope === "SYSTEM" && elevated ? (
+          <header className={styles.header}>
+            <div className={styles.headerTitle}><span className={styles.headerIcon}><ScenovaIcon name="strategy" size={24}/></span><div><h1>Trading Performance & Backtest</h1><p>ภาพรวมผลการเทรดทั้งระบบและรายบัญชี</p></div></div>
+            <div className={styles.headerMeta}><span className={styles.onlineDot}/><div><b>{options?.user?.user_code || "SCENOVA"}</b><small>Owner / Admin Analytics</small></div></div>
+          </header>
+        ) : null}
 
         {error ? <div className={styles.error}>{error}</div> : null}
 
@@ -482,47 +484,224 @@ export default function PerformanceDashboardPage() {
               <section className={styles.backtestPicker}><div><b>เลือกรายงาน Backtest</b><small>Admin ดูของบัญชีที่เลือกได้ ลูกค้าดูเฉพาะของตัวเอง</small></div><select value={selectedBacktestId} onChange={(e)=>chooseBacktest(e.target.value)}><option value="">เลือกรายงาน</option>{(report?.backtests || []).map((run:any)=><option value={run.id} key={run.id}>{run.title} · {run.symbol} · {run.timeframe}</option>)}</select></section>
             ) : null}
 
-            <section className={styles.kpis}>
-              <Kpi label="Initial Balance" value={money(initialBalance,false,activeCurrency)} sub={mode === "LIVE" ? "คำนวณย้อนจาก Balance + Bot P/L" : "เงินเริ่มต้น Backtest"}/>
-              <Kpi label="Net Profit" value={money(summary.netProfit,true,activeCurrency)} sub="กำไร/ขาดทุนสุทธิ" className={tone(summary.netProfit)}/>
-              <Kpi label="Profit Factor" value={number(summary.profitFactor, 2)} sub="Gross Profit / Gross Loss"/>
-              <Kpi label="Win Rate" value={percent(summary.winRate)} sub={`${summary.wins ?? 0} ชนะ · ${summary.losses ?? 0} แพ้`}/>
-              <Kpi label="Max Drawdown" value={percent(summary.maxDrawdownPercent)} sub={`${money(summary.maxDrawdownMoney,false,activeCurrency)} · Closed Performance`} className={styles.bad}/>
-              <Kpi label="Total Trades" value={String(summary.trades ?? 0)} sub="Basket ที่ปิดแล้ว"/>
-              <Kpi label="Recovery Factor" value={number(summary.recoveryFactor, 2)} sub="Net Profit / Max DD"/>
-              <Kpi label="Return %" value={percent(summary.returnPercent)} sub="ผลตอบแทนช่วงที่เลือก" className={tone(summary.returnPercent)}/>
-            </section>
+            <PerformanceSummaryReport
+              mode={mode}
+              report={report}
+              backtest={activeBacktest}
+              summary={summary}
+              liveSummary={liveSummary}
+              curve={curve}
+              initialBalance={initialBalance}
+              currency={activeCurrency}
+              from={from}
+              to={to}
+              loading={loading}
+              onDownloadCsv={downloadCsv}
+            />
 
-            <section className={styles.statsStrip}>
-              <div><span>Gross Profit</span><b className={styles.good}>{money(summary.grossProfit,false,activeCurrency)}</b></div>
-              <div><span>Gross Loss</span><b className={styles.bad}>{money(-Math.abs(Number(summary.grossLoss || 0)),false,activeCurrency)}</b></div>
-              <div><span>Sharpe Ratio</span><b>{number(summary.sharpeRatio,2)}</b></div>
-              <div><span>Buy Trades</span><b>{String(liveSummary.buyTrades ?? "—")}</b></div>
-              <div><span>Sell Trades</span><b>{String(liveSummary.sellTrades ?? "—")}</b></div>
-              <div><span>Balance ล่าสุด</span><b>{money(report?.balance?.current,false,activeCurrency)}</b></div>
-              <div><span>Equity ล่าสุด</span><b>{money(report?.balance?.equity,false,activeCurrency)}</b></div>
-            </section>
-
-            <div className={styles.analyticsGrid}>
-              <section className={`${styles.card} ${styles.equityCard}`}>
-                <div className={styles.cardTitle}><div><b>{mode === "LIVE" ? "Equity & Balance Curve" : "Backtest Balance Curve"}</b><small>{mode === "LIVE" ? "Balance แสดงตาม EXIT ที่บอทปิดจริง · ใต้กราฟเป็นเวลาเมื่อเลือก 1 วัน และเป็นวันที่เมื่อเลือกหลายวัน" : "ผลตามลำดับรายการใน Backtest"}</small></div><strong className={tone(summary.netProfit)}>{money(summary.netProfit,true,activeCurrency)}</strong></div>
-                <LineChart points={curve} from={from} to={to}/>
+            <details className={styles.reportTradesDetails}>
+              <summary><ScenovaIcon name="orders" size={15}/><span>ดูรายการเทรดทั้งหมดในช่วงนี้</span></summary>
+              <section className={`${styles.card} ${styles.tradesCard}`}>
+                <div className={styles.cardTitle}><div><b>{mode === "LIVE" ? "รายการเทรดที่ปิดแล้ว" : "Backtest Trades"}</b><small>{mode === "LIVE" ? "Closed Trades จาก MT5 Trade Journal" : "รายการจาก Backtest ที่บันทึก"}</small></div><div className={styles.exportActions}>{mode === "LIVE" ? <button onClick={downloadCsv}>ดาวน์โหลด CSV</button> : null}<button onClick={()=>window.print()}>พิมพ์ / PDF</button></div></div>
+                <TradesTable rows={mode === "LIVE" ? (report?.closedTrades || []) : (activeBacktest?.trades || [])} backtest={mode === "BACKTEST"} currency={activeCurrency}/>
               </section>
-              <section className={`${styles.card} ${styles.drawdownCard}`}><div className={styles.cardTitle}><div><b>Drawdown</b><small>Closed-performance drawdown จาก Peak Balance</small></div><strong className={styles.bad}>{percent(summary.maxDrawdownPercent)}</strong></div><DrawdownChart points={curve} from={from} to={to}/></section>
-              {mode === "LIVE" ? <QualityCard quality={report?.quality}/> : <section className={`${styles.card} ${styles.qualityCard}`}><div className={styles.cardTitle}><div><b>Backtest Summary</b><small>ค่าจากรายงานที่เลือก</small></div></div><div className={styles.backtestSummary}><span>Initial Balance <b>{money(backSummary.initialDeposit,false,activeCurrency)}</b></span><span>Final Balance <b>{money(backSummary.finalBalance,false,activeCurrency)}</b></span><span>Average Win <b>{money(backSummary.averageWin,false,activeCurrency)}</b></span><span>Average Loss <b>{money(backSummary.averageLoss,false,activeCurrency)}</b></span></div></section>}
-              <section className={`${styles.card} ${styles.monthlyCard}`}><div className={styles.cardTitle}><div><b>ผลตอบแทนรายเดือน</b><small>Monthly Returns</small></div></div>{mode === "LIVE" ? <MonthlyBars rows={monthly} currency={activeCurrency}/> : <div className={styles.emptyChart}>Backtest รุ่นปัจจุบันยังไม่เก็บ Monthly Bucket แยก</div>}</section>
-              <section className={`${styles.card} ${styles.distributionCard}`}><div className={styles.cardTitle}><div><b>การกระจายการเทรด</b><small>Buy vs Sell</small></div></div><TradeDistribution buy={Number(liveSummary.buyTrades || 0)} sell={Number(liveSummary.sellTrades || 0)} total={Number(summary.trades || 0)}/></section>
-              <section className={`${styles.card} ${styles.strategyCard}`}><div className={styles.cardTitle}><div><b>ข้อมูลบัญชีและช่วงรายงาน</b><small>Report Context</small></div></div><StrategySummary report={report} mode={mode} backtest={activeBacktest} from={from} to={to}/></section>
-            </div>
-
-            <section className={`${styles.card} ${styles.tradesCard}`}>
-              <div className={styles.cardTitle}><div><b>{mode === "LIVE" ? "รายการเทรดที่ปิดแล้ว" : "Backtest Trades"}</b><small>{mode === "LIVE" ? "Closed Trades จาก MT5 Trade Journal" : "รายการจาก Backtest ที่บันทึก"}</small></div><div className={styles.exportActions}>{mode === "LIVE" ? <button onClick={downloadCsv}>ดาวน์โหลด CSV</button> : null}<button onClick={()=>window.print()}>พิมพ์ / PDF</button></div></div>
-              <TradesTable rows={mode === "LIVE" ? (report?.closedTrades || []) : (activeBacktest?.trades || [])} backtest={mode === "BACKTEST"} currency={activeCurrency}/>
-            </section>
+            </details>
           </>
         )}
       </main>
     </div>
+  );
+}
+
+
+function deriveReportTradeStats(rows:any[]) {
+  const normalized=(rows||[]).map((row:any)=>({
+    profit:Number(row.profit ?? row.net_profit ?? 0),
+    side:String(row.side ?? row.direction ?? "").toUpperCase()
+  }));
+  const wins=normalized.filter((row)=>row.profit>0);
+  const losses=normalized.filter((row)=>row.profit<0);
+  const bySide=(side:string)=>{
+    const selected=normalized.filter((row)=>row.side===side);
+    const won=selected.filter((row)=>row.profit>0).length;
+    return { count:selected.length, winRate:selected.length?won/selected.length*100:0 };
+  };
+  let maxWinStreak=0,maxLossStreak=0,currentWin=0,currentLoss=0;
+  let currentWinMoney=0,currentLossMoney=0,maxWinMoney=0,maxLossMoney=0;
+  let winRuns=0,lossRuns=0,totalWinRunLength=0,totalLossRunLength=0;
+  normalized.forEach((row)=>{
+    if(row.profit>0){
+      if(currentWin===0) winRuns++;
+      currentWin++; currentWinMoney+=row.profit;
+      currentLoss=0; currentLossMoney=0;
+      totalWinRunLength++;
+      if(currentWin>maxWinStreak){maxWinStreak=currentWin;maxWinMoney=currentWinMoney;}
+      else if(currentWin===maxWinStreak) maxWinMoney=Math.max(maxWinMoney,currentWinMoney);
+    }else if(row.profit<0){
+      if(currentLoss===0) lossRuns++;
+      currentLoss++; currentLossMoney+=row.profit;
+      currentWin=0; currentWinMoney=0;
+      totalLossRunLength++;
+      if(currentLoss>maxLossStreak){maxLossStreak=currentLoss;maxLossMoney=currentLossMoney;}
+      else if(currentLoss===maxLossStreak) maxLossMoney=Math.min(maxLossMoney,currentLossMoney);
+    }else{
+      currentWin=0;currentLoss=0;currentWinMoney=0;currentLossMoney=0;
+    }
+  });
+  return {
+    total:normalized.length,
+    wins:wins.length,
+    losses:losses.length,
+    long:bySide("BUY"),
+    short:bySide("SELL"),
+    largestProfit:wins.length?Math.max(...wins.map((row)=>row.profit)):0,
+    largestLoss:losses.length?Math.min(...losses.map((row)=>row.profit)):0,
+    averageProfit:wins.length?wins.reduce((sum,row)=>sum+row.profit,0)/wins.length:0,
+    averageLoss:losses.length?losses.reduce((sum,row)=>sum+row.profit,0)/losses.length:0,
+    maxWinStreak,maxLossStreak,maxWinMoney,maxLossMoney,
+    averageWinStreak:winRuns?totalWinRunLength/winRuns:0,
+    averageLossStreak:lossRuns?totalLossRunLength/lossRuns:0
+  };
+}
+
+function reportDateLabel(value:any) {
+  if(!value) return "—";
+  const date=new Date(value);
+  if(!Number.isFinite(date.getTime())) return "—";
+  return date.toLocaleString("th-TH",{timeZone:"Asia/Bangkok",dateStyle:"medium",timeStyle:"short"});
+}
+
+function ReportRow({label,value,toneClass=""}:{label:string;value:string;toneClass?:string}) {
+  return <div className={styles.reportRow}><span>{label}</span><b className={toneClass}>{value}</b></div>;
+}
+
+function ReportMetric({icon,label,value,toneClass=""}:{icon:string;label:string;value:string;toneClass?:string}) {
+  return <div className={styles.reportMetric}><div><ScenovaIcon name={icon} size={13}/><span>{label}</span></div><b className={toneClass}>{value}</b></div>;
+}
+
+function PerformanceSummaryReport(props:{
+  mode:Mode;report:any;backtest:any;summary:any;liveSummary:any;curve:any[];initialBalance:any;
+  currency:string;from:string;to:string;loading:boolean;onDownloadCsv:()=>void;
+}) {
+  const rows=props.mode==="LIVE"?(props.report?.closedTrades||[]):(props.backtest?.trades||[]);
+  const stats=deriveReportTradeStats(rows);
+  const finalBalance=props.mode==="LIVE"
+    ? Number(props.report?.balance?.current ?? Number(props.initialBalance||0)+Number(props.summary?.netProfit||0))
+    : Number(props.backtest?.summary?.finalBalance ?? Number(props.initialBalance||0)+Number(props.summary?.netProfit||0));
+  const startTime=props.mode==="LIVE"
+    ? props.report?.range?.from
+    : props.backtest?.started_at;
+  const stopTime=props.mode==="LIVE"
+    ? props.report?.range?.to
+    : props.backtest?.ended_at;
+  const account=props.report?.account||{};
+  const expectedPayoff=Number(props.summary?.trades||0)>0
+    ? Number(props.summary?.netProfit||0)/Number(props.summary?.trades||1)
+    : 0;
+  const periodDays=inclusiveDays(props.from,props.to);
+  const singleDay=props.from===props.to;
+
+  return (
+    <section className={styles.reportFrame}>
+      <header className={styles.reportHero}>
+        <div className={styles.reportTitleLine}>
+          <ScenovaIcon name="pnl" size={24}/>
+          <h1>TRADING PERFORMANCE & BACKTEST</h1>
+          <ScenovaIcon name="pnl" size={24}/>
+        </div>
+        <p>สรุปผลการเทรดในรูปแบบเดียวกับ Performance Report</p>
+      </header>
+
+      <section className={styles.reportInfo}>
+        <div>
+          <ReportRow label="Account" value={props.mode==="LIVE"?(account.accountNumber||"—"):(props.backtest?.title||"Backtest")}/>
+          <ReportRow label="Symbol" value={props.mode==="LIVE"?(account.symbol||"—"):(props.backtest?.symbol||"—")}/>
+          <ReportRow label="Currency" value={props.currency}/>
+        </div>
+        <div>
+          <ReportRow label="Runtime Mode" value={props.mode==="LIVE"?(account.mode||"LIVE"):"BACKTEST"}/>
+          <ReportRow label="Start Time" value={reportDateLabel(startTime)}/>
+          <ReportRow label="Status" value={props.mode==="LIVE"?(props.report?.status?.actualState||"LIVE"):(props.backtest?.status||"COMPLETED")}/>
+        </div>
+        <div>
+          <ReportRow label="Stop Time" value={reportDateLabel(stopTime)}/>
+          <ReportRow label="Selected Period" value={periodDays+" วัน"}/>
+          <ReportRow label="Closed Trades" value={String(Number(props.summary?.trades||0))}/>
+        </div>
+      </section>
+
+      <section className={styles.reportMetrics}>
+        <ReportMetric icon="wallet" label="Start Capital" value={money(props.initialBalance,false,props.currency)}/>
+        <ReportMetric icon="equity" label="End Balance" value={money(finalBalance,false,props.currency)}/>
+        <ReportMetric icon="profit" label="Net Profit" value={money(props.summary?.netProfit,true,props.currency)} toneClass={tone(props.summary?.netProfit)}/>
+        <ReportMetric icon="trend" label="Return" value={percent(props.summary?.returnPercent)} toneClass={tone(props.summary?.returnPercent)}/>
+        <ReportMetric icon="calendar" label="Period" value={periodDays+" วัน"}/>
+        <ReportMetric icon="risk" label="Max Drawdown" value={percent(props.summary?.maxDrawdownPercent)}/>
+        <ReportMetric icon="target" label="Win Rate" value={percent(props.summary?.winRate)}/>
+      </section>
+
+      <div className={styles.reportSectionTitle}><ScenovaIcon name="report" size={14}/>Results</div>
+      <div className={styles.reportResultsGrid}>
+        <section className={styles.reportPanel}>
+          <h3><ScenovaIcon name="profit" size={14}/>Performance</h3>
+          <ReportRow label="Total Net Profit" value={money(props.summary?.netProfit,true,props.currency)} toneClass={tone(props.summary?.netProfit)}/>
+          <ReportRow label="Profit (%)" value={percent(props.summary?.returnPercent)} toneClass={tone(props.summary?.returnPercent)}/>
+          <ReportRow label="Gross Profit" value={money(props.summary?.grossProfit,false,props.currency)}/>
+          <ReportRow label="Gross Loss" value={money(-Math.abs(Number(props.summary?.grossLoss||0)),false,props.currency)} toneClass={styles.bad}/>
+          <ReportRow label="Profit Factor" value={number(props.summary?.profitFactor,2)}/>
+          <ReportRow label="Expected Payoff" value={money(expectedPayoff,false,props.currency)}/>
+          <ReportRow label="Recovery Factor" value={number(props.summary?.recoveryFactor,2)}/>
+          <ReportRow label="Sharpe Ratio" value={number(props.summary?.sharpeRatio,2)}/>
+        </section>
+
+        <div className={styles.reportMiddleStack}>
+          <section className={styles.reportPanel}>
+            <h3><ScenovaIcon name="shield" size={14}/>Drawdown</h3>
+            <ReportRow label="Max Drawdown" value={percent(props.summary?.maxDrawdownPercent)}/>
+            <ReportRow label="Drawdown Money" value={money(props.summary?.maxDrawdownMoney,false,props.currency)}/>
+          </section>
+          <section className={styles.reportPanel}>
+            <h3><ScenovaIcon name="orders" size={14}/>Trades</h3>
+            <ReportRow label="Total Trades" value={String(props.summary?.trades??0)}/>
+            <ReportRow label="Total Deals" value={String(stats.total)}/>
+            <ReportRow label="Profit Trades" value={String(props.summary?.wins??0)}/>
+            <ReportRow label="Loss Trades" value={String(props.summary?.losses??0)}/>
+            <ReportRow label="Win Rate" value={percent(props.summary?.winRate)}/>
+            <ReportRow label="Loss Rate" value={percent(Number(props.summary?.trades||0)>0?Number(props.summary?.losses||0)/Number(props.summary?.trades||1)*100:0)}/>
+          </section>
+        </div>
+
+        <div className={styles.reportRightStack}>
+          <section className={styles.reportPanel}>
+            <h3><ScenovaIcon name="spread" size={14}/>Trade Direction</h3>
+            <ReportRow label="Long Trades (won %)" value={stats.long.count+" ("+percent(stats.long.winRate)+")"}/>
+            <ReportRow label="Short Trades (won %)" value={stats.short.count+" ("+percent(stats.short.winRate)+")"}/>
+          </section>
+          <section className={styles.reportPanel}>
+            <h3><ScenovaIcon name="pnl" size={14}/>Trade Statistics</h3>
+            <ReportRow label="Largest profit trade" value={money(stats.largestProfit,false,props.currency)}/>
+            <ReportRow label="Largest loss trade" value={money(stats.largestLoss,false,props.currency)} toneClass={styles.bad}/>
+            <ReportRow label="Average profit trade" value={money(stats.averageProfit,false,props.currency)}/>
+            <ReportRow label="Average loss trade" value={money(stats.averageLoss,false,props.currency)} toneClass={styles.bad}/>
+          </section>
+          <section className={styles.reportPanel}>
+            <h3><ScenovaIcon name="target" size={14}/>Streaks</h3>
+            <ReportRow label="Maximum consecutive wins" value={stats.maxWinStreak+" ("+money(stats.maxWinMoney,false,props.currency)+")"}/>
+            <ReportRow label="Maximum consecutive losses" value={stats.maxLossStreak+" ("+money(stats.maxLossMoney,false,props.currency)+")"} toneClass={styles.bad}/>
+            <ReportRow label="Average consecutive wins" value={number(stats.averageWinStreak,1)}/>
+            <ReportRow label="Average consecutive losses" value={number(stats.averageLossStreak,1)}/>
+          </section>
+        </div>
+      </div>
+
+      <section className={styles.reportChartPanel}>
+        <div className={styles.reportChartHead}>
+          <div><ScenovaIcon name="trend" size={14}/><b>Balance</b><small>{singleDay?"แกนล่างแสดงเวลา":"แกนล่างแสดงวันที่"}</small></div>
+          <strong>End Balance: {money(finalBalance,false,props.currency)}</strong>
+        </div>
+        <LineChart points={props.curve} from={props.from} to={props.to}/>
+      </section>
+    </section>
   );
 }
 
