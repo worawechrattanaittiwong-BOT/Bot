@@ -71,7 +71,7 @@ must(
 );
 must(
   shareApi.includes("AND mt5_account_id=$4") &&
-  shareApi.includes('currency: String(metrics.currency || "USD")'),
+  shareApi.includes('currency: String(metrics.currency || "UNKNOWN")'),
   "Shared live snapshots must be scoped to the MT5 account and capture currency"
 );
 
