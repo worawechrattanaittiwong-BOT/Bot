@@ -6,6 +6,7 @@ import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { EaDecisionCenter } from "../../components/EaDecisionCenter";
+import { BotPerformanceSummary } from "../../components/BotPerformanceSummary";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
 
 type Dashboard = {
@@ -1889,6 +1890,7 @@ export default function DashboardPage() {
           </div>
         </header>
 
+        <BotPerformanceSummary dashboard={data} />
 
         {maintenance.status !== "OFF" && (
           <div className={"system-maintenance-banner status-" + String(maintenance.status).toLowerCase()} role="alert">

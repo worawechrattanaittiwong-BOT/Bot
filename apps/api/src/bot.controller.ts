@@ -984,6 +984,230 @@ export class BotController {
       [userId]
     );
 
+    let runSummary: any = null;
+    if (instance?.mt5_account_id) {
+      const latestRunStart = await this.db.one(
+        `SELECT id,created_at
+         FROM bot_commands
+         WHERE bot_instance_id=$1
+           AND command='START'
+         ORDER BY id DESC
+         LIMIT 1`,
+        [instance.id]
+      );
+
+      if (latestRunStart?.created_at) {
+        const firstStopAfterStart = await this.db.one(
+          `SELECT id,command,created_at,acked_at
+           FROM bot_commands
+           WHERE bot_instance_id=$1
+             AND id>$2
+             AND command IN ('SAFE_STOP','CLOSE_ALL')
+           ORDER BY id ASC
+           LIMIT 1`,
+          [instance.id, latestRunStart.id]
+        );
+
+        const runningNow =
+          String(instance.actual_state || "").toUpperCase() === "RUNNING" ||
+          String(instance.desired_state || "").toUpperCase() === "RUNNING";
+        const startAt = new Date(latestRunStart.created_at);
+        const stopAt = !runningNow && firstStopAfterStart
+          ? new Date(firstStopAfterStart.acked_at || firstStopAfterStart.created_at)
+          : null;
+        const summaryEndAt = stopAt || new Date();
+
+        const sessionJournal = await this.db.query(
+          `SELECT
+             deal_ticket,
+             position_id,
+             event_type,
+             direction,
+             net_profit::float8 AS net_profit,
+             created_at
+           FROM trade_journal
+           WHERE bot_instance_id=$1
+             AND mt5_account_id=$2
+             AND event_type IN ('ENTRY','EXIT','BASKET')
+             AND created_at >= $3
+             AND created_at <= $4
+           ORDER BY created_at ASC, id ASC`,
+          [instance.id, instance.mt5_account_id, startAt.toISOString(), summaryEndAt.toISOString()]
+        );
+
+        const sessionRows = sessionJournal.rows || [];
+        const basketRows = sessionRows.filter(
+          (row:any) => String(row.event_type || "").toUpperCase() === "BASKET"
+        );
+        const entryRows = sessionRows.filter(
+          (row:any) => String(row.event_type || "").toUpperCase() === "ENTRY"
+        );
+        const dealRows = sessionRows.filter(
+          (row:any) => String(row.event_type || "").toUpperCase() !== "BASKET"
+        );
+
+        const pnlValues = basketRows.map((row:any) => Number(row.net_profit || 0));
+        const netProfit = pnlValues.reduce((sum:number, value:number) => sum + value, 0);
+        const positive = pnlValues.filter((value:number) => value > 0);
+        const negative = pnlValues.filter((value:number) => value < 0);
+        const grossProfit = positive.reduce((sum:number, value:number) => sum + value, 0);
+        const grossLoss = Math.abs(negative.reduce((sum:number, value:number) => sum + value, 0));
+
+        let equity = 0;
+        let peak = 0;
+        let maxDrawdownMoney = 0;
+        const cumulativeProfit = [0];
+        for (const value of pnlValues) {
+          equity += value;
+          cumulativeProfit.push(equity);
+          peak = Math.max(peak, equity);
+          maxDrawdownMoney = Math.max(maxDrawdownMoney, peak - equity);
+        }
+
+        const endBalance = Number(instance.metrics?.balance || 0);
+        const startCapital = Math.max(0, endBalance - netProfit);
+        const maxDrawdownPercent = startCapital > 0
+          ? maxDrawdownMoney / startCapital * 100
+          : 0;
+        const returnPercent = startCapital > 0
+          ? netProfit / startCapital * 100
+          : 0;
+        const closedBaskets = basketRows.length;
+        const wins = positive.length;
+        const losses = negative.length;
+        const winRate = closedBaskets > 0 ? wins / closedBaskets * 100 : 0;
+        const expectedPayoff = closedBaskets > 0 ? netProfit / closedBaskets : 0;
+        const profitFactor = grossLoss > 0
+          ? grossProfit / grossLoss
+          : grossProfit > 0 ? grossProfit : 0;
+        const recoveryFactor = maxDrawdownMoney > 0
+          ? netProfit / maxDrawdownMoney
+          : netProfit > 0 ? netProfit : 0;
+
+        const pnlMean = closedBaskets > 0 ? netProfit / closedBaskets : 0;
+        const pnlVariance = closedBaskets > 1
+          ? pnlValues.reduce(
+              (sum:number, value:number) => sum + Math.pow(value - pnlMean, 2),
+              0
+            ) / (closedBaskets - 1)
+          : 0;
+        const pnlStdDev = Math.sqrt(Math.max(0, pnlVariance));
+        const sharpeRatio = pnlStdDev > 0
+          ? pnlMean / pnlStdDev * Math.sqrt(closedBaskets)
+          : 0;
+
+        const directionStats = (direction:string) => {
+          const selected = basketRows.filter(
+            (row:any) => String(row.direction || "").toUpperCase() === direction
+          );
+          const selectedWins = selected.filter(
+            (row:any) => Number(row.net_profit || 0) > 0
+          ).length;
+          return {
+            trades: selected.length,
+            wins: selectedWins,
+            winRate: selected.length > 0 ? selectedWins / selected.length * 100 : 0
+          };
+        };
+
+        let maxWinStreak = 0;
+        let maxLossStreak = 0;
+        let currentWinStreak = 0;
+        let currentLossStreak = 0;
+        let maxWinStreakProfit = 0;
+        let maxLossStreakLoss = 0;
+        let currentWinProfit = 0;
+        let currentLossValue = 0;
+        let totalWinStreaks = 0;
+        let totalLossStreaks = 0;
+        let winStreakCount = 0;
+        let lossStreakCount = 0;
+
+        for (const value of pnlValues) {
+          if (value > 0) {
+            if (currentWinStreak === 0) winStreakCount++;
+            currentWinStreak++;
+            currentWinProfit += value;
+            currentLossStreak = 0;
+            currentLossValue = 0;
+            if (currentWinStreak > maxWinStreak) {
+              maxWinStreak = currentWinStreak;
+              maxWinStreakProfit = currentWinProfit;
+            } else if (currentWinStreak === maxWinStreak) {
+              maxWinStreakProfit = Math.max(maxWinStreakProfit, currentWinProfit);
+            }
+            totalWinStreaks++;
+          } else if (value < 0) {
+            if (currentLossStreak === 0) lossStreakCount++;
+            currentLossStreak++;
+            currentLossValue += value;
+            currentWinStreak = 0;
+            currentWinProfit = 0;
+            if (currentLossStreak > maxLossStreak) {
+              maxLossStreak = currentLossStreak;
+              maxLossStreakLoss = currentLossValue;
+            } else if (currentLossStreak === maxLossStreak) {
+              maxLossStreakLoss = Math.min(maxLossStreakLoss, currentLossValue);
+            }
+            totalLossStreaks++;
+          } else {
+            currentWinStreak = 0;
+            currentLossStreak = 0;
+            currentWinProfit = 0;
+            currentLossValue = 0;
+          }
+        }
+
+        const balanceSeries = cumulativeProfit.map(
+          (value:number) => startCapital + value
+        );
+
+        runSummary = {
+          running: runningNow,
+          startAt: startAt.toISOString(),
+          stopAt: stopAt ? stopAt.toISOString() : null,
+          runtimeSeconds: Math.max(
+            0,
+            Math.floor((summaryEndAt.getTime() - startAt.getTime()) / 1000)
+          ),
+          startCapital,
+          endBalance,
+          netProfit,
+          returnPercent,
+          maxDrawdownMoney,
+          maxDrawdownPercent,
+          closedBaskets,
+          totalTrades: entryRows.length,
+          totalDeals: dealRows.length,
+          wins,
+          losses,
+          winRate,
+          lossRate: closedBaskets > 0 ? losses / closedBaskets * 100 : 0,
+          grossProfit,
+          grossLoss,
+          profitFactor,
+          expectedPayoff,
+          recoveryFactor,
+          sharpeRatio,
+          largestProfitTrade: positive.length ? Math.max(...positive) : 0,
+          largestLossTrade: negative.length ? Math.min(...negative) : 0,
+          averageProfitTrade: positive.length ? grossProfit / positive.length : 0,
+          averageLossTrade: negative.length
+            ? negative.reduce((sum:number, value:number) => sum + value, 0) / negative.length
+            : 0,
+          long: directionStats("BUY"),
+          short: directionStats("SELL"),
+          maxWinStreak,
+          maxWinStreakProfit,
+          maxLossStreak,
+          maxLossStreakLoss,
+          averageWinStreak: winStreakCount > 0 ? totalWinStreaks / winStreakCount : 0,
+          averageLossStreak: lossStreakCount > 0 ? totalLossStreaks / lossStreakCount : 0,
+          balanceSeries
+        };
+      }
+    }
+
     const entitlement = await this.entitlement(
       userId,
       account?.id || null,
@@ -1007,6 +1231,7 @@ export class BotController {
       liveStatus,
       softwareUpdate,
       startTransition,
+      runSummary,
       maintenance,
       partner,
       tradeJournal
