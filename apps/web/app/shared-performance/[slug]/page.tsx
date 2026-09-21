@@ -6,10 +6,10 @@ import { api } from "../../../lib/api";
 import { ScenovaBrand } from "../../../components/ScenovaBrand";
 import styles from "./shared-performance.module.css";
 
-function money(value: any, signed = false, currency: any = "USD") {
+function money(value: any, signed = false, currency: any = "UNKNOWN") {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
-  const code = String(currency || "USD").trim().toUpperCase() || "USD";
+  const code = String(currency || "UNKNOWN").trim().toUpperCase() || "UNKNOWN";
   const sign = signed && n > 0 ? "+" : n < 0 ? "-" : "";
   return `${sign}${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${code}`;
 }
@@ -72,7 +72,7 @@ export default function SharedPerformancePage() {
   const snapshot = data?.snapshot || {};
   const summary = snapshot?.summary || {};
   const account = snapshot?.account || {};
-  const currency = String(account.currency || "USD").trim().toUpperCase() || "USD";
+  const currency = String(account.currency || "UNKNOWN").trim().toUpperCase() || "UNKNOWN";
   const curve = Array.isArray(snapshot?.curve) ? snapshot.curve : [];
   const trades = Array.isArray(snapshot?.closedTrades) ? snapshot.closedTrades : [];
   const rangeLabel = useMemo(() => {
