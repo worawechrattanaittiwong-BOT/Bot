@@ -925,6 +925,7 @@ export class EaController {
     winSamples?: number;
     averageNet?: number;
     controlMode?: string;
+    executedByBot?: boolean;
   }) {
     const instance = await this.instance(body.instanceId, body.installToken);
 
@@ -1018,6 +1019,7 @@ export class EaController {
           source: "EA",
           controlMode: journalControlMode,
           controlModeSource: validJournalModes.includes(reportedJournalMode) ? "EA_DEAL" : "SERVER_SETTINGS",
+          executedByBot: body.executedByBot !== false,
           schema: eventType === "BASKET"
             ? Math.max(2, Math.min(5, Math.trunc(n(body.journalSchema, 2))))
             : 1,
