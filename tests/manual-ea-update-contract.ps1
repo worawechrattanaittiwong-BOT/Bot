@@ -31,6 +31,8 @@ if (-not $agent.Contains('forceReload=true  => UPDATE_EA_RESTART only')) { throw
 if (-not $agent.Contains('WriteStamp(stampPath, actionId);')) { throw 'Agent one-restart stamp missing' }
 if (-not $smart.Contains('Waiting for explicit update button restart')) { throw 'Background update must remain restart-free' }
 if (-not $smart.Contains('PendingReloadPath(config)')) { throw 'Pending reload marker missing' }
+if (-not $smart.Contains('Always poll the guarded UPDATE_EA_RESTART action when restart-safe.')) { throw 'Explicit Update action must be checked independently from staging marker' }
+if ($smart.Contains('if (reloadPending && heartbeat.SafeToRestart)')) { throw 'Pending reload marker must not gate the explicit Update restart action' }
 $web = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/components/Mt5ManualActionControls.tsx'))
 if (-not $web.Contains('updateIntentAt')) { throw 'Update button optimistic one-click lock missing' }
 if (-not $web.Contains('คำสั่งกำลังทำงาน · ไม่ต้องกดซ้ำ')) { throw 'Update button pending guidance missing' }
