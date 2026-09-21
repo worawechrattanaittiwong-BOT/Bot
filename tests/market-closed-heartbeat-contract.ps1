@@ -13,6 +13,8 @@ foreach ($pattern in @(
 
 foreach ($required in @(
   'string MarketSessionStateNow()',
+  '\"runtimeContract\":\"" + SCENOVA_RUNTIME_CONTRACT + "\"',
+  '\"livePriceTelemetrySuppressed\":true',
   'TimeTradeServer()',
   'SymbolInfoSessionTrade(_Symbol, day, session, from, to)',
   'if(day == SATURDAY || day == SUNDAY)',
