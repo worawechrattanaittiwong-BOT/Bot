@@ -154,7 +154,6 @@ export class PerformanceActionsController {
   ) {
     const actor = req.user as Actor;
     const account = await this.accountForActor(actor, String(body?.accountId || ""));
-    if (!account.instance_id) throw new BadRequestException("selected account has no bot instance");
     const { from, to } = this.parseRange(String(body?.from || ""), String(body?.to || ""));
     const metrics = account.metrics || {};
     const currentBalance = Number(metrics.balance || 0);
@@ -162,14 +161,13 @@ export class PerformanceActionsController {
     const basketResult = await this.db.query(
       `SELECT direction,net_profit,created_at
        FROM trade_journal
-       WHERE bot_instance_id=$1
-         AND mt5_account_id=$4
+       WHERE mt5_account_id=$1
          AND event_type='BASKET'
          AND created_at >= $2
          AND created_at <= $3
        ORDER BY created_at ASC
        LIMIT 20000`,
-      [account.instance_id, from.toISOString(), to.toISOString(), account.id]
+      [account.id, from.toISOString(), to.toISOString()]
     );
     const baskets = basketResult.rows as BasketRow[];
     if (!baskets.length) throw new BadRequestException("ยังไม่มีข้อมูลผลการเทรดในช่วงเวลาที่เลือก");
@@ -177,11 +175,10 @@ export class PerformanceActionsController {
     const pnlSinceFrom = await this.db.one(
       `SELECT COALESCE(SUM(net_profit),0)::float8 AS net
        FROM trade_journal
-       WHERE bot_instance_id=$1
-         AND mt5_account_id=$3
+       WHERE mt5_account_id=$1
          AND event_type='BASKET'
          AND created_at >= $2`,
-      [account.instance_id, from.toISOString(), account.id]
+      [account.id, from.toISOString()]
     );
     const derivedStart = currentBalance > 0
       ? Number((currentBalance - Number(pnlSinceFrom?.net || 0)).toFixed(2))
@@ -191,28 +188,43 @@ export class PerformanceActionsController {
     const exitResult = await this.db.query(
       `SELECT
          x.deal_ticket,x.position_id,x.direction,x.volume,x.price AS exit_price,x.net_profit,
-         x.created_at AS closed_at,COALESCE(x.metadata->>'symbol',$5) AS symbol,
+         x.created_at AS closed_at,COALESCE(x.metadata->>'symbol',$4) AS symbol,
          e.price AS entry_price,e.created_at AS opened_at
        FROM trade_journal x
        LEFT JOIN LATERAL (
          SELECT price,created_at
          FROM trade_journal e
-         WHERE e.bot_instance_id=x.bot_instance_id
-           AND e.mt5_account_id=x.mt5_account_id
+         WHERE e.mt5_account_id=x.mt5_account_id
            AND e.event_type='ENTRY'
            AND e.position_id=x.position_id
            AND e.created_at<=x.created_at
          ORDER BY e.created_at DESC
          LIMIT 1
        ) e ON true
-       WHERE x.bot_instance_id=$1
-         AND x.mt5_account_id=$4
+       WHERE x.mt5_account_id=$1
          AND x.event_type='EXIT'
          AND x.created_at >= $2
          AND x.created_at <= $3
        ORDER BY x.created_at DESC
        LIMIT 500`,
-      [account.instance_id, from.toISOString(), to.toISOString(), account.id, String(metrics.symbol || "XAUUSD")]
+      [account.id, from.toISOString(), to.toISOString(), String(metrics.symbol || "XAUUSD")]
+    );
+
+    const historyIdentity = await this.db.one(
+      `SELECT
+         NULLIF(metadata->>'currency','') AS currency,
+         NULLIF(metadata->>'symbol','') AS symbol
+       FROM trade_journal
+       WHERE mt5_account_id=$1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [account.id]
+    );
+    const accountCurrency = String(
+      metrics.currency || historyIdentity?.currency || "UNKNOWN"
+    ).trim().toUpperCase() || "UNKNOWN";
+    const accountSymbol = String(
+      metrics.symbol || historyIdentity?.symbol || "XAUUSD"
     );
 
     const slug = `live-${String(account.account_number || "account").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}-${randomBytes(5).toString("hex")}`;
@@ -226,9 +238,9 @@ export class PerformanceActionsController {
         broker: account.broker,
         brokerServer: account.broker_server,
         mode: account.mode,
-        symbol: String(metrics.symbol || "XAUUSD"),
+        symbol: accountSymbol,
         timeframe: String(metrics.timeframe || "M5"),
-        currency: String(metrics.currency || "UNKNOWN").trim().toUpperCase() || "UNKNOWN"
+        currency: accountCurrency
       },
       range: { from: from.toISOString(), to: to.toISOString() },
       balance: {
@@ -243,7 +255,7 @@ export class PerformanceActionsController {
       closedTrades: exitResult.rows.map((row: any) => ({
         ticket: String(row.deal_ticket),
         positionId: row.position_id ? String(row.position_id) : null,
-        symbol: row.symbol || String(metrics.symbol || "XAUUSD"),
+        symbol: row.symbol || accountSymbol,
         side: row.direction,
         lot: Number(row.volume || 0),
         entryPrice: row.entry_price === null ? null : Number(row.entry_price),
