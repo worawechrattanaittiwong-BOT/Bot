@@ -188,7 +188,7 @@ export class EaController {
     return false;
   }
 
-  private async basketWinProbability(instanceId: string, symbol: string) {
+  private async basketWinProbability(instanceId: string, mt5AccountId: string | null, symbol: string) {
     const rows = await this.db.query(
       `SELECT
          direction,
@@ -197,11 +197,12 @@ export class EaController {
          COALESCE(AVG(net_profit),0)::float8 AS avg_net
        FROM trade_journal
        WHERE bot_instance_id=$1
+         AND mt5_account_id=$2
          AND event_type='BASKET'
          AND COALESCE((metadata->>'schema')::int,0) >= 3
-         AND ($2='' OR metadata->>'symbol'=$2)
+         AND ($3='' OR metadata->>'symbol'=$3)
        GROUP BY direction`,
-      [instanceId, symbol]
+      [instanceId, mt5AccountId, symbol]
     );
     const byDirection = new Map<string, { samples: number; wins: number; averageNet: number }>();
     for (const row of rows.rows) {
@@ -231,6 +232,7 @@ export class EaController {
 
   private async setupPerformance(
     instanceId: string,
+    mt5AccountId: string | null,
     symbol: string,
     decisionDirection: number,
     entryModel: string,
@@ -275,16 +277,17 @@ export class EaController {
          SELECT net_profit
          FROM trade_journal
          WHERE bot_instance_id=$1
+           AND mt5_account_id=$2
            AND event_type='BASKET'
            AND COALESCE((metadata->>'schema')::int,0) >= 3
-           AND ($2='' OR metadata->>'symbol'=$2)
-           AND direction=$3
-           AND entry_model=$4
-           AND ($5='' OR market_regime=$5)
+           AND ($3='' OR metadata->>'symbol'=$3)
+           AND direction=$4
+           AND entry_model=$5
+           AND ($6='' OR market_regime=$6)
          ORDER BY created_at DESC
          LIMIT 120
        ) recent_setup`,
-      [instanceId, symbol, direction, model, useRegime ? regime : ""]
+      [instanceId, mt5AccountId, symbol, direction, model, useRegime ? regime : ""]
     );
 
     const samples = Math.max(0, Number(row?.samples || 0));
@@ -316,19 +319,21 @@ export class EaController {
          SELECT net_profit
          FROM trade_journal
          WHERE bot_instance_id=$1
+           AND mt5_account_id=$2
            AND event_type='BASKET'
            AND COALESCE((metadata->>'schema')::int,0) >= 5
-           AND ($2='' OR metadata->>'symbol'=$2)
-           AND direction=$3
-           AND entry_model=$4
-           AND ($5='' OR market_regime=$5)
+           AND ($3='' OR metadata->>'symbol'=$3)
+           AND direction=$4
+           AND entry_model=$5
+           AND ($6='' OR market_regime=$6)
            AND NULLIF(metadata->>'indicatorCompositeScore','')::float8
-               BETWEEN $6 AND $7
+               BETWEEN $7 AND $8
          ORDER BY created_at DESC
          LIMIT 160
        ) recent_indicator_context`,
       [
         instanceId,
+        mt5AccountId,
         symbol,
         direction,
         model,
@@ -796,6 +801,36 @@ export class EaController {
     // Runtime contract: preserve the direction selected by the customer.
     // RACE runs at exactly 2x the normal order cadence without changing AUTO.
     const runtimeSettings = { ...(settings?.settings || {}) };
+    const reportedCurrency = String(metrics.currency || "").trim().toUpperCase();
+    const previousCurrency = String(
+      runtimeSettings.accountCurrency ||
+      instance.metrics?.currency ||
+      ""
+    ).trim().toUpperCase();
+    const firstNonUsdCurrency =
+      !previousCurrency &&
+      reportedCurrency &&
+      reportedCurrency !== "USD";
+    if (
+      firstNonUsdCurrency ||
+      (previousCurrency && reportedCurrency && previousCurrency !== reportedCurrency)
+    ) {
+      const reviewFromCurrency = previousCurrency || "UNSET";
+      await this.db.query(
+        `UPDATE bot_settings
+         SET settings=jsonb_set(
+               jsonb_set(COALESCE(settings,'{}'::jsonb),'{accountCurrencyReviewRequired}','true'::jsonb,true),
+               '{previousAccountCurrency}',
+               to_jsonb($2::text),
+               true
+             ),
+             updated_at=now()
+         WHERE bot_instance_id=$1`,
+        [instance.id, reviewFromCurrency]
+      );
+      runtimeSettings.accountCurrencyReviewRequired = true;
+      runtimeSettings.previousAccountCurrency = reviewFromCurrency;
+    }
     const savedControlMode = String(runtimeSettings.controlMode || "").toUpperCase();
     if (!["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "ASSISTED", "MANUAL"].includes(savedControlMode)) {
       const engineMode = String(runtimeSettings.engineMode || "AUTO").toUpperCase();
@@ -822,10 +857,12 @@ export class EaController {
     }
     const intelligenceStats = await this.basketWinProbability(
       instance.id,
+      instance.mt5_account_id || null,
       String(metrics.symbol || "").trim()
     );
     const setupStats = await this.setupPerformance(
       instance.id,
+      instance.mt5_account_id || null,
       String(metrics.symbol || "").trim(),
       Number(metrics.decisionDirection || 0),
       String(metrics.entryModel || ""),
@@ -994,7 +1031,7 @@ export class EaController {
          $1,$2,$3::bigint,NULLIF($4,'')::bigint,$5,$6,
          $7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb
        )
-       ON CONFLICT(bot_instance_id,deal_ticket,event_type) DO NOTHING`,
+       ON CONFLICT(bot_instance_id,mt5_account_id,deal_ticket,event_type) DO NOTHING`,
       [
         instance.id,
         instance.mt5_account_id || null,
@@ -1025,6 +1062,7 @@ export class EaController {
             : 1,
           symbol: text(body.symbol, 48),
           brokerServer: text(body.brokerServer, 96),
+          currency: text(instance.metrics?.currency, 16),
           startedAt: Math.max(0, Math.trunc(n(body.startedAt))),
           endedAt: Math.max(0, Math.trunc(n(body.endedAt))),
           peakPositions: Math.max(0, Math.trunc(n(body.peakPositions))),

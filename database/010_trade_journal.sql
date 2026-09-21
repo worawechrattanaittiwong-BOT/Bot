@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS trade_journal (
   basket_index integer NOT NULL DEFAULT 0,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(bot_instance_id, deal_ticket, event_type)
+  CONSTRAINT trade_journal_instance_account_deal_event_key UNIQUE(bot_instance_id, mt5_account_id, deal_ticket, event_type)
 );
 
 CREATE INDEX IF NOT EXISTS idx_trade_journal_instance_created
@@ -29,3 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_trade_journal_instance_created
 
 CREATE INDEX IF NOT EXISTS idx_trade_journal_instance_exit
   ON trade_journal(bot_instance_id, event_type, created_at DESC);
+
+
+CREATE INDEX IF NOT EXISTS idx_trade_journal_account_created
+  ON trade_journal(mt5_account_id, created_at DESC);

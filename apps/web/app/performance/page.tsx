@@ -21,11 +21,16 @@ function isoDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-function money(value: any, signed = false) {
+function currencyCode(value: any) {
+  const code = String(value || "").trim().toUpperCase();
+  return code || "UNKNOWN";
+}
+
+function money(value: any, signed = false, currency: any = "UNKNOWN") {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
   const sign = signed && n > 0 ? "+" : "";
-  return `${sign}$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${sign}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyCode(currency)}`;
 }
 
 function number(value: any, digits = 2) {
@@ -91,7 +96,7 @@ function DrawdownChart({ points }:{ points:any[] }) {
   return <LineChart points={normalized} valueKey="dd" secondaryKey="dd"/>;
 }
 
-function MonthlyBars({ rows }:{ rows:any[] }) {
+function MonthlyBars({ rows, currency }:{ rows:any[]; currency:any }) {
   const max = Math.max(1, ...(rows || []).map((row) => Math.abs(Number(row.returnPercent ?? row.profit ?? 0))));
   if (!rows?.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลรายเดือน</div>;
   return (
@@ -103,7 +108,7 @@ function MonthlyBars({ rows }:{ rows:any[] }) {
             <div className={styles.monthBarTrack}>
               <div className={value >= 0 ? styles.monthBarPositive : styles.monthBarNegative} style={{ height: `${Math.max(4, Math.abs(value) / max * 100)}%` }} />
             </div>
-            <b className={value >= 0 ? styles.good : styles.bad}>{row.returnPercent === null || row.returnPercent === undefined ? money(row.profit, true) : `${value.toFixed(1)}%`}</b>
+            <b className={value >= 0 ? styles.good : styles.bad}>{row.returnPercent === null || row.returnPercent === undefined ? money(row.profit, true, currency) : `${value.toFixed(1)}%`}</b>
             <small>{row.month}</small>
           </div>
         );
@@ -334,6 +339,9 @@ export default function PerformanceDashboardPage() {
     : (report?.curve || []);
   const monthly = mode === "BACKTEST" ? [] : (report?.monthly || []);
   const initialBalance = mode === "BACKTEST" ? backSummary.initialDeposit : report?.balance?.derivedStart;
+  const activeCurrency = mode === "BACKTEST"
+    ? currencyCode(activeBacktest?.currency)
+    : currencyCode(report?.account?.currency);
 
   return (
     <div className={styles.shell}>
@@ -391,41 +399,41 @@ export default function PerformanceDashboardPage() {
             ) : null}
 
             <section className={styles.kpis}>
-              <Kpi label="Initial Balance" value={money(initialBalance)} sub={mode === "LIVE" ? "คำนวณย้อนจาก Balance + Bot P/L" : "เงินเริ่มต้น Backtest"}/>
-              <Kpi label="Net Profit" value={money(summary.netProfit, true)} sub="กำไร/ขาดทุนสุทธิ" className={tone(summary.netProfit)}/>
+              <Kpi label="Initial Balance" value={money(initialBalance,false,activeCurrency)} sub={mode === "LIVE" ? "คำนวณย้อนจาก Balance + Bot P/L" : "เงินเริ่มต้น Backtest"}/>
+              <Kpi label="Net Profit" value={money(summary.netProfit,true,activeCurrency)} sub="กำไร/ขาดทุนสุทธิ" className={tone(summary.netProfit)}/>
               <Kpi label="Profit Factor" value={number(summary.profitFactor, 2)} sub="Gross Profit / Gross Loss"/>
               <Kpi label="Win Rate" value={percent(summary.winRate)} sub={`${summary.wins ?? 0} ชนะ · ${summary.losses ?? 0} แพ้`}/>
-              <Kpi label="Max Drawdown" value={percent(summary.maxDrawdownPercent)} sub={`${money(summary.maxDrawdownMoney)} · Closed Performance`} className={styles.bad}/>
+              <Kpi label="Max Drawdown" value={percent(summary.maxDrawdownPercent)} sub={`${money(summary.maxDrawdownMoney,false,activeCurrency)} · Closed Performance`} className={styles.bad}/>
               <Kpi label="Total Trades" value={String(summary.trades ?? 0)} sub="Basket ที่ปิดแล้ว"/>
               <Kpi label="Recovery Factor" value={number(summary.recoveryFactor, 2)} sub="Net Profit / Max DD"/>
               <Kpi label="Return %" value={percent(summary.returnPercent)} sub="ผลตอบแทนช่วงที่เลือก" className={tone(summary.returnPercent)}/>
             </section>
 
             <section className={styles.statsStrip}>
-              <div><span>Gross Profit</span><b className={styles.good}>{money(summary.grossProfit)}</b></div>
-              <div><span>Gross Loss</span><b className={styles.bad}>{money(-Math.abs(Number(summary.grossLoss || 0)))}</b></div>
+              <div><span>Gross Profit</span><b className={styles.good}>{money(summary.grossProfit,false,activeCurrency)}</b></div>
+              <div><span>Gross Loss</span><b className={styles.bad}>{money(-Math.abs(Number(summary.grossLoss || 0)),false,activeCurrency)}</b></div>
               <div><span>Sharpe Ratio</span><b>{number(summary.sharpeRatio,2)}</b></div>
               <div><span>Buy Trades</span><b>{String(liveSummary.buyTrades ?? "—")}</b></div>
               <div><span>Sell Trades</span><b>{String(liveSummary.sellTrades ?? "—")}</b></div>
-              <div><span>Balance ล่าสุด</span><b>{money(report?.balance?.current)}</b></div>
-              <div><span>Equity ล่าสุด</span><b>{money(report?.balance?.equity)}</b></div>
+              <div><span>Balance ล่าสุด</span><b>{money(report?.balance?.current,false,activeCurrency)}</b></div>
+              <div><span>Equity ล่าสุด</span><b>{money(report?.balance?.equity,false,activeCurrency)}</b></div>
             </section>
 
             <div className={styles.analyticsGrid}>
               <section className={`${styles.card} ${styles.equityCard}`}>
-                <div className={styles.cardTitle}><div><b>{mode === "LIVE" ? "Equity & Balance Curve" : "Backtest Balance Curve"}</b><small>{mode === "LIVE" ? "Balance สร้างจาก Basket ที่ปิดจริง · Equity ล่าสุดจาก Heartbeat" : "ผลตามลำดับรายการใน Backtest"}</small></div><strong className={tone(summary.netProfit)}>{money(summary.netProfit, true)}</strong></div>
+                <div className={styles.cardTitle}><div><b>{mode === "LIVE" ? "Equity & Balance Curve" : "Backtest Balance Curve"}</b><small>{mode === "LIVE" ? "Balance สร้างจาก Basket ที่ปิดจริง · Equity ล่าสุดจาก Heartbeat" : "ผลตามลำดับรายการใน Backtest"}</small></div><strong className={tone(summary.netProfit)}>{money(summary.netProfit,true,activeCurrency)}</strong></div>
                 <LineChart points={curve}/>
               </section>
               <section className={`${styles.card} ${styles.drawdownCard}`}><div className={styles.cardTitle}><div><b>Drawdown</b><small>Closed-performance drawdown จาก Peak Balance</small></div><strong className={styles.bad}>{percent(summary.maxDrawdownPercent)}</strong></div><DrawdownChart points={curve}/></section>
-              {mode === "LIVE" ? <QualityCard quality={report?.quality}/> : <section className={`${styles.card} ${styles.qualityCard}`}><div className={styles.cardTitle}><div><b>Backtest Summary</b><small>ค่าจากรายงานที่เลือก</small></div></div><div className={styles.backtestSummary}><span>Initial Balance <b>{money(backSummary.initialDeposit)}</b></span><span>Final Balance <b>{money(backSummary.finalBalance)}</b></span><span>Average Win <b>{money(backSummary.averageWin)}</b></span><span>Average Loss <b>{money(backSummary.averageLoss)}</b></span></div></section>}
-              <section className={`${styles.card} ${styles.monthlyCard}`}><div className={styles.cardTitle}><div><b>ผลตอบแทนรายเดือน</b><small>Monthly Returns</small></div></div>{mode === "LIVE" ? <MonthlyBars rows={monthly}/> : <div className={styles.emptyChart}>Backtest รุ่นปัจจุบันยังไม่เก็บ Monthly Bucket แยก</div>}</section>
+              {mode === "LIVE" ? <QualityCard quality={report?.quality}/> : <section className={`${styles.card} ${styles.qualityCard}`}><div className={styles.cardTitle}><div><b>Backtest Summary</b><small>ค่าจากรายงานที่เลือก</small></div></div><div className={styles.backtestSummary}><span>Initial Balance <b>{money(backSummary.initialDeposit,false,activeCurrency)}</b></span><span>Final Balance <b>{money(backSummary.finalBalance,false,activeCurrency)}</b></span><span>Average Win <b>{money(backSummary.averageWin,false,activeCurrency)}</b></span><span>Average Loss <b>{money(backSummary.averageLoss,false,activeCurrency)}</b></span></div></section>}
+              <section className={`${styles.card} ${styles.monthlyCard}`}><div className={styles.cardTitle}><div><b>ผลตอบแทนรายเดือน</b><small>Monthly Returns</small></div></div>{mode === "LIVE" ? <MonthlyBars rows={monthly} currency={activeCurrency}/> : <div className={styles.emptyChart}>Backtest รุ่นปัจจุบันยังไม่เก็บ Monthly Bucket แยก</div>}</section>
               <section className={`${styles.card} ${styles.distributionCard}`}><div className={styles.cardTitle}><div><b>การกระจายการเทรด</b><small>Buy vs Sell</small></div></div><TradeDistribution buy={Number(liveSummary.buyTrades || 0)} sell={Number(liveSummary.sellTrades || 0)} total={Number(summary.trades || 0)}/></section>
               <section className={`${styles.card} ${styles.strategyCard}`}><div className={styles.cardTitle}><div><b>ข้อมูลบัญชีและช่วงรายงาน</b><small>Report Context</small></div></div><StrategySummary report={report} mode={mode} backtest={activeBacktest} from={from} to={to}/></section>
             </div>
 
             <section className={`${styles.card} ${styles.tradesCard}`}>
               <div className={styles.cardTitle}><div><b>{mode === "LIVE" ? "รายการเทรดที่ปิดแล้ว" : "Backtest Trades"}</b><small>{mode === "LIVE" ? "Closed Trades จาก MT5 Trade Journal" : "รายการจาก Backtest ที่บันทึก"}</small></div><div className={styles.exportActions}>{mode === "LIVE" ? <button onClick={downloadCsv}>ดาวน์โหลด CSV</button> : null}<button onClick={()=>window.print()}>พิมพ์ / PDF</button></div></div>
-              <TradesTable rows={mode === "LIVE" ? (report?.closedTrades || []) : (activeBacktest?.trades || [])} backtest={mode === "BACKTEST"}/>
+              <TradesTable rows={mode === "LIVE" ? (report?.closedTrades || []) : (activeBacktest?.trades || [])} backtest={mode === "BACKTEST"} currency={activeCurrency}/>
             </section>
           </>
         )}
@@ -450,35 +458,51 @@ function StrategySummary({ report, mode, backtest, from, to }:{ report:any; mode
     ["สัญลักษณ์", report?.account?.symbol || "—"],
     ["กรอบเวลา", report?.account?.timeframe || "—"],
     ["ช่วงข้อมูล", `${from} → ${to}`],
-    ["Balance ล่าสุด", money(report?.balance?.current)],
-    ["Equity ล่าสุด", money(report?.balance?.equity)]
+    ["สกุลเงิน", currencyCode(report?.account?.currency)],
+    ["Balance ล่าสุด", money(report?.balance?.current,false,report?.account?.currency)],
+    ["Equity ล่าสุด", money(report?.balance?.equity,false,report?.account?.currency)]
   ] : [
-    ["ชื่อรายงาน", backtest?.title || "—"], ["Source", backtest?.source || "—"], ["สัญลักษณ์", backtest?.symbol || "—"], ["กรอบเวลา", backtest?.timeframe || "—"], ["เงินเริ่มต้น", money(backtest?.initial_deposit)], ["Lot", String(backtest?.lot ?? "—")]
+    ["ชื่อรายงาน", backtest?.title || "—"], ["Source", backtest?.source || "—"], ["สัญลักษณ์", backtest?.symbol || "—"], ["กรอบเวลา", backtest?.timeframe || "—"], ["สกุลเงิน", currencyCode(backtest?.currency)], ["เงินเริ่มต้น", money(backtest?.initial_deposit,false,backtest?.currency)], ["Lot", String(backtest?.lot ?? "—")]
   ];
   return <div className={styles.summaryRows}>{rows.map(([label,value])=><div key={label}><span>{label}</span><b>{value}</b></div>)}</div>;
 }
 
-function TradesTable({ rows, backtest }:{ rows:any[]; backtest:boolean }) {
-  return <div className={styles.tableWrap}><table><thead><tr><th>#</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Lot</th><th>Entry</th><th>Exit</th><th>P/L</th><th>Close Time</th></tr></thead><tbody>{(rows || []).slice(0,100).map((row:any,index:number)=>{ const side=String(backtest?row.direction:row.side||"").toUpperCase(); const profit=Number(row.profit||0); const dateValue=backtest?(row.closed_at||row.opened_at):row.closedAt; return <tr key={String(row.ticket||row.trade_index||index)}><td>{index+1}</td><td>{backtest?row.trade_index:row.ticket}</td><td>{backtest?(row.metadata?.symbol||"—"):row.symbol}</td><td><span className={side==="BUY"?styles.buyBadge:styles.sellBadge}>{side||"—"}</span></td><td>{number(backtest?row.volume:row.lot,2)}</td><td>{number(backtest?row.open_price:row.entryPrice,3)}</td><td>{number(backtest?row.close_price:row.exitPrice,3)}</td><td className={tone(profit)}>{money(profit,true)}</td><td>{dateValue?new Date(dateValue).toLocaleString("th-TH"):"—"}</td></tr>;})}{!rows?.length?<tr><td colSpan={9} className={styles.emptyCell}>ยังไม่มีรายการในช่วงเวลาที่เลือก</td></tr>:null}</tbody></table></div>;
+function TradesTable({ rows, backtest, currency }:{ rows:any[]; backtest:boolean; currency:any }) {
+  return <div className={styles.tableWrap}><table><thead><tr><th>#</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Lot</th><th>Entry</th><th>Exit</th><th>P/L</th><th>Close Time</th></tr></thead><tbody>{(rows || []).slice(0,100).map((row:any,index:number)=>{ const side=String(backtest?row.direction:row.side||"").toUpperCase(); const profit=Number(row.profit||0); const dateValue=backtest?(row.closed_at||row.opened_at):row.closedAt; return <tr key={String(row.ticket||row.trade_index||index)}><td>{index+1}</td><td>{backtest?row.trade_index:row.ticket}</td><td>{backtest?(row.metadata?.symbol||"—"):row.symbol}</td><td><span className={side==="BUY"?styles.buyBadge:styles.sellBadge}>{side||"—"}</span></td><td>{number(backtest?row.volume:row.lot,2)}</td><td>{number(backtest?row.open_price:row.entryPrice,3)}</td><td>{number(backtest?row.close_price:row.exitPrice,3)}</td><td className={tone(profit)}>{money(profit,true,currency)}</td><td>{dateValue?new Date(dateValue).toLocaleString("th-TH"):"—"}</td></tr>;})}{!rows?.length?<tr><td colSpan={9} className={styles.emptyCell}>ยังไม่มีรายการในช่วงเวลาที่เลือก</td></tr>:null}</tbody></table></div>;
 }
 
 function SystemOverview({ data, loading, onDrill }:{ data:any; loading:boolean; onDrill:(accountId:string,userId:string)=>void }) {
   const summary = data?.summary || {};
+  const currencySummaries = Array.isArray(data?.currencySummaries) ? data.currencySummaries : [];
+  const singleCurrency = currencySummaries.length === 1 ? currencySummaries[0] : null;
+  const netLabel = singleCurrency
+    ? money(singleCurrency.netProfit, true, singleCurrency.currency)
+    : currencySummaries.length > 1
+      ? "แยก " + currencySummaries.length + " สกุล"
+      : "—";
+  const netDetail = currencySummaries.length
+    ? currencySummaries.map((row:any)=>money(row.netProfit,true,row.currency)).join(" · ")
+    : "ยังไม่มี Basket P/L";
+  const profitFactorLabel = singleCurrency ? number(singleCurrency.profitFactor,2) : currencySummaries.length > 1 ? "แยกตามสกุล" : "—";
+
   return <>
-    <section className={styles.systemNotice}><div><b>Admin System Performance</b><span>ภาพรวมนี้รวมเฉพาะบัญชีลูกค้า ไม่รวมบัญชี OWNER / ADMIN ภายใน · ข้อมูลมาจาก Trade Journal จริง</span></div><strong>{loading?"กำลังอัปเดต...":"ข้อมูลจริงจาก SCENOVA"}</strong></section>
+    <section className={styles.systemNotice}><div><b>Admin System Performance</b><span>ภาพรวมนี้รวมเฉพาะบัญชีลูกค้า ไม่รวมบัญชี OWNER / ADMIN ภายใน · ค่าเงินแยกตามสกุลบัญชี MT5</span></div><strong>{loading?"กำลังอัปเดต...":"ข้อมูลจริงจาก SCENOVA"}</strong></section>
     <section className={styles.kpis}>
       <Kpi label="Customers" value={String(summary.customers||0)} sub="ลูกค้าที่มีในระบบ"/>
       <Kpi label="MT5 Accounts" value={String(summary.accounts||0)} sub="บัญชีลูกค้าทั้งหมด"/>
       <Kpi label="Online" value={String(summary.onlineAccounts||0)} sub="Heartbeat ≤ 35 วินาที" className={styles.good}/>
-      <Kpi label="System Net P/L" value={money(summary.netProfit,true)} sub="รวม Basket P/L" className={tone(summary.netProfit)}/>
+      <Kpi label="System Net P/L" value={netLabel} sub={netDetail} className={singleCurrency?tone(singleCurrency.netProfit):""}/>
       <Kpi label="Win Rate" value={percent(summary.winRate)} sub="ทั้งระบบ"/>
-      <Kpi label="Profit Factor" value={number(summary.profitFactor,2)} sub="ทั้งระบบ"/>
+      <Kpi label="Profit Factor" value={profitFactorLabel} sub={singleCurrency?"ทั้งระบบ":"ไม่รวมข้ามสกุล"}/>
       <Kpi label="Total Trades" value={String(summary.trades||0)} sub="Basket ที่ปิด"/>
       <Kpi label="Profitable Accounts" value={`${summary.profitableAccounts||0} (${number(summary.profitableAccountRate,1)}%)`} sub="บัญชีที่ P/L เป็นบวก"/>
     </section>
     <div className={styles.systemGrid}>
-      <section className={`${styles.card} ${styles.systemCurve}`}><div className={styles.cardTitle}><div><b>System Cumulative P/L</b><small>ผลรวมรายวันจากบัญชีลูกค้าทั้งระบบ</small></div><strong className={tone(summary.netProfit)}>{money(summary.netProfit,true)}</strong></div><LineChart points={data?.curve||[]} valueKey="cumulative" secondaryKey="cumulative"/></section>
-      <section className={`${styles.card} ${styles.systemAccounts}`}><div className={styles.cardTitle}><div><b>รายบุคคล / รายบัญชี</b><small>กดดูเพื่อ Drill-down รายละเอียดและสร้าง Share Snapshot</small></div></div><div className={styles.tableWrap}><table><thead><tr><th>ลูกค้า</th><th>MT5</th><th>Mode</th><th>Status</th><th>Trades</th><th>Win Rate</th><th>Net P/L</th><th></th></tr></thead><tbody>{(data?.accounts||[]).map((row:any)=><tr key={row.accountId}><td><b>{row.userCode}</b><small className={styles.tableSub}>{row.email}</small></td><td>{row.accountNumber}</td><td>{row.mode}</td><td><span className={row.online?styles.statusOnline:styles.statusOffline}>{row.online?"ONLINE":"OFFLINE"}</span></td><td>{row.trades}</td><td>{percent(row.winRate)}</td><td className={tone(row.netProfit)}>{money(row.netProfit,true)}</td><td><button className={styles.drillButton} onClick={()=>onDrill(row.accountId,row.userId)}>ดูรายบัญชี</button></td></tr>)}</tbody></table></div></section>
+      <section className={`${styles.card} ${styles.systemCurve}`}>
+        <div className={styles.cardTitle}><div><b>System Cumulative P/L</b><small>{singleCurrency?"ผลรวมรายวันของ "+singleCurrency.currency:"หลายสกุลเงินจะแยกยอด ไม่รวมกราฟเป็นตัวเลขเดียว"}</small></div><strong>{netLabel}</strong></div>
+        {singleCurrency ? <LineChart points={data?.curve||[]} valueKey="cumulative" secondaryKey="cumulative"/> : <div className={styles.emptyChart}>{netDetail}</div>}
+      </section>
+      <section className={`${styles.card} ${styles.systemAccounts}`}><div className={styles.cardTitle}><div><b>รายบุคคล / รายบัญชี</b><small>กดดูเพื่อ Drill-down รายละเอียดและสร้าง Share Snapshot</small></div></div><div className={styles.tableWrap}><table><thead><tr><th>ลูกค้า</th><th>MT5</th><th>Mode</th><th>Status</th><th>Trades</th><th>Win Rate</th><th>Net P/L</th><th></th></tr></thead><tbody>{(data?.accounts||[]).map((row:any)=><tr key={row.accountId}><td><b>{row.userCode}</b><small className={styles.tableSub}>{row.email}</small></td><td>{row.accountNumber}</td><td>{row.mode}</td><td><span className={row.online?styles.statusOnline:styles.statusOffline}>{row.online?"ONLINE":"OFFLINE"}</span></td><td>{row.trades}</td><td>{percent(row.winRate)}</td><td className={tone(row.netProfit)}>{money(row.netProfit,true,row.currency)}</td><td><button className={styles.drillButton} onClick={()=>onDrill(row.accountId,row.userId)}>ดูรายบัญชี</button></td></tr>)}</tbody></table></div></section>
     </div>
   </>;
 }

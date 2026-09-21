@@ -752,13 +752,14 @@ export class BotController {
            created_at
          FROM trade_journal
          WHERE bot_instance_id=$1
+           AND mt5_account_id=$2
            AND event_type IN ('ENTRY','EXIT','BASKET')
            AND created_at >= (
              date_trunc('day', now() AT TIME ZONE 'Asia/Bangkok')
              AT TIME ZONE 'Asia/Bangkok'
            )
          ORDER BY created_at ASC`,
-        [instance.id]
+        [instance.id, instance.mt5_account_id]
       );
 
       const rows = todayRows.rows || [];
@@ -909,8 +910,9 @@ export class BotController {
            COALESCE(SUM(net_profit) FILTER (WHERE event_type='BASKET' AND net_profit>0),0)::float8 AS gross_profit,
            ABS(COALESCE(SUM(net_profit) FILTER (WHERE event_type='BASKET' AND net_profit<0),0))::float8 AS gross_loss
          FROM trade_journal
-         WHERE bot_instance_id=$1`,
-        [instance.id]
+         WHERE bot_instance_id=$1
+           AND mt5_account_id=$2`,
+        [instance.id, instance.mt5_account_id]
       );
       const closedTrades = Number(stats?.closed_trades || 0);
       const wins = Number(stats?.wins || 0);
@@ -936,9 +938,10 @@ export class BotController {
            confidence::float8,basket_index,created_at
          FROM trade_journal
          WHERE bot_instance_id=$1
+           AND mt5_account_id=$2
          ORDER BY created_at DESC
          LIMIT 20`,
-        [instance.id]
+        [instance.id, instance.mt5_account_id]
       );
       tradeJournal.recent = recentJournal.rows;
 
@@ -953,11 +956,12 @@ export class BotController {
            ABS(COALESCE(SUM(net_profit) FILTER (WHERE net_profit<0),0))::float8 AS gross_loss
          FROM trade_journal
          WHERE bot_instance_id=$1
+           AND mt5_account_id=$2
            AND event_type='BASKET'
            AND created_at>=now()-interval '30 days'
          GROUP BY 1
          ORDER BY 1`,
-        [instance.id]
+        [instance.id, instance.mt5_account_id]
       );
       tradeJournal.hourlyWinRate = hourlyWinRate.rows.map((row:any) => {
         const trades = Number(row.trades || 0);
@@ -1673,6 +1677,28 @@ export class BotController {
     );
     if (!access.allowed) throw new ConflictException("trial or matching subscription required");
 
+    const startSettingsRow = await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+      [instance.id]
+    );
+    const startSettings = startSettingsRow?.settings || {};
+    const currentAccountCurrency = String(instance.metrics?.currency || "").trim().toUpperCase();
+    const settingsAccountCurrency = String(startSettings.accountCurrency || "").trim().toUpperCase();
+    if (startSettings.accountCurrencyReviewRequired === true) {
+      throw new ConflictException(
+        "สกุลเงินของบัญชี MT5 เปลี่ยน กรุณาตรวจค่า Profit/Loss/Target แล้วกดบันทึกการตั้งค่าก่อนเริ่มบอท"
+      );
+    }
+    if (
+      currentAccountCurrency &&
+      settingsAccountCurrency &&
+      currentAccountCurrency !== settingsAccountCurrency
+    ) {
+      throw new ConflictException(
+        "ค่าตั้งบอทถูกบันทึกไว้คนละสกุลเงินกับบัญชี MT5 ปัจจุบัน กรุณาตรวจและบันทึกการตั้งค่าใหม่ก่อนเริ่มบอท"
+      );
+    }
+
     if (instance.mode === "LOCAL") {
       const softwareUpdate = this.installerUpdateState(instance, instance.mode);
       if (softwareUpdate.required) {
@@ -1840,6 +1866,36 @@ export class BotController {
         "การตั้งค่าถูกล็อกขณะบอทกำลังเริ่มหรือกำลังทำงาน · กดหยุดบอทและรอให้สถานะหยุดก่อนแก้ไข"
       );
     }
+    const moneyReviewKeys = [
+      "autoMaxBasketLossMoney",
+      "autoDailyLossMoney",
+      "autoDailyProfitTargetMoney",
+      "raceMaxBasketLossMoney",
+      "raceDailyLossMoney",
+      "raceDailyProfitTargetMoney",
+      "flipLockMaxBasketLossMoney",
+      "flipLockDailyLossMoney",
+      "flipLockDailyProfitTargetMoney",
+      "manualMaxBasketLossMoney",
+      "manualDailyLossMoney",
+      "manualDailyProfitTargetMoney",
+      "autoProfitTargetMoney",
+      "raceCloseAllProfitMoney",
+      "racePerPositionProfitMoney",
+      "manualBasketProfitTargetMoney",
+      "manualPerPositionProfitMoney",
+      "zeroGridMinNetProfitMoney"
+    ];
+    const currencyReviewRequired = currentSettings.accountCurrencyReviewRequired === true;
+    const currencyReviewComplete =
+      !currencyReviewRequired ||
+      moneyReviewKeys.every((key) => body[key] !== undefined);
+    if (currencyReviewRequired && !currencyReviewComplete) {
+      throw new ConflictException(
+        "สกุลเงินบัญชี MT5 เปลี่ยน กรุณาเปิดหน้าตั้งค่าบอท ตรวจค่าเงินทุกโหมด แล้วกดบันทึกจากหน้า Settings"
+      );
+    }
+
     const clean: Record<string, any> = {};
 
     const numberSetting = (
@@ -2292,6 +2348,13 @@ export class BotController {
     clean.sessionStartHour = 0;
     clean.sessionEndHour = 24;
     clean.maxAtrPoints = 0;
+    const settingsCurrency = String(currentMetrics.currency || "").trim().toUpperCase();
+    if (settingsCurrency) {
+      clean.accountCurrency = settingsCurrency;
+      if (currencyReviewComplete) {
+        clean.accountCurrencyReviewRequired = false;
+      }
+    }
 
     if (Object.keys(clean).length === 0) {
       throw new BadRequestException("ไม่มีค่าการตั้งค่าที่บันทึกได้");
@@ -2302,7 +2365,7 @@ export class BotController {
        VALUES($1,$2::jsonb,now())
        ON CONFLICT(bot_instance_id)
        DO UPDATE SET
-         settings=(bot_settings.settings - 'tradingProfile') || EXCLUDED.settings,
+         settings=(bot_settings.settings - 'tradingProfile' - 'previousAccountCurrency') || EXCLUDED.settings,
          updated_at=now()
        RETURNING settings`,
       [instance.id, JSON.stringify(clean)]

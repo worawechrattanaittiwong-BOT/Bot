@@ -28,6 +28,8 @@ jobs:
       - name: Control Center V12 inline settings and per-mode performance
         shell: pwsh
         run: ./tests/control-center-settings-contract.ps1
+      - name: Cent account currency isolation contract
+        run: node ./tests/cent-account-currency-isolation-contract.mjs
       - name: AUTO V20 same-dataset policy regression
         shell: pwsh
         run: ./tests/auto-v20-policy-regression.ps1
