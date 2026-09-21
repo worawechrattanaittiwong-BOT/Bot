@@ -34,4 +34,7 @@ if (-not $smart.Contains('PendingReloadPath(config)')) { throw 'Pending reload m
 $web = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/components/Mt5ManualActionControls.tsx'))
 if (-not $web.Contains('updateIntentAt')) { throw 'Update button optimistic one-click lock missing' }
 if (-not $web.Contains('คำสั่งกำลังทำงาน · ไม่ต้องกดซ้ำ')) { throw 'Update button pending guidance missing' }
+if (-not $web.Contains('window.location.reload();')) { throw 'Completed EA update must refresh the dashboard automatically' }
+if (-not $web.Contains('อัปเดต EA สำเร็จแล้ว · กำลังรีเฟรชสถานะล่าสุด')) { throw 'Completed EA update refresh feedback missing' }
+if (-not $web.Contains('ระบบจะรีโหลด MT5 1 รอบและรีเฟรชหน้านี้อัตโนมัติเมื่อสำเร็จ')) { throw 'Manual update one-click refresh guidance missing' }
 Write-Host 'Manual EA update stop-first / one-click / one-restart contract PASS'

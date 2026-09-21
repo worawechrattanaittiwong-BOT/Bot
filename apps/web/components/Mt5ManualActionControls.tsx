@@ -127,7 +127,21 @@ export function Mt5ManualActionControls() {
 
   useEffect(() => {
     if (!updateIntentAt) return;
-    if (!needsEaUpdate || actionStatus === "FAILED") {
+
+    // One click owns the whole update UX. Once the Agent has loaded the new EA
+    // and the dashboard confirms Version/Hash/Runtime all match, refresh the
+    // page automatically so the customer never has to press F5 or reopen the
+    // status dialog to see the completed version.
+    if (!needsEaUpdate) {
+      setError("");
+      setNotice("อัปเดต EA สำเร็จแล้ว · กำลังรีเฟรชสถานะล่าสุด...");
+      const reloadTimer = window.setTimeout(() => {
+        window.location.reload();
+      }, 900);
+      return () => window.clearTimeout(reloadTimer);
+    }
+
+    if (actionStatus === "FAILED") {
       setUpdateIntentAt(null);
       return;
     }
@@ -592,7 +606,7 @@ export function Mt5ManualActionControls() {
                 ? ` · EA ${String(update?.currentEaVersion || "—")} → ${String(update?.latestEaVersion || "—")}`
                 : " · EA ตรงเวอร์ชัน"}
             </small>
-            <small className="manual-only">{updatePending || updateIntentAt ? "คำสั่งกำลังทำงาน · ไม่ต้องกดซ้ำ" : updateSettling ? "Agent ทำเสร็จแล้ว · กำลังรอ EA รายงานเวอร์ชันใหม่" : "Manual Update เท่านั้น · ระบบจะไม่อัปเดตหรือรีสตาร์ทเอง"}</small>
+            <small className="manual-only">{updatePending || updateIntentAt ? "คำสั่งกำลังทำงาน · ไม่ต้องกดซ้ำ" : updateSettling ? "Agent ทำเสร็จแล้ว · กำลังรอ EA รายงานเวอร์ชันใหม่" : "กดอัปเดต 1 ครั้ง · ระบบจะรีโหลด MT5 1 รอบและรีเฟรชหน้านี้อัตโนมัติเมื่อสำเร็จ"}</small>
             {(botRunning || botStarting || positions > 0) && <small>หยุดบอทและรอให้ออเดอร์เป็น 0 ก่อนอัปเดต</small>}
           </div>
           <button
