@@ -404,22 +404,6 @@ export class EaController {
     await this.maintenance.current();
     const eaIp = this.clientIp(req);
     const metrics = body.metrics || {};
-    const previousCurrency = String(instance.metrics?.currency || "").trim().toUpperCase();
-    const reportedCurrency = String(metrics.currency || "").trim().toUpperCase();
-    if (previousCurrency && reportedCurrency && previousCurrency !== reportedCurrency) {
-      await this.db.query(
-        `UPDATE bot_settings
-         SET settings=jsonb_set(
-               jsonb_set(COALESCE(settings,'{}'::jsonb),'{accountCurrencyReviewRequired}','true'::jsonb,true),
-               '{previousAccountCurrency}',
-               to_jsonb($2::text),
-               true
-             ),
-             updated_at=now()
-         WHERE bot_instance_id=$1`,
-        [instance.id, previousCurrency]
-      );
-    }
 
     // Device/Agent metadata is not a trading permission. The authenticated
     // instance token, live MT5 identity and Server entitlement are authoritative.
@@ -817,6 +801,28 @@ export class EaController {
     // Runtime contract: preserve the direction selected by the customer.
     // RACE runs at exactly 2x the normal order cadence without changing AUTO.
     const runtimeSettings = { ...(settings?.settings || {}) };
+    const reportedCurrency = String(metrics.currency || "").trim().toUpperCase();
+    const previousCurrency = String(
+      runtimeSettings.accountCurrency ||
+      instance.metrics?.currency ||
+      ""
+    ).trim().toUpperCase();
+    if (previousCurrency && reportedCurrency && previousCurrency !== reportedCurrency) {
+      await this.db.query(
+        `UPDATE bot_settings
+         SET settings=jsonb_set(
+               jsonb_set(COALESCE(settings,'{}'::jsonb),'{accountCurrencyReviewRequired}','true'::jsonb,true),
+               '{previousAccountCurrency}',
+               to_jsonb($2::text),
+               true
+             ),
+             updated_at=now()
+         WHERE bot_instance_id=$1`,
+        [instance.id, previousCurrency]
+      );
+      runtimeSettings.accountCurrencyReviewRequired = true;
+      runtimeSettings.previousAccountCurrency = previousCurrency;
+    }
     const savedControlMode = String(runtimeSettings.controlMode || "").toUpperCase();
     if (!["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "ASSISTED", "MANUAL"].includes(savedControlMode)) {
       const engineMode = String(runtimeSettings.engineMode || "AUTO").toUpperCase();
