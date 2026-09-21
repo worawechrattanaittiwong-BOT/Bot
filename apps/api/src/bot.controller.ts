@@ -1744,18 +1744,18 @@ export class BotController {
     const startSettings = startSettingsRow?.settings || {};
     const currentAccountCurrency = String(instance.metrics?.currency || "").trim().toUpperCase();
     const settingsAccountCurrency = String(startSettings.accountCurrency || "").trim().toUpperCase();
-    if (startSettings.accountCurrencyReviewRequired === true) {
-      throw new ConflictException(
-        "สกุลเงินของบัญชี MT5 เปลี่ยน กรุณาตรวจค่า Profit/Loss/Target แล้วกดบันทึกการตั้งค่าก่อนเริ่มบอท"
+    const implicitCurrencyReviewRequired =
+      Boolean(currentAccountCurrency) &&
+      (
+        (Boolean(settingsAccountCurrency) && currentAccountCurrency !== settingsAccountCurrency) ||
+        (!settingsAccountCurrency && currentAccountCurrency !== "USD")
       );
-    }
     if (
-      currentAccountCurrency &&
-      settingsAccountCurrency &&
-      currentAccountCurrency !== settingsAccountCurrency
+      startSettings.accountCurrencyReviewRequired === true ||
+      implicitCurrencyReviewRequired
     ) {
       throw new ConflictException(
-        "ค่าตั้งบอทถูกบันทึกไว้คนละสกุลเงินกับบัญชี MT5 ปัจจุบัน กรุณาตรวจและบันทึกการตั้งค่าใหม่ก่อนเริ่มบอท"
+        "สกุลเงินของบัญชี MT5 ยังไม่ได้ยืนยันกับค่าตั้งบอท กรุณาตรวจ Profit/Loss/Target ทุกโหมดแล้วกดบันทึกการตั้งค่าก่อนเริ่มบอท"
       );
     }
 
@@ -1946,7 +1946,21 @@ export class BotController {
       "manualPerPositionProfitMoney",
       "zeroGridMinNetProfitMoney"
     ];
-    const currencyReviewRequired = currentSettings.accountCurrencyReviewRequired === true;
+    const storedSettingsCurrency = String(
+      currentSettings.accountCurrency || ""
+    ).trim().toUpperCase();
+    const liveSettingsCurrency = String(
+      currentMetrics.currency || ""
+    ).trim().toUpperCase();
+    const implicitCurrencyReviewRequired =
+      Boolean(liveSettingsCurrency) &&
+      (
+        (Boolean(storedSettingsCurrency) && liveSettingsCurrency !== storedSettingsCurrency) ||
+        (!storedSettingsCurrency && liveSettingsCurrency !== "USD")
+      );
+    const currencyReviewRequired =
+      currentSettings.accountCurrencyReviewRequired === true ||
+      implicitCurrencyReviewRequired;
     const currencyReviewComplete =
       !currencyReviewRequired ||
       moneyReviewKeys.every((key) => body[key] !== undefined);
