@@ -3283,9 +3283,22 @@ function EmptySetup({onNext}:{onNext:()=>void}) {
 function BotSettingsModal(props:any) {
   const [revealedManualRisk,setRevealedManualRisk] = useState<Record<string,boolean>>({});
   const accountCurrency = normalizeAccountCurrency(props.metrics?.currency);
-  const currencyReviewRequired = props.settings?.accountCurrencyReviewRequired === true;
-  const previousAccountCurrency = String(props.settings?.previousAccountCurrency || "เดิม").trim().toUpperCase();
-  const reportedAccountCurrency = String(props.metrics?.currency || "UNKNOWN").trim().toUpperCase() || "UNKNOWN";
+  const savedAccountCurrency = String(props.settings?.accountCurrency || "").trim().toUpperCase();
+  const reportedAccountCurrency = String(props.metrics?.currency || "").trim().toUpperCase();
+  const implicitCurrencyReviewRequired =
+    Boolean(reportedAccountCurrency) &&
+    (
+      (Boolean(savedAccountCurrency) && savedAccountCurrency !== reportedAccountCurrency) ||
+      (!savedAccountCurrency && reportedAccountCurrency !== "USD")
+    );
+  const currencyReviewRequired =
+    props.settings?.accountCurrencyReviewRequired === true ||
+    implicitCurrencyReviewRequired;
+  const previousAccountCurrency = String(
+    props.settings?.previousAccountCurrency ||
+    savedAccountCurrency ||
+    "UNSET"
+  ).trim().toUpperCase();
   if (!props.open && !props.embedded) return null;
   const embedded = Boolean(props.embedded);
   const tradingSymbol = String(
