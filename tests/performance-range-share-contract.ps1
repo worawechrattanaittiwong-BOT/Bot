@@ -16,6 +16,16 @@ foreach ($required in @(
 }
 
 foreach ($required in @(
+  'publicShare(',
+  'availableRange',
+  'detailedExits',
+  'parsePublicRange',
+  '730 days'
+)) {
+  if (-not $actions.Contains($required)) { throw "Public performance dynamic-share contract missing: $required" }
+}
+
+foreach ($required in @(
   'วันนี้',
   '7 วัน',
   '30 วัน',
@@ -30,29 +40,12 @@ foreach ($required in @(
   'compactToolbar',
   'แชร์ Read-only'
 )) {
-  if (-not $actions.Contains($required)) { throw "Public performance dynamic-share contract missing: $required" }
+  if (-not $web.Contains($required)) { throw "Trading Performance compact date/share contract missing: $required" }
 }
 
-foreach ($required in @(
-  'วันนี้',
-  '7 วัน',
-  '30 วัน',
-  '90 วัน',
-  'customDays',
-  'inclusiveDays',
-  'chartTickLabel',
-  'from={from} to={to}',
-  'BOT PERFORMANCE SUMMARY',
-  'My Performance Only',
-  'account.userId===options?.user?.id',
-  'ownAccounts',
-  'TRADING PERFORMANCE & BACKTEST',
-  'PerformanceSummaryReport',
-  'reportResultsGrid',
-  'reportChartPanel'
-)) {
-  if (-not $web.Contains($required)) { throw "Trading Performance date/chart contract missing: $required" }
-}
+if ($web.Contains('customDays')) { throw 'Main Trading Performance page must not render the removed custom-day input' }
+if ($web.Contains('className={styles.shareCard}')) { throw 'Share controls must stay integrated into the main toolbar' }
+if ($web.Contains('<h1>Trading Performance & Backtest</h1>')) { throw 'Redundant page heading must stay removed' }
 
 foreach ($required in @(
   'DATE SELECTABLE',
