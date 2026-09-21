@@ -76,6 +76,13 @@ must(
 );
 
 must(
+  botApi.includes("implicitCurrencyReviewRequired") &&
+  botApi.includes('currentAccountCurrency !== settingsAccountCurrency') &&
+  botApi.includes('liveSettingsCurrency !== storedSettingsCurrency'),
+  "Server must derive currency review from live-vs-saved currency even if the persisted review flag is missing"
+);
+
+must(
   eaApi.includes("AND mt5_account_id=$2") &&
   botApi.includes("AND mt5_account_id=$2"),
   "EA intelligence and dashboard journal stats must be isolated by MT5 account"
