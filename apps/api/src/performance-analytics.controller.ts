@@ -498,15 +498,15 @@ export class PerformanceAnalyticsController {
     const elevated = this.elevated(actor);
     const rows = await this.db.query(
       elevated
-        ? `SELECT a.id,a.user_id,a.account_number,a.broker,a.broker_server,a.mode,a.status,
-                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,bi.metrics AS instance_metrics,ls.slot_number,ls.label AS slot_label
+        ? `SELECT a.id,a.user_id,a.account_number,a.broker,a.broker_server,a.mode,a.status,a.created_at AS account_created_at,
+                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,bi.metrics AS instance_metrics,bi.last_seen_at AS instance_last_seen_at,ls.slot_number,ls.label AS slot_label
            FROM mt5_accounts a
            JOIN users u ON u.id=a.user_id
            LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
            LEFT JOIN license_slots ls ON ls.id=bi.slot_id
            ORDER BY u.user_code,a.created_at,a.account_number`
-        : `SELECT a.id,a.user_id,a.account_number,a.broker,a.broker_server,a.mode,a.status,
-                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,bi.metrics AS instance_metrics,ls.slot_number,ls.label AS slot_label
+        : `SELECT a.id,a.user_id,a.account_number,a.broker,a.broker_server,a.mode,a.status,a.created_at AS account_created_at,
+                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,bi.metrics AS instance_metrics,bi.last_seen_at AS instance_last_seen_at,ls.slot_number,ls.label AS slot_label
            FROM mt5_accounts a
            JOIN users u ON u.id=a.user_id
            LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
@@ -541,6 +541,8 @@ export class PerformanceAnalyticsController {
           accountType,
           mode: row.mode,
           status: row.status,
+          createdAt: row.account_created_at,
+          lastSeenAt: row.instance_last_seen_at,
           instanceId: row.instance_id,
           slotId: row.slot_id,
           slotNumber: row.slot_number,

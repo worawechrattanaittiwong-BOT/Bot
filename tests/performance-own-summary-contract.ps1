@@ -47,7 +47,10 @@ foreach ($required in @(
   'clearAllPerformanceData',
   '/performance-actions/reset-test-data',
   'ล้างข้อมูลทดสอบ',
-  'Account Type'
+  'Account Type',
+  'currentRealDemoAccounts',
+  'compareCurrentAccounts',
+  'slice(0,1)'
 )) {
   if (-not $web.Contains($required)) { throw "Performance account/reset UI missing: $required" }
 }
@@ -56,7 +59,9 @@ foreach ($required in @(
   'instance_metrics',
   'accountTradeMode',
   'accountType',
-  'demo|practice|trial|contest'
+  'demo|practice|trial|contest',
+  'instance_last_seen_at',
+  'account_created_at'
 )) {
   if (-not $api.Contains($required)) { throw "Performance REAL/DEMO classification missing: $required" }
 }
@@ -73,5 +78,9 @@ if (-not $web.Contains('controlsOpen')) { throw 'Performance options must use a 
 if (-not $web.Contains('styles.optionsDrawer')) { throw 'Performance options drawer UI missing' }
 if (-not $web.Contains('styles.optionsButton')) { throw 'Performance options button missing' }
 if ($web.Contains('className={styles.controlCard}')) { throw 'External performance control card must stay removed so summary can fill the viewport' }
+
+$ea = [System.IO.File]::ReadAllText((Resolve-Path 'mt5/FastBasketBot.mq5'))
+if (-not $ea.Contains('\"accountTradeMode\":%d')) { throw 'EA heartbeat must publish authoritative accountTradeMode' }
+if (-not $ea.Contains('AccountInfoInteger(ACCOUNT_TRADE_MODE)')) { throw 'EA account type telemetry must come from MT5 ACCOUNT_TRADE_MODE' }
 
 Write-Host 'Own-only popup-style Trading Performance contract PASS'

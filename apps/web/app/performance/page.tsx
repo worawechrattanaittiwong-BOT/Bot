@@ -23,6 +23,31 @@ function dateInput(value: Date | string) {
   }).format(date);
 }
 
+function accountCurrentScore(account:any) {
+  const lastSeen=account?.lastSeenAt?new Date(account.lastSeenAt).getTime():0;
+  const created=account?.createdAt?new Date(account.createdAt).getTime():0;
+  const online=lastSeen>0&&Date.now()-lastSeen<=90_000?1:0;
+  const active=String(account?.status||"").toUpperCase()==="ACTIVE"?1:0;
+  return {online,active,lastSeen,created};
+}
+
+function compareCurrentAccounts(a:any,b:any) {
+  const aa=accountCurrentScore(a);
+  const bb=accountCurrentScore(b);
+  return bb.online-aa.online ||
+    bb.active-aa.active ||
+    bb.lastSeen-aa.lastSeen ||
+    bb.created-aa.created ||
+    String(b?.accountNumber||"").localeCompare(String(a?.accountNumber||""));
+}
+
+function currentRealDemoAccounts(accounts:any[]) {
+  const sorted=[...(accounts||[])].sort(compareCurrentAccounts);
+  const real=sorted.find((account:any)=>String(account.accountType||"REAL").toUpperCase()==="REAL")||null;
+  const demo=sorted.find((account:any)=>String(account.accountType||"REAL").toUpperCase()!=="REAL")||null;
+  return [real,demo].filter(Boolean);
+}
+
 function inclusiveDays(from:string,to:string) {
   const start = new Date(from + "T00:00:00+07:00").getTime();
   const end = new Date(to + "T00:00:00+07:00").getTime();
@@ -181,17 +206,21 @@ export default function PerformanceDashboardPage() {
     ()=>(options?.accounts||[]).filter((account:any)=>account.userId===options?.user?.id),
     [options]
   );
-  const realAccounts=useMemo(
-    ()=>ownAccounts.filter((account:any)=>String(account.accountType||"REAL").toUpperCase()==="REAL"),
+  const currentAccounts=useMemo(
+    ()=>currentRealDemoAccounts(ownAccounts),
     [ownAccounts]
+  );
+  const realAccounts=useMemo(
+    ()=>currentAccounts.filter((account:any)=>String(account.accountType||"REAL").toUpperCase()==="REAL").slice(0,1),
+    [currentAccounts]
   );
   const demoAccounts=useMemo(
-    ()=>ownAccounts.filter((account:any)=>String(account.accountType||"REAL").toUpperCase()!=="REAL"),
-    [ownAccounts]
+    ()=>currentAccounts.filter((account:any)=>String(account.accountType||"REAL").toUpperCase()!=="REAL").slice(0,1),
+    [currentAccounts]
   );
   const selectedAccount=useMemo(
-    ()=>ownAccounts.find((account:any)=>account.id===accountId)||null,
-    [ownAccounts,accountId]
+    ()=>currentAccounts.find((account:any)=>account.id===accountId)||null,
+    [currentAccounts,accountId]
   );
 
   function logout(){localStorage.removeItem("bot_token");window.location.href="/login";}
@@ -201,7 +230,8 @@ export default function PerformanceDashboardPage() {
       const next=await api("/performance-analytics/options");
       setOptions(next);
       const own=(next.accounts||[]).filter((account:any)=>account.userId===next.user?.id);
-      const first=own[0];
+      const current=currentRealDemoAccounts(own).sort(compareCurrentAccounts);
+      const first=current[0];
       setAccountId(first?.id||"");
       if(!first) setError("ยังไม่พบบัญชี MT5 ของคุณสำหรับดู Performance");
       else setError("");
@@ -227,7 +257,13 @@ export default function PerformanceDashboardPage() {
   }
 
   useEffect(()=>{if(!getToken()){window.location.href="/login";return;}void loadOptions().finally(()=>setLoading(false));},[]);
-  useEffect(()=>{if(accountId){setShareResult(null);void refresh(accountId,mode);}},[accountId,mode,from,to]);
+  useEffect(()=>{
+    if(currentAccounts.length&&!currentAccounts.some((account:any)=>account.id===accountId)){
+      setAccountId(currentAccounts[0]?.id||"");
+      return;
+    }
+    if(accountId){setShareResult(null);void refresh(accountId,mode);}
+  },[accountId,mode,from,to,currentAccounts]);
 
   function applyDays(days:number){
     const range=rangeFromDays(to||today,days);
