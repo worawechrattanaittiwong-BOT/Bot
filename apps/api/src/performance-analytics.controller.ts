@@ -106,6 +106,8 @@ export class PerformanceAnalyticsController {
     const byMonth = new Map<string, { profit: number; trades: number; wins: number }>();
     let buyTrades = 0;
     let sellTrades = 0;
+    let buyWins = 0;
+    let sellWins = 0;
     let executionTotal = 0;
     let executionSamples = 0;
 
@@ -119,8 +121,14 @@ export class PerformanceAnalyticsController {
       monthly.trades += 1;
       if (profit > 0) monthly.wins += 1;
       byMonth.set(month, monthly);
-      if (String(row.direction).toUpperCase() === "BUY") buyTrades += 1;
-      if (String(row.direction).toUpperCase() === "SELL") sellTrades += 1;
+      if (String(row.direction).toUpperCase() === "BUY") {
+        buyTrades += 1;
+        if (profit > 0) buyWins += 1;
+      }
+      if (String(row.direction).toUpperCase() === "SELL") {
+        sellTrades += 1;
+        if (profit > 0) sellWins += 1;
+      }
       const metadataExecution = Number(row.metadata?.indicatorExecutionScore);
       const fallbackExecution = Number(row.entry_quality_score || row.confidence || 0);
       const execution = Number.isFinite(metadataExecution) && metadataExecution > 0
@@ -159,6 +167,64 @@ export class PerformanceAnalyticsController {
       };
     });
 
+    const positiveValues = rows.map((row) => Number(row.net_profit || 0)).filter((value) => value > 0);
+    const negativeValues = rows.map((row) => Number(row.net_profit || 0)).filter((value) => value < 0);
+    const expectedPayoff = trades > 0 ? netProfit / trades : 0;
+    const averageProfitTrade = positiveValues.length > 0
+      ? positiveValues.reduce((sum, value) => sum + value, 0) / positiveValues.length
+      : 0;
+    const averageLossTrade = negativeValues.length > 0
+      ? negativeValues.reduce((sum, value) => sum + value, 0) / negativeValues.length
+      : 0;
+
+    let maxWinStreak = 0;
+    let maxLossStreak = 0;
+    let currentWinStreak = 0;
+    let currentLossStreak = 0;
+    let currentWinProfit = 0;
+    let currentLossValue = 0;
+    let maxWinStreakProfit = 0;
+    let maxLossStreakLoss = 0;
+    let winStreakRuns = 0;
+    let lossStreakRuns = 0;
+    let totalWinStreakTrades = 0;
+    let totalLossStreakTrades = 0;
+    for (const row of rows) {
+      const value = Number(row.net_profit || 0);
+      if (value > 0) {
+        if (currentWinStreak === 0) winStreakRuns += 1;
+        currentWinStreak += 1;
+        currentWinProfit += value;
+        currentLossStreak = 0;
+        currentLossValue = 0;
+        totalWinStreakTrades += 1;
+        if (currentWinStreak > maxWinStreak) {
+          maxWinStreak = currentWinStreak;
+          maxWinStreakProfit = currentWinProfit;
+        } else if (currentWinStreak === maxWinStreak) {
+          maxWinStreakProfit = Math.max(maxWinStreakProfit, currentWinProfit);
+        }
+      } else if (value < 0) {
+        if (currentLossStreak === 0) lossStreakRuns += 1;
+        currentLossStreak += 1;
+        currentLossValue += value;
+        currentWinStreak = 0;
+        currentWinProfit = 0;
+        totalLossStreakTrades += 1;
+        if (currentLossStreak > maxLossStreak) {
+          maxLossStreak = currentLossStreak;
+          maxLossStreakLoss = currentLossValue;
+        } else if (currentLossStreak === maxLossStreak) {
+          maxLossStreakLoss = Math.min(maxLossStreakLoss, currentLossValue);
+        }
+      } else {
+        currentWinStreak = 0;
+        currentLossStreak = 0;
+        currentWinProfit = 0;
+        currentLossValue = 0;
+      }
+    }
+
     const positiveMonths = monthly.filter((item) => item.profit > 0).length;
     const positiveMonthRate = monthly.length > 0 ? positiveMonths / monthly.length * 100 : 50;
     const winRate = decided > 0 ? wins / decided * 100 : 0;
@@ -186,8 +252,24 @@ export class PerformanceAnalyticsController {
         maxDrawdownPercent: startBalance !== null ? Number(maxDrawdownPercent.toFixed(2)) : null,
         sharpeRatio: sharpeRatio === null ? null : Number(sharpeRatio.toFixed(2)),
         recoveryFactor: maxDrawdownMoney > 0 ? Number((netProfit / maxDrawdownMoney).toFixed(2)) : null,
+        lossRate: Number((trades > 0 ? losses / trades * 100 : 0).toFixed(2)),
+        expectedPayoff: Number(expectedPayoff.toFixed(2)),
+        largestProfitTrade: positiveValues.length ? Number(Math.max(...positiveValues).toFixed(2)) : 0,
+        largestLossTrade: negativeValues.length ? Number(Math.min(...negativeValues).toFixed(2)) : 0,
+        averageProfitTrade: Number(averageProfitTrade.toFixed(2)),
+        averageLossTrade: Number(averageLossTrade.toFixed(2)),
+        maxWinStreak,
+        maxWinStreakProfit: Number(maxWinStreakProfit.toFixed(2)),
+        maxLossStreak,
+        maxLossStreakLoss: Number(maxLossStreakLoss.toFixed(2)),
+        averageWinStreak: Number((winStreakRuns > 0 ? totalWinStreakTrades / winStreakRuns : 0).toFixed(2)),
+        averageLossStreak: Number((lossStreakRuns > 0 ? totalLossStreakTrades / lossStreakRuns : 0).toFixed(2)),
         buyTrades,
-        sellTrades
+        sellTrades,
+        buyWins,
+        sellWins,
+        buyWinRate: Number((buyTrades > 0 ? buyWins / buyTrades * 100 : 0).toFixed(2)),
+        sellWinRate: Number((sellTrades > 0 ? sellWins / sellTrades * 100 : 0).toFixed(2))
       },
       curve,
       monthly,
