@@ -35,10 +35,141 @@ must(
   "Dashboard must render money from MT5 currency"
 );
 must(
-  !dashboard.includes('money-prefix">$') &&
-  !dashboard.includes('"+$') &&
+  !dashboard.includes('money-prefix">
+
+must(
+  eaApi.includes("accountCurrencyReviewRequired") &&
+  botApi.includes("accountCurrencyReviewRequired"),
+  "Currency changes must force settings review before Start"
+);
+must(
+  botApi.includes("clean.accountCurrency = settingsCurrency") &&
+  botApi.includes("clean.accountCurrencyReviewRequired = false"),
+  "Saving settings must stamp the current account currency and clear the review gate"
+);
+
+must(
+  eaApi.includes("AND mt5_account_id=$2") &&
+  botApi.includes("AND mt5_account_id=$2"),
+  "EA intelligence and dashboard journal stats must be isolated by MT5 account"
+);
+must(
+  eaApi.includes("ON CONFLICT(bot_instance_id,mt5_account_id,deal_ticket,event_type) DO NOTHING") &&
+  journalSchema.includes("UNIQUE(bot_instance_id, mt5_account_id, deal_ticket, event_type)") &&
+  currencyMigration.includes("trade_journal_instance_account_deal_event_key"),
+  "Trade Journal deal identity must include MT5 account to avoid ticket collisions after rebind"
+);
+must(
+  deployHostinger.includes("database/021_cent_account_currency_isolation.sql"),
+  "Production deployment must apply the Cent account currency isolation migration"
+);
+must(
+  perfApi.includes("AND mt5_account_id=$4") &&
+  perfApi.includes("currencySummaries") &&
+  perfApi.includes("curvesByCurrency"),
+  "Performance analytics must isolate account history and split system money by currency"
+);
+must(
+  shareApi.includes("AND mt5_account_id=$4") &&
+  shareApi.includes('currency: String(metrics.currency || "USD")'),
+  "Shared live snapshots must be scoped to the MT5 account and capture currency"
+);
+
+for (const [name, source] of [
+  ["dashboard enhancements", dashboardEnhancements],
+  ["performance", performance],
+  ["public performance", publicPerformance],
+  ["shared performance", sharedPerformance]
+]) {
+  must(
+    !source.includes('"+$') &&
+    !source.includes('"$"+') &&
+    !source.includes("Max DD ($)"),
+    name + " must not hardcode USD formatting"
+  );
+}
+
+must(
+  performance.includes("currencySummaries") &&
+  performance.includes("หลายสกุลเงินจะแยกยอด"),
+  "System Performance UI must not combine unlike currencies into one monetary total"
+);
+
+console.log("Cent/Standard account currency isolation contract: OK");
+) &&
+  !dashboard.includes('"+
+
+must(
+  eaApi.includes("accountCurrencyReviewRequired") &&
+  botApi.includes("accountCurrencyReviewRequired"),
+  "Currency changes must force settings review before Start"
+);
+must(
+  botApi.includes("clean.accountCurrency = settingsCurrency") &&
+  botApi.includes("clean.accountCurrencyReviewRequired = false"),
+  "Saving settings must stamp the current account currency and clear the review gate"
+);
+
+must(
+  eaApi.includes("AND mt5_account_id=$2") &&
+  botApi.includes("AND mt5_account_id=$2"),
+  "EA intelligence and dashboard journal stats must be isolated by MT5 account"
+);
+must(
+  eaApi.includes("ON CONFLICT(bot_instance_id,mt5_account_id,deal_ticket,event_type) DO NOTHING") &&
+  journalSchema.includes("UNIQUE(bot_instance_id, mt5_account_id, deal_ticket, event_type)") &&
+  currencyMigration.includes("trade_journal_instance_account_deal_event_key"),
+  "Trade Journal deal identity must include MT5 account to avoid ticket collisions after rebind"
+);
+must(
+  deployHostinger.includes("database/021_cent_account_currency_isolation.sql"),
+  "Production deployment must apply the Cent account currency isolation migration"
+);
+must(
+  perfApi.includes("AND mt5_account_id=$4") &&
+  perfApi.includes("currencySummaries") &&
+  perfApi.includes("curvesByCurrency"),
+  "Performance analytics must isolate account history and split system money by currency"
+);
+must(
+  shareApi.includes("AND mt5_account_id=$4") &&
+  shareApi.includes('currency: String(metrics.currency || "USD")'),
+  "Shared live snapshots must be scoped to the MT5 account and capture currency"
+);
+
+for (const [name, source] of [
+  ["dashboard enhancements", dashboardEnhancements],
+  ["performance", performance],
+  ["public performance", publicPerformance],
+  ["shared performance", sharedPerformance]
+]) {
+  must(
+    !source.includes('"+$') &&
+    !source.includes('"$"+') &&
+    !source.includes("Max DD ($)"),
+    name + " must not hardcode USD formatting"
+  );
+}
+
+must(
+  performance.includes("currencySummaries") &&
+  performance.includes("หลายสกุลเงินจะแยกยอด"),
+  "System Performance UI must not combine unlike currencies into one monetary total"
+);
+
+console.log("Cent/Standard account currency isolation contract: OK");
+) &&
   !dashboard.includes('"$"+'),
   "Dashboard must not hardcode dollar money labels"
+);
+const integerKeysStart = dashboard.indexOf("const integerKeys = new Set([");
+const integerKeysEnd = dashboard.indexOf("]);", integerKeysStart);
+const integerKeysBlock = integerKeysStart >= 0 && integerKeysEnd > integerKeysStart
+  ? dashboard.slice(integerKeysStart, integerKeysEnd)
+  : "";
+must(
+  !integerKeysBlock.includes("racePerPositionProfitMoney"),
+  "RACE per-position money target must preserve decimal account-currency values"
 );
 
 must(
