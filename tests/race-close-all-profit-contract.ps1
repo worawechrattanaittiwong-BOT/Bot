@@ -41,7 +41,7 @@ Need $harvestBlock 'g_racePerPositionProfitMoney' 'RACE harvest must use its ded
 Need $raceStop 'double points = RaceAtrStopPoints();' 'RACE stop must use RACE ATR only'
 if($raceStop.Contains('g_manualStopLossPoints')){throw 'MANUAL Stop Loss still leaks into RACE'}
 
-Need $api 'numberSetting("racePerPositionProfitMoney", 0.01, 100000)' 'API must validate RACE per-position target'
+Need $api 'numberSetting("racePerPositionProfitMoney", 0.01, maxAccountMoney)' 'API must validate RACE per-position target with the account-currency-safe limit'
 Need $api 'body.raceProfitTargetMode' 'API must validate RACE target mode'
 Need $api '["BASKET", "POSITION", "OFF"]' 'API RACE target mode choices missing'
 Need $api 'clean.raceCloseAllProfitEnabled = raceMode === "BASKET"' 'Legacy RACE switch must mirror Basket mode only'
