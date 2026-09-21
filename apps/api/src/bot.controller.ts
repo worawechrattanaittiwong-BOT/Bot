@@ -736,14 +736,17 @@ export class BotController {
 
     if (instance) {
       // "Today" is Bangkok-local trading day. For the mode table, "trades"
-      // means actual bot entries (individual positions/ไม้), while Win Rate and
-      // Drawdown remain based on completed Basket outcomes. This prevents a
-      // 10-position Basket from being displayed as only one trade.
+      // means actual bot entries (individual positions/ไม้). Win Rate and
+      // Drawdown are calculated from positions that the EA itself closed, so a
+      // customer-side/manual MT5 close does not become bot performance.
       const todayRows = await this.db.query(
         `SELECT
+           deal_ticket,
+           position_id,
            event_type,
            net_profit::float8 AS net_profit,
            metadata->>'controlMode' AS control_mode,
+           metadata->>'executedByBot' AS executed_by_bot,
            entry_model,
            entry_trigger,
            created_at
@@ -826,18 +829,70 @@ export class BotController {
       // dashboard cards already describe Basket win rate/drawdown.
       tradeJournal.today = summarizeBaskets(rows);
 
-      // Per-mode "trades" is deliberately the number of ENTRY deals so this
-      // table reflects how many positions the bot actually opened today.
+      const isBotExecuted = (row:any) =>
+        String(row.executed_by_bot ?? "true").toLowerCase() !== "false";
+
+      const summarizeClosedBotPositions = (selected:any[]) => {
+        // EXIT can be emitted more than once for a partial close. Aggregate by
+        // MT5 position id so one position is still one closed trade.
+        const byPosition = new Map<string,{ netProfit:number; createdAt:any }>();
+        for (const row of selected) {
+          if (String(row.event_type || "").toUpperCase() !== "EXIT") continue;
+          if (!isBotExecuted(row)) continue;
+          const key = String(row.position_id || row.deal_ticket || "");
+          if (!key) continue;
+          const current = byPosition.get(key) || { netProfit: 0, createdAt: row.created_at };
+          current.netProfit += Number(row.net_profit || 0);
+          current.createdAt = row.created_at || current.createdAt;
+          byPosition.set(key, current);
+        }
+
+        const completed = Array.from(byPosition.values()).sort(
+          (a:any,b:any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+        );
+        let equityCurve = 0;
+        let peak = 0;
+        let maxDrawdown = 0;
+        let wins = 0;
+        let losses = 0;
+        let netProfit = 0;
+        for (const row of completed) {
+          const pnl = Number(row.netProfit || 0);
+          netProfit += pnl;
+          if (pnl > 0) wins++;
+          if (pnl < 0) losses++;
+          equityCurve += pnl;
+          peak = Math.max(peak, equityCurve);
+          maxDrawdown = Math.max(maxDrawdown, peak - equityCurve);
+        }
+        const closedTrades = completed.length;
+        return {
+          closedTrades,
+          wins,
+          losses,
+          winRate: closedTrades > 0 ? wins / closedTrades * 100 : 0,
+          netProfit,
+          drawdownMoney: maxDrawdown,
+          drawdownPercent: dayStartBalance > 0
+            ? maxDrawdown / dayStartBalance * 100
+            : 0
+        };
+      };
+
+      // Per-mode "trades" is the number of bot ENTRY deals. Closed performance
+      // is based only on EXIT deals explicitly executed by SCENOVA.
       tradeJournal.modeToday = controlModes.map(mode => {
         const modeRows = rows.filter((row:any) => resolveMode(row) === mode);
-        const performance = summarizeBaskets(modeRows);
+        const performance = summarizeClosedBotPositions(modeRows);
         const entries = modeRows.filter(
-          (row:any) => String(row.event_type || "").toUpperCase() === "ENTRY"
+          (row:any) =>
+            String(row.event_type || "").toUpperCase() === "ENTRY" &&
+            isBotExecuted(row)
         ).length;
         return {
           mode,
-          ...performance,
-          trades: entries
+          trades: entries,
+          ...performance
         };
       });
     }
