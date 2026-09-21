@@ -8,7 +8,7 @@ foreach ($required in @(
   'My Performance Only',
   'ownAccounts',
   'account.userId===options?.user?.id',
-  'สร้างลิงก์แชร์',
+  'แชร์ Read-only',
   'วันนี้',
   '7 วัน',
   '30 วัน',
@@ -33,6 +33,9 @@ foreach ($required in @(
 
 if ($web.Contains('ภาพรวมทั้งระบบ')) { throw 'Trading Performance page must not expose system-wide performance view' }
 if ($web.Contains('รายลูกค้า / รายบัญชี')) { throw 'Trading Performance page must not expose other customer drill-down' }
+if ($web.Contains('<h1>Trading Performance & Backtest</h1>')) { throw 'Redundant page title must stay removed from compact performance view' }
+if ($web.Contains('customDays')) { throw 'Custom-day number input must stay removed from compact performance view' }
+if ($web.Contains('className={styles.shareCard}')) { throw 'Share controls must stay integrated into the main performance controls' }
 
 $actions = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/performance-actions.controller.ts'))
 
@@ -43,7 +46,7 @@ foreach ($required in @(
   'บัญชีทดลอง (DEMO)',
   'clearAllPerformanceData',
   '/performance-actions/reset-test-data',
-  'ล้างข้อมูลทดสอบทั้งหมด',
+  'ล้างข้อมูลทดสอบ',
   'Account Type'
 )) {
   if (-not $web.Contains($required)) { throw "Performance account/reset UI missing: $required" }

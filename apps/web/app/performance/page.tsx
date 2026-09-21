@@ -231,7 +231,7 @@ export default function PerformanceDashboardPage() {
 
   function applyDays(days:number){
     const range=rangeFromDays(to||today,days);
-    setFrom(range.from);setTo(range.to);setCustomDays(String(days));
+    setFrom(range.from);setTo(range.to);
   }
 
   async function chooseBacktest(id:string){
@@ -311,18 +311,20 @@ export default function PerformanceDashboardPage() {
     <div className={styles.shell}>
       {options?.elevated?<OwnerSidebar activeKey="trading-backtest" onLogout={logout}/>:<CustomerSidebar onLogout={logout}/>}
       <main className={styles.main}>
-        <header className={styles.pageHeader}>
-          <div><span className={styles.pageEyebrow}>MY TRADING ANALYTICS</span><h1>Trading Performance & Backtest</h1><p>เฉพาะบัญชีของคุณ · แยก REAL / DEMO · แชร์แบบ Read-only ได้</p></div>
-          <div className={styles.headerActions}>
-            {selectedAccount?<span className={String(selectedAccount.accountType).toUpperCase()==="DEMO"?styles.demoBadge:styles.realBadge}>{String(selectedAccount.accountType||"REAL").toUpperCase()}</span>:null}
-            {options?.elevated?<button type="button" className={styles.clearButton} onClick={clearAllPerformanceData} disabled={loading}><ScenovaIcon name="delete" size={14}/>ล้างข้อมูลทดสอบทั้งหมด</button>:null}
-            <div className={styles.ownerBadge}><ScenovaIcon name="account" size={16}/><div><b>{options?.user?.user_code||"SCENOVA"}</b><span>My Performance Only</span></div></div>
-          </div>
-        </header>
-
         {error?<div className={styles.error}>{error}</div>:null}
 
         <section className={styles.controlCard}>
+          <div className={styles.compactToolbar}>
+            <div className={styles.toolbarIdentity}>
+              {selectedAccount?<span className={String(selectedAccount.accountType).toUpperCase()==="DEMO"?styles.demoBadge:styles.realBadge}>{String(selectedAccount.accountType||"REAL").toUpperCase()}</span>:null}
+              <div className={styles.ownerBadge}><ScenovaIcon name="account" size={15}/><div><b>{options?.user?.user_code||"SCENOVA"}</b><span>My Performance Only</span></div></div>
+            </div>
+            <div className={styles.toolbarActions}>
+              {mode==="LIVE"?<button type="button" className={styles.shareButton} onClick={createShare} disabled={sharing||!Number(summary.trades||0)}><ScenovaIcon name="share" size={14}/>{sharing?"กำลังสร้าง...":"แชร์ Read-only"}</button>:null}
+              {shareResult?.path&&mode==="LIVE"?<><input className={styles.shareInput} readOnly value={window.location.origin+shareResult.path}/><button type="button" className={styles.minorButton} onClick={copyShare}>คัดลอก</button><a className={styles.minorButton} href={shareResult.path} target="_blank" rel="noreferrer">เปิด</a></>:null}
+              {options?.elevated?<button type="button" className={styles.clearButton} onClick={clearAllPerformanceData} disabled={loading}><ScenovaIcon name="delete" size={14}/>ล้างข้อมูลทดสอบ</button>:null}
+            </div>
+          </div>
           <div className={styles.controlMain}>
             <label><span>บัญชีของฉัน</span><select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>
               {realAccounts.length?<optgroup label="บัญชีจริง (REAL)">{realAccounts.map((account:any)=><option key={account.id} value={account.id}>REAL · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
@@ -335,25 +337,16 @@ export default function PerformanceDashboardPage() {
           </div>
           <div className={styles.rangeBar}>
             <div className={styles.presets}><button onClick={()=>applyDays(1)}>วันนี้</button><button onClick={()=>applyDays(7)}>7 วัน</button><button onClick={()=>applyDays(30)}>30 วัน</button><button onClick={()=>applyDays(90)}>90 วัน</button></div>
-            <div className={styles.customDays}><span>กำหนดเอง</span><input type="number" min="1" max="730" value={customDays} onChange={(e)=>setCustomDays(e.target.value.replace(/\D/g,"").slice(0,3))}/><span>วัน</span><button onClick={()=>applyDays(Number(customDays||1))}>ใช้</button></div>
             <strong>{rangeDays} วัน · {from} → {to}</strong>
           </div>
         </section>
 
-        {mode==="LIVE"?(
-          <section className={styles.shareCard}>
-            <div><ScenovaIcon name="share" size={18}/><span><b>แชร์ Performance แบบ Read-only</b><small>ผู้ชมเลือกวันดูเองได้ แต่ไม่มีสิทธิ์เข้าบัญชีหรือสั่งเทรด</small></span></div>
-            <div className={styles.shareActions}>
-              <button onClick={createShare} disabled={sharing||!Number(summary.trades||0)}>{sharing?"กำลังสร้าง...":"สร้างลิงก์แชร์"}</button>
-              {shareResult?.path?<><input readOnly value={window.location.origin+shareResult.path}/><button onClick={copyShare}>คัดลอก</button><a href={shareResult.path} target="_blank" rel="noreferrer">เปิด</a></>:null}
-            </div>
-          </section>
-        ):(
+        {mode==="BACKTEST"?(
           <section className={styles.backtestBar}>
             <div><ScenovaIcon name="strategy" size={17}/><span><b>เลือกรายงาน Backtest ของคุณ</b><small>แสดงเฉพาะ Backtest ที่ผูกกับบัญชีของคุณ</small></span></div>
             <select value={selectedBacktestId} onChange={(e)=>chooseBacktest(e.target.value)}><option value="">เลือกรายงาน</option>{(report?.backtests||[]).map((run:any)=><option key={run.id} value={run.id}>{run.title} · {run.symbol} · {run.timeframe}</option>)}</select>
           </section>
-        )}
+        ):null}
 
         <section className={styles.summaryShell}>
           <header className={styles.summaryTitle}>

@@ -16,11 +16,19 @@ foreach ($required in @(
 }
 
 foreach ($required in @(
-  'publicShare(',
-  'availableRange',
-  'detailedExits',
-  'parsePublicRange',
-  '730 days'
+  'วันนี้',
+  '7 วัน',
+  '30 วัน',
+  '90 วัน',
+  'inclusiveDays',
+  'chartTickLabel',
+  'from={from} to={to}',
+  'BOT PERFORMANCE SUMMARY',
+  'My Performance Only',
+  'account.userId===options?.user?.id',
+  'ownAccounts',
+  'compactToolbar',
+  'แชร์ Read-only'
 )) {
   if (-not $actions.Contains($required)) { throw "Public performance dynamic-share contract missing: $required" }
 }
