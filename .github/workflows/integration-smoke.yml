@@ -543,6 +543,16 @@ jobs:
           test "$(printf '%s' "$FULL_CURRENCY_SAVE" | jq -r '.settings.accountCurrency')" = "USC"
           test "$(printf '%s' "$FULL_CURRENCY_SAVE" | jq -r '.settings.accountCurrencyReviewRequired')" = "false"
 
+          echo "[integration] same deal ticket on a different MT5 account does not collide or mix history"
+          curl -fsS -X POST "$BASE/ea/journal" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"dealTicket\":\"900001\",\"eventType\":\"BASKET\",\"direction\":\"BUY\",\"volume\":0.01,\"netProfit\":5.00,\"entryTrigger\":\"CENT_REBIND_TEST\",\"entryModel\":\"CENT_REBIND_TEST\",\"basketIndex\":1,\"symbol\":\"XAUUSDm\",\"brokerServer\":\"SCENOVA-Real\",\"journalSchema\":3}" >/dev/null
+          SAME_TICKET_ROWS=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from trade_journal where deal_ticket=900001 and event_type='BASKET';")
+          test "$SAME_TICKET_ROWS" = "2"
+          SAME_TICKET_ACCOUNTS=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(distinct mt5_account_id) from trade_journal where deal_ticket=900001 and event_type='BASKET';")
+          test "$SAME_TICKET_ACCOUNTS" = "2"
+          CENT_JOURNAL_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$CENT_JOURNAL_DASH" | jq -r '.tradeJournal.stats.closedTrades')" = "1"
+          test "$(printf '%s' "$CENT_JOURNAL_DASH" | jq -r '.tradeJournal.stats.netProfit')" = "5"
+
           TRIAL_COUNT=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from trial_grants where user_id=(select id from users where email='integration@scenova.test');")
           test "$TRIAL_COUNT" = "1"
           OLD_TRIAL=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from trial_grants where account_number='100001';")
