@@ -41,12 +41,13 @@ Need $analysis 'return RaceVolumeDirection();' 'AUTO RACE direction must use vol
 if($analysis.Contains('RaceM5CandleDirection()')){throw 'RACE entry must not use M5 candle direction'}
 Need $flow 'RaceVolumeDirection() == direction' 'RACE profit flow must follow 60-second volume side'
 Need $start 'RACE_VOLUME_WARMUP' 'RACE must wait for 60-second warmup before first AUTO entry'
-Need $manage 'RACE_PERSISTENT_REVERSAL_EXIT_V4' 'RACE persistent-reversal marker missing'
+Need $manage 'RACE_USER_LOSS_ONLY_V5' 'RACE user-loss-only marker missing'
 Need $manage 'volumeDirection != direction' 'RACE must detect a volume-side flip'
 Need $manage 'cycleProfit >= 0.0' 'ordinary RACE rollover must wait on a negative net cycle unless adverse impulse is confirmed'
 Need $manage 'cycleProfit < 0.0 && floatingProfit < 0.0' 'RACE adverse exit must never trigger from a profitable or flat basket'
 Need $manage 'RaceWrongDirectionConfirmed(direction,momentum,filling,wrongDirectionReason)' 'RACE must evaluate confirmed adverse impulse before recovery wait'
-Need $manage 'RaceCloseCycle(wrongDirectionReason)' 'confirmed adverse impulse must close the full RACE basket'
+if($manage.Contains('RaceCloseCycle(wrongDirectionReason)')){throw 'RACE reversal intelligence must never close a losing Basket by itself'}
+Need $manage 'RACE_REVERSAL_HOLD' 'confirmed adverse direction must hold/pause instead of closing a losing Basket'
 Need $ea '#define RACE_VOLUME_HISTORY_SECONDS 60' 'RACE pressure history must retain the full 60-second window'
 Need $ea 'now-g_raceVolumeLastSampleAt>RACE_VOLUME_WINDOW_SECONDS' 'RACE stalled-feed reset must preserve the 60-second entry warmup'
 Need $wrong 'RACE_EXIT_CYCLE_GRACE_SECONDS' 'RACE soft-loss exit must honor cycle startup grace'
@@ -66,8 +67,8 @@ Need $wrong 'g_raceExitCandidateSince = now' 'RACE reversal must enter a timed c
 Need $wrong 'RACE_EXIT_CONFIRM_SECONDS' 'RACE normal reversal must persist before closing'
 Need $wrong 'RACE_EXIT_SEVERE_CONFIRM_SECONDS' 'RACE severe reversal must still persist before closing'
 Need $wrong 'g_raceExitCandidatePeakAdverse * 0.70' 'RACE reversal candidate must cancel after a 30 percent price reclaim'
-Need $wrong 'RACE_PERSISTENT_REVERSAL_SEVERE' 'persistent severe reversal close reason missing'
-Need $wrong 'RACE_PERSISTENT_REVERSAL_CONFIRMED' 'persistent confirmed reversal close reason missing'
+Need $wrong 'RACE_PERSISTENT_REVERSAL_SEVERE_HOLD' 'persistent severe reversal hold reason missing'
+Need $wrong 'RACE_PERSISTENT_REVERSAL_CONFIRMED_HOLD' 'persistent confirmed reversal hold reason missing'
 if($wrong.Contains('RACE_ADVERSE_IMPULSE_SEVERE') -or $wrong.Contains('RACE_ADVERSE_IMPULSE_CONFIRMED')){throw 'Obsolete instant adverse-impulse close path remains'}
 Need $fill 'g_raceLastFillAt = TimeCurrent();' 'RACE must restart soft-exit grace after every accepted fill'
 Need $fill 'RaceResetExitCandidate();' 'RACE fill must cancel any stale reversal candidate'
@@ -98,6 +99,6 @@ if(-not $eaVersionMatch.Success -or -not $releaseVersionMatch.Success){
 if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
   throw ("EA release version mismatch: EA={0} API={1}" -f $eaVersionMatch.Groups[1].Value,$releaseVersionMatch.Groups[1].Value)
 }
-Need $release 'EA_RUNTIME_CONTRACT = "RACE_PERSISTENT_REVERSAL_EXIT_V4"' 'API runtime contract must match EA'
+Need $release 'EA_RUNTIME_CONTRACT = "RACE_USER_LOSS_ONLY_V5"' 'API runtime contract must match EA'
 
-Write-Host 'RACE 60-second volume + persistent reversal V4 contract: PASS'
+Write-Host 'RACE 60-second volume + user-controlled loss V5 contract: PASS'

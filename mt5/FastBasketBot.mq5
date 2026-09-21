@@ -1,8 +1,8 @@
 #property strict
-#property version   "1.0.50"
-#define SCENOVA_EA_VERSION "1.0.50"
-#define SCENOVA_PRODUCT_VERSION "1.0.50"
-#define SCENOVA_RUNTIME_CONTRACT "RACE_PERSISTENT_REVERSAL_EXIT_V4"
+#property version   "1.0.51"
+#define SCENOVA_EA_VERSION "1.0.51"
+#define SCENOVA_PRODUCT_VERSION "1.0.51"
+#define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -3296,10 +3296,10 @@ bool RaceWrongDirectionConfirmed(
       return false;
 
    reasonOut = severe
-      ? "RACE_PERSISTENT_REVERSAL_SEVERE"
-      : "RACE_PERSISTENT_REVERSAL_CONFIRMED";
+      ? "RACE_PERSISTENT_REVERSAL_SEVERE_HOLD"
+      : "RACE_PERSISTENT_REVERSAL_CONFIRMED_HOLD";
    Print(
-      "RACE persistent reversal exit adversePts=",DoubleToString(adversePoints,1),
+      "RACE persistent reversal hold adversePts=",DoubleToString(adversePoints,1),
       " fastOpp=",DoubleToString(fastOppositeShare,2),
       " slowOpp=",DoubleToString(slowOppositeShare,2),
       " candidateAge=",candidateAge,
@@ -3647,16 +3647,19 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   // RACE_PERSISTENT_REVERSAL_EXIT_V4: a temporary pullback never closes the
-   // basket by itself. Hard loss/SL stay authoritative above; soft loss exit
-   // requires post-fill grace, fast+slow pressure, closed-bar confirmation and
-   // a persistent candidate window with rebound cancellation.
+   // RACE_USER_LOSS_ONLY_V5:
+   // Reversal intelligence may PAUSE additional fills while a Basket is red,
+   // but it must never liquidate a losing RACE Basket by itself. A loss close
+   // is allowed only by an explicitly enabled Basket/Daily loss control, the
+   // Broker SL attached to the Position, or an explicit user Close All.
    string wrongDirectionReason = "NONE";
    if(cycleProfit < 0.0 && floatingProfit < 0.0)
    {
       if(RaceWrongDirectionConfirmed(direction,momentum,filling,wrongDirectionReason))
       {
-         RaceCloseCycle(wrongDirectionReason);
+         g_raceRecoveryWatch = true;
+         g_raceState = "REVERSAL_HOLD";
+         g_executionStatus = "RACE_REVERSAL_HOLD";
          return true;
       }
       if(g_raceExitCandidateSince > 0)
