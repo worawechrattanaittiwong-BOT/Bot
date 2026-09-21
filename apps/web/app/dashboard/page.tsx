@@ -739,17 +739,18 @@ export default function DashboardPage() {
   };
   const currentPositions = Math.max(0, Number(metrics.positions || 0));
   const configuredMaxPositions = Math.max(1, Number(settings.maxPositions || 1));
+  const dashboardBotTodayProfit = Number(metrics.botTodayProfit ?? metrics.dailyProfit ?? 0);
   const activeControlModeRaw = String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase();
   const activeControlMode = ["AUTO","RACE","FLIP_LOCK","ZERO_GRID","MANUAL"].includes(activeControlModeRaw)
     ? activeControlModeRaw
     : "AUTO";
   const todayPerformance = data?.tradeJournal?.today || {
-    trades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
+    trades:0,closedTrades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
   };
   const modePerformanceToday = Array.isArray(data?.tradeJournal?.modeToday)
     ? data.tradeJournal.modeToday
     : ["AUTO","RACE","FLIP_LOCK","ZERO_GRID","MANUAL"].map(mode=>({
-        mode,trades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
+        mode,trades:0,closedTrades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
       }));
 
   const rawOpenPositions = (() => {
@@ -2034,7 +2035,7 @@ export default function DashboardPage() {
               <section className="cc-kpi-grid cc-v3-kpis cc-v6-kpis cc-v12-kpis cc-v13-kpis">
                 <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online?formatAccountMoney(metrics.balance,accountCurrency):"—"} sub={"Balance · "+accountCurrency} />
                 <DashboardMetric icon="equity" label="มูลค่ารวม" value={isMt5Online?formatAccountMoney(metrics.equity,accountCurrency):"—"} sub={"Equity · "+accountCurrency} />
-                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?formatAccountMoney(metrics.dailyProfit,accountCurrency,true):"—"} sub={"Daily P/L · "+accountCurrency} tone={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"good":"bad"):"neutral"} />
+                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?formatAccountMoney(dashboardBotTodayProfit,accountCurrency,true):"—"} sub={"Bot P/L ทุกโหมด · "+accountCurrency} tone={isMt5Online?(dashboardBotTodayProfit>=0?"good":"bad"):"neutral"} />
                 <DashboardMetric icon="target" label="Win Rate วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.winRate||0).toFixed(1)+"%":"—"} sub={Number(todayPerformance.trades||0)>0?Number(todayPerformance.wins||0)+" / "+Number(todayPerformance.trades||0)+" Basket":"ยังไม่มี Basket ปิดวันนี้"} tone={Number(todayPerformance.trades||0)>0?(Number(todayPerformance.winRate||0)>=60?"good":Number(todayPerformance.winRate||0)>=45?"warn":"bad"):"neutral"} />
                 <DashboardMetric icon="risk" label="Drawdown วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.drawdownPercent||0).toFixed(2)+"%":"0.00%"} sub={formatAccountMoney(-Math.abs(Number(todayPerformance.drawdownMoney||0)),accountCurrency)+" Realized DD"} tone={Number(todayPerformance.drawdownPercent||0)>=5?"bad":Number(todayPerformance.drawdownPercent||0)>=2?"warn":"good"} />
                 <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
@@ -2112,17 +2113,19 @@ export default function DashboardPage() {
                     <em>Today</em>
                   </div>
                   <div className="cc-v12-mode-table">
-                    <div className="head"><span>โหมด</span><span>Win Rate</span><span>Drawdown</span><span>Trades</span></div>
+                    <div className="head"><span>โหมด</span><span>Win Rate</span><span>Drawdown</span><span>ไม้วันนี้</span></div>
                     {modePerformanceToday.map((row:any)=>{
                       const mode=String(row.mode||"AUTO");
                       const active=mode===activeControlMode;
                       const win=Number(row.winRate||0);
                       const dd=Number(row.drawdownPercent||0);
+                      const entries=Number(row.trades||0);
+                      const closedTrades=Number(row.closedTrades??0);
                       return <div key={mode} className={"row "+(active?"active":"")}>
                         <span className="mode"><i/>{mode}</span>
-                        <span className={Number(row.trades||0)>0?(win>=60?"good":win>=45?"warn":"bad"):"neutral"}>{Number(row.trades||0)>0?win.toFixed(1)+"%":"—"}</span>
+                        <span className={closedTrades>0?(win>=60?"good":win>=45?"warn":"bad"):"neutral"}>{closedTrades>0?win.toFixed(1)+"%":"—"}</span>
                         <span className={dd>=5?"bad":dd>=2?"warn":"good"}>{dd.toFixed(2)+"%"}<small>{formatAccountMoney(-Math.abs(Number(row.drawdownMoney||0)),accountCurrency)}</small></span>
-                        <span>{Number(row.trades||0)}<small>{active?(botRunning?"Active":"Selected"):"Idle"}</small></span>
+                        <span>{entries}<small>{closedTrades>0?closedTrades+" ปิดโดยบอท · ":""}{active?(botRunning?"Active":"Selected"):"Idle"}</small></span>
                       </div>;
                     })}
                   </div>

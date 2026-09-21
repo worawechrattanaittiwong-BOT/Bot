@@ -698,6 +698,7 @@ export class BotController {
 
     const blankTodayPerformance = () => ({
       trades: 0,
+      closedTrades: 0,
       wins: 0,
       losses: 0,
       winRate: 0,
@@ -734,18 +735,24 @@ export class BotController {
     };
 
     if (instance) {
-      // "Today" is Bangkok-local trading day. Pull only closed Basket events;
-      // this keeps the query small enough for the lightweight 10-second refresh.
+      // "Today" is Bangkok-local trading day. For the mode table, "trades"
+      // means actual bot entries (individual positions/ไม้). Win Rate and
+      // Drawdown are calculated from positions that the EA itself closed, so a
+      // customer-side/manual MT5 close does not become bot performance.
       const todayRows = await this.db.query(
         `SELECT
+           deal_ticket,
+           position_id,
+           event_type,
            net_profit::float8 AS net_profit,
            metadata->>'controlMode' AS control_mode,
+           metadata->>'executedByBot' AS executed_by_bot,
            entry_model,
            entry_trigger,
            created_at
          FROM trade_journal
          WHERE bot_instance_id=$1
-           AND event_type='BASKET'
+           AND event_type IN ('ENTRY','EXIT','BASKET')
            AND created_at >= (
              date_trunc('day', now() AT TIME ZONE 'Asia/Bangkok')
              AT TIME ZONE 'Asia/Bangkok'
@@ -755,7 +762,10 @@ export class BotController {
       );
 
       const rows = todayRows.rows || [];
-      const totalTodayNet = rows.reduce(
+      const basketRows = rows.filter(
+        (row:any) => String(row.event_type || "").toUpperCase() === "BASKET"
+      );
+      const totalTodayNet = basketRows.reduce(
         (sum:any,row:any) => sum + Number(row.net_profit || 0),
         0
       );
@@ -763,29 +773,35 @@ export class BotController {
       const dayStartBalance = Math.max(0, currentBalance - totalTodayNet);
 
       const resolveMode = (row:any) => {
-        const saved = String(row.control_mode || "").toUpperCase();
-        if (controlModes.includes(saved)) return saved;
-        // Backward-compatible classification for journal rows created before
-        // controlMode was stored in metadata.
         const fingerprint = (
           String(row.entry_model || "") + " " +
           String(row.entry_trigger || "")
         ).toUpperCase();
+
+        // Strong execution fingerprints are more trustworthy than legacy
+        // metadata because older EA versions could flush a queued journal after
+        // the website had already switched to another mode.
         if (fingerprint.includes("RACE")) return "RACE";
         if (fingerprint.includes("FLIP")) return "FLIP_LOCK";
         if (fingerprint.includes("ZERO")) return "ZERO_GRID";
         if (fingerprint.includes("MANUAL")) return "MANUAL";
+
+        const saved = String(row.control_mode || "").toUpperCase();
+        if (controlModes.includes(saved)) return saved;
         return "AUTO";
       };
 
-      const summarize = (selected:any[]) => {
+      const summarizeBaskets = (selected:any[]) => {
+        const completed = selected.filter(
+          (row:any) => String(row.event_type || "").toUpperCase() === "BASKET"
+        );
         let equityCurve = 0;
         let peak = 0;
         let maxDrawdown = 0;
         let wins = 0;
         let losses = 0;
         let netProfit = 0;
-        for (const row of selected) {
+        for (const row of completed) {
           const pnl = Number(row.net_profit || 0);
           netProfit += pnl;
           if (pnl > 0) wins++;
@@ -794,12 +810,13 @@ export class BotController {
           peak = Math.max(peak, equityCurve);
           maxDrawdown = Math.max(maxDrawdown, peak - equityCurve);
         }
-        const trades = selected.length;
+        const closedTrades = completed.length;
         return {
-          trades,
+          trades: closedTrades,
+          closedTrades,
           wins,
           losses,
-          winRate: trades > 0 ? wins / trades * 100 : 0,
+          winRate: closedTrades > 0 ? wins / closedTrades * 100 : 0,
           netProfit,
           drawdownMoney: maxDrawdown,
           drawdownPercent: dayStartBalance > 0
@@ -808,11 +825,76 @@ export class BotController {
         };
       };
 
-      tradeJournal.today = summarize(rows);
-      tradeJournal.modeToday = controlModes.map(mode => ({
-        mode,
-        ...summarize(rows.filter((row:any) => resolveMode(row) === mode))
-      }));
+      // Top-level "today" keeps the existing Basket semantics because other
+      // dashboard cards already describe Basket win rate/drawdown.
+      tradeJournal.today = summarizeBaskets(rows);
+
+      const isBotExecuted = (row:any) =>
+        String(row.executed_by_bot ?? "true").toLowerCase() !== "false";
+
+      const summarizeClosedBotPositions = (selected:any[]) => {
+        // EXIT can be emitted more than once for a partial close. Aggregate by
+        // MT5 position id so one position is still one closed trade.
+        const byPosition = new Map<string,{ netProfit:number; createdAt:any }>();
+        for (const row of selected) {
+          if (String(row.event_type || "").toUpperCase() !== "EXIT") continue;
+          if (!isBotExecuted(row)) continue;
+          const key = String(row.position_id || row.deal_ticket || "");
+          if (!key) continue;
+          const current = byPosition.get(key) || { netProfit: 0, createdAt: row.created_at };
+          current.netProfit += Number(row.net_profit || 0);
+          current.createdAt = row.created_at || current.createdAt;
+          byPosition.set(key, current);
+        }
+
+        const completed = Array.from(byPosition.values()).sort(
+          (a:any,b:any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+        );
+        let equityCurve = 0;
+        let peak = 0;
+        let maxDrawdown = 0;
+        let wins = 0;
+        let losses = 0;
+        let netProfit = 0;
+        for (const row of completed) {
+          const pnl = Number(row.netProfit || 0);
+          netProfit += pnl;
+          if (pnl > 0) wins++;
+          if (pnl < 0) losses++;
+          equityCurve += pnl;
+          peak = Math.max(peak, equityCurve);
+          maxDrawdown = Math.max(maxDrawdown, peak - equityCurve);
+        }
+        const closedTrades = completed.length;
+        return {
+          closedTrades,
+          wins,
+          losses,
+          winRate: closedTrades > 0 ? wins / closedTrades * 100 : 0,
+          netProfit,
+          drawdownMoney: maxDrawdown,
+          drawdownPercent: dayStartBalance > 0
+            ? maxDrawdown / dayStartBalance * 100
+            : 0
+        };
+      };
+
+      // Per-mode "trades" is the number of bot ENTRY deals. Closed performance
+      // is based only on EXIT deals explicitly executed by SCENOVA.
+      tradeJournal.modeToday = controlModes.map(mode => {
+        const modeRows = rows.filter((row:any) => resolveMode(row) === mode);
+        const performance = summarizeClosedBotPositions(modeRows);
+        const entries = modeRows.filter(
+          (row:any) =>
+            String(row.event_type || "").toUpperCase() === "ENTRY" &&
+            isBotExecuted(row)
+        ).length;
+        return {
+          mode,
+          trades: entries,
+          ...performance
+        };
+      });
     }
 
     if (instance && !lightweight) {

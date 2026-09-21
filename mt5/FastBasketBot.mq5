@@ -4849,9 +4849,12 @@ void SendHeartbeat()
    double telemetryLot = g_adaptiveEngine && g_adaptiveLot > 0.0
       ? g_adaptiveLot
       : NormalizeTradeVolume(g_lot);
+   double botTodayClosedProfit = BotTodayClosedProfitAllModes();
+   double botFloatingProfit = BotFloatingProfitAllModes();
+   double botTodayProfit = botTodayClosedProfit + botFloatingProfit;
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"%s\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"%s\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"botTodayProfit\":%.2f,\"botTodayClosedProfit\":%.2f,\"botFloatingProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -4872,6 +4875,9 @@ void SendHeartbeat()
       g_profitRunPeak,
       g_perPositionLoss,
       DailyBotProfit(),
+      botTodayProfit,
+      botTodayClosedProfit,
+      botFloatingProfit,
       EffectiveDailyProfitTarget(),
       dailyProfitContinueText,
       g_dailyProfitDrawdownPercent,
@@ -5636,10 +5642,27 @@ void PostTradeJournalDeal(ulong dealTicket)
    int dealDirection = dealType == DEAL_TYPE_BUY ? 1 : -1;
    int positionDirection = isExit ? -dealDirection : dealDirection;
 
+   // Journal ownership must come from the actual MT5 deal/position history,
+   // never from the mode currently selected on the website. A queued journal
+   // can be flushed after the user has already changed modes.
+   string journalControlMode = TradeModeForDeal(dealTicket);
+   if(journalControlMode == "")
+      journalControlMode = DailyRiskMode();
+   HistoryDealSelect(dealTicket);
+
+   // A customer can manually close a SCENOVA-opened position. The ownership
+   // fallback above is still needed to identify the mode, but performance must
+   // distinguish who actually executed this deal.
+   bool executedByBot = IsScenovaMagic(
+      HistoryDealGetInteger(dealTicket, DEAL_MAGIC)
+   );
+   string executedByBotText = executedByBot ? "true" : "false";
+
    double net =
       HistoryDealGetDouble(dealTicket, DEAL_PROFIT) +
       HistoryDealGetDouble(dealTicket, DEAL_SWAP) +
-      HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
+      HistoryDealGetDouble(dealTicket, DEAL_COMMISSION) +
+      HistoryDealGetDouble(dealTicket, DEAL_FEE);
 
    double obQuality = positionDirection > 0
       ? g_bullishOrderBlockQuality
@@ -5649,12 +5672,14 @@ void PostTradeJournalDeal(ulong dealTicket)
       : MathMax(1, BasketPositionCount());
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"controlMode\":\"%s\",\"executedByBot\":%s,\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d}",
       InpInstanceId,
       InpInstallToken,
       (long)dealTicket,
       (long)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID),
       isExit ? "EXIT" : "ENTRY",
+      journalControlMode,
+      executedByBotText,
       positionDirection > 0 ? "BUY" : "SELL",
       HistoryDealGetDouble(dealTicket, DEAL_VOLUME),
       DoubleToString(HistoryDealGetDouble(dealTicket, DEAL_PRICE), SymbolDigitsNow()),
@@ -5737,15 +5762,18 @@ void PostRescueJournalDeal(ulong dealTicket)
    double net=
       HistoryDealGetDouble(dealTicket,DEAL_PROFIT)+
       HistoryDealGetDouble(dealTicket,DEAL_SWAP)+
-      HistoryDealGetDouble(dealTicket,DEAL_COMMISSION);
+      HistoryDealGetDouble(dealTicket,DEAL_COMMISSION)+
+      HistoryDealGetDouble(dealTicket,DEAL_FEE);
+   string journalControlMode=DailyRiskMode();
 
    string payload=StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"RESCUE_HEDGE\",\"entryModel\":\"WEIGHT_BALANCE\",\"entryQuality\":\"R\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":0}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"positionId\":\"%I64d\",\"eventType\":\"%s\",\"controlMode\":\"%s\",\"executedByBot\":true,\"direction\":\"%s\",\"volume\":%.8f,\"price\":%s,\"netProfit\":%.2f,\"entryTrigger\":\"RESCUE_HEDGE\",\"entryModel\":\"WEIGHT_BALANCE\",\"entryQuality\":\"R\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":0}",
       InpInstanceId,
       InpInstallToken,
       (long)dealTicket,
       (long)HistoryDealGetInteger(dealTicket,DEAL_POSITION_ID),
       isExit ? "EXIT" : "ENTRY",
+      journalControlMode,
       positionDirection>0 ? "BUY" : "SELL",
       HistoryDealGetDouble(dealTicket,DEAL_VOLUME),
       DoubleToString(HistoryDealGetDouble(dealTicket,DEAL_PRICE),SymbolDigitsNow()),
@@ -6014,11 +6042,16 @@ void FlushPendingBasketJournal()
    if(g_pendingBasketRetryAt > now)
       return;
 
+   string pendingControlMode=TradeModeForDeal((ulong)g_pendingBasketId);
+   if(pendingControlMode=="")
+      pendingControlMode=DailyRiskMode();
+
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"eventType\":\"BASKET\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":0,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d,\"symbol\":\"%s\",\"brokerServer\":\"%s\",\"startedAt\":%I64d,\"endedAt\":%I64d,\"peakPositions\":%d,\"sessionProfile\":\"%s\",\"journalSchema\":5,\"marketCycleState\":\"%s\",\"entryPrecisionState\":\"%s\",\"liquidityState\":\"%s\",\"microStructureState\":\"%s\",\"fvgState\":\"%s\",\"entryPrecisionScore\":%.2f,\"entryDistanceAtr\":%.4f,\"setupEvScore\":%.2f,\"indicatorLocationScore\":%.2f,\"indicatorMomentumScore\":%.2f,\"indicatorStructureScore\":%.2f,\"indicatorVolatilityScore\":%.2f,\"indicatorExecutionScore\":%.2f,\"indicatorCostSpaceScore\":%.2f,\"indicatorCompositeScore\":%.2f,\"volumeProfileState\":\"%s\",\"squeezeState\":\"%s\",\"macdState\":\"%s\",\"levelFlipState\":\"%s\",\"premiumDiscountState\":\"%s\"}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"dealTicket\":\"%I64d\",\"eventType\":\"BASKET\",\"controlMode\":\"%s\",\"direction\":\"%s\",\"volume\":%.8f,\"price\":0,\"netProfit\":%.2f,\"entryTrigger\":\"%s\",\"entryModel\":\"%s\",\"entryQuality\":\"%s\",\"entryQualityScore\":%.2f,\"marketRegime\":\"%s\",\"marketRegimeDetail\":\"%s\",\"fibSetupScore\":%.2f,\"orderBlockQuality\":%.2f,\"confidence\":%.2f,\"basketIndex\":%d,\"symbol\":\"%s\",\"brokerServer\":\"%s\",\"startedAt\":%I64d,\"endedAt\":%I64d,\"peakPositions\":%d,\"sessionProfile\":\"%s\",\"journalSchema\":5,\"marketCycleState\":\"%s\",\"entryPrecisionState\":\"%s\",\"liquidityState\":\"%s\",\"microStructureState\":\"%s\",\"fvgState\":\"%s\",\"entryPrecisionScore\":%.2f,\"entryDistanceAtr\":%.4f,\"setupEvScore\":%.2f,\"indicatorLocationScore\":%.2f,\"indicatorMomentumScore\":%.2f,\"indicatorStructureScore\":%.2f,\"indicatorVolatilityScore\":%.2f,\"indicatorExecutionScore\":%.2f,\"indicatorCostSpaceScore\":%.2f,\"indicatorCompositeScore\":%.2f,\"volumeProfileState\":\"%s\",\"squeezeState\":\"%s\",\"macdState\":\"%s\",\"levelFlipState\":\"%s\",\"premiumDiscountState\":\"%s\"}",
       InpInstanceId,
       InpInstallToken,
       g_pendingBasketId,
+      pendingControlMode,
       g_pendingBasketDirection > 0 ? "BUY" : "SELL",
       g_pendingBasketVolume,
       g_pendingBasketProfit,
@@ -15524,6 +15557,56 @@ double DailyBotProfit()
       total+=RescueProfit();
 
    g_dailyClosedProfit=DailyClosedProfitForMode(mode);
+   return total;
+}
+
+// Dashboard P/L is intentionally separate from DailyBotProfit(). Risk controls
+// remain mode-scoped, while the dashboard must show all SCENOVA modes together.
+// Only deals actually executed by a SCENOVA magic are counted; a customer-side
+// MT5 close normally has magic=0 and is therefore excluded.
+double BotTodayClosedProfitAllModes()
+{
+   datetime from=BrokerDayStart();
+   datetime to=TimeCurrent();
+   if(!HistorySelect(from,to))
+      return 0.0;
+
+   double total=0.0;
+   int totalDeals=HistoryDealsTotal();
+   for(int i=0;i<totalDeals;i++)
+   {
+      ulong deal=HistoryDealGetTicket(i);
+      if(deal==0)
+         continue;
+      if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol)
+         continue;
+      if(!IsScenovaMagic(HistoryDealGetInteger(deal,DEAL_MAGIC)))
+         continue;
+
+      total+=HistoryDealGetDouble(deal,DEAL_PROFIT);
+      total+=HistoryDealGetDouble(deal,DEAL_SWAP);
+      total+=HistoryDealGetDouble(deal,DEAL_COMMISSION);
+      total+=HistoryDealGetDouble(deal,DEAL_FEE);
+   }
+   return total;
+}
+
+double BotFloatingProfitAllModes()
+{
+   double total=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol)
+         continue;
+      if(!IsScenovaMagic(PositionGetInteger(POSITION_MAGIC)))
+         continue;
+
+      total+=PositionGetDouble(POSITION_PROFIT);
+      total+=PositionGetDouble(POSITION_SWAP);
+   }
    return total;
 }
 
