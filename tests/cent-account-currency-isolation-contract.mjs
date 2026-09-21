@@ -83,6 +83,13 @@ must(
 );
 
 must(
+  botApi.includes("const maxAccountMoney = 100_000_000") &&
+  botApi.includes('numberSetting("raceCloseAllProfitMoney", 0.01, maxAccountMoney)') &&
+  botApi.includes('numberSetting("zeroGridMinNetProfitMoney", 0.01, maxAccountMoney)'),
+  "Native Cent money validation must allow values above the old USD-oriented 100,000 ceiling"
+);
+
+must(
   eaApi.includes("AND mt5_account_id=$2") &&
   botApi.includes("AND mt5_account_id=$2"),
   "EA intelligence and dashboard journal stats must be isolated by MT5 account"
