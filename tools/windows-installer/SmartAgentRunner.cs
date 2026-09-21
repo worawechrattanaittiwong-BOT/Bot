@@ -147,15 +147,18 @@ internal static class SmartAgentRunner
             }
         }
 
-        if (!heartbeat.EaOnline && heartbeat.SafeToRestart)
+        if (heartbeat.SafeToRestart)
         {
-            // This call is a no-op unless the customer has pressed
-            // "เชื่อมต่อ MT5". There is intentionally no background auto-start.
+            // CONNECT_MT5 is also used by authoritative Web Symbol selection.
+            // Call the guarded helper even while EA is online: it remains a no-op
+            // unless the Server exposes a still-active explicit action. This lets
+            // the Web force MT5 to reopen on the selected Symbol without a second
+            // button click once the account is flat and restart-safe.
             if (AgentRunner.EnsureMt5RunningWithEa(config, forceReload: false))
             {
                 await AppendLogAsync(
                     logPath,
-                    "Manual MT5 connect/restart completed. profile=" + key);
+                    "Manual/Web-authorized MT5 connect or Symbol switch completed. profile=" + key);
             }
         }
 

@@ -10,11 +10,12 @@ import {
   Req,
   UseGuards
 } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { DbService } from "./db.service";
 import { isVersionAtLeast } from "./release-version";
 import { CryptoService, JwtGuard } from "./security";
 
-const SYMBOL_AGENT_VERSION = "1.0.10";
+const SYMBOL_AGENT_VERSION = "1.0.11";
 
 function normalizeSymbol(value: unknown) {
   const symbol = String(value || "").trim();
@@ -158,25 +159,15 @@ export class TradingSymbolController {
       );
     }
     const positions = Math.max(0, Number(instance.positions || 0));
-    if (
+    const runtimeBusy =
       positions > 0 ||
       String(instance.actual_state || "").toUpperCase() === "RUNNING" ||
-      String(instance.desired_state || "").toUpperCase() === "RUNNING"
-    ) {
-      throw new ConflictException(
-        "หยุดบอทและปิด Position ให้หมดก่อนเปลี่ยน Symbol เพื่อป้องกันออเดอร์ย้ายข้ามตลาด"
-      );
-    }
-    if (!instance.agent_online) {
-      throw new ConflictException("Windows Agent ยังไม่ออนไลน์ กรุณาเปิด SCENOVA Agent ก่อนเปลี่ยน Symbol");
-    }
-    if (!isVersionAtLeast(instance.agent_version, SYMBOL_AGENT_VERSION)) {
-      throw new ConflictException(
-        "SCENOVA Windows Setup/Agent ต้องเป็น v" + SYMBOL_AGENT_VERSION +
-        " หรือใหม่กว่าเพื่อเปลี่ยน Symbol อย่างปลอดภัย กรุณาอัปเดต Setup ก่อน"
-      );
-    }
+      String(instance.desired_state || "").toUpperCase() === "RUNNING";
 
+    // The Web selection is authoritative. Never reject the user's desired
+    // Symbol because MT5/Agent is offline or because positions are still open.
+    // Instead persist the desired Symbol immediately, force SAFE_STOP, and let
+    // the Agent apply it automatically as soon as the runtime is restart-safe.
     const before = this.snapshot(instance);
     const changed =
       !before.explicitSymbol ||
@@ -198,38 +189,79 @@ export class TradingSymbolController {
     );
     const requestedAt = new Date().toISOString();
     const requiresReconnect = changed || !activeMatches;
+    const actionId = requiresReconnect ? randomUUID() : null;
+    const agentVersionReady = isVersionAtLeast(instance.agent_version, SYMBOL_AGENT_VERSION);
 
-    await this.db.query(
-      `UPDATE bot_instances
-       SET desired_state='SAFE_STOP',
-           metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
-             'requestedStartupSymbol',$2::text,
-             'symbolChangeStatus',$3::text,
-             'symbolChangeRequestedAt',$4::text
-           )
-       WHERE id=$1`,
-      [
-        instance.id,
-        symbol,
-        requiresReconnect ? "PENDING_RESTART" : "READY",
-        requestedAt
-      ]
-    );
+    if (requiresReconnect) {
+      await this.db.query(
+        `UPDATE bot_instances
+         SET desired_state='SAFE_STOP',
+             metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
+               'requestedStartupSymbol',$2::text,
+               'symbolChangeStatus',$3::text,
+               'symbolChangeRequestedAt',$4::text,
+               'manualMt5ActionName','CONNECT_MT5',
+               'manualMt5ActionId',$5::text,
+               'manualMt5ActionRequestedAt',$4::text,
+               'manualMt5ActionStatus','PENDING',
+               'manualMt5ActionSource','SYMBOL_SELECTION',
+               'manualMt5ActionMessage',$6::text
+             )
+         WHERE id=$1`,
+        [
+          instance.id,
+          symbol,
+          runtimeBusy ? "WAITING_FLAT" : "QUEUED",
+          requestedAt,
+          actionId,
+          runtimeBusy
+            ? "เว็บกำหนด Symbol ใหม่แล้ว · ระบบ Safe Stop และจะบังคับ MT5 เปิด Symbol นี้ทันทีเมื่อไม่มี Position"
+            : "เว็บกำหนด Symbol ใหม่แล้ว · ระบบกำลังบังคับ MT5 เปิด Chart/EA บน Symbol นี้"
+        ]
+      );
 
-    await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
-      [instance.id]
-    );
-    await this.db.query(
-      "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
-      [instance.id]
-    );
+      // Web Symbol selection has higher priority than a pending Start/Stop
+      // transition. It never force-closes positions; SAFE_STOP prevents new
+      // entries and the Agent applies the selected Symbol once the account is flat.
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
+        [instance.id]
+      );
+      await this.db.query(
+        "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
+        [instance.id]
+      );
+    } else {
+      await this.db.query(
+        `UPDATE bot_instances
+         SET metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
+           'requestedStartupSymbol',$2::text,
+           'symbolChangeStatus','READY',
+           'symbolChangeRequestedAt',$3::text
+         )
+         WHERE id=$1`,
+        [instance.id, symbol, requestedAt]
+      );
+    }
+
     await this.db.query(
       "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'SELECT_TRADING_SYMBOL','bot_instance',$2,$3::jsonb)",
       [
         String(req.user.code || req.user.sub),
         instance.id,
-        JSON.stringify({ slotId, symbol, previous: before.desiredSymbol, changed, activeSymbol: activeSymbol || null })
+        JSON.stringify({
+          slotId,
+          symbol,
+          previous: before.desiredSymbol,
+          changed,
+          activeSymbol: activeSymbol || null,
+          authority: "WEB",
+          actionId,
+          waitingForFlat: runtimeBusy,
+          agentOnline: Boolean(instance.agent_online),
+          agentVersion: String(instance.agent_version || ""),
+          minimumAgentVersion: SYMBOL_AGENT_VERSION
+        })
       ]
     );
 
@@ -238,9 +270,21 @@ export class TradingSymbolController {
       symbol,
       changed,
       symbolChangeRequiresReconnect: requiresReconnect,
-      message: requiresReconnect
-        ? "บันทึก Symbol แล้ว ต้องเชื่อม MT5 ใหม่ 1 ครั้งเพื่อโหลด Chart/EA บน Symbol นี้"
-        : "Symbol ที่เลือกตรงกับ EA และ Startup Profile แล้ว"
+      queued: requiresReconnect,
+      actionId,
+      waitingForFlat: requiresReconnect && runtimeBusy,
+      agentOnline: Boolean(instance.agent_online),
+      agentVersionReady,
+      minimumAgentVersion: SYMBOL_AGENT_VERSION,
+      message: !requiresReconnect
+        ? "MT5 กำลังใช้ Symbol นี้อยู่แล้ว"
+        : runtimeBusy
+          ? "ยืนยันแล้ว · เว็บเป็นคำสั่งหลัก ระบบหยุดเปิดรอบใหม่และจะบังคับ MT5 เปลี่ยนเป็น " + symbol + " ทันทีเมื่อ Position เป็น 0"
+          : !instance.agent_online
+            ? "ยืนยันแล้ว · บันทึกคำสั่ง " + symbol + " ไว้เป็นค่าหลัก รอ Windows Agent ออนไลน์แล้วระบบจะบังคับ MT5 เปิดให้อัตโนมัติ"
+            : !agentVersionReady
+              ? "ยืนยันแล้ว · บันทึกคำสั่ง " + symbol + " ไว้เป็นค่าหลัก กรุณาอัปเดต SCENOVA Agent v" + SYMBOL_AGENT_VERSION + " แล้วระบบจะทำต่ออัตโนมัติ"
+              : "ยืนยันแล้ว · ระบบกำลังบังคับ MT5 เปิด " + symbol + " และโหลด EA บน Symbol นี้อัตโนมัติ"
     };
   }
 }

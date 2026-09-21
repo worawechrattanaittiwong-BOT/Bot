@@ -291,10 +291,13 @@ export class AgentActionController {
     const actionStatus = String(instance.manual_action_status || "").toUpperCase();
     const actionSource = String(instance.manual_action_source || "").toUpperCase();
     const actionName = String(instance.manual_action_name || "").toUpperCase();
+    const symbolSelectionAction = actionSource === "SYMBOL_SELECTION";
     const sourceIsUserAuthorized =
       actionSource === "USER" ||
+      symbolSelectionAction ||
       (actionSource === "START_RECOVERY" && actionName === "CONNECT_MT5");
     const stalePending = Boolean(
+      !symbolSelectionAction &&
       instance.manual_action_id &&
       instance.manual_action_name &&
       previousRequestedAt &&
@@ -338,7 +341,7 @@ export class AgentActionController {
       instance.manual_action_name &&
       previousRequestedAt &&
       previousAgeMs >= 0 &&
-      previousAgeMs <= ACTION_PENDING_TTL_MS &&
+      (symbolSelectionAction || previousAgeMs <= ACTION_PENDING_TTL_MS) &&
       String(instance.manual_action_status || "PENDING") === "PENDING"
     );
 
@@ -416,12 +419,25 @@ export class AgentActionController {
       ? "การซ่อม EA รอบนี้ไม่สำเร็จและหยุดแล้ว กรุณาตรวจ MT5 แล้วกดใหม่เมื่อต้องการ"
       : message;
 
+    const symbolSelectionAction =
+      String(instance.manual_action_source || "").toUpperCase() === "SYMBOL_SELECTION";
+    const acknowledgedAt = new Date().toISOString();
+
     await this.db.query(
       `UPDATE bot_instances
        SET metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
          'manualMt5ActionStatus',$2::text,
          'manualMt5ActionAckAt',$3::text,
          'manualMt5ActionMessage',$4::text,
+         'symbolChangeStatus',CASE
+           WHEN $6::boolean AND $2='ACKED' THEN 'READY'
+           WHEN $6::boolean THEN 'FAILED'
+           ELSE COALESCE(metrics->>'symbolChangeStatus','')
+         END,
+         'symbolChangeAckAt',CASE
+           WHEN $6::boolean THEN $3::text
+           ELSE COALESCE(metrics->>'symbolChangeAckAt','')
+         END,
          'startAfterRepairRequested',CASE
            WHEN $5::boolean THEN false
            ELSE COALESCE((metrics->>'startAfterRepairRequested')::boolean,false)
@@ -438,7 +454,7 @@ export class AgentActionController {
          END
        )
        WHERE id=$1`,
-      [instanceId, status, new Date().toISOString(), recoveryMessage, recoveryFailed]
+      [instanceId, status, acknowledgedAt, recoveryMessage, recoveryFailed, symbolSelectionAction]
     );
 
     return { ok: true, actionId, status };
