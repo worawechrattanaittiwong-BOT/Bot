@@ -2115,7 +2115,7 @@ export default function DashboardPage() {
                     <em>Today</em>
                   </div>
                   <div className="cc-v12-mode-table">
-                    <div className="head"><span>โหมด</span><span>Win Rate</span><span>Drawdown</span><span>ไม้วันนี้</span></div>
+                    <div className="head"><span>โหมด</span><span>Win Rate</span><span>Drawdown</span><span>Activity</span></div>
                     {modePerformanceToday.map((row:any)=>{
                       const mode=String(row.mode||"AUTO");
                       const active=mode===activeControlMode;
@@ -2127,7 +2127,7 @@ export default function DashboardPage() {
                         <span className="mode"><i/>{mode}</span>
                         <span className={closedTrades>0?(win>=60?"good":win>=45?"warn":"bad"):"neutral"}>{closedTrades>0?win.toFixed(1)+"%":"—"}</span>
                         <span className={dd>=5?"bad":dd>=2?"warn":"good"}>{dd.toFixed(2)+"%"}<small>{formatAccountMoney(-Math.abs(Number(row.drawdownMoney||0)),accountCurrency)}</small></span>
-                        <span>{entries}<small>{closedTrades>0?closedTrades+" ปิดโดยบอท · ":""}{active?(botRunning?"Active":"Selected"):"Idle"}</small></span>
+                        <span>{entries}<small>{closedTrades>0?closedTrades+" Closed · ":""}{active?(botRunning?"Active":"Selected"):"Inactive"}</small></span>
                       </div>;
                     })}
                   </div>

@@ -5317,11 +5317,16 @@
 
 .cc-shell-v4 .cc-v19-three-card-grid .cc-v12-mode-table .head,
 .cc-shell-v4 .cc-v19-three-card-grid .cc-v12-mode-table .row{
-  grid-template-columns:1.22fr .78fr .92fr .64fr!important;
+  grid-template-columns:1.16fr .78fr .92fr minmax(112px,.8fr)!important;
 }
 
 .cc-shell-v4 .cc-v19-three-card-grid .cc-v12-mode-table .mode{
   justify-content:flex-start!important;
+}
+
+.cc-shell-v4 .cc-v19-three-card-grid .cc-v12-mode-table .row>span:last-child small{
+  white-space:nowrap!important;
+  font-size:6.4px!important;
 }
 
 .cc-shell-v4 .cc-v46-performance-system{
