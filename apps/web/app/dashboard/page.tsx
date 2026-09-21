@@ -2124,7 +2124,7 @@ export default function DashboardPage() {
                         <span className="mode"><i/>{mode}</span>
                         <span className={closedTrades>0?(win>=60?"good":win>=45?"warn":"bad"):"neutral"}>{closedTrades>0?win.toFixed(1)+"%":"—"}</span>
                         <span className={dd>=5?"bad":dd>=2?"warn":"good"}>{dd.toFixed(2)+"%"}<small>{formatAccountMoney(-Math.abs(Number(row.drawdownMoney||0)),accountCurrency)}</small></span>
-                        <span>{entries}<small>{closedTrades>0?closedTrades+" รอบปิด · ":""}{active?(botRunning?"Active":"Selected"):"Idle"}</small></span>
+                        <span>{entries}<small>{closedTrades>0?closedTrades+" ปิดโดยบอท · ":""}{active?(botRunning?"Active":"Selected"):"Idle"}</small></span>
                       </div>;
                     })}
                   </div>
