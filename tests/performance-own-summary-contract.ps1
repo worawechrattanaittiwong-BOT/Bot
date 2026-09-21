@@ -69,4 +69,9 @@ if (-not $actions.Contains('preserved: ["users", "mt5_accounts", "bot_instances"
 if (-not $web.Contains('styles.mainOwner')) { throw 'Owner performance layout must use a dedicated non-offset main class' }
 if (-not $web.Contains('styles.mainCustomer')) { throw 'Customer performance layout must preserve fixed-sidebar offset separately' }
 
+if (-not $web.Contains('controlsOpen')) { throw 'Performance options must use a collapsible slide-down drawer' }
+if (-not $web.Contains('styles.optionsDrawer')) { throw 'Performance options drawer UI missing' }
+if (-not $web.Contains('styles.optionsButton')) { throw 'Performance options button missing' }
+if ($web.Contains('className={styles.controlCard}')) { throw 'External performance control card must stay removed so summary can fill the viewport' }
+
 Write-Host 'Own-only popup-style Trading Performance contract PASS'

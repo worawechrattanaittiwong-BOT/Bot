@@ -175,6 +175,7 @@ export default function PerformanceDashboardPage() {
   const [sharing,setSharing]=useState(false);
   const [shareResult,setShareResult]=useState<any>(null);
   const [error,setError]=useState("");
+  const [controlsOpen,setControlsOpen]=useState(false);
 
   const ownAccounts=useMemo(
     ()=>(options?.accounts||[]).filter((account:any)=>account.userId===options?.user?.id),
@@ -312,42 +313,54 @@ export default function PerformanceDashboardPage() {
       <main className={`${styles.main} ${options?.elevated ? styles.mainOwner : styles.mainCustomer}`}>
         {error?<div className={styles.error}>{error}</div>:null}
 
-        <section className={styles.controlCard}>
-          <div className={styles.compactToolbar}>
-            <div className={styles.toolbarIdentity}>
-              {selectedAccount?<span className={String(selectedAccount.accountType).toUpperCase()==="DEMO"?styles.demoBadge:styles.realBadge}>{String(selectedAccount.accountType||"REAL").toUpperCase()}</span>:null}
-              <div className={styles.ownerBadge}><ScenovaIcon name="account" size={15}/><div><b>{options?.user?.user_code||"SCENOVA"}</b><span>My Performance Only</span></div></div>
-            </div>
-            <div className={styles.toolbarActions}>
-              {mode==="LIVE"?<button type="button" className={styles.shareButton} onClick={createShare} disabled={sharing||!Number(summary.trades||0)}><ScenovaIcon name="share" size={14}/>{sharing?"กำลังสร้าง...":"แชร์ Read-only"}</button>:null}
-              {shareResult?.path&&mode==="LIVE"?<><input className={styles.shareInput} readOnly value={window.location.origin+shareResult.path}/><button type="button" className={styles.minorButton} onClick={copyShare}>คัดลอก</button><a className={styles.minorButton} href={shareResult.path} target="_blank" rel="noreferrer">เปิด</a></>:null}
-              {options?.elevated?<button type="button" className={styles.clearButton} onClick={clearAllPerformanceData} disabled={loading}><ScenovaIcon name="delete" size={14}/>ล้างข้อมูลทดสอบ</button>:null}
-            </div>
-          </div>
-          <div className={styles.controlMain}>
-            <label><span>บัญชีของฉัน</span><select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>
-              {realAccounts.length?<optgroup label="บัญชีจริง (REAL)">{realAccounts.map((account:any)=><option key={account.id} value={account.id}>REAL · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
-              {demoAccounts.length?<optgroup label="บัญชีทดลอง (DEMO)">{demoAccounts.map((account:any)=><option key={account.id} value={account.id}>DEMO · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
-            </select></label>
-            <label><span>โหมดข้อมูล</span><select value={mode} onChange={(e)=>setMode(e.target.value as Mode)}><option value="LIVE">Live Performance</option><option value="BACKTEST">Backtest</option></select></label>
-            <label><span>ตั้งแต่วันที่</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
-            <label><span>ถึงวันที่</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
-            <button className={styles.refreshButton} onClick={()=>refresh()} disabled={loading||!accountId}><ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh"}</button>
-          </div>
-          <div className={styles.rangeBar}>
-            <div className={styles.presets}><button onClick={()=>applyDays(1)}>วันนี้</button><button onClick={()=>applyDays(7)}>7 วัน</button><button onClick={()=>applyDays(30)}>30 วัน</button><button onClick={()=>applyDays(90)}>90 วัน</button></div>
-            <strong>{rangeDays} วัน · {from} → {to}</strong>
-          </div>
-        </section>
-
-        {mode==="BACKTEST"?(
-          <section className={styles.backtestBar}>
-            <div><ScenovaIcon name="strategy" size={17}/><span><b>เลือกรายงาน Backtest ของคุณ</b><small>แสดงเฉพาะ Backtest ที่ผูกกับบัญชีของคุณ</small></span></div>
-            <select value={selectedBacktestId} onChange={(e)=>chooseBacktest(e.target.value)}><option value="">เลือกรายงาน</option>{(report?.backtests||[]).map((run:any)=><option key={run.id} value={run.id}>{run.title} · {run.symbol} · {run.timeframe}</option>)}</select>
-          </section>
-        ):null}
-
         <section className={styles.summaryShell}>
+          <button
+            type="button"
+            className={`${styles.optionsButton} ${controlsOpen?styles.optionsButtonOpen:""}`}
+            onClick={()=>setControlsOpen((value)=>!value)}
+            aria-expanded={controlsOpen}
+          >
+            <ScenovaIcon name="control" size={15}/>
+            <span>ตัวเลือก</span>
+            <span className={styles.optionsChevron}>▾</span>
+          </button>
+
+          <div className={`${styles.optionsDrawer} ${controlsOpen?styles.optionsDrawerOpen:""}`}>
+            <div className={styles.drawerTop}>
+              <div className={styles.toolbarIdentity}>
+                {selectedAccount?<span className={String(selectedAccount.accountType).toUpperCase()==="DEMO"?styles.demoBadge:styles.realBadge}>{String(selectedAccount.accountType||"REAL").toUpperCase()}</span>:null}
+                <div className={styles.ownerBadge}><ScenovaIcon name="account" size={15}/><div><b>{options?.user?.user_code||"SCENOVA"}</b><span>My Performance Only</span></div></div>
+              </div>
+              <div className={styles.toolbarActions}>
+                {mode==="LIVE"?<button type="button" className={styles.shareButton} onClick={createShare} disabled={sharing||!Number(summary.trades||0)}><ScenovaIcon name="share" size={14}/>{sharing?"กำลังสร้าง...":"แชร์ Read-only"}</button>:null}
+                {shareResult?.path&&mode==="LIVE"?<><input className={styles.shareInput} readOnly value={window.location.origin+shareResult.path}/><button type="button" className={styles.minorButton} onClick={copyShare}>คัดลอก</button><a className={styles.minorButton} href={shareResult.path} target="_blank" rel="noreferrer">เปิด</a></>:null}
+                {options?.elevated?<button type="button" className={styles.clearButton} onClick={clearAllPerformanceData} disabled={loading}><ScenovaIcon name="delete" size={14}/>ล้างข้อมูลทดสอบ</button>:null}
+              </div>
+            </div>
+
+            <div className={styles.drawerControls}>
+              <label><span>บัญชีของฉัน</span><select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>
+                {realAccounts.length?<optgroup label="บัญชีจริง (REAL)">{realAccounts.map((account:any)=><option key={account.id} value={account.id}>REAL · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
+                {demoAccounts.length?<optgroup label="บัญชีทดลอง (DEMO)">{demoAccounts.map((account:any)=><option key={account.id} value={account.id}>DEMO · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
+              </select></label>
+              <label><span>โหมดข้อมูล</span><select value={mode} onChange={(e)=>setMode(e.target.value as Mode)}><option value="LIVE">Live Performance</option><option value="BACKTEST">Backtest</option></select></label>
+              <label><span>ตั้งแต่วันที่</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
+              <label><span>ถึงวันที่</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
+              <button className={styles.refreshButton} onClick={()=>refresh()} disabled={loading||!accountId}><ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh"}</button>
+            </div>
+
+            <div className={styles.drawerFooter}>
+              <div className={styles.presets}><button onClick={()=>applyDays(1)}>วันนี้</button><button onClick={()=>applyDays(7)}>7 วัน</button><button onClick={()=>applyDays(30)}>30 วัน</button><button onClick={()=>applyDays(90)}>90 วัน</button></div>
+              <strong>{rangeDays} วัน · {from} → {to}</strong>
+            </div>
+
+            {mode==="BACKTEST"?(
+              <div className={styles.drawerBacktest}>
+                <div><ScenovaIcon name="strategy" size={15}/><span><b>เลือกรายงาน Backtest ของคุณ</b><small>แสดงเฉพาะ Backtest ที่ผูกกับบัญชีของคุณ</small></span></div>
+                <select value={selectedBacktestId} onChange={(e)=>chooseBacktest(e.target.value)}><option value="">เลือกรายงาน</option>{(report?.backtests||[]).map((run:any)=><option key={run.id} value={run.id}>{run.title} · {run.symbol} · {run.timeframe}</option>)}</select>
+              </div>
+            ):null}
+          </div>
           <header className={styles.summaryTitle}>
             <div className={styles.titleMark}><ScenovaIcon name="pnl" size={24}/><h2>BOT PERFORMANCE SUMMARY</h2><ScenovaIcon name="pnl" size={24}/></div>
             <p>{mode==="LIVE"?"สรุปผลการเทรดจริงของบัญชีคุณ":"สรุปผล Backtest ของบัญชีคุณ"}</p>
