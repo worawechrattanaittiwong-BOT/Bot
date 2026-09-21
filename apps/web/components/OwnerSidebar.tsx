@@ -14,17 +14,30 @@ type NavItem = {
   hint: string;
 };
 
+const controlCenterNavItem: NavItem = {
+  section:"TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"control",
+  label:"Control Center", hint:"Bot status, controls & live monitoring"
+};
+const mt5EaNavItem: NavItem = {
+  section:"TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account",
+  label:"MT5 & EA", hint:"Local / Cloud accounts & EA management"
+};
+const performanceNavItem: NavItem = {
+  section:"TRADING", key:"trading-backtest", href:"/performance", icon:"strategy",
+  label:"Backtest & Performance", hint:"Real performance, backtests & reports"
+};
+
 export const sharedTradingNavItems: NavItem[] = [
-  { section:"TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"control", label:"Control Center", hint:"Bot status, controls & live monitoring" },
-  { section:"TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account", label:"MT5 & EA", hint:"Local / Cloud accounts & EA management" },
-  { section:"TRADING", key:"trading-backtest", href:"/performance", icon:"strategy", label:"Backtest & Performance", hint:"Real performance, backtests & reports" }
+  controlCenterNavItem,
+  mt5EaNavItem,
+  performanceNavItem
 ];
 
 export const ownerNavItems: NavItem[] = [
-  sharedTradingNavItems[0],
-  sharedTradingNavItems[1],
+  controlCenterNavItem,
+  mt5EaNavItem,
   { section:"TRADING", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud Trading", hint:"Trading nodes & execution infrastructure" },
-  sharedTradingNavItems[2],
+  performanceNavItem,
   { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trials, subscriptions & customer access" },
   { section:"SYSTEM", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"System Overview", hint:"Platform health & system status" },
   { section:"SYSTEM", key:"cloud-hardening", href:"/admin/cloud-hardening", icon:"cloud", label:"Production Hardening", hint:"Incidents, capacity guard & emergency controls" },
