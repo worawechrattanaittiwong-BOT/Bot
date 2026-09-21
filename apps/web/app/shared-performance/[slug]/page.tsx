@@ -6,11 +6,12 @@ import { api } from "../../../lib/api";
 import { ScenovaBrand } from "../../../components/ScenovaBrand";
 import styles from "./shared-performance.module.css";
 
-function money(value: any, signed = false) {
+function money(value: any, signed = false, currency: any = "UNKNOWN") {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
+  const code = String(currency || "UNKNOWN").trim().toUpperCase() || "UNKNOWN";
   const sign = signed && n > 0 ? "+" : n < 0 ? "-" : "";
-  return `${sign}$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${sign}${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${code}`;
 }
 
 function percent(value: any) {
@@ -71,6 +72,7 @@ export default function SharedPerformancePage() {
   const snapshot = data?.snapshot || {};
   const summary = snapshot?.summary || {};
   const account = snapshot?.account || {};
+  const currency = String(account.currency || "UNKNOWN").trim().toUpperCase() || "UNKNOWN";
   const curve = Array.isArray(snapshot?.curve) ? snapshot.curve : [];
   const trades = Array.isArray(snapshot?.closedTrades) ? snapshot.closedTrades : [];
   const rangeLabel = useMemo(() => {
@@ -98,8 +100,8 @@ export default function SharedPerformancePage() {
       </section>
 
       <section className={styles.kpis}>
-        <Kpi label="Initial Balance" value={money(summary.initialDeposit)} />
-        <Kpi label="Net Profit" value={money(summary.netProfit, true)} tone={Number(summary.netProfit || 0) >= 0 ? "good" : "bad"}/>
+        <Kpi label="Initial Balance" value={money(summary.initialDeposit,false,currency)} />
+        <Kpi label="Net Profit" value={money(summary.netProfit,true,currency)} tone={Number(summary.netProfit || 0) >= 0 ? "good" : "bad"}/>
         <Kpi label="Profit Factor" value={number(summary.profitFactor)} />
         <Kpi label="Win Rate" value={percent(summary.winRate)} />
         <Kpi label="Max Drawdown" value={percent(summary.maxDrawdownPercent)} tone="bad"/>
@@ -109,20 +111,20 @@ export default function SharedPerformancePage() {
       </section>
 
       <div className={styles.grid}>
-        <section className={`${styles.card} ${styles.equityCard}`}><div className={styles.cardHead}><div><b>Equity / Balance Curve</b><small>สร้างจากผล Basket ที่ปิดจริงในระบบ SCENOVA</small></div><strong>{money(summary.finalBalance)}</strong></div><EquityChart points={curve}/></section>
+        <section className={`${styles.card} ${styles.equityCard}`}><div className={styles.cardHead}><div><b>Equity / Balance Curve</b><small>สร้างจากผล Basket ที่ปิดจริงในระบบ SCENOVA</small></div><strong>{money(summary.finalBalance,false,currency)}</strong></div><EquityChart points={curve}/></section>
         <section className={`${styles.card} ${styles.drawdownCard}`}><div className={styles.cardHead}><div><b>Drawdown</b><small>Closed-performance drawdown</small></div><strong className={styles.badText}>{percent(summary.maxDrawdownPercent)}</strong></div><DrawdownChart points={curve}/></section>
       </div>
 
       <section className={styles.card}>
         <div className={styles.cardHead}><div><b>สถิติผลการเทรด</b><small>ข้อมูลถูก freeze ตอนสร้างลิงก์ จึงไม่เปลี่ยนตามหลัง</small></div></div>
         <div className={styles.stats}>
-          <Stat label="Gross Profit" value={money(summary.grossProfit)}/><Stat label="Gross Loss" value={money(-Math.abs(Number(summary.grossLoss || 0)))}/><Stat label="Wins" value={String(summary.wins ?? 0)}/><Stat label="Losses" value={String(summary.losses ?? 0)}/><Stat label="Breakeven" value={String(summary.breakeven ?? 0)}/><Stat label="Max DD ($)" value={money(summary.maxDrawdownMoney)}/>
+          <Stat label="Gross Profit" value={money(summary.grossProfit,false,currency)}/><Stat label="Gross Loss" value={money(-Math.abs(Number(summary.grossLoss || 0)),false,currency)}/><Stat label="Wins" value={String(summary.wins ?? 0)}/><Stat label="Losses" value={String(summary.losses ?? 0)}/><Stat label="Breakeven" value={String(summary.breakeven ?? 0)}/><Stat label={"Max DD ("+currency+")"} value={money(summary.maxDrawdownMoney,false,currency)}/>
         </div>
       </section>
 
       <section className={styles.card}>
         <div className={styles.cardHead}><div><b>รายการเทรดล่าสุด</b><small>แสดงสูงสุด 100 รายการจาก Snapshot</small></div></div>
-        <div className={styles.tableWrap}><table><thead><tr><th>#</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Lot</th><th>Entry</th><th>Exit</th><th>P/L</th><th>Closed</th></tr></thead><tbody>{trades.slice(0,100).map((row:any,index:number)=><tr key={`${row.ticket}-${index}`}><td>{index+1}</td><td>{row.ticket}</td><td>{row.symbol}</td><td>{row.side}</td><td>{number(row.lot)}</td><td>{number(row.entryPrice,3)}</td><td>{number(row.exitPrice,3)}</td><td className={Number(row.profit||0)>=0?styles.goodText:styles.badText}>{money(row.profit,true)}</td><td>{row.closedAt?new Date(row.closedAt).toLocaleString("th-TH"):"—"}</td></tr>)}{!trades.length?<tr><td colSpan={9} className={styles.emptyCell}>ไม่มีรายการ EXIT ใน Snapshot นี้</td></tr>:null}</tbody></table></div>
+        <div className={styles.tableWrap}><table><thead><tr><th>#</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Lot</th><th>Entry</th><th>Exit</th><th>P/L</th><th>Closed</th></tr></thead><tbody>{trades.slice(0,100).map((row:any,index:number)=><tr key={`${row.ticket}-${index}`}><td>{index+1}</td><td>{row.ticket}</td><td>{row.symbol}</td><td>{row.side}</td><td>{number(row.lot)}</td><td>{number(row.entryPrice,3)}</td><td>{number(row.exitPrice,3)}</td><td className={Number(row.profit||0)>=0?styles.goodText:styles.badText}>{money(row.profit,true,currency)}</td><td>{row.closedAt?new Date(row.closedAt).toLocaleString("th-TH"):"—"}</td></tr>)}{!trades.length?<tr><td colSpan={9} className={styles.emptyCell}>ไม่มีรายการ EXIT ใน Snapshot นี้</td></tr>:null}</tbody></table></div>
       </section>
 
       <section className={styles.disclaimer}><b>คำเตือนความเสี่ยง</b><p>ข้อมูลหน้านี้เป็น Snapshot ของผลการเทรดในอดีตจากระบบ SCENOVA และไม่ใช่การรับประกันผลตอบแทนในอนาคต ค่า Drawdown แสดงจากผลกำไร/ขาดทุนที่ปิดแล้ว เว้นแต่ระบบจะมี Equity Snapshot แยกต่างหาก</p></section>
