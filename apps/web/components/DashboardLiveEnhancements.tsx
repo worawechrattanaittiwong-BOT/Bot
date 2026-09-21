@@ -80,6 +80,7 @@ export function DashboardLiveEnhancements() {
       const levels = readZeroGridValue(modal, "จำนวน Pending ต่อฝั่ง") || "—";
       const baseLot = readZeroGridValue(modal, "Base Lot") || "—";
       const minProfit = readZeroGridValue(modal, "กำไรสุทธิขั้นต่ำ") || "—";
+      const accountCurrency = String(modal.querySelector<HTMLElement>(".money-prefix")?.textContent || "").trim();
 
       setText(summaryRows[1]?.querySelector("dt"), "ทิศทาง");
       setText(summaryRows[1]?.querySelector("dd"), "BUY STOP + SELL STOP");
@@ -92,7 +93,7 @@ export function DashboardLiveEnhancements() {
         summaryRows[4]?.querySelector("dd"),
         baseLot === "—" || minProfit === "—"
           ? "—"
-          : "Base " + baseLot + " Lot · Net +$" + minProfit
+          : "Base " + baseLot + " Lot · Net +" + minProfit + (accountCurrency ? " " + accountCurrency : "")
       );
     };
 
