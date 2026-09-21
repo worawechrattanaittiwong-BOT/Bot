@@ -2121,7 +2121,7 @@ export default function DashboardPage() {
                       const active=mode===activeControlMode;
                       const win=Number(row.winRate||0);
                       const dd=Number(row.drawdownPercent||0);
-                      const entries=Number(row.activityEntries??row.trades||0);
+                      const entries=Number(row.activityEntries ?? row.trades ?? 0);
                       const closedTrades=Number(row.closedTrades??0);
                       return <div key={mode} className={"row "+(active?"active":"")}>
                         <span className="mode"><i/>{mode}</span>
