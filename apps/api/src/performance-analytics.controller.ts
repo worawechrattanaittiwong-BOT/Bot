@@ -476,7 +476,7 @@ export class PerformanceAnalyticsController {
          AND tj.created_at <= $2
        WHERE u.role NOT IN ('OWNER','ADMIN')
        GROUP BY u.id,u.user_code,u.email,a.id,a.account_number,a.broker,a.broker_server,a.mode,bi.id,bi.last_seen_at,(bi.metrics->>'currency')
-       ORDER BY net_profit DESC,u.user_code,a.account_number`,
+       ORDER BY currency,u.user_code,a.account_number`,
       [from.toISOString(), to.toISOString()]
     );
 
