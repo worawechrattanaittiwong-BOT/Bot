@@ -20,7 +20,9 @@ foreach ($required in @(
   'availableRange',
   'detailedExits',
   'parsePublicRange',
-  '730 days'
+  '730 days',
+  'accountType',
+  'accountTradeMode'
 )) {
   if (-not $actions.Contains($required)) { throw "Public performance dynamic-share contract missing: $required" }
 }
@@ -54,7 +56,14 @@ foreach ($required in @(
   'แกนล่างแสดงวันที่',
   'shared-performance/',
   'customDays',
-  'EquityChart points={curve} from={from} to={to}'
+  'EquityChart points={curve} from={from} to={to}',
+  'REAL ACCOUNT',
+  'DEMO ACCOUNT',
+  'บัญชีจริง · REAL',
+  'บัญชีทดลอง · DEMO',
+  'Drawdown %',
+  'horizontalGrid',
+  'yTickLabel'
 )) {
   if (-not $public.Contains($required)) { throw "Shared Performance date selector contract missing: $required" }
 }

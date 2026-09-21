@@ -226,6 +226,16 @@ export class PerformanceActionsController {
     const accountSymbol = String(
       metrics.symbol || historyIdentity?.symbol || "XAUUSD"
     );
+    const reportedTradeMode = Number(metrics.accountTradeMode);
+    const serverIdentity = `${account.broker || ""} ${account.broker_server || ""}`.toLowerCase();
+    const accountType =
+      reportedTradeMode === 2
+        ? "REAL"
+        : reportedTradeMode === 0 || reportedTradeMode === 1
+          ? "DEMO"
+          : /(demo|practice|trial|contest)/i.test(serverIdentity)
+            ? "DEMO"
+            : "REAL";
 
     const slug = `live-${String(account.account_number || "account").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}-${randomBytes(5).toString("hex")}`;
     const title = String(body?.title || `SCENOVA Live Performance · ${account.account_number}`).slice(0, 180);
@@ -238,6 +248,7 @@ export class PerformanceActionsController {
         broker: account.broker,
         brokerServer: account.broker_server,
         mode: account.mode,
+        accountType,
         symbol: accountSymbol,
         timeframe: String(metrics.timeframe || "M5"),
         currency: accountCurrency
@@ -607,6 +618,18 @@ export class SharedPerformanceController {
     const accountSymbol = String(
       account.metrics?.symbol || frozen.account?.symbol || "XAUUSD"
     );
+    const reportedTradeMode = Number(account.metrics?.accountTradeMode);
+    const serverIdentity = `${account.broker || frozen.account?.broker || ""} ${account.broker_server || frozen.account?.brokerServer || ""}`.toLowerCase();
+    const accountType =
+      reportedTradeMode === 2
+        ? "REAL"
+        : reportedTradeMode === 0 || reportedTradeMode === 1
+          ? "DEMO"
+          : String(frozen.account?.accountType || "").toUpperCase() === "DEMO"
+            ? "DEMO"
+            : /(demo|practice|trial|contest)/i.test(serverIdentity)
+              ? "DEMO"
+              : "REAL";
 
     const snapshot = {
       kind: "LIVE_PERFORMANCE_PUBLIC",
@@ -618,6 +641,7 @@ export class SharedPerformanceController {
         broker: frozen.account?.broker || account.broker,
         brokerServer: frozen.account?.brokerServer || account.broker_server,
         mode: frozen.account?.mode || account.mode,
+        accountType,
         symbol: accountSymbol,
         timeframe: String(account.metrics?.timeframe || frozen.account?.timeframe || "M5"),
         currency: accountCurrency

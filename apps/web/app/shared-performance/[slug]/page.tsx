@@ -55,34 +55,89 @@ function axisLabel(value:any,singleDay:boolean) {
     : date.toLocaleDateString("th-TH",{timeZone:"Asia/Bangkok",day:"2-digit",month:"2-digit"});
 }
 
-function EquityChart({points,from,to}:{points:any[];from:string;to:string}) {
+function Chart({
+  points,
+  from,
+  to,
+  kind,
+  currency
+}:{points:any[];from:string;to:string;kind:"balance"|"drawdown";currency:string}) {
   if(!points?.length) return <div className={styles.empty}>ยังไม่มีข้อมูลกราฟในช่วงนี้</div>;
-  const width=1000,height=286,left=32,right=12,top=12,bottom=38;
-  const values=points.map((point)=>Number(point.balance||0));
-  const min=Math.min(...values),max=Math.max(...values),pad=Math.max(1,(max-min)*.06);
-  const low=min-pad,high=max+pad,range=Math.max(1,high-low);
+
+  const width=1000,height=300,left=66,right=22,top=18,bottom=42;
+  const rawValues=points.map((point)=>kind==="balance"
+    ? Number(point.balance||0)
+    : Math.abs(Number(point.drawdownPercent||0))
+  );
+  const finite=rawValues.filter(Number.isFinite);
+  if(!finite.length) return <div className={styles.empty}>ยังไม่มีข้อมูลกราฟในช่วงนี้</div>;
+
+  const rawMin=Math.min(...finite);
+  const rawMax=Math.max(...finite);
+  const low=kind==="drawdown" ? 0 : rawMin-Math.max(1,(rawMax-rawMin)*.08);
+  const high=kind==="drawdown"
+    ? Math.max(1,rawMax*1.08)
+    : rawMax+Math.max(1,(rawMax-rawMin)*.08);
+  const range=Math.max(.0001,high-low);
   const plotWidth=width-left-right,plotHeight=height-top-bottom;
-  const coords=values.map((value,index)=>{
-    const x=left+(values.length<=1?0:index/(values.length-1)*plotWidth);
-    const y=top+(high-value)/range*plotHeight;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-  const ticks=Array.from({length:Math.min(7,Math.max(2,points.length))},(_,i)=>Math.round(i*(points.length-1)/Math.max(1,Math.min(7,Math.max(2,points.length))-1)))
-    .filter((v,i,a)=>i===0||v!==a[i-1]);
+
+  const coords=rawValues.map((value,index)=>{
+    const x=left+(rawValues.length<=1?0:index/(rawValues.length-1)*plotWidth);
+    const y=kind==="drawdown"
+      ? top+(value-low)/range*plotHeight
+      : top+(high-value)/range*plotHeight;
+    return {x,y,value};
+  });
+  const polyline=coords.map((point)=>`${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+
+  const xTicks=Array.from(
+    {length:Math.min(7,Math.max(2,points.length))},
+    (_,i)=>Math.round(i*(points.length-1)/Math.max(1,Math.min(7,Math.max(2,points.length))-1))
+  ).filter((value,index,array)=>index===0||value!==array[index-1]);
+
+  const yTicks=Array.from({length:5},(_,i)=>{
+    const ratio=i/4;
+    const value=kind==="drawdown" ? low+ratio*range : high-ratio*range;
+    const y=top+ratio*plotHeight;
+    return {value,y};
+  });
+
   const singleDay=from===to;
-  return <svg className={styles.chart} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-    {ticks.map((index)=>{
+  const last=coords[coords.length-1];
+  const lastLabel=kind==="drawdown"
+    ? last.value.toFixed(2)+"%"
+    : last.value.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  return <svg className={`${styles.chart} ${kind==="drawdown"?styles.drawdownChart:""}`} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={kind==="drawdown"?"Drawdown chart":"Balance chart"}>
+    {yTicks.map((tick,index)=><g key={"y-"+index}>
+      <line className={styles.horizontalGrid} x1={left} x2={width-right} y1={tick.y} y2={tick.y}/>
+      <text className={styles.yTickLabel} x={left-10} y={tick.y+4} textAnchor="end">
+        {kind==="drawdown" ? tick.value.toFixed(1)+"%" : tick.value.toLocaleString("en-US",{maximumFractionDigits:0})}
+      </text>
+    </g>)}
+    {xTicks.map((index)=>{
       const x=left+(points.length<=1?0:index/(points.length-1)*plotWidth);
-      return <g key={index}><line className={styles.tickLine} x1={x} x2={x} y1={top} y2={top+plotHeight}/><text className={styles.tickLabel} x={x} y={height-9} textAnchor="middle">{axisLabel(points[index]?.time,singleDay)}</text></g>;
+      return <g key={"x-"+index}>
+        <line className={styles.tickLine} x1={x} x2={x} y1={top} y2={top+plotHeight}/>
+        <text className={styles.tickLabel} x={x} y={height-10} textAnchor="middle">{axisLabel(points[index]?.time,singleDay)}</text>
+      </g>;
     })}
-    <polyline points={coords} fill="none" vectorEffect="non-scaling-stroke"/>
+    <polyline className={kind==="drawdown"?styles.drawdownLine:styles.balanceLine} points={polyline} fill="none" vectorEffect="non-scaling-stroke"/>
+    <circle className={styles.endPoint} cx={last.x} cy={last.y} r="4"/>
+    <g className={styles.endValue}>
+      <rect x={Math.max(left,last.x-74)} y={Math.max(top,last.y-30)} width="72" height="22" rx="7"/>
+      <text x={Math.max(left+36,last.x-38)} y={Math.max(top+15,last.y-15)} textAnchor="middle">{lastLabel}</text>
+    </g>
+    <text className={styles.axisTitle} x="10" y="14">{kind==="drawdown"?"DD %":currency}</text>
   </svg>;
 }
 
+function EquityChart({points,from,to,currency}:{points:any[];from:string;to:string;currency:string}) {
+  return <Chart points={points} from={from} to={to} kind="balance" currency={currency}/>;
+}
+
 function DrawdownChart({points,from,to}:{points:any[];from:string;to:string}) {
-  if(!points?.length) return <div className={styles.empty}>ยังไม่มีข้อมูล Drawdown ในช่วงนี้</div>;
-  const mapped=points.map((point)=>({...point,balance:-Math.abs(Number(point.drawdownPercent||0))}));
-  return <EquityChart points={mapped} from={from} to={to}/>;
+  return <Chart points={points} from={from} to={to} kind="drawdown" currency="%"/>;
 }
 
 export default function SharedPerformancePage() {
@@ -126,6 +181,7 @@ export default function SharedPerformancePage() {
   const snapshot=data?.snapshot||{};
   const summary=snapshot?.summary||{};
   const account=snapshot?.account||{};
+  const accountType=String(account.accountType||"REAL").toUpperCase()==="DEMO"?"DEMO":"REAL";
   const currency=String(account.currency||"UNKNOWN").trim().toUpperCase()||"UNKNOWN";
   const curve=Array.isArray(snapshot?.curve)?snapshot.curve:[];
   const trades=Array.isArray(snapshot?.closedTrades)?snapshot.closedTrades:[];
@@ -141,14 +197,21 @@ export default function SharedPerformancePage() {
     <main className={styles.shell}>
       <header className={styles.header}>
         <ScenovaBrand className={styles.brand}/>
-        <div className={styles.badges}><span className={styles.verified}>LIVE READ ONLY</span><span>DATE SELECTABLE</span></div>
+        <div className={styles.badges}>
+          <span className={accountType==="DEMO"?styles.demoAccount:styles.realAccount}>{accountType==="DEMO"?"DEMO ACCOUNT":"REAL ACCOUNT"}</span>
+          <span className={styles.verified}>LIVE READ ONLY</span>
+          <span>DATE SELECTABLE</span>
+        </div>
       </header>
 
       <section className={styles.hero}>
         <div>
           <span className={styles.eyebrow}>SCENOVA TRADING PERFORMANCE</span>
           <h1>{data.title}</h1>
-          <p>{account.userCode||"SCENOVA Trader"} · {account.accountNumber||"—"} · {account.broker||"—"} · {account.symbol||"—"} · {account.timeframe||"—"}</p>
+          <div className={styles.accountLine}>
+            <span className={accountType==="DEMO"?styles.demoAccountPill:styles.realAccountPill}>{accountType==="DEMO"?"บัญชีทดลอง · DEMO":"บัญชีจริง · REAL"}</span>
+            <p>{account.userCode||"SCENOVA Trader"} · {account.accountNumber||"—"} · {account.broker||"—"} · {account.symbol||"—"} · {account.timeframe||"—"}</p>
+          </div>
         </div>
         <div className={styles.heroMeta}><span>ช่วงข้อมูล</span><b>{rangeLabel}</b><small>{data.dynamic?"ผู้ชมเลือกช่วงเวลาได้ · Read only":"Snapshot แบบเดิม"}</small></div>
       </section>
@@ -181,8 +244,8 @@ export default function SharedPerformancePage() {
       </section>
 
       <div className={styles.grid}>
-        <section className={`${styles.card} ${styles.equityCard}`}><div className={styles.cardHead}><div><b>Equity / Balance Curve</b><small>{from===to?"แกนล่างแสดงเวลา":"แกนล่างแสดงวันที่"} · EXIT ที่บอทปิดจริง</small></div><strong>{money(summary.finalBalance,false,currency)}</strong></div><EquityChart points={curve} from={from} to={to}/></section>
-        <section className={`${styles.card} ${styles.drawdownCard}`}><div className={styles.cardHead}><div><b>Drawdown</b><small>Closed-performance drawdown</small></div><strong className={styles.badText}>{percent(summary.maxDrawdownPercent)}</strong></div><DrawdownChart points={curve} from={from} to={to}/></section>
+        <section className={`${styles.card} ${styles.equityCard}`}><div className={styles.cardHead}><div><b>Equity / Balance Curve</b><small>{from===to?"แกนล่าง = เวลา":"แกนล่าง = วันที่"} · แกนซ้าย = Balance ({currency}) · EXIT ที่บอทปิดจริง</small><div className={styles.chartLegend}><span className={styles.balanceLegendDot}/>Balance</div></div><strong>{money(summary.finalBalance,false,currency)}</strong></div><EquityChart points={curve} from={from} to={to} currency={currency}/></section>
+        <section className={`${styles.card} ${styles.drawdownCard}`}><div className={styles.cardHead}><div><b>Drawdown</b><small>{from===to?"แกนล่าง = เวลา":"แกนล่าง = วันที่"} · แกนซ้าย = Drawdown %</small><div className={styles.chartLegend}><span className={styles.drawdownLegendDot}/>Drawdown %</div></div><strong className={styles.badText}>{percent(summary.maxDrawdownPercent)}</strong></div><DrawdownChart points={curve} from={from} to={to}/></section>
       </div>
 
       <section className={styles.card}>
