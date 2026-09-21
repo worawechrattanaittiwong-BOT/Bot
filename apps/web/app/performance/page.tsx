@@ -168,7 +168,6 @@ export default function PerformanceDashboardPage() {
   const [mode,setMode]=useState<Mode>("LIVE");
   const [from,setFrom]=useState(rangeFromDays(today,30).from);
   const [to,setTo]=useState(today);
-  const [customDays,setCustomDays]=useState("30");
   const [report,setReport]=useState<any>(null);
   const [selectedBacktestId,setSelectedBacktestId]=useState("");
   const [backtest,setBacktest]=useState<any>(null);
