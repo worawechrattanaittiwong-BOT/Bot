@@ -65,4 +65,8 @@ if (-not $actions.Contains('@Post("reset-test-data")')) { throw 'Owner performan
 if (-not $actions.Contains('DELETE FROM trade_journal')) { throw 'Performance reset must clear trade journal' }
 if (-not $actions.Contains('preserved: ["users", "mt5_accounts", "bot_instances", "subscriptions", "settings"]')) { throw 'Performance reset must preserve account/config data' }
 
+
+if (-not $web.Contains('styles.mainOwner')) { throw 'Owner performance layout must use a dedicated non-offset main class' }
+if (-not $web.Contains('styles.mainCustomer')) { throw 'Customer performance layout must preserve fixed-sidebar offset separately' }
+
 Write-Host 'Own-only popup-style Trading Performance contract PASS'

@@ -309,7 +309,7 @@ export default function PerformanceDashboardPage() {
   return (
     <div className={styles.shell}>
       {options?.elevated?<OwnerSidebar activeKey="trading-backtest" onLogout={logout}/>:<CustomerSidebar onLogout={logout}/>}
-      <main className={styles.main}>
+      <main className={`${styles.main} ${options?.elevated ? styles.mainOwner : styles.mainCustomer}`}>
         {error?<div className={styles.error}>{error}</div>:null}
 
         <section className={styles.controlCard}>
