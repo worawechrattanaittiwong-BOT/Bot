@@ -735,10 +735,11 @@ export class BotController {
     };
 
     if (instance) {
-      // "Today" is Bangkok-local trading day. For the mode table, "trades"
-      // means actual bot entries (individual positions/ไม้). Win Rate and
-      // Drawdown are calculated from positions that the EA itself closed, so a
-      // customer-side/manual MT5 close does not become bot performance.
+      // "Today" is Bangkok-local trading day. Performance statistics use
+      // one canonical unit everywhere: a completed BASKET. Per-mode Activity
+      // still reports bot ENTRY count, but Win Rate, P/L and Drawdown are all
+      // calculated from completed BASKET rows so headline and per-mode values
+      // are directly comparable.
       const todayRows = await this.db.query(
         `SELECT
            deal_ticket,
@@ -796,9 +797,10 @@ export class BotController {
         const completed = selected.filter(
           (row:any) => String(row.event_type || "").toUpperCase() === "BASKET"
         );
-        let equityCurve = 0;
-        let peak = 0;
-        let maxDrawdown = 0;
+        let runningBalance = dayStartBalance;
+        let peakBalance = runningBalance;
+        let maxDrawdownMoney = 0;
+        let maxDrawdownPercent = 0;
         let wins = 0;
         let losses = 0;
         let netProfit = 0;
@@ -807,9 +809,14 @@ export class BotController {
           netProfit += pnl;
           if (pnl > 0) wins++;
           if (pnl < 0) losses++;
-          equityCurve += pnl;
-          peak = Math.max(peak, equityCurve);
-          maxDrawdown = Math.max(maxDrawdown, peak - equityCurve);
+          runningBalance += pnl;
+          peakBalance = Math.max(peakBalance, runningBalance);
+          const drawdownMoney = Math.max(0, peakBalance - runningBalance);
+          const drawdownPercent = peakBalance > 0
+            ? drawdownMoney / peakBalance * 100
+            : 0;
+          maxDrawdownMoney = Math.max(maxDrawdownMoney, drawdownMoney);
+          maxDrawdownPercent = Math.max(maxDrawdownPercent, drawdownPercent);
         }
         const closedTrades = completed.length;
         return {
@@ -819,10 +826,8 @@ export class BotController {
           losses,
           winRate: closedTrades > 0 ? wins / closedTrades * 100 : 0,
           netProfit,
-          drawdownMoney: maxDrawdown,
-          drawdownPercent: dayStartBalance > 0
-            ? maxDrawdown / dayStartBalance * 100
-            : 0
+          drawdownMoney: maxDrawdownMoney,
+          drawdownPercent: maxDrawdownPercent
         };
       };
 
@@ -833,58 +838,11 @@ export class BotController {
       const isBotExecuted = (row:any) =>
         String(row.executed_by_bot ?? "true").toLowerCase() !== "false";
 
-      const summarizeClosedBotPositions = (selected:any[]) => {
-        // EXIT can be emitted more than once for a partial close. Aggregate by
-        // MT5 position id so one position is still one closed trade.
-        const byPosition = new Map<string,{ netProfit:number; createdAt:any }>();
-        for (const row of selected) {
-          if (String(row.event_type || "").toUpperCase() !== "EXIT") continue;
-          if (!isBotExecuted(row)) continue;
-          const key = String(row.position_id || row.deal_ticket || "");
-          if (!key) continue;
-          const current = byPosition.get(key) || { netProfit: 0, createdAt: row.created_at };
-          current.netProfit += Number(row.net_profit || 0);
-          current.createdAt = row.created_at || current.createdAt;
-          byPosition.set(key, current);
-        }
-
-        const completed = Array.from(byPosition.values()).sort(
-          (a:any,b:any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
-        );
-        let equityCurve = 0;
-        let peak = 0;
-        let maxDrawdown = 0;
-        let wins = 0;
-        let losses = 0;
-        let netProfit = 0;
-        for (const row of completed) {
-          const pnl = Number(row.netProfit || 0);
-          netProfit += pnl;
-          if (pnl > 0) wins++;
-          if (pnl < 0) losses++;
-          equityCurve += pnl;
-          peak = Math.max(peak, equityCurve);
-          maxDrawdown = Math.max(maxDrawdown, peak - equityCurve);
-        }
-        const closedTrades = completed.length;
-        return {
-          closedTrades,
-          wins,
-          losses,
-          winRate: closedTrades > 0 ? wins / closedTrades * 100 : 0,
-          netProfit,
-          drawdownMoney: maxDrawdown,
-          drawdownPercent: dayStartBalance > 0
-            ? maxDrawdown / dayStartBalance * 100
-            : 0
-        };
-      };
-
-      // Per-mode "trades" is the number of bot ENTRY deals. Closed performance
-      // is based only on EXIT deals explicitly executed by SCENOVA.
+      // Performance by mode follows the same Basket contract as the headline
+      // cards. Activity remains ENTRY count and is deliberately kept separate.
       tradeJournal.modeToday = controlModes.map(mode => {
         const modeRows = rows.filter((row:any) => resolveMode(row) === mode);
-        const performance = summarizeClosedBotPositions(modeRows);
+        const performance = summarizeBaskets(modeRows);
         const entries = modeRows.filter(
           (row:any) =>
             String(row.event_type || "").toUpperCase() === "ENTRY" &&
@@ -892,8 +850,9 @@ export class BotController {
         ).length;
         return {
           mode,
+          ...performance,
           trades: entries,
-          ...performance
+          activityEntries: entries
         };
       });
     }
@@ -1054,20 +1013,23 @@ export class BotController {
         const grossProfit = positive.reduce((sum:number, value:number) => sum + value, 0);
         const grossLoss = Math.abs(negative.reduce((sum:number, value:number) => sum + value, 0));
 
-        let equity = 0;
-        let peak = 0;
-        let maxDrawdownMoney = 0;
-        for (const value of pnlValues) {
-          equity += value;
-          peak = Math.max(peak, equity);
-          maxDrawdownMoney = Math.max(maxDrawdownMoney, peak - equity);
-        }
-
         const endBalance = Number(instance.metrics?.balance || 0);
         const startCapital = Math.max(0, endBalance - netProfit);
-        const maxDrawdownPercent = startCapital > 0
-          ? maxDrawdownMoney / startCapital * 100
-          : 0;
+        let runningBalance = startCapital;
+        let peakBalance = runningBalance;
+        let maxDrawdownMoney = 0;
+        let maxDrawdownPercent = 0;
+        for (const value of pnlValues) {
+          runningBalance += value;
+          peakBalance = Math.max(peakBalance, runningBalance);
+          const drawdownMoney = Math.max(0, peakBalance - runningBalance);
+          const drawdownPercent = peakBalance > 0
+            ? drawdownMoney / peakBalance * 100
+            : 0;
+          maxDrawdownMoney = Math.max(maxDrawdownMoney, drawdownMoney);
+          maxDrawdownPercent = Math.max(maxDrawdownPercent, drawdownPercent);
+        }
+
         const returnPercent = startCapital > 0
           ? netProfit / startCapital * 100
           : 0;

@@ -2121,13 +2121,13 @@ export default function DashboardPage() {
                       const active=mode===activeControlMode;
                       const win=Number(row.winRate||0);
                       const dd=Number(row.drawdownPercent||0);
-                      const entries=Number(row.trades||0);
+                      const entries=Number(row.activityEntries ?? row.trades ?? 0);
                       const closedTrades=Number(row.closedTrades??0);
                       return <div key={mode} className={"row "+(active?"active":"")}>
                         <span className="mode"><i/>{mode}</span>
                         <span className={closedTrades>0?(win>=60?"good":win>=45?"warn":"bad"):"neutral"}>{closedTrades>0?win.toFixed(1)+"%":"—"}</span>
                         <span className={dd>=5?"bad":dd>=2?"warn":"good"}>{dd.toFixed(2)+"%"}<small>{formatAccountMoney(-Math.abs(Number(row.drawdownMoney||0)),accountCurrency)}</small></span>
-                        <span>{entries}<small>{closedTrades>0?closedTrades+" Closed · ":""}{active?(botRunning?"Active":"Selected"):"Inactive"}</small></span>
+                        <span>{entries}<small>{closedTrades>0?closedTrades+" Basket · ":""}{active?(botRunning?"Active":"Selected"):"Inactive"}</small></span>
                       </div>;
                     })}
                   </div>
