@@ -580,6 +580,10 @@ jobs:
           test "$(printf '%s' "$FULL_CURRENCY_SAVE" | jq -r '.settings.accountCurrency')" = "USC"
           test "$(printf '%s' "$FULL_CURRENCY_SAVE" | jq -r '.settings.accountCurrencyReviewRequired')" = "false"
 
+          echo "[integration] native Cent money values can exceed the old 100000 account-unit ceiling"
+          LARGE_CENT_SAVE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"raceCloseAllProfitMoney":250000}')
+          test "$(printf '%s' "$LARGE_CENT_SAVE" | jq -r '.settings.raceCloseAllProfitMoney')" = "250000"
+
           echo "[integration] same deal ticket on a different MT5 account does not collide or mix history"
           curl -fsS -X POST "$BASE/ea/journal" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"dealTicket\":\"900001\",\"eventType\":\"BASKET\",\"direction\":\"BUY\",\"volume\":0.01,\"netProfit\":5.00,\"entryTrigger\":\"CENT_REBIND_TEST\",\"entryModel\":\"CENT_REBIND_TEST\",\"basketIndex\":1,\"symbol\":\"XAUUSDm\",\"brokerServer\":\"SCENOVA-Real\",\"journalSchema\":3}" >/dev/null
           SAME_TICKET_ROWS=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from trade_journal where deal_ticket=900001 and event_type='BASKET';")
