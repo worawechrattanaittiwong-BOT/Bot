@@ -539,6 +539,8 @@ jobs:
           test "$DRAIN_CURRENCY" = "USD"
           DRAIN_SERVER=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select metadata->>'brokerServer' from trade_journal where deal_ticket=900099 and event_type='BASKET';")
           test "$DRAIN_SERVER" = "SCENOVA-Demo"
+          DRAIN_SYMBOL=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select metadata->>'symbol' from trade_journal where deal_ticket=900099 and event_type='BASKET';")
+          test "$DRAIN_SYMBOL" = "XAUUSDm"
 
           echo "[integration] automatic account-follow succeeds after the old Basket journal is drained"
           DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"symbol\":\"XAUUSDc\",\"positions\":0,\"pendingBasketJournal\":false}}")
