@@ -518,9 +518,32 @@ jobs:
           REBIND_BLOCKED_HTTP=$(curl -sS -o /tmp/rebind-open-positions.json -w "%{http_code}" -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$REBIND_BLOCKED_HTTP" = "409"
 
-          echo "[integration] automatic account-follow succeeds after old MT5 reports flat"
-          OLD_FLAT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Demo\",\"currency\":\"USD\",\"positions\":0}}")
-          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"positions\":0}}")
+          echo "[integration] pending Basket journal blocks MT5 account-follow until the old account journal drains"
+          OLD_FLAT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Demo\",\"currency\":\"USD\",\"symbol\":\"XAUUSDm\",\"positions\":0,\"pendingBasketJournal\":true}}")
+          PENDING_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"symbol\":\"XAUUSDc\",\"positions\":0,\"pendingBasketJournal\":true}}")
+          test "$(printf '%s' "$PENDING_REAL" | jq -r '.accountMismatch')" = "true"
+          test "$(printf '%s' "$PENDING_REAL" | jq -r '.journalDrainPending')" = "true"
+          test "$(printf '%s' "$PENDING_REAL" | jq -r '.accountChangeBlocked')" = "true"
+          PENDING_ACCOUNT=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select a.account_number from bot_instances bi join mt5_accounts a on a.id=bi.mt5_account_id where bi.id='$INSTANCE';")
+          test "$PENDING_ACCOUNT" = "100001"
+          PENDING_CURRENCY=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select metrics->>'currency' from bot_instances where id='$INSTANCE';")
+          test "$PENDING_CURRENCY" = "USD"
+          PENDING_REBIND_HTTP=$(curl -sS -o /tmp/rebind-pending-journal.json -w "%{http_code}" -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$PENDING_REBIND_HTTP" = "409"
+
+          echo "[integration] delayed Basket journal is persisted under the old MT5 account and old currency"
+          curl -fsS -X POST "$BASE/ea/journal" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"dealTicket\":\"900099\",\"eventType\":\"BASKET\",\"direction\":\"BUY\",\"volume\":0.01,\"netProfit\":2.50,\"entryTrigger\":\"PENDING_DRAIN_TEST\",\"entryModel\":\"PENDING_DRAIN_TEST\",\"basketIndex\":1,\"symbol\":\"XAUUSDc\",\"brokerServer\":\"SCENOVA-Real\",\"journalSchema\":3}" >/dev/null
+          DRAIN_ACCOUNT=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select a.account_number from trade_journal tj join mt5_accounts a on a.id=tj.mt5_account_id where tj.deal_ticket=900099 and tj.event_type='BASKET';")
+          test "$DRAIN_ACCOUNT" = "100001"
+          DRAIN_CURRENCY=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select metadata->>'currency' from trade_journal where deal_ticket=900099 and event_type='BASKET';")
+          test "$DRAIN_CURRENCY" = "USD"
+          DRAIN_SERVER=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select metadata->>'brokerServer' from trade_journal where deal_ticket=900099 and event_type='BASKET';")
+          test "$DRAIN_SERVER" = "SCENOVA-Demo"
+          DRAIN_SYMBOL=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select metadata->>'symbol' from trade_journal where deal_ticket=900099 and event_type='BASKET';")
+          test "$DRAIN_SYMBOL" = "XAUUSDm"
+
+          echo "[integration] automatic account-follow succeeds after the old Basket journal is drained"
+          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"symbol\":\"XAUUSDc\",\"positions\":0,\"pendingBasketJournal\":false}}")
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch // false')" = "false"
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.access')" = "false"
           test "$(printf '%s' "$DETECT_REAL" | jq -r '.desiredState')" = "SAFE_STOP"
@@ -534,7 +557,21 @@ jobs:
           test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.settings.accountCurrencyReviewRequired')" = "true"
           test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.settings.previousAccountCurrency')" = "USD"
 
-          echo "[integration] currency change blocks partial settings save until full money review"
+          echo "[integration] currency review overrides a stale RUNNING intent before START delivery"
+          FOLLOW_ACCOUNT_ID=$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.id')
+          FOLLOW_USER_ID=$(printf '%s' "$FOLLOW_DASH" | jq -r '.user.id')
+          LOCAL_PLAN_ID=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select id from plans where code='LOCAL_30D' limit 1;")
+          REVIEW_SUB_ID=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "insert into subscriptions(user_id,plan_id,status,starts_at,expires_at) values('$FOLLOW_USER_ID','$LOCAL_PLAN_ID','ACTIVE',now()-interval '1 minute',now()+interval '1 day') returning id;")
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set desired_state='RUNNING' where id='$INSTANCE'; insert into bot_commands(bot_instance_id,command) values('$INSTANCE','START');" >/dev/null
+          REVIEW_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"symbol\":\"XAUUSDc\",\"positions\":0,\"pendingBasketJournal\":false}}")
+          test "$(printf '%s' "$REVIEW_HB" | jq -r '.access')" = "true"
+          test "$(printf '%s' "$REVIEW_HB" | jq -r '.desiredState')" = "SAFE_STOP"
+          REVIEW_START_PENDING=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select count(*) from bot_commands where bot_instance_id='$INSTANCE' and command='START' and status in ('PENDING','DELIVERED');")
+          test "$REVIEW_START_PENDING" = "0"
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "delete from subscriptions where id='$REVIEW_SUB_ID';" >/dev/null
+
+          echo "[integration] currency mismatch blocks partial settings save even if the explicit review flag is missing"
+          PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_settings set settings=settings-'accountCurrencyReviewRequired' where bot_instance_id='$INSTANCE';" >/dev/null
           PARTIAL_CURRENCY_SAVE_HTTP=$(curl -sS -o /tmp/currency-review-partial.json -w "%{http_code}" -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"maxPositions":7}')
           test "$PARTIAL_CURRENCY_SAVE_HTTP" = "409"
 
@@ -542,6 +579,10 @@ jobs:
           FULL_CURRENCY_SAVE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "$REVIEW_PAYLOAD")
           test "$(printf '%s' "$FULL_CURRENCY_SAVE" | jq -r '.settings.accountCurrency')" = "USC"
           test "$(printf '%s' "$FULL_CURRENCY_SAVE" | jq -r '.settings.accountCurrencyReviewRequired')" = "false"
+
+          echo "[integration] native Cent money values can exceed the old 100000 account-unit ceiling"
+          LARGE_CENT_SAVE=$(curl -fsS -X PUT "$BASE/bot/settings?slotId=$SLOT" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"raceCloseAllProfitMoney":250000}')
+          test "$(printf '%s' "$LARGE_CENT_SAVE" | jq -r '.settings.raceCloseAllProfitMoney')" = "250000"
 
           echo "[integration] same deal ticket on a different MT5 account does not collide or mix history"
           curl -fsS -X POST "$BASE/ea/journal" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"dealTicket\":\"900001\",\"eventType\":\"BASKET\",\"direction\":\"BUY\",\"volume\":0.01,\"netProfit\":5.00,\"entryTrigger\":\"CENT_REBIND_TEST\",\"entryModel\":\"CENT_REBIND_TEST\",\"basketIndex\":1,\"symbol\":\"XAUUSDm\",\"brokerServer\":\"SCENOVA-Real\",\"journalSchema\":3}" >/dev/null
@@ -557,8 +598,8 @@ jobs:
           FOLLOW_ACCOUNT_ID=$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.id')
           test -n "$FOLLOW_ACCOUNT_ID"
           OLD_ACCOUNT_PERF=$(curl -fsS "$BASE/performance-analytics/report?accountId=$ACCOUNT_ID" -H "authorization: Bearer $TOKEN")
-          test "$(printf '%s' "$OLD_ACCOUNT_PERF" | jq -r '.summary.netProfit')" = "12.5"
-          test "$(printf '%s' "$OLD_ACCOUNT_PERF" | jq -r '.summary.trades')" = "1"
+          test "$(printf '%s' "$OLD_ACCOUNT_PERF" | jq -r '.summary.netProfit')" = "15"
+          test "$(printf '%s' "$OLD_ACCOUNT_PERF" | jq -r '.summary.trades')" = "2"
           NEW_ACCOUNT_PERF=$(curl -fsS "$BASE/performance-analytics/report?accountId=$FOLLOW_ACCOUNT_ID" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$NEW_ACCOUNT_PERF" | jq -r '.summary.netProfit')" = "5"
           test "$(printf '%s' "$NEW_ACCOUNT_PERF" | jq -r '.summary.trades')" = "1"

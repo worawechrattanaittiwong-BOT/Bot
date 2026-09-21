@@ -39,6 +39,14 @@ must(
 );
 
 must(
+  dashboard.includes("currencyReviewRequired") &&
+  dashboard.includes("implicitCurrencyReviewRequired") &&
+  dashboard.includes("savedAccountCurrency !== reportedAccountCurrency") &&
+  dashboard.includes("ตรวจหน่วยเงินก่อนเริ่มบอท"),
+  "Dashboard must derive and visibly explain the currency review gate before Start"
+);
+
+must(
   !dashboard.includes('money-prefix">$') &&
   !dashboard.includes('"+$') &&
   !dashboard.includes('"$"+'),
@@ -70,9 +78,56 @@ must(
 );
 
 must(
+  botApi.includes("implicitCurrencyReviewRequired") &&
+  botApi.includes('currentAccountCurrency !== settingsAccountCurrency') &&
+  botApi.includes('liveSettingsCurrency !== storedSettingsCurrency'),
+  "Server must derive currency review from live-vs-saved currency even if the persisted review flag is missing"
+);
+
+must(
+  botApi.includes("const maxAccountMoney = 100_000_000") &&
+  botApi.includes('numberSetting("raceCloseAllProfitMoney", 0.01, maxAccountMoney)') &&
+  botApi.includes('numberSetting("zeroGridMinNetProfitMoney", 0.01, maxAccountMoney)'),
+  "Native Cent money validation must allow values above the old USD-oriented 100,000 ceiling"
+);
+
+must(
   eaApi.includes("AND mt5_account_id=$2") &&
   botApi.includes("AND mt5_account_id=$2"),
   "EA intelligence and dashboard journal stats must be isolated by MT5 account"
+);
+
+must(
+  eaApi.includes("const journalDrainPending = metrics.pendingBasketJournal === true") &&
+  eaApi.includes("previousBoundPositions <= 0 && !journalDrainPending") &&
+  eaApi.includes("...(instance.metrics || {})") &&
+  eaApi.includes("accountChangeBlocked: previousBoundPositions > 0 || journalDrainPending"),
+  "MT5 account-follow must wait for the previous account Basket journal to drain without overwriting its metrics"
+);
+
+must(
+  eaApi.includes("symbol: text(instance.metrics?.symbol || body.symbol, 48)") &&
+  eaApi.includes("brokerServer: text(instance.broker_server || body.brokerServer, 96)") &&
+  eaApi.includes("currency: text(instance.metrics?.currency, 16)"),
+  "Delayed journals must inherit symbol/server/currency from the still-bound MT5 account"
+);
+
+const pendingJournalBotGuards = (botApi.match(/pendingBasketJournal === true/g) || []).length;
+must(
+  pendingJournalBotGuards >= 7,
+  "Account change/rebind/reset/Cloud replacement plus Slot assign/release and Device release must block while a Basket journal is pending"
+);
+
+const settingsFetchIndex = eaApi.indexOf(
+  'const settings = await this.db.one(\n      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1"'
+);
+const effectiveDesiredIndex = eaApi.indexOf("const effectiveDesired = access");
+must(
+  settingsFetchIndex >= 0 &&
+  effectiveDesiredIndex > settingsFetchIndex &&
+  eaApi.includes("currencyReviewRequired") &&
+  eaApi.includes("UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1 AND desired_state='RUNNING'"),
+  "Currency review must become a server-side SAFE_STOP gate before START command selection"
 );
 
 must(

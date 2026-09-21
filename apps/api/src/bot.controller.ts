@@ -1189,6 +1189,16 @@ export class BotController {
     )) {
       throw new ConflictException("หยุดบอทและปิด Position ของ Slot นี้ก่อนเปลี่ยนผู้ใช้งาน");
     }
+    if (
+      instance &&
+      slot.assigned_user_id &&
+      slot.assigned_user_id !== target.id &&
+      instance.metrics?.pendingBasketJournal === true
+    ) {
+      throw new ConflictException(
+        "ยังมี Basket Journal ของผู้ใช้เดิมรอส่ง กรุณารอให้ส่งสำเร็จก่อนโอน Slot"
+      );
+    }
 
     if (instance && slot.assigned_user_id && slot.assigned_user_id !== target.id) {
       if (instance.mt5_account_id) {
@@ -1236,6 +1246,11 @@ export class BotController {
       Number(instance.positions || 0) > 0
     )) {
       throw new ConflictException("หยุดบอทและปิด Position ก่อนคืน Slot");
+    }
+    if (instance?.metrics?.pendingBasketJournal === true) {
+      throw new ConflictException(
+        "ยังมี Basket Journal รอส่ง กรุณารอให้ส่งสำเร็จก่อนคืน Slot"
+      );
     }
 
     if (instance) {
@@ -1300,6 +1315,11 @@ export class BotController {
       (instance.actual_state === "RUNNING" || instance.desired_state === "RUNNING")
     ) {
       throw new ConflictException("MT5 ยัง Online และบอทกำลังทำงาน กรุณากดหยุดบอทก่อนปลดหรือย้ายเครื่อง");
+    }
+    if (instance.metrics?.pendingBasketJournal === true) {
+      throw new ConflictException(
+        "ยังมี Basket Journal รอส่ง กรุณารอให้ส่งสำเร็จก่อนปลดหรือย้ายเครื่อง"
+      );
     }
 
     const revoked = randomBytes(32).toString("hex");
@@ -1381,6 +1401,11 @@ export class BotController {
     ) {
       throw new ConflictException("หยุดบอทและปิด Position ให้เรียบร้อยก่อนเปลี่ยนบัญชี MT5");
     }
+    if (instance.metrics?.pendingBasketJournal === true) {
+      throw new ConflictException(
+        "ยังมีข้อมูล Basket ของบัญชี MT5 เดิมรอส่งเข้า Server กรุณารอ Heartbeat/Journal ส่งสำเร็จก่อนเปลี่ยนบัญชี"
+      );
+    }
     await this.db.query(
       `UPDATE bot_instances SET
          desired_state='SAFE_STOP',
@@ -1430,6 +1455,11 @@ export class BotController {
     if (Number(instance.previous_bound_positions || 0) > 0) {
       throw new ConflictException(
         "บัญชี MT5 เดิมยังมี Position ค้างจากสถานะล่าสุด กรุณา Login กลับบัญชีเดิม ปิด Position ให้หมด แล้วค่อย Login บัญชีใหม่อีกครั้ง"
+      );
+    }
+    if (instance.metrics?.pendingBasketJournal === true) {
+      throw new ConflictException(
+        "ยังมี Basket Journal ของบัญชีเดิมรอส่ง กรุณารอให้ระบบส่งสำเร็จก่อนยืนยันบัญชี MT5 ใหม่"
       );
     }
     const isFirstBind = !instance.old_account_id;
@@ -1532,6 +1562,31 @@ export class BotController {
       slot.id
     );
 
+    const existingInstance = await this.db.one(
+      "SELECT * FROM bot_instances WHERE slot_id=$1",
+      [slot.id]
+    );
+    if (existingInstance) {
+      const existingPositions = Math.max(
+        0,
+        Number(existingInstance.metrics?.positions || 0)
+      );
+      if (
+        existingInstance.actual_state === "RUNNING" ||
+        existingInstance.desired_state === "RUNNING" ||
+        existingPositions > 0
+      ) {
+        throw new ConflictException(
+          "หยุดบอทและปิด Position ให้หมดก่อนเปลี่ยนบัญชี Cloud MT5"
+        );
+      }
+      if (existingInstance.metrics?.pendingBasketJournal === true) {
+        throw new ConflictException(
+          "ยังมี Basket Journal ของบัญชี Cloud เดิมรอส่ง กรุณารอให้ส่งสำเร็จก่อนเปลี่ยนบัญชี"
+        );
+      }
+    }
+
     let account = await this.db.one(
       "SELECT * FROM mt5_accounts WHERE user_id=$1 AND lower(account_number)=lower($2) AND lower(broker_server)=lower($3) LIMIT 1",
       [req.user.sub, String(body.accountNumber), String(body.brokerServer)]
@@ -1549,10 +1604,10 @@ export class BotController {
     }
 
     const installToken = randomBytes(32).toString("hex");
-    let instance = await this.db.one("SELECT * FROM bot_instances WHERE slot_id=$1", [slot.id]);
+    let instance = existingInstance;
     if (instance) {
       instance = await this.db.one(
-        "UPDATE bot_instances SET mt5_account_id=$2,mode=$3,install_token_hash=$4,actual_state='OFFLINE',last_seen_at=NULL WHERE id=$1 RETURNING id,mode,desired_state,actual_state",
+        "UPDATE bot_instances SET mt5_account_id=$2,mode=$3,install_token_hash=$4,desired_state='STOPPED',actual_state='OFFLINE',last_seen_at=NULL WHERE id=$1 RETURNING id,mode,desired_state,actual_state",
         [instance.id, account.id, mode, this.crypto.sha256(installToken)]
       );
     } else {
@@ -1613,6 +1668,11 @@ export class BotController {
     }
     if (instance.actual_state === "RUNNING" || instance.desired_state === "RUNNING" || Number(instance.positions || 0) > 0) {
       throw new ConflictException("stop the bot and close positions before changing MT5 account");
+    }
+    if (instance.metrics?.pendingBasketJournal === true) {
+      throw new ConflictException(
+        "ยังมี Basket Journal รอส่งจากบัญชี MT5 เดิม กรุณารอให้ส่งสำเร็จก่อนรีเซ็ตบัญชี"
+      );
     }
     if (instance.mt5_account_id) {
       await this.db.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [instance.mt5_account_id]);
@@ -1684,18 +1744,18 @@ export class BotController {
     const startSettings = startSettingsRow?.settings || {};
     const currentAccountCurrency = String(instance.metrics?.currency || "").trim().toUpperCase();
     const settingsAccountCurrency = String(startSettings.accountCurrency || "").trim().toUpperCase();
-    if (startSettings.accountCurrencyReviewRequired === true) {
-      throw new ConflictException(
-        "สกุลเงินของบัญชี MT5 เปลี่ยน กรุณาตรวจค่า Profit/Loss/Target แล้วกดบันทึกการตั้งค่าก่อนเริ่มบอท"
+    const implicitCurrencyReviewRequired =
+      Boolean(currentAccountCurrency) &&
+      (
+        (Boolean(settingsAccountCurrency) && currentAccountCurrency !== settingsAccountCurrency) ||
+        (!settingsAccountCurrency && currentAccountCurrency !== "USD")
       );
-    }
     if (
-      currentAccountCurrency &&
-      settingsAccountCurrency &&
-      currentAccountCurrency !== settingsAccountCurrency
+      startSettings.accountCurrencyReviewRequired === true ||
+      implicitCurrencyReviewRequired
     ) {
       throw new ConflictException(
-        "ค่าตั้งบอทถูกบันทึกไว้คนละสกุลเงินกับบัญชี MT5 ปัจจุบัน กรุณาตรวจและบันทึกการตั้งค่าใหม่ก่อนเริ่มบอท"
+        "สกุลเงินของบัญชี MT5 ยังไม่ได้ยืนยันกับค่าตั้งบอท กรุณาตรวจ Profit/Loss/Target ทุกโหมดแล้วกดบันทึกการตั้งค่าก่อนเริ่มบอท"
       );
     }
 
@@ -1886,7 +1946,21 @@ export class BotController {
       "manualPerPositionProfitMoney",
       "zeroGridMinNetProfitMoney"
     ];
-    const currencyReviewRequired = currentSettings.accountCurrencyReviewRequired === true;
+    const storedSettingsCurrency = String(
+      currentSettings.accountCurrency || ""
+    ).trim().toUpperCase();
+    const liveSettingsCurrency = String(
+      currentMetrics.currency || ""
+    ).trim().toUpperCase();
+    const implicitCurrencyReviewRequired =
+      Boolean(liveSettingsCurrency) &&
+      (
+        (Boolean(storedSettingsCurrency) && liveSettingsCurrency !== storedSettingsCurrency) ||
+        (!storedSettingsCurrency && liveSettingsCurrency !== "USD")
+      );
+    const currencyReviewRequired =
+      currentSettings.accountCurrencyReviewRequired === true ||
+      implicitCurrencyReviewRequired;
     const currencyReviewComplete =
       !currencyReviewRequired ||
       moneyReviewKeys.every((key) => body[key] !== undefined);
@@ -1941,35 +2015,36 @@ export class BotController {
     numberSetting("manualMaxPositions", 1, 100, true);
     // Risk controls are remembered independently by control mode. The legacy
     // standard* keys remain accepted only as migration fallbacks.
-    numberSetting("standardMaxBasketLossMoney", 0, 100000);
-    numberSetting("standardDailyLossMoney", 0, 100000);
-    numberSetting("standardDailyProfitTargetMoney", 0, 100000);
-    numberSetting("autoMaxBasketLossMoney", 0, 100000);
-    numberSetting("autoDailyLossMoney", 0, 100000);
-    numberSetting("autoDailyProfitTargetMoney", 0, 100000);
-    numberSetting("raceMaxBasketLossMoney", 0, 100000);
-    numberSetting("raceDailyLossMoney", 0, 100000);
-    numberSetting("raceDailyProfitTargetMoney", 0, 100000);
-    numberSetting("flipLockMaxBasketLossMoney", 0, 100000);
-    numberSetting("flipLockDailyLossMoney", 0, 100000);
-    numberSetting("flipLockDailyProfitTargetMoney", 0, 100000);
-    numberSetting("manualMaxBasketLossMoney", 0, 100000);
-    numberSetting("manualDailyLossMoney", 0, 100000);
-    numberSetting("manualDailyProfitTargetMoney", 0, 100000);
-    numberSetting("basketTriggerMoney", 0, 100000);
-    numberSetting("basketTrailMoney", 0, 100000);
-    numberSetting("maxBasketLossMoney", 0, 100000);
-    numberSetting("dailyLossMoney", 0, 100000);
-    numberSetting("dailyProfitTargetMoney", 0, 100000);
+    const maxAccountMoney = 100_000_000;
+    numberSetting("standardMaxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("standardDailyLossMoney", 0, maxAccountMoney);
+    numberSetting("standardDailyProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("autoMaxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("autoDailyLossMoney", 0, maxAccountMoney);
+    numberSetting("autoDailyProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("raceMaxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("raceDailyLossMoney", 0, maxAccountMoney);
+    numberSetting("raceDailyProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("flipLockMaxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("flipLockDailyLossMoney", 0, maxAccountMoney);
+    numberSetting("flipLockDailyProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("manualMaxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("manualDailyLossMoney", 0, maxAccountMoney);
+    numberSetting("manualDailyProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("basketTriggerMoney", 0, maxAccountMoney);
+    numberSetting("basketTrailMoney", 0, maxAccountMoney);
+    numberSetting("maxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("dailyLossMoney", 0, maxAccountMoney);
+    numberSetting("dailyProfitTargetMoney", 0, maxAccountMoney);
     booleanSetting("dailyProfitContinueAfterTarget");
     numberSetting("dailyProfitDrawdownPercent", 0, 95);
     // Per-mode profit profiles are persisted independently. The legacy
     // basket/per-position keys remain runtime mirrors for older EA builds.
-    numberSetting("autoProfitTargetMoney", 0, 100000);
-    numberSetting("manualBasketProfitTargetMoney", 0, 100000);
-    numberSetting("manualPerPositionProfitMoney", 0, 100000);
-    numberSetting("basketProfitTargetMoney", 0, 100000);
-    numberSetting("perPositionProfitMoney", 0, 100000);
+    numberSetting("autoProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("manualBasketProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("manualPerPositionProfitMoney", 0, maxAccountMoney);
+    numberSetting("basketProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("perPositionProfitMoney", 0, maxAccountMoney);
     numberSetting("profitRunTrailPercent", 0, 95);
     if (body.profitTargetMode !== undefined) {
       const profitTargetMode = String(body.profitTargetMode || "").toUpperCase();
@@ -1980,7 +2055,7 @@ export class BotController {
     }
     // EA 1.017 replaces floating-money loss closes with a real Broker SL.
     // Keep accepting the legacy key only to let old clients clear it safely.
-    numberSetting("perPositionLossMoney", 0, 100000);
+    numberSetting("perPositionLossMoney", 0, maxAccountMoney);
     numberSetting("manualStopLossPoints", 0, 1000000);
     if (body.perPositionLossMoney !== undefined) {
       clean.perPositionLossMoney = 0;
@@ -1997,11 +2072,11 @@ export class BotController {
     booleanSetting("zeroGridLowVolatilityEnabled");
     numberSetting("zeroGridLevelsPerSide", 1, 30, true);
     numberSetting("zeroGridBaseLot", 0.01, 100);
-    numberSetting("zeroGridMinNetProfitMoney", 0.01, 100000);
-    numberSetting("zeroGridCloseReserveMoney", 0, 100000);
+    numberSetting("zeroGridMinNetProfitMoney", 0.01, maxAccountMoney);
+    numberSetting("zeroGridCloseReserveMoney", 0, maxAccountMoney);
     booleanSetting("raceCloseAllProfitEnabled");
-    numberSetting("raceCloseAllProfitMoney", 0.01, 100000);
-    numberSetting("racePerPositionProfitMoney", 0.01, 100000);
+    numberSetting("raceCloseAllProfitMoney", 0.01, maxAccountMoney);
+    numberSetting("racePerPositionProfitMoney", 0.01, maxAccountMoney);
     if (body.raceProfitTargetMode !== undefined) {
       const raceProfitTargetMode = String(body.raceProfitTargetMode || "").toUpperCase();
       if (!["BASKET", "POSITION", "OFF"].includes(raceProfitTargetMode)) {
