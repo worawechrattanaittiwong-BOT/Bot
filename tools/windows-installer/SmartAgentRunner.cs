@@ -132,12 +132,18 @@ internal static class SmartAgentRunner
         // only after an explicit Dashboard action authorizes one restart.
         await StageOrApplyEaAsync(http, config, token, localHash, heartbeat, logPath);
 
-        var reloadPending = File.Exists(PendingReloadPath(config));
-        if (reloadPending && heartbeat.SafeToRestart)
+        if (heartbeat.SafeToRestart)
         {
-            // This call is a no-op unless the customer has pressed
-            // "อัปเดต EA ตอนนี้" and the Server still exposes that one-time
-            // UPDATE_EA_RESTART action.
+            // Always poll the guarded UPDATE_EA_RESTART action when restart-safe.
+            // PendingReloadPath is only a staging hint; it must never be the
+            // authorization gate. The binary on disk can already be current while
+            // the loaded EA/runtime contract is stale. In that case there is no
+            // pending file marker, but the explicit Web Update button still needs
+            // to restart MT5 once so the current EX5 is loaded again.
+            //
+            // EnsureMt5RunningWithEa() remains a no-op unless the Server exposes
+            // a still-active one-time UPDATE_EA_RESTART action, so background
+            // heartbeats can never restart MT5 by themselves.
             if (AgentRunner.EnsureMt5RunningWithEa(config, forceReload: true))
             {
                 TryDelete(PendingReloadPath(config));

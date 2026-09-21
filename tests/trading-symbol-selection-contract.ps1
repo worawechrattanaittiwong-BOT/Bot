@@ -60,9 +60,9 @@ Assert-Contains $smartRunner 'if (heartbeat.SafeToRestart)' 'Agent checks explic
 Assert-Contains $smartRunner 'Web-authorized MT5 connect or Symbol switch completed' 'Agent logs Web-authorized Symbol switch completion'
 Assert-Contains $agentContract 'TradingSymbolAgentResponse' 'Windows Agent has symbol verification response contract'
 
-Assert-Contains $agentBuild 'Version = "1.0.11"' 'Agent build version bumped'
-Assert-Contains $project '<Version>1.0.11</Version>' 'Installer project version bumped'
-Assert-Contains $release 'DEFAULT_INSTALLER_VERSION = "1.0.11"' 'Server publishes authoritative-symbol installer version'
+Assert-Contains $agentBuild 'Version = "1.0.12"' 'Agent build version bumped'
+Assert-Contains $project '<Version>1.0.12</Version>' 'Installer project version bumped'
+Assert-Contains $release 'DEFAULT_INSTALLER_VERSION = "1.0.12"' 'Server publishes current installer version'
 
 Assert-Contains $dashboard '/bot/trading-symbol' 'bot Control Center owns Symbol selection'
 Assert-Contains $dashboard 'openTradingSymbolPicker' 'bot has direct Symbol picker action'
