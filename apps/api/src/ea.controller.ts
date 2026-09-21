@@ -807,7 +807,15 @@ export class EaController {
       instance.metrics?.currency ||
       ""
     ).trim().toUpperCase();
-    if (previousCurrency && reportedCurrency && previousCurrency !== reportedCurrency) {
+    const firstNonUsdCurrency =
+      !previousCurrency &&
+      reportedCurrency &&
+      reportedCurrency !== "USD";
+    if (
+      firstNonUsdCurrency ||
+      (previousCurrency && reportedCurrency && previousCurrency !== reportedCurrency)
+    ) {
+      const reviewFromCurrency = previousCurrency || "UNSET";
       await this.db.query(
         `UPDATE bot_settings
          SET settings=jsonb_set(
@@ -818,10 +826,10 @@ export class EaController {
              ),
              updated_at=now()
          WHERE bot_instance_id=$1`,
-        [instance.id, previousCurrency]
+        [instance.id, reviewFromCurrency]
       );
       runtimeSettings.accountCurrencyReviewRequired = true;
-      runtimeSettings.previousAccountCurrency = previousCurrency;
+      runtimeSettings.previousAccountCurrency = reviewFromCurrency;
     }
     const savedControlMode = String(runtimeSettings.controlMode || "").toUpperCase();
     if (!["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "ASSISTED", "MANUAL"].includes(savedControlMode)) {
