@@ -552,7 +552,11 @@ export class EaController {
       );
 
     // LOCAL account-follow: changing the MT5 login switches SCENOVA to the new
-    // account automatically only while the previously-bound account is flat.
+    // account automatically only while the previously-bound account is flat and
+    // the old account has no Basket journal waiting to be flushed. Heartbeat runs
+    // before journal flush in the EA timer, so one blocked heartbeat gives the
+    // old journal a chance to persist under the old MT5 account before rebind.
+    const journalDrainPending = metrics.pendingBasketJournal === true;
     if (accountMismatch && instance.mode === "LOCAL" && reportedAccount && reportedServer) {
       const previousBoundPositions = Number(
         instance.metrics?.previousBoundPositions ??
@@ -560,7 +564,7 @@ export class EaController {
         0
       );
 
-      if (previousBoundPositions <= 0) {
+      if (previousBoundPositions <= 0 && !journalDrainPending) {
         const foreignAccount = await this.db.one(
           `SELECT id,user_id
            FROM mt5_accounts
@@ -650,10 +654,16 @@ export class EaController {
         instance.metrics?.positions ??
         0
       );
-      const mismatchMetrics = {
-        ...metrics,
-        previousBoundPositions
-      };
+      const mismatchMetrics = journalDrainPending
+        ? {
+            ...(instance.metrics || {}),
+            previousBoundPositions,
+            pendingBasketJournal: true
+          }
+        : {
+            ...metrics,
+            previousBoundPositions
+          };
 
       await this.db.query(
         `UPDATE bot_instances SET
@@ -686,7 +696,8 @@ export class EaController {
         detectedBroker: reportedBroker || null,
         detectedServer: reportedServer || null,
         previousBoundPositions,
-        accountChangeBlocked: previousBoundPositions > 0,
+        journalDrainPending,
+        accountChangeBlocked: previousBoundPositions > 0 || journalDrainPending,
         settings: {}
       };
     }
@@ -769,6 +780,71 @@ export class EaController {
       latestControl = { desired_state: "STOPPED" };
     }
 
+    const settings = await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+      [instance.id]
+    );
+    // Runtime contract: preserve the direction selected by the customer.
+    // RACE runs at exactly 2x the normal order cadence without changing AUTO.
+    const runtimeSettings = { ...(settings?.settings || {}) };
+    const reportedCurrency = String(metrics.currency || "").trim().toUpperCase();
+    const previousCurrency = String(
+      runtimeSettings.accountCurrency ||
+      instance.metrics?.currency ||
+      ""
+    ).trim().toUpperCase();
+    const firstNonUsdCurrency =
+      !previousCurrency &&
+      reportedCurrency &&
+      reportedCurrency !== "USD";
+    const currencyChanged =
+      Boolean(previousCurrency) &&
+      Boolean(reportedCurrency) &&
+      previousCurrency !== reportedCurrency;
+
+    if (firstNonUsdCurrency || currencyChanged) {
+      const reviewFromCurrency = previousCurrency || "UNSET";
+      await this.db.query(
+        `UPDATE bot_settings
+         SET settings=jsonb_set(
+               jsonb_set(COALESCE(settings,'{}'::jsonb),'{accountCurrencyReviewRequired}','true'::jsonb,true),
+               '{previousAccountCurrency}',
+               to_jsonb($2::text),
+               true
+             ),
+             updated_at=now()
+         WHERE bot_instance_id=$1`,
+        [instance.id, reviewFromCurrency]
+      );
+      runtimeSettings.accountCurrencyReviewRequired = true;
+      runtimeSettings.previousAccountCurrency = reviewFromCurrency;
+    }
+
+    const currencyReviewRequired =
+      runtimeSettings.accountCurrencyReviewRequired === true;
+
+    // A currency review is a trading safety gate, not only a UI validation.
+    // If a stale RUNNING intent exists, drain safely and never deliver START
+    // until the customer reviews and saves the account-money settings.
+    if (
+      currencyReviewRequired &&
+      String(latestControl?.desired_state || "") === "RUNNING"
+    ) {
+      await this.db.query(
+        "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1 AND desired_state='RUNNING'",
+        [instance.id]
+      );
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=COALESCE(acked_at,now()) WHERE bot_instance_id=$1 AND command='START' AND status IN ('PENDING','DELIVERED')",
+        [instance.id]
+      );
+      await this.db.query(
+        "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
+        [instance.id]
+      );
+      latestControl = { desired_state: "SAFE_STOP" };
+    }
+
     const effectiveDesired = access
       ? String(latestControl?.desired_state || "STOPPED")
       : "SAFE_STOP";
@@ -794,43 +870,6 @@ export class EaController {
       );
     }
 
-    const settings = await this.db.one(
-      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
-      [instance.id]
-    );
-    // Runtime contract: preserve the direction selected by the customer.
-    // RACE runs at exactly 2x the normal order cadence without changing AUTO.
-    const runtimeSettings = { ...(settings?.settings || {}) };
-    const reportedCurrency = String(metrics.currency || "").trim().toUpperCase();
-    const previousCurrency = String(
-      runtimeSettings.accountCurrency ||
-      instance.metrics?.currency ||
-      ""
-    ).trim().toUpperCase();
-    const firstNonUsdCurrency =
-      !previousCurrency &&
-      reportedCurrency &&
-      reportedCurrency !== "USD";
-    if (
-      firstNonUsdCurrency ||
-      (previousCurrency && reportedCurrency && previousCurrency !== reportedCurrency)
-    ) {
-      const reviewFromCurrency = previousCurrency || "UNSET";
-      await this.db.query(
-        `UPDATE bot_settings
-         SET settings=jsonb_set(
-               jsonb_set(COALESCE(settings,'{}'::jsonb),'{accountCurrencyReviewRequired}','true'::jsonb,true),
-               '{previousAccountCurrency}',
-               to_jsonb($2::text),
-               true
-             ),
-             updated_at=now()
-         WHERE bot_instance_id=$1`,
-        [instance.id, reviewFromCurrency]
-      );
-      runtimeSettings.accountCurrencyReviewRequired = true;
-      runtimeSettings.previousAccountCurrency = reviewFromCurrency;
-    }
     const savedControlMode = String(runtimeSettings.controlMode || "").toUpperCase();
     if (!["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "ASSISTED", "MANUAL"].includes(savedControlMode)) {
       const engineMode = String(runtimeSettings.engineMode || "AUTO").toUpperCase();
@@ -1060,8 +1099,8 @@ export class EaController {
           schema: eventType === "BASKET"
             ? Math.max(2, Math.min(5, Math.trunc(n(body.journalSchema, 2))))
             : 1,
-          symbol: text(body.symbol, 48),
-          brokerServer: text(body.brokerServer, 96),
+          symbol: text(body.symbol || instance.metrics?.symbol, 48),
+          brokerServer: text(instance.broker_server || body.brokerServer, 96),
           currency: text(instance.metrics?.currency, 16),
           startedAt: Math.max(0, Math.trunc(n(body.startedAt))),
           endedAt: Math.max(0, Math.trunc(n(body.endedAt))),
