@@ -1189,6 +1189,16 @@ export class BotController {
     )) {
       throw new ConflictException("หยุดบอทและปิด Position ของ Slot นี้ก่อนเปลี่ยนผู้ใช้งาน");
     }
+    if (
+      instance &&
+      slot.assigned_user_id &&
+      slot.assigned_user_id !== target.id &&
+      instance.metrics?.pendingBasketJournal === true
+    ) {
+      throw new ConflictException(
+        "ยังมี Basket Journal ของผู้ใช้เดิมรอส่ง กรุณารอให้ส่งสำเร็จก่อนโอน Slot"
+      );
+    }
 
     if (instance && slot.assigned_user_id && slot.assigned_user_id !== target.id) {
       if (instance.mt5_account_id) {
@@ -1236,6 +1246,11 @@ export class BotController {
       Number(instance.positions || 0) > 0
     )) {
       throw new ConflictException("หยุดบอทและปิด Position ก่อนคืน Slot");
+    }
+    if (instance?.metrics?.pendingBasketJournal === true) {
+      throw new ConflictException(
+        "ยังมี Basket Journal รอส่ง กรุณารอให้ส่งสำเร็จก่อนคืน Slot"
+      );
     }
 
     if (instance) {
@@ -1300,6 +1315,11 @@ export class BotController {
       (instance.actual_state === "RUNNING" || instance.desired_state === "RUNNING")
     ) {
       throw new ConflictException("MT5 ยัง Online และบอทกำลังทำงาน กรุณากดหยุดบอทก่อนปลดหรือย้ายเครื่อง");
+    }
+    if (instance.metrics?.pendingBasketJournal === true) {
+      throw new ConflictException(
+        "ยังมี Basket Journal รอส่ง กรุณารอให้ส่งสำเร็จก่อนปลดหรือย้ายเครื่อง"
+      );
     }
 
     const revoked = randomBytes(32).toString("hex");
