@@ -76,6 +76,32 @@ must(
 );
 
 must(
+  eaApi.includes("const journalDrainPending = metrics.pendingBasketJournal === true") &&
+  eaApi.includes("previousBoundPositions <= 0 && !journalDrainPending") &&
+  eaApi.includes("...(instance.metrics || {})") &&
+  eaApi.includes("accountChangeBlocked: previousBoundPositions > 0 || journalDrainPending"),
+  "MT5 account-follow must wait for the previous account Basket journal to drain without overwriting its metrics"
+);
+
+const pendingJournalBotGuards = (botApi.match(/pendingBasketJournal === true/g) || []).length;
+must(
+  pendingJournalBotGuards >= 4,
+  "Change, rebind, reset and Cloud account replacement must all block while a Basket journal is pending"
+);
+
+const settingsFetchIndex = eaApi.indexOf(
+  'const settings = await this.db.one(\n      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1"'
+);
+const effectiveDesiredIndex = eaApi.indexOf("const effectiveDesired = access");
+must(
+  settingsFetchIndex >= 0 &&
+  effectiveDesiredIndex > settingsFetchIndex &&
+  eaApi.includes("currencyReviewRequired") &&
+  eaApi.includes("UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1 AND desired_state='RUNNING'"),
+  "Currency review must become a server-side SAFE_STOP gate before START command selection"
+);
+
+must(
   eaApi.includes("ON CONFLICT(bot_instance_id,mt5_account_id,deal_ticket,event_type) DO NOTHING") &&
   journalSchema.includes("UNIQUE(bot_instance_id, mt5_account_id, deal_ticket, event_type)") &&
   currencyMigration.includes("trade_journal_instance_account_deal_event_key"),
