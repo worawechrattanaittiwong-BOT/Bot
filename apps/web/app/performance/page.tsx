@@ -181,6 +181,18 @@ export default function PerformanceDashboardPage() {
     ()=>(options?.accounts||[]).filter((account:any)=>account.userId===options?.user?.id),
     [options]
   );
+  const realAccounts=useMemo(
+    ()=>ownAccounts.filter((account:any)=>String(account.accountType||"REAL").toUpperCase()==="REAL"),
+    [ownAccounts]
+  );
+  const demoAccounts=useMemo(
+    ()=>ownAccounts.filter((account:any)=>String(account.accountType||"REAL").toUpperCase()!=="REAL"),
+    [ownAccounts]
+  );
+  const selectedAccount=useMemo(
+    ()=>ownAccounts.find((account:any)=>account.id===accountId)||null,
+    [ownAccounts,accountId]
+  );
 
   function logout(){localStorage.removeItem("bot_token");window.location.href="/login";}
 
@@ -244,6 +256,38 @@ export default function PerformanceDashboardPage() {
     await navigator.clipboard.writeText(window.location.origin+shareResult.path);
   }
 
+  async function clearAllPerformanceData(){
+    if(!options?.elevated) return;
+    const token=window.prompt(
+      "คำสั่งนี้จะล้าง Trade Journal, Backtest และลิงก์ Performance ที่เป็นข้อมูลทดสอบทั้งหมด\n\nบัญชี MT5, Settings และ Subscription จะไม่ถูกลบ\n\nพิมพ์ RESET เพื่อยืนยัน"
+    );
+    if(token!=="RESET") return;
+    if(!window.confirm("ยืนยันล้างข้อมูล Performance ทั้งหมดตอนนี้หรือไม่?")) return;
+    setLoading(true);
+    try{
+      const result=await api("/performance-actions/reset-test-data",{
+        method:"POST",
+        body:JSON.stringify({confirm:"RESET"})
+      });
+      setReport(null);
+      setBacktest(null);
+      setSelectedBacktestId("");
+      setShareResult(null);
+      setError("");
+      await loadOptions();
+      if(accountId) await refresh(accountId,mode);
+      window.alert(
+        "ล้างข้อมูลสำเร็จ\nTrade Journal: "+String(result?.deleted?.tradeJournal||0)+
+        "\nBacktest: "+String(result?.deleted?.backtestRuns||0)+
+        "\nShare links: "+String(result?.deleted?.performanceShares||0)
+      );
+    }catch(e:any){
+      setError(String(e?.message||"ล้างข้อมูลไม่สำเร็จ"));
+    }finally{
+      setLoading(false);
+    }
+  }
+
   const liveSummary=report?.summary||{};
   const backSummary=backtest?.summary||{};
   const backExtra=backtestStats(backtest);
@@ -268,15 +312,22 @@ export default function PerformanceDashboardPage() {
       {options?.elevated?<OwnerSidebar activeKey="trading-backtest" onLogout={logout}/>:<CustomerSidebar onLogout={logout}/>}
       <main className={styles.main}>
         <header className={styles.pageHeader}>
-          <div><span className={styles.pageEyebrow}>MY TRADING ANALYTICS</span><h1>Trading Performance & Backtest</h1><p>แสดงเฉพาะบัญชีของคุณ · รูปแบบเดียวกับปุ่มสรุปผลบอท · เลือกช่วงเวลาและแชร์แบบ Read-only ได้</p></div>
-          <div className={styles.ownerBadge}><ScenovaIcon name="account" size={18}/><div><b>{options?.user?.user_code||"SCENOVA"}</b><span>My Performance Only</span></div></div>
+          <div><span className={styles.pageEyebrow}>MY TRADING ANALYTICS</span><h1>Trading Performance & Backtest</h1><p>เฉพาะบัญชีของคุณ · แยก REAL / DEMO · แชร์แบบ Read-only ได้</p></div>
+          <div className={styles.headerActions}>
+            {selectedAccount?<span className={String(selectedAccount.accountType).toUpperCase()==="DEMO"?styles.demoBadge:styles.realBadge}>{String(selectedAccount.accountType||"REAL").toUpperCase()}</span>:null}
+            {options?.elevated?<button type="button" className={styles.clearButton} onClick={clearAllPerformanceData} disabled={loading}><ScenovaIcon name="delete" size={14}/>ล้างข้อมูลทดสอบทั้งหมด</button>:null}
+            <div className={styles.ownerBadge}><ScenovaIcon name="account" size={16}/><div><b>{options?.user?.user_code||"SCENOVA"}</b><span>My Performance Only</span></div></div>
+          </div>
         </header>
 
         {error?<div className={styles.error}>{error}</div>:null}
 
         <section className={styles.controlCard}>
           <div className={styles.controlMain}>
-            <label><span>บัญชีของฉัน</span><select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>{ownAccounts.map((account:any)=><option key={account.id} value={account.id}>{account.accountNumber} · {account.broker} · {account.mode}</option>)}</select></label>
+            <label><span>บัญชีของฉัน</span><select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>
+              {realAccounts.length?<optgroup label="บัญชีจริง (REAL)">{realAccounts.map((account:any)=><option key={account.id} value={account.id}>REAL · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
+              {demoAccounts.length?<optgroup label="บัญชีทดลอง (DEMO)">{demoAccounts.map((account:any)=><option key={account.id} value={account.id}>DEMO · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
+            </select></label>
             <label><span>โหมดข้อมูล</span><select value={mode} onChange={(e)=>setMode(e.target.value as Mode)}><option value="LIVE">Live Performance</option><option value="BACKTEST">Backtest</option></select></label>
             <label><span>ตั้งแต่วันที่</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
             <label><span>ถึงวันที่</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
@@ -315,7 +366,7 @@ export default function PerformanceDashboardPage() {
           ):(
             <>
               <div className={styles.infoCard}>
-                <div className={styles.infoCol}><InfoRow icon="account" label="Account" value={String(report?.account?.accountNumber||"—")}/><InfoRow icon="strategy" label="Symbol" value={symbol}/><InfoRow icon="wallet" label="Currency" value={currency}/></div>
+                <div className={styles.infoCol}><InfoRow icon="account" label="Account" value={String(report?.account?.accountNumber||"—")}/><InfoRow icon="shield" label="Account Type" value={String(selectedAccount?.accountType||"REAL").toUpperCase()}/><InfoRow icon="wallet" label="Currency" value={currency}/></div>
                 <div className={styles.infoCol}><InfoRow icon="layers" label="Runtime Mode" value={runtimeMode}/><InfoRow icon="clock" label="From" value={from}/><InfoRow icon="play" label="Data Mode" value={mode}/></div>
                 <div className={styles.infoCol}><InfoRow icon="stop" label="To" value={to}/><InfoRow icon="hourglass" label="Period" value={rangeDays+" วัน"}/><InfoRow icon="orders" label="Closed Baskets" value={String(Number(summary.trades||0))}/></div>
               </div>

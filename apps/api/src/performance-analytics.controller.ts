@@ -499,14 +499,14 @@ export class PerformanceAnalyticsController {
     const rows = await this.db.query(
       elevated
         ? `SELECT a.id,a.user_id,a.account_number,a.broker,a.broker_server,a.mode,a.status,
-                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,ls.slot_number,ls.label AS slot_label
+                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,bi.metrics AS instance_metrics,ls.slot_number,ls.label AS slot_label
            FROM mt5_accounts a
            JOIN users u ON u.id=a.user_id
            LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
            LEFT JOIN license_slots ls ON ls.id=bi.slot_id
            ORDER BY u.user_code,a.created_at,a.account_number`
         : `SELECT a.id,a.user_id,a.account_number,a.broker,a.broker_server,a.mode,a.status,
-                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,ls.slot_number,ls.label AS slot_label
+                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,bi.metrics AS instance_metrics,ls.slot_number,ls.label AS slot_label
            FROM mt5_accounts a
            JOIN users u ON u.id=a.user_id
            LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
@@ -518,22 +518,35 @@ export class PerformanceAnalyticsController {
     return {
       user: self,
       elevated,
-      accounts: rows.rows.map((row: any) => ({
-        id: row.id,
-        userId: row.user_id,
-        userCode: row.user_code,
-        email: row.email,
-        role: row.role,
-        accountNumber: row.account_number,
-        broker: row.broker,
-        brokerServer: row.broker_server,
-        mode: row.mode,
-        status: row.status,
-        instanceId: row.instance_id,
-        slotId: row.slot_id,
-        slotNumber: row.slot_number,
-        slotLabel: row.slot_label
-      }))
+      accounts: rows.rows.map((row: any) => {
+        const reportedTradeMode = Number(row.instance_metrics?.accountTradeMode);
+        const serverIdentity = `${row.broker || ""} ${row.broker_server || ""}`.toLowerCase();
+        const accountType =
+          reportedTradeMode === 0 || reportedTradeMode === 1
+            ? "DEMO"
+            : reportedTradeMode === 2
+              ? "REAL"
+              : /(demo|practice|trial|contest)/i.test(serverIdentity)
+                ? "DEMO"
+                : "REAL";
+        return {
+          id: row.id,
+          userId: row.user_id,
+          userCode: row.user_code,
+          email: row.email,
+          role: row.role,
+          accountNumber: row.account_number,
+          broker: row.broker,
+          brokerServer: row.broker_server,
+          accountType,
+          mode: row.mode,
+          status: row.status,
+          instanceId: row.instance_id,
+          slotId: row.slot_id,
+          slotNumber: row.slot_number,
+          slotLabel: row.slot_label
+        };
+      })
     };
   }
 
