@@ -16,6 +16,9 @@ foreach ($required in @(
 }
 
 foreach ($required in @(
+  'clear-own-data',
+  'PERFORMANCE_OWN_DATA_RESET',
+  'scope: "SYSTEM"',
   'publicShare(',
   'availableRange',
   'detailedExits',
@@ -40,7 +43,10 @@ foreach ($required in @(
   'account.userId===options?.user?.id',
   'ownAccounts',
   'compactToolbar',
-  'แชร์ Read-only'
+  'แชร์ Read-only',
+  'ล้างข้อมูลของฉัน',
+  'ล้างข้อมูลทั้งระบบ',
+  '/performance-actions/clear-own-data'
 )) {
   if (-not $web.Contains($required)) { throw "Trading Performance compact date/share contract missing: $required" }
 }
