@@ -92,17 +92,19 @@ must(
 );
 
 must(
-  perfApi.includes("AND mt5_account_id=$4") &&
+  perfApi.includes("WHERE mt5_account_id=$1") &&
   perfApi.includes("currencySummaries") &&
   perfApi.includes("curvesByCurrency") &&
-  perfApi.includes("ORDER BY currency,u.user_code,a.account_number"),
-  "Performance analytics must isolate account history and never rank unlike currencies together"
+  perfApi.includes("ORDER BY currency,u.user_code,a.account_number") &&
+  !perfApi.includes("selected account has no bot instance"),
+  "Performance analytics must remain account-scoped and preserve history after rebind"
 );
 
 must(
-  shareApi.includes("AND mt5_account_id=$4") &&
-  shareApi.includes('currency: String(metrics.currency || "UNKNOWN")'),
-  "Shared live snapshots must be scoped to the MT5 account and capture currency"
+  shareApi.includes("WHERE mt5_account_id=$1") &&
+  shareApi.includes("accountCurrency") &&
+  !shareApi.includes("selected account has no bot instance"),
+  "Shared live snapshots must remain account-scoped and work for historical MT5 accounts"
 );
 
 for (const [name, source] of [
