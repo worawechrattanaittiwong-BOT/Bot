@@ -2015,35 +2015,36 @@ export class BotController {
     numberSetting("manualMaxPositions", 1, 100, true);
     // Risk controls are remembered independently by control mode. The legacy
     // standard* keys remain accepted only as migration fallbacks.
-    numberSetting("standardMaxBasketLossMoney", 0, 100000);
-    numberSetting("standardDailyLossMoney", 0, 100000);
-    numberSetting("standardDailyProfitTargetMoney", 0, 100000);
-    numberSetting("autoMaxBasketLossMoney", 0, 100000);
-    numberSetting("autoDailyLossMoney", 0, 100000);
-    numberSetting("autoDailyProfitTargetMoney", 0, 100000);
-    numberSetting("raceMaxBasketLossMoney", 0, 100000);
-    numberSetting("raceDailyLossMoney", 0, 100000);
-    numberSetting("raceDailyProfitTargetMoney", 0, 100000);
-    numberSetting("flipLockMaxBasketLossMoney", 0, 100000);
-    numberSetting("flipLockDailyLossMoney", 0, 100000);
-    numberSetting("flipLockDailyProfitTargetMoney", 0, 100000);
-    numberSetting("manualMaxBasketLossMoney", 0, 100000);
-    numberSetting("manualDailyLossMoney", 0, 100000);
-    numberSetting("manualDailyProfitTargetMoney", 0, 100000);
-    numberSetting("basketTriggerMoney", 0, 100000);
-    numberSetting("basketTrailMoney", 0, 100000);
-    numberSetting("maxBasketLossMoney", 0, 100000);
-    numberSetting("dailyLossMoney", 0, 100000);
-    numberSetting("dailyProfitTargetMoney", 0, 100000);
+    const maxAccountMoney = 100_000_000;
+    numberSetting("standardMaxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("standardDailyLossMoney", 0, maxAccountMoney);
+    numberSetting("standardDailyProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("autoMaxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("autoDailyLossMoney", 0, maxAccountMoney);
+    numberSetting("autoDailyProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("raceMaxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("raceDailyLossMoney", 0, maxAccountMoney);
+    numberSetting("raceDailyProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("flipLockMaxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("flipLockDailyLossMoney", 0, maxAccountMoney);
+    numberSetting("flipLockDailyProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("manualMaxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("manualDailyLossMoney", 0, maxAccountMoney);
+    numberSetting("manualDailyProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("basketTriggerMoney", 0, maxAccountMoney);
+    numberSetting("basketTrailMoney", 0, maxAccountMoney);
+    numberSetting("maxBasketLossMoney", 0, maxAccountMoney);
+    numberSetting("dailyLossMoney", 0, maxAccountMoney);
+    numberSetting("dailyProfitTargetMoney", 0, maxAccountMoney);
     booleanSetting("dailyProfitContinueAfterTarget");
     numberSetting("dailyProfitDrawdownPercent", 0, 95);
     // Per-mode profit profiles are persisted independently. The legacy
     // basket/per-position keys remain runtime mirrors for older EA builds.
-    numberSetting("autoProfitTargetMoney", 0, 100000);
-    numberSetting("manualBasketProfitTargetMoney", 0, 100000);
-    numberSetting("manualPerPositionProfitMoney", 0, 100000);
-    numberSetting("basketProfitTargetMoney", 0, 100000);
-    numberSetting("perPositionProfitMoney", 0, 100000);
+    numberSetting("autoProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("manualBasketProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("manualPerPositionProfitMoney", 0, maxAccountMoney);
+    numberSetting("basketProfitTargetMoney", 0, maxAccountMoney);
+    numberSetting("perPositionProfitMoney", 0, maxAccountMoney);
     numberSetting("profitRunTrailPercent", 0, 95);
     if (body.profitTargetMode !== undefined) {
       const profitTargetMode = String(body.profitTargetMode || "").toUpperCase();
@@ -2054,7 +2055,7 @@ export class BotController {
     }
     // EA 1.017 replaces floating-money loss closes with a real Broker SL.
     // Keep accepting the legacy key only to let old clients clear it safely.
-    numberSetting("perPositionLossMoney", 0, 100000);
+    numberSetting("perPositionLossMoney", 0, maxAccountMoney);
     numberSetting("manualStopLossPoints", 0, 1000000);
     if (body.perPositionLossMoney !== undefined) {
       clean.perPositionLossMoney = 0;
@@ -2071,11 +2072,11 @@ export class BotController {
     booleanSetting("zeroGridLowVolatilityEnabled");
     numberSetting("zeroGridLevelsPerSide", 1, 30, true);
     numberSetting("zeroGridBaseLot", 0.01, 100);
-    numberSetting("zeroGridMinNetProfitMoney", 0.01, 100000);
-    numberSetting("zeroGridCloseReserveMoney", 0, 100000);
+    numberSetting("zeroGridMinNetProfitMoney", 0.01, maxAccountMoney);
+    numberSetting("zeroGridCloseReserveMoney", 0, maxAccountMoney);
     booleanSetting("raceCloseAllProfitEnabled");
-    numberSetting("raceCloseAllProfitMoney", 0.01, 100000);
-    numberSetting("racePerPositionProfitMoney", 0.01, 100000);
+    numberSetting("raceCloseAllProfitMoney", 0.01, maxAccountMoney);
+    numberSetting("racePerPositionProfitMoney", 0.01, maxAccountMoney);
     if (body.raceProfitTargetMode !== undefined) {
       const raceProfitTargetMode = String(body.raceProfitTargetMode || "").toUpperCase();
       if (!["BASKET", "POSITION", "OFF"].includes(raceProfitTargetMode)) {
