@@ -17,6 +17,7 @@ const botApi = read("apps/api/src/bot.controller.ts");
 const perfApi = read("apps/api/src/performance-analytics.controller.ts");
 const shareApi = read("apps/api/src/performance-actions.controller.ts");
 const dashboard = read("apps/web/app/dashboard/page.tsx");
+const dashboardEnhancements = read("apps/web/components/DashboardLiveEnhancements.tsx");
 const performance = read("apps/web/app/performance/page.tsx");
 const publicPerformance = read("apps/web/app/performance/[slug]/page.tsx");
 const sharedPerformance = read("apps/web/app/shared-performance/[slug]/page.tsx");
@@ -74,6 +75,7 @@ must(
 );
 
 for (const [name, source] of [
+  ["dashboard enhancements", dashboardEnhancements],
   ["performance", performance],
   ["public performance", publicPerformance],
   ["shared performance", sharedPerformance]
