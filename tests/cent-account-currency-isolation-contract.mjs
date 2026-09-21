@@ -40,8 +40,10 @@ must(
 
 must(
   dashboard.includes("currencyReviewRequired") &&
+  dashboard.includes("implicitCurrencyReviewRequired") &&
+  dashboard.includes("savedAccountCurrency !== reportedAccountCurrency") &&
   dashboard.includes("ตรวจหน่วยเงินก่อนเริ่มบอท"),
-  "Dashboard must visibly explain the currency review gate before Start"
+  "Dashboard must derive and visibly explain the currency review gate before Start"
 );
 
 must(
