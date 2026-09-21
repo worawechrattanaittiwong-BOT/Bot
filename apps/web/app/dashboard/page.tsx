@@ -3022,7 +3022,7 @@ function LiveTerminalPanel(props:any) {
                     <span><b>{Number(position.openPrice||0).toFixed(props.symbolDigits)}</b></span>
                     <span><b>{Number(position.currentPrice||0).toFixed(props.symbolDigits)}</b></span>
                     <span><b>{Number(position.sl||0)>0?Number(position.sl).toFixed(props.symbolDigits):"ไม่มี"}</b><small>{Number(position.slDistancePoints||0)>0?Number(position.slDistancePoints).toFixed(0)+" pt ถึง SL":""}</small></span>
-                    <span><b className={Number(position.profit||0)>=0?"text-good":"text-bad"}>{Number(position.profit||0)>=0?"+$":"-$"}{Math.abs(Number(position.profit||0)).toFixed(2)}</b></span>
+                    <span><b className={Number(position.profit||0)>=0?"text-good":"text-bad"}>{formatAccountMoney(position.profit,props.currency,true)}</b></span>
                     <span><b className={Number(position.movePoints||0)>=0?"text-good":"text-bad"}>{Number(position.movePoints||0)>=0?"+":""}{Number(position.movePoints||0).toFixed(0)} pt</b></span>
                   </div>
                 ))}
@@ -3911,7 +3911,7 @@ function ProfitTargetModeField(props:any) {
       </div>
       {mode==="AUTO"&&<div className="auto-profit-live">
         <span><i/>Auto กำลังดูแลกำไร</span>
-        <b>{"รอบนี้ $"+Number(props.cycleProfit||0).toFixed(2)+" · สูงสุด $"+Number(props.peakProfit||0).toFixed(2)}</b>
+        <b>{"รอบนี้ "+formatAccountMoney(props.cycleProfit,props.currency,true)+" · สูงสุด "+formatAccountMoney(props.peakProfit,props.currency,true)}</b>
         <small>ระบบจะปิดเฉพาะตอนกำไรรวมยังเป็นบวกและเหลือมากกว่าค่าเผื่อปิดออเดอร์</small>
       </div>}
       {mode==="OFF"&&<div className="auto-profit-off-note">ปิดเฉพาะระบบทำกำไรอัตโนมัติ — Stop Loss และตัวควบคุมขาดทุนยังทำงานตามเดิม</div>}
@@ -4025,6 +4025,7 @@ function BasketProfitTargetField(props: any) {
       {enabled&&<div className="daily-profit-main-row basket-profit-main-row">
         <MoneyInput
           value={targetValue}
+          currency={props.currency}
           suffix="กำไรรวมทั้ง Basket"
           ariaLabel="เป้ากำไรรวมทั้งชุด"
           onCommit={(value:string)=>props.onTargetChange?.(value)}
@@ -4051,10 +4052,10 @@ function BasketProfitTargetField(props: any) {
 
       {enabled&&<div className="basket-profit-explain">
         {trailEnabled
-          ? <><b>Profit Run เปิดอยู่:</b> <b>{"$"+targetValue}</b> คือจุดเริ่มปล่อยกำไรวิ่ง ไม่ใช่จุดปิด · EA จะปิดเมื่อกำไรย่อลงตามเปอร์เซ็นต์ที่เลือก</>
-          : <>ถึงกำไรรวม <b>{"$"+targetValue}</b> → ปิดทุกออเดอร์ในชุดทันที</>}
+          ? <><b>Profit Run เปิดอยู่:</b> <b>{formatAccountMoney(targetValue,props.currency)}</b> คือจุดเริ่มปล่อยกำไรวิ่ง ไม่ใช่จุดปิด · EA จะปิดเมื่อกำไรย่อลงตามเปอร์เซ็นต์ที่เลือก</>
+          : <>ถึงกำไรรวม <b>{formatAccountMoney(targetValue,props.currency)}</b> → ปิดทุกออเดอร์ในชุดทันที</>}
         <br/>
-        <small>{"EA ใช้ Basket Cycle P/L ของรอบเทรด · ตอนนี้ $"+Number(props.currentCycleProfit||0).toFixed(2)}</small>
+        <small>{"EA ใช้ Basket Cycle P/L ของรอบเทรด · ตอนนี้ "+formatAccountMoney(props.currentCycleProfit,props.currency,true)}</small>
       </div>}
     </div>
   );
@@ -4101,7 +4102,7 @@ function DailyProfitTargetField(props: any) {
           onChange={e=>props.onTargetChange?.(e.target.value)}
         >
           {targetValues.map((value:string)=>(
-            <option key={value} value={value}>${value}</option>
+            <option key={value} value={value}>{formatAccountMoney(value,props.currency)}</option>
           ))}
         </select>
 
