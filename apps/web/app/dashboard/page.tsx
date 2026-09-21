@@ -37,6 +37,7 @@ type BrokerCatalog = {
 
 type View = "overview" | "account" | "backtest";
 const LIVE_PRICE_WINDOW_MS = 15 * 60 * 1000;
+const TRADING_SYMBOL_PATTERN = /^[A-Za-z0-9._#-]+$/;
 
 function normalizeAccountCurrency(value: unknown) {
   const currency = String(value || "").trim().toUpperCase();
@@ -133,6 +134,9 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState(false);
   const [checkingVersion, setCheckingVersion] = useState(false);
   const statusDialogRef = useRef<HTMLDialogElement | null>(null);
+  const symbolDialogRef = useRef<HTMLDialogElement | null>(null);
+  const [tradingSymbol, setTradingSymbol] = useState("");
+  const [symbolBusy, setSymbolBusy] = useState(false);
   const [activeView, setActiveView] = useState<View>("overview");
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const selectedSlotIdRef = useRef("");
@@ -386,6 +390,26 @@ export default function DashboardPage() {
 
   const metrics = data?.instance?.metrics || {};
   const accountCurrency = normalizeAccountCurrency(metrics.currency);
+  const isLocalSelectedSlot = String(data?.selectedSlot?.mode || "").toUpperCase() === "LOCAL";
+  const marketWatchSymbols = Array.isArray(metrics.marketWatchSymbols)
+    ? Array.from(new Map(
+        metrics.marketWatchSymbols
+          .map((item:any)=>String(item || "").trim())
+          .filter((item:string)=>item && TRADING_SYMBOL_PATTERN.test(item))
+          .map((item:string)=>[item.toUpperCase(),item])
+      ).values()) as string[]
+    : [];
+  const desiredTradingSymbol = String(
+    data?.settings?.startupSymbol ||
+    metrics.requestedStartupSymbol ||
+    metrics.symbol ||
+    settings.symbol ||
+    ""
+  ).trim();
+  const tradingSymbolOptions = marketWatchSymbols.length
+    ? marketWatchSymbols
+    : [desiredTradingSymbol, String(metrics.symbol || "").trim()]
+        .filter((value,index,all)=>Boolean(value) && all.findIndex(item=>String(item).toUpperCase()===String(value).toUpperCase())===index);
 
   useEffect(() => {
     const slotKey = String(data?.selectedSlot?.id || data?.instance?.id || "");
@@ -1495,6 +1519,53 @@ export default function DashboardPage() {
     }
   }
 
+  function openTradingSymbolPicker() {
+    if (!isLocalSelectedSlot) {
+      setError("การเลือก Symbol จากบอทรองรับ Local MT5 เท่านั้น");
+      return;
+    }
+    const desired = desiredTradingSymbol;
+    const match = tradingSymbolOptions.find(
+      item => item.toUpperCase() === desired.toUpperCase()
+    );
+    setTradingSymbol(match || tradingSymbolOptions[0] || desired);
+    symbolDialogRef.current?.showModal();
+  }
+
+  async function applyTradingSymbol() {
+    const next = String(tradingSymbol || "").trim();
+    if (!selectedSlotIdRef.current) {
+      setError("ไม่พบบัญชี MT5 ที่เลือก");
+      return;
+    }
+    if (!next || next.length > 64 || !TRADING_SYMBOL_PATTERN.test(next)) {
+      setError("Symbol ไม่ถูกต้อง กรุณาเลือกชื่อเดียวกับ MT5 Market Watch");
+      return;
+    }
+
+    setSymbolBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await api(
+        "/bot/trading-symbol?slotId=" + encodeURIComponent(selectedSlotIdRef.current),
+        {
+          method:"PUT",
+          body:JSON.stringify({ symbol: next })
+        }
+      );
+      symbolDialogRef.current?.close();
+      setNotice(String(result?.message || ("ยืนยัน " + next + " แล้ว")));
+      await load(selectedSlotIdRef.current, true);
+      window.setTimeout(() => void load(selectedSlotIdRef.current, true), 2500);
+      window.setTimeout(() => void load(selectedSlotIdRef.current, true), 6500);
+    } catch (e:any) {
+      setError(String(e?.message || "เปลี่ยน Symbol ไม่สำเร็จ"));
+    } finally {
+      setSymbolBusy(false);
+    }
+  }
+
   function editSetting(key: string, value: any) {
     if (settingsLocked) {
       setError("การตั้งค่าถูกล็อกขณะบอทกำลังเริ่มหรือกำลังทำงาน · หยุดบอทก่อนแก้ไข");
@@ -2027,6 +2098,7 @@ export default function DashboardPage() {
 
                 <div className="cc-v13-hero-actions" aria-label="ควบคุมบอท">
                   <div className="cc-v12-quick-actions cc-v19-hero-quick-actions">
+                    {isLocalSelectedSlot?<button className="symbol" disabled={symbolBusy} onClick={openTradingSymbolPicker}><ScenovaIcon name="trend" size={15}/><span><b>{desiredTradingSymbol||"Symbol"}</b><small>เลือก Symbol</small></span></button>:null}
                     <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
                     <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
                     <button className="close" disabled={busy||currentPositions===0} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ปิดออเดอร์ทั้งหมด",message:"ยืนยันปิดออเดอร์ที่กำลังเปิดทั้งหมดทันที?",confirmLabel:"ปิดทุกไม้",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ปิดทุกไม้</b><small>Close All</small></span></button>
@@ -2034,6 +2106,37 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </section>
+
+              <dialog
+                ref={symbolDialogRef}
+                className="cc-symbol-picker"
+                onCancel={()=>{ if(!symbolBusy) symbolDialogRef.current?.close(); }}
+              >
+                <div className="cc-symbol-picker-card">
+                  <div className="cc-symbol-picker-head">
+                    <b>Trading Symbol</b>
+                    <button type="button" aria-label="ปิด" disabled={symbolBusy} onClick={()=>symbolDialogRef.current?.close()}>×</button>
+                  </div>
+                  <select
+                    autoFocus
+                    value={tradingSymbol}
+                    disabled={symbolBusy || tradingSymbolOptions.length===0}
+                    onChange={(event)=>setTradingSymbol(event.target.value)}
+                  >
+                    {tradingSymbolOptions.length
+                      ? tradingSymbolOptions.map(item=><option key={item} value={item}>{item}</option>)
+                      : <option value="">รอ Symbol จาก MT5</option>}
+                  </select>
+                  <button
+                    type="button"
+                    className="confirm"
+                    disabled={symbolBusy || !tradingSymbol}
+                    onClick={applyTradingSymbol}
+                  >
+                    {symbolBusy ? "กำลังใช้..." : "ยืนยัน"}
+                  </button>
+                </div>
+              </dialog>
 
               <section className="cc-kpi-grid cc-v3-kpis cc-v6-kpis cc-v12-kpis cc-v13-kpis">
                 <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online?formatAccountMoney(metrics.balance,accountCurrency):"—"} sub={"Balance · "+accountCurrency} />
