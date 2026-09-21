@@ -163,12 +163,13 @@ export class PerformanceActionsController {
       `SELECT direction,net_profit,created_at
        FROM trade_journal
        WHERE bot_instance_id=$1
+         AND mt5_account_id=$4
          AND event_type='BASKET'
          AND created_at >= $2
          AND created_at <= $3
        ORDER BY created_at ASC
        LIMIT 20000`,
-      [account.instance_id, from.toISOString(), to.toISOString()]
+      [account.instance_id, from.toISOString(), to.toISOString(), account.id]
     );
     const baskets = basketResult.rows as BasketRow[];
     if (!baskets.length) throw new BadRequestException("ยังไม่มีข้อมูลผลการเทรดในช่วงเวลาที่เลือก");
@@ -177,9 +178,10 @@ export class PerformanceActionsController {
       `SELECT COALESCE(SUM(net_profit),0)::float8 AS net
        FROM trade_journal
        WHERE bot_instance_id=$1
+         AND mt5_account_id=$3
          AND event_type='BASKET'
          AND created_at >= $2`,
-      [account.instance_id, from.toISOString()]
+      [account.instance_id, from.toISOString(), account.id]
     );
     const derivedStart = currentBalance > 0
       ? Number((currentBalance - Number(pnlSinceFrom?.net || 0)).toFixed(2))
@@ -189,13 +191,14 @@ export class PerformanceActionsController {
     const exitResult = await this.db.query(
       `SELECT
          x.deal_ticket,x.position_id,x.direction,x.volume,x.price AS exit_price,x.net_profit,
-         x.created_at AS closed_at,COALESCE(x.metadata->>'symbol',$4) AS symbol,
+         x.created_at AS closed_at,COALESCE(x.metadata->>'symbol',$5) AS symbol,
          e.price AS entry_price,e.created_at AS opened_at
        FROM trade_journal x
        LEFT JOIN LATERAL (
          SELECT price,created_at
          FROM trade_journal e
          WHERE e.bot_instance_id=x.bot_instance_id
+           AND e.mt5_account_id=x.mt5_account_id
            AND e.event_type='ENTRY'
            AND e.position_id=x.position_id
            AND e.created_at<=x.created_at
@@ -203,12 +206,13 @@ export class PerformanceActionsController {
          LIMIT 1
        ) e ON true
        WHERE x.bot_instance_id=$1
+         AND x.mt5_account_id=$4
          AND x.event_type='EXIT'
          AND x.created_at >= $2
          AND x.created_at <= $3
        ORDER BY x.created_at DESC
        LIMIT 500`,
-      [account.instance_id, from.toISOString(), to.toISOString(), String(metrics.symbol || "XAUUSD")]
+      [account.instance_id, from.toISOString(), to.toISOString(), account.id, String(metrics.symbol || "XAUUSD")]
     );
 
     const slug = `live-${String(account.account_number || "account").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}-${randomBytes(5).toString("hex")}`;
@@ -223,7 +227,8 @@ export class PerformanceActionsController {
         brokerServer: account.broker_server,
         mode: account.mode,
         symbol: String(metrics.symbol || "XAUUSD"),
-        timeframe: String(metrics.timeframe || "M5")
+        timeframe: String(metrics.timeframe || "M5"),
+        currency: String(metrics.currency || "USD").trim().toUpperCase() || "USD"
       },
       range: { from: from.toISOString(), to: to.toISOString() },
       balance: {
