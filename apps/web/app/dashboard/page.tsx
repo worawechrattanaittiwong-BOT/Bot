@@ -2136,7 +2136,7 @@ export default function DashboardPage() {
                     <div className="cc-v46-performance-system-head">
                       <div>
                         <span><ScenovaIcon name="status" size={16}/></span>
-                        <div><b>Platform / MT5 / EA Status</b><small>สถานะการเชื่อมต่อระบบ</small></div>
+                        <div><b>System Pulse</b><small>สถานะระบบแบบย่อ</small></div>
                       </div>
                       <em className={isMt5Online&&isAgentOnline?"good":"warn"}>{isMt5Online&&isAgentOnline?"All Online":"Check"}</em>
                     </div>

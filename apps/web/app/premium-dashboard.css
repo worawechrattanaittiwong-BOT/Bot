@@ -5305,3 +5305,82 @@
   scrollbar-width:thin;
   scrollbar-color:rgba(129,115,186,.4) transparent;
 }
+
+/* ===== Mode performance card · balanced columns and compact system pulse =====
+   Keep the active mode readable while giving numeric columns one shared
+   center line. The connection summary stays live but no longer creates a
+   second oversized card inside the performance panel. */
+.cc-shell-v4 .cc-v19-three-card-grid .cc-v12-mode-table .head>span:not(:first-child),
+.cc-shell-v4 .cc-v19-three-card-grid .cc-v12-mode-table .row>span:not(:first-child){
+  text-align:center!important;
+}
+
+.cc-shell-v4 .cc-v19-three-card-grid .cc-v12-mode-table .head,
+.cc-shell-v4 .cc-v19-three-card-grid .cc-v12-mode-table .row{
+  grid-template-columns:1.22fr .78fr .92fr .64fr!important;
+}
+
+.cc-shell-v4 .cc-v19-three-card-grid .cc-v12-mode-table .mode{
+  justify-content:flex-start!important;
+}
+
+.cc-shell-v4 .cc-v46-performance-system{
+  margin:8px 0 0!important;
+  padding:7px 0 0!important;
+  border:0!important;
+  border-top:1px solid rgba(72,88,137,.4)!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+
+.cc-shell-v4 .cc-v46-performance-system-head{
+  min-height:28px!important;
+  padding:0 2px 6px!important;
+  border-bottom:0!important;
+  background:transparent!important;
+}
+
+.cc-shell-v4 .cc-v46-performance-system-head>div>span{
+  width:23px!important;
+  height:23px!important;
+  flex-basis:23px!important;
+  border-radius:7px!important;
+}
+
+.cc-shell-v4 .cc-v46-performance-system-head b{
+  font-size:10px!important;
+}
+
+.cc-shell-v4 .cc-v46-performance-system-head small{
+  font-size:7px!important;
+}
+
+.cc-shell-v4 .cc-v46-performance-system-head em{
+  min-height:20px!important;
+  padding:0 7px!important;
+  font-size:7px!important;
+}
+
+.cc-shell-v4 .cc-v46-performance-system-grid{
+  gap:5px!important;
+  padding:0!important;
+}
+
+.cc-shell-v4 .cc-v46-performance-system-grid>div{
+  min-height:43px!important;
+  padding:6px!important;
+  gap:2px!important;
+  border-radius:7px!important;
+}
+
+.cc-shell-v4 .cc-v46-performance-system-grid span{
+  font-size:7px!important;
+}
+
+.cc-shell-v4 .cc-v46-performance-system-grid b{
+  font-size:9px!important;
+}
+
+.cc-shell-v4 .cc-v46-performance-system-grid small{
+  font-size:6.5px!important;
+}
