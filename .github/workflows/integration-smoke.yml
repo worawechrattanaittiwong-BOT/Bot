@@ -601,11 +601,14 @@ jobs:
           # Device telemetry may be missing; authenticated EA still auto-binds MT5.
           PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set device_status='UNREGISTERED',device_last_seen_at=NULL,device_last_ip=NULL,mt5_account_id=NULL where id='$INSTANCE3';" >/dev/null
 
-          FIRST_DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE3\",\"installToken\":\"$INSTALL_TOKEN3\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"300003\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Legacy\",\"positions\":0}}")
+          FIRST_DETECT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE3\",\"installToken\":\"$INSTALL_TOKEN3\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"300003\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Legacy\",\"currency\":\"USC\",\"positions\":0}}")
           test "$(printf '%s' "$FIRST_DETECT" | jq -r '.accountMismatch // false')" = "false"
 
           FIRST_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT3" -H "authorization: Bearer $TOKEN3")
           test "$(printf '%s' "$FIRST_DASH" | jq -r '.account.account_number')" = "300003"
+          test "$(printf '%s' "$FIRST_DASH" | jq -r '.instance.metrics.currency')" = "USC"
+          test "$(printf '%s' "$FIRST_DASH" | jq -r '.settings.accountCurrencyReviewRequired')" = "true"
+          test "$(printf '%s' "$FIRST_DASH" | jq -r '.settings.previousAccountCurrency')" = "UNSET"
 
           echo "[integration] reinstalling the same Slot revokes the old EA token"
           REGISTER4=$(curl -fsS -X POST "$BASE/auth/register" -H 'content-type: application/json' -d '{"email":"integration4@scenova.test","password":"Integration123!"}')
