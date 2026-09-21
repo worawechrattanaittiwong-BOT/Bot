@@ -924,6 +924,7 @@ export class EaController {
     winProbability?: number;
     winSamples?: number;
     averageNet?: number;
+    controlMode?: string;
   }) {
     const instance = await this.instance(body.instanceId, body.installToken);
 
@@ -959,12 +960,19 @@ export class EaController {
       [instance.id]
     );
     const journalSettings = { ...(journalSettingsRow?.settings || {}) };
+    const validJournalModes = ["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "MANUAL"];
+    const reportedJournalMode = String(body.controlMode || "").toUpperCase();
     const rawJournalMode = String(journalSettings.controlMode || "").toUpperCase();
     const journalEngineMode = String(journalSettings.engineMode || "AUTO").toUpperCase();
     const journalProfitMode = String(journalSettings.profitTargetMode || "AUTO").toUpperCase();
     const journalManualStop = Number(journalSettings.manualStopLossPoints || 0);
-    const journalControlMode =
-      ["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "MANUAL"].includes(rawJournalMode)
+
+    // New EA versions report the execution owner from the actual MT5 deal
+    // comment/history. Prefer that over the website's current setting because a
+    // queued journal may be delivered after the user has switched modes.
+    const journalControlMode = validJournalModes.includes(reportedJournalMode)
+      ? reportedJournalMode
+      : validJournalModes.includes(rawJournalMode)
         ? rawJournalMode
         : journalEngineMode === "ZERO_GRID"
           ? "ZERO_GRID"
@@ -1009,6 +1017,7 @@ export class EaController {
         JSON.stringify({
           source: "EA",
           controlMode: journalControlMode,
+          controlModeSource: validJournalModes.includes(reportedJournalMode) ? "EA_DEAL" : "SERVER_SETTINGS",
           schema: eventType === "BASKET"
             ? Math.max(2, Math.min(5, Math.trunc(n(body.journalSchema, 2))))
             : 1,
