@@ -106,10 +106,12 @@ must(
 );
 
 must(
-  eaApi.includes("symbol: text(instance.metrics?.symbol || body.symbol, 48)") &&
+  eaApi.includes("instance.metrics?.pendingBasketJournal === true") &&
+  eaApi.includes("? (instance.metrics?.symbol || body.symbol)") &&
+  eaApi.includes(": (body.symbol || instance.metrics?.symbol)") &&
   eaApi.includes("brokerServer: text(instance.broker_server || body.brokerServer, 96)") &&
   eaApi.includes("currency: text(instance.metrics?.currency, 16)"),
-  "Delayed journals must inherit symbol/server/currency from the still-bound MT5 account"
+  "Delayed journals must inherit symbol/server/currency from the still-bound MT5 account only while journal drain is pending"
 );
 
 const pendingJournalBotGuards = (botApi.match(/pendingBasketJournal === true/g) || []).length;
