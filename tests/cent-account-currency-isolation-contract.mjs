@@ -98,8 +98,8 @@ must(
 
 const pendingJournalBotGuards = (botApi.match(/pendingBasketJournal === true/g) || []).length;
 must(
-  pendingJournalBotGuards >= 4,
-  "Change, rebind, reset and Cloud account replacement must all block while a Basket journal is pending"
+  pendingJournalBotGuards >= 7,
+  "Account change/rebind/reset/Cloud replacement plus Slot assign/release and Device release must block while a Basket journal is pending"
 );
 
 const settingsFetchIndex = eaApi.indexOf(
