@@ -561,7 +561,7 @@ jobs:
           FOLLOW_ACCOUNT_ID=$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.id')
           FOLLOW_USER_ID=$(printf '%s' "$FOLLOW_DASH" | jq -r '.user.id')
           LOCAL_PLAN_ID=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select id from plans where code='LOCAL_30D' limit 1;")
-          REVIEW_SUB_ID=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "insert into subscriptions(user_id,plan_id,status,starts_at,expires_at) values('$FOLLOW_USER_ID','$LOCAL_PLAN_ID','ACTIVE',now()-interval '1 minute',now()+interval '1 day') returning id;")
+          REVIEW_SUB_ID=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -qAtc "insert into subscriptions(user_id,plan_id,status,starts_at,expires_at) values('$FOLLOW_USER_ID','$LOCAL_PLAN_ID','ACTIVE',now()-interval '1 minute',now()+interval '1 day') returning id;")
           PGPASSWORD=bot psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set desired_state='RUNNING' where id='$INSTANCE'; insert into bot_commands(bot_instance_id,command) values('$INSTANCE','START');" >/dev/null
           REVIEW_HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"symbol\":\"XAUUSDc\",\"positions\":0,\"pendingBasketJournal\":false}}")
           test "$(printf '%s' "$REVIEW_HB" | jq -r '.access')" = "true"
