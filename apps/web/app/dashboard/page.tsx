@@ -3283,6 +3283,9 @@ function EmptySetup({onNext}:{onNext:()=>void}) {
 function BotSettingsModal(props:any) {
   const [revealedManualRisk,setRevealedManualRisk] = useState<Record<string,boolean>>({});
   const accountCurrency = normalizeAccountCurrency(props.metrics?.currency);
+  const currencyReviewRequired = props.settings?.accountCurrencyReviewRequired === true;
+  const previousAccountCurrency = String(props.settings?.previousAccountCurrency || "เดิม").trim().toUpperCase();
+  const reportedAccountCurrency = String(props.metrics?.currency || "UNKNOWN").trim().toUpperCase() || "UNKNOWN";
   if (!props.open && !props.embedded) return null;
   const embedded = Boolean(props.embedded);
   const tradingSymbol = String(
@@ -3484,6 +3487,7 @@ function BotSettingsModal(props:any) {
         </div>
 
         <div className="cc-bot-modal-body cc-bot-v2-body">
+          {currencyReviewRequired&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="shield" size={17}/><span><b>ตรวจหน่วยเงินก่อนเริ่มบอท</b><small>{previousAccountCurrency+" → "+reportedAccountCurrency+" · ตรวจ Profit / Loss / Target ทุกโหมด แล้วกดบันทึกการตั้งค่า ระบบจะยังไม่ให้ Start จนกว่าจะบันทึก"}</small></span></div>}
           <div className="cc-bot-v17-contract-copy" aria-hidden="true">
             <span>AUTO Ownership · ไม่รับไม้ของโหมดอื่นมาจัดการต่อ</span>
             <span>MANUAL Ownership</span>
