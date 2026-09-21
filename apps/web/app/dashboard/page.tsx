@@ -5,6 +5,7 @@ import { API_URL, api, getToken } from "../../lib/api";
 import { CustomerMobileNav, CustomerSidebar, OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
+import { Mt5ConnectionExperience } from "../../components/Mt5ConnectionExperience";
 import { EaDecisionCenter } from "../../components/EaDecisionCenter";
 import { BotPerformanceSummary } from "../../components/BotPerformanceSummary";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
@@ -154,7 +155,6 @@ export default function DashboardPage() {
   const [installToken, setInstallToken] = useState("");
   const [installInstanceId, setInstallInstanceId] = useState("");
   const [activationMessage, setActivationMessage] = useState("");
-  const [installGuideOpen, setInstallGuideOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
   const [botLogs, setBotLogs] = useState<any>(null);
@@ -1927,8 +1927,8 @@ export default function DashboardPage() {
           <div className="cc-v3-title">
             <span className="cc-v3-title-icon"><ScenovaIcon name={activeView === "overview" ? "control" : activeView === "account" ? "account" : "strategy"} size={24}/></span>
             <div>
-              <h1>{activeView === "overview" ? "Control Center" : activeView === "account" ? "บัญชีและการเชื่อมต่อ MT5" : "Backtest & Performance"}</h1>
-              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "ติดตั้ง อัปเดต ตรวจ MT5 / EA และจัดการสมาชิกหรือ Trial ที่จำเป็น" : "ดูผลทดสอบย้อนหลัง ดาวน์โหลดรายงาน และสร้างหน้าพอร์ตตัวอย่างแบบอ่านอย่างเดียว"}</p>
+              <h1>{activeView === "overview" ? "Control Center" : activeView === "account" ? "MT5 & EA" : "Backtest & Performance"}</h1>
+              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "เชื่อมต่อบัญชี MT5 ของคุณ พร้อมคู่มือติดตั้ง SCENOVA ทีละขั้นตอน" : "ดูผลทดสอบย้อนหลัง ดาวน์โหลดรายงาน และสร้างหน้าพอร์ตตัวอย่างแบบอ่านอย่างเดียว"}</p>
             </div>
           </div>
           <div className="cc-v3-head-actions">
@@ -2415,54 +2415,16 @@ export default function DashboardPage() {
         {activeView === "account" && (
           <div className="account-workspace">
             {data.selectedSlot?.mode === "LOCAL" ? (
-              <>
-            <section className="panel scenova-mt5-hero">
-              <div className="scenova-mt5-hero-copy">
-                <div className="eyebrow">SCENOVA · MT5 CONNECTION</div>
-                <h1>เชื่อมต่อ MT5<br/><span>ให้พร้อมใช้งาน</span></h1>
-                <p className="muted">เปิด MT5 ไว้ แล้วให้ SCENOVA จัดการการเชื่อมต่อให้คุณในไม่กี่ขั้นตอน</p>
-                <div className="scenova-mt5-hero-actions">
-                  <button
-                    className="btn primary btn-lg"
-                    disabled={busy || desired==="RUNNING" || (state==="RUNNING" && isMt5Online)}
-                    onClick={()=>setInstallGuideOpen(true)}
-                  >
-                    {busy ? "กำลังเตรียม..." : data.instance?.id ? "ติดตั้ง / อัปเดต" : "เริ่มเชื่อมต่อ"} <span aria-hidden="true">→</span>
-                  </button>
-                  <span className={"scenova-mt5-status "+(isMt5Online ? "online" : "waiting")}>
-                    <span className="dot"/>{isMt5Online ? "เชื่อมต่อแล้ว" : "รอการเชื่อมต่อ"}
-                  </span>
-                </div>
-                {activationMessage && <div className="notice good scenova-mt5-activation">{activationMessage}</div>}
-                <div className="scenova-mt5-benefits">
-                  <span><b>01</b>ติดตั้งง่าย</span>
-                  <span><b>02</b>ตรวจบัญชีอัตโนมัติ</span>
-                  <span><b>03</b>พร้อมใช้งานในไม่กี่นาที</span>
-                </div>
-              </div>
-              <div className="scenova-mt5-hero-art" aria-hidden="true">
-                <div className="scenova-mt5-orbit orbit-one"/>
-                <div className="scenova-mt5-orbit orbit-two"/>
-                <img src="/assets/scenova-mt5-robot-v1.png" alt="" />
-                <div className="scenova-mt5-art-label">MT5<br/><span>READY</span></div>
-              </div>
-            </section>
-
-            <section className="panel scenova-mt5-account-snapshot">
-              <div className="scenova-mt5-snapshot-title">
-                <span className="scenova-mt5-icon">◎</span>
-                <div><div className="eyebrow">บัญชีที่กำลังใช้งาน</div><b>{data.account ? "เชื่อมต่อบัญชีแล้ว" : "รอการผูกบัญชี MT5"}</b></div>
-              </div>
-              <div className="scenova-mt5-snapshot-values">
-                <div><span>Broker</span><b>{data.account?.broker || "—"}</b></div>
-                <div><span>MT5 Login</span><b>{data.account?.account_number || "รอตรวจจาก MT5"}</b></div>
-                <div><span>Server</span><b>{data.account?.broker_server || "—"}</b></div>
-              </div>
-              {!data.account && data.instance?.pending_account_number && (
-                <button className="btn ghost scenova-mt5-bind" disabled={busy || !data.instance?.first_bind_ready || state==="RUNNING" || desired==="RUNNING"} onClick={rebindDetectedAccount}>ผูกบัญชีนี้</button>
-              )}
-            </section>
-              </>
+              <Mt5ConnectionExperience
+                account={data.account}
+                online={isMt5Online}
+                busy={busy}
+                downloadBlocked={desired==="RUNNING" || (state==="RUNNING" && isMt5Online) || Number(data.instance?.metrics?.positions || 0)>0}
+                apiBase={mt5ApiBase}
+                message={activationMessage}
+                error={error}
+                onDownload={downloadWindowsInstaller}
+              />
             ) : (
               <section className="panel account-card">
                 <div className="panel-head">
@@ -2478,15 +2440,6 @@ export default function DashboardPage() {
 
             {data.selectedSlot?.mode === "LOCAL" && (
               <>
-                <section className="panel scenova-mt5-steps-panel">
-                  <div className="scenova-mt5-section-heading"><div className="eyebrow">เริ่มใช้งานง่าย ๆ</div><h2>พร้อมเทรดใน 3 ขั้นตอน</h2><p className="muted">ไม่ต้องกรอกเลขบัญชี ระบบจะอ่านบัญชีจาก MT5 ที่คุณเปิดอยู่</p></div>
-                  <div className="scenova-mt5-steps">
-                    <div><span>01</span><b>เปิด MT5</b><small>เข้าสู่ระบบบัญชีที่ต้องการใช้งาน</small></div>
-                    <div><span>02</span><b>ติดตั้ง SCENOVA</b><small>กดปุ่ม “เริ่มเชื่อมต่อ” ด้านบน</small></div>
-                    <div><span>03</span><b>เปิด EA แล้วเริ่มใช้งาน</b><small>ระบบตรวจบัญชีและเชื่อมต่อให้เอง</small></div>
-                  </div>
-                  <div className="scenova-mt5-help-strip"><span>ต้องการเปลี่ยนบัญชี?</span> ปิดออเดอร์เดิมก่อน แล้ว Login บัญชีใหม่ใน MT5 จากนั้นกลับมายืนยันบัญชีอีกครั้ง</div>
-                </section>
 
                 {data.instance?.pending_account_number && (
                   <section className="panel detected-mt5-card">
@@ -2532,21 +2485,6 @@ export default function DashboardPage() {
                   </section>
                 )}
 
-                <section className="panel first-install-guide">
-                  <div className="eyebrow">LOCAL MT5 · AUTO DETECT</div>
-                  <h2>ไม่ต้องกรอกเลขบัญชี MT5</h2>
-                  <div className="first-install-steps">
-                    <div><span>1</span><div><b>เปิด MT5 และ Login บัญชีที่ต้องการใช้</b><small>เลข Login, Broker และ Server จะถูกอ่านจาก MT5 จริง ไม่รับค่าที่ผู้ใช้พิมพ์เอง</small></div></div>
-                    <div><span>2</span><div><b>ดาวน์โหลดและติดตั้ง SCENOVA จากหน้านี้</b><small>Installer จะลง EA + preset + Device Agent และเปิด FastBasketBot ให้โดยอัตโนมัติ</small></div></div>
-                    <div><span>3</span><div><b>อนุญาต WebRequest ถ้า MT5 ยังบล็อก</b><small>MT5 → Tools → Options → Expert Advisors → เพิ่ม <code>{mt5ApiBase}</code> แล้วระบบจะเชื่อมและผูกบัญชีให้เอง</small></div></div>
-                  </div>
-                  <div className="notice good">
-                    ครั้งแรกระบบจะผูก MT5 ที่ตรวจพบกับบัญชี SCENOVA นี้ให้อัตโนมัติ หาก MT5 Login + Server ยังไม่ถูกบัญชี SCENOVA อื่นใช้อยู่
-                  </div>
-                  <div className="notice">
-                    ถ้าจะเปลี่ยน Demo → Real หรือเปลี่ยนบัญชีภายหลัง: ปิด Position เดิม → Login บัญชีใหม่ใน MT5 → ระบบ Safe Stop อัตโนมัติ → กลับมากดยืนยัน <b>“ใช้บัญชีนี้”</b> ครั้งเดียว
-                  </div>
-                </section>
               </>
             )}
 
@@ -2734,36 +2672,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {installGuideOpen && activeView === "account" && data.selectedSlot?.mode === "LOCAL" && (
-          <div className="scenova-install-guide-backdrop" onClick={()=>setInstallGuideOpen(false)}>
-            <section className="scenova-install-guide" role="dialog" aria-modal="true" aria-labelledby="scenova-install-guide-title" onClick={e=>e.stopPropagation()}>
-              <div className="scenova-install-guide-head">
-                <div>
-                  <div className="eyebrow">SCENOVA · INSTALL GUIDE</div>
-                  <h2 id="scenova-install-guide-title">ติดตั้ง SCENOVA ให้พร้อมใช้งาน</h2>
-                  <p>ทำตามทีละขั้นตอนได้เลยครับ ใช้เวลาไม่กี่นาที และไม่ต้องพิมพ์คำสั่งใน CMD</p>
-                </div>
-                <button className="scenova-install-guide-close" onClick={()=>setInstallGuideOpen(false)} aria-label="ปิดคำแนะนำ">×</button>
-              </div>
-
-              <div className="scenova-install-guide-download">
-                <div><span className="scenova-install-guide-file">EXE</span><div><b>ขั้นแรก: ดาวน์โหลดตัวติดตั้ง</b><small>กดปุ่มนี้เพื่อดาวน์โหลด SCENOVA Windows Setup แล้วเปิดไฟล์ที่ดาวน์โหลด</small></div></div>
-                <button className="btn primary" disabled={busy || desired==="RUNNING" || (state==="RUNNING" && isMt5Online)} onClick={downloadWindowsInstaller}>{busy ? "กำลังเตรียม..." : "ดาวน์โหลดตัวติดตั้ง"}</button>
-              </div>
-
-              <div className="scenova-install-guide-steps">
-                <article><span>01</span><div><h3>เปิด MT5 และเข้าสู่ระบบ</h3><p>เปิด MetaTrader 5 แล้ว Login บัญชีที่ต้องการใช้ให้เรียบร้อย ตรวจชื่อ Broker และ Server ให้ถูกต้อง</p><small>แนะนำให้เปิดกราฟ XAUUSD หรือสัญลักษณ์ที่ต้องการเทรดไว้ก่อน</small></div></article>
-                <article><span>02</span><div><h3>ติดตั้ง SCENOVA Windows Setup</h3><p>ดับเบิลคลิกไฟล์ที่ดาวน์โหลด กดติดตั้งตามหน้าจอ แล้วรอให้ระบบลง EA และไฟล์ตั้งค่าให้อัตโนมัติ</p><small>ไม่ต้องแก้ไขไฟล์ระบบ และไม่ต้องเปิด CMD หรือ PowerShell</small></div></article>
-                <article><span>03</span><div><h3>เปิดหน้าต่างตั้งค่า EA</h3><p>ใน MT5 ไปที่ Navigator → Expert Advisors → SCENOVA แล้วลาก <b>FastBasketBot</b> ลงบนกราฟ</p><small>ถ้าไม่เห็น Navigator ให้กด View → Navigator หรือกด Ctrl+N</small></div></article>
-                <article><span>04</span><div><h3>เปิดสิทธิ์ให้ EA ทำงาน</h3><p>ในแท็บ Common ให้ติ๊ก <b>Allow Algo Trading</b> จากนั้นตรวจปุ่ม Algo Trading ด้านบนของ MT5 ให้เป็นสีเขียว</p><small>หาก MT5 ถามเรื่อง WebRequest ให้กดอนุญาต และใช้ที่อยู่ที่ระบบแสดงให้เท่านั้น</small></div></article>
-                <article><span>05</span><div><h3>โหลดไฟล์ตั้งค่าในแท็บ Inputs</h3><p>ไปที่แท็บ Inputs กด <b>Load</b> แล้วเลือกไฟล์ <b>SCENOVA-FastBasketBot.set</b> ในโฟลเดอร์ Presets</p><small>ค่าที่ขึ้นต้นด้วย InpApiBase, InpInstanceId และ InpInstallToken ต้องมาจากระบบ ห้ามส่งต่อให้ผู้อื่น</small></div></article>
-                <article><span>06</span><div><h3>กด OK และตรวจการเชื่อมต่อ</h3><p>กด OK แล้วรอสักครู่ มุมขวาบนของกราฟควรแสดง <b>SCENOVA · CONNECTED</b> และสถานะ EA เปลี่ยนเป็นพร้อมทำงาน</p><small>กลับมาหน้านี้เพื่อดูสถานะบัญชีและยืนยันว่าระบบเชื่อมต่อสำเร็จ</small></div></article>
-              </div>
-
-              <div className="scenova-install-guide-footer"><span>หากยังไม่เชื่อมต่อ</span> ตรวจว่า MT5 เปิดอยู่, Algo Trading เป็นสีเขียว และ EA อยู่บนกราฟ จากนั้นรอ Heartbeat อีกครั้ง</div>
-            </section>
-          </div>
-        )}
 
         {installToken && activeView === "account" && (
           <div className="notice good secret-box">
