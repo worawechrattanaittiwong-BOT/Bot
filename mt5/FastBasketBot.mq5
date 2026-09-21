@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.53"
-#define SCENOVA_EA_VERSION "1.0.53"
-#define SCENOVA_PRODUCT_VERSION "1.0.53"
+#property version   "1.0.54"
+#define SCENOVA_EA_VERSION "1.0.54"
+#define SCENOVA_PRODUCT_VERSION "1.0.54"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -4936,7 +4936,7 @@ void SendHeartbeat()
    if(suppressLivePriceTelemetry && StringLen(payload)>=2)
    {
       string liveControlOnly=
-         ",\"sessionProfile\":\"" + g_sessionProfile + "\",\"marketSessionState\":\"" + MarketSessionStateNow() + "\",\"executionPriceSource\":\"MT5_LOCAL_TICK\",\"serverPriceControl\":false,\"livePriceTelemetrySuppressed\":true,\"openPositions\":" +
+         ",\"sessionProfile\":\"" + g_sessionProfile + "\",\"marketSessionState\":\"" + MarketSessionStateNow() + "\",\"executionPriceSource\":\"MT5_LOCAL_TICK\",\"serverPriceControl\":false,\"runtimeContract\":\"" + SCENOVA_RUNTIME_CONTRACT + "\",\"livePriceTelemetrySuppressed\":true,\"openPositions\":" +
          OpenPositionsTelemetryJson() + "}}";
       payload=StringSubstr(payload,0,StringLen(payload)-2)+liveControlOnly;
    }
