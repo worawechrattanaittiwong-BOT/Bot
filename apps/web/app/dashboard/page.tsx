@@ -744,12 +744,12 @@ export default function DashboardPage() {
     ? activeControlModeRaw
     : "AUTO";
   const todayPerformance = data?.tradeJournal?.today || {
-    trades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
+    trades:0,closedTrades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
   };
   const modePerformanceToday = Array.isArray(data?.tradeJournal?.modeToday)
     ? data.tradeJournal.modeToday
     : ["AUTO","RACE","FLIP_LOCK","ZERO_GRID","MANUAL"].map(mode=>({
-        mode,trades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
+        mode,trades:0,closedTrades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
       }));
 
   const rawOpenPositions = (() => {
@@ -2112,17 +2112,19 @@ export default function DashboardPage() {
                     <em>Today</em>
                   </div>
                   <div className="cc-v12-mode-table">
-                    <div className="head"><span>โหมด</span><span>Win Rate</span><span>Drawdown</span><span>Trades</span></div>
+                    <div className="head"><span>โหมด</span><span>Win Rate</span><span>Drawdown</span><span>ไม้วันนี้</span></div>
                     {modePerformanceToday.map((row:any)=>{
                       const mode=String(row.mode||"AUTO");
                       const active=mode===activeControlMode;
                       const win=Number(row.winRate||0);
                       const dd=Number(row.drawdownPercent||0);
+                      const entries=Number(row.trades||0);
+                      const closedTrades=Number(row.closedTrades??0);
                       return <div key={mode} className={"row "+(active?"active":"")}>
                         <span className="mode"><i/>{mode}</span>
-                        <span className={Number(row.trades||0)>0?(win>=60?"good":win>=45?"warn":"bad"):"neutral"}>{Number(row.trades||0)>0?win.toFixed(1)+"%":"—"}</span>
+                        <span className={closedTrades>0?(win>=60?"good":win>=45?"warn":"bad"):"neutral"}>{closedTrades>0?win.toFixed(1)+"%":"—"}</span>
                         <span className={dd>=5?"bad":dd>=2?"warn":"good"}>{dd.toFixed(2)+"%"}<small>{formatAccountMoney(-Math.abs(Number(row.drawdownMoney||0)),accountCurrency)}</small></span>
-                        <span>{Number(row.trades||0)}<small>{active?(botRunning?"Active":"Selected"):"Idle"}</small></span>
+                        <span>{entries}<small>{closedTrades>0?closedTrades+" รอบปิด · ":""}{active?(botRunning?"Active":"Selected"):"Idle"}</small></span>
                       </div>;
                     })}
                   </div>
