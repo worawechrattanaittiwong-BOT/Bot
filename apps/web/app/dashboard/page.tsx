@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { API_URL, api, getToken } from "../../lib/api";
-import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
+import { CustomerMobileNav, CustomerSidebar, OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { EaDecisionCenter } from "../../components/EaDecisionCenter";
@@ -1888,46 +1888,23 @@ export default function DashboardPage() {
     activeView === "backtest" ? "trading-backtest" :
     "trading-overview";
 
-  const navItems: Array<{id:View;label:string;hint:string}> = [
-    { id:"overview", label:"บอท", hint:"สถานะ ควบคุม และตั้งค่า" },
-    { id:"account", label:"บัญชี MT5", hint:"MT5, Device, สมาชิก และ Trial" },
-    { id:"backtest", label:"Backtest", hint:"ผลย้อนหลัง ดาวน์โหลด และแชร์ตัวอย่าง" }
-  ];
-
   return (
     <div className={"app-wrap "+(activeView === "overview" ? "cc-shell-v4" : "")}>
       {isOwner ? (
-        <OwnerSidebar activeKey={ownerActiveKey} onLogout={logout} onNavigate={handleOwnerNavigate}/>
+        <OwnerSidebar
+          activeKey={ownerActiveKey}
+          onLogout={logout}
+          onNavigate={handleOwnerNavigate}
+          role={String(data.user?.role || "OWNER")}
+        />
       ) : (
-        <aside className="sidebar app-sidebar">
-          <div className="brand-lockup side-brand scenova-brand-lockup">
-            <ScenovaBrand className="scenova-brand-logo-sidebar"/>
-          </div>
-          <div className="side-section-label">เมนูหลัก</div>
-          <nav className="side-nav">
-            {navItems.map(item=>(
-              <button
-                type="button"
-                key={item.id}
-                className={"side-link side-link-rich " + (activeView===item.id ? "active" : "")}
-                onClick={()=>setActiveView(item.id)}
-              >
-                <span>{item.label}</span>
-                <small>{item.hint}</small>
-              </button>
-            ))}
-            {data.partner && (
-              <a className="side-link side-link-rich partner-dashboard-link" href="/partner">
-                <span>Partner Dashboard</span>
-                <small>{data.partner.usedSeats || 0}/{data.partner.seat_limit || 0} Seats · {data.partner.status}</small>
-              </a>
-            )}
-          </nav>
-          <div className="sidebar-user">
-            <div><small>User ID</small><b>{data.user?.user_code}</b></div>
-            <button className="btn ghost full" onClick={logout}>ออกจากระบบ</button>
-          </div>
-        </aside>
+        <CustomerSidebar
+          activeKey={ownerActiveKey}
+          onLogout={logout}
+          onNavigate={handleOwnerNavigate}
+          userCode={data.user?.user_code}
+          partner={data.partner}
+        />
       )}
 
       <main className="main app-main">
@@ -1939,12 +1916,11 @@ export default function DashboardPage() {
         {isOwner ? (
           <OwnerMobileNav activeKey={ownerActiveKey} onNavigate={handleOwnerNavigate}/>
         ) : (
-          <div className="mobile-only mobile-nav">
-            {navItems.map(item=>(
-              <button key={item.id} className={activeView===item.id ? "active" : ""} onClick={()=>setActiveView(item.id)}>{item.label}</button>
-            ))}
-            {data.partner && <a href="/partner">Partner</a>}
-          </div>
+          <CustomerMobileNav
+            activeKey={ownerActiveKey}
+            onNavigate={handleOwnerNavigate}
+            partner={data.partner}
+          />
         )}
 
         <header className={"page-head human-head cc-page-head cc-v3-head " + (activeView === "overview" ? "cc-page-head-overview cc-v4-page-head" : "")}>

@@ -4,31 +4,96 @@ import Link from "next/link";
 import { ScenovaIcon } from "./ScenovaIcon";
 import { ScenovaBrand } from "./ScenovaBrand";
 
-export const ownerNavItems = [
-  { section:"TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"control", label:"Control Center", hint:"Bot status, controls & live monitoring" },
-  { section:"TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account", label:"MT5 & EA", hint:"Local / Cloud accounts & EA management" },
+type NavSection = "TRADING" | "MANAGEMENT" | "SYSTEM";
+type NavItem = {
+  section: NavSection;
+  key: string;
+  href: string;
+  icon: string;
+  label: string;
+  hint: string;
+};
+
+const controlCenterNavItem: NavItem = {
+  section:"TRADING", key:"trading-overview", href:"/dashboard?view=overview", icon:"control",
+  label:"Control Center", hint:"Bot status, controls & live monitoring"
+};
+const mt5EaNavItem: NavItem = {
+  section:"TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account",
+  label:"MT5 & EA", hint:"Local / Cloud accounts & EA management"
+};
+const performanceNavItem: NavItem = {
+  section:"TRADING", key:"trading-backtest", href:"/performance", icon:"strategy",
+  label:"Backtest & Performance", hint:"Real performance, backtests & reports"
+};
+
+export const sharedTradingNavItems: NavItem[] = [
+  controlCenterNavItem,
+  mt5EaNavItem,
+  performanceNavItem
+];
+
+export const ownerNavItems: NavItem[] = [
+  controlCenterNavItem,
+  mt5EaNavItem,
   { section:"TRADING", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud Trading", hint:"Trading nodes & execution infrastructure" },
-  { section:"TRADING", key:"trading-backtest", href:"/performance", icon:"strategy", label:"Backtest & Performance", hint:"Real performance, backtests & reports" },
+  performanceNavItem,
   { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trials, subscriptions & customer access" },
   { section:"SYSTEM", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"System Overview", hint:"Platform health & system status" },
   { section:"SYSTEM", key:"cloud-hardening", href:"/admin/cloud-hardening", icon:"cloud", label:"Production Hardening", hint:"Incidents, capacity guard & emergency controls" },
   { section:"SYSTEM", key:"website", href:"/website", icon:"strategy", label:"Website", hint:"SCENOVA public website" }
-] as const;
+];
 
-type OwnerNavigateHandler = (href:string)=>boolean | void;
+export const customerNavItems: NavItem[] = [...sharedTradingNavItems];
 
-export function OwnerSidebar({
+type SidebarNavigateHandler = (href:string)=>boolean | void;
+type PartnerSummary = {
+  usedSeats?: number;
+  seat_limit?: number;
+  status?: string;
+} | null | undefined;
+
+function sidebarItems(elevated:boolean, partner?:PartnerSummary): NavItem[] {
+  const items = elevated ? [...ownerNavItems] : [...customerNavItems];
+  if (!elevated && partner) {
+    items.push({
+      section:"MANAGEMENT",
+      key:"partner-dashboard",
+      href:"/partner",
+      icon:"users",
+      label:"Partner Dashboard",
+      hint:`${partner.usedSeats || 0}/${partner.seat_limit || 0} Seats · ${partner.status || "ACTIVE"}`
+    });
+  }
+  return items;
+}
+
+function UnifiedSidebar({
   activeKey,
   onLogout,
-  onNavigate
+  onNavigate,
+  elevated,
+  role,
+  userCode,
+  partner
 }:{
   activeKey:string;
   onLogout:()=>void;
-  onNavigate?:OwnerNavigateHandler;
+  onNavigate?:SidebarNavigateHandler;
+  elevated:boolean;
+  role:string;
+  userCode?:string|null;
+  partner?:PartnerSummary;
 }) {
-  const sections = ["TRADING","MANAGEMENT","SYSTEM"] as const;
+  const items = sidebarItems(elevated, partner);
+  const sections = (["TRADING","MANAGEMENT","SYSTEM"] as const)
+    .filter(section=>items.some(item=>item.section===section));
+  const profileTitle = elevated ? "System Role" : "User ID";
+  const profileValue = elevated ? role.toUpperCase() : String(userCode || "CUSTOMER");
+  const avatar = elevated ? (role.toUpperCase()==="ADMIN" ? "A" : "O") : "U";
+
   return (
-    <aside className="sidebar app-sidebar owner-sidebar">
+    <aside className={"sidebar app-sidebar owner-sidebar " + (elevated ? "elevated-sidebar" : "customer-role-sidebar")}>
       <Link href="/dashboard?view=overview" className="brand-lockup side-brand scenova-brand-lockup" aria-label="SCENOVA Control Center">
         <ScenovaBrand className="scenova-brand-logo-sidebar"/>
       </Link>
@@ -37,7 +102,7 @@ export function OwnerSidebar({
         <div key={section}>
           <div className={"owner-nav-label " + (section!=="TRADING" ? "owner-nav-label-secondary" : "")}>{section}</div>
           <nav className="side-nav owner-nav">
-            {ownerNavItems.filter(item=>item.section===section).map(item=>(
+            {items.filter(item=>item.section===section).map(item=>(
               <Link
                 key={item.key}
                 href={item.href}
@@ -58,8 +123,8 @@ export function OwnerSidebar({
       ))}
 
       <div className="owner-profile">
-        <div className="owner-avatar">O</div>
-        <div><small>System Role</small><b>OWNER</b></div>
+        <div className="owner-avatar">{avatar}</div>
+        <div><small>{profileTitle}</small><b>{profileValue}</b></div>
         <span className="dot green"/>
       </div>
       <button type="button" className="btn ghost full owner-logout" onClick={onLogout}><ScenovaIcon name="logout" size={18}/>Sign Out</button>
@@ -67,16 +132,21 @@ export function OwnerSidebar({
   );
 }
 
-export function OwnerMobileNav({
+function UnifiedMobileNav({
   activeKey,
-  onNavigate
+  onNavigate,
+  elevated,
+  partner
 }:{
   activeKey:string;
-  onNavigate?:OwnerNavigateHandler;
+  onNavigate?:SidebarNavigateHandler;
+  elevated:boolean;
+  partner?:PartnerSummary;
 }) {
+  const items = sidebarItems(elevated, partner);
   return (
     <div className="mobile-only mobile-nav owner-mobile-nav">
-      {ownerNavItems.map(item=>(
+      {items.map(item=>(
         <Link
           key={item.key}
           href={item.href}
@@ -92,4 +162,74 @@ export function OwnerMobileNav({
       ))}
     </div>
   );
+}
+
+export function OwnerSidebar({
+  activeKey,
+  onLogout,
+  onNavigate,
+  role = "OWNER"
+}:{
+  activeKey:string;
+  onLogout:()=>void;
+  onNavigate?:SidebarNavigateHandler;
+  role?:string;
+}) {
+  return (
+    <UnifiedSidebar
+      activeKey={activeKey}
+      onLogout={onLogout}
+      onNavigate={onNavigate}
+      elevated
+      role={role}
+    />
+  );
+}
+
+export function CustomerSidebar({
+  activeKey,
+  onLogout,
+  onNavigate,
+  userCode,
+  partner
+}:{
+  activeKey:string;
+  onLogout:()=>void;
+  onNavigate?:SidebarNavigateHandler;
+  userCode?:string|null;
+  partner?:PartnerSummary;
+}) {
+  return (
+    <UnifiedSidebar
+      activeKey={activeKey}
+      onLogout={onLogout}
+      onNavigate={onNavigate}
+      elevated={false}
+      role="CUSTOMER"
+      userCode={userCode}
+      partner={partner}
+    />
+  );
+}
+
+export function OwnerMobileNav({
+  activeKey,
+  onNavigate
+}:{
+  activeKey:string;
+  onNavigate?:SidebarNavigateHandler;
+}) {
+  return <UnifiedMobileNav activeKey={activeKey} onNavigate={onNavigate} elevated/>;
+}
+
+export function CustomerMobileNav({
+  activeKey,
+  onNavigate,
+  partner
+}:{
+  activeKey:string;
+  onNavigate?:SidebarNavigateHandler;
+  partner?:PartnerSummary;
+}) {
+  return <UnifiedMobileNav activeKey={activeKey} onNavigate={onNavigate} elevated={false} partner={partner}/>;
 }
