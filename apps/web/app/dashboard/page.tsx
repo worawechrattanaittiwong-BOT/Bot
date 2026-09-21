@@ -739,6 +739,7 @@ export default function DashboardPage() {
   };
   const currentPositions = Math.max(0, Number(metrics.positions || 0));
   const configuredMaxPositions = Math.max(1, Number(settings.maxPositions || 1));
+  const dashboardBotTodayProfit = Number(metrics.botTodayProfit ?? metrics.dailyProfit ?? 0);
   const activeControlModeRaw = String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase();
   const activeControlMode = ["AUTO","RACE","FLIP_LOCK","ZERO_GRID","MANUAL"].includes(activeControlModeRaw)
     ? activeControlModeRaw
@@ -2034,7 +2035,7 @@ export default function DashboardPage() {
               <section className="cc-kpi-grid cc-v3-kpis cc-v6-kpis cc-v12-kpis cc-v13-kpis">
                 <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online?formatAccountMoney(metrics.balance,accountCurrency):"—"} sub={"Balance · "+accountCurrency} />
                 <DashboardMetric icon="equity" label="มูลค่ารวม" value={isMt5Online?formatAccountMoney(metrics.equity,accountCurrency):"—"} sub={"Equity · "+accountCurrency} />
-                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?formatAccountMoney(metrics.dailyProfit,accountCurrency,true):"—"} sub={"Daily P/L · "+accountCurrency} tone={isMt5Online?(Number(metrics.dailyProfit||0)>=0?"good":"bad"):"neutral"} />
+                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?formatAccountMoney(dashboardBotTodayProfit,accountCurrency,true):"—"} sub={"Bot P/L ทุกโหมด · "+accountCurrency} tone={isMt5Online?(dashboardBotTodayProfit>=0?"good":"bad"):"neutral"} />
                 <DashboardMetric icon="target" label="Win Rate วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.winRate||0).toFixed(1)+"%":"—"} sub={Number(todayPerformance.trades||0)>0?Number(todayPerformance.wins||0)+" / "+Number(todayPerformance.trades||0)+" Basket":"ยังไม่มี Basket ปิดวันนี้"} tone={Number(todayPerformance.trades||0)>0?(Number(todayPerformance.winRate||0)>=60?"good":Number(todayPerformance.winRate||0)>=45?"warn":"bad"):"neutral"} />
                 <DashboardMetric icon="risk" label="Drawdown วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.drawdownPercent||0).toFixed(2)+"%":"0.00%"} sub={formatAccountMoney(-Math.abs(Number(todayPerformance.drawdownMoney||0)),accountCurrency)+" Realized DD"} tone={Number(todayPerformance.drawdownPercent||0)>=5?"bad":Number(todayPerformance.drawdownPercent||0)>=2?"warn":"good"} />
                 <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
