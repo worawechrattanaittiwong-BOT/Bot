@@ -74,7 +74,6 @@ export class PerformanceActionsController {
     const grossProfit = rows.reduce((sum, row) => sum + Math.max(0, Number(row.net_profit || 0)), 0);
     const grossLoss = rows.reduce((sum, row) => sum + Math.abs(Math.min(0, Number(row.net_profit || 0))), 0);
     const netProfit = grossProfit - grossLoss;
-    const decided = wins + losses;
     let running = startBalance ?? 0;
     let peak = running;
     let maxDrawdownMoney = 0;
@@ -127,7 +126,7 @@ export class PerformanceActionsController {
         wins,
         losses,
         breakeven,
-        winRate: decided > 0 ? Number((wins / decided * 100).toFixed(2)) : 0,
+        winRate: rows.length > 0 ? Number((wins / rows.length * 100).toFixed(2)) : 0,
         netProfit: Number(netProfit.toFixed(2)),
         grossProfit: Number(grossProfit.toFixed(2)),
         grossLoss: Number(grossLoss.toFixed(2)),
@@ -415,7 +414,6 @@ export class SharedPerformanceController {
     const grossProfit = values.reduce((sum, value) => sum + Math.max(0, value), 0);
     const grossLoss = values.reduce((sum, value) => sum + Math.abs(Math.min(0, value)), 0);
     const netProfit = grossProfit - grossLoss;
-    const decided = wins + losses;
     let running = startBalance ?? 0;
     let peak = running;
     let maxDrawdownMoney = 0;
@@ -442,7 +440,7 @@ export class SharedPerformanceController {
         wins,
         losses,
         breakeven,
-        winRate: decided > 0 ? Number((wins / decided * 100).toFixed(2)) : 0,
+        winRate: rows.length > 0 ? Number((wins / rows.length * 100).toFixed(2)) : 0,
         netProfit: Number(netProfit.toFixed(2)),
         grossProfit: Number(grossProfit.toFixed(2)),
         grossLoss: Number(grossLoss.toFixed(2)),
