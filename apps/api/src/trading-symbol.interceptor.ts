@@ -56,9 +56,9 @@ export class TradingSymbolStartInterceptor implements NestInterceptor {
 
     if (desired && (!active || desired.toUpperCase() !== active.toUpperCase())) {
       throw new ConflictException(
-        "ยังเริ่มบอทไม่ได้: เลือก Symbol " + desired +
-        " ไว้ แต่ EA ที่กำลังรันอยู่บน " + (active || "ไม่ทราบ") +
-        " · กรุณากดเชื่อม MT5 ใหม่ให้ Chart/EA โหลด Symbol ที่เลือกก่อน"
+        "ยังเริ่มบอทไม่ได้: เว็บกำหนด Symbol " + desired +
+        " ไว้ แต่ EA ยังอยู่บน " + (active || "ไม่ทราบ") +
+        " · คำสั่งหน้าเว็บมีสิทธิ์สูงสุด ระบบกำลังรอให้ MT5 เปิด Symbol ที่เลือกให้ตรงก่อน"
       );
     }
 
