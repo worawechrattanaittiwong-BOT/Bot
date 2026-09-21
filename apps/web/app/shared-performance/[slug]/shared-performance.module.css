@@ -7,3 +7,23 @@
 .accountLine{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.accountLine p{margin:0}.realAccountPill,.demoAccountPill{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;font-size:9px;font-weight:900;letter-spacing:.04em}.realAccountPill{border:1px solid rgba(77,225,167,.46);background:rgba(30,126,89,.18);color:#66efb6}.demoAccountPill{border:1px solid rgba(255,190,75,.5);background:rgba(142,91,25,.18);color:#ffd06f}
 .chart{height:292px;background:#07101b;overflow:visible}.horizontalGrid{stroke:rgba(111,130,175,.18);stroke-width:1}.tickLine{stroke:rgba(93,109,151,.14);stroke-dasharray:3 5}.tickLabel,.yTickLabel{fill:#8d9bb9;font-size:10px}.axisTitle{fill:#a99bcd;font-size:10px;font-weight:800}.balanceLine{stroke:#8f7cff;stroke-width:2.6;stroke-linejoin:round;stroke-linecap:round}.drawdownLine{stroke:#ff6579;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.endPoint{fill:#f1efff;stroke:#9b7cff;stroke-width:2}.drawdownChart .endPoint{stroke:#ff6579}.endValue rect{fill:#0b1321;stroke:#384760;stroke-width:1}.endValue text{fill:#eef2ff;font-size:9px;font-weight:800}.chartLegend{display:flex;align-items:center;gap:6px;margin-top:4px;color:#8f9db8;font-size:9px}.balanceLegendDot,.drawdownLegendDot{width:17px;height:3px;border-radius:999px;display:inline-block}.balanceLegendDot{background:#8f7cff}.drawdownLegendDot{background:#ff6579}.equityCard,.drawdownCard{min-height:365px}
 @media(max-width:850px){.chart{height:250px}.equityCard,.drawdownCard{min-height:320px}.badges{flex-wrap:wrap;justify-content:flex-end}}
+
+/* Public performance readability pass: keep existing card/chart dimensions, fix typography and SVG proportions. */
+.heroMeta{align-items:stretch;gap:10px;min-width:310px}
+.heroRisk{border:1px solid rgba(255,103,122,.28);background:rgba(95,28,43,.18);border-radius:11px;padding:9px 11px;text-align:right}
+.heroRisk b{display:block;color:#ff8191;font-size:11px;margin-bottom:3px}
+.heroRisk span{display:block;color:#c89ca5;font-size:10px;line-height:1.35}
+.heroRange{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.heroRange span{color:#74839f;font-size:10px}
+.heroRange b{font-size:15px}
+.chartLegend{font-size:11px;gap:7px;margin-top:5px;color:#a5b0c8}
+.balanceLegendDot,.drawdownLegendDot{width:20px;height:4px}
+.tickLabel,.yTickLabel{font-size:11px;fill:#a0acc6}
+.axisTitle{font-size:11px;fill:#b8acd7}
+.endValue text{font-size:10px}
+.cardHead b{font-size:15px}
+@media(max-width:850px){
+  .heroMeta{min-width:0;width:100%}
+  .heroRisk{text-align:left}
+  .heroRange{align-items:flex-start}
+}

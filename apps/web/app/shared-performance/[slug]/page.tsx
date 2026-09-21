@@ -64,7 +64,12 @@ function Chart({
 }:{points:any[];from:string;to:string;kind:"balance"|"drawdown";currency:string}) {
   if(!points?.length) return <div className={styles.empty}>ยังไม่มีข้อมูลกราฟในช่วงนี้</div>;
 
-  const width=1000,height=300,left=66,right=22,top=18,bottom=42;
+  const width=kind==="drawdown"?560:1000;
+  const height=300;
+  const left=kind==="drawdown"?58:66;
+  const right=kind==="drawdown"?18:22;
+  const top=18;
+  const bottom=42;
   const rawValues=points.map((point)=>kind==="balance"
     ? Number(point.balance||0)
     : Math.abs(Number(point.drawdownPercent||0))
@@ -108,7 +113,7 @@ function Chart({
     ? last.value.toFixed(2)+"%"
     : last.value.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 
-  return <svg className={`${styles.chart} ${kind==="drawdown"?styles.drawdownChart:""}`} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={kind==="drawdown"?"Drawdown chart":"Balance chart"}>
+  return <svg className={`${styles.chart} ${kind==="drawdown"?styles.drawdownChart:""}`} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={kind==="drawdown"?"Drawdown chart":"Balance chart"}>
     {yTicks.map((tick,index)=><g key={"y-"+index}>
       <line className={styles.horizontalGrid} x1={left} x2={width-right} y1={tick.y} y2={tick.y}/>
       <text className={styles.yTickLabel} x={left-10} y={tick.y+4} textAnchor="end">
@@ -199,8 +204,6 @@ export default function SharedPerformancePage() {
         <ScenovaBrand className={styles.brand}/>
         <div className={styles.badges}>
           <span className={accountType==="DEMO"?styles.demoAccount:styles.realAccount}>{accountType==="DEMO"?"DEMO ACCOUNT":"REAL ACCOUNT"}</span>
-          <span className={styles.verified}>LIVE READ ONLY</span>
-          <span>DATE SELECTABLE</span>
         </div>
       </header>
 
@@ -213,7 +216,13 @@ export default function SharedPerformancePage() {
             <p>{account.userCode||"SCENOVA Trader"} · {account.accountNumber||"—"} · {account.broker||"—"} · {account.symbol||"—"} · {account.timeframe||"—"}</p>
           </div>
         </div>
-        <div className={styles.heroMeta}><span>ช่วงข้อมูล</span><b>{rangeLabel}</b><small>{data.dynamic?"ผู้ชมเลือกช่วงเวลาได้ · Read only":"Snapshot แบบเดิม"}</small></div>
+        <div className={styles.heroMeta}>
+          <div className={styles.heroRisk}>
+            <b>คำเตือนความเสี่ยง</b>
+            <span>ผลย้อนหลังไม่รับประกันผลลัพธ์ในอนาคต</span>
+          </div>
+          <div className={styles.heroRange}><span>ช่วงข้อมูล</span><b>{rangeLabel}</b></div>
+        </div>
       </section>
 
       <section className={styles.rangeBar}>
@@ -244,24 +253,23 @@ export default function SharedPerformancePage() {
       </section>
 
       <div className={styles.grid}>
-        <section className={`${styles.card} ${styles.equityCard}`}><div className={styles.cardHead}><div><b>Equity / Balance Curve</b><small>{from===to?"แกนล่าง = เวลา":"แกนล่าง = วันที่"} · แกนซ้าย = Balance ({currency}) · EXIT ที่บอทปิดจริง</small><div className={styles.chartLegend}><span className={styles.balanceLegendDot}/>Balance</div></div><strong>{money(summary.finalBalance,false,currency)}</strong></div><EquityChart points={curve} from={from} to={to} currency={currency}/></section>
-        <section className={`${styles.card} ${styles.drawdownCard}`}><div className={styles.cardHead}><div><b>Drawdown</b><small>{from===to?"แกนล่าง = เวลา":"แกนล่าง = วันที่"} · แกนซ้าย = Drawdown %</small><div className={styles.chartLegend}><span className={styles.drawdownLegendDot}/>Drawdown %</div></div><strong className={styles.badText}>{percent(summary.maxDrawdownPercent)}</strong></div><DrawdownChart points={curve} from={from} to={to}/></section>
+        <section className={`${styles.card} ${styles.equityCard}`}><div className={styles.cardHead}><div><b>Equity / Balance Curve</b><div className={styles.chartLegend}><span className={styles.balanceLegendDot}/>Balance</div></div><strong>{money(summary.finalBalance,false,currency)}</strong></div><EquityChart points={curve} from={from} to={to} currency={currency}/></section>
+        <section className={`${styles.card} ${styles.drawdownCard}`}><div className={styles.cardHead}><div><b>Drawdown</b><div className={styles.chartLegend}><span className={styles.drawdownLegendDot}/>Drawdown %</div></div><strong className={styles.badText}>{percent(summary.maxDrawdownPercent)}</strong></div><DrawdownChart points={curve} from={from} to={to}/></section>
       </div>
 
       <section className={styles.card}>
-        <div className={styles.cardHead}><div><b>สถิติผลการเทรด</b><small>ข้อมูลจะคำนวณใหม่ตามวันที่ที่ผู้ชมเลือก โดยเป็น Read-only เท่านั้น</small></div></div>
+        <div className={styles.cardHead}><div><b>สถิติผลการเทรด</b></div></div>
         <div className={styles.stats}>
           <Stat label="Gross Profit" value={money(summary.grossProfit,false,currency)}/><Stat label="Gross Loss" value={money(-Math.abs(Number(summary.grossLoss||0)),false,currency)}/><Stat label="Wins" value={String(summary.wins??0)}/><Stat label="Losses" value={String(summary.losses??0)}/><Stat label="Breakeven" value={String(summary.breakeven??0)}/><Stat label={"Max DD ("+currency+")"} value={money(summary.maxDrawdownMoney,false,currency)}/>
         </div>
       </section>
 
       <section className={styles.card}>
-        <div className={styles.cardHead}><div><b>รายการเทรดล่าสุด</b><small>แสดงสูงสุด 100 รายการในช่วงวันที่ที่เลือก</small></div></div>
+        <div className={styles.cardHead}><div><b>รายการเทรดล่าสุด</b></div></div>
         <div className={styles.tableWrap}><table><thead><tr><th>#</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Lot</th><th>Entry</th><th>Exit</th><th>P/L</th><th>Closed</th></tr></thead><tbody>{trades.slice(0,100).map((row:any,index:number)=><tr key={`${row.ticket}-${index}`}><td>{index+1}</td><td>{row.ticket}</td><td>{row.symbol}</td><td>{row.side}</td><td>{number(row.lot)}</td><td>{number(row.entryPrice,3)}</td><td>{number(row.exitPrice,3)}</td><td className={Number(row.profit||0)>=0?styles.goodText:styles.badText}>{money(row.profit,true,currency)}</td><td>{row.closedAt?new Date(row.closedAt).toLocaleString("th-TH",{timeZone:"Asia/Bangkok"}):"—"}</td></tr>)}{!trades.length?<tr><td colSpan={9} className={styles.emptyCell}>ไม่มีรายการ EXIT ในช่วงวันที่ที่เลือก</td></tr>:null}</tbody></table></div>
       </section>
 
-      <section className={styles.disclaimer}><b>คำเตือนความเสี่ยง</b><p>หน้านี้เป็นลิงก์สาธารณะแบบ Read-only ผู้ชมสามารถเลือกช่วงวันที่เพื่อดูผลย้อนหลังได้ แต่ไม่มีสิทธิ์เชื่อม MT5 เปลี่ยนการตั้งค่า หรือส่งคำสั่งเทรด ผลย้อนหลังไม่รับประกันผลลัพธ์ในอนาคต</p></section>
-      <footer className={styles.footer}>SCENOVA · Trading Performance · Public Read Only</footer>
+
     </main>
   );
 }

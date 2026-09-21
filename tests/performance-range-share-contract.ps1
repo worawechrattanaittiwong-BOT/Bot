@@ -50,10 +50,7 @@ if ($web.Contains('className={styles.shareCard}')) { throw 'Share controls must 
 if ($web.Contains('<h1>Trading Performance & Backtest</h1>')) { throw 'Redundant page heading must stay removed' }
 
 foreach ($required in @(
-  'DATE SELECTABLE',
   'กำหนดเอง',
-  'แกนล่างแสดงเวลา',
-  'แกนล่างแสดงวันที่',
   'shared-performance/',
   'customDays',
   'EquityChart points={curve} from={from} to={to}',
@@ -63,9 +60,20 @@ foreach ($required in @(
   'บัญชีทดลอง · DEMO',
   'Drawdown %',
   'horizontalGrid',
-  'yTickLabel'
+  'yTickLabel',
+  'preserveAspectRatio="xMidYMid meet"',
+  'kind==="drawdown"?560:1000',
+  'heroRisk',
+  'ผลย้อนหลังไม่รับประกันผลลัพธ์ในอนาคต'
 )) {
   if (-not $public.Contains($required)) { throw "Shared Performance date selector contract missing: $required" }
 }
+
+if ($public.Contains('LIVE READ ONLY')) { throw 'Public performance page must not show system-explanation LIVE READ ONLY badge' }
+if ($public.Contains('DATE SELECTABLE')) { throw 'Public performance page must not show system-explanation DATE SELECTABLE badge' }
+if ($public.Contains('แกนล่าง =')) { throw 'Public chart header must not show internal axis explanation copy' }
+if ($public.Contains('EXIT ที่บอทปิดจริง')) { throw 'Public chart header must not expose implementation explanation' }
+if ($public.Contains('className={styles.disclaimer}')) { throw 'Risk warning must live in the hero card, not a separate bottom card' }
+if ($public.Contains('Public Read Only')) { throw 'Public page must not show system footer explanation' }
 
 Write-Host 'Performance date range / dynamic public share contract PASS'
