@@ -2334,94 +2334,78 @@ export default function DashboardPage() {
 
         {activeView === "account" && (
           <div className="account-workspace">
-            <section className="panel account-card">
-              <div className="panel-head">
-                <div>
-                  <div className="eyebrow">MT5 ACCOUNT · {data.selectedSlot?.mode || "LOCAL"}</div>
-                  <h2>
-                    {data.account
-                      ? (data.account.broker + " · " + data.account.account_number)
-                      : "ยังไม่ได้ผูกบัญชี MT5"}
-                  </h2>
-                  <p className="muted">
-                    {data.account
-                      ? (data.account.broker_server + " · บัญชีนี้เป็น MT5 ที่กำลังใช้งาน")
-                      : data.selectedSlot?.mode === "LOCAL"
-                        ? "ไม่ต้องกรอกเลขบัญชี MT5 · เปิด MT5 ที่ Login บัญชีที่ต้องการ แล้วติดตั้ง SCENOVA ระบบจะอ่านบัญชีจาก Terminal และผูกให้อัตโนมัติ"
-                        : "Cloud ต้องใช้ MT5 Login และ Trading Password เพื่อให้ Trading Node Login แทนคุณ"}
-                  </p>
-                </div>
-                <div className="account-card-actions">
-                  <span className="badge">
-                    <span className={"dot "+(isMt5Online?"green":"red")}/>
-                    {connectionLabel}
+            {data.selectedSlot?.mode === "LOCAL" ? (
+              <>
+            <section className="panel scenova-mt5-hero">
+              <div className="scenova-mt5-hero-copy">
+                <div className="eyebrow">SCENOVA · MT5 CONNECTION</div>
+                <h1>เชื่อมต่อ MT5<br/><span>ให้พร้อมใช้งาน</span></h1>
+                <p className="muted">เปิด MT5 ไว้ แล้วให้ SCENOVA จัดการการเชื่อมต่อให้คุณในไม่กี่ขั้นตอน</p>
+                <div className="scenova-mt5-hero-actions">
+                  <button
+                    className="btn primary btn-lg"
+                    disabled={busy || desired==="RUNNING" || (state==="RUNNING" && isMt5Online)}
+                    onClick={downloadWindowsInstaller}
+                  >
+                    {busy ? "กำลังเตรียม..." : data.instance?.id ? "ติดตั้ง / อัปเดต" : "เริ่มเชื่อมต่อ"} <span aria-hidden="true">→</span>
+                  </button>
+                  <span className={"scenova-mt5-status "+(isMt5Online ? "online" : "waiting")}>
+                    <span className="dot"/>{isMt5Online ? "เชื่อมต่อแล้ว" : "รอการเชื่อมต่อ"}
                   </span>
-                  {data.selectedSlot?.mode === "LOCAL" && !data.account && (
-                    data.instance?.pending_account_number ? (
-                      <button
-                        className="btn primary"
-                        disabled={busy || !data.instance?.first_bind_ready || state==="RUNNING" || desired==="RUNNING"}
-                        onClick={rebindDetectedAccount}
-                      >
-                        ผูกบัญชีนี้
-                      </button>
-                    ) : (
-                      <span className="owner-state-chip">รอ EA ตรวจบัญชี</span>
-                    )
-                  )}
+                </div>
+                {activationMessage && <div className="notice good scenova-mt5-activation">{activationMessage}</div>}
+                <div className="scenova-mt5-benefits">
+                  <span><b>01</b>ติดตั้งง่าย</span>
+                  <span><b>02</b>ตรวจบัญชีอัตโนมัติ</span>
+                  <span><b>03</b>พร้อมใช้งานในไม่กี่นาที</span>
                 </div>
               </div>
-              {data.selectedSlot?.mode === "LOCAL" && (
-                <div className="help">
-                  {!data.account
-                    ? data.instance?.pending_account_number
-                      ? "ระบบตรวจพบบัญชีจาก EA แล้ว ปกติจะผูกบัญชีแรกให้อัตโนมัติ หากยังค้างสามารถกด “ผูกบัญชีนี้” ได้"
-                      : "เปิด MT5 ที่ Login บัญชีที่ต้องการแล้วติดตั้ง SCENOVA ระบบจะอ่าน Login / Broker / Server และผูกบัญชีแรกให้อัตโนมัติ"
-                    : "ถ้าจะเปลี่ยน Demo / Real หรือ Login อื่น: ปิด Position เดิมให้เรียบร้อย แล้ว Login บัญชีใหม่ใน MT5 ระบบจะ Safe Stop และแสดงบัญชีใหม่ให้ยืนยันครั้งเดียว"}
-                </div>
+              <div className="scenova-mt5-hero-art" aria-hidden="true">
+                <div className="scenova-mt5-orbit orbit-one"/>
+                <div className="scenova-mt5-orbit orbit-two"/>
+                <img src="/assets/scenova-mt5-robot-v1.png" alt="" />
+                <div className="scenova-mt5-art-label">MT5<br/><span>READY</span></div>
+              </div>
+            </section>
+
+            <section className="panel scenova-mt5-account-snapshot">
+              <div className="scenova-mt5-snapshot-title">
+                <span className="scenova-mt5-icon">◎</span>
+                <div><div className="eyebrow">บัญชีที่กำลังใช้งาน</div><b>{data.account ? "เชื่อมต่อบัญชีแล้ว" : "รอการผูกบัญชี MT5"}</b></div>
+              </div>
+              <div className="scenova-mt5-snapshot-values">
+                <div><span>Broker</span><b>{data.account?.broker || "—"}</b></div>
+                <div><span>MT5 Login</span><b>{data.account?.account_number || "รอตรวจจาก MT5"}</b></div>
+                <div><span>Server</span><b>{data.account?.broker_server || "—"}</b></div>
+              </div>
+              {!data.account && data.instance?.pending_account_number && (
+                <button className="btn ghost scenova-mt5-bind" disabled={busy || !data.instance?.first_bind_ready || state==="RUNNING" || desired==="RUNNING"} onClick={rebindDetectedAccount}>ผูกบัญชีนี้</button>
               )}
             </section>
+              </>
+            ) : (
+              <section className="panel account-card">
+                <div className="panel-head">
+                  <div>
+                    <div className="eyebrow">MT5 ACCOUNT · CLOUD</div>
+                    <h2>{data.account ? (data.account.broker + " · " + data.account.account_number) : "ยังไม่ได้ผูกบัญชี MT5"}</h2>
+                    <p className="muted">{data.account ? (data.account.broker_server + " · บัญชีนี้เป็น MT5 ที่กำลังใช้งาน") : "กรอกข้อมูล MT5 เพื่อเชื่อมต่อ Cloud Trading"}</p>
+                  </div>
+                  <span className="badge"><span className={"dot "+(isMt5Online?"green":"red")}/>{connectionLabel}</span>
+                </div>
+              </section>
+            )}
 
             {data.selectedSlot?.mode === "LOCAL" && (
               <>
-                <section className="panel purple website-install-panel">
-                  <div className="panel-head">
-                    <div>
-                      <div className="eyebrow">SCENOVA LOCAL INSTALL</div>
-                      <h2>ติดตั้ง / อัปเดต SCENOVA</h2>
-                      <p className="muted">
-                        Installer มีหน้าที่ลง EA + preset + Device Agent เท่านั้น การอนุญาตให้บอททำงานตรวจจากบัญชี SCENOVA, MT5 Login/Server และสิทธิ์บน Server ทุกครั้ง
-                      </p>
-                    </div>
-                    <span className={"badge "+(isMt5Online?"agent-online":"")}>
-                      <span className={"dot "+(isMt5Online?"green":"red")}/>
-                      {isMt5Online ? "EA CONNECTED" : "WAITING FOR EA"}
-                    </span>
+                <section className="panel scenova-mt5-steps-panel">
+                  <div className="scenova-mt5-section-heading"><div className="eyebrow">เริ่มใช้งานง่าย ๆ</div><h2>พร้อมเทรดใน 3 ขั้นตอน</h2><p className="muted">ไม่ต้องกรอกเลขบัญชี ระบบจะอ่านบัญชีจาก MT5 ที่คุณเปิดอยู่</p></div>
+                  <div className="scenova-mt5-steps">
+                    <div><span>01</span><b>เปิด MT5</b><small>เข้าสู่ระบบบัญชีที่ต้องการใช้งาน</small></div>
+                    <div><span>02</span><b>ติดตั้ง SCENOVA</b><small>กดปุ่ม “เริ่มเชื่อมต่อ” ด้านบน</small></div>
+                    <div><span>03</span><b>เปิด EA แล้วเริ่มใช้งาน</b><small>ระบบตรวจบัญชีและเชื่อมต่อให้เอง</small></div>
                   </div>
-
-                  <div className="website-install-card">
-                    <div className="website-install-copy">
-                      <span className="auto-install-icon">EXE</span>
-                      <div>
-                        <b>SCENOVA Windows Setup</b>
-                        <small>ติดตั้งซ้ำหรือย้ายไปเครื่องใหม่ได้ · ไม่ต้องปลด Device Lock · ระบบตรวจสิทธิ์จาก Server</small>
-                      </div>
-                    </div>
-                    <button
-                      className="btn primary btn-lg"
-                      disabled={busy || desired==="RUNNING" || (state==="RUNNING" && isMt5Online)}
-                      onClick={downloadWindowsInstaller}
-                    >
-                      {busy ? "กำลังเตรียม..." : data.instance?.id ? "ติดตั้ง / อัปเดตใหม่" : "ติดตั้ง SCENOVA"}
-                    </button>
-                  </div>
-
-                  {data.instance?.agent_last_seen_at && (
-                    <div className="help">
-                      Device Agent ล่าสุด: {new Date(data.instance.agent_last_seen_at).toLocaleString("th-TH")} · ใช้เพื่ออัปเดต EA และวินิจฉัยเท่านั้น ไม่ใช่สิทธิ์เทรด
-                    </div>
-                  )}
-                  {activationMessage && <div className="notice good">{activationMessage}</div>}
+                  <div className="scenova-mt5-help-strip"><span>ต้องการเปลี่ยนบัญชี?</span> ปิดออเดอร์เดิมก่อน แล้ว Login บัญชีใหม่ใน MT5 จากนั้นกลับมายืนยันบัญชีอีกครั้ง</div>
                 </section>
 
                 {data.instance?.pending_account_number && (
