@@ -89,6 +89,13 @@ must(
   "MT5 account-follow must wait for the previous account Basket journal to drain without overwriting its metrics"
 );
 
+must(
+  eaApi.includes("symbol: text(instance.metrics?.symbol || body.symbol, 48)") &&
+  eaApi.includes("brokerServer: text(instance.broker_server || body.brokerServer, 96)") &&
+  eaApi.includes("currency: text(instance.metrics?.currency, 16)"),
+  "Delayed journals must inherit symbol/server/currency from the still-bound MT5 account"
+);
+
 const pendingJournalBotGuards = (botApi.match(/pendingBasketJournal === true/g) || []).length;
 must(
   pendingJournalBotGuards >= 4,
