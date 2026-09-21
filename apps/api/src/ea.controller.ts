@@ -1008,7 +1008,7 @@ export class EaController {
          $1,$2,$3::bigint,NULLIF($4,'')::bigint,$5,$6,
          $7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb
        )
-       ON CONFLICT(bot_instance_id,deal_ticket,event_type) DO NOTHING`,
+       ON CONFLICT(bot_instance_id,mt5_account_id,deal_ticket,event_type) DO NOTHING`,
       [
         instance.id,
         instance.mt5_account_id || null,
