@@ -57,8 +57,11 @@ internal sealed partial class InstallerForm : Form
     {
         Dock = DockStyle.Top,
         Height = 14,
-        Style = ProgressBarStyle.Marquee,
-        Visible = false
+        Minimum = 0,
+        Maximum = 100,
+        Value = 0,
+        Style = ProgressBarStyle.Continuous,
+        Visible = true
     };
     private readonly TextBox _advancedDetails = new()
     {
@@ -84,7 +87,7 @@ internal sealed partial class InstallerForm : Form
         BackColor = Color.FromArgb(235, 245, 255)
     };
 
-    private readonly Button _install = MakeButton("ตรวจสอบและอัปเดต", 520);
+    private readonly Button _install = MakePrimaryButton("⟳  ตรวจสอบและอัปเดต", 520);
     private readonly Button _rollback = MakeButton("ย้อนกลับ", 120);
     private readonly Button _uninstall = MakeButton("ถอน SCENOVA", 130);
 
@@ -97,8 +100,8 @@ internal sealed partial class InstallerForm : Form
     internal InstallerForm()
     {
         Text = InstallerConstants.ProductName + " v" + InstallerConstants.Version;
-        ClientSize = new Size(1180, 860);
-        MinimumSize = new Size(1000, 720);
+        ClientSize = new Size(1320, 900);
+        MinimumSize = new Size(1100, 780);
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         DoubleBuffered = true;
@@ -174,15 +177,29 @@ internal sealed partial class InstallerForm : Form
             UseCompatibleTextRendering = true
         };
 
+    private static Button MakePrimaryButton(string text, int width) =>
+        new InstallerPrimaryButton
+        {
+            Text = text,
+            Width = width,
+            Height = 64,
+            BackColor = PrimaryBlue,
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI Semibold", 15f, FontStyle.Bold),
+            Margin = new Padding(5, 4, 5, 4),
+            Padding = new Padding(12, 0, 12, 0)
+        };
+
     private void ConfigureHealthList()
     {
         _health.BackColor = CardBackground;
         _health.ForeColor = Color.FromArgb(32, 47, 65);
         _health.BorderStyle = BorderStyle.None;
-        _health.Font = new Font("Segoe UI", 10f);
-        _health.Columns.Add("ระบบ");
-        _health.Columns.Add("สถานะ");
+        _health.Font = new Font("Segoe UI", 10.5f);
+        _health.HeaderStyle = ColumnHeaderStyle.None;
+        _health.Columns.Add("รายการ");
         _health.Columns.Add("รายละเอียด");
+        _health.Columns.Add("สถานะ");
         _health.Resize += (_, _) => ResizeHealthColumns();
         ResizeHealthColumns();
     }
@@ -191,8 +208,8 @@ internal sealed partial class InstallerForm : Form
     {
         if (_health.Columns.Count < 3) return;
         var width = Math.Max(1, _health.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 8);
-        _health.Columns[0].Width = (int)(width * 0.25);
-        _health.Columns[1].Width = (int)(width * 0.17);
+        _health.Columns[0].Width = (int)(width * 0.31);
+        _health.Columns[1].Width = (int)(width * 0.49);
         _health.Columns[2].Width = Math.Max(1, width - _health.Columns[0].Width - _health.Columns[1].Width);
     }
 
@@ -236,7 +253,7 @@ internal sealed partial class InstallerForm : Form
 
             var index = _terminals.FindIndex(x => string.Equals(x.DataPath, previous, StringComparison.OrdinalIgnoreCase));
             _terminal.SelectedIndex = index >= 0 ? index : 0;
-            _terminalNote.Text = $"พบ MT5 {_terminals.Count} รายการ\r\nเลือกโปรแกรมที่ต้องการด้านล่าง";
+            _terminalNote.Text = $"พบ MT5 {_terminals.Count} รายการ\r\nพร้อมใช้งาน";
             await AssessSelectedAsync(force: true);
         }
         catch (Exception ex)
@@ -280,50 +297,104 @@ internal sealed partial class InstallerForm : Form
 
     private void RenderHealth(InstallationAssessment assessment)
     {
+        HealthCheckResult? Find(string code) =>
+            assessment.Checks.FirstOrDefault(x =>
+                string.Equals(x.Code, code, StringComparison.OrdinalIgnoreCase));
+
+        HealthState Combine(params string[] codes)
+        {
+            var states = codes
+                .Select(Find)
+                .Where(x => x is not null)
+                .Select(x => x!.State)
+                .ToList();
+
+            if (states.Any(x => x == HealthState.NeedAction)) return HealthState.NeedAction;
+            if (states.Any(x => x == HealthState.Warning)) return HealthState.Warning;
+            if (states.Any(x => x == HealthState.AutoFix)) return HealthState.AutoFix;
+            return HealthState.Ready;
+        }
+
+        var terminal = _terminal.SelectedItem as TerminalChoice;
+        var profile = SelectedProfile();
+        var rows = new[]
+        {
+            new
+            {
+                Title = "ค้นหา MetaTrader 5",
+                State = Combine("MT5_DETECTED", "TERMINAL_MATCH"),
+                Detail = terminal is null
+                    ? "ยังไม่พบ MetaTrader 5"
+                    : "พบ " + (string.IsNullOrWhiteSpace(terminal.BrokerHint) ? "MetaTrader 5" : terminal.BrokerHint)
+            },
+            new
+            {
+                Title = "ตรวจสอบเวอร์ชัน",
+                State = Combine("AGENT", "EXISTING_INSTALL"),
+                Detail = profile is not null && !string.IsNullOrWhiteSpace(profile.EaVersion)
+                    ? "เวอร์ชัน " + profile.EaVersion + " พร้อมตรวจสอบอัปเดต"
+                    : "พร้อมติดตั้งเวอร์ชันล่าสุด"
+            },
+            new
+            {
+                Title = "ตรวจสอบการเชื่อมต่อ",
+                State = Combine("API_REACHABLE"),
+                Detail = Find("API_REACHABLE")?.State == HealthState.NeedAction
+                    ? "ยังเชื่อมต่อ SCENOVA ไม่ได้"
+                    : "เชื่อมต่อ SCENOVA ได้"
+            },
+            new
+            {
+                Title = "ติดตั้ง / อัปเดต",
+                State = Combine("WINDOWS_ARCH", "MQL5_WRITE", "DISK_SPACE"),
+                Detail = Combine("WINDOWS_ARCH", "MQL5_WRITE", "DISK_SPACE") == HealthState.NeedAction
+                    ? "มีรายการที่ต้องแก้ก่อนติดตั้ง"
+                    : "พร้อมติดตั้งและอัปเดต"
+            }
+        };
+
         _health.BeginUpdate();
         try
         {
             _health.Items.Clear();
-            foreach (var check in assessment.Checks)
+            foreach (var row in rows)
             {
-                var status = check.State switch
+                var status = row.State switch
                 {
-                    HealthState.Ready => "เรียบร้อย",
-                    HealthState.AutoFix => "ปรับให้อัตโนมัติ",
-                    HealthState.Warning => "ข้อสังเกต",
-                    HealthState.NeedAction => "ต้องดำเนินการ",
-                    _ => "ข้อมูล"
+                    HealthState.NeedAction => "ต้องตรวจสอบ",
+                    HealthState.Warning => "ควรตรวจสอบ",
+                    HealthState.AutoFix => "พร้อมติดตั้ง",
+                    _ => "เรียบร้อย"
                 };
-                var title = check.Code switch
-                {
-                    "WINDOWS" => "ความพร้อมของ Windows",
-                    "MT5_DETECTED" => "ค้นหา MetaTrader 5",
-                    "TERMINAL_MATCH" => "โปรแกรม MT5 ที่เลือก",
-                    "MQL5_WRITE" => "สิทธิ์ติดตั้งไฟล์",
-                    "DISK_SPACE" => "พื้นที่จัดเก็บ",
-                    "API_REACHABLE" => "เชื่อมต่อ SCENOVA",
-                    "AGENT" => "โปรแกรมเชื่อมต่อ SCENOVA",
-                    "SIGNATURE" => "ลายเซ็นตัวติดตั้ง",
-                    "EXISTING_INSTALL" => "การติดตั้งปัจจุบัน",
-                    _ => check.Title
-                };
-                var item = new ListViewItem(title);
+                var prefix = row.State is HealthState.Ready or HealthState.Info ? "✓  " : "•  ";
+                var item = new ListViewItem(prefix + row.Title);
+                item.SubItems.Add(row.Detail);
                 item.SubItems.Add(status);
-                item.SubItems.Add(check.Detail);
-                item.ForeColor = check.State switch
+                item.ForeColor = row.State switch
                 {
-                    HealthState.Ready => SuccessGreen,
                     HealthState.NeedAction => Color.FromArgb(193, 62, 46),
                     HealthState.Warning => Color.FromArgb(151, 96, 12),
                     HealthState.AutoFix => PrimaryBlue,
-                    _ => MutedText
+                    _ => SuccessGreen
                 };
                 _health.Items.Add(item);
             }
         }
-        finally { _health.EndUpdate(); }
-        _score.Text = $"{assessment.Score} / 100\r\n{(assessment.Ready ? "พร้อมตรวจสอบเวอร์ชัน" : "มีรายการที่ต้องแก้ไข")}";
+        finally
+        {
+            _health.EndUpdate();
+        }
+
+        _displayScore = assessment.Ready
+            ? 100
+            : rows.Count(x => x.State != HealthState.NeedAction) * 25;
+
+        _score.Text = assessment.Ready ? "พร้อมใช้งาน" : "ต้องตรวจสอบ";
         _score.ForeColor = assessment.Ready ? SuccessGreen : Color.FromArgb(151, 96, 12);
+
+        _progress.Value = Math.Clamp(_displayScore, 0, 100);
+        _progressPercent.Text = _busy ? "" : _displayScore + "%";
+        _progressPercent.ForeColor = _displayScore == 100 ? SuccessGreen : MutedText;
     }
 
     private async Task InstallOrUpdateAsync()
@@ -354,7 +425,7 @@ internal sealed partial class InstallerForm : Form
             var token = ScenovaRuntime.TryUnprotect(profile.InstallTokenProtected)
                 ?? throw new InvalidOperationException("ข้อมูลการเชื่อมต่อไม่ครบ กรุณาดาวน์โหลดตัวติดตั้งจากบัญชี SCENOVA อีกครั้ง");
             using var http = ScenovaClient.NewHttpClient();
-            SetStep(2, "กำลังเปรียบเทียบไฟล์ เวอร์ชัน และการเชื่อมต่อกับ SCENOVA");
+            SetStep(2, "กำลังตรวจสอบเวอร์ชันและการเชื่อมต่อ");
             var heartbeat = await TryHeartbeatAsync(profile, http)
                 ?? throw new InvalidOperationException("SCENOVA Server ยังไม่ตอบกลับ จึงยังยืนยันเวอร์ชันล่าสุดไม่ได้");
             EnsureAccountMatches(profile, heartbeat);
@@ -369,7 +440,7 @@ internal sealed partial class InstallerForm : Form
             if (filesMatch && IsVerified(profile, heartbeat))
             {
                 _updateSummary.Text = "เวอร์ชันและไฟล์ตรงกัน\r\nไม่จำเป็นต้องอัปเดต";
-                ShowResult("ตรวจสอบแล้ว ระบบตรงกัน · EA และ Agent พร้อมใช้งาน ไม่จำเป็นต้องอัปเดต", true);
+                ShowResult("ตรวจสอบแล้ว ทุกอย่างพร้อมใช้งาน ไม่จำเป็นต้องอัปเดต", true);
                 return;
             }
 
@@ -390,11 +461,11 @@ internal sealed partial class InstallerForm : Form
             {
                 if (!heartbeat.ArtifactAvailable || string.IsNullOrWhiteSpace(heartbeat.ArtifactHash))
                     throw new InvalidOperationException("ยังไม่มีไฟล์ EA ที่ยืนยันความถูกต้องได้จาก Server กรุณาลองใหม่ภายหลัง");
-                SetStep(3, "กำลังดาวน์โหลดและอัปเดต EA เฉพาะส่วนที่เปลี่ยนแปลง");
+                SetStep(3, "กำลังดาวน์โหลดและติดตั้งอัปเดต");
             }
             else
             {
-                SetStep(3, filesMatch ? "ไฟล์ตรงกันแล้ว กำลังตรวจการเชื่อมต่อ EA" : "กำลังปรับการติดตั้งให้ตรงกับเวอร์ชันล่าสุด");
+                SetStep(3, filesMatch ? "ทุกอย่างตรงกันแล้ว กำลังตรวจสอบการเชื่อมต่อ" : "กำลังเตรียมเวอร์ชันล่าสุด");
             }
             _updateSummary.Text = needEaUpdate ? "กำลังอัปเดต EA\r\nเก็บค่าการใช้งานเดิมไว้" : "ตรวจเฉพาะส่วนที่จำเป็น";
 
@@ -403,13 +474,13 @@ internal sealed partial class InstallerForm : Form
 
             if (repairPreset)
             {
-                SetStep(3, "กำลังจัดเตรียมค่าการเชื่อมต่อ โดยรักษาค่าที่คุณตั้งไว้");
+                SetStep(3, "กำลังจัดเตรียมค่าการเชื่อมต่อ");
                 PresetManager.Migrate(PresetPath(profile), profile.ApiBase, profile.InstanceId, token);
             }
 
             if (plan.InstallAgent || plan.UpdateAgent)
             {
-                SetStep(3, "กำลังติดตั้งโปรแกรมเชื่อมต่อ SCENOVA");
+                SetStep(3, "กำลังติดตั้งส่วนที่จำเป็น");
                 await Task.Run(AgentRunner.InstallAndStart);
             }
             else
@@ -432,11 +503,11 @@ internal sealed partial class InstallerForm : Form
                 // A release may have changed or an earlier update may have
                 // been staged while trading; apply only the freshly approved file.
                 await SmartAgentRunner.EnsureEaArtifactAsync(http, profile, token, heartbeat, ScenovaRuntime.DiagnosticsPath);
-                SetStep(3, "กำลังเชื่อมต่อ MT5 และโหลด EA เวอร์ชันล่าสุด");
+                SetStep(3, "กำลังเชื่อมต่อ MT5 และโหลดเวอร์ชันล่าสุด");
                 await Task.Run(() => AgentRunner.ConnectFromInstallerButton(profile, heartbeat));
             }
 
-            SetStep(4, "กำลังยืนยันไฟล์ เวอร์ชัน EA ที่ทำงานอยู่ และการเชื่อมต่อ");
+            SetStep(4, "กำลังตรวจสอบความเรียบร้อย");
             var verified = await WaitForVerificationAsync(profile, TimeSpan.FromSeconds(40));
             var complete = verified is not null && IsVerified(profile, verified);
             RenderLive(profile, verified);
@@ -461,8 +532,8 @@ internal sealed partial class InstallerForm : Form
             {
                 _updateSummary.Text = "เวอร์ชันล่าสุด\r\nตรวจยืนยันเรียบร้อย";
                 ShowResult(filesMatch
-                    ? "ตรวจสอบแล้ว ระบบตรงกัน · ยืนยันการเชื่อมต่อเรียบร้อย"
-                    : "อัปเดตและตรวจสอบเรียบร้อย · EA และ Agent ตรงกับเวอร์ชันล่าสุด", true);
+                    ? "ตรวจสอบแล้ว ทุกอย่างพร้อมใช้งาน"
+                    : "อัปเดตและตรวจสอบเรียบร้อย พร้อมใช้งาน", true);
             }
             else
             {
@@ -834,15 +905,28 @@ internal sealed partial class InstallerForm : Form
     {
         if (profile is null)
         {
-            _live.Text = "ยังไม่ได้ติดตั้ง\r\nพร้อมเริ่มจากปุ่มด้านล่าง";
+            _live.Text = "ยังไม่ได้เชื่อมต่อ";
             _live.ForeColor = MutedText;
             return;
         }
-        var required = heartbeat?.EaVersionRequired ?? profile.EaVersion;
-        var current = string.IsNullOrWhiteSpace(heartbeat?.EaVersion) ? "รอยืนยัน" : heartbeat.EaVersion;
-        _live.Text = "EA " + current + "  /  ล่าสุด " + required + "\r\n" +
-                     (heartbeat?.EaOnline == true ? "EA เชื่อมต่อแล้ว" : "รอ EA เชื่อมต่อ");
-        _live.ForeColor = heartbeat is not null && IsVerified(profile, heartbeat) ? SuccessGreen : MutedText;
+
+        var verified = heartbeat is not null && IsVerified(profile, heartbeat);
+        if (verified)
+        {
+            _live.Text = "เชื่อมต่อแล้ว\r\nพร้อมใช้งาน";
+            _live.ForeColor = SuccessGreen;
+            return;
+        }
+
+        if (heartbeat?.EaOnline == true)
+        {
+            _live.Text = "เชื่อมต่อแล้ว\r\nกำลังตรวจสอบ";
+            _live.ForeColor = PrimaryBlue;
+            return;
+        }
+
+        _live.Text = "รอการเชื่อมต่อ";
+        _live.ForeColor = MutedText;
     }
 
     private void RenderAdvancedDetails(AgentHeartbeatResponse? heartbeat)
@@ -956,13 +1040,28 @@ internal sealed partial class InstallerForm : Form
     private void SetBusy(bool busy)
     {
         _busy = busy;
-        _progress.Visible = busy;
         _install.Enabled = !busy;
         _rollback.Enabled = !busy;
         _uninstall.Enabled = !busy;
         _terminal.Enabled = !busy && _terminals.Count > 0;
         _channel.Enabled = !busy;
-        _install.Text = busy ? "กำลังดำเนินการ…" : "ตรวจสอบและอัปเดต";
+
+        _progress.Visible = true;
+        if (busy)
+        {
+            _progress.Style = ProgressBarStyle.Marquee;
+            _progress.MarqueeAnimationSpeed = 24;
+            _progressPercent.Text = "";
+        }
+        else
+        {
+            _progress.MarqueeAnimationSpeed = 0;
+            _progress.Style = ProgressBarStyle.Continuous;
+            _progress.Value = Math.Clamp(_displayScore, 0, 100);
+            _progressPercent.Text = _displayScore + "%";
+        }
+
+        _install.Text = busy ? "กำลังดำเนินการ…" : "⟳  ตรวจสอบและอัปเดต";
     }
 
     protected override void Dispose(bool disposing)
