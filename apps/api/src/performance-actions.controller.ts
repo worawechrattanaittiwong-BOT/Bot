@@ -213,7 +213,8 @@ export class PerformanceActionsController {
     const exitResult = await this.db.query(
       `SELECT
          x.deal_ticket,x.position_id,x.direction,x.volume,x.price AS exit_price,x.net_profit,
-         x.created_at AS closed_at,COALESCE(x.metadata->>'symbol',$4) AS symbol,
+         x.created_at AS closed_at,x.metadata,x.entry_model,x.entry_trigger,
+         COALESCE(x.metadata->>'symbol',$4) AS symbol,
          e.price AS entry_price,e.created_at AS opened_at
        FROM trade_journal x
        LEFT JOIN LATERAL (
