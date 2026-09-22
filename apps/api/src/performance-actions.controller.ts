@@ -14,13 +14,38 @@ import {
 import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
 import { JwtGuard } from "./security";
+import { resolveJournalControlMode } from "./performance-journal";
 
 type Actor = { sub: string; role?: string };
 type BasketRow = {
   direction: string;
   net_profit: number | string;
   created_at: string;
+  metadata?: Record<string, any> | null;
+  entry_model?: string | null;
+  entry_trigger?: string | null;
 };
+
+const SHARE_STRATEGY_MODES = ["AUTO","RACE","FLIP_LOCK","MANUAL","ZERO_GRID"];
+
+function normalizeShareStrategyModes(value: unknown) {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || "ALL").split(",");
+  const normalized = source
+    .map((item) => String(item || "").trim().toUpperCase())
+    .filter(Boolean)
+    .map((item) => item === "GRID" ? "ZERO_GRID" : item);
+  if (!normalized.length || normalized.includes("ALL")) return [...SHARE_STRATEGY_MODES];
+  const unique = Array.from(new Set(normalized));
+  return unique.filter((item) => SHARE_STRATEGY_MODES.includes(item));
+}
+
+function shareModeLabel(value: unknown) {
+  return String(value || "AUTO").toUpperCase() === "ZERO_GRID"
+    ? "GRID"
+    : String(value || "AUTO").toUpperCase();
+}
 
 @Controller("performance-actions")
 @UseGuards(JwtGuard)
@@ -149,11 +174,12 @@ export class PerformanceActionsController {
   @Header("Cache-Control", "no-store")
   async shareLive(
     @Req() req: any,
-    @Body() body: { accountId?: string; from?: string; to?: string; title?: string }
+    @Body() body: { accountId?: string; from?: string; to?: string; title?: string; strategyModes?: string[] }
   ) {
     const actor = req.user as Actor;
     const account = await this.accountForActor(actor, String(body?.accountId || ""));
     const { from, to } = this.parseRange(String(body?.from || ""), String(body?.to || ""));
+    const selectedStrategyModes = normalizeShareStrategyModes(body?.strategyModes);
     const metrics = account.metrics || {};
     const currentBalance = Number(metrics.balance || 0);
 
@@ -219,6 +245,53 @@ export class PerformanceActionsController {
        LIMIT 1`,
       [account.id]
     );
+    const filteredExitRows = (exits.rows || []).filter((item:any) =>
+      selectedStrategyModes.includes(resolveJournalControlMode(item as any))
+    );
+
+    const volumes = filteredExitRows
+      .map((item:any) => Number(item.volume || 0))
+      .filter((value:number) => Number.isFinite(value) && value > 0);
+    const lotMap = new Map<number, number>();
+    for (const volume of volumes) {
+      const lot = Number(volume.toFixed(4));
+      lotMap.set(lot, (lotMap.get(lot) || 0) + 1);
+    }
+    const lotDistribution = Array.from(lotMap.entries())
+      .map(([lot,count]) => ({
+        lot,
+        count,
+        percent: volumes.length ? Number((count / volumes.length * 100).toFixed(2)) : 0
+      }))
+      .sort((a,b) => a.lot - b.lot);
+    const primaryLot = [...lotDistribution].sort((a,b) => b.count - a.count || a.lot - b.lot)[0] || {
+      lot:0,count:0,percent:0
+    };
+    computed.summary.totalPositions = filteredExitRows.length;
+    computed.summary.totalDeals = detailedExits.rows.length;
+    computed.summary.averageLot = volumes.length
+      ? Number((volumes.reduce((sum:number,value:number)=>sum+value,0)/volumes.length).toFixed(4))
+      : 0;
+    computed.summary.maxLot = volumes.length ? Number(Math.max(...volumes).toFixed(4)) : 0;
+    computed.summary.primaryLot = primaryLot.lot;
+    computed.summary.primaryLotCount = primaryLot.count;
+    computed.summary.primaryLotPercent = primaryLot.percent;
+    computed.summary.lotSizeCount = lotDistribution.length;
+
+    const modeBreakdown = SHARE_STRATEGY_MODES.map((mode) => {
+      const rows = allBaskets.filter((item:any) => resolveJournalControlMode(item as any) === mode);
+      const wins = rows.filter((item:any) => Number(item.net_profit || 0) > 0).length;
+      return {
+        mode,
+        label: shareModeLabel(mode),
+        baskets: rows.length,
+        wins,
+        losses: rows.filter((item:any) => Number(item.net_profit || 0) < 0).length,
+        winRate: rows.length ? Number((wins / rows.length * 100).toFixed(2)) : 0,
+        netProfit: Number(rows.reduce((sum:number,item:any)=>sum+Number(item.net_profit||0),0).toFixed(2))
+      };
+    });
+
     const accountCurrency = String(
       metrics.currency || historyIdentity?.currency || "UNKNOWN"
     ).trim().toUpperCase() || "UNKNOWN";
@@ -253,6 +326,10 @@ export class PerformanceActionsController {
         currency: accountCurrency
       },
       range: { from: from.toISOString(), to: to.toISOString() },
+      filter: {
+        strategyModes: selectedStrategyModes,
+        scope: selectedStrategyModes.length === SHARE_STRATEGY_MODES.length ? "ALL_STRATEGIES" : "CUSTOM_PORTFOLIO"
+      },
       balance: {
         current: currentBalance > 0 ? currentBalance : null,
         equity: Number(metrics.equity || 0) > 0 ? Number(metrics.equity) : null,
@@ -530,6 +607,7 @@ export class SharedPerformanceController {
     if (!row) throw new BadRequestException("public performance report not found");
 
     const frozen = row.snapshot || {};
+    const selectedStrategyModes = normalizeShareStrategyModes(frozen?.filter?.strategyModes);
     if (!row.mt5_account_id) {
       return {
         ...row,
@@ -572,7 +650,7 @@ export class SharedPerformanceController {
     );
 
     const basketsResult = await this.db.query(
-      `SELECT direction,net_profit,created_at
+      `SELECT direction,net_profit,created_at,metadata,entry_model,entry_trigger
        FROM trade_journal
        WHERE mt5_account_id=$1
          AND event_type='BASKET'
@@ -582,7 +660,10 @@ export class SharedPerformanceController {
        LIMIT 20000`,
       [account.id, from.toISOString(), to.toISOString()]
     );
-    const baskets = basketsResult.rows as BasketRow[];
+    const allBaskets = basketsResult.rows as BasketRow[];
+    const baskets = allBaskets.filter((item:any) =>
+      selectedStrategyModes.includes(resolveJournalControlMode(item as any))
+    );
     const currentBalance = Number(account.metrics?.balance || 0);
     const pnlSinceFrom = await this.db.one(
       `SELECT COALESCE(SUM(net_profit),0)::float8 AS net
@@ -598,7 +679,7 @@ export class SharedPerformanceController {
     const computed = this.summarize(baskets, derivedStart);
 
     const detailedExits = await this.db.query(
-      `SELECT net_profit::float8 AS net_profit,created_at
+      `SELECT net_profit::float8 AS net_profit,created_at,metadata,entry_model,entry_trigger
        FROM trade_journal
        WHERE mt5_account_id=$1
          AND event_type='EXIT'
@@ -608,6 +689,9 @@ export class SharedPerformanceController {
        ORDER BY created_at ASC,id ASC
        LIMIT 20000`,
       [account.id, from.toISOString(), to.toISOString()]
+    );
+    detailedExits.rows = (detailedExits.rows || []).filter((item:any) =>
+      selectedStrategyModes.includes(resolveJournalControlMode(item as any))
     );
     if (derivedStart !== null && detailedExits.rows.length > 0) {
       let balance = derivedStart;
@@ -700,14 +784,21 @@ export class SharedPerformanceController {
         currency: accountCurrency
       },
       range: { from: from.toISOString(), to: to.toISOString() },
+      filter: {
+        strategyModes: selectedStrategyModes,
+        scope: selectedStrategyModes.length === SHARE_STRATEGY_MODES.length ? "ALL_STRATEGIES" : "CUSTOM_PORTFOLIO"
+      },
       balance: {
         current: currentBalance > 0 ? currentBalance : null,
         equity: Number(account.metrics?.equity || 0) > 0 ? Number(account.metrics.equity) : null,
-        derivedStart
+        derivedStart,
+        rangeEnd: derivedStart === null ? null : Number((derivedStart + Number(computed.summary.netProfit || 0)).toFixed(2))
       },
       summary: computed.summary,
       curve: computed.curve,
-      closedTrades: exits.rows.map((trade:any) => ({
+      lotDistribution,
+      modeBreakdown,
+      closedTrades: filteredExitRows.map((trade:any) => ({
         ticket: String(trade.deal_ticket),
         positionId: trade.position_id ? String(trade.position_id) : null,
         symbol: trade.symbol || accountSymbol,
