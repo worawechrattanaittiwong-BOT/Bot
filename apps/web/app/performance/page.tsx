@@ -77,6 +77,20 @@ function fixed(value:any,digits=2) {
   return Number.isFinite(n)?n.toFixed(digits):"—";
 }
 
+function runtimeLabel(value:any) {
+  let seconds=Math.max(0,Math.floor(Number(value||0)));
+  const days=Math.floor(seconds/86400);
+  seconds%=86400;
+  const hours=Math.floor(seconds/3600);
+  seconds%=3600;
+  const minutes=Math.floor(seconds/60);
+  const parts:string[]=[];
+  if(days) parts.push(days+" วัน");
+  if(hours) parts.push(hours+" ชม.");
+  if(minutes||parts.length===0) parts.push(minutes+" นาที");
+  return parts.join(" ");
+}
+
 function InfoRow({icon,label,value}:{icon:string;label:string;value:string}) {
   return <div className={styles.infoRow}><span className={styles.infoIcon}><ScenovaIcon name={icon} size={15}/></span><span>{label}</span><b>{value}</b></div>;
 }
@@ -443,7 +457,11 @@ export default function PerformanceDashboardPage() {
                 <Metric icon="equity" label="End Balance" value={money(endBalance,currency)}/>
                 <Metric icon="profit" label="Net Profit" value={money(summary.netProfit,currency,true)} tone={Number(summary.netProfit)>=0?"good":"bad"}/>
                 <Metric icon="trend" label="Return" value={percent(summary.returnPercent,true)} tone={Number(summary.returnPercent)>=0?"good":"bad"}/>
-                <Metric icon="timer" label="Period" value={rangeDays+" วัน"}/>
+                <Metric
+                  icon="timer"
+                  label={mode==="LIVE"?"เวลารันบอท":"Period"}
+                  value={mode==="LIVE"?runtimeLabel(summary.runtimeSeconds):rangeDays+" วัน"}
+                />
                 <Metric icon="risk" label="Max Drawdown" value={percent(summary.maxDrawdownPercent)}/>
                 <Metric icon="target" label="Win Rate" value={percent(summary.winRate)}/>
               </div>
