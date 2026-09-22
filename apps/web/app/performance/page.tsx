@@ -7,7 +7,8 @@ import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./performance.module.css";
 
 type Mode = "LIVE" | "BACKTEST";
-type StrategyMode = "ALL" | "AUTO" | "RACE" | "FLIP_LOCK" | "MANUAL";
+type StrategyMode = "AUTO" | "RACE" | "FLIP_LOCK" | "MANUAL" | "ZERO_GRID";
+const STRATEGY_OPTIONS:StrategyMode[]=["AUTO","RACE","FLIP_LOCK","MANUAL","ZERO_GRID"];
 type Options = {
   user: { id:string; user_code:string; email:string; role:string } | null;
   elevated: boolean;
@@ -109,13 +110,20 @@ function growthRatio(value:any) {
 
 function strategyLabel(value:StrategyMode|string) {
   const labels:Record<string,string>={
-    ALL:"รวม 4 โหมด · ไม่รวม ZERO GRID",
     AUTO:"AUTO",
     RACE:"RACE",
     FLIP_LOCK:"FLIP LOCK",
-    MANUAL:"MANUAL"
+    MANUAL:"MANUAL",
+    ZERO_GRID:"GRID"
   };
-  return labels[String(value||"ALL").toUpperCase()]||String(value||"ALL");
+  return labels[String(value||"AUTO").toUpperCase()]||String(value||"AUTO");
+}
+
+function strategyPortfolioLabel(values:Array<StrategyMode|string>) {
+  const normalized=(values||[]).map((value)=>String(value).toUpperCase());
+  if(normalized.length===5) return "All Strategies · 5 Selected";
+  if(normalized.length===1) return strategyLabel(normalized[0])+" · Single Strategy";
+  return normalized.length+" Strategies · "+normalized.map(strategyLabel).join(" + ");
 }
 
 function InfoRow({icon,label,value}:{icon:string;label:string;value:string}) {
@@ -134,9 +142,31 @@ function StatRow({label,value,tone=""}:{label:string;value:string;tone?:"good"|"
   return <div className={styles.statRow}><span>{label}</span><b className={tone?styles[tone]:""}>{value}</b></div>;
 }
 
+function LotDistributionChart({rows,total}:{rows:any[];total:number}) {
+  const items=[...(rows||[])].sort((a,b)=>Number(b.count||0)-Number(a.count||0)||Number(a.lot||0)-Number(b.lot||0));
+  if(!items.length) return <div className={styles.emptyLotChart}>ยังไม่มีข้อมูล Lot ในช่วงเวลานี้</div>;
+  return (
+    <div className={styles.lotChart} role="img" aria-label="Lot allocation by closed positions">
+      {items.map((row:any)=> {
+        const pct=Math.max(0,Math.min(100,Number(row.percent||0)));
+        return (
+          <div className={styles.lotRow} key={String(row.lot)}>
+            <div className={styles.lotRowHead}>
+              <b>{fixed(row.lot,3)} Lot</b>
+              <span>{Number(row.count||0)} ไม้ · {percent(pct)}</span>
+            </div>
+            <div className={styles.lotTrack}><i style={{width:Math.max(2,pct)+"%"}}/></div>
+          </div>
+        );
+      })}
+      <div className={styles.lotTotal}>รวม {total.toLocaleString("en-US")} Position</div>
+    </div>
+  );
+}
+
 function SummaryChart({points}:{points:any[]}) {
   if(!points?.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลกราฟในช่วงเวลานี้</div>;
-  const width=1200,height=148,left=34,right=18,top=10,bottom=31;
+  const width=1320,height=148,left=38,right=14,top=10,bottom=31;
   const values=points.map((point)=>Number(point.balance??0));
   const min=Math.min(...values),max=Math.max(...values),pad=Math.max(1,(max-min)*.09);
   const low=min-pad,high=max+pad,range=Math.max(1,high-low);
@@ -200,6 +230,15 @@ function backtestStats(backtest:any) {
     if(key) byDay.set(key,(byDay.get(key)||0)+Number(row.profit||0));
   }
   const days=Array.from(byDay.values());
+  const lotMap=new Map<number,number>();
+  for(const volume of volumes){
+    const lot=Number(volume.toFixed(4));
+    lotMap.set(lot,(lotMap.get(lot)||0)+1);
+  }
+  const lotDistribution=Array.from(lotMap.entries()).map(([lot,count])=>({
+    lot,count,percent:total?count/total*100:0
+  })).sort((a,b)=>a.lot-b.lot);
+  const primaryLot=[...lotDistribution].sort((a,b)=>b.count-a.count||a.lot-b.lot)[0]||{lot:0,count:0,percent:0};
   return {
     totalDeals:total,totalPositions:total,wins,losses,
     profitPositions:wins,lossPositions:losses,breakevenPositions:Math.max(0,total-wins-losses),
@@ -213,6 +252,11 @@ function backtestStats(backtest:any) {
     averageLossTrade:negative.length?negative.reduce((a:number,b:number)=>a+b,0)/negative.length:0,
     averageLot:volumes.length?volumes.reduce((a:number,b:number)=>a+b,0)/volumes.length:0,
     maxLot:volumes.length?Math.max(...volumes):0,
+    primaryLot:primaryLot.lot,
+    primaryLotCount:primaryLot.count,
+    primaryLotPercent:primaryLot.percent,
+    lotSizeCount:lotDistribution.length,
+    lotDistribution,
     averageTradeDurationSeconds:durations.length?durations.reduce((a:number,b:number)=>a+b,0)/durations.length:0,
     maxTradeDurationSeconds:durations.length?Math.max(...durations):0,
     minTradeDurationSeconds:durations.length?Math.min(...durations):0,
@@ -233,7 +277,7 @@ export default function PerformanceDashboardPage() {
   const [options,setOptions]=useState<Options|null>(null);
   const [accountId,setAccountId]=useState("");
   const [mode,setMode]=useState<Mode>("LIVE");
-  const [strategyMode,setStrategyMode]=useState<StrategyMode>("ALL");
+  const [selectedStrategies,setSelectedStrategies]=useState<StrategyMode[]>([...STRATEGY_OPTIONS]);
   const [from,setFrom]=useState(today);
   const [to,setTo]=useState(today);
   const [report,setReport]=useState<any>(null);
@@ -286,7 +330,7 @@ export default function PerformanceDashboardPage() {
     setLoading(true);
     try{
       const strategyQuery=nextMode==="LIVE"
-        ? `&strategyMode=${encodeURIComponent(strategyMode)}`
+        ? `&strategyModes=${encodeURIComponent(selectedStrategies.join(","))}`
         : "";
       const next=await api(`/performance-analytics/report?accountId=${encodeURIComponent(nextAccountId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${strategyQuery}`);
       setReport(next);
@@ -309,7 +353,23 @@ export default function PerformanceDashboardPage() {
       return;
     }
     if(accountId){setShareResult(null);void refresh(accountId,mode);}
-  },[accountId,mode,strategyMode,from,to,currentAccounts]);
+  },[accountId,mode,selectedStrategies,from,to,currentAccounts]);
+
+  function toggleStrategy(strategy:StrategyMode){
+    setSelectedStrategies((current)=>{
+      if(current.includes(strategy)){
+        if(current.length===1) return current;
+        return current.filter((item)=>item!==strategy);
+      }
+      return STRATEGY_OPTIONS.filter((item)=>current.includes(item)||item===strategy);
+    });
+  }
+
+  function selectStrategyPortfolio(preset:"ALL"|"CORE"|"GRID"){
+    if(preset==="ALL") setSelectedStrategies([...STRATEGY_OPTIONS]);
+    else if(preset==="CORE") setSelectedStrategies(["AUTO","RACE","FLIP_LOCK","MANUAL"]);
+    else setSelectedStrategies(["ZERO_GRID"]);
+  }
 
   function applyDays(days:number){
     const range=rangeFromDays(to||today,days);
@@ -434,9 +494,18 @@ export default function PerformanceDashboardPage() {
     ? backExtra.totalDeals
     : Number(summary.totalDeals??report?.closedTrades?.length??0);
   const totalPositions=Number((summary.totalPositions??(mode==="BACKTEST"?backExtra.totalDeals:report?.closedTrades?.length))||0);
-  const selectedStrategy=mode==="LIVE"
-    ? String(report?.filter?.strategyMode||strategyMode).toUpperCase()
-    : "BACKTEST";
+  const selectedStrategyModes:StrategyMode[]=mode==="LIVE"
+    ? ((Array.isArray(report?.filter?.strategyModes)&&report.filter.strategyModes.length
+        ? report.filter.strategyModes
+        : selectedStrategies) as StrategyMode[])
+    : [];
+  const strategyScopeLabel=mode==="LIVE"?strategyPortfolioLabel(selectedStrategyModes):"BACKTEST";
+  const lotDistribution=mode==="BACKTEST"
+    ? (backExtra.lotDistribution||[])
+    : (report?.lotDistribution||[]);
+  const primaryLot=Number(summary.primaryLot||0);
+  const primaryLotCount=Number(summary.primaryLotCount||0);
+  const primaryLotPercent=Number(summary.primaryLotPercent||0);
   const liveDisplayFrom=report?.range?.effectiveFrom?dateInput(report.range.effectiveFrom):from;
   const displayFrom=mode==="BACKTEST"&&backtest?.started_at?dateInput(backtest.started_at):liveDisplayFrom;
   const displayTo=mode==="BACKTEST"&&backtest?.ended_at?dateInput(backtest.ended_at):to;
@@ -477,26 +546,47 @@ export default function PerformanceDashboardPage() {
             </div>
 
             <div className={styles.drawerControls}>
-              <label><span>บัญชีของฉัน</span><select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>
-                {realAccounts.length?<optgroup label="บัญชีจริง (REAL)">{realAccounts.map((account:any)=><option key={account.id} value={account.id}>REAL · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
-                {demoAccounts.length?<optgroup label="บัญชีทดลอง (DEMO)">{demoAccounts.map((account:any)=><option key={account.id} value={account.id}>DEMO · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
+              <label><span>Trading Account</span><select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>
+                {realAccounts.length?<optgroup label="Live Accounts (REAL)">{realAccounts.map((account:any)=><option key={account.id} value={account.id}>REAL · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
+                {demoAccounts.length?<optgroup label="Demo Accounts">{demoAccounts.map((account:any)=><option key={account.id} value={account.id}>DEMO · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
               </select></label>
-              <label><span>โหมดข้อมูล</span><select value={mode} onChange={(e)=>setMode(e.target.value as Mode)}><option value="LIVE">Live Performance</option><option value="BACKTEST">Backtest</option></select></label>
-              <label><span>โหมดกลยุทธ์</span><select value={strategyMode} disabled={mode!=="LIVE"} onChange={(e)=>setStrategyMode(e.target.value as StrategyMode)}>
-                <option value="ALL">รวม 4 โหมด · ไม่รวม ZERO GRID</option>
-                <option value="AUTO">AUTO</option>
-                <option value="RACE">RACE</option>
-                <option value="FLIP_LOCK">FLIP LOCK</option>
-                <option value="MANUAL">MANUAL</option>
-              </select></label>
-              <label><span>ตั้งแต่วันที่</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
-              <label><span>ถึงวันที่</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
-              <button className={styles.refreshButton} onClick={()=>refresh()} disabled={loading||!accountId}><ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh"}</button>
+              <label><span>Report Source</span><select value={mode} onChange={(e)=>setMode(e.target.value as Mode)}><option value="LIVE">Live Performance</option><option value="BACKTEST">Backtest Analysis</option></select></label>
+              <label><span>Start Date</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
+              <label><span>End Date</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
+              <button className={styles.refreshButton} onClick={()=>refresh()} disabled={loading||!accountId}><ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh Report"}</button>
             </div>
+
+            {mode==="LIVE"?(
+              <div className={styles.strategyPortfolio}>
+                <div className={styles.strategyPortfolioHead}>
+                  <div><ScenovaIcon name="strategy" size={16}/><span><b>Strategy Portfolio</b><small>เลือกกลยุทธ์ที่ต้องการนำมาคำนวณและแสดงผลได้อย่างอิสระ</small></span></div>
+                  <strong>{strategyPortfolioLabel(selectedStrategies)}</strong>
+                </div>
+                <div className={styles.strategyChips}>
+                  {STRATEGY_OPTIONS.map((strategy)=>(
+                    <button
+                      type="button"
+                      key={strategy}
+                      className={selectedStrategies.includes(strategy)?styles.strategyChipActive:styles.strategyChip}
+                      onClick={()=>toggleStrategy(strategy)}
+                    >
+                      <span>{strategyLabel(strategy)}</span>
+                      <small>{selectedStrategies.includes(strategy)?"Included":"Excluded"}</small>
+                    </button>
+                  ))}
+                </div>
+                <div className={styles.strategyPresets}>
+                  <span>Portfolio Presets</span>
+                  <button type="button" onClick={()=>selectStrategyPortfolio("ALL")}>All Strategies</button>
+                  <button type="button" onClick={()=>selectStrategyPortfolio("CORE")}>Core 4</button>
+                  <button type="button" onClick={()=>selectStrategyPortfolio("GRID")}>Grid Only</button>
+                </div>
+              </div>
+            ):null}
 
             <div className={styles.drawerFooter}>
               <div className={styles.presets}><button onClick={()=>applyDays(1)}>วันนี้</button><button onClick={()=>applyDays(7)}>7 วัน</button><button onClick={()=>applyDays(30)}>30 วัน</button><button onClick={()=>applyDays(90)}>90 วัน</button></div>
-              <strong>{rangeDays} วัน · {from} → {to} · {mode==="LIVE"?strategyLabel(strategyMode):"BACKTEST"}</strong>
+              <strong>{rangeDays} วัน · {from} → {to} · {mode==="LIVE"?strategyPortfolioLabel(selectedStrategies):"BACKTEST"}</strong>
             </div>
 
             {mode==="BACKTEST"?(
@@ -508,7 +598,7 @@ export default function PerformanceDashboardPage() {
           </div>
           <header className={styles.summaryTitle}>
             <div className={styles.titleMark}><ScenovaIcon name="pnl" size={24}/><h2>BOT PERFORMANCE SUMMARY</h2><ScenovaIcon name="pnl" size={24}/></div>
-            <p>{mode==="LIVE"?"สรุปผลการเทรดจริง · "+strategyLabel(selectedStrategy):"สรุปผล Backtest ของบัญชีคุณ"}</p>
+            <p>{mode==="LIVE"?"Live portfolio performance · "+strategyScopeLabel:"Backtest performance analysis"}</p>
           </header>
 
           {!report||(mode==="BACKTEST"&&!backtest)?(
@@ -524,7 +614,7 @@ export default function PerformanceDashboardPage() {
                 <div className={styles.infoCol}>
                   <InfoRow icon="layers" label="Runtime Mode" value={runtimeMode}/>
                   <InfoRow icon="strategy" label="Symbol" value={symbol}/>
-                  <InfoRow icon="control" label="Strategy" value={mode==="LIVE"?strategyLabel(selectedStrategy):"BACKTEST"}/>
+                  <InfoRow icon="control" label="Strategy Portfolio" value={strategyScopeLabel}/>
                 </div>
                 <div className={styles.infoCol}>
                   <InfoRow icon="clock" label="From" value={displayFrom}/>
@@ -546,10 +636,12 @@ export default function PerformanceDashboardPage() {
                 <Metric icon="risk" label="Max Drawdown" value={percent(summary.maxDrawdownPercent)}/>
                 <Metric icon="target" label="Win Rate" value={percent(summary.winRate)}/>
                 <Metric icon="report" label="Profit Factor" value={fixed(summary.profitFactor)}/>
-                <Metric icon="shield" label="Recovery Factor" value={fixed(summary.recoveryFactor)}/>
+                <Metric icon="orders" label="Closed Positions" value={totalPositions.toLocaleString("en-US")}/>
+                <Metric icon="pnl" label="Average Lot" value={fixed(summary.averageLot,3)}/>
+                <Metric icon="strategy" label="Primary Lot" value={fixed(primaryLot,3)+" · "+primaryLotCount+" ไม้ · "+percent(primaryLotPercent)}/>
               </div>
 
-              <div className={styles.resultsLabel}><ScenovaIcon name="report" size={14}/><span>Results · รายละเอียดแบบ MT5</span></div>
+              <div className={styles.resultsLabel}><ScenovaIcon name="report" size={15}/><span>Performance Breakdown · MT5 Analytics</span></div>
               <div className={styles.resultsGrid}>
                 <div className={styles.panel}>
                   <PanelTitle icon="profit">Performance</PanelTitle>
@@ -591,19 +683,19 @@ export default function PerformanceDashboardPage() {
                 </div>
 
                 <div className={styles.panel}>
-                  <PanelTitle icon="spread">Trade Direction</PanelTitle>
+                  <PanelTitle icon="spread">Directional Analytics</PanelTitle>
                   <StatRow label="Long Baskets (won %)" value={String(Number(summary.buyTrades||0))+" ("+percent(summary.buyWinRate||0)+")"}/>
                   <StatRow label="Short Baskets (won %)" value={String(Number(summary.sellTrades||0))+" ("+percent(summary.sellWinRate||0)+")"}/>
                   <StatRow label="Loss Rate" value={percent(summary.lossRate??(Number(summary.trades)?Number(summary.losses||0)/Number(summary.trades)*100:0))}/>
                   <StatRow label="Breakeven Baskets" value={String(Number(summary.breakeven||0))}/>
                   <StatRow label="Breakeven Positions" value={String(Number(summary.breakevenPositions||0))}/>
                   {mode==="LIVE"?(report?.modeBreakdown||[]).map((row:any)=>(
-                    <StatRow key={row.mode} label={String(row.mode).replace("_"," ")+" Baskets"} value={String(Number(row.baskets||0))+" · "+percent(row.winRate||0)}/>
+                    <StatRow key={row.mode} label={strategyLabel(row.mode)+" Baskets"} value={String(Number(row.baskets||0))+" · "+percent(row.winRate||0)}/>
                   )):null}
                 </div>
 
                 <div className={styles.panel}>
-                  <PanelTitle icon="pnl">Trade Statistics</PanelTitle>
+                  <PanelTitle icon="pnl">Execution Analytics</PanelTitle>
                   <StatRow label="Largest profit trade" value={money(summary.largestProfitTrade,currency)}/>
                   <StatRow label="Largest loss trade" value={money(summary.largestLossTrade,currency)} tone="bad"/>
                   <StatRow label="Average profit trade" value={money(summary.averageProfitTrade,currency)}/>
@@ -629,18 +721,33 @@ export default function PerformanceDashboardPage() {
                 </div>
 
                 <div className={styles.panel}>
-                  <PanelTitle icon="strategy">Data Scope</PanelTitle>
-                  <StatRow label="Strategy Filter" value={mode==="LIVE"?strategyLabel(selectedStrategy):"BACKTEST"}/>
-                  <StatRow label="ZERO GRID" value={mode==="LIVE"?"Excluded":"—"}/>
+                  <PanelTitle icon="strategy">Portfolio Scope</PanelTitle>
+                  <StatRow label="Selected Portfolio" value={strategyScopeLabel}/>
+                  <StatRow label="Strategies Included" value={mode==="LIVE"?String(selectedStrategyModes.length):"—"}/>
+                  <StatRow label="Lot Sizes Used" value={String(Number(summary.lotSizeCount||lotDistribution.length||0))}/>
                   <StatRow label="From" value={displayFrom}/>
                   <StatRow label="To" value={displayTo}/>
                   <StatRow label="Symbol" value={symbol}/>
                 </div>
               </div>
 
-              <div className={styles.chartCard}>
-                <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={14}/><b>Balance</b><small>กระชับ · แกน X = จำนวน Position ที่ปิด</small></div><span>End Balance: {money(endBalance,currency)}</span></div>
-                <SummaryChart points={curve}/>
+              <div className={styles.analyticsCharts}>
+                <div className={styles.lotCard}>
+                  <div className={styles.chartHead}>
+                    <div><ScenovaIcon name="pnl" size={15}/><b>Lot Allocation</b><small>Lot Size · จำนวนไม้ · สัดส่วน</small></div>
+                    <span>{Number(summary.lotSizeCount||lotDistribution.length||0)} Sizes</span>
+                  </div>
+                  <div className={styles.lotHighlights}>
+                    <div><span>Primary Lot</span><b>{fixed(primaryLot,3)}</b></div>
+                    <div><span>Positions</span><b>{primaryLotCount}</b></div>
+                    <div><span>Share</span><b>{percent(primaryLotPercent)}</b></div>
+                  </div>
+                  <LotDistributionChart rows={lotDistribution} total={totalPositions}/>
+                </div>
+                <div className={styles.chartCard}>
+                  <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={15}/><b>Capital Growth</b><small>Balance progression · X = Closed Positions</small></div><span>End Balance: {money(endBalance,currency)}</span></div>
+                  <SummaryChart points={curve}/>
+                </div>
               </div>
             </>
           )}
