@@ -61,7 +61,7 @@ if ($web.Contains('<h1>Trading Performance & Backtest</h1>')) { throw 'Redundant
 
 foreach ($required in @(
   'BOT PERFORMANCE SUMMARY',
-  'Public read-only performance',
+  'Live portfolio performance',
   'Strategy Portfolio',
   'Performance Breakdown · MT5 Analytics',
   'Directional Analytics',
