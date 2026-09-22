@@ -819,7 +819,8 @@ export class SharedPerformanceController {
     const exits = await this.db.query(
       `SELECT
          x.deal_ticket,x.position_id,x.direction,x.volume,x.price AS exit_price,x.net_profit,
-         x.created_at AS closed_at,COALESCE(x.metadata->>'symbol',$4) AS symbol,
+         x.created_at AS closed_at,x.metadata,x.entry_model,x.entry_trigger,
+         COALESCE(x.metadata->>'symbol',$4) AS symbol,
          e.price AS entry_price,e.created_at AS opened_at
        FROM trade_journal x
        LEFT JOIN LATERAL (
@@ -845,6 +846,56 @@ export class SharedPerformanceController {
         String(account.metrics?.symbol || frozen.account?.symbol || "XAUUSD")
       ]
     );
+
+    const filteredExitRows = (exits.rows || []).filter((item:any) =>
+      selectedStrategyModes.includes(resolveJournalControlMode(item as any))
+    );
+    const volumes = filteredExitRows
+      .map((item:any) => Number(item.volume || 0))
+      .filter((value:number) => Number.isFinite(value) && value > 0);
+    const lotMap = new Map<number, number>();
+    for (const volume of volumes) {
+      const lot = Number(volume.toFixed(4));
+      lotMap.set(lot, (lotMap.get(lot) || 0) + 1);
+    }
+    const lotDistribution = Array.from(lotMap.entries())
+      .map(([lot,count]) => ({
+        lot,
+        count,
+        percent: volumes.length ? Number((count / volumes.length * 100).toFixed(2)) : 0
+      }))
+      .sort((a,b) => a.lot - b.lot);
+    const primaryLot = [...lotDistribution].sort((a,b) => b.count - a.count || a.lot - b.lot)[0] || {
+      lot:0,count:0,percent:0
+    };
+    computed.summary.totalPositions = filteredExitRows.length;
+    computed.summary.totalDeals = selectedRangeLedger.length;
+    computed.summary.expectedPayoff = filteredExitRows.length
+      ? Number((selectedRangeNet / filteredExitRows.length).toFixed(2))
+      : 0;
+    computed.summary.runtimeSeconds = runtimeSeconds;
+    computed.summary.averageLot = volumes.length
+      ? Number((volumes.reduce((sum:number,value:number)=>sum+value,0)/volumes.length).toFixed(4))
+      : 0;
+    computed.summary.maxLot = volumes.length ? Number(Math.max(...volumes).toFixed(4)) : 0;
+    computed.summary.primaryLot = primaryLot.lot;
+    computed.summary.primaryLotCount = primaryLot.count;
+    computed.summary.primaryLotPercent = primaryLot.percent;
+    computed.summary.lotSizeCount = lotDistribution.length;
+
+    const modeBreakdown = SHARE_STRATEGY_MODES.map((mode) => {
+      const rows = allBaskets.filter((item:any) => resolveJournalControlMode(item as any) === mode);
+      const wins = rows.filter((item:any) => Number(item.net_profit || 0) > 0).length;
+      return {
+        mode,
+        label: shareModeLabel(mode),
+        baskets: rows.length,
+        wins,
+        losses: rows.filter((item:any) => Number(item.net_profit || 0) < 0).length,
+        winRate: rows.length ? Number((wins / rows.length * 100).toFixed(2)) : 0,
+        netProfit: Number(rows.reduce((sum:number,item:any)=>sum+Number(item.net_profit||0),0).toFixed(2))
+      };
+    });
 
     const accountCurrency = String(
       account.metrics?.currency || frozen.account?.currency || "UNKNOWN"
