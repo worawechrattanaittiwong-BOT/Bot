@@ -95,7 +95,7 @@ function StatRow({label,value,tone=""}:{label:string;value:string;tone?:"good"|"
 
 function SummaryChart({points}:{points:any[]}) {
   if(!points?.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลกราฟในช่วงเวลานี้</div>;
-  const width=1200,height=190,left=34,right=18,top=13,bottom=30;
+  const width=1200,height=190,left=34,right=18,top=13,bottom=38;
   const values=points.map((point)=>Number(point.balance??0));
   const min=Math.min(...values),max=Math.max(...values),pad=Math.max(1,(max-min)*.09);
   const low=min-pad,high=max+pad,range=Math.max(1,high-low);
@@ -125,12 +125,12 @@ function SummaryChart({points}:{points:any[]}) {
       })}
       {ticks.map((index)=>{
         const x=left+(points.length<=1?0:index/(points.length-1)*plotWidth);
-        return <g key={"v"+index}><line x1={x} x2={x} y1={top} y2={top+plotHeight} className={styles.gridLine}/><text x={x} y={height-7} textAnchor="middle" className={styles.chartLabel}>{String(Number(points[index]?.tradeNumber ?? index))}</text></g>;
+        return <g key={"v"+index}><line x1={x} x2={x} y1={top} y2={top+plotHeight} className={styles.gridLine}/><text x={x} y={height-16} textAnchor="middle" className={styles.chartLabel}>{String(Number(points[index]?.tradeNumber ?? index))}</text></g>;
       })}
       <path d={area} fill="url(#perf-area)"/>
       <path d={line} fill="none" stroke="url(#perf-line)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
       <circle cx={last.x} cy={last.y} r="4" className={styles.endDot}/>
-      <text x={width/2} y={height-1} textAnchor="middle" className={styles.chartLabel}>จำนวนไม้</text>
+      <text x={width/2} y={height-3} textAnchor="middle" className={styles.chartLabel}>จำนวนไม้</text>
     </svg>
   );
 }
@@ -358,8 +358,8 @@ export default function PerformanceDashboardPage() {
     : backTradePoints;
   const curve=mode==="BACKTEST"?backCurve:(report?.curve||[]);
   const endBalance=Number(mode==="BACKTEST"
-    ? backSummary.finalBalance??backCurve[backCurve.length-1]?.balance??startCapital
-    : report?.balance?.rangeEnd??liveEnd||startCapital+Number(summary.netProfit||0));
+    ? (backSummary.finalBalance??backCurve[backCurve.length-1]?.balance??startCapital)
+    : (report?.balance?.rangeEnd??(liveEnd||startCapital+Number(summary.netProfit||0))));
   const totalDeals=mode==="BACKTEST"?backExtra.totalDeals:Number(report?.closedTrades?.length||0);
   const liveDisplayFrom=report?.range?.effectiveFrom?dateInput(report.range.effectiveFrom):from;
   const displayFrom=mode==="BACKTEST"&&backtest?.started_at?dateInput(backtest.started_at):liveDisplayFrom;
