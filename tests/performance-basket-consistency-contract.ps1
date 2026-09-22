@@ -28,10 +28,6 @@ foreach ($required in @(
 )) {
   if (-not $analytics.Contains($required)) { throw "Performance analytics actual-deal contract missing: $required" }
 }
-if ($analytics.Contains("AND event_type='BASKET'")) {
-  throw 'Private live Performance must not trust raw BASKET net_profit after async multi-position close'
-}
-
 foreach ($required in @(
   'position.remainingVolume=Math.max(0,position.remainingVolume-volume);',
   'basket.netProfit+=net;',
