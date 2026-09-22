@@ -7,6 +7,7 @@ import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./performance.module.css";
 
 type Mode = "LIVE" | "BACKTEST";
+type StrategyMode = "ALL" | "AUTO" | "RACE" | "FLIP_LOCK" | "MANUAL";
 type Options = {
   user: { id:string; user_code:string; email:string; role:string } | null;
   elevated: boolean;
@@ -91,6 +92,32 @@ function runtimeLabel(value:any) {
   return parts.join(" ");
 }
 
+function durationLabel(value:any) {
+  let seconds=Math.max(0,Math.floor(Number(value||0)));
+  if(seconds<60) return seconds+" วินาที";
+  const hours=Math.floor(seconds/3600);
+  const minutes=Math.floor((seconds%3600)/60);
+  if(hours>0) return hours+" ชม. "+minutes+" นาที";
+  return minutes+" นาที";
+}
+
+function growthRatio(value:any) {
+  const n=Number(value);
+  if(!Number.isFinite(n)||n<=0) return "—";
+  return n.toFixed(4)+" ("+((n-1)*100).toFixed(2)+"%)";
+}
+
+function strategyLabel(value:StrategyMode|string) {
+  const labels:Record<string,string>={
+    ALL:"รวม 4 โหมด · ไม่รวม ZERO GRID",
+    AUTO:"AUTO",
+    RACE:"RACE",
+    FLIP_LOCK:"FLIP LOCK",
+    MANUAL:"MANUAL"
+  };
+  return labels[String(value||"ALL").toUpperCase()]||String(value||"ALL");
+}
+
 function InfoRow({icon,label,value}:{icon:string;label:string;value:string}) {
   return <div className={styles.infoRow}><span className={styles.infoIcon}><ScenovaIcon name={icon} size={15}/></span><span>{label}</span><b>{value}</b></div>;
 }
@@ -109,7 +136,7 @@ function StatRow({label,value,tone=""}:{label:string;value:string;tone?:"good"|"
 
 function SummaryChart({points}:{points:any[]}) {
   if(!points?.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลกราฟในช่วงเวลานี้</div>;
-  const width=1200,height=190,left=34,right=18,top=13,bottom=38;
+  const width=1200,height=148,left=34,right=18,top=10,bottom=31;
   const values=points.map((point)=>Number(point.balance??0));
   const min=Math.min(...values),max=Math.max(...values),pad=Math.max(1,(max-min)*.09);
   const low=min-pad,high=max+pad,range=Math.max(1,high-low);
@@ -144,7 +171,7 @@ function SummaryChart({points}:{points:any[]}) {
       <path d={area} fill="url(#perf-area)"/>
       <path d={line} fill="none" stroke="url(#perf-line)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
       <circle cx={last.x} cy={last.y} r="4" className={styles.endDot}/>
-      <text x={width/2} y={height-3} textAnchor="middle" className={styles.chartLabel}>จำนวนไม้</text>
+      <text x={width/2} y={height-2} textAnchor="middle" className={styles.chartLabel}>จำนวนไม้</text>
     </svg>
   );
 }
@@ -161,8 +188,22 @@ function backtestStats(backtest:any) {
   const short=trades.filter((row:any)=>String(row.direction).toUpperCase()==="SELL");
   const longWins=long.filter((row:any)=>Number(row.profit||0)>0).length;
   const shortWins=short.filter((row:any)=>Number(row.profit||0)>0).length;
+  const volumes=trades.map((row:any)=>Number(row.volume||0)).filter((value:number)=>Number.isFinite(value)&&value>0);
+  const durations=trades.map((row:any)=>{
+    const opened=new Date(row.opened_at||0).getTime();
+    const closed=new Date(row.closed_at||0).getTime();
+    return Number.isFinite(opened)&&Number.isFinite(closed)&&closed>=opened?Math.floor((closed-opened)/1000):0;
+  }).filter((value:number)=>value>=0);
+  const byDay=new Map<string,number>();
+  for(const row of trades){
+    const key=row.closed_at?dateInput(row.closed_at):"";
+    if(key) byDay.set(key,(byDay.get(key)||0)+Number(row.profit||0));
+  }
+  const days=Array.from(byDay.values());
   return {
-    totalDeals:total,wins,losses,
+    totalDeals:total,totalPositions:total,wins,losses,
+    profitPositions:wins,lossPositions:losses,breakevenPositions:Math.max(0,total-wins-losses),
+    positionWinRate:total?wins/total*100:0,
     lossRate:total?losses/total*100:0,
     grossProfit,grossLoss,
     expectedPayoff:total?profits.reduce((a:number,b:number)=>a+b,0)/total:0,
@@ -170,6 +211,17 @@ function backtestStats(backtest:any) {
     largestLossTrade:negative.length?Math.min(...negative):0,
     averageProfitTrade:positive.length?grossProfit/positive.length:0,
     averageLossTrade:negative.length?negative.reduce((a:number,b:number)=>a+b,0)/negative.length:0,
+    averageLot:volumes.length?volumes.reduce((a:number,b:number)=>a+b,0)/volumes.length:0,
+    maxLot:volumes.length?Math.max(...volumes):0,
+    averageTradeDurationSeconds:durations.length?durations.reduce((a:number,b:number)=>a+b,0)/durations.length:0,
+    maxTradeDurationSeconds:durations.length?Math.max(...durations):0,
+    minTradeDurationSeconds:durations.length?Math.min(...durations):0,
+    tradingDays:days.length,
+    profitableDays:days.filter((value:number)=>value>0).length,
+    losingDays:days.filter((value:number)=>value<0).length,
+    bestDayProfit:days.length?Math.max(...days):0,
+    worstDayProfit:days.length?Math.min(...days):0,
+    averageDailyProfit:days.length?days.reduce((a:number,b:number)=>a+b,0)/days.length:0,
     buyTrades:long.length,sellTrades:short.length,
     buyWinRate:long.length?longWins/long.length*100:0,
     sellWinRate:short.length?shortWins/short.length*100:0
@@ -181,6 +233,7 @@ export default function PerformanceDashboardPage() {
   const [options,setOptions]=useState<Options|null>(null);
   const [accountId,setAccountId]=useState("");
   const [mode,setMode]=useState<Mode>("LIVE");
+  const [strategyMode,setStrategyMode]=useState<StrategyMode>("ALL");
   const [from,setFrom]=useState(today);
   const [to,setTo]=useState(today);
   const [report,setReport]=useState<any>(null);
@@ -232,7 +285,10 @@ export default function PerformanceDashboardPage() {
     if(!nextAccountId) return;
     setLoading(true);
     try{
-      const next=await api(`/performance-analytics/report?accountId=${encodeURIComponent(nextAccountId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      const strategyQuery=nextMode==="LIVE"
+        ? `&strategyMode=${encodeURIComponent(strategyMode)}`
+        : "";
+      const next=await api(`/performance-analytics/report?accountId=${encodeURIComponent(nextAccountId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${strategyQuery}`);
       setReport(next);
       if(nextMode==="BACKTEST"){
         const candidate=selectedBacktestId||next.backtests?.[0]?.id||"";
@@ -253,7 +309,7 @@ export default function PerformanceDashboardPage() {
       return;
     }
     if(accountId){setShareResult(null);void refresh(accountId,mode);}
-  },[accountId,mode,from,to,currentAccounts]);
+  },[accountId,mode,strategyMode,from,to,currentAccounts]);
 
   function applyDays(days:number){
     const range=rangeFromDays(to||today,days);
@@ -374,7 +430,13 @@ export default function PerformanceDashboardPage() {
   const endBalance=Number(mode==="BACKTEST"
     ? (backSummary.finalBalance??backCurve[backCurve.length-1]?.balance??startCapital)
     : (report?.balance?.rangeEnd??(liveEnd||startCapital+Number(summary.netProfit||0))));
-  const totalDeals=mode==="BACKTEST"?backExtra.totalDeals:Number(report?.closedTrades?.length||0);
+  const totalDeals=mode==="BACKTEST"
+    ? backExtra.totalDeals
+    : Number(summary.totalDeals??report?.closedTrades?.length??0);
+  const totalPositions=Number((summary.totalPositions??(mode==="BACKTEST"?backExtra.totalDeals:report?.closedTrades?.length))||0);
+  const selectedStrategy=mode==="LIVE"
+    ? String(report?.filter?.strategyMode||strategyMode).toUpperCase()
+    : "BACKTEST";
   const liveDisplayFrom=report?.range?.effectiveFrom?dateInput(report.range.effectiveFrom):from;
   const displayFrom=mode==="BACKTEST"&&backtest?.started_at?dateInput(backtest.started_at):liveDisplayFrom;
   const displayTo=mode==="BACKTEST"&&backtest?.ended_at?dateInput(backtest.ended_at):to;
@@ -420,6 +482,13 @@ export default function PerformanceDashboardPage() {
                 {demoAccounts.length?<optgroup label="บัญชีทดลอง (DEMO)">{demoAccounts.map((account:any)=><option key={account.id} value={account.id}>DEMO · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
               </select></label>
               <label><span>โหมดข้อมูล</span><select value={mode} onChange={(e)=>setMode(e.target.value as Mode)}><option value="LIVE">Live Performance</option><option value="BACKTEST">Backtest</option></select></label>
+              <label><span>โหมดกลยุทธ์</span><select value={strategyMode} disabled={mode!=="LIVE"} onChange={(e)=>setStrategyMode(e.target.value as StrategyMode)}>
+                <option value="ALL">รวม 4 โหมด · ไม่รวม ZERO GRID</option>
+                <option value="AUTO">AUTO</option>
+                <option value="RACE">RACE</option>
+                <option value="FLIP_LOCK">FLIP LOCK</option>
+                <option value="MANUAL">MANUAL</option>
+              </select></label>
               <label><span>ตั้งแต่วันที่</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
               <label><span>ถึงวันที่</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
               <button className={styles.refreshButton} onClick={()=>refresh()} disabled={loading||!accountId}><ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh"}</button>
@@ -427,7 +496,7 @@ export default function PerformanceDashboardPage() {
 
             <div className={styles.drawerFooter}>
               <div className={styles.presets}><button onClick={()=>applyDays(1)}>วันนี้</button><button onClick={()=>applyDays(7)}>7 วัน</button><button onClick={()=>applyDays(30)}>30 วัน</button><button onClick={()=>applyDays(90)}>90 วัน</button></div>
-              <strong>{rangeDays} วัน · {from} → {to}</strong>
+              <strong>{rangeDays} วัน · {from} → {to} · {mode==="LIVE"?strategyLabel(strategyMode):"BACKTEST"}</strong>
             </div>
 
             {mode==="BACKTEST"?(
@@ -439,7 +508,7 @@ export default function PerformanceDashboardPage() {
           </div>
           <header className={styles.summaryTitle}>
             <div className={styles.titleMark}><ScenovaIcon name="pnl" size={24}/><h2>BOT PERFORMANCE SUMMARY</h2><ScenovaIcon name="pnl" size={24}/></div>
-            <p>{mode==="LIVE"?"สรุปผลการเทรดจริงของบัญชีคุณ":"สรุปผล Backtest ของบัญชีคุณ"}</p>
+            <p>{mode==="LIVE"?"สรุปผลการเทรดจริง · "+strategyLabel(selectedStrategy):"สรุปผล Backtest ของบัญชีคุณ"}</p>
           </header>
 
           {!report||(mode==="BACKTEST"&&!backtest)?(
@@ -447,9 +516,26 @@ export default function PerformanceDashboardPage() {
           ):(
             <>
               <div className={styles.infoCard}>
-                <div className={styles.infoCol}><InfoRow icon="account" label="Account" value={String(report?.account?.accountNumber||"—")}/><InfoRow icon="shield" label="Account Type" value={String(selectedAccount?.accountType||"REAL").toUpperCase()}/><InfoRow icon="wallet" label="Currency" value={currency}/></div>
-                <div className={styles.infoCol}><InfoRow icon="layers" label="Runtime Mode" value={runtimeMode}/><InfoRow icon="clock" label="From" value={displayFrom}/><InfoRow icon="play" label="Data Mode" value={mode}/></div>
-                <div className={styles.infoCol}><InfoRow icon="stop" label="To" value={displayTo}/><InfoRow icon="hourglass" label="Period" value={rangeDays+" วัน"}/><InfoRow icon="orders" label="Closed Baskets" value={String(Number(summary.trades||0))}/></div>
+                <div className={styles.infoCol}>
+                  <InfoRow icon="account" label="Account" value={String(report?.account?.accountNumber||"—")}/>
+                  <InfoRow icon="shield" label="Account Type" value={String(selectedAccount?.accountType||"REAL").toUpperCase()}/>
+                  <InfoRow icon="wallet" label="Currency" value={currency}/>
+                </div>
+                <div className={styles.infoCol}>
+                  <InfoRow icon="layers" label="Runtime Mode" value={runtimeMode}/>
+                  <InfoRow icon="strategy" label="Symbol" value={symbol}/>
+                  <InfoRow icon="control" label="Strategy" value={mode==="LIVE"?strategyLabel(selectedStrategy):"BACKTEST"}/>
+                </div>
+                <div className={styles.infoCol}>
+                  <InfoRow icon="clock" label="From" value={displayFrom}/>
+                  <InfoRow icon="stop" label="To" value={displayTo}/>
+                  <InfoRow icon="hourglass" label="Period" value={rangeDays+" วัน"}/>
+                </div>
+                <div className={styles.infoCol}>
+                  <InfoRow icon="play" label="Data Mode" value={mode}/>
+                  <InfoRow icon="orders" label="Closed Baskets" value={String(Number(summary.trades||0))}/>
+                  <InfoRow icon="orders" label="Closed Positions" value={String(totalPositions)}/>
+                </div>
               </div>
 
               <div className={styles.metricsCard}>
@@ -457,49 +543,103 @@ export default function PerformanceDashboardPage() {
                 <Metric icon="equity" label="End Balance" value={money(endBalance,currency)}/>
                 <Metric icon="profit" label="Net Profit" value={money(summary.netProfit,currency,true)} tone={Number(summary.netProfit)>=0?"good":"bad"}/>
                 <Metric icon="trend" label="Return" value={percent(summary.returnPercent,true)} tone={Number(summary.returnPercent)>=0?"good":"bad"}/>
-                <Metric
-                  icon="timer"
-                  label={mode==="LIVE"?"เวลารันบอท":"Period"}
-                  value={mode==="LIVE"?runtimeLabel(summary.runtimeSeconds):rangeDays+" วัน"}
-                />
                 <Metric icon="risk" label="Max Drawdown" value={percent(summary.maxDrawdownPercent)}/>
                 <Metric icon="target" label="Win Rate" value={percent(summary.winRate)}/>
+                <Metric icon="report" label="Profit Factor" value={fixed(summary.profitFactor)}/>
+                <Metric icon="shield" label="Recovery Factor" value={fixed(summary.recoveryFactor)}/>
               </div>
 
-              <div className={styles.resultsLabel}><ScenovaIcon name="report" size={14}/><span>Results</span></div>
+              <div className={styles.resultsLabel}><ScenovaIcon name="report" size={14}/><span>Results · รายละเอียดแบบ MT5</span></div>
               <div className={styles.resultsGrid}>
-                <div className={styles.panel}><PanelTitle icon="profit">Performance</PanelTitle>
+                <div className={styles.panel}>
+                  <PanelTitle icon="profit">Performance</PanelTitle>
                   <StatRow label="Total Net Profit" value={money(summary.netProfit,currency,true)} tone={Number(summary.netProfit)>=0?"good":"bad"}/>
-                  <StatRow label="Profit (%)" value={percent(summary.returnPercent,true)} tone={Number(summary.returnPercent)>=0?"good":"bad"}/>
                   <StatRow label="Gross Profit" value={money(summary.grossProfit,currency)}/>
                   <StatRow label="Gross Loss" value={"-"+money(Math.abs(Number(summary.grossLoss||0)),currency)} tone="bad"/>
                   <StatRow label="Profit Factor" value={fixed(summary.profitFactor)}/>
                   <StatRow label="Expected Payoff" value={money(summary.expectedPayoff,currency)}/>
                   <StatRow label="Recovery Factor" value={fixed(summary.recoveryFactor)}/>
                   <StatRow label="Sharpe Ratio" value={fixed(summary.sharpeRatio)}/>
+                  <StatRow label="AHPR" value={growthRatio(summary.ahpr)}/>
+                  <StatRow label="GHPR" value={growthRatio(summary.ghpr)}/>
                 </div>
 
-                <div className={styles.stack}>
-                  <div className={styles.panel}><PanelTitle icon="shield">Drawdown</PanelTitle><StatRow label="Max Drawdown" value={percent(summary.maxDrawdownPercent)}/><StatRow label="Drawdown Money" value={money(summary.maxDrawdownMoney,currency)}/></div>
-                  <div className={styles.panel}><PanelTitle icon="orders">Trades</PanelTitle>
-                    <StatRow label="Total Baskets" value={String(Number(summary.trades||0))}/>
-                    <StatRow label="Total Deals" value={String(totalDeals)}/>
-                    <StatRow label="Profit Baskets" value={String(Number(summary.wins||0))}/>
-                    <StatRow label="Loss Baskets" value={String(Number(summary.losses||0))}/>
-                    <StatRow label="Win Rate" value={percent(summary.winRate)}/>
-                    <StatRow label="Loss Rate" value={percent(summary.lossRate??(Number(summary.trades)?Number(summary.losses||0)/Number(summary.trades)*100:0))}/>
-                  </div>
+                <div className={styles.panel}>
+                  <PanelTitle icon="shield">Drawdown & Risk</PanelTitle>
+                  <StatRow label="Max Drawdown" value={percent(summary.maxDrawdownPercent)}/>
+                  <StatRow label="Drawdown Money" value={money(summary.maxDrawdownMoney,currency)}/>
+                  <StatRow label="Return" value={percent(summary.returnPercent,true)} tone={Number(summary.returnPercent)>=0?"good":"bad"}/>
+                  <StatRow label="Trading Days" value={String(Number(summary.tradingDays||0))}/>
+                  <StatRow label="Profitable Days" value={String(Number(summary.profitableDays||0))}/>
+                  <StatRow label="Losing Days" value={String(Number(summary.losingDays||0))}/>
+                  <StatRow label="Best Day" value={money(summary.bestDayProfit,currency,true)} tone={Number(summary.bestDayProfit)>=0?"good":"bad"}/>
+                  <StatRow label="Worst Day" value={money(summary.worstDayProfit,currency,true)} tone={Number(summary.worstDayProfit)>=0?"good":"bad"}/>
+                  <StatRow label="Average / Day" value={money(summary.averageDailyProfit,currency,true)} tone={Number(summary.averageDailyProfit)>=0?"good":"bad"}/>
                 </div>
 
-                <div className={styles.stack}>
-                  <div className={styles.panel}><PanelTitle icon="spread">Trade Direction</PanelTitle><StatRow label="Long Baskets (won %)" value={String(Number(summary.buyTrades||0))+" ("+percent(summary.buyWinRate||0)+")"}/><StatRow label="Short Baskets (won %)" value={String(Number(summary.sellTrades||0))+" ("+percent(summary.sellWinRate||0)+")"}/></div>
-                  <div className={styles.panel}><PanelTitle icon="pnl">Trade Statistics</PanelTitle><StatRow label="Largest profit trade" value={money(summary.largestProfitTrade,currency)}/><StatRow label="Largest loss trade" value={money(summary.largestLossTrade,currency)} tone="bad"/><StatRow label="Average profit trade" value={money(summary.averageProfitTrade,currency)}/><StatRow label="Average loss trade" value={money(summary.averageLossTrade,currency)} tone="bad"/></div>
-                  <div className={styles.panel}><PanelTitle icon="target">Streaks</PanelTitle><StatRow label="Maximum consecutive wins" value={String(Number(summary.maxWinStreak||0))+" ("+money(summary.maxWinStreakProfit,currency)+")"}/><StatRow label="Maximum consecutive losses" value={String(Number(summary.maxLossStreak||0))+" ("+money(summary.maxLossStreakLoss,currency)+")"} tone="bad"/><StatRow label="Average consecutive wins" value={fixed(summary.averageWinStreak,1)}/><StatRow label="Average consecutive losses" value={fixed(summary.averageLossStreak,1)}/></div>
+                <div className={styles.panel}>
+                  <PanelTitle icon="orders">Trades & Positions</PanelTitle>
+                  <StatRow label="Total Baskets" value={String(Number(summary.trades||0))}/>
+                  <StatRow label="Total Positions" value={String(totalPositions)}/>
+                  <StatRow label="Total Deals" value={String(totalDeals)}/>
+                  <StatRow label="Profit Baskets" value={String(Number(summary.wins||0))}/>
+                  <StatRow label="Loss Baskets" value={String(Number(summary.losses||0))}/>
+                  <StatRow label="Basket Win Rate" value={percent(summary.winRate)}/>
+                  <StatRow label="Profit Positions" value={String(Number(summary.profitPositions||0))}/>
+                  <StatRow label="Loss Positions" value={String(Number(summary.lossPositions||0))}/>
+                  <StatRow label="Position Win Rate" value={percent(summary.positionWinRate||0)}/>
+                </div>
+
+                <div className={styles.panel}>
+                  <PanelTitle icon="spread">Trade Direction</PanelTitle>
+                  <StatRow label="Long Baskets (won %)" value={String(Number(summary.buyTrades||0))+" ("+percent(summary.buyWinRate||0)+")"}/>
+                  <StatRow label="Short Baskets (won %)" value={String(Number(summary.sellTrades||0))+" ("+percent(summary.sellWinRate||0)+")"}/>
+                  <StatRow label="Loss Rate" value={percent(summary.lossRate??(Number(summary.trades)?Number(summary.losses||0)/Number(summary.trades)*100:0))}/>
+                  <StatRow label="Breakeven Baskets" value={String(Number(summary.breakeven||0))}/>
+                  <StatRow label="Breakeven Positions" value={String(Number(summary.breakevenPositions||0))}/>
+                  {mode==="LIVE"?(report?.modeBreakdown||[]).map((row:any)=>(
+                    <StatRow key={row.mode} label={String(row.mode).replace("_"," ")+" Baskets"} value={String(Number(row.baskets||0))+" · "+percent(row.winRate||0)}/>
+                  )):null}
+                </div>
+
+                <div className={styles.panel}>
+                  <PanelTitle icon="pnl">Trade Statistics</PanelTitle>
+                  <StatRow label="Largest profit trade" value={money(summary.largestProfitTrade,currency)}/>
+                  <StatRow label="Largest loss trade" value={money(summary.largestLossTrade,currency)} tone="bad"/>
+                  <StatRow label="Average profit trade" value={money(summary.averageProfitTrade,currency)}/>
+                  <StatRow label="Average loss trade" value={money(summary.averageLossTrade,currency)} tone="bad"/>
+                  <StatRow label="Average Lot" value={fixed(summary.averageLot,3)}/>
+                  <StatRow label="Maximum Lot" value={fixed(summary.maxLot,3)}/>
+                </div>
+
+                <div className={styles.panel}>
+                  <PanelTitle icon="target">Streaks</PanelTitle>
+                  <StatRow label="Maximum consecutive wins" value={String(Number(summary.maxWinStreak||0))+" ("+money(summary.maxWinStreakProfit,currency)+")"}/>
+                  <StatRow label="Maximum consecutive losses" value={String(Number(summary.maxLossStreak||0))+" ("+money(summary.maxLossStreakLoss,currency)+")"} tone="bad"/>
+                  <StatRow label="Average consecutive wins" value={fixed(summary.averageWinStreak,1)}/>
+                  <StatRow label="Average consecutive losses" value={fixed(summary.averageLossStreak,1)}/>
+                </div>
+
+                <div className={styles.panel}>
+                  <PanelTitle icon="timer">Timing</PanelTitle>
+                  <StatRow label={mode==="LIVE"?"Bot Runtime":"Report Period"} value={mode==="LIVE"?runtimeLabel(summary.runtimeSeconds):rangeDays+" วัน"}/>
+                  <StatRow label="Average Trade Time" value={durationLabel(summary.averageTradeDurationSeconds)}/>
+                  <StatRow label="Longest Trade" value={durationLabel(summary.maxTradeDurationSeconds)}/>
+                  <StatRow label="Shortest Trade" value={durationLabel(summary.minTradeDurationSeconds)}/>
+                </div>
+
+                <div className={styles.panel}>
+                  <PanelTitle icon="strategy">Data Scope</PanelTitle>
+                  <StatRow label="Strategy Filter" value={mode==="LIVE"?strategyLabel(selectedStrategy):"BACKTEST"}/>
+                  <StatRow label="ZERO GRID" value={mode==="LIVE"?"Excluded":"—"}/>
+                  <StatRow label="From" value={displayFrom}/>
+                  <StatRow label="To" value={displayTo}/>
+                  <StatRow label="Symbol" value={symbol}/>
                 </div>
               </div>
 
               <div className={styles.chartCard}>
-                <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={14}/><b>Balance</b><small>แกน X = จำนวนไม้ที่ปิด</small></div><span>End Balance: {money(endBalance,currency)}</span></div>
+                <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={14}/><b>Balance</b><small>กระชับ · แกน X = จำนวน Position ที่ปิด</small></div><span>End Balance: {money(endBalance,currency)}</span></div>
                 <SummaryChart points={curve}/>
               </div>
             </>
