@@ -155,9 +155,14 @@ function BalanceChart({ values }: { values: number[] }) {
         value: high - ratio * range
       };
     });
-    const verticalTicks = Array.from({ length: 10 }, (_, index) =>
-      left + index / 9 * (width - left - right)
-    );
+    const tickIndexes = Array.from(
+      { length: Math.min(8, Math.max(2, source.length)) },
+      (_, index) => Math.round(index * (source.length - 1) / Math.max(1, Math.min(8, Math.max(2, source.length)) - 1))
+    ).filter((value,index,array)=>index===0||value!==array[index-1]);
+    const verticalTicks = tickIndexes.map((pointIndex) => ({
+      pointIndex,
+      x: points[pointIndex]?.x ?? left
+    }));
     return { path, area, horizontalTicks, verticalTicks, points };
   }, [values]);
 
@@ -186,13 +191,16 @@ function BalanceChart({ values }: { values: number[] }) {
           <text x="3" y={tick.y + 3} className="bps-chart-label">{tick.value.toFixed(0)}</text>
         </g>
       ))}
-      {chart.verticalTicks.map((x, index) => (
-        <line key={"v-" + index} x1={x} x2={x} y1="13" y2="160" className="bps-grid-v" />
+      {chart.verticalTicks.map((tick, index) => (
+        <g key={"v-" + index}>
+          <line x1={tick.x} x2={tick.x} y1="13" y2="160" className="bps-grid-v" />
+          <text x={tick.x} y="174" textAnchor="middle" className="bps-chart-label">{tick.pointIndex}</text>
+        </g>
       ))}
       <path d={chart.area} fill="url(#bps-area)" />
       <path d={chart.path} fill="none" stroke="url(#bps-line)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       <circle className="bps-end-dot" cx={last.x} cy={last.y} r="4" />
-      <text x="600" y="181" textAnchor="middle" className="bps-chart-label">Trade Number</text>
+      <text x="600" y="183" textAnchor="middle" className="bps-chart-label">จำนวนไม้</text>
     </svg>
   );
 }

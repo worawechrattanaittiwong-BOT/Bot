@@ -12,6 +12,7 @@ import {
 import type { Response } from "express";
 import { DbService } from "./db.service";
 import { JwtGuard } from "./security";
+import { reconstructCompletedJournal } from "./performance-journal";
 
 type Actor = { sub: string; role?: string };
 type BasketRow = {
@@ -84,7 +85,7 @@ export class PerformanceAnalyticsController {
     let peak = running;
     let maxDrawdownMoney = 0;
     let maxDrawdownPercent = 0;
-    const curve: Array<{ time: string; balance: number; equity: number; drawdownPercent: number }> = [];
+    const curve: Array<{ time: string; balance: number; equity: number; drawdownPercent: number; tradeNumber?: number }> = [];
 
     for (const row of rows) {
       running += Number(row.net_profit || 0);
@@ -316,94 +317,105 @@ export class PerformanceAnalyticsController {
     const currentBalance = Number(metrics.balance || 0);
     const currentEquity = Number(metrics.equity || 0);
 
-    const basketsResult = await this.db.query(
-      `SELECT direction,net_profit,created_at,metadata,entry_quality_score,confidence
-       FROM trade_journal
-       WHERE mt5_account_id=$1
-         AND event_type='BASKET'
-         AND created_at >= $2
-         AND created_at <= $3
-       ORDER BY created_at ASC
-       LIMIT 20000`,
-      [account.id, from.toISOString(), to.toISOString()]
+    const resetRow = await this.db.one(
+      `SELECT created_at
+       FROM audit_logs
+       WHERE action='PERFORMANCE_TEST_DATA_RESET'
+          OR (action='PERFORMANCE_OWN_DATA_RESET' AND entity_id=$1)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [String(account.user_id)]
     );
-    const baskets = basketsResult.rows as BasketRow[];
+    const resetAt = resetRow?.created_at ? new Date(resetRow.created_at) : null;
+    const effectiveFrom =
+      resetAt && resetAt.getTime() > from.getTime()
+        ? resetAt
+        : from;
+    const now = new Date();
+    const journalTo = now.getTime() > to.getTime() ? now : to;
 
-    const pnlSinceFrom = await this.db.one(
-      `SELECT COALESCE(SUM(net_profit),0)::float8 AS net
+    // PERFORMANCE_ACTUAL_DEALS_V1: rebuild completed baskets from the actual
+    // ENTRY/EXIT deals. Raw BASKET rows are intentionally not trusted here
+    // because async close callbacks can finalize that legacy row before every
+    // exit deal has been accumulated.
+    const journalResult = await this.db.query(
+      `SELECT
+         deal_ticket,position_id,event_type,direction,volume::float8,price::float8,
+         net_profit::float8,entry_model,entry_trigger,entry_quality_score::float8,
+         confidence::float8,created_at,metadata
        FROM trade_journal
        WHERE mt5_account_id=$1
-         AND event_type='BASKET'
-         AND created_at >= $2`,
-      [account.id, from.toISOString()]
-    );
-    const derivedStart = currentBalance > 0
-      ? Number((currentBalance - Number(pnlSinceFrom?.net || 0)).toFixed(2))
-      : null;
-    const computed = this.summarize(baskets, derivedStart);
-
-    const curveExits = await this.db.query(
-      `SELECT net_profit::float8 AS net_profit,created_at
-       FROM trade_journal
-       WHERE mt5_account_id=$1
-         AND event_type='EXIT'
-         AND lower(COALESCE(metadata->>'executedByBot','true')) <> 'false'
+         AND event_type IN ('ENTRY','EXIT')
          AND created_at >= $2
          AND created_at <= $3
        ORDER BY created_at ASC,id ASC
-       LIMIT 20000`,
-      [account.id, from.toISOString(), to.toISOString()]
+       LIMIT 50000`,
+      [account.id, effectiveFrom.toISOString(), journalTo.toISOString()]
     );
-    if (derivedStart !== null && curveExits.rows.length > 0) {
-      let curveBalance = derivedStart;
-      let curvePeak = curveBalance;
-      let curveMaxDdMoney = 0;
-      let curveMaxDdPercent = 0;
-      computed.curve = curveExits.rows.map((row:any) => {
-        curveBalance += Number(row.net_profit || 0);
-        curvePeak = Math.max(curvePeak, curveBalance);
-        const ddMoney = Math.max(0, curvePeak - curveBalance);
-        const ddPercent = curvePeak > 0 ? ddMoney / curvePeak * 100 : 0;
-        curveMaxDdMoney = Math.max(curveMaxDdMoney, ddMoney);
-        curveMaxDdPercent = Math.max(curveMaxDdPercent, ddPercent);
-        return {
-          time: row.created_at,
-          balance: Number(curveBalance.toFixed(2)),
-          equity: Number(curveBalance.toFixed(2)),
-          drawdownPercent: Number(ddPercent.toFixed(3))
-        };
+    const reconstructed = reconstructCompletedJournal(journalResult.rows || []);
+    const allBaskets = reconstructed.baskets;
+    const allPositions = reconstructed.positions;
+    const selectedBaskets = allBaskets.filter(
+      (row) => new Date(row.created_at).getTime() <= to.getTime()
+    );
+    const selectedPositions = allPositions.filter(
+      (row) => new Date(row.closedAt).getTime() <= to.getTime()
+    );
+
+    const pnlSinceFrom = allBaskets.reduce(
+      (sum,row) => sum + Number(row.net_profit || 0),
+      0
+    );
+    const derivedStart = currentBalance > 0
+      ? Number((currentBalance - pnlSinceFrom).toFixed(2))
+      : null;
+    const computed = this.summarize(selectedBaskets as BasketRow[], derivedStart);
+
+    if(derivedStart !== null){
+      let curveBalance=derivedStart;
+      let curvePeak=curveBalance;
+      let curveMaxDdMoney=0;
+      let curveMaxDdPercent=0;
+      computed.curve=[{
+        time:effectiveFrom.toISOString(),
+        tradeNumber:0,
+        balance:Number(curveBalance.toFixed(2)),
+        equity:Number(curveBalance.toFixed(2)),
+        drawdownPercent:0
+      }];
+      selectedPositions.forEach((position,index) => {
+        curveBalance+=Number(position.net_profit || 0);
+        curvePeak=Math.max(curvePeak,curveBalance);
+        const ddMoney=Math.max(0,curvePeak-curveBalance);
+        const ddPercent=curvePeak>0 ? ddMoney/curvePeak*100 : 0;
+        curveMaxDdMoney=Math.max(curveMaxDdMoney,ddMoney);
+        curveMaxDdPercent=Math.max(curveMaxDdPercent,ddPercent);
+        computed.curve.push({
+          time:position.closedAt,
+          tradeNumber:index+1,
+          balance:Number(curveBalance.toFixed(2)),
+          equity:Number(curveBalance.toFixed(2)),
+          drawdownPercent:Number(ddPercent.toFixed(3))
+        });
       });
-      computed.summary.maxDrawdownMoney = Number(curveMaxDdMoney.toFixed(2));
-      computed.summary.maxDrawdownPercent = Number(curveMaxDdPercent.toFixed(2));
-      computed.summary.recoveryFactor = curveMaxDdMoney > 0
-        ? Number((computed.summary.netProfit / curveMaxDdMoney).toFixed(2))
-        : computed.summary.netProfit > 0 ? 999 : null;
+      computed.summary.maxDrawdownMoney=Number(curveMaxDdMoney.toFixed(2));
+      computed.summary.maxDrawdownPercent=Number(curveMaxDdPercent.toFixed(2));
+      computed.summary.recoveryFactor=curveMaxDdMoney>0
+        ? Number((computed.summary.netProfit/curveMaxDdMoney).toFixed(2))
+        : computed.summary.netProfit>0 ? 999 : null;
     }
 
-    const exits = await this.db.query(
-      `SELECT
-         x.deal_ticket,x.position_id,x.direction,x.volume,x.price AS exit_price,x.net_profit,
-         x.created_at AS closed_at,COALESCE(x.metadata->>'symbol',$4) AS symbol,
-         e.price AS entry_price,e.created_at AS opened_at
-       FROM trade_journal x
-       LEFT JOIN LATERAL (
-         SELECT price,created_at
-         FROM trade_journal e
-         WHERE e.mt5_account_id=x.mt5_account_id
-           AND e.event_type='ENTRY'
-           AND e.position_id=x.position_id
-           AND e.created_at<=x.created_at
-         ORDER BY e.created_at DESC
-         LIMIT 1
-       ) e ON true
-       WHERE x.mt5_account_id=$1
-         AND x.event_type='EXIT'
-         AND x.created_at >= $2
-         AND x.created_at <= $3
-       ORDER BY x.created_at DESC
-       LIMIT 500`,
-      [account.id, from.toISOString(), to.toISOString(), String(metrics.symbol || "XAUUSD")]
-    );
+    const positionProfits=selectedPositions.map((position)=>Number(position.net_profit || 0));
+    const positivePositions=positionProfits.filter((value)=>value>0);
+    const negativePositions=positionProfits.filter((value)=>value<0);
+    computed.summary.largestProfitTrade=positivePositions.length
+      ? Number(Math.max(...positivePositions).toFixed(2)) : 0;
+    computed.summary.largestLossTrade=negativePositions.length
+      ? Number(Math.min(...negativePositions).toFixed(2)) : 0;
+    computed.summary.averageProfitTrade=positivePositions.length
+      ? Number((positivePositions.reduce((a,b)=>a+b,0)/positivePositions.length).toFixed(2)) : 0;
+    computed.summary.averageLossTrade=negativePositions.length
+      ? Number((negativePositions.reduce((a,b)=>a+b,0)/negativePositions.length).toFixed(2)) : 0;
 
     const historyIdentity = await this.db.one(
       `SELECT
@@ -439,9 +451,18 @@ export class PerformanceAnalyticsController {
       computed.curve[computed.curve.length - 1].equity = Number(currentEquity.toFixed(2));
     }
 
+    const rangeEnd = derivedStart === null
+      ? null
+      : Number((derivedStart + Number(computed.summary.netProfit || 0)).toFixed(2));
+
     return {
       source: "LIVE",
-      range: { from: from.toISOString(), to: to.toISOString() },
+      range: {
+        from: from.toISOString(),
+        to: to.toISOString(),
+        effectiveFrom: effectiveFrom.toISOString(),
+        resetAt: resetAt ? resetAt.toISOString() : null
+      },
       account: {
         id: account.id,
         userId: account.user_id,
@@ -470,20 +491,21 @@ export class PerformanceAnalyticsController {
         current: currentBalance > 0 ? currentBalance : null,
         equity: currentEquity > 0 ? currentEquity : null,
         derivedStart,
-        basis: derivedStart !== null ? "DERIVED_FROM_CURRENT_BALANCE_AND_BOT_PNL" : "BOT_CLOSED_PNL_ONLY"
+        rangeEnd,
+        basis: derivedStart !== null ? "ACTUAL_ENTRY_EXIT_DEALS" : "BOT_CLOSED_PNL_ONLY"
       },
       ...computed,
-      closedTrades: exits.rows.map((row: any) => ({
-        ticket: String(row.deal_ticket),
-        positionId: row.position_id ? String(row.position_id) : null,
+      closedTrades: [...selectedPositions].reverse().slice(0,500).map((row) => ({
+        ticket: row.positionId,
+        positionId: row.positionId,
         symbol: row.symbol || accountSymbol,
         side: row.direction,
         lot: Number(row.volume || 0),
-        entryPrice: row.entry_price === null ? null : Number(row.entry_price),
-        exitPrice: Number(row.exit_price || 0),
+        entryPrice: row.entryPrice,
+        exitPrice: row.exitPrice,
         profit: Number(row.net_profit || 0),
-        openedAt: row.opened_at || null,
-        closedAt: row.closed_at
+        openedAt: row.openedAt,
+        closedAt: row.closedAt
       })),
       backtests: backtests.rows
     };

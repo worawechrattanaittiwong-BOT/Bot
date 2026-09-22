@@ -77,14 +77,6 @@ function fixed(value:any,digits=2) {
   return Number.isFinite(n)?n.toFixed(digits):"—";
 }
 
-function chartTickLabel(value:any,singleDay:boolean) {
-  const date=value?new Date(value):null;
-  if(!date||!Number.isFinite(date.getTime())) return "";
-  return singleDay
-    ? date.toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit",hour12:false})
-    : date.toLocaleDateString("th-TH",{timeZone:"Asia/Bangkok",day:"2-digit",month:"2-digit"});
-}
-
 function InfoRow({icon,label,value}:{icon:string;label:string;value:string}) {
   return <div className={styles.infoRow}><span className={styles.infoIcon}><ScenovaIcon name={icon} size={15}/></span><span>{label}</span><b>{value}</b></div>;
 }
@@ -101,7 +93,7 @@ function StatRow({label,value,tone=""}:{label:string;value:string;tone?:"good"|"
   return <div className={styles.statRow}><span>{label}</span><b className={tone?styles[tone]:""}>{value}</b></div>;
 }
 
-function SummaryChart({points,from,to}:{points:any[];from:string;to:string}) {
+function SummaryChart({points}:{points:any[]}) {
   if(!points?.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลกราฟในช่วงเวลานี้</div>;
   const width=1200,height=190,left=34,right=18,top=13,bottom=30;
   const values=points.map((point)=>Number(point.balance??0));
@@ -117,7 +109,6 @@ function SummaryChart({points,from,to}:{points:any[];from:string;to:string}) {
   const area=line+" L "+coords[coords.length-1].x.toFixed(1)+" "+(top+plotHeight)+" L "+coords[0].x.toFixed(1)+" "+(top+plotHeight)+" Z";
   const ticks=Array.from({length:Math.min(7,Math.max(2,points.length))},(_,i)=>Math.round(i*(points.length-1)/Math.max(1,Math.min(7,Math.max(2,points.length))-1)))
     .filter((value,index,array)=>index===0||value!==array[index-1]);
-  const singleDay=from===to;
   const last=coords[coords.length-1];
   return (
     <svg className={styles.chart} viewBox={"0 0 "+width+" "+height} role="img" aria-label="Balance curve">
@@ -134,11 +125,12 @@ function SummaryChart({points,from,to}:{points:any[];from:string;to:string}) {
       })}
       {ticks.map((index)=>{
         const x=left+(points.length<=1?0:index/(points.length-1)*plotWidth);
-        return <g key={"v"+index}><line x1={x} x2={x} y1={top} y2={top+plotHeight} className={styles.gridLine}/><text x={x} y={height-7} textAnchor="middle" className={styles.chartLabel}>{chartTickLabel(points[index]?.time,singleDay)}</text></g>;
+        return <g key={"v"+index}><line x1={x} x2={x} y1={top} y2={top+plotHeight} className={styles.gridLine}/><text x={x} y={height-7} textAnchor="middle" className={styles.chartLabel}>{String(Number(points[index]?.tradeNumber ?? index))}</text></g>;
       })}
       <path d={area} fill="url(#perf-area)"/>
       <path d={line} fill="none" stroke="url(#perf-line)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
       <circle cx={last.x} cy={last.y} r="4" className={styles.endDot}/>
+      <text x={width/2} y={height-1} textAnchor="middle" className={styles.chartLabel}>จำนวนไม้</text>
     </svg>
   );
 }
@@ -175,7 +167,7 @@ export default function PerformanceDashboardPage() {
   const [options,setOptions]=useState<Options|null>(null);
   const [accountId,setAccountId]=useState("");
   const [mode,setMode]=useState<Mode>("LIVE");
-  const [from,setFrom]=useState(rangeFromDays(today,30).from);
+  const [from,setFrom]=useState(today);
   const [to,setTo]=useState(today);
   const [report,setReport]=useState<any>(null);
   const [selectedBacktestId,setSelectedBacktestId]=useState("");
@@ -293,8 +285,9 @@ export default function PerformanceDashboardPage() {
       setSelectedBacktestId("");
       setShareResult(null);
       setError("");
+      setFrom(today);
+      setTo(today);
       await loadOptions();
-      if(accountId) await refresh(accountId,mode);
       window.alert(
         "ล้างข้อมูลของคุณสำเร็จ\nTrade Journal: "+String(result?.deleted?.tradeJournal||0)+
         "\nBacktest: "+String(result?.deleted?.backtestRuns||0)+
@@ -325,8 +318,9 @@ export default function PerformanceDashboardPage() {
       setSelectedBacktestId("");
       setShareResult(null);
       setError("");
+      setFrom(today);
+      setTo(today);
       await loadOptions();
-      if(accountId) await refresh(accountId,mode);
       window.alert(
         "ล้างข้อมูลสำเร็จ\nTrade Journal: "+String(result?.deleted?.tradeJournal||0)+
         "\nBacktest: "+String(result?.deleted?.backtestRuns||0)+
@@ -348,15 +342,29 @@ export default function PerformanceDashboardPage() {
   const runtimeMode=String(mode==="BACKTEST"?"BACKTEST":report?.account?.mode||"LIVE").toUpperCase();
   const startCapital=Number(mode==="BACKTEST"?backtest?.initial_deposit:report?.balance?.derivedStart||0);
   const liveEnd=Number(report?.balance?.current||0);
-  const backCurve=Array.isArray(backtest?.trades)&&backtest.trades.length
-    ? backtest.trades.map((row:any)=>({time:row.closed_at||row.opened_at,balance:Number(row.balance_after||0)}))
-    : Array.isArray(backtest?.equity_curve)?backtest.equity_curve.map((row:any,index:number)=>({time:row.time||row.closed_at||null,balance:Number(row.balance||row.value||0),index})):[];
+  const backTradePoints=Array.isArray(backtest?.trades)&&backtest.trades.length
+    ? backtest.trades.map((row:any,index:number)=>({
+        time:row.closed_at||row.opened_at,
+        tradeNumber:index+1,
+        balance:Number(row.balance_after||0)
+      }))
+    : Array.isArray(backtest?.equity_curve)?backtest.equity_curve.map((row:any,index:number)=>({
+        time:row.time||row.closed_at||null,
+        tradeNumber:index+1,
+        balance:Number(row.balance||row.value||0)
+      })):[];
+  const backCurve=mode==="BACKTEST"&&startCapital>0
+    ? [{time:backtest?.started_at||null,tradeNumber:0,balance:startCapital},...backTradePoints]
+    : backTradePoints;
   const curve=mode==="BACKTEST"?backCurve:(report?.curve||[]);
   const endBalance=Number(mode==="BACKTEST"
     ? backSummary.finalBalance??backCurve[backCurve.length-1]?.balance??startCapital
-    : liveEnd||startCapital+Number(summary.netProfit||0));
+    : report?.balance?.rangeEnd??liveEnd||startCapital+Number(summary.netProfit||0));
   const totalDeals=mode==="BACKTEST"?backExtra.totalDeals:Number(report?.closedTrades?.length||0);
-  const rangeDays=inclusiveDays(from,to);
+  const liveDisplayFrom=report?.range?.effectiveFrom?dateInput(report.range.effectiveFrom):from;
+  const displayFrom=mode==="BACKTEST"&&backtest?.started_at?dateInput(backtest.started_at):liveDisplayFrom;
+  const displayTo=mode==="BACKTEST"&&backtest?.ended_at?dateInput(backtest.ended_at):to;
+  const rangeDays=inclusiveDays(displayFrom,displayTo);
 
   return (
     <div className={styles.shell}>
@@ -426,8 +434,8 @@ export default function PerformanceDashboardPage() {
             <>
               <div className={styles.infoCard}>
                 <div className={styles.infoCol}><InfoRow icon="account" label="Account" value={String(report?.account?.accountNumber||"—")}/><InfoRow icon="shield" label="Account Type" value={String(selectedAccount?.accountType||"REAL").toUpperCase()}/><InfoRow icon="wallet" label="Currency" value={currency}/></div>
-                <div className={styles.infoCol}><InfoRow icon="layers" label="Runtime Mode" value={runtimeMode}/><InfoRow icon="clock" label="From" value={from}/><InfoRow icon="play" label="Data Mode" value={mode}/></div>
-                <div className={styles.infoCol}><InfoRow icon="stop" label="To" value={to}/><InfoRow icon="hourglass" label="Period" value={rangeDays+" วัน"}/><InfoRow icon="orders" label="Closed Baskets" value={String(Number(summary.trades||0))}/></div>
+                <div className={styles.infoCol}><InfoRow icon="layers" label="Runtime Mode" value={runtimeMode}/><InfoRow icon="clock" label="From" value={displayFrom}/><InfoRow icon="play" label="Data Mode" value={mode}/></div>
+                <div className={styles.infoCol}><InfoRow icon="stop" label="To" value={displayTo}/><InfoRow icon="hourglass" label="Period" value={rangeDays+" วัน"}/><InfoRow icon="orders" label="Closed Baskets" value={String(Number(summary.trades||0))}/></div>
               </div>
 
               <div className={styles.metricsCard}>
@@ -473,8 +481,8 @@ export default function PerformanceDashboardPage() {
               </div>
 
               <div className={styles.chartCard}>
-                <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={14}/><b>Balance</b><small>{from===to?"ใต้กราฟแสดงเวลา":"ใต้กราฟแสดงวันที่"}</small></div><span>End Balance: {money(endBalance,currency)}</span></div>
-                <SummaryChart points={curve} from={from} to={to}/>
+                <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={14}/><b>Balance</b><small>แกน X = จำนวนไม้ที่ปิด</small></div><span>End Balance: {money(endBalance,currency)}</span></div>
+                <SummaryChart points={curve}/>
               </div>
             </>
           )}
