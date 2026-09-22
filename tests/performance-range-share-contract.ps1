@@ -25,7 +25,11 @@ foreach ($required in @(
   'parsePublicRange',
   '730 days',
   'accountType',
-  'accountTradeMode'
+  'accountTradeMode',
+  'strategyModes',
+  'normalizeShareStrategyModes',
+  'lotDistribution',
+  'modeBreakdown'
 )) {
   if (-not $actions.Contains($required)) { throw "Public performance dynamic-share contract missing: $required" }
 }
@@ -36,13 +40,13 @@ foreach ($required in @(
   '30 วัน',
   '90 วัน',
   'inclusiveDays',
-  'chartTickLabel',
-  'from={from} to={to}',
+  'SummaryChart',
+  'Capital Growth',
   'BOT PERFORMANCE SUMMARY',
   'My Performance Only',
   'account.userId===options?.user?.id',
   'ownAccounts',
-  'compactToolbar',
+  'Strategy Portfolio',
   'แชร์ Read-only',
   'ล้างข้อมูลของฉัน',
   'ล้างข้อมูลทั้งระบบ',
@@ -56,30 +60,28 @@ if ($web.Contains('className={styles.shareCard}')) { throw 'Share controls must 
 if ($web.Contains('<h1>Trading Performance & Backtest</h1>')) { throw 'Redundant page heading must stay removed' }
 
 foreach ($required in @(
-  'กำหนดเอง',
-  'shared-performance/',
-  'customDays',
-  'EquityChart points={curve} from={from} to={to}',
-  'REAL ACCOUNT',
-  'DEMO ACCOUNT',
-  'บัญชีจริง · REAL',
-  'บัญชีทดลอง · DEMO',
-  'Drawdown %',
-  'horizontalGrid',
-  'yTickLabel',
-  'preserveAspectRatio="xMidYMid meet"',
-  'kind==="drawdown"?560:1000',
-  'heroRisk',
-  'ผลย้อนหลังไม่รับประกันผลลัพธ์ในอนาคต'
+  'BOT PERFORMANCE SUMMARY',
+  'Public read-only performance',
+  'Strategy Portfolio',
+  'Performance Breakdown · MT5 Analytics',
+  'Directional Analytics',
+  'Execution Analytics',
+  'Portfolio Scope',
+  'Lot Allocation',
+  'Capital Growth',
+  'SummaryChart',
+  'LotDistributionChart',
+  'styles.optionsDrawer',
+  'วันนี้',
+  '7 วัน',
+  '30 วัน',
+  '90 วัน'
 )) {
-  if (-not $public.Contains($required)) { throw "Shared Performance date selector contract missing: $required" }
+  if (-not $public.Contains($required)) { throw "Shared Performance mirror-dashboard contract missing: $required" }
 }
 
-if ($public.Contains('LIVE READ ONLY')) { throw 'Public performance page must not show system-explanation LIVE READ ONLY badge' }
-if ($public.Contains('DATE SELECTABLE')) { throw 'Public performance page must not show system-explanation DATE SELECTABLE badge' }
-if ($public.Contains('แกนล่าง =')) { throw 'Public chart header must not show internal axis explanation copy' }
-if ($public.Contains('EXIT ที่บอทปิดจริง')) { throw 'Public chart header must not expose implementation explanation' }
-if ($public.Contains('className={styles.disclaimer}')) { throw 'Risk warning must live in the hero card, not a separate bottom card' }
-if ($public.Contains('Public Read Only')) { throw 'Public page must not show system footer explanation' }
+if ($public.Contains('Equity / Balance Curve')) { throw 'Legacy public share dashboard must stay removed' }
+if ($public.Contains('DrawdownChart')) { throw 'Legacy standalone public drawdown chart must stay removed' }
+if ($public.Contains('className={styles.disclaimer}')) { throw 'Public share must use the same compact report surface as the private summary' }
 
 Write-Host 'Performance date range / dynamic public share contract PASS'
