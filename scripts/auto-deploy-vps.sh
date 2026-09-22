@@ -303,9 +303,26 @@ PUBLIC_WEB_URL="$(grep '^PUBLIC_WEB_URL=' .env.hostinger 2>/dev/null | cut -d= -
 if [ -n "$PUBLIC_WEB_URL" ] && command -v curl >/dev/null 2>&1; then
   HEALTH_URL="$PUBLIC_WEB_URL/backend/api/health"
   echo "[SCENOVA] health check: $HEALTH_URL"
+
+  # The VPS public IP does not reliably support HTTPS hairpin/NAT to itself.
+  # Going back out through public DNS can produce a TLS internal error even
+  # while nginx and the site are healthy. Pin the public hostname to local
+  # nginx for this post-deploy check so a healthy deploy is marked once and
+  # is not rebuilt/restarted every cron cycle.
+  HEALTH_HOST="$(printf '%s' "$PUBLIC_WEB_URL" | sed -E 's#^[a-zA-Z]+://##; s#/.*$##; s/:.*$//')"
+  HEALTH_CURL=(curl --fail --silent --show-error --max-time 5)
+  case "$PUBLIC_WEB_URL" in
+    https://*)
+      HEALTH_CURL+=(--resolve "$HEALTH_HOST:443:127.0.0.1")
+      ;;
+    http://*)
+      HEALTH_CURL+=(--resolve "$HEALTH_HOST:80:127.0.0.1")
+      ;;
+  esac
+
   HEALTH_OK=0
   for ((attempt=1; attempt<=30; attempt++)); do
-    if curl --fail --silent --show-error --max-time 5 "$HEALTH_URL" >/dev/null; then
+    if "${HEALTH_CURL[@]}" "$HEALTH_URL" >/dev/null; then
       HEALTH_OK=1
       echo "[SCENOVA] health check passed on attempt $attempt"
       break
