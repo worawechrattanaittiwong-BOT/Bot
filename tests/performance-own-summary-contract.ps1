@@ -14,7 +14,7 @@ foreach ($required in @(
   '30 วัน',
   '90 วัน',
   'SummaryChart',
-  'Trade Direction',
+  'Directional Analytics',
   'Streaks'
 )) {
   if (-not $web.Contains($required)) { throw "Own performance summary page missing: $required" }
@@ -42,11 +42,11 @@ $actions = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/performance
 foreach ($required in @(
   'realAccounts',
   'demoAccounts',
-  'บัญชีจริง (REAL)',
-  'บัญชีทดลอง (DEMO)',
+  'Live Accounts (REAL)',
+  'Demo Accounts',
   'clearAllPerformanceData',
   '/performance-actions/reset-test-data',
-  'ล้างข้อมูลทดสอบ',
+  'ล้างข้อมูลทั้งระบบ',
   'Account Type',
   'currentRealDemoAccounts',
   'compareCurrentAccounts',
