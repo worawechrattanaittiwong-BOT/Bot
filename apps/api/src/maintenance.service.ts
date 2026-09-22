@@ -157,7 +157,7 @@ export class MaintenanceService {
       "UPDATE bot_instances SET desired_state='STOPPED' WHERE desired_state<>'STOPPED'"
     );
     await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')"
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE status IN ('PENDING','DELIVERED') AND command<>'CLOSE_ALL'"
     );
 
     const payload = JSON.stringify({
@@ -196,6 +196,16 @@ export class MaintenanceService {
          COALESCE(SUM(reported_pending_orders),0)::int AS pending_orders,
          COALESCE(SUM(CASE WHEN mt5_fresh THEN reported_positions ELSE 0 END),0)::int AS fresh_positions,
          COALESCE(SUM(CASE WHEN mt5_fresh THEN reported_pending_orders ELSE 0 END),0)::int AS fresh_pending_orders,
+         (
+           SELECT COUNT(*)::int
+           FROM runtime rr
+           WHERE EXISTS (
+             SELECT 1 FROM bot_commands bc
+             WHERE bc.bot_instance_id=rr.id
+               AND bc.command='CLOSE_ALL'
+               AND bc.status IN ('PENDING','DELIVERED')
+           )
+         ) AS unresolved_close_all,
          COUNT(*) FILTER (
            WHERE NOT mt5_fresh AND reported_positions>0
          )::int AS stale_position_instances,
@@ -212,7 +222,8 @@ export class MaintenanceService {
     if (
       Number(blockers?.running || 0) === 0 &&
       Number(blockers?.fresh_positions || 0) === 0 &&
-      Number(blockers?.fresh_pending_orders || 0) === 0
+      Number(blockers?.fresh_pending_orders || 0) === 0 &&
+      Number(blockers?.unresolved_close_all || 0) === 0
     ) {
       await this.db.query(
         `UPDATE system_maintenance
@@ -269,6 +280,18 @@ export class MaintenanceService {
          )::int AS running_instances,
          COUNT(*) FILTER (WHERE reported_positions>0)::int AS instances_with_positions,
          COALESCE(SUM(reported_positions),0)::int AS open_positions,
+         COUNT(*) FILTER (WHERE reported_pending_orders>0)::int AS instances_with_pending_orders,
+         COALESCE(SUM(reported_pending_orders),0)::int AS open_pending_orders,
+         (
+           SELECT COUNT(*)::int
+           FROM runtime rr
+           WHERE EXISTS (
+             SELECT 1 FROM bot_commands bc
+             WHERE bc.bot_instance_id=rr.id
+               AND bc.command='CLOSE_ALL'
+               AND bc.status IN ('PENDING','DELIVERED')
+           )
+         ) AS unresolved_close_all,
          COUNT(*) FILTER (WHERE NOT mt5_fresh AND reported_positions>0)::int AS stale_position_instances,
          COALESCE(SUM(CASE WHEN NOT mt5_fresh THEN reported_positions ELSE 0 END),0)::int AS stale_reported_positions
        FROM runtime`
@@ -285,6 +308,7 @@ export class MaintenanceService {
          r.desired_state,
          r.last_seen_at,
          r.reported_positions AS positions,
+         r.reported_pending_orders AS pending_orders,
          r.mt5_fresh AS positions_fresh
        FROM runtime r
        LEFT JOIN license_slots ls ON ls.id=r.slot_id
@@ -293,7 +317,14 @@ export class MaintenanceService {
        WHERE r.desired_state='RUNNING'
           OR (r.mt5_fresh AND r.actual_state='RUNNING')
           OR r.reported_positions>0
-       ORDER BY r.reported_positions DESC,r.last_seen_at DESC NULLS LAST
+          OR r.reported_pending_orders>0
+          OR EXISTS (
+            SELECT 1 FROM bot_commands bc
+            WHERE bc.bot_instance_id=r.id
+              AND bc.command='CLOSE_ALL'
+              AND bc.status IN ('PENDING','DELIVERED')
+          )
+       ORDER BY r.reported_positions DESC,r.reported_pending_orders DESC,r.last_seen_at DESC NULLS LAST
        LIMIT 1000`
     );
 
@@ -324,6 +355,9 @@ export class MaintenanceService {
         runningInstances: Number(summary?.running_instances || 0),
         instancesWithPositions: Number(summary?.instances_with_positions || 0),
         openPositions: Number(summary?.open_positions || 0),
+        instancesWithPendingOrders: Number(summary?.instances_with_pending_orders || 0),
+        openPendingOrders: Number(summary?.open_pending_orders || 0),
+        unresolvedCloseAll: Number(summary?.unresolved_close_all || 0),
         stalePositionInstances: Number(summary?.stale_position_instances || 0),
         staleReportedPositions: Number(summary?.stale_reported_positions || 0)
       },
@@ -358,17 +392,32 @@ export class MaintenanceService {
     // Supersede obsolete start/stop controls, but never fake a CLOSE_ALL ACK.
     // reconcileAckedCloseAll() must only trust an acknowledgement sent by the EA.
     await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
+      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command<>'CLOSE_ALL'",
       [id]
     );
-    await this.db.query(
-      "INSERT INTO bot_commands(bot_instance_id,command,payload) VALUES($1,'CLOSE_ALL',$2::jsonb)",
-      [id, JSON.stringify({ source: "OWNER_MAINTENANCE", actor: actor.slice(0, 120), forceReset: true })]
+    const closePayload = JSON.stringify({
+      source: "OWNER_MAINTENANCE",
+      actor: actor.slice(0, 120),
+      forceReset: true,
+      requestedAt: new Date().toISOString()
+    });
+    const queued = await this.db.query(
+      `INSERT INTO bot_commands(bot_instance_id,command,payload)
+       SELECT $1,'CLOSE_ALL',$2::jsonb
+       WHERE NOT EXISTS (
+         SELECT 1 FROM bot_commands
+         WHERE bot_instance_id=$1
+           AND command='CLOSE_ALL'
+           AND status IN ('PENDING','DELIVERED')
+       )
+       RETURNING id`,
+      [id, closePayload]
     );
 
     return {
       ok: true,
-      queued: true,
+      queued: Number(queued.rowCount || 0) > 0,
+      closeAllPending: true,
       instanceId: id,
       userCode: instance.user_code || null,
       accountNumber: instance.account_number || null,
@@ -563,12 +612,15 @@ export class MaintenanceService {
     const running = Number(blockers?.running || 0);
     const positions = Number(blockers?.positions || 0);
     const pendingOrders = Number(blockers?.pending_orders || 0);
+    const unresolvedCloseAll = Number(blockers?.unresolved_close_all || 0);
     const stalePositions = Number(blockers?.stale_reported_positions || 0);
-    if (running > 0 || positions > 0 || pendingOrders > 0) {
+    if (running > 0 || positions > 0 || pendingOrders > 0 || unresolvedCloseAll > 0) {
       throw new ConflictException(
         stalePositions > 0
           ? "ยังมี Position จากข้อมูล MT5 ล่าสุดที่ยังไม่ได้ยืนยันว่าเป็น 0 กรุณาเปิด EA/MT5 ให้ heartbeat ยืนยัน หรือส่ง Close All ให้สำเร็จก่อนเปิดระบบ"
-          : "ยังมี Bot Running, Position หรือ Pending Order ค้างอยู่ ระบบยังเปิดกลับไม่ได้"
+          : unresolvedCloseAll > 0
+            ? "ยังมีคำสั่ง Force Flat/CLOSE_ALL ที่ MT5 ยังไม่ได้ยืนยัน ระบบยังเปิดกลับไม่ได้"
+            : "ยังมี Bot Running, Position หรือ Pending Order ค้างอยู่ ระบบยังเปิดกลับไม่ได้"
       );
     }
 

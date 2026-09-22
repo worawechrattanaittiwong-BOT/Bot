@@ -75,14 +75,43 @@ KEY_BAD_HTTP=$(curl -sS -o /tmp/force-flat-key-bad.json -w '%{http_code}' \
 assert_eq "$KEY_BAD_HTTP" "409"
 assert_eq "$(psql -h localhost -U bot -d bot -Atc "select status from system_maintenance where id=1;")" "OFF"
 
-echo '[regression] Owner FORCE FLAT freezes starts and leaves durable CLOSE_ALL'
+echo '[regression] customer self Force Flat queues even when cached Position count is already zero'
+SELF_FORCE=$(curl -fsS -X POST "$BASE/bot/close-all?slotId=$SLOT_ID" \
+  -H "authorization: Bearer $USER_TOKEN")
+assert_eq "$(printf '%s' "$SELF_FORCE" | jq -r '.state')" "STOPPED"
+SELF_CLOSE_ID=$(psql -h localhost -U bot -d bot -Atc "select id from bot_commands where bot_instance_id='$INSTANCE' and command='CLOSE_ALL' and status in ('PENDING','DELIVERED') order by id desc limit 1;")
+test -n "$SELF_CLOSE_ID"
+assert_eq "$(psql -h localhost -U bot -d bot -Atc "select payload->>'source' from bot_commands where id=$SELF_CLOSE_ID;")" "CUSTOMER_FORCE_FLAT_RESET"
+psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_commands set status='ACKED',acked_at=now() where id=$SELF_CLOSE_ID;" >/dev/null
+
+echo '[regression] Admin per-account Force Flat queues even when cached Position count is zero'
+ACCOUNT_FORCE=$(curl -fsS -X POST "$BASE/admin/maintenance/close-instance" \
+  -H "authorization: Bearer $OWNER_TOKEN" -H 'content-type: application/json' \
+  -d "{\"instanceId\":\"$INSTANCE\"}")
+test "$(printf '%s' "$ACCOUNT_FORCE" | jq -r '.ok')" = 'true'
+ACCOUNT_CLOSE_ID=$(psql -h localhost -U bot -d bot -Atc "select id from bot_commands where bot_instance_id='$INSTANCE' and command='CLOSE_ALL' and status in ('PENDING','DELIVERED') order by id desc limit 1;")
+test -n "$ACCOUNT_CLOSE_ID"
+assert_eq "$(psql -h localhost -U bot -d bot -Atc "select payload->>'forceReset' from bot_commands where id=$ACCOUNT_CLOSE_ID;")" "true"
+psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_commands set status='ACKED',acked_at=now() where id=$ACCOUNT_CLOSE_ID;" >/dev/null
+
+STALE_COMMAND_ID=$(psql -h localhost -U bot -d bot -Atq -c "insert into bot_commands(bot_instance_id,command,status,payload) values('$INSTANCE','UPDATE_SETTINGS','PENDING','{}'::jsonb) returning id;" | head -n1)
+test -n "$STALE_COMMAND_ID"
+
+echo '[regression] Owner FORCE FLAT freezes starts, supersedes stale commands and leaves durable CLOSE_ALL'
 FORCE=$(curl -fsS -X POST "$BASE/admin/maintenance/force-flat-all" \
   -H "authorization: Bearer $OWNER_TOKEN" -H 'content-type: application/json' \
   -d '{"confirmation":"FORCE FLAT ALL"}')
 test "$(printf '%s' "$FORCE" | jq -r '.blockStarts')" = 'true'
+assert_eq "$(psql -h localhost -U bot -d bot -Atc "select status from system_maintenance where id=1;")" "DRAINING"
 assert_eq "$(psql -h localhost -U bot -d bot -Atc "select desired_state from bot_instances where id='$INSTANCE';")" "STOPPED"
+assert_eq "$(psql -h localhost -U bot -d bot -Atc "select status from bot_commands where id=$STALE_COMMAND_ID;")" "ACKED"
 CLOSE_ID=$(psql -h localhost -U bot -d bot -Atc "select id from bot_commands where bot_instance_id='$INSTANCE' and command='CLOSE_ALL' and status in ('PENDING','DELIVERED') order by id desc limit 1;")
 test -n "$CLOSE_ID"
+test "$(printf '%s' "$FORCE" | jq -r '.summary.unresolvedCloseAll')" -ge 1
+
+PRE_RESUME_HTTP=$(curl -sS -o /tmp/resume-before-force-flat-ack.json -w '%{http_code}' \
+  -X POST "$BASE/admin/maintenance/resume" -H "authorization: Bearer $OWNER_TOKEN")
+assert_eq "$PRE_RESUME_HTTP" "409"
 
 echo '[regression] application and DB layers both block every Start path during maintenance'
 START_HTTP=$(curl -sS -o /tmp/start-during-maint.json -w '%{http_code}' \
@@ -107,9 +136,19 @@ test "$STATE_RC" -ne 0
 test "$COMMAND_RC" -ne 0
 assert_eq "$(psql -h localhost -U bot -d bot -Atc "select desired_state from bot_instances where id='$INSTANCE';")" "STOPPED"
 
-echo '[regression] only a real EA ACK marks CLOSE_ALL as trusted'
+echo '[regression] legacy/symbol-only ACK cannot clear account-wide CLOSE_ALL'
+OLD_ACK=$(curl -fsS -X POST "$BASE/ea/ack" -H 'content-type: application/json' \
+  -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"commandId\":$CLOSE_ID,\"state\":\"STOPPED\",\"executionStatus\":\"CI_OLD_CLOSE_ALL_ACK\"}")
+test "$(printf '%s' "$OLD_ACK" | jq -r '.ok')" = 'false'
+OLD_ACK_STATUS=$(psql -h localhost -U bot -d bot -Atc "select status from bot_commands where id=$CLOSE_ID;")
+if [ "$OLD_ACK_STATUS" = "ACKED" ]; then
+  echo 'legacy ACK incorrectly cleared CLOSE_ALL' >&2
+  exit 1
+fi
+
+echo '[regression] account-wide EA proof is required to ACK CLOSE_ALL'
 ACK=$(curl -fsS -X POST "$BASE/ea/ack" -H 'content-type: application/json' \
-  -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"commandId\":$CLOSE_ID,\"state\":\"STOPPED\",\"executionStatus\":\"CI_CLOSE_ALL_ACK\"}")
+  -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"commandId\":$CLOSE_ID,\"state\":\"STOPPED\",\"executionStatus\":\"FORCE_FLAT_CONFIRMED\",\"accountScenovaPositions\":0,\"accountScenovaPendingOrders\":0,\"accountFlatConfirmed\":true}")
 test "$(printf '%s' "$ACK" | jq -r '.ok')" = 'true'
 assert_eq "$(psql -h localhost -U bot -d bot -Atc "select payload->>'ackSource' from bot_commands where id=$CLOSE_ID;")" "EA"
 

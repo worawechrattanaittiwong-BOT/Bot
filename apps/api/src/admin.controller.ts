@@ -683,8 +683,10 @@ export class AdminController {
   async shutdownForMaintenance(@Req() req: any, @Body() body: { message?: string }) {
     const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
     const result = await this.maintenance.shutdownNow(actor, body?.message);
-    await this.audit(actor, "BEGIN_SAFE_MAINTENANCE", "system", "maintenance", {
+    await this.audit(actor, "BEGIN_EMERGENCY_FORCE_FLAT", "system", "maintenance", {
       openPositions: result.summary?.openPositions || 0,
+      openPendingOrders: result.summary?.openPendingOrders || 0,
+      unresolvedCloseAll: result.summary?.unresolvedCloseAll || 0,
       runningInstances: result.summary?.runningInstances || 0
     });
     return result;
@@ -698,7 +700,8 @@ export class AdminController {
       userCode: result.userCode,
       accountNumber: result.accountNumber,
       brokerServer: result.brokerServer,
-      positionsAtRequest: result.positions
+      positionsAtRequest: result.positions,
+      pendingOrdersAtRequest: result.pendingOrders
     });
     return result;
   }
