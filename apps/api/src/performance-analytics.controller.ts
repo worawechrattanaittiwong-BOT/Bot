@@ -466,7 +466,6 @@ export class PerformanceAnalyticsController {
       ? Number((currentBalance - realizedSinceFrom).toFixed(2))
       : null;
     const computed = this.summarize(selectedBaskets as BasketRow[], derivedStart);
-    computed.summary.runtimeSeconds = runtimeSeconds;
     const positiveDeals = selectedDealRows.map((row:any)=>Number(row.net_profit || 0)).filter((value:number)=>value>0);
     const negativeDeals = selectedDealRows.map((row:any)=>Number(row.net_profit || 0)).filter((value:number)=>value<0);
     const rawGrossProfit = positiveDeals.reduce((sum:number,value:number)=>sum+value,0);
@@ -626,6 +625,7 @@ export class PerformanceAnalyticsController {
         } : null
       },
       ...computed,
+      summary: { ...computed.summary, runtimeSeconds },
       closedTrades: [...selectedPositions].reverse().slice(0,500).map((row) => ({
         ticket: row.positionId,
         positionId: row.positionId,
