@@ -21,7 +21,7 @@ foreach ($required in @(
 foreach ($required in @(
   'PERFORMANCE_ACTUAL_DEALS_V1',
   "event_type IN ('ENTRY','EXIT')",
-  'reconstructCompletedJournal(journalResult.rows || [])',
+  'reconstructCompletedJournal(journalRows)',
   'effectiveFrom',
   'rangeEnd',
   'ACTUAL_ENTRY_EXIT_DEALS'
