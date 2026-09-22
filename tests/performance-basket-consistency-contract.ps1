@@ -24,7 +24,10 @@ foreach ($required in @(
   'reconstructCompletedJournal(journalRows)',
   'effectiveFrom',
   'rangeEnd',
-  'ACTUAL_ENTRY_EXIT_DEALS'
+  'ACTUAL_ENTRY_EXIT_DEALS',
+  'MT5_HEARTBEAT_TODAY_CLOSED_PNL',
+  'mt5TodayReconciliation',
+  'reportedTodayClosed'
 )) {
   if (-not $analytics.Contains($required)) { throw "Performance analytics actual-deal contract missing: $required" }
 }

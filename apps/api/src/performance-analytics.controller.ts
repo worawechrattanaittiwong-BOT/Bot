@@ -369,22 +369,51 @@ export class PerformanceAnalyticsController {
     // Money follows the actual realized deal ledger, including partial closes
     // from a basket that is still draining. Basket count/Win Rate still use
     // only fully completed reconstructed baskets.
-    const realizedSinceFrom = journalRows.reduce(
+    //
+    // The EA heartbeat is the authority for the current MT5 broker-day closed
+    // P/L. Per-deal journals are HTTP telemetry and an individual deal can be
+    // missed during a transient network failure. When this report includes the
+    // live Bangkok day and the reporting range began before that day, reconcile
+    // the journal total to the fresh MT5 heartbeat without changing Basket
+    // counts or trading behavior.
+    const rawRealizedSinceFrom = journalRows.reduce(
       (sum:number,row:any) => sum + Number(row.net_profit || 0),
       0
     );
-    const selectedRealizedNet = selectedDealRows.reduce(
+    const rawSelectedRealizedNet = selectedDealRows.reduce(
       (sum:number,row:any) => sum + Number(row.net_profit || 0),
       0
     );
+    const bangkokTodayStart = new Date(this.dayKey(now) + "T00:00:00.000+07:00");
+    const freshHeartbeat =
+      Boolean(account.last_seen_at) &&
+      Date.now() - new Date(account.last_seen_at).getTime() <= 35_000;
+    const reportedTodayClosed = Number(metrics.botTodayClosedProfit);
+    const canReconcileToday =
+      freshHeartbeat &&
+      Number.isFinite(reportedTodayClosed) &&
+      effectiveFrom.getTime() <= bangkokTodayStart.getTime() &&
+      to.getTime() >= now.getTime();
+    const journalTodayClosed = canReconcileToday
+      ? journalRows
+          .filter((row:any) => new Date(row.created_at).getTime() >= bangkokTodayStart.getTime())
+          .reduce((sum:number,row:any) => sum + Number(row.net_profit || 0), 0)
+      : 0;
+    const mt5TodayReconciliation = canReconcileToday
+      ? reportedTodayClosed - journalTodayClosed
+      : 0;
+    const realizedSinceFrom = rawRealizedSinceFrom + mt5TodayReconciliation;
+    const selectedRealizedNet = rawSelectedRealizedNet + mt5TodayReconciliation;
     const derivedStart = currentBalance > 0
       ? Number((currentBalance - realizedSinceFrom).toFixed(2))
       : null;
     const computed = this.summarize(selectedBaskets as BasketRow[], derivedStart);
     const positiveDeals = selectedDealRows.map((row:any)=>Number(row.net_profit || 0)).filter((value:number)=>value>0);
     const negativeDeals = selectedDealRows.map((row:any)=>Number(row.net_profit || 0)).filter((value:number)=>value<0);
-    const actualGrossProfit = positiveDeals.reduce((sum:number,value:number)=>sum+value,0);
-    const actualGrossLoss = Math.abs(negativeDeals.reduce((sum:number,value:number)=>sum+value,0));
+    const rawGrossProfit = positiveDeals.reduce((sum:number,value:number)=>sum+value,0);
+    const rawGrossLoss = Math.abs(negativeDeals.reduce((sum:number,value:number)=>sum+value,0));
+    const actualGrossProfit = rawGrossProfit + Math.max(0, mt5TodayReconciliation);
+    const actualGrossLoss = rawGrossLoss + Math.max(0, -mt5TodayReconciliation);
     computed.summary.netProfit = Number(selectedRealizedNet.toFixed(2));
     computed.summary.grossProfit = Number(actualGrossProfit.toFixed(2));
     computed.summary.grossLoss = Number(actualGrossLoss.toFixed(2));
@@ -529,7 +558,13 @@ export class PerformanceAnalyticsController {
         equity: currentEquity > 0 ? currentEquity : null,
         derivedStart,
         rangeEnd,
-        basis: derivedStart !== null ? "ACTUAL_ENTRY_EXIT_DEALS" : "BOT_CLOSED_PNL_ONLY"
+        basis: derivedStart !== null ? "ACTUAL_ENTRY_EXIT_DEALS" : "BOT_CLOSED_PNL_ONLY",
+        reconciliation: canReconcileToday ? {
+          source: "MT5_HEARTBEAT_TODAY_CLOSED_PNL",
+          reportedTodayClosed: Number(reportedTodayClosed.toFixed(2)),
+          journalTodayClosed: Number(journalTodayClosed.toFixed(2)),
+          adjustment: Number(mt5TodayReconciliation.toFixed(2))
+        } : null
       },
       ...computed,
       closedTrades: [...selectedPositions].reverse().slice(0,500).map((row) => ({
