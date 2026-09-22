@@ -133,6 +133,8 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const botCommandLockRef = useRef(false);
+  const [botCommandLocked, setBotCommandLocked] = useState(false);
   const [checkingVersion, setCheckingVersion] = useState(false);
   const statusDialogRef = useRef<HTMLDialogElement | null>(null);
   const symbolDialogRef = useRef<HTMLDialogElement | null>(null);
@@ -692,12 +694,16 @@ export default function DashboardPage() {
   // never race an in-flight Safe Stop drain. The Server also enforces this.
   const startBlocked =
     busy ||
+    botCommandLocked ||
     botStarting ||
     botRunning ||
     safeStopInProgress ||
     maintenanceBlocksStart ||
     !startConnectionReady;
-  const stopBlocked = busy || (desired !== "RUNNING" && state !== "RUNNING");
+  const stopBlocked =
+    busy ||
+    botCommandLocked ||
+    (desired !== "RUNNING" && state !== "RUNNING");
   const selectedBroker = brokerCatalog.find((item)=>item.code === brokerCode);
   const selectedBrokerName = brokerCode === "OTHER"
     ? customBrokerName.trim()
@@ -1486,10 +1492,19 @@ export default function DashboardPage() {
   }
 
   async function command(path: string, success: string) {
+    const singleClickBotCommand =
+      path.startsWith("/bot/start") || path.startsWith("/bot/stop");
+    if (singleClickBotCommand && botCommandLockRef.current) return;
+
     if (path.startsWith("/bot/start") && settingsDirtyRef.current) {
       setError("มีการตั้งค่าที่ยังไม่ได้บันทึก กรุณากดบันทึกก่อนเริ่มบอท");
       setBotSettingsOpen(true);
       return;
+    }
+
+    if (singleClickBotCommand) {
+      botCommandLockRef.current = true;
+      setBotCommandLocked(true);
     }
     setBusy(true);
     setError("");
@@ -1515,6 +1530,10 @@ export default function DashboardPage() {
       const message = String(e?.message || "เกิดข้อผิดพลาด");
       setError(path.startsWith("/bot/start") ? "เริ่มบอทไม่ได้: " + message : message);
     } finally {
+      if (singleClickBotCommand) {
+        botCommandLockRef.current = false;
+        setBotCommandLocked(false);
+      }
       setBusy(false);
     }
   }

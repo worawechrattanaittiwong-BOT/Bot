@@ -31,6 +31,11 @@ Need $page 'Drawdown วันนี้' 'Daily Drawdown KPI missing'
 Need $page 'PERFORMANCE BY MODE' 'Per-mode performance card missing'
 Need $page 'modePerformanceToday.map' 'Per-mode performance rows must use real API data'
 Need $page 'cc-v13-hero-actions' 'Hero bot action deck missing'
+Need $page 'const botCommandLockRef = useRef(false);' 'Start/Stop synchronous command lock missing'
+Need $page 'const [botCommandLocked, setBotCommandLocked] = useState(false);' 'Start/Stop visual lock state missing'
+Need $page 'if (singleClickBotCommand && botCommandLockRef.current) return;' 'Start/Stop duplicate-click guard missing'
+Need $page 'botCommandLockRef.current = true;' 'Start/Stop command lock must engage before API call'
+Need $page 'setBotCommandLocked(false);' 'Start/Stop command lock must release after command completes'
 if($page.Contains('cc-v17-control-identity')) { throw 'Removed Control Center identity header must not render' }
 if($page.Contains('cc-v17-control-meta')) { throw 'Removed Symbol/Lot/EA Sync header must not render' }
 if($page.Contains('<LivePriceChart points={livePricePoints}')) { throw 'Price chart must not render on V12 Control Center' }
