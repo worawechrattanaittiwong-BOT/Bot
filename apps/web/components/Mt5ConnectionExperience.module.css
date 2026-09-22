@@ -83,9 +83,22 @@
 .screenshotGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px;align-items:start}
 .screenshotCard{margin:0;padding:10px;border:1px solid #384664;border-radius:12px;background:#0f1728;overflow:hidden}
 .screenshotCard figcaption{margin-top:8px;color:#9eabc3;font-size:11px;line-height:1.5}
-.screenshot{display:block;width:100%;height:auto;max-height:250px;object-fit:contain;object-position:top center;border:1px solid #415175;border-radius:9px;background:#f5f6f8}
+.screenshot{display:block;width:100%;height:auto;max-height:380px;object-fit:contain;object-position:center;border:1px solid #415175;border-radius:9px;background:#f5f6f8}
 .screenshotSolo{margin-top:18px;max-height:290px}
-.faq details{border:1px solid #303b5c;border-radius:12px;margin:0 0 12px;padding:15px}.faq summary{cursor:pointer;color:#e7eaff;font-weight:650}.faq p{margin-top:12px;font-size:13px}
+.faq{margin-top:20px}.faq details{border:1px solid #303b5c;border-radius:12px;margin:0 0 12px;padding:15px}.faq summary{cursor:pointer;color:#e7eaff;font-weight:650}.faq p{margin-top:12px;font-size:13px}
+.guideSplit{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,.85fr);gap:22px;align-items:start}
+.guideSplit>div{min-width:0}.portraitShot .screenshot{max-height:420px}
+.wideShot{margin-top:18px;padding:12px;background:linear-gradient(135deg,#18243b,#101629)}
+.wideShot .screenshot{max-height:520px;width:100%;height:auto}
+.screenshotCard figcaption{display:flex;align-items:flex-start;gap:9px;padding:4px 2px;overflow-wrap:anywhere}
+.screenshotCard figcaption>span{display:inline-grid;place-items:center;flex-shrink:0;width:24px;height:24px;border:1px solid #574b85;border-radius:7px;background:#25203d;color:#c3b0ff;font-size:10px}
+.guideAccount{display:flex;align-items:center;gap:16px;padding:20px;margin-top:20px;border:1px solid #35476a;border-radius:14px;background:linear-gradient(120deg,#16253d,#14192e);color:#96cfff}
+.guideAccount>svg{flex-shrink:0}.guideAccount>div{min-width:0}.guideAccount small,.guideAccount b,.guideAccount span{display:block;overflow-wrap:anywhere}
+.guideAccount small{color:#9fafca;font-size:11px}.guideAccount b{margin:4px 0;font-size:18px}.guideAccount span{color:#b3c0d7;font-size:12px}
+.resultGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:18px}
+.resultGrid>div{padding:14px;border:1px solid #384463;border-radius:12px;background:#131e31;min-width:0}
+.resultGrid b{font-size:12px;color:#b5e1ff}.resultGrid p{font-size:12px;line-height:1.8;margin-top:6px}
+@media(max-width:850px){.guideSplit{grid-template-columns:1fr}.portraitShot{max-width:400px;width:100%;justify-self:center}.resultGrid{grid-template-columns:1fr}.screenshotGrid{grid-template-columns:1fr}.screenshotCard{max-width:100%;min-width:0}.screenshot{max-height:380px}}
 .dialog footer{border-top:1px solid #303354}.dialog footer>span{font-size:12px;color:#8c9bb7}.dialog footer>div{display:flex;gap:10px}.dialog footer .primary,.dialog footer .secondary{min-height:42px;font-size:13px}
 @media(min-width:1800px){.hero{min-height:365px;padding:38px;gap:32px}.art{margin:-38px -38px -38px -18px}.stepsPanel,.tutorial{min-height:310px}.stepCard{min-height:205px}}
 @media(max-width:1250px){.hero{gap:18px;padding:24px;grid-template-columns:1.1fr .85fr .85fr}.heroCopy h1{font-size:30px}.art{margin:-24px -24px -24px -12px}.benefits{gap:12px}.benefits>div{gap:5px}.benefits small{display:none}.connect>.primary{font-size:16px;min-height:52px}.connectionStatus{padding:13px;gap:8px}.connectionStatus small{font-size:10px}.connectionStatus>svg{width:25px}.artCaption{font-size:13px}.steps{gap:18px}.stepCard{padding:12px 10px}.stepIcon{width:39px;height:39px;margin:5px 0 12px;align-self:flex-start}.stepCard:not(:last-child):after{right:-16px}.bottom{grid-template-columns:2.5fr 1fr}.accountFields svg{display:none}.help{padding:18px}}
