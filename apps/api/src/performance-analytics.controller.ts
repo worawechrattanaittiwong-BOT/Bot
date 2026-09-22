@@ -334,6 +334,64 @@ export class PerformanceAnalyticsController {
     const now = new Date();
     const journalTo = now.getTime() > to.getTime() ? now : to;
 
+    // Total time the bot was commanded to run inside the selected report range.
+    // START begins a run; SAFE_STOP/CLOSE_ALL ends it. Repeated START commands
+    // while already running do not double-count time.
+    const runtimeWindowEnd = new Date(Math.min(to.getTime(), now.getTime()));
+    let runtimeSeconds = 0;
+    if (account.instance_id && runtimeWindowEnd.getTime() > effectiveFrom.getTime()) {
+      const runtimeRows = await this.db.query(
+        `SELECT id,command,created_at
+         FROM bot_commands
+         WHERE bot_instance_id=$1
+           AND command IN ('START','SAFE_STOP','CLOSE_ALL')
+           AND created_at <= $3
+           AND (
+             created_at >= $2
+             OR id=(
+               SELECT id
+               FROM bot_commands
+               WHERE bot_instance_id=$1
+                 AND command IN ('START','SAFE_STOP','CLOSE_ALL')
+                 AND created_at < $2
+               ORDER BY created_at DESC,id DESC
+               LIMIT 1
+             )
+           )
+         ORDER BY created_at ASC,id ASC`,
+        [account.instance_id, effectiveFrom.toISOString(), runtimeWindowEnd.toISOString()]
+      );
+
+      let runningSince: number | null = null;
+      for (const row of runtimeRows.rows || []) {
+        const eventAt = new Date(row.created_at).getTime();
+        if (!Number.isFinite(eventAt)) continue;
+        const command = String(row.command || "").toUpperCase();
+
+        if (eventAt < effectiveFrom.getTime()) {
+          runningSince = command === "START" ? effectiveFrom.getTime() : null;
+          continue;
+        }
+
+        if (command === "START") {
+          if (runningSince === null) runningSince = Math.max(eventAt, effectiveFrom.getTime());
+          continue;
+        }
+
+        if (runningSince !== null) {
+          runtimeSeconds += Math.max(0, Math.floor((eventAt - runningSince) / 1000));
+          runningSince = null;
+        }
+      }
+
+      if (runningSince !== null) {
+        runtimeSeconds += Math.max(
+          0,
+          Math.floor((runtimeWindowEnd.getTime() - runningSince) / 1000)
+        );
+      }
+    }
+
     // PERFORMANCE_ACTUAL_DEALS_V1: rebuild completed baskets from the actual
     // ENTRY/EXIT deals. Raw BASKET rows are intentionally not trusted here
     // because async close callbacks can finalize that legacy row before every
@@ -408,6 +466,7 @@ export class PerformanceAnalyticsController {
       ? Number((currentBalance - realizedSinceFrom).toFixed(2))
       : null;
     const computed = this.summarize(selectedBaskets as BasketRow[], derivedStart);
+    computed.summary.runtimeSeconds = runtimeSeconds;
     const positiveDeals = selectedDealRows.map((row:any)=>Number(row.net_profit || 0)).filter((value:number)=>value>0);
     const negativeDeals = selectedDealRows.map((row:any)=>Number(row.net_profit || 0)).filter((value:number)=>value<0);
     const rawGrossProfit = positiveDeals.reduce((sum:number,value:number)=>sum+value,0);
