@@ -45,8 +45,11 @@ if($raceSyncGate -lt 0 -or $dailyControl -lt 0 -or $raceManager -lt 0 -or
    $raceSyncGate -gt $dailyControl -or $raceSyncGate -gt $raceManager){
   throw 'RACE settings-sync guard must execute before daily money controls and RACE Basket management'
 }
-Need $analysis 'return RaceVolumeDirection();' 'AUTO RACE direction must use volume only'
+Need $analysis 'int volumeDirection=RaceVolumeDirection();' 'AUTO RACE primary direction must start from rolling 60-second volume'
+Need $analysis 'RaceZonePriorityActive(' 'AUTO RACE may protect an intact opposing Demand/Supply boundary'
+Need $analysis 'return volumeDirection;' 'AUTO RACE must return to rolling 60-second volume after zone release/no-zone'
 if($analysis.Contains('RaceM5CandleDirection()')){throw 'RACE entry must not use M5 candle direction'}
+if($analysis.Contains('g_trend') -or $analysis.Contains('g_ema')){throw 'RACE entry direction must not leak trend/EMA into the 60-second volume decision'}
 Need $flow 'RaceVolumeDirection() == direction' 'RACE profit flow must follow 60-second volume side'
 Need $start 'RACE_VOLUME_WARMUP' 'RACE must wait for 60-second warmup before first AUTO entry'
 Need $manage 'RACE_USER_LOSS_ONLY_V5' 'RACE user-loss-only marker missing'
