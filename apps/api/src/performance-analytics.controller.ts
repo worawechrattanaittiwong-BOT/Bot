@@ -12,7 +12,7 @@ import {
 import type { Response } from "express";
 import { DbService } from "./db.service";
 import { JwtGuard } from "./security";
-import { reconstructCompletedJournal } from "./performance-journal";
+import { reconstructCompletedJournal, resolveJournalControlMode } from "./performance-journal";
 
 type Actor = { sub: string; role?: string };
 type BasketRow = {
@@ -70,6 +70,15 @@ export class PerformanceAnalyticsController {
 
   private clamp(value: number, min = 0, max = 100) {
     return Math.max(min, Math.min(max, value));
+  }
+
+  private strategyMode(value = "ALL") {
+    const normalized = String(value || "ALL").trim().toUpperCase();
+    const allowed = ["ALL", "AUTO", "RACE", "FLIP_LOCK", "MANUAL"];
+    if (!allowed.includes(normalized)) {
+      throw new BadRequestException("invalid strategy mode");
+    }
+    return normalized;
   }
 
   private summarize(rows: BasketRow[], startBalance: number | null) {
@@ -310,8 +319,20 @@ export class PerformanceAnalyticsController {
     return account;
   }
 
-  private async buildReport(actor: Actor, accountId: string, fromRaw = "", toRaw = "") {
+  private async buildReport(
+    actor: Actor,
+    accountId: string,
+    fromRaw = "",
+    toRaw = "",
+    strategyModeRaw = "ALL"
+  ) {
     const { from, to } = this.range(fromRaw, toRaw);
+    const strategyMode = this.strategyMode(strategyModeRaw);
+    const includeControlMode = (value: unknown) => {
+      const mode = String(value || "AUTO").trim().toUpperCase() || "AUTO";
+      if (mode === "ZERO_GRID") return false;
+      return strategyMode === "ALL" || mode === strategyMode;
+    };
     const account = await this.accountForActor(actor, accountId);
     const metrics = account.metrics || {};
     const currentBalance = Number(metrics.balance || 0);
@@ -414,13 +435,23 @@ export class PerformanceAnalyticsController {
     const reconstructed = reconstructCompletedJournal(journalRows);
     const allBaskets = reconstructed.baskets;
     const allPositions = reconstructed.positions;
-    const selectedBaskets = allBaskets.filter(
-      (row) => new Date(row.created_at).getTime() <= to.getTime()
+    const rangeBasketsAllNonZero = allBaskets.filter(
+      (row) =>
+        new Date(row.created_at).getTime() <= to.getTime() &&
+        String(row.controlMode || "AUTO").toUpperCase() !== "ZERO_GRID"
+    );
+    const selectedBaskets = rangeBasketsAllNonZero.filter(
+      (row) => includeControlMode(row.controlMode)
     );
     const selectedPositions = allPositions.filter(
-      (row) => new Date(row.closedAt).getTime() <= to.getTime()
+      (row) =>
+        new Date(row.closedAt).getTime() <= to.getTime() &&
+        includeControlMode(row.controlMode)
     );
-    const selectedDealRows = journalRows.filter(
+    const filteredJournalRows = journalRows.filter(
+      (row:any) => includeControlMode(resolveJournalControlMode(row))
+    );
+    const selectedDealRows = filteredJournalRows.filter(
       (row:any) => new Date(row.created_at).getTime() <= to.getTime()
     );
 
@@ -434,7 +465,7 @@ export class PerformanceAnalyticsController {
     // live Bangkok day and the reporting range began before that day, reconcile
     // the journal total to the fresh MT5 heartbeat without changing Basket
     // counts or trading behavior.
-    const rawRealizedSinceFrom = journalRows.reduce(
+    const rawRealizedSinceFrom = filteredJournalRows.reduce(
       (sum:number,row:any) => sum + Number(row.net_profit || 0),
       0
     );
@@ -442,24 +473,13 @@ export class PerformanceAnalyticsController {
       (sum:number,row:any) => sum + Number(row.net_profit || 0),
       0
     );
-    const bangkokTodayStart = new Date(this.dayKey(now) + "T00:00:00.000+07:00");
-    const freshHeartbeat =
-      Boolean(account.last_seen_at) &&
-      Date.now() - new Date(account.last_seen_at).getTime() <= 35_000;
+    // MT5's broker-day closed P/L is an account-wide number and cannot be
+    // safely allocated across strategy modes. This page intentionally filters
+    // ZERO_GRID out, so filtered reports use the strategy-tagged journal only.
     const reportedTodayClosed = Number(metrics.botTodayClosedProfit);
-    const canReconcileToday =
-      freshHeartbeat &&
-      Number.isFinite(reportedTodayClosed) &&
-      effectiveFrom.getTime() <= bangkokTodayStart.getTime() &&
-      to.getTime() >= now.getTime();
-    const journalTodayClosed = canReconcileToday
-      ? journalRows
-          .filter((row:any) => new Date(row.created_at).getTime() >= bangkokTodayStart.getTime())
-          .reduce((sum:number,row:any) => sum + Number(row.net_profit || 0), 0)
-      : 0;
-    const mt5TodayReconciliation = canReconcileToday
-      ? reportedTodayClosed - journalTodayClosed
-      : 0;
+    const canReconcileToday = false;
+    const journalTodayClosed = 0;
+    const mt5TodayReconciliation = 0;
     const realizedSinceFrom = rawRealizedSinceFrom + mt5TodayReconciliation;
     const selectedRealizedNet = rawSelectedRealizedNet + mt5TodayReconciliation;
     const derivedStart = currentBalance > 0
@@ -531,6 +551,98 @@ export class PerformanceAnalyticsController {
     computed.summary.averageLossTrade=negativePositions.length
       ? Number((negativePositions.reduce((a,b)=>a+b,0)/negativePositions.length).toFixed(2)) : 0;
 
+    const positionWins = positivePositions.length;
+    const positionLosses = negativePositions.length;
+    const breakevenPositions = Math.max(0, selectedPositions.length - positionWins - positionLosses);
+    const volumes = selectedPositions
+      .map((position) => Number(position.volume || 0))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    const durations = selectedPositions
+      .map((position) => Math.max(
+        0,
+        Math.floor((new Date(position.closedAt).getTime() - new Date(position.openedAt).getTime()) / 1000)
+      ))
+      .filter((value) => Number.isFinite(value));
+    const dailyProfitMap = new Map<string, number>();
+    for (const row of selectedDealRows) {
+      const key = this.dayKey(row.created_at);
+      dailyProfitMap.set(key, (dailyProfitMap.get(key) || 0) + Number(row.net_profit || 0));
+    }
+    const dailyProfits = Array.from(dailyProfitMap.values());
+    const profitableDays = dailyProfits.filter((value) => value > 0).length;
+    const losingDays = dailyProfits.filter((value) => value < 0).length;
+    const breakevenDays = Math.max(0, dailyProfits.length - profitableDays - losingDays);
+
+    let ahpr: number | null = null;
+    let ghpr: number | null = null;
+    if (derivedStart !== null && derivedStart > 0 && positionProfits.length > 0) {
+      let rolling = derivedStart;
+      const growthFactors: number[] = [];
+      for (const profit of positionProfits) {
+        if (rolling > 0) {
+          const next = rolling + profit;
+          const factor = next / rolling;
+          if (Number.isFinite(factor) && factor > 0) growthFactors.push(factor);
+        }
+        rolling += profit;
+      }
+      if (growthFactors.length > 0) {
+        ahpr = growthFactors.reduce((sum, value) => sum + value, 0) / growthFactors.length;
+        ghpr = Math.exp(
+          growthFactors.reduce((sum, value) => sum + Math.log(value), 0) / growthFactors.length
+        );
+      }
+    }
+
+    computed.summary.totalDeals = selectedDealRows.length;
+    computed.summary.totalPositions = selectedPositions.length;
+    computed.summary.profitPositions = positionWins;
+    computed.summary.lossPositions = positionLosses;
+    computed.summary.breakevenPositions = breakevenPositions;
+    computed.summary.positionWinRate = selectedPositions.length > 0
+      ? Number((positionWins / selectedPositions.length * 100).toFixed(2))
+      : 0;
+    computed.summary.averageLot = volumes.length > 0
+      ? Number((volumes.reduce((sum, value) => sum + value, 0) / volumes.length).toFixed(4))
+      : 0;
+    computed.summary.maxLot = volumes.length > 0 ? Number(Math.max(...volumes).toFixed(4)) : 0;
+    computed.summary.averageTradeDurationSeconds = durations.length > 0
+      ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length)
+      : 0;
+    computed.summary.maxTradeDurationSeconds = durations.length > 0 ? Math.max(...durations) : 0;
+    computed.summary.minTradeDurationSeconds = durations.length > 0 ? Math.min(...durations) : 0;
+    computed.summary.tradingDays = dailyProfits.length;
+    computed.summary.profitableDays = profitableDays;
+    computed.summary.losingDays = losingDays;
+    computed.summary.breakevenDays = breakevenDays;
+    computed.summary.bestDayProfit = dailyProfits.length > 0
+      ? Number(Math.max(...dailyProfits).toFixed(2))
+      : 0;
+    computed.summary.worstDayProfit = dailyProfits.length > 0
+      ? Number(Math.min(...dailyProfits).toFixed(2))
+      : 0;
+    computed.summary.averageDailyProfit = dailyProfits.length > 0
+      ? Number((dailyProfits.reduce((sum, value) => sum + value, 0) / dailyProfits.length).toFixed(2))
+      : 0;
+    computed.summary.ahpr = ahpr === null ? null : Number(ahpr.toFixed(6));
+    computed.summary.ghpr = ghpr === null ? null : Number(ghpr.toFixed(6));
+
+    const modeBreakdown = ["AUTO", "RACE", "FLIP_LOCK", "MANUAL"].map((mode) => {
+      const rows = rangeBasketsAllNonZero.filter(
+        (row) => String(row.controlMode || "AUTO").toUpperCase() === mode
+      );
+      const netProfit = rows.reduce((sum, row) => sum + Number(row.net_profit || 0), 0);
+      const wins = rows.filter((row) => Number(row.net_profit || 0) > 0).length;
+      return {
+        mode,
+        baskets: rows.length,
+        wins,
+        losses: rows.filter((row) => Number(row.net_profit || 0) < 0).length,
+        winRate: rows.length > 0 ? Number((wins / rows.length * 100).toFixed(2)) : 0,
+        netProfit: Number(netProfit.toFixed(2))
+      };
+    });
+
     const historyIdentity = await this.db.one(
       `SELECT
          NULLIF(metadata->>'currency','') AS currency,
@@ -587,6 +699,10 @@ export class PerformanceAnalyticsController {
         effectiveFrom: effectiveFrom.toISOString(),
         resetAt: resetAt ? resetAt.toISOString() : null
       },
+      filter: {
+        strategyMode,
+        excludedModes: ["ZERO_GRID"]
+      },
       account: {
         id: account.id,
         userId: account.user_id,
@@ -626,6 +742,7 @@ export class PerformanceAnalyticsController {
       },
       ...computed,
       summary: { ...computed.summary, runtimeSeconds },
+      modeBreakdown,
       closedTrades: [...selectedPositions].reverse().slice(0,500).map((row) => ({
         ticket: row.positionId,
         positionId: row.positionId,
@@ -710,9 +827,10 @@ export class PerformanceAnalyticsController {
     @Req() req: any,
     @Query("accountId") accountId = "",
     @Query("from") from = "",
-    @Query("to") to = ""
+    @Query("to") to = "",
+    @Query("strategyMode") strategyMode = "ALL"
   ) {
-    return this.buildReport(req.user as Actor, accountId, from, to);
+    return this.buildReport(req.user as Actor, accountId, from, to, strategyMode);
   }
 
   @Get("system")
@@ -918,9 +1036,16 @@ export class PerformanceAnalyticsController {
     @Query("accountId") accountId: string,
     @Query("from") from: string,
     @Query("to") to: string,
+    @Query("strategyMode") strategyMode = "ALL",
     @Res() res: Response
   ) {
-    const report: any = await this.buildReport(req.user as Actor, accountId, from || "", to || "");
+    const report: any = await this.buildReport(
+      req.user as Actor,
+      accountId,
+      from || "",
+      to || "",
+      strategyMode
+    );
     const escape = (value: any) => {
       const text = value === null || value === undefined ? "" : String(value);
       return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
