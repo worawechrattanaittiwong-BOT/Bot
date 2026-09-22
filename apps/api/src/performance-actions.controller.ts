@@ -184,127 +184,138 @@ export class PerformanceActionsController {
     const currentBalance = Number(metrics.balance || 0);
 
     const basketResult = await this.db.query(
-      `SELECT direction,net_profit,created_at
-       FROM trade_journal
-       WHERE mt5_account_id=$1
-         AND event_type='BASKET'
-         AND created_at >= $2
-         AND created_at <= $3
-       ORDER BY created_at ASC
-       LIMIT 20000`,
+      "SELECT direction,net_profit,created_at,metadata,entry_model,entry_trigger " +
+      "FROM trade_journal " +
+      "WHERE mt5_account_id=$1 AND event_type='BASKET' AND created_at >= $2 AND created_at <= $3 " +
+      "ORDER BY created_at ASC,id ASC LIMIT 20000",
       [account.id, from.toISOString(), to.toISOString()]
     );
-    const baskets = basketResult.rows as BasketRow[];
-    if (!baskets.length) throw new BadRequestException("ยังไม่มีข้อมูลผลการเทรดในช่วงเวลาที่เลือก");
+    const allBaskets = basketResult.rows as BasketRow[];
+    const baskets = allBaskets.filter((row:any) =>
+      selectedStrategyModes.includes(resolveJournalControlMode(row as any))
+    );
+    if (!baskets.length) {
+      throw new BadRequestException("ยังไม่มีข้อมูลผลการเทรดของ Strategy Portfolio ที่เลือกในช่วงเวลานี้");
+    }
 
-    const pnlSinceFrom = await this.db.one(
-      `SELECT COALESCE(SUM(net_profit),0)::float8 AS net
-       FROM trade_journal
-       WHERE mt5_account_id=$1
-         AND event_type='BASKET'
-         AND created_at >= $2`,
+    const ledgerResult = await this.db.query(
+      "SELECT event_type,net_profit::float8 AS net_profit,created_at,metadata,entry_model,entry_trigger " +
+      "FROM trade_journal " +
+      "WHERE mt5_account_id=$1 AND event_type IN ('ENTRY','EXIT') AND created_at >= $2 " +
+      "ORDER BY created_at ASC,id ASC LIMIT 50000",
       [account.id, from.toISOString()]
     );
+    const strategyLedger = (ledgerResult.rows || []).filter((row:any) =>
+      selectedStrategyModes.includes(resolveJournalControlMode(row as any))
+    );
+    const ledgerNetSinceFrom = strategyLedger.reduce(
+      (sum:number,row:any) => sum + Number(row.net_profit || 0),
+      0
+    );
+    const rangeLedger = strategyLedger.filter(
+      (row:any) => new Date(row.created_at).getTime() <= to.getTime()
+    );
+    const selectedNet = rangeLedger.reduce(
+      (sum:number,row:any) => sum + Number(row.net_profit || 0),
+      0
+    );
+    const selectedGrossProfit = rangeLedger.reduce(
+      (sum:number,row:any) => sum + Math.max(0,Number(row.net_profit || 0)),
+      0
+    );
+    const selectedGrossLoss = rangeLedger.reduce(
+      (sum:number,row:any) => sum + Math.abs(Math.min(0,Number(row.net_profit || 0))),
+      0
+    );
+
     const derivedStart = currentBalance > 0
-      ? Number((currentBalance - Number(pnlSinceFrom?.net || 0)).toFixed(2))
+      ? Number((currentBalance - ledgerNetSinceFrom).toFixed(2))
       : null;
-    const computed = this.summarize(baskets, derivedStart);
+    const computed:any = this.summarize(baskets, derivedStart);
+    computed.summary.netProfit = Number(selectedNet.toFixed(2));
+    computed.summary.grossProfit = Number(selectedGrossProfit.toFixed(2));
+    computed.summary.grossLoss = Number(selectedGrossLoss.toFixed(2));
+    computed.summary.profitFactor = selectedGrossLoss > 0
+      ? Number((selectedGrossProfit / selectedGrossLoss).toFixed(3))
+      : selectedGrossProfit > 0 ? 999 : 0;
+    computed.summary.returnPercent = derivedStart && derivedStart > 0
+      ? Number((selectedNet / derivedStart * 100).toFixed(2))
+      : null;
 
     const exitResult = await this.db.query(
-      `SELECT
-         x.deal_ticket,x.position_id,x.direction,x.volume,x.price AS exit_price,x.net_profit,
-         x.created_at AS closed_at,x.metadata,x.entry_model,x.entry_trigger,
-         COALESCE(x.metadata->>'symbol',$4) AS symbol,
-         e.price AS entry_price,e.created_at AS opened_at
-       FROM trade_journal x
-       LEFT JOIN LATERAL (
-         SELECT price,created_at
-         FROM trade_journal e
-         WHERE e.mt5_account_id=x.mt5_account_id
-           AND e.event_type='ENTRY'
-           AND e.position_id=x.position_id
-           AND e.created_at<=x.created_at
-         ORDER BY e.created_at DESC
-         LIMIT 1
-       ) e ON true
-       WHERE x.mt5_account_id=$1
-         AND x.event_type='EXIT'
-         AND x.created_at >= $2
-         AND x.created_at <= $3
-       ORDER BY x.created_at DESC
-       LIMIT 500`,
+      "SELECT x.deal_ticket,x.position_id,x.direction,x.volume,x.price AS exit_price,x.net_profit," +
+      " x.created_at AS closed_at,x.metadata,x.entry_model,x.entry_trigger," +
+      " COALESCE(x.metadata->>'symbol',$4) AS symbol,e.price AS entry_price,e.created_at AS opened_at " +
+      "FROM trade_journal x " +
+      "LEFT JOIN LATERAL (" +
+      " SELECT price,created_at FROM trade_journal e" +
+      " WHERE e.mt5_account_id=x.mt5_account_id AND e.event_type='ENTRY'" +
+      " AND e.position_id=x.position_id AND e.created_at<=x.created_at" +
+      " ORDER BY e.created_at DESC LIMIT 1" +
+      ") e ON true " +
+      "WHERE x.mt5_account_id=$1 AND x.event_type='EXIT' AND x.created_at >= $2 AND x.created_at <= $3 " +
+      "ORDER BY x.created_at DESC LIMIT 500",
       [account.id, from.toISOString(), to.toISOString(), String(metrics.symbol || "XAUUSD")]
     );
-
-    const historyIdentity = await this.db.one(
-      `SELECT
-         NULLIF(metadata->>'currency','') AS currency,
-         NULLIF(metadata->>'symbol','') AS symbol
-       FROM trade_journal
-       WHERE mt5_account_id=$1
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [account.id]
-    );
-    const filteredExitRows = (exits.rows || []).filter((item:any) =>
-      selectedStrategyModes.includes(resolveJournalControlMode(item as any))
+    const filteredExitRows = (exitResult.rows || []).filter((row:any) =>
+      selectedStrategyModes.includes(resolveJournalControlMode(row as any))
     );
 
     const volumes = filteredExitRows
-      .map((item:any) => Number(item.volume || 0))
+      .map((row:any) => Number(row.volume || 0))
       .filter((value:number) => Number.isFinite(value) && value > 0);
-    const lotMap = new Map<number, number>();
-    for (const volume of volumes) {
-      const lot = Number(volume.toFixed(4));
-      lotMap.set(lot, (lotMap.get(lot) || 0) + 1);
+    const lotMap = new Map<number,number>();
+    for(const volume of volumes){
+      const lot=Number(volume.toFixed(4));
+      lotMap.set(lot,(lotMap.get(lot)||0)+1);
     }
-    const lotDistribution = Array.from(lotMap.entries())
-      .map(([lot,count]) => ({
-        lot,
-        count,
-        percent: volumes.length ? Number((count / volumes.length * 100).toFixed(2)) : 0
-      }))
-      .sort((a,b) => a.lot - b.lot);
-    const primaryLot = [...lotDistribution].sort((a,b) => b.count - a.count || a.lot - b.lot)[0] || {
+    const lotDistribution=Array.from(lotMap.entries()).map(([lot,count])=>({
+      lot,
+      count,
+      percent:volumes.length?Number((count/volumes.length*100).toFixed(2)):0
+    })).sort((a,b)=>a.lot-b.lot);
+    const primaryLot=[...lotDistribution].sort((a,b)=>b.count-a.count||a.lot-b.lot)[0]||{
       lot:0,count:0,percent:0
     };
-    computed.summary.totalPositions = filteredExitRows.length;
-    computed.summary.totalDeals = selectedRangeLedger.length;
-    computed.summary.expectedPayoff = filteredExitRows.length
-      ? Number((selectedRangeNet / filteredExitRows.length).toFixed(2))
+    computed.summary.totalPositions=filteredExitRows.length;
+    computed.summary.totalDeals=rangeLedger.length;
+    computed.summary.expectedPayoff=filteredExitRows.length
+      ? Number((selectedNet/filteredExitRows.length).toFixed(2))
       : 0;
-    computed.summary.runtimeSeconds = runtimeSeconds;
-    computed.summary.averageLot = volumes.length
+    computed.summary.averageLot=volumes.length
       ? Number((volumes.reduce((sum:number,value:number)=>sum+value,0)/volumes.length).toFixed(4))
       : 0;
-    computed.summary.maxLot = volumes.length ? Number(Math.max(...volumes).toFixed(4)) : 0;
-    computed.summary.primaryLot = primaryLot.lot;
-    computed.summary.primaryLotCount = primaryLot.count;
-    computed.summary.primaryLotPercent = primaryLot.percent;
-    computed.summary.lotSizeCount = lotDistribution.length;
+    computed.summary.maxLot=volumes.length?Number(Math.max(...volumes).toFixed(4)):0;
+    computed.summary.primaryLot=primaryLot.lot;
+    computed.summary.primaryLotCount=primaryLot.count;
+    computed.summary.primaryLotPercent=primaryLot.percent;
+    computed.summary.lotSizeCount=lotDistribution.length;
 
-    const modeBreakdown = SHARE_STRATEGY_MODES.map((mode) => {
-      const rows = allBaskets.filter((item:any) => resolveJournalControlMode(item as any) === mode);
-      const wins = rows.filter((item:any) => Number(item.net_profit || 0) > 0).length;
+    const modeBreakdown=SHARE_STRATEGY_MODES.map((mode)=>{
+      const rows=allBaskets.filter((row:any)=>resolveJournalControlMode(row as any)===mode);
+      const wins=rows.filter((row:any)=>Number(row.net_profit||0)>0).length;
       return {
         mode,
-        label: shareModeLabel(mode),
-        baskets: rows.length,
+        label:shareModeLabel(mode),
+        baskets:rows.length,
         wins,
-        losses: rows.filter((item:any) => Number(item.net_profit || 0) < 0).length,
-        winRate: rows.length ? Number((wins / rows.length * 100).toFixed(2)) : 0,
-        netProfit: Number(rows.reduce((sum:number,item:any)=>sum+Number(item.net_profit||0),0).toFixed(2))
+        losses:rows.filter((row:any)=>Number(row.net_profit||0)<0).length,
+        winRate:rows.length?Number((wins/rows.length*100).toFixed(2)):0,
+        netProfit:Number(rows.reduce((sum:number,row:any)=>sum+Number(row.net_profit||0),0).toFixed(2))
       };
     });
 
+    const historyIdentity = await this.db.one(
+      "SELECT NULLIF(metadata->>'currency','') AS currency,NULLIF(metadata->>'symbol','') AS symbol " +
+      "FROM trade_journal WHERE mt5_account_id=$1 ORDER BY created_at DESC LIMIT 1",
+      [account.id]
+    );
     const accountCurrency = String(
       metrics.currency || historyIdentity?.currency || "UNKNOWN"
     ).trim().toUpperCase() || "UNKNOWN";
-    const accountSymbol = String(
-      metrics.symbol || historyIdentity?.symbol || "XAUUSD"
-    );
+    const accountSymbol = String(metrics.symbol || historyIdentity?.symbol || "XAUUSD");
     const reportedTradeMode = Number(metrics.accountTradeMode);
-    const serverIdentity = `${account.broker || ""} ${account.broker_server || ""}`.toLowerCase();
+    const serverIdentity = String(account.broker || "") + " " + String(account.broker_server || "");
     const accountType =
       reportedTradeMode === 2
         ? "REAL"
@@ -314,56 +325,60 @@ export class PerformanceActionsController {
             ? "DEMO"
             : "REAL";
 
-    const slug = `live-${String(account.account_number || "account").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}-${randomBytes(5).toString("hex")}`;
-    const title = String(body?.title || `SCENOVA Live Performance · ${account.account_number}`).slice(0, 180);
+    const slug = "live-" +
+      String(account.account_number || "account").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase() +
+      "-" + randomBytes(5).toString("hex");
+    const title = String(body?.title || ("SCENOVA Live Performance · " + account.account_number)).slice(0,180);
     const snapshot = {
-      kind: "LIVE_PERFORMANCE_SNAPSHOT",
-      frozenAt: new Date().toISOString(),
-      account: {
-        userCode: account.user_code,
-        accountNumber: account.account_number,
-        broker: account.broker,
-        brokerServer: account.broker_server,
-        mode: account.mode,
+      kind:"LIVE_PERFORMANCE_SNAPSHOT",
+      frozenAt:new Date().toISOString(),
+      account:{
+        userCode:account.user_code,
+        accountNumber:account.account_number,
+        broker:account.broker,
+        brokerServer:account.broker_server,
+        mode:account.mode,
         accountType,
-        symbol: accountSymbol,
-        timeframe: String(metrics.timeframe || "M5"),
-        currency: accountCurrency
+        symbol:accountSymbol,
+        timeframe:String(metrics.timeframe || "M5"),
+        currency:accountCurrency
       },
-      range: { from: from.toISOString(), to: to.toISOString() },
-      filter: {
-        strategyModes: selectedStrategyModes,
-        scope: selectedStrategyModes.length === SHARE_STRATEGY_MODES.length ? "ALL_STRATEGIES" : "CUSTOM_PORTFOLIO"
+      range:{from:from.toISOString(),to:to.toISOString()},
+      filter:{
+        strategyModes:selectedStrategyModes,
+        scope:selectedStrategyModes.length===SHARE_STRATEGY_MODES.length?"ALL_STRATEGIES":"CUSTOM_PORTFOLIO"
       },
-      balance: {
-        current: currentBalance > 0 ? currentBalance : null,
-        equity: Number(metrics.equity || 0) > 0 ? Number(metrics.equity) : null,
+      balance:{
+        current:currentBalance>0?currentBalance:null,
+        equity:Number(metrics.equity||0)>0?Number(metrics.equity):null,
         derivedStart,
-        basis: derivedStart !== null ? "DERIVED_FROM_CURRENT_BALANCE_AND_BOT_PNL" : "BOT_CLOSED_PNL_ONLY"
+        rangeEnd:derivedStart===null?null:Number((derivedStart+selectedNet).toFixed(2)),
+        basis:derivedStart!==null?"ACTUAL_ENTRY_EXIT_DEALS":"BOT_CLOSED_PNL_ONLY"
       },
-      summary: computed.summary,
-      curve: computed.curve,
-      monthly: computed.monthly,
-      closedTrades: exitResult.rows.map((row: any) => ({
-        ticket: String(row.deal_ticket),
-        positionId: row.position_id ? String(row.position_id) : null,
-        symbol: row.symbol || accountSymbol,
-        side: row.direction,
-        lot: Number(row.volume || 0),
-        entryPrice: row.entry_price === null ? null : Number(row.entry_price),
-        exitPrice: Number(row.exit_price || 0),
-        profit: Number(row.net_profit || 0),
-        openedAt: row.opened_at || null,
-        closedAt: row.closed_at
+      summary:computed.summary,
+      curve:computed.curve,
+      monthly:computed.monthly,
+      lotDistribution,
+      modeBreakdown,
+      closedTrades:filteredExitRows.map((row:any)=>({
+        ticket:String(row.deal_ticket),
+        positionId:row.position_id?String(row.position_id):null,
+        symbol:row.symbol||accountSymbol,
+        side:row.direction,
+        lot:Number(row.volume||0),
+        entryPrice:row.entry_price===null?null:Number(row.entry_price),
+        exitPrice:Number(row.exit_price||0),
+        profit:Number(row.net_profit||0),
+        openedAt:row.opened_at||null,
+        closedAt:row.closed_at
       }))
     };
 
     const share = await this.db.one(
-      `INSERT INTO performance_shares(
-         owner_user_id,created_by_user_id,mt5_account_id,title,public_slug,from_at,to_at,snapshot
-       )
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
-       RETURNING id,title,public_slug,created_at`,
+      "INSERT INTO performance_shares(" +
+      "owner_user_id,created_by_user_id,mt5_account_id,title,public_slug,from_at,to_at,snapshot" +
+      ") VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb) " +
+      "RETURNING id,title,public_slug,created_at",
       [
         account.user_id,
         actor.sub,
@@ -378,7 +393,7 @@ export class PerformanceActionsController {
 
     return {
       ...share,
-      path: `/shared-performance/${share.public_slug}`
+      path:"/shared-performance/"+share.public_slug
     };
   }
 
