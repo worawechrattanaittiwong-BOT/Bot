@@ -166,7 +166,7 @@ function LotDistributionChart({rows,total}:{rows:any[];total:number}) {
 
 function SummaryChart({points}:{points:any[]}) {
   if(!points?.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลกราฟในช่วงเวลานี้</div>;
-  const width=1320,height=148,left=38,right=14,top=10,bottom=31;
+  const width=1500,height=148,left=40,right=12,top=10,bottom=31;
   const values=points.map((point)=>Number(point.balance??0));
   const min=Math.min(...values),max=Math.max(...values),pad=Math.max(1,(max-min)*.09);
   const low=min-pad,high=max+pad,range=Math.max(1,high-low);
