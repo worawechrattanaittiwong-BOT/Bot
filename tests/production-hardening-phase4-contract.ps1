@@ -73,7 +73,7 @@ Require $botApi '\(livePositions > 0 \|\| livePendingOrders > 0\).*desired_state
 Require $dashboard 'safeStopPositionCount > 0.*safeStopInProgress' 'dashboard only blocks Start while positions are draining'
 Require $eaApi "desired_state='STOPPED'.*desired_state='SAFE_STOP'" 'flat Safe Stop canonicalizes Server desired state to STOPPED'
 Require $dashboard 'safeStopInProgress' 'dashboard blocks Start while Safe Stop is draining'
-Require $dashboard 'cc-force-flat-zone.*ล้าง / ปิดทั้งหมด.*\/bot\/close-all' 'customer Force Flat Reset is exposed once in the lower dashboard zone'
+Require $dashboard 'cc-v19-hero-quick-actions.*ล้าง / ปิดทั้งหมด.*\/bot\/close-all' 'customer Force Flat Reset stays in the original top quick-action row'
 Reject $dashboard 'disabled=\{busy\|\|currentPositions===0\}.*\/bot\/close-all' 'customer Force Flat Reset must remain available when cached positions are zero'
 Reject $dashboard 'กำลังยืนยันการหยุดกับ EA' 'dashboard must not keep a flat Safe Stop acknowledgement banner'
 Require $botApi 'const delayed = startAgeSeconds >= 20' 'slow START acknowledgement is diagnostic only'
