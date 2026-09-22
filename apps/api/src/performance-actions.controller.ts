@@ -269,7 +269,11 @@ export class PerformanceActionsController {
       lot:0,count:0,percent:0
     };
     computed.summary.totalPositions = filteredExitRows.length;
-    computed.summary.totalDeals = detailedExits.rows.length;
+    computed.summary.totalDeals = selectedRangeLedger.length;
+    computed.summary.expectedPayoff = filteredExitRows.length
+      ? Number((selectedRangeNet / filteredExitRows.length).toFixed(2))
+      : 0;
+    computed.summary.runtimeSeconds = runtimeSeconds;
     computed.summary.averageLot = volumes.length
       ? Number((volumes.reduce((sum:number,value:number)=>sum+value,0)/volumes.length).toFixed(4))
       : 0;
@@ -620,7 +624,7 @@ export class SharedPerformanceController {
 
     const account = await this.db.one(
       `SELECT a.id,a.account_number,a.broker,a.broker_server,a.mode,
-              bi.metrics,bi.last_seen_at
+              bi.id AS instance_id,bi.metrics,bi.last_seen_at
        FROM mt5_accounts a
        LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
        WHERE a.id=$1
@@ -666,18 +670,95 @@ export class SharedPerformanceController {
       selectedStrategyModes.includes(resolveJournalControlMode(item as any))
     );
     const currentBalance = Number(account.metrics?.balance || 0);
-    const pnlSinceFrom = await this.db.one(
-      `SELECT COALESCE(SUM(net_profit),0)::float8 AS net
+    const ledgerResult = await this.db.query(
+      `SELECT event_type,net_profit::float8 AS net_profit,created_at,metadata,entry_model,entry_trigger
        FROM trade_journal
        WHERE mt5_account_id=$1
-         AND event_type='BASKET'
-         AND created_at >= $2`,
+         AND event_type IN ('ENTRY','EXIT')
+         AND created_at >= $2
+       ORDER BY created_at ASC,id ASC
+       LIMIT 50000`,
       [account.id, from.toISOString()]
     );
+    const strategyLedger = (ledgerResult.rows || []).filter((item:any) =>
+      selectedStrategyModes.includes(resolveJournalControlMode(item as any))
+    );
+    const ledgerNetSinceFrom = strategyLedger.reduce(
+      (sum:number,item:any) => sum + Number(item.net_profit || 0),
+      0
+    );
+    const selectedRangeLedger = strategyLedger.filter(
+      (item:any) => new Date(item.created_at).getTime() <= to.getTime()
+    );
+    const selectedRangeNet = selectedRangeLedger.reduce(
+      (sum:number,item:any) => sum + Number(item.net_profit || 0),
+      0
+    );
+    const selectedRangeGrossProfit = selectedRangeLedger.reduce(
+      (sum:number,item:any) => sum + Math.max(0,Number(item.net_profit || 0)),
+      0
+    );
+    const selectedRangeGrossLoss = selectedRangeLedger.reduce(
+      (sum:number,item:any) => sum + Math.abs(Math.min(0,Number(item.net_profit || 0))),
+      0
+    );
     const derivedStart = currentBalance > 0
-      ? Number((currentBalance - Number(pnlSinceFrom?.net || 0)).toFixed(2))
+      ? Number((currentBalance - ledgerNetSinceFrom).toFixed(2))
       : null;
-    const computed = this.summarize(baskets, derivedStart);
+    const computed:any = this.summarize(baskets, derivedStart);
+    computed.summary.netProfit = Number(selectedRangeNet.toFixed(2));
+    computed.summary.grossProfit = Number(selectedRangeGrossProfit.toFixed(2));
+    computed.summary.grossLoss = Number(selectedRangeGrossLoss.toFixed(2));
+    computed.summary.profitFactor = selectedRangeGrossLoss > 0
+      ? Number((selectedRangeGrossProfit / selectedRangeGrossLoss).toFixed(3))
+      : selectedRangeGrossProfit > 0 ? 999 : 0;
+    computed.summary.returnPercent = derivedStart && derivedStart > 0
+      ? Number((selectedRangeNet / derivedStart * 100).toFixed(2))
+      : null;
+
+    let runtimeSeconds = 0;
+    const now = new Date();
+    const runtimeWindowEnd = new Date(Math.min(to.getTime(), now.getTime()));
+    if (account.instance_id && runtimeWindowEnd.getTime() > from.getTime()) {
+      const runtimeRows = await this.db.query(
+        `SELECT id,command,created_at
+         FROM bot_commands
+         WHERE bot_instance_id=$1
+           AND command IN ('START','SAFE_STOP','CLOSE_ALL')
+           AND created_at <= $3
+           AND (
+             created_at >= $2
+             OR id=(
+               SELECT id
+               FROM bot_commands
+               WHERE bot_instance_id=$1
+                 AND command IN ('START','SAFE_STOP','CLOSE_ALL')
+                 AND created_at < $2
+               ORDER BY created_at DESC,id DESC
+               LIMIT 1
+             )
+           )
+         ORDER BY created_at ASC,id ASC`,
+        [account.instance_id, from.toISOString(), runtimeWindowEnd.toISOString()]
+      );
+      let runningSince:number|null=null;
+      for(const row of runtimeRows.rows||[]){
+        const at=new Date(row.created_at).getTime();
+        const command=String(row.command||"").toUpperCase();
+        if(!Number.isFinite(at)) continue;
+        if(at<from.getTime()){
+          runningSince=command==="START"?from.getTime():null;
+        }else if(command==="START"){
+          if(runningSince===null) runningSince=at;
+        }else if(runningSince!==null){
+          runtimeSeconds+=Math.max(0,Math.floor((at-runningSince)/1000));
+          runningSince=null;
+        }
+      }
+      if(runningSince!==null){
+        runtimeSeconds+=Math.max(0,Math.floor((runtimeWindowEnd.getTime()-runningSince)/1000));
+      }
+    }
 
     const detailedExits = await this.db.query(
       `SELECT net_profit::float8 AS net_profit,created_at,metadata,entry_model,entry_trigger
