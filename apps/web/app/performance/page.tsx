@@ -387,7 +387,7 @@ export default function PerformanceDashboardPage() {
     if(!accountId||mode!=="LIVE") return;
     setSharing(true);
     try{
-      const result=await api("/performance-actions/share-live",{method:"POST",body:JSON.stringify({accountId,from,to})});
+      const result=await api("/performance-actions/share-live",{method:"POST",body:JSON.stringify({accountId,from,to,strategyModes:selectedStrategies})});
       setShareResult(result);setError("");
     }catch(e:any){setError(String(e?.message||"สร้างลิงก์แชร์ไม่สำเร็จ"));}
     finally{setSharing(false);}
