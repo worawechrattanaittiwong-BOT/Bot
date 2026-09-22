@@ -45,6 +45,11 @@ Need $raceBurst 'RaceClosePositionAsync(tickets[i])' 'RACE close-all must queue 
 Need $raceClose 'RaceClosePositionsBurst();' 'RACE Basket close must use burst dispatch'
 if($raceClose.Contains('CloseAllBasket(reason)')){throw 'RACE Basket close still uses sequential global CloseAllBasket'}
 Need $race 'RaceClosePositionsBurst();' 'RACE CLOSING retry must remain burst-based'
+Need $ea 'bool FastProfitClosePriority()' 'ZERO/RACE exact profit fast path is missing'
+Need $ea 'CLOSE_FAST_PATH_V157' 'ZERO/RACE fast close marker is missing'
+Need $ea 'nowMs-g_zeroGridLastExitBurstMs<30' 'ZERO close retry must be 30 ms'
+Need $ea 'nowMs-g_raceLastExitBurstMs<30' 'RACE close retry must be 30 ms'
+Need $ea 'if(FastProfitClosePriority())' 'profit fast path must run before normal tick/timer work'
 Need $harvestBlock 'g_raceProfitTargetMode == "POSITION"' 'RACE harvest must run only in per-position mode'
 Need $harvestBlock 'g_racePerPositionProfitMoney' 'RACE harvest must use its dedicated per-position amount'
 Need $raceStop 'double points = RaceAtrStopPoints();' 'RACE stop must use RACE ATR only'

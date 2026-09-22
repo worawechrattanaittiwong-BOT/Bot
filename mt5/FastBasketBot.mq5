@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.56"
-#define SCENOVA_EA_VERSION "1.0.56"
-#define SCENOVA_PRODUCT_VERSION "1.0.56"
+#property version   "1.0.57"
+#define SCENOVA_EA_VERSION "1.0.57"
+#define SCENOVA_PRODUCT_VERSION "1.0.57"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -2686,7 +2686,7 @@ void ZeroGridClosePositions()
    // cancel remaining ZERO pending orders. MT5 still reports one deal per
    // position, but the EA never waits for ticket A before submitting ticket B.
    ulong nowMs=GetTickCount64();
-   if(g_zeroGridLastExitBurstMs>0 && nowMs-g_zeroGridLastExitBurstMs<750) return;
+   if(g_zeroGridLastExitBurstMs>0 && nowMs-g_zeroGridLastExitBurstMs<30) return;
    g_zeroGridLastExitBurstMs=nowMs;
    ulong tickets[];
    int ticketCount=0;
@@ -3586,9 +3586,9 @@ int RaceClosePositionsBurst()
 {
    // RACE_CLOSE_ALL_BURST: snapshot every owned RACE ticket, then submit every
    // close request back-to-back. Do not wait for one position to disappear
-   // before sending the next close. Retry unresolved tickets after 750 ms.
+   // before sending the next close. Retry unresolved tickets after 30 ms.
    ulong nowMs=GetTickCount64();
-   if(g_raceLastExitBurstMs>0 && nowMs-g_raceLastExitBurstMs<750)
+   if(g_raceLastExitBurstMs>0 && nowMs-g_raceLastExitBurstMs<30)
       return 0;
    g_raceLastExitBurstMs=nowMs;
 
@@ -4020,6 +4020,46 @@ bool ManageRaceBasket(double momentum)
    return true;
 }
 
+bool FastProfitClosePriority()
+{
+   // CLOSE_FAST_PATH_V157: only accelerate an already-existing ZERO/RACE
+   // Basket-profit contract. No entry, target, risk or direction rule changes.
+   if(g_zeroGridClosing)
+   {
+      ZeroGridClosePositions();
+      return true;
+   }
+
+   if(ZeroGridPositionCount()>0 &&
+      ZeroGridCycleNet()>=ZeroGridRequiredCloseNet())
+   {
+      g_zeroGridClosing=true;
+      SaveZeroGridCycleState();
+      g_executionStatus="ZERO_GRID_CLOSING_PROFIT";
+      ZeroGridClosePositions();
+      return true;
+   }
+
+   if(g_raceState=="CLOSING" && BasketHasRacePosition())
+   {
+      RaceClosePositionsBurst();
+      return true;
+   }
+
+   bool raceBasketProfitTarget =
+      BasketHasRacePosition() &&
+      g_raceProfitTargetMode=="BASKET" &&
+      g_raceCloseAllProfitMoney>0.0;
+   if(raceBasketProfitTarget &&
+      BasketCycleProfit()>=g_raceCloseAllProfitMoney)
+   {
+      RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET");
+      return true;
+   }
+
+   return false;
+}
+
 void OnTick()
 {
    // Local execution clock: all price-sensitive management reads the MT5 tick
@@ -4027,6 +4067,11 @@ void OnTick()
    g_lastMarketTickMs=GetTickCount64();
    SampleSpread();
    RaceSampleVolumePressure();
+
+   // Profit target owns the tick before any non-close analysis.
+   if(FastProfitClosePriority())
+      return;
+
    bool zeroGridFastPath =
       ZeroGridPositionCount() > 0 ||
       ZeroGridPendingCount() > 0 ||
@@ -4655,6 +4700,15 @@ void OnTick()
 void OnTimer()
 {
    SampleSpread();
+
+   // Timer fallback: close/retry first and do not enter WebRequest while a
+   // ZERO/RACE profit close is in progress.
+   if(FastProfitClosePriority())
+   {
+      RefreshChartStatus();
+      return;
+   }
+
    bool zeroGridFastPath =
       ZeroGridPositionCount() > 0 ||
       ZeroGridPendingCount() > 0 ||
