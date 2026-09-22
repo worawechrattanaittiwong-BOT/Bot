@@ -63,3 +63,22 @@
 .strategyChips{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin-top:8px}.strategyChip,.strategyChipActive{min-height:43px;border-radius:9px;padding:6px 9px;display:flex;align-items:center;justify-content:space-between;gap:7px;cursor:pointer}.strategyChip{border:1px solid #293149;background:#090f1a;color:#7f8ca8}.strategyChipActive{border:1px solid #7259df;background:linear-gradient(135deg,rgba(92,68,208,.4),rgba(54,40,121,.35));color:#f0ebff;box-shadow:inset 0 1px rgba(255,255,255,.05)}.strategyChip span,.strategyChipActive span{font-size:10.5px;font-weight:900}.strategyChip small,.strategyChipActive small{font-size:8px}.strategyChipActive small{color:#79e8b6}.strategyChip small{color:#66728c}
 .strategyPresets{display:flex;align-items:center;gap:6px;margin-top:7px}.strategyPresets>span{font-size:8.5px;color:#7f8ba5;margin-right:2px}.strategyPresets button{height:25px;border:1px solid #45366f;border-radius:7px;background:#141127;color:#c9bfff;padding:0 8px;font-size:8.5px;font-weight:800;cursor:pointer}
 .analyticsCharts{display:grid;grid-template-columns:minmax(300px,350px) minmax(0,1fr);gap:8px;margin-top:8px;align-items:stretch}.lotCard{padding:9px 10px;min-height:154px}.lotHighlights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:8px 0}.lotHighlights>div{padding:6px 7px;border:1px solid rgba(142,123,231,.16);border-radius:8px;background:rgba(255,255,255,.02)}.lotHighlights span{display:block;color:#8793ad;font-size:8.5px}.lotHighlights b{display:block;margin-top:2px;color:#f2f3ff;font-size:11px}.lotChart{display:flex;flex-direction:column;gap:6px;max-height:120px;overflow:auto;padding-right:3px}.lotRow{min-width:0}.lotRowHead{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px}.lotRowHead b{color:#ded8ff;font-size:9.5px}.lotRowHead span{color:#a4aec6;white-space:nowrap}.lotTrack{height:5px;margin-top:3px;border-radius:999px;background:#121a30;overflow:hidden}.lotTrack i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#5ed7ff,#8b78ff,#bd6cff)}.lotTotal{margin-top:1px;padding-top:4px;border-top:1px solid rgba(144,130,220,.12);color:#8793ad;font-size:8.5px}.emptyLotChart{height:90px;display:grid;place-items:center;color:#77849f;font-size:10px}
+
+@media(max-width:1500px){
+  .metricsCard{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .analyticsCharts{grid-template-columns:minmax(280px,330px) minmax(0,1fr)}
+}
+@media(max-width:1250px){
+  .metricsCard{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .strategyChips{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .analyticsCharts{grid-template-columns:minmax(250px,300px) minmax(0,1fr)}
+}
+@media(max-width:900px){
+  .metricsCard{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .strategyPortfolioHead{align-items:flex-start;flex-direction:column}
+  .strategyChips{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .strategyPresets{flex-wrap:wrap}
+  .analyticsCharts{grid-template-columns:1fr}
+  .lotCard,.chartCard{min-height:auto}
+  .chart{height:138px}
+}
