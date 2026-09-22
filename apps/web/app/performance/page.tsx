@@ -188,8 +188,22 @@ function backtestStats(backtest:any) {
   const short=trades.filter((row:any)=>String(row.direction).toUpperCase()==="SELL");
   const longWins=long.filter((row:any)=>Number(row.profit||0)>0).length;
   const shortWins=short.filter((row:any)=>Number(row.profit||0)>0).length;
+  const volumes=trades.map((row:any)=>Number(row.volume||0)).filter((value:number)=>Number.isFinite(value)&&value>0);
+  const durations=trades.map((row:any)=>{
+    const opened=new Date(row.opened_at||0).getTime();
+    const closed=new Date(row.closed_at||0).getTime();
+    return Number.isFinite(opened)&&Number.isFinite(closed)&&closed>=opened?Math.floor((closed-opened)/1000):0;
+  }).filter((value:number)=>value>=0);
+  const byDay=new Map<string,number>();
+  for(const row of trades){
+    const key=row.closed_at?dateInput(row.closed_at):"";
+    if(key) byDay.set(key,(byDay.get(key)||0)+Number(row.profit||0));
+  }
+  const days=Array.from(byDay.values());
   return {
-    totalDeals:total,wins,losses,
+    totalDeals:total,totalPositions:total,wins,losses,
+    profitPositions:wins,lossPositions:losses,breakevenPositions:Math.max(0,total-wins-losses),
+    positionWinRate:total?wins/total*100:0,
     lossRate:total?losses/total*100:0,
     grossProfit,grossLoss,
     expectedPayoff:total?profits.reduce((a:number,b:number)=>a+b,0)/total:0,
@@ -197,6 +211,17 @@ function backtestStats(backtest:any) {
     largestLossTrade:negative.length?Math.min(...negative):0,
     averageProfitTrade:positive.length?grossProfit/positive.length:0,
     averageLossTrade:negative.length?negative.reduce((a:number,b:number)=>a+b,0)/negative.length:0,
+    averageLot:volumes.length?volumes.reduce((a:number,b:number)=>a+b,0)/volumes.length:0,
+    maxLot:volumes.length?Math.max(...volumes):0,
+    averageTradeDurationSeconds:durations.length?durations.reduce((a:number,b:number)=>a+b,0)/durations.length:0,
+    maxTradeDurationSeconds:durations.length?Math.max(...durations):0,
+    minTradeDurationSeconds:durations.length?Math.min(...durations):0,
+    tradingDays:days.length,
+    profitableDays:days.filter((value:number)=>value>0).length,
+    losingDays:days.filter((value:number)=>value<0).length,
+    bestDayProfit:days.length?Math.max(...days):0,
+    worstDayProfit:days.length?Math.min(...days):0,
+    averageDailyProfit:days.length?days.reduce((a:number,b:number)=>a+b,0)/days.length:0,
     buyTrades:long.length,sellTrades:short.length,
     buyWinRate:long.length?longWins/long.length*100:0,
     sellWinRate:short.length?shortWins/short.length*100:0
@@ -408,7 +433,7 @@ export default function PerformanceDashboardPage() {
   const totalDeals=mode==="BACKTEST"
     ? backExtra.totalDeals
     : Number(summary.totalDeals??report?.closedTrades?.length??0);
-  const totalPositions=Number(summary.totalPositions??(mode==="BACKTEST"?backExtra.totalDeals:report?.closedTrades?.length)||0);
+  const totalPositions=Number((summary.totalPositions??(mode==="BACKTEST"?backExtra.totalDeals:report?.closedTrades?.length))||0);
   const selectedStrategy=mode==="LIVE"
     ? String(report?.filter?.strategyMode||strategyMode).toUpperCase()
     : "BACKTEST";
