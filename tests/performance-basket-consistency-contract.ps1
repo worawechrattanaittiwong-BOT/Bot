@@ -32,7 +32,9 @@ foreach ($required in @(
   'MT5_HEARTBEAT_TODAY_CLOSED_PNL',
   'mt5TodayReconciliation',
   'reportedTodayClosed',
-  'excludedModes: ["ZERO_GRID"]',
+  'selectedStrategyModes',
+  'strategyModes: selectedStrategyModes',
+  'lotDistribution',
   'resolveJournalControlMode(row)'
 )) {
   if (-not $analytics.Contains($required)) { throw "Performance analytics actual-deal contract missing: $required" }
@@ -48,12 +50,13 @@ foreach ($required in @(
 
 foreach ($required in @(
   'const [from,setFrom]=useState(today);',
-  'const [strategyMode,setStrategyMode]=useState<StrategyMode>("ALL");',
+  'const [selectedStrategies,setSelectedStrategies]=useState<StrategyMode[]>([...STRATEGY_OPTIONS]);',
   'tradeNumber:index+1',
-  'แกน X = จำนวน Position ที่ปิด',
+  'Lot Allocation',
+  'Strategy Portfolio',
+  'ZERO_GRID',
   'report?.balance?.rangeEnd',
-  'report?.range?.effectiveFrom',
-  'รวม 4 โหมด · ไม่รวม ZERO GRID'
+  'report?.range?.effectiveFrom'
 )) {
   if (-not $performancePage.Contains($required)) { throw "Performance UI actual-range/trade-axis contract missing: $required" }
 }
