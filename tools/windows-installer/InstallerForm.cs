@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace ScenovaInstaller;
 
-internal sealed class InstallerForm : Form
+internal sealed partial class InstallerForm : Form
 {
     private static readonly Color PrimaryBlue = Color.FromArgb(15, 112, 230);
     private static readonly Color AccentCyan = Color.FromArgb(15, 170, 230);
@@ -70,7 +70,7 @@ internal sealed class InstallerForm : Form
     };
     private readonly CheckBox _advancedMode = new()
     {
-        Text = "โหมดขั้นสูง",
+        Text = "รายละเอียดและเครื่องมือเพิ่มเติม",
         AutoSize = true,
         ForeColor = Color.FromArgb(46, 63, 84)
     };
@@ -84,24 +84,21 @@ internal sealed class InstallerForm : Form
         BackColor = Color.FromArgb(235, 245, 255)
     };
 
-    private readonly Button _install = MakeButton("ติดตั้ง / อัปเดตอัตโนมัติ", 230);
-    private readonly Button _repair = MakeButton("ตรวจและซ่อม", 145);
-    private readonly Button _verify = MakeButton("ตรวจสอบอีกครั้ง", 145);
+    private readonly Button _install = MakeButton("ตรวจสอบและอัปเดต", 520);
     private readonly Button _rollback = MakeButton("ย้อนกลับ", 120);
     private readonly Button _uninstall = MakeButton("ถอน SCENOVA", 130);
-    private readonly Button _rescan = MakeButton("สแกน MT5 ใหม่", 135);
 
     private List<TerminalChoice> _terminals = [];
     private InstallationAssessment? _assessment;
-    private readonly Image _brandLogo = BrandAssets.LoadScenovaLogo();
+    private readonly Image _brandLogo = BrandAssets.LoadInstallerMark();
     private bool _busy;
+    private bool _refreshing;
 
     internal InstallerForm()
     {
         Text = InstallerConstants.ProductName + " v" + InstallerConstants.Version;
-        Width = 1200;
-        Height = 810;
-        MinimumSize = new Size(1080, 720);
+        ClientSize = new Size(1180, 860);
+        MinimumSize = new Size(1000, 720);
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         DoubleBuffered = true;
@@ -119,35 +116,46 @@ internal sealed class InstallerForm : Form
         };
         _channel.SelectedIndex = desiredChannel;
         _channel.Visible = false;
-        _channelSummary.Text = "Release: " + SelectedReleaseChannel();
+        _channelSummary.Text = "ช่องทาง: " + SelectedReleaseChannel();
 
         ConfigureHealthList();
         BuildLayout();
 
         _install.Click += async (_, _) => await InstallOrUpdateAsync();
-        _repair.Click += async (_, _) => await RepairAsync();
-        _verify.Click += async (_, _) => await RefreshAllAsync();
         _rollback.Click += async (_, _) => await RollbackAsync();
         _uninstall.Click += async (_, _) => await UninstallAsync();
-        _rescan.Click += async (_, _) => await RefreshAllAsync();
-        _terminal.SelectedIndexChanged += async (_, _) => await AssessSelectedAsync();
+        _terminal.SelectedIndexChanged += async (_, _) =>
+        {
+            if (_busy || _refreshing) return;
+            SetBusy(true);
+            try { await AssessSelectedAsync(force: true); }
+            catch (Exception ex) { ShowResult(InstallerDiagnostics.Friendly(InstallerDiagnostics.Classify(ex), ex.Message), false); }
+            finally { SetBusy(false); }
+        };
         _channel.SelectedIndexChanged += (_, _) =>
         {
             var next = ScenovaRuntime.ReadState();
             next.ReleaseChannel = SelectedReleaseChannel();
             ScenovaRuntime.SaveState(next);
-            _channelSummary.Text = "Release: " + SelectedReleaseChannel();
+            _channelSummary.Text = "ช่องทาง: " + SelectedReleaseChannel();
+            ShowResult("เปลี่ยนช่องทางแล้ว · กดตรวจสอบและอัปเดตเพื่อเปรียบเทียบเวอร์ชัน", false);
             RenderAdvancedDetails(null);
         };
         _advancedMode.CheckedChanged += (_, _) =>
         {
+            _advancedPanel.Visible = _advancedMode.Checked;
             _advancedDetails.Visible = _advancedMode.Checked;
             _channel.Visible = _advancedMode.Checked;
-            _channelSummary.Visible = !_advancedMode.Checked;
             RenderAdvancedDetails(null);
         };
 
         Shown += async (_, _) => await RefreshAllAsync();
+        FormClosing += (_, e) =>
+        {
+            if (!_busy) return;
+            e.Cancel = true;
+            _status.Text = "กำลังดำเนินการ กรุณารอให้เสร็จก่อนปิดหน้าต่าง";
+        };
     }
 
     private static Button MakeButton(string text, int width) =>
@@ -170,7 +178,7 @@ internal sealed class InstallerForm : Form
     {
         _health.BackColor = CardBackground;
         _health.ForeColor = Color.FromArgb(32, 47, 65);
-        _health.BorderStyle = BorderStyle.FixedSingle;
+        _health.BorderStyle = BorderStyle.None;
         _health.Font = new Font("Segoe UI", 10f);
         _health.Columns.Add("ระบบ");
         _health.Columns.Add("สถานะ");
@@ -182,244 +190,65 @@ internal sealed class InstallerForm : Form
     private void ResizeHealthColumns()
     {
         if (_health.Columns.Count < 3) return;
-        var width = Math.Max(640, _health.ClientSize.Width - 6);
-        _health.Columns[0].Width = Math.Max(190, (int)(width * 0.29));
-        _health.Columns[1].Width = Math.Max(110, (int)(width * 0.17));
-        _health.Columns[2].Width = Math.Max(300, width - _health.Columns[0].Width - _health.Columns[1].Width);
+        var width = Math.Max(1, _health.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 8);
+        _health.Columns[0].Width = (int)(width * 0.25);
+        _health.Columns[1].Width = (int)(width * 0.17);
+        _health.Columns[2].Width = Math.Max(1, width - _health.Columns[0].Width - _health.Columns[1].Width);
     }
 
-    private void BuildLayout()
-    {
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 4,
-            Padding = new Padding(20),
-            BackColor = SoftBackground
-        };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 74));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-
-        var header = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.Transparent,
-            Padding = new Padding(2)
-        };
-        var brand = new PictureBox
-        {
-            Image = _brandLogo,
-            SizeMode = PictureBoxSizeMode.Zoom,
-            BackColor = Color.Transparent,
-            Location = new Point(6, 12),
-            Size = new Size(225, 74),
-            AccessibleName = "SCENOVA"
-        };
-        var divider = new Panel
-        {
-            BackColor = BorderBlue,
-            Location = new Point(244, 18),
-            Size = new Size(2, 62)
-        };
-        var title = new Label
-        {
-            Text = "SCENOVA Smart Installer",
-            Font = new Font("Segoe UI Semibold", 24f, FontStyle.Bold),
-            ForeColor = Navy,
-            AutoSize = false,
-            AutoEllipsis = true,
-            Location = new Point(268, 8),
-            Size = new Size(650, 44),
-            UseCompatibleTextRendering = true
-        };
-        var subtitle = new Label
-        {
-            Text = "ค้นหา MT5 · ติดตั้ง · ซ่อม · อัปเดตอย่างปลอดภัย · ยืนยันการเชื่อมต่อ",
-            Font = new Font("Segoe UI", 10.25f),
-            ForeColor = MutedText,
-            AutoSize = false,
-            AutoEllipsis = true,
-            Location = new Point(270, 55),
-            Size = new Size(690, 32),
-            UseCompatibleTextRendering = true
-        };
-        header.Controls.Add(brand);
-        header.Controls.Add(divider);
-        header.Controls.Add(title);
-        header.Controls.Add(subtitle);
-        root.Controls.Add(header, 0, 0);
-        root.SetColumnSpan(header, 2);
-
-        var selector = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 4,
-            Padding = new Padding(12, 8, 10, 8),
-            BackColor = CardBackground,
-            Margin = new Padding(0, 0, 0, 8)
-        };
-        selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
-        selector.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
-        selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
-        selector.Controls.Add(new Label
-        {
-            Text = "MetaTrader 5",
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Segoe UI Semibold", 10.5f),
-            ForeColor = Navy,
-            AutoEllipsis = true,
-            UseCompatibleTextRendering = true
-        }, 0, 0);
-        selector.Controls.Add(_terminal, 1, 0);
-
-        var channelPanel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false
-        };
-        channelPanel.Controls.Add(_channelSummary);
-        channelPanel.Controls.Add(_channel);
-        channelPanel.Controls.Add(_advancedMode);
-        selector.Controls.Add(channelPanel, 2, 0);
-        selector.Controls.Add(_rescan, 3, 0);
-
-        root.Controls.Add(selector, 0, 1);
-        root.SetColumnSpan(selector, 2);
-
-        var center = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 4,
-            Padding = new Padding(0, 4, 8, 4)
-        };
-        center.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
-        center.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        center.RowStyles.Add(new RowStyle(SizeType.Absolute, 16));
-        center.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
-        _score.BackColor = Color.FromArgb(235, 249, 243);
-        _score.Padding = new Padding(18, 0, 12, 0);
-        _score.UseCompatibleTextRendering = true;
-        _status.BackColor = CardBackground;
-        _status.ForeColor = MutedText;
-        _status.Padding = new Padding(12, 4, 12, 4);
-        _status.Font = new Font("Segoe UI", 9.75f);
-        _status.UseCompatibleTextRendering = true;
-        center.Controls.Add(_score, 0, 0);
-        center.Controls.Add(_health, 0, 1);
-        center.Controls.Add(_progress, 0, 2);
-        center.Controls.Add(_status, 0, 3);
-        root.Controls.Add(center, 0, 2);
-
-        var right = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            RowCount = 2,
-            Padding = new Padding(10, 4, 0, 4),
-            BackColor = Color.FromArgb(239, 247, 255)
-        };
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 205));
-        right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var liveTitle = new Label
-        {
-            Text = "Live Status / Verification",
-            Dock = DockStyle.Top,
-            Height = 28,
-            Font = new Font("Segoe UI Semibold", 12f, FontStyle.Bold),
-            ForeColor = PrimaryBlue,
-            UseCompatibleTextRendering = true
-        };
-        _live.Font = new Font("Segoe UI", 10f);
-        _live.ForeColor = Navy;
-        _live.Padding = new Padding(2, 6, 2, 0);
-        _live.UseCompatibleTextRendering = true;
-        var livePanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12), BackColor = CardBackground };
-        livePanel.Controls.Add(_live);
-        livePanel.Controls.Add(liveTitle);
-        right.Controls.Add(livePanel, 0, 0);
-        right.Controls.Add(_advancedDetails, 0, 1);
-        root.Controls.Add(right, 1, 2);
-
-        var actions = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Padding = new Padding(0, 10, 0, 0)
-        };
-        _install.BackColor = PrimaryBlue;
-        _install.ForeColor = Color.White;
-        _install.FlatAppearance.BorderColor = PrimaryBlue;
-        foreach (var secondary in new[] { _repair, _verify, _rollback })
-        {
-            secondary.BackColor = Color.White;
-            secondary.ForeColor = PrimaryBlue;
-            secondary.FlatAppearance.BorderColor = BorderBlue;
-            secondary.FlatAppearance.BorderSize = 1;
-        }
-        _uninstall.BackColor = Color.White;
-        _uninstall.ForeColor = Color.FromArgb(196, 54, 54);
-        _uninstall.FlatAppearance.BorderColor = Color.FromArgb(240, 196, 196);
-        _uninstall.FlatAppearance.BorderSize = 1;
-        actions.Controls.Add(_install);
-        actions.Controls.Add(_repair);
-        actions.Controls.Add(_verify);
-        actions.Controls.Add(_rollback);
-        actions.Controls.Add(_uninstall);
-        root.Controls.Add(actions, 0, 3);
-        root.SetColumnSpan(actions, 2);
-
-        Controls.Add(root);
-    }
 
     private async Task RefreshAllAsync(bool force = false)
     {
-        if (_busy && !force) return;
-
-        _terminals = TerminalDiscovery.Discover();
-        var previous = (_terminal.SelectedItem as TerminalChoice)?.DataPath
-                       ?? ScenovaRuntime.ReadState().LastTerminalPath;
-        _terminal.Items.Clear();
-        foreach (var item in _terminals)
-            _terminal.Items.Add(item);
-
-        if (_terminals.Count == 0)
+        if ((_busy && !force) || _refreshing) return;
+        var alreadyBusy = _busy;
+        _refreshing = true;
+        SetBusy(true);
+        try
         {
-            _terminal.Enabled = false;
-            _status.Text = "ไม่พบ MT5 · กรุณาเปิด MetaTrader 5 อย่างน้อย 1 ครั้ง แล้วกดสแกนใหม่";
-            _score.Text = "Installation Score: 0/100 · NEED ACTION";
-            RenderHealth(new InstallationAssessment
-            {
-                Score = 0,
-                Summary = "ไม่พบ MetaTrader 5",
-                Checks =
-                [
-                    new HealthCheckResult
-                    {
-                        Code = "MT5_NOT_FOUND",
-                        Title = "Auto Detect MT5",
-                        Detail = "ไม่พบ MetaQuotes Terminal Data Folder",
-                        State = HealthState.NeedAction,
-                        Weight = 1
-                    }
-                ]
-            });
-            return;
-        }
+            var previous = (_terminal.SelectedItem as TerminalChoice)?.DataPath
+                           ?? ScenovaRuntime.ReadState().LastTerminalPath;
+            _terminals = await Task.Run(TerminalDiscovery.Discover);
+            _terminal.Items.Clear();
+            foreach (var item in _terminals) _terminal.Items.Add(item);
+            _assessment = null;
 
-        _terminal.Enabled = true;
-        var index = _terminals.FindIndex(x =>
-            string.Equals(x.DataPath, previous, StringComparison.OrdinalIgnoreCase));
-        _terminal.SelectedIndex = index >= 0 ? index : 0;
-        await AssessSelectedAsync(force);
+            if (_terminals.Count == 0)
+            {
+                _terminalNote.Text = "ยังไม่พบ MetaTrader 5";
+                _live.Text = "รอเลือก MT5";
+                _assessment = new InstallationAssessment
+                {
+                    Score = 0, Summary = "ยังไม่พบ MetaTrader 5",
+                    Checks =
+                    [
+                        new HealthCheckResult
+                        {
+                            Code = "MT5_NOT_FOUND", Title = "ค้นหา MetaTrader 5",
+                            Detail = "เปิด MT5 อย่างน้อยหนึ่งครั้ง แล้วกดตรวจสอบและอัปเดต",
+                            State = HealthState.NeedAction, Weight = 1
+                        }
+                    ]
+                };
+                RenderHealth(_assessment);
+                ShowResult("ยังไม่พบ MT5 · เปิดโปรแกรม MetaTrader 5 แล้วกดตรวจสอบและอัปเดตอีกครั้ง", false);
+                return;
+            }
+
+            var index = _terminals.FindIndex(x => string.Equals(x.DataPath, previous, StringComparison.OrdinalIgnoreCase));
+            _terminal.SelectedIndex = index >= 0 ? index : 0;
+            _terminalNote.Text = $"พบ MT5 {_terminals.Count} รายการ\r\nเลือกโปรแกรมที่ต้องการด้านล่าง";
+            await AssessSelectedAsync(force: true);
+        }
+        catch (Exception ex)
+        {
+            if (force) throw;
+            ShowResult(InstallerDiagnostics.Friendly(InstallerDiagnostics.Classify(ex), ex.Message), false);
+        }
+        finally
+        {
+            _refreshing = false;
+            SetBusy(alreadyBusy);
+        }
     }
 
     private async Task AssessSelectedAsync(bool force = false)
@@ -451,225 +280,273 @@ internal sealed class InstallerForm : Form
 
     private void RenderHealth(InstallationAssessment assessment)
     {
-        _health.Items.Clear();
-        foreach (var check in assessment.Checks)
+        _health.BeginUpdate();
+        try
         {
-            var status = check.State switch
+            _health.Items.Clear();
+            foreach (var check in assessment.Checks)
             {
-                HealthState.Ready => "READY",
-                HealthState.AutoFix => "AUTO FIX",
-                HealthState.Warning => "WARNING",
-                HealthState.NeedAction => "NEED ACTION",
-                _ => "INFO"
-            };
-            var item = new ListViewItem(check.Title);
-            item.SubItems.Add(status);
-            item.SubItems.Add(check.Detail);
-            item.ForeColor = check.State switch
-            {
-                HealthState.Ready => Color.FromArgb(8, 140, 93),
-                HealthState.NeedAction => Color.FromArgb(193, 62, 46),
-                HealthState.Warning => Color.FromArgb(183, 112, 0),
-                HealthState.AutoFix => Color.FromArgb(25, 104, 190),
-                _ => Color.FromArgb(65, 82, 101)
-            };
-            _health.Items.Add(item);
+                var status = check.State switch
+                {
+                    HealthState.Ready => "เรียบร้อย",
+                    HealthState.AutoFix => "ปรับให้อัตโนมัติ",
+                    HealthState.Warning => "ข้อสังเกต",
+                    HealthState.NeedAction => "ต้องดำเนินการ",
+                    _ => "ข้อมูล"
+                };
+                var title = check.Code switch
+                {
+                    "WINDOWS" => "ความพร้อมของ Windows",
+                    "MT5_DETECTED" => "ค้นหา MetaTrader 5",
+                    "TERMINAL_MATCH" => "โปรแกรม MT5 ที่เลือก",
+                    "MQL5_WRITE" => "สิทธิ์ติดตั้งไฟล์",
+                    "DISK_SPACE" => "พื้นที่จัดเก็บ",
+                    "API_REACHABLE" => "เชื่อมต่อ SCENOVA",
+                    "AGENT" => "โปรแกรมเชื่อมต่อ SCENOVA",
+                    "SIGNATURE" => "ลายเซ็นตัวติดตั้ง",
+                    "EXISTING_INSTALL" => "การติดตั้งปัจจุบัน",
+                    _ => check.Title
+                };
+                var item = new ListViewItem(title);
+                item.SubItems.Add(status);
+                item.SubItems.Add(check.Detail);
+                item.ForeColor = check.State switch
+                {
+                    HealthState.Ready => SuccessGreen,
+                    HealthState.NeedAction => Color.FromArgb(193, 62, 46),
+                    HealthState.Warning => Color.FromArgb(151, 96, 12),
+                    HealthState.AutoFix => PrimaryBlue,
+                    _ => MutedText
+                };
+                _health.Items.Add(item);
+            }
         }
-
-        _score.Text =
-            $"Installation Score: {assessment.Score}/100 · {assessment.Summary}";
-        _score.Font = new Font("Segoe UI Semibold", 15f, FontStyle.Bold);
-        _score.ForeColor = assessment.Score >= 90
-            ? SuccessGreen
-            : assessment.Score >= 70
-                ? PrimaryBlue
-                : Color.FromArgb(183, 112, 0);
+        finally { _health.EndUpdate(); }
+        _score.Text = $"{assessment.Score} / 100\r\n{(assessment.Ready ? "พร้อมตรวจสอบเวอร์ชัน" : "มีรายการที่ต้องแก้ไข")}";
+        _score.ForeColor = assessment.Ready ? SuccessGreen : Color.FromArgb(151, 96, 12);
     }
 
     private async Task InstallOrUpdateAsync()
     {
-        if (_terminal.SelectedItem is not TerminalChoice terminal) return;
+        if (_busy) return;
         SetBusy(true);
         AgentConfig? profile = null;
         try
         {
-            await InstallerDiagnostics.LogAsync("INSTALL_BEGIN", terminal.DataPath);
-            _status.Text = "กำลังตรวจ System Health...";
-            var assessment = await SmartHealthEngine.AssessAsync(terminal);
-            RenderHealth(assessment);
+            SetStep(1, "กำลังค้นหา MT5 และตรวจสอบความพร้อม");
+            await RefreshAllAsync(force: true);
+            if (_terminal.SelectedItem is not TerminalChoice terminal) return;
+            if (_assessment is null || !_assessment.Ready)
+                throw new InvalidOperationException("กรุณาแก้รายการที่ระบุว่าต้องดำเนินการ แล้วกดปุ่มนี้อีกครั้ง");
 
-            if (assessment.Checks.Any(x => x.State == HealthState.NeedAction))
+            profile = SelectedProfile();
+            var newInstall = profile is null;
+            if (newInstall)
             {
-                var blocking = assessment.Checks
-                    .Where(x => x.State == HealthState.NeedAction)
-                    .Select(x => x.Title);
-                throw new InvalidOperationException(
-                    "ต้องแก้ก่อนติดตั้ง: " + string.Join(", ", blocking));
+                var code = ScenovaRuntime.ReadEnrollmentCode();
+                if (string.IsNullOrWhiteSpace(code))
+                    throw new InvalidOperationException("กรุณาดาวน์โหลดตัวติดตั้งจากหน้า MT5 & EA ในบัญชี SCENOVA ของคุณ");
+                SetStep(2, "กำลังเชื่อมต่อบัญชี SCENOVA กับ MT5 ที่เลือก");
+                profile = await EnrollProfileAsync(terminal, code, null);
             }
+            if (profile is null) throw new InvalidOperationException("ไม่พบข้อมูลการติดตั้งสำหรับ MT5 ที่เลือก");
+
+            var token = ScenovaRuntime.TryUnprotect(profile.InstallTokenProtected)
+                ?? throw new InvalidOperationException("ข้อมูลการเชื่อมต่อไม่ครบ กรุณาดาวน์โหลดตัวติดตั้งจากบัญชี SCENOVA อีกครั้ง");
+            using var http = ScenovaClient.NewHttpClient();
+            SetStep(2, "กำลังเปรียบเทียบไฟล์ เวอร์ชัน และการเชื่อมต่อกับ SCENOVA");
+            var heartbeat = await TryHeartbeatAsync(profile, http)
+                ?? throw new InvalidOperationException("SCENOVA Server ยังไม่ตอบกลับ จึงยังยืนยันเวอร์ชันล่าสุดไม่ได้");
+            EnsureAccountMatches(profile, heartbeat);
+            var plan = SmartHealthEngine.BuildPlan(terminal, profile, heartbeat);
+            var repairPreset = newInstall || plan.RepairPreset || !PresetMatches(profile, token);
+            var filesMatch = plan.VerifyOnly && !repairPreset;
+            RenderLive(profile, heartbeat);
+            RenderAdvancedDetails(heartbeat);
+
+            // A matching file on disk alone is not proof that MT5 loaded it.
+            // Skip all installers, preset writes and restarts only after every check passes.
+            if (filesMatch && IsVerified(profile, heartbeat))
+            {
+                _updateSummary.Text = "เวอร์ชันและไฟล์ตรงกัน\r\nไม่จำเป็นต้องอัปเดต";
+                ShowResult("ตรวจสอบแล้ว ระบบตรงกัน · EA และ Agent พร้อมใช้งาน ไม่จำเป็นต้องอัปเดต", true);
+                return;
+            }
+
+            var requiredAgent = string.IsNullOrWhiteSpace(heartbeat.AgentVersionRequired)
+                ? InstallerConstants.AgentVersion : heartbeat.AgentVersionRequired;
+            if ((plan.InstallAgent || plan.UpdateAgent || heartbeat.AgentUpdateRequired) &&
+                !VersionsMatch(InstallerConstants.AgentVersion, requiredAgent))
+                throw new InvalidOperationException(
+                    "ตัวติดตั้งนี้มี Agent " + InstallerConstants.AgentVersion +
+                    " แต่ระบบต้องการ " + requiredAgent +
+                    " · กรุณาดาวน์โหลดตัวติดตั้งล่าสุดจากหน้า MT5 & EA");
 
             Directory.CreateDirectory(ScenovaRuntime.BaseDir);
             Directory.CreateDirectory(ScenovaRuntime.StagingDir);
-
-            profile = SelectedProfile();
-            var code = ScenovaRuntime.ReadEnrollmentCode();
-
-            if (profile is null && string.IsNullOrWhiteSpace(code))
-                throw new InvalidOperationException(
-                    "ไฟล์นี้ไม่มีรหัสติดตั้ง กรุณาดาวน์โหลดจาก SCENOVA Control Center");
-
-            if (!string.IsNullOrWhiteSpace(code))
+            var needEaUpdate = plan.InstallEa || plan.UpdateEa;
+            var needsReload = !VersionsMatch(heartbeat.EaVersion, heartbeat.EaVersionRequired);
+            if (needEaUpdate)
             {
-                _status.Text = "กำลังเชื่อม Slot และ Smart Terminal Matching...";
-                profile = await EnrollProfileAsync(terminal, code!, profile);
-            }
-
-            if (profile is null)
-                throw new InvalidOperationException(
-                    "ไม่พบ SCENOVA Profile สำหรับ Terminal นี้");
-
-            var token = ScenovaRuntime.TryUnprotect(profile.InstallTokenProtected)
-                        ?? throw new InvalidOperationException("install token unavailable");
-
-            using var http = ScenovaClient.NewHttpClient();
-            var heartbeat = await TryHeartbeatAsync(profile, http);
-
-            if (heartbeat is null)
-            {
-                // New install can download directly from enroll metadata already
-                // stored in the profile. Existing installs require server check.
-                if (string.IsNullOrWhiteSpace(profile.EaHash))
-                    throw new InvalidOperationException(
-                        "SCENOVA Server ยังไม่คืนข้อมูล EA release");
+                if (!heartbeat.ArtifactAvailable || string.IsNullOrWhiteSpace(heartbeat.ArtifactHash))
+                    throw new InvalidOperationException("ยังไม่มีไฟล์ EA ที่ยืนยันความถูกต้องได้จาก Server กรุณาลองใหม่ภายหลัง");
+                SetStep(3, "กำลังดาวน์โหลดและอัปเดต EA เฉพาะส่วนที่เปลี่ยนแปลง");
             }
             else
             {
-                _status.Text = "กำลังวางแผนอัปเดตเฉพาะ Component ที่จำเป็น...";
-                var plan = SmartHealthEngine.BuildPlan(terminal, profile, heartbeat);
-                _status.Text = plan.Summary;
-
-                if (!string.IsNullOrWhiteSpace(heartbeat.ArtifactHash))
-                {
-                    await SmartAgentRunner.EnsureEaArtifactAsync(
-                        http,
-                        profile,
-                        token,
-                        heartbeat,
-                        ScenovaRuntime.DiagnosticsPath);
-                }
-
-                if (heartbeat.SafeToRestart)
-                {
-                    AgentRunner.EnsureMt5RunningWithEa(profile, forceReload: true);
-                }
-                else if (SmartAgentRunner.PendingUpdateExists(profile))
-                {
-                    _status.Text =
-                        "พบ Position/สถานะ RUNNING · เก็บ EA ใหม่ไว้ใน Staging แล้ว จะอัปเดตอัตโนมัติเมื่อ Safe Stop";
-                }
+                SetStep(3, filesMatch ? "ไฟล์ตรงกันแล้ว กำลังตรวจการเชื่อมต่อ EA" : "กำลังปรับการติดตั้งให้ตรงกับเวอร์ชันล่าสุด");
             }
+            _updateSummary.Text = needEaUpdate ? "กำลังอัปเดต EA\r\nเก็บค่าการใช้งานเดิมไว้" : "ตรวจเฉพาะส่วนที่จำเป็น";
 
-            if (!File.Exists(profile.EaBinaryPath) && !string.IsNullOrWhiteSpace(profile.EaHash))
+            if (needEaUpdate || needsReload || SmartAgentRunner.PendingUpdateExists(profile))
+                await SmartAgentRunner.EnsureEaArtifactAsync(http, profile, token, heartbeat, ScenovaRuntime.DiagnosticsPath);
+
+            if (repairPreset)
             {
-                _status.Text = "กำลังดาวน์โหลด EA ด้วย Resume / Retry...";
-                var staged = Path.Combine(
-                    ScenovaRuntime.StagingDir,
-                    "install-" + profile.InstanceId + ".ex5");
-                await ScenovaClient.DownloadArtifactResumableAsync(
-                    http,
-                    profile.ApiBase,
-                    profile.InstanceId,
-                    token,
-                    staged,
-                    profile.EaHash,
-                    profile.ReleaseChannel);
-
-                BackupManager.CreateSnapshot(profile, terminal.DataPath);
-                Directory.CreateDirectory(Path.GetDirectoryName(profile.EaBinaryPath)!);
-                File.Move(staged, profile.EaBinaryPath, true);
+                SetStep(3, "กำลังจัดเตรียมค่าการเชื่อมต่อ โดยรักษาค่าที่คุณตั้งไว้");
+                PresetManager.Migrate(PresetPath(profile), profile.ApiBase, profile.InstanceId, token);
             }
 
-            _status.Text = "กำลัง Migrate preset โดยรักษาค่าที่คุณตั้งไว้...";
-            PresetManager.Migrate(
-                Path.Combine(
-                    profile.TerminalDataPath,
-                    "MQL5",
-                    "Presets",
-                    "SCENOVA-FastBasketBot.set"),
-                profile.ApiBase,
-                profile.InstanceId,
-                token);
+            if (plan.InstallAgent || plan.UpdateAgent)
+            {
+                SetStep(3, "กำลังติดตั้งโปรแกรมเชื่อมต่อ SCENOVA");
+                await Task.Run(AgentRunner.InstallAndStart);
+            }
+            else
+            {
+                await Task.Run(AgentRunner.StartInstalledAgentIfNeeded);
+            }
 
             profile.InstallerVersion = InstallerConstants.Version;
-            // Preserve the Server-resolved channel. A requested Beta/AdminTest
-            // channel may have been safely downgraded to Stable by policy.
-            if (string.IsNullOrWhiteSpace(profile.ReleaseChannel))
-                profile.ReleaseChannel = SelectedReleaseChannel();
             profile.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
             ScenovaRuntime.SaveOrUpdateProfile(profile, makePrimary: true);
 
-            _status.Text = "กำลังติดตั้ง / ซ่อม Device Agent...";
-            AgentRunner.InstallAndStart();
-
-            if (!AgentRunner.IsMt5Running(profile))
+            // The explicit foreground click permits one connection/reload only
+            // after a fresh Server check. Automatic refresh never enters here.
+            heartbeat = await TryHeartbeatAsync(profile, http)
+                ?? throw new InvalidOperationException("SCENOVA Server ยังไม่ตอบกลับ จึงยังโหลด EA ใหม่ไม่ได้");
+            EnsureAccountMatches(profile, heartbeat);
+            if (heartbeat.SafeToRestart && heartbeat.Positions == 0 &&
+                (!heartbeat.EaOnline || !VersionsMatch(heartbeat.EaVersion, heartbeat.EaVersionRequired)))
             {
-                _status.Text = "กำลังเปิด MT5 พร้อม SCENOVA...";
-                AgentRunner.EnsureMt5RunningWithEa(profile, forceReload: false);
+                // A release may have changed or an earlier update may have
+                // been staged while trading; apply only the freshly approved file.
+                await SmartAgentRunner.EnsureEaArtifactAsync(http, profile, token, heartbeat, ScenovaRuntime.DiagnosticsPath);
+                SetStep(3, "กำลังเชื่อมต่อ MT5 และโหลด EA เวอร์ชันล่าสุด");
+                await Task.Run(() => AgentRunner.ConnectFromInstallerButton(profile, heartbeat));
             }
 
-            _status.Text = "กำลัง Post-install Self Test...";
+            SetStep(4, "กำลังยืนยันไฟล์ เวอร์ชัน EA ที่ทำงานอยู่ และการเชื่อมต่อ");
             var verified = await WaitForVerificationAsync(profile, TimeSpan.FromSeconds(40));
+            var complete = verified is not null && IsVerified(profile, verified);
+            RenderLive(profile, verified);
+            RenderAdvancedDetails(verified);
+            _assessment = await SmartHealthEngine.AssessAsync(terminal);
+            RenderHealth(_assessment);
 
             var state = ScenovaRuntime.ReadState();
-            state.LastAction = "INSTALL_OR_UPDATE";
-            state.LastResult = verified is not null && verified.EaOnline ? "SUCCESS" : "PARTIAL";
-            state.LastInstallAt = DateTimeOffset.UtcNow.ToString("O");
-            state.LastAgentVersion = InstallerConstants.AgentVersion;
-            state.LastEaVersion = verified?.EaVersion ?? profile.EaVersion;
-            state.LastEaHash = profile.EaHash;
-            state.LastErrorCode = "";
+            state.LastAction = "CHECK_AND_UPDATE";
+            state.LastResult = complete ? "SUCCESS" : "PARTIAL";
+            if (newInstall || !filesMatch) state.LastInstallAt = DateTimeOffset.UtcNow.ToString("O");
+            state.LastAgentVersion = File.Exists(AgentRunner.AgentPath)
+                ? FileVersionInfo.GetVersionInfo(AgentRunner.AgentPath).FileVersion ?? "" : "";
+            state.LastEaVersion = verified?.EaVersion ?? "";
+            state.LastEaHash = File.Exists(profile.EaBinaryPath) ? BackupManager.HashFile(profile.EaBinaryPath) : "";
+            state.LastErrorCode = complete ? "" : InstallerErrorCode.EaOffline.ToString();
             ScenovaRuntime.SaveState(state);
+            await ReportTelemetryAsync(profile, "CHECK_AND_UPDATE", state.LastResult,
+                complete ? InstallerErrorCode.None : InstallerErrorCode.EaOffline);
 
-            await ReportTelemetryAsync(
-                profile,
-                "INSTALL_OR_UPDATE",
-                state.LastResult,
-                InstallerErrorCode.None);
-
-            if (verified is not null && verified.EaOnline)
+            if (complete)
             {
-                _status.Text =
-                    "พร้อมใช้งาน · Agent Online · EA " +
-                    (verified.EaVersion ?? "OK") +
-                    " · Account " +
-                    (verified.AccountNumber ?? "กำลังยืนยัน") +
-                    " · " +
-                    (verified.Server ?? "");
+                _updateSummary.Text = "เวอร์ชันล่าสุด\r\nตรวจยืนยันเรียบร้อย";
+                ShowResult(filesMatch
+                    ? "ตรวจสอบแล้ว ระบบตรงกัน · ยืนยันการเชื่อมต่อเรียบร้อย"
+                    : "อัปเดตและตรวจสอบเรียบร้อย · EA และ Agent ตรงกับเวอร์ชันล่าสุด", true);
             }
             else
             {
-                _status.Text =
-                    "ติดตั้งสำเร็จ แต่ EA ยังไม่ Heartbeat · กด “ตรวจและซ่อม” เพื่อให้ระบบแก้การเปิด MT5 / preset / permission";
+                _updateSummary.Text = "ยังรอยืนยันจาก MT5";
+                var latest = verified ?? heartbeat;
+                var message = !latest.SafeToRestart && (needEaUpdate || SmartAgentRunner.PendingUpdateExists(profile))
+                    ? "เตรียมอัปเดตแล้ว · MT5 ยังทำงานหรือมีออเดอร์อยู่ จึงยังยืนยันว่าอัปเดตสำเร็จไม่ได้"
+                    : SmartAgentRunner.PendingUpdateExists(profile) || !VersionsMatch(latest.EaVersion, latest.EaVersionRequired)
+                        ? "ไฟล์อัปเดตพร้อมแล้ว แต่ MT5 ยังไม่ยืนยันเวอร์ชันใหม่ · ตรวจการเชื่อมต่อแล้วกดตรวจสอบและอัปเดตอีกครั้ง"
+                        : "ยังยืนยันการเชื่อมต่อ EA ไม่สำเร็จ · เปิด MT5 และตรวจว่า FastBasketBot อยู่บนกราฟ แล้วกดปุ่มนี้อีกครั้ง";
+                ShowResult(message, false);
             }
-
-            await RefreshAllAsync(force: true);
         }
         catch (Exception ex)
         {
             var code = InstallerDiagnostics.Classify(ex);
-            await InstallerDiagnostics.LogAsync("INSTALL_ERROR", code + " " + ex.Message);
-            SaveFailureState("INSTALL_OR_UPDATE", code);
-
+            await InstallerDiagnostics.LogAsync("CHECK_UPDATE_ERROR", code + " " + ex.Message);
+            SaveFailureState("CHECK_AND_UPDATE", code);
             if (profile is not null)
-                await ReportTelemetryAsync(profile, "INSTALL_OR_UPDATE", "FAILED", code);
+            {
+                try { await ReportTelemetryAsync(profile, "CHECK_AND_UPDATE", "FAILED", code); }
+                catch { /* Telemetry must not hide the original failure. */ }
+            }
+            _updateSummary.Text = "ยังดำเนินการไม่สำเร็จ";
+            ShowResult(InstallerDiagnostics.Friendly(code, ex.Message), false);
+        }
+        finally { SetBusy(false); }
+    }
 
-            _status.Text =
-                "ไม่สำเร็จ [" + code + "] · " +
-                InstallerDiagnostics.Friendly(code, ex.Message);
-        }
-        finally
+    private static string PresetPath(AgentConfig profile) =>
+        Path.Combine(profile.TerminalDataPath, "MQL5", "Presets", "SCENOVA-FastBasketBot.set");
+
+    private static bool PresetMatches(AgentConfig profile, string token)
+    {
+        var path = PresetPath(profile);
+        if (!File.Exists(path)) return false;
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var line in File.ReadLines(path))
         {
-            SetBusy(false);
+            var equals = line.IndexOf('=');
+            if (equals <= 0) continue;
+            values[line[..equals].Trim()] = line[(equals + 1)..].Split("||")[0].Trim();
         }
+        return values.TryGetValue("InpApiBase", out var api) && api.TrimEnd('/') == profile.ApiBase.TrimEnd('/') &&
+               values.TryGetValue("InpInstanceId", out var instance) && instance == profile.InstanceId &&
+               values.TryGetValue("InpInstallToken", out var savedToken) && savedToken == token &&
+               PresetManager.Defaults.Keys.All(values.ContainsKey);
+    }
+
+    private static bool VersionsMatch(string? actual, string? required)
+    {
+        if (string.IsNullOrWhiteSpace(actual) || string.IsNullOrWhiteSpace(required)) return false;
+        static string Normalize(string value) => string.Join(".", value.Trim().TrimStart('v', 'V').Split('.').Take(3));
+        return string.Equals(Normalize(actual), Normalize(required), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void EnsureAccountMatches(AgentConfig profile, AgentHeartbeatResponse heartbeat)
+    {
+        if ((!string.IsNullOrWhiteSpace(profile.ExpectedAccountNumber) && !string.IsNullOrWhiteSpace(heartbeat.AccountNumber) &&
+             !string.Equals(profile.ExpectedAccountNumber, heartbeat.AccountNumber, StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrWhiteSpace(profile.ExpectedServer) && !string.IsNullOrWhiteSpace(heartbeat.Server) &&
+             !string.Equals(profile.ExpectedServer, heartbeat.Server, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("account mismatch");
+    }
+
+    private static bool IsVerified(AgentConfig profile, AgentHeartbeatResponse heartbeat)
+    {
+        if (!heartbeat.DeviceVerified || !heartbeat.EaOnline || heartbeat.AgentUpdateRequired ||
+            string.IsNullOrWhiteSpace(heartbeat.ArtifactHash) || !File.Exists(profile.EaBinaryPath) ||
+            !File.Exists(AgentRunner.AgentPath))
+            return false;
+        if (!string.Equals(BackupManager.HashFile(profile.EaBinaryPath), heartbeat.ArtifactHash, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!VersionsMatch(heartbeat.EaVersion, heartbeat.EaVersionRequired ?? profile.EaVersion) ||
+            !VersionsMatch(FileVersionInfo.GetVersionInfo(AgentRunner.AgentPath).FileVersion,
+                heartbeat.AgentVersionRequired ?? InstallerConstants.AgentVersion))
+            return false;
+        if ((!string.IsNullOrWhiteSpace(profile.ExpectedAccountNumber) &&
+             !string.Equals(profile.ExpectedAccountNumber, heartbeat.AccountNumber, StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrWhiteSpace(profile.ExpectedServer) &&
+             !string.Equals(profile.ExpectedServer, heartbeat.Server, StringComparison.OrdinalIgnoreCase)))
+            return false;
+        var token = ScenovaRuntime.TryUnprotect(profile.InstallTokenProtected);
+        return !string.IsNullOrWhiteSpace(token) && PresetMatches(profile, token);
     }
 
     private async Task<AgentConfig> EnrollProfileAsync(
@@ -751,66 +628,6 @@ internal sealed class InstallerForm : Form
         return profile;
     }
 
-    private async Task RepairAsync()
-    {
-        if (_terminal.SelectedItem is not TerminalChoice terminal) return;
-        SetBusy(true);
-        try
-        {
-            _status.Text = "กำลัง Auto Fix...";
-            var actions = await InstallerRepair.RepairAsync(terminal);
-            var profile = SelectedProfile();
-
-            if (profile is not null)
-            {
-                var heartbeat = await TryHeartbeatAsync(profile);
-                if (heartbeat is not null)
-                {
-                    var token = ScenovaRuntime.TryUnprotect(profile.InstallTokenProtected);
-                    if (!string.IsNullOrWhiteSpace(token))
-                    {
-                        using var http = ScenovaClient.NewHttpClient();
-                        await SmartAgentRunner.EnsureEaArtifactAsync(
-                            http,
-                            profile,
-                            token,
-                            heartbeat,
-                            ScenovaRuntime.DiagnosticsPath);
-                    }
-
-                    if (heartbeat.SafeToRestart && !heartbeat.EaOnline)
-                        AgentRunner.EnsureMt5RunningWithEa(profile, forceReload: true);
-                }
-
-                await ReportTelemetryAsync(
-                    profile,
-                    "REPAIR",
-                    "SUCCESS",
-                    InstallerErrorCode.None);
-            }
-
-            var state = ScenovaRuntime.ReadState();
-            state.LastAction = "REPAIR";
-            state.LastResult = "SUCCESS";
-            state.LastRepairAt = DateTimeOffset.UtcNow.ToString("O");
-            state.LastErrorCode = "";
-            ScenovaRuntime.SaveState(state);
-
-            _status.Text = "ซ่อมเสร็จ · " + string.Join(" · ", actions);
-            await RefreshAllAsync(force: true);
-        }
-        catch (Exception ex)
-        {
-            var code = InstallerDiagnostics.Classify(ex);
-            SaveFailureState("REPAIR", code);
-            _status.Text = "ซ่อมไม่สำเร็จ [" + code + "] · " +
-                           InstallerDiagnostics.Friendly(code, ex.Message);
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
 
     private async Task RollbackAsync()
     {
@@ -994,8 +811,7 @@ internal sealed class InstallerForm : Form
     }
 
     private async Task<AgentHeartbeatResponse?> WaitForVerificationAsync(
-        AgentConfig profile,
-        TimeSpan timeout)
+        AgentConfig profile, TimeSpan timeout)
     {
         var deadline = DateTimeOffset.UtcNow + timeout;
         AgentHeartbeatResponse? last = null;
@@ -1004,88 +820,29 @@ internal sealed class InstallerForm : Form
             last = await TryHeartbeatAsync(profile);
             if (last is not null)
             {
-                var localHash = File.Exists(profile.EaBinaryPath)
-                    ? BackupManager.HashFile(profile.EaBinaryPath)
-                    : "";
-                var hashOk = string.IsNullOrWhiteSpace(last.ArtifactHash) ||
-                             string.Equals(
-                                 localHash,
-                                 last.ArtifactHash,
-                                 StringComparison.OrdinalIgnoreCase);
-
-                var accountOk = string.IsNullOrWhiteSpace(profile.ExpectedAccountNumber) ||
-                                string.IsNullOrWhiteSpace(last.AccountNumber) ||
-                                string.Equals(
-                                    profile.ExpectedAccountNumber,
-                                    last.AccountNumber,
-                                    StringComparison.OrdinalIgnoreCase);
-                var serverOk = string.IsNullOrWhiteSpace(profile.ExpectedServer) ||
-                               string.IsNullOrWhiteSpace(last.Server) ||
-                               string.Equals(
-                                   profile.ExpectedServer,
-                                   last.Server,
-                                   StringComparison.OrdinalIgnoreCase);
-
-                if (!accountOk || !serverOk)
-                    throw new InvalidOperationException("account mismatch");
-
-                if (last.EaOnline && hashOk && !last.AgentUpdateRequired)
-                    return last;
+                EnsureAccountMatches(profile, last);
+                if (IsVerified(profile, last)) return last;
+                RenderLive(profile, last);
             }
-
             await Task.Delay(TimeSpan.FromSeconds(2));
         }
+        // The caller must use IsVerified; a final heartbeat is not success.
         return last;
     }
 
-    private void RenderLive(
-        AgentConfig? profile,
-        AgentHeartbeatResponse? heartbeat)
+    private void RenderLive(AgentConfig? profile, AgentHeartbeatResponse? heartbeat)
     {
         if (profile is null)
         {
-            _live.Text =
-                "EA Version: ยังไม่ติดตั้ง\r\n" +
-                "Installer: " + InstallerConstants.Version + "\r\n" +
-                "Agent: " + (File.Exists(AgentRunner.AgentPath) ? "Installed" : "ยังไม่ติดตั้ง") + "\r\n" +
-                "Heartbeat: รอการติดตั้ง\r\n" +
-                "Channel: " + SelectedReleaseChannel();
-            _live.ForeColor = PrimaryBlue;
+            _live.Text = "ยังไม่ได้ติดตั้ง\r\nพร้อมเริ่มจากปุ่มด้านล่าง";
+            _live.ForeColor = MutedText;
             return;
         }
-
-        var localHash = File.Exists(profile.EaBinaryPath)
-            ? BackupManager.HashFile(profile.EaBinaryPath)
-            : "";
-        var hashOk = heartbeat is not null &&
-                     !string.IsNullOrWhiteSpace(heartbeat.ArtifactHash) &&
-                     string.Equals(
-                         localHash,
-                         heartbeat.ArtifactHash,
-                         StringComparison.OrdinalIgnoreCase);
-        var runtimeVersion = (heartbeat?.EaVersion ?? "").Trim();
-        var requiredVersion = (heartbeat?.EaVersionRequired ?? profile.EaVersion ?? InstallerConstants.Version).Trim();
-        var runtimeMatches = !string.IsNullOrWhiteSpace(runtimeVersion) &&
-                             !string.IsNullOrWhiteSpace(requiredVersion) &&
-                             string.Equals(runtimeVersion, requiredVersion, StringComparison.OrdinalIgnoreCase);
-        var versionLine = runtimeMatches
-            ? "EA Version: " + requiredVersion
-            : "EA Runtime: " + (string.IsNullOrWhiteSpace(runtimeVersion) ? "รอตรวจ" : runtimeVersion) +
-              "  →  ล่าสุด " + (string.IsNullOrWhiteSpace(requiredVersion) ? InstallerConstants.Version : requiredVersion);
-
-        _live.Text =
-            versionLine + "\r\n" +
-            "Installer / Agent: " + InstallerConstants.Version + "\r\n" +
-            "Agent: " + (File.Exists(AgentRunner.AgentPath) ? "Installed" : "Missing") + "\r\n" +
-            "Heartbeat: " + (heartbeat?.EaOnline == true ? "OK" : "WAITING") + "\r\n" +
-            "Hash: " + (hashOk ? "OK" : SmartAgentRunner.PendingUpdateExists(profile) ? "UPDATE PENDING" : "CHECK") + "\r\n" +
-            "Account: " + (heartbeat?.AccountNumber ?? profile.VerifiedAccountNumber ?? "—") + "\r\n" +
-            "Server: " + (heartbeat?.Server ?? profile.VerifiedServer ?? "—");
-        _live.ForeColor = heartbeat?.EaOnline == true && runtimeMatches && hashOk
-            ? SuccessGreen
-            : runtimeMatches
-                ? PrimaryBlue
-                : Color.FromArgb(190, 111, 0);
+        var required = heartbeat?.EaVersionRequired ?? profile.EaVersion;
+        var current = string.IsNullOrWhiteSpace(heartbeat?.EaVersion) ? "รอยืนยัน" : heartbeat.EaVersion;
+        _live.Text = "EA " + current + "  /  ล่าสุด " + required + "\r\n" +
+                     (heartbeat?.EaOnline == true ? "EA เชื่อมต่อแล้ว" : "รอ EA เชื่อมต่อ");
+        _live.ForeColor = heartbeat is not null && IsVerified(profile, heartbeat) ? SuccessGreen : MutedText;
     }
 
     private void RenderAdvancedDetails(AgentHeartbeatResponse? heartbeat)
@@ -1201,13 +958,11 @@ internal sealed class InstallerForm : Form
         _busy = busy;
         _progress.Visible = busy;
         _install.Enabled = !busy;
-        _repair.Enabled = !busy;
-        _verify.Enabled = !busy;
         _rollback.Enabled = !busy;
         _uninstall.Enabled = !busy;
-        _rescan.Enabled = !busy;
         _terminal.Enabled = !busy && _terminals.Count > 0;
         _channel.Enabled = !busy;
+        _install.Text = busy ? "กำลังดำเนินการ…" : "ตรวจสอบและอัปเดต";
     }
 
     protected override void Dispose(bool disposing)

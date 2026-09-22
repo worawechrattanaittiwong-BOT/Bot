@@ -10,9 +10,10 @@ namespace ScenovaInstaller;
 /// MT5 PROCESS OWNERSHIP POLICY
 /// ----------------------------
 /// Background install, repair, account switching and update checks are NEVER
-/// allowed to start/stop/restart MT5. Process control is allowed only when the
-/// authenticated Server returns a still-active one-time manual action that was
-/// created by the customer pressing a Dashboard button.
+/// allowed to start/stop/restart MT5. Process control requires a Dashboard
+/// manual action, or the foreground Installer button together with a fresh
+/// authenticated, restart-safe Server response. Background callers must use
+/// EnsureMt5RunningWithEa; the Installer entry point is never called by Agent.
 /// </summary>
 internal static class AgentRunner
 {
@@ -114,6 +115,71 @@ internal static class AgentRunner
             });
         }
         catch { }
+    }
+
+    // Called only from the foreground Installer's explicit check/update click.
+    // Reuse the normal MT5 launch configuration and restrict process ownership
+    // to the selected Terminal. Never restart while the Server sees trading.
+    internal static bool ConnectFromInstallerButton(AgentConfig config, AgentHeartbeatResponse permission)
+    {
+        if (!permission.DeviceVerified || !permission.SafeToRestart || permission.Positions != 0)
+            return false;
+        if (string.IsNullOrWhiteSpace(permission.ArtifactHash) || !File.Exists(config.EaBinaryPath) ||
+            !string.Equals(BackupManager.HashFile(config.EaBinaryPath), permission.ArtifactHash, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var terminalExe = ScenovaRuntime.ResolveTerminalExecutable(config.TerminalDataPath);
+        if (string.IsNullOrWhiteSpace(terminalExe) || !File.Exists(terminalExe))
+            throw new InvalidOperationException("ไม่พบ terminal64.exe ของ MT5 ที่เลือก");
+
+        var symbolSnapshot = FetchTradingSymbolSnapshot(config);
+        if (!string.IsNullOrWhiteSpace(symbolSnapshot?.DesiredSymbol))
+        {
+            var symbol = NormalizeStartupSymbol(symbolSnapshot.DesiredSymbol);
+            if (string.IsNullOrWhiteSpace(symbol))
+                throw new InvalidOperationException("Symbol ที่เลือกไม่ถูกต้อง");
+            config.StartupSymbol = symbol;
+            ScenovaRuntime.SaveOrUpdateProfile(config, config.IsPrimary);
+        }
+
+        var matching = FindTargetMt5Processes(terminalExe);
+        try
+        {
+            foreach (var process in matching) StopTargetMt5(process);
+        }
+        finally
+        {
+            foreach (var process in matching) process.Dispose();
+        }
+        StartTargetMt5(config, terminalExe);
+        return true;
+    }
+
+    internal static void StartInstalledAgentIfNeeded()
+    {
+        if (!File.Exists(AgentPath)) return;
+        var processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(AgentPath));
+        try
+        {
+            foreach (var process in processes)
+            {
+                try
+                {
+                    if (string.Equals(process.MainModule?.FileName, AgentPath, StringComparison.OrdinalIgnoreCase))
+                        return;
+                }
+                catch { }
+            }
+        }
+        finally
+        {
+            foreach (var process in processes) process.Dispose();
+        }
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = AgentPath, Arguments = "--agent",
+            UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden
+        });
     }
 
     /// <summary>
