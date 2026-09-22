@@ -352,7 +352,8 @@ export class PerformanceAnalyticsController {
        LIMIT 50000`,
       [account.id, effectiveFrom.toISOString(), journalTo.toISOString()]
     );
-    const reconstructed = reconstructCompletedJournal(journalResult.rows || []);
+    const journalRows = journalResult.rows || [];
+    const reconstructed = reconstructCompletedJournal(journalRows);
     const allBaskets = reconstructed.baskets;
     const allPositions = reconstructed.positions;
     const selectedBaskets = allBaskets.filter(
@@ -361,15 +362,41 @@ export class PerformanceAnalyticsController {
     const selectedPositions = allPositions.filter(
       (row) => new Date(row.closedAt).getTime() <= to.getTime()
     );
+    const selectedDealRows = journalRows.filter(
+      (row:any) => new Date(row.created_at).getTime() <= to.getTime()
+    );
 
-    const pnlSinceFrom = allBaskets.reduce(
-      (sum,row) => sum + Number(row.net_profit || 0),
+    // Money follows the actual realized deal ledger, including partial closes
+    // from a basket that is still draining. Basket count/Win Rate still use
+    // only fully completed reconstructed baskets.
+    const realizedSinceFrom = journalRows.reduce(
+      (sum:number,row:any) => sum + Number(row.net_profit || 0),
+      0
+    );
+    const selectedRealizedNet = selectedDealRows.reduce(
+      (sum:number,row:any) => sum + Number(row.net_profit || 0),
       0
     );
     const derivedStart = currentBalance > 0
-      ? Number((currentBalance - pnlSinceFrom).toFixed(2))
+      ? Number((currentBalance - realizedSinceFrom).toFixed(2))
       : null;
     const computed = this.summarize(selectedBaskets as BasketRow[], derivedStart);
+    const positiveDeals = selectedDealRows.map((row:any)=>Number(row.net_profit || 0)).filter((value:number)=>value>0);
+    const negativeDeals = selectedDealRows.map((row:any)=>Number(row.net_profit || 0)).filter((value:number)=>value<0);
+    const actualGrossProfit = positiveDeals.reduce((sum:number,value:number)=>sum+value,0);
+    const actualGrossLoss = Math.abs(negativeDeals.reduce((sum:number,value:number)=>sum+value,0));
+    computed.summary.netProfit = Number(selectedRealizedNet.toFixed(2));
+    computed.summary.grossProfit = Number(actualGrossProfit.toFixed(2));
+    computed.summary.grossLoss = Number(actualGrossLoss.toFixed(2));
+    computed.summary.profitFactor = actualGrossLoss>0
+      ? Number((actualGrossProfit/actualGrossLoss).toFixed(3))
+      : actualGrossProfit>0 ? 999 : 0;
+    computed.summary.returnPercent = derivedStart && derivedStart>0
+      ? Number((selectedRealizedNet/derivedStart*100).toFixed(2))
+      : null;
+    computed.summary.expectedPayoff = selectedPositions.length>0
+      ? Number((selectedRealizedNet/selectedPositions.length).toFixed(2))
+      : 0;
 
     if(derivedStart !== null){
       let curveBalance=derivedStart;
@@ -453,7 +480,17 @@ export class PerformanceAnalyticsController {
 
     const rangeEnd = derivedStart === null
       ? null
-      : Number((derivedStart + Number(computed.summary.netProfit || 0)).toFixed(2));
+      : Number((derivedStart + selectedRealizedNet).toFixed(2));
+    if(rangeEnd !== null && computed.curve.length>0){
+      // Keep the visual endpoint identical to the money cards. This also
+      // absorbs entry-side commission from an unfinished position without
+      // inventing another closed-trade number on the X axis.
+      computed.curve[computed.curve.length-1].balance=rangeEnd;
+      computed.curve[computed.curve.length-1].equity=
+        to.getTime()>Date.now()-5*60*1000 && currentEquity>0
+          ? Number(currentEquity.toFixed(2))
+          : rangeEnd;
+    }
 
     return {
       source: "LIVE",
