@@ -53,8 +53,12 @@ Forbid $raceStop 'g_manualStopLossPoints' 'MANUAL stop leaked into RACE'
 Need $ea 'g_raceProfitTargetMode == "POSITION"' 'RACE dedicated per-position target mode missing'
 Need $ea 'g_racePerPositionProfitMoney' 'RACE per-position profit amount missing'
 
-# Closing deviation must be symbol-aware for BTC and fast markets.
-Need $closeAll 'request.deviation = DynamicDeviationPoints();' 'Full close must use dynamic deviation'
+# Closing must use the position Symbol, not the chart Symbol. This is required
+# for account-wide Force Flat when another SCENOVA Symbol is still open.
+Need $ea 'int DynamicDeviationPointsForSymbol(string symbol)' 'Cross-symbol dynamic deviation helper missing'
+Need $closeAll 'request.volume = NormalizeTradeVolumeForSymbol(symbol,volume);' 'Full close must normalize volume for the position Symbol'
+Need $closeAll 'request.deviation = DynamicDeviationPointsForSymbol(symbol);' 'Full close must use position-symbol dynamic deviation'
+Need $closeAll 'request.type_filling = AllowedFillingModeForSymbol(symbol);' 'Full close must use filling mode for the position Symbol'
 Need $partialClose 'request.deviation=DynamicDeviationPoints();' 'Partial close must use dynamic deviation'
 
 # API/UI mode profiles must be separate.

@@ -179,6 +179,22 @@ export class MaintenanceService {
              AND bc.command='CLOSE_ALL'
              AND bc.status IN ('PENDING','DELIVERED')
          )
+         AND NOT EXISTS (
+           SELECT 1
+           FROM bot_commands bc
+           CROSS JOIN system_maintenance sm
+           WHERE sm.id=1
+             AND bc.bot_instance_id=r.id
+             AND bc.command='CLOSE_ALL'
+             AND bc.status='ACKED'
+             AND bc.payload->>'ackSource'='EA'
+             AND bc.acked_at >= COALESCE(
+               sm.force_close_at,
+               sm.drain_started_at,
+               sm.maintenance_at,
+               sm.updated_at
+             )
+         )
        RETURNING bot_instance_id`,
       [payload]
     );
