@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.55"
-#define SCENOVA_EA_VERSION "1.0.55"
-#define SCENOVA_PRODUCT_VERSION "1.0.55"
+#property version   "1.0.56"
+#define SCENOVA_EA_VERSION "1.0.56"
+#define SCENOVA_PRODUCT_VERSION "1.0.56"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -363,6 +363,7 @@ bool   g_raceRecoveryWatch = false;
 string g_raceState = "IDLE";
 datetime g_raceCycleStartedAt = 0;
 datetime g_raceLastFillAt = 0;
+ulong  g_raceLastExitBurstMs = 0;
 datetime g_raceExitCandidateSince = 0;
 double g_raceExitCandidatePeakAdverse = 0.0;
 bool   g_raceCloseAllProfitEnabled = true;
@@ -2680,8 +2681,10 @@ void ZeroGridCancelPendingAsync()
 
 void ZeroGridClosePositions()
 {
-   // ZERO_GRID_CLOSE_ALL_BURST: queue every owned position exit first, then
-   // cancel remaining ZERO pending orders without waiting one network round trip per ticket.
+   // ZERO_GRID_CLOSE_ALL_BURST: profit close is full-basket burst dispatch.
+   // Queue every owned position exit before waiting for any broker fill, then
+   // cancel remaining ZERO pending orders. MT5 still reports one deal per
+   // position, but the EA never waits for ticket A before submitting ticket B.
    ulong nowMs=GetTickCount64();
    if(g_zeroGridLastExitBurstMs>0 && nowMs-g_zeroGridLastExitBurstMs<750) return;
    g_zeroGridLastExitBurstMs=nowMs;
@@ -2927,6 +2930,7 @@ void ResetRaceRuntime()
    g_raceState = "IDLE";
    g_raceCycleStartedAt = 0;
    g_raceLastFillAt = 0;
+   g_raceLastExitBurstMs = 0;
    RaceResetExitCandidate();
 }
 
@@ -3520,12 +3524,107 @@ int RaceHarvestProfitablePositions()
    return harvested;
 }
 
+bool RaceClosePositionAsync(ulong ticket)
+{
+   // Strategy Tester has no live async trade queue, so keep deterministic
+   // synchronous close semantics there. Live terminals use burst dispatch.
+   if(MQLInfoInteger(MQL_TESTER))
+      return ClosePositionByTicket(ticket);
+
+   if(ticket==0 || !PositionSelectByTicket(ticket))
+      return false;
+   if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+      PositionGetInteger(POSITION_MAGIC)!=InpMagic ||
+      StringFind(PositionGetString(POSITION_COMMENT),"SaaSRace")<0)
+      return false;
+
+   string symbol=PositionGetString(POSITION_SYMBOL);
+   double volume=PositionGetDouble(POSITION_VOLUME);
+   long positionType=PositionGetInteger(POSITION_TYPE);
+
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol,tick))
+      return false;
+
+   MqlTradeRequest request={};
+   MqlTradeResult result={};
+   request.action=TRADE_ACTION_DEAL;
+   request.position=ticket;
+   request.magic=PositionGetInteger(POSITION_MAGIC);
+   request.symbol=symbol;
+   request.volume=NormalizeTradeVolume(volume);
+   request.deviation=DynamicDeviationPoints();
+   request.type_filling=AllowedFillingMode();
+   request.comment="SaaSRaceCloseAll";
+
+   if(positionType==POSITION_TYPE_BUY)
+   {
+      request.type=ORDER_TYPE_SELL;
+      request.price=tick.bid;
+   }
+   else
+   {
+      request.type=ORDER_TYPE_BUY;
+      request.price=tick.ask;
+   }
+
+   ResetLastError();
+   bool sent=OrderSendAsync(request,result);
+   if(!sent || !TradeResultAccepted(result))
+   {
+      Print(
+         "RACE close-all async rejected ticket=",ticket,
+         " error=",GetLastError(),
+         " retcode=",result.retcode
+      );
+      return false;
+   }
+   return true;
+}
+
+int RaceClosePositionsBurst()
+{
+   // RACE_CLOSE_ALL_BURST: snapshot every owned RACE ticket, then submit every
+   // close request back-to-back. Do not wait for one position to disappear
+   // before sending the next close. Retry unresolved tickets after 750 ms.
+   ulong nowMs=GetTickCount64();
+   if(g_raceLastExitBurstMs>0 && nowMs-g_raceLastExitBurstMs<750)
+      return 0;
+   g_raceLastExitBurstMs=nowMs;
+
+   ulong tickets[];
+   int ticketCount=0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic ||
+         StringFind(PositionGetString(POSITION_COMMENT),"SaaSRace")<0)
+         continue;
+
+      ArrayResize(tickets,ticketCount+1);
+      tickets[ticketCount++]=ticket;
+   }
+
+   int sent=0;
+   for(int i=0;i<ticketCount;i++)
+      if(RaceClosePositionAsync(tickets[i]))
+         sent++;
+
+   return sent;
+}
+
 bool RaceCloseCycle(string reason)
 {
    g_raceState = "CLOSING";
    g_executionStatus = reason;
    g_lastCloseReason = reason;
-   bool closed = CloseAllBasket(reason);
+
+   RaceClosePositionsBurst();
+
+   bool closed = !BasketHasRacePosition();
    if(closed)
       ResetTrail();
    return closed;
@@ -3684,7 +3783,9 @@ bool ManageRaceBasket(double momentum)
 
    if(g_raceState == "CLOSING")
    {
-      CloseAllBasket("RACE_CLOSE_RETRY");
+      RaceClosePositionsBurst();
+      if(!BasketHasRacePosition())
+         ResetTrail();
       return true;
    }
 
