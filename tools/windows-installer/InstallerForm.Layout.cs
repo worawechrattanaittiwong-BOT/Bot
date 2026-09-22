@@ -38,21 +38,19 @@ internal sealed partial class InstallerForm
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 930,
+            Height = 790,
             ColumnCount = 1,
-            RowCount = 8,
-            Padding = new Padding(34, 20, 34, 16),
+            RowCount = 6,
+            Padding = new Padding(34, 18, 34, 14),
             BackColor = SoftBackground,
             Margin = Padding.Empty
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 184));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 386));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
 
         var brandRow = new TableLayoutPanel
@@ -62,8 +60,8 @@ internal sealed partial class InstallerForm
             Margin = Padding.Empty,
             BackColor = Color.Transparent
         };
-        brandRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
-        brandRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230));
+        brandRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62));
+        brandRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 270));
         brandRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         brandRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 176));
 
@@ -78,10 +76,12 @@ internal sealed partial class InstallerForm
         }, 0, 0);
 
         var brandName = TextLabel("SCENOVA", 22, Navy, true);
-        brandName.Padding = new Padding(0, 0, 14, 0);
+        brandName.AutoEllipsis = false;
+        brandName.Padding = new Padding(0, 0, 16, 0);
         brandRow.Controls.Add(brandName, 1, 0);
 
         var productName = TextLabel("Smart Installer", 16, MutedText);
+        productName.AutoEllipsis = false;
         productName.Padding = new Padding(18, 0, 0, 0);
         brandRow.Controls.Add(productName, 2, 0);
 
@@ -94,33 +94,11 @@ internal sealed partial class InstallerForm
         brandRow.Controls.Add(_stateBadge, 3, 0);
         root.Controls.Add(brandRow, 0, 0);
 
-        var welcome = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            RowCount = 2,
-            Margin = new Padding(0, 4, 0, 12),
-            BackColor = Color.Transparent
-        };
-        welcome.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
-        welcome.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        var welcomeTitle = TextLabel("ยินดีต้อนรับสู่ SCENOVA Smart Installer", 24, Navy, true);
-        welcomeTitle.Padding = new Padding(4, 2, 0, 0);
-        welcome.Controls.Add(welcomeTitle, 0, 0);
-
-        var welcomeSubtitle = TextLabel(
-            "ตรวจสอบเวอร์ชัน ตรวจหาอัปเดต และติดตั้งให้คุณแบบอัตโนมัติ",
-            12,
-            MutedText);
-        welcomeSubtitle.Padding = new Padding(4, 0, 0, 6);
-        welcome.Controls.Add(welcomeSubtitle, 0, 1);
-        root.Controls.Add(welcome, 0, 1);
-
         var features = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 4,
-            Margin = Padding.Empty,
+            Margin = new Padding(0, 8, 0, 8),
             BackColor = Color.Transparent
         };
         for (var i = 0; i < 4; i++)
@@ -135,44 +113,49 @@ internal sealed partial class InstallerForm
         features.Controls.Add(FeatureCard("\uE895", "ติดตั้ง / อัปเดตอัตโนมัติ", _updateSummary, new Padding(4, 0, 4, 0)), 1, 0);
         features.Controls.Add(FeatureCard("\uE9D9", "ความพร้อม", _score, new Padding(8, 0, 4, 0)), 2, 0);
         features.Controls.Add(FeatureCard("\uE73E", "สถานะการเชื่อมต่อ", _live, new Padding(8, 0, 0, 0)), 3, 0);
-        root.Controls.Add(features, 0, 2);
+        root.Controls.Add(features, 0, 1);
 
         var selector = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            Margin = new Padding(0, 8, 0, 8),
-            Padding = new Padding(10, 4, 10, 2),
+            Margin = new Padding(0, 4, 0, 6),
+            Padding = new Padding(10, 3, 10, 2),
             BackColor = Color.Transparent
         };
         selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 164));
         selector.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         var selectorLabel = TextLabel("MT5 ที่ต้องการใช้", 10.5f, Navy, true);
+        selectorLabel.AutoEllipsis = false;
         selector.Controls.Add(selectorLabel, 0, 0);
-        _terminal.Margin = new Padding(0, 4, 0, 3);
+
+        _terminal.Margin = new Padding(0, 3, 0, 3);
         _terminal.Font = new Font("Segoe UI", 10f);
         selector.Controls.Add(_terminal, 1, 0);
-        root.Controls.Add(selector, 0, 3);
+        root.Controls.Add(selector, 0, 2);
 
         var checkCard = new InstallerCard
         {
             Dock = DockStyle.Fill,
             Margin = Padding.Empty,
-            Padding = new Padding(20, 14, 20, 14)
+            Padding = new Padding(20, 12, 20, 12)
         };
+
         var checks = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            RowCount = 4,
+            RowCount = 6,
             ColumnCount = 1,
             BackColor = Color.Transparent,
             Margin = Padding.Empty
         };
-        checks.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        checks.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         checks.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        checks.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        checks.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
+        checks.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        checks.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        checks.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+        checks.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var checkHeader = new TableLayoutPanel
         {
@@ -194,7 +177,7 @@ internal sealed partial class InstallerForm
         checkHeader.Controls.Add(_stepCaption, 1, 0);
         checks.Controls.Add(checkHeader, 0, 0);
 
-        _health.Margin = new Padding(0, 4, 0, 4);
+        _health.Margin = new Padding(0, 2, 0, 2);
         checks.Controls.Add(_health, 0, 1);
 
         var progressLine = new TableLayoutPanel
@@ -206,8 +189,9 @@ internal sealed partial class InstallerForm
         };
         progressLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         progressLine.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62));
+
         _progress.Dock = DockStyle.Fill;
-        _progress.Margin = new Padding(0, 13, 12, 13);
+        _progress.Margin = new Padding(0, 11, 12, 11);
         progressLine.Controls.Add(_progress, 0, 0);
 
         _progressPercent.Dock = DockStyle.Fill;
@@ -219,9 +203,9 @@ internal sealed partial class InstallerForm
         checks.Controls.Add(progressLine, 0, 2);
 
         _status.Dock = DockStyle.Fill;
-        _status.Padding = new Padding(14, 6, 14, 6);
+        _status.Padding = new Padding(14, 5, 14, 5);
         _status.Font = new Font("Segoe UI", 10);
-        _status.Margin = new Padding(0, 3, 0, 0);
+        _status.Margin = new Padding(0, 2, 0, 4);
         _status.UseCompatibleTextRendering = false;
         _status.AutoEllipsis = true;
         _status.BackColor = Color.FromArgb(234, 244, 255);
@@ -229,38 +213,24 @@ internal sealed partial class InstallerForm
         _status.Text = "กดปุ่มด้านล่างเพื่อเริ่มตรวจสอบ";
         checks.Controls.Add(_status, 0, 3);
 
-        checkCard.Controls.Add(checks);
-        root.Controls.Add(checkCard, 0, 4);
-
-        var actions = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 2,
-            Margin = new Padding(0, 12, 0, 0),
-            BackColor = Color.Transparent
-        };
-        actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
-        actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
-        actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
-        actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
-        actions.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
         _install.Dock = DockStyle.Fill;
-        _install.Margin = Padding.Empty;
+        _install.Margin = new Padding(0, 6, 0, 4);
         _install.Font = new Font("Segoe UI Semibold", 16, FontStyle.Bold);
         _install.FlatAppearance.BorderSize = 0;
         _install.AccessibleDescription = "ตรวจสอบและอัปเดต SCENOVA เมื่อจำเป็น";
-        actions.Controls.Add(_install, 1, 0);
+        checks.Controls.Add(_install, 0, 4);
 
         var hint = TextLabel(
-            "ตรวจสอบก่อนทุกครั้ง  •  ถ้ามีอัปเดต ระบบจะติดตั้งให้  •  ถ้าตรงกันจะไม่ติดตั้งซ้ำ",
+            "ตรวจสอบก่อนทุกครั้ง  •  ถ้ามีอัปเดตจะติดตั้งให้  •  ถ้าตรงกันจะไม่ติดตั้งซ้ำ",
             9,
             MutedText);
         hint.TextAlign = ContentAlignment.MiddleCenter;
-        actions.Controls.Add(hint, 0, 1);
-        actions.SetColumnSpan(hint, 3);
-        root.Controls.Add(actions, 0, 5);
+        hint.AutoEllipsis = false;
+        hint.Padding = new Padding(0, 2, 0, 0);
+        checks.Controls.Add(hint, 0, 5);
+
+        checkCard.Controls.Add(checks);
+        root.Controls.Add(checkCard, 0, 3);
 
         var footer = new TableLayoutPanel
         {
@@ -275,7 +245,7 @@ internal sealed partial class InstallerForm
         _advancedMode.Anchor = AnchorStyles.Right;
         _advancedMode.Text = "รายละเอียดเพิ่มเติม";
         footer.Controls.Add(_advancedMode, 1, 0);
-        root.Controls.Add(footer, 0, 6);
+        root.Controls.Add(footer, 0, 4);
 
         _advancedPanel.Dock = DockStyle.Fill;
         _advancedPanel.Visible = false;
@@ -312,18 +282,15 @@ internal sealed partial class InstallerForm
 
         advanced.Controls.Add(tools, 1, 0);
         _advancedPanel.Controls.Add(advanced);
-        root.Controls.Add(_advancedPanel, 0, 7);
+        root.Controls.Add(_advancedPanel, 0, 5);
 
         scroll.Controls.Add(root);
         Controls.Add(scroll);
 
         void ResizeContent()
         {
-            var scale = Math.Max(1f, DeviceDpi / 96f);
-            root.RowStyles[7].Height = _advancedMode.Checked ? 160 * scale : 0;
-            root.Height = Math.Max(
-                (int)((930 + (_advancedMode.Checked ? 160 : 0)) * scale),
-                scroll.ClientSize.Height);
+            root.RowStyles[5].Height = _advancedMode.Checked ? 160 : 0;
+            root.Height = 790 + (_advancedMode.Checked ? 160 : 0);
         }
 
         scroll.Resize += (_, _) => ResizeContent();
@@ -336,8 +303,9 @@ internal sealed partial class InstallerForm
         {
             Dock = DockStyle.Fill,
             Margin = margin,
-            Padding = new Padding(16, 14, 16, 12)
+            Padding = new Padding(16, 12, 16, 10)
         };
+
         var grid = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -346,17 +314,19 @@ internal sealed partial class InstallerForm
             BackColor = Color.Transparent,
             Margin = Padding.Empty
         };
-        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var icon = TextLabel(glyph, 34, PrimaryBlue);
-        icon.Font = new Font("Segoe MDL2 Assets", 32);
+        var icon = TextLabel(glyph, 32, PrimaryBlue);
+        icon.Font = new Font("Segoe MDL2 Assets", 30);
         icon.TextAlign = ContentAlignment.MiddleCenter;
+        icon.AutoEllipsis = false;
         grid.Controls.Add(icon, 0, 0);
 
-        var heading = TextLabel(title, 12.5f, Navy, true);
+        var heading = TextLabel(title, 12.2f, Navy, true);
         heading.TextAlign = ContentAlignment.MiddleCenter;
+        heading.AutoEllipsis = false;
         grid.Controls.Add(heading, 0, 1);
 
         content.Dock = DockStyle.Fill;
@@ -365,7 +335,7 @@ internal sealed partial class InstallerForm
         content.BackColor = Color.Transparent;
         content.ForeColor = MutedText;
         content.Margin = new Padding(4, 2, 4, 0);
-        content.AutoEllipsis = true;
+        content.AutoEllipsis = false;
         content.UseCompatibleTextRendering = false;
         grid.Controls.Add(content, 0, 2);
 
