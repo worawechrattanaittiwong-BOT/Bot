@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.61"
-#define SCENOVA_EA_VERSION "1.0.61"
-#define SCENOVA_PRODUCT_VERSION "1.0.61"
+#property version   "1.0.62"
+#define SCENOVA_EA_VERSION "1.0.62"
+#define SCENOVA_PRODUCT_VERSION "1.0.62"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -4033,9 +4033,11 @@ bool FastProfitClosePriority()
       ZeroGridClosePositions();
       if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)
       {
-         // FastProfitClosePriority runs before OnTimer heartbeat. Release the
-         // ZERO close latch as soon as the cycle is flat so STOP/SAFE_STOP can
-         // keep the EA connected without requiring an MT5 restart.
+         // Async ZERO exits can deliver DEAL_ADD before MT5 removes the final
+         // position from PositionsTotal(), so the transaction callback may miss
+         // the exact flat moment. Finalize the active Basket here, where flat is
+         // confirmed, before resetting the ZERO cycle.
+         FinalizeBasketJournal();
          ResetZeroGridCycleState();
          g_executionStatus=
             ZeroGridModeEnabled() && g_state==STATE_RUNNING && g_access

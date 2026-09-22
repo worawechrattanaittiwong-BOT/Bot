@@ -43,6 +43,7 @@ Forbid $race 'HttpPostJson' 'RACE price/exit management must never call SaaS HTT
 Need $zero 'ZeroGridCycleNet()' 'ZERO close decision must use local MT5 cycle net'
 Forbid $zero 'HttpPostJson' 'ZERO price/close management must never call SaaS HTTP'
 Need $fastClose 'if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)' 'ZERO fast close must detect fully-flat completion'
+Need $fastClose 'FinalizeBasketJournal();' 'ZERO confirmed-flat close must finalize performance Basket before cycle reset'
 Need $fastClose 'ResetZeroGridCycleState();' 'ZERO fast close must clear its close latch when flat'
 Need $fastClose '? "ZERO_GRID_REARMING"' 'ZERO fast close must preserve normal RUNNING rearm behavior'
 Need $fastClose ': "ZERO_GRID_STOPPED_FLAT";' 'ZERO fast close must release STOP/SAFE_STOP without blocking heartbeat'
