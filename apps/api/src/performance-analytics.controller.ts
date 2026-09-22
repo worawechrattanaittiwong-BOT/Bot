@@ -485,7 +485,7 @@ export class PerformanceAnalyticsController {
     const derivedStart = currentBalance > 0
       ? Number((currentBalance - realizedSinceFrom).toFixed(2))
       : null;
-    const computed = this.summarize(selectedBaskets as BasketRow[], derivedStart);
+    const computed: any = this.summarize(selectedBaskets as BasketRow[], derivedStart);
     const positiveDeals = selectedDealRows.map((row:any)=>Number(row.net_profit || 0)).filter((value:number)=>value>0);
     const negativeDeals = selectedDealRows.map((row:any)=>Number(row.net_profit || 0)).filter((value:number)=>value<0);
     const rawGrossProfit = positiveDeals.reduce((sum:number,value:number)=>sum+value,0);
