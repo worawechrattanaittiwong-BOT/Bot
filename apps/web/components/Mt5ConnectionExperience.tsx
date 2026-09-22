@@ -16,16 +16,12 @@ type Props = {
 };
 
 const steps = [
-  { title: "เตรียม MT5 และบัญชี", short: "เตรียมบัญชี", icon: "account" },
-  { title: "ดาวน์โหลดและติดตั้ง SCENOVA", short: "ติดตั้ง", icon: "arrow-down" },
-  { title: "ตั้งค่า Tools → Options", short: "ตั้งค่า MT5", icon: "settings" },
-  { title: "เพิ่ม EA ลงบนกราฟ", short: "เปิด EA", icon: "bot" },
-  { title: "Common: อนุญาต Algo Trading", short: "อนุญาต EA", icon: "shield" },
-  { title: "Inputs: กด Load เพื่อเลือกไฟล์", short: "โหลดค่า", icon: "layers" },
-  { title: "เลือก SCENOVA-FastBasketBot.set", short: "เลือกไฟล์ .set", icon: "report" },
-  { title: "ตรวจค่า แล้วกด OK", short: "ยืนยันค่า", icon: "status" },
-  { title: "ตรวจการเชื่อมต่อและเริ่มใช้งาน", short: "ตรวจสถานะ", icon: "control" },
-  { title: "ติดตรงไหน? ลองตรวจตามนี้", short: "แก้ปัญหา", icon: "info" },
+  { title: "เตรียม MT5 และบัญชี", short: "เตรียม MT5", icon: "account" },
+  { title: "ติดตั้ง SCENOVA", short: "ติดตั้ง", icon: "arrow-down" },
+  { title: "ตั้งค่า MT5 ให้พร้อม", short: "ตั้งค่า MT5", icon: "settings" },
+  { title: "เปิด FastBasketBot บนกราฟ", short: "เปิด EA", icon: "bot" },
+  { title: "โหลดไฟล์ตั้งค่า .set", short: "โหลดค่า", icon: "layers" },
+  { title: "ตรวจสถานะ แล้วเริ่มใช้งาน", short: "ตรวจสถานะ", icon: "status" },
 ];
 
 export function Mt5ConnectionExperience(props: Props) {
@@ -108,7 +104,7 @@ export function Mt5ConnectionExperience(props: Props) {
         </section>
         <section className={styles.help}>
           <div><ScenovaIcon name="chat" size={30}/><div><h2>ติดตั้งไม่สำเร็จ?</h2><p>ดูวิธีแก้ปัญหาเชื่อมต่อ<br/>และสิ่งที่ต้องตรวจใน MT5</p></div></div>
-          <button className={styles.secondary} onClick={() => showGuide(9)}>ดูวิธีแก้ปัญหา <span>→</span></button>
+          <button className={styles.secondary} onClick={() => showGuide(5)}>ดูวิธีแก้ปัญหา <span>→</span></button>
         </section>
       </div>
 
@@ -119,21 +115,96 @@ export function Mt5ConnectionExperience(props: Props) {
             <nav aria-label="ขั้นตอนติดตั้ง">{steps.map((s,i) => <button key={s.title} className={step === i ? styles.selected : ""} aria-current={step === i ? "step" : undefined} onClick={() => setStep(i)}><span>{String(i+1).padStart(2,"0")}</span>{s.short}</button>)}</nav>
             <div ref={content} className={styles.guideContent}>
               <div className={styles.guideHeading}><ScenovaIcon name={steps[step].icon} size={30}/><div><small>ขั้นตอน {step+1} / {steps.length}</small><h3>{steps[step].title}</h3></div></div>
-              {step === 0 && <><ol><li>เปิด MetaTrader 5 บนคอมพิวเตอร์ Windows</li><li>ไปที่ <b>File → Login to Trade Account</b> ใส่เลขบัญชี รหัสผ่าน และเลือก Server ตามที่โบรกเกอร์ให้มา</li><li>ตรวจว่าเลขบัญชีและ Server ตรงกับบัญชีที่ต้องการใช้</li><li>เปิดกราฟสินค้าที่ต้องการ เช่น XAUUSDm จาก Market Watch โดยคลิกขวา → Chart Window</li></ol><aside>เริ่มจากบัญชี Demo ได้ หากใช้ MT5 หลายตัว ให้ติดตั้งและตั้งค่าบนตัวที่ Login บัญชีนี้อยู่</aside></>}
-              {step === 1 && <><ol><li>กด <b>ดาวน์โหลดตัวติดตั้ง</b> ด้านล่าง แล้วเปิดโฟลเดอร์ Downloads</li><li>ดับเบิลคลิก SCENOVA Setup ที่เพิ่งดาวน์โหลด และทำตามขั้นตอนบนหน้าจอ</li><li>รอให้ติดตั้งเสร็จ จากนั้นกลับไป MT5 ตัวที่ต้องการใช้งาน</li><li>ถ้าบอทถูกเพิ่มบนกราฟแล้ว ข้ามขั้นตอนลาก EA แล้วตรวจ Common และ Inputs ต่อได้เลย</li></ol><button className={styles.primary} disabled={props.busy || props.downloadBlocked} onClick={() => void props.onDownload()}>{props.busy ? "กำลังเตรียมไฟล์…" : "ดาวน์โหลดตัวติดตั้ง Windows"}<ScenovaIcon name="arrow-down"/></button>{props.downloadBlocked && <aside>หยุดบอทและจัดการออเดอร์ที่เปิดอยู่ให้เรียบร้อยก่อนติดตั้งหรืออัปเดต</aside>}{props.message && <p role="status" className={styles.good}>{props.message}</p>}{props.error && <p role="alert" className={styles.failure}>{props.error}</p>}</>}
-              {step === 2 && <><ol><li>คลิก <b>Tools → Options</b> ที่แถบเมนูด้านบน หรือกด <kbd>Ctrl</kbd> + <kbd>O</kbd></li><li>เลือกแท็บ <b>Expert Advisors</b></li><li>ติ๊ก <b>Allow algorithmic trading</b> เพื่ออนุญาตให้ EA ส่งคำสั่งเมื่อคุณเริ่มใช้งาน</li><li>ติ๊ก <b>Allow WebRequest for listed URL</b> แล้วกดเพิ่มที่อยู่ด้านล่างลงในรายการ</li></ol><div className={styles.address}><code>{props.apiBase || "กำลังโหลดที่อยู่เชื่อมต่อ…"}</code><button className={styles.secondary} disabled={!props.apiBase} onClick={() => void copyAddress()}><ScenovaIcon name="copy"/>คัดลอก</button></div><small role="status">{copyState}</small><p>เพิ่ม URL แล้วกด <b>OK</b> เพื่อบันทึก ไม่ต้องเปิด Allow DLL imports เพื่อทำขั้นตอน WebRequest</p><div className={styles.example}><span>Tools → Options → Expert Advisors</span><b>☑ Allow algorithmic trading</b><b>☑ Allow WebRequest for listed URL</b><code>{props.apiBase}</code><small>ภาพอธิบายตำแหน่งตั้งค่า ไม่ใช่สถานะจริงของ MT5</small></div></>}
-              {step === 3 && <><ol><li>เปิดแถบ <b>Navigator</b> โดยกด <kbd>Ctrl</kbd> + <kbd>N</kbd></li><li>ขยาย <b>Expert Advisors → SCENOVA</b> แล้วหา <b>FastBasketBot</b></li><li>ลาก FastBasketBot ลงบนกราฟที่เปิดไว้ จะมีหน้าต่างตั้งค่า EA ปรากฏขึ้น</li><li>หากมี EA อยู่บนกราฟแล้ว ให้กด <kbd>F7</kbd> ขณะเลือกกราฟนั้นเพื่อเปิดการตั้งค่า</li></ol><aside>หา EA ไม่เจอ: คลิกขวาใน Navigator → Refresh หากยังไม่พบ ให้ตรวจว่าติดตั้งลง MT5 ตัวเดียวกับที่เปิดใช้อยู่</aside></>}
-              {step === 4 && <><ol><li>ที่หน้าต่าง FastBasketBot เลือกแท็บ <b>Common</b></li><li>ติ๊ก <b>Allow Algo Trading</b> ตามภาพ</li><li>ยังไม่ต้องกด OK ให้ไปแท็บ Inputs เพื่อโหลดไฟล์ตั้งค่าก่อน</li></ol><img className={styles.screenshot} src="/assets/mt5-guide-common.png" alt="แท็บ Common ของ FastBasketBot พร้อมช่อง Allow Algo Trading"/><aside>ภาพเป็นตัวอย่างจากเวอร์ชันก่อนหน้า เลขเวอร์ชันในเครื่องคุณอาจต่างกัน</aside></>}
-              {step === 5 && <><ol><li>เลือกแท็บ <b>Inputs</b> ข้าง Common</li><li>กดปุ่ม <b>Load</b> ทางขวาของตาราง</li><li>หน้าต่างเลือกไฟล์จะเปิดขึ้น ให้เลือกไฟล์ของบัญชี SCENOVA ที่คุณเพิ่งติดตั้ง</li></ol><img className={styles.screenshot} src="/assets/mt5-guide-inputs.png" alt="แท็บ Inputs ก่อนโหลดไฟล์ตั้งค่า มีปุ่ม Load ทางขวา"/><aside>ช่อง InpInstanceId และ InpInstallToken ที่ว่างในภาพ จะได้รับค่าจากไฟล์ .set ในขั้นตอนถัดไป</aside></>}
-              {step === 6 && <><ol><li>มองหาไฟล์ <b>SCENOVA-FastBasketBot.set</b> ในโฟลเดอร์ <b>MQL5 → Presets</b></li><li>เลือกไฟล์นี้ แล้วกด <b>Open</b> เพื่อโหลดค่า</li><li>หากหาโฟลเดอร์ไม่เจอ กลับไป MT5 → <b>File → Open Data Folder</b> แล้วเปิด MQL5 → Presets</li><li>ถ้าไม่มีไฟล์ ให้กลับไปขั้นตอนติดตั้งและติดตั้งใหม่สำหรับ MT5 ตัวนี้ อย่าใช้ไฟล์ของบัญชีคนอื่น</li></ol><div className={styles.example}><span>MQL5 / Presets</span><b>▤ SCENOVA-FastBasketBot.set</b><small>เลือกไฟล์ → Open</small></div></>}
-              {step === 7 && <><ol><li>หลังโหลดไฟล์ ตรวจว่า <b>InpApiBase</b> ตรงกับที่อยู่เชื่อมต่อของระบบ</li><li>ตรวจว่า <b>InpInstanceId</b> และ <b>InpInstallToken</b> มีค่าแล้ว ไม่ต้องพิมพ์หรือเดาค่าเอง</li><li>ถ้าค่ายังว่าง ให้กลับไป Load แล้วเลือกไฟล์ .set ที่ได้จากการติดตั้งล่าสุด</li><li>ตรวจ Common ว่าติ๊ก Allow Algo Trading จากนั้นกด <b>OK</b></li></ol><div className={styles.example}><span>ตัวอย่างหลังโหลดไฟล์ — ซ่อนข้อมูลส่วนตัว</span><b>InpApiBase</b><code>{props.apiBase}</code><b>InpInstanceId · ••••••••••</b><b>InpInstallToken · ••••••••••</b></div><aside>ไฟล์ .set และ Install Token เป็นรหัสเชื่อมต่อของคุณ ไม่ควรส่งต่อหรือโพสต์ภาพที่เห็นค่า</aside></>}
-              {step === 8 && <><ol><li>ตรวจปุ่ม <b>Algo Trading</b> บนแถบเครื่องมือ MT5 ให้เปิดใช้งาน</li><li>รอให้ EA ติดต่อระบบ มุมกราฟควรแสดง <b>SCENOVA · CONNECTED</b></li><li>กลับมาดูหมายเลขบัญชีและ Server ในหน้า MT5 & EA ให้ตรงกับที่เลือกไว้</li><li>ถ้าขึ้น <b>STOPPED</b> แต่เชื่อมต่อแล้ว แปลว่าบอทยังหยุดอยู่ ไม่ใช่ติดตั้งผิด</li><li>เมื่อตรวจการตั้งค่าครบและต้องการให้บอททำงาน ไปที่ <b>Control Center → เริ่มบอท</b></li></ol><div className={`${styles.connectionStatus} ${props.online ? styles.online : styles.waiting}`} role="status"><ScenovaIcon name={props.online ? "status" : "clock"} size={30}/><div><b>{statusText}</b><small>สถานะล่าสุดที่หน้าเว็บได้รับจาก EA</small></div></div></>}
-              {step === 9 && <div className={styles.faq}>
-                <details open><summary>Agent เชื่อมแล้ว แต่ยังรอ EA</summary><p>ตรวจ FastBasketBot บนกราฟ, URL ใน Tools → Options → Expert Advisors และโหลดไฟล์ .set ของบัญชีนี้อีกครั้ง การเชื่อมต่อ Agent อย่างเดียวไม่ได้แปลว่า EA เชื่อมแล้ว</p></details>
-                <details><summary>WebRequest ไม่ผ่าน หรือยังไม่ขึ้น CONNECTED</summary><p>ตรวจ URL ในขั้นตอน 3 ให้ตรงทุกตัว ไม่มีช่องว่าง แล้วกด OK ตรวจอินเทอร์เน็ต และดูข้อความในแท็บ Experts / Journal ด้านล่าง MT5</p></details>
-                <details><summary>ไม่มีไฟล์ .set หรือช่องรหัสยังว่าง</summary><p>ตรวจ File → Open Data Folder → MQL5 → Presets ของ MT5 ตัวที่ใช้งาน ถ้าไม่พบ ให้ติดตั้งใหม่จากบัญชี SCENOVA นี้ แล้วโหลด SCENOVA-FastBasketBot.set อีกครั้ง</p></details>
-                <details><summary>ต้องการเปลี่ยนบัญชี Demo / Real</summary><p>จัดการออเดอร์เดิมก่อน Login บัญชีใหม่ใน MT5 แล้วกลับมาหน้านี้ ระบบจะแสดงบัญชีใหม่ให้กด “ใช้บัญชีนี้” เมื่อพร้อมเปลี่ยน</p></details>
-              </div>}
+              {step === 0 && <><ol>
+                <li>เปิด <b>MetaTrader 5</b> แล้ว Login บัญชีที่ต้องการใช้ผ่าน <b>File → Login to Trade Account</b></li>
+                <li>เช็กเลขบัญชีและ <b>Server</b> ให้ตรงกับบัญชีของคุณ</li>
+                <li>เปิดกราฟที่ต้องการใช้งาน เช่น <b>XAUUSDm</b></li>
+              </ol><aside>ถ้ามี MT5 หลายตัว ให้ทำขั้นตอนนี้บนตัวที่ Login บัญชีนี้อยู่</aside></>}
+              {step === 1 && <><ol>
+                <li>กด <b>ดาวน์โหลดตัวติดตั้ง</b> แล้วเปิดไฟล์ SCENOVA Setup</li>
+                <li>ติดตั้งตามหน้าจอจนเสร็จ</li>
+                <li>กลับมาที่ MT5 ตัวที่ต้องการใช้ แล้วไปขั้นตอนถัดไป</li>
+              </ol>
+                <button className={styles.primary} disabled={props.busy || props.downloadBlocked} onClick={() => void props.onDownload()}>
+                  {props.busy ? "กำลังเตรียมไฟล์…" : "ดาวน์โหลดตัวติดตั้ง Windows"}<ScenovaIcon name="arrow-down"/>
+                </button>
+                {props.downloadBlocked && <aside>หยุดบอทและจัดการออเดอร์ที่เปิดอยู่ให้เรียบร้อยก่อนติดตั้งหรืออัปเดต</aside>}
+                {props.message && <p role="status" className={styles.good}>{props.message}</p>}
+                {props.error && <p role="alert" className={styles.failure}>{props.error}</p>}
+              </>}
+              {step === 2 && <><ol>
+                <li>ที่ MT5 กด <b>Tools → Options</b></li>
+                <li>เปิดแท็บ <b>Expert Advisors</b></li>
+                <li>ติ๊ก <b>Allow algorithmic trading</b></li>
+                <li>ติ๊ก <b>Allow WebRequest for listed URL</b> แล้วเพิ่ม URL ด้านล่าง จากนั้นกด <b>OK</b></li>
+              </ol>
+                <div className={styles.address}>
+                  <code>{props.apiBase || "กำลังโหลดที่อยู่เชื่อมต่อ…"}</code>
+                  <button className={styles.secondary} disabled={!props.apiBase} onClick={() => void copyAddress()}><ScenovaIcon name="copy"/>คัดลอก</button>
+                </div>
+                <small role="status">{copyState}</small>
+                <div className={styles.screenshotGrid}>
+                  <figure className={styles.screenshotCard}>
+                    <img className={styles.screenshot} src="/assets/mt5-guide-tools-options.webp" alt="เมนู Tools ของ MT5 โดยมี Options อยู่ด้านล่าง"/>
+                    <figcaption>1. Tools → Options</figcaption>
+                  </figure>
+                  <figure className={styles.screenshotCard}>
+                    <img className={styles.screenshot} src="/assets/mt5-guide-experts-webrequest.webp" alt="หน้า Expert Advisors ของ MT5 ที่เปิด Algorithmic trading และ WebRequest"/>
+                    <figcaption>2. เปิด Algorithmic trading และ WebRequest แล้วเพิ่ม URL ของ SCENOVA</figcaption>
+                  </figure>
+                </div>
+                <aside>ไม่ต้องเปิด <b>Allow DLL imports</b> สำหรับขั้นตอนนี้</aside>
+              </>}
+              {step === 3 && <><ol>
+                <li>กด <kbd>Ctrl</kbd> + <kbd>N</kbd> เพื่อเปิด <b>Navigator</b></li>
+                <li>ไปที่ <b>Expert Advisors → SCENOVA → FastBasketBot</b></li>
+                <li>ลาก <b>FastBasketBot</b> ลงบนกราฟ หากมี EA อยู่แล้วให้กด <kbd>F7</kbd></li>
+                <li>แท็บ <b>Common</b> ให้ติ๊ก <b>Allow Algo Trading</b> แล้วไปแท็บ Inputs</li>
+              </ol>
+                <div className={styles.screenshotGrid}>
+                  <figure className={styles.screenshotCard}>
+                    <img className={styles.screenshot} src="/assets/mt5-guide-navigator.webp" alt="Navigator ของ MT5 แสดง Expert Advisors โฟลเดอร์ SCENOVA และ FastBasketBot"/>
+                    <figcaption>หา FastBasketBot ใน Expert Advisors → SCENOVA</figcaption>
+                  </figure>
+                  <figure className={styles.screenshotCard}>
+                    <img className={styles.screenshot} src="/assets/mt5-guide-common.png" alt="แท็บ Common ของ FastBasketBot พร้อมช่อง Allow Algo Trading"/>
+                    <figcaption>เปิด Allow Algo Trading ก่อนโหลดค่าที่แท็บ Inputs</figcaption>
+                  </figure>
+                </div>
+                <aside>หา FastBasketBot ไม่เจอ ให้คลิกขวาใน Navigator → Refresh และเช็กว่าเปิด MT5 ตัวเดียวกับที่ติดตั้งไว้</aside>
+              </>}
+              {step === 4 && <><ol>
+                <li>เปิดแท็บ <b>Inputs</b> แล้วกด <b>Load</b></li>
+                <li>เลือก <b>SCENOVA-FastBasketBot.set</b> ใน <b>MQL5 → Presets</b></li>
+                <li>ตรวจว่า <b>InpApiBase</b>, <b>InpInstanceId</b> และ <b>InpInstallToken</b> มีค่าแล้ว</li>
+                <li>กด <b>OK</b> เพื่อบันทึก</li>
+              </ol>
+                <img className={`${styles.screenshot} ${styles.screenshotSolo}`} src="/assets/mt5-guide-inputs.png" alt="แท็บ Inputs ของ FastBasketBot พร้อมปุ่ม Load"/>
+                <div className={styles.example}>
+                  <span>หลังโหลดไฟล์ .set ให้มีค่าประมาณนี้</span>
+                  <b>InpApiBase</b><code>{props.apiBase}</code>
+                  <b>InpInstanceId · ••••••••••</b>
+                  <b>InpInstallToken · ••••••••••</b>
+                </div>
+                <aside>อย่าพิมพ์หรือเดา Install Token เอง และอย่าส่งต่อไฟล์ .set ของบัญชีคุณ</aside>
+              </>}
+              {step === 5 && <><ol>
+                <li>เปิดปุ่ม <b>Algo Trading</b> บนแถบเครื่องมือ MT5</li>
+                <li>รอให้ EA เชื่อมต่อ แล้วกลับมาดูสถานะในหน้า SCENOVA</li>
+                <li>เช็กบัญชีและ Server ให้ตรงกับที่ต้องการใช้</li>
+                <li>เมื่อขึ้นเชื่อมต่อแล้ว ไปที่ <b>Control Center → เริ่มบอท</b> เมื่อคุณพร้อม</li>
+              </ol>
+                <div className={`${styles.connectionStatus} ${props.online ? styles.online : styles.waiting}`} role="status">
+                  <ScenovaIcon name={props.online ? "status" : "clock"} size={30}/>
+                  <div><b>{statusText}</b><small>สถานะล่าสุดที่หน้าเว็บได้รับจาก EA</small></div>
+                </div>
+                <div className={styles.faq}>
+                  <details><summary>Agent เชื่อมแล้ว แต่ยังรอ EA</summary><p>เช็ก FastBasketBot บนกราฟ, WebRequest และโหลดไฟล์ .set ของบัญชีนี้อีกครั้ง</p></details>
+                  <details><summary>ยังไม่ขึ้น CONNECTED</summary><p>เช็ก URL ใน Tools → Options → Expert Advisors ให้ตรงทุกตัว แล้วดูข้อความในแท็บ Experts / Journal ของ MT5</p></details>
+                  <details><summary>ไม่มีไฟล์ .set หรือช่องรหัสยังว่าง</summary><p>ไปที่ File → Open Data Folder → MQL5 → Presets ถ้าไม่มีไฟล์ ให้ติดตั้งใหม่สำหรับ MT5 ตัวนี้</p></details>
+                  <details><summary>ต้องการเปลี่ยนบัญชี Demo / Real</summary><p>จัดการออเดอร์เดิมก่อน Login บัญชีใหม่ แล้วกลับมาหน้า SCENOVA เพื่อตรวจบัญชีอีกครั้ง</p></details>
+                </div>
+              </>}
             </div>
           </div>
           <footer><span>ขั้นตอน {step+1} จาก {steps.length}</span><div><button className={styles.secondary} disabled={step === 0} onClick={() => setStep(step-1)}>← ย้อนกลับ</button><button className={styles.primary} onClick={() => step === steps.length-1 ? setOpen(false) : setStep(step+1)}>{step === steps.length-1 ? "ปิดคู่มือ" : "ถัดไป →"}</button></div></footer>
