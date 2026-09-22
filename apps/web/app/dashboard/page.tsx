@@ -2596,6 +2596,7 @@ export default function DashboardPage() {
         {activeView === "backtest" && (
           <BacktestCenter
             slotId={selectedSlotId || data.selectedSlot?.id || ""}
+            controlMode={activeControlMode}
             onError={(message:string)=>setError(message)}
             onNotice={(message:string)=>setNotice(message)}
           />
@@ -2686,7 +2687,7 @@ export default function DashboardPage() {
   );
 }
 
-function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNotice:(message:string)=>void}) {
+function BacktestCenter(props:{slotId:string;controlMode:string;onError:(message:string)=>void;onNotice:(message:string)=>void}) {
   const [runs,setRuns] = useState<any[]>([]);
   const [selected,setSelected] = useState<any|null>(null);
   const [loading,setLoading] = useState(false);
@@ -2734,6 +2735,22 @@ function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNo
       await refresh(created.id);
     } catch (e:any) {
       props.onError(String(e?.message||"สร้างตัวอย่างไม่สำเร็จ"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function syncZeroHistory() {
+    setBusy(true);
+    try {
+      const created = await api("/backtest/zero-history",{
+        method:"POST",
+        body:JSON.stringify({slotId:props.slotId})
+      });
+      props.onNotice("เชื่อมประวัติ ZERO GRID จริงเข้า Backtest Center แล้ว");
+      await refresh(created.id);
+    } catch (e:any) {
+      props.onError(String(e?.message||"เชื่อมข้อมูล ZERO GRID ไม่สำเร็จ"));
     } finally {
       setBusy(false);
     }
@@ -2789,6 +2806,7 @@ function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNo
 
   const summary = selected?.summary || {};
   const equity = Array.isArray(selected?.equity_curve)?selected.equity_curve:[];
+  const selectedZeroLive = String(selected?.settings?.dataSource || "") === "LIVE_ZERO_HISTORY";
   const publicUrl = selected?.is_published && selected?.public_slug
     ? (typeof window!=="undefined"?window.location.origin:"")+"/performance/"+selected.public_slug
     : "";
@@ -2803,7 +2821,8 @@ function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNo
         </div>
         <div className="backtest-hero-actions">
           <button className="btn" disabled={loading||busy} onClick={()=>refresh()}><ScenovaIcon name="refresh" size={16}/>รีเฟรช</button>
-          <button className="btn primary" disabled={busy} onClick={createSample}><ScenovaIcon name="strategy" size={16}/>สร้างตัวอย่าง</button>
+          {props.controlMode==="ZERO_GRID"&&<button className="btn primary" disabled={busy} onClick={syncZeroHistory}><ScenovaIcon name="strategy" size={16}/>เชื่อมผล ZERO จริง</button>}
+          <button className="btn" disabled={busy} onClick={createSample}><ScenovaIcon name="strategy" size={16}/>สร้างตัวอย่าง</button>
         </div>
       </section>
 
@@ -2814,17 +2833,18 @@ function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNo
             <span className="badge">{runs.length} รายการ</span>
           </div>
           <div className="backtest-run-scroll">
-            {runs.map((run:any)=>(
-              <button key={run.id} className={"backtest-run-item "+(selected?.id===run.id?"active":"")} onClick={async()=>{
+            {runs.map((run:any)=>{
+              const zeroLive = String(run.settings?.dataSource || "") === "LIVE_ZERO_HISTORY";
+              return <button key={run.id} className={"backtest-run-item "+(selected?.id===run.id?"active":"")} onClick={async()=>{
                 setLoading(true);
                 try{setSelected(await api("/backtest/run?id="+encodeURIComponent(run.id)));}
                 catch(e:any){props.onError(String(e?.message||"เปิดรายงานไม่สำเร็จ"));}
                 finally{setLoading(false);}
               }}>
                 <div><b>{run.title}</b><small>{run.symbol+" · "+run.timeframe+" · "+new Date(run.created_at).toLocaleDateString("th-TH")}</small></div>
-                <span className={run.source==="SAMPLE"?"warn":""}>{run.source==="SAMPLE"?"ตัวอย่าง":"Backtest"}</span>
-              </button>
-            ))}
+                <span className={zeroLive?"good":run.source==="SAMPLE"?"warn":""}>{zeroLive?"ZERO LIVE":run.source==="SAMPLE"?"ตัวอย่าง":"Backtest"}</span>
+              </button>;
+            })}
             {!loading&&!runs.length&&<div className="backtest-empty">ยังไม่มีรายงาน Backtest<br/><small>สร้างตัวอย่างเพื่อดูรูปแบบหน้ารายงานได้ทันที</small></div>}
           </div>
         </section>
@@ -2834,7 +2854,7 @@ function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNo
             <>
               <div className="backtest-report-head">
                 <div>
-                  <div className="eyebrow">{selected.source==="SAMPLE"?"SIMULATED SAMPLE":"BACKTEST REPORT"}</div>
+                  <div className="eyebrow">{selectedZeroLive?"ZERO LIVE HISTORY":selected.source==="SAMPLE"?"SIMULATED SAMPLE":"BACKTEST REPORT"}</div>
                   <h2>{selected.title}</h2>
                   <p>{selected.symbol+" · "+selected.timeframe+" · Lot "+Number(selected.lot||0).toFixed(2)+" · เงินเริ่มต้น "+formatAccountMoney(selected.initial_deposit,selected.currency)}</p>
                 </div>
@@ -2846,6 +2866,7 @@ function BacktestCenter(props:{slotId:string;onError:(message:string)=>void;onNo
                 </div>
               </div>
 
+              {selectedZeroLive&&<div className="notice good backtest-disclaimer"><b>ZERO GRID · ข้อมูลจริง</b><span>รายงานนี้สร้างจากรอบ ZERO GRID ที่ปิดจริงใน Trade Journal ไม่ใช่ข้อมูลจำลอง</span></div>}
               {selected.source==="SAMPLE"&&<div className="notice warn backtest-disclaimer"><b>ผลจำลองตัวอย่าง</b><span>ข้อมูลชุดนี้สร้างขึ้นเพื่อสาธิตหน้ารายงานเท่านั้น ไม่ใช่ผลการเทรดจริง</span></div>}
 
               <div className="backtest-kpis">

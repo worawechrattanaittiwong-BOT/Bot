@@ -8,12 +8,16 @@ $journal = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/performance
 $performancePage = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/app/performance/page.tsx'))
 $summaryPopup = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/components/BotPerformanceSummary.tsx'))
 $page = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/app/dashboard/page.tsx'))
+$backtest = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/backtest.controller.ts'))
 
 foreach ($required in @(
   'reconstructCompletedJournal(rows)',
   'const performance = summarizeBaskets(modeBaskets);',
   'activityEntries: entries',
-  'tradeJournal.today = summarizeBaskets(basketRows);'
+  'tradeJournal.today = summarizeBaskets(basketRows);',
+  "event_type IN ('ENTRY','EXIT','BASKET')",
+  'const zeroBasketRows = rows',
+  'resolveJournalControlMode(row) === "ZERO_GRID"'
 )) {
   if (-not $bot.Contains($required)) { throw "Dashboard actual-deal consistency contract missing: $required" }
 }
@@ -72,9 +76,19 @@ if ($shareFormulaCount -lt 2) {
 
 foreach ($required in @(
   'row.activityEntries ?? row.trades ?? 0',
-  'closedTrades+" Basket · "'
+  'closedTrades+" Basket · "',
+  '/backtest/zero-history',
+  'ZERO LIVE'
 )) {
   if (-not $page.Contains($required)) { throw "Dashboard Basket UI contract missing: $required" }
+}
+foreach ($required in @(
+  '@Post("zero-history")',
+  'LIVE_ZERO_HISTORY',
+  "event_type='BASKET'",
+  "metadata->>'controlMode'"
+)) {
+  if (-not $backtest.Contains($required)) { throw "ZERO Backtest bridge contract missing: $required" }
 }
 
 Write-Host 'Performance actual-deal reconstruction + trade-number chart contract PASS'

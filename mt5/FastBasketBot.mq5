@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.59"
-#define SCENOVA_EA_VERSION "1.0.59"
-#define SCENOVA_PRODUCT_VERSION "1.0.59"
+#property version   "1.0.60"
+#define SCENOVA_EA_VERSION "1.0.60"
+#define SCENOVA_PRODUCT_VERSION "1.0.60"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -167,6 +167,8 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS 5000
 #define LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS 120
 #define LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS 500
+#define ZERO_GRID_JOURNAL_FORCE_INTERVAL_MS 3000
+#define ZERO_GRID_JOURNAL_HTTP_TIMEOUT_MS 500
 #define LOCAL_DYNAMIC_PROTECTION_INTERVAL_MS 150
 #define DEFERRED_DEAL_JOURNAL_MAX 256
 #define AUTO_V21_POLICY "AUTO_V21_BALANCED_EXIT_V1"
@@ -823,6 +825,7 @@ ulong  g_deferredJournalTickets[DEFERRED_DEAL_JOURNAL_MAX];
 bool   g_deferredJournalRescue[DEFERRED_DEAL_JOURNAL_MAX];
 int    g_deferredJournalHead = 0;
 int    g_deferredJournalCount = 0;
+ulong  g_lastZeroGridJournalAttemptMs = 0;
 int    g_journalFailed = 0;
 string g_sessionProfile = "UNKNOWN";
 bool   g_spreadProfileRestored = false;
@@ -4781,8 +4784,47 @@ void OnTimer()
       networkUsed=true;
    }
 
-   // Journals are best-effort observability. Never stack multiple HTTP calls in
-   // one timer pass and never send them while the market tick stream is busy.
+   bool zeroDeferredJournalReady=false;
+   if(g_deferredJournalCount>0)
+   {
+      int zeroJournalSlot=g_deferredJournalHead;
+      ulong zeroJournalTicket=g_deferredJournalTickets[zeroJournalSlot];
+      bool zeroJournalRescue=g_deferredJournalRescue[zeroJournalSlot];
+      zeroDeferredJournalReady=
+         !zeroJournalRescue &&
+         TradeModeForDeal(zeroJournalTicket)=="ZERO_GRID";
+   }
+
+   bool zeroBasketJournalReady=false;
+   if(g_pendingBasketJournal && g_pendingBasketRetryAt<=TimeCurrent())
+   {
+      string zeroPendingMode=TradeModeForDeal((ulong)g_pendingBasketId);
+      if(zeroPendingMode=="")
+         zeroPendingMode=DailyRiskMode();
+      zeroBasketJournalReady=zeroPendingMode=="ZERO_GRID";
+   }
+
+   bool zeroJournalForceDue=
+      (zeroDeferredJournalReady || zeroBasketJournalReady) &&
+      (g_lastZeroGridJournalAttemptMs==0 ||
+       heartbeatNowMs-g_lastZeroGridJournalAttemptMs>=ZERO_GRID_JOURNAL_FORCE_INTERVAL_MS);
+
+   // ZERO keeps broker-side pending exposure alive almost continuously, so the
+   // normal market-quiet journal slot may never open. Give ZERO one bounded
+   // telemetry attempt between heartbeats; heartbeat still has priority and
+   // trading management above remains local and first.
+   if(!networkUsed && !heartbeatDue && zeroJournalForceDue)
+   {
+      g_lastZeroGridJournalAttemptMs=heartbeatNowMs;
+      if(zeroBasketJournalReady)
+         FlushPendingBasketJournal();
+      else
+         FlushOneDeferredDealJournal();
+      networkUsed=true;
+   }
+
+   // Other journal traffic keeps the existing market-quiet behavior. Never
+   // stack more than one HTTP call in the same timer pass.
    if(!networkUsed && allowNetworkNow)
    {
       if(g_deferredJournalCount>0)
@@ -5064,12 +5106,27 @@ void FlushOneDeferredDealJournal()
    int slot=g_deferredJournalHead;
    ulong ticket=g_deferredJournalTickets[slot];
    bool rescueDeal=g_deferredJournalRescue[slot];
+   bool zeroGridJournal=
+      !rescueDeal &&
+      TradeModeForDeal(ticket)=="ZERO_GRID";
+
+   // ZERO statistics are required by the per-mode dashboard. Do not discard a
+   // ZERO deal just because one telemetry request timed out; keep it at the
+   // queue head and retry from the bounded ZERO journal slot.
+   if(zeroGridJournal)
+   {
+      g_lastZeroGridJournalAttemptMs=GetTickCount64();
+      if(!PostTradeJournalDeal(ticket))
+         return;
+   }
 
    g_deferredJournalTickets[slot]=0;
    g_deferredJournalRescue[slot]=false;
    g_deferredJournalHead=(g_deferredJournalHead+1)%DEFERRED_DEAL_JOURNAL_MAX;
    g_deferredJournalCount--;
 
+   if(zeroGridJournal)
+      return;
    if(rescueDeal)
       PostRescueJournalDeal(ticket);
    else
@@ -5888,21 +5945,21 @@ int HttpPostJson(string url, string payload, string &response)
    return HttpPostJsonTimeout(url, payload, response, 1200);
 }
 
-void PostTradeJournalDeal(ulong dealTicket)
+bool PostTradeJournalDeal(ulong dealTicket)
 {
    if(MQLInfoInteger(MQL_TESTER) || dealTicket == 0 || !HistoryDealSelect(dealTicket))
-      return;
+      return true;
 
    long dealEntry = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
    if(dealEntry != DEAL_ENTRY_IN &&
       dealEntry != DEAL_ENTRY_OUT &&
       dealEntry != DEAL_ENTRY_OUT_BY &&
       dealEntry != DEAL_ENTRY_INOUT)
-      return;
+      return true;
 
    long dealType = HistoryDealGetInteger(dealTicket, DEAL_TYPE);
    if(dealType != DEAL_TYPE_BUY && dealType != DEAL_TYPE_SELL)
-      return;
+      return true;
 
    bool isExit = dealEntry == DEAL_ENTRY_OUT ||
                  dealEntry == DEAL_ENTRY_OUT_BY ||
@@ -5993,16 +6050,23 @@ void PostTradeJournalDeal(ulong dealTicket)
    }
 
    string response = "";
+   int journalTimeoutMs=journalControlMode=="ZERO_GRID"
+      ? MathMax(ZERO_GRID_JOURNAL_HTTP_TIMEOUT_MS,ExecutionAwareHttpTimeoutMs(650))
+      : ExecutionAwareHttpTimeoutMs(650);
    int code=HttpPostJsonTimeout(
       InpApiBase + "/api/ea/journal",
       payload,
       response,
-      ExecutionAwareHttpTimeoutMs(650)
+      journalTimeoutMs
    );
    if(code >= 200 && code < 300)
+   {
       g_journalSent++;
-   else
-      g_journalFailed++;
+      return true;
+   }
+
+   g_journalFailed++;
+   return false;
 }
 
 void PostRescueJournalDeal(ulong dealTicket)
@@ -6368,11 +6432,16 @@ void FlushPendingBasketJournal()
    }
 
    string response = "";
+   if(pendingControlMode=="ZERO_GRID")
+      g_lastZeroGridJournalAttemptMs=GetTickCount64();
+   int journalTimeoutMs=pendingControlMode=="ZERO_GRID"
+      ? MathMax(ZERO_GRID_JOURNAL_HTTP_TIMEOUT_MS,ExecutionAwareHttpTimeoutMs(650))
+      : ExecutionAwareHttpTimeoutMs(650);
    int code=HttpPostJsonTimeout(
       InpApiBase + "/api/ea/journal",
       payload,
       response,
-      ExecutionAwareHttpTimeoutMs(650)
+      journalTimeoutMs
    );
    if(code >= 200 && code < 300)
    {

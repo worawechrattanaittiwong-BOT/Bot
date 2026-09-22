@@ -749,7 +749,7 @@ export class BotController {
          FROM trade_journal
          WHERE bot_instance_id=$1
            AND mt5_account_id=$2
-           AND event_type IN ('ENTRY','EXIT')
+           AND event_type IN ('ENTRY','EXIT','BASKET')
            AND created_at >= (
              date_trunc('day', now() AT TIME ZONE 'Asia/Bangkok')
              AT TIME ZONE 'Asia/Bangkok'
@@ -760,7 +760,23 @@ export class BotController {
 
       const rows = todayRows.rows || [];
       const reconstructedToday = reconstructCompletedJournal(rows);
-      const basketRows = reconstructedToday.baskets;
+      const reconstructedBasketRows = reconstructedToday.baskets;
+      const zeroBasketRows = rows
+        .filter((row:any) =>
+          String(row.event_type || "").toUpperCase() === "BASKET" &&
+          resolveJournalControlMode(row) === "ZERO_GRID"
+        )
+        .map((row:any) => ({ ...row, controlMode: "ZERO_GRID" }));
+      const reconstructedZeroRows = reconstructedBasketRows.filter(
+        (row:any) => row.controlMode === "ZERO_GRID"
+      );
+      const basketRows = [
+        ...reconstructedBasketRows.filter((row:any) => row.controlMode !== "ZERO_GRID"),
+        ...(zeroBasketRows.length > 0 ? zeroBasketRows : reconstructedZeroRows)
+      ].sort(
+        (left:any,right:any) =>
+          new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
+      );
       const totalTodayNet = basketRows.reduce(
         (sum:any,row:any) => sum + Number(row.net_profit || 0),
         0

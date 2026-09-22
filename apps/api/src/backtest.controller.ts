@@ -371,7 +371,7 @@ export class BacktestController {
     const rows = await this.db.query(
       `SELECT br.id,br.title,br.source,br.symbol,br.timeframe,br.started_at,br.ended_at,
               br.initial_deposit,br.lot,br.currency,br.summary,br.status,br.is_published,
-              br.public_slug,br.created_at,ls.slot_number
+              br.public_slug,br.settings,br.created_at,ls.slot_number
        FROM backtest_runs br
        LEFT JOIN license_slots ls ON ls.id=br.slot_id
        WHERE br.owner_user_id=$1${slotClause}
@@ -393,6 +393,109 @@ export class BacktestController {
     const trades = this.normalizeTrades(body?.trades || []);
     if (!trades.length) throw new BadRequestException("at least one trade is required");
     return this.insertRun(req.user.sub, body, "IMPORT", trades);
+  }
+
+  @Post("zero-history")
+  async zeroHistory(@Req() req: any, @Body() body: any) {
+    const slot = await this.slotForUser(req.user.sub, String(body?.slotId || ""));
+    if (!slot) throw new ConflictException("slot unavailable");
+
+    const instance = await this.db.one(
+      `SELECT id,mt5_account_id,metrics
+       FROM bot_instances
+       WHERE slot_id=$1
+       LIMIT 1`,
+      [slot.id]
+    );
+    if (!instance?.mt5_account_id) {
+      throw new ConflictException("ZERO GRID history requires a connected MT5 account");
+    }
+
+    const settingsRow = await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+      [instance.id]
+    );
+    const settings = { ...(settingsRow?.settings || {}) };
+
+    const journal = await this.db.query(
+      `SELECT deal_ticket,direction,volume::float8,net_profit::float8,metadata,created_at
+       FROM trade_journal
+       WHERE bot_instance_id=$1
+         AND mt5_account_id=$2
+         AND event_type='BASKET'
+         AND UPPER(COALESCE(metadata->>'controlMode',''))='ZERO_GRID'
+       ORDER BY created_at ASC,id ASC
+       LIMIT 10000`,
+      [instance.id, instance.mt5_account_id]
+    );
+
+    const rows = journal.rows || [];
+    if (!rows.length) {
+      throw new ConflictException("ยังไม่มีรอบ ZERO GRID ที่ปิดสมบูรณ์สำหรับสร้างรายงาน");
+    }
+
+    const toIso = (seconds: unknown, fallback: unknown) => {
+      const value = Number(seconds);
+      if (Number.isFinite(value) && value > 0) {
+        return new Date(value * 1000).toISOString();
+      }
+      return new Date(String(fallback)).toISOString();
+    };
+
+    const trades: BacktestTradeInput[] = rows.map((row: any) => ({
+      openedAt: toIso(row.metadata?.startedAt, row.created_at),
+      closedAt: toIso(row.metadata?.endedAt, row.created_at),
+      direction: String(row.direction || "").toUpperCase() === "SELL" ? "SELL" : "BUY",
+      volume: Math.max(0, Number(row.volume || 0)),
+      openPrice: 0,
+      closePrice: 0,
+      profit: Number(row.net_profit || 0),
+      metadata: {
+        controlMode: "ZERO_GRID",
+        dataSource: "LIVE_ZERO_HISTORY",
+        basketDealTicket: String(row.deal_ticket || ""),
+        peakPositions: Number(row.metadata?.peakPositions || 0),
+        symbol: String(row.metadata?.symbol || instance.metrics?.symbol || "")
+      }
+    }));
+
+    const totalNet = trades.reduce((sum, trade) => sum + Number(trade.profit || 0), 0);
+    const currentBalance = Number(instance.metrics?.balance || 0);
+    const inferredStart = currentBalance > 0 ? currentBalance - totalNet : 0;
+    const initialDeposit = inferredStart > 0
+      ? inferredStart
+      : Math.max(1000, currentBalance || 0);
+    const symbol = String(
+      rows[0]?.metadata?.symbol || instance.metrics?.symbol || "XAUUSDm"
+    );
+    const currency = String(instance.metrics?.currency || "USD");
+
+    return this.insertRun(
+      req.user.sub,
+      {
+        slotId: slot.id,
+        title: "ZERO GRID · ประวัติรอบจริง",
+        symbol,
+        timeframe: "LIVE",
+        startedAt: trades[0]?.openedAt || null,
+        endedAt: trades[trades.length - 1]?.closedAt || null,
+        initialDeposit,
+        lot: Math.max(0, Number(settings.zeroGridBaseLot || settings.lot || 0.01)),
+        currency,
+        settings: {
+          controlMode: "ZERO_GRID",
+          dataSource: "LIVE_ZERO_HISTORY",
+          zeroGridStepPrice: Number(settings.zeroGridStepPrice || 0),
+          zeroGridLowVolatilityEnabled: settings.zeroGridLowVolatilityEnabled === true,
+          zeroGridLevelsPerSide: Number(settings.zeroGridLevelsPerSide || 0),
+          zeroGridBaseLot: Number(settings.zeroGridBaseLot || settings.lot || 0.01),
+          zeroGridMinNetProfitMoney: Number(settings.zeroGridMinNetProfitMoney || 0),
+          zeroGridCloseReserveMoney: Number(settings.zeroGridCloseReserveMoney || 0)
+        }
+      },
+      "IMPORT",
+      trades
+    );
   }
 
   @Post("sample")
