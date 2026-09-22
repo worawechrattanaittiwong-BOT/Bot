@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.54"
-#define SCENOVA_EA_VERSION "1.0.54"
-#define SCENOVA_PRODUCT_VERSION "1.0.54"
+#property version   "1.0.55"
+#define SCENOVA_EA_VERSION "1.0.55"
+#define SCENOVA_PRODUCT_VERSION "1.0.55"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -369,9 +369,12 @@ bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
 string g_raceProfitTargetMode = "BASKET";
 double g_racePerPositionProfitMoney = 0.50;
-// RACE uses a rolling 60-second order-flow window. Exchange/deal-side flags
-// are used when the broker publishes them; quote-only symbols fall back to
-// uptick/downtick tick-volume counts. No trend/EMA/timeframe signal decides side.
+// RACE uses a rolling 60-second order-flow window as the primary side signal.
+// Exchange/deal-side flags are used when the broker publishes them; quote-only
+// symbols fall back to uptick/downtick tick-volume counts. Intact Demand/Supply
+// zones may override only at the boundary; a live ATR-buffer break releases the
+// 60-second flow to continue through the broken zone. Trend/EMA/timeframes stay
+// excluded from RACE side selection.
 datetime g_raceVolumeBucketSecond[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketBuy[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketSell[RACE_VOLUME_HISTORY_SECONDS];
@@ -3092,13 +3095,74 @@ int RaceM5CandleDirection()
    return 0;
 }
 
+bool RaceZonePriorityActive(
+   int zoneDirection,
+   double price,
+   double atrPrice,
+   bool &broken)
+{
+   broken=false;
+   if(zoneDirection==0 || price<=0.0 || atrPrice<=0.0)
+      return false;
+
+   double low=zoneDirection>0 ? g_demandZoneLow : g_supplyZoneLow;
+   double high=zoneDirection>0 ? g_demandZoneHigh : g_supplyZoneHigh;
+   double score=zoneDirection>0 ? g_demandZoneScore : g_supplyZoneScore;
+   if(low<=0.0 || high<low || score<55.0)
+      return false;
+
+   // Keep RACE fast: a real break is confirmed from live price, not by waiting
+   // for another candle. Once price clears the far edge by 0.12 ATR, the
+   // original 60-second flow may continue through the zone immediately.
+   double breakBuffer=atrPrice*0.12;
+   broken=zoneDirection>0
+      ? price < low-breakBuffer
+      : price > high+breakBuffer;
+   if(broken)
+      return false;
+
+   bool inside=price>=low && price<=high;
+   bool near=PriceInsideOrNearZone(price,low,high,atrPrice*0.18);
+
+   // Moderate zones get priority only when price is actually inside them.
+   // A nearby zone must be stronger (70+) before it can override tick flow.
+   return inside || (score>=70.0 && near);
+}
+
 int RaceAnalysisDirection(double momentum)
 {
-   // Explicit customer direction remains an override. AUTO RACE ignores
-   // trend/EMA/timeframes and follows only the rolling 60-second volume side.
+   // Explicit customer direction remains authoritative. AUTO RACE keeps the
+   // rolling 60-second pressure as its primary signal, then protects an intact
+   // opposing Demand/Supply zone without adding another waiting timer.
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
    if(g_entryMode == ENTRY_SELL_ONLY) return -1;
-   return RaceVolumeDirection();
+
+   int volumeDirection=RaceVolumeDirection();
+   if(volumeDirection==0)
+      return 0;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return volumeDirection;
+
+   double price=(tick.bid+tick.ask)*0.5;
+   double atrPrice=MathMax(
+      _Point*12.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+
+   bool zoneBroken=false;
+   if(volumeDirection<0 &&
+      RaceZonePriorityActive(1,price,atrPrice,zoneBroken))
+      return 1;
+
+   if(volumeDirection>0 &&
+      RaceZonePriorityActive(-1,price,atrPrice,zoneBroken))
+      return -1;
+
+   // Broken opposing zone, or no qualifying zone nearby: follow the original
+   // rolling 60-second side immediately.
+   return volumeDirection;
 }
 
 double RaceMidProgressPoints(int direction)
@@ -3583,12 +3647,23 @@ bool StartRaceCycle(double momentum)
       return false;
 
    ResetRaceRuntime();
+
+   // Preserve the original 60-second warm-up. Do not rebuild market structure
+   // until RACE is actually ready to choose a side.
+   if(!RaceVolumeWindowReady())
+   {
+      g_executionStatus = "RACE_VOLUME_WARMUP";
+      return false;
+   }
+
+   // Refresh Demand/Supply only at the actual decision point. The market
+   // context is second-cached, so this adds no new waiting timer.
+   RefreshMarketContext(false);
+
    int direction = RaceAnalysisDirection(momentum);
    if(direction == 0)
    {
-      g_executionStatus = RaceVolumeWindowReady()
-         ? "RACE_VOLUME_BALANCED"
-         : "RACE_VOLUME_WARMUP";
+      g_executionStatus = "RACE_VOLUME_BALANCED";
       return false;
    }
 
