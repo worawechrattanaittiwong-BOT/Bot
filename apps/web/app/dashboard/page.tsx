@@ -2077,7 +2077,6 @@ export default function DashboardPage() {
                     {isLocalSelectedSlot?<button className="symbol" disabled={symbolBusy} onClick={openTradingSymbolPicker}><ScenovaIcon name="trend" size={15}/><span><b>{desiredTradingSymbol||"Symbol"}</b><small>เลือก Symbol</small></span></button>:null}
                     <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
                     <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
-                    <button className="close" disabled={busy||currentPositions===0} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ปิดออเดอร์ทั้งหมด",message:"ยืนยันปิดออเดอร์ที่กำลังเปิดทั้งหมดทันที?",confirmLabel:"ปิดทุกไม้",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งปิดออเดอร์ทั้งหมดแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ปิดทุกไม้</b><small>Close All</small></span></button>
                     <button className="terminal" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={15}/><span><b>Terminal</b><small>Live Logs</small></span></button>
                   </div>
                 </div>
@@ -2391,6 +2390,12 @@ export default function DashboardPage() {
                     <li><i className={Number(todayPerformance.drawdownPercent||0)<2?"good":"warn"}/><span>Drawdown วันนี้ {Number(todayPerformance.drawdownPercent||0).toFixed(2)}%</span></li>
                   </ul>
                 </section>
+              </section>
+
+              <section className="panel cc-force-flat-zone" aria-label="ล้างและปิดทั้งหมด">
+                <div className="cc-v12-quick-actions">
+                  <button className="close" disabled={busy} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ล้างและปิดทั้งหมด",message:"คำสั่งนี้จะ Force Flat ออเดอร์ของ SCENOVA และล้างสถานะค้างของบัญชีนี้ ใช้ได้แม้หน้าจอแสดง 0 Position ยืนยันดำเนินการทันที?",confirmLabel:"ล้าง / ปิดทั้งหมด",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งล้าง / ปิดทั้งหมดแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ล้าง / ปิดทั้งหมด</b><small>Force Flat &amp; Reset</small></span></button>
+                </div>
               </section>
 
               <div className="cc-mobile-command-dock mobile-only" aria-label="ควบคุมบอท">
