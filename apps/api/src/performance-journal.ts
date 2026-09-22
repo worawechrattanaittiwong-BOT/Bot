@@ -137,10 +137,7 @@ export function reconstructCompletedJournal(rows: PerformanceJournalDeal[]) {
 
   const finishBasket=(root:string,state:BasketState) => {
     const positions=closedPositions.filter((position) =>
-      position.controlMode===state.controlMode &&
-      position.symbol===state.symbol &&
-      new Date(position.openedAt).getTime()>=new Date(state.openedAt).getTime() &&
-      new Date(position.closedAt).getTime()<=new Date(state.metadata.__closedAt || position.closedAt).getTime()
+      state.positionKeys.has(position.positionId)
     );
     const closedAt=String(state.metadata.__closedAt || state.openedAt);
     const cleanMetadata={...(state.metadata || {})};
