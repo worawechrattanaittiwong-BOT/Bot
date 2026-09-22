@@ -429,7 +429,7 @@ export default function SharedPerformancePage() {
 
           <header className={styles.summaryTitle}>
             <div className={styles.titleMark}><ScenovaIcon name="pnl" size={24}/><h2>BOT PERFORMANCE SUMMARY</h2><ScenovaIcon name="pnl" size={24}/></div>
-            <p>Public read-only performance · {strategyScopeLabel}</p>
+            <p>Live portfolio performance · {strategyScopeLabel}</p>
           </header>
 
           <div className={styles.infoCard}>
