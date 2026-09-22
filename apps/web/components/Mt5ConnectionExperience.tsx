@@ -64,8 +64,7 @@ export function Mt5ConnectionExperience(props: Props) {
             <ScenovaIcon name={props.online ? "status" : "clock"} size={34}/>
             <div><b>{statusText}</b><small>{props.online ? "MT5 ส่งสถานะมายัง SCENOVA แล้ว" : "ทำตามคู่มือเพื่อเชื่อมบัญชีของคุณ"}</small></div>
           </div>
-          <button className={styles.primary} onClick={() => showGuide()}>{props.online ? "ติดตั้ง / อัปเดต" : "เริ่มเชื่อมต่อ"}<span>→</span></button>
-          <button className={styles.textButton} onClick={() => showGuide(4)}>ติดตั้งแล้ว? ดูวิธีตั้งค่า MT5</button>
+          <button className={styles.primary} onClick={() => showGuide(1)}>ดาวน์โหลดติดตั้ง<span>→</span></button>
         </div>
         <div className={styles.art}>
           <img src="/assets/scenova-mt5-companion-v2.png" alt="มาสคอต SCENOVA ตัวกลมสีขาวม่วง อยู่ข้างหน้าจอ MT5"/>
@@ -75,7 +74,10 @@ export function Mt5ConnectionExperience(props: Props) {
 
       <div className={styles.middle}>
         <section className={styles.stepsPanel}>
-          <h2>ทำตาม 3 ขั้นตอนนี้</h2><p>ตั้งแต่เปิด MT5 จนเชื่อมต่อสำเร็จ มีคำแนะนำให้ทุกขั้นตอน</p>
+          <div className={styles.stepsHeading}>
+            <div><h2>ทำตาม 3 ขั้นตอนนี้</h2><p>ตั้งแต่เปิด MT5 จนเชื่อมต่อสำเร็จ มีคำแนะนำให้ทุกขั้นตอน</p></div>
+            <button className={styles.secondary} onClick={() => showGuide(0)}><ScenovaIcon name="book" size={18}/>ดูวิธีติดตั้ง<span>→</span></button>
+          </div>
           <div className={styles.steps}>
             {[{icon:"strategy",title:"เปิด MT5 และเข้าสู่ระบบ",desc:"เปิดโปรแกรม MT5 แล้วเข้าสู่ระบบด้วยบัญชีเทรดของคุณ",index:0},
               {icon:"arrow-down",title:"ติดตั้ง SCENOVA",desc:"ดาวน์โหลดและเปิดตัวติดตั้งบนคอมพิวเตอร์ Windows",index:1},
