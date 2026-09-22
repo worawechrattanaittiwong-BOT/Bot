@@ -916,6 +916,14 @@ export class SharedPerformanceController {
               ? "DEMO"
               : "REAL";
 
+    const rangeEnd = derivedStart === null
+      ? null
+      : Number((derivedStart + selectedRangeNet).toFixed(2));
+    if (rangeEnd !== null && computed.curve.length > 0) {
+      computed.curve[computed.curve.length - 1].balance = rangeEnd;
+      computed.curve[computed.curve.length - 1].equity = rangeEnd;
+    }
+
     const snapshot = {
       kind: "LIVE_PERFORMANCE_PUBLIC",
       frozenAt: frozen.frozenAt || row.created_at,
@@ -940,7 +948,7 @@ export class SharedPerformanceController {
         current: currentBalance > 0 ? currentBalance : null,
         equity: Number(account.metrics?.equity || 0) > 0 ? Number(account.metrics.equity) : null,
         derivedStart,
-        rangeEnd: derivedStart === null ? null : Number((derivedStart + Number(computed.summary.netProfit || 0)).toFixed(2))
+        rangeEnd
       },
       summary: computed.summary,
       curve: computed.curve,
