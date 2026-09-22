@@ -962,13 +962,16 @@ export class BotController {
         const positionRows = reconstructedRun.positions;
         const pnlValues = basketRows.map((row:any) => Number(row.net_profit || 0));
         const positionPnlValues = positionRows.map((row:any) => Number(row.net_profit || 0));
-        const netProfit = pnlValues.reduce((sum:number,value:number)=>sum+value,0);
+        const dealPnlValues = sessionRows.map((row:any) => Number(row.net_profit || 0));
+        const netProfit = dealPnlValues.reduce((sum:number,value:number)=>sum+value,0);
         const positiveBaskets = pnlValues.filter((value:number)=>value>0);
         const negativeBaskets = pnlValues.filter((value:number)=>value<0);
         const positivePositions = positionPnlValues.filter((value:number)=>value>0);
         const negativePositions = positionPnlValues.filter((value:number)=>value<0);
-        const grossProfit = positivePositions.reduce((sum:number,value:number)=>sum+value,0);
-        const grossLoss = Math.abs(negativePositions.reduce((sum:number,value:number)=>sum+value,0));
+        const positiveDeals = dealPnlValues.filter((value:number)=>value>0);
+        const negativeDeals = dealPnlValues.filter((value:number)=>value<0);
+        const grossProfit = positiveDeals.reduce((sum:number,value:number)=>sum+value,0);
+        const grossLoss = Math.abs(negativeDeals.reduce((sum:number,value:number)=>sum+value,0));
 
         const endBalance = Number(instance.metrics?.balance || 0);
         const startCapital = Math.max(0, endBalance - netProfit);
@@ -986,6 +989,8 @@ export class BotController {
           maxDrawdownMoney = Math.max(maxDrawdownMoney, drawdownMoney);
           maxDrawdownPercent = Math.max(maxDrawdownPercent, drawdownPercent);
         }
+        if(balanceSeries.length>0)
+          balanceSeries[balanceSeries.length-1]=endBalance;
 
         const commandStopAt = !runningNow && firstStopAfterStart
           ? new Date(firstStopAfterStart.acked_at || firstStopAfterStart.created_at)
