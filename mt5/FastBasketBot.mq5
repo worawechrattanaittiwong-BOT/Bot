@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.58"
-#define SCENOVA_EA_VERSION "1.0.58"
-#define SCENOVA_PRODUCT_VERSION "1.0.58"
+#property version   "1.0.59"
+#define SCENOVA_EA_VERSION "1.0.59"
+#define SCENOVA_PRODUCT_VERSION "1.0.59"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -166,6 +166,7 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define LOCAL_EXECUTION_NETWORK_QUIET_MS 300
 #define LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS 5000
 #define LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS 120
+#define LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS 500
 #define LOCAL_DYNAMIC_PROTECTION_INTERVAL_MS 150
 #define DEFERRED_DEAL_JOURNAL_MAX 256
 #define AUTO_V21_POLICY "AUTO_V21_BALANCED_EXIT_V1"
@@ -5654,7 +5655,7 @@ void SendHeartbeat()
       heartbeatUrl,
       payload,
       response,
-      ExecutionAwareHttpTimeoutMs(1200)
+      MathMax(LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS, ExecutionAwareHttpTimeoutMs(1200))
    );
    g_lastHeartbeatLatencyMs = (long)(GetTickCount64() - heartbeatStartedMs);
    g_lastHeartbeatHttpStatus = code;

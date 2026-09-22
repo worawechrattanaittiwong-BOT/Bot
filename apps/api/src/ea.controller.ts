@@ -730,46 +730,15 @@ export class EaController {
       instance.slot_id || null
     );
 
-    const settings = await this.db.one(
-      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
-      [instance.id]
-    );
-    const runtimeSettings = { ...(settings?.settings || {}) };
-
     const dailyProfitUnlockRequested =
       instance.metrics?.dailyProfitUnlockRequested === true;
     const dailyProfitLocked =
       metrics.dailyProfitLocked === true && !dailyProfitUnlockRequested;
 
-    const heartbeatSavedControlMode = String(runtimeSettings.controlMode || "").toUpperCase();
-    const heartbeatEngineMode = String(runtimeSettings.engineMode || "AUTO").toUpperCase();
-    const heartbeatEntryMode = String(runtimeSettings.entryMode || "AUTO_MOMENTUM").toUpperCase();
-    const heartbeatConfiguredControlMode =
-      ["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "ASSISTED", "MANUAL"].includes(heartbeatSavedControlMode)
-        ? heartbeatSavedControlMode
-        : heartbeatEngineMode === "ZERO_GRID"
-          ? "ZERO_GRID"
-          : heartbeatEngineMode === "RACE"
-            ? "RACE"
-            : heartbeatEntryMode === "AUTO_MOMENTUM" ? "AUTO" : "LEGACY";
-    const heartbeatReportedControlMode = String(
-      metrics.controlMode || instance.metrics?.controlMode || ""
-    ).toUpperCase();
-
-    let dailyProfitLockApplies = dailyProfitLocked;
-    if (heartbeatConfiguredControlMode === "ZERO_GRID") {
-      dailyProfitLockApplies = false;
-    } else if (
-      heartbeatConfiguredControlMode === "FLIP_LOCK" &&
-      heartbeatReportedControlMode &&
-      heartbeatReportedControlMode !== "FLIP_LOCK"
-    ) {
-      dailyProfitLockApplies = false;
-    }
-
-    // ZERO_GRID does not use the generic Daily Profit lock. FLIP_LOCK must not
-    // inherit a stale lock reported by the previous engine during mode sync.
-    if ((!access || dailyProfitLockApplies) && instance.desired_state === "RUNNING") {
+    // The first heartbeat after a user raises/disables the Daily Profit target
+    // may still carry the old EA lock bit. Let that one heartbeat deliver the
+    // new settings instead of immediately forcing SAFE_STOP again.
+    if ((!access || dailyProfitLocked) && instance.desired_state === "RUNNING") {
       await this.db.query(
         "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1",
         [instance.id]
@@ -832,8 +801,13 @@ export class EaController {
       latestControl = { desired_state: "STOPPED" };
     }
 
+    const settings = await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+      [instance.id]
+    );
     // Runtime contract: preserve the direction selected by the customer.
     // RACE runs at exactly 2x the normal order cadence without changing AUTO.
+    const runtimeSettings = { ...(settings?.settings || {}) };
     const reportedCurrency = String(metrics.currency || "").trim().toUpperCase();
     const previousCurrency = String(
       runtimeSettings.accountCurrency ||

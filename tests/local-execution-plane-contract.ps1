@@ -56,8 +56,9 @@ if($flipTimer -lt 0 -or $zeroTimer -lt 0 -or $heartbeatTimer -lt 0 -or
 }
 Need $onTimer 'LOCAL_EXECUTION_NETWORK_QUIET_MS' 'heartbeat must yield while local ticks are busy'
 Need $onTimer 'LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS' 'heartbeat defer must remain bounded'
-Need $ea '#define LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS 120' 'live heartbeat timeout must stay below one local management burst'
-Need $ea 'ExecutionAwareHttpTimeoutMs(1200)' 'live heartbeat must use execution-aware short timeout'
+Need $ea '#define LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS 120' 'non-heartbeat live HTTP timeout must stay below one local management burst'
+Need $ea '#define LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS 500' 'active heartbeat needs enough transport time to stay connected'
+Need $ea 'MathMax(LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS, ExecutionAwareHttpTimeoutMs(1200))' 'heartbeat must keep a dedicated active-execution transport floor'
 Need $ea 'bool suppressLivePriceTelemetry=LocalExecutionExposureActive();' 'active exposure must suppress price-heavy heartbeat telemetry'
 Need $ea '\"livePriceTelemetrySuppressed\":true' 'live control heartbeat must declare price telemetry suppression'
 Need $ea 'if(StringLen(payload) >= 2 && !suppressLivePriceTelemetry)' 'price-heavy diagnostics must be flat-state only'
