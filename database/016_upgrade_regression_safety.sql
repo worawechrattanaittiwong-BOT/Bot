@@ -91,8 +91,14 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  IF COALESCE(NEW.metrics->>'positions','') !~ '^[0-9]+$'
-     OR (NEW.metrics->>'positions')::int <> 0 THEN
+  -- CLOSE_ALL is account-wide. Never infer a successful emergency close from
+  -- the chart-symbol Basket count. The EA must explicitly prove that every
+  -- SCENOVA Position and Pending Order in the MT5 account is gone.
+  IF COALESCE(NEW.metrics->>'accountScenovaPositions','') !~ '^[0-9]+$'
+     OR COALESCE(NEW.metrics->>'accountScenovaPendingOrders','') !~ '^[0-9]+$'
+     OR (NEW.metrics->>'accountScenovaPositions')::int <> 0
+     OR (NEW.metrics->>'accountScenovaPendingOrders')::int <> 0
+     OR COALESCE(NEW.metrics->>'accountFlatConfirmed','false') <> 'true' THEN
     RETURN NEW;
   END IF;
 
@@ -137,6 +143,9 @@ BEGIN
       NEW.id,
       jsonb_build_object(
         'positions',0,
+        'accountScenovaPositions',0,
+        'accountScenovaPendingOrders',0,
+        'accountFlatConfirmed',true,
         'accountNumber',NEW.metrics->>'accountNumber',
         'brokerServer',NEW.metrics->>'server',
         'reconciledCommands',reconciled_count

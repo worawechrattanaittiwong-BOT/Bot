@@ -25,7 +25,12 @@ export class MaintenanceService {
     return `WITH runtime AS (
       SELECT
         bi.*,
-        COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)::int AS reported_positions,
+        COALESCE(
+          NULLIF(bi.metrics->>'accountScenovaPositions','')::int,
+          NULLIF(bi.metrics->>'positions','')::int,
+          0
+        )::int AS reported_positions,
+        COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0)::int AS reported_pending_orders,
         COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0) AS mt5_report_epoch,
         CASE
           WHEN COALESCE(NULLIF(bi.metrics->>'lastServerContactAt','')::double precision,0)>0
@@ -158,7 +163,8 @@ export class MaintenanceService {
     const payload = JSON.stringify({
       source: "OWNER_FORCE_FLAT_ALL",
       actor: actor.slice(0, 120),
-      requestedAt: new Date().toISOString()
+      requestedAt: new Date().toISOString(),
+      forceReset: true
     });
     return this.db.query(
       `${this.runtimeCte()}
@@ -187,7 +193,9 @@ export class MaintenanceService {
               OR (mt5_fresh AND actual_state='RUNNING')
          )::int AS running,
          COALESCE(SUM(reported_positions),0)::int AS positions,
+         COALESCE(SUM(reported_pending_orders),0)::int AS pending_orders,
          COALESCE(SUM(CASE WHEN mt5_fresh THEN reported_positions ELSE 0 END),0)::int AS fresh_positions,
+         COALESCE(SUM(CASE WHEN mt5_fresh THEN reported_pending_orders ELSE 0 END),0)::int AS fresh_pending_orders,
          COUNT(*) FILTER (
            WHERE NOT mt5_fresh AND reported_positions>0
          )::int AS stale_position_instances,
@@ -201,7 +209,11 @@ export class MaintenanceService {
     // An offline EA can leave a stale cached Position forever. That must remain
     // visible and must block reopening, but it must not deadlock entry into
     // MAINTENANCE once every live MT5 session is stopped and fresh Positions are 0.
-    if (Number(blockers?.running || 0) === 0 && Number(blockers?.fresh_positions || 0) === 0) {
+    if (
+      Number(blockers?.running || 0) === 0 &&
+      Number(blockers?.fresh_positions || 0) === 0 &&
+      Number(blockers?.fresh_pending_orders || 0) === 0
+    ) {
       await this.db.query(
         `UPDATE system_maintenance
          SET status='MAINTENANCE',maintenance_started_at=COALESCE(maintenance_started_at,now()),updated_at=now()
@@ -326,7 +338,12 @@ export class MaintenanceService {
 
     const instance = await this.db.one(
       `SELECT bi.id,bi.actual_state,bi.desired_state,bi.last_seen_at,
-              COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)::int AS positions,
+              COALESCE(
+                NULLIF(bi.metrics->>'accountScenovaPositions','')::int,
+                NULLIF(bi.metrics->>'positions','')::int,
+                0
+              )::int AS positions,
+              COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0)::int AS pending_orders,
               u.user_code,a.account_number,a.broker_server
        FROM bot_instances bi
        LEFT JOIN license_slots ls ON ls.id=bi.slot_id
@@ -336,9 +353,6 @@ export class MaintenanceService {
       [id]
     );
     if (!instance) throw new ConflictException("ไม่พบบัญชี/บอทนี้ในระบบ");
-    if (Number(instance.positions || 0) <= 0) {
-      throw new ConflictException("บัญชีนี้ไม่มี Position ค้างให้ปิด");
-    }
 
     await this.db.query("UPDATE bot_instances SET desired_state='STOPPED' WHERE id=$1", [id]);
     // Supersede obsolete start/stop controls, but never fake a CLOSE_ALL ACK.
@@ -349,7 +363,7 @@ export class MaintenanceService {
     );
     await this.db.query(
       "INSERT INTO bot_commands(bot_instance_id,command,payload) VALUES($1,'CLOSE_ALL',$2::jsonb)",
-      [id, JSON.stringify({ source: "OWNER_MAINTENANCE", actor: actor.slice(0, 120) })]
+      [id, JSON.stringify({ source: "OWNER_MAINTENANCE", actor: actor.slice(0, 120), forceReset: true })]
     );
 
     return {
@@ -360,7 +374,8 @@ export class MaintenanceService {
       accountNumber: instance.account_number || null,
       brokerServer: instance.broker_server || null,
       positions: Number(instance.positions || 0),
-      message: "ส่งคำสั่ง Close All ให้บัญชีนี้แล้ว ระบบจะรอ EA รับคำสั่งและ heartbeat จาก MT5 ยืนยัน Position เป็น 0"
+      pendingOrders: Number(instance.pending_orders || 0),
+      message: "ส่งคำสั่ง Force Flat + Reset ให้บัญชีนี้แล้ว ระบบจะรอ MT5 ยืนยันว่า Position และ Pending Order ของ SCENOVA เป็น 0 ก่อนถือว่าสำเร็จ"
     };
   }
 
@@ -497,8 +512,8 @@ export class MaintenanceService {
     await this.db.query(
       `UPDATE system_maintenance
        SET status='DRAINING',
-           title='กำลังปิดระบบเพื่ออัปเดต',
-           message=COALESCE(NULLIF($1,''),'ระบบกำลังหยุดบอทและปิด Position ที่ยังค้างอย่างปลอดภัย'),
+           title='EMERGENCY FORCE FLAT',
+           message=COALESCE(NULLIF($1,''),'Admin สั่งปิดระบบฉุกเฉิน: บล็อก Start และล้าง Position/Pending ของ SCENOVA ทุกบัญชี'),
            maintenance_at=now(),
            force_close_at=now(),
            force_close=true,
@@ -511,7 +526,7 @@ export class MaintenanceService {
       [String(message || "").trim().slice(0, 2000), actor.slice(0, 120)]
     );
     await this.reconcileAckedCloseAll();
-    await this.ensureDrainCommands(true);
+    await this.ensureForceFlatCommands(actor);
     await this.tryFinishDrain();
     return this.snapshot();
   }
@@ -547,12 +562,13 @@ export class MaintenanceService {
     const blockers = await this.liveBlockers();
     const running = Number(blockers?.running || 0);
     const positions = Number(blockers?.positions || 0);
+    const pendingOrders = Number(blockers?.pending_orders || 0);
     const stalePositions = Number(blockers?.stale_reported_positions || 0);
-    if (running > 0 || positions > 0) {
+    if (running > 0 || positions > 0 || pendingOrders > 0) {
       throw new ConflictException(
         stalePositions > 0
           ? "ยังมี Position จากข้อมูล MT5 ล่าสุดที่ยังไม่ได้ยืนยันว่าเป็น 0 กรุณาเปิด EA/MT5 ให้ heartbeat ยืนยัน หรือส่ง Close All ให้สำเร็จก่อนเปิดระบบ"
-          : "ยังมี Bot Running หรือ Position ค้างอยู่ ระบบยังเปิดกลับไม่ได้"
+          : "ยังมี Bot Running, Position หรือ Pending Order ค้างอยู่ ระบบยังเปิดกลับไม่ได้"
       );
     }
 

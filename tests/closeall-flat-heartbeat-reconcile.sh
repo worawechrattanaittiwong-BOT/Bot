@@ -33,10 +33,21 @@ CLOSE_ID=$(psql -h localhost -U bot -d bot -Atq -c "insert into bot_commands(bot
 test -n "$INSTANCE"
 test -n "$CLOSE_ID"
 
-echo '[closeall-reconcile] authenticated flat EA heartbeat clears lost CLOSE_ALL ACK'
+echo '[closeall-reconcile] symbol-flat heartbeat must NOT clear account-wide CLOSE_ALL'
 HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" \
   -H 'content-type: application/json' \
-  -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"positions\":0,\"accountNumber\":\"$ACCOUNT\",\"server\":\"$SERVER\",\"broker\":\"CI\"}}")
+  -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"positions\":0,\"accountScenovaPositions\":1,\"accountScenovaPendingOrders\":0,\"accountFlatConfirmed\":false,\"accountNumber\":\"$ACCOUNT\",\"server\":\"$SERVER\",\"broker\":\"CI\"}}")
+test "$(printf '%s' "$HB" | jq -r '.ok')" = 'true'
+STATUS_BEFORE=$(psql -h localhost -U bot -d bot -Atc "select status from bot_commands where id=$CLOSE_ID;")
+if [ "$STATUS_BEFORE" = "ACKED" ]; then
+  echo 'CLOSE_ALL was incorrectly ACKED while accountScenovaPositions=1' >&2
+  exit 1
+fi
+
+echo '[closeall-reconcile] account-wide flat heartbeat clears lost CLOSE_ALL ACK'
+HB=$(curl -fsS -X POST "$BASE/ea/heartbeat" \
+  -H 'content-type: application/json' \
+  -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"positions\":0,\"accountScenovaPositions\":0,\"accountScenovaPendingOrders\":0,\"accountFlatConfirmed\":true,\"accountNumber\":\"$ACCOUNT\",\"server\":\"$SERVER\",\"broker\":\"CI\"}}")
 test "$(printf '%s' "$HB" | jq -r '.ok')" = 'true'
 
 assert_eq "$(psql -h localhost -U bot -d bot -Atc "select status from bot_commands where id=$CLOSE_ID;")" "ACKED"

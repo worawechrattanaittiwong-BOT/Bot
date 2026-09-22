@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.57"
-#define SCENOVA_EA_VERSION "1.0.57"
-#define SCENOVA_PRODUCT_VERSION "1.0.57"
+#property version   "1.0.58"
+#define SCENOVA_EA_VERSION "1.0.58"
+#define SCENOVA_PRODUCT_VERSION "1.0.58"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -4113,11 +4113,15 @@ void OnTick()
 
    if(g_pendingCloseReason != CLOSE_REASON_NONE)
    {
+      int pendingReason=g_pendingCloseReason;
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
-      if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
-      bool closed = CloseAllBasket(CloseReasonText(g_pendingCloseReason));
-      g_executionStatus = closed ? CloseCompletionStatus(g_pendingCloseReason) : "CLOSE_RETRY";
+      bool closed = pendingReason==CLOSE_REASON_REMOTE
+         ? ForceFlatResetAccount("REMOTE_CLOSE_ALL")
+         : CloseAllBasket(CloseReasonText(pendingReason));
+      g_executionStatus = pendingReason==CLOSE_REASON_REMOTE
+         ? (closed ? "FORCE_FLAT_CONFIRMED" : "FORCE_FLAT_RETRY")
+         : (closed ? CloseCompletionStatus(pendingReason) : "CLOSE_RETRY");
       return;
    }
 
@@ -5098,9 +5102,15 @@ void SendHeartbeat()
    double botTodayClosedProfit = BotTodayClosedProfitAllModes();
    double botFloatingProfit = BotFloatingProfitAllModes();
    double botTodayProfit = botTodayClosedProfit + botFloatingProfit;
+   int accountScenovaPositions=ScenovaAccountPositionCount();
+   int accountScenovaPendingOrders=ScenovaAccountPendingCount();
+   string accountFlatConfirmedText=
+      (accountScenovaPositions==0 && accountScenovaPendingOrders==0)
+      ? "true"
+      : "false";
 
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"%s\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"accountTradeMode\":%d,\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"botTodayProfit\":%.2f,\"botTodayClosedProfit\":%.2f,\"botFloatingProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"state\":\"%s\",\"metrics\":{\"accountNumber\":\"%s\",\"eaVersion\":\"%s\",\"productVersion\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\",\"currency\":\"%s\",\"accountTradeMode\":%d,\"balance\":%.2f,\"equity\":%.2f,\"basketProfit\":%.2f,\"basketCycleProfit\":%.2f,\"basketProfitTarget\":%.2f,\"basketPeakPositions\":%d,\"perPositionProfitTarget\":%.2f,\"profitRunTrailPercent\":%.2f,\"profitRunPeak\":%.2f,\"perPositionLoss\":%.2f,\"dailyProfit\":%.2f,\"botTodayProfit\":%.2f,\"botTodayClosedProfit\":%.2f,\"botFloatingProfit\":%.2f,\"dailyProfitTarget\":%.2f,\"dailyProfitContinueAfterTarget\":%s,\"dailyProfitDrawdownPercent\":%.2f,\"dailyProfitTargetArmed\":%s,\"dailyProfitGivebackFloor\":%.2f,\"dailyProfitLocked\":%s,\"peakProfit\":%.2f,\"positions\":%d,\"accountScenovaPositions\":%d,\"accountScenovaPendingOrders\":%d,\"accountFlatConfirmed\":%s,\"spreadPoints\":%.1f,\"spreadPrice\":%s,\"pointSize\":%s,\"symbolDigits\":%d,\"maxSpreadPrice\":%s,\"momentumPoints\":%.1f,\"momentumEntryPoints\":%.1f,\"maxSpreadPoints\":%d,\"terminalConnected\":%s,\"terminalTradeAllowed\":%s,\"mqlTradeAllowed\":%s,\"accountTradeAllowed\":%s,\"accountTradeExpert\":%s,\"tradeReady\":%s,\"symbolTradeMode\":%d,\"adaptiveEngine\":%s,\"marketRegime\":\"%s\",\"signalConfidence\":%.1f,\"adaptiveLot\":%.4f,\"atrPoints\":%.1f,\"adaptiveBlockReason\":\"%s\",\"consecutiveLosses\":%d,\"cooldownUntil\":%I64d,\"executionStatus\":\"%s\",\"lastOrderRetcode\":%I64d,\"lastOrderError\":%d,\"lastOrderAt\":%I64d}}",
       InpInstanceId,
       InpInstallToken,
       stateText,
@@ -5133,6 +5143,9 @@ void SendHeartbeat()
       dailyProfitLockedText,
       g_peakProfit,
       BasketPositionCount(),
+      accountScenovaPositions,
+      accountScenovaPendingOrders,
+      accountFlatConfirmedText,
       CurrentSpreadPoints(),
       DoubleToString(CurrentSpreadPrice(), SymbolDigitsNow()),
       DoubleToString(_Point, SymbolDigitsNow()),
@@ -5776,7 +5789,7 @@ void SendHeartbeat()
    else if(desired == "STOPPED")
    {
       g_runAuthorized = false;
-      if(BasketPositionCount() == 0)
+      if(ScenovaAccountPositionCount()==0 && ScenovaAccountPendingCount()==0)
       {
          g_state = STATE_STOPPED;
          g_executionStatus = "STOPPED";
@@ -5784,7 +5797,7 @@ void SendHeartbeat()
       else
       {
          g_state = STATE_SAFE_STOP;
-         g_executionStatus = "SAFE_STOP";
+         g_executionStatus = "FORCE_FLAT_PENDING";
       }
    }
 
@@ -5801,10 +5814,7 @@ void SendHeartbeat()
 
    if(command == "CLOSE_ALL" && desired == "STOPPED")
    {
-      g_state = STATE_SAFE_STOP;
-      g_runAuthorized = false;
-      g_executionStatus = "SAFE_STOP";
-      CloseAllBasket("REMOTE_CLOSE_ALL");
+      ForceFlatResetAccount("REMOTE_CLOSE_ALL");
    }
 
    RenderChartStatus("CONNECTED", clrLimeGreen, g_executionStatus);
@@ -5812,7 +5822,12 @@ void SendHeartbeat()
    long commandId = (long)JsonNumber(response, "commandId", 0.0);
    if(commandId > 0)
    {
-      bool closeConfirmed = (command != "CLOSE_ALL" || BasketPositionCount() == 0);
+      bool closeConfirmed =
+         command != "CLOSE_ALL" ||
+         (
+            ScenovaAccountPositionCount()==0 &&
+            ScenovaAccountPendingCount()==0
+         );
       if(closeConfirmed)
          AckCommand(commandId);
    }
@@ -5820,13 +5835,18 @@ void SendHeartbeat()
 
 void AckCommand(long commandId)
 {
+   int accountScenovaPositions=ScenovaAccountPositionCount();
+   int accountScenovaPendingOrders=ScenovaAccountPendingCount();
    string payload = StringFormat(
-      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"commandId\":%I64d,\"state\":\"%s\",\"executionStatus\":\"%s\"}",
+      "{\"instanceId\":\"%s\",\"installToken\":\"%s\",\"commandId\":%I64d,\"state\":\"%s\",\"executionStatus\":\"%s\",\"accountScenovaPositions\":%d,\"accountScenovaPendingOrders\":%d,\"accountFlatConfirmed\":%s}",
       InpInstanceId,
       InpInstallToken,
       commandId,
       StateText(),
-      g_executionStatus
+      g_executionStatus,
+      accountScenovaPositions,
+      accountScenovaPendingOrders,
+      (accountScenovaPositions==0 && accountScenovaPendingOrders==0) ? "true" : "false"
    );
    string response = "";
    HttpPostJsonTimeout(
@@ -16174,9 +16194,9 @@ int BasketDirection()
    return 0;
 }
 
-ENUM_ORDER_TYPE_FILLING AllowedFillingMode()
+ENUM_ORDER_TYPE_FILLING AllowedFillingModeForSymbol(string symbol)
 {
-   long filling = SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
+   long filling = SymbolInfoInteger(symbol, SYMBOL_FILLING_MODE);
    if((filling & SYMBOL_FILLING_FOK) == SYMBOL_FILLING_FOK)
       return ORDER_FILLING_FOK;
    if((filling & SYMBOL_FILLING_IOC) == SYMBOL_FILLING_IOC)
@@ -16184,11 +16204,16 @@ ENUM_ORDER_TYPE_FILLING AllowedFillingMode()
    return ORDER_FILLING_RETURN;
 }
 
-double NormalizeTradeVolume(double volume)
+ENUM_ORDER_TYPE_FILLING AllowedFillingMode()
 {
-   double minVolume = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   double maxVolume = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-   double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   return AllowedFillingModeForSymbol(_Symbol);
+}
+
+double NormalizeTradeVolumeForSymbol(string symbol,double volume)
+{
+   double minVolume = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double maxVolume = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   double step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
 
    volume = MathMax(minVolume, MathMin(maxVolume, volume));
    if(step > 0.0)
@@ -16198,6 +16223,11 @@ double NormalizeTradeVolume(double volume)
    }
 
    return NormalizeDouble(volume, 8);
+}
+
+double NormalizeTradeVolume(double volume)
+{
+   return NormalizeTradeVolumeForSymbol(_Symbol,volume);
 }
 
 bool TradeResultAccepted(const MqlTradeResult &result)
@@ -16228,9 +16258,25 @@ int DynamicDeviationPoints()
    return (int)MathRound(MathMin(cap, deviation));
 }
 
+int DynamicDeviationPointsForSymbol(string symbol)
+{
+   if(symbol=="" || symbol==_Symbol)
+      return DynamicDeviationPoints();
+
+   MqlTick tick;
+   double point=SymbolInfoDouble(symbol,SYMBOL_POINT);
+   if(point<=0.0 || !SymbolInfoTick(symbol,tick))
+      return 80;
+
+   double spread=(tick.ask-tick.bid)/point;
+   if(spread<=0.0 || spread>=999999.0)
+      spread=5.0;
+   return (int)MathRound(MathMin(100000.0,MathMax(10.0,spread*3.0)));
+}
+
 bool OrderSendWithPriceRetry(MqlTradeRequest &request, MqlTradeResult &result)
 {
-   request.deviation = DynamicDeviationPoints();
+   request.deviation = DynamicDeviationPointsForSymbol(request.symbol);
    ResetLastError();
    bool sent = OrderSend(request, result);
    if(sent && TradeResultAccepted(result))
@@ -16254,7 +16300,7 @@ bool OrderSendWithPriceRetry(MqlTradeRequest &request, MqlTradeResult &result)
    else
       return sent;
 
-   request.deviation = DynamicDeviationPoints();
+   request.deviation = DynamicDeviationPointsForSymbol(request.symbol);
    ResetLastError();
    return OrderSend(request, result);
 }
@@ -17616,9 +17662,9 @@ bool ClosePositionByTicket(ulong ticket) /* V9_RETRY */
    request.position = ticket;
    request.magic = PositionGetInteger(POSITION_MAGIC);
    request.symbol = symbol;
-   request.volume = NormalizeTradeVolume(volume);
-   request.deviation = DynamicDeviationPoints();
-   request.type_filling = AllowedFillingMode();
+   request.volume = NormalizeTradeVolumeForSymbol(symbol,volume);
+   request.deviation = DynamicDeviationPointsForSymbol(symbol);
+   request.type_filling = AllowedFillingModeForSymbol(symbol);
    request.comment = "SaaSBasketClose";
 
    if(positionType == POSITION_TYPE_BUY)
@@ -17700,6 +17746,131 @@ string CloseCompletionStatus(int reasonCode)
 void PersistPendingClose()
 {
    GlobalVariableSet(DailyRiskStateKey("close"), (double)g_pendingCloseReason);
+}
+
+int ScenovaAccountPositionCount()
+{
+   int count=0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(IsScenovaMagic(PositionGetInteger(POSITION_MAGIC)))
+         count++;
+   }
+   return count;
+}
+
+int ScenovaAccountPendingCount()
+{
+   int count=0;
+   for(int i=OrdersTotal()-1;i>=0;i--)
+   {
+      ulong ticket=OrderGetTicket(i);
+      if(ticket==0 || !OrderSelect(ticket))
+         continue;
+      if(IsScenovaMagic(OrderGetInteger(ORDER_MAGIC)))
+         count++;
+   }
+   return count;
+}
+
+bool RemoveScenovaPendingOrderByTicket(ulong ticket)
+{
+   if(ticket==0 || !OrderSelect(ticket))
+      return false;
+   long magic=OrderGetInteger(ORDER_MAGIC);
+   if(!IsScenovaMagic(magic))
+      return false;
+
+   MqlTradeRequest request={};
+   MqlTradeResult result={};
+   request.action=TRADE_ACTION_REMOVE;
+   request.order=ticket;
+   request.magic=magic;
+   request.symbol=OrderGetString(ORDER_SYMBOL);
+   ResetLastError();
+   bool sent=OrderSend(request,result);
+   g_lastOrderError=GetLastError();
+   g_lastOrderRetcode=(long)result.retcode;
+   RegisterOrderRequest();
+   if(!sent || !TradeResultAccepted(result))
+   {
+      Print("Force Flat pending remove failed. order=",ticket,
+            " error=",g_lastOrderError," retcode=",result.retcode);
+      return false;
+   }
+   return true;
+}
+
+void RemoveAllScenovaPendingOrders()
+{
+   for(int i=OrdersTotal()-1;i>=0;i--)
+   {
+      ulong ticket=OrderGetTicket(i);
+      if(ticket==0 || !OrderSelect(ticket))
+         continue;
+      if(!IsScenovaMagic(OrderGetInteger(ORDER_MAGIC)))
+         continue;
+      RemoveScenovaPendingOrderByTicket(ticket);
+   }
+}
+
+void ResetForceFlatRuntime()
+{
+   ResetZeroGridCycleState();
+   ResetRaceRuntime();
+   ResetRescueState();
+   FlipLockResetTracking(true);
+   ResetLegacyBurstStateForIsolatedMode();
+   AutoV20ResetCycle();
+   ResetPrecisionWait();
+   ResetTrail();
+   ResetBasketCycleState();
+   g_safeStopDrainRequested=false;
+}
+
+bool ForceFlatResetAccount(string reason)
+{
+   g_lastCloseReason=reason;
+   g_state=STATE_SAFE_STOP;
+   g_runAuthorized=false;
+   g_safeStopDrainRequested=false;
+   g_executionStatus="FORCE_FLATTENING";
+   g_pendingCloseReason=CLOSE_REASON_REMOTE;
+   PersistPendingClose();
+
+   RemoveAllScenovaPendingOrders();
+
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(!IsScenovaMagic(PositionGetInteger(POSITION_MAGIC)))
+         continue;
+      ClosePositionByTicket(ticket);
+   }
+
+   RemoveAllScenovaPendingOrders();
+
+   bool flat=
+      ScenovaAccountPositionCount()==0 &&
+      ScenovaAccountPendingCount()==0;
+   if(!flat)
+   {
+      g_executionStatus="FORCE_FLAT_RETRY";
+      return false;
+   }
+
+   ResetForceFlatRuntime();
+   g_pendingCloseReason=CLOSE_REASON_NONE;
+   PersistPendingClose();
+   g_state=STATE_STOPPED;
+   g_runAuthorized=false;
+   g_executionStatus="FORCE_FLAT_CONFIRMED";
+   return true;
 }
 
 bool CloseAllBasket(string reason)
@@ -17844,7 +18015,8 @@ void RestoreDailyRiskState()
    }
 
    string closeKey = DailyRiskStateKey("close");
-   if(BasketPositionCount() > 0 && GlobalVariableCheck(closeKey))
+   if((ScenovaAccountPositionCount()>0 || ScenovaAccountPendingCount()>0) &&
+      GlobalVariableCheck(closeKey))
    {
       int restoredReason = (int)GlobalVariableGet(closeKey);
       g_pendingCloseReason =

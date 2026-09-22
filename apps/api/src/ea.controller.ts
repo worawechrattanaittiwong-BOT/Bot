@@ -1390,8 +1390,45 @@ export class EaController {
     commandId: number;
     state?: string;
     executionStatus?: string;
+    accountScenovaPositions?: number;
+    accountScenovaPendingOrders?: number;
+    accountFlatConfirmed?: boolean;
   }) {
     await this.instance(body.instanceId, body.installToken);
+
+    const commandRow = await this.db.one(
+      "SELECT command FROM bot_commands WHERE id=$1 AND bot_instance_id=$2",
+      [body.commandId, body.instanceId]
+    );
+    if (!commandRow) return { ok: true };
+
+    if (String(commandRow.command || "") === "CLOSE_ALL") {
+      const accountPositions = Number(body.accountScenovaPositions);
+      const accountPending = Number(body.accountScenovaPendingOrders);
+      const accountFlat =
+        body.accountFlatConfirmed === true &&
+        Number.isFinite(accountPositions) &&
+        Number.isFinite(accountPending) &&
+        accountPositions === 0 &&
+        accountPending === 0;
+      if (!accountFlat) {
+        return {
+          ok: false,
+          pending: true,
+          reason: "ACCOUNT_FORCE_FLAT_NOT_CONFIRMED"
+        };
+      }
+      await this.db.query(
+        `UPDATE bot_instances
+         SET metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
+           'accountScenovaPositions',$2::int,
+           'accountScenovaPendingOrders',$3::int,
+           'accountFlatConfirmed',true
+         )
+         WHERE id=$1`,
+        [body.instanceId, accountPositions, accountPending]
+      );
+    }
 
     const state = String(body.state || "");
     const executionStatus = String(body.executionStatus || "").slice(0, 64);

@@ -1860,16 +1860,23 @@ export class BotController {
     if (unresolvedCloseAll) {
       throw new ConflictException("ยังมีคำสั่ง Close All รอ EA ยืนยัน กรุณารอให้ Position เป็น 0 ก่อนเริ่มบอท");
     }
-    const livePositions = Math.max(0, Number(instance.metrics?.positions || 0));
+    const livePositions = Math.max(
+      0,
+      Number(instance.metrics?.accountScenovaPositions ?? instance.metrics?.positions ?? 0)
+    );
+    const livePendingOrders = Math.max(
+      0,
+      Number(instance.metrics?.accountScenovaPendingOrders ?? 0)
+    );
     if (
-      livePositions > 0 &&
+      (livePositions > 0 || livePendingOrders > 0) &&
       (
         String(instance.desired_state || "") === "SAFE_STOP" ||
         String(instance.actual_state || "") === "SAFE_STOP"
       )
     ) {
       throw new ConflictException(
-        "Safe Stop กำลังทำงานอยู่ กรุณารอให้ Position เป็น 0 และสถานะเป็น STOPPED ก่อนเริ่มบอทอีกครั้ง"
+        "Safe Stop/Force Flat กำลังทำงานอยู่ กรุณารอให้ Position และ Pending Order ของ SCENOVA เป็น 0 และสถานะเป็น STOPPED ก่อนเริ่มบอทอีกครั้ง"
       );
     }
     const access: any = await this.entitlement(
@@ -2684,8 +2691,20 @@ export class BotController {
     const desired = command === "CLOSE_ALL" ? "STOPPED" : "SAFE_STOP";
     await this.db.query("UPDATE bot_instances SET desired_state=$2 WHERE id=$1", [instance.id, desired]);
     await this.db.query(
-      "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,$2)",
-      [instance.id, command]
+      "INSERT INTO bot_commands(bot_instance_id,command,payload) VALUES($1,$2,$3::jsonb)",
+      [
+        instance.id,
+        command,
+        JSON.stringify(
+          command === "CLOSE_ALL"
+            ? {
+                source: "CUSTOMER_FORCE_FLAT_RESET",
+                forceReset: true,
+                requestedAt: new Date().toISOString()
+              }
+            : {}
+        )
+      ]
     );
     return { ok: true, state: desired };
   }
