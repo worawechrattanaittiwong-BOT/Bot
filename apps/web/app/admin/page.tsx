@@ -6,10 +6,12 @@ import { adminApi } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { CloudConsole } from "../../components/CloudConsole";
+import { useSystemPopup } from "../../components/SystemPopupProvider";
 
 type Menu = "overview"|"customers"|"workers";
 
 export default function AdminPage() {
+  const { confirmPopup, promptPopup } = useSystemPopup();
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<any[]>([]);
   const [message, setMessage] = useState("");
@@ -190,7 +192,13 @@ export default function AdminPage() {
   }
 
   async function suspendPartner(user:any) {
-    if (!confirm(`ระงับสิทธิ์ Partner ของ ${user.user_code} หรือไม่? ลูกค้าที่เปิดไปแล้วจะยังใช้ได้ถึงวันหมดอายุของตัวเอง`)) return;
+    const confirmed=await confirmPopup({
+      title:"ระงับสิทธิ์ Partner",
+      tone:"warning",
+      message:`ระงับสิทธิ์ Partner ของ ${user.user_code} หรือไม่? ลูกค้าที่เปิดไปแล้วจะยังใช้ได้ถึงวันหมดอายุของตัวเอง`,
+      confirmLabel:"ระงับ Partner"
+    });
+    if (!confirmed) return;
     setPartnerBusy(true);
     try {
       await adminApi("/admin/partners/suspend", { method:"POST", body:JSON.stringify({ userId:user.id }) });
@@ -214,7 +222,13 @@ export default function AdminPage() {
   }
 
   async function suspend(user: any) {
-    if (!confirm("ระงับ " + user.user_code + " และสั่ง Safe Stop บอทหรือไม่?")) return;
+    const confirmed=await confirmPopup({
+      title:"ระงับบัญชี",
+      tone:"warning",
+      message:"ระงับ " + user.user_code + " และสั่ง Safe Stop บอทหรือไม่?",
+      confirmLabel:"ระงับบัญชี"
+    });
+    if (!confirmed) return;
     try {
       await adminApi("/admin/users/suspend", {
         method: "POST",
@@ -228,10 +242,15 @@ export default function AdminPage() {
   }
 
   async function deleteUser(user: any) {
-    if (!confirm(
-      "ลบบัญชี " + user.user_code + " ออกจากการใช้งานหรือไม่?\n\n" +
-      "ระบบจะยกเลิกสิทธิ์และซ่อนบัญชีนี้ออกจากรายการ แต่จะเก็บประวัติ Trial ของเลข MT5 ไว้เพื่อป้องกันการรับ Trial ซ้ำ"
-    )) return;
+    const confirmed=await confirmPopup({
+      title:"ลบบัญชีผู้ใช้",
+      tone:"warning",
+      message:
+        "ลบบัญชี " + user.user_code + " ออกจากการใช้งานหรือไม่?\n\n" +
+        "ระบบจะยกเลิกสิทธิ์และซ่อนบัญชีนี้ออกจากรายการ แต่จะเก็บประวัติ Trial ของเลข MT5 ไว้เพื่อป้องกันการรับ Trial ซ้ำ",
+      confirmLabel:"ลบบัญชี"
+    });
+    if (!confirmed) return;
     try {
       await adminApi("/admin/users/delete", {
         method: "POST",
@@ -280,10 +299,15 @@ export default function AdminPage() {
   }
 
   async function shutdownForMaintenance() {
-    if (!confirm(
-      "ปิดระบบอย่างปลอดภัยตอนนี้หรือไม่?\n\n" +
-      "ระบบจะบล็อก Start ใหม่ สั่งหยุดทุกบอท และส่ง Close All ให้บัญชีที่ยังมี Position ค้างอยู่"
-    )) return;
+    const confirmed=await confirmPopup({
+      title:"Safe Shutdown",
+      tone:"warning",
+      message:
+        "ปิดระบบอย่างปลอดภัยตอนนี้หรือไม่?\n\n" +
+        "ระบบจะบล็อก Start ใหม่ สั่งหยุดทุกบอท และส่ง Close All ให้บัญชีที่ยังมี Position ค้างอยู่",
+      confirmLabel:"เริ่ม Safe Shutdown"
+    });
+    if (!confirmed) return;
     setMaintenanceBusy(true);
     try {
       await adminApi("/admin/maintenance/shutdown", {
@@ -303,10 +327,15 @@ export default function AdminPage() {
     const positions = Number(item?.positions || 0);
     if (positions <= 0) return setMessage("บัญชีนี้ไม่มี Position ค้างให้ปิด");
     const accountLabel = [item?.user_code, item?.account_number, item?.broker_server].filter(Boolean).join(" · ");
-    if (!confirm(
-      "ยืนยันบังคับปิด Position ทั้งหมดของบัญชีนี้?\n\n" +
-      accountLabel + "\n" + positions + " Position\n\nระบบจะส่งคำสั่ง Close All ไปยัง EA ของบัญชีนี้และหยุดการเปิดรอบใหม่"
-    )) return;
+    const confirmed=await confirmPopup({
+      title:"บังคับปิด Position",
+      tone:"warning",
+      message:
+        "ยืนยันบังคับปิด Position ทั้งหมดของบัญชีนี้?\n\n" +
+        accountLabel + "\n" + positions + " Position\n\nระบบจะส่งคำสั่ง Close All ไปยัง EA ของบัญชีนี้และหยุดการเปิดรอบใหม่",
+      confirmLabel:"Close All"
+    });
+    if (!confirmed) return;
     setMaintenanceActionId(String(item.instance_id || ""));
     try {
       const result = await adminApi("/admin/maintenance/close-instance", {
@@ -323,21 +352,29 @@ export default function AdminPage() {
   }
 
   async function forceFlatAllAccounts() {
-    const typed = window.prompt(
-      "คำสั่งนี้เป็นสิทธิ์ OWNER สูงสุด\n\n" +
-      "ระบบจะบล็อก Start ใหม่ทันที, STOP ทุก Bot และส่ง CLOSE_ALL ไปยังทุกบัญชีที่เกี่ยวข้อง\n" +
-      "บัญชี Local ที่ออฟไลน์จะรับคำสั่งเมื่อ EA กลับมาออนไลน์\n\n" +
-      "พิมพ์ FORCE FLAT ALL เพื่อยืนยัน"
-    );
-    if (typed === null) return;
-    if (typed.trim() !== "FORCE FLAT ALL") {
-      setMessage("ยกเลิกคำสั่ง: ข้อความยืนยันไม่ตรงกับ FORCE FLAT ALL");
-      return;
-    }
-    if (!window.confirm(
-      "ยืนยัน FORCE FLAT ALL ACCOUNTS จริงหรือไม่?\n\n" +
-      "หลังยืนยัน ระบบจะเข้าสู่โหมดปิดฉุกเฉินและจะไม่ถือว่าสำเร็จจนกว่า MT5/EA จะยืนยัน Position = 0"
-    )) return;
+    const typed = await promptPopup({
+      title:"FORCE FLAT ALL ACCOUNTS",
+      tone:"warning",
+      message:
+        "คำสั่งนี้เป็นสิทธิ์ OWNER สูงสุด\n\n" +
+        "ระบบจะบล็อก Start ใหม่ทันที, STOP ทุก Bot และส่ง CLOSE_ALL ไปยังทุกบัญชีที่เกี่ยวข้อง\n" +
+        "บัญชี Local ที่ออฟไลน์จะรับคำสั่งเมื่อ EA กลับมาออนไลน์",
+      requiredText:"FORCE FLAT ALL",
+      placeholder:"พิมพ์ FORCE FLAT ALL",
+      copyLabel:"คัดลอกข้อความ",
+      confirmLabel:"ตรวจสอบต่อ"
+    });
+    if (typed !== "FORCE FLAT ALL") return;
+
+    const confirmed=await confirmPopup({
+      title:"ยืนยันคำสั่งฉุกเฉิน",
+      tone:"warning",
+      message:
+        "ยืนยัน FORCE FLAT ALL ACCOUNTS จริงหรือไม่?\n\n" +
+        "หลังยืนยัน ระบบจะเข้าสู่โหมดปิดฉุกเฉินและจะไม่ถือว่าสำเร็จจนกว่า MT5/EA จะยืนยัน Position = 0",
+      confirmLabel:"FORCE FLAT ALL"
+    });
+    if (!confirmed) return;
 
     setMaintenanceBusy(true);
     try {
@@ -359,7 +396,13 @@ export default function AdminPage() {
   }
 
   async function cancelMaintenance() {
-    if (!confirm("ยกเลิกประกาศ Maintenance ที่ยังไม่เริ่มหรือไม่?")) return;
+    const confirmed=await confirmPopup({
+      title:"ยกเลิก Maintenance",
+      tone:"warning",
+      message:"ยกเลิกประกาศ Maintenance ที่ยังไม่เริ่มหรือไม่?",
+      confirmLabel:"ยกเลิกประกาศ"
+    });
+    if (!confirmed) return;
     setMaintenanceBusy(true);
     try {
       await adminApi("/admin/maintenance/cancel", { method: "POST" });
@@ -373,7 +416,13 @@ export default function AdminPage() {
   }
 
   async function resumeMaintenance() {
-    if (!confirm("ยืนยันว่าอัปเดตเสร็จแล้วและต้องการเปิดให้ลูกค้ากด Start ได้อีกครั้ง?")) return;
+    const confirmed=await confirmPopup({
+      title:"เปิดระบบหลัง Maintenance",
+      tone:"warning",
+      message:"ยืนยันว่าอัปเดตเสร็จแล้วและต้องการเปิดให้ลูกค้ากด Start ได้อีกครั้ง?",
+      confirmLabel:"เปิดระบบ"
+    });
+    if (!confirmed) return;
     setMaintenanceBusy(true);
     try {
       await adminApi("/admin/maintenance/resume", { method: "POST" });
