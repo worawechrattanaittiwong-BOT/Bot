@@ -1,72 +1,496 @@
-.main{max-width:none!important;background:radial-gradient(circle at 84% 2%,rgba(111,78,255,.08),transparent 28%),#080b12}
-.loadingPage{min-height:100vh;display:grid;place-items:center;padding:24px;background:#080b12;color:#eef2ff}
-.loadingCard{border:1px solid #2b3350;border-radius:14px;background:#0d111c;padding:18px 22px;color:#cfd6e6;font-size:12px}
-
-.header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;padding:6px 2px}
-.header h1{margin:0;color:#f2f4fb;font-size:26px;letter-spacing:-.03em}
-.header span{display:block;margin-top:4px;color:#737f94;font-size:10px}
-.header>b{color:#a999ff;font:800 10px Consolas,monospace}
-
-.message{margin-bottom:12px;padding:9px 11px;border:1px solid #3b3a61;border-radius:10px;background:#121426;color:#bdb6e8;font-size:10px}
-.message.good{border-color:#285741;background:#0d1d17;color:#92dab5}
-.message.bad{border-color:#60313b;background:#211015;color:#f2a5b1}
-
-.stack{display:grid;gap:10px}
-.rowCard{display:grid;grid-template-columns:minmax(160px,.42fr) minmax(0,1.58fr);gap:16px;align-items:center;border:1px solid #27304a;border-radius:14px;background:linear-gradient(155deg,#0d1422,#090d16 78%);padding:13px 14px;scroll-margin-top:18px}
-.rowTitle{display:flex;align-items:center;gap:10px;min-width:0}
-.rowTitle>div{min-width:0}
-.rowTitle b{display:block;color:#e8edf7;font-size:11px}
-.rowTitle small{display:block;margin-top:3px;color:#718098;font-size:9px;overflow:hidden;text-overflow:ellipsis}
-.icon{width:31px;height:31px;display:grid;place-items:center;flex:0 0 auto;border:1px solid #453a73;border-radius:9px;background:#141326;color:#a997ff}
-
-.rowActions,.simpleInline,.phoneInline,.trialInline,.passwordInline,.secretLine{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
-.phoneInline{display:grid;grid-template-columns:minmax(130px,190px) minmax(150px,1fr) auto auto}
-.trialInline{display:grid;grid-template-columns:minmax(90px,1fr) auto minmax(110px,150px) auto}
-.passwordInline{display:grid;grid-template-columns:repeat(3,minmax(120px,1fr)) auto}
-.passwordInline:has(input:nth-of-type(4)){grid-template-columns:repeat(4,minmax(100px,1fr)) auto}
-.simpleInline{display:grid;grid-template-columns:minmax(170px,1fr) auto}
-.setupBox{display:grid;gap:8px}
-
-.phoneInline input,.phoneInline select,.trialInline input,.passwordInline input,.simpleInline input{
-  height:36px;min-width:0;border:1px solid #303954;border-radius:9px;background:#080d16;color:#eef2ff;padding:0 10px;outline:none;font-size:10px
+.main{
+  max-width:none!important;
+  min-height:100vh;
+  background:
+    radial-gradient(circle at 78% 0,rgba(105,78,224,.10),transparent 30%),
+    #080b12
 }
-.phoneInline input:focus,.phoneInline select:focus,.trialInline input:focus,.passwordInline input:focus,.simpleInline input:focus{
-  border-color:#745fd2;box-shadow:0 0 0 3px rgba(116,95,210,.08)
-}
-.phoneInline select{appearance:auto}
 
-.primaryButton,.secondaryButton{
-  min-height:36px;border-radius:9px;padding:8px 12px;font-size:9px;font-weight:800;white-space:nowrap;cursor:pointer
+.accountShell{
+  width:min(1160px,calc(100vw - 300px));
+  margin:0 auto;
+  padding:8px 0 34px
 }
-.primaryButton{border:1px solid #7059d2;background:linear-gradient(120deg,#6948dc,#4435a1);color:#fff}
-.secondaryButton{border:1px solid #50456f;background:#151522;color:#c4b9f4;text-decoration:none}
-.primaryButton:disabled,.secondaryButton:disabled{opacity:.42;cursor:not-allowed}
-.textButton{border:0;background:transparent;color:#8f82c5;padding:6px;font-size:9px;font-weight:700;cursor:pointer}
+
+.loadingPage{
+  min-height:100vh;
+  display:grid;
+  place-items:center;
+  padding:24px;
+  background:#080b12;
+  color:#eef2ff
+}
+.loadingCard{
+  border:1px solid #2b3350;
+  border-radius:14px;
+  background:#0d111c;
+  padding:18px 22px;
+  color:#cfd6e6;
+  font-size:12px
+}
+
+.header{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:18px;
+  margin-bottom:18px;
+  padding:8px 2px 0
+}
+.eyebrow{
+  margin-bottom:5px;
+  color:#8b78e8;
+  font:800 8px/1 Consolas,monospace;
+  letter-spacing:.17em
+}
+.header h1{
+  margin:0;
+  color:#f2f4fb;
+  font-size:30px;
+  line-height:1;
+  letter-spacing:-.035em
+}
+.header span{
+  display:block;
+  margin-top:7px;
+  color:#748097;
+  font-size:10px
+}
+.userCode{
+  border:1px solid #39315f;
+  border-radius:999px;
+  background:#11101e;
+  color:#aa9cff;
+  padding:8px 11px;
+  font:800 9px Consolas,monospace;
+  letter-spacing:.04em
+}
+
+.message{
+  margin-bottom:14px;
+  padding:10px 12px;
+  border:1px solid #3b3a61;
+  border-radius:11px;
+  background:#121426;
+  color:#bdb6e8;
+  font-size:10px
+}
+.message.good{
+  border-color:#285741;
+  background:#0d1d17;
+  color:#92dab5
+}
+.message.bad{
+  border-color:#60313b;
+  background:#211015;
+  color:#f2a5b1
+}
+
+.cardGrid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+  align-items:start
+}
+
+.accountCard{
+  min-width:0;
+  overflow:hidden;
+  border:1px solid #29314c;
+  border-radius:17px;
+  background:
+    radial-gradient(circle at 100% 0,rgba(103,78,220,.07),transparent 34%),
+    linear-gradient(155deg,#0e1421,#090d16 76%);
+  box-shadow:
+    0 16px 38px rgba(0,0,0,.20),
+    inset 0 1px rgba(255,255,255,.025);
+  scroll-margin-top:18px
+}
+
+.cardHeader{
+  min-height:68px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:14px 15px;
+  border-bottom:1px solid rgba(114,128,160,.10)
+}
+.cardTitle{
+  display:flex;
+  align-items:center;
+  gap:11px;
+  min-width:0
+}
+.cardTitle>div{
+  min-width:0
+}
+.cardTitle h2{
+  margin:0;
+  color:#edf1fb;
+  font-size:13px;
+  font-weight:800
+}
+.cardTitle p{
+  margin:4px 0 0;
+  max-width:340px;
+  overflow:hidden;
+  color:#69778e;
+  font-size:9px;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+.icon{
+  width:34px;
+  height:34px;
+  display:grid;
+  place-items:center;
+  flex:0 0 auto;
+  border:1px solid #463a76;
+  border-radius:10px;
+  background:#151329;
+  color:#aa98ff
+}
+.badge{
+  flex:0 0 auto;
+  border:1px solid #504664;
+  border-radius:999px;
+  background:#171520;
+  color:#9d93b5;
+  padding:6px 8px;
+  font:800 7.5px Consolas,monospace;
+  letter-spacing:.08em
+}
+.badgeGood{
+  border-color:#2f634c;
+  background:#0d2118;
+  color:#80dbad
+}
+
+.cardBody{
+  padding:15px
+}
+
+.phoneForm{
+  display:grid;
+  grid-template-columns:minmax(150px,.8fr) minmax(190px,1.2fr);
+  gap:10px
+}
+.phoneForm label,
+.passwordGrid label,
+.twoFactorForm label,
+.disableForm label{
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  gap:6px
+}
+.phoneForm label>span,
+.passwordGrid label>span,
+.twoFactorForm label>span,
+.disableForm label>span{
+  color:#77859a;
+  font-size:8.5px;
+  font-weight:700
+}
+.phoneForm select,
+.phoneForm input,
+.passwordGrid input,
+.twoFactorForm input,
+.disableForm input,
+.otpActions input{
+  width:100%;
+  height:39px;
+  min-width:0;
+  border:1px solid #303954;
+  border-radius:9px;
+  background:#080d16;
+  color:#eef2ff;
+  padding:0 11px;
+  outline:none;
+  font-size:10px
+}
+.phoneForm select:focus,
+.phoneForm input:focus,
+.passwordGrid input:focus,
+.twoFactorForm input:focus,
+.disableForm input:focus,
+.otpActions input:focus{
+  border-color:#745fd2;
+  box-shadow:0 0 0 3px rgba(116,95,210,.08)
+}
+.phoneForm select{
+  appearance:auto
+}
+.formActions{
+  grid-column:1/-1;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  padding-top:2px
+}
+
+.primaryButton,
+.secondaryButton{
+  min-height:37px;
+  border-radius:9px;
+  padding:8px 13px;
+  font-size:9px;
+  font-weight:800;
+  white-space:nowrap;
+  cursor:pointer
+}
+.primaryButton{
+  border:1px solid #6f57d2;
+  background:linear-gradient(120deg,#6746d9,#4435a2);
+  color:#fff;
+  box-shadow:0 7px 18px rgba(72,50,159,.18)
+}
+.secondaryButton{
+  border:1px solid #4c4569;
+  background:#151522;
+  color:#c3b8ee;
+  text-decoration:none
+}
+.primaryButton:hover:not(:disabled){
+  filter:brightness(1.06)
+}
+.secondaryButton:hover:not(:disabled){
+  border-color:#665a8f;
+  background:#191826
+}
+.primaryButton:disabled,
+.secondaryButton:disabled{
+  opacity:.42;
+  cursor:not-allowed;
+  box-shadow:none
+}
+.textButton{
+  border:0;
+  background:transparent;
+  color:#8f82c5;
+  padding:6px;
+  font-size:9px;
+  font-weight:700;
+  cursor:pointer
+}
 .textButton:disabled{opacity:.45}
 
-.ok{color:#79dba9;font-size:9px;font-weight:800}
-.muted{color:#748196;font-size:9px}
-.phoneTarget{color:#d6dcef;font:800 9px Consolas,monospace}
-
-.secretLine{display:grid;grid-template-columns:minmax(0,1fr) auto auto}
-.secretLine code{min-width:0;overflow:auto;border:1px solid #2b3450;border-radius:9px;background:#070b13;color:#cfc5ff;padding:9px 10px;font:800 10px Consolas,monospace}
-.recoveryBox{margin-top:8px;border:1px solid #345741;border-radius:10px;background:#0b1712;padding:10px}
-.recoveryHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.recoveryHead b{color:#a6d7ba;font-size:10px}
-.recoveryGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
-.recoveryGrid code{border:1px solid #2c4b38;border-radius:7px;background:#08110d;color:#a5d5b7;padding:7px;text-align:center;font:800 9px Consolas,monospace}
-
-@media(max-width:1100px){
-  .rowCard{grid-template-columns:1fr}
-  .rowActions,.simpleInline,.phoneInline,.trialInline,.passwordInline,.secretLine{justify-content:start}
-  .passwordInline,.passwordInline:has(input:nth-of-type(4)){grid-template-columns:repeat(2,minmax(0,1fr))}
-  .passwordInline .primaryButton{justify-self:start}
+.savedRow,
+.trialLanding{
+  min-height:68px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  border:1px solid #28324d;
+  border-radius:12px;
+  background:#0a101a;
+  padding:12px
 }
+.savedRow>div{
+  min-width:0
+}
+.savedRow strong{
+  display:block;
+  color:#e8edf8;
+  font:800 11px Consolas,monospace
+}
+.savedRow span,
+.trialLanding>span{
+  display:block;
+  margin-top:4px;
+  color:#758298;
+  font-size:9px
+}
+
+.otpBox{
+  border:1px solid #2d3653;
+  border-radius:12px;
+  background:#0a101b;
+  padding:12px
+}
+.otpTarget{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:9px
+}
+.otpTarget span{
+  color:#76839a;
+  font-size:9px
+}
+.otpTarget strong{
+  color:#dce3f2;
+  font:800 10px Consolas,monospace
+}
+.otpActions{
+  display:grid;
+  grid-template-columns:auto minmax(110px,1fr) auto;
+  gap:8px
+}
+.successState{
+  display:grid;
+  min-height:72px;
+  place-items:center;
+  border:1px solid #2f5b46;
+  border-radius:12px;
+  background:#0b1912;
+  color:#8cddb2;
+  font-size:10px;
+  font-weight:800
+}
+
+.passwordGrid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px
+}
+.cardFooter{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid rgba(113,129,160,.10)
+}
+.passwordMeter{
+  display:grid;
+  grid-template-columns:repeat(4,28px);
+  gap:4px
+}
+.passwordMeter span{
+  height:4px;
+  border-radius:999px;
+  background:#293047
+}
+.passwordMeter span.meterOn{
+  background:#8d70ff;
+  box-shadow:0 0 9px rgba(141,112,255,.24)
+}
+
+.twoFactorForm{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:9px;
+  align-items:end
+}
+.disableForm{
+  display:grid;
+  grid-template-columns:1fr 1fr auto;
+  gap:9px;
+  align-items:end
+}
+.setupBox{
+  display:grid;
+  gap:10px
+}
+.secretLine{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  gap:8px
+}
+.secretLine code{
+  min-width:0;
+  overflow:auto;
+  border:1px solid #2b3450;
+  border-radius:9px;
+  background:#070b13;
+  color:#cfc5ff;
+  padding:10px;
+  font:800 10px Consolas,monospace
+}
+
+.recoveryBox{
+  margin-top:12px;
+  border:1px solid #345741;
+  border-radius:11px;
+  background:#0b1712;
+  padding:11px
+}
+.recoveryHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px
+}
+.recoveryHead b{
+  color:#a6d7ba;
+  font-size:10px
+}
+.recoveryGrid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:6px;
+  margin-top:9px
+}
+.recoveryGrid code{
+  border:1px solid #2c4b38;
+  border-radius:7px;
+  background:#08110d;
+  color:#a5d5b7;
+  padding:7px;
+  text-align:center;
+  font:800 9px Consolas,monospace
+}
+
+@media(max-width:1280px){
+  .accountShell{
+    width:min(1060px,calc(100vw - 270px))
+  }
+}
+
+@media(max-width:1050px){
+  .accountShell{
+    width:100%;
+    padding:8px 4px 30px
+  }
+  .cardGrid{
+    grid-template-columns:1fr
+  }
+}
+
 @media(max-width:720px){
-  .header{align-items:flex-start;flex-direction:column}
-  .rowCard{padding:12px}
-  .phoneInline,.trialInline,.passwordInline,.passwordInline:has(input:nth-of-type(4)),.simpleInline,.secretLine{grid-template-columns:1fr}
-  .primaryButton,.secondaryButton{width:100%}
-  .rowActions{justify-content:space-between}
-  .recoveryGrid{grid-template-columns:1fr 1fr}
+  .accountShell{
+    padding:8px 0 24px
+  }
+  .header{
+    align-items:flex-start;
+    flex-direction:column
+  }
+  .header h1{
+    font-size:27px
+  }
+  .cardHeader,
+  .cardBody{
+    padding:13px
+  }
+  .phoneForm,
+  .passwordGrid,
+  .twoFactorForm,
+  .disableForm,
+  .secretLine,
+  .otpActions{
+    grid-template-columns:1fr
+  }
+  .formActions,
+  .cardFooter{
+    align-items:stretch;
+    flex-direction:column
+  }
+  .primaryButton,
+  .secondaryButton{
+    width:100%
+  }
+  .savedRow,
+  .trialLanding{
+    align-items:flex-start;
+    flex-direction:column
+  }
+  .recoveryGrid{
+    grid-template-columns:1fr 1fr
+  }
 }
