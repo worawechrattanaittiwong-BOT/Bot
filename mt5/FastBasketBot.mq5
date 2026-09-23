@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.64"
-#define SCENOVA_EA_VERSION "1.0.64"
-#define SCENOVA_PRODUCT_VERSION "1.0.64"
+#property version   "1.0.65"
+#define SCENOVA_EA_VERSION "1.0.65"
+#define SCENOVA_PRODUCT_VERSION "1.0.65"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -3389,9 +3389,9 @@ bool RaceFlowStillRunning(int direction, double momentum)
 
 double RaceAtrStopPoints()
 {
-   // RACE must use the customer's visible ATR stop contract directly. Do not
-   // depend on the AUTO market-context cache because the first RACE fill may
-   // happen before that cache has been refreshed.
+   // RACE uses its isolated M15 ATR stop at 1.50x. Do not depend on the AUTO
+   // market-context cache because the first RACE fill may happen before that
+   // cache has been refreshed.
    double atr = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
    if(atr <= 0.0 && g_atrPoints > 0.0)
       atr = g_atrPoints;
@@ -3403,7 +3403,7 @@ double RaceAtrStopPoints()
       (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
    ) + 2.0;
 
-   double multiplier = MathMax(0.5, MathMin(10.0, g_hardStopAtrMultiplier));
+   double multiplier = 1.50;
    return MathMax(atr * multiplier, brokerMinimumPoints);
 }
 
