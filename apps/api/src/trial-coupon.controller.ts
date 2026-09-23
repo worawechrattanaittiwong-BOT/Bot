@@ -258,6 +258,7 @@ export class TrialCouponController {
     if (!phone?.e164) {
       throw new BadRequestException("กรุณาเพิ่มเบอร์โทรใน My Account ก่อนขอ OTP");
     }
+
     const msisdn = String(phone.e164);
     const phoneHash = this.phoneHash(msisdn);
     const check = await this.eligibility(userId, phoneHash);
@@ -298,23 +299,30 @@ export class TrialCouponController {
       }
     }
 
-    const code = String(randomInt(100000, 1000000));
+    const fallbackCode = String(randomInt(100000, 1000000));
     const salt = randomBytes(16).toString("hex");
     const last4 = msisdn.slice(-4);
+
     const record = await this.db.one(
       `INSERT INTO trial_sms_codes(
-         user_id,phone_hash,phone_last4,code_hash,code_salt,status,expires_at,request_ip
+         user_id,phone_hash,phone_last4,code_hash,code_salt,provider,status,expires_at,request_ip
        )
-       VALUES($1,$2,$3,$4,$5,'PENDING',now()+interval '10 minutes',$6)
+       VALUES($1,$2,$3,$4,$5,'PENDING','PENDING',now()+interval '10 minutes',$6)
        RETURNING id`,
-      [userId, phoneHash, last4, this.codeHash(salt, code), salt, ip]
+      [userId, phoneHash, last4, this.codeHash(salt, fallbackCode), salt, ip]
     );
 
     try {
-      await this.sms.sendTrialCode(msisdn, code);
+      const delivery = await this.sms.requestOtp(msisdn, fallbackCode);
       await this.db.query(
-        "UPDATE trial_sms_codes SET status='SENT',sent_at=now() WHERE id=$1",
-        [record.id]
+        `UPDATE trial_sms_codes
+         SET status='SENT',
+             sent_at=now(),
+             provider=$2,
+             provider_token=$3,
+             provider_refno=$4
+         WHERE id=$1`,
+        [record.id, delivery.provider, delivery.token, delivery.refno]
       );
     } catch (error) {
       await this.db.query(
@@ -338,6 +346,7 @@ export class TrialCouponController {
     if (!phone?.e164) {
       throw new BadRequestException("กรุณาเพิ่มเบอร์โทรใน My Account ก่อนยืนยัน OTP");
     }
+
     const msisdn = String(phone.e164);
     const phoneHash = this.phoneHash(msisdn);
     const code = String(body.code || "").replace(/\D/g, "").slice(0, 6);
@@ -358,9 +367,15 @@ export class TrialCouponController {
       throw new BadRequestException("กรอกรหัสผิดเกินจำนวนที่กำหนด กรุณาขอรหัสใหม่");
     }
 
-    const expected = Buffer.from(String(record.code_hash), "hex");
-    const supplied = Buffer.from(this.codeHash(String(record.code_salt), code), "hex");
-    const ok = expected.length === supplied.length && timingSafeEqual(expected, supplied);
+    let ok = false;
+    if (String(record.provider || "") === "TBS_OTP" && record.provider_token) {
+      ok = await this.sms.verifyOtp(String(record.provider_token), code);
+    } else {
+      const expected = Buffer.from(String(record.code_hash), "hex");
+      const supplied = Buffer.from(this.codeHash(String(record.code_salt), code), "hex");
+      ok = expected.length === supplied.length && timingSafeEqual(expected, supplied);
+    }
+
     if (!ok) {
       await this.db.query(
         "UPDATE trial_sms_codes SET attempts=attempts+1 WHERE id=$1",
