@@ -2,6 +2,7 @@ import { BadRequestException, Body, ConflictException, Controller, Get, Injectab
 import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
 import { AdminGuard, CryptoService, JwtGuard } from "./security";
+import { ReferralService } from "./referral.service";
 
 export function paymentMode() {
   const key = process.env.OMISE_SECRET_KEY || "";
@@ -18,7 +19,10 @@ export function validateCharge(charge: any, order: any) {
 
 @Injectable()
 export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly referrals: ReferralService
+  ) {}
   private timer?: ReturnType<typeof setInterval>;
   private checking = false;
   onApplicationBootstrap() {
@@ -121,8 +125,35 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
       }
       await tx.query("UPDATE cloud_orders SET status='PAID',charge_id=$2,slot_id=$3,subscription_id=$4,paid_at=now() WHERE id=$1",
         [order.id, charge.id, slot.id, subscription.id]);
+
+      // Referral accounting must never prevent a successfully paid customer
+      // from receiving their Cloud entitlement. Keep it in an isolated
+      // savepoint so the payment transaction can still complete if referral
+      // bookkeeping has an unexpected problem.
+      let referralCommissionCount = 0;
+      await tx.query("SAVEPOINT referral_credit");
+      try {
+        const commissions = await this.referrals.creditPurchase(tx, {
+          sourceUserId: order.user_id,
+          sourceType: "CLOUD_ORDER",
+          sourceId: order.id,
+          grossAmountSatang: Number(order.amount || 0),
+          currency: "THB",
+          metadata: {
+            subscriptionId: subscription.id,
+            months: order.months,
+            slotId: slot.id
+          }
+        });
+        referralCommissionCount = commissions.length;
+        await tx.query("RELEASE SAVEPOINT referral_credit");
+      } catch {
+        await tx.query("ROLLBACK TO SAVEPOINT referral_credit");
+        await tx.query("RELEASE SAVEPOINT referral_credit");
+      }
+
       await tx.query("INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES('PAYMENT','CLOUD_ACTIVATED','order',$1,$2)",
-        [order.id, JSON.stringify({ chargeId, slotId: slot.id, runnerId: order.runner_id })]);
+        [order.id, JSON.stringify({ chargeId, slotId: slot.id, runnerId: order.runner_id, referralCommissionCount })]);
       return { ...order, status: "PAID", slot_id: slot.id };
     });
   }
