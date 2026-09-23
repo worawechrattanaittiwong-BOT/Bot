@@ -130,3 +130,275 @@
     min-height:118px;
   }
 }
+
+
+/* Performance compact right-options rail v2 */
+@media(min-width:901px){
+  .optionsDrawer{
+    top:50px;
+    left:auto;
+    right:10px;
+    width:min(330px,calc(100% - 20px));
+    max-height:calc(100% - 62px);
+    opacity:0;
+    transform:translateX(18px);
+    pointer-events:none;
+    overflow:auto;
+    padding:10px;
+    border-color:#39325f;
+    background:linear-gradient(180deg,rgba(10,14,30,.995),rgba(7,10,22,.995));
+    box-shadow:-18px 18px 50px rgba(0,0,0,.5);
+    scrollbar-width:thin;
+    scrollbar-color:#493b82 transparent;
+  }
+  .optionsDrawerOpen{
+    max-height:calc(100% - 62px);
+    opacity:1;
+    transform:translateX(0);
+    pointer-events:auto;
+  }
+  .drawerTop{
+    align-items:stretch;
+    flex-direction:column;
+    gap:8px;
+    padding-bottom:9px;
+  }
+  .toolbarIdentity{justify-content:flex-start}
+  .toolbarActions{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:6px;
+    width:100%;
+  }
+  .toolbarActions .shareButton,
+  .toolbarActions .clearOwnButton,
+  .toolbarActions .clearButton,
+  .toolbarActions .minorButton{
+    width:100%;
+    min-width:0;
+  }
+  .toolbarActions .shareInput{
+    grid-column:1/-1;
+    min-width:0;
+    width:100%;
+    max-width:none;
+    flex:none;
+  }
+  .drawerControls{
+    display:flex;
+    flex-direction:column;
+    gap:9px;
+    padding-top:10px;
+  }
+  .drawerField,
+  .drawerControls label{
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+    min-width:0;
+  }
+  .drawerControls label span,
+  .drawerLabel{
+    font-size:9.7px;
+    color:#929db6;
+    text-transform:uppercase;
+    letter-spacing:.075em;
+    font-weight:800;
+  }
+  .drawerControls select,
+  .drawerControls input{
+    width:100%;
+    height:37px;
+    font-size:10.8px;
+    box-sizing:border-box;
+  }
+  .modeField{display:flex;flex-direction:column;gap:6px}
+  .modeBoxes{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .modeBox,.modeBoxActive{
+    min-width:0;
+    min-height:48px;
+    border-radius:9px;
+    padding:7px 8px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    text-align:left;
+    cursor:pointer;
+  }
+  .modeBox{
+    border:1px solid #293149;
+    background:#090f1a;
+    color:#8792aa;
+  }
+  .modeBoxActive{
+    border:1px solid #745ae2;
+    background:linear-gradient(135deg,rgba(92,68,208,.42),rgba(54,40,121,.34));
+    color:#f2efff;
+    box-shadow:inset 0 1px rgba(255,255,255,.05);
+  }
+  .modeCheck,.strategyCheck{
+    width:19px;
+    height:19px;
+    flex:0 0 19px;
+    border-radius:5px;
+    display:grid;
+    place-items:center;
+    border:1px solid #4c5570;
+    background:#080d18;
+    color:#fff;
+    font-size:11px;
+    font-weight:950;
+  }
+  .modeBoxActive .modeCheck,
+  .strategyChipActive .strategyCheck{
+    border-color:#8b72ff;
+    background:#7358ed;
+    box-shadow:0 0 13px rgba(115,88,237,.28);
+  }
+  .modeBox>span:last-child,
+  .modeBoxActive>span:last-child{
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+  }
+  .modeBox b,.modeBoxActive b{font-size:10.8px}
+  .modeBox small,.modeBoxActive small{font-size:8px;color:#78849e;margin-top:1px}
+  .modeBoxActive small{color:#aaa0d4}
+  .datePair{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .refreshButton{width:100%;height:37px}
+  .strategyPortfolio{
+    margin-top:9px;
+    padding:9px;
+  }
+  .strategyPortfolioHead{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:4px;
+  }
+  .strategyPortfolioHead>strong{font-size:8.8px}
+  .strategyChips{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:6px;
+    margin-top:7px;
+  }
+  .strategyChip,.strategyChipActive{
+    min-height:42px;
+    padding:6px 7px;
+    justify-content:flex-start;
+    gap:7px;
+  }
+  .strategyCopy{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:1px;
+  }
+  .strategyCopy b{font-size:10px;color:inherit}
+  .strategyCopy small{font-size:7.7px!important}
+  .strategyPresets{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:5px;
+    margin-top:7px;
+  }
+  .strategyPresets>span{
+    grid-column:1/-1;
+    margin:0;
+  }
+  .strategyPresets button{
+    width:100%;
+    padding:0 5px;
+    font-size:8px;
+  }
+  .drawerFooter{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:6px;
+    margin-top:9px;
+    padding-top:8px;
+  }
+  .drawerFooter .presets{
+    width:100%;
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:5px;
+  }
+  .drawerFooter .presets button{
+    padding:0 4px;
+    width:100%;
+  }
+  .drawerFooter>strong{
+    white-space:normal;
+    line-height:1.45;
+    font-size:8.8px;
+  }
+  .drawerBacktest{
+    align-items:stretch;
+    flex-direction:column;
+  }
+  .drawerBacktest select{min-width:0;width:100%}
+}
+
+/* Slightly larger report typography while keeping the current viewport density. */
+.infoRow{
+  font-size:12px;
+  padding:3.7px 0;
+}
+.infoRow b{font-size:12.2px}
+.metricHead{font-size:11.2px}
+.metric b{font-size:clamp(19px,1.28vw,23px)}
+.resultsLabel{font-size:13.4px}
+.panelTitle{
+  font-size:12.4px;
+  margin-bottom:7px;
+}
+.statRow{
+  font-size:11.1px;
+  padding:3.25px 0;
+  line-height:1.34;
+}
+.statRow b{font-size:11.3px}
+.panel{padding:7px 9px}
+.resultsGrid{gap:6px}
+.chartHead>div{font-size:11.8px}
+.chartHead small{font-size:9.8px}
+.lotHighlights span{font-size:9px}
+.lotHighlights b{font-size:11.6px}
+
+@media(min-width:901px) and (max-height:820px){
+  .optionsDrawer{
+    top:44px;
+    max-height:calc(100% - 54px);
+    width:min(310px,calc(100% - 18px));
+  }
+  .optionsDrawerOpen{max-height:calc(100% - 54px)}
+  .infoRow{font-size:10.8px;padding:2.7px 0}
+  .infoRow b{font-size:11px}
+  .metricHead{font-size:10.2px}
+  .metric b{font-size:18px}
+  .panelTitle{font-size:11.5px}
+  .statRow{font-size:9.8px;padding:2.2px 0}
+  .statRow b{font-size:10px}
+}
+
+@media(max-width:900px){
+  .modeField{display:flex;flex-direction:column;gap:6px}
+  .drawerLabel{font-size:9.3px;color:#8a97b0;text-transform:uppercase;letter-spacing:.07em}
+  .modeBoxes{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .modeBox,.modeBoxActive{
+    min-height:46px;border-radius:9px;padding:7px;display:flex;align-items:center;gap:7px;text-align:left
+  }
+  .modeBox{border:1px solid #293149;background:#090f1a;color:#8792aa}
+  .modeBoxActive{border:1px solid #745ae2;background:rgba(92,68,208,.35);color:#f2efff}
+  .modeCheck,.strategyCheck{
+    width:19px;height:19px;flex:0 0 19px;border-radius:5px;display:grid;place-items:center;
+    border:1px solid #4c5570;background:#080d18;color:#fff;font-size:11px;font-weight:950
+  }
+  .modeBoxActive .modeCheck,.strategyChipActive .strategyCheck{background:#7358ed;border-color:#8b72ff}
+  .modeBox>span:last-child,.modeBoxActive>span:last-child,.strategyCopy{display:flex;flex-direction:column;min-width:0}
+  .modeBox b,.modeBoxActive b,.strategyCopy b{font-size:10px}
+  .modeBox small,.modeBoxActive small,.strategyCopy small{font-size:8px}
+  .datePair{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .strategyChip,.strategyChipActive{justify-content:flex-start}
+}
