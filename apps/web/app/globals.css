@@ -6605,3 +6605,112 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 @media(max-width:1180px){.owner-customer-layout{grid-template-columns:260px minmax(0,1fr)}.owner-control-grid{grid-template-columns:1fr}.owner-control-card.access-card{grid-row:auto}}
 @media(max-width:900px){.owner-customer-toolbar{grid-template-columns:1fr}.owner-customer-layout{grid-template-columns:1fr}.owner-customer-directory{position:static}.owner-customer-list{max-height:260px}.owner-customer-snapshot{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:620px){.owner-customer-snapshot,.owner-access-mode-grid,.owner-control-fields{grid-template-columns:1fr}.owner-control-fields .wide{grid-column:auto}.owner-membership-row{grid-template-columns:1fr}.owner-add-days{grid-template-columns:80px 1fr}.owner-trial-control{grid-template-columns:1fr}.owner-account-actions{grid-template-columns:1fr}.owner-partner-grid.compact{grid-template-columns:1fr}}
+
+
+/* ===== SCENOVA Sidebar · compact professional navigation ===== */
+@media(min-width:961px){
+  .app-wrap{
+    grid-template-columns:224px minmax(0,1fr);
+    background:linear-gradient(90deg,#050812 0,#050711 224px,#060813 100%)
+  }
+  .owner-sidebar,
+  .sidebar.app-sidebar{
+    width:224px;
+    padding:14px 10px 14px
+  }
+  .owner-sidebar .side-brand,
+  .sidebar.app-sidebar .side-brand{
+    min-height:54px;
+    margin-bottom:8px!important;
+    padding:3px 10px 14px!important
+  }
+  .scenova-brand-logo-sidebar{
+    max-width:174px;
+    height:auto
+  }
+  .owner-nav-label{
+    margin:0;
+    padding:11px 10px 6px;
+    color:#59647f;
+    font:800 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.16em
+  }
+  .owner-nav-label-secondary{
+    margin-top:10px
+  }
+  .owner-nav{
+    gap:3px
+  }
+  .owner-nav-item,
+  .owner-nav-link{
+    min-height:44px!important;
+    grid-template-columns:30px minmax(0,1fr) 12px!important;
+    gap:8px!important;
+    padding:6px 9px!important;
+    border-radius:10px!important
+  }
+  .owner-nav-icon{
+    width:30px!important;
+    height:30px!important;
+    border-radius:8px!important
+  }
+  .owner-nav-copy{
+    display:block!important;
+    min-width:0
+  }
+  .owner-nav-copy b{
+    display:block;
+    overflow:hidden;
+    color:#cfd6e7!important;
+    font-size:12px!important;
+    line-height:1.18;
+    font-weight:760;
+    text-overflow:ellipsis;
+    white-space:normal
+  }
+  .owner-nav-copy small{
+    display:none!important
+  }
+  .owner-nav-caret{
+    align-self:center;
+    justify-self:end;
+    color:#46516d!important;
+    font-size:16px!important;
+    line-height:1
+  }
+  .owner-nav-item.active .owner-nav-copy b{
+    color:#f5f3ff!important
+  }
+  .owner-profile{
+    min-height:52px;
+    padding:8px 9px!important;
+    grid-template-columns:32px minmax(0,1fr) 8px!important;
+    gap:8px!important;
+    border-radius:12px!important;
+    margin-bottom:7px!important
+  }
+  .owner-avatar{
+    width:32px!important;
+    height:32px!important;
+    border-radius:9px!important;
+    font-size:11px!important
+  }
+  .owner-profile small{
+    font-size:8px!important;
+    line-height:1.1
+  }
+  .owner-profile b{
+    margin-top:2px!important;
+    font-size:10.5px!important;
+    line-height:1.15
+  }
+  .owner-logout{
+    min-height:38px!important;
+    padding:8px 10px!important;
+    border-radius:10px!important;
+    font-size:11px!important
+  }
+  .app-main:before{
+    inset:0 0 auto 224px
+  }
+}
