@@ -77,6 +77,10 @@ Login MT5 ใหม่บนเครื่องเดิม
    -> ใช้ต่อด้วย EX5/.set/Instance เดิม
 ```
 
+## Invite & Earn referral program
+
+SCENOVA includes a four-level referral ledger for eligible paid purchases: **7% / 5% / 3% / 1%**. Invite relationships are locked at account creation, trials and Partner Seat grants do not generate commission, Cloud checkout is credited automatically, and Owner can record the real paid amount for manual membership sales. See `docs/REFERRAL-PROGRAM.md`.
+
 ## Stack
 
 - Web/PWA: Next.js + React + TypeScript
