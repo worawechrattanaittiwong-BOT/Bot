@@ -121,8 +121,7 @@ export default function AccountPage() {
         setTrialAccess(null);
       }
     } catch (error: unknown) {
-      setMessageKind("bad");
-      setMessage(error instanceof Error ? error.message : "โหลดข้อมูลบัญชีไม่สำเร็จ");
+      notify("bad", error instanceof Error ? error.message : "โหลดข้อมูลบัญชีไม่สำเร็จ");
     } finally {
       setLoading(false);
     }
@@ -152,16 +151,16 @@ export default function AccountPage() {
     currentPassword.length > 0 &&
     (!data?.security.twoFactorEnabled || password2fa.trim().length > 0);
 
+  function notify(kind: "good" | "bad" | "info", text: string) {
+    setMessageKind(kind);
+    setMessage(text);
+  }
+
   function logout() {
     localStorage.removeItem("bot_token");
     sessionStorage.removeItem("scenova_2fa_challenge");
     sessionStorage.removeItem("scenova_2fa_email");
     window.location.replace("/login");
-  }
-
-  function notify(kind: "good" | "bad" | "info", text: string) {
-    setMessageKind(kind);
-    setMessage(text);
   }
 
   function goTo(id: string) {
@@ -195,7 +194,7 @@ export default function AccountPage() {
   }
 
   async function requestTrialCode() {
-    if (trialBusy || !trialAccess?.smsConfigured || !trialAccess?.phone) return;
+    if (trialBusy || !trialAccess?.phone) return;
     setTrialBusy(true);
     try {
       const result = await api("/trial-access/request-code", { method: "POST" });
@@ -332,11 +331,7 @@ export default function AccountPage() {
   const trialVisible =
     !elevated &&
     !!trialAccess &&
-    (
-      trialAccess.eligibility.allowed ||
-      !!trialAccess.authorization ||
-      !!trialAccess.trial
-    );
+    (trialAccess.eligibility.allowed || !!trialAccess.authorization || !!trialAccess.trial);
 
   return (
     <div className="app-wrap">
@@ -348,183 +343,362 @@ export default function AccountPage() {
           ? <OwnerMobileNav activeKey="my-account"/>
           : <CustomerMobileNav activeKey="my-account" partner={partnerSummary}/>}
 
-        <header className={styles.header}>
-          <div>
-            <h1>My Account</h1>
-            <span>{data.user.email}</span>
-          </div>
-          <b>{data.user.userCode}</b>
-        </header>
-
-        {message && (
-          <div className={`${styles.message} ${messageKind === "good" ? styles.good : messageKind === "bad" ? styles.bad : ""}`}>
-            {message}
-          </div>
-        )}
-
-        <section className={styles.stack}>
-          <div id="phone-settings" className={styles.rowCard}>
-            <div className={styles.rowTitle}>
-              <span className={styles.icon}><ScenovaIcon name="account" size={18}/></span>
-              <div>
-                <b>เบอร์โทร</b>
-                {data.user.phone && <small>{data.user.phone.masked}</small>}
-              </div>
+        <div className={styles.accountShell}>
+          <header className={styles.header}>
+            <div>
+              <div className={styles.eyebrow}>ACCOUNT SETTINGS</div>
+              <h1>My Account</h1>
+              <span>{data.user.email}</span>
             </div>
+            <div className={styles.userCode}>{data.user.userCode}</div>
+          </header>
 
-            {data.user.phone && !phoneEditing ? (
-              <div className={styles.rowActions}>
-                <span className={data.user.phone.verified ? styles.ok : styles.muted}>
-                  {data.user.phone.verified ? "ยืนยันแล้ว" : "บันทึกแล้ว"}
-                </span>
-                {!data.user.phone.verified && !trialAccess?.authorization && !trialAccess?.trial && (
-                  <button type="button" className={styles.secondaryButton} onClick={() => setPhoneEditing(true)}>เปลี่ยน</button>
-                )}
-              </div>
-            ) : (
-              <div className={styles.phoneInline}>
-                <select value={phoneCountry} onChange={e => setPhoneCountry(e.target.value)} disabled={phoneBusy}>
-                  <option value="" disabled>รหัสประเทศ</option>
-                  {PHONE_COUNTRIES.map(([iso,name,code]) => <option key={iso} value={code}>{name} {code}</option>)}
-                </select>
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  aria-label="เบอร์โทร"
-                  value={phoneInput}
-                  onChange={e => setPhoneInput(e.target.value.slice(0,24))}
-                  disabled={phoneBusy}
-                />
-                <button type="button" className={styles.primaryButton} onClick={savePhone} disabled={!phoneCountry || !phoneInput.trim() || phoneBusy}>
-                  บันทึก
-                </button>
-                {data.user.phone && (
-                  <button type="button" className={styles.textButton} onClick={() => setPhoneEditing(false)} disabled={phoneBusy}>
-                    ยกเลิก
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {trialVisible && (
-            <div className={styles.rowCard}>
-              <div className={styles.rowTitle}>
-                <span className={styles.icon}><ScenovaIcon name="wallet" size={18}/></span>
-                <div>
-                  <b>Trial</b>
-                  {trialAccess?.trial && <small>{trialAccess.trial.status}</small>}
-                </div>
-              </div>
-
-              {!trialOpen && !trialAccess?.trial && !trialAccess?.authorization ? (
-                <button type="button" className={styles.primaryButton} onClick={openTrial}>รับสิทธิ์ทดลอง</button>
-              ) : (
-                <div id="trial-access" className={styles.trialInline}>
-                  {trialAccess?.trial ? (
-                    <span className={styles.ok}>เปิดสิทธิ์แล้ว</span>
-                  ) : trialAccess?.authorization ? (
-                    <span className={styles.ok}>Trial พร้อมใช้งาน</span>
-                  ) : !trialAccess?.phone ? (
-                    <>
-                      <span className={styles.muted}>เพิ่มเบอร์โทรก่อน</span>
-                      <button type="button" className={styles.secondaryButton} onClick={() => goTo("phone-settings")}>ไปที่เบอร์โทร</button>
-                    </>
-                  ) : (
-                    <>
-                      <span className={styles.phoneTarget}>{trialAccess.phone.masked}</span>
-                      <button type="button" className={styles.secondaryButton} onClick={requestTrialCode} disabled={trialBusy}>
-                        ส่ง OTP
-                      </button>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        aria-label="OTP"
-                        maxLength={6}
-                        value={trialCode}
-                        onChange={e => setTrialCode(e.target.value.replace(/\D/g,"").slice(0,6))}
-                        disabled={trialBusy}
-                      />
-                      <button type="button" className={styles.primaryButton} onClick={redeemTrialCode} disabled={trialBusy || trialCode.length !== 6}>
-                        ยืนยัน
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
+          {message && (
+            <div className={`${styles.message} ${messageKind === "good" ? styles.good : messageKind === "bad" ? styles.bad : ""}`}>
+              {message}
             </div>
           )}
 
-          <div className={styles.rowCard}>
-            <div className={styles.rowTitle}>
-              <span className={styles.icon}><ScenovaIcon name="shield" size={18}/></span>
-              <b>เปลี่ยนรหัสผ่าน</b>
-            </div>
-            <form className={styles.passwordInline} onSubmit={changePassword}>
-              <input type="password" autoComplete="current-password" aria-label="รหัสผ่านปัจจุบัน" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} disabled={busy}/>
-              <input type="password" autoComplete="new-password" aria-label="รหัสผ่านใหม่" value={newPassword} onChange={e=>setNewPassword(e.target.value)} disabled={busy}/>
-              <input type="password" autoComplete="new-password" aria-label="ยืนยันรหัสผ่านใหม่" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} disabled={busy}/>
-              {data.security.twoFactorEnabled && (
-                <input type="text" autoComplete="one-time-code" aria-label="รหัส 2FA" value={password2fa} onChange={e=>setPassword2fa(e.target.value)} disabled={busy}/>
-              )}
-              <button type="submit" className={styles.primaryButton} disabled={!passwordReady || busy}>บันทึก</button>
-            </form>
-          </div>
+          <section className={styles.cardGrid}>
+            <section id="phone-settings" className={styles.accountCard}>
+              <CardHeader
+                icon="account"
+                title="เบอร์โทร"
+                subtitle={data.user.phone ? data.user.phone.masked : "ยังไม่ได้ผูกเบอร์"}
+                badge={data.user.phone ? (data.user.phone.verified ? "VERIFIED" : "SAVED") : "REQUIRED"}
+                badgeKind={data.user.phone?.verified ? "good" : "neutral"}
+              />
 
-          <div className={styles.rowCard}>
-            <div className={styles.rowTitle}>
-              <span className={styles.icon}><ScenovaIcon name="shield" size={18}/></span>
-              <div>
-                <b>2FA</b>
-                <small className={data.security.twoFactorEnabled ? styles.ok : styles.muted}>
-                  {data.security.twoFactorEnabled ? "เปิดอยู่" : "ปิดอยู่"}
-                </small>
-              </div>
-            </div>
+              <div className={styles.cardBody}>
+                {data.user.phone && !phoneEditing ? (
+                  <div className={styles.savedRow}>
+                    <div>
+                      <strong>{data.user.phone.masked}</strong>
+                      <span>{data.user.phone.verified ? "ยืนยันแล้ว" : "บันทึกแล้ว"}</span>
+                    </div>
+                    {!data.user.phone.verified && !trialAccess?.authorization && !trialAccess?.trial && (
+                      <button type="button" className={styles.secondaryButton} onClick={() => setPhoneEditing(true)}>
+                        เปลี่ยนเบอร์
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className={styles.phoneForm}>
+                    <label>
+                      <span>ประเทศ</span>
+                      <select
+                        name="scenova_country_manual"
+                        autoComplete="off"
+                        value={phoneCountry}
+                        onChange={e => setPhoneCountry(e.target.value)}
+                        disabled={phoneBusy}
+                      >
+                        <option value="" disabled>เลือกรหัสประเทศ</option>
+                        {PHONE_COUNTRIES.map(([iso,name,code]) => (
+                          <option key={iso} value={code}>{name} {code}</option>
+                        ))}
+                      </select>
+                    </label>
 
-            {!data.security.twoFactorEnabled && !twoFactorSetup && (
-              <div className={styles.simpleInline}>
-                <input type="password" autoComplete="current-password" aria-label="รหัสผ่านปัจจุบันสำหรับเปิด 2FA" value={twoFactorPassword} onChange={e=>setTwoFactorPassword(e.target.value)} disabled={busy}/>
-                <button type="button" className={styles.primaryButton} onClick={startTwoFactor} disabled={!twoFactorPassword || busy}>เปิด 2FA</button>
+                    <label className={styles.phoneNumberField}>
+                      <span>เบอร์โทร</span>
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        name="scenova_phone_manual"
+                        autoComplete="off"
+                        data-lpignore="true"
+                        data-1p-ignore="true"
+                        aria-label="เบอร์โทร"
+                        value={phoneInput}
+                        onChange={e => setPhoneInput(e.target.value.slice(0,24))}
+                        disabled={phoneBusy}
+                      />
+                    </label>
+
+                    <div className={styles.formActions}>
+                      <button
+                        type="button"
+                        className={styles.primaryButton}
+                        onClick={savePhone}
+                        disabled={!phoneCountry || !phoneInput.trim() || phoneBusy}
+                      >
+                        {phoneBusy ? "กำลังบันทึก..." : "บันทึก"}
+                      </button>
+                      {data.user.phone && (
+                        <button type="button" className={styles.textButton} onClick={() => setPhoneEditing(false)} disabled={phoneBusy}>
+                          ยกเลิก
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
+            </section>
+
+            {trialVisible && (
+              <section className={styles.accountCard}>
+                <CardHeader
+                  icon="wallet"
+                  title="Trial"
+                  subtitle={trialAccess?.trial ? trialAccess.trial.status : "สิทธิ์ทดลองใช้งาน"}
+                  badge={trialAccess?.trial ? "ACTIVE" : trialAccess?.authorization ? "READY" : "AVAILABLE"}
+                  badgeKind={trialAccess?.trial || trialAccess?.authorization ? "good" : "neutral"}
+                />
+
+                <div className={styles.cardBody}>
+                  {!trialOpen && !trialAccess?.trial && !trialAccess?.authorization ? (
+                    <div className={styles.trialLanding}>
+                      <span>ยืนยันเบอร์ด้วย OTP เพื่อเปิดสิทธิ์</span>
+                      <button type="button" className={styles.primaryButton} onClick={openTrial}>
+                        รับสิทธิ์ทดลอง
+                      </button>
+                    </div>
+                  ) : (
+                    <div id="trial-access">
+                      {trialAccess?.trial ? (
+                        <div className={styles.successState}>เปิดสิทธิ์แล้ว</div>
+                      ) : trialAccess?.authorization ? (
+                        <div className={styles.successState}>Trial พร้อมใช้งาน</div>
+                      ) : !trialAccess?.phone ? (
+                        <div className={styles.trialLanding}>
+                          <span>ต้องผูกเบอร์โทรก่อน</span>
+                          <button type="button" className={styles.secondaryButton} onClick={() => goTo("phone-settings")}>
+                            ไปที่เบอร์โทร
+                          </button>
+                        </div>
+                      ) : (
+                        <div className={styles.otpBox}>
+                          <div className={styles.otpTarget}>
+                            <span>ส่ง OTP ไปที่</span>
+                            <strong>{trialAccess.phone.masked}</strong>
+                          </div>
+                          <div className={styles.otpActions}>
+                            <button type="button" className={styles.secondaryButton} onClick={requestTrialCode} disabled={trialBusy}>
+                              {trialBusy ? "กำลังส่ง..." : "ส่ง OTP"}
+                            </button>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              name="scenova_trial_otp"
+                              autoComplete="one-time-code"
+                              data-lpignore="true"
+                              aria-label="OTP"
+                              maxLength={6}
+                              value={trialCode}
+                              onChange={e => setTrialCode(e.target.value.replace(/\D/g,"").slice(0,6))}
+                              disabled={trialBusy}
+                            />
+                            <button type="button" className={styles.primaryButton} onClick={redeemTrialCode} disabled={trialBusy || trialCode.length !== 6}>
+                              ยืนยัน
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </section>
             )}
 
-            {!data.security.twoFactorEnabled && twoFactorSetup && (
-              <div className={styles.setupBox}>
-                <div className={styles.secretLine}>
-                  <code>{twoFactorSetup.secret}</code>
-                  <button type="button" className={styles.secondaryButton} onClick={()=>copyText(twoFactorSetup.secret)}>คัดลอก</button>
-                  <a className={styles.secondaryButton} href={twoFactorSetup.otpauthUri}>เปิดแอป</a>
+            <section className={styles.accountCard}>
+              <CardHeader icon="shield" title="เปลี่ยนรหัสผ่าน" subtitle="อัปเดตรหัสผ่านบัญชี" />
+              <form className={styles.cardBody} onSubmit={changePassword} autoComplete="off">
+                <div className={styles.passwordGrid}>
+                  <label>
+                    <span>รหัสผ่านปัจจุบัน</span>
+                    <input
+                      type="password"
+                      name="scenova_current_password"
+                      autoComplete="off"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      value={currentPassword}
+                      onChange={e=>setCurrentPassword(e.target.value)}
+                      disabled={busy}
+                    />
+                  </label>
+                  <label>
+                    <span>รหัสผ่านใหม่</span>
+                    <input
+                      type="password"
+                      name="scenova_new_password"
+                      autoComplete="new-password"
+                      value={newPassword}
+                      onChange={e=>setNewPassword(e.target.value)}
+                      disabled={busy}
+                    />
+                  </label>
+                  <label>
+                    <span>ยืนยันรหัสผ่านใหม่</span>
+                    <input
+                      type="password"
+                      name="scenova_confirm_password"
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={e=>setConfirmPassword(e.target.value)}
+                      disabled={busy}
+                    />
+                  </label>
+                  {data.security.twoFactorEnabled && (
+                    <label>
+                      <span>รหัส 2FA</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        name="scenova_password_2fa"
+                        autoComplete="one-time-code"
+                        data-lpignore="true"
+                        value={password2fa}
+                        onChange={e=>setPassword2fa(e.target.value)}
+                        disabled={busy}
+                      />
+                    </label>
+                  )}
                 </div>
-                <div className={styles.simpleInline}>
-                  <input type="text" inputMode="numeric" autoComplete="one-time-code" aria-label="รหัส 2FA 6 หลัก" maxLength={6} value={twoFactorCode} onChange={e=>setTwoFactorCode(e.target.value.replace(/\D/g,"").slice(0,6))} disabled={busy}/>
-                  <button type="button" className={styles.primaryButton} onClick={enableTwoFactor} disabled={twoFactorCode.length !== 6 || busy}>ยืนยัน</button>
+                <div className={styles.cardFooter}>
+                  <div className={styles.passwordMeter} aria-hidden="true">
+                    {[1,2,3,4].map(level => <span key={level} className={passwordStrength >= level ? styles.meterOn : ""}/>)}
+                  </div>
+                  <button type="submit" className={styles.primaryButton} disabled={!passwordReady || busy}>
+                    บันทึกรหัสผ่าน
+                  </button>
                 </div>
-              </div>
-            )}
-
-            {data.security.twoFactorEnabled && (
-              <form className={styles.simpleInline} onSubmit={disableTwoFactor}>
-                <input type="password" autoComplete="current-password" aria-label="รหัสผ่านปัจจุบันสำหรับปิด 2FA" value={disablePassword} onChange={e=>setDisablePassword(e.target.value)} disabled={busy}/>
-                <input type="text" autoComplete="one-time-code" aria-label="รหัส 2FA หรือ Recovery Code" value={disableCode} onChange={e=>setDisableCode(e.target.value)} disabled={busy}/>
-                <button type="submit" className={styles.secondaryButton} disabled={!disablePassword || !disableCode || busy}>ปิด 2FA</button>
               </form>
-            )}
+            </section>
 
-            {recoveryCodes.length > 0 && (
-              <div className={styles.recoveryBox}>
-                <div className={styles.recoveryHead}>
-                  <b>Recovery Codes</b>
-                  <button type="button" className={styles.textButton} onClick={()=>copyText(recoveryCodes.join("\n"))}>คัดลอกทั้งหมด</button>
-                </div>
-                <div className={styles.recoveryGrid}>{recoveryCodes.map(code=><code key={code}>{code}</code>)}</div>
+            <section className={styles.accountCard}>
+              <CardHeader
+                icon="shield"
+                title="2FA"
+                subtitle="Authenticator"
+                badge={data.security.twoFactorEnabled ? "ON" : "OFF"}
+                badgeKind={data.security.twoFactorEnabled ? "good" : "neutral"}
+              />
+
+              <div className={styles.cardBody}>
+                {!data.security.twoFactorEnabled && !twoFactorSetup && (
+                  <div className={styles.twoFactorForm}>
+                    <label>
+                      <span>รหัสผ่านปัจจุบัน</span>
+                      <input
+                        type="password"
+                        name="scenova_2fa_setup_password"
+                        autoComplete="off"
+                        data-lpignore="true"
+                        data-1p-ignore="true"
+                        value={twoFactorPassword}
+                        onChange={e=>setTwoFactorPassword(e.target.value)}
+                        disabled={busy}
+                      />
+                    </label>
+                    <button type="button" className={styles.primaryButton} onClick={startTwoFactor} disabled={!twoFactorPassword || busy}>
+                      เปิด 2FA
+                    </button>
+                  </div>
+                )}
+
+                {!data.security.twoFactorEnabled && twoFactorSetup && (
+                  <div className={styles.setupBox}>
+                    <div className={styles.secretLine}>
+                      <code>{twoFactorSetup.secret}</code>
+                      <button type="button" className={styles.secondaryButton} onClick={()=>copyText(twoFactorSetup.secret)}>คัดลอก</button>
+                      <a className={styles.secondaryButton} href={twoFactorSetup.otpauthUri}>เปิดแอป</a>
+                    </div>
+                    <div className={styles.twoFactorForm}>
+                      <label>
+                        <span>รหัส 6 หลัก</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          name="scenova_2fa_verify_code"
+                          autoComplete="one-time-code"
+                          maxLength={6}
+                          value={twoFactorCode}
+                          onChange={e=>setTwoFactorCode(e.target.value.replace(/\D/g,"").slice(0,6))}
+                          disabled={busy}
+                        />
+                      </label>
+                      <button type="button" className={styles.primaryButton} onClick={enableTwoFactor} disabled={twoFactorCode.length !== 6 || busy}>
+                        ยืนยัน
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {data.security.twoFactorEnabled && (
+                  <form className={styles.disableForm} onSubmit={disableTwoFactor} autoComplete="off">
+                    <label>
+                      <span>รหัสผ่านปัจจุบัน</span>
+                      <input
+                        type="password"
+                        name="scenova_2fa_disable_password"
+                        autoComplete="off"
+                        data-lpignore="true"
+                        data-1p-ignore="true"
+                        value={disablePassword}
+                        onChange={e=>setDisablePassword(e.target.value)}
+                        disabled={busy}
+                      />
+                    </label>
+                    <label>
+                      <span>2FA / Recovery Code</span>
+                      <input
+                        type="text"
+                        name="scenova_2fa_disable_code"
+                        autoComplete="one-time-code"
+                        value={disableCode}
+                        onChange={e=>setDisableCode(e.target.value)}
+                        disabled={busy}
+                      />
+                    </label>
+                    <button type="submit" className={styles.secondaryButton} disabled={!disablePassword || !disableCode || busy}>
+                      ปิด 2FA
+                    </button>
+                  </form>
+                )}
+
+                {recoveryCodes.length > 0 && (
+                  <div className={styles.recoveryBox}>
+                    <div className={styles.recoveryHead}>
+                      <b>Recovery Codes</b>
+                      <button type="button" className={styles.textButton} onClick={()=>copyText(recoveryCodes.join("\n"))}>คัดลอกทั้งหมด</button>
+                    </div>
+                    <div className={styles.recoveryGrid}>{recoveryCodes.map(code=><code key={code}>{code}</code>)}</div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </section>
+            </section>
+          </section>
+        </div>
       </main>
+    </div>
+  );
+}
+
+function CardHeader({
+  icon,
+  title,
+  subtitle,
+  badge,
+  badgeKind = "neutral"
+}:{
+  icon:string;
+  title:string;
+  subtitle:string;
+  badge?:string;
+  badgeKind?:"good"|"neutral";
+}) {
+  return (
+    <div className={styles.cardHeader}>
+      <div className={styles.cardTitle}>
+        <span className={styles.icon}><ScenovaIcon name={icon} size={18}/></span>
+        <div>
+          <h2>{title}</h2>
+          <p>{subtitle}</p>
+        </div>
+      </div>
+      {badge && <span className={`${styles.badge} ${badgeKind === "good" ? styles.badgeGood : ""}`}>{badge}</span>}
     </div>
   );
 }
