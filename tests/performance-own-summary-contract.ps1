@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $web = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/app/performance/page.tsx'))
+$css = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/app/performance/performance.module.css'))
 $api = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/performance-analytics.controller.ts'))
 
 foreach ($required in @(
@@ -74,9 +75,12 @@ if (-not $actions.Contains('preserved: ["users", "mt5_accounts", "bot_instances"
 if (-not $web.Contains('styles.mainOwner')) { throw 'Owner performance layout must use a dedicated non-offset main class' }
 if (-not $web.Contains('styles.mainCustomer')) { throw 'Customer performance layout must preserve fixed-sidebar offset separately' }
 
-if (-not $web.Contains('controlsOpen')) { throw 'Performance options must use a collapsible slide-down drawer' }
-if (-not $web.Contains('styles.optionsDrawer')) { throw 'Performance options drawer UI missing' }
+if (-not $web.Contains('controlsOpen')) { throw 'Performance options must remain collapsible' }
+if (-not $web.Contains('styles.optionsDrawer')) { throw 'Performance options panel UI missing' }
 if (-not $web.Contains('styles.optionsButton')) { throw 'Performance options button missing' }
+if (-not $web.Contains('styles.modeBoxes')) { throw 'Performance report source must use compact selectable boxes' }
+if (-not $web.Contains('styles.strategyCheck')) { throw 'Strategy modes must use checkbox-style selection boxes' }
+if (-not $css.Contains('Performance compact right-options rail v2')) { throw 'Performance options must use the compact right-side vertical rail' }
 if ($web.Contains('className={styles.controlCard}')) { throw 'External performance control card must stay removed so summary can fill the viewport' }
 
 $ea = [System.IO.File]::ReadAllText((Resolve-Path 'mt5/FastBasketBot.mq5'))
