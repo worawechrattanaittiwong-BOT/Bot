@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, getToken } from "../../lib/api";
 import { CustomerSidebar, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
+import { useSystemPopup } from "../../components/SystemPopupProvider";
 import styles from "./performance.module.css";
 
 type Mode = "LIVE" | "BACKTEST";
@@ -273,6 +274,7 @@ function backtestStats(backtest:any) {
 }
 
 export default function PerformanceDashboardPage() {
+  const { showPopup, confirmPopup, promptPopup } = useSystemPopup();
   const today=useMemo(()=>dateInput(new Date()),[]);
   const [options,setOptions]=useState<Options|null>(null);
   const [accountId,setAccountId]=useState("");
@@ -399,11 +401,23 @@ export default function PerformanceDashboardPage() {
   }
 
   async function clearOwnPerformanceData(){
-    const token=window.prompt(
-      "คำสั่งนี้จะล้าง Trade Journal, Backtest และลิงก์ Performance ของบัญชีผู้ใช้ของคุณทั้งหมด\n\nบัญชี MT5, Settings และ Subscription จะไม่ถูกลบ\n\nพิมพ์ CLEAR เพื่อยืนยัน"
-    );
+    const token=await promptPopup({
+      title:"ล้างข้อมูล Performance ของคุณ",
+      tone:"warning",
+      message:"คำสั่งนี้จะล้าง Trade Journal, Backtest และลิงก์ Performance ของบัญชีคุณทั้งหมด\n\nบัญชี MT5, Settings และ Subscription จะไม่ถูกลบ",
+      requiredText:"CLEAR",
+      placeholder:"พิมพ์ CLEAR",
+      copyLabel:"คัดลอก CLEAR",
+      confirmLabel:"ตรวจสอบต่อ"
+    });
     if(token!=="CLEAR") return;
-    if(!window.confirm("ยืนยันล้างข้อมูล Performance ของคุณทั้งหมดตอนนี้หรือไม่?")) return;
+    const confirmed=await confirmPopup({
+      title:"ยืนยันล้างข้อมูลของคุณ",
+      tone:"warning",
+      message:"Trade Journal, Backtest และลิงก์ Performance ของบัญชีนี้จะถูกล้างทันที โดยไม่ลบบัญชี MT5, Settings หรือ Subscription",
+      confirmLabel:"ล้างข้อมูล"
+    });
+    if(!confirmed) return;
     setLoading(true);
     try{
       const result=await api("/performance-actions/clear-own-data",{
@@ -418,11 +432,15 @@ export default function PerformanceDashboardPage() {
       setFrom(today);
       setTo(today);
       await loadOptions();
-      window.alert(
-        "ล้างข้อมูลของคุณสำเร็จ\nTrade Journal: "+String(result?.deleted?.tradeJournal||0)+
-        "\nBacktest: "+String(result?.deleted?.backtestRuns||0)+
-        "\nShare links: "+String(result?.deleted?.performanceShares||0)
-      );
+      showPopup({
+        tone:"success",
+        title:"ล้างข้อมูลสำเร็จ",
+        message:
+          "Trade Journal: "+String(result?.deleted?.tradeJournal||0)+
+          "\nBacktest: "+String(result?.deleted?.backtestRuns||0)+
+          "\nShare links: "+String(result?.deleted?.performanceShares||0),
+        duration:4200
+      });
     }catch(e:any){
       setError(String(e?.message||"ล้างข้อมูลของคุณไม่สำเร็จ"));
     }finally{
@@ -432,11 +450,23 @@ export default function PerformanceDashboardPage() {
 
   async function clearAllPerformanceData(){
     if(!options?.elevated) return;
-    const token=window.prompt(
-      "คำสั่งนี้จะล้าง Trade Journal, Backtest และลิงก์ Performance ของผู้ใช้ทุกคนทั้งระบบ\n\nบัญชี MT5, Settings และ Subscription จะไม่ถูกลบ\n\nพิมพ์ RESET เพื่อยืนยัน"
-    );
+    const token=await promptPopup({
+      title:"ล้างข้อมูล Performance ทั้งระบบ",
+      tone:"warning",
+      message:"คำสั่งนี้จะล้าง Trade Journal, Backtest และลิงก์ Performance ของผู้ใช้ทุกคนทั้งระบบ\n\nบัญชี MT5, Settings และ Subscription จะไม่ถูกลบ",
+      requiredText:"RESET",
+      placeholder:"พิมพ์ RESET",
+      copyLabel:"คัดลอก RESET",
+      confirmLabel:"ตรวจสอบต่อ"
+    });
     if(token!=="RESET") return;
-    if(!window.confirm("ยืนยันล้างข้อมูล Performance ทั้งระบบตอนนี้หรือไม่?")) return;
+    const confirmed=await confirmPopup({
+      title:"ยืนยันล้างข้อมูลทั้งระบบ",
+      tone:"warning",
+      message:"ข้อมูล Performance ของผู้ใช้ทุกคนจะถูกล้างทันที การดำเนินการนี้ไม่ลบบัญชี MT5, Settings หรือ Subscription",
+      confirmLabel:"ล้างทั้งระบบ"
+    });
+    if(!confirmed) return;
     setLoading(true);
     try{
       const result=await api("/performance-actions/reset-test-data",{
@@ -451,11 +481,15 @@ export default function PerformanceDashboardPage() {
       setFrom(today);
       setTo(today);
       await loadOptions();
-      window.alert(
-        "ล้างข้อมูลสำเร็จ\nTrade Journal: "+String(result?.deleted?.tradeJournal||0)+
-        "\nBacktest: "+String(result?.deleted?.backtestRuns||0)+
-        "\nShare links: "+String(result?.deleted?.performanceShares||0)
-      );
+      showPopup({
+        tone:"success",
+        title:"ล้างข้อมูลทั้งระบบสำเร็จ",
+        message:
+          "Trade Journal: "+String(result?.deleted?.tradeJournal||0)+
+          "\nBacktest: "+String(result?.deleted?.backtestRuns||0)+
+          "\nShare links: "+String(result?.deleted?.performanceShares||0),
+        duration:4200
+      });
     }catch(e:any){
       setError(String(e?.message||"ล้างข้อมูลไม่สำเร็จ"));
     }finally{
