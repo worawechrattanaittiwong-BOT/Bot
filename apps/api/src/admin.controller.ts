@@ -15,6 +15,7 @@ import { AdminGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
 import { ReferralService } from "./referral.service";
+import { TrialAuthorizationService } from "./trial-authorization.service";
 import { createHash, randomBytes } from "crypto";
 
 @Controller("admin")
@@ -24,7 +25,8 @@ export class AdminController {
     private readonly db: DbService,
     private readonly maintenance: MaintenanceService,
     private readonly partner: PartnerService,
-    private readonly referrals: ReferralService
+    private readonly referrals: ReferralService,
+    private readonly trials: TrialAuthorizationService
   ) {}
 
   @Get("users")
@@ -38,6 +40,7 @@ export class AdminController {
          s.subscription_id,s.plan_code,s.subscription_mode,s.subscription_status,s.subscription_starts_at,s.subscription_expires_at,s.plan_slots,s.allow_resale,s.subscription_active,
          COALESCE(ms.memberships,'[]'::jsonb) memberships,
          t.trial_status,t.trial_expires_at,t.trial_duration_minutes,t.trial_started_at,
+         ta.trial_authorization_status,ta.trial_authorization_minutes,ta.trial_authorization_approved_at,ta.trial_authorization_blocked_reason,
          tr.trial_request_id,tr.line_contact,tr.request_ip,tr.trial_request_status,
          COALESCE(ss.total_slots,0)::int total_slots,
          COALESCE(ss.assigned_slots,0)::int assigned_slots,
@@ -122,6 +125,16 @@ export class AdminController {
          ORDER BY tg.created_at DESC
          LIMIT 1
        ) t ON true
+       LEFT JOIN LATERAL (
+         SELECT
+           auth.status trial_authorization_status,
+           auth.duration_minutes trial_authorization_minutes,
+           auth.approved_at trial_authorization_approved_at,
+           auth.blocked_reason trial_authorization_blocked_reason
+         FROM trial_authorizations auth
+         WHERE auth.user_id=u.id
+         LIMIT 1
+       ) ta ON true
        LEFT JOIN LATERAL (
          SELECT trq.id trial_request_id,trq.line_contact,trq.request_ip,trq.status trial_request_status
          FROM trial_requests trq
@@ -210,6 +223,21 @@ export class AdminController {
     return { users, bots, slots, workers: workers.rows, maintenance };
   }
 
+  @Post("trials/authorize")
+  async authorizeTrial(@Body() body: {
+    userId: string;
+    days: number;
+    mt5AccountId?: string;
+    approvedBy?: string;
+  }) {
+    return this.trials.authorizeUser({
+      userId: body.userId,
+      days: body.days,
+      mt5AccountId: body.mt5AccountId || null,
+      approvedBy: body.approvedBy || "OWNER"
+    });
+  }
+
   @Post("trials/grant")
   async grantTrial(@Body() body: {
     mt5AccountId: string;
@@ -271,47 +299,13 @@ export class AdminController {
 
   @Post("trials/set-duration")
   async setTrialDuration(@Body() body: { userId: string; days: number }) {
-    const days = Math.trunc(Number(body.days));
-    if (!Number.isFinite(days) || days < 1 || days > 365) {
-      throw new ConflictException("Trial days must be between 1 and 365");
-    }
-
-    const trial = await this.db.one(
-      `SELECT id,user_id,status,started_at,expires_at
-       FROM trial_grants
-       WHERE user_id=$1
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [body.userId]
-    );
-    if (!trial) throw new ConflictException("ยังไม่พบ Trial ของลูกค้ารายนี้");
-
-    const durationMinutes = days * 1440;
-    const row = await this.db.one(
-      `UPDATE trial_grants
-       SET duration_minutes=$2,
-           expires_at=CASE
-             WHEN started_at IS NULL THEN NULL
-             ELSE started_at + ($2 || ' minutes')::interval
-           END,
-           status=CASE
-             WHEN started_at IS NULL THEN 'APPROVED'
-             WHEN started_at + ($2 || ' minutes')::interval > now() THEN 'ACTIVE'
-             ELSE 'EXPIRED'
-           END
-       WHERE id=$1
-       RETURNING *`,
-      [trial.id, durationMinutes]
-    );
-
-    await this.audit("OWNER", "SET_TRIAL_DURATION", "trial", row.id, {
-      userId: body.userId,
-      days,
-      durationMinutes,
-      startedAt: row.started_at || null,
-      expiresAt: row.expires_at || null
+    const result = await this.trials.setDuration(body.userId, body.days);
+    await this.audit("OWNER", "SET_TRIAL_DURATION", "user", body.userId, {
+      days: result.days,
+      durationMinutes: result.durationMinutes,
+      status: result.status
     });
-    return row;
+    return result;
   }
 
   @Post("subscriptions/activate")
