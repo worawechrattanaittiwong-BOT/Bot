@@ -17,6 +17,7 @@ import { EA_RUNTIME_CONTRACT, ZERO_GRID_MAX_LEVELS_PER_SIDE, installerDownloadPa
 import { CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
+import { TrialAuthorizationService } from "./trial-authorization.service";
 import { reconstructCompletedJournal, resolveJournalControlMode } from "./performance-journal";
 
 function isBitcoinTradingSymbol(value: unknown) {
@@ -31,7 +32,8 @@ export class BotController {
     private readonly db: DbService,
     private readonly crypto: CryptoService,
     private readonly maintenance: MaintenanceService,
-    private readonly partner: PartnerService
+    private readonly partner: PartnerService,
+    private readonly trials: TrialAuthorizationService
   ) {}
 
   private supportedEaRuntime(version: any) {
@@ -1689,6 +1691,7 @@ export class BotController {
         })
       ]
     );
+    await this.trials.claimPendingAuthorization(req.user.sub, account.id);
     return { ok: true, account, firstBind: isFirstBind };
   }
 
@@ -1783,6 +1786,7 @@ export class BotController {
       [instance.id, secret.ciphertext, secret.iv, secret.authTag]
     );
 
+    await this.trials.claimPendingAuthorization(req.user.sub, account.id);
     return {
       account,
       instance,
