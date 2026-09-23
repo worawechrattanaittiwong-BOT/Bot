@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
+import { TrialAuthorizationService } from "./trial-authorization.service";
 
 @Controller("ea")
 export class EaController {
@@ -24,7 +25,8 @@ export class EaController {
     private readonly db: DbService,
     private readonly crypto: CryptoService,
     private readonly maintenance: MaintenanceService,
-    private readonly partner: PartnerService
+    private readonly partner: PartnerService,
+    private readonly trials: TrialAuthorizationService
   ) {}
 
   private normalizeReleaseChannel(value: unknown) {
@@ -555,6 +557,7 @@ export class EaController {
         ]
       );
 
+      await this.trials.claimPendingAuthorization(instance.user_id, account.id);
       instance.mt5_account_id = account.id;
       instance.account_number = account.account_number;
       instance.broker = account.broker;
@@ -656,6 +659,7 @@ export class EaController {
             ]
           );
 
+          await this.trials.claimPendingAuthorization(instance.user_id, nextAccount.id);
           instance.mt5_account_id = nextAccount.id;
           instance.account_number = nextAccount.account_number;
           instance.broker = nextAccount.broker;
