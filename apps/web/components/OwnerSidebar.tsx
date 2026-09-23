@@ -26,6 +26,10 @@ const performanceNavItem: NavItem = {
   section:"TRADING", key:"trading-backtest", href:"/performance", icon:"strategy",
   label:"Backtest & Performance", hint:"Real performance, backtests & reports"
 };
+const myAccountNavItem: NavItem = {
+  section:"MANAGEMENT", key:"my-account", href:"/account", icon:"account",
+  label:"My Account", hint:"Profile, security & sign-in settings"
+};
 
 export const sharedTradingNavItems: NavItem[] = [
   controlCenterNavItem,
@@ -38,13 +42,14 @@ export const ownerNavItems: NavItem[] = [
   mt5EaNavItem,
   { section:"TRADING", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud Trading", hint:"Trading nodes & execution infrastructure" },
   performanceNavItem,
+  myAccountNavItem,
   { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trials, subscriptions & customer access" },
   { section:"SYSTEM", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"System Overview", hint:"Platform health & system status" },
   { section:"SYSTEM", key:"cloud-hardening", href:"/admin/cloud-hardening", icon:"cloud", label:"Production Hardening", hint:"Incidents, capacity guard & emergency controls" },
   { section:"SYSTEM", key:"website", href:"/website", icon:"strategy", label:"Website", hint:"SCENOVA public website" }
 ];
 
-export const customerNavItems: NavItem[] = [...sharedTradingNavItems];
+export const customerNavItems: NavItem[] = [...sharedTradingNavItems, myAccountNavItem];
 
 type SidebarNavigateHandler = (href:string)=>boolean | void;
 type PartnerSummary = {
