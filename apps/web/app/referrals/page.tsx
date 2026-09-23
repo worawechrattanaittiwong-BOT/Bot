@@ -218,7 +218,7 @@ export default function ReferralsPage() {
           <div>
             <h2>Program Rules</h2>
             <p>The four levels are fixed at <b>7% → 5% → 3% → 1%</b>. The maximum combined network commission is 16% of an eligible sale when all four uplines exist and are active.</p>
-            <p>Trial access and Partner Seat allocations do not create referral commission. Cloud checkout is the first eligible automated payment source. Commissions enter a {data.program.holdDays}-day review period before becoming available. Refunds, reversals, duplicate or abusive accounts can be voided before payout.</p>
+            <p>Trial access and Partner Seat allocations do not create referral commission. Cloud checkout is credited automatically. Manual membership sales are also eligible when the Owner records the actual paid amount during activation. Commissions enter a {data.program.holdDays}-day review period before becoming available. Refunds, reversals, duplicate or abusive accounts can be voided before payout.</p>
             <p>The sponsor is locked at account creation. A user cannot refer themselves. Payout remains manual until SCENOVA connects a verified payout workflow.</p>
           </div>
           <div className={styles.sponsorBox}><small>Your Sponsor</small><b>{data.sponsor?.userCode || "Direct / No Sponsor"}</b></div>
