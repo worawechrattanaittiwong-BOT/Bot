@@ -633,7 +633,7 @@ export class AdminController {
 
     const apiKey = String(process.env.RESEND_API_KEY || "").trim();
     const from = String(process.env.EMAIL_FROM || "").trim();
-    const webBase = String(process.env.PUBLIC_WEB_BASE || "").trim().replace(/\/$/, "");
+    const webBase = String(process.env.PUBLIC_WEB_BASE || process.env.PUBLIC_WEB_URL || process.env.WEB_ORIGIN || "").trim().replace(/\/$/, "");
     if (!apiKey || !from || !webBase) {
       throw new ServiceUnavailableException("ระบบส่งอีเมลรีเซ็ตรหัสผ่านยังตั้งค่าไม่ครบ");
     }
