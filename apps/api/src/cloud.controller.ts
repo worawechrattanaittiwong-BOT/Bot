@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
 import { AdminGuard, CryptoService, JwtGuard } from "./security";
 import { ReferralService } from "./referral.service";
+import { LocalPackageService } from "./local-package.controller";
 
 export function paymentMode() {
   const key = process.env.OMISE_SECRET_KEY || "";
@@ -225,10 +226,17 @@ export class CloudCustomerController {
 
 @Controller("payments/omise")
 export class CloudPaymentController {
-  constructor(private readonly cloud: CloudService) {}
+  constructor(
+    private readonly cloud: CloudService,
+    private readonly localPackages: LocalPackageService
+  ) {}
   @Post("webhook") async webhook(@Body() body: any) {
     if (body?.key === "charge.complete" || body?.key === "charge.create" || body?.key === "charge.expire") {
-      await this.cloud.reconcile(String(body.data?.id || ""));
+      const chargeId = String(body.data?.id || "");
+      await Promise.allSettled([
+        this.cloud.reconcile(chargeId),
+        this.localPackages.reconcile(chargeId)
+      ]);
     }
     return { received: true };
   }
