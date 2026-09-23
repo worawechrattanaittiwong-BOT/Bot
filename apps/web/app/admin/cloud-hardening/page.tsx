@@ -5,6 +5,7 @@ import Link from "next/link";
 import { adminApi } from "../../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../../components/OwnerSidebar";
 import { ScenovaBrand } from "../../../components/ScenovaBrand";
+import { useSystemPopup } from "../../../components/SystemPopupProvider";
 import s from "./page.module.css";
 
 type Snapshot = {
@@ -21,6 +22,7 @@ function fmt(value:any) {
 }
 
 export default function CloudHardeningPage() {
+  const { confirmPopup } = useSystemPopup();
   const [data,setData]=useState<Snapshot|null>(null);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
@@ -62,7 +64,13 @@ export default function CloudHardeningPage() {
     const text=next
       ? `Quarantine ${node.runner_id}? ระบบจะหยุดรับงานใหม่และหยุด Auto-Recovery ใหม่บน VPS นี้ แต่จะไม่ kill MT5 ที่กำลังรันอยู่`
       : `ปลด Quarantine ${node.runner_id}? ระบบยังจะไม่เปิดรับลูกค้าใหม่จนกว่าจะเปิดจาก Cloud Console`;
-    if (!window.confirm(text)) return;
+    const confirmed=await confirmPopup({
+      title:next ? "ยืนยัน Quarantine VPS" : "ยืนยันปลด Quarantine",
+      tone:"warning",
+      message:text,
+      confirmLabel:next ? "Quarantine" : "ปลด Quarantine"
+    });
+    if (!confirmed) return;
     setBusy("node:"+node.runner_id);setError("");setNotice("");
     try {
       await adminApi(`/admin/production-hardening/nodes/${encodeURIComponent(node.runner_id)}/quarantine`,{
@@ -74,7 +82,13 @@ export default function CloudHardeningPage() {
   }
 
   async function resetRecovery(instance:any) {
-    if (!window.confirm(`Reset recovery circuit ของ ${instance.account_number||instance.id}? คำสั่งนี้ไม่ Start MT5 เอง แต่เปิดให้ Worker ขอ recovery ใหม่ได้`)) return;
+    const confirmed=await confirmPopup({
+      title:"Reset Recovery Circuit",
+      tone:"warning",
+      message:`Reset recovery circuit ของ ${instance.account_number||instance.id}? คำสั่งนี้ไม่ Start MT5 เอง แต่เปิดให้ Worker ขอ recovery ใหม่ได้`,
+      confirmLabel:"Reset circuit"
+    });
+    if (!confirmed) return;
     setBusy("recovery:"+instance.id);setError("");setNotice("");
     try {
       await adminApi(`/admin/production-hardening/instances/${instance.id}/recovery-reset`,{method:"POST"});
