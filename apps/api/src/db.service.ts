@@ -140,6 +140,9 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         phone_last4 varchar(4) NOT NULL,
         code_hash text NOT NULL,
         code_salt text NOT NULL,
+        provider varchar(24) NOT NULL DEFAULT 'LOCAL_SMS',
+        provider_token text,
+        provider_refno varchar(64),
         status varchar(20) NOT NULL DEFAULT 'PENDING',
         attempts integer NOT NULL DEFAULT 0,
         expires_at timestamptz NOT NULL,
@@ -148,6 +151,11 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         verified_at timestamptz,
         created_at timestamptz NOT NULL DEFAULT now()
       );
+      ALTER TABLE trial_sms_codes
+        ADD COLUMN IF NOT EXISTS provider varchar(24) NOT NULL DEFAULT 'LOCAL_SMS',
+        ADD COLUMN IF NOT EXISTS provider_token text,
+        ADD COLUMN IF NOT EXISTS provider_refno varchar(64);
+
       CREATE INDEX IF NOT EXISTS idx_trial_sms_user_created
         ON trial_sms_codes(user_id,created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_trial_sms_phone_created
