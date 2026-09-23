@@ -487,6 +487,7 @@ export default function AdminPage() {
   ];
   const selectedPlan = planOptions.find(p=>p.code===plan) || planOptions[0];
   const selectedCustomer = users.find((u:any)=>u.id===selectedCustomerId) || null;
+  const memberships = (user:any) => Array.isArray(user?.memberships) ? user.memberships : [];
   useEffect(() => {
     if (!selectedCustomer) return;
     if (selectedCustomer.trial_duration_minutes) {
@@ -498,7 +499,6 @@ export default function AdminPage() {
     if (activeMode === "CLOUD") setPlan("CLOUD_30D");
     else if (activeMode === "LOCAL") setPlan("LOCAL_30D");
   }, [selectedCustomerId]);
-  const memberships = (user:any) => Array.isArray(user?.memberships) ? user.memberships : [];
   const hasActivePlan = (user:any, planCode:string) =>
     memberships(user).some((m:any)=>m.plan_code===planCode && m.active);
   const hasActiveMode = (user:any, mode:string) =>
