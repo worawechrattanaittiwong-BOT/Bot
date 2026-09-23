@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberEmail, setRememberEmail] = useState(true);
+  const [inviteCode, setInviteCode] = useState("");
 
   const passwordChecks = useMemo(() => ({
     length: password.length >= 8,
@@ -43,7 +44,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setRegister(params.get("mode") === "register");
+    const incomingInvite = String(params.get("ref") || "").trim().toUpperCase();
+    setRegister(params.get("mode") === "register" || Boolean(incomingInvite));
+    if (incomingInvite) setInviteCode(incomingInvite);
 
     if (params.get("reason") === "session-expired") {
       setMessageKind("info");
@@ -98,7 +101,11 @@ export default function LoginPage() {
       const res = await fetch(API_URL + "/api/auth/" + (register ? "register" : "login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({
+          email,
+          password,
+          referralCode: register ? (inviteCode.trim() || undefined) : undefined
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Unable to sign in. Please try again.");
@@ -149,7 +156,12 @@ export default function LoginPage() {
     setPassword("");
     setConfirmPassword("");
     setAcceptedTerms(false);
-    window.history.replaceState({}, "", next ? "/login?mode=register" : "/login");
+    const ref = inviteCode.trim();
+    window.history.replaceState(
+      {},
+      "",
+      next ? "/login?mode=register" + (ref ? "&ref=" + encodeURIComponent(ref) : "") : "/login" + (ref ? "?ref=" + encodeURIComponent(ref) : "")
+    );
   }
 
   function showPasswordRecovery() {
@@ -233,6 +245,26 @@ export default function LoginPage() {
                   <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></svg>
                   <input id="login-email" className={styles.input} type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com" required disabled={busy} />
                 </div>
+
+                {register && (
+                  <>
+                    <label className={styles.label} htmlFor="invite-code">Invite Code <span className={styles.optional}>(optional)</span></label>
+                    <div className={styles.inputWrap}>
+                      <ScenovaIcon name="users" size={19}/>
+                      <input
+                        id="invite-code"
+                        className={styles.input}
+                        type="text"
+                        autoCapitalize="characters"
+                        spellCheck={false}
+                        value={inviteCode}
+                        onChange={e=>setInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g,"").slice(0,40))}
+                        placeholder="SCN-XXXXXX"
+                        disabled={busy}
+                      />
+                    </div>
+                  </>
+                )}
 
                 <label className={styles.label} htmlFor="login-password">Password</label>
                 <div className={styles.inputWrap}>
