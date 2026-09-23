@@ -649,6 +649,7 @@ internal sealed partial class InstallerForm : Form
                 code,
                 devicePublicId,
                 deviceSecret,
+                deviceFingerprint = DeviceFingerprint.Current(),
                 hostname = Environment.MachineName,
                 terminalPath = terminal.DataPath,
                 legacyInstanceId = existing?.InstanceId ?? legacyInstanceId,
@@ -841,6 +842,7 @@ internal sealed partial class InstallerForm : Form
                     hostname = Environment.MachineName,
                     devicePublicId = profile.DevicePublicId,
                     deviceSecret = secret,
+                    deviceFingerprint = DeviceFingerprint.Current(),
                     releaseChannel = SelectedReleaseChannel(),
                     installerStatus = new
                     {

@@ -18,6 +18,9 @@ export class TrialAuthorizationService {
     days: number;
     approvedBy?: string;
     mt5AccountId?: string | null;
+    phoneHash?: string | null;
+    phoneLast4?: string | null;
+    source?: "OWNER" | "SMS";
   }) {
     const days = this.normalizeDays(input.days);
     const user = await this.db.one(
@@ -39,13 +42,31 @@ export class TrialAuthorizationService {
       throw new ConflictException("บัญชีนี้เคยได้รับ Trial แล้ว สามารถปรับจำนวนวันของ Trial เดิมได้ แต่ไม่สามารถสร้าง Trial ใหม่ซ้ำ");
     }
 
+    if (input.phoneHash) {
+      const phoneOwner = await this.db.one(
+        "SELECT user_id FROM trial_authorizations WHERE phone_hash=$1 AND user_id<>$2 LIMIT 1",
+        [input.phoneHash, input.userId]
+      );
+      if (phoneOwner) {
+        throw new ConflictException("เบอร์โทรนี้เคยใช้รับสิทธิ์ Trial แล้ว");
+      }
+      const phoneHistory = await this.db.one(
+        "SELECT user_id FROM trial_identity_registry WHERE phone_hash=$1 AND user_id<>$2 LIMIT 1",
+        [input.phoneHash, input.userId]
+      );
+      if (phoneHistory) {
+        throw new ConflictException("เบอร์โทรนี้เคยใช้รับสิทธิ์ Trial แล้ว");
+      }
+    }
+
     const durationMinutes = days * 1440;
     const approvedBy = String(input.approvedBy || "OWNER").slice(0, 120);
     const authorization = await this.db.one(
       `INSERT INTO trial_authorizations(
-         user_id,duration_minutes,status,approved_by,approved_at,blocked_reason,claimed_at,claimed_mt5_account_id,updated_at
+         user_id,duration_minutes,status,approved_by,approved_at,blocked_reason,claimed_at,claimed_mt5_account_id,
+         phone_hash,phone_last4,source,updated_at
        )
-       VALUES($1,$2,'PENDING_BIND',$3,now(),NULL,NULL,NULL,now())
+       VALUES($1,$2,'PENDING_BIND',$3,now(),NULL,NULL,NULL,$4,$5,$6,now())
        ON CONFLICT(user_id) DO UPDATE
        SET duration_minutes=EXCLUDED.duration_minutes,
            status='PENDING_BIND',
@@ -54,9 +75,19 @@ export class TrialAuthorizationService {
            blocked_reason=NULL,
            claimed_at=NULL,
            claimed_mt5_account_id=NULL,
+           phone_hash=COALESCE(EXCLUDED.phone_hash,trial_authorizations.phone_hash),
+           phone_last4=COALESCE(EXCLUDED.phone_last4,trial_authorizations.phone_last4),
+           source=EXCLUDED.source,
            updated_at=now()
        RETURNING *`,
-      [input.userId, durationMinutes, approvedBy]
+      [
+        input.userId,
+        durationMinutes,
+        approvedBy,
+        input.phoneHash || null,
+        input.phoneLast4 || null,
+        input.source || "OWNER"
+      ]
     );
 
     await this.db.query(
@@ -68,6 +99,8 @@ export class TrialAuthorizationService {
           days,
           durationMinutes,
           mt5AccountId: input.mt5AccountId || null,
+          source: input.source || "OWNER",
+          phoneVerified: Boolean(input.phoneHash),
           preapproved: true
         })
       ]
@@ -184,6 +217,55 @@ export class TrialAuthorizationService {
       };
     }
 
+    const device = await this.db.one(
+      `SELECT bi.device_fingerprint_hash,bi.device_public_id
+       FROM license_slots ls
+       JOIN bot_instances bi ON bi.slot_id=ls.id
+       WHERE ls.assigned_user_id=$1
+         AND bi.mt5_account_id=$2
+       ORDER BY COALESCE(bi.device_last_seen_at,bi.last_seen_at,ls.created_at) DESC
+       LIMIT 1`,
+      [userId, account.id]
+    );
+
+    if (device?.device_fingerprint_hash) {
+      const registryDevice = await this.db.one(
+        `SELECT user_id FROM trial_identity_registry
+         WHERE device_fingerprint_hash=$1 AND user_id<>$2
+         LIMIT 1`,
+        [device.device_fingerprint_hash, userId]
+      );
+      const historicalDevice = await this.db.one(
+        `SELECT tg.user_id
+         FROM trial_grants tg
+         JOIN license_slots ls ON ls.assigned_user_id=tg.user_id
+         JOIN bot_instances bi ON bi.slot_id=ls.id
+         WHERE bi.device_fingerprint_hash=$1
+           AND tg.user_id<>$2
+         LIMIT 1`,
+        [device.device_fingerprint_hash, userId]
+      );
+      if (registryDevice || historicalDevice) {
+        await this.blockAuthorization(userId, "DEVICE_ALREADY_USED");
+        return { status: "BLOCKED", message: "อุปกรณ์นี้เคยได้รับ Trial แล้ว" };
+      }
+    } else if (device?.device_public_id) {
+      const legacyDevice = await this.db.one(
+        `SELECT tg.user_id
+         FROM trial_grants tg
+         JOIN license_slots ls ON ls.assigned_user_id=tg.user_id
+         JOIN bot_instances bi ON bi.slot_id=ls.id
+         WHERE bi.device_public_id=$1
+           AND tg.user_id<>$2
+         LIMIT 1`,
+        [device.device_public_id, userId]
+      );
+      if (legacyDevice) {
+        await this.blockAuthorization(userId, "DEVICE_ALREADY_USED");
+        return { status: "BLOCKED", message: "อุปกรณ์นี้เคยได้รับ Trial แล้ว" };
+      }
+    }
+
     const request = await this.db.one(
       `SELECT id,line_contact,request_ip
        FROM trial_requests
@@ -218,6 +300,36 @@ export class TrialAuthorizationService {
       return {
         status: "BLOCKED",
         message: "MT5 นี้มีประวัติ Trial อยู่แล้ว"
+      };
+    }
+
+    const registry = await this.db.one(
+      `INSERT INTO trial_identity_registry(
+         user_id,trial_grant_id,phone_hash,phone_last4,
+         device_fingerprint_hash,device_public_id,
+         mt5_account_id,account_number,broker_server
+       )
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
+      [
+        userId,
+        row.id,
+        authorization.phone_hash || null,
+        authorization.phone_last4 || null,
+        device?.device_fingerprint_hash || null,
+        device?.device_public_id || null,
+        account.id,
+        account.account_number,
+        account.broker_server
+      ]
+    );
+    if (!registry) {
+      await this.db.query("DELETE FROM trial_grants WHERE id=$1 AND started_at IS NULL", [row.id]);
+      await this.blockAuthorization(userId, "TRIAL_IDENTITY_CONFLICT");
+      return {
+        status: "BLOCKED",
+        message: "พบประวัติ Trial จากเบอร์โทร อุปกรณ์ หรือ MT5 นี้แล้ว"
       };
     }
 

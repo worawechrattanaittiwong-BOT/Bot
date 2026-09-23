@@ -10,3 +10,16 @@
 @media(max-width:1150px){.summaryGrid{grid-template-columns:1fr 1fr}.disableBox{grid-template-columns:1fr 1fr}.disableBox>div{grid-column:1/-1}.recoveryGrid{grid-template-columns:1fr 1fr}}
 @media(max-width:820px){.contentGrid,.formGrid,.twoFactorIntro{grid-template-columns:1fr}.summaryGrid{grid-template-columns:1fr 1fr}.inlineAction,.secretRow{grid-template-columns:1fr}.disableBox{grid-template-columns:1fr}.recoveryGrid{grid-template-columns:1fr 1fr}.header{grid-template-columns:auto 1fr}.statusPill{grid-column:1/-1;justify-self:start}.passwordMeterRow{flex-direction:column;align-items:flex-start}}
 @media(max-width:540px){.summaryGrid{grid-template-columns:1fr}.recoveryGrid{grid-template-columns:1fr}.header h1{font-size:27px}.panel{padding:14px}.detailList>div{grid-template-columns:1fr;gap:3px;padding:9px 0}.detailList b{text-align:left}.securityRows>div{align-items:flex-start;flex-direction:column;gap:5px;padding:9px 0}}
+
+.trialPanel{margin-bottom:14px;border-color:#3b3566;background:radial-gradient(circle at 92% 0,rgba(119,82,255,.10),transparent 34%),linear-gradient(150deg,#0f1323,#090d17 74%)}
+.trialCompact{display:grid;grid-template-columns:minmax(180px,1fr) auto minmax(150px,.7fr) auto;gap:8px;align-items:end}
+.trialCompact label{display:grid;gap:6px;color:#7e8aa2;font-size:9px;font-weight:700}
+.trialCompact input{height:40px;border:1px solid #303955;border-radius:10px;background:#080d17;color:#eef2ff;padding:0 11px;outline:none}
+.trialCompact input:focus{border-color:#7560dd;box-shadow:0 0 0 3px rgba(111,85,230,.08)}
+.trialCompact button{min-height:40px;white-space:nowrap}
+.trialHint{margin-top:9px;padding:8px 10px;border:1px solid #273d4c;border-radius:9px;background:#091219;color:#7794a2;font-size:8.5px;line-height:1.45}
+.trialHintBlocked{border-color:#533039;background:#170d11;color:#c6848e}
+.trialResult{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:11px 12px;border:1px solid #2b5744;border-radius:12px;background:#0a1711}
+.trialResult b{color:#8ce2b4;font-size:11px}.trialResult span{color:#91a0b0;font-size:9px}.trialResult small{color:#627b6d;font-size:8.5px}
+@media(max-width:900px){.trialCompact{grid-template-columns:1fr auto}.trialResult{grid-template-columns:1fr}.trialResult small{text-align:left}}
+@media(max-width:560px){.trialCompact{grid-template-columns:1fr}.trialCompact button{width:100%}}

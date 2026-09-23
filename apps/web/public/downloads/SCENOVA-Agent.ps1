@@ -24,6 +24,18 @@ function Unprotect-CurrentUserSecret([string]$ProtectedValue) {
   return [System.Text.Encoding]::UTF8.GetString($plain)
 }
 
+function Get-DeviceFingerprint {
+  try {
+    $machineGuid = [string](Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Cryptography" -Name MachineGuid -ErrorAction Stop).MachineGuid
+    if ([string]::IsNullOrWhiteSpace($machineGuid)) { return "" }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $bytes = [System.Text.Encoding]::UTF8.GetBytes("SCENOVA-DEVICE-V1:" + $machineGuid.Trim())
+      return (($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString("x2") }) -join "")
+    } finally { $sha.Dispose() }
+  } catch { return "" }
+}
+
 function Invoke-AgentCycle {
   try {
     if (-not (Test-Path $ConfigPath)) {
@@ -46,6 +58,7 @@ function Invoke-AgentCycle {
       terminalPath = [string]$config.TerminalDataPath
       eaHash = $localHash
       hostname = $env:COMPUTERNAME
+      deviceFingerprint = Get-DeviceFingerprint
     } | ConvertTo-Json -Compress
 
     $heartbeat = Invoke-RestMethod -Method Post -Uri "$($config.ApiBase)/api/ea/agent-heartbeat" -ContentType "application/json" -Body $heartbeatPayload

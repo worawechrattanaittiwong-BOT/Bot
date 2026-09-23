@@ -90,6 +90,7 @@ internal static class SmartAgentRunner
                 hostname = Environment.MachineName,
                 devicePublicId = config.DevicePublicId,
                 deviceSecret,
+                deviceFingerprint = DeviceFingerprint.Current(),
                 releaseChannel = config.ReleaseChannel,
                 installerStatus = new
                 {

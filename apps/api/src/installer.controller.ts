@@ -32,6 +32,7 @@ export class InstallerController {
     code: string;
     devicePublicId: string;
     deviceSecret: string;
+    deviceFingerprint?: string;
     hostname?: string;
     terminalPath?: string;
     legacyInstanceId?: string;
@@ -41,6 +42,8 @@ export class InstallerController {
     const code = String(body.code || "").trim();
     const devicePublicId = String(body.devicePublicId || "").trim();
     const deviceSecret = String(body.deviceSecret || "").trim();
+    const fingerprintInput = String(body.deviceFingerprint || "").trim().toLowerCase();
+    const deviceFingerprint = /^[a-f0-9]{64}$/.test(fingerprintInput) ? fingerprintInput : null;
     if (code.length < 12 || devicePublicId.length < 8 || deviceSecret.length < 24) {
       throw new ConflictException("invalid SCENOVA installer enrollment");
     }
@@ -120,9 +123,9 @@ export class InstallerController {
       throw new ConflictException("this installer code is not valid for LOCAL mode");
     }
 
-    // Device identity is installation telemetry only. A valid Slot enrollment
-    // may be installed on any PC; trading authorization is decided by the
-    // Slot token + live MT5 identity + Server entitlement on every heartbeat.
+    // Device identity does not change trading authorization. The stable,
+    // one-way fingerprint is also used only as an anti-abuse signal for Trial
+    // eligibility; normal Slot/MT5 entitlement remains authoritative.
     let instance = await this.db.one(
       "SELECT * FROM bot_instances WHERE slot_id=$1",
       [enrollment.slot_id]
@@ -162,6 +165,7 @@ export class InstallerController {
          device_last_seen_at=NULL,
          device_last_ip=NULL,
          agent_terminal_path=$6,
+         device_fingerprint_hash=COALESCE($7,device_fingerprint_hash),
          actual_state=CASE WHEN actual_state='RUNNING' THEN 'SAFE_STOP' ELSE actual_state END,
          desired_state=CASE WHEN desired_state='RUNNING' THEN 'SAFE_STOP' ELSE desired_state END
        WHERE id=$1`,
@@ -171,7 +175,8 @@ export class InstallerController {
         devicePublicId.slice(0, 160),
         this.crypto.sha256(deviceSecret),
         String(body.hostname || "").slice(0, 160) || null,
-        String(body.terminalPath || "").slice(0, 1000) || null
+        String(body.terminalPath || "").slice(0, 1000) || null,
+        deviceFingerprint
       ]
     );
 

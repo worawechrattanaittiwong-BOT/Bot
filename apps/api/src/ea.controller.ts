@@ -1203,6 +1203,7 @@ export class EaController {
       hostname?: string;
       devicePublicId?: string;
       deviceSecret?: string;
+      deviceFingerprint?: string;
       releaseChannel?: string;
       installerStatus?: {
         version?: string;
@@ -1217,6 +1218,8 @@ export class EaController {
     const instance = await this.instance(body.instanceId, body.installToken);
     const publicId = String(body.devicePublicId || "").trim();
     const secret = String(body.deviceSecret || "").trim();
+    const fingerprintInput = String(body.deviceFingerprint || "").trim().toLowerCase();
+    const deviceFingerprint = /^[a-f0-9]{64}$/.test(fingerprintInput) ? fingerprintInput : null;
     const deviceReported = publicId.length >= 8 && secret.length >= 24;
     const deviceVerified = deviceReported;
 
@@ -1245,6 +1248,7 @@ export class EaController {
          device_status=CASE WHEN $6::boolean THEN 'ACTIVE' ELSE device_status END,
          device_last_seen_at=CASE WHEN $6::boolean THEN now() ELSE device_last_seen_at END,
          device_last_ip=CASE WHEN $6::boolean THEN $9 ELSE device_last_ip END,
+         device_fingerprint_hash=COALESCE($11,device_fingerprint_hash),
          metrics=CASE
            WHEN $10::jsonb IS NULL THEN metrics
            ELSE jsonb_set(COALESCE(metrics,'{}'::jsonb),'{installer}', $10::jsonb, true)
@@ -1260,7 +1264,8 @@ export class EaController {
         publicId.slice(0, 160),
         deviceReported ? this.crypto.sha256(secret) : null,
         ip,
-        installerStatus ? JSON.stringify(installerStatus) : null
+        installerStatus ? JSON.stringify(installerStatus) : null,
+        deviceFingerprint
       ]
     );
 

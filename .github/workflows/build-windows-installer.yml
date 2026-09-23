@@ -201,9 +201,9 @@ jobs:
           # will not loop on apps/web/public/downloads/**, while the production web
           # deploy still needs to see this binary publish commit.
           if ($env:SIGNING_ENABLED -eq "true") {
-            git commit -m "build: publish signed SCENOVA Windows installer v$version"
+            git commit -m "[customer-admin-only] build: publish signed SCENOVA Windows installer v$version"
           } else {
-            git commit -m "build: publish SCENOVA Windows installer v$version"
+            git commit -m "[customer-admin-only] build: publish SCENOVA Windows installer v$version"
           }
 
           # Main can advance again between fetch and push while other CI work
