@@ -24,6 +24,7 @@ import { PartnerController } from "./partner.controller";
 import { PartnerService } from "./partner.service";
 import { ReferralController } from "./referral.controller";
 import { ReferralService } from "./referral.service";
+import { TrialAuthorizationService } from "./trial-authorization.service";
 import { DbService } from "./db.service";
 import { MaintenanceService } from "./maintenance.service";
 import { CloudService, CloudAdminController, CloudCustomerController, CloudPaymentController } from "./cloud.controller";
@@ -53,6 +54,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
     MaintenanceService,
     PartnerService,
     ReferralService,
+    TrialAuthorizationService,
     JwtGuard,
     AdminGuard,
     WorkerGuard,
