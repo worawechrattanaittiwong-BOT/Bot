@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "../../../lib/api";
+import { useSystemPopup } from "../../../components/SystemPopupProvider";
 import s from "./cloud-test.module.css";
 
 type Node = {
@@ -30,6 +31,7 @@ const labels:Record<string,string> = {
 };
 
 export default function CloudTestPage() {
+  const { confirmPopup } = useSystemPopup();
   const [data,setData]=useState<State|null>(null);
   const [safety,setSafety]=useState<any|null>(null);
   const [runnerId,setRunnerId]=useState("");
@@ -103,7 +105,13 @@ export default function CloudTestPage() {
   async function rotateLease() {
     const instanceId=data?.test?.instance_id;
     if (!instanceId) return;
-    if (!confirm("ยืนยันหมุน Execution Lease หรือไม่? Token ของ runtime เดิมจะใช้กับ Server ไม่ได้ทันที และ Phase 2 จะยังไม่ปล่อย VPS ownership")) return;
+    const confirmed=await confirmPopup({
+      title:"Rotate Execution Lease",
+      tone:"warning",
+      message:"Token ของ runtime เดิมจะใช้กับ Server ไม่ได้ทันที และ Phase 2 จะยังไม่ปล่อย VPS ownership",
+      confirmLabel:"Rotate Lease"
+    });
+    if (!confirmed) return;
     setBusy(true);setError("");setMessage("");
     try {
       const result=await adminApi("/admin/runtime-safety/"+encodeURIComponent(instanceId)+"/rotate-lease",{
