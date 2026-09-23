@@ -3,8 +3,10 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../../lib/api";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
+import { useSystemPopup } from "../../components/SystemPopupProvider";
 
 export default function PartnerPage() {
+  const { confirmPopup } = useSystemPopup();
   const [data, setData] = useState<any>(null);
   const [target, setTarget] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,7 +49,13 @@ export default function PartnerPage() {
   }
 
   async function renewCustomer(customer:any) {
-    if (!confirm(`ต่ออายุ ${customer.user_code} อีก ${data?.account?.customer_duration_days || 30} วันใช่หรือไม่?`)) return;
+    const confirmed=await confirmPopup({
+      title:"ยืนยันต่ออายุลูกค้า",
+      tone:"warning",
+      message:`ต่ออายุ ${customer.user_code} อีก ${data?.account?.customer_duration_days || 30} วันใช่หรือไม่?`,
+      confirmLabel:"ต่ออายุ"
+    });
+    if (!confirmed) return;
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await api("/partner/customers/renew", {
