@@ -22,6 +22,8 @@ import { PerformanceActionsController, SharedPerformanceController } from "./per
 import { DashboardLiveController } from "./dashboard-live.controller";
 import { PartnerController } from "./partner.controller";
 import { PartnerService } from "./partner.service";
+import { ReferralController } from "./referral.controller";
+import { ReferralService } from "./referral.service";
 import { DbService } from "./db.service";
 import { MaintenanceService } from "./maintenance.service";
 import { CloudService, CloudAdminController, CloudCustomerController, CloudPaymentController } from "./cloud.controller";
@@ -41,7 +43,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, AccountSecurityController, BotController, DashboardLiveController, PartnerController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
+  controllers: [ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, RootController, CatalogController, AuthController, AccountSecurityController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
     ProductionHardeningService,
     RuntimeMigrationService,
@@ -50,6 +52,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
     DbService,
     MaintenanceService,
     PartnerService,
+    ReferralService,
     JwtGuard,
     AdminGuard,
     WorkerGuard,

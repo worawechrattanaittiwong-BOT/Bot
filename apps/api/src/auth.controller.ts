@@ -218,13 +218,31 @@ export class AuthController {
   }
 
   @Post("register")
-  async register(@Req() req: any, @Body() body: { email: string; password: string }) {
+  async register(
+    @Req() req: any,
+    @Body() body: { email: string; password: string; referralCode?: string }
+  ) {
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");
     if (!email || password.length < 8) {
       throw new ConflictException(
         "email required and password must be at least 8 characters"
       );
+    }
+
+    const inviteCode = String(body.referralCode || "").trim().toUpperCase();
+    const sponsor = inviteCode
+      ? await this.db.one(
+          `SELECT id,user_code,referral_code
+           FROM users
+           WHERE lower(referral_code)=lower($1)
+             AND status='ACTIVE'
+           LIMIT 1`,
+          [inviteCode]
+        )
+      : null;
+    if (inviteCode && !sponsor) {
+      throw new BadRequestException("Invite code is invalid or unavailable");
     }
 
     const requireVerification = this.verificationRequired();
@@ -238,19 +256,26 @@ export class AuthController {
 
     const passwordHash = await hash(password, 12);
     const code = "BOT-" + Date.now().toString(36).toUpperCase();
+    const ownReferralCode = "SCN-" + code.replace(/^BOT-/i, "");
 
     const user = requireVerification
       ? await this.db.one(
-          `INSERT INTO users(user_code,email,password_hash,email_verified_at)
-           VALUES($1,$2,$3,NULL)
-           RETURNING id,user_code,email,role,status,email_verified_at`,
-          [code, email, passwordHash]
+          `INSERT INTO users(
+             user_code,email,password_hash,email_verified_at,
+             referral_code,referred_by_user_id,referred_at
+           )
+           VALUES($1,$2,$3,NULL,$4,$5,CASE WHEN $5::uuid IS NULL THEN NULL ELSE now() END)
+           RETURNING id,user_code,email,role,status,email_verified_at,referral_code,referred_by_user_id`,
+          [code, email, passwordHash, ownReferralCode, sponsor?.id || null]
         )
       : await this.db.one(
-          `INSERT INTO users(user_code,email,password_hash,email_verified_at)
-           VALUES($1,$2,$3,now())
-           RETURNING id,user_code,email,role,status,email_verified_at`,
-          [code, email, passwordHash]
+          `INSERT INTO users(
+             user_code,email,password_hash,email_verified_at,
+             referral_code,referred_by_user_id,referred_at
+           )
+           VALUES($1,$2,$3,now(),$4,$5,CASE WHEN $5::uuid IS NULL THEN NULL ELSE now() END)
+           RETURNING id,user_code,email,role,status,email_verified_at,referral_code,referred_by_user_id`,
+          [code, email, passwordHash, ownReferralCode, sponsor?.id || null]
         );
 
     await this.authEvent(user.id, email, "REGISTER", req);
@@ -261,6 +286,7 @@ export class AuthController {
         user: this.publicUser(user),
         email,
         requiresEmailVerification: true,
+        referralApplied: Boolean(sponsor?.id),
         ...delivery
       };
     }
@@ -268,7 +294,8 @@ export class AuthController {
     return {
       user: this.publicUser(user),
       token: this.tokenFor(user),
-      requiresEmailVerification: false
+      requiresEmailVerification: false,
+      referralApplied: Boolean(sponsor?.id)
     };
   }
 
