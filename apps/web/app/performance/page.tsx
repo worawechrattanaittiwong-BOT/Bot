@@ -546,34 +546,73 @@ export default function PerformanceDashboardPage() {
             </div>
 
             <div className={styles.drawerControls}>
-              <label><span>Trading Account</span><select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>
-                {realAccounts.length?<optgroup label="Live Accounts (REAL)">{realAccounts.map((account:any)=><option key={account.id} value={account.id}>REAL · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
-                {demoAccounts.length?<optgroup label="Demo Accounts">{demoAccounts.map((account:any)=><option key={account.id} value={account.id}>DEMO · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
-              </select></label>
-              <label><span>Report Source</span><select value={mode} onChange={(e)=>setMode(e.target.value as Mode)}><option value="LIVE">Live Performance</option><option value="BACKTEST">Backtest Analysis</option></select></label>
-              <label><span>Start Date</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
-              <label><span>End Date</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
-              <button className={styles.refreshButton} onClick={()=>refresh()} disabled={loading||!accountId}><ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh Report"}</button>
+              <label className={styles.drawerField}>
+                <span>Trading Account</span>
+                <select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>
+                  {realAccounts.length?<optgroup label="Live Accounts (REAL)">{realAccounts.map((account:any)=><option key={account.id} value={account.id}>REAL · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
+                  {demoAccounts.length?<optgroup label="Demo Accounts">{demoAccounts.map((account:any)=><option key={account.id} value={account.id}>DEMO · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
+                </select>
+              </label>
+
+              <div className={styles.modeField}>
+                <span className={styles.drawerLabel}>Report Source</span>
+                <div className={styles.modeBoxes}>
+                  <button
+                    type="button"
+                    aria-pressed={mode==="LIVE"}
+                    className={mode==="LIVE"?styles.modeBoxActive:styles.modeBox}
+                    onClick={()=>setMode("LIVE")}
+                  >
+                    <span className={styles.modeCheck}>{mode==="LIVE"?"✓":""}</span>
+                    <span><b>Live</b><small>Live Performance</small></span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={mode==="BACKTEST"}
+                    className={mode==="BACKTEST"?styles.modeBoxActive:styles.modeBox}
+                    onClick={()=>setMode("BACKTEST")}
+                  >
+                    <span className={styles.modeCheck}>{mode==="BACKTEST"?"✓":""}</span>
+                    <span><b>Backtest</b><small>Backtest Analysis</small></span>
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.datePair}>
+                <label><span>Start Date</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
+                <label><span>End Date</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
+              </div>
+
+              <button className={styles.refreshButton} onClick={()=>refresh()} disabled={loading||!accountId}>
+                <ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh Report"}
+              </button>
             </div>
 
             {mode==="LIVE"?(
               <div className={styles.strategyPortfolio}>
                 <div className={styles.strategyPortfolioHead}>
-                  <div><ScenovaIcon name="strategy" size={16}/><span><b>Strategy Portfolio</b><small>เลือกกลยุทธ์ที่ต้องการนำมาคำนวณและแสดงผลได้อย่างอิสระ</small></span></div>
+                  <div><ScenovaIcon name="strategy" size={16}/><span><b>Strategy Portfolio</b><small>ติ๊กเลือกโหมดที่ต้องการนำมาคำนวณในรายงาน</small></span></div>
                   <strong>{strategyPortfolioLabel(selectedStrategies)}</strong>
                 </div>
                 <div className={styles.strategyChips}>
-                  {STRATEGY_OPTIONS.map((strategy)=>(
-                    <button
-                      type="button"
-                      key={strategy}
-                      className={selectedStrategies.includes(strategy)?styles.strategyChipActive:styles.strategyChip}
-                      onClick={()=>toggleStrategy(strategy)}
-                    >
-                      <span>{strategyLabel(strategy)}</span>
-                      <small>{selectedStrategies.includes(strategy)?"Included":"Excluded"}</small>
-                    </button>
-                  ))}
+                  {STRATEGY_OPTIONS.map((strategy)=>{
+                    const selected=selectedStrategies.includes(strategy);
+                    return (
+                      <button
+                        type="button"
+                        key={strategy}
+                        aria-pressed={selected}
+                        className={selected?styles.strategyChipActive:styles.strategyChip}
+                        onClick={()=>toggleStrategy(strategy)}
+                      >
+                        <span className={styles.strategyCheck}>{selected?"✓":""}</span>
+                        <span className={styles.strategyCopy}>
+                          <b>{strategyLabel(strategy)}</b>
+                          <small>{selected?"Selected":"Not selected"}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className={styles.strategyPresets}>
                   <span>Portfolio Presets</span>
