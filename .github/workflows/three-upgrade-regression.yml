@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   force-flat-partner-entitlement:
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[popup-only]') == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
