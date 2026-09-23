@@ -2596,6 +2596,8 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+          </div>
+        )}
 
         {activeView === "backtest" && (
           <BacktestCenter
