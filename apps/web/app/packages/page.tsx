@@ -632,7 +632,6 @@ export default function PackagesPage() {
               <OrderHistory title={isLocalSystem ? "Local MT5" : "VPS / Cloud MT5"} orders={activeOrders}/>
             </div>
           </section>
-          </section>
         </div>
       </main>
     </div>
