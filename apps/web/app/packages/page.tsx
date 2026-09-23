@@ -1,0 +1,774 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api, getToken } from "../../lib/api";
+import {
+  CustomerMobileNav,
+  CustomerSidebar,
+  OwnerMobileNav,
+  OwnerSidebar
+} from "../../components/OwnerSidebar";
+import { ScenovaIcon } from "../../components/ScenovaIcon";
+import styles from "./packages.module.css";
+
+type Account = {
+  user: {
+    userCode: string;
+    email: string;
+    role: string;
+    phone: { masked: string; verified: boolean } | null;
+  };
+  access: {
+    subscription: any;
+    trial: any;
+    partner: any;
+  };
+};
+
+type TrialStatus = {
+  smsConfigured: boolean;
+  trialDays: number;
+  eligibility: { allowed: boolean; reason: string; message: string };
+  phone: { masked: string; verified: boolean } | null;
+  authorization: any;
+  trial: any;
+  latestCode: any;
+  otp?: {
+    codeLength: number;
+    expiresInMinutes: number;
+    resendSeconds: number;
+    resendAfterSeconds: number;
+    resendAvailableAt: string | null;
+    maxSendsPerDay: number;
+    sendsUsedToday: number;
+    sendsRemaining: number;
+  };
+};
+
+type PackageItem = {
+  months: number;
+  price_satang: number;
+  enabled: boolean;
+  updated_at: string;
+};
+
+type Catalog = {
+  packages: PackageItem[];
+  paymentMode: string;
+  checkoutEnabled: boolean;
+  available?: number;
+  provisioningPaused?: boolean;
+};
+
+type Order = {
+  id: string;
+  months: number;
+  amount: number;
+  status: string;
+  qr_url: string | null;
+  expires_at: string | null;
+  created_at: string;
+  paid_at: string | null;
+  slot_id: string | null;
+  subscription_id?: string | null;
+  subscription_expires_at: string | null;
+  account_number?: string | null;
+  actual_state?: string | null;
+  last_seen_at?: string | null;
+};
+
+function money(satang: number) {
+  return (Number(satang || 0) / 100).toLocaleString("th-TH", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+}
+
+function date(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("th-TH", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function logout() {
+  localStorage.removeItem("bot_token");
+  sessionStorage.removeItem("scenova_2fa_challenge");
+  sessionStorage.removeItem("scenova_2fa_email");
+  window.location.replace("/login");
+}
+
+export default function PackagesPage() {
+  const [account, setAccount] = useState<Account | null>(null);
+  const [trial, setTrial] = useState<TrialStatus | null>(null);
+  const [localCatalog, setLocalCatalog] = useState<Catalog | null>(null);
+  const [cloudCatalog, setCloudCatalog] = useState<Catalog | null>(null);
+  const [localOrders, setLocalOrders] = useState<Order[]>([]);
+  const [cloudOrders, setCloudOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
+  const [messageKind, setMessageKind] = useState<"good" | "bad" | "info">("info");
+  const [otp, setOtp] = useState("");
+  const [cooldown, setCooldown] = useState(0);
+  const polling = useRef(false);
+
+  const elevated = ["OWNER", "ADMIN"].includes(String(account?.user.role || "").toUpperCase());
+  const partnerSummary = account?.access.partner ? {
+    usedSeats: Number(account.access.partner.used_seats || 0),
+    seat_limit: Number(account.access.partner.seat_limit || 0),
+    status: String(account.access.partner.status || "ACTIVE")
+  } : null;
+
+  async function load() {
+    const [a, t, lc, lo, cc, co] = await Promise.all([
+      api("/auth/account"),
+      api("/trial-access/status").catch(() => null),
+      api("/packages/local/catalog"),
+      api("/packages/local/orders"),
+      api("/cloud/catalog"),
+      api("/cloud/orders")
+    ]);
+    setAccount(a);
+    setTrial(t);
+    setLocalCatalog(lc);
+    setLocalOrders(Array.isArray(lo) ? lo : []);
+    setCloudCatalog(cc);
+    setCloudOrders(Array.isArray(co) ? co : []);
+    if (t?.otp?.resendAfterSeconds != null) {
+      setCooldown(Number(t.otp.resendAfterSeconds || 0));
+    }
+  }
+
+  useEffect(() => {
+    if (!getToken()) {
+      window.location.replace("/login");
+      return;
+    }
+    load()
+      .catch((error: unknown) => {
+        setMessageKind("bad");
+        setMessage(error instanceof Error ? error.message : "โหลดแพ็กเกจไม่สำเร็จ");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = window.setInterval(() => {
+      setCooldown(current => Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [cooldown > 0]);
+
+  const pendingLocal = localOrders.find(order => ["CREATING", "PENDING", "REVIEW"].includes(order.status));
+  const pendingCloud = cloudOrders.find(order => ["CREATING", "PENDING", "REVIEW"].includes(order.status));
+
+  useEffect(() => {
+    if (!pendingLocal && !pendingCloud) return;
+    const id = window.setInterval(async () => {
+      if (document.hidden || polling.current) return;
+      polling.current = true;
+      try {
+        if (pendingLocal?.status === "PENDING") {
+          await api(`/packages/local/orders/${pendingLocal.id}/refresh`, { method: "POST" });
+        }
+        if (pendingCloud?.status === "PENDING") {
+          await api(`/cloud/orders/${pendingCloud.id}/refresh`, { method: "POST" });
+        }
+        await load();
+      } catch {
+        // Keep the payment card visible; manual refresh remains available.
+      } finally {
+        polling.current = false;
+      }
+    }, 20000);
+    return () => window.clearInterval(id);
+  }, [pendingLocal?.id, pendingLocal?.status, pendingCloud?.id, pendingCloud?.status]);
+
+  const activeLocal = useMemo(
+    () => localOrders.find(order =>
+      order.status === "PAID" &&
+      order.subscription_expires_at &&
+      new Date(order.subscription_expires_at).getTime() > Date.now()
+    ),
+    [localOrders]
+  );
+
+  const activeCloud = useMemo(
+    () => cloudOrders.find(order =>
+      order.status === "PAID" &&
+      order.subscription_expires_at &&
+      new Date(order.subscription_expires_at).getTime() > Date.now()
+    ),
+    [cloudOrders]
+  );
+
+  function notify(kind: "good" | "bad" | "info", text: string) {
+    setMessageKind(kind);
+    setMessage(text);
+  }
+
+  async function requestOtp() {
+    if (busy || cooldown > 0 || !trial?.phone) return;
+    setBusy("otp-send");
+    setMessage("");
+    try {
+      const result = await api("/trial-access/request-code", { method: "POST" });
+      setCooldown(Number(result.resendAfterSeconds || 60));
+      setOtp("");
+      notify("good", "ส่ง OTP ไปที่ " + result.phoneMasked + " แล้ว");
+      await load();
+    } catch (error: unknown) {
+      notify("bad", error instanceof Error ? error.message : "ส่ง OTP ไม่สำเร็จ");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function verifyOtp() {
+    if (busy || otp.length !== 6) return;
+    setBusy("otp-verify");
+    setMessage("");
+    try {
+      const result = await api("/trial-access/redeem", {
+        method: "POST",
+        body: JSON.stringify({ code: otp })
+      });
+      setOtp("");
+      notify("good", result.message || "เปิดสิทธิ์ทดลองแล้ว");
+      await load();
+    } catch (error: unknown) {
+      notify("bad", error instanceof Error ? error.message : "ยืนยัน OTP ไม่สำเร็จ");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function checkoutLocal(months: number) {
+    if (busy) return;
+    setBusy("local-" + months);
+    setMessage("");
+    try {
+      await api("/packages/local/checkout", {
+        method: "POST",
+        body: JSON.stringify({ months })
+      });
+      await load();
+      notify("info", "สร้าง QR สำหรับแพ็กเกจ Local แล้ว");
+    } catch (error: unknown) {
+      notify("bad", error instanceof Error ? error.message : "สร้างรายการ Local ไม่สำเร็จ");
+      await load().catch(() => {});
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function checkoutCloud(months: number) {
+    if (busy) return;
+    setBusy("cloud-" + months);
+    setMessage("");
+    try {
+      await api("/cloud/checkout", {
+        method: "POST",
+        body: JSON.stringify({ months })
+      });
+      await load();
+      notify("info", "สร้าง QR สำหรับแพ็กเกจ Cloud แล้ว");
+    } catch (error: unknown) {
+      notify("bad", error instanceof Error ? error.message : "สร้างรายการ Cloud ไม่สำเร็จ");
+      await load().catch(() => {});
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function refreshOrder(type: "local" | "cloud", id: string) {
+    if (busy) return;
+    setBusy("refresh-" + type);
+    try {
+      await api(
+        type === "local"
+          ? `/packages/local/orders/${id}/refresh`
+          : `/cloud/orders/${id}/refresh`,
+        { method: "POST" }
+      );
+      await load();
+      notify("good", "ตรวจสอบสถานะการชำระเงินแล้ว");
+    } catch (error: unknown) {
+      notify("bad", error instanceof Error ? error.message : "ตรวจสอบรายการไม่สำเร็จ");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (loading) {
+    return <main className={styles.loading}>กำลังโหลดแพ็กเกจ...</main>;
+  }
+
+  if (!account) {
+    return <main className={styles.loading}>{message || "ไม่พบบัญชี"}</main>;
+  }
+
+  const trialReady = Boolean(trial?.authorization || trial?.trial);
+  const trialEligible = Boolean(trial?.eligibility?.allowed);
+  const sendsRemaining = Number(trial?.otp?.sendsRemaining ?? 0);
+
+  return (
+    <div className="app-wrap">
+      {elevated
+        ? <OwnerSidebar activeKey="packages" onLogout={logout} role={account.user.role}/>
+        : <CustomerSidebar activeKey="packages" onLogout={logout} userCode={account.user.userCode} partner={partnerSummary}/>}
+      <main className={`main app-main ${styles.main}`}>
+        {elevated
+          ? <OwnerMobileNav activeKey="packages"/>
+          : <CustomerMobileNav activeKey="packages" partner={partnerSummary}/>}
+
+        <div className={styles.shell}>
+          <header className={styles.header}>
+            <div>
+              <span className={styles.eyebrow}>ACCESS & MEMBERSHIP</span>
+              <h1>Packages</h1>
+              <p>เลือก Trial, Local MT5 หรือ Cloud MT5 ตามรูปแบบที่คุณใช้งานจริง</p>
+            </div>
+            <div className={styles.currentAccess}>
+              <span>สิทธิ์ปัจจุบัน</span>
+              <b>{account.access.subscription?.code || account.access.trial?.status || "ยังไม่มีแพ็กเกจ"}</b>
+            </div>
+          </header>
+
+          {message && (
+            <div className={`${styles.message} ${messageKind === "good" ? styles.good : messageKind === "bad" ? styles.bad : ""}`}>
+              {message}
+            </div>
+          )}
+
+          <section className={styles.trialPanel}>
+            <div className={styles.trialHead}>
+              <div className={styles.titleWithIcon}>
+                <span className={styles.icon}><ScenovaIcon name="status" size={19}/></span>
+                <div>
+                  <span className={styles.eyebrow}>START HERE</span>
+                  <h2>ทดลองใช้งาน</h2>
+                  <p>ยืนยันเบอร์โทรด้วย OTP ก่อนเปิด Trial</p>
+                </div>
+              </div>
+              <span className={`${styles.badge} ${trialReady ? styles.badgeGood : ""}`}>
+                {trial?.trial ? "ACTIVE" : trial?.authorization ? "READY" : trialEligible ? "AVAILABLE" : "UNAVAILABLE"}
+              </span>
+            </div>
+
+            <div className={styles.trialBody}>
+              <div className={styles.trialSteps}>
+                <TrialStep
+                  number="1"
+                  title="เบอร์โทร"
+                  value={trial?.phone?.masked || "ยังไม่ได้เพิ่มเบอร์"}
+                  done={Boolean(trial?.phone)}
+                />
+                <TrialStep
+                  number="2"
+                  title="OTP"
+                  value={trial?.latestCode ? "ส่งรหัสแล้ว" : "รอยืนยัน"}
+                  done={Boolean(trial?.phone?.verified || trialReady)}
+                />
+                <TrialStep
+                  number="3"
+                  title="Trial"
+                  value={trialReady ? "พร้อมใช้งาน" : `${trial?.trialDays || 1} วัน`}
+                  done={trialReady}
+                />
+              </div>
+
+              {trialReady ? (
+                <div className={styles.trialSuccess}>
+                  <span className={styles.successIcon}>✓</span>
+                  <div>
+                    <b>{trial?.trial ? "Trial เปิดใช้งานแล้ว" : "Trial พร้อมใช้งาน"}</b>
+                    <span>{trial?.eligibility?.message || "เชื่อม MT5 แล้วเริ่มใช้งานได้"}</span>
+                  </div>
+                </div>
+              ) : !trialEligible ? (
+                <div className={styles.trialUnavailable}>
+                  <b>ไม่สามารถรับ Trial เพิ่มได้</b>
+                  <span>{trial?.eligibility?.message || "บัญชีนี้ไม่มีสิทธิ์ Trial"}</span>
+                </div>
+              ) : !trial?.phone ? (
+                <div className={styles.phoneRequired}>
+                  <div>
+                    <b>เพิ่มเบอร์โทรก่อน</b>
+                    <span>OTP จะส่งเฉพาะเบอร์ที่ผูกกับบัญชี SCENOVA</span>
+                  </div>
+                  <Link className={styles.secondaryButton} href="/account#phone-settings">
+                    ไปที่ My Account
+                  </Link>
+                </div>
+              ) : (
+                <div className={styles.otpPanel}>
+                  <div className={styles.otpMeta}>
+                    <div>
+                      <span>เบอร์รับ OTP</span>
+                      <strong>{trial.phone.masked}</strong>
+                    </div>
+                    <div>
+                      <span>ส่งได้อีกวันนี้</span>
+                      <strong>{sendsRemaining} ครั้ง</strong>
+                    </div>
+                    <div>
+                      <span>อายุรหัส</span>
+                      <strong>{trial.otp?.expiresInMinutes || 10} นาที</strong>
+                    </div>
+                  </div>
+
+                  <div className={styles.otpActions}>
+                    <button
+                      type="button"
+                      className={styles.secondaryButton}
+                      onClick={requestOtp}
+                      disabled={
+                        Boolean(busy) ||
+                        cooldown > 0 ||
+                        sendsRemaining <= 0 ||
+                        !trial.smsConfigured
+                      }
+                    >
+                      {busy === "otp-send"
+                        ? "กำลังส่ง..."
+                        : cooldown > 0
+                          ? `ส่งใหม่ได้ใน ${cooldown}s`
+                          : trial.latestCode
+                            ? "ส่ง OTP ใหม่"
+                            : "ส่ง OTP"}
+                    </button>
+
+                    <label className={styles.otpInput}>
+                      <span>รหัส OTP 6 หลัก</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        name="scenova_package_trial_otp"
+                        maxLength={6}
+                        value={otp}
+                        onChange={event => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                        disabled={Boolean(busy)}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      className={styles.primaryButton}
+                      onClick={verifyOtp}
+                      disabled={Boolean(busy) || otp.length !== 6}
+                    >
+                      {busy === "otp-verify" ? "กำลังตรวจสอบ..." : "ยืนยัน OTP"}
+                    </button>
+                  </div>
+
+                  {!trial.smsConfigured && (
+                    <div className={styles.smsWarning}>ระบบ SMS ยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแล</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {(pendingLocal || pendingCloud) && (
+            <section className={styles.paymentPanel}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <span className={styles.eyebrow}>PAYMENT IN PROGRESS</span>
+                  <h2>รายการรอชำระ</h2>
+                </div>
+              </div>
+              <div className={styles.pendingGrid}>
+                {pendingLocal && (
+                  <PaymentCard
+                    type="LOCAL"
+                    order={pendingLocal}
+                    busy={Boolean(busy)}
+                    onRefresh={() => refreshOrder("local", pendingLocal.id)}
+                  />
+                )}
+                {pendingCloud && (
+                  <PaymentCard
+                    type="CLOUD"
+                    order={pendingCloud}
+                    busy={Boolean(busy)}
+                    onRefresh={() => refreshOrder("cloud", pendingCloud.id)}
+                  />
+                )}
+              </div>
+            </section>
+          )}
+
+          <section className={`${styles.systemPanel} ${styles.localPanel}`}>
+            <div className={styles.systemHeader}>
+              <div className={styles.systemName}>
+                <span className={styles.systemIcon}><ScenovaIcon name="account" size={22}/></span>
+                <div>
+                  <span className={styles.eyebrow}>SYSTEM 01</span>
+                  <h2>Local MT5</h2>
+                  <p>ติดตั้ง EA บนคอมพิวเตอร์ของคุณเอง · ควบคุมสิทธิ์และ Settings ผ่าน SCENOVA</p>
+                </div>
+              </div>
+              <div className={styles.systemStatus}>
+                <span>{activeLocal ? "ACTIVE" : "LOCAL"}</span>
+                {activeLocal && <b>ถึง {date(activeLocal.subscription_expires_at)}</b>}
+              </div>
+            </div>
+
+            <div className={styles.systemFeatures}>
+              <span>ใช้ MT5 บนเครื่องของคุณ</span>
+              <span>1 แพ็กเกจ / 1 บัญชี MT5</span>
+              <span>EA ทำงานเมื่อเครื่องและ MT5 เปิดอยู่</span>
+              <span>ต่ออายุเพิ่มจากเวลาที่เหลือ</span>
+            </div>
+
+            <div className={styles.packageGrid}>
+              {(localCatalog?.packages || []).map(pack => (
+                <PackageCard
+                  key={pack.months}
+                  system="LOCAL"
+                  pack={pack}
+                  checkoutEnabled={Boolean(localCatalog?.checkoutEnabled)}
+                  paymentMode={localCatalog?.paymentMode || "UNCONFIGURED"}
+                  busy={Boolean(busy)}
+                  pending={Boolean(pendingLocal)}
+                  onBuy={() => checkoutLocal(pack.months)}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section className={`${styles.systemPanel} ${styles.cloudPanel}`}>
+            <div className={styles.systemHeader}>
+              <div className={styles.systemName}>
+                <span className={styles.systemIcon}><ScenovaIcon name="cloud" size={22}/></span>
+                <div>
+                  <span className={styles.eyebrow}>SYSTEM 02</span>
+                  <h2>Cloud MT5</h2>
+                  <p>MT5 และ EA ทำงานบนเซิร์ฟเวอร์ · ปิดมือถือหรือคอมของคุณได้หลังจากกด Start</p>
+                </div>
+              </div>
+              <div className={styles.systemStatus}>
+                <span>{activeCloud ? "ACTIVE" : "CLOUD"}</span>
+                <b>
+                  {activeCloud
+                    ? `ถึง ${date(activeCloud.subscription_expires_at)}`
+                    : cloudCatalog
+                      ? `${Number(cloudCatalog.available || 0)} Slot พร้อม`
+                      : "กำลังตรวจสอบ"}
+                </b>
+              </div>
+            </div>
+
+            <div className={styles.systemFeatures}>
+              <span>รันบอทบน Cloud 24/7</span>
+              <span>1 แพ็กเกจ / 1 Cloud MT5</span>
+              <span>Start / Stop จากมือถือ</span>
+              <span>มี Capacity Guard ก่อนเปิดขาย</span>
+            </div>
+
+            <div className={styles.packageGrid}>
+              {(cloudCatalog?.packages || []).map(pack => (
+                <PackageCard
+                  key={pack.months}
+                  system="CLOUD"
+                  pack={pack}
+                  checkoutEnabled={Boolean(cloudCatalog?.checkoutEnabled)}
+                  paymentMode={cloudCatalog?.paymentMode || "UNCONFIGURED"}
+                  busy={Boolean(busy)}
+                  pending={Boolean(pendingCloud)}
+                  capacityAvailable={Number(cloudCatalog?.available || 0) > 0}
+                  onBuy={() => checkoutCloud(pack.months)}
+                />
+              ))}
+            </div>
+          </section>
+
+          {(localCatalog?.paymentMode === "TEST" || cloudCatalog?.paymentMode === "TEST") && (
+            <div className={styles.testNotice}>
+              Payment Gateway อยู่ในโหมดทดสอบ รายการทดสอบจะไม่ใช่การรับชำระเงินจริง
+            </div>
+          )}
+
+          <section className={styles.historyPanel}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <span className={styles.eyebrow}>MEMBERSHIP HISTORY</span>
+                <h2>รายการล่าสุด</h2>
+              </div>
+            </div>
+            <div className={styles.historyGrid}>
+              <OrderHistory title="Local MT5" orders={localOrders}/>
+              <OrderHistory title="Cloud MT5" orders={cloudOrders}/>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function TrialStep({
+  number,
+  title,
+  value,
+  done
+}:{
+  number:string;
+  title:string;
+  value:string;
+  done:boolean;
+}) {
+  return (
+    <div className={`${styles.trialStep} ${done ? styles.trialStepDone : ""}`}>
+      <span className={styles.stepNumber}>{done ? "✓" : number}</span>
+      <div>
+        <b>{title}</b>
+        <span>{value}</span>
+      </div>
+    </div>
+  );
+}
+
+function PackageCard({
+  system,
+  pack,
+  checkoutEnabled,
+  paymentMode,
+  busy,
+  pending,
+  capacityAvailable = true,
+  onBuy
+}:{
+  system:"LOCAL"|"CLOUD";
+  pack:PackageItem;
+  checkoutEnabled:boolean;
+  paymentMode:string;
+  busy:boolean;
+  pending:boolean;
+  capacityAvailable?:boolean;
+  onBuy:()=>void;
+}) {
+  const available =
+    pack.enabled &&
+    pack.price_satang > 0 &&
+    checkoutEnabled &&
+    capacityAvailable &&
+    !pending;
+
+  const featured = pack.months === 3;
+  const label =
+    !pack.enabled || pack.price_satang <= 0
+      ? "ยังไม่เปิดขาย"
+      : !checkoutEnabled || paymentMode === "UNCONFIGURED"
+        ? "ระบบชำระเงินยังไม่เปิด"
+        : !capacityAvailable
+          ? "Cloud เต็มชั่วคราว"
+          : pending
+            ? "มีรายการรอชำระ"
+            : "เลือกแพ็กเกจ";
+
+  return (
+    <article className={`${styles.packageCard} ${featured ? styles.featured : ""}`}>
+      <div className={styles.packageTop}>
+        <span>{system} MT5</span>
+        {featured && <em>POPULAR</em>}
+      </div>
+      <h3>{pack.months} เดือน</h3>
+      <div className={styles.price}>
+        {pack.price_satang > 0 ? `฿${money(pack.price_satang)}` : "—"}
+        <small>
+          {pack.price_satang > 0
+            ? `เฉลี่ย ฿${money(Math.round(pack.price_satang / pack.months))} / เดือน`
+            : "รอผู้ดูแลกำหนดราคา"}
+        </small>
+      </div>
+      <div className={styles.cardFeatures}>
+        <span>1 บัญชี MT5</span>
+        <span>ต่ออายุรักษาเวลาที่เหลือ</span>
+        <span>ชำระครั้งเดียว ไม่ต่ออายุอัตโนมัติ</span>
+      </div>
+      <button
+        type="button"
+        className={featured ? styles.primaryButton : styles.secondaryButton}
+        disabled={busy || !available}
+        onClick={onBuy}
+      >
+        {busy ? "กำลังดำเนินการ..." : label}
+      </button>
+    </article>
+  );
+}
+
+function PaymentCard({
+  type,
+  order,
+  busy,
+  onRefresh
+}:{
+  type:"LOCAL"|"CLOUD";
+  order:Order;
+  busy:boolean;
+  onRefresh:()=>void;
+}) {
+  return (
+    <article className={styles.paymentCard}>
+      <div className={styles.paymentQr}>
+        {order.qr_url && /^https:\/\//.test(order.qr_url) && order.status === "PENDING" ? (
+          <img src={order.qr_url} alt={`QR PromptPay ${type} ${order.months} เดือน`} referrerPolicy="no-referrer"/>
+        ) : (
+          <div className={styles.qrPlaceholder}><ScenovaIcon name="wallet" size={28}/></div>
+        )}
+      </div>
+      <div className={styles.paymentInfo}>
+        <span className={styles.eyebrow}>{type} / {order.id.slice(0,8)}</span>
+        <h3>{order.months} เดือน · ฿{money(order.amount)}</h3>
+        <p>
+          {order.status === "REVIEW"
+            ? "กำลังตรวจสอบรายการกับ Payment Gateway"
+            : "สแกน QR ผ่านแอปธนาคาร ระบบจะเปิดสิทธิ์อัตโนมัติหลังยืนยันยอด"}
+        </p>
+        <small>QR หมดอายุ: {date(order.expires_at)}</small>
+        <button type="button" className={styles.secondaryButton} onClick={onRefresh} disabled={busy}>
+          ตรวจสอบการชำระเงิน
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function OrderHistory({title,orders}:{title:string;orders:Order[]}) {
+  return (
+    <div className={styles.historyCard}>
+      <h3>{title}</h3>
+      {orders.length ? (
+        <div className={styles.orderList}>
+          {orders.slice(0,5).map(order => (
+            <div className={styles.orderRow} key={order.id}>
+              <div>
+                <b>{order.months} เดือน</b>
+                <span>{date(order.created_at)}</span>
+              </div>
+              <strong>฿{money(order.amount)}</strong>
+              <em className={order.status === "PAID" ? styles.orderPaid : order.status === "FAILED" ? styles.orderFailed : ""}>
+                {order.status}
+              </em>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className={styles.empty}>ยังไม่มีรายการ</p>
+      )}
+    </div>
+  );
+}
