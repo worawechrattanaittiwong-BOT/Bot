@@ -14,7 +14,7 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { compare, hash } from "bcryptjs";
-import { randomInt } from "crypto";
+import { createHash, randomBytes, randomInt } from "crypto";
 import { DbService } from "./db.service";
 import { JwtGuard } from "./security";
 
@@ -297,6 +297,36 @@ export class AuthController {
       return {
         requiresEmailVerification: true,
         email: user.email
+      };
+    }
+
+    const security = await this.db.one(
+      "SELECT two_factor_enabled_at FROM user_security WHERE user_id=$1",
+      [user.id]
+    );
+    if (security?.two_factor_enabled_at) {
+      const challenge = randomBytes(32).toString("base64url");
+      const challengeHash = createHash("sha256").update(challenge).digest("hex");
+      await this.db.transaction(async client => {
+        await client.query(
+          `UPDATE two_factor_login_challenges
+           SET consumed_at=COALESCE(consumed_at,now())
+           WHERE user_id=$1 AND consumed_at IS NULL`,
+          [user.id]
+        );
+        await client.query(
+          `INSERT INTO two_factor_login_challenges(
+             user_id,token_hash,request_ip,expires_at
+           ) VALUES($1,$2,$3,now() + interval '5 minutes')`,
+          [user.id, challengeHash, this.clientIp(req)]
+        );
+      });
+      await this.authEvent(user.id, email, "LOGIN_2FA_REQUIRED", req);
+      return {
+        requiresTwoFactor: true,
+        twoFactorChallenge: challenge,
+        email: user.email,
+        requiresEmailVerification: false
       };
     }
 
