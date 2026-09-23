@@ -13,6 +13,7 @@ import { DbService } from "./db.service";
 import { AdminGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
+import { ReferralService } from "./referral.service";
 
 @Controller("admin")
 @UseGuards(AdminGuard)
@@ -20,7 +21,8 @@ export class AdminController {
   constructor(
     private readonly db: DbService,
     private readonly maintenance: MaintenanceService,
-    private readonly partner: PartnerService
+    private readonly partner: PartnerService,
+    private readonly referrals: ReferralService
   ) {}
 
   @Get("users")
@@ -273,6 +275,8 @@ export class AdminController {
     expiresAt?: string;
     activatedBy?: string;
     note?: string;
+    paidAmountSatang?: number;
+    paymentReference?: string;
   }) {
     const plan = await this.db.one(
       "SELECT * FROM plans WHERE code=$1 AND active=true",
@@ -327,13 +331,45 @@ export class AdminController {
     } else {
       await this.syncSlotsForSubscription(body.userId, row.id, plan);
     }
+
+    const paidAmountSatang = Math.trunc(Number(body.paidAmountSatang || 0));
+    if (!Number.isFinite(paidAmountSatang) || paidAmountSatang < 0 || paidAmountSatang > 100_000_000) {
+      throw new ConflictException("ยอดชำระเงินสำหรับ Referral ไม่ถูกต้อง");
+    }
+    let referralCommissionCount = 0;
+    let referralCreditFailed = false;
+    if (paidAmountSatang > 0) {
+      try {
+        const commissions = await this.referrals.creditRecordedPurchase({
+          sourceUserId: body.userId,
+          sourceType: "MANUAL_SUBSCRIPTION",
+          sourceId: row.id,
+          grossAmountSatang: paidAmountSatang,
+          currency: "THB",
+          metadata: {
+            planCode: body.planCode,
+            paymentReference: String(body.paymentReference || "").slice(0, 160) || null
+          }
+        });
+        referralCommissionCount = commissions.length;
+      } catch {
+        // Membership activation is the primary operation. Never revoke paid
+        // access because referral bookkeeping needs manual review.
+        referralCreditFailed = true;
+      }
+    }
+
     await this.audit("ADMIN", "ACTIVATE_SUBSCRIPTION", "subscription", row.id, {
       plan: body.planCode,
       startsAt,
       expiresAt,
       partnerCarryForwardUntil: partnerSource?.expires_at || null,
       slots: Number(plan.max_mt5_accounts || 1),
-      reseller: Boolean(plan.allow_resale)
+      reseller: Boolean(plan.allow_resale),
+      paidAmountSatang,
+      paymentReference: String(body.paymentReference || "").slice(0, 160) || null,
+      referralCommissionCount,
+      referralCreditFailed
     });
     const slots = await this.db.query(
       "SELECT id,slot_number,mode,status,assigned_user_id,subscription_id FROM license_slots WHERE owner_user_id=$1 AND mode=$2 AND status<>'DELETED' ORDER BY slot_number",
@@ -347,7 +383,12 @@ export class AdminController {
         slots: Number(plan.max_mt5_accounts || 1),
         reseller: Boolean(plan.allow_resale)
       },
-      slots: slots.rows
+      slots: slots.rows,
+      referral: {
+        paidAmountSatang,
+        commissionCount: referralCommissionCount,
+        creditFailed: referralCreditFailed
+      }
     };
   }
 
