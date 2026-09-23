@@ -434,7 +434,7 @@ export default function AccountPage() {
                   ) : (
                     <>
                       <span className={styles.phoneTarget}>{trialAccess.phone.masked}</span>
-                      <button type="button" className={styles.secondaryButton} onClick={requestTrialCode} disabled={trialBusy || !trialAccess.smsConfigured}>
+                      <button type="button" className={styles.secondaryButton} onClick={requestTrialCode} disabled={trialBusy}>
                         ส่ง OTP
                       </button>
                       <input
