@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   Req,
+  ServiceUnavailableException,
   UseGuards
 } from "@nestjs/common";
 import { DbService } from "./db.service";
@@ -14,6 +15,7 @@ import { AdminGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
 import { ReferralService } from "./referral.service";
+import { createHash, randomBytes } from "crypto";
 
 @Controller("admin")
 @UseGuards(AdminGuard)
@@ -30,12 +32,12 @@ export class AdminController {
     const term = "%" + q.trim() + "%";
     const result = await this.db.query(
       `SELECT
-         u.id,u.user_code,u.email,u.role,u.status,
+         u.id,u.user_code,u.email,u.role,u.status,u.created_at,u.email_verified_at,
          x.slot_id,x.slot_subscription_id,x.mt5_account_id,x.account_number,x.broker_server,x.mode,
          x.actual_state,x.desired_state,x.mt5_online,
          s.subscription_id,s.plan_code,s.subscription_mode,s.subscription_status,s.subscription_starts_at,s.subscription_expires_at,s.plan_slots,s.allow_resale,s.subscription_active,
          COALESCE(ms.memberships,'[]'::jsonb) memberships,
-         t.trial_status,t.trial_expires_at,
+         t.trial_status,t.trial_expires_at,t.trial_duration_minutes,t.trial_started_at,
          tr.trial_request_id,tr.line_contact,tr.request_ip,tr.trial_request_status,
          COALESCE(ss.total_slots,0)::int total_slots,
          COALESCE(ss.assigned_slots,0)::int assigned_slots,
@@ -113,7 +115,8 @@ export class AdminController {
            AND sub.expires_at>now()
        ) ms ON true
        LEFT JOIN LATERAL (
-         SELECT tg.status trial_status,tg.expires_at trial_expires_at
+         SELECT tg.status trial_status,tg.expires_at trial_expires_at,
+                tg.duration_minutes trial_duration_minutes,tg.started_at trial_started_at
          FROM trial_grants tg
          WHERE tg.user_id=u.id
          ORDER BY tg.created_at DESC
@@ -247,7 +250,7 @@ export class AdminController {
         account.id,
         account.account_number,
         account.broker_server,
-        Math.max(1, Number(body.minutes || 180)),
+        Math.min(525600, Math.max(1, Math.trunc(Number(body.minutes || 180)))),
         body.approvedBy || "ADMIN",
         request.line_contact,
         request.request_ip
@@ -262,6 +265,51 @@ export class AdminController {
       lineContact: request.line_contact,
       requestIp: request.request_ip,
       ipWasAdvisoryOnly: true
+    });
+    return row;
+  }
+
+  @Post("trials/set-duration")
+  async setTrialDuration(@Body() body: { userId: string; days: number }) {
+    const days = Math.trunc(Number(body.days));
+    if (!Number.isFinite(days) || days < 1 || days > 365) {
+      throw new ConflictException("Trial days must be between 1 and 365");
+    }
+
+    const trial = await this.db.one(
+      `SELECT id,user_id,status,started_at,expires_at
+       FROM trial_grants
+       WHERE user_id=$1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [body.userId]
+    );
+    if (!trial) throw new ConflictException("ยังไม่พบ Trial ของลูกค้ารายนี้");
+
+    const durationMinutes = days * 1440;
+    const row = await this.db.one(
+      `UPDATE trial_grants
+       SET duration_minutes=$2,
+           expires_at=CASE
+             WHEN started_at IS NULL THEN NULL
+             ELSE started_at + ($2 || ' minutes')::interval
+           END,
+           status=CASE
+             WHEN started_at IS NULL THEN 'APPROVED'
+             WHEN started_at + ($2 || ' minutes')::interval > now() THEN 'ACTIVE'
+             ELSE 'EXPIRED'
+           END
+       WHERE id=$1
+       RETURNING *`,
+      [trial.id, durationMinutes]
+    );
+
+    await this.audit("OWNER", "SET_TRIAL_DURATION", "trial", row.id, {
+      userId: body.userId,
+      days,
+      durationMinutes,
+      startedAt: row.started_at || null,
+      expiresAt: row.expires_at || null
     });
     return row;
   }
@@ -460,9 +508,13 @@ export class AdminController {
 
   @Post("subscriptions/extend")
   async extend(@Body() body: { subscriptionId: string; days: number }) {
+    const days = Math.trunc(Number(body.days));
+    if (!Number.isFinite(days) || days < 1 || days > 3650) {
+      throw new ConflictException("จำนวนวันที่เพิ่มต้องอยู่ระหว่าง 1 ถึง 3650 วัน");
+    }
     const row = await this.db.one(
       "UPDATE subscriptions SET expires_at=GREATEST(expires_at,now()) + ($2 || ' days')::interval,status='ACTIVE' WHERE id=$1 RETURNING *",
-      [body.subscriptionId, Math.max(1, Number(body.days))]
+      [body.subscriptionId, days]
     );
     if (!row) throw new ConflictException("subscription not found");
 
@@ -483,7 +535,7 @@ export class AdminController {
     }
 
     await this.audit("ADMIN", "EXTEND_SUBSCRIPTION", "subscription", row.id, {
-      days: body.days,
+      days,
       partnerRelationUpdated: Boolean(relation?.id),
       queuedDirectShifted: Boolean(relation?.direct_subscription_id)
     });
@@ -566,6 +618,77 @@ export class AdminController {
       released: true,
       message: "ปลด Device Lock ของลูกค้าแล้ว สมาชิกและ MT5 เดิมยังคงอยู่"
     };
+  }
+
+  @Post("users/send-password-reset")
+  async sendPasswordReset(@Req() req: any, @Body() body: { userId: string }) {
+    const user = await this.db.one(
+      "SELECT id,user_code,email,role,status FROM users WHERE id=$1 AND status<>'DELETED'",
+      [body.userId]
+    );
+    if (!user) throw new ConflictException("ไม่พบบัญชีลูกค้า");
+    if (user.role === "OWNER" || user.role === "ADMIN") {
+      throw new ConflictException("ไม่อนุญาตให้รีเซ็ตรหัส OWNER/ADMIN จาก Customer Control Center");
+    }
+
+    const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+    const from = String(process.env.EMAIL_FROM || "").trim();
+    const webBase = String(process.env.PUBLIC_WEB_BASE || "").trim().replace(/\/$/, "");
+    if (!apiKey || !from || !webBase) {
+      throw new ServiceUnavailableException("ระบบส่งอีเมลรีเซ็ตรหัสผ่านยังตั้งค่าไม่ครบ");
+    }
+
+    const token = randomBytes(32).toString("base64url");
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+
+    const record = await this.db.one(
+      `INSERT INTO password_reset_tokens(user_id,token_hash,requested_by,expires_at)
+       VALUES($1,$2,$3,now() + interval '30 minutes')
+       RETURNING id`,
+      [user.id, tokenHash, actor]
+    );
+    await this.db.query(
+      `UPDATE password_reset_tokens
+       SET consumed_at=COALESCE(consumed_at,now())
+       WHERE user_id=$1 AND id<>$2 AND consumed_at IS NULL`,
+      [user.id, record.id]
+    );
+
+    const resetUrl = webBase + "/reset-password?token=" + encodeURIComponent(token);
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from,
+          to: [user.email],
+          subject: "ตั้งรหัสผ่านใหม่สำหรับบัญชี SCENOVA",
+          html:
+            '<div style="font-family:Arial,sans-serif;background:#090711;color:#f4f1ff;padding:32px">' +
+            '<div style="max-width:560px;margin:auto;border:1px solid #4d3d78;border-radius:16px;padding:28px;background:#100c1d">' +
+            '<div style="font-size:12px;letter-spacing:3px;color:#a38bff">SCENOVA ACCOUNT SECURITY</div>' +
+            '<h2 style="margin:14px 0 8px">ตั้งรหัสผ่านใหม่</h2>' +
+            '<p style="color:#b9b1c8;line-height:1.7">ผู้ดูแลระบบได้ส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ให้บัญชี ' + user.user_code + ' ลิงก์นี้ใช้ได้ครั้งเดียวและหมดอายุใน 30 นาที</p>' +
+            '<p style="margin:24px 0"><a href="' + resetUrl + '" style="display:inline-block;background:#7657f4;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">ตั้งรหัสผ่านใหม่</a></p>' +
+            '<p style="color:#777083;font-size:12px;line-height:1.6">หากคุณไม่ได้ขอให้ผู้ดูแลรีเซ็ตรหัสผ่าน กรุณาติดต่อ SCENOVA และไม่ต้องเปิดลิงก์นี้</p>' +
+            '</div></div>'
+        })
+      });
+      if (!response.ok) throw new Error("resend request failed");
+    } catch {
+      await this.db.query("DELETE FROM password_reset_tokens WHERE id=$1", [record.id]);
+      throw new ServiceUnavailableException("ส่งอีเมลรีเซ็ตรหัสผ่านไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+    }
+
+    await this.audit(actor, "SEND_PASSWORD_RESET", "user", user.id, {
+      email: user.email,
+      expiresInMinutes: 30
+    });
+    return { ok: true, email: user.email, expiresInMinutes: 30 };
   }
 
   @Post("users/suspend")
