@@ -62,8 +62,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
   }
 
   private checkoutEnabled() {
-    return process.env.LOCAL_CHECKOUT_ENABLED !== "false" &&
-      process.env.CLOUD_CHECKOUT_ENABLED === "true" &&
+    return process.env.LOCAL_CHECKOUT_ENABLED === "true" &&
       paymentMode() !== "UNCONFIGURED";
   }
 
