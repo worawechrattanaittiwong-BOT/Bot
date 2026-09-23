@@ -36,6 +36,8 @@ jobs:
         run: ./tests/unified-role-sidebar-contract.ps1
       - name: Referral program contract
         run: node ./tests/referral-program-contract.mjs
+      - name: System popup contract
+        run: node ./tests/system-popup-contract.mjs
       - name: Cent account currency isolation contract
         run: node ./tests/cent-account-currency-isolation-contract.mjs
       - name: AUTO V20 same-dataset policy regression
