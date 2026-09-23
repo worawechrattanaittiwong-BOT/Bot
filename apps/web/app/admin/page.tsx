@@ -17,6 +17,8 @@ export default function AdminPage() {
   const [startsAt, setStartsAt] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [plan, setPlan] = useState("LOCAL_30D");
+  const [paidAmountBaht, setPaidAmountBaht] = useState("");
+  const [paymentReference, setPaymentReference] = useState("");
   const [system, setSystem] = useState<any>(null);
   const [activeMenu, setActiveMenu] = useState<Menu>("overview");
   const [loading, setLoading] = useState(false);
@@ -120,15 +122,22 @@ export default function AdminPage() {
           durationDays: expiresAt ? undefined : days,
           startsAt: startsAt || undefined,
           expiresAt: expiresAt || undefined,
-          activatedBy: "OWNER"
+          activatedBy: "OWNER",
+          paidAmountSatang: paidAmountBaht.trim() ? Math.round(Number(paidAmountBaht) * 100) : 0,
+          paymentReference: paymentReference.trim() || undefined
         })
       });
       const seatCount = Array.isArray(result?.slots) ? result.slots.length : (result?.plan?.slots || 1);
       const partnerSeatText = result?.plan?.reseller ? " · " + seatCount + " Customer Seats" : "";
+      const referralText = result?.referral?.commissionCount
+        ? " · Referral " + result.referral.commissionCount + " รายการ"
+        : "";
       setMessage(
         "เปิดสิทธิ์ " + (result?.plan?.code || planCode) +
-        " ให้ " + user.user_code + " แล้ว" + partnerSeatText
+        " ให้ " + user.user_code + " แล้ว" + partnerSeatText + referralText
       );
+      setPaidAmountBaht("");
+      setPaymentReference("");
       await search(undefined, true);
     } catch (e: any) {
       setMessage(e.message);
@@ -603,6 +612,8 @@ export default function AdminPage() {
                 <div className="field"><label>วันเริ่ม <span className="muted">(ว่าง = เริ่มทันที)</span></label><input className="input" type="datetime-local" value={startsAt} onChange={e=>setStartsAt(e.target.value)}/><div className="help">Owner Console รุ่นนี้เปิดสิทธิ์ทันทีเท่านั้น ถ้ากำหนดเวลาอนาคตระบบจะแจ้งเตือน</div></div>
                 <div className="field"><label>จำนวนวัน</label><input className="input" type="number" min={1} value={days} onChange={e=>setDays(Number(e.target.value))}/></div>
                 <div className="field"><label>กำหนดวันหมดอายุเอง</label><input className="input" type="datetime-local" value={expiresAt} onChange={e=>setExpiresAt(e.target.value)}/><div className="help">ถ้ากรอก ระบบจะใช้วันนี้แทนจำนวนวัน</div></div>
+                <div className="field"><label>ยอดที่ลูกค้าชำระจริง <span className="muted">(บาท)</span></label><input className="input" type="number" min={0} step="0.01" value={paidAmountBaht} onChange={e=>setPaidAmountBaht(e.target.value)} placeholder="0.00"/><div className="help">กรอกเฉพาะยอดที่รับเงินจริง ระบบ Referral จะคำนวณ 7% / 5% / 3% / 1% จากยอดนี้</div></div>
+                <div className="field"><label>Payment Reference <span className="muted">(optional)</span></label><input className="input" value={paymentReference} onChange={e=>setPaymentReference(e.target.value.slice(0,160))} placeholder="PromptPay / slip / note"/><div className="help">ใช้สำหรับตรวจสอบย้อนหลัง ไม่แสดงให้ลูกค้าคนอื่นเห็น</div></div>
               </div>
             </section>
 
