@@ -6436,6 +6436,99 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   to{opacity:1;transform:translateY(0) scale(1)}
 }
 
+
+
+/* Typed confirmation variant uses the same global SCENOVA popup system. */
+.sc-system-popup-layer.is-prompt{
+  pointer-events:auto;
+  background:rgba(2,5,12,.58);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+}
+.sc-system-popup-layer.is-prompt .sc-system-popup{
+  grid-template-columns:42px minmax(0,1fr);
+  width:min(480px,calc(100vw - 28px));
+  min-height:160px;
+}
+.sc-system-popup-copy>p{
+  white-space:pre-line;
+}
+.sc-system-popup-prompt-body{
+  grid-column:1/-1;
+  display:grid;
+  gap:9px;
+}
+.sc-system-popup-required{
+  display:grid;
+  gap:6px;
+  padding:10px;
+  border:1px solid rgba(134,111,236,.22);
+  border-radius:11px;
+  background:rgba(4,8,17,.72);
+}
+.sc-system-popup-required>span{
+  color:#7f8aa2;
+  font-size:9.5px;
+  font-weight:750;
+  letter-spacing:.04em;
+}
+.sc-system-popup-required>div{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.sc-system-popup-required code{
+  user-select:text;
+  -webkit-user-select:text;
+  color:#efeaff;
+  font:800 13px/1.2 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+  letter-spacing:.06em;
+}
+.sc-system-popup-required button{
+  flex:0 0 auto;
+  min-height:30px;
+  border:1px solid rgba(128,104,238,.38);
+  border-radius:8px;
+  background:rgba(95,70,204,.14);
+  color:#d7ceff;
+  padding:0 9px;
+  font-size:9.5px;
+  font-weight:850;
+  cursor:pointer;
+}
+.sc-system-popup-required button:hover{
+  border-color:rgba(158,134,255,.65);
+  background:rgba(105,78,230,.22);
+}
+.sc-system-popup-input{
+  width:100%;
+  height:42px;
+  box-sizing:border-box;
+  border:1px solid rgba(116,133,169,.4);
+  border-radius:10px;
+  background:#080e18;
+  color:#f5f7fb;
+  outline:none;
+  padding:0 12px;
+  font-size:12px;
+  font-weight:750;
+  letter-spacing:.03em;
+}
+.sc-system-popup-input:focus{
+  border-color:#8b74f2;
+  box-shadow:0 0 0 3px rgba(114,88,237,.12);
+}
+.sc-system-popup-actions button:disabled{
+  opacity:.38;
+  cursor:not-allowed;
+  filter:saturate(.55);
+}
+.sc-system-popup-actions button:disabled:hover{
+  border-color:rgba(244,110,127,.44);
+  background:linear-gradient(135deg,rgba(104,28,43,.84),rgba(55,18,29,.96));
+}
+
 /* Legacy page notices fall back to the same compact centered behavior. */
 .page-notice{
   top:50%!important;
