@@ -226,13 +226,28 @@ export class TrialCouponController {
       [userId]
     );
     const latestCode = await this.db.one(
-      `SELECT phone_last4,status,expires_at,created_at
+      `SELECT phone_last4,status,expires_at,created_at,sent_at,provider,provider_refno
        FROM trial_sms_codes
        WHERE user_id=$1
          AND status='SENT'
        ORDER BY created_at DESC LIMIT 1`,
       [userId]
     );
+    const dailyCount = await this.db.one(
+      `SELECT count(*)::int count
+       FROM trial_sms_codes
+       WHERE user_id=$1
+         AND status IN ('SENT','USED')
+         AND created_at>now()-interval '24 hours'`,
+      [userId]
+    );
+    const sentAt = latestCode?.sent_at || latestCode?.created_at || null;
+    const resendAvailableAt = sentAt
+      ? new Date(new Date(sentAt).getTime() + RESEND_SECONDS * 1000).toISOString()
+      : null;
+    const resendAfterSeconds = sentAt
+      ? Math.max(0, Math.ceil((new Date(sentAt).getTime() + RESEND_SECONDS * 1000 - Date.now()) / 1000))
+      : 0;
     const phone = await this.boundPhone(userId);
     const phoneHash = phone?.e164 ? this.phoneHash(phone.e164) : null;
     const base = await this.eligibility(userId, phoneHash);
@@ -248,7 +263,17 @@ export class TrialCouponController {
       } : null,
       authorization: authorization || null,
       trial: trial || null,
-      latestCode: latestCode || null
+      latestCode: latestCode || null,
+      otp: {
+        codeLength: 6,
+        expiresInMinutes: CODE_TTL_MINUTES,
+        resendSeconds: RESEND_SECONDS,
+        resendAfterSeconds,
+        resendAvailableAt,
+        maxSendsPerDay: MAX_SENDS_PER_DAY,
+        sendsUsedToday: Number(dailyCount?.count || 0),
+        sendsRemaining: Math.max(0, MAX_SENDS_PER_DAY - Number(dailyCount?.count || 0))
+      }
     };
   }
 
@@ -266,14 +291,22 @@ export class TrialCouponController {
     if (!check.allowed) throw new ConflictException(check.message);
 
     const latest = await this.db.one(
-      `SELECT created_at
+      `SELECT COALESCE(sent_at,created_at) sent_at
        FROM trial_sms_codes
        WHERE user_id=$1
+         AND status='SENT'
        ORDER BY created_at DESC LIMIT 1`,
       [userId]
     );
-    if (latest && Date.now() - new Date(latest.created_at).getTime() < RESEND_SECONDS * 1000) {
-      throw new HttpException("กรุณารอ 60 วินาทีก่อนขอรหัสใหม่", HttpStatus.TOO_MANY_REQUESTS);
+    if (latest && Date.now() - new Date(latest.sent_at).getTime() < RESEND_SECONDS * 1000) {
+      const remaining = Math.max(
+        1,
+        Math.ceil((RESEND_SECONDS * 1000 - (Date.now() - new Date(latest.sent_at).getTime())) / 1000)
+      );
+      throw new HttpException(
+        `กรุณารออีก ${remaining} วินาทีก่อนส่ง OTP ใหม่`,
+        HttpStatus.TOO_MANY_REQUESTS
+      );
     }
 
     const todayCount = await this.db.one(
@@ -293,7 +326,9 @@ export class TrialCouponController {
       const ipCount = await this.db.one(
         `SELECT count(*)::int count
          FROM trial_sms_codes
-         WHERE request_ip=$1 AND created_at>now()-interval '24 hours'`,
+         WHERE request_ip=$1
+           AND status IN ('SENT','USED')
+           AND created_at>now()-interval '24 hours'`,
         [ip]
       );
       if (Number(ipCount?.count || 0) >= 12) {
@@ -337,7 +372,9 @@ export class TrialCouponController {
     return {
       sent: true,
       phoneMasked: maskPhone(msisdn, phone.country_code),
-      expiresInMinutes: CODE_TTL_MINUTES
+      expiresInMinutes: CODE_TTL_MINUTES,
+      resendAfterSeconds: RESEND_SECONDS,
+      sendsRemaining: Math.max(0, MAX_SENDS_PER_DAY - Number(todayCount?.count || 0) - 1)
     };
   }
 
