@@ -229,6 +229,7 @@ export class TrialCouponController {
       `SELECT phone_last4,status,expires_at,created_at
        FROM trial_sms_codes
        WHERE user_id=$1
+         AND status='SENT'
        ORDER BY created_at DESC LIMIT 1`,
       [userId]
     );
@@ -279,6 +280,7 @@ export class TrialCouponController {
       `SELECT count(*)::int count
        FROM trial_sms_codes
        WHERE (user_id=$1 OR phone_hash=$2)
+         AND status IN ('SENT','USED')
          AND created_at>now()-interval '24 hours'`,
       [userId, phoneHash]
     );
