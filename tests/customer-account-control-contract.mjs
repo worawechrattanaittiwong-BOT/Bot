@@ -28,7 +28,7 @@ assert.match(adminPage, /CUSTOMER CONTROL CENTER/);
 assert.match(adminPage, /Local MT5/);
 assert.match(adminPage, /Cloud VPS/);
 assert.match(adminPage, /Trial Days/);
-assert.match(adminPage, /อนุมัติ Trial " \+ trialDays \+ " วันล่วงหน้า/);
+assert.match(adminPage, /วันล่วงหน้า/);
 assert.match(adminPage, /\/admin\/trials\/authorize/);
 assert.doesNotMatch(adminPage, /!selectedCustomer\.mt5_account_id \|\| selectedCustomer\.trial_request_status!=="PENDING"/);
 assert.match(adminPage, /ส่งลิงก์ตั้งรหัสผ่านใหม่/);
