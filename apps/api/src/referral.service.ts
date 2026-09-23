@@ -151,7 +151,7 @@ export class ReferralService {
           REFERRAL_LEVELS.reduce((sum, item) => sum + item.rateBps, 0) / 100,
         holdDays: this.holdDays(),
         payoutMode: "MANUAL",
-        eligibleSourceTypes: ["CLOUD_ORDER", "MANUAL_SUBSCRIPTION"]
+        eligibleSourceTypes: ["LOCAL_ORDER", "CLOUD_ORDER", "MANUAL_SUBSCRIPTION"]
       },
       network: {
         directInvites: countByLevel.get(1) || 0,
