@@ -294,6 +294,11 @@ export class AdminController {
       throw new ConflictException("OWNER/ADMIN already has unlimited access");
     }
 
+    const paidAmountSatang = Math.trunc(Number(body.paidAmountSatang || 0));
+    if (!Number.isFinite(paidAmountSatang) || paidAmountSatang < 0 || paidAmountSatang > 100_000_000) {
+      throw new ConflictException("ยอดชำระเงินสำหรับ Referral ไม่ถูกต้อง");
+    }
+
     const days = Math.max(1, Number(body.durationDays || 30));
     const requestedStartsAt = body.startsAt ? new Date(body.startsAt) : new Date();
     const partnerSource = plan.mode === "LOCAL" && !plan.allow_resale
@@ -332,10 +337,6 @@ export class AdminController {
       await this.syncSlotsForSubscription(body.userId, row.id, plan);
     }
 
-    const paidAmountSatang = Math.trunc(Number(body.paidAmountSatang || 0));
-    if (!Number.isFinite(paidAmountSatang) || paidAmountSatang < 0 || paidAmountSatang > 100_000_000) {
-      throw new ConflictException("ยอดชำระเงินสำหรับ Referral ไม่ถูกต้อง");
-    }
     let referralCommissionCount = 0;
     let referralCreditFailed = false;
     if (paidAmountSatang > 0) {
