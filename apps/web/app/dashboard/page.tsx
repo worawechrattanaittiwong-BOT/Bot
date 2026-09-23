@@ -1329,11 +1329,15 @@ export default function DashboardPage() {
       data.instance.pending_account_number +
       " (" + (data.instance.pending_broker_server || "ไม่ทราบ Server") + ")";
 
-    if (!confirm(
-      firstBind
+    const confirmed = await confirmPopup({
+      title:firstBind ? "ยืนยันการผูกบัญชี MT5" : "ยืนยันการเปลี่ยนบัญชี MT5",
+      tone:"warning",
+      message:firstBind
         ? "ผูก MT5 " + accountText + " เป็นบัญชีที่ใช้งานใช่หรือไม่?"
-        : "เปลี่ยนมาใช้ MT5 " + accountText + " ใช่หรือไม่?"
-    )) return;
+        : "เปลี่ยนมาใช้ MT5 " + accountText + " ใช่หรือไม่?",
+      confirmLabel:firstBind ? "ผูกบัญชี" : "เปลี่ยนบัญชี"
+    });
+    if (!confirmed) return;
 
     setBusy(true);
     setError("");
@@ -1475,7 +1479,13 @@ export default function DashboardPage() {
   }
 
   async function resetMt5() {
-    if (!confirm("ต้องการเปลี่ยนบัญชีหรือโหมด MT5 ใช่หรือไม่?")) return;
+    const confirmed = await confirmPopup({
+      title:"เปลี่ยนบัญชีหรือโหมด MT5",
+      tone:"warning",
+      message:"ต้องการรีเซ็ตการเชื่อมต่อปัจจุบันเพื่อเปลี่ยนบัญชีหรือโหมด MT5 ใช่หรือไม่?",
+      confirmLabel:"ดำเนินการต่อ"
+    });
+    if (!confirmed) return;
     setBusy(true);
     setError("");
     try {
