@@ -97,6 +97,35 @@ CREATE TABLE IF NOT EXISTS cloud_orders (
 CREATE UNIQUE INDEX IF NOT EXISTS cloud_order_user_pending ON cloud_orders(user_id)
  WHERE status IN ('CREATING','PENDING','REVIEW');
 ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS checked_at timestamptz;
+
+CREATE TABLE IF NOT EXISTS local_packages (
+ months integer PRIMARY KEY CHECK(months IN (1,3,6,12)),
+ price_satang integer NOT NULL DEFAULT 0 CHECK(price_satang>=0),
+ enabled boolean NOT NULL DEFAULT false,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO local_packages(months) VALUES(1),(3),(6),(12) ON CONFLICT DO NOTHING;
+INSERT INTO plans(code,name_th,mode,max_mt5_accounts)
+ VALUES ('LOCAL_1M','Local MT5 1 เดือน','LOCAL',1),('LOCAL_3M','Local MT5 3 เดือน','LOCAL',1),
+ ('LOCAL_6M','Local MT5 6 เดือน','LOCAL',1),('LOCAL_12M','Local MT5 12 เดือน','LOCAL',1)
+ ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS local_orders (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ user_id uuid NOT NULL REFERENCES users(id),
+ months integer NOT NULL REFERENCES local_packages(months),
+ amount integer NOT NULL CHECK(amount>0),
+ status text NOT NULL DEFAULT 'CREATING' CHECK(status IN ('CREATING','PENDING','PAID','FAILED','REVIEW')),
+ slot_id uuid REFERENCES license_slots(id),
+ subscription_id uuid REFERENCES subscriptions(id),
+ charge_id text UNIQUE,
+ qr_url text,
+ expires_at timestamptz,
+ paid_at timestamptz,
+ checked_at timestamptz,
+ created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS local_order_user_pending ON local_orders(user_id)
+ WHERE status IN ('CREATING','PENDING','REVIEW');
 CREATE TABLE IF NOT EXISTS worker_commands (
  id bigserial PRIMARY KEY,
  runner_id varchar(120) NOT NULL REFERENCES worker_nodes(runner_id) ON DELETE CASCADE,
