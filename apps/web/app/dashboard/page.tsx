@@ -2565,62 +2565,37 @@ export default function DashboardPage() {
 
           {!isOwner && (
             <div className="access-workspace account-access-summary" id="membership-and-trial">
-            <section className="panel purple"><div className="eyebrow">CLOUD MEMBERSHIP</div><h2>ให้ Cloud ดูแล MT5 ของคุณ</h2><p className="muted">เลือก 1 / 3 / 6 / 12 เดือน ชำระผ่าน QR และติดตามการเปิดใช้งานได้จากหน้าเดียว</p><a className="btn primary" href={"/cloud"+(data.selectedSlot?.mode==="CLOUD"?"?slotId="+encodeURIComponent(data.selectedSlot.id):"")}>ซื้อ / ต่ออายุ Cloud →</a></section>
-            <div className="grid2 access-grid">
-              <section className="panel purple">
-                <div className="eyebrow">ACCESS STATUS</div>
-                <h2 style={{marginTop:8}}>{accessLabel}</h2>
-                {entitlement?.source === "OWNER" ? (
-                  <div className="notice good owner-unlimited-access">
-                    <b>สิทธิ์เจ้าของระบบเปิดครบทุกฟังก์ชัน</b>
-                    <span>ไม่ต้องเปิด Trial หรือแพ็กเกจให้บัญชีนี้ และไม่มีวันหมดอายุ</span>
-                  </div>
-                ) : remainingText ? (
-                  <div className="time-card"><span>เวลาคงเหลือ</span><b className="mono">{remainingText}</b><small>หมดอายุ {accessExpiry?.toLocaleString("th-TH")}</small></div>
-                ) : (
-                  <p className="muted">ยังไม่มีสิทธิ์สมาชิกที่กำลังใช้งาน</p>
-                )}
-                {data.selectedSlot?.plan_code && (
-                  <div className="slot-plan-summary">
-                    <span>แพ็กเกจ</span>
-                    <b>{data.selectedSlot.plan_code}</b>
-                    <small>{data.selectedSlot.allow_resale ? (data.selectedSlot.plan_slots || 1) + " Customer Seats · Partner / Reseller" : data.selectedSlot.mode}</small>
-                  </div>
-                )}
-              </section>
+              <div className="grid2 access-grid">
+                <section className="panel purple">
+                  <div className="eyebrow">ACCESS STATUS</div>
+                  <h2 style={{marginTop:8}}>{accessLabel}</h2>
+                  {remainingText ? (
+                    <div className="time-card">
+                      <span>เวลาคงเหลือ</span>
+                      <b className="mono">{remainingText}</b>
+                      <small>หมดอายุ {accessExpiry?.toLocaleString("th-TH")}</small>
+                    </div>
+                  ) : (
+                    <p className="muted">ยังไม่มีสิทธิ์สมาชิกที่กำลังใช้งาน</p>
+                  )}
+                  {data.selectedSlot?.plan_code && (
+                    <div className="slot-plan-summary">
+                      <span>แพ็กเกจ</span>
+                      <b>{data.selectedSlot.plan_code}</b>
+                      <small>{data.selectedSlot.mode}</small>
+                    </div>
+                  )}
+                </section>
 
-              <section className="panel">
-                <div className="eyebrow">YOUR USER ID</div>
-                <h2 className="mono user-code-big">{data.user.user_code}</h2>
-                <p className="muted">ใช้รหัสนี้แจ้งผู้ดูแลเรื่อง Trial หรือสมาชิก</p>
-
-                {entitlement?.source !== "OWNER" && (
-                  <>
-                    {data.trialRequest?.status === "PENDING" ? (
-                      <div className="notice">
-                        <b>คำขอ Trial กำลังรอ Owner อนุมัติ</b>
-                        <span>LINE: {data.trialRequest.line_contact}</span>
-                      </div>
-                    ) : !["TRIAL","TRIAL_READY","TRIAL_EXPIRED"].includes(String(entitlement?.source || "")) ? (
-                      <form className="trial-request-form" onSubmit={requestTrial}>
-                        <div className="field">
-                          <label>LINE ที่ใช้ติดต่อขอ Trial</label>
-                          <input className="input" value={lineContact} onChange={e=>setLineContact(e.target.value)} placeholder="@line หรือชื่อ LINE" required />
-                          <div className="help">Trial ไม่ได้มาอัตโนมัติหลังสมัคร Owner จะตรวจ User / LINE / MT5 / ประวัติ IP ก่อนอนุมัติ</div>
-                        </div>
-                        <button className="btn primary" disabled={busy || !data.account}>ส่งคำขอ Trial 3 ชั่วโมง</button>
-                      </form>
-                    ) : (
-                      <div className="notice">Trial ของ User นี้มีประวัติแล้ว ระบบจะไม่สร้าง Trial ใหม่จากการเปลี่ยน MT5 ภายใต้ User เดิม</div>
-                    )}
-                  </>
-                )}
-              </section>
-            </div>
+                <section className="panel">
+                  <div className="eyebrow">PACKAGES</div>
+                  <h2>Trial · Local MT5 · Cloud MT5</h2>
+                  <p className="muted">จัดการ Trial ด้วย OTP และเลือกแพ็กเกจ Local หรือ Cloud จากหน้าเดียว</p>
+                  <a className="btn primary" href="/packages">เปิดหน้า Packages →</a>
+                </section>
+              </div>
             </div>
           )}
-          </div>
-        )}
 
         {activeView === "backtest" && (
           <BacktestCenter
