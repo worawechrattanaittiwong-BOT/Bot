@@ -127,9 +127,9 @@ function UnifiedSidebar({
                   if (onNavigate?.(item.href) === true) event.preventDefault();
                 }}
               >
-                <span className="owner-nav-icon"><ScenovaIcon name={item.icon} size={19}/></span>
-                <span className="owner-nav-copy"><b>{item.label}</b><small>{item.hint}</small></span>
-                <span className="owner-nav-caret">›</span>
+                <span className="owner-nav-icon"><ScenovaIcon name={item.icon} size={18}/></span>
+                <span className="owner-nav-copy" title={item.hint}><b>{item.label}</b></span>
+                <span className="owner-nav-caret" aria-hidden="true">›</span>
               </Link>
             ))}
           </nav>
