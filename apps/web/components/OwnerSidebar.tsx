@@ -32,7 +32,7 @@ const myAccountNavItem: NavItem = {
 };
 const inviteEarnNavItem: NavItem = {
   section:"MANAGEMENT", key:"referrals", href:"/referrals", icon:"users",
-  label:"Invite & Earn", hint:"Referral network, rewards & invite link"
+  label:"Invite & Earn", hint:"Share your link & earn rewards"
 };
 
 export const sharedTradingNavItems: NavItem[] = [
