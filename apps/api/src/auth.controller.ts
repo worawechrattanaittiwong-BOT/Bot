@@ -299,6 +299,65 @@ export class AuthController {
     };
   }
 
+  @Post("reset-password")
+  async resetPassword(
+    @Req() req: any,
+    @Body() body: { token: string; password: string }
+  ) {
+    const token = String(body.token || "").trim();
+    const password = String(body.password || "");
+    if (token.length < 20) throw new BadRequestException("ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง");
+    if (password.length < 8) {
+      throw new BadRequestException("รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร");
+    }
+
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const reset = await this.db.one(
+      `SELECT pr.id,pr.user_id,u.email,u.status
+       FROM password_reset_tokens pr
+       JOIN users u ON u.id=pr.user_id
+       WHERE pr.token_hash=$1
+         AND pr.consumed_at IS NULL
+         AND pr.expires_at>now()
+         AND u.status<>'DELETED'
+       LIMIT 1`,
+      [tokenHash]
+    );
+    if (!reset) {
+      throw new BadRequestException("ลิงก์รีเซ็ตรหัสผ่านหมดอายุหรือถูกใช้ไปแล้ว");
+    }
+
+    const passwordHash = await hash(password, 12);
+    await this.db.transaction(async client => {
+      await client.query(
+        "UPDATE users SET password_hash=$2,updated_at=now() WHERE id=$1",
+        [reset.user_id, passwordHash]
+      );
+      await client.query(
+        `UPDATE password_reset_tokens
+         SET consumed_at=COALESCE(consumed_at,now())
+         WHERE user_id=$1 AND consumed_at IS NULL`,
+        [reset.user_id]
+      );
+      await client.query(
+        `INSERT INTO user_security(user_id,last_password_changed_at,updated_at)
+         VALUES($1,now(),now())
+         ON CONFLICT(user_id) DO UPDATE
+         SET last_password_changed_at=now(),updated_at=now()`,
+        [reset.user_id]
+      );
+      await client.query(
+        `UPDATE two_factor_login_challenges
+         SET consumed_at=COALESCE(consumed_at,now())
+         WHERE user_id=$1 AND consumed_at IS NULL`,
+        [reset.user_id]
+      );
+    });
+
+    await this.authEvent(reset.user_id, reset.email, "PASSWORD_RESET", req);
+    return { ok: true, message: "ตั้งรหัสผ่านใหม่สำเร็จแล้ว" };
+  }
+
   @Post("login")
   async login(@Req() req: any, @Body() body: { email: string; password: string }) {
     const email = String(body.email || "").trim().toLowerCase();
