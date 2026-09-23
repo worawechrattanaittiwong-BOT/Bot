@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.63"
-#define SCENOVA_EA_VERSION "1.0.63"
-#define SCENOVA_PRODUCT_VERSION "1.0.63"
+#property version   "1.0.64"
+#define SCENOVA_EA_VERSION "1.0.64"
+#define SCENOVA_PRODUCT_VERSION "1.0.64"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -178,20 +178,6 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS 6
 #define RACE_VOLUME_WINDOW_SECONDS 60
 #define RACE_VOLUME_HISTORY_SECONDS 60
-// RACE first-entry edge protection. These rules affect only the first order
-// of a new AUTO-direction RACE cycle; existing RACE baskets keep their original
-// side logic and continue filling without pullback/retest requirements.
-#define RACE_FIRST_ENTRY_EDGE_BARS 10
-#define RACE_FIRST_ENTRY_TURN_WINDOW_SECONDS 10
-#define RACE_FIRST_ENTRY_M5_EDGE_ATR 0.20
-#define RACE_FIRST_ENTRY_M15_EDGE_ATR 0.15
-#define RACE_FIRST_ENTRY_BREAKOUT_ATR 0.18
-#define RACE_FIRST_ENTRY_TURN_SHARE 0.56
-#define RACE_FIRST_ENTRY_BREAKOUT_SHARE 0.65
-#define RACE_FIRST_ENTRY_MIN_FLOW_SAMPLES 6
-// Additional RACE positions remain fast, but are paced slightly slower than
-// the 150 ms first-order runtime cadence. No pullback is required.
-#define RACE_ADD_INTERVAL_MS 300
 #define RACE_EXIT_CYCLE_GRACE_SECONDS 20
 #define RACE_EXIT_LAST_FILL_GRACE_SECONDS 15
 #define RACE_EXIT_CONFIRM_SECONDS 12
@@ -380,7 +366,6 @@ bool   g_raceRecoveryWatch = false;
 string g_raceState = "IDLE";
 datetime g_raceCycleStartedAt = 0;
 datetime g_raceLastFillAt = 0;
-ulong  g_raceNextAddAllowedMs = 0;
 ulong  g_raceLastExitBurstMs = 0;
 datetime g_raceExitCandidateSince = 0;
 double g_raceExitCandidatePeakAdverse = 0.0;
@@ -2949,7 +2934,6 @@ void ResetRaceRuntime()
    g_raceState = "IDLE";
    g_raceCycleStartedAt = 0;
    g_raceLastFillAt = 0;
-   g_raceNextAddAllowedMs = 0;
    g_raceLastExitBurstMs = 0;
    RaceResetExitCandidate();
 }
@@ -3102,230 +3086,6 @@ int RaceVolumeDirection()
    if(samples<=0 || MathAbs(buyPressure-sellPressure)<=0.00000001)
       return 0;
    return buyPressure>sellPressure ? 1 : -1;
-}
-
-bool RaceRecentRange(
-   ENUM_TIMEFRAMES timeframe,
-   int bars,
-   double &lowOut,
-   double &highOut)
-{
-   lowOut=0.0;
-   highOut=0.0;
-   if(bars<=0)
-      return false;
-
-   MqlRates rates[];
-   ArraySetAsSeries(rates,true);
-   int copied=CopyRates(_Symbol,timeframe,1,bars,rates);
-   if(copied<3)
-      return false;
-
-   lowOut=rates[0].low;
-   highOut=rates[0].high;
-   for(int i=1;i<copied;i++)
-   {
-      if(rates[i].low<lowOut) lowOut=rates[i].low;
-      if(rates[i].high>highOut) highOut=rates[i].high;
-   }
-   return lowOut>0.0 && highOut>=lowOut;
-}
-
-bool RaceFlowShare(
-   int windowSeconds,
-   int direction,
-   double &shareOut,
-   int &samplesOut)
-{
-   shareOut=0.0;
-   samplesOut=0;
-   double buyPressure=0.0;
-   double sellPressure=0.0;
-   RaceVolumeSnapshotWindow(
-      windowSeconds,
-      buyPressure,
-      sellPressure,
-      samplesOut
-   );
-   double total=buyPressure+sellPressure;
-   if(samplesOut<=0 || total<=0.0 || direction==0)
-      return false;
-
-   shareOut=direction>0
-      ? buyPressure/total
-      : sellPressure/total;
-   return true;
-}
-
-bool RaceFirstEntryShortTurn(int direction)
-{
-   double share=0.0;
-   int samples=0;
-   if(!RaceFlowShare(
-      RACE_FIRST_ENTRY_TURN_WINDOW_SECONDS,
-      direction,
-      share,
-      samples))
-      return false;
-
-   return samples>=RACE_FIRST_ENTRY_MIN_FLOW_SAMPLES &&
-          share>=RACE_FIRST_ENTRY_TURN_SHARE;
-}
-
-bool RaceFirstEntryBreakoutFlow(int direction)
-{
-   double share=0.0;
-   int samples=0;
-   if(!RaceFlowShare(
-      RACE_VOLUME_WINDOW_SECONDS,
-      direction,
-      share,
-      samples))
-      return false;
-
-   return samples>=RACE_FIRST_ENTRY_MIN_FLOW_SAMPLES &&
-          share>=RACE_FIRST_ENTRY_BREAKOUT_SHARE;
-}
-
-int RaceFirstEntryDirection(int baseDirection,string &reasonOut)
-{
-   reasonOut="RACE_FIRST_FLOW";
-   if(baseDirection==0)
-      return 0;
-
-   // BUY_ONLY / SELL_ONLY are explicit customer instructions and remain
-   // authoritative. Edge reversal is only for AUTO-direction RACE.
-   if(g_entryMode!=ENTRY_AUTO_MOMENTUM)
-   {
-      reasonOut="RACE_EXPLICIT_DIRECTION";
-      return baseDirection;
-   }
-
-   MqlTick tick;
-   if(!SymbolInfoTick(_Symbol,tick))
-      return baseDirection;
-   double price=(tick.bid+tick.ask)*0.5;
-   if(price<=0.0)
-      return baseDirection;
-
-   double m5Low=0.0,m5High=0.0,m15Low=0.0,m15High=0.0;
-   bool hasM5=RaceRecentRange(
-      PERIOD_M5,
-      RACE_FIRST_ENTRY_EDGE_BARS,
-      m5Low,
-      m5High
-   );
-   bool hasM15=RaceRecentRange(
-      PERIOD_M15,
-      RACE_FIRST_ENTRY_EDGE_BARS,
-      m15Low,
-      m15High
-   );
-
-   double atrM5Points=AverageTrueRangePoints(PERIOD_M5,g_atrPeriod);
-   double atrM15Points=AverageTrueRangePoints(PERIOD_M15,g_atrPeriod);
-   bool m5Ready=hasM5 && atrM5Points>0.0;
-   bool m15Ready=hasM15 && atrM15Points>0.0;
-   if(!m5Ready && !m15Ready)
-      return baseDirection;
-
-   double atrM5Price=atrM5Points*_Point;
-   double atrM15Price=atrM15Points*_Point;
-
-   bool lowBreakout=
-      (m5Ready &&
-       price<m5Low-atrM5Price*RACE_FIRST_ENTRY_BREAKOUT_ATR) ||
-      (m15Ready &&
-       price<m15Low-atrM15Price*RACE_FIRST_ENTRY_BREAKOUT_ATR);
-   bool highBreakout=
-      (m5Ready &&
-       price>m5High+atrM5Price*RACE_FIRST_ENTRY_BREAKOUT_ATR) ||
-      (m15Ready &&
-       price>m15High+atrM15Price*RACE_FIRST_ENTRY_BREAKOUT_ATR);
-
-   bool lowEdge=
-      !lowBreakout &&
-      ((m5Ready &&
-        price<=m5Low+atrM5Price*RACE_FIRST_ENTRY_M5_EDGE_ATR) ||
-       (m15Ready &&
-        price<=m15Low+atrM15Price*RACE_FIRST_ENTRY_M15_EDGE_ATR));
-   bool highEdge=
-      !highBreakout &&
-      ((m5Ready &&
-        price>=m5High-atrM5Price*RACE_FIRST_ENTRY_M5_EDGE_ATR) ||
-       (m15Ready &&
-        price>=m15High-atrM15Price*RACE_FIRST_ENTRY_M15_EDGE_ATR));
-
-   // In an unusually compressed range both edges may overlap. Keep the normal
-   // RACE side instead of inventing a countertrend direction.
-   if((lowEdge && highEdge) || (lowBreakout && highBreakout))
-   {
-      reasonOut="RACE_EDGE_AMBIGUOUS";
-      return baseDirection;
-   }
-
-   // A real low break may continue SELL only when the full 60-second flow is
-   // still decisively SELL. Otherwise wait briefly for a turn instead of
-   // selling the terminal low.
-   if(lowBreakout)
-   {
-      if(RaceFirstEntryBreakoutFlow(-1))
-      {
-         reasonOut="RACE_LOW_BREAKOUT_SELL";
-         return -1;
-      }
-      if(RaceFirstEntryShortTurn(1))
-      {
-         reasonOut="RACE_LOW_BREAK_REJECT_BUY";
-         return 1;
-      }
-      reasonOut="RACE_LOW_BREAKOUT_WAIT";
-      return 0;
-   }
-
-   // Symmetric release for a genuine upside breakout.
-   if(highBreakout)
-   {
-      if(RaceFirstEntryBreakoutFlow(1))
-      {
-         reasonOut="RACE_HIGH_BREAKOUT_BUY";
-         return 1;
-      }
-      if(RaceFirstEntryShortTurn(-1))
-      {
-         reasonOut="RACE_HIGH_BREAK_REJECT_SELL";
-         return -1;
-      }
-      reasonOut="RACE_HIGH_BREAKOUT_WAIT";
-      return 0;
-   }
-
-   // Near the 10-bar M5/M15 low, do not open a fresh SELL. If the short flow
-   // has already turned BUY, reverse the first RACE order upward immediately.
-   if(lowEdge)
-   {
-      if(baseDirection>0 || RaceFirstEntryShortTurn(1))
-      {
-         reasonOut="RACE_LOW_EDGE_BUY";
-         return 1;
-      }
-      reasonOut="RACE_LOW_EDGE_WAIT_BUY";
-      return 0;
-   }
-
-   // Near the 10-bar M5/M15 high, mirror the same rule for SELL.
-   if(highEdge)
-   {
-      if(baseDirection<0 || RaceFirstEntryShortTurn(-1))
-      {
-         reasonOut="RACE_HIGH_EDGE_SELL";
-         return -1;
-      }
-      reasonOut="RACE_HIGH_EDGE_WAIT_SELL";
-      return 0;
-   }
-
-   return baseDirection;
 }
 
 int RaceM5CandleDirection()
@@ -3899,20 +3659,6 @@ bool ProcessRaceFill(int direction)
       }
    }
 
-   // Only additional RACE positions are paced. The first position remains on
-   // the normal fast RACE path, and no pullback/retest condition is introduced.
-   if(existingPositions>0)
-   {
-      ulong nowMs=GetTickCount64();
-      if(g_raceNextAddAllowedMs==0)
-         g_raceNextAddAllowedMs=nowMs+RACE_ADD_INTERVAL_MS;
-      if(nowMs<g_raceNextAddAllowedMs)
-      {
-         g_executionStatus="RACE_ADD_PACING";
-         return false;
-      }
-   }
-
    int filledUnits = RaceFilledUnits();
    if(filledUnits >= g_maxPositions)
    {
@@ -3977,7 +3723,6 @@ bool ProcessRaceFill(int direction)
    if(accepted)
    {
       g_raceLastFillAt = TimeCurrent();
-      g_raceNextAddAllowedMs=GetTickCount64()+RACE_ADD_INTERVAL_MS;
       RaceResetExitCandidate();
       int after = RaceFilledUnits();
       g_raceState = after >= g_maxPositions ? "FULL" : "FILLING";
@@ -4018,34 +3763,17 @@ bool StartRaceCycle(double momentum)
    // context is second-cached, so this adds no new waiting timer.
    RefreshMarketContext(false);
 
-   int baseDirection = RaceAnalysisDirection(momentum);
-   if(baseDirection == 0)
+   int direction = RaceAnalysisDirection(momentum);
+   if(direction == 0)
    {
       g_executionStatus = "RACE_VOLUME_BALANCED";
-      return false;
-   }
-
-   // Edge protection applies only to the first order of a new RACE cycle.
-   // Existing baskets keep the original 60-second side and fill logic.
-   string firstEntryReason="RACE_FIRST_FLOW";
-   int direction=RaceFirstEntryDirection(baseDirection,firstEntryReason);
-   if(direction==0)
-   {
-      g_executionStatus=firstEntryReason;
       return false;
    }
 
    g_burstActive = false;
    g_burstNeedsRearm = false;
    g_burstTargetPositions = 0;
-   bool accepted=ProcessRaceFill(direction);
-   if(accepted && firstEntryReason!="RACE_FIRST_FLOW")
-      Print(
-         "RACE first-entry edge decision reason=",firstEntryReason,
-         " baseDirection=",baseDirection,
-         " finalDirection=",direction
-      );
-   return accepted;
+   return ProcessRaceFill(direction);
 }
 
 bool ManageRaceBasket(double momentum)
