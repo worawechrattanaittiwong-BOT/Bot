@@ -73,7 +73,7 @@ type TwoFactorSetup = {
   period: number;
 };
 
-type PanelKey = "phone" | "trial" | "password" | "twoFactor" | "session";
+type PanelKey = "phone" | "password" | "twoFactor" | "session";
 
 const PHONE_COUNTRIES = [
   ["TH","ไทย","+66"], ["US","สหรัฐฯ / แคนาดา","+1"], ["GB","สหราชอาณาจักร","+44"],
@@ -125,7 +125,6 @@ export default function AccountPage() {
   const [messageKind, setMessageKind] = useState<"good" | "bad" | "info">("info");
   const [open, setOpen] = useState<Record<PanelKey, boolean>>({
     phone: false,
-    trial: false,
     password: false,
     twoFactor: false,
     session: false
@@ -134,9 +133,6 @@ export default function AccountPage() {
   const [phoneCountry, setPhoneCountry] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
   const [phoneBusy, setPhoneBusy] = useState(false);
-
-  const [trialCode, setTrialCode] = useState("");
-  const [trialBusy, setTrialBusy] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -223,39 +219,6 @@ export default function AccountPage() {
       notify("bad", error instanceof Error ? error.message : "บันทึกเบอร์โทรไม่สำเร็จ");
     } finally {
       setPhoneBusy(false);
-    }
-  }
-
-  async function requestTrialCode() {
-    if (trialBusy || !trialAccess?.phone) return;
-    setTrialBusy(true);
-    try {
-      const result = await api("/trial-access/request-code", { method: "POST" });
-      notify("good", "ส่ง OTP ไปที่ " + result.phoneMasked + " แล้ว");
-      setTrialCode("");
-      setTrialAccess(await api("/trial-access/status"));
-    } catch (error: unknown) {
-      notify("bad", error instanceof Error ? error.message : "ส่ง OTP ไม่สำเร็จ");
-    } finally {
-      setTrialBusy(false);
-    }
-  }
-
-  async function redeemTrialCode() {
-    if (!trialAccess?.phone || trialCode.length !== 6 || trialBusy) return;
-    setTrialBusy(true);
-    try {
-      const result = await api("/trial-access/redeem", {
-        method: "POST",
-        body: JSON.stringify({ code: trialCode })
-      });
-      notify("good", result.message || "เปิดสิทธิ์ทดลองแล้ว");
-      setTrialCode("");
-      await load();
-    } catch (error: unknown) {
-      notify("bad", error instanceof Error ? error.message : "เปิดสิทธิ์ทดลองไม่สำเร็จ");
-    } finally {
-      setTrialBusy(false);
     }
   }
 
@@ -362,11 +325,6 @@ export default function AccountPage() {
   if (!data) {
     return <main className={styles.loadingPage}><div className={styles.loadingCard}>{message || "ไม่พบบัญชี"}</div></main>;
   }
-
-  const trialVisible =
-    !elevated &&
-    !!trialAccess &&
-    (trialAccess.eligibility.allowed || !!trialAccess.authorization || !!trialAccess.trial);
 
   const phoneLocked = Boolean(
     data.user.phone?.verified ||
@@ -480,60 +438,15 @@ export default function AccountPage() {
               )}
             </section>
 
-            {trialVisible && (
-              <section className={styles.sectionCard}>
-                <SectionHeader
-                  icon="wallet"
-                  title="Trial"
-                  subtitle={trialAccess?.trial ? "สิทธิ์ทดลองเปิดใช้งานแล้ว" : "ยืนยันเบอร์ด้วย OTP เพื่อเปิดสิทธิ์ทดลอง"}
-                  badge={trialAccess?.trial ? "ACTIVE" : trialAccess?.authorization ? "READY" : "AVAILABLE"}
-                  good={Boolean(trialAccess?.trial || trialAccess?.authorization)}
-                  action={!trialAccess?.trial && !trialAccess?.authorization ? "จัดการ Trial" : undefined}
-                  expanded={open.trial}
-                  onAction={() => toggle("trial")}
-                />
-                {open.trial && !trialAccess?.trial && !trialAccess?.authorization && (
-                  <div id="trial-access" className={styles.commandBody}>
-                    {!trialAccess?.phone ? (
-                      <div className={styles.inlineNotice}>
-                        <span>ต้องเพิ่มเบอร์โทรก่อนจึงจะส่ง OTP ได้</span>
-                        <button type="button" className={styles.secondaryButton} onClick={() => {
-                          toggle("phone", true);
-                          document.getElementById("phone-settings")?.scrollIntoView({ behavior: "smooth", block: "center" });
-                        }}>
-                          ไปที่เบอร์โทร
-                        </button>
-                      </div>
-                    ) : (
-                      <div className={styles.otpRow}>
-                        <div>
-                          <span>ส่ง OTP ไปที่</span>
-                          <strong>{trialAccess.phone.masked}</strong>
-                        </div>
-                        <button type="button" className={styles.secondaryButton} onClick={requestTrialCode} disabled={trialBusy}>
-                          {trialBusy ? "กำลังส่ง..." : "ส่ง OTP"}
-                        </button>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          name="scenova_trial_otp"
-                          autoComplete="one-time-code"
-                          data-lpignore="true"
-                          aria-label="OTP"
-                          maxLength={6}
-                          value={trialCode}
-                          onChange={e => setTrialCode(e.target.value.replace(/\D/g,"").slice(0,6))}
-                          disabled={trialBusy}
-                        />
-                        <button type="button" className={styles.primaryButton} onClick={redeemTrialCode} disabled={trialBusy || trialCode.length !== 6}>
-                          ยืนยัน OTP
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </section>
-            )}
+            <section className={styles.sectionCard}>
+              <SectionHeader
+                icon="wallet"
+                title="Trial & Packages"
+                subtitle="Trial, Local MT5 และ Cloud MT5 ย้ายไปอยู่หน้า Packages"
+                action="เปิดหน้า Packages"
+                onAction={() => window.location.assign("/packages")}
+              />
+            </section>
 
             <InfoSection icon="shield" title="Security Status" subtitle="สถานะความปลอดภัยของบัญชี">
               <div className={styles.statusGrid}>
