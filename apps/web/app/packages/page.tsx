@@ -11,6 +11,7 @@ import {
 } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./packages.module.css";
+import legacy from "../../components/cloud.module.css";
 
 type Account = {
   user: {
@@ -118,6 +119,8 @@ export default function PackagesPage() {
   const [messageKind, setMessageKind] = useState<"good" | "bad" | "info">("info");
   const [otp, setOtp] = useState("");
   const [cooldown, setCooldown] = useState(0);
+  const [activeSystem, setActiveSystem] = useState<"LOCAL" | "CLOUD">("LOCAL");
+  const [trialOpen, setTrialOpen] = useState(false);
   const polling = useRef(false);
 
   const elevated = ["OWNER", "ADMIN"].includes(String(account?.user.role || "").toUpperCase());
@@ -320,6 +323,11 @@ export default function PackagesPage() {
   const trialReady = Boolean(trial?.authorization || trial?.trial);
   const trialEligible = Boolean(trial?.eligibility?.allowed);
   const sendsRemaining = Number(trial?.otp?.sendsRemaining ?? 0);
+  const isLocalSystem = activeSystem === "LOCAL";
+  const activeCatalog = isLocalSystem ? localCatalog : cloudCatalog;
+  const activeOrders = isLocalSystem ? localOrders : cloudOrders;
+  const activePending = isLocalSystem ? pendingLocal : pendingCloud;
+  const activeMembership = isLocalSystem ? activeLocal : activeCloud;
 
   return (
     <div className="app-wrap">
@@ -360,12 +368,22 @@ export default function PackagesPage() {
                   <p>ยืนยันเบอร์โทรด้วย OTP ก่อนเปิด Trial</p>
                 </div>
               </div>
-              <span className={`${styles.badge} ${trialReady ? styles.badgeGood : ""}`}>
-                {trial?.trial ? "ACTIVE" : trial?.authorization ? "READY" : trialEligible ? "AVAILABLE" : "UNAVAILABLE"}
-              </span>
+              <div className={styles.trialHeaderActions}>
+                <span className={`${styles.badge} ${trialReady ? styles.badgeGood : ""}`}>
+                  {trial?.trial ? "ACTIVE" : trial?.authorization ? "READY" : trialEligible ? "AVAILABLE" : "UNAVAILABLE"}
+                </span>
+                <button
+                  type="button"
+                  className={styles.trialToggle}
+                  onClick={() => setTrialOpen(value => !value)}
+                  aria-expanded={trialOpen}
+                >
+                  {trialOpen ? "ซ่อน" : trialReady ? "ดูสถานะ Trial" : "จัดการ Trial"}
+                </button>
+              </div>
             </div>
 
-            <div className={styles.trialBody}>
+            {trialOpen && <div className={styles.trialBody}>
               <div className={styles.trialSteps}>
                 <TrialStep
                   number="1"
@@ -477,10 +495,10 @@ export default function PackagesPage() {
                   )}
                 </div>
               )}
-            </div>
+            </div>}
           </section>
 
-          {(pendingLocal || pendingCloud) && (
+          {activePending && (
             <section className={styles.paymentPanel}>
               <div className={styles.sectionHeader}>
                 <div>
@@ -489,114 +507,117 @@ export default function PackagesPage() {
                 </div>
               </div>
               <div className={styles.pendingGrid}>
-                {pendingLocal && (
-                  <PaymentCard
-                    type="LOCAL"
-                    order={pendingLocal}
-                    busy={Boolean(busy)}
-                    onRefresh={() => refreshOrder("local", pendingLocal.id)}
-                  />
-                )}
-                {pendingCloud && (
-                  <PaymentCard
-                    type="CLOUD"
-                    order={pendingCloud}
-                    busy={Boolean(busy)}
-                    onRefresh={() => refreshOrder("cloud", pendingCloud.id)}
-                  />
-                )}
+                <PaymentCard
+                  type={isLocalSystem ? "LOCAL" : "CLOUD"}
+                  order={activePending}
+                  busy={Boolean(busy)}
+                  onRefresh={() => refreshOrder(isLocalSystem ? "local" : "cloud", activePending.id)}
+                />
               </div>
             </section>
           )}
 
-          <section className={`${styles.systemPanel} ${styles.localPanel}`}>
-            <div className={styles.systemHeader}>
-              <div className={styles.systemName}>
-                <span className={styles.systemIcon}><ScenovaIcon name="account" size={22}/></span>
-                <div>
-                  <span className={styles.eyebrow}>SYSTEM 01</span>
-                  <h2>Local MT5</h2>
-                  <p>ติดตั้ง EA บนคอมพิวเตอร์ของคุณเอง · ควบคุมสิทธิ์และ Settings ผ่าน SCENOVA</p>
+          <section className={styles.accessCenter}>
+            <div className={styles.centerTop}>
+              <div>
+                <span className={styles.eyebrow}>SCENOVA ACCESS CENTER</span>
+                <h2>เลือกระบบที่ต้องการใช้งาน</h2>
+                <p>Local และ VPS แยกสิทธิ์ แยกแพ็กเกจ และแยกการทำงานออกจากกันอย่างชัดเจน</p>
+              </div>
+              <div className={styles.systemSwitcher} role="tablist" aria-label="เลือกระบบแพ็กเกจ">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSystem === "LOCAL"}
+                  className={`${styles.systemTab} ${activeSystem === "LOCAL" ? styles.systemTabActive : ""}`}
+                  onClick={() => setActiveSystem("LOCAL")}
+                >
+                  <span className={styles.tabIcon}><ScenovaIcon name="account" size={22}/></span>
+                  <span><b>Local MT5</b><small>รันบนคอมของคุณ</small></span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSystem === "CLOUD"}
+                  className={`${styles.systemTab} ${activeSystem === "CLOUD" ? styles.systemTabActive : ""}`}
+                  onClick={() => setActiveSystem("CLOUD")}
+                >
+                  <span className={styles.tabIcon}><ScenovaIcon name="cloud" size={22}/></span>
+                  <span><b>VPS / Cloud MT5</b><small>รันบนเซิร์ฟเวอร์</small></span>
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.systemPanel}>
+              <div className={styles.systemHeader}>
+                <div className={styles.systemName}>
+                  <span className={styles.systemIcon}>
+                    <ScenovaIcon name={isLocalSystem ? "account" : "cloud"} size={24}/>
+                  </span>
+                  <div>
+                    <span className={styles.eyebrow}>{isLocalSystem ? "LOCAL SYSTEM" : "VPS SYSTEM"}</span>
+                    <h2>{isLocalSystem ? "Local MT5" : "VPS / Cloud MT5"}</h2>
+                    <p>
+                      {isLocalSystem
+                        ? "ติดตั้ง EA บน MT5 ในคอมพิวเตอร์ของคุณเอง และควบคุมสิทธิ์ผ่าน SCENOVA"
+                        : "MT5 และ EA ทำงานบน VPS ของ SCENOVA ปิดมือถือหรือคอมของคุณได้หลังจาก Start"}
+                    </p>
+                  </div>
+                </div>
+                <div className={styles.systemStatus}>
+                  <span>{activeMembership ? "ACTIVE" : isLocalSystem ? "LOCAL" : "VPS"}</span>
+                  <b>
+                    {activeMembership
+                      ? `ใช้ได้ถึง ${date(activeMembership.subscription_expires_at)}`
+                      : isLocalSystem
+                        ? "พร้อมเลือกแพ็กเกจ"
+                        : activeCatalog
+                          ? `${Number(activeCatalog.available || 0)} Slot พร้อม`
+                          : "กำลังตรวจสอบ"}
+                  </b>
                 </div>
               </div>
-              <div className={styles.systemStatus}>
-                <span>{activeLocal ? "ACTIVE" : "LOCAL"}</span>
-                {activeLocal && <b>ถึง {date(activeLocal.subscription_expires_at)}</b>}
+
+              <div className={styles.systemFeatures}>
+                {(isLocalSystem
+                  ? [
+                      "ใช้ MT5 บนเครื่องของคุณ",
+                      "1 แพ็กเกจ / 1 บัญชี MT5",
+                      "EA ทำงานเมื่อเครื่องและ MT5 เปิดอยู่",
+                      "ต่ออายุเพิ่มจากเวลาที่เหลือ"
+                    ]
+                  : [
+                      "รันบอทบน VPS 24/7",
+                      "1 แพ็กเกจ / 1 Cloud MT5",
+                      "Start / Stop จากมือถือ",
+                      "Capacity Guard ก่อนเปิดขาย"
+                    ]
+                ).map(item => <span key={item}>{item}</span>)}
               </div>
-            </div>
 
-            <div className={styles.systemFeatures}>
-              <span>ใช้ MT5 บนเครื่องของคุณ</span>
-              <span>1 แพ็กเกจ / 1 บัญชี MT5</span>
-              <span>EA ทำงานเมื่อเครื่องและ MT5 เปิดอยู่</span>
-              <span>ต่ออายุเพิ่มจากเวลาที่เหลือ</span>
-            </div>
-
-            <div className={styles.packageGrid}>
-              {(localCatalog?.packages || []).map(pack => (
-                <PackageCard
-                  key={pack.months}
-                  system="LOCAL"
-                  pack={pack}
-                  checkoutEnabled={Boolean(localCatalog?.checkoutEnabled)}
-                  paymentMode={localCatalog?.paymentMode || "UNCONFIGURED"}
-                  busy={Boolean(busy)}
-                  pending={Boolean(pendingLocal)}
-                  onBuy={() => checkoutLocal(pack.months)}
-                />
-              ))}
+              <div className={`${legacy.root} ${styles.legacyPackageScope}`}>
+                <div className={legacy.packages}>
+                  {(activeCatalog?.packages || []).map(pack => (
+                    <PackageCard
+                      key={pack.months}
+                      system={activeSystem}
+                      pack={pack}
+                      checkoutEnabled={Boolean(activeCatalog?.checkoutEnabled)}
+                      paymentMode={activeCatalog?.paymentMode || "UNCONFIGURED"}
+                      busy={Boolean(busy)}
+                      pending={Boolean(activePending)}
+                      capacityAvailable={isLocalSystem || Number(cloudCatalog?.available || 0) > 0}
+                      onBuy={() => isLocalSystem ? checkoutLocal(pack.months) : checkoutCloud(pack.months)}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
 
-          <section className={`${styles.systemPanel} ${styles.cloudPanel}`}>
-            <div className={styles.systemHeader}>
-              <div className={styles.systemName}>
-                <span className={styles.systemIcon}><ScenovaIcon name="cloud" size={22}/></span>
-                <div>
-                  <span className={styles.eyebrow}>SYSTEM 02</span>
-                  <h2>Cloud MT5</h2>
-                  <p>MT5 และ EA ทำงานบนเซิร์ฟเวอร์ · ปิดมือถือหรือคอมของคุณได้หลังจากกด Start</p>
-                </div>
-              </div>
-              <div className={styles.systemStatus}>
-                <span>{activeCloud ? "ACTIVE" : "CLOUD"}</span>
-                <b>
-                  {activeCloud
-                    ? `ถึง ${date(activeCloud.subscription_expires_at)}`
-                    : cloudCatalog
-                      ? `${Number(cloudCatalog.available || 0)} Slot พร้อม`
-                      : "กำลังตรวจสอบ"}
-                </b>
-              </div>
-            </div>
-
-            <div className={styles.systemFeatures}>
-              <span>รันบอทบน Cloud 24/7</span>
-              <span>1 แพ็กเกจ / 1 Cloud MT5</span>
-              <span>Start / Stop จากมือถือ</span>
-              <span>มี Capacity Guard ก่อนเปิดขาย</span>
-            </div>
-
-            <div className={styles.packageGrid}>
-              {(cloudCatalog?.packages || []).map(pack => (
-                <PackageCard
-                  key={pack.months}
-                  system="CLOUD"
-                  pack={pack}
-                  checkoutEnabled={Boolean(cloudCatalog?.checkoutEnabled)}
-                  paymentMode={cloudCatalog?.paymentMode || "UNCONFIGURED"}
-                  busy={Boolean(busy)}
-                  pending={Boolean(pendingCloud)}
-                  capacityAvailable={Number(cloudCatalog?.available || 0) > 0}
-                  onBuy={() => checkoutCloud(pack.months)}
-                />
-              ))}
-            </div>
-          </section>
-
-          {(localCatalog?.paymentMode === "TEST" || cloudCatalog?.paymentMode === "TEST") && (
+          {activeCatalog?.paymentMode === "TEST" && (
             <div className={styles.testNotice}>
-              Payment Gateway อยู่ในโหมดทดสอบ รายการทดสอบจะไม่ใช่การรับชำระเงินจริง
+              Payment Gateway อยู่ในโหมดทดสอบ รายการนี้ยังไม่ใช่การรับชำระเงินจริง
             </div>
           )}
 
@@ -604,13 +625,13 @@ export default function PackagesPage() {
             <div className={styles.sectionHeader}>
               <div>
                 <span className={styles.eyebrow}>MEMBERSHIP HISTORY</span>
-                <h2>รายการล่าสุด</h2>
+                <h2>รายการล่าสุด · {isLocalSystem ? "Local MT5" : "VPS / Cloud MT5"}</h2>
               </div>
             </div>
-            <div className={styles.historyGrid}>
-              <OrderHistory title="Local MT5" orders={localOrders}/>
-              <OrderHistory title="Cloud MT5" orders={cloudOrders}/>
+            <div className={styles.historyGridSingle}>
+              <OrderHistory title={isLocalSystem ? "Local MT5" : "VPS / Cloud MT5"} orders={activeOrders}/>
             </div>
+          </section>
           </section>
         </div>
       </main>
@@ -673,39 +694,49 @@ function PackageCard({
       : !checkoutEnabled || paymentMode === "UNCONFIGURED"
         ? "ระบบชำระเงินยังไม่เปิด"
         : !capacityAvailable
-          ? "Cloud เต็มชั่วคราว"
+          ? "VPS เต็มชั่วคราว"
           : pending
             ? "มีรายการรอชำระ"
             : "เลือกแพ็กเกจ";
 
+  const features = system === "LOCAL"
+    ? [
+        "Local สำหรับ 1 บัญชี MT5",
+        "ใช้ EA บนคอมพิวเตอร์ของคุณ",
+        "ควบคุมสิทธิ์ผ่าน SCENOVA",
+        "ต่ออายุรักษาเวลาที่เหลือ"
+      ]
+    : [
+        "Cloud สำหรับ 1 บัญชี MT5",
+        "Start / Stop ผ่านมือถือ",
+        "ดูสถานะบอทได้ตลอด",
+        "ต่ออายุรักษาเวลาที่เหลือ"
+      ];
+
   return (
-    <article className={`${styles.packageCard} ${featured ? styles.featured : ""}`}>
-      <div className={styles.packageTop}>
-        <span>{system} MT5</span>
-        {featured && <em>POPULAR</em>}
-      </div>
+    <article className={`${legacy.package} ${featured ? legacy.featured : ""}`}>
+      <span className={legacy.eyebrow}>{system === "LOCAL" ? "LOCAL MT5" : "VPS / CLOUD MT5"}</span>
       <h3>{pack.months} เดือน</h3>
-      <div className={styles.price}>
-        {pack.price_satang > 0 ? `฿${money(pack.price_satang)}` : "—"}
+      <div className={legacy.price}>
+        {pack.price_satang > 0 ? `฿${money(pack.price_satang)}` : "รอประกาศราคา"}
         <small>
           {pack.price_satang > 0
             ? `เฉลี่ย ฿${money(Math.round(pack.price_satang / pack.months))} / เดือน`
-            : "รอผู้ดูแลกำหนดราคา"}
+            : "ราคาจะแสดงเมื่อพร้อมเปิดขาย"}
         </small>
       </div>
-      <div className={styles.cardFeatures}>
-        <span>1 บัญชี MT5</span>
-        <span>ต่ออายุรักษาเวลาที่เหลือ</span>
-        <span>ชำระครั้งเดียว ไม่ต่ออายุอัตโนมัติ</span>
+      <div className={legacy.features}>
+        {features.map(feature => <span key={feature}>{feature}</span>)}
       </div>
       <button
         type="button"
-        className={featured ? styles.primaryButton : styles.secondaryButton}
+        className={`${legacy.button} ${featured ? legacy.primary : ""}`}
         disabled={busy || !available}
         onClick={onBuy}
       >
-        {busy ? "กำลังดำเนินการ..." : label}
+        {busy ? "กำลังดำเนินการ…" : label}
       </button>
+      <small className={legacy.muted}>ชำระครั้งเดียว ไม่ตัดเงินต่ออายุอัตโนมัติ</small>
     </article>
   );
 }
