@@ -123,7 +123,7 @@ export class ReferralService {
     ]);
 
     const countByLevel = new Map<number, number>(
-      levels.rows.map((row: any) => [Number(row.level), Number(row.count || 0)])
+      levels.rows.map((row: any) => [Number(row.level), Number(row.count || 0)] as [number, number])
     );
     const networkByLevel = REFERRAL_LEVELS.map(item => ({
       level: item.level,
@@ -151,7 +151,7 @@ export class ReferralService {
           REFERRAL_LEVELS.reduce((sum, item) => sum + item.rateBps, 0) / 100,
         holdDays: this.holdDays(),
         payoutMode: "MANUAL",
-        eligibleSourceTypes: ["CLOUD_ORDER"]
+        eligibleSourceTypes: ["CLOUD_ORDER", "MANUAL_SUBSCRIPTION"]
       },
       network: {
         directInvites: countByLevel.get(1) || 0,
@@ -168,6 +168,17 @@ export class ReferralService {
         recent: commissions.rows
       }
     };
+  }
+
+  async creditRecordedPurchase(input: {
+    sourceUserId: string;
+    sourceType: string;
+    sourceId: string;
+    grossAmountSatang: number;
+    currency?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    return this.db.transaction(tx => this.creditPurchase(tx, input));
   }
 
   async creditPurchase(
