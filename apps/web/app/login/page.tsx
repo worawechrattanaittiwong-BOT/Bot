@@ -106,6 +106,14 @@ export default function LoginPage() {
       if (rememberEmail) localStorage.setItem(LOGIN_EMAIL_KEY, email.trim());
       else localStorage.removeItem(LOGIN_EMAIL_KEY);
 
+      if (data.requiresEmailVerification) {
+        localStorage.removeItem("bot_token");
+        const verificationEmail = String(data.email || email).trim().toLowerCase();
+        window.location.href = "/verify-email?email=" + encodeURIComponent(verificationEmail);
+        return;
+      }
+
+      if (!data.token) throw new Error("Secure session was not issued. Please try again.");
       localStorage.setItem("bot_token", data.token);
       window.location.href = register ? "/onboarding?new=1" : "/dashboard?view=overview";
     } catch (err: unknown) {

@@ -48,7 +48,20 @@ BOT_WEB_PORT=$BOT_WEB_PORT
 APP_DOMAIN=$APP_DOMAIN
 PUBLIC_WEB_URL=$PUBLIC_URL
 WEB_ORIGIN=$PUBLIC_URL
+RESEND_API_KEY=
+EMAIL_FROM='SCENOVA <no-reply@mail.snvea-bot.online>'
+EMAIL_VERIFICATION_REQUIRED=false
 EOF
+fi
+
+if ! grep -q '^RESEND_API_KEY=' .env.hostinger; then
+  echo 'RESEND_API_KEY=' >> .env.hostinger
+fi
+if ! grep -q '^EMAIL_FROM=' .env.hostinger; then
+  echo "EMAIL_FROM='SCENOVA <no-reply@mail.snvea-bot.online>'" >> .env.hostinger
+fi
+if ! grep -q '^EMAIL_VERIFICATION_REQUIRED=' .env.hostinger; then
+  echo 'EMAIL_VERIFICATION_REQUIRED=false' >> .env.hostinger
 fi
 
 if grep -q '^BOT_WEB_PORT=' .env.hostinger; then
@@ -87,7 +100,7 @@ until docker compose --env-file .env.hostinger -f "$COMPOSE" exec -T postgres pg
   sleep 2
 done
 
-for migration in   database/001_init.sql   database/002_cloud_worker.sql   database/003_trial_history_lock.sql   database/004_broker_catalog.sql   database/005_local_desktop_agent.sql   database/010_trade_journal.sql   database/011_basket_intelligence.sql   database/012_auto_profit_target_mode.sql   database/013_backtest_performance.sql   database/014_maintenance_mode.sql   database/015_partner_program.sql   database/016_upgrade_regression_safety.sql   database/017_runtime_safety.sql   database/018_runtime_migration.sql   database/019_production_hardening.sql   database/020_performance_shares.sql   database/021_cent_account_currency_isolation.sql
+for migration in   database/001_init.sql   database/002_cloud_worker.sql   database/003_trial_history_lock.sql   database/004_broker_catalog.sql   database/005_local_desktop_agent.sql   database/010_trade_journal.sql   database/011_basket_intelligence.sql   database/012_auto_profit_target_mode.sql   database/013_backtest_performance.sql   database/014_maintenance_mode.sql   database/015_partner_program.sql   database/016_upgrade_regression_safety.sql   database/017_runtime_safety.sql   database/018_runtime_migration.sql   database/019_production_hardening.sql   database/020_performance_shares.sql   database/021_cent_account_currency_isolation.sql   database/022_email_verification.sql
 do
   docker compose --env-file .env.hostinger -f "$COMPOSE" exec -T postgres     psql -U bot -d bot -v ON_ERROR_STOP=1 -f /dev/stdin < "$migration"
 done

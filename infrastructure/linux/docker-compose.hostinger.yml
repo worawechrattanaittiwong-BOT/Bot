@@ -35,6 +35,9 @@ services:
       CREDENTIAL_MASTER_KEY: ${CREDENTIAL_MASTER_KEY}
       OMISE_SECRET_KEY: ${OMISE_SECRET_KEY:-}
       CLOUD_CHECKOUT_ENABLED: ${CLOUD_CHECKOUT_ENABLED:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      EMAIL_VERIFICATION_REQUIRED: ${EMAIL_VERIFICATION_REQUIRED:-false}
     depends_on:
       postgres:
         condition: service_healthy
