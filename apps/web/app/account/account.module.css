@@ -2,14 +2,14 @@
   max-width:none!important;
   min-height:100vh;
   background:
-    radial-gradient(circle at 78% 0,rgba(105,78,224,.10),transparent 30%),
+    radial-gradient(circle at 82% 0,rgba(104,78,220,.08),transparent 31%),
     #080b12
 }
 
 .accountShell{
-  width:min(1160px,calc(100vw - 300px));
+  width:min(1120px,100%);
   margin:0 auto;
-  padding:8px 0 34px
+  padding:10px 0 36px
 }
 
 .loadingPage{
@@ -21,7 +21,7 @@
   color:#eef2ff
 }
 .loadingCard{
-  border:1px solid #2b3350;
+  border:1px solid #2a3350;
   border-radius:14px;
   background:#0d111c;
   padding:18px 22px;
@@ -31,46 +31,71 @@
 
 .header{
   display:flex;
-  align-items:flex-end;
+  align-items:center;
   justify-content:space-between;
   gap:18px;
-  margin-bottom:18px;
-  padding:8px 2px 0
+  margin-bottom:16px
+}
+.headerTitle{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0
+}
+.headerIcon{
+  width:43px;
+  height:43px;
+  display:grid;
+  place-items:center;
+  flex:0 0 auto;
+  border:1px solid #483d76;
+  border-radius:12px;
+  background:#15132a;
+  color:#a895ff
 }
 .eyebrow{
   margin-bottom:5px;
-  color:#8b78e8;
+  color:#8d7ae9;
   font:800 8px/1 Consolas,monospace;
   letter-spacing:.17em
 }
 .header h1{
   margin:0;
-  color:#f2f4fb;
-  font-size:30px;
-  line-height:1;
+  color:#f1f4fb;
+  font-size:28px;
+  line-height:1.05;
   letter-spacing:-.035em
 }
-.header span{
-  display:block;
-  margin-top:7px;
-  color:#748097;
+.header p{
+  margin:6px 0 0;
+  color:#728097;
   font-size:10px
 }
-.userCode{
-  border:1px solid #39315f;
+.accountStatus{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex:0 0 auto;
+  border:1px solid #2c5844;
   border-radius:999px;
-  background:#11101e;
-  color:#aa9cff;
-  padding:8px 11px;
-  font:800 9px Consolas,monospace;
-  letter-spacing:.04em
+  background:#0d1c16;
+  color:#87d7ac;
+  padding:7px 10px;
+  font:800 8px Consolas,monospace
+}
+.accountStatus i{
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#7ce2ad;
+  box-shadow:0 0 9px #7ce2ad
 }
 
 .message{
-  margin-bottom:14px;
+  margin-bottom:12px;
   padding:10px 12px;
   border:1px solid #3b3a61;
-  border-radius:11px;
+  border-radius:10px;
   background:#121426;
   color:#bdb6e8;
   font-size:10px
@@ -86,56 +111,83 @@
   color:#f2a5b1
 }
 
-.cardGrid{
+.summaryBar{
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:14px;
-  align-items:start
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  margin-bottom:12px;
+  overflow:hidden;
+  border:1px solid #28314b;
+  border-radius:14px;
+  background:#0c111c
+}
+.summaryItem{
+  min-width:0;
+  padding:12px 14px;
+  border-right:1px solid rgba(118,131,159,.12)
+}
+.summaryItem:last-child{
+  border-right:0
+}
+.summaryItem span{
+  display:block;
+  margin-bottom:5px;
+  color:#68758c;
+  font-size:8px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.06em
+}
+.summaryItem b{
+  display:block;
+  overflow:hidden;
+  color:#e9edf6;
+  font-size:10px;
+  text-overflow:ellipsis;
+  white-space:nowrap
 }
 
-.accountCard{
+.sectionStack{
+  display:grid;
+  gap:10px
+}
+.sectionCard{
   min-width:0;
   overflow:hidden;
-  border:1px solid #29314c;
-  border-radius:17px;
+  border:1px solid #28314b;
+  border-radius:14px;
   background:
-    radial-gradient(circle at 100% 0,rgba(103,78,220,.07),transparent 34%),
-    linear-gradient(155deg,#0e1421,#090d16 76%);
-  box-shadow:
-    0 16px 38px rgba(0,0,0,.20),
-    inset 0 1px rgba(255,255,255,.025);
+    radial-gradient(circle at 100% 0,rgba(103,78,220,.045),transparent 32%),
+    linear-gradient(150deg,#0e1421,#090d16 78%);
+  box-shadow:0 11px 28px rgba(0,0,0,.16);
   scroll-margin-top:18px
 }
-
-.cardHeader{
-  min-height:68px;
+.sectionHeader{
+  min-height:66px;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:14px;
-  padding:14px 15px;
-  border-bottom:1px solid rgba(114,128,160,.10)
+  gap:16px;
+  padding:12px 14px
 }
-.cardTitle{
+.sectionTitle{
   display:flex;
   align-items:center;
   gap:11px;
   min-width:0
 }
-.cardTitle>div{
+.sectionTitle>div{
   min-width:0
 }
-.cardTitle h2{
+.sectionTitle h2{
   margin:0;
-  color:#edf1fb;
-  font-size:13px;
+  color:#edf1fa;
+  font-size:12px;
   font-weight:800
 }
-.cardTitle p{
+.sectionTitle p{
   margin:4px 0 0;
-  max-width:340px;
   overflow:hidden;
-  color:#69778e;
+  color:#6f7c92;
   font-size:9px;
   text-overflow:ellipsis;
   white-space:nowrap
@@ -146,40 +198,150 @@
   display:grid;
   place-items:center;
   flex:0 0 auto;
-  border:1px solid #463a76;
+  border:1px solid #463b73;
   border-radius:10px;
   background:#151329;
-  color:#aa98ff
+  color:#a996ff
+}
+.sectionControls{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex:0 0 auto
 }
 .badge{
-  flex:0 0 auto;
-  border:1px solid #504664;
+  border:1px solid #4a435f;
   border-radius:999px;
-  background:#171520;
-  color:#9d93b5;
+  background:#15141e;
+  color:#988eac;
   padding:6px 8px;
   font:800 7.5px Consolas,monospace;
-  letter-spacing:.08em
+  letter-spacing:.07em
 }
 .badgeGood{
-  border-color:#2f634c;
-  background:#0d2118;
-  color:#80dbad
+  border-color:#2d614a;
+  background:#0c2117;
+  color:#7fdaad
+}
+.disclosureButton{
+  min-height:34px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border:1px solid #4b426a;
+  border-radius:9px;
+  background:#141321;
+  color:#c0b5e9;
+  padding:7px 10px;
+  font-size:8.5px;
+  font-weight:800;
+  cursor:pointer
+}
+.disclosureButton span{
+  width:14px;
+  color:#927cff;
+  text-align:center;
+  font-size:13px;
+  line-height:1
+}
+.disclosureButton:hover{
+  border-color:#65588f;
+  background:#191726
 }
 
-.cardBody{
-  padding:15px
+.infoBody,
+.commandBody{
+  border-top:1px solid rgba(115,128,157,.10)
+}
+.infoBody{
+  padding:0 14px 12px
+}
+.commandBody{
+  padding:14px;
+  background:rgba(5,9,16,.34)
+}
+
+.detailGrid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr))
+}
+.detailItem{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  min-height:44px;
+  padding:9px 10px;
+  border-bottom:1px solid rgba(112,125,153,.09)
+}
+.detailItem:nth-last-child(-n+3){
+  border-bottom:0
+}
+.detailItem span{
+  color:#748096;
+  font-size:8.5px
+}
+.detailItem b{
+  min-width:0;
+  overflow:hidden;
+  color:#dbe1ee;
+  font-size:9px;
+  text-align:right;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+
+.statusGrid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  padding-top:12px
+}
+.statusItem{
+  min-width:0;
+  border:1px solid #252e45;
+  border-radius:10px;
+  background:#090f18;
+  padding:10px
+}
+.statusItem span{
+  display:block;
+  color:#6f7d92;
+  font-size:8px
+}
+.statusItem b{
+  display:block;
+  margin-top:5px;
+  overflow:hidden;
+  color:#dce2ee;
+  font-size:9px;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+
+.goodText{
+  color:#7ed7aa!important
+}
+.mono{
+  font-family:Consolas,monospace!important;
+  color:#b7a9ff!important
+}
+.monoSmall{
+  font:800 8px Consolas,monospace!important;
+  color:#a99cff!important
 }
 
 .phoneForm{
   display:grid;
-  grid-template-columns:minmax(150px,.8fr) minmax(190px,1.2fr);
+  grid-template-columns:minmax(170px,.8fr) minmax(220px,1.2fr);
   gap:10px
 }
 .phoneForm label,
 .passwordGrid label,
-.twoFactorForm label,
-.disableForm label{
+.twoFactorRow label,
+.disableGrid label{
   display:flex;
   min-width:0;
   flex-direction:column;
@@ -187,42 +349,42 @@
 }
 .phoneForm label>span,
 .passwordGrid label>span,
-.twoFactorForm label>span,
-.disableForm label>span{
-  color:#77859a;
-  font-size:8.5px;
+.twoFactorRow label>span,
+.disableGrid label>span{
+  color:#77849a;
+  font-size:8px;
   font-weight:700
 }
 .phoneForm select,
 .phoneForm input,
 .passwordGrid input,
-.twoFactorForm input,
-.disableForm input,
-.otpActions input{
+.twoFactorRow input,
+.disableGrid input,
+.otpRow input{
   width:100%;
-  height:39px;
+  height:38px;
   min-width:0;
   border:1px solid #303954;
   border-radius:9px;
   background:#080d16;
-  color:#eef2ff;
-  padding:0 11px;
+  color:#edf2fb;
+  padding:0 10px;
   outline:none;
   font-size:10px
 }
 .phoneForm select:focus,
 .phoneForm input:focus,
 .passwordGrid input:focus,
-.twoFactorForm input:focus,
-.disableForm input:focus,
-.otpActions input:focus{
-  border-color:#745fd2;
-  box-shadow:0 0 0 3px rgba(116,95,210,.08)
+.twoFactorRow input:focus,
+.disableGrid input:focus,
+.otpRow input:focus{
+  border-color:#725dd0;
+  box-shadow:0 0 0 3px rgba(114,93,208,.08)
 }
 .phoneForm select{
   appearance:auto
 }
-.formActions{
+.actionLine{
   grid-column:1/-1;
   display:flex;
   align-items:center;
@@ -233,32 +395,25 @@
 
 .primaryButton,
 .secondaryButton{
-  min-height:37px;
+  min-height:36px;
   border-radius:9px;
-  padding:8px 13px;
-  font-size:9px;
+  padding:8px 12px;
+  font-size:8.5px;
   font-weight:800;
   white-space:nowrap;
   cursor:pointer
 }
 .primaryButton{
-  border:1px solid #6f57d2;
-  background:linear-gradient(120deg,#6746d9,#4435a2);
+  border:1px solid #7059d2;
+  background:linear-gradient(120deg,#6847da,#4435a1);
   color:#fff;
-  box-shadow:0 7px 18px rgba(72,50,159,.18)
+  box-shadow:0 7px 18px rgba(70,49,157,.17)
 }
 .secondaryButton{
-  border:1px solid #4c4569;
+  border:1px solid #4d4569;
   background:#151522;
   color:#c3b8ee;
   text-decoration:none
-}
-.primaryButton:hover:not(:disabled){
-  filter:brightness(1.06)
-}
-.secondaryButton:hover:not(:disabled){
-  border-color:#665a8f;
-  background:#191826
 }
 .primaryButton:disabled,
 .secondaryButton:disabled{
@@ -271,114 +426,89 @@
   background:transparent;
   color:#8f82c5;
   padding:6px;
-  font-size:9px;
+  font-size:8.5px;
   font-weight:700;
   cursor:pointer
 }
-.textButton:disabled{opacity:.45}
 
-.savedRow,
-.trialLanding{
-  min-height:68px;
+.lockNote{
+  border-top:1px solid rgba(115,128,157,.10);
+  background:#0a1018;
+  color:#6f7d91;
+  padding:10px 14px;
+  font-size:8.5px
+}
+.inlineNotice{
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:14px;
-  border:1px solid #28324d;
-  border-radius:12px;
-  background:#0a101a;
-  padding:12px
+  border:1px solid #33304f;
+  border-radius:10px;
+  background:#0d101b;
+  color:#9ba4b6;
+  padding:10px 11px;
+  font-size:9px
 }
-.savedRow>div{
+.otpRow{
+  display:grid;
+  grid-template-columns:minmax(130px,1fr) auto 130px auto;
+  gap:8px;
+  align-items:end
+}
+.otpRow>div{
   min-width:0
 }
-.savedRow strong{
+.otpRow>div span{
   display:block;
-  color:#e8edf8;
-  font:800 11px Consolas,monospace
+  margin-bottom:5px;
+  color:#6f7d92;
+  font-size:8px
 }
-.savedRow span,
-.trialLanding>span{
-  display:block;
-  margin-top:4px;
-  color:#758298;
-  font-size:9px
-}
-
-.otpBox{
-  border:1px solid #2d3653;
-  border-radius:12px;
-  background:#0a101b;
-  padding:12px
-}
-.otpTarget{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  margin-bottom:9px
-}
-.otpTarget span{
-  color:#76839a;
-  font-size:9px
-}
-.otpTarget strong{
-  color:#dce3f2;
+.otpRow>div strong{
+  color:#e0e6f1;
   font:800 10px Consolas,monospace
-}
-.otpActions{
-  display:grid;
-  grid-template-columns:auto minmax(110px,1fr) auto;
-  gap:8px
-}
-.successState{
-  display:grid;
-  min-height:72px;
-  place-items:center;
-  border:1px solid #2f5b46;
-  border-radius:12px;
-  background:#0b1912;
-  color:#8cddb2;
-  font-size:10px;
-  font-weight:800
 }
 
 .passwordGrid{
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-columns:repeat(3,minmax(0,1fr));
   gap:10px
 }
-.cardFooter{
+.passwordGrid:has(label:nth-child(4)){
+  grid-template-columns:repeat(4,minmax(0,1fr))
+}
+.commandFooter{
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:14px;
   margin-top:12px;
   padding-top:12px;
-  border-top:1px solid rgba(113,129,160,.10)
+  border-top:1px solid rgba(112,126,154,.10)
 }
 .passwordMeter{
   display:grid;
-  grid-template-columns:repeat(4,28px);
+  grid-template-columns:repeat(4,30px);
   gap:4px
 }
 .passwordMeter span{
   height:4px;
   border-radius:999px;
-  background:#293047
+  background:#293048
 }
 .passwordMeter span.meterOn{
   background:#8d70ff;
-  box-shadow:0 0 9px rgba(141,112,255,.24)
+  box-shadow:0 0 9px rgba(141,112,255,.22)
 }
 
-.twoFactorForm{
+.twoFactorRow{
   display:grid;
-  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-columns:minmax(220px,1fr) auto;
   gap:9px;
   align-items:end
 }
-.disableForm{
+.disableGrid{
   display:grid;
   grid-template-columns:1fr 1fr auto;
   gap:9px;
@@ -403,13 +533,12 @@
   padding:10px;
   font:800 10px Consolas,monospace
 }
-
 .recoveryBox{
   margin-top:12px;
   border:1px solid #345741;
-  border-radius:11px;
+  border-radius:10px;
   background:#0b1712;
-  padding:11px
+  padding:10px
 }
 .recoveryHead{
   display:flex;
@@ -425,7 +554,7 @@
   display:grid;
   grid-template-columns:repeat(4,1fr);
   gap:6px;
-  margin-top:9px
+  margin-top:8px
 }
 .recoveryGrid code{
   border:1px solid #2c4b38;
@@ -437,47 +566,130 @@
   font:800 9px Consolas,monospace
 }
 
-@media(max-width:1280px){
-  .accountShell{
-    width:min(1060px,calc(100vw - 270px))
-  }
+.sessionCard{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  gap:11px;
+  align-items:center;
+  border:1px solid #29324b;
+  border-radius:11px;
+  background:#090f18;
+  padding:11px
+}
+.sessionIcon{
+  width:34px;
+  height:34px;
+  display:grid;
+  place-items:center;
+  border:1px solid #3c3960;
+  border-radius:9px;
+  background:#121322;
+  color:#9f8ef5
+}
+.sessionCard b{
+  display:block;
+  color:#e4e9f3;
+  font-size:9px
+}
+.sessionCard span,
+.sessionCard small{
+  display:block;
+  margin-top:3px;
+  overflow:hidden;
+  color:#6f7c91;
+  font-size:8px;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+.sessionCard em{
+  color:#78d7a7;
+  font:800 8px Consolas,monospace;
+  font-style:normal
 }
 
-@media(max-width:1050px){
-  .accountShell{
-    width:100%;
-    padding:8px 4px 30px
+@media(max-width:980px){
+  .summaryBar{
+    grid-template-columns:repeat(2,minmax(0,1fr))
   }
-  .cardGrid{
-    grid-template-columns:1fr
+  .summaryItem:nth-child(2){
+    border-right:0
+  }
+  .summaryItem:nth-child(-n+2){
+    border-bottom:1px solid rgba(118,131,159,.12)
+  }
+  .detailGrid{
+    grid-template-columns:repeat(2,minmax(0,1fr))
+  }
+  .detailItem:nth-last-child(-n+3){
+    border-bottom:1px solid rgba(112,125,153,.09)
+  }
+  .detailItem:nth-last-child(-n+2){
+    border-bottom:0
+  }
+  .statusGrid{
+    grid-template-columns:repeat(2,minmax(0,1fr))
+  }
+  .passwordGrid,
+  .passwordGrid:has(label:nth-child(4)){
+    grid-template-columns:repeat(2,minmax(0,1fr))
+  }
+  .otpRow{
+    grid-template-columns:1fr auto
   }
 }
 
 @media(max-width:720px){
   .accountShell{
-    padding:8px 0 24px
+    padding:8px 0 26px
   }
   .header{
     align-items:flex-start;
     flex-direction:column
   }
   .header h1{
-    font-size:27px
+    font-size:25px
   }
-  .cardHeader,
-  .cardBody{
-    padding:13px
-  }
+  .summaryBar,
+  .detailGrid,
+  .statusGrid,
   .phoneForm,
   .passwordGrid,
-  .twoFactorForm,
-  .disableForm,
+  .passwordGrid:has(label:nth-child(4)),
+  .twoFactorRow,
+  .disableGrid,
   .secretLine,
-  .otpActions{
+  .otpRow{
     grid-template-columns:1fr
   }
-  .formActions,
-  .cardFooter{
+  .summaryItem{
+    border-right:0;
+    border-bottom:1px solid rgba(118,131,159,.12)
+  }
+  .summaryItem:last-child{
+    border-bottom:0
+  }
+  .detailItem,
+  .detailItem:nth-last-child(-n+3),
+  .detailItem:nth-last-child(-n+2){
+    border-bottom:1px solid rgba(112,125,153,.09)
+  }
+  .detailItem:last-child{
+    border-bottom:0
+  }
+  .sectionHeader{
+    align-items:flex-start;
+    flex-direction:column
+  }
+  .sectionControls{
+    width:100%;
+    justify-content:space-between
+  }
+  .disclosureButton{
+    margin-left:auto
+  }
+  .actionLine,
+  .commandFooter,
+  .inlineNotice{
     align-items:stretch;
     flex-direction:column
   }
@@ -485,12 +697,13 @@
   .secondaryButton{
     width:100%
   }
-  .savedRow,
-  .trialLanding{
-    align-items:flex-start;
-    flex-direction:column
-  }
   .recoveryGrid{
     grid-template-columns:1fr 1fr
+  }
+  .sessionCard{
+    grid-template-columns:auto minmax(0,1fr)
+  }
+  .sessionCard em{
+    grid-column:2
   }
 }
