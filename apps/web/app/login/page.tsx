@@ -113,6 +113,21 @@ export default function LoginPage() {
         return;
       }
 
+      if (data.requiresTwoFactor) {
+        localStorage.removeItem("bot_token");
+        const challenge = String(data.twoFactorChallenge || "").trim();
+        if (!challenge) throw new Error("Two-factor challenge was not issued. Please try again.");
+        sessionStorage.setItem("scenova_2fa_challenge", challenge);
+        sessionStorage.setItem(
+          "scenova_2fa_email",
+          String(data.email || email).trim().toLowerCase()
+        );
+        window.location.href = "/verify-2fa";
+        return;
+      }
+
+      sessionStorage.removeItem("scenova_2fa_challenge");
+      sessionStorage.removeItem("scenova_2fa_email");
       if (!data.token) throw new Error("Secure session was not issued. Please try again.");
       localStorage.setItem("bot_token", data.token);
       window.location.href = register ? "/onboarding?new=1" : "/dashboard?view=overview";
