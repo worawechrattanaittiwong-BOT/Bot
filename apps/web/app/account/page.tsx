@@ -23,6 +23,12 @@ type AccountData = {
     emailVerified: boolean;
     emailVerifiedAt: string | null;
     lastSignInAt: string | null;
+    phone: {
+      countryCode: string;
+      masked: string;
+      verified: boolean;
+      verifiedAt: string | null;
+    } | null;
   };
   security: {
     twoFactorEnabled: boolean;
@@ -50,10 +56,26 @@ type TrialAccessData = {
     reason: string;
     message: string;
   };
+  phone: {
+    countryCode: string;
+    masked: string;
+    verified: boolean;
+    verifiedAt: string | null;
+  } | null;
   authorization: any;
   trial: any;
   latestCode: any;
 };
+
+const PHONE_COUNTRIES = [
+  ["TH", "ไทย", "+66"], ["US", "สหรัฐฯ/แคนาดา", "+1"], ["GB", "สหราชอาณาจักร", "+44"],
+  ["AU", "ออสเตรเลีย", "+61"], ["SG", "สิงคโปร์", "+65"], ["MY", "มาเลเซีย", "+60"],
+  ["ID", "อินโดนีเซีย", "+62"], ["PH", "ฟิลิปปินส์", "+63"], ["VN", "เวียดนาม", "+84"],
+  ["JP", "ญี่ปุ่น", "+81"], ["KR", "เกาหลีใต้", "+82"], ["CN", "จีน", "+86"],
+  ["HK", "ฮ่องกง", "+852"], ["TW", "ไต้หวัน", "+886"], ["IN", "อินเดีย", "+91"],
+  ["AE", "UAE", "+971"], ["SA", "ซาอุดีอาระเบีย", "+966"], ["DE", "เยอรมนี", "+49"],
+  ["FR", "ฝรั่งเศส", "+33"], ["IT", "อิตาลี", "+39"]
+] as const;
 
 type TwoFactorSetup = {
   secret: string;
@@ -91,7 +113,10 @@ export default function AccountPage() {
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<"good" | "bad" | "info">("info");
   const [trialAccess, setTrialAccess] = useState<TrialAccessData | null>(null);
-  const [trialPhone, setTrialPhone] = useState("");
+  const [phoneCountry, setPhoneCountry] = useState("+66");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneEditing, setPhoneEditing] = useState(false);
+  const [phoneBusy, setPhoneBusy] = useState(false);
   const [trialCode, setTrialCode] = useState("");
   const [trialBusy, setTrialBusy] = useState(false);
 
@@ -109,7 +134,10 @@ export default function AccountPage() {
 
   async function load() {
     try {
-      setData(await api("/auth/account"));
+      const account = await api("/auth/account");
+      setData(account);
+      if (account.user?.phone?.countryCode) setPhoneCountry(account.user.phone.countryCode);
+      if (!account.user?.phone) setPhoneEditing(true);
       try {
         setTrialAccess(await api("/trial-access/status"));
       } catch {
@@ -158,32 +186,52 @@ export default function AccountPage() {
     setMessage(text);
   }
 
+  function goToAccountSection(id: "phone-settings" | "trial-access") {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  async function savePhone() {
+    if (!phoneInput.trim() || phoneBusy) return;
+    setPhoneBusy(true);
+    try {
+      await api("/auth/account/phone", {
+        method: "POST",
+        body: JSON.stringify({ countryCode: phoneCountry, phone: phoneInput })
+      });
+      setPhoneInput("");
+      setPhoneEditing(false);
+      notify("good", "ผูกเบอร์โทรกับบัญชีแล้ว");
+      await load();
+    } catch (error: unknown) {
+      notify("bad", error instanceof Error ? error.message : "บันทึกเบอร์โทรไม่สำเร็จ");
+    } finally {
+      setPhoneBusy(false);
+    }
+  }
+
   async function requestTrialCode() {
-    if (!trialPhone.trim() || trialBusy || !trialAccess?.smsConfigured) return;
+    if (trialBusy || !trialAccess?.smsConfigured || !trialAccess?.phone) return;
     setTrialBusy(true);
     try {
-      const result = await api("/trial-access/request-code", {
-        method: "POST",
-        body: JSON.stringify({ phone: trialPhone })
-      });
-      notify("good", "ส่ง Trial Code ไปที่ " + result.phoneMasked + " แล้ว · รหัสมีอายุ 10 นาที");
+      const result = await api("/trial-access/request-code", { method: "POST" });
+      notify("good", "ส่ง OTP ไปที่ " + result.phoneMasked + " แล้ว · รหัสมีอายุ 10 นาที");
       setTrialCode("");
       const status = await api("/trial-access/status");
       setTrialAccess(status);
     } catch (error: unknown) {
-      notify("bad", error instanceof Error ? error.message : "ส่ง Trial Code ไม่สำเร็จ");
+      notify("bad", error instanceof Error ? error.message : "ส่ง OTP ไม่สำเร็จ");
     } finally {
       setTrialBusy(false);
     }
   }
 
   async function redeemTrialCode() {
-    if (!trialPhone.trim() || trialCode.length !== 6 || trialBusy) return;
+    if (!trialAccess?.phone || trialCode.length !== 6 || trialBusy) return;
     setTrialBusy(true);
     try {
       const result = await api("/trial-access/redeem", {
         method: "POST",
-        body: JSON.stringify({ phone: trialPhone, code: trialCode })
+        body: JSON.stringify({ code: trialCode })
       });
       notify("good", result.message || "เปิดสิทธิ์ทดลองสำเร็จ");
       setTrialCode("");
@@ -325,7 +373,20 @@ export default function AccountPage() {
           <article className={styles.summaryCard}><span>SCENOVA User ID</span><b className={styles.mono}>{data.user.userCode}</b><small>Permanent account identifier</small></article>
           <article className={styles.summaryCard}><span>Email Verification</span><b>{data.user.emailVerified ? "Verified" : "Not Verified"}</b><small>{formatDate(data.user.emailVerifiedAt)}</small></article>
           <article className={styles.summaryCard}><span>Two-Factor Authentication</span><b className={data.security.twoFactorEnabled ? styles.goodText : styles.warnText}>{data.security.twoFactorEnabled ? "Enabled" : "Not Enabled"}</b><small>{data.security.twoFactorEnabled ? `${data.security.recoveryCodesRemaining} recovery codes remaining` : "Authenticator app ready"}</small></article>
-          <article className={styles.summaryCard}><span>Access</span><b>{accessSummary(data)}</b><small>{data.access.subscription?.expires_at ? `Expires ${formatDate(data.access.subscription.expires_at)}` : "SCENOVA membership status"}</small></article>
+          <article className={styles.summaryCard}>
+            <span>Access</span>
+            <b>{accessSummary(data)}</b>
+            <small>{data.access.subscription?.expires_at ? `Expires ${formatDate(data.access.subscription.expires_at)}` : "SCENOVA membership status"}</small>
+            {trialAccess?.eligibility.allowed && (
+              <button
+                type="button"
+                className={styles.summaryAction}
+                onClick={()=>goToAccountSection(data.user.phone ? "trial-access" : "phone-settings")}
+              >
+                {data.user.phone ? "รับ Trial →" : "เพิ่มเบอร์เพื่อรับ Trial →"}
+              </button>
+            )}
+          </article>
         </section>
 
         <div className={styles.contentGrid}>
@@ -352,90 +413,98 @@ export default function AccountPage() {
         </div>
 
         {!elevated && trialAccess && (
-          <section className={`${styles.panel} ${styles.trialPanel}`}>
-            <div className={styles.panelHead}>
-              <div>
-                <span className={styles.panelIcon}><ScenovaIcon name="wallet" size={19}/></span>
-                <div><h2>Trial & Coupon</h2><p>ยืนยันเบอร์ด้วย SMS เพื่อรับสิทธิ์ทดลองครั้งเดียวต่อผู้ใช้และอุปกรณ์</p></div>
+          <div className={styles.accountActionsGrid}>
+            <section id="phone-settings" className={`${styles.panel} ${styles.compactPanel}`}>
+              <div className={styles.panelHead}>
+                <div>
+                  <span className={styles.panelIcon}><ScenovaIcon name="account" size={19}/></span>
+                  <div><h2>Phone Number</h2><p>ผูกเบอร์โทรก่อนใช้งาน OTP และสิทธิ์ทดลอง</p></div>
+                </div>
+                <span className={`${styles.stateBadge} ${data.user.phone ? styles.stateOn : ""}`}>
+                  {data.user.phone ? (data.user.phone.verified ? "VERIFIED" : "BOUND") : "REQUIRED"}
+                </span>
               </div>
-              <span className={`${styles.stateBadge} ${(trialAccess.trial || trialAccess.authorization?.status === "PENDING_BIND" || trialAccess.authorization?.status === "CLAIMED") ? styles.stateOn : ""}`}>
-                {trialAccess.trial?.status || (trialAccess.authorization?.status === "PENDING_BIND" ? "TRIAL READY" : trialAccess.authorization?.status === "CLAIMED" ? "READY" : trialAccess.eligibility.allowed ? "AVAILABLE" : "UNAVAILABLE")}
-              </span>
-            </div>
 
-            {trialAccess.trial ? (
-              <div className={styles.trialResult}>
-                <b>สิทธิ์ทดลอง {Math.max(1, Math.ceil(Number(trialAccess.trial.duration_minutes || 1440) / 1440))} วัน</b>
-                <span>{trialAccess.trial.status === "ACTIVE" ? "กำลังใช้งาน" : "พร้อมเริ่มเมื่อกด Start Bot ครั้งแรก"}</span>
-                <small>{trialAccess.trial.expires_at ? "หมดอายุ " + formatDate(trialAccess.trial.expires_at) : "เวลาทดลองยังไม่เริ่มนับ"}</small>
-              </div>
-            ) : trialAccess.authorization?.status === "PENDING_BIND" ? (
-              <div className={styles.trialResult}>
-                <b>TRIAL READY · รอ MT5</b>
-                <span>ยืนยันสิทธิ์แล้ว ระบบจะผูกกับ MT5 แรกที่คุณเชื่อม</span>
-                <small>เวลาทดลองจะเริ่มเมื่อกด Start Bot ครั้งแรก</small>
-              </div>
-            ) : trialAccess.authorization?.status === "CLAIMED" ? (
-              <div className={styles.trialResult}>
-                <b>Trial พร้อมใช้งาน</b>
-                <span>MT5 ถูกผูกกับสิทธิ์ทดลองแล้ว</span>
-                <small>กด Start Bot เพื่อเริ่มนับเวลา</small>
-              </div>
-            ) : (
-              <>
-                <div className={styles.trialCompact}>
-                  <label>
-                    <span>เบอร์มือถือ</span>
+              {data.user.phone && !phoneEditing ? (
+                <div className={styles.phoneSummary}>
+                  <div>
+                    <b>{data.user.phone.masked}</b>
+                    <span>{data.user.phone.verified ? "ยืนยันด้วย OTP แล้ว" : "ผูกกับบัญชีแล้ว · ยังไม่ยืนยัน"}</span>
+                  </div>
+                  {!data.user.phone.verified && !trialAccess.authorization && !trialAccess.trial && (
+                    <button type="button" className={styles.secondaryButton} onClick={()=>setPhoneEditing(true)}>เปลี่ยนเบอร์</button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className={styles.phoneForm}>
+                    <select value={phoneCountry} onChange={e=>setPhoneCountry(e.target.value)} disabled={phoneBusy}>
+                      {PHONE_COUNTRIES.map(([iso,name,code])=><option key={iso} value={code}>{name} {code}</option>)}
+                    </select>
                     <input
                       type="tel"
                       inputMode="tel"
                       autoComplete="tel"
-                      placeholder="08x xxx xxxx"
-                      value={trialPhone}
-                      onChange={e=>setTrialPhone(e.target.value.slice(0,18))}
-                      disabled={trialBusy || !trialAccess.eligibility.allowed}
+                      placeholder="เช่น 0812345678"
+                      value={phoneInput}
+                      onChange={e=>setPhoneInput(e.target.value.slice(0,24))}
+                      disabled={phoneBusy}
                     />
-                  </label>
-                  <button
-                    type="button"
-                    className={styles.secondaryButton}
-                    onClick={requestTrialCode}
-                    disabled={trialBusy || !trialPhone.trim() || !trialAccess.smsConfigured || !trialAccess.eligibility.allowed}
-                  >
-                    {trialBusy ? "กำลังดำเนินการ..." : "ส่ง Trial Code"}
-                  </button>
-                  <label>
-                    <span>Trial Code / Coupon</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                      placeholder="000000"
-                      value={trialCode}
-                      onChange={e=>setTrialCode(e.target.value.replace(/\D/g,"").slice(0,6))}
-                      disabled={trialBusy || !trialAccess.eligibility.allowed}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className={styles.primaryButton}
-                    onClick={redeemTrialCode}
-                    disabled={trialBusy || trialCode.length !== 6 || !trialPhone.trim() || !trialAccess.eligibility.allowed}
-                  >
-                    เปิดสิทธิ์ทดลอง
-                  </button>
+                    <button type="button" className={styles.primaryButton} onClick={savePhone} disabled={!phoneInput.trim() || phoneBusy}>
+                      {phoneBusy ? "กำลังบันทึก..." : "ผูกเบอร์โทร"}
+                    </button>
+                    {data.user.phone && <button type="button" className={styles.linkButton} onClick={()=>setPhoneEditing(false)} disabled={phoneBusy}>ยกเลิก</button>}
+                  </div>
+                  <div className={styles.compactHint}>รองรับหมายเลขต่างประเทศแบบ E.164 · เลือกรหัสประเทศแล้วกรอกเบอร์มือถือ</div>
+                </>
+              )}
+            </section>
+
+            <section id="trial-access" className={`${styles.panel} ${styles.compactPanel} ${styles.trialPanel}`}>
+              <div className={styles.panelHead}>
+                <div>
+                  <span className={styles.panelIcon}><ScenovaIcon name="wallet" size={19}/></span>
+                  <div><h2>Trial Access</h2><p>เฉพาะบัญชีที่ผ่านเงื่อนไข · ยืนยันผ่าน OTP</p></div>
                 </div>
-                <div className={`${styles.trialHint} ${!trialAccess.eligibility.allowed ? styles.trialHintBlocked : ""}`}>
-                  {!trialAccess.smsConfigured
-                    ? "ระบบ SMS รอการตั้งค่าจาก SCENOVA · ยังไม่สามารถส่งรหัสได้"
-                    : trialAccess.eligibility.allowed
-                      ? `ระบบจะตรวจบัญชี เบอร์โทร MT5 และอุปกรณ์ก่อนส่งรหัส · Trial ${trialAccess.trialDays} วัน`
-                      : trialAccess.eligibility.message}
+                <span className={`${styles.stateBadge} ${(trialAccess.trial || trialAccess.authorization?.status === "PENDING_BIND" || trialAccess.authorization?.status === "CLAIMED") ? styles.stateOn : ""}`}>
+                  {trialAccess.trial?.status || (trialAccess.authorization?.status === "PENDING_BIND" ? "TRIAL READY" : trialAccess.authorization?.status === "CLAIMED" ? "READY" : trialAccess.eligibility.allowed ? "AVAILABLE" : "UNAVAILABLE")}
+                </span>
+              </div>
+
+              {trialAccess.trial ? (
+                <div className={styles.trialResult}>
+                  <b>Trial {Math.max(1, Math.ceil(Number(trialAccess.trial.duration_minutes || 1440) / 1440))} วัน</b>
+                  <span>{trialAccess.trial.status === "ACTIVE" ? "กำลังใช้งาน" : "พร้อมเริ่มเมื่อกด Start Bot ครั้งแรก"}</span>
+                  <small>{trialAccess.trial.expires_at ? "หมดอายุ " + formatDate(trialAccess.trial.expires_at) : "เวลายังไม่เริ่มนับ"}</small>
                 </div>
-              </>
-            )}
-          </section>
+              ) : trialAccess.authorization?.status === "PENDING_BIND" ? (
+                <div className={styles.trialResult}><b>TRIAL READY · รอ MT5</b><span>ผูก MT5 แรกแล้วกด Start เพื่อเริ่มนับเวลา</span></div>
+              ) : trialAccess.authorization?.status === "CLAIMED" ? (
+                <div className={styles.trialResult}><b>Trial พร้อมใช้งาน</b><span>กด Start Bot เพื่อเริ่มนับเวลา</span></div>
+              ) : !trialAccess.eligibility.allowed ? (
+                <div className={`${styles.compactHint} ${styles.trialHintBlocked}`}>{trialAccess.eligibility.message}</div>
+              ) : !trialAccess.phone ? (
+                <div className={styles.phoneRequired}>
+                  <div><b>ต้องผูกเบอร์โทรก่อน</b><span>OTP จะส่งเฉพาะเบอร์ที่บันทึกไว้ในบัญชีนี้</span></div>
+                  <button type="button" className={styles.secondaryButton} onClick={()=>goToAccountSection("phone-settings")}>เพิ่มเบอร์โทร →</button>
+                </div>
+              ) : (
+                <>
+                  <div className={styles.otpTarget}><span>OTP จะส่งไปที่</span><b>{trialAccess.phone.masked}</b></div>
+                  <div className={styles.otpRow}>
+                    <button type="button" className={styles.secondaryButton} onClick={requestTrialCode} disabled={trialBusy || !trialAccess.smsConfigured}>
+                      {trialBusy ? "กำลังส่ง..." : "ส่ง OTP"}
+                    </button>
+                    <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="OTP 6 หลัก" value={trialCode} onChange={e=>setTrialCode(e.target.value.replace(/\D/g,"").slice(0,6))} disabled={trialBusy}/>
+                    <button type="button" className={styles.primaryButton} onClick={redeemTrialCode} disabled={trialBusy || trialCode.length !== 6}>ยืนยัน & เปิด Trial</button>
+                  </div>
+                  <div className={styles.compactHint}>
+                    {!trialAccess.smsConfigured ? "ระบบ SMS ยังไม่พร้อมใช้งาน" : `Trial ${trialAccess.trialDays} วัน · ตรวจบัญชี เบอร์โทร MT5 และอุปกรณ์ก่อนอนุมัติ`}
+                  </div>
+                </>
+              )}
+            </section>
+          </div>
         )}
 
         <section className={`${styles.panel} ${styles.securityPanel}`}>

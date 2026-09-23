@@ -15,6 +15,7 @@ import { DbService } from "./db.service";
 import { JwtGuard } from "./security";
 import { SmsService } from "./sms.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
+import { maskPhone } from "./phone-utils";
 
 const CODE_TTL_MINUTES = 10;
 const RESEND_SECONDS = 60;
@@ -35,32 +36,24 @@ export class TrialCouponController {
     return (forwarded || String(req?.ip || req?.socket?.remoteAddress || "")).slice(0, 96) || null;
   }
 
-  private normalizeThaiMobile(input: unknown) {
-    const raw = String(input || "").replace(/[^\d+]/g, "").trim();
-    let normalized = raw.replace(/^\+/, "");
-    if (/^0[689]\d{8}$/.test(normalized)) normalized = "66" + normalized.slice(1);
-    if (!/^66[689]\d{8}$/.test(normalized)) {
-      throw new BadRequestException("กรุณากรอกเบอร์มือถือไทยให้ถูกต้อง");
-    }
-    return normalized;
-  }
-
   private phoneHash(msisdn: string) {
     const secret = String(
       process.env.TRIAL_IDENTITY_SECRET ||
       process.env.JWT_SECRET ||
       "development-only-change-me"
     );
-    return createHmac("sha256", secret).update(msisdn).digest("hex");
+    return createHmac("sha256", secret).update(String(msisdn).replace(/\D/g, "")).digest("hex");
   }
 
   private codeHash(salt: string, code: string) {
     return createHash("sha256").update(`${salt}:${code}`).digest("hex");
   }
 
-  private maskPhone(msisdn: string) {
-    const local = msisdn.startsWith("66") ? "0" + msisdn.slice(2) : msisdn;
-    return local.length >= 10 ? `${local.slice(0,3)}-xxx-${local.slice(-4)}` : "xxx";
+  private async boundPhone(userId: string) {
+    return this.db.one(
+      "SELECT country_code,e164,verified_at FROM user_phone_numbers WHERE user_id=$1",
+      [userId]
+    );
   }
 
   private trialDays() {
@@ -216,7 +209,7 @@ export class TrialCouponController {
       }
     }
 
-    return { allowed: true, reason: "ELIGIBLE", message: "พร้อมขอ Trial Code" };
+    return { allowed: true, reason: "ELIGIBLE", message: "พร้อมขอ OTP" };
   }
 
   @Get("status")
@@ -239,11 +232,19 @@ export class TrialCouponController {
        ORDER BY created_at DESC LIMIT 1`,
       [userId]
     );
-    const base = await this.eligibility(userId);
+    const phone = await this.boundPhone(userId);
+    const phoneHash = phone?.e164 ? this.phoneHash(phone.e164) : null;
+    const base = await this.eligibility(userId, phoneHash);
     return {
       smsConfigured: this.sms.configured(),
       trialDays: this.trialDays(),
       eligibility: base,
+      phone: phone ? {
+        countryCode: phone.country_code,
+        masked: maskPhone(phone.e164, phone.country_code),
+        verified: Boolean(phone.verified_at),
+        verifiedAt: phone.verified_at || null
+      } : null,
       authorization: authorization || null,
       trial: trial || null,
       latestCode: latestCode || null
@@ -251,9 +252,13 @@ export class TrialCouponController {
   }
 
   @Post("request-code")
-  async requestCode(@Req() req: any, @Body() body: { phone: string }) {
+  async requestCode(@Req() req: any) {
     const userId = String(req.user.sub);
-    const msisdn = this.normalizeThaiMobile(body.phone);
+    const phone = await this.boundPhone(userId);
+    if (!phone?.e164) {
+      throw new BadRequestException("กรุณาเพิ่มเบอร์โทรใน My Account ก่อนขอ OTP");
+    }
+    const msisdn = String(phone.e164);
     const phoneHash = this.phoneHash(msisdn);
     const check = await this.eligibility(userId, phoneHash);
     if (!check.allowed) throw new ConflictException(check.message);
@@ -277,7 +282,7 @@ export class TrialCouponController {
       [userId, phoneHash]
     );
     if (Number(todayCount?.count || 0) >= MAX_SENDS_PER_DAY) {
-      throw new HttpException("ขอ Trial Code ครบจำนวนต่อวันแล้ว กรุณาลองใหม่ภายหลัง", HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException("ขอ OTP ครบจำนวนต่อวันแล้ว กรุณาลองใหม่ภายหลัง", HttpStatus.TOO_MANY_REQUESTS);
     }
 
     const ip = this.clientIp(req);
@@ -321,15 +326,19 @@ export class TrialCouponController {
 
     return {
       sent: true,
-      phoneMasked: this.maskPhone(msisdn),
+      phoneMasked: maskPhone(msisdn, phone.country_code),
       expiresInMinutes: CODE_TTL_MINUTES
     };
   }
 
   @Post("redeem")
-  async redeem(@Req() req: any, @Body() body: { phone: string; code: string }) {
+  async redeem(@Req() req: any, @Body() body: { code: string }) {
     const userId = String(req.user.sub);
-    const msisdn = this.normalizeThaiMobile(body.phone);
+    const phone = await this.boundPhone(userId);
+    if (!phone?.e164) {
+      throw new BadRequestException("กรุณาเพิ่มเบอร์โทรใน My Account ก่อนยืนยัน OTP");
+    }
+    const msisdn = String(phone.e164);
     const phoneHash = this.phoneHash(msisdn);
     const code = String(body.code || "").replace(/\D/g, "").slice(0, 6);
     if (code.length !== 6) throw new BadRequestException("กรุณากรอกรหัส 6 หลัก");
@@ -344,7 +353,7 @@ export class TrialCouponController {
        ORDER BY created_at DESC LIMIT 1`,
       [userId, phoneHash]
     );
-    if (!record) throw new BadRequestException("ไม่พบ Trial Code ที่ใช้งานได้ หรือรหัสหมดอายุแล้ว");
+    if (!record) throw new BadRequestException("ไม่พบ OTP ที่ใช้งานได้ หรือรหัสหมดอายุแล้ว");
     if (Number(record.attempts || 0) >= MAX_ATTEMPTS) {
       throw new BadRequestException("กรอกรหัสผิดเกินจำนวนที่กำหนด กรุณาขอรหัสใหม่");
     }
@@ -357,7 +366,7 @@ export class TrialCouponController {
         "UPDATE trial_sms_codes SET attempts=attempts+1 WHERE id=$1",
         [record.id]
       );
-      throw new BadRequestException("Trial Code ไม่ถูกต้อง");
+      throw new BadRequestException("OTP ไม่ถูกต้อง");
     }
 
     const check = await this.eligibility(userId, phoneHash);
@@ -375,10 +384,16 @@ export class TrialCouponController {
       source: "SMS"
     });
 
-    await this.db.query(
-      "UPDATE trial_sms_codes SET status='USED',verified_at=now(),attempts=attempts+1 WHERE id=$1",
-      [record.id]
-    );
+    await Promise.all([
+      this.db.query(
+        "UPDATE trial_sms_codes SET status='USED',verified_at=now(),attempts=attempts+1 WHERE id=$1",
+        [record.id]
+      ),
+      this.db.query(
+        "UPDATE user_phone_numbers SET verified_at=now(),updated_at=now() WHERE user_id=$1 AND e164=$2",
+        [userId, msisdn]
+      )
+    ]);
 
     return {
       activated: true,

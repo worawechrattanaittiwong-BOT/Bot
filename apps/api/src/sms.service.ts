@@ -26,7 +26,7 @@ export class SmsService {
     form.set("msisdn", msisdn);
     form.set(
       "message",
-      `SCENOVA Trial Code: ${code}. Expires in 10 min. Do not share this code.`
+      `SCENOVA OTP: ${code}. Expires in 10 min. Do not share this code.`
     );
 
     const response = await fetch("https://api-v2.thaibulksms.com/sms", {

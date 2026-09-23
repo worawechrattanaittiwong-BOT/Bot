@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Get,
   Post,
@@ -13,6 +14,7 @@ import { compare, hash } from "bcryptjs";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { DbService } from "./db.service";
 import { CryptoService, JwtGuard } from "./security";
+import { maskPhone, normalizePhone } from "./phone-utils";
 
 const TOTP_STEP_SECONDS = 30;
 const TOTP_DIGITS = 6;
@@ -175,7 +177,7 @@ export class AccountSecurityController {
     const user = await this.getUser(req.user.sub);
     if (!user || user.status !== "ACTIVE") throw new UnauthorizedException("account unavailable");
 
-    const [security, subscription, trial, partner, latestLogin] = await Promise.all([
+    const [security, subscription, trial, partner, latestLogin, phone] = await Promise.all([
       this.db.one(
         `SELECT two_factor_enabled_at,last_password_changed_at,recovery_code_hashes
          FROM user_security WHERE user_id=$1`,
@@ -210,6 +212,11 @@ export class AccountSecurityController {
          WHERE user_id=$1 AND event IN ('LOGIN','LOGIN_2FA')
          ORDER BY created_at DESC LIMIT 1`,
         [user.id]
+      ),
+      this.db.one(
+        `SELECT country_code,e164,verified_at
+         FROM user_phone_numbers WHERE user_id=$1`,
+        [user.id]
       )
     ]);
 
@@ -228,7 +235,13 @@ export class AccountSecurityController {
         updatedAt: user.updated_at,
         emailVerified: Boolean(user.email_verified_at),
         emailVerifiedAt: user.email_verified_at,
-        lastSignInAt: latestLogin?.created_at || null
+        lastSignInAt: latestLogin?.created_at || null,
+        phone: phone ? {
+          countryCode: phone.country_code,
+          masked: maskPhone(phone.e164, phone.country_code),
+          verified: Boolean(phone.verified_at),
+          verifiedAt: phone.verified_at || null
+        } : null
       },
       security: {
         twoFactorEnabled: Boolean(security?.two_factor_enabled_at),
@@ -245,6 +258,89 @@ export class AccountSecurityController {
         current: true,
         ip: this.maskedIp(req),
         userAgent: String(req?.headers?.["user-agent"] || "Current browser").slice(0, 220)
+      }
+    };
+  }
+
+  @Post("account/phone")
+  @UseGuards(JwtGuard)
+  async savePhone(
+    @Req() req: any,
+    @Body() body: { countryCode?: string; phone?: string }
+  ) {
+    const user = await this.getUser(req.user.sub);
+    if (!user || user.status !== "ACTIVE") throw new UnauthorizedException("account unavailable");
+
+    const normalized = normalizePhone(body.countryCode, body.phone);
+    const existing = await this.db.one(
+      "SELECT e164,verified_at FROM user_phone_numbers WHERE user_id=$1",
+      [user.id]
+    );
+    if (existing?.e164 === normalized.e164) {
+      return {
+        saved: true,
+        phone: {
+          countryCode: normalized.countryCode,
+          masked: maskPhone(normalized.e164, normalized.countryCode),
+          verified: Boolean(existing.verified_at),
+          verifiedAt: existing.verified_at || null
+        }
+      };
+    }
+
+    const trialLock = await this.db.one(
+      `SELECT 1
+       FROM trial_grants
+       WHERE user_id=$1
+       UNION ALL
+       SELECT 1
+       FROM trial_authorizations
+       WHERE user_id=$1 AND status IN ('PENDING_BIND','CLAIMED')
+       LIMIT 1`,
+      [user.id]
+    );
+    if (trialLock && existing) {
+      throw new ConflictException("เบอร์โทรถูกล็อกกับสิทธิ์ Trial แล้ว ไม่สามารถเปลี่ยนได้");
+    }
+
+    const owner = await this.db.one(
+      "SELECT user_id FROM user_phone_numbers WHERE e164=$1 AND user_id<>$2 LIMIT 1",
+      [normalized.e164, user.id]
+    );
+    if (owner) throw new ConflictException("เบอร์โทรนี้ถูกผูกกับบัญชี SCENOVA อื่นแล้ว");
+
+    try {
+      await this.db.query(
+        `INSERT INTO user_phone_numbers(user_id,country_code,national_number,e164,verified_at)
+         VALUES($1,$2,$3,$4,NULL)
+         ON CONFLICT(user_id) DO UPDATE
+         SET country_code=EXCLUDED.country_code,
+             national_number=EXCLUDED.national_number,
+             e164=EXCLUDED.e164,
+             verified_at=NULL,
+             updated_at=now()`,
+        [user.id, normalized.countryCode, normalized.nationalNumber, normalized.e164]
+      );
+    } catch (error: any) {
+      if (String(error?.code || "") === "23505") {
+        throw new ConflictException("เบอร์โทรนี้ถูกผูกกับบัญชี SCENOVA อื่นแล้ว");
+      }
+      throw error;
+    }
+
+    await this.db.query(
+      "UPDATE trial_sms_codes SET status='EXPIRED' WHERE user_id=$1 AND status IN ('PENDING','SENT')",
+      [user.id]
+    );
+    await this.authEvent(user.id, user.email, "PHONE_UPDATED", req);
+
+    return {
+      saved: true,
+      phone: {
+        countryCode: normalized.countryCode,
+        masked: maskPhone(normalized.e164, normalized.countryCode),
+        verified: false,
+        verifiedAt: null
       }
     };
   }
