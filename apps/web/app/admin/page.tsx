@@ -95,22 +95,23 @@ export default function AdminPage() {
   }
 
   async function grantTrial(user: any) {
-    if (!user.mt5_account_id) return setMessage("บัญชีนี้ยังไม่ได้เชื่อม MT5");
-    if (!user.trial_request_id || user.trial_request_status !== "PENDING") {
-      return setMessage("ลูกค้าต้องส่งคำขอ Trial พร้อม LINE จากหน้า SCENOVA ก่อน");
-    }
     const safeDays = Math.max(1, Math.min(365, Math.trunc(Number(trialDays) || 1)));
     setCustomerAction("trial");
     try {
-      await adminApi("/admin/trials/grant", {
+      const result = await adminApi("/admin/trials/authorize", {
         method: "POST",
         body: JSON.stringify({
-          mt5AccountId: user.mt5_account_id,
-          minutes: safeDays * 1440,
+          userId: user.id,
+          days: safeDays,
+          mt5AccountId: user.mt5_account_id || undefined,
           approvedBy: "OWNER"
         })
       });
-      setMessage("อนุมัติ Trial " + safeDays + " วันให้ " + user.user_code + " แล้ว");
+      setMessage(
+        result?.status === "APPROVED"
+          ? "อนุมัติ Trial " + safeDays + " วันให้ " + user.user_code + " แล้ว · ผูกกับ MT5 เรียบร้อย"
+          : "อนุมัติ Trial " + safeDays + " วันให้ " + user.user_code + " ล่วงหน้าแล้ว · ระบบจะผูกกับ MT5 แรกที่ลูกค้าเชื่อม"
+      );
       await search(undefined, true);
     } catch (e: any) {
       setMessage(e.message);
@@ -714,7 +715,13 @@ export default function AdminPage() {
                         className={"owner-customer-item "+(selectedCustomerId===user.id?"active":"")}
                         onClick={()=>{
                           setSelectedCustomerId(user.id);
-                          setTrialDays(user.trial_duration_minutes ? Math.max(1,Math.ceil(Number(user.trial_duration_minutes)/1440)) : 1);
+                          setTrialDays(
+                            user.trial_duration_minutes
+                              ? Math.max(1,Math.ceil(Number(user.trial_duration_minutes)/1440))
+                              : user.trial_authorization_minutes
+                                ? Math.max(1,Math.ceil(Number(user.trial_authorization_minutes)/1440))
+                                : 1
+                          );
                           const mode=memberships(user).find((m:any)=>m.active)?.mode;
                           if(mode==="CLOUD") setPlan("CLOUD_30D");
                           else if(mode==="LOCAL") setPlan("LOCAL_30D");
@@ -731,7 +738,9 @@ export default function AdminPage() {
                                 ? activeMemberships.map((m:any)=>m.mode==="CLOUD"?"CLOUD VPS":"LOCAL").join(" + ")
                                 : user.trial_status
                                   ? "TRIAL "+user.trial_status
-                                  : "NO ACCESS"}
+                                  : user.trial_authorization_status==="PENDING_BIND"
+                                    ? "TRIAL PREAPPROVED"
+                                    : "NO ACCESS"}
                           </em>
                         </span>
                         <span className={"owner-customer-status-dot "+(user.status==="ACTIVE"?"good":"bad")}/>
@@ -769,7 +778,7 @@ export default function AdminPage() {
                       <>
                         <div className="owner-customer-snapshot">
                           <div><small>MT5</small><b>{selectedCustomer.account_number || "ยังไม่เชื่อม"}</b><span>{selectedCustomer.mt5_online ? "Online" : "Offline / Waiting"}</span></div>
-                          <div><small>Trial</small><b>{selectedCustomer.trial_status || (selectedCustomer.trial_request_status==="PENDING"?"PENDING":"NONE")}</b><span>{selectedCustomer.trial_expires_at ? "ถึง "+new Date(selectedCustomer.trial_expires_at).toLocaleDateString("th-TH") : (selectedCustomer.trial_duration_minutes ? Math.ceil(Number(selectedCustomer.trial_duration_minutes)/1440)+" วัน" : "ยังไม่กำหนด")}</span></div>
+                          <div><small>Trial</small><b>{selectedCustomer.trial_status || (selectedCustomer.trial_authorization_status==="PENDING_BIND"?"PREAPPROVED":selectedCustomer.trial_authorization_status==="BLOCKED"?"BLOCKED":selectedCustomer.trial_request_status==="PENDING"?"PENDING":"NONE")}</b><span>{selectedCustomer.trial_expires_at ? "ถึง "+new Date(selectedCustomer.trial_expires_at).toLocaleDateString("th-TH") : selectedCustomer.trial_duration_minutes ? Math.ceil(Number(selectedCustomer.trial_duration_minutes)/1440)+" วัน" : selectedCustomer.trial_authorization_minutes ? Math.ceil(Number(selectedCustomer.trial_authorization_minutes)/1440)+" วัน · รอ MT5" : "ยังไม่กำหนด"}</span></div>
                           <div><small>Local</small><b>{hasActiveMode(selectedCustomer,"LOCAL")?"ACTIVE":"OFF"}</b><span>{memberships(selectedCustomer).find((m:any)=>m.mode==="LOCAL"&&m.active)?.expires_at ? "ถึง "+new Date(memberships(selectedCustomer).find((m:any)=>m.mode==="LOCAL"&&m.active).expires_at).toLocaleDateString("th-TH") : "ไม่มีสิทธิ์"}</span></div>
                           <div><small>Cloud VPS</small><b>{hasActiveMode(selectedCustomer,"CLOUD")?"ACTIVE":"OFF"}</b><span>{memberships(selectedCustomer).find((m:any)=>m.mode==="CLOUD"&&m.active)?.expires_at ? "ถึง "+new Date(memberships(selectedCustomer).find((m:any)=>m.mode==="CLOUD"&&m.active).expires_at).toLocaleDateString("th-TH") : "ไม่มีสิทธิ์"}</span></div>
                         </div>
@@ -832,26 +841,30 @@ export default function AdminPage() {
                             </div>
                             <div className="owner-trial-control">
                               <label><span>Trial Days</span><input className="input" type="number" min={1} max={365} value={trialDays} onChange={e=>setTrialDays(Number(e.target.value))}/></label>
-                              {selectedCustomer.trial_status ? (
+                              {selectedCustomer.trial_status || selectedCustomer.trial_authorization_status==="PENDING_BIND" ? (
                                 <button className="btn primary" disabled={customerAction==="trial"} onClick={()=>updateTrialDuration(selectedCustomer)}>
                                   บันทึก Trial {trialDays} วัน
                                 </button>
                               ) : (
                                 <button
                                   className="btn primary"
-                                  disabled={customerAction==="trial" || !selectedCustomer.mt5_account_id || selectedCustomer.trial_request_status!=="PENDING"}
+                                  disabled={customerAction==="trial" || selectedCustomer.trial_authorization_status==="BLOCKED"}
                                   onClick={()=>grantTrial(selectedCustomer)}
                                 >
-                                  อนุมัติ Trial {trialDays} วัน
+                                  {selectedCustomer.mt5_account_id ? "อนุมัติ Trial "+trialDays+" วัน" : "อนุมัติ Trial "+trialDays+" วันล่วงหน้า"}
                                 </button>
                               )}
                             </div>
                             <div className="owner-control-note">
                               {selectedCustomer.trial_status
-                                ? "Trial ปัจจุบัน: "+selectedCustomer.trial_status+(selectedCustomer.trial_started_at?" · เริ่ม "+new Date(selectedCustomer.trial_started_at).toLocaleString("th-TH"):" · ยังไม่เริ่ม")
-                                : selectedCustomer.trial_request_status==="PENDING"
-                                  ? "คำขอพร้อมแล้ว · LINE: "+(selectedCustomer.line_contact||"—")
-                                  : "ลูกค้ายังไม่ได้ส่งคำขอ Trial"}
+                                ? "Trial ปัจจุบัน: "+selectedCustomer.trial_status+(selectedCustomer.trial_started_at?" · เริ่ม "+new Date(selectedCustomer.trial_started_at).toLocaleString("th-TH"):" · พร้อมเริ่มเมื่อผู้ใช้กด Start")
+                                : selectedCustomer.trial_authorization_status==="PENDING_BIND"
+                                  ? "อนุมัติล่วงหน้าแล้ว · รอ MT5 แรกของลูกค้าเชื่อม ระบบจะผูก Trial ให้อัตโนมัติ"
+                                  : selectedCustomer.trial_authorization_status==="BLOCKED"
+                                    ? "Trial ถูกบล็อก: "+(selectedCustomer.trial_authorization_blocked_reason||"บัญชีหรือ MT5 มีประวัติ Trial แล้ว")
+                                    : selectedCustomer.mt5_account_id
+                                      ? "Owner สามารถอนุมัติ Trial ได้ทันที ไม่ต้องรอคำขอจากลูกค้า"
+                                      : "ยังไม่เชื่อม MT5 · Owner สามารถอนุมัติล่วงหน้าได้ และระบบจะผูกสิทธิ์กับ MT5 แรกที่ลูกค้าเชื่อม"}
                             </div>
                           </section>
 
