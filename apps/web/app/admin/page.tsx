@@ -488,17 +488,6 @@ export default function AdminPage() {
   const selectedPlan = planOptions.find(p=>p.code===plan) || planOptions[0];
   const selectedCustomer = users.find((u:any)=>u.id===selectedCustomerId) || null;
   const memberships = (user:any) => Array.isArray(user?.memberships) ? user.memberships : [];
-  useEffect(() => {
-    if (!selectedCustomer) return;
-    if (selectedCustomer.trial_duration_minutes) {
-      setTrialDays(Math.max(1, Math.ceil(Number(selectedCustomer.trial_duration_minutes) / 1440)));
-    } else {
-      setTrialDays(1);
-    }
-    const activeMode = memberships(selectedCustomer).find((m:any)=>m.active)?.mode;
-    if (activeMode === "CLOUD") setPlan("CLOUD_30D");
-    else if (activeMode === "LOCAL") setPlan("LOCAL_30D");
-  }, [selectedCustomerId]);
   const hasActivePlan = (user:any, planCode:string) =>
     memberships(user).some((m:any)=>m.plan_code===planCode && m.active);
   const hasActiveMode = (user:any, mode:string) =>
@@ -723,7 +712,13 @@ export default function AdminPage() {
                         type="button"
                         key={user.id}
                         className={"owner-customer-item "+(selectedCustomerId===user.id?"active":"")}
-                        onClick={()=>setSelectedCustomerId(user.id)}
+                        onClick={()=>{
+                          setSelectedCustomerId(user.id);
+                          setTrialDays(user.trial_duration_minutes ? Math.max(1,Math.ceil(Number(user.trial_duration_minutes)/1440)) : 1);
+                          const mode=memberships(user).find((m:any)=>m.active)?.mode;
+                          if(mode==="CLOUD") setPlan("CLOUD_30D");
+                          else if(mode==="LOCAL") setPlan("LOCAL_30D");
+                        }}
                       >
                         <span className="owner-customer-avatar">{String(user.user_code||"U").slice(-1)}</span>
                         <span className="owner-customer-item-copy">
