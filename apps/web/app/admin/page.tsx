@@ -16,8 +16,6 @@ export default function AdminPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [days, setDays] = useState(30);
-  const [startsAt, setStartsAt] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
   const [plan, setPlan] = useState("LOCAL_30D");
   const [paidAmountBaht, setPaidAmountBaht] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
@@ -38,6 +36,9 @@ export default function AdminPage() {
   const [partnerDurationDays, setPartnerDurationDays] = useState(30);
   const [partnerCustomerDays, setPartnerCustomerDays] = useState(30);
   const [partnerBusy, setPartnerBusy] = useState(false);
+  const [trialDays, setTrialDays] = useState(1);
+  const [extendDays, setExtendDays] = useState(30);
+  const [customerAction, setCustomerAction] = useState("");
 
   async function search(e?: FormEvent, preserveMessage = false) {
     e?.preventDefault();
@@ -98,19 +99,62 @@ export default function AdminPage() {
     if (!user.trial_request_id || user.trial_request_status !== "PENDING") {
       return setMessage("ลูกค้าต้องส่งคำขอ Trial พร้อม LINE จากหน้า SCENOVA ก่อน");
     }
+    const safeDays = Math.max(1, Math.min(365, Math.trunc(Number(trialDays) || 1)));
+    setCustomerAction("trial");
     try {
       await adminApi("/admin/trials/grant", {
         method: "POST",
         body: JSON.stringify({
           mt5AccountId: user.mt5_account_id,
-          minutes: 180,
+          minutes: safeDays * 1440,
           approvedBy: "OWNER"
         })
       });
-      setMessage("อนุมัติ Trial 3 ชั่วโมงให้ " + user.user_code + " แล้ว");
+      setMessage("อนุมัติ Trial " + safeDays + " วันให้ " + user.user_code + " แล้ว");
       await search(undefined, true);
     } catch (e: any) {
       setMessage(e.message);
+    } finally {
+      setCustomerAction("");
+    }
+  }
+
+  async function updateTrialDuration(user:any) {
+    const safeDays = Math.max(1, Math.min(365, Math.trunc(Number(trialDays) || 1)));
+    setCustomerAction("trial");
+    try {
+      await adminApi("/admin/trials/set-duration", {
+        method:"POST",
+        body:JSON.stringify({ userId:user.id, days:safeDays })
+      });
+      setMessage("ปรับ Trial ของ " + user.user_code + " เป็น " + safeDays + " วันแล้ว");
+      await search(undefined, true);
+    } catch (e:any) {
+      setMessage(e.message);
+    } finally {
+      setCustomerAction("");
+    }
+  }
+
+  async function sendPasswordReset(user:any) {
+    const confirmed=await confirmPopup({
+      title:"ส่งลิงก์ตั้งรหัสผ่านใหม่",
+      tone:"warning",
+      message:"ระบบจะส่งลิงก์แบบใช้ครั้งเดียวไปที่ " + user.email + " และลิงก์จะหมดอายุใน 30 นาที",
+      confirmLabel:"ส่งอีเมล"
+    });
+    if(!confirmed) return;
+    setCustomerAction("password");
+    try {
+      const result=await adminApi("/admin/users/send-password-reset", {
+        method:"POST",
+        body:JSON.stringify({ userId:user.id })
+      });
+      setMessage("ส่งลิงก์ตั้งรหัสผ่านใหม่ไปที่ " + (result?.email || user.email) + " แล้ว");
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setCustomerAction("");
     }
   }
 
@@ -121,9 +165,7 @@ export default function AdminPage() {
         body: JSON.stringify({
           userId: user.id,
           planCode,
-          durationDays: expiresAt ? undefined : days,
-          startsAt: startsAt || undefined,
-          expiresAt: expiresAt || undefined,
+          durationDays: Math.max(1, Math.min(3650, Math.trunc(Number(days) || 30))),
           activatedBy: "OWNER",
           paidAmountSatang: paidAmountBaht.trim() ? Math.round(Number(paidAmountBaht) * 100) : 0,
           paymentReference: paymentReference.trim() || undefined
@@ -148,15 +190,19 @@ export default function AdminPage() {
 
   async function extendSubscription(user: any, subscriptionId: string, addDays: number) {
     if (!subscriptionId) return setMessage("ไม่พบสมาชิกที่ต้องการต่ออายุ");
+    const safeDays = Math.max(1, Math.min(3650, Math.trunc(Number(addDays) || 1)));
+    setCustomerAction("membership:"+subscriptionId);
     try {
       await adminApi("/admin/subscriptions/extend", {
         method: "POST",
-        body: JSON.stringify({ subscriptionId, days: addDays })
+        body: JSON.stringify({ subscriptionId, days: safeDays })
       });
-      setMessage("เพิ่ม " + addDays + " วันให้ " + user.user_code + " แล้ว");
+      setMessage("เพิ่ม " + safeDays + " วันให้ " + user.user_code + " แล้ว");
       await search(undefined, true);
     } catch (e: any) {
       setMessage(e.message);
+    } finally {
+      setCustomerAction("");
     }
   }
 
@@ -441,6 +487,17 @@ export default function AdminPage() {
   ];
   const selectedPlan = planOptions.find(p=>p.code===plan) || planOptions[0];
   const selectedCustomer = users.find((u:any)=>u.id===selectedCustomerId) || null;
+  useEffect(() => {
+    if (!selectedCustomer) return;
+    if (selectedCustomer.trial_duration_minutes) {
+      setTrialDays(Math.max(1, Math.ceil(Number(selectedCustomer.trial_duration_minutes) / 1440)));
+    } else {
+      setTrialDays(1);
+    }
+    const activeMode = memberships(selectedCustomer).find((m:any)=>m.active)?.mode;
+    if (activeMode === "CLOUD") setPlan("CLOUD_30D");
+    else if (activeMode === "LOCAL") setPlan("LOCAL_30D");
+  }, [selectedCustomerId]);
   const memberships = (user:any) => Array.isArray(user?.memberships) ? user.memberships : [];
   const hasActivePlan = (user:any, planCode:string) =>
     memberships(user).some((m:any)=>m.plan_code===planCode && m.active);
@@ -463,7 +520,7 @@ export default function AdminPage() {
 
   const title = useMemo(() => ({
     overview: ["ภาพรวมระบบ","เห็นสุขภาพระบบและสิ่งที่ต้องจัดการในหน้าจอเดียว"],
-    customers: ["ลูกค้า & สมาชิก","ค้นหา อนุมัติ Trial เปิดสมาชิก ต่ออายุ ระงับ และลบบัญชีจากหน้าเดียว"],
+    customers: ["Customer Control Center","จัดการสิทธิ์ Local / Cloud VPS, Trial, วันใช้งาน และความปลอดภัยของลูกค้าจากจุดเดียว"],
     workers: ["Cloud Trading System","ตรวจ Trading Nodes, Load และสถานะ Cloud MT5"]
   }[activeMenu]), [activeMenu]);
 
@@ -640,232 +697,232 @@ export default function AdminPage() {
 
         {activeMenu === "customers" && (
           <>
-            <section className="owner-toolbar-card">
-              <div><span className="owner-card-kicker">CUSTOMER & MEMBER</span><h2>จัดการบัญชีลูกค้าโดยไม่ต้องกรอก MT5</h2><p>เปิดสมาชิกจาก User ID ได้ก่อน ลูกค้า LOCAL จะให้ระบบอ่านเลขบัญชี MT5 จาก EA/Terminal อัตโนมัติหลังติดตั้ง ส่วนเลข MT5 ใช้สำหรับค้นหาและตรวจสอบเท่านั้น</p></div>
+            <section className="owner-customer-toolbar">
+              <div>
+                <span className="owner-card-kicker">CUSTOMER CONTROL CENTER</span>
+                <h2>จัดการลูกค้าจากจุดเดียว</h2>
+                <p>ค้นหาบัญชี → เลือกลูกค้า → จัดการ Local / Cloud VPS, Trial, วันใช้งาน และรหัสผ่านได้ทันที</p>
+              </div>
               <form className="owner-search" onSubmit={search}>
-                <input className="input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="User ID, email, LINE หรือค้นหา MT5 ที่เชื่อมแล้ว"/>
+                <input className="input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="User ID, email, LINE หรือเลข MT5"/>
                 <button className="btn primary" disabled={loading}>{loading?"กำลังค้นหา...":"ค้นหา"}</button>
               </form>
             </section>
 
-            <section className="owner-card owner-plan-inline-card">
-              <div className="owner-card-head">
-                <div><span className="owner-card-kicker">MEMBERSHIP SETUP</span><h3>เปิดสิทธิ์จากบัญชี SCENOVA</h3><p className="muted">ไม่ต้องรอเลขบัญชี MT5 เลือกแพ็กเกจแล้วกด “เปิดสมาชิก” ที่ลูกค้าได้เลย ระบบจะจัดสิทธิ์ตามโหมดของแพ็กเกจให้อัตโนมัติ</p></div>
-                <span className="owner-count">ใช้กับลูกค้าที่เลือกด้านล่าง</span>
-              </div>
-              <div className="owner-plan-inline">
-                <div className="field"><label>แพ็กเกจ</label><select className="input" value={plan} onChange={e=>setPlan(e.target.value)}>
-                  <option value="LOCAL_30D">LOCAL 30D</option>
-                  <option value="CLOUD_30D">CLOUD 30D</option>
-                </select></div>
-                <div className="field"><label>วันเริ่ม <span className="muted">(ว่าง = เริ่มทันที)</span></label><input className="input" type="datetime-local" value={startsAt} onChange={e=>setStartsAt(e.target.value)}/><div className="help">Owner Console รุ่นนี้เปิดสิทธิ์ทันทีเท่านั้น ถ้ากำหนดเวลาอนาคตระบบจะแจ้งเตือน</div></div>
-                <div className="field"><label>จำนวนวัน</label><input className="input" type="number" min={1} value={days} onChange={e=>setDays(Number(e.target.value))}/></div>
-                <div className="field"><label>กำหนดวันหมดอายุเอง</label><input className="input" type="datetime-local" value={expiresAt} onChange={e=>setExpiresAt(e.target.value)}/><div className="help">ถ้ากรอก ระบบจะใช้วันนี้แทนจำนวนวัน</div></div>
-                <div className="field"><label>ยอดที่ลูกค้าชำระจริง <span className="muted">(บาท)</span></label><input className="input" type="number" min={0} step="0.01" value={paidAmountBaht} onChange={e=>setPaidAmountBaht(e.target.value)} placeholder="0.00"/><div className="help">กรอกเฉพาะยอดที่รับเงินจริง ระบบ Referral จะคำนวณ 7% / 5% / 3% / 1% จากยอดนี้</div></div>
-                <div className="field"><label>Payment Reference <span className="muted">(optional)</span></label><input className="input" value={paymentReference} onChange={e=>setPaymentReference(e.target.value.slice(0,160))} placeholder="PromptPay / slip / note"/><div className="help">ใช้สำหรับตรวจสอบย้อนหลัง ไม่แสดงให้ลูกค้าคนอื่นเห็น</div></div>
-              </div>
-            </section>
-
-            {selectedCustomer && (
-              <section className="owner-card">
-                <div className="owner-card-head">
-                  <div>
-                    <span className="owner-card-kicker">CUSTOMER ACCOUNT</span>
-                    <h3>{selectedCustomer.user_code}</h3>
-                    <p className="muted">{selectedCustomer.email}</p>
-                  </div>
-                  <button className="btn" onClick={()=>setSelectedCustomerId("")}>ปิดรายละเอียด</button>
+            <div className="owner-customer-layout">
+              <aside className="owner-customer-directory">
+                <div className="owner-customer-directory-head">
+                  <div><b>Customer Accounts</b><small>{users.length} บัญชี</small></div>
+                  <span className="owner-state-chip good">LIVE</span>
                 </div>
-
-                <div className="owner-partner-program">
-                  <div className="owner-partner-program-head">
-                    <div>
-                      <span className="owner-card-kicker">PARTNER PROGRAM</span>
-                      <h3>สิทธิ์ Partner / Customer Seats</h3>
-                      <p className="muted">Partner เริ่มอายุทันทีเมื่อ Owner เปิดสิทธิ์ ใช้ EA ของตัวเองได้ 1 บัญชีโดยไม่กิน Customer Seat; ลูกค้าแต่ละรายมีอายุของตัวเองและเปลี่ยน MT5 ได้โดยไม่กิน Seat เพิ่ม</p>
-                    </div>
-                    <span className={"owner-state-chip "+(selectedCustomer.partner_status === "ACTIVE" || selectedCustomer.partner_status === "READY" ? "good" : selectedCustomer.partner_status ? "bad" : "")}>{selectedCustomer.partner_status || "NOT PARTNER"}</span>
-                  </div>
-                  <div className="owner-partner-grid">
-                    <div className="field"><label>จำนวน Customer Seats</label><select className="input" value={partnerSeats} onChange={e=>setPartnerSeats(Number(e.target.value))}><option value={10}>10 Seats</option><option value={25}>25 Seats</option><option value={50}>50 Seats</option></select></div>
-                    <div className="field"><label>อายุ Partner</label><input className="input" type="number" min={1} value={partnerDurationDays} onChange={e=>setPartnerDurationDays(Number(e.target.value))}/><div className="help">วัน · เริ่มนับทันทีเมื่อเปิดสิทธิ์ Partner</div></div>
-                    <div className="field"><label>อายุลูกค้าแต่ละราย</label><input className="input" type="number" min={1} value={partnerCustomerDays} onChange={e=>setPartnerCustomerDays(Number(e.target.value))}/><div className="help">วันเต็มต่อคน นับจากวันที่ Partner เปิดสิทธิ์ให้ลูกค้ารายนั้น</div></div>
-                  </div>
-                  {selectedCustomer.partner_status && (
-                    <div className="owner-partner-summary">
-                      <span>ใช้อยู่ <b>{selectedCustomer.partner_active_customers || 0}/{selectedCustomer.partner_seat_limit || 0}</b> Seats</span>
-                      <span>เริ่ม: <b>{selectedCustomer.partner_activated_at ? new Date(selectedCustomer.partner_activated_at).toLocaleDateString("th-TH") : "ยังไม่เริ่ม"}</b></span>
-                      <span>หมดอายุ: <b>{selectedCustomer.partner_expires_at ? new Date(selectedCustomer.partner_expires_at).toLocaleDateString("th-TH") : "—"}</b></span>
-                    </div>
-                  )}
-                  <div className="owner-maintenance-actions">
-                    <button className="btn primary" disabled={partnerBusy} onClick={()=>grantPartner(selectedCustomer)}>{selectedCustomer.partner_status === "ACTIVE" || selectedCustomer.partner_status === "READY" ? "อัปเดต Partner / Seats" : "เปิดสิทธิ์ Partner"}</button>
-                    {selectedCustomer.partner_status && <button className="btn" disabled={partnerBusy} onClick={()=>renewPartner(selectedCustomer)}>ต่อ Partner +{partnerDurationDays} วัน</button>}
-                    {(selectedCustomer.partner_status === "ACTIVE" || selectedCustomer.partner_status === "READY") && <button className="btn danger" disabled={partnerBusy} onClick={()=>suspendPartner(selectedCustomer)}>ระงับ Partner</button>}
-                  </div>
-                  <div className="help">การระงับ/หมดอายุ Partner จะหยุด EA ของ Partner และหยุดการเพิ่ม/ต่ออายุลูกค้าใหม่ แต่ลูกค้าที่เปิดไปแล้วใช้ต่อถึงวันหมดอายุของตัวเองได้ การลด Seats ต่ำกว่าจำนวนลูกค้า Active จะไม่ตัดลูกค้าเดิม เพียงแต่เพิ่มลูกค้าใหม่ไม่ได้จนกว่าจำนวน Active จะต่ำกว่าขีดจำกัดใหม่</div>
+                <div className="owner-customer-list">
+                  {users.map(user=>{
+                    const activeMemberships=memberships(user).filter((m:any)=>m.active);
+                    return (
+                      <button
+                        type="button"
+                        key={user.id}
+                        className={"owner-customer-item "+(selectedCustomerId===user.id?"active":"")}
+                        onClick={()=>setSelectedCustomerId(user.id)}
+                      >
+                        <span className="owner-customer-avatar">{String(user.user_code||"U").slice(-1)}</span>
+                        <span className="owner-customer-item-copy">
+                          <b>{user.user_code}</b>
+                          <small>{user.email}</small>
+                          <em>
+                            {user.role === "OWNER" || user.role === "ADMIN"
+                              ? "SYSTEM ACCOUNT"
+                              : activeMemberships.length
+                                ? activeMemberships.map((m:any)=>m.mode==="CLOUD"?"CLOUD VPS":"LOCAL").join(" + ")
+                                : user.trial_status
+                                  ? "TRIAL "+user.trial_status
+                                  : "NO ACCESS"}
+                          </em>
+                        </span>
+                        <span className={"owner-customer-status-dot "+(user.status==="ACTIVE"?"good":"bad")}/>
+                      </button>
+                    );
+                  })}
+                  {!users.length && <div className="owner-customer-empty">ไม่พบบัญชีลูกค้า</div>}
                 </div>
+              </aside>
 
-                <div className="owner-plan-inline">
-                  <div className="field">
-                    <label>บัญชี MT5</label>
-                    <div className="input" style={{display:"flex",alignItems:"center"}}>
-                      {selectedCustomer.account_number || "ยังไม่เชื่อม — LOCAL จะตรวจจาก MT5 อัตโนมัติ"}
+              <section className="owner-customer-control">
+                {selectedCustomer ? (
+                  <>
+                    <div className="owner-customer-control-head">
+                      <div className="owner-customer-identity">
+                        <span className="owner-customer-avatar large">{String(selectedCustomer.user_code||"U").slice(-1)}</span>
+                        <div>
+                          <span className="owner-card-kicker">SELECTED CUSTOMER</span>
+                          <h2>{selectedCustomer.user_code}</h2>
+                          <p>{selectedCustomer.email}</p>
+                        </div>
+                      </div>
+                      <div className="owner-customer-head-chips">
+                        <span className={"owner-state-chip "+(selectedCustomer.status==="ACTIVE"?"good":"bad")}>{selectedCustomer.status}</span>
+                        {selectedCustomer.email_verified_at && <span className="owner-state-chip good">EMAIL VERIFIED</span>}
+                      </div>
                     </div>
-                    <div className="help">
-                      {selectedCustomer.account_number
-                        ? (selectedCustomer.broker_server || "ตรวจจาก MT5 แล้ว")
-                        : "ไม่ต้องกรอกเลขบัญชี MT5 ให้ลูกค้าเปิด MT5 แล้วติดตั้ง SCENOVA ระบบจะผูกจาก Terminal จริง"}
-                    </div>
-                  </div>
 
-                  <div className="field">
-                    <label>สถานะบัญชี</label>
-                    <div className="input" style={{display:"flex",alignItems:"center"}}>{selectedCustomer.status}</div>
-                  </div>
+                    {selectedCustomer.role === "OWNER" || selectedCustomer.role === "ADMIN" ? (
+                      <div className="owner-system-readonly">
+                        <b>System Account</b>
+                        <span>บัญชี OWNER / ADMIN มีสิทธิ์ถาวรและไม่ใช้ Customer Membership Control</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="owner-customer-snapshot">
+                          <div><small>MT5</small><b>{selectedCustomer.account_number || "ยังไม่เชื่อม"}</b><span>{selectedCustomer.mt5_online ? "Online" : "Offline / Waiting"}</span></div>
+                          <div><small>Trial</small><b>{selectedCustomer.trial_status || (selectedCustomer.trial_request_status==="PENDING"?"PENDING":"NONE")}</b><span>{selectedCustomer.trial_expires_at ? "ถึง "+new Date(selectedCustomer.trial_expires_at).toLocaleDateString("th-TH") : (selectedCustomer.trial_duration_minutes ? Math.ceil(Number(selectedCustomer.trial_duration_minutes)/1440)+" วัน" : "ยังไม่กำหนด")}</span></div>
+                          <div><small>Local</small><b>{hasActiveMode(selectedCustomer,"LOCAL")?"ACTIVE":"OFF"}</b><span>{memberships(selectedCustomer).find((m:any)=>m.mode==="LOCAL"&&m.active)?.expires_at ? "ถึง "+new Date(memberships(selectedCustomer).find((m:any)=>m.mode==="LOCAL"&&m.active).expires_at).toLocaleDateString("th-TH") : "ไม่มีสิทธิ์"}</span></div>
+                          <div><small>Cloud VPS</small><b>{hasActiveMode(selectedCustomer,"CLOUD")?"ACTIVE":"OFF"}</b><span>{memberships(selectedCustomer).find((m:any)=>m.mode==="CLOUD"&&m.active)?.expires_at ? "ถึง "+new Date(memberships(selectedCustomer).find((m:any)=>m.mode==="CLOUD"&&m.active).expires_at).toLocaleDateString("th-TH") : "ไม่มีสิทธิ์"}</span></div>
+                        </div>
 
-                  <div className="field">
-                    <label>แพ็กเกจที่จะเปิด/เปลี่ยน</label>
-                    <select className="input" value={plan} onChange={e=>setPlan(e.target.value)}>
-                      {planOptions.map(p=><option key={p.code} value={p.code}>{p.label}</option>)}
-                    </select>
-                  </div>
-
-                  <div className="field submit-field">
-                    <button
-                      className="btn primary btn-lg"
-                      disabled={hasActivePlan(selectedCustomer, selectedPlan.code)}
-                      onClick={()=>activate(selectedCustomer, selectedPlan.code)}
-                    >
-                      {hasActivePlan(selectedCustomer, selectedPlan.code)
-                        ? selectedPlan.label + " ใช้งานอยู่"
-                        : hasActiveMode(selectedCustomer, selectedPlan.mode)
-                          ? "เปลี่ยนเป็น " + selectedPlan.label
-                          : "เปิด " + selectedPlan.label}
-                    </button>
-                    <small className="help">เปิดสมาชิกจาก User ID ได้ ไม่ต้องมีเลข MT5 ก่อน</small>
-                  </div>
-                </div>
-
-                <div className="detail-list" style={{marginBottom:14}}>
-                  {(Array.isArray(selectedCustomer.customer_slots) ? selectedCustomer.customer_slots : []).map((slot:any)=>(
-                    <div key={slot.id}>
-                      <span>
-                        {slot.mode}{slot.account_number ? " · MT5 " + slot.account_number : ""}
-                      </span>
-                      <b>
-                        {slot.mode === "LOCAL"
-                          ? (slot.mt5_online
-                              ? "EA ONLINE" + (slot.actual_state ? " · " + slot.actual_state : "")
-                              : slot.account_number
-                                ? "EA OFFLINE"
-                                : "รอลูกค้าติดตั้ง / เปิด MT5")
-                          : (slot.actual_state || "CLOUD")}
-                      </b>
-                    </div>
-                  ))}
-                  {!(Array.isArray(selectedCustomer.customer_slots) && selectedCustomer.customer_slots.length) && (
-                    <div><span>บัญชี MT5</span><b>ยังไม่มีบัญชีที่เชื่อมต่อ</b></div>
-                  )}
-                </div>
-
-                <div className="detail-list">
-                  {memberships(selectedCustomer).length ? memberships(selectedCustomer).map((m:any)=>(
-                    <div key={m.subscription_id}>
-                      <span>{m.plan_code} · {m.mode}</span>
-                      <b>
-                        {m.active ? "ACTIVE" : m.status}
-                        {" · ถึง " + new Date(m.expires_at).toLocaleDateString("th-TH")}
-                        <button className="btn" style={{marginLeft:8}} onClick={()=>extendSubscription(selectedCustomer,m.subscription_id,7)}>+7 วัน</button>
-                        <button className="btn" style={{marginLeft:6}} onClick={()=>extendSubscription(selectedCustomer,m.subscription_id,30)}>+30 วัน</button>
-                      </b>
-                    </div>
-                  )) : (
-                    <div><span>สมาชิก</span><b>ยังไม่มีสมาชิก</b></div>
-                  )}
-                </div>
-              </section>
-            )}
-
-            <section className="owner-card owner-table-card">
-              <div className="owner-card-head">
-                <div><span className="owner-card-kicker">CUSTOMERS</span><h3>ลูกค้าและสิทธิ์</h3></div>
-                <span className="owner-count">{users.length} รายการ</span>
-              </div>
-              <div className="table-wrap owner-table-wrap">
-                <table>
-                  <thead><tr><th>ลูกค้า</th><th>MT5 / Bot</th><th>สิทธิ์</th><th>สมาชิก</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
-                  <tbody>
-                    {users.map(user=>{
-                      const activeSelectedPlan = hasActivePlan(user, selectedPlan.code);
-                      const activeSelectedMode = hasActiveMode(user, selectedPlan.mode);
-                      return (
-                      <tr key={user.id}>
-                        <td><b>{user.user_code}</b><br/><span className="muted">{user.email}</span></td>
-                        <td>
-                          <b>{user.account_number || "ยังไม่เชื่อม MT5"}</b><br/>
-                          <span className="muted">{user.broker_server || ""}</span>
-                          {user.account_number && <div className="owner-mini-status"><span className={"dot "+(user.mt5_online?"green":"red")}/>{user.mt5_online ? "MT5 ONLINE" : (user.actual_state || "OFFLINE")} · {user.mode || "—"}</div>}
-                        </td>
-                        <td>
-                          {user.role === "OWNER" || user.role === "ADMIN"
-                            ? <><b className="text-good">FULL ACCESS</b><br/><span className="muted">ไม่ใช้ระบบ Trial</span></>
-                            : user.trial_status
-                              ? <><b>{"Trial " + user.trial_status}</b>{user.trial_expires_at && <><br/><span className="muted">ถึง {new Date(user.trial_expires_at).toLocaleString("th-TH")}</span></>}</>
-                              : user.trial_request_status === "PENDING"
-                                ? <div className="owner-trial-request"><b className="text-warn">รออนุมัติ Trial</b><small>LINE: {user.line_contact || "—"}</small><small>IP: {user.request_ip || "—"} · พบ {user.ip_user_count || 0} User / {user.ip_trial_count || 0} Trial</small></div>
-                                : <><b>ยังไม่มี Trial</b><br/><span className="muted">รอลูกค้าส่งคำขอพร้อม LINE</span></>}
-                        </td>
-                        <td>
-                          {user.partner_status && <div style={{marginBottom:6}}><span className={"owner-state-chip "+(user.partner_status === "ACTIVE" || user.partner_status === "READY" ? "good" : "bad")}>PARTNER {user.partner_active_customers || 0}/{user.partner_seat_limit || 0}</span></div>}
-                          {user.role === "OWNER" || user.role === "ADMIN"
-                            ? <><b className="text-good">OWNER UNLIMITED</b><br/><span className="muted">ไม่ต้องเปิด Trial / สมาชิก</span></>
-                            : memberships(user).length
-                              ? memberships(user).map((m:any)=>(
-                                  <div key={m.subscription_id} style={{marginBottom:4}}>
-                                    <b className={m.active ? "text-good" : ""}>{m.plan_code}</b><br/>
-                                    <span className="muted">{m.mode}{m.allow_resale ? " · " + (m.slots || 1) + " Customer Seats" : ""} · {m.active ? "ACTIVE" : m.status} · ถึง {new Date(m.expires_at).toLocaleDateString("th-TH")}</span>
-                                  </div>
-                                ))
-                              : <><b>ยังไม่มีสมาชิก</b><br/><span className="muted">เลือกแพ็กเกจด้านบนแล้วกดเปิดสมาชิก</span></>}
-                        </td>
-                        <td><span className={"owner-state-chip "+(user.status==="SUSPENDED"?"bad":"good")}>{user.status}</span></td>
-                        <td>
-                          {user.role === "OWNER" || user.role === "ADMIN" ? (
-                            <div className="owner-system-account">
-                              <span className="owner-state-chip good">SYSTEM OWNER</span>
-                              <small>สิทธิ์ถาวร · ไม่ต้องจัดการแพ็กเกจ</small>
+                        <div className="owner-control-grid">
+                          <section className="owner-control-card access-card">
+                            <div className="owner-control-card-head">
+                              <div><span className="owner-card-kicker">ACCESS CONTROL</span><h3>Local / Cloud VPS</h3><p>เลือกสิทธิ์ที่ต้องการเปิดให้ลูกค้า แล้วกำหนดจำนวนวันได้อิสระ</p></div>
+                              <span className="owner-count">{selectedPlan.mode}</span>
                             </div>
-                          ) : (
-                            <div className="owner-row-actions owner-row-actions-wrap">
-                              <button className="btn" onClick={()=>setSelectedCustomerId(user.id)}>ดูบัญชี</button>
-                              <button className="btn" disabled={!user.mt5_account_id || user.trial_request_status !== "PENDING" || Boolean(user.trial_status)} onClick={()=>grantTrial(user)}>อนุมัติ Trial 3h</button>
-                              <button
-                                className="btn primary"
-                                disabled={activeSelectedPlan}
-                                onClick={()=>activate(user, selectedPlan.code)}
-                              >
-                                {activeSelectedPlan
-                                  ? selectedPlan.label + " ใช้งานอยู่"
-                                  : activeSelectedMode
-                                    ? "เปลี่ยนเป็น " + selectedPlan.label
-                                    : "เปิด " + selectedPlan.label}
+
+                            <div className="owner-access-mode-grid">
+                              <button type="button" className={"owner-access-option "+(plan==="LOCAL_30D"?"active":"")} onClick={()=>setPlan("LOCAL_30D")}>
+                                <span className="owner-access-check">{plan==="LOCAL_30D"?"✓":""}</span>
+                                <span><b>Local MT5</b><small>ใช้ MT5 บนคอมลูกค้า</small></span>
+                                {hasActiveMode(selectedCustomer,"LOCAL") && <em>ACTIVE</em>}
                               </button>
-                              {user.status==="SUSPENDED"
-                                ? <button className="btn primary" onClick={()=>reactivate(user)}>เปิดกลับ</button>
-                                : <button className="btn danger" onClick={()=>suspend(user)}>ระงับ</button>}
-                              <button className="btn danger subtle-danger" onClick={()=>deleteUser(user)}>ลบบัญชี</button>
+                              <button type="button" className={"owner-access-option "+(plan==="CLOUD_30D"?"active":"")} onClick={()=>setPlan("CLOUD_30D")}>
+                                <span className="owner-access-check">{plan==="CLOUD_30D"?"✓":""}</span>
+                                <span><b>Cloud VPS</b><small>ใช้ MT5 บน Trading VPS</small></span>
+                                {hasActiveMode(selectedCustomer,"CLOUD") && <em>ACTIVE</em>}
+                              </button>
                             </div>
-                          )}
-                        </td>
-                      </tr>
-                      );
-                    })}
-                    {!users.length && <tr><td colSpan={6}><div className="owner-empty">ยังไม่มีผลการค้นหา</div></td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+
+                            <div className="owner-control-fields">
+                              <label><span>จำนวนวัน</span><input className="input" type="number" min={1} max={3650} value={days} onChange={e=>setDays(Number(e.target.value))}/></label>
+                              <label><span>ยอดชำระจริง (บาท)</span><input className="input" type="number" min={0} step="0.01" value={paidAmountBaht} onChange={e=>setPaidAmountBaht(e.target.value)} placeholder="0.00"/></label>
+                              <label className="wide"><span>Payment Reference</span><input className="input" value={paymentReference} onChange={e=>setPaymentReference(e.target.value.slice(0,160))} placeholder="PromptPay / slip / note"/></label>
+                            </div>
+                            <button
+                              className="btn primary owner-wide-action"
+                              disabled={hasActivePlan(selectedCustomer,selectedPlan.code) || Boolean(customerAction)}
+                              onClick={()=>activate(selectedCustomer,selectedPlan.code)}
+                            >
+                              {hasActivePlan(selectedCustomer,selectedPlan.code)
+                                ? selectedPlan.label+" ใช้งานอยู่ — เพิ่มวันด้านล่าง"
+                                : "เปิด "+(selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" "+days+" วัน"}
+                            </button>
+
+                            <div className="owner-membership-list">
+                              {memberships(selectedCustomer).length ? memberships(selectedCustomer).map((m:any)=>(
+                                <div className="owner-membership-row" key={m.subscription_id}>
+                                  <div>
+                                    <span className={"owner-mode-badge "+String(m.mode).toLowerCase()}>{m.mode==="CLOUD"?"CLOUD VPS":"LOCAL"}</span>
+                                    <b>{m.plan_code}</b>
+                                    <small>{m.active?"ใช้งานอยู่":"สถานะ "+m.status} · หมดอายุ {new Date(m.expires_at).toLocaleString("th-TH")}</small>
+                                  </div>
+                                  <div className="owner-add-days">
+                                    <input type="number" min={1} max={3650} value={extendDays} onChange={e=>setExtendDays(Number(e.target.value))}/>
+                                    <button className="btn" disabled={Boolean(customerAction)} onClick={()=>extendSubscription(selectedCustomer,m.subscription_id,extendDays)}>+ เพิ่มวัน</button>
+                                  </div>
+                                </div>
+                              )) : <div className="owner-control-empty">ยังไม่มีสมาชิกแบบชำระเงิน</div>}
+                            </div>
+                          </section>
+
+                          <section className="owner-control-card">
+                            <div className="owner-control-card-head">
+                              <div><span className="owner-card-kicker">TRIAL CONTROL</span><h3>กำหนดวันทดลอง</h3><p>เปลี่ยนจาก 1 วันเป็น 7 วัน หรือจำนวนอื่นได้ทันที</p></div>
+                            </div>
+                            <div className="owner-trial-control">
+                              <label><span>Trial Days</span><input className="input" type="number" min={1} max={365} value={trialDays} onChange={e=>setTrialDays(Number(e.target.value))}/></label>
+                              {selectedCustomer.trial_status ? (
+                                <button className="btn primary" disabled={customerAction==="trial"} onClick={()=>updateTrialDuration(selectedCustomer)}>
+                                  บันทึก Trial {trialDays} วัน
+                                </button>
+                              ) : (
+                                <button
+                                  className="btn primary"
+                                  disabled={customerAction==="trial" || !selectedCustomer.mt5_account_id || selectedCustomer.trial_request_status!=="PENDING"}
+                                  onClick={()=>grantTrial(selectedCustomer)}
+                                >
+                                  อนุมัติ Trial {trialDays} วัน
+                                </button>
+                              )}
+                            </div>
+                            <div className="owner-control-note">
+                              {selectedCustomer.trial_status
+                                ? "Trial ปัจจุบัน: "+selectedCustomer.trial_status+(selectedCustomer.trial_started_at?" · เริ่ม "+new Date(selectedCustomer.trial_started_at).toLocaleString("th-TH"):" · ยังไม่เริ่ม")
+                                : selectedCustomer.trial_request_status==="PENDING"
+                                  ? "คำขอพร้อมแล้ว · LINE: "+(selectedCustomer.line_contact||"—")
+                                  : "ลูกค้ายังไม่ได้ส่งคำขอ Trial"}
+                            </div>
+                          </section>
+
+                          <section className="owner-control-card">
+                            <div className="owner-control-card-head">
+                              <div><span className="owner-card-kicker">ACCOUNT SECURITY</span><h3>รีเซ็ตรหัสผ่าน</h3><p>ส่งลิงก์ตั้งรหัสผ่านใหม่ไปยังอีเมลลูกค้าโดยไม่เปิดเผยรหัสผ่านเดิม</p></div>
+                            </div>
+                            <div className="owner-security-email">
+                              <span>Email</span><b>{selectedCustomer.email}</b>
+                              <small>{selectedCustomer.email_verified_at?"ยืนยันอีเมลแล้ว":"ยังไม่ยืนยันอีเมล"}</small>
+                            </div>
+                            <button className="btn owner-wide-action" disabled={customerAction==="password"} onClick={()=>sendPasswordReset(selectedCustomer)}>
+                              {customerAction==="password"?"กำลังส่ง...":"ส่งลิงก์ตั้งรหัสผ่านใหม่"}
+                            </button>
+                            <div className="owner-control-note">ลิงก์ใช้ได้ครั้งเดียว · หมดอายุใน 30 นาที · ลูกค้าเป็นผู้ตั้งรหัสใหม่เอง</div>
+                          </section>
+
+                          <section className="owner-control-card">
+                            <div className="owner-control-card-head">
+                              <div><span className="owner-card-kicker">MT5 & DEVICE</span><h3>สถานะการเชื่อมต่อ</h3><p>ดู Local / Cloud Slot และ MT5 ที่ระบบตรวจพบ</p></div>
+                            </div>
+                            <div className="owner-slot-list">
+                              {(Array.isArray(selectedCustomer.customer_slots)?selectedCustomer.customer_slots:[]).map((slot:any)=>(
+                                <div key={slot.id}>
+                                  <span className={"owner-mode-badge "+String(slot.mode).toLowerCase()}>{slot.mode==="CLOUD"?"CLOUD VPS":"LOCAL"}</span>
+                                  <div><b>{slot.account_number?"MT5 "+slot.account_number:"รอเชื่อม MT5"}</b><small>{slot.mode==="LOCAL"?(slot.mt5_online?"EA ONLINE":"EA OFFLINE / WAITING"):(slot.actual_state||"CLOUD READY")}</small></div>
+                                </div>
+                              ))}
+                              {!(Array.isArray(selectedCustomer.customer_slots)&&selectedCustomer.customer_slots.length) && <div className="owner-control-empty">ยังไม่มี Slot ที่เชื่อมต่อ</div>}
+                            </div>
+                          </section>
+                        </div>
+
+                        <details className="owner-customer-advanced">
+                          <summary><span><b>Partner Program</b><small>จัดการ Seats และอายุ Partner เมื่อต้องการ</small></span><span>Advanced ▾</span></summary>
+                          <div className="owner-partner-grid compact">
+                            <div className="field"><label>Customer Seats</label><select className="input" value={partnerSeats} onChange={e=>setPartnerSeats(Number(e.target.value))}><option value={10}>10 Seats</option><option value={25}>25 Seats</option><option value={50}>50 Seats</option></select></div>
+                            <div className="field"><label>Partner Days</label><input className="input" type="number" min={1} value={partnerDurationDays} onChange={e=>setPartnerDurationDays(Number(e.target.value))}/></div>
+                            <div className="field"><label>Customer Days</label><input className="input" type="number" min={1} value={partnerCustomerDays} onChange={e=>setPartnerCustomerDays(Number(e.target.value))}/></div>
+                          </div>
+                          <div className="owner-maintenance-actions">
+                            <button className="btn primary" disabled={partnerBusy} onClick={()=>grantPartner(selectedCustomer)}>{selectedCustomer.partner_status?"อัปเดต Partner":"เปิดสิทธิ์ Partner"}</button>
+                            {selectedCustomer.partner_status && <button className="btn" disabled={partnerBusy} onClick={()=>renewPartner(selectedCustomer)}>+{partnerDurationDays} วัน</button>}
+                            {(selectedCustomer.partner_status==="ACTIVE"||selectedCustomer.partner_status==="READY") && <button className="btn danger" disabled={partnerBusy} onClick={()=>suspendPartner(selectedCustomer)}>ระงับ Partner</button>}
+                          </div>
+                        </details>
+
+                        <div className="owner-account-actions">
+                          <div><b>Account Status</b><small>ใช้เมื่อต้องระงับหรือเปิดบัญชีกลับมา</small></div>
+                          {selectedCustomer.status==="SUSPENDED"
+                            ? <button className="btn primary" onClick={()=>reactivate(selectedCustomer)}>เปิดบัญชีกลับ</button>
+                            : <button className="btn danger" onClick={()=>suspend(selectedCustomer)}>ระงับบัญชี</button>}
+                          <button className="btn danger subtle-danger" onClick={()=>deleteUser(selectedCustomer)}>ลบบัญชี</button>
+                        </div>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <div className="owner-customer-placeholder">
+                    <span>◎</span>
+                    <b>เลือกลูกค้าที่ต้องการจัดการ</b>
+                    <p>คลิกบัญชีทางซ้าย แล้วเครื่องมือ Local / Cloud VPS, Trial, วันใช้งาน และ Password Reset จะแสดงที่นี่</p>
+                  </div>
+                )}
+              </section>
+            </div>
           </>
         )}
 
