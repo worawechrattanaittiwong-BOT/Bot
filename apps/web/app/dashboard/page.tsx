@@ -3455,7 +3455,9 @@ function BotSettingsModal(props:any) {
     ? "Safety Stop ก่อน · ยก SL เมื่อ Broker ล็อกกำไรได้"
     : controlMode === "MANUAL"
       ? Number(manualSl).toFixed(0)+" points"
-      : "ATR × 2.00";
+      : controlMode === "RACE"
+        ? "ATR × 1.50"
+        : "ATR × 2.00";
   const selectedZeroLevels = Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||10));
   const zeroGridLowVolatilityEnabled = props.settings?.zeroGridLowVolatilityEnabled === true;
   const appliedZeroLevels = Number(props.metrics?.zeroGridConfiguredLevelsPerSide);

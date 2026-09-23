@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.65"
-#define SCENOVA_EA_VERSION "1.0.65"
-#define SCENOVA_PRODUCT_VERSION "1.0.65"
+#property version   "1.0.66"
+#define SCENOVA_EA_VERSION "1.0.66"
+#define SCENOVA_PRODUCT_VERSION "1.0.66"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -3403,7 +3403,7 @@ double RaceAtrStopPoints()
       (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
    ) + 2.0;
 
-   double multiplier = 1.50;
+   double multiplier = EffectiveHardStopMultiplier();
    return MathMax(atr * multiplier, brokerMinimumPoints);
 }
 
@@ -11982,11 +11982,10 @@ double EffectiveHardStopMultiplier()
 {
    double multiplier = g_hardStopAtrMultiplier;
 
-   // RACE presents ATR x multiplier as an explicit user contract. AUTO may
-   // adapt that multiplier to market regime, but RACE must not silently widen
-   // or tighten it behind the Settings value.
+   // RACE owns a fixed 1.50x M15 ATR stop. Keep this isolated from AUTO and
+   // from the generic server multiplier so changing RACE cannot alter AUTO.
    if(RaceModeEnabled() || BasketHasRacePosition())
-      return MathMax(0.5, MathMin(10.0, multiplier));
+      return 1.50;
 
    if(g_marketRegime == "HIGH_VOLATILITY") multiplier *= 1.25;
    else if(g_marketRegime == "QUIET") multiplier *= 0.85;
