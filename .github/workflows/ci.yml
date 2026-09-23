@@ -14,7 +14,7 @@ on:
 
 jobs:
   build:
-    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[popup-only]') == false }}
+    if: ${{ github.event_name != 'push' || (contains(github.event.head_commit.message, '[popup-only]') == false && contains(github.event.head_commit.message, '[customer-admin-only]') == false) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -129,3 +129,17 @@ jobs:
           node-version: 20
       - name: System popup contract
         run: node ./tests/system-popup-contract.mjs
+
+  customer-admin-contract:
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[customer-admin-only]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - name: Typecheck API and Web
+        run: npm run typecheck
+      - name: Customer Account Control contract
+        run: node ./tests/customer-account-control-contract.mjs
