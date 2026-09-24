@@ -72,6 +72,23 @@ jobs:
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/015_partner_program.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/015_partner_program.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/021_cent_account_currency_isolation.sql
+          for migration in \
+            database/022_email_verification.sql \
+            database/023_account_security.sql \
+            database/024_referral_program.sql \
+            database/025_password_reset.sql \
+            database/026_trial_authorizations.sql \
+            database/027_trial_sms_activation.sql \
+            database/028_account_phone.sql \
+            database/029_admin_service_links.sql \
+            database/030_admin_api_credentials.sql \
+            database/031_admin_api_credential_test_metadata.sql \
+            database/032_commission_wallet_core.sql \
+            database/033_github_owner_migration.sql
+          do
+            psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f "$migration"
+            psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f "$migration"
+          done
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/021_cent_account_currency_isolation.sql
 
       - name: Build API
