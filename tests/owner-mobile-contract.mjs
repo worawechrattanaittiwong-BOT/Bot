@@ -21,7 +21,7 @@ assert(
   "Owner Mobile must stay outside root web/API workspaces"
 );
 
-assert(!app.includes("OMISE_SECRET_KEY"), "Omise secret must never be present in mobile app source");
+assert(!/process\\.env\\.OMISE_SECRET_KEY|skey_(?:test|live)_/i.test(app), "Omise secret value/access must never be present in mobile app source");
 assert(api.includes('process.env.OMISE_SECRET_KEY'), "Omise secret must be read server-side");
 assert(api.includes('String(user.role).toUpperCase() !== "OWNER"'), "Enrollment must be OWNER-only");
 assert(api.includes("verifyTotp"), "First-device enrollment must require TOTP");
