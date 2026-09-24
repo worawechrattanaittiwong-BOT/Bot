@@ -887,7 +887,7 @@ export class CommissionWithdrawalService {
 
     return this.db.transaction(async tx => {
       const row = (await tx.query(
-        `SELECT id,user_id,destination_id,amount_satang,status
+        `SELECT id,user_id,destination_id,amount_satang,status,approval_count,approval_required
          FROM commission_withdrawals WHERE id=$1 FOR UPDATE`,
         [withdrawalId]
       )).rows[0];
@@ -994,5 +994,55 @@ export class CommissionWithdrawalService {
       accountName: row.account_name,
       accountNumber
     };
+  }
+
+  async updateAdvancedSettings(
+    actor: string,
+    input: {
+      globalDailyLimitSatang?: number;
+      dualApprovalThresholdSatang?: number;
+      highRiskScoreThreshold?: number;
+      criticalRiskScoreThreshold?: number;
+      riskEngineEnabled?: boolean;
+      autoPayoutEnabled?: boolean;
+    }
+  ) {
+    return this.risk.updateAdvancedSettings(actor, input);
+  }
+
+  async setKillSwitch(enabled: boolean, actor: string, reason: string) {
+    return this.risk.setKillSwitch(enabled, actor, reason);
+  }
+
+  async setUserControl(
+    userId: string,
+    actor: string,
+    input: { withdrawalPaused?: boolean; pauseReason?: string; dailyLimitSatang?: number | null }
+  ) {
+    return this.risk.setUserControl(userId, actor, input);
+  }
+
+  async resolveAlert(alertId: string, actor: string) {
+    return this.risk.resolveAlert(alertId, actor);
+  }
+
+  async claimPayout(workerId: string) {
+    return this.risk.claimPayout(workerId);
+  }
+
+  async reportPayoutResult(
+    workerId: string,
+    input: {
+      jobId?: string;
+      status?: string;
+      providerReference?: string;
+      providerAmountSatang?: number;
+      providerCurrency?: string;
+      providerStatus?: string;
+      errorCode?: string;
+      errorMessage?: string;
+    }
+  ) {
+    return this.risk.reportPayoutResult(workerId, input);
   }
 }
