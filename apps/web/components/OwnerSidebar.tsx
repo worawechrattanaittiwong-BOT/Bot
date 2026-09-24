@@ -54,7 +54,8 @@ export const ownerNavItems: NavItem[] = [
   inviteEarnNavItem,
   { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trials, subscriptions & customer access" },
   { section:"SYSTEM", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"System Overview", hint:"Platform health & system status" },
-  { section:"SYSTEM", key:"system-test", href:"/admin/system-test", icon:"overview", label:"System Test", hint:"Read-only health checks & test history" },\n  { section:"SYSTEM", key:"service-links", href:"/admin/service-links", icon:"strategy", label:"API & Service Links", hint:"Private links for connected services & providers" },
+  { section:"SYSTEM", key:"system-test", href:"/admin/system-test", icon:"overview", label:"System Test", hint:"Read-only health checks & test history" },
+  { section:"SYSTEM", key:"service-links", href:"/admin/service-links", icon:"strategy", label:"API & Service Links", hint:"Private links for connected services & providers" },
   { section:"SYSTEM", key:"cloud-hardening", href:"/admin/cloud-hardening", icon:"cloud", label:"Production Hardening", hint:"Incidents, capacity guard & emergency controls" },
   { section:"SYSTEM", key:"website", href:"/website", icon:"strategy", label:"Website", hint:"SCENOVA public website" }
 ];
