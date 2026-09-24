@@ -1,0 +1,90 @@
+.shellMain{min-width:0}
+.root{width:min(1420px,100%);margin:0 auto;padding:24px 26px 42px}
+.header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin:4px 0 14px}
+.kicker{display:block;color:#9487ff;font-size:8px;font-weight:950;letter-spacing:.14em}
+.header h1{margin:6px 0 0;color:#f5f2ff;font-size:27px;letter-spacing:-.03em}
+.header p{margin:7px 0 0;color:#7f879d;font-size:10px;line-height:1.5}
+.openBadge,.pauseBadge,.statusBadge,.securityTag{
+  display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border-radius:999px;
+  font-size:7px;font-weight:950;letter-spacing:.08em;white-space:nowrap
+}
+.openBadge{border:1px solid rgba(69,214,139,.24);background:rgba(45,185,112,.07);color:#70dfa9}
+.pauseBadge{border:1px solid rgba(242,164,83,.22);background:rgba(216,132,42,.07);color:#efb06a}
+.openBadge i,.pauseBadge i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.notice{margin-bottom:10px;padding:10px 12px;border:1px solid rgba(116,99,190,.15);border-radius:10px;background:rgba(103,82,220,.06);color:#a9a0d7;font-size:9px}
+.summaryGrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
+.summaryGrid article{padding:13px;border:1px solid rgba(126,137,175,.12);border-radius:12px;background:linear-gradient(145deg,rgba(13,17,29,.95),rgba(7,10,19,.98))}
+.summaryGrid span,.summaryGrid small{display:block;color:#727b91;font-size:8px}
+.summaryGrid b{display:block;margin:5px 0 4px;color:#ece8f8;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.controlGrid{display:grid;grid-template-columns:1.25fr .75fr;gap:10px;margin-top:10px}
+.controlCard{padding:14px;border:1px solid rgba(121,103,191,.14);border-radius:14px;background:rgba(8,11,23,.78)}
+.cardHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.cardHead h2{margin:4px 0 0;color:#ece9f7;font-size:13px}
+.switchLine{display:flex;align-items:center;gap:7px;color:#9198aa;font-size:8px;font-weight:800}
+.switchLine input{accent-color:#70dda8}
+.settingsFields{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-top:11px;align-items:end}
+.settingsFields label,.verifyFields label{display:grid;gap:4px}
+.settingsFields span,.verifyFields span{color:#71798f;font-size:7px;font-weight:800}
+.settingsFields input,.verifyFields input,.noteInput{
+  width:100%;box-sizing:border-box;border:1px solid rgba(124,136,171,.15);border-radius:8px;
+  background:rgba(3,6,14,.7);color:#ebe8f6;font:inherit;font-size:8px;outline:none
+}
+.settingsFields input,.verifyFields input{height:34px;padding:0 9px}
+.noteInput{height:32px;padding:0 9px}
+.primary{min-height:34px;border:0;border-radius:8px;background:linear-gradient(135deg,#775fff,#6777ee);color:white;font-size:8px;font-weight:950;cursor:pointer}
+.securityTag{border:1px solid rgba(117,95,240,.22);background:rgba(99,76,220,.07);color:#b1a6ef}
+.verifyFields{display:grid;grid-template-columns:1fr .6fr;gap:8px;margin-top:11px}
+.controlCard p{margin:8px 0 0;color:#6f778d;font-size:7px;line-height:1.45}
+.sectionHead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:18px 1px 9px}
+.sectionHead h2{margin:4px 0 0;color:#e9e6f3;font-size:14px}
+.sectionHead>span{color:#697287;font-size:8px}
+.queue{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.withdrawalCard{padding:13px;border:1px solid rgba(126,138,175,.12);border-radius:14px;background:linear-gradient(145deg,rgba(12,16,28,.96),rgba(7,10,19,.98))}
+.rowTop{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.rowTop>div{display:grid;gap:3px}
+.userCode{color:#9b8cef;font-size:8px;font-weight:950}
+.rowTop b{color:#f0edf8;font-size:17px}
+.rowTop small{color:#6f778b;font-size:7px}
+.statusBadge{border:1px solid rgba(123,101,230,.2);background:rgba(101,82,210,.07);color:#afa4ea}
+.bankBox{display:grid;grid-template-columns:1fr auto;gap:10px;margin:10px 0;padding:10px;border:1px solid rgba(120,132,167,.1);border-radius:9px;background:rgba(255,255,255,.014)}
+.bankBox>div:first-child span,.bankBox>div:first-child b,.bankBox code{display:block}
+.bankBox>div:first-child span{color:#777f93;font-size:8px}
+.bankBox>div:first-child b{margin-top:3px;color:#cdc9dc;font-size:9px}
+.bankBox code{margin-top:7px;color:#b5add7;font-size:10px;letter-spacing:.05em}
+.bankBox>div:last-child{display:grid;grid-template-columns:auto auto;gap:3px 8px;text-align:right}
+.bankBox small{color:#687186;font-size:7px}
+.bankBox>div:last-child span{color:#8c94a7;font-size:7px}
+.riskText{color:#ef9a78!important;font-weight:900}
+.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.actions button{min-height:29px;padding:0 8px;border:1px solid rgba(126,138,176,.13);border-radius:7px;background:rgba(255,255,255,.018);color:#8991a6;font-size:7px;font-weight:900;cursor:pointer}
+.actions button:disabled{opacity:.4;cursor:not-allowed}
+.approveButton{color:#73dca9!important;border-color:rgba(70,209,139,.18)!important}
+.rejectButton{color:#ef8b99!important;border-color:rgba(237,113,132,.18)!important}
+.paidButton{color:#c0b7ff!important;border-color:rgba(119,95,240,.22)!important;background:rgba(102,80,220,.07)!important}
+.metaLine{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;color:#70788b;font-size:7px}
+.empty{grid-column:1/-1;padding:28px 12px;border:1px dashed rgba(123,135,171,.14);border-radius:12px;text-align:center;color:#6c7489;font-size:9px}
+.auditList{border:1px solid rgba(125,137,173,.1);border-radius:12px;overflow:hidden}
+.auditRow{display:grid;grid-template-columns:1.2fr .8fr 1fr auto;gap:10px;align-items:center;min-height:42px;padding:7px 10px;border-bottom:1px solid rgba(119,130,162,.08)}
+.auditRow:last-child{border-bottom:0}
+.auditRow span{color:#9b8dea;font-size:7px;font-weight:900}
+.auditRow b{color:#cac6d8;font-size:8px}
+.auditRow small,.auditRow time{color:#687186;font-size:7px}
+@media(max-width:1100px){
+  .summaryGrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .controlGrid{grid-template-columns:1fr}
+}
+@media(max-width:800px){
+  .queue{grid-template-columns:1fr}
+  .settingsFields{grid-template-columns:1fr 1fr}
+  .auditRow{grid-template-columns:1fr 1fr}
+  .auditRow time{display:none}
+}
+@media(max-width:620px){
+  .root{padding:14px 12px 28px}
+  .header{display:block}
+  .openBadge,.pauseBadge{margin-top:9px}
+  .summaryGrid{grid-template-columns:1fr 1fr}
+  .settingsFields,.verifyFields{grid-template-columns:1fr}
+  .bankBox{grid-template-columns:1fr}
+  .bankBox>div:last-child{text-align:left}
+}
