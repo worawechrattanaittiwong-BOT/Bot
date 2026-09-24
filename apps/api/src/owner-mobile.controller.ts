@@ -18,7 +18,7 @@ import { DbService } from "./db.service";
 import { CryptoService } from "./security";
 import { CommissionWithdrawalService } from "./commission-withdrawal.service";
 
-const SESSION_HOURS = 12;
+const SESSION_MINUTES = 30;
 const MAX_PIN_FAILURES = 5;
 const PIN_LOCK_MINUTES = 30;
 
@@ -146,9 +146,11 @@ export class OwnerMobileService implements OnApplicationBootstrap {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new ServiceUnavailableException(
-        String(data?.message || "ติดต่อ Omise ไม่สำเร็จ")
-      );
+      const message = String(data?.message || "ติดต่อ Omise ไม่สำเร็จ");
+      if (response.status >= 400 && response.status < 500) {
+        throw new BadRequestException(message);
+      }
+      throw new ServiceUnavailableException(message);
     }
     return data;
   }
@@ -268,13 +270,22 @@ export class OwnerMobileService implements OnApplicationBootstrap {
     }
 
     const pinHash = await hash(pin, 12);
-    const existing = await this.db.one(
-      "SELECT id,status FROM owner_mobile_devices WHERE owner_user_id=$1 AND device_id=$2",
+
+    // Full password + TOTP enrollment is also the secure recovery path for a
+    // forgotten PIN. Keep one active owner phone so replacing a device revokes
+    // access from the previous phone automatically.
+    await this.db.query(
+      `UPDATE owner_mobile_devices
+       SET status='REVOKED',revoked_at=now()
+       WHERE owner_user_id=$1 AND device_id<>$2 AND status='ACTIVE'`,
       [user.id, deviceId]
     );
-    if (existing?.status === "ACTIVE") {
-      throw new ConflictException("โทรศัพท์เครื่องนี้ลงทะเบียนแล้ว กรุณาเข้าใช้งานด้วย PIN");
-    }
+    await this.db.query(
+      `UPDATE owner_mobile_sessions
+       SET revoked_at=now()
+       WHERE owner_user_id=$1 AND revoked_at IS NULL`,
+      [user.id]
+    );
 
     const device = await this.db.one(
       `INSERT INTO owner_mobile_devices(owner_user_id,device_id,device_name,pin_hash,status)
@@ -291,7 +302,14 @@ export class OwnerMobileService implements OnApplicationBootstrap {
 
   private async createSession(ownerUserId: string, deviceRowId: string) {
     const token = randomBytes(32).toString("base64url");
-    const expiresAt = new Date(Date.now() + SESSION_HOURS * 3600_000);
+    const expiresAt = new Date(Date.now() + SESSION_MINUTES * 60_000);
+
+    await this.db.query(
+      `UPDATE owner_mobile_sessions
+       SET revoked_at=now()
+       WHERE device_row_id=$1 AND revoked_at IS NULL`,
+      [deviceRowId]
+    );
     await this.db.query(
       `INSERT INTO owner_mobile_sessions(owner_user_id,device_row_id,token_hash,expires_at)
        VALUES($1,$2,$3,$4)`,
@@ -659,6 +677,17 @@ export class OwnerMobileService implements OnApplicationBootstrap {
         ]
       );
     } catch (error: any) {
+      if (error instanceof BadRequestException) {
+        await this.db.query(
+          `UPDATE owner_omise_transfers
+           SET status='FAILED',provider_status='REJECTED',
+               provider_response=$2::jsonb,updated_at=now()
+           WHERE id=$1`,
+          [local.id, JSON.stringify({ error: String(error?.message || "rejected") })]
+        );
+        throw error;
+      }
+
       await this.db.query(
         `UPDATE owner_omise_transfers
          SET status='REVIEW',provider_status='UNKNOWN',
