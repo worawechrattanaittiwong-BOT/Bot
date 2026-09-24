@@ -1039,6 +1039,23 @@ export class CommissionWithdrawalService {
     return this.risk.claimPayout(workerId);
   }
 
+  async manualReconcilePaid(
+    adminUserId: string,
+    withdrawalId: string,
+    actor: string,
+    input: StepUp & { payoutReference?: string; confirmedAmountSatang?: number },
+    ip?: string | null
+  ) {
+    await this.stepUp(adminUserId, input);
+    return this.risk.manualReconcilePaid(
+      withdrawalId,
+      actor,
+      String(input.payoutReference || ""),
+      Math.trunc(Number(input.confirmedAmountSatang || 0)),
+      ip
+    );
+  }
+
   async authorizePayout(workerId: string, jobId: string) {
     return this.risk.authorizePayout(workerId, jobId);
   }
