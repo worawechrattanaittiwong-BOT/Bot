@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { OwnerMobileNav, OwnerSidebar } from "../../../components/OwnerSidebar";
 import { ScenovaBrand } from "../../../components/ScenovaBrand";
 import { useSystemPopup } from "../../../components/SystemPopupProvider";
@@ -26,6 +26,13 @@ type Credential = {
   last_four: string;
   note: string;
   active: boolean;
+  provider: string;
+  test_url: string;
+  auth_mode: string;
+  header_name: string;
+  last_test_status: string;
+  last_test_detail: string;
+  last_tested_at: string | null;
   updated_at: string;
 };
 
@@ -35,6 +42,15 @@ type Connection = {
   category: string;
   active: boolean;
   detail: string;
+};
+
+type TestResult = {
+  ok: boolean;
+  status: "PASS" | "LIMITED" | "FAIL";
+  provider: string;
+  detectedFrom: string;
+  detail: string;
+  httpStatus?: number;
 };
 
 type LinkForm = {
@@ -50,8 +66,13 @@ type CredentialForm = {
   label: string;
   configKey: string;
   value: string;
+  companionValue: string;
   note: string;
   active: boolean;
+  provider: string;
+  testUrl: string;
+  authMode: string;
+  headerName: string;
 };
 
 const EMPTY_LINK: LinkForm = { name: "", purpose: "", url: "", note: "" };
@@ -61,8 +82,13 @@ const EMPTY_CREDENTIAL: CredentialForm = {
   label: "",
   configKey: "",
   value: "",
+  companionValue: "",
   note: "",
-  active: true
+  active: true,
+  provider: "",
+  testUrl: "",
+  authMode: "BEARER",
+  headerName: ""
 };
 
 const KEY_EXAMPLES: Record<string, string> = {
@@ -87,12 +113,36 @@ const CREDENTIAL_PRESETS = [
   { key: "OPENAI_API_KEY", category: "AI", label: "OpenAI API Key" },
   { key: "ANTHROPIC_API_KEY", category: "AI", label: "Anthropic API Key" },
   { key: "GEMINI_API_KEY", category: "AI", label: "Gemini API Key" },
-  { key: "NEWS_API_KEY", category: "NEWS", label: "News API Key" },
+  { key: "NEWS_API_KEY", category: "NEWS", label: "NewsAPI Key" },
   { key: "MARKET_DATA_API_KEY", category: "MARKET_DATA", label: "Market Data API Key" }
 ];
 
 function domainOf(url: string) {
   try { return new URL(url).hostname; } catch { return url; }
+}
+
+function companionFor(configKey: string) {
+  if (configKey === "THAIBULKSMS_API_KEY") {
+    return { key: "THAIBULKSMS_API_SECRET", label: "ThaiBulkSMS API Secret" };
+  }
+  if (configKey === "THAIBULKSMS_API_SECRET") {
+    return { key: "THAIBULKSMS_API_KEY", label: "ThaiBulkSMS API Key" };
+  }
+  if (configKey === "THAIBULKSMS_OTP_KEY") {
+    return { key: "THAIBULKSMS_OTP_SECRET", label: "ThaiBulkSMS OTP Secret" };
+  }
+  if (configKey === "THAIBULKSMS_OTP_SECRET") {
+    return { key: "THAIBULKSMS_OTP_KEY", label: "ThaiBulkSMS OTP Key" };
+  }
+  return null;
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "ยังไม่เคยทดสอบ";
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })
+    : "—";
 }
 
 export default function AdminServiceLinksPage() {
@@ -110,8 +160,40 @@ export default function AdminServiceLinksPage() {
   const [loading, setLoading] = useState(true);
   const [savingLink, setSavingLink] = useState(false);
   const [savingCredential, setSavingCredential] = useState(false);
+  const [testingCredential, setTestingCredential] = useState(false);
+  const [retestingId, setRetestingId] = useState("");
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testedSignature, setTestedSignature] = useState("");
   const [message, setMessage] = useState("กำลังโหลด...");
   const [error, setError] = useState("");
+
+  const companion = useMemo(
+    () => companionFor(credentialForm.configKey),
+    [credentialForm.configKey]
+  );
+
+  const needsCustomTest = credentialForm.preset === "CUSTOM" ||
+    credentialForm.configKey === "MARKET_DATA_API_KEY";
+
+  const credentialSignature = useMemo(() => JSON.stringify({
+    id: editingCredentialId,
+    configKey: credentialForm.configKey.trim().toUpperCase(),
+    value: credentialForm.value,
+    companionValue: credentialForm.companionValue,
+    testUrl: credentialForm.testUrl.trim(),
+    authMode: credentialForm.authMode,
+    headerName: credentialForm.headerName.trim()
+  }), [
+    editingCredentialId,
+    credentialForm.configKey,
+    credentialForm.value,
+    credentialForm.companionValue,
+    credentialForm.testUrl,
+    credentialForm.authMode,
+    credentialForm.headerName
+  ]);
+
+  const testIsCurrent = Boolean(testResult?.ok && testedSignature === credentialSignature);
 
   useEffect(() => {
     if (!localStorage.getItem("bot_token")) {
@@ -162,6 +244,36 @@ export default function AdminServiceLinksPage() {
   function resetCredentialForm() {
     setEditingCredentialId("");
     setCredentialForm(EMPTY_CREDENTIAL);
+    setTestResult(null);
+    setTestedSignature("");
+  }
+
+  function selectPreset(presetKey: string) {
+    const preset = CREDENTIAL_PRESETS.find(item => item.key === presetKey);
+    setTestResult(null);
+    setTestedSignature("");
+
+    if (!preset) {
+      setCredentialForm(current => ({
+        ...EMPTY_CREDENTIAL,
+        active: current.active
+      }));
+      return;
+    }
+
+    setCredentialForm(current => ({
+      ...current,
+      preset: preset.key,
+      category: preset.category,
+      label: preset.label,
+      configKey: preset.key,
+      value: "",
+      companionValue: "",
+      provider: "",
+      testUrl: "",
+      authMode: "BEARER",
+      headerName: ""
+    }));
   }
 
   function editLink(item: ServiceLink) {
@@ -184,9 +296,16 @@ export default function AdminServiceLinksPage() {
       label: item.label,
       configKey: item.config_key,
       value: "",
+      companionValue: "",
       note: item.note,
-      active: item.active
+      active: item.active,
+      provider: item.provider || "",
+      testUrl: item.test_url || "",
+      authMode: item.auth_mode || "BEARER",
+      headerName: item.header_name || ""
     });
+    setTestResult(null);
+    setTestedSignature("");
     setError("");
     document.getElementById("api-vault-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -219,35 +338,136 @@ export default function AdminServiceLinksPage() {
     }
   }
 
+  async function testCredential() {
+    if (testingCredential) return;
+    setTestingCredential(true);
+    setError("");
+    try {
+      let result: TestResult;
+      if (editingCredentialId && !credentialForm.value.trim()) {
+        result = await adminApi("/admin/api-credentials/" + editingCredentialId + "/test-saved", {
+          method: "POST",
+          body: JSON.stringify({
+            testUrl: credentialForm.testUrl,
+            authMode: credentialForm.authMode,
+            headerName: credentialForm.headerName
+          })
+        });
+      } else {
+        result = await adminApi("/admin/api-credentials/test", {
+          method: "POST",
+          body: JSON.stringify({
+            configKey: credentialForm.configKey.trim().toUpperCase(),
+            category: credentialForm.category,
+            value: credentialForm.value,
+            companionConfigKey: companion?.key || "",
+            companionValue: credentialForm.companionValue,
+            testUrl: credentialForm.testUrl,
+            authMode: credentialForm.authMode,
+            headerName: credentialForm.headerName
+          })
+        });
+      }
+
+      setTestResult(result);
+      setTestedSignature(credentialSignature);
+
+      if (result?.provider) {
+        setCredentialForm(current => ({
+          ...current,
+          provider: result.provider,
+          label: current.label.trim() || (result.provider + " API Key")
+        }));
+      }
+      setMessage(result.ok ? "Test Connection ผ่านแล้ว" : "Test Connection ไม่ผ่าน");
+    } catch (err: any) {
+      setTestResult({
+        ok: false,
+        status: "FAIL",
+        provider: credentialForm.provider || "Unknown",
+        detectedFrom: "",
+        detail: String(err?.message || "ทดสอบ API ไม่สำเร็จ")
+      });
+      setTestedSignature(credentialSignature);
+      setError(String(err?.message || "ทดสอบ API ไม่สำเร็จ"));
+    } finally {
+      setTestingCredential(false);
+    }
+  }
+
   async function saveCredential(event: FormEvent) {
     event.preventDefault();
-    if (savingCredential) return;
+    if (savingCredential || !testIsCurrent || !testResult) return;
+
     setSavingCredential(true);
     setError("");
     try {
       const payload = {
         ...credentialForm,
-        configKey: credentialForm.configKey.trim().toUpperCase()
+        configKey: credentialForm.configKey.trim().toUpperCase(),
+        provider: testResult.provider || credentialForm.provider,
+        lastTestStatus: testResult.status,
+        lastTestDetail: testResult.detail
       };
+
       if (editingCredentialId) {
         await adminApi("/admin/api-credentials/" + editingCredentialId, {
           method: "PATCH",
           body: JSON.stringify(payload)
         });
-        setMessage("อัปเดต API Key แล้ว");
       } else {
         await adminApi("/admin/api-credentials", {
           method: "POST",
           body: JSON.stringify(payload)
         });
-        setMessage("บันทึก API Key แบบเข้ารหัสแล้ว");
       }
+
+      if (companion && credentialForm.companionValue.trim()) {
+        await adminApi("/admin/api-credentials", {
+          method: "POST",
+          body: JSON.stringify({
+            configKey: companion.key,
+            category: "SMS",
+            label: companion.label,
+            value: credentialForm.companionValue,
+            note: "Paired credential saved from connection test",
+            active: credentialForm.active,
+            provider: testResult.provider || "ThaiBulkSMS",
+            lastTestStatus: testResult.status,
+            lastTestDetail: testResult.detail
+          })
+        });
+      }
+
+      setMessage(editingCredentialId ? "อัปเดต API Key แล้ว" : "Test ผ่านและบันทึก API Key แล้ว");
       resetCredentialForm();
       await load();
     } catch (err: any) {
       setError(String(err?.message || "บันทึก API Key ไม่สำเร็จ"));
     } finally {
       setSavingCredential(false);
+    }
+  }
+
+  async function retestStored(item: Credential) {
+    if (retestingId) return;
+    setRetestingId(item.id);
+    setError("");
+    try {
+      const result: TestResult = await adminApi("/admin/api-credentials/" + item.id + "/test-saved", {
+        method: "POST",
+        body: JSON.stringify({
+          testUrl: item.test_url,
+          authMode: item.auth_mode,
+          headerName: item.header_name
+        })
+      });
+      setMessage(`${item.label}: ${result.status} · ${result.detail}`);
+      await load();
+    } catch (err: any) {
+      setError(String(err?.message || "Re-test ไม่สำเร็จ"));
+    } finally {
+      setRetestingId("");
     }
   }
 
@@ -260,8 +480,6 @@ export default function AdminServiceLinksPage() {
       tone: "warning"
     });
     if (!confirmed) return;
-
-    setError("");
     try {
       await adminApi("/admin/service-links/" + item.id, { method: "DELETE" });
       if (editingLinkId === item.id) resetLinkForm();
@@ -281,8 +499,6 @@ export default function AdminServiceLinksPage() {
       tone: "warning"
     });
     if (!confirmed) return;
-
-    setError("");
     try {
       await adminApi("/admin/api-credentials/" + item.id, { method: "DELETE" });
       if (editingCredentialId === item.id) resetCredentialForm();
@@ -325,9 +541,7 @@ export default function AdminServiceLinksPage() {
             <div>
               <span className={s.kicker}>SCENOVA / ADMIN ONLY</span>
               <h1>API & Service Center</h1>
-              <p>
-                เก็บ API Key แบบเข้ารหัส พร้อมสถานะการเชื่อมต่อและลิงก์บริการทั้งหมดในหน้าเดียว
-              </p>
+              <p>Test API ภายนอกก่อนบันทึก เก็บ Key แบบเข้ารหัส และดูสถานะบริการทั้งหมดในหน้าเดียว</p>
             </div>
             <span className={s.privateBadge}>PRIVATE · OWNER / ADMIN</span>
           </header>
@@ -348,8 +562,8 @@ export default function AdminServiceLinksPage() {
 
           <div className={s.sectionHead}>
             <div>
-              <span className={s.kicker}>ENCRYPTED API KEY VAULT</span>
-              <h2>API Keys</h2>
+              <span className={s.kicker}>TEST BEFORE SAVE</span>
+              <h2>API Key Vault</h2>
             </div>
             <span>{loading ? "LOADING" : `${credentials.length} KEYS`}</span>
           </div>
@@ -359,27 +573,8 @@ export default function AdminServiceLinksPage() {
               <label>เลือกบริการ / คีย์</label>
               <select
                 value={credentialForm.preset}
-                onChange={event => {
-                  const presetKey = event.target.value;
-                  const preset = CREDENTIAL_PRESETS.find(item => item.key === presetKey);
-                  if (!preset) {
-                    setCredentialForm(current => ({
-                      ...current,
-                      preset: "CUSTOM",
-                      category: "OTHER",
-                      label: "",
-                      configKey: ""
-                    }));
-                    return;
-                  }
-                  setCredentialForm(current => ({
-                    ...current,
-                    preset: preset.key,
-                    category: preset.category,
-                    label: preset.label,
-                    configKey: preset.key
-                  }));
-                }}
+                disabled={Boolean(editingCredentialId)}
+                onChange={event => selectPreset(event.target.value)}
               >
                 <option value="CUSTOM">Custom / API อื่น</option>
                 <optgroup label="Email">
@@ -418,7 +613,7 @@ export default function AdminServiceLinksPage() {
                     configKey: current.configKey || KEY_EXAMPLES[category] || ""
                   }));
                 }}
-                disabled={credentialForm.preset !== "CUSTOM"}
+                disabled={credentialForm.preset !== "CUSTOM" || Boolean(editingCredentialId)}
               >
                 <option value="EMAIL">Email</option>
                 <option value="SMS">SMS / OTP</option>
@@ -435,10 +630,9 @@ export default function AdminServiceLinksPage() {
               <input
                 value={credentialForm.label}
                 onChange={event => updateCredentialField("label", event.target.value)}
-                placeholder="เช่น Resend API Key"
+                placeholder="Custom จะเติมชื่อให้หลัง Test ได้"
                 readOnly={credentialForm.preset !== "CUSTOM"}
                 maxLength={140}
-                required
               />
             </div>
 
@@ -448,7 +642,7 @@ export default function AdminServiceLinksPage() {
                 value={credentialForm.configKey}
                 onChange={event => updateCredentialField("configKey", event.target.value.toUpperCase())}
                 placeholder={KEY_EXAMPLES[credentialForm.category]}
-                readOnly={credentialForm.preset !== "CUSTOM"}
+                readOnly={credentialForm.preset !== "CUSTOM" || Boolean(editingCredentialId)}
                 spellCheck={false}
                 maxLength={96}
                 required
@@ -456,16 +650,66 @@ export default function AdminServiceLinksPage() {
             </div>
 
             <div className={s.field}>
-              <label>API Key / Secret</label>
+              <label>{editingCredentialId ? "API Key ใหม่ (ไม่ใส่ = ใช้เดิม)" : "API Key / Secret"}</label>
               <input
                 type="password"
                 value={credentialForm.value}
                 onChange={event => updateCredentialField("value", event.target.value)}
-                placeholder={editingCredentialId ? "ปล่อยว่างเพื่อใช้คีย์เดิม" : "วาง API Key ที่นี่"}
+                placeholder={editingCredentialId ? "ปล่อยว่างเพื่อ Test คีย์เดิม" : "วาง API Key ที่นี่"}
                 autoComplete="new-password"
                 required={!editingCredentialId}
               />
             </div>
+
+            {companion && (
+              <div className={s.field}>
+                <label>{companion.label} {editingCredentialId ? "(ถ้าต้องการเปลี่ยน)" : "(กรอกพร้อมกันได้)"}</label>
+                <input
+                  type="password"
+                  value={credentialForm.companionValue}
+                  onChange={event => updateCredentialField("companionValue", event.target.value)}
+                  placeholder="ถ้ามีอยู่ในระบบแล้วปล่อยว่างได้"
+                  autoComplete="new-password"
+                />
+              </div>
+            )}
+
+            {needsCustomTest && (
+              <>
+                <div className={`${s.field} ${s.fieldWide}`}>
+                  <label>Custom Test URL</label>
+                  <input
+                    value={credentialForm.testUrl}
+                    onChange={event => updateCredentialField("testUrl", event.target.value)}
+                    placeholder="https://api.provider.com/v1/..."
+                    inputMode="url"
+                  />
+                </div>
+                <div className={s.field}>
+                  <label>ส่ง Key แบบไหน</label>
+                  <select
+                    value={credentialForm.authMode}
+                    onChange={event => updateCredentialField("authMode", event.target.value)}
+                  >
+                    <option value="BEARER">Authorization: Bearer</option>
+                    <option value="X_API_KEY">X-Api-Key</option>
+                    <option value="CUSTOM_HEADER">Custom Header</option>
+                    <option value="NONE">ไม่ส่ง Header</option>
+                  </select>
+                </div>
+                {credentialForm.authMode === "CUSTOM_HEADER" && (
+                  <div className={s.field}>
+                    <label>ชื่อ Header</label>
+                    <input
+                      value={credentialForm.headerName}
+                      onChange={event => updateCredentialField("headerName", event.target.value)}
+                      placeholder="X-My-Api-Key"
+                      maxLength={80}
+                    />
+                  </div>
+                )}
+              </>
+            )}
 
             <div className={`${s.field} ${s.fieldWide}`}>
               <label>หมายเหตุ</label>
@@ -483,21 +727,59 @@ export default function AdminServiceLinksPage() {
                 checked={credentialForm.active}
                 onChange={event => updateCredentialField("active", event.target.checked)}
               />
-              เปิดใช้งานทันที
+              เปิดใช้งานหลังบันทึก
             </label>
 
+            <div className={s.testStrip}>
+              <div>
+                {testResult ? (
+                  <>
+                    <span className={
+                      testResult.status === "PASS"
+                        ? s.testPass
+                        : testResult.status === "LIMITED"
+                          ? s.testLimited
+                          : s.testFail
+                    }>
+                      <i/> {testResult.status}
+                    </span>
+                    <b>{testResult.provider}</b>
+                    <small>{testResult.detail}</small>
+                    {testedSignature !== credentialSignature && (
+                      <small className={s.changedHint}>ข้อมูลเปลี่ยนแล้ว · กรุณา Test ใหม่</small>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <b>ยังไม่ได้ Test</b>
+                    <small>ต้อง Test Connection ผ่านก่อนจึงจะบันทึกได้</small>
+                  </>
+                )}
+              </div>
+              <button
+                type="button"
+                className={s.testButton}
+                disabled={testingCredential || (!editingCredentialId && !credentialForm.value.trim())}
+                onClick={() => void testCredential()}
+              >
+                {testingCredential ? "Testing..." : editingCredentialId && !credentialForm.value.trim() ? "Test Stored Key" : "Test Connection"}
+              </button>
+            </div>
+
             <div className={s.vaultActions}>
-              <span>
-                คีย์จะถูกเข้ารหัสก่อนเก็บ และระบบจะไม่ส่งคีย์เต็มกลับมาที่หน้าเว็บ
-              </span>
+              <span>Key ถูกส่งจาก Browser ไป Server เพื่อทดสอบและเข้ารหัสเท่านั้น ระบบไม่ส่ง Key เต็มกลับมาหลังบันทึก</span>
               <div>
                 {editingCredentialId && (
                   <button type="button" className={s.ghost} onClick={resetCredentialForm} disabled={savingCredential}>
                     ยกเลิก
                   </button>
                 )}
-                <button type="submit" className={s.primary} disabled={savingCredential}>
-                  {savingCredential ? "กำลังบันทึก..." : editingCredentialId ? "บันทึกการแก้ไข" : "+ บันทึก API Key"}
+                <button
+                  type="submit"
+                  className={s.primary}
+                  disabled={savingCredential || !testIsCurrent || !credentialForm.label.trim()}
+                >
+                  {savingCredential ? "กำลังบันทึก..." : testIsCurrent ? "✓ บันทึก API Key" : "Test ก่อนบันทึก"}
                 </button>
               </div>
             </div>
@@ -510,34 +792,55 @@ export default function AdminServiceLinksPage() {
               <article className={s.credentialCard} key={item.id}>
                 <div className={s.cardTop}>
                   <div>
-                    <div className={s.miniMeta}>{item.category}</div>
+                    <div className={s.miniMeta}>{item.category}{item.provider ? " · " + item.provider : ""}</div>
                     <h3>{item.label}</h3>
                   </div>
                   <span className={item.active ? s.activeBadge : s.inactiveBadge}>
                     <i/> {item.active ? "ACTIVE" : "INACTIVE"}
                   </span>
                 </div>
+
                 <code className={s.configKey}>{item.config_key}</code>
                 <div className={s.masked}>{item.masked_value}</div>
-                <p className={s.note}>{item.note || "—"}</p>
+
+                <div className={s.savedTest}>
+                  <span className={
+                    item.last_test_status === "PASS"
+                      ? s.testPass
+                      : item.last_test_status === "LIMITED"
+                        ? s.testLimited
+                        : item.last_test_status === "FAIL"
+                          ? s.testFail
+                          : s.testUnknown
+                  }>
+                    <i/> {item.last_test_status || "NOT TESTED"}
+                  </span>
+                  <small>{formatDate(item.last_tested_at)}</small>
+                </div>
+
+                {item.test_url && <span className={s.testHost}>Test: {domainOf(item.test_url)}</span>}
+                <p className={s.note}>{item.last_test_detail || item.note || "—"}</p>
+
                 <div className={s.cardActions}>
+                  <button
+                    className={s.smallButton}
+                    type="button"
+                    disabled={retestingId === item.id}
+                    onClick={() => void retestStored(item)}
+                  >
+                    {retestingId === item.id ? "Testing..." : "Re-test"}
+                  </button>
                   <button className={s.smallButton} type="button" onClick={() => void toggleCredential(item)}>
                     {item.active ? "Disable" : "Activate"}
                   </button>
-                  <button className={s.smallButton} type="button" onClick={() => editCredential(item)}>
-                    แก้ไข
-                  </button>
-                  <button className={`${s.smallButton} ${s.smallDanger}`} type="button" onClick={() => void removeCredential(item)}>
-                    ลบ
-                  </button>
+                  <button className={s.smallButton} type="button" onClick={() => editCredential(item)}>แก้ไข</button>
+                  <button className={`${s.smallButton} ${s.smallDanger}`} type="button" onClick={() => void removeCredential(item)}>ลบ</button>
                 </div>
               </article>
             ))}
           </section>
 
-          <div className={`${s.message} ${error ? s.messageError : ""}`}>
-            {error || message}
-          </div>
+          <div className={`${s.message} ${error ? s.messageError : ""}`}>{error || message}</div>
 
           <div className={s.sectionHead}>
             <div>
