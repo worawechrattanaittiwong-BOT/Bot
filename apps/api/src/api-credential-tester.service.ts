@@ -231,6 +231,27 @@ export class ApiCredentialTesterService {
         `Resend ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
     }
 
+    if (configKey === "OMISE_WEBHOOK_SECRET") {
+      let decoded: Buffer;
+      try {
+        decoded = Buffer.from(value, "base64");
+      } catch {
+        decoded = Buffer.alloc(0);
+      }
+      const canonical = decoded.length > 0 &&
+        decoded.toString("base64").replace(/=+$/,"") === value.replace(/=+$/,"");
+      const valid = canonical && decoded.length >= 16;
+      return this.result(
+        valid,
+        valid ? "LIMITED" : "FAIL",
+        "Opn / Omise Webhook",
+        "preset/config key",
+        valid
+          ? "รูปแบบ Webhook secret ถูกต้อง ระบบจะยืนยัน HMAC กับ webhook จริงเมื่อมี event เข้ามา"
+          : "Webhook secret ต้องเป็น Base64 ที่ Omise สร้างให้"
+      );
+    }
+
     if (configKey === "OMISE_SECRET_KEY" || inferred.provider === "Opn / Omise") {
       const { response } = await this.request("https://api.omise.co/account", {
         method: "GET",
