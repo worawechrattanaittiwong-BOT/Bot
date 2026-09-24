@@ -51,3 +51,7 @@ CREATE TABLE IF NOT EXISTS owner_omise_transfers (
 
 CREATE INDEX IF NOT EXISTS idx_owner_omise_transfers_recent
   ON owner_omise_transfers(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_owner_omise_transfers_incomplete
+  ON owner_omise_transfers(status,created_at)
+  WHERE status IN ('CREATING','SUBMITTED','REVIEW');
