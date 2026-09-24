@@ -22,6 +22,12 @@ type SaveCredentialBody = {
   value?: string;
   note?: string;
   active?: boolean;
+  provider?: string;
+  testUrl?: string;
+  authMode?: string;
+  headerName?: string;
+  lastTestStatus?: string;
+  lastTestDetail?: string;
 };
 
 @Controller("admin/api-credentials")
@@ -139,7 +145,13 @@ export class AdminApiCredentialsController {
         value: String(body.value || ""),
         note: String(body.note || ""),
         active: body.active !== false,
-        updatedBy: this.actor(req)
+        updatedBy: this.actor(req),
+        provider: String(body.provider || ""),
+        testUrl: String(body.testUrl || ""),
+        authMode: String(body.authMode || "BEARER"),
+        headerName: String(body.headerName || ""),
+        lastTestStatus: String(body.lastTestStatus || ""),
+        lastTestDetail: String(body.lastTestDetail || "")
       });
       return { ok: true, id: row?.id };
     } catch (error: any) {
@@ -163,12 +175,46 @@ export class AdminApiCredentialsController {
         value: body.value === undefined ? undefined : String(body.value || ""),
         note: String(body.note || ""),
         active: body.active !== false,
-        updatedBy: this.actor(req)
+        updatedBy: this.actor(req),
+        provider: String(body.provider || ""),
+        testUrl: String(body.testUrl || ""),
+        authMode: String(body.authMode || "BEARER"),
+        headerName: String(body.headerName || ""),
+        lastTestStatus: String(body.lastTestStatus || ""),
+        lastTestDetail: String(body.lastTestDetail || "")
       });
       if (!row) throw new Error("ไม่พบ API Key");
       return { ok: true };
     } catch (error: any) {
       throw new BadRequestException(String(error?.message || "แก้ไข API Key ไม่สำเร็จ"));
+    }
+  }
+
+  @Post(":id/test-saved")
+  async testSaved(
+    @Param("id") id: string,
+    @Body() body: {
+      testUrl?: string;
+      authMode?: string;
+      headerName?: string;
+    }
+  ) {
+    this.assertId(id);
+    try {
+      const stored = await this.secrets.getForTest(id);
+      if (!stored) throw new Error("ไม่พบ API Key");
+      const result = await this.tester.test({
+        configKey: stored.configKey,
+        category: stored.category,
+        value: stored.value,
+        testUrl: String(body.testUrl || stored.testUrl || ""),
+        authMode: String(body.authMode || stored.authMode || "BEARER"),
+        headerName: String(body.headerName || stored.headerName || "")
+      });
+      await this.secrets.recordTest(id, result.status, result.detail, result.provider);
+      return result;
+    } catch (error: any) {
+      throw new BadRequestException(String(error?.message || "ทดสอบ API ไม่สำเร็จ"));
     }
   }
 
