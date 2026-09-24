@@ -1,6 +1,20 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "/backend";
 const API_TIMEOUT_MS = 15_000;
 
+function getDeviceId() {
+  if (typeof window === "undefined") return "";
+  const key = "scenova_device_id";
+  let value = localStorage.getItem(key) || "";
+  if (!value) {
+    try {
+      value = globalThis.crypto?.randomUUID?.() || "";
+    } catch {}
+    if (!value) value = "dev-" + Date.now() + "-" + Math.random().toString(36).slice(2, 18);
+    localStorage.setItem(key, value);
+  }
+  return value.slice(0, 180);
+}
+
 export function getToken() {
   if (typeof window === "undefined") return "";
   return localStorage.getItem("bot_token") || "";
@@ -11,6 +25,8 @@ async function requestJson(path: string, init: RequestInit, emergencyAdminKey = 
   headers.set("Content-Type", "application/json");
   const token = getToken();
   if (token) headers.set("Authorization", "Bearer " + token);
+  const deviceId = getDeviceId();
+  if (deviceId) headers.set("x-scenova-device-id", deviceId);
   if (emergencyAdminKey) headers.set("x-admin-key", emergencyAdminKey);
 
   const controller = new AbortController();
