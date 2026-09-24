@@ -28,6 +28,33 @@ type ReferralData = {
     availableSatang: number;
     paidSatang: number;
   };
+  wallet: {
+    currency: string;
+    pendingSatang: number;
+    availableSatang: number;
+    paidSatang: number;
+    currentBalanceSatang: number;
+    lifetimeSatang: number;
+    entryCount: number;
+    ledgerVerified: boolean;
+    withdrawalEnabled: boolean;
+    recent: Array<{
+      id: string;
+      event_type: string;
+      pending_delta_satang: number;
+      available_delta_satang: number;
+      paid_delta_satang: number;
+      currency: string;
+      source_type: string;
+      level: number;
+      rate_bps: number;
+      created_at: string;
+      commission_status: string;
+      available_at: string;
+      commission_amount_satang: number;
+      source_user_code: string;
+    }>;
+  };
 };
 
 function money(satang: number) {
@@ -35,6 +62,25 @@ function money(satang: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }) + " THB";
+}
+
+function ledgerAmount(entry: ReferralData["wallet"]["recent"][number]) {
+  const values = [
+    Number(entry.pending_delta_satang || 0),
+    Number(entry.available_delta_satang || 0),
+    Number(entry.paid_delta_satang || 0)
+  ];
+  const positive = values.find(value => value > 0);
+  return positive || Math.abs(values.find(value => value < 0) || 0);
+}
+
+function ledgerLabel(eventType: string) {
+  if (eventType === "COMMISSION_EARN") return "Commission earned";
+  if (eventType === "COMMISSION_RELEASE") return "Released to available";
+  if (eventType === "COMMISSION_PAID") return "Marked paid";
+  if (eventType === "COMMISSION_VOID") return "Voided";
+  if (eventType === "MIGRATION_SNAPSHOT") return "Wallet opening balance";
+  return eventType.replaceAll("_", " ");
 }
 
 export default function ReferralsPage() {
@@ -217,6 +263,89 @@ export default function ReferralsPage() {
             <b>{money(data.earnings.paidSatang)}</b>
             <small>Rewards already paid</small>
           </article>
+        </section>
+
+        <section className={styles.walletCard}>
+          <div className={styles.walletHead}>
+            <div>
+              <span className={styles.eyebrow}>COMMISSION WALLET · PHASE 1</span>
+              <h2>Commission Wallet</h2>
+              <p>ยอดทุกบาทมาจากรายการ Ledger ที่ตรวจสอบย้อนหลังได้ ไม่มีการแก้ Balance ตรง ๆ</p>
+            </div>
+            <span className={data.wallet.ledgerVerified ? styles.verified : styles.review}>
+              <i/> {data.wallet.ledgerVerified ? "LEDGER VERIFIED" : "REVIEW REQUIRED"}
+            </span>
+          </div>
+
+          <div className={styles.walletBalances}>
+            <article>
+              <small>Current Wallet</small>
+              <b>{money(data.wallet.currentBalanceSatang)}</b>
+              <span>Pending + Available</span>
+            </article>
+            <article>
+              <small>Pending</small>
+              <b>{money(data.wallet.pendingSatang)}</b>
+              <span>รอครบ {data.program.holdDays} วัน</span>
+            </article>
+            <article>
+              <small>Available</small>
+              <b>{money(data.wallet.availableSatang)}</b>
+              <span>พร้อมสำหรับระบบถอนใน Phase 2</span>
+            </article>
+            <article>
+              <small>Lifetime</small>
+              <b>{money(data.wallet.lifetimeSatang)}</b>
+              <span>{data.wallet.entryCount} ledger entries</span>
+            </article>
+          </div>
+
+          <div className={styles.walletStatus}>
+            <div>
+              <ScenovaIcon name="wallet" size={17}/>
+              <span><b>Withdrawal ยังไม่เปิดใน Phase 1</b><small>เฟสนี้เก็บยอดและประวัติเท่านั้น จึงยังไม่มีเส้นทางถอนเงินออกจากระบบ</small></span>
+            </div>
+            <span className={styles.phaseChip}>CORE WALLET ACTIVE</span>
+          </div>
+
+          <div className={styles.ledgerHead}>
+            <div>
+              <span className={styles.eyebrow}>IMMUTABLE LEDGER</span>
+              <h3>รายการล่าสุด</h3>
+            </div>
+            <span>{data.wallet.recent.length} recent events</span>
+          </div>
+
+          <div className={styles.ledgerList}>
+            {data.wallet.recent.map(entry => (
+              <div className={styles.ledgerRow} key={entry.id}>
+                <div className={styles.ledgerEvent}>
+                  <span className={
+                    entry.event_type === "COMMISSION_RELEASE"
+                      ? styles.releaseDot
+                      : entry.event_type === "COMMISSION_VOID"
+                        ? styles.voidDot
+                        : styles.earnDot
+                  }/>
+                  <div>
+                    <b>{ledgerLabel(entry.event_type)}</b>
+                    <small>{new Date(entry.created_at).toLocaleString("th-TH")}</small>
+                  </div>
+                </div>
+                <div>
+                  <span>Level {entry.level} · {Number(entry.rate_bps || 0) / 100}%</span>
+                  <small>จาก {entry.source_user_code || "—"} · {entry.source_type}</small>
+                </div>
+                <div>
+                  <b>{money(ledgerAmount(entry))}</b>
+                  <small>{entry.commission_status}</small>
+                </div>
+              </div>
+            ))}
+            {!data.wallet.recent.length && (
+              <div className={styles.ledgerEmpty}>ยังไม่มี Commission Ledger</div>
+            )}
+          </div>
         </section>
 
         <section className={styles.learnCard}>
