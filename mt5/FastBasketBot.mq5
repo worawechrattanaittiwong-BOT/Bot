@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.70"
-#define SCENOVA_EA_VERSION "1.0.70"
-#define SCENOVA_PRODUCT_VERSION "1.0.70"
+#property version   "1.0.71"
+#define SCENOVA_EA_VERSION "1.0.71"
+#define SCENOVA_PRODUCT_VERSION "1.0.71"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -3190,6 +3190,7 @@ bool RaceZonePriorityActive(
 #include "include\\RaceLossV2.mqh"
 #include "include\\RaceReentryV1.mqh"
 #include "include\\RaceNewsV1.mqh"
+#include "include\\RaceTelemetryV1.mqh"
 
 int RaceAnalysisDirection(double momentum)
 {
@@ -5881,6 +5882,15 @@ void SendHeartbeat()
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + marketWatchDiagnostics;
    }
 
+   bool raceTelemetryRelevant=
+      EffectiveExecutionMode()=="RACE" ||
+      BasketHasRacePosition() ||
+      g_raceReentryPending ||
+      g_raceNewsPauseActive;
+   if(raceTelemetryRelevant && StringLen(payload)>=2)
+      payload=StringSubstr(payload,0,StringLen(payload)-2)+
+         RaceTelemetryCurrentJsonFragment()+"}}";
+
    string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";
    ulong heartbeatStartedMs = GetTickCount64();
    int code=HttpPostJsonTimeout(
@@ -6223,6 +6233,12 @@ bool PostTradeJournalDeal(ulong dealTicket)
       );
       payload=StringSubstr(payload,0,StringLen(payload)-1)+audit;
    }
+
+   // Phase 5: persist RACE decision/loss/exposure context with the actual deal.
+   // This is telemetry only and never participates in order execution.
+   if(journalControlMode=="RACE" && StringLen(payload)>=1)
+      payload=StringSubstr(payload,0,StringLen(payload)-1)+
+         RaceTelemetryCurrentJsonFragment()+"}";
 
    string response = "";
    int journalTimeoutMs=journalControlMode=="ZERO_GRID"

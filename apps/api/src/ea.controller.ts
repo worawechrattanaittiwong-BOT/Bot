@@ -1025,6 +1025,29 @@ export class EaController {
     winProbability?: number;
     winSamples?: number;
     averageNet?: number;
+    raceTelemetryVersion?: number;
+    raceDirection?: number;
+    raceState?: string;
+    raceFlowScore?: number;
+    raceStructureDirection?: number;
+    raceRejectionDirection?: number;
+    raceLegPhase?: string;
+    raceDecisionScore?: number;
+    raceLossState?: string;
+    raceTotalLot?: number;
+    raceProjectedLot?: number;
+    raceAverageEntry?: number;
+    raceMoneyPerPoint?: number;
+    raceEstimatedCostMoney?: number;
+    raceNoisePoints?: number;
+    raceNoiseMoney?: number;
+    raceProjectedStructureLossMoney?: number;
+    raceStructureInvalidPrice?: number;
+    raceRiskMismatch?: boolean;
+    raceNewsPauseActive?: boolean;
+    raceNewsPauseEvent?: string;
+    raceNewsPauseMinutes?: number;
+    raceReentryPending?: boolean;
     controlMode?: string;
     executedByBot?: boolean;
   }) {
@@ -1183,7 +1206,30 @@ export class EaController {
           modelConfidence: Math.max(0, Math.min(100, n(body.modelConfidence))),
           winProbability: Math.max(0, Math.min(100, n(body.winProbability))),
           winSamples: Math.max(0, Math.trunc(n(body.winSamples))),
-          averageNet: n(body.averageNet)
+          averageNet: n(body.averageNet),
+          raceTelemetryVersion: Math.max(0, Math.trunc(n(body.raceTelemetryVersion))),
+          raceDirection: Math.max(-1, Math.min(1, Math.trunc(n(body.raceDirection)))),
+          raceState: text(body.raceState, 48),
+          raceFlowScore: n(body.raceFlowScore),
+          raceStructureDirection: Math.max(-1, Math.min(1, Math.trunc(n(body.raceStructureDirection)))),
+          raceRejectionDirection: Math.max(-1, Math.min(1, Math.trunc(n(body.raceRejectionDirection)))),
+          raceLegPhase: text(body.raceLegPhase, 48),
+          raceDecisionScore: n(body.raceDecisionScore),
+          raceLossState: text(body.raceLossState, 48),
+          raceTotalLot: Math.max(0, n(body.raceTotalLot)),
+          raceProjectedLot: Math.max(0, n(body.raceProjectedLot)),
+          raceAverageEntry: Math.max(0, n(body.raceAverageEntry)),
+          raceMoneyPerPoint: Math.max(0, n(body.raceMoneyPerPoint)),
+          raceEstimatedCostMoney: Math.max(0, n(body.raceEstimatedCostMoney)),
+          raceNoisePoints: Math.max(0, n(body.raceNoisePoints)),
+          raceNoiseMoney: Math.max(0, n(body.raceNoiseMoney)),
+          raceProjectedStructureLossMoney: Math.max(0, n(body.raceProjectedStructureLossMoney)),
+          raceStructureInvalidPrice: Math.max(0, n(body.raceStructureInvalidPrice)),
+          raceRiskMismatch: body.raceRiskMismatch === true,
+          raceNewsPauseActive: body.raceNewsPauseActive === true,
+          raceNewsPauseEvent: text(body.raceNewsPauseEvent, 128),
+          raceNewsPauseMinutes: Math.trunc(n(body.raceNewsPauseMinutes, 9999)),
+          raceReentryPending: body.raceReentryPending === true
         })
       ]
     );
