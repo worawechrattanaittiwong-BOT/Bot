@@ -506,7 +506,7 @@ function Dashboard({
           <View style={styles.testBadge}><Text style={styles.testText}>OMISE TEST MODE · ยังไม่ใช่เงินจริง</Text></View>
         )}
         {summary && !summary.omise.configured && (
-          <View style={styles.warningBadge}><Text style={styles.warningText}>ยังไม่ได้ตั้งค่า OMISE_SECRET_KEY · ดูรายการได้ แต่ถอนเงินจริงไม่ได้</Text></View>
+          <View style={styles.warningBadge}><Text style={styles.warningText}>ยังไม่ได้เชื่อม Omise API · ดูรายการได้ แต่ถอนเงินจริงไม่ได้</Text></View>
         )}
         {summary?.omise.configured && !summary.omise.reachable && (
           <View style={styles.warningBadge}><Text style={styles.warningText}>ติดต่อ Omise ไม่สำเร็จ · ระบบปิดการถอนชั่วคราวเพื่อความปลอดภัย</Text></View>
