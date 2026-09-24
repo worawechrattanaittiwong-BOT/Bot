@@ -28,6 +28,8 @@ import { PartnerController } from "./partner.controller";
 import { PartnerService } from "./partner.service";
 import { ReferralController } from "./referral.controller";
 import { ReferralService } from "./referral.service";
+import { CommissionWithdrawalService } from "./commission-withdrawal.service";
+import { CommissionWalletWithdrawalController, AdminCommissionWithdrawalsController } from "./commission-withdrawal.controller";
 import { TrialAuthorizationService } from "./trial-authorization.service";
 import { TrialCouponController } from "./trial-coupon.controller";
 import { SmsService } from "./sms.service";
@@ -51,8 +53,9 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
+  controllers: [AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
+    CommissionWithdrawalService,
     ApiCredentialTesterService,
     RuntimeSecretsService,
     ProductionHardeningService,
