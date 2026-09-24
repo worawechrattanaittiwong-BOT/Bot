@@ -332,7 +332,7 @@ export class ApiCredentialTesterService {
         const headerName = String(input.headerName || "").trim();
         if (!/^[A-Za-z0-9-]{1,80}$/.test(headerName)) throw new Error("ชื่อ Custom Header ไม่ถูกต้อง");
         headers[headerName] = value;
-      } else if (authMode !== "NONE") {
+      } else {
         throw new Error("Auth Mode ไม่รองรับ");
       }
 
