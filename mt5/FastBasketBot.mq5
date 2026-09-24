@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.69"
-#define SCENOVA_EA_VERSION "1.0.69"
-#define SCENOVA_PRODUCT_VERSION "1.0.69"
+#property version   "1.0.70"
+#define SCENOVA_EA_VERSION "1.0.70"
+#define SCENOVA_PRODUCT_VERSION "1.0.70"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -410,6 +410,11 @@ string   g_raceLossState = "NORMAL";
 bool     g_raceHadExposure = false;
 bool     g_raceReentryPending = false;
 datetime g_raceReentryStartedAt = 0;
+// RACE VNext Phase 4 news-pause telemetry. RACE only; existing baskets are
+// never force-closed merely because an event window became active.
+bool     g_raceNewsPauseActive = false;
+string   g_raceNewsPauseEvent = "NONE";
+int      g_raceNewsPauseMinutes = 9999;
 bool   g_adaptiveEngine;
 double g_riskPerOrderPercent;
 bool   g_allowMinimumLotOverride;
@@ -3184,6 +3189,7 @@ bool RaceZonePriorityActive(
 #include "include\\RaceExposureV1.mqh"
 #include "include\\RaceLossV2.mqh"
 #include "include\\RaceReentryV1.mqh"
+#include "include\\RaceNewsV1.mqh"
 
 int RaceAnalysisDirection(double momentum)
 {
@@ -3750,6 +3756,14 @@ bool ProcessRaceFill(int direction)
       }
    }
 
+   string raceNewsReason="NONE";
+   if(RaceNewsPauseActive(raceNewsReason))
+   {
+      g_raceState="NEWS_PAUSE";
+      g_executionStatus="RACE_NEWS_PAUSE";
+      return false;
+   }
+
    int filledUnits = RaceFilledUnits();
    if(filledUnits >= g_maxPositions)
    {
@@ -3852,6 +3866,15 @@ bool StartRaceCycle(double momentum)
    // Phase 3: after the previous RACE Basket becomes flat, watch fresh ticks for
    // four seconds before clearing the old direction and choosing the next side.
    RaceReentryDetectFlatTransition();
+
+   string raceNewsReason="NONE";
+   if(RaceNewsPauseActive(raceNewsReason))
+   {
+      g_raceState="NEWS_PAUSE";
+      g_executionStatus="RACE_NEWS_PAUSE";
+      return false;
+   }
+
    if(!RaceReentryObserveReady())
       return false;
 
