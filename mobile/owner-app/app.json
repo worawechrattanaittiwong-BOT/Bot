@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "SCENOVA Owner",
+    "slug": "scenova-owner",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "scenova-owner",
+    "android": {
+      "package": "com.scenova.owner",
+      "versionCode": 1,
+      "permissions": ["INTERNET"]
+    },
+    "ios": {
+      "bundleIdentifier": "com.scenova.owner",
+      "supportsTablet": false
+    },
+    "plugins": [
+      ["expo-secure-store", { "configureAndroidBackup": true }]
+    ]
+  }
+}
