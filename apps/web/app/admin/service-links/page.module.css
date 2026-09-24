@@ -70,7 +70,7 @@
   letter-spacing:.08em;
   text-transform:uppercase;
 }
-.field input,.field textarea{
+.field input,.field textarea,.field select{
   width:100%;
   box-sizing:border-box;
   border:1px solid rgba(135,149,188,.16);
@@ -82,14 +82,14 @@
   font-size:11px;
   transition:border-color .15s ease,box-shadow .15s ease;
 }
-.field input{height:38px;padding:0 11px}
+.field input,.field select{height:38px;padding:0 11px}
 .field textarea{
   min-height:76px;
   padding:10px 11px;
   resize:vertical;
   line-height:1.5;
 }
-.field input:focus,.field textarea:focus{
+.field input:focus,.field textarea:focus,.field select:focus{
   border-color:rgba(126,105,255,.46);
   box-shadow:0 0 0 3px rgba(115,96,255,.08);
 }
@@ -270,4 +270,168 @@
   .actions{display:block}
   .actionRight{margin-top:9px}
   .grid{grid-template-columns:1fr}
+}
+
+.sectionHead{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+  margin:18px 1px 9px;
+}
+.sectionHead h2{
+  margin:0;
+  color:#e9edf9;
+  font-size:15px;
+}
+.sectionHead>span{
+  color:#6e7a92;
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:.08em;
+}
+.connectionGrid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+}
+.connectionCard{
+  min-height:72px;
+  padding:11px 12px;
+  border:1px solid rgba(132,147,187,.12);
+  border-radius:12px;
+  background:linear-gradient(145deg,rgba(13,18,31,.95),rgba(7,11,20,.98));
+}
+.connectionTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.connectionTop b{
+  color:#e9edf9;
+  font-size:10px;
+}
+.connectionCard small{
+  display:block;
+  margin-top:8px;
+  color:#68758e;
+  font-size:8px;
+  line-height:1.35;
+}
+.activeBadge,.inactiveBadge{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:4px 7px;
+  border-radius:999px;
+  font-size:7px;
+  font-weight:950;
+  letter-spacing:.08em;
+  white-space:nowrap;
+}
+.activeBadge{
+  border:1px solid rgba(76,216,143,.24);
+  background:rgba(45,190,119,.08);
+  color:#6fe3a9;
+}
+.inactiveBadge{
+  border:1px solid rgba(126,139,174,.15);
+  background:rgba(255,255,255,.025);
+  color:#738099;
+}
+.activeBadge i,.inactiveBadge i{
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:currentColor;
+}
+.vaultEditor{
+  display:grid;
+  grid-template-columns:.8fr 1.2fr 1.05fr 1.35fr;
+  gap:10px;
+  padding:14px;
+  border:1px solid rgba(123,105,255,.18);
+  border-radius:17px;
+  background:
+    radial-gradient(circle at 100% 0,rgba(112,88,255,.13),transparent 34%),
+    linear-gradient(150deg,rgba(15,20,35,.98),rgba(7,11,20,.99));
+}
+.activeToggle{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  align-self:end;
+  min-height:38px;
+  color:#99a4ba;
+  font-size:9px;
+  font-weight:800;
+}
+.activeToggle input{accent-color:#6fdca8}
+.vaultActions{
+  grid-column:1/-1;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding-top:2px;
+  color:#6f7d95;
+  font-size:8px;
+}
+.vaultActions>div{
+  display:flex;
+  gap:8px;
+}
+.credentialGrid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:9px;
+  margin-top:9px;
+}
+.credentialCard{
+  min-height:172px;
+  padding:13px;
+  border:1px solid rgba(132,147,187,.12);
+  border-radius:14px;
+  background:
+    radial-gradient(circle at 100% 0,rgba(106,88,255,.08),transparent 34%),
+    linear-gradient(145deg,rgba(12,17,29,.96),rgba(7,11,20,.98));
+}
+.credentialCard h3{
+  margin:3px 0 0;
+  color:#edf0fa;
+  font-size:11px;
+}
+.miniMeta{
+  color:#8072e8;
+  font-size:7px;
+  font-weight:950;
+  letter-spacing:.1em;
+}
+.configKey{
+  display:inline-block;
+  margin-top:12px;
+  padding:4px 6px;
+  border:1px solid rgba(129,141,176,.12);
+  border-radius:6px;
+  background:rgba(255,255,255,.02);
+  color:#8592aa;
+  font-size:8px;
+}
+.masked{
+  margin-top:8px;
+  color:#c8cfdf;
+  font:800 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.05em;
+}
+@media(max-width:1100px){
+  .connectionGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .vaultEditor{grid-template-columns:1fr 1fr}
+  .credentialGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:700px){
+  .connectionGrid,.credentialGrid{grid-template-columns:1fr}
+  .vaultEditor{grid-template-columns:1fr}
+  .vaultActions{display:block}
+  .vaultActions>div{margin-top:9px}
 }
