@@ -823,4 +823,14 @@ const styles = StyleSheet.create({
   actionCard: { padding: 16, borderRadius: 20, backgroundColor: "#0d0d18", borderWidth: 1, borderColor: "#222131", gap: 12 },
   actionTitle: { color: "#eeeaf7", fontSize: 16, fontWeight: "850" },
   actionRow: { flexDirection: "row", gap: 9 },
-  smallButton: { flex: 1, minHeight: 45, borderRadius: 12, borderWidth: 1, borderColor: "#353449", backgroundColor: "#12121
+  smallButton: { flex: 1, minHeight: 45, borderRadius: 12, borderWidth: 1, borderColor: "#353449", backgroundColor: "#12121e", alignItems: "center", justifyContent: "center" },
+  smallButtonText: { color: "#b9b7c7", fontSize: 13, fontWeight: "800" },
+  smallDanger: { borderColor: "#59303b", backgroundColor: "#25151b" },
+  smallDangerText: { color: "#ef94a3" },
+  bottomNav: { position: "absolute", left: 12, right: 12, bottom: 10, minHeight: 66, borderRadius: 20, borderWidth: 1, borderColor: "#262438", backgroundColor: "#0c0c16ee", flexDirection: "row", alignItems: "center", justifyContent: "space-around", paddingHorizontal: 8 },
+  navItem: { flex: 1, alignItems: "center", gap: 5, paddingVertical: 9 },
+  navDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "transparent" },
+  navDotActive: { backgroundColor: "#9a7cff" },
+  navText: { color: "#66687b", fontSize: 10, fontWeight: "750" },
+  navTextActive: { color: "#b9a8ff" }
+});
