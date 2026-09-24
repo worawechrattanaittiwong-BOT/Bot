@@ -6,6 +6,8 @@ type TestInput = {
   configKey?: string;
   category?: string;
   value?: string;
+  companionConfigKey?: string;
+  companionValue?: string;
   testUrl?: string;
   authMode?: string;
   headerName?: string;
@@ -22,8 +24,16 @@ type TestResult = {
 
 @Injectable()
 export class ApiCredentialTesterService {
-  private env(key: string, candidateKey: string, candidateValue: string) {
-    return candidateKey === key ? candidateValue : String(process.env[key] || "").trim();
+  private env(
+    key: string,
+    candidateKey: string,
+    candidateValue: string,
+    companionKey: string,
+    companionValue: string
+  ) {
+    if (candidateKey === key) return candidateValue;
+    if (companionKey === key && companionValue) return companionValue;
+    return String(process.env[key] || "").trim();
   }
 
   private infer(configKey: string, value: string, testUrl: string) {
@@ -50,6 +60,32 @@ export class ApiCredentialTesterService {
     }
     if (key.includes("NEWS") || url.includes("newsapi.org")) {
       return { provider: url.includes("newsapi.org") ? "NewsAPI" : "News Provider", from: url.includes("newsapi.org") ? "URL" : "config key" };
+    }
+
+    if (configKey === "THAIBULKSMS_SENDER") {
+      const key = String(process.env.THAIBULKSMS_API_KEY || "").trim();
+      const secret = String(process.env.THAIBULKSMS_API_SECRET || "").trim();
+      if (!key || !secret) {
+        return this.result(false, "FAIL", "ThaiBulkSMS", "preset/config key",
+          "ต้องมี ThaiBulkSMS API Key และ API Secret ก่อนจึงจะตรวจ Sender ได้");
+      }
+      const { response } = await this.request("https://api-v2.thaibulksms.com/credit", {
+        method: "GET",
+        headers: {
+          Authorization: "Basic " + Buffer.from(key + ":" + secret).toString("base64"),
+          Accept: "application/json"
+        }
+      });
+      return this.result(
+        response.ok,
+        response.ok ? "LIMITED" : "FAIL",
+        "ThaiBulkSMS",
+        "preset/config key",
+        response.ok
+          ? "ThaiBulkSMS credentials ใช้งานได้ แต่ Sender จะยืนยันเต็มรูปแบบเมื่อมีการส่ง SMS จริง"
+          : `ThaiBulkSMS ปฏิเสธ credentials (HTTP ${response.status})`,
+        response.status
+      );
     }
 
     if (testUrl) {
@@ -122,6 +158,8 @@ export class ApiCredentialTesterService {
   async test(input: TestInput): Promise<TestResult> {
     const configKey = String(input.configKey || "").trim().toUpperCase();
     const value = String(input.value || "").trim();
+    const companionKey = String(input.companionConfigKey || "").trim().toUpperCase();
+    const companionValue = String(input.companionValue || "").trim();
     const testUrl = String(input.testUrl || "").trim();
     if (!value) throw new Error("กรุณาวาง API Key / Secret ก่อนทดสอบ");
 
@@ -165,6 +203,44 @@ export class ApiCredentialTesterService {
         response.ok ? "NewsAPI ตอบสำเร็จ" : `NewsAPI ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
     }
 
+    if (configKey === "EMAIL_FROM") {
+      const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+      if (!apiKey) {
+        return this.result(false, "FAIL", "Resend", "preset/config key", "ต้องมี Resend API Key ก่อนจึงจะตรวจ Email Sender ได้");
+      }
+      const email = value.toLowerCase();
+      const at = email.lastIndexOf("@");
+      if (at <= 0 || at === email.length - 1) {
+        return this.result(false, "FAIL", "Resend", "preset/config key", "รูปแบบ Email Sender ไม่ถูกต้อง");
+      }
+      const senderDomain = email.slice(at + 1);
+      const { response, text } = await this.request("https://api.resend.com/domains", {
+        method: "GET",
+        headers: { Authorization: "Bearer " + apiKey, Accept: "application/json" }
+      });
+      if (response.status === 403) {
+        return this.result(true, "LIMITED", "Resend", "preset/config key",
+          "Resend ตอบกลับ แต่ API Key ไม่มีสิทธิ์อ่าน Domains จึงตรวจได้เพียงการเชื่อมต่อ", response.status);
+      }
+      if (!response.ok) {
+        return this.result(false, "FAIL", "Resend", "preset/config key",
+          `Resend ปฏิเสธการตรวจ Sender (HTTP ${response.status})`, response.status);
+      }
+      try {
+        const payload = JSON.parse(text);
+        const domains = Array.isArray(payload?.data) ? payload.data : [];
+        const matched = domains.some((domain: any) =>
+          String(domain?.name || "").toLowerCase() === senderDomain &&
+          String(domain?.status || "").toLowerCase() === "verified"
+        );
+        return this.result(matched, matched ? "PASS" : "FAIL", "Resend", "preset/config key",
+          matched ? `Domain ${senderDomain} verified บน Resend` : `ไม่พบ verified domain ${senderDomain} บน Resend`, response.status);
+      } catch {
+        return this.result(true, "LIMITED", "Resend", "preset/config key",
+          "Resend ตอบสำเร็จ แต่ไม่สามารถอ่านสถานะ Domain จาก response ได้", response.status);
+      }
+    }
+
     if (configKey === "RESEND_API_KEY") {
       const { response } = await this.request("https://api.resend.com/domains", {
         method: "GET",
@@ -194,8 +270,8 @@ export class ApiCredentialTesterService {
     }
 
     if (configKey === "THAIBULKSMS_API_KEY" || configKey === "THAIBULKSMS_API_SECRET") {
-      const key = this.env("THAIBULKSMS_API_KEY", configKey, value);
-      const secret = this.env("THAIBULKSMS_API_SECRET", configKey, value);
+      const key = this.env("THAIBULKSMS_API_KEY", configKey, value, companionKey, companionValue);
+      const secret = this.env("THAIBULKSMS_API_SECRET", configKey, value, companionKey, companionValue);
       if (!key || !secret) {
         return this.result(false, "FAIL", "ThaiBulkSMS", "preset/config key",
           "ต้องมีทั้ง ThaiBulkSMS API Key และ API Secret จึงจะทดสอบภายนอกได้");
