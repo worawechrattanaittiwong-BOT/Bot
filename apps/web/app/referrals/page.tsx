@@ -684,14 +684,19 @@ export default function ReferralsPage() {
                 <form className={styles.withdrawRequestForm} onSubmit={requestWithdrawal} autoComplete="off">
                   <div className={styles.amountBlock}>
                     <label className={styles.formField}>
-                      <span>จำนวนเงิน</span>
+                      <span>จำนวนเงิน (THB)</span>
                       <div className={styles.amountInput}>
                         <input
                           name="scenova-withdrawal-amount-thb"
                           value={withdrawForm.amountThb}
                           onChange={event=>{
                             const cleaned=event.target.value.replace(/[^0-9.]/g,"");
-                            const [whole="",...rest]=cleaned.split(".");
+                            if (!cleaned || cleaned === ".") {
+                              setWithdrawForm(v=>({...v,amountThb:""}));
+                              return;
+                            }
+                            const normalized=cleaned.startsWith(".") ? "0"+cleaned : cleaned;
+                            const [whole="",...rest]=normalized.split(".");
                             const next=rest.length ? whole+"."+rest.join("").slice(0,2) : whole;
                             setWithdrawForm(v=>({...v,amountThb:next.slice(0,12)}));
                           }}
@@ -699,9 +704,10 @@ export default function ReferralsPage() {
                           autoComplete="off"
                           data-lpignore="true"
                           data-1p-ignore="true"
-                          placeholder="10,000"
+                          placeholder=""
                           required
                         />
+                        <span>THB</span>
                       </div>
                     </label>
                     <div className={styles.amountMeta}>

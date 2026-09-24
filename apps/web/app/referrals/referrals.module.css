@@ -243,8 +243,13 @@
 }
 .destinationForm .formHint{margin-top:1px}
 .amountBlock{grid-column:1/-1;display:grid;grid-template-columns:minmax(220px,360px) minmax(0,1fr);gap:14px;align-items:flex-end}
-.amountInput{display:block}
-.amountInput input{border-radius:10px!important}
+.amountInput{display:grid;grid-template-columns:minmax(0,1fr) auto}
+.amountInput input{border-radius:10px 0 0 10px!important}
+.amountInput>span{
+  display:grid;place-items:center;min-width:64px;border:1px solid rgba(133,139,194,.28);border-left:0;
+  border-radius:0 10px 10px 0;background:rgba(61,53,111,.32);color:#bbb2e8;
+  font-size:var(--ui-type-label);font-weight:900
+}
 .amountMeta{display:flex;justify-content:space-between;gap:10px;align-items:flex-end;padding-bottom:3px}
 .amountMeta span{color:#8a869a;font-size:var(--ui-type-caption);line-height:1.4}
 .amountMeta b{color:#b8b1cc}
