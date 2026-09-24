@@ -45,6 +45,7 @@ type LinkForm = {
 };
 
 type CredentialForm = {
+  preset: string;
   category: string;
   label: string;
   configKey: string;
@@ -55,6 +56,7 @@ type CredentialForm = {
 
 const EMPTY_LINK: LinkForm = { name: "", purpose: "", url: "", note: "" };
 const EMPTY_CREDENTIAL: CredentialForm = {
+  preset: "CUSTOM",
   category: "OTHER",
   label: "",
   configKey: "",
@@ -72,6 +74,22 @@ const KEY_EXAMPLES: Record<string, string> = {
   MARKET_DATA: "MARKET_DATA_API_KEY",
   OTHER: "SERVICE_API_KEY"
 };
+
+const CREDENTIAL_PRESETS = [
+  { key: "RESEND_API_KEY", category: "EMAIL", label: "Resend API Key" },
+  { key: "EMAIL_FROM", category: "EMAIL", label: "Email Sender / From" },
+  { key: "THAIBULKSMS_OTP_KEY", category: "SMS", label: "ThaiBulkSMS OTP Key" },
+  { key: "THAIBULKSMS_OTP_SECRET", category: "SMS", label: "ThaiBulkSMS OTP Secret" },
+  { key: "THAIBULKSMS_API_KEY", category: "SMS", label: "ThaiBulkSMS API Key" },
+  { key: "THAIBULKSMS_API_SECRET", category: "SMS", label: "ThaiBulkSMS API Secret" },
+  { key: "THAIBULKSMS_SENDER", category: "SMS", label: "ThaiBulkSMS Sender" },
+  { key: "OMISE_SECRET_KEY", category: "PAYMENT", label: "Opn / Omise Secret Key" },
+  { key: "OPENAI_API_KEY", category: "AI", label: "OpenAI API Key" },
+  { key: "ANTHROPIC_API_KEY", category: "AI", label: "Anthropic API Key" },
+  { key: "GEMINI_API_KEY", category: "AI", label: "Gemini API Key" },
+  { key: "NEWS_API_KEY", category: "NEWS", label: "News API Key" },
+  { key: "MARKET_DATA_API_KEY", category: "MARKET_DATA", label: "Market Data API Key" }
+];
 
 function domainOf(url: string) {
   try { return new URL(url).hostname; } catch { return url; }
@@ -161,6 +179,7 @@ export default function AdminServiceLinksPage() {
   function editCredential(item: Credential) {
     setEditingCredentialId(item.id);
     setCredentialForm({
+      preset: CREDENTIAL_PRESETS.some(preset => preset.key === item.config_key) ? item.config_key : "CUSTOM",
       category: item.category,
       label: item.label,
       configKey: item.config_key,
@@ -337,6 +356,56 @@ export default function AdminServiceLinksPage() {
 
           <form id="api-vault-editor" className={s.vaultEditor} onSubmit={saveCredential}>
             <div className={s.field}>
+              <label>เลือกบริการ / คีย์</label>
+              <select
+                value={credentialForm.preset}
+                onChange={event => {
+                  const presetKey = event.target.value;
+                  const preset = CREDENTIAL_PRESETS.find(item => item.key === presetKey);
+                  if (!preset) {
+                    setCredentialForm(current => ({
+                      ...current,
+                      preset: "CUSTOM",
+                      category: "OTHER",
+                      label: "",
+                      configKey: ""
+                    }));
+                    return;
+                  }
+                  setCredentialForm(current => ({
+                    ...current,
+                    preset: preset.key,
+                    category: preset.category,
+                    label: preset.label,
+                    configKey: preset.key
+                  }));
+                }}
+              >
+                <option value="CUSTOM">Custom / API อื่น</option>
+                <optgroup label="Email">
+                  {CREDENTIAL_PRESETS.filter(item => item.category === "EMAIL").map(item => (
+                    <option key={item.key} value={item.key}>{item.label}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="SMS / OTP">
+                  {CREDENTIAL_PRESETS.filter(item => item.category === "SMS").map(item => (
+                    <option key={item.key} value={item.key}>{item.label}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Payment">
+                  {CREDENTIAL_PRESETS.filter(item => item.category === "PAYMENT").map(item => (
+                    <option key={item.key} value={item.key}>{item.label}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="AI / News / Market">
+                  {CREDENTIAL_PRESETS.filter(item => ["AI","NEWS","MARKET_DATA"].includes(item.category)).map(item => (
+                    <option key={item.key} value={item.key}>{item.label}</option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+
+            <div className={s.field}>
               <label>ประเภท</label>
               <select
                 value={credentialForm.category}
@@ -344,10 +413,12 @@ export default function AdminServiceLinksPage() {
                   const category = event.target.value;
                   setCredentialForm(current => ({
                     ...current,
+                    preset: "CUSTOM",
                     category,
                     configKey: current.configKey || KEY_EXAMPLES[category] || ""
                   }));
                 }}
+                disabled={credentialForm.preset !== "CUSTOM"}
               >
                 <option value="EMAIL">Email</option>
                 <option value="SMS">SMS / OTP</option>
@@ -365,6 +436,7 @@ export default function AdminServiceLinksPage() {
                 value={credentialForm.label}
                 onChange={event => updateCredentialField("label", event.target.value)}
                 placeholder="เช่น Resend API Key"
+                readOnly={credentialForm.preset !== "CUSTOM"}
                 maxLength={140}
                 required
               />
@@ -376,6 +448,7 @@ export default function AdminServiceLinksPage() {
                 value={credentialForm.configKey}
                 onChange={event => updateCredentialField("configKey", event.target.value.toUpperCase())}
                 placeholder={KEY_EXAMPLES[credentialForm.category]}
+                readOnly={credentialForm.preset !== "CUSTOM"}
                 spellCheck={false}
                 maxLength={96}
                 required
