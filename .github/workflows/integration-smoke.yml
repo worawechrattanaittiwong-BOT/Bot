@@ -101,6 +101,13 @@ jobs:
       - name: Build API
         run: npm run build -w @bot/api
 
+      - name: Commission withdrawal Phase 3 integration
+        env:
+          DATABASE_URL: postgresql://bot:bot@localhost:5432/bot
+          CREDENTIAL_MASTER_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          PAYOUT_WORKER_KEY: integration-payout-worker-key
+        run: node ./tests/commission-withdrawal-phase3-integration.mjs
+
       - name: Start API
         env:
           DATABASE_URL: postgresql://bot:bot@localhost:5432/bot
