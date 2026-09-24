@@ -65,7 +65,7 @@
 }
 .sectionBlock{margin:14px 24px 0}
 .sectionHead{
-  display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:9px;
+  display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:9px;
 }
 .sectionHead h2{margin:3px 0 0;color:#f1effb;font-size:16px}
 .sectionHead a{color:#aaa0ef;text-decoration:none;font-size:var(--ui-type-meta);font-weight:700}
@@ -242,7 +242,7 @@
   font-size:var(--ui-type-meta);line-height:1.5
 }
 .destinationForm .formHint{margin-top:1px}
-.amountBlock{grid-column:1/-1;display:grid;grid-template-columns:minmax(220px,360px) minmax(0,1fr);gap:14px;align-items:end}
+.amountBlock{grid-column:1/-1;display:grid;grid-template-columns:minmax(220px,360px) minmax(0,1fr);gap:14px;align-items:flex-end}
 .amountInput{display:grid;grid-template-columns:minmax(0,1fr) auto}
 .amountInput input{border-radius:10px 0 0 10px!important}
 .amountInput>span{
@@ -250,7 +250,7 @@
   border-radius:0 10px 10px 0;background:rgba(61,53,111,.32);color:#bbb2e8;
   font-size:var(--ui-type-label);font-weight:900
 }
-.amountMeta{display:flex;justify-content:space-between;gap:10px;align-items:end;padding-bottom:3px}
+.amountMeta{display:flex;justify-content:space-between;gap:10px;align-items:flex-end;padding-bottom:3px}
 .amountMeta span{color:#8a869a;font-size:var(--ui-type-caption);line-height:1.4}
 .amountMeta b{color:#b8b1cc}
 .withdrawRequestForm>.primaryAction{grid-column:1/-1}
