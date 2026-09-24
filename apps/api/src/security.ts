@@ -6,7 +6,7 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { DbService } from "./db.service";
 
 @Injectable()
@@ -133,5 +133,15 @@ export class CryptoService {
 
   sha256(value: string) {
     return createHash("sha256").update(value).digest("hex");
+  }
+
+  sign(value: string) {
+    return createHmac("sha256", this.key()).update(value).digest("base64url");
+  }
+
+  verifySignature(value: string, signature: string) {
+    const expected = Buffer.from(this.sign(value));
+    const supplied = Buffer.from(String(signature || ""));
+    return expected.length === supplied.length && timingSafeEqual(expected, supplied);
   }
 }
