@@ -147,3 +147,84 @@ CREATE TRIGGER trg_commission_withdrawal_audit_immutable
 BEFORE UPDATE OR DELETE ON commission_withdrawal_audit
 FOR EACH ROW
 EXECUTE FUNCTION reject_commission_withdrawal_audit_mutation();
+
+
+-- Financial identity and state transitions are guarded at database level.
+CREATE OR REPLACE FUNCTION guard_commission_withdrawal_update()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.user_id IS DISTINCT FROM OLD.user_id
+     OR NEW.destination_id IS DISTINCT FROM OLD.destination_id
+     OR NEW.amount_satang IS DISTINCT FROM OLD.amount_satang
+     OR NEW.currency IS DISTINCT FROM OLD.currency
+     OR NEW.client_request_key IS DISTINCT FROM OLD.client_request_key
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'withdrawal financial identity is immutable';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
+    IF OLD.status='REQUESTED' AND NEW.status IN ('HOLD','APPROVED','REJECTED','CANCELLED') THEN
+      RETURN NEW;
+    ELSIF OLD.status='HOLD' AND NEW.status IN ('APPROVED','REJECTED') THEN
+      RETURN NEW;
+    ELSIF OLD.status='APPROVED' AND NEW.status IN ('PAID','REJECTED') THEN
+      RETURN NEW;
+    ELSE
+      RAISE EXCEPTION 'invalid withdrawal status transition: % -> %', OLD.status, NEW.status;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_commission_withdrawal_update_guard
+  ON commission_withdrawals;
+
+CREATE TRIGGER trg_commission_withdrawal_update_guard
+BEFORE UPDATE ON commission_withdrawals
+FOR EACH ROW
+EXECUTE FUNCTION guard_commission_withdrawal_update();
+
+CREATE OR REPLACE FUNCTION guard_commission_payout_destination_update()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.user_id IS DISTINCT FROM OLD.user_id
+     OR NEW.bank_code IS DISTINCT FROM OLD.bank_code
+     OR NEW.bank_name IS DISTINCT FROM OLD.bank_name
+     OR NEW.account_name IS DISTINCT FROM OLD.account_name
+     OR NEW.account_ciphertext IS DISTINCT FROM OLD.account_ciphertext
+     OR NEW.account_iv IS DISTINCT FROM OLD.account_iv
+     OR NEW.account_auth_tag IS DISTINCT FROM OLD.account_auth_tag
+     OR NEW.account_last4 IS DISTINCT FROM OLD.account_last4
+     OR NEW.account_hash IS DISTINCT FROM OLD.account_hash
+     OR NEW.usable_at IS DISTINCT FROM OLD.usable_at
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'payout destination identity is immutable';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
+    IF OLD.status='PENDING_COOLDOWN' AND NEW.status IN ('ACTIVE','DISABLED') THEN
+      RETURN NEW;
+    ELSIF OLD.status='ACTIVE' AND NEW.status='DISABLED' THEN
+      RETURN NEW;
+    ELSE
+      RAISE EXCEPTION 'invalid payout destination status transition: % -> %', OLD.status, NEW.status;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_commission_payout_destination_update_guard
+  ON commission_payout_destinations;
+
+CREATE TRIGGER trg_commission_payout_destination_update_guard
+BEFORE UPDATE ON commission_payout_destinations
+FOR EACH ROW
+EXECUTE FUNCTION guard_commission_payout_destination_update();
