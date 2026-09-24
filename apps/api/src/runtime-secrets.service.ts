@@ -204,14 +204,17 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
         )
       : await this.db.one(
           `INSERT INTO admin_api_credentials(
-             config_key,category,label,ciphertext,iv,auth_tag,last_four,note,active,updated_by
+             config_key,category,label,ciphertext,iv,auth_tag,last_four,note,active,updated_by,
+             provider,test_url,auth_mode,header_name,last_test_status,last_test_detail,last_tested_at
            )
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+                  CASE WHEN $15<>'' THEN now() ELSE NULL END)
            RETURNING id`,
           [
             configKey, category, label,
             encrypted.ciphertext, encrypted.iv, encrypted.authTag,
-            lastFour, note, active, input.updatedBy || null
+            lastFour, note, active, input.updatedBy || null,
+            provider, testUrl, authMode, headerName, lastTestStatus, lastTestDetail
           ]
         );
 
