@@ -19,12 +19,10 @@ import { ReferralService } from "./referral.service";
 import { PromotionService } from "./promotion.service";
 
 function paymentMode() {
-  const key = process.env.OMISE_SECRET_KEY || "";
-  return key.startsWith("skey_live_")
-    ? "LIVE"
-    : key.startsWith("skey_test_")
-      ? "TEST"
-      : "UNCONFIGURED";
+  const key = String(process.env.OMISE_SECRET_KEY || "").trim();
+  if (key.startsWith("skey_test_")) return "TEST";
+  if (key.startsWith("skey_live_") || key.startsWith("skey_")) return "LIVE";
+  return "UNCONFIGURED";
 }
 
 function validateCharge(charge: any, order: any) {

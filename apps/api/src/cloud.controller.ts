@@ -7,8 +7,10 @@ import { LocalPackageService } from "./local-package.controller";
 import { PromotionService } from "./promotion.service";
 
 export function paymentMode() {
-  const key = process.env.OMISE_SECRET_KEY || "";
-  return key.startsWith("skey_live_") ? "LIVE" : key.startsWith("skey_test_") ? "TEST" : "UNCONFIGURED";
+  const key = String(process.env.OMISE_SECRET_KEY || "").trim();
+  if (key.startsWith("skey_test_")) return "TEST";
+  if (key.startsWith("skey_live_") || key.startsWith("skey_")) return "LIVE";
+  return "UNCONFIGURED";
 }
 export function validateCharge(charge: any, order: any) {
   if (charge.object !== "charge" || charge.metadata?.order_id !== order.id ||
