@@ -721,6 +721,106 @@ export class CommissionWithdrawalRiskService {
     });
   }
 
+  async manualReconcilePaid(
+    withdrawalId: string,
+    actor: string,
+    providerReference: string,
+    confirmedAmountSatang: number,
+    ip?: string | null
+  ) {
+    const reference = String(providerReference || "").trim();
+    const confirmed = Math.trunc(Number(confirmedAmountSatang || 0));
+    if (reference.length < 3 || reference.length > 180) {
+      throw new BadRequestException("กรุณาใส่ Provider / Transfer Reference");
+    }
+
+    return this.db.transaction(async tx => {
+      const row = (await tx.query(
+        `SELECT w.id,w.user_id,w.destination_id,w.amount_satang,w.currency,w.status,
+                w.reconciliation_status,w.approval_count,w.approval_required,
+                j.id AS job_id,j.status AS job_status
+         FROM commission_withdrawals w
+         JOIN commission_payout_jobs j ON j.withdrawal_id=w.id
+         WHERE w.id=$1
+         FOR UPDATE OF w,j`,
+        [withdrawalId]
+      )).rows[0];
+      if (!row) throw new NotFoundException("ไม่พบ payout reconciliation");
+      if (
+        row.status !== "HOLD" ||
+        !["MISMATCH","MANUAL_REVIEW"].includes(row.reconciliation_status) ||
+        !["RECONCILE_REQUIRED","FAILED"].includes(row.job_status)
+      ) {
+        throw new ConflictException("รายการนี้ไม่ได้อยู่ในสถานะ Manual Reconciliation");
+      }
+      if (Number(row.approval_count || 0) < Number(row.approval_required || 1)) {
+        throw new ConflictException("Approval เดิมยังไม่ครบ");
+      }
+      if (confirmed !== Number(row.amount_satang)) {
+        throw new BadRequestException("ยอดที่ยืนยันต้องตรงกับยอดถอนเต็มจำนวน");
+      }
+
+      await tx.query(
+        `UPDATE commission_payout_jobs
+         SET status='SUCCEEDED',completed_at=now(),
+             provider_reference=$2,provider_amount_satang=$3,
+             provider_currency=$4,provider_status='MANUAL_RECONCILED',
+             error_code=NULL,error_message=NULL,updated_at=now()
+         WHERE id=$1`,
+        [row.job_id, reference, confirmed, row.currency]
+      );
+      await tx.query(
+        `UPDATE commission_withdrawals
+         SET status='PAID',paid_at=now(),payout_reference=$2,
+             reconciliation_status='MATCHED',reconciled_at=now(),
+             review_reason='MANUAL_RECONCILIATION_CONFIRMED',updated_at=now()
+         WHERE id=$1`,
+        [row.id, reference]
+      );
+      await tx.query(
+        `INSERT INTO commission_withdrawal_ledger(
+           entry_key,user_id,withdrawal_id,event_type,
+           available_delta_satang,locked_delta_satang,paid_delta_satang,currency,metadata
+         ) VALUES($1,$2,$3,'PAID',0,$4,$5,$6,$7::jsonb)
+         ON CONFLICT(entry_key) DO NOTHING`,
+        [
+          "manual-reconcile-paid:" + row.id,
+          row.user_id,row.id,-Number(row.amount_satang),Number(row.amount_satang),row.currency,
+          JSON.stringify({ providerReference: reference, payoutJobId: row.job_id, actor })
+        ]
+      );
+      await tx.query(
+        `INSERT INTO commission_payout_reconciliation(
+           payout_job_id,withdrawal_id,event_type,provider_reference,
+           expected_amount_satang,provider_amount_satang,expected_currency,provider_currency,metadata
+         ) VALUES($1,$2,'MATCHED',$3,$4,$5,$6,$6,$7::jsonb)`,
+        [
+          row.job_id,row.id,reference,row.amount_satang,confirmed,row.currency,
+          JSON.stringify({ manual: true, actor })
+        ]
+      );
+      await tx.query(
+        `INSERT INTO commission_withdrawal_audit(
+           user_id,withdrawal_id,destination_id,actor_type,actor_label,event_type,ip_address,metadata
+         ) VALUES($1,$2,$3,'ADMIN',$4,'PAYOUT_MANUAL_RECONCILED',$5,$6::jsonb)`,
+        [
+          row.user_id,row.id,row.destination_id,actor,ip || null,
+          JSON.stringify({ providerReference: reference, confirmedAmountSatang: confirmed })
+        ]
+      );
+      await tx.query(
+        `UPDATE commission_withdrawal_alerts
+         SET status='RESOLVED',resolved_by=$2,resolved_at=now()
+         WHERE withdrawal_id=$1
+           AND status='OPEN'
+           AND alert_type='PAYOUT_RECONCILIATION_MISMATCH'`,
+        [row.id, actor]
+      );
+
+      return { ok: true, paid: true, reconciled: true };
+    });
+  }
+
   async reportPayoutResult(
     workerId: string,
     input: {
