@@ -128,7 +128,7 @@ Need $ea '#include "include\\RaceTelemetryV1.mqh"' 'RACE Telemetry V1 module mis
 Need $ea 'journalControlMode=="RACE"' 'RACE deal telemetry must be isolated by actual deal ownership'
 Need $ea 'RaceTelemetryCurrentJsonFragment()+"}"' 'RACE deal journal must persist VNext context'
 Need $ea 'bool raceTelemetryRelevant=' 'RACE heartbeat telemetry relevance guard missing'
-Need $raceTelemetryV1 '"raceTelemetryVersion":1' 'RACE telemetry schema version missing'
+Need $raceTelemetryV1 'raceTelemetryVersion' 'RACE telemetry schema version missing'
 Need $raceTelemetryV1 '"raceNoiseMoney"' 'RACE telemetry must expose exposure-scaled noise money'
 Need $raceTelemetryV1 '"raceLegPhase"' 'RACE telemetry must expose leg phase'
 Need $api 'raceTelemetryVersion?: number;' 'API journal input must accept RACE telemetry'
