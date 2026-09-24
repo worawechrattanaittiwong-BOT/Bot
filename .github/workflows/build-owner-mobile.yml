@@ -57,7 +57,7 @@ jobs:
           SCENOVA_OWNER_KEYSTORE_PATH: ${{ github.workspace }}/apps/owner-mobile/android/app/scenova-owner-release.jks
         run: |
           chmod +x android/gradlew
-          ./android/gradlew -p android assembleRelease --no-daemon
+          ./android/gradlew -p android assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
           cp android/app/build/outputs/apk/release/app-release.apk ./SCENOVA-Owner.apk
 
       - name: Verify APK signature
