@@ -12,7 +12,11 @@
         "backgroundColor": "#0b0713",
         "foregroundImage": "./assets/scenova-owner-icon.png"
       },
-      "allowBackup": false
+      "allowBackup": false,
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.REQUEST_INSTALL_PACKAGES"
+      ]
     },
     "ios": {
       "bundleIdentifier": "com.scenova.owner",
