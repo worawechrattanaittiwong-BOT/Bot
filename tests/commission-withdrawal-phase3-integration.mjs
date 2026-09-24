@@ -238,6 +238,27 @@ try {
   );
   assert(alert?.severity === "CRITICAL" && alert?.status === "OPEN", "mismatch must open CRITICAL alert");
 
+  const reconciled = await risk.manualReconcilePaid(
+    mismatch.id,
+    "ADMIN-1",
+    "CI-MANUAL-RECONCILED",
+    20000
+  );
+  assert(reconciled.paid === true && reconciled.reconciled === true, "manual reconciliation must complete paid state");
+  const reconciledRow = await db.one(
+    "SELECT status,reconciliation_status FROM commission_withdrawals WHERE id=$1",
+    [mismatch.id]
+  );
+  assert(reconciledRow.status === "PAID" && reconciledRow.reconciliation_status === "MATCHED",
+    "manual reconciliation must close HOLD as PAID/MATCHED");
+  const resolvedAlert = await db.one(
+    `SELECT status FROM commission_withdrawal_alerts
+     WHERE withdrawal_id=$1 AND alert_type='PAYOUT_RECONCILIATION_MISMATCH'
+     ORDER BY created_at DESC LIMIT 1`,
+    [mismatch.id]
+  );
+  assert(resolvedAlert?.status === "RESOLVED", "manual reconciliation must resolve mismatch alert");
+
   await risk.setUserControl(userId,"ADMIN-1",{
     withdrawalPaused:true,
     pauseReason:"CI fraud review",
