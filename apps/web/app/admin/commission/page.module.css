@@ -171,3 +171,9 @@
   .riskStrip{grid-template-columns:1fr}
   .badgeStack{align-items:flex-start;margin-top:7px}
 }
+
+.reconcileButton{
+  color:#f0bd78!important;
+  border-color:rgba(236,171,88,.22)!important;
+  background:rgba(202,133,43,.07)!important;
+}
