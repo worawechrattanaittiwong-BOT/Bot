@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import { AdminGuard } from "./security";
 import { RuntimeSecretsService } from "./runtime-secrets.service";
+import { ApiCredentialTesterService } from "./api-credential-tester.service";
 
 type SaveCredentialBody = {
   configKey?: string;
@@ -26,7 +27,10 @@ type SaveCredentialBody = {
 @Controller("admin/api-credentials")
 @UseGuards(AdminGuard)
 export class AdminApiCredentialsController {
-  constructor(private readonly secrets: RuntimeSecretsService) {}
+  constructor(
+    private readonly secrets: RuntimeSecretsService,
+    private readonly tester: ApiCredentialTesterService
+  ) {}
 
   private assertId(id: string) {
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
@@ -40,6 +44,24 @@ export class AdminApiCredentialsController {
 
   private configured(...keys: string[]) {
     return keys.every(key => Boolean(String(process.env[key] || "").trim()));
+  }
+
+  @Post("test")
+  async test(
+    @Body() body: {
+      configKey?: string;
+      category?: string;
+      value?: string;
+      testUrl?: string;
+      authMode?: string;
+      headerName?: string;
+    }
+  ) {
+    try {
+      return await this.tester.test(body);
+    } catch (error: any) {
+      throw new BadRequestException(String(error?.message || "ทดสอบ API ไม่สำเร็จ"));
+    }
   }
 
   @Get()
