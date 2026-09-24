@@ -7,6 +7,7 @@ on:
       - "apps/api/src/owner-mobile.controller.ts"
       - "apps/api/src/app.module.ts"
       - "database/036_owner_mobile.sql"
+      - "tests/owner-mobile-contract.mjs"
       - "package.json"
       - ".github/workflows/owner-mobile-ci.yml"
   workflow_dispatch:
@@ -29,3 +30,5 @@ jobs:
       - name: Owner mobile typecheck
         run: npm run typecheck
         working-directory: apps/owner-mobile
+      - name: Owner mobile security contract
+        run: node ./tests/owner-mobile-contract.mjs
