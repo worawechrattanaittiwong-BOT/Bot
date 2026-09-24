@@ -31,7 +31,7 @@ assert(migration.includes("idx_owner_mobile_one_active_device"), "Only one activ
 assert(api.includes("commissionLiability"), "Owner withdrawal must reserve commission liabilities");
 assert(api.includes("commission_wallet_ledger"), "Commission liability must use the append-only wallet ledger");
 assert(api.includes("commission_withdrawal_ledger"), "Commission liability must include withdrawal lock/paid deltas");
-assert(api.includes("limits?.transfer_amount?.min"), "Omise transfer minimum must use capability limits");
+assert(api.includes("OWNER_OMISE_MIN_TRANSFER_SATANG || 3000"), "Owner transfer minimum must default to Omise Thailand API limit");\nassert(api.includes("idemp_key: requestKey"), "Omise transfer must use provider-side idempotency");
 assert(api.includes("status IN ('CREATING','SUBMITTED','REVIEW')"), "Unresolved owner transfers must block duplicate transfer creation");
 assert(api.includes("reconcileOwnerTransfers"), "Owner transfers must reconcile with Omise before a new transfer");
 assert(api.includes("client_request_key"), "Owner transfer must be idempotent");
