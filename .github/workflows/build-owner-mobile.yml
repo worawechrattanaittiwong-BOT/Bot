@@ -140,6 +140,11 @@ jobs:
 
           git commit -m "build: publish SCENOVA Owner APK [skip owner apk build]"
 
+          # Expo/npm can touch tracked generated metadata during the build.
+          # Keep the release commit and discard only leftover working-tree edits
+          # before rebasing onto a newer main.
+          git reset --hard HEAD
+
           for attempt in 1 2 3 4 5 6; do
             git fetch origin main
             git rebase origin/main
