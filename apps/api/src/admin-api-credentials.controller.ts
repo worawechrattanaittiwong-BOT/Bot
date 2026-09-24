@@ -52,6 +52,8 @@ export class AdminApiCredentialsController {
       configKey?: string;
       category?: string;
       value?: string;
+      companionConfigKey?: string;
+      companionValue?: string;
       testUrl?: string;
       authMode?: string;
       headerName?: string;
