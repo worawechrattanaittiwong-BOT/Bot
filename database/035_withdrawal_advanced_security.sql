@@ -210,6 +210,11 @@ BEGIN
       RETURN NEW;
     ELSIF OLD.status='HOLD' AND NEW.status IN ('APPROVED','REJECTED') THEN
       RETURN NEW;
+    ELSIF OLD.status='HOLD'
+      AND NEW.status='PAID'
+      AND OLD.reconciliation_status IN ('MISMATCH','MANUAL_REVIEW')
+      AND NEW.reconciliation_status='MATCHED' THEN
+      RETURN NEW;
     ELSIF OLD.status='APPROVED' AND NEW.status IN ('PAID','REJECTED','HOLD') THEN
       RETURN NEW;
     ELSE
