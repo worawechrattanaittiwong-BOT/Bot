@@ -354,3 +354,232 @@
   .walletCard{margin-left:11px;margin-right:11px;padding:14px}
   .walletBalances{grid-template-columns:1fr 1fr}
 }
+
+.walletBalances{grid-template-columns:repeat(5,minmax(0,1fr))}
+.securityWarning{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  gap:10px;
+  align-items:center;
+  margin-top:10px;
+  padding:11px 12px;
+  border:1px solid rgba(244,177,85,.2);
+  border-radius:11px;
+  background:rgba(212,138,42,.055);
+  color:#efb66c;
+}
+.securityWarning span b,.securityWarning span small{display:block}
+.securityWarning span b{font-size:9px;color:#e7cfac}
+.securityWarning span small{margin-top:2px;font-size:8px;color:#8f806f}
+.securityWarning a{color:#cdb8ff;text-decoration:none;font-size:8px;font-weight:900;white-space:nowrap}
+.withdrawalGrid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:12px;
+}
+.withdrawalPanel{
+  min-width:0;
+  padding:14px;
+  border:1px solid rgba(119,103,185,.13);
+  border-radius:13px;
+  background:rgba(6,9,20,.55);
+}
+.panelHead{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:10px;
+}
+.panelHead h3{
+  margin:3px 0 0;
+  color:#efecfa;
+  font-size:13px;
+}
+.textButton{
+  border:0;
+  background:transparent;
+  color:#9f91ef;
+  font-size:8px;
+  font-weight:900;
+  cursor:pointer;
+}
+.destinationCard{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:6px 10px;
+  align-items:start;
+  padding:12px;
+  border:1px solid rgba(120,103,194,.13);
+  border-radius:11px;
+  background:rgba(255,255,255,.018);
+}
+.destinationCard>div b,.destinationCard>div span,.destinationCard>div strong{
+  display:block;
+}
+.destinationCard>div b{color:#e7e3f4;font-size:10px}
+.destinationCard>div span{margin-top:3px;color:#7f879c;font-size:8px}
+.destinationCard>div strong{
+  margin-top:8px;
+  color:#b8b0df;
+  font:800 12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.04em;
+}
+.destinationCard>small{
+  grid-column:1/-1;
+  color:#70788d;
+  font-size:8px;
+}
+.readyBadge,.coolingBadge,.statusBadge{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  min-height:22px;
+  padding:0 7px;
+  border-radius:999px;
+  font-size:7px;
+  font-weight:950;
+  letter-spacing:.08em;
+  white-space:nowrap;
+}
+.readyBadge{
+  border:1px solid rgba(67,213,139,.23);
+  background:rgba(46,185,113,.07);
+  color:#70dda8;
+}
+.coolingBadge{
+  border:1px solid rgba(241,177,86,.22);
+  background:rgba(210,140,48,.07);
+  color:#efb56c;
+}
+.statusBadge{
+  border:1px solid rgba(126,105,235,.20);
+  background:rgba(105,82,220,.08);
+  color:#b5abef;
+}
+.readyBadge i,.coolingBadge i{
+  width:6px;height:6px;border-radius:50%;background:currentColor;
+}
+.withdrawForm{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.withdrawForm label{
+  display:grid;
+  gap:4px;
+}
+.withdrawForm label span{
+  color:#737b90;
+  font-size:8px;
+  font-weight:800;
+}
+.withdrawForm input,.withdrawForm select{
+  width:100%;
+  height:36px;
+  box-sizing:border-box;
+  border:1px solid rgba(125,137,172,.15);
+  border-radius:9px;
+  outline:none;
+  padding:0 10px;
+  background:rgba(3,6,14,.72);
+  color:#e9e6f4;
+  font:inherit;
+  font-size:9px;
+}
+.withdrawForm input:focus,.withdrawForm select:focus{
+  border-color:rgba(119,96,242,.38);
+  box-shadow:0 0 0 3px rgba(105,82,220,.07);
+}
+.withdrawForm label:first-child:nth-last-child(n+4),
+.withdrawForm label:nth-child(3){
+  grid-column:auto;
+}
+.primaryAction{
+  min-height:36px;
+  border:0;
+  border-radius:9px;
+  background:linear-gradient(135deg,#765fff,#6678ef);
+  color:#fff;
+  font-size:8px;
+  font-weight:950;
+  cursor:pointer;
+}
+.primaryAction:disabled{
+  opacity:.38;
+  cursor:not-allowed;
+}
+.formHint{
+  grid-column:1/-1;
+  color:#697186;
+  font-size:7px;
+  line-height:1.4;
+}
+.limitLine{
+  grid-column:1/-1;
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  color:#6f778b;
+  font-size:7px;
+}
+.openRequest{
+  display:grid;
+  gap:6px;
+  min-height:158px;
+  align-content:start;
+  padding:12px;
+  border:1px solid rgba(119,102,191,.13);
+  border-radius:11px;
+  background:rgba(255,255,255,.018);
+}
+.openRequest .statusBadge{justify-self:start}
+.openRequest>b{color:#f0edf9;font-size:18px}
+.openRequest>small{color:#747c90;font-size:8px}
+.openRequest>p{margin:3px 0;color:#7e869b;font-size:8px;line-height:1.45}
+.cancelButton{
+  justify-self:start;
+  min-height:30px;
+  padding:0 9px;
+  border:1px solid rgba(242,129,145,.2);
+  border-radius:8px;
+  background:rgba(222,79,102,.06);
+  color:#ef8d9b;
+  font-size:8px;
+  font-weight:900;
+  cursor:pointer;
+}
+.withdrawalHistory{display:grid}
+.withdrawalRow{
+  display:grid;
+  grid-template-columns:minmax(150px,.7fr) minmax(180px,1fr) minmax(180px,1fr);
+  gap:12px;
+  align-items:center;
+  min-height:58px;
+  padding:9px 4px;
+  border-bottom:1px solid rgba(113,102,164,.09);
+}
+.withdrawalRow>div:first-child{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.withdrawalRow b{color:#e9e5f6;font-size:10px}
+.withdrawalRow span,.withdrawalRow small{display:block;color:#747c91;font-size:8px}
+.withdrawalRow small{margin-top:3px}
+@media(max-width:1100px){
+  .walletBalances{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:820px){
+  .withdrawalGrid{grid-template-columns:1fr}
+  .walletBalances{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:620px){
+  .securityWarning{grid-template-columns:auto 1fr}
+  .securityWarning a{grid-column:1/-1}
+  .withdrawForm{grid-template-columns:1fr}
+  .limitLine,.formHint{grid-column:1}
+  .withdrawalRow{grid-template-columns:1fr auto}
+  .withdrawalRow>div:nth-child(2){display:none}
+}
