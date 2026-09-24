@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DbService } from "./db.service";
+import { CommissionWithdrawalService } from "./commission-withdrawal.service";
 
 export const REFERRAL_LEVELS = [
   { level: 1, rateBps: 700 },
@@ -11,7 +12,10 @@ export const REFERRAL_LEVELS = [
 
 @Injectable()
 export class ReferralService {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly withdrawals: CommissionWithdrawalService
+  ) {}
 
   private holdDays() {
     const raw = Number(process.env.REFERRAL_HOLD_DAYS || 7);
@@ -174,6 +178,8 @@ export class ReferralService {
       )
     ]);
 
+    const withdrawalState = await this.withdrawals.customerState(userId);
+
     const countByLevel = new Map<number, number>(
       levels.rows.map((row: any) => [Number(row.level), Number(row.count || 0)] as [number, number])
     );
@@ -222,21 +228,35 @@ export class ReferralService {
       wallet: {
         currency: "THB",
         pendingSatang: Number(walletTotals?.pending_satang || 0),
-        availableSatang: Number(walletTotals?.available_satang || 0),
-        paidSatang: Number(walletTotals?.paid_satang || 0),
+        availableSatang:
+          Number(walletTotals?.available_satang || 0) +
+          Number(withdrawalState.availableDeltaSatang || 0),
+        lockedSatang: Number(withdrawalState.lockedSatang || 0),
+        paidSatang:
+          Number(walletTotals?.paid_satang || 0) +
+          Number(withdrawalState.paidSatang || 0),
         currentBalanceSatang:
           Number(walletTotals?.pending_satang || 0) +
-          Number(walletTotals?.available_satang || 0),
+          Number(walletTotals?.available_satang || 0) +
+          Number(withdrawalState.availableDeltaSatang || 0) +
+          Number(withdrawalState.lockedSatang || 0),
         lifetimeSatang:
           Number(walletTotals?.pending_satang || 0) +
           Number(walletTotals?.available_satang || 0) +
-          Number(walletTotals?.paid_satang || 0),
-        entryCount: Number(walletTotals?.entry_count || 0),
+          Number(withdrawalState.availableDeltaSatang || 0) +
+          Number(withdrawalState.lockedSatang || 0) +
+          Number(walletTotals?.paid_satang || 0) +
+          Number(withdrawalState.paidSatang || 0),
+        entryCount:
+          Number(walletTotals?.entry_count || 0) +
+          Number(withdrawalState.entryCount || 0),
         ledgerVerified:
           Number(walletTotals?.pending_satang || 0) === Number(totals?.pending_satang || 0) &&
           Number(walletTotals?.available_satang || 0) === Number(totals?.available_satang || 0) &&
-          Number(walletTotals?.paid_satang || 0) === Number(totals?.paid_satang || 0),
-        withdrawalEnabled: false,
+          Number(walletTotals?.paid_satang || 0) === Number(totals?.paid_satang || 0) &&
+          Boolean(withdrawalState.conserved),
+        withdrawalEnabled: Boolean(withdrawalState.settings?.requestsEnabled),
+        withdrawal: withdrawalState,
         recent: walletLedger.rows
       }
     };
