@@ -269,6 +269,40 @@ export class ApiCredentialTesterService {
         response.ok ? "Omise Account API ตอบสำเร็จ" : `Omise ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
     }
 
+    if (configKey === "THAIBULKSMS_OTP_KEY" || configKey === "THAIBULKSMS_OTP_SECRET") {
+      const key = this.env("THAIBULKSMS_OTP_KEY", configKey, value, companionKey, companionValue);
+      const secret = this.env("THAIBULKSMS_OTP_SECRET", configKey, value, companionKey, companionValue);
+      if (!key || !secret) {
+        return this.result(false, "FAIL", "ThaiBulkSMS OTP", "preset/config key",
+          "ต้องมีทั้ง ThaiBulkSMS OTP Key และ OTP Secret จึงจะทดสอบได้");
+      }
+      const form = new URLSearchParams();
+      form.set("key", key);
+      form.set("secret", secret);
+      form.set("token", "__scenova_connection_test__");
+      form.set("pin", "000000");
+      const { response, text } = await this.request("https://otp.thaibulksms.com/v2/otp/verify", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: form.toString()
+      });
+      if (response.ok) {
+        return this.result(true, "PASS", "ThaiBulkSMS OTP", "preset/config key",
+          "ThaiBulkSMS OTP endpoint ตอบสำเร็จ", response.status);
+      }
+      const lowered = text.toLowerCase();
+      const authFailed = /unauthorized|authentication|invalid\s*(key|secret)|api\s*(key|secret)/i.test(lowered);
+      if (response.status === 400 && !authFailed) {
+        return this.result(true, "LIMITED", "ThaiBulkSMS OTP", "preset/config key",
+          "OTP endpoint รับคำขอแล้วและปฏิเสธ token ทดสอบตามคาด โดยไม่มีการส่ง OTP", response.status);
+      }
+      return this.result(false, "FAIL", "ThaiBulkSMS OTP", "preset/config key",
+        `ThaiBulkSMS OTP ปฏิเสธ credentials (HTTP ${response.status})`, response.status);
+    }
+
     if (configKey === "THAIBULKSMS_API_KEY" || configKey === "THAIBULKSMS_API_SECRET") {
       const key = this.env("THAIBULKSMS_API_KEY", configKey, value, companionKey, companionValue);
       const secret = this.env("THAIBULKSMS_API_SECRET", configKey, value, companionKey, companionValue);
