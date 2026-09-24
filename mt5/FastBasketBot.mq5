@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.68"
-#define SCENOVA_EA_VERSION "1.0.68"
-#define SCENOVA_PRODUCT_VERSION "1.0.68"
+#property version   "1.0.69"
+#define SCENOVA_EA_VERSION "1.0.69"
+#define SCENOVA_PRODUCT_VERSION "1.0.69"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -405,6 +405,11 @@ double   g_raceExposureProjectedStructureLossMoney = 0.0;
 double   g_raceExposureStructureInvalidPrice = 0.0;
 bool     g_raceExposureRiskMismatch = false;
 string   g_raceLossState = "NORMAL";
+// RACE VNext Phase 3 re-entry observer. Kept outside ResetRaceRuntime so the
+// flat-transition clock survives the normal per-cycle state reset.
+bool     g_raceHadExposure = false;
+bool     g_raceReentryPending = false;
+datetime g_raceReentryStartedAt = 0;
 bool   g_adaptiveEngine;
 double g_riskPerOrderPercent;
 bool   g_allowMinimumLotOverride;
@@ -3178,6 +3183,7 @@ bool RaceZonePriorityActive(
 #include "include\\RaceDecisionV2.mqh"
 #include "include\\RaceExposureV1.mqh"
 #include "include\\RaceLossV2.mqh"
+#include "include\\RaceReentryV1.mqh"
 
 int RaceAnalysisDirection(double momentum)
 {
@@ -3815,6 +3821,7 @@ bool ProcessRaceFill(int direction)
    RegisterOrderRequest();
    if(accepted)
    {
+      RaceReentryMarkExposure();
       g_raceLastFillAt = TimeCurrent();
       RaceResetExitCandidate();
       int after = RaceFilledUnits();
@@ -3840,6 +3847,12 @@ bool StartRaceCycle(double momentum)
    if(!RaceModeEnabled())
       return false;
    if(BasketPositionCount() > 0 || RescuePositionCount() > 0)
+      return false;
+
+   // Phase 3: after the previous RACE Basket becomes flat, watch fresh ticks for
+   // four seconds before clearing the old direction and choosing the next side.
+   RaceReentryDetectFlatTransition();
+   if(!RaceReentryObserveReady())
       return false;
 
    ResetRaceRuntime();
@@ -3872,6 +3885,8 @@ bool StartRaceCycle(double momentum)
 bool ManageRaceBasket(double momentum)
 {
    int positions = BasketPositionCount();
+   if(positions > 0)
+      RaceReentryMarkExposure();
    if(positions <= 0)
    {
       ResetRaceRuntime();
