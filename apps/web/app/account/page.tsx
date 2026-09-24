@@ -71,6 +71,7 @@ type TwoFactorSetup = {
   otpauthUri: string;
   digits: number;
   period: number;
+  resumed?: boolean;
 };
 
 type PanelKey = "phone" | "password" | "twoFactor" | "session";
@@ -521,6 +522,11 @@ export default function AccountPage() {
 
                   {!data.security.twoFactorEnabled && twoFactorSetup && (
                     <div className={styles.setupBox}>
+                      <div className={styles.lockNote}>
+                        {twoFactorSetup.resumed
+                          ? "พบการตั้งค่า 2FA ที่ยังไม่เสร็จ ระบบใช้ Key เดิมต่อให้แล้ว ถ้า Authenticator ของคุณเป็นรายการเก่า ให้ลบ SCENOVA เดิมแล้วเพิ่ม Key ด้านล่างใหม่"
+                          : "เพิ่ม SCENOVA ใน Google Authenticator / Microsoft Authenticator เพียงครั้งเดียว แล้วกรอกรหัส 6 หลักด้านล่าง การเปิดหน้านี้ซ้ำจะไม่เปลี่ยน Key"}
+                      </div>
                       <div className={styles.secretLine}>
                         <code>{twoFactorSetup.secret}</code>
                         <button type="button" className={styles.secondaryButton} onClick={()=>copyText(twoFactorSetup.secret)}>คัดลอก Key</button>
