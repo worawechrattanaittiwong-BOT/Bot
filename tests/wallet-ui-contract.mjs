@@ -23,6 +23,8 @@ expect(!walletCss.includes("font-size:8px"), "wallet must not regress to unreada
 expect(walletCss.includes("font-size:var(--ui-type-meta)"), "wallet helper text must use central readable token");
 expect(walletCss.includes("grid-template-columns:minmax(220px,360px)"), "withdraw amount field must stay compact");
 expect(walletCss.includes(".compactField{max-width:220px}"), "2FA field must stay compact");
+expect(!page.includes("จำนวนเงิน (THB)"), "withdraw amount label must not show currency code");
+expect(!page.includes("<span>THB</span>"), "withdraw amount input must not show currency suffix");
 
 expect(page.includes('name="scenova-payout-account-number"'), "bank account input must use dedicated autofill identity");
 expect(page.includes('name="scenova-withdrawal-amount-thb"'), "withdraw amount input must use dedicated autofill identity");

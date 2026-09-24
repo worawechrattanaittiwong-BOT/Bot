@@ -684,7 +684,7 @@ export default function ReferralsPage() {
                 <form className={styles.withdrawRequestForm} onSubmit={requestWithdrawal} autoComplete="off">
                   <div className={styles.amountBlock}>
                     <label className={styles.formField}>
-                      <span>จำนวนเงิน (THB)</span>
+                      <span>จำนวนเงิน</span>
                       <div className={styles.amountInput}>
                         <input
                           name="scenova-withdrawal-amount-thb"
@@ -702,7 +702,6 @@ export default function ReferralsPage() {
                           placeholder="10,000"
                           required
                         />
-                        <span>THB</span>
                       </div>
                     </label>
                     <div className={styles.amountMeta}>
