@@ -85,7 +85,8 @@ jobs:
             database/031_admin_api_credential_test_metadata.sql \
             database/032_commission_wallet_core.sql \
             database/033_github_owner_migration.sql \
-            database/034_secure_withdrawals.sql
+            database/034_secure_withdrawals.sql \
+            database/035_withdrawal_advanced_security.sql
           do
             psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f "$migration"
             psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f "$migration"
