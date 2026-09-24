@@ -59,6 +59,7 @@ BEGIN
     ALTER TABLE local_orders ADD COLUMN IF NOT EXISTS promotion_redemption_id uuid REFERENCES promotion_redemptions(id) ON DELETE SET NULL;
     UPDATE local_orders SET original_amount=amount WHERE original_amount IS NULL;
     ALTER TABLE local_orders ALTER COLUMN original_amount SET NOT NULL;
+    ALTER TABLE local_orders ALTER COLUMN original_amount SET DEFAULT 0;
   END IF;
 
   IF to_regclass('public.cloud_orders') IS NOT NULL THEN
@@ -70,5 +71,6 @@ BEGIN
     ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS promotion_redemption_id uuid REFERENCES promotion_redemptions(id) ON DELETE SET NULL;
     UPDATE cloud_orders SET original_amount=amount WHERE original_amount IS NULL;
     ALTER TABLE cloud_orders ALTER COLUMN original_amount SET NOT NULL;
+    ALTER TABLE cloud_orders ALTER COLUMN original_amount SET DEFAULT 0;
   END IF;
 END $$;

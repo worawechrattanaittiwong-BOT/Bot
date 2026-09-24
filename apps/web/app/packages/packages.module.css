@@ -665,7 +665,7 @@
   color:#82ddb0;
   font-size:11px
 }
-.promoApplied span{font:700 10px Consolas,monospace}
+.promoApplied span{font:700 11px Consolas,monospace}
 .promoApplied b{font-size:11px}
 @media(max-width:1180px){
   .shell{

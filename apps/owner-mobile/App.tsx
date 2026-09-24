@@ -241,7 +241,7 @@ function OwnerApp({ restoreTheme }: { restoreTheme: (theme: ThemeMode) => void }
   else if (auth) body = screen === "setup" ? <FirstSetup onSubmit={enroll} onBack={enrolled ? () => setScreen("pin") : undefined} /> : <PinLogin onSetup={() => setScreen("setup")} onLogin={login} />;
   else if (screen === "detail" && selected) body = <ApprovalDetail item={selected} onBack={() => setScreen("approvals")} onAction={approvalAction} />;
   else if (screen === "withdraw") body = <OwnerWithdraw summary={summary} onBack={() => setScreen("dashboard")} onSubmit={withdraw} stale={!!summaryError || refreshing} />;
-  else if (screen === "approvals") body = <ApprovalList items={approvals} loading={approvalsLoading} error={approvalsError} onRefresh={() => void loadApprovals()} onOpen={item => { setSelected(item); setScreen("detail"); }} />;
+  else if (screen === "approvals") body = <ApprovalList items={approvals} loading={approvalsLoading} error={approvalsError} onBack={() => setScreen("dashboard")} onRefresh={() => void loadApprovals()} onOpen={item => { setSelected(item); setScreen("detail"); }} />;
   else if (screen === "packages") body = <PackagesScreen api={authorized} />;
   else if (screen === "promotions") body = <PromotionsScreen api={authorized} />;
   else if (screen === "accounts") body = <AccountsScreen api={authorized} version={`v${appConfig.expo.version}`} update={updateManifest} updateBusy={updateBusy} onInstall={() => { if (updateManifest) void runOwnerUpdate(updateManifest); }} onLock={lock} />;

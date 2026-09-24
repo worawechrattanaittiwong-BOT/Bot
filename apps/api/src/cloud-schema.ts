@@ -68,6 +68,53 @@ CREATE TABLE IF NOT EXISTS runtime_incidents (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_incident_open_key ON runtime_incidents(incident_key) WHERE state='OPEN';
 CREATE INDEX IF NOT EXISTS idx_runtime_incident_recent ON runtime_incidents(state,severity,last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_runtime_incident_instance ON runtime_incidents(bot_instance_id,last_seen_at DESC);
+CREATE TABLE IF NOT EXISTS promotion_codes (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ code varchar(20) NOT NULL UNIQUE,
+ discount_percent integer NOT NULL CHECK(discount_percent BETWEEN 0 AND 100),
+ usage_limit integer NOT NULL CHECK(usage_limit BETWEEN 1 AND 1000000),
+ per_user_limit integer NOT NULL DEFAULT 1 CHECK(per_user_limit BETWEEN 1 AND 1000),
+ starts_at timestamptz NOT NULL,
+ ends_at timestamptz NOT NULL,
+ applies_to_all_packages boolean NOT NULL DEFAULT true,
+ active boolean NOT NULL DEFAULT true,
+ created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ CHECK(ends_at > starts_at)
+);
+CREATE TABLE IF NOT EXISTS promotion_package_rules (
+ promotion_id uuid NOT NULL REFERENCES promotion_codes(id) ON DELETE CASCADE,
+ mode varchar(16) NOT NULL CHECK(mode IN ('LOCAL','CLOUD')),
+ months integer NOT NULL CHECK(months IN (1,3,6,12)),
+ PRIMARY KEY(promotion_id,mode,months)
+);
+CREATE TABLE IF NOT EXISTS promotion_redemptions (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ promotion_id uuid NOT NULL REFERENCES promotion_codes(id) ON DELETE RESTRICT,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ purchase_type varchar(16) NOT NULL CHECK(purchase_type IN ('LOCAL','CLOUD')),
+ months integer NOT NULL CHECK(months IN (1,3,6,12)),
+ order_id uuid,
+ original_amount_satang integer NOT NULL CHECK(original_amount_satang >= 0),
+ discount_amount_satang integer NOT NULL CHECK(discount_amount_satang >= 0),
+ final_amount_satang integer NOT NULL CHECK(final_amount_satang >= 0),
+ status varchar(16) NOT NULL DEFAULT 'RESERVED'
+   CHECK(status IN ('RESERVED','USED','RELEASED','CANCELLED')),
+ reserved_until timestamptz,
+ used_at timestamptz,
+ created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_promotion_codes_active
+ ON promotion_codes(active,starts_at,ends_at);
+CREATE INDEX IF NOT EXISTS idx_promotion_redemptions_promo
+ ON promotion_redemptions(promotion_id,status,reserved_until);
+CREATE INDEX IF NOT EXISTS idx_promotion_redemptions_user
+ ON promotion_redemptions(user_id,promotion_id,status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_promotion_redemption_order
+ ON promotion_redemptions(purchase_type,order_id)
+ WHERE order_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS cloud_packages (
  months integer PRIMARY KEY CHECK(months IN (1,3,6,12)),
  price_satang integer NOT NULL DEFAULT 0 CHECK(price_satang>=0),
@@ -84,7 +131,7 @@ CREATE TABLE IF NOT EXISTS cloud_orders (
  user_id uuid NOT NULL REFERENCES users(id),
  months integer NOT NULL REFERENCES cloud_packages(months),
  amount integer NOT NULL CHECK(amount>=0),
- original_amount integer NOT NULL CHECK(original_amount>=0),
+ original_amount integer NOT NULL DEFAULT 0 CHECK(original_amount>=0),
  discount_amount integer NOT NULL DEFAULT 0 CHECK(discount_amount>=0),
  promotion_code varchar(20),
  promotion_redemption_id uuid REFERENCES promotion_redemptions(id) ON DELETE SET NULL,
@@ -118,7 +165,7 @@ CREATE TABLE IF NOT EXISTS local_orders (
  user_id uuid NOT NULL REFERENCES users(id),
  months integer NOT NULL REFERENCES local_packages(months),
  amount integer NOT NULL CHECK(amount>=0),
- original_amount integer NOT NULL CHECK(original_amount>=0),
+ original_amount integer NOT NULL DEFAULT 0 CHECK(original_amount>=0),
  discount_amount integer NOT NULL DEFAULT 0 CHECK(discount_amount>=0),
  promotion_code varchar(20),
  promotion_redemption_id uuid REFERENCES promotion_redemptions(id) ON DELETE SET NULL,

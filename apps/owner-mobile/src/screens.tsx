@@ -58,12 +58,12 @@ export function OwnerMoney({ summary, refreshing, error, onRefresh, onWithdraw }
   </Page>;
 }
 
-export function ApprovalList({ items, loading, error, onRefresh, onOpen }: { items: Approval[] | null; loading: boolean; error?: string; onRefresh: () => void; onOpen: (item: Approval) => void }) {
+export function ApprovalList({ items, loading, error, onRefresh, onOpen, onBack }: { items: Approval[] | null; loading: boolean; error?: string; onRefresh: () => void; onOpen: (item: Approval) => void; onBack?: () => void }) {
   const { colors: c } = useTheme();
   const [filter, setFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const visible = (items || []).filter(item => (filter === "ALL" || item.status === filter) && `${item.user_code} ${item.email} ${item.account_name}`.toLowerCase().includes(search.trim().toLowerCase()));
-  return <Page title="คำขอถอน" subtitle="ตรวจสอบและจัดการรายการของลูกค้า" refreshing={loading} onRefresh={onRefresh}>
+  return <Page title="คำขอถอน" subtitle="ตรวจสอบและจัดการรายการของลูกค้า" onBack={onBack} refreshing={loading} onRefresh={onRefresh}>
     <Field label="ค้นหารายการ" placeholder="รหัสลูกค้า ชื่อ หรืออีเมล" value={search} onChangeText={setSearch} />
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>{[["ALL", "ทั้งหมด"], ["REQUESTED", "รออนุมัติ"], ["HOLD", "พักรายการ"], ["APPROVED", "อนุมัติแล้ว"]].map(([key, label]) => <Pressable key={key} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: key === filter }} onPress={() => setFilter(key)} style={{ minHeight: 44, paddingHorizontal: 13, justifyContent: "center", borderRadius: 12, borderWidth: 1, borderColor: key === filter ? c.accent : c.border, backgroundColor: key === filter ? c.accentSoft : c.surface }}><Copy style={{ fontSize: 12, color: key === filter ? c.accent : c.muted, fontWeight: "600" }}>{label}</Copy></Pressable>)}</ScrollView>
     {!!error && <Notice text={error} danger onRetry={onRefresh} />}
