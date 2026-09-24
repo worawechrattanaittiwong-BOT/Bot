@@ -40,11 +40,11 @@ export class ApiCredentialTesterService {
     const key = configKey.toUpperCase();
     const url = testUrl.toLowerCase();
 
-    if (key.includes("OPENAI") || /^sk-(?:proj-|svcacct-)?/i.test(value) || url.includes("api.openai.com")) {
-      return { provider: "OpenAI", from: key.includes("OPENAI") ? "config key" : url ? "URL / key pattern" : "key pattern" };
-    }
     if (key.includes("ANTHROPIC") || /^sk-ant-/i.test(value) || url.includes("api.anthropic.com")) {
       return { provider: "Anthropic", from: key.includes("ANTHROPIC") ? "config key" : url ? "URL / key pattern" : "key pattern" };
+    }
+    if (key.includes("OPENAI") || /^sk-(?:proj-|svcacct-)/i.test(value) || url.includes("api.openai.com")) {
+      return { provider: "OpenAI", from: key.includes("OPENAI") ? "config key" : url ? "URL / key pattern" : "key pattern" };
     }
     if (key.includes("GEMINI") || /^AIza[0-9A-Za-z_-]+$/.test(value) || url.includes("generativelanguage.googleapis.com")) {
       return { provider: "Google Gemini", from: key.includes("GEMINI") ? "config key" : url ? "URL / key pattern" : "key pattern" };
