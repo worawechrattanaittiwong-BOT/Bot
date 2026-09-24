@@ -107,7 +107,10 @@ export class AdminApiCredentialsController {
       entries,
       provider: String(result.provider || "").slice(0, 140),
       status: result.status === "LIMITED" ? "LIMITED" : "PASS",
-      detail: String(result.detail || "").slice(0, 1000),
+      detail: (
+        String(result.detail || "") +
+        (result.detectedFrom ? " · Detected from: " + String(result.detectedFrom) : "")
+      ).slice(0, 1000),
       testUrl: String(body.testUrl || "").trim().slice(0, 1200),
       authMode: String(body.authMode || "BEARER").trim().toUpperCase().slice(0, 32),
       headerName: String(body.headerName || "").trim().slice(0, 80)
