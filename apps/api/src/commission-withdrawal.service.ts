@@ -710,7 +710,7 @@ export class CommissionWithdrawalService {
         shared_account_users: Number(row.shared_account_users || 0)
       })),
       audit: audit.rows,
-      advanced
+      phase3: advanced
     };
   }
 
