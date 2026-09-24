@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
-const { hash } = require("../apps/api/node_modules/bcryptjs");
-require("../apps/api/node_modules/reflect-metadata");
+const { hash } = require("bcryptjs");
+require("reflect-metadata");
 const { AccountSecurityController } = require("../apps/api/dist/account-security.controller");
 
 (async () => {
