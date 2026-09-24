@@ -1,0 +1,249 @@
+import { Injectable } from "@nestjs/common";
+import { lookup } from "dns/promises";
+import { isIP } from "net";
+
+type TestInput = {
+  configKey?: string;
+  category?: string;
+  value?: string;
+  testUrl?: string;
+  authMode?: string;
+  headerName?: string;
+};
+
+type TestResult = {
+  ok: boolean;
+  status: "PASS" | "LIMITED" | "FAIL";
+  provider: string;
+  detectedFrom: string;
+  detail: string;
+  httpStatus?: number;
+};
+
+@Injectable()
+export class ApiCredentialTesterService {
+  private env(key: string, candidateKey: string, candidateValue: string) {
+    return candidateKey === key ? candidateValue : String(process.env[key] || "").trim();
+  }
+
+  private infer(configKey: string, value: string, testUrl: string) {
+    const key = configKey.toUpperCase();
+    const url = testUrl.toLowerCase();
+
+    if (key.includes("OPENAI") || /^sk-(?:proj-|svcacct-)?/i.test(value) || url.includes("api.openai.com")) {
+      return { provider: "OpenAI", from: key.includes("OPENAI") ? "config key" : url ? "URL / key pattern" : "key pattern" };
+    }
+    if (key.includes("ANTHROPIC") || /^sk-ant-/i.test(value) || url.includes("api.anthropic.com")) {
+      return { provider: "Anthropic", from: key.includes("ANTHROPIC") ? "config key" : url ? "URL / key pattern" : "key pattern" };
+    }
+    if (key.includes("GEMINI") || /^AIza[0-9A-Za-z_-]+$/.test(value) || url.includes("generativelanguage.googleapis.com")) {
+      return { provider: "Google Gemini", from: key.includes("GEMINI") ? "config key" : url ? "URL / key pattern" : "key pattern" };
+    }
+    if (key.includes("RESEND") || /^re_[A-Za-z0-9_-]+$/.test(value) || url.includes("api.resend.com")) {
+      return { provider: "Resend", from: key.includes("RESEND") ? "config key" : url ? "URL / key pattern" : "key pattern" };
+    }
+    if (key.includes("OMISE") || /^skey_(?:test|live)_/i.test(value) || url.includes("api.omise.co")) {
+      return { provider: "Opn / Omise", from: key.includes("OMISE") ? "config key" : url ? "URL / key pattern" : "key pattern" };
+    }
+    if (key.includes("THAIBULKSMS") || url.includes("thaibulksms.com")) {
+      return { provider: "ThaiBulkSMS", from: key.includes("THAIBULKSMS") ? "config key" : "URL" };
+    }
+    if (key.includes("NEWS") || url.includes("newsapi.org")) {
+      return { provider: url.includes("newsapi.org") ? "NewsAPI" : "News Provider", from: url.includes("newsapi.org") ? "URL" : "config key" };
+    }
+
+    if (testUrl) {
+      try {
+        const host = new URL(testUrl).hostname.replace(/^api\./i, "").replace(/^www\./i, "");
+        const brand = host.split(".")[0] || "Custom API";
+        return { provider: brand.charAt(0).toUpperCase() + brand.slice(1), from: "URL hostname" };
+      } catch {}
+    }
+    return { provider: "Custom API", from: "manual / unknown" };
+  }
+
+  private privateIp(address: string) {
+    const v = isIP(address);
+    if (v === 4) {
+      const p = address.split(".").map(Number);
+      return p[0] === 10 ||
+        p[0] === 127 ||
+        (p[0] === 169 && p[1] === 254) ||
+        (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
+        (p[0] === 192 && p[1] === 168) ||
+        p[0] === 0;
+    }
+    if (v === 6) {
+      const a = address.toLowerCase();
+      return a === "::1" || a.startsWith("fe80:") || a.startsWith("fc") || a.startsWith("fd");
+    }
+    return true;
+  }
+
+  private async assertPublicHttps(rawUrl: string) {
+    let url: URL;
+    try {
+      url = new URL(rawUrl);
+    } catch {
+      throw new Error("Test URL ไม่ถูกต้อง");
+    }
+    if (url.protocol !== "https:") throw new Error("Custom Test URL ต้องเป็น https:// เท่านั้น");
+    if (["localhost", "localhost.localdomain"].includes(url.hostname.toLowerCase())) {
+      throw new Error("ไม่อนุญาต localhost/private network");
+    }
+    const records = await lookup(url.hostname, { all: true });
+    if (!records.length || records.some(record => this.privateIp(record.address))) {
+      throw new Error("ไม่อนุญาต private/internal network");
+    }
+    return url;
+  }
+
+  private async request(url: string, init: RequestInit) {
+    const response = await fetch(url, {
+      ...init,
+      redirect: "manual",
+      signal: AbortSignal.timeout(10000)
+    });
+    const text = await response.text().catch(() => "");
+    return { response, text: text.slice(0, 800) };
+  }
+
+  private result(
+    ok: boolean,
+    status: TestResult["status"],
+    provider: string,
+    detectedFrom: string,
+    detail: string,
+    httpStatus?: number
+  ): TestResult {
+    return { ok, status, provider, detectedFrom, detail, httpStatus };
+  }
+
+  async test(input: TestInput): Promise<TestResult> {
+    const configKey = String(input.configKey || "").trim().toUpperCase();
+    const value = String(input.value || "").trim();
+    const testUrl = String(input.testUrl || "").trim();
+    if (!value) throw new Error("กรุณาวาง API Key / Secret ก่อนทดสอบ");
+
+    const inferred = this.infer(configKey, value, testUrl);
+
+    if (configKey === "OPENAI_API_KEY") {
+      const { response } = await this.request("https://api.openai.com/v1/models", {
+        method: "GET",
+        headers: { Authorization: "Bearer " + value, Accept: "application/json" }
+      });
+      return this.result(response.ok, response.ok ? "PASS" : "FAIL", "OpenAI", "preset/config key",
+        response.ok ? "OpenAI API ตอบสำเร็จ" : `OpenAI ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
+    }
+
+    if (configKey === "ANTHROPIC_API_KEY") {
+      const { response } = await this.request("https://api.anthropic.com/v1/models", {
+        method: "GET",
+        headers: {
+          "x-api-key": value,
+          "anthropic-version": "2023-06-01",
+          Accept: "application/json"
+        }
+      });
+      return this.result(response.ok, response.ok ? "PASS" : "FAIL", "Anthropic", "preset/config key",
+        response.ok ? "Anthropic API ตอบสำเร็จ" : `Anthropic ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
+    }
+
+    if (configKey === "GEMINI_API_KEY") {
+      const url = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=" + encodeURIComponent(value);
+      const { response } = await this.request(url, { method: "GET", headers: { Accept: "application/json" } });
+      return this.result(response.ok, response.ok ? "PASS" : "FAIL", "Google Gemini", "preset/config key",
+        response.ok ? "Gemini API ตอบสำเร็จ" : `Gemini ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
+    }
+
+    if (configKey === "NEWS_API_KEY") {
+      const { response } = await this.request("https://newsapi.org/v2/top-headlines/sources", {
+        method: "GET",
+        headers: { "X-Api-Key": value, Accept: "application/json" }
+      });
+      return this.result(response.ok, response.ok ? "PASS" : "FAIL", "NewsAPI", "preset/config key",
+        response.ok ? "NewsAPI ตอบสำเร็จ" : `NewsAPI ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
+    }
+
+    if (configKey === "RESEND_API_KEY") {
+      const { response } = await this.request("https://api.resend.com/domains", {
+        method: "GET",
+        headers: { Authorization: "Bearer " + value, Accept: "application/json" }
+      });
+      if (response.ok) {
+        return this.result(true, "PASS", "Resend", "preset/config key", "Resend API ตอบสำเร็จ", response.status);
+      }
+      if (response.status === 403) {
+        return this.result(true, "LIMITED", "Resend", "preset/config key",
+          "คีย์ตอบกลับจาก Resend แต่สิทธิ์ไม่อนุญาต endpoint ทดสอบนี้", response.status);
+      }
+      return this.result(false, "FAIL", "Resend", "preset/config key",
+        `Resend ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
+    }
+
+    if (configKey === "OMISE_SECRET_KEY") {
+      const { response } = await this.request("https://api.omise.co/account", {
+        method: "GET",
+        headers: {
+          Authorization: "Basic " + Buffer.from(value + ":").toString("base64"),
+          Accept: "application/json"
+        }
+      });
+      return this.result(response.ok, response.ok ? "PASS" : "FAIL", "Opn / Omise", "preset/config key",
+        response.ok ? "Omise Account API ตอบสำเร็จ" : `Omise ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
+    }
+
+    if (configKey === "THAIBULKSMS_API_KEY" || configKey === "THAIBULKSMS_API_SECRET") {
+      const key = this.env("THAIBULKSMS_API_KEY", configKey, value);
+      const secret = this.env("THAIBULKSMS_API_SECRET", configKey, value);
+      if (!key || !secret) {
+        return this.result(false, "FAIL", "ThaiBulkSMS", "preset/config key",
+          "ต้องมีทั้ง ThaiBulkSMS API Key และ API Secret จึงจะทดสอบภายนอกได้");
+      }
+      const { response } = await this.request("https://api-v2.thaibulksms.com/credit", {
+        method: "GET",
+        headers: {
+          Authorization: "Basic " + Buffer.from(key + ":" + secret).toString("base64"),
+          Accept: "application/json"
+        }
+      });
+      return this.result(response.ok, response.ok ? "PASS" : "FAIL", "ThaiBulkSMS", "preset/config key",
+        response.ok ? "ThaiBulkSMS Credit API ตอบสำเร็จ" : `ThaiBulkSMS ปฏิเสธ credentials (HTTP ${response.status})`, response.status);
+    }
+
+    if (testUrl) {
+      const url = await this.assertPublicHttps(testUrl);
+      const authMode = String(input.authMode || "BEARER").trim().toUpperCase();
+      const headers: Record<string, string> = { Accept: "application/json" };
+
+      if (authMode === "BEARER") headers.Authorization = "Bearer " + value;
+      else if (authMode === "X_API_KEY") headers["X-Api-Key"] = value;
+      else if (authMode === "CUSTOM_HEADER") {
+        const headerName = String(input.headerName || "").trim();
+        if (!/^[A-Za-z0-9-]{1,80}$/.test(headerName)) throw new Error("ชื่อ Custom Header ไม่ถูกต้อง");
+        headers[headerName] = value;
+      } else if (authMode !== "NONE") {
+        throw new Error("Auth Mode ไม่รองรับ");
+      }
+
+      const { response } = await this.request(url.toString(), { method: "GET", headers });
+      const success = response.status >= 200 && response.status < 300;
+      return this.result(
+        success,
+        success ? "PASS" : "FAIL",
+        inferred.provider,
+        inferred.from,
+        success ? `${inferred.provider} ตอบสำเร็จจาก Custom Test URL` : `ปลายทางตอบ HTTP ${response.status}`,
+        response.status
+      );
+    }
+
+    return this.result(
+      false,
+      "FAIL",
+      inferred.provider,
+      inferred.from,
+      "ยังไม่มีวิธี Test แบบไม่สร้างรายการภายนอกสำหรับคีย์นี้ กรุณาใช้ Custom Test URL"
+    );
+  }
+}
