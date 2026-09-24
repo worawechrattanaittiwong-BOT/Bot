@@ -24,6 +24,8 @@ expect(files.migration.includes("idx_commission_withdrawal_one_open"), "one-open
 expect(files.migration.includes("idx_commission_payout_one_current"), "one-current-destination guard missing");
 expect(files.migration.includes("reject_commission_withdrawal_ledger_mutation"), "append-only withdrawal ledger trigger missing");
 expect(files.migration.includes("reject_commission_withdrawal_audit_mutation"), "append-only audit trigger missing");
+expect(files.migration.includes("guard_commission_withdrawal_update"), "withdrawal identity/state guard missing");
+expect(files.migration.includes("guard_commission_payout_destination_update"), "destination identity/state guard missing");
 
 expect(files.service.includes("FOR UPDATE"), "row locking missing from withdrawal service");
 expect(files.service.includes("walletIntegrityTx"), "wallet integrity check missing");
