@@ -11,6 +11,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { PoolClient } from "pg";
 import { CryptoService } from "./security";
 import { DbService } from "./db.service";
+import { CommissionWithdrawalRiskService } from "./commission-withdrawal-risk.service";
 
 const TOTP_STEP_SECONDS = 30;
 const TOTP_DIGITS = 6;
@@ -70,7 +71,8 @@ type StepUp = {
 export class CommissionWithdrawalService {
   constructor(
     private readonly db: DbService,
-    private readonly crypto: CryptoService
+    private readonly crypto: CryptoService,
+    private readonly risk: CommissionWithdrawalRiskService
   ) {}
 
   private async stepUp(userId: string, input: StepUp) {
@@ -238,7 +240,8 @@ export class CommissionWithdrawalService {
     const [settings, destination, totals, recent] = await Promise.all([
       this.db.one(
         `SELECT requests_enabled,min_amount_satang,max_amount_satang,
-                destination_cooldown_hours,updated_at
+                destination_cooldown_hours,kill_switch_enabled,kill_switch_reason,
+                updated_at
          FROM commission_withdrawal_settings WHERE id=1`
       ),
       this.db.one(
@@ -278,7 +281,9 @@ export class CommissionWithdrawalService {
         requestsEnabled: Boolean(settings?.requests_enabled),
         minAmountSatang: Number(settings?.min_amount_satang || 10000),
         maxAmountSatang: Number(settings?.max_amount_satang || 5000000),
-        destinationCooldownHours: Number(settings?.destination_cooldown_hours || 24)
+        destinationCooldownHours: Number(settings?.destination_cooldown_hours || 24),
+        killSwitchEnabled: Boolean(settings?.kill_switch_enabled),
+        killSwitchReason: settings?.kill_switch_reason || null
       },
       destination: destination ? {
         id: destination.id,
@@ -398,7 +403,8 @@ export class CommissionWithdrawalService {
       currentPassword?: string;
       twoFactorCode?: string;
     },
-    ip?: string | null
+    ip?: string | null,
+    deviceId?: string | null
   ) {
     const amountSatang = Math.trunc(Number(input.amountSatang || 0));
     const requestKey = String(input.clientRequestKey || "").trim();
@@ -490,13 +496,45 @@ export class CommissionWithdrawalService {
         throw new BadRequestException("ยอด Available ไม่เพียงพอ");
       }
 
+      const risk = await this.risk.assessRequestTx(tx, {
+        userId,
+        destinationId: destination.id,
+        amountSatang,
+        availableSatang: integrity.availableSatang,
+        ip: ip || null,
+        deviceId: deviceId || null
+      });
+
       const row = (await tx.query(
         `INSERT INTO commission_withdrawals(
-           user_id,destination_id,amount_satang,currency,status,client_request_key,request_ip
-         ) VALUES($1,$2,$3,'THB','REQUESTED',$4,$5)
-         RETURNING id,status,amount_satang,created_at`,
-        [userId, destination.id, amountSatang, requestKey, ip || null]
+           user_id,destination_id,amount_satang,currency,status,client_request_key,request_ip,
+           request_device_hash,risk_score,risk_level,risk_reasons,approval_required,approval_count
+         ) VALUES(
+           $1,$2,$3,'THB',$4,$5,$6,$7,$8,$9,$10::jsonb,$11,0
+         )
+         RETURNING id,status,amount_satang,created_at,risk_score,risk_level,approval_required`,
+        [
+          userId,
+          destination.id,
+          amountSatang,
+          risk.autoHold ? "HOLD" : "REQUESTED",
+          requestKey,
+          ip || null,
+          risk.deviceHash,
+          risk.score,
+          risk.level,
+          JSON.stringify(risk.reasons),
+          risk.approvalRequired
+        ]
       )).rows[0];
+
+      await this.risk.createRiskAlertTx(tx, {
+        withdrawalId: row.id,
+        userId,
+        score: risk.score,
+        level: risk.level,
+        reasons: risk.reasons
+      });
 
       await tx.query(
         `INSERT INTO commission_withdrawal_ledger(
@@ -525,7 +563,12 @@ export class CommissionWithdrawalService {
         actorLabel: userId,
         eventType: "WITHDRAWAL_REQUESTED",
         ip,
-        metadata: { amountSatang }
+        metadata: {
+          amountSatang,
+          riskScore: Number(row.risk_score || 0),
+          riskLevel: row.risk_level,
+          approvalRequired: Number(row.approval_required || 1)
+        }
       });
 
       return {
@@ -533,6 +576,9 @@ export class CommissionWithdrawalService {
         status: row.status,
         amountSatang: Number(row.amount_satang),
         createdAt: row.created_at,
+        riskScore: Number(row.risk_score || 0),
+        riskLevel: row.risk_level,
+        approvalRequired: Number(row.approval_required || 1),
         duplicate: false
       };
     });
@@ -588,7 +634,7 @@ export class CommissionWithdrawalService {
   }
 
   async adminDashboard() {
-    const [settings, summary, items, audit] = await Promise.all([
+    const [settings, summary, items, audit, advanced] = await Promise.all([
       this.db.one(
         `SELECT requests_enabled,min_amount_satang,max_amount_satang,
                 destination_cooldown_hours,updated_by,updated_at
@@ -609,6 +655,8 @@ export class CommissionWithdrawalService {
            w.id,w.user_id,u.user_code,u.email,w.amount_satang,w.currency,w.status,
            w.review_reason,w.reviewed_by,w.reviewed_at,w.approved_at,w.rejected_at,
            w.paid_at,w.payout_reference,w.created_at,w.updated_at,
+           w.risk_score,w.risk_level,w.risk_reasons,w.approval_required,w.approval_count,
+           w.auto_payout_eligible,w.reconciliation_status,
            d.id AS destination_id,d.bank_code,d.bank_name,d.account_name,d.account_last4,
            d.status AS destination_status,d.usable_at,
            (SELECT count(DISTINCT d2.user_id)::int
@@ -634,7 +682,8 @@ export class CommissionWithdrawalService {
          LEFT JOIN users u ON u.id=a.user_id
          ORDER BY a.created_at DESC
          LIMIT 100`
-      )
+      ),
+      this.risk.adminOverview()
     ]);
 
     return {
@@ -660,7 +709,8 @@ export class CommissionWithdrawalService {
         masked_account: "••••" + String(row.account_last4 || ""),
         shared_account_users: Number(row.shared_account_users || 0)
       })),
-      audit: audit.rows
+      audit: audit.rows,
+      advanced
     };
   }
 
@@ -698,8 +748,20 @@ export class CommissionWithdrawalService {
     return this.reviewStatus(withdrawalId, actor, "HOLD", reason, ip);
   }
 
-  async approve(withdrawalId: string, actor: string, reason: string, ip?: string | null) {
-    return this.reviewStatus(withdrawalId, actor, "APPROVED", reason, ip);
+  async approve(
+    adminUserId: string,
+    withdrawalId: string,
+    actor: string,
+    reason: string,
+    ip?: string | null
+  ) {
+    return this.db.transaction(tx => this.risk.recordApprovalTx(tx, {
+      withdrawalId,
+      adminUserId,
+      adminLabel: actor,
+      note: reason,
+      ip
+    }));
   }
 
   private async reviewStatus(
@@ -748,13 +810,30 @@ export class CommissionWithdrawalService {
 
     return this.db.transaction(async tx => {
       const row = (await tx.query(
-        `SELECT id,user_id,destination_id,amount_satang,status
+        `SELECT id,user_id,destination_id,amount_satang,status,approval_count,approval_required
          FROM commission_withdrawals WHERE id=$1 FOR UPDATE`,
         [withdrawalId]
       )).rows[0];
       if (!row) throw new NotFoundException("ไม่พบรายการถอน");
       if (!["REQUESTED","HOLD","APPROVED"].includes(row.status)) {
         throw new ConflictException("รายการนี้ Reject ไม่ได้แล้ว");
+      }
+
+      const payoutJob = (await tx.query(
+        `SELECT id,status FROM commission_payout_jobs
+         WHERE withdrawal_id=$1 FOR UPDATE`,
+        [row.id]
+      )).rows[0];
+      if (payoutJob && ["CLAIMED","SUBMITTED","RECONCILE_REQUIRED"].includes(payoutJob.status)) {
+        throw new ConflictException("Payout กำลังทำงานหรือรอ Reconciliation ห้าม Reject/Unlock เพื่อป้องกันจ่ายซ้ำ");
+      }
+      if (payoutJob?.status === "READY") {
+        await tx.query(
+          `UPDATE commission_payout_jobs
+           SET status='CANCELLED',error_code='ADMIN_REJECT',updated_at=now()
+           WHERE id=$1`,
+          [payoutJob.id]
+        );
       }
 
       await tx.query(
@@ -815,6 +894,26 @@ export class CommissionWithdrawalService {
       if (!row) throw new NotFoundException("ไม่พบรายการถอน");
       if (row.status !== "APPROVED") {
         throw new ConflictException("ต้อง Approve รายการก่อน Mark Paid");
+      }
+      if (Number(row.approval_count || 0) < Number(row.approval_required || 1)) {
+        throw new ConflictException("จำนวนผู้อนุมัติยังไม่ครบ");
+      }
+
+      const payoutJob = (await tx.query(
+        `SELECT id,status FROM commission_payout_jobs
+         WHERE withdrawal_id=$1 FOR UPDATE`,
+        [row.id]
+      )).rows[0];
+      if (payoutJob && ["CLAIMED","SUBMITTED","RECONCILE_REQUIRED"].includes(payoutJob.status)) {
+        throw new ConflictException("Payout worker กำลังทำงานหรือรอ Reconciliation ห้าม Mark Paid ซ้ำ");
+      }
+      if (payoutJob?.status === "READY") {
+        await tx.query(
+          `UPDATE commission_payout_jobs
+           SET status='CANCELLED',error_code='MANUAL_PAYOUT',updated_at=now()
+           WHERE id=$1`,
+          [payoutJob.id]
+        );
       }
 
       await tx.query(
