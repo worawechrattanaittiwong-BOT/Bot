@@ -16,7 +16,9 @@
     "expo-secure-store": "~15.0.7",
     "expo-status-bar": "~3.0.8",
     "react": "19.1.0",
-    "react-native": "0.81.4"
+    "react-native": "0.81.4",
+    "expo-file-system": "~19.0.24",
+    "expo-intent-launcher": "~13.0.8"
   },
   "devDependencies": {
     "@types/react": "~19.1.10",
