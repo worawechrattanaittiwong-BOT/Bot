@@ -415,36 +415,56 @@ export class AccountSecurityController {
     }
 
     const existing = await this.db.one(
-      "SELECT two_factor_enabled_at FROM user_security WHERE user_id=$1",
+      `SELECT totp_secret_ciphertext,totp_secret_iv,totp_secret_auth_tag,two_factor_enabled_at
+       FROM user_security WHERE user_id=$1`,
       [user.id]
     );
     if (existing?.two_factor_enabled_at) {
       throw new BadRequestException("Two-factor authentication is already enabled");
     }
 
-    const secret = base32Encode(randomBytes(20));
-    const encrypted = this.crypto.encrypt(secret);
-    await this.db.query(
-      `INSERT INTO user_security(
-         user_id,totp_secret_ciphertext,totp_secret_iv,totp_secret_auth_tag,updated_at
-       ) VALUES($1,$2,$3,$4,now())
-       ON CONFLICT (user_id) DO UPDATE SET
-         totp_secret_ciphertext=EXCLUDED.totp_secret_ciphertext,
-         totp_secret_iv=EXCLUDED.totp_secret_iv,
-         totp_secret_auth_tag=EXCLUDED.totp_secret_auth_tag,
-         recovery_code_hashes='[]'::jsonb,
-         updated_at=now()
-       WHERE user_security.two_factor_enabled_at IS NULL`,
-      [user.id, encrypted.ciphertext, encrypted.iv, encrypted.authTag]
-    );
+    // A pending setup must be stable. Reopening this screen must NOT rotate the
+    // secret, otherwise the authenticator entry the user just added becomes
+    // invalid and every 6-digit code will fail.
+    let secret: string;
+    let resumed = false;
+    if (
+      existing?.totp_secret_ciphertext &&
+      existing?.totp_secret_iv &&
+      existing?.totp_secret_auth_tag
+    ) {
+      secret = this.decryptSecret(existing);
+      resumed = true;
+    } else {
+      secret = base32Encode(randomBytes(20));
+      const encrypted = this.crypto.encrypt(secret);
+      await this.db.query(
+        `INSERT INTO user_security(
+           user_id,totp_secret_ciphertext,totp_secret_iv,totp_secret_auth_tag,updated_at
+         ) VALUES($1,$2,$3,$4,now())
+         ON CONFLICT (user_id) DO UPDATE SET
+           totp_secret_ciphertext=EXCLUDED.totp_secret_ciphertext,
+           totp_secret_iv=EXCLUDED.totp_secret_iv,
+           totp_secret_auth_tag=EXCLUDED.totp_secret_auth_tag,
+           recovery_code_hashes='[]'::jsonb,
+           updated_at=now()
+         WHERE user_security.two_factor_enabled_at IS NULL`,
+        [user.id, encrypted.ciphertext, encrypted.iv, encrypted.authTag]
+      );
+    }
 
     const label = encodeURIComponent("SCENOVA:" + user.email);
     const issuer = encodeURIComponent("SCENOVA");
     const otpauthUri =
       `otpauth://totp/${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
 
-    await this.authEvent(user.id, user.email, "TWO_FACTOR_SETUP_STARTED", req);
-    return { secret, otpauthUri, digits: 6, period: 30 };
+    await this.authEvent(
+      user.id,
+      user.email,
+      resumed ? "TWO_FACTOR_SETUP_RESUMED" : "TWO_FACTOR_SETUP_STARTED",
+      req
+    );
+    return { secret, otpauthUri, digits: 6, period: 30, resumed };
   }
 
   @Post("2fa/enable")
@@ -464,7 +484,12 @@ export class AccountSecurityController {
 
     const secret = this.decryptSecret(security);
     const code = String(body.code || "").trim();
-    if (!verifyTotp(secret, code)) throw new BadRequestException("Authenticator code is invalid");
+    if (!verifyTotp(secret, code)) {
+      await this.authEvent(user.id, user.email, "TWO_FACTOR_ENABLE_FAILED", req);
+      throw new BadRequestException(
+        "Authenticator code is invalid. Make sure you are using the latest SCENOVA entry in your authenticator."
+      );
+    }
 
     const recoveryCodes = Array.from({ length: RECOVERY_CODE_COUNT }, () => makeRecoveryCode());
     const recoveryHashes = await Promise.all(
