@@ -153,6 +153,71 @@ export class OwnerMobileService implements OnApplicationBootstrap {
     return data;
   }
 
+  private transferState(transfer: any) {
+    if (transfer?.failure_code) {
+      return { status: "FAILED", providerStatus: "FAILED" };
+    }
+    if (transfer?.paid === true) {
+      return { status: "SUCCEEDED", providerStatus: "PAID" };
+    }
+    if (transfer?.sent === true) {
+      return { status: "SUBMITTED", providerStatus: "SENT" };
+    }
+    return { status: "SUBMITTED", providerStatus: "PENDING" };
+  }
+
+  private transferSnapshot(transfer: any) {
+    return {
+      id: transfer?.id || null,
+      livemode: transfer?.livemode ?? null,
+      amount: transfer?.amount ?? null,
+      currency: transfer?.currency || null,
+      paid: transfer?.paid ?? null,
+      sent: transfer?.sent ?? null,
+      sendable: transfer?.sendable ?? null,
+      failure_code: transfer?.failure_code || null,
+      failure_message: transfer?.failure_message || null,
+      total_fee: transfer?.total_fee ?? null,
+      net: transfer?.net ?? null,
+      created_at: transfer?.created_at || null,
+      sent_at: transfer?.sent_at || null,
+      paid_at: transfer?.paid_at || null
+    };
+  }
+
+  private async reconcileOwnerTransfers() {
+    if (this.paymentMode() === "UNCONFIGURED") return;
+
+    const pending = await this.db.query(
+      `SELECT id,omise_transfer_id
+       FROM owner_omise_transfers
+       WHERE status IN ('SUBMITTED','REVIEW')
+         AND omise_transfer_id IS NOT NULL
+       ORDER BY created_at ASC
+       LIMIT 20`
+    );
+
+    await Promise.allSettled(
+      pending.rows.map(async (row: any) => {
+        const transfer = await this.omise(
+          "/transfers/" + encodeURIComponent(String(row.omise_transfer_id))
+        );
+        const state = this.transferState(transfer);
+        await this.db.query(
+          `UPDATE owner_omise_transfers
+           SET status=$2,provider_status=$3,provider_response=$4::jsonb,updated_at=now()
+           WHERE id=$1`,
+          [
+            row.id,
+            state.status,
+            state.providerStatus,
+            JSON.stringify(this.transferSnapshot(transfer))
+          ]
+        );
+      })
+    );
+  }
+
   private async totpSecret(userId: string) {
     const row = await this.db.one(
       `SELECT s.totp_secret_ciphertext,s.totp_secret_iv,s.totp_secret_auth_tag,s.two_factor_enabled_at
@@ -301,12 +366,46 @@ export class OwnerMobileService implements OnApplicationBootstrap {
   }
 
   async verifyPin(session: any, pin?: string) {
-    if (!/^\d{6}$/.test(String(pin || ""))) {
+    const supplied = String(pin || "");
+    if (!/^\d{6}$/.test(supplied)) {
       throw new UnauthorizedException("กรุณายืนยัน PIN 6 หลัก");
     }
-    if (!(await compare(String(pin), String(session.pin_hash)))) {
-      throw new UnauthorizedException("PIN ไม่ถูกต้อง");
+
+    const device = await this.db.one(
+      `SELECT id,pin_hash,failed_pin_attempts,locked_until,status
+       FROM owner_mobile_devices
+       WHERE id=$1 AND owner_user_id=$2`,
+      [session.device_row_id, session.owner_user_id]
+    );
+    if (!device || device.status !== "ACTIVE") {
+      throw new UnauthorizedException("อุปกรณ์นี้ไม่ได้รับอนุญาตแล้ว");
     }
+    if (device.locked_until && new Date(device.locked_until).getTime() > Date.now()) {
+      throw new UnauthorizedException("PIN ถูกล็อกชั่วคราว กรุณารอแล้วลองใหม่");
+    }
+
+    if (!(await compare(supplied, String(device.pin_hash || "")))) {
+      const failures = Number(device.failed_pin_attempts || 0) + 1;
+      const lock = failures >= MAX_PIN_FAILURES
+        ? new Date(Date.now() + PIN_LOCK_MINUTES * 60_000)
+        : null;
+      await this.db.query(
+        `UPDATE owner_mobile_devices
+         SET failed_pin_attempts=$2,locked_until=$3
+         WHERE id=$1`,
+        [device.id, failures >= MAX_PIN_FAILURES ? 0 : failures, lock]
+      );
+      throw new UnauthorizedException(
+        lock ? "PIN ผิดครบกำหนด อุปกรณ์ถูกล็อกชั่วคราว" : "PIN ไม่ถูกต้อง"
+      );
+    }
+
+    await this.db.query(
+      `UPDATE owner_mobile_devices
+       SET failed_pin_attempts=0,locked_until=NULL,last_seen_at=now()
+       WHERE id=$1`,
+      [device.id]
+    );
   }
 
   async logout(req: any) {
@@ -322,44 +421,100 @@ export class OwnerMobileService implements OnApplicationBootstrap {
   }
 
   async summary() {
-    const [balance, commission, queue, recentTransfers] = await Promise.all([
-      this.omise("/balance"),
-      this.db.one(
-        `SELECT
-           COALESCE(SUM(commission_amount_satang) FILTER (WHERE status='PENDING'),0)::bigint pending_satang,
-           COALESCE(SUM(commission_amount_satang) FILTER (WHERE status='AVAILABLE'),0)::bigint available_satang,
-           COALESCE(SUM(commission_amount_satang) FILTER (WHERE status='PAID'),0)::bigint paid_satang
-         FROM referral_commissions`
-      ),
-      this.db.one(
-        `SELECT
-           COUNT(*) FILTER (WHERE status='REQUESTED')::int requested_count,
-           COUNT(*) FILTER (WHERE status='HOLD')::int hold_count,
-           COUNT(*) FILTER (WHERE status='APPROVED')::int approved_count,
-           COALESCE(SUM(amount_satang) FILTER (WHERE status IN ('REQUESTED','HOLD','APPROVED')),0)::bigint waiting_satang
-         FROM commission_withdrawals`
-      ),
-      this.db.query(
-        `SELECT id,amount_satang,status,omise_transfer_id,provider_status,created_at
-         FROM owner_omise_transfers ORDER BY created_at DESC LIMIT 10`
-      )
-    ]);
+    const configured = this.paymentMode() !== "UNCONFIGURED";
+    if (configured) {
+      await this.reconcileOwnerTransfers().catch(() => undefined);
+    }
 
-    const transferable = Number(balance?.transferable || 0);
-    const total = Number(balance?.total || 0);
-    const pendingCommission = Number(commission?.pending_satang || 0);
-    const availableCommission = Number(commission?.available_satang || 0);
-    const reserve = Math.max(0, Math.trunc(Number(process.env.OWNER_OMISE_RESERVE_SATANG || 0)));
-    const commissionLiability = pendingCommission + availableCommission;
-    const safeWithdrawable = Math.max(0, transferable - commissionLiability - reserve);
+    const [balanceResult, capabilityResult, coreCommission, withdrawalCommission, queue, recentTransfers] =
+      await Promise.all([
+        configured
+          ? this.omise("/balance").then(value => ({ ok: true, value })).catch(() => ({ ok: false, value: null }))
+          : Promise.resolve({ ok: false, value: null }),
+        configured
+          ? this.omise("/capability").then(value => ({ ok: true, value })).catch(() => ({ ok: false, value: null }))
+          : Promise.resolve({ ok: false, value: null }),
+        this.db.one(
+          `SELECT
+             COALESCE(SUM(pending_delta_satang),0)::bigint pending_satang,
+             COALESCE(SUM(available_delta_satang),0)::bigint available_satang,
+             COALESCE(SUM(paid_delta_satang),0)::bigint paid_satang
+           FROM commission_wallet_ledger`
+        ),
+        this.db.one(
+          `SELECT
+             COALESCE(SUM(available_delta_satang),0)::bigint available_delta_satang,
+             COALESCE(SUM(locked_delta_satang),0)::bigint locked_satang,
+             COALESCE(SUM(paid_delta_satang),0)::bigint paid_satang
+           FROM commission_withdrawal_ledger`
+        ),
+        this.db.one(
+          `SELECT
+             COUNT(*) FILTER (WHERE status='REQUESTED')::int requested_count,
+             COUNT(*) FILTER (WHERE status='HOLD')::int hold_count,
+             COUNT(*) FILTER (WHERE status='APPROVED')::int approved_count,
+             COALESCE(SUM(amount_satang) FILTER (WHERE status IN ('REQUESTED','HOLD','APPROVED')),0)::bigint waiting_satang
+           FROM commission_withdrawals`
+        ),
+        this.db.query(
+          `SELECT id,amount_satang,status,omise_transfer_id,provider_status,created_at,updated_at
+           FROM owner_omise_transfers ORDER BY created_at DESC LIMIT 10`
+        )
+      ]);
+
+    const balance = balanceResult.value as any;
+    const capability = capabilityResult.value as any;
+    const reachable = Boolean(balanceResult.ok && capabilityResult.ok);
+    const transferable = reachable ? Number(balance?.transferable || 0) : 0;
+    const total = reachable ? Number(balance?.total || 0) : 0;
+
+    const pendingCommission = Math.max(0, Number(coreCommission?.pending_satang || 0));
+    const availableCommission = Math.max(
+      0,
+      Number(coreCommission?.available_satang || 0) +
+        Number(withdrawalCommission?.available_delta_satang || 0)
+    );
+    const lockedCommission = Math.max(0, Number(withdrawalCommission?.locked_satang || 0));
+    const paidCommission = Math.max(
+      0,
+      Number(coreCommission?.paid_satang || 0) +
+        Number(withdrawalCommission?.paid_satang || 0)
+    );
+
+    const reserve = Math.max(
+      0,
+      Math.trunc(Number(process.env.OWNER_OMISE_RESERVE_SATANG || 0))
+    );
+    const commissionLiability =
+      pendingCommission + availableCommission + lockedCommission;
+    const safeWithdrawable = reachable
+      ? Math.max(0, transferable - commissionLiability - reserve)
+      : 0;
+
+    const minTransferSatang = Math.max(
+      1,
+      Math.trunc(Number(capability?.limits?.transfer_amount?.min || 3000))
+    );
+    const maxTransferSatang = Math.max(
+      minTransferSatang,
+      Math.trunc(Number(capability?.limits?.transfer_amount?.max || 5000000000))
+    );
 
     return {
       paymentMode: this.paymentMode(),
-      omise: { totalSatang: total, transferableSatang: transferable },
+      omise: {
+        configured,
+        reachable,
+        totalSatang: total,
+        transferableSatang: transferable,
+        minTransferSatang,
+        maxTransferSatang
+      },
       commission: {
         pendingSatang: pendingCommission,
         availableSatang: availableCommission,
-        paidSatang: Number(commission?.paid_satang || 0)
+        lockedSatang: lockedCommission,
+        paidSatang: paidCommission
       },
       approvals: {
         requestedCount: Number(queue?.requested_count || 0),
@@ -423,10 +578,11 @@ export class OwnerMobileService implements OnApplicationBootstrap {
     ip?: string | null
   ) {
     await this.verifyPin(session, input.pin);
+
     const amount = Math.trunc(Number(input.amountSatang || 0));
     const requestKey = String(input.clientRequestKey || "").trim().slice(0, 100);
-    if (amount < 100 || !requestKey) {
-      throw new BadRequestException("ยอดถอนหรือ Request Key ไม่ถูกต้อง");
+    if (!requestKey) {
+      throw new BadRequestException("Request Key ไม่ถูกต้อง");
     }
 
     const existing = await this.db.one(
@@ -435,53 +591,87 @@ export class OwnerMobileService implements OnApplicationBootstrap {
     );
     if (existing) return existing;
 
+    if (this.paymentMode() === "UNCONFIGURED") {
+      throw new ServiceUnavailableException("Omise ยังไม่ได้ตั้งค่า");
+    }
+
+    await this.reconcileOwnerTransfers().catch(() => undefined);
+
+    const unresolved = await this.db.one(
+      `SELECT id,status,omise_transfer_id,created_at
+       FROM owner_omise_transfers
+       WHERE status IN ('CREATING','SUBMITTED','REVIEW')
+       ORDER BY created_at DESC
+       LIMIT 1`
+    );
+    if (unresolved) {
+      throw new ConflictException(
+        "มีรายการถอนของเจ้าของที่ยังดำเนินการไม่เสร็จ กรุณาตรวจรายการเดิมก่อนสร้างรายการใหม่"
+      );
+    }
+
     const snapshot = await this.summary();
+    if (!snapshot.omise.reachable) {
+      throw new ServiceUnavailableException("ติดต่อ Omise ไม่สำเร็จ กรุณาลองใหม่ภายหลัง");
+    }
+
+    const minTransfer = Number(snapshot.omise.minTransferSatang || 3000);
+    const maxTransfer = Number(snapshot.omise.maxTransferSatang || 5000000000);
+    if (amount < minTransfer || amount > maxTransfer) {
+      throw new BadRequestException(
+        "ยอดถอนต้องอยู่ระหว่าง " +
+          (minTransfer / 100).toFixed(2) +
+          " และ " +
+          (maxTransfer / 100).toFixed(2) +
+          " บาท"
+      );
+    }
     if (amount > Number(snapshot.owner.safeWithdrawableSatang || 0)) {
       throw new ConflictException("ยอดถอนสูงกว่า Safe Withdrawable Balance");
     }
 
     const local = await this.db.one(
-      `INSERT INTO owner_omise_transfers(owner_user_id,amount_satang,client_request_key,requested_ip)
-       VALUES($1,$2,$3,$4) RETURNING *`,
+      `INSERT INTO owner_omise_transfers(
+         owner_user_id,amount_satang,client_request_key,requested_ip
+       ) VALUES($1,$2,$3,$4)
+       RETURNING *`,
       [session.owner_user_id, amount, requestKey, ip || null]
     );
 
     try {
-      const transfer = await this.omise("/transfers", new URLSearchParams({
-        amount: String(amount)
-      }));
-      const providerStatus = String(transfer?.status || (transfer?.paid ? "paid" : "submitted"));
+      const transfer = await this.omise(
+        "/transfers",
+        new URLSearchParams({ amount: String(amount) })
+      );
+      const state = this.transferState(transfer);
       return await this.db.one(
         `UPDATE owner_omise_transfers
-         SET status=$2,omise_transfer_id=$3,provider_status=$4,provider_response=$5::jsonb,updated_at=now()
-         WHERE id=$1 RETURNING *`,
+         SET status=$2,omise_transfer_id=$3,provider_status=$4,
+             provider_response=$5::jsonb,updated_at=now()
+         WHERE id=$1
+         RETURNING *`,
         [
           local.id,
-          transfer?.paid === true ? "SUCCEEDED" : "SUBMITTED",
+          state.status,
           String(transfer?.id || "") || null,
-          providerStatus,
-          JSON.stringify({
-            id: transfer?.id || null,
-            amount: transfer?.amount || null,
-            currency: transfer?.currency || null,
-            status: transfer?.status || null,
-            paid: transfer?.paid ?? null,
-            created_at: transfer?.created_at || null
-          })
+          state.providerStatus,
+          JSON.stringify(this.transferSnapshot(transfer))
         ]
       );
     } catch (error: any) {
       await this.db.query(
         `UPDATE owner_omise_transfers
-         SET status='REVIEW',provider_status='UNKNOWN',provider_response=$2::jsonb,updated_at=now()
+         SET status='REVIEW',provider_status='UNKNOWN',
+             provider_response=$2::jsonb,updated_at=now()
          WHERE id=$1`,
         [local.id, JSON.stringify({ error: String(error?.message || "unknown") })]
       );
       throw new ConflictException(
-        "สถานะการถอนยังยืนยันไม่ได้ กรุณาตรวจรายการก่อนกดซ้ำ"
+        "สถานะการถอนยังยืนยันไม่ได้ ระบบจะไม่ส่งซ้ำอัตโนมัติ กรุณาตรวจรายการเดิมก่อน"
       );
     }
   }
+
 }
 
 @Controller("owner-mobile")
