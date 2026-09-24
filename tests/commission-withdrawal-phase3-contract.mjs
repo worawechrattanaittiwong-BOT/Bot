@@ -41,10 +41,12 @@ expect(files.risk.includes("authorizePayout"), "pre-transfer authorization gate 
 expect(files.risk.includes("Withdrawal Kill Switch is active"), "worker kill-switch gate missing");
 expect(files.risk.includes("PAYOUT_RECONCILIATION_MISMATCH"), "reconciliation mismatch alert missing");
 expect(files.risk.includes("AUTO_PAYOUT_RECONCILED"), "matched auto payout audit missing");
+expect(files.risk.includes("manualReconcilePaid"), "manual reconciliation completion missing");
 
 expect(files.service.includes("approval_count"), "manual paid approval check missing");
 expect(files.service.includes("Payout worker กำลังทำงาน"), "manual double-payout guard missing");
 expect(files.service.includes("ปิด Kill Switch ก่อนเปิดรับคำขอถอน"), "request reopen kill-switch guard missing");
+expect(files.service.includes("await this.stepUp(adminUserId, input)"), "manual reconciliation step-up missing");
 
 expect(files.controller.includes('@Controller("payout-worker")'), "separate payout worker controller missing");
 expect(files.controller.includes('@Post("authorize")'), "worker authorization endpoint missing");
@@ -57,6 +59,7 @@ expect(files.admin.includes("Fraud Risk · Dual Approval · Kill Switch"), "phas
 expect(files.admin.includes("ACTIVATE KILL SWITCH"), "kill switch UI missing");
 expect(files.admin.includes("Auto Payout"), "auto payout UI missing");
 expect(files.admin.includes("Fraud & Reconciliation Alerts"), "alert UI missing");
+expect(files.admin.includes("Reconcile as Paid"), "manual reconciliation UI missing");
 
 expect(files.deploy.includes("database/035_withdrawal_advanced_security.sql"), "phase 3 production migration missing");
 expect(files.deploy.includes("PAYOUT_WORKER_KEY"), "production payout worker secret generation missing");
