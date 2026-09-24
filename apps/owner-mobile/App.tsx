@@ -735,7 +735,8 @@ function OwnerWithdraw({
   onBack: () => void;
   onDone: () => Promise<void>;
 }) {
-  const max = Number(summary?.owner.safeWithdrawableSatang || 0);\n  const min = Number(summary?.omise.minTransferSatang || 3000);
+  const max = Number(summary?.owner.safeWithdrawableSatang || 0);
+  const min = Number(summary?.omise.minTransferSatang || 3000);
   const [amount, setAmount] = useState("");
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -871,7 +872,9 @@ const styles = StyleSheet.create({
   lockButton: { backgroundColor: "#17121f", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 9 },
   lockText: { color: "#c5b8d3", fontWeight: "700" },
   testBadge: { backgroundColor: "#2f2510", borderRadius: 12, padding: 11, marginBottom: 18 },
-  testText: { color: "#f2cf69", fontSize: 11, fontWeight: "800", textAlign: "center" },\n  warningBadge: { backgroundColor: "#35171d", borderRadius: 12, padding: 11, marginBottom: 18 },\n  warningText: { color: "#f0a0ad", fontSize: 11, fontWeight: "800", textAlign: "center", lineHeight: 16 },
+  testText: { color: "#f2cf69", fontSize: 11, fontWeight: "800", textAlign: "center" },
+  warningBadge: { backgroundColor: "#35171d", borderRadius: 12, padding: 11, marginBottom: 18 },
+  warningText: { color: "#f0a0ad", fontSize: 11, fontWeight: "800", textAlign: "center", lineHeight: 16 },
   sectionTitle: { color: "#8b8197", fontSize: 12, fontWeight: "800", letterSpacing: 1.2, marginTop: 18, marginBottom: 9 },
   statCard: {
     backgroundColor: "#120e19", borderRadius: 20, padding: 17, marginBottom: 10,
