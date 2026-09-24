@@ -104,6 +104,22 @@ export class WorkerGuard implements CanActivate {
 }
 
 @Injectable()
+export class PayoutWorkerGuard implements CanActivate {
+  canActivate(context: ExecutionContext) {
+    const req = context.switchToHttp().getRequest();
+    const supplied = String(req.headers["x-payout-worker-key"] || "");
+    const expected = String(process.env.PAYOUT_WORKER_KEY || "");
+    if (!expected) throw new ForbiddenException("payout worker is not configured");
+    const a = Buffer.from(supplied);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      throw new ForbiddenException("payout worker key invalid");
+    }
+    return true;
+  }
+}
+
+@Injectable()
 export class CryptoService {
   private key() {
     const raw = Buffer.from(process.env.CREDENTIAL_MASTER_KEY || "", "base64");
