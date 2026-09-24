@@ -8,6 +8,7 @@ import { AdminController } from "./admin.controller";
 import { AdminServiceLinksController } from "./admin-service-links.controller";
 import { AdminApiCredentialsController } from "./admin-api-credentials.controller";
 import { RuntimeSecretsService } from "./runtime-secrets.service";
+import { ApiCredentialTesterService } from "./api-credential-tester.service";
 import { EaController } from "./ea.controller";
 import { AgentActionController } from "./agent-action.controller";
 import { ManualMt5Controller } from "./manual-mt5.controller";
@@ -52,6 +53,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
   ],
   controllers: [AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
+    ApiCredentialTesterService,
     RuntimeSecretsService,
     ProductionHardeningService,
     RuntimeMigrationService,
