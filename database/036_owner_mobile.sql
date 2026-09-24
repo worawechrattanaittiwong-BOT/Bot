@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS owner_mobile_devices (
 CREATE INDEX IF NOT EXISTS idx_owner_mobile_devices_owner
   ON owner_mobile_devices(owner_user_id,status);
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_mobile_one_active_device
+  ON owner_mobile_devices(owner_user_id)
+  WHERE status='ACTIVE';
+
 CREATE TABLE IF NOT EXISTS owner_mobile_sessions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_user_id uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
