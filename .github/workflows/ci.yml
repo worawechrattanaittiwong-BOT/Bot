@@ -43,6 +43,8 @@ jobs:
         run: node ./tests/commission-withdrawal-phase3-contract.mjs
       - name: Wallet UI typography and autofill contract
         run: node ./tests/wallet-ui-contract.mjs
+      - name: Omise webhook security contract
+        run: node ./tests/omise-webhook-security-contract.cjs
       - name: Account 2FA pending setup contract
         run: node ./tests/account-security-2fa-contract.cjs
       - name: Account typography contract
