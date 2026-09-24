@@ -29,7 +29,8 @@ import { PartnerService } from "./partner.service";
 import { ReferralController } from "./referral.controller";
 import { ReferralService } from "./referral.service";
 import { CommissionWithdrawalService } from "./commission-withdrawal.service";
-import { CommissionWalletWithdrawalController, AdminCommissionWithdrawalsController } from "./commission-withdrawal.controller";
+import { CommissionWithdrawalRiskService } from "./commission-withdrawal-risk.service";
+import { CommissionWalletWithdrawalController, AdminCommissionWithdrawalsController, CommissionPayoutWorkerController } from "./commission-withdrawal.controller";
 import { TrialAuthorizationService } from "./trial-authorization.service";
 import { TrialCouponController } from "./trial-coupon.controller";
 import { SmsService } from "./sms.service";
@@ -44,7 +45,7 @@ import { RuntimeMigrationController, RuntimeMigrationAgentController } from "./r
 import { RuntimeMigrationService } from "./runtime-migration.service";
 import { ProductionHardeningController } from "./production-hardening.controller";
 import { ProductionHardeningService } from "./production-hardening.service";
-import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
+import { AdminGuard, CryptoService, JwtGuard, WorkerGuard, PayoutWorkerGuard } from "./security";
 
 @Module({
   imports: [
@@ -53,8 +54,9 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
+  controllers: [CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
+    CommissionWithdrawalRiskService,
     CommissionWithdrawalService,
     ApiCredentialTesterService,
     RuntimeSecretsService,
@@ -72,6 +74,7 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard } from "./security";
     JwtGuard,
     AdminGuard,
     WorkerGuard,
+    PayoutWorkerGuard,
     CryptoService,
     { provide: APP_INTERCEPTOR, useClass: TradingSymbolStartInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ManualEaUpdateStopInterceptor }
