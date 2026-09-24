@@ -458,13 +458,10 @@ export class OwnerMobileService implements OnApplicationBootstrap {
       await this.reconcileOwnerTransfers().catch(() => undefined);
     }
 
-    const [balanceResult, capabilityResult, coreCommission, withdrawalCommission, queue, recentTransfers] =
+    const [balanceResult, coreCommission, withdrawalCommission, queue, recentTransfers] =
       await Promise.all([
         configured
           ? this.omise("/balance").then(value => ({ ok: true, value })).catch(() => ({ ok: false, value: null }))
-          : Promise.resolve({ ok: false, value: null }),
-        configured
-          ? this.omise("/capability").then(value => ({ ok: true, value })).catch(() => ({ ok: false, value: null }))
           : Promise.resolve({ ok: false, value: null }),
         this.db.one(
           `SELECT
@@ -495,8 +492,7 @@ export class OwnerMobileService implements OnApplicationBootstrap {
       ]);
 
     const balance = balanceResult.value as any;
-    const capability = capabilityResult.value as any;
-    const reachable = Boolean(balanceResult.ok && capabilityResult.ok);
+    const reachable = Boolean(balanceResult.ok);
     const transferable = reachable ? Number(balance?.transferable || 0) : 0;
     const total = reachable ? Number(balance?.total || 0) : 0;
 
@@ -523,13 +519,16 @@ export class OwnerMobileService implements OnApplicationBootstrap {
       ? Math.max(0, transferable - commissionLiability - reserve)
       : 0;
 
+    // Omise Thailand Capability API documents transfer limits of 30 THB min
+    // and 50,000,000 THB max. Capability retrieval uses public-key auth, so
+    // Owner Mobile does not couple payout readiness to that endpoint.
     const minTransferSatang = Math.max(
       1,
-      Math.trunc(Number(capability?.limits?.transfer_amount?.min || 3000))
+      Math.trunc(Number(process.env.OWNER_OMISE_MIN_TRANSFER_SATANG || 3000))
     );
     const maxTransferSatang = Math.max(
       minTransferSatang,
-      Math.trunc(Number(capability?.limits?.transfer_amount?.max || 5000000000))
+      Math.trunc(Number(process.env.OWNER_OMISE_MAX_TRANSFER_SATANG || 5000000000))
     );
 
     return {
@@ -673,7 +672,10 @@ export class OwnerMobileService implements OnApplicationBootstrap {
     try {
       const transfer = await this.omise(
         "/transfers",
-        new URLSearchParams({ amount: String(amount) })
+        new URLSearchParams({
+          amount: String(amount),
+          idemp_key: requestKey
+        })
       );
       const state = this.transferState(transfer);
       return await this.db.one(
