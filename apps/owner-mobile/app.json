@@ -5,12 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "scenova-owner",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "android": {
       "package": "com.scenova.owner",
       "adaptiveIcon": {
-        "backgroundColor": "#0b0713",
-        "foregroundImage": "./assets/scenova-owner-icon.png"
+        "backgroundColor": "#080f20",
+        "foregroundImage": "./assets/scenova-owner-icon-v2.png"
       },
       "allowBackup": false,
       "versionCode": 1,
@@ -31,6 +31,6 @@
         }
       ]
     ],
-    "icon": "./assets/scenova-owner-icon.png"
+    "icon": "./assets/scenova-owner-icon-v2.png"
   }
 }
