@@ -265,6 +265,16 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
 
   async setActive(id: string, active: boolean, updatedBy?: string) {
     await this.ensureTable();
+    if (active) {
+      const current = await this.db.one(
+        "SELECT last_test_status FROM admin_api_credentials WHERE id=$1",
+        [id]
+      );
+      if (!current) return null;
+      if (!["PASS", "LIMITED"].includes(String(current.last_test_status || "").toUpperCase())) {
+        throw new Error("กรุณา Re-test API ให้ผ่านก่อน Activate");
+      }
+    }
     const row = await this.db.one(
       `UPDATE admin_api_credentials
        SET active=$2,updated_by=$3,updated_at=now()
