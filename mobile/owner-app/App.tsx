@@ -701,4 +701,126 @@ function MiniCard({ label, value, note }: { label: string; value: string; note: 
 }
 
 function SectionTitle({ title, action }: { title: string; action?: string }) {
-  return <View style={styles.sectionTitle}><Text style={styles.sectionTitleText}>{title}</Text>{actio
+  return <View style={styles.sectionTitle}><Text style={styles.sectionTitleText}>{title}</Text>{action ? <Text style={styles.sectionAction}>{action}</Text> : null}</View>;
+}
+
+function QueueCard({ item, onPress }: { item: QueueItem; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.queueCard, pressed && { opacity: 0.75 }]}>
+      <View style={styles.rowBetween}><View><Text style={styles.userCode}>{item.user_code}</Text><Text style={styles.queueAmount}>{money(item.amount_satang)}</Text></View><RiskPill level={item.risk_level} score={item.risk_score}/></View>
+      <View style={styles.queueMeta}><Text style={styles.meta}>{item.bank_code} · {item.masked_account}</Text><Text style={styles.meta}>Approval {item.approval_count}/{item.approval_required}</Text></View>
+      <Text style={styles.meta}>{shortDate(item.created_at)}</Text>
+    </Pressable>
+  );
+}
+
+function RiskPill({ level, score }: { level: string; score: number }) {
+  const danger = ["HIGH", "CRITICAL"].includes(String(level));
+  const medium = String(level) === "MEDIUM";
+  return <View style={[styles.riskPill, danger && styles.riskDanger, medium && styles.riskMedium]}><Text style={[styles.riskText, danger && styles.riskDangerText, medium && styles.riskMediumText]}>{level || "LOW"} · {Number(score || 0)}</Text></View>;
+}
+
+function StatusPill({ value }: { value: string }) {
+  return <View style={styles.statusPill}><Text style={styles.statusText}>{value}</Text></View>;
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return <View style={styles.detailItem}><Text style={styles.meta}>{label}</Text><Text style={styles.detailValue}>{value}</Text></View>;
+}
+
+function Back({ title, onPress }: { title: string; onPress: () => void }) {
+  return <View style={styles.backRow}><Pressable onPress={onPress} style={styles.backButton}><Text style={styles.backText}>‹</Text></Pressable><Text style={styles.pageTitle}>{title}</Text></View>;
+}
+
+function Empty({ text }: { text: string }) {
+  return <View style={styles.empty}><Text style={styles.emptyText}>{text}</Text></View>;
+}
+
+function Nav({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return <Pressable onPress={onPress} style={styles.navItem}><View style={[styles.navDot, active && styles.navDotActive]}/><Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text></Pressable>;
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#070710" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16, padding: 24 },
+  muted: { color: "#8b8ca0", fontSize: 14 },
+  authWrap: { flex: 1 },
+  authInner: { flexGrow: 1, justifyContent: "center", padding: 22, paddingBottom: 42 },
+  logo: { color: "#a98cff", fontWeight: "900", letterSpacing: 4, fontSize: 13, marginBottom: 18 },
+  authTitle: { color: "#f7f5ff", fontSize: 28, fontWeight: "800", letterSpacing: -0.8 },
+  authSub: { color: "#8f91a7", fontSize: 14, lineHeight: 21, marginTop: 8, marginBottom: 22 },
+  authCard: { borderWidth: 1, borderColor: "#25243a", backgroundColor: "#0d0d18", borderRadius: 22, padding: 18, gap: 14 },
+  field: { gap: 7 },
+  fieldLabel: { color: "#b7b6c6", fontSize: 13, fontWeight: "700" },
+  input: { minHeight: 50, borderRadius: 13, borderWidth: 1, borderColor: "#2c2b41", backgroundColor: "#10101d", paddingHorizontal: 14, color: "#f3f0ff", fontSize: 16 },
+  textarea: { minHeight: 88, paddingTop: 13, textAlignVertical: "top" },
+  primary: { minHeight: 52, borderRadius: 14, backgroundColor: "#7b5cff", alignItems: "center", justifyContent: "center", marginTop: 2 },
+  primaryText: { color: "white", fontSize: 15, fontWeight: "850" },
+  buttonDim: { opacity: 0.45 },
+  link: { textAlign: "center", color: "#a995ff", fontSize: 13, paddingVertical: 8 },
+  message: { padding: 12, borderRadius: 12, backgroundColor: "#2a1720", borderWidth: 1, borderColor: "#5a2a3a" },
+  messageText: { color: "#ffb4c1", fontSize: 13, lineHeight: 19 },
+  securityNote: { padding: 12, borderRadius: 12, backgroundColor: "#151426", borderWidth: 1, borderColor: "#302c53" },
+  securityText: { color: "#aaa3d4", fontSize: 12, lineHeight: 18 },
+  lockCircle: { width: 72, height: 72, borderRadius: 36, alignSelf: "center", alignItems: "center", justifyContent: "center", backgroundColor: "#17152c", borderWidth: 1, borderColor: "#3b3466", marginBottom: 4 },
+  lockIcon: { color: "#a98cff", fontSize: 24 },
+  appHeader: { minHeight: 64, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: "#1b1a29", flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#090912" },
+  brand: { color: "#e9e3ff", fontSize: 15, fontWeight: "900", letterSpacing: 3 },
+  brandSub: { color: "#6f6a8d", fontSize: 9, fontWeight: "800", letterSpacing: 2, marginTop: 2 },
+  testBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, backgroundColor: "#302444", borderWidth: 1, borderColor: "#5d4681" },
+  testBadgeText: { color: "#c8aaff", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  page: { padding: 16, paddingBottom: 100, gap: 12 },
+  pageTitle: { color: "#f5f2ff", fontSize: 24, fontWeight: "800", letterSpacing: -0.5 },
+  pageLead: { color: "#85879a", fontSize: 13, lineHeight: 19, marginBottom: 4 },
+  heroCard: { padding: 18, borderRadius: 22, backgroundColor: "#11101e", borderWidth: 1, borderColor: "#312b53", gap: 9 },
+  cardEyebrow: { color: "#9e87ff", fontSize: 11, fontWeight: "900", letterSpacing: 1.3 },
+  heroAmount: { color: "#ffffff", fontSize: 34, fontWeight: "850", letterSpacing: -1.1 },
+  cardHint: { color: "#85869a", fontSize: 12, lineHeight: 18 },
+  progress: { height: 5, borderRadius: 99, backgroundColor: "#29283a", overflow: "hidden", marginTop: 6 },
+  progressBar: { height: "100%", borderRadius: 99, backgroundColor: "#8c70ff" },
+  rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  meta: { color: "#747688", fontSize: 11, lineHeight: 16 },
+  twoCols: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  miniCard: { width: "48%", flexGrow: 1, minWidth: 145, padding: 14, borderRadius: 17, backgroundColor: "#0d0d17", borderWidth: 1, borderColor: "#20202e", gap: 5 },
+  miniLabel: { color: "#828397", fontSize: 11 },
+  miniValue: { color: "#f0edf8", fontSize: 19, fontWeight: "800" },
+  sectionTitle: { marginTop: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  sectionTitleText: { color: "#dcd9e8", fontSize: 15, fontWeight: "800" },
+  sectionAction: { color: "#a38cff", fontSize: 11, fontWeight: "700" },
+  queueSummary: { minHeight: 94, borderRadius: 18, borderWidth: 1, borderColor: "#26253a", backgroundColor: "#0d0d18", flexDirection: "row", alignItems: "center", paddingHorizontal: 16, gap: 16 },
+  queueNumber: { color: "#f7f4ff", fontSize: 25, fontWeight: "850" },
+  queueLabel: { color: "#77798d", fontSize: 11, marginTop: 3 },
+  queueDivider: { width: 1, height: 46, backgroundColor: "#29283b" },
+  chevron: { color: "#8f78e8", fontSize: 28, marginLeft: "auto" },
+  queueCard: { borderRadius: 17, borderWidth: 1, borderColor: "#222131", backgroundColor: "#0d0d17", padding: 14, gap: 8 },
+  userCode: { color: "#a28cff", fontWeight: "850", fontSize: 11, letterSpacing: 0.5 },
+  queueAmount: { color: "#f5f2fb", fontSize: 20, fontWeight: "850", marginTop: 3 },
+  queueMeta: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
+  riskPill: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, backgroundColor: "#13231e", borderWidth: 1, borderColor: "#234c3d" },
+  riskText: { color: "#76d9aa", fontSize: 10, fontWeight: "900" },
+  riskMedium: { backgroundColor: "#292315", borderColor: "#5a4a25" },
+  riskMediumText: { color: "#e4be6d" },
+  riskDanger: { backgroundColor: "#2e171d", borderColor: "#64303d" },
+  riskDangerText: { color: "#f08fa0" },
+  statusPill: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, backgroundColor: "#1b1731", borderWidth: 1, borderColor: "#342a5d" },
+  statusText: { color: "#aa93ff", fontSize: 10, fontWeight: "850" },
+  transferRow: { minHeight: 65, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: "#1b1a27", paddingVertical: 8 },
+  transferAmount: { color: "#eae7f4", fontSize: 16, fontWeight: "800" },
+  empty: { minHeight: 86, alignItems: "center", justifyContent: "center", borderRadius: 16, borderWidth: 1, borderStyle: "dashed", borderColor: "#29283a" },
+  emptyText: { color: "#737588", fontSize: 12 },
+  backRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10 },
+  backButton: { width: 38, height: 38, borderRadius: 12, borderWidth: 1, borderColor: "#29283a", alignItems: "center", justifyContent: "center" },
+  backText: { color: "#b4a3ff", fontSize: 28, marginTop: -3 },
+  detailCard: { padding: 17, borderRadius: 20, backgroundColor: "#0d0d18", borderWidth: 1, borderColor: "#28263a", gap: 8 },
+  detailAmount: { color: "#fff", fontSize: 32, fontWeight: "850", letterSpacing: -1 },
+  detailEmail: { color: "#818397", fontSize: 12 },
+  detailGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  detailItem: { width: "48%", flexGrow: 1, padding: 11, borderRadius: 12, backgroundColor: "#11111d" },
+  detailValue: { color: "#d8d4e4", fontSize: 12, fontWeight: "750", marginTop: 3 },
+  reasonTitle: { color: "#a6a2b5", fontSize: 12, fontWeight: "800", marginTop: 8 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: { color: "#a199c6", fontSize: 9, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: "#312b4e", backgroundColor: "#141221" },
+  actionCard: { padding: 16, borderRadius: 20, backgroundColor: "#0d0d18", borderWidth: 1, borderColor: "#222131", gap: 12 },
+  actionTitle: { color: "#eeeaf7", fontSize: 16, fontWeight: "850" },
+  actionRow: { flexDirection: "row", gap: 9 },
+  smallButton: { flex: 1, minHeight: 45, borderRadius: 12, borderWidth: 1, borderColor: "#353449", backgroundColor: "#12121
