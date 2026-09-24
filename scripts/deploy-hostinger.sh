@@ -54,6 +54,7 @@ RESEND_API_KEY=
 EMAIL_FROM='SCENOVA <no-reply@mail.snvea-bot.online>'
 EMAIL_VERIFICATION_REQUIRED=false
 OMISE_SECRET_KEY=
+OMISE_WEBHOOK_SECRET=
 OWNER_OMISE_RESERVE_SATANG=0
 EOF
 fi
@@ -73,6 +74,9 @@ fi
 
 if ! grep -q '^OMISE_SECRET_KEY=' .env.hostinger; then
   echo 'OMISE_SECRET_KEY=' >> .env.hostinger
+fi
+if ! grep -q '^OMISE_WEBHOOK_SECRET=' .env.hostinger; then
+  echo 'OMISE_WEBHOOK_SECRET=' >> .env.hostinger
 fi
 if ! grep -q '^OWNER_OMISE_RESERVE_SATANG=' .env.hostinger; then
   echo 'OWNER_OMISE_RESERVE_SATANG=0' >> .env.hostinger
