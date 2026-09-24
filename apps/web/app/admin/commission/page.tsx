@@ -395,6 +395,40 @@ export default function AdminCommissionPage() {
     }
   }
 
+  async function reconcilePaid(item: Withdrawal) {
+    if (busy) return;
+    const reference = String(references[item.id] || "").trim();
+    const confirmed = await confirmPopup({
+      title: "Manual Reconciliation",
+      message: `ยืนยันว่าตรวจหลักฐานแล้ว Provider จ่ายเต็ม ${money(item.amount_satang)} จริง?`,
+      confirmLabel: "Reconcile as Paid",
+      cancelLabel: "Cancel",
+      tone: "warning"
+    });
+    if (!confirmed) return;
+
+    setBusy(item.id + "reconcile");
+    setMessage("");
+    try {
+      await adminApi("/admin/commission-withdrawals/" + item.id + "/reconcile-paid", {
+        method: "POST",
+        body: JSON.stringify({
+          payoutReference: reference,
+          confirmedAmountSatang: item.amount_satang,
+          currentPassword: verification.currentPassword,
+          twoFactorCode: verification.twoFactorCode
+        })
+      });
+      setVerification({ currentPassword: "", twoFactorCode: "" });
+      setMessage("Manual Reconciliation สำเร็จ · ยืนยัน PAID และปิด mismatch alert แล้ว");
+      await load();
+    } catch (error: any) {
+      setMessage(String(error?.message || "Manual Reconciliation ไม่สำเร็จ"));
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function markPaid(item: Withdrawal) {
     if (busy) return;
     const reference = String(references[item.id] || "").trim();
@@ -647,6 +681,9 @@ export default function AdminCommissionPage() {
                   )}
                   {item.status === "APPROVED" && (
                     <button type="button" className={s.paidButton} onClick={()=>void markPaid(item)} disabled={Boolean(busy)}>Manual Mark Paid</button>
+                  )}
+                  {item.status === "HOLD" && ["MISMATCH","MANUAL_REVIEW"].includes(item.reconciliation_status) && (
+                    <button type="button" className={s.reconcileButton} onClick={()=>void reconcilePaid(item)} disabled={Boolean(busy)}>Reconcile as Paid</button>
                   )}
                   <button
                     type="button"
