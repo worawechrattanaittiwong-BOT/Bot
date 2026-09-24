@@ -175,6 +175,27 @@ export class AdminCommissionWithdrawalsController {
     );
   }
 
+  @Post(":id/reconcile-paid")
+  async reconcilePaid(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: {
+      payoutReference?: string;
+      confirmedAmountSatang?: number;
+      currentPassword?: string;
+      twoFactorCode?: string;
+    }
+  ) {
+    assertUuid(id);
+    return this.withdrawals.manualReconcilePaid(
+      this.adminUserId(req),
+      id,
+      this.actor(req),
+      body,
+      clientIp(req)
+    );
+  }
+
   @Post("destinations/:id/reveal")
   async reveal(
     @Req() req: any,
