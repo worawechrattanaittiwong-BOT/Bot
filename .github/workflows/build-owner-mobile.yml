@@ -6,6 +6,9 @@ on:
 jobs:
   android-apk:
     runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_API_URL: https://snvea-bot.online/backend/api
+      CI: "1"
     defaults:
       run:
         working-directory: apps/owner-mobile
@@ -24,22 +27,23 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install dependencies
         run: npm install
 
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Setup Expo / EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Build Android APK
-        env:
-          EXPO_PUBLIC_API_URL: ${{ secrets.OWNER_MOBILE_API_URL }}
-        run: eas build --platform android --profile preview --non-interactive --local --output ./SCENOVA-Owner.apk
+      - name: Build standalone release APK
+        run: |
+          chmod +x android/gradlew
+          ./android/gradlew -p android assembleRelease --no-daemon
+          cp android/app/build/outputs/apk/release/app-release.apk ./SCENOVA-Owner.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -47,3 +51,4 @@ jobs:
           name: SCENOVA-Owner-APK
           path: apps/owner-mobile/SCENOVA-Owner.apk
           if-no-files-found: error
+          retention-days: 30
