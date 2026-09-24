@@ -1,7 +1,16 @@
 name: Build SCENOVA Owner APK
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/owner-mobile/**"
+      - ".github/workflows/build-owner-mobile.yml"
   workflow_dispatch:
+
+concurrency:
+  group: scenova-owner-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -11,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       EXPO_PUBLIC_API_URL: https://snvea-bot.online/backend/api
+      EXPO_PUBLIC_OWNER_BUILD: ${{ github.run_number }}
       CI: "1"
     defaults:
       run:
@@ -35,6 +45,16 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Stamp Android build number
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const app = JSON.parse(fs.readFileSync("app.json", "utf8"));
+          app.expo.android.versionCode = Number(process.env.GITHUB_RUN_NUMBER);
+          fs.writeFileSync("app.json", JSON.stringify(app, null, 2) + "\n");
+          console.log("SCENOVA Owner versionCode=" + app.expo.android.versionCode);
+          NODE
 
       - name: Generate native Android project
         run: npx expo prebuild --platform android --clean --no-install
@@ -69,11 +89,31 @@ jobs:
           test -x "$APK_SIGNER"
           "$APK_SIGNER" verify --verbose --print-certs ./SCENOVA-Owner.apk
 
+      - name: Create update manifest
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const app = JSON.parse(fs.readFileSync("app.json", "utf8"));
+          const { execFileSync } = require("child_process");
+          const sha256 = execFileSync("sha256sum", ["SCENOVA-Owner.apk"], { encoding: "utf8" }).trim().split(/\s+/)[0];
+          const manifest = {
+            version: String(app.expo.version || ""),
+            versionCode: Number(process.env.GITHUB_RUN_NUMBER),
+            url: "https://snvea-bot.online/downloads/SCENOVA-Owner.apk",
+            sha256,
+            releasedAt: new Date().toISOString()
+          };
+          fs.writeFileSync("SCENOVA-Owner.json", JSON.stringify(manifest, null, 2) + "\n");
+          console.log(JSON.stringify(manifest));
+          NODE
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: SCENOVA-Owner-APK
-          path: apps/owner-mobile/SCENOVA-Owner.apk
+          path: |
+            apps/owner-mobile/SCENOVA-Owner.apk
+            apps/owner-mobile/SCENOVA-Owner.json
           if-no-files-found: error
           retention-days: 30
 
@@ -83,10 +123,15 @@ jobs:
         run: |
           mkdir -p apps/web/public/downloads
           cp apps/owner-mobile/SCENOVA-Owner.apk apps/web/public/downloads/SCENOVA-Owner.apk
+          cp apps/owner-mobile/SCENOVA-Owner.json apps/web/public/downloads/SCENOVA-Owner.json
+
+          # app.json is stamped only for this binary. Keep source config clean
+          # before fetch/rebase/publish.
+          git checkout -- apps/owner-mobile/app.json
 
           git config user.name "scenova-build"
           git config user.email "actions@users.noreply.github.com"
-          git add apps/web/public/downloads/SCENOVA-Owner.apk
+          git add apps/web/public/downloads/SCENOVA-Owner.apk apps/web/public/downloads/SCENOVA-Owner.json
 
           if git diff --cached --quiet; then
             echo "Published Owner APK is already current."
