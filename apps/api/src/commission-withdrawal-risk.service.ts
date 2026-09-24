@@ -115,53 +115,50 @@ export class CommissionWithdrawalRiskService {
     )).rows[0];
     if (!destination) throw new BadRequestException("ไม่พบบัญชีรับเงิน");
 
-    const [user, sharedAccount, sharedIp, sharedDevice, rejected, attempts, priorPaid] =
-      await Promise.all([
-        tx.query("SELECT created_at FROM users WHERE id=$1", [input.userId]),
-        tx.query(
+    const user = await tx.query("SELECT created_at FROM users WHERE id=$1", [input.userId]);
+    const sharedAccount = await tx.query(
+      `SELECT count(DISTINCT user_id)::int AS users
+       FROM commission_payout_destinations
+       WHERE account_hash=$1 AND user_id<>$2`,
+      [destination.account_hash, input.userId]
+    );
+    const sharedIp = input.ip
+      ? await tx.query(
           `SELECT count(DISTINCT user_id)::int AS users
-           FROM commission_payout_destinations
-           WHERE account_hash=$1 AND user_id<>$2`,
-          [destination.account_hash, input.userId]
-        ),
-        input.ip
-          ? tx.query(
-              `SELECT count(DISTINCT user_id)::int AS users
-               FROM commission_withdrawals
-               WHERE request_ip=$1 AND user_id<>$2
-                 AND created_at>now()-interval '30 days'`,
-              [input.ip, input.userId]
-            )
-          : Promise.resolve({ rows: [{ users: 0 }] } as any),
-        deviceHash
-          ? tx.query(
-              `SELECT count(DISTINCT user_id)::int AS users
-               FROM commission_withdrawals
-               WHERE request_device_hash=$1 AND user_id<>$2
-                 AND created_at>now()-interval '30 days'`,
-              [deviceHash, input.userId]
-            )
-          : Promise.resolve({ rows: [{ users: 0 }] } as any),
-        tx.query(
-          `SELECT count(*)::int AS count
            FROM commission_withdrawals
-           WHERE user_id=$1 AND status='REJECTED'
+           WHERE request_ip=$1 AND user_id<>$2
              AND created_at>now()-interval '30 days'`,
-          [input.userId]
-        ),
-        tx.query(
-          `SELECT count(*)::int AS count
-           FROM commission_withdrawals
-           WHERE user_id=$1 AND created_at>now()-interval '24 hours'`,
-          [input.userId]
-        ),
-        tx.query(
-          `SELECT count(*)::int AS count
-           FROM commission_withdrawals
-           WHERE user_id=$1 AND status='PAID'`,
-          [input.userId]
+          [input.ip, input.userId]
         )
-      ]);
+      : ({ rows: [{ users: 0 }] } as any);
+    const sharedDevice = deviceHash
+      ? await tx.query(
+          `SELECT count(DISTINCT user_id)::int AS users
+           FROM commission_withdrawals
+           WHERE request_device_hash=$1 AND user_id<>$2
+             AND created_at>now()-interval '30 days'`,
+          [deviceHash, input.userId]
+        )
+      : ({ rows: [{ users: 0 }] } as any);
+    const rejected = await tx.query(
+      `SELECT count(*)::int AS count
+       FROM commission_withdrawals
+       WHERE user_id=$1 AND status='REJECTED'
+         AND created_at>now()-interval '30 days'`,
+      [input.userId]
+    );
+    const attempts = await tx.query(
+      `SELECT count(*)::int AS count
+       FROM commission_withdrawals
+       WHERE user_id=$1 AND created_at>now()-interval '24 hours'`,
+      [input.userId]
+    );
+    const priorPaid = await tx.query(
+      `SELECT count(*)::int AS count
+       FROM commission_withdrawals
+       WHERE user_id=$1 AND status='PAID'`,
+      [input.userId]
+    );
 
     let score = 0;
     const reasons: string[] = [];
