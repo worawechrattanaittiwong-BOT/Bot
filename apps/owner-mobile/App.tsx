@@ -20,7 +20,8 @@ import {
 
 const API = String(process.env.EXPO_PUBLIC_API_URL || "").replace(/\/$/, "");
 const DEVICE_KEY = "scenova.owner.deviceId";
-const TOKEN_KEY = "scenova.owner.session";\nconst ENROLLED_KEY = "scenova.owner.enrolled";
+const TOKEN_KEY = "scenova.owner.session";
+const ENROLLED_KEY = "scenova.owner.enrolled";
 
 type Summary = {
   paymentMode: string;
