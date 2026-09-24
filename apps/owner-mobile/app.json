@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "SCENOVA Owner",
+    "slug": "scenova-owner",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "scenova-owner",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.scenova.owner",
+      "adaptiveIcon": {
+        "backgroundColor": "#0b0713"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.scenova.owner",
+      "supportsTablet": false
+    },
+    "plugins": [
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "อนุญาตให้ SCENOVA Owner ใช้ Face ID เพื่อปกป้องข้อมูลในเครื่อง"
+        }
+      ]
+    ]
+  }
+}

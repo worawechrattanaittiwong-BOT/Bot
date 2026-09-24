@@ -46,6 +46,7 @@ import { RuntimeMigrationService } from "./runtime-migration.service";
 import { ProductionHardeningController } from "./production-hardening.controller";
 import { ProductionHardeningService } from "./production-hardening.service";
 import { AdminGuard, CryptoService, JwtGuard, WorkerGuard, PayoutWorkerGuard } from "./security";
+import { OwnerMobileController, OwnerMobileService } from "./owner-mobile.controller";
 
 @Module({
   imports: [
@@ -54,8 +55,9 @@ import { AdminGuard, CryptoService, JwtGuard, WorkerGuard, PayoutWorkerGuard } f
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
+  controllers: [OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
+    OwnerMobileService,
     CommissionWithdrawalRiskService,
     CommissionWithdrawalService,
     ApiCredentialTesterService,

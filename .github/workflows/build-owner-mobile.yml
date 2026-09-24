@@ -1,0 +1,49 @@
+name: Build SCENOVA Owner APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/owner-mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Setup Expo / EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android APK
+        env:
+          EXPO_PUBLIC_API_URL: ${{ secrets.OWNER_MOBILE_API_URL }}
+        run: eas build --platform android --profile preview --non-interactive --local --output ./SCENOVA-Owner.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SCENOVA-Owner-APK
+          path: apps/owner-mobile/SCENOVA-Owner.apk
+          if-no-files-found: error
