@@ -159,7 +159,7 @@ validate_generated_owner_mobile_shape() {
   while IFS= read -r file; do
     [ -z "$file" ] && continue
     case "$file" in
-      apps/web/public/downloads/SCENOVA-Owner.apk)
+      apps/web/public/downloads/SCENOVA-Owner.apk|apps/web/public/downloads/SCENOVA-Owner.json)
         ;;
       *)
         return 1
@@ -168,6 +168,7 @@ validate_generated_owner_mobile_shape() {
   done <<< "$changed"
 
   git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-Owner.apk" 2>/dev/null || return 1
+  git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-Owner.json" 2>/dev/null || return 1
   return 0
 }
 
