@@ -435,3 +435,113 @@
   .vaultActions{display:block}
   .vaultActions>div{margin-top:9px}
 }
+
+.testStrip{
+  grid-column:1/-1;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  min-height:62px;
+  padding:10px 11px;
+  border:1px solid rgba(132,146,184,.13);
+  border-radius:11px;
+  background:rgba(4,8,16,.48);
+}
+.testStrip>div{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  min-width:0;
+}
+.testStrip b{
+  color:#dce2f0;
+  font-size:9px;
+}
+.testStrip small{
+  color:#748199;
+  font-size:8px;
+  line-height:1.35;
+}
+.changedHint{
+  width:100%;
+  color:#f2b46d!important;
+}
+.testPass,.testLimited,.testFail,.testUnknown{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  min-height:22px;
+  padding:0 7px;
+  border-radius:999px;
+  font-size:7px;
+  font-weight:950;
+  letter-spacing:.08em;
+  white-space:nowrap;
+}
+.testPass{
+  border:1px solid rgba(71,214,139,.25);
+  background:rgba(43,189,117,.08);
+  color:#6ce2a7;
+}
+.testLimited{
+  border:1px solid rgba(242,178,94,.24);
+  background:rgba(220,145,50,.08);
+  color:#efb76f;
+}
+.testFail{
+  border:1px solid rgba(255,101,120,.24);
+  background:rgba(255,73,98,.08);
+  color:#ff8797;
+}
+.testUnknown{
+  border:1px solid rgba(127,140,176,.15);
+  background:rgba(255,255,255,.02);
+  color:#758198;
+}
+.testPass i,.testLimited i,.testFail i,.testUnknown i{
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:currentColor;
+}
+.testButton{
+  flex:0 0 auto;
+  min-height:34px;
+  padding:0 12px;
+  border:1px solid rgba(112,95,255,.30);
+  border-radius:9px;
+  background:rgba(101,82,255,.11);
+  color:#c7bfff;
+  font-size:8px;
+  font-weight:950;
+  cursor:pointer;
+}
+.testButton:disabled{
+  opacity:.42;
+  cursor:not-allowed;
+}
+.savedTest{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:10px;
+}
+.savedTest small{
+  color:#68758d;
+  font-size:7px;
+}
+.testHost{
+  display:block;
+  overflow:hidden;
+  margin-top:7px;
+  color:#626f87;
+  font:700 7px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+@media(max-width:700px){
+  .testStrip{display:block}
+  .testButton{margin-top:9px;width:100%}
+}
