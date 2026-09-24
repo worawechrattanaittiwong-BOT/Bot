@@ -547,3 +547,158 @@ export default function App() {
           <Pressable style={styles.queueSummary} onPress={() => setScreen("queue")}>
             <View><Text style={styles.queueNumber}>{dashboard.commissions.awaitingApprovalCount}</Text><Text style={styles.queueLabel}>คำขอรอตรวจสอบ</Text></View>
             <View style={styles.queueDivider}/>
+            <View><Text style={styles.queueNumber}>{dashboard.commissions.approvedWaitingPayoutCount}</Text><Text style={styles.queueLabel}>อนุมัติแล้วรอจ่าย</Text></View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+
+          {dashboard.queue.slice(0, 3).map(item => <QueueCard key={item.id} item={item} onPress={() => loadDetail(item)}/>)}
+
+          <SectionTitle title="ถอนเงินของ Owner ล่าสุด"/>
+          {dashboard.ownerTransfers.length ? dashboard.ownerTransfers.slice(0, 5).map(item => (
+            <View key={item.id} style={styles.transferRow}>
+              <View><Text style={styles.transferAmount}>{money(item.amount_satang)}</Text><Text style={styles.meta}>{shortDate(item.created_at)}</Text></View>
+              <StatusPill value={item.status}/>
+            </View>
+          )) : <Empty text="ยังไม่มีรายการถอนจากแอป"/>}
+        </ScrollView>
+      )}
+
+      {screen === "queue" && dashboard && (
+        <ScrollView contentContainerStyle={styles.page} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#9a7cff"/>}>
+          <Back title="คำขอถอนค่าคอม" onPress={() => setScreen("home")}/>
+          <Text style={styles.pageLead}>กดรายการเพื่อดู Risk, บัญชีปลายทาง และประวัติการอนุมัติ</Text>
+          {dashboard.queue.length ? dashboard.queue.map(item => <QueueCard key={item.id} item={item} onPress={() => loadDetail(item)}/>) : <Empty text="ไม่มีรายการรออนุมัติ"/>}
+          <SectionTitle title="อนุมัติแล้วรอจ่าย"/>
+          {dashboard.approvedWaitingPayout.length ? dashboard.approvedWaitingPayout.map(item => <QueueCard key={item.id} item={item} onPress={() => loadDetail(item)}/>) : <Empty text="ไม่มีรายการค้างจ่าย"/>}
+        </ScrollView>
+      )}
+
+      {screen === "detail" && selected && (
+        <ScrollView contentContainerStyle={styles.page}>
+          <Back title="ตรวจสอบคำขอถอน" onPress={() => setScreen("queue")}/>
+          <View style={styles.detailCard}>
+            <View style={styles.rowBetween}><Text style={styles.cardEyebrow}>{selected.user_code}</Text><RiskPill level={selected.risk_level} score={selected.risk_score}/></View>
+            <Text style={styles.detailAmount}>{money(selected.amount_satang)}</Text>
+            <Text style={styles.detailEmail}>{selected.email}</Text>
+            <View style={styles.detailGrid}>
+              <Detail label="ธนาคาร" value={`${selected.bank_name || selected.bank_code}`}/>
+              <Detail label="บัญชี" value={`${selected.account_name} ${selected.masked_account}`}/>
+              <Detail label="Approval" value={`${selected.approval_count}/${selected.approval_required}`}/>
+              <Detail label="บัญชีซ้ำ" value={`${selected.shared_account_users || 0} User`}/>
+              <Detail label="สถานะบัญชี" value={selected.destination_status || "-"}/>
+              <Detail label="สร้างเมื่อ" value={shortDate(selected.created_at)}/>
+            </View>
+            <Text style={styles.reasonTitle}>Risk signals</Text>
+            <View style={styles.chips}>{(selected.risk_reasons || []).map(reason => <Text key={reason} style={styles.chip}>{reason}</Text>)}</View>
+          </View>
+          <View style={styles.actionCard}>
+            <Text style={styles.actionTitle}>ยืนยันการตัดสินใจ</Text>
+            <Field label="หมายเหตุ / เหตุผล" value={actionReason} onChangeText={setActionReason} placeholder="ระบุเมื่อ Hold หรือ Reject" multiline/>
+            <PinField value={action2fa} onChangeText={setAction2fa} label="2FA 6 หลัก"/>
+            <View style={styles.actionRow}>
+              <SmallButton label="พักรายการ" onPress={() => withdrawalAction("hold")} disabled={busy}/>
+              <SmallButton label="ปฏิเสธ" tone="danger" onPress={() => withdrawalAction("reject")} disabled={busy}/>
+            </View>
+            <Primary label={busy ? "กำลังยืนยัน..." : "อนุมัติรายการ"} onPress={() => withdrawalAction("approve")} disabled={busy}/>
+            <Text style={styles.cardHint}>รายการ Risk สูงหรือยอดเกิน Threshold อาจต้องใช้ผู้ดูแลอีกบัญชีอนุมัติรอบสอง</Text>
+          </View>
+          <Message text={message}/>
+        </ScrollView>
+      )}
+
+      {screen === "withdraw" && dashboard && (
+        <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+          <Back title="ถอนเงินของเรา" onPress={() => setScreen("home")}/>
+          <View style={styles.heroCard}>
+            <Text style={styles.cardEyebrow}>ถอนได้อย่างปลอดภัย</Text>
+            <Text style={styles.heroAmount}>{money(dashboard.omise.safeWithdrawableSatang)}</Text>
+            <Text style={styles.cardHint}>ระบบกัน {money(dashboard.omise.customerReserveSatang)} สำหรับค่าคอมลูกค้าไว้แล้ว</Text>
+          </View>
+          <View style={styles.actionCard}>
+            <Field label="จำนวนเงิน (บาท)" value={withdrawAmount} onChangeText={setWithdrawAmount} keyboardType="decimal-pad" placeholder="0.00"/>
+            <PinField value={action2fa} onChangeText={setAction2fa} label="2FA 6 หลัก"/>
+            <View style={styles.securityNote}><Text style={styles.securityText}>เงินจะถูกส่งไปบัญชีธนาคาร Default ที่ยืนยันไว้กับ Omise เท่านั้น Secret Key อยู่ที่ Server ไม่อยู่ในมือถือ</Text></View>
+            <Primary label={busy ? "กำลังส่ง Omise..." : "ยืนยันถอนเงิน"} onPress={ownerWithdraw} disabled={busy}/>
+          </View>
+          <Message text={message}/>
+        </ScrollView>
+      )}
+
+      {screen === "security" && (
+        <ScrollView contentContainerStyle={styles.page}>
+          <Back title="ความปลอดภัย" onPress={() => setScreen("home")}/>
+          <View style={styles.actionCard}>
+            <Text style={styles.actionTitle}>เปลี่ยน PIN</Text>
+            <PinField value={newPin} onChangeText={setNewPin} label="PIN ใหม่" secureTextEntry/>
+            <PinField value={newPinConfirm} onChangeText={setNewPinConfirm} label="ยืนยัน PIN ใหม่" secureTextEntry/>
+            <PinField value={action2fa} onChangeText={setAction2fa} label="2FA 6 หลัก"/>
+            <Primary label="เปลี่ยน PIN" onPress={changePin} disabled={busy}/>
+          </View>
+          <View style={styles.actionCard}>
+            <Text style={styles.actionTitle}>ยกเลิกมือถือเครื่องนี้</Text>
+            <Text style={styles.cardHint}>หลัง Revoke ต้อง Login ด้วยรหัสผ่าน + 2FA และตั้ง PIN ใหม่ก่อนใช้งานอีกครั้ง</Text>
+            <PinField value={action2fa} onChangeText={setAction2fa} label="2FA 6 หลัก"/>
+            <SmallButton label="Revoke เครื่องนี้" tone="danger" onPress={() => Alert.alert("ยืนยัน Revoke", "เครื่องนี้จะเข้าแอปไม่ได้จนกว่าจะลงทะเบียนใหม่", [{ text:"ยกเลิก" }, { text:"Revoke", style:"destructive", onPress:revokeThisDevice }])}/>
+          </View>
+          <Message text={message}/>
+        </ScrollView>
+      )}
+
+      {["home", "queue"].includes(screen) && (
+        <View style={styles.bottomNav}>
+          <Nav label="ภาพรวม" active={screen === "home"} onPress={() => setScreen("home")}/>
+          <Nav label={`อนุมัติ ${dashboard?.commissions?.awaitingApprovalCount || 0}`} active={screen === "queue"} onPress={() => setScreen("queue")}/>
+          <Nav label="ความปลอดภัย" active={false} onPress={() => { setAction2fa(""); setScreen("security"); }}/>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor="#070710"/>
+      <KeyboardAvoidingView style={styles.authWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView contentContainerStyle={styles.authInner} keyboardShouldPersistTaps="handled">
+          <Text style={styles.logo}>SCENOVA</Text>
+          <Text style={styles.authTitle}>{title}</Text>
+          <Text style={styles.authSub}>{subtitle}</Text>
+          <View style={styles.authCard}>{children}</View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+function Center({ children }: { children: React.ReactNode }) {
+  return <SafeAreaView style={styles.safe}><View style={styles.center}>{children}</View></SafeAreaView>;
+}
+
+function Field(props: any) {
+  return <View style={styles.field}><Text style={styles.fieldLabel}>{props.label}</Text><TextInput {...props} label={undefined} style={[styles.input, props.multiline && styles.textarea]} placeholderTextColor="#5f6072"/></View>;
+}
+
+function PinField(props: any) {
+  return <Field {...props} value={props.value} onChangeText={(v: string) => props.onChangeText(v.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" maxLength={6}/>;
+}
+
+function Primary({ label, onPress, disabled = false }: { label: string; onPress: () => void; disabled?: boolean }) {
+  return <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [styles.primary, (pressed || disabled) && styles.buttonDim]}><Text style={styles.primaryText}>{label}</Text></Pressable>;
+}
+
+function SmallButton({ label, onPress, disabled = false, tone = "normal" }: { label: string; onPress: () => void; disabled?: boolean; tone?: "normal" | "danger" }) {
+  return <Pressable onPress={onPress} disabled={disabled} style={[styles.smallButton, tone === "danger" && styles.smallDanger, disabled && styles.buttonDim]}><Text style={[styles.smallButtonText, tone === "danger" && styles.smallDangerText]}>{label}</Text></Pressable>;
+}
+
+function Message({ text }: { text: string }) {
+  if (!text) return null;
+  return <View style={styles.message}><Text style={styles.messageText}>{text}</Text></View>;
+}
+
+function MiniCard({ label, value, note }: { label: string; value: string; note: string }) {
+  return <View style={styles.miniCard}><Text style={styles.miniLabel}>{label}</Text><Text style={styles.miniValue}>{value}</Text><Text style={styles.meta}>{note}</Text></View>;
+}
+
+function SectionTitle({ title, action }: { title: string; action?: string }) {
+  return <View style={styles.sectionTitle}><Text style={styles.sectionTitleText}>{title}</Text>{actio
