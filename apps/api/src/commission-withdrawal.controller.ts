@@ -252,6 +252,13 @@ export class CommissionPayoutWorkerController {
     return this.withdrawals.claimPayout(String(body.workerId || ""));
   }
 
+  @Post("authorize")
+  async authorize(@Body() body: { workerId?: string; jobId?: string }) {
+    const jobId = String(body.jobId || "");
+    assertUuid(jobId);
+    return this.withdrawals.authorizePayout(String(body.workerId || ""), jobId);
+  }
+
   @Post("result")
   async result(
     @Body() body: {
