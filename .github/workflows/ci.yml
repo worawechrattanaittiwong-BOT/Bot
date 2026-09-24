@@ -39,6 +39,8 @@ jobs:
         run: node ./tests/referral-program-contract.mjs
       - name: Commission withdrawal Phase 2 contract
         run: node ./tests/commission-withdrawal-contract.mjs
+      - name: Commission withdrawal Phase 3 contract
+        run: node ./tests/commission-withdrawal-phase3-contract.mjs
       - name: System popup contract
         run: node ./tests/system-popup-contract.mjs
       - name: Cent account currency isolation contract
