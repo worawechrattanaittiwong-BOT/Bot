@@ -52,8 +52,7 @@ export class CommissionWalletWithdrawalController {
     return this.withdrawals.saveDestination(
       String(req.user.sub || ""),
       body,
-      clientIp(req),
-      clientDeviceId(req)
+      clientIp(req)
     );
   }
 
@@ -71,7 +70,8 @@ export class CommissionWalletWithdrawalController {
     return this.withdrawals.requestWithdrawal(
       String(req.user.sub || ""),
       body,
-      clientIp(req)
+      clientIp(req),
+      clientDeviceId(req)
     );
   }
 
