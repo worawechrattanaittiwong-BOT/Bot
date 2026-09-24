@@ -866,7 +866,7 @@ const styles = StyleSheet.create({
   },
   statCardAccent: { borderColor: "#5a3f83", backgroundColor: "#151021" },
   cardLabel: { color: "#91879c", fontSize: 11, fontWeight: "800", letterSpacing: 0.8 },
-  statValue: { color: "white", fontSize: 27, fontWeight: "850", marginTop: 7 },
+  statValue: { color: "white", fontSize: 27, fontWeight: "900", marginTop: 7 },
   cardCaption: { color: "#786f82", fontSize: 12, marginTop: 5 },
   grid: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
@@ -874,7 +874,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#171022", borderWidth: 1, borderColor: "#3e2b58", borderRadius: 22,
     padding: 18, marginTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between"
   },
-  queueCount: { color: "white", fontSize: 24, fontWeight: "850", marginTop: 7 },
+  queueCount: { color: "white", fontSize: 24, fontWeight: "900", marginTop: 7 },
   arrow: { color: "#b48cff", fontSize: 36 },
   ownerCard: {
     backgroundColor: "#160f24", borderColor: "#6847a0", borderWidth: 1,
@@ -887,7 +887,7 @@ const styles = StyleSheet.create({
     paddingTop: 58, paddingHorizontal: 18, paddingBottom: 12,
     flexDirection: "row", alignItems: "center", justifyContent: "space-between"
   },
-  back: { color: "#b38cff", fontSize: 15, fontWeight: "750", marginBottom: 14 },
+  back: { color: "#b38cff", fontSize: 15, fontWeight: "700", marginBottom: 14 },
   listContent: { padding: 18, paddingBottom: 40 },
   empty: { color: "#887d93", textAlign: "center", marginTop: 70 },
   approvalCard: {
