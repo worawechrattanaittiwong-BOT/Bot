@@ -733,6 +733,15 @@ export class CommissionWithdrawalService {
       throw new BadRequestException("Cooling Period ต้องอยู่ระหว่าง 0-720 ชั่วโมง");
     }
 
+    if (Boolean(input.requestsEnabled)) {
+      const current = await this.db.one(
+        "SELECT kill_switch_enabled FROM commission_withdrawal_settings WHERE id=1"
+      );
+      if (current?.kill_switch_enabled) {
+        throw new ForbiddenException("ปิด Kill Switch ก่อนเปิดรับคำขอถอน");
+      }
+    }
+
     const row = await this.db.one(
       `UPDATE commission_withdrawal_settings
        SET requests_enabled=$1,min_amount_satang=$2,max_amount_satang=$3,
@@ -1028,6 +1037,10 @@ export class CommissionWithdrawalService {
 
   async claimPayout(workerId: string) {
     return this.risk.claimPayout(workerId);
+  }
+
+  async authorizePayout(workerId: string, jobId: string) {
+    return this.risk.authorizePayout(workerId, jobId);
   }
 
   async reportPayoutResult(
