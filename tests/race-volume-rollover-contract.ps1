@@ -18,6 +18,7 @@ function Need([string]$text,[string]$needle,[string]$message) {
 }
 
 $ea = Read-Text 'mt5/FastBasketBot.mq5'
+$raceLossV2 = Read-Text 'mt5/include/RaceLossV2.mqh'
 $release = Read-Text 'apps/api/src/release-version.ts'
 $analysis = Block $ea 'int RaceAnalysisDirection(double momentum)'
 $flow = Block $ea 'bool RaceFlowStillRunning(int direction, double momentum)'
@@ -90,7 +91,7 @@ Need $wrong 'RACE_PERSISTENT_REVERSAL_CONFIRMED_HOLD' 'persistent confirmed reve
 if($wrong.Contains('RACE_ADVERSE_IMPULSE_SEVERE') -or $wrong.Contains('RACE_ADVERSE_IMPULSE_CONFIRMED')){throw 'Obsolete instant adverse-impulse close path remains'}
 Need $fill 'g_raceLastFillAt = TimeCurrent();' 'RACE must restart soft-exit grace after every accepted fill'
 Need $fill 'RaceResetExitCandidate();' 'RACE fill must cancel any stale reversal candidate'
-Need $manage 'g_raceExitCandidateSince > 0' 'RACE must hold an active reversal candidate instead of continuing to fill'
+Need $raceLossV2 'g_raceExitCandidateSince>0' 'RACE loss engine must hold an active reversal candidate instead of continuing to fill'
 Need $manage 'RACE_EXIT_CANDIDATE' 'RACE candidate state must be observable'
 Need $manage 'g_raceLastFillAt = g_raceCycleStartedAt' 'RACE restart recovery must rebase last-fill grace instead of disabling soft protection'
 Need $manage 'RACE_VOLUME_ROLLOVER' 'RACE rollover close reason missing'
