@@ -331,4 +331,309 @@ export class OwnerMobileService implements OnApplicationBootstrap {
        WHERE d.device_id_hash=$1 AND d.disabled_at IS NULL`,
       [sha256(deviceId)]
     );
-    if (!
+    if (!device || device.role !== "OWNER" || device.status !== "ACTIVE") {
+      throw new UnauthorizedException("device unavailable");
+    }
+    if (device.locked_until && new Date(device.locked_until).getTime() > Date.now()) {
+      throw new ForbiddenException("PIN ถูกล็อกชั่วคราว กรุณารอแล้วลองใหม่");
+    }
+    const expected = Buffer.from(String(device.device_secret_hash || ""));
+    const supplied = Buffer.from(sha256(secret));
+    const secretOk = expected.length === supplied.length && timingSafeEqual(expected, supplied);
+    const pinOk = secretOk && (await compare(pin, String(device.pin_hash || "")));
+    if (!pinOk) {
+      const next = Number(device.failed_pin_attempts || 0) + 1;
+      await this.db.query(
+        `UPDATE owner_mobile_devices
+         SET failed_pin_attempts=$2,
+             locked_until=CASE WHEN $2>=$3 THEN now()+make_interval(mins=>$4) ELSE NULL END,
+             updated_at=now()
+         WHERE id=$1`,
+        [device.id, next, MAX_PIN_ATTEMPTS, DEVICE_LOCK_MINUTES]
+      );
+      throw new UnauthorizedException(
+        next >= MAX_PIN_ATTEMPTS
+          ? "PIN ผิดครบจำนวนครั้ง เครื่องถูกล็อกชั่วคราว"
+          : `PIN ไม่ถูกต้อง เหลือลองได้ ${MAX_PIN_ATTEMPTS - next} ครั้ง`
+      );
+    }
+
+    await this.db.query(
+      `UPDATE owner_mobile_devices
+       SET failed_pin_attempts=0,locked_until=NULL,last_unlocked_at=now(),last_seen_at=now(),updated_at=now()
+       WHERE id=$1`,
+      [device.id]
+    );
+    const minutes = this.tokenMinutes();
+    const token = this.jwt.sign(
+      {
+        sub: device.user_id,
+        role: "OWNER",
+        code: device.user_code,
+        scope: "owner-mobile",
+        deviceRecordId: device.id
+      },
+      { audience: "owner-mobile", expiresIn: minutes * 60 }
+    );
+    return { token, expiresInSeconds: minutes * 60, deviceName: device.device_name, ip: ip || null };
+  }
+
+  async changePin(userId: string, deviceRecordId: string, newPin: string, twoFactorCode: string) {
+    const pin = String(newPin || "").trim();
+    if (!/^\d{6}$/.test(pin) || /^(\d)\1{5}$/.test(pin) || pin === "123456" || pin === "654321") {
+      throw new BadRequestException("PIN ต้องเป็นตัวเลข 6 หลักและห้ามเป็นเลขเดาง่าย");
+    }
+    await this.verifyTotpForUser(userId, twoFactorCode);
+    await this.db.query(
+      `UPDATE owner_mobile_devices
+       SET pin_hash=$2,failed_pin_attempts=0,locked_until=NULL,updated_at=now()
+       WHERE id=$1 AND user_id=$3 AND disabled_at IS NULL`,
+      [deviceRecordId, await hash(pin, 12), userId]
+    );
+    return { ok: true };
+  }
+
+  async revokeDevice(userId: string, deviceRecordId: string, twoFactorCode: string) {
+    await this.verifyTotpForUser(userId, twoFactorCode);
+    await this.db.query(
+      `UPDATE owner_mobile_devices SET disabled_at=now(),updated_at=now()
+       WHERE id=$1 AND user_id=$2 AND disabled_at IS NULL`,
+      [deviceRecordId, userId]
+    );
+    return { ok: true };
+  }
+
+  private async omise(path: string, fields?: URLSearchParams) {
+    const key = String(process.env.OMISE_SECRET_KEY || "");
+    if (paymentMode() === "UNCONFIGURED") {
+      throw new ServiceUnavailableException("ยังไม่ได้ตั้ง OMISE_SECRET_KEY");
+    }
+    const response = await fetch("https://api.omise.co" + path, {
+      method: fields ? "POST" : "GET",
+      headers: {
+        Authorization: "Basic " + Buffer.from(key + ":").toString("base64"),
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Omise-Version": "2019-05-29"
+      },
+      body: fields,
+      signal: AbortSignal.timeout(15000)
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = String((body as any)?.message || "Omise request failed").slice(0, 300);
+      throw new ConflictException(message);
+    }
+    return body as any;
+  }
+
+  private async omiseBalance() {
+    if (paymentMode() === "UNCONFIGURED") {
+      return { configured: false, mode: paymentMode(), totalSatang: 0, transferableSatang: 0 };
+    }
+    const balance = await this.omise("/balance");
+    return {
+      configured: true,
+      mode: paymentMode(),
+      totalSatang: Number(balance?.total || 0),
+      transferableSatang: Number(balance?.transferable || 0),
+      currency: String(balance?.currency || "THB").toUpperCase()
+    };
+  }
+
+  private async commissionLiability() {
+    const [core, adjustments] = await Promise.all([
+      this.db.one(
+        `SELECT
+           COALESCE(SUM(pending_delta_satang),0)::bigint AS pending_satang,
+           COALESCE(SUM(available_delta_satang),0)::bigint AS available_satang,
+           COALESCE(SUM(paid_delta_satang),0)::bigint AS paid_satang
+         FROM commission_wallet_ledger`
+      ),
+      this.db.one(
+        `SELECT
+           COALESCE(SUM(available_delta_satang),0)::bigint AS available_delta_satang,
+           COALESCE(SUM(locked_delta_satang),0)::bigint AS locked_satang,
+           COALESCE(SUM(paid_delta_satang),0)::bigint AS withdrawal_paid_satang
+         FROM commission_withdrawal_ledger`
+      )
+    ]);
+    const pending = Number(core?.pending_satang || 0);
+    const available = Math.max(
+      0,
+      Number(core?.available_satang || 0) + Number(adjustments?.available_delta_satang || 0)
+    );
+    const locked = Math.max(0, Number(adjustments?.locked_satang || 0));
+    return {
+      pendingSatang: Math.max(0, pending),
+      availableSatang: available,
+      lockedSatang: locked,
+      paidSatang: Math.max(0, Number(core?.paid_satang || 0)),
+      reserveSatang: Math.max(0, pending) + available + locked
+    };
+  }
+
+  async dashboard() {
+    this.requireEnabled();
+    const [balance, liability, withdrawalDashboard, recentOwnerTransfers] = await Promise.all([
+      this.omiseBalance().catch(error => ({
+        configured: paymentMode() !== "UNCONFIGURED",
+        mode: paymentMode(),
+        totalSatang: 0,
+        transferableSatang: 0,
+        error: error instanceof Error ? error.message : "Omise unavailable"
+      })),
+      this.commissionLiability(),
+      this.withdrawals.adminDashboard(),
+      this.db.query(
+        `SELECT id,amount_satang,status,provider_transfer_id,provider_status,
+                failure_code,created_at,updated_at
+         FROM owner_omise_transfers
+         ORDER BY created_at DESC LIMIT 20`
+      )
+    ]);
+    const cashBuffer = this.cashBufferSatang();
+    const safeWithdrawable = Math.max(
+      0,
+      Number((balance as any).transferableSatang || 0) - liability.reserveSatang - cashBuffer
+    );
+    const approvalItems = (withdrawalDashboard.items || []).filter((item: any) =>
+      ["REQUESTED", "HOLD"].includes(String(item.status))
+    );
+    const approvedItems = (withdrawalDashboard.items || []).filter((item: any) =>
+      String(item.status) === "APPROVED"
+    );
+
+    return {
+      omise: {
+        ...balance,
+        cashBufferSatang: cashBuffer,
+        customerReserveSatang: liability.reserveSatang,
+        safeWithdrawableSatang: safeWithdrawable
+      },
+      commissions: {
+        ...liability,
+        awaitingApprovalCount: approvalItems.length,
+        approvedWaitingPayoutCount: approvedItems.length,
+        lockedWithdrawalSatang: Number(withdrawalDashboard.summary?.lockedSatang || 0),
+        paidWithdrawalSatang: Number(withdrawalDashboard.summary?.paidSatang || 0)
+      },
+      queue: approvalItems.slice(0, 50),
+      approvedWaitingPayout: approvedItems.slice(0, 30),
+      alerts: withdrawalDashboard.phase3?.alerts?.filter((a: any) => a.status === "OPEN").slice(0, 20) || [],
+      ownerTransfers: recentOwnerTransfers.rows,
+      security: {
+        mobileEnabled: this.enabled(),
+        tokenMinutes: this.tokenMinutes(),
+        paymentMode: paymentMode()
+      }
+    };
+  }
+
+  async withdrawalDetail(id: string) {
+    const dashboard = await this.withdrawals.adminDashboard();
+    const item = (dashboard.items || []).find((entry: any) => String(entry.id) === String(id));
+    if (!item) throw new NotFoundException("ไม่พบรายการถอน");
+    const approvals = await this.db.query(
+      `SELECT admin_label,note,created_at
+       FROM commission_withdrawal_approvals
+       WHERE withdrawal_id=$1 ORDER BY created_at`,
+      [id]
+    );
+    return { item, approvals: approvals.rows };
+  }
+
+  async approveWithdrawal(userId: string, actor: string, id: string, note: string, code: string, ip?: string | null) {
+    await this.verifyTotpForUser(userId, code);
+    return this.withdrawals.approve(userId, id, actor, note, ip);
+  }
+
+  async holdWithdrawal(userId: string, actor: string, id: string, reason: string, code: string, ip?: string | null) {
+    await this.verifyTotpForUser(userId, code);
+    return this.withdrawals.hold(id, actor, reason, ip);
+  }
+
+  async rejectWithdrawal(userId: string, actor: string, id: string, reason: string, code: string, ip?: string | null) {
+    await this.verifyTotpForUser(userId, code);
+    return this.withdrawals.reject(id, actor, reason, ip);
+  }
+
+  async createOwnerTransfer(
+    userId: string,
+    deviceRecordId: string,
+    actor: string,
+    input: { amountSatang?: number; twoFactorCode?: string; clientRequestKey?: string },
+    ip?: string | null
+  ) {
+    this.requireEnabled();
+    await this.verifyTotpForUser(userId, String(input.twoFactorCode || ""));
+    const amount = Math.trunc(Number(input.amountSatang || 0));
+    const requestKey = String(input.clientRequestKey || "").trim();
+    if (!Number.isInteger(amount) || amount < 100) {
+      throw new BadRequestException("ยอดถอนต้องอย่างน้อย 1 บาท");
+    }
+    if (!/^[a-zA-Z0-9._:-]{8,100}$/.test(requestKey)) {
+      throw new BadRequestException("clientRequestKey invalid");
+    }
+
+    const result = await this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740093)");
+      const existing = (await tx.query(
+        `SELECT * FROM owner_omise_transfers
+         WHERE owner_user_id=$1 AND client_request_key=$2 FOR UPDATE`,
+        [userId, requestKey]
+      )).rows[0];
+      if (existing && existing.status !== "REVIEW" && existing.status !== "CREATING") {
+        return { row: existing, shouldSubmit: false };
+      }
+
+      const [balance, liability] = await Promise.all([this.omiseBalance(), this.commissionLiability()]);
+      const safe = Math.max(
+        0,
+        Number(balance.transferableSatang || 0) - liability.reserveSatang - this.cashBufferSatang()
+      );
+      if (amount > safe) {
+        throw new ConflictException(
+          `ถอนเกิน Safe Withdrawable (${(safe / 100).toFixed(2)} THB) เพราะระบบกันเงินค่าคอมลูกค้าไว้`
+        );
+      }
+
+      const row = existing || (await tx.query(
+        `INSERT INTO owner_omise_transfers(
+           owner_user_id,device_id,client_request_key,amount_satang,status,request_ip
+         ) VALUES($1,$2,$3,$4,'CREATING',$5)
+         RETURNING *`,
+        [userId, deviceRecordId, requestKey, amount, ip || null]
+      )).rows[0];
+      if (Number(row.amount_satang) !== amount) {
+        throw new ConflictException("clientRequestKey ถูกใช้กับยอดเงินอื่นแล้ว");
+      }
+      return { row, shouldSubmit: true };
+    });
+
+    if (!result.shouldSubmit) return result.row;
+    const row = result.row;
+    try {
+      const transfer = await this.omise(
+        "/transfers",
+        new URLSearchParams({
+          amount: String(amount),
+          fail_fast: "true",
+          idemp_key: String(row.id),
+          "metadata[source]": "SCENOVA_OWNER_MOBILE",
+          "metadata[owner_transfer_id]": String(row.id)
+        })
+      );
+      if (transfer?.object !== "transfer" || Number(transfer?.amount || 0) !== amount) {
+        throw new ConflictException("Omise transfer response does not match request");
+      }
+      if (Boolean(transfer?.livemode) !== (paymentMode() === "LIVE")) {
+        throw new ConflictException("Omise transfer mode mismatch");
+      }
+      const status = transfer?.failure_code
+        ? "FAILED"
+        : transfer?.sent
+          ? "SENT"
+          : "SUBMITTED";
+      const updated = await this.db.one(
+        `UPDATE owner_omise_transfers
+ 
