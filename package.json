@@ -2,12 +2,17 @@
   "name": "bot-trading-saas",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["apps/*"],
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
   "scripts": {
     "dev:web": "npm run dev -w @bot/web",
     "dev:api": "npm run start:dev -w @bot/api",
     "build": "npm run build -w @bot/api && npm run build -w @bot/web",
     "typecheck": "npm run typecheck -w @bot/api && npm run typecheck -w @bot/web"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
