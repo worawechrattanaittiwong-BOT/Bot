@@ -80,7 +80,7 @@ function ledgerLabel(eventType: string) {
   if (eventType === "COMMISSION_PAID") return "Marked paid";
   if (eventType === "COMMISSION_VOID") return "Voided";
   if (eventType === "MIGRATION_SNAPSHOT") return "Wallet opening balance";
-  return eventType.replaceAll("_", " ");
+  return eventType.replace(/_/g, " ");
 }
 
 export default function ReferralsPage() {
