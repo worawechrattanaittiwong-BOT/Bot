@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { OwnerMobileNav, OwnerSidebar } from "../../../components/OwnerSidebar";
 import { ScenovaBrand } from "../../../components/ScenovaBrand";
+import { useSystemPopup } from "../../../components/SystemPopupProvider";
 import { adminApi } from "../../../lib/api";
 import s from "./page.module.css";
 
@@ -39,6 +40,7 @@ function domainOf(url: string) {
 }
 
 export default function AdminServiceLinksPage() {
+  const { confirmPopup } = useSystemPopup();
   const [items, setItems] = useState<ServiceLink[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editingId, setEditingId] = useState("");
@@ -130,7 +132,14 @@ export default function AdminServiceLinksPage() {
   }
 
   async function remove(item: ServiceLink) {
-    if (!window.confirm(`ลบ ${item.name} ออกจากรายการ?`)) return;
+    const confirmed = await confirmPopup({
+      title: "ลบบริการ",
+      message: `ลบ ${item.name} ออกจากรายการ?`,
+      confirmLabel: "ลบ",
+      cancelLabel: "ยกเลิก",
+      tone: "warning"
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
