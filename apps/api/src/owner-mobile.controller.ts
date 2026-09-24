@@ -636,4 +636,213 @@ export class OwnerMobileService implements OnApplicationBootstrap {
           : "SUBMITTED";
       const updated = await this.db.one(
         `UPDATE owner_omise_transfers
- 
+         SET status=$2,provider_transfer_id=$3,provider_status=$4,
+             failure_code=$5,failure_message=$6,updated_at=now()
+         WHERE id=$1
+         RETURNING *`,
+        [
+          row.id,
+          status,
+          String(transfer.id || ""),
+          transfer.sent ? "sent" : transfer.sendable ? "sendable" : "created",
+          transfer.failure_code || null,
+          transfer.failure_message || null
+        ]
+      );
+      await this.db.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES($1,'OWNER_OMISE_TRANSFER_CREATED','owner_omise_transfer',$2,$3::jsonb)`,
+        [
+          actor,
+          row.id,
+          JSON.stringify({ amountSatang: amount, providerTransferId: transfer.id, mode: paymentMode(), ip: ip || null })
+        ]
+      );
+      return updated;
+    } catch (error: any) {
+      await this.db.query(
+        `UPDATE owner_omise_transfers
+         SET status='REVIEW',failure_message=$2,updated_at=now()
+         WHERE id=$1 AND status='CREATING'`,
+        [row.id, String(error?.message || "Provider result unknown").slice(0, 1000)]
+      );
+      throw error;
+    }
+  }
+
+  async refreshOwnerTransfer(userId: string, id: string) {
+    const row = await this.db.one(
+      `SELECT * FROM owner_omise_transfers WHERE id=$1 AND owner_user_id=$2`,
+      [id, userId]
+    );
+    if (!row) throw new NotFoundException("ไม่พบรายการถอน Owner");
+    if (!row.provider_transfer_id) {
+      return { ...row, note: "Provider reference not recorded yet; retry with the same clientRequestKey only." };
+    }
+    const transfer = await this.omise("/transfers/" + encodeURIComponent(String(row.provider_transfer_id)));
+    const status = transfer?.failure_code
+      ? "FAILED"
+      : transfer?.sent
+        ? "SENT"
+        : "SUBMITTED";
+    return this.db.one(
+      `UPDATE owner_omise_transfers
+       SET status=$2,provider_status=$3,failure_code=$4,failure_message=$5,updated_at=now()
+       WHERE id=$1 RETURNING *`,
+      [
+        id,
+        status,
+        transfer.sent ? "sent" : transfer.sendable ? "sendable" : "created",
+        transfer.failure_code || null,
+        transfer.failure_message || null
+      ]
+    );
+  }
+}
+
+@Controller("owner-mobile")
+export class OwnerMobileController {
+  constructor(private readonly mobile: OwnerMobileService) {}
+
+  @Post("enroll")
+  @UseGuards(AdminGuard)
+  async enroll(
+    @Req() req: any,
+    @Body() body: {
+      deviceId?: string;
+      deviceName?: string;
+      pin?: string;
+      currentPassword?: string;
+      twoFactorCode?: string;
+    }
+  ) {
+    if (req.user?.role !== "OWNER" || !req.user?.sub) {
+      throw new ForbiddenException("OWNER login required. Emergency admin key cannot enroll a phone.");
+    }
+    return this.mobile.enroll(String(req.user.sub), body, clientIp(req));
+  }
+
+  @Post("unlock")
+  unlock(
+    @Req() req: any,
+    @Body() body: { deviceId?: string; deviceSecret?: string; pin?: string }
+  ) {
+    return this.mobile.unlock(body, clientIp(req));
+  }
+
+  @Get("dashboard")
+  @UseGuards(OwnerMobileGuard)
+  dashboard() {
+    return this.mobile.dashboard();
+  }
+
+  @Get("withdrawals/:id")
+  @UseGuards(OwnerMobileGuard)
+  detail(@Param("id") id: string) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new BadRequestException("invalid id");
+    return this.mobile.withdrawalDetail(id);
+  }
+
+  @Post("withdrawals/:id/approve")
+  @UseGuards(OwnerMobileGuard)
+  approve(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: { note?: string; twoFactorCode?: string }
+  ) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new BadRequestException("invalid id");
+    return this.mobile.approveWithdrawal(
+      String(req.user.sub),
+      String(req.user.code || "OWNER"),
+      id,
+      String(body.note || ""),
+      String(body.twoFactorCode || ""),
+      clientIp(req)
+    );
+  }
+
+  @Post("withdrawals/:id/hold")
+  @UseGuards(OwnerMobileGuard)
+  hold(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: { reason?: string; twoFactorCode?: string }
+  ) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new BadRequestException("invalid id");
+    return this.mobile.holdWithdrawal(
+      String(req.user.sub),
+      String(req.user.code || "OWNER"),
+      id,
+      String(body.reason || ""),
+      String(body.twoFactorCode || ""),
+      clientIp(req)
+    );
+  }
+
+  @Post("withdrawals/:id/reject")
+  @UseGuards(OwnerMobileGuard)
+  reject(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: { reason?: string; twoFactorCode?: string }
+  ) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new BadRequestException("invalid id");
+    return this.mobile.rejectWithdrawal(
+      String(req.user.sub),
+      String(req.user.code || "OWNER"),
+      id,
+      String(body.reason || ""),
+      String(body.twoFactorCode || ""),
+      clientIp(req)
+    );
+  }
+
+  @Post("owner-transfers")
+  @UseGuards(OwnerMobileGuard)
+  transfer(
+    @Req() req: any,
+    @Body() body: { amountSatang?: number; twoFactorCode?: string; clientRequestKey?: string }
+  ) {
+    return this.mobile.createOwnerTransfer(
+      String(req.user.sub),
+      String(req.user.deviceRecordId),
+      String(req.user.code || "OWNER"),
+      body,
+      clientIp(req)
+    );
+  }
+
+  @Post("owner-transfers/:id/refresh")
+  @UseGuards(OwnerMobileGuard)
+  refreshTransfer(@Req() req: any, @Param("id") id: string) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new BadRequestException("invalid id");
+    return this.mobile.refreshOwnerTransfer(String(req.user.sub), id);
+  }
+
+  @Post("pin/change")
+  @UseGuards(OwnerMobileGuard)
+  changePin(
+    @Req() req: any,
+    @Body() body: { newPin?: string; twoFactorCode?: string }
+  ) {
+    return this.mobile.changePin(
+      String(req.user.sub),
+      String(req.user.deviceRecordId),
+      String(body.newPin || ""),
+      String(body.twoFactorCode || "")
+    );
+  }
+
+  @Post("device/revoke")
+  @UseGuards(OwnerMobileGuard)
+  revoke(
+    @Req() req: any,
+    @Body() body: { twoFactorCode?: string }
+  ) {
+    return this.mobile.revokeDevice(
+      String(req.user.sub),
+      String(req.user.deviceRecordId),
+      String(body.twoFactorCode || "")
+    );
+  }
+}
