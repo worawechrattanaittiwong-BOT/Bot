@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../../lib/api";
 import {
   CustomerMobileNav,
@@ -10,7 +10,25 @@ import {
   OwnerSidebar
 } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
+import { useSystemPopup } from "../../components/SystemPopupProvider";
 import styles from "./referrals.module.css";
+
+type WithdrawalRecord = {
+  id: string;
+  amount_satang: number;
+  currency: string;
+  status: string;
+  review_reason: string | null;
+  created_at: string;
+  approved_at: string | null;
+  rejected_at: string | null;
+  paid_at: string | null;
+  payout_reference: string | null;
+  bank_code: string;
+  bank_name: string;
+  account_name: string;
+  account_last4: string;
+};
 
 type ReferralData = {
   user: { userCode: string; role: string; referralCode: string };
@@ -32,12 +50,36 @@ type ReferralData = {
     currency: string;
     pendingSatang: number;
     availableSatang: number;
+    lockedSatang: number;
     paidSatang: number;
     currentBalanceSatang: number;
     lifetimeSatang: number;
     entryCount: number;
     ledgerVerified: boolean;
     withdrawalEnabled: boolean;
+    withdrawal: {
+      settings: {
+        requestsEnabled: boolean;
+        minAmountSatang: number;
+        maxAmountSatang: number;
+        destinationCooldownHours: number;
+      };
+      destination: null | {
+        id: string;
+        bankCode: string;
+        bankName: string;
+        accountName: string;
+        maskedAccount: string;
+        status: string;
+        usableAt: string;
+        createdAt: string;
+      };
+      availableDeltaSatang: number;
+      lockedSatang: number;
+      paidSatang: number;
+      conserved: boolean;
+      recent: WithdrawalRecord[];
+    };
     recent: Array<{
       id: string;
       event_type: string;
@@ -56,6 +98,21 @@ type ReferralData = {
     }>;
   };
 };
+
+const BANKS = [
+  ["KBANK","Kasikornbank"],
+  ["SCB","Siam Commercial Bank"],
+  ["KTB","Krungthai Bank"],
+  ["BBL","Bangkok Bank"],
+  ["BAY","Bank of Ayudhya / Krungsri"],
+  ["TTB","TMBThanachart Bank"],
+  ["GSB","Government Savings Bank"],
+  ["BAAC","Bank for Agriculture and Agricultural Cooperatives"],
+  ["UOB","UOB Thailand"],
+  ["CIMB","CIMB Thai"],
+  ["KKP","Kiatnakin Phatra Bank"],
+  ["TISCO","TISCO Bank"]
+] as const;
 
 function money(satang: number) {
   return (Number(satang || 0) / 100).toLocaleString("en-US", {
@@ -77,33 +134,74 @@ function ledgerAmount(entry: ReferralData["wallet"]["recent"][number]) {
 function ledgerLabel(eventType: string) {
   if (eventType === "COMMISSION_EARN") return "Commission earned";
   if (eventType === "COMMISSION_RELEASE") return "Released to available";
-  if (eventType === "COMMISSION_PAID") return "Marked paid";
+  if (eventType === "COMMISSION_PAID") return "Legacy paid";
   if (eventType === "COMMISSION_VOID") return "Voided";
   if (eventType === "MIGRATION_SNAPSHOT") return "Wallet opening balance";
   return eventType.replace(/_/g, " ");
 }
 
+function makeRequestKey() {
+  try {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  } catch {}
+  return "wd-" + Date.now() + "-" + Math.random().toString(36).slice(2, 14);
+}
+
+function dateTime(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString("th-TH") : "—";
+}
+
 export default function ReferralsPage() {
+  const { confirmPopup } = useSystemPopup();
   const [data, setData] = useState<ReferralData | null>(null);
   const [account, setAccount] = useState<any>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [savingDestination, setSavingDestination] = useState(false);
+  const [requestingWithdrawal, setRequestingWithdrawal] = useState(false);
+  const [cancellingId, setCancellingId] = useState("");
+  const [showDestinationForm, setShowDestinationForm] = useState(false);
+  const [withdrawRequestKey, setWithdrawRequestKey] = useState(makeRequestKey);
+  const [destinationForm, setDestinationForm] = useState({
+    bankCode: "KBANK",
+    bankName: "Kasikornbank",
+    accountName: "",
+    accountNumber: "",
+    currentPassword: "",
+    twoFactorCode: ""
+  });
+  const [withdrawForm, setWithdrawForm] = useState({
+    amountThb: "",
+    currentPassword: "",
+    twoFactorCode: ""
+  });
 
   useEffect(() => {
     if (!localStorage.getItem("bot_token")) {
       window.location.replace("/login");
       return;
     }
-    Promise.all([api("/referrals"), api("/auth/account")])
-      .then(([referrals, accountData]) => {
-        setData(referrals);
-        setAccount(accountData);
-      })
-      .catch((error: unknown) => {
-        setMessage(error instanceof Error ? error.message : "Unable to load Invite & Earn");
-      })
-      .finally(() => setLoading(false));
+    void load();
   }, []);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [referrals, accountData] = await Promise.all([
+        api("/referrals"),
+        api("/auth/account")
+      ]);
+      setData(referrals);
+      setAccount(accountData);
+      setMessage("");
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : "Unable to load Invite & Earn");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const inviteLink = useMemo(() => {
     if (!data || typeof window === "undefined") return "";
@@ -119,6 +217,16 @@ export default function ReferralsPage() {
     seat_limit: Number(account.access.partner.seat_limit || 0),
     status: String(account.access.partner.status || "ACTIVE")
   } : null;
+  const twoFactorEnabled = Boolean(account?.security?.twoFactorEnabled);
+  const destination = data?.wallet?.withdrawal?.destination || null;
+  const settings = data?.wallet?.withdrawal?.settings;
+  const destinationReady = Boolean(
+    destination &&
+    new Date(destination.usableAt).getTime() <= Date.now()
+  );
+  const openWithdrawal = data?.wallet?.withdrawal?.recent?.find(item =>
+    ["REQUESTED","HOLD","APPROVED"].includes(item.status)
+  ) || null;
 
   function logout() {
     localStorage.removeItem("bot_token");
@@ -131,6 +239,95 @@ export default function ReferralsPage() {
       setMessage(label);
     } catch {
       setMessage("Copy failed. Please select and copy the value manually.");
+    }
+  }
+
+  function selectBank(code: string) {
+    const bank = BANKS.find(item => item[0] === code);
+    setDestinationForm(current => ({
+      ...current,
+      bankCode: code,
+      bankName: bank?.[1] || code
+    }));
+  }
+
+  async function saveDestination(event: FormEvent) {
+    event.preventDefault();
+    if (savingDestination) return;
+    setSavingDestination(true);
+    setMessage("");
+    try {
+      await api("/commission-wallet/destination", {
+        method: "POST",
+        body: JSON.stringify(destinationForm)
+      });
+      setDestinationForm(current => ({
+        ...current,
+        accountName: "",
+        accountNumber: "",
+        currentPassword: "",
+        twoFactorCode: ""
+      }));
+      setShowDestinationForm(false);
+      setMessage("บันทึกบัญชีรับเงินแล้ว ระบบเริ่ม Cooling Period เพื่อความปลอดภัย");
+      await load();
+    } catch (error: any) {
+      setMessage(String(error?.message || "บันทึกบัญชีรับเงินไม่สำเร็จ"));
+    } finally {
+      setSavingDestination(false);
+    }
+  }
+
+  async function requestWithdrawal(event: FormEvent) {
+    event.preventDefault();
+    if (requestingWithdrawal || !destination) return;
+    const amountSatang = Math.round(Number(withdrawForm.amountThb || 0) * 100);
+    setRequestingWithdrawal(true);
+    setMessage("");
+    try {
+      await api("/commission-wallet/withdrawals", {
+        method: "POST",
+        body: JSON.stringify({
+          destinationId: destination.id,
+          amountSatang,
+          clientRequestKey: withdrawRequestKey,
+          currentPassword: withdrawForm.currentPassword,
+          twoFactorCode: withdrawForm.twoFactorCode
+        })
+      });
+      setWithdrawForm({ amountThb: "", currentPassword: "", twoFactorCode: "" });
+      setWithdrawRequestKey(makeRequestKey());
+      setMessage("ส่งคำขอถอนแล้ว ยอดถูก Lock และรอ Admin ตรวจสอบ");
+      await load();
+    } catch (error: any) {
+      setMessage(String(error?.message || "ขอถอนเงินไม่สำเร็จ"));
+    } finally {
+      setRequestingWithdrawal(false);
+    }
+  }
+
+  async function cancelWithdrawal(item: WithdrawalRecord) {
+    const confirmed = await confirmPopup({
+      title: "ยกเลิกรายการถอน",
+      message: `ยกเลิกรายการ ${money(item.amount_satang)} และคืนยอดเข้า Available?`,
+      confirmLabel: "ยกเลิกการถอน",
+      cancelLabel: "ไม่ยกเลิก",
+      tone: "warning"
+    });
+    if (!confirmed) return;
+
+    setCancellingId(item.id);
+    setMessage("");
+    try {
+      await api("/commission-wallet/withdrawals/" + item.id + "/cancel", {
+        method: "POST"
+      });
+      setMessage("ยกเลิกรายการถอนแล้ว ยอดถูกคืนเข้า Available");
+      await load();
+    } catch (error: any) {
+      setMessage(String(error?.message || "ยกเลิกรายการไม่สำเร็จ"));
+    } finally {
+      setCancellingId("");
     }
   }
 
@@ -250,30 +447,30 @@ export default function ReferralsPage() {
           </article>
           <article>
             <span>Pending</span>
-            <b>{money(data.earnings.pendingSatang)}</b>
+            <b>{money(data.wallet.pendingSatang)}</b>
             <small>{data.program.holdDays}-day review period</small>
           </article>
           <article>
             <span>Available</span>
-            <b>{money(data.earnings.availableSatang)}</b>
-            <small>Available balance</small>
+            <b>{money(data.wallet.availableSatang)}</b>
+            <small>ถอนได้เมื่อผ่านเงื่อนไข</small>
           </article>
           <article>
-            <span>Paid</span>
-            <b>{money(data.earnings.paidSatang)}</b>
-            <small>Rewards already paid</small>
+            <span>Withdrawn</span>
+            <b>{money(data.wallet.paidSatang)}</b>
+            <small>ยอดที่จ่ายออกแล้ว</small>
           </article>
         </section>
 
         <section className={styles.walletCard}>
           <div className={styles.walletHead}>
             <div>
-              <span className={styles.eyebrow}>COMMISSION WALLET · PHASE 1</span>
-              <h2>Commission Wallet</h2>
-              <p>ยอดทุกบาทมาจากรายการ Ledger ที่ตรวจสอบย้อนหลังได้ ไม่มีการแก้ Balance ตรง ๆ</p>
+              <span className={styles.eyebrow}>COMMISSION WALLET · PHASE 2</span>
+              <h2>Secure Withdrawal Wallet</h2>
+              <p>ยอดทุกบาทตรวจสอบจาก Ledger และยอดถอนจะถูก Lock ก่อน Admin ตรวจเสมอ</p>
             </div>
             <span className={data.wallet.ledgerVerified ? styles.verified : styles.review}>
-              <i/> {data.wallet.ledgerVerified ? "LEDGER VERIFIED" : "REVIEW REQUIRED"}
+              <i/> {data.wallet.ledgerVerified ? "LEDGER VERIFIED" : "WITHDRAWAL PAUSED"}
             </span>
           </div>
 
@@ -281,7 +478,7 @@ export default function ReferralsPage() {
             <article>
               <small>Current Wallet</small>
               <b>{money(data.wallet.currentBalanceSatang)}</b>
-              <span>Pending + Available</span>
+              <span>Pending + Available + Locked</span>
             </article>
             <article>
               <small>Pending</small>
@@ -291,27 +488,208 @@ export default function ReferralsPage() {
             <article>
               <small>Available</small>
               <b>{money(data.wallet.availableSatang)}</b>
-              <span>พร้อมสำหรับระบบถอนใน Phase 2</span>
+              <span>ยอดที่ขอถอนได้</span>
             </article>
             <article>
-              <small>Lifetime</small>
-              <b>{money(data.wallet.lifetimeSatang)}</b>
-              <span>{data.wallet.entryCount} ledger entries</span>
+              <small>Locked</small>
+              <b>{money(data.wallet.lockedSatang)}</b>
+              <span>กำลังดำเนินการถอน</span>
+            </article>
+            <article>
+              <small>Withdrawn</small>
+              <b>{money(data.wallet.paidSatang)}</b>
+              <span>จ่ายออกแล้ว</span>
             </article>
           </div>
 
           <div className={styles.walletStatus}>
             <div>
               <ScenovaIcon name="wallet" size={17}/>
-              <span><b>Withdrawal ยังไม่เปิดใน Phase 1</b><small>เฟสนี้เก็บยอดและประวัติเท่านั้น จึงยังไม่มีเส้นทางถอนเงินออกจากระบบ</small></span>
+              <span>
+                <b>{data.wallet.withdrawalEnabled ? "Secure Withdrawal เปิดใช้งาน" : "Withdrawal ถูก Pause"}</b>
+                <small>Password + 2FA · Cooling Period · Balance Lock · Manual Admin Review</small>
+              </span>
             </div>
-            <span className={styles.phaseChip}>CORE WALLET ACTIVE</span>
+            <span className={styles.phaseChip}>PHASE 2 ACTIVE</span>
+          </div>
+
+          {!twoFactorEnabled && (
+            <div className={styles.securityWarning}>
+              <ScenovaIcon name="info" size={16}/>
+              <span>
+                <b>ต้องเปิด Two-Factor Authentication ก่อนถอนเงิน</b>
+                <small>ไปที่ My Account เพื่อเปิด Authenticator แล้วกลับมาหน้านี้</small>
+              </span>
+              <Link href="/account">เปิด 2FA →</Link>
+            </div>
+          )}
+
+          <div className={styles.withdrawalGrid}>
+            <div className={styles.withdrawalPanel}>
+              <div className={styles.panelHead}>
+                <div>
+                  <span className={styles.eyebrow}>PAYOUT DESTINATION</span>
+                  <h3>บัญชีรับเงิน</h3>
+                </div>
+                {destination && (
+                  <button type="button" className={styles.textButton} onClick={()=>setShowDestinationForm(value=>!value)}>
+                    {showDestinationForm ? "ปิด" : "เปลี่ยนบัญชี"}
+                  </button>
+                )}
+              </div>
+
+              {destination && !showDestinationForm ? (
+                <div className={styles.destinationCard}>
+                  <div>
+                    <b>{destination.bankName}</b>
+                    <span>{destination.accountName}</span>
+                    <strong>{destination.maskedAccount}</strong>
+                  </div>
+                  <span className={destinationReady ? styles.readyBadge : styles.coolingBadge}>
+                    <i/> {destinationReady ? "READY" : "COOLING"}
+                  </span>
+                  <small>
+                    {destinationReady
+                      ? "บัญชีนี้พร้อมรับคำขอถอน"
+                      : "ใช้ถอนได้หลัง " + dateTime(destination.usableAt)}
+                  </small>
+                </div>
+              ) : (
+                <form className={styles.withdrawForm} onSubmit={saveDestination}>
+                  <label>
+                    <span>ธนาคาร</span>
+                    <select value={destinationForm.bankCode} onChange={event=>selectBank(event.target.value)}>
+                      {BANKS.map(bank=><option key={bank[0]} value={bank[0]}>{bank[1]}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>ชื่อบัญชี</span>
+                    <input value={destinationForm.accountName} onChange={event=>setDestinationForm(v=>({...v,accountName:event.target.value}))} placeholder="ชื่อเจ้าของบัญชี" required/>
+                  </label>
+                  <label>
+                    <span>เลขบัญชี</span>
+                    <input value={destinationForm.accountNumber} onChange={event=>setDestinationForm(v=>({...v,accountNumber:event.target.value}))} placeholder="ตัวเลขเท่านั้น" inputMode="numeric" required/>
+                  </label>
+                  <label>
+                    <span>Current Password</span>
+                    <input type="password" value={destinationForm.currentPassword} onChange={event=>setDestinationForm(v=>({...v,currentPassword:event.target.value}))} autoComplete="current-password" required/>
+                  </label>
+                  <label>
+                    <span>2FA Code</span>
+                    <input value={destinationForm.twoFactorCode} onChange={event=>setDestinationForm(v=>({...v,twoFactorCode:event.target.value}))} inputMode="numeric" maxLength={6} placeholder="6 digits" required/>
+                  </label>
+                  <button type="submit" className={styles.primaryAction} disabled={savingDestination || !twoFactorEnabled}>
+                    {savingDestination ? "Saving..." : destination ? "ยืนยันบัญชีใหม่" : "บันทึกบัญชีรับเงิน"}
+                  </button>
+                  <small className={styles.formHint}>
+                    การเพิ่มหรือเปลี่ยนบัญชีจะเริ่ม Cooling Period {settings?.destinationCooldownHours || 24} ชั่วโมงใหม่ทุกครั้ง
+                  </small>
+                </form>
+              )}
+            </div>
+
+            <div className={styles.withdrawalPanel}>
+              <div className={styles.panelHead}>
+                <div>
+                  <span className={styles.eyebrow}>WITHDRAW</span>
+                  <h3>ขอถอนเงิน</h3>
+                </div>
+                <span className={data.wallet.withdrawalEnabled ? styles.readyBadge : styles.coolingBadge}>
+                  <i/> {data.wallet.withdrawalEnabled ? "OPEN" : "PAUSED"}
+                </span>
+              </div>
+
+              {openWithdrawal ? (
+                <div className={styles.openRequest}>
+                  <span className={styles.statusBadge}>{openWithdrawal.status}</span>
+                  <b>{money(openWithdrawal.amount_satang)}</b>
+                  <small>สร้างเมื่อ {dateTime(openWithdrawal.created_at)}</small>
+                  <p>ยอดนี้ถูก Lock แล้วและไม่สามารถถูกขอถอนซ้ำได้</p>
+                  {openWithdrawal.status === "REQUESTED" && (
+                    <button type="button" className={styles.cancelButton} disabled={cancellingId===openWithdrawal.id} onClick={()=>void cancelWithdrawal(openWithdrawal)}>
+                      {cancellingId===openWithdrawal.id ? "Cancelling..." : "ยกเลิกรายการและคืนยอด"}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <form className={styles.withdrawForm} onSubmit={requestWithdrawal}>
+                  <label>
+                    <span>จำนวนถอน (THB)</span>
+                    <input
+                      value={withdrawForm.amountThb}
+                      onChange={event=>setWithdrawForm(v=>({...v,amountThb:event.target.value}))}
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      required
+                    />
+                  </label>
+                  <div className={styles.limitLine}>
+                    <span>Available {money(data.wallet.availableSatang)}</span>
+                    <span>
+                      Min {money(settings?.minAmountSatang || 0)} · Max {money(settings?.maxAmountSatang || 0)}
+                    </span>
+                  </div>
+                  <label>
+                    <span>Current Password</span>
+                    <input type="password" value={withdrawForm.currentPassword} onChange={event=>setWithdrawForm(v=>({...v,currentPassword:event.target.value}))} autoComplete="current-password" required/>
+                  </label>
+                  <label>
+                    <span>2FA Code</span>
+                    <input value={withdrawForm.twoFactorCode} onChange={event=>setWithdrawForm(v=>({...v,twoFactorCode:event.target.value}))} inputMode="numeric" maxLength={6} placeholder="6 digits" required/>
+                  </label>
+                  <button
+                    type="submit"
+                    className={styles.primaryAction}
+                    disabled={
+                      requestingWithdrawal ||
+                      !twoFactorEnabled ||
+                      !data.wallet.withdrawalEnabled ||
+                      !data.wallet.ledgerVerified ||
+                      !destinationReady
+                    }
+                  >
+                    {requestingWithdrawal ? "Locking balance..." : "ขอถอนและ Lock ยอด"}
+                  </button>
+                  {!destinationReady && <small className={styles.formHint}>ต้องมีบัญชีรับเงินที่พ้น Cooling Period ก่อน</small>}
+                </form>
+              )}
+            </div>
           </div>
 
           <div className={styles.ledgerHead}>
             <div>
-              <span className={styles.eyebrow}>IMMUTABLE LEDGER</span>
-              <h3>รายการล่าสุด</h3>
+              <span className={styles.eyebrow}>WITHDRAWAL HISTORY</span>
+              <h3>ประวัติการถอน</h3>
+            </div>
+            <span>{data.wallet.withdrawal.recent.length} recent requests</span>
+          </div>
+
+          <div className={styles.withdrawalHistory}>
+            {data.wallet.withdrawal.recent.map(item=>(
+              <div className={styles.withdrawalRow} key={item.id}>
+                <div>
+                  <span className={styles.statusBadge}>{item.status}</span>
+                  <b>{money(item.amount_satang)}</b>
+                </div>
+                <div>
+                  <span>{item.bank_name}</span>
+                  <small>{item.account_name} · ••••{item.account_last4}</small>
+                </div>
+                <div>
+                  <span>{dateTime(item.created_at)}</span>
+                  <small>{item.payout_reference ? "Ref: " + item.payout_reference : item.review_reason || "—"}</small>
+                </div>
+              </div>
+            ))}
+            {!data.wallet.withdrawal.recent.length && (
+              <div className={styles.ledgerEmpty}>ยังไม่มีรายการถอน</div>
+            )}
+          </div>
+
+          <div className={styles.ledgerHead}>
+            <div>
+              <span className={styles.eyebrow}>IMMUTABLE COMMISSION LEDGER</span>
+              <h3>รายการคอมมิชชั่นล่าสุด</h3>
             </div>
             <span>{data.wallet.recent.length} recent events</span>
           </div>
@@ -329,7 +707,7 @@ export default function ReferralsPage() {
                   }/>
                   <div>
                     <b>{ledgerLabel(entry.event_type)}</b>
-                    <small>{new Date(entry.created_at).toLocaleString("th-TH")}</small>
+                    <small>{dateTime(entry.created_at)}</small>
                   </div>
                 </div>
                 <div>
