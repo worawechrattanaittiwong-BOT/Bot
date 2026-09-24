@@ -47,9 +47,14 @@ if($raceSyncGate -lt 0 -or $dailyControl -lt 0 -or $raceManager -lt 0 -or
 }
 Need $analysis 'int volumeDirection=RaceVolumeDirection();' 'AUTO RACE primary direction must start from rolling 60-second volume'
 Need $analysis 'RaceZonePriorityActive(' 'AUTO RACE may protect an intact opposing Demand/Supply boundary'
-Need $analysis 'RaceV2DecisionDirection(' 'AUTO RACE must combine 60-second volume with RACE-local Flow/Structure/Leg context after zone handling'`nNeed $analysis 'return decision==0 ? volumeDirection : decision;' 'AUTO RACE tie must fall back to the original 60-second volume side'
+Need $analysis 'RaceV2DecisionDirection(' 'AUTO RACE must combine 60-second volume with RACE-local Flow/Structure/Leg context after zone handling'
+Need $analysis 'return decision==0 ? volumeDirection : decision;' 'AUTO RACE tie must fall back to the original 60-second volume side'
 if($analysis.Contains('RaceM5CandleDirection()')){throw 'RACE entry must not use M5 candle direction'}
-if($analysis.Contains('g_trend') -or $analysis.Contains('g_ema')){throw 'RACE entry direction must not leak trend/EMA into the RACE VNext decision'}`nNeed $ea '#include "include\\RaceFlowV2.mqh"' 'RACE Flow V2 module missing'`nNeed $ea '#include "include\\RaceStructureV2.mqh"' 'RACE Structure V2 module missing'`nNeed $ea '#include "include\\RaceLegPhaseV2.mqh"' 'RACE Leg Phase V2 module missing'`nNeed $ea '#include "include\\RaceDecisionV2.mqh"' 'RACE Decision V2 module missing'
+if($analysis.Contains('g_trend') -or $analysis.Contains('g_ema')){throw 'RACE entry direction must not leak trend/EMA into the RACE VNext decision'}
+Need $ea '#include "include\\RaceFlowV2.mqh"' 'RACE Flow V2 module missing'
+Need $ea '#include "include\\RaceStructureV2.mqh"' 'RACE Structure V2 module missing'
+Need $ea '#include "include\\RaceLegPhaseV2.mqh"' 'RACE Leg Phase V2 module missing'
+Need $ea '#include "include\\RaceDecisionV2.mqh"' 'RACE Decision V2 module missing'
 Need $flow 'RaceVolumeDirection() == direction' 'RACE profit flow must follow 60-second volume side'
 Need $start 'RACE_VOLUME_WARMUP' 'RACE must wait for 60-second warmup before first AUTO entry'
 Need $manage 'RACE_USER_LOSS_ONLY_V5' 'RACE user-loss-only marker missing'
