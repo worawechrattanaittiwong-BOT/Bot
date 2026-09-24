@@ -252,6 +252,13 @@ export class AdminApiCredentialsController {
           detail: "PromptPay / payment gateway"
         },
         {
+          key: "omise-webhook",
+          name: "Opn / Omise Webhook",
+          category: "PAYMENT",
+          active: this.configured("OMISE_WEBHOOK_SECRET"),
+          detail: "HMAC-SHA256 webhook signature verification"
+        },
+        {
           key: "ai",
           name: "AI Provider",
           category: "AI",
