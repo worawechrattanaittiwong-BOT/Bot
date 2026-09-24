@@ -189,9 +189,9 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
           `UPDATE admin_api_credentials
            SET config_key=$2,category=$3,label=$4,ciphertext=$5,iv=$6,auth_tag=$7,
                last_four=$8,note=$9,active=$10,updated_by=$11,
-               provider=$12,test_url=$13,auth_mode=$14,header_name=$15,
-               last_test_status=$16,last_test_detail=$17,
-               last_tested_at=CASE WHEN $16<>'' THEN now() ELSE last_tested_at END,
+               provider=$12::text,test_url=$13::text,auth_mode=$14::text,header_name=$15::text,
+               last_test_status=$16::text,last_test_detail=$17::text,
+               last_tested_at=CASE WHEN $16::text<>'' THEN now() ELSE last_tested_at END,
                updated_at=now()
            WHERE id=$1
            RETURNING id`,
@@ -207,8 +207,8 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
              config_key,category,label,ciphertext,iv,auth_tag,last_four,note,active,updated_by,
              provider,test_url,auth_mode,header_name,last_test_status,last_test_detail,last_tested_at
            )
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                  CASE WHEN $15<>'' THEN now() ELSE NULL END)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::text,$12::text,$13::text,$14::text,$15::text,$16::text,
+                  CASE WHEN $15::text<>'' THEN now() ELSE NULL END)
            RETURNING id`,
           [
             configKey, category, label,
@@ -254,8 +254,8 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
     await this.ensureTable();
     return this.db.one(
       `UPDATE admin_api_credentials
-       SET last_test_status=$2,last_test_detail=$3,last_tested_at=now(),
-           provider=CASE WHEN $4<>'' THEN $4 ELSE provider END,
+       SET last_test_status=$2::text,last_test_detail=$3::text,last_tested_at=now(),
+           provider=CASE WHEN $4::text<>'' THEN $4::text ELSE provider END,
            updated_at=now()
        WHERE id=$1
        RETURNING id`,
