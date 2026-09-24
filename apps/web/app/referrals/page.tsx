@@ -100,18 +100,18 @@ type ReferralData = {
 };
 
 const BANKS = [
-  ["KBANK","Kasikornbank"],
-  ["SCB","Siam Commercial Bank"],
-  ["KTB","Krungthai Bank"],
-  ["BBL","Bangkok Bank"],
-  ["BAY","Bank of Ayudhya / Krungsri"],
-  ["TTB","TMBThanachart Bank"],
-  ["GSB","Government Savings Bank"],
-  ["BAAC","Bank for Agriculture and Agricultural Cooperatives"],
-  ["UOB","UOB Thailand"],
-  ["CIMB","CIMB Thai"],
-  ["KKP","Kiatnakin Phatra Bank"],
-  ["TISCO","TISCO Bank"]
+  ["KBANK","ธนาคารกสิกรไทย (KBank)"],
+  ["SCB","ธนาคารไทยพาณิชย์ (SCB)"],
+  ["KTB","ธนาคารกรุงไทย (KTB)"],
+  ["BBL","ธนาคารกรุงเทพ (BBL)"],
+  ["BAY","ธนาคารกรุงศรีอยุธยา (Krungsri)"],
+  ["TTB","ธนาคารทหารไทยธนชาต (ttb)"],
+  ["GSB","ธนาคารออมสิน (GSB)"],
+  ["BAAC","ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร"],
+  ["UOB","ธนาคารยูโอบี (UOB)"],
+  ["CIMB","ธนาคารซีไอเอ็มบี ไทย (CIMB)"],
+  ["KKP","ธนาคารเกียรตินาคินภัทร (KKP)"],
+  ["TISCO","ธนาคารทิสโก้ (TISCO)"]
 ] as const;
 
 function money(satang: number) {
@@ -166,7 +166,7 @@ export default function ReferralsPage() {
   const [withdrawRequestKey, setWithdrawRequestKey] = useState(makeRequestKey);
   const [destinationForm, setDestinationForm] = useState({
     bankCode: "KBANK",
-    bankName: "Kasikornbank",
+    bankName: "ธนาคารกสิกรไทย (KBank)",
     accountName: "",
     accountNumber: "",
     currentPassword: "",
@@ -465,71 +465,91 @@ export default function ReferralsPage() {
         <section className={styles.walletCard}>
           <div className={styles.walletHead}>
             <div>
-              <span className={styles.eyebrow}>COMMISSION WALLET · PHASE 2</span>
+              <span className={styles.eyebrow}>COMMISSION WALLET · SECURE PAYOUT</span>
               <h2>Secure Withdrawal Wallet</h2>
-              <p>ยอดทุกบาทตรวจสอบจาก Ledger และยอดถอนจะถูก Lock ก่อน Admin ตรวจเสมอ</p>
+              <p>ยอดคงเหลือจากค่าคอมมิชชั่นใน Ledger และยอดถอนจะถูก Lock ก่อน Admin ตรวจสอบ</p>
             </div>
             <span className={data.wallet.ledgerVerified ? styles.verified : styles.review}>
-              <i/> {data.wallet.ledgerVerified ? "LEDGER VERIFIED" : "WITHDRAWAL PAUSED"}
+              <ScenovaIcon name={data.wallet.ledgerVerified ? "check" : "info"} size={15}/>
+              {data.wallet.ledgerVerified ? "LEDGER VERIFIED" : "WITHDRAWAL PAUSED"}
             </span>
           </div>
 
           <div className={styles.walletBalances}>
-            <article>
-              <small>Current Wallet</small>
-              <b>{money(data.wallet.currentBalanceSatang)}</b>
-              <span>Pending + Available + Locked</span>
+            <article className={styles.balanceCard}>
+              <span className={styles.balanceIcon}><ScenovaIcon name="wallet" size={23}/></span>
+              <div>
+                <small>ยอดคงเหลือปัจจุบัน</small>
+                <b>{money(data.wallet.currentBalanceSatang)}</b>
+                <span>Pending + Available + Locked</span>
+              </div>
             </article>
-            <article>
-              <small>Pending</small>
-              <b>{money(data.wallet.pendingSatang)}</b>
-              <span>รอครบ {data.program.holdDays} วัน</span>
+            <article className={styles.balanceCard}>
+              <span className={styles.balanceIcon}><ScenovaIcon name="clock" size={23}/></span>
+              <div>
+                <small>รอดำเนินการถอน</small>
+                <b>{money(data.wallet.pendingSatang)}</b>
+                <span>รออนุมัติ {data.program.holdDays} วัน</span>
+              </div>
             </article>
-            <article>
-              <small>Available</small>
-              <b>{money(data.wallet.availableSatang)}</b>
-              <span>ยอดที่ขอถอนได้</span>
+            <article className={styles.balanceCard}>
+              <span className={styles.balanceIcon}><ScenovaIcon name="coins" size={23}/></span>
+              <div>
+                <small>ยอดที่ถอนได้</small>
+                <b>{money(data.wallet.availableSatang)}</b>
+                <span>ยอดที่พร้อมถอนได้</span>
+              </div>
             </article>
-            <article>
-              <small>Locked</small>
-              <b>{money(data.wallet.lockedSatang)}</b>
-              <span>กำลังดำเนินการถอน</span>
+            <article className={styles.balanceCard}>
+              <span className={styles.balanceIcon}><ScenovaIcon name="lock" size={23}/></span>
+              <div>
+                <small>ยอดที่ถูก Lock</small>
+                <b>{money(data.wallet.lockedSatang)}</b>
+                <span>กำลังดำเนินการตรวจสอบ</span>
+              </div>
             </article>
-            <article>
-              <small>Withdrawn</small>
-              <b>{money(data.wallet.paidSatang)}</b>
-              <span>จ่ายออกแล้ว</span>
+            <article className={styles.balanceCard}>
+              <span className={styles.balanceIcon}><ScenovaIcon name="download" size={23}/></span>
+              <div>
+                <small>ยอดที่ถอนแล้ว</small>
+                <b>{money(data.wallet.paidSatang)}</b>
+                <span>จำนวนเงินที่จ่ายออกแล้ว</span>
+              </div>
             </article>
           </div>
 
           <div className={styles.walletStatus}>
             <div>
-              <ScenovaIcon name="wallet" size={17}/>
+              <span className={styles.statusIcon}><ScenovaIcon name="lock" size={18}/></span>
               <span>
                 <b>{data.wallet.withdrawalEnabled ? "Secure Withdrawal เปิดใช้งาน" : "Withdrawal ถูก Pause"}</b>
                 <small>Password + 2FA · Cooling Period · Balance Lock · Manual Admin Review</small>
               </span>
             </div>
-            <span className={styles.phaseChip}>PHASE 2 ACTIVE</span>
+            <span className={styles.phaseChip}>PHASE 3 SECURED</span>
           </div>
 
           {!twoFactorEnabled && (
             <div className={styles.securityWarning}>
-              <ScenovaIcon name="info" size={16}/>
+              <ScenovaIcon name="info" size={20}/>
               <span>
-                <b>ต้องเปิด Two-Factor Authentication ก่อนถอนเงิน</b>
-                <small>ไปที่ My Account เพื่อเปิด Authenticator แล้วกลับมาหน้านี้</small>
+                <b>ต้องเปิดใช้ Two-Factor Authentication ก่อนถอนเงิน</b>
+                <small>โปรดตั้งค่า 2FA ในบัญชีของคุณ เพื่อความปลอดภัยของเงินและข้อมูลบัญชี</small>
               </span>
-              <Link href="/account">เปิด 2FA →</Link>
+              <Link href="/account">เปิด 2FA <span>→</span></Link>
             </div>
           )}
 
           <div className={styles.withdrawalGrid}>
             <div className={styles.withdrawalPanel}>
               <div className={styles.panelHead}>
-                <div>
-                  <span className={styles.eyebrow}>PAYOUT DESTINATION</span>
-                  <h3>บัญชีรับเงิน</h3>
+                <div className={styles.panelTitleGroup}>
+                  <span className={styles.panelIcon}><ScenovaIcon name="bank" size={22}/></span>
+                  <div>
+                    <span className={styles.eyebrow}>PAYOUT DESTINATION</span>
+                    <h3>บัญชีรับเงิน</h3>
+                    <p>ระบุบัญชีธนาคารสำหรับรับเงินค่าคอมมิชชั่น</p>
+                  </div>
                 </div>
                 {destination && (
                   <button type="button" className={styles.textButton} onClick={()=>setShowDestinationForm(value=>!value)}>
@@ -540,10 +560,13 @@ export default function ReferralsPage() {
 
               {destination && !showDestinationForm ? (
                 <div className={styles.destinationCard}>
-                  <div>
-                    <b>{destination.bankName}</b>
-                    <span>{destination.accountName}</span>
-                    <strong>{destination.maskedAccount}</strong>
+                  <div className={styles.destinationIdentity}>
+                    <span className={styles.destinationIcon}><ScenovaIcon name="bank" size={22}/></span>
+                    <div>
+                      <b>{destination.bankName}</b>
+                      <span>{destination.accountName}</span>
+                      <strong>{destination.maskedAccount}</strong>
+                    </div>
                   </div>
                   <span className={destinationReady ? styles.readyBadge : styles.coolingBadge}>
                     <i/> {destinationReady ? "READY" : "COOLING"}
@@ -555,34 +578,75 @@ export default function ReferralsPage() {
                   </small>
                 </div>
               ) : (
-                <form className={styles.withdrawForm} onSubmit={saveDestination}>
-                  <label>
+                <form className={styles.destinationForm} onSubmit={saveDestination} autoComplete="off">
+                  <label className={styles.formField}>
                     <span>ธนาคาร</span>
-                    <select value={destinationForm.bankCode} onChange={event=>selectBank(event.target.value)}>
+                    <select
+                      name="scenova-payout-bank"
+                      value={destinationForm.bankCode}
+                      onChange={event=>selectBank(event.target.value)}
+                      autoComplete="off"
+                    >
                       {BANKS.map(bank=><option key={bank[0]} value={bank[0]}>{bank[1]}</option>)}
                     </select>
                   </label>
-                  <label>
-                    <span>ชื่อบัญชี</span>
-                    <input value={destinationForm.accountName} onChange={event=>setDestinationForm(v=>({...v,accountName:event.target.value}))} placeholder="ชื่อเจ้าของบัญชี" required/>
+                  <label className={styles.formField}>
+                    <span>ชื่อเจ้าของบัญชี</span>
+                    <input
+                      name="scenova-payout-account-holder"
+                      value={destinationForm.accountName}
+                      onChange={event=>setDestinationForm(v=>({...v,accountName:event.target.value.slice(0,180)}))}
+                      placeholder="ชื่อเจ้าของบัญชี"
+                      autoComplete="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      required
+                    />
                   </label>
-                  <label>
-                    <span>เลขบัญชี</span>
-                    <input value={destinationForm.accountNumber} onChange={event=>setDestinationForm(v=>({...v,accountNumber:event.target.value}))} placeholder="ตัวเลขเท่านั้น" inputMode="numeric" required/>
+                  <label className={styles.formField}>
+                    <span>เลขที่บัญชี</span>
+                    <input
+                      name="scenova-payout-account-number"
+                      value={destinationForm.accountNumber}
+                      onChange={event=>setDestinationForm(v=>({...v,accountNumber:event.target.value.replace(/\D/g,"").slice(0,20)}))}
+                      placeholder="เช่น 1234567890"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      required
+                    />
                   </label>
-                  <label>
-                    <span>Current Password</span>
-                    <input type="password" value={destinationForm.currentPassword} onChange={event=>setDestinationForm(v=>({...v,currentPassword:event.target.value}))} autoComplete="current-password" required/>
+                  <label className={styles.formField}>
+                    <span>รหัสผ่าน (Current Password)</span>
+                    <input
+                      name="scenova-payout-current-password"
+                      type="password"
+                      value={destinationForm.currentPassword}
+                      onChange={event=>setDestinationForm(v=>({...v,currentPassword:event.target.value}))}
+                      autoComplete="current-password"
+                      required
+                    />
                   </label>
-                  <label>
-                    <span>2FA Code</span>
-                    <input value={destinationForm.twoFactorCode} onChange={event=>setDestinationForm(v=>({...v,twoFactorCode:event.target.value}))} inputMode="numeric" maxLength={6} placeholder="6 digits" required/>
+                  <label className={`${styles.formField} ${styles.compactField}`}>
+                    <span>รหัส 2FA</span>
+                    <input
+                      name="scenova-payout-otp"
+                      value={destinationForm.twoFactorCode}
+                      onChange={event=>setDestinationForm(v=>({...v,twoFactorCode:event.target.value.replace(/\D/g,"").slice(0,6)}))}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      placeholder="6 digits"
+                      required
+                    />
                   </label>
                   <button type="submit" className={styles.primaryAction} disabled={savingDestination || !twoFactorEnabled}>
-                    {savingDestination ? "Saving..." : destination ? "ยืนยันบัญชีใหม่" : "บันทึกบัญชีรับเงิน"}
+                    <ScenovaIcon name="save" size={17}/>
+                    {savingDestination ? "กำลังบันทึก..." : destination ? "ยืนยันบัญชีใหม่" : "บันทึกบัญชีรับเงิน"}
                   </button>
                   <small className={styles.formHint}>
-                    การเพิ่มหรือเปลี่ยนบัญชีจะเริ่ม Cooling Period {settings?.destinationCooldownHours || 24} ชั่วโมงใหม่ทุกครั้ง
+                    การเปลี่ยนแปลงบัญชีรับเงินจะมีผลหลังพ้น Cooling Period {settings?.destinationCooldownHours || 24} ชั่วโมงในรอบถัดไป
                   </small>
                 </form>
               )}
@@ -590,12 +654,17 @@ export default function ReferralsPage() {
 
             <div className={styles.withdrawalPanel}>
               <div className={styles.panelHead}>
-                <div>
-                  <span className={styles.eyebrow}>WITHDRAW</span>
-                  <h3>ขอถอนเงิน</h3>
+                <div className={styles.panelTitleGroup}>
+                  <span className={styles.panelIcon}><ScenovaIcon name="download" size={22}/></span>
+                  <div>
+                    <span className={styles.eyebrow}>WITHDRAW</span>
+                    <h3>ขอถอนเงิน</h3>
+                    <p>ระบุจำนวนเงินที่ต้องการถอนจากค่าคอมมิชชั่น</p>
+                  </div>
                 </div>
                 <span className={data.wallet.withdrawalEnabled ? styles.readyBadge : styles.coolingBadge}>
-                  <i/> {data.wallet.withdrawalEnabled ? "OPEN" : "PAUSED"}
+                  <ScenovaIcon name={data.wallet.withdrawalEnabled ? "check" : "pause"} size={13}/>
+                  {data.wallet.withdrawalEnabled ? "OPEN" : "PAUSED"}
                 </span>
               </div>
 
@@ -607,35 +676,64 @@ export default function ReferralsPage() {
                   <p>ยอดนี้ถูก Lock แล้วและไม่สามารถถูกขอถอนซ้ำได้</p>
                   {openWithdrawal.status === "REQUESTED" && (
                     <button type="button" className={styles.cancelButton} disabled={cancellingId===openWithdrawal.id} onClick={()=>void cancelWithdrawal(openWithdrawal)}>
-                      {cancellingId===openWithdrawal.id ? "Cancelling..." : "ยกเลิกรายการและคืนยอด"}
+                      {cancellingId===openWithdrawal.id ? "กำลังยกเลิก..." : "ยกเลิกรายการและคืนยอด"}
                     </button>
                   )}
                 </div>
               ) : (
-                <form className={styles.withdrawForm} onSubmit={requestWithdrawal}>
-                  <label>
-                    <span>จำนวนถอน (THB)</span>
+                <form className={styles.withdrawRequestForm} onSubmit={requestWithdrawal} autoComplete="off">
+                  <div className={styles.amountBlock}>
+                    <label className={styles.formField}>
+                      <span>จำนวนเงิน (THB)</span>
+                      <div className={styles.amountInput}>
+                        <input
+                          name="scenova-withdrawal-amount-thb"
+                          value={withdrawForm.amountThb}
+                          onChange={event=>{
+                            const cleaned=event.target.value.replace(/[^0-9.]/g,"");
+                            const [whole="",...rest]=cleaned.split(".");
+                            const next=rest.length ? whole+"."+rest.join("").slice(0,2) : whole;
+                            setWithdrawForm(v=>({...v,amountThb:next.slice(0,12)}));
+                          }}
+                          inputMode="decimal"
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-1p-ignore="true"
+                          placeholder="10,000"
+                          required
+                        />
+                        <span>THB</span>
+                      </div>
+                    </label>
+                    <div className={styles.amountMeta}>
+                      <span>ยอดที่ถอนได้: <b>{money(data.wallet.availableSatang)}</b></span>
+                      <span>ขั้นต่ำ {money(settings?.minAmountSatang || 0)} · สูงสุด {money(settings?.maxAmountSatang || 0)} ต่อครั้ง</span>
+                    </div>
+                  </div>
+
+                  <label className={styles.formField}>
+                    <span>รหัสผ่าน (Current Password)</span>
                     <input
-                      value={withdrawForm.amountThb}
-                      onChange={event=>setWithdrawForm(v=>({...v,amountThb:event.target.value}))}
-                      inputMode="decimal"
-                      placeholder="0.00"
+                      name="scenova-withdrawal-current-password"
+                      type="password"
+                      value={withdrawForm.currentPassword}
+                      onChange={event=>setWithdrawForm(v=>({...v,currentPassword:event.target.value}))}
+                      autoComplete="current-password"
                       required
                     />
                   </label>
-                  <div className={styles.limitLine}>
-                    <span>Available {money(data.wallet.availableSatang)}</span>
-                    <span>
-                      Min {money(settings?.minAmountSatang || 0)} · Max {money(settings?.maxAmountSatang || 0)}
-                    </span>
-                  </div>
-                  <label>
-                    <span>Current Password</span>
-                    <input type="password" value={withdrawForm.currentPassword} onChange={event=>setWithdrawForm(v=>({...v,currentPassword:event.target.value}))} autoComplete="current-password" required/>
-                  </label>
-                  <label>
-                    <span>2FA Code</span>
-                    <input value={withdrawForm.twoFactorCode} onChange={event=>setWithdrawForm(v=>({...v,twoFactorCode:event.target.value}))} inputMode="numeric" maxLength={6} placeholder="6 digits" required/>
+                  <label className={`${styles.formField} ${styles.compactField}`}>
+                    <span>รหัส 2FA</span>
+                    <input
+                      name="scenova-withdrawal-otp"
+                      value={withdrawForm.twoFactorCode}
+                      onChange={event=>setWithdrawForm(v=>({...v,twoFactorCode:event.target.value.replace(/\D/g,"").slice(0,6)}))}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      placeholder="6 digits"
+                      required
+                    />
                   </label>
                   <button
                     type="submit"
@@ -648,81 +746,99 @@ export default function ReferralsPage() {
                       !destinationReady
                     }
                   >
-                    {requestingWithdrawal ? "Locking balance..." : "ขอถอนและ Lock ยอด"}
+                    <ScenovaIcon name="download" size={17}/>
+                    {requestingWithdrawal ? "กำลัง Lock ยอด..." : "ขอถอนเงิน และ Lock ยอด"}
                   </button>
-                  {!destinationReady && <small className={styles.formHint}>ต้องมีบัญชีรับเงินที่พ้น Cooling Period ก่อน</small>}
+                  {!destinationReady && (
+                    <small className={styles.formHint}>
+                      <ScenovaIcon name="info" size={15}/>
+                      ต้องมีบัญชีรับเงินที่พ้น Cooling Period ก่อน
+                    </small>
+                  )}
                 </form>
               )}
             </div>
           </div>
 
-          <div className={styles.ledgerHead}>
-            <div>
-              <span className={styles.eyebrow}>WITHDRAWAL HISTORY</span>
-              <h3>ประวัติการถอน</h3>
-            </div>
-            <span>{data.wallet.withdrawal.recent.length} recent requests</span>
-          </div>
-
-          <div className={styles.withdrawalHistory}>
-            {data.wallet.withdrawal.recent.map(item=>(
-              <div className={styles.withdrawalRow} key={item.id}>
+          <div className={styles.historyPanel}>
+            <div className={styles.ledgerHead}>
+              <div className={styles.historyTitle}>
+                <span className={styles.historyIcon}><ScenovaIcon name="clock" size={20}/></span>
                 <div>
-                  <span className={styles.statusBadge}>{item.status}</span>
-                  <b>{money(item.amount_satang)}</b>
-                </div>
-                <div>
-                  <span>{item.bank_name}</span>
-                  <small>{item.account_name} · ••••{item.account_last4}</small>
-                </div>
-                <div>
-                  <span>{dateTime(item.created_at)}</span>
-                  <small>{item.payout_reference ? "Ref: " + item.payout_reference : item.review_reason || "—"}</small>
+                  <span className={styles.eyebrow}>WITHDRAWAL HISTORY</span>
+                  <h3>ประวัติการถอน</h3>
+                  <p>แสดงรายการคำขอถอนเงินทั้งหมด</p>
                 </div>
               </div>
-            ))}
-            {!data.wallet.withdrawal.recent.length && (
-              <div className={styles.ledgerEmpty}>ยังไม่มีรายการถอน</div>
-            )}
-          </div>
-
-          <div className={styles.ledgerHead}>
-            <div>
-              <span className={styles.eyebrow}>IMMUTABLE COMMISSION LEDGER</span>
-              <h3>รายการคอมมิชชั่นล่าสุด</h3>
+              <span>{data.wallet.withdrawal.recent.length} คำขอถอนล่าสุด</span>
             </div>
-            <span>{data.wallet.recent.length} recent events</span>
-          </div>
 
-          <div className={styles.ledgerList}>
-            {data.wallet.recent.map(entry => (
-              <div className={styles.ledgerRow} key={entry.id}>
-                <div className={styles.ledgerEvent}>
-                  <span className={
-                    entry.event_type === "COMMISSION_RELEASE"
-                      ? styles.releaseDot
-                      : entry.event_type === "COMMISSION_VOID"
-                        ? styles.voidDot
-                        : styles.earnDot
-                  }/>
+            <div className={styles.withdrawalHistory}>
+              {data.wallet.withdrawal.recent.map(item=>(
+                <div className={styles.withdrawalRow} key={item.id}>
                   <div>
-                    <b>{ledgerLabel(entry.event_type)}</b>
-                    <small>{dateTime(entry.created_at)}</small>
+                    <span className={styles.statusBadge}>{item.status}</span>
+                    <b>{money(item.amount_satang)}</b>
+                  </div>
+                  <div>
+                    <span>{item.bank_name}</span>
+                    <small>{item.account_name} · ••••{item.account_last4}</small>
+                  </div>
+                  <div>
+                    <span>{dateTime(item.created_at)}</span>
+                    <small>{item.payout_reference ? "Ref: " + item.payout_reference : item.review_reason || "—"}</small>
                   </div>
                 </div>
+              ))}
+              {!data.wallet.withdrawal.recent.length && (
+                <div className={styles.ledgerEmpty}>ยังไม่มีรายการถอน</div>
+              )}
+            </div>
+          </div>
+
+          <div className={styles.historyPanel}>
+            <div className={styles.ledgerHead}>
+              <div className={styles.historyTitle}>
+                <span className={styles.historyIcon}><ScenovaIcon name="report" size={20}/></span>
                 <div>
-                  <span>Level {entry.level} · {Number(entry.rate_bps || 0) / 100}%</span>
-                  <small>จาก {entry.source_user_code || "—"} · {entry.source_type}</small>
-                </div>
-                <div>
-                  <b>{money(ledgerAmount(entry))}</b>
-                  <small>{entry.commission_status}</small>
+                  <span className={styles.eyebrow}>IMMUTABLE COMMISSION LEDGER</span>
+                  <h3>รายการคอมมิชชั่นล่าสุด</h3>
+                  <p>แสดงรายการคอมมิชชั่นทั้งหมดแบบไม่สามารถแก้ไขย้อนหลังได้</p>
                 </div>
               </div>
-            ))}
-            {!data.wallet.recent.length && (
-              <div className={styles.ledgerEmpty}>ยังไม่มี Commission Ledger</div>
-            )}
+              <span>{data.wallet.recent.length} รายการล่าสุด</span>
+            </div>
+
+            <div className={styles.ledgerList}>
+              {data.wallet.recent.map(entry => (
+                <div className={styles.ledgerRow} key={entry.id}>
+                  <div className={styles.ledgerEvent}>
+                    <span className={
+                      entry.event_type === "COMMISSION_RELEASE"
+                        ? styles.releaseDot
+                        : entry.event_type === "COMMISSION_VOID"
+                          ? styles.voidDot
+                          : styles.earnDot
+                    }/>
+                    <div>
+                      <b>{ledgerLabel(entry.event_type)}</b>
+                      <small>{dateTime(entry.created_at)}</small>
+                    </div>
+                  </div>
+                  <div>
+                    <span>Level {entry.level} · {Number(entry.rate_bps || 0) / 100}%</span>
+                    <small>จาก {entry.source_user_code || "—"} · {entry.source_type}</small>
+                  </div>
+                  <div>
+                    <b>{money(ledgerAmount(entry))}</b>
+                    <small>{entry.commission_status}</small>
+                  </div>
+                </div>
+              ))}
+              {!data.wallet.recent.length && (
+                <div className={styles.ledgerEmpty}>ยังไม่มี Commission Ledger</div>
+              )}
+            </div>
           </div>
         </section>
 

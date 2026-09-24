@@ -8,7 +8,8 @@ export type ScenovaIconName =
   | "wallet" | "equity" | "pnl" | "orders" | "gold" | "play" | "stop" | "close"
   | "trend" | "target" | "spread" | "hourglass" | "status" | "account" | "copy"
   | "refresh" | "bot" | "brain" | "risk" | "timer" | "profit" | "save" | "bell"
-  | "layers" | "lot" | "spark" | "info" | "arrow-up" | "arrow-down";
+  | "layers" | "lot" | "spark" | "info" | "arrow-up" | "arrow-down"
+  | "bank" | "lock" | "download" | "check" | "pause" | "coins";
 
 function P({children}:{children:ReactNode}) {
   return <>{children}</>;
@@ -38,6 +39,12 @@ export function ScenovaIcon({name,size=18,className=""}:{name:ScenovaIconName|st
     case "chat": body=<P><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 10h8M8 14h5"/></P>;break;
     case "logout": body=<P><path d="M10 17l5-5-5-5M15 12H3"/><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/></P>;break;
     case "wallet": body=<P><path d="M4 6h14a2 2 0 0 1 2 2v10H4a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3h12"/><path d="M16 11h4v4h-4a2 2 0 0 1 0-4Z"/></P>;break;
+    case "bank": body=<P><path d="M3 10h18M5 10v8M9 10v8M15 10v8M19 10v8M3 18h18M2 21h20"/><path d="m12 3 9 5H3z"/></P>;break;
+    case "lock": body=<P><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></P>;break;
+    case "download": body=<P><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 20h14"/></P>;break;
+    case "check": body=<P><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16.5 8.5"/></P>;break;
+    case "pause": body=<P><circle cx="12" cy="12" r="9"/><path d="M9.5 9v6M14.5 9v6"/></P>;break;
+    case "coins": body=<P><ellipse cx="9" cy="6" rx="5" ry="2.5"/><path d="M4 6v4c0 1.4 2.2 2.5 5 2.5S14 11.4 14 10V6"/><path d="M4 10v4c0 1.4 2.2 2.5 5 2.5 1 0 1.9-.1 2.7-.4"/><ellipse cx="16" cy="15" rx="5" ry="2.5"/><path d="M11 15v4c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5v-4"/></P>;break;
     case "equity": body=<P><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9h10M7 13h6M7 17h8"/></P>;break;
     case "pnl": body=<P><path d="M5 20V10M12 20V4M19 20v-7"/><path d="M3 20h18"/></P>;break;
     case "orders":
