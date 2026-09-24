@@ -7,7 +7,7 @@
 }
 
 .accountShell{
-  width:min(1120px,100%);
+  width:min(1240px,100%);
   margin:0 auto;
   padding:10px 0 36px
 }
@@ -26,7 +26,7 @@
   background:#0d111c;
   padding:18px 22px;
   color:#cfd6e6;
-  font-size:12px
+  font-size:var(--ui-type-body)
 }
 
 .header{
@@ -56,20 +56,24 @@
 .eyebrow{
   margin-bottom:5px;
   color:#8d7ae9;
-  font:800 8px/1 Consolas,monospace;
+  font-family:Consolas,monospace;
+  font-size:var(--ui-type-caption);
+  font-weight:800;
+  line-height:1;
   letter-spacing:.17em
 }
 .header h1{
   margin:0;
   color:#f1f4fb;
-  font-size:28px;
+  font-size:var(--ui-type-page);
   line-height:1.05;
   letter-spacing:-.035em
 }
 .header p{
   margin:6px 0 0;
-  color:#728097;
-  font-size:10px
+  color:#8792a7;
+  font-size:var(--ui-type-meta);
+  line-height:var(--ui-line-body)
 }
 .accountStatus{
   display:flex;
@@ -81,7 +85,9 @@
   background:#0d1c16;
   color:#87d7ac;
   padding:7px 10px;
-  font:800 8px Consolas,monospace
+  font-family:Consolas,monospace;
+  font-size:var(--ui-type-caption);
+  font-weight:800
 }
 .accountStatus i{
   width:6px;
@@ -93,12 +99,13 @@
 
 .message{
   margin-bottom:12px;
-  padding:10px 12px;
+  padding:11px 13px;
   border:1px solid #3b3a61;
   border-radius:10px;
   background:#121426;
-  color:#bdb6e8;
-  font-size:10px
+  color:#c8c1ec;
+  font-size:var(--ui-type-body);
+  line-height:var(--ui-line-body)
 }
 .message.good{
   border-color:#285741;
@@ -122,7 +129,7 @@
 }
 .summaryItem{
   min-width:0;
-  padding:12px 14px;
+  padding:14px 16px;
   border-right:1px solid rgba(118,131,159,.12)
 }
 .summaryItem:last-child{
@@ -130,9 +137,9 @@
 }
 .summaryItem span{
   display:block;
-  margin-bottom:5px;
-  color:#68758c;
-  font-size:8px;
+  margin-bottom:6px;
+  color:#7f8aa0;
+  font-size:var(--ui-type-caption);
   font-weight:700;
   text-transform:uppercase;
   letter-spacing:.06em
@@ -140,8 +147,8 @@
 .summaryItem b{
   display:block;
   overflow:hidden;
-  color:#e9edf6;
-  font-size:10px;
+  color:#edf1fa;
+  font-size:var(--ui-type-body);
   text-overflow:ellipsis;
   white-space:nowrap
 }
@@ -162,7 +169,7 @@
   scroll-margin-top:18px
 }
 .sectionHeader{
-  min-height:66px;
+  min-height:76px;
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -180,15 +187,16 @@
 }
 .sectionTitle h2{
   margin:0;
-  color:#edf1fa;
-  font-size:12px;
+  color:#f0f3fb;
+  font-size:var(--ui-type-subtitle);
   font-weight:800
 }
 .sectionTitle p{
   margin:4px 0 0;
   overflow:hidden;
-  color:#6f7c92;
-  font-size:9px;
+  color:#8792a7;
+  font-size:var(--ui-type-meta);
+  line-height:var(--ui-line-body);
   text-overflow:ellipsis;
   white-space:nowrap
 }
@@ -216,7 +224,9 @@
   background:#15141e;
   color:#988eac;
   padding:6px 8px;
-  font:800 7.5px Consolas,monospace;
+  font-family:Consolas,monospace;
+  font-size:var(--ui-type-caption);
+  font-weight:800;
   letter-spacing:.07em
 }
 .badgeGood{
@@ -225,7 +235,7 @@
   color:#7fdaad
 }
 .disclosureButton{
-  min-height:34px;
+  min-height:40px;
   display:flex;
   align-items:center;
   gap:8px;
@@ -234,7 +244,7 @@
   background:#141321;
   color:#c0b5e9;
   padding:7px 10px;
-  font-size:8.5px;
+  font-size:var(--ui-type-label);
   font-weight:800;
   cursor:pointer
 }
@@ -272,22 +282,23 @@
   align-items:center;
   justify-content:space-between;
   gap:12px;
-  min-height:44px;
-  padding:9px 10px;
+  min-height:52px;
+  padding:10px 11px;
   border-bottom:1px solid rgba(112,125,153,.09)
 }
 .detailItem:nth-last-child(-n+3){
   border-bottom:0
 }
 .detailItem span{
-  color:#748096;
-  font-size:8.5px
+  color:#8792a7;
+  font-size:var(--ui-type-meta);
+  line-height:var(--ui-line-body)
 }
 .detailItem b{
   min-width:0;
   overflow:hidden;
-  color:#dbe1ee;
-  font-size:9px;
+  color:#e5e9f3;
+  font-size:var(--ui-type-label);
   text-align:right;
   text-overflow:ellipsis;
   white-space:nowrap
@@ -304,19 +315,19 @@
   border:1px solid #252e45;
   border-radius:10px;
   background:#090f18;
-  padding:10px
+  padding:12px
 }
 .statusItem span{
   display:block;
-  color:#6f7d92;
-  font-size:8px
+  color:#8792a7;
+  font-size:var(--ui-type-caption)
 }
 .statusItem b{
   display:block;
-  margin-top:5px;
+  margin-top:6px;
   overflow:hidden;
-  color:#dce2ee;
-  font-size:9px;
+  color:#e6eaf4;
+  font-size:var(--ui-type-label);
   text-overflow:ellipsis;
   white-space:nowrap
 }
@@ -329,7 +340,9 @@
   color:#b7a9ff!important
 }
 .monoSmall{
-  font:800 8px Consolas,monospace!important;
+  font-family:Consolas,monospace!important;
+  font-size:var(--ui-type-caption)!important;
+  font-weight:800!important;
   color:#a99cff!important
 }
 
@@ -351,8 +364,8 @@
 .passwordGrid label>span,
 .twoFactorRow label>span,
 .disableGrid label>span{
-  color:#77849a;
-  font-size:8px;
+  color:#8a95aa;
+  font-size:var(--ui-type-label);
   font-weight:700
 }
 .phoneForm select,
@@ -362,7 +375,7 @@
 .disableGrid input,
 .otpRow input{
   width:100%;
-  height:38px;
+  height:var(--ui-control-height);
   min-width:0;
   border:1px solid #303954;
   border-radius:9px;
@@ -370,7 +383,7 @@
   color:#edf2fb;
   padding:0 10px;
   outline:none;
-  font-size:10px
+  font-size:var(--ui-type-control)
 }
 .phoneForm select:focus,
 .phoneForm input:focus,
@@ -395,10 +408,10 @@
 
 .primaryButton,
 .secondaryButton{
-  min-height:36px;
+  min-height:var(--ui-control-height);
   border-radius:9px;
-  padding:8px 12px;
-  font-size:8.5px;
+  padding:8px 14px;
+  font-size:var(--ui-type-label);
   font-weight:800;
   white-space:nowrap;
   cursor:pointer
@@ -424,9 +437,9 @@
 .textButton{
   border:0;
   background:transparent;
-  color:#8f82c5;
-  padding:6px;
-  font-size:8.5px;
+  color:#a99be0;
+  padding:7px;
+  font-size:var(--ui-type-label);
   font-weight:700;
   cursor:pointer
 }
@@ -434,9 +447,10 @@
 .lockNote{
   border-top:1px solid rgba(115,128,157,.10);
   background:#0a1018;
-  color:#6f7d91;
-  padding:10px 14px;
-  font-size:8.5px
+  color:#8e99ad;
+  padding:11px 14px;
+  font-size:var(--ui-type-meta);
+  line-height:var(--ui-line-body)
 }
 .inlineNotice{
   display:flex;
@@ -446,9 +460,10 @@
   border:1px solid #33304f;
   border-radius:10px;
   background:#0d101b;
-  color:#9ba4b6;
-  padding:10px 11px;
-  font-size:9px
+  color:#aab2c2;
+  padding:11px 12px;
+  font-size:var(--ui-type-meta);
+  line-height:var(--ui-line-body)
 }
 .otpRow{
   display:grid;
@@ -461,13 +476,15 @@
 }
 .otpRow>div span{
   display:block;
-  margin-bottom:5px;
-  color:#6f7d92;
-  font-size:8px
+  margin-bottom:6px;
+  color:#8792a7;
+  font-size:var(--ui-type-label)
 }
 .otpRow>div strong{
   color:#e0e6f1;
-  font:800 10px Consolas,monospace
+  font-family:Consolas,monospace;
+  font-size:var(--ui-type-control);
+  font-weight:800
 }
 
 .passwordGrid{
@@ -531,7 +548,7 @@
   background:#070b13;
   color:#cfc5ff;
   padding:10px;
-  font:800 10px Consolas,monospace
+  font:800 var(--ui-type-label) Consolas,monospace
 }
 .recoveryBox{
   margin-top:12px;
@@ -548,7 +565,7 @@
 }
 .recoveryHead b{
   color:#a6d7ba;
-  font-size:10px
+  font-size:var(--ui-type-label)
 }
 .recoveryGrid{
   display:grid;
@@ -563,7 +580,9 @@
   color:#a5d5b7;
   padding:7px;
   text-align:center;
-  font:800 9px Consolas,monospace
+  font-family:Consolas,monospace;
+  font-size:var(--ui-type-meta);
+  font-weight:800
 }
 
 .sessionCard{
@@ -588,22 +607,24 @@
 }
 .sessionCard b{
   display:block;
-  color:#e4e9f3;
-  font-size:9px
+  color:#e8ecf5;
+  font-size:var(--ui-type-label)
 }
 .sessionCard span,
 .sessionCard small{
   display:block;
-  margin-top:3px;
+  margin-top:4px;
   overflow:hidden;
-  color:#6f7c91;
-  font-size:8px;
+  color:#8792a7;
+  font-size:var(--ui-type-meta);
   text-overflow:ellipsis;
   white-space:nowrap
 }
 .sessionCard em{
   color:#78d7a7;
-  font:800 8px Consolas,monospace;
+  font-family:Consolas,monospace;
+  font-size:var(--ui-type-caption);
+  font-weight:800;
   font-style:normal
 }
 
@@ -647,7 +668,7 @@
     flex-direction:column
   }
   .header h1{
-    font-size:25px
+    font-size:var(--ui-type-page)
   }
   .summaryBar,
   .detailGrid,
