@@ -165,7 +165,7 @@ export class ApiCredentialTesterService {
 
     const inferred = this.infer(configKey, value, testUrl);
 
-    if (configKey === "OPENAI_API_KEY") {
+    if (configKey === "OPENAI_API_KEY" || inferred.provider === "OpenAI") {
       const { response } = await this.request("https://api.openai.com/v1/models", {
         method: "GET",
         headers: { Authorization: "Bearer " + value, Accept: "application/json" }
@@ -174,7 +174,7 @@ export class ApiCredentialTesterService {
         response.ok ? "OpenAI API ตอบสำเร็จ" : `OpenAI ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
     }
 
-    if (configKey === "ANTHROPIC_API_KEY") {
+    if (configKey === "ANTHROPIC_API_KEY" || inferred.provider === "Anthropic") {
       const { response } = await this.request("https://api.anthropic.com/v1/models", {
         method: "GET",
         headers: {
@@ -187,7 +187,7 @@ export class ApiCredentialTesterService {
         response.ok ? "Anthropic API ตอบสำเร็จ" : `Anthropic ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
     }
 
-    if (configKey === "GEMINI_API_KEY") {
+    if (configKey === "GEMINI_API_KEY" || inferred.provider === "Google Gemini") {
       const url = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=" + encodeURIComponent(value);
       const { response } = await this.request(url, { method: "GET", headers: { Accept: "application/json" } });
       return this.result(response.ok, response.ok ? "PASS" : "FAIL", "Google Gemini", "preset/config key",
@@ -241,7 +241,7 @@ export class ApiCredentialTesterService {
       }
     }
 
-    if (configKey === "RESEND_API_KEY") {
+    if (configKey === "RESEND_API_KEY" || inferred.provider === "Resend") {
       const { response } = await this.request("https://api.resend.com/domains", {
         method: "GET",
         headers: { Authorization: "Bearer " + value, Accept: "application/json" }
@@ -257,7 +257,7 @@ export class ApiCredentialTesterService {
         `Resend ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
     }
 
-    if (configKey === "OMISE_SECRET_KEY") {
+    if (configKey === "OMISE_SECRET_KEY" || inferred.provider === "Opn / Omise") {
       const { response } = await this.request("https://api.omise.co/account", {
         method: "GET",
         headers: {
