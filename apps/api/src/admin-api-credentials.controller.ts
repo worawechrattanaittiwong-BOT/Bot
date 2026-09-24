@@ -374,9 +374,14 @@ export class AdminApiCredentialsController {
     @Body() body: { active?: boolean }
   ) {
     this.assertId(id);
-    const row = await this.secrets.setActive(id, Boolean(body.active), this.actor(req));
-    if (!row) throw new NotFoundException("ไม่พบ API Key");
-    return { ok: true };
+    try {
+      const row = await this.secrets.setActive(id, Boolean(body.active), this.actor(req));
+      if (!row) throw new NotFoundException("ไม่พบ API Key");
+      return { ok: true };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      throw new BadRequestException(String(error?.message || "เปลี่ยนสถานะ API Key ไม่สำเร็จ"));
+    }
   }
 
   @Delete(":id")
