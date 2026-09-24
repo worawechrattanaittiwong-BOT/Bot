@@ -177,3 +177,22 @@
   border-color:rgba(236,171,88,.22)!important;
   background:rgba(202,133,43,.07)!important;
 }
+
+
+.ownerAppCard{
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+  margin:0 0 12px;padding:15px 16px;border:1px solid rgba(121,98,232,.22);
+  border-radius:13px;background:linear-gradient(135deg,rgba(104,79,224,.10),rgba(8,11,21,.88))
+}
+.ownerAppCard h2{margin:4px 0 3px;color:#eeeafd;font-size:var(--ui-type-title)}
+.ownerAppCard p{margin:0;color:#7e879b;font-size:var(--ui-type-meta)}
+.ownerAppDownload{
+  display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 14px;
+  border:1px solid rgba(139,116,255,.32);border-radius:9px;background:rgba(111,87,236,.17);
+  color:#d9d1ff;text-decoration:none;font-size:var(--ui-type-meta);font-weight:950;white-space:nowrap
+}
+.ownerAppDownload:hover{background:rgba(111,87,236,.25);border-color:rgba(153,133,255,.46)}
+@media(max-width:620px){
+  .ownerAppCard{display:block;padding:13px}
+  .ownerAppDownload{width:100%;box-sizing:border-box;margin-top:12px;min-height:44px}
+}
