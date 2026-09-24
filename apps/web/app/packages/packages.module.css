@@ -623,6 +623,50 @@
   color:#7a879b;
   font-size:12px
 }
+.promoBox{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(210px,280px);
+  gap:16px;
+  align-items:center;
+  margin:0 15px 14px;
+  padding:14px 16px;
+  border:1px solid #3a3156;
+  border-radius:12px;
+  background:linear-gradient(135deg,rgba(86,58,142,.18),rgba(10,16,24,.9))
+}
+.promoBox b,.promoBox small{display:block}
+.promoBox b{margin:4px 0;color:#ece7f6;font-size:13px}
+.promoBox small{color:#7f8a9d;font-size:11px;line-height:1.55}
+.promoBox input{
+  width:100%;
+  min-height:44px;
+  padding:0 13px;
+  border:1px solid #3a4560;
+  border-radius:10px;
+  outline:none;
+  background:#09111d;
+  color:#f0ecff;
+  font:700 13px Consolas,monospace;
+  letter-spacing:.7px;
+  text-transform:uppercase
+}
+.promoBox input:focus{border-color:#7f64c8;box-shadow:0 0 0 3px rgba(127,100,200,.12)}
+.promoApplied{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  width:max-content;
+  max-width:100%;
+  margin:8px 0;
+  padding:6px 9px;
+  border:1px solid #3b5d4c;
+  border-radius:999px;
+  background:#10251d;
+  color:#82ddb0;
+  font-size:11px
+}
+.promoApplied span{font:700 10px Consolas,monospace}
+.promoApplied b{font-size:11px}
 @media(max-width:1180px){
   .shell{
     width:100%
@@ -702,6 +746,10 @@
   }
   .legacyPackageScope{
     padding:13px
+  }
+  .promoBox{
+    grid-template-columns:1fr;
+    margin:0 13px 13px
   }
   .orderRow{
     grid-template-columns:minmax(0,1fr) auto

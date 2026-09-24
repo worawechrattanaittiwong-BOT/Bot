@@ -16,6 +16,7 @@ import { PoolClient } from "pg";
 import { DbService } from "./db.service";
 import { AdminGuard, JwtGuard } from "./security";
 import { ReferralService } from "./referral.service";
+import { PromotionService } from "./promotion.service";
 
 function paymentMode() {
   const key = process.env.OMISE_SECRET_KEY || "";
@@ -47,7 +48,8 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
 
   constructor(
     private readonly db: DbService,
-    private readonly referrals: ReferralService
+    private readonly referrals: ReferralService,
+    private readonly promotions: PromotionService
   ) {}
 
   onApplicationBootstrap() {
@@ -166,6 +168,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
             charge.expires_at || null
           ]
         );
+        if (failed) await this.promotions.release(tx, "LOCAL", order.id);
         return null;
       }
 
@@ -268,6 +271,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
          WHERE id=$1`,
         [order.id, charge.id, slot.id, subscription.id]
       );
+      await this.promotions.consume(tx, "LOCAL", order.id);
 
       let referralCommissionCount = 0;
       await tx.query("SAVEPOINT referral_credit");
@@ -314,7 +318,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
     });
   }
 
-  async checkout(userId: string, months: number) {
+  async checkout(userId: string, months: number, promoCode?: string) {
     if (!this.checkoutEnabled()) {
       throw new ConflictException("ยังไม่เปิดรับชำระแพ็กเกจ Local");
     }
@@ -355,15 +359,30 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
         throw new ConflictException("แพ็กเกจ Local นี้ยังไม่เปิดขาย");
       }
 
-      return (
+      const promo = await this.promotions.reserve(tx, {
+        code: promoCode,
+        userId,
+        mode: "LOCAL",
+        months: pack.months,
+        originalAmountSatang: Number(pack.price_satang)
+      });
+      const order = (
         await tx.query(
-          `INSERT INTO local_orders(user_id,months,amount)
-           VALUES($1,$2,$3)
+          `INSERT INTO local_orders(
+             user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id
+           ) VALUES($1,$2,$3,$4,$5,$6,$7)
            RETURNING *`,
-          [userId, pack.months, pack.price_satang]
+          [userId, pack.months, promo.finalAmountSatang, pack.price_satang,
+           promo.discountAmountSatang, promo.code, promo.redemptionId]
         )
       ).rows[0];
+      await this.promotions.attachOrder(tx, promo.redemptionId, order.id);
+      return order;
     });
+
+    if (Number(order.amount) === 0) {
+      return this.activateFreeOrder(order.id);
+    }
 
     try {
       const charge = await this.gateway(
@@ -407,6 +426,63 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
       );
     }
   }
+
+  private async activateFreeOrder(orderId: string) {
+    return this.db.transaction(async (tx: PoolClient) => {
+      await tx.query("SELECT pg_advisory_xact_lock(740092)");
+      const order = (await tx.query("SELECT * FROM local_orders WHERE id=$1 FOR UPDATE", [orderId])).rows[0];
+      if (!order) throw new BadRequestException("ไม่พบรายการ");
+      if (order.status === "PAID") return { id: order.id, free: true };
+      if (Number(order.amount) !== 0 || !order.promotion_redemption_id) {
+        throw new ConflictException("รายการโปรโมชั่น 100% ไม่ถูกต้อง");
+      }
+      const user = (await tx.query("SELECT status FROM users WHERE id=$1 FOR UPDATE", [order.user_id])).rows[0];
+      if (user?.status !== "ACTIVE") throw new ConflictException("บัญชีไม่พร้อมใช้งาน");
+      const current = (await tx.query(
+        `SELECT max(s.expires_at) expires_at FROM subscriptions s
+         JOIN plans p ON p.id=s.plan_id
+         WHERE s.user_id=$1 AND p.mode='LOCAL' AND s.status='ACTIVE' AND s.expires_at>now()`,
+        [order.user_id]
+      )).rows[0];
+      const subscription = (await tx.query(
+        `INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note)
+         SELECT $1,p.id,now(),GREATEST(now(),COALESCE($3::timestamptz,now()))+make_interval(months=>$2::int),'PROMOTION',$4
+         FROM plans p WHERE p.code=$5 AND p.active=true RETURNING *`,
+        [order.user_id, Number(order.months), current?.expires_at || null,
+         "Local promotion order " + order.id, "LOCAL_" + Number(order.months) + "M"]
+      )).rows[0];
+      if (!subscription) throw new ConflictException("ไม่พบแพ็กเกจ Local ที่เปิดใช้งาน");
+      let slot = (await tx.query(
+        `SELECT * FROM license_slots
+         WHERE owner_user_id=$1 AND assigned_user_id=$1 AND mode='LOCAL' AND status<>'DELETED'
+         ORDER BY CASE WHEN slot_type='PERSONAL' THEN 0 ELSE 1 END,slot_number LIMIT 1 FOR UPDATE`,
+        [order.user_id]
+      )).rows[0];
+      if (slot) {
+        await tx.query(
+          "UPDATE license_slots SET subscription_id=$2,status='ACTIVE',slot_type='PERSONAL',updated_at=now() WHERE id=$1",
+          [slot.id, subscription.id]
+        );
+      } else {
+        slot = (await tx.query(
+          `INSERT INTO license_slots(owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label)
+           SELECT $1,$1,$2,'LOCAL',COALESCE(max(slot_number),0)+1,'PERSONAL','ACTIVE','Local MT5'
+           FROM license_slots WHERE owner_user_id=$1 AND mode='LOCAL' RETURNING *`,
+          [order.user_id, subscription.id]
+        )).rows[0];
+      }
+      await tx.query(
+        "UPDATE local_orders SET status='PAID',slot_id=$2,subscription_id=$3,paid_at=now(),expires_at=now() WHERE id=$1",
+        [order.id, slot.id, subscription.id]
+      );
+      await this.promotions.consume(tx, "LOCAL", order.id);
+      await tx.query(
+        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES('PROMOTION','LOCAL_ACTIVATED','order',$1,$2::jsonb)",
+        [order.id, JSON.stringify({ subscriptionId: subscription.id, slotId: slot.id, promotionCode: order.promotion_code })]
+      );
+      return { id: order.id, free: true };
+    });
+  }
 }
 
 @Controller("packages/local")
@@ -427,7 +503,7 @@ export class LocalPackageCustomerController {
     return (
       await this.db.query(
         `SELECT
-           o.id,o.months,o.amount,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,
+           o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,
            o.slot_id,o.subscription_id,s.expires_at subscription_expires_at
          FROM local_orders o
          LEFT JOIN subscriptions s ON s.id=o.subscription_id
@@ -440,8 +516,12 @@ export class LocalPackageCustomerController {
   }
 
   @Post("checkout")
-  checkout(@Req() req: any, @Body() body: { months?: number }) {
-    return this.local.checkout(String(req.user.sub), Math.trunc(Number(body.months || 0)));
+  checkout(@Req() req: any, @Body() body: { months?: number; promoCode?: string }) {
+    return this.local.checkout(
+      String(req.user.sub),
+      Math.trunc(Number(body.months || 0)),
+      String(body.promoCode || "")
+    );
   }
 
   @Post("orders/:id/refresh")

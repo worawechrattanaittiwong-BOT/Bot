@@ -14,7 +14,7 @@ export type Approval = {
   account_name: string; masked_account: string; destination_status: string; shared_account_users: number;
 };
 export type OwnerUpdateManifest = { version: string; versionCode: number; url: string; sha256?: string; releasedAt?: string };
-export type MainTab = "dashboard" | "approvals" | "owner" | "settings";
+export type MainTab = "dashboard" | "packages" | "promotions" | "accounts";
 export type ApprovalAction = "approve" | "hold" | "reject";
 
 // Display unknown balances as unavailable, never as a successful zero balance.

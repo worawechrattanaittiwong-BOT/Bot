@@ -10,7 +10,8 @@ import appConfig from "./app.json";
 import { type Approval, type ApprovalAction, type MainTab, type OwnerUpdateManifest, type Summary } from "./src/finance";
 import { ThemeProvider, type ThemeMode, useTheme } from "./src/theme";
 import { Button, Copy, Frame, Notice } from "./src/ui";
-import { ApprovalDetail, ApprovalList, Dashboard, type Enrollment, FirstSetup, OwnerMoney, OwnerWithdraw, PinLogin, Settings, UpdateNotice } from "./src/screens";
+import { ApprovalDetail, ApprovalList, Dashboard, type Enrollment, FirstSetup, OwnerWithdraw, PinLogin, UpdateNotice } from "./src/screens";
+import { AccountsScreen, PackagesScreen, PromotionsScreen } from "./src/management";
 
 const API = String(process.env.EXPO_PUBLIC_API_URL || "").replace(/\/$/, "");
 const DEVICE_KEY = "scenova.owner.deviceId";
@@ -20,7 +21,7 @@ const THEME_KEY = "scenova.owner.theme";
 const OWNER_UPDATE_MANIFEST = "https://snvea-bot.online/downloads/SCENOVA-Owner.json";
 const OWNER_UPDATE_APK = "https://snvea-bot.online/downloads/SCENOVA-Owner.apk";
 const CURRENT_BUILD = Math.max(1, Number(process.env.EXPO_PUBLIC_OWNER_BUILD || 1));
-type Screen = MainTab | "pin" | "setup" | "detail" | "withdraw";
+type Screen = MainTab | "pin" | "setup" | "approvals" | "detail" | "withdraw";
 class RequestError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 async function request(path: string, options: RequestInit = {}, token?: string) {
   if (!API) throw new Error("ยังไม่พร้อมเชื่อมต่อบริการ กรุณาติดต่อผู้ดูแล");
@@ -131,7 +132,7 @@ function OwnerApp({ restoreTheme }: { restoreTheme: (theme: ThemeMode) => void }
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       if (screen === "detail") { setSelected(null); setScreen("approvals"); return true; }
-      if (screen === "withdraw") { setScreen("owner"); return true; }
+      if (screen === "withdraw") { setScreen("dashboard"); return true; }
       if (tokenRef.current && screen !== "dashboard") { setScreen("dashboard"); return true; }
       if (screen === "setup" && enrolled) { setScreen("pin"); return true; }
       return false;
@@ -188,9 +189,9 @@ function OwnerApp({ restoreTheme }: { restoreTheme: (theme: ThemeMode) => void }
     await authenticated(result.token, attempt, true);
   }
   function navigate(next: MainTab) {
-    setSelected(null); setScreen(next);
-    if (next === "approvals") void loadApprovals();
-    if (next === "owner" || next === "dashboard") void loadDashboard();
+    setSelected(null);
+    setScreen(next);
+    if (next === "dashboard") void loadDashboard();
   }
   async function approvalAction(kind: ApprovalAction, pin: string, reason: string) {
     if (!selected) return;
@@ -205,8 +206,8 @@ function OwnerApp({ restoreTheme }: { restoreTheme: (theme: ThemeMode) => void }
     const run = generation.current;
     await authorized("/owner-mobile/withdraw", { method: "POST", body: JSON.stringify({ amountSatang, pin, clientRequestKey: Crypto.randomUUID() }) });
     if (run !== generation.current) return;
-    setScreen("owner");
-    Alert.alert("ส่งคำสั่งถอนแล้ว", "ตรวจสอบสถานะได้ที่ประวัติการถอนเงิน");
+    setScreen("dashboard");
+    Alert.alert("ส่งคำสั่งถอนแล้ว", "ระบบบันทึกรายการถอนเรียบร้อย");
     await loadDashboard();
   }
 
@@ -233,16 +234,17 @@ function OwnerApp({ restoreTheme }: { restoreTheme: (theme: ThemeMode) => void }
   }, [runOwnerUpdate]);
 
   const auth = !token;
-  const tab: MainTab = screen === "detail" ? "approvals" : screen === "withdraw" ? "owner" : ["dashboard", "approvals", "owner", "settings"].includes(screen) ? screen as MainTab : "dashboard";
-  const subpage = screen === "detail" || screen === "withdraw";
+  const tab: MainTab = ["dashboard", "packages", "promotions", "accounts"].includes(screen) ? screen as MainTab : "dashboard";
+  const subpage = screen === "detail" || screen === "withdraw" || screen === "approvals";
   let body;
   if (booting || bootError) body = <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 20 }}>{bootError ? <><Notice text={bootError} danger /><Button label="ลองอีกครั้ง" onPress={() => void boot()} /></> : <><ActivityIndicator size="large" color={c.accent} /><Copy style={{ color: c.muted }}>กำลังเปิด SCENOVA Owner</Copy></>}</View>;
   else if (auth) body = screen === "setup" ? <FirstSetup onSubmit={enroll} onBack={enrolled ? () => setScreen("pin") : undefined} /> : <PinLogin onSetup={() => setScreen("setup")} onLogin={login} />;
   else if (screen === "detail" && selected) body = <ApprovalDetail item={selected} onBack={() => setScreen("approvals")} onAction={approvalAction} />;
-  else if (screen === "withdraw") body = <OwnerWithdraw summary={summary} onBack={() => setScreen("owner")} onSubmit={withdraw} stale={!!summaryError || refreshing} />;
+  else if (screen === "withdraw") body = <OwnerWithdraw summary={summary} onBack={() => setScreen("dashboard")} onSubmit={withdraw} stale={!!summaryError || refreshing} />;
   else if (screen === "approvals") body = <ApprovalList items={approvals} loading={approvalsLoading} error={approvalsError} onRefresh={() => void loadApprovals()} onOpen={item => { setSelected(item); setScreen("detail"); }} />;
-  else if (screen === "owner") body = <OwnerMoney summary={summary} refreshing={refreshing} error={summaryError} onRefresh={() => void loadDashboard()} onWithdraw={() => setScreen("withdraw")} />;
-  else if (screen === "settings") body = <Settings summary={summary} error={summaryError} version={`v${appConfig.expo.version}`} update={updateManifest} updateBusy={updateBusy} onInstall={() => { if (updateManifest) void runOwnerUpdate(updateManifest); }} onLock={lock} />;
-  else body = <Dashboard summary={summary} refreshing={refreshing} error={summaryError} updatedAt={updatedAt} onRefresh={() => void loadDashboard()} onApprovals={() => navigate("approvals")} onWithdraw={() => setScreen("withdraw")} />;
-  return <><StatusBar style={theme === "light" ? "dark" : "light"} /><Frame auth={auth || booting || !!bootError} tab={tab} onNavigate={subpage ? undefined : navigate} count={summary?.approvals.requestedCount || 0} onLock={auth ? undefined : lock}>{updateManifest && !auth && !subpage && screen !== "settings" && <UpdateNotice manifest={updateManifest} busy={updateBusy} onInstall={() => void runOwnerUpdate(updateManifest)} />}{body}</Frame></>;
+  else if (screen === "packages") body = <PackagesScreen api={authorized} />;
+  else if (screen === "promotions") body = <PromotionsScreen api={authorized} />;
+  else if (screen === "accounts") body = <AccountsScreen api={authorized} version={`v${appConfig.expo.version}`} update={updateManifest} updateBusy={updateBusy} onInstall={() => { if (updateManifest) void runOwnerUpdate(updateManifest); }} onLock={lock} />;
+  else body = <Dashboard summary={summary} refreshing={refreshing} error={summaryError} updatedAt={updatedAt} onRefresh={() => void loadDashboard()} onApprovals={() => { setScreen("approvals"); void loadApprovals(); }} onWithdraw={() => setScreen("withdraw")} />;
+  return <><StatusBar style={theme === "light" ? "dark" : "light"} /><Frame auth={auth || booting || !!bootError} tab={tab} onNavigate={subpage ? undefined : navigate} count={summary?.approvals.requestedCount || 0} onLock={auth ? undefined : lock}>{updateManifest && !auth && !subpage && screen !== "accounts" && <UpdateNotice manifest={updateManifest} busy={updateBusy} onInstall={() => void runOwnerUpdate(updateManifest)} />}{body}</Frame></>;
 }

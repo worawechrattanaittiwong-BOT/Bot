@@ -74,6 +74,9 @@ type Order = {
   slot_id: string | null;
   subscription_id?: string | null;
   subscription_expires_at: string | null;
+  original_amount?: number | null;
+  discount_amount?: number | null;
+  promotion_code?: string | null;
   account_number?: string | null;
   actual_state?: string | null;
   last_seen_at?: string | null;
@@ -121,6 +124,7 @@ export default function PackagesPage() {
   const [cooldown, setCooldown] = useState(0);
   const [activeSystem, setActiveSystem] = useState<"LOCAL" | "CLOUD">("LOCAL");
   const [trialOpen, setTrialOpen] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
   const polling = useRef(false);
 
   const elevated = ["OWNER", "ADMIN"].includes(String(account?.user.role || "").toUpperCase());
@@ -260,12 +264,12 @@ export default function PackagesPage() {
     setBusy("local-" + months);
     setMessage("");
     try {
-      await api("/packages/local/checkout", {
+      const result = await api("/packages/local/checkout", {
         method: "POST",
-        body: JSON.stringify({ months })
+        body: JSON.stringify({ months, promoCode: promoCode.trim().toUpperCase() })
       });
       await load();
-      notify("info", "สร้าง QR สำหรับแพ็กเกจ Local แล้ว");
+      notify(result?.free ? "good" : "info", result?.free ? "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Local แล้ว" : "สร้าง QR สำหรับแพ็กเกจ Local แล้ว");
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "สร้างรายการ Local ไม่สำเร็จ");
       await load().catch(() => {});
@@ -279,12 +283,12 @@ export default function PackagesPage() {
     setBusy("cloud-" + months);
     setMessage("");
     try {
-      await api("/cloud/checkout", {
+      const result = await api("/cloud/checkout", {
         method: "POST",
-        body: JSON.stringify({ months })
+        body: JSON.stringify({ months, promoCode: promoCode.trim().toUpperCase() })
       });
       await load();
-      notify("info", "สร้าง QR สำหรับแพ็กเกจ Cloud แล้ว");
+      notify(result?.free ? "good" : "info", result?.free ? "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Cloud แล้ว" : "สร้าง QR สำหรับแพ็กเกจ Cloud แล้ว");
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "สร้างรายการ Cloud ไม่สำเร็จ");
       await load().catch(() => {});
@@ -595,6 +599,21 @@ export default function PackagesPage() {
                 ).map(item => <span key={item}>{item}</span>)}
               </div>
 
+              <div className={styles.promoBox}>
+                <div>
+                  <span className={styles.eyebrow}>PROMOTION CODE</span>
+                  <b>มีรหัสส่วนลด?</b>
+                  <small>ใส่รหัส SNV-XXXX-XXXX ระบบจะตรวจสิทธิ์และคำนวณราคาจาก Server ตอนสร้างรายการ</small>
+                </div>
+                <input
+                  value={promoCode}
+                  onChange={event => setPromoCode(event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 13))}
+                  placeholder="SNV-XXXX-XXXX"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                />
+              </div>
+
               <div className={`${legacy.root} ${styles.legacyPackageScope}`}>
                 <div className={legacy.packages}>
                   {(activeCatalog?.packages || []).map(pack => (
@@ -763,6 +782,12 @@ function PaymentCard({
       <div className={styles.paymentInfo}>
         <span className={styles.eyebrow}>{type} / {order.id.slice(0,8)}</span>
         <h3>{order.months} เดือน · ฿{money(order.amount)}</h3>
+        {Number(order.discount_amount || 0) > 0 && (
+          <div className={styles.promoApplied}>
+            <span>{order.promotion_code}</span>
+            <b>ลด ฿{money(Number(order.discount_amount || 0))}</b>
+          </div>
+        )}
         <p>
           {order.status === "REVIEW"
             ? "กำลังตรวจสอบรายการกับ Payment Gateway"

@@ -4,6 +4,7 @@ import { DbService } from "./db.service";
 import { AdminGuard, CryptoService, JwtGuard } from "./security";
 import { ReferralService } from "./referral.service";
 import { LocalPackageService } from "./local-package.controller";
+import { PromotionService } from "./promotion.service";
 
 export function paymentMode() {
   const key = process.env.OMISE_SECRET_KEY || "";
@@ -22,7 +23,8 @@ export function validateCharge(charge: any, order: any) {
 export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
   constructor(
     private readonly db: DbService,
-    private readonly referrals: ReferralService
+    private readonly referrals: ReferralService,
+    private readonly promotions: PromotionService
   ) {}
   private timer?: ReturnType<typeof setInterval>;
   private checking = false;
@@ -101,6 +103,7 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
         const failed = ["failed", "expired", "reversed"].includes(charge.status);
         await tx.query("UPDATE cloud_orders SET charge_id=$2,status=$3,qr_url=$4,expires_at=$5 WHERE id=$1",
           [order.id, charge.id, failed ? "FAILED" : "PENDING", charge.source?.scannable_code?.image?.download_uri || null, charge.expires_at || null]);
+        if (failed) await this.promotions.release(tx, "CLOUD", order.id);
         return;
       }
       const user = (await tx.query("SELECT status FROM users WHERE id=$1 FOR UPDATE", [order.user_id])).rows[0];
@@ -126,6 +129,7 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
       }
       await tx.query("UPDATE cloud_orders SET status='PAID',charge_id=$2,slot_id=$3,subscription_id=$4,paid_at=now() WHERE id=$1",
         [order.id, charge.id, slot.id, subscription.id]);
+      await this.promotions.consume(tx, "CLOUD", order.id);
 
       // Referral accounting must never prevent a successfully paid customer
       // from receiving their Cloud entitlement. Keep it in an isolated
@@ -158,15 +162,65 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
       return { ...order, status: "PAID", slot_id: slot.id };
     });
   }
+
+  async activateFreeOrder(orderId: string) {
+    return this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740091)");
+      const order = (await tx.query("SELECT * FROM cloud_orders WHERE id=$1 FOR UPDATE", [orderId])).rows[0];
+      if (!order) throw new BadRequestException("ไม่พบรายการ");
+      if (order.status === "PAID") return { id: order.id, free: true };
+      if (Number(order.amount) !== 0 || !order.promotion_redemption_id) {
+        throw new ConflictException("รายการโปรโมชั่น 100% ไม่ถูกต้อง");
+      }
+      const user = (await tx.query("SELECT status FROM users WHERE id=$1 FOR UPDATE", [order.user_id])).rows[0];
+      if (user?.status !== "ACTIVE") throw new ConflictException("บัญชีไม่พร้อมใช้งาน");
+      let slot = order.slot_id ? (await tx.query("SELECT * FROM license_slots WHERE id=$1 FOR UPDATE", [order.slot_id])).rows[0] : null;
+      if (slot && (slot.owner_user_id !== order.user_id || slot.assigned_user_id !== order.user_id || slot.status === "DELETED")) {
+        throw new ConflictException("Slot เปลี่ยนแปลง กรุณาติดต่อผู้ดูแล");
+      }
+      const subscription = (await tx.query(
+        `INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note)
+         SELECT $1,p.id,now(),GREATEST(now(),COALESCE((SELECT expires_at FROM subscriptions WHERE id=$3 AND status='ACTIVE'),now()))
+           + make_interval(months=>$2::int),'PROMOTION',$4
+         FROM plans p WHERE p.code='CLOUD_' || $2::text || 'M' RETURNING *`,
+        [order.user_id, order.months, slot?.subscription_id || null, "Promotion order " + order.id]
+      )).rows[0];
+      if (!subscription) throw new ConflictException("ไม่พบแพ็กเกจ Cloud ที่เปิดใช้งาน");
+      if (slot) {
+        await tx.query("UPDATE license_slots SET subscription_id=$2,status='ACTIVE',updated_at=now() WHERE id=$1", [slot.id, subscription.id]);
+      } else {
+        slot = (await tx.query(
+          `INSERT INTO license_slots(owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label)
+           SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,'PERSONAL','ACTIVE','Cloud Trading'
+           FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' RETURNING *`,
+          [order.user_id, subscription.id]
+        )).rows[0];
+      }
+      await tx.query(
+        "UPDATE cloud_orders SET status='PAID',slot_id=$2,subscription_id=$3,paid_at=now(),expires_at=now() WHERE id=$1",
+        [order.id, slot.id, subscription.id]
+      );
+      await this.promotions.consume(tx, "CLOUD", order.id);
+      await tx.query(
+        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES('PROMOTION','CLOUD_ACTIVATED','order',$1,$2::jsonb)",
+        [order.id, JSON.stringify({ subscriptionId: subscription.id, slotId: slot.id, runnerId: order.runner_id, promotionCode: order.promotion_code })]
+      );
+      return { id: order.id, free: true };
+    });
+  }
 }
 
 @Controller("cloud")
 @UseGuards(JwtGuard)
 export class CloudCustomerController {
-  constructor(private readonly db: DbService, private readonly cloud: CloudService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly cloud: CloudService,
+    private readonly promotions: PromotionService
+  ) {}
   @Get("catalog") catalog() { return this.cloud.catalog(); }
   @Get("orders") async orders(@Req() req: any) {
-    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,
+    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,
       s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number
       FROM cloud_orders o LEFT JOIN subscriptions s ON s.id=o.subscription_id
       LEFT JOIN bot_instances b ON b.slot_id=o.slot_id LEFT JOIN mt5_accounts a ON a.id=b.mt5_account_id
@@ -179,7 +233,7 @@ export class CloudCustomerController {
     if (order.charge_id && order.status !== "PAID") await this.cloud.reconcile(order.charge_id);
     return { ok: true };
   }
-  @Post("checkout") async checkout(@Req() req: any, @Body() body: { months: number; slotId?: string }) {
+  @Post("checkout") async checkout(@Req() req: any, @Body() body: { months: number; slotId?: string; promoCode?: string }) {
     if (process.env.CLOUD_CHECKOUT_ENABLED !== "true" || paymentMode() === "UNCONFIGURED") throw new ConflictException("ยังไม่เปิดรับชำระเงิน");
     if (![1,3,6,12].includes(body.months)) throw new BadRequestException("Invalid package");
     if (body.slotId && !/^[0-9a-f-]{36}$/i.test(body.slotId)) throw new BadRequestException("Invalid slot");
@@ -206,12 +260,27 @@ export class CloudCustomerController {
         AND GREATEST(l.occupied,w.active_instances)<w.capacity
         ORDER BY GREATEST(l.occupied,w.active_instances)::float/w.capacity,w.runner_id LIMIT 1`)).rows[0];
       if (!node) throw new ConflictException("Cloud เต็มหรือ VPS ยังไม่ผ่าน Health Guard กรุณาลองภายหลัง");
-      return (await tx.query("INSERT INTO cloud_orders(user_id,months,amount,runner_id,slot_id) VALUES($1,$2,$3,$4,$5) RETURNING *",
-        [req.user.sub, pack.months, pack.price_satang, node.runner_id, slot?.id || null])).rows[0];
+      const promo = await this.promotions.reserve(tx, {
+        code: body.promoCode,
+        userId: String(req.user.sub),
+        mode: "CLOUD",
+        months: pack.months,
+        originalAmountSatang: Number(pack.price_satang)
+      });
+      const order = (await tx.query(
+        `INSERT INTO cloud_orders(
+           user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,runner_id,slot_id
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [req.user.sub, pack.months, promo.finalAmountSatang, pack.price_satang,
+         promo.discountAmountSatang, promo.code, promo.redemptionId, node.runner_id, slot?.id || null]
+      )).rows[0];
+      await this.promotions.attachOrder(tx, promo.redemptionId, order.id);
+      return order;
     });
+    if (Number(order.amount) === 0) return this.cloud.activateFreeOrder(order.id);
     try {
       const charge = await this.cloud.gateway("/charges", new URLSearchParams({ amount: String(order.amount), currency: "thb",
-        "source[type]": "promptpay", "metadata[order_id]": order.id, description: "SCENOVA Cloud " + order.months + " months",
+        "source[type]": "promptpay", "metadata[order_id]": order.id, "metadata[purchase_type]": "CLOUD", description: "SCENOVA Cloud " + order.months + " months",
         expires_at: new Date(Date.now()+15*60000).toISOString() }));
       validateCharge(charge, order);
       await this.db.query("UPDATE cloud_orders SET charge_id=$2,qr_url=$3,expires_at=$4,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=$1",
