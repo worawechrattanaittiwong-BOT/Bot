@@ -747,7 +747,7 @@ export default function AdminServiceLinksPage() {
                       <i/> {testResult.status}
                     </span>
                     <b>{testResult.provider}</b>
-                    <small>{testResult.detail}</small>
+                    <small>{testResult.detail}{testResult.detectedFrom ? " · จาก " + testResult.detectedFrom : ""}</small>
                     {testedSignature !== credentialSignature && (
                       <small className={s.changedHint}>ข้อมูลเปลี่ยนแล้ว · กรุณา Test ใหม่</small>
                     )}
