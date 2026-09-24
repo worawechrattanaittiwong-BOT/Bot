@@ -1,6 +1,8 @@
 import { StatusBar } from "expo-status-bar";
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
+import * as FileSystem from "expo-file-system/legacy";
+import * as IntentLauncher from "expo-intent-launcher";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,6 +24,9 @@ const API = String(process.env.EXPO_PUBLIC_API_URL || "").replace(/\/$/, "");
 const DEVICE_KEY = "scenova.owner.deviceId";
 const TOKEN_KEY = "scenova.owner.session";
 const ENROLLED_KEY = "scenova.owner.enrolled";
+const OWNER_UPDATE_MANIFEST = "https://snvea-bot.online/downloads/SCENOVA-Owner.json";
+const OWNER_UPDATE_APK = "https://snvea-bot.online/downloads/SCENOVA-Owner.apk";
+const CURRENT_BUILD = Math.max(1, Number(process.env.EXPO_PUBLIC_OWNER_BUILD || 1));
 
 type Summary = {
   paymentMode: string;
@@ -39,6 +44,14 @@ type Summary = {
     safeWithdrawableSatang: number;
   };
   recentOwnerTransfers: Array<any>;
+};
+
+type OwnerUpdateManifest = {
+  version: string;
+  versionCode: number;
+  url: string;
+  sha256?: string;
+  releasedAt?: string;
 };
 
 type Approval = {
@@ -97,6 +110,88 @@ function shortDate(value?: string) {
     hour: "2-digit",
     minute: "2-digit"
   });
+}
+
+async function fetchOwnerUpdate(): Promise<OwnerUpdateManifest | null> {
+  if (Platform.OS !== "android") return null;
+  const response = await fetch(OWNER_UPDATE_MANIFEST + "?t=" + Date.now(), {
+    cache: "no-store"
+  });
+  if (!response.ok) return null;
+  const data = await response.json().catch(() => null);
+  if (!data || !Number.isFinite(Number(data.versionCode))) return null;
+  return {
+    version: String(data.version || ""),
+    versionCode: Number(data.versionCode),
+    url: String(data.url || OWNER_UPDATE_APK),
+    sha256: data.sha256 ? String(data.sha256) : undefined,
+    releasedAt: data.releasedAt ? String(data.releasedAt) : undefined
+  };
+}
+
+async function installOwnerUpdate(manifest: OwnerUpdateManifest) {
+  if (Platform.OS !== "android") return;
+  const target = FileSystem.cacheDirectory + "SCENOVA-Owner-update.apk";
+  if (!FileSystem.cacheDirectory) throw new Error("ไม่พบพื้นที่ดาวน์โหลดของแอป");
+
+  await FileSystem.deleteAsync(target, { idempotent: true }).catch(() => {});
+  const result = await FileSystem.downloadAsync(
+    manifest.url || OWNER_UPDATE_APK,
+    target
+  );
+  if (result.status < 200 || result.status >= 300) {
+    throw new Error("ดาวน์โหลดอัปเดตไม่สำเร็จ");
+  }
+
+  const contentUri = await FileSystem.getContentUriAsync(result.uri);
+  try {
+    await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+      data: contentUri,
+      type: "application/vnd.android.package-archive",
+      flags: 1
+    });
+  } catch {
+    await IntentLauncher.startActivityAsync(
+      "android.settings.MANAGE_UNKNOWN_APP_SOURCES",
+      { data: "package:com.scenova.owner" }
+    );
+    throw new Error(
+      "กรุณาเปิดสิทธิ์ติดตั้งแอปจาก SCENOVA Owner แล้วกดอัปเดตอีกครั้ง"
+    );
+  }
+}
+
+function OwnerUpdateNotice({
+  manifest,
+  busy,
+  onInstall
+}: {
+  manifest: OwnerUpdateManifest;
+  busy: boolean;
+  onInstall: () => void;
+}) {
+  return (
+    <View style={styles.updateBanner}>
+      <View style={styles.updateTextWrap}>
+        <Text style={styles.updateTitle}>มี SCENOVA Owner เวอร์ชันใหม่</Text>
+        <Text style={styles.updateCaption}>
+          {manifest.version ? "v" + manifest.version + " · " : ""}
+          Build {manifest.versionCode} · ดาวน์โหลดอัตโนมัติและติดตั้งทับแอปเดิม
+        </Text>
+      </View>
+      <Pressable
+        onPress={onInstall}
+        disabled={busy}
+        style={({ pressed }) => [
+          styles.updateButton,
+          busy && styles.disabled,
+          pressed && !busy && styles.pressed
+        ]}
+      >
+        <Text style={styles.updateButtonText}>{busy ? "กำลังดาวน์โหลด…" : "อัปเดตตอนนี้"}</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 function PrimaryButton({
@@ -181,6 +276,8 @@ export default function App() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [selected, setSelected] = useState<Approval | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [updateManifest, setUpdateManifest] = useState<OwnerUpdateManifest | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -196,6 +293,40 @@ export default function App() {
       setBooting(false);
     })();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkForUpdate() {
+      try {
+        const manifest = await fetchOwnerUpdate();
+        if (!cancelled && manifest && manifest.versionCode > CURRENT_BUILD) {
+          setUpdateManifest(manifest);
+        }
+      } catch {
+        // Update checks must never block access to the finance app.
+      }
+    }
+
+    void checkForUpdate();
+    const timer = setInterval(checkForUpdate, 6 * 60 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  async function runOwnerUpdate() {
+    if (!updateManifest || updateBusy) return;
+    setUpdateBusy(true);
+    try {
+      await installOwnerUpdate(updateManifest);
+    } catch (error: any) {
+      Alert.alert("อัปเดตแอป", String(error?.message || "อัปเดตไม่สำเร็จ"));
+    } finally {
+      setUpdateBusy(false);
+    }
+  }
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", state => {
@@ -314,7 +445,15 @@ export default function App() {
   }
 
   return (
-    <Dashboard
+    <>
+      {updateManifest && (
+        <OwnerUpdateNotice
+          manifest={updateManifest}
+          busy={updateBusy}
+          onInstall={runOwnerUpdate}
+        />
+      )}
+      <Dashboard
       summary={summary}
       refreshing={refreshing}
       onRefresh={refreshDashboard}
@@ -331,6 +470,7 @@ export default function App() {
         setMode("pin");
       }}
     />
+    </>
   );
 }
 
@@ -951,5 +1091,11 @@ const styles = StyleSheet.create({
   twoButtons: { flexDirection: "row", gap: 10, marginTop: 5 },
   maxButton: { alignSelf: "flex-end", paddingVertical: 3, marginTop: -8, marginBottom: 12 },
   maxText: { color: "#b38cff", fontSize: 12, fontWeight: "800" },
-  errorText: { color: "#ef8495", fontSize: 12, marginTop: 10, textAlign: "center" }
+  errorText: { color: "#ef8495", fontSize: 12, marginTop: 10, textAlign: "center" },
+  updateBanner: { position: "absolute", zIndex: 50, left: 12, right: 12, top: 44, backgroundColor: "#211630", borderColor: "#6f4ba7", borderWidth: 1, borderRadius: 18, padding: 13, flexDirection: "row", alignItems: "center", gap: 12 },
+  updateTextWrap: { flex: 1 },
+  updateTitle: { color: "#f1eaff", fontSize: 13, fontWeight: "900" },
+  updateCaption: { color: "#ab9cbe", fontSize: 10, lineHeight: 15, marginTop: 3 },
+  updateButton: { minHeight: 36, paddingHorizontal: 12, borderRadius: 11, backgroundColor: "#6d3fe6", alignItems: "center", justifyContent: "center" },
+  updateButtonText: { color: "white", fontSize: 11, fontWeight: "900" }
 });
