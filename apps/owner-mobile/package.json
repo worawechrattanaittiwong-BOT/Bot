@@ -8,8 +8,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "typecheck": "tsc --noEmit",
-    "build:android:apk": "eas build --platform android --profile preview",
-    "build:android": "eas build --platform android --profile production"
+    "build:android:apk": "expo prebuild --platform android --clean --no-install && cd android && ./gradlew assembleRelease"
   },
   "dependencies": {
     "expo": "~54.0.0",
@@ -21,7 +20,6 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.10",
-    "eas-cli": "^16.17.0",
     "typescript": "~5.9.2"
   }
 }
