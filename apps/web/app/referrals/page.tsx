@@ -256,7 +256,7 @@ export default function ReferralsPage() {
           <article>
             <span>Available</span>
             <b>{money(data.earnings.availableSatang)}</b>
-            <small>Ready for payout</small>
+            <small>Available balance</small>
           </article>
           <article>
             <span>Paid</span>
