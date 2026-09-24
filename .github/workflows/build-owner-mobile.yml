@@ -3,6 +3,9 @@ name: Build SCENOVA Owner APK
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   android-apk:
     runs-on: ubuntu-latest
@@ -73,3 +76,33 @@ jobs:
           path: apps/owner-mobile/SCENOVA-Owner.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish APK to SCENOVA website
+        if: github.ref == 'refs/heads/main'
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p apps/web/public/downloads
+          cp apps/owner-mobile/SCENOVA-Owner.apk apps/web/public/downloads/SCENOVA-Owner.apk
+
+          git config user.name "scenova-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/web/public/downloads/SCENOVA-Owner.apk
+
+          if git diff --cached --quiet; then
+            echo "Published Owner APK is already current."
+            exit 0
+          fi
+
+          git commit -m "build: publish SCENOVA Owner APK [skip owner apk build]"
+
+          for attempt in 1 2 3 4 5 6; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Failed to publish SCENOVA Owner APK to main"
+          exit 1
