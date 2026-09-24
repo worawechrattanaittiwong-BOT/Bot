@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.67"
-#define SCENOVA_EA_VERSION "1.0.67"
-#define SCENOVA_PRODUCT_VERSION "1.0.67"
+#property version   "1.0.68"
+#define SCENOVA_EA_VERSION "1.0.68"
+#define SCENOVA_PRODUCT_VERSION "1.0.68"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -393,6 +393,18 @@ int      g_raceVNextStructureDirection = 0;
 int      g_raceVNextRejectionDirection = 0;
 string   g_raceVNextLegPhase = "UNKNOWN";
 double   g_raceVNextDecisionScore = 0.0;
+// RACE VNext Phase 2 exposure/loss telemetry. These never alter another mode.
+double   g_raceExposureTotalLot = 0.0;
+double   g_raceExposureProjectedLot = 0.0;
+double   g_raceExposureAverageEntry = 0.0;
+double   g_raceExposureMoneyPerPoint = 0.0;
+double   g_raceExposureEstimatedCostMoney = 0.0;
+double   g_raceExposureNoisePoints = 0.0;
+double   g_raceExposureNoiseMoney = 0.0;
+double   g_raceExposureProjectedStructureLossMoney = 0.0;
+double   g_raceExposureStructureInvalidPrice = 0.0;
+bool     g_raceExposureRiskMismatch = false;
+string   g_raceLossState = "NORMAL";
 bool   g_adaptiveEngine;
 double g_riskPerOrderPercent;
 bool   g_allowMinimumLotOverride;
@@ -2947,6 +2959,17 @@ void ResetRaceRuntime()
    g_raceVNextRejectionDirection = 0;
    g_raceVNextLegPhase = "UNKNOWN";
    g_raceVNextDecisionScore = 0.0;
+   g_raceExposureTotalLot = 0.0;
+   g_raceExposureProjectedLot = 0.0;
+   g_raceExposureAverageEntry = 0.0;
+   g_raceExposureMoneyPerPoint = 0.0;
+   g_raceExposureEstimatedCostMoney = 0.0;
+   g_raceExposureNoisePoints = 0.0;
+   g_raceExposureNoiseMoney = 0.0;
+   g_raceExposureProjectedStructureLossMoney = 0.0;
+   g_raceExposureStructureInvalidPrice = 0.0;
+   g_raceExposureRiskMismatch = false;
+   g_raceLossState = "NORMAL";
    RaceResetExitCandidate();
 }
 
@@ -3153,6 +3176,8 @@ bool RaceZonePriorityActive(
 #include "include\\RaceStructureV2.mqh"
 #include "include\\RaceLegPhaseV2.mqh"
 #include "include\\RaceDecisionV2.mqh"
+#include "include\\RaceExposureV1.mqh"
+#include "include\\RaceLossV2.mqh"
 
 int RaceAnalysisDirection(double momentum)
 {
@@ -3454,21 +3479,36 @@ double RaceAtrStopPoints()
 
 double RaceInitialStopPrice(int direction, double entryPrice)
 {
-   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-   double brokerMinimumPoints = MathMax(
-      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
-      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
-   ) + 2.0;
-
-   // RACE owns its ATR stop. A MANUAL stop value must never leak into RACE.
+   // RACE broker SL is an emergency boundary, not the normal noise detector.
+   // Keep the existing isolated M15 ATR x1.50 floor, then move it farther away
+   // only when the current RACE structure invalidation requires more room.
    double points = RaceAtrStopPoints();
-
    if(points <= 0.0)
       return 0.0;
 
    double stop = direction > 0
       ? entryPrice - points * _Point
       : entryPrice + points * _Point;
+
+   double invalidPrice=RaceV2StructureInvalidPrice(direction);
+   double atrM5Price=MathMax(
+      _Point*8.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+   double structureBuffer=atrM5Price*0.18;
+
+   if(invalidPrice>0.0)
+   {
+      double structureStop=direction>0
+         ? invalidPrice-structureBuffer
+         : invalidPrice+structureBuffer;
+
+      if(direction>0 && structureStop<stop && structureStop<entryPrice)
+         stop=structureStop;
+      else if(direction<0 && structureStop>stop && structureStop>entryPrice)
+         stop=structureStop;
+   }
+
    return NormalizeStopPriceToTick(stop,direction);
 }
 
@@ -3755,6 +3795,14 @@ bool ProcessRaceFill(int direction)
       return false;
    }
 
+   // Phase 2: recalculate total/projected exposure before every fill. This is
+   // advisory/risk telemetry only; it never changes the user's configured Lot.
+   RaceV1UpdateExposureTelemetry(direction,g_adaptiveLot);
+   double projectedLossLimit=EffectiveBasketLossLimit();
+   g_raceExposureRiskMismatch =
+      projectedLossLimit > 0.0 &&
+      g_raceExposureNoiseMoney > projectedLossLimit * 0.80;
+
    g_entryModel = "RACE_VOLUME_60S";
    g_entryTrigger = direction > 0 ? "RACE_VOLUME_BUY" : "RACE_VOLUME_SELL";
    g_entryQuality = "RACE";
@@ -3872,31 +3920,61 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   // RACE_USER_LOSS_ONLY_V5:
-   // Reversal intelligence may PAUSE additional fills while a Basket is red,
-   // but it must never liquidate a losing RACE Basket by itself. A loss close
-   // is allowed only by an explicitly enabled Basket/Daily loss control, the
-   // Broker SL attached to the Position, or an explicit user Close All.
+   // RACE_USER_LOSS_ONLY_V5 + VNext Phase 2:
+   // Distinguish spread/commission/noise from real adverse travel. Intelligence
+   // may stop additional fills, but a losing Basket is still liquidated only by
+   // the user's Max Basket/Daily loss, the Broker SL, or explicit Close All.
+   RaceV1UpdateExposureTelemetry(direction,0.0);
+   g_raceExposureRiskMismatch =
+      lossLimit > 0.0 &&
+      g_raceExposureNoiseMoney > lossLimit * 0.80;
+
    string wrongDirectionReason = "NONE";
    if(cycleProfit < 0.0 && floatingProfit < 0.0)
    {
-      if(RaceWrongDirectionConfirmed(direction,momentum,filling,wrongDirectionReason))
+      g_raceLossState=RaceV2LossState(
+         direction,
+         momentum,
+         filling,
+         cycleProfit,
+         floatingProfit,
+         wrongDirectionReason
+      );
+
+      if(g_raceLossState=="STRUCTURE_INVALID")
       {
-         g_raceRecoveryWatch = true;
-         g_raceState = "REVERSAL_HOLD";
-         g_executionStatus = "RACE_REVERSAL_HOLD";
+         g_raceRecoveryWatch=true;
+         g_raceState="STRUCTURE_INVALID";
+         g_executionStatus="RACE_STRUCTURE_INVALID_HOLD";
          return true;
       }
-      if(g_raceExitCandidateSince > 0)
+      if(g_raceLossState=="REVERSAL_HOLD")
       {
-         g_raceRecoveryWatch = true;
-         g_raceState = "EXIT_CANDIDATE";
-         g_executionStatus = "RACE_EXIT_CANDIDATE";
+         g_raceRecoveryWatch=true;
+         g_raceState="REVERSAL_HOLD";
+         g_executionStatus="RACE_REVERSAL_HOLD";
+         return true;
+      }
+      if(g_raceLossState=="EXIT_CANDIDATE")
+      {
+         g_raceRecoveryWatch=true;
+         g_raceState="EXIT_CANDIDATE";
+         g_executionStatus="RACE_EXIT_CANDIDATE";
+         return true;
+      }
+      if(g_raceLossState=="ADVERSE_WATCH")
+      {
+         // Stop adding exposure while evidence is turning against the Basket.
+         // Do not close the existing losing Basket from this soft state.
+         g_raceRecoveryWatch=true;
+         g_raceState="ADVERSE_WATCH";
+         g_executionStatus="RACE_ADVERSE_WATCH";
          return true;
       }
    }
    else
    {
+      g_raceLossState="NORMAL";
       RaceResetExitCandidate();
    }
 
