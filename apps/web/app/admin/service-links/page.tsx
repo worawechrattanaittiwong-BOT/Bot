@@ -111,6 +111,7 @@ const CREDENTIAL_PRESETS = [
   { key: "THAIBULKSMS_API_SECRET", category: "SMS", label: "ThaiBulkSMS API Secret" },
   { key: "THAIBULKSMS_SENDER", category: "SMS", label: "ThaiBulkSMS Sender" },
   { key: "OMISE_SECRET_KEY", category: "PAYMENT", label: "Opn / Omise Secret Key" },
+  { key: "OMISE_WEBHOOK_SECRET", category: "PAYMENT", label: "Opn / Omise Webhook Secret" },
   { key: "OPENAI_API_KEY", category: "AI", label: "OpenAI API Key" },
   { key: "ANTHROPIC_API_KEY", category: "AI", label: "Anthropic API Key" },
   { key: "GEMINI_API_KEY", category: "AI", label: "Gemini API Key" },
