@@ -92,6 +92,11 @@ jobs:
           done
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/021_cent_account_currency_isolation.sql
 
+      - name: Commission withdrawal DB integration
+        env:
+          DATABASE_URL: postgresql://bot:bot@localhost:5432/bot
+        run: node ./tests/commission-withdrawal-db-integration.mjs
+
       - name: Build API
         run: npm run build -w @bot/api
 
