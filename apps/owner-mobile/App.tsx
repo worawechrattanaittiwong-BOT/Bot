@@ -20,7 +20,7 @@ import {
 
 const API = String(process.env.EXPO_PUBLIC_API_URL || "").replace(/\/$/, "");
 const DEVICE_KEY = "scenova.owner.deviceId";
-const TOKEN_KEY = "scenova.owner.session";
+const TOKEN_KEY = "scenova.owner.session";\nconst ENROLLED_KEY = "scenova.owner.enrolled";
 
 type Summary = {
   paymentMode: string;
@@ -188,9 +188,10 @@ export default function App() {
         id = Crypto.randomUUID();
         await SecureStore.setItemAsync(DEVICE_KEY, id);
       }
+      const enrolled = await SecureStore.getItemAsync(ENROLLED_KEY);
       setDeviceId(id);
       await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
-      setMode("pin");
+      setMode(enrolled === "1" ? "pin" : "setup");
       setBooting(false);
     })();
   }, []);
@@ -256,7 +257,15 @@ export default function App() {
   }
 
   if (mode === "setup") {
-    return <FirstSetup deviceId={deviceId} onSuccess={authenticated} />;
+    return (
+      <FirstSetup
+        deviceId={deviceId}
+        onSuccess={async nextToken => {
+          await SecureStore.setItemAsync(ENROLLED_KEY, "1");
+          await authenticated(nextToken);
+        }}
+      />
+    );
   }
 
   if (mode === "approvals") {
