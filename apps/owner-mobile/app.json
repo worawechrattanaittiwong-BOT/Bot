@@ -9,8 +9,10 @@
     "android": {
       "package": "com.scenova.owner",
       "adaptiveIcon": {
-        "backgroundColor": "#0b0713"
-      }
+        "backgroundColor": "#0b0713",
+        "foregroundImage": "./assets/scenova-owner-icon.png"
+      },
+      "allowBackup": false
     },
     "ios": {
       "bundleIdentifier": "com.scenova.owner",
@@ -24,6 +26,7 @@
           "faceIDPermission": "อนุญาตให้ SCENOVA Owner ใช้ Face ID เพื่อปกป้องข้อมูลในเครื่อง"
         }
       ]
-    ]
+    ],
+    "icon": "./assets/scenova-owner-icon.png"
   }
 }
