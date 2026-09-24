@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS commission_withdrawal_settings (
   id smallint PRIMARY KEY DEFAULT 1 CHECK (id=1),
-  requests_enabled boolean NOT NULL DEFAULT true,
+  requests_enabled boolean NOT NULL DEFAULT false,
   min_amount_satang integer NOT NULL DEFAULT 10000 CHECK (min_amount_satang>=100),
   max_amount_satang integer NOT NULL DEFAULT 5000000 CHECK (max_amount_satang>=min_amount_satang),
   destination_cooldown_hours integer NOT NULL DEFAULT 24 CHECK (destination_cooldown_hours BETWEEN 0 AND 720),
