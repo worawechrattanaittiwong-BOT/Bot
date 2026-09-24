@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -133,6 +134,17 @@ export default function App() {
   useEffect(() => {
     void bootstrap();
   }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", nextState => {
+      if (nextState !== "active" && mobileToken) {
+        setMobileToken("");
+        setPin("");
+        setScreen("pin");
+      }
+    });
+    return () => subscription.remove();
+  }, [mobileToken]);
 
   async function bootstrap() {
     const storedApi = cleanApiUrl((await SecureStore.getItemAsync(STORE_API)) || process.env.EXPO_PUBLIC_API_URL || "");
