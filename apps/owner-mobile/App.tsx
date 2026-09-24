@@ -198,6 +198,7 @@ export default function App() {
   useEffect(() => {
     const sub = AppState.addEventListener("change", state => {
       if (state !== "active" && token) {
+        request("/owner-mobile/logout", { method: "POST" }, token).catch(() => {});
         setToken("");
         setSummary(null);
         setMode("pin");
