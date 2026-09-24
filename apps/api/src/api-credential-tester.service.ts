@@ -62,32 +62,6 @@ export class ApiCredentialTesterService {
       return { provider: url.includes("newsapi.org") ? "NewsAPI" : "News Provider", from: url.includes("newsapi.org") ? "URL" : "config key" };
     }
 
-    if (configKey === "THAIBULKSMS_SENDER") {
-      const key = String(process.env.THAIBULKSMS_API_KEY || "").trim();
-      const secret = String(process.env.THAIBULKSMS_API_SECRET || "").trim();
-      if (!key || !secret) {
-        return this.result(false, "FAIL", "ThaiBulkSMS", "preset/config key",
-          "ต้องมี ThaiBulkSMS API Key และ API Secret ก่อนจึงจะตรวจ Sender ได้");
-      }
-      const { response } = await this.request("https://api-v2.thaibulksms.com/credit", {
-        method: "GET",
-        headers: {
-          Authorization: "Basic " + Buffer.from(key + ":" + secret).toString("base64"),
-          Accept: "application/json"
-        }
-      });
-      return this.result(
-        response.ok,
-        response.ok ? "LIMITED" : "FAIL",
-        "ThaiBulkSMS",
-        "preset/config key",
-        response.ok
-          ? "ThaiBulkSMS credentials ใช้งานได้ แต่ Sender จะยืนยันเต็มรูปแบบเมื่อมีการส่ง SMS จริง"
-          : `ThaiBulkSMS ปฏิเสธ credentials (HTTP ${response.status})`,
-        response.status
-      );
-    }
-
     if (testUrl) {
       try {
         const host = new URL(testUrl).hostname.replace(/^api\./i, "").replace(/^www\./i, "");
@@ -319,6 +293,32 @@ export class ApiCredentialTesterService {
       });
       return this.result(response.ok, response.ok ? "PASS" : "FAIL", "ThaiBulkSMS", "preset/config key",
         response.ok ? "ThaiBulkSMS Credit API ตอบสำเร็จ" : `ThaiBulkSMS ปฏิเสธ credentials (HTTP ${response.status})`, response.status);
+    }
+
+    if (configKey === "THAIBULKSMS_SENDER") {
+      const key = String(process.env.THAIBULKSMS_API_KEY || "").trim();
+      const secret = String(process.env.THAIBULKSMS_API_SECRET || "").trim();
+      if (!key || !secret) {
+        return this.result(false, "FAIL", "ThaiBulkSMS", "preset/config key",
+          "ต้องมี ThaiBulkSMS API Key และ API Secret ก่อนจึงจะตรวจ Sender ได้");
+      }
+      const { response } = await this.request("https://api-v2.thaibulksms.com/credit", {
+        method: "GET",
+        headers: {
+          Authorization: "Basic " + Buffer.from(key + ":" + secret).toString("base64"),
+          Accept: "application/json"
+        }
+      });
+      return this.result(
+        response.ok,
+        response.ok ? "LIMITED" : "FAIL",
+        "ThaiBulkSMS",
+        "preset/config key",
+        response.ok
+          ? "ThaiBulkSMS credentials ใช้งานได้ แต่ Sender จะยืนยันเต็มรูปแบบเมื่อมีการส่ง SMS จริง"
+          : `ThaiBulkSMS ปฏิเสธ credentials (HTTP ${response.status})`,
+        response.status
+      );
     }
 
     if (testUrl) {
