@@ -253,7 +253,8 @@ export class CommissionWithdrawalService {
            COALESCE(SUM(available_delta_satang),0)::bigint AS available_delta_satang,
            COALESCE(SUM(locked_delta_satang),0)::bigint AS locked_satang,
            COALESCE(SUM(paid_delta_satang),0)::bigint AS paid_satang,
-           COALESCE(SUM(available_delta_satang+locked_delta_satang+paid_delta_satang),0)::bigint AS conserved
+           COALESCE(SUM(available_delta_satang+locked_delta_satang+paid_delta_satang),0)::bigint AS conserved,
+           COUNT(*)::int AS entry_count
          FROM commission_withdrawal_ledger
          WHERE user_id=$1`,
         [userId]
@@ -292,6 +293,7 @@ export class CommissionWithdrawalService {
       availableDeltaSatang: Number(totals?.available_delta_satang || 0),
       lockedSatang: Number(totals?.locked_satang || 0),
       paidSatang: Number(totals?.paid_satang || 0),
+      entryCount: Number(totals?.entry_count || 0),
       conserved: Number(totals?.conserved || 0) === 0,
       recent: recent.rows
     };
