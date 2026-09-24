@@ -144,6 +144,33 @@ validate_generated_installer_shape() {
   return 0
 }
 
+
+validate_generated_owner_mobile_shape() {
+  local sha="$1"
+  local subject author_email changed
+
+  subject="$(git log -1 --format=%s "$sha" 2>/dev/null || true)"
+  author_email="$(git log -1 --format=%ae "$sha" 2>/dev/null || true)"
+
+  [ "$subject" = "build: publish SCENOVA Owner APK [skip owner apk build]" ] || return 1
+  [ "$author_email" = "actions@users.noreply.github.com" ] || return 1
+
+  changed="$(git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null || true)"
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    case "$file" in
+      apps/web/public/downloads/SCENOVA-Owner.apk)
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done <<< "$changed"
+
+  git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-Owner.apk" 2>/dev/null || return 1
+  return 0
+}
+
 # Generated release commits can legitimately arrive back-to-back (for example
 # Windows installer publish followed by EA publish). Walk across only commits
 # whose author, subject, changed paths and artifact shape are trusted, then use
@@ -157,7 +184,8 @@ resolve_ci_anchor() {
 
   while [ "$hops" -lt 8 ]; do
     if validate_generated_ea_shape "$parent" >/dev/null 2>&1 || \
-       validate_generated_installer_shape "$parent" >/dev/null 2>&1; then
+       validate_generated_installer_shape "$parent" >/dev/null 2>&1 || \
+       validate_generated_owner_mobile_shape "$parent" >/dev/null 2>&1; then
       parent="$(git rev-parse "$parent^" 2>/dev/null || true)"
       [ -n "$parent" ] || return 1
       hops=$((hops + 1))
@@ -243,6 +271,35 @@ verify_generated_installer_release() {
   return 0
 }
 
+
+verify_generated_owner_mobile_release() {
+  local sha="$1"
+  local parent parent_ci parent_smoke
+
+  if ! validate_generated_owner_mobile_shape "$sha"; then
+    echo "[SCENOVA] generated Owner APK release rejected: untrusted commit shape"
+    return 1
+  fi
+
+  parent="$(resolve_ci_anchor "$sha" 2>/dev/null || true)"
+  [ -n "$parent" ] || return 1
+
+  parent_ci="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow CI --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
+  [ "$parent_ci" = "completed:success" ] || {
+    echo "[SCENOVA] generated Owner APK waiting for source CI ($parent_ci)"
+    return 1
+  }
+
+  parent_smoke="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow "Integration Smoke" --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
+  [ "$parent_smoke" = "completed:success" ] || {
+    echo "[SCENOVA] generated Owner APK waiting for source Integration Smoke ($parent_smoke)"
+    return 1
+  }
+
+  echo "[SCENOVA] trusted generated Owner APK release verified"
+  return 0
+}
+
 if command -v gh >/dev/null 2>&1; then
   CI_STATE="$(
     gh run list \
@@ -274,6 +331,8 @@ if command -v gh >/dev/null 2>&1; then
         echo "[SCENOVA] generated EX5 release accepted without a direct CI run"
       elif verify_generated_installer_release "$REMOTE_SHA"; then
         echo "[SCENOVA] generated Windows installer release accepted without a direct CI run"
+      elif verify_generated_owner_mobile_release "$REMOTE_SHA"; then
+        echo "[SCENOVA] generated Owner APK release accepted without a direct CI run"
       else
         echo "[SCENOVA] CI not ready yet ($CI_STATE); waiting for next check"
         exit 0
