@@ -21,16 +21,18 @@
 
 ## Build APK
 
+GitHub Actions workflow `Build SCENOVA Owner APK` สร้าง APK แบบ standalone โดยไม่ต้องใช้ Expo Token
+และฝัง API production เป็น `https://snvea-bot.online/backend/api`
+
+สำหรับ build ในเครื่องที่มี Android SDK:
+
 ```bash
 cd apps/owner-mobile
 npm install
-cp .env.example .env
-# แก้ EXPO_PUBLIC_API_URL ให้เป็น API production
-npx eas login
-npm run build:android:apk
+EXPO_PUBLIC_API_URL=https://snvea-bot.online/backend/api npm run build:android:apk
 ```
 
-EAS จะสร้าง APK แบบ Internal Distribution แยกจากเว็บ SCENOVA
+APK จะอยู่ที่ `android/app/build/outputs/apk/release/app-release.apk`
 
 ## Device safety
 
