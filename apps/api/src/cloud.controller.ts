@@ -1,5 +1,5 @@
-import { BadRequestException, Body, ConflictException, Controller, Get, Injectable, OnApplicationBootstrap, OnModuleDestroy, Param, Post, Req, UseGuards } from "@nestjs/common";
-import { randomBytes } from "crypto";
+import { BadRequestException, Body, ConflictException, Controller, Get, Injectable, OnApplicationBootstrap, OnModuleDestroy, Param, Post, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
+import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { DbService } from "./db.service";
 import { AdminGuard, CryptoService, JwtGuard } from "./security";
 import { ReferralService } from "./referral.service";
@@ -230,7 +230,62 @@ export class CloudPaymentController {
     private readonly cloud: CloudService,
     private readonly localPackages: LocalPackageService
   ) {}
-  @Post("webhook") async webhook(@Body() body: any) {
+
+  private verifyWebhookSignature(req: any) {
+    const encodedSecret = String(process.env.OMISE_WEBHOOK_SECRET || "").trim();
+    if (!encodedSecret) return;
+
+    const signatureHeader = String(req?.headers?.["omise-signature"] || "").trim();
+    const timestampHeader = String(req?.headers?.["omise-signature-timestamp"] || "").trim();
+    if (!signatureHeader || !/^\d{10,13}$/.test(timestampHeader)) {
+      throw new UnauthorizedException("Invalid Omise webhook signature");
+    }
+
+    const timestampSeconds = Number(timestampHeader);
+    if (
+      !Number.isFinite(timestampSeconds) ||
+      Math.abs(Math.floor(Date.now() / 1000) - timestampSeconds) > 300
+    ) {
+      throw new UnauthorizedException("Expired Omise webhook signature");
+    }
+
+    let secret: Buffer;
+    try {
+      secret = Buffer.from(encodedSecret, "base64");
+    } catch {
+      throw new UnauthorizedException("Invalid Omise webhook secret");
+    }
+    if (secret.length < 16) {
+      throw new UnauthorizedException("Invalid Omise webhook secret");
+    }
+
+    const rawBody = Buffer.isBuffer(req?.rawBody)
+      ? req.rawBody.toString("utf8")
+      : "";
+    if (!rawBody) {
+      throw new UnauthorizedException("Missing raw Omise webhook body");
+    }
+
+    const expected = createHmac("sha256", secret)
+      .update(timestampHeader + "." + rawBody)
+      .digest();
+
+    const valid = signatureHeader
+      .split(",")
+      .map((value: string) => value.trim())
+      .filter((value: string) => /^[0-9a-f]{64}$/i.test(value))
+      .some((value: string) => {
+        const supplied = Buffer.from(value, "hex");
+        return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+      });
+
+    if (!valid) {
+      throw new UnauthorizedException("Invalid Omise webhook signature");
+    }
+  }
+
+  @Post("webhook") async webhook(@Req() req: any, @Body() body: any) {
+    this.verifyWebhookSignature(req);
     if (body?.key === "charge.complete" || body?.key === "charge.create" || body?.key === "charge.expire") {
       const chargeId = String(body.data?.id || "");
       await Promise.allSettled([
