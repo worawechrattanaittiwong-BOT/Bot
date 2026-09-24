@@ -24,8 +24,8 @@ const TOKEN_KEY = "scenova.owner.session";
 
 type Summary = {
   paymentMode: string;
-  omise: { totalSatang: number; transferableSatang: number };
-  commission: { pendingSatang: number; availableSatang: number; paidSatang: number };
+  omise: { configured: boolean; reachable: boolean; totalSatang: number; transferableSatang: number; minTransferSatang: number; maxTransferSatang: number };
+  commission: { pendingSatang: number; availableSatang: number; lockedSatang: number; paidSatang: number };
   approvals: {
     requestedCount: number;
     holdCount: number;
@@ -504,6 +504,12 @@ function Dashboard({
         {summary?.paymentMode === "TEST" && (
           <View style={styles.testBadge}><Text style={styles.testText}>OMISE TEST MODE · ยังไม่ใช่เงินจริง</Text></View>
         )}
+        {summary && !summary.omise.configured && (
+          <View style={styles.warningBadge}><Text style={styles.warningText}>ยังไม่ได้ตั้งค่า OMISE_SECRET_KEY · ดูรายการได้ แต่ถอนเงินจริงไม่ได้</Text></View>
+        )}
+        {summary?.omise.configured && !summary.omise.reachable && (
+          <View style={styles.warningBadge}><Text style={styles.warningText}>ติดต่อ Omise ไม่สำเร็จ · ระบบปิดการถอนชั่วคราวเพื่อความปลอดภัย</Text></View>
+        )}
 
         <Text style={styles.sectionTitle}>Omise / Opn</Text>
         <StatCard
@@ -527,6 +533,11 @@ function Dashboard({
             <StatCard title="ถอนได้แล้ว" value={money(summary?.commission.availableSatang)} caption="Available commission" />
           </View>
         </View>
+        <StatCard
+          title="ล็อกไว้รอจ่าย"
+          value={money(summary?.commission.lockedSatang)}
+          caption="คำขอถอนของลูกค้าที่กันยอดไว้แล้ว"
+        />
 
         <Pressable onPress={onApprovals} style={styles.queueCard}>
           <View>
@@ -553,7 +564,7 @@ function Dashboard({
             <PrimaryButton
               label="ถอนเงินเข้าบัญชีเรา"
               onPress={onWithdraw}
-              disabled={!summary || summary.owner.safeWithdrawableSatang < 100}
+              disabled={!summary || !summary.omise.reachable || summary.owner.safeWithdrawableSatang < summary.omise.minTransferSatang}
             />
           </View>
         </View>
@@ -723,14 +734,14 @@ function OwnerWithdraw({
   onBack: () => void;
   onDone: () => Promise<void>;
 }) {
-  const max = Number(summary?.owner.safeWithdrawableSatang || 0);
+  const max = Number(summary?.owner.safeWithdrawableSatang || 0);\n  const min = Number(summary?.omise.minTransferSatang || 3000);
   const [amount, setAmount] = useState("");
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const satang = useMemo(() => Math.round(Number(amount || 0) * 100), [amount]);
 
   async function withdraw() {
-    if (satang <= 0 || satang > max || pin.length !== 6 || busy) return;
+    if (satang < min || satang > max || pin.length !== 6 || busy) return;
     Alert.alert(
       "ยืนยันการถอนเงิน",
       `ถอน ${money(satang)} เข้าบัญชีหลักที่ผูกกับ Omise?`,
@@ -799,10 +810,11 @@ function OwnerWithdraw({
           <PrimaryButton
             label={busy ? "กำลังส่งคำสั่ง…" : `ถอน ${satang > 0 ? money(satang) : ""}`}
             onPress={withdraw}
-            disabled={busy || satang < 100 || satang > max || pin.length !== 6}
+            disabled={busy || satang < min || satang > max || pin.length !== 6 || !summary?.omise.reachable}
             danger
           />
           {satang > max && <Text style={styles.errorText}>ยอดนี้สูงกว่า Safe Withdrawable Balance</Text>}
+          {satang > 0 && satang < min && <Text style={styles.errorText}>ยอดถอนขั้นต่ำ {money(min)}</Text>}
         </View>
 
         <Text style={styles.footerNote}>
@@ -858,7 +870,7 @@ const styles = StyleSheet.create({
   lockButton: { backgroundColor: "#17121f", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 9 },
   lockText: { color: "#c5b8d3", fontWeight: "700" },
   testBadge: { backgroundColor: "#2f2510", borderRadius: 12, padding: 11, marginBottom: 18 },
-  testText: { color: "#f2cf69", fontSize: 11, fontWeight: "800", textAlign: "center" },
+  testText: { color: "#f2cf69", fontSize: 11, fontWeight: "800", textAlign: "center" },\n  warningBadge: { backgroundColor: "#35171d", borderRadius: 12, padding: 11, marginBottom: 18 },\n  warningText: { color: "#f0a0ad", fontSize: 11, fontWeight: "800", textAlign: "center", lineHeight: 16 },
   sectionTitle: { color: "#8b8197", fontSize: 12, fontWeight: "800", letterSpacing: 1.2, marginTop: 18, marginBottom: 9 },
   statCard: {
     backgroundColor: "#120e19", borderRadius: 20, padding: 17, marginBottom: 10,
