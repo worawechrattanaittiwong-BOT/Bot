@@ -697,7 +697,6 @@ export default function AdminServiceLinksPage() {
                     <option value="BEARER">Authorization: Bearer</option>
                     <option value="X_API_KEY">X-Api-Key</option>
                     <option value="CUSTOM_HEADER">Custom Header</option>
-                    <option value="NONE">ไม่ส่ง Header</option>
                   </select>
                 </div>
                 {credentialForm.authMode === "CUSTOM_HEADER" && (
