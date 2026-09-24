@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.66"
-#define SCENOVA_EA_VERSION "1.0.66"
-#define SCENOVA_PRODUCT_VERSION "1.0.66"
+#property version   "1.0.67"
+#define SCENOVA_EA_VERSION "1.0.67"
+#define SCENOVA_PRODUCT_VERSION "1.0.67"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -386,6 +386,13 @@ int      g_raceVolumeBucketSamples[RACE_VOLUME_HISTORY_SECONDS];
 datetime g_raceVolumeWarmupStartedAt = 0;
 datetime g_raceVolumeLastSampleAt = 0;
 double   g_raceVolumeLastMid = 0.0;
+// RACE VNext Phase 1 telemetry. These fields are isolated to RACE and never
+// participate in AUTO/MANUAL/FLIP/ZERO execution.
+double   g_raceVNextFlowScore = 0.0;
+int      g_raceVNextStructureDirection = 0;
+int      g_raceVNextRejectionDirection = 0;
+string   g_raceVNextLegPhase = "UNKNOWN";
+double   g_raceVNextDecisionScore = 0.0;
 bool   g_adaptiveEngine;
 double g_riskPerOrderPercent;
 bool   g_allowMinimumLotOverride;
@@ -2935,6 +2942,11 @@ void ResetRaceRuntime()
    g_raceCycleStartedAt = 0;
    g_raceLastFillAt = 0;
    g_raceLastExitBurstMs = 0;
+   g_raceVNextFlowScore = 0.0;
+   g_raceVNextStructureDirection = 0;
+   g_raceVNextRejectionDirection = 0;
+   g_raceVNextLegPhase = "UNKNOWN";
+   g_raceVNextDecisionScore = 0.0;
    RaceResetExitCandidate();
 }
 
@@ -3137,11 +3149,16 @@ bool RaceZonePriorityActive(
    return inside || (score>=70.0 && near);
 }
 
+#include "include\\RaceFlowV2.mqh"
+#include "include\\RaceStructureV2.mqh"
+#include "include\\RaceLegPhaseV2.mqh"
+#include "include\\RaceDecisionV2.mqh"
+
 int RaceAnalysisDirection(double momentum)
 {
    // Explicit customer direction remains authoritative. AUTO RACE keeps the
-   // rolling 60-second pressure as its primary signal, then protects an intact
-   // opposing Demand/Supply zone without adding another waiting timer.
+   // rolling 60-second pressure as its primary signal, then combines only
+   // RACE-local candle flow, structure, leg phase and rejection context.
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
    if(g_entryMode == ENTRY_SELL_ONLY) return -1;
 
@@ -3162,15 +3179,43 @@ int RaceAnalysisDirection(double momentum)
    bool zoneBroken=false;
    if(volumeDirection<0 &&
       RaceZonePriorityActive(1,price,atrPrice,zoneBroken))
+   {
+      g_raceVNextDecisionScore=100.0;
+      g_raceVNextLegPhase="ZONE_PRIORITY";
       return 1;
+   }
 
    if(volumeDirection>0 &&
       RaceZonePriorityActive(-1,price,atrPrice,zoneBroken))
+   {
+      g_raceVNextDecisionScore=-100.0;
+      g_raceVNextLegPhase="ZONE_PRIORITY";
       return -1;
+   }
 
-   // Broken opposing zone, or no qualifying zone nearby: follow the original
-   // rolling 60-second side immediately.
-   return volumeDirection;
+   g_raceVNextFlowScore=RaceV2FlowScore();
+   int flowDirection=RaceV2SignedDirection(g_raceVNextFlowScore);
+   g_raceVNextStructureDirection=RaceV2StructureDirection();
+   g_raceVNextRejectionDirection=RaceV2RejectionDirection();
+   g_raceVNextLegPhase=RaceV2LegPhase(
+      volumeDirection,
+      flowDirection,
+      g_raceVNextStructureDirection,
+      g_raceVNextRejectionDirection
+   );
+
+   int decision=RaceV2DecisionDirection(
+      volumeDirection,
+      flowDirection,
+      g_raceVNextStructureDirection,
+      g_raceVNextRejectionDirection,
+      g_raceVNextLegPhase,
+      g_raceVNextDecisionScore
+   );
+
+   // No confidence gate is added to RACE. A tie falls back to the original
+   // 60-second side so Phase 1 changes direction quality, not trading cadence.
+   return decision==0 ? volumeDirection : decision;
 }
 
 double RaceMidProgressPoints(int direction)
