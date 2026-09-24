@@ -46,6 +46,13 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
+      ALTER TABLE admin_api_credentials ADD COLUMN IF NOT EXISTS provider varchar(140) NOT NULL DEFAULT '';
+      ALTER TABLE admin_api_credentials ADD COLUMN IF NOT EXISTS test_url text NOT NULL DEFAULT '';
+      ALTER TABLE admin_api_credentials ADD COLUMN IF NOT EXISTS auth_mode varchar(32) NOT NULL DEFAULT 'BEARER';
+      ALTER TABLE admin_api_credentials ADD COLUMN IF NOT EXISTS header_name varchar(80) NOT NULL DEFAULT '';
+      ALTER TABLE admin_api_credentials ADD COLUMN IF NOT EXISTS last_test_status varchar(16) NOT NULL DEFAULT '';
+      ALTER TABLE admin_api_credentials ADD COLUMN IF NOT EXISTS last_test_detail text NOT NULL DEFAULT '';
+      ALTER TABLE admin_api_credentials ADD COLUMN IF NOT EXISTS last_tested_at timestamptz;
       CREATE INDEX IF NOT EXISTS idx_admin_api_credentials_category
         ON admin_api_credentials(category,updated_at DESC);
     `);
@@ -107,7 +114,9 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
   async list() {
     await this.ensureTable();
     const result = await this.db.query(
-      `SELECT id,config_key,category,label,last_four,note,active,updated_by,created_at,updated_at
+      `SELECT id,config_key,category,label,last_four,note,active,updated_by,
+              provider,test_url,auth_mode,header_name,last_test_status,last_test_detail,last_tested_at,
+              created_at,updated_at
        FROM admin_api_credentials
        ORDER BY category,label,config_key`
     );
@@ -127,6 +136,12 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
     note?: string;
     active?: boolean;
     updatedBy?: string;
+    provider?: string;
+    testUrl?: string;
+    authMode?: string;
+    headerName?: string;
+    lastTestStatus?: string;
+    lastTestDetail?: string;
   }) {
     await this.ensureTable();
     const configKey = this.normalizeKey(input.configKey);
@@ -134,6 +149,12 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
     const label = String(input.label || "").trim();
     const note = String(input.note || "").trim();
     const active = input.active !== false;
+    const provider = String(input.provider || "").trim().slice(0, 140);
+    const testUrl = String(input.testUrl || "").trim().slice(0, 1200);
+    const authMode = String(input.authMode || "BEARER").trim().toUpperCase().slice(0, 32);
+    const headerName = String(input.headerName || "").trim().slice(0, 80);
+    const lastTestStatus = String(input.lastTestStatus || "").trim().toUpperCase().slice(0, 16);
+    const lastTestDetail = String(input.lastTestDetail || "").trim().slice(0, 1000);
     if (!label || label.length > 140) throw new Error("invalid label");
     if (note.length > 1000) throw new Error("note too long");
 
@@ -167,13 +188,18 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
       ? await this.db.one(
           `UPDATE admin_api_credentials
            SET config_key=$2,category=$3,label=$4,ciphertext=$5,iv=$6,auth_tag=$7,
-               last_four=$8,note=$9,active=$10,updated_by=$11,updated_at=now()
+               last_four=$8,note=$9,active=$10,updated_by=$11,
+               provider=$12,test_url=$13,auth_mode=$14,header_name=$15,
+               last_test_status=$16,last_test_detail=$17,
+               last_tested_at=CASE WHEN $16<>'' THEN now() ELSE last_tested_at END,
+               updated_at=now()
            WHERE id=$1
            RETURNING id`,
           [
             existing.id, configKey, category, label,
             encrypted.ciphertext, encrypted.iv, encrypted.authTag,
-            lastFour, note, active, input.updatedBy || null
+            lastFour, note, active, input.updatedBy || null,
+            provider, testUrl, authMode, headerName, lastTestStatus, lastTestDetail
           ]
         )
       : await this.db.one(
@@ -191,6 +217,47 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
 
     await this.reload();
     return row;
+  }
+
+  async getForTest(id: string) {
+    await this.ensureTable();
+    const row = await this.db.one(
+      `SELECT id,config_key,category,label,ciphertext,iv,auth_tag,
+              provider,test_url,auth_mode,header_name
+       FROM admin_api_credentials
+       WHERE id=$1`,
+      [id]
+    );
+    if (!row) return null;
+    const value = this.crypto.decrypt({
+      ciphertext: String(row.ciphertext),
+      iv: String(row.iv),
+      authTag: String(row.auth_tag)
+    });
+    return {
+      id: row.id,
+      configKey: String(row.config_key),
+      category: String(row.category),
+      label: String(row.label),
+      value,
+      provider: String(row.provider || ""),
+      testUrl: String(row.test_url || ""),
+      authMode: String(row.auth_mode || "BEARER"),
+      headerName: String(row.header_name || "")
+    };
+  }
+
+  async recordTest(id: string, status: string, detail: string, provider?: string) {
+    await this.ensureTable();
+    return this.db.one(
+      `UPDATE admin_api_credentials
+       SET last_test_status=$2,last_test_detail=$3,last_tested_at=now(),
+           provider=CASE WHEN $4<>'' THEN $4 ELSE provider END,
+           updated_at=now()
+       WHERE id=$1
+       RETURNING id`,
+      [id, String(status || "").slice(0,16), String(detail || "").slice(0,1000), String(provider || "").slice(0,140)]
+    );
   }
 
   async setActive(id: string, active: boolean, updatedBy?: string) {
