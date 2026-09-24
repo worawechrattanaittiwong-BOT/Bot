@@ -25,7 +25,9 @@ assert(!app.includes("OMISE_SECRET_KEY"), "Omise secret must never be present in
 assert(api.includes('process.env.OMISE_SECRET_KEY'), "Omise secret must be read server-side");
 assert(api.includes('String(user.role).toUpperCase() !== "OWNER"'), "Enrollment must be OWNER-only");
 assert(api.includes("verifyTotp"), "First-device enrollment must require TOTP");
-assert(api.includes("MAX_PIN_FAILURES"), "PIN brute-force lockout must remain enabled");\nassert(api.includes("SESSION_MINUTES = 30"), "Owner Mobile session lifetime must remain short");\nassert(migration.includes("idx_owner_mobile_one_active_device"), "Only one active owner phone may exist");
+assert(api.includes("MAX_PIN_FAILURES"), "PIN brute-force lockout must remain enabled");
+assert(api.includes("SESSION_MINUTES = 30"), "Owner Mobile session lifetime must remain short");
+assert(migration.includes("idx_owner_mobile_one_active_device"), "Only one active owner phone may exist");
 assert(api.includes("commissionLiability"), "Owner withdrawal must reserve commission liabilities");
 assert(api.includes("commission_wallet_ledger"), "Commission liability must use the append-only wallet ledger");
 assert(api.includes("commission_withdrawal_ledger"), "Commission liability must include withdrawal lock/paid deltas");
