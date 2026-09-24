@@ -400,12 +400,30 @@ export class CommissionWithdrawalService {
     },
     ip?: string | null
   ) {
-    await this.stepUp(userId, input);
     const amountSatang = Math.trunc(Number(input.amountSatang || 0));
     const requestKey = String(input.clientRequestKey || "").trim();
     if (requestKey.length < 12 || requestKey.length > 100) {
       throw new BadRequestException("invalid withdrawal request key");
     }
+
+    const previous = await this.db.one(
+      `SELECT id,status,amount_satang,created_at
+       FROM commission_withdrawals
+       WHERE user_id=$1 AND client_request_key=$2
+       LIMIT 1`,
+      [userId, requestKey]
+    );
+    if (previous) {
+      return {
+        id: previous.id,
+        status: previous.status,
+        amountSatang: Number(previous.amount_satang),
+        createdAt: previous.created_at,
+        duplicate: true
+      };
+    }
+
+    await this.stepUp(userId, input);
 
     return this.db.transaction(async tx => {
       await tx.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [userId]);
