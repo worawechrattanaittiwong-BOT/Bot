@@ -45,6 +45,8 @@ jobs:
         run: node ./tests/wallet-ui-contract.mjs
       - name: Account typography contract
         run: node ./tests/account-typography-contract.mjs
+      - name: System typography contract
+        run: node ./tests/system-typography-contract.mjs
       - name: System popup contract
         run: node ./tests/system-popup-contract.mjs
       - name: Cent account currency isolation contract

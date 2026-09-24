@@ -104,7 +104,7 @@
   gap:4px;
   margin-top:10px;
   color:#7fb9e3;
-  font:600 8px/1.2 Consolas,"SFMono-Regular",monospace;
+  font:600 var(--ui-type-caption)/1.2 Consolas,"SFMono-Regular",monospace;
   letter-spacing:.06em;
 }
 .hudChart{
@@ -141,7 +141,7 @@
   background:linear-gradient(145deg,rgba(8,31,59,.72),rgba(2,13,28,.48));
   box-shadow:0 12px 28px rgba(0,0,0,.22),0 0 24px rgba(38,135,255,.08);
   color:#62b9ff;
-  font:700 6px/1.2 Consolas,"SFMono-Regular",monospace;
+  font:700 var(--ui-type-caption)/1.2 Consolas,"SFMono-Regular",monospace;
   letter-spacing:.09em;
   text-align:center;
   backdrop-filter:blur(7px);
@@ -169,7 +169,7 @@
   right:-4px;
   width:72px;
   color:#66b7ff;
-  font:700 6px/1.72 Consolas,"SFMono-Regular",monospace;
+  font:700 var(--ui-type-caption)/1.72 Consolas,"SFMono-Regular",monospace;
   letter-spacing:.17em;
   text-transform:uppercase;
   text-align:left;

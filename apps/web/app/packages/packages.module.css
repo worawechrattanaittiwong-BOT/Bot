@@ -28,7 +28,7 @@
 }
 .eyebrow{
   color:#9b89f6;
-  font:800 10px/1 Consolas,monospace;
+  font:800 var(--ui-type-meta)/1 Consolas,monospace;
   letter-spacing:.16em
 }
 .header h1{
@@ -166,7 +166,7 @@
   background:#16151f;
   color:#aaa0b9;
   padding:7px 10px;
-  font:800 9px Consolas,monospace;
+  font:800 var(--ui-type-meta) Consolas,monospace;
   letter-spacing:.07em
 }
 .badgeGood{
@@ -513,7 +513,7 @@
 }
 .systemStatus span{
   color:#a08ff5;
-  font:800 10px Consolas,monospace;
+  font:800 var(--ui-type-meta) Consolas,monospace;
   letter-spacing:.08em
 }
 .systemStatus b{
@@ -596,7 +596,7 @@
 .orderRow span{
   margin-top:4px;
   color:#758297;
-  font-size:10.5px
+  font-size:var(--ui-type-meta)
 }
 .orderRow strong{
   color:#e3e7f0;
@@ -607,7 +607,7 @@
   border-radius:999px;
   color:#9b90ad;
   padding:5px 8px;
-  font:800 8px Consolas,monospace;
+  font:800 var(--ui-type-caption) Consolas,monospace;
   font-style:normal
 }
 .orderRow em.orderPaid{

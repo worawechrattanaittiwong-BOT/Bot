@@ -19,7 +19,7 @@
 .hero{
   max-width:1120px;margin:0 auto;padding:58px 24px 34px;text-align:center;
 }
-.kicker{font-size:10px;letter-spacing:.22em;color:#957fff;font-weight:900}
+.kicker{font-size:var(--ui-type-meta);letter-spacing:.22em;color:#957fff;font-weight:900}
 .hero h1{font-size:46px;line-height:1.05;margin:10px 0 12px;color:#fbfaff}
 .hero p{max-width:710px;margin:0 auto;color:#9ca1b6;font-size:14px;line-height:1.7}
 .rateBanner{
@@ -28,7 +28,7 @@
   border-radius:16px;padding:15px 20px;box-shadow:0 0 38px rgba(86,54,230,.11);
 }
 .rateBanner b{display:block;color:#f4f1ff;font-size:24px;letter-spacing:.05em}
-.rateBanner span{display:block;margin-top:4px;color:#9e94c7;font-size:10px}
+.rateBanner span{display:block;margin-top:4px;color:#9e94c7;font-size:var(--ui-type-meta)}
 .section,.rules{
   max-width:1120px;margin:14px auto 0;padding:24px;
   border:1px solid rgba(112,91,205,.2);border-radius:20px;
@@ -50,7 +50,7 @@
 }
 .stepNumber{
   position:absolute;left:10px;top:10px;width:24px;height:24px;border-radius:50%;
-  display:grid;place-items:center;background:#6d53ef;color:white;font-size:10px;font-weight:900;
+  display:grid;place-items:center;background:#6d53ef;color:white;font-size:var(--ui-type-meta);font-weight:900;
   box-shadow:0 0 15px rgba(110,82,239,.32);
 }
 .flowIcon{
@@ -58,7 +58,7 @@
   color:#a48fff;border:1px solid rgba(119,86,241,.4);background:rgba(95,62,213,.1);
 }
 .flowCard h3{margin:0 0 6px;font-size:13px;color:#f0edf9}
-.flowCard p{margin:0;color:#858ba0;font-size:10px;line-height:1.55}
+.flowCard p{margin:0;color:#858ba0;font-size:var(--ui-type-meta);line-height:1.55}
 .arrow{color:#806af2;font-size:22px}
 .pyramidWrap{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:22px;align-items:center}
 .pyramid{display:grid;gap:8px;justify-items:center}
@@ -73,13 +73,13 @@
   width:100%;padding:13px 20px;border:1px solid rgba(139,104,255,.48);border-radius:14px;
   background:linear-gradient(135deg,rgba(97,64,217,.24),rgba(23,18,55,.78));text-align:center;
 }
-.youCard small{display:block;color:#8f80eb;font-size:9px;font-weight:900;letter-spacing:.16em}
+.youCard small{display:block;color:#8f80eb;font-size:var(--ui-type-meta);font-weight:900;letter-spacing:.16em}
 .youCard b{display:block;margin-top:3px;color:#ece7ff;font-size:13px}
 .level1{width:52%}.level2{width:68%}.level3{width:84%}.level4{width:100%}
 .levelLabel{min-width:155px}
-.levelLabel span{display:block;color:#7e8299;font-size:8px;font-weight:900;letter-spacing:.13em}
+.levelLabel span{display:block;color:#7e8299;font-size:var(--ui-type-caption);font-weight:900;letter-spacing:.13em}
 .levelLabel b{font-size:23px;color:#a996ff}
-.levelLabel small{display:block;color:#898ea2;font-size:9px}
+.levelLabel small{display:block;color:#898ea2;font-size:var(--ui-type-meta)}
 .people{display:flex;justify-content:flex-end;gap:5px;flex-wrap:wrap}
 .people span{
   width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:#9e8cff;
@@ -90,18 +90,18 @@
   background:rgba(14,12,31,.65);display:flex;gap:11px;color:#a492ff;
 }
 .relativeNote b{display:block;color:#dcd6fb;font-size:12px}
-.relativeNote p{margin:5px 0 0;color:#858a9f;font-size:10px;line-height:1.6}
+.relativeNote p{margin:5px 0 0;color:#858a9f;font-size:var(--ui-type-meta);line-height:1.6}
 .exampleGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .exampleCard{
   border:1px solid rgba(112,91,202,.22);border-radius:15px;background:rgba(9,11,24,.7);
   padding:17px;text-align:center;
 }
 .exampleCard span,.exampleCard small,.exampleCard em{display:block}
-.exampleCard span{color:#7f8498;font-size:9px}
+.exampleCard span{color:#7f8498;font-size:var(--ui-type-meta)}
 .exampleCard strong{display:block;margin:5px 0 13px;color:#e6e1f9;font-size:13px}
-.exampleCard small{color:#747a91;font-size:9px}
+.exampleCard small{color:#747a91;font-size:var(--ui-type-meta)}
 .exampleCard b{display:block;margin:3px 0;color:#ad9cff;font-size:22px}
-.exampleCard em{color:#777d93;font-style:normal;font-size:9px}
+.exampleCard em{color:#777d93;font-style:normal;font-size:var(--ui-type-meta)}
 .saleExample{
   border:1px solid rgba(114,90,219,.23);border-radius:16px;padding:18px;
   background:rgba(8,10,22,.72);
@@ -114,23 +114,23 @@
 .chain>span{color:#806af2;font-size:18px}
 .chain b,.chain small,.chain strong{display:block}
 .chain b{width:30px;height:30px;margin:0 auto 5px;border-radius:50%;display:grid;place-items:center;background:rgba(104,78,220,.2);color:#c8bcff}
-.chain small{color:#787e92;font-size:9px}
+.chain small{color:#787e92;font-size:var(--ui-type-meta)}
 .chain strong{margin-top:5px;color:#ece8fa;font-size:12px}
 .chain .buyer{border-color:rgba(86,164,218,.3);background:rgba(16,39,61,.45)}
 .totalLine{
   margin-top:15px;padding-top:14px;border-top:1px solid rgba(112,94,198,.16);
   display:flex;align-items:baseline;justify-content:center;gap:12px;
 }
-.totalLine span{color:#858b9f;font-size:10px}
+.totalLine span{color:#858b9f;font-size:var(--ui-type-meta)}
 .totalLine b{color:#b7a8ff;font-size:22px}
-.totalLine em{font-style:normal;color:#7e8498;font-size:9px}
+.totalLine em{font-style:normal;color:#7e8498;font-size:var(--ui-type-meta)}
 .exampleExplanation{
-  margin:12px 4px 0;color:#888ea3;font-size:10px;line-height:1.65;text-align:center;
+  margin:12px 4px 0;color:#888ea3;font-size:var(--ui-type-meta);line-height:1.65;text-align:center;
 }
 .ruleGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
 .ruleGrid>div{
   display:flex;align-items:center;gap:10px;border:1px solid rgba(104,88,186,.16);
-  border-radius:12px;padding:12px 13px;background:rgba(8,10,21,.58);color:#8c92a6;font-size:10px;
+  border-radius:12px;padding:12px 13px;background:rgba(8,10,21,.58);color:#8c92a6;font-size:var(--ui-type-meta);
 }
 .ruleGrid svg{color:#9784f6;flex:0 0 auto}
 .footer{
@@ -139,7 +139,7 @@
   display:flex;align-items:center;justify-content:space-between;gap:20px;
 }
 .footerBrand{width:120px;height:auto}
-.footer p{margin:5px 0 0;color:#858ba0;font-size:10px}
+.footer p{margin:5px 0 0;color:#858ba0;font-size:var(--ui-type-meta)}
 .primaryButton{
   text-decoration:none;border:1px solid rgba(138,103,255,.6);border-radius:11px;
   background:linear-gradient(135deg,#6550ec,#854fff);color:white;padding:10px 15px;
@@ -156,7 +156,7 @@
 }
 @media(max-width:680px){
   .topbar{height:64px;padding:0 14px}.brand{width:118px}
-  .backButton{font-size:9px;padding:8px 10px}
+  .backButton{font-size:var(--ui-type-meta);padding:8px 10px}
   .hero{padding:38px 16px 24px}.hero h1{font-size:34px}
   .section,.rules{padding:17px}
   .flow{grid-template-columns:1fr}

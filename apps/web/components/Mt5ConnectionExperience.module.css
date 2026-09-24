@@ -16,7 +16,7 @@
 .benefits>div{display:flex;gap:9px;align-items:center;min-width:0}
 .benefits>div>span{width:38px;height:38px;display:grid;place-items:center;border:1px solid #5242b7;border-radius:50%;background:#11122c;color:#a294ff;flex-shrink:0}
 .benefits b,.benefits small{display:block;white-space:nowrap}
-.benefits b{font-size:11px}.benefits small{font-size:9px;color:var(--muted);margin-top:4px}
+.benefits b{font-size:11px}.benefits small{font-size:var(--ui-type-meta);color:var(--muted);margin-top:4px}
 .connect{align-self:center;z-index:2;display:grid;gap:17px;padding-bottom:10px;min-width:0}
 .connectionStatus{display:flex;gap:13px;align-items:center;padding:18px;border:1px solid #287669;border-radius:16px;background:linear-gradient(115deg,#0b2925,#10303b);color:#8ff1c5;min-width:0}
 .connectionStatus>svg{flex-shrink:0;filter:drop-shadow(0 0 12px #4cba9170)}
@@ -45,7 +45,7 @@
 .stepIcon{align-self:center;display:grid;place-items:center;width:52px;height:52px;border:1px solid #3f3680;border-radius:50%;color:#b3a0ff;background:#1b1940;margin:-29px 0 18px}
 .stepCard b{font-size:clamp(12px,1vw,16px);line-height:1.6}
 .stepCard small{display:block;color:#a2b1d0;font-size:12px;line-height:1.7;margin-top:8px}
-.stepLink{margin-top:auto;padding-top:14px;font-size:10px;color:#b7a0ff}
+.stepLink{margin-top:auto;padding-top:14px;font-size:var(--ui-type-meta);color:#b7a0ff}
 .tutorial{position:relative;isolation:isolate;overflow:hidden;padding:22px 26px;min-height:280px;background:radial-gradient(ellipse at 65% 90%,#2b197d,transparent 70%),#0b1222}
 .tutorial>p{font-size:13px}.tutorial>h2,.tutorial>p{position:relative;z-index:1;max-width:80%}
 .tutorial>img{position:absolute;width:85%;height:78%;right:0;bottom:-25px;object-fit:contain;object-position:right bottom;mix-blend-mode:screen;z-index:-1;opacity:.8}
@@ -56,7 +56,7 @@
 .accountFields>div{display:flex;align-items:center;gap:10px;min-width:0;padding-left:12px;border-left:1px solid #2b3552}
 .accountFields>div:first-child{border:0;padding-left:0}
 .accountFields svg{color:#b0a5fb;flex-shrink:0}.accountFields span{min-width:0}.accountFields small,.accountFields b{display:block;overflow-wrap:anywhere}
-.accountFields small{color:var(--muted);font-size:10px;margin-bottom:6px}.accountFields b{font-size:clamp(12px,.95vw,16px);font-weight:650}
+.accountFields small{color:var(--muted);font-size:var(--ui-type-meta);margin-bottom:6px}.accountFields b{font-size:clamp(12px,.95vw,16px);font-weight:650}
 .good{color:#8fe4b5!important}.pending{color:#e4c17e!important}.failure{color:#ff989f!important}
 .help{display:flex;flex-direction:column;justify-content:space-between;padding:22px;gap:20px}
 .help>div{display:flex;align-items:flex-start;gap:12px}.help svg{color:#b5a0ff;flex-shrink:0}.help h2{font-size:16px}.help p{font-size:12px}
@@ -66,11 +66,11 @@
 .dialog::backdrop{background:#030510d9;backdrop-filter:blur(8px)}
 .dialogInner{display:flex;flex-direction:column;height:100%;max-height:none;min-height:0}
 .dialog header,.dialog footer{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 24px;background:#11182c;flex-shrink:0}
-.dialog header{border-bottom:1px solid #303354}.dialog header small{color:#a499f7;letter-spacing:.12em;font-size:10px}.dialog h2{font-size:21px}.close{display:grid;place-items:center;border:1px solid #4a426b;background:#211b3c;color:#eae4ff;width:38px;height:38px;border-radius:10px;flex-shrink:0}
+.dialog header{border-bottom:1px solid #303354}.dialog header small{color:#a499f7;letter-spacing:.12em;font-size:var(--ui-type-meta)}.dialog h2{font-size:21px}.close{display:grid;place-items:center;border:1px solid #4a426b;background:#211b3c;color:#eae4ff;width:38px;height:38px;border-radius:10px;flex-shrink:0}
 .guideLayout{display:grid;grid-template-columns:190px minmax(0,1fr);flex:1;min-height:0;overflow:hidden}
 .guideLayout nav{padding:18px 10px;border-right:1px solid #27324a;overflow:auto;display:flex;flex-direction:column;gap:5px}
 .guideLayout nav button{display:flex;align-items:center;gap:10px;padding:11px 9px;background:none;border:1px solid transparent;border-radius:9px;color:#a1abc4;text-align:left;font-size:12px;flex-shrink:0}
-.guideLayout nav button span{font-size:10px;color:#998cbf}.guideLayout nav button.selected{background:#292046;border-color:#645094;color:#ede6ff}
+.guideLayout nav button span{font-size:var(--ui-type-meta);color:#998cbf}.guideLayout nav button.selected{background:#292046;border-color:#645094;color:#ede6ff}
 .guideContent{overflow:auto;padding:25px;min-height:0;height:100%;font-size:14px;line-height:1.85;overscroll-behavior:contain}
 .guideHeading{display:flex;gap:13px;align-items:center;margin-bottom:17px;color:#b19dfd}.guideHeading small{font-size:11px}.guideHeading h3{font-size:22px;color:#edf3ff;line-height:1.5}
 .guideContent ol{margin:0;padding-left:22px;color:#b9c7de}.guideContent li{padding-left:5px;margin-bottom:13px}.guideContent b{color:#edf0ff}
@@ -92,7 +92,7 @@
 .wideShot{margin-top:18px;padding:12px;background:linear-gradient(135deg,#18243b,#101629)}
 .wideShot .screenshot{max-height:520px;width:100%;height:auto}
 .screenshotCard figcaption{display:flex;align-items:flex-start;gap:9px;padding:4px 2px;overflow-wrap:anywhere}
-.screenshotCard figcaption>span{display:inline-grid;place-items:center;flex-shrink:0;width:24px;height:24px;border:1px solid #574b85;border-radius:7px;background:#25203d;color:#c3b0ff;font-size:10px}
+.screenshotCard figcaption>span{display:inline-grid;place-items:center;flex-shrink:0;width:24px;height:24px;border:1px solid #574b85;border-radius:7px;background:#25203d;color:#c3b0ff;font-size:var(--ui-type-meta)}
 .guideAccount{display:flex;align-items:center;gap:16px;padding:20px;margin-top:20px;border:1px solid #35476a;border-radius:14px;background:linear-gradient(120deg,#16253d,#14192e);color:#96cfff}
 .guideAccount>svg{flex-shrink:0}.guideAccount>div{min-width:0}.guideAccount small,.guideAccount b,.guideAccount span{display:block;overflow-wrap:anywhere}
 .guideAccount small{color:#9fafca;font-size:11px}.guideAccount b{margin:4px 0;font-size:18px}.guideAccount span{color:#b3c0d7;font-size:12px}
@@ -102,7 +102,7 @@
 @media(max-width:850px){.guideSplit{grid-template-columns:1fr}.portraitShot{max-width:400px;width:100%;justify-self:center}.resultGrid{grid-template-columns:1fr}.screenshotGrid{grid-template-columns:1fr}.screenshotCard{max-width:100%;min-width:0}.screenshot{max-height:380px}}
 .dialog footer{border-top:1px solid #303354}.dialog footer>span{font-size:12px;color:#8c9bb7}.dialog footer>div{display:flex;gap:10px}.dialog footer .primary,.dialog footer .secondary{min-height:42px;font-size:13px}
 @media(min-width:1800px){.hero{min-height:365px;padding:38px;gap:32px}.art{margin:-38px -38px -38px -18px}.stepsPanel,.tutorial{min-height:310px}.stepCard{min-height:205px}}
-@media(max-width:1250px){.hero{gap:18px;padding:24px;grid-template-columns:1.1fr .85fr .85fr}.heroCopy h1{font-size:30px}.art{margin:-24px -24px -24px -12px}.benefits{gap:12px}.benefits>div{gap:5px}.benefits small{display:none}.connect>.primary{font-size:16px;min-height:52px}.connectionStatus{padding:13px;gap:8px}.connectionStatus small{font-size:10px}.connectionStatus>svg{width:25px}.artCaption{font-size:13px}.steps{gap:18px}.stepCard{padding:12px 10px}.stepIcon{width:39px;height:39px;margin:5px 0 12px;align-self:flex-start}.stepCard:not(:last-child):after{right:-16px}.bottom{grid-template-columns:2.5fr 1fr}.accountFields svg{display:none}.help{padding:18px}}
+@media(max-width:1250px){.hero{gap:18px;padding:24px;grid-template-columns:1.1fr .85fr .85fr}.heroCopy h1{font-size:30px}.art{margin:-24px -24px -24px -12px}.benefits{gap:12px}.benefits>div{gap:5px}.benefits small{display:none}.connect>.primary{font-size:16px;min-height:52px}.connectionStatus{padding:13px;gap:8px}.connectionStatus small{font-size:var(--ui-type-meta)}.connectionStatus>svg{width:25px}.artCaption{font-size:13px}.steps{gap:18px}.stepCard{padding:12px 10px}.stepIcon{width:39px;height:39px;margin:5px 0 12px;align-self:flex-start}.stepCard:not(:last-child):after{right:-16px}.bottom{grid-template-columns:2.5fr 1fr}.accountFields svg{display:none}.help{padding:18px}}
 @media(max-width:1000px){.hero{grid-template-columns:1.2fr 1fr;gap:20px}.heroCopy{grid-row:1;grid-column:1}.connect{grid-column:1;grid-row:2;gap:10px;padding:0}.art{grid-column:2;grid-row:1/3;min-height:310px}.benefits{margin-top:15px}.connect>.primary{min-height:46px}.heroCopy h1{font-size:36px}.middle{grid-template-columns:1fr}.tutorial{min-height:230px}.tutorial>img{width:48%;height:110%;right:20%}.bottom{grid-template-columns:1fr}.help{flex-direction:row;align-items:center}.help>.secondary{width:auto}.stepsPanel{padding:20px}.stepCard{min-height:170px}.stepIcon{align-self:center;margin:-28px 0 16px}.stepCard b{font-size:14px}}
 @media(max-width:640px){.root{gap:12px}.hero{padding:20px;gap:14px;grid-template-columns:1fr}.heroCopy{grid-column:1;grid-row:1}.heroCopy h1{font-size:34px}.heroCopy>p{font-size:13px}.benefits{justify-content:space-between}.art{grid-column:1;grid-row:2;min-height:210px;margin:0 -20px}.art>img{object-fit:contain}.artCaption{right:25px}.connect{grid-row:3;grid-column:1}.connectionStatus{padding:12px}.steps{grid-template-columns:1fr;gap:12px}.stepCard{min-height:0;padding:16px 16px 16px 66px}.stepNumber{position:absolute;left:17px;top:18px}.stepIcon{display:none}.stepCard small{font-size:12px}.stepCard:not(:last-child):after{display:none}.stepLink{padding-top:8px}.tutorial{min-height:260px;padding:20px}.tutorial>img{width:75%;right:0;height:85%}.tutorial>h2,.tutorial>p{max-width:100%}.account{padding:18px}.accountFields{grid-template-columns:1fr 1fr;gap:16px}.accountFields>div{padding:0;border:0}.accountFields b{font-size:13px}.help{align-items:stretch;flex-direction:column}.help>.secondary{width:100%}.dialog{width:100%;height:100dvh;max-height:100dvh;border:0;border-radius:0}.dialogInner{height:100dvh;max-height:100dvh}.dialog header,.dialog footer{padding:14px}.dialog h2{font-size:17px}.guideLayout{flex:1;display:flex;flex-direction:column}.guideLayout nav{flex-direction:row;padding:9px;border-right:0;border-bottom:1px solid #27324a;flex-shrink:0}.guideLayout nav button{padding:8px;white-space:nowrap;font-size:11px}.guideContent{padding:18px;min-height:0;height:auto;flex:1}.guideHeading h3{font-size:19px}.guideContent li{font-size:13px}.address{align-items:stretch;flex-direction:column}.screenshotGrid{grid-template-columns:1fr}.screenshot{max-height:260px}.dialog footer>span{display:none}.dialog footer>div{width:100%;justify-content:space-between}.dialog footer .primary{flex:1}}
 @media(max-width:640px){.stepsHeading{align-items:stretch;flex-direction:column;gap:12px}.stepsHeading .secondary{width:100%}}

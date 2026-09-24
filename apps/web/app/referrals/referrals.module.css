@@ -57,11 +57,11 @@
 .codeBox button,.linkBox button{
   margin-left:auto;border:1px solid rgba(123,97,255,.38);background:rgba(100,74,220,.14);
   color:#d8d1ff;border-radius:9px;padding:7px 10px;display:flex;align-items:center;gap:6px;
-  cursor:pointer;font-size:10px;font-weight:700;white-space:nowrap;
+  cursor:pointer;font-size:var(--ui-type-meta);font-weight:700;white-space:nowrap;
 }
 .linkBox span{
   min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  color:#8d94aa;font-size:10px;
+  color:#8d94aa;font-size:var(--ui-type-meta);
 }
 .sectionBlock{margin:14px 24px 0}
 .sectionHead{
