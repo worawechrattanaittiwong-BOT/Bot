@@ -461,6 +461,14 @@ export class CommissionWithdrawalRiskService {
     if (Boolean(input.autoPayoutEnabled) && !process.env.PAYOUT_WORKER_KEY) {
       throw new ForbiddenException("ตั้ง PAYOUT_WORKER_KEY ก่อนเปิด Auto Payout");
     }
+    if (Boolean(input.autoPayoutEnabled)) {
+      const current = await this.db.one(
+        "SELECT kill_switch_enabled FROM commission_withdrawal_settings WHERE id=1"
+      );
+      if (current?.kill_switch_enabled) {
+        throw new ForbiddenException("ปิด Kill Switch ก่อนเปิด Auto Payout");
+      }
+    }
 
     return this.db.one(
       `UPDATE commission_withdrawal_settings
@@ -587,8 +595,7 @@ export class CommissionWithdrawalRiskService {
 
       const row = (await tx.query(
         `SELECT j.id,j.withdrawal_id,w.user_id,w.destination_id,w.amount_satang,w.currency,
-                d.bank_code,d.bank_name,d.account_name,
-                d.account_ciphertext,d.account_iv,d.account_auth_tag
+                d.bank_code,d.bank_name,d.account_name,d.account_last4
          FROM commission_payout_jobs j
          JOIN commission_withdrawals w ON w.id=j.withdrawal_id
          JOIN commission_payout_destinations d ON d.id=w.destination_id
@@ -618,12 +625,6 @@ export class CommissionWithdrawalRiskService {
         [row.id, row.withdrawal_id, row.amount_satang, row.currency, JSON.stringify({ workerId: cleanWorker })]
       );
 
-      const accountNumber = this.crypto.decrypt({
-        ciphertext: String(row.account_ciphertext),
-        iv: String(row.account_iv),
-        authTag: String(row.account_auth_tag)
-      });
-
       return {
         job: {
           id: row.id,
@@ -634,8 +635,90 @@ export class CommissionWithdrawalRiskService {
             bankCode: row.bank_code,
             bankName: row.bank_name,
             accountName: row.account_name,
-            accountNumber
-          }
+            maskedAccount: "••••" + String(row.account_last4 || "")
+          },
+          requiresAuthorization: true,
+          claimExpiresInSeconds: 300
+        }
+      };
+    });
+  }
+
+  async authorizePayout(workerId: string, jobId: string) {
+    return this.db.transaction(async tx => {
+      const settings = await this.settingsTx(tx);
+      if (!settings?.auto_payout_enabled) {
+        throw new ForbiddenException("Auto Payout is disabled");
+      }
+      if (settings?.kill_switch_enabled) {
+        throw new ForbiddenException("Withdrawal Kill Switch is active");
+      }
+
+      const row = (await tx.query(
+        `SELECT j.id,j.withdrawal_id,j.status,j.worker_id,j.claim_expires_at,
+                w.amount_satang,w.currency,w.status AS withdrawal_status,
+                w.auto_payout_eligible,w.approval_count,w.approval_required,
+                d.bank_code,d.bank_name,d.account_name,
+                d.account_ciphertext,d.account_iv,d.account_auth_tag
+         FROM commission_payout_jobs j
+         JOIN commission_withdrawals w ON w.id=j.withdrawal_id
+         JOIN commission_payout_destinations d ON d.id=w.destination_id
+         WHERE j.id=$1
+         FOR UPDATE OF j,w`,
+        [jobId]
+      )).rows[0];
+      if (!row) throw new NotFoundException("ไม่พบ payout job");
+      if (row.worker_id !== workerId) {
+        throw new ForbiddenException("payout job belongs to another worker");
+      }
+      if (row.status !== "CLAIMED") {
+        throw new ConflictException("payout job must be CLAIMED before authorization");
+      }
+      if (!row.claim_expires_at || new Date(row.claim_expires_at).getTime() <= Date.now()) {
+        throw new ConflictException("payout claim expired");
+      }
+      if (
+        row.withdrawal_status !== "APPROVED" ||
+        !row.auto_payout_eligible ||
+        Number(row.approval_count || 0) < Number(row.approval_required || 1)
+      ) {
+        throw new ForbiddenException("withdrawal is no longer eligible for payout");
+      }
+
+      await tx.query(
+        `UPDATE commission_payout_jobs
+         SET status='SUBMITTED',submitted_at=now(),provider_status='AUTHORIZED',
+             updated_at=now()
+         WHERE id=$1`,
+        [row.id]
+      );
+      await tx.query(
+        `INSERT INTO commission_payout_reconciliation(
+           payout_job_id,withdrawal_id,event_type,expected_amount_satang,expected_currency,metadata
+         ) VALUES($1,$2,'SUBMITTED',$3,$4,$5::jsonb)`,
+        [
+          row.id,row.withdrawal_id,row.amount_satang,row.currency,
+          JSON.stringify({ workerId, stage: "PRE_TRANSFER_AUTHORIZATION" })
+        ]
+      );
+
+      const accountNumber = this.crypto.decrypt({
+        ciphertext: String(row.account_ciphertext),
+        iv: String(row.account_iv),
+        authTag: String(row.account_auth_tag)
+      });
+
+      return {
+        authorized: true,
+        jobId: row.id,
+        withdrawalId: row.withdrawal_id,
+        amountSatang: Number(row.amount_satang),
+        currency: row.currency,
+        destination: {
+          bankCode: row.bank_code,
+          bankName: row.bank_name,
+          accountName: row.account_name,
+          accountNumber
         }
       };
     });
@@ -680,6 +763,10 @@ export class CommissionWithdrawalRiskService {
       const providerAmount = input.providerAmountSatang == null
         ? null : Math.trunc(Number(input.providerAmountSatang));
       const providerCurrency = String(input.providerCurrency || row.currency).toUpperCase().slice(0, 8);
+
+      if (status === "SUBMITTED" && row.status === "SUBMITTED") {
+        return { ok: true, submitted: true, duplicate: true };
+      }
 
       if (status === "SUBMITTED") {
         await tx.query(
