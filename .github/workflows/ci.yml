@@ -37,6 +37,8 @@ jobs:
         run: ./tests/unified-role-sidebar-contract.ps1
       - name: Referral program contract
         run: node ./tests/referral-program-contract.mjs
+      - name: Commission withdrawal Phase 2 contract
+        run: node ./tests/commission-withdrawal-contract.mjs
       - name: System popup contract
         run: node ./tests/system-popup-contract.mjs
       - name: Cent account currency isolation contract
