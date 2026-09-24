@@ -33,11 +33,36 @@ export class ReferralService {
 
   private async refreshAvailability(userId: string) {
     await this.db.query(
-      `UPDATE referral_commissions
-       SET status='AVAILABLE',updated_at=now()
-       WHERE beneficiary_user_id=$1
-         AND status='PENDING'
-         AND available_at<=now()`,
+      `WITH released AS (
+         UPDATE referral_commissions
+         SET status='AVAILABLE',updated_at=now()
+         WHERE beneficiary_user_id=$1
+           AND status='PENDING'
+           AND available_at<=now()
+         RETURNING *
+       )
+       INSERT INTO commission_wallet_ledger(
+         entry_key,beneficiary_user_id,commission_id,event_type,
+         pending_delta_satang,available_delta_satang,paid_delta_satang,
+         currency,source_type,source_id,level,rate_bps,metadata,created_at
+       )
+       SELECT
+         'release:' || id::text,
+         beneficiary_user_id,
+         id,
+         'COMMISSION_RELEASE',
+         -commission_amount_satang,
+         commission_amount_satang,
+         0,
+         currency,
+         source_type,
+         source_id,
+         level,
+         rate_bps,
+         jsonb_build_object('availableAt',available_at,'source','availability_refresh'),
+         now()
+       FROM released
+       ON CONFLICT(entry_key) DO NOTHING`,
       [userId]
     );
   }
@@ -48,7 +73,7 @@ export class ReferralService {
 
     await this.refreshAvailability(userId);
 
-    const [sponsor, levels, recentNetwork, totals, commissions] = await Promise.all([
+    const [sponsor, levels, recentNetwork, totals, commissions, walletTotals, walletLedger] = await Promise.all([
       account.referred_by_user_id
         ? this.db.one(
             `SELECT user_code,referral_code
@@ -119,6 +144,33 @@ export class ReferralService {
          ORDER BY rc.created_at DESC
          LIMIT 50`,
         [userId]
+      ),
+      this.db.one(
+        `SELECT
+           COALESCE(SUM(pending_delta_satang),0)::bigint AS pending_satang,
+           COALESCE(SUM(available_delta_satang),0)::bigint AS available_satang,
+           COALESCE(SUM(paid_delta_satang),0)::bigint AS paid_satang,
+           COUNT(*)::int AS entry_count
+         FROM commission_wallet_ledger
+         WHERE beneficiary_user_id=$1`,
+        [userId]
+      ),
+      this.db.query(
+        `SELECT
+           wl.id,wl.event_type,wl.pending_delta_satang,wl.available_delta_satang,
+           wl.paid_delta_satang,wl.currency,wl.source_type,wl.source_id,
+           wl.level,wl.rate_bps,wl.created_at,
+           rc.status AS commission_status,
+           rc.available_at,
+           rc.commission_amount_satang,
+           u.user_code AS source_user_code
+         FROM commission_wallet_ledger wl
+         JOIN referral_commissions rc ON rc.id=wl.commission_id
+         JOIN users u ON u.id=rc.source_user_id
+         WHERE wl.beneficiary_user_id=$1
+         ORDER BY wl.created_at DESC,wl.id DESC
+         LIMIT 60`,
+        [userId]
       )
     ]);
 
@@ -166,6 +218,26 @@ export class ReferralService {
         lifetimeSatang: Number(totals?.lifetime_satang || 0),
         commissionCount: Number(totals?.commission_count || 0),
         recent: commissions.rows
+      },
+      wallet: {
+        currency: "THB",
+        pendingSatang: Number(walletTotals?.pending_satang || 0),
+        availableSatang: Number(walletTotals?.available_satang || 0),
+        paidSatang: Number(walletTotals?.paid_satang || 0),
+        currentBalanceSatang:
+          Number(walletTotals?.pending_satang || 0) +
+          Number(walletTotals?.available_satang || 0),
+        lifetimeSatang:
+          Number(walletTotals?.pending_satang || 0) +
+          Number(walletTotals?.available_satang || 0) +
+          Number(walletTotals?.paid_satang || 0),
+        entryCount: Number(walletTotals?.entry_count || 0),
+        ledgerVerified:
+          Number(walletTotals?.pending_satang || 0) === Number(totals?.pending_satang || 0) &&
+          Number(walletTotals?.available_satang || 0) === Number(totals?.available_satang || 0) &&
+          Number(walletTotals?.paid_satang || 0) === Number(totals?.paid_satang || 0),
+        withdrawalEnabled: false,
+        recent: walletLedger.rows
       }
     };
   }
@@ -246,7 +318,37 @@ export class ReferralService {
               JSON.stringify(input.metadata || {})
             ]
           )).rows[0];
-          if (row) created.push(row);
+          if (row) {
+            await tx.query(
+              `INSERT INTO commission_wallet_ledger(
+                 entry_key,beneficiary_user_id,commission_id,event_type,
+                 pending_delta_satang,available_delta_satang,paid_delta_satang,
+                 currency,source_type,source_id,level,rate_bps,metadata,created_at
+               )
+               VALUES(
+                 'earn:' || $1::text,$2,$1,'COMMISSION_EARN',
+                 $3,0,0,$4,$5,$6,$7,$8,$9::jsonb,$10
+               )
+               ON CONFLICT(entry_key) DO NOTHING`,
+              [
+                row.id,
+                row.beneficiary_user_id,
+                Number(row.commission_amount_satang || 0),
+                row.currency,
+                row.source_type,
+                row.source_id,
+                Number(row.level),
+                Number(row.rate_bps),
+                JSON.stringify({
+                  grossAmountSatang: Number(row.gross_amount_satang || 0),
+                  availableAt: row.available_at,
+                  source: "referral_credit"
+                }),
+                row.created_at
+              ]
+            );
+            created.push(row);
+          }
         }
       }
 
