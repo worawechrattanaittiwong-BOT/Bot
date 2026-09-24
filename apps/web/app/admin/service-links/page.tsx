@@ -51,6 +51,7 @@ type TestResult = {
   detectedFrom: string;
   detail: string;
   httpStatus?: number;
+  testProof?: string | null;
 };
 
 type LinkForm = {
@@ -80,7 +81,7 @@ const EMPTY_CREDENTIAL: CredentialForm = {
   preset: "CUSTOM",
   category: "OTHER",
   label: "",
-  configKey: "",
+  configKey: "SERVICE_API_KEY",
   value: "",
   companionValue: "",
   note: "",
@@ -407,7 +408,8 @@ export default function AdminServiceLinksPage() {
         configKey: credentialForm.configKey.trim().toUpperCase(),
         provider: testResult.provider || credentialForm.provider,
         lastTestStatus: testResult.status,
-        lastTestDetail: testResult.detail
+        lastTestDetail: testResult.detail,
+        testProof: testResult.testProof || ""
       };
 
       if (editingCredentialId) {
@@ -434,7 +436,8 @@ export default function AdminServiceLinksPage() {
             active: credentialForm.active,
             provider: testResult.provider || "ThaiBulkSMS",
             lastTestStatus: testResult.status,
-            lastTestDetail: testResult.detail
+            lastTestDetail: testResult.detail,
+            testProof: testResult.testProof || ""
           })
         });
       }
