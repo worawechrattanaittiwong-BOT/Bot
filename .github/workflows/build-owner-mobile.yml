@@ -36,11 +36,33 @@ jobs:
       - name: Generate native Android project
         run: npx expo prebuild --platform android --clean --no-install
 
+      - name: Configure dedicated release signing
+        env:
+          SCENOVA_OWNER_KEYSTORE_B64: ${{ secrets.SCENOVA_OWNER_KEYSTORE_B64 }}
+          SCENOVA_OWNER_STORE_PASSWORD: ${{ secrets.SCENOVA_OWNER_STORE_PASSWORD }}
+          SCENOVA_OWNER_KEY_PASSWORD: ${{ secrets.SCENOVA_OWNER_KEY_PASSWORD }}
+          SCENOVA_OWNER_KEY_ALIAS: ${{ secrets.SCENOVA_OWNER_KEY_ALIAS }}
+          SCENOVA_OWNER_KEYSTORE_PATH: ${{ github.workspace }}/apps/owner-mobile/android/app/scenova-owner-release.jks
+        run: |
+          test -n "$SCENOVA_OWNER_KEYSTORE_B64"
+          printf '%s' "$SCENOVA_OWNER_KEYSTORE_B64" | base64 --decode > "$SCENOVA_OWNER_KEYSTORE_PATH"
+          chmod 600 "$SCENOVA_OWNER_KEYSTORE_PATH"
+          node scripts/configure-android-signing.mjs
+
       - name: Build standalone release APK
+        env:
+          SCENOVA_OWNER_STORE_PASSWORD: ${{ secrets.SCENOVA_OWNER_STORE_PASSWORD }}
+          SCENOVA_OWNER_KEY_PASSWORD: ${{ secrets.SCENOVA_OWNER_KEY_PASSWORD }}
+          SCENOVA_OWNER_KEY_ALIAS: ${{ secrets.SCENOVA_OWNER_KEY_ALIAS }}
+          SCENOVA_OWNER_KEYSTORE_PATH: ${{ github.workspace }}/apps/owner-mobile/android/app/scenova-owner-release.jks
         run: |
           chmod +x android/gradlew
           ./android/gradlew -p android assembleRelease --no-daemon
           cp android/app/build/outputs/apk/release/app-release.apk ./SCENOVA-Owner.apk
+
+      - name: Verify APK signature
+        run: |
+          keytool -printcert -jarfile ./SCENOVA-Owner.apk | grep -q "Owner"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
