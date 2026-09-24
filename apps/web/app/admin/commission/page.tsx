@@ -492,6 +492,21 @@ export default function AdminCommissionPage() {
 
           {message && <div className={s.notice}>{message}</div>}
 
+          <section className={s.ownerAppCard}>
+            <div>
+              <span className={s.kicker}>OWNER MOBILE</span>
+              <h2>SCENOVA Owner สำหรับ Android</h2>
+              <p>แอปแยกสำหรับดูยอด อนุมัติคำขอถอน และถอนเงินผ่าน Omise จากมือถือ</p>
+            </div>
+            <a
+              className={s.ownerAppDownload}
+              href="/downloads/SCENOVA-Owner.apk"
+              download="SCENOVA-Owner.apk"
+            >
+              ดาวน์โหลดและติดตั้ง
+            </a>
+          </section>
+
           <section className={s.summaryGrid}>
             <article><span>Requested</span><b>{data?.summary.requestedCount || 0}</b><small>รอตรวจสอบ</small></article>
             <article><span>On Hold</span><b>{data?.summary.holdCount || 0}</b><small>Risk / second approval</small></article>
