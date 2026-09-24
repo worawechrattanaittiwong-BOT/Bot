@@ -7,6 +7,7 @@ on:
       - "apps/api/src/owner-mobile.controller.ts"
       - "apps/api/src/app.module.ts"
       - "database/036_owner_mobile.sql"
+      - "package.json"
       - ".github/workflows/owner-mobile-ci.yml"
   workflow_dispatch:
 
@@ -18,9 +19,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Install repository
+      - name: Install web/API workspaces
         run: npm install
       - name: API typecheck
         run: npm run typecheck -w @bot/api
+      - name: Install owner mobile dependencies separately
+        run: npm install
+        working-directory: apps/owner-mobile
       - name: Owner mobile typecheck
-        run: npm run typecheck -w @bot/owner-mobile
+        run: npm run typecheck
+        working-directory: apps/owner-mobile
