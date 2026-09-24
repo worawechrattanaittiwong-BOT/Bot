@@ -3,7 +3,7 @@ import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -131,8 +131,8 @@ async function fetchOwnerUpdate(): Promise<OwnerUpdateManifest | null> {
 
 async function installOwnerUpdate(manifest: OwnerUpdateManifest) {
   if (Platform.OS !== "android") return;
-  const target = FileSystem.cacheDirectory + "SCENOVA-Owner-update.apk";
   if (!FileSystem.cacheDirectory) throw new Error("ไม่พบพื้นที่ดาวน์โหลดของแอป");
+  const target = FileSystem.cacheDirectory + "SCENOVA-Owner-update.apk";
 
   await FileSystem.deleteAsync(target, { idempotent: true }).catch(() => {});
   const result = await FileSystem.downloadAsync(
@@ -278,6 +278,7 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [updateManifest, setUpdateManifest] = useState<OwnerUpdateManifest | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
+  const updateAttempted = useRef(0);
 
   useEffect(() => {
     (async () => {
@@ -302,6 +303,26 @@ export default function App() {
         const manifest = await fetchOwnerUpdate();
         if (!cancelled && manifest && manifest.versionCode > CURRENT_BUILD) {
           setUpdateManifest(manifest);
+
+          // Owner app is intentionally self-updating: download the signed APK
+          // automatically and hand it to Android's package installer. Android
+          // still requires the device owner to confirm the final install.
+          if (updateAttempted.current !== manifest.versionCode) {
+            updateAttempted.current = manifest.versionCode;
+            setUpdateBusy(true);
+            try {
+              await installOwnerUpdate(manifest);
+            } catch (error: any) {
+              if (!cancelled) {
+                Alert.alert(
+                  "มีอัปเดต SCENOVA Owner",
+                  String(error?.message || "ดาวน์โหลดอัปเดตไม่สำเร็จ")
+                );
+              }
+            } finally {
+              if (!cancelled) setUpdateBusy(false);
+            }
+          }
         }
       } catch {
         // Update checks must never block access to the finance app.
