@@ -4,15 +4,15 @@ import "./premium-dashboard.css";
 import "./dashboard-live.css";
 import { Mt5ManualActionControls } from "../components/Mt5ManualActionControls";
 import { SystemPopupProvider } from "../components/SystemPopupProvider";
+import { SCENOVA_APPLE_TOUCH_ICON, SCENOVA_BRAND_NAME, SCENOVA_MASTER_MARK } from "../lib/brand";
 
 const SITE_URL = "https://snvea-bot.online";
-const FAVICON_URL = "/favicon.png";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  applicationName: "SCENOVA EA",
+  applicationName: SCENOVA_BRAND_NAME,
   title: {
-    default: "SCENOVA EA",
+    default: SCENOVA_BRAND_NAME,
     template: "%s | SCENOVA EA"
   },
   description: "ระบบควบคุม MT5 BOT EA ผ่านเว็บและมือถือ รองรับ Cloud และ Local",
@@ -20,15 +20,15 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: FAVICON_URL,
+        url: SCENOVA_MASTER_MARK,
         type: "image/png",
         sizes: "512x512"
       }
     ],
-    shortcut: [FAVICON_URL],
+    shortcut: [SCENOVA_MASTER_MARK],
     apple: [
       {
-        url: "/apple-touch-icon.png",
+        url: SCENOVA_APPLE_TOUCH_ICON,
         type: "image/png",
         sizes: "512x512"
       }
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "SCENOVA EA",
+    title: SCENOVA_BRAND_NAME,
     statusBarStyle: "default"
   }
 };
