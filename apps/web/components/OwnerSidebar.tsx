@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { ScenovaIcon } from "./ScenovaIcon";
 import { ScenovaBrand } from "./ScenovaBrand";
 
@@ -161,23 +162,81 @@ function UnifiedMobileNav({
   partner?:PartnerSummary;
 }) {
   const items = sidebarItems(elevated, partner);
+  const sections = (["TRADING","MANAGEMENT","SYSTEM"] as const)
+    .filter(section=>items.some(item=>item.section===section));
+  const [open, setOpen] = useState(false);
+  const drawerId = elevated ? "owner-mobile-sidebar-drawer" : "customer-mobile-sidebar-drawer";
+
   return (
-    <div className="mobile-only mobile-nav owner-mobile-nav">
-      {items.map(item=>(
-        <Link
-          key={item.key}
-          href={item.href}
-          prefetch
-          aria-current={activeKey===item.key ? "page" : undefined}
-          className={activeKey===item.key ? "active" : ""}
-          onClick={(event)=>{
-            if (onNavigate?.(item.href) === true) event.preventDefault();
-          }}
+    <>
+      <div className="mobile-only owner-mobile-nav owner-mobile-nav-trigger-wrap">
+        <button
+          type="button"
+          className={"owner-mobile-nav-trigger " + (open ? "active" : "")}
+          aria-expanded={open}
+          aria-controls={drawerId}
+          onClick={()=>setOpen(value=>!value)}
         >
-          {item.label}
-        </Link>
-      ))}
-    </div>
+          <ScenovaIcon name="overview" size={19}/>
+          <span>เมนู</span>
+        </button>
+      </div>
+
+      {open ? (
+        <div
+          className="mobile-only owner-mobile-drawer-backdrop"
+          role="presentation"
+          onClick={()=>setOpen(false)}
+        >
+          <aside
+            id={drawerId}
+            className="owner-mobile-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="เมนูระบบ"
+            onClick={event=>event.stopPropagation()}
+          >
+            <div className="owner-mobile-drawer-handle" aria-hidden="true"/>
+            <header className="owner-mobile-drawer-head">
+              <div>
+                <b>SCENOVA</b>
+                <span>{elevated ? "Owner / Admin Menu" : "เมนูระบบ"}</span>
+              </div>
+              <button type="button" className="owner-mobile-drawer-close" aria-label="ปิดเมนู" onClick={()=>setOpen(false)}>×</button>
+            </header>
+
+            <div className="owner-mobile-drawer-body">
+              {sections.map(section=>(
+                <section key={section} className="owner-mobile-drawer-section">
+                  <div className="owner-mobile-drawer-label">{section}</div>
+                  <div className="owner-mobile-drawer-grid">
+                    {items.filter(item=>item.section===section).map(item=>(
+                      <Link
+                        key={item.key}
+                        href={item.href}
+                        prefetch
+                        aria-current={activeKey===item.key ? "page" : undefined}
+                        className={"owner-mobile-drawer-item " + (activeKey===item.key ? "active" : "")}
+                        onClick={(event)=>{
+                          setOpen(false);
+                          if (onNavigate?.(item.href) === true) event.preventDefault();
+                        }}
+                      >
+                        <span className="owner-mobile-drawer-icon"><ScenovaIcon name={item.icon} size={20}/></span>
+                        <span className="owner-mobile-drawer-copy">
+                          <b>{item.label}</b>
+                          <small>{item.hint}</small>
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          </aside>
+        </div>
+      ) : null}
+    </>
   );
 }
 
