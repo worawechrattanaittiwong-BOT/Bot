@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, getToken } from "../../lib/api";
-import { CustomerMobileNav, CustomerSidebar, OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
+import { CustomerSidebar, OwnerSidebar } from "../../components/OwnerSidebar";
+import { CustomerMobileNav, OwnerMobileNav } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
 import styles from "./performance.module.css";
