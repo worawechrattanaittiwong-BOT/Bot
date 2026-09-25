@@ -1547,3 +1547,254 @@
     grid-template-columns:repeat(4,minmax(0,1fr));
   }
 }
+
+
+/* SCENOVA Mobile UX Upgrade · M7 · Installer / Update / Logs / System */
+@media (max-width:767px){
+  .scn-mobile-system-center{
+    display:block!important;
+    margin:0 0 10px!important;
+    padding:12px!important;
+    border:1px solid var(--m-line);
+    border-radius:18px;
+    background:var(--m-surface);
+    box-shadow:var(--m-shadow);
+    scroll-margin-top:76px;
+  }
+
+  .scn-mobile-system-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:9px;
+  }
+
+  .scn-mobile-system-head>div{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+
+  .scn-mobile-system-head small{
+    color:var(--m-purple);
+    font-size:var(--ui-type-caption);
+    font-weight:900;
+    letter-spacing:.08em;
+  }
+
+  .scn-mobile-system-head b{
+    color:var(--m-text);
+    font-size:var(--ui-type-label);
+  }
+
+  .scn-mobile-system-head>span{
+    padding:5px 8px;
+    border-radius:999px;
+    border:1px solid var(--m-line);
+    font-size:var(--ui-type-caption);
+    font-weight:900;
+  }
+
+  .scn-mobile-system-head>span.good{color:var(--m-green)}
+  .scn-mobile-system-head>span.warn{color:var(--m-amber)}
+
+  .scn-mobile-system-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:7px;
+  }
+
+  .scn-mobile-system-grid>div{
+    min-width:0;
+    min-height:67px;
+    padding:9px;
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+    border:1px solid var(--m-line);
+    border-radius:13px;
+    background:var(--m-surface-2);
+  }
+
+  .scn-mobile-system-grid span,
+  .scn-mobile-system-grid small{
+    color:var(--m-muted);
+    font-size:var(--ui-type-caption);
+  }
+
+  .scn-mobile-system-grid b{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    color:var(--m-text);
+    font-size:var(--ui-type-caption);
+    white-space:nowrap;
+  }
+
+  .scn-mobile-system-actions{
+    margin-top:8px;
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:7px;
+  }
+
+  .scn-mobile-system-actions>button{
+    min-width:0;
+    min-height:62px;
+    padding:8px 5px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+    border:1px solid var(--m-line);
+    border-radius:13px;
+    background:var(--m-surface-2);
+    color:var(--m-text);
+  }
+
+  .scn-mobile-system-actions>button>span{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:1px;
+  }
+
+  .scn-mobile-system-actions b,
+  .scn-mobile-system-actions small{
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-size:var(--ui-type-caption);
+  }
+
+  .scn-mobile-system-actions small{color:var(--m-muted)}
+
+  /* Existing status dialog becomes a native-like bottom sheet on phones. */
+  body.scn-mobile-app-route .cc-status-dialog{
+    width:calc(100% - 12px)!important;
+    max-width:none!important;
+    max-height:82dvh!important;
+    margin:auto 6px 6px!important;
+    padding:0!important;
+    border:1px solid var(--m-line)!important;
+    border-radius:22px 22px 16px 16px!important;
+    background:var(--m-bg-elevated)!important;
+    color:var(--m-text)!important;
+  }
+
+  body.scn-mobile-app-route .cc-status-dialog::backdrop{
+    background:rgba(2,4,10,.62)!important;
+    backdrop-filter:blur(5px);
+  }
+
+  body.scn-mobile-app-route .cc-status-dialog-card{
+    max-height:82dvh!important;
+    overflow:auto!important;
+    border-radius:inherit!important;
+    background:var(--m-bg-elevated)!important;
+  }
+
+  body.scn-mobile-app-route .cc-status-dialog-head{
+    position:sticky;
+    top:0;
+    z-index:5;
+    padding:12px!important;
+    border-bottom:1px solid var(--m-line)!important;
+    background:color-mix(in srgb,var(--m-bg-elevated) 95%,transparent)!important;
+    backdrop-filter:blur(14px);
+  }
+
+  body.scn-mobile-app-route .cc-status-center,
+  body.scn-mobile-app-route .cc-status-software{
+    padding-left:11px!important;
+    padding-right:11px!important;
+  }
+
+  /* Existing terminal becomes a full-screen mobile console. */
+  body.scn-mobile-app-route .bot-log-overlay{
+    z-index:2800!important;
+    padding:0!important;
+    align-items:stretch!important;
+    background:rgba(2,4,10,.70)!important;
+  }
+
+  body.scn-mobile-app-route .bot-log-drawer.cc-terminal-drawer{
+    width:100%!important;
+    max-width:none!important;
+    height:100dvh!important;
+    max-height:none!important;
+    margin:0!important;
+    padding:
+      calc(8px + env(safe-area-inset-top))
+      9px
+      calc(10px + env(safe-area-inset-bottom))
+      !important;
+    border:0!important;
+    border-radius:0!important;
+    background:var(--m-bg)!important;
+  }
+
+  body.scn-mobile-app-route .cc-terminal-drawer-head{
+    position:sticky;
+    top:0;
+    z-index:10;
+    padding:7px 2px 10px!important;
+    background:var(--m-bg)!important;
+  }
+
+  body.scn-mobile-app-route .cc-terminal-drawer-head .cc-card-title span,
+  body.scn-mobile-app-route .cc-terminal-drawer-head .cc-card-title .eyebrow{
+    font-size:var(--ui-type-caption)!important;
+  }
+
+  body.scn-mobile-app-route .cc-terminal-drawer-head h2{
+    max-width:240px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    color:var(--m-text)!important;
+    font-size:var(--ui-type-label)!important;
+  }
+
+  body.scn-mobile-app-route .cc-terminal-drawer-stats{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:6px!important;
+  }
+
+  body.scn-mobile-app-route .cc-terminal-drawer-meta{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:6px!important;
+  }
+
+  body.scn-mobile-app-route .cc-terminal-toolbar.drawer{
+    display:flex!important;
+    gap:5px!important;
+    overflow-x:auto;
+    scrollbar-width:none;
+  }
+
+  body.scn-mobile-app-route .cc-terminal-toolbar.drawer::-webkit-scrollbar{display:none}
+
+  body.scn-mobile-app-route .cc-terminal-filter{
+    flex:0 0 auto;
+    min-height:36px!important;
+  }
+
+  body.scn-mobile-app-route .cc-terminal-window-full{
+    min-height:38dvh!important;
+    max-height:none!important;
+    overflow:auto!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route .cc-status-dialog,
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route .cc-status-dialog-card,
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route .bot-log-drawer.cc-terminal-drawer{
+    background:var(--m-bg-elevated)!important;
+    color:var(--m-text)!important;
+  }
+}

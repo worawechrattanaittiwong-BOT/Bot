@@ -101,7 +101,7 @@ export function MobileExperience() {
                   <a href="/referrals"><ScenovaIcon name="users" size={20}/><span><b>Invite & Earn</b><small>Referral และ Wallet</small></span></a>
                   <a href="/partner"><ScenovaIcon name="users" size={20}/><span><b>Partner</b><small>จัดการ Customer Seats</small></span></a>
                   <a href="/runtime-migration"><ScenovaIcon name="refresh" size={20}/><span><b>Runtime</b><small>Local ↔ Cloud migration</small></span></a>
-                  <a href="/dashboard?view=overview#cc-system-status"><ScenovaIcon name="status" size={20}/><span><b>System</b><small>สถานะและเวอร์ชัน</small></span></a>
+                  <a href="/dashboard?view=overview#mobile-system-center"><ScenovaIcon name="status" size={20}/><span><b>System</b><small>สถานะและเวอร์ชัน</small></span></a>
                 </div>
                 <div className="scn-mobile-more-theme">
                   <span><ScenovaIcon name="spark" size={18}/><b>Appearance</b></span>

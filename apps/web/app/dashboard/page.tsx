@@ -2056,6 +2056,24 @@ export default function DashboardPage() {
                 </div>
               </dialog>
 
+              <section className="mobile-only scn-mobile-system-center" id="mobile-system-center" aria-label="System and update center">
+                <div className="scn-mobile-system-head">
+                  <div><small>SYSTEM CENTER</small><b>สถานะ · อัปเดต · Logs</b></div>
+                  <span className={isMt5Online ? "good" : "warn"}>{isMt5Online ? "ONLINE" : isAgentOnline ? "EA WAIT" : "OFFLINE"}</span>
+                </div>
+                <div className="scn-mobile-system-grid">
+                  <div><span>MT5</span><b>{isMt5Online ? "Connected" : isAgentOnline ? "Agent Online" : "Waiting"}</b></div>
+                  <div><span>EA</span><b>{softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}</b><small>{softwareUpdate.eaUpdateRequired ? "มีอัปเดต" : "Runtime"}</small></div>
+                  <div><span>Agent</span><b>{softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : data.selectedSlot?.mode === "LOCAL" ? "—" : "Cloud"}</b><small>{softwareUpdate.installerRequired ? "มีอัปเดต" : "Status"}</small></div>
+                  <div><span>Execution</span><b>{String(liveStatus.label || state)}</b><small>{heartbeatAgeSeconds.toFixed(0)}s heartbeat</small></div>
+                </div>
+                <div className="scn-mobile-system-actions">
+                  <button type="button" onClick={()=>statusDialogRef.current?.showModal()}><ScenovaIcon name="status" size={17}/><span><b>สถานะระบบ</b><small>Version / Update</small></span></button>
+                  <button type="button" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={17}/><span><b>Live Logs</b><small>Terminal</small></span></button>
+                  <button type="button" onClick={()=>{setActiveView("account");window.history.replaceState({},"","/dashboard?view=account");window.scrollTo({top:0,behavior:"smooth"});}}><ScenovaIcon name="arrow-down" size={17}/><span><b>ติดตั้ง / อัปเดต</b><small>MT5 & EA</small></span></button>
+                </div>
+              </section>
+
               <section className="cc-v6-telemetry" aria-label="ข้อมูลสดจาก EA">
                 <div className="cc-v6-telemetry-live"><i/>{marketSessionClosed ? "MARKET CLOSED" : "REALTIME"}</div>
                 <LiveTelemetryItem icon="timer" label="ATR (M15)" value={atrValueLabel} tone={atrPoints>0?"good":"neutral"}/>
