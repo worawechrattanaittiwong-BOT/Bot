@@ -15,11 +15,9 @@ $sidebar = Read-Text 'apps/web/components/OwnerSidebar.tsx'
 
 Need $layout 'import "./mobile-ui.css";' 'Mobile UI stylesheet must load after existing dashboard styles'
 Need $layout '<MobileExperience />' 'Mobile theme experience must be mounted once at root'
-Need $mobile 'scenova-mobile-theme' 'Mobile theme persistence key missing'
+Need $mobile 'root.dataset.scenovaMobileTheme = "dark"' 'Mobile UI must force the approved dark theme'
 Need $mobile 'data-mobile-ui-only="true"' 'Mobile UI-only marker missing'
-Need $mobile 'prefers-color-scheme: light' 'Mobile theme should honor device preference on first use'
 Need $css '@media (max-width:767px)' 'Mobile UI must remain isolated below the mobile breakpoint'
-Need $css 'data-scenova-mobile-theme="light"' 'Light mode CSS contract missing'
 Need $css 'body.scn-mobile-app-route .mobile-only.mobile-nav' 'Mobile app navigation shell missing'
 Need $css 'env(safe-area-inset-bottom)' 'Mobile shell must respect device safe area'
 Need $sidebar 'mobile-nav-icon' 'Mobile navigation must expose app-style icon slots'
@@ -40,4 +38,8 @@ foreach($needle in $forbidden){
   }
 }
 
-Write-Host 'SCENOVA mobile UI M1 shell + light mode contract: PASS'
+if($mobile.Contains('Appearance') -or $mobile.Contains('prefers-color-scheme: light') -or $mobile.Contains('setTheme(')){
+  throw 'Dark-only mobile UI must not expose or auto-select a light theme'
+}
+
+Write-Host 'SCENOVA mobile UI M1 shell + dark-only theme contract: PASS'
