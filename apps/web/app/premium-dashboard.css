@@ -2,8 +2,8 @@
 
 /* Premium white-blue logo glow (keep the brand readable without changing its proportions) */
 .owner-sidebar .scenova-brand-lockup{position:relative;isolation:isolate;overflow:visible!important}
-.owner-sidebar .scenova-brand-lockup::before{content:"";position:absolute;left:2%;top:50%;width:96%;height:84px;transform:translateY(-50%);border-radius:999px;background:radial-gradient(ellipse at center,rgba(236,247,255,.18) 0%,rgba(154,201,255,.12) 34%,rgba(92,143,255,.055) 58%,transparent 78%);filter:blur(14px);pointer-events:none;z-index:-1}
-.owner-sidebar .scenova-brand-logo-sidebar{position:relative;z-index:1;filter:brightness(1.68) contrast(1.07) saturate(.86) drop-shadow(0 0 1px rgba(255,255,255,.98)) drop-shadow(0 0 7px rgba(226,242,255,.72)) drop-shadow(0 0 18px rgba(128,186,255,.40)) drop-shadow(0 0 32px rgba(79,121,255,.18))!important;opacity:1!important}
+.owner-sidebar .scenova-brand-lockup::before{display:none!important}
+.owner-sidebar .scenova-brand-logo-sidebar{position:relative;z-index:1;filter:none!important;opacity:1!important}
 .owner-sidebar .side-brand{padding-bottom:19px!important;margin-bottom:22px!important;border-bottom:1px solid rgba(205,228,255,.10)!important;box-shadow:0 1px 0 rgba(96,156,255,.04)!important}
 
 /* Restore the original top-card width proportions. Do NOT force equal widths. */
