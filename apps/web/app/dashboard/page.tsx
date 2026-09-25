@@ -2180,7 +2180,7 @@ export default function DashboardPage() {
                   />
                 </section>
 
-                <section className="panel cc-v17-running-positions" aria-label="ออเดอร์ที่บอทกำลังรัน">
+                <section id="live-orders" className="panel cc-v17-running-positions" aria-label="ออเดอร์ที่บอทกำลังรัน">
                   <div className="cc-v17-running-head">
                     <div><span><ScenovaIcon name="orders" size={18}/></span><div><small>LIVE EXECUTION</small><b>ออเดอร์ที่กำลังรัน</b></div></div>
                     <em className={currentPositions>0?"live":"idle"}>{currentPositions>0?currentPositions+" Running":"No Position"}</em>
