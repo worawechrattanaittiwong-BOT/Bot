@@ -3192,6 +3192,162 @@ bool RaceZonePriorityActive(
 #include "include\\RaceNewsV1.mqh"
 #include "include\\RaceTelemetryV1.mqh"
 
+// RACE-only anti-chase guard -------------------------------------------------
+// This guard changes only RACE entry/fill timing. It never flips direction,
+// closes a Basket, changes Lot/Max Positions, or participates in AUTO/MANUAL/
+// FLIP/ZERO logic. When RACE is already stretched at the terminal edge of a
+// move, wait for a real pullback followed by a fresh continuation candle.
+bool RaceAntiChasePullbackContinuationReady(int direction,double atrM5Price)
+{
+   if(direction==0 || atrM5Price<=0.0)
+      return false;
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   if(CopyRates(_Symbol,PERIOD_M5,1,3,rates)<3)
+      return false;
+
+   double latestBody=MathAbs(rates[0].close-rates[0].open);
+   bool latestContinuation=direction>0
+      ? rates[0].close>rates[0].open
+      : rates[0].close<rates[0].open;
+
+   bool priorPullback=direction>0
+      ? rates[1].close<rates[1].open
+      : rates[1].close>rates[1].open;
+
+   double priorBody=MathAbs(rates[1].close-rates[1].open);
+
+   // Require a measurable counter-direction pause/pullback first, then a fresh
+   // completed M5 candle back in the original RACE direction. This deliberately
+   // does not treat a wick-only pause as enough confirmation.
+   return latestContinuation &&
+          latestBody>=atrM5Price*0.12 &&
+          priorPullback &&
+          priorBody>=atrM5Price*0.10;
+}
+
+bool RaceAntiChaseBlocked(int direction,string &reasonOut)
+{
+   reasonOut="NONE";
+   if(direction==0)
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return false;
+
+   double price=(tick.bid+tick.ask)*0.5;
+   if(price<=0.0)
+      return false;
+
+   double atrM5Points=AverageTrueRangePoints(PERIOD_M5,g_atrPeriod);
+   double atrM15Points=AverageTrueRangePoints(PERIOD_M15,g_atrPeriod);
+   if(atrM5Points<=0.0 || atrM15Points<=0.0)
+      return false;
+
+   double atrM5Price=atrM5Points*_Point;
+   double atrM15Price=atrM15Points*_Point;
+
+   MqlRates m5[];
+   ArraySetAsSeries(m5,true);
+   int copiedM5=CopyRates(_Symbol,PERIOD_M5,1,10,m5);
+   if(copiedM5<4)
+      return false;
+
+   MqlRates m15[];
+   ArraySetAsSeries(m15,true);
+   int copiedM15=CopyRates(_Symbol,PERIOD_M15,1,10,m15);
+
+   double m5Low=m5[0].low;
+   double m5High=m5[0].high;
+   for(int i=1;i<copiedM5;i++)
+   {
+      m5Low=MathMin(m5Low,m5[i].low);
+      m5High=MathMax(m5High,m5[i].high);
+   }
+
+   double m15Low=0.0;
+   double m15High=0.0;
+   if(copiedM15>=4)
+   {
+      m15Low=m15[0].low;
+      m15High=m15[0].high;
+      for(int i=1;i<copiedM15;i++)
+      {
+         m15Low=MathMin(m15Low,m15[i].low);
+         m15High=MathMax(m15High,m15[i].high);
+      }
+   }
+
+   bool nearM5Terminal=direction>0
+      ? price>=m5High-atrM5Price*0.20
+      : price<=m5Low+atrM5Price*0.20;
+
+   bool nearM15Terminal=false;
+   if(copiedM15>=4)
+   {
+      nearM15Terminal=direction>0
+         ? price>=m15High-atrM15Price*0.14
+         : price<=m15Low+atrM15Price*0.14;
+   }
+
+   double latestRange=MathMax(_Point,m5[0].high-m5[0].low);
+   double latestBody=MathAbs(m5[0].close-m5[0].open);
+   double latestBodyRatio=latestBody/latestRange;
+   bool latestDirectional=direction>0
+      ? m5[0].close>m5[0].open
+      : m5[0].close<m5[0].open;
+
+   // A single large completed M5 expansion candle is the exact case that used
+   // to make RACE chase the bottom/top. It is a hard WAIT until pullback +
+   // continuation is visible.
+   bool largeExpansion=
+      latestDirectional &&
+      latestBody>=atrM5Price*0.75 &&
+      latestBodyRatio>=0.58;
+
+   int sameDirectionBars=0;
+   int recent=MathMin(copiedM5,4);
+   for(int i=0;i<recent;i++)
+   {
+      bool same=direction>0
+         ? m5[i].close>m5[i].open
+         : m5[i].close<m5[i].open;
+      if(same)
+         sameDirectionBars++;
+   }
+
+   double runTravel=direction>0
+      ? m5[0].close-m5[recent-1].open
+      : m5[recent-1].open-m5[0].close;
+
+   bool stretchedRun=
+      sameDirectionBars>=3 &&
+      runTravel>=atrM5Price*1.05;
+
+   bool terminalEdge=nearM5Terminal || nearM15Terminal;
+   bool chaseRisk=largeExpansion || (terminalEdge && stretchedRun);
+   if(!chaseRisk)
+      return false;
+
+   // Never reverse the side here. A valid pullback/continuation simply releases
+   // the existing RACE direction; otherwise the fill waits and is re-evaluated.
+   if(RaceAntiChasePullbackContinuationReady(direction,atrM5Price))
+      return false;
+
+   if(largeExpansion)
+      reasonOut=direction>0
+         ? "RACE_WAIT_BUY_EXPANSION_PULLBACK"
+         : "RACE_WAIT_SELL_EXPANSION_PULLBACK";
+   else
+      reasonOut=direction>0
+         ? "RACE_WAIT_BUY_TERMINAL_PULLBACK"
+         : "RACE_WAIT_SELL_TERMINAL_PULLBACK";
+
+   return true;
+}
+
 int RaceAnalysisDirection(double momentum)
 {
    // Explicit customer direction remains authoritative. AUTO RACE keeps the
@@ -3798,6 +3954,16 @@ bool ProcessRaceFill(int direction)
    if(!OpenTradingAllowedForDirection(direction))
    {
       g_executionStatus = "RACE_SYMBOL_DIRECTION_BLOCKED";
+      return false;
+   }
+
+   // RACE-only hard anti-chase gate. Apply to the first order and every add.
+   // It only delays a fill; it does not flip direction or alter any exit logic.
+   string raceAntiChaseReason="NONE";
+   if(RaceAntiChaseBlocked(direction,raceAntiChaseReason))
+   {
+      g_raceState="ANTI_CHASE_WAIT";
+      g_executionStatus=raceAntiChaseReason;
       return false;
    }
 
