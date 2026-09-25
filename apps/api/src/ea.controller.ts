@@ -12,7 +12,7 @@ import {
 } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { CryptoService } from "./security";
-import { EA_RUNTIME_CONTRACT, installerDownloadPath, isEaVersionExact, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";
+import { EA_RUNTIME_CONTRACT, installerDownloadPath, isEaVersionExact, isVersionExact, isVersionSame, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { MaintenanceService } from "./maintenance.service";
@@ -1346,9 +1346,33 @@ export class EaController {
     const agentVersionRequired = latestInstallerVersion();
     const reportedAgentVersion = String(body.agentVersion || "").trim();
     const agentUpdateRequired = !isVersionExact(reportedAgentVersion, agentVersionRequired);
+    const agentUpdateAvailable = !isVersionSame(reportedAgentVersion, agentVersionRequired);
     const eaVersionRequired = this.artifactVersion(releaseChannel);
     const currentRuntimeContract = String(runtime?.runtime_contract || "").trim();
     const runtimeContractMatch = currentRuntimeContract === EA_RUNTIME_CONTRACT;
+    const runtimeVersionMatch = isEaVersionExact(runtime?.ea_version, eaVersionRequired);
+    const safeToRestart =
+      String(runtime?.desired_state || "STOPPED") !== "RUNNING" &&
+      String(runtime?.actual_state || "STOPPED") !== "RUNNING" &&
+      Number(runtime?.positions || 0) <= 0;
+    const localArtifactHash = String(body.eaHash || "").trim().toLowerCase();
+    const artifactHashMatch = Boolean(
+      serverEaHash &&
+      localArtifactHash &&
+      localArtifactHash === String(serverEaHash).toLowerCase()
+    );
+    const stagedUpdate = Boolean(body.installerStatus?.stagedUpdate);
+
+    let eaUpdateState = "UP_TO_DATE";
+    if (!serverEaHash) {
+      eaUpdateState = "ARTIFACT_UNAVAILABLE";
+    } else if (!artifactHashMatch) {
+      eaUpdateState = stagedUpdate
+        ? (safeToRestart ? "APPLY_REQUIRED" : "WAIT_SAFE_STOP_APPLY")
+        : "DOWNLOAD_REQUIRED";
+    } else if (!runtimeVersionMatch || !runtimeContractMatch) {
+      eaUpdateState = safeToRestart ? "RELOAD_REQUIRED" : "WAIT_SAFE_STOP_RELOAD";
+    }
 
     // Compatibility bridge for already-installed 1.0.x Agents:
     // when the EX5/version are already current but MT5 still has an older
@@ -1357,7 +1381,7 @@ export class EaController {
     // release version remains unchanged everywhere else, and MT5 still restarts
     // only after the customer's explicit UPDATE_EA_RESTART action.
     const runtimeReloadOnly =
-      isEaVersionExact(runtime?.ea_version, eaVersionRequired) &&
+      runtimeVersionMatch &&
       !runtimeContractMatch;
     const agentEaVersionRequired = runtimeReloadOnly
       ? `${eaVersionRequired}-runtime-reload`
@@ -1371,8 +1395,11 @@ export class EaController {
       artifactHash: serverEaHash,
       artifactName: "FastBasketBot.ex5",
       artifactEndpoint: "/api/ea/artifact",
+      artifactHashMatch,
+      eaUpdateState,
       eaOnline: eaLastSeenAgeSeconds >= 0 && eaLastSeenAgeSeconds <= 10,
       eaVersion: String(runtime?.ea_version || ""),
+      runtimeVersionMatch,
       eaLastSeenAgeSeconds,
       terminalTradeAllowed:
         runtime?.terminal_trade_allowed === "true"
@@ -1386,10 +1413,7 @@ export class EaController {
           : runtime?.mql_trade_allowed === "false"
             ? false
             : null,
-      safeToRestart:
-        String(runtime?.desired_state || "STOPPED") !== "RUNNING" &&
-        String(runtime?.actual_state || "STOPPED") !== "RUNNING" &&
-        Number(runtime?.positions || 0) <= 0,
+      safeToRestart,
       positions: Number(runtime?.positions || 0),
       desiredState: String(runtime?.desired_state || "STOPPED"),
       actualState: String(runtime?.actual_state || "STOPPED"),
@@ -1404,6 +1428,7 @@ export class EaController {
       agentVersion: reportedAgentVersion,
       agentVersionRequired,
       agentUpdateRequired,
+      agentUpdateAvailable,
       agentDownloadUrl: installerDownloadPath(agentVersionRequired)
     };
   }
