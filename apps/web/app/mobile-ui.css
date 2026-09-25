@@ -1869,7 +1869,7 @@
 }
 @media (max-width:360px){
   .scn-mobile-theme-toggle>span:last-child{display:none}
-  .scn-mobile-primary-nav span{font-size:9px}
+  .scn-mobile-primary-nav span{font-size:var(--ui-type-caption)}
   .scn-mobile-more-grid{grid-template-columns:1fr}
   .scn-mobile-system-actions{grid-template-columns:1fr 1fr 1fr}
 }
