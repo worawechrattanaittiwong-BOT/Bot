@@ -244,7 +244,7 @@
     gap:4px;
     scroll-snap-align:start;
     white-space:nowrap;
-    font-size:10px!important;
+    font-size:var(--ui-type-caption)!important;
     font-weight:750;
     line-height:1.15;
   }
