@@ -358,7 +358,7 @@ export default function SharedPerformancePage() {
   const symbol=String(account.symbol||"—");
 
   if(error){
-    return <div className={styles.shell}><main className={styles.main+" "+styles.mainOwner}><section className={styles.summaryShell}><div className={styles.emptyState}><b>ไม่พบรายงาน</b><br/>{error}</div></section></main></div>;
+    return <div className={`${styles.shell} scn-mobile-public-performance`}><main className={styles.main+" "+styles.mainOwner}><section className={styles.summaryShell}><div className={styles.emptyState}><b>ไม่พบรายงาน</b><br/>{error}</div></section></main></div>;
   }
 
   if(!data){

@@ -38,7 +38,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page} scn-mobile-auth-page`}>
       <section className={styles.card}>
         <ScenovaBrand className={styles.brand}/>
         {done ? (

@@ -66,7 +66,7 @@ export default function VerifyTwoFactorPage() {
   }
 
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page} scn-mobile-auth-page`}>
       <header className={styles.header}>
         <a href="/website" aria-label="SCENOVA website"><ScenovaBrand className={styles.brand}/></a>
         <span><ScenovaIcon name="shield" size={16}/> TWO-FACTOR AUTHENTICATION</span>

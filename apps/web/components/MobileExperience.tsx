@@ -10,7 +10,6 @@ const MOBILE_THEME_STORAGE_KEY = "scenova-mobile-theme";
 const APP_ROUTE_PREFIXES = [
   "/dashboard",
   "/account",
-  "/performance",
   "/packages",
   "/referrals",
   "/partner",
@@ -31,13 +30,23 @@ export function MobileExperience() {
   const pathname = usePathname() || "/";
   const [theme, setTheme] = useState<MobileTheme>("dark");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [online, setOnline] = useState(true);
   const isAppRoute = useMemo(
-    () => APP_ROUTE_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(prefix + "/")),
+    () => pathname === "/performance" ||
+      APP_ROUTE_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(prefix + "/")),
     [pathname]
   );
 
   useEffect(() => {
     setTheme(preferredTheme());
+    const updateNetwork = () => setOnline(window.navigator.onLine);
+    updateNetwork();
+    window.addEventListener("online", updateNetwork);
+    window.addEventListener("offline", updateNetwork);
+    return () => {
+      window.removeEventListener("online", updateNetwork);
+      window.removeEventListener("offline", updateNetwork);
+    };
   }, []);
 
   useEffect(() => {
@@ -57,7 +66,7 @@ export function MobileExperience() {
     { label:"Home", href:"/dashboard?view=overview", icon:"overview", active:pathname==="/dashboard" },
     { label:"Trade", href:"/dashboard?view=overview#bot-settings", icon:"control", active:false },
     { label:"Orders", href:"/dashboard?view=overview#live-orders", icon:"orders", active:false },
-    { label:"Stats", href:"/performance", icon:"pnl", active:pathname.startsWith("/performance") }
+    { label:"Stats", href:"/performance", icon:"pnl", active:pathname==="/performance" }
   ];
 
   return (
@@ -72,6 +81,13 @@ export function MobileExperience() {
         <span className={"scn-mobile-theme-glyph " + theme} aria-hidden="true"><i/></span>
         <span>{theme === "dark" ? "สว่าง" : "มืด"}</span>
       </button>
+
+      {!online ? (
+        <div className="scn-mobile-network-state" role="status" aria-live="polite">
+          <ScenovaIcon name="info" size={16}/>
+          <span><b>Offline</b><small>รอการเชื่อมต่ออินเทอร์เน็ตกลับมา</small></span>
+        </div>
+      ) : null}
 
       {isAppRoute ? (
         <>

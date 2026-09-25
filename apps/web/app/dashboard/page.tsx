@@ -2171,7 +2171,7 @@ export default function DashboardPage() {
               </section>
 
               <div className="cc-v19-three-card-grid">
-                <section className="cc-v17-settings-column cc-v19-settings-card" aria-label="ตั้งค่าบอท">
+                <section id="bot-settings" className="cc-v17-settings-column cc-v19-settings-card" aria-label="ตั้งค่าบอท">
                   <BotSettingsModal
                     embedded
                     open

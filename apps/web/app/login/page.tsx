@@ -171,7 +171,7 @@ export default function LoginPage() {
 
   if (checkingSession) {
     return (
-      <main className={styles.page}>
+      <main className={`${styles.page} scn-mobile-auth-page`}>
         <img className={styles.background} src={LOGIN_BACKGROUND_URL} alt="" aria-hidden="true" />
         <section className={styles.sessionCard}>
           <ScenovaBrand className={styles.formLogo} />

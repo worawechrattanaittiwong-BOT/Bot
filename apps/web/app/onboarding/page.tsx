@@ -84,7 +84,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page} scn-mobile-auth-page`}>
       <div className={styles.glowOne} aria-hidden="true" />
       <div className={styles.glowTwo} aria-hidden="true" />
 
