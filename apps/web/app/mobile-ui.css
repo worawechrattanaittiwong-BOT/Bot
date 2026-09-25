@@ -721,3 +721,317 @@
     grid-template-columns:repeat(3,minmax(0,1fr))!important;
   }
 }
+
+
+/* SCENOVA Mobile UX Upgrade · M3
+   Primary app navigation + mobile trading settings. Navigation is presentation;
+   all actions still call the existing dashboard handlers. */
+@media (max-width:767px){
+  body.scn-mobile-app-route{
+    --m-primary-nav-height:68px;
+  }
+
+  body.scn-mobile-app-route .app-main,
+  body.scn-mobile-app-route .main.app-main{
+    padding-bottom:calc(var(--m-primary-nav-height) + 24px + env(safe-area-inset-bottom))!important;
+  }
+
+  .scn-mobile-primary-nav{
+    position:fixed;
+    left:8px;
+    right:8px;
+    bottom:calc(8px + env(safe-area-inset-bottom));
+    z-index:2500;
+    min-height:var(--m-primary-nav-height);
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:4px;
+    padding:6px;
+    border:1px solid var(--m-line);
+    border-radius:20px;
+    background:color-mix(in srgb,var(--m-bg-elevated) 94%,transparent);
+    box-shadow:0 18px 48px rgba(0,0,0,.34);
+    backdrop-filter:blur(22px);
+    -webkit-backdrop-filter:blur(22px);
+  }
+
+  .scn-mobile-primary-nav>a,
+  .scn-mobile-primary-nav>button{
+    min-width:0;
+    min-height:54px;
+    padding:5px 3px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+    border:1px solid transparent;
+    border-radius:14px;
+    background:transparent;
+    color:var(--m-muted);
+    font:inherit;
+    text-decoration:none;
+  }
+
+  .scn-mobile-primary-nav span{
+    font-size:var(--ui-type-caption);
+    font-weight:800;
+  }
+
+  .scn-mobile-primary-nav :where(a,button).active{
+    color:var(--m-text);
+    border-color:color-mix(in srgb,var(--m-purple) 38%,var(--m-line));
+    background:linear-gradient(180deg,
+      color-mix(in srgb,var(--m-purple) 16%,var(--m-surface)),
+      var(--m-surface));
+  }
+
+  /* Existing role-aware menu stays available as a secondary rail, so no Owner
+     or Customer destination disappears when the primary 5-tab app nav is added. */
+  body.scn-mobile-app-route .mobile-only.mobile-nav,
+  body.scn-mobile-app-route .mobile-nav.owner-mobile-nav{
+    position:static!important;
+    height:auto!important;
+    min-height:0!important;
+    margin:0 -2px 12px!important;
+    padding:2px 2px 7px!important;
+    gap:6px!important;
+    border:0!important;
+    border-radius:0!important;
+    background:transparent!important;
+    box-shadow:none!important;
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+  }
+
+  body.scn-mobile-app-route .mobile-nav a,
+  body.scn-mobile-app-route .mobile-nav button{
+    min-width:auto!important;
+    min-height:36px!important;
+    padding:7px 10px!important;
+    flex-direction:row!important;
+    gap:6px!important;
+    border:1px solid var(--m-line)!important;
+    border-radius:999px!important;
+    background:var(--m-surface)!important;
+    font-size:var(--ui-type-caption)!important;
+  }
+
+  body.scn-mobile-app-route .mobile-nav-icon{
+    width:18px;
+    height:18px;
+  }
+
+  .scn-mobile-more-backdrop{
+    position:fixed;
+    inset:0;
+    z-index:2700;
+    display:flex;
+    align-items:flex-end;
+    background:rgba(2,4,10,.60);
+    backdrop-filter:blur(5px);
+    -webkit-backdrop-filter:blur(5px);
+  }
+
+  .scn-mobile-more-sheet{
+    width:100%;
+    max-height:min(78dvh,720px);
+    overflow:auto;
+    padding:8px 14px calc(18px + env(safe-area-inset-bottom));
+    border:1px solid var(--m-line);
+    border-bottom:0;
+    border-radius:24px 24px 0 0;
+    background:var(--m-bg-elevated);
+    color:var(--m-text);
+    box-shadow:0 -24px 60px rgba(0,0,0,.34);
+  }
+
+  .scn-mobile-sheet-handle{
+    width:42px;
+    height:4px;
+    margin:2px auto 10px;
+    border-radius:999px;
+    background:color-mix(in srgb,var(--m-muted) 45%,transparent);
+  }
+
+  .scn-mobile-more-sheet>header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:12px;
+  }
+
+  .scn-mobile-more-sheet>header div{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+
+  .scn-mobile-more-sheet>header b{font-size:17px}
+  .scn-mobile-more-sheet>header span{font-size:var(--ui-type-caption);color:var(--m-muted)}
+
+  .scn-mobile-more-sheet>header button{
+    width:40px;
+    height:40px;
+    min-height:40px;
+    display:grid;
+    place-items:center;
+    border:1px solid var(--m-line);
+    border-radius:12px;
+    background:var(--m-surface);
+    color:var(--m-text);
+    font-size:22px;
+  }
+
+  .scn-mobile-more-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+  }
+
+  .scn-mobile-more-grid>a{
+    min-height:76px;
+    padding:11px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    border:1px solid var(--m-line);
+    border-radius:15px;
+    background:var(--m-surface);
+    color:var(--m-text);
+  }
+
+  .scn-mobile-more-grid>a>svg{
+    flex:0 0 auto;
+    color:var(--m-purple);
+  }
+
+  .scn-mobile-more-grid>a span{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+  }
+
+  .scn-mobile-more-grid>a b{font-size:var(--ui-type-label)}
+  .scn-mobile-more-grid>a small{font-size:var(--ui-type-caption);line-height:1.35;color:var(--m-muted)}
+
+  .scn-mobile-more-theme{
+    margin-top:10px;
+    padding:10px 11px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    border:1px solid var(--m-line);
+    border-radius:15px;
+    background:var(--m-surface-2);
+  }
+
+  .scn-mobile-more-theme>span{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+
+  .scn-mobile-more-theme button{
+    min-height:38px;
+    padding:7px 10px;
+    border:1px solid var(--m-line);
+    border-radius:10px;
+    background:var(--m-surface);
+    color:var(--m-text);
+  }
+
+  /* Mobile trading settings: the embedded settings UI is retained field-for-field. */
+  body.scn-mobile-app-route #bot-settings{
+    scroll-margin-top:72px;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-panel,
+  body.scn-mobile-app-route .cc-v19-settings-card{
+    border-radius:18px!important;
+    background:var(--m-surface)!important;
+    border-color:var(--m-line)!important;
+    box-shadow:var(--m-shadow)!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-head{
+    padding:13px!important;
+    align-items:flex-start!important;
+    gap:10px!important;
+    border-bottom-color:var(--m-line)!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-head>div:first-child{
+    min-width:0;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-main{
+    padding:11px!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-modes{
+    display:flex!important;
+    gap:7px!important;
+    overflow-x:auto;
+    padding-bottom:5px;
+    scrollbar-width:none;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-modes::-webkit-scrollbar{display:none}
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-mode-section{
+    flex:0 0 auto;
+    min-width:116px;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-fields,
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-limit-grid{
+    grid-template-columns:1fr!important;
+    gap:9px!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-control-cell,
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-field{
+    min-height:0!important;
+    padding:11px!important;
+    border-radius:13px!important;
+    border-color:var(--m-line)!important;
+    background:var(--m-surface-2)!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings :where(.input,input,select){
+    width:100%;
+    min-height:46px!important;
+    border-radius:11px!important;
+    background:var(--m-bg-elevated)!important;
+    border-color:var(--m-line)!important;
+    color:var(--m-text)!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-choice-row{
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:7px!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-footer{
+    position:sticky;
+    bottom:calc(var(--m-primary-nav-height) + 14px + env(safe-area-inset-bottom));
+    z-index:30;
+    margin:10px -2px 0!important;
+    padding:9px!important;
+    border:1px solid var(--m-line)!important;
+    border-radius:14px!important;
+    background:color-mix(in srgb,var(--m-bg-elevated) 94%,transparent)!important;
+    box-shadow:0 10px 30px rgba(0,0,0,.25);
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+  }
+
+  html[data-scenova-mobile-theme="light"] .scn-mobile-more-backdrop{
+    background:rgba(28,34,58,.34);
+  }
+}
