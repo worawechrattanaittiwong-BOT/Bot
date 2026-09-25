@@ -38,6 +38,9 @@ jobs:
       - name: Mobile sidebar toggle drawer contract
         shell: pwsh
         run: ./tests/mobile-sidebar-drawer-contract.ps1
+      - name: Mobile dashboard command dock hierarchy contract
+        shell: pwsh
+        run: ./tests/mobile-dashboard-command-dock-contract.ps1
       - name: Referral program contract
         run: node ./tests/referral-program-contract.mjs
       - name: Commission withdrawal Phase 2 contract
