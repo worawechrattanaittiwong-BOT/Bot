@@ -82,8 +82,11 @@ export function Mt5ManualActionControls() {
   const positions = Math.max(0, Number(metrics?.positions || 0));
   const needsEaUpdate = Boolean(update?.eaUpdateRequired || update?.eaVersionMatch === false || update?.eaHashMatch === false || update?.runtimeContractMatch === false);
   const installerRequired = Boolean(update?.installerRequired);
-  const softwareUpdateRequired = isLocal && Boolean(update?.required || installerRequired || needsEaUpdate);
-  const installerVersion = String(update?.latestVersion || update?.latestInstallerVersion || update?.installerVersionRequired || "1.0.8");
+  const installerUpdateAvailable = Boolean(update?.installerUpdateAvailable);
+  const softwareUpdateRequired = isLocal && Boolean(
+    update?.required || installerRequired || installerUpdateAvailable || needsEaUpdate
+  );
+  const installerVersion = String(update?.latestVersion || update?.latestInstallerVersion || update?.installerVersionRequired || "1.0.13");
   const actionName = String(metrics?.manualMt5ActionName || "");
   const actionSource = String(metrics?.manualMt5ActionSource || "").toUpperCase();
   const actionStatus = String(metrics?.manualMt5ActionStatus || "");
@@ -444,7 +447,7 @@ export function Mt5ManualActionControls() {
 
   async function requestPersistentUpdate() {
     if (busyAction || positions > 0) return;
-    if (installerRequired && !needsEaUpdate) {
+    if ((installerRequired || installerUpdateAvailable) && !needsEaUpdate) {
       try {
         setBusyAction("UPDATE_EA_RESTART");
         setError("");
@@ -604,7 +607,7 @@ export function Mt5ManualActionControls() {
           <div className="scenova-persistent-update-copy">
             <b>มีเวอร์ชันที่ต้องอัปเดต</b>
             <small>
-              {installerRequired
+              {installerRequired || installerUpdateAvailable
                 ? `Agent ${String(update?.currentVersion || "—")} → ${String(update?.latestVersion || "—")}`
                 : "Agent ตรงเวอร์ชัน"}
               {needsEaUpdate
@@ -625,7 +628,7 @@ export function Mt5ManualActionControls() {
           >
             {busyAction === "UPDATE_EA_RESTART" || updatePending || updateSettling || updateIntentAt
               ? (updateSettling ? "กำลังยืนยันเวอร์ชัน..." : "กำลังดำเนินการ...")
-              : installerRequired && !needsEaUpdate
+              : (installerRequired || installerUpdateAvailable) && !needsEaUpdate
                 ? `ดาวน์โหลด Agent v${installerVersion}`
                 : installerRequired
                   ? `อัปเดต SCENOVA ${installerVersion} + EA`
