@@ -7,6 +7,7 @@ foreach ($required in @(
   '[SCENOVA] CI passed',
   '[SCENOVA] Integration Smoke passed',
   '"build: publish EA v"*" [skip ea build]"',
+  '"[customer-admin-only] build: publish SCENOVA Windows installer v"*',
   'customer bots/positions do not block platform Web/API deployment',
   'bash scripts/deploy-hostinger.sh',
   'for ((attempt=1; attempt<=30; attempt++))',
