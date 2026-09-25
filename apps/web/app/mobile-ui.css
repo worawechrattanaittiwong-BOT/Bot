@@ -2147,3 +2147,182 @@
     grid-template-columns:1fr!important;
   }
 }
+
+
+/* SCENOVA Mobile Shell Cleanup · real-device navigation/scroll pass
+   Fixes duplicate navigation, scroll-lock feeling, unreliable hash targets,
+   bottom-dock overlap and narrow Performance metadata. */
+@media (max-width:767px){
+  html[data-scenova-mobile-ui="v1"]{
+    height:auto!important;
+    min-height:100%!important;
+    overflow-x:clip!important;
+    overflow-y:auto!important;
+    overscroll-behavior-y:auto!important;
+  }
+
+  html[data-scenova-mobile-ui="v1"] body.scn-mobile-app-route{
+    box-sizing:border-box!important;
+    height:auto!important;
+    min-height:100dvh!important;
+    overflow-x:clip!important;
+    overflow-y:visible!important;
+    overscroll-behavior-y:auto!important;
+    -webkit-overflow-scrolling:touch;
+    touch-action:auto!important;
+    padding-bottom:calc(94px + env(safe-area-inset-bottom))!important;
+  }
+
+  body.scn-mobile-app-route :where(main,.app-wrap,.scn-mobile-performance-shell,.scn-mobile-performance-page){
+    height:auto!important;
+    max-height:none!important;
+    overflow-y:visible!important;
+    overscroll-behavior-y:auto!important;
+  }
+
+  /* The old role rail duplicated the new 5-tab app navigation and stole
+     vertical space. All of its destinations remain available in More. */
+  body.scn-mobile-app-route .mobile-only.mobile-nav.owner-mobile-nav,
+  body.scn-mobile-app-route .mobile-nav.owner-mobile-nav{
+    display:none!important;
+  }
+
+  .scn-mobile-primary-nav{
+    left:max(8px,env(safe-area-inset-left))!important;
+    right:max(8px,env(safe-area-inset-right))!important;
+    bottom:max(8px,env(safe-area-inset-bottom))!important;
+    z-index:2500!important;
+    pointer-events:auto!important;
+    touch-action:manipulation!important;
+  }
+
+  .scn-mobile-primary-nav>a,
+  .scn-mobile-primary-nav>button{
+    cursor:pointer;
+    touch-action:manipulation!important;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+
+  .scn-mobile-more-backdrop{
+    overflow-y:auto!important;
+    overscroll-behavior:contain;
+    touch-action:pan-y!important;
+  }
+
+  .scn-mobile-more-sheet{
+    max-height:82dvh!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+
+  .scn-mobile-owner-tools{
+    margin-top:14px;
+    padding-top:12px;
+    border-top:1px solid var(--m-line);
+  }
+
+  .scn-mobile-more-section-title{
+    display:block;
+    margin:0 0 8px;
+    color:var(--m-muted);
+    font-size:var(--ui-type-caption);
+    font-weight:900;
+    letter-spacing:.08em;
+  }
+
+  /* Every standalone route needs enough scroll tail so the last control can
+     move completely above the fixed bottom navigation. */
+  body[data-scn-mobile-route="runtime-migration"] main,
+  body[data-scn-mobile-route="partner"] main,
+  body[data-scn-mobile-route="cloud"] main{
+    box-sizing:border-box!important;
+    min-height:100dvh!important;
+    padding-bottom:calc(112px + env(safe-area-inset-bottom))!important;
+    overflow-y:visible!important;
+  }
+
+  body[data-scn-mobile-route="runtime-migration"] main :where(input,select,button,a),
+  body[data-scn-mobile-route="partner"] main :where(input,select,button,a),
+  body[data-scn-mobile-route="cloud"] main :where(input,select,button,a){
+    touch-action:manipulation!important;
+  }
+
+  /* Account / Packages page titles were inherited as white from their desktop
+     hero even in light mode. */
+  html[data-scenova-mobile-theme="light"] body[data-scn-mobile-route="account"] .scn-mobile-account-page h1,
+  html[data-scenova-mobile-theme="light"] body[data-scn-mobile-route="packages"] .scn-mobile-packages-page h1{
+    color:#171b28!important;
+    text-shadow:none!important;
+  }
+
+  /* Performance metadata now gets a full-width row per group; long account,
+     date and strategy values can no longer push outside the card. */
+  .scn-mobile-performance-info{
+    grid-template-columns:1fr!important;
+  }
+
+  .scn-mobile-performance-info>div{
+    width:100%!important;
+    min-width:0!important;
+    overflow:hidden!important;
+  }
+
+  .scn-mobile-performance-info>div>div{
+    display:grid!important;
+    grid-template-columns:22px minmax(0,1fr) minmax(90px,44%)!important;
+    align-items:center!important;
+    gap:7px!important;
+    min-width:0!important;
+  }
+
+  .scn-mobile-performance-info>div>div>*{
+    min-width:0!important;
+  }
+
+  .scn-mobile-performance-info>div>div>b{
+    max-width:100%!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+    text-align:right!important;
+  }
+
+  .scn-mobile-performance-metrics>div{
+    min-width:0!important;
+    overflow:hidden!important;
+  }
+
+  .scn-mobile-performance-metrics>div>b{
+    max-width:100%!important;
+    overflow-wrap:anywhere!important;
+  }
+
+  /* Anchor destinations sit above the dock instead of underneath it. */
+  #bot-settings,
+  #live-orders,
+  #mobile-system-center,
+  #trial-access,
+  #access-center,
+  #membership-history,
+  #phone-settings{
+    scroll-margin-top:18px!important;
+    scroll-margin-bottom:calc(88px + env(safe-area-inset-bottom))!important;
+  }
+}
+
+@media (max-width:390px){
+  .scn-mobile-primary-nav{
+    left:6px!important;
+    right:6px!important;
+  }
+
+  .scn-mobile-more-grid{
+    grid-template-columns:1fr!important;
+  }
+
+  .scn-mobile-performance-info>div>div{
+    grid-template-columns:20px minmax(0,1fr) minmax(82px,42%)!important;
+  }
+}
