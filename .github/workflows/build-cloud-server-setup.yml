@@ -41,7 +41,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           dotnet restore tools/windows-cloud-worker/Worker/ScenovaCloudWorker.csproj
-          dotnet publish tools/windows-cloud-worker/Worker/ScenovaCloudWorker.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o cloud-worker-publish
+          dotnet publish tools/windows-cloud-worker/Worker/ScenovaCloudWorker.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o cloud-worker-publish
           if (-not (Test-Path "cloud-worker-publish/SCENOVA-CloudWorker.exe")) {
             throw "SCENOVA-CloudWorker.exe was not produced"
           }
@@ -52,7 +52,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $workerPayload = (Resolve-Path "cloud-worker-publish/SCENOVA-CloudWorker.exe").Path
           dotnet restore tools/windows-cloud-worker/Setup/ScenovaCloudSetup.csproj
-          dotnet publish tools/windows-cloud-worker/Setup/ScenovaCloudSetup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:WorkerPayloadPath="$workerPayload" -o cloud-setup-publish
+          dotnet publish tools/windows-cloud-worker/Setup/ScenovaCloudSetup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:WorkerPayloadPath="$workerPayload" -o cloud-setup-publish
           if (-not (Test-Path "cloud-setup-publish/SCENOVA-Cloud-Setup.exe")) {
             throw "SCENOVA-Cloud-Setup.exe was not produced"
           }
