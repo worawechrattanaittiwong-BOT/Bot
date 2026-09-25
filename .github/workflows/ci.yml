@@ -35,6 +35,9 @@ jobs:
       - name: Unified role sidebar and customer performance contract
         shell: pwsh
         run: ./tests/unified-role-sidebar-contract.ps1
+      - name: Mobile sidebar toggle drawer contract
+        shell: pwsh
+        run: ./tests/mobile-sidebar-drawer-contract.ps1
       - name: Referral program contract
         run: node ./tests/referral-program-contract.mjs
       - name: Commission withdrawal Phase 2 contract
