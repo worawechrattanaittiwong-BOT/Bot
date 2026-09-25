@@ -150,6 +150,7 @@ export default function AdminCommissionPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [activePanel, setActivePanel] = useState<"overview"|"requests"|"security"|"operations">("overview");
   const [notes, setNotes] = useState<Record<string,string>>({});
   const [references, setReferences] = useState<Record<string,string>>({});
   const [revealed, setRevealed] = useState<Record<string,string>>({});
@@ -466,6 +467,12 @@ export default function AdminCommissionPage() {
     return Boolean(data?.phase3.userControls.find(item=>item.user_id===userId)?.withdrawal_paused);
   }
 
+  const pendingReviewCount = (data?.summary.requestedCount || 0) + (data?.summary.holdCount || 0);
+  const readyToPayCount = data?.summary.approvedCount || 0;
+  const requestsOpen = Boolean(data?.settings.requestsEnabled) && !Boolean(data?.phase3?.advanced.killSwitchEnabled);
+  const killSwitchActive = Boolean(data?.phase3?.advanced.killSwitchEnabled);
+  const workerReady = Boolean(data?.phase3?.advanced.payoutWorkerConfigured);
+
   return (
     <div className="app-wrap owner-app">
       <OwnerSidebar activeKey="commission-withdrawals" onLogout={logout}/>
@@ -481,305 +488,426 @@ export default function AdminCommissionPage() {
 
           <header className={s.header}>
             <div>
-              <span className={s.kicker}>SCENOVA / FINANCIAL CONTROL · PHASE 3</span>
-              <h1>Commission & Withdrawal Center</h1>
-              <p>Fraud Risk · Dual Approval · Kill Switch · Payout Worker · Reconciliation</p>
+              <span className={s.kicker}>FINANCE / WITHDRAWALS</span>
+              <h1>ศูนย์ถอนเงินและคอมมิชชั่น</h1>
+              <p>ตรวจคำขอ → ประเมินความเสี่ยง → อนุมัติ → จ่ายเงิน → ตรวจสอบย้อนหลัง</p>
             </div>
-            <span className={data?.phase3?.advanced.killSwitchEnabled ? s.killBadge : data?.settings.requestsEnabled ? s.openBadge : s.pauseBadge}>
-              <i/> {data?.phase3?.advanced.killSwitchEnabled ? "KILL SWITCH ACTIVE" : data?.settings.requestsEnabled ? "REQUESTS OPEN" : "WITHDRAWALS PAUSED"}
+            <span className={
+              killSwitchActive ? `${s.systemBadge} ${s.systemDanger}` :
+              requestsOpen ? `${s.systemBadge} ${s.systemOpen}` :
+              `${s.systemBadge} ${s.systemPaused}`
+            }>
+              <i/>
+              {killSwitchActive ? "หยุดระบบฉุกเฉิน" : requestsOpen ? "รับคำขอถอนปกติ" : "พักรับคำขอถอน"}
             </span>
           </header>
 
           {message && <div className={s.notice}>{message}</div>}
+          {loading && <div className={s.loadingBar}>กำลังโหลดข้อมูลล่าสุด…</div>}
 
-          <section className={s.ownerAppCard}>
-            <div>
-              <span className={s.kicker}>OWNER MOBILE</span>
-              <h2>SCENOVA Owner สำหรับ Android</h2>
-              <p>แอปแยกสำหรับดูยอด อนุมัติคำขอถอน และถอนเงินผ่าน Omise จากมือถือ</p>
-            </div>
-            <a
-              className={s.ownerAppDownload}
-              href="/downloads/SCENOVA-Owner.apk"
-              download="SCENOVA-Owner.apk"
-            >
-              ดาวน์โหลดและติดตั้ง
-            </a>
-          </section>
+          <nav className={s.tabBar} aria-label="Withdrawal center sections">
+            <button type="button" className={activePanel==="overview" ? s.activeTab : ""} onClick={()=>setActivePanel("overview")}>
+              ภาพรวม
+            </button>
+            <button type="button" className={activePanel==="requests" ? s.activeTab : ""} onClick={()=>setActivePanel("requests")}>
+              คำขอถอน
+              <span className={s.tabCount}>{data?.items.length || 0}</span>
+            </button>
+            <button type="button" className={activePanel==="security" ? s.activeTab : ""} onClick={()=>setActivePanel("security")}>
+              กฎและความปลอดภัย
+            </button>
+            <button type="button" className={activePanel==="operations" ? s.activeTab : ""} onClick={()=>setActivePanel("operations")}>
+              ระบบและประวัติ
+              {(openAlerts.length + activeJobs.length) > 0 && <span className={s.tabCount}>{openAlerts.length + activeJobs.length}</span>}
+            </button>
+          </nav>
 
-          <section className={s.summaryGrid}>
-            <article><span>Requested</span><b>{data?.summary.requestedCount || 0}</b><small>รอตรวจสอบ</small></article>
-            <article><span>On Hold</span><b>{data?.summary.holdCount || 0}</b><small>Risk / second approval</small></article>
-            <article><span>Approved</span><b>{data?.summary.approvedCount || 0}</b><small>พร้อมจ่าย</small></article>
-            <article><span>Open Alerts</span><b>{openAlerts.length}</b><small>Fraud / reconciliation</small></article>
-            <article><span>Payout Queue</span><b>{activeJobs.length}</b><small>Worker jobs</small></article>
-            <article><span>Locked</span><b>{money(data?.summary.lockedSatang || 0)}</b><small>เงินที่กันไว้</small></article>
-            <article><span>Total Paid</span><b>{money(data?.summary.paidSatang || 0)}</b><small>ยอดจ่ายออก</small></article>
-          </section>
-
-          <section className={s.controlGrid}>
-            <div className={s.controlCard}>
-              <div className={s.cardHead}>
-                <div><span className={s.kicker}>GLOBAL SETTINGS</span><h2>Withdrawal Rules</h2></div>
-                <label className={s.switchLine}>
-                  <input
-                    type="checkbox"
-                    checked={settingsForm.requestsEnabled}
-                    disabled={Boolean(data?.phase3?.advanced.killSwitchEnabled)}
-                    onChange={event=>setSettingsForm(v=>({...v,requestsEnabled:event.target.checked}))}
-                  />
-                  รับคำขอถอน
-                </label>
-              </div>
-              <div className={s.settingsFields}>
-                <label><span>Minimum THB</span><input value={settingsForm.minThb} onChange={event=>setSettingsForm(v=>({...v,minThb:event.target.value}))}/></label>
-                <label><span>Maximum THB</span><input value={settingsForm.maxThb} onChange={event=>setSettingsForm(v=>({...v,maxThb:event.target.value}))}/></label>
-                <label><span>Cooling Hours</span><input value={settingsForm.cooldownHours} onChange={event=>setSettingsForm(v=>({...v,cooldownHours:event.target.value}))}/></label>
-                <button type="button" className={s.primary} disabled={busy==="settings"} onClick={()=>void saveSettings()}>
-                  {busy==="settings" ? "Saving..." : "Save Rules"}
-                </button>
-              </div>
-            </div>
-
-            <div className={s.controlCard}>
-              <div className={s.cardHead}>
-                <div><span className={s.kicker}>ADMIN STEP-UP</span><h2>Reveal / Manual Paid</h2></div>
-                <span className={s.securityTag}>PASSWORD + 2FA</span>
-              </div>
-              <div className={s.verifyFields}>
-                <label><span>Current Password</span><input type="password" value={verification.currentPassword} onChange={event=>setVerification(v=>({...v,currentPassword:event.target.value}))} autoComplete="current-password"/></label>
-                <label><span>2FA Code</span><input value={verification.twoFactorCode} onChange={event=>setVerification(v=>({...v,twoFactorCode:event.target.value}))} maxLength={6} inputMode="numeric" placeholder="6 digits"/></label>
-              </div>
-              <p>เลขบัญชีเต็มแสดงชั่วคราว 60 วินาที และทุกการ Reveal ถูกบันทึก Audit</p>
-            </div>
-          </section>
-
-          <section className={s.phase3Grid}>
-            <div className={s.controlCard}>
-              <div className={s.cardHead}>
-                <div><span className={s.kicker}>ADVANCED SECURITY</span><h2>Risk & Approval Policy</h2></div>
-                <span className={s.securityTag}>RISK ENGINE</span>
-              </div>
-              <div className={s.advancedFields}>
-                <label><span>Global Daily Limit THB</span><input value={advancedForm.globalDailyThb} onChange={event=>setAdvancedForm(v=>({...v,globalDailyThb:event.target.value}))}/></label>
-                <label><span>2-Person Approval ≥ THB</span><input value={advancedForm.dualApprovalThb} onChange={event=>setAdvancedForm(v=>({...v,dualApprovalThb:event.target.value}))}/></label>
-                <label><span>High Risk Score</span><input value={advancedForm.highRisk} onChange={event=>setAdvancedForm(v=>({...v,highRisk:event.target.value}))}/></label>
-                <label><span>Critical Score</span><input value={advancedForm.criticalRisk} onChange={event=>setAdvancedForm(v=>({...v,criticalRisk:event.target.value}))}/></label>
-              </div>
-              <div className={s.policySwitches}>
-                <label className={s.switchLine}>
-                  <input type="checkbox" checked={advancedForm.riskEngineEnabled} onChange={event=>setAdvancedForm(v=>({...v,riskEngineEnabled:event.target.checked}))}/>
-                  Fraud Risk Engine
-                </label>
-                <label className={s.switchLine}>
-                  <input
-                    type="checkbox"
-                    checked={advancedForm.autoPayoutEnabled}
-                    disabled={!data?.phase3.advanced.payoutWorkerConfigured || Boolean(data?.phase3.advanced.killSwitchEnabled)}
-                    onChange={event=>setAdvancedForm(v=>({...v,autoPayoutEnabled:event.target.checked}))}
-                  />
-                  Auto Payout
-                </label>
-                <span className={data?.phase3.advanced.payoutWorkerConfigured ? s.workerReady : s.workerOff}>
-                  {data?.phase3.advanced.payoutWorkerConfigured ? "WORKER KEY READY" : "WORKER NOT CONFIGURED"}
-                </span>
-                <button type="button" className={s.primary} disabled={busy==="advanced"} onClick={()=>void saveAdvanced()}>
-                  {busy==="advanced" ? "Saving..." : "Save Security Policy"}
-                </button>
-              </div>
-            </div>
-
-            <div className={`${s.controlCard} ${data?.phase3.advanced.killSwitchEnabled ? s.killCard : ""}`}>
-              <div className={s.cardHead}>
-                <div><span className={s.kicker}>EMERGENCY CONTROL</span><h2>Withdrawal Kill Switch</h2></div>
-                <span className={data?.phase3.advanced.killSwitchEnabled ? s.killBadge : s.openBadge}>
-                  <i/> {data?.phase3.advanced.killSwitchEnabled ? "ACTIVE" : "STANDBY"}
-                </span>
-              </div>
-              <input
-                className={s.noteInput}
-                value={killReason}
-                onChange={event=>setKillReason(event.target.value)}
-                placeholder="เหตุผล เช่น พบ payout anomaly / suspected fraud"
-              />
-              <p>เมื่อเปิด: ปิด Requests + Auto Payout และยกเลิก READY jobs ทันที แต่ไม่ Unlock เงินที่กำลังตรวจสอบ</p>
-              <button
-                type="button"
-                className={data?.phase3.advanced.killSwitchEnabled ? s.resumeButton : s.killButton}
-                disabled={busy==="kill"}
-                onClick={()=>void toggleKillSwitch(!data?.phase3.advanced.killSwitchEnabled)}
-              >
-                {data?.phase3.advanced.killSwitchEnabled ? "Deactivate Kill Switch" : "ACTIVATE KILL SWITCH"}
-              </button>
-            </div>
-          </section>
-
-          <div className={s.sectionHead}>
-            <div><span className={s.kicker}>RISK REVIEW QUEUE</span><h2>Withdrawal Requests</h2></div>
-            <span>{loading ? "LOADING" : `${data?.items.length || 0} ITEMS`}</span>
-          </div>
-
-          <section className={s.queue}>
-            {data?.items.map(item=>(
-              <article className={s.withdrawalCard} key={item.id}>
-                <div className={s.rowTop}>
-                  <div>
-                    <span className={s.userCode}>{item.user_code}</span>
-                    <b>{money(item.amount_satang)}</b>
-                    <small>{item.email}</small>
-                  </div>
-                  <div className={s.badgeStack}>
-                    <span className={s.statusBadge}>{item.status}</span>
+          {activePanel==="overview" && (
+            <>
+              <section className={s.overviewGrid}>
+                <article className={s.heroStatus}>
+                  <div className={s.statusTitle}>
+                    <div>
+                      <span className={s.kicker}>SYSTEM STATUS</span>
+                      <h2>{killSwitchActive ? "ระบบถอนถูกหยุดฉุกเฉิน" : requestsOpen ? "ระบบพร้อมรับคำขอถอน" : "ระบบพักรับคำขอถอน"}</h2>
+                      <p>
+                        {killSwitchActive
+                          ? "Kill Switch ทำงานอยู่ ระบบไม่รับคำขอใหม่และ Auto Payout ถูกหยุด"
+                          : requestsOpen
+                            ? "คำขอใหม่เข้าคิวตรวจสอบตาม Risk Policy และ Approval Policy ปัจจุบัน"
+                            : "ยังไม่รับคำขอใหม่ แต่รายการเดิมและประวัติยังตรวจสอบได้ตามปกติ"}
+                      </p>
+                    </div>
                     <span className={
-                      item.risk_level==="CRITICAL" ? s.riskCritical :
-                      item.risk_level==="HIGH" ? s.riskHigh :
-                      item.risk_level==="MEDIUM" ? s.riskMedium : s.riskLow
-                    }>
-                      RISK {item.risk_score} · {item.risk_level}
-                    </span>
+                      killSwitchActive ? `${s.systemBadge} ${s.systemDanger}` :
+                      requestsOpen ? `${s.systemBadge} ${s.systemOpen}` :
+                      `${s.systemBadge} ${s.systemPaused}`
+                    }><i/>{killSwitchActive ? "EMERGENCY" : requestsOpen ? "ONLINE" : "PAUSED"}</span>
                   </div>
+                  <div className={s.statusGrid}>
+                    <div><span>รับคำขอถอน</span><b>{requestsOpen ? "เปิด" : "ปิด"}</b></div>
+                    <div><span>Risk Engine</span><b>{data?.phase3.advanced.riskEngineEnabled ? "เปิด" : "ปิด"}</b></div>
+                    <div><span>Payout Worker</span><b>{workerReady ? "พร้อม" : "ยังไม่พร้อม"}</b></div>
+                    <div><span>Auto Payout</span><b>{data?.phase3.advanced.autoPayoutEnabled ? "เปิด" : "ปิด"}</b></div>
+                  </div>
+                </article>
+
+                <article className={s.workflowCard}>
+                  <span className={s.kicker}>WITHDRAWAL FLOW</span>
+                  <h2>ลำดับงานที่ควรทำ</h2>
+                  <div className={s.workflowSteps}>
+                    <div><strong>1</strong><span><b>ตรวจคำขอ</b><small>ยอด, บัญชีรับเงิน, Risk</small></span></div>
+                    <div><strong>2</strong><span><b>อนุมัติ</b><small>ใช้ 2 คนเมื่อถึง Threshold</small></span></div>
+                    <div><strong>3</strong><span><b>จ่ายเงิน</b><small>Auto Payout หรือ Manual Paid</small></span></div>
+                    <div><strong>4</strong><span><b>ตรวจสอบ</b><small>Reconcile, Alert และ Audit</small></span></div>
+                  </div>
+                </article>
+              </section>
+
+              <section className={s.summaryGrid}>
+                <article><span>ต้องตรวจตอนนี้</span><b>{pendingReviewCount}</b><small>Requested + On Hold</small></article>
+                <article><span>พร้อมจ่าย</span><b>{readyToPayCount}</b><small>Approved</small></article>
+                <article><span>เงินที่ล็อกไว้</span><b>{money(data?.summary.lockedSatang || 0)}</b><small>รอการตัดสินใจ/จ่าย</small></article>
+                <article><span>จ่ายแล้วทั้งหมด</span><b>{money(data?.summary.paidSatang || 0)}</b><small>ยอดสะสม</small></article>
+              </section>
+
+              <section className={s.taskGrid}>
+                <button type="button" onClick={()=>setActivePanel("requests")}>
+                  <span className={s.taskNumber}>{pendingReviewCount}</span>
+                  <span><b>ตรวจคำขอถอน</b><small>เริ่มจากรายการที่รอตรวจหรือถูก Hold</small></span>
+                  <i>›</i>
+                </button>
+                <button type="button" onClick={()=>setActivePanel("operations")}>
+                  <span className={s.taskNumber}>{openAlerts.length}</span>
+                  <span><b>ตรวจ Alert</b><small>Fraud และ Reconciliation ที่ยังเปิดอยู่</small></span>
+                  <i>›</i>
+                </button>
+                <button type="button" onClick={()=>setActivePanel("security")}>
+                  <span className={s.taskNumber}>{activeJobs.length}</span>
+                  <span><b>ตรวจนโยบายระบบ</b><small>Rules, Risk Policy และ Emergency Control</small></span>
+                  <i>›</i>
+                </button>
+              </section>
+
+              <section className={s.ownerAppCard}>
+                <div>
+                  <span className={s.kicker}>OWNER MOBILE</span>
+                  <h2>SCENOVA Owner สำหรับ Android</h2>
+                  <p>ใช้สำหรับตรวจยอดและจัดการงาน Owner จากมือถือ โดยไม่ปะปนกับการตั้งค่าระบบบนหน้านี้</p>
                 </div>
+                <a className={s.ownerAppDownload} href="/downloads/SCENOVA-Owner.apk" download="SCENOVA-Owner.apk">
+                  ดาวน์โหลดแอป
+                </a>
+              </section>
+            </>
+          )}
 
-                <div className={s.riskStrip}>
-                  <span>Approval <b>{item.approval_count}/{item.approval_required}</b></span>
-                  <span>Reconcile <b>{item.reconciliation_status}</b></span>
-                  <span>Auto Payout <b>{item.auto_payout_eligible ? "ELIGIBLE" : "NO"}</b></span>
+          {activePanel==="requests" && (
+            <>
+              <div className={s.sectionHead}>
+                <div>
+                  <span className={s.kicker}>REVIEW QUEUE</span>
+                  <h2>คำขอถอนเงิน</h2>
+                  <p>ตรวจความเสี่ยงและข้อมูลบัญชีก่อนตัดสินใจทุกครั้ง</p>
                 </div>
+                <span>{loading ? "LOADING" : `${data?.items.length || 0} รายการ`}</span>
+              </div>
 
-                <div className={s.bankBox}>
-                  <div>
-                    <span>{item.bank_name}</span>
-                    <b>{item.account_name}</b>
-                    <code>{revealed[item.id] || item.masked_account}</code>
-                  </div>
-                  <div>
-                    <small>Requested</small><span>{dateTime(item.created_at)}</span>
-                    <small>Shared account users</small>
-                    <span className={item.shared_account_users>1 ? s.riskText : ""}>{item.shared_account_users}</span>
-                  </div>
+              <details className={s.stepUp}>
+                <summary>
+                  <span><b>ยืนยันตัวตนสำหรับงานสำคัญ</b><small>ใช้เฉพาะ Reveal เลขบัญชี, Manual Paid และ Reconciliation</small></span>
+                  <span className={s.securityTag}>PASSWORD + 2FA</span>
+                </summary>
+                <div className={s.verifyFields}>
+                  <label><span>รหัสผ่านปัจจุบัน</span><input type="password" value={verification.currentPassword} onChange={event=>setVerification(v=>({...v,currentPassword:event.target.value}))} autoComplete="current-password"/></label>
+                  <label><span>รหัส 2FA</span><input value={verification.twoFactorCode} onChange={event=>setVerification(v=>({...v,twoFactorCode:event.target.value}))} maxLength={6} inputMode="numeric" placeholder="6 หลัก"/></label>
                 </div>
+                <p>เลขบัญชีเต็มจะแสดงชั่วคราว 60 วินาที และทุกการ Reveal ถูกบันทึก Audit</p>
+              </details>
 
-                {Array.isArray(item.risk_reasons) && item.risk_reasons.length>0 && (
-                  <div className={s.reasonChips}>
-                    {item.risk_reasons.slice(0,5).map(reason=><span key={reason}>{reason.replace(/_/g," ")}</span>)}
-                  </div>
-                )}
+              <section className={s.queue}>
+                {data?.items.map(item=>(
+                  <article className={s.withdrawalCard} key={item.id}>
+                    <div className={s.rowTop}>
+                      <div>
+                        <span className={s.userCode}>{item.user_code}</span>
+                        <b>{money(item.amount_satang)}</b>
+                        <small>{item.email}</small>
+                      </div>
+                      <div className={s.badgeStack}>
+                        <span className={s.statusBadge}>{item.status}</span>
+                        <span className={
+                          item.risk_level==="CRITICAL" ? s.riskCritical :
+                          item.risk_level==="HIGH" ? s.riskHigh :
+                          item.risk_level==="MEDIUM" ? s.riskMedium : s.riskLow
+                        }>
+                          RISK {item.risk_score} · {item.risk_level}
+                        </span>
+                      </div>
+                    </div>
 
-                <input
-                  className={s.noteInput}
-                  value={notes[item.id] || ""}
-                  onChange={event=>setNotes(v=>({...v,[item.id]:event.target.value}))}
-                  placeholder="Review note / Reject reason / User pause reason"
-                />
+                    <div className={s.requestFacts}>
+                      <span>Approval <b>{item.approval_count}/{item.approval_required}</b></span>
+                      <span>Reconcile <b>{item.reconciliation_status}</b></span>
+                      <span>Auto Payout <b>{item.auto_payout_eligible ? "พร้อม" : "ไม่ใช้"}</b></span>
+                    </div>
 
-                {item.status === "APPROVED" && (
-                  <input
-                    className={s.noteInput}
-                    value={references[item.id] || ""}
-                    onChange={event=>setReferences(v=>({...v,[item.id]:event.target.value}))}
-                    placeholder="Manual Transfer / Payment Reference"
-                  />
-                )}
+                    <div className={s.bankBox}>
+                      <div>
+                        <span>{item.bank_name}</span>
+                        <b>{item.account_name}</b>
+                        <code>{revealed[item.id] || item.masked_account}</code>
+                      </div>
+                      <div>
+                        <small>ขอถอนเมื่อ</small><span>{dateTime(item.created_at)}</span>
+                        <small>ผู้ใช้บัญชีร่วม</small>
+                        <span className={item.shared_account_users>1 ? s.riskText : ""}>{item.shared_account_users}</span>
+                      </div>
+                    </div>
 
-                <div className={s.actions}>
-                  <button type="button" onClick={()=>void revealAccount(item)} disabled={Boolean(busy)}>Reveal</button>
-                  {["REQUESTED","HOLD"].includes(item.status) && (
-                    <>
-                      <button type="button" onClick={()=>void review(item,"hold")} disabled={Boolean(busy)}>Hold</button>
-                      <button type="button" className={s.approveButton} onClick={()=>void review(item,"approve")} disabled={Boolean(busy)}>
-                        Approve {item.approval_required===2 ? `${item.approval_count+1}/2` : ""}
+                    {Array.isArray(item.risk_reasons) && item.risk_reasons.length>0 && (
+                      <div className={s.reasonChips}>
+                        {item.risk_reasons.slice(0,5).map(reason=><span key={reason}>{reason.replace(/_/g," ")}</span>)}
+                      </div>
+                    )}
+
+                    <label className={s.fieldLabel}>
+                      <span>บันทึกการตรวจสอบ</span>
+                      <input
+                        className={s.noteInput}
+                        value={notes[item.id] || ""}
+                        onChange={event=>setNotes(v=>({...v,[item.id]:event.target.value}))}
+                        placeholder="เหตุผล Hold / Reject / Pause ผู้ใช้"
+                      />
+                    </label>
+
+                    {item.status === "APPROVED" && (
+                      <label className={s.fieldLabel}>
+                        <span>Payment Reference</span>
+                        <input
+                          className={s.noteInput}
+                          value={references[item.id] || ""}
+                          onChange={event=>setReferences(v=>({...v,[item.id]:event.target.value}))}
+                          placeholder="เลขอ้างอิงการโอนเงิน"
+                        />
+                      </label>
+                    )}
+
+                    <div className={s.actions}>
+                      {["REQUESTED","HOLD"].includes(item.status) && (
+                        <button type="button" className={s.approveButton} onClick={()=>void review(item,"approve")} disabled={Boolean(busy)}>
+                          อนุมัติ {item.approval_required===2 ? `${item.approval_count+1}/2` : ""}
+                        </button>
+                      )}
+                      {["REQUESTED","HOLD"].includes(item.status) && (
+                        <button type="button" onClick={()=>void review(item,"hold")} disabled={Boolean(busy)}>พักตรวจ</button>
+                      )}
+                      {["REQUESTED","HOLD","APPROVED"].includes(item.status) && (
+                        <button type="button" className={s.rejectButton} onClick={()=>void review(item,"reject")} disabled={Boolean(busy)}>ปฏิเสธ</button>
+                      )}
+                      <button type="button" onClick={()=>void revealAccount(item)} disabled={Boolean(busy)}>ดูเลขบัญชี</button>
+                      {item.status === "APPROVED" && (
+                        <button type="button" className={s.paidButton} onClick={()=>void markPaid(item)} disabled={Boolean(busy)}>ยืนยันจ่ายแล้ว</button>
+                      )}
+                      {item.status === "HOLD" && ["MISMATCH","MANUAL_REVIEW"].includes(item.reconciliation_status) && (
+                        <button type="button" className={s.reconcileButton} onClick={()=>void reconcilePaid(item)} disabled={Boolean(busy)}>ยืนยัน Reconcile</button>
+                      )}
+                      <button
+                        type="button"
+                        className={userPaused(item.user_id) ? s.resumeButton : s.userPauseButton}
+                        disabled={Boolean(busy)}
+                        onClick={()=>void setUserPause(item,!userPaused(item.user_id))}
+                      >
+                        {userPaused(item.user_id) ? "เปิดถอนให้ผู้ใช้อีกครั้ง" : "พักการถอนของผู้ใช้"}
                       </button>
-                    </>
-                  )}
-                  {["REQUESTED","HOLD","APPROVED"].includes(item.status) && (
-                    <button type="button" className={s.rejectButton} onClick={()=>void review(item,"reject")} disabled={Boolean(busy)}>Reject</button>
-                  )}
-                  {item.status === "APPROVED" && (
-                    <button type="button" className={s.paidButton} onClick={()=>void markPaid(item)} disabled={Boolean(busy)}>Manual Mark Paid</button>
-                  )}
-                  {item.status === "HOLD" && ["MISMATCH","MANUAL_REVIEW"].includes(item.reconciliation_status) && (
-                    <button type="button" className={s.reconcileButton} onClick={()=>void reconcilePaid(item)} disabled={Boolean(busy)}>Reconcile as Paid</button>
-                  )}
-                  <button
-                    type="button"
-                    className={userPaused(item.user_id) ? s.resumeButton : s.userPauseButton}
-                    disabled={Boolean(busy)}
-                    onClick={()=>void setUserPause(item,!userPaused(item.user_id))}
-                  >
-                    {userPaused(item.user_id) ? "Resume User" : "Pause User"}
+                    </div>
+
+                    {(item.review_reason || item.payout_reference) && (
+                      <div className={s.metaLine}>
+                        {item.review_reason && <span>Note: {item.review_reason}</span>}
+                        {item.payout_reference && <span>Ref: {item.payout_reference}</span>}
+                      </div>
+                    )}
+                  </article>
+                ))}
+                {!loading && !data?.items.length && <div className={s.empty}>ยังไม่มีคำขอถอนที่ต้องดำเนินการ</div>}
+              </section>
+            </>
+          )}
+
+          {activePanel==="security" && (
+            <>
+              <div className={s.sectionHead}>
+                <div>
+                  <span className={s.kicker}>POLICY & SECURITY</span>
+                  <h2>กฎการถอนและความปลอดภัย</h2>
+                  <p>ตั้งค่าที่มีผลกับทุกคำขอถอน แยกจากงานตรวจสอบประจำวัน</p>
+                </div>
+              </div>
+
+              <section className={s.settingsLayout}>
+                <div className={s.controlCard}>
+                  <div className={s.cardHead}>
+                    <div><span className={s.kicker}>WITHDRAWAL RULES</span><h2>กฎพื้นฐานการถอน</h2></div>
+                    <label className={s.switchLine}>
+                      <input
+                        type="checkbox"
+                        checked={settingsForm.requestsEnabled}
+                        disabled={killSwitchActive}
+                        onChange={event=>setSettingsForm(v=>({...v,requestsEnabled:event.target.checked}))}
+                      />
+                      รับคำขอถอน
+                    </label>
+                  </div>
+                  <p>กำหนดยอดต่ำสุด/สูงสุด และช่วงเวลาป้องกันหลังเปลี่ยนบัญชีรับเงิน</p>
+                  <div className={s.settingsFields}>
+                    <label><span>ขั้นต่ำ (THB)</span><input value={settingsForm.minThb} onChange={event=>setSettingsForm(v=>({...v,minThb:event.target.value}))}/></label>
+                    <label><span>สูงสุด (THB)</span><input value={settingsForm.maxThb} onChange={event=>setSettingsForm(v=>({...v,maxThb:event.target.value}))}/></label>
+                    <label><span>Cooling period (ชั่วโมง)</span><input value={settingsForm.cooldownHours} onChange={event=>setSettingsForm(v=>({...v,cooldownHours:event.target.value}))}/></label>
+                  </div>
+                  <button type="button" className={s.primary} disabled={busy==="settings"} onClick={()=>void saveSettings()}>
+                    {busy==="settings" ? "กำลังบันทึก…" : "บันทึกกฎการถอน"}
                   </button>
                 </div>
 
-                {(item.review_reason || item.payout_reference) && (
-                  <div className={s.metaLine}>
-                    {item.review_reason && <span>Note: {item.review_reason}</span>}
-                    {item.payout_reference && <span>Ref: {item.payout_reference}</span>}
+                <div className={s.controlCard}>
+                  <div className={s.cardHead}>
+                    <div><span className={s.kicker}>RISK & APPROVAL</span><h2>นโยบายความเสี่ยงและการอนุมัติ</h2></div>
+                    <span className={s.securityTag}>RISK ENGINE</span>
                   </div>
-                )}
-              </article>
-            ))}
-            {!loading && !data?.items.length && <div className={s.empty}>ยังไม่มีคำขอถอน</div>}
-          </section>
-
-          <div className={s.sectionHead}>
-            <div><span className={s.kicker}>ANOMALY ALERTS</span><h2>Fraud & Reconciliation Alerts</h2></div>
-            <span>{openAlerts.length} OPEN</span>
-          </div>
-
-          <section className={s.alertGrid}>
-            {data?.phase3.alerts.slice(0,30).map(item=>(
-              <article className={`${s.alertCard} ${item.status==="OPEN" ? s.alertOpen : ""}`} key={item.id}>
-                <div>
-                  <span className={
-                    item.severity==="CRITICAL" ? s.riskCritical :
-                    item.severity==="HIGH" ? s.riskHigh : s.riskMedium
-                  }>{item.severity}</span>
-                  <small>{dateTime(item.created_at)}</small>
+                  <p>ใช้เพื่อจำกัดยอดรวมรายวัน กำหนดจุดที่ต้องอนุมัติ 2 คน และระดับ Risk Score</p>
+                  <div className={s.advancedFields}>
+                    <label><span>วงเงินรวม/วัน (THB)</span><input value={advancedForm.globalDailyThb} onChange={event=>setAdvancedForm(v=>({...v,globalDailyThb:event.target.value}))}/></label>
+                    <label><span>อนุมัติ 2 คนเมื่อ ≥ THB</span><input value={advancedForm.dualApprovalThb} onChange={event=>setAdvancedForm(v=>({...v,dualApprovalThb:event.target.value}))}/></label>
+                    <label><span>High Risk Score</span><input value={advancedForm.highRisk} onChange={event=>setAdvancedForm(v=>({...v,highRisk:event.target.value}))}/></label>
+                    <label><span>Critical Score</span><input value={advancedForm.criticalRisk} onChange={event=>setAdvancedForm(v=>({...v,criticalRisk:event.target.value}))}/></label>
+                  </div>
+                  <div className={s.policySwitches}>
+                    <label className={s.switchLine}>
+                      <input type="checkbox" checked={advancedForm.riskEngineEnabled} onChange={event=>setAdvancedForm(v=>({...v,riskEngineEnabled:event.target.checked}))}/>
+                      Fraud Risk Engine
+                    </label>
+                    <label className={s.switchLine}>
+                      <input
+                        type="checkbox"
+                        checked={advancedForm.autoPayoutEnabled}
+                        disabled={!workerReady || killSwitchActive}
+                        onChange={event=>setAdvancedForm(v=>({...v,autoPayoutEnabled:event.target.checked}))}
+                      />
+                      Auto Payout
+                    </label>
+                    <span className={workerReady ? s.workerReady : s.workerOff}>
+                      {workerReady ? "PAYOUT WORKER READY" : "PAYOUT WORKER NOT READY"}
+                    </span>
+                  </div>
+                  <button type="button" className={s.primary} disabled={busy==="advanced"} onClick={()=>void saveAdvanced()}>
+                    {busy==="advanced" ? "กำลังบันทึก…" : "บันทึกนโยบายความปลอดภัย"}
+                  </button>
                 </div>
-                <b>{item.title}</b>
-                <span>{item.user_code || "SYSTEM"} · {item.alert_type}</span>
-                {item.status==="OPEN" && (
-                  <button type="button" disabled={Boolean(busy)} onClick={()=>void resolveAlert(item.id)}>Resolve</button>
-                )}
-              </article>
-            ))}
-            {!data?.phase3.alerts.length && <div className={s.empty}>ไม่มี Fraud / Reconciliation alert</div>}
-          </section>
+              </section>
 
-          <div className={s.sectionHead}>
-            <div><span className={s.kicker}>SEPARATE PAYOUT PLANE</span><h2>Payout Jobs & Reconciliation</h2></div>
-            <span>{data?.phase3.payoutJobs.length || 0} JOBS</span>
-          </div>
+              <section className={`${s.dangerZone} ${killSwitchActive ? s.dangerActive : ""}`}>
+                <div className={s.dangerHeader}>
+                  <div>
+                    <span className={s.kicker}>EMERGENCY CONTROL</span>
+                    <h2>Kill Switch การถอนเงิน</h2>
+                    <p>ใช้เมื่อพบเหตุผิดปกติร้ายแรงเท่านั้น การเปิดจะหยุด Requests และ Auto Payout ทันที แต่ไม่ปลดล็อกเงินที่อยู่ระหว่างตรวจสอบ</p>
+                  </div>
+                  <span className={killSwitchActive ? `${s.systemBadge} ${s.systemDanger}` : `${s.systemBadge} ${s.systemOpen}`}>
+                    <i/>{killSwitchActive ? "ACTIVE" : "STANDBY"}
+                  </span>
+                </div>
+                <label className={s.fieldLabel}>
+                  <span>เหตุผล / Incident note</span>
+                  <input className={s.noteInput} value={killReason} onChange={event=>setKillReason(event.target.value)} placeholder="เช่น payout anomaly / suspected fraud"/>
+                </label>
+                <button
+                  type="button"
+                  className={killSwitchActive ? s.resumeButton : s.killButton}
+                  disabled={busy==="kill"}
+                  onClick={()=>void toggleKillSwitch(!killSwitchActive)}
+                >
+                  {killSwitchActive ? "ปิด Kill Switch" : "เปิด Kill Switch ฉุกเฉิน"}
+                </button>
+              </section>
+            </>
+          )}
 
-          <section className={s.jobList}>
-            {data?.phase3.payoutJobs.slice(0,30).map(job=>(
-              <div className={s.jobRow} key={job.id}>
-                <span className={s.statusBadge}>{job.status}</span>
-                <b>{job.user_code}</b>
-                <span>{money(job.amount_satang)}</span>
-                <small>Risk {job.risk_score} · {job.risk_level}</small>
-                <small>{job.provider_reference ? "Ref " + job.provider_reference : job.error_code || "No provider result yet"}</small>
-                <time>{dateTime(job.updated_at)}</time>
+          {activePanel==="operations" && (
+            <>
+              <div className={s.sectionHead}>
+                <div>
+                  <span className={s.kicker}>OPERATIONS & AUDIT</span>
+                  <h2>ระบบจ่ายเงินและประวัติ</h2>
+                  <p>ใช้ตรวจสิ่งผิดปกติ งาน Payout และเหตุการณ์ย้อนหลัง โดยไม่ปะปนกับการอนุมัติคำขอ</p>
+                </div>
               </div>
-            ))}
-            {!data?.phase3.payoutJobs.length && <div className={s.empty}>ยังไม่มี Auto Payout job</div>}
-          </section>
 
-          <div className={s.sectionHead}>
-            <div><span className={s.kicker}>APPEND-ONLY AUDIT</span><h2>Recent Security Events</h2></div>
-            <span>{data?.audit.length || 0} EVENTS</span>
-          </div>
+              <section className={s.operationsColumns}>
+                <div>
+                  <div className={s.subsectionHead}>
+                    <div><h3>Fraud & Reconciliation Alerts</h3><p>แก้รายการที่ยังเปิดอยู่ก่อน</p></div>
+                    <span>{openAlerts.length} OPEN</span>
+                  </div>
+                  <div className={s.alertGrid}>
+                    {data?.phase3.alerts.slice(0,30).map(item=>(
+                      <article className={`${s.alertCard} ${item.status==="OPEN" ? s.alertOpen : ""}`} key={item.id}>
+                        <div>
+                          <span className={
+                            item.severity==="CRITICAL" ? s.riskCritical :
+                            item.severity==="HIGH" ? s.riskHigh : s.riskMedium
+                          }>{item.severity}</span>
+                          <small>{dateTime(item.created_at)}</small>
+                        </div>
+                        <b>{item.title}</b>
+                        <span>{item.user_code || "SYSTEM"} · {item.alert_type}</span>
+                        {item.status==="OPEN" && (
+                          <button type="button" disabled={Boolean(busy)} onClick={()=>void resolveAlert(item.id)}>Resolve Alert</button>
+                        )}
+                      </article>
+                    ))}
+                    {!data?.phase3.alerts.length && <div className={s.empty}>ไม่มี Fraud / Reconciliation alert</div>}
+                  </div>
+                </div>
 
-          <section className={s.auditList}>
-            {data?.audit.slice(0,40).map(item=>(
-              <div className={s.auditRow} key={item.id}>
-                <span>{item.event_type}</span>
-                <b>{item.user_code || "SYSTEM"}</b>
-                <small>{item.actor_type} · {item.actor_label || "—"}</small>
-                <time>{dateTime(item.created_at)}</time>
+                <div>
+                  <div className={s.subsectionHead}>
+                    <div><h3>Payout Jobs</h3><p>สถานะงานจาก Payout Worker</p></div>
+                    <span>{data?.phase3.payoutJobs.length || 0} JOBS</span>
+                  </div>
+                  <div className={s.jobList}>
+                    {data?.phase3.payoutJobs.slice(0,30).map(job=>(
+                      <div className={s.jobRow} key={job.id}>
+                        <span className={s.statusBadge}>{job.status}</span>
+                        <b>{job.user_code}</b>
+                        <span>{money(job.amount_satang)}</span>
+                        <small>Risk {job.risk_score} · {job.risk_level}</small>
+                        <small>{job.provider_reference ? "Ref " + job.provider_reference : job.error_code || "ยังไม่มีผลจาก Provider"}</small>
+                        <time>{dateTime(job.updated_at)}</time>
+                      </div>
+                    ))}
+                    {!data?.phase3.payoutJobs.length && <div className={s.empty}>ยังไม่มี Auto Payout job</div>}
+                  </div>
+                </div>
+              </section>
+
+              <div className={s.subsectionHead}>
+                <div><h3>Recent Security Events</h3><p>Audit log แบบ append-only สำหรับตรวจย้อนหลัง</p></div>
+                <span>{data?.audit.length || 0} EVENTS</span>
               </div>
-            ))}
-          </section>
+              <section className={s.auditList}>
+                {data?.audit.slice(0,40).map(item=>(
+                  <div className={s.auditRow} key={item.id}>
+                    <span>{item.event_type}</span>
+                    <b>{item.user_code || "SYSTEM"}</b>
+                    <small>{item.actor_type} · {item.actor_label || "—"}</small>
+                    <time>{dateTime(item.created_at)}</time>
+                  </div>
+                ))}
+                {!data?.audit.length && <div className={s.empty}>ยังไม่มี Audit event</div>}
+              </section>
+            </>
+          )}
         </div>
       </main>
     </div>
