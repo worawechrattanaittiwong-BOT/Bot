@@ -1,0 +1,327 @@
+using System.Diagnostics;
+using System.Text;
+
+namespace Scenova.CloudWorker;
+
+internal sealed class Mt5Runtime
+{
+    private readonly WorkerConfig _config;
+    private readonly string _instancesPath;
+    private readonly string _templatePath;
+    private readonly Dictionary<string, DateTimeOffset> _retryAfter =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    public Mt5Runtime(WorkerConfig config)
+    {
+        _config = config;
+        _instancesPath = Path.Combine(config.Root, "instances");
+        _templatePath = Path.Combine(config.Root, "template");
+    }
+
+    public bool TemplateReady =>
+        File.Exists(Path.Combine(_templatePath, "terminal64.exe")) &&
+        File.Exists(Path.Combine(_templatePath, "MQL5", "Experts", "FastBasketBot.ex5")) &&
+        File.Exists(Path.Combine(_templatePath, "cloud-template.ready"));
+
+    public int ActiveInstanceCount()
+    {
+        var prefix = Path.GetFullPath(_instancesPath).TrimEnd('\\') + "\\";
+        return EnumerateTerminalProcesses()
+            .Count(item => item.Path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task ProcessCommandAsync(
+        WorkerCommand command,
+        WorkerClient client,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(command.Name, "STOP_INSTANCE", StringComparison.Ordinal)) return;
+
+        var result = "STOP_FAILED";
+        var errorCode = "STOP_FAILED";
+
+        try
+        {
+            if (StopInstance(command.InstanceId))
+            {
+                result = "STOP_CONFIRMED";
+                errorCode = "";
+            }
+            else
+            {
+                errorCode = "PROCESS_STILL_RUNNING";
+            }
+        }
+        catch
+        {
+            result = "STOP_FAILED";
+            errorCode = "STOP_FAILED";
+        }
+
+        await client.PostAsync("command-result", new
+        {
+            commandId = command.Id,
+            instanceId = command.InstanceId,
+            executionGeneration = command.ExecutionGeneration,
+            result,
+            errorCode
+        }, cancellationToken);
+    }
+
+    public async Task StartOrRecoverAsync(
+        CloudJob job,
+        WorkerClient client,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(job.RuntimeStopState) &&
+            !string.Equals(job.RuntimeStopState, "NONE", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var instancePath = GetInstancePath(job.InstanceId);
+        var terminal = Path.Combine(instancePath, "terminal64.exe");
+
+        if (HasExactTerminal(terminal))
+        {
+            var startup = Path.Combine(instancePath, "cloud-start.ini");
+            if (job.EaOnline && File.Exists(startup))
+            {
+                try { File.Delete(startup); } catch { }
+            }
+
+            return;
+        }
+
+        if (_retryAfter.TryGetValue(job.InstanceId, out var retryAt) &&
+            retryAt > DateTimeOffset.UtcNow)
+            return;
+
+        _retryAfter[job.InstanceId] = DateTimeOffset.UtcNow.AddSeconds(60);
+
+        var marker = Path.Combine(instancePath, "cloud-provisioned");
+        var alreadyProvisioned = File.Exists(marker);
+        var recoveryAuthorized = false;
+
+        if (alreadyProvisioned)
+        {
+            try
+            {
+                var decision = await client.PostAsync<RecoveryDecision>(
+                    "recovery-check",
+                    new
+                    {
+                        instanceId = job.InstanceId,
+                        executionGeneration = job.ExecutionGeneration
+                    },
+                    cancellationToken);
+
+                if (!decision.Allow) return;
+                recoveryAuthorized = true;
+
+                if (HasExactTerminal(terminal)) return;
+            }
+            catch
+            {
+                return;
+            }
+        }
+
+        try
+        {
+            if (!alreadyProvisioned)
+            {
+                if (!TemplateReady) throw new InvalidOperationException("Template is not verified");
+
+                Directory.CreateDirectory(instancePath);
+                CopyTemplate(_templatePath, instancePath);
+                File.WriteAllText(marker, "1", new UTF8Encoding(false));
+            }
+
+            var ea = Path.Combine(instancePath, "MQL5", "Experts", "FastBasketBot.ex5");
+            if (!File.Exists(terminal) || !File.Exists(ea))
+                throw new InvalidOperationException("Missing MT5 or EA");
+
+            var presetDir = Path.Combine(instancePath, "MQL5", "Presets");
+            Directory.CreateDirectory(presetDir);
+
+            File.WriteAllLines(
+                Path.Combine(presetDir, "SCENOVA-Cloud.set"),
+                new[]
+                {
+                    "InpApiBase=" + SafeIniValue(_config.ApiBase),
+                    "InpInstanceId=" + SafeIniValue(job.InstanceId),
+                    "InpInstallToken=" + SafeIniValue(job.InstallToken)
+                },
+                Encoding.Unicode);
+
+            var startupPath = Path.Combine(instancePath, "cloud-start.ini");
+            File.WriteAllLines(
+                startupPath,
+                new[]
+                {
+                    "[Common]",
+                    "Login=" + SafeIniValue(job.AccountNumberText),
+                    "Password=" + SafeIniValue(job.TradingPassword),
+                    "Server=" + SafeIniValue(job.BrokerServer),
+                    "KeepPrivate=1",
+                    "NewsEnable=0",
+                    "[Charts]",
+                    "MaxBars=5000",
+                    "[Experts]",
+                    "Enabled=1",
+                    "AllowLiveTrading=1",
+                    "AllowDllImport=0",
+                    "[StartUp]",
+                    "Expert=FastBasketBot",
+                    "ExpertParameters=SCENOVA-Cloud.set",
+                    "Symbol=" + SafeIniValue(job.Symbol),
+                    "Period=M5"
+                },
+                Encoding.Unicode);
+
+            if (!HasExactTerminal(terminal))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = terminal,
+                    Arguments = $"/portable /config:\"{startupPath}\"",
+                    WorkingDirectory = instancePath,
+                    UseShellExecute = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                });
+            }
+
+            if (recoveryAuthorized)
+            {
+                await client.PostAsync("recovery-result", new
+                {
+                    instanceId = job.InstanceId,
+                    executionGeneration = job.ExecutionGeneration,
+                    result = "STARTED",
+                    errorCode = ""
+                }, cancellationToken);
+            }
+
+            await client.PostAsync("provision-result", new
+            {
+                instanceId = job.InstanceId,
+                errorCode = ""
+            }, cancellationToken);
+        }
+        catch
+        {
+            if (recoveryAuthorized)
+            {
+                try
+                {
+                    await client.PostAsync("recovery-result", new
+                    {
+                        instanceId = job.InstanceId,
+                        executionGeneration = job.ExecutionGeneration,
+                        result = "FAILED",
+                        errorCode = "RECOVERY_START_FAILED"
+                    }, cancellationToken);
+                }
+                catch { }
+            }
+
+            try
+            {
+                await client.PostAsync("provision-result", new
+                {
+                    instanceId = job.InstanceId,
+                    errorCode = "CHECK_TEMPLATE_OR_TERMINAL"
+                }, cancellationToken);
+            }
+            catch { }
+        }
+    }
+
+    private bool StopInstance(string instanceId)
+    {
+        var terminal = Path.Combine(GetInstancePath(instanceId), "terminal64.exe");
+        var matches = EnumerateTerminalProcesses()
+            .Where(item => string.Equals(item.Path, terminal, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        foreach (var item in matches)
+        {
+            try
+            {
+                using var process = Process.GetProcessById(item.Pid);
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(15_000);
+            }
+            catch { }
+        }
+
+        return !HasExactTerminal(terminal);
+    }
+
+    private string GetInstancePath(string instanceId)
+    {
+        if (!Guid.TryParse(instanceId, out _))
+            throw new InvalidOperationException("Invalid instance ID");
+
+        var root = Path.GetFullPath(_instancesPath).TrimEnd('\\') + "\\";
+        var path = Path.GetFullPath(Path.Combine(_instancesPath, instanceId));
+        if (!path.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Invalid instance path");
+
+        return path;
+    }
+
+    private bool HasExactTerminal(string terminalPath) =>
+        EnumerateTerminalProcesses()
+            .Any(item => string.Equals(item.Path, terminalPath, StringComparison.OrdinalIgnoreCase));
+
+    private static string SafeIniValue(string? value)
+    {
+        var result = value ?? "";
+        if (result.IndexOfAny(['\r', '\n', '\0']) >= 0)
+            throw new InvalidOperationException("Invalid configuration value");
+        return result;
+    }
+
+    private static void CopyTemplate(string source, string destination)
+    {
+        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(source, directory);
+            Directory.CreateDirectory(Path.Combine(destination, relative));
+        }
+
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            if (string.Equals(Path.GetFileName(file), "cloud-template.ready", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var relative = Path.GetRelativePath(source, file);
+            var target = Path.Combine(destination, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target, overwrite: true);
+        }
+    }
+
+    private static List<(int Pid, string Path)> EnumerateTerminalProcesses()
+    {
+        var result = new List<(int, string)>();
+        foreach (var process in Process.GetProcessesByName("terminal64"))
+        {
+            using (process)
+            {
+                try
+                {
+                    var path = process.MainModule?.FileName;
+                    if (!string.IsNullOrWhiteSpace(path))
+                        result.Add((process.Id, Path.GetFullPath(path)));
+                }
+                catch
+                {
+                    // Ignore inaccessible terminals outside this Worker session.
+                }
+            }
+        }
+
+        return result;
+    }
+}

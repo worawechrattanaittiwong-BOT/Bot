@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - "tools/windows-cloud-worker/Setup/**"
+      - "tools/windows-cloud-worker/Worker/**"
       - "apps/web/components/CloudConsole.tsx"
       - ".github/workflows/build-cloud-server-setup.yml"
   push:
     branches: [main]
     paths:
       - "tools/windows-cloud-worker/Setup/**"
+      - "tools/windows-cloud-worker/Worker/**"
       - "apps/web/components/CloudConsole.tsx"
       - ".github/workflows/build-cloud-server-setup.yml"
   workflow_dispatch:
@@ -26,15 +28,6 @@ jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 20
-    env:
-      SIGNING_ENABLED: ${{ vars.SCENOVA_WINDOWS_SIGNING_ENABLED }}
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      ARTIFACT_SIGNING_ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
-      ARTIFACT_SIGNING_ACCOUNT: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
-      ARTIFACT_SIGNING_PROFILE: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
-      EXPECTED_PUBLISHER: ${{ vars.SCENOVA_WINDOWS_EXPECTED_PUBLISHER }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +35,7 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Publish self-contained Cloud Setup
+      - name: Publish Cloud Setup
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -52,67 +45,44 @@ jobs:
             throw "SCENOVA-Cloud-Setup.exe was not produced"
           }
 
-      - name: Azure login for Artifact Signing
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.SIGNING_ENABLED == 'true'
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Sign Cloud Setup
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.SIGNING_ENABLED == 'true'
-        uses: azure/artifact-signing-action@v2
-        with:
-          endpoint: ${{ env.ARTIFACT_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ env.ARTIFACT_SIGNING_ACCOUNT }}
-          certificate-profile-name: ${{ env.ARTIFACT_SIGNING_PROFILE }}
-          files: ${{ github.workspace }}\cloud-setup-publish\SCENOVA-Cloud-Setup.exe
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-          description: SCENOVA Cloud Server Setup
-          description-url: https://snvea-bot.online
-
-      - name: Verify signature when signing is enabled
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.SIGNING_ENABLED == 'true'
+      - name: Publish Cloud Worker
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          $signature = Get-AuthenticodeSignature -FilePath "cloud-setup-publish/SCENOVA-Cloud-Setup.exe"
-          if ($signature.Status -ne "Valid") {
-            throw "SCENOVA-Cloud-Setup.exe signature is invalid: $($signature.Status)"
-          }
-          if (-not [string]::IsNullOrWhiteSpace($env:EXPECTED_PUBLISHER) -and
-              $signature.SignerCertificate.Subject -notlike "*$($env:EXPECTED_PUBLISHER)*") {
-            throw "Unexpected publisher: $($signature.SignerCertificate.Subject)"
+          dotnet restore tools/windows-cloud-worker/Worker/ScenovaCloudWorker.csproj
+          dotnet publish tools/windows-cloud-worker/Worker/ScenovaCloudWorker.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o cloud-worker-publish
+          if (-not (Test-Path "cloud-worker-publish/SCENOVA-CloudWorker.exe")) {
+            throw "SCENOVA-CloudWorker.exe was not produced"
           }
 
-      - name: Upload Cloud Setup artifact
+      - name: Upload Cloud Server artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: SCENOVA-Cloud-Server-Setup
-          path: cloud-setup-publish/SCENOVA-Cloud-Setup.exe
+          name: SCENOVA-Cloud-Server
+          path: |
+            cloud-setup-publish/SCENOVA-Cloud-Setup.exe
+            cloud-worker-publish/SCENOVA-CloudWorker.exe
           if-no-files-found: error
 
-      - name: Publish Cloud Setup to website on main
+      - name: Publish Cloud binaries to website on main
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
           Copy-Item -Force "cloud-setup-publish/SCENOVA-Cloud-Setup.exe" "apps/web/public/downloads/SCENOVA-Cloud-Setup.exe"
+          Copy-Item -Force "cloud-worker-publish/SCENOVA-CloudWorker.exe" "apps/web/public/downloads/SCENOVA-CloudWorker.exe"
 
           git config user.name "scenova-build"
           git config user.email "actions@users.noreply.github.com"
-          git add "apps/web/public/downloads/SCENOVA-Cloud-Setup.exe"
+          git add "apps/web/public/downloads/SCENOVA-Cloud-Setup.exe" "apps/web/public/downloads/SCENOVA-CloudWorker.exe"
 
           git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Published Cloud Setup is already current."
+            Write-Host "Published Cloud binaries are already current."
             exit 0
           }
 
-          git commit -m "[phase2-generated] build: publish SCENOVA Cloud Setup"
+          git commit -m "[phase3-generated] build: publish SCENOVA Cloud binaries"
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
@@ -125,7 +95,7 @@ jobs:
             git rebase origin/main
             if ($LASTEXITCODE -ne 0) {
               git rebase --abort
-              throw "Could not rebase Cloud Setup binary onto latest main"
+              throw "Could not rebase Cloud binaries onto latest main"
             }
 
             git push origin HEAD:main
@@ -138,5 +108,5 @@ jobs:
           }
 
           if (-not $published) {
-            throw "Failed to publish SCENOVA Cloud Setup to main"
+            throw "Failed to publish SCENOVA Cloud binaries to main"
           }
