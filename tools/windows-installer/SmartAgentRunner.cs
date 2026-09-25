@@ -17,6 +17,32 @@ internal static class SmartAgentRunner
     private static string PendingReloadPath(AgentConfig config) =>
         Path.Combine(ScenovaRuntime.StagingDir, "reload-" + SafeKey(config) + ".pending");
 
+    private const string RuntimeReloadSuffix = "-runtime-reload";
+
+    private static string ArtifactReleaseVersion(string? value)
+    {
+        var raw = (value ?? "").Trim();
+        return raw.EndsWith(RuntimeReloadSuffix, StringComparison.OrdinalIgnoreCase)
+            ? raw[..^RuntimeReloadSuffix.Length]
+            : raw;
+    }
+
+    private static bool RuntimeReloadRequired(AgentHeartbeatResponse heartbeat)
+    {
+        var required = ArtifactReleaseVersion(heartbeat.EaVersionRequired);
+        var current = ArtifactReleaseVersion(heartbeat.EaVersion);
+        var versionMismatch =
+            !string.IsNullOrWhiteSpace(required) &&
+            !string.Equals(current, required, StringComparison.OrdinalIgnoreCase);
+        var contractMismatch = heartbeat.RuntimeContractMatch == false;
+        return versionMismatch || contractMismatch;
+    }
+
+    private static bool RuntimeVerified(AgentHeartbeatResponse heartbeat) =>
+        heartbeat.EaOnline &&
+        !RuntimeReloadRequired(heartbeat) &&
+        heartbeat.RuntimeContractMatch != false;
+
     internal static async Task RunAsync()
     {
         Directory.CreateDirectory(ScenovaRuntime.BaseDir);
@@ -103,7 +129,7 @@ internal static class SmartAgentRunner
                 }
             });
 
-        UpdateVerifiedIdentity(config, heartbeat);
+        UpdateVerifiedIdentity(config, heartbeat, localHash);
 
         // Migration stop has higher priority than every normal/manual Agent action.
         // If the Server asks this Local runtime to stop, do not stage/reload or
@@ -231,19 +257,14 @@ internal static class SmartAgentRunner
         {
             TryDelete(PendingEaPath(config));
 
-            // The binary on disk can already be current while the EA loaded on
-            // the chart is still an older runtime. Preserve a reload marker when
-            // the Server reports that mismatch so the explicit update button can
-            // authorize a single MT5 restart.
-            if (!string.IsNullOrWhiteSpace(heartbeat.EaVersion) &&
-                !string.IsNullOrWhiteSpace(heartbeat.EaVersionRequired) &&
-                !string.Equals(
-                    heartbeat.EaVersion,
-                    heartbeat.EaVersionRequired,
-                    StringComparison.OrdinalIgnoreCase))
-            {
+            // The binary on disk can already be current while the loaded runtime
+            // is stale. Runtime identity includes both semantic version and the
+            // runtime contract; either mismatch requires one explicit reload.
+            if (RuntimeReloadRequired(heartbeat))
                 File.WriteAllText(PendingReloadPath(config), expected);
-            }
+            else if (RuntimeVerified(heartbeat))
+                TryDelete(PendingReloadPath(config));
+
             return;
         }
 
@@ -293,7 +314,7 @@ internal static class SmartAgentRunner
         File.Move(apply, config.EaBinaryPath, true);
         config.PreviousEaHash = config.EaHash;
         config.EaHash = expected;
-        config.EaVersion = heartbeat.EaVersionRequired ?? config.EaVersion;
+        config.EaVersion = ArtifactReleaseVersion(heartbeat.EaVersionRequired ?? config.EaVersion);
         config.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
         ScenovaRuntime.SaveOrUpdateProfile(config, config.IsPrimary);
 
@@ -306,7 +327,8 @@ internal static class SmartAgentRunner
 
     private static void UpdateVerifiedIdentity(
         AgentConfig config,
-        AgentHeartbeatResponse heartbeat)
+        AgentHeartbeatResponse heartbeat,
+        string localHash)
     {
         config.VerifiedAccountNumber =
             heartbeat.AccountNumber ?? config.VerifiedAccountNumber;
@@ -317,10 +339,26 @@ internal static class SmartAgentRunner
         config.InstallerVersion = AgentBuildInfo.Version;
         config.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
 
+        // Server-advertised release metadata is desired state only. Never copy it
+        // into installed/verified fields before the local EX5 and loaded runtime
+        // have independently proven that state.
         if (!string.IsNullOrWhiteSpace(heartbeat.EaVersionRequired))
-            config.EaVersion = heartbeat.EaVersionRequired;
+            config.DesiredEaVersion = ArtifactReleaseVersion(heartbeat.EaVersionRequired);
         if (!string.IsNullOrWhiteSpace(heartbeat.ArtifactHash))
-            config.EaHash = heartbeat.ArtifactHash;
+            config.DesiredEaHash = heartbeat.ArtifactHash;
+        if (!string.IsNullOrWhiteSpace(localHash))
+            config.EaHash = localHash;
+
+        if (!string.IsNullOrWhiteSpace(heartbeat.EaVersion))
+            config.VerifiedRuntimeVersion = ArtifactReleaseVersion(heartbeat.EaVersion);
+        if (!string.IsNullOrWhiteSpace(heartbeat.RuntimeContract))
+            config.VerifiedRuntimeContract = heartbeat.RuntimeContract;
+
+        if (RuntimeVerified(heartbeat))
+        {
+            config.EaVersion = ArtifactReleaseVersion(heartbeat.EaVersion);
+            config.LastEaVerifiedAt = DateTimeOffset.UtcNow.ToString("O");
+        }
 
         ScenovaRuntime.SaveOrUpdateProfile(config, config.IsPrimary);
     }
