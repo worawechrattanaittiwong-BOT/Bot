@@ -1,9 +1,10 @@
 import type { MetadataRoute } from "next";
+import { SCENOVA_BRAND_NAME, SCENOVA_MASTER_MARK } from "../lib/brand";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "SCENOVA EA",
-    short_name: "SCENOVA EA",
+    name: SCENOVA_BRAND_NAME,
+    short_name: SCENOVA_BRAND_NAME,
     description: "SCENOVA EA — MT5 trading automation and control center",
     start_url: "/",
     scope: "/",
@@ -12,12 +13,12 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#080f20",
     icons: [
       {
-        src: "/scenova-ea-icon.png",
+        src: SCENOVA_MASTER_MARK,
         type: "image/png",
         purpose: "any"
       },
       {
-        src: "/scenova-ea-icon.png",
+        src: SCENOVA_MASTER_MARK,
         type: "image/png",
         purpose: "maskable"
       }
