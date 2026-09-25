@@ -88,42 +88,6 @@ jobs:
       - name: RACE VNext Phase 6 evaluation contract
         shell: pwsh
         run: ./tests/race-vnext-phase6-evaluation-contract.ps1
-      - name: Mobile UI M1 shell and light mode contract
-        shell: pwsh
-        run: ./tests/mobile-ui-shell-contract.ps1
-      - name: Mobile UI M2 dashboard home contract
-        shell: pwsh
-        run: ./tests/mobile-ui-dashboard-contract.ps1
-      - name: Mobile UI M3 navigation and trade settings contract
-        shell: pwsh
-        run: ./tests/mobile-ui-trade-contract.ps1
-      - name: Mobile UI M4 orders history baskets contract
-        shell: pwsh
-        run: ./tests/mobile-ui-orders-contract.ps1
-      - name: Mobile UI M5 performance stats contract
-        shell: pwsh
-        run: ./tests/mobile-ui-performance-contract.ps1
-      - name: Mobile UI M6 account access contract
-        shell: pwsh
-        run: ./tests/mobile-ui-account-access-contract.ps1
-      - name: Mobile UI M7 system tools contract
-        shell: pwsh
-        run: ./tests/mobile-ui-system-tools-contract.ps1
-      - name: Mobile UI M8 final app feel contract
-        shell: pwsh
-        run: ./tests/mobile-ui-final-polish-contract.ps1
-      - name: Mobile UI final feature parity contract
-        shell: pwsh
-        run: ./tests/mobile-ui-final-parity-contract.ps1
-      - name: Mobile real-device visual QA contract
-        shell: pwsh
-        run: ./tests/mobile-ui-real-device-qa-contract.ps1
-      - name: Mobile navigation and scroll stability contract
-        shell: pwsh
-        run: ./tests/mobile-ui-navigation-scroll-contract.ps1
-      - name: Mobile dashboard professional command center contract
-        shell: pwsh
-        run: ./tests/mobile-ui-dashboard-command-contract.ps1
       - name: FLIP LOCK strict isolation contract
         shell: pwsh
         run: ./tests/flip-lock-isolation-contract.ps1

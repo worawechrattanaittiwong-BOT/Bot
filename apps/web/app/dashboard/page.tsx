@@ -2056,11 +2056,17 @@ export default function DashboardPage() {
                 </div>
               </dialog>
 
+              <section className="cc-v6-telemetry" aria-label="ข้อมูลสดจาก EA">
+                <div className="cc-v6-telemetry-live"><i/>{marketSessionClosed ? "MARKET CLOSED" : "REALTIME"}</div>
+                <LiveTelemetryItem icon="timer" label="ATR (M15)" value={atrValueLabel} tone={atrPoints>0?"good":"neutral"}/>
+                <LiveTelemetryItem icon="spread" label="Spread" value={spreadValueLabel} tone={spreadStatus==="NORMAL"?"good":spreadStatus==="EXTREME"?"bad":"warn"}/>
+                <LiveTelemetryItem icon="spark" label="Momentum" value={Number(metrics.momentumPoints||0).toFixed(1)+" pt"}/>
+                <LiveTelemetryItem icon="clock" label="Latency" value={heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"} tone={heartbeatLatencyMs>2000?"bad":heartbeatLatencyMs>700?"warn":"good"}/>
+                <LiveTelemetryItem icon="status" label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20&&heartbeatHttpStatus>=200&&heartbeatHttpStatus<300?"good":"warn"}/>
+                <LiveTelemetryItem icon="shield" label="Execution" value={Number(metrics.executionQuality||0)>0?Number(metrics.executionQuality).toFixed(0)+"%":"—"} tone={Number(metrics.executionQuality||0)>=80?"good":"neutral"}/>
+              </section>
 
-
-
-
-              <section id="trade-control" className={"panel cc-v6-hero cc-v47-command-bar "+(state === "RUNNING" ? "is-running" : "is-idle")} aria-label="ศูนย์ควบคุมบอท">
+              <section className={"panel cc-v6-hero cc-v47-command-bar "+(state === "RUNNING" ? "is-running" : "is-idle")}>
                 <div className="cc-v6-hero-main">
                   <div className="cc-v6-gold-stage"><ScenovaIcon name="gold" size={52}/><i/><i/></div>
                   <div className="cc-v6-symbol-copy">
@@ -2101,7 +2107,6 @@ export default function DashboardPage() {
                     <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
                     <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
                     <button className="close" disabled={busy} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ล้างและปิดทั้งหมด",message:"คำสั่งนี้จะ Force Flat ออเดอร์ของ SCENOVA และล้างสถานะค้างของบัญชีนี้ ใช้ได้แม้หน้าจอแสดง 0 Position ยืนยันดำเนินการทันที?",confirmLabel:"ล้าง / ปิดทั้งหมด",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งล้าง / ปิดทั้งหมดแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ล้าง / ปิดทั้งหมด</b><small>Force Flat &amp; Reset</small></span></button>
-                    <button className="settings" onClick={()=>{window.history.replaceState({},"","/dashboard?view=overview#bot-settings");document.getElementById("bot-settings")?.scrollIntoView({behavior:"smooth",block:"start"});}}><ScenovaIcon name="control" size={15}/><span><b>ตั้งค่าบอท</b><small>Settings</small></span></button>
                     <button className="terminal" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={15}/><span><b>Terminal</b><small>Live Logs</small></span></button>
                   </div>
                 </div>
@@ -2147,36 +2152,8 @@ export default function DashboardPage() {
                 <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
               </section>
 
-              <section className="cc-v6-telemetry" aria-label="ข้อมูลสดจาก EA">
-                <div className="cc-v6-telemetry-live"><i/>{marketSessionClosed ? "MARKET CLOSED" : "REALTIME"}</div>
-                <LiveTelemetryItem icon="timer" label="ATR (M15)" value={atrValueLabel} tone={atrPoints>0?"good":"neutral"}/>
-                <LiveTelemetryItem icon="spread" label="Spread" value={spreadValueLabel} tone={spreadStatus==="NORMAL"?"good":spreadStatus==="EXTREME"?"bad":"warn"}/>
-                <LiveTelemetryItem icon="spark" label="Momentum" value={Number(metrics.momentumPoints||0).toFixed(1)+" pt"}/>
-                <LiveTelemetryItem icon="clock" label="Latency" value={heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"} tone={heartbeatLatencyMs>2000?"bad":heartbeatLatencyMs>700?"warn":"good"}/>
-                <LiveTelemetryItem icon="status" label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20&&heartbeatHttpStatus>=200&&heartbeatHttpStatus<300?"good":"warn"}/>
-                <LiveTelemetryItem icon="shield" label="Execution" value={Number(metrics.executionQuality||0)>0?Number(metrics.executionQuality).toFixed(0)+"%":"—"} tone={Number(metrics.executionQuality||0)>=80?"good":"neutral"}/>
-              </section>
-
-              <section className="mobile-only scn-mobile-system-center" id="mobile-system-center" aria-label="System and update center">
-                <div className="scn-mobile-system-head">
-                  <div><small>SYSTEM CENTER</small><b>สถานะ · อัปเดต · Logs</b></div>
-                  <span className={isMt5Online ? "good" : "warn"}>{isMt5Online ? "ONLINE" : isAgentOnline ? "EA WAIT" : "OFFLINE"}</span>
-                </div>
-                <div className="scn-mobile-system-grid">
-                  <div><span>MT5</span><b>{isMt5Online ? "Connected" : isAgentOnline ? "Agent Online" : "Waiting"}</b></div>
-                  <div><span>EA</span><b>{softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}</b><small>{softwareUpdate.eaUpdateRequired ? "มีอัปเดต" : "Runtime"}</small></div>
-                  <div><span>Agent</span><b>{softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : data.selectedSlot?.mode === "LOCAL" ? "—" : "Cloud"}</b><small>{softwareUpdate.installerRequired ? "มีอัปเดต" : "Status"}</small></div>
-                  <div><span>Execution</span><b>{String(liveStatus.label || state)}</b><small>{heartbeatAgeSeconds.toFixed(0)}s heartbeat</small></div>
-                </div>
-                <div className="scn-mobile-system-actions">
-                  <button type="button" onClick={()=>statusDialogRef.current?.showModal()}><ScenovaIcon name="status" size={17}/><span><b>สถานะระบบ</b><small>Version / Update</small></span></button>
-                  <button type="button" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={17}/><span><b>Live Logs</b><small>Terminal</small></span></button>
-                  <button type="button" onClick={()=>{setActiveView("account");window.history.replaceState({},"","/dashboard?view=account");window.scrollTo({top:0,behavior:"smooth"});}}><ScenovaIcon name="arrow-down" size={17}/><span><b>ติดตั้ง / อัปเดต</b><small>MT5 & EA</small></span></button>
-                </div>
-              </section>
-
               <div className="cc-v19-three-card-grid">
-                <section id="bot-settings" className="cc-v17-settings-column cc-v19-settings-card" aria-label="ตั้งค่าบอท">
+                <section className="cc-v17-settings-column cc-v19-settings-card" aria-label="ตั้งค่าบอท">
                   <BotSettingsModal
                     embedded
                     open
@@ -2203,7 +2180,7 @@ export default function DashboardPage() {
                   />
                 </section>
 
-                <section id="live-orders" className="panel cc-v17-running-positions" aria-label="ออเดอร์ที่บอทกำลังรัน">
+                <section className="panel cc-v17-running-positions" aria-label="ออเดอร์ที่บอทกำลังรัน">
                   <div className="cc-v17-running-head">
                     <div><span><ScenovaIcon name="orders" size={18}/></span><div><small>LIVE EXECUTION</small><b>ออเดอร์ที่กำลังรัน</b></div></div>
                     <em className={currentPositions>0?"live":"idle"}>{currentPositions>0?currentPositions+" Running":"No Position"}</em>
@@ -2240,56 +2217,6 @@ export default function DashboardPage() {
                 </section>
 
 
-
-                <section className="mobile-only scn-mobile-order-history" id="mobile-order-history" aria-label="ประวัติออเดอร์ล่าสุด">
-                  <div className="scn-mobile-order-tabs" aria-label="Orders navigation">
-                    <a href="#live-orders"><ScenovaIcon name="orders" size={15}/>OPEN</a>
-                    <a href="#mobile-order-history" className="active"><ScenovaIcon name="clock" size={15}/>HISTORY</a>
-                    <a href="#mobile-basket-history"><ScenovaIcon name="layers" size={15}/>BASKETS</a>
-                  </div>
-                  <div className="scn-mobile-order-card-head">
-                    <div><small>RECENT ACTIVITY</small><b>ประวัติออเดอร์ล่าสุด</b></div>
-                    <a href="/performance">ดูสถิติ →</a>
-                  </div>
-                  <div className="scn-mobile-order-feed">
-                    {(Array.isArray(data.tradeJournal?.recent) ? data.tradeJournal.recent : [])
-                      .filter((row:any)=>String(row.event_type||"").toUpperCase()!=="BASKET")
-                      .slice(0,6)
-                      .map((row:any,index:number)=>{
-                        const type=String(row.event_type||"EVENT").toUpperCase();
-                        const side=String(row.direction||"").toUpperCase();
-                        const profit=Number(row.net_profit||0);
-                        return <div className="scn-mobile-order-feed-row" key={"journal-"+index+"-"+String(row.created_at||"")}>
-                          <span className={"event "+type.toLowerCase()}>{type}</span>
-                          <div><b>{side||String(row.entry_model||"TRADE")}</b><small>{row.created_at?new Date(row.created_at).toLocaleString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"short"}):"—"}</small></div>
-                          <div className="meta"><b>{Number(row.volume||0)>0?Number(row.volume).toFixed(2)+" Lot":"—"}</b><small>{Number(row.price||0)>0?Number(row.price).toFixed(Math.max(2,Math.min(5,Number(metrics.symbolDigits||3)))):"—"}</small></div>
-                          <strong className={profit>0?"good":profit<0?"bad":""}>{type==="EXIT"?formatAccountMoney(profit,accountCurrency,true):""}</strong>
-                        </div>;
-                      })}
-                    {!(Array.isArray(data.tradeJournal?.recent) && data.tradeJournal.recent.some((row:any)=>String(row.event_type||"").toUpperCase()!=="BASKET")) && <div className="scn-mobile-order-empty">ยังไม่มีประวัติออเดอร์ล่าสุด</div>}
-                  </div>
-                </section>
-
-                <section className="mobile-only scn-mobile-basket-history" id="mobile-basket-history" aria-label="Basket ที่ปิดล่าสุด">
-                  <div className="scn-mobile-order-card-head">
-                    <div><small>CLOSED BASKETS</small><b>Basket ที่ปิดล่าสุด</b></div>
-                    <span>{Number(data.tradeJournal?.stats?.closedTrades||0)} Total</span>
-                  </div>
-                  <div className="scn-mobile-basket-list">
-                    {(Array.isArray(data.tradeJournal?.recent) ? data.tradeJournal.recent : [])
-                      .filter((row:any)=>String(row.event_type||"").toUpperCase()==="BASKET")
-                      .slice(0,5)
-                      .map((row:any,index:number)=>{
-                        const profit=Number(row.net_profit||0);
-                        return <div className="scn-mobile-basket-row" key={"basket-"+index+"-"+String(row.created_at||"")}>
-                          <span className={profit>=0?"good":"bad"}><ScenovaIcon name={profit>=0?"profit":"risk"} size={17}/></span>
-                          <div><b>{String(row.direction||"BASKET").toUpperCase()}</b><small>{row.created_at?new Date(row.created_at).toLocaleString("th-TH",{timeZone:"Asia/Bangkok",dateStyle:"short",timeStyle:"short"}):"—"}</small></div>
-                          <strong className={profit>=0?"good":"bad"}>{formatAccountMoney(profit,accountCurrency,true)}</strong>
-                        </div>;
-                      })}
-                    {!(Array.isArray(data.tradeJournal?.recent) && data.tradeJournal.recent.some((row:any)=>String(row.event_type||"").toUpperCase()==="BASKET")) && <div className="scn-mobile-order-empty">ยังไม่มี Basket ที่ปิดในรายการล่าสุด</div>}
-                  </div>
-                </section>
 
                 <section className="panel cc-v12-mode-performance">
                   <div className="cc-v12-card-head">

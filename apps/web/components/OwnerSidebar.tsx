@@ -174,8 +174,7 @@ function UnifiedMobileNav({
             if (onNavigate?.(item.href) === true) event.preventDefault();
           }}
         >
-          <span className="mobile-nav-icon" aria-hidden="true"><ScenovaIcon name={item.icon} size={18}/></span>
-          <span className="mobile-nav-label">{item.label}</span>
+          {item.label}
         </Link>
       ))}
     </div>

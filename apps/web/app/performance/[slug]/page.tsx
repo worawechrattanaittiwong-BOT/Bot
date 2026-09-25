@@ -27,17 +27,17 @@ export default function PublicPerformancePage() {
   },[slug]);
 
   if(error){
-    return <main className="performance-public-shell scn-mobile-public-performance"><section className="performance-public-error"><b>ไม่พบพอร์ตตัวอย่าง</b><span>{error}</span></section></main>;
+    return <main className="performance-public-shell"><section className="performance-public-error"><b>ไม่พบพอร์ตตัวอย่าง</b><span>{error}</span></section></main>;
   }
   if(!data){
-    return <main className="performance-public-shell scn-mobile-public-performance"><section className="performance-public-error"><span className="dot green"/>กำลังโหลดผลการทดสอบ...</section></main>;
+    return <main className="performance-public-shell"><section className="performance-public-error"><span className="dot green"/>กำลังโหลดผลการทดสอบ...</section></main>;
   }
 
   const summary=data.summary||{};
   const points=Array.isArray(data.equity_curve)?data.equity_curve:[];
   const currency=String(data.currency||"UNKNOWN").trim().toUpperCase()||"UNKNOWN";
   return (
-    <main className="performance-public-shell scn-mobile-public-performance">
+    <main className="performance-public-shell">
       <header className="performance-public-head">
         <div className="performance-brand">
           <ScenovaBrand className="scenova-brand-logo-performance"/>

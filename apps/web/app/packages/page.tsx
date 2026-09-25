@@ -338,7 +338,7 @@ export default function PackagesPage() {
       {elevated
         ? <OwnerSidebar activeKey="packages" onLogout={logout} role={account.user.role}/>
         : <CustomerSidebar activeKey="packages" onLogout={logout} userCode={account.user.userCode} partner={partnerSummary}/>}
-      <main className={`main app-main ${styles.main} scn-mobile-packages-page`}>
+      <main className={`main app-main ${styles.main}`}>
         {elevated
           ? <OwnerMobileNav activeKey="packages"/>
           : <CustomerMobileNav activeKey="packages" partner={partnerSummary}/>}
@@ -362,14 +362,7 @@ export default function PackagesPage() {
             </div>
           )}
 
-          <nav className="mobile-only scn-mobile-access-jump" aria-label="เมนูสิทธิ์มือถือ">
-            <a href="#trial-access"><ScenovaIcon name="status" size={17}/><span>Trial</span></a>
-            <a href="#access-center"><ScenovaIcon name="account" size={17}/><span>Local / Cloud</span></a>
-            <a href="#membership-history"><ScenovaIcon name="clock" size={17}/><span>History</span></a>
-            <a href="/dashboard?view=account"><ScenovaIcon name="layers" size={17}/><span>MT5 & Slots</span></a>
-          </nav>
-
-          <section id="trial-access" className={styles.trialPanel}>
+          <section className={styles.trialPanel}>
             <div className={styles.trialHead}>
               <div className={styles.titleWithIcon}>
                 <span className={styles.icon}><ScenovaIcon name="status" size={19}/></span>
@@ -528,7 +521,7 @@ export default function PackagesPage() {
             </section>
           )}
 
-          <section id="access-center" className={styles.accessCenter}>
+          <section className={styles.accessCenter}>
             <div className={styles.centerTop}>
               <div>
                 <span className={styles.eyebrow}>SCENOVA ACCESS CENTER</span>
@@ -647,7 +640,7 @@ export default function PackagesPage() {
             </div>
           )}
 
-          <section id="membership-history" className={styles.historyPanel}>
+          <section className={styles.historyPanel}>
             <div className={styles.sectionHeader}>
               <div>
                 <span className={styles.eyebrow}>MEMBERSHIP HISTORY</span>

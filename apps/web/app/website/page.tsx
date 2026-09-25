@@ -21,7 +21,7 @@ const steps = [
 
 export default function WebsitePage() {
   return (
-    <div className={`${styles.page} scn-mobile-marketing-page`}>
+    <div className={styles.page}>
       <a className={styles.skipLink} href="#main-content">ข้ามไปยังเนื้อหา</a>
       <SiteHeader />
       <main id="main-content">
