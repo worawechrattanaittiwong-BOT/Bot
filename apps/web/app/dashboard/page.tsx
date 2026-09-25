@@ -2056,35 +2056,11 @@ export default function DashboardPage() {
                 </div>
               </dialog>
 
-              <section className="mobile-only scn-mobile-system-center" id="mobile-system-center" aria-label="System and update center">
-                <div className="scn-mobile-system-head">
-                  <div><small>SYSTEM CENTER</small><b>สถานะ · อัปเดต · Logs</b></div>
-                  <span className={isMt5Online ? "good" : "warn"}>{isMt5Online ? "ONLINE" : isAgentOnline ? "EA WAIT" : "OFFLINE"}</span>
-                </div>
-                <div className="scn-mobile-system-grid">
-                  <div><span>MT5</span><b>{isMt5Online ? "Connected" : isAgentOnline ? "Agent Online" : "Waiting"}</b></div>
-                  <div><span>EA</span><b>{softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}</b><small>{softwareUpdate.eaUpdateRequired ? "มีอัปเดต" : "Runtime"}</small></div>
-                  <div><span>Agent</span><b>{softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : data.selectedSlot?.mode === "LOCAL" ? "—" : "Cloud"}</b><small>{softwareUpdate.installerRequired ? "มีอัปเดต" : "Status"}</small></div>
-                  <div><span>Execution</span><b>{String(liveStatus.label || state)}</b><small>{heartbeatAgeSeconds.toFixed(0)}s heartbeat</small></div>
-                </div>
-                <div className="scn-mobile-system-actions">
-                  <button type="button" onClick={()=>statusDialogRef.current?.showModal()}><ScenovaIcon name="status" size={17}/><span><b>สถานะระบบ</b><small>Version / Update</small></span></button>
-                  <button type="button" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={17}/><span><b>Live Logs</b><small>Terminal</small></span></button>
-                  <button type="button" onClick={()=>{setActiveView("account");window.history.replaceState({},"","/dashboard?view=account");window.scrollTo({top:0,behavior:"smooth"});}}><ScenovaIcon name="arrow-down" size={17}/><span><b>ติดตั้ง / อัปเดต</b><small>MT5 & EA</small></span></button>
-                </div>
-              </section>
 
-              <section className="cc-v6-telemetry" aria-label="ข้อมูลสดจาก EA">
-                <div className="cc-v6-telemetry-live"><i/>{marketSessionClosed ? "MARKET CLOSED" : "REALTIME"}</div>
-                <LiveTelemetryItem icon="timer" label="ATR (M15)" value={atrValueLabel} tone={atrPoints>0?"good":"neutral"}/>
-                <LiveTelemetryItem icon="spread" label="Spread" value={spreadValueLabel} tone={spreadStatus==="NORMAL"?"good":spreadStatus==="EXTREME"?"bad":"warn"}/>
-                <LiveTelemetryItem icon="spark" label="Momentum" value={Number(metrics.momentumPoints||0).toFixed(1)+" pt"}/>
-                <LiveTelemetryItem icon="clock" label="Latency" value={heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"} tone={heartbeatLatencyMs>2000?"bad":heartbeatLatencyMs>700?"warn":"good"}/>
-                <LiveTelemetryItem icon="status" label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20&&heartbeatHttpStatus>=200&&heartbeatHttpStatus<300?"good":"warn"}/>
-                <LiveTelemetryItem icon="shield" label="Execution" value={Number(metrics.executionQuality||0)>0?Number(metrics.executionQuality).toFixed(0)+"%":"—"} tone={Number(metrics.executionQuality||0)>=80?"good":"neutral"}/>
-              </section>
 
-              <section className={"panel cc-v6-hero cc-v47-command-bar "+(state === "RUNNING" ? "is-running" : "is-idle")}>
+
+
+              <section id="trade-control" className={"panel cc-v6-hero cc-v47-command-bar "+(state === "RUNNING" ? "is-running" : "is-idle")} aria-label="ศูนย์ควบคุมบอท">
                 <div className="cc-v6-hero-main">
                   <div className="cc-v6-gold-stage"><ScenovaIcon name="gold" size={52}/><i/><i/></div>
                   <div className="cc-v6-symbol-copy">
@@ -2125,6 +2101,7 @@ export default function DashboardPage() {
                     <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
                     <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
                     <button className="close" disabled={busy} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ล้างและปิดทั้งหมด",message:"คำสั่งนี้จะ Force Flat ออเดอร์ของ SCENOVA และล้างสถานะค้างของบัญชีนี้ ใช้ได้แม้หน้าจอแสดง 0 Position ยืนยันดำเนินการทันที?",confirmLabel:"ล้าง / ปิดทั้งหมด",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งล้าง / ปิดทั้งหมดแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ล้าง / ปิดทั้งหมด</b><small>Force Flat &amp; Reset</small></span></button>
+                    <button className="settings" onClick={()=>{window.history.replaceState({},"","/dashboard?view=overview#bot-settings");document.getElementById("bot-settings")?.scrollIntoView({behavior:"smooth",block:"start"});}}><ScenovaIcon name="control" size={15}/><span><b>ตั้งค่าบอท</b><small>Settings</small></span></button>
                     <button className="terminal" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={15}/><span><b>Terminal</b><small>Live Logs</small></span></button>
                   </div>
                 </div>
@@ -2168,6 +2145,34 @@ export default function DashboardPage() {
                 <DashboardMetric icon="target" label="Win Rate วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.winRate||0).toFixed(1)+"%":"—"} sub={Number(todayPerformance.trades||0)>0?Number(todayPerformance.wins||0)+" / "+Number(todayPerformance.trades||0)+" Basket":"ยังไม่มี Basket ปิดวันนี้"} tone={Number(todayPerformance.trades||0)>0?(Number(todayPerformance.winRate||0)>=60?"good":Number(todayPerformance.winRate||0)>=45?"warn":"bad"):"neutral"} />
                 <DashboardMetric icon="risk" label="Drawdown วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.drawdownPercent||0).toFixed(2)+"%":"0.00%"} sub={formatAccountMoney(-Math.abs(Number(todayPerformance.drawdownMoney||0)),accountCurrency)+" Realized DD"} tone={Number(todayPerformance.drawdownPercent||0)>=5?"bad":Number(todayPerformance.drawdownPercent||0)>=2?"warn":"good"} />
                 <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
+              </section>
+
+              <section className="cc-v6-telemetry" aria-label="ข้อมูลสดจาก EA">
+                <div className="cc-v6-telemetry-live"><i/>{marketSessionClosed ? "MARKET CLOSED" : "REALTIME"}</div>
+                <LiveTelemetryItem icon="timer" label="ATR (M15)" value={atrValueLabel} tone={atrPoints>0?"good":"neutral"}/>
+                <LiveTelemetryItem icon="spread" label="Spread" value={spreadValueLabel} tone={spreadStatus==="NORMAL"?"good":spreadStatus==="EXTREME"?"bad":"warn"}/>
+                <LiveTelemetryItem icon="spark" label="Momentum" value={Number(metrics.momentumPoints||0).toFixed(1)+" pt"}/>
+                <LiveTelemetryItem icon="clock" label="Latency" value={heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"} tone={heartbeatLatencyMs>2000?"bad":heartbeatLatencyMs>700?"warn":"good"}/>
+                <LiveTelemetryItem icon="status" label="Heartbeat" value={heartbeatAgeSeconds.toFixed(0)+"s · HTTP "+(heartbeatHttpStatus||"—")} tone={heartbeatAgeSeconds<=20&&heartbeatHttpStatus>=200&&heartbeatHttpStatus<300?"good":"warn"}/>
+                <LiveTelemetryItem icon="shield" label="Execution" value={Number(metrics.executionQuality||0)>0?Number(metrics.executionQuality).toFixed(0)+"%":"—"} tone={Number(metrics.executionQuality||0)>=80?"good":"neutral"}/>
+              </section>
+
+              <section className="mobile-only scn-mobile-system-center" id="mobile-system-center" aria-label="System and update center">
+                <div className="scn-mobile-system-head">
+                  <div><small>SYSTEM CENTER</small><b>สถานะ · อัปเดต · Logs</b></div>
+                  <span className={isMt5Online ? "good" : "warn"}>{isMt5Online ? "ONLINE" : isAgentOnline ? "EA WAIT" : "OFFLINE"}</span>
+                </div>
+                <div className="scn-mobile-system-grid">
+                  <div><span>MT5</span><b>{isMt5Online ? "Connected" : isAgentOnline ? "Agent Online" : "Waiting"}</b></div>
+                  <div><span>EA</span><b>{softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}</b><small>{softwareUpdate.eaUpdateRequired ? "มีอัปเดต" : "Runtime"}</small></div>
+                  <div><span>Agent</span><b>{softwareUpdate.currentVersion ? "v"+softwareUpdate.currentVersion : data.selectedSlot?.mode === "LOCAL" ? "—" : "Cloud"}</b><small>{softwareUpdate.installerRequired ? "มีอัปเดต" : "Status"}</small></div>
+                  <div><span>Execution</span><b>{String(liveStatus.label || state)}</b><small>{heartbeatAgeSeconds.toFixed(0)}s heartbeat</small></div>
+                </div>
+                <div className="scn-mobile-system-actions">
+                  <button type="button" onClick={()=>statusDialogRef.current?.showModal()}><ScenovaIcon name="status" size={17}/><span><b>สถานะระบบ</b><small>Version / Update</small></span></button>
+                  <button type="button" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={17}/><span><b>Live Logs</b><small>Terminal</small></span></button>
+                  <button type="button" onClick={()=>{setActiveView("account");window.history.replaceState({},"","/dashboard?view=account");window.scrollTo({top:0,behavior:"smooth"});}}><ScenovaIcon name="arrow-down" size={17}/><span><b>ติดตั้ง / อัปเดต</b><small>MT5 & EA</small></span></button>
+                </div>
               </section>
 
               <div className="cc-v19-three-card-grid">

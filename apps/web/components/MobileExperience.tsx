@@ -113,7 +113,7 @@ export function MobileExperience() {
     ? (new URLSearchParams(locationState.search).get("view") || "overview")
     : "";
 
-  const tradeActive = pathname === "/dashboard" && locationState.hash === "#bot-settings";
+  const tradeActive = pathname === "/dashboard" && (locationState.hash === "#trade-control" || locationState.hash === "#bot-settings");
   const ordersActive = pathname === "/dashboard" && locationState.hash === "#live-orders";
   const homeActive = pathname === "/dashboard" && currentView === "overview" && !tradeActive && !ordersActive;
   const statsActive = pathname === "/performance";
@@ -156,7 +156,7 @@ export function MobileExperience() {
 
   const primary = [
     { label:"Home", href:"/dashboard?view=overview", icon:"overview", active:homeActive },
-    { label:"Trade", href:"/dashboard?view=overview#bot-settings", icon:"control", active:tradeActive },
+    { label:"Trade", href:"/dashboard?view=overview#trade-control", icon:"control", active:tradeActive },
     { label:"Orders", href:"/dashboard?view=overview#live-orders", icon:"orders", active:ordersActive },
     { label:"Stats", href:"/performance", icon:"pnl", active:statsActive }
   ];

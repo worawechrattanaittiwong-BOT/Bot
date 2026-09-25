@@ -121,6 +121,9 @@ jobs:
       - name: Mobile navigation and scroll stability contract
         shell: pwsh
         run: ./tests/mobile-ui-navigation-scroll-contract.ps1
+      - name: Mobile dashboard professional command center contract
+        shell: pwsh
+        run: ./tests/mobile-ui-dashboard-command-contract.ps1
       - name: FLIP LOCK strict isolation contract
         shell: pwsh
         run: ./tests/flip-lock-isolation-contract.ps1

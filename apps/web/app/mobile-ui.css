@@ -2326,3 +2326,261 @@
     grid-template-columns:20px minmax(0,1fr) minmax(82px,42%)!important;
   }
 }
+
+
+/* SCENOVA Dashboard Command Center · professional mobile control hierarchy */
+@media (max-width:767px){
+  body[data-scn-mobile-route="dashboard"] #trade-control{
+    scroll-margin-top:12px!important;
+    scroll-margin-bottom:calc(84px + env(safe-area-inset-bottom))!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-overview{
+    width:100%;
+    min-width:0;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v6-hero.cc-v47-command-bar{
+    margin:0 0 10px!important;
+    padding:14px!important;
+    display:flex!important;
+    flex-direction:column!important;
+    gap:10px!important;
+    border-radius:20px!important;
+    overflow:hidden!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v6-hero-main{
+    width:100%!important;
+    display:block!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v6-symbol-copy{
+    width:100%!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v6-symbol-copy h2{
+    font-size:29px!important;
+    line-height:1.05!important;
+    letter-spacing:-.035em!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v6-symbol-copy p{
+    display:block!important;
+    margin-top:5px!important;
+    line-height:1.35!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v6-symbol-copy p em{
+    display:none!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v6-symbol-chips{
+    display:flex!important;
+    flex-wrap:wrap!important;
+    overflow:visible!important;
+    gap:6px!important;
+    margin-top:10px!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v6-symbol-chips>span{
+    flex:0 0 auto!important;
+  }
+
+  /* Connection state is a readable strip, not a tiny bell-only square. */
+  body[data-scn-mobile-route="dashboard"] .cc-v47-live-state{
+    order:2;
+    width:100%!important;
+    min-width:0!important;
+    height:auto!important;
+    min-height:48px!important;
+    padding:8px 10px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    gap:9px!important;
+    border-radius:13px!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v47-live-state .cc-status-trigger-copy{
+    min-width:0;
+    display:flex!important;
+    flex:1;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:1px;
+    text-align:left;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v47-live-state .cc-status-trigger-copy b{
+    font-size:var(--ui-type-label)!important;
+    line-height:1.15!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v47-live-state .cc-status-trigger-copy small{
+    color:var(--m-muted)!important;
+    font-size:var(--ui-type-caption)!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v47-live-state>i{
+    position:static!important;
+    width:9px!important;
+    height:9px!important;
+    flex:0 0 9px;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-status-trigger-bell{
+    margin-left:auto!important;
+    flex:0 0 auto;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v13-hero-actions{
+    order:3;
+    width:100%!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions{
+    width:100%!important;
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:8px!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button{
+    min-width:0!important;
+    min-height:54px!important;
+    padding:9px 10px!important;
+    display:flex!important;
+    flex-direction:row!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:8px!important;
+    border-radius:14px!important;
+    touch-action:manipulation!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button svg{
+    flex:0 0 auto;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button span{
+    min-width:0;
+    text-align:left!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button b{
+    font-size:var(--ui-type-label)!important;
+    line-height:1.15!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button small{
+    display:block!important;
+    margin-top:2px;
+    color:currentColor!important;
+    opacity:.68;
+    font-size:var(--ui-type-caption)!important;
+    line-height:1.1!important;
+  }
+
+  /* Primary action: one obvious Start button. */
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button.start{
+    grid-column:1/-1!important;
+    order:1;
+    min-height:64px!important;
+    justify-content:flex-start!important;
+    padding:10px 15px!important;
+    border-color:#25845d!important;
+    background:linear-gradient(135deg,#073e2c,#0b5a3b)!important;
+    color:#8ff1bd!important;
+    box-shadow:0 12px 26px rgba(11,96,61,.16)!important;
+  }
+
+  /* Stop and emergency close belong together but remain visually distinct. */
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button.stop{
+    order:2;
+    border-color:#74602f!important;
+    background:linear-gradient(145deg,#2c2618,#181a1d)!important;
+    color:#f0d178!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button.close{
+    order:3;
+    border-color:#773545!important;
+    background:linear-gradient(145deg,#35141d,#1d1117)!important;
+    color:#ff8394!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button.settings,
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button.terminal{
+    order:4;
+    min-height:46px!important;
+    background:var(--m-surface-2)!important;
+    color:var(--m-text)!important;
+    border-color:var(--m-line)!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button.terminal{order:5}
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button.symbol{
+    grid-column:1/-1!important;
+    order:6;
+    min-height:44px!important;
+    background:color-mix(in srgb,var(--m-purple) 8%,var(--m-surface-2))!important;
+    color:var(--m-text)!important;
+    border-color:color-mix(in srgb,var(--m-purple) 35%,var(--m-line))!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button:disabled{
+    opacity:.42!important;
+    filter:saturate(.5)!important;
+  }
+
+  /* Make account KPIs compact enough to keep controls and status visible. */
+  body[data-scn-mobile-route="dashboard"] .cc-v3-kpis.cc-v6-kpis{
+    gap:7px!important;
+    margin-bottom:10px!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v3-kpis.cc-v6-kpis .cc-kpi{
+    min-height:82px!important;
+    padding:10px!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v3-kpis.cc-v6-kpis .cc-kpi-icon{
+    width:31px!important;
+    height:31px!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v3-kpis.cc-v6-kpis .cc-kpi b{
+    font-size:17px!important;
+  }
+
+  /* Diagnostics belong after the primary control surface. */
+  body[data-scn-mobile-route="dashboard"] .cc-v6-telemetry{
+    margin:0 0 10px!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .scn-mobile-system-center{
+    margin:0 0 10px!important;
+  }
+
+  /* The run-summary utility must never float over Start/Stop/Close or the dock. */
+  body[data-scn-mobile-route="dashboard"] .bps-launcher{
+    position:static!important;
+    width:100%!important;
+    min-height:44px!important;
+    margin:0 0 10px!important;
+    justify-content:center!important;
+    border-radius:14px!important;
+  }
+}
+
+@media (max-width:390px){
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions{
+    grid-template-columns:1fr 1fr!important;
+  }
+
+  body[data-scn-mobile-route="dashboard"] .cc-v19-hero-quick-actions>button.start{
+    grid-column:1/-1!important;
+  }
+}
