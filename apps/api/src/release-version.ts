@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-export const DEFAULT_INSTALLER_VERSION = "1.0.12";
+export const DEFAULT_INSTALLER_VERSION = "1.0.13";
 export const DEFAULT_EA_VERSION = "1.0.72";
 export const EA_RUNTIME_CONTRACT = "RACE_USER_LOSS_ONLY_V5";
 export const ZERO_GRID_MAX_LEVELS_PER_SIDE = 30;
@@ -49,6 +49,12 @@ export function isVersionAtLeast(current: unknown, required: unknown) {
 
 function normalizedExactVersion(version: unknown) {
   return String(version || "").trim().replace(/^v/i, "");
+}
+
+export function isVersionSame(current: unknown, required: unknown) {
+  const a = normalizedExactVersion(current);
+  const b = normalizedExactVersion(required);
+  return Boolean(a && b && a === b);
 }
 
 // Historical callers use isVersionExact() for the Windows Agent compatibility
@@ -118,23 +124,40 @@ function actualArtifactHash() {
 
 export function latestEaRelease() {
   const manifest = readReleaseManifest();
+  const actualHash = String(actualArtifactHash() || "").trim().toLowerCase() || null;
+  const manifestHash = String(manifest.sha256 || "").trim().toLowerCase() || null;
+  const configuredHash = String(process.env.SCENOVA_EA_SHA256 || "").trim().toLowerCase() || null;
+  const manifestEaVersion = String(manifest.eaVersion || "").trim();
   const configuredEaVersion = String(process.env.SCENOVA_EA_VERSION || "").trim();
-  const eaVersion = configuredEaVersion && sameReleaseLine(configuredEaVersion, DEFAULT_EA_VERSION)
-    ? configuredEaVersion
-    : String(manifest.eaVersion || DEFAULT_EA_VERSION).trim() || DEFAULT_EA_VERSION;
-  const sha256 =
-    String(
-      actualArtifactHash() ||
-      manifest.sha256 ||
-      process.env.SCENOVA_EA_SHA256 ||
-      ""
-    ).trim().toLowerCase() || null;
+
+  // Trust a release version only when it is bound to the EX5 actually served.
+  // This prevents stale environment values or stale manifests from advertising
+  // a version that does not match the downloadable binary.
+  const manifestBoundToArtifact = Boolean(
+    manifestEaVersion &&
+    (!actualHash || (manifestHash && manifestHash === actualHash))
+  );
+  const configuredVersionIsSafeFallback = Boolean(
+    configuredEaVersion &&
+    sameReleaseLine(configuredEaVersion, DEFAULT_EA_VERSION) &&
+    isVersionAtLeast(configuredEaVersion, DEFAULT_EA_VERSION) &&
+    (!actualHash || (configuredHash && configuredHash === actualHash))
+  );
+
+  const eaVersion = manifestBoundToArtifact
+    ? manifestEaVersion
+    : configuredVersionIsSafeFallback
+      ? configuredEaVersion
+      : DEFAULT_EA_VERSION;
+  const sha256 = actualHash || manifestHash || configuredHash || null;
 
   return {
     eaVersion,
     sha256,
+    runtimeContract: String(manifest.runtimeContract || EA_RUNTIME_CONTRACT).trim() || EA_RUNTIME_CONTRACT,
     sourceCommit: String(manifest.sourceCommit || "").trim() || null,
-    builtAt: String(manifest.builtAt || "").trim() || null
+    builtAt: String(manifest.builtAt || "").trim() || null,
+    manifestIntegrity: actualHash && manifestHash ? actualHash === manifestHash : null
   };
 }
 
