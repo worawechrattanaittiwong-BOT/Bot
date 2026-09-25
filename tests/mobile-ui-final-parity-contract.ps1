@@ -80,7 +80,7 @@ Need (Read-Text 'apps/web/app/page.tsx') 'redirect("/dashboard?view=overview")' 
 foreach($phase in 1..8){
   Need $ci ("Mobile UI M"+$phase) ("CI is missing Mobile M"+$phase+" contract")
 }
-Need $css 'data-scenova-mobile-theme="light"' 'Final light mode missing'
+Need $experience 'root.dataset.scenovaMobileTheme = "dark"' 'Final dark-only mobile theme contract missing'
 Need $css 'env(safe-area-inset-bottom)' 'Final safe-area coverage missing'
 
 Write-Host ('SCENOVA final mobile feature parity: PASS · '+$actual.Count+' routes reviewed')
