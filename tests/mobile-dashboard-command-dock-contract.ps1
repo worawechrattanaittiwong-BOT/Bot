@@ -1,0 +1,20 @@
+$ErrorActionPreference="Stop"
+function Read-Text([string]$path){if(-not(Test-Path $path)){throw "Missing source: $path"};[System.IO.File]::ReadAllText((Resolve-Path $path))}
+function Need([string]$text,[string]$needle,[string]$message){if(-not $text.Contains($needle)){throw $message}}
+
+$page=Read-Text 'apps/web/app/dashboard/page.tsx'
+$css=Read-Text 'apps/web/app/globals.css'
+$summary=Read-Text 'apps/web/components/BotPerformanceSummary.tsx'
+
+Need $page 'className="cc-mobile-command stop"' 'Persistent mobile Stop control missing'
+Need $page '<b>หยุดบอท</b>' 'Persistent mobile Stop label must be explicit'
+Need $page 'command("/bot/stop"' 'Persistent mobile Stop must reuse existing Safe Stop handler'
+Need $page 'command("/bot/start"' 'Persistent mobile Start must reuse existing Start handler'
+Need $css '.cc-v19-hero-quick-actions .start' 'Upper duplicate Start cleanup missing'
+Need $css '.cc-v19-hero-quick-actions .stop' 'Upper duplicate Stop cleanup missing'
+Need $css 'display:none!important' 'Upper duplicate Start/Stop must be hidden on phone'
+Need $css '.cc-mobile-command-dock' 'Persistent mobile command dock styles missing'
+Need $css 'z-index:2600!important' 'Primary bot command dock must stay above secondary launchers'
+Need $css 'bottom:calc(94px + env(safe-area-inset-bottom))' 'Mobile sidebar menu must sit above command dock'
+Need $summary 'left:12px;right:auto;bottom:calc(94px + env(safe-area-inset-bottom));z-index:2200' 'Bot summary launcher must sit above and away from command dock'
+Write-Host 'SCENOVA mobile dashboard command hierarchy contract: PASS'
