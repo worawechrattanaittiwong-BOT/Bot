@@ -6923,3 +6923,70 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .owner-mobile-drawer-grid{grid-template-columns:1fr}
   .owner-mobile-drawer-item{min-height:70px}
 }
+
+
+/* ===== Mobile command hierarchy cleanup =====
+   Primary Start/Stop live only in the persistent lower dock on phones.
+   Secondary Symbol / Close All / Terminal remain in the hero. */
+@media(max-width:720px){
+  .cc-v19-hero-quick-actions{
+    grid-template-columns:1fr 1fr!important;
+    gap:8px!important;
+  }
+  .cc-v19-hero-quick-actions .start,
+  .cc-v19-hero-quick-actions .stop{
+    display:none!important;
+  }
+  .cc-v19-hero-quick-actions .symbol{
+    grid-column:1/-1;
+  }
+
+  .cc-mobile-command-dock{
+    z-index:2600!important;
+    bottom:calc(10px + env(safe-area-inset-bottom))!important;
+    width:min(430px,calc(100vw - 20px))!important;
+    gap:8px!important;
+    padding:7px!important;
+  }
+  .cc-mobile-command{
+    min-height:58px!important;
+    padding:9px 10px!important;
+  }
+  .cc-mobile-command b{
+    font-size:14px!important;
+    white-space:nowrap;
+  }
+
+  /* Secondary mobile menu sits above the primary bot controls instead of
+     covering the Stop button. */
+  .owner-mobile-nav-trigger-wrap{
+    right:12px!important;
+    bottom:calc(94px + env(safe-area-inset-bottom))!important;
+    z-index:2300!important;
+  }
+  .owner-mobile-nav-trigger{
+    min-width:88px!important;
+    min-height:46px!important;
+  }
+
+  .cc-overview{
+    padding-bottom:calc(190px + env(safe-area-inset-bottom))!important;
+  }
+}
+
+@media(max-width:390px){
+  .cc-mobile-command-dock{
+    width:calc(100vw - 16px)!important;
+  }
+  .cc-mobile-command{
+    min-height:56px!important;
+    padding:8px 7px!important;
+  }
+  .cc-mobile-command span{
+    width:25px!important;
+    height:25px!important;
+  }
+  .cc-mobile-command b{
+    font-size:13px!important;
+  }
+}
