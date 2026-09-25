@@ -33,6 +33,19 @@ if (-not $smart.Contains('Waiting for explicit update button restart')) { throw 
 if (-not $smart.Contains('PendingReloadPath(config)')) { throw 'Pending reload marker missing' }
 if (-not $smart.Contains('Always poll the guarded UPDATE_EA_RESTART action when restart-safe.')) { throw 'Explicit Update action must be checked independently from staging marker' }
 if ($smart.Contains('if (reloadPending && heartbeat.SafeToRestart)')) { throw 'Pending reload marker must not gate the explicit Update restart action' }
+foreach ($required in @(
+  'DesiredEaVersion',
+  'DesiredEaHash',
+  'RuntimeReloadRequired(heartbeat)',
+  'RuntimeVerified(heartbeat)',
+  'LastEaVerifiedAt'
+)) {
+  if (-not $smart.Contains($required)) { throw "Verified EA lifecycle state missing: $required" }
+}
+if ($smart.Contains('config.EaVersion = heartbeat.EaVersionRequired')) { throw 'Server desired EA version must not overwrite installed version before verification' }
+if ($smart.Contains('config.EaHash = heartbeat.ArtifactHash')) { throw 'Server desired EA hash must not overwrite observed local hash before verification' }
+if (-not $agent.Contains('runtimeContractReady')) { throw 'Manual update ACK must verify Runtime Contract' }
+if (-not $agent.Contains('snapshot.RuntimeContractMatch == false')) { throw 'Manual update must surface Runtime Contract verification failure' }
 $web = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/components/Mt5ManualActionControls.tsx'))
 if (-not $web.Contains('updateIntentAt')) { throw 'Update button optimistic one-click lock missing' }
 if (-not $web.Contains('คำสั่งกำลังทำงาน · ไม่ต้องกดซ้ำ')) { throw 'Update button pending guidance missing' }
@@ -41,4 +54,5 @@ if (-not $web.Contains('UI_PENDING_TIMEOUT_MS - elapsed')) { throw 'Update refre
 if ($web.Contains('20_000 - elapsed')) { throw 'Update refresh intent must not expire after only 20 seconds' }
 if (-not $web.Contains('อัปเดต EA สำเร็จแล้ว · กำลังรีเฟรชสถานะล่าสุด')) { throw 'Completed EA update refresh feedback missing' }
 if (-not $web.Contains('ระบบจะรีโหลด MT5 1 รอบและรีเฟรชหน้านี้อัตโนมัติเมื่อสำเร็จ')) { throw 'Manual update one-click refresh guidance missing' }
+if (-not $web.Contains('installerUpdateAvailable')) { throw 'Compatible Agent patch update notice missing' }
 Write-Host 'Manual EA update stop-first / one-click / one-restart contract PASS'

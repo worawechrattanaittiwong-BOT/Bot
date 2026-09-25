@@ -11,6 +11,9 @@ internal sealed class AgentActionResponse
     public bool EaOnline { get; set; }
     public string? EaVersion { get; set; }
     public string? EaVersionRequired { get; set; }
+    public string? RuntimeContract { get; set; }
+    public string? RuntimeContractRequired { get; set; }
+    public bool? RuntimeContractMatch { get; set; }
     public bool SafeToRestart { get; set; }
     public int Positions { get; set; }
     public bool ManualActionPending { get; set; }

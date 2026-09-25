@@ -393,9 +393,16 @@ internal sealed class AgentConfig
     public string UpdatedAt { get; set; } = "";
     public string InstallerVersion { get; set; } = "";
     public string ReleaseChannel { get; set; } = "Stable";
+    // Installed artifact identity is updated only from local file/apply state.
+    // Desired release identity is tracked separately from verified runtime state.
     public string EaVersion { get; set; } = "";
     public string EaHash { get; set; } = "";
     public string PreviousEaHash { get; set; } = "";
+    public string DesiredEaVersion { get; set; } = "";
+    public string DesiredEaHash { get; set; } = "";
+    public string VerifiedRuntimeVersion { get; set; } = "";
+    public string VerifiedRuntimeContract { get; set; } = "";
+    public string LastEaVerifiedAt { get; set; } = "";
     public bool IsPrimary { get; set; }
     public string TerminalBrokerHint { get; set; } = "";
     public string VerifiedAccountNumber { get; set; } = "";
@@ -435,6 +442,11 @@ internal sealed class AgentHeartbeatResponse
     public string? AgentVersionRequired { get; set; }
     public string? AgentDownloadUrl { get; set; }
     public string? EaVersionRequired { get; set; }
+    public string? RuntimeContract { get; set; }
+    public string? RuntimeContractRequired { get; set; }
+    public bool? RuntimeContractMatch { get; set; }
+    public string? EaUpdateState { get; set; }
+    public bool AgentUpdateAvailable { get; set; }
     public string? AccountNumber { get; set; }
     public string? Server { get; set; }
     public string? Broker { get; set; }

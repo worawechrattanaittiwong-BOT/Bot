@@ -13,7 +13,7 @@ import {
 } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
-import { EA_RUNTIME_CONTRACT, ZERO_GRID_MAX_LEVELS_PER_SIDE, installerDownloadPath, isEaVersionExact, isVersionExact, latestEaRelease, latestInstallerVersion } from "./release-version";
+import { EA_RUNTIME_CONTRACT, ZERO_GRID_MAX_LEVELS_PER_SIDE, installerDownloadPath, isEaVersionExact, isVersionExact, isVersionSame, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
@@ -48,6 +48,7 @@ export class BotController {
       return {
         required: false,
         installerRequired: false,
+        installerUpdateAvailable: false,
         eaUpdateRequired: false,
         currentVersion: null,
         latestVersion,
@@ -76,6 +77,9 @@ export class BotController {
     const installerRequired =
       !currentVersion ||
       !isVersionExact(currentVersion, latestVersion);
+    const installerUpdateAvailable =
+      !currentVersion ||
+      !isVersionSame(currentVersion, latestVersion);
 
     const eaVersionMatch = isEaVersionExact(currentEaVersion, release.eaVersion);
     const eaHashMatch = Boolean(
@@ -111,6 +115,7 @@ export class BotController {
     return {
       required,
       installerRequired,
+      installerUpdateAvailable,
       eaUpdateRequired,
       currentVersion,
       latestVersion,
