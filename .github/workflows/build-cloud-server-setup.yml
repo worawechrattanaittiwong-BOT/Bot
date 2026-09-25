@@ -5,6 +5,7 @@ on:
     paths:
       - "tools/windows-cloud-worker/Setup/**"
       - "tools/windows-cloud-worker/Worker/**"
+      - "mt5/release/FastBasketBot.ex5"
       - "apps/web/components/CloudConsole.tsx"
       - ".github/workflows/build-cloud-server-setup.yml"
   push:
@@ -12,13 +13,13 @@ on:
     paths:
       - "tools/windows-cloud-worker/Setup/**"
       - "tools/windows-cloud-worker/Worker/**"
+      - "mt5/release/FastBasketBot.ex5"
       - "apps/web/components/CloudConsole.tsx"
       - ".github/workflows/build-cloud-server-setup.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
-  id-token: write
 
 concurrency:
   group: scenova-cloud-setup-${{ github.ref }}
@@ -27,23 +28,13 @@ concurrency:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-
-      - name: Publish Cloud Setup
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          dotnet restore tools/windows-cloud-worker/Setup/ScenovaCloudSetup.csproj
-          dotnet publish tools/windows-cloud-worker/Setup/ScenovaCloudSetup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o cloud-setup-publish
-          if (-not (Test-Path "cloud-setup-publish/SCENOVA-Cloud-Setup.exe")) {
-            throw "SCENOVA-Cloud-Setup.exe was not produced"
-          }
 
       - name: Publish Cloud Worker
         shell: powershell
@@ -53,6 +44,17 @@ jobs:
           dotnet publish tools/windows-cloud-worker/Worker/ScenovaCloudWorker.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o cloud-worker-publish
           if (-not (Test-Path "cloud-worker-publish/SCENOVA-CloudWorker.exe")) {
             throw "SCENOVA-CloudWorker.exe was not produced"
+          }
+
+      - name: Publish Cloud Setup with embedded Worker and EA
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $workerPayload = (Resolve-Path "cloud-worker-publish/SCENOVA-CloudWorker.exe").Path
+          dotnet restore tools/windows-cloud-worker/Setup/ScenovaCloudSetup.csproj
+          dotnet publish tools/windows-cloud-worker/Setup/ScenovaCloudSetup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:WorkerPayloadPath="$workerPayload" -o cloud-setup-publish
+          if (-not (Test-Path "cloud-setup-publish/SCENOVA-Cloud-Setup.exe")) {
+            throw "SCENOVA-Cloud-Setup.exe was not produced"
           }
 
       - name: Upload Cloud Server artifacts
@@ -82,7 +84,7 @@ jobs:
             exit 0
           }
 
-          git commit -m "[phase3-generated] build: publish SCENOVA Cloud binaries"
+          git commit -m "[phase4-generated] build: publish automatic Cloud Setup"
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {

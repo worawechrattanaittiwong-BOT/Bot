@@ -9,12 +9,19 @@ namespace Scenova.CloudSetup;
 
 internal static class Program
 {
-    private const string SetupVersion = "0.1.0";
+    private const string SetupVersion = "0.3.0";
     private const string DefaultApiBase = "https://snvea-bot.online/backend";
     private const string RootPath = @"C:\BotTrading";
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("SCENOVA-CLOUD-WORKER-V1");
 
     private sealed record EnrollmentResponse(string RunnerId, string WorkerKey);
+
+    private sealed class ExistingConfig
+    {
+        public string RunnerId { get; set; } = "";
+        public string ApiBase { get; set; } = "";
+        public string WorkerKeyProtected { get; set; } = "";
+    }
 
     public static async Task<int> Main(string[] args)
     {
@@ -27,80 +34,85 @@ internal static class Program
                 throw new InvalidOperationException("SCENOVA Cloud Setup รองรับ Windows Server เท่านั้น");
 
             EnsureAdministrator();
-
-            var options = ParseArgs(args);
-            var apiBase = GetOption(options, "api") ?? Prompt("API URL", DefaultApiBase);
-            var runnerId = GetOption(options, "runner") ?? Prompt("Server ID / Runner ID");
-            var token = GetOption(options, "token") ?? PromptSecret("Enrollment Token");
-
-            ValidateInput(apiBase, runnerId, token);
-
-            Console.WriteLine();
-            Console.WriteLine("กำลังลงทะเบียน Server กับ SCENOVA...");
-
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            var endpoint = apiBase.TrimEnd('/') + "/api/server-enrollment/activate";
-            using var response = await http.PostAsJsonAsync(endpoint, new
-            {
-                runnerId,
-                enrollmentToken = token,
-                hostname = Environment.MachineName
-            });
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var body = await response.Content.ReadAsStringAsync();
-                throw new InvalidOperationException(
-                    $"Server enrollment ไม่สำเร็จ ({(int)response.StatusCode}). " +
-                    SafeServerMessage(body));
-            }
-
-            var enrolled = await response.Content.ReadFromJsonAsync<EnrollmentResponse>(
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            if (enrolled is null ||
-                string.IsNullOrWhiteSpace(enrolled.RunnerId) ||
-                string.IsNullOrWhiteSpace(enrolled.WorkerKey))
-                throw new InvalidOperationException("Server ตอบข้อมูลลงทะเบียนไม่ครบ");
-
             PrepareDirectories();
 
-            var protectedKey = Convert.ToBase64String(
-                ProtectedData.Protect(
-                    Encoding.UTF8.GetBytes(enrolled.WorkerKey),
-                    Entropy,
-                    DataProtectionScope.LocalMachine));
+            var options = ParseArgs(args);
+            var configPath = Path.Combine(RootPath, "worker", "config.json");
+            var existing = TryLoadExistingConfig(configPath);
 
-            var config = new
+            var runnerId = GetOption(options, "runner")
+                           ?? existing?.RunnerId
+                           ?? Prompt("Server ID / Runner ID");
+
+            var apiBase = GetOption(options, "api")
+                          ?? existing?.ApiBase
+                          ?? Prompt("API URL", DefaultApiBase);
+
+            ValidateApiAndRunner(apiBase, runnerId);
+
+            if (existing is null ||
+                !string.Equals(existing.RunnerId, runnerId, StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(existing.WorkerKeyProtected))
             {
-                RunnerId = enrolled.RunnerId,
-                ApiBase = apiBase.TrimEnd('/'),
-                Root = RootPath,
-                WorkerKeyProtected = protectedKey,
-                KeyProtection = "DPAPI_LOCAL_MACHINE",
-                SetupVersion,
-                EnrolledAtUtc = DateTimeOffset.UtcNow.ToString("O")
-            };
+                var token = GetOption(options, "token") ?? PromptSecret("Enrollment Token");
+                if (token.Length is < 32 or > 200)
+                    throw new InvalidOperationException("Enrollment Token ไม่ถูกต้อง");
 
-            var workerDir = Path.Combine(RootPath, "worker");
-            var configPath = Path.Combine(workerDir, "config.json");
-            var tempPath = configPath + ".tmp";
+                Console.WriteLine();
+                Console.WriteLine("กำลังลงทะเบียน Server กับ SCENOVA...");
 
-            await File.WriteAllTextAsync(
-                tempPath,
-                JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }),
-                new UTF8Encoding(false));
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+                var endpoint = apiBase.TrimEnd('/') + "/api/server-enrollment/activate";
+                using var response = await http.PostAsJsonAsync(endpoint, new
+                {
+                    runnerId,
+                    enrollmentToken = token,
+                    hostname = Environment.MachineName
+                });
 
-            File.Move(tempPath, configPath, true);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    throw new InvalidOperationException(
+                        $"Server enrollment ไม่สำเร็จ ({(int)response.StatusCode}). " +
+                        SafeServerMessage(body));
+                }
+
+                var enrolled = await response.Content.ReadFromJsonAsync<EnrollmentResponse>(
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (enrolled is null ||
+                    string.IsNullOrWhiteSpace(enrolled.RunnerId) ||
+                    string.IsNullOrWhiteSpace(enrolled.WorkerKey))
+                    throw new InvalidOperationException("Server ตอบข้อมูลลงทะเบียนไม่ครบ");
+
+                SaveConfig(configPath, enrolled.RunnerId, apiBase, enrolled.WorkerKey);
+                runnerId = enrolled.RunnerId;
+                Console.WriteLine("✅ Server Enrollment สำเร็จ");
+            }
+            else
+            {
+                Console.WriteLine("พบ Server Enrollment เดิมแล้ว ใช้ config เดิมต่อโดยไม่ใช้ Token ซ้ำ");
+            }
+
+            var workerPath = PayloadInstaller.ExtractWorker(RootPath);
+            Console.WriteLine("✅ ติดตั้ง SCENOVA Cloud Worker แล้ว");
+
+            Mt5TemplateManager.Prepare(
+                RootPath,
+                apiBase,
+                GetOption(options, "mt5-source"));
+
+            PayloadInstaller.StartWorker(workerPath, configPath);
 
             Console.WriteLine();
-            Console.WriteLine("✅ Server Enrollment สำเร็จ");
-            Console.WriteLine($"Server: {enrolled.RunnerId}");
-            Console.WriteLine($"Config: {configPath}");
+            Console.WriteLine("✅ SCENOVA Cloud Server พร้อมเชื่อมต่อ Backend");
+            Console.WriteLine($"Server: {runnerId}");
+            Console.WriteLine($"Root: {RootPath}");
             Console.WriteLine("Enrollment Token ไม่ถูกบันทึกไว้ในเครื่อง");
+            Console.WriteLine("Worker ถูกเปิดใน Windows session ปัจจุบัน");
             Console.WriteLine();
-            Console.WriteLine("Phase 3 จะติดตั้ง SCENOVA Cloud Worker จาก config นี้");
-            Console.WriteLine("กด Enter เพื่อปิด");
+            Console.WriteLine("กด Enter เพื่อปิด Setup");
             Console.ReadLine();
             return 0;
         }
@@ -113,6 +125,49 @@ internal static class Program
             Console.Error.WriteLine("กด Enter เพื่อปิด");
             Console.ReadLine();
             return 1;
+        }
+    }
+
+    private static void SaveConfig(string path, string runnerId, string apiBase, string workerKey)
+    {
+        var protectedKey = Convert.ToBase64String(
+            ProtectedData.Protect(
+                Encoding.UTF8.GetBytes(workerKey),
+                Entropy,
+                DataProtectionScope.LocalMachine));
+
+        var config = new
+        {
+            RunnerId = runnerId,
+            ApiBase = apiBase.TrimEnd('/'),
+            Root = RootPath,
+            WorkerKeyProtected = protectedKey,
+            KeyProtection = "DPAPI_LOCAL_MACHINE",
+            SetupVersion,
+            EnrolledAtUtc = DateTimeOffset.UtcNow.ToString("O")
+        };
+
+        var tempPath = path + ".tmp";
+        File.WriteAllText(
+            tempPath,
+            JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }),
+            new UTF8Encoding(false));
+        File.Move(tempPath, path, true);
+    }
+
+    private static ExistingConfig? TryLoadExistingConfig(string path)
+    {
+        if (!File.Exists(path)) return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<ExistingConfig>(
+                File.ReadAllText(path),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -150,9 +205,7 @@ internal static class Program
             if (!current.StartsWith("--", StringComparison.Ordinal) || i + 1 >= args.Length)
                 continue;
 
-            var key = current[2..];
-            var value = args[++i];
-            result[key] = value;
+            result[current[2..]] = args[++i];
         }
 
         return result;
@@ -174,9 +227,8 @@ internal static class Program
     {
         Console.Write($"{label}: ");
         var buffer = new StringBuilder();
-        ConsoleKeyInfo key;
 
-        while ((key = Console.ReadKey(intercept: true)).Key != ConsoleKey.Enter)
+        while (Console.ReadKey(intercept: true) is var key && key.Key != ConsoleKey.Enter)
         {
             if (key.Key == ConsoleKey.Backspace)
             {
@@ -191,7 +243,7 @@ internal static class Program
         return buffer.ToString().Trim();
     }
 
-    private static void ValidateInput(string apiBase, string runnerId, string token)
+    private static void ValidateApiAndRunner(string apiBase, string runnerId)
     {
         if (!Uri.TryCreate(apiBase, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps ||
@@ -200,28 +252,21 @@ internal static class Program
 
         if (!Regex.IsMatch(runnerId, "^[a-zA-Z0-9_-]{3,80}$"))
             throw new InvalidOperationException("Server ID ไม่ถูกต้อง");
-
-        if (token.Length is < 32 or > 200)
-            throw new InvalidOperationException("Enrollment Token ไม่ถูกต้อง");
     }
 
     private static string SafeServerMessage(string body)
     {
-        if (string.IsNullOrWhiteSpace(body)) return "กรุณาสร้าง Enrollment ใหม่จากหน้า Admin";
+        if (string.IsNullOrWhiteSpace(body))
+            return "กรุณาสร้าง Enrollment ใหม่จากหน้า Admin";
+
         try
         {
             using var document = JsonDocument.Parse(body);
-            if (document.RootElement.TryGetProperty("message", out var message))
-            {
-                return message.ValueKind == JsonValueKind.String
-                    ? message.GetString() ?? "กรุณาลองใหม่"
-                    : "กรุณาลองใหม่";
-            }
+            if (document.RootElement.TryGetProperty("message", out var message) &&
+                message.ValueKind == JsonValueKind.String)
+                return message.GetString() ?? "กรุณาลองใหม่";
         }
-        catch
-        {
-            // Do not echo raw server bodies because they can contain diagnostics.
-        }
+        catch { }
 
         return "กรุณาสร้าง Enrollment ใหม่จากหน้า Admin";
     }

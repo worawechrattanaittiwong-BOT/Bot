@@ -9,11 +9,16 @@
     <PublishSingleFile>true</PublishSingleFile>
     <AssemblyName>SCENOVA-Cloud-Setup</AssemblyName>
     <RootNamespace>Scenova.CloudSetup</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.3.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <EmbeddedResource Include="../../../mt5/release/FastBasketBot.ex5"
+                      LogicalName="SCENOVA.Payload.FastBasketBot.ex5" />
+    <EmbeddedResource Include="$(WorkerPayloadPath)"
+                      LogicalName="SCENOVA.Payload.SCENOVA-CloudWorker.exe"
+                      Condition="'$(WorkerPayloadPath)' != '' and Exists('$(WorkerPayloadPath)')" />
   </ItemGroup>
 </Project>
