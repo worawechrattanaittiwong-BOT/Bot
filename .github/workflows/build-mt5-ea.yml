@@ -57,7 +57,10 @@ jobs:
           if (-not $propertyMatch.Success -or -not $runtimeMatch.Success) { throw "EA version metadata missing" }
           $eaVersion = $propertyMatch.Groups[1].Value
           if ($eaVersion -ne $runtimeMatch.Groups[1].Value) { throw "EA version metadata mismatch" }
+          $contractMatch = [regex]::Match($text, '#define\s+SCENOVA_RUNTIME_CONTRACT\s+"([^"]+)"')
+          if (-not $contractMatch.Success) { throw "EA runtime contract metadata missing" }
           "EA_VERSION=$eaVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EA_RUNTIME_CONTRACT=$($contractMatch.Groups[1].Value)" | Out-File -FilePath $env:GITHUB_ENV -Append
           "EA_SOURCE=$mq5Path" | Out-File -FilePath $env:GITHUB_ENV -Append
 
           foreach ($sentinel in @(
@@ -111,6 +114,7 @@ jobs:
             file = "FastBasketBot.ex5"
             sha256 = $hash
             eaVersion = $env:EA_VERSION
+            runtimeContract = $env:EA_RUNTIME_CONTRACT
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
             brain = "AUTO_VECTOR_EDGE_V1"
