@@ -119,7 +119,9 @@ validate_generated_installer_shape() {
     "build: publish SCENOVA Windows installer [skip ci]"|\
     "build: publish signed SCENOVA Windows installer [skip ci]"|\
     "build: publish SCENOVA Windows installer v"*|\
-    "build: publish signed SCENOVA Windows installer v"*)
+    "build: publish signed SCENOVA Windows installer v"*|\
+    "[customer-admin-only] build: publish SCENOVA Windows installer v"*|\
+    "[customer-admin-only] build: publish signed SCENOVA Windows installer v"*)
       ;;
     *)
       return 1
