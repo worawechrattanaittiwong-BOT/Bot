@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, getToken } from "../../lib/api";
-import { CustomerSidebar, OwnerSidebar } from "../../components/OwnerSidebar";
+import { CustomerMobileNav, CustomerSidebar, OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
 import styles from "./performance.module.css";
@@ -546,14 +546,23 @@ export default function PerformanceDashboardPage() {
   const rangeDays=inclusiveDays(displayFrom,displayTo);
 
   return (
-    <div className={styles.shell}>
+    <div className={`${styles.shell} scn-mobile-performance-shell`}>
       {options?.elevated
         ? <OwnerSidebar activeKey="trading-backtest" onLogout={logout} role={String(options?.user?.role || "OWNER")}/>
         : <CustomerSidebar activeKey="trading-backtest" onLogout={logout} userCode={options?.user?.user_code}/>} 
-      <main className={`${styles.main} ${options?.elevated ? styles.mainOwner : styles.mainCustomer}`}>
+      <main className={`${styles.main} ${options?.elevated ? styles.mainOwner : styles.mainCustomer} scn-mobile-performance-page`}>
+        {options?.elevated
+          ? <OwnerMobileNav activeKey="trading-backtest"/>
+          : <CustomerMobileNav activeKey="trading-backtest"/>}
         {error?<div className={styles.error}>{error}</div>:null}
 
-        <section className={styles.summaryShell}>
+        <section className={`${styles.summaryShell} scn-mobile-performance-summary`}>
+          <div className="mobile-only scn-mobile-stat-periods" aria-label="ช่วงเวลารายงาน">
+            <button type="button" className={rangeDays===1?"active":""} onClick={()=>applyDays(1)}>วันนี้</button>
+            <button type="button" className={rangeDays===7?"active":""} onClick={()=>applyDays(7)}>7 วัน</button>
+            <button type="button" className={rangeDays===30?"active":""} onClick={()=>applyDays(30)}>30 วัน</button>
+            <button type="button" className={rangeDays===90?"active":""} onClick={()=>applyDays(90)}>90 วัน</button>
+          </div>
           <button
             type="button"
             className={`${styles.optionsButton} ${controlsOpen?styles.optionsButtonOpen:""}`}
@@ -678,7 +687,7 @@ export default function PerformanceDashboardPage() {
             <div className={styles.emptyState}>{mode==="BACKTEST"?"เลือกรายงาน Backtest เพื่อดูสรุป":"ยังไม่มีข้อมูล Performance ในช่วงเวลานี้"}</div>
           ):(
             <>
-              <div className={styles.infoCard}>
+              <div className={`${styles.infoCard} scn-mobile-performance-info`}>
                 <div className={styles.infoCol}>
                   <InfoRow icon="account" label="Account" value={String(report?.account?.accountNumber||"—")}/>
                   <InfoRow icon="shield" label="Account Type" value={String(selectedAccount?.accountType||"REAL").toUpperCase()}/>
@@ -701,7 +710,7 @@ export default function PerformanceDashboardPage() {
                 </div>
               </div>
 
-              <div className={styles.metricsCard}>
+              <div className={`${styles.metricsCard} scn-mobile-performance-metrics`}>
                 <Metric icon="wallet" label="Start Capital" value={money(startCapital,currency)}/>
                 <Metric icon="equity" label="End Balance" value={money(endBalance,currency)}/>
                 <Metric icon="profit" label="Net Profit" value={money(summary.netProfit,currency,true)} tone={Number(summary.netProfit)>=0?"good":"bad"}/>
@@ -715,7 +724,7 @@ export default function PerformanceDashboardPage() {
               </div>
 
               <div className={styles.resultsLabel}><ScenovaIcon name="report" size={15}/><span>Performance Breakdown · MT5 Analytics</span></div>
-              <div className={styles.resultsGrid}>
+              <div className={`${styles.resultsGrid} scn-mobile-performance-results`}>
                 <div className={styles.panel}>
                   <PanelTitle icon="profit">Performance</PanelTitle>
                   <StatRow label="Total Net Profit" value={money(summary.netProfit,currency,true)} tone={Number(summary.netProfit)>=0?"good":"bad"}/>

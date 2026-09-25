@@ -1230,3 +1230,174 @@
   .scn-mobile-order-history .bad,
   .scn-mobile-basket-history .bad{color:var(--m-red)!important}
 }
+
+
+/* SCENOVA Mobile UX Upgrade · M5 · Performance / Stats */
+@media (max-width:767px){
+  .scn-mobile-performance-shell{
+    min-height:100dvh;
+    background:transparent!important;
+  }
+
+  .scn-mobile-performance-page{
+    width:100%!important;
+    max-width:none!important;
+    min-height:100dvh;
+    padding:
+      calc(8px + env(safe-area-inset-top))
+      10px
+      calc(var(--m-primary-nav-height) + 26px + env(safe-area-inset-bottom))
+      !important;
+    background:transparent!important;
+    color:var(--m-text)!important;
+  }
+
+  .scn-mobile-performance-page>.mobile-nav{
+    margin-top:52px!important;
+  }
+
+  .scn-mobile-performance-summary{
+    width:100%!important;
+    margin:0!important;
+    padding:0!important;
+  }
+
+  .scn-mobile-stat-periods{
+    position:sticky;
+    top:calc(6px + env(safe-area-inset-top));
+    z-index:80;
+    margin:0 0 10px!important;
+    padding:4px!important;
+    display:grid!important;
+    grid-template-columns:repeat(4,1fr);
+    gap:4px;
+    border:1px solid var(--m-line);
+    border-radius:14px;
+    background:color-mix(in srgb,var(--m-bg-elevated) 94%,transparent);
+    box-shadow:0 8px 24px rgba(0,0,0,.16);
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+  }
+
+  .scn-mobile-stat-periods button{
+    min-width:0;
+    min-height:38px;
+    padding:6px 4px;
+    border:1px solid transparent;
+    border-radius:10px;
+    background:transparent;
+    color:var(--m-muted);
+    font-size:var(--ui-type-caption);
+    font-weight:850;
+  }
+
+  .scn-mobile-stat-periods button.active{
+    border-color:color-mix(in srgb,var(--m-purple) 38%,var(--m-line));
+    background:color-mix(in srgb,var(--m-purple) 14%,var(--m-surface));
+    color:var(--m-text);
+  }
+
+  .scn-mobile-performance-summary>button{
+    min-height:44px;
+  }
+
+  .scn-mobile-performance-info{
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:8px!important;
+    padding:10px!important;
+    border:1px solid var(--m-line)!important;
+    border-radius:18px!important;
+    background:var(--m-surface)!important;
+    box-shadow:var(--m-shadow)!important;
+  }
+
+  .scn-mobile-performance-info>div{
+    min-width:0;
+    padding:9px!important;
+    border:1px solid var(--m-line);
+    border-radius:13px;
+    background:var(--m-surface-2);
+  }
+
+  .scn-mobile-performance-metrics{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+    padding:10px!important;
+    border:1px solid var(--m-line)!important;
+    border-radius:18px!important;
+    background:var(--m-surface)!important;
+    box-shadow:var(--m-shadow)!important;
+  }
+
+  .scn-mobile-performance-metrics>div{
+    min-width:0;
+    min-height:86px!important;
+    padding:10px!important;
+    border:1px solid var(--m-line)!important;
+    border-radius:13px!important;
+    background:var(--m-surface-2)!important;
+  }
+
+  .scn-mobile-performance-results{
+    display:flex!important;
+    flex-direction:column!important;
+    gap:9px!important;
+  }
+
+  .scn-mobile-performance-results>div{
+    width:100%!important;
+    min-width:0!important;
+    padding:12px!important;
+    border:1px solid var(--m-line)!important;
+    border-radius:17px!important;
+    background:var(--m-surface)!important;
+    box-shadow:none!important;
+  }
+
+  .scn-mobile-performance-page svg[aria-label="Balance curve"]{
+    width:100%!important;
+    min-width:620px;
+    height:auto!important;
+  }
+
+  .scn-mobile-performance-page [role="img"][aria-label="Lot allocation by closed positions"]{
+    width:100%!important;
+    overflow:hidden;
+  }
+
+  .scn-mobile-performance-page :where(input,select,button,a){
+    touch-action:manipulation;
+  }
+
+  .scn-mobile-performance-page :where(input,select){
+    min-height:44px;
+    border-color:var(--m-line)!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-page{
+    color:var(--m-text)!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-page :where(
+    .scn-mobile-performance-info,
+    .scn-mobile-performance-metrics,
+    .scn-mobile-performance-results>div
+  ){
+    background:var(--m-surface)!important;
+    border-color:var(--m-line)!important;
+  }
+}
+
+@media (max-width:390px){
+  .scn-mobile-performance-page{
+    padding-left:8px!important;
+    padding-right:8px!important;
+  }
+
+  .scn-mobile-performance-info,
+  .scn-mobile-performance-metrics{
+    grid-template-columns:1fr 1fr!important;
+  }
+}
