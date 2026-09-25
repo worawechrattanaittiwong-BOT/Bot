@@ -1,10 +1,10 @@
 ﻿{
-    "builtAt": "2026-09-25T06:52:33.7797353Z",
-    "policy": "AUTO_VECTOR_EDGE_FLIP_LOCK_V1",
-    "brain": "AUTO_VECTOR_EDGE_V1",
-    "sha256": "935aa7cac00c2487e0fabfa6f5cf266b807b2447f442ee06a01e0e0f6925236b",
-    "sourceCommit": "0e1b86443401e4794f8d9a9f100103aac023b645",
-    "eaVersion": "1.0.72",
-    "file": "FastBasketBot.ex5",
-    "runtimeContract": "RACE_USER_LOSS_ONLY_V5"
+    "sourceCommit":  "aa455d7c025aa4f25e912ed0e477cbceedd5ab98",
+    "policy":  "AUTO_VECTOR_EDGE_FLIP_LOCK_V1",
+    "eaVersion":  "1.0.72",
+    "file":  "FastBasketBot.ex5",
+    "brain":  "AUTO_VECTOR_EDGE_V1",
+    "builtAt":  "2026-09-25T09:14:40.8335902Z",
+    "runtimeContract":  "RACE_USER_LOSS_ONLY_V5",
+    "sha256":  "fb394dfba2e2787d32da3af3481280457b2a51f33b27a1374df02d8751b711b1"
 }
