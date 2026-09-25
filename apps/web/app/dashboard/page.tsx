@@ -2431,10 +2431,10 @@ export default function DashboardPage() {
                   aria-live="polite"
                 >
                   <span>{botStarting ? <i className="cc-start-spinner" aria-hidden="true"/> : botRunning ? <i className="cc-start-pulse" aria-hidden="true"/> : "▶"}</span>
-                  <b>{botStarting ? "กำลังเริ่ม" : botRunning ? "กำลังทำงาน" : "เริ่ม"}</b>
+                  <b>{botStarting ? "กำลังเริ่ม" : botRunning ? "กำลังทำงาน" : "เริ่มบอท"}</b>
                 </button>
                 <button className="cc-mobile-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}>
-                  <span>■</span><b>หยุด</b>
+                  <span>■</span><b>หยุดบอท</b>
                 </button>
               </div>
             </div>
