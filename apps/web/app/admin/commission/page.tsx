@@ -486,7 +486,7 @@ export default function AdminCommissionPage() {
           </div>
           <OwnerMobileNav activeKey="commission-withdrawals"/>
 
-          <header className={s.header}>
+          <header className={s.header} aria-label="Commission & Withdrawal Center">
             <div>
               <span className={s.kicker}>FINANCE / WITHDRAWALS</span>
               <h1>ศูนย์ถอนเงินและคอมมิชชั่น</h1>
@@ -707,7 +707,7 @@ export default function AdminCommissionPage() {
                       )}
                       <button type="button" onClick={()=>void revealAccount(item)} disabled={Boolean(busy)}>ดูเลขบัญชี</button>
                       {item.status === "APPROVED" && (
-                        <button type="button" className={s.paidButton} onClick={()=>void markPaid(item)} disabled={Boolean(busy)}>ยืนยันจ่ายแล้ว</button>
+                        <button type="button" className={s.paidButton} title="Mark Paid" onClick={()=>void markPaid(item)} disabled={Boolean(busy)}>ยืนยันจ่ายแล้ว</button>
                       )}
                       {item.status === "HOLD" && ["MISMATCH","MANUAL_REVIEW"].includes(item.reconciliation_status) && (
                         <button type="button" className={s.reconcileButton} onClick={()=>void reconcilePaid(item)} disabled={Boolean(busy)}>ยืนยัน Reconcile</button>
