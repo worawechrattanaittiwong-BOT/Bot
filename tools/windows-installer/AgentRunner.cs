@@ -446,9 +446,11 @@ internal static class AgentRunner
 
             var current = (snapshot.EaVersion ?? "").Trim();
             var required = (snapshot.EaVersionRequired ?? "").Trim();
+            var runtimeContractReady = snapshot.RuntimeContractMatch != false;
             if (!string.IsNullOrWhiteSpace(current) &&
                 !string.IsNullOrWhiteSpace(required) &&
-                string.Equals(current, required, StringComparison.OrdinalIgnoreCase))
+                string.Equals(current, required, StringComparison.OrdinalIgnoreCase) &&
+                runtimeContractReady)
                 return true;
         }
         return false;
@@ -479,6 +481,17 @@ internal static class AgentRunner
                 return "Broker ไม่อนุญาตเปิดออเดอร์ใหม่บน Symbol " + expectedSymbol +
                        " (Disabled/Close Only) กรุณาเลือก Symbol อื่นที่บัญชีนี้เทรดได้";
             }
+        }
+
+        if (forceReload && snapshot.RuntimeContractMatch == false)
+        {
+            var currentContract = string.IsNullOrWhiteSpace(snapshot.RuntimeContract)
+                ? "ไม่ทราบ"
+                : snapshot.RuntimeContract;
+            var requiredContract = string.IsNullOrWhiteSpace(snapshot.RuntimeContractRequired)
+                ? "ล่าสุด"
+                : snapshot.RuntimeContractRequired;
+            return $"MT5 โหลด EA แล้ว แต่ Runtime Contract ยังเป็น {currentContract} (ต้องการ {requiredContract}) กรุณากดอัปเดตอีกครั้ง";
         }
 
         if (forceReload)
