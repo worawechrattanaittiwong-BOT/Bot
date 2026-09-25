@@ -3,7 +3,7 @@
 Scope: phone-only UX upgrade. Desktop, API behavior and MT5 trading logic remain shared and unchanged.
 
 ## M1–M8
-- M1 App shell, safe area, dark/light theme
+- M1 App shell, safe area, dark-only theme
 - M2 Home / Dashboard
 - M3 Home / Trade / Orders / Stats / More navigation and trading settings
 - M4 Open Orders / History / Baskets
@@ -24,4 +24,4 @@ All 25 current `apps/web/app/**/page.tsx` routes are reviewed. Each route is cov
 CI fails when a new page route appears without a mobile parity review.
 
 ## Isolation
-Mobile work is limited to web presentation, route navigation, CSS, metadata and UI contracts. It does not modify EA source, trade direction, sizing, stop, profit or execution rules.
+Mobile work is limited to web presentation, route navigation, CSS, metadata and UI contracts. The phone experience is intentionally dark-only for visual consistency. It does not modify EA source, trade direction, sizing, stop, profit or execution rules.
