@@ -124,6 +124,8 @@ export default function PackagesPage() {
   const [cooldown, setCooldown] = useState(0);
   const [activeSystem, setActiveSystem] = useState<"LOCAL" | "CLOUD">("LOCAL");
   const [trialOpen, setTrialOpen] = useState(false);
+  const [checkoutPack, setCheckoutPack] = useState<PackageItem | null>(null);
+  const checkoutDialog = useRef<HTMLDialogElement>(null);
   const [promoCode, setPromoCode] = useState("");
   const polling = useRef(false);
 
@@ -346,9 +348,10 @@ export default function PackagesPage() {
         <div className={styles.shell}>
           <header className={styles.header}>
             <div>
-              <span className={styles.eyebrow}>ACCESS & MEMBERSHIP</span>
-              <h1>Packages</h1>
-              <p>เลือก Trial, Local MT5 หรือ Cloud MT5 ตามรูปแบบที่คุณใช้งานจริง</p>
+              <div className={styles.breadcrumb}>Membership <span>/</span> Packages</div>
+              <span className={styles.eyebrow}>SCENOVA MEMBERSHIP</span>
+              <h1>สิทธิ์ที่ใช่ สำหรับคุณ</h1>
+              <p>เลือกแพ็กเกจที่เหมาะกับการใช้งานของคุณ</p>
             </div>
             <div className={styles.currentAccess}>
               <span>สิทธิ์ปัจจุบัน</span>
@@ -526,7 +529,7 @@ export default function PackagesPage() {
               <div>
                 <span className={styles.eyebrow}>SCENOVA ACCESS CENTER</span>
                 <h2>เลือกระบบที่ต้องการใช้งาน</h2>
-                <p>Local และ VPS แยกสิทธิ์ แยกแพ็กเกจ และแยกการทำงานออกจากกันอย่างชัดเจน</p>
+                <p>เลือกใช้งานบนเครื่องของคุณ หรือทำงานต่อเนื่องบน Cloud</p>
               </div>
               <div className={styles.systemSwitcher} role="tablist" aria-label="เลือกระบบแพ็กเกจ">
                 <button
@@ -615,7 +618,7 @@ export default function PackagesPage() {
               </div>
 
               <div className={`${legacy.root} ${styles.legacyPackageScope}`}>
-                <div className={legacy.packages}>
+                <div className={styles.packageGrid}>
                   {(activeCatalog?.packages || []).map(pack => (
                     <PackageCard
                       key={pack.months}
@@ -626,7 +629,10 @@ export default function PackagesPage() {
                       busy={Boolean(busy)}
                       pending={Boolean(activePending)}
                       capacityAvailable={isLocalSystem || Number(cloudCatalog?.available || 0) > 0}
-                      onBuy={() => isLocalSystem ? checkoutLocal(pack.months) : checkoutCloud(pack.months)}
+                      onBuy={() => {
+                        setCheckoutPack(pack);
+                        checkoutDialog.current?.showModal();
+                      }}
                     />
                   ))}
                 </div>
@@ -652,6 +658,47 @@ export default function PackagesPage() {
             </div>
           </section>
         </div>
+        <dialog
+          ref={checkoutDialog}
+          className={styles.checkoutDialog}
+          aria-labelledby="checkout-title"
+          onCancel={event => { if (busy) event.preventDefault(); }}
+        >
+          {checkoutPack && <>
+            <div className={styles.checkoutHeading}>
+              <div><span className={styles.eyebrow}>SCENOVA CHECKOUT</span><h2 id="checkout-title">ยืนยันแพ็กเกจ</h2><p>ตรวจสอบรายละเอียดก่อนชำระเงิน</p></div>
+              <button type="button" className={styles.closeDialog} aria-label="ปิดหน้าต่างชำระเงิน" disabled={Boolean(busy)} onClick={() => checkoutDialog.current?.close()}>×</button>
+            </div>
+            <div className={styles.checkoutColumns}>
+              <aside className={styles.checkoutPlan}>
+                <ScenovaIcon name={isLocalSystem ? "account" : "cloud"} size={32}/>
+                <span className={styles.eyebrow}>{isLocalSystem ? "LOCAL MT5" : "VPS / CLOUD MT5"}</span>
+                <h3>{checkoutPack.months} เดือน</h3>
+                <strong className={styles.checkoutPrice}>฿{money(checkoutPack.price_satang)}</strong>
+                <p>เฉลี่ย ฿{money(Math.round(checkoutPack.price_satang / checkoutPack.months))} / เดือน</p>
+                <ul><li>สำหรับ 1 บัญชี MT5</li><li>{isLocalSystem ? "ใช้งานบนคอมพิวเตอร์ของคุณ" : "Start / Stop ผ่านมือถือ"}</li><li>ต่ออายุเพิ่มจากเวลาที่เหลือ</li></ul>
+                <div className={styles.planFootnote}>SCENOVA<br/><span>ACCESS & MEMBERSHIP</span></div>
+              </aside>
+              <div className={styles.checkoutSummary}>
+                <h3>สรุปการชำระเงิน</h3>
+                <div className={styles.summaryRow}><span>แพ็กเกจ {checkoutPack.months} เดือน</span><b>฿{money(checkoutPack.price_satang)}</b></div>
+                <label className={styles.promoField} htmlFor="package-promo">รหัสโปรโมชั่น</label>
+                <div className={styles.promoInput}><input id="package-promo" placeholder="กรอกรหัสโปรโมชั่น" value={promoCode} onChange={event => setPromoCode(event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 13))} autoCapitalize="characters" spellCheck={false}/><button type="button" onClick={() => setPromoCode(value => value.trim().toUpperCase())}>ใช้รหัส</button></div>
+                <small className={styles.checkoutHint}>ระบบจะตรวจสอบสิทธิ์และคำนวณส่วนลดจาก Server ตอนสร้างรายการ</small>
+                <div className={`${styles.summaryRow} ${styles.summaryTotal}`}><span>ยอดที่ต้องชำระ</span><strong>฿{money(checkoutPack.price_satang)}</strong></div>
+                <p className={styles.checkoutHint}>ชำระครั้งเดียว · ไม่มีการต่ออายุอัตโนมัติ</p>
+                <div className={styles.paymentMethod}><ScenovaIcon name="wallet" size={23}/><div><b>พร้อมเพย์ / QR Payment</b><p>สร้าง QR แล้วสแกนด้วยแอปธนาคารของคุณ</p></div></div>
+                <p className={styles.checkoutHint}>สิทธิ์จะเปิดใช้งานเมื่อยืนยันการชำระเงินสำเร็จ ติดตามสถานะได้ที่รายการรอชำระ</p>
+                {activeCatalog?.paymentMode === "TEST" && <div className={styles.testNotice}>โหมดทดสอบ · ยังไม่ใช่การรับชำระเงินจริง</div>}
+                <button type="button" className={styles.confirmCheckout} disabled={Boolean(busy)} onClick={() => {
+                  checkoutDialog.current?.close();
+                  void (isLocalSystem ? checkoutLocal(checkoutPack.months) : checkoutCloud(checkoutPack.months));
+                }}>สร้าง QR ชำระเงิน ฿{money(checkoutPack.price_satang)}</button>
+                <button type="button" className={styles.cancelCheckout} disabled={Boolean(busy)} onClick={() => checkoutDialog.current?.close()}>ยกเลิก</button>
+              </div>
+            </div>
+          </>}
+        </dialog>
       </main>
     </div>
   );
@@ -732,7 +779,8 @@ function PackageCard({
       ];
 
   return (
-    <article className={`${legacy.package} ${featured ? legacy.featured : ""}`}>
+    <article className={`${legacy.package} ${styles.planCard} ${featured ? styles.planFeatured : ""}`}>
+      {featured && <span className={styles.recommended}>แนะนำ</span>}
       <span className={legacy.eyebrow}>{system === "LOCAL" ? "LOCAL MT5" : "VPS / CLOUD MT5"}</span>
       <h3>{pack.months} เดือน</h3>
       <div className={legacy.price}>
