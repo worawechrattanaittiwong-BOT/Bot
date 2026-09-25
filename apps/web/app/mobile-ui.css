@@ -1401,3 +1401,149 @@
     grid-template-columns:1fr 1fr!important;
   }
 }
+
+
+/* SCENOVA Mobile UX Upgrade · M6 · Account / MT5 / Subscription / Trial / Slots */
+@media (max-width:767px){
+  .scn-mobile-account-page,
+  .scn-mobile-packages-page{
+    color:var(--m-text)!important;
+  }
+
+  .scn-mobile-account-page>.mobile-nav,
+  .scn-mobile-packages-page>.mobile-nav{
+    margin-top:52px!important;
+  }
+
+  .scn-mobile-account-hub{
+    display:grid!important;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin:0 0 10px!important;
+  }
+
+  .scn-mobile-account-hub>a{
+    min-height:72px;
+    padding:10px;
+    display:flex;
+    align-items:center;
+    gap:9px;
+    border:1px solid var(--m-line);
+    border-radius:15px;
+    background:var(--m-surface);
+    color:var(--m-text);
+    box-shadow:0 8px 22px rgba(0,0,0,.10);
+  }
+
+  .scn-mobile-account-hub>a>svg{
+    flex:0 0 auto;
+    color:var(--m-purple);
+  }
+
+  .scn-mobile-account-hub>a>span{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+
+  .scn-mobile-account-hub b{
+    font-size:var(--ui-type-label);
+  }
+
+  .scn-mobile-account-hub small{
+    color:var(--m-muted);
+    font-size:var(--ui-type-caption);
+  }
+
+  .scn-mobile-account-page :where(input,select,textarea),
+  .scn-mobile-packages-page :where(input,select,textarea){
+    width:100%;
+    min-height:46px!important;
+    border-radius:11px!important;
+    border-color:var(--m-line)!important;
+  }
+
+  .scn-mobile-account-page :where(button,a),
+  .scn-mobile-packages-page :where(button,a){
+    touch-action:manipulation;
+  }
+
+  .scn-mobile-access-jump{
+    position:sticky;
+    top:calc(6px + env(safe-area-inset-top));
+    z-index:75;
+    margin:0 0 10px!important;
+    padding:4px!important;
+    display:grid!important;
+    grid-template-columns:repeat(4,1fr);
+    gap:4px;
+    border:1px solid var(--m-line);
+    border-radius:14px;
+    background:color-mix(in srgb,var(--m-bg-elevated) 94%,transparent);
+    box-shadow:0 8px 22px rgba(0,0,0,.12);
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+  }
+
+  .scn-mobile-access-jump>a{
+    min-width:0;
+    min-height:50px;
+    padding:6px 3px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+    border-radius:10px;
+    color:var(--m-muted);
+    font-size:var(--ui-type-caption);
+    font-weight:800;
+    text-align:center;
+  }
+
+  .scn-mobile-access-jump>a:active{
+    background:color-mix(in srgb,var(--m-purple) 12%,var(--m-surface));
+    color:var(--m-text);
+  }
+
+  .scn-mobile-packages-page #trial-access,
+  .scn-mobile-packages-page #access-center,
+  .scn-mobile-packages-page #membership-history{
+    scroll-margin-top:84px;
+  }
+
+  .scn-mobile-account-page section,
+  .scn-mobile-packages-page section{
+    max-width:100%;
+  }
+
+  .scn-mobile-account-page form,
+  .scn-mobile-packages-page form{
+    max-width:100%;
+  }
+
+  .scn-mobile-packages-page img{
+    max-width:100%;
+    height:auto;
+  }
+
+  html[data-scenova-mobile-theme="light"] .scn-mobile-account-page :where(
+    section,form
+  ),
+  html[data-scenova-mobile-theme="light"] .scn-mobile-packages-page :where(
+    section,form
+  ){
+    border-color:var(--m-line);
+  }
+}
+
+@media (max-width:390px){
+  .scn-mobile-account-hub{
+    grid-template-columns:1fr 1fr;
+  }
+
+  .scn-mobile-access-jump{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+  }
+}

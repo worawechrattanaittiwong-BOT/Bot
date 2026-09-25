@@ -103,6 +103,9 @@ jobs:
       - name: Mobile UI M5 performance stats contract
         shell: pwsh
         run: ./tests/mobile-ui-performance-contract.ps1
+      - name: Mobile UI M6 account access contract
+        shell: pwsh
+        run: ./tests/mobile-ui-account-access-contract.ps1
       - name: FLIP LOCK strict isolation contract
         shell: pwsh
         run: ./tests/flip-lock-isolation-contract.ps1

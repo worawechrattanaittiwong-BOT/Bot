@@ -338,7 +338,7 @@ export default function AccountPage() {
       {elevated
         ? <OwnerSidebar activeKey="my-account" onLogout={logout} role={data.user.role}/>
         : <CustomerSidebar activeKey="my-account" onLogout={logout} userCode={data.user.userCode} partner={partnerSummary}/>}
-      <main className={`main app-main ${styles.main}`}>
+      <main className={`main app-main ${styles.main} scn-mobile-account-page`}>
         {elevated
           ? <OwnerMobileNav activeKey="my-account"/>
           : <CustomerMobileNav activeKey="my-account" partner={partnerSummary}/>}
@@ -361,6 +361,13 @@ export default function AccountPage() {
               {message}
             </div>
           )}
+
+          <nav className="mobile-only scn-mobile-account-hub" aria-label="ทางลัดบัญชีมือถือ">
+            <a href="/dashboard?view=account"><ScenovaIcon name="account" size={18}/><span><b>MT5 & Slots</b><small>เชื่อมต่อและ Runtime</small></span></a>
+            <a href="/packages#trial-access"><ScenovaIcon name="status" size={18}/><span><b>Trial</b><small>สิทธิ์ทดลอง</small></span></a>
+            <a href="/packages#access-center"><ScenovaIcon name="wallet" size={18}/><span><b>Packages</b><small>Local / Cloud</small></span></a>
+            <a href="/cloud"><ScenovaIcon name="cloud" size={18}/><span><b>Cloud</b><small>Cloud MT5</small></span></a>
+          </nav>
 
           <section className={styles.summaryBar}>
             <Summary label="User ID" value={data.user.userCode} mono/>
