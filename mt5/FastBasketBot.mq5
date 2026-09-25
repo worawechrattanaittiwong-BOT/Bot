@@ -3327,6 +3327,26 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
       runTravel>=atrM5Price*1.05;
 
    bool terminalEdge=nearM5Terminal || nearM15Terminal;
+
+   // Protect the still-forming impulse too. Waiting only for the M5 candle to
+   // close is too late for RACE because it can fill while the long candle is
+   // still extending. Measure live displacement from the latest completed M5
+   // close and hard-WAIT once that displacement reaches 0.35 ATR at the edge.
+   double liveTravel=direction>0
+      ? price-m5[0].close
+      : m5[0].close-price;
+   bool liveImpulseExtension=
+      terminalEdge &&
+      liveTravel>=atrM5Price*0.35;
+
+   if(liveImpulseExtension)
+   {
+      reasonOut=direction>0
+         ? "RACE_WAIT_BUY_LIVE_EXTENSION"
+         : "RACE_WAIT_SELL_LIVE_EXTENSION";
+      return true;
+   }
+
    bool chaseRisk=largeExpansion || (terminalEdge && stretchedRun);
    if(!chaseRisk)
       return false;
