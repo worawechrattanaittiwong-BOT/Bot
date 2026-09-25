@@ -1,0 +1,123 @@
+using System.Text;
+using System.Text.Json;
+
+namespace Scenova.CloudWorker;
+
+internal static class ProvisioningSelfTest
+{
+    public static int Run()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "SCENOVA-CloudWorker-SelfTest-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var template = Path.Combine(root, "template");
+            Directory.CreateDirectory(Path.Combine(template, "MQL5", "Experts"));
+            Directory.CreateDirectory(Path.Combine(template, "MQL5", "Presets"));
+            Directory.CreateDirectory(Path.Combine(root, "instances"));
+
+            File.WriteAllBytes(Path.Combine(template, "terminal64.exe"), Encoding.ASCII.GetBytes("MZ-SELF-TEST"));
+            File.WriteAllBytes(
+                Path.Combine(template, "MQL5", "Experts", "FastBasketBot.ex5"),
+                Encoding.ASCII.GetBytes("SCENOVA-EA-SELF-TEST"));
+            File.WriteAllText(Path.Combine(template, "cloud-template.ready"), "SELF_TEST", new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(template, "template-sentinel.txt"), "UNCHANGED", new UTF8Encoding(false));
+
+            var config = new WorkerConfig
+            {
+                RunnerId = "phase5-self-test",
+                ApiBase = "https://example.invalid/backend",
+                Root = root
+            };
+
+            var runtime = new Mt5Runtime(config);
+            if (!runtime.TemplateReady) throw new InvalidOperationException("self-test template not ready");
+
+            var created = new List<(CloudJob Job, PreparedInstance Prepared)>();
+            var checkpoints = new HashSet<int> { 1, 2, 5, 20 };
+
+            for (var i = 1; i <= 20; i++)
+            {
+                var id = Guid.NewGuid().ToString();
+                using var accountJson = JsonDocument.Parse((900000 + i).ToString());
+                using var settingsJson = JsonDocument.Parse("{\"symbol\":\"XAUUSD\"}");
+
+                var job = new CloudJob
+                {
+                    InstanceId = id,
+                    AccountNumber = accountJson.RootElement.Clone(),
+                    BrokerServer = "SCENOVA-Demo-" + i,
+                    TradingPassword = "demo-password-" + i,
+                    InstallToken = "install-token-" + i,
+                    ExecutionGeneration = 1,
+                    RuntimeStopState = "NONE",
+                    Settings = settingsJson.RootElement.Clone()
+                };
+
+                var prepared = runtime.PrepareInstanceFiles(job);
+                created.Add((job, prepared));
+
+                if (checkpoints.Contains(i))
+                {
+                    var count = Directory.EnumerateDirectories(Path.Combine(root, "instances")).Count();
+                    if (count != i)
+                        throw new InvalidOperationException($"checkpoint {i} expected {i} isolated instances but found {count}");
+                }
+            }
+
+            if (created.Select(item => item.Prepared.InstancePath).Distinct(StringComparer.OrdinalIgnoreCase).Count() != 20)
+                throw new InvalidOperationException("instance paths are not isolated");
+
+            for (var i = 0; i < created.Count; i++)
+            {
+                var number = i + 1;
+                var item = created[i];
+                var preset = File.ReadAllText(item.Prepared.PresetPath, Encoding.Unicode);
+                var startup = File.ReadAllText(item.Prepared.StartupPath, Encoding.Unicode);
+
+                AssertContains(preset, "InpInstanceId=" + item.Job.InstanceId, "instance id");
+                AssertContains(preset, "InpInstallToken=install-token-" + number, "install token");
+                AssertContains(startup, "Login=" + (900000 + number), "account");
+                AssertContains(startup, "Password=demo-password-" + number, "password");
+                AssertContains(startup, "Server=SCENOVA-Demo-" + number, "broker server");
+
+                var next = number == 20 ? 1 : number + 1;
+                if (startup.Contains("demo-password-" + next, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"credential crossed instance boundary at {number}");
+            }
+
+            var sentinel = File.ReadAllText(Path.Combine(template, "template-sentinel.txt"));
+            if (!string.Equals(sentinel, "UNCHANGED", StringComparison.Ordinal))
+                throw new InvalidOperationException("template was mutated by provisioning");
+
+            if (File.Exists(Path.Combine(template, "cloud-start.ini")))
+                throw new InvalidOperationException("template received customer startup config");
+
+            Console.WriteLine("PASS: isolated provisioning checkpoints 1 -> 2 -> 5 -> 20");
+            Console.WriteLine("PASS: per-instance account, credential, token and startup files remain isolated");
+            Console.WriteLine("PASS: self-test never launches terminal64.exe or contacts a broker/backend");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("FAIL: " + ex.Message);
+            return 1;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
+            catch { }
+        }
+    }
+
+    private static void AssertContains(string text, string expected, string label)
+    {
+        if (!text.Contains(expected, StringComparison.Ordinal))
+            throw new InvalidOperationException($"missing {label}: {expected}");
+    }
+}

@@ -11,6 +11,9 @@ internal static class Program
             if (!OperatingSystem.IsWindows())
                 throw new InvalidOperationException("SCENOVA Cloud Worker รองรับ Windows เท่านั้น");
 
+            if (args.Any(arg => string.Equals(arg, "--provision-self-test", StringComparison.OrdinalIgnoreCase)))
+                return ProvisioningSelfTest.Run();
+
             var configPath = WorkerConfig.ResolveConfigPath(args);
             var config = WorkerConfig.Load(configPath);
 

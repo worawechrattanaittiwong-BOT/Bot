@@ -3,6 +3,12 @@ using System.Text;
 
 namespace Scenova.CloudWorker;
 
+internal sealed record PreparedInstance(
+    string InstancePath,
+    string TerminalPath,
+    string PresetPath,
+    string StartupPath);
+
 internal sealed class Mt5Runtime
 {
     private readonly WorkerConfig _config;
@@ -28,6 +34,68 @@ internal sealed class Mt5Runtime
         var prefix = Path.GetFullPath(_instancesPath).TrimEnd('\\') + "\\";
         return EnumerateTerminalProcesses()
             .Count(item => item.Path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal PreparedInstance PrepareInstanceFiles(CloudJob job)
+    {
+        var instancePath = GetInstancePath(job.InstanceId);
+        var marker = Path.Combine(instancePath, "cloud-provisioned");
+        var alreadyProvisioned = File.Exists(marker);
+
+        if (!alreadyProvisioned)
+        {
+            if (!TemplateReady) throw new InvalidOperationException("Template is not verified");
+
+            Directory.CreateDirectory(instancePath);
+            CopyTemplate(_templatePath, instancePath);
+            File.WriteAllText(marker, "1", new UTF8Encoding(false));
+        }
+
+        var terminal = Path.Combine(instancePath, "terminal64.exe");
+        var ea = Path.Combine(instancePath, "MQL5", "Experts", "FastBasketBot.ex5");
+        if (!File.Exists(terminal) || !File.Exists(ea))
+            throw new InvalidOperationException("Missing MT5 or EA");
+
+        var presetDir = Path.Combine(instancePath, "MQL5", "Presets");
+        Directory.CreateDirectory(presetDir);
+
+        var presetPath = Path.Combine(presetDir, "SCENOVA-Cloud.set");
+        File.WriteAllLines(
+            presetPath,
+            new[]
+            {
+                "InpApiBase=" + SafeIniValue(_config.ApiBase),
+                "InpInstanceId=" + SafeIniValue(job.InstanceId),
+                "InpInstallToken=" + SafeIniValue(job.InstallToken)
+            },
+            Encoding.Unicode);
+
+        var startupPath = Path.Combine(instancePath, "cloud-start.ini");
+        File.WriteAllLines(
+            startupPath,
+            new[]
+            {
+                "[Common]",
+                "Login=" + SafeIniValue(job.AccountNumberText),
+                "Password=" + SafeIniValue(job.TradingPassword),
+                "Server=" + SafeIniValue(job.BrokerServer),
+                "KeepPrivate=1",
+                "NewsEnable=0",
+                "[Charts]",
+                "MaxBars=5000",
+                "[Experts]",
+                "Enabled=1",
+                "AllowLiveTrading=1",
+                "AllowDllImport=0",
+                "[StartUp]",
+                "Expert=FastBasketBot",
+                "ExpertParameters=SCENOVA-Cloud.set",
+                "Symbol=" + SafeIniValue(job.Symbol),
+                "Period=M5"
+            },
+            Encoding.Unicode);
+
+        return new PreparedInstance(instancePath, terminal, presetPath, startupPath);
     }
 
     public async Task ProcessCommandAsync(
@@ -97,8 +165,7 @@ internal sealed class Mt5Runtime
 
         _retryAfter[job.InstanceId] = DateTimeOffset.UtcNow.AddSeconds(60);
 
-        var marker = Path.Combine(instancePath, "cloud-provisioned");
-        var alreadyProvisioned = File.Exists(marker);
+        var alreadyProvisioned = File.Exists(Path.Combine(instancePath, "cloud-provisioned"));
         var recoveryAuthorized = false;
 
         if (alreadyProvisioned)
@@ -127,64 +194,15 @@ internal sealed class Mt5Runtime
 
         try
         {
-            if (!alreadyProvisioned)
-            {
-                if (!TemplateReady) throw new InvalidOperationException("Template is not verified");
+            var prepared = PrepareInstanceFiles(job);
 
-                Directory.CreateDirectory(instancePath);
-                CopyTemplate(_templatePath, instancePath);
-                File.WriteAllText(marker, "1", new UTF8Encoding(false));
-            }
-
-            var ea = Path.Combine(instancePath, "MQL5", "Experts", "FastBasketBot.ex5");
-            if (!File.Exists(terminal) || !File.Exists(ea))
-                throw new InvalidOperationException("Missing MT5 or EA");
-
-            var presetDir = Path.Combine(instancePath, "MQL5", "Presets");
-            Directory.CreateDirectory(presetDir);
-
-            File.WriteAllLines(
-                Path.Combine(presetDir, "SCENOVA-Cloud.set"),
-                new[]
-                {
-                    "InpApiBase=" + SafeIniValue(_config.ApiBase),
-                    "InpInstanceId=" + SafeIniValue(job.InstanceId),
-                    "InpInstallToken=" + SafeIniValue(job.InstallToken)
-                },
-                Encoding.Unicode);
-
-            var startupPath = Path.Combine(instancePath, "cloud-start.ini");
-            File.WriteAllLines(
-                startupPath,
-                new[]
-                {
-                    "[Common]",
-                    "Login=" + SafeIniValue(job.AccountNumberText),
-                    "Password=" + SafeIniValue(job.TradingPassword),
-                    "Server=" + SafeIniValue(job.BrokerServer),
-                    "KeepPrivate=1",
-                    "NewsEnable=0",
-                    "[Charts]",
-                    "MaxBars=5000",
-                    "[Experts]",
-                    "Enabled=1",
-                    "AllowLiveTrading=1",
-                    "AllowDllImport=0",
-                    "[StartUp]",
-                    "Expert=FastBasketBot",
-                    "ExpertParameters=SCENOVA-Cloud.set",
-                    "Symbol=" + SafeIniValue(job.Symbol),
-                    "Period=M5"
-                },
-                Encoding.Unicode);
-
-            if (!HasExactTerminal(terminal))
+            if (!HasExactTerminal(prepared.TerminalPath))
             {
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = terminal,
-                    Arguments = $"/portable /config:\"{startupPath}\"",
-                    WorkingDirectory = instancePath,
+                    FileName = prepared.TerminalPath,
+                    Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
+                    WorkingDirectory = prepared.InstancePath,
                     UseShellExecute = true,
                     WindowStyle = ProcessWindowStyle.Hidden
                 });

@@ -46,6 +46,15 @@ jobs:
             throw "SCENOVA-CloudWorker.exe was not produced"
           }
 
+      - name: Verify isolated provisioning checkpoints
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "cloud-worker-publish/SCENOVA-CloudWorker.exe" --provision-self-test
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cloud Worker provisioning self-test failed"
+          }
+
       - name: Publish Cloud Setup with embedded Worker and EA
         shell: powershell
         run: |
@@ -84,7 +93,7 @@ jobs:
             exit 0
           }
 
-          git commit -m "[phase4-generated] build: publish automatic Cloud Setup"
+          git commit -m "[phase5-generated] build: publish validated Cloud Setup"
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
