@@ -4,9 +4,6 @@ import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { usePathname } from "next/navigation";
 import { ScenovaIcon } from "./ScenovaIcon";
 
-type MobileTheme = "dark" | "light";
-
-const MOBILE_THEME_STORAGE_KEY = "scenova-mobile-theme";
 const MOBILE_SCROLL_TARGET_KEY = "scenova-mobile-scroll-target";
 const APP_ROUTE_PREFIXES = [
   "/dashboard",
@@ -20,20 +17,12 @@ const APP_ROUTE_PREFIXES = [
   "/trading-symbol"
 ];
 
-function preferredTheme(): MobileTheme {
-  if (typeof window === "undefined") return "dark";
-  const stored = window.localStorage.getItem(MOBILE_THEME_STORAGE_KEY);
-  if (stored === "light" || stored === "dark") return stored;
-  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
-}
-
 function firstRouteSegment(pathname:string) {
   return pathname.split("/").filter(Boolean)[0] || "root";
 }
 
 export function MobileExperience() {
   const pathname = usePathname() || "/";
-  const [theme, setTheme] = useState<MobileTheme>("dark");
   const [moreOpen, setMoreOpen] = useState(false);
   const [online, setOnline] = useState(true);
   const [locationState, setLocationState] = useState({ search:"", hash:"" });
@@ -46,7 +35,6 @@ export function MobileExperience() {
   );
 
   useEffect(() => {
-    setTheme(preferredTheme());
     const updateNetwork = () => setOnline(window.navigator.onLine);
     updateNetwork();
     window.addEventListener("online", updateNetwork);
@@ -74,11 +62,10 @@ export function MobileExperience() {
   useEffect(() => {
     const root = document.documentElement;
     const body = document.body;
-    root.dataset.scenovaMobileTheme = theme;
+    root.dataset.scenovaMobileTheme = "dark";
     root.dataset.scenovaMobileUi = "v1";
     body.dataset.scnMobileRoute = firstRouteSegment(pathname);
     body.classList.toggle("scn-mobile-app-route", isAppRoute);
-    window.localStorage.setItem(MOBILE_THEME_STORAGE_KEY, theme);
     setMoreOpen(false);
 
     const detectElevated = () => setElevated(Boolean(document.querySelector(".sidebar.elevated-sidebar")));
@@ -90,7 +77,7 @@ export function MobileExperience() {
       body.classList.remove("scn-mobile-app-route");
       delete body.dataset.scnMobileRoute;
     };
-  }, [theme, isAppRoute, pathname]);
+  }, [isAppRoute, pathname]);
 
   useEffect(() => {
     if (!isAppRoute) return;
@@ -223,10 +210,6 @@ export function MobileExperience() {
                   </div>
                 ) : null}
 
-                <div className="scn-mobile-more-theme">
-                  <span><ScenovaIcon name="spark" size={18}/><b>Appearance</b></span>
-                  <button type="button" onClick={()=>setTheme(current=>current==="dark"?"light":"dark")}>{theme==="dark"?"ใช้โหมดสว่าง":"ใช้โหมดมืด"}</button>
-                </div>
               </section>
             </div>
           ) : null}
