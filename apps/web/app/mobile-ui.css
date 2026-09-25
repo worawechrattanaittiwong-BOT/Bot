@@ -1878,3 +1878,272 @@
     scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important;
   }
 }
+
+
+/* SCENOVA Mobile Visual QA Fix · real-device screenshots 2026-09-25
+   Presentation-only corrections from Android Chrome screenshots. */
+@media (max-width:767px){
+  /* Theme is still available in More > Appearance. The floating pill caused
+     overlap with the header/nav on real phones, so it is intentionally hidden. */
+  .scn-mobile-theme-toggle{display:none!important}
+
+  /* Keep the role navigation useful without fighting the app header. */
+  body.scn-mobile-app-route .mobile-only.mobile-nav,
+  body.scn-mobile-app-route .mobile-nav.owner-mobile-nav{
+    margin-top:2px!important;
+    margin-bottom:10px!important;
+    padding:2px 0 6px!important;
+    scroll-padding-inline:8px;
+  }
+
+  body.scn-mobile-app-route .mobile-nav a,
+  body.scn-mobile-app-route .mobile-nav button{
+    min-height:40px!important;
+    padding:7px 11px!important;
+    background:color-mix(in srgb,var(--m-surface) 96%,transparent)!important;
+  }
+
+  /* Remove the decorative gold tile on the mobile symbol hero. It duplicates
+     the symbol identity and consumed scarce horizontal space. */
+  body.scn-mobile-app-route .cc-v6-gold-stage{
+    display:none!important;
+  }
+
+  body.scn-mobile-app-route .cc-v6-hero-main{
+    min-width:0!important;
+    width:100%!important;
+    align-items:flex-start!important;
+  }
+
+  body.scn-mobile-app-route .cc-v6-symbol-copy{
+    width:100%!important;
+  }
+
+  body.scn-mobile-app-route .cc-v6-symbol-chips{
+    width:100%!important;
+    max-width:100%!important;
+    display:flex!important;
+    flex-wrap:wrap!important;
+    overflow:visible!important;
+    gap:6px!important;
+  }
+
+  body.scn-mobile-app-route .cc-v6-symbol-chips>span{
+    max-width:100%;
+    min-height:30px!important;
+    padding:5px 8px!important;
+  }
+
+  /* The desktop design fixes these cards at 560px. On phones that produced
+     large empty black/white areas. Mobile uses content height instead. */
+  body.scn-mobile-app-route .cc-v19-three-card-grid .cc-v17-running-positions,
+  body.scn-mobile-app-route .cc-v17-running-positions{
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+  }
+
+  body.scn-mobile-app-route .cc-v17-running-table .body,
+  body.scn-mobile-app-route .cc-v19-three-card-grid .cc-v17-running-table .body{
+    max-height:none!important;
+    overflow:visible!important;
+  }
+
+  body.scn-mobile-app-route .cc-v17-running-table .empty{
+    min-height:132px!important;
+    padding:18px 10px!important;
+  }
+
+  body.scn-mobile-app-route .cc-v19-settings-card,
+  body.scn-mobile-app-route .cc-v19-settings-card .cc-bot-embedded-frame,
+  body.scn-mobile-app-route .cc-v19-settings-card .cc-bot-v2-embedded,
+  body.scn-mobile-app-route .cc-v19-settings-card .cc-bot-v2-body{
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-main,
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-workspace,
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-panel,
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-mode-section{
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-embedded .cc-bot-v2-body{
+    padding:0 10px 10px!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-fields,
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-limit-grid{
+    gap:8px!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-field{
+    min-height:50px!important;
+    padding:9px 10px!important;
+    border:1px solid var(--m-line)!important;
+    border-radius:12px!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-limit-grid>div{
+    min-height:58px!important;
+    padding:9px 10px!important;
+    border:1px solid var(--m-line)!important;
+    border-radius:12px!important;
+    background:var(--m-surface-2)!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-field>span,
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-limit-grid>div>div>span{
+    min-width:0;
+    color:var(--m-text)!important;
+    font-weight:750;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-field small,
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-engine-line span{
+    color:var(--m-muted)!important;
+  }
+
+  /* A smaller dock prevents it from covering cards/buttons on 360–430px phones. */
+  body.scn-mobile-app-route{
+    --m-primary-nav-height:62px;
+  }
+
+  .scn-mobile-primary-nav{
+    min-height:62px!important;
+    padding:5px!important;
+    border-radius:18px!important;
+  }
+
+  .scn-mobile-primary-nav>a,
+  .scn-mobile-primary-nav>button{
+    min-height:50px!important;
+    gap:3px!important;
+  }
+
+  body.scn-mobile-app-route .app-main,
+  body.scn-mobile-app-route .main.app-main,
+  .scn-mobile-performance-page{
+    padding-bottom:calc(var(--m-primary-nav-height) + 40px + env(safe-area-inset-bottom))!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-footer{
+    bottom:calc(var(--m-primary-nav-height) + 12px + env(safe-area-inset-bottom))!important;
+  }
+
+  /* Light theme: force real contrast on the old dark desktop surfaces that are
+     reused inside the mobile shell. */
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route .cc-v19-settings-card,
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings .cc-bot-v2-embedded,
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings .cc-bot-v2-body,
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings .cc-bot-v2-main,
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings .cc-bot-v2-workspace,
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings .cc-bot-v2-panel,
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings .cc-bot-v2-mode-section{
+    background:#fff!important;
+    color:#151827!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings .cc-bot-v2-head{
+    background:#fff!important;
+    border-bottom-color:#dfe3ef!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings .cc-bot-v2-field,
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings .cc-bot-v2-limit-grid>div,
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings .cc-bot-v2-control-cell{
+    background:#f7f8fc!important;
+    border-color:#dfe3ef!important;
+    color:#151827!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings :where(
+    .cc-bot-v2-field>span,
+    .cc-bot-v2-field>span b,
+    .cc-bot-v2-limit-grid b,
+    .cc-bot-v2-section-title b,
+    label,
+    strong
+  ){
+    color:#242938!important;
+    text-shadow:none!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings :where(
+    small,
+    .cc-bot-v2-engine-line span,
+    .cc-bot-v2-summary-note small
+  ){
+    color:#6f778e!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings :where(
+    input,
+    select,
+    .input,
+    .cc-bot-v2-readonly-control
+  ){
+    background:#fff!important;
+    color:#151827!important;
+    border-color:#cfd5e3!important;
+    opacity:1!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings :where(input,select):disabled{
+    background:#eef1f6!important;
+    color:#555e72!important;
+    -webkit-text-fill-color:#555e72!important;
+    opacity:1!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route #bot-settings .cc-bot-v12-mode-select{
+    background:#fff!important;
+    color:#151827!important;
+  }
+
+  /* Performance light theme: old module CSS used very pale text. */
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-page .scn-mobile-performance-summary,
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-page .scn-mobile-performance-info,
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-page .scn-mobile-performance-metrics,
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-page .scn-mobile-performance-results>div{
+    color:#151827!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-info :where(b,strong,h1,h2,h3),
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-metrics :where(b,strong,h1,h2,h3),
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-results :where(b,strong,h1,h2,h3){
+    color:#151827!important;
+    text-shadow:none!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-info :where(span,small,p,label),
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-metrics :where(span,small,p,label),
+  html[data-scenova-mobile-theme="light"] .scn-mobile-performance-results :where(span,small,p,label){
+    color:#687086!important;
+  }
+
+  /* Decorative ambient layers were washing out light-theme content in the
+     screenshots. Keep them only in dark mode. */
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route .cc-v4-ambient{
+    display:none!important;
+  }
+}
+
+@media (max-width:390px){
+  .scn-mobile-primary-nav span{
+    font-size:var(--ui-type-caption)!important;
+  }
+
+  body.scn-mobile-app-route .cc-v6-symbol-copy h2{
+    font-size:22px!important;
+  }
+
+  body.scn-mobile-app-route #bot-settings .cc-bot-v2-choice-row{
+    grid-template-columns:1fr!important;
+  }
+}

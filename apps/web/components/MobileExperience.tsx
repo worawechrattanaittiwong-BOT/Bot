@@ -71,17 +71,6 @@ export function MobileExperience() {
 
   return (
     <div className="scn-mobile-experience" data-mobile-ui-only="true">
-      <button
-        type="button"
-        className="scn-mobile-theme-toggle"
-        aria-label={theme === "dark" ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด"}
-        title={theme === "dark" ? "โหมดสว่าง" : "โหมดมืด"}
-        onClick={() => setTheme(current => current === "dark" ? "light" : "dark")}
-      >
-        <span className={"scn-mobile-theme-glyph " + theme} aria-hidden="true"><i/></span>
-        <span>{theme === "dark" ? "สว่าง" : "มืด"}</span>
-      </button>
-
       {!online ? (
         <div className="scn-mobile-network-state" role="status" aria-live="polite">
           <ScenovaIcon name="info" size={16}/>
