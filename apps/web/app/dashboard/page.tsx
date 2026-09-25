@@ -2218,6 +2218,56 @@ export default function DashboardPage() {
 
 
 
+                <section className="mobile-only scn-mobile-order-history" id="mobile-order-history" aria-label="ประวัติออเดอร์ล่าสุด">
+                  <div className="scn-mobile-order-tabs" aria-label="Orders navigation">
+                    <a href="#live-orders"><ScenovaIcon name="orders" size={15}/>OPEN</a>
+                    <a href="#mobile-order-history" className="active"><ScenovaIcon name="clock" size={15}/>HISTORY</a>
+                    <a href="#mobile-basket-history"><ScenovaIcon name="layers" size={15}/>BASKETS</a>
+                  </div>
+                  <div className="scn-mobile-order-card-head">
+                    <div><small>RECENT ACTIVITY</small><b>ประวัติออเดอร์ล่าสุด</b></div>
+                    <a href="/performance">ดูสถิติ →</a>
+                  </div>
+                  <div className="scn-mobile-order-feed">
+                    {(Array.isArray(data.tradeJournal?.recent) ? data.tradeJournal.recent : [])
+                      .filter((row:any)=>String(row.event_type||"").toUpperCase()!=="BASKET")
+                      .slice(0,6)
+                      .map((row:any,index:number)=>{
+                        const type=String(row.event_type||"EVENT").toUpperCase();
+                        const side=String(row.direction||"").toUpperCase();
+                        const profit=Number(row.net_profit||0);
+                        return <div className="scn-mobile-order-feed-row" key={"journal-"+index+"-"+String(row.created_at||"")}>
+                          <span className={"event "+type.toLowerCase()}>{type}</span>
+                          <div><b>{side||String(row.entry_model||"TRADE")}</b><small>{row.created_at?new Date(row.created_at).toLocaleString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"short"}):"—"}</small></div>
+                          <div className="meta"><b>{Number(row.volume||0)>0?Number(row.volume).toFixed(2)+" Lot":"—"}</b><small>{Number(row.price||0)>0?Number(row.price).toFixed(Math.max(2,Math.min(5,Number(metrics.symbolDigits||3)))):"—"}</small></div>
+                          <strong className={profit>0?"good":profit<0?"bad":""}>{type==="EXIT"?formatAccountMoney(profit,accountCurrency,true):""}</strong>
+                        </div>;
+                      })}
+                    {!(Array.isArray(data.tradeJournal?.recent) && data.tradeJournal.recent.some((row:any)=>String(row.event_type||"").toUpperCase()!=="BASKET")) && <div className="scn-mobile-order-empty">ยังไม่มีประวัติออเดอร์ล่าสุด</div>}
+                  </div>
+                </section>
+
+                <section className="mobile-only scn-mobile-basket-history" id="mobile-basket-history" aria-label="Basket ที่ปิดล่าสุด">
+                  <div className="scn-mobile-order-card-head">
+                    <div><small>CLOSED BASKETS</small><b>Basket ที่ปิดล่าสุด</b></div>
+                    <span>{Number(data.tradeJournal?.stats?.closedTrades||0)} Total</span>
+                  </div>
+                  <div className="scn-mobile-basket-list">
+                    {(Array.isArray(data.tradeJournal?.recent) ? data.tradeJournal.recent : [])
+                      .filter((row:any)=>String(row.event_type||"").toUpperCase()==="BASKET")
+                      .slice(0,5)
+                      .map((row:any,index:number)=>{
+                        const profit=Number(row.net_profit||0);
+                        return <div className="scn-mobile-basket-row" key={"basket-"+index+"-"+String(row.created_at||"")}>
+                          <span className={profit>=0?"good":"bad"}><ScenovaIcon name={profit>=0?"profit":"risk"} size={17}/></span>
+                          <div><b>{String(row.direction||"BASKET").toUpperCase()}</b><small>{row.created_at?new Date(row.created_at).toLocaleString("th-TH",{timeZone:"Asia/Bangkok",dateStyle:"short",timeStyle:"short"}):"—"}</small></div>
+                          <strong className={profit>=0?"good":"bad"}>{formatAccountMoney(profit,accountCurrency,true)}</strong>
+                        </div>;
+                      })}
+                    {!(Array.isArray(data.tradeJournal?.recent) && data.tradeJournal.recent.some((row:any)=>String(row.event_type||"").toUpperCase()==="BASKET")) && <div className="scn-mobile-order-empty">ยังไม่มี Basket ที่ปิดในรายการล่าสุด</div>}
+                  </div>
+                </section>
+
                 <section className="panel cc-v12-mode-performance">
                   <div className="cc-v12-card-head">
                     <div><span><ScenovaIcon name="pnl" size={17}/></span><div><small>PERFORMANCE BY MODE</small><b>สถิติรายโหมดวันนี้</b></div></div>

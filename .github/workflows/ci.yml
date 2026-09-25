@@ -97,6 +97,9 @@ jobs:
       - name: Mobile UI M3 navigation and trade settings contract
         shell: pwsh
         run: ./tests/mobile-ui-trade-contract.ps1
+      - name: Mobile UI M4 orders history baskets contract
+        shell: pwsh
+        run: ./tests/mobile-ui-orders-contract.ps1
       - name: FLIP LOCK strict isolation contract
         shell: pwsh
         run: ./tests/flip-lock-isolation-contract.ps1
