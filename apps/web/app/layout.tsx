@@ -22,7 +22,7 @@ export const metadata: Metadata = {
       {
         url: SCENOVA_MASTER_MARK,
         type: "image/png",
-        sizes: "512x512"
+        sizes: "1254x1254"
       }
     ],
     shortcut: [SCENOVA_MASTER_MARK],
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
       {
         url: SCENOVA_APPLE_TOUCH_ICON,
         type: "image/png",
-        sizes: "512x512"
+        sizes: "1254x1254"
       }
     ]
   },

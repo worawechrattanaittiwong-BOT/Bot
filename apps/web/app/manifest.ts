@@ -14,11 +14,13 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       {
         src: SCENOVA_MASTER_MARK,
+        sizes: "1254x1254",
         type: "image/png",
         purpose: "any"
       },
       {
         src: SCENOVA_MASTER_MARK,
+        sizes: "1254x1254",
         type: "image/png",
         purpose: "maskable"
       }

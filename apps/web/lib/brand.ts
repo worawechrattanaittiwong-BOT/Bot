@@ -1,4 +1,4 @@
 export const SCENOVA_BRAND_NAME = "SCENOVA EA";
-export const SCENOVA_MASTER_LOGO = "/assets/scenova-brand-logo-v1.png";
-export const SCENOVA_MASTER_MARK = "/favicon.png";
-export const SCENOVA_APPLE_TOUCH_ICON = "/apple-touch-icon.png";
+export const SCENOVA_MASTER_MARK = "/brand/scenova-master-1254.png";
+export const SCENOVA_MASTER_LOGO = SCENOVA_MASTER_MARK;
+export const SCENOVA_APPLE_TOUCH_ICON = SCENOVA_MASTER_MARK;
