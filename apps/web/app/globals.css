@@ -6733,3 +6733,193 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
     inset:0 0 auto 224px
   }
 }
+
+
+/* ===== Mobile role sidebar drawer =====
+   Mobile only: replace the horizontal role menu with one toggle button.
+   Desktop sidebar and all destination/permission logic remain unchanged. */
+@media(max-width:960px){
+  .owner-mobile-nav-trigger-wrap{
+    position:fixed;
+    right:14px;
+    bottom:calc(14px + env(safe-area-inset-bottom));
+    z-index:2450;
+    width:auto;
+    margin:0;
+    padding:0;
+    pointer-events:none;
+  }
+  .owner-mobile-nav-trigger{
+    pointer-events:auto;
+    min-width:92px;
+    min-height:50px;
+    padding:10px 14px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    border:1px solid #2e3560;
+    border-radius:16px;
+    background:linear-gradient(145deg,#12162a,#0a0e1b);
+    color:#f2f4ff;
+    box-shadow:0 16px 40px rgba(0,0,0,.38),0 0 0 1px rgba(139,104,255,.08);
+    font:inherit;
+    font-weight:800;
+    touch-action:manipulation;
+  }
+  .owner-mobile-nav-trigger svg{color:#956dff}
+  .owner-mobile-nav-trigger.active{
+    border-color:#7657d8;
+    background:linear-gradient(145deg,#201743,#111329);
+  }
+
+  .owner-mobile-drawer-backdrop{
+    position:fixed;
+    inset:0;
+    z-index:3000;
+    display:flex!important;
+    align-items:flex-end;
+    padding:0;
+    background:rgba(2,4,12,.72);
+    backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px);
+  }
+  .owner-mobile-drawer{
+    width:100%;
+    max-height:min(84dvh,760px);
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+    padding:8px 14px calc(18px + env(safe-area-inset-bottom));
+    border:1px solid #27304f;
+    border-bottom:0;
+    border-radius:26px 26px 0 0;
+    background:linear-gradient(180deg,#090d1b 0%,#070b16 100%);
+    color:#eef1ff;
+    box-shadow:0 -24px 60px rgba(0,0,0,.48);
+  }
+  .owner-mobile-drawer-handle{
+    width:48px;
+    height:5px;
+    margin:2px auto 12px;
+    border-radius:999px;
+    background:#4a516d;
+  }
+  .owner-mobile-drawer-head{
+    position:sticky;
+    top:-8px;
+    z-index:3;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin:0 -2px 12px;
+    padding:8px 2px 10px;
+    background:linear-gradient(180deg,#090d1b 78%,rgba(9,13,27,0));
+  }
+  .owner-mobile-drawer-head>div{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+  }
+  .owner-mobile-drawer-head b{
+    font-size:22px;
+    line-height:1.1;
+    color:#f7f8ff;
+  }
+  .owner-mobile-drawer-head span{
+    color:#7f879f;
+    font-size:12px;
+  }
+  .owner-mobile-drawer-close{
+    flex:0 0 48px;
+    width:48px;
+    height:48px;
+    display:grid;
+    place-items:center;
+    border:1px solid #29314d;
+    border-radius:15px;
+    background:#0c1121;
+    color:#f3f5ff;
+    font:inherit;
+    font-size:28px;
+    line-height:1;
+  }
+  .owner-mobile-drawer-body{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .owner-mobile-drawer-section{
+    min-width:0;
+  }
+  .owner-mobile-drawer-label{
+    margin:0 2px 8px;
+    color:#929ab2;
+    font-size:11px;
+    font-weight:900;
+    letter-spacing:.12em;
+  }
+  .owner-mobile-drawer-grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:9px;
+  }
+  .owner-mobile-drawer-item{
+    min-width:0;
+    min-height:84px;
+    padding:12px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    border:1px solid #242d49;
+    border-radius:17px;
+    background:#0a0f1e;
+    color:#e7eafa;
+    text-decoration:none;
+    touch-action:manipulation;
+  }
+  .owner-mobile-drawer-item.active{
+    border-color:#7657d8;
+    background:linear-gradient(145deg,#171431,#0d1223);
+    box-shadow:inset 3px 0 0 #8f68ff;
+  }
+  .owner-mobile-drawer-icon{
+    flex:0 0 38px;
+    width:38px;
+    height:38px;
+    display:grid;
+    place-items:center;
+    border-radius:12px;
+    border:1px solid #3b3268;
+    background:#12102a;
+    color:#946bff;
+  }
+  .owner-mobile-drawer-copy{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+  }
+  .owner-mobile-drawer-copy b{
+    color:#f0f2ff;
+    font-size:14px;
+    line-height:1.2;
+  }
+  .owner-mobile-drawer-copy small{
+    color:#777f98;
+    font-size:11px;
+    line-height:1.35;
+  }
+
+  /* Do not render the legacy horizontal mobile role menu. */
+  .mobile-only.mobile-nav.owner-mobile-nav{
+    display:none!important;
+  }
+}
+
+@media(max-width:520px){
+  .owner-mobile-drawer-grid{grid-template-columns:1fr}
+  .owner-mobile-drawer-item{min-height:70px}
+}
