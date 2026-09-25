@@ -88,6 +88,9 @@ jobs:
       - name: RACE VNext Phase 6 evaluation contract
         shell: pwsh
         run: ./tests/race-vnext-phase6-evaluation-contract.ps1
+      - name: Mobile UI M1 shell and light mode contract
+        shell: pwsh
+        run: ./tests/mobile-ui-shell-contract.ps1
       - name: FLIP LOCK strict isolation contract
         shell: pwsh
         run: ./tests/flip-lock-isolation-contract.ps1

@@ -1,0 +1,393 @@
+/* SCENOVA Mobile UX Upgrade · M1
+   Presentation-only foundation. Every selector in this file is mobile-scoped;
+   desktop layout and all trading/backend behavior stay untouched. */
+
+.scn-mobile-experience{display:none}
+
+@media (max-width:767px){
+  html[data-scenova-mobile-ui="v1"]{
+    --m-bg:#050711;
+    --m-bg-elevated:#090d18;
+    --m-surface:#0c1120;
+    --m-surface-2:#11172a;
+    --m-line:#252d49;
+    --m-text:#f4f6ff;
+    --m-muted:#8c96b1;
+    --m-purple:#8b6cff;
+    --m-blue:#5aa8ff;
+    --m-green:#56e4a2;
+    --m-red:#ff6e80;
+    --m-amber:#f0c96a;
+    --m-shadow:0 14px 38px rgba(0,0,0,.28);
+    --m-nav-height:72px;
+    color-scheme:dark;
+  }
+
+  html[data-scenova-mobile-theme="light"]{
+    --m-bg:#f4f6fb;
+    --m-bg-elevated:#ffffff;
+    --m-surface:#ffffff;
+    --m-surface-2:#f7f8fc;
+    --m-line:#dfe3ef;
+    --m-text:#141827;
+    --m-muted:#6f778e;
+    --m-purple:#6847df;
+    --m-blue:#327fd6;
+    --m-green:#16895a;
+    --m-red:#c83f54;
+    --m-amber:#9f7416;
+    --m-shadow:0 12px 34px rgba(28,35,68,.10);
+    color-scheme:light;
+  }
+
+  html[data-scenova-mobile-ui="v1"],
+  html[data-scenova-mobile-ui="v1"] body{
+    min-height:100%;
+    background:var(--m-bg);
+    color:var(--m-text);
+  }
+
+  html[data-scenova-mobile-ui="v1"] body{
+    -webkit-tap-highlight-color:transparent;
+    overscroll-behavior-y:none;
+  }
+
+  html[data-scenova-mobile-ui="v1"] body.scn-mobile-app-route{
+    background:
+      radial-gradient(circle at 92% -8%,rgba(124,92,255,.14),transparent 28%),
+      radial-gradient(circle at 6% 18%,rgba(69,145,255,.07),transparent 26%),
+      var(--m-bg);
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route{
+    background:
+      radial-gradient(circle at 90% -10%,rgba(111,79,230,.10),transparent 28%),
+      radial-gradient(circle at 8% 14%,rgba(76,147,221,.08),transparent 24%),
+      var(--m-bg);
+  }
+
+  .scn-mobile-experience{display:block}
+
+  .scn-mobile-theme-toggle{
+    position:fixed;
+    top:calc(12px + env(safe-area-inset-top));
+    right:12px;
+    z-index:2600;
+    min-height:38px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
+    padding:7px 10px;
+    border:1px solid color-mix(in srgb,var(--m-line) 88%,transparent);
+    border-radius:999px;
+    background:color-mix(in srgb,var(--m-surface) 92%,transparent);
+    color:var(--m-text);
+    box-shadow:var(--m-shadow);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+    font-size:11px;
+    font-weight:800;
+    letter-spacing:.01em;
+  }
+
+  body.scn-mobile-app-route .scn-mobile-theme-toggle{
+    right:76px;
+  }
+
+  .scn-mobile-theme-glyph{
+    position:relative;
+    width:18px;
+    height:18px;
+    display:grid;
+    place-items:center;
+    border-radius:50%;
+    flex:0 0 18px;
+  }
+
+  .scn-mobile-theme-glyph:before{
+    content:"";
+    width:9px;
+    height:9px;
+    border-radius:50%;
+    background:currentColor;
+    box-shadow:0 0 0 2px color-mix(in srgb,currentColor 16%,transparent);
+  }
+
+  .scn-mobile-theme-glyph.dark{
+    color:#a792ff;
+    background:#201a3f;
+  }
+
+  .scn-mobile-theme-glyph.dark:after{
+    content:"";
+    position:absolute;
+    width:8px;
+    height:8px;
+    border-radius:50%;
+    top:3px;
+    left:8px;
+    background:var(--m-surface);
+  }
+
+  .scn-mobile-theme-glyph.light{
+    color:#d79a20;
+    background:#fff3ca;
+  }
+
+  /* Mobile app shell: existing DOM/actions are preserved, only presentation moves. */
+  body.scn-mobile-app-route .app-wrap{
+    display:block!important;
+    min-height:100dvh;
+    background:transparent!important;
+  }
+
+  body.scn-mobile-app-route .sidebar.app-sidebar{
+    display:none!important;
+  }
+
+  body.scn-mobile-app-route .app-main,
+  body.scn-mobile-app-route .main.app-main{
+    width:100%!important;
+    max-width:none!important;
+    min-height:100dvh;
+    overflow:visible!important;
+    padding:
+      calc(10px + env(safe-area-inset-top))
+      12px
+      calc(var(--m-nav-height) + 28px + env(safe-area-inset-bottom))
+      !important;
+    background:transparent!important;
+  }
+
+  body.scn-mobile-app-route .app-main:before{
+    display:none!important;
+  }
+
+  body.scn-mobile-app-route .mobile-only.mobile-app-head{
+    position:sticky;
+    top:0;
+    z-index:2200;
+    min-height:54px;
+    margin:-10px -12px 12px!important;
+    padding:
+      calc(8px + env(safe-area-inset-top))
+      12px
+      8px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    border-bottom:1px solid color-mix(in srgb,var(--m-line) 88%,transparent);
+    background:color-mix(in srgb,var(--m-bg-elevated) 88%,transparent)!important;
+    backdrop-filter:blur(20px);
+    -webkit-backdrop-filter:blur(20px);
+  }
+
+  body.scn-mobile-app-route .mobile-app-head .scenova-brand-lockup{
+    min-height:34px;
+  }
+
+  body.scn-mobile-app-route .mobile-app-head .btn{
+    min-width:48px;
+    min-height:36px;
+    padding:7px 10px!important;
+    border-radius:10px!important;
+    border-color:var(--m-line)!important;
+    background:var(--m-surface)!important;
+    color:var(--m-text)!important;
+  }
+
+  /* Keep every existing destination reachable. The current navigation becomes
+     a native-like bottom rail with horizontal overflow instead of deleting items. */
+  body.scn-mobile-app-route .mobile-only.mobile-nav,
+  body.scn-mobile-app-route .mobile-nav.owner-mobile-nav{
+    position:fixed!important;
+    left:8px;
+    right:8px;
+    bottom:calc(8px + env(safe-area-inset-bottom));
+    z-index:2400;
+    height:var(--m-nav-height);
+    margin:0!important;
+    padding:7px!important;
+    display:flex!important;
+    align-items:stretch;
+    gap:5px!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    scrollbar-width:none;
+    border:1px solid color-mix(in srgb,var(--m-line) 92%,transparent);
+    border-radius:20px!important;
+    background:color-mix(in srgb,var(--m-bg-elevated) 92%,transparent)!important;
+    box-shadow:0 18px 48px rgba(0,0,0,.34);
+    backdrop-filter:blur(22px);
+    -webkit-backdrop-filter:blur(22px);
+    overscroll-behavior-x:contain;
+    scroll-snap-type:x proximity;
+  }
+
+  body.scn-mobile-app-route .mobile-nav::-webkit-scrollbar{display:none}
+
+  body.scn-mobile-app-route .mobile-nav a,
+  body.scn-mobile-app-route .mobile-nav button{
+    min-width:76px;
+    min-height:56px;
+    padding:6px 8px!important;
+    border:1px solid transparent!important;
+    border-radius:14px!important;
+    background:transparent!important;
+    color:var(--m-muted)!important;
+    display:flex!important;
+    flex:0 0 auto;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+    scroll-snap-align:start;
+    white-space:nowrap;
+    font-size:10px!important;
+    font-weight:750;
+    line-height:1.15;
+  }
+
+  body.scn-mobile-app-route .mobile-nav a.active,
+  body.scn-mobile-app-route .mobile-nav a[aria-current="page"],
+  body.scn-mobile-app-route .mobile-nav button.active{
+    color:var(--m-text)!important;
+    border-color:color-mix(in srgb,var(--m-purple) 42%,var(--m-line))!important;
+    background:linear-gradient(180deg,
+      color-mix(in srgb,var(--m-purple) 15%,var(--m-surface)),
+      var(--m-surface))!important;
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--m-purple) 10%,transparent);
+  }
+
+  .mobile-nav-icon{
+    width:24px;
+    height:24px;
+    display:grid;
+    place-items:center;
+    color:inherit;
+  }
+
+  .mobile-nav-label{
+    display:block;
+    max-width:88px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  /* Shared mobile touch/spacing system. */
+  body.scn-mobile-app-route :where(button,a.btn,input,select,textarea){
+    min-height:44px;
+  }
+
+  body.scn-mobile-app-route :where(.panel,.tech-card,.auth-card){
+    border-color:var(--m-line);
+    border-radius:18px;
+    box-shadow:var(--m-shadow);
+  }
+
+  body.scn-mobile-app-route :where(.input,input,select,textarea){
+    border-color:var(--m-line);
+  }
+
+  body.scn-mobile-app-route .page-head,
+  body.scn-mobile-app-route .cc-page-head{
+    margin-top:4px!important;
+  }
+
+  body.scn-mobile-app-route .page-notice{
+    left:12px!important;
+    right:12px!important;
+    bottom:calc(var(--m-nav-height) + 20px + env(safe-area-inset-bottom))!important;
+    width:auto!important;
+    max-width:none!important;
+    border-radius:15px!important;
+  }
+
+  /* Light palette overrides are intentionally presentation-only and scoped to
+     mobile app routes. Status colors remain semantic. */
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route :where(
+    .panel,.tech-card,.auth-card,.cc-command-hero,.cc-account-console,
+    .cc-v4-intelligence,.cc-live-terminal-panel,.cc-v19-settings-card,
+    .cc-v42-card,.cc-v6-hourly-chart,.cc-v46-performance-system
+  ){
+    background:var(--m-surface)!important;
+    border-color:var(--m-line)!important;
+    color:var(--m-text)!important;
+    box-shadow:var(--m-shadow)!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route :where(
+    .cc-v3-kpis .cc-kpi,.cc-v4-performance-metric,.cc-signal-item,
+    .cc-live-position-row,.cc-v42-mini-stats>div,.cc-v46-performance-system-grid>div,
+    .detail-list>div,.status-chip
+  ){
+    background:var(--m-surface-2)!important;
+    border-color:var(--m-line)!important;
+    color:var(--m-text)!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route :where(
+    .cc-v3-title h1,.cc-card-title,.panel h2,.panel h3,.cc-symbol-title h2,
+    .cc-kpi b,.cc-v4-performance-metric b,.cc-status-value,.detail-list b
+  ){
+    color:var(--m-text)!important;
+    text-shadow:none!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route :where(
+    .cc-v3-title p,.muted,.cc-kpi-label,.panel p,.panel small,.detail-list span,
+    .cc-live-position-empty,.cc-terminal-empty
+  ){
+    color:var(--m-muted)!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route :where(
+    .input,input,select,textarea
+  ){
+    background:#fff!important;
+    border-color:var(--m-line)!important;
+    color:#141827!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route :where(
+    .btn,.cc-control-settings-button,.cc-save-primary
+  ){
+    border-color:var(--m-line)!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route .btn:not(.primary):not(.danger):not(.purple){
+    background:#fff!important;
+    color:#1e2435!important;
+  }
+
+  html[data-scenova-mobile-theme="light"] body.scn-mobile-app-route .cc-v4-ambient{
+    opacity:.22;
+  }
+}
+
+@media (max-width:390px){
+  body.scn-mobile-app-route .app-main,
+  body.scn-mobile-app-route .main.app-main{
+    padding-left:9px!important;
+    padding-right:9px!important;
+  }
+
+  body.scn-mobile-app-route .mobile-only.mobile-nav,
+  body.scn-mobile-app-route .mobile-nav.owner-mobile-nav{
+    left:6px;
+    right:6px;
+  }
+
+  .scn-mobile-theme-toggle{
+    padding:7px 9px;
+  }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .scn-mobile-theme-toggle,
+  body.scn-mobile-app-route .mobile-nav *{
+    transition:none!important;
+    animation:none!important;
+  }
+}
