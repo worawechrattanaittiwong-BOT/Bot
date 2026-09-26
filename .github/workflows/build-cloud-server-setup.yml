@@ -104,20 +104,11 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          Copy-Item -Force "cloud-setup-publish/SCENOVA-Cloud-Setup.exe" "apps/web/public/downloads/SCENOVA-Cloud-Setup.exe"
-          Copy-Item -Force "cloud-worker-publish/SCENOVA-CloudWorker.exe" "apps/web/public/downloads/SCENOVA-CloudWorker.exe"
+          $setupPayload = (Resolve-Path "cloud-setup-publish/SCENOVA-Cloud-Setup.exe").Path
+          $workerPayload = (Resolve-Path "cloud-worker-publish/SCENOVA-CloudWorker.exe").Path
 
           git config user.name "scenova-build"
           git config user.email "actions@users.noreply.github.com"
-          git add "apps/web/public/downloads/SCENOVA-Cloud-Setup.exe" "apps/web/public/downloads/SCENOVA-CloudWorker.exe"
-
-          git diff --cached --quiet
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "Published Cloud binaries are already current."
-            exit 0
-          }
-
-          git commit -m "[server-setup-generated] build: publish hardened Cloud Setup"
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {
@@ -127,18 +118,30 @@ jobs:
               continue
             }
 
-            git rebase origin/main
-            if ($LASTEXITCODE -ne 0) {
-              git rebase --abort
-              throw "Could not rebase Cloud binaries onto latest main"
+            # Always apply the freshly built binaries onto the newest main.
+            # Do not rebase a binary artifact commit: concurrent Cloud Setup
+            # builds can legitimately publish the same paths and Git cannot
+            # auto-merge those executable files.
+            git reset --hard origin/main
+            Copy-Item -Force $setupPayload "apps/web/public/downloads/SCENOVA-Cloud-Setup.exe"
+            Copy-Item -Force $workerPayload "apps/web/public/downloads/SCENOVA-CloudWorker.exe"
+            git add "apps/web/public/downloads/SCENOVA-Cloud-Setup.exe" "apps/web/public/downloads/SCENOVA-CloudWorker.exe"
+
+            git diff --cached --quiet
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Published Cloud binaries are already current."
+              $published = $true
+              break
             }
 
+            git commit -m "[server-setup-generated] build: publish hardened Cloud Setup"
             git push origin HEAD:main
             if ($LASTEXITCODE -eq 0) {
               $published = $true
               break
             }
 
+            git reset --hard origin/main
             Start-Sleep -Seconds 2
           }
 
