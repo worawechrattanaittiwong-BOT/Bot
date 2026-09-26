@@ -30,6 +30,37 @@ internal sealed class RecoveryDecision
     public bool Allow { get; set; }
 }
 
+internal sealed class FleetUpdateEnvelope
+{
+    public FleetUpdateJob? Update { get; set; }
+}
+
+internal sealed class FleetUpdateJob
+{
+    public string Id { get; set; } = "";
+    public string ServerUpdateJobId { get; set; } = "";
+    public string InstanceId { get; set; } = "";
+    public string Action { get; set; } = "";
+    public string? SourceInstanceUpdateId { get; set; }
+    public string TargetVersion { get; set; } = "";
+    public string? TargetSha256 { get; set; }
+}
+
+internal sealed record EaApplyOutcome(string PreviousSha256);
+
+internal sealed class EaApplyException : Exception
+{
+    public string Code { get; }
+    public string? PreviousSha256 { get; }
+
+    public EaApplyException(string code, string? previousSha256 = null, Exception? inner = null)
+        : base(code, inner)
+    {
+        Code = code;
+        PreviousSha256 = previousSha256;
+    }
+}
+
 internal sealed class CloudJob
 {
     public string InstanceId { get; set; } = "";

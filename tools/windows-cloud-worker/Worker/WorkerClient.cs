@@ -16,7 +16,7 @@ internal sealed class WorkerClient : IDisposable
     public WorkerClient(WorkerConfig config)
     {
         _config = config;
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
         _http.DefaultRequestHeaders.Add("x-worker-key", config.WorkerKey);
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("SCENOVA-CloudWorker/" + WorkerLoop.Version);
     }
@@ -45,6 +45,21 @@ internal sealed class WorkerClient : IDisposable
             cancellationToken);
 
         response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<byte[]> DownloadUpdateArtifactAsync(
+        string instanceUpdateId,
+        CancellationToken cancellationToken)
+    {
+        var body = MergeRunner(new { instanceUpdateId });
+        using var response = await _http.PostAsJsonAsync(
+            _config.ApiBase.TrimEnd('/') + "/api/worker/updates/artifact",
+            body,
+            _json,
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
     }
 
     private Dictionary<string, object?> MergeRunner(object payload)

@@ -2,11 +2,12 @@ namespace Scenova.CloudWorker;
 
 internal sealed class WorkerLoop
 {
-    internal const string Version = "2.0.0";
+    internal const string Version = "2.1.0";
 
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;
     private readonly Mt5Runtime _mt5;
+    private readonly FleetUpdateManager _updates;
     private readonly string _statusPath;
 
     public WorkerLoop(WorkerConfig config, WorkerClient client)
@@ -14,6 +15,7 @@ internal sealed class WorkerLoop
         _config = config;
         _client = client;
         _mt5 = new Mt5Runtime(config);
+        _updates = new FleetUpdateManager(config, client, _mt5);
         _statusPath = Path.Combine(config.Root, "worker", "last-status.txt");
     }
 
@@ -46,6 +48,10 @@ internal sealed class WorkerLoop
                 var assigned = await _client.PostAsync<AssignedResponse>(
                     "assigned",
                     new { },
+                    cancellationToken);
+
+                await _updates.ProcessNextAsync(
+                    assigned.Jobs,
                     cancellationToken);
 
                 foreach (var job in assigned.Jobs)

@@ -51,6 +51,8 @@ import { OwnerManagementController, OwnerManagementService } from "./owner-manag
 import { PromotionService } from "./promotion.service";
 import { CloudServerAdminController, ServerEnrollmentController } from "./server-enrollment.controller";
 import { ServerEnrollmentService } from "./server-enrollment.service";
+import { CloudUpdateAdminController, CloudUpdateWorkerController } from "./cloud-update.controller";
+import { CloudUpdateService } from "./cloud-update.service";
 
 @Module({
   imports: [
@@ -59,8 +61,9 @@ import { ServerEnrollmentService } from "./server-enrollment.service";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
+  controllers: [CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
+    CloudUpdateService,
     ServerEnrollmentService,
     OwnerManagementService,
     PromotionService,

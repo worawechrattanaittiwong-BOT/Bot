@@ -55,6 +55,15 @@ jobs:
             throw "Cloud Worker provisioning self-test failed"
           }
 
+      - name: Verify Fleet Update package and rollback
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "cloud-worker-publish/SCENOVA-CloudWorker.exe" --fleet-update-self-test
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cloud Worker Fleet Update self-test failed"
+          }
+
       - name: Publish Cloud Setup with embedded Worker and EA
         shell: powershell
         run: |
@@ -93,7 +102,7 @@ jobs:
             exit 0
           }
 
-          git commit -m "[phase5-generated] build: publish validated Cloud Setup"
+          git commit -m "[phase6-generated] build: publish Fleet Update Cloud Setup"
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {

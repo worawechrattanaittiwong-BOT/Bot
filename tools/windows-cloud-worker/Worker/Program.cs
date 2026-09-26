@@ -14,6 +14,9 @@ internal static class Program
             if (args.Any(arg => string.Equals(arg, "--provision-self-test", StringComparison.OrdinalIgnoreCase)))
                 return ProvisioningSelfTest.Run();
 
+            if (args.Any(arg => string.Equals(arg, "--fleet-update-self-test", StringComparison.OrdinalIgnoreCase)))
+                return FleetUpdateSelfTest.Run();
+
             var configPath = WorkerConfig.ResolveConfigPath(args);
             var config = WorkerConfig.Load(configPath);
 

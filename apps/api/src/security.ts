@@ -94,10 +94,15 @@ export class WorkerGuard implements CanActivate {
     // assigned/provision/recovery work because that version can auto-restart a
     // missing terminal without Phase 4 server authorization.
     const controlPath = String(req.path || req.url || "");
-    const requiresHardeningProtocol = ["/assigned", "/claim-next", "/recovery-check", "/recovery-result"]
+    const requiresHardeningProtocol = ["/assigned", "/claim-next", "/recovery-check", "/recovery-result", "/updates/next", "/updates/result", "/updates/artifact"]
       .some(suffix => controlPath.endsWith(suffix));
     if (requiresHardeningProtocol && !this.versionAtLeast(node?.telemetry?.version, "1.2.0")) {
       throw new ForbiddenException("Cloud Worker v1.2.0+ required for provisioning and recovery");
+    }
+    const requiresFleetUpdateProtocol = ["/updates/next", "/updates/result", "/updates/artifact"]
+      .some(suffix => controlPath.endsWith(suffix));
+    if (requiresFleetUpdateProtocol && !this.versionAtLeast(node?.telemetry?.version, "2.1.0")) {
+      throw new ForbiddenException("Cloud Worker v2.1.0+ required for Fleet Update");
     }
     return true;
   }

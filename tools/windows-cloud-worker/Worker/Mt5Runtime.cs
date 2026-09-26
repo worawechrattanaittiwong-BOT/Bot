@@ -98,6 +98,134 @@ internal sealed class Mt5Runtime
         return new PreparedInstance(instancePath, terminal, presetPath, startupPath);
     }
 
+    public EaApplyOutcome ApplyEaUpdate(
+        CloudJob job,
+        FleetUpdateJob update,
+        string packagePath)
+    {
+        var prepared = PrepareInstanceFiles(job);
+        var currentEa = Path.Combine(
+            prepared.InstancePath,
+            "MQL5",
+            "Experts",
+            "FastBasketBot.ex5");
+
+        var backup = EaPackageStore.BackupCurrent(
+            _config.Root,
+            job.InstanceId,
+            update.Id,
+            currentEa);
+
+        if (!StopInstance(job.InstanceId))
+            throw new EaApplyException("PROCESS_STILL_RUNNING", backup.PreviousSha256);
+
+        try
+        {
+            EaPackageStore.ReplaceEa(
+                currentEa,
+                packagePath,
+                update.TargetSha256);
+
+            LaunchPrepared(prepared);
+            return new EaApplyOutcome(backup.PreviousSha256);
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                EaPackageStore.ReplaceEa(
+                    currentEa,
+                    backup.BackupPath,
+                    backup.PreviousSha256);
+                LaunchPrepared(prepared);
+                throw new EaApplyException(
+                    "UPDATE_FAILED_ROLLED_BACK",
+                    backup.PreviousSha256,
+                    ex);
+            }
+            catch (EaApplyException)
+            {
+                throw;
+            }
+            catch (Exception rollbackError)
+            {
+                throw new EaApplyException(
+                    "UPDATE_FAILED_ROLLBACK_FAILED",
+                    backup.PreviousSha256,
+                    rollbackError);
+            }
+        }
+    }
+
+    public EaApplyOutcome ApplyEaRollback(
+        CloudJob job,
+        FleetUpdateJob update)
+    {
+        if (string.IsNullOrWhiteSpace(update.SourceInstanceUpdateId))
+            throw new EaApplyException("ROLLBACK_SOURCE_REQUIRED");
+
+        var prepared = PrepareInstanceFiles(job);
+        var currentEa = Path.Combine(
+            prepared.InstancePath,
+            "MQL5",
+            "Experts",
+            "FastBasketBot.ex5");
+
+        var sourceBackup = EaPackageStore.BackupPath(
+            _config.Root,
+            job.InstanceId,
+            update.SourceInstanceUpdateId);
+
+        if (!File.Exists(sourceBackup))
+            throw new EaApplyException("ROLLBACK_BACKUP_MISSING");
+
+        var currentBackup = EaPackageStore.BackupCurrent(
+            _config.Root,
+            job.InstanceId,
+            update.Id,
+            currentEa);
+
+        if (!StopInstance(job.InstanceId))
+            throw new EaApplyException("PROCESS_STILL_RUNNING", currentBackup.PreviousSha256);
+
+        try
+        {
+            EaPackageStore.ReplaceEa(
+                currentEa,
+                sourceBackup,
+                update.TargetSha256);
+
+            LaunchPrepared(prepared);
+            return new EaApplyOutcome(currentBackup.PreviousSha256);
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                EaPackageStore.ReplaceEa(
+                    currentEa,
+                    currentBackup.BackupPath,
+                    currentBackup.PreviousSha256);
+                LaunchPrepared(prepared);
+                throw new EaApplyException(
+                    "ROLLBACK_FAILED_RESTORED_CURRENT",
+                    currentBackup.PreviousSha256,
+                    ex);
+            }
+            catch (EaApplyException)
+            {
+                throw;
+            }
+            catch (Exception restoreError)
+            {
+                throw new EaApplyException(
+                    "ROLLBACK_FAILED_RESTORE_FAILED",
+                    currentBackup.PreviousSha256,
+                    restoreError);
+            }
+        }
+    }
+
     public async Task ProcessCommandAsync(
         WorkerCommand command,
         WorkerClient client,
@@ -197,16 +325,7 @@ internal sealed class Mt5Runtime
             var prepared = PrepareInstanceFiles(job);
 
             if (!HasExactTerminal(prepared.TerminalPath))
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = prepared.TerminalPath,
-                    Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
-                    WorkingDirectory = prepared.InstancePath,
-                    UseShellExecute = true,
-                    WindowStyle = ProcessWindowStyle.Hidden
-                });
-            }
+                LaunchPrepared(prepared);
 
             if (recoveryAuthorized)
             {
@@ -252,6 +371,29 @@ internal sealed class Mt5Runtime
             }
             catch { }
         }
+    }
+
+    private void LaunchPrepared(PreparedInstance prepared)
+    {
+        if (HasExactTerminal(prepared.TerminalPath)) return;
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = prepared.TerminalPath,
+            Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
+            WorkingDirectory = prepared.InstancePath,
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        });
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(15);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (HasExactTerminal(prepared.TerminalPath)) return;
+            Thread.Sleep(250);
+        }
+
+        throw new InvalidOperationException("MT5_RESTART_FAILED");
     }
 
     private bool StopInstance(string instanceId)
