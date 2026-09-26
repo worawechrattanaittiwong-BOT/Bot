@@ -19,6 +19,13 @@ internal static class SetupSelfTest
             Directory.CreateDirectory(Path.Combine(root, "backups"));
             Directory.CreateDirectory(Path.Combine(root, "logs"));
 
+            var canonicalApi = Program.NormalizeApiBase("https://www.snvea-bot.online/backend/");
+            if (!string.Equals(
+                    canonicalApi,
+                    "https://snvea-bot.online/backend",
+                    StringComparison.Ordinal))
+                throw new InvalidOperationException("SCENOVA API canonicalization failed");
+
             var worker = PayloadInstaller.ExtractWorker(root);
             if (!File.Exists(worker) || new FileInfo(worker).Length < 64 * 1024)
                 throw new InvalidOperationException("embedded Worker extraction failed");
@@ -59,6 +66,7 @@ internal static class SetupSelfTest
             if (Directory.EnumerateDirectories(Path.Combine(root, "instances")).Any())
                 throw new InvalidOperationException("self-test touched customer instances");
 
+            Console.WriteLine("PASS: SCENOVA API URL is canonicalized to the non-www origin");
             Console.WriteLine("PASS: embedded Worker payload is valid");
             Console.WriteLine("PASS: MT5 template readiness validation is strict");
             Console.WriteLine("PASS: auto-start plan uses interactive logon and restart policy");
