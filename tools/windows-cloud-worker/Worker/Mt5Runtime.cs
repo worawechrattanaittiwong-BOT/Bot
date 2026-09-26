@@ -286,30 +286,39 @@ internal sealed class Mt5Runtime
             string.Equals(job.DesiredState, "STOPPED", StringComparison.OrdinalIgnoreCase) &&
             File.Exists(Path.Combine(instancePath, "cloud-provisioned")) &&
             TemplateReady &&
-            InstanceEaDiffersFromTemplate(instancePath))
+            (!_retryAfter.TryGetValue(job.InstanceId, out var repairRetryAt) ||
+             repairRetryAt <= DateTimeOffset.UtcNow))
         {
+            // A STOPPED Cloud instance with no fresh EA heartbeat must be able to
+            // self-repair even when its EA binary already matches the template.
+            // This covers the post-update case where MT5 is running but the EA
+            // was not attached from cloud-start.ini.
+            _retryAfter[job.InstanceId] = DateTimeOffset.UtcNow.AddSeconds(60);
+
             try
             {
                 if (!StopInstance(job.InstanceId))
                     return;
 
-                var templateEa = Path.Combine(
-                    _templatePath,
-                    "MQL5",
-                    "Experts",
-                    "FastBasketBot.ex5");
-                var instanceEa = Path.Combine(
-                    instancePath,
-                    "MQL5",
-                    "Experts",
-                    "FastBasketBot.ex5");
+                if (InstanceEaDiffersFromTemplate(instancePath))
+                {
+                    var templateEa = Path.Combine(
+                        _templatePath,
+                        "MQL5",
+                        "Experts",
+                        "FastBasketBot.ex5");
+                    var instanceEa = Path.Combine(
+                        instancePath,
+                        "MQL5",
+                        "Experts",
+                        "FastBasketBot.ex5");
 
-                Directory.CreateDirectory(Path.GetDirectoryName(instanceEa)!);
-                File.Copy(templateEa, instanceEa, overwrite: true);
+                    Directory.CreateDirectory(Path.GetDirectoryName(instanceEa)!);
+                    File.Copy(templateEa, instanceEa, overwrite: true);
+                }
 
                 var repaired = PrepareInstanceFiles(job);
                 LaunchPrepared(repaired);
-                _retryAfter[job.InstanceId] = DateTimeOffset.UtcNow.AddSeconds(60);
 
                 await client.PostAsync("provision-result", new
                 {
@@ -336,7 +345,14 @@ internal sealed class Mt5Runtime
         if (HasExactTerminal(terminal))
         {
             var startup = Path.Combine(instancePath, "cloud-start.ini");
-            if (job.EaOnline && File.Exists(startup))
+            // The assigned-job snapshot can still report EA online from the
+            // heartbeat that happened immediately before an update restart.
+            // Keep the startup file longer than the API's 30-second EA-online
+            // freshness window so that stale pre-restart state cannot delete it
+            // before the new MT5 process has attached FastBasketBot.
+            if (job.EaOnline &&
+                File.Exists(startup) &&
+                StartupConfigCleanupAllowed(startup))
             {
                 try { File.Delete(startup); } catch { }
             }
@@ -451,6 +467,19 @@ internal sealed class Mt5Runtime
         }
 
         throw new InvalidOperationException("MT5_RESTART_FAILED");
+    }
+
+    private static bool StartupConfigCleanupAllowed(string startupPath)
+    {
+        try
+        {
+            var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(startupPath);
+            return age >= TimeSpan.FromSeconds(35);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private bool StopInstance(string instanceId)
