@@ -10,7 +10,7 @@ namespace Scenova.CloudSetup;
 
 internal static class Program
 {
-    internal const string SetupVersion = "0.5.0";
+    internal const string SetupVersion = "0.5.1";
     private const string DefaultApiBase = "https://snvea-bot.online/backend";
     private const string RootPath = @"C:\BotTrading";
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("SCENOVA-CLOUD-WORKER-V1");
@@ -49,9 +49,10 @@ internal static class Program
                            ?? existing?.RunnerId
                            ?? Prompt("Server ID / Runner ID");
 
-            var apiBase = GetOption(options, "api")
-                          ?? existing?.ApiBase
-                          ?? Prompt("API URL", DefaultApiBase);
+            var apiBase = NormalizeApiBase(
+                GetOption(options, "api")
+                ?? existing?.ApiBase
+                ?? Prompt("API URL", DefaultApiBase));
 
             ValidateApiAndRunner(apiBase, runnerId);
 
@@ -85,7 +86,7 @@ internal static class Program
                 Console.WriteLine("พบ Server Enrollment เดิมแล้ว กำลังตรวจและ Repair โดยไม่ใช้ Token ซ้ำ");
             }
 
-            StampSetupVersion(configPath);
+            StampSetupVersion(configPath, apiBase);
 
             Mt5TemplateManager.Prepare(
                 RootPath,
@@ -165,11 +166,12 @@ internal static class Program
         File.Move(tempPath, path, true);
     }
 
-    private static void StampSetupVersion(string path)
+    private static void StampSetupVersion(string path, string apiBase)
     {
         var node = JsonNode.Parse(File.ReadAllText(path)) as JsonObject
             ?? throw new InvalidOperationException("Cloud Worker config ไม่ถูกต้อง");
 
+        node["ApiBase"] = NormalizeApiBase(apiBase);
         node["SetupVersion"] = SetupVersion;
 
         var tempPath = path + ".setup";
@@ -311,6 +313,22 @@ internal static class Program
             await Task.Delay(TimeSpan.FromSeconds(attempt));
         }
         throw new InvalidOperationException("Server enrollment ไม่สำเร็จ");
+    }
+
+    internal static string NormalizeApiBase(string apiBase)
+    {
+        var normalized = (apiBase ?? string.Empty).Trim().TrimEnd('/');
+        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+            return normalized;
+
+        if (!string.Equals(uri.Host, "www.snvea-bot.online", StringComparison.OrdinalIgnoreCase))
+            return normalized;
+
+        var builder = new UriBuilder(uri)
+        {
+            Host = "snvea-bot.online"
+        };
+        return builder.Uri.AbsoluteUri.TrimEnd('/');
     }
 
     private static void ValidateApiAndRunner(string apiBase, string runnerId)
