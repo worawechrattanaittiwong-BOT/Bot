@@ -355,8 +355,9 @@ export class TrialCouponController {
 
     const phone = await this.boundPhone(userId);
     const msisdn = phone?.e164 ? String(phone.e164) : null;
-    const phoneHash = msisdn ? this.phoneHash(msisdn) : null;
-    const check = await this.eligibility(userId, phoneHash);
+    const candidatePhoneHash = msisdn ? this.phoneHash(msisdn) : null;
+    const verifiedPhoneHash = phone?.verified_at ? candidatePhoneHash : null;
+    const check = await this.eligibility(userId, verifiedPhoneHash);
     if (!check.allowed) throw new ConflictException(check.message);
 
     const latest = await this.db.one(
@@ -386,7 +387,7 @@ export class TrialCouponController {
          AND purpose='TRIAL'
          AND status IN ('SENT','USED')
          AND created_at>now()-interval '24 hours'`,
-      [userId, phoneHash]
+      [userId, candidatePhoneHash]
     );
     if (Number(todayCount?.count || 0) >= MAX_SENDS_PER_DAY) {
       throw new HttpException(
@@ -426,7 +427,7 @@ export class TrialCouponController {
        )
        VALUES($1,$2,$3,$4,$5,'PENDING','PENDING',now()+interval '10 minutes',$6,'TRIAL','EMAIL',$7)
        RETURNING id`,
-      [userId, phoneHash, last4, this.codeHash(salt, otpCode), salt, ip, emailMasked]
+      [userId, candidatePhoneHash, last4, this.codeHash(salt, otpCode), salt, ip, emailMasked]
     );
 
     let deliveryChannel: "EMAIL" | "SMS" = "EMAIL";
@@ -511,7 +512,6 @@ export class TrialCouponController {
     const userId = String(req.user.sub);
     const phone = await this.boundPhone(userId);
     const msisdn = phone?.e164 ? String(phone.e164) : null;
-    const phoneHash = msisdn ? this.phoneHash(msisdn) : null;
     const code = String(body.code || "").replace(/\D/g, "").slice(0, 6);
     if (code.length !== 6) throw new BadRequestException("กรุณากรอกรหัส 6 หลัก");
 
@@ -547,19 +547,23 @@ export class TrialCouponController {
       throw new BadRequestException("OTP ไม่ถูกต้อง");
     }
 
-    const check = await this.eligibility(userId, phoneHash);
+    const deliveredBySms = String(record.delivery_channel || "SMS").toUpperCase() === "SMS";
+    const authorizedPhoneHash =
+      msisdn && (deliveredBySms || Boolean(phone?.verified_at))
+        ? this.phoneHash(msisdn)
+        : null;
+    const check = await this.eligibility(userId, authorizedPhoneHash);
     if (!check.allowed) throw new ConflictException(check.message);
 
     const identities = await this.currentIdentity(userId);
     const mt5 = identities.find((item: any) => item.mt5_account_id) || null;
-    const deliveredBySms = String(record.delivery_channel || "SMS").toUpperCase() === "SMS";
     const result = await this.trials.authorizeUser({
       userId,
       days: this.trialDays(),
       approvedBy: deliveredBySms ? "SMS_TRIAL" : "EMAIL_TRIAL",
       mt5AccountId: mt5?.mt5_account_id || null,
-      phoneHash,
-      phoneLast4: msisdn ? msisdn.slice(-4) : null,
+      phoneHash: authorizedPhoneHash,
+      phoneLast4: authorizedPhoneHash && msisdn ? msisdn.slice(-4) : null,
       source: deliveredBySms ? "SMS" : "EMAIL"
     });
 
