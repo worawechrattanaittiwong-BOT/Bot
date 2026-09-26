@@ -299,8 +299,8 @@ export class AccountSecurityController {
        LIMIT 1`,
       [user.id]
     );
-    if (trialLock && existing) {
-      throw new ConflictException("เบอร์โทรถูกล็อกกับสิทธิ์ Trial แล้ว ไม่สามารถเปลี่ยนได้");
+    if (trialLock && existing?.verified_at) {
+      throw new ConflictException("เบอร์โทรที่ยืนยัน OTP และผูกกับสิทธิ์ Trial แล้วไม่สามารถเปลี่ยนได้");
     }
 
     const owner = await this.db.one(
