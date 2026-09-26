@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 
 namespace Scenova.CloudWorker;
 
@@ -28,6 +29,13 @@ internal sealed class ServerUpdateManager
             var bytes = await _client.DownloadServerSetupAsync(
                 update.SetupUrl,
                 cancellationToken);
+
+            var actualSha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+            if (!string.Equals(
+                    actualSha,
+                    update.TargetSetupSha256,
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("SERVER_UPDATE_HASH_MISMATCH");
 
             var packageDir = Path.Combine(_config.Root, "packages", "server");
             Directory.CreateDirectory(packageDir);

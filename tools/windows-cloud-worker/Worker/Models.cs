@@ -40,6 +40,7 @@ internal sealed class ServerSoftwareUpdateJob
     public string Id { get; set; } = "";
     public string TargetWorkerVersion { get; set; } = "";
     public string TargetSetupVersion { get; set; } = "";
+    public string TargetSetupSha256 { get; set; } = "";
     public string SetupUrl { get; set; } = "";
 }
 

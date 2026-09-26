@@ -21,10 +21,40 @@ export class ServerSoftwareUpdateService {
     private readonly cloudUpdates: CloudUpdateService
   ) {}
 
+  private async publishedRelease() {
+    try {
+      const response = await fetch(CLOUD_SERVER_RELEASE.manifestUrl, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000)
+      });
+      if (!response.ok) throw new Error("manifest unavailable");
+      const manifest: any = await response.json();
+      const workerVersion = String(manifest?.workerVersion || "").trim();
+      const setupVersion = String(manifest?.setupVersion || "").trim();
+      const setupSha256 = String(manifest?.setupSha256 || "").trim().toLowerCase();
+
+      if (
+        !versionExact(workerVersion, CLOUD_SERVER_RELEASE.workerVersion) ||
+        !versionExact(setupVersion, CLOUD_SERVER_RELEASE.setupVersion) ||
+        !/^[0-9a-f]{64}$/.test(setupSha256)
+      ) {
+        throw new Error("manifest version mismatch");
+      }
+
+      return { workerVersion, setupVersion, setupSha256 };
+    } catch {
+      throw new ConflictException(
+        "Cloud Setup รุ่นล่าสุดยัง Build/Publish ไม่เสร็จ กรุณารอสักครู่แล้วกดอัปเดตอีกครั้ง"
+      );
+    }
+  }
+
   async create(runnerId: string, actor: string) {
     if (!/^[a-zA-Z0-9_-]{3,80}$/.test(runnerId || "")) {
       throw new BadRequestException("Invalid Runner ID");
     }
+
+    const published = await this.publishedRelease();
 
     const job = await this.db.transaction(async tx => {
       const node = (await tx.query(
@@ -59,12 +89,13 @@ export class ServerSoftwareUpdateService {
       if (active) throw new ConflictException("Server นี้มีงานอัปเดตกำลังดำเนินการอยู่");
 
       const created = (await tx.query(
-        "INSERT INTO server_software_update_jobs(runner_id,target_worker_version,target_setup_version,setup_url,state,original_accepting_jobs,created_by) VALUES($1,$2,$3,$4,'REQUESTED',$5,$6) RETURNING *",
+        "INSERT INTO server_software_update_jobs(runner_id,target_worker_version,target_setup_version,setup_url,setup_sha256,state,original_accepting_jobs,created_by) VALUES($1,$2,$3,$4,$5,'REQUESTED',$6,$7) RETURNING *",
         [
           runnerId,
-          CLOUD_SERVER_RELEASE.workerVersion,
-          CLOUD_SERVER_RELEASE.setupVersion,
+          published.workerVersion,
+          published.setupVersion,
           CLOUD_SERVER_RELEASE.setupUrl,
+          published.setupSha256,
           Boolean(node.accepting_jobs),
           actor
         ]
@@ -137,6 +168,7 @@ export class ServerSoftwareUpdateService {
           id: job.id,
           targetWorkerVersion: job.target_worker_version,
           targetSetupVersion: job.target_setup_version,
+          targetSetupSha256: job.setup_sha256,
           setupUrl: job.setup_url
         }
       };

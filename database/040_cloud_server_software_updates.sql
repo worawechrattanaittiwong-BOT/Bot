@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS server_software_update_jobs (
   target_worker_version varchar(32) NOT NULL,
   target_setup_version varchar(32) NOT NULL,
   setup_url text NOT NULL,
+  setup_sha256 varchar(64),
   state varchar(24) NOT NULL DEFAULT 'REQUESTED'
     CHECK(state IN ('REQUESTED','DELIVERED','RESTARTING','COMPLETED','FAILED')),
   original_accepting_jobs boolean NOT NULL DEFAULT false,
@@ -16,6 +17,9 @@ CREATE TABLE IF NOT EXISTS server_software_update_jobs (
   started_at timestamptz,
   completed_at timestamptz
 );
+
+ALTER TABLE server_software_update_jobs
+  ADD COLUMN IF NOT EXISTS setup_sha256 varchar(64);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_server_software_update_one_active
 ON server_software_update_jobs(runner_id)

@@ -81,6 +81,27 @@ jobs:
             throw "SCENOVA-Cloud-Setup.exe was not produced"
           }
 
+      - name: Generate Cloud Server release manifest
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $setupSource = Get-Content "tools/windows-cloud-worker/Setup/Program.cs" -Raw
+          $workerSource = Get-Content "tools/windows-cloud-worker/Worker/WorkerLoop.cs" -Raw
+          if ($setupSource -notmatch 'SetupVersion\s*=\s*"([^"]+)"') { throw "SetupVersion not found" }
+          $setupVersion = $Matches[1]
+          if ($workerSource -notmatch 'Version\s*=\s*"([^"]+)"') { throw "Worker Version not found" }
+          $workerVersion = $Matches[1]
+          $setupSha = (Get-FileHash "cloud-setup-publish/SCENOVA-Cloud-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $workerSha = (Get-FileHash "cloud-worker-publish/SCENOVA-CloudWorker.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = [ordered]@{
+            setupVersion = $setupVersion
+            workerVersion = $workerVersion
+            setupSha256 = $setupSha
+            workerSha256 = $workerSha
+            builtAt = (Get-Date).ToUniversalTime().ToString("O")
+          } | ConvertTo-Json
+          Set-Content -Path "cloud-setup-publish/SCENOVA-Cloud-Server.json" -Value $manifest -Encoding utf8
+
       - name: Verify Cloud Setup infrastructure self-test
         shell: powershell
         run: |
@@ -96,6 +117,7 @@ jobs:
           name: SCENOVA-Cloud-Server
           path: |
             cloud-setup-publish/SCENOVA-Cloud-Setup.exe
+            cloud-setup-publish/SCENOVA-Cloud-Server.json
             cloud-worker-publish/SCENOVA-CloudWorker.exe
           if-no-files-found: error
 
@@ -105,6 +127,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $setupPayload = (Resolve-Path "cloud-setup-publish/SCENOVA-Cloud-Setup.exe").Path
+          $manifestPayload = (Resolve-Path "cloud-setup-publish/SCENOVA-Cloud-Server.json").Path
           $workerPayload = (Resolve-Path "cloud-worker-publish/SCENOVA-CloudWorker.exe").Path
 
           git config user.name "scenova-build"
@@ -124,8 +147,9 @@ jobs:
             # auto-merge those executable files.
             git reset --hard origin/main
             Copy-Item -Force $setupPayload "apps/web/public/downloads/SCENOVA-Cloud-Setup.exe"
+            Copy-Item -Force $manifestPayload "apps/web/public/downloads/SCENOVA-Cloud-Server.json"
             Copy-Item -Force $workerPayload "apps/web/public/downloads/SCENOVA-CloudWorker.exe"
-            git add "apps/web/public/downloads/SCENOVA-Cloud-Setup.exe" "apps/web/public/downloads/SCENOVA-CloudWorker.exe"
+            git add "apps/web/public/downloads/SCENOVA-Cloud-Setup.exe" "apps/web/public/downloads/SCENOVA-Cloud-Server.json" "apps/web/public/downloads/SCENOVA-CloudWorker.exe"
 
             git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) {

@@ -165,11 +165,12 @@ validate_generated_cloud_setup_shape() {
   while IFS= read -r file; do
     [ -z "$file" ] && continue
     case "$file" in
-      apps/web/public/downloads/SCENOVA-Cloud-Setup.exe|apps/web/public/downloads/SCENOVA-CloudWorker.exe) ;;
+      apps/web/public/downloads/SCENOVA-Cloud-Setup.exe|apps/web/public/downloads/SCENOVA-Cloud-Server.json|apps/web/public/downloads/SCENOVA-CloudWorker.exe) ;;
       *) return 1 ;;
     esac
   done <<< "$changed"
   git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-Cloud-Setup.exe" 2>/dev/null || return 1
+  git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-Cloud-Server.json" 2>/dev/null || return 1
   git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-CloudWorker.exe" 2>/dev/null || return 1
   return 0
 }
