@@ -34,8 +34,39 @@ foreach ($required in @('manifestBoundToArtifact','configuredVersionIsSafeFallba
 $manifestPath = 'mt5/release/manifest.json'
 if (-not (Test-Path $manifestPath)) { throw "Missing release manifest: $manifestPath" }
 $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-Assert-Equal ([string]$manifest.eaVersion) $eaRelease 'Manifest EA'
-Assert-Equal ([string]$manifest.runtimeContract) $eaRuntimeContract 'Manifest runtime contract'
+$manifestEaRelease = [string]$manifest.eaVersion
+$manifestRuntimeContract = [string]$manifest.runtimeContract
+Assert-SemVer $manifestEaRelease 'Manifest EA'
+
+# The EX5/manifest is produced asynchronously by Build MT5 EA after a source
+# commit. On that source commit only, the checked-in artifact may legitimately
+# still describe the previous EA. CI must validate that the old artifact is
+# internally intact while the dedicated Windows builder compiles/publishes the
+# new version. Every commit that does NOT change EA source must have exact
+# source/API/artifact version alignment.
+$eaSourceChanged = $false
+try {
+  $changedEaPaths = @(
+    git diff --name-only HEAD^ HEAD -- mt5/FastBasketBot.mq5 mt5/include 2>$null
+  )
+  if ($LASTEXITCODE -eq 0) {
+    $eaSourceChanged = @($changedEaPaths | Where-Object { $_ -match '^mt5/(FastBasketBot\.mq5|include/)' }).Count -gt 0
+  }
+} catch {
+  $eaSourceChanged = $false
+}
+
+$artifactMatchesSource =
+  $manifestEaRelease -eq $eaRelease -and
+  $manifestRuntimeContract -eq $eaRuntimeContract
+
+if (-not $artifactMatchesSource) {
+  if (-not $eaSourceChanged) {
+    throw "EA artifact metadata is stale without an EA source change: source=$eaRelease manifest=$manifestEaRelease"
+  }
+  Write-Host "EA artifact publication pending for source commit: source=$eaRelease manifest=$manifestEaRelease"
+}
+
 $releaseHash = (Get-FileHash -Algorithm SHA256 'mt5/release/FastBasketBot.ex5').Hash.ToLowerInvariant()
 $manifestHash = ([string]$manifest.sha256).ToLowerInvariant()
 Assert-Equal $manifestHash $releaseHash 'Manifest EX5 hash'
