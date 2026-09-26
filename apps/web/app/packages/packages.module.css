@@ -294,6 +294,28 @@
   background:#090f18;
   padding:13px
 }
+.deliveryNote{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:11px;
+  border:1px solid rgba(108,89,196,.28);
+  border-radius:10px;
+  background:linear-gradient(135deg,rgba(48,39,101,.22),rgba(10,15,24,.78));
+  padding:11px 12px
+}
+.deliveryNote b{
+  display:block;
+  color:#e9e6f8;
+  font-size:12.5px
+}
+.deliveryNote span{
+  display:block;
+  margin-top:4px;
+  color:#8d96aa;
+  font-size:11.5px;
+  line-height:1.6
+}
 .otpMeta{
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
