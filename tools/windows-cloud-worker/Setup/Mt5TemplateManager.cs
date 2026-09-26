@@ -22,7 +22,13 @@ internal static class Mt5TemplateManager
 
         if (IsReady(root))
         {
-            Console.WriteLine("MT5 Template พร้อมอยู่แล้ว ข้ามการสร้างใหม่");
+            var currentEa = Path.Combine(
+                target,
+                "MQL5",
+                "Experts",
+                "FastBasketBot.ex5");
+            PayloadInstaller.ExtractEa(currentEa);
+            Console.WriteLine("MT5 Template พร้อมอยู่แล้ว · รีเฟรช EA จาก Setup รุ่นล่าสุดแล้ว");
             return;
         }
 
@@ -66,7 +72,9 @@ internal static class Mt5TemplateManager
         Console.WriteLine();
         Console.WriteLine("MT5 Template ถูกเตรียมอัตโนมัติแล้ว");
         Console.WriteLine("MetaTrader 5 กำหนดให้ผู้ใช้เพิ่ม WebRequest URL จาก Tools > Options > Expert Advisors ด้วยตนเอง");
-        Console.WriteLine($"เพิ่ม URL นี้: {apiBase.TrimEnd('/')}");
+        var allowedOrigin = ApiOrigin(apiBase);
+        Console.WriteLine($"เพิ่ม URL นี้: {allowedOrigin}");
+        Console.WriteLine($"API path ที่ EA ใช้: {apiBase.TrimEnd('/')}");
         Console.WriteLine("เปิด Allow WebRequest for listed URL และเปิด Algo Trading จากนั้นปิด MT5 Template");
         Console.WriteLine();
 
@@ -93,6 +101,14 @@ internal static class Mt5TemplateManager
             new UTF8Encoding(false));
 
         Console.WriteLine("✅ MT5 Template พร้อมใช้งาน");
+    }
+
+    private static string ApiOrigin(string apiBase)
+    {
+        if (!Uri.TryCreate(apiBase, UriKind.Absolute, out var uri))
+            return apiBase.TrimEnd('/');
+
+        return uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
     }
 
     private static string ResolveTerminal(string? explicitSource)

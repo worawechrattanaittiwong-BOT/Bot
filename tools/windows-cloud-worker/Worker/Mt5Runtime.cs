@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Security.Cryptography;
 
 namespace Scenova.CloudWorker;
 
@@ -276,6 +277,62 @@ internal sealed class Mt5Runtime
         var instancePath = GetInstancePath(job.InstanceId);
         var terminal = Path.Combine(instancePath, "terminal64.exe");
 
+        // Bootstrap repair for Cloud instances that have never managed to
+        // heartbeat. Once the customer/server control state is STOPPED, it is
+        // safe to refresh only this terminal's EA from the verified template.
+        // This breaks the deadlock where an old/broken EA cannot heartbeat and
+        // therefore cannot qualify for the normal deferred fleet-update path.
+        if (!job.EaOnline &&
+            string.Equals(job.DesiredState, "STOPPED", StringComparison.OrdinalIgnoreCase) &&
+            File.Exists(Path.Combine(instancePath, "cloud-provisioned")) &&
+            TemplateReady &&
+            InstanceEaDiffersFromTemplate(instancePath))
+        {
+            try
+            {
+                if (!StopInstance(job.InstanceId))
+                    return;
+
+                var templateEa = Path.Combine(
+                    _templatePath,
+                    "MQL5",
+                    "Experts",
+                    "FastBasketBot.ex5");
+                var instanceEa = Path.Combine(
+                    instancePath,
+                    "MQL5",
+                    "Experts",
+                    "FastBasketBot.ex5");
+
+                Directory.CreateDirectory(Path.GetDirectoryName(instanceEa)!);
+                File.Copy(templateEa, instanceEa, overwrite: true);
+
+                var repaired = PrepareInstanceFiles(job);
+                LaunchPrepared(repaired);
+                _retryAfter[job.InstanceId] = DateTimeOffset.UtcNow.AddSeconds(60);
+
+                await client.PostAsync("provision-result", new
+                {
+                    instanceId = job.InstanceId,
+                    errorCode = ""
+                }, cancellationToken);
+                return;
+            }
+            catch
+            {
+                try
+                {
+                    await client.PostAsync("provision-result", new
+                    {
+                        instanceId = job.InstanceId,
+                        errorCode = "CHECK_TEMPLATE_OR_TERMINAL"
+                    }, cancellationToken);
+                }
+                catch { }
+                return;
+            }
+        }
+
         if (HasExactTerminal(terminal))
         {
             var startup = Path.Combine(instancePath, "cloud-start.ini");
@@ -428,6 +485,29 @@ internal sealed class Mt5Runtime
             throw new InvalidOperationException("Invalid instance path");
 
         return path;
+    }
+
+    private bool InstanceEaDiffersFromTemplate(string instancePath)
+    {
+        var templateEa = Path.Combine(
+            _templatePath,
+            "MQL5",
+            "Experts",
+            "FastBasketBot.ex5");
+        var instanceEa = Path.Combine(
+            instancePath,
+            "MQL5",
+            "Experts",
+            "FastBasketBot.ex5");
+
+        if (!File.Exists(templateEa) || !File.Exists(instanceEa))
+            return true;
+
+        using var left = File.OpenRead(templateEa);
+        using var right = File.OpenRead(instanceEa);
+        var leftHash = SHA256.HashData(left);
+        var rightHash = SHA256.HashData(right);
+        return !leftHash.SequenceEqual(rightHash);
     }
 
     private bool HasExactTerminal(string terminalPath) =>

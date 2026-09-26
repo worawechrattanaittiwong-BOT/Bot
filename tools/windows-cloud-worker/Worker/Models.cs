@@ -79,6 +79,7 @@ internal sealed class CloudJob
 {
     public string InstanceId { get; set; } = "";
     public bool EaOnline { get; set; }
+    public string DesiredState { get; set; } = "STOPPED";
     public JsonElement AccountNumber { get; set; }
     public string BrokerServer { get; set; } = "";
     public long ExecutionGeneration { get; set; }
