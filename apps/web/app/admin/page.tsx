@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { adminApi } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
@@ -558,12 +557,18 @@ export default function AdminPage() {
               </div>
             </section>
 
+            <section className="owner-kpi-grid">
+              <OwnerKpi label="ผู้ใช้ทั้งหมด" value={system?.users?.total ?? "—"} meta="บัญชีที่ยังใช้งานในระบบ" tone="blue"/>
+              <OwnerKpi label="ผู้ใช้ Active" value={system?.users?.active ?? "—"} meta="พร้อมใช้งาน" tone="green"/>
+              <OwnerKpi label="Bots Running" value={system?.bots?.running ?? "—"} meta="กำลังทำงาน" tone="purple"/>
+              <OwnerKpi label="Bots Offline" value={system?.bots?.offline ?? "—"} meta={(system?.slots?.active ?? 0) + " access records active"} tone={(system?.bots?.offline||0)>0?"red":"neutral"}/>
+            </section>
+
             <section className={"owner-card owner-maintenance-card status-" + String(maintenance.status || "OFF").toLowerCase()}>
               <div className="owner-card-head owner-maintenance-head">
                 <div>
-                  <span className="owner-card-kicker">SAFE UPDATE CONTROL</span>
-                  <h3>ประกาศและปิดระบบเพื่ออัปเดตอย่างปลอดภัย</h3>
-                  <p className="muted">แจ้งลูกค้าล่วงหน้า → ถึงเวลาระบบบล็อก Start → ปิด Position ที่ยังค้าง → รอทุกบัญชีหยุด → จึงเข้าสู่ Maintenance</p>
+                  <span className="owner-card-kicker">MAINTENANCE</span>
+                  <h3>กำหนดช่วงปิดปรับปรุงระบบ</h3>
                 </div>
                 <span className={"owner-maintenance-state " + String(maintenance.status || "OFF").toLowerCase()}>{maintenance.status || "OFF"}</span>
               </div>
@@ -585,23 +590,25 @@ export default function AdminPage() {
 
               <div className="owner-force-flat-panel">
                 <div>
-                  <span className="owner-card-kicker">OWNER EMERGENCY CONTROL</span>
-                  <b>🚨 FORCE FLAT ALL ACCOUNTS</b>
-                  <small>บล็อก Start ทันที → STOP ทุก Bot → ส่ง CLOSE_ALL → Retry ระหว่าง DRAINING → รอ MT5/EA ยืนยัน Position = 0</small>
-                  <small>คำสั่ง CLOSE_ALL จะไม่ถูกทำเครื่องหมายว่าสำเร็จจากฝั่ง Server เอง และบัญชี Local ที่ออฟไลน์จะยังคงรอคำสั่งเมื่อกลับมาออนไลน์</small>
+                  <span className="owner-card-kicker">EMERGENCY</span>
+                  <b>ปิดทุก Position ทุกบัญชี</b>
                 </div>
                 <button className="btn danger owner-force-flat-button" disabled={maintenanceBusy} onClick={forceFlatAllAccounts}>
-                  {maintenanceBusy ? "กำลังดำเนินการ..." : "🚨 FORCE FLAT ALL ACCOUNTS"}
+                  {maintenanceBusy ? "กำลังดำเนินการ..." : "FORCE FLAT ALL"}
                 </button>
               </div>
 
               <div className="owner-maintenance-form">
-                <div className="field"><label>หัวข้อประกาศ</label><input className="input" value={maintenanceTitle} onChange={e=>setMaintenanceTitle(e.target.value)} /></div>
-                <div className="field maintenance-message"><label>ข้อความแจ้งลูกค้า</label><input className="input" value={maintenanceMessage} onChange={e=>setMaintenanceMessage(e.target.value)} /></div>
-                <div className="field"><label>วัน/เวลา Maintenance</label><input className="input" type="datetime-local" value={maintenanceAt} onChange={e=>setMaintenanceAt(e.target.value)} /></div>
-                <div className="field"><label>เวลาบังคับ Close All</label><input className="input" type="datetime-local" value={forceCloseAt} onChange={e=>setForceCloseAt(e.target.value)} /><div className="help">เว้นว่าง = เวลาเดียวกับ Maintenance</div></div>
-                <div className="field"><label>คาดว่าจะเปิดระบบ</label><input className="input" type="datetime-local" value={expectedResumeAt} onChange={e=>setExpectedResumeAt(e.target.value)} /></div>
-                <label className="owner-maintenance-check"><input type="checkbox" checked={maintenanceForceClose} onChange={e=>setMaintenanceForceClose(e.target.checked)} /><span><b>บังคับปิด Position ที่ยังค้าง</b><small>เมื่อถึงกำหนด ระบบส่ง Close All และไม่เปิดรอบใหม่</small></span></label>
+                <div className="owner-maintenance-copy">
+                  <div className="field"><label>หัวข้อประกาศ</label><input className="input" value={maintenanceTitle} onChange={e=>setMaintenanceTitle(e.target.value)} /></div>
+                  <div className="field"><label>ข้อความแจ้งลูกค้า</label><input className="input" value={maintenanceMessage} onChange={e=>setMaintenanceMessage(e.target.value)} /></div>
+                </div>
+                <div className="owner-maintenance-dates">
+                  <div className="field"><label>วัน/เวลา Maintenance</label><input className="input owner-date-input" type="datetime-local" value={maintenanceAt} onClick={e=>e.currentTarget.showPicker?.()} onFocus={e=>e.currentTarget.showPicker?.()} onChange={e=>setMaintenanceAt(e.target.value)} /></div>
+                  <div className="field"><label>เวลาบังคับ Close All</label><input className="input owner-date-input" type="datetime-local" value={forceCloseAt} onClick={e=>e.currentTarget.showPicker?.()} onFocus={e=>e.currentTarget.showPicker?.()} onChange={e=>setForceCloseAt(e.target.value)} /></div>
+                  <div className="field"><label>คาดว่าจะเปิดระบบ</label><input className="input owner-date-input" type="datetime-local" value={expectedResumeAt} onClick={e=>e.currentTarget.showPicker?.()} onFocus={e=>e.currentTarget.showPicker?.()} onChange={e=>setExpectedResumeAt(e.target.value)} /></div>
+                </div>
+                <label className="owner-maintenance-check"><input type="checkbox" checked={maintenanceForceClose} onChange={e=>setMaintenanceForceClose(e.target.checked)} /><span><b>บังคับปิด Position ที่ยังค้าง</b></span></label>
               </div>
 
               <div className="owner-maintenance-actions">
@@ -616,7 +623,6 @@ export default function AdminPage() {
                   <div className="owner-maintenance-blockers-head">
                     <div>
                       <b>บัญชีที่ยังต้องเคลียร์ก่อนอัปเดต</b>
-                      <small>ค้นหาด้วย User ID, เลข MT5, Broker Server หรือสถานะ</small>
                     </div>
                     <div className="owner-maintenance-search">
                       <input
@@ -652,36 +658,6 @@ export default function AdminPage() {
               )}
             </section>
 
-            <section className="owner-kpi-grid">
-              <OwnerKpi label="ผู้ใช้ทั้งหมด" value={system?.users?.total ?? "—"} meta="บัญชีที่ยังใช้งานในระบบ" tone="blue"/>
-              <OwnerKpi label="ผู้ใช้ Active" value={system?.users?.active ?? "—"} meta="พร้อมใช้งาน" tone="green"/>
-              <OwnerKpi label="Bots Running" value={system?.bots?.running ?? "—"} meta="กำลังทำงาน" tone="purple"/>
-              <OwnerKpi label="Bots Offline" value={system?.bots?.offline ?? "—"} meta={(system?.slots?.active ?? 0) + " access records active"} tone={(system?.bots?.offline||0)>0?"red":"neutral"}/>
-            </section>
-
-            <div className="owner-overview-grid">
-              <section className="owner-card">
-                <div className="owner-card-head">
-                  <div><span className="owner-card-kicker">QUICK ACTIONS</span><h3>งานที่ใช้บ่อย</h3></div>
-                </div>
-                <div className="owner-action-list">
-                  <button onClick={()=>switchMenu("customers")}><span className="action-icon">◎</span><div><b>จัดการลูกค้า & สมาชิก</b><small>Trial / เปิดสมาชิก / ต่ออายุ / Suspend / Delete</small></div><span>→</span></button>
-                  <Link href="/dashboard?view=overview"><span className="action-icon purple">▣</span><div><b>เปิด Control Center ของฉัน</b><small>ดู Balance, Status, Start / Stop และ Log</small></div><span>→</span></Link>
-                  <button onClick={()=>switchMenu("workers")}><span className="action-icon">⌁</span><div><b>ตรวจ Cloud Trading Nodes</b><small>ดู Online, Capacity และ Last Seen</small></div><span>→</span></button>
-                </div>
-              </section>
-
-              <section className="owner-card">
-                <div className="owner-card-head">
-                  <div><span className="owner-card-kicker">INFRASTRUCTURE</span><h3>สถานะการให้บริการ</h3></div>
-                </div>
-                <div className="owner-service-list">
-                  <div><span className="service-icon">W</span><div><b>Cloud Workers</b><small>{workersOnline} online จาก {workersTotal} node</small></div><span className={"service-state "+(workersOnline>0?"ok":"idle")}>{workersOnline>0?"ONLINE":"WAITING"}</span></div>
-                  <div><span className="service-icon purple">B</span><div><b>Bot Instances</b><small>{system?.bots?.total || 0} instances ทั้งหมด</small></div><span className="service-state ok">{system?.bots?.running || 0} RUNNING</span></div>
-                  <div><span className="service-icon">U</span><div><b>User Access</b><small>{system?.users?.active || 0} active accounts</small></div><span className="service-state ok">READY</span></div>
-                </div>
-              </section>
-            </div>
           </>
         )}
 
