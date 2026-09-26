@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.74"
-#define SCENOVA_EA_VERSION "1.0.74"
-#define SCENOVA_PRODUCT_VERSION "1.0.74"
+#property version   "1.0.75"
+#define SCENOVA_EA_VERSION "1.0.75"
+#define SCENOVA_PRODUCT_VERSION "1.0.75"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -166,7 +166,9 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define LOCAL_EXECUTION_NETWORK_QUIET_MS 300
 #define LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS 5000
 #define LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS 120
-#define LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS 500
+#define LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS 1200
+#define FLAT_HEARTBEAT_HTTP_TIMEOUT_MS 4000
+#define FLAT_HEARTBEAT_RETRY_DELAY_MS 100
 #define ZERO_GRID_JOURNAL_FORCE_INTERVAL_MS 3000
 #define ZERO_GRID_JOURNAL_HTTP_TIMEOUT_MS 500
 #define LOCAL_DYNAMIC_PROTECTION_INTERVAL_MS 150
@@ -5451,6 +5453,24 @@ int ExecutionAwareHttpTimeoutMs(const int flatTimeoutMs)
    return MathMax(LOCAL_EXECUTION_LIVE_HTTP_TIMEOUT_MS,flatTimeoutMs);
 }
 
+int HeartbeatHttpTimeoutMs()
+{
+   if(LocalExecutionExposureActive())
+      return LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS;
+   return FLAT_HEARTBEAT_HTTP_TIMEOUT_MS;
+}
+
+bool IsRealHttpStatus(const int code)
+{
+   return code>=100 && code<=599;
+}
+
+bool IsHttpTransportFailure(const int code,const int transportError)
+{
+   return !IsRealHttpStatus(code) ||
+          (transportError>=5200 && transportError<=5203);
+}
+
 void QueueDeferredDealJournal(const ulong dealTicket,const bool rescueDeal)
 {
    if(dealTicket==0 || MQLInfoInteger(MQL_TESTER))
@@ -6094,15 +6114,36 @@ void SendHeartbeat()
       heartbeatUrl,
       payload,
       response,
-      MathMax(LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS, ExecutionAwareHttpTimeoutMs(1200))
+      HeartbeatHttpTimeoutMs(),
+      true
    );
-   g_lastHeartbeatLatencyMs = (long)(GetTickCount64() - heartbeatStartedMs);
-   g_lastHeartbeatHttpStatus = code;
-   if(code > 0)
-      g_lastServerContactAt = TimeCurrent();
    int webError = g_lastHttpTransportError;
 
-   if(code < 200 || code >= 300)
+   // MT5 can occasionally return a non-HTTP positive value such as 1003
+   // together with ERR_WEBREQUEST_REQUEST_FAILED (5203). That is transport
+   // failure, not proof that SCENOVA was contacted. When flat, retry once on a
+   // fresh connection. Never add this retry while live exposure exists.
+   if(IsHttpTransportFailure(code,webError) && !LocalExecutionExposureActive())
+   {
+      Sleep(FLAT_HEARTBEAT_RETRY_DELAY_MS);
+      response="";
+      code=HttpPostJsonTimeout(
+         heartbeatUrl,
+         payload,
+         response,
+         FLAT_HEARTBEAT_HTTP_TIMEOUT_MS,
+         true
+      );
+      webError=g_lastHttpTransportError;
+   }
+
+   g_lastHeartbeatLatencyMs = (long)(GetTickCount64() - heartbeatStartedMs);
+   bool realHttpStatus=IsRealHttpStatus(code);
+   g_lastHeartbeatHttpStatus = realHttpStatus ? code : 0;
+   if(realHttpStatus)
+      g_lastServerContactAt = TimeCurrent();
+
+   if(code < 200 || code >= 300 || !realHttpStatus)
    {
       // A single Wi-Fi/ISP/API packet loss must not flap RUNNING -> STOPPED ->
       // RUNNING. Keep the last verified RUNNING authorization only for a short
@@ -6110,13 +6151,14 @@ void SendHeartbeat()
       // closed immediately, and the longer offline lease remains the absolute
       // access limit for all new entries.
       bool transientFailure =
-         code == -1 || code == 408 || code == 425 || code == 429 || code >= 500;
+         !realHttpStatus || code == 408 || code == 425 || code == 429 || code >= 500;
       int transientGraceSeconds = MathMax(9, MathMin(20, InpHeartbeatSeconds * 5));
       bool verifiedControlStillFresh =
          g_lastSuccessfulHeartbeat > 0 &&
          TimeCurrent() - g_lastSuccessfulHeartbeat <= transientGraceSeconds;
 
-      Print("SCENOVA heartbeat failed. HTTP=", code, " error=", webError, " URL=", heartbeatUrl,
+      Print("SCENOVA heartbeat failed. HTTP=", (realHttpStatus ? code : 0),
+            " transportCode=", code, " error=", webError, " URL=", heartbeatUrl,
             " transient=", transientFailure, " grace=", verifiedControlStillFresh);
 
       if(transientFailure && verifiedControlStillFresh)
@@ -6138,9 +6180,10 @@ void SendHeartbeat()
       {
          RenderChartStatus("AUTH FAILED", clrTomato, "Reload the newest SCENOVA .set file");
       }
-      else if(code == -1)
+      else if(!realHttpStatus)
       {
-         RenderChartStatus("NETWORK ERROR", clrTomato, "WebRequest error " + IntegerToString(webError));
+         RenderChartStatus("NETWORK ERROR", clrTomato,
+            "WebRequest " + IntegerToString(code) + "/" + IntegerToString(webError));
       }
       else
       {
@@ -6300,12 +6343,20 @@ void AckCommand(long commandId)
    );
 }
 
-int HttpPostJsonTimeout(string url, string payload, string &response, int timeoutMs)
+int HttpPostJsonTimeout(
+   string url,
+   string payload,
+   string &response,
+   int timeoutMs,
+   bool forceConnectionClose=false
+)
 {
    char data[];
    char result[];
    string resultHeaders = "";
-   string headers = "Content-Type: application/json\r\n";
+   string headers = "Content-Type: application/json\r\nAccept: application/json\r\n";
+   if(forceConnectionClose)
+      headers += "Connection: close\r\n";
 
    ResetLastError();
    int copied = StringToCharArray(payload, data, 0, WHOLE_ARRAY, CP_UTF8);

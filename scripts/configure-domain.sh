@@ -29,6 +29,24 @@ server {
 
     client_max_body_size 20m;
 
+    # MT5 WebRequest is synchronous. Isolate heartbeat traffic and close the
+    # client connection after each response so Windows MT5 cannot reuse a stale
+    # HTTPS connection for the next heartbeat.
+    location = /backend/api/ea/heartbeat {
+        proxy_pass http://127.0.0.1:$BOT_WEB_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Connection "";
+        proxy_connect_timeout 3s;
+        proxy_send_timeout 8s;
+        proxy_read_timeout 8s;
+        keepalive_timeout 0;
+        keepalive_requests 1;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:$BOT_WEB_PORT;
         proxy_http_version 1.1;
