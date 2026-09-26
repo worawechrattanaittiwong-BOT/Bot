@@ -28,13 +28,22 @@ type Account = {
 };
 
 type TrialStatus = {
+  emailConfigured: boolean;
   smsConfigured: boolean;
+  verificationConfigured: boolean;
+  defaultDelivery: "EMAIL" | "SMS";
+  email: { masked: string; verified: boolean } | null;
   trialDays: number;
   eligibility: { allowed: boolean; reason: string; message: string };
   phone: { masked: string; verified: boolean } | null;
   authorization: any;
   trial: any;
-  latestCode: any;
+  latestCode: {
+    delivery_channel?: "EMAIL" | "SMS";
+    email_masked?: string | null;
+    phone_last4?: string | null;
+    status?: string;
+  } | null;
   otp?: {
     codeLength: number;
     expiresInMinutes: number;
@@ -122,7 +131,7 @@ export default function PackagesPage() {
   const [messageKind, setMessageKind] = useState<"good" | "bad" | "info">("info");
   const [otp, setOtp] = useState("");
   const [cooldown, setCooldown] = useState(0);
-  const [activeSystem, setActiveSystem] = useState<"LOCAL" | "CLOUD">("LOCAL");
+  const [activeSystem, setActiveSystem] = useState<"LOCAL" | "CLOUD">("CLOUD");
   const [trialOpen, setTrialOpen] = useState(false);
   const [checkoutPack, setCheckoutPack] = useState<PackageItem | null>(null);
   const checkoutDialog = useRef<HTMLDialogElement>(null);
@@ -226,14 +235,18 @@ export default function PackagesPage() {
   }
 
   async function requestOtp() {
-    if (busy || cooldown > 0 || !trial?.phone) return;
+    if (busy || cooldown > 0 || !trial?.verificationConfigured) return;
     setBusy("otp-send");
     setMessage("");
     try {
       const result = await api("/trial-access/request-code", { method: "POST" });
       setCooldown(Number(result.resendAfterSeconds || 60));
       setOtp("");
-      notify("good", "ส่ง OTP ไปที่ " + result.phoneMasked + " แล้ว");
+      const channel = result.deliveryChannel === "SMS" ? "SMS" : "อีเมล";
+      notify(
+        "good",
+        `ส่ง OTP ทาง${channel} ไปที่ ${result.deliveryMasked} แล้ว${result.fallbackUsed ? " · ระบบใช้งาน SMS สำรองเนื่องจากส่งอีเมลไม่สำเร็จ" : ""}`
+      );
       await load();
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "ส่ง OTP ไม่สำเร็จ");
