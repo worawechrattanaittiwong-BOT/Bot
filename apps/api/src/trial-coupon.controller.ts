@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Post,
   Req,
+  ServiceUnavailableException,
   UseGuards
 } from "@nestjs/common";
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "crypto";
@@ -47,6 +48,57 @@ export class TrialCouponController {
 
   private codeHash(salt: string, code: string) {
     return createHash("sha256").update(`${salt}:${code}`).digest("hex");
+  }
+
+  private emailConfigured() {
+    return Boolean(
+      String(process.env.RESEND_API_KEY || "").trim() &&
+      String(process.env.EMAIL_FROM || "").trim()
+    );
+  }
+
+  private maskEmail(email: string) {
+    const value = String(email || "").trim().toLowerCase();
+    const [local, domain] = value.split("@");
+    if (!local || !domain) return value || "—";
+    const visible = local.length <= 2 ? local.slice(0, 1) : local.slice(0, 2);
+    return `${visible}${"*".repeat(Math.max(3, local.length - visible.length))}@${domain}`;
+  }
+
+  private async sendTrialEmailOtp(email: string, code: string) {
+    if (!this.emailConfigured()) {
+      throw new ServiceUnavailableException("ระบบส่งอีเมล OTP ยังไม่ได้ตั้งค่า");
+    }
+
+    const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+    const from = String(process.env.EMAIL_FROM || "").trim();
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + apiKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from,
+        to: [email],
+        subject: "SCENOVA — รหัสยืนยันสิทธิ์ทดลองใช้งาน",
+        html:
+          '<div style="font-family:Arial,sans-serif;background:#080a14;color:#f4f1ff;padding:32px">' +
+          '<div style="max-width:560px;margin:auto;border:1px solid #40366d;border-radius:16px;padding:28px;background:#0f1020">' +
+          '<div style="font-size:12px;letter-spacing:2.5px;color:#9f8cff">SCENOVA TRIAL ACCESS</div>' +
+          '<h2 style="margin:14px 0 8px">รหัสยืนยันสิทธิ์ทดลองใช้งาน</h2>' +
+          '<p style="color:#b8b4c8;line-height:1.7;margin:0">มีการขอสิทธิ์ทดลองใช้งานจากบัญชี SCENOVA ของคุณ ใช้รหัส 6 หลักด้านล่างเพื่อยืนยันคำขอ รหัสนี้มีอายุ 10 นาที</p>' +
+          '<div style="font-size:34px;font-weight:800;letter-spacing:10px;margin:24px 0;color:#ffffff">' +
+          code +
+          '</div>' +
+          '<p style="color:#8a8498;font-size:12px;line-height:1.7;margin:0">หากคุณไม่ได้เป็นผู้ขอสิทธิ์ทดลองใช้งาน ไม่ต้องดำเนินการใด ๆ และห้ามส่งต่อรหัสนี้ให้บุคคลอื่น</p>' +
+          '</div></div>'
+      })
+    });
+
+    if (!response.ok) {
+      throw new ServiceUnavailableException("ส่ง OTP ทางอีเมลไม่สำเร็จ");
+    }
   }
 
   private async boundPhone(userId: string) {
