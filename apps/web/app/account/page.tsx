@@ -328,9 +328,11 @@ export default function AccountPage() {
   }
 
   const phoneLocked = Boolean(
-    data.user.phone?.verified ||
-    trialAccess?.authorization ||
-    trialAccess?.trial
+    data.user.phone && (
+      data.user.phone.verified ||
+      trialAccess?.authorization ||
+      trialAccess?.trial
+    )
   );
 
   return (
@@ -365,6 +367,7 @@ export default function AccountPage() {
           <section className={styles.summaryBar}>
             <Summary label="User ID" value={data.user.userCode} mono/>
             <Summary label="Email" value={data.user.emailVerified ? "Verified" : "Pending"} good={data.user.emailVerified}/>
+            <Summary label="Mobile" value={data.user.phone ? data.user.phone.masked : "Not linked"} good={Boolean(data.user.phone?.verified)}/>
             <Summary label="2FA" value={data.security.twoFactorEnabled ? "Enabled" : "Off"} good={data.security.twoFactorEnabled}/>
             <Summary label="Access" value={accessSummary(data)}/>
           </section>
@@ -375,6 +378,7 @@ export default function AccountPage() {
                 <Detail label="Email Address" value={data.user.email}/>
                 <Detail label="Account Role" value={data.user.role}/>
                 <Detail label="Account Status" value={data.user.status} good/>
+                <Detail label="Mobile Number" value={data.user.phone ? data.user.phone.masked : "ยังไม่ได้ผูกเบอร์"}/>
                 <Detail label="Member Since" value={formatDate(data.user.createdAt)}/>
                 <Detail label="Last Sign In" value={formatDate(data.user.lastSignInAt)}/>
                 <Detail label="SCENOVA Account ID" value={data.user.id} mono/>
@@ -385,10 +389,10 @@ export default function AccountPage() {
               <SectionHeader
                 icon="account"
                 title="เบอร์โทร"
-                subtitle={data.user.phone ? data.user.phone.masked : "ยังไม่ได้ผูกเบอร์"}
-                badge={data.user.phone ? (data.user.phone.verified ? "VERIFIED" : "SAVED") : "REQUIRED"}
+                subtitle={data.user.phone ? data.user.phone.masked : "ยังไม่ได้ผูกเบอร์มือถือ"}
+                badge={data.user.phone ? (data.user.phone.verified ? "VERIFIED" : "SAVED") : "NOT LINKED"}
                 good={Boolean(data.user.phone?.verified)}
-                action={!phoneLocked ? (data.user.phone ? "จัดการ" : "เพิ่มเบอร์โทร") : undefined}
+                action={!phoneLocked ? (data.user.phone ? "จัดการเบอร์" : "ผูกเบอร์มือถือ") : undefined}
                 expanded={open.phone}
                 onAction={() => toggle("phone")}
               />
@@ -452,6 +456,7 @@ export default function AccountPage() {
             <InfoSection icon="shield" title="Security Status" subtitle="สถานะความปลอดภัยของบัญชี">
               <div className={styles.statusGrid}>
                 <StatusItem label="Email Verification" value={data.user.emailVerified ? "Verified" : "Pending"} good={data.user.emailVerified}/>
+                <StatusItem label="Mobile Number" value={data.user.phone ? (data.user.phone.verified ? "Verified" : "Linked") : "Not linked"} good={Boolean(data.user.phone?.verified)}/>
                 <StatusItem label="Two-Factor Authentication" value={data.security.twoFactorEnabled ? "On" : "Off"} good={data.security.twoFactorEnabled}/>
                 <StatusItem label="Password Last Changed" value={formatDate(data.security.passwordChangedAt)}/>
                 <StatusItem label="Current Session" value={data.session.current ? "Active" : "Unknown"} good={data.session.current}/>
