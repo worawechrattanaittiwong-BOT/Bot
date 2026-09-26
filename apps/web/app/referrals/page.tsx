@@ -115,10 +115,10 @@ const BANKS = [
 ] as const;
 
 function money(satang: number) {
-  return (Number(satang || 0) / 100).toLocaleString("en-US", {
+  return (Number(satang || 0) / 100).toLocaleString("th-TH", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  }) + " THB";
+  }) + " บาท";
 }
 
 function ledgerAmount(entry: ReferralData["wallet"]["recent"][number]) {
@@ -138,6 +138,34 @@ function ledgerLabel(eventType: string) {
   if (eventType === "COMMISSION_VOID") return "ยกเลิกรายการ";
   if (eventType === "MIGRATION_SNAPSHOT") return "ยอดตั้งต้นกระเป๋า";
   return eventType.replace(/_/g, " ");
+}
+
+function withdrawalStatusLabel(status: string) {
+  const value = String(status || "").toUpperCase();
+  if (value === "REQUESTED") return "ส่งคำขอแล้ว";
+  if (value === "HOLD") return "กำลังตรวจสอบ";
+  if (value === "APPROVED") return "อนุมัติแล้ว";
+  if (value === "PAID") return "จ่ายแล้ว";
+  if (value === "REJECTED") return "ไม่อนุมัติ";
+  if (value === "CANCELLED") return "ยกเลิกแล้ว";
+  return status || "—";
+}
+
+function commissionStatusLabel(status: string) {
+  const value = String(status || "").toUpperCase();
+  if (value === "PENDING") return "รอตรวจสอบ";
+  if (value === "AVAILABLE") return "ถอนได้";
+  if (value === "PAID") return "จ่ายแล้ว";
+  if (value === "VOID") return "ยกเลิก";
+  return status || "—";
+}
+
+function sourceTypeLabel(source: string) {
+  const value = String(source || "").toUpperCase();
+  if (value === "SUBSCRIPTION") return "สมาชิก";
+  if (value === "PACKAGE") return "แพ็กเกจ";
+  if (value === "PAYMENT") return "การชำระเงิน";
+  return source || "—";
 }
 
 function makeRequestKey() {
@@ -404,7 +432,7 @@ export default function ReferralsPage() {
             <div className={styles.linkBox}>
               <span>{inviteLink}</span>
               <button type="button" onClick={()=>copy(inviteLink,"คัดลอกลิงก์เชิญแล้ว")}>
-                <ScenovaIcon name="copy" size={16}/> คัดลอก Link
+                <ScenovaIcon name="copy" size={16}/> คัดลอกลิงก์
               </button>
             </div>
           </div>
@@ -487,7 +515,7 @@ export default function ReferralsPage() {
             <article className={styles.balanceCard}>
               <span className={styles.balanceIcon}><ScenovaIcon name="clock" size={23}/></span>
               <div>
-                <small>รอดำเนินการถอน</small>
+                <small>คอมมิชชั่นรอตรวจสอบ</small>
                 <b>{money(data.wallet.pendingSatang)}</b>
                 <span>อยู่ในช่วงตรวจสอบ {data.program.holdDays} วัน</span>
               </div>
@@ -533,7 +561,7 @@ export default function ReferralsPage() {
             <div className={styles.securityWarning}>
               <ScenovaIcon name="info" size={20}/>
               <span>
-                <b>ต้องเปิดใช้ Two-Factor Authentication ก่อนถอนเงิน</b>
+                <b>ต้องเปิดใช้การยืนยันตัวตน 2 ขั้นตอน (2FA) ก่อนถอนเงิน</b>
                 <small>โปรดตั้งค่า 2FA ในบัญชีของคุณ เพื่อความปลอดภัยของเงินและข้อมูลบัญชี</small>
               </span>
               <Link href="/account">เปิด 2FA <span>→</span></Link>
@@ -670,7 +698,7 @@ export default function ReferralsPage() {
 
               {openWithdrawal ? (
                 <div className={styles.openRequest}>
-                  <span className={styles.statusBadge}>{openWithdrawal.status}</span>
+                  <span className={styles.statusBadge}>{withdrawalStatusLabel(openWithdrawal.status)}</span>
                   <b>{money(openWithdrawal.amount_satang)}</b>
                   <small>สร้างเมื่อ {dateTime(openWithdrawal.created_at)}</small>
                   <p>ระบบกันยอดรายการนี้ไว้แล้ว จึงไม่สามารถส่งคำขอถอนซ้ำได้</p>
@@ -684,7 +712,7 @@ export default function ReferralsPage() {
                 <form className={styles.withdrawRequestForm} onSubmit={requestWithdrawal} autoComplete="off">
                   <div className={styles.amountBlock}>
                     <label className={styles.formField}>
-                      <span>จำนวนเงิน (THB)</span>
+                      <span>จำนวนเงิน (บาท)</span>
                       <div className={styles.amountInput}>
                         <input
                           name="scenova-withdrawal-amount-thb"
@@ -707,7 +735,7 @@ export default function ReferralsPage() {
                           placeholder="1,000"
                           required
                         />
-                        <span>THB</span>
+                        <span>บาท</span>
                       </div>
                     </label>
                     <div className={styles.amountMeta}>
@@ -782,7 +810,7 @@ export default function ReferralsPage() {
               {data.wallet.withdrawal.recent.map(item=>(
                 <div className={styles.withdrawalRow} key={item.id}>
                   <div>
-                    <span className={styles.statusBadge}>{item.status}</span>
+                    <span className={styles.statusBadge}>{withdrawalStatusLabel(item.status)}</span>
                     <b>{money(item.amount_satang)}</b>
                   </div>
                   <div>
@@ -791,7 +819,7 @@ export default function ReferralsPage() {
                   </div>
                   <div>
                     <span>{dateTime(item.created_at)}</span>
-                    <small>{item.payout_reference ? "Ref: " + item.payout_reference : item.review_reason || "—"}</small>
+                    <small>{item.payout_reference ? "เลขอ้างอิง: " + item.payout_reference : item.review_reason || "—"}</small>
                   </div>
                 </div>
               ))}
@@ -832,11 +860,11 @@ export default function ReferralsPage() {
                   </div>
                   <div>
                     <span>ระดับ {entry.level} · {Number(entry.rate_bps || 0) / 100}%</span>
-                    <small>จาก {entry.source_user_code || "—"} · {entry.source_type}</small>
+                    <small>จาก {entry.source_user_code || "—"} · {sourceTypeLabel(entry.source_type)}</small>
                   </div>
                   <div>
                     <b>{money(ledgerAmount(entry))}</b>
-                    <small>{entry.commission_status}</small>
+                    <small>{commissionStatusLabel(entry.commission_status)}</small>
                   </div>
                 </div>
               ))}
