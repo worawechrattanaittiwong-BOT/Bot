@@ -133,8 +133,10 @@ function NodeCard({node:n,busy,save,renewEnrollment}:{node:Node;busy:boolean;sav
     </div>
     <p className={s.muted}>ติดต่อครั้งล่าสุด {date(n.last_seen_at)}<br/>MT5 Template: {n.telemetry?.templateReady?"พร้อม":"รอตรวจสอบ"}</p>
     <div className={s.inline}>
-      <a className={s.button} href="/downloads/SCENOVA-Cloud-Setup.exe" download>{n.last_seen_at?"ติดตั้งใหม่ / Repair":"ดาวน์โหลด Setup"}</a>
-      <button type="button" className={s.button} disabled={busy} onClick={()=>renewEnrollment(n.runner_id)}>สร้าง Enrollment ใหม่</button>
+      {n.last_seen_at
+        ? <a className={s.button} href="/downloads/SCENOVA-Cloud-Setup.exe" download>ติดตั้งใหม่ / Repair</a>
+        : <button type="button" className={`${s.button} ${s.primary}`} disabled={busy} onClick={()=>renewEnrollment(n.runner_id)}>เตรียมติดตั้ง VPS อัตโนมัติ</button>}
+      {n.last_seen_at&&<button type="button" className={s.button} disabled={busy} onClick={()=>renewEnrollment(n.runner_id)}>สร้าง Enrollment ใหม่</button>}
     </div>
     <form className={s.form} onSubmit={e=>{e.preventDefault();save("/nodes/"+encodeURIComponent(n.runner_id),{capacity,acceptingJobs:accept});}}>
       <div className={s.inline}>
