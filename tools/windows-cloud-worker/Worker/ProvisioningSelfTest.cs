@@ -28,7 +28,7 @@ internal static class ProvisioningSelfTest
             var config = new WorkerConfig
             {
                 RunnerId = "phase5-self-test",
-                ApiBase = "https://example.invalid/backend",
+                ApiBase = "https://www.snvea-bot.online/backend",
                 Root = root
             };
 
@@ -77,6 +77,7 @@ internal static class ProvisioningSelfTest
                 var preset = File.ReadAllText(item.Prepared.PresetPath, Encoding.Unicode);
                 var startup = File.ReadAllText(item.Prepared.StartupPath, Encoding.Unicode);
 
+                AssertContains(preset, "InpApiBase=https://snvea-bot.online/backend", "canonical API base");
                 AssertContains(preset, "InpInstanceId=" + item.Job.InstanceId, "instance id");
                 AssertContains(preset, "InpInstallToken=install-token-" + number, "install token");
                 AssertContains(startup, "Login=" + (900000 + number), "account");
@@ -96,6 +97,7 @@ internal static class ProvisioningSelfTest
                 throw new InvalidOperationException("template received customer startup config");
 
             Console.WriteLine("PASS: isolated provisioning checkpoints 1 -> 2 -> 5 -> 20");
+            Console.WriteLine("PASS: SCENOVA API base is canonicalized before writing EA presets");
             Console.WriteLine("PASS: per-instance account, credential, token and startup files remain isolated");
             Console.WriteLine("PASS: self-test never launches terminal64.exe or contacts a broker/backend");
             return 0;
