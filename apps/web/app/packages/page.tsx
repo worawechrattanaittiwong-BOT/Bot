@@ -382,14 +382,14 @@ export default function PackagesPage() {
               <div className={styles.titleWithIcon}>
                 <span className={styles.icon}><ScenovaIcon name="status" size={19}/></span>
                 <div>
-                  <span className={styles.eyebrow}>START HERE</span>
-                  <h2>ทดลองใช้งาน</h2>
+                  <span className={styles.eyebrow}>SCENOVA TRIAL ACCESS</span>
+                  <h2>ทดลองใช้งาน SCENOVA</h2>
                   <p>ขอรหัสยืนยันได้ทันที ระบบส่งไปยังอีเมลที่ลงทะเบียนเป็นช่องทางหลัก และใช้ SMS สำรองเมื่อส่งอีเมลไม่สำเร็จ</p>
                 </div>
               </div>
               <div className={styles.trialHeaderActions}>
                 <span className={`${styles.badge} ${trialReady ? styles.badgeGood : ""}`}>
-                  {trial?.trial ? "ACTIVE" : trial?.authorization ? "READY" : trialEligible ? "AVAILABLE" : "UNAVAILABLE"}
+                  {trial?.trial ? "ใช้งานอยู่" : trial?.authorization ? "พร้อมใช้งาน" : trialEligible ? "ขอสิทธิ์ได้" : "ไม่พร้อม"}
                 </span>
                 <button
                   type="button"
@@ -397,7 +397,7 @@ export default function PackagesPage() {
                   onClick={() => setTrialOpen(value => !value)}
                   aria-expanded={trialOpen}
                 >
-                  {trialOpen ? "ซ่อน" : trialReady ? "ดูสถานะ Trial" : "จัดการ Trial"}
+                  {trialOpen ? "ย่อรายละเอียด" : trialReady ? "ดูรายละเอียด" : "ขอรหัสทดลอง"}
                 </button>
               </div>
             </div>
@@ -408,7 +408,7 @@ export default function PackagesPage() {
                   number="1"
                   title="ช่องทางหลัก"
                   value={trial?.email?.masked || "อีเมลที่ลงทะเบียน"}
-                  done={Boolean(trial?.email?.verified)}
+                  done={Boolean(trial?.email)}
                 />
                 <TrialStep
                   number="2"
