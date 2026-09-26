@@ -307,7 +307,8 @@ export class TrialCouponController {
       ? Math.max(0, Math.ceil((new Date(sentAt).getTime() + RESEND_SECONDS * 1000 - Date.now()) / 1000))
       : 0;
     const phone = await this.boundPhone(userId);
-    const phoneHash = phone?.e164 ? this.phoneHash(phone.e164) : null;
+    const phoneHash =
+      phone?.e164 && phone?.verified_at ? this.phoneHash(phone.e164) : null;
     const base = await this.eligibility(userId, phoneHash);
     return {
       emailConfigured: this.emailConfigured(),
