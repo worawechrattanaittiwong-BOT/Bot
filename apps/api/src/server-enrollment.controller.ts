@@ -76,7 +76,7 @@ export class ServerEnrollmentController {
   }) {
     if (!validRunnerId(body.runnerId)) throw new BadRequestException("Invalid Runner ID");
     const token = String(body.enrollmentToken || "")
-      .replace(/[\\s\\u200B-\\u200D\\uFEFF]+/g, "");
+      .replace(/[\s\u200B-\u200D\uFEFF]+/g, "");
     if (token.length < 32 || token.length > 200) {
       throw new BadRequestException("Invalid enrollment token");
     }
