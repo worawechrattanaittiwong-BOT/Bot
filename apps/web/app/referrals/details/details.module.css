@@ -172,3 +172,84 @@
   .footer{align-items:flex-start;flex-direction:column}
   .primaryButton{width:100%;justify-content:center}
 }
+
+
+/* ===== Professional Thai referral guide refinement ===== */
+.page{
+  background:
+    radial-gradient(circle at 50% -10%,rgba(86,64,183,.14),transparent 32%),
+    linear-gradient(180deg,#090a14 0%,#070811 50%,#05060c 100%);
+}
+.topbar{
+  height:70px;
+  border-bottom-color:rgba(121,101,211,.11);
+}
+.hero{
+  max-width:980px;
+  padding:48px 24px 30px;
+}
+.hero h1{
+  max-width:760px;
+  margin:10px auto 12px;
+  font-size:clamp(34px,4vw,44px);
+  letter-spacing:-.035em;
+}
+.hero p{
+  max-width:680px;
+  font-size:13px;
+}
+.rateBanner{
+  max-width:560px;
+  padding:14px 18px;
+  border-color:rgba(124,104,221,.28);
+  background:rgba(58,43,126,.10);
+  box-shadow:none;
+}
+.rateBanner b{
+  font-size:15px;
+  letter-spacing:0;
+}
+.rateBanner span{
+  margin-top:5px;
+  color:#8e8aa3;
+  line-height:1.5;
+}
+.section,.rules{
+  border-color:rgba(112,91,205,.16);
+  background:linear-gradient(155deg,rgba(12,14,27,.95),rgba(7,9,18,.96));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.015);
+}
+.sectionTitle h2{
+  font-size:18px;
+}
+.flowCard,.exampleCard,.saleExample,.ruleGrid>div{
+  border-color:rgba(113,96,190,.16);
+  background:rgba(8,10,21,.70);
+}
+.flowIcon{
+  width:44px;
+  height:44px;
+}
+.pyramidRow{
+  border-color:rgba(105,88,201,.20);
+  background:linear-gradient(90deg,rgba(43,33,100,.18),rgba(12,14,29,.94),rgba(43,33,100,.18));
+}
+.youCard{
+  border-color:rgba(129,105,226,.34);
+  background:linear-gradient(135deg,rgba(76,57,157,.18),rgba(18,16,40,.76));
+}
+.relativeNote{
+  border-color:rgba(116,92,219,.18);
+  background:rgba(11,11,25,.68);
+}
+.exampleCard b,.levelLabel b,.totalLine b{
+  color:#b4a6ff;
+}
+.footer{
+  border-color:rgba(121,91,234,.18);
+  background:linear-gradient(90deg,rgba(43,32,103,.22),rgba(12,11,28,.82));
+}
+.primaryButton{
+  background:linear-gradient(135deg,#7359e8,#5742c8);
+  border-color:rgba(138,111,245,.48);
+}
