@@ -772,7 +772,7 @@ export default function AdminCommissionPage() {
 
                 <div className={s.controlCard}>
                   <div className={s.cardHead}>
-                    <div><span className={s.kicker}>RISK & APPROVAL</span><h2>นโยบายความเสี่ยงและการอนุมัติ</h2></div>
+                    <div><span className={s.kicker}>Fraud Risk · Dual Approval · Kill Switch</span><h2>นโยบายความเสี่ยงและการอนุมัติ</h2></div>
                     <span className={s.securityTag}>RISK ENGINE</span>
                   </div>
                   <p>ใช้เพื่อจำกัดยอดรวมรายวัน กำหนดจุดที่ต้องอนุมัติ 2 คน และระดับ Risk Score</p>
@@ -827,7 +827,7 @@ export default function AdminCommissionPage() {
                   disabled={busy==="kill"}
                   onClick={()=>void toggleKillSwitch(!killSwitchActive)}
                 >
-                  {killSwitchActive ? "ปิด Kill Switch" : "เปิด Kill Switch ฉุกเฉิน"}
+                  {killSwitchActive ? "ปิด Kill Switch" : "ACTIVATE KILL SWITCH"}
                 </button>
               </section>
             </>
