@@ -96,30 +96,10 @@ const PHONE_COUNTRIES = [
 ] as const;
 
 function phoneInputGuide(countryCode: string) {
-  if (countryCode === "+66") {
-    return {
-      placeholder: "เช่น 0812345678",
-      hint: "ตัวอย่าง: 0812345678 — เลือกไทย +66 แล้ว ไม่ต้องพิมพ์ +66 ซ้ำ"
-    };
-  }
-  if (countryCode === "+1") {
-    return {
-      placeholder: "เช่น 4155550123",
-      hint: "ตัวอย่าง: 4155550123 — ไม่ต้องพิมพ์ +1 ซ้ำ"
-    };
-  }
-  if (countryCode === "+44") {
-    return {
-      placeholder: "เช่น 07123456789",
-      hint: "ตัวอย่าง: 07123456789 — ไม่ต้องพิมพ์ +44 ซ้ำ"
-    };
-  }
-  return {
-    placeholder: "เช่น 812345678",
-    hint: countryCode
-      ? `กรอกเฉพาะหมายเลขโทรศัพท์ ไม่ต้องพิมพ์ ${countryCode} ซ้ำ`
-      : "เลือกประเทศก่อน แล้วกรอกหมายเลขโทรศัพท์"
-  };
+  if (countryCode === "+66") return { placeholder: "เช่น 0812345678" };
+  if (countryCode === "+1") return { placeholder: "เช่น 4155550123" };
+  if (countryCode === "+44") return { placeholder: "เช่น 07123456789" };
+  return { placeholder: "เช่น 812345678" };
 }
 
 function formatDate(value?: string | null) {
@@ -459,7 +439,6 @@ export default function AccountPage() {
                         onChange={e => setPhoneInput(e.target.value.slice(0,24))}
                         disabled={phoneBusy}
                       />
-                      <small className={styles.phoneHint}>{phoneGuide.hint}</small>
                     </label>
                     <div className={styles.actionLine}>
                       <button type="button" className={styles.secondaryButton} onClick={() => toggle("phone", false)} disabled={phoneBusy}>ยกเลิก</button>
