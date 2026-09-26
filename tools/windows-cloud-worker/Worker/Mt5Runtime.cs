@@ -64,7 +64,7 @@ internal sealed class Mt5Runtime
             presetPath,
             new[]
             {
-                "InpApiBase=" + SafeIniValue(_config.ApiBase),
+                "InpApiBase=" + SafeIniValue(_config.EffectiveApiBase),
                 "InpInstanceId=" + SafeIniValue(job.InstanceId),
                 "InpInstallToken=" + SafeIniValue(job.InstallToken)
             },
