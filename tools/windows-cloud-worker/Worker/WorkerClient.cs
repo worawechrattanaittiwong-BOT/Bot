@@ -25,7 +25,7 @@ internal sealed class WorkerClient : IDisposable
     {
         var body = MergeRunner(payload);
         using var response = await _http.PostAsJsonAsync(
-            _config.ApiBase.TrimEnd('/') + "/api/worker/" + route,
+            _config.EffectiveApiBase.TrimEnd('/') + "/api/worker/" + route,
             body,
             _json,
             cancellationToken);
@@ -39,7 +39,7 @@ internal sealed class WorkerClient : IDisposable
     {
         var body = MergeRunner(payload);
         using var response = await _http.PostAsJsonAsync(
-            _config.ApiBase.TrimEnd('/') + "/api/worker/" + route,
+            _config.EffectiveApiBase.TrimEnd('/') + "/api/worker/" + route,
             body,
             _json,
             cancellationToken);
@@ -53,7 +53,7 @@ internal sealed class WorkerClient : IDisposable
     {
         var body = MergeRunner(new { instanceUpdateId });
         using var response = await _http.PostAsJsonAsync(
-            _config.ApiBase.TrimEnd('/') + "/api/worker/updates/artifact",
+            _config.EffectiveApiBase.TrimEnd('/') + "/api/worker/updates/artifact",
             body,
             _json,
             cancellationToken);
