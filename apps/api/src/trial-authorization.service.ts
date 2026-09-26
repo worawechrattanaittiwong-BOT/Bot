@@ -20,7 +20,7 @@ export class TrialAuthorizationService {
     mt5AccountId?: string | null;
     phoneHash?: string | null;
     phoneLast4?: string | null;
-    source?: "OWNER" | "SMS";
+    source?: "OWNER" | "SMS" | "EMAIL";
   }) {
     const days = this.normalizeDays(input.days);
     const user = await this.db.one(
