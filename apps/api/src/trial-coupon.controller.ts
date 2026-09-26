@@ -345,13 +345,17 @@ export class TrialCouponController {
   @Post("request-code")
   async requestCode(@Req() req: any) {
     const userId = String(req.user.sub);
-    const phone = await this.boundPhone(userId);
-    if (!phone?.e164) {
-      throw new BadRequestException("กรุณาเพิ่มเบอร์โทรใน My Account ก่อนขอ OTP");
+    const user = await this.db.one(
+      "SELECT email,email_verified_at FROM users WHERE id=$1 AND status='ACTIVE'",
+      [userId]
+    );
+    if (!user?.email) {
+      throw new BadRequestException("ไม่พบอีเมลที่ลงทะเบียนกับบัญชีนี้");
     }
 
-    const msisdn = String(phone.e164);
-    const phoneHash = this.phoneHash(msisdn);
+    const phone = await this.boundPhone(userId);
+    const msisdn = phone?.e164 ? String(phone.e164) : null;
+    const phoneHash = msisdn ? this.phoneHash(msisdn) : null;
     const check = await this.eligibility(userId, phoneHash);
     if (!check.allowed) throw new ConflictException(check.message);
 
@@ -359,6 +363,7 @@ export class TrialCouponController {
       `SELECT COALESCE(sent_at,created_at) sent_at
        FROM trial_sms_codes
        WHERE user_id=$1
+         AND purpose='TRIAL'
          AND status='SENT'
        ORDER BY created_at DESC LIMIT 1`,
       [userId]
@@ -377,14 +382,17 @@ export class TrialCouponController {
     const todayCount = await this.db.one(
       `SELECT count(*)::int count
        FROM trial_sms_codes
-       WHERE (user_id=$1 OR phone_hash=$2)
+       WHERE (user_id=$1 OR ($2::text IS NOT NULL AND phone_hash=$2))
          AND purpose='TRIAL'
          AND status IN ('SENT','USED')
          AND created_at>now()-interval '24 hours'`,
       [userId, phoneHash]
     );
     if (Number(todayCount?.count || 0) >= MAX_SENDS_PER_DAY) {
-      throw new HttpException("ขอ OTP ครบจำนวนต่อวันแล้ว กรุณาลองใหม่ภายหลัง", HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        "ขอ OTP ครบจำนวนต่อวันแล้ว กรุณาลองใหม่ภายหลัง",
+        HttpStatus.TOO_MANY_REQUESTS
+      );
     }
 
     const ip = this.clientIp(req);
@@ -399,46 +407,103 @@ export class TrialCouponController {
         [ip]
       );
       if (Number(ipCount?.count || 0) >= 12) {
-        throw new HttpException("มีการขอรหัสจากเครือข่ายนี้มากเกินไป กรุณาลองใหม่ภายหลัง", HttpStatus.TOO_MANY_REQUESTS);
+        throw new HttpException(
+          "มีการขอรหัสจากเครือข่ายนี้มากเกินไป กรุณาลองใหม่ภายหลัง",
+          HttpStatus.TOO_MANY_REQUESTS
+        );
       }
     }
 
-    const fallbackCode = String(randomInt(100000, 1000000));
+    const otpCode = String(randomInt(100000, 1000000));
     const salt = randomBytes(16).toString("hex");
-    const last4 = msisdn.slice(-4);
+    const emailMasked = this.maskEmail(user.email);
+    const last4 = msisdn ? msisdn.slice(-4) : null;
 
     const record = await this.db.one(
       `INSERT INTO trial_sms_codes(
-         user_id,phone_hash,phone_last4,code_hash,code_salt,provider,status,expires_at,request_ip,purpose
+         user_id,phone_hash,phone_last4,code_hash,code_salt,provider,status,
+         expires_at,request_ip,purpose,delivery_channel,email_masked
        )
-       VALUES($1,$2,$3,$4,$5,'PENDING','PENDING',now()+interval '10 minutes',$6,'TRIAL')
+       VALUES($1,$2,$3,$4,$5,'PENDING','PENDING',now()+interval '10 minutes',$6,'TRIAL','EMAIL',$7)
        RETURNING id`,
-      [userId, phoneHash, last4, this.codeHash(salt, fallbackCode), salt, ip]
+      [userId, phoneHash, last4, this.codeHash(salt, otpCode), salt, ip, emailMasked]
     );
 
-    try {
-      const delivery = await this.sms.requestOtp(msisdn, fallbackCode);
-      await this.db.query(
-        `UPDATE trial_sms_codes
-         SET status='SENT',
-             sent_at=now(),
-             provider=$2,
-             provider_token=$3,
-             provider_refno=$4
-         WHERE id=$1`,
-        [record.id, delivery.provider, delivery.token, delivery.refno]
+    let deliveryChannel: "EMAIL" | "SMS" = "EMAIL";
+    let deliveryMasked = emailMasked;
+    let fallbackUsed = false;
+    let emailFailure: unknown = null;
+
+    const canUseEmail = Boolean(user.email_verified_at && this.emailConfigured());
+    if (canUseEmail) {
+      try {
+        await this.sendTrialEmailOtp(String(user.email), otpCode);
+        await this.db.query(
+          `UPDATE trial_sms_codes
+           SET status='SENT',
+               sent_at=now(),
+               provider='RESEND_EMAIL',
+               delivery_channel='EMAIL',
+               email_masked=$2
+           WHERE id=$1`,
+          [record.id, emailMasked]
+        );
+      } catch (error) {
+        emailFailure = error;
+      }
+    } else {
+      emailFailure = new Error(
+        user.email_verified_at
+          ? "email provider unavailable"
+          : "registered email is not verified"
       );
-    } catch (error) {
-      await this.db.query(
-        "UPDATE trial_sms_codes SET status='FAILED' WHERE id=$1",
-        [record.id]
-      );
-      throw error;
+    }
+
+    if (emailFailure) {
+      if (!msisdn || !phone) {
+        await this.db.query(
+          "UPDATE trial_sms_codes SET status='FAILED' WHERE id=$1",
+          [record.id]
+        );
+        throw new ServiceUnavailableException(
+          "ส่งรหัสทางอีเมลไม่สำเร็จ และบัญชีนี้ยังไม่มีเบอร์มือถือสำรอง กรุณาตรวจสอบอีเมลหรือเพิ่มเบอร์มือถือใน My Account"
+        );
+      }
+
+      try {
+        const delivery = await this.sms.requestOtp(msisdn, otpCode);
+        deliveryChannel = "SMS";
+        deliveryMasked = maskPhone(msisdn, phone.country_code);
+        fallbackUsed = true;
+        await this.db.query(
+          `UPDATE trial_sms_codes
+           SET status='SENT',
+               sent_at=now(),
+               provider=$2,
+               provider_token=$3,
+               provider_refno=$4,
+               delivery_channel='SMS'
+           WHERE id=$1`,
+          [record.id, delivery.provider, delivery.token, delivery.refno]
+        );
+      } catch (smsError) {
+        await this.db.query(
+          "UPDATE trial_sms_codes SET status='FAILED' WHERE id=$1",
+          [record.id]
+        );
+        throw new ServiceUnavailableException(
+          "ไม่สามารถส่งรหัสทดลองได้ทั้งทางอีเมลและ SMS กรุณาลองใหม่อีกครั้งภายหลัง"
+        );
+      }
     }
 
     return {
       sent: true,
-      phoneMasked: maskPhone(msisdn, phone.country_code),
+      deliveryChannel,
+      deliveryMasked,
+      fallbackUsed,
+      emailMasked,
+      phoneMasked: msisdn && phone ? maskPhone(msisdn, phone.country_code) : null,
       expiresInMinutes: CODE_TTL_MINUTES,
       resendAfterSeconds: RESEND_SECONDS,
       sendsRemaining: Math.max(0, MAX_SENDS_PER_DAY - Number(todayCount?.count || 0) - 1)
@@ -449,12 +514,8 @@ export class TrialCouponController {
   async redeem(@Req() req: any, @Body() body: { code: string }) {
     const userId = String(req.user.sub);
     const phone = await this.boundPhone(userId);
-    if (!phone?.e164) {
-      throw new BadRequestException("กรุณาเพิ่มเบอร์โทรใน My Account ก่อนยืนยัน OTP");
-    }
-
-    const msisdn = String(phone.e164);
-    const phoneHash = this.phoneHash(msisdn);
+    const msisdn = phone?.e164 ? String(phone.e164) : null;
+    const phoneHash = msisdn ? this.phoneHash(msisdn) : null;
     const code = String(body.code || "").replace(/\D/g, "").slice(0, 6);
     if (code.length !== 6) throw new BadRequestException("กรุณากรอกรหัส 6 หลัก");
 
@@ -462,12 +523,11 @@ export class TrialCouponController {
       `SELECT *
        FROM trial_sms_codes
        WHERE user_id=$1
-         AND phone_hash=$2
          AND purpose='TRIAL'
          AND status='SENT'
          AND expires_at>now()
        ORDER BY created_at DESC LIMIT 1`,
-      [userId, phoneHash]
+      [userId]
     );
     if (!record) throw new BadRequestException("ไม่พบ OTP ที่ใช้งานได้ หรือรหัสหมดอายุแล้ว");
     if (Number(record.attempts || 0) >= MAX_ATTEMPTS) {
@@ -496,34 +556,37 @@ export class TrialCouponController {
 
     const identities = await this.currentIdentity(userId);
     const mt5 = identities.find((item: any) => item.mt5_account_id) || null;
+    const deliveredBySms = String(record.delivery_channel || "SMS").toUpperCase() === "SMS";
     const result = await this.trials.authorizeUser({
       userId,
       days: this.trialDays(),
-      approvedBy: "SMS_TRIAL",
+      approvedBy: deliveredBySms ? "SMS_TRIAL" : "EMAIL_TRIAL",
       mt5AccountId: mt5?.mt5_account_id || null,
       phoneHash,
-      phoneLast4: msisdn.slice(-4),
-      source: "SMS"
+      phoneLast4: msisdn ? msisdn.slice(-4) : null,
+      source: deliveredBySms ? "SMS" : "EMAIL"
     });
 
-    await Promise.all([
-      this.db.query(
-        "UPDATE trial_sms_codes SET status='USED',verified_at=now(),attempts=attempts+1 WHERE id=$1",
-        [record.id]
-      ),
-      this.db.query(
+    await this.db.query(
+      "UPDATE trial_sms_codes SET status='USED',verified_at=now(),attempts=attempts+1 WHERE id=$1",
+      [record.id]
+    );
+
+    if (deliveredBySms && msisdn) {
+      await this.db.query(
         "UPDATE user_phone_numbers SET verified_at=now(),updated_at=now() WHERE user_id=$1 AND e164=$2",
         [userId, msisdn]
-      )
-    ]);
+      );
+    }
 
     return {
       activated: true,
       status: result.status,
+      deliveryChannel: deliveredBySms ? "SMS" : "EMAIL",
       trialDays: this.trialDays(),
       message: result.status === "APPROVED"
-        ? "ยืนยัน Trial สำเร็จและผูก MT5 แล้ว"
-        : "ยืนยัน Trial สำเร็จ รอเชื่อม MT5 แล้วจึงเริ่มใช้งาน"
+        ? "ยืนยันสิทธิ์ทดลองสำเร็จและผูก MT5 แล้ว"
+        : "ยืนยันสิทธิ์ทดลองสำเร็จ รอเชื่อม MT5 แล้วจึงเริ่มใช้งาน"
     };
   }
 }
