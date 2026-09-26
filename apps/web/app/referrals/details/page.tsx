@@ -7,58 +7,58 @@ const flow = [
   {
     number: "1",
     icon: "copy",
-    title: "Share your invite link",
-    copy: "Send your personal SCENOVA invite link or code to a friend."
+    title: "แชร์ลิงก์เชิญ",
+    copy: "ส่งลิงก์หรือรหัสเชิญส่วนตัวของคุณให้คนที่ต้องการแนะนำเข้าสู่ SCENOVA"
   },
   {
     number: "2",
     icon: "users",
-    title: "Your friend joins",
-    copy: "They create a SCENOVA account through your invite link."
+    title: "สมาชิกสมัครผ่านลิงก์",
+    copy: "เมื่อสมัครผ่านลิงก์ ระบบจะเชื่อมสมาชิกคนนั้นเข้ากับเครือข่ายของคุณ"
   },
   {
     number: "3",
     icon: "wallet",
-    title: "They buy an eligible plan",
-    copy: "Rewards are created only from eligible paid purchases."
+    title: "เกิดรายการที่เข้าเงื่อนไข",
+    copy: "คอมมิชชั่นจะเกิดจากรายการชำระเงินที่ระบบกำหนดว่าเข้าเงื่อนไขเท่านั้น"
   },
   {
     number: "4",
     icon: "layers",
-    title: "You earn from the network",
-    copy: "You can earn from purchases made across up to 4 levels below you."
+    title: "รับคอมมิชชั่นตามระดับ",
+    copy: "ระบบคำนวณคอมมิชชั่นตามความสัมพันธ์ของสมาชิกในเครือข่ายสูงสุด 4 ระดับ"
   }
 ];
 
 const levels = [
-  { level: 1, rate: 7, label: "People you invite directly" },
-  { level: 2, rate: 5, label: "People invited by your Level 1" },
-  { level: 3, rate: 3, label: "People invited by your Level 2" },
-  { level: 4, rate: 1, label: "People invited by your Level 3" }
+  { level: 1, rate: 7, label: "สมาชิกที่คุณเชิญโดยตรง" },
+  { level: 2, rate: 5, label: "สมาชิกที่ถูกเชิญโดยระดับ 1" },
+  { level: 3, rate: 3, label: "สมาชิกที่ถูกเชิญโดยระดับ 2" },
+  { level: 4, rate: 1, label: "สมาชิกที่ถูกเชิญโดยระดับ 3" }
 ];
 
 export default function ReferralDetailsPage() {
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <Link href="/referrals" aria-label="Back to Invite & Earn">
+        <Link href="/referrals" aria-label="กลับไปหน้าระบบแนะนำเพื่อน">
           <ScenovaBrand className={styles.brand}/>
         </Link>
         <Link className={styles.backButton} href="/referrals">
-          ← Back to Invite & Earn
+          ← กลับหน้าระบบแนะนำเพื่อน
         </Link>
       </header>
 
       <section className={styles.hero}>
-        <span className={styles.kicker}>INVITE & EARN GUIDE</span>
-        <h1>How Invite & Earn Works</h1>
+        <span className={styles.kicker}>คู่มือระบบแนะนำเพื่อน</span>
+        <h1>ระบบแนะนำเพื่อนทำงานอย่างไร</h1>
         <p>
-          Build your SCENOVA referral network and earn commission when members in your
-          network make eligible paid purchases.
+          ทำความเข้าใจตั้งแต่การแชร์ลิงก์ การเชื่อมสมาชิกเข้ากับเครือข่าย
+          ไปจนถึงการคำนวณและถอนคอมมิชชั่น
         </p>
         <div className={styles.rateBanner}>
-          <b>7% + 5% + 3% + 1%</b>
-          <span>Maximum combined commission per eligible sale: 16%</span>
+          <b>โครงสร้างคอมมิชชั่นสูงสุด 4 ระดับ</b>
+          <span>อัตราคอมมิชชั่นของแต่ละระดับแสดงแยกอย่างชัดเจนด้านล่าง</span>
         </div>
       </section>
 
@@ -66,8 +66,8 @@ export default function ReferralDetailsPage() {
         <div className={styles.sectionTitle}>
           <span>01</span>
           <div>
-            <h2>Simple Flow</h2>
-            <p>From sharing your link to earning a reward.</p>
+            <h2>ขั้นตอนการทำงาน</h2>
+            <p>ตั้งแต่แชร์ลิงก์จนถึงได้รับคอมมิชชั่น</p>
           </div>
         </div>
 
@@ -90,8 +90,8 @@ export default function ReferralDetailsPage() {
         <div className={styles.sectionTitle}>
           <span>02</span>
           <div>
-            <h2>Your 4-Level Network</h2>
-            <p>Levels are based on each member's relationship to you.</p>
+            <h2>โครงสร้างเครือข่าย 4 ระดับ</h2>
+            <p>ระดับจะอ้างอิงจากความสัมพันธ์ระหว่างสมาชิกแต่ละคนกับคุณ</p>
           </div>
         </div>
 
@@ -99,8 +99,8 @@ export default function ReferralDetailsPage() {
           <div className={styles.pyramid}>
             <div className={`${styles.pyramidRow} ${styles.youRow}`}>
               <div className={styles.youCard}>
-                <small>YOU</small>
-                <b>Your referral network</b>
+                <small>บัญชีของคุณ</small>
+                <b>เครือข่ายการแนะนำของคุณ</b>
               </div>
             </div>
 
@@ -110,7 +110,7 @@ export default function ReferralDetailsPage() {
                 className={`${styles.pyramidRow} ${styles["level" + item.level]}`}
               >
                 <div className={styles.levelLabel}>
-                  <span>LEVEL {item.level}</span>
+                  <span>ระดับ {item.level}</span>
                   <b>{item.rate}%</b>
                   <small>{item.label}</small>
                 </div>
@@ -126,10 +126,10 @@ export default function ReferralDetailsPage() {
           <aside className={styles.relativeNote}>
             <ScenovaIcon name="info" size={19}/>
             <div>
-              <b>Levels are relative to each member.</b>
+              <b>ระดับของสมาชิกเป็นแบบสัมพันธ์</b>
               <p>
-                Someone who is your Level 2 can still have their own Level 1.
-                Every member can keep building their own network.
+                สมาชิกที่เป็นระดับ 2 ของคุณ ยังสามารถมีสมาชิกระดับ 1 ของตัวเองได้
+                ระบบจะคำนวณระดับตามสายการแนะนำของแต่ละบัญชี
               </p>
             </div>
           </aside>
@@ -140,19 +140,19 @@ export default function ReferralDetailsPage() {
         <div className={styles.sectionTitle}>
           <span>03</span>
           <div>
-            <h2>What You Earn</h2>
-            <p>Example when a member in your network buys a 1,000 THB eligible plan.</p>
+            <h2>ตัวอย่างการคำนวณคอมมิชชั่น</h2>
+            <p>ตัวอย่างกรณีมีรายการชำระเงินที่เข้าเงื่อนไขจำนวน 1,000 บาท</p>
           </div>
         </div>
 
         <div className={styles.exampleGrid}>
           {levels.map(item => (
             <article className={styles.exampleCard} key={item.level}>
-              <span>Your Level {item.level} buys</span>
-              <strong>1,000 THB</strong>
-              <small>You earn</small>
-              <b>{item.rate * 10} THB</b>
-              <em>{item.rate}% commission</em>
+              <span>สมาชิกระดับ {item.level} ชำระ</span>
+              <strong>1,000 บาท</strong>
+              <small>คอมมิชชั่นของคุณ</small>
+              <b>{item.rate * 10} บาท</b>
+              <em>อัตรา {item.rate}%</em>
             </article>
           ))}
         </div>
@@ -162,33 +162,33 @@ export default function ReferralDetailsPage() {
         <div className={styles.sectionTitle}>
           <span>04</span>
           <div>
-            <h2>How One Sale Is Shared</h2>
-            <p>One eligible sale can reward up to 4 people above the buyer.</p>
+            <h2>ตัวอย่างการกระจายคอมมิชชั่น</h2>
+            <p>หนึ่งรายการสามารถสร้างคอมมิชชั่นให้สมาชิกที่อยู่เหนือผู้ซื้อได้สูงสุด 4 ระดับ</p>
           </div>
         </div>
 
         <div className={styles.saleExample}>
           <div className={styles.chain}>
-            <div><b>A</b><small>Gets 1%</small><strong>10 THB</strong></div>
+            <div><b>A</b><small>ระดับ 4</small><strong>10 บาท</strong></div>
             <span>←</span>
-            <div><b>B</b><small>Gets 3%</small><strong>30 THB</strong></div>
+            <div><b>B</b><small>ระดับ 3</small><strong>30 บาท</strong></div>
             <span>←</span>
-            <div><b>C</b><small>Gets 5%</small><strong>50 THB</strong></div>
+            <div><b>C</b><small>ระดับ 2</small><strong>50 บาท</strong></div>
             <span>←</span>
-            <div><b>D</b><small>Gets 7%</small><strong>70 THB</strong></div>
+            <div><b>D</b><small>ระดับ 1</small><strong>70 บาท</strong></div>
             <span>←</span>
-            <div className={styles.buyer}><b>E</b><small>Buys plan</small><strong>1,000 THB</strong></div>
+            <div className={styles.buyer}><b>E</b><small>ผู้ซื้อ</small><strong>1,000 บาท</strong></div>
           </div>
           <div className={styles.totalLine}>
-            <span>Total commission from this 1,000 THB sale</span>
-            <b>160 THB</b>
-            <em>16% maximum</em>
+            <span>คอมมิชชั่นรวมจากตัวอย่างรายการนี้</span>
+            <b>160 บาท</b>
+            <em>คำนวณตามโครงสร้าง 4 ระดับ</em>
           </div>
         </div>
 
         <p className={styles.exampleExplanation}>
-          In this example, E is D's Level 1, C's Level 2, B's Level 3 and A's Level 4.
-          The same person can therefore appear at a different level depending on whose network is being viewed.
+          ในตัวอย่างนี้ E เป็นระดับ 1 ของ D, ระดับ 2 ของ C, ระดับ 3 ของ B และระดับ 4 ของ A
+          จึงเห็นได้ว่าระดับเดียวกันไม่ได้ตายตัว แต่ขึ้นอยู่กับตำแหน่งของสมาชิกแต่ละคนในเครือข่าย
         </p>
       </section>
 
@@ -196,28 +196,28 @@ export default function ReferralDetailsPage() {
         <div className={styles.sectionTitle}>
           <span>05</span>
           <div>
-            <h2>Important to Know</h2>
-            <p>Simple rules for customer rewards.</p>
+            <h2>เงื่อนไขสำคัญ</h2>
+            <p>หลักเกณฑ์ที่ควรรู้ก่อนใช้งานระบบแนะนำเพื่อน</p>
           </div>
         </div>
 
         <div className={styles.ruleGrid}>
-          <div><ScenovaIcon name="status" size={17}/><span>Only eligible paid purchases create commission.</span></div>
-          <div><ScenovaIcon name="close" size={17}/><span>Trial and free access do not create commission.</span></div>
-          <div><ScenovaIcon name="wallet" size={17}/><span>Commission is based on the actual eligible amount paid.</span></div>
-          <div><ScenovaIcon name="clock" size={17}/><span>Rewards enter a review period before becoming available.</span></div>
-          <div><ScenovaIcon name="shield" size={17}/><span>Your sponsor is linked when your account is created.</span></div>
-          <div><ScenovaIcon name="refresh" size={17}/><span>Refunded or reversed purchases can cancel related commission.</span></div>
+          <div><ScenovaIcon name="status" size={17}/><span>คอมมิชชั่นเกิดจากรายการชำระเงินที่เข้าเงื่อนไขเท่านั้น</span></div>
+          <div><ScenovaIcon name="close" size={17}/><span>Trial และสิทธิ์ใช้งานฟรีไม่สร้างคอมมิชชั่น</span></div>
+          <div><ScenovaIcon name="wallet" size={17}/><span>คอมมิชชั่นคำนวณจากยอดชำระจริงที่เข้าเงื่อนไข</span></div>
+          <div><ScenovaIcon name="clock" size={17}/><span>ยอดคอมมิชชั่นจะผ่านช่วงตรวจสอบก่อนเปลี่ยนเป็นยอดที่ถอนได้</span></div>
+          <div><ScenovaIcon name="shield" size={17}/><span>ผู้แนะนำจะถูกผูกกับบัญชีตั้งแต่ขั้นตอนสมัครสมาชิก</span></div>
+          <div><ScenovaIcon name="refresh" size={17}/><span>รายการคืนเงินหรือยกเลิกอาจทำให้คอมมิชชั่นที่เกี่ยวข้องถูกยกเลิก</span></div>
         </div>
       </section>
 
       <footer className={styles.footer}>
         <div>
           <ScenovaBrand className={styles.footerBrand}/>
-          <p>Share your link. Grow your network. Earn from eligible purchases.</p>
+          <p>แชร์ลิงก์ สร้างเครือข่าย และติดตามคอมมิชชั่นได้จากบัญชีของคุณ</p>
         </div>
         <Link className={styles.primaryButton} href="/referrals">
-          Go to Invite & Earn <span>→</span>
+          ไปหน้าระบบแนะนำเพื่อน <span>→</span>
         </Link>
       </footer>
     </main>
