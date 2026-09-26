@@ -303,11 +303,43 @@ export class AccountSecurityController {
       throw new ConflictException("เบอร์โทรที่ยืนยัน OTP และผูกกับสิทธิ์ Trial แล้วไม่สามารถเปลี่ยนได้");
     }
 
-    const owner = await this.db.one(
-      "SELECT user_id FROM user_phone_numbers WHERE e164=$1 AND user_id<>$2 LIMIT 1",
+    const phoneOwner = await this.db.one(
+      `SELECT p.user_id,u.user_code,u.status,u.role
+       FROM user_phone_numbers p
+       JOIN users u ON u.id=p.user_id
+       WHERE p.e164=$1 AND p.user_id<>$2
+       LIMIT 1`,
       [normalized.e164, user.id]
     );
-    if (owner) throw new ConflictException("เบอร์โทรนี้ถูกผูกกับบัญชี SCENOVA อื่นแล้ว");
+    const isOwner = String(user.role || "").toUpperCase() === "OWNER";
+    if (phoneOwner) {
+      if (isOwner && String(phoneOwner.status || "").toUpperCase() === "DELETED") {
+        await this.db.query(
+          "DELETE FROM user_phone_numbers WHERE user_id=$1 AND e164=$2",
+          [phoneOwner.user_id, normalized.e164]
+        );
+        await this.db.query(
+          "UPDATE trial_sms_codes SET status='EXPIRED' WHERE user_id=$1 AND status IN ('PENDING','SENT')",
+          [phoneOwner.user_id]
+        );
+        await this.db.query(
+          `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+           VALUES($1,'OWNER_RECLAIM_DELETED_PHONE','user',$2,$3::jsonb)`,
+          [
+            "OWNER:" + user.id,
+            phoneOwner.user_id,
+            JSON.stringify({
+              fromUserCode: phoneOwner.user_code || null,
+              toUserCode: user.user_code,
+              phoneLast4: normalized.e164.slice(-4),
+              preservedTrialHistory: true
+            })
+          ]
+        );
+      } else {
+        throw new ConflictException("เบอร์โทรนี้ถูกผูกกับบัญชี SCENOVA อื่นแล้ว");
+      }
+    }
 
     try {
       await this.db.query(
