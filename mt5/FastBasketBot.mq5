@@ -6094,7 +6094,7 @@ void SendHeartbeat()
       heartbeatUrl,
       payload,
       response,
-      MathMax(LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS, ExecutionAwareHttpTimeoutMs(3000))
+      MathMax(LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS, ExecutionAwareHttpTimeoutMs(1200))
    );
    g_lastHeartbeatLatencyMs = (long)(GetTickCount64() - heartbeatStartedMs);
    g_lastHeartbeatHttpStatus = code;
