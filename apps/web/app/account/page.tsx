@@ -193,7 +193,9 @@ export default function AccountPage() {
 
   useEffect(() => { load(); }, []);
 
-  const elevated = ["OWNER", "ADMIN"].includes(String(data?.user.role || "").toUpperCase());
+  const accountRole = String(data?.user.role || "").toUpperCase();
+  const isOwner = accountRole === "OWNER";
+  const elevated = ["OWNER", "ADMIN"].includes(accountRole);
   const partnerSummary = data?.access.partner ? {
     usedSeats: Number(data.access.partner.used_seats || 0),
     seat_limit: Number(data.access.partner.seat_limit || 0),
@@ -243,7 +245,12 @@ export default function AccountPage() {
       });
       setPhoneInput("");
       toggle("phone", false);
-      notify("good", "บันทึกเบอร์โทรแล้ว คุณยังแก้ไขได้จนกว่าจะยืนยัน OTP");
+      notify(
+        "good",
+        isOwner
+          ? "บันทึกเบอร์โทรแล้ว · OWNER สามารถแก้ไขเบอร์ของบัญชีตัวเองได้ และระบบจะคืนเบอร์จากบัญชีที่ลบแล้วให้อัตโนมัติ"
+          : "บันทึกเบอร์โทรแล้ว คุณยังแก้ไขได้จนกว่าจะยืนยัน OTP"
+      );
       await load();
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "บันทึกเบอร์โทรไม่สำเร็จ");
@@ -356,7 +363,7 @@ export default function AccountPage() {
     return <main className={styles.loadingPage}><div className={styles.loadingCard}>{message || "ไม่พบบัญชี"}</div></main>;
   }
 
-  const phoneLocked = Boolean(data.user.phone?.verified);
+  const phoneLocked = !isOwner && Boolean(data.user.phone?.verified);
 
   return (
     <div className="app-wrap">
@@ -466,7 +473,10 @@ export default function AccountPage() {
               {phoneLocked && (
                 <div className={styles.lockNote}>เบอร์นี้ยืนยัน OTP แล้ว จึงถูกล็อกเพื่อป้องกันการเปลี่ยนเบอร์ที่ผูกกับสิทธิ์ Trial</div>
               )}
-              {!phoneLocked && data.user.phone && !open.phone && (
+              {isOwner && data.user.phone && !open.phone && (
+                <div className={styles.lockNote}>สิทธิ์ OWNER: แก้ไขเบอร์ของบัญชีนี้ได้ แม้เคยยืนยันแล้ว และสามารถนำเบอร์ที่ค้างอยู่กับบัญชีที่ลบแล้วกลับมาใช้ได้ โดยประวัติ Trial เดิมยังถูกเก็บไว้</div>
+              )}
+              {!isOwner && !phoneLocked && data.user.phone && !open.phone && (
                 <div className={styles.lockNote}>หากกรอกเบอร์ผิด กด “แก้ไขเบอร์” เพื่อเปลี่ยนได้ก่อนยืนยัน OTP</div>
               )}
             </section>
