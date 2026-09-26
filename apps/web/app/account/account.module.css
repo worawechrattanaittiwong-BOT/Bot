@@ -397,6 +397,14 @@
 .phoneForm select{
   appearance:auto
 }
+.phoneHint{
+  display:block;
+  margin-top:1px;
+  color:#707c92;
+  font-size:var(--ui-type-caption);
+  font-weight:600;
+  line-height:1.45
+}
 .actionLine{
   grid-column:1/-1;
   display:flex;
