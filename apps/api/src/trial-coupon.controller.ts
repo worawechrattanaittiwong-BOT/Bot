@@ -229,6 +229,7 @@ export class TrialCouponController {
       `SELECT phone_last4,status,expires_at,created_at,sent_at,provider,provider_refno
        FROM trial_sms_codes
        WHERE user_id=$1
+         AND purpose='TRIAL'
          AND status='SENT'
        ORDER BY created_at DESC LIMIT 1`,
       [userId]
@@ -237,6 +238,7 @@ export class TrialCouponController {
       `SELECT count(*)::int count
        FROM trial_sms_codes
        WHERE user_id=$1
+         AND purpose='TRIAL'
          AND status IN ('SENT','USED')
          AND created_at>now()-interval '24 hours'`,
       [userId]
@@ -313,6 +315,7 @@ export class TrialCouponController {
       `SELECT count(*)::int count
        FROM trial_sms_codes
        WHERE (user_id=$1 OR phone_hash=$2)
+         AND purpose='TRIAL'
          AND status IN ('SENT','USED')
          AND created_at>now()-interval '24 hours'`,
       [userId, phoneHash]
@@ -327,6 +330,7 @@ export class TrialCouponController {
         `SELECT count(*)::int count
          FROM trial_sms_codes
          WHERE request_ip=$1
+           AND purpose='TRIAL'
            AND status IN ('SENT','USED')
            AND created_at>now()-interval '24 hours'`,
         [ip]
@@ -342,9 +346,9 @@ export class TrialCouponController {
 
     const record = await this.db.one(
       `INSERT INTO trial_sms_codes(
-         user_id,phone_hash,phone_last4,code_hash,code_salt,provider,status,expires_at,request_ip
+         user_id,phone_hash,phone_last4,code_hash,code_salt,provider,status,expires_at,request_ip,purpose
        )
-       VALUES($1,$2,$3,$4,$5,'PENDING','PENDING',now()+interval '10 minutes',$6)
+       VALUES($1,$2,$3,$4,$5,'PENDING','PENDING',now()+interval '10 minutes',$6,'TRIAL')
        RETURNING id`,
       [userId, phoneHash, last4, this.codeHash(salt, fallbackCode), salt, ip]
     );
@@ -396,6 +400,7 @@ export class TrialCouponController {
        FROM trial_sms_codes
        WHERE user_id=$1
          AND phone_hash=$2
+         AND purpose='TRIAL'
          AND status='SENT'
          AND expires_at>now()
        ORDER BY created_at DESC LIMIT 1`,
