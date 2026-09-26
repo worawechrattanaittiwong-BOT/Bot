@@ -155,7 +155,12 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         ADD COLUMN IF NOT EXISTS provider varchar(24) NOT NULL DEFAULT 'LOCAL_SMS',
         ADD COLUMN IF NOT EXISTS provider_token text,
         ADD COLUMN IF NOT EXISTS provider_refno varchar(64),
-        ADD COLUMN IF NOT EXISTS purpose varchar(20) NOT NULL DEFAULT 'TRIAL';
+        ADD COLUMN IF NOT EXISTS purpose varchar(20) NOT NULL DEFAULT 'TRIAL',
+        ADD COLUMN IF NOT EXISTS delivery_channel varchar(16) NOT NULL DEFAULT 'SMS',
+        ADD COLUMN IF NOT EXISTS email_masked varchar(320);
+      ALTER TABLE trial_sms_codes
+        ALTER COLUMN phone_hash DROP NOT NULL,
+        ALTER COLUMN phone_last4 DROP NOT NULL;
 
       CREATE INDEX IF NOT EXISTS idx_trial_sms_user_created
         ON trial_sms_codes(user_id,created_at DESC);
