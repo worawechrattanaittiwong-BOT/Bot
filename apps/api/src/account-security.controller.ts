@@ -4,6 +4,8 @@ import {
   ConflictException,
   Controller,
   Get,
+  HttpException,
+  HttpStatus,
   Post,
   Req,
   UnauthorizedException,
@@ -11,10 +13,11 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { compare, hash } from "bcryptjs";
-import { createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { DbService } from "./db.service";
 import { CryptoService, JwtGuard } from "./security";
 import { maskPhone, normalizePhone } from "./phone-utils";
+import { SmsService } from "./sms.service";
 
 const TOTP_STEP_SECONDS = 30;
 const TOTP_DIGITS = 6;
@@ -90,12 +93,28 @@ export class AccountSecurityController {
   constructor(
     private readonly db: DbService,
     private readonly jwt: JwtService,
-    private readonly crypto: CryptoService
+    private readonly crypto: CryptoService,
+    private readonly sms: SmsService
   ) {}
 
   private clientIp(req: any) {
     const forwarded = String(req?.headers?.["x-forwarded-for"] || "").split(",")[0].trim();
     return (forwarded || String(req?.ip || req?.socket?.remoteAddress || "")).slice(0, 96) || null;
+  }
+
+  private phoneIdentityHash(msisdn: string) {
+    const secret = String(
+      process.env.TRIAL_IDENTITY_SECRET ||
+      process.env.JWT_SECRET ||
+      "development-only-change-me"
+    );
+    return createHmac("sha256", secret)
+      .update(String(msisdn).replace(/\D/g, ""))
+      .digest("hex");
+  }
+
+  private phoneOtpCodeHash(salt: string, code: string) {
+    return createHash("sha256").update(`${salt}:${code}`).digest("hex");
   }
 
   private maskedIp(req: any) {
