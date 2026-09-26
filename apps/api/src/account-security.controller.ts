@@ -396,6 +396,221 @@ export class AccountSecurityController {
     };
   }
 
+  @Post("account/phone/request-otp")
+  @UseGuards(JwtGuard)
+  async requestPhoneOtp(@Req() req: any) {
+    const user = await this.getUser(req.user.sub);
+    if (!user || user.status !== "ACTIVE") throw new UnauthorizedException("account unavailable");
+
+    const phone = await this.db.one(
+      "SELECT country_code,e164,verified_at FROM user_phone_numbers WHERE user_id=$1",
+      [user.id]
+    );
+    if (!phone?.e164) throw new BadRequestException("กรุณาเพิ่มเบอร์โทรก่อนขอ OTP");
+    if (phone.verified_at) throw new ConflictException("เบอร์โทรนี้ยืนยันแล้ว");
+
+    const msisdn = String(phone.e164);
+    const phoneHash = this.phoneIdentityHash(msisdn);
+    const latest = await this.db.one(
+      `SELECT COALESCE(sent_at,created_at) sent_at
+       FROM trial_sms_codes
+       WHERE user_id=$1
+         AND phone_hash=$2
+         AND purpose='ACCOUNT'
+         AND status='SENT'
+       ORDER BY created_at DESC LIMIT 1`,
+      [user.id, phoneHash]
+    );
+
+    if (latest && Date.now() - new Date(latest.sent_at).getTime() < 60_000) {
+      const remaining = Math.max(
+        1,
+        Math.ceil((60_000 - (Date.now() - new Date(latest.sent_at).getTime())) / 1000)
+      );
+      throw new HttpException(
+        `กรุณารออีก ${remaining} วินาทีก่อนส่ง OTP ใหม่`,
+        HttpStatus.TOO_MANY_REQUESTS
+      );
+    }
+
+    const todayCount = await this.db.one(
+      `SELECT count(*)::int count
+       FROM trial_sms_codes
+       WHERE (user_id=$1 OR phone_hash=$2)
+         AND purpose='ACCOUNT'
+         AND status IN ('SENT','USED')
+         AND created_at>now()-interval '24 hours'`,
+      [user.id, phoneHash]
+    );
+    if (Number(todayCount?.count || 0) >= 5) {
+      throw new HttpException(
+        "ขอ OTP ครบจำนวนต่อวันแล้ว กรุณาลองใหม่ภายหลัง",
+        HttpStatus.TOO_MANY_REQUESTS
+      );
+    }
+
+    const ip = this.clientIp(req);
+    if (ip) {
+      const ipCount = await this.db.one(
+        `SELECT count(*)::int count
+         FROM trial_sms_codes
+         WHERE request_ip=$1
+           AND purpose='ACCOUNT'
+           AND status IN ('SENT','USED')
+           AND created_at>now()-interval '24 hours'`,
+        [ip]
+      );
+      if (Number(ipCount?.count || 0) >= 12) {
+        throw new HttpException(
+          "มีการขอรหัสจากเครือข่ายนี้มากเกินไป กรุณาลองใหม่ภายหลัง",
+          HttpStatus.TOO_MANY_REQUESTS
+        );
+      }
+    }
+
+    const fallbackCode = String(randomInt(100000, 1000000));
+    const salt = randomBytes(16).toString("hex");
+    const record = await this.db.one(
+      `INSERT INTO trial_sms_codes(
+         user_id,phone_hash,phone_last4,code_hash,code_salt,provider,status,expires_at,request_ip,purpose
+       )
+       VALUES($1,$2,$3,$4,$5,'PENDING','PENDING',now()+interval '10 minutes',$6,'ACCOUNT')
+       RETURNING id`,
+      [
+        user.id,
+        phoneHash,
+        msisdn.slice(-4),
+        this.phoneOtpCodeHash(salt, fallbackCode),
+        salt,
+        ip
+      ]
+    );
+
+    try {
+      const delivery = await this.sms.requestOtp(msisdn, fallbackCode);
+      await this.db.query(
+        `UPDATE trial_sms_codes
+         SET status='SENT',
+             sent_at=now(),
+             provider=$2,
+             provider_token=$3,
+             provider_refno=$4
+         WHERE id=$1`,
+        [record.id, delivery.provider, delivery.token, delivery.refno]
+      );
+    } catch (error) {
+      await this.db.query(
+        "UPDATE trial_sms_codes SET status='FAILED' WHERE id=$1",
+        [record.id]
+      );
+      throw error;
+    }
+
+    await this.authEvent(user.id, user.email, "PHONE_OTP_SENT", req);
+    return {
+      sent: true,
+      phoneMasked: maskPhone(msisdn, phone.country_code),
+      expiresInMinutes: 10,
+      resendAfterSeconds: 60
+    };
+  }
+
+  @Post("account/phone/verify-otp")
+  @UseGuards(JwtGuard)
+  async verifyPhoneOtp(@Req() req: any, @Body() body: { code?: string }) {
+    const user = await this.getUser(req.user.sub);
+    if (!user || user.status !== "ACTIVE") throw new UnauthorizedException("account unavailable");
+
+    const phone = await this.db.one(
+      "SELECT country_code,e164,verified_at FROM user_phone_numbers WHERE user_id=$1",
+      [user.id]
+    );
+    if (!phone?.e164) throw new BadRequestException("กรุณาเพิ่มเบอร์โทรก่อนยืนยัน OTP");
+    if (phone.verified_at) {
+      return {
+        verified: true,
+        phone: {
+          countryCode: phone.country_code,
+          masked: maskPhone(phone.e164, phone.country_code)
+        }
+      };
+    }
+
+    const code = String(body.code || "").replace(/\D/g, "").slice(0, 6);
+    if (code.length !== 6) throw new BadRequestException("กรุณากรอกรหัส OTP 6 หลัก");
+
+    const msisdn = String(phone.e164);
+    const phoneHash = this.phoneIdentityHash(msisdn);
+    const record = await this.db.one(
+      `SELECT *
+       FROM trial_sms_codes
+       WHERE user_id=$1
+         AND phone_hash=$2
+         AND purpose='ACCOUNT'
+         AND status='SENT'
+         AND expires_at>now()
+       ORDER BY created_at DESC LIMIT 1`,
+      [user.id, phoneHash]
+    );
+
+    if (!record) throw new BadRequestException("ไม่พบ OTP ที่ใช้งานได้ หรือรหัสหมดอายุแล้ว");
+    if (Number(record.attempts || 0) >= 5) {
+      throw new BadRequestException("กรอกรหัสผิดเกินจำนวนที่กำหนด กรุณาขอ OTP ใหม่");
+    }
+
+    let ok = false;
+    if (String(record.provider || "") === "TBS_OTP" && record.provider_token) {
+      ok = await this.sms.verifyOtp(String(record.provider_token), code);
+    } else {
+      const expected = Buffer.from(String(record.code_hash), "hex");
+      const supplied = Buffer.from(
+        this.phoneOtpCodeHash(String(record.code_salt), code),
+        "hex"
+      );
+      ok = expected.length === supplied.length && timingSafeEqual(expected, supplied);
+    }
+
+    if (!ok) {
+      await this.db.query(
+        "UPDATE trial_sms_codes SET attempts=attempts+1 WHERE id=$1",
+        [record.id]
+      );
+      await this.authEvent(user.id, user.email, "PHONE_OTP_FAILED", req);
+      throw new BadRequestException("OTP ไม่ถูกต้อง");
+    }
+
+    await this.db.transaction(async client => {
+      await client.query(
+        `UPDATE trial_sms_codes
+         SET status='USED',verified_at=now(),attempts=attempts+1
+         WHERE id=$1`,
+        [record.id]
+      );
+      await client.query(
+        `UPDATE trial_sms_codes
+         SET status='EXPIRED'
+         WHERE user_id=$1
+           AND purpose='ACCOUNT'
+           AND status='SENT'
+           AND id<>$2`,
+        [user.id, record.id]
+      );
+      await client.query(
+        "UPDATE user_phone_numbers SET verified_at=now(),updated_at=now() WHERE user_id=$1 AND e164=$2",
+        [user.id, msisdn]
+      );
+    });
+
+    await this.authEvent(user.id, user.email, "PHONE_VERIFIED", req);
+    return {
+      verified: true,
+      phone: {
+        countryCode: phone.country_code,
+        masked: maskPhone(msisdn, phone.country_code)
+      }
+    };
+  }
+
   @Post("change-password")
   @UseGuards(JwtGuard)
   async changePassword(
