@@ -30,6 +30,19 @@ internal sealed class RecoveryDecision
     public bool Allow { get; set; }
 }
 
+internal sealed class ServerSoftwareUpdateEnvelope
+{
+    public ServerSoftwareUpdateJob? Update { get; set; }
+}
+
+internal sealed class ServerSoftwareUpdateJob
+{
+    public string Id { get; set; } = "";
+    public string TargetWorkerVersion { get; set; } = "";
+    public string TargetSetupVersion { get; set; } = "";
+    public string SetupUrl { get; set; } = "";
+}
+
 internal sealed class FleetUpdateEnvelope
 {
     public FleetUpdateJob? Update { get; set; }

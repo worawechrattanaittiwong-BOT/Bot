@@ -5,6 +5,7 @@ import { AdminGuard, CryptoService, JwtGuard } from "./security";
 import { ReferralService } from "./referral.service";
 import { LocalPackageService } from "./local-package.controller";
 import { PromotionService } from "./promotion.service";
+import { CLOUD_SERVER_RELEASE, versionAtLeast, versionExact } from "./cloud-server-release";
 
 export function paymentMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
@@ -63,9 +64,12 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async nodes() {
-    return (await this.db.query(`SELECT w.runner_id,w.region,w.hostname,w.capacity,w.active_instances,
+    const rows = (await this.db.query(`SELECT w.runner_id,w.region,w.hostname,w.capacity,w.active_instances,
       w.accepting_jobs,w.monthly_cost,w.spec,w.telemetry,w.last_seen_at,l.occupied,
       w.health_state,w.capacity_blocked,w.capacity_block_reason,w.quarantined,w.quarantine_reason,w.recovery_paused,
+      su.state server_update_state,su.target_worker_version server_update_target_worker,
+      su.target_setup_version server_update_target_setup,su.result_code server_update_error,
+      su.created_at server_update_created_at,su.completed_at server_update_completed_at,
       CASE WHEN w.last_seen_at>now()-interval '30 seconds' THEN 'ONLINE' ELSE 'OFFLINE' END health,
       CASE
         WHEN w.last_seen_at>now()-interval '30 seconds' AND w.telemetry->>'templateReady'='true' THEN 'ONLINE'
@@ -74,7 +78,30 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
         WHEN w.hostname IS NOT NULL THEN 'INSTALLING'
         ELSE 'WAITING_INSTALL'
       END setup_state
-      FROM worker_nodes w JOIN cloud_node_load l USING(runner_id) ORDER BY w.created_at`)).rows;
+      FROM worker_nodes w
+      JOIN cloud_node_load l USING(runner_id)
+      LEFT JOIN LATERAL (
+        SELECT state,target_worker_version,target_setup_version,result_code,created_at,completed_at
+        FROM server_software_update_jobs
+        WHERE runner_id=w.runner_id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) su ON true
+      ORDER BY w.created_at`)).rows;
+
+    return rows.map((node:any) => {
+      const currentWorker = String(node.telemetry?.version || "");
+      const currentSetup = String(node.telemetry?.setupVersion || "");
+      return {
+        ...node,
+        latest_worker_version: CLOUD_SERVER_RELEASE.workerVersion,
+        latest_setup_version: CLOUD_SERVER_RELEASE.setupVersion,
+        server_update_available:
+          !versionExact(currentWorker, CLOUD_SERVER_RELEASE.workerVersion) ||
+          !versionExact(currentSetup, CLOUD_SERVER_RELEASE.setupVersion),
+        server_update_capable: versionAtLeast(currentWorker, "2.2.0")
+      };
+    });
   }
 
   async catalog() {

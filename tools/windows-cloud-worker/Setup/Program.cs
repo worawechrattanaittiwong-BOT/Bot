@@ -10,7 +10,7 @@ namespace Scenova.CloudSetup;
 
 internal static class Program
 {
-    internal const string SetupVersion = "0.5.1";
+    internal const string SetupVersion = "0.6.0";
     private const string DefaultApiBase = "https://snvea-bot.online/backend";
     private const string RootPath = @"C:\BotTrading";
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("SCENOVA-CLOUD-WORKER-V1");
@@ -28,6 +28,8 @@ internal static class Program
     {
         Console.OutputEncoding = Encoding.UTF8;
         Console.Title = "SCENOVA Cloud Server Setup";
+        var unattended = args.Any(arg =>
+            string.Equals(arg, "--unattended", StringComparison.OrdinalIgnoreCase));
 
         if (args.Any(arg =>
                 string.Equals(arg, "--setup-self-test", StringComparison.OrdinalIgnoreCase)))
@@ -122,9 +124,12 @@ internal static class Program
             Console.WriteLine($"Auto Start: {WorkerStartupManager.TaskName(runnerId)}");
             Console.WriteLine("Enrollment Token ไม่ถูกบันทึกไว้ในเครื่อง");
             Console.WriteLine("สามารถตัด Remote Desktop ได้ แต่บัญชี Windows สำหรับ MT5 ต้องคง session ไว้");
-            Console.WriteLine();
-            Console.WriteLine("กด Enter เพื่อปิด Setup");
-            Console.ReadLine();
+            if (!unattended)
+            {
+                Console.WriteLine();
+                Console.WriteLine("กด Enter เพื่อปิด Setup");
+                Console.ReadLine();
+            }
             return 0;
         }
         catch (Exception ex)
@@ -132,9 +137,12 @@ internal static class Program
             Console.Error.WriteLine();
             Console.Error.WriteLine("❌ ติดตั้ง/Repair ไม่สำเร็จ");
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine();
-            Console.Error.WriteLine("กด Enter เพื่อปิด");
-            Console.ReadLine();
+            if (!unattended)
+            {
+                Console.Error.WriteLine();
+                Console.Error.WriteLine("กด Enter เพื่อปิด");
+                Console.ReadLine();
+            }
             return 1;
         }
     }

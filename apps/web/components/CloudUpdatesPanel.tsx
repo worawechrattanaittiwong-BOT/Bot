@@ -54,10 +54,10 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
 
   async function start(runnerId:string) {
     const ok=await confirmPopup({
-      title:"เริ่ม Safe EA Update",
+      title:"ปล่อย EA Update ให้ลูกค้า",
       tone:"warning",
-      message:"อัปเดต EA บน "+runnerId+"? บัญชีที่กำลังเทรดจะเข้า Safe Stop รอ Position เป็น 0 แล้ว Worker จะอัปเดตทีละ MT5 และตรวจเวอร์ชันหลัง Restart",
-      confirmLabel:"เริ่ม Safe Update"
+      message:"เตรียม EA เวอร์ชันล่าสุดบน "+runnerId+"? บัญชีที่กำลังเทรดจะไม่ถูกหยุด ระบบจะรอให้ลูกค้าแต่ละบัญชีกด Stop และ Position เป็น 0 แล้วอัปเดตบัญชีนั้นอัตโนมัติ",
+      confirmLabel:"สร้างคิวอัปเดต"
     });
     if(!ok)return;
 
@@ -67,7 +67,7 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
         method:"POST",
         body:JSON.stringify({runnerId})
       });
-      setNotice("เริ่ม Safe Update บน "+runnerId+" แล้ว");
+      setNotice("สร้างคิว EA Update บน "+runnerId+" แล้ว · บัญชีที่กำลังรันจะอัปเดตเมื่อผู้ใช้กด Stop");
       await load();
     }catch(e:any){setError(e.message);}
     finally{setBusy("");}
@@ -77,7 +77,7 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
     const ok=await confirmPopup({
       title:"Rollback EA",
       tone:"warning",
-      message:"ย้อน EA ของ "+job.runner_id+" กลับจาก Backup ของงานนี้? ระบบจะใช้ Safe Stop และทำทีละ MT5 เช่นเดียวกับ Update",
+      message:"ย้อน EA ของ "+job.runner_id+" กลับจาก Backup ของงานนี้? บัญชีที่กำลังรันจะไม่ถูกหยุด และจะ Rollback เฉพาะเมื่อผู้ใช้กด Stop จนบัญชีนั้นปลอด Position",
       confirmLabel:"เริ่ม Rollback"
     });
     if(!ok)return;
@@ -106,7 +106,7 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
         {notice&&<div role="status" className={s.notice+" "+s.success}>{notice}</div>}
         {release?<>
           <p className={s.muted}>SHA256 <code>{release.sha256.slice(0,16)}…</code><br/>Runtime Contract: {release.runtimeContract}</p>
-          <p className={s.muted}>Safe Update จะหยุดการเปิดรอบใหม่ก่อน รอ Position ของ SCENOVA เป็น 0 แล้วค่อยอัปเดตทีละ MT5 หากลูกค้ากดหยุดเองระหว่าง Update ระบบจะไม่เปิดบอทกลับเอง</p>
+          <p className={s.muted}>Deferred Update ไม่รบกวนบัญชีที่กำลังเทรด ลูกค้าจะเห็นแจ้งเตือนบน Control Center และเมื่อกด Stop จน Position เป็น 0 ระบบจะอัปเดตเฉพาะ MT5 บัญชีนั้น จากนั้นคงสถานะหยุดไว้จนลูกค้ากด Start เอง</p>
         </>:<p className={s.muted}>Backend ยังไม่พบ EA production artifact จึงยังเริ่ม Fleet Update ไม่ได้</p>}
         <div className={s.nodes}>
           {nodes.map(n=><section key={n.runner_id} className={s.nodeCard}>
@@ -115,7 +115,7 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
               className={s.button+" "+s.primary}
               disabled={!release||n.health!=="ONLINE"||Boolean(busy)}
               onClick={()=>start(n.runner_id)}
-            >{busy===n.runner_id?"กำลังเริ่ม…":"Safe Update EA"}</button>
+            >{busy===n.runner_id?"กำลังสร้างคิว…":"ปล่อย EA Update"}</button>
           </section>)}
         </div>
       </div>

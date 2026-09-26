@@ -21,6 +21,7 @@ type Dashboard = {
   trialRequest: any;
   liveStatus: any;
   softwareUpdate: any;
+  cloudUpdate: any;
   startTransition: any;
   maintenance: any;
   partner: any;
@@ -659,7 +660,34 @@ export default function DashboardPage() {
   const softwareUpdateRequired =
     data?.selectedSlot?.mode === "LOCAL" &&
     Boolean(softwareUpdate.required);
-  const statusNoticeCount = Number(marketSessionClosed || !isMt5Online) + Number(softwareUpdateRequired);
+  const cloudUpdate = data?.selectedSlot?.mode === "CLOUD" ? data?.cloudUpdate : null;
+  const cloudUpdateState = String(cloudUpdate?.state || "");
+  const cloudUpdateVisible = Boolean(cloudUpdate) && cloudUpdateState !== "COMPLETED";
+  const cloudUpdateLabel =
+    cloudUpdateState === "WAITING_SAFE"
+      ? (desired === "RUNNING" || state === "RUNNING"
+          ? "มีอัปเดตใหม่ · กดหยุดบอทเมื่อคุณสะดวก"
+          : "รอระบบเริ่มอัปเดตบัญชีนี้")
+      : cloudUpdateState === "DELIVERED"
+        ? "กำลังอัปเดต EA ของบัญชีนี้"
+        : cloudUpdateState === "VERIFYING"
+          ? "กำลังเปิด MT5 ใหม่และตรวจสอบเวอร์ชัน"
+          : cloudUpdateState === "FAILED"
+            ? "อัปเดตบัญชีนี้ไม่สำเร็จ · ผู้ดูแลกำลังตรวจสอบ"
+            : "กำลังเตรียมอัปเดต SCENOVA";
+  const cloudUpdateDetail =
+    cloudUpdateState === "WAITING_SAFE"
+      ? (desired === "RUNNING" || state === "RUNNING"
+          ? "บอทยังทำงานต่อได้ตามปกติ ระบบจะไม่หยุดให้เอง และจะอัปเดตเฉพาะบัญชีนี้หลังคุณกด Stop และ Position เป็น 0"
+          : "กรุณารอสักครู่ Worker จะรีเฟรช EA เฉพาะบัญชีนี้ แล้วตรวจ Heartbeat ให้อัตโนมัติ")
+      : cloudUpdateState === "DELIVERED"
+        ? "กำลังปิด/รีเฟรชเฉพาะ MT5 บัญชีนี้เพื่อเปลี่ยน EA โดยไม่กระทบบัญชีอื่น"
+        : cloudUpdateState === "VERIFYING"
+          ? "กำลังรอ EA เวอร์ชันใหม่ส่ง Heartbeat กลับมา เมื่อตรวจผ่านแล้วคุณสามารถกด Start เอง"
+          : cloudUpdateState === "FAILED"
+            ? "บอทยังคงหยุดอยู่เพื่อความปลอดภัย กรุณารอผู้ดูแลตรวจสอบ"
+            : "กำลังประมวลผล";
+  const statusNoticeCount = Number(marketSessionClosed || !isMt5Online) + Number(softwareUpdateRequired) + Number(cloudUpdateVisible);
 
   const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };
   const maintenanceBlocksStart = Boolean(maintenance.blockStarts);
@@ -1919,6 +1947,12 @@ export default function DashboardPage() {
 
   return (
     <div className={"app-wrap "+(activeView === "overview" ? "cc-shell-v4" : "")}>
+      {cloudUpdateVisible&&<div className={"cc-cloud-update-float "+(cloudUpdateState==="FAILED"?"failed":"")} role="status" aria-live="polite">
+        <span className="cc-cloud-update-kicker">SCENOVA CLOUD UPDATE · {cloudUpdate?.target_version?"v"+cloudUpdate.target_version:"LATEST"}</span>
+        <b>{cloudUpdateLabel}</b>
+        <p>{cloudUpdateDetail}</p>
+        <small>{cloudUpdateState==="WAITING_SAFE"?"สถานะ: รอคุณหยุดบอท":"สถานะ: "+cloudUpdateState}</small>
+      </div>}
       {isOwner ? (
         <OwnerSidebar
           activeKey={ownerActiveKey}

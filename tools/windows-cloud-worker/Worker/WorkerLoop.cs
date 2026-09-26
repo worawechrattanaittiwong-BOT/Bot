@@ -2,11 +2,12 @@ namespace Scenova.CloudWorker;
 
 internal sealed class WorkerLoop
 {
-    internal const string Version = "2.1.2";
+    internal const string Version = "2.2.0";
 
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;
     private readonly Mt5Runtime _mt5;
+    private readonly ServerUpdateManager _serverUpdates;
     private readonly FleetUpdateManager _updates;
     private readonly string _statusPath;
 
@@ -15,6 +16,7 @@ internal sealed class WorkerLoop
         _config = config;
         _client = client;
         _mt5 = new Mt5Runtime(config);
+        _serverUpdates = new ServerUpdateManager(config, client);
         _updates = new FleetUpdateManager(config, client, _mt5);
         _statusPath = Path.Combine(config.Root, "worker", "last-status.txt");
     }
@@ -37,6 +39,11 @@ internal sealed class WorkerLoop
                     activeInstances = _mt5.ActiveInstanceCount(),
                     telemetry
                 }, cancellationToken);
+
+                // Server update is independent from customer MT5 lifecycles.
+                // It replaces/restarts only Worker/Setup and leaves terminals running.
+                if (await _serverUpdates.ProcessNextAsync(cancellationToken))
+                    return;
 
                 var commands = await _client.PostAsync<CommandEnvelope>(
                     "commands",

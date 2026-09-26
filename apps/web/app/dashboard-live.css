@@ -1040,3 +1040,71 @@
   }
 }
 /* ===== /V49 ===== */
+
+
+/* ===== Cloud deferred per-account update status ===== */
+.cc-cloud-update-float{
+  position:fixed;
+  z-index:1200;
+  left:50%;
+  top:50%;
+  width:min(520px,calc(100vw - 32px));
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  padding:20px 22px;
+  border:1px solid rgba(151,119,255,.58);
+  border-radius:18px;
+  background:
+    radial-gradient(circle at 90% 0,rgba(127,86,255,.18),transparent 48%),
+    linear-gradient(145deg,rgba(15,22,39,.96),rgba(8,13,25,.97));
+  box-shadow:0 24px 80px rgba(0,0,0,.48),0 0 34px rgba(106,84,255,.13),inset 0 1px 0 rgba(255,255,255,.06);
+  backdrop-filter:blur(14px);
+  color:#edf2ff;
+  text-align:center;
+}
+.cc-cloud-update-float::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  pointer-events:none;
+  background:linear-gradient(120deg,rgba(255,255,255,.04),transparent 30%,transparent 72%,rgba(90,158,255,.05));
+}
+.cc-cloud-update-float .cc-cloud-update-kicker{
+  position:relative;
+  display:block;
+  margin-bottom:8px;
+  color:#ae99ff;
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.16em;
+}
+.cc-cloud-update-float b{
+  position:relative;
+  display:block;
+  font-size:20px;
+  line-height:1.35;
+}
+.cc-cloud-update-float p{
+  position:relative;
+  margin:9px auto 8px;
+  max-width:440px;
+  color:#aeb9cf;
+  font-size:13px;
+  line-height:1.7;
+}
+.cc-cloud-update-float small{
+  position:relative;
+  color:#7fd8ba;
+  font-size:11px;
+  font-weight:800;
+}
+.cc-cloud-update-float.failed{
+  border-color:rgba(242,108,132,.58);
+  background:linear-gradient(145deg,rgba(45,17,27,.97),rgba(17,10,17,.98));
+}
+.cc-cloud-update-float.failed small{color:#f29baf}
+@media(max-width:600px){
+  .cc-cloud-update-float{top:auto;bottom:78px;transform:translateX(-50%);padding:16px 17px}
+  .cc-cloud-update-float b{font-size:16px}
+}

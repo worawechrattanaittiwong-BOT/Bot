@@ -183,30 +183,9 @@ export class CloudUpdateService {
           ]
         )).rows[0];
 
-        if (String(instance.desired_state || "") === "RUNNING") {
-          await tx.query(
-            "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1 AND desired_state='RUNNING'",
-            [instance.id]
-          );
-          await tx.query(
-            `INSERT INTO bot_commands(bot_instance_id,command,payload)
-             SELECT $1,'SAFE_STOP',$2::jsonb
-             WHERE NOT EXISTS(
-               SELECT 1 FROM bot_commands
-               WHERE bot_instance_id=$1
-                 AND command IN ('SAFE_STOP','CLOSE_ALL')
-                 AND status IN ('PENDING','DELIVERED')
-             )`,
-            [
-              instance.id,
-              JSON.stringify({
-                source: "CLOUD_EA_UPDATE",
-                updateJobId: parent.id,
-                instanceUpdateId: child.id
-              })
-            ]
-          );
-        }
+        // Deferred update policy: never interrupt a running customer.
+        // This instance remains WAITING_SAFE until the customer chooses Stop
+        // and the account is flat. The Worker updates only that MT5 instance.
       }
 
       return this.parentStatus(tx, parent.id);
@@ -277,30 +256,8 @@ export class CloudUpdateService {
           ]
         )).rows[0];
 
-        if (String(item.current_desired_state || "") === "RUNNING") {
-          await tx.query(
-            "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1 AND desired_state='RUNNING'",
-            [item.bot_instance_id]
-          );
-          await tx.query(
-            `INSERT INTO bot_commands(bot_instance_id,command,payload)
-             SELECT $1,'SAFE_STOP',$2::jsonb
-             WHERE NOT EXISTS(
-               SELECT 1 FROM bot_commands
-               WHERE bot_instance_id=$1
-                 AND command IN ('SAFE_STOP','CLOSE_ALL')
-                 AND status IN ('PENDING','DELIVERED')
-             )`,
-            [
-              item.bot_instance_id,
-              JSON.stringify({
-                source: "CLOUD_EA_ROLLBACK",
-                updateJobId: parent.id,
-                instanceUpdateId: child.id
-              })
-            ]
-          );
-        }
+        // Rollback follows the same deferred policy: wait for the customer to
+        // stop this account; never force a running bot into Safe Stop.
       }
 
       return this.parentStatus(tx, parent.id);
@@ -529,42 +486,10 @@ export class CloudUpdateService {
           [row.id]
         );
 
-        if (String(row.original_desired_state || "") === "RUNNING") {
-          const userStop = (await tx.query(
-            `SELECT 1
-             FROM bot_commands
-             WHERE bot_instance_id=$1
-               AND created_at>$2
-               AND command IN ('SAFE_STOP','CLOSE_ALL')
-               AND COALESCE(payload->>'source','') NOT LIKE 'CLOUD_EA_%'
-             LIMIT 1`,
-            [row.bot_instance_id, row.parent_created_at]
-          )).rows[0];
+        // Never auto-resume after an EA update. The customer intentionally
+        // stopped this account to create a safe update window and remains in
+        // control of when trading starts again.
 
-          if (!userStop) {
-            const resumed = await tx.query(
-              `UPDATE bot_instances
-               SET desired_state='RUNNING'
-               WHERE id=$1 AND desired_state='STOPPED'
-               RETURNING id`,
-              [row.bot_instance_id]
-            );
-
-            if (resumed.rowCount) {
-              await tx.query(
-                `INSERT INTO bot_commands(bot_instance_id,command,payload)
-                 VALUES($1,'START',$2::jsonb)`,
-                [
-                  row.bot_instance_id,
-                  JSON.stringify({
-                    source: "CLOUD_EA_UPDATE_RESUME",
-                    instanceUpdateId: row.id
-                  })
-                ]
-              );
-            }
-          }
-        }
       }
 
       const parents = (await tx.query(

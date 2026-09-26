@@ -1302,6 +1302,19 @@ export class BotController {
     );
     const liveStatus = this.buildLiveStatus(instance, settings, entitlement);
     const softwareUpdate = this.installerUpdateState(instance, selectedSlot.mode);
+    const cloudUpdate = instance && String(selectedSlot.mode || "").toUpperCase() === "CLOUD"
+      ? await this.db.one(
+          `SELECT
+             ij.state,ij.target_version,ij.result_code,ij.created_at,ij.delivered_at,
+             ij.applied_at,ij.completed_at,sj.action,sj.runner_id
+           FROM instance_update_jobs ij
+           JOIN server_update_jobs sj ON sj.id=ij.server_update_job_id
+           WHERE ij.bot_instance_id=$1
+           ORDER BY ij.created_at DESC
+           LIMIT 1`,
+          [instance.id]
+        )
+      : null;
     const maintenance = await this.maintenance.current();
     const partner = await this.partner.dashboardSummary(userId);
 
@@ -1316,6 +1329,7 @@ export class BotController {
       entitlement,
       liveStatus,
       softwareUpdate,
+      cloudUpdate,
       startTransition,
       runSummary,
       maintenance,

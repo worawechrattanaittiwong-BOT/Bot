@@ -62,6 +62,26 @@ internal sealed class WorkerClient : IDisposable
         return await response.Content.ReadAsByteArrayAsync(cancellationToken);
     }
 
+    public async Task<byte[]> DownloadServerSetupAsync(
+        string url,
+        CancellationToken cancellationToken)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            !string.Equals(uri.Host, "snvea-bot.online", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("SERVER_UPDATE_URL_INVALID");
+
+        using var download = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        using var response = await download.GetAsync(uri, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        if (bytes.Length < 1024 * 1024)
+            throw new InvalidOperationException("SERVER_UPDATE_PAYLOAD_INVALID");
+
+        return bytes;
+    }
+
     private Dictionary<string, object?> MergeRunner(object payload)
     {
         var result = JsonSerializer.Deserialize<Dictionary<string, object?>>(
