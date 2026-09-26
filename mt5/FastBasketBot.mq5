@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.72"
-#define SCENOVA_EA_VERSION "1.0.72"
-#define SCENOVA_PRODUCT_VERSION "1.0.72"
+#property version   "1.0.73"
+#define SCENOVA_EA_VERSION "1.0.73"
+#define SCENOVA_PRODUCT_VERSION "1.0.73"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -268,6 +268,7 @@ datetime g_lastRunAuthorization = 0;
 datetime g_lastServerContactAt = 0;
 long   g_lastHeartbeatLatencyMs = 0;
 int    g_lastHeartbeatHttpStatus = 0;
+int    g_lastHttpTransportError = 0;
 string g_executionStatus = "INITIALIZING";
 long   g_lastOrderRetcode = 0;
 int    g_lastOrderError = 0;
@@ -1534,6 +1535,16 @@ int OnInit()
       g_lastSuccessfulHeartbeat = TimeCurrent();
       g_lastRunAuthorization = TimeCurrent();
       Print("Strategy Tester mode: SaaS heartbeat bypassed for historical testing only.");
+   }
+
+   if(!MQLInfoInteger(MQL_TESTER))
+   {
+      // Establish control immediately at startup instead of waiting for the
+      // first timer pass. This also makes Cloud provisioning failures visible
+      // in Experts as soon as MT5 loads the EA.
+      g_lastHeartbeatTickMs = GetTickCount64();
+      g_lastHeartbeat = TimeCurrent();
+      SendHeartbeat();
    }
 
    RefreshChartStatus(true);
@@ -6083,13 +6094,13 @@ void SendHeartbeat()
       heartbeatUrl,
       payload,
       response,
-      MathMax(LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS, ExecutionAwareHttpTimeoutMs(1200))
+      MathMax(LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS, ExecutionAwareHttpTimeoutMs(3000))
    );
    g_lastHeartbeatLatencyMs = (long)(GetTickCount64() - heartbeatStartedMs);
    g_lastHeartbeatHttpStatus = code;
    if(code > 0)
       g_lastServerContactAt = TimeCurrent();
-   int webError = GetLastError();
+   int webError = g_lastHttpTransportError;
 
    if(code < 200 || code >= 300)
    {
@@ -6138,7 +6149,10 @@ void SendHeartbeat()
       return;
    }
 
+   bool firstSuccessfulHeartbeat = (g_lastSuccessfulHeartbeat <= 0);
    g_lastSuccessfulHeartbeat = TimeCurrent();
+   if(firstSuccessfulHeartbeat)
+      Print("SCENOVA heartbeat connected. HTTP=", code, " URL=", heartbeatUrl);
    g_access = JsonBool(response, "access", false);
 
    string desired = JsonString(response, "desiredState", "STOPPED");
@@ -6293,7 +6307,17 @@ int HttpPostJsonTimeout(string url, string payload, string &response, int timeou
    string resultHeaders = "";
    string headers = "Content-Type: application/json\r\n";
 
-   StringToCharArray(payload, data, 0, WHOLE_ARRAY, CP_UTF8);
+   ResetLastError();
+   int copied = StringToCharArray(payload, data, 0, WHOLE_ARRAY, CP_UTF8);
+   if(copied <= 0)
+   {
+      g_lastHttpTransportError = GetLastError();
+      response = "";
+      return -1;
+   }
+
+   // StringToCharArray includes the terminal zero when WHOLE_ARRAY is used.
+   // Do not send that byte in a JSON body.
    if(ArraySize(data) > 0)
       ArrayResize(data, ArraySize(data) - 1);
 
@@ -6307,7 +6331,17 @@ int HttpPostJsonTimeout(string url, string payload, string &response, int timeou
       result,
       resultHeaders
    );
-   response = CharArrayToString(result, 0, -1, CP_UTF8);
+
+   // Capture the WebRequest error BEFORE touching result[]. Converting an
+   // empty response array can itself set ERR_INVALID_ARRAY (4006) and mask the
+   // real network error (5200-5203).
+   g_lastHttpTransportError = GetLastError();
+
+   if(ArraySize(result) > 0)
+      response = CharArrayToString(result, 0, -1, CP_UTF8);
+   else
+      response = "";
+
    return code;
 }
 
