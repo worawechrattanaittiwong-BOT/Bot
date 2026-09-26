@@ -267,6 +267,10 @@ export class TrialCouponController {
   @Get("status")
   async status(@Req() req: any) {
     const userId = String(req.user.sub);
+    const user = await this.db.one(
+      "SELECT email,email_verified_at FROM users WHERE id=$1",
+      [userId]
+    );
     const authorization = await this.db.one(
       `SELECT status,duration_minutes,phone_last4,approved_at,claimed_at,blocked_reason
        FROM trial_authorizations WHERE user_id=$1 LIMIT 1`,
@@ -278,7 +282,7 @@ export class TrialCouponController {
       [userId]
     );
     const latestCode = await this.db.one(
-      `SELECT phone_last4,status,expires_at,created_at,sent_at,provider,provider_refno
+      `SELECT phone_last4,email_masked,delivery_channel,status,expires_at,created_at,sent_at,provider,provider_refno
        FROM trial_sms_codes
        WHERE user_id=$1
          AND purpose='TRIAL'
@@ -306,7 +310,14 @@ export class TrialCouponController {
     const phoneHash = phone?.e164 ? this.phoneHash(phone.e164) : null;
     const base = await this.eligibility(userId, phoneHash);
     return {
+      emailConfigured: this.emailConfigured(),
       smsConfigured: this.sms.configured(),
+      verificationConfigured: this.emailConfigured() || this.sms.configured(),
+      defaultDelivery: "EMAIL",
+      email: user?.email ? {
+        masked: this.maskEmail(user.email),
+        verified: Boolean(user.email_verified_at)
+      } : null,
       trialDays: this.trialDays(),
       eligibility: base,
       phone: phone ? {
