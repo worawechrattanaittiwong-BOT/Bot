@@ -95,6 +95,33 @@ const PHONE_COUNTRIES = [
   ["ZA","แอฟริกาใต้","+27"], ["BR","บราซิล","+55"], ["MX","เม็กซิโก","+52"]
 ] as const;
 
+function phoneInputGuide(countryCode: string) {
+  if (countryCode === "+66") {
+    return {
+      placeholder: "เช่น 0812345678",
+      hint: "ตัวอย่าง: 0812345678 — เลือกไทย +66 แล้ว ไม่ต้องพิมพ์ +66 ซ้ำ"
+    };
+  }
+  if (countryCode === "+1") {
+    return {
+      placeholder: "เช่น 4155550123",
+      hint: "ตัวอย่าง: 4155550123 — ไม่ต้องพิมพ์ +1 ซ้ำ"
+    };
+  }
+  if (countryCode === "+44") {
+    return {
+      placeholder: "เช่น 07123456789",
+      hint: "ตัวอย่าง: 07123456789 — ไม่ต้องพิมพ์ +44 ซ้ำ"
+    };
+  }
+  return {
+    placeholder: "เช่น 812345678",
+    hint: countryCode
+      ? `กรอกเฉพาะหมายเลขโทรศัพท์ ไม่ต้องพิมพ์ ${countryCode} ซ้ำ`
+      : "เลือกประเทศก่อน แล้วกรอกหมายเลขโทรศัพท์"
+  };
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "—";
   const date = new Date(value);
@@ -187,6 +214,8 @@ export default function AccountPage() {
     confirmPassword.length >= 8 &&
     currentPassword.length > 0 &&
     (!data?.security.twoFactorEnabled || password2fa.trim().length > 0);
+
+  const phoneGuide = phoneInputGuide(phoneCountry);
 
   function notify(kind: "good" | "bad" | "info", text: string) {
     setMessageKind(kind);
@@ -424,10 +453,12 @@ export default function AccountPage() {
                         data-lpignore="true"
                         data-1p-ignore="true"
                         aria-label="เบอร์โทร"
+                        placeholder={phoneGuide.placeholder}
                         value={phoneInput}
                         onChange={e => setPhoneInput(e.target.value.slice(0,24))}
                         disabled={phoneBusy}
                       />
+                      <small className={styles.phoneHint}>{phoneGuide.hint}</small>
                     </label>
                     <div className={styles.actionLine}>
                       <button type="button" className={styles.secondaryButton} onClick={() => toggle("phone", false)} disabled={phoneBusy}>ยกเลิก</button>
