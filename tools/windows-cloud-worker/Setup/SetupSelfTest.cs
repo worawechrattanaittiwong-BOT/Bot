@@ -30,6 +30,11 @@ internal static class SetupSelfTest
             if (!File.Exists(worker) || new FileInfo(worker).Length < 64 * 1024)
                 throw new InvalidOperationException("embedded Worker extraction failed");
 
+            var embeddedEa = Path.Combine(root, "packages", "FastBasketBot.ex5");
+            PayloadInstaller.ExtractEa(embeddedEa);
+            if (!File.Exists(embeddedEa) || new FileInfo(embeddedEa).Length < 10 * 1024)
+                throw new InvalidOperationException("embedded EA extraction failed");
+
             File.WriteAllBytes(
                 Path.Combine(root, "template", "terminal64.exe"),
                 Encoding.ASCII.GetBytes("MZ-SETUP-SELF-TEST"));
@@ -68,6 +73,7 @@ internal static class SetupSelfTest
 
             Console.WriteLine("PASS: SCENOVA API URL is canonicalized to the non-www origin");
             Console.WriteLine("PASS: embedded Worker payload is valid");
+            Console.WriteLine("PASS: embedded EA payload is valid");
             Console.WriteLine("PASS: MT5 template readiness validation is strict");
             Console.WriteLine("PASS: auto-start plan uses interactive logon and restart policy");
             Console.WriteLine("PASS: ACL plan covers Server runtime without touching customer instances");
