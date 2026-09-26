@@ -2,7 +2,7 @@ namespace Scenova.CloudWorker;
 
 internal sealed class WorkerLoop
 {
-    internal const string Version = "2.1.0";
+    internal const string Version = "2.1.1";
 
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;
@@ -29,6 +29,7 @@ internal sealed class WorkerLoop
             {
                 var templateReady = _mt5.TemplateReady;
                 var telemetry = TelemetryReader.Read(templateReady);
+                telemetry.SetupVersion = _config.SetupVersion;
 
                 await _client.PostAsync("heartbeat", new
                 {

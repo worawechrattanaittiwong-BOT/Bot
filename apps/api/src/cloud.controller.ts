@@ -66,7 +66,14 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
     return (await this.db.query(`SELECT w.runner_id,w.region,w.hostname,w.capacity,w.active_instances,
       w.accepting_jobs,w.monthly_cost,w.spec,w.telemetry,w.last_seen_at,l.occupied,
       w.health_state,w.capacity_blocked,w.capacity_block_reason,w.quarantined,w.quarantine_reason,w.recovery_paused,
-      CASE WHEN w.last_seen_at>now()-interval '30 seconds' THEN 'ONLINE' ELSE 'OFFLINE' END health
+      CASE WHEN w.last_seen_at>now()-interval '30 seconds' THEN 'ONLINE' ELSE 'OFFLINE' END health,
+      CASE
+        WHEN w.last_seen_at>now()-interval '30 seconds' AND w.telemetry->>'templateReady'='true' THEN 'ONLINE'
+        WHEN w.last_seen_at>now()-interval '30 seconds' THEN 'TEMPLATE_NOT_READY'
+        WHEN w.last_seen_at IS NOT NULL THEN 'WORKER_OFFLINE'
+        WHEN w.hostname IS NOT NULL THEN 'INSTALLING'
+        ELSE 'WAITING_INSTALL'
+      END setup_state
       FROM worker_nodes w JOIN cloud_node_load l USING(runner_id) ORDER BY w.created_at`)).rows;
   }
 

@@ -13,6 +13,7 @@ internal sealed class WorkerConfig
     public string Root { get; init; } = "";
     public string WorkerKeyProtected { get; init; } = "";
     public string KeyProtection { get; init; } = "";
+    public string SetupVersion { get; init; } = "";
 
     public string WorkerKey
     {

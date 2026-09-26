@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Security.Cryptography;
 
 namespace Scenova.CloudSetup;
 
@@ -14,7 +15,12 @@ internal static class PayloadInstaller
         Directory.CreateDirectory(workerDir);
 
         var target = Path.Combine(workerDir, "SCENOVA-CloudWorker.exe");
-        ExtractResource(WorkerResource, target, minimumBytes: 64 * 1024);
+        ExtractResource(
+            WorkerResource,
+            target,
+            minimumBytes: 64 * 1024,
+            beforeReplace: () => StopMatchingWorker(target));
+
         return target;
     }
 
@@ -24,36 +30,11 @@ internal static class PayloadInstaller
         ExtractResource(EaResource, target, minimumBytes: 10 * 1024);
     }
 
-    public static void StartWorker(string workerPath, string configPath)
-    {
-        var existing = Process.GetProcessesByName("SCENOVA-CloudWorker");
-        foreach (var process in existing)
-        {
-            using (process)
-            {
-                try
-                {
-                    if (string.Equals(
-                        process.MainModule?.FileName,
-                        workerPath,
-                        StringComparison.OrdinalIgnoreCase))
-                        return;
-                }
-                catch { }
-            }
-        }
-
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = workerPath,
-            Arguments = $"--config \"{configPath}\"",
-            WorkingDirectory = Path.GetDirectoryName(workerPath)!,
-            UseShellExecute = true,
-            WindowStyle = ProcessWindowStyle.Hidden
-        });
-    }
-
-    private static void ExtractResource(string resourceName, string target, int minimumBytes)
+    private static void ExtractResource(
+        string resourceName,
+        string target,
+        int minimumBytes,
+        Action? beforeReplace = null)
     {
         var assembly = Assembly.GetExecutingAssembly();
         using var source = assembly.GetManifestResourceStream(resourceName)
@@ -61,16 +42,72 @@ internal static class PayloadInstaller
                 $"Setup payload หาย: {resourceName}. กรุณาดาวน์โหลด SCENOVA Cloud Setup รุ่นล่าสุด");
 
         var temp = target + ".tmp";
-        using (var output = File.Create(temp))
-            source.CopyTo(output);
-
-        var info = new FileInfo(temp);
-        if (info.Length < minimumBytes)
+        try
         {
-            File.Delete(temp);
-            throw new InvalidOperationException($"Setup payload ไม่สมบูรณ์: {resourceName}");
-        }
+            using (var output = File.Create(temp))
+                source.CopyTo(output);
 
-        File.Move(temp, target, true);
+            var info = new FileInfo(temp);
+            if (info.Length < minimumBytes)
+                throw new InvalidOperationException($"Setup payload ไม่สมบูรณ์: {resourceName}");
+
+            if (File.Exists(target) &&
+                string.Equals(HashFile(target), HashFile(temp), StringComparison.OrdinalIgnoreCase))
+            {
+                File.Delete(temp);
+                return;
+            }
+
+            beforeReplace?.Invoke();
+            File.Move(temp, target, true);
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+            }
+            catch { }
+        }
+    }
+
+    private static string HashFile(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private static void StopMatchingWorker(string workerPath)
+    {
+        var expected = Path.GetFullPath(workerPath);
+
+        foreach (var process in Process.GetProcessesByName("SCENOVA-CloudWorker"))
+        {
+            using (process)
+            {
+                try
+                {
+                    var path = process.MainModule?.FileName;
+                    if (string.IsNullOrWhiteSpace(path) ||
+                        !string.Equals(
+                            Path.GetFullPath(path),
+                            expected,
+                            StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    process.Kill(entireProcessTree: true);
+                    if (!process.WaitForExit(15_000))
+                        throw new InvalidOperationException("Cloud Worker เดิมยังไม่หยุด จึงไม่แทนที่ไฟล์");
+                }
+                catch (InvalidOperationException)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // Ignore unrelated/inaccessible processes.
+                }
+            }
+        }
     }
 }

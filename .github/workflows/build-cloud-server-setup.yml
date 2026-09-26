@@ -7,6 +7,8 @@ on:
       - "tools/windows-cloud-worker/Worker/**"
       - "mt5/release/FastBasketBot.ex5"
       - "apps/web/components/CloudConsole.tsx"
+      - "apps/api/src/worker.controller.ts"
+      - "apps/api/src/cloud.controller.ts"
       - ".github/workflows/build-cloud-server-setup.yml"
   push:
     branches: [main]
@@ -75,6 +77,15 @@ jobs:
             throw "SCENOVA-Cloud-Setup.exe was not produced"
           }
 
+      - name: Verify Cloud Setup infrastructure self-test
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "cloud-setup-publish/SCENOVA-Cloud-Setup.exe" --setup-self-test
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cloud Setup infrastructure self-test failed"
+          }
+
       - name: Upload Cloud Server artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -102,7 +113,7 @@ jobs:
             exit 0
           }
 
-          git commit -m "[phase6-generated] build: publish Fleet Update Cloud Setup"
+          git commit -m "[server-setup-generated] build: publish hardened Cloud Setup"
 
           $published = $false
           for ($attempt = 1; $attempt -le 6; $attempt++) {

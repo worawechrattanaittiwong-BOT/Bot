@@ -105,4 +105,5 @@ internal sealed class WorkerTelemetry
     public double? DiskTotalGb { get; set; }
     public bool TemplateReady { get; set; }
     public string Version { get; set; } = WorkerLoop.Version;
+    public string SetupVersion { get; set; } = "";
 }

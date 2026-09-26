@@ -5,16 +5,30 @@ namespace Scenova.CloudSetup;
 
 internal static class Mt5TemplateManager
 {
+    public static bool IsReady(string root)
+    {
+        var target = Path.Combine(root, "template");
+        return
+            File.Exists(Path.Combine(target, "cloud-template.ready")) &&
+            File.Exists(Path.Combine(target, "terminal64.exe")) &&
+            File.Exists(Path.Combine(target, "MQL5", "Experts", "FastBasketBot.ex5"));
+    }
+
     public static void Prepare(string root, string apiBase, string? explicitSource)
     {
         var instances = Path.Combine(root, "instances");
         var target = Path.Combine(root, "template");
         var readyMarker = Path.Combine(target, "cloud-template.ready");
 
-        if (File.Exists(readyMarker))
+        if (IsReady(root))
         {
             Console.WriteLine("MT5 Template พร้อมอยู่แล้ว ข้ามการสร้างใหม่");
             return;
+        }
+
+        if (File.Exists(readyMarker))
+        {
+            try { File.Delete(readyMarker); } catch { }
         }
 
         if (Directory.Exists(instances) &&

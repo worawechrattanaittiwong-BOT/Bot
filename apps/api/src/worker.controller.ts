@@ -27,6 +27,7 @@ export class WorkerController {
       diskTotalGb?: number;
       templateReady?: boolean;
       version?: string;
+      setupVersion?: string;
     };
   }) {
     if (body.activeInstances != null && (!Number.isInteger(body.activeInstances) || body.activeInstances<0 || body.activeInstances>200)) {
@@ -52,7 +53,8 @@ export class WorkerController {
         diskFreeGb: finite(t.diskFreeGb),
         diskTotalGb: finite(t.diskTotalGb),
         templateReady: t.templateReady === true,
-        version: String(t.version || "").slice(0,32)
+        version: String(t.version || "").slice(0,32),
+        setupVersion: String(t.setupVersion || "").slice(0,32)
       };
       await this.db.query("UPDATE worker_nodes SET telemetry=$2 WHERE runner_id=$1", [body.runnerId, JSON.stringify(telemetry)]);
       await this.hardening.recordWorkerHeartbeat(body.runnerId, telemetry);

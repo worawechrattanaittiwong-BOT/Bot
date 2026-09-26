@@ -3,13 +3,14 @@ using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace Scenova.CloudSetup;
 
 internal static class Program
 {
-    private const string SetupVersion = "0.3.0";
+    internal const string SetupVersion = "0.4.0";
     private const string DefaultApiBase = "https://snvea-bot.online/backend";
     private const string RootPath = @"C:\BotTrading";
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("SCENOVA-CLOUD-WORKER-V1");
@@ -27,6 +28,10 @@ internal static class Program
     {
         Console.OutputEncoding = Encoding.UTF8;
         Console.Title = "SCENOVA Cloud Server Setup";
+
+        if (args.Any(arg =>
+                string.Equals(arg, "--setup-self-test", StringComparison.OrdinalIgnoreCase)))
+            return SetupSelfTest.Run();
 
         try
         {
@@ -92,25 +97,45 @@ internal static class Program
             }
             else
             {
-                Console.WriteLine("พบ Server Enrollment เดิมแล้ว ใช้ config เดิมต่อโดยไม่ใช้ Token ซ้ำ");
+                Console.WriteLine("พบ Server Enrollment เดิมแล้ว กำลังตรวจและ Repair โดยไม่ใช้ Token ซ้ำ");
             }
 
-            var workerPath = PayloadInstaller.ExtractWorker(RootPath);
-            Console.WriteLine("✅ ติดตั้ง SCENOVA Cloud Worker แล้ว");
+            StampSetupVersion(configPath);
 
             Mt5TemplateManager.Prepare(
                 RootPath,
                 apiBase,
                 GetOption(options, "mt5-source"));
 
-            PayloadInstaller.StartWorker(workerPath, configPath);
+            Console.WriteLine();
+            Console.WriteLine("กำลังติดตั้ง/Repair Cloud Worker, Auto Start และ Windows Permission...");
+
+            var report = await RepairManager.RepairAsync(
+                RootPath,
+                runnerId,
+                SetupVersion,
+                apiBase,
+                configPath);
 
             Console.WriteLine();
-            Console.WriteLine("✅ SCENOVA Cloud Server พร้อมเชื่อมต่อ Backend");
+            foreach (var check in report.Checks)
+            {
+                Console.WriteLine(
+                    $"{(check.Passed ? "✅" : "❌")} {check.Name}: {check.Detail}");
+            }
+
+            if (!report.Ready)
+                throw new InvalidOperationException(
+                    "Server Setup ยังไม่ผ่าน Health Check กรุณาแก้รายการที่ขึ้น ❌ แล้วเปิด Setup ซ้ำ");
+
+            Console.WriteLine();
+            Console.WriteLine("✅ SCENOVA Cloud Server READY");
             Console.WriteLine($"Server: {runnerId}");
+            Console.WriteLine($"Setup: v{SetupVersion}");
             Console.WriteLine($"Root: {RootPath}");
+            Console.WriteLine($"Auto Start: {WorkerStartupManager.TaskName(runnerId)}");
             Console.WriteLine("Enrollment Token ไม่ถูกบันทึกไว้ในเครื่อง");
-            Console.WriteLine("Worker ถูกเปิดใน Windows session ปัจจุบัน");
+            Console.WriteLine("สามารถตัด Remote Desktop ได้ แต่บัญชี Windows สำหรับ MT5 ต้องคง session ไว้");
             Console.WriteLine();
             Console.WriteLine("กด Enter เพื่อปิด Setup");
             Console.ReadLine();
@@ -119,7 +144,7 @@ internal static class Program
         catch (Exception ex)
         {
             Console.Error.WriteLine();
-            Console.Error.WriteLine("❌ ติดตั้งไม่สำเร็จ");
+            Console.Error.WriteLine("❌ ติดตั้ง/Repair ไม่สำเร็จ");
             Console.Error.WriteLine(ex.Message);
             Console.Error.WriteLine();
             Console.Error.WriteLine("กด Enter เพื่อปิด");
@@ -151,6 +176,21 @@ internal static class Program
         File.WriteAllText(
             tempPath,
             JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }),
+            new UTF8Encoding(false));
+        File.Move(tempPath, path, true);
+    }
+
+    private static void StampSetupVersion(string path)
+    {
+        var node = JsonNode.Parse(File.ReadAllText(path)) as JsonObject
+            ?? throw new InvalidOperationException("Cloud Worker config ไม่ถูกต้อง");
+
+        node["SetupVersion"] = SetupVersion;
+
+        var tempPath = path + ".setup";
+        File.WriteAllText(
+            tempPath,
+            node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
             new UTF8Encoding(false));
         File.Move(tempPath, path, true);
     }
