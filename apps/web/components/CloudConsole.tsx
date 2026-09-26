@@ -50,7 +50,7 @@ function downloadServerBootstrap(enrollment:{runnerId:string;enrollmentToken:str
     "set \"EXITCODE=%ERRORLEVEL%\"",
     "del \"%~f0\" >nul 2>&1",
     "exit /b %EXITCODE%"
-  ].join("\\r\\n");
+  ].join("\r\n");
   const blob=new Blob([script],{type:"application/octet-stream"});
   const url=URL.createObjectURL(blob);
   const anchor=document.createElement("a");
