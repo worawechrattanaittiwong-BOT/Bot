@@ -132,7 +132,7 @@ export default function PackagesPage() {
   const [otp, setOtp] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [activeSystem, setActiveSystem] = useState<"LOCAL" | "CLOUD">("CLOUD");
-  const [trialOpen, setTrialOpen] = useState(false);
+  const [trialOpen, setTrialOpen] = useState(true);
   const [checkoutPack, setCheckoutPack] = useState<PackageItem | null>(null);
   const checkoutDialog = useRef<HTMLDialogElement>(null);
   const [promoCode, setPromoCode] = useState("");
@@ -385,7 +385,7 @@ export default function PackagesPage() {
                 <div>
                   <span className={styles.eyebrow}>START HERE</span>
                   <h2>ทดลองใช้งาน</h2>
-                  <p>ยืนยันเบอร์โทรด้วย OTP ก่อนเปิด Trial</p>
+                  <p>ขอรหัสยืนยันได้ทันที ระบบส่งไปยังอีเมลที่ลงทะเบียนเป็นช่องทางหลัก และใช้ SMS สำรองเมื่อส่งอีเมลไม่สำเร็จ</p>
                 </div>
               </div>
               <div className={styles.trialHeaderActions}>
@@ -407,19 +407,25 @@ export default function PackagesPage() {
               <div className={styles.trialSteps}>
                 <TrialStep
                   number="1"
-                  title="เบอร์โทร"
-                  value={trial?.phone?.masked || "ยังไม่ได้เพิ่มเบอร์"}
-                  done={Boolean(trial?.phone)}
+                  title="ช่องทางหลัก"
+                  value={trial?.email?.masked || "อีเมลที่ลงทะเบียน"}
+                  done={Boolean(trial?.email?.verified)}
                 />
                 <TrialStep
                   number="2"
-                  title="OTP"
-                  value={trial?.latestCode ? "ส่งรหัสแล้ว" : "รอยืนยัน"}
-                  done={Boolean(trial?.phone?.verified || trialReady)}
+                  title="ยืนยัน OTP"
+                  value={
+                    trial?.latestCode
+                      ? trial.latestCode.delivery_channel === "SMS"
+                        ? "ส่งทาง SMS แล้ว"
+                        : "ส่งทางอีเมลแล้ว"
+                      : "พร้อมขอรหัส"
+                  }
+                  done={trialReady}
                 />
                 <TrialStep
                   number="3"
-                  title="Trial"
+                  title="สิทธิ์ทดลอง"
                   value={trialReady ? "พร้อมใช้งาน" : `${trial?.trialDays || 1} วัน`}
                   done={trialReady}
                 />
@@ -438,30 +444,31 @@ export default function PackagesPage() {
                   <b>ไม่สามารถรับ Trial เพิ่มได้</b>
                   <span>{trial?.eligibility?.message || "บัญชีนี้ไม่มีสิทธิ์ Trial"}</span>
                 </div>
-              ) : !trial?.phone ? (
-                <div className={styles.phoneRequired}>
-                  <div>
-                    <b>เพิ่มเบอร์โทรก่อน</b>
-                    <span>OTP จะส่งเฉพาะเบอร์ที่ผูกกับบัญชี SCENOVA</span>
-                  </div>
-                  <Link className={styles.secondaryButton} href="/account#phone-settings">
-                    ไปที่ My Account
-                  </Link>
-                </div>
               ) : (
                 <div className={styles.otpPanel}>
+                  <div className={styles.deliveryNote}>
+                    <div>
+                      <b>รับรหัสทางอีเมลเป็นค่าเริ่มต้น</b>
+                      <span>
+                        เมื่อกดขอรหัส ระบบจะส่ง OTP ไปยัง {trial?.email?.masked || "อีเมลที่ลงทะเบียน"} ก่อน
+                        {trial?.phone?.masked
+                          ? ` หากผู้ให้บริการอีเมลส่งไม่สำเร็จ ระบบจะลองส่ง SMS ไปที่ ${trial.phone.masked} ให้อัตโนมัติ`
+                          : " หากส่งอีเมลไม่สำเร็จและยังไม่มีเบอร์มือถือสำรอง ระบบจะแจ้งให้เพิ่มเบอร์ใน My Account"}
+                      </span>
+                    </div>
+                  </div>
                   <div className={styles.otpMeta}>
                     <div>
-                      <span>เบอร์รับ OTP</span>
-                      <strong>{trial.phone.masked}</strong>
+                      <span>ช่องทางหลัก</span>
+                      <strong>{trial?.email?.masked || account.user.email}</strong>
                     </div>
                     <div>
-                      <span>ส่งได้อีกวันนี้</span>
-                      <strong>{sendsRemaining} ครั้ง</strong>
+                      <span>ช่องทางสำรอง</span>
+                      <strong>{trial?.phone?.masked || "ยังไม่ผูกเบอร์มือถือ"}</strong>
                     </div>
                     <div>
-                      <span>อายุรหัส</span>
-                      <strong>{trial.otp?.expiresInMinutes || 10} นาที</strong>
+                      <span>อายุรหัส / สิทธิ์ขอวันนี้</span>
+                      <strong>{trial.otp?.expiresInMinutes || 10} นาที · เหลือ {sendsRemaining} ครั้ง</strong>
                     </div>
                   </div>
 
@@ -474,7 +481,7 @@ export default function PackagesPage() {
                         Boolean(busy) ||
                         cooldown > 0 ||
                         sendsRemaining <= 0 ||
-                        !trial.smsConfigured
+                        !trial.verificationConfigured
                       }
                     >
                       {busy === "otp-send"
@@ -510,8 +517,11 @@ export default function PackagesPage() {
                     </button>
                   </div>
 
-                  {!trial.smsConfigured && (
-                    <div className={styles.smsWarning}>ระบบ SMS ยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแล</div>
+                  {!trial.emailConfigured && trial.smsConfigured && (
+                    <div className={styles.smsWarning}>ระบบอีเมลยังไม่พร้อมใช้งานในขณะนี้ คำขอ OTP จะใช้ SMS เป็นช่องทางหลักชั่วคราว</div>
+                  )}
+                  {!trial.verificationConfigured && (
+                    <div className={styles.smsWarning}>ระบบส่ง OTP ยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ</div>
                   )}
                 </div>
               )}
@@ -548,22 +558,22 @@ export default function PackagesPage() {
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={activeSystem === "LOCAL"}
-                  className={`${styles.systemTab} ${activeSystem === "LOCAL" ? styles.systemTabActive : ""}`}
-                  onClick={() => setActiveSystem("LOCAL")}
-                >
-                  <span className={styles.tabIcon}><ScenovaIcon name="account" size={22}/></span>
-                  <span><b>Local MT5</b><small>รันบนคอมของคุณ</small></span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
                   aria-selected={activeSystem === "CLOUD"}
                   className={`${styles.systemTab} ${activeSystem === "CLOUD" ? styles.systemTabActive : ""}`}
                   onClick={() => setActiveSystem("CLOUD")}
                 >
                   <span className={styles.tabIcon}><ScenovaIcon name="cloud" size={22}/></span>
-                  <span><b>VPS / Cloud MT5</b><small>รันบนเซิร์ฟเวอร์</small></span>
+                  <span><b>VPS / Cloud MT5</b><small>รันต่อเนื่องบนเซิร์ฟเวอร์ 24/7</small></span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSystem === "LOCAL"}
+                  className={`${styles.systemTab} ${activeSystem === "LOCAL" ? styles.systemTabActive : ""}`}
+                  onClick={() => setActiveSystem("LOCAL")}
+                >
+                  <span className={styles.tabIcon}><ScenovaIcon name="account" size={22}/></span>
+                  <span><b>Local MT5</b><small>รันบนคอมพิวเตอร์ของคุณ</small></span>
                 </button>
               </div>
             </div>
