@@ -141,6 +141,9 @@ export default function AccountPage() {
   const [phoneCountry, setPhoneCountry] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
   const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phoneOtp, setPhoneOtp] = useState("");
+  const [phoneOtpBusy, setPhoneOtpBusy] = useState<"" | "send" | "verify">("");
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -224,6 +227,8 @@ export default function AccountPage() {
         body: JSON.stringify({ countryCode: phoneCountry, phone: phoneInput })
       });
       setPhoneInput("");
+      setPhoneOtp("");
+      setPhoneOtpSent(false);
       toggle("phone", false);
       notify(
         "good",
@@ -236,6 +241,40 @@ export default function AccountPage() {
       notify("bad", error instanceof Error ? error.message : "บันทึกเบอร์โทรไม่สำเร็จ");
     } finally {
       setPhoneBusy(false);
+    }
+  }
+
+  async function requestPhoneOtp() {
+    if (!data?.user.phone || data.user.phone.verified || phoneOtpBusy) return;
+    setPhoneOtpBusy("send");
+    try {
+      const result = await api("/auth/account/phone/request-otp", { method: "POST" });
+      setPhoneOtp("");
+      setPhoneOtpSent(true);
+      notify("good", `ส่ง OTP ไปที่ ${result.phoneMasked || data.user.phone.masked} แล้ว รหัสมีอายุ 10 นาที`);
+    } catch (error: unknown) {
+      notify("bad", error instanceof Error ? error.message : "ส่ง OTP ไม่สำเร็จ");
+    } finally {
+      setPhoneOtpBusy("");
+    }
+  }
+
+  async function verifyPhoneOtp() {
+    if (!data?.user.phone || data.user.phone.verified || phoneOtp.length !== 6 || phoneOtpBusy) return;
+    setPhoneOtpBusy("verify");
+    try {
+      await api("/auth/account/phone/verify-otp", {
+        method: "POST",
+        body: JSON.stringify({ code: phoneOtp })
+      });
+      setPhoneOtp("");
+      setPhoneOtpSent(false);
+      notify("good", "ยืนยันเบอร์มือถือสำเร็จ");
+      await load();
+    } catch (error: unknown) {
+      notify("bad", error instanceof Error ? error.message : "ยืนยัน OTP ไม่สำเร็จ");
+    } finally {
+      setPhoneOtpBusy("");
     }
   }
 
@@ -449,6 +488,47 @@ export default function AccountPage() {
                   </div>
                 </div>
               )}
+              {data.user.phone && !data.user.phone.verified && !open.phone && (
+                <div className={styles.commandBody}>
+                  <div className={styles.otpRow}>
+                    <div>
+                      <span>ยืนยันเบอร์มือถือ</span>
+                      <strong>{data.user.phone.masked}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      className={styles.secondaryButton}
+                      onClick={requestPhoneOtp}
+                      disabled={Boolean(phoneOtpBusy)}
+                    >
+                      {phoneOtpBusy === "send" ? "กำลังส่ง..." : phoneOtpSent ? "ส่ง OTP ใหม่" : "ส่ง OTP"}
+                    </button>
+                    <div>
+                      <span>รหัส OTP 6 หลัก</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        name="scenova_phone_otp"
+                        maxLength={6}
+                        value={phoneOtp}
+                        onChange={event => setPhoneOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                        disabled={Boolean(phoneOtpBusy)}
+                        placeholder="000000"
+                        aria-label="รหัส OTP 6 หลัก"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className={styles.primaryButton}
+                      onClick={verifyPhoneOtp}
+                      disabled={Boolean(phoneOtpBusy) || phoneOtp.length !== 6}
+                    >
+                      {phoneOtpBusy === "verify" ? "กำลังยืนยัน..." : "ยืนยัน OTP"}
+                    </button>
+                  </div>
+                </div>
+              )}
               {phoneLocked && (
                 <div className={styles.lockNote}>เบอร์นี้ยืนยัน OTP แล้ว จึงถูกล็อกเพื่อป้องกันการเปลี่ยนเบอร์ที่ผูกกับสิทธิ์ Trial</div>
               )}
@@ -473,7 +553,7 @@ export default function AccountPage() {
             <InfoSection icon="shield" title="Security Status" subtitle="สถานะความปลอดภัยของบัญชี">
               <div className={styles.statusGrid}>
                 <StatusItem label="Email Verification" value={data.user.emailVerified ? "Verified" : "Pending"} good={data.user.emailVerified}/>
-                <StatusItem label="Mobile Number" value={data.user.phone ? (data.user.phone.verified ? "Verified" : "Linked") : "Not linked"} good={Boolean(data.user.phone?.verified)}/>
+                <StatusItem label="Mobile Number" value={data.user.phone ? (data.user.phone.verified ? "Verified" : "รอยืนยัน OTP") : "Not linked"} good={Boolean(data.user.phone?.verified)}/>
                 <StatusItem label="Two-Factor Authentication" value={data.security.twoFactorEnabled ? "On" : "Off"} good={data.security.twoFactorEnabled}/>
                 <StatusItem label="Password Last Changed" value={formatDate(data.security.passwordChangedAt)}/>
                 <StatusItem label="Current Session" value={data.session.current ? "Active" : "Unknown"} good={data.session.current}/>
