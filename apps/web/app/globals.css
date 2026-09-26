@@ -6990,3 +6990,75 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
     font-size:13px!important;
   }
 }
+
+
+/* ===== Owner overview compact maintenance layout ===== */
+.owner-maintenance-card{padding:16px 17px 17px}
+.owner-maintenance-head{margin-bottom:10px}
+.owner-maintenance-head h3{margin-top:4px;font-size:18px}
+.owner-maintenance-summary{gap:8px;margin:10px 0 12px}
+.owner-maintenance-summary>div{padding:10px 12px;border-radius:10px}
+.owner-maintenance-summary small{margin-bottom:3px}
+.owner-maintenance-current{margin-bottom:12px;padding:10px 12px}
+.owner-force-flat-panel{margin:10px 0 12px;padding:11px 13px;border-radius:10px}
+.owner-force-flat-panel>div{gap:3px}
+.owner-force-flat-panel b{font-size:14px}
+.owner-force-flat-button{min-height:40px;padding:8px 12px}
+
+.owner-maintenance-form{
+  display:grid;
+  grid-template-columns:minmax(0,1.15fr) minmax(560px,1.65fr) auto;
+  gap:12px;
+  align-items:end;
+}
+.owner-maintenance-copy{
+  display:grid;
+  grid-template-columns:minmax(180px,.8fr) minmax(260px,1.2fr);
+  gap:10px;
+  min-width:0;
+}
+.owner-maintenance-dates{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+  min-width:0;
+}
+.owner-maintenance-form .field{min-width:0}
+.owner-maintenance-form .field>label{min-height:auto;margin-bottom:6px}
+.owner-maintenance-form .input{min-height:48px;height:48px;padding-top:0;padding-bottom:0}
+.owner-date-input{cursor:pointer}
+.owner-date-input::-webkit-calendar-picker-indicator{cursor:pointer}
+.owner-maintenance-check{
+  align-self:end;
+  min-height:48px;
+  margin:0;
+  padding:10px 12px;
+  align-items:center;
+  white-space:nowrap;
+}
+.owner-maintenance-check input{margin-top:0}
+.owner-maintenance-actions{margin-top:11px;gap:8px}
+.owner-maintenance-actions .btn{min-height:40px}
+.owner-maintenance-blockers{margin-top:13px;padding-top:11px}
+.owner-maintenance-blockers>.owner-maintenance-blockers-head{align-items:center;margin-bottom:8px}
+.owner-maintenance-search .input{min-height:40px;height:40px}
+
+@media(max-width:1500px){
+  .owner-maintenance-form{grid-template-columns:1fr}
+  .owner-maintenance-copy{grid-template-columns:minmax(180px,.75fr) minmax(280px,1.25fr)}
+  .owner-maintenance-dates{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .owner-maintenance-check{justify-self:start;white-space:normal}
+}
+@media(max-width:900px){
+  .owner-maintenance-copy{grid-template-columns:1fr}
+  .owner-maintenance-dates{grid-template-columns:1fr 1fr}
+}
+@media(max-width:620px){
+  .owner-maintenance-card{padding:14px}
+  .owner-maintenance-summary,.owner-maintenance-dates{grid-template-columns:1fr}
+  .owner-maintenance-summary{gap:7px}
+  .owner-maintenance-form{gap:10px}
+  .owner-maintenance-check{width:100%}
+  .owner-force-flat-panel{align-items:stretch;flex-direction:column}
+  .owner-force-flat-button{width:100%}
+}
