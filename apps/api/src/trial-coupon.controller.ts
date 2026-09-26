@@ -434,7 +434,7 @@ export class TrialCouponController {
     let fallbackUsed = false;
     let emailFailure: unknown = null;
 
-    const canUseEmail = Boolean(user.email_verified_at && this.emailConfigured());
+    const canUseEmail = this.emailConfigured();
     if (canUseEmail) {
       try {
         await this.sendTrialEmailOtp(String(user.email), otpCode);
@@ -452,11 +452,7 @@ export class TrialCouponController {
         emailFailure = error;
       }
     } else {
-      emailFailure = new Error(
-        user.email_verified_at
-          ? "email provider unavailable"
-          : "registered email is not verified"
-      );
+      emailFailure = new Error("email provider unavailable");
     }
 
     if (emailFailure) {
