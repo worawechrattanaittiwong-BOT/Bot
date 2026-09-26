@@ -467,7 +467,7 @@ export default function PackagesPage() {
                     </div>
                     <div>
                       <span>อายุรหัส / สิทธิ์ขอวันนี้</span>
-                      <strong>{trial.otp?.expiresInMinutes || 10} นาที · เหลือ {sendsRemaining} ครั้ง</strong>
+                      <strong>{trial?.otp?.expiresInMinutes || 10} นาที · เหลือ {sendsRemaining} ครั้ง</strong>
                     </div>
                   </div>
 
@@ -480,14 +480,14 @@ export default function PackagesPage() {
                         Boolean(busy) ||
                         cooldown > 0 ||
                         sendsRemaining <= 0 ||
-                        !trial.verificationConfigured
+                        !trial?.verificationConfigured
                       }
                     >
                       {busy === "otp-send"
                         ? "กำลังส่ง..."
                         : cooldown > 0
                           ? `ส่งใหม่ได้ใน ${cooldown}s`
-                          : trial.latestCode
+                          : trial?.latestCode
                             ? "ส่ง OTP ใหม่"
                             : "ส่ง OTP"}
                     </button>
@@ -516,10 +516,10 @@ export default function PackagesPage() {
                     </button>
                   </div>
 
-                  {!trial.emailConfigured && trial.smsConfigured && (
+                  {!trial?.emailConfigured && trial?.smsConfigured && (
                     <div className={styles.smsWarning}>ระบบอีเมลยังไม่พร้อมใช้งานในขณะนี้ คำขอ OTP จะใช้ SMS เป็นช่องทางหลักชั่วคราว</div>
                   )}
-                  {!trial.verificationConfigured && (
+                  {!trial?.verificationConfigured && (
                     <div className={styles.smsWarning}>ระบบส่ง OTP ยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ</div>
                   )}
                 </div>
