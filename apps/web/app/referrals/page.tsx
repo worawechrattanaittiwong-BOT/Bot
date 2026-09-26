@@ -396,7 +396,7 @@ export default function ReferralsPage() {
         <header className={styles.header}>
           <div className={styles.headerIcon}><ScenovaIcon name="users" size={24}/></div>
           <div className={styles.headerCopy}>
-            <div className={styles.eyebrow}>SCENOVA REFERRAL</div>
+            <div className={styles.eyebrow}>ระบบแนะนำเพื่อน SCENOVA</div>
             <h1>แนะนำเพื่อน & รับคอมมิชชั่น</h1>
             <p>แชร์ลิงก์ส่วนตัวเพื่อสร้างเครือข่าย และรับคอมมิชชั่นจากรายการที่เข้าเงื่อนไข</p>
           </div>
@@ -456,10 +456,10 @@ export default function ReferralsPage() {
                   {level.level === 1
                     ? "เพื่อนที่คุณเชิญโดยตรง"
                     : level.level === 2
-                      ? "Your Level 1's invite"
+                      ? "ผู้ที่สมาชิกระดับ 1 เชิญมา"
                       : level.level === 3
-                        ? "Your Level 2's invite"
-                        : "Your Level 3's invite"}
+                        ? "ผู้ที่สมาชิกระดับ 2 เชิญมา"
+                        : "ผู้ที่สมาชิกระดับ 3 เชิญมา"}
                 </small>
                 <em>{level.count} สมาชิก</em>
               </article>
