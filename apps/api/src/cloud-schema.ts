@@ -43,6 +43,8 @@ ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS last_healthy_at timestamptz;
 ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS quarantined boolean NOT NULL DEFAULT false;
 ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS quarantine_reason varchar(160);
 ALTER TABLE worker_nodes ADD COLUMN IF NOT EXISTS recovery_paused boolean NOT NULL DEFAULT false;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_worker_nodes_runner_id_ci
+ ON worker_nodes(lower(runner_id));
 CREATE TABLE IF NOT EXISTS cloud_server_enrollments (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  runner_id varchar(120) NOT NULL REFERENCES worker_nodes(runner_id) ON DELETE CASCADE,

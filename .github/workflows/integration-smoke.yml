@@ -137,6 +137,32 @@ jobs:
           ADMIN_KEY: integration-admin
         run: bash ./tests/partner-program-v3.sh
 
+      - name: Cloud Server enrollment handshake
+        env:
+          BASE: http://127.0.0.1:4000/api
+          ADMIN_KEY: integration-admin
+          PGPASSWORD: bot
+        run: |
+          set -euo pipefail
+          RID="Scenova-Smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          RID_LOWER="$(printf '%s' "$RID" | tr '[:upper:]' '[:lower:]')"
+          cleanup() { psql -h localhost -U bot -d bot -qAtc "DELETE FROM worker_nodes WHERE runner_id='$RID';" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          CREATED=$(curl -fsS -X POST "$BASE/admin/cloud-servers" -H "x-admin-key: $ADMIN_KEY" -H 'content-type: application/json' -d "{\"runnerId\":\"$RID\",\"region\":\"CI\",\"capacity\":1,\"monthlyCost\":0,\"spec\":\"enrollment smoke\"}")
+          TOKEN=$(printf '%s' "$CREATED" | jq -r '.enrollmentToken')
+          test "$(printf '%s' "$CREATED" | jq -r '.runnerId')" = "$RID"
+          test "${#TOKEN}" -ge 32
+          WORKER_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
+          ACTIVATED=$(curl -fsS -X POST "$BASE/server-enrollment/activate" -H 'content-type: application/json' -d "{\"runnerId\":\"$RID_LOWER\",\"enrollmentToken\":\"$TOKEN\",\"hostname\":\"CI-SERVER\",\"workerKey\":\"$WORKER_KEY\"}")
+          test "$(printf '%s' "$ACTIVATED" | jq -r '.runnerId')" = "$RID"
+          test "$(printf '%s' "$ACTIVATED" | jq -r '.workerKey')" = "$WORKER_KEY"
+          test "$(printf '%s' "$ACTIVATED" | jq -r '.replayed')" = "false"
+          REPLAYED=$(curl -fsS -X POST "$BASE/server-enrollment/activate" -H 'content-type: application/json' -d "{\"runnerId\":\"$RID\",\"enrollmentToken\":\"$TOKEN\",\"hostname\":\"CI-SERVER\",\"workerKey\":\"$WORKER_KEY\"}")
+          test "$(printf '%s' "$REPLAYED" | jq -r '.workerKey')" = "$WORKER_KEY"
+          test "$(printf '%s' "$REPLAYED" | jq -r '.replayed')" = "true"
+          USED=$(psql -h localhost -U bot -d bot -qAtc "SELECT count(*) FROM cloud_server_enrollments WHERE runner_id='$RID' AND used_at IS NOT NULL;")
+          test "$USED" = "1"
+
       - name: Exercise signup device enrollment MT5 rebind Trial and Start
         env:
           BASE: http://127.0.0.1:4000/api

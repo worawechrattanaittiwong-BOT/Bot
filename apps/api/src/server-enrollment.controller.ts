@@ -72,12 +72,18 @@ export class ServerEnrollmentController {
     runnerId: string;
     enrollmentToken: string;
     hostname?: string;
+    workerKey?: string;
   }) {
     if (!validRunnerId(body.runnerId)) throw new BadRequestException("Invalid Runner ID");
-    const token = String(body.enrollmentToken || "").trim();
+    const token = String(body.enrollmentToken || "")
+      .replace(/[\\s\\u200B-\\u200D\\uFEFF]+/g, "");
     if (token.length < 32 || token.length > 200) {
       throw new BadRequestException("Invalid enrollment token");
     }
-    return this.enrollment.activate(body.runnerId, token, body.hostname);
+    const workerKey = body.workerKey == null ? undefined : String(body.workerKey).trim();
+    if (workerKey && (workerKey.length < 32 || workerKey.length > 200 || !/^[a-zA-Z0-9_-]+$/.test(workerKey))) {
+      throw new BadRequestException("Invalid worker key");
+    }
+    return this.enrollment.activate(body.runnerId, token, body.hostname, workerKey);
   }
 }

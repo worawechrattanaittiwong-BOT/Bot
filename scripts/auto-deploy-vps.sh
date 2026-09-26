@@ -147,6 +147,33 @@ validate_generated_installer_shape() {
 }
 
 
+validate_generated_cloud_setup_shape() {
+  local sha="$1"
+  local subject author_email changed
+  subject="$(git log -1 --format=%s "$sha" 2>/dev/null || true)"
+  author_email="$(git log -1 --format=%ae "$sha" 2>/dev/null || true)"
+  case "$subject" in
+    "[server-setup-generated] build: publish hardened Cloud Setup"|\
+    "[phase2-generated] build: publish SCENOVA Cloud Setup"|\
+    "[phase4-generated] build: publish automatic Cloud Setup"|\
+    "[phase5-generated] build: publish validated Cloud Setup"|\
+    "[phase6-generated] build: publish Fleet Update Cloud Setup") ;;
+    *) return 1 ;;
+  esac
+  [ "$author_email" = "actions@users.noreply.github.com" ] || return 1
+  changed="$(git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null || true)"
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    case "$file" in
+      apps/web/public/downloads/SCENOVA-Cloud-Setup.exe|apps/web/public/downloads/SCENOVA-CloudWorker.exe) ;;
+      *) return 1 ;;
+    esac
+  done <<< "$changed"
+  git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-Cloud-Setup.exe" 2>/dev/null || return 1
+  git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-CloudWorker.exe" 2>/dev/null || return 1
+  return 0
+}
+
 validate_generated_owner_mobile_shape() {
   local sha="$1"
   local subject author_email changed
@@ -188,6 +215,7 @@ resolve_ci_anchor() {
   while [ "$hops" -lt 8 ]; do
     if validate_generated_ea_shape "$parent" >/dev/null 2>&1 || \
        validate_generated_installer_shape "$parent" >/dev/null 2>&1 || \
+       validate_generated_cloud_setup_shape "$parent" >/dev/null 2>&1 || \
        validate_generated_owner_mobile_shape "$parent" >/dev/null 2>&1; then
       parent="$(git rev-parse "$parent^" 2>/dev/null || true)"
       [ -n "$parent" ] || return 1
@@ -275,6 +303,20 @@ verify_generated_installer_release() {
 }
 
 
+verify_generated_cloud_setup_release() {
+  local sha="$1"
+  local parent parent_ci parent_smoke
+  validate_generated_cloud_setup_shape "$sha" || { echo "[SCENOVA] generated Cloud Setup release rejected: untrusted commit shape"; return 1; }
+  parent="$(resolve_ci_anchor "$sha" 2>/dev/null || true)"
+  [ -n "$parent" ] || return 1
+  parent_ci="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow CI --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
+  [ "$parent_ci" = "completed:success" ] || { echo "[SCENOVA] generated Cloud Setup waiting for source CI ($parent_ci)"; return 1; }
+  parent_smoke="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow "Integration Smoke" --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
+  [ "$parent_smoke" = "completed:success" ] || { echo "[SCENOVA] generated Cloud Setup waiting for source Integration Smoke ($parent_smoke)"; return 1; }
+  echo "[SCENOVA] trusted generated Cloud Setup release verified"
+  return 0
+}
+
 verify_generated_owner_mobile_release() {
   local sha="$1"
   local parent parent_ci parent_smoke
@@ -334,6 +376,8 @@ if command -v gh >/dev/null 2>&1; then
         echo "[SCENOVA] generated EX5 release accepted without a direct CI run"
       elif verify_generated_installer_release "$REMOTE_SHA"; then
         echo "[SCENOVA] generated Windows installer release accepted without a direct CI run"
+      elif verify_generated_cloud_setup_release "$REMOTE_SHA"; then
+        echo "[SCENOVA] generated Cloud Setup release accepted without a direct CI run"
       elif verify_generated_owner_mobile_release "$REMOTE_SHA"; then
         echo "[SCENOVA] generated Owner APK release accepted without a direct CI run"
       else

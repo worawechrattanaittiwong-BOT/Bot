@@ -9,6 +9,8 @@ on:
       - "apps/web/components/CloudConsole.tsx"
       - "apps/api/src/worker.controller.ts"
       - "apps/api/src/cloud.controller.ts"
+      - "apps/api/src/server-enrollment.controller.ts"
+      - "apps/api/src/server-enrollment.service.ts"
       - ".github/workflows/build-cloud-server-setup.yml"
   push:
     branches: [main]
@@ -17,6 +19,8 @@ on:
       - "tools/windows-cloud-worker/Worker/**"
       - "mt5/release/FastBasketBot.ex5"
       - "apps/web/components/CloudConsole.tsx"
+      - "apps/api/src/server-enrollment.controller.ts"
+      - "apps/api/src/server-enrollment.service.ts"
       - ".github/workflows/build-cloud-server-setup.yml"
   workflow_dispatch:
 

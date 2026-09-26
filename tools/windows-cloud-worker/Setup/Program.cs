@@ -10,7 +10,7 @@ namespace Scenova.CloudSetup;
 
 internal static class Program
 {
-    internal const string SetupVersion = "0.4.0";
+    internal const string SetupVersion = "0.5.0";
     private const string DefaultApiBase = "https://snvea-bot.online/backend";
     private const string RootPath = @"C:\BotTrading";
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("SCENOVA-CLOUD-WORKER-V1");
@@ -59,32 +59,17 @@ internal static class Program
                 !string.Equals(existing.RunnerId, runnerId, StringComparison.OrdinalIgnoreCase) ||
                 string.IsNullOrWhiteSpace(existing.WorkerKeyProtected))
             {
-                var token = GetOption(options, "token") ?? PromptSecret("Enrollment Token");
+                var token = NormalizeToken(GetOption(options, "token") ?? PromptSecret("Enrollment Token"));
                 if (token.Length is < 32 or > 200)
                     throw new InvalidOperationException("Enrollment Token ไม่ถูกต้อง");
 
                 Console.WriteLine();
-                Console.WriteLine("กำลังลงทะเบียน Server กับ SCENOVA...");
+                Console.WriteLine("กำลังตรวจ API และลงทะเบียน Server กับ SCENOVA...");
 
                 using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-                var endpoint = apiBase.TrimEnd('/') + "/api/server-enrollment/activate";
-                using var response = await http.PostAsJsonAsync(endpoint, new
-                {
-                    runnerId,
-                    enrollmentToken = token,
-                    hostname = Environment.MachineName
-                });
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var body = await response.Content.ReadAsStringAsync();
-                    throw new InvalidOperationException(
-                        $"Server enrollment ไม่สำเร็จ ({(int)response.StatusCode}). " +
-                        SafeServerMessage(body));
-                }
-
-                var enrolled = await response.Content.ReadFromJsonAsync<EnrollmentResponse>(
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                await VerifyApiAsync(http, apiBase);
+                var proposedWorkerKey = ToBase64Url(RandomNumberGenerator.GetBytes(32));
+                var enrolled = await ActivateAsync(http,apiBase,runnerId,token,proposedWorkerKey);
 
                 if (enrolled is null ||
                     string.IsNullOrWhiteSpace(enrolled.RunnerId) ||
@@ -281,6 +266,51 @@ internal static class Program
 
         Console.WriteLine();
         return buffer.ToString().Trim();
+    }
+
+    private static string NormalizeToken(string value) =>
+        Regex.Replace(value ?? string.Empty, @"[\s\u200B-\u200D\uFEFF]+", string.Empty);
+
+    private static string ToBase64Url(byte[] value) =>
+        Convert.ToBase64String(value).TrimEnd('=').Replace('+','-').Replace('/','_');
+
+    private static async Task VerifyApiAsync(HttpClient http,string apiBase)
+    {
+        try
+        {
+            using var response=await http.GetAsync(apiBase.TrimEnd('/')+"/api/health");
+            if(!response.IsSuccessStatusCode) throw new InvalidOperationException($"SCENOVA API ตอบกลับ {(int)response.StatusCode}");
+        }
+        catch(Exception ex) when(ex is HttpRequestException or TaskCanceledException)
+        {
+            throw new InvalidOperationException("เชื่อมต่อ SCENOVA API ไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ต/Firewall แล้วเปิด Setup ซ้ำ",ex);
+        }
+    }
+
+    private static async Task<EnrollmentResponse> ActivateAsync(HttpClient http,string apiBase,string runnerId,string token,string proposedWorkerKey)
+    {
+        var endpoint=apiBase.TrimEnd('/')+"/api/server-enrollment/activate";
+        for(var attempt=1;attempt<=3;attempt++)
+        {
+            try
+            {
+                using var response=await http.PostAsJsonAsync(endpoint,new {runnerId,enrollmentToken=token,hostname=Environment.MachineName,workerKey=proposedWorkerKey});
+                if(response.IsSuccessStatusCode)
+                {
+                    var enrolled=await response.Content.ReadFromJsonAsync<EnrollmentResponse>(new JsonSerializerOptions { PropertyNameCaseInsensitive=true });
+                    return enrolled ?? throw new InvalidOperationException("Server ตอบข้อมูลลงทะเบียนไม่ครบ");
+                }
+                var body=await response.Content.ReadAsStringAsync();
+                var status=(int)response.StatusCode;
+                if(status<500 && status!=408 && status!=429)
+                    throw new InvalidOperationException($"Server enrollment ไม่สำเร็จ ({status}). {SafeServerMessage(body)}");
+                if(attempt==3) throw new InvalidOperationException($"Server enrollment ไม่สำเร็จ ({status}). กรุณาเปิด Setup ซ้ำ");
+            }
+            catch(HttpRequestException) when(attempt<3) {}
+            catch(TaskCanceledException) when(attempt<3) {}
+            await Task.Delay(TimeSpan.FromSeconds(attempt));
+        }
+        throw new InvalidOperationException("Server enrollment ไม่สำเร็จ");
     }
 
     private static void ValidateApiAndRunner(string apiBase, string runnerId)

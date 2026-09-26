@@ -16,3 +16,7 @@ WHERE used_at IS NULL AND revoked_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_cloud_server_enrollment_expiry
 ON cloud_server_enrollments(expires_at)
 WHERE used_at IS NULL AND revoked_at IS NULL;
+
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_worker_nodes_runner_id_ci
+ON worker_nodes(lower(runner_id));
