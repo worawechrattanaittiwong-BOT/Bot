@@ -17,6 +17,8 @@ internal sealed class Mt5Runtime
     private readonly string _templatePath;
     private readonly Dictionary<string, DateTimeOffset> _retryAfter =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _offlineRepairAttempted =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public Mt5Runtime(WorkerConfig config)
     {
@@ -88,6 +90,8 @@ internal sealed class Mt5Runtime
                 "Enabled=1",
                 "AllowLiveTrading=1",
                 "AllowDllImport=0",
+                "Account=0",
+                "Profile=0",
                 "[StartUp]",
                 "Expert=FastBasketBot",
                 "ExpertParameters=SCENOVA-Cloud.set",
@@ -274,6 +278,9 @@ internal sealed class Mt5Runtime
             !string.Equals(job.RuntimeStopState, "NONE", StringComparison.OrdinalIgnoreCase))
             return;
 
+        if (job.EaOnline)
+            _offlineRepairAttempted.Remove(job.InstanceId);
+
         var instancePath = GetInstancePath(job.InstanceId);
         var terminal = Path.Combine(instancePath, "terminal64.exe");
 
@@ -286,13 +293,13 @@ internal sealed class Mt5Runtime
             string.Equals(job.DesiredState, "STOPPED", StringComparison.OrdinalIgnoreCase) &&
             File.Exists(Path.Combine(instancePath, "cloud-provisioned")) &&
             TemplateReady &&
+            !_offlineRepairAttempted.Contains(job.InstanceId) &&
             (!_retryAfter.TryGetValue(job.InstanceId, out var repairRetryAt) ||
              repairRetryAt <= DateTimeOffset.UtcNow))
         {
-            // A STOPPED Cloud instance with no fresh EA heartbeat must be able to
-            // self-repair even when its EA binary already matches the template.
-            // This covers the post-update case where MT5 is running but the EA
-            // was not attached from cloud-start.ini.
+            // Never restart a permanently offline MT5 in a loop. One repair
+            // attempt is enough until a fresh EA heartbeat proves recovery.
+            _offlineRepairAttempted.Add(job.InstanceId);
             _retryAfter[job.InstanceId] = DateTimeOffset.UtcNow.AddSeconds(60);
 
             try
