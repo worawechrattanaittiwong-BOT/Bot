@@ -15,6 +15,24 @@ internal sealed class WorkerConfig
     public string KeyProtection { get; init; } = "";
     public string SetupVersion { get; init; } = "";
 
+    public string EffectiveApiBase => NormalizeApiBase(ApiBase);
+
+    internal static string NormalizeApiBase(string apiBase)
+    {
+        var normalized = (apiBase ?? string.Empty).Trim().TrimEnd('/');
+        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+            return normalized;
+
+        if (!string.Equals(uri.Host, "www.snvea-bot.online", StringComparison.OrdinalIgnoreCase))
+            return normalized;
+
+        var builder = new UriBuilder(uri)
+        {
+            Host = "snvea-bot.online"
+        };
+        return builder.Uri.AbsoluteUri.TrimEnd('/');
+    }
+
     public string WorkerKey
     {
         get
@@ -48,7 +66,7 @@ internal sealed class WorkerConfig
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("Cloud Worker config invalid");
 
-        if (!Uri.TryCreate(config.ApiBase, UriKind.Absolute, out var uri) ||
+        if (!Uri.TryCreate(config.EffectiveApiBase, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrWhiteSpace(uri.UserInfo))
             throw new InvalidOperationException("Cloud Worker API must use HTTPS");
