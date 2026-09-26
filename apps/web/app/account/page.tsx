@@ -243,7 +243,7 @@ export default function AccountPage() {
       });
       setPhoneInput("");
       toggle("phone", false);
-      notify("good", "บันทึกเบอร์โทรแล้ว");
+      notify("good", "บันทึกเบอร์โทรแล้ว คุณยังแก้ไขได้จนกว่าจะยืนยัน OTP");
       await load();
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "บันทึกเบอร์โทรไม่สำเร็จ");
@@ -356,13 +356,7 @@ export default function AccountPage() {
     return <main className={styles.loadingPage}><div className={styles.loadingCard}>{message || "ไม่พบบัญชี"}</div></main>;
   }
 
-  const phoneLocked = Boolean(
-    data.user.phone && (
-      data.user.phone.verified ||
-      trialAccess?.authorization ||
-      trialAccess?.trial
-    )
-  );
+  const phoneLocked = Boolean(data.user.phone?.verified);
 
   return (
     <div className="app-wrap">
@@ -421,7 +415,7 @@ export default function AccountPage() {
                 subtitle={data.user.phone ? data.user.phone.masked : "ยังไม่ได้ผูกเบอร์มือถือ"}
                 badge={data.user.phone ? (data.user.phone.verified ? "VERIFIED" : "SAVED") : "NOT LINKED"}
                 good={Boolean(data.user.phone?.verified)}
-                action={!phoneLocked ? (data.user.phone ? "จัดการเบอร์" : "ผูกเบอร์มือถือ") : undefined}
+                action={!phoneLocked ? (data.user.phone ? "แก้ไขเบอร์" : "ผูกเบอร์มือถือ") : undefined}
                 expanded={open.phone}
                 onAction={() => toggle("phone")}
               />
@@ -470,7 +464,10 @@ export default function AccountPage() {
                 </div>
               )}
               {phoneLocked && (
-                <div className={styles.lockNote}>เบอร์นี้ถูกผูกกับการยืนยันบัญชีหรือสิทธิ์ Trial แล้ว</div>
+                <div className={styles.lockNote}>เบอร์นี้ยืนยัน OTP แล้ว จึงถูกล็อกเพื่อป้องกันการเปลี่ยนเบอร์ที่ผูกกับสิทธิ์ Trial</div>
+              )}
+              {!phoneLocked && data.user.phone && !open.phone && (
+                <div className={styles.lockNote}>หากกรอกเบอร์ผิด กด “แก้ไขเบอร์” เพื่อเปลี่ยนได้ก่อนยืนยัน OTP</div>
               )}
             </section>
 
