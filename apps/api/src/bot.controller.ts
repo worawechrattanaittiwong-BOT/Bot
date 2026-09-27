@@ -587,6 +587,8 @@ export class BotController {
 
     const instance = await this.db.one(
       `SELECT bi.*,
+         wn.region AS runner_region,
+         wn.hostname AS runner_hostname,
          (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') AS mt5_online,
          (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '30 minutes') AS agent_online,
          (bi.device_last_seen_at IS NOT NULL AND bi.device_last_seen_at > now() - interval '90 seconds') AS device_online,
@@ -601,6 +603,7 @@ export class BotController {
                     AND bi.last_seen_at > now() - interval '20 seconds'
               THEN true ELSE false END AS first_bind_ready
        FROM bot_instances bi
+       LEFT JOIN worker_nodes wn ON wn.runner_id=bi.runner_id
        WHERE bi.slot_id=$1`,
       [selectedSlot.id]
     );
