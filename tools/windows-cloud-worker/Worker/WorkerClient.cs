@@ -48,6 +48,23 @@ internal sealed class WorkerClient : IDisposable
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task<int> RelayEaRuntimeEventAsync(
+        string payload,
+        CancellationToken cancellationToken)
+    {
+        var body = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            payload,
+            _json) ?? new Dictionary<string, object?>();
+        body["runnerId"] = _config.RunnerId;
+
+        using var response = await _http.PostAsJsonAsync(
+            _config.EffectiveApiBase.TrimEnd('/') + "/api/worker/runtime-event",
+            body,
+            _json,
+            cancellationToken);
+        return (int)response.StatusCode;
+    }
+
     public async Task<EaRelayResult> RelayEaHeartbeatAsync(
         string payload,
         CancellationToken cancellationToken)
