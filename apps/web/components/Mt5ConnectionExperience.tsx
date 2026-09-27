@@ -134,7 +134,7 @@ export function Mt5ConnectionExperience(props: Props) {
                   progress={props.vpsMove.progress}
                   onRetry={props.vpsMove.onRetry}
                 />
-              ) : props.vpsMove.hasAccess ? (
+              ) : (
                 <>
                   <button
                     type="button"
@@ -147,10 +147,6 @@ export function Mt5ConnectionExperience(props: Props) {
                   </button>
                   {props.vpsMove.blockedReason && <small className={styles.vpsReason}>{props.vpsMove.blockedReason}</small>}
                 </>
-              ) : (
-                <a className={styles.vpsHeroButton} href={props.vpsMove.packageHref || "/packages?system=cloud"}>
-                  ย้ายไป VPS Server <span>→</span>
-                </a>
               )}
             </>
           )}
