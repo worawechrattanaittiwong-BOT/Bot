@@ -27,8 +27,10 @@ const end = ea.indexOf("\nint HttpPostJsonTimeout(", start);
 if (start < 0 || end < 0) throw new Error("Pass 7.1: CloudRelayHeartbeat bounds missing");
 const relay = ea.slice(start, end);
 
-rejectMatch(/\bwhile\s*\(/, "CloudRelayHeartbeat must not spin-wait");
-rejectMatch(/Sleep\s*\(\s*25\s*\)/, "CloudRelayHeartbeat must not sleep waiting for Worker");
+if (/\bwhile\s*\(/.test(relay))
+  throw new Error("Pass 7.1 violated: CloudRelayHeartbeat must not spin-wait");
+if (/Sleep\s*\(\s*25\s*\)/.test(relay))
+  throw new Error("Pass 7.1 violated: CloudRelayHeartbeat must not sleep waiting for Worker");
 requireMatch(/FileWriteString\(out,requestId\+"\\r\\n"\+payload\)[\s\S]*g_cloudHeartbeatPending=true[\s\S]*return CLOUD_RELAY_PENDING_CODE;/, "request is written then returns immediately");
 requireMatch(/FileIsExist\(g_cloudHeartbeatResponseFile\)[\s\S]*responseId==g_cloudHeartbeatRequestId/, "response keeps requestId validation");
 requireMatch(/pendingAgeMs<\(ulong\)pendingWaitMs[\s\S]*CLOUD_RELAY_PENDING_CODE[\s\S]*g_lastHttpTransportError=5901/, "original bounded timeout/failure path remains");
