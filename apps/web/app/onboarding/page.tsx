@@ -54,7 +54,8 @@ export default function OnboardingPage() {
   }
 
   useEffect(() => {
-    setNewAccount(new URLSearchParams(window.location.search).get("new") === "1");
+    const params = new URLSearchParams(window.location.search);
+    setNewAccount(params.get("new") === "1" || params.get("verified") === "1");
     void load();
   }, []);
 
