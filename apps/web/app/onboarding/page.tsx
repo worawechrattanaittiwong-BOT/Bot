@@ -161,14 +161,24 @@ export default function OnboardingPage() {
                   <strong>เลือกแพ็กเกจ VPS <span>→</span></strong>
                 </div>
               </a>
-              <a className={styles.choiceCard} href="/dashboard?view=account&welcome=1&setup=local">
+              <div className={styles.choiceCard + " " + styles.choiceLocal}>
                 <span className={styles.choiceIcon}><ScenovaIcon name="strategy" size={25}/></span>
                 <div>
                   <b>Local MT5</b>
                   <p>ติดตั้ง SCENOVA บนคอมพิวเตอร์ของคุณ แล้วใช้ MT5 ที่เครื่องของคุณเอง</p>
-                  <strong>ไปหน้าติดตั้ง Local <span>→</span></strong>
+                  <div className={styles.choiceActions}>
+                    <a className={styles.choicePrimaryAction} href="/dashboard?view=account&welcome=1&setup=local">
+                      ไปหน้าติดตั้ง Local <span>→</span>
+                    </a>
+                    <a className={styles.choiceTrialAction} href="/packages?system=local&from=onboarding">
+                      ขอสิทธิ์ทดลองใช้งาน
+                    </a>
+                    <a className={styles.choiceDashboardAction} href="/dashboard?view=overview">
+                      ข้ามไปหน้า Dashboard
+                    </a>
+                  </div>
                 </div>
-              </a>
+              </div>
             </div>
           </section>
         )}
