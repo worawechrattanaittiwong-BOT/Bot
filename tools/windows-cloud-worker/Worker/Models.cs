@@ -111,6 +111,15 @@ internal sealed class CloudJob
     }
 }
 
+internal sealed class CloudInstanceDiagnostic
+{
+    public string InstanceId { get; set; } = "";
+    public bool TerminalRunning { get; set; }
+    public int ChartFiles { get; set; }
+    public string LatestExpertLog { get; set; } = "";
+    public string LatestJournalLog { get; set; } = "";
+}
+
 internal sealed class WorkerTelemetry
 {
     public double? CpuPercent { get; set; }
@@ -121,4 +130,5 @@ internal sealed class WorkerTelemetry
     public bool TemplateReady { get; set; }
     public string Version { get; set; } = WorkerLoop.Version;
     public string SetupVersion { get; set; } = "";
+    public IReadOnlyList<CloudInstanceDiagnostic> Instances { get; set; } = Array.Empty<CloudInstanceDiagnostic>();
 }

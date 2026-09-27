@@ -39,6 +39,70 @@ internal sealed class Mt5Runtime
             .Count(item => item.Path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 
+    public IReadOnlyList<CloudInstanceDiagnostic> Diagnostics()
+    {
+        var result = new List<CloudInstanceDiagnostic>();
+        if (!Directory.Exists(_instancesPath)) return result;
+
+        foreach (var instancePath in Directory.EnumerateDirectories(_instancesPath))
+        {
+            var instanceId = Path.GetFileName(instancePath);
+            if (!Guid.TryParse(instanceId, out _)) continue;
+
+            var terminal = Path.Combine(instancePath, "terminal64.exe");
+            var chartRoot = Path.Combine(instancePath, "Profiles", "Charts");
+            var chartFiles = 0;
+            try
+            {
+                if (Directory.Exists(chartRoot))
+                    chartFiles = Directory.EnumerateFiles(
+                        chartRoot, "*.chr", SearchOption.AllDirectories).Count();
+            }
+            catch { }
+
+            result.Add(new CloudInstanceDiagnostic
+            {
+                InstanceId = instanceId,
+                TerminalRunning = HasExactTerminal(terminal),
+                ChartFiles = chartFiles,
+                LatestExpertLog = LatestMt5LogSignal(Path.Combine(instancePath, "MQL5", "Logs")),
+                LatestJournalLog = LatestMt5LogSignal(Path.Combine(instancePath, "logs"))
+            });
+        }
+
+        return result.Take(50).ToArray();
+    }
+
+    private static string LatestMt5LogSignal(string directory)
+    {
+        try
+        {
+            if (!Directory.Exists(directory)) return "";
+            var file = Directory.EnumerateFiles(directory, "*.log", SearchOption.TopDirectoryOnly)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+            if (file is null) return "";
+
+            var lines = File.ReadLines(file)
+                .TakeLast(160)
+                .Where(line =>
+                    line.Contains("SCENOVA", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("FastBasketBot", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("WebRequest", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("failed", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("error", StringComparison.OrdinalIgnoreCase))
+                .TakeLast(8)
+                .ToArray();
+
+            var joined = string.Join(" | ", lines);
+            return joined.Length <= 1800 ? joined : joined[^1800..];
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
     internal PreparedInstance PrepareInstanceFiles(CloudJob job)
     {
         var instancePath = GetInstancePath(job.InstanceId);
@@ -84,14 +148,19 @@ internal sealed class Mt5Runtime
                 "Server=" + SafeIniValue(job.BrokerServer),
                 "KeepPrivate=1",
                 "NewsEnable=0",
+                "ProxyEnable=0",
+                "CertInstall=0",
+                "EnableDpiAware=1",
                 "[Charts]",
                 "MaxBars=5000",
                 "[Experts]",
                 "Enabled=1",
                 "AllowLiveTrading=1",
                 "AllowDllImport=0",
+                "WebRequest=1",
                 "Account=0",
                 "Profile=0",
+                "Chart=0",
                 "[StartUp]",
                 "Expert=FastBasketBot",
                 "ExpertParameters=SCENOVA-Cloud.set",

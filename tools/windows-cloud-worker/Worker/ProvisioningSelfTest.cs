@@ -83,6 +83,9 @@ internal static class ProvisioningSelfTest
                 AssertContains(startup, "Login=" + (900000 + number), "account");
                 AssertContains(startup, "Password=demo-password-" + number, "password");
                 AssertContains(startup, "Server=SCENOVA-Demo-" + number, "broker server");
+                AssertContains(startup, "ProxyEnable=0", "proxy disabled");
+                AssertContains(startup, "WebRequest=1", "WebRequest enabled");
+                AssertContains(startup, "Chart=0", "chart-change trading remains enabled");
 
                 var next = number == 20 ? 1 : number + 1;
                 if (startup.Contains("demo-password-" + next, StringComparison.Ordinal))

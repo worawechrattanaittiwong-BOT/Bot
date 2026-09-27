@@ -28,6 +28,13 @@ export class WorkerController {
       templateReady?: boolean;
       version?: string;
       setupVersion?: string;
+      instances?: Array<{
+        instanceId?: string;
+        terminalRunning?: boolean;
+        chartFiles?: number;
+        latestExpertLog?: string;
+        latestJournalLog?: string;
+      }>;
     };
   }) {
     if (body.activeInstances != null && (!Number.isInteger(body.activeInstances) || body.activeInstances<0 || body.activeInstances>200)) {
@@ -54,7 +61,16 @@ export class WorkerController {
         diskTotalGb: finite(t.diskTotalGb),
         templateReady: t.templateReady === true,
         version: String(t.version || "").slice(0,32),
-        setupVersion: String(t.setupVersion || "").slice(0,32)
+        setupVersion: String(t.setupVersion || "").slice(0,32),
+        instances: Array.isArray(t.instances)
+          ? t.instances.slice(0,50).map(item => ({
+              instanceId: String(item?.instanceId || "").slice(0,64),
+              terminalRunning: item?.terminalRunning === true,
+              chartFiles: Math.max(0, Math.min(200, Number(item?.chartFiles || 0))),
+              latestExpertLog: String(item?.latestExpertLog || "").slice(0,1800),
+              latestJournalLog: String(item?.latestJournalLog || "").slice(0,1800)
+            }))
+          : []
       };
       await this.db.query("UPDATE worker_nodes SET telemetry=$2 WHERE runner_id=$1", [body.runnerId, JSON.stringify(telemetry)]);
       await this.hardening.recordWorkerHeartbeat(body.runnerId, telemetry);
