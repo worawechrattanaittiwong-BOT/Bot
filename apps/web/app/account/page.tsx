@@ -36,6 +36,11 @@ type AccountData = {
     passwordChangedAt: string | null;
     recoveryCodesRemaining: number;
   };
+  phoneVerification: {
+    smsAvailable: boolean;
+    resendAfterSeconds: number;
+    codeExpiresInMinutes: number;
+  };
   access: {
     subscription: any;
     trial: any;
@@ -46,24 +51,6 @@ type AccountData = {
     ip: string;
     userAgent: string;
   };
-};
-
-type TrialAccessData = {
-  smsConfigured: boolean;
-  trialDays: number;
-  eligibility: {
-    allowed: boolean;
-    reason: string;
-    message: string;
-  };
-  phone: {
-    countryCode: string;
-    masked: string;
-    verified: boolean;
-    verifiedAt: string | null;
-  } | null;
-  authorization: any;
-  trial: any;
 };
 
 type TwoFactorSetup = {
@@ -126,7 +113,6 @@ function accessSummary(data: AccountData) {
 
 export default function AccountPage() {
   const [data, setData] = useState<AccountData | null>(null);
-  const [trialAccess, setTrialAccess] = useState<TrialAccessData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -163,11 +149,6 @@ export default function AccountPage() {
       const account = await api("/auth/account");
       setData(account);
       setPhoneCountry(account.user?.phone?.countryCode || "");
-      try {
-        setTrialAccess(await api("/trial-access/status"));
-      } catch {
-        setTrialAccess(null);
-      }
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "โหลดข้อมูลบัญชีไม่สำเร็จ");
     } finally {
@@ -210,7 +191,7 @@ export default function AccountPage() {
     (!data?.security.twoFactorEnabled || password2fa.trim().length > 0);
 
   const phoneGuide = phoneInputGuide(phoneCountry);
-  const phoneSmsAvailable = trialAccess?.smsConfigured !== false;
+  const phoneSmsAvailable = data?.phoneVerification?.smsAvailable !== false;
 
   function notify(kind: "good" | "bad" | "info", text: string) {
     setMessageKind(kind);
