@@ -119,7 +119,8 @@ export class RuntimeEventWorkerController {
       state: state || null,
       positions,
       symbol: symbol || null,
-      sourceAgeMs
+      sourceAgeMs,
+      metrics: metricsPatch
     });
 
     return { ok: true, receivedAt, sourceAgeMs };
