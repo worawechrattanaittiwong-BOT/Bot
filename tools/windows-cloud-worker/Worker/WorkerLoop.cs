@@ -33,6 +33,7 @@ internal sealed class WorkerLoop
         {
         while (!cancellationToken.IsCancellationRequested)
         {
+            var phase = "heartbeat";
             try
             {
                 var templateReady = _mt5.TemplateReady;
@@ -40,6 +41,7 @@ internal sealed class WorkerLoop
                 telemetry.SetupVersion = _config.SetupVersion;
                 telemetry.Instances = _mt5.Diagnostics();
 
+                phase = "heartbeat";
                 await _client.PostAsync("heartbeat", new
                 {
                     hostname = Environment.MachineName,
@@ -49,22 +51,29 @@ internal sealed class WorkerLoop
 
                 // Server update is independent from customer MT5 lifecycles.
                 // It replaces/restarts only Worker/Setup and leaves terminals running.
+                phase = "server-update";
                 if (await _serverUpdates.ProcessNextAsync(cancellationToken))
                     return;
 
+                phase = "commands";
                 var commands = await _client.PostAsync<CommandEnvelope>(
                     "commands",
                     new { },
                     cancellationToken);
 
                 if (commands.Command is not null)
+                {
+                    phase = "process-command";
                     await _mt5.ProcessCommandAsync(commands.Command, _client, cancellationToken);
+                }
 
+                phase = "assigned";
                 var assigned = await _client.PostAsync<AssignedResponse>(
                     "assigned",
                     new { },
                     cancellationToken);
 
+                phase = "instance-updates";
                 await _updates.ProcessNextAsync(
                     assigned.Jobs,
                     cancellationToken);
@@ -72,18 +81,23 @@ internal sealed class WorkerLoop
                 foreach (var job in assigned.Jobs)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    phase = "start-or-recover-assigned";
                     await _mt5.StartOrRecoverAsync(job, _client, cancellationToken);
                 }
 
                 if (templateReady)
                 {
+                    phase = "claim-next";
                     var next = await _client.PostAsync<ClaimResponse>(
                         "claim-next",
                         new { },
                         cancellationToken);
 
                     if (next.Job is not null)
+                    {
+                        phase = "start-or-recover-claimed";
                         await _mt5.StartOrRecoverAsync(next.Job, _client, cancellationToken);
+                    }
                 }
 
                 WriteStatus("OK " + DateTimeOffset.UtcNow.ToString("O"));
@@ -92,9 +106,18 @@ internal sealed class WorkerLoop
             {
                 break;
             }
-            catch
+            catch (Exception ex)
             {
-                WriteStatus("API_OR_WORKER_RETRY " + DateTimeOffset.UtcNow.ToString("O"));
+                var message = ex.Message.Replace('\r', ' ').Replace('\n', ' ');
+                if (message.Length > 500) message = message[..500];
+                var diagnostic =
+                    "API_OR_WORKER_RETRY " + DateTimeOffset.UtcNow.ToString("O") +
+                    " phase=" + phase +
+                    " runner=" + _config.RunnerId +
+                    " error=" + ex.GetType().Name +
+                    " message=" + message;
+                WriteStatus(diagnostic);
+                Console.Error.WriteLine(diagnostic);
             }
 
             try

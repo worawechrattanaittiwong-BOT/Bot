@@ -5,6 +5,7 @@ import {
   Controller,
   Get,
   Header,
+  Logger,
   Post,
   Put,
   Query,
@@ -28,6 +29,8 @@ function isBitcoinTradingSymbol(value: unknown) {
 @Controller("bot")
 @UseGuards(JwtGuard)
 export class BotController {
+  private readonly logger = new Logger(BotController.name);
+
   constructor(
     private readonly db: DbService,
     private readonly crypto: CryptoService,
@@ -2044,8 +2047,10 @@ export class BotController {
 
   @Post("start")
   async start(@Req() req: any, @Query("slotId") slotId = "") {
-    await this.maintenance.assertStartAllowed();
-    const instance = await this.getInstance(req.user.sub, slotId || null);
+    let instance: any = null;
+    try {
+      await this.maintenance.assertStartAllowed();
+      instance = await this.getInstance(req.user.sub, slotId || null);
     if (!instance.mt5_account_id) throw new ConflictException("เชื่อมบัญชี MT5 ก่อนเริ่มบอท");
     const unresolvedCloseAll = await this.db.one(
       "SELECT id FROM bot_commands WHERE bot_instance_id=$1 AND command='CLOSE_ALL' AND status IN ('PENDING','DELIVERED') ORDER BY id DESC LIMIT 1",
@@ -2211,7 +2216,51 @@ export class BotController {
       "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'START')",
       [instance.id]
     );
-    return { ok: true, state: "RUNNING" };
+      this.logger.log(JSON.stringify({
+        event: "BOT_START_ACCEPTED",
+        userId: req.user?.sub || null,
+        slotId: slotId || instance?.slot_id || null,
+        instanceId: instance?.id || null,
+        mode: instance?.mode || null,
+        runnerId: instance?.runner_id || null,
+        desiredStateBefore: instance?.desired_state || null,
+        actualStateBefore: instance?.actual_state || null,
+        eaLastSeenAt: instance?.last_seen_at || null,
+        heartbeatHttpStatus: instance?.metrics?.heartbeatHttpStatus ?? null,
+        heartbeatLatencyMs: instance?.metrics?.heartbeatLatencyMs ?? null,
+        terminalConnected: instance?.metrics?.terminalConnected ?? null,
+        accessSource: access?.source || null
+      }));
+      return { ok: true, state: "RUNNING" };
+    } catch (error: any) {
+      const lastSeenAt = instance?.last_seen_at ? new Date(instance.last_seen_at).getTime() : NaN;
+      const eaLastSeenAgeMs = Number.isFinite(lastSeenAt)
+        ? Math.max(0, Date.now() - lastSeenAt)
+        : null;
+      this.logger.error(
+        JSON.stringify({
+          event: "BOT_START_FAILED",
+          userId: req.user?.sub || null,
+          slotId: slotId || instance?.slot_id || null,
+          instanceId: instance?.id || null,
+          mode: instance?.mode || null,
+          runnerId: instance?.runner_id || null,
+          desiredState: instance?.desired_state || null,
+          actualState: instance?.actual_state || null,
+          eaLastSeenAt: instance?.last_seen_at || null,
+          eaLastSeenAgeMs,
+          heartbeatHttpStatus: instance?.metrics?.heartbeatHttpStatus ?? null,
+          heartbeatLatencyMs: instance?.metrics?.heartbeatLatencyMs ?? null,
+          terminalConnected: instance?.metrics?.terminalConnected ?? null,
+          errorName: error?.name || null,
+          errorMessage: error?.message || String(error),
+          errorCode: error?.code || null,
+          errorConstraint: error?.constraint || null
+        }),
+        error instanceof Error ? error.stack : undefined
+      );
+      throw error;
+    }
   }
 
   @Post("stop")
