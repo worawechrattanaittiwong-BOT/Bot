@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.88"
-#define SCENOVA_EA_VERSION "1.0.88"
-#define SCENOVA_PRODUCT_VERSION "1.0.88"
+#property version   "1.0.89"
+#define SCENOVA_EA_VERSION "1.0.89"
+#define SCENOVA_PRODUCT_VERSION "1.0.89"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -5206,7 +5206,8 @@ bool SendFlatHeartbeatIfDue()
 
    if(InpCloudRelay && g_cloudHeartbeatPending)
    {
-      SendHeartbeat();
+      if(CloudRelayHeartbeatResultReady())
+         SendHeartbeat();
       return true;
    }
 
@@ -5274,6 +5275,18 @@ void OnTimer()
    if(g_settingsSynchronized && zeroTimerOwnsExposure)
       ManageZeroGrid();
 
+   // A Cloud relay response is local file I/O only. While one heartbeat is
+   // pending, do not enter indicator/history/journal work that could keep this
+   // Timer event busy after the Worker has already written the response file.
+   // Local exposure protection above still runs first on every Timer event.
+   if(InpCloudRelay && g_cloudHeartbeatPending)
+   {
+      if(CloudRelayHeartbeatResultReady())
+         SendHeartbeat();
+      RefreshChartStatus();
+      return;
+   }
+
    ulong heartbeatNowMs=GetTickCount64();
    ulong heartbeatIntervalMs=(ulong)MathMax(1,InpHeartbeatSeconds)*1000;
    bool heartbeatDue =
@@ -5300,6 +5313,11 @@ void OnTimer()
       g_lastHeartbeat=TimeCurrent();
       SendHeartbeat();
       networkUsed=true;
+      if(InpCloudRelay && g_cloudHeartbeatPending)
+      {
+         RefreshChartStatus();
+         return;
+      }
    }
 
    // Keep control-plane liveness ahead of chart/history work. CopyRates,
@@ -6688,6 +6706,17 @@ int CloudRelayHeartbeat(string payload,string &response,int timeoutMs)
    g_cloudHeartbeatTimeoutMs=MathMax(300,timeoutMs);
    g_lastHttpTransportError=0;
    return CLOUD_RELAY_PENDING_CODE;
+}
+
+bool CloudRelayHeartbeatResultReady()
+{
+   if(!g_cloudHeartbeatPending)
+      return false;
+   if(FileIsExist(g_cloudHeartbeatResponseFile))
+      return true;
+
+   int waitMs=MathMax(300,g_cloudHeartbeatTimeoutMs);
+   return GetTickCount64()-g_cloudHeartbeatStartedMs>=(ulong)waitMs;
 }
 
 int HttpPostJsonTimeout(

@@ -12,14 +12,24 @@ function rejectMatch(pattern, label) {
   if (pattern.test(ea)) throw new Error("Pass 7.1 violated: " + label);
 }
 
-requireText('#property version   "1.0.88"', "EA version bump");
-requireText('#define SCENOVA_EA_VERSION "1.0.88"', "runtime version bump");
+requireText('#property version   "1.0.89"', "EA version bump");
+requireText('#define SCENOVA_EA_VERSION "1.0.89"', "runtime version bump");
 requireText("#define CLOUD_RELAY_PENDING_CODE -5902", "explicit pending transport state");
 requireText("bool   g_cloudHeartbeatPending = false;", "persistent relay pending state");
 requireText("g_cloudHeartbeatStartedMs=GetTickCount64();", "request start timestamp");
 requireText("return CLOUD_RELAY_PENDING_CODE;", "non-blocking pending return");
 requireText("if(InpCloudRelay && code==CLOUD_RELAY_PENDING_CODE)", "pending bypasses heartbeat failure logic");
-requireText("if(InpCloudRelay && g_cloudHeartbeatPending)", "flat timer pumps pending response");
+requireText("if(InpCloudRelay && g_cloudHeartbeatPending)", "timer recognizes pending relay response");
+requireText("CloudRelayHeartbeatResultReady()", "pending response has a lightweight readiness check");
+requireText("if(CloudRelayHeartbeatResultReady())", "pending response is polled without spin-wait");
+requireMatch(
+  /if\(InpCloudRelay && g_cloudHeartbeatPending\)[\s\S]*CloudRelayHeartbeatResultReady\(\)[\s\S]*RefreshChartStatus\(\);[\s\S]*return;/,
+  "pending Cloud heartbeat stops the rest of the timer pass"
+);
+requireMatch(
+  /SendHeartbeat\(\);[\s\S]*networkUsed=true;[\s\S]*if\(InpCloudRelay && g_cloudHeartbeatPending\)[\s\S]*return;/,
+  "new asynchronous heartbeat request returns before heavy timer work"
+);
 requireText("g_lastHeartbeatLatencyMs = InpCloudRelay", "relay latency remains measured from request start");
 
 const start = ea.indexOf("int CloudRelayHeartbeat(string payload,string &response,int timeoutMs)");
