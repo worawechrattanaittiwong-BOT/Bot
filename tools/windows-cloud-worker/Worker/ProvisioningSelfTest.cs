@@ -42,7 +42,7 @@ internal static class ProvisioningSelfTest
             {
                 var id = Guid.NewGuid().ToString();
                 using var accountJson = JsonDocument.Parse((900000 + i).ToString());
-                using var settingsJson = JsonDocument.Parse("{\"symbol\":\"XAUUSD\"}");
+                using var settingsJson = JsonDocument.Parse("{\"startupSymbol\":\"BTCUSD\",\"symbol\":\"XAUUSD\"}");
 
                 var job = new CloudJob
                 {
@@ -84,6 +84,7 @@ internal static class ProvisioningSelfTest
                 AssertContains(startup, "Login=" + (900000 + number), "account");
                 AssertContains(startup, "Password=demo-password-" + number, "password");
                 AssertContains(startup, "Server=SCENOVA-Demo-" + number, "broker server");
+                AssertContains(startup, "Symbol=BTCUSD", "web-authoritative startup symbol");
                 AssertContains(startup, "ProxyEnable=0", "proxy disabled");
                 AssertContains(startup, "WebRequest=1", "WebRequest enabled");
                 AssertContains(startup, "Chart=0", "chart-change trading remains enabled");

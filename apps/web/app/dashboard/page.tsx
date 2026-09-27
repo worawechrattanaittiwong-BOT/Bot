@@ -409,10 +409,12 @@ export default function DashboardPage() {
     settings.symbol ||
     ""
   ).trim();
-  const tradingSymbolOptions = marketWatchSymbols.length
-    ? marketWatchSymbols
-    : [desiredTradingSymbol, String(metrics.symbol || "").trim()]
-        .filter((value,index,all)=>Boolean(value) && all.findIndex(item=>String(item).toUpperCase()===String(value).toUpperCase())===index);
+  const tradingSymbolOptions = [
+    ...marketWatchSymbols,
+    desiredTradingSymbol,
+    String(metrics.symbol || "").trim(),
+    ...(isLocalSelectedSlot ? [] : ["XAUUSD","BTCUSD"])
+  ].filter((value,index,all)=>Boolean(value) && all.findIndex(item=>String(item).toUpperCase()===String(value).toUpperCase())===index);
 
   useEffect(() => {
     const slotKey = String(data?.selectedSlot?.id || data?.instance?.id || "");
@@ -1577,10 +1579,6 @@ export default function DashboardPage() {
   }
 
   function openTradingSymbolPicker() {
-    if (!isLocalSelectedSlot) {
-      setError("การเลือก Symbol จากบอทรองรับ Local MT5 เท่านั้น");
-      return;
-    }
     const desired = desiredTradingSymbol;
     const match = tradingSymbolOptions.find(
       item => item.toUpperCase() === desired.toUpperCase()
@@ -2137,7 +2135,7 @@ export default function DashboardPage() {
 
                 <div className="cc-v13-hero-actions" aria-label="ควบคุมบอท">
                   <div className="cc-v12-quick-actions cc-v19-hero-quick-actions">
-                    {isLocalSelectedSlot?<button className="symbol" disabled={symbolBusy} onClick={openTradingSymbolPicker}><ScenovaIcon name="trend" size={15}/><span><b>{desiredTradingSymbol||"Symbol"}</b><small>เลือก Symbol</small></span></button>:null}
+                    <button className="symbol" disabled={symbolBusy} onClick={openTradingSymbolPicker}><ScenovaIcon name="trend" size={15}/><span><b>{desiredTradingSymbol||"Symbol"}</b><small>เลือก Symbol</small></span></button>
                     <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
                     <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
                     <button className="close" disabled={busy} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ล้างและปิดทั้งหมด",message:"คำสั่งนี้จะ Force Flat ออเดอร์ของ SCENOVA และล้างสถานะค้างของบัญชีนี้ ใช้ได้แม้หน้าจอแสดง 0 Position ยืนยันดำเนินการทันที?",confirmLabel:"ล้าง / ปิดทั้งหมด",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งล้าง / ปิดทั้งหมดแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ล้าง / ปิดทั้งหมด</b><small>Force Flat &amp; Reset</small></span></button>

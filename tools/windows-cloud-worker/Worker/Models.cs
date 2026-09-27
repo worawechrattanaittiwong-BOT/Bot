@@ -13,6 +13,7 @@ internal sealed class WorkerCommand
     public string InstanceId { get; set; } = "";
     public long ExecutionGeneration { get; set; }
     public string Name { get; set; } = "";
+    public CloudJob? Job { get; set; }
 }
 
 internal sealed class AssignedResponse
@@ -100,6 +101,12 @@ internal sealed class CloudJob
     {
         get
         {
+            if (Settings.ValueKind == JsonValueKind.Object &&
+                Settings.TryGetProperty("startupSymbol", out var startupSymbol) &&
+                startupSymbol.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(startupSymbol.GetString()))
+                return startupSymbol.GetString()!.Trim();
+
             if (Settings.ValueKind == JsonValueKind.Object &&
                 Settings.TryGetProperty("symbol", out var symbol) &&
                 symbol.ValueKind == JsonValueKind.String &&

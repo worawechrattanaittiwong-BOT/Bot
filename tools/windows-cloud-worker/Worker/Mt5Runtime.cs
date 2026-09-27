@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 
 namespace Scenova.CloudWorker;
 
@@ -8,10 +9,30 @@ internal sealed record PreparedInstance(
     string InstancePath,
     string TerminalPath,
     string PresetPath,
-    string StartupPath);
+    string StartupPath,
+    string Symbol);
 
 internal sealed class Mt5Runtime
 {
+    private const int SwMaximize = 3;
+    private const uint WmMdiMaximize = 0x0225;
+    private delegate bool EnumWindowProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetParent(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+
     private readonly WorkerConfig _config;
     private readonly string _instancesPath;
     private readonly string _templatePath;
@@ -260,7 +281,7 @@ internal sealed class Mt5Runtime
             },
             Encoding.Unicode);
 
-        return new PreparedInstance(instancePath, terminal, presetPath, startupPath);
+        return new PreparedInstance(instancePath, terminal, presetPath, startupPath, job.Symbol);
     }
 
     public EaApplyOutcome ApplyEaUpdate(
@@ -396,27 +417,50 @@ internal sealed class Mt5Runtime
         WorkerClient client,
         CancellationToken cancellationToken)
     {
-        if (!string.Equals(command.Name, "STOP_INSTANCE", StringComparison.Ordinal)) return;
+        var isStop = string.Equals(command.Name, "STOP_INSTANCE", StringComparison.Ordinal);
+        var isReload = string.Equals(command.Name, "RELOAD_INSTANCE", StringComparison.Ordinal);
+        if (!isStop && !isReload) return;
 
-        var result = "STOP_FAILED";
-        var errorCode = "STOP_FAILED";
+        var result = isReload ? "RELOAD_FAILED" : "STOP_FAILED";
+        var errorCode = result;
 
         try
         {
-            if (StopInstance(command.InstanceId))
+            if (!StopInstance(command.InstanceId))
             {
-                result = "STOP_CONFIRMED";
+                errorCode = "PROCESS_STILL_RUNNING";
+            }
+            else if (isReload)
+            {
+                if (command.Job is null ||
+                    !string.Equals(command.Job.InstanceId, command.InstanceId, StringComparison.OrdinalIgnoreCase) ||
+                    command.Job.ExecutionGeneration != command.ExecutionGeneration)
+                    throw new InvalidOperationException("RELOAD_JOB_MISMATCH");
+
+                var prepared = PrepareInstanceFiles(command.Job);
+                LaunchPrepared(prepared);
+                _offlineRepairAttempted.Remove(command.InstanceId);
+                _retryAfter.Remove(command.InstanceId);
+                result = "RELOAD_CONFIRMED";
                 errorCode = "";
             }
             else
             {
-                errorCode = "PROCESS_STILL_RUNNING";
+                result = "STOP_CONFIRMED";
+                errorCode = "";
             }
         }
-        catch
+        catch (Exception ex)
         {
-            result = "STOP_FAILED";
-            errorCode = "STOP_FAILED";
+            result = isReload ? "RELOAD_FAILED" : "STOP_FAILED";
+            var normalized = new string(ex.Message
+                .ToUpperInvariant()
+                .Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_')
+                .ToArray())
+                .Trim('_');
+            errorCode = string.IsNullOrWhiteSpace(normalized)
+                ? result
+                : normalized[..Math.Min(64, normalized.Length)];
         }
 
         await client.PostAsync("command-result", new
@@ -644,7 +688,7 @@ internal sealed class Mt5Runtime
                 Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
                 WorkingDirectory = prepared.InstancePath,
                 UseShellExecute = true,
-                WindowStyle = ProcessWindowStyle.Hidden
+                WindowStyle = ProcessWindowStyle.Maximized
             });
 
             // MetaTrader may defer EA startup while account/chart data syncs.
@@ -654,7 +698,10 @@ internal sealed class Mt5Runtime
             {
                 if (HasExactTerminal(prepared.TerminalPath) &&
                     EaReadyMarkerMatches(readyMarker, instanceId))
+                {
+                    TryMaximizeChart(prepared);
                     return;
+                }
 
                 Thread.Sleep(250);
             }
@@ -664,6 +711,64 @@ internal sealed class Mt5Runtime
         }
 
         throw new InvalidOperationException("EA_ATTACH_FAILED");
+    }
+
+    private static void TryMaximizeChart(PreparedInstance prepared)
+    {
+        try
+        {
+            var terminal = EnumerateTerminalProcesses()
+                .FirstOrDefault(item =>
+                    string.Equals(item.Path, prepared.TerminalPath, StringComparison.OrdinalIgnoreCase));
+            if (terminal.Pid <= 0) return;
+
+            using var process = Process.GetProcessById(terminal.Pid);
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                process.Refresh();
+                var mainWindow = process.MainWindowHandle;
+                if (mainWindow != IntPtr.Zero)
+                {
+                    IntPtr chartWindow = IntPtr.Zero;
+                    EnumChildWindows(
+                        mainWindow,
+                        (handle, _) =>
+                        {
+                            var title = new StringBuilder(256);
+                            if (GetWindowText(handle, title, title.Capacity) <= 0)
+                                return true;
+
+                            var text = title.ToString();
+                            if (text.Contains(prepared.Symbol, StringComparison.OrdinalIgnoreCase) &&
+                                text.Contains("M5", StringComparison.OrdinalIgnoreCase))
+                            {
+                                chartWindow = handle;
+                                return false;
+                            }
+
+                            return true;
+                        },
+                        IntPtr.Zero);
+
+                    if (chartWindow != IntPtr.Zero)
+                    {
+                        var parent = GetParent(chartWindow);
+                        if (parent != IntPtr.Zero)
+                            SendMessage(parent, WmMdiMaximize, chartWindow, IntPtr.Zero);
+                        ShowWindowAsync(chartWindow, SwMaximize);
+                        return;
+                    }
+                }
+
+                Thread.Sleep(250);
+            }
+        }
+        catch
+        {
+            // Window layout is cosmetic. Never fail or restart a healthy MT5
+            // only because Windows did not expose the chart child in time.
+        }
     }
 
     private static bool EaReadyMarkerMatches(string markerPath, string instanceId)

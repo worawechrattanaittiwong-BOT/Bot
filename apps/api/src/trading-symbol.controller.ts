@@ -64,8 +64,8 @@ function marketWatchSymbols(metrics: any) {
 export class TradingSymbolController {
   constructor(private readonly db: DbService) {}
 
-  private async localInstance(userId: string, slotId: string) {
-    if (!slotId) throw new BadRequestException("ไม่พบ Local Slot ที่เลือก");
+  private async selectedInstance(userId: string, slotId: string) {
+    if (!slotId) throw new BadRequestException("ไม่พบ Slot ที่เลือก");
     const row = await this.db.one(
       `SELECT
          bi.*,
@@ -83,9 +83,6 @@ export class TradingSymbolController {
       [slotId, userId]
     );
     if (!row) throw new ConflictException("ไม่พบ SCENOVA Instance ของ Slot นี้");
-    if (String(row.mode || "").toUpperCase() !== "LOCAL") {
-      throw new ConflictException("การเลือก Symbol รุ่นนี้ใช้กับ Local MT5 เท่านั้น");
-    }
     return row;
   }
 
@@ -132,7 +129,7 @@ export class TradingSymbolController {
 
   @Get()
   async get(@Req() req: any, @Query("slotId") slotId = "") {
-    const instance = await this.localInstance(req.user.sub, slotId);
+    const instance = await this.selectedInstance(req.user.sub, slotId);
     return { ok: true, ...this.snapshot(instance) };
   }
 
@@ -149,7 +146,7 @@ export class TradingSymbolController {
       );
     }
 
-    const instance = await this.localInstance(req.user.sub, slotId);
+    const instance = await this.selectedInstance(req.user.sub, slotId);
     const savedControlMode = String(
       instance.settings?.controlMode || instance.settings?.engineMode || "AUTO"
     ).toUpperCase();
@@ -159,10 +156,9 @@ export class TradingSymbolController {
       );
     }
     const positions = Math.max(0, Number(instance.positions || 0));
-    const runtimeBusy =
-      positions > 0 ||
-      String(instance.actual_state || "").toUpperCase() === "RUNNING" ||
-      String(instance.desired_state || "").toUpperCase() === "RUNNING";
+    const waitingForFlat = positions > 0;
+    const mode = String(instance.mode || "").toUpperCase();
+    const isCloud = mode === "CLOUD";
 
     // The Web selection is authoritative. Never reject the user's desired
     // Symbol because MT5/Agent is offline or because positions are still open.
@@ -175,10 +171,13 @@ export class TradingSymbolController {
 
     await this.db.query(
       `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
-       VALUES($1,jsonb_build_object('startupSymbol',$2::text),now())
+       VALUES($1,jsonb_build_object('startupSymbol',$2::text,'symbol',$2::text),now())
        ON CONFLICT(bot_instance_id)
        DO UPDATE SET
-         settings=jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
+         settings=jsonb_set(
+           jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
+           '{symbol}',to_jsonb($2::text),true
+         ),
          updated_at=now()`,
       [instance.id, symbol]
     );
@@ -211,12 +210,14 @@ export class TradingSymbolController {
         [
           instance.id,
           symbol,
-          runtimeBusy ? "WAITING_FLAT" : "QUEUED",
+          waitingForFlat ? "WAITING_FLAT" : "QUEUED",
           requestedAt,
           actionId,
-          runtimeBusy
+          waitingForFlat
             ? "เว็บกำหนด Symbol ใหม่แล้ว · ระบบ Safe Stop และจะบังคับ MT5 เปิด Symbol นี้ทันทีเมื่อไม่มี Position"
-            : "เว็บกำหนด Symbol ใหม่แล้ว · ระบบกำลังบังคับ MT5 เปิด Chart/EA บน Symbol นี้"
+            : isCloud
+              ? "เว็บกำหนด Symbol ใหม่แล้ว · Cloud Worker กำลัง Reload MT5 ให้เหลือ Chart เดียวบน Symbol นี้"
+              : "เว็บกำหนด Symbol ใหม่แล้ว · ระบบกำลังบังคับ MT5 เปิด Chart/EA บน Symbol นี้"
         ]
       );
 
@@ -231,6 +232,20 @@ export class TradingSymbolController {
         "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
         [instance.id]
       );
+
+      if (isCloud && !waitingForFlat && instance.runner_id) {
+        await this.db.query(
+          `INSERT INTO worker_commands(runner_id,bot_instance_id,execution_generation,command,status)
+           SELECT $1,$2,$3,'RELOAD_INSTANCE','PENDING'
+           WHERE NOT EXISTS (
+             SELECT 1 FROM worker_commands
+             WHERE bot_instance_id=$2
+               AND command='RELOAD_INSTANCE'
+               AND status IN ('PENDING','DELIVERED')
+           )`,
+          [instance.runner_id, instance.id, Number(instance.execution_generation || 1)]
+        );
+      }
     } else {
       await this.db.query(
         `UPDATE bot_instances
@@ -257,7 +272,7 @@ export class TradingSymbolController {
           activeSymbol: activeSymbol || null,
           authority: "WEB",
           actionId,
-          waitingForFlat: runtimeBusy,
+          waitingForFlat,
           agentOnline: Boolean(instance.agent_online),
           agentVersion: String(instance.agent_version || ""),
           minimumAgentVersion: SYMBOL_AGENT_VERSION
@@ -272,19 +287,21 @@ export class TradingSymbolController {
       symbolChangeRequiresReconnect: requiresReconnect,
       queued: requiresReconnect,
       actionId,
-      waitingForFlat: requiresReconnect && runtimeBusy,
+      waitingForFlat: requiresReconnect && waitingForFlat,
       agentOnline: Boolean(instance.agent_online),
       agentVersionReady,
       minimumAgentVersion: SYMBOL_AGENT_VERSION,
       message: !requiresReconnect
         ? "MT5 กำลังใช้ Symbol นี้อยู่แล้ว"
-        : runtimeBusy
+        : waitingForFlat
           ? "ยืนยันแล้ว · เว็บเป็นคำสั่งหลัก ระบบหยุดเปิดรอบใหม่และจะบังคับ MT5 เปลี่ยนเป็น " + symbol + " ทันทีเมื่อ Position เป็น 0"
-          : !instance.agent_online
-            ? "ยืนยันแล้ว · บันทึกคำสั่ง " + symbol + " ไว้เป็นค่าหลัก รอ Windows Agent ออนไลน์แล้วระบบจะบังคับ MT5 เปิดให้อัตโนมัติ"
-            : !agentVersionReady
-              ? "ยืนยันแล้ว · บันทึกคำสั่ง " + symbol + " ไว้เป็นค่าหลัก กรุณาอัปเดต SCENOVA Agent v" + SYMBOL_AGENT_VERSION + " แล้วระบบจะทำต่ออัตโนมัติ"
-              : "ยืนยันแล้ว · ระบบกำลังบังคับ MT5 เปิด " + symbol + " และโหลด EA บน Symbol นี้อัตโนมัติ"
+          : isCloud
+            ? "ยืนยันแล้ว · Cloud Worker กำลัง Reload MT5 เป็น " + symbol + " และจะเปิดเพียง Chart เดียว"
+            : !instance.agent_online
+              ? "ยืนยันแล้ว · บันทึกคำสั่ง " + symbol + " ไว้เป็นค่าหลัก รอ Windows Agent ออนไลน์แล้วระบบจะบังคับ MT5 เปิดให้อัตโนมัติ"
+              : !agentVersionReady
+                ? "ยืนยันแล้ว · บันทึกคำสั่ง " + symbol + " ไว้เป็นค่าหลัก กรุณาอัปเดต SCENOVA Agent v" + SYMBOL_AGENT_VERSION + " แล้วระบบจะทำต่ออัตโนมัติ"
+                : "ยืนยันแล้ว · ระบบกำลังบังคับ MT5 เปิด " + symbol + " และโหลด EA บน Symbol นี้อัตโนมัติ"
     };
   }
 }

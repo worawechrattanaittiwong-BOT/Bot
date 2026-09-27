@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.82"
-#define SCENOVA_EA_VERSION "1.0.82"
-#define SCENOVA_PRODUCT_VERSION "1.0.82"
+#property version   "1.0.83"
+#define SCENOVA_EA_VERSION "1.0.83"
+#define SCENOVA_PRODUCT_VERSION "1.0.83"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1410,6 +1410,30 @@ bool ArmRuntimeTimer()
    return false;
 }
 
+bool PublishEaAttachMarker()
+{
+   if(MQLInfoInteger(MQL_TESTER))
+      return true;
+
+   ResetLastError();
+   int ready=FileOpen("scenova-ea-ready.txt",FILE_WRITE|FILE_TXT|FILE_ANSI,0,CP_UTF8);
+   if(ready==INVALID_HANDLE)
+   {
+      Print("SCENOVA attach marker failed. error=",GetLastError());
+      return false;
+   }
+
+   FileWriteString(
+      ready,
+      SCENOVA_EA_VERSION+"\r\n"+
+      InpInstanceId+"\r\n"+
+      IntegerToString((long)TimeLocal())
+   );
+   FileFlush(ready);
+   FileClose(ready);
+   return true;
+}
+
 int OnInit()
 {
    for(int t = 0; t < EMA_TF_COUNT; t++)
@@ -1417,6 +1441,23 @@ int OnInit()
          g_emaHandles[t][p] = INVALID_HANDLE;
    for(int p = 0; p < EMA_PERIOD_COUNT; p++)
       g_emaChartHandles[p] = INVALID_HANDLE;
+
+   if(!MQLInfoInteger(MQL_TESTER))
+   {
+      bool apiOk = (StringFind(InpApiBase, "https://") == 0);
+      if(!apiOk || StringLen(InpInstanceId) < 8 || StringLen(InpInstallToken) < 8)
+      {
+         Print("SCENOVA CONFIG ERROR: connection settings are missing. Load SCENOVA-FastBasketBot.set in Inputs.");
+         RenderChartStatus("CONFIG REQUIRED", clrTomato, "Load SCENOVA-FastBasketBot.set");
+         return(INIT_PARAMETERS_INCORRECT);
+      }
+
+      // This marker proves that MetaTrader loaded FastBasketBot with the
+      // intended Cloud preset. Broker history/indicator warm-up and the first
+      // heartbeat may legitimately take longer and must never make the Worker
+      // kill a healthy terminal during startup.
+      PublishEaAttachMarker();
+   }
 
    g_lot = InpLot;
    g_maxPositions = InpMaxPositions;
@@ -1543,17 +1584,6 @@ int OnInit()
    DrawEmaCurves();
    RestoreRescueState();
 
-   if(!MQLInfoInteger(MQL_TESTER))
-   {
-      bool apiOk = (StringFind(InpApiBase, "https://") == 0);
-      if(!apiOk || StringLen(InpInstanceId) < 8 || StringLen(InpInstallToken) < 8)
-      {
-         Print("SCENOVA CONFIG ERROR: connection settings are missing. Load SCENOVA-FastBasketBot.set in Inputs.");
-         RenderChartStatus("CONFIG REQUIRED", clrTomato, "Load SCENOVA-FastBasketBot.set");
-         return(INIT_PARAMETERS_INCORRECT);
-      }
-   }
-
    // Strategy Tester cannot use WebRequest. In tester mode only,
    // run the trading engine locally so historical tests work even when markets are closed.
    if(MQLInfoInteger(MQL_TESTER))
@@ -1581,28 +1611,6 @@ int OnInit()
       Print("SCENOVA FATAL: runtime timer could not be armed; refusing false-online state.");
       RenderChartStatus("TIMER ERROR",clrTomato,"Restart MT5 / check terminal log");
       return(INIT_FAILED);
-   }
-
-   // Worker-side launch verification: a terminal process alone is not proof
-   // that FastBasketBot attached. Publish this only after OnInit reached a
-   // usable state and the runtime timer was armed successfully.
-   if(!MQLInfoInteger(MQL_TESTER))
-   {
-      ResetLastError();
-      int ready=FileOpen("scenova-ea-ready.txt",FILE_WRITE|FILE_TXT|FILE_ANSI,0,CP_UTF8);
-      if(ready!=INVALID_HANDLE)
-      {
-         FileWriteString(
-            ready,
-            SCENOVA_EA_VERSION+"\r\n"+
-            InpInstanceId+"\r\n"+
-            IntegerToString((long)TimeLocal())
-         );
-         FileFlush(ready);
-         FileClose(ready);
-      }
-      else
-         Print("SCENOVA ready marker failed. error=",GetLastError());
    }
 
    RefreshChartStatus(true);
