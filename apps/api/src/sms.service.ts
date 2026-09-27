@@ -36,7 +36,11 @@ export class SmsService {
     );
   }
 
-  async requestOtp(msisdn: string, fallbackCode: string): Promise<OtpDelivery> {
+  async requestOtp(
+    msisdn: string,
+    fallbackCode: string,
+    purpose: "ACCOUNT" | "LOCAL_TRIAL" = "ACCOUNT"
+  ): Promise<OtpDelivery> {
     if (this.otpConfigured()) {
       const otp = this.otpCredentials();
       const form = new URLSearchParams();
@@ -77,7 +81,7 @@ export class SmsService {
 
     const sms = this.smsCredentials();
     if (sms.key && sms.secret && sms.sender) {
-      await this.sendTrialCode(msisdn, fallbackCode);
+      await this.sendOtpCode(msisdn, fallbackCode, purpose);
       return { provider: "SMS_FALLBACK", token: null, refno: null };
     }
 
@@ -135,7 +139,11 @@ export class SmsService {
     );
   }
 
-  async sendTrialCode(msisdn: string, code: string) {
+  async sendOtpCode(
+    msisdn: string,
+    code: string,
+    purpose: "ACCOUNT" | "LOCAL_TRIAL" = "ACCOUNT"
+  ) {
     const { key, secret, sender } = this.smsCredentials();
 
     if (!key || !secret || !sender) {
@@ -147,10 +155,10 @@ export class SmsService {
     const form = new URLSearchParams();
     form.set("sender", sender);
     form.set("msisdn", msisdn);
-    form.set(
-      "message",
-      `SCENOVA OTP: ${code}. Expires in 10 min. Do not share this code.`
-    );
+    const message = purpose === "LOCAL_TRIAL"
+      ? `SCENOVA OTP ${code} ยืนยัน Local Trial ใช้ภายใน 10 นาที ห้ามส่งต่อรหัสนี้`
+      : `SCENOVA OTP ${code} ยืนยันเบอร์มือถือ ใช้ภายใน 10 นาที ห้ามส่งต่อรหัสนี้`;
+    form.set("message", message);
 
     let response: Response;
     try {
