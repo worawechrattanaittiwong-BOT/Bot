@@ -41,6 +41,19 @@ requireText(ea, 'string relayTag=chartTag+"-"+requestId;', "EA unique heartbeat 
 requireText(ea, 'string requestFile="scenova-hb-"+relayTag+".request.txt";', "EA unique heartbeat request path");
 requireText(relay, "HeartbeatRequestMaxAge = TimeSpan.FromSeconds(15)", "relay stale request cleanup");
 requireText(relay, "DeleteRequestIfUnchanged(requestPath, requestId);", "relay compare-before-delete guard");
+requireText(relay, "RunHeartbeatRelayLoopAsync", "heartbeat relay has an isolated loop");
+requireText(relay, "RunRuntimeEventRelayLoopAsync", "runtime events have a separate loop");
+requireText(relay, "HeartbeatRelayTimeout = TimeSpan.FromSeconds(3)", "heartbeat relay request is bounded");
+requireMatch(
+  relay,
+  /Task\.WhenAll\([\s\S]*ProcessHeartbeatAsync\(instancePath, cancellationToken\)/,
+  "instances relay heartbeats concurrently"
+);
+requireMatch(
+  relay,
+  /scenova-hb-\*\.request\.txt[\s\S]*OrderByDescending\(File\.GetLastWriteTimeUtc\)[\s\S]*FirstOrDefault\(\)/,
+  "heartbeat relay prioritizes only the newest request"
+);
 
 // Pass 5: Worker liveness is independent from the sequential command/provisioning loop.
 requireText(worker, "private async Task RunHeartbeatLoopAsync", "dedicated Worker heartbeat loop");

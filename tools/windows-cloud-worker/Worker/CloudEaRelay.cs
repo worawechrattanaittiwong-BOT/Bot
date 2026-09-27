@@ -4,6 +4,7 @@ internal sealed class CloudEaRelay
 {
     private static readonly TimeSpan HeartbeatRequestMaxAge = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan HeartbeatResponseMaxAge = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan HeartbeatRelayTimeout = TimeSpan.FromSeconds(3);
 
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;
@@ -20,17 +21,23 @@ internal sealed class CloudEaRelay
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
+        var heartbeatTask = RunHeartbeatRelayLoopAsync(cancellationToken);
+        var eventTask = RunRuntimeEventRelayLoopAsync(cancellationToken);
+        await Task.WhenAll(heartbeatTask, eventTask);
+    }
+
+    private async Task RunHeartbeatRelayLoopAsync(CancellationToken cancellationToken)
+    {
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
                 if (Directory.Exists(_instancesPath))
                 {
-                    foreach (var instancePath in Directory.EnumerateDirectories(_instancesPath))
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        await ProcessInstanceAsync(instancePath, cancellationToken);
-                    }
+                    var instancePaths = Directory.EnumerateDirectories(_instancesPath).ToArray();
+                    await Task.WhenAll(
+                        instancePaths.Select(instancePath =>
+                            ProcessHeartbeatAsync(instancePath, cancellationToken)));
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -39,7 +46,8 @@ internal sealed class CloudEaRelay
             }
             catch
             {
-                // Relay retries per pass; EA remains fail-closed until a verified server response returns.
+                // Heartbeat relay retries per pass. One MT5/API delay must not
+                // block heartbeat delivery for other instances.
             }
 
             try
@@ -53,97 +61,168 @@ internal sealed class CloudEaRelay
         }
     }
 
-    private async Task ProcessInstanceAsync(string instancePath, CancellationToken cancellationToken)
+    private async Task RunRuntimeEventRelayLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                if (Directory.Exists(_instancesPath))
+                {
+                    foreach (var instancePath in Directory.EnumerateDirectories(_instancesPath))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await ProcessRuntimeEventsAsync(instancePath, cancellationToken);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch
+            {
+                // Runtime events are best-effort local queue files and retry later.
+            }
+
+            try
+            {
+                await Task.Delay(100, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+    }
+
+    private async Task ProcessHeartbeatAsync(
+        string instancePath,
+        CancellationToken cancellationToken)
     {
         var filesPath = Path.Combine(instancePath, "MQL5", "Files");
         if (!Directory.Exists(filesPath)) return;
 
         CleanupExpiredHeartbeatFiles(filesPath);
 
-        // Realtime status events are fire-and-retry files. The EA never waits
-        // for internet I/O; this relay owns delivery and keeps failed files in
-        // the local queue. A failed upstream gets a short per-instance backoff
-        // so an API outage cannot create a tight request loop.
-        if (!_eventRetryAfterUtc.TryGetValue(instancePath, out var retryAfter) ||
-            retryAfter <= DateTime.UtcNow)
+        string? requestPath;
+        try
         {
-            var relayFailed = false;
-            foreach (var eventPath in Directory.EnumerateFiles(
-                         filesPath,
-                         "scenova-evt-*.request.txt",
-                         SearchOption.TopDirectoryOnly)
-                     .OrderBy(File.GetCreationTimeUtc)
-                     .Take(64))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
+            // Only the newest request can still be useful to the EA. Older
+            // single-use requests are left for the stale-file cleanup instead
+            // of consuming relay time ahead of current control-plane liveness.
+            requestPath = Directory.EnumerateFiles(
+                    filesPath,
+                    "scenova-hb-*.request.txt",
+                    SearchOption.TopDirectoryOnly)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+        }
+        catch (IOException) { return; }
+        catch (UnauthorizedAccessException) { return; }
 
-                string payload;
-                try { payload = (await File.ReadAllTextAsync(eventPath, cancellationToken)).Trim(); }
-                catch (IOException) { continue; }
-                catch (UnauthorizedAccessException) { continue; }
+        if (string.IsNullOrWhiteSpace(requestPath)) return;
 
-                if (payload.Length < 16) continue;
+        string[] lines;
+        try { lines = await File.ReadAllLinesAsync(requestPath, cancellationToken); }
+        catch (IOException) { return; }
+        catch (UnauthorizedAccessException) { return; }
 
-                try
-                {
-                    var statusCode = await _client.RelayEaRuntimeEventAsync(payload, cancellationToken);
-                    if (statusCode >= 200 && statusCode < 300)
-                    {
-                        File.Delete(eventPath);
-                        continue;
-                    }
+        if (lines.Length < 2 || string.IsNullOrWhiteSpace(lines[0]))
+            return;
 
-                    relayFailed = true;
-                    break;
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch
-                {
-                    // Leave the event file in place for a later retry.
-                    relayFailed = true;
-                    break;
-                }
-            }
+        var requestId = lines[0].Trim();
+        var payload = string.Join("\n", lines.Skip(1)).Trim();
+        if (payload.Length < 16) return;
 
-            if (relayFailed)
-                _eventRetryAfterUtc[instancePath] = DateTime.UtcNow.AddSeconds(1);
-            else
-                _eventRetryAfterUtc.Remove(instancePath);
+        var responsePath = requestPath.Replace(
+            ".request.txt",
+            ".response.txt",
+            StringComparison.OrdinalIgnoreCase);
+        var tempPath = responsePath + ".tmp";
+
+        int statusCode;
+        string body;
+        try
+        {
+            using var relayCts =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            relayCts.CancelAfter(HeartbeatRelayTimeout);
+
+            var result = await _client.RelayEaHeartbeatAsync(payload, relayCts.Token);
+            statusCode = result.StatusCode;
+            body = result.Body.Replace("\r", "").Replace("\n", "");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            statusCode = 0;
+            body = "{}";
         }
 
-        foreach (var requestPath in Directory.EnumerateFiles(
+        try
+        {
+            await File.WriteAllTextAsync(
+                tempPath,
+                requestId + Environment.NewLine +
+                statusCode + Environment.NewLine +
+                body,
+                cancellationToken);
+            File.Move(tempPath, responsePath, true);
+            DeleteRequestIfUnchanged(requestPath, requestId);
+        }
+        catch
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+        }
+    }
+
+    private async Task ProcessRuntimeEventsAsync(
+        string instancePath,
+        CancellationToken cancellationToken)
+    {
+        var filesPath = Path.Combine(instancePath, "MQL5", "Files");
+        if (!Directory.Exists(filesPath)) return;
+
+        // Realtime status events are fire-and-retry files. The EA never waits
+        // for internet I/O; this relay owns delivery and keeps failed files in
+        // the local queue. This loop is intentionally separate from heartbeat
+        // relay so event backlog or an upstream delay cannot make MT5 look stale.
+        if (_eventRetryAfterUtc.TryGetValue(instancePath, out var retryAfter) &&
+            retryAfter > DateTime.UtcNow)
+            return;
+
+        var relayFailed = false;
+        foreach (var eventPath in Directory.EnumerateFiles(
                      filesPath,
-                     "scenova-hb-*.request.txt",
+                     "scenova-evt-*.request.txt",
                      SearchOption.TopDirectoryOnly)
-                 .OrderByDescending(File.GetLastWriteTimeUtc))
+                 .OrderBy(File.GetCreationTimeUtc)
+                 .Take(64))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            string[] lines;
-            try { lines = await File.ReadAllLinesAsync(requestPath, cancellationToken); }
+            string payload;
+            try { payload = (await File.ReadAllTextAsync(eventPath, cancellationToken)).Trim(); }
             catch (IOException) { continue; }
             catch (UnauthorizedAccessException) { continue; }
 
-            if (lines.Length < 2 || string.IsNullOrWhiteSpace(lines[0]))
-                continue;
-
-            var requestId = lines[0].Trim();
-            var payload = string.Join("\n", lines.Skip(1)).Trim();
             if (payload.Length < 16) continue;
 
-            var responsePath = requestPath.Replace(".request.txt", ".response.txt", StringComparison.OrdinalIgnoreCase);
-            var tempPath = responsePath + ".tmp";
-
-            int statusCode;
-            string body;
             try
             {
-                var result = await _client.RelayEaHeartbeatAsync(payload, cancellationToken);
-                statusCode = result.StatusCode;
-                body = result.Body.Replace("\r", "").Replace("\n", "");
+                var statusCode = await _client.RelayEaRuntimeEventAsync(payload, cancellationToken);
+                if (statusCode >= 200 && statusCode < 300)
+                {
+                    File.Delete(eventPath);
+                    continue;
+                }
+
+                relayFailed = true;
+                break;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -151,26 +230,16 @@ internal sealed class CloudEaRelay
             }
             catch
             {
-                statusCode = 0;
-                body = "{}";
-            }
-
-            try
-            {
-                await File.WriteAllTextAsync(
-                    tempPath,
-                    requestId + Environment.NewLine +
-                    statusCode + Environment.NewLine +
-                    body,
-                    cancellationToken);
-                File.Move(tempPath, responsePath, true);
-                DeleteRequestIfUnchanged(requestPath, requestId);
-            }
-            catch
-            {
-                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+                // Leave the event file in place for a later retry.
+                relayFailed = true;
+                break;
             }
         }
+
+        if (relayFailed)
+            _eventRetryAfterUtc[instancePath] = DateTime.UtcNow.AddSeconds(1);
+        else
+            _eventRetryAfterUtc.Remove(instancePath);
     }
 
     private static void CleanupExpiredHeartbeatFiles(string filesPath)
