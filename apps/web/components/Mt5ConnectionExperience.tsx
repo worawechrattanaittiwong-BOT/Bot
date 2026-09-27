@@ -127,6 +127,33 @@ export function Mt5ConnectionExperience(props: Props) {
           </div>
           <button className={styles.primary} onClick={() => showGuide(1)}>ดาวน์โหลดติดตั้ง<span>→</span></button>
 
+          {props.vpsMove && (
+            <>
+              {props.vpsMove.progress ? (
+                <VpsMigrationProgressCard
+                  progress={props.vpsMove.progress}
+                  onRetry={props.vpsMove.onRetry}
+                />
+              ) : props.vpsMove.hasAccess ? (
+                <>
+                  <button
+                    type="button"
+                    className={styles.vpsHeroButton}
+                    disabled={Boolean(props.vpsMove.busy || props.vpsMove.blockedReason)}
+                    onClick={props.vpsMove.onMove}
+                  >
+                    {props.vpsMove.busy ? "กำลังเตรียม VPS..." : "ย้ายไป VPS Server"}
+                    <span>→</span>
+                  </button>
+                  {props.vpsMove.blockedReason && <small className={styles.vpsReason}>{props.vpsMove.blockedReason}</small>}
+                </>
+              ) : (
+                <a className={styles.vpsHeroButton} href={props.vpsMove.packageHref || "/packages?system=cloud"}>
+                  ย้ายไป VPS Server <span>→</span>
+                </a>
+              )}
+            </>
+          )}
         </div>
         <div className={styles.art}>
           <img src="/assets/scenova-mt5-companion-v2.png" alt="มาสคอต SCENOVA ตัวกลมสีขาวม่วง อยู่ข้างหน้าจอ MT5"/>
@@ -155,34 +182,6 @@ export function Mt5ConnectionExperience(props: Props) {
           <section className={styles.tutorialVisual} aria-label="ภาพประกอบการติดตั้ง SCENOVA กับ MT5">
             <img src="/assets/scenova-mt5-companion-v2.png" alt="หน้าจอ MT5 และผู้ช่วย SCENOVA" loading="lazy"/>
           </section>
-
-          {props.vpsMove && (
-            <div className={styles.vpsQuickArea}>
-              {props.vpsMove.progress ? (
-                <VpsMigrationProgressCard
-                  progress={props.vpsMove.progress}
-                  onRetry={props.vpsMove.onRetry}
-                />
-              ) : props.vpsMove.hasAccess ? (
-                <>
-                  <button
-                    type="button"
-                    className={styles.vpsQuickButton}
-                    disabled={Boolean(props.vpsMove.busy || props.vpsMove.blockedReason)}
-                    onClick={props.vpsMove.onMove}
-                  >
-                    {props.vpsMove.busy ? "กำลังเตรียม VPS..." : "ย้ายไป VPS Server"}
-                    <span>→</span>
-                  </button>
-                  {props.vpsMove.blockedReason && <small className={styles.vpsReason}>{props.vpsMove.blockedReason}</small>}
-                </>
-              ) : (
-                <a className={styles.vpsQuickButton} href={props.vpsMove.packageHref || "/packages?system=cloud"}>
-                  ย้ายไป VPS Server <span>→</span>
-                </a>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
