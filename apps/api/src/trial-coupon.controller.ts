@@ -639,8 +639,8 @@ export class TrialCouponController {
       deliveryChannel: deliveredBySms ? "SMS" : "EMAIL",
       trialDays: this.trialDays(),
       message: result.status === "APPROVED"
-        ? "ยืนยันสิทธิ์ทดลองสำเร็จและผูก MT5 แล้ว"
-        : "ยืนยันสิทธิ์ทดลองสำเร็จ รอเชื่อม MT5 แล้วจึงเริ่มใช้งาน"
+        ? "ยืนยัน Local Trial สำเร็จและผูก MT5 แล้ว"
+        : "ยืนยัน Local Trial สำเร็จ รอเชื่อม Local MT5 แล้วจึงเริ่มใช้งาน"
     };
   }
 }
