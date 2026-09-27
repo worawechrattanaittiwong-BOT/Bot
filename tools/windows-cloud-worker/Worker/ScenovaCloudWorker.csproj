@@ -9,7 +9,7 @@
     <PublishSingleFile>true</PublishSingleFile>
     <AssemblyName>SCENOVA-CloudWorker</AssemblyName>
     <RootNamespace>Scenova.CloudWorker</RootNamespace>
-    <Version>2.2.14</Version>
+    <Version>2.2.15</Version>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.Management" Version="8.0.0" />
