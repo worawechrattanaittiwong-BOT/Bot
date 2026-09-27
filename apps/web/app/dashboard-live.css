@@ -1253,3 +1253,20 @@
   .cc-cloud-update-float{top:auto;bottom:78px;transform:translateX(-50%);padding:16px 17px}
   .cc-cloud-update-float b{font-size:16px}
 }
+
+.owner-vps-move-panel{
+  margin-bottom:14px;
+  border-color:rgba(130,96,255,.48)!important;
+  box-shadow:0 14px 38px rgba(52,34,112,.15);
+}
+.owner-vps-entitlement-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+}
+@media(max-width:640px){
+  .owner-vps-entitlement-row{align-items:stretch;flex-direction:column}
+  .owner-vps-entitlement-row .btn{width:100%}
+}
