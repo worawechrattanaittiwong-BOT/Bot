@@ -3,7 +3,7 @@ name: Build MT5 EA
 # Official compile/publish pipeline for AUTO + VECTOR EDGE, FLIP LOCK,
 # RACE and ZERO GRID.
 concurrency:
-  group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+  group: "${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}"
   cancel-in-progress: true
 
 on:
