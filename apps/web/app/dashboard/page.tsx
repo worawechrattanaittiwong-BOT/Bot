@@ -142,6 +142,7 @@ export default function DashboardPage() {
   const ownerVpsDialogRef = useRef<HTMLDialogElement | null>(null);
   const [ownerVpsPassword, setOwnerVpsPassword] = useState("");
   const [ownerVpsBusy, setOwnerVpsBusy] = useState(false);
+  const [vpsMoveCardDismissed, setVpsMoveCardDismissed] = useState(false);
   const [dismissedCloudUpdateKey, setDismissedCloudUpdateKey] = useState("");
   const [tradingSymbol, setTradingSymbol] = useState("");
   const [symbolBusy, setSymbolBusy] = useState(false);
@@ -758,6 +759,14 @@ export default function DashboardPage() {
     ? new Date(lastServerContactEpoch * 1000).toLocaleString("th-TH", {hour12:false})
     : "—";
   const entitlement = data?.entitlement;
+  const cloudMigrationTarget = (data?.slots || []).find((slot:any) =>
+    String(slot?.mode || "").toUpperCase() === "CLOUD" &&
+    Boolean(slot?.subscription_active) &&
+    Boolean(slot?.can_control) &&
+    !slot?.instance_id &&
+    ["ACTIVE","AVAILABLE"].includes(String(slot?.status || "").toUpperCase())
+  ) || null;
+  const customerHasCloudMigrationAccess = Boolean(cloudMigrationTarget);
   const liveStatus = data?.liveStatus || {
     code: isMt5Online ? "RUNNING_READY" : "MT5_OFFLINE",
     label: isMt5Online ? "กำลังตรวจสอบสถานะบอท" : "MT5 ยังไม่เชื่อมต่อ",
@@ -985,10 +994,10 @@ export default function DashboardPage() {
 
         const migrationState = String(migration.state || "").toUpperCase();
         const stateMessage:Record<string,string> = {
-          STOPPING_LOCAL:"กำลังหยุด Local MT5 เดิมแบบยืนยัน Process ก่อนย้ายสิทธิ์ไป VPS",
-          SOURCE_STOP_CONFIRMED:"Local MT5 หยุดแล้ว · กำลังส่ง Runtime ไป VPS",
-          TARGET_PROVISIONING:"กำลังเปิด MT5 และ FastBasketBot บน VPS " + String(serverOperation.runnerRegion || serverOperation.runnerId || ""),
-          COMPLETED:"ย้ายบัญชีไป VPS สำเร็จ · พร้อมใช้งานบน " + String(serverOperation.runnerRegion || serverOperation.runnerId || "SCENOVA VPS")
+          STOPPING_LOCAL:"กำลังย้ายระบบ · กำลังหยุด Local MT5 เดิมอย่างปลอดภัย",
+          SOURCE_STOP_CONFIRMED:"Local MT5 หยุดแล้ว · กำลังย้ายระบบไป VPS",
+          TARGET_PROVISIONING:"กำลังติดตั้งระบบ VPS · กำลังเปิด MT5 และ FastBasketBot " + String(serverOperation.runnerRegion || serverOperation.runnerId || ""),
+          COMPLETED:"ย้ายระบบไป VPS สำเร็จ · พร้อมใช้งานบน " + String(serverOperation.runnerRegion || serverOperation.runnerId || "SCENOVA VPS")
         };
 
         if (migrationState === "FAILED" || migrationState === "CANCELLED") {
@@ -1017,6 +1026,8 @@ export default function DashboardPage() {
                 }
               : current
           );
+          setVpsMoveCardDismissed(true);
+          setNotice("ย้ายระบบไป VPS สำเร็จ");
           if (targetSlotId) {
             selectedSlotIdRef.current = targetSlotId;
             setSelectedSlotId(targetSlotId);
@@ -1870,6 +1881,10 @@ export default function DashboardPage() {
   }
 
   function openOwnerVpsMigration() {
+    if (!isOwner && !cloudMigrationTarget) {
+      setError("บัญชีนี้ยังไม่มีสิทธิ์ VPS กรุณาซื้อแพ็กเกจ VPS ก่อนย้ายระบบ");
+      return;
+    }
     setOwnerVpsPassword("");
     setError("");
     ownerVpsDialogRef.current?.showModal();
@@ -1896,33 +1911,53 @@ export default function DashboardPage() {
       kind:"MIGRATION",
       title:"กำลังย้ายบัญชีไป VPS",
       status:"RUNNING",
-      message:"กำลังตรวจ Local Runtime และหา SCENOVA VPS ที่พร้อมใช้งาน...",
+      message:"กำลังย้ายระบบ · กำลังตรวจ Local Runtime และเตรียมติดตั้งระบบ VPS...",
       startedAt:Date.now()
     });
 
     try {
-      const result = await api("/runtime-migration/owner/local-to-cloud", {
-        method:"POST",
-        body:JSON.stringify({
-          sourceSlotId,
-          tradingPassword:ownerVpsPassword
-        })
-      });
+      const result = isOwner
+        ? await api("/runtime-migration/owner/local-to-cloud", {
+            method:"POST",
+            body:JSON.stringify({
+              sourceSlotId,
+              tradingPassword:ownerVpsPassword
+            })
+          })
+        : await api("/runtime-migration/request", {
+            method:"POST",
+            body:JSON.stringify({
+              sourceSlotId,
+              targetSlotId:String(cloudMigrationTarget?.id || ""),
+              tradingPassword:ownerVpsPassword,
+              confirmFlat:true,
+              confirmSwitch:true
+            })
+          });
+
+      const migration = isOwner ? result?.migration : result;
+      const targetSlotId = isOwner
+        ? String(result?.targetSlotId || migration?.target_slot_id || "")
+        : String(cloudMigrationTarget?.id || migration?.target_slot_id || "");
+
       ownerVpsDialogRef.current?.close();
       setOwnerVpsPassword("");
+      setVpsMoveCardDismissed(true);
+      setNotice("รับคำสั่งย้ายระบบแล้ว · กำลังติดตั้งระบบ VPS");
       setServerOperation((current:any) =>
         current?.id === operationId
           ? {
               ...current,
-              migrationId:String(result?.migration?.id || ""),
-              targetSlotId:String(result?.targetSlotId || ""),
-              runnerId:String(result?.runnerId || ""),
+              migrationId:String(migration?.id || ""),
+              targetSlotId,
+              runnerId:String(result?.runnerId || migration?.target_runner_id || ""),
               runnerRegion:String(result?.runnerRegion || ""),
-              message:"SCENOVA รับคำสั่งแล้ว · กำลังย้าย Local MT5 ไป VPS " + String(result?.runnerRegion || result?.runnerId || "")
+              message:"กำลังย้ายระบบ · กำลังติดตั้งระบบ VPS"
             }
           : current
       );
     } catch (e:any) {
+      setVpsMoveCardDismissed(false);
       setServerOperation((current:any) =>
         current?.id === operationId
           ? {
@@ -2555,7 +2590,7 @@ export default function DashboardPage() {
         >
           <form className="cc-symbol-picker-card" onSubmit={moveOwnerLocalToVps}>
             <div className="cc-symbol-picker-head">
-              <b>ย้าย OWNER ไป SCENOVA VPS</b>
+              <b>ย้ายบัญชีนี้ไป SCENOVA VPS</b>
               <button type="button" aria-label="ปิด" disabled={ownerVpsBusy} onClick={()=>ownerVpsDialogRef.current?.close()}>×</button>
             </div>
             <p className="cc-symbol-picker-source">
@@ -2578,7 +2613,9 @@ export default function DashboardPage() {
               />
             </label>
             <p className="cc-symbol-picker-source">
-              SCENOVA จะเลือก VPS ที่ ONLINE / HEALTHY และมี Capacity ให้อัตโนมัติ Local เดิมจะถูกหยุดก่อนส่ง Runtime ไป VPS
+              {isOwner
+                ? "SCENOVA จะเลือก VPS ที่ ONLINE / HEALTHY และมี Capacity ให้อัตโนมัติ"
+                : "ระบบจะใช้สิทธิ์แพ็กเกจ VPS ที่บัญชีนี้ซื้อไว้"} · Local เดิมจะถูกหยุดอย่างปลอดภัยก่อนติดตั้ง MT5 และ EA บน VPS
             </p>
             <div className="cc-symbol-picker-actions">
               <button type="button" className="btn" disabled={ownerVpsBusy} onClick={()=>ownerVpsDialogRef.current?.close()}>ยกเลิก</button>
@@ -3044,27 +3081,23 @@ export default function DashboardPage() {
 
         {activeView === "account" && (
           <div className="account-workspace">
-            {data.selectedSlot?.mode === "LOCAL" ? (
-              <>
-                <Mt5ConnectionExperience
-                  account={data.account}
-                  online={isMt5Online}
-                  busy={busy}
-                  downloadBlocked={desired==="RUNNING" || (state==="RUNNING" && isMt5Online) || Number(data.instance?.metrics?.positions || 0)>0}
-                  apiBase={mt5ApiBase}
-                  message={activationMessage}
-                  error={error}
-                  onDownload={downloadWindowsInstaller}
-                />
-                {isOwner && data.account && (
-                  <section className="panel purple setup-panel owner-vps-move-panel">
-                    <div className="setup-heading">
-                      <div>
-                        <div className="eyebrow">OWNER · MOVE TO VPS</div>
-                        <h2>ย้ายบัญชีนี้ไป SCENOVA VPS</h2>
-                        <p className="muted">ระบบจะใช้บัญชี MT5 เดิม หยุด Local Runtime แบบยืนยันก่อน แล้วเลือก VPS ที่พร้อมให้อัตโนมัติ</p>
-                      </div>
-                    </div>
+            {data.selectedSlot?.mode === "LOCAL" && data.account && !vpsMoveCardDismissed && (
+              <section className="panel purple setup-panel owner-vps-move-panel">
+                <div className="setup-heading">
+                  <div>
+                    <div className="eyebrow">{isOwner ? "OWNER · MOVE TO VPS" : "MOVE TO VPS"}</div>
+                    <h2>ย้ายบัญชีนี้ไป SCENOVA VPS</h2>
+                    <p className="muted">
+                      {isOwner
+                        ? "ย้าย MT5 เดิมจาก Local ไป Trading VPS โดยไม่ต้องซื้อแพ็กเกจเพิ่ม"
+                        : customerHasCloudMigrationAccess
+                          ? "สิทธิ์ VPS พร้อมแล้ว · ย้าย MT5 เดิมจาก Local ไป VPS ได้จากตรงนี้"
+                          : "บัญชีนี้ยังไม่มีสิทธิ์ VPS ซื้อแพ็กเกจก่อน แล้วกลับมากดย้ายได้ทันที"}
+                    </p>
+                  </div>
+                </div>
+                {isOwner || customerHasCloudMigrationAccess ? (
+                  <>
                     <button
                       type="button"
                       className="btn primary btn-lg"
@@ -3084,10 +3117,30 @@ export default function DashboardPage() {
                         ? "กรุณากด Safe Stop ก่อนย้าย"
                         : Number(data.instance?.metrics?.positions || 0) > 0
                           ? "ต้องไม่มี Position ค้างก่อนย้ายไป VPS"
-                          : "พร้อมย้าย · OWNER ไม่ต้องซื้อแพ็ก Cloud เพิ่ม"}
+                          : "พร้อมย้าย · ระบบจะปิดการ์ดนี้ทันทีเมื่อเริ่มย้าย"}
                     </div>
-                  </section>
+                  </>
+                ) : (
+                  <div className="owner-vps-entitlement-row">
+                    <div className="help">ไม่มีสิทธิ์ VPS สำหรับบัญชีนี้</div>
+                    <a className="btn primary btn-lg" href="/packages?system=cloud&from=mt5-ea">ซื้อแพ็กเกจ VPS →</a>
+                  </div>
                 )}
+              </section>
+            )}
+
+            {data.selectedSlot?.mode === "LOCAL" ? (
+              <>
+                <Mt5ConnectionExperience
+                  account={data.account}
+                  online={isMt5Online}
+                  busy={busy}
+                  downloadBlocked={desired==="RUNNING" || (state==="RUNNING" && isMt5Online) || Number(data.instance?.metrics?.positions || 0)>0}
+                  apiBase={mt5ApiBase}
+                  message={activationMessage}
+                  error={error}
+                  onDownload={downloadWindowsInstaller}
+                />
               </>
             ) : (
               <section className="panel account-card">
