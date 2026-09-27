@@ -78,7 +78,7 @@ export default function OnboardingPage() {
         href: "/dashboard?view=account&welcome=1"
       };
     }
-    return { label: "เข้าสู่ Control Center", href: "/dashboard?view=overview" };
+    return { label: "เข้าสู่ Dashboard", href: "/dashboard?view=overview" };
   }, [accountLinked, accessAllowed, trialPending]);
 
   function logout() {
@@ -105,7 +105,7 @@ export default function OnboardingPage() {
         <div className={styles.hero}>
           <div className={styles.eyebrow}>ACCOUNT ONBOARDING</div>
           <h1>ตั้งค่าบัญชีให้พร้อม<br/><span>ก่อนเริ่มใช้งาน MT5</span></h1>
-          <p>เลือกวิธีใช้งานที่ต้องการ แล้วดำเนินการตามขั้นตอนด้านล่าง</p>
+          <p>เลือกวิธีใช้งาน แล้วไปยังขั้นตอนถัดไปได้ทันที</p>
 
           <div className={styles.identity}>
             <div>
@@ -125,9 +125,9 @@ export default function OnboardingPage() {
 
         <div className={styles.progress} aria-label="Setup progress">
           {[
-            { n:1, title:"Account", sub:"สร้างบัญชี SCENOVA" },
+            { n:1, title:"Account", sub:"บัญชี SCENOVA" },
             { n:2, title:"Choose System", sub:"VPS หรือ Local" },
-            { n:3, title:"Setup & Access", sub:"ติดตั้งหรือเลือกแพ็กเกจ" }
+            { n:3, title:"Setup & Access", sub:"ติดตั้งและเริ่มใช้งาน" }
           ].map(step => {
             const complete =
               step.n === 1 ||
@@ -149,7 +149,7 @@ export default function OnboardingPage() {
               <div>
                 <div className={styles.eyebrow}>CHOOSE YOUR SYSTEM</div>
                 <h2>จะใช้งานแบบไหน?</h2>
-                <p>เลือกได้เลยตอนนี้ ระบบจะพาไปขั้นตอนที่ถูกต้องโดยไม่ต้องหาเมนูเอง</p>
+                <p>เลือกระบบที่ต้องการใช้งานได้เลย</p>
               </div>
             </div>
             <div className={styles.choiceGrid}>
@@ -157,7 +157,7 @@ export default function OnboardingPage() {
                 <span className={styles.choiceIcon}><ScenovaIcon name="cloud" size={25}/></span>
                 <div>
                   <b>VPS / Cloud MT5</b>
-                  <p>SCENOVA รัน MT5 และ EA บน Trading VPS ให้ ปิดมือถือหรือคอมได้หลัง Start</p>
+                  <p>SCENOVA รัน MT5 และ EA บน VPS ให้ พร้อมใช้งานหลัง Start</p>
                   <strong>เลือกแพ็กเกจ VPS <span>→</span></strong>
                 </div>
               </a>
@@ -165,7 +165,7 @@ export default function OnboardingPage() {
                 <span className={styles.choiceIcon}><ScenovaIcon name="strategy" size={25}/></span>
                 <div>
                   <b>Local MT5</b>
-                  <p>ติดตั้ง SCENOVA บนคอมพิวเตอร์ของคุณ แล้วใช้ MT5 ที่เครื่องของคุณเอง</p>
+                  <p>ติดตั้ง SCENOVA บนคอมของคุณ แล้วใช้ MT5 ที่เครื่องของคุณเอง</p>
                   <div className={styles.choiceActions}>
                     <a className={styles.choicePrimaryAction} href="/dashboard?view=account&welcome=1&setup=local">
                       ไปหน้าติดตั้ง Local <span>→</span>
@@ -193,33 +193,33 @@ export default function OnboardingPage() {
         <div className={styles.cards}>
           <article className={styles.card + " " + styles.cardDone}>
             <div className={styles.cardTop}>
-              <span className={styles.icon}><ScenovaIcon name="shield" size={22}/></span>
+              <span className={styles.icon}><ScenovaIcon name="shield" size={20}/></span>
               <span className={styles.stateGood}>READY</span>
             </div>
             <h2>1. SCENOVA Account</h2>
-            <p>บัญชี SCENOVA พร้อมใช้งานสำหรับเข้าสู่ Control Center</p>
+            <p>บัญชีพร้อมสำหรับเข้าใช้งาน Control Center</p>
           </article>
 
           <article className={styles.card + (accountLinked ? " " + styles.cardDone : "")}>
             <div className={styles.cardTop}>
-              <span className={styles.icon}><ScenovaIcon name="control" size={22}/></span>
+              <span className={styles.icon}><ScenovaIcon name="control" size={20}/></span>
               <span className={accountLinked ? styles.stateGood : styles.stateWait}>{accountLinked ? "CONNECTED" : "NEXT"}</span>
             </div>
             <h2>2. ระบบที่ใช้งาน</h2>
             <p>
               {accountLinked
                 ? "เชื่อม MT5 แล้ว · " + String(data?.account?.account_number || "บัญชีพร้อมใช้งาน")
-                : "เลือก VPS เพื่อไปหน้าแพ็กเกจ หรือ Local เพื่อไปหน้าติดตั้งบนคอมพิวเตอร์ของคุณ"}
+                : "เลือก VPS หรือ Local เพื่อไปยังขั้นตอนถัดไป"}
             </p>
             <div className={styles.modeRow}>
-              <span><ScenovaIcon name="cloud" size={16}/> Cloud</span>
-              <span><ScenovaIcon name="strategy" size={16}/> Local</span>
+              <span><ScenovaIcon name="cloud" size={15}/> Cloud</span>
+              <span><ScenovaIcon name="strategy" size={15}/> Local</span>
             </div>
           </article>
 
           <article className={styles.card + (accessAllowed ? " " + styles.cardDone : "")}>
             <div className={styles.cardTop}>
-              <span className={styles.icon}><ScenovaIcon name="clock" size={22}/></span>
+              <span className={styles.icon}><ScenovaIcon name="clock" size={20}/></span>
               <span className={accessAllowed ? styles.stateGood : trialPending ? styles.statePending : styles.stateWait}>
                 {accessAllowed ? "ACTIVE" : trialPending ? "PENDING" : "LOCKED"}
               </span>
@@ -227,10 +227,10 @@ export default function OnboardingPage() {
             <h2>3. Trial / Subscription</h2>
             <p>
               {accessAllowed
-                ? "สิทธิ์พร้อมใช้งาน สามารถเข้าสู่ Control Center และเริ่มขั้นตอนเปิดบอทได้"
+                ? "สิทธิ์พร้อมใช้งาน เริ่มใช้งานได้ทันที"
                 : trialPending
                   ? "ส่งคำขอ Trial แล้ว อยู่ระหว่างรอผู้ดูแลอนุมัติ"
-                  : "หลังเชื่อม MT5 ให้ขอ Trial หรือเปิด Subscription ตามสิทธิ์ของบัญชี"}
+                  : "เปิด Trial หรือ Subscription เพื่อเริ่มใช้งาน"}
             </p>
           </article>
         </div>
@@ -238,8 +238,8 @@ export default function OnboardingPage() {
         <section className={styles.actionPanel}>
           <div>
             <small>RECOMMENDED NEXT STEP</small>
-            <h3>{loading ? "กำลังตรวจสอบสถานะ..." : newAccount && !accountLinked ? "เลือก VPS หรือ Local ด้านบน" : primaryAction.label}</h3>
-            <p>{newAccount && !accountLinked ? "เลือกวิธีใช้งานที่ต้องการเพื่อไปขั้นตอนถัดไป" : "ดำเนินการต่อเพื่อเริ่มใช้งานบัญชีของคุณ"}</p>
+            <h3>{loading ? "กำลังตรวจสอบสถานะ..." : newAccount && !accountLinked ? "เลือกระบบที่ต้องการใช้งาน" : primaryAction.label}</h3>
+            <p>{newAccount && !accountLinked ? "เริ่มจาก VPS หรือ Local ได้ทันที" : "ดำเนินการต่อเพื่อเริ่มใช้งานบัญชีของคุณ"}</p>
           </div>
           <div className={styles.actions}>
             {!(newAccount && !accountLinked) && <a className={styles.primary} href={loading ? "#" : primaryAction.href} aria-disabled={loading}>ดำเนินการต่อ <span>→</span></a>}
