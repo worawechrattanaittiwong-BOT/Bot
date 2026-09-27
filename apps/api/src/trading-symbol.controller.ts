@@ -125,6 +125,7 @@ export class TradingSymbolController {
          ma.broker_server AS account_broker_server,
          bs.settings,
          COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) AS positions,
+         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') AS mt5_online,
          (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '90 seconds') AS agent_online
        FROM license_slots ls
        JOIN bot_instances bi ON bi.slot_id=ls.id
@@ -217,20 +218,34 @@ export class TradingSymbolController {
     }
 
     const instance = await this.selectedInstance(req.user.sub, slotId);
-    const symbol = resolveBrokerTradingSymbol(
+    const liveSymbols = marketWatchSymbols(instance.metrics);
+    if (!instance.mt5_online || liveSymbols.length === 0) {
+      throw new ConflictException(
+        "ยังเลือก Symbol ไม่ได้: รอ MT5/EA ส่ง Market Watch ล่าสุดมายัง Server ก่อน"
+      );
+    }
+
+    const resolvedSymbol = resolveBrokerTradingSymbol(
       requestedSymbol,
       instance.metrics,
       instance.account_broker,
       instance.account_broker_server
     );
-    if (!symbol) {
-      throw new BadRequestException("ไม่พบ Symbol จริงของบัญชี MT5 ที่เลือก");
+    const liveSymbol = liveSymbols.find(
+      item => item.toUpperCase() === resolvedSymbol.toUpperCase()
+    );
+    if (!resolvedSymbol || !liveSymbol) {
+      throw new BadRequestException(
+        "Symbol นี้ไม่มีอยู่ใน Market Watch จริงของบัญชี MT5 กรุณาเลือกจากรายการที่ Server แสดง"
+      );
     }
+
+    const resolvedSymbol = liveSymbol;
 
     const savedControlMode = String(
       instance.settings?.controlMode || instance.settings?.engineMode || "AUTO"
     ).toUpperCase();
-    if (isBitcoinSymbol(symbol) && savedControlMode === "ZERO_GRID") {
+    if (isBitcoinSymbol(resolvedSymbol) && savedControlMode === "ZERO_GRID") {
       throw new ConflictException(
         "เปลี่ยนโหมดจาก ZERO GRID เป็น AUTO, RACE, FLIP LOCK หรือ MANUAL ก่อนเลือก BTC/XBT"
       );
@@ -247,24 +262,24 @@ export class TradingSymbolController {
     const before = this.snapshot(instance);
     const changed =
       !before.explicitSymbol ||
-      String(before.explicitSymbol).toUpperCase() !== symbol.toUpperCase();
+      String(before.explicitSymbol).toUpperCase() !== resolvedSymbol.toUpperCase();
 
     await this.db.query(
       `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
-       VALUES($1,jsonb_build_object('startupSymbol',$2::text,'symbol',$2::text),now())
+       VALUES($1,jsonb_build_object('startupSymbol',$2::text,'resolvedSymbol',$2::text),now())
        ON CONFLICT(bot_instance_id)
        DO UPDATE SET
          settings=jsonb_set(
            jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
-           '{symbol}',to_jsonb($2::text),true
+           '{resolvedSymbol}',to_jsonb($2::text),true
          ),
          updated_at=now()`,
-      [instance.id, symbol]
+      [instance.id, resolvedSymbol]
     );
 
-    const activeSymbol = normalizeSymbol(instance.metrics?.symbol);
+    const activeSymbol = normalizeSymbol(instance.metrics?.resolvedSymbol);
     const activeMatches = Boolean(
-      activeSymbol && activeSymbol.toUpperCase() === symbol.toUpperCase()
+      activeSymbol && activeSymbol.toUpperCase() === resolvedSymbol.toUpperCase()
     );
     const requestedAt = new Date().toISOString();
     const requiresReconnect = changed || !activeMatches;
@@ -289,7 +304,7 @@ export class TradingSymbolController {
          WHERE id=$1`,
         [
           instance.id,
-          symbol,
+          resolvedSymbol,
           waitingForFlat ? "WAITING_FLAT" : "QUEUED",
           requestedAt,
           actionId,
@@ -335,7 +350,7 @@ export class TradingSymbolController {
            'symbolChangeRequestedAt',$3::text
          )
          WHERE id=$1`,
-        [instance.id, symbol, requestedAt]
+        [instance.id, resolvedSymbol, requestedAt]
       );
     }
 
@@ -347,8 +362,8 @@ export class TradingSymbolController {
         JSON.stringify({
           slotId,
           requestedSymbol,
-          symbol,
-          resolvedSymbol: symbol,
+          symbol: resolvedSymbol,
+          resolvedSymbol,
           previous: before.desiredSymbol,
           changed,
           activeSymbol: activeSymbol || null,
@@ -365,8 +380,8 @@ export class TradingSymbolController {
     return {
       ok: true,
       requestedSymbol,
-      symbol,
-      resolvedSymbol: symbol,
+      resolvedSymbol,
+      resolvedSymbol: resolvedSymbol,
       changed,
       symbolChangeRequiresReconnect: requiresReconnect,
       queued: requiresReconnect,
@@ -378,14 +393,14 @@ export class TradingSymbolController {
       message: !requiresReconnect
         ? "MT5 กำลังใช้ Symbol นี้อยู่แล้ว"
         : waitingForFlat
-          ? "ยืนยันแล้ว · เว็บเป็นคำสั่งหลัก ระบบหยุดเปิดรอบใหม่และจะบังคับ MT5 เปลี่ยนเป็น " + symbol + " ทันทีเมื่อ Position เป็น 0"
+          ? "ยืนยันแล้ว · เว็บเป็นคำสั่งหลัก ระบบหยุดเปิดรอบใหม่และจะบังคับ MT5 เปลี่ยนเป็น " + resolvedSymbol + " ทันทีเมื่อ Position เป็น 0"
           : isCloud
-            ? "ยืนยันแล้ว · Cloud Worker กำลัง Reload MT5 เป็น " + symbol + " และจะเปิดเพียง Chart เดียว"
+            ? "ยืนยันแล้ว · Cloud Worker กำลัง Reload MT5 เป็น " + resolvedSymbol + " และจะเปิดเพียง Chart เดียว"
             : !instance.agent_online
-              ? "ยืนยันแล้ว · บันทึกคำสั่ง " + symbol + " ไว้เป็นค่าหลัก รอ Windows Agent ออนไลน์แล้วระบบจะบังคับ MT5 เปิดให้อัตโนมัติ"
+              ? "ยืนยันแล้ว · บันทึกคำสั่ง " + resolvedSymbol + " ไว้เป็นค่าหลัก รอ Windows Agent ออนไลน์แล้วระบบจะบังคับ MT5 เปิดให้อัตโนมัติ"
               : !agentVersionReady
-                ? "ยืนยันแล้ว · บันทึกคำสั่ง " + symbol + " ไว้เป็นค่าหลัก กรุณาอัปเดต SCENOVA Agent v" + SYMBOL_AGENT_VERSION + " แล้วระบบจะทำต่ออัตโนมัติ"
-                : "ยืนยันแล้ว · ระบบกำลังบังคับ MT5 เปิด " + symbol + " และโหลด EA บน Symbol นี้อัตโนมัติ"
+                ? "ยืนยันแล้ว · บันทึกคำสั่ง " + resolvedSymbol + " ไว้เป็นค่าหลัก กรุณาอัปเดต SCENOVA Agent v" + SYMBOL_AGENT_VERSION + " แล้วระบบจะทำต่ออัตโนมัติ"
+                : "ยืนยันแล้ว · ระบบกำลังบังคับ MT5 เปิด " + resolvedSymbol + " และโหลด EA บน Symbol นี้อัตโนมัติ"
     };
   }
 }
