@@ -3092,8 +3092,8 @@ export default function DashboardPage() {
                   message={activationMessage}
                   error={error}
                   onDownload={downloadWindowsInstaller}
-                  vpsMove={data.account ? {
-                    hasAccess:isOwner || customerHasCloudMigrationAccess,
+                  vpsMove={{
+                    hasAccess:Boolean(data.account) && (isOwner || customerHasCloudMigrationAccess),
                     isOwner,
                     busy:ownerVpsBusy,
                     blockedReason:
@@ -3109,7 +3109,7 @@ export default function DashboardPage() {
                       setVpsMigrationProgress(null);
                       setError("");
                     }
-                  } : undefined}
+                  }}
                 />
               </>
             ) : (
