@@ -15,6 +15,9 @@ const mt5Connect = read("apps/web/components/Mt5ConnectionExperience.tsx");
 const botApi = read("apps/api/src/bot.controller.ts");
 
 assert.match(sms, /purpose:\s*"ACCOUNT" \| "LOCAL_TRIAL"/);
+assert.match(sms, /THAIBULKSMS_LIVE_MODE/);
+assert.match(sms, /liveEnabled\(\)/);
+assert.match(sms, /request blocked because LIVE_MODE is not enabled/);
 assert.match(sms, /SCENOVA: รหัสยืนยัน Local MT5 Trial \$\{code\}/);
 assert.match(sms, /SCENOVA: รหัสยืนยันเบอร์มือถือ \$\{code\}/);
 assert.match(sms, /AbortSignal\.timeout\(SMS_REQUEST_TIMEOUT_MS\)/);
