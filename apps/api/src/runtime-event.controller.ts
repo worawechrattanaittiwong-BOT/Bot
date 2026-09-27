@@ -3,7 +3,7 @@ import {
   Body,
   Controller,
   ForbiddenException,
-  Get,
+  Header,
   Post,
   Query,
   Req,
@@ -150,6 +150,8 @@ export class RuntimeEventStreamController {
   }
 
   @Sse("events")
+  @Header("Cache-Control", "no-cache, no-transform")
+  @Header("X-Accel-Buffering", "no")
   stream(@Req() req: any, @Query("slotId") slotId = "") {
     const userId = String(req.user.sub);
     return from(this.resolveSlot(userId, String(slotId || ""))).pipe(
