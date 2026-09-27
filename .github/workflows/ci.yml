@@ -148,6 +148,8 @@ jobs:
         run: node ./tests/bot-start-error-contract.mjs
       - name: Pass 7 control-plane regression contract
         run: node ./tests/pass7-control-plane-regression.mjs
+      - name: Pass 7.1 non-blocking Cloud heartbeat contract
+        run: node ./tests/pass71-cloud-heartbeat-nonblocking.mjs
       - name: Production hardening Phase 4 contract
         shell: pwsh
         run: ./tests/production-hardening-phase4-contract.ps1

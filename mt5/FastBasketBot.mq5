@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.87"
-#define SCENOVA_EA_VERSION "1.0.87"
-#define SCENOVA_PRODUCT_VERSION "1.0.87"
+#property version   "1.0.88"
+#define SCENOVA_EA_VERSION "1.0.88"
+#define SCENOVA_PRODUCT_VERSION "1.0.88"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -170,6 +170,7 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define LOCAL_EXECUTION_HEARTBEAT_HTTP_TIMEOUT_MS 1200
 #define FLAT_HEARTBEAT_HTTP_TIMEOUT_MS 4000
 #define FLAT_HEARTBEAT_RETRY_DELAY_MS 100
+#define CLOUD_RELAY_PENDING_CODE -5902
 #define ZERO_GRID_JOURNAL_FORCE_INTERVAL_MS 3000
 #define ZERO_GRID_JOURNAL_HTTP_TIMEOUT_MS 500
 #define LOCAL_DYNAMIC_PROTECTION_INTERVAL_MS 150
@@ -274,6 +275,13 @@ datetime g_lastServerContactAt = 0;
 long   g_lastHeartbeatLatencyMs = 0;
 int    g_lastHeartbeatHttpStatus = 0;
 int    g_lastHttpTransportError = 0;
+bool   g_cloudHeartbeatPending = false;
+string g_cloudHeartbeatRequestId = "";
+string g_cloudHeartbeatRequestFile = "";
+string g_cloudHeartbeatResponseFile = "";
+ulong  g_cloudHeartbeatStartedMs = 0;
+int    g_cloudHeartbeatTimeoutMs = 0;
+long   g_cloudHeartbeatLastLatencyMs = 0;
 string g_executionStatus = "INITIALIZING";
 long   g_lastOrderRetcode = 0;
 int    g_lastOrderError = 0;
@@ -5196,6 +5204,12 @@ bool SendFlatHeartbeatIfDue()
    if(MQLInfoInteger(MQL_TESTER) || LocalExecutionExposureActive())
       return false;
 
+   if(InpCloudRelay && g_cloudHeartbeatPending)
+   {
+      SendHeartbeat();
+      return true;
+   }
+
    ulong heartbeatNowMs=GetTickCount64();
    ulong heartbeatIntervalMs=(ulong)MathMax(1,InpHeartbeatSeconds)*1000;
    bool heartbeatDue=
@@ -6339,6 +6353,9 @@ void SendHeartbeat()
         );
    int webError = g_lastHttpTransportError;
 
+   if(InpCloudRelay && code==CLOUD_RELAY_PENDING_CODE)
+      return;
+
    // MT5 can occasionally return a non-HTTP positive value such as 1003
    // together with ERR_WEBREQUEST_REQUEST_FAILED (5203). That is transport
    // failure, not proof that SCENOVA was contacted. When flat, retry once on a
@@ -6357,9 +6374,13 @@ void SendHeartbeat()
               true
            );
       webError=g_lastHttpTransportError;
+      if(InpCloudRelay && code==CLOUD_RELAY_PENDING_CODE)
+         return;
    }
 
-   g_lastHeartbeatLatencyMs = (long)(GetTickCount64() - heartbeatStartedMs);
+   g_lastHeartbeatLatencyMs = InpCloudRelay
+      ? g_cloudHeartbeatLastLatencyMs
+      : (long)(GetTickCount64() - heartbeatStartedMs);
    bool realHttpStatus=IsRealHttpStatus(code);
    g_lastHeartbeatHttpStatus = realHttpStatus ? code : 0;
    if(realHttpStatus)
@@ -6572,6 +6593,68 @@ void AckCommand(long commandId)
 
 int CloudRelayHeartbeat(string payload,string &response,int timeoutMs)
 {
+   response="";
+
+   // Cloud relay is a local file transport. Never sleep inside the MT5 event
+   // handler waiting for the Worker: that can starve Timer events and create a
+   // false EA-offline gap even while the Worker/API are healthy.
+   if(g_cloudHeartbeatPending)
+   {
+      if(FileIsExist(g_cloudHeartbeatResponseFile))
+      {
+         int in=FileOpen(
+            g_cloudHeartbeatResponseFile,
+            FILE_READ|FILE_TXT|FILE_ANSI,
+            0,
+            CP_UTF8
+         );
+         if(in!=INVALID_HANDLE)
+         {
+            string responseId=FileReadString(in);
+            string statusText=FileReadString(in);
+            string body=FileReadString(in);
+            FileClose(in);
+
+            if(responseId==g_cloudHeartbeatRequestId)
+            {
+               g_cloudHeartbeatLastLatencyMs=
+                  (long)(GetTickCount64()-g_cloudHeartbeatStartedMs);
+               FileDelete(g_cloudHeartbeatResponseFile);
+               FileDelete(g_cloudHeartbeatRequestFile);
+               g_cloudHeartbeatPending=false;
+               g_cloudHeartbeatRequestId="";
+               g_cloudHeartbeatRequestFile="";
+               g_cloudHeartbeatResponseFile="";
+               g_cloudHeartbeatStartedMs=0;
+               g_cloudHeartbeatTimeoutMs=0;
+               response=body;
+               g_lastHttpTransportError=0;
+               return (int)StringToInteger(statusText);
+            }
+         }
+      }
+
+      int pendingWaitMs=MathMax(300,g_cloudHeartbeatTimeoutMs);
+      ulong pendingAgeMs=GetTickCount64()-g_cloudHeartbeatStartedMs;
+      if(pendingAgeMs<(ulong)pendingWaitMs)
+      {
+         g_lastHttpTransportError=0;
+         return CLOUD_RELAY_PENDING_CODE;
+      }
+
+      g_cloudHeartbeatLastLatencyMs=(long)pendingAgeMs;
+      FileDelete(g_cloudHeartbeatRequestFile);
+      FileDelete(g_cloudHeartbeatResponseFile);
+      g_cloudHeartbeatPending=false;
+      g_cloudHeartbeatRequestId="";
+      g_cloudHeartbeatRequestFile="";
+      g_cloudHeartbeatResponseFile="";
+      g_cloudHeartbeatStartedMs=0;
+      g_cloudHeartbeatTimeoutMs=0;
+      g_lastHttpTransportError=5901;
+      return -1;
+   }
+
    string chartTag=IntegerToString((long)ChartID());
    string requestId=
       IntegerToString((long)TimeLocal())+"-"+IntegerToString((long)GetTickCount64());
@@ -6588,8 +6671,8 @@ int CloudRelayHeartbeat(string payload,string &response,int timeoutMs)
    int out=FileOpen(requestFile,FILE_WRITE|FILE_TXT|FILE_ANSI,0,CP_UTF8);
    if(out==INVALID_HANDLE)
    {
+      g_cloudHeartbeatLastLatencyMs=0;
       g_lastHttpTransportError=GetLastError();
-      response="";
       return -1;
    }
 
@@ -6597,38 +6680,14 @@ int CloudRelayHeartbeat(string payload,string &response,int timeoutMs)
    FileFlush(out);
    FileClose(out);
 
-   ulong started=GetTickCount64();
-   int waitMs=MathMax(300,timeoutMs);
-   while(GetTickCount64()-started<(ulong)waitMs)
-   {
-      if(FileIsExist(responseFile))
-      {
-         int in=FileOpen(responseFile,FILE_READ|FILE_TXT|FILE_ANSI,0,CP_UTF8);
-         if(in!=INVALID_HANDLE)
-         {
-            string responseId=FileReadString(in);
-            string statusText=FileReadString(in);
-            string body=FileReadString(in);
-            FileClose(in);
-
-            if(responseId==requestId)
-            {
-               FileDelete(responseFile);
-               FileDelete(requestFile);
-               response=body;
-               g_lastHttpTransportError=0;
-               return (int)StringToInteger(statusText);
-            }
-         }
-      }
-      Sleep(25);
-   }
-
-   FileDelete(requestFile);
-   FileDelete(responseFile);
-   response="";
-   g_lastHttpTransportError=5901;
-   return -1;
+   g_cloudHeartbeatPending=true;
+   g_cloudHeartbeatRequestId=requestId;
+   g_cloudHeartbeatRequestFile=requestFile;
+   g_cloudHeartbeatResponseFile=responseFile;
+   g_cloudHeartbeatStartedMs=GetTickCount64();
+   g_cloudHeartbeatTimeoutMs=MathMax(300,timeoutMs);
+   g_lastHttpTransportError=0;
+   return CLOUD_RELAY_PENDING_CODE;
 }
 
 int HttpPostJsonTimeout(
