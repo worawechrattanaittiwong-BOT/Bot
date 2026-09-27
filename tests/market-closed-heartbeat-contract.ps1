@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $ea = [System.IO.File]::ReadAllText((Resolve-Path 'mt5/FastBasketBot.mq5'))
 $web = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/app/dashboard/page.tsx'))
 $eaApi = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/ea.controller.ts'))
+$botApi = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/bot.controller.ts'))
 
 foreach ($pattern in @(
   'ulong\s+g_lastHeartbeatTickMs\s*=\s*0;',
@@ -29,7 +30,9 @@ foreach ($required in @(
   'SCENOVA FATAL: runtime timer could not be armed',
   'terminalOfflineConfirmed',
   'statusNowMs - terminalDisconnectedSinceMs >= 5000',
-  'terminalOfflineConfirmed ? "MT5 OFFLINE" : "RECONNECTING"'
+  'terminalOfflineConfirmed ? "MT5 OFFLINE" : "RECONNECTING"',
+  'TERMINAL_PING_LAST',
+  '\"brokerPingMs\":%.1f'
 )) {
   if (-not $ea.Contains($required)) { throw "Market-closed EA contract missing: $required" }
 }
@@ -44,7 +47,11 @@ foreach ($required in @(
   'ตลาดปิดชั่วคราว',
   'MT5 และ EA ยังเชื่อมต่ออยู่',
   'EA Heartbeat ขาดช่วง',
-  'marketSessionClosed ? "MARKET CLOSED" : "REALTIME"'
+  'marketSessionClosed ? "MARKET CLOSED" : "REALTIME"',
+  'const brokerPingMs = Math.max(0, Number(metrics.brokerPingMs ?? 0));',
+  'runtimeModeLabel',
+  'runtimeLocationLabel',
+  'Ping จริงจาก MT5 ไป Broker Trade Server'
 )) {
   if (-not $web.Contains($required)) { throw "Market-closed dashboard contract missing: $required" }
 }
@@ -55,6 +62,13 @@ foreach ($required in @(
   'heartbeatActualState === "RUNNING"'
 )) {
   if (-not $eaApi.Contains($required)) { throw "RUNNING heartbeat command ACK contract missing: $required" }
+}
+
+foreach ($required in @(
+  'wn.region AS runner_region',
+  'LEFT JOIN worker_nodes wn ON wn.runner_id=bi.runner_id'
+)) {
+  if (-not $botApi.Contains($required)) { throw "Cloud runtime location contract missing: $required" }
 }
 
 Write-Host 'Market-closed heartbeat/status contract PASS'
