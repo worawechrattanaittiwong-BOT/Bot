@@ -35,6 +35,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [newAccount, setNewAccount] = useState(false);
+  const [runtimeMode, setRuntimeMode] = useState<"cloud" | "local">("cloud");
 
   async function load() {
     setLoading(true);
@@ -131,51 +132,93 @@ export default function OnboardingPage() {
 
         {newAccount && !accountLinked && (
           <section className={styles.systemChoice}>
-            <div className={styles.choiceLabel}>SELECT RUNTIME</div>
-            <div className={styles.choiceGrid}>
-              <a className={styles.choiceCard + " " + styles.choiceVps} href="/packages?system=cloud&from=onboarding">
-                <span className={styles.choiceIcon}><ScenovaIcon name="cloud" size={25}/></span>
-                <div className={styles.choiceBody}>
-                  <div>
-                    <b>VPS / Cloud MT5</b>
-                    <p>MT5 และ EA ทำงานบน SCENOVA Trading Server คุณติดตามและสั่งงานผ่านเว็บได้จากทุกอุปกรณ์</p>
-                    <div className={styles.choiceFeatures}>
-                      <span>✓ ใช้งานได้จากมือถือ</span>
-                      <span>✓ ทำงานบนเซิร์ฟเวอร์</span>
-                      <span>✓ ควบคุมผ่านเว็บ</span>
-                    </div>
-                  </div>
-                  <strong>ดูแพ็กเกจ VPS <span>→</span></strong>
-                </div>
-              </a>
-
-              <div className={styles.choiceCard + " " + styles.choiceLocal}>
-                <span className={styles.choiceIcon}><ScenovaIcon name="strategy" size={25}/></span>
-                <div className={styles.choiceBody}>
-                  <div>
-                    <b>Local MT5</b>
-                    <p>ติดตั้ง SCENOVA Agent เพื่อเชื่อม MT5 บน PC หรือ VPS ของคุณ แล้วควบคุมบอทผ่านเว็บ</p>
-                    <div className={styles.choiceFeatures}>
-                      <span>✓ ใช้ PC หรือ VPS ของคุณ</span>
-                      <span>✓ เชื่อมต่อผ่าน Agent</span>
-                      <span>✓ ควบคุมผ่านเว็บ</span>
-                    </div>
-                  </div>
-                </div>
+            <div className={styles.runtimePanel}>
+              <div className={styles.runtimeTabs} role="tablist" aria-label="เลือกรูปแบบการใช้งาน MT5">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={runtimeMode === "cloud"}
+                  className={runtimeMode === "cloud" ? styles.runtimeTabActive : ""}
+                  onClick={() => setRuntimeMode("cloud")}
+                >
+                  <ScenovaIcon name="cloud" size={20}/>
+                  <span>Cloud</span>
+                  <small>MODE</small>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={runtimeMode === "local"}
+                  className={runtimeMode === "local" ? styles.runtimeTabActive : ""}
+                  onClick={() => setRuntimeMode("local")}
+                >
+                  <ScenovaIcon name="strategy" size={20}/>
+                  <span>Local</span>
+                  <small>MODE</small>
+                </button>
               </div>
-            </div>
 
-            <div className={styles.localActionsBar} aria-label="Local MT5 actions">
-              <div className={styles.choiceActions}>
-                <a className={styles.choicePrimaryAction} href="/dashboard?view=account&welcome=1&setup=local">
-                  ติดตั้ง Local MT5 <span>→</span>
-                </a>
-                <a className={styles.choiceTrialAction} href="/packages?system=local&from=onboarding">
-                  เริ่มทดลองใช้งาน
-                </a>
-                <a className={styles.choiceDashboardAction} href="/dashboard?view=overview">
-                  เข้าสู่ Dashboard
-                </a>
+              <div key={runtimeMode} className={styles.runtimeContent} role="tabpanel">
+                <div className={styles.runtimeDiagram} aria-label={runtimeMode === "cloud" ? "SCENOVA Cloud เชื่อมต่อ MT5 และ EA" : "คอมพิวเตอร์ของคุณเชื่อมต่อ MT5 และ EA"}>
+                  <div className={styles.runtimeNode}>
+                    <ScenovaIcon name="control" size={29}/>
+                    <span>YOUR CONTROL</span>
+                  </div>
+                  <div className={styles.runtimeLine} aria-hidden="true"><i/></div>
+                  <div className={styles.runtimeNode + " " + styles.runtimeCore}>
+                    <ScenovaIcon name={runtimeMode === "cloud" ? "cloud" : "strategy"} size={36}/>
+                    <span>{runtimeMode === "cloud" ? "SCENOVA CLOUD" : "YOUR PC / VPS"}</span>
+                  </div>
+                  <div className={styles.runtimeLine} aria-hidden="true"><i/></div>
+                  <div className={styles.runtimeNode}>
+                    <ScenovaIcon name="strategy" size={29}/>
+                    <span>MT5 + EA</span>
+                  </div>
+                </div>
+
+                <div className={styles.runtimeCopy}>
+                  <h2>{runtimeMode === "cloud" ? "เปิดโลกการเทรดจากมือถือ" : "ใช้ MT5 บนเครื่องของคุณ"}</h2>
+                  <p>
+                    {runtimeMode === "cloud"
+                      ? "MT5 และ EA ทำงานบน Trading Server ของ SCENOVA คุณติดตามสถานะและสั่งงานผ่านเว็บได้จากทุกอุปกรณ์"
+                      : "ติดตั้ง SCENOVA Agent เพื่อเชื่อม MT5 บน PC หรือ VPS ของคุณ แล้วสั่งเริ่ม หยุด และตั้งค่าบอทผ่านเว็บ"}
+                  </p>
+
+                  <div className={styles.runtimeFeatures}>
+                    {(runtimeMode === "cloud"
+                      ? ["ใช้ผ่านมือถือได้", "ทำงานบนเซิร์ฟเวอร์", "ควบคุมผ่านเว็บ"]
+                      : ["PC หรือ VPS ของคุณ", "เชื่อมด้วย Agent", "ควบคุมผ่านเว็บ"]
+                    ).map(item => (
+                      <span key={item}><ScenovaIcon name="status" size={14}/>{item}</span>
+                    ))}
+                  </div>
+
+                  <small className={styles.runtimeCaption}>
+                    {runtimeMode === "cloud"
+                      ? "บอททำงานบน Trading Server ตามการตั้งค่าของคุณ"
+                      : "เปิด MT5 และ SCENOVA Agent ไว้ระหว่างการทำงาน"}
+                  </small>
+
+                  <div className={styles.runtimeActions}>
+                    {runtimeMode === "cloud" ? (
+                      <a className={styles.runtimePrimary} href="/packages?system=cloud&from=onboarding">
+                        ดูแพ็กเกจ VPS <span>→</span>
+                      </a>
+                    ) : (
+                      <>
+                        <a className={styles.runtimePrimary} href="/dashboard?view=account&welcome=1&setup=local">
+                          ติดตั้ง Local MT5 <span>→</span>
+                        </a>
+                        <a className={styles.runtimeTrial} href="/packages?system=local&from=onboarding">
+                          เริ่มทดลองใช้งาน
+                        </a>
+                        <a className={styles.runtimeSecondary} href="/dashboard?view=overview">
+                          เข้าสู่ Dashboard
+                        </a>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </section>
