@@ -8,6 +8,7 @@ const trialApi = read("apps/api/src/trial-coupon.controller.ts");
 const packages = read("apps/web/app/packages/page.tsx");
 const onboarding = read("apps/web/app/onboarding/page.tsx");
 const dashboard = read("apps/web/app/dashboard/page.tsx");
+const mt5Connect = read("apps/web/components/Mt5ConnectionExperience.tsx");
 const botApi = read("apps/api/src/bot.controller.ts");
 
 assert.match(sms, /purpose:\s*"ACCOUNT" \| "LOCAL_TRIAL"/);
@@ -31,10 +32,13 @@ assert.match(dashboard, /customerHasCloudMigrationAccess/);
 assert.match(dashboard, /บัญชีนี้ยังไม่มีสิทธิ์ VPS/);
 assert.match(dashboard, /\/packages\?system=cloud&from=mt5-ea/);
 assert.match(dashboard, /\/runtime-migration\/request/);
-assert.match(dashboard, /setVpsMoveCardDismissed\(true\)/);
 assert.match(dashboard, /กำลังย้ายระบบ/);
 assert.match(dashboard, /กำลังติดตั้งระบบ VPS/);
-assert.match(dashboard, /cc-vps-migration-status/);
+assert.doesNotMatch(dashboard, /owner-vps-move-panel/);
+assert.match(dashboard, /vpsMove=\{data\.account \?/);
+assert.match(mt5Connect, /ย้ายไป VPS/);
+assert.match(mt5Connect, /ซื้อแพ็กเกจ VPS/);
+assert.match(mt5Connect, /props\.vpsMove\.progress/);
 assert.match(dashboard, /ย้ายระบบไป VPS สำเร็จ/);
 
 console.log("Customer onboarding, Local Trial SMS, and VPS migration contract PASS");
