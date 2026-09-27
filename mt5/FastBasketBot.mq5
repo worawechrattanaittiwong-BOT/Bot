@@ -5141,9 +5141,38 @@ void OnTick()
    }
 }
 
+bool SendFlatHeartbeatIfDue()
+{
+   if(MQLInfoInteger(MQL_TESTER) || LocalExecutionExposureActive())
+      return false;
+
+   ulong heartbeatNowMs=GetTickCount64();
+   ulong heartbeatIntervalMs=(ulong)MathMax(1,InpHeartbeatSeconds)*1000;
+   bool heartbeatDue=
+      g_lastHeartbeatTickMs==0 ||
+      heartbeatNowMs-g_lastHeartbeatTickMs>=heartbeatIntervalMs;
+   if(!heartbeatDue)
+      return false;
+
+   g_lastHeartbeatTickMs=heartbeatNowMs;
+   g_lastHeartbeat=TimeCurrent();
+   SendHeartbeat();
+   return true;
+}
+
 void OnTimer()
 {
    g_lastTimerEventTickMs=GetTickCount64();
+
+   // A flat/STOPPED Cloud runtime has no exposure to protect. Give a due
+   // heartbeat the whole timer pass before indicators/chart/profit work so a
+   // closed market or slow history read cannot starve SaaS connectivity.
+   if(SendFlatHeartbeatIfDue())
+   {
+      RefreshChartStatus();
+      return;
+   }
+
    SampleSpread();
 
    // Timer fallback: close/retry first and do not enter WebRequest while a
