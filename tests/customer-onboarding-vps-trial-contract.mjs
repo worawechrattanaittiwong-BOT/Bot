@@ -65,9 +65,10 @@ assert.match(dashboard, /\/runtime-migration\/request/);
 assert.match(dashboard, /กำลังย้ายระบบ/);
 assert.match(dashboard, /กำลังติดตั้งระบบ VPS/);
 assert.doesNotMatch(dashboard, /owner-vps-move-panel/);
-assert.match(dashboard, /vpsMove=\{data\.account \?/);
+assert.match(dashboard, /vpsMove=\{\{/);
+assert.match(dashboard, /hasAccess:Boolean\(data\.account\) && \(isOwner \|\| customerHasCloudMigrationAccess\)/);
 assert.match(mt5Connect, /ย้ายไป VPS/);
-assert.match(mt5Connect, /packageHref \|\| "\/packages\?system=cloud"/);
+assert.match(mt5Connect, /onClick=\{props\.vpsMove\.onMove\}/);
 assert.match(mt5Connect, /props\.vpsMove\.progress/);
 assert.match(dashboard, /ย้ายระบบไป VPS สำเร็จ/);
 
