@@ -105,7 +105,7 @@ export default function OnboardingPage() {
         <div className={styles.hero}>
           <div className={styles.eyebrow}>ACCOUNT ONBOARDING</div>
           <h1>ตั้งค่าบัญชีให้พร้อม<br/><span>ก่อนเริ่มใช้งาน MT5</span></h1>
-          <p>ขั้นตอนนี้จัดระเบียบการเริ่มใช้งานเท่านั้น ไม่เปลี่ยนการตั้งค่า EA และไม่แก้ Logic ของโหมดเทรดใด ๆ</p>
+          <p>เลือกวิธีใช้งานที่ต้องการ แล้วดำเนินการตามขั้นตอนด้านล่าง</p>
 
           <div className={styles.identity}>
             <div>
@@ -187,8 +187,7 @@ export default function OnboardingPage() {
               <span className={styles.stateGood}>READY</span>
             </div>
             <h2>1. SCENOVA Account</h2>
-            <p>บัญชีและ Secure Session พร้อมแล้ว ใช้บัญชีนี้สำหรับเข้า Control Center และจัดการสิทธิ์ทั้งหมด</p>
-            <div className={styles.cardFoot}>ไม่เก็บ MT5 Password ในขั้นตอน Login</div>
+            <p>บัญชี SCENOVA พร้อมใช้งานสำหรับเข้าสู่ Control Center</p>
           </article>
 
           <article className={styles.card + (accountLinked ? " " + styles.cardDone : "")}>
@@ -239,11 +238,6 @@ export default function OnboardingPage() {
           </div>
         </section>
 
-        <div className={styles.securityStrip}>
-          <div><ScenovaIcon name="shield" size={18}/><span><b>Secure Session</b><small>ใช้ Token เดิมของระบบ</small></span></div>
-          <div><ScenovaIcon name="control" size={18}/><span><b>MT5 Isolated</b><small>ไม่เปลี่ยน MT5 settings</small></span></div>
-          <div><ScenovaIcon name="strategy" size={18}/><span><b>Trading Logic Safe</b><small>ไม่แตะ AUTO / RACE / FLIP / ZERO / MANUAL</small></span></div>
-        </div>
       </section>
     </main>
   );
