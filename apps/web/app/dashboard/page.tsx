@@ -337,6 +337,114 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    if (!selectedSlotId) return;
+
+    let stopped = false;
+    let controller: AbortController | null = null;
+    let reconnectTimer: number | null = null;
+    let reloadTimer: number | null = null;
+
+    const scheduleRealtimeReload = () => {
+      if (reloadTimer !== null) window.clearTimeout(reloadTimer);
+      reloadTimer = window.setTimeout(() => {
+        if (!stopped && document.visibilityState === "visible") {
+          void load(selectedSlotIdRef.current, true);
+        }
+      }, 250);
+    };
+
+    const connect = async () => {
+      controller = new AbortController();
+      try {
+        const token = getToken();
+        if (!token) return;
+
+        const query = new URLSearchParams({ slotId: selectedSlotId });
+        const response = await fetch(
+          API_URL + "/api/realtime/events?" + query.toString(),
+          {
+            method:"GET",
+            headers:{
+              "Accept":"text/event-stream",
+              "Authorization":"Bearer " + token
+            },
+            signal:controller.signal,
+            cache:"no-store"
+          }
+        );
+        if (!response.ok || !response.body) {
+          throw new Error("realtime stream unavailable");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (!stopped) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream:true });
+          buffer = buffer.replace(/\r\n/g, "\n");
+
+          let boundary = buffer.indexOf("\n\n");
+          while (boundary >= 0) {
+            const frame = buffer.slice(0, boundary).replace(/\r/g, "");
+            buffer = buffer.slice(boundary + 2);
+
+            const dataLines = frame
+              .split("\n")
+              .filter(line => line.startsWith("data:"))
+              .map(line => line.slice(5).trim());
+            if (dataLines.length) {
+              try {
+                const event = JSON.parse(dataLines.join("\n"));
+                if (event?.eventType) {
+                  setData((previous:any) => {
+                    if (!previous?.instance || String(event.slotId || "") !== String(selectedSlotIdRef.current || "")) {
+                      return previous;
+                    }
+                    return {
+                      ...previous,
+                      instance:{
+                        ...previous.instance,
+                        ...(event.state ? { actual_state:event.state } : {}),
+                        metrics:{
+                          ...(previous.instance.metrics || {}),
+                          ...(event.metrics || {})
+                        }
+                      }
+                    };
+                  });
+                  scheduleRealtimeReload();
+                }
+              } catch {
+                // Ignore malformed/keepalive SSE frames. The 5s poll remains fallback.
+              }
+            }
+
+            boundary = buffer.indexOf("\n\n");
+          }
+        }
+      } catch {
+        // SSE is an acceleration layer only. Existing polling remains the
+        // recovery path if the stream or proxy is temporarily unavailable.
+      } finally {
+        if (!stopped) {
+          reconnectTimer = window.setTimeout(() => void connect(), 1500);
+        }
+      }
+    };
+
+    void connect();
+    return () => {
+      stopped = true;
+      controller?.abort();
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+      if (reloadTimer !== null) window.clearTimeout(reloadTimer);
+    };
+  }, [selectedSlotId]);
+
+  useEffect(() => {
     if (!notice && !error) return;
     const text = error || notice;
     const pending = !error && /^กำลัง/.test(notice);
