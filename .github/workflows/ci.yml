@@ -26,6 +26,10 @@ jobs:
       - run: npm install
       - run: npm run typecheck
       - run: npm run build
+      - name: API deploy compiled-code integrity and stale-runtime rejection
+        run: |
+          bash -n scripts/deploy-hostinger.sh scripts/auto-deploy-vps.sh scripts/lib/api-deploy.sh
+          node --test tests/api-build-integrity.test.cjs
       - name: Control Center V12 inline settings and per-mode performance
         shell: pwsh
         run: ./tests/control-center-settings-contract.ps1

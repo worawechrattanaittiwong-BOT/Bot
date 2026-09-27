@@ -74,7 +74,7 @@ sed -i -E "s#^WEB_ORIGIN=.*#WEB_ORIGIN=https://$DOMAIN#" .env.hostinger
 
 certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --redirect --non-interactive --agree-tos --register-unsafely-without-email
 
-docker compose --env-file .env.hostinger -f infrastructure/linux/docker-compose.hostinger.yml up -d --build web api
+bash scripts/deploy-hostinger.sh
 
 echo ""
 echo "Domain ready:"

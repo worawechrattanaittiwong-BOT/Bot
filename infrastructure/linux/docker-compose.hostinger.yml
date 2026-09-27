@@ -21,9 +21,16 @@ services:
     networks: [internal]
 
   api:
+    image: scenova-api:${API_BUILD_SHA:-unverified}-${API_BUILD_ID:-unverified}
     build:
-      context: ../..
+      context: ${DEPLOY_BUILD_CONTEXT:-../..}
       dockerfile: Dockerfile.api
+      no_cache: true
+      pull: true
+      args:
+        API_BUILD_SHA: ${API_BUILD_SHA:-unverified}
+        API_SOURCE_SHA256: ${API_SOURCE_SHA256:-unverified}
+        API_BUILD_ID: ${API_BUILD_ID:-unverified}
     restart: unless-stopped
     environment:
       PORT: 4000
@@ -49,6 +56,12 @@ services:
       THAIBULKSMS_SENDER: ${THAIBULKSMS_SENDER:-}
       TRIAL_IDENTITY_SECRET: ${TRIAL_IDENTITY_SECRET:-}
       TRIAL_SMS_DAYS: ${TRIAL_SMS_DAYS:-1}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health',{signal:AbortSignal.timeout(4000)}).then(async r=>{const b=await r.json();if(!r.ok||b.ok!==true||b.service!=='bot-api')process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 20s
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,7 +71,7 @@ services:
 
   web:
     build:
-      context: ../..
+      context: ${DEPLOY_BUILD_CONTEXT:-../..}
       dockerfile: Dockerfile.web
       args:
         NEXT_PUBLIC_API_URL: /backend

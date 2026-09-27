@@ -5,6 +5,31 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 COMPOSE="infrastructure/linux/docker-compose.hostinger.yml"
 
+# Use the same lock as the timer, inherited when called by auto-deploy-vps.sh.
+if [ "${SCENOVA_DEPLOY_LOCK_HELD:-0}" != 1 ]; then
+  DEPLOY_LOCK_FILE="${SCENOVA_DEPLOY_LOCK_FILE:-/run/lock/scenova-auto-deploy.lock}"
+  mkdir -p "$(dirname "$DEPLOY_LOCK_FILE")"
+  exec 9>"$DEPLOY_LOCK_FILE"
+  flock -n 9 || { echo '[SCENOVA] another deploy is already running'; exit 1; }
+  export SCENOVA_DEPLOY_LOCK_HELD=1
+fi
+
+if [ -z "${DEPLOY_SHA:-}" ]; then
+  git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main'
+  DEPLOY_SHA="$(git rev-parse origin/main)"
+fi
+[[ "$DEPLOY_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo '[SCENOVA] invalid deploy commit'; exit 1; }
+[ "$DEPLOY_SHA" = "$(git rev-parse origin/main)" ] || { echo '[SCENOVA] deploy target must be the fetched origin/main'; exit 1; }
+git diff --quiet && git diff --cached --quiet || { echo '[SCENOVA] commit or save local edits before deployment'; exit 1; }
+if [ "$(git rev-parse HEAD)" != "$DEPLOY_SHA" ]; then
+  git merge --ff-only "$DEPLOY_SHA"
+  [ "$(git rev-parse HEAD)" = "$DEPLOY_SHA" ] || { echo '[SCENOVA] local commits diverge from origin/main'; exit 1; }
+  # Run the deploy code from the selected release, not the previously loaded script.
+  export DEPLOY_SHA
+  exec bash "$ROOT/scripts/deploy-hostinger.sh"
+fi
+. "$ROOT/scripts/lib/api-deploy.sh"
+
 if ! command -v docker >/dev/null 2>&1; then
   apt-get update
   apt-get install -y ca-certificates curl gnupg
@@ -112,22 +137,49 @@ set -a
 . ./.env.hostinger
 set +a
 
-docker compose --env-file .env.hostinger -f "$COMPOSE" up -d --build postgres redis
+# Build from an immutable, tracked Git snapshot. Untracked dist, node_modules,
+# tsbuildinfo and credentials on the VPS never become build inputs.
+RELEASE_CONTEXT="$(mktemp -d /tmp/scenova-release.XXXXXXXX)"
+trap 'rm -rf -- "$RELEASE_CONTEXT"' EXIT
+git archive "$DEPLOY_SHA" | tar -x -C "$RELEASE_CONTEXT"
+export DEPLOY_BUILD_CONTEXT="$RELEASE_CONTEXT"
+export API_BUILD_SHA="$DEPLOY_SHA"
+API_SOURCE_SHA256="$(api_source_digest "$RELEASE_CONTEXT")"
+API_BUILD_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 4)"
+export API_SOURCE_SHA256 API_BUILD_ID
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-linux}"
+COMPOSE_CMD=(docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file .env.hostinger -f "$COMPOSE")
 
-until docker compose --env-file .env.hostinger -f "$COMPOSE" exec -T postgres pg_isready -U bot -d bot >/dev/null 2>&1; do
+echo "[SCENOVA] building origin/main=$API_BUILD_SHA source=$API_SOURCE_SHA256 build=$API_BUILD_ID"
+"${COMPOSE_CMD[@]}" build --no-cache --pull api
+API_IMAGE="scenova-api:$API_BUILD_SHA-$API_BUILD_ID"
+API_IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$API_IMAGE")"
+docker run --rm -i --network none --entrypoint node -w /app "$API_IMAGE_ID" - verify "$API_BUILD_SHA" "$API_SOURCE_SHA256" "$API_BUILD_ID" < scripts/api-build-integrity.cjs
+"${COMPOSE_CMD[@]}" build --pull web
+
+"${COMPOSE_CMD[@]}" up -d postgres redis
+
+until "${COMPOSE_CMD[@]}" exec -T postgres pg_isready -U bot -d bot >/dev/null 2>&1; do
   sleep 2
 done
 
 for migration in   database/001_init.sql   database/002_cloud_worker.sql   database/003_trial_history_lock.sql   database/004_broker_catalog.sql   database/005_local_desktop_agent.sql   database/010_trade_journal.sql   database/011_basket_intelligence.sql   database/012_auto_profit_target_mode.sql   database/013_backtest_performance.sql   database/014_maintenance_mode.sql   database/015_partner_program.sql   database/016_upgrade_regression_safety.sql   database/017_runtime_safety.sql   database/018_runtime_migration.sql   database/019_production_hardening.sql   database/019_server_enrollment.sql   database/020_performance_shares.sql   database/021_cent_account_currency_isolation.sql   database/022_email_verification.sql   database/023_account_security.sql   database/024_referral_program.sql   database/025_password_reset.sql   database/026_trial_authorizations.sql   database/027_trial_sms_activation.sql   database/028_account_phone.sql   database/029_admin_service_links.sql   database/030_admin_api_credentials.sql   database/031_admin_api_credential_test_metadata.sql   database/032_commission_wallet_core.sql   database/033_github_owner_migration.sql   database/034_secure_withdrawals.sql   database/035_withdrawal_advanced_security.sql   database/036_owner_mobile.sql   database/037_promotions.sql   database/038_cloud_fleet_updates.sql   database/039_trial_otp_delivery_channels.sql   database/040_cloud_server_software_updates.sql
 do
-  docker compose --env-file .env.hostinger -f "$COMPOSE" exec -T postgres     psql -U bot -d bot -v ON_ERROR_STOP=1 -f /dev/stdin < "$migration"
+  "${COMPOSE_CMD[@]}" exec -T postgres psql -U bot -d bot -v ON_ERROR_STOP=1 -f /dev/stdin < "$RELEASE_CONTEXT/$migration"
 done
 
-docker compose --env-file .env.hostinger -f "$COMPOSE" up -d --build api web
+# Recreate only the application services, using the image just built. Do not
+# let up rebuild implicitly or substitute a pulled image with the same tag.
+"${COMPOSE_CMD[@]}" up -d --no-build --pull never --force-recreate --no-deps --wait --wait-timeout 150 api
+verify_api_runtime "$API_BUILD_SHA" "$API_SOURCE_SHA256" "$API_IMAGE_ID" "$API_BUILD_ID"
+"${COMPOSE_CMD[@]}" up -d --no-build --pull never --force-recreate --no-deps --wait --wait-timeout 150 web
+verify_api_runtime "$API_BUILD_SHA" "$API_SOURCE_SHA256" "$API_IMAGE_ID" "$API_BUILD_ID"
 
 echo ""
 echo "========================================"
-echo "Bot SaaS is starting on Hostinger VPS"
+echo "Bot SaaS deployed; running API compiled code verified"
+echo "Commit: $API_BUILD_SHA"
+echo "API image: $API_IMAGE_ID"
 echo "Web: $PUBLIC_WEB_URL"
 echo "API health through web: $PUBLIC_WEB_URL/backend/api/health"
 echo "========================================"

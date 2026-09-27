@@ -1,20 +1,36 @@
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY package.json ./
+COPY package*.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
-RUN npm install
-COPY apps/api apps/api
-RUN npm run build -w @bot/api
+RUN if [ -f package-lock.json ]; then npm ci; else npm install --package-lock=false; fi
+COPY apps/api/*.json apps/api/
+COPY apps/api/src apps/api/src
+COPY scripts/api-build-integrity.cjs scripts/api-build-integrity.cjs
+COPY Dockerfile.api Dockerfile.api.dockerignore ./
+ARG API_BUILD_SHA
+ARG API_SOURCE_SHA256
+ARG API_BUILD_ID
+# Never inherit host dist/tsbuildinfo or incremental compiler state.
+RUN rm -rf apps/api/dist && find apps/api -name '*.tsbuildinfo' -delete \
+    && npm run build -w @bot/api \
+    && node scripts/api-build-integrity.cjs record "$API_BUILD_SHA" "$API_SOURCE_SHA256" "$API_BUILD_ID"
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-COPY package.json ./
+ARG API_BUILD_SHA
+ARG API_SOURCE_SHA256
+ARG API_BUILD_ID
+LABEL org.opencontainers.image.revision=$API_BUILD_SHA \
+      io.scenova.api.source-sha256=$API_SOURCE_SHA256 \
+      io.scenova.api.build-id=$API_BUILD_ID
+COPY package*.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
-RUN npm install --omit=dev
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev --package-lock=false; fi
 COPY --from=build /app/apps/api/dist apps/api/dist
+COPY --from=build /app/apps/api/build-manifest.json apps/api/build-manifest.json
 COPY mt5/release apps/api/artifacts
 EXPOSE 4000
 CMD ["node","apps/api/dist/main.js"]

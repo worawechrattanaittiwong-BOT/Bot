@@ -1,0 +1,22 @@
+# An API build can receive only source, build inputs and published EA artifacts.
+**
+!package.json
+!package-lock.json
+!Dockerfile.api
+!Dockerfile.api.dockerignore
+!apps/
+!apps/api/
+!apps/api/*.json
+!apps/api/src/
+!apps/api/src/**
+!apps/web/
+!apps/web/package.json
+!scripts/
+!scripts/api-build-integrity.cjs
+!mt5/
+!mt5/release/
+!mt5/release/**
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.env*

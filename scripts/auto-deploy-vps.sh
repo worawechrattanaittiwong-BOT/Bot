@@ -3,16 +3,19 @@ set -euo pipefail
 
 REPO_DIR="${REPO_DIR:-/opt/Bot}"
 REPO_FULL_NAME="${REPO_FULL_NAME:-scenova-lang/Bot}"
-LOCK_FILE="/run/lock/scenova-auto-deploy.lock"
-STATE_DIR="/var/lib/scenova"
+LOCK_FILE="${SCENOVA_DEPLOY_LOCK_FILE:-/run/lock/scenova-auto-deploy.lock}"
+STATE_DIR="${SCENOVA_STATE_DIR:-/var/lib/scenova}"
 DEPLOYED_SHA_FILE="$STATE_DIR/deployed.sha"
 
-mkdir -p "$(dirname "$LOCK_FILE")"
-exec 9>"$LOCK_FILE"
-if ! flock -n 9; then
-  echo "[SCENOVA] another deploy is already running"
-  exit 0
+if [ "${SCENOVA_DEPLOY_LOCK_HELD:-0}" != 1 ]; then
+  mkdir -p "$(dirname "$LOCK_FILE")"
+  exec 9>"$LOCK_FILE"
+  if ! flock -n 9; then
+    echo "[SCENOVA] another deploy is already running"
+    exit 0
+  fi
 fi
+export SCENOVA_DEPLOY_LOCK_HELD=1
 
 cd "$REPO_DIR"
 git config --global --add safe.directory "$REPO_DIR" >/dev/null 2>&1 || true
@@ -51,7 +54,7 @@ if [ -f "$DEPLOYED_SHA_FILE" ]; then
 fi
 
 echo "[SCENOVA] checking GitHub main..."
-git fetch --quiet origin main
+git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main'
 REMOTE_SHA="$(git rev-parse origin/main)"
 
 echo "[SCENOVA] repository HEAD: $CURRENT_SHA"
@@ -59,8 +62,17 @@ echo "[SCENOVA] deployed SHA: ${DEPLOYED_SHA:-none}"
 echo "[SCENOVA] remote main: $REMOTE_SHA"
 
 if [ "$DEPLOYED_SHA" = "$REMOTE_SHA" ]; then
-  echo "[SCENOVA] production already deployed: $REMOTE_SHA"
-  exit 0
+  # A marker only records a previous success. Verify the actual running image
+  # and compiled files before trusting it (including on every timer tick).
+  if [ -f scripts/lib/api-deploy.sh ]; then
+    . scripts/lib/api-deploy.sh
+    EXPECTED_SOURCE="$(api_expected_source_digest "$REMOTE_SHA")"
+    if verify_api_runtime "$REMOTE_SHA" "$EXPECTED_SOURCE"; then
+      echo "[SCENOVA] production already deployed and verified: $REMOTE_SHA"
+      exit 0
+    fi
+  fi
+  echo '[SCENOVA] deployed marker is current but running API is stale/unverified; rebuilding'
 fi
 
 if [ "$CURRENT_SHA" = "$REMOTE_SHA" ]; then
@@ -401,10 +413,12 @@ fi
 echo "[SCENOVA] hot-deploy policy: customer bots/positions do not block platform Web/API deployment"
 
 echo "[SCENOVA] updating working tree..."
-git reset --hard "$REMOTE_SHA"
+git diff --quiet && git diff --cached --quiet || { echo '[SCENOVA] save local edits before deploying'; exit 1; }
+git merge --ff-only "$REMOTE_SHA"
+[ "$(git rev-parse HEAD)" = "$REMOTE_SHA" ] || { echo '[SCENOVA] repository must match origin/main exactly'; exit 1; }
 
 echo "[SCENOVA] deploying..."
-bash scripts/deploy-hostinger.sh
+DEPLOY_SHA="$REMOTE_SHA" bash scripts/deploy-hostinger.sh
 
 PUBLIC_WEB_URL="$(grep '^PUBLIC_WEB_URL=' .env.hostinger 2>/dev/null | cut -d= -f2- || true)"
 if [ -n "$PUBLIC_WEB_URL" ] && command -v curl >/dev/null 2>&1; then
@@ -427,7 +441,13 @@ if [ -n "$PUBLIC_WEB_URL" ] && command -v curl >/dev/null 2>&1; then
   fi
 fi
 
+# Confirm the container again after the public health check, then and only then
+# update deployed.sha. Health alone cannot distinguish old API code from new.
+. scripts/lib/api-deploy.sh
+EXPECTED_SOURCE="$(api_expected_source_digest "$REMOTE_SHA")"
+verify_api_runtime "$REMOTE_SHA" "$EXPECTED_SOURCE"
 mkdir -p "$STATE_DIR"
-printf '%s\n' "$REMOTE_SHA" > "$DEPLOYED_SHA_FILE"
+printf '%s\n' "$REMOTE_SHA" > "$DEPLOYED_SHA_FILE.tmp"
+mv -f "$DEPLOYED_SHA_FILE.tmp" "$DEPLOYED_SHA_FILE"
 echo "[SCENOVA] deploy complete: $REMOTE_SHA"
 echo "[SCENOVA] production marker updated: $DEPLOYED_SHA_FILE"
