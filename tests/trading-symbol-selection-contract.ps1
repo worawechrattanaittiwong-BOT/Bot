@@ -24,6 +24,7 @@ $retiredPage = Read-Text 'apps/web/app/trading-symbol/page.tsx'
 $ea = Read-Text 'mt5/FastBasketBot.mq5'
 $sidebar = Read-Text 'apps/web/components/OwnerSidebar.tsx'
 $manualControls = Read-Text 'apps/web/components/Mt5ManualActionControls.tsx'
+$cloudModels = Read-Text 'tools/windows-cloud-worker/Worker/Models.cs'
 
 Assert-Contains $controller 'startupSymbol' 'explicit desired symbol is stored separately from live metrics'
 Assert-Contains $controller 'SYMBOL_AGENT_VERSION = "1.0.11"' 'authoritative symbol switching requires the current Agent'
@@ -70,6 +71,9 @@ Assert-Contains $dashboard 'applyTradingSymbol' 'bot confirms and applies select
 Assert-Contains $dashboard 'cc-symbol-picker' 'bot uses compact choose-and-confirm dialog'
 Assert-Contains $dashboard 'เลือก Symbol' 'bot renders the Symbol button'
 Assert-Contains $dashboard 'marketWatchSymbols' 'bot selector is populated from MT5 Market Watch telemetry'
+Assert-Contains $controller 'resolveBrokerTradingSymbol' 'Server resolves the requested Web symbol to the broker-native MT5 symbol'
+Assert-Contains $controller 'account_broker_server' 'Server symbol resolver receives the actual MT5 broker server'
+Assert-Contains $controller 'resolvedSymbol: symbol' 'symbol selection audit/response records the broker-native resolved symbol'
 Assert-Contains $dashboard 'ยืนยัน' 'bot selector has one confirmation action'
 if ($dashboard.Contains('/bot/mt5/manual-action') -and $dashboard.Contains('applyTradingSymbol')) {
   # Other dashboard features may use manual-action; Symbol flow itself must not
@@ -86,5 +90,9 @@ Assert-Contains $manualControls 'actionSource === "SYMBOL_SELECTION"' 'manual co
 Assert-Contains $ea 'SymbolsTotal(true)' 'EA enumerates selected MT5 Market Watch symbols'
 Assert-Contains $ea 'SymbolName(i, true)' 'EA publishes exact broker symbol names from Market Watch'
 Assert-Contains $ea 'marketWatchSymbols' 'EA heartbeat publishes Market Watch telemetry'
+
+Assert-Contains $cloudModels 'ResolveBrokerSymbol' 'Cloud Worker resolves saved canonical symbols before writing MT5 startup config'
+Assert-Contains $cloudModels 'return "XAUUSDm";' 'Cloud Worker resolves Exness Gold to its native chart'
+Assert-Contains $cloudModels 'return "BTCUSDm";' 'Cloud Worker resolves Exness BTC to its native chart'
 
 Write-Host 'Trading symbol authoritative Control Center contract PASS.'
