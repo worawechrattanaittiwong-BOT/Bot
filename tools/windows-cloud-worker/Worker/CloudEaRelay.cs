@@ -5,6 +5,8 @@ internal sealed class CloudEaRelay
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;
     private readonly string _instancesPath;
+    private readonly Dictionary<string, DateTime> _eventRetryAfterUtc =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public CloudEaRelay(WorkerConfig config, WorkerClient client)
     {
@@ -54,38 +56,57 @@ internal sealed class CloudEaRelay
         if (!Directory.Exists(filesPath)) return;
 
         // Realtime status events are fire-and-retry files. The EA never waits
-        // for internet I/O; this relay owns delivery and keeps failed files for
-        // the next 100 ms pass.
-        foreach (var eventPath in Directory.EnumerateFiles(
-                     filesPath,
-                     "scenova-evt-*.request.txt",
-                     SearchOption.TopDirectoryOnly)
-                 .OrderBy(File.GetCreationTimeUtc)
-                 .Take(64))
+        // for internet I/O; this relay owns delivery and keeps failed files in
+        // the local queue. A failed upstream gets a short per-instance backoff
+        // so an API outage cannot create a tight request loop.
+        if (!_eventRetryAfterUtc.TryGetValue(instancePath, out var retryAfter) ||
+            retryAfter <= DateTime.UtcNow)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            string payload;
-            try { payload = (await File.ReadAllTextAsync(eventPath, cancellationToken)).Trim(); }
-            catch (IOException) { continue; }
-            catch (UnauthorizedAccessException) { continue; }
-
-            if (payload.Length < 16) continue;
-
-            try
+            var relayFailed = false;
+            foreach (var eventPath in Directory.EnumerateFiles(
+                         filesPath,
+                         "scenova-evt-*.request.txt",
+                         SearchOption.TopDirectoryOnly)
+                     .OrderBy(File.GetCreationTimeUtc)
+                     .Take(64))
             {
-                var statusCode = await _client.RelayEaRuntimeEventAsync(payload, cancellationToken);
-                if (statusCode >= 200 && statusCode < 300)
-                    File.Delete(eventPath);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string payload;
+                try { payload = (await File.ReadAllTextAsync(eventPath, cancellationToken)).Trim(); }
+                catch (IOException) { continue; }
+                catch (UnauthorizedAccessException) { continue; }
+
+                if (payload.Length < 16) continue;
+
+                try
+                {
+                    var statusCode = await _client.RelayEaRuntimeEventAsync(payload, cancellationToken);
+                    if (statusCode >= 200 && statusCode < 300)
+                    {
+                        File.Delete(eventPath);
+                        continue;
+                    }
+
+                    relayFailed = true;
+                    break;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // Leave the event file in place for a later retry.
+                    relayFailed = true;
+                    break;
+                }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch
-            {
-                // Leave the event file in place. It is the bounded local retry queue.
-            }
+
+            if (relayFailed)
+                _eventRetryAfterUtc[instancePath] = DateTime.UtcNow.AddSeconds(1);
+            else
+                _eventRetryAfterUtc.Remove(instancePath);
         }
 
         foreach (var requestPath in Directory.EnumerateFiles(
