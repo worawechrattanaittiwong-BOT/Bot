@@ -67,7 +67,7 @@ assert.match(dashboard, /กำลังติดตั้งระบบ VPS/);
 assert.doesNotMatch(dashboard, /owner-vps-move-panel/);
 assert.match(dashboard, /vpsMove=\{data\.account \?/);
 assert.match(mt5Connect, /ย้ายไป VPS/);
-assert.match(mt5Connect, /ซื้อแพ็กเกจ VPS/);
+assert.match(mt5Connect, /packageHref \|\| "\/packages\?system=cloud"/);
 assert.match(mt5Connect, /props\.vpsMove\.progress/);
 assert.match(dashboard, /ย้ายระบบไป VPS สำเร็จ/);
 
