@@ -59,7 +59,7 @@ assert.match(onboarding, /\/dashboard\?view=account&welcome=1&setup=local/);
 assert.match(onboarding, /params\.get\("new"\) === "1" \|\| params\.get\("verified"\) === "1"/);
 
 assert.match(dashboard, /customerHasCloudMigrationAccess/);
-assert.match(dashboard, /บัญชีนี้ยังไม่มีสิทธิ์ VPS/);
+assert.match(dashboard, /window\.location\.href = "\/packages\?system=cloud&from=mt5-ea"/);
 assert.match(dashboard, /\/packages\?system=cloud&from=mt5-ea/);
 assert.match(dashboard, /\/runtime-migration\/request/);
 assert.match(dashboard, /กำลังย้ายระบบ/);
