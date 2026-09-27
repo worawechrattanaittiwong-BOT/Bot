@@ -635,6 +635,11 @@ export default function DashboardPage() {
     marketSessionState === "CLOSED" ||
     String(metrics.executionStatus || "").toUpperCase() === "MARKET_CLOSED";
   const heartbeatLatencyMs = Number(metrics.heartbeatLatencyMs ?? 0);
+  const brokerPingMs = Math.max(0, Number(metrics.brokerPingMs ?? 0));
+  const runtimeModeLabel = String(data?.selectedSlot?.mode || "").toUpperCase() === "CLOUD" ? "VPS" : "LOCAL";
+  const runtimeLocationLabel = runtimeModeLabel === "VPS"
+    ? String(data?.instance?.runner_region || data?.instance?.runner_id || "VPS").trim()
+    : "LOCAL DEVICE";
   const heartbeatHttpStatus = Number(metrics.heartbeatHttpStatus ?? 0);
   const lastServerContactEpoch = Number(metrics.lastServerContactAt || 0);
   const lastServerContactLabel = lastServerContactEpoch > 0
@@ -2282,15 +2287,10 @@ export default function DashboardPage() {
                   <div className="cc-v6-symbol-copy">
                     <span className="cc-v4-eyebrow">SCENOVA · LIVE EXECUTION</span>
                     <h2>{metrics.symbol || settings.symbol}</h2>
-                    <p>{String(metrics.symbol || settings.symbol).startsWith("XAU") ? "Gold Spot / US Dollar" : "Live Trading Symbol"}<em/>MT5 Expert Advisor</p>
-                    <div className="cc-v6-symbol-chips">
-                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? "ZERO GRID" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "RACE" ? "RACE" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "FLIP_LOCK" ? "FLIP LOCK" : String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : settings.entryMode === "AUTO_MOMENTUM" ? "AUTO · VECTOR" : settings.entryMode}</span>
-                      <span>{Number(settings.lot||0).toFixed(2)} Lot</span>
-                      <span>{String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase() === "ZERO_GRID" ? Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" BUY STOP + "+Math.max(1,Math.min(30,Number(settings.zeroGridLevelsPerSide)||10))+" SELL STOP" : configuredMaxPositions+" ไม้"}</span>
-                      <HeroTrendChip label="M5" value={metrics.trendM5}/>
-                      <HeroTrendChip label="M15" value={metrics.trendM15}/>
-                      <HeroTrendChip label="M30" value={metrics.trendM30}/>
-                      <HeroTrendChip label="H1" value={metrics.trendH1}/>
+                    <div className="cc-v6-symbol-chips" aria-label="Runtime connection">
+                      <span title="ระบบที่บัญชีนี้กำลังใช้งาน">{runtimeModeLabel}</span>
+                      <span title="ตำแหน่ง SCENOVA Trading Node">{runtimeLocationLabel}</span>
+                      <span title="Ping จริงจาก MT5 ไป Broker Trade Server">{brokerPingMs>0?brokerPingMs.toFixed(0)+" ms":"— ms"}</span>
                     </div>
                   </div>
                 </div>
