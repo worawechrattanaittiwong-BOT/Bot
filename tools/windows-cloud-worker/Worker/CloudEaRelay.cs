@@ -2,6 +2,9 @@ namespace Scenova.CloudWorker;
 
 internal sealed class CloudEaRelay
 {
+    private static readonly TimeSpan HeartbeatRequestMaxAge = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan HeartbeatResponseMaxAge = TimeSpan.FromMinutes(5);
+
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;
     private readonly string _instancesPath;
@@ -54,6 +57,8 @@ internal sealed class CloudEaRelay
     {
         var filesPath = Path.Combine(instancePath, "MQL5", "Files");
         if (!Directory.Exists(filesPath)) return;
+
+        CleanupExpiredHeartbeatFiles(filesPath);
 
         // Realtime status events are fire-and-retry files. The EA never waits
         // for internet I/O; this relay owns delivery and keeps failed files in
@@ -112,7 +117,8 @@ internal sealed class CloudEaRelay
         foreach (var requestPath in Directory.EnumerateFiles(
                      filesPath,
                      "scenova-hb-*.request.txt",
-                     SearchOption.TopDirectoryOnly))
+                     SearchOption.TopDirectoryOnly)
+                 .OrderByDescending(File.GetLastWriteTimeUtc))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -158,13 +164,52 @@ internal sealed class CloudEaRelay
                     body,
                     cancellationToken);
                 File.Move(tempPath, responsePath, true);
-                File.Delete(requestPath);
+                DeleteRequestIfUnchanged(requestPath, requestId);
             }
             catch
             {
                 try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             }
         }
+    }
+
+    private static void CleanupExpiredHeartbeatFiles(string filesPath)
+    {
+        var now = DateTime.UtcNow;
+        foreach (var path in Directory.EnumerateFiles(
+                     filesPath,
+                     "scenova-hb-*.*.txt",
+                     SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                var maxAge = path.EndsWith(".request.txt", StringComparison.OrdinalIgnoreCase)
+                    ? HeartbeatRequestMaxAge
+                    : path.EndsWith(".response.txt", StringComparison.OrdinalIgnoreCase)
+                        ? HeartbeatResponseMaxAge
+                        : TimeSpan.Zero;
+                if (maxAge == TimeSpan.Zero) continue;
+                if (now - File.GetLastWriteTimeUtc(path) > maxAge)
+                    File.Delete(path);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private static void DeleteRequestIfUnchanged(string requestPath, string requestId)
+    {
+        try
+        {
+            if (!File.Exists(requestPath)) return;
+            string? currentRequestId;
+            using (var reader = new StreamReader(requestPath))
+                currentRequestId = reader.ReadLine()?.Trim();
+            if (string.Equals(currentRequestId, requestId, StringComparison.Ordinal))
+                File.Delete(requestPath);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 }
 

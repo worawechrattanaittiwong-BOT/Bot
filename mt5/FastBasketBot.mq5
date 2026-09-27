@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.86"
-#define SCENOVA_EA_VERSION "1.0.86"
-#define SCENOVA_PRODUCT_VERSION "1.0.86"
+#property version   "1.0.87"
+#define SCENOVA_EA_VERSION "1.0.87"
+#define SCENOVA_PRODUCT_VERSION "1.0.87"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -6573,10 +6573,15 @@ void AckCommand(long commandId)
 int CloudRelayHeartbeat(string payload,string &response,int timeoutMs)
 {
    string chartTag=IntegerToString((long)ChartID());
-   string requestFile="scenova-hb-"+chartTag+".request.txt";
-   string responseFile="scenova-hb-"+chartTag+".response.txt";
    string requestId=
       IntegerToString((long)TimeLocal())+"-"+IntegerToString((long)GetTickCount64());
+   // Heartbeat files are single-use. Reusing the same chart filename lets a
+   // slow relay response from an older request delete or overwrite the next
+   // heartbeat after the EA has already timed out. Keep requestId in the path
+   // so each heartbeat owns only its own request/response pair.
+   string relayTag=chartTag+"-"+requestId;
+   string requestFile="scenova-hb-"+relayTag+".request.txt";
+   string responseFile="scenova-hb-"+relayTag+".response.txt";
 
    FileDelete(responseFile);
    ResetLastError();
