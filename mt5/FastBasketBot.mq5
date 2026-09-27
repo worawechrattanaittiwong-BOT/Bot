@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.83"
-#define SCENOVA_EA_VERSION "1.0.83"
-#define SCENOVA_PRODUCT_VERSION "1.0.83"
+#property version   "1.0.84"
+#define SCENOVA_EA_VERSION "1.0.84"
+#define SCENOVA_PRODUCT_VERSION "1.0.84"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1023,14 +1023,31 @@ void RefreshChartStatus(bool force=false)
    int connectedFreshSeconds = MathMax(9, InpHeartbeatSeconds * 4);
    bool serverFresh = heartbeatAge >= 0 && heartbeatAge <= connectedFreshSeconds;
    bool serverWithinLease = heartbeatAge >= 0 && heartbeatAge <= InpMaxOfflineLeaseSeconds;
+
+   // MetaTrader may briefly report TERMINAL_CONNECTED=false while the broker
+   // session is renegotiating even though the next tick/heartbeat is healthy.
+   // Debounce only the chart label; trading permission checks continue to read
+   // TerminalConnectedNow() directly and are not relaxed by this UI grace.
+   static ulong terminalDisconnectedSinceMs = 0;
+   ulong statusNowMs = GetTickCount64();
+   if(terminalOnline)
+      terminalDisconnectedSinceMs = 0;
+   else if(terminalDisconnectedSinceMs == 0)
+      terminalDisconnectedSinceMs = statusNowMs;
+
+   bool terminalOfflineConfirmed =
+      !terminalOnline &&
+      statusNowMs >= terminalDisconnectedSinceMs &&
+      statusNowMs - terminalDisconnectedSinceMs >= 5000;
+
    string connectionText = !terminalOnline
-      ? "MT5 OFFLINE"
+      ? (terminalOfflineConfirmed ? "MT5 OFFLINE" : "RECONNECTING")
       : serverFresh
          ? "CONNECTED"
          : serverWithinLease ? "RECONNECTING" : "CONNECTING";
-   color statusColor = !terminalOnline
+   color statusColor = terminalOfflineConfirmed
       ? clrTomato
-      : serverFresh ? clrLimeGreen : clrGold;
+      : terminalOnline && serverFresh ? clrLimeGreen : clrGold;
    RenderChartStatus(connectionText, statusColor, g_executionStatus);
 }
 
