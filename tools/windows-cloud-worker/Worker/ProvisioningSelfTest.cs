@@ -89,6 +89,23 @@ internal static class ProvisioningSelfTest
                     throw new InvalidOperationException($"credential crossed instance boundary at {number}");
             }
 
+            var chartProfile = Path.Combine(created[0].Prepared.InstancePath, "Profiles", "Charts", "Default");
+            Directory.CreateDirectory(chartProfile);
+            File.WriteAllText(Path.Combine(chartProfile, "chart01.chr"), "old-chart-1");
+            File.WriteAllText(Path.Combine(chartProfile, "chart02.chr"), "old-chart-2");
+            Directory.CreateDirectory(Path.Combine(created[0].Prepared.InstancePath, "Profiles"));
+            File.WriteAllText(
+                Path.Combine(created[0].Prepared.InstancePath, "Profiles", "lastprofile.ini"),
+                "Default");
+            Mt5Runtime.ResetCloudChartWorkspace(created[0].Prepared.InstancePath);
+            if (Directory.EnumerateFiles(
+                    Path.Combine(created[0].Prepared.InstancePath, "Profiles", "Charts"),
+                    "*",
+                    SearchOption.AllDirectories).Any())
+                throw new InvalidOperationException("cloud chart workspace was not reset");
+            if (File.Exists(Path.Combine(created[0].Prepared.InstancePath, "Profiles", "lastprofile.ini")))
+                throw new InvalidOperationException("last profile hint was not reset");
+
             var sentinel = File.ReadAllText(Path.Combine(template, "template-sentinel.txt"));
             if (!string.Equals(sentinel, "UNCHANGED", StringComparison.Ordinal))
                 throw new InvalidOperationException("template was mutated by provisioning");
@@ -99,6 +116,7 @@ internal static class ProvisioningSelfTest
             Console.WriteLine("PASS: isolated provisioning checkpoints 1 -> 2 -> 5 -> 20");
             Console.WriteLine("PASS: SCENOVA API base is canonicalized before writing EA presets");
             Console.WriteLine("PASS: per-instance account, credential, token and startup files remain isolated");
+            Console.WriteLine("PASS: duplicate MT5 chart profiles are cleared before Cloud startup");
             Console.WriteLine("PASS: self-test never launches terminal64.exe or contacts a broker/backend");
             return 0;
         }

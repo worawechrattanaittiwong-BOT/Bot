@@ -460,6 +460,14 @@ internal sealed class Mt5Runtime
     {
         if (HasExactTerminal(prepared.TerminalPath)) return;
 
+        // Cloud instances are fully Worker-managed. MT5 persists every open
+        // chart in Profiles/Charts and /config [StartUp] opens another chart on
+        // each recovery. Without clearing the persisted workspace, unattended
+        // restarts accumulate duplicate XAUUSD,M5 charts (and may attach the EA
+        // more than once). Rebuild only the chart workspace while the terminal
+        // is stopped; credentials, presets, history and the EA binary remain.
+        ResetCloudChartWorkspace(prepared.InstancePath);
+
         Process.Start(new ProcessStartInfo
         {
             FileName = prepared.TerminalPath,
@@ -477,6 +485,39 @@ internal sealed class Mt5Runtime
         }
 
         throw new InvalidOperationException("MT5_RESTART_FAILED");
+    }
+
+    internal static void ResetCloudChartWorkspace(string instancePath)
+    {
+        var profilesRoot = Path.Combine(instancePath, "Profiles");
+        var chartsRoot = Path.Combine(profilesRoot, "Charts");
+
+        try
+        {
+            if (Directory.Exists(chartsRoot))
+                Directory.Delete(chartsRoot, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("MT5_CHART_PROFILE_RESET_FAILED", ex);
+        }
+
+        // MT5 may remember the last profile name separately. Remove only these
+        // profile-selection hints so startup is driven by cloud-start.ini.
+        foreach (var name in new[] { "lastprofile.ini", "LastProfile.ini" })
+        {
+            var path = Path.Combine(profilesRoot, name);
+            try
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("MT5_LAST_PROFILE_RESET_FAILED", ex);
+            }
+        }
+
+        Directory.CreateDirectory(chartsRoot);
     }
 
     private static bool StartupConfigCleanupAllowed(string startupPath)
