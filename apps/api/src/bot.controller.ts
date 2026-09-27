@@ -138,6 +138,34 @@ export class BotController {
     };
   }
 
+  private mapStartDatabaseConflict(error: any) {
+    const code = String(error?.code || "");
+    const message = String(error?.message || "");
+
+    if (
+      code === "55000" &&
+      message.includes("runtime migration is active for this bot instance")
+    ) {
+      return new ConflictException(
+        "กำลังย้ายการทำงานระหว่าง Local/Cloud อยู่ จึงยังเริ่มบอทไม่ได้ กรุณารอให้การย้ายเสร็จก่อน"
+      );
+    }
+
+    if (
+      code === "P0001" &&
+      (
+        message.includes("SCENOVA_MAINTENANCE_BLOCKS_START") ||
+        message.includes("SCENOVA_MAINTENANCE_BLOCKS_START_COMMAND")
+      )
+    ) {
+      return new ConflictException(
+        "ระบบกำลังปิดอย่างปลอดภัยหรืออยู่ระหว่าง Maintenance จึงยังเริ่มบอทไม่ได้"
+      );
+    }
+
+    return null;
+  }
+
   private clientIp(req: any) {
     const forwarded = String(req?.headers?.["x-forwarded-for"] || "").split(",")[0].trim();
     return (forwarded || String(req?.ip || req?.socket?.remoteAddress || "")).slice(0, 96) || null;
@@ -2259,6 +2287,8 @@ export class BotController {
         }),
         error instanceof Error ? error.stack : undefined
       );
+      const mappedConflict = this.mapStartDatabaseConflict(error);
+      if (mappedConflict) throw mappedConflict;
       throw error;
     }
   }
