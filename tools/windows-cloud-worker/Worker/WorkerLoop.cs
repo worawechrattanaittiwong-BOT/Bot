@@ -2,7 +2,7 @@ namespace Scenova.CloudWorker;
 
 internal sealed class WorkerLoop
 {
-    internal const string Version = "2.2.8";
+    internal const string Version = "2.2.9";
 
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;

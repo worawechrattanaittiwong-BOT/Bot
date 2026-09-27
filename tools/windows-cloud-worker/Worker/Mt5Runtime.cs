@@ -50,27 +50,117 @@ internal sealed class Mt5Runtime
             if (!Guid.TryParse(instanceId, out _)) continue;
 
             var terminal = Path.Combine(instancePath, "terminal64.exe");
-            var chartRoot = Path.Combine(instancePath, "MQL5", "Profiles", "Charts");
+            var chartRoots = new[]
+            {
+                Path.Combine(instancePath, "MQL5", "Profiles", "Charts"),
+                Path.Combine(instancePath, "Profiles", "Charts")
+            };
             var chartFiles = 0;
+            var chartHasFastBasketBot = false;
+            foreach (var chartRoot in chartRoots)
+            {
+                try
+                {
+                    if (!Directory.Exists(chartRoot)) continue;
+                    foreach (var chart in Directory.EnumerateFiles(
+                                 chartRoot, "*.chr", SearchOption.AllDirectories))
+                    {
+                        chartFiles++;
+                        if (!chartHasFastBasketBot)
+                        {
+                            try
+                            {
+                                var text = File.ReadAllText(chart);
+                                chartHasFastBasketBot =
+                                    text.Contains("FastBasketBot", StringComparison.OrdinalIgnoreCase);
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            var eaPath = Path.Combine(instancePath, "MQL5", "Experts", "FastBasketBot.ex5");
+            var eaSha256 = "";
+            long eaBytes = 0;
             try
             {
-                if (Directory.Exists(chartRoot))
-                    chartFiles = Directory.EnumerateFiles(
-                        chartRoot, "*.chr", SearchOption.AllDirectories).Count();
+                if (File.Exists(eaPath))
+                {
+                    eaBytes = new FileInfo(eaPath).Length;
+                    using var stream = File.OpenRead(eaPath);
+                    eaSha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+                }
             }
             catch { }
 
+            var presetPath = Path.Combine(instancePath, "MQL5", "Presets", "SCENOVA-Cloud.set");
+            var presetCloudRelayEnabled = false;
+            try
+            {
+                presetCloudRelayEnabled =
+                    File.Exists(presetPath) &&
+                    File.ReadAllText(presetPath)
+                        .Contains("InpCloudRelay=true", StringComparison.OrdinalIgnoreCase);
+            }
+            catch { }
+
+            var filesPath = Path.Combine(instancePath, "MQL5", "Files");
+            var relayRequestFiles = 0;
+            var relayResponseFiles = 0;
+            try
+            {
+                if (Directory.Exists(filesPath))
+                {
+                    relayRequestFiles = Directory.EnumerateFiles(
+                        filesPath, "scenova-hb-*.request.txt", SearchOption.TopDirectoryOnly).Count();
+                    relayResponseFiles = Directory.EnumerateFiles(
+                        filesPath, "scenova-hb-*.response.txt", SearchOption.TopDirectoryOnly).Count();
+                }
+            }
+            catch { }
+
+            var expertLogDir = Path.Combine(instancePath, "MQL5", "Logs");
+            var journalLogDir = Path.Combine(instancePath, "logs");
             result.Add(new CloudInstanceDiagnostic
             {
                 InstanceId = instanceId,
                 TerminalRunning = HasExactTerminal(terminal),
                 ChartFiles = chartFiles,
-                LatestExpertLog = LatestMt5LogSignal(Path.Combine(instancePath, "MQL5", "Logs")),
-                LatestJournalLog = LatestMt5LogSignal(Path.Combine(instancePath, "logs"))
+                ChartHasFastBasketBot = chartHasFastBasketBot,
+                EaSha256 = eaSha256,
+                EaBytes = eaBytes,
+                StartupConfigExists = File.Exists(Path.Combine(instancePath, "cloud-start.ini")),
+                PresetCloudRelayEnabled = presetCloudRelayEnabled,
+                RelayRequestFiles = relayRequestFiles,
+                RelayResponseFiles = relayResponseFiles,
+                ExpertLogUpdatedAt = LatestLogUpdatedAt(expertLogDir),
+                JournalLogUpdatedAt = LatestLogUpdatedAt(journalLogDir),
+                LatestExpertLog = LatestMt5LogSignal(expertLogDir),
+                LatestJournalLog = LatestMt5LogSignal(journalLogDir)
             });
         }
 
         return result.Take(50).ToArray();
+    }
+
+    private static string LatestLogUpdatedAt(string directory)
+    {
+        try
+        {
+            if (!Directory.Exists(directory)) return "";
+            var file = Directory.EnumerateFiles(directory, "*.log", SearchOption.TopDirectoryOnly)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+            return file is null
+                ? ""
+                : File.GetLastWriteTimeUtc(file).ToString("O");
+        }
+        catch
+        {
+            return "";
+        }
     }
 
     private static string LatestMt5LogSignal(string directory)

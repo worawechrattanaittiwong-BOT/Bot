@@ -116,6 +116,15 @@ internal sealed class CloudInstanceDiagnostic
     public string InstanceId { get; set; } = "";
     public bool TerminalRunning { get; set; }
     public int ChartFiles { get; set; }
+    public bool ChartHasFastBasketBot { get; set; }
+    public string EaSha256 { get; set; } = "";
+    public long EaBytes { get; set; }
+    public bool StartupConfigExists { get; set; }
+    public bool PresetCloudRelayEnabled { get; set; }
+    public int RelayRequestFiles { get; set; }
+    public int RelayResponseFiles { get; set; }
+    public string ExpertLogUpdatedAt { get; set; } = "";
+    public string JournalLogUpdatedAt { get; set; } = "";
     public string LatestExpertLog { get; set; } = "";
     public string LatestJournalLog { get; set; } = "";
 }

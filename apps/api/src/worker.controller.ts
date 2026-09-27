@@ -32,6 +32,15 @@ export class WorkerController {
         instanceId?: string;
         terminalRunning?: boolean;
         chartFiles?: number;
+        chartHasFastBasketBot?: boolean;
+        eaSha256?: string;
+        eaBytes?: number;
+        startupConfigExists?: boolean;
+        presetCloudRelayEnabled?: boolean;
+        relayRequestFiles?: number;
+        relayResponseFiles?: number;
+        expertLogUpdatedAt?: string;
+        journalLogUpdatedAt?: string;
         latestExpertLog?: string;
         latestJournalLog?: string;
       }>;
@@ -67,6 +76,15 @@ export class WorkerController {
               instanceId: String(item?.instanceId || "").slice(0,64),
               terminalRunning: item?.terminalRunning === true,
               chartFiles: Math.max(0, Math.min(200, Number(item?.chartFiles || 0))),
+              chartHasFastBasketBot: item?.chartHasFastBasketBot === true,
+              eaSha256: String(item?.eaSha256 || "").replace(/[^a-f0-9]/gi,"").slice(0,64).toLowerCase(),
+              eaBytes: Math.max(0, Math.min(10_000_000, Number(item?.eaBytes || 0))),
+              startupConfigExists: item?.startupConfigExists === true,
+              presetCloudRelayEnabled: item?.presetCloudRelayEnabled === true,
+              relayRequestFiles: Math.max(0, Math.min(100, Number(item?.relayRequestFiles || 0))),
+              relayResponseFiles: Math.max(0, Math.min(100, Number(item?.relayResponseFiles || 0))),
+              expertLogUpdatedAt: String(item?.expertLogUpdatedAt || "").slice(0,64),
+              journalLogUpdatedAt: String(item?.journalLogUpdatedAt || "").slice(0,64),
               latestExpertLog: String(item?.latestExpertLog || "").slice(0,1800),
               latestJournalLog: String(item?.latestJournalLog || "").slice(0,1800)
             }))
