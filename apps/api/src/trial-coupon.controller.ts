@@ -81,17 +81,17 @@ export class TrialCouponController {
       body: JSON.stringify({
         from,
         to: [email],
-        subject: "SCENOVA — รหัสยืนยันสิทธิ์ทดลองใช้งาน",
+        subject: "SCENOVA — รหัสยืนยัน Local MT5 Trial",
         html:
           '<div style="font-family:Arial,sans-serif;background:#080a14;color:#f4f1ff;padding:32px">' +
           '<div style="max-width:560px;margin:auto;border:1px solid #40366d;border-radius:16px;padding:28px;background:#0f1020">' +
-          '<div style="font-size:12px;letter-spacing:2.5px;color:#9f8cff">SCENOVA TRIAL ACCESS</div>' +
-          '<h2 style="margin:14px 0 8px">รหัสยืนยันสิทธิ์ทดลองใช้งาน</h2>' +
-          '<p style="color:#b8b4c8;line-height:1.7;margin:0">มีการขอสิทธิ์ทดลองใช้งานจากบัญชี SCENOVA ของคุณ ใช้รหัส 6 หลักด้านล่างเพื่อยืนยันคำขอ รหัสนี้มีอายุ 10 นาที</p>' +
+          '<div style="font-size:12px;letter-spacing:2.5px;color:#9f8cff">SCENOVA LOCAL TRIAL</div>' +
+          '<h2 style="margin:14px 0 8px">รหัสยืนยัน Local MT5 Trial</h2>' +
+          '<p style="color:#b8b4c8;line-height:1.7;margin:0">รหัสนี้ใช้ยืนยันสิทธิ์ทดลองระบบ Local MT5 เท่านั้น ไม่ใช่ VPS รหัสมีอายุ 10 นาที</p>' +
           '<div style="font-size:34px;font-weight:800;letter-spacing:10px;margin:24px 0;color:#ffffff">' +
           code +
           '</div>' +
-          '<p style="color:#8a8498;font-size:12px;line-height:1.7;margin:0">หากคุณไม่ได้เป็นผู้ขอสิทธิ์ทดลองใช้งาน ไม่ต้องดำเนินการใด ๆ และห้ามส่งต่อรหัสนี้ให้บุคคลอื่น</p>' +
+          '<p style="color:#8a8498;font-size:12px;line-height:1.7;margin:0">หากคุณไม่ได้ขอ Local Trial ไม่ต้องดำเนินการใด ๆ และห้ามส่งต่อรหัสนี้ให้บุคคลอื่น</p>' +
           '</div></div>'
       })
     });
