@@ -3089,7 +3089,7 @@ export default function DashboardPage() {
                     <h2>ย้ายบัญชีนี้ไป SCENOVA VPS</h2>
                     <p className="muted">
                       {isOwner
-                        ? "ย้าย MT5 เดิมจาก Local ไป Trading VPS โดยไม่ต้องซื้อแพ็กเกจเพิ่ม"
+                        ? "ย้าย MT5 เดิมจาก Local ไป Trading VPS · OWNER ไม่ต้องซื้อแพ็ก Cloud เพิ่ม"
                         : customerHasCloudMigrationAccess
                           ? "สิทธิ์ VPS พร้อมแล้ว · ย้าย MT5 เดิมจาก Local ไป VPS ได้จากตรงนี้"
                           : "บัญชีนี้ยังไม่มีสิทธิ์ VPS ซื้อแพ็กเกจก่อน แล้วกลับมากดย้ายได้ทันที"}
