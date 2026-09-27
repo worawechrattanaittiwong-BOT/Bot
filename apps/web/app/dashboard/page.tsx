@@ -743,8 +743,20 @@ export default function DashboardPage() {
     let complete = false;
     let failed = false;
     let message = String(op.message || "");
+    const operationAgeMs = Math.max(0, Date.now() - Number(op.startedAt || Date.now()));
 
-    if (op.kind === "SYMBOL") {
+    if (
+      operationAgeMs >= 90_000 &&
+      (
+        op.kind === "SYMBOL" ||
+        op.kind === "START" ||
+        op.kind === "CLOSE_ALL" ||
+        (op.kind === "STOP" && positions <= 0)
+      )
+    ) {
+      failed = true;
+      message = "Server ไม่ได้รับสถานะยืนยันภายใน 90 วินาที · กรุณาตรวจ MT5/EA แล้วลองใหม่";
+    } else if (op.kind === "SYMBOL") {
       const target = String(op.target || "");
       const current = String(liveMetrics.symbol || "");
       const symbolStatus = String(liveMetrics.symbolChangeStatus || liveMetrics.manualMt5ActionStatus || "").toUpperCase();
