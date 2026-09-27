@@ -23,7 +23,7 @@ assert.match(packages, /LOCAL ONLY · ไม่รวม VPS/);
 assert.match(packages, /JSON\.stringify\(\{ delivery: trialDelivery \}\)/);
 assert.match(packages, /SMS · \{trial\?\.phone\?\.masked \|\| "ยังไม่ผูกเบอร์"\}/);
 
-assert.match(onboarding, /CHOOSE YOUR SYSTEM/);
+assert.match(onboarding, /SELECT RUNTIME/);
 assert.match(onboarding, /\/packages\?system=cloud&from=onboarding/);
 assert.match(onboarding, /\/dashboard\?view=account&welcome=1&setup=local/);
 assert.match(onboarding, /params\.get\("new"\) === "1" \|\| params\.get\("verified"\) === "1"/);
