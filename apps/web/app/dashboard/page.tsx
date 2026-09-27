@@ -141,6 +141,7 @@ export default function DashboardPage() {
   const symbolDialogRef = useRef<HTMLDialogElement | null>(null);
   const [tradingSymbol, setTradingSymbol] = useState("");
   const [symbolBusy, setSymbolBusy] = useState(false);
+  const [serverOperation, setServerOperation] = useState<any>(null);
   const [activeView, setActiveView] = useState<View>("overview");
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const selectedSlotIdRef = useRef("");
@@ -327,7 +328,7 @@ export default function DashboardPage() {
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible" || dashboardLoadInFlightRef.current) return;
       void load(undefined, true);
-    }, 10000);
+    }, 5000);
     return () => clearInterval(id);
   }, []);
 
@@ -393,7 +394,6 @@ export default function DashboardPage() {
 
   const metrics = data?.instance?.metrics || {};
   const accountCurrency = normalizeAccountCurrency(metrics.currency);
-  const isLocalSelectedSlot = String(data?.selectedSlot?.mode || "").toUpperCase() === "LOCAL";
   const marketWatchSymbols = Array.isArray(metrics.marketWatchSymbols)
     ? Array.from(new Map(
         metrics.marketWatchSymbols
@@ -409,12 +409,16 @@ export default function DashboardPage() {
     settings.symbol ||
     ""
   ).trim();
-  const tradingSymbolOptions = [
-    ...marketWatchSymbols,
-    desiredTradingSymbol,
-    String(metrics.symbol || "").trim(),
-    ...(isLocalSelectedSlot ? [] : ["XAUUSD","BTCUSD"])
-  ].filter((value,index,all)=>Boolean(value) && all.findIndex(item=>String(item).toUpperCase()===String(value).toUpperCase())===index);
+  // Only symbols reported by the connected MT5 Market Watch are selectable.
+  // Never inject guessed canonical names such as BTCUSD/XAUUSD into the picker.
+  const tradingSymbolOptions = marketWatchSymbols;
+  const tradingSymbolLabel = (symbol:string) => {
+    const upper = String(symbol || "").toUpperCase();
+    if (upper.includes("BTC") || upper.includes("XBT")) return "Bitcoin · " + symbol;
+    if (upper.startsWith("XAU")) return "Gold · " + symbol;
+    if (upper.includes("ETH")) return "Ethereum · " + symbol;
+    return symbol;
+  };
 
   useEffect(() => {
     const slotKey = String(data?.selectedSlot?.id || data?.instance?.id || "");
@@ -715,6 +719,127 @@ export default function DashboardPage() {
     TIMEOUT: "Start Timeout · ยกเลิกคำสั่งค้างแล้ว",
     IDLE: "พร้อมรับคำสั่ง"
   };
+  useEffect(() => {
+    if (!serverOperation || serverOperation.status !== "RUNNING") return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || dashboardLoadInFlightRef.current) return;
+      void load(selectedSlotIdRef.current, true);
+    }, 1500);
+    return () => clearInterval(id);
+  }, [serverOperation?.id, serverOperation?.status]);
+
+  useEffect(() => {
+    if (!serverOperation || serverOperation.status !== "RUNNING" || !data?.instance) return;
+
+    const op = serverOperation;
+    const liveMetrics = data.instance.metrics || {};
+    const actual = String(data.instance.actual_state || "").toUpperCase();
+    const wanted = String(data.instance.desired_state || "").toUpperCase();
+    const positions = Math.max(0, Number(liveMetrics.positions || 0));
+    const pendingOrders = Math.max(0, Number(liveMetrics.accountScenovaPendingOrders || 0));
+    const httpStatus = Number(liveMetrics.heartbeatHttpStatus || 0);
+    const heartbeatOk = Boolean(data.instance.mt5_online) && httpStatus >= 200 && httpStatus < 300;
+
+    let complete = false;
+    let failed = false;
+    let message = String(op.message || "");
+    const operationAgeMs = Math.max(0, Date.now() - Number(op.startedAt || Date.now()));
+
+    if (
+      operationAgeMs >= 90_000 &&
+      (
+        op.kind === "SYMBOL" ||
+        op.kind === "START" ||
+        op.kind === "CLOSE_ALL" ||
+        (op.kind === "STOP" && positions <= 0)
+      )
+    ) {
+      failed = true;
+      message = "Server ไม่ได้รับสถานะยืนยันภายใน 90 วินาที · กรุณาตรวจ MT5/EA แล้วลองใหม่";
+    } else if (op.kind === "SYMBOL") {
+      const target = String(op.target || "");
+      const current = String(liveMetrics.symbol || "");
+      const symbolStatus = String(liveMetrics.symbolChangeStatus || liveMetrics.manualMt5ActionStatus || "").toUpperCase();
+      if (symbolStatus === "FAILED") {
+        failed = true;
+        message = String(liveMetrics.manualMt5ActionMessage || "Cloud Worker เปลี่ยน Symbol ไม่สำเร็จ");
+      } else if (target && current.toUpperCase() === target.toUpperCase() && heartbeatOk) {
+        complete = true;
+        message = "MT5 เปิด " + target + " และ EA ส่ง Heartbeat ยืนยันแล้ว";
+      } else if (symbolStatus === "RELOADED" || current.toUpperCase() === target.toUpperCase()) {
+        message = "Worker เปิดกราฟ " + target + " แล้ว · กำลังรอ EA Heartbeat ยืนยัน";
+      } else {
+        message = "Server ส่งคำสั่งไป Cloud Worker แล้ว · กำลังเปิดกราฟ " + target + " และโหลด FastBasketBot";
+      }
+    } else if (op.kind === "START") {
+      if (actual === "RUNNING" && wanted === "RUNNING" && heartbeatOk) {
+        complete = true;
+        message = "EA ยืนยัน RUNNING แล้ว · บอทเริ่มทำงานสำเร็จ";
+      } else {
+        message = String(startTransition.message || startPhaseLabel[startPhase] || "Server กำลังรอ EA ยืนยัน RUNNING");
+      }
+    } else if (op.kind === "STOP") {
+      if (wanted === "STOPPED" && actual === "STOPPED" && positions <= 0) {
+        complete = true;
+        message = "EA ยืนยัน STOPPED แล้ว · Safe Stop สำเร็จ";
+      } else {
+        message = positions > 0
+          ? "Safe Stop ทำงานอยู่ · รอรอบปัจจุบันปิดตามเงื่อนไข (" + positions + " Position)"
+          : "Server ส่ง Safe Stop แล้ว · กำลังรอ EA ยืนยัน STOPPED";
+      }
+    } else if (op.kind === "CLOSE_ALL") {
+      if (wanted === "STOPPED" && positions <= 0 && pendingOrders <= 0) {
+        complete = true;
+        message = "Force Flat สำเร็จ · Position และ Pending Order ของ SCENOVA เป็น 0";
+      } else {
+        message = "Server กำลัง Force Flat · เหลือ " + positions + " Position / " + pendingOrders + " Pending";
+      }
+    }
+
+    if (failed) {
+      setServerOperation((current:any) =>
+        current?.id === op.id
+          ? { ...current, status:"FAILED", message, updatedAt:Date.now() }
+          : current
+      );
+      return;
+    }
+
+    if (complete) {
+      setServerOperation((current:any) =>
+        current?.id === op.id
+          ? { ...current, status:"SUCCESS", message, updatedAt:Date.now() }
+          : current
+      );
+      return;
+    }
+
+    if (message !== op.message) {
+      setServerOperation((current:any) =>
+        current?.id === op.id ? { ...current, message, updatedAt:Date.now() } : current
+      );
+    }
+  }, [
+    data?.instance?.last_seen_at,
+    data?.instance?.actual_state,
+    data?.instance?.desired_state,
+    data?.instance?.metrics?.symbol,
+    data?.instance?.metrics?.symbolChangeStatus,
+    data?.instance?.metrics?.manualMt5ActionStatus,
+    data?.instance?.metrics?.positions,
+    data?.instance?.metrics?.accountScenovaPendingOrders,
+    serverOperation?.id,
+    serverOperation?.status,
+    startPhase,
+    startTransition.message
+  ]);
+
+  useEffect(() => {
+    if (serverOperation?.status !== "SUCCESS") return;
+    const id = window.setTimeout(() => setServerOperation(null), 1200);
+    return () => clearTimeout(id);
+  }, [serverOperation?.id, serverOperation?.status]);
+
   const startConnectionReady = isMt5Online || isAgentOnline;
   const safeStopPositionCount = Math.max(0, Number(metrics.positions || 0));
   const safeStopInProgress =
@@ -1548,27 +1673,53 @@ export default function DashboardPage() {
     }
     setBusy(true);
     setError("");
-    const commandPendingNotice = path.startsWith("/bot/start")
-      ? "กำลังส่งคำสั่งเริ่มบอท..."
+    setNotice("");
+    const operationId = Date.now() + "-" + Math.random().toString(36).slice(2);
+    const operationKind = path.startsWith("/bot/start")
+      ? "START"
       : path.startsWith("/bot/stop")
-        ? "กำลังส่งคำสั่ง Safe Stop..."
-        : "";
-    setNotice(commandPendingNotice);
+        ? "STOP"
+        : path.startsWith("/bot/close-all")
+          ? "CLOSE_ALL"
+          : "COMMAND";
+    const operationTitle = operationKind === "START"
+      ? "กำลังเริ่มบอท"
+      : operationKind === "STOP"
+        ? "กำลัง Safe Stop"
+        : operationKind === "CLOSE_ALL"
+          ? "กำลัง Force Flat"
+          : "Server กำลังดำเนินการ";
+    setServerOperation({
+      id:operationId,
+      kind:operationKind,
+      title:operationTitle,
+      status:"RUNNING",
+      message:"กำลังส่งคำสั่งจากเว็บไป Server...",
+      startedAt:Date.now()
+    });
     try {
       const suffix = selectedSlotIdRef.current
         ? (path.includes("?") ? "&" : "?") + "slotId=" + encodeURIComponent(selectedSlotIdRef.current)
         : "";
       await api(path + suffix, { method: "POST" });
-      setNotice(success);
-      await load();
-      if (path.startsWith("/bot/start")) {
-        // Pull the START transition sooner than the normal 10s dashboard poll.
-        window.setTimeout(() => void load(selectedSlotIdRef.current, true), 2500);
-        window.setTimeout(() => void load(selectedSlotIdRef.current, true), 6500);
-      }
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? { ...current, message: success || "Server รับคำสั่งแล้ว · กำลังรอ EA ยืนยัน", updatedAt:Date.now() }
+          : current
+      );
+      await load(selectedSlotIdRef.current, true);
     } catch (e: any) {
       const message = String(e?.message || "เกิดข้อผิดพลาด");
-      setError(path.startsWith("/bot/start") ? "เริ่มบอทไม่ได้: " + message : message);
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? {
+              ...current,
+              status:"FAILED",
+              message:path.startsWith("/bot/start") ? "เริ่มบอทไม่ได้: " + message : message,
+              updatedAt:Date.now()
+            }
+          : current
+      );
     } finally {
       if (singleClickBotCommand) {
         botCommandLockRef.current = false;
@@ -1583,7 +1734,7 @@ export default function DashboardPage() {
     const match = tradingSymbolOptions.find(
       item => item.toUpperCase() === desired.toUpperCase()
     );
-    setTradingSymbol(match || tradingSymbolOptions[0] || desired);
+    setTradingSymbol(match || tradingSymbolOptions[0] || "");
     symbolDialogRef.current?.showModal();
   }
 
@@ -1601,6 +1752,16 @@ export default function DashboardPage() {
     setSymbolBusy(true);
     setError("");
     setNotice("");
+    const operationId = Date.now() + "-" + Math.random().toString(36).slice(2);
+    setServerOperation({
+      id:operationId,
+      kind:"SYMBOL",
+      title:"กำลังเปลี่ยน Trading Symbol",
+      target:next,
+      status:"RUNNING",
+      message:"กำลังตรวจสอบ Symbol จริงจาก MT5 Market Watch...",
+      startedAt:Date.now()
+    });
     try {
       const result = await api(
         "/bot/trading-symbol?slotId=" + encodeURIComponent(selectedSlotIdRef.current),
@@ -1609,13 +1770,30 @@ export default function DashboardPage() {
           body:JSON.stringify({ symbol: next })
         }
       );
+      const resolved = String(result?.resolvedSymbol || result?.symbol || next);
       symbolDialogRef.current?.close();
-      setNotice(String(result?.message || ("ยืนยัน " + next + " แล้ว")));
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? {
+              ...current,
+              target:resolved,
+              message:"Server ยืนยัน " + resolved + " แล้ว · กำลังสั่ง Worker เปิดกราฟและโหลด EA",
+              updatedAt:Date.now()
+            }
+          : current
+      );
       await load(selectedSlotIdRef.current, true);
-      window.setTimeout(() => void load(selectedSlotIdRef.current, true), 2500);
-      window.setTimeout(() => void load(selectedSlotIdRef.current, true), 6500);
     } catch (e:any) {
-      setError(String(e?.message || "เปลี่ยน Symbol ไม่สำเร็จ"));
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? {
+              ...current,
+              status:"FAILED",
+              message:String(e?.message || "เปลี่ยน Symbol ไม่สำเร็จ"),
+              updatedAt:Date.now()
+            }
+          : current
+      );
     } finally {
       setSymbolBusy(false);
     }
@@ -2144,6 +2322,51 @@ export default function DashboardPage() {
                 </div>
               </section>
 
+              {serverOperation && (
+                <div className="cc-server-operation-backdrop" role="presentation">
+                  <section
+                    className={"cc-server-operation-terminal status-" + String(serverOperation.status || "RUNNING").toLowerCase()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="cc-server-operation-title"
+                  >
+                    <header>
+                      <div>
+                        <span className="cc-server-operation-icon">&gt;_</span>
+                        <div>
+                          <small>SCENOVA SERVER TERMINAL</small>
+                          <h3 id="cc-server-operation-title">{serverOperation.title}</h3>
+                        </div>
+                      </div>
+                      {serverOperation.status === "FAILED" && (
+                        <button
+                          type="button"
+                          aria-label="ปิด"
+                          onClick={()=>setServerOperation(null)}
+                        >×</button>
+                      )}
+                    </header>
+                    <div className="cc-server-operation-body">
+                      <div className="cc-server-operation-line">
+                        <span className="prompt">server@scenova:~$</span>
+                        <b>{serverOperation.status === "RUNNING" ? "processing" : serverOperation.status === "SUCCESS" ? "completed" : "failed"}</b>
+                      </div>
+                      <p>{serverOperation.message}</p>
+                      {serverOperation.kind === "SYMBOL" && serverOperation.target && (
+                        <div className="cc-server-operation-meta"><span>Target Symbol</span><b>{serverOperation.target}</b></div>
+                      )}
+                      <div className="cc-server-operation-progress" aria-hidden="true"><i/></div>
+                    </div>
+                    <footer>
+                      <span>{serverOperation.status === "RUNNING" ? "กำลังติดตามสถานะจาก Server อัตโนมัติทุก 1.5 วินาที" : serverOperation.status === "SUCCESS" ? "สำเร็จ · หน้าต่างจะปิดอัตโนมัติ" : "ไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"}</span>
+                      {serverOperation.status === "FAILED" && (
+                        <button type="button" className="btn" onClick={()=>setServerOperation(null)}>ปิด</button>
+                      )}
+                    </footer>
+                  </section>
+                </div>
+              )}
+
               <dialog
                 ref={symbolDialogRef}
                 className="cc-symbol-picker"
@@ -2154,6 +2377,7 @@ export default function DashboardPage() {
                     <b>Trading Symbol</b>
                     <button type="button" aria-label="ปิด" disabled={symbolBusy} onClick={()=>symbolDialogRef.current?.close()}>×</button>
                   </div>
+                  <p className="cc-symbol-picker-source">แสดงเฉพาะ Symbol ที่ MT5 บัญชีนี้รายงานจาก Market Watch</p>
                   <select
                     autoFocus
                     value={tradingSymbol}
@@ -2161,7 +2385,7 @@ export default function DashboardPage() {
                     onChange={(event)=>setTradingSymbol(event.target.value)}
                   >
                     {tradingSymbolOptions.length
-                      ? tradingSymbolOptions.map(item=><option key={item} value={item}>{item}</option>)
+                      ? tradingSymbolOptions.map(item=><option key={item} value={item}>{tradingSymbolLabel(item)}</option>)
                       : <option value="">รอ Symbol จาก MT5</option>}
                   </select>
                   <button

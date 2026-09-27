@@ -125,6 +125,7 @@ export class TradingSymbolController {
          ma.broker_server AS account_broker_server,
          bs.settings,
          COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) AS positions,
+         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') AS mt5_online,
          (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '90 seconds') AS agent_online
        FROM license_slots ls
        JOIN bot_instances bi ON bi.slot_id=ls.id
@@ -217,14 +218,26 @@ export class TradingSymbolController {
     }
 
     const instance = await this.selectedInstance(req.user.sub, slotId);
-    const symbol = resolveBrokerTradingSymbol(
+    const liveSymbols = marketWatchSymbols(instance.metrics);
+    if (!instance.mt5_online || liveSymbols.length === 0) {
+      throw new ConflictException(
+        "ยังเลือก Symbol ไม่ได้: รอ MT5/EA ส่ง Market Watch ล่าสุดมายัง Server ก่อน"
+      );
+    }
+
+    const candidate = resolveBrokerTradingSymbol(
       requestedSymbol,
       instance.metrics,
       instance.account_broker,
       instance.account_broker_server
     );
-    if (!symbol) {
-      throw new BadRequestException("ไม่พบ Symbol จริงของบัญชี MT5 ที่เลือก");
+    const symbol = liveSymbols.find(
+      item => item.toUpperCase() === candidate.toUpperCase()
+    );
+    if (!candidate || !symbol) {
+      throw new BadRequestException(
+        "Symbol นี้ไม่มีอยู่ใน Market Watch จริงของบัญชี MT5 กรุณาเลือกจากรายการที่ Server แสดง"
+      );
     }
 
     const savedControlMode = String(
@@ -240,10 +253,6 @@ export class TradingSymbolController {
     const mode = String(instance.mode || "").toUpperCase();
     const isCloud = mode === "CLOUD";
 
-    // The Web selection is authoritative. Never reject the user's desired
-    // Symbol because MT5/Agent is offline or because positions are still open.
-    // Instead persist the desired Symbol immediately, force SAFE_STOP, and let
-    // the Agent apply it automatically as soon as the runtime is restart-safe.
     const before = this.snapshot(instance);
     const changed =
       !before.explicitSymbol ||
@@ -301,9 +310,6 @@ export class TradingSymbolController {
         ]
       );
 
-      // Web Symbol selection has higher priority than a pending Start/Stop
-      // transition. It never force-closes positions; SAFE_STOP prevents new
-      // entries and the Agent applies the selected Symbol once the account is flat.
       await this.db.query(
         "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
         [instance.id]
