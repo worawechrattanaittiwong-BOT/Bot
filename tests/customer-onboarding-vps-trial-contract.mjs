@@ -32,7 +32,9 @@ assert.match(dashboard, /บัญชีนี้ยังไม่มีสิ�
 assert.match(dashboard, /\/packages\?system=cloud&from=mt5-ea/);
 assert.match(dashboard, /\/runtime-migration\/request/);
 assert.match(dashboard, /setVpsMoveCardDismissed\(true\)/);
-assert.match(dashboard, /กำลังย้ายระบบ · กำลังติดตั้งระบบ VPS/);
+assert.match(dashboard, /กำลังย้ายระบบ/);
+assert.match(dashboard, /กำลังติดตั้งระบบ VPS/);
+assert.match(dashboard, /cc-vps-migration-status/);
 assert.match(dashboard, /ย้ายระบบไป VPS สำเร็จ/);
 
 console.log("Customer onboarding, Local Trial SMS, and VPS migration contract PASS");

@@ -143,6 +143,7 @@ export default function DashboardPage() {
   const [ownerVpsPassword, setOwnerVpsPassword] = useState("");
   const [ownerVpsBusy, setOwnerVpsBusy] = useState(false);
   const [vpsMoveCardDismissed, setVpsMoveCardDismissed] = useState(false);
+  const [vpsMigrationProgress, setVpsMigrationProgress] = useState<any>(null);
   const [dismissedCloudUpdateKey, setDismissedCloudUpdateKey] = useState("");
   const [tradingSymbol, setTradingSymbol] = useState("");
   const [symbolBusy, setSymbolBusy] = useState(false);
@@ -980,7 +981,7 @@ export default function DashboardPage() {
   ]);
 
   useEffect(() => {
-    if (serverOperation?.kind !== "MIGRATION" || serverOperation?.status !== "RUNNING") return;
+    if (!vpsMigrationProgress?.migrationId || vpsMigrationProgress?.status !== "RUNNING") return;
     let cancelled = false;
 
     const pollMigration = async () => {
@@ -988,26 +989,32 @@ export default function DashboardPage() {
         const snapshot = await api("/runtime-migration/status");
         if (cancelled) return;
         const migration = (snapshot?.migrations || []).find(
-          (item:any) => String(item.id) === String(serverOperation.migrationId)
+          (item:any) => String(item.id) === String(vpsMigrationProgress.migrationId)
         );
         if (!migration) return;
 
         const migrationState = String(migration.state || "").toUpperCase();
+        const runnerLabel = String(
+          vpsMigrationProgress.runnerRegion ||
+          vpsMigrationProgress.runnerId ||
+          migration.target_runner_id ||
+          "SCENOVA VPS"
+        );
         const stateMessage:Record<string,string> = {
-          STOPPING_LOCAL:"กำลังย้ายระบบ · กำลังหยุด Local MT5 เดิมอย่างปลอดภัย",
-          SOURCE_STOP_CONFIRMED:"Local MT5 หยุดแล้ว · กำลังย้ายระบบไป VPS",
-          TARGET_PROVISIONING:"กำลังติดตั้งระบบ VPS · กำลังเปิด MT5 และ FastBasketBot " + String(serverOperation.runnerRegion || serverOperation.runnerId || ""),
-          COMPLETED:"ย้ายระบบไป VPS สำเร็จ · พร้อมใช้งานบน " + String(serverOperation.runnerRegion || serverOperation.runnerId || "SCENOVA VPS")
+          STOPPING_LOCAL:"กำลังย้ายระบบ · กำลังตรวจและหยุด Local MT5 อย่างปลอดภัย",
+          SOURCE_STOP_CONFIRMED:"Local MT5 หยุดแล้ว · กำลังส่งระบบไป VPS",
+          TARGET_PROVISIONING:"กำลังติดตั้งระบบ VPS · กำลังเปิด MT5 และ FastBasketBot บน " + runnerLabel,
+          COMPLETED:"ย้ายระบบไป VPS สำเร็จ"
         };
 
         if (migrationState === "FAILED" || migrationState === "CANCELLED") {
-          setServerOperation((current:any) =>
-            current?.id === serverOperation.id
+          setVpsMigrationProgress((current:any) =>
+            current?.migrationId === vpsMigrationProgress.migrationId
               ? {
                   ...current,
                   status:"FAILED",
-                  message:String(migration.error_detail || migration.error_code || "ย้ายบัญชีไป VPS ไม่สำเร็จ"),
-                  updatedAt:Date.now()
+                  stage:migrationState,
+                  message:String(migration.error_detail || migration.error_code || "ย้ายบัญชีไป VPS ไม่สำเร็จ")
                 }
               : current
           );
@@ -1015,18 +1022,12 @@ export default function DashboardPage() {
         }
 
         if (migrationState === "COMPLETED") {
-          const targetSlotId = String(serverOperation.targetSlotId || migration.target_slot_id || "");
-          setServerOperation((current:any) =>
-            current?.id === serverOperation.id
-              ? {
-                  ...current,
-                  status:"SUCCESS",
-                  message:stateMessage.COMPLETED,
-                  updatedAt:Date.now()
-                }
+          const targetSlotId = String(vpsMigrationProgress.targetSlotId || migration.target_slot_id || "");
+          setVpsMigrationProgress((current:any) =>
+            current?.migrationId === vpsMigrationProgress.migrationId
+              ? { ...current, status:"SUCCESS", stage:"COMPLETED", message:stateMessage.COMPLETED }
               : current
           );
-          setVpsMoveCardDismissed(true);
           setNotice("ย้ายระบบไป VPS สำเร็จ");
           if (targetSlotId) {
             selectedSlotIdRef.current = targetSlotId;
@@ -1038,24 +1039,37 @@ export default function DashboardPage() {
 
         const nextMessage = stateMessage[migrationState];
         if (nextMessage) {
-          setServerOperation((current:any) =>
-            current?.id === serverOperation.id
-              ? { ...current, message:nextMessage, updatedAt:Date.now() }
+          setVpsMigrationProgress((current:any) =>
+            current?.migrationId === vpsMigrationProgress.migrationId
+              ? { ...current, stage:migrationState, message:nextMessage }
               : current
           );
         }
       } catch {
-        // Keep the migration terminal open; the next poll can recover.
+        // Keep the compact migration status visible; the next poll can recover.
       }
     };
 
     void pollMigration();
-    const id = window.setInterval(pollMigration, 1500);
+    const id = window.setInterval(pollMigration, 1200);
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [serverOperation?.id, serverOperation?.kind, serverOperation?.status]);
+  }, [
+    vpsMigrationProgress?.migrationId,
+    vpsMigrationProgress?.status,
+    vpsMigrationProgress?.runnerId,
+    vpsMigrationProgress?.runnerRegion,
+    vpsMigrationProgress?.targetSlotId
+  ]);
+
+  useEffect(() => {
+    if (vpsMigrationProgress?.status !== "SUCCESS") return;
+    const id = window.setTimeout(() => setVpsMigrationProgress(null), 1200);
+    return () => window.clearTimeout(id);
+  }, [vpsMigrationProgress?.status, vpsMigrationProgress?.migrationId]);
+
 
   useEffect(() => {
     if (serverOperation?.status !== "SUCCESS") return;
@@ -1902,17 +1916,19 @@ export default function DashboardPage() {
       return;
     }
 
-    const operationId = Date.now() + "-" + Math.random().toString(36).slice(2);
     setOwnerVpsBusy(true);
     setError("");
     setNotice("");
-    setServerOperation({
-      id:operationId,
-      kind:"MIGRATION",
-      title:"กำลังย้ายบัญชีไป VPS",
+
+    // Close the credential dialog and replace the action card immediately.
+    // The migration continues in the background and reports compact progress
+    // instead of opening the full-screen Server Terminal.
+    ownerVpsDialogRef.current?.close();
+    setVpsMoveCardDismissed(true);
+    setVpsMigrationProgress({
       status:"RUNNING",
-      message:"กำลังย้ายระบบ · กำลังตรวจ Local Runtime และเตรียมติดตั้งระบบ VPS...",
-      startedAt:Date.now()
+      stage:"REQUESTING",
+      message:"กำลังย้ายระบบ · กำลังตรวจ Local MT5 และเตรียม VPS"
     });
 
     try {
@@ -1940,34 +1956,24 @@ export default function DashboardPage() {
         ? String(result?.targetSlotId || migration?.target_slot_id || "")
         : String(cloudMigrationTarget?.id || migration?.target_slot_id || "");
 
-      ownerVpsDialogRef.current?.close();
       setOwnerVpsPassword("");
-      setVpsMoveCardDismissed(true);
-      setNotice("รับคำสั่งย้ายระบบแล้ว · กำลังติดตั้งระบบ VPS");
-      setServerOperation((current:any) =>
-        current?.id === operationId
-          ? {
-              ...current,
-              migrationId:String(migration?.id || ""),
-              targetSlotId,
-              runnerId:String(result?.runnerId || migration?.target_runner_id || ""),
-              runnerRegion:String(result?.runnerRegion || ""),
-              message:"กำลังย้ายระบบ · กำลังติดตั้งระบบ VPS"
-            }
-          : current
-      );
+      setVpsMigrationProgress({
+        status:"RUNNING",
+        stage:String(migration?.state || "STOPPING_LOCAL"),
+        migrationId:String(migration?.id || ""),
+        targetSlotId,
+        runnerId:String(result?.runnerId || migration?.target_runner_id || ""),
+        runnerRegion:String(result?.runnerRegion || ""),
+        message:String(migration?.state || "").toUpperCase() === "TARGET_PROVISIONING"
+          ? "กำลังติดตั้งระบบ VPS · กำลังเปิด MT5 และ FastBasketBot"
+          : "กำลังย้ายระบบ · กำลังตรวจและหยุด Local MT5 อย่างปลอดภัย"
+      });
     } catch (e:any) {
-      setVpsMoveCardDismissed(false);
-      setServerOperation((current:any) =>
-        current?.id === operationId
-          ? {
-              ...current,
-              status:"FAILED",
-              message:String(e?.message || "ย้ายบัญชีไป VPS ไม่สำเร็จ"),
-              updatedAt:Date.now()
-            }
-          : current
-      );
+      setVpsMigrationProgress({
+        status:"FAILED",
+        stage:"FAILED",
+        message:String(e?.message || "ย้ายบัญชีไป VPS ไม่สำเร็จ")
+      });
     } finally {
       setOwnerVpsBusy(false);
     }
@@ -3081,7 +3087,33 @@ export default function DashboardPage() {
 
         {activeView === "account" && (
           <div className="account-workspace">
-            {data.selectedSlot?.mode === "LOCAL" && data.account && !vpsMoveCardDismissed && (
+            {vpsMigrationProgress && (
+              <section className={"panel purple setup-panel cc-vps-migration-status status-" + String(vpsMigrationProgress.status || "RUNNING").toLowerCase()} role="status" aria-live="polite">
+                <div className="cc-vps-migration-status-main">
+                  <span className="cc-vps-migration-status-icon">{vpsMigrationProgress.status === "SUCCESS" ? "✓" : vpsMigrationProgress.status === "FAILED" ? "!" : "↻"}</span>
+                  <div>
+                    <div className="eyebrow">SCENOVA VPS MIGRATION</div>
+                    <h2>{vpsMigrationProgress.status === "SUCCESS" ? "ย้ายระบบสำเร็จ" : vpsMigrationProgress.status === "FAILED" ? "ย้ายระบบไม่สำเร็จ" : "กำลังย้ายระบบ"}</h2>
+                    <p className="muted">{vpsMigrationProgress.message}</p>
+                  </div>
+                </div>
+                {vpsMigrationProgress.status === "RUNNING" && <div className="cc-vps-migration-status-progress" aria-hidden="true"><i/></div>}
+                {vpsMigrationProgress.status === "FAILED" && (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={()=>{
+                      setVpsMigrationProgress(null);
+                      setVpsMoveCardDismissed(false);
+                    }}
+                  >
+                    ลองใหม่
+                  </button>
+                )}
+              </section>
+            )}
+
+            {data.selectedSlot?.mode === "LOCAL" && data.account && !vpsMoveCardDismissed && !vpsMigrationProgress && (
               <section className="panel purple setup-panel owner-vps-move-panel">
                 <div className="setup-heading">
                   <div>
