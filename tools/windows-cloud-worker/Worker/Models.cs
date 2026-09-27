@@ -82,6 +82,7 @@ internal sealed class CloudJob
     public bool EaOnline { get; set; }
     public string DesiredState { get; set; } = "STOPPED";
     public JsonElement AccountNumber { get; set; }
+    public string Broker { get; set; } = "";
     public string BrokerServer { get; set; } = "";
     public long ExecutionGeneration { get; set; }
     public string RuntimeStopState { get; set; } = "NONE";
@@ -134,6 +135,8 @@ internal sealed class CloudInstanceDiagnostic
     public string JournalLogUpdatedAt { get; set; } = "";
     public string LatestExpertLog { get; set; } = "";
     public string LatestJournalLog { get; set; } = "";
+    public string BrokerPlatform { get; set; } = "";
+    public string BrokerPlatformError { get; set; } = "";
 }
 
 internal sealed class WorkerTelemetry

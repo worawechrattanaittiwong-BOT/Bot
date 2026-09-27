@@ -36,6 +36,9 @@ internal sealed class Mt5Runtime
     private readonly WorkerConfig _config;
     private readonly string _instancesPath;
     private readonly string _templatePath;
+    private readonly BrokerPlatformManager _brokerPlatforms;
+    private readonly HashSet<string> _brokerMigrationAttempted =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _autoLaunchAttempted =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _maximizedProcessByInstance =
@@ -46,6 +49,7 @@ internal sealed class Mt5Runtime
         _config = config;
         _instancesPath = Path.Combine(config.Root, "instances");
         _templatePath = Path.Combine(config.Root, "template");
+        _brokerPlatforms = new BrokerPlatformManager(config);
     }
 
     public bool TemplateReady =>
@@ -159,11 +163,30 @@ internal sealed class Mt5Runtime
                 ExpertLogUpdatedAt = LatestLogUpdatedAt(expertLogDir),
                 JournalLogUpdatedAt = LatestLogUpdatedAt(journalLogDir),
                 LatestExpertLog = LatestMt5LogSignal(expertLogDir),
-                LatestJournalLog = LatestMt5LogSignal(journalLogDir)
+                LatestJournalLog = LatestMt5LogSignal(journalLogDir),
+                BrokerPlatform = _brokerPlatforms.InstalledPlatform(instancePath),
+                BrokerPlatformError = ReadSmallText(
+                    Path.Combine(instancePath, "broker-platform-error.txt"))
             });
         }
 
         return result.Take(50).ToArray();
+    }
+
+    private static string ReadSmallText(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return "";
+            var value = File.ReadAllText(path).Trim();
+            if (value.Length > 240)
+                value = value.Substring(value.Length - 240);
+            return value;
+        }
+        catch
+        {
+            return "";
+        }
     }
 
     private static string LatestLogUpdatedAt(string directory)
@@ -222,10 +245,39 @@ internal sealed class Mt5Runtime
 
         if (!alreadyProvisioned)
         {
-            if (!TemplateReady) throw new InvalidOperationException("Template is not verified");
-
             Directory.CreateDirectory(instancePath);
-            CopyTemplate(_templatePath, instancePath);
+
+            var brokerPlatformReady =
+                !string.IsNullOrWhiteSpace(_brokerPlatforms.InstalledPlatform(instancePath)) &&
+                File.Exists(Path.Combine(instancePath, "terminal64.exe"));
+
+            if (brokerPlatformReady)
+            {
+                if (!TemplateReady)
+                    throw new InvalidOperationException("Template is not verified");
+
+                var brokerEa = Path.Combine(
+                    instancePath,
+                    "MQL5",
+                    "Experts",
+                    "FastBasketBot.ex5");
+                var templateEa = Path.Combine(
+                    _templatePath,
+                    "MQL5",
+                    "Experts",
+                    "FastBasketBot.ex5");
+
+                Directory.CreateDirectory(Path.GetDirectoryName(brokerEa)!);
+                File.Copy(templateEa, brokerEa, overwrite: true);
+            }
+            else
+            {
+                if (!TemplateReady)
+                    throw new InvalidOperationException("Template is not verified");
+
+                CopyTemplate(_templatePath, instancePath);
+            }
+
             File.WriteAllText(marker, "1", new UTF8Encoding(false));
         }
 
@@ -486,6 +538,9 @@ internal sealed class Mt5Runtime
             !string.Equals(job.RuntimeStopState, "NONE", StringComparison.OrdinalIgnoreCase))
             return;
 
+        if (!await EnsureBrokerPlatformAsync(job, cancellationToken))
+            return;
+
         var instancePath = GetInstancePath(job.InstanceId);
         var terminal = Path.Combine(instancePath, "terminal64.exe");
 
@@ -537,6 +592,82 @@ internal sealed class Mt5Runtime
             }
             catch { }
         }
+    }
+
+    private async Task<bool> EnsureBrokerPlatformAsync(
+        CloudJob job,
+        CancellationToken cancellationToken)
+    {
+        var instancePath = GetInstancePath(job.InstanceId);
+        if (!_brokerPlatforms.NeedsInstall(job, instancePath))
+            return true;
+
+        // A failed broker migration must never become a 10-second stop/start
+        // loop. Retry only after the Worker itself is intentionally updated or
+        // restarted.
+        if (!_brokerMigrationAttempted.Add(job.InstanceId))
+            return false;
+
+        var terminal = Path.Combine(instancePath, "terminal64.exe");
+        if (HasExactTerminal(terminal) && !StopInstance(job.InstanceId))
+            return false;
+
+        try
+        {
+            await _brokerPlatforms.InstallAsync(
+                job,
+                instancePath,
+                cancellationToken);
+
+            // Some broker installers start the terminal after installation.
+            // Close only that exact per-instance process so SCENOVA can launch
+            // it once with the authoritative cloud-start.ini.
+            StopInstance(job.InstanceId);
+
+            _autoLaunchAttempted.Remove(job.InstanceId);
+            _maximizedProcessByInstance.Remove(job.InstanceId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                File.WriteAllText(
+                    Path.Combine(instancePath, "broker-platform-error.txt"),
+                    DateTimeOffset.UtcNow.ToString("O") + " " + NormalizeRuntimeError(ex.Message),
+                    new UTF8Encoding(false));
+            }
+            catch { }
+
+            // BrokerPlatformManager restores the previous Config/EA on failure.
+            // Bring the old terminal back once instead of leaving the customer
+            // with no MT5 at all.
+            try
+            {
+                if (File.Exists(terminal))
+                {
+                    _autoLaunchAttempted.Remove(job.InstanceId);
+                    var prepared = PrepareInstanceFiles(job);
+                    LaunchPrepared(prepared, requireEaAttach: false);
+                }
+            }
+            catch { }
+
+            return false;
+        }
+    }
+
+    private static string NormalizeRuntimeError(string? value)
+    {
+        var clean = new string((value ?? "BROKER_PLATFORM_FAILED")
+            .ToUpperInvariant()
+            .Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_')
+            .ToArray())
+            .Trim('_');
+
+        return string.IsNullOrWhiteSpace(clean)
+            ? "BROKER_PLATFORM_FAILED"
+            : clean[..Math.Min(96, clean.Length)];
     }
 
     private void LaunchPrepared(

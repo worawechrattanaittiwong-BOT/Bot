@@ -35,6 +35,36 @@ internal static class ProvisioningSelfTest
             var runtime = new Mt5Runtime(config);
             if (!runtime.TemplateReady) throw new InvalidOperationException("self-test template not ready");
 
+            var brokerPlatforms = new BrokerPlatformManager(config);
+            using (var brokerAccount = JsonDocument.Parse("123456"))
+            using (var brokerSettings = JsonDocument.Parse("{}"))
+            {
+                var exnessJob = new CloudJob
+                {
+                    InstanceId = Guid.NewGuid().ToString(),
+                    AccountNumber = brokerAccount.RootElement.Clone(),
+                    Broker = "Exness",
+                    BrokerServer = "Exness-MT5Trial14",
+                    Settings = brokerSettings.RootElement.Clone()
+                };
+                if (!string.Equals(
+                        brokerPlatforms.RequiredPlatform(exnessJob),
+                        "EXNESS",
+                        StringComparison.Ordinal))
+                    throw new InvalidOperationException("Exness broker platform mapping failed");
+
+                var genericJob = new CloudJob
+                {
+                    InstanceId = Guid.NewGuid().ToString(),
+                    AccountNumber = brokerAccount.RootElement.Clone(),
+                    Broker = "Other",
+                    BrokerServer = "Other-MT5",
+                    Settings = brokerSettings.RootElement.Clone()
+                };
+                if (!string.IsNullOrWhiteSpace(brokerPlatforms.RequiredPlatform(genericJob)))
+                    throw new InvalidOperationException("generic broker was forced to a dedicated platform");
+            }
+
             var created = new List<(CloudJob Job, PreparedInstance Prepared)>();
             var checkpoints = new HashSet<int> { 1, 2, 5, 20 };
 
