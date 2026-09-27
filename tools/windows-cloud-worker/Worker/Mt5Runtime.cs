@@ -91,6 +91,7 @@ internal sealed class Mt5Runtime
             if (!Guid.TryParse(instanceId, out _)) continue;
 
             var terminal = Path.Combine(instancePath, "terminal64.exe");
+            var terminalRunning = HasExactTerminal(terminal);
             var chartRoots = new[]
             {
                 Path.Combine(instancePath, "MQL5", "Profiles", "Charts"),
@@ -121,6 +122,15 @@ internal sealed class Mt5Runtime
                 }
                 catch { }
             }
+
+            var readyMarker = Path.Combine(
+                instancePath,
+                "MQL5",
+                "Files",
+                "scenova-ea-ready.txt");
+            var attachMarkerMatches =
+                terminalRunning &&
+                EaReadyMarkerMatches(readyMarker, instanceId);
 
             var eaPath = Path.Combine(instancePath, "MQL5", "Experts", "FastBasketBot.ex5");
             var eaSha256 = "";
@@ -167,9 +177,9 @@ internal sealed class Mt5Runtime
             result.Add(new CloudInstanceDiagnostic
             {
                 InstanceId = instanceId,
-                TerminalRunning = HasExactTerminal(terminal),
+                TerminalRunning = terminalRunning,
                 ChartFiles = chartFiles,
-                ChartHasFastBasketBot = chartHasFastBasketBot,
+                ChartHasFastBasketBot = chartHasFastBasketBot || attachMarkerMatches,
                 EaSha256 = eaSha256,
                 EaBytes = eaBytes,
                 StartupConfigExists = File.Exists(Path.Combine(instancePath, "cloud-start.ini")),
