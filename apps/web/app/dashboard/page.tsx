@@ -5,7 +5,7 @@ import { API_URL, api, getToken } from "../../lib/api";
 import { CustomerMobileNav, CustomerSidebar, OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
-import { Mt5ConnectionExperience } from "../../components/Mt5ConnectionExperience";
+import { Mt5ConnectionExperience, VpsMigrationProgressCard } from "../../components/Mt5ConnectionExperience";
 import { EaDecisionCenter } from "../../components/EaDecisionCenter";
 import { BotPerformanceSummary } from "../../components/BotPerformanceSummary";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
@@ -1003,7 +1003,7 @@ export default function DashboardPage() {
           STOPPING_LOCAL:"กำลังย้ายระบบ · กำลังตรวจและหยุด Local MT5 อย่างปลอดภัย",
           SOURCE_STOP_CONFIRMED:"Local MT5 หยุดแล้ว · กำลังส่งระบบไป VPS",
           TARGET_PROVISIONING:"กำลังติดตั้งระบบ VPS · กำลังเปิด MT5 และ FastBasketBot บน " + runnerLabel,
-          COMPLETED:"ย้ายระบบไป VPS สำเร็จ"
+          COMPLETED:"ย้ายระบบไป VPS สำเร็จ · VPS Online แล้ว · พร้อมกดเริ่มบอท"
         };
 
         if (migrationState === "FAILED" || migrationState === "CANCELLED") {
@@ -1062,13 +1062,6 @@ export default function DashboardPage() {
     vpsMigrationProgress?.runnerRegion,
     vpsMigrationProgress?.targetSlotId
   ]);
-
-  useEffect(() => {
-    if (vpsMigrationProgress?.status !== "SUCCESS") return;
-    const id = window.setTimeout(() => setVpsMigrationProgress(null), 1200);
-    return () => window.clearTimeout(id);
-  }, [vpsMigrationProgress?.status, vpsMigrationProgress?.migrationId]);
-
 
   useEffect(() => {
     if (serverOperation?.status !== "SUCCESS") return;
@@ -2035,6 +2028,9 @@ export default function DashboardPage() {
               }
             : current
         );
+        if (vpsMigrationProgress?.status === "SUCCESS") {
+          setVpsMigrationProgress(null);
+        }
         void load(selectedSlotIdRef.current, true);
       } else {
         setServerOperation((current:any) =>
@@ -3118,6 +3114,15 @@ export default function DashboardPage() {
               </>
             ) : (
               <section className="panel account-card">
+                {vpsMigrationProgress && (
+                  <VpsMigrationProgressCard
+                    progress={vpsMigrationProgress}
+                    onRetry={()=>{
+                      setVpsMigrationProgress(null);
+                      setError("");
+                    }}
+                  />
+                )}
                 <div className="panel-head">
                   <div>
                     <div className="eyebrow">MT5 ACCOUNT · CLOUD</div>
