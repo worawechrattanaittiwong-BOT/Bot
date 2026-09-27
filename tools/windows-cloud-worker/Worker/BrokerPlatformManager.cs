@@ -114,7 +114,11 @@ internal sealed class BrokerPlatformManager
                 throw new InvalidOperationException("BROKER_INSTALLER_TIMEOUT");
             }
 
-            if (process.ExitCode != 0)
+            // MetaTrader's web installer can return exit code 1 after a
+            // successful /auto install. Do not roll back a valid broker
+            // runtime solely because of that code; terminal64.exe is verified
+            // below before the platform is accepted.
+            if (!IsInstallerSuccessExitCode(process.ExitCode))
                 throw new InvalidOperationException("BROKER_INSTALLER_FAILED_" + process.ExitCode);
 
             var terminal = Path.Combine(instancePath, "terminal64.exe");
@@ -179,6 +183,9 @@ internal sealed class BrokerPlatformManager
             throw;
         }
     }
+
+    internal static bool IsInstallerSuccessExitCode(int exitCode) =>
+        exitCode is 0 or 1;
 
     private async Task<string> GetInstallerAsync(
         string brokerCode,
