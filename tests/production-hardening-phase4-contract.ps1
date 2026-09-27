@@ -60,7 +60,10 @@ Require $cloud '!n\.capacity_blocked && !n\.quarantined' 'catalog excludes block
 Require $cloud 'cloud_provisioning_paused' 'checkout obeys global provisioning pause'
 Require $cloud 'NOT w\.capacity_blocked AND NOT w\.quarantined' 'allocator excludes blocked nodes'
 Require $cloud 'node\.capacity_blocked \|\| node\.quarantined' 'owner cannot reopen blocked node'
-Require $cloudUpdate "bi\.desired_state='STOPPED'.*bi\.actual_state='STOPPED'.*bi\.last_seen_at>now\(\)-interval '60 minutes'" 'stale heartbeat repair is restricted to recently seen stopped Cloud runtime'
+Require $cloudUpdate "bi\.desired_state='STOPPED'.*bi\.actual_state='STOPPED'.*bi\.last_seen_at>now\(\)-interval '60 minutes'" 'stale heartbeat repair retains the recent-heartbeat path'
+Require $cloudUpdate "jsonb_array_elements" 'offline repair can use Worker-reported per-instance runtime diagnostics'
+Require $cloudUpdate "diag->>'instanceId'=bi\.id::text" 'offline repair diagnostics must match the exact Cloud instance'
+Require $cloudUpdate "diag->>'terminalRunning'" 'offline repair requires Worker confirmation that the managed MT5 terminal is running'
 Require $cloudUpdate "accountScenovaPositions'.*<=0.*accountScenovaPendingOrders'.*<=0" 'stale heartbeat repair requires flat SCENOVA positions and pending orders'
 Require $cloudUpdate "bi\.last_seen_at>now\(\)-interval '30 seconds'.*OR" 'normal fleet update still prefers fresh heartbeat'
 

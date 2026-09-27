@@ -276,6 +276,7 @@ export class CloudUpdateService {
          FROM instance_update_jobs ij
          JOIN server_update_jobs sj ON sj.id=ij.server_update_job_id
          JOIN bot_instances bi ON bi.id=ij.bot_instance_id
+         JOIN worker_nodes wn ON wn.runner_id=bi.runner_id
          WHERE sj.runner_id=$1
            AND sj.state='RUNNING'
            AND ij.state='WAITING_SAFE'
@@ -289,11 +290,26 @@ export class CloudUpdateService {
              OR (
                -- Connectivity-repair escape hatch: a broken EA cannot satisfy a
                -- fresh-heartbeat gate in order to receive the EA that fixes its
-               -- heartbeat. Permit only a recently-seen, explicitly STOPPED,
-               -- fully-flat SCENOVA runtime. Never use this path for RUNNING,
-               -- SAFE_STOP, unknown/stale (>60m), open, or pending exposure.
+               -- heartbeat. For older runtimes require a recent EA heartbeat.
+               -- Worker 2.2.7+ also reports the exact managed terminal process;
+               -- this allows repair after recovery intentionally cleared
+               -- last_seen_at, but only for an explicitly STOPPED, fully-flat
+               -- runtime whose Windows terminal is still confirmed running.
                bi.actual_state='STOPPED'
-               AND bi.last_seen_at>now()-interval '60 minutes'
+               AND (
+                 bi.last_seen_at>now()-interval '60 minutes'
+                 OR (
+                   bi.last_seen_at IS NULL
+                   AND EXISTS (
+                     SELECT 1
+                     FROM jsonb_array_elements(
+                       COALESCE(wn.telemetry->'instances','[]'::jsonb)
+                     ) diag
+                     WHERE diag->>'instanceId'=bi.id::text
+                       AND COALESCE((diag->>'terminalRunning')::boolean,false)=true
+                   )
+                 )
+               )
                AND COALESCE(NULLIF(bi.metrics->>'accountScenovaPositions','')::int,0)<=0
                AND COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0)<=0
              )
