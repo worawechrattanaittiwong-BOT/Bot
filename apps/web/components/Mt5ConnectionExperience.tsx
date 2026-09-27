@@ -127,81 +127,6 @@ export function Mt5ConnectionExperience(props: Props) {
           </div>
           <button className={styles.primary} onClick={() => showGuide(1)}>ดาวน์โหลดติดตั้ง<span>→</span></button>
 
-          {props.vpsMove && (
-            <div className={styles.vpsMove}>
-              {props.vpsMove.progress ? (
-                <div className={
-                  styles.vpsProgress + " " +
-                  (String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "SUCCESS"
-                    ? styles.vpsProgressSuccess
-                    : String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "FAILED"
-                      ? styles.vpsProgressFailed
-                      : styles.vpsProgressRunning)
-                }>
-                  <div className={styles.vpsProgressHead}>
-                    <span className={styles.vpsProgressIcon}>
-                      {String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "SUCCESS"
-                        ? "✓"
-                        : String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "FAILED"
-                          ? "!"
-                          : "↻"}
-                    </span>
-                    <div>
-                      <small>SCENOVA VPS</small>
-                      <b>
-                        {String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "SUCCESS"
-                          ? "ย้ายระบบสำเร็จ"
-                          : String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "FAILED"
-                            ? "ย้ายระบบไม่สำเร็จ"
-                            : "กำลังย้ายระบบ"}
-                      </b>
-                    </div>
-                  </div>
-                  <p>{props.vpsMove.progress.message || "กำลังเตรียมระบบ VPS"}</p>
-                  {String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "RUNNING" && (
-                    <div className={styles.vpsProgressBar} aria-hidden="true"><i/></div>
-                  )}
-                  {String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "FAILED" && props.vpsMove.onRetry && (
-                    <button type="button" className={styles.vpsRetry} onClick={props.vpsMove.onRetry}>ลองใหม่</button>
-                  )}
-                </div>
-              ) : (
-                <div className={styles.vpsAction}>
-                  <div className={styles.vpsActionCopy}>
-                    <span className={styles.vpsBadge}>VPS OPTION</span>
-                    <div>
-                      <b>{props.vpsMove.hasAccess ? "ต้องการย้ายไป SCENOVA VPS?" : "ต้องการใช้ SCENOVA VPS?"}</b>
-                      <small>
-                        {props.vpsMove.hasAccess
-                          ? "ย้ายบัญชี MT5 เดิมจาก Local ไป VPS โดยใช้บัญชีเดิม"
-                          : "บัญชีนี้ยังไม่มีสิทธิ์ VPS เลือกแพ็กเกจก่อนแล้วกลับมาย้ายได้ทันที"}
-                      </small>
-                    </div>
-                  </div>
-
-                  {props.vpsMove.hasAccess ? (
-                    <>
-                      <button
-                        type="button"
-                        className={styles.vpsButton}
-                        disabled={Boolean(props.vpsMove.busy || props.vpsMove.blockedReason)}
-                        onClick={props.vpsMove.onMove}
-                      >
-                        {props.vpsMove.busy ? "กำลังเตรียม VPS..." : "ย้ายไป VPS"}
-                        <span>→</span>
-                      </button>
-                      {props.vpsMove.blockedReason && <small className={styles.vpsReason}>{props.vpsMove.blockedReason}</small>}
-                      {props.vpsMove.isOwner && <small className={styles.vpsOwnerNote}>OWNER ใช้ VPS ได้โดยไม่ต้องซื้อแพ็กเพิ่ม</small>}
-                    </>
-                  ) : (
-                    <a className={styles.vpsButton} href={props.vpsMove.packageHref || "/packages?system=cloud"}>
-                      ซื้อแพ็กเกจ VPS <span>→</span>
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
         </div>
         <div className={styles.art}>
           <img src="/assets/scenova-mt5-companion-v2.png" alt="มาสคอต SCENOVA ตัวกลมสีขาวม่วง อยู่ข้างหน้าจอ MT5"/>
@@ -226,11 +151,39 @@ export function Mt5ConnectionExperience(props: Props) {
             ))}
           </div>
         </section>
-        <section className={styles.tutorial}>
-          <h2>ติดตั้งตามได้ทีละขั้น</h2><p>คู่มือพร้อมภาพประกอบ<br/>แม้เพิ่งเคยติดตั้ง EA ก็เริ่มได้</p>
-          <img src="/assets/scenova-mt5-companion-v2.png" alt="หน้าจอ MT5 และผู้ช่วย SCENOVA" loading="lazy"/>
-          <button className={styles.guideButton} onClick={() => showGuide()}><ScenovaIcon name="book" size={22}/>ดูวิธีติดตั้ง <span>→</span></button>
-        </section>
+        <div className={styles.tutorialAside}>
+          <section className={styles.tutorialVisual} aria-label="ภาพประกอบการติดตั้ง SCENOVA กับ MT5">
+            <img src="/assets/scenova-mt5-companion-v2.png" alt="หน้าจอ MT5 และผู้ช่วย SCENOVA" loading="lazy"/>
+          </section>
+
+          {props.vpsMove && (
+            <div className={styles.vpsQuickArea}>
+              {props.vpsMove.progress ? (
+                <VpsMigrationProgressCard
+                  progress={props.vpsMove.progress}
+                  onRetry={props.vpsMove.onRetry}
+                />
+              ) : props.vpsMove.hasAccess ? (
+                <>
+                  <button
+                    type="button"
+                    className={styles.vpsQuickButton}
+                    disabled={Boolean(props.vpsMove.busy || props.vpsMove.blockedReason)}
+                    onClick={props.vpsMove.onMove}
+                  >
+                    {props.vpsMove.busy ? "กำลังเตรียม VPS..." : "ย้ายไป VPS Server"}
+                    <span>→</span>
+                  </button>
+                  {props.vpsMove.blockedReason && <small className={styles.vpsReason}>{props.vpsMove.blockedReason}</small>}
+                </>
+              ) : (
+                <a className={styles.vpsQuickButton} href={props.vpsMove.packageHref || "/packages?system=cloud"}>
+                  ย้ายไป VPS Server <span>→</span>
+                </a>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className={styles.bottom}>
