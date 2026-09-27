@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.85"
-#define SCENOVA_EA_VERSION "1.0.85"
-#define SCENOVA_PRODUCT_VERSION "1.0.85"
+#property version   "1.0.86"
+#define SCENOVA_EA_VERSION "1.0.86"
+#define SCENOVA_PRODUCT_VERSION "1.0.86"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -5379,6 +5379,64 @@ void OnTimer()
    RefreshChartStatus();
 }
 
+string RealtimeJsonEscape(string value)
+{
+   StringReplace(value, "\\", "\\\\");
+   StringReplace(value, "\"","\\\"");
+   StringReplace(value, "\r", " ");
+   StringReplace(value, "\n", " ");
+   return value;
+}
+
+string RealtimeEventTypeForDealEntry(long dealEntry)
+{
+   if(dealEntry == DEAL_ENTRY_IN)
+      return "ORDER_OPENED";
+   if(dealEntry == DEAL_ENTRY_OUT || dealEntry == DEAL_ENTRY_OUT_BY)
+      return "ORDER_CLOSED";
+   return "ORDER_CHANGED";
+}
+
+void PublishRealtimeEvent(string eventType, ulong dealTicket=0)
+{
+   // Cloud realtime telemetry is deliberately local-file only. No WebRequest
+   // is allowed here, so trade execution and broker-side close/open paths never
+   // wait for SCENOVA network latency.
+   if(MQLInfoInteger(MQL_TESTER) || !InpCloudRelay ||
+      StringLen(InpInstanceId) < 8 || StringLen(eventType) <= 0)
+      return;
+
+   string eventId =
+      IntegerToString((long)TimeLocal()) + "-" +
+      IntegerToString((long)GetTickCount64()) + "-" +
+      IntegerToString((long)dealTicket);
+   string chartTag = IntegerToString((long)ChartID());
+   string eventFile =
+      "scenova-evt-" + chartTag + "-" + eventId + ".request.txt";
+
+   string payload = StringFormat(
+      "{\"eventId\":\"%s\",\"eventType\":\"%s\",\"instanceId\":\"%s\",\"occurredAt\":%I64d,\"state\":\"%s\",\"executionStatus\":\"%s\",\"symbol\":\"%s\",\"positions\":%d,\"openPositions\":%s,\"dealTicket\":\"%I64u\"}",
+      RealtimeJsonEscape(eventId),
+      RealtimeJsonEscape(eventType),
+      RealtimeJsonEscape(InpInstanceId),
+      (long)TimeCurrent(),
+      RealtimeJsonEscape(StateText()),
+      RealtimeJsonEscape(g_executionStatus),
+      RealtimeJsonEscape(_Symbol),
+      ScenovaAccountPositionCount(),
+      OpenPositionsTelemetryJson(),
+      dealTicket
+   );
+
+   ResetLastError();
+   int out = FileOpen(eventFile,FILE_WRITE|FILE_TXT|FILE_ANSI,0,CP_UTF8);
+   if(out == INVALID_HANDLE)
+      return;
+
+   FileWriteString(out,payload);
+   FileClose(out);
+}
+
 void OnTradeTransaction(
    const MqlTradeTransaction &trans,
    const MqlTradeRequest &request,
@@ -5419,6 +5477,11 @@ void OnTradeTransaction(
          BasketPositionCount() == 0 &&
          RescuePositionCount() == 0)
          FinalizeBasketJournal();
+
+      PublishRealtimeEvent(
+         RealtimeEventTypeForDealEntry(rescueEntry),
+         trans.deal
+      );
       return;
    }
 
@@ -5444,6 +5507,11 @@ void OnTradeTransaction(
          g_burstTargetMoney = 0.0;
          g_burstLossMoney = 0.0;
       }
+
+      PublishRealtimeEvent(
+         RealtimeEventTypeForDealEntry(dealEntry),
+         trans.deal
+      );
       return;
    }
 
@@ -5455,6 +5523,7 @@ void OnTradeTransaction(
       Print("Manual/external trade detected on ", _Symbol, ". Entering SAFE_STOP.");
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
+      PublishRealtimeEvent("STATE_CHANGED",trans.deal);
    }
 }
 
@@ -6390,6 +6459,8 @@ void SendHeartbeat()
    g_indicatorHistoryEvScore = MathMax(0.0,MathMin(100.0,
       JsonNumber(response,"indicatorEvScore",g_indicatorHistoryEvScore)));
 
+   string realtimeStateBeforeControl = StateText();
+
    // desiredState is authoritative. A stale START/SAFE_STOP command must never
    // override the latest state selected on the website.
    // Only an explicit website SAFE_STOP is allowed to preserve the active ZERO
@@ -6455,6 +6526,9 @@ void SendHeartbeat()
    {
       ForceFlatResetAccount("REMOTE_CLOSE_ALL");
    }
+
+   if(StateText() != realtimeStateBeforeControl)
+      PublishRealtimeEvent("STATE_CHANGED");
 
    RenderChartStatus("CONNECTED", clrLimeGreen, g_executionStatus);
 
