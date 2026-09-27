@@ -36,7 +36,7 @@
 .progressItem.active{border-color:#7057d5;box-shadow:0 0 18px rgba(107,77,224,.08)}
 .progressItem.active>span{border-color:#8a70ff;color:#d7cfff;background:#21193d}
 .systemChoice{margin:12px 0;padding:14px;border:1px solid rgba(132,96,255,.40);border-radius:15px;background:radial-gradient(circle at 80% 0,rgba(110,70,255,.09),transparent 35%),rgba(10,8,20,.90);box-shadow:0 14px 38px rgba(0,0,0,.15)}
-.choiceLabel{margin:1px 0 10px;color:#9c86ff;font:700 10px Consolas,"SFMono-Regular",monospace;letter-spacing:.24em}
+.choiceLabel{margin:1px 0 10px;color:#9c86ff;font:700 var(--ui-type-caption) Consolas,"SFMono-Regular",monospace;letter-spacing:.24em}
 .choiceGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .choiceCard{display:grid;grid-template-columns:44px 1fr;gap:12px;min-height:126px;padding:14px;border:1px solid #38304b;border-radius:13px;background:linear-gradient(145deg,#100d1d,#090812);color:#efeaff;text-decoration:none;transition:.16s ease}
 .choiceCard:hover{transform:translateY(-1px);border-color:#7d68da;box-shadow:0 10px 26px rgba(42,27,91,.16)}
