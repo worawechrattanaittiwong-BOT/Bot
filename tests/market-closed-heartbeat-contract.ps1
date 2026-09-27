@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $ea = [System.IO.File]::ReadAllText((Resolve-Path 'mt5/FastBasketBot.mq5'))
 $web = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/app/dashboard/page.tsx'))
+$eaApi = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/ea.controller.ts'))
 
 foreach ($pattern in @(
   'ulong\s+g_lastHeartbeatTickMs\s*=\s*0;',
@@ -25,7 +26,10 @@ foreach ($required in @(
   'return "MARKET_CLOSED";',
   'marketSessionState',
   'Keep control-plane liveness ahead of chart/history work',
-  'SCENOVA FATAL: runtime timer could not be armed'
+  'SCENOVA FATAL: runtime timer could not be armed',
+  'terminalOfflineConfirmed',
+  'statusNowMs - terminalDisconnectedSinceMs >= 5000',
+  'terminalOfflineConfirmed ? "MT5 OFFLINE" : "RECONNECTING"'
 )) {
   if (-not $ea.Contains($required)) { throw "Market-closed EA contract missing: $required" }
 }
@@ -43,6 +47,14 @@ foreach ($required in @(
   'marketSessionClosed ? "MARKET CLOSED" : "REALTIME"'
 )) {
   if (-not $web.Contains($required)) { throw "Market-closed dashboard contract missing: $required" }
+}
+
+foreach ($required in @(
+  "command='START'",
+  "'ackSource','RUNNING_HEARTBEAT'",
+  'heartbeatActualState === "RUNNING"'
+)) {
+  if (-not $eaApi.Contains($required)) { throw "RUNNING heartbeat command ACK contract missing: $required" }
 }
 
 Write-Host 'Market-closed heartbeat/status contract PASS'
