@@ -34,6 +34,7 @@ export default function OnboardingPage() {
   const [data, setData] = useState<SetupDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [newAccount, setNewAccount] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -53,6 +54,7 @@ export default function OnboardingPage() {
   }
 
   useEffect(() => {
+    setNewAccount(new URLSearchParams(window.location.search).get("new") === "1");
     void load();
   }, []);
 
@@ -123,8 +125,8 @@ export default function OnboardingPage() {
         <div className={styles.progress} aria-label="Setup progress">
           {[
             { n:1, title:"Account", sub:"สร้างบัญชี SCENOVA" },
-            { n:2, title:"Connect MT5", sub:"เลือก Cloud หรือ Local" },
-            { n:3, title:"Access", sub:"Trial หรือ Subscription" }
+            { n:2, title:"Choose System", sub:"VPS หรือ Local" },
+            { n:3, title:"Setup & Access", sub:"ติดตั้งหรือเลือกแพ็กเกจ" }
           ].map(step => {
             const complete =
               step.n === 1 ||
@@ -139,6 +141,36 @@ export default function OnboardingPage() {
             );
           })}
         </div>
+
+        {newAccount && !accountLinked && (
+          <section className={styles.systemChoice}>
+            <div className={styles.choiceHead}>
+              <div>
+                <div className={styles.eyebrow}>CHOOSE YOUR SYSTEM</div>
+                <h2>จะใช้งานแบบไหน?</h2>
+                <p>เลือกได้เลยตอนนี้ ระบบจะพาไปขั้นตอนที่ถูกต้องโดยไม่ต้องหาเมนูเอง</p>
+              </div>
+            </div>
+            <div className={styles.choiceGrid}>
+              <a className={styles.choiceCard + " " + styles.choiceVps} href="/packages?system=cloud&from=onboarding">
+                <span className={styles.choiceIcon}><ScenovaIcon name="cloud" size={25}/></span>
+                <div>
+                  <b>VPS / Cloud MT5</b>
+                  <p>SCENOVA รัน MT5 และ EA บน Trading VPS ให้ ปิดมือถือหรือคอมได้หลัง Start</p>
+                  <strong>เลือกแพ็กเกจ VPS <span>→</span></strong>
+                </div>
+              </a>
+              <a className={styles.choiceCard} href="/dashboard?view=account&welcome=1&setup=local">
+                <span className={styles.choiceIcon}><ScenovaIcon name="strategy" size={25}/></span>
+                <div>
+                  <b>Local MT5</b>
+                  <p>ติดตั้ง SCENOVA บนคอมพิวเตอร์ของคุณ แล้วใช้ MT5 ที่เครื่องของคุณเอง</p>
+                  <strong>ไปหน้าติดตั้ง Local <span>→</span></strong>
+                </div>
+              </a>
+            </div>
+          </section>
+        )}
 
         {error && (
           <div className={styles.errorBox}>
@@ -163,11 +195,11 @@ export default function OnboardingPage() {
               <span className={styles.icon}><ScenovaIcon name="control" size={22}/></span>
               <span className={accountLinked ? styles.stateGood : styles.stateWait}>{accountLinked ? "CONNECTED" : "NEXT"}</span>
             </div>
-            <h2>2. Connect MT5</h2>
+            <h2>2. ระบบที่ใช้งาน</h2>
             <p>
               {accountLinked
                 ? "เชื่อม MT5 แล้ว · " + String(data?.account?.account_number || "บัญชีพร้อมใช้งาน")
-                : "เลือก Cloud MT5 สำหรับใช้งานผ่าน Server หรือ Local MT5 สำหรับเครื่องของคุณ"}
+                : "เลือก VPS เพื่อไปหน้าแพ็กเกจ หรือ Local เพื่อไปหน้าติดตั้งบนคอมพิวเตอร์ของคุณ"}
             </p>
             <div className={styles.modeRow}>
               <span><ScenovaIcon name="cloud" size={16}/> Cloud</span>
@@ -197,11 +229,11 @@ export default function OnboardingPage() {
         <section className={styles.actionPanel}>
           <div>
             <small>RECOMMENDED NEXT STEP</small>
-            <h3>{loading ? "กำลังตรวจสอบสถานะ..." : primaryAction.label}</h3>
-            <p>หน้า MT5 และหน้าตั้งค่าบอทเดิมยังคงทำงานเหมือนเดิมทุกประการ</p>
+            <h3>{loading ? "กำลังตรวจสอบสถานะ..." : newAccount && !accountLinked ? "เลือก VPS หรือ Local ด้านบน" : primaryAction.label}</h3>
+            <p>{newAccount && !accountLinked ? "หลังเลือกแล้วระบบจะพาไปแพ็กเกจ VPS หรือหน้าติดตั้ง Local อัตโนมัติ" : "หน้า MT5 และหน้าตั้งค่าบอทเดิมยังคงทำงานเหมือนเดิมทุกประการ"}</p>
           </div>
           <div className={styles.actions}>
-            <a className={styles.primary} href={loading ? "#" : primaryAction.href} aria-disabled={loading}>ดำเนินการต่อ <span>→</span></a>
+            {!(newAccount && !accountLinked) && <a className={styles.primary} href={loading ? "#" : primaryAction.href} aria-disabled={loading}>ดำเนินการต่อ <span>→</span></a>}
             <a className={styles.secondary} href="/dashboard?view=overview">ไป Dashboard</a>
           </div>
         </section>
