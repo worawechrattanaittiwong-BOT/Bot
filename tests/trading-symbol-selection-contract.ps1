@@ -25,6 +25,7 @@ $ea = Read-Text 'mt5/FastBasketBot.mq5'
 $sidebar = Read-Text 'apps/web/components/OwnerSidebar.tsx'
 $manualControls = Read-Text 'apps/web/components/Mt5ManualActionControls.tsx'
 $cloudModels = Read-Text 'tools/windows-cloud-worker/Worker/Models.cs'
+$cloudRuntime = Read-Text 'tools/windows-cloud-worker/Worker/Mt5Runtime.cs'
 
 Assert-Contains $controller 'startupSymbol' 'explicit desired symbol is stored separately from live metrics'
 Assert-Contains $controller 'SYMBOL_AGENT_VERSION = "1.0.11"' 'authoritative symbol switching requires the current Agent'
@@ -98,5 +99,7 @@ Assert-Contains $ea 'marketWatchSymbols' 'EA heartbeat publishes Market Watch te
 Assert-Contains $cloudModels 'ResolveBrokerSymbol' 'Cloud Worker resolves saved canonical symbols before writing MT5 startup config'
 Assert-Contains $cloudModels 'return "XAUUSDm";' 'Cloud Worker resolves Exness Gold to its native chart'
 Assert-Contains $cloudModels 'return "BTCUSDm";' 'Cloud Worker resolves Exness BTC to its native chart'
+Assert-Contains $cloudRuntime 'scenova-ea-ready.txt' 'Cloud Worker diagnostics inspect the EA attach marker'
+Assert-Contains $cloudRuntime 'ChartHasFastBasketBot = chartHasFastBasketBot || attachMarkerMatches' 'Cloud Worker accepts a matching live EA marker as attach evidence'
 
 Write-Host 'Trading symbol authoritative Control Center contract PASS.'

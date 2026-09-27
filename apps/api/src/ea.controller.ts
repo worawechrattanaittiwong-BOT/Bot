@@ -770,6 +770,26 @@ export class EaController {
       [instance.id]
     );
 
+    // A RUNNING heartbeat is stronger evidence than a command-delivery flag.
+    // Close the START command lifecycle immediately so Dashboard/Terminal never
+    // remains stuck at DELIVERED after the EA is already executing.
+    const heartbeatActualState = String(body.state || "").toUpperCase();
+    if (
+      heartbeatActualState === "RUNNING" &&
+      String(latestControl?.desired_state || "").toUpperCase() === "RUNNING"
+    ) {
+      await this.db.query(
+        `UPDATE bot_commands
+         SET status='ACKED',
+             acked_at=COALESCE(acked_at,now()),
+             payload=COALESCE(payload,'{}'::jsonb) || jsonb_build_object('ackSource','RUNNING_HEARTBEAT')
+         WHERE bot_instance_id=$1
+           AND command='START'
+           AND status IN ('PENDING','DELIVERED')`,
+        [instance.id]
+      );
+    }
+
     // SAFE_STOP is a drain transition, not a terminal state. When the EA has
     // positively reported that it is flat and already in SAFE_STOP/STOPPED,
     // finish the lifecycle by moving the Server control state to STOPPED.
