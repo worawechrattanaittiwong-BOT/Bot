@@ -620,31 +620,66 @@ internal sealed class Mt5Runtime
     {
         if (HasExactTerminal(prepared.TerminalPath)) return;
 
-        // Cloud instances are fully Worker-managed; rebuild a clean single-chart startup every time. MT5 persists every open
-        // chart in Profiles/Charts and /config [StartUp] opens another chart on
-        // each recovery. Without clearing the persisted workspace, unattended
-        // restarts accumulate duplicate XAUUSD,M5 charts (and may attach the EA
-        // more than once). Rebuild only the chart workspace while the terminal
-        // is stopped; credentials, presets, history and the EA binary remain.
-        ResetCloudChartWorkspace(prepared.InstancePath);
+        var instanceId = Path.GetFileName(
+            prepared.InstancePath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar));
+        var readyMarker = Path.Combine(
+            prepared.InstancePath,
+            "MQL5",
+            "Files",
+            "scenova-ea-ready.txt");
 
-        Process.Start(new ProcessStartInfo
+        for (var attempt = 1; attempt <= 2; attempt++)
         {
-            FileName = prepared.TerminalPath,
-            Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
-            WorkingDirectory = prepared.InstancePath,
-            UseShellExecute = true,
-            WindowStyle = ProcessWindowStyle.Hidden
-        });
+            try { if (File.Exists(readyMarker)) File.Delete(readyMarker); } catch { }
 
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(15);
-        while (DateTimeOffset.UtcNow < deadline)
-        {
-            if (HasExactTerminal(prepared.TerminalPath)) return;
-            Thread.Sleep(250);
+            // Rebuild only the chart workspace. Credentials, presets, history
+            // and the per-instance EA binary remain untouched.
+            ResetCloudChartWorkspace(prepared.InstancePath);
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = prepared.TerminalPath,
+                Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
+                WorkingDirectory = prepared.InstancePath,
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+
+            // MetaTrader may defer EA startup while account/chart data syncs.
+            // Do not report success until the EA itself confirms OnInit.
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(20);
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                if (HasExactTerminal(prepared.TerminalPath) &&
+                    EaReadyMarkerMatches(readyMarker, instanceId))
+                    return;
+
+                Thread.Sleep(250);
+            }
+
+            StopInstance(instanceId);
+            Thread.Sleep(500);
         }
 
-        throw new InvalidOperationException("MT5_RESTART_FAILED");
+        throw new InvalidOperationException("EA_ATTACH_FAILED");
+    }
+
+    private static bool EaReadyMarkerMatches(string markerPath, string instanceId)
+    {
+        try
+        {
+            if (!File.Exists(markerPath)) return false;
+            var lines = File.ReadAllLines(markerPath);
+            return lines.Length >= 2 &&
+                   !string.IsNullOrWhiteSpace(lines[0]) &&
+                   string.Equals(lines[1].Trim(), instanceId, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     internal static void ResetCloudChartWorkspace(string instancePath)

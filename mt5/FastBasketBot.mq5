@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.81"
-#define SCENOVA_EA_VERSION "1.0.81"
-#define SCENOVA_PRODUCT_VERSION "1.0.81"
+#property version   "1.0.82"
+#define SCENOVA_EA_VERSION "1.0.82"
+#define SCENOVA_PRODUCT_VERSION "1.0.82"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -1583,6 +1583,28 @@ int OnInit()
       return(INIT_FAILED);
    }
 
+   // Worker-side launch verification: a terminal process alone is not proof
+   // that FastBasketBot attached. Publish this only after OnInit reached a
+   // usable state and the runtime timer was armed successfully.
+   if(!MQLInfoInteger(MQL_TESTER))
+   {
+      ResetLastError();
+      int ready=FileOpen("scenova-ea-ready.txt",FILE_WRITE|FILE_TXT|FILE_ANSI,0,CP_UTF8);
+      if(ready!=INVALID_HANDLE)
+      {
+         FileWriteString(
+            ready,
+            SCENOVA_EA_VERSION+"\r\n"+
+            InpInstanceId+"\r\n"+
+            IntegerToString((long)TimeLocal())
+         );
+         FileFlush(ready);
+         FileClose(ready);
+      }
+      else
+         Print("SCENOVA ready marker failed. error=",GetLastError());
+   }
+
    RefreshChartStatus(true);
    Print("Bot SaaS EA initialized. Instance=", InpInstanceId);
    return(INIT_SUCCEEDED);
@@ -1590,6 +1612,8 @@ int OnInit()
 
 void OnDeinit(const int reason)
 {
+   if(!MQLInfoInteger(MQL_TESTER))
+      FileDelete("scenova-ea-ready.txt");
    FlipLockRemoveAllPending();
    EventKillTimer();
    DeleteTradingFibonacci();
