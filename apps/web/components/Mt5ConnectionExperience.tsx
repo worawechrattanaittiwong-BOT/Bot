@@ -42,6 +42,51 @@ const steps = [
   { title: "ตรวจสถานะ แล้วเริ่มใช้งาน", short: "ตรวจสถานะ", icon: "status" },
 ];
 
+export function VpsMigrationProgressCard(props: {
+  progress?: VpsMoveProps["progress"];
+  onRetry?: () => void;
+}) {
+  const progress = props.progress;
+  if (!progress) return null;
+
+  const status = String(progress.status || "RUNNING").toUpperCase();
+  return (
+    <div className={styles.vpsMove}>
+      <div className={
+        styles.vpsProgress + " " +
+        (status === "SUCCESS"
+          ? styles.vpsProgressSuccess
+          : status === "FAILED"
+            ? styles.vpsProgressFailed
+            : styles.vpsProgressRunning)
+      }>
+        <div className={styles.vpsProgressHead}>
+          <span className={styles.vpsProgressIcon}>
+            {status === "SUCCESS" ? "✓" : status === "FAILED" ? "!" : "↻"}
+          </span>
+          <div>
+            <small>SCENOVA VPS</small>
+            <b>
+              {status === "SUCCESS"
+                ? "ย้ายระบบสำเร็จ · พร้อมเริ่ม"
+                : status === "FAILED"
+                  ? "ย้ายระบบไม่สำเร็จ"
+                  : "กำลังย้ายระบบ"}
+            </b>
+          </div>
+        </div>
+        <p>{progress.message || "กำลังเตรียมระบบ VPS"}</p>
+        {status === "RUNNING" && (
+          <div className={styles.vpsProgressBar} aria-hidden="true"><i/></div>
+        )}
+        {status === "FAILED" && props.onRetry && (
+          <button type="button" className={styles.vpsRetry} onClick={props.onRetry}>ลองใหม่</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Mt5ConnectionExperience(props: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const content = useRef<HTMLDivElement>(null);
