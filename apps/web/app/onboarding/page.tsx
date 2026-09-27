@@ -138,27 +138,34 @@ export default function OnboardingPage() {
                 <div className={styles.choiceBody}>
                   <div>
                     <b>VPS / Cloud MT5</b>
-                    <p>ใช้งาน MT5 และ EA บน SCENOVA VPS โดยไม่ต้องเปิดคอมพิวเตอร์ตลอดเวลา</p>
+                    <p>MT5 และ EA ทำงานบน SCENOVA Trading Server คุณติดตามและสั่งงานผ่านเว็บได้จากทุกอุปกรณ์</p>
+                    <div className={styles.choiceFeatures}>
+                      <span>✓ ใช้งานได้จากมือถือ</span>
+                      <span>✓ ทำงานบนเซิร์ฟเวอร์</span>
+                      <span>✓ ควบคุมผ่านเว็บ</span>
+                    </div>
                   </div>
                   <strong>ดูแพ็กเกจ VPS <span>→</span></strong>
                 </div>
               </a>
+
               <div className={styles.choiceCard + " " + styles.choiceLocal}>
                 <span className={styles.choiceIcon}><ScenovaIcon name="strategy" size={25}/></span>
                 <div className={styles.choiceBody}>
                   <div>
                     <b>Local MT5</b>
-                    <p>ใช้งาน MT5 และ SCENOVA บนคอมพิวเตอร์ของคุณโดยตรง</p>
+                    <p>ติดตั้ง SCENOVA Agent เพื่อเชื่อม MT5 บน PC หรือ VPS ของคุณ แล้วควบคุมบอทผ่านเว็บ</p>
+                    <div className={styles.choiceFeatures}>
+                      <span>✓ ใช้ PC หรือ VPS ของคุณ</span>
+                      <span>✓ เชื่อมต่อผ่าน Agent</span>
+                      <span>✓ ควบคุมผ่านเว็บ</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
             <div className={styles.localActionsBar} aria-label="Local MT5 actions">
-              <div className={styles.localActionsCopy}>
-                <b>Local MT5</b>
-                <span>เลือกขั้นตอนที่ต้องการดำเนินการต่อ</span>
-              </div>
               <div className={styles.choiceActions}>
                 <a className={styles.choicePrimaryAction} href="/dashboard?view=account&welcome=1&setup=local">
                   ติดตั้ง Local MT5 <span>→</span>
