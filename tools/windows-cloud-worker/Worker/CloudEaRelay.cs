@@ -53,6 +53,41 @@ internal sealed class CloudEaRelay
         var filesPath = Path.Combine(instancePath, "MQL5", "Files");
         if (!Directory.Exists(filesPath)) return;
 
+        // Realtime status events are fire-and-retry files. The EA never waits
+        // for internet I/O; this relay owns delivery and keeps failed files for
+        // the next 100 ms pass.
+        foreach (var eventPath in Directory.EnumerateFiles(
+                     filesPath,
+                     "scenova-evt-*.request.txt",
+                     SearchOption.TopDirectoryOnly)
+                 .OrderBy(File.GetCreationTimeUtc)
+                 .Take(64))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            string payload;
+            try { payload = (await File.ReadAllTextAsync(eventPath, cancellationToken)).Trim(); }
+            catch (IOException) { continue; }
+            catch (UnauthorizedAccessException) { continue; }
+
+            if (payload.Length < 16) continue;
+
+            try
+            {
+                var statusCode = await _client.RelayEaRuntimeEventAsync(payload, cancellationToken);
+                if (statusCode >= 200 && statusCode < 300)
+                    File.Delete(eventPath);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                // Leave the event file in place. It is the bounded local retry queue.
+            }
+        }
+
         foreach (var requestPath in Directory.EnumerateFiles(
                      filesPath,
                      "scenova-hb-*.request.txt",
