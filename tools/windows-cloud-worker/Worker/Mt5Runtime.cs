@@ -36,9 +36,9 @@ internal sealed class Mt5Runtime
     private readonly WorkerConfig _config;
     private readonly string _instancesPath;
     private readonly string _templatePath;
-    private readonly Dictionary<string, DateTimeOffset> _retryAfter =
+    private readonly HashSet<string> _autoLaunchAttempted =
         new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _offlineRepairAttempted =
+    private readonly Dictionary<string, int> _maximizedProcessByInstance =
         new(StringComparer.OrdinalIgnoreCase);
 
     public Mt5Runtime(WorkerConfig config)
@@ -319,6 +319,9 @@ internal sealed class Mt5Runtime
         {
             try
             {
+                // This stop is allowed only because an explicit Fleet Update
+                // is being rolled back. Normal Worker supervision never stops MT5.
+                StopInstance(job.InstanceId);
                 EaPackageStore.ReplaceEa(
                     currentEa,
                     backup.BackupPath,
@@ -388,6 +391,9 @@ internal sealed class Mt5Runtime
         {
             try
             {
+                // This stop is allowed only because an explicit rollback is
+                // restoring the previous EA binary.
+                StopInstance(job.InstanceId);
                 EaPackageStore.ReplaceEa(
                     currentEa,
                     currentBackup.BackupPath,
@@ -439,8 +445,6 @@ internal sealed class Mt5Runtime
 
                 var prepared = PrepareInstanceFiles(command.Job);
                 LaunchPrepared(prepared);
-                _offlineRepairAttempted.Remove(command.InstanceId);
-                _retryAfter.Remove(command.InstanceId);
                 result = "RELOAD_CONFIRMED";
                 errorCode = "";
             }
@@ -482,148 +486,38 @@ internal sealed class Mt5Runtime
             !string.Equals(job.RuntimeStopState, "NONE", StringComparison.OrdinalIgnoreCase))
             return;
 
-        if (job.EaOnline)
-            _offlineRepairAttempted.Remove(job.InstanceId);
-
         var instancePath = GetInstancePath(job.InstanceId);
         var terminal = Path.Combine(instancePath, "terminal64.exe");
 
-        // Bootstrap repair for Cloud instances that have never managed to
-        // heartbeat. Once the customer/server control state is STOPPED, it is
-        // safe to refresh only this terminal's EA from the verified template.
-        // This breaks the deadlock where an old/broken EA cannot heartbeat and
-        // therefore cannot qualify for the normal deferred fleet-update path.
-        if (!job.EaOnline &&
-            string.Equals(job.DesiredState, "STOPPED", StringComparison.OrdinalIgnoreCase) &&
-            File.Exists(Path.Combine(instancePath, "cloud-provisioned")) &&
-            TemplateReady &&
-            !_offlineRepairAttempted.Contains(job.InstanceId) &&
-            (!_retryAfter.TryGetValue(job.InstanceId, out var repairRetryAt) ||
-             repairRetryAt <= DateTimeOffset.UtcNow))
-        {
-            // Never restart a permanently offline MT5 in a loop. One repair
-            // attempt is enough until a fresh EA heartbeat proves recovery.
-            _offlineRepairAttempted.Add(job.InstanceId);
-            _retryAfter[job.InstanceId] = DateTimeOffset.UtcNow.AddSeconds(60);
-
-            try
-            {
-                if (!StopInstance(job.InstanceId))
-                    return;
-
-                // Never overwrite an existing provisioned EA during heartbeat
-                // recovery. Fleet Update is the sole owner of EA version changes.
-                // The template may legitimately lag behind a newer per-instance
-                // EA and copying it here would silently downgrade the runtime.
-                var instanceEa = Path.Combine(
-                    instancePath,
-                    "MQL5",
-                    "Experts",
-                    "FastBasketBot.ex5");
-                if (!File.Exists(instanceEa))
-                {
-                    var templateEa = Path.Combine(
-                        _templatePath,
-                        "MQL5",
-                        "Experts",
-                        "FastBasketBot.ex5");
-                    Directory.CreateDirectory(Path.GetDirectoryName(instanceEa)!);
-                    File.Copy(templateEa, instanceEa, overwrite: false);
-                }
-
-                var repaired = PrepareInstanceFiles(job);
-                LaunchPrepared(repaired);
-
-                await client.PostAsync("provision-result", new
-                {
-                    instanceId = job.InstanceId,
-                    errorCode = ""
-                }, cancellationToken);
-                return;
-            }
-            catch
-            {
-                try
-                {
-                    await client.PostAsync("provision-result", new
-                    {
-                        instanceId = job.InstanceId,
-                        errorCode = "CHECK_TEMPLATE_OR_TERMINAL"
-                    }, cancellationToken);
-                }
-                catch { }
-                return;
-            }
-        }
-
+        // Normal supervision must never recycle a healthy MT5 merely because
+        // the EA heartbeat is late/offline. Stop/start is reserved for an
+        // explicit fleet update, rollback, symbol reload, or runtime stop.
         if (HasExactTerminal(terminal))
         {
+            _autoLaunchAttempted.Add(job.InstanceId);
+            TryApplyChartLayout(job, terminal);
+
             var startup = Path.Combine(instancePath, "cloud-start.ini");
-            // The assigned-job snapshot can still report EA online from the
-            // heartbeat that happened immediately before an update restart.
-            // Keep the startup file longer than the API's 30-second EA-online
-            // freshness window so that stale pre-restart state cannot delete it
-            // before the new MT5 process has attached FastBasketBot.
             if (job.EaOnline &&
                 File.Exists(startup) &&
                 StartupConfigCleanupAllowed(startup))
             {
                 try { File.Delete(startup); } catch { }
             }
-
             return;
         }
 
-        if (_retryAfter.TryGetValue(job.InstanceId, out var retryAt) &&
-            retryAt > DateTimeOffset.UtcNow)
+        // Open each assigned Cloud account once per Worker lifetime. If that
+        // terminal later exits, do not create an unattended restart loop.
+        if (_autoLaunchAttempted.Contains(job.InstanceId))
             return;
 
-        _retryAfter[job.InstanceId] = DateTimeOffset.UtcNow.AddSeconds(60);
-
-        var alreadyProvisioned = File.Exists(Path.Combine(instancePath, "cloud-provisioned"));
-        var recoveryAuthorized = false;
-
-        if (alreadyProvisioned)
-        {
-            try
-            {
-                var decision = await client.PostAsync<RecoveryDecision>(
-                    "recovery-check",
-                    new
-                    {
-                        instanceId = job.InstanceId,
-                        executionGeneration = job.ExecutionGeneration
-                    },
-                    cancellationToken);
-
-                if (!decision.Allow) return;
-                recoveryAuthorized = true;
-
-                if (HasExactTerminal(terminal)) return;
-            }
-            catch
-            {
-                return;
-            }
-        }
+        _autoLaunchAttempted.Add(job.InstanceId);
 
         try
         {
             var prepared = PrepareInstanceFiles(job);
-
-            if (!HasExactTerminal(prepared.TerminalPath))
-                LaunchPrepared(prepared);
-
-            if (recoveryAuthorized)
-            {
-                await client.PostAsync("recovery-result", new
-                {
-                    instanceId = job.InstanceId,
-                    executionGeneration = job.ExecutionGeneration,
-                    result = "STARTED",
-                    errorCode = ""
-                }, cancellationToken);
-            }
+            LaunchPrepared(prepared, requireEaAttach: false);
 
             await client.PostAsync("provision-result", new
             {
@@ -633,21 +527,6 @@ internal sealed class Mt5Runtime
         }
         catch
         {
-            if (recoveryAuthorized)
-            {
-                try
-                {
-                    await client.PostAsync("recovery-result", new
-                    {
-                        instanceId = job.InstanceId,
-                        executionGeneration = job.ExecutionGeneration,
-                        result = "FAILED",
-                        errorCode = "RECOVERY_START_FAILED"
-                    }, cancellationToken);
-                }
-                catch { }
-            }
-
             try
             {
                 await client.PostAsync("provision-result", new
@@ -660,9 +539,15 @@ internal sealed class Mt5Runtime
         }
     }
 
-    private void LaunchPrepared(PreparedInstance prepared)
+    private void LaunchPrepared(
+        PreparedInstance prepared,
+        bool requireEaAttach = true)
     {
-        if (HasExactTerminal(prepared.TerminalPath)) return;
+        if (HasExactTerminal(prepared.TerminalPath))
+        {
+            TryMaximizeChart(prepared);
+            return;
+        }
 
         var instanceId = Path.GetFileName(
             prepared.InstancePath.TrimEnd(
@@ -674,53 +559,82 @@ internal sealed class Mt5Runtime
             "Files",
             "scenova-ea-ready.txt");
 
-        for (var attempt = 1; attempt <= 2; attempt++)
+        try { if (File.Exists(readyMarker)) File.Delete(readyMarker); } catch { }
+
+        // Every intentional launch starts from one clean chart workspace.
+        // Never recycle the terminal here just because broker/EA initialization
+        // takes longer than expected.
+        ResetCloudChartWorkspace(prepared.InstancePath);
+
+        Process.Start(new ProcessStartInfo
         {
-            try { if (File.Exists(readyMarker)) File.Delete(readyMarker); } catch { }
+            FileName = prepared.TerminalPath,
+            Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
+            WorkingDirectory = prepared.InstancePath,
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Maximized
+        });
 
-            // Rebuild only the chart workspace. Credentials, presets, history
-            // and the per-instance EA binary remain untouched.
-            ResetCloudChartWorkspace(prepared.InstancePath);
+        _autoLaunchAttempted.Add(instanceId);
 
-            Process.Start(new ProcessStartInfo
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var running = HasExactTerminal(prepared.TerminalPath);
+            if (running && EaReadyMarkerMatches(readyMarker, instanceId))
             {
-                FileName = prepared.TerminalPath,
-                Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
-                WorkingDirectory = prepared.InstancePath,
-                UseShellExecute = true,
-                WindowStyle = ProcessWindowStyle.Maximized
-            });
-
-            // MetaTrader may defer EA startup while account/chart data syncs.
-            // Do not report success until the EA itself confirms OnInit.
-            var deadline = DateTimeOffset.UtcNow.AddSeconds(20);
-            while (DateTimeOffset.UtcNow < deadline)
-            {
-                if (HasExactTerminal(prepared.TerminalPath) &&
-                    EaReadyMarkerMatches(readyMarker, instanceId))
-                {
-                    TryMaximizeChart(prepared);
-                    return;
-                }
-
-                Thread.Sleep(250);
+                TryMaximizeChart(prepared);
+                return;
             }
 
-            StopInstance(instanceId);
-            Thread.Sleep(500);
+            Thread.Sleep(250);
         }
 
-        throw new InvalidOperationException("EA_ATTACH_FAILED");
+        if (HasExactTerminal(prepared.TerminalPath))
+        {
+            TryMaximizeChart(prepared);
+            if (!requireEaAttach)
+                return;
+
+            // Explicit update/reload callers may treat this as verification
+            // failure, but normal supervision must never kill this terminal.
+            throw new InvalidOperationException("EA_ATTACH_TIMEOUT");
+        }
+
+        throw new InvalidOperationException("TERMINAL_START_FAILED");
     }
 
-    private static void TryMaximizeChart(PreparedInstance prepared)
+    private void TryApplyChartLayout(CloudJob job, string terminalPath)
+    {
+        var terminal = EnumerateTerminalProcesses()
+            .FirstOrDefault(item =>
+                string.Equals(item.Path, terminalPath, StringComparison.OrdinalIgnoreCase));
+        if (terminal.Pid <= 0) return;
+
+        if (_maximizedProcessByInstance.TryGetValue(job.InstanceId, out var appliedPid) &&
+            appliedPid == terminal.Pid)
+            return;
+
+        var instancePath = GetInstancePath(job.InstanceId);
+        var prepared = new PreparedInstance(
+            instancePath,
+            terminalPath,
+            Path.Combine(instancePath, "MQL5", "Presets", "SCENOVA-Cloud.set"),
+            Path.Combine(instancePath, "cloud-start.ini"),
+            job.Symbol);
+
+        if (TryMaximizeChart(prepared))
+            _maximizedProcessByInstance[job.InstanceId] = terminal.Pid;
+    }
+
+    private static bool TryMaximizeChart(PreparedInstance prepared)
     {
         try
         {
             var terminal = EnumerateTerminalProcesses()
                 .FirstOrDefault(item =>
                     string.Equals(item.Path, prepared.TerminalPath, StringComparison.OrdinalIgnoreCase));
-            if (terminal.Pid <= 0) return;
+            if (terminal.Pid <= 0) return false;
 
             using var process = Process.GetProcessById(terminal.Pid);
             var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
@@ -730,6 +644,7 @@ internal sealed class Mt5Runtime
                 var mainWindow = process.MainWindowHandle;
                 if (mainWindow != IntPtr.Zero)
                 {
+                    ShowWindowAsync(mainWindow, SwMaximize);
                     IntPtr chartWindow = IntPtr.Zero;
                     EnumChildWindows(
                         mainWindow,
@@ -757,7 +672,7 @@ internal sealed class Mt5Runtime
                         if (parent != IntPtr.Zero)
                             SendMessage(parent, WmMdiMaximize, chartWindow, IntPtr.Zero);
                         ShowWindowAsync(chartWindow, SwMaximize);
-                        return;
+                        return true;
                     }
                 }
 
@@ -769,6 +684,8 @@ internal sealed class Mt5Runtime
             // Window layout is cosmetic. Never fail or restart a healthy MT5
             // only because Windows did not expose the chart child in time.
         }
+
+        return false;
     }
 
     private static bool EaReadyMarkerMatches(string markerPath, string instanceId)
