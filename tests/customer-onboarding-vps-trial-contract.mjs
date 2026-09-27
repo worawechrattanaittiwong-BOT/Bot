@@ -25,20 +25,24 @@ assert.match(accountSecurity, /@Post\("account\/phone\/verify-otp"\)/);
 assert.match(accountSecurity, /purpose='ACCOUNT'/);
 assert.match(accountSecurity, /PHONE_OTP_SENT/);
 assert.match(accountSecurity, /PHONE_VERIFIED/);
+assert.match(accountSecurity, /phoneVerification:\s*\{/);
+assert.match(accountSecurity, /smsAvailable:\s*this\.sms\.configured\(\)/);
 assert.match(phoneUtils, /raw\.startsWith\("00"\)/);
 assert.match(phoneUtils, /national\.startsWith\(ccDigits\)/);
 assert.match(accountPage, /phoneOtpCooldown/);
 assert.match(accountPage, /resendAfterSeconds/);
 assert.match(accountPage, /ส่งรหัสยืนยัน/);
 assert.match(accountPage, /ยืนยันเบอร์มือถือ/);
+assert.match(accountPage, /data\?\.phoneVerification\?\.smsAvailable/);
+assert.doesNotMatch(accountPage, /trialAccess/);
 assert.doesNotMatch(accountPage, /placeholder="000000"/);
 assert.match(trialApi, /defaultDelivery:\s*\n\s*phone\?\.e164 && this\.sms\.configured\(\) \? "SMS" : "EMAIL"/);
 assert.match(trialApi, /@Body\(\) body: \{ delivery\?: "SMS" \| "EMAIL" \}/);
 assert.match(trialApi, /requestOtp\(msisdn, otpCode, "LOCAL_TRIAL"\)/);
 assert.match(botApi, /reason: "TRIAL_LOCAL_ONLY"/);
 
-assert.match(packages, /<h2>ทดลอง Local MT5<\/h2>/);
-assert.match(packages, /LOCAL ONLY · ไม่รวม VPS/);
+assert.match(packages, /<h2>ทดลองใช้งาน Local MT5<\/h2>/);
+assert.match(packages, /LOCAL MT5 TRIAL/);
 assert.match(packages, /JSON\.stringify\(\{ delivery: trialDelivery \}\)/);
 assert.match(packages, /SMS · \{trial\?\.phone\?\.masked \|\| "ยังไม่ผูกเบอร์"\}/);
 
