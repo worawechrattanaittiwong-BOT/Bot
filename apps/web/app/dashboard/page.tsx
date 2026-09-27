@@ -142,7 +142,6 @@ export default function DashboardPage() {
   const ownerVpsDialogRef = useRef<HTMLDialogElement | null>(null);
   const [ownerVpsPassword, setOwnerVpsPassword] = useState("");
   const [ownerVpsBusy, setOwnerVpsBusy] = useState(false);
-  const [vpsMoveCardDismissed, setVpsMoveCardDismissed] = useState(false);
   const [vpsMigrationProgress, setVpsMigrationProgress] = useState<any>(null);
   const [dismissedCloudUpdateKey, setDismissedCloudUpdateKey] = useState("");
   const [tradingSymbol, setTradingSymbol] = useState("");
@@ -1924,7 +1923,6 @@ export default function DashboardPage() {
     // The migration continues in the background and reports compact progress
     // instead of opening the full-screen Server Terminal.
     ownerVpsDialogRef.current?.close();
-    setVpsMoveCardDismissed(true);
     setVpsMigrationProgress({
       status:"RUNNING",
       stage:"REQUESTING",
@@ -3087,80 +3085,6 @@ export default function DashboardPage() {
 
         {activeView === "account" && (
           <div className="account-workspace">
-            {vpsMigrationProgress && (
-              <section className={"panel purple setup-panel cc-vps-migration-status status-" + String(vpsMigrationProgress.status || "RUNNING").toLowerCase()} role="status" aria-live="polite">
-                <div className="cc-vps-migration-status-main">
-                  <span className="cc-vps-migration-status-icon">{vpsMigrationProgress.status === "SUCCESS" ? "✓" : vpsMigrationProgress.status === "FAILED" ? "!" : "↻"}</span>
-                  <div>
-                    <div className="eyebrow">SCENOVA VPS MIGRATION</div>
-                    <h2>{vpsMigrationProgress.status === "SUCCESS" ? "ย้ายระบบสำเร็จ" : vpsMigrationProgress.status === "FAILED" ? "ย้ายระบบไม่สำเร็จ" : "กำลังย้ายระบบ"}</h2>
-                    <p className="muted">{vpsMigrationProgress.message}</p>
-                  </div>
-                </div>
-                {vpsMigrationProgress.status === "RUNNING" && <div className="cc-vps-migration-status-progress" aria-hidden="true"><i/></div>}
-                {vpsMigrationProgress.status === "FAILED" && (
-                  <button
-                    type="button"
-                    className="btn primary"
-                    onClick={()=>{
-                      setVpsMigrationProgress(null);
-                      setVpsMoveCardDismissed(false);
-                    }}
-                  >
-                    ลองใหม่
-                  </button>
-                )}
-              </section>
-            )}
-
-            {data.selectedSlot?.mode === "LOCAL" && data.account && !vpsMoveCardDismissed && !vpsMigrationProgress && (
-              <section className="panel purple setup-panel owner-vps-move-panel">
-                <div className="setup-heading">
-                  <div>
-                    <div className="eyebrow">{isOwner ? "OWNER · MOVE TO VPS" : "MOVE TO VPS"}</div>
-                    <h2>ย้ายบัญชีนี้ไป SCENOVA VPS</h2>
-                    <p className="muted">
-                      {isOwner
-                        ? "ย้าย MT5 เดิมจาก Local ไป Trading VPS · OWNER ไม่ต้องซื้อแพ็ก Cloud เพิ่ม"
-                        : customerHasCloudMigrationAccess
-                          ? "สิทธิ์ VPS พร้อมแล้ว · ย้าย MT5 เดิมจาก Local ไป VPS ได้จากตรงนี้"
-                          : "บัญชีนี้ยังไม่มีสิทธิ์ VPS ซื้อแพ็กเกจก่อน แล้วกลับมากดย้ายได้ทันที"}
-                    </p>
-                  </div>
-                </div>
-                {isOwner || customerHasCloudMigrationAccess ? (
-                  <>
-                    <button
-                      type="button"
-                      className="btn primary btn-lg"
-                      disabled={
-                        ownerVpsBusy ||
-                        busy ||
-                        desired === "RUNNING" ||
-                        state === "RUNNING" ||
-                        Number(data.instance?.metrics?.positions || 0) > 0
-                      }
-                      onClick={openOwnerVpsMigration}
-                    >
-                      {ownerVpsBusy ? "กำลังเตรียม VPS..." : "ย้ายบัญชีนี้ไป VPS"}
-                    </button>
-                    <div className="help">
-                      {desired === "RUNNING" || state === "RUNNING"
-                        ? "กรุณากด Safe Stop ก่อนย้าย"
-                        : Number(data.instance?.metrics?.positions || 0) > 0
-                          ? "ต้องไม่มี Position ค้างก่อนย้ายไป VPS"
-                          : "พร้อมย้าย · ระบบจะปิดการ์ดนี้ทันทีเมื่อเริ่มย้าย"}
-                    </div>
-                  </>
-                ) : (
-                  <div className="owner-vps-entitlement-row">
-                    <div className="help">ไม่มีสิทธิ์ VPS สำหรับบัญชีนี้</div>
-                    <a className="btn primary btn-lg" href="/packages?system=cloud&from=mt5-ea">ซื้อแพ็กเกจ VPS →</a>
-                  </div>
-                )}
-              </section>
-            )}
-
             {data.selectedSlot?.mode === "LOCAL" ? (
               <>
                 <Mt5ConnectionExperience
@@ -3172,6 +3096,24 @@ export default function DashboardPage() {
                   message={activationMessage}
                   error={error}
                   onDownload={downloadWindowsInstaller}
+                  vpsMove={data.account ? {
+                    hasAccess:isOwner || customerHasCloudMigrationAccess,
+                    isOwner,
+                    busy:ownerVpsBusy,
+                    blockedReason:
+                      desired === "RUNNING" || state === "RUNNING"
+                        ? "กรุณากด Safe Stop ก่อนย้ายไป VPS"
+                        : Number(data.instance?.metrics?.positions || 0) > 0
+                          ? "ต้องไม่มี Position ค้างก่อนย้ายไป VPS"
+                          : "",
+                    packageHref:"/packages?system=cloud&from=mt5-ea",
+                    progress:vpsMigrationProgress,
+                    onMove:openOwnerVpsMigration,
+                    onRetry:()=>{
+                      setVpsMigrationProgress(null);
+                      setError("");
+                    }
+                  } : undefined}
                 />
               </>
             ) : (

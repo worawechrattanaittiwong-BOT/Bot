@@ -4,6 +4,21 @@ import { useEffect, useRef, useState } from "react";
 import { ScenovaIcon } from "./ScenovaIcon";
 import styles from "./Mt5ConnectionExperience.module.css";
 
+type VpsMoveProps = {
+  hasAccess: boolean;
+  isOwner?: boolean;
+  busy?: boolean;
+  blockedReason?: string;
+  packageHref?: string;
+  progress?: {
+    status?: string;
+    stage?: string;
+    message?: string;
+  } | null;
+  onMove?: () => void;
+  onRetry?: () => void;
+};
+
 type Props = {
   account?: { account_number?: string; broker?: string; broker_server?: string } | null;
   online: boolean;
@@ -13,6 +28,7 @@ type Props = {
   message: string;
   error: string;
   onDownload: () => Promise<void>;
+  vpsMove?: VpsMoveProps;
 };
 
 const steps = [
@@ -65,6 +81,82 @@ export function Mt5ConnectionExperience(props: Props) {
             <div><b>{statusText}</b><small>{props.online ? "MT5 ส่งสถานะมายัง SCENOVA แล้ว" : "ทำตามคู่มือเพื่อเชื่อมบัญชีของคุณ"}</small></div>
           </div>
           <button className={styles.primary} onClick={() => showGuide(1)}>ดาวน์โหลดติดตั้ง<span>→</span></button>
+
+          {props.vpsMove && (
+            <div className={styles.vpsMove}>
+              {props.vpsMove.progress ? (
+                <div className={
+                  styles.vpsProgress + " " +
+                  (String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "SUCCESS"
+                    ? styles.vpsProgressSuccess
+                    : String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "FAILED"
+                      ? styles.vpsProgressFailed
+                      : styles.vpsProgressRunning)
+                }>
+                  <div className={styles.vpsProgressHead}>
+                    <span className={styles.vpsProgressIcon}>
+                      {String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "SUCCESS"
+                        ? "✓"
+                        : String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "FAILED"
+                          ? "!"
+                          : "↻"}
+                    </span>
+                    <div>
+                      <small>SCENOVA VPS</small>
+                      <b>
+                        {String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "SUCCESS"
+                          ? "ย้ายระบบสำเร็จ"
+                          : String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "FAILED"
+                            ? "ย้ายระบบไม่สำเร็จ"
+                            : "กำลังย้ายระบบ"}
+                      </b>
+                    </div>
+                  </div>
+                  <p>{props.vpsMove.progress.message || "กำลังเตรียมระบบ VPS"}</p>
+                  {String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "RUNNING" && (
+                    <div className={styles.vpsProgressBar} aria-hidden="true"><i/></div>
+                  )}
+                  {String(props.vpsMove.progress.status || "RUNNING").toUpperCase() === "FAILED" && props.vpsMove.onRetry && (
+                    <button type="button" className={styles.vpsRetry} onClick={props.vpsMove.onRetry}>ลองใหม่</button>
+                  )}
+                </div>
+              ) : (
+                <div className={styles.vpsAction}>
+                  <div className={styles.vpsActionCopy}>
+                    <span className={styles.vpsBadge}>VPS OPTION</span>
+                    <div>
+                      <b>{props.vpsMove.hasAccess ? "ต้องการย้ายไป SCENOVA VPS?" : "ต้องการใช้ SCENOVA VPS?"}</b>
+                      <small>
+                        {props.vpsMove.hasAccess
+                          ? "ย้ายบัญชี MT5 เดิมจาก Local ไป VPS โดยใช้บัญชีเดิม"
+                          : "บัญชีนี้ยังไม่มีสิทธิ์ VPS เลือกแพ็กเกจก่อนแล้วกลับมาย้ายได้ทันที"}
+                      </small>
+                    </div>
+                  </div>
+
+                  {props.vpsMove.hasAccess ? (
+                    <>
+                      <button
+                        type="button"
+                        className={styles.vpsButton}
+                        disabled={Boolean(props.vpsMove.busy || props.vpsMove.blockedReason)}
+                        onClick={props.vpsMove.onMove}
+                      >
+                        {props.vpsMove.busy ? "กำลังเตรียม VPS..." : "ย้ายไป VPS"}
+                        <span>→</span>
+                      </button>
+                      {props.vpsMove.blockedReason && <small className={styles.vpsReason}>{props.vpsMove.blockedReason}</small>}
+                      {props.vpsMove.isOwner && <small className={styles.vpsOwnerNote}>OWNER ใช้ VPS ได้โดยไม่ต้องซื้อแพ็กเพิ่ม</small>}
+                    </>
+                  ) : (
+                    <a className={styles.vpsButton} href={props.vpsMove.packageHref || "/packages?system=cloud"}>
+                      ซื้อแพ็กเกจ VPS <span>→</span>
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className={styles.art}>
           <img src="/assets/scenova-mt5-companion-v2.png" alt="มาสคอต SCENOVA ตัวกลมสีขาวม่วง อยู่ข้างหน้าจอ MT5"/>
