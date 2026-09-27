@@ -129,6 +129,7 @@ export default function PackagesPage() {
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<"good" | "bad" | "info">("info");
   const [otp, setOtp] = useState("");
+  const [trialDelivery, setTrialDelivery] = useState<"SMS" | "EMAIL">("SMS");
   const [cooldown, setCooldown] = useState(0);
   const [activeSystem, setActiveSystem] = useState<"LOCAL" | "CLOUD">("CLOUD");
   const [trialOpen, setTrialOpen] = useState(true);
@@ -155,6 +156,11 @@ export default function PackagesPage() {
     ]);
     setAccount(a);
     setTrial(t);
+    setTrialDelivery(
+      t?.defaultDelivery === "SMS" && t?.phone?.masked && t?.smsConfigured
+        ? "SMS"
+        : "EMAIL"
+    );
     setLocalCatalog(lc);
     setLocalOrders(Array.isArray(lo) ? lo : []);
     setCloudCatalog(cc);
@@ -168,6 +174,11 @@ export default function PackagesPage() {
     if (!getToken()) {
       window.location.replace("/login");
       return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const requestedSystem = String(params.get("system") || "").toUpperCase();
+    if (requestedSystem === "LOCAL" || requestedSystem === "CLOUD") {
+      setActiveSystem(requestedSystem);
     }
     load()
       .catch((error: unknown) => {
@@ -238,13 +249,16 @@ export default function PackagesPage() {
     setBusy("otp-send");
     setMessage("");
     try {
-      const result = await api("/trial-access/request-code", { method: "POST" });
+      const result = await api("/trial-access/request-code", {
+        method: "POST",
+        body: JSON.stringify({ delivery: trialDelivery })
+      });
       setCooldown(Number(result.resendAfterSeconds || 60));
       setOtp("");
       const channel = result.deliveryChannel === "SMS" ? "SMS" : "อีเมล";
       notify(
         "good",
-        `ส่ง OTP ทาง${channel} ไปที่ ${result.deliveryMasked} แล้ว${result.fallbackUsed ? " · ระบบใช้งาน SMS สำรองเนื่องจากส่งอีเมลไม่สำเร็จ" : ""}`
+        `ส่ง OTP ทาง${channel} ไปที่ ${result.deliveryMasked} แล้ว${result.fallbackUsed ? " · ช่องทางหลักมีปัญหา ระบบส่งผ่านช่องทางสำรองให้แล้ว" : ""}`
       );
       await load();
     } catch (error: unknown) {
@@ -382,9 +396,9 @@ export default function PackagesPage() {
               <div className={styles.titleWithIcon}>
                 <span className={styles.icon}><ScenovaIcon name="status" size={19}/></span>
                 <div>
-                  <span className={styles.eyebrow}>SCENOVA TRIAL ACCESS</span>
-                  <h2>ทดลองใช้งาน SCENOVA</h2>
-                  <p>ขอรหัสยืนยันได้ทันที ระบบส่งไปยังอีเมลที่ลงทะเบียนเป็นช่องทางหลัก และใช้ SMS สำรองเมื่อส่งอีเมลไม่สำเร็จ</p>
+                  <span className={styles.eyebrow}>LOCAL TRIAL</span>
+                  <h2>ทดลอง Local MT5</h2>
+                  <p>Trial ใช้กับระบบ Local เท่านั้น · รับ OTP ทาง SMS หรืออีเมลได้</p>
                 </div>
               </div>
               <div className={styles.trialHeaderActions}>
@@ -397,38 +411,13 @@ export default function PackagesPage() {
                   onClick={() => setTrialOpen(value => !value)}
                   aria-expanded={trialOpen}
                 >
-                  {trialOpen ? "ย่อรายละเอียด" : trialReady ? "ดูรายละเอียด" : "ขอรหัสทดลอง"}
+                  {trialOpen ? "ย่อ" : trialReady ? "ดูสิทธิ์ Local Trial" : "ขอ Local Trial"}
                 </button>
               </div>
             </div>
 
             {trialOpen && <div className={styles.trialBody}>
-              <div className={styles.trialSteps}>
-                <TrialStep
-                  number="1"
-                  title="ช่องทางหลัก"
-                  value={trial?.email?.masked || "อีเมลที่ลงทะเบียน"}
-                  done={Boolean(trial?.email)}
-                />
-                <TrialStep
-                  number="2"
-                  title="ยืนยัน OTP"
-                  value={
-                    trial?.latestCode
-                      ? trial.latestCode.delivery_channel === "SMS"
-                        ? "ส่งทาง SMS แล้ว"
-                        : "ส่งทางอีเมลแล้ว"
-                      : "พร้อมขอรหัส"
-                  }
-                  done={trialReady}
-                />
-                <TrialStep
-                  number="3"
-                  title="สิทธิ์ทดลอง"
-                  value={trialReady ? "พร้อมใช้งาน" : `${trial?.trialDays || 1} วัน`}
-                  done={trialReady}
-                />
-              </div>
+              <div className={styles.localTrialBadge}>LOCAL ONLY · ไม่รวม VPS</div>
 
               {trialReady ? (
                 <div className={styles.trialSuccess}>
@@ -447,29 +436,33 @@ export default function PackagesPage() {
                 <div className={styles.otpPanel}>
                   <div className={styles.deliveryNote}>
                     <div>
-                      <b>รับรหัสทางอีเมลเป็นค่าเริ่มต้น</b>
-                      <span>
-                        เมื่อกดขอรหัส ระบบจะส่ง OTP ไปยัง {trial?.email?.masked || "อีเมลที่ลงทะเบียน"} ก่อน
-                        {trial?.phone?.masked
-                          ? ` หากผู้ให้บริการอีเมลส่งไม่สำเร็จ ระบบจะลองส่ง SMS ไปที่ ${trial.phone.masked} ให้อัตโนมัติ`
-                          : " หากส่งอีเมลไม่สำเร็จและยังไม่มีเบอร์มือถือสำรอง ระบบจะแจ้งให้เพิ่มเบอร์ใน My Account"}
-                      </span>
+                      <b>เลือกช่องทางรับ OTP</b>
+                      <span>รหัสมีอายุ {trial?.otp?.expiresInMinutes || 10} นาที · ขอได้อีก {sendsRemaining} ครั้งวันนี้</span>
+                    </div>
+                    <div className={styles.deliveryChoice}>
+                      <button
+                        type="button"
+                        className={trialDelivery === "SMS" ? styles.deliveryActive : ""}
+                        disabled={!trial?.smsConfigured || !trial?.phone?.masked}
+                        onClick={()=>setTrialDelivery("SMS")}
+                      >
+                        SMS · {trial?.phone?.masked || "ยังไม่ผูกเบอร์"}
+                      </button>
+                      <button
+                        type="button"
+                        className={trialDelivery === "EMAIL" ? styles.deliveryActive : ""}
+                        disabled={!trial?.emailConfigured}
+                        onClick={()=>setTrialDelivery("EMAIL")}
+                      >
+                        Email · {trial?.email?.masked || account.user.email}
+                      </button>
                     </div>
                   </div>
-                  <div className={styles.otpMeta}>
-                    <div>
-                      <span>ช่องทางหลัก</span>
-                      <strong>{trial?.email?.masked || account.user.email}</strong>
+                  {!trial?.phone?.masked && (
+                    <div className={styles.smsWarning}>
+                      ต้องการ OTP ทาง SMS? <a href="/account#phone-settings">ผูกเบอร์มือถือใน My Account</a>
                     </div>
-                    <div>
-                      <span>ช่องทางสำรอง</span>
-                      <strong>{trial?.phone?.masked || "ยังไม่ผูกเบอร์มือถือ"}</strong>
-                    </div>
-                    <div>
-                      <span>อายุรหัส / สิทธิ์ขอวันนี้</span>
-                      <strong>{trial?.otp?.expiresInMinutes || 10} นาที · เหลือ {sendsRemaining} ครั้ง</strong>
-                    </div>
-                  </div>
+                  )}
 
                   <div className={styles.otpActions}>
                     <button
@@ -480,7 +473,9 @@ export default function PackagesPage() {
                         Boolean(busy) ||
                         cooldown > 0 ||
                         sendsRemaining <= 0 ||
-                        !trial?.verificationConfigured
+                        !trial?.verificationConfigured ||
+                        (trialDelivery === "SMS" && (!trial?.smsConfigured || !trial?.phone?.masked)) ||
+                        (trialDelivery === "EMAIL" && !trial?.emailConfigured)
                       }
                     >
                       {busy === "otp-send"
@@ -488,8 +483,8 @@ export default function PackagesPage() {
                         : cooldown > 0
                           ? `ส่งใหม่ได้ใน ${cooldown}s`
                           : trial?.latestCode
-                            ? "ส่ง OTP ใหม่"
-                            : "ส่ง OTP"}
+                            ? `ส่ง OTP ทาง ${trialDelivery === "SMS" ? "SMS" : "Email"} ใหม่`
+                            : `ส่ง OTP ทาง ${trialDelivery === "SMS" ? "SMS" : "Email"}`}
                     </button>
 
                     <label className={styles.otpInput}>
@@ -516,8 +511,8 @@ export default function PackagesPage() {
                     </button>
                   </div>
 
-                  {!trial?.emailConfigured && trial?.smsConfigured && (
-                    <div className={styles.smsWarning}>ระบบอีเมลยังไม่พร้อมใช้งานในขณะนี้ คำขอ OTP จะใช้ SMS เป็นช่องทางหลักชั่วคราว</div>
+                  {!trial?.smsConfigured && trial?.emailConfigured && (
+                    <div className={styles.smsWarning}>SMS OTP ยังไม่พร้อมใช้งาน สามารถใช้อีเมลยืนยัน Local Trial ได้</div>
                   )}
                   {!trial?.verificationConfigured && (
                     <div className={styles.smsWarning}>ระบบส่ง OTP ยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ</div>
