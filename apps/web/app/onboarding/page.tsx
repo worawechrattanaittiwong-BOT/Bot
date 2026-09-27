@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, getToken } from "../../lib/api";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
@@ -65,21 +65,7 @@ export default function OnboardingPage() {
     data?.instance?.mt5_account_id
   );
   const accessAllowed = Boolean(data?.entitlement?.allowed);
-  const trialPending = String(data?.trialRequest?.status || "").toUpperCase() === "PENDING";
   const currentStep = accessAllowed ? 3 : accountLinked ? 2 : 1;
-
-  const primaryAction = useMemo(() => {
-    if (!accountLinked) {
-      return { label: "เชื่อมบัญชี MT5", href: "/dashboard?view=account&welcome=1" };
-    }
-    if (!accessAllowed) {
-      return {
-        label: trialPending ? "ดูสถานะ Trial" : "ขอ Trial / เปิดสิทธิ์",
-        href: "/dashboard?view=account&welcome=1"
-      };
-    }
-    return { label: "เข้าสู่ Dashboard", href: "/dashboard?view=overview" };
-  }, [accountLinked, accessAllowed, trialPending]);
 
   function logout() {
     localStorage.removeItem("bot_token");
@@ -187,18 +173,6 @@ export default function OnboardingPage() {
             <button type="button" onClick={()=>void load()}>ลองใหม่</button>
           </div>
         )}
-
-        <section className={styles.actionPanel}>
-          <div>
-            <small>RECOMMENDED NEXT STEP</small>
-            <h3>{loading ? "กำลังตรวจสอบสถานะ..." : newAccount && !accountLinked ? "เลือกระบบที่ต้องการใช้งาน" : primaryAction.label}</h3>
-            <p>{newAccount && !accountLinked ? "เริ่มจาก VPS หรือ Local ได้ทันที" : "ดำเนินการต่อเพื่อเริ่มใช้งานบัญชีของคุณ"}</p>
-          </div>
-          <div className={styles.actions}>
-            {!(newAccount && !accountLinked) && <a className={styles.primary} href={loading ? "#" : primaryAction.href} aria-disabled={loading}>ดำเนินการต่อ <span>→</span></a>}
-            <a className={styles.secondary} href="/dashboard?view=overview">ไป Dashboard</a>
-          </div>
-        </section>
 
       </section>
     </main>
