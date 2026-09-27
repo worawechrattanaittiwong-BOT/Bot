@@ -1,6 +1,6 @@
 export const CLOUD_SERVER_RELEASE = {
-  workerVersion: "2.2.15",
-  setupVersion: "0.6.13",
+  workerVersion: "2.2.16",
+  setupVersion: "0.6.14",
   setupUrl: "https://snvea-bot.online/downloads/SCENOVA-Cloud-Setup.exe",
   manifestUrl: "https://snvea-bot.online/downloads/SCENOVA-Cloud-Server.json"
 } as const;
