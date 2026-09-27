@@ -28,6 +28,10 @@ export class SmsService {
     };
   }
 
+  private liveEnabled() {
+    return String(process.env.THAIBULKSMS_LIVE_MODE || "").trim().toLowerCase() === "true";
+  }
+
   private otpConfigured() {
     const otp = this.otpCredentials();
     return Boolean(/^\d+$/.test(otp.key) && otp.secret);
@@ -36,8 +40,11 @@ export class SmsService {
   configured() {
     const sms = this.smsCredentials();
     return Boolean(
-      this.otpConfigured() ||
-      (sms.key && sms.secret && sms.sender)
+      this.liveEnabled() &&
+      (
+        this.otpConfigured() ||
+        (sms.key && sms.secret && sms.sender)
+      )
     );
   }
 
@@ -46,6 +53,13 @@ export class SmsService {
     fallbackCode: string,
     purpose: "ACCOUNT" | "LOCAL_TRIAL" = "ACCOUNT"
   ): Promise<OtpDelivery> {
+    if (!this.liveEnabled()) {
+      this.logger.warn("ThaiBulkSMS request blocked because LIVE_MODE is not enabled");
+      throw new ServiceUnavailableException(
+        "บริการยืนยันเบอร์ผ่าน SMS ยังไม่พร้อมใช้งาน กรุณาลองใหม่ภายหลัง"
+      );
+    }
+
     if (this.otpConfigured()) {
       const otp = this.otpCredentials();
       const form = new URLSearchParams();
