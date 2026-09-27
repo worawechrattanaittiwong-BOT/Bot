@@ -75,8 +75,8 @@
 .stepCard b{font-size:clamp(12px,1vw,16px);line-height:1.6}
 .stepCard small{display:block;color:#a2b1d0;font-size:12px;line-height:1.7;margin-top:8px}
 .stepLink{margin-top:auto;padding-top:14px;font-size:var(--ui-type-meta);color:#b7a0ff}
-.tutorialAside{display:grid;align-content:start;min-width:0}
-.tutorialVisual{position:relative;overflow:hidden;min-height:280px;border:1px solid var(--edge);border-radius:16px;background:radial-gradient(ellipse at 66% 88%,rgba(67,42,157,.82),transparent 58%),linear-gradient(145deg,#10172b,#0b1020 78%);box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
+.tutorialAside{display:flex;align-self:stretch;min-width:0}
+.tutorialVisual{position:relative;overflow:hidden;flex:1;min-height:280px;border:1px solid var(--edge);border-radius:16px;background:radial-gradient(ellipse at 66% 88%,rgba(67,42,157,.82),transparent 58%),linear-gradient(145deg,#10172b,#0b1020 78%);box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
 .tutorialVisual:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.015),transparent 35%,rgba(5,8,18,.16))}
 .tutorialVisual>img{position:absolute;inset:0;display:block;width:100%;height:100%;min-height:280px;max-height:none;object-fit:contain;object-position:center bottom;mix-blend-mode:screen;filter:saturate(1.05) contrast(1.03)}
 .bottom{display:grid;grid-template-columns:3fr 1fr;gap:18px}
