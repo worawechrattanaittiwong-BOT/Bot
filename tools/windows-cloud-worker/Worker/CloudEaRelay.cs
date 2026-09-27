@@ -34,7 +34,7 @@ internal sealed class CloudEaRelay
             }
             catch
             {
-                // Relay is best-effort per pass. EA retries on its next heartbeat.
+                // Relay retries per pass; EA remains fail-closed until a verified server response returns.
             }
 
             try
