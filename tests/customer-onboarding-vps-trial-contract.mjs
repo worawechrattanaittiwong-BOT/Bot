@@ -49,7 +49,11 @@ assert.match(packages, /LOCAL MT5 TRIAL/);
 assert.match(packages, /JSON\.stringify\(\{ delivery: trialDelivery \}\)/);
 assert.match(packages, /SMS · \{trial\?\.phone\?\.masked \|\| "ยังไม่ผูกเบอร์"\}/);
 
-assert.match(onboarding, /SELECT RUNTIME/);
+assert.match(onboarding, /runtimeMode/);
+assert.match(onboarding, /SCENOVA CLOUD/);
+assert.match(onboarding, /YOUR PC \/ VPS/);
+assert.match(onboarding, /เปิดโลกการเทรดจากมือถือ/);
+assert.match(onboarding, /ใช้ MT5 บนเครื่องของคุณ/);
 assert.match(onboarding, /\/packages\?system=cloud&from=onboarding/);
 assert.match(onboarding, /\/dashboard\?view=account&welcome=1&setup=local/);
 assert.match(onboarding, /params\.get\("new"\) === "1" \|\| params\.get\("verified"\) === "1"/);
