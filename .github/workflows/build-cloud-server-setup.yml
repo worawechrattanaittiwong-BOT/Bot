@@ -56,8 +56,8 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          & "cloud-worker-publish/SCENOVA-CloudWorker.exe" --provision-self-test
-          if ($LASTEXITCODE -ne 0) {
+          $p = Start-Process -FilePath "cloud-worker-publish/SCENOVA-CloudWorker.exe" -ArgumentList "--provision-self-test" -Wait -PassThru
+          if ($p.ExitCode -ne 0) {
             throw "Cloud Worker provisioning self-test failed"
           }
 
@@ -65,8 +65,8 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          & "cloud-worker-publish/SCENOVA-CloudWorker.exe" --fleet-update-self-test
-          if ($LASTEXITCODE -ne 0) {
+          $p = Start-Process -FilePath "cloud-worker-publish/SCENOVA-CloudWorker.exe" -ArgumentList "--fleet-update-self-test" -Wait -PassThru
+          if ($p.ExitCode -ne 0) {
             throw "Cloud Worker Fleet Update self-test failed"
           }
 
