@@ -7,6 +7,9 @@ foreach ($pattern in @(
   'ulong\s+g_lastHeartbeatTickMs\s*=\s*0;',
   'ulong\s+heartbeatNowMs\s*=\s*GetTickCount64\(\);',
   'heartbeatNowMs\s*-\s*g_lastHeartbeatTickMs\s*>=\s*heartbeatIntervalMs'
+  'bool\s+ArmRuntimeTimer\(\)'
+  'EventSetTimer\(1\)'
+  'g_lastTimerEventTickMs\s*=\s*GetTickCount64\(\)'
 )) {
   if ($ea -notmatch $pattern) { throw "Market-closed EA heartbeat regex missing: $pattern" }
 }
@@ -20,7 +23,9 @@ foreach ($required in @(
   'if(day == SATURDAY || day == SUNDAY)',
   'if(MarketSessionStateNow() == "CLOSED")',
   'return "MARKET_CLOSED";',
-  'marketSessionState'
+  'marketSessionState',
+  'Keep control-plane liveness ahead of chart/history work',
+  'SCENOVA FATAL: runtime timer could not be armed'
 )) {
   if (-not $ea.Contains($required)) { throw "Market-closed EA contract missing: $required" }
 }

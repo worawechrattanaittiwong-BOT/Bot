@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.75"
-#define SCENOVA_EA_VERSION "1.0.75"
-#define SCENOVA_PRODUCT_VERSION "1.0.75"
+#property version   "1.0.76"
+#define SCENOVA_EA_VERSION "1.0.76"
+#define SCENOVA_PRODUCT_VERSION "1.0.76"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -265,6 +265,8 @@ int    g_ordersInWindow = 0;
 datetime g_lastHeartbeat = 0;
 ulong  g_lastHeartbeatTickMs = 0;
 ulong  g_lastMarketTickMs = 0;
+ulong  g_lastTimerEventTickMs = 0;
+ulong  g_timerArmedAtTickMs = 0;
 datetime g_lastSuccessfulHeartbeat = 0;
 datetime g_lastRunAuthorization = 0;
 datetime g_lastServerContactAt = 0;
@@ -1379,6 +1381,34 @@ double EmaTrailReference(int direction)
       : g_ema21;
 }
 
+bool ArmRuntimeTimer()
+{
+   EventKillTimer();
+
+   // Production heartbeat/control does not need a 200 ms timer. A one-second
+   // system timer is intentionally used because it remains independent from
+   // market ticks while avoiding high-resolution startup/queue edge cases on
+   // unattended Windows Server terminals. Price-sensitive execution remains
+   // tick-driven in OnTick().
+   for(int attempt=1; attempt<=5; attempt++)
+   {
+      ResetLastError();
+      if(EventSetTimer(1))
+      {
+         g_timerArmedAtTickMs=GetTickCount64();
+         g_lastTimerEventTickMs=0;
+         Print("SCENOVA runtime timer armed. period=1s attempt=",attempt);
+         return true;
+      }
+
+      int err=GetLastError();
+      Print("SCENOVA runtime timer arm failed. attempt=",attempt," error=",err);
+      Sleep(200);
+   }
+
+   return false;
+}
+
 int OnInit()
 {
    for(int t = 0; t < EMA_TF_COUNT; t++)
@@ -1523,10 +1553,6 @@ int OnInit()
       }
    }
 
-   // A 200 ms timer drives the controlled multi-position queue. Heartbeat keeps
-   // its own second-based gate and is never sent at this frequency.
-   EventSetMillisecondTimer(200);
-
    // Strategy Tester cannot use WebRequest. In tester mode only,
    // run the trading engine locally so historical tests work even when markets are closed.
    if(MQLInfoInteger(MQL_TESTER))
@@ -1542,11 +1568,18 @@ int OnInit()
    if(!MQLInfoInteger(MQL_TESTER))
    {
       // Establish control immediately at startup instead of waiting for the
-      // first timer pass. This also makes Cloud provisioning failures visible
-      // in Experts as soon as MT5 loads the EA.
+      // first timer pass. This also gives Windows/MT5 time to finish account
+      // initialization before the independent runtime timer is armed.
       g_lastHeartbeatTickMs = GetTickCount64();
       g_lastHeartbeat = TimeCurrent();
       SendHeartbeat();
+   }
+
+   if(!ArmRuntimeTimer())
+   {
+      Print("SCENOVA FATAL: runtime timer could not be armed; refusing false-online state.");
+      RenderChartStatus("TIMER ERROR",clrTomato,"Restart MT5 / check terminal log");
+      return(INIT_FAILED);
    }
 
    RefreshChartStatus(true);
@@ -4441,6 +4474,23 @@ bool FastProfitClosePriority()
 
 void OnTick()
 {
+   // Timer watchdog. Standard timer is independent of market ticks, but a live
+   // tick gives us a second recovery path if the terminal ever drops timer
+   // delivery after startup.
+   if(!MQLInfoInteger(MQL_TESTER))
+   {
+      ulong watchdogNow=GetTickCount64();
+      ulong timerReference=g_lastTimerEventTickMs>0
+         ? g_lastTimerEventTickMs
+         : g_timerArmedAtTickMs;
+      if(timerReference>0 && watchdogNow>=timerReference &&
+         watchdogNow-timerReference>7000)
+      {
+         Print("SCENOVA timer watchdog: no timer event for >7s; re-arming.");
+         ArmRuntimeTimer();
+      }
+   }
+
    // Local execution clock: all price-sensitive management reads the MT5 tick
    // directly. SaaS heartbeat/telemetry is never a price source for trading.
    g_lastMarketTickMs=GetTickCount64();
@@ -5082,6 +5132,7 @@ void OnTick()
 
 void OnTimer()
 {
+   g_lastTimerEventTickMs=GetTickCount64();
    SampleSpread();
 
    // Timer fallback: close/retry first and do not enter WebRequest while a
@@ -5090,18 +5141,6 @@ void OnTimer()
    {
       RefreshChartStatus();
       return;
-   }
-
-   bool zeroGridFastPath =
-      ZeroGridPositionCount() > 0 ||
-      ZeroGridPendingCount() > 0 ||
-      (ZeroGridModeEnabled() &&
-       BasketPositionCount() <= 0 &&
-       RescuePositionCount() <= 0);
-   if(!zeroGridFastPath)
-   {
-      RefreshEmaIntelligence(false);
-      DrawEmaCurves();
    }
 
    if(MQLInfoInteger(MQL_TESTER))
@@ -5157,6 +5196,21 @@ void OnTimer()
       g_lastHeartbeat=TimeCurrent();
       SendHeartbeat();
       networkUsed=true;
+   }
+
+   // Keep control-plane liveness ahead of chart/history work. CopyRates,
+   // CopyBuffer and chart redraw are allowed to lag on a closed/disconnected
+   // market, but they must never prevent the EA heartbeat from reaching SaaS.
+   bool zeroGridFastPath =
+      ZeroGridPositionCount() > 0 ||
+      ZeroGridPendingCount() > 0 ||
+      (ZeroGridModeEnabled() &&
+       BasketPositionCount() <= 0 &&
+       RescuePositionCount() <= 0);
+   if(!zeroGridFastPath)
+   {
+      RefreshEmaIntelligence(false);
+      DrawEmaCurves();
    }
 
    bool zeroDeferredJournalReady=false;
