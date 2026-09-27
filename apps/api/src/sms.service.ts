@@ -1,4 +1,4 @@
-import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 
 type OtpDelivery = {
   provider: "TBS_OTP" | "SMS_FALLBACK";
@@ -6,8 +6,13 @@ type OtpDelivery = {
   refno: string | null;
 };
 
+const SMS_REQUEST_TIMEOUT_MS = 10_000;
+const SMS_UNAVAILABLE_MESSAGE =
+  "ไม่สามารถส่งรหัสยืนยันทาง SMS ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง";
+
 @Injectable()
 export class SmsService {
+  private readonly logger = new Logger(SmsService.name);
   private otpCredentials() {
     return {
       key: String(process.env.THAIBULKSMS_OTP_KEY || "").trim(),
@@ -55,7 +60,8 @@ export class SmsService {
             Accept: "application/json",
             "Content-Type": "application/x-www-form-urlencoded"
           },
-          body: form.toString()
+          body: form.toString(),
+          signal: AbortSignal.timeout(SMS_REQUEST_TIMEOUT_MS)
         });
 
         let result: any = null;
@@ -70,12 +76,14 @@ export class SmsService {
         }
 
         const detail = this.providerError(result) || `HTTP ${response.status}`;
-        throw new ServiceUnavailableException(`ส่ง OTP ไม่สำเร็จ: ${detail}`);
+        this.logger.warn(`ThaiBulkSMS OTP request failed: ${detail}`);
+        throw new ServiceUnavailableException(SMS_UNAVAILABLE_MESSAGE);
       } catch (error: any) {
         if (error instanceof ServiceUnavailableException) throw error;
-        throw new ServiceUnavailableException(
-          `ส่ง OTP ไม่สำเร็จ: ${String(error?.message || error || "network error").slice(0, 180)}`
+        this.logger.warn(
+          `ThaiBulkSMS OTP request network error: ${String(error?.message || error || "network error").slice(0, 180)}`
         );
+        throw new ServiceUnavailableException(SMS_UNAVAILABLE_MESSAGE);
       }
     }
 
@@ -87,19 +95,18 @@ export class SmsService {
 
     const otp = this.otpCredentials();
     if (otp.key || otp.secret) {
-      throw new ServiceUnavailableException(
-        "THAIBULKSMS OTP Application Key/Secret ไม่ถูกต้อง กรุณาตั้งค่า Application Key แบบตัวเลข"
-      );
+      this.logger.error("ThaiBulkSMS OTP credentials are incomplete or invalid");
+      throw new ServiceUnavailableException(SMS_UNAVAILABLE_MESSAGE);
     }
 
-    throw new ServiceUnavailableException(
-      "ระบบ OTP ยังไม่ได้ตั้งค่า ThaiBulkSMS OTP หรือ SMS credentials"
-    );
+    this.logger.error("ThaiBulkSMS OTP/SMS credentials are not configured");
+    throw new ServiceUnavailableException(SMS_UNAVAILABLE_MESSAGE);
   }
 
   async verifyOtp(token: string, pin: string) {
     if (!this.otpConfigured()) {
-      throw new ServiceUnavailableException("ระบบ OTP Application ยังไม่ได้ตั้งค่า credentials");
+      this.logger.error("ThaiBulkSMS OTP verify requested without OTP credentials");
+      throw new ServiceUnavailableException("บริการยืนยันรหัส SMS ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่ภายหลัง");
     }
 
     const otp = this.otpCredentials();
@@ -117,11 +124,15 @@ export class SmsService {
           Accept: "application/json",
           "Content-Type": "application/x-www-form-urlencoded"
         },
-        body: form.toString()
+        body: form.toString(),
+        signal: AbortSignal.timeout(SMS_REQUEST_TIMEOUT_MS)
       });
     } catch (error: any) {
+      this.logger.warn(
+        `ThaiBulkSMS OTP verify network error: ${String(error?.message || error || "network error").slice(0, 160)}`
+      );
       throw new ServiceUnavailableException(
-        `ตรวจสอบ OTP ไม่สำเร็จ: ${String(error?.message || error || "network error").slice(0, 160)}`
+        "ไม่สามารถตรวจสอบรหัสยืนยันได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง"
       );
     }
 
@@ -133,9 +144,10 @@ export class SmsService {
     }
     if (response.status === 400) return false;
 
-    const detail = this.providerError(result);
+    const detail = this.providerError(result) || `HTTP ${response.status}`;
+    this.logger.warn(`ThaiBulkSMS OTP verify failed: ${detail}`);
     throw new ServiceUnavailableException(
-      detail ? `ตรวจสอบ OTP ไม่สำเร็จ: ${detail}` : "ตรวจสอบ OTP ไม่สำเร็จ กรุณาลองใหม่"
+      "ไม่สามารถตรวจสอบรหัสยืนยันได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง"
     );
   }
 
@@ -147,17 +159,16 @@ export class SmsService {
     const { key, secret, sender } = this.smsCredentials();
 
     if (!key || !secret || !sender) {
-      throw new ServiceUnavailableException(
-        "SMS fallback ยังไม่ได้ตั้งค่า THAIBULKSMS_API_KEY / API_SECRET / SENDER"
-      );
+      this.logger.error("ThaiBulkSMS SMS credentials are not configured");
+      throw new ServiceUnavailableException(SMS_UNAVAILABLE_MESSAGE);
     }
 
     const form = new URLSearchParams();
     form.set("sender", sender);
     form.set("msisdn", msisdn);
     const message = purpose === "LOCAL_TRIAL"
-      ? `SCENOVA OTP ${code} ยืนยัน Local Trial ใช้ภายใน 10 นาที ห้ามส่งต่อรหัสนี้`
-      : `SCENOVA OTP ${code} ยืนยันเบอร์มือถือ ใช้ภายใน 10 นาที ห้ามส่งต่อรหัสนี้`;
+      ? `SCENOVA: รหัสยืนยัน Local MT5 Trial ${code} ใช้ได้ 10 นาที กรุณาอย่าเปิดเผยรหัสนี้แก่ผู้อื่น`
+      : `SCENOVA: รหัสยืนยันเบอร์มือถือ ${code} ใช้ได้ 10 นาที กรุณาอย่าเปิดเผยรหัสนี้แก่ผู้อื่น`;
     form.set("message", message);
 
     let response: Response;
@@ -169,22 +180,23 @@ export class SmsService {
           "Content-Type": "application/x-www-form-urlencoded",
           Authorization: "Basic " + Buffer.from(`${key}:${secret}`).toString("base64")
         },
-        body: form.toString()
+        body: form.toString(),
+        signal: AbortSignal.timeout(SMS_REQUEST_TIMEOUT_MS)
       });
     } catch (error: any) {
-      throw new ServiceUnavailableException(
-        `ส่ง SMS ไม่สำเร็จ: ${String(error?.message || error || "network error").slice(0, 160)}`
+      this.logger.warn(
+        `ThaiBulkSMS SMS network error: ${String(error?.message || error || "network error").slice(0, 160)}`
       );
+      throw new ServiceUnavailableException(SMS_UNAVAILABLE_MESSAGE);
     }
 
     let result: any = null;
     try { result = await response.json(); } catch {}
 
     if (!response.ok) {
-      const detail = this.providerError(result);
-      throw new ServiceUnavailableException(
-        detail ? `ส่ง SMS ไม่สำเร็จ: ${detail}` : `ส่ง SMS ไม่สำเร็จ (HTTP ${response.status})`
-      );
+      const detail = this.providerError(result) || `HTTP ${response.status}`;
+      this.logger.warn(`ThaiBulkSMS SMS send failed: ${detail}`);
+      throw new ServiceUnavailableException(SMS_UNAVAILABLE_MESSAGE);
     }
 
     return result || { ok: true };
