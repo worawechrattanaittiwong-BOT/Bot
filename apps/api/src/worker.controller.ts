@@ -43,6 +43,8 @@ export class WorkerController {
         journalLogUpdatedAt?: string;
         latestExpertLog?: string;
         latestJournalLog?: string;
+        brokerPlatform?: string;
+        brokerPlatformError?: string;
       }>;
     };
   }) {
@@ -86,7 +88,10 @@ export class WorkerController {
               expertLogUpdatedAt: String(item?.expertLogUpdatedAt || "").slice(0,64),
               journalLogUpdatedAt: String(item?.journalLogUpdatedAt || "").slice(0,64),
               latestExpertLog: String(item?.latestExpertLog || "").slice(0,1800),
-              latestJournalLog: String(item?.latestJournalLog || "").slice(0,1800)
+              latestJournalLog: String(item?.latestJournalLog || "").slice(0,1800),
+              brokerPlatform: String(item?.brokerPlatform || "")
+                .toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32),
+              brokerPlatformError: String(item?.brokerPlatformError || "").slice(0,240)
             }))
           : []
       };
