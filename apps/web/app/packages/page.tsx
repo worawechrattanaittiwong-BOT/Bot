@@ -374,10 +374,11 @@ export default function PackagesPage() {
         <div className={styles.shell}>
           <header className={styles.header}>
             <div>
-              <div className={styles.breadcrumb}>Membership <span>/</span> Packages</div>
+              <div className={styles.breadcrumb}>SCENOVA <span>/</span> Membership</div>
               <span className={styles.eyebrow}>SCENOVA MEMBERSHIP</span>
-              <h1>สิทธิ์ที่ใช่ สำหรับคุณ</h1>
-              <p>เลือกแพ็กเกจที่เหมาะกับการใช้งานของคุณ</p>
+              <h1>อีกระดับของการใช้งาน<br/><span className={styles.heroAccent}>ในแบบที่คุณเลือก</span></h1>
+              <p>Local หรือ Cloud เลือกแพ็กเกจที่ลงตัวกับคุณ<br/>จัดการสิทธิ์และการชำระเงินได้ในที่เดียว</p>
+              <div className={styles.heroDetails}><span>Local & Cloud MT5</span><i aria-hidden="true"/><span>ชำระครั้งเดียวตามระยะเวลาที่เลือก</span></div>
             </div>
             <div className={styles.currentAccess}>
               <span>สิทธิ์ปัจจุบัน</span>
@@ -386,7 +387,7 @@ export default function PackagesPage() {
           </header>
 
           {message && (
-            <div className={`${styles.message} ${messageKind === "good" ? styles.good : messageKind === "bad" ? styles.bad : ""}`}>
+            <div role="status" className={`${styles.message} ${messageKind === "good" ? styles.good : messageKind === "bad" ? styles.bad : ""}`}>
               {message}
             </div>
           )}
@@ -526,9 +527,10 @@ export default function PackagesPage() {
             <section className={styles.paymentPanel}>
               <div className={styles.sectionHeader}>
                 <div>
-                  <span className={styles.eyebrow}>PAYMENT IN PROGRESS</span>
-                  <h2>รายการรอชำระ</h2>
+                  <span className={styles.eyebrow}>PAYMENT DETAILS</span>
+                  <h2>ดำเนินการชำระเงิน</h2>
                 </div>
+                <span className={styles.paymentStatus}>รายการรอดำเนินการ</span>
               </div>
               <div className={styles.pendingGrid}>
                 <PaymentCard
@@ -544,8 +546,8 @@ export default function PackagesPage() {
           <section className={styles.accessCenter}>
             <div className={styles.centerTop}>
               <div>
-                <span className={styles.eyebrow}>SCENOVA ACCESS CENTER</span>
-                <h2>เลือกระบบที่ต้องการใช้งาน</h2>
+                <span className={styles.eyebrow}>YOUR MEMBERSHIP</span>
+                <h2>เลือกแพ็กเกจของคุณ</h2>
                 <p>เลือกใช้งานบนเครื่องของคุณ หรือทำงานต่อเนื่องบน Cloud</p>
               </div>
               <div className={styles.systemSwitcher} role="tablist" aria-label="เลือกระบบแพ็กเกจ">
@@ -619,21 +621,6 @@ export default function PackagesPage() {
                 ).map(item => <span key={item}>{item}</span>)}
               </div>
 
-              <div className={styles.promoBox}>
-                <div>
-                  <span className={styles.eyebrow}>PROMOTION CODE</span>
-                  <b>มีรหัสส่วนลด?</b>
-                  <small>ใส่รหัส SNV-XXXX-XXXX ระบบจะตรวจสิทธิ์และคำนวณราคาจาก Server ตอนสร้างรายการ</small>
-                </div>
-                <input
-                  value={promoCode}
-                  onChange={event => setPromoCode(event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 13))}
-                  placeholder="SNV-XXXX-XXXX"
-                  autoCapitalize="characters"
-                  spellCheck={false}
-                />
-              </div>
-
               <div className={`${legacy.root} ${styles.legacyPackageScope}`}>
                 <div className={styles.packageGrid}>
                   {(activeCatalog?.packages || []).map(pack => (
@@ -654,6 +641,7 @@ export default function PackagesPage() {
                   ))}
                 </div>
               </div>
+              <div className={styles.purchaseNote}><ScenovaIcon name="wallet" size={17}/><span>ชำระผ่าน QR Payment · เพิ่มรหัสโปรโมชั่นได้ในขั้นตอนยืนยันแพ็กเกจ</span></div>
             </div>
           </section>
 
@@ -683,9 +671,10 @@ export default function PackagesPage() {
         >
           {checkoutPack && <>
             <div className={styles.checkoutHeading}>
-              <div><span className={styles.eyebrow}>SCENOVA CHECKOUT</span><h2 id="checkout-title">ยืนยันแพ็กเกจ</h2><p>ตรวจสอบรายละเอียดก่อนชำระเงิน</p></div>
+              <div><span className={styles.eyebrow}>SCENOVA CHECKOUT</span><h2 id="checkout-title">แพ็กเกจที่คุณเลือก</h2><p>ตรวจสอบรายละเอียด แล้วดำเนินการชำระเงิน</p></div>
               <button type="button" className={styles.closeDialog} aria-label="ปิดหน้าต่างชำระเงิน" disabled={Boolean(busy)} onClick={() => checkoutDialog.current?.close()}>×</button>
             </div>
+            <div className={styles.checkoutSteps} aria-label="ขั้นตอนการชำระเงิน"><span aria-current="step"><b>01</b> ยืนยันแพ็กเกจ</span><i aria-hidden="true"/><span><b>02</b> สแกนชำระเงิน</span></div>
             <div className={styles.checkoutColumns}>
               <aside className={styles.checkoutPlan}>
                 <ScenovaIcon name={isLocalSystem ? "account" : "cloud"} size={32}/>
@@ -701,8 +690,8 @@ export default function PackagesPage() {
                 <div className={styles.summaryRow}><span>แพ็กเกจ {checkoutPack.months} เดือน</span><b>฿{money(checkoutPack.price_satang)}</b></div>
                 <label className={styles.promoField} htmlFor="package-promo">รหัสโปรโมชั่น</label>
                 <div className={styles.promoInput}><input id="package-promo" placeholder="กรอกรหัสโปรโมชั่น" value={promoCode} onChange={event => setPromoCode(event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 13))} autoCapitalize="characters" spellCheck={false}/><button type="button" onClick={() => setPromoCode(value => value.trim().toUpperCase())}>ใช้รหัส</button></div>
-                <small className={styles.checkoutHint}>ระบบจะตรวจสอบสิทธิ์และคำนวณส่วนลดจาก Server ตอนสร้างรายการ</small>
-                <div className={`${styles.summaryRow} ${styles.summaryTotal}`}><span>ยอดที่ต้องชำระ</span><strong>฿{money(checkoutPack.price_satang)}</strong></div>
+                <small className={styles.checkoutHint}>ส่วนลดจะได้รับการตรวจสอบเมื่อสร้างรายการ ยอดหลังส่วนลดจะแสดงในรายการชำระเงิน</small>
+                <div className={`${styles.summaryRow} ${styles.summaryTotal}`}><span>ราคาแพ็กเกจ<small>ก่อนใช้ส่วนลด</small></span><strong>฿{money(checkoutPack.price_satang)}</strong></div>
                 <p className={styles.checkoutHint}>ชำระครั้งเดียว · ไม่มีการต่ออายุอัตโนมัติ</p>
                 <div className={styles.paymentMethod}><ScenovaIcon name="wallet" size={23}/><div><b>พร้อมเพย์ / QR Payment</b><p>สร้าง QR แล้วสแกนด้วยแอปธนาคารของคุณ</p></div></div>
                 <p className={styles.checkoutHint}>สิทธิ์จะเปิดใช้งานเมื่อยืนยันการชำระเงินสำเร็จ ติดตามสถานะได้ที่รายการรอชำระ</p>
@@ -710,7 +699,7 @@ export default function PackagesPage() {
                 <button type="button" className={styles.confirmCheckout} disabled={Boolean(busy)} onClick={() => {
                   checkoutDialog.current?.close();
                   void (isLocalSystem ? checkoutLocal(checkoutPack.months) : checkoutCloud(checkoutPack.months));
-                }}>สร้าง QR ชำระเงิน ฿{money(checkoutPack.price_satang)}</button>
+                }}>สร้าง QR เพื่อชำระเงิน <span aria-hidden="true">↗</span></button>
                 <button type="button" className={styles.cancelCheckout} disabled={Boolean(busy)} onClick={() => checkoutDialog.current?.close()}>ยกเลิก</button>
               </div>
             </div>
@@ -798,9 +787,9 @@ function PackageCard({
   return (
     <article className={`${legacy.package} ${styles.planCard} ${featured ? styles.planFeatured : ""}`}>
       {featured && <span className={styles.recommended}>แนะนำ</span>}
-      <span className={legacy.eyebrow}>{system === "LOCAL" ? "LOCAL MT5" : "VPS / CLOUD MT5"}</span>
+      <span className={styles.planType}><ScenovaIcon name={system === "LOCAL" ? "account" : "cloud"} size={19}/>{system === "LOCAL" ? "LOCAL MT5" : "CLOUD MT5"}</span>
       <h3>{pack.months} เดือน</h3>
-      <div className={legacy.price}>
+      <div className={`${legacy.price} ${styles.planPrice}`}>
         {pack.price_satang > 0 ? `฿${money(pack.price_satang)}` : "รอประกาศราคา"}
         <small>
           {pack.price_satang > 0
@@ -808,7 +797,7 @@ function PackageCard({
             : "ราคาจะแสดงเมื่อพร้อมเปิดขาย"}
         </small>
       </div>
-      <div className={legacy.features}>
+      <div className={`${legacy.features} ${styles.planFeatures}`}>
         {features.map(feature => <span key={feature}>{feature}</span>)}
       </div>
       <button
@@ -817,7 +806,7 @@ function PackageCard({
         disabled={busy || !available}
         onClick={onBuy}
       >
-        {busy ? "กำลังดำเนินการ…" : label}
+        {busy ? "กำลังดำเนินการ…" : label}<span aria-hidden="true">↗</span>
       </button>
       <small className={legacy.muted}>ชำระครั้งเดียว ไม่ตัดเงินต่ออายุอัตโนมัติ</small>
     </article>
