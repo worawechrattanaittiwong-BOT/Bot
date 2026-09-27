@@ -50,7 +50,7 @@ internal sealed class Mt5Runtime
             if (!Guid.TryParse(instanceId, out _)) continue;
 
             var terminal = Path.Combine(instancePath, "terminal64.exe");
-            var chartRoot = Path.Combine(instancePath, "Profiles", "Charts");
+            var chartRoot = Path.Combine(instancePath, "MQL5", "Profiles", "Charts");
             var chartFiles = 0;
             try
             {
@@ -133,7 +133,8 @@ internal sealed class Mt5Runtime
             {
                 "InpApiBase=" + SafeIniValue(_config.EffectiveApiBase),
                 "InpInstanceId=" + SafeIniValue(job.InstanceId),
-                "InpInstallToken=" + SafeIniValue(job.InstallToken)
+                "InpInstallToken=" + SafeIniValue(job.InstallToken),
+                "InpCloudRelay=true"
             },
             Encoding.Unicode);
 
@@ -558,35 +559,43 @@ internal sealed class Mt5Runtime
 
     internal static void ResetCloudChartWorkspace(string instancePath)
     {
-        var profilesRoot = Path.Combine(instancePath, "Profiles");
-        var chartsRoot = Path.Combine(profilesRoot, "Charts");
+        // Portable MT5 stores chart profiles below MQL5\Profiles. Older copied
+        // templates may also contain a root Profiles folder, so clean both.
+        var profileRoots = new[]
+        {
+            Path.Combine(instancePath, "MQL5", "Profiles"),
+            Path.Combine(instancePath, "Profiles")
+        };
 
-        try
+        foreach (var profilesRoot in profileRoots)
         {
-            if (Directory.Exists(chartsRoot))
-                Directory.Delete(chartsRoot, recursive: true);
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException("MT5_CHART_PROFILE_RESET_FAILED", ex);
-        }
-
-        // MT5 may remember the last profile name separately. Remove only these
-        // profile-selection hints so startup is driven by cloud-start.ini.
-        foreach (var name in new[] { "lastprofile.ini", "LastProfile.ini" })
-        {
-            var path = Path.Combine(profilesRoot, name);
+            var chartsRoot = Path.Combine(profilesRoot, "Charts");
             try
             {
-                if (File.Exists(path)) File.Delete(path);
+                if (Directory.Exists(chartsRoot))
+                    Directory.Delete(chartsRoot, recursive: true);
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException("MT5_LAST_PROFILE_RESET_FAILED", ex);
+                throw new InvalidOperationException("MT5_CHART_PROFILE_RESET_FAILED", ex);
+            }
+
+            foreach (var name in new[] { "lastprofile.ini", "LastProfile.ini" })
+            {
+                var path = Path.Combine(profilesRoot, name);
+                try
+                {
+                    if (File.Exists(path)) File.Delete(path);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("MT5_LAST_PROFILE_RESET_FAILED", ex);
+                }
             }
         }
 
-        Directory.CreateDirectory(chartsRoot);
+        Directory.CreateDirectory(
+            Path.Combine(instancePath, "MQL5", "Profiles", "Charts"));
     }
 
     private static bool StartupConfigCleanupAllowed(string startupPath)

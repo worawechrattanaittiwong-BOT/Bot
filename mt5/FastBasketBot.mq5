@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.80"
-#define SCENOVA_EA_VERSION "1.0.80"
-#define SCENOVA_PRODUCT_VERSION "1.0.80"
+#property version   "1.0.81"
+#define SCENOVA_EA_VERSION "1.0.81"
+#define SCENOVA_PRODUCT_VERSION "1.0.81"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -126,6 +126,7 @@ enum ENUM_INDICATOR_V6_MODE
 input string          InpApiBase              = "https://snvea-bot.online/backend";
 input string          InpInstanceId           = "";
 input string          InpInstallToken         = "";
+input bool            InpCloudRelay           = false;
 input long            InpMagic                = 26090501;
 input double          InpLot                  = 0.01;
 input int             InpMaxPositions         = 10;
@@ -6204,13 +6205,15 @@ void SendHeartbeat()
 
    string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";
    ulong heartbeatStartedMs = GetTickCount64();
-   int code=HttpPostJsonTimeout(
-      heartbeatUrl,
-      payload,
-      response,
-      HeartbeatHttpTimeoutMs(),
-      true
-   );
+   int code=InpCloudRelay
+      ? CloudRelayHeartbeat(payload,response,HeartbeatHttpTimeoutMs())
+      : HttpPostJsonTimeout(
+           heartbeatUrl,
+           payload,
+           response,
+           HeartbeatHttpTimeoutMs(),
+           true
+        );
    int webError = g_lastHttpTransportError;
 
    // MT5 can occasionally return a non-HTTP positive value such as 1003
@@ -6221,13 +6224,15 @@ void SendHeartbeat()
    {
       Sleep(FLAT_HEARTBEAT_RETRY_DELAY_MS);
       response="";
-      code=HttpPostJsonTimeout(
-         heartbeatUrl,
-         payload,
-         response,
-         FLAT_HEARTBEAT_HTTP_TIMEOUT_MS,
-         true
-      );
+      code=InpCloudRelay
+         ? CloudRelayHeartbeat(payload,response,FLAT_HEARTBEAT_HTTP_TIMEOUT_MS)
+         : HttpPostJsonTimeout(
+              heartbeatUrl,
+              payload,
+              response,
+              FLAT_HEARTBEAT_HTTP_TIMEOUT_MS,
+              true
+           );
       webError=g_lastHttpTransportError;
    }
 
@@ -6435,6 +6440,62 @@ void AckCommand(long commandId)
       response,
       ExecutionAwareHttpTimeoutMs(500)
    );
+}
+
+int CloudRelayHeartbeat(string payload,string &response,int timeoutMs)
+{
+   string chartTag=IntegerToString((long)ChartID());
+   string requestFile="scenova-hb-"+chartTag+".request.txt";
+   string responseFile="scenova-hb-"+chartTag+".response.txt";
+   string requestId=
+      IntegerToString((long)TimeLocal())+"-"+IntegerToString((long)GetTickCount64());
+
+   FileDelete(responseFile);
+   ResetLastError();
+   int out=FileOpen(requestFile,FILE_WRITE|FILE_TXT|FILE_ANSI,0,CP_UTF8);
+   if(out==INVALID_HANDLE)
+   {
+      g_lastHttpTransportError=GetLastError();
+      response="";
+      return -1;
+   }
+
+   FileWriteString(out,requestId+"\r\n"+payload);
+   FileFlush(out);
+   FileClose(out);
+
+   ulong started=GetTickCount64();
+   int waitMs=MathMax(300,timeoutMs);
+   while(GetTickCount64()-started<(ulong)waitMs)
+   {
+      if(FileIsExist(responseFile))
+      {
+         int in=FileOpen(responseFile,FILE_READ|FILE_TXT|FILE_ANSI,0,CP_UTF8);
+         if(in!=INVALID_HANDLE)
+         {
+            string responseId=FileReadString(in);
+            string statusText=FileReadString(in);
+            string body=FileReadString(in);
+            FileClose(in);
+
+            if(responseId==requestId)
+            {
+               FileDelete(responseFile);
+               FileDelete(requestFile);
+               response=body;
+               g_lastHttpTransportError=0;
+               return (int)StringToInteger(statusText);
+            }
+         }
+      }
+      Sleep(25);
+   }
+
+   FileDelete(requestFile);
+   FileDelete(responseFile);
+   response="";
+   g_lastHttpTransportError=5901;
+   return -1;
 }
 
 int HttpPostJsonTimeout(

@@ -80,6 +80,7 @@ internal static class ProvisioningSelfTest
                 AssertContains(preset, "InpApiBase=https://snvea-bot.online/backend", "canonical API base");
                 AssertContains(preset, "InpInstanceId=" + item.Job.InstanceId, "instance id");
                 AssertContains(preset, "InpInstallToken=install-token-" + number, "install token");
+                AssertContains(preset, "InpCloudRelay=true", "Cloud heartbeat relay");
                 AssertContains(startup, "Login=" + (900000 + number), "account");
                 AssertContains(startup, "Password=demo-password-" + number, "password");
                 AssertContains(startup, "Server=SCENOVA-Demo-" + number, "broker server");
@@ -92,21 +93,21 @@ internal static class ProvisioningSelfTest
                     throw new InvalidOperationException($"credential crossed instance boundary at {number}");
             }
 
-            var chartProfile = Path.Combine(created[0].Prepared.InstancePath, "Profiles", "Charts", "Default");
+            var chartProfile = Path.Combine(created[0].Prepared.InstancePath, "MQL5", "Profiles", "Charts", "Default");
             Directory.CreateDirectory(chartProfile);
             File.WriteAllText(Path.Combine(chartProfile, "chart01.chr"), "old-chart-1");
             File.WriteAllText(Path.Combine(chartProfile, "chart02.chr"), "old-chart-2");
-            Directory.CreateDirectory(Path.Combine(created[0].Prepared.InstancePath, "Profiles"));
+            Directory.CreateDirectory(Path.Combine(created[0].Prepared.InstancePath, "MQL5", "Profiles"));
             File.WriteAllText(
-                Path.Combine(created[0].Prepared.InstancePath, "Profiles", "lastprofile.ini"),
+                Path.Combine(created[0].Prepared.InstancePath, "MQL5", "Profiles", "lastprofile.ini"),
                 "Default");
             Mt5Runtime.ResetCloudChartWorkspace(created[0].Prepared.InstancePath);
             if (Directory.EnumerateFiles(
-                    Path.Combine(created[0].Prepared.InstancePath, "Profiles", "Charts"),
+                    Path.Combine(created[0].Prepared.InstancePath, "MQL5", "Profiles", "Charts"),
                     "*",
                     SearchOption.AllDirectories).Any())
                 throw new InvalidOperationException("cloud chart workspace was not reset");
-            if (File.Exists(Path.Combine(created[0].Prepared.InstancePath, "Profiles", "lastprofile.ini")))
+            if (File.Exists(Path.Combine(created[0].Prepared.InstancePath, "MQL5", "Profiles", "lastprofile.ini")))
                 throw new InvalidOperationException("last profile hint was not reset");
 
             var sentinel = File.ReadAllText(Path.Combine(template, "template-sentinel.txt"));

@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 
 namespace Scenova.CloudWorker;
@@ -45,6 +46,19 @@ internal sealed class WorkerClient : IDisposable
             cancellationToken);
 
         response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<EaRelayResult> RelayEaHeartbeatAsync(
+        string payload,
+        CancellationToken cancellationToken)
+    {
+        using var content = new StringContent(payload, Encoding.UTF8, "application/json");
+        using var response = await _http.PostAsync(
+            _config.EffectiveApiBase.TrimEnd('/') + "/api/ea/heartbeat",
+            content,
+            cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return new EaRelayResult((int)response.StatusCode, body);
     }
 
     public async Task<byte[]> DownloadUpdateArtifactAsync(

@@ -2,13 +2,14 @@ namespace Scenova.CloudWorker;
 
 internal sealed class WorkerLoop
 {
-    internal const string Version = "2.2.7";
+    internal const string Version = "2.2.8";
 
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;
     private readonly Mt5Runtime _mt5;
     private readonly ServerUpdateManager _serverUpdates;
     private readonly FleetUpdateManager _updates;
+    private readonly CloudEaRelay _eaRelay;
     private readonly string _statusPath;
 
     public WorkerLoop(WorkerConfig config, WorkerClient client)
@@ -18,13 +19,18 @@ internal sealed class WorkerLoop
         _mt5 = new Mt5Runtime(config);
         _serverUpdates = new ServerUpdateManager(config, client);
         _updates = new FleetUpdateManager(config, client, _mt5);
+        _eaRelay = new CloudEaRelay(config, client);
         _statusPath = Path.Combine(config.Root, "worker", "last-status.txt");
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.Combine(_config.Root, "worker"));
+        using var relayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var relayTask = _eaRelay.RunAsync(relayCts.Token);
 
+        try
+        {
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -99,6 +105,12 @@ internal sealed class WorkerLoop
             {
                 break;
             }
+        }
+        }
+        finally
+        {
+            relayCts.Cancel();
+            try { await relayTask; } catch (OperationCanceledException) { }
         }
     }
 
