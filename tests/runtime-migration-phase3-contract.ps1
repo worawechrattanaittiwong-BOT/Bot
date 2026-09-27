@@ -99,7 +99,7 @@ Require $dashboard 'vpsMove=\{data\.account \?' 'MT5 connection experience recei
 Require $dashboard '/runtime-migration/owner/local-to-cloud' 'OWNER dashboard uses the protected migration endpoint'
 Require $mt5Connect 'ย้ายไป VPS' 'MT5 connection panel exposes the VPS migration action'
 Require $mt5Connect 'props\.vpsMove\.progress' 'MT5 connection panel renders migration progress inline'
-Require $mt5Connect 'OWNER ใช้ VPS ได้โดยไม่ต้องซื้อแพ็กเพิ่ม' 'OWNER VPS move bypasses customer membership UX'
+Require $dashboard 'hasAccess:isOwner \|\| customerHasCloudMigrationAccess' 'OWNER VPS move bypasses customer membership UX'
 Require $dashboard 'status:"SUCCESS".*title:"เริ่มบอทสำเร็จ".*message:"บอททำงานสำเร็จ"' 'Start terminal completes immediately after the Server accepts Start'
 Require $dashboard 'serverOperation\?\.kind === "START" \? 550 : 1200' 'Start success terminal auto-closes quickly'
 Require $dashboard 'const operationTerminal = serverOperation \|\| cloudUpdateOperation' 'Cloud update and Server actions share one terminal surface'
