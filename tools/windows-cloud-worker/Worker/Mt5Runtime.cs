@@ -64,6 +64,22 @@ internal sealed class Mt5Runtime
             .Count(item => item.Path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 
+    internal bool ShouldAutoLaunch(string instanceId, bool terminalRunning)
+    {
+        if (terminalRunning)
+        {
+            // A confirmed running MT5 rearms exactly one future automatic
+            // launch. Normal supervision never stops or restarts it here.
+            _autoLaunchAttempted.Remove(instanceId);
+            return false;
+        }
+
+        // Claim one launch attempt until a running terminal is observed again.
+        // If startup fails immediately, keep the claim to prevent a 10-second
+        // unattended launch loop.
+        return _autoLaunchAttempted.Add(instanceId);
+    }
+
     public IReadOnlyList<CloudInstanceDiagnostic> Diagnostics()
     {
         var result = new List<CloudInstanceDiagnostic>();
@@ -545,11 +561,11 @@ internal sealed class Mt5Runtime
         var terminal = Path.Combine(instancePath, "terminal64.exe");
 
         // Normal supervision must never recycle a healthy MT5 merely because
-        // the EA heartbeat is late/offline. Stop/start is reserved for an
-        // explicit fleet update, rollback, symbol reload, or runtime stop.
+        // the EA heartbeat is late/offline. A confirmed running process only
+        // rearms one future launch in case the user later closes MT5.
         if (HasExactTerminal(terminal))
         {
-            _autoLaunchAttempted.Add(job.InstanceId);
+            ShouldAutoLaunch(job.InstanceId, terminalRunning: true);
             TryApplyChartLayout(job, terminal);
 
             var startup = Path.Combine(instancePath, "cloud-start.ini");
@@ -562,12 +578,11 @@ internal sealed class Mt5Runtime
             return;
         }
 
-        // Open each assigned Cloud account once per Worker lifetime. If that
-        // terminal later exits, do not create an unattended restart loop.
-        if (_autoLaunchAttempted.Contains(job.InstanceId))
+        // If MT5 was previously observed running and the user closes it,
+        // reopen it once. If that launch fails before MT5 is observed running
+        // again, do not keep retrying and never stop another running process.
+        if (!ShouldAutoLaunch(job.InstanceId, terminalRunning: false))
             return;
-
-        _autoLaunchAttempted.Add(job.InstanceId);
 
         try
         {
