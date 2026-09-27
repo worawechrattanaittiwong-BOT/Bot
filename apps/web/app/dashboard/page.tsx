@@ -1141,6 +1141,15 @@ export default function DashboardPage() {
         : data?.account
           ? "รอ Windows Agent / MT5"
           : "ยังไม่ได้เชื่อมบัญชี";
+  const accountConnectionOnline =
+    String(data?.selectedSlot?.mode || "").toUpperCase() === "CLOUD"
+      ? isAgentOnline
+      : isMt5Online;
+  const accountConnectionLabel = accountConnectionOnline
+    ? "เชื่อมต่อแล้ว"
+    : data?.account
+      ? "ไม่เชื่อมต่อ"
+      : "ยังไม่ได้เชื่อมบัญชี";
   const controlStateLabel =
     startTimedOut
       ? "เริ่มบอทไม่สำเร็จ — พร้อมให้ลองใหม่"
@@ -3113,7 +3122,7 @@ export default function DashboardPage() {
               <>
                 <Mt5ConnectionExperience
                   account={data.account}
-                  online={isMt5Online}
+                  online={accountConnectionOnline}
                   busy={busy}
                   downloadBlocked={desired==="RUNNING" || (state==="RUNNING" && isMt5Online) || Number(data.instance?.metrics?.positions || 0)>0}
                   apiBase={mt5ApiBase}
@@ -3157,7 +3166,7 @@ export default function DashboardPage() {
                     <h2>{data.account ? (data.account.broker + " · " + data.account.account_number) : "ยังไม่ได้ผูกบัญชี MT5"}</h2>
                     <p className="muted">{data.account ? (data.account.broker_server + " · บัญชีนี้เป็น MT5 ที่กำลังใช้งาน") : "กรอกข้อมูล MT5 เพื่อเชื่อมต่อ Cloud Trading"}</p>
                   </div>
-                  <span className="badge"><span className={"dot "+(isMt5Online?"green":"red")}/>{connectionLabel}</span>
+                  <span className="badge"><span className={"dot "+(accountConnectionOnline?"green":"red")}/>{accountConnectionLabel}</span>
                 </div>
               </section>
             )}
