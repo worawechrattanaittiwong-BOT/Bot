@@ -398,9 +398,10 @@ export class RuntimeMigrationService {
         if (!source.agent_terminal_path) {
           throw new ConflictException("Local Agent has not reported its MT5 terminal path");
         }
-        if (!this.fresh(source.last_seen_at, 30_000)) {
-          throw new ConflictException("EA heartbeat must be fresh before verified Local stop");
-        }
+        // A Local runtime that is already STOPPED may legitimately have no fresh
+        // EA heartbeat. Runtime ownership is still released safely because the
+        // online Windows Agent must verify that the exact terminal64.exe process
+        // for this profile is absent/stopped before the handoff can commit.
       } else {
         if (!source.runner_id) throw new ConflictException("Cloud runtime is not bound to a Worker");
         const node = (await tx.query(
