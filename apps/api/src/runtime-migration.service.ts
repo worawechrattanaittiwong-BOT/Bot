@@ -168,6 +168,121 @@ export class RuntimeMigrationService {
     };
   }
 
+  async ownerLocalToCloud(
+    userId: string,
+    actor: string,
+    input: {
+      sourceSlotId: string;
+      tradingPassword?: string;
+    }
+  ) {
+    const prepared = await this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740094)");
+
+      const user = (await tx.query(
+        "SELECT id,role,status FROM users WHERE id=$1 FOR UPDATE",
+        [userId]
+      )).rows[0];
+      if (!user || user.status !== "ACTIVE" || !["OWNER", "ADMIN"].includes(String(user.role))) {
+        throw new ForbiddenException("Only OWNER/ADMIN can use direct Local to VPS migration");
+      }
+
+      const source = (await tx.query(
+        `SELECT ls.id,ls.mode,ls.status,bi.id instance_id,bi.mt5_account_id,
+           bi.desired_state,bi.actual_state,
+           COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions
+         FROM license_slots ls
+         JOIN bot_instances bi ON bi.slot_id=ls.id
+         WHERE ls.id=$1
+           AND ls.assigned_user_id=$2
+           AND ls.mode='LOCAL'
+           AND ls.status IN ('ACTIVE','AVAILABLE')
+         FOR UPDATE OF ls,bi`,
+        [input.sourceSlotId, userId]
+      )).rows[0];
+      if (!source) throw new NotFoundException("Owner Local runtime not found");
+      if (!source.mt5_account_id) throw new ConflictException("Local runtime has no MT5 account");
+      if (source.desired_state === "RUNNING" || source.actual_state === "RUNNING") {
+        throw new ConflictException("หยุดบอท Local ก่อนย้ายไป VPS");
+      }
+      if (Number(source.positions || 0) > 0) {
+        throw new ConflictException("ปิด Position ให้หมดก่อนย้ายไป VPS");
+      }
+
+      let target = (await tx.query(
+        `SELECT ls.*
+         FROM license_slots ls
+         LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
+         WHERE ls.assigned_user_id=$1
+           AND ls.owner_user_id=$1
+           AND ls.mode='CLOUD'
+           AND ls.status IN ('ACTIVE','AVAILABLE')
+           AND bi.id IS NULL
+         ORDER BY ls.slot_number,ls.created_at
+         LIMIT 1
+         FOR UPDATE OF ls`,
+        [userId]
+      )).rows[0];
+
+      if (!target) {
+        const next = (await tx.query(
+          "SELECT COALESCE(max(slot_number),0)::int + 1 AS next_slot FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD'",
+          [userId]
+        )).rows[0];
+        target = (await tx.query(
+          `INSERT INTO license_slots(
+             owner_user_id,assigned_user_id,mode,slot_number,slot_type,status,label
+           ) VALUES($1,$1,'CLOUD',$2,'OWNER','ACTIVE','Owner VPS')
+           RETURNING *`,
+          [userId, Number(next?.next_slot || 1)]
+        )).rows[0];
+      }
+
+      const runner = (await tx.query(
+        `SELECT w.runner_id,w.region,
+           GREATEST(COALESCE(l.occupied,0),COALESCE(w.active_instances,0)) AS used
+         FROM worker_nodes w
+         LEFT JOIN cloud_node_load l USING(runner_id)
+         WHERE w.status='ONLINE'
+           AND w.last_seen_at>now()-interval '30 seconds'
+           AND COALESCE(w.accepting_jobs,true)=true
+           AND COALESCE(w.capacity_blocked,false)=false
+           AND COALESCE(w.quarantined,false)=false
+           AND COALESCE(w.telemetry->>'templateReady','false')='true'
+           AND GREATEST(COALESCE(l.occupied,0),COALESCE(w.active_instances,0)) < w.capacity
+         ORDER BY used ASC,w.last_seen_at DESC,w.runner_id
+         LIMIT 1
+         FOR UPDATE OF w`
+      )).rows[0];
+      if (!runner) {
+        throw new ConflictException("ยังไม่มี SCENOVA VPS ที่พร้อมรับบัญชีนี้");
+      }
+
+      return {
+        targetSlotId: String(target.id),
+        runnerId: String(runner.runner_id),
+        runnerRegion: String(runner.region || "")
+      };
+    });
+
+    const migration = await this.request(userId, actor, {
+      sourceSlotId: input.sourceSlotId,
+      targetSlotId: prepared.targetSlotId,
+      tradingPassword: input.tradingPassword,
+      runnerId: prepared.runnerId,
+      confirmFlat: true,
+      confirmSwitch: true
+    });
+
+    return {
+      ok: true,
+      migration,
+      targetSlotId: prepared.targetSlotId,
+      runnerId: prepared.runnerId,
+      runnerRegion: prepared.runnerRegion
+    };
+  }
+
   async request(
     userId: string,
     actor: string,
