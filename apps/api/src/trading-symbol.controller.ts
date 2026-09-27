@@ -59,6 +59,57 @@ function marketWatchSymbols(metrics: any) {
   return Array.from(unique.values());
 }
 
+function instrumentRoot(value: unknown) {
+  const normalized = normalizeSymbol(value).toUpperCase().replace(/^XBT/, "BTC");
+  if (normalized === "BTCUSD" || normalized.startsWith("BTCUSD")) return "BTCUSD";
+  if (normalized === "XAUUSD" || normalized.startsWith("XAUUSD")) return "XAUUSD";
+  return normalized;
+}
+
+function isExnessBroker(broker: unknown, brokerServer: unknown) {
+  const name = String(broker || "").trim();
+  const server = String(brokerServer || "").trim();
+  return /exness/i.test(name) || /^Exness-/i.test(server);
+}
+
+function resolveBrokerTradingSymbol(
+  requested: unknown,
+  metrics: any,
+  broker: unknown,
+  brokerServer: unknown
+) {
+  const symbol = normalizeSymbol(requested);
+  if (!symbol) return "";
+
+  const symbols = marketWatchSymbols(metrics);
+  const exact = symbols.find(
+    item => item.toUpperCase() === symbol.toUpperCase()
+  );
+  const root = instrumentRoot(symbol);
+
+  // If the Web already supplied a broker-native variant (suffix/prefix),
+  // preserve it. Exact Market Watch spelling wins when available.
+  const canonicalRequest =
+    symbol.toUpperCase() === root ||
+    (root === "BTCUSD" && symbol.toUpperCase() === "XBTUSD");
+  if (!canonicalRequest) return exact || symbol;
+
+  const family = symbols
+    .filter(item => instrumentRoot(item) === root)
+    .sort((a, b) => a.length - b.length || a.localeCompare(b));
+
+  // Exness Cloud terminals used by SCENOVA expose Gold and BTC with the
+  // broker-native "m" suffix. Prefer a real Market Watch match, otherwise use
+  // the known Exness native name instead of opening a blank canonical chart.
+  if (isExnessBroker(broker, brokerServer) && (root === "BTCUSD" || root === "XAUUSD")) {
+    const native = family.find(item => item.toUpperCase().endsWith("M"));
+    if (native) return native;
+    return root + "m";
+  }
+
+  return exact || family[0] || symbol;
+}
+
 @Controller("bot/trading-symbol")
 @UseGuards(JwtGuard)
 export class TradingSymbolController {
@@ -70,11 +121,14 @@ export class TradingSymbolController {
       `SELECT
          bi.*,
          ls.mode,
+         ma.broker AS account_broker,
+         ma.broker_server AS account_broker_server,
          bs.settings,
          COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) AS positions,
          (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '90 seconds') AS agent_online
        FROM license_slots ls
        JOIN bot_instances bi ON bi.slot_id=ls.id
+       LEFT JOIN mt5_accounts ma ON ma.id=bi.mt5_account_id
        LEFT JOIN bot_settings bs ON bs.bot_instance_id=bi.id
        WHERE ls.id=$1
          AND ls.assigned_user_id=$2
@@ -89,10 +143,25 @@ export class TradingSymbolController {
   private snapshot(instance: any) {
     const settings = instance.settings || {};
     const metrics = instance.metrics || {};
-    const explicitSymbol = normalizeSymbol(settings.startupSymbol);
+    const explicitRequestedSymbol = normalizeSymbol(settings.startupSymbol);
     const activeSymbol = normalizeSymbol(metrics.symbol);
-    const fallbackSymbol = normalizeSymbol(settings.symbol);
-    const desiredSymbol = explicitSymbol || activeSymbol || fallbackSymbol || "XAUUSD";
+    const fallbackRequestedSymbol = normalizeSymbol(settings.symbol);
+    const desiredRequestedSymbol =
+      explicitRequestedSymbol || activeSymbol || fallbackRequestedSymbol || "XAUUSD";
+    const explicitSymbol = explicitRequestedSymbol
+      ? resolveBrokerTradingSymbol(
+          explicitRequestedSymbol,
+          metrics,
+          instance.account_broker,
+          instance.account_broker_server
+        )
+      : "";
+    const desiredSymbol = resolveBrokerTradingSymbol(
+      desiredRequestedSymbol,
+      metrics,
+      instance.account_broker,
+      instance.account_broker_server
+    );
     const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const matches = Boolean(
@@ -105,6 +174,7 @@ export class TradingSymbolController {
 
     return {
       desiredSymbol,
+      requestedSymbol: desiredRequestedSymbol,
       explicitSymbol: explicitSymbol || null,
       activeSymbol: activeSymbol || null,
       instrumentProfile: bitcoin ? "BTC" : "STANDARD",
@@ -139,14 +209,24 @@ export class TradingSymbolController {
     @Query("slotId") slotId = "",
     @Body() body: { symbol?: string }
   ) {
-    const symbol = normalizeSymbol(body.symbol);
-    if (!symbol) {
+    const requestedSymbol = normalizeSymbol(body.symbol);
+    if (!requestedSymbol) {
       throw new BadRequestException(
-        "Symbol ไม่ถูกต้อง กรุณาใช้ชื่อเดียวกับ MT5 Market Watch เช่น XAUUSDm, EURUSDm หรือ BTCUSDm"
+        "Symbol ไม่ถูกต้อง กรุณาเลือก Symbol ที่ต้องการเทรด"
       );
     }
 
     const instance = await this.selectedInstance(req.user.sub, slotId);
+    const symbol = resolveBrokerTradingSymbol(
+      requestedSymbol,
+      instance.metrics,
+      instance.account_broker,
+      instance.account_broker_server
+    );
+    if (!symbol) {
+      throw new BadRequestException("ไม่พบ Symbol จริงของบัญชี MT5 ที่เลือก");
+    }
+
     const savedControlMode = String(
       instance.settings?.controlMode || instance.settings?.engineMode || "AUTO"
     ).toUpperCase();
@@ -266,7 +346,9 @@ export class TradingSymbolController {
         instance.id,
         JSON.stringify({
           slotId,
+          requestedSymbol,
           symbol,
+          resolvedSymbol: symbol,
           previous: before.desiredSymbol,
           changed,
           activeSymbol: activeSymbol || null,
@@ -282,7 +364,9 @@ export class TradingSymbolController {
 
     return {
       ok: true,
+      requestedSymbol,
       symbol,
+      resolvedSymbol: symbol,
       changed,
       symbolChangeRequiresReconnect: requiresReconnect,
       queued: requiresReconnect,
@@ -322,8 +406,11 @@ export class EaTradingSymbolController {
     }
 
     const row = await this.db.one(
-      `SELECT bi.install_token_hash,bi.metrics,bs.settings
+      `SELECT bi.install_token_hash,bi.metrics,bs.settings,
+              ma.broker AS account_broker,
+              ma.broker_server AS account_broker_server
        FROM bot_instances bi
+       LEFT JOIN mt5_accounts ma ON ma.id=bi.mt5_account_id
        LEFT JOIN bot_settings bs ON bs.bot_instance_id=bi.id
        WHERE bi.id=$1`,
       [instanceId]
@@ -334,10 +421,17 @@ export class EaTradingSymbolController {
 
     const settings = row.settings || {};
     const metrics = row.metrics || {};
-    const explicitSymbol = normalizeSymbol(settings.startupSymbol);
+    const explicitRequestedSymbol = normalizeSymbol(settings.startupSymbol);
     const currentSymbol = normalizeSymbol(metrics.symbol);
     const legacySavedSymbol = normalizeSymbol(settings.symbol);
-    const desiredSymbol = explicitSymbol || currentSymbol || legacySavedSymbol || "XAUUSD";
+    const desiredRequestedSymbol =
+      explicitRequestedSymbol || currentSymbol || legacySavedSymbol || "XAUUSD";
+    const desiredSymbol = resolveBrokerTradingSymbol(
+      desiredRequestedSymbol,
+      metrics,
+      row.account_broker,
+      row.account_broker_server
+    );
     const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const currentMatchesDesired = Boolean(
@@ -347,7 +441,7 @@ export class EaTradingSymbolController {
     return {
       ok: true,
       desiredSymbol,
-      explicitSymbolSelected: Boolean(explicitSymbol),
+      explicitSymbolSelected: Boolean(explicitRequestedSymbol),
       currentSymbol: currentSymbol || null,
       symbolTradeMode: tradeMode,
       symbolTradingAllowed: tradingAllowed,
