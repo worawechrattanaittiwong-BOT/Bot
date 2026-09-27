@@ -222,7 +222,6 @@ export default function OnboardingPage() {
                   ? "ส่งคำขอ Trial แล้ว อยู่ระหว่างรอผู้ดูแลอนุมัติ"
                   : "หลังเชื่อม MT5 ให้ขอ Trial หรือเปิด Subscription ตามสิทธิ์ของบัญชี"}
             </p>
-            <div className={styles.cardFoot}>Trial และสมาชิกยังใช้กติกาเดิมของระบบ</div>
           </article>
         </div>
 
@@ -230,7 +229,7 @@ export default function OnboardingPage() {
           <div>
             <small>RECOMMENDED NEXT STEP</small>
             <h3>{loading ? "กำลังตรวจสอบสถานะ..." : newAccount && !accountLinked ? "เลือก VPS หรือ Local ด้านบน" : primaryAction.label}</h3>
-            <p>{newAccount && !accountLinked ? "หลังเลือกแล้วระบบจะพาไปแพ็กเกจ VPS หรือหน้าติดตั้ง Local อัตโนมัติ" : "หน้า MT5 และหน้าตั้งค่าบอทเดิมยังคงทำงานเหมือนเดิมทุกประการ"}</p>
+            <p>{newAccount && !accountLinked ? "เลือกวิธีใช้งานที่ต้องการเพื่อไปขั้นตอนถัดไป" : "ดำเนินการต่อเพื่อเริ่มใช้งานบัญชีของคุณ"}</p>
           </div>
           <div className={styles.actions}>
             {!(newAccount && !accountLinked) && <a className={styles.primary} href={loading ? "#" : primaryAction.href} aria-disabled={loading}>ดำเนินการต่อ <span>→</span></a>}
