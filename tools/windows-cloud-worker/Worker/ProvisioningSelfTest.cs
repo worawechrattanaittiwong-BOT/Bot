@@ -35,6 +35,18 @@ internal static class ProvisioningSelfTest
             var runtime = new Mt5Runtime(config);
             if (!runtime.TemplateReady) throw new InvalidOperationException("self-test template not ready");
 
+            var autoLaunchId = Guid.NewGuid().ToString();
+            if (!runtime.ShouldAutoLaunch(autoLaunchId, terminalRunning: false))
+                throw new InvalidOperationException("initial MT5 auto-launch was not allowed");
+            if (runtime.ShouldAutoLaunch(autoLaunchId, terminalRunning: false))
+                throw new InvalidOperationException("failed MT5 auto-launch would loop");
+            if (runtime.ShouldAutoLaunch(autoLaunchId, terminalRunning: true))
+                throw new InvalidOperationException("running MT5 requested an unnecessary launch");
+            if (!runtime.ShouldAutoLaunch(autoLaunchId, terminalRunning: false))
+                throw new InvalidOperationException("manual MT5 close was not rearmed for one launch");
+            if (runtime.ShouldAutoLaunch(autoLaunchId, terminalRunning: false))
+                throw new InvalidOperationException("manual-close recovery would loop");
+
             var brokerPlatforms = new BrokerPlatformManager(config);
             using (var brokerAccount = JsonDocument.Parse("123456"))
             using (var brokerSettings = JsonDocument.Parse("{}"))
@@ -157,6 +169,7 @@ internal static class ProvisioningSelfTest
             Console.WriteLine("PASS: SCENOVA API base is canonicalized before writing EA presets");
             Console.WriteLine("PASS: per-instance account, credential, token and startup files remain isolated");
             Console.WriteLine("PASS: duplicate MT5 chart profiles are cleared before Cloud startup");
+            Console.WriteLine("PASS: MT5 manual close rearms one automatic reopen without a launch loop");
             Console.WriteLine("PASS: MetaTrader automatic installer accepts success exit codes 0/1");
             Console.WriteLine("PASS: self-test never launches terminal64.exe or contacts a broker/backend");
             return 0;
