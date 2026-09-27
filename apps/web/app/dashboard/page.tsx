@@ -2378,6 +2378,110 @@ export default function DashboardPage() {
         )}
 
 
+        {operationTerminal && (
+          <div className="cc-server-operation-backdrop" role="presentation">
+            <section
+              className={"cc-server-operation-terminal status-" + String(operationTerminal.status || "RUNNING").toLowerCase()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cc-server-operation-title"
+            >
+              <header>
+                <div>
+                  <span className="cc-server-operation-icon">&gt;_</span>
+                  <div>
+                    <small>SCENOVA SERVER TERMINAL</small>
+                    <h3 id="cc-server-operation-title">{operationTerminal.title}</h3>
+                  </div>
+                </div>
+                {(operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
+                  <button
+                    type="button"
+                    aria-label="ปิด"
+                    onClick={()=>operationTerminal.kind==="CLOUD_UPDATE" ? setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey)) : setServerOperation(null)}
+                  >×</button>
+                )}
+              </header>
+              <div className="cc-server-operation-body">
+                <div className="cc-server-operation-line">
+                  <span className="prompt">server@scenova:~$</span>
+                  <b>{operationTerminal.status === "RUNNING" ? "processing" : operationTerminal.status === "SUCCESS" ? "completed" : "failed"}</b>
+                </div>
+                <p>{operationTerminal.message}</p>
+                {operationTerminal.kind === "SYMBOL" && operationTerminal.target && (
+                  <div className="cc-server-operation-meta"><span>Target Symbol</span><b>{operationTerminal.target}</b></div>
+                )}
+                {operationTerminal.kind === "CLOUD_UPDATE" && operationTerminal.target && (
+                  <div className="cc-server-operation-meta"><span>Target Version</span><b>v{operationTerminal.target}</b></div>
+                )}
+                <div className="cc-server-operation-progress" aria-hidden="true"><i/></div>
+              </div>
+              <footer>
+                <span>{operationTerminal.kind === "CLOUD_UPDATE"
+                  ? operationTerminal.status === "FAILED"
+                    ? "อัปเดตไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"
+                    : cloudUpdateState === "WAITING_SAFE"
+                      ? "ปิดหน้าต่างนี้เพื่อกดหยุดบอทเมื่อคุณพร้อม แล้วระบบจะอัปเดตต่อ"
+                      : "SCENOVA กำลังอัปเดตบัญชีนี้ใน Terminal เดียว"
+                  : operationTerminal.status === "RUNNING"
+                    ? "กำลังติดตามสถานะจาก Server อัตโนมัติทุก 1.5 วินาที"
+                    : operationTerminal.status === "SUCCESS"
+                      ? "สำเร็จ · หน้าต่างจะปิดอัตโนมัติ"
+                      : "ไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"}</span>
+                {(operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={()=>operationTerminal.kind==="CLOUD_UPDATE" ? setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey)) : setServerOperation(null)}
+                  >ปิด</button>
+                )}
+              </footer>
+            </section>
+          </div>
+        )}
+
+        <dialog
+          ref={ownerVpsDialogRef}
+          className="cc-symbol-picker"
+          onCancel={()=>{ if(!ownerVpsBusy) ownerVpsDialogRef.current?.close(); }}
+        >
+          <form className="cc-symbol-picker-card" onSubmit={moveOwnerLocalToVps}>
+            <div className="cc-symbol-picker-head">
+              <b>ย้าย OWNER ไป SCENOVA VPS</b>
+              <button type="button" aria-label="ปิด" disabled={ownerVpsBusy} onClick={()=>ownerVpsDialogRef.current?.close()}>×</button>
+            </div>
+            <p className="cc-symbol-picker-source">
+              {data.account
+                ? data.account.account_number + " · " + data.account.broker_server
+                : "บัญชี MT5 ปัจจุบัน"}
+            </p>
+            <label className="field">
+              <span>MT5 Trading Password</span>
+              <input
+                className="input"
+                autoFocus
+                type="password"
+                autoComplete="off"
+                value={ownerVpsPassword}
+                disabled={ownerVpsBusy}
+                onChange={e=>setOwnerVpsPassword(e.target.value)}
+                placeholder="กรอกรหัส Trading ของ MT5"
+                required
+              />
+            </label>
+            <p className="cc-symbol-picker-source">
+              SCENOVA จะเลือก VPS ที่ ONLINE / HEALTHY และมี Capacity ให้อัตโนมัติ Local เดิมจะถูกหยุดก่อนส่ง Runtime ไป VPS
+            </p>
+            <div className="cc-symbol-picker-actions">
+              <button type="button" className="btn" disabled={ownerVpsBusy} onClick={()=>ownerVpsDialogRef.current?.close()}>ยกเลิก</button>
+              <button type="submit" className="btn primary" disabled={ownerVpsBusy || !ownerVpsPassword}>
+                {ownerVpsBusy ? "กำลังย้าย..." : "ยืนยันย้ายไป VPS"}
+              </button>
+            </div>
+          </form>
+        </dialog>
+
+
         {activeView === "overview" && (
           !data.account ? (
             <EmptySetup onNext={()=>setActiveView("account")} />
@@ -2499,109 +2603,6 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </section>
-
-              {operationTerminal && (
-                <div className="cc-server-operation-backdrop" role="presentation">
-                  <section
-                    className={"cc-server-operation-terminal status-" + String(operationTerminal.status || "RUNNING").toLowerCase()}
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="cc-server-operation-title"
-                  >
-                    <header>
-                      <div>
-                        <span className="cc-server-operation-icon">&gt;_</span>
-                        <div>
-                          <small>SCENOVA SERVER TERMINAL</small>
-                          <h3 id="cc-server-operation-title">{operationTerminal.title}</h3>
-                        </div>
-                      </div>
-                      {(operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
-                        <button
-                          type="button"
-                          aria-label="ปิด"
-                          onClick={()=>operationTerminal.kind==="CLOUD_UPDATE" ? setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey)) : setServerOperation(null)}
-                        >×</button>
-                      )}
-                    </header>
-                    <div className="cc-server-operation-body">
-                      <div className="cc-server-operation-line">
-                        <span className="prompt">server@scenova:~$</span>
-                        <b>{operationTerminal.status === "RUNNING" ? "processing" : operationTerminal.status === "SUCCESS" ? "completed" : "failed"}</b>
-                      </div>
-                      <p>{operationTerminal.message}</p>
-                      {operationTerminal.kind === "SYMBOL" && operationTerminal.target && (
-                        <div className="cc-server-operation-meta"><span>Target Symbol</span><b>{operationTerminal.target}</b></div>
-                      )}
-                      {operationTerminal.kind === "CLOUD_UPDATE" && operationTerminal.target && (
-                        <div className="cc-server-operation-meta"><span>Target Version</span><b>v{operationTerminal.target}</b></div>
-                      )}
-                      <div className="cc-server-operation-progress" aria-hidden="true"><i/></div>
-                    </div>
-                    <footer>
-                      <span>{operationTerminal.kind === "CLOUD_UPDATE"
-                        ? operationTerminal.status === "FAILED"
-                          ? "อัปเดตไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"
-                          : cloudUpdateState === "WAITING_SAFE"
-                            ? "ปิดหน้าต่างนี้เพื่อกดหยุดบอทเมื่อคุณพร้อม แล้วระบบจะอัปเดตต่อ"
-                            : "SCENOVA กำลังอัปเดตบัญชีนี้ใน Terminal เดียว"
-                        : operationTerminal.status === "RUNNING"
-                          ? "กำลังติดตามสถานะจาก Server อัตโนมัติทุก 1.5 วินาที"
-                          : operationTerminal.status === "SUCCESS"
-                            ? "สำเร็จ · หน้าต่างจะปิดอัตโนมัติ"
-                            : "ไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"}</span>
-                      {(operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={()=>operationTerminal.kind==="CLOUD_UPDATE" ? setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey)) : setServerOperation(null)}
-                        >ปิด</button>
-                      )}
-                    </footer>
-                  </section>
-                </div>
-              )}
-
-              <dialog
-                ref={ownerVpsDialogRef}
-                className="cc-symbol-picker"
-                onCancel={()=>{ if(!ownerVpsBusy) ownerVpsDialogRef.current?.close(); }}
-              >
-                <form className="cc-symbol-picker-card" onSubmit={moveOwnerLocalToVps}>
-                  <div className="cc-symbol-picker-head">
-                    <b>ย้าย OWNER ไป SCENOVA VPS</b>
-                    <button type="button" aria-label="ปิด" disabled={ownerVpsBusy} onClick={()=>ownerVpsDialogRef.current?.close()}>×</button>
-                  </div>
-                  <p className="cc-symbol-picker-source">
-                    {data.account
-                      ? data.account.account_number + " · " + data.account.broker_server
-                      : "บัญชี MT5 ปัจจุบัน"}
-                  </p>
-                  <label className="field">
-                    <span>MT5 Trading Password</span>
-                    <input
-                      className="input"
-                      autoFocus
-                      type="password"
-                      autoComplete="off"
-                      value={ownerVpsPassword}
-                      disabled={ownerVpsBusy}
-                      onChange={e=>setOwnerVpsPassword(e.target.value)}
-                      placeholder="กรอกรหัส Trading ของ MT5"
-                      required
-                    />
-                  </label>
-                  <p className="cc-symbol-picker-source">
-                    SCENOVA จะเลือก VPS ที่ ONLINE / HEALTHY และมี Capacity ให้อัตโนมัติ Local เดิมจะถูกหยุดก่อนส่ง Runtime ไป VPS
-                  </p>
-                  <div className="cc-symbol-picker-actions">
-                    <button type="button" className="btn" disabled={ownerVpsBusy} onClick={()=>ownerVpsDialogRef.current?.close()}>ยกเลิก</button>
-                    <button type="submit" className="btn primary" disabled={ownerVpsBusy || !ownerVpsPassword}>
-                      {ownerVpsBusy ? "กำลังย้าย..." : "ยืนยันย้ายไป VPS"}
-                    </button>
-                  </div>
-                </form>
-              </dialog>
 
               <dialog
                 ref={symbolDialogRef}
