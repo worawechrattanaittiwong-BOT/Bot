@@ -529,7 +529,7 @@ internal sealed class Mt5Runtime
     {
         if (HasExactTerminal(prepared.TerminalPath)) return;
 
-        // Cloud instances are fully Worker-managed; keep startup deterministic. MT5 persists every open
+        // Cloud instances are fully Worker-managed; rebuild a clean single-chart startup every time. MT5 persists every open
         // chart in Profiles/Charts and /config [StartUp] opens another chart on
         // each recovery. Without clearing the persisted workspace, unattended
         // restarts accumulate duplicate XAUUSD,M5 charts (and may attach the EA
