@@ -307,21 +307,24 @@ internal sealed class Mt5Runtime
                 if (!StopInstance(job.InstanceId))
                     return;
 
-                if (InstanceEaDiffersFromTemplate(instancePath))
+                // Never overwrite an existing provisioned EA during heartbeat
+                // recovery. Fleet Update is the sole owner of EA version changes.
+                // The template may legitimately lag behind a newer per-instance
+                // EA and copying it here would silently downgrade the runtime.
+                var instanceEa = Path.Combine(
+                    instancePath,
+                    "MQL5",
+                    "Experts",
+                    "FastBasketBot.ex5");
+                if (!File.Exists(instanceEa))
                 {
                     var templateEa = Path.Combine(
                         _templatePath,
                         "MQL5",
                         "Experts",
                         "FastBasketBot.ex5");
-                    var instanceEa = Path.Combine(
-                        instancePath,
-                        "MQL5",
-                        "Experts",
-                        "FastBasketBot.ex5");
-
                     Directory.CreateDirectory(Path.GetDirectoryName(instanceEa)!);
-                    File.Copy(templateEa, instanceEa, overwrite: true);
+                    File.Copy(templateEa, instanceEa, overwrite: false);
                 }
 
                 var repaired = PrepareInstanceFiles(job);
@@ -521,29 +524,6 @@ internal sealed class Mt5Runtime
             throw new InvalidOperationException("Invalid instance path");
 
         return path;
-    }
-
-    private bool InstanceEaDiffersFromTemplate(string instancePath)
-    {
-        var templateEa = Path.Combine(
-            _templatePath,
-            "MQL5",
-            "Experts",
-            "FastBasketBot.ex5");
-        var instanceEa = Path.Combine(
-            instancePath,
-            "MQL5",
-            "Experts",
-            "FastBasketBot.ex5");
-
-        if (!File.Exists(templateEa) || !File.Exists(instanceEa))
-            return true;
-
-        using var left = File.OpenRead(templateEa);
-        using var right = File.OpenRead(instanceEa);
-        var leftHash = SHA256.HashData(left);
-        var rightHash = SHA256.HashData(right);
-        return !leftHash.SequenceEqual(rightHash);
     }
 
     private bool HasExactTerminal(string terminalPath) =>
