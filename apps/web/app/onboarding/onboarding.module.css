@@ -35,6 +35,17 @@
 .progressItem.complete>span{border-color:#4eb58f;background:rgba(34,132,96,.18);color:#8fe0bf}
 .progressItem.active{border-color:#7057d5;box-shadow:0 0 24px rgba(107,77,224,.10)}
 .progressItem.active>span{border-color:#8a70ff;color:#d7cfff;background:#21193d}
+.systemChoice{margin:18px 0;padding:18px;border:1px solid rgba(132,96,255,.48);border-radius:16px;background:radial-gradient(circle at 80% 0,rgba(110,70,255,.12),transparent 35%),rgba(10,8,20,.90);box-shadow:0 18px 50px rgba(0,0,0,.18)}
+.choiceHead h2{margin:8px 0 6px;font-size:24px}
+.choiceHead p{margin:0;color:#958da5;font-size:12px}
+.choiceGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:15px}
+.choiceCard{display:grid;grid-template-columns:50px 1fr;gap:14px;min-height:154px;padding:17px;border:1px solid #38304b;border-radius:13px;background:linear-gradient(145deg,#100d1d,#090812);color:#efeaff;text-decoration:none;transition:.16s ease}
+.choiceCard:hover{transform:translateY(-2px);border-color:#7d68da;box-shadow:0 14px 34px rgba(42,27,91,.22)}
+.choiceVps{border-color:#6f58cc;background:radial-gradient(circle at 90% 10%,rgba(114,76,255,.18),transparent 36%),linear-gradient(145deg,#17112b,#0a0814)}
+.choiceIcon{display:grid;place-items:center;width:48px;height:48px;border:1px solid #6855b7;border-radius:12px;background:#1d1537;color:#b8a7ff}
+.choiceCard b{display:block;font-size:17px}
+.choiceCard p{margin:7px 0 14px;color:#9a93a8;font-size:12px;line-height:1.6}
+.choiceCard strong{display:inline-flex;gap:8px;color:#cbbfff;font-size:12px}
 .errorBox{display:flex;justify-content:space-between;gap:14px;align-items:center;margin:14px 0;padding:12px 14px;border:1px solid #734356;border-radius:10px;background:#27121acc;color:#ffc4d0;font-size:11px}
 .errorBox button{border:1px solid #8b5066;border-radius:7px;background:#361a25;color:#ffdce3;padding:7px 10px}
 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:18px}
@@ -66,7 +77,7 @@
 .securityStrip b{display:block;color:#c9c3d6;font-size:var(--ui-type-meta)}
 .securityStrip small{display:block;margin-top:3px;color:#686272;font-size:var(--ui-type-caption)}
 @media(max-width:920px){
-  .identity,.cards,.securityStrip{grid-template-columns:1fr}
+  .identity,.cards,.securityStrip,.choiceGrid{grid-template-columns:1fr}
   .progress{grid-template-columns:1fr}
   .actionPanel{align-items:flex-start;flex-direction:column}
   .actions{width:100%}

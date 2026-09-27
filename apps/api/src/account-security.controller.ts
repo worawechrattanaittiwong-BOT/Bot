@@ -487,7 +487,7 @@ export class AccountSecurityController {
     );
 
     try {
-      const delivery = await this.sms.requestOtp(msisdn, fallbackCode);
+      const delivery = await this.sms.requestOtp(msisdn, fallbackCode, "ACCOUNT");
       await this.db.query(
         `UPDATE trial_sms_codes
          SET status='SENT',

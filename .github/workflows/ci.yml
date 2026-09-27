@@ -59,6 +59,8 @@ jobs:
         run: node ./tests/account-security-2fa-contract.cjs
       - name: Account typography contract
         run: node ./tests/account-typography-contract.mjs
+      - name: Customer onboarding, Local Trial SMS and VPS migration contract
+        run: node ./tests/customer-onboarding-vps-trial-contract.mjs
       - name: System typography contract
         run: node ./tests/system-typography-contract.mjs
       - name: System popup contract

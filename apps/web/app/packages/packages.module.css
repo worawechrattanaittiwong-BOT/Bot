@@ -190,7 +190,20 @@
   background:#1d1a2b
 }
 .trialBody{
-  padding:16px 18px 18px
+  padding:13px 18px 16px
+}
+.localTrialBadge{
+  display:inline-flex;
+  align-items:center;
+  min-height:28px;
+  margin-bottom:10px;
+  border:1px solid #5c4b2c;
+  border-radius:999px;
+  background:#241d12;
+  color:#e8ca8d;
+  padding:5px 9px;
+  font:800 11px Consolas,monospace;
+  letter-spacing:.06em
 }
 .trialSteps{
   display:grid;
@@ -296,7 +309,8 @@
 }
 .deliveryNote{
   display:flex;
-  align-items:flex-start;
+  align-items:center;
+  justify-content:space-between;
   gap:12px;
   margin-bottom:11px;
   border:1px solid rgba(108,89,196,.28);
@@ -315,6 +329,36 @@
   color:#8d96aa;
   font-size:11.5px;
   line-height:1.6
+}
+.deliveryChoice{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap
+}
+.deliveryChoice button{
+  min-height:34px;
+  border:1px solid #3a435c;
+  border-radius:8px;
+  background:#0c121d;
+  color:#8e99aa;
+  padding:7px 10px;
+  font-size:11px;
+  font-weight:800;
+  cursor:pointer
+}
+.deliveryChoice button:hover:not(:disabled){
+  border-color:#6956bd;
+  color:#e8e3ff
+}
+.deliveryChoice button:disabled{
+  opacity:.4;
+  cursor:not-allowed
+}
+.deliveryChoice .deliveryActive{
+  border-color:#725fd2;
+  background:#1b1730;
+  color:#d9cfff
 }
 .otpMeta{
   display:grid;
@@ -374,6 +418,7 @@
   border-color:#745fd2;
   box-shadow:0 0 0 3px rgba(116,95,210,.08)
 }
+.smsWarning a{color:#eadcff;font-weight:800}
 .smsWarning,
 .testNotice{
   margin-top:10px;

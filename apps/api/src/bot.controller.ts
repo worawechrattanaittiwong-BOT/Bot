@@ -564,6 +564,12 @@ export class BotController {
       return { allowed: true, source: "SUBSCRIPTION", expiresAt: legacySub.expires_at };
     }
 
+    // Trial is intentionally Local-only. Cloud/VPS always requires a
+    // Cloud entitlement so a Trial can never consume a reserved Trading VPS.
+    if (String(mode || "").toUpperCase() === "CLOUD") {
+      return { allowed: false, source: "NONE", reason: "TRIAL_LOCAL_ONLY" };
+    }
+
     const trial = await this.db.one(
       "SELECT id,status,duration_minutes,started_at,expires_at FROM trial_grants WHERE user_id=$1 AND ($2::uuid IS NULL OR mt5_account_id=$2) ORDER BY created_at DESC LIMIT 1",
       [userId, mt5AccountId]
