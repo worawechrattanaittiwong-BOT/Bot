@@ -350,7 +350,7 @@ export default function DashboardPage() {
         if (!stopped && document.visibilityState === "visible") {
           void load(selectedSlotIdRef.current, true);
         }
-      }, 75);
+      }, 250);
     };
 
     const connect = async () => {
@@ -398,7 +398,25 @@ export default function DashboardPage() {
             if (dataLines.length) {
               try {
                 const event = JSON.parse(dataLines.join("\n"));
-                if (event?.eventType) scheduleRealtimeReload();
+                if (event?.eventType) {
+                  setData((previous:any) => {
+                    if (!previous?.instance || String(event.slotId || "") !== String(selectedSlotIdRef.current || "")) {
+                      return previous;
+                    }
+                    return {
+                      ...previous,
+                      instance:{
+                        ...previous.instance,
+                        ...(event.state ? { actual_state:event.state } : {}),
+                        metrics:{
+                          ...(previous.instance.metrics || {}),
+                          ...(event.metrics || {})
+                        }
+                      }
+                    };
+                  });
+                  scheduleRealtimeReload();
+                }
               } catch {
                 // Ignore malformed/keepalive SSE frames. The 5s poll remains fallback.
               }
