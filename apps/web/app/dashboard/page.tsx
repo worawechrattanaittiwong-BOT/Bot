@@ -743,6 +743,15 @@ export default function DashboardPage() {
   };
   const heartbeatAgeSeconds = Math.max(0, Number(data?.instance?.ea_last_seen_age_seconds ?? metrics.heartbeatAgeSeconds ?? 0));
   const isAgentOnline = Boolean(data?.instance?.agent_online || data?.instance?.device_online);
+  const isHeartbeatDelayed =
+    !isMt5Online &&
+    isAgentOnline &&
+    eaLastSeenAgeSeconds >= 0 &&
+    eaLastSeenAgeSeconds <= 60;
+  const connectionAgeLabel = eaLastSeenAgeSeconds >= 0
+    ? Math.max(0, eaLastSeenAgeSeconds).toFixed(0) + "s"
+    : "—";
+  const showLastKnownTelemetry = isMt5Online || isHeartbeatDelayed;
   const marketSessionState = String(metrics.marketSessionState || "").toUpperCase();
   const marketSessionClosed =
     marketSessionState === "CLOSED" ||
@@ -767,13 +776,22 @@ export default function DashboardPage() {
     ["ACTIVE","AVAILABLE"].includes(String(slot?.status || "").toUpperCase())
   ) || null;
   const customerHasCloudMigrationAccess = Boolean(cloudMigrationTarget);
-  const liveStatus = data?.liveStatus || {
+  const serverLiveStatus = data?.liveStatus || {
     code: isMt5Online ? "RUNNING_READY" : "MT5_OFFLINE",
     label: isMt5Online ? "กำลังตรวจสอบสถานะบอท" : "MT5 ยังไม่เชื่อมต่อ",
     detail: isMt5Online ? "รอข้อมูล Execution จาก EA" : "เปิด MT5 และ EA บนกราฟ",
     tone: isMt5Online ? "neutral" : "bad",
     tradeReady: false
   };
+  const liveStatus = isHeartbeatDelayed
+    ? {
+        ...serverLiveStatus,
+        code: "EA_HEARTBEAT_DELAYED",
+        label: "EA Heartbeat ขาดช่วง",
+        detail: "Windows Agent ยังเชื่อมอยู่ · Heartbeat ล่าสุด " + connectionAgeLabel,
+        tone: "warn"
+      }
+    : serverLiveStatus;
   const softwareUpdate = data?.softwareUpdate || {
     required: false,
     installerRequired: false,
@@ -1116,11 +1134,13 @@ export default function DashboardPage() {
 
   const connectionLabel = isMt5Online
     ? "EA + MT5 เชื่อมต่อแล้ว"
-    : isAgentOnline
-      ? "Windows Agent เชื่อมแล้ว · รอ EA"
-      : data?.account
-        ? "รอ Windows Agent / MT5"
-        : "ยังไม่ได้เชื่อมบัญชี";
+    : isHeartbeatDelayed
+      ? "EA Heartbeat ขาดช่วง · กำลังเชื่อมต่อใหม่"
+      : isAgentOnline
+        ? "Windows Agent เชื่อมแล้ว · EA ยังไม่ตอบสนอง"
+        : data?.account
+          ? "รอ Windows Agent / MT5"
+          : "ยังไม่ได้เชื่อมบัญชี";
   const controlStateLabel =
     startTimedOut
       ? "เริ่มบอทไม่สำเร็จ — พร้อมให้ลองใหม่"
@@ -1204,7 +1224,11 @@ export default function DashboardPage() {
     marketSessionClosed
       ? "ตลาดปิด — MT5/EA ยังเชื่อมต่อ · รอ Session เปิด"
       : !isMt5Online
-        ? (isAgentOnline ? "Agent เชื่อมแล้ว · EA Heartbeat ขาดช่วง — ตรวจ EA โดยไม่สรุปว่า MT5 หลุด" : "รอ MT5 เชื่อมต่อ")
+        ? (isHeartbeatDelayed
+            ? "EA Heartbeat ขาดช่วง — Windows Agent ยังออนไลน์และกำลังเชื่อมต่อใหม่"
+            : isAgentOnline
+              ? "Windows Agent ออนไลน์ แต่ EA ไม่ตอบสนองเกินช่วงรอ — ตรวจ MT5/EA"
+              : "รอ MT5 เชื่อมต่อ")
         : metrics.tradeReady === true
           ? "ตลาดเปิด — พร้อมส่งออเดอร์"
           : "มีราคา แต่ยังมีเงื่อนไขที่บล็อกการเทรด";
@@ -2501,7 +2525,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="cc-v3-head-actions">
-            <span className={"cc-head-chip " + (isMt5Online ? "good" : isAgentOnline ? "warn" : "bad")}><i/><span><b>{isMt5Online ? "เชื่อมต่อแล้ว" : isAgentOnline ? "Agent เชื่อมแล้ว" : "ยังไม่เชื่อมต่อ"}</b><small>{isMt5Online ? (data.account?.broker || "MT5")+" · EA Online" : isAgentOnline ? "Windows Agent Online · รอ EA" : (data.account?.broker || "MT5")+" · "+(data.selectedSlot?.mode || "LOCAL")}</small></span></span>
+            <span className={"cc-head-chip " + (isMt5Online ? "good" : isHeartbeatDelayed ? "warn" : "bad")}><i/><span><b>{isMt5Online ? "เชื่อมต่อแล้ว" : isHeartbeatDelayed ? "กำลังเชื่อมต่อใหม่" : isAgentOnline ? "EA ไม่ตอบสนอง" : "ยังไม่เชื่อมต่อ"}</b><small>{isMt5Online ? (data.account?.broker || "MT5")+" · EA Online" : isHeartbeatDelayed ? "Windows Agent Online · Heartbeat "+connectionAgeLabel : isAgentOnline ? "Windows Agent Online · รอ EA" : (data.account?.broker || "MT5")+" · "+(data.selectedSlot?.mode || "LOCAL")}</small></span></span>
             <span className={"cc-head-chip bot " + (desired==="RUNNING" ? "active" : "")}><ScenovaIcon name="bot" size={18}/><span><b>{controlStateLabel}</b><small>{settings.entryMode || "AUTO MOMENTUM"}</small></span></span>
             <span className="cc-head-icon-button" aria-label="การแจ้งเตือน"><ScenovaIcon name="bell" size={18}/></span>
           </div>
@@ -2665,8 +2689,8 @@ export default function DashboardPage() {
                 <div className="cc-connect-alert cc-status-connection" role="status">
                   <div className="cc-alert-icon"><ScenovaIcon name="info" size={20}/></div>
                   <div className="cc-alert-copy">
-                    <b>{isAgentOnline ? "EA Heartbeat ขาดช่วง" : "ยังไม่ได้เชื่อมต่อ MT5"}</b>
-                    <span>{isAgentOnline ? "Windows Agent ยังเชื่อมอยู่ · ตรวจว่า EA ยังติดอยู่บนกราฟก่อนเชื่อม MT5 ใหม่" : data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span>
+                    <b>{isHeartbeatDelayed ? "EA Heartbeat ขาดช่วง" : isAgentOnline ? "EA ยังไม่ตอบสนอง" : "ยังไม่ได้เชื่อมต่อ MT5"}</b>
+                    <span>{isHeartbeatDelayed ? "Windows Agent ยังเชื่อมอยู่ · กำลังรอ Heartbeat ถัดไป (ล่าสุด "+connectionAgeLabel+")" : isAgentOnline ? "Windows Agent ยังเชื่อมอยู่ แต่ EA ไม่ส่ง Heartbeat เกิน 60 วินาที · ตรวจ MT5/EA" : data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span>
                   </div>
                   <button type="button" className="btn cc-alert-action" onClick={()=>{statusDialogRef.current?.close();setActiveView("account");}}>{isAgentOnline ? "ตรวจการเชื่อมต่อ →" : "ไปหน้าการเชื่อมต่อ →"}</button>
                 </div>
@@ -2736,7 +2760,7 @@ export default function DashboardPage() {
                 >
                   <i/>
                   <span className="cc-status-trigger-copy">
-                    <b>{!isMt5Online ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
+                    <b>{isHeartbeatDelayed ? "Reconnecting" : !isMt5Online ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
                     <small>สถานะและอัปเดต</small>
                   </span>
                   <span className="cc-status-trigger-bell"><ScenovaIcon name="bell" size={16}/>{statusNoticeCount > 0 && <em>{statusNoticeCount}</em>}</span>
@@ -2786,12 +2810,12 @@ export default function DashboardPage() {
               </dialog>
 
               <section className="cc-kpi-grid cc-v3-kpis cc-v6-kpis cc-v12-kpis cc-v13-kpis">
-                <DashboardMetric icon="wallet" label="ยอดเงิน" value={isMt5Online?formatAccountMoney(metrics.balance,accountCurrency):"—"} sub={"Balance · "+accountCurrency} />
-                <DashboardMetric icon="equity" label="มูลค่ารวม" value={isMt5Online?formatAccountMoney(metrics.equity,accountCurrency):"—"} sub={"Equity · "+accountCurrency} />
-                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={isMt5Online?formatAccountMoney(dashboardBotTodayProfit,accountCurrency,true):"—"} sub={"Bot P/L ทุกโหมด · "+accountCurrency} tone={isMt5Online?(dashboardBotTodayProfit>=0?"good":"bad"):"neutral"} />
+                <DashboardMetric icon="wallet" label="ยอดเงิน" value={showLastKnownTelemetry?formatAccountMoney(metrics.balance,accountCurrency):"—"} sub={"Balance · "+accountCurrency} />
+                <DashboardMetric icon="equity" label="มูลค่ารวม" value={showLastKnownTelemetry?formatAccountMoney(metrics.equity,accountCurrency):"—"} sub={"Equity · "+accountCurrency} />
+                <DashboardMetric icon="pnl" label="กำไร / ขาดทุนวันนี้" value={showLastKnownTelemetry?formatAccountMoney(dashboardBotTodayProfit,accountCurrency,true):"—"} sub={"Bot P/L ทุกโหมด · "+accountCurrency} tone={showLastKnownTelemetry?(dashboardBotTodayProfit>=0?"good":"bad"):"neutral"} />
                 <DashboardMetric icon="target" label="Win Rate วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.winRate||0).toFixed(1)+"%":"—"} sub={Number(todayPerformance.trades||0)>0?Number(todayPerformance.wins||0)+" / "+Number(todayPerformance.trades||0)+" Basket":"ยังไม่มี Basket ปิดวันนี้"} tone={Number(todayPerformance.trades||0)>0?(Number(todayPerformance.winRate||0)>=60?"good":Number(todayPerformance.winRate||0)>=45?"warn":"bad"):"neutral"} />
                 <DashboardMetric icon="risk" label="Drawdown วันนี้" value={Number(todayPerformance.trades||0)>0?Number(todayPerformance.drawdownPercent||0).toFixed(2)+"%":"0.00%"} sub={formatAccountMoney(-Math.abs(Number(todayPerformance.drawdownMoney||0)),accountCurrency)+" Realized DD"} tone={Number(todayPerformance.drawdownPercent||0)>=5?"bad":Number(todayPerformance.drawdownPercent||0)>=2?"warn":"good"} />
-                <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={isMt5Online?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
+                <DashboardMetric icon="orders" label="ออเดอร์เปิด" value={showLastKnownTelemetry?currentPositions+" / "+configuredMaxPositions:"—"} sub="Open Positions" />
               </section>
 
               <div className="cc-v19-three-card-grid">
@@ -2889,7 +2913,7 @@ export default function DashboardPage() {
                         <span><ScenovaIcon name="status" size={16}/></span>
                         <div><b>System Pulse</b><small>สถานะระบบแบบย่อ</small></div>
                       </div>
-                      <em className={isMt5Online&&isAgentOnline?"good":"warn"}>{isMt5Online&&isAgentOnline?"All Online":"Check"}</em>
+                      <em className={isMt5Online&&isAgentOnline?"good":"warn"}>{isMt5Online&&isAgentOnline?"All Online":isHeartbeatDelayed?"Reconnecting":"Check"}</em>
                     </div>
                     <div className="cc-v46-performance-system-grid">
                       <div>
@@ -2904,7 +2928,7 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <span><i className={isMt5Online?"good":"warn"}/>MT5 / EA</span>
-                        <b>{isMt5Online?"Connected":"Waiting"}</b>
+                        <b>{isMt5Online?"Connected":isHeartbeatDelayed?"Reconnecting":"Waiting"}</b>
                         <small>{heartbeatAgeSeconds.toFixed(0)}s heartbeat</small>
                       </div>
                     </div>
@@ -3032,7 +3056,7 @@ export default function DashboardPage() {
                     <em>Live status</em>
                   </div>
                   <div className="cc-v42-news-status">
-                    <span className={marketSessionClosed?"warn":isMt5Online?"good":"neutral"}>{marketSessionClosed?"Market Closed":isMt5Online?"Market Online":"Waiting MT5"}</span>
+                    <span className={marketSessionClosed?"warn":isMt5Online?"good":isHeartbeatDelayed?"warn":"neutral"}>{marketSessionClosed?"Market Closed":isMt5Online?"Market Online":isHeartbeatDelayed?"Reconnecting":"Waiting MT5"}</span>
                     <b>{marketTradeLabel}</b>
                   </div>
                   <div className="cc-v42-news-list">
@@ -3262,13 +3286,13 @@ export default function DashboardPage() {
               </div>
 
               <div className="cc-terminal-drawer-stats">
-                <TerminalStat label="CONNECTION" value={connectionLabel} tone={isMt5Online ? "good" : "bad"} />
+                <TerminalStat label="CONNECTION" value={connectionLabel} tone={isMt5Online ? "good" : isHeartbeatDelayed ? "warn" : "bad"} />
                 <TerminalStat label="ACTUAL" value={String(botLogs?.snapshot?.actual_state || state)} tone={state==="RUNNING" ? "good" : "neutral"} />
                 <TerminalStat label="DESIRED" value={String(botLogs?.snapshot?.desired_state || desired)} tone={desired==="RUNNING" ? "good" : "neutral"} />
                 <TerminalStat label="SPREAD" value={spreadValueLabel} />
                 <TerminalStat label="MOMENTUM" value={Number(metrics.momentumPoints || 0).toFixed(1)} />
                 <TerminalStat label="POSITIONS" value={String(metrics.positions || 0)} />
-                <TerminalStat label="HEARTBEAT AGE" value={heartbeatAgeSeconds.toFixed(0) + "s"} tone={heartbeatAgeSeconds <= 20 ? "good" : "bad"} />
+                <TerminalStat label="HEARTBEAT AGE" value={heartbeatAgeSeconds.toFixed(0) + "s"} tone={heartbeatAgeSeconds <= 20 ? "good" : heartbeatAgeSeconds <= 60 ? "warn" : "bad"} />
                 <TerminalStat label="LATENCY" value={heartbeatLatencyMs > 0 ? heartbeatLatencyMs.toFixed(0) + " ms" : "—"} tone={heartbeatLatencyMs > 2000 ? "warn" : "neutral"} />
                 <TerminalStat label="HTTP STATUS" value={heartbeatHttpStatus > 0 ? String(heartbeatHttpStatus) : "—"} tone={heartbeatHttpStatus >= 200 && heartbeatHttpStatus < 300 ? "good" : "bad"} />
                 <TerminalStat label="LAST CONTACT" value={lastServerContactLabel} />
