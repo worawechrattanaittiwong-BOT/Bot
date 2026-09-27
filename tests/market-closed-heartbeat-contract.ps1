@@ -85,9 +85,9 @@ foreach ($required in @(
 
 foreach ($required in @(
   '@Post("runtime-event")',
-  "bi.runner_id=$2",
-  "bi.mode='CLOUD'",
-  "metrics=COALESCE(metrics,'{}'::jsonb) || $2::jsonb",
+  'bi.runner_id=$2',
+  'bi.mode=''CLOUD''',
+  'metrics=COALESCE(metrics,''{}''::jsonb) || $2::jsonb',
   '@Sse("events")',
   'X-Accel-Buffering',
   'this.events.publish'
