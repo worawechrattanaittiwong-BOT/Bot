@@ -102,20 +102,49 @@ internal sealed class CloudJob
     {
         get
         {
+            var requested = "XAUUSD";
+
             if (Settings.ValueKind == JsonValueKind.Object &&
                 Settings.TryGetProperty("startupSymbol", out var startupSymbol) &&
                 startupSymbol.ValueKind == JsonValueKind.String &&
                 !string.IsNullOrWhiteSpace(startupSymbol.GetString()))
-                return startupSymbol.GetString()!.Trim();
+                requested = startupSymbol.GetString()!.Trim();
+            else if (Settings.ValueKind == JsonValueKind.Object &&
+                     Settings.TryGetProperty("symbol", out var symbol) &&
+                     symbol.ValueKind == JsonValueKind.String &&
+                     !string.IsNullOrWhiteSpace(symbol.GetString()))
+                requested = symbol.GetString()!.Trim();
 
-            if (Settings.ValueKind == JsonValueKind.Object &&
-                Settings.TryGetProperty("symbol", out var symbol) &&
-                symbol.ValueKind == JsonValueKind.String &&
-                !string.IsNullOrWhiteSpace(symbol.GetString()))
-                return symbol.GetString()!.Trim();
-
-            return "XAUUSD";
+            return ResolveBrokerSymbol(requested, Broker, BrokerServer);
         }
+    }
+
+    internal static string ResolveBrokerSymbol(
+        string requested,
+        string? broker,
+        string? brokerServer)
+    {
+        var symbol = (requested ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(symbol))
+            symbol = "XAUUSD";
+
+        var isExness =
+            (broker ?? "").Contains("exness", StringComparison.OrdinalIgnoreCase) ||
+            (brokerServer ?? "").StartsWith("Exness-", StringComparison.OrdinalIgnoreCase);
+        if (!isExness)
+            return symbol;
+
+        // Exness Cloud terminals expose Gold/BTC under their broker-native
+        // Market Watch names. Preserve an already-resolved symbol, but map the
+        // canonical Web choices to the actual Exness chart names so MT5 never
+        // opens a synthetic/blank BTCUSD or XAUUSD chart.
+        if (string.Equals(symbol, "XAUUSD", StringComparison.OrdinalIgnoreCase))
+            return "XAUUSDm";
+        if (string.Equals(symbol, "BTCUSD", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(symbol, "XBTUSD", StringComparison.OrdinalIgnoreCase))
+            return "BTCUSDm";
+
+        return symbol;
     }
 }
 
