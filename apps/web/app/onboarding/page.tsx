@@ -145,36 +145,34 @@ export default function OnboardingPage() {
 
         {newAccount && !accountLinked && (
           <section className={styles.systemChoice}>
-            <div className={styles.choiceHead}>
-              <div>
-                <div className={styles.eyebrow}>CHOOSE YOUR SYSTEM</div>
-                <h2>จะใช้งานแบบไหน?</h2>
-                <p>เลือกระบบที่ต้องการใช้งานได้เลย</p>
-              </div>
-            </div>
+            <div className={styles.choiceLabel}>SELECT RUNTIME</div>
             <div className={styles.choiceGrid}>
               <a className={styles.choiceCard + " " + styles.choiceVps} href="/packages?system=cloud&from=onboarding">
                 <span className={styles.choiceIcon}><ScenovaIcon name="cloud" size={25}/></span>
-                <div>
-                  <b>VPS / Cloud MT5</b>
-                  <p>SCENOVA รัน MT5 และ EA บน VPS ให้ พร้อมใช้งานหลัง Start</p>
-                  <strong>เลือกแพ็กเกจ VPS <span>→</span></strong>
+                <div className={styles.choiceBody}>
+                  <div>
+                    <b>VPS / Cloud MT5</b>
+                    <p>ใช้งาน MT5 และ EA บน SCENOVA VPS โดยไม่ต้องเปิดคอมพิวเตอร์ตลอดเวลา</p>
+                  </div>
+                  <strong>ดูแพ็กเกจ VPS <span>→</span></strong>
                 </div>
               </a>
               <div className={styles.choiceCard + " " + styles.choiceLocal}>
                 <span className={styles.choiceIcon}><ScenovaIcon name="strategy" size={25}/></span>
-                <div>
-                  <b>Local MT5</b>
-                  <p>ติดตั้ง SCENOVA บนคอมของคุณ แล้วใช้ MT5 ที่เครื่องของคุณเอง</p>
+                <div className={styles.choiceBody}>
+                  <div>
+                    <b>Local MT5</b>
+                    <p>ใช้งาน MT5 และ SCENOVA บนคอมพิวเตอร์ของคุณโดยตรง</p>
+                  </div>
                   <div className={styles.choiceActions}>
                     <a className={styles.choicePrimaryAction} href="/dashboard?view=account&welcome=1&setup=local">
-                      ไปหน้าติดตั้ง Local <span>→</span>
+                      ติดตั้ง Local MT5 <span>→</span>
                     </a>
                     <a className={styles.choiceTrialAction} href="/packages?system=local&from=onboarding">
-                      ขอสิทธิ์ทดลองใช้งาน
+                      เริ่มทดลองใช้งาน
                     </a>
                     <a className={styles.choiceDashboardAction} href="/dashboard?view=overview">
-                      ข้ามไปหน้า Dashboard
+                      เข้าสู่ Dashboard
                     </a>
                   </div>
                 </div>
