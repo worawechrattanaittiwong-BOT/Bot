@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.77"
-#define SCENOVA_EA_VERSION "1.0.77"
-#define SCENOVA_PRODUCT_VERSION "1.0.77"
+#property version   "1.0.78"
+#define SCENOVA_EA_VERSION "1.0.78"
+#define SCENOVA_PRODUCT_VERSION "1.0.78"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -5144,32 +5144,10 @@ void OnTick()
 void OnTimer()
 {
    g_lastTimerEventTickMs=GetTickCount64();
-
-   // CONTROL-PLANE FIRST: heartbeat must never be gated by chart drawing,
-   // indicator reads, profit-close state, broker session state or strategy work.
-   // When due, give the whole timer pass to WebRequest and return. The next
-   // one-second pass resumes local execution maintenance.
-   if(!MQLInfoInteger(MQL_TESTER))
-   {
-      ulong heartbeatNowMs=GetTickCount64();
-      ulong heartbeatIntervalMs=(ulong)MathMax(1,InpHeartbeatSeconds)*1000;
-      bool heartbeatDue=
-         g_lastHeartbeatTickMs==0 ||
-         heartbeatNowMs-g_lastHeartbeatTickMs>=heartbeatIntervalMs;
-
-      if(heartbeatDue)
-      {
-         g_lastHeartbeatTickMs=heartbeatNowMs;
-         g_lastHeartbeat=TimeCurrent();
-         SendHeartbeat();
-         RefreshChartStatus();
-         return;
-      }
-   }
-
    SampleSpread();
 
-   // Local close/retry runs on non-heartbeat timer passes.
+   // Timer fallback: close/retry first and do not enter WebRequest while a
+   // ZERO/RACE profit close is in progress.
    if(FastProfitClosePriority())
    {
       RefreshChartStatus();
@@ -5204,14 +5182,32 @@ void OnTimer()
       ManageZeroGrid();
 
    ulong heartbeatNowMs=GetTickCount64();
+   ulong heartbeatIntervalMs=(ulong)MathMax(1,InpHeartbeatSeconds)*1000;
+   bool heartbeatDue =
+      g_lastHeartbeatTickMs==0 ||
+      heartbeatNowMs-g_lastHeartbeatTickMs>=heartbeatIntervalMs;
    bool localExposure=LocalExecutionExposureActive();
    bool marketBusy =
       localExposure &&
       g_lastMarketTickMs>0 &&
       heartbeatNowMs>=g_lastMarketTickMs &&
       heartbeatNowMs-g_lastMarketTickMs<LOCAL_EXECUTION_NETWORK_QUIET_MS;
-   bool allowNetworkNow=!marketBusy;
+   bool heartbeatOverdue =
+      g_lastHeartbeatTickMs==0 ||
+      heartbeatNowMs-g_lastHeartbeatTickMs>=
+         heartbeatIntervalMs+LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS;
+   bool allowNetworkNow=!marketBusy || heartbeatOverdue;
    bool networkUsed=false;
+
+   // Heartbeat is control/telemetry only. During active execution it yields to
+   // fast ticks for a bounded defer window, then uses a short HTTP timeout.
+   if(heartbeatDue && allowNetworkNow)
+   {
+      g_lastHeartbeatTickMs=heartbeatNowMs;
+      g_lastHeartbeat=TimeCurrent();
+      SendHeartbeat();
+      networkUsed=true;
+   }
 
    // Keep control-plane liveness ahead of chart/history work. CopyRates,
    // CopyBuffer and chart redraw are allowed to lag on a closed/disconnected
@@ -5257,7 +5253,7 @@ void OnTimer()
    // normal market-quiet journal slot may never open. Give ZERO one bounded
    // telemetry attempt between heartbeats; heartbeat still has priority and
    // trading management above remains local and first.
-   if(!networkUsed && zeroJournalForceDue)
+   if(!networkUsed && !heartbeatDue && zeroJournalForceDue)
    {
       g_lastZeroGridJournalAttemptMs=heartbeatNowMs;
       if(zeroBasketJournalReady)
