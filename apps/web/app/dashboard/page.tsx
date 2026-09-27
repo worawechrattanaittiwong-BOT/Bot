@@ -1888,7 +1888,11 @@ export default function DashboardPage() {
 
   function openOwnerVpsMigration() {
     if (!isOwner && !cloudMigrationTarget) {
-      setError("บัญชีนี้ยังไม่มีสิทธิ์ VPS กรุณาซื้อแพ็กเกจ VPS ก่อนย้ายระบบ");
+      window.location.href = "/packages?system=cloud&from=mt5-ea";
+      return;
+    }
+    if (!data?.account) {
+      setError("กรุณาเชื่อมบัญชี MT5 ก่อนย้ายไป VPS Server");
       return;
     }
     setOwnerVpsPassword("");
