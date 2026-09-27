@@ -258,11 +258,11 @@ export default function PackagesPage() {
       const channel = result.deliveryChannel === "SMS" ? "SMS" : "อีเมล";
       notify(
         "good",
-        `ส่ง OTP ทาง${channel} ไปที่ ${result.deliveryMasked} แล้ว${result.fallbackUsed ? " · ช่องทางหลักมีปัญหา ระบบส่งผ่านช่องทางสำรองให้แล้ว" : ""}`
+        `ส่งรหัสยืนยันทาง${channel} ไปยัง ${result.deliveryMasked} แล้ว${result.fallbackUsed ? " · ส่งผ่านช่องทางสำรองเรียบร้อยแล้ว" : ""}`
       );
       await load();
     } catch (error: unknown) {
-      notify("bad", error instanceof Error ? error.message : "ส่ง OTP ไม่สำเร็จ");
+      notify("bad", error instanceof Error ? error.message : "ไม่สามารถส่งรหัสยืนยันได้ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setBusy("");
     }
@@ -278,10 +278,10 @@ export default function PackagesPage() {
         body: JSON.stringify({ code: otp })
       });
       setOtp("");
-      notify("good", result.message || "เปิดสิทธิ์ทดลองแล้ว");
+      notify("good", result.message || "เปิดสิทธิ์ทดลองใช้งานเรียบร้อยแล้ว");
       await load();
     } catch (error: unknown) {
-      notify("bad", error instanceof Error ? error.message : "ยืนยัน OTP ไม่สำเร็จ");
+      notify("bad", error instanceof Error ? error.message : "ไม่สามารถยืนยันรหัสได้ กรุณาตรวจสอบแล้วลองใหม่อีกครั้ง");
     } finally {
       setBusy("");
     }
@@ -396,14 +396,14 @@ export default function PackagesPage() {
               <div className={styles.titleWithIcon}>
                 <span className={styles.icon}><ScenovaIcon name="status" size={19}/></span>
                 <div>
-                  <span className={styles.eyebrow}>LOCAL TRIAL</span>
-                  <h2>ทดลอง Local MT5</h2>
-                  <p>Trial ใช้กับระบบ Local เท่านั้น · รับ OTP ทาง SMS หรืออีเมลได้</p>
+                  <span className={styles.eyebrow}>LOCAL MT5 TRIAL</span>
+                  <h2>ทดลองใช้งาน Local MT5</h2>
+                  <p>สิทธิ์ทดลองใช้งานสำหรับ Local MT5 · ยืนยันตัวตนผ่าน SMS หรืออีเมล</p>
                 </div>
               </div>
               <div className={styles.trialHeaderActions}>
                 <span className={`${styles.badge} ${trialReady ? styles.badgeGood : ""}`}>
-                  {trial?.trial ? "ใช้งานอยู่" : trial?.authorization ? "พร้อมใช้งาน" : trialEligible ? "ขอสิทธิ์ได้" : "ไม่พร้อม"}
+                  {trial?.trial ? "กำลังใช้งาน" : trial?.authorization ? "พร้อมใช้งาน" : trialEligible ? "พร้อมยืนยัน" : "ไม่สามารถใช้งานได้"}
                 </span>
                 <button
                   type="button"
@@ -411,33 +411,33 @@ export default function PackagesPage() {
                   onClick={() => setTrialOpen(value => !value)}
                   aria-expanded={trialOpen}
                 >
-                  {trialOpen ? "ย่อ" : trialReady ? "ดูสิทธิ์ Local Trial" : "ขอ Local Trial"}
+                  {trialOpen ? "ซ่อนรายละเอียด" : trialReady ? "ดูสิทธิ์ทดลองใช้งาน" : "เริ่มทดลองใช้งาน"}
                 </button>
               </div>
             </div>
 
             {trialOpen && <div className={styles.trialBody}>
-              <div className={styles.localTrialBadge}>LOCAL ONLY · ไม่รวม VPS</div>
+              <div className={styles.localTrialBadge}>LOCAL MT5 TRIAL</div>
 
               {trialReady ? (
                 <div className={styles.trialSuccess}>
                   <span className={styles.successIcon}>✓</span>
                   <div>
-                    <b>{trial?.trial ? "Trial เปิดใช้งานแล้ว" : "Trial พร้อมใช้งาน"}</b>
+                    <b>{trial?.trial ? "สิทธิ์ทดลองใช้งานเปิดแล้ว" : "สิทธิ์ทดลองใช้งานพร้อมแล้ว"}</b>
                     <span>{trial?.eligibility?.message || "เชื่อม MT5 แล้วเริ่มใช้งานได้"}</span>
                   </div>
                 </div>
               ) : !trialEligible ? (
                 <div className={styles.trialUnavailable}>
-                  <b>ไม่สามารถรับ Trial เพิ่มได้</b>
-                  <span>{trial?.eligibility?.message || "บัญชีนี้ไม่มีสิทธิ์ Trial"}</span>
+                  <b>ไม่สามารถเปิดสิทธิ์ทดลองใช้งานเพิ่มได้</b>
+                  <span>{trial?.eligibility?.message || "บัญชีนี้ไม่เข้าเงื่อนไขสิทธิ์ทดลองใช้งาน"}</span>
                 </div>
               ) : (
                 <div className={styles.otpPanel}>
                   <div className={styles.deliveryNote}>
                     <div>
-                      <b>เลือกช่องทางรับ OTP</b>
-                      <span>รหัสมีอายุ {trial?.otp?.expiresInMinutes || 10} นาที · ขอได้อีก {sendsRemaining} ครั้งวันนี้</span>
+                      <b>เลือกช่องทางรับรหัสยืนยัน</b>
+                      <span>รหัสยืนยันมีอายุ {trial?.otp?.expiresInMinutes || 10} นาที · ส่งได้อีก {sendsRemaining} ครั้งวันนี้</span>
                     </div>
                     <div className={styles.deliveryChoice}>
                       <button
@@ -460,7 +460,7 @@ export default function PackagesPage() {
                   </div>
                   {!trial?.phone?.masked && (
                     <div className={styles.smsWarning}>
-                      ต้องการ OTP ทาง SMS? <a href="/account#phone-settings">ผูกเบอร์มือถือใน My Account</a>
+                      ต้องการรับรหัสทาง SMS? <a href="/account#phone-settings">เพิ่มและยืนยันเบอร์มือถือใน My Account</a>
                     </div>
                   )}
 
@@ -479,16 +479,16 @@ export default function PackagesPage() {
                       }
                     >
                       {busy === "otp-send"
-                        ? "กำลังส่ง..."
+                        ? "กำลังส่งรหัส..."
                         : cooldown > 0
-                          ? `ส่งใหม่ได้ใน ${cooldown}s`
+                          ? `ส่งรหัสใหม่ได้ใน ${cooldown} วินาที`
                           : trial?.latestCode
-                            ? `ส่ง OTP ทาง ${trialDelivery === "SMS" ? "SMS" : "Email"} ใหม่`
-                            : `ส่ง OTP ทาง ${trialDelivery === "SMS" ? "SMS" : "Email"}`}
+                            ? `ส่งรหัสยืนยันทาง ${trialDelivery === "SMS" ? "SMS" : "Email"} ใหม่`
+                            : `ส่งรหัสยืนยันทาง ${trialDelivery === "SMS" ? "SMS" : "Email"}`}
                     </button>
 
                     <label className={styles.otpInput}>
-                      <span>รหัส OTP 6 หลัก</span>
+                      <span>รหัสยืนยัน 6 หลัก</span>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -507,15 +507,15 @@ export default function PackagesPage() {
                       onClick={verifyOtp}
                       disabled={Boolean(busy) || otp.length !== 6}
                     >
-                      {busy === "otp-verify" ? "กำลังตรวจสอบ..." : "ยืนยัน OTP"}
+                      {busy === "otp-verify" ? "กำลังตรวจสอบ..." : "ยืนยันและเปิดสิทธิ์ทดลอง"}
                     </button>
                   </div>
 
                   {!trial?.smsConfigured && trial?.emailConfigured && (
-                    <div className={styles.smsWarning}>SMS OTP ยังไม่พร้อมใช้งาน สามารถใช้อีเมลยืนยัน Local Trial ได้</div>
+                    <div className={styles.smsWarning}>บริการ SMS ไม่พร้อมใช้งานชั่วคราว สามารถรับรหัสยืนยันทางอีเมลแทนได้</div>
                   )}
                   {!trial?.verificationConfigured && (
-                    <div className={styles.smsWarning}>ระบบส่ง OTP ยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ</div>
+                    <div className={styles.smsWarning}>บริการส่งรหัสยืนยันไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่ภายหลัง</div>
                   )}
                 </div>
               )}
