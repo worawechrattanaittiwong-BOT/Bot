@@ -139,6 +139,10 @@ export default function DashboardPage() {
   const [checkingVersion, setCheckingVersion] = useState(false);
   const statusDialogRef = useRef<HTMLDialogElement | null>(null);
   const symbolDialogRef = useRef<HTMLDialogElement | null>(null);
+  const ownerVpsDialogRef = useRef<HTMLDialogElement | null>(null);
+  const [ownerVpsPassword, setOwnerVpsPassword] = useState("");
+  const [ownerVpsBusy, setOwnerVpsBusy] = useState(false);
+  const [dismissedCloudUpdateKey, setDismissedCloudUpdateKey] = useState("");
   const [tradingSymbol, setTradingSymbol] = useState("");
   const [symbolBusy, setSymbolBusy] = useState(false);
   const [serverOperation, setServerOperation] = useState<any>(null);
@@ -673,7 +677,13 @@ export default function DashboardPage() {
     Boolean(softwareUpdate.required);
   const cloudUpdate = data?.selectedSlot?.mode === "CLOUD" ? data?.cloudUpdate : null;
   const cloudUpdateState = String(cloudUpdate?.state || "");
-  const cloudUpdateVisible = Boolean(cloudUpdate) && cloudUpdateState !== "COMPLETED";
+  const cloudUpdateStageKey = cloudUpdate
+    ? [String(cloudUpdate.created_at || ""),String(cloudUpdate.target_version || ""),cloudUpdateState].join("|")
+    : "";
+  const cloudUpdateVisible =
+    Boolean(cloudUpdate) &&
+    cloudUpdateState !== "COMPLETED" &&
+    cloudUpdateStageKey !== dismissedCloudUpdateKey;
   const cloudUpdateLabel =
     cloudUpdateState === "WAITING_SAFE"
       ? (desired === "RUNNING" || state === "RUNNING"
@@ -698,6 +708,19 @@ export default function DashboardPage() {
           : cloudUpdateState === "FAILED"
             ? "บอทยังคงหยุดอยู่เพื่อความปลอดภัย กรุณารอผู้ดูแลตรวจสอบ"
             : "กำลังประมวลผล";
+  const cloudUpdateOperation = cloudUpdateVisible
+    ? {
+        id:"cloud-update-" + cloudUpdateStageKey,
+        kind:"CLOUD_UPDATE",
+        title:"SCENOVA CLOUD UPDATE" + (cloudUpdate?.target_version ? " · v" + cloudUpdate.target_version : ""),
+        status:cloudUpdateState === "FAILED" ? "FAILED" : "RUNNING",
+        message:cloudUpdateLabel + " · " + cloudUpdateDetail,
+        target:String(cloudUpdate?.target_version || ""),
+        canClose:cloudUpdateState === "WAITING_SAFE" || cloudUpdateState === "FAILED",
+        cloudUpdateKey:cloudUpdateStageKey
+      }
+    : null;
+  const operationTerminal = serverOperation || cloudUpdateOperation;
   const statusNoticeCount = Number(marketSessionClosed || !isMt5Online) + Number(softwareUpdateRequired) + Number(cloudUpdateVisible);
 
   const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };
@@ -840,10 +863,87 @@ export default function DashboardPage() {
   ]);
 
   useEffect(() => {
+    if (serverOperation?.kind !== "MIGRATION" || serverOperation?.status !== "RUNNING") return;
+    let cancelled = false;
+
+    const pollMigration = async () => {
+      try {
+        const snapshot = await api("/runtime-migration/status");
+        if (cancelled) return;
+        const migration = (snapshot?.migrations || []).find(
+          (item:any) => String(item.id) === String(serverOperation.migrationId)
+        );
+        if (!migration) return;
+
+        const migrationState = String(migration.state || "").toUpperCase();
+        const stateMessage:Record<string,string> = {
+          STOPPING_LOCAL:"กำลังหยุด Local MT5 เดิมแบบยืนยัน Process ก่อนย้ายสิทธิ์ไป VPS",
+          SOURCE_STOP_CONFIRMED:"Local MT5 หยุดแล้ว · กำลังส่ง Runtime ไป VPS",
+          TARGET_PROVISIONING:"กำลังเปิด MT5 และ FastBasketBot บน VPS " + String(serverOperation.runnerRegion || serverOperation.runnerId || ""),
+          COMPLETED:"ย้ายบัญชีไป VPS สำเร็จ · พร้อมใช้งานบน " + String(serverOperation.runnerRegion || serverOperation.runnerId || "SCENOVA VPS")
+        };
+
+        if (migrationState === "FAILED" || migrationState === "CANCELLED") {
+          setServerOperation((current:any) =>
+            current?.id === serverOperation.id
+              ? {
+                  ...current,
+                  status:"FAILED",
+                  message:String(migration.error_detail || migration.error_code || "ย้ายบัญชีไป VPS ไม่สำเร็จ"),
+                  updatedAt:Date.now()
+                }
+              : current
+          );
+          return;
+        }
+
+        if (migrationState === "COMPLETED") {
+          const targetSlotId = String(serverOperation.targetSlotId || migration.target_slot_id || "");
+          setServerOperation((current:any) =>
+            current?.id === serverOperation.id
+              ? {
+                  ...current,
+                  status:"SUCCESS",
+                  message:stateMessage.COMPLETED,
+                  updatedAt:Date.now()
+                }
+              : current
+          );
+          if (targetSlotId) {
+            selectedSlotIdRef.current = targetSlotId;
+            setSelectedSlotId(targetSlotId);
+            void load(targetSlotId, true);
+          }
+          return;
+        }
+
+        const nextMessage = stateMessage[migrationState];
+        if (nextMessage) {
+          setServerOperation((current:any) =>
+            current?.id === serverOperation.id
+              ? { ...current, message:nextMessage, updatedAt:Date.now() }
+              : current
+          );
+        }
+      } catch {
+        // Keep the migration terminal open; the next poll can recover.
+      }
+    };
+
+    void pollMigration();
+    const id = window.setInterval(pollMigration, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [serverOperation?.id, serverOperation?.kind, serverOperation?.status]);
+
+  useEffect(() => {
     if (serverOperation?.status !== "SUCCESS") return;
-    const id = window.setTimeout(() => setServerOperation(null), 1200);
+    const delayMs = serverOperation?.kind === "START" ? 550 : 1200;
+    const id = window.setTimeout(() => setServerOperation(null), delayMs);
     return () => clearTimeout(id);
-  }, [serverOperation?.id, serverOperation?.status]);
+  }, [serverOperation?.id, serverOperation?.kind, serverOperation?.status]);
 
   const startConnectionReady = isMt5Online || isAgentOnline;
   const safeStopPositionCount = Math.max(0, Number(metrics.positions || 0));
@@ -1661,6 +1761,75 @@ export default function DashboardPage() {
     }
   }
 
+  function openOwnerVpsMigration() {
+    setOwnerVpsPassword("");
+    setError("");
+    ownerVpsDialogRef.current?.showModal();
+  }
+
+  async function moveOwnerLocalToVps(e: FormEvent) {
+    e.preventDefault();
+    const sourceSlotId = String(selectedSlotIdRef.current || data?.selectedSlot?.id || "");
+    if (!sourceSlotId) {
+      setError("ไม่พบ Local Slot ที่จะย้าย");
+      return;
+    }
+    if (!ownerVpsPassword) {
+      setError("กรุณากรอก MT5 Trading Password");
+      return;
+    }
+
+    const operationId = Date.now() + "-" + Math.random().toString(36).slice(2);
+    setOwnerVpsBusy(true);
+    setError("");
+    setNotice("");
+    setServerOperation({
+      id:operationId,
+      kind:"MIGRATION",
+      title:"กำลังย้ายบัญชีไป VPS",
+      status:"RUNNING",
+      message:"กำลังตรวจ Local Runtime และหา SCENOVA VPS ที่พร้อมใช้งาน...",
+      startedAt:Date.now()
+    });
+
+    try {
+      const result = await api("/runtime-migration/owner/local-to-cloud", {
+        method:"POST",
+        body:JSON.stringify({
+          sourceSlotId,
+          tradingPassword:ownerVpsPassword
+        })
+      });
+      ownerVpsDialogRef.current?.close();
+      setOwnerVpsPassword("");
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? {
+              ...current,
+              migrationId:String(result?.migration?.id || ""),
+              targetSlotId:String(result?.targetSlotId || ""),
+              runnerId:String(result?.runnerId || ""),
+              runnerRegion:String(result?.runnerRegion || ""),
+              message:"SCENOVA รับคำสั่งแล้ว · กำลังย้าย Local MT5 ไป VPS " + String(result?.runnerRegion || result?.runnerId || "")
+            }
+          : current
+      );
+    } catch (e:any) {
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? {
+              ...current,
+              status:"FAILED",
+              message:String(e?.message || "ย้ายบัญชีไป VPS ไม่สำเร็จ"),
+              updatedAt:Date.now()
+            }
+          : current
+      );
+    } finally {
+      setOwnerVpsBusy(false);
+    }
+  }
+
   async function command(path: string, success: string) {
     const singleClickBotCommand =
       path.startsWith("/bot/start") || path.startsWith("/bot/stop");
@@ -1707,12 +1876,27 @@ export default function DashboardPage() {
         ? (path.includes("?") ? "&" : "?") + "slotId=" + encodeURIComponent(selectedSlotIdRef.current)
         : "";
       await api(path + suffix, { method: "POST" });
-      setServerOperation((current:any) =>
-        current?.id === operationId
-          ? { ...current, message: success || "Server รับคำสั่งแล้ว · กำลังรอ EA ยืนยัน", updatedAt:Date.now() }
-          : current
-      );
-      await load(selectedSlotIdRef.current, true);
+      if (operationKind === "START") {
+        setServerOperation((current:any) =>
+          current?.id === operationId
+            ? {
+                ...current,
+                status:"SUCCESS",
+                title:"เริ่มบอทสำเร็จ",
+                message:"บอททำงานสำเร็จ",
+                updatedAt:Date.now()
+              }
+            : current
+        );
+        void load(selectedSlotIdRef.current, true);
+      } else {
+        setServerOperation((current:any) =>
+          current?.id === operationId
+            ? { ...current, message: success || "Server รับคำสั่งแล้ว · กำลังรอ EA ยืนยัน", updatedAt:Date.now() }
+            : current
+        );
+        await load(selectedSlotIdRef.current, true);
+      }
     } catch (e: any) {
       const message = String(e?.message || "เกิดข้อผิดพลาด");
       setServerOperation((current:any) =>
@@ -2128,12 +2312,6 @@ export default function DashboardPage() {
 
   return (
     <div className={"app-wrap "+(activeView === "overview" ? "cc-shell-v4" : "")}>
-      {cloudUpdateVisible&&<div className={"cc-cloud-update-float "+(cloudUpdateState==="FAILED"?"failed":"")} role="status" aria-live="polite">
-        <span className="cc-cloud-update-kicker">SCENOVA CLOUD UPDATE · {cloudUpdate?.target_version?"v"+cloudUpdate.target_version:"LATEST"}</span>
-        <b>{cloudUpdateLabel}</b>
-        <p>{cloudUpdateDetail}</p>
-        <small>{cloudUpdateState==="WAITING_SAFE"?"สถานะ: รอคุณหยุดบอท":"สถานะ: "+cloudUpdateState}</small>
-      </div>}
       {isOwner ? (
         <OwnerSidebar
           activeKey={ownerActiveKey}
@@ -2198,6 +2376,110 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+
+        {operationTerminal && (
+          <div className="cc-server-operation-backdrop" role="presentation">
+            <section
+              className={"cc-server-operation-terminal status-" + String(operationTerminal.status || "RUNNING").toLowerCase()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cc-server-operation-title"
+            >
+              <header>
+                <div>
+                  <span className="cc-server-operation-icon">&gt;_</span>
+                  <div>
+                    <small>SCENOVA SERVER TERMINAL</small>
+                    <h3 id="cc-server-operation-title">{operationTerminal.title}</h3>
+                  </div>
+                </div>
+                {(operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
+                  <button
+                    type="button"
+                    aria-label="ปิด"
+                    onClick={()=>operationTerminal.kind==="CLOUD_UPDATE" ? setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey)) : setServerOperation(null)}
+                  >×</button>
+                )}
+              </header>
+              <div className="cc-server-operation-body">
+                <div className="cc-server-operation-line">
+                  <span className="prompt">server@scenova:~$</span>
+                  <b>{operationTerminal.status === "RUNNING" ? "processing" : operationTerminal.status === "SUCCESS" ? "completed" : "failed"}</b>
+                </div>
+                <p>{operationTerminal.message}</p>
+                {operationTerminal.kind === "SYMBOL" && operationTerminal.target && (
+                  <div className="cc-server-operation-meta"><span>Target Symbol</span><b>{operationTerminal.target}</b></div>
+                )}
+                {operationTerminal.kind === "CLOUD_UPDATE" && operationTerminal.target && (
+                  <div className="cc-server-operation-meta"><span>Target Version</span><b>v{operationTerminal.target}</b></div>
+                )}
+                <div className="cc-server-operation-progress" aria-hidden="true"><i/></div>
+              </div>
+              <footer>
+                <span>{operationTerminal.kind === "CLOUD_UPDATE"
+                  ? operationTerminal.status === "FAILED"
+                    ? "อัปเดตไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"
+                    : cloudUpdateState === "WAITING_SAFE"
+                      ? "ปิดหน้าต่างนี้เพื่อกดหยุดบอทเมื่อคุณพร้อม แล้วระบบจะอัปเดตต่อ"
+                      : "SCENOVA กำลังอัปเดตบัญชีนี้ใน Terminal เดียว"
+                  : operationTerminal.status === "RUNNING"
+                    ? "กำลังติดตามสถานะจาก Server อัตโนมัติทุก 1.5 วินาที"
+                    : operationTerminal.status === "SUCCESS"
+                      ? "สำเร็จ · หน้าต่างจะปิดอัตโนมัติ"
+                      : "ไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"}</span>
+                {(operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={()=>operationTerminal.kind==="CLOUD_UPDATE" ? setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey)) : setServerOperation(null)}
+                  >ปิด</button>
+                )}
+              </footer>
+            </section>
+          </div>
+        )}
+
+        <dialog
+          ref={ownerVpsDialogRef}
+          className="cc-symbol-picker"
+          onCancel={()=>{ if(!ownerVpsBusy) ownerVpsDialogRef.current?.close(); }}
+        >
+          <form className="cc-symbol-picker-card" onSubmit={moveOwnerLocalToVps}>
+            <div className="cc-symbol-picker-head">
+              <b>ย้าย OWNER ไป SCENOVA VPS</b>
+              <button type="button" aria-label="ปิด" disabled={ownerVpsBusy} onClick={()=>ownerVpsDialogRef.current?.close()}>×</button>
+            </div>
+            <p className="cc-symbol-picker-source">
+              {data.account
+                ? data.account.account_number + " · " + data.account.broker_server
+                : "บัญชี MT5 ปัจจุบัน"}
+            </p>
+            <label className="field">
+              <span>MT5 Trading Password</span>
+              <input
+                className="input"
+                autoFocus
+                type="password"
+                autoComplete="off"
+                value={ownerVpsPassword}
+                disabled={ownerVpsBusy}
+                onChange={e=>setOwnerVpsPassword(e.target.value)}
+                placeholder="กรอกรหัส Trading ของ MT5"
+                required
+              />
+            </label>
+            <p className="cc-symbol-picker-source">
+              SCENOVA จะเลือก VPS ที่ ONLINE / HEALTHY และมี Capacity ให้อัตโนมัติ Local เดิมจะถูกหยุดก่อนส่ง Runtime ไป VPS
+            </p>
+            <div className="cc-symbol-picker-actions">
+              <button type="button" className="btn" disabled={ownerVpsBusy} onClick={()=>ownerVpsDialogRef.current?.close()}>ยกเลิก</button>
+              <button type="submit" className="btn primary" disabled={ownerVpsBusy || !ownerVpsPassword}>
+                {ownerVpsBusy ? "กำลังย้าย..." : "ยืนยันย้ายไป VPS"}
+              </button>
+            </div>
+          </form>
+        </dialog>
 
 
         {activeView === "overview" && (
@@ -2321,51 +2603,6 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </section>
-
-              {serverOperation && (
-                <div className="cc-server-operation-backdrop" role="presentation">
-                  <section
-                    className={"cc-server-operation-terminal status-" + String(serverOperation.status || "RUNNING").toLowerCase()}
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="cc-server-operation-title"
-                  >
-                    <header>
-                      <div>
-                        <span className="cc-server-operation-icon">&gt;_</span>
-                        <div>
-                          <small>SCENOVA SERVER TERMINAL</small>
-                          <h3 id="cc-server-operation-title">{serverOperation.title}</h3>
-                        </div>
-                      </div>
-                      {serverOperation.status === "FAILED" && (
-                        <button
-                          type="button"
-                          aria-label="ปิด"
-                          onClick={()=>setServerOperation(null)}
-                        >×</button>
-                      )}
-                    </header>
-                    <div className="cc-server-operation-body">
-                      <div className="cc-server-operation-line">
-                        <span className="prompt">server@scenova:~$</span>
-                        <b>{serverOperation.status === "RUNNING" ? "processing" : serverOperation.status === "SUCCESS" ? "completed" : "failed"}</b>
-                      </div>
-                      <p>{serverOperation.message}</p>
-                      {serverOperation.kind === "SYMBOL" && serverOperation.target && (
-                        <div className="cc-server-operation-meta"><span>Target Symbol</span><b>{serverOperation.target}</b></div>
-                      )}
-                      <div className="cc-server-operation-progress" aria-hidden="true"><i/></div>
-                    </div>
-                    <footer>
-                      <span>{serverOperation.status === "RUNNING" ? "กำลังติดตามสถานะจาก Server อัตโนมัติทุก 1.5 วินาที" : serverOperation.status === "SUCCESS" ? "สำเร็จ · หน้าต่างจะปิดอัตโนมัติ" : "ไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"}</span>
-                      {serverOperation.status === "FAILED" && (
-                        <button type="button" className="btn" onClick={()=>setServerOperation(null)}>ปิด</button>
-                      )}
-                    </footer>
-                  </section>
-                </div>
-              )}
 
               <dialog
                 ref={symbolDialogRef}
@@ -2700,16 +2937,50 @@ export default function DashboardPage() {
         {activeView === "account" && (
           <div className="account-workspace">
             {data.selectedSlot?.mode === "LOCAL" ? (
-              <Mt5ConnectionExperience
-                account={data.account}
-                online={isMt5Online}
-                busy={busy}
-                downloadBlocked={desired==="RUNNING" || (state==="RUNNING" && isMt5Online) || Number(data.instance?.metrics?.positions || 0)>0}
-                apiBase={mt5ApiBase}
-                message={activationMessage}
-                error={error}
-                onDownload={downloadWindowsInstaller}
-              />
+              <>
+                <Mt5ConnectionExperience
+                  account={data.account}
+                  online={isMt5Online}
+                  busy={busy}
+                  downloadBlocked={desired==="RUNNING" || (state==="RUNNING" && isMt5Online) || Number(data.instance?.metrics?.positions || 0)>0}
+                  apiBase={mt5ApiBase}
+                  message={activationMessage}
+                  error={error}
+                  onDownload={downloadWindowsInstaller}
+                />
+                {isOwner && data.account && (
+                  <section className="panel purple setup-panel owner-vps-move-panel">
+                    <div className="setup-heading">
+                      <div>
+                        <div className="eyebrow">OWNER · MOVE TO VPS</div>
+                        <h2>ย้ายบัญชีนี้ไป SCENOVA VPS</h2>
+                        <p className="muted">ระบบจะใช้บัญชี MT5 เดิม หยุด Local Runtime แบบยืนยันก่อน แล้วเลือก VPS ที่พร้อมให้อัตโนมัติ</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn primary btn-lg"
+                      disabled={
+                        ownerVpsBusy ||
+                        busy ||
+                        desired === "RUNNING" ||
+                        state === "RUNNING" ||
+                        Number(data.instance?.metrics?.positions || 0) > 0
+                      }
+                      onClick={openOwnerVpsMigration}
+                    >
+                      {ownerVpsBusy ? "กำลังเตรียม VPS..." : "ย้ายบัญชีนี้ไป VPS"}
+                    </button>
+                    <div className="help">
+                      {desired === "RUNNING" || state === "RUNNING"
+                        ? "กรุณากด Safe Stop ก่อนย้าย"
+                        : Number(data.instance?.metrics?.positions || 0) > 0
+                          ? "ต้องไม่มี Position ค้างก่อนย้ายไป VPS"
+                          : "พร้อมย้าย · OWNER ไม่ต้องซื้อแพ็ก Cloud เพิ่ม"}
+                    </div>
+                  </section>
+                )}
+              </>
             ) : (
               <section className="panel account-card">
                 <div className="panel-head">

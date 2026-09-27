@@ -35,6 +35,24 @@ export class RuntimeMigrationController {
     return this.migrations.overview(userId);
   }
 
+  @Post("owner/local-to-cloud")
+  async ownerLocalToCloud(
+    @Req() req: any,
+    @Body() body: {
+      sourceSlotId: string;
+      tradingPassword?: string;
+    }
+  ) {
+    return this.migrations.ownerLocalToCloud(
+      String(req.user.sub),
+      this.actor(req),
+      {
+        sourceSlotId: String(body.sourceSlotId || ""),
+        tradingPassword: String(body.tradingPassword || "")
+      }
+    );
+  }
+
   @Post("request")
   async request(
     @Req() req: any,
