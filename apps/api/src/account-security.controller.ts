@@ -268,6 +268,11 @@ export class AccountSecurityController {
         passwordChangedAt: security?.last_password_changed_at || null,
         recoveryCodesRemaining
       },
+      phoneVerification: {
+        smsAvailable: this.sms.configured(),
+        resendAfterSeconds: 60,
+        codeExpiresInMinutes: 10
+      },
       access: {
         subscription: subscription || null,
         trial: trial || null,
