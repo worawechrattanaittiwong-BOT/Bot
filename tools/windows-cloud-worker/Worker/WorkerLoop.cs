@@ -2,7 +2,9 @@ namespace Scenova.CloudWorker;
 
 internal sealed class WorkerLoop
 {
-    internal const string Version = "2.2.19";
+    internal const string Version = "2.2.20";
+    private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan HeartbeatRequestTimeout = TimeSpan.FromSeconds(8);
 
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;
@@ -26,14 +28,113 @@ internal sealed class WorkerLoop
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.Combine(_config.Root, "worker"));
-        using var relayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var relayTask = _eaRelay.RunAsync(relayCts.Token);
+        using var backgroundCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var relayTask = _eaRelay.RunAsync(backgroundCts.Token);
+        var heartbeatTask = RunHeartbeatLoopAsync(backgroundCts.Token);
 
         try
         {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var phase = "work-cycle";
+                try
+                {
+                    var templateReady = _mt5.TemplateReady;
+
+                    // Server update is independent from customer MT5 lifecycles.
+                    // It replaces/restarts only Worker/Setup and leaves terminals running.
+                    phase = "server-update";
+                    if (await _serverUpdates.ProcessNextAsync(cancellationToken))
+                        return;
+
+                    phase = "commands";
+                    var commands = await _client.PostAsync<CommandEnvelope>(
+                        "commands",
+                        new { },
+                        cancellationToken);
+
+                    if (commands.Command is not null)
+                    {
+                        phase = "process-command";
+                        await _mt5.ProcessCommandAsync(commands.Command, _client, cancellationToken);
+                    }
+
+                    phase = "assigned";
+                    var assigned = await _client.PostAsync<AssignedResponse>(
+                        "assigned",
+                        new { },
+                        cancellationToken);
+
+                    phase = "instance-updates";
+                    await _updates.ProcessNextAsync(
+                        assigned.Jobs,
+                        cancellationToken);
+
+                    foreach (var job in assigned.Jobs)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        phase = "start-or-recover-assigned";
+                        await _mt5.StartOrRecoverAsync(job, _client, cancellationToken);
+                    }
+
+                    if (templateReady)
+                    {
+                        phase = "claim-next";
+                        var next = await _client.PostAsync<ClaimResponse>(
+                            "claim-next",
+                            new { },
+                            cancellationToken);
+
+                        if (next.Job is not null)
+                        {
+                            phase = "start-or-recover-claimed";
+                            await _mt5.StartOrRecoverAsync(next.Job, _client, cancellationToken);
+                        }
+                    }
+
+                    WriteStatus("OK " + DateTimeOffset.UtcNow.ToString("O"));
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    var message = ex.Message.Replace('\r', ' ').Replace('\n', ' ');
+                    if (message.Length > 500) message = message[..500];
+                    var diagnostic =
+                        "API_OR_WORKER_RETRY " + DateTimeOffset.UtcNow.ToString("O") +
+                        " phase=" + phase +
+                        " runner=" + _config.RunnerId +
+                        " error=" + ex.GetType().Name +
+                        " message=" + message;
+                    WriteStatus(diagnostic);
+                    Console.Error.WriteLine(diagnostic);
+                }
+
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            backgroundCts.Cancel();
+            try { await Task.WhenAll(relayTask, heartbeatTask); }
+            catch (OperationCanceledException) { }
+        }
+    }
+
+    private async Task RunHeartbeatLoopAsync(CancellationToken cancellationToken)
+    {
         while (!cancellationToken.IsCancellationRequested)
         {
-            var phase = "heartbeat";
+            var startedAt = DateTime.UtcNow;
             try
             {
                 var templateReady = _mt5.TemplateReady;
@@ -41,66 +142,16 @@ internal sealed class WorkerLoop
                 telemetry.SetupVersion = _config.SetupVersion;
                 telemetry.Instances = _mt5.Diagnostics();
 
-                phase = "heartbeat";
+                using var requestCts =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                requestCts.CancelAfter(HeartbeatRequestTimeout);
+
                 await _client.PostAsync("heartbeat", new
                 {
                     hostname = Environment.MachineName,
                     activeInstances = _mt5.ActiveInstanceCount(),
                     telemetry
-                }, cancellationToken);
-
-                // Server update is independent from customer MT5 lifecycles.
-                // It replaces/restarts only Worker/Setup and leaves terminals running.
-                phase = "server-update";
-                if (await _serverUpdates.ProcessNextAsync(cancellationToken))
-                    return;
-
-                phase = "commands";
-                var commands = await _client.PostAsync<CommandEnvelope>(
-                    "commands",
-                    new { },
-                    cancellationToken);
-
-                if (commands.Command is not null)
-                {
-                    phase = "process-command";
-                    await _mt5.ProcessCommandAsync(commands.Command, _client, cancellationToken);
-                }
-
-                phase = "assigned";
-                var assigned = await _client.PostAsync<AssignedResponse>(
-                    "assigned",
-                    new { },
-                    cancellationToken);
-
-                phase = "instance-updates";
-                await _updates.ProcessNextAsync(
-                    assigned.Jobs,
-                    cancellationToken);
-
-                foreach (var job in assigned.Jobs)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    phase = "start-or-recover-assigned";
-                    await _mt5.StartOrRecoverAsync(job, _client, cancellationToken);
-                }
-
-                if (templateReady)
-                {
-                    phase = "claim-next";
-                    var next = await _client.PostAsync<ClaimResponse>(
-                        "claim-next",
-                        new { },
-                        cancellationToken);
-
-                    if (next.Job is not null)
-                    {
-                        phase = "start-or-recover-claimed";
-                        await _mt5.StartOrRecoverAsync(next.Job, _client, cancellationToken);
-                    }
-                }
-
-                WriteStatus("OK " + DateTimeOffset.UtcNow.ToString("O"));
+                }, requestCts.Token);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -110,30 +161,25 @@ internal sealed class WorkerLoop
             {
                 var message = ex.Message.Replace('\r', ' ').Replace('\n', ' ');
                 if (message.Length > 500) message = message[..500];
-                var diagnostic =
-                    "API_OR_WORKER_RETRY " + DateTimeOffset.UtcNow.ToString("O") +
-                    " phase=" + phase +
+                Console.Error.WriteLine(
+                    "WORKER_HEARTBEAT_RETRY " + DateTimeOffset.UtcNow.ToString("O") +
                     " runner=" + _config.RunnerId +
                     " error=" + ex.GetType().Name +
-                    " message=" + message;
-                WriteStatus(diagnostic);
-                Console.Error.WriteLine(diagnostic);
+                    " message=" + message);
             }
+
+            var elapsed = DateTime.UtcNow - startedAt;
+            var delay = HeartbeatInterval - elapsed;
+            if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                await Task.Delay(delay, cancellationToken);
             }
             catch (OperationCanceledException)
             {
                 break;
             }
-        }
-        }
-        finally
-        {
-            relayCts.Cancel();
-            try { await relayTask; } catch (OperationCanceledException) { }
         }
     }
 
