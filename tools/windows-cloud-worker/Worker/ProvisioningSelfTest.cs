@@ -63,6 +63,11 @@ internal static class ProvisioningSelfTest
                 };
                 if (!string.IsNullOrWhiteSpace(brokerPlatforms.RequiredPlatform(genericJob)))
                     throw new InvalidOperationException("generic broker was forced to a dedicated platform");
+
+                if (!BrokerPlatformManager.IsInstallerSuccessExitCode(0) ||
+                    !BrokerPlatformManager.IsInstallerSuccessExitCode(1) ||
+                    BrokerPlatformManager.IsInstallerSuccessExitCode(2))
+                    throw new InvalidOperationException("MetaTrader installer exit-code contract failed");
             }
 
             var created = new List<(CloudJob Job, PreparedInstance Prepared)>();
@@ -152,6 +157,7 @@ internal static class ProvisioningSelfTest
             Console.WriteLine("PASS: SCENOVA API base is canonicalized before writing EA presets");
             Console.WriteLine("PASS: per-instance account, credential, token and startup files remain isolated");
             Console.WriteLine("PASS: duplicate MT5 chart profiles are cleared before Cloud startup");
+            Console.WriteLine("PASS: MetaTrader automatic installer accepts success exit codes 0/1");
             Console.WriteLine("PASS: self-test never launches terminal64.exe or contacts a broker/backend");
             return 0;
         }
