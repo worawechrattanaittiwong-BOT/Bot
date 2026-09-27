@@ -328,7 +328,7 @@ export default function DashboardPage() {
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible" || dashboardLoadInFlightRef.current) return;
       void load(undefined, true);
-    }, 10000);
+    }, 5000);
     return () => clearInterval(id);
   }, []);
 
