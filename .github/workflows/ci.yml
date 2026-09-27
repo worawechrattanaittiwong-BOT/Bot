@@ -146,6 +146,8 @@ jobs:
         run: ./tests/runtime-migration-phase3-contract.ps1
       - name: BOT START exact-error mapping contract
         run: node ./tests/bot-start-error-contract.mjs
+      - name: Pass 7 control-plane regression contract
+        run: node ./tests/pass7-control-plane-regression.mjs
       - name: Production hardening Phase 4 contract
         shell: pwsh
         run: ./tests/production-hardening-phase4-contract.ps1
