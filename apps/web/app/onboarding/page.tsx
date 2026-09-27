@@ -150,18 +150,25 @@ export default function OnboardingPage() {
                     <b>Local MT5</b>
                     <p>ใช้งาน MT5 และ SCENOVA บนคอมพิวเตอร์ของคุณโดยตรง</p>
                   </div>
-                  <div className={styles.choiceActions}>
-                    <a className={styles.choicePrimaryAction} href="/dashboard?view=account&welcome=1&setup=local">
-                      ติดตั้ง Local MT5 <span>→</span>
-                    </a>
-                    <a className={styles.choiceTrialAction} href="/packages?system=local&from=onboarding">
-                      เริ่มทดลองใช้งาน
-                    </a>
-                    <a className={styles.choiceDashboardAction} href="/dashboard?view=overview">
-                      เข้าสู่ Dashboard
-                    </a>
-                  </div>
                 </div>
+              </div>
+            </div>
+
+            <div className={styles.localActionsBar} aria-label="Local MT5 actions">
+              <div className={styles.localActionsCopy}>
+                <b>Local MT5</b>
+                <span>เลือกขั้นตอนที่ต้องการดำเนินการต่อ</span>
+              </div>
+              <div className={styles.choiceActions}>
+                <a className={styles.choicePrimaryAction} href="/dashboard?view=account&welcome=1&setup=local">
+                  ติดตั้ง Local MT5 <span>→</span>
+                </a>
+                <a className={styles.choiceTrialAction} href="/packages?system=local&from=onboarding">
+                  เริ่มทดลองใช้งาน
+                </a>
+                <a className={styles.choiceDashboardAction} href="/dashboard?view=overview">
+                  เข้าสู่ Dashboard
+                </a>
               </div>
             </div>
           </section>
