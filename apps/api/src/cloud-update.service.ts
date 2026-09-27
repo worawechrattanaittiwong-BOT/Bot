@@ -291,9 +291,9 @@ export class CloudUpdateService {
                -- fresh-heartbeat gate in order to receive the EA that fixes its
                -- heartbeat. Permit only a recently-seen, explicitly STOPPED,
                -- fully-flat SCENOVA runtime. Never use this path for RUNNING,
-               -- SAFE_STOP, unknown/stale (>10m), open, or pending exposure.
+               -- SAFE_STOP, unknown/stale (>60m), open, or pending exposure.
                bi.actual_state='STOPPED'
-               AND bi.last_seen_at>now()-interval '10 minutes'
+               AND bi.last_seen_at>now()-interval '60 minutes'
                AND COALESCE(NULLIF(bi.metrics->>'accountScenovaPositions','')::int,0)<=0
                AND COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0)<=0
              )
