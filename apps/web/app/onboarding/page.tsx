@@ -188,51 +188,6 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        <div className={styles.cards}>
-          <article className={styles.card + " " + styles.cardDone}>
-            <div className={styles.cardTop}>
-              <span className={styles.icon}><ScenovaIcon name="shield" size={20}/></span>
-              <span className={styles.stateGood}>READY</span>
-            </div>
-            <h2>1. SCENOVA Account</h2>
-            <p>บัญชีพร้อมสำหรับเข้าใช้งาน Control Center</p>
-          </article>
-
-          <article className={styles.card + (accountLinked ? " " + styles.cardDone : "")}>
-            <div className={styles.cardTop}>
-              <span className={styles.icon}><ScenovaIcon name="control" size={20}/></span>
-              <span className={accountLinked ? styles.stateGood : styles.stateWait}>{accountLinked ? "CONNECTED" : "NEXT"}</span>
-            </div>
-            <h2>2. ระบบที่ใช้งาน</h2>
-            <p>
-              {accountLinked
-                ? "เชื่อม MT5 แล้ว · " + String(data?.account?.account_number || "บัญชีพร้อมใช้งาน")
-                : "เลือก VPS หรือ Local เพื่อไปยังขั้นตอนถัดไป"}
-            </p>
-            <div className={styles.modeRow}>
-              <span><ScenovaIcon name="cloud" size={15}/> Cloud</span>
-              <span><ScenovaIcon name="strategy" size={15}/> Local</span>
-            </div>
-          </article>
-
-          <article className={styles.card + (accessAllowed ? " " + styles.cardDone : "")}>
-            <div className={styles.cardTop}>
-              <span className={styles.icon}><ScenovaIcon name="clock" size={20}/></span>
-              <span className={accessAllowed ? styles.stateGood : trialPending ? styles.statePending : styles.stateWait}>
-                {accessAllowed ? "ACTIVE" : trialPending ? "PENDING" : "LOCKED"}
-              </span>
-            </div>
-            <h2>3. Trial / Subscription</h2>
-            <p>
-              {accessAllowed
-                ? "สิทธิ์พร้อมใช้งาน เริ่มใช้งานได้ทันที"
-                : trialPending
-                  ? "ส่งคำขอ Trial แล้ว อยู่ระหว่างรอผู้ดูแลอนุมัติ"
-                  : "เปิด Trial หรือ Subscription เพื่อเริ่มใช้งาน"}
-            </p>
-          </article>
-        </div>
-
         <section className={styles.actionPanel}>
           <div>
             <small>RECOMMENDED NEXT STEP</small>
