@@ -313,8 +313,10 @@ export class TrialCouponController {
     return {
       emailConfigured: this.emailConfigured(),
       smsConfigured: this.sms.configured(),
-      verificationConfigured: this.emailConfigured() || this.sms.configured(),
-      defaultDelivery: "EMAIL",
+      verificationConfigured:
+        this.emailConfigured() || Boolean(phone?.e164 && this.sms.configured()),
+      defaultDelivery:
+        phone?.e164 && this.sms.configured() ? "SMS" : "EMAIL",
       email: user?.email ? {
         masked: this.maskEmail(user.email),
         verified: Boolean(user.email_verified_at)
@@ -344,7 +346,10 @@ export class TrialCouponController {
   }
 
   @Post("request-code")
-  async requestCode(@Req() req: any) {
+  async requestCode(
+    @Req() req: any,
+    @Body() body: { delivery?: "SMS" | "EMAIL" } = {}
+  ) {
     const userId = String(req.user.sub);
     const user = await this.db.one(
       "SELECT email,email_verified_at FROM users WHERE id=$1 AND status='ACTIVE'",
@@ -421,84 +426,132 @@ export class TrialCouponController {
     const emailMasked = this.maskEmail(user.email);
     const last4 = msisdn ? msisdn.slice(-4) : null;
 
+    const requestedDelivery = String(body?.delivery || "").toUpperCase();
+    if (requestedDelivery && !["SMS", "EMAIL"].includes(requestedDelivery)) {
+      throw new BadRequestException("ช่องทาง OTP ไม่ถูกต้อง");
+    }
+    const preferredDelivery: "SMS" | "EMAIL" =
+      requestedDelivery === "SMS" || requestedDelivery === "EMAIL"
+        ? requestedDelivery
+        : msisdn && this.sms.configured()
+          ? "SMS"
+          : "EMAIL";
+
+    if (preferredDelivery === "SMS" && (!msisdn || !phone)) {
+      throw new BadRequestException(
+        "ยังไม่ได้ผูกเบอร์มือถือ กรุณาเพิ่มเบอร์ใน My Account หรือเลือก OTP ทางอีเมล"
+      );
+    }
+    if (preferredDelivery === "SMS" && !this.sms.configured()) {
+      throw new ServiceUnavailableException(
+        "ระบบ SMS OTP ยังไม่พร้อมใช้งาน กรุณาเลือก OTP ทางอีเมล"
+      );
+    }
+    if (preferredDelivery === "EMAIL" && !this.emailConfigured()) {
+      throw new ServiceUnavailableException(
+        "ระบบอีเมล OTP ยังไม่พร้อมใช้งาน กรุณาเลือก OTP ทาง SMS"
+      );
+    }
+
     const record = await this.db.one(
       `INSERT INTO trial_sms_codes(
          user_id,phone_hash,phone_last4,code_hash,code_salt,provider,status,
          expires_at,request_ip,purpose,delivery_channel,email_masked
        )
-       VALUES($1,$2,$3,$4,$5,'PENDING','PENDING',now()+interval '10 minutes',$6,'TRIAL','EMAIL',$7)
+       VALUES($1,$2,$3,$4,$5,'PENDING','PENDING',now()+interval '10 minutes',$6,'TRIAL',$7,$8)
        RETURNING id`,
-      [userId, candidatePhoneHash, last4, this.codeHash(salt, otpCode), salt, ip, emailMasked]
+      [
+        userId,
+        candidatePhoneHash,
+        last4,
+        this.codeHash(salt, otpCode),
+        salt,
+        ip,
+        preferredDelivery,
+        emailMasked
+      ]
     );
 
-    let deliveryChannel: "EMAIL" | "SMS" = "EMAIL";
-    let deliveryMasked = emailMasked;
-    let fallbackUsed = false;
-    let emailFailure: unknown = null;
+    const sendEmail = async () => {
+      await this.sendTrialEmailOtp(String(user.email), otpCode);
+      await this.db.query(
+        `UPDATE trial_sms_codes
+         SET status='SENT',
+             sent_at=now(),
+             provider='RESEND_EMAIL',
+             provider_token=NULL,
+             provider_refno=NULL,
+             delivery_channel='EMAIL',
+             email_masked=$2
+         WHERE id=$1`,
+        [record.id, emailMasked]
+      );
+      return {
+        channel: "EMAIL" as const,
+        masked: emailMasked
+      };
+    };
 
-    const canUseEmail = this.emailConfigured();
-    if (canUseEmail) {
+    const sendSms = async () => {
+      if (!msisdn || !phone) throw new Error("phone unavailable");
+      const delivery = await this.sms.requestOtp(msisdn, otpCode, "LOCAL_TRIAL");
+      await this.db.query(
+        `UPDATE trial_sms_codes
+         SET status='SENT',
+             sent_at=now(),
+             provider=$2,
+             provider_token=$3,
+             provider_refno=$4,
+             delivery_channel='SMS'
+         WHERE id=$1`,
+        [record.id, delivery.provider, delivery.token, delivery.refno]
+      );
+      return {
+        channel: "SMS" as const,
+        masked: maskPhone(msisdn, phone.country_code)
+      };
+    };
+
+    let delivered: { channel: "EMAIL" | "SMS"; masked: string } | null = null;
+    let fallbackUsed = false;
+
+    try {
+      delivered = preferredDelivery === "SMS"
+        ? await sendSms()
+        : await sendEmail();
+    } catch {
+      fallbackUsed = true;
       try {
-        await this.sendTrialEmailOtp(String(user.email), otpCode);
-        await this.db.query(
-          `UPDATE trial_sms_codes
-           SET status='SENT',
-               sent_at=now(),
-               provider='RESEND_EMAIL',
-               delivery_channel='EMAIL',
-               email_masked=$2
-           WHERE id=$1`,
-          [record.id, emailMasked]
-        );
-      } catch (error) {
-        emailFailure = error;
+        if (preferredDelivery === "SMS" && this.emailConfigured()) {
+          delivered = await sendEmail();
+        } else if (
+          preferredDelivery === "EMAIL" &&
+          msisdn &&
+          phone &&
+          this.sms.configured()
+        ) {
+          delivered = await sendSms();
+        }
+      } catch {
+        delivered = null;
       }
-    } else {
-      emailFailure = new Error("email provider unavailable");
     }
 
-    if (emailFailure) {
-      if (!msisdn || !phone) {
-        await this.db.query(
-          "UPDATE trial_sms_codes SET status='FAILED' WHERE id=$1",
-          [record.id]
-        );
-        throw new ServiceUnavailableException(
-          "ส่งรหัสทางอีเมลไม่สำเร็จ และบัญชีนี้ยังไม่มีเบอร์มือถือสำรอง กรุณาตรวจสอบอีเมลหรือเพิ่มเบอร์มือถือใน My Account"
-        );
-      }
-
-      try {
-        const delivery = await this.sms.requestOtp(msisdn, otpCode);
-        deliveryChannel = "SMS";
-        deliveryMasked = maskPhone(msisdn, phone.country_code);
-        fallbackUsed = true;
-        await this.db.query(
-          `UPDATE trial_sms_codes
-           SET status='SENT',
-               sent_at=now(),
-               provider=$2,
-               provider_token=$3,
-               provider_refno=$4,
-               delivery_channel='SMS'
-           WHERE id=$1`,
-          [record.id, delivery.provider, delivery.token, delivery.refno]
-        );
-      } catch (smsError) {
-        await this.db.query(
-          "UPDATE trial_sms_codes SET status='FAILED' WHERE id=$1",
-          [record.id]
-        );
-        throw new ServiceUnavailableException(
-          "ไม่สามารถส่งรหัสทดลองได้ทั้งทางอีเมลและ SMS กรุณาลองใหม่อีกครั้งภายหลัง"
-        );
-      }
+    if (!delivered) {
+      await this.db.query(
+        "UPDATE trial_sms_codes SET status='FAILED' WHERE id=$1",
+        [record.id]
+      );
+      throw new ServiceUnavailableException(
+        "ส่ง OTP ไม่สำเร็จ กรุณาตรวจสอบช่องทางที่เลือกแล้วลองใหม่อีกครั้ง"
+      );
     }
 
     return {
       sent: true,
-      deliveryChannel,
-      deliveryMasked,
+      requestedDelivery: preferredDelivery,
+      deliveryChannel: delivered.channel,
+      deliveryMasked: delivered.masked,
       fallbackUsed,
       emailMasked,
       phoneMasked: msisdn && phone ? maskPhone(msisdn, phone.country_code) : null,
