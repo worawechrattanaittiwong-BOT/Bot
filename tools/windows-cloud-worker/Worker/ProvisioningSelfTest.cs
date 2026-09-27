@@ -65,6 +65,27 @@ internal static class ProvisioningSelfTest
                         StringComparison.Ordinal))
                     throw new InvalidOperationException("Exness broker platform mapping failed");
 
+                if (!string.Equals(
+                        CloudJob.ResolveBrokerSymbol("XAUUSD", "Exness", "Exness-MT5Trial14"),
+                        "XAUUSDm",
+                        StringComparison.Ordinal))
+                    throw new InvalidOperationException("Exness Gold symbol was not resolved to XAUUSDm");
+                if (!string.Equals(
+                        CloudJob.ResolveBrokerSymbol("BTCUSD", "Exness", "Exness-MT5Real38"),
+                        "BTCUSDm",
+                        StringComparison.Ordinal))
+                    throw new InvalidOperationException("Exness BTC symbol was not resolved to BTCUSDm");
+                if (!string.Equals(
+                        CloudJob.ResolveBrokerSymbol("BTCUSDm", "Exness", "Exness-MT5Real38"),
+                        "BTCUSDm",
+                        StringComparison.Ordinal))
+                    throw new InvalidOperationException("resolved Exness BTC symbol was changed unexpectedly");
+                if (!string.Equals(
+                        CloudJob.ResolveBrokerSymbol("XAUUSD", "Other", "Other-MT5"),
+                        "XAUUSD",
+                        StringComparison.Ordinal))
+                    throw new InvalidOperationException("generic broker symbol was rewritten");
+
                 var genericJob = new CloudJob
                 {
                     InstanceId = Guid.NewGuid().ToString(),
@@ -169,6 +190,7 @@ internal static class ProvisioningSelfTest
             Console.WriteLine("PASS: SCENOVA API base is canonicalized before writing EA presets");
             Console.WriteLine("PASS: per-instance account, credential, token and startup files remain isolated");
             Console.WriteLine("PASS: duplicate MT5 chart profiles are cleared before Cloud startup");
+            Console.WriteLine("PASS: Cloud broker symbol resolver maps Exness Gold/BTC to native m-suffix charts");
             Console.WriteLine("PASS: MT5 manual close rearms one automatic reopen without a launch loop");
             Console.WriteLine("PASS: MetaTrader automatic installer accepts success exit codes 0/1");
             Console.WriteLine("PASS: self-test never launches terminal64.exe or contacts a broker/backend");
