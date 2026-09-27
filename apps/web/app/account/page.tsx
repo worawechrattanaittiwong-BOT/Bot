@@ -82,11 +82,8 @@ const PHONE_COUNTRIES = [
   ["ZA","แอฟริกาใต้","+27"], ["BR","บราซิล","+55"], ["MX","เม็กซิโก","+52"]
 ] as const;
 
-function phoneInputGuide(countryCode: string) {
-  if (countryCode === "+66") return { placeholder: "เช่น 0812345678" };
-  if (countryCode === "+1") return { placeholder: "เช่น 4155550123" };
-  if (countryCode === "+44") return { placeholder: "เช่น 07123456789" };
-  return { placeholder: "เช่น 812345678" };
+function phoneInputGuide() {
+  return { placeholder: "กรอกหมายเลขโทรศัพท์" };
 }
 
 function formatDate(value?: string | null) {
@@ -190,7 +187,7 @@ export default function AccountPage() {
     currentPassword.length > 0 &&
     (!data?.security.twoFactorEnabled || password2fa.trim().length > 0);
 
-  const phoneGuide = phoneInputGuide(phoneCountry);
+  const phoneGuide = phoneInputGuide();
   const phoneSmsAvailable = data?.phoneVerification?.smsAvailable !== false;
 
   function notify(kind: "good" | "bad" | "info", text: string) {
