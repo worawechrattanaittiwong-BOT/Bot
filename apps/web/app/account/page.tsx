@@ -144,6 +144,7 @@ export default function AccountPage() {
   const [phoneOtp, setPhoneOtp] = useState("");
   const [phoneOtpBusy, setPhoneOtpBusy] = useState<"" | "send" | "verify">("");
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneOtpCooldown, setPhoneOtpCooldown] = useState(0);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -176,6 +177,14 @@ export default function AccountPage() {
 
   useEffect(() => { load(); }, []);
 
+  useEffect(() => {
+    if (phoneOtpCooldown <= 0) return;
+    const id = window.setInterval(() => {
+      setPhoneOtpCooldown(current => Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [phoneOtpCooldown > 0]);
+
   const accountRole = String(data?.user.role || "").toUpperCase();
   const isOwner = accountRole === "OWNER";
   const elevated = ["OWNER", "ADMIN"].includes(accountRole);
@@ -201,6 +210,7 @@ export default function AccountPage() {
     (!data?.security.twoFactorEnabled || password2fa.trim().length > 0);
 
   const phoneGuide = phoneInputGuide(phoneCountry);
+  const phoneSmsAvailable = trialAccess?.smsConfigured !== false;
 
   function notify(kind: "good" | "bad" | "info", text: string) {
     setMessageKind(kind);
@@ -229,12 +239,11 @@ export default function AccountPage() {
       setPhoneInput("");
       setPhoneOtp("");
       setPhoneOtpSent(false);
+      setPhoneOtpCooldown(0);
       toggle("phone", false);
       notify(
         "good",
-        isOwner
-          ? "บันทึกเบอร์โทรแล้ว · OWNER สามารถแก้ไขเบอร์ของบัญชีตัวเองได้ และระบบจะคืนเบอร์จากบัญชีที่ลบแล้วให้อัตโนมัติ"
-          : "บันทึกเบอร์โทรแล้ว คุณยังแก้ไขได้จนกว่าจะยืนยัน OTP"
+        "บันทึกเบอร์มือถือแล้ว กรุณาส่งรหัสยืนยันเพื่อยืนยันหมายเลขนี้"
       );
       await load();
     } catch (error: unknown) {
@@ -245,15 +254,30 @@ export default function AccountPage() {
   }
 
   async function requestPhoneOtp() {
-    if (!data?.user.phone || data.user.phone.verified || phoneOtpBusy) return;
+    if (
+      !data?.user.phone ||
+      data.user.phone.verified ||
+      phoneOtpBusy ||
+      phoneOtpCooldown > 0 ||
+      !phoneSmsAvailable
+    ) return;
     setPhoneOtpBusy("send");
     try {
       const result = await api("/auth/account/phone/request-otp", { method: "POST" });
       setPhoneOtp("");
       setPhoneOtpSent(true);
-      notify("good", `ส่ง OTP ไปที่ ${result.phoneMasked || data.user.phone.masked} แล้ว รหัสมีอายุ 10 นาที`);
+      setPhoneOtpCooldown(Math.max(0, Number(result?.resendAfterSeconds || 60)));
+      notify(
+        "good",
+        `ส่งรหัสยืนยันไปยัง ${result.phoneMasked || data.user.phone.masked} แล้ว กรุณากรอก OTP ภายใน ${Number(result?.expiresInMinutes || 10)} นาที`
+      );
     } catch (error: unknown) {
-      notify("bad", error instanceof Error ? error.message : "ส่ง OTP ไม่สำเร็จ");
+      notify(
+        "bad",
+        error instanceof Error
+          ? error.message
+          : "ไม่สามารถส่งรหัสยืนยันได้ กรุณาลองใหม่อีกครั้ง"
+      );
     } finally {
       setPhoneOtpBusy("");
     }
@@ -269,10 +293,16 @@ export default function AccountPage() {
       });
       setPhoneOtp("");
       setPhoneOtpSent(false);
-      notify("good", "ยืนยันเบอร์มือถือสำเร็จ");
+      setPhoneOtpCooldown(0);
+      notify("good", "ยืนยันเบอร์มือถือเรียบร้อยแล้ว");
       await load();
     } catch (error: unknown) {
-      notify("bad", error instanceof Error ? error.message : "ยืนยัน OTP ไม่สำเร็จ");
+      notify(
+        "bad",
+        error instanceof Error
+          ? error.message
+          : "ไม่สามารถยืนยันรหัสได้ กรุณาตรวจสอบ OTP แล้วลองใหม่อีกครั้ง"
+      );
     } finally {
       setPhoneOtpBusy("");
     }
@@ -437,7 +467,7 @@ export default function AccountPage() {
             <section id="phone-settings" className={styles.sectionCard}>
               <SectionHeader
                 icon="account"
-                title="เบอร์โทร"
+                title="เบอร์มือถือ"
                 subtitle={data.user.phone ? data.user.phone.masked : "ยังไม่ได้ผูกเบอร์มือถือ"}
                 badge={data.user.phone ? (data.user.phone.verified ? "VERIFIED" : "SAVED") : "NOT LINKED"}
                 good={Boolean(data.user.phone?.verified)}
@@ -464,7 +494,7 @@ export default function AccountPage() {
                       </select>
                     </label>
                     <label>
-                      <span>เบอร์โทร</span>
+                      <span>หมายเลขโทรศัพท์</span>
                       <input
                         type="tel"
                         inputMode="tel"
@@ -482,7 +512,7 @@ export default function AccountPage() {
                     <div className={styles.actionLine}>
                       <button type="button" className={styles.secondaryButton} onClick={() => toggle("phone", false)} disabled={phoneBusy}>ยกเลิก</button>
                       <button type="button" className={styles.primaryButton} onClick={savePhone} disabled={!phoneCountry || !phoneInput.trim() || phoneBusy}>
-                        {phoneBusy ? "กำลังบันทึก..." : "บันทึกเบอร์"}
+                        {phoneBusy ? "กำลังบันทึก..." : "บันทึกเบอร์มือถือ"}
                       </button>
                     </div>
                   </div>
@@ -499,9 +529,15 @@ export default function AccountPage() {
                       type="button"
                       className={styles.secondaryButton}
                       onClick={requestPhoneOtp}
-                      disabled={Boolean(phoneOtpBusy)}
+                      disabled={Boolean(phoneOtpBusy) || phoneOtpCooldown > 0 || !phoneSmsAvailable}
                     >
-                      {phoneOtpBusy === "send" ? "กำลังส่ง..." : phoneOtpSent ? "ส่ง OTP ใหม่" : "ส่ง OTP"}
+                      {phoneOtpBusy === "send"
+                        ? "กำลังส่งรหัส..."
+                        : phoneOtpCooldown > 0
+                          ? `ส่งรหัสใหม่ได้ใน ${phoneOtpCooldown} วินาที`
+                          : phoneOtpSent
+                            ? "ส่งรหัสใหม่"
+                            : "ส่งรหัสยืนยัน"}
                     </button>
                     <div>
                       <span>รหัส OTP 6 หลัก</span>
@@ -514,7 +550,6 @@ export default function AccountPage() {
                         value={phoneOtp}
                         onChange={event => setPhoneOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
                         disabled={Boolean(phoneOtpBusy)}
-                        placeholder="000000"
                         aria-label="รหัส OTP 6 หลัก"
                       />
                     </div>
@@ -524,7 +559,7 @@ export default function AccountPage() {
                       onClick={verifyPhoneOtp}
                       disabled={Boolean(phoneOtpBusy) || phoneOtp.length !== 6}
                     >
-                      {phoneOtpBusy === "verify" ? "กำลังยืนยัน..." : "ยืนยัน OTP"}
+                      {phoneOtpBusy === "verify" ? "กำลังยืนยัน..." : "ยืนยันเบอร์มือถือ"}
                     </button>
                   </div>
                 </div>
@@ -535,8 +570,11 @@ export default function AccountPage() {
               {isOwner && data.user.phone && !open.phone && (
                 <div className={styles.lockNote}>สิทธิ์ OWNER: แก้ไขเบอร์ของบัญชีนี้ได้ แม้เคยยืนยันแล้ว และสามารถนำเบอร์ที่ค้างอยู่กับบัญชีที่ลบแล้วกลับมาใช้ได้ โดยประวัติ Trial เดิมยังถูกเก็บไว้</div>
               )}
+              {!phoneSmsAvailable && data.user.phone && !data.user.phone.verified && !open.phone && (
+                <div className={styles.lockNote}>บริการยืนยันเบอร์ผ่าน SMS ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่ภายหลัง</div>
+              )}
               {!isOwner && !phoneLocked && data.user.phone && !open.phone && (
-                <div className={styles.lockNote}>หากกรอกเบอร์ผิด กด “แก้ไขเบอร์” เพื่อเปลี่ยนได้ก่อนยืนยัน OTP</div>
+                <div className={styles.lockNote}>สามารถแก้ไขหมายเลขได้จนกว่าจะยืนยันเบอร์มือถือสำเร็จ</div>
               )}
             </section>
 
