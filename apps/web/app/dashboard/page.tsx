@@ -3230,39 +3230,6 @@ export default function DashboardPage() {
               )
             )}
 
-          {!isOwner && (
-            <div className="access-workspace account-access-summary" id="membership-and-trial">
-              <div className="grid2 access-grid">
-                <section className="panel purple">
-                  <div className="eyebrow">ACCESS STATUS</div>
-                  <h2 style={{marginTop:8}}>{accessLabel}</h2>
-                  {remainingText ? (
-                    <div className="time-card">
-                      <span>เวลาคงเหลือ</span>
-                      <b className="mono">{remainingText}</b>
-                      <small>หมดอายุ {accessExpiry?.toLocaleString("th-TH")}</small>
-                    </div>
-                  ) : (
-                    <p className="muted">ยังไม่มีสิทธิ์สมาชิกที่กำลังใช้งาน</p>
-                  )}
-                  {data.selectedSlot?.plan_code && (
-                    <div className="slot-plan-summary">
-                      <span>แพ็กเกจ</span>
-                      <b>{data.selectedSlot.plan_code}</b>
-                      <small>{data.selectedSlot.mode}</small>
-                    </div>
-                  )}
-                </section>
-
-                <section className="panel">
-                  <div className="eyebrow">PACKAGES</div>
-                  <h2>Trial · Local MT5 · Cloud MT5</h2>
-                  <p className="muted">จัดการ Trial ด้วย OTP และเลือกแพ็กเกจ Local หรือ Cloud จากหน้าเดียว</p>
-                  <a className="btn primary" href="/packages">เปิดหน้า Packages →</a>
-                </section>
-              </div>
-            </div>
-          )}
           </div>
         )}
 
