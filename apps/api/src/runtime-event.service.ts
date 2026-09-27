@@ -12,6 +12,7 @@ export type RuntimeRealtimeEvent = {
   positions?: number | null;
   symbol?: string | null;
   sourceAgeMs?: number | null;
+  metrics?: Record<string, any>;
 };
 
 @Injectable()
