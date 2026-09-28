@@ -537,7 +537,7 @@ export default function ReferralsPage() {
               </div>
             </article>
             <article className={styles.balanceCard}>
-              <span className={styles.balanceIcon}><ScenovaIcon name="download" size={23}/></span>
+              <span className={styles.balanceIcon}><ScenovaIcon name="check" size={23}/></span>
               <div>
                 <small>ยอดที่ถอนแล้ว</small>
                 <b>{money(data.wallet.paidSatang)}</b>
