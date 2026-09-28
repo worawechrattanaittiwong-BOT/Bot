@@ -39,6 +39,7 @@ type BrokerCatalog = {
 
 type CloudCatalog = {
   packages: Array<{ months:number; price_satang:number; enabled:boolean; updated_at?:string }>;
+  addonPackages: Array<{ months:number; price_satang:number; enabled:boolean; updated_at?:string }>;
   available: number;
   provisioningPaused: boolean;
   salesPaused: boolean;
@@ -71,6 +72,8 @@ type CloudOrder = {
   slot_id?:string|null;
   subscription_expires_at?:string|null;
   account_number?:string|null;
+  purchase_type?:string|null;
+  slot_type?:string|null;
 };
 
 type View = "overview" | "account" | "backtest";
@@ -183,6 +186,13 @@ export default function DashboardPage() {
   const [vpsRenewSlotId, setVpsRenewSlotId] = useState("");
   const [vpsPaymentOrderId, setVpsPaymentOrderId] = useState("");
   const [vpsPurchaseBusy, setVpsPurchaseBusy] = useState(false);
+  const [ownerAddonPriceEditorOpen, setOwnerAddonPriceEditorOpen] = useState(false);
+  const [ownerAddonPrices, setOwnerAddonPrices] = useState<Record<number,{priceBaht:string;enabled:boolean}>>({
+    1:{priceBaht:"",enabled:false},
+    3:{priceBaht:"",enabled:false},
+    6:{priceBaht:"",enabled:false},
+    12:{priceBaht:"",enabled:false}
+  });
   const [vpsSlipFile, setVpsSlipFile] = useState<File | null>(null);
   const [vpsSlipPreview, setVpsSlipPreview] = useState("");
   const [ownerVpsPassword, setOwnerVpsPassword] = useState("");
@@ -1237,25 +1247,42 @@ export default function DashboardPage() {
       return remaining > 0 && remaining < 3 * 24 * 60 * 60 * 1000;
     }).length
   };
+  const primaryCloudSlot = cloudSlots.find((slot:any)=>String(slot?.slot_type || "").toUpperCase()==="PERSONAL")
+    || cloudSlots.find((slot:any)=>Number(slot?.slot_number || 0)===1)
+    || null;
+  const primaryCloudExpiry = primaryCloudSlot?.subscription_expires_at
+    ? new Date(primaryCloudSlot.subscription_expires_at)
+    : null;
+  const primaryCloudRemaining = primaryCloudExpiry
+    ? primaryCloudExpiry.getTime() - accessClockNow
+    : null;
+  const primaryCloudActive = ownerCloudAccess || (
+    Boolean(primaryCloudSlot?.subscription_active) &&
+    primaryCloudRemaining !== null &&
+    primaryCloudRemaining > 0
+  );
   const vpsPaymentOrder = cloudOrders.find(order=>order.id===vpsPaymentOrderId) || null;
   const vpsPaymentAccount = cloudCatalog?.paymentAccounts?.[0] || null;
-  const vpsPackages = (cloudCatalog?.packages || [])
+  const vpsPackages = (cloudCatalog?.addonPackages || [])
     .filter(pack=>pack.enabled && Number(pack.price_satang) > 0)
     .sort((a,b)=>Number(a.months)-Number(b.months));
   const selectedVpsPackage = vpsPackages.find(pack=>Number(pack.months)===Number(vpsPurchaseMonths)) || vpsPackages[0] || null;
   const vpsRenewSlot = cloudSlots.find((slot:any)=>String(slot?.id || "")===String(vpsRenewSlotId || "")) || null;
-  const canBuyVpsSlot = Boolean(cloudCatalog?.checkoutEnabled) && Number(cloudCatalog?.available || 0) > 0;
+  const canBuyVpsSlot = Boolean(cloudCatalog?.checkoutEnabled) &&
+    Number(cloudCatalog?.available || 0) > 0 &&
+    primaryCloudActive;
   const canCheckoutVpsOrder = Boolean(cloudCatalog?.checkoutEnabled) &&
+    primaryCloudActive &&
     (Boolean(vpsRenewSlotId) || Number(cloudCatalog?.available || 0) > 0);
 
   const accessExpiry = entitlement?.expiresAt ? new Date(entitlement.expiresAt) : null;
   const accessRemaining = accessExpiry ? Math.max(0, accessExpiry.getTime() - accessClockNow) : null;
   const cloudRenewalWarning =
     String(data?.selectedSlot?.mode || "").toUpperCase() === "CLOUD" &&
-    entitlement?.source === "SUBSCRIPTION" &&
-    accessRemaining !== null &&
-    accessRemaining > 0 &&
-    accessRemaining < 3 * 24 * 60 * 60 * 1000;
+    !ownerCloudAccess &&
+    primaryCloudRemaining !== null &&
+    primaryCloudRemaining > 0 &&
+    primaryCloudRemaining < 3 * 24 * 60 * 60 * 1000;
   const accessCompactCountdown = accessRemaining === null ? "" : (() => {
     const totalSeconds = Math.floor(accessRemaining / 1000);
     const days = Math.floor(totalSeconds / 86400);
@@ -2011,19 +2038,91 @@ export default function DashboardPage() {
   }
 
 
+  function openPrimaryPackagePage() {
+    window.location.href = "/packages?system=cloud&renew=primary";
+  }
+
   function openVpsSlotDialog(slotId = "") {
-    const enabledPackages = (cloudCatalog?.packages || [])
+    const targetSlot = cloudSlots.find((slot:any)=>String(slot?.id || "")===String(slotId || "")) || null;
+    const targetIsPrimary =
+      Boolean(targetSlot) &&
+      (
+        String(targetSlot?.slot_type || "").toUpperCase()==="PERSONAL" ||
+        Number(targetSlot?.slot_number || 0)===1
+      );
+    if (targetIsPrimary && !ownerCloudAccess) {
+      openPrimaryPackagePage();
+      return;
+    }
+
+    const enabledPackages = (cloudCatalog?.addonPackages || [])
       .filter(pack=>pack.enabled && Number(pack.price_satang) > 0)
       .sort((a,b)=>Number(a.months)-Number(b.months));
     setVpsPurchaseMonths(Number(enabledPackages[0]?.months || 1));
     setVpsSlipFile(null);
+    setOwnerAddonPriceEditorOpen(false);
 
     const pending = cloudOrders.find(order =>
+      String(order.purchase_type || "PACKAGE").toUpperCase()==="ADDON" &&
       ["CREATING","PENDING","REVIEW"].includes(String(order.status || "").toUpperCase())
     );
     setVpsRenewSlotId(pending ? String(pending.slot_id || "") : slotId);
     setVpsPaymentOrderId(String(pending?.id || ""));
     vpsSlotDialogRef.current?.showModal();
+  }
+
+  function openOwnerAddonPricing() {
+    const next:Record<number,{priceBaht:string;enabled:boolean}> = {
+      1:{priceBaht:"",enabled:false},
+      3:{priceBaht:"",enabled:false},
+      6:{priceBaht:"",enabled:false},
+      12:{priceBaht:"",enabled:false}
+    };
+    for (const months of [1,3,6,12]) {
+      const pack = (cloudCatalog?.addonPackages || []).find(item=>Number(item.months)===months);
+      next[months] = {
+        priceBaht: pack ? String(Number(pack.price_satang || 0) / 100) : "",
+        enabled: Boolean(pack?.enabled)
+      };
+    }
+    setOwnerAddonPrices(next);
+    setOwnerAddonPriceEditorOpen(true);
+    setVpsRenewSlotId("");
+    setVpsPaymentOrderId("");
+    setVpsSlipFile(null);
+    vpsSlotDialogRef.current?.showModal();
+  }
+
+  async function saveOwnerAddonPrices() {
+    if (vpsPurchaseBusy) return;
+    setVpsPurchaseBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const packages = [1,3,6,12].map(months=>{
+        const row = ownerAddonPrices[months] || {priceBaht:"",enabled:false};
+        const priceBaht = Number(row.priceBaht || 0);
+        if (!Number.isFinite(priceBaht) || priceBaht < 0) {
+          throw new Error("กรุณาตรวจราคา Slot เสริมให้ถูกต้อง");
+        }
+        return {
+          months,
+          priceSatang:Math.round(priceBaht * 100),
+          enabled:Boolean(row.enabled)
+        };
+      });
+      await api("/cloud/addon-prices", {
+        method:"POST",
+        body:JSON.stringify({ packages })
+      });
+      await loadVpsCommerce();
+      setOwnerAddonPriceEditorOpen(false);
+      setNotice("บันทึกราคา VPS Slot เสริมแล้ว");
+    } catch (e:any) {
+      setError(String(e?.message || "บันทึกราคา Slot เสริมไม่สำเร็จ"));
+    } finally {
+      setVpsPurchaseBusy(false);
+    }
   }
 
   async function createVpsSlotOrder() {
@@ -2047,7 +2146,7 @@ export default function DashboardPage() {
         const targetSlotId = String(paidOrder?.slot_id || vpsRenewSlotId || selectedSlotIdRef.current || "");
         await load(targetSlotId);
         vpsSlotDialogRef.current?.close();
-        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เรียบร้อยแล้ว" : "เพิ่ม VPS Slot เรียบร้อยแล้ว");
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เสริมเรียบร้อยแล้ว" : "เพิ่ม VPS Slot เสริมเรียบร้อยแล้ว");
         return;
       }
       setVpsPaymentOrderId(String(result?.id || ""));
@@ -2093,7 +2192,7 @@ export default function DashboardPage() {
         vpsSlotDialogRef.current?.close();
         setVpsPaymentOrderId("");
         setVpsSlipFile(null);
-        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot สำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot ใหม่แล้ว");
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เสริมสำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot เสริมใหม่แล้ว");
       }
     } catch (e:any) {
       setError(String(e?.message || "ตรวจสลิปไม่สำเร็จ"));
@@ -2114,7 +2213,7 @@ export default function DashboardPage() {
         await load(targetSlotId);
         vpsSlotDialogRef.current?.close();
         setVpsPaymentOrderId("");
-        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot สำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot ใหม่แล้ว");
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เสริมสำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot เสริมใหม่แล้ว");
       }
     } catch (e:any) {
       setError(String(e?.message || "ตรวจสอบการชำระเงินไม่สำเร็จ"));
@@ -2998,23 +3097,33 @@ export default function DashboardPage() {
           </section>
         )}
 
+        {activeView === "overview" && String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" && !ownerCloudAccess && !primaryCloudActive && (
+          <section className="membership-expiry-warning membership-expiry-warning-overview primary-expired" role="alert">
+            <div className="membership-expiry-warning-icon">!</div>
+            <div className="membership-expiry-warning-copy">
+              <small>PRIMARY VPS PACKAGE · SLOT #1 EXPIRED</small>
+              <b>แพ็กเกจ VPS หลักหมดอายุ · ระงับการใช้งาน VPS Slot ทั้งหมด</b>
+              <p>ต้องต่ออายุ Slot #1 ก่อนจึงจะใช้ Slot เสริมได้อีกครั้ง วันคงเหลือของ Slot เสริมยังคงเดิมและจะไม่ถูกยืดตามแพ็กเกจหลัก</p>
+            </div>
+            <button type="button" className="btn primary" onClick={openPrimaryPackagePage}>
+              ต่ออายุแพ็กเกจหลัก
+            </button>
+          </section>
+        )}
+
         {activeView === "overview" && cloudRenewalWarning && (
           <section className="membership-expiry-warning membership-expiry-warning-overview" role="alert">
             <div className="membership-expiry-warning-icon">!</div>
             <div className="membership-expiry-warning-copy">
-              <small>VPS MEMBERSHIP · เหลือน้อยกว่า 3 วัน</small>
-              <b>กรุณาต่ออายุก่อนหมดอายุ เพื่อไม่ให้ VPS ถูกตัดระหว่างใช้งาน</b>
+              <small>PRIMARY VPS PACKAGE · เหลือน้อยกว่า 3 วัน</small>
+              <b>กรุณาต่ออายุแพ็กเกจหลัก Slot #1 ก่อนหมดอายุ</b>
               <p>
-                เมื่อสมาชิกหมดอายุ Server จะปิด MT5 ของ Slot นี้ทันที แม้บอทยังทำงานหรือมี Position / Pending Order อยู่
+                เมื่อแพ็กเกจหลักหมดอายุ Server จะปิด MT5 ของ VPS Slot ทุกตัวทันที แม้ Slot เสริมยังมีวันเหลืออยู่
                 การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ
               </p>
             </div>
-            <button
-              type="button"
-              className="btn primary"
-              onClick={()=>openVpsSlotDialog(String(data.selectedSlot?.id || ""))}
-            >
-              ต่ออายุ VPS Slot
+            <button type="button" className="btn primary" onClick={openPrimaryPackagePage}>
+              ต่ออายุแพ็กเกจหลัก
             </button>
           </section>
         )}
@@ -3701,23 +3810,33 @@ export default function DashboardPage() {
               />
             ) : null}
 
+            {String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" && !ownerCloudAccess && !primaryCloudActive && (
+              <section className="membership-expiry-warning primary-expired" role="alert">
+                <div className="membership-expiry-warning-icon">!</div>
+                <div className="membership-expiry-warning-copy">
+                  <small>PRIMARY VPS PACKAGE · SLOT #1 EXPIRED</small>
+                  <b>แพ็กเกจ VPS หลักหมดอายุ · VPS Slot เสริมทั้งหมดถูกระงับ</b>
+                  <p>ต่ออายุแพ็กเกจหลักก่อนเพื่อกลับมาใช้งาน ระบบจะไม่เพิ่มหรือลดวันคงเหลือของ Slot เสริม</p>
+                </div>
+                <button type="button" className="btn primary" onClick={openPrimaryPackagePage}>
+                  ต่ออายุแพ็กเกจหลัก
+                </button>
+              </section>
+            )}
+
             {cloudRenewalWarning && (
               <section className="membership-expiry-warning" role="alert">
                 <div className="membership-expiry-warning-icon">!</div>
                 <div className="membership-expiry-warning-copy">
-                  <small>VPS MEMBERSHIP · เหลือน้อยกว่า 3 วัน</small>
-                  <b>กรุณาต่ออายุก่อนหมดอายุ เพื่อไม่ให้การทำงานบน VPS ถูกตัด</b>
+                  <small>PRIMARY VPS PACKAGE · เหลือน้อยกว่า 3 วัน</small>
+                  <b>กรุณาต่ออายุแพ็กเกจหลัก Slot #1 ก่อนหมดอายุ</b>
                   <p>
-                    เมื่อเวลาสมาชิกหมด ระบบจะปิด MT5 บน Server ทันที แม้บอทยังทำงานหรือมี Position / Pending Order อยู่
-                    การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ กรุณาจัดการความเสี่ยงก่อนถึงเวลาหมดอายุ
+                    เมื่อแพ็กเกจหลักหมดอายุ Server จะปิด MT5 บน VPS ทุก Slot ทันที แม้ Slot เสริมยังมีวันเหลืออยู่
+                    การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={()=>openVpsSlotDialog(String(data.selectedSlot?.id || ""))}
-                >
-                  ต่ออายุ VPS Slot
+                <button type="button" className="btn primary" onClick={openPrimaryPackagePage}>
+                  ต่ออายุแพ็กเกจหลัก
                 </button>
               </section>
             )}
@@ -3728,11 +3847,15 @@ export default function DashboardPage() {
                 summary={cloudSlotSummary}
                 selectedSlotId={String(data.selectedSlot?.id || "")}
                 ownerUnlimited={ownerCloudAccess}
+                primaryActive={primaryCloudActive}
                 canBuy={canBuyVpsSlot}
                 capacity={Number(cloudCatalog?.available || 0)}
+                ownerCanPrice={String(data.user?.role || "").toUpperCase()==="OWNER"}
                 onSelect={(slotId:string)=>selectSlot(slotId)}
                 onBuy={()=>openVpsSlotDialog("")}
                 onRenew={(slotId:string)=>openVpsSlotDialog(slotId)}
+                onPrimaryRenew={openPrimaryPackagePage}
+                onConfigurePricing={openOwnerAddonPricing}
               />
             )}
 
@@ -3962,14 +4085,83 @@ export default function DashboardPage() {
           <div className="vps-slot-dialog-shell">
             <header className="vps-slot-dialog-head">
               <div>
-                <div className="eyebrow">VPS SLOT COMMERCE</div>
-                <h2>{vpsRenewSlot ? "ต่ออายุ VPS Slot #" + vpsRenewSlot.slot_number : "ซื้อ VPS Slot เพิ่ม"}</h2>
-                <p>{vpsRenewSlot ? "ต่ออายุ Slot เดิมโดยคงเวลาที่เหลืออยู่" : "1 Slot = 1 VPS MT5 + 1 EA Runtime · ซื้อเพิ่มได้เรื่อย ๆ"}</p>
+                <div className="eyebrow">{ownerAddonPriceEditorOpen ? "OWNER · ADD-ON PRICING" : "VPS ADD-ON SLOT COMMERCE"}</div>
+                <h2>
+                  {ownerAddonPriceEditorOpen
+                    ? "ตั้งราคา VPS Slot เสริม"
+                    : vpsRenewSlot
+                      ? "ต่ออายุ VPS Slot เสริม #" + vpsRenewSlot.slot_number
+                      : "ซื้อ VPS Slot เสริม"}
+                </h2>
+                <p>
+                  {ownerAddonPriceEditorOpen
+                    ? "ราคาชุดนี้แยกจากแพ็กเกจหลัก Slot #1 และใช้เฉพาะ Slot #2 ขึ้นไป"
+                    : vpsRenewSlot
+                      ? "ต่ออายุ Slot เสริมจากวันหมดอายุเดิม · ไม่กระทบอายุแพ็กเกจหลักหรือ Slot อื่น"
+                      : "1 Slot เสริม = 1 VPS MT5 + 1 EA Runtime · อายุแยกจากแพ็กเกจหลัก"}
+                </p>
               </div>
-              <button type="button" className="vps-slot-dialog-close" onClick={()=>vpsSlotDialogRef.current?.close()} aria-label="ปิด">×</button>
+              <div className="vps-slot-dialog-head-actions">
+                {String(data.user?.role || "").toUpperCase()==="OWNER" && !ownerAddonPriceEditorOpen && !vpsPaymentOrder && (
+                  <button type="button" className="btn ghost" onClick={openOwnerAddonPricing}>ตั้งราคา Slot เสริม</button>
+                )}
+                <button type="button" className="vps-slot-dialog-close" onClick={()=>vpsSlotDialogRef.current?.close()} aria-label="ปิด">×</button>
+              </div>
             </header>
 
-            {!vpsPaymentOrder ? (
+            {ownerAddonPriceEditorOpen ? (
+              <section className="vps-addon-price-editor">
+                <div className="vps-addon-price-note">
+                  <b>ราคา Slot เสริม</b>
+                  <span>ตั้งราคา 1 / 3 / 6 / 12 เดือนได้อิสระ การแก้ราคานี้จะไม่เปลี่ยนราคาแพ็กเกจหลัก</span>
+                </div>
+                <div className="vps-addon-price-grid">
+                  {[1,3,6,12].map(months=>{
+                    const row = ownerAddonPrices[months] || {priceBaht:"",enabled:false};
+                    return (
+                      <div className="vps-addon-price-row" key={months}>
+                        <div>
+                          <b>{months} เดือน</b>
+                          <small>ต่อ 1 VPS Slot เสริม</small>
+                        </div>
+                        <label>
+                          <span>ราคา (บาท)</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={row.priceBaht}
+                            onChange={event=>setOwnerAddonPrices(current=>({
+                              ...current,
+                              [months]:{...(current[months] || {priceBaht:"",enabled:false}),priceBaht:event.target.value}
+                            }))}
+                          />
+                        </label>
+                        <label className="vps-addon-price-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(row.enabled)}
+                            onChange={event=>setOwnerAddonPrices(current=>({
+                              ...current,
+                              [months]:{...(current[months] || {priceBaht:"",enabled:false}),enabled:event.target.checked}
+                            }))}
+                          />
+                          <span>เปิดขาย</span>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="vps-addon-price-actions">
+                  <button type="button" className="btn ghost" disabled={vpsPurchaseBusy} onClick={()=>setOwnerAddonPriceEditorOpen(false)}>
+                    กลับ
+                  </button>
+                  <button type="button" className="btn primary" disabled={vpsPurchaseBusy} onClick={()=>void saveOwnerAddonPrices()}>
+                    {vpsPurchaseBusy ? "กำลังบันทึก..." : "บันทึกราคา Slot เสริม"}
+                  </button>
+                </div>
+              </section>
+            ) : !vpsPaymentOrder ? (
               <>
                 <section className="vps-slot-package-section">
                   <div className="vps-slot-dialog-label">เลือกระยะเวลา</div>
@@ -3983,7 +4175,7 @@ export default function DashboardPage() {
                       >
                         <span>{pack.months} เดือน</span>
                         <b>฿{(Number(pack.price_satang || 0)/100).toLocaleString("th-TH",{maximumFractionDigits:2})}</b>
-                        <small>ต่อ 1 VPS Slot</small>
+                        <small>ต่อ 1 VPS Slot เสริม</small>
                       </button>
                     ))}
                   </div>
@@ -3991,7 +4183,7 @@ export default function DashboardPage() {
 
                 <section className="vps-slot-order-summary">
                   <div>
-                    <span>{vpsRenewSlot ? "ต่ออายุ Slot" : "VPS Slot ใหม่"}</span>
+                    <span>{vpsRenewSlot ? "ต่ออายุ Slot เสริม" : "VPS Slot เสริมใหม่"}</span>
                     <b>{vpsRenewSlot ? "#" + vpsRenewSlot.slot_number : "เพิ่ม 1 Slot"}</b>
                   </div>
                   <div>
@@ -4006,9 +4198,11 @@ export default function DashboardPage() {
 
                 {!canCheckoutVpsOrder && (
                   <div className="vps-slot-capacity-warning">
-                    {!cloudCatalog?.checkoutEnabled
-                      ? "ระบบขาย VPS Slot ยังไม่พร้อมใช้งาน"
-                      : "VPS Capacity เต็มชั่วคราว ระบบจะไม่รับเงินสำหรับ Slot ใหม่จนกว่าจะมี Capacity ว่าง"}
+                    {!primaryCloudActive
+                      ? "แพ็กเกจ VPS หลัก Slot #1 หมดอายุ กรุณาต่ออายุแพ็กเกจหลักก่อนซื้อหรือต่ออายุ Slot เสริม"
+                      : !cloudCatalog?.checkoutEnabled
+                        ? "ระบบขาย VPS Slot เสริมยังไม่พร้อมใช้งาน"
+                        : "VPS Capacity เต็มชั่วคราว ระบบจะไม่รับเงินสำหรับ Slot เสริมใหม่จนกว่าจะมี Capacity ว่าง"}
                   </div>
                 )}
 
@@ -4018,7 +4212,7 @@ export default function DashboardPage() {
                   disabled={vpsPurchaseBusy || !selectedVpsPackage || !canCheckoutVpsOrder}
                   onClick={()=>void createVpsSlotOrder()}
                 >
-                  {vpsPurchaseBusy ? "กำลังสร้างรายการ..." : vpsRenewSlot ? "สร้างรายการต่ออายุ" : "สร้างรายการซื้อ VPS Slot"}
+                  {vpsPurchaseBusy ? "กำลังสร้างรายการ..." : vpsRenewSlot ? "สร้างรายการต่ออายุ Slot เสริม" : "สร้างรายการซื้อ Slot เสริม"}
                 </button>
               </>
             ) : (
@@ -4073,7 +4267,7 @@ export default function DashboardPage() {
                       disabled={vpsPurchaseBusy || !vpsSlipFile || !vpsPaymentAccount}
                       onClick={()=>void verifyVpsSlotSlip()}
                     >
-                      {vpsPurchaseBusy ? "กำลังตรวจสลิป..." : "ตรวจสลิปและเปิด VPS Slot"}
+                      {vpsPurchaseBusy ? "กำลังตรวจสลิป..." : "ตรวจสลิปและเปิด VPS Slot เสริม"}
                     </button>
                   </>
                 ) : (
@@ -4196,12 +4390,19 @@ function VpsSlotManager(props:{
   summary:{total:number;online:number;ready:number;expiring:number};
   selectedSlotId:string;
   ownerUnlimited:boolean;
+  primaryActive:boolean;
   canBuy:boolean;
   capacity:number;
+  ownerCanPrice:boolean;
   onSelect:(slotId:string)=>void;
   onBuy:()=>void;
   onRenew:(slotId:string)=>void;
+  onPrimaryRenew:()=>void;
+  onConfigurePricing:()=>void;
 }) {
+  const isPrimary = (slot:any) =>
+    String(slot?.slot_type || "").toUpperCase()==="PERSONAL" ||
+    Number(slot?.slot_number || 0)===1;
   const formatExpiry = (value:any) => {
     if (props.ownerUnlimited) return "ไม่จำกัดเวลา";
     if (!value) return "ยังไม่มีแพ็กเกจ";
@@ -4210,6 +4411,7 @@ function VpsSlotManager(props:{
     return d.toLocaleDateString("th-TH",{day:"2-digit",month:"short",year:"numeric"});
   };
   const slotTone = (slot:any) => {
+    if (!props.ownerUnlimited && !props.primaryActive && !isPrimary(slot)) return "blocked";
     if (!props.ownerUnlimited && slot?.subscription_expires_at && new Date(slot.subscription_expires_at).getTime() <= Date.now()) return "expired";
     if (slot?.mt5_online) return "online";
     if (slot?.instance_id) return "offline";
@@ -4217,6 +4419,7 @@ function VpsSlotManager(props:{
   };
   const slotLabel = (slot:any) => {
     const tone = slotTone(slot);
+    if (tone==="blocked") return "PRIMARY EXPIRED";
     if (tone==="expired") return "EXPIRED";
     if (tone==="online") return "ONLINE";
     if (tone==="offline") return "OFFLINE";
@@ -4229,15 +4432,26 @@ function VpsSlotManager(props:{
         <div>
           <div className="eyebrow">VPS SLOT MANAGER</div>
           <h2>VPS Slots ของคุณ</h2>
-          <p>แต่ละ Slot แยก MT5, EA Runtime และวันหมดอายุออกจากกัน</p>
+          <p>Slot #1 คือแพ็กเกจหลัก · Slot #2 ขึ้นไปเป็น Slot เสริมที่มีราคาและวันหมดอายุแยกกัน</p>
         </div>
         <div className="vps-slot-manager-actions">
           <span className={"vps-capacity-pill " + (props.capacity>0 ? "good" : "bad")}>
             <i/> Capacity {Math.max(0,props.capacity)}
           </span>
-          <button type="button" className="btn primary" disabled={!props.canBuy} onClick={props.onBuy}>+ ซื้อ VPS Slot</button>
+          {props.ownerCanPrice && (
+            <button type="button" className="btn ghost" onClick={props.onConfigurePricing}>ตั้งราคา Slot เสริม</button>
+          )}
+          <button type="button" className="btn primary" disabled={!props.canBuy} onClick={props.onBuy}>+ ซื้อ Slot เสริม</button>
         </div>
       </div>
+
+      {!props.ownerUnlimited && !props.primaryActive && (
+        <div className="vps-primary-gate-note">
+          <b>แพ็กเกจหลัก Slot #1 หมดอายุ</b>
+          <span>Slot เสริมทั้งหมดถูกพักการใช้งานจนกว่าจะต่ออายุแพ็กเกจหลัก วันคงเหลือของ Slot เสริมไม่เปลี่ยนแปลง</span>
+          <button type="button" className="btn primary" onClick={props.onPrimaryRenew}>ต่ออายุแพ็กเกจหลัก</button>
+        </div>
+      )}
 
       <div className="vps-slot-stats">
         <div><span>Slots ทั้งหมด</span><b>{props.summary.total}</b></div>
@@ -4249,34 +4463,57 @@ function VpsSlotManager(props:{
       <div className="vps-slot-grid">
         {props.slots.map(slot=>{
           const selected = String(slot?.id || "") === String(props.selectedSlotId || "");
+          const primary = isPrimary(slot);
           const tone = slotTone(slot);
           return (
             <article key={slot.id} className={"vps-slot-card tone-"+tone+(selected ? " selected" : "")}>
               <header>
                 <div>
-                  <span>VPS SLOT</span>
+                  <span>{primary ? "PRIMARY VPS PACKAGE" : "VPS ADD-ON SLOT"}</span>
                   <h3>Slot #{slot.slot_number}</h3>
                 </div>
                 <span className={"vps-slot-status "+tone}><i/>{slotLabel(slot)}</span>
               </header>
 
+              <div className={"vps-slot-kind "+(primary ? "primary" : "addon")}>
+                {primary ? "แพ็กเกจหลัก" : "Slot เสริม"}
+              </div>
+
               <div className="vps-slot-account">
                 <small>MT5 ACCOUNT</small>
                 <b>{slot.account_number || "ยังไม่ได้เชื่อม MT5"}</b>
-                <span>{slot.account_number ? ((slot.broker || "Broker")+" · "+(slot.broker_server || "Server")) : "พร้อมสำหรับเชื่อมบัญชีใหม่"}</span>
+                <span>
+                  {tone==="blocked"
+                    ? "แพ็กเกจหลักหมดอายุ · ระงับการใช้งานชั่วคราว"
+                    : slot.account_number
+                      ? ((slot.broker || "Broker")+" · "+(slot.broker_server || "Server"))
+                      : "พร้อมสำหรับเชื่อมบัญชีใหม่"}
+                </span>
               </div>
 
               <div className="vps-slot-meta">
-                <div><span>EA</span><b>{slot.actual_state || (slot.instance_id ? "STOPPED" : "NOT INSTALLED")}</b></div>
+                <div><span>EA</span><b>{tone==="blocked" ? "BLOCKED" : slot.actual_state || (slot.instance_id ? "STOPPED" : "NOT INSTALLED")}</b></div>
                 <div><span>หมดอายุ</span><b>{formatExpiry(slot.subscription_expires_at)}</b></div>
               </div>
 
               <footer>
-                <button type="button" className={"btn "+(selected ? "primary" : "ghost")} onClick={()=>props.onSelect(String(slot.id))}>
-                  {selected ? "กำลังจัดการ" : slot.account_number ? "จัดการ Slot" : "เชื่อม MT5"}
+                <button
+                  type="button"
+                  className={"btn "+(selected ? "primary" : "ghost")}
+                  disabled={tone==="blocked"}
+                  onClick={()=>props.onSelect(String(slot.id))}
+                >
+                  {tone==="blocked" ? "รอต่ออายุแพ็กเกจหลัก" : selected ? "กำลังจัดการ" : slot.account_number ? "จัดการ Slot" : "เชื่อม MT5"}
                 </button>
                 {!props.ownerUnlimited && (
-                  <button type="button" className="btn ghost" onClick={()=>props.onRenew(String(slot.id))}>ต่ออายุ</button>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    disabled={!primary && !props.primaryActive}
+                    onClick={()=>primary ? props.onPrimaryRenew() : props.onRenew(String(slot.id))}
+                  >
+                    {primary ? "ต่ออายุแพ็กเกจหลัก" : "ต่ออายุ Slot เสริม"}
+                  </button>
                 )}
               </footer>
             </article>
@@ -4285,8 +4522,8 @@ function VpsSlotManager(props:{
 
         <button type="button" className="vps-slot-add-card" disabled={!props.canBuy} onClick={props.onBuy}>
           <span className="vps-slot-add-icon">+</span>
-          <b>ซื้อ VPS Slot เพิ่ม</b>
-          <small>เพิ่ม VPS MT5 ใหม่ได้เรื่อย ๆ โดยไม่จำกัดจำนวนต่อบัญชี</small>
+          <b>ซื้อ VPS Slot เสริม</b>
+          <small>{props.primaryActive ? "ราคาและวันหมดอายุแยกจากแพ็กเกจหลัก" : "ต้องต่ออายุแพ็กเกจหลัก Slot #1 ก่อน"}</small>
         </button>
       </div>
     </section>

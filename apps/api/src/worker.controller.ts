@@ -231,28 +231,65 @@ export class WorkerController {
       // an access cutoff, not Safe Stop: no trading drain is attempted.
       const expiredRuntimes = (await tx.query(
         `SELECT bi.id,bi.runner_id,bi.execution_generation,bi.runtime_stop_state,
-                ls.id slot_id,ls.assigned_user_id,sub.id subscription_id,sub.expires_at
+                ls.id slot_id,ls.assigned_user_id,ls.slot_type,
+                sub.id subscription_id,sub.expires_at,
+                primary_access.primary_slot_id,
+                primary_access.primary_expires_at,
+                primary_access.primary_active,
+                CASE
+                  WHEN primary_access.primary_active IS DISTINCT FROM true THEN 'PRIMARY_EXPIRED'
+                  ELSE 'SLOT_EXPIRED'
+                END cutoff_reason
          FROM bot_instances bi
          JOIN license_slots ls ON ls.id=bi.slot_id
-         JOIN subscriptions sub ON sub.id=ls.subscription_id
+         LEFT JOIN subscriptions sub ON sub.id=ls.subscription_id
          JOIN users u ON u.id=ls.assigned_user_id
+         LEFT JOIN LATERAL (
+           SELECT primary_slot.id primary_slot_id,
+                  primary_sub.expires_at primary_expires_at,
+                  (
+                    primary_sub.id IS NOT NULL
+                    AND primary_sub.status='ACTIVE'
+                    AND primary_sub.starts_at<=now()
+                    AND primary_sub.expires_at>now()
+                  ) primary_active
+           FROM license_slots primary_slot
+           LEFT JOIN subscriptions primary_sub ON primary_sub.id=primary_slot.subscription_id
+           WHERE primary_slot.owner_user_id=ls.owner_user_id
+             AND primary_slot.assigned_user_id=ls.assigned_user_id
+             AND primary_slot.mode='CLOUD'
+             AND primary_slot.slot_type='PERSONAL'
+             AND primary_slot.status<>'DELETED'
+           ORDER BY primary_slot.slot_number,primary_slot.created_at
+           LIMIT 1
+         ) primary_access ON true
          WHERE bi.runner_id=$1
            AND bi.mode='CLOUD'
            AND ls.mode='CLOUD'
            AND ls.status<>'DELETED'
            AND u.role NOT IN ('OWNER','ADMIN')
-           AND sub.expires_at<=now()
            AND COALESCE(bi.runtime_stop_state,'NONE') NOT IN ('STOP_REQUESTED','STOP_CONFIRMED','LEASE_REVOKED')
-           AND NOT EXISTS (
-             SELECT 1
-             FROM access_group_grants gg
-             JOIN access_groups ag ON ag.id=gg.access_group_id
-             WHERE gg.user_id=ls.assigned_user_id
-               AND gg.mode='CLOUD'
-               AND gg.status='ACTIVE'
-               AND gg.starts_at<=now()
-               AND gg.expires_at>now()
-               AND ag.enabled=true
+           AND (
+             primary_access.primary_active IS DISTINCT FROM true
+             OR (
+               (
+                 sub.id IS NULL
+                 OR sub.status<>'ACTIVE'
+                 OR sub.starts_at>now()
+                 OR sub.expires_at<=now()
+               )
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM access_group_grants gg
+                 JOIN access_groups ag ON ag.id=gg.access_group_id
+                 WHERE gg.user_id=ls.assigned_user_id
+                   AND gg.mode='CLOUD'
+                   AND gg.status='ACTIVE'
+                   AND gg.starts_at<=now()
+                   AND gg.expires_at>now()
+                   AND ag.enabled=true
+               )
+             )
            )
          FOR UPDATE OF bi`,
         [body.runnerId]
@@ -280,6 +317,11 @@ export class WorkerController {
           );
         }
 
+        const cutoffAt =
+          expired.cutoff_reason === "PRIMARY_EXPIRED"
+            ? expired.primary_expires_at
+            : expired.expires_at;
+
         await tx.query(
           `UPDATE bot_instances SET
              desired_state='STOPPED',
@@ -290,10 +332,12 @@ export class WorkerController {
              metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
                'membershipCutoff',true,
                'membershipCutoffAt',now()::text,
-               'membershipExpiredAt',$2::text
+               'membershipExpiredAt',COALESCE($2::text,''),
+               'membershipCutoffReason',$3::text,
+               'primaryMembershipExpiredAt',COALESCE($4::text,'')
              )
            WHERE id=$1`,
-          [expired.id, expired.expires_at]
+          [expired.id, cutoffAt, expired.cutoff_reason, expired.primary_expires_at]
         );
         await tx.query(
           `UPDATE bot_commands
@@ -309,8 +353,12 @@ export class WorkerController {
             expired.id,
             JSON.stringify({
               slotId: expired.slot_id,
+              slotType: expired.slot_type,
               subscriptionId: expired.subscription_id,
               expiresAt: expired.expires_at,
+              primarySlotId: expired.primary_slot_id,
+              primaryExpiresAt: expired.primary_expires_at,
+              cutoffReason: expired.cutoff_reason,
               runnerId: expired.runner_id,
               executionGeneration: Number(expired.execution_generation || 1),
               policy: "HARD_MT5_CUTOFF"

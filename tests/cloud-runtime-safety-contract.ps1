@@ -6,6 +6,8 @@ $controller = Get-Content (Join-Path $root 'apps/api/src/runtime-safety.controll
 $service = Get-Content (Join-Path $root 'apps/api/src/runtime-safety.service.ts') -Raw
 $workerApi = Get-Content (Join-Path $root 'apps/api/src/worker.controller.ts') -Raw
 $botApi = Get-Content (Join-Path $root 'apps/api/src/bot.controller.ts') -Raw
+$cloudApi = Get-Content (Join-Path $root 'apps/api/src/cloud.controller.ts') -Raw
+$addonMigration = Get-Content (Join-Path $root 'database/051_cloud_addon_pricing.sql') -Raw
 $dashboard = Get-Content (Join-Path $root 'apps/web/app/dashboard/page.tsx') -Raw
 $worker = Get-Content (Join-Path $root 'apps/web/public/downloads/SCENOVA-CloudWorker.ps1') -Raw
 
@@ -51,8 +53,22 @@ Assert-Contains $botApi 'DELETE FROM mt5_credentials WHERE mt5_account_id=$1' 'o
 Assert-Contains $botApi "runtime_stop_state=CASE WHEN `$3='CLOUD' THEN 'NONE'" 'new Cloud account must rearm the existing VPS runtime'
 Assert-Contains $botApi 'an active subscription on VPS Slot #1 must never unlock an' 'per-slot Cloud entitlement isolation is missing'
 Assert-Contains $dashboard 'ปิด MT5 เดิมบน VPS แล้ว · พร้อมเชื่อมบัญชี MT5 ใหม่' 'customer account-switch completion UX missing'
-Assert-Contains $dashboard 'VPS MEMBERSHIP · เหลือน้อยกว่า 3 วัน' 'three-day VPS renewal warning missing'
+Assert-Contains $dashboard 'PRIMARY VPS PACKAGE · เหลือน้อยกว่า 3 วัน' 'primary-package three-day renewal warning missing'
 Assert-Contains $dashboard 'การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ' 'expiry warning must explain broker positions remain open'
+
+# Slot #1 is the Cloud package gate; add-on pricing and expiry remain independent.
+Assert-Contains $schema 'CREATE TABLE IF NOT EXISTS cloud_addon_packages' 'independent add-on pricing schema missing'
+Assert-Contains $cloudApi "'membershipCutoffReason'" 'gateway renewal must clear Cloud membership cutoff markers'
+Assert-Contains $cloudApi 'EXISTS (SELECT 1 FROM primary_access)' 'gateway renewal must rearm only when the primary package is active'
+Assert-Contains $cloudApi 'addonFlow ? "ADDON" : "PACKAGE"' 'Cloud orders must persist package/add-on purchase type'
+Assert-Contains $cloudApi 'cloud_addon_packages WHERE months=$1' 'add-on checkout must use add-on pricing'
+Assert-Contains $cloudApi 'Slot #1 เป็นแพ็กเกจหลัก กรุณาต่ออายุจากหน้าแพ็กเกจ' 'primary renewal redirect guard missing'
+Assert-Contains $botApi 'PRIMARY_SUBSCRIPTION_EXPIRED' 'Cloud entitlement must fail when the primary package expires'
+Assert-Contains $workerApi "'PRIMARY_EXPIRED'" 'Worker must identify primary-package hard cutoff'
+Assert-Contains $workerApi 'primary_access.primary_active IS DISTINCT FROM true' 'Worker must stop every Cloud runtime when primary is inactive'
+Assert-Contains $dashboard 'ตั้งราคา Slot เสริม' 'Owner add-on pricing control missing'
+Assert-Contains $dashboard 'ต่ออายุแพ็กเกจหลัก' 'primary package renewal CTA missing'
+Assert-Contains $dashboard '/packages?system=cloud&renew=primary' 'primary renewal must route to packages page'
 
 # Windows Worker may terminate only the exact portable terminal belonging to this instance.
 # Phase 4 raises the control-plane Worker protocol to v1.2.0 while preserving

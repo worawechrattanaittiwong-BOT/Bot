@@ -143,6 +143,15 @@ CREATE TABLE IF NOT EXISTS cloud_packages (
  updated_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO cloud_packages(months) VALUES(1),(3),(6),(12) ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS cloud_addon_packages (
+ months integer PRIMARY KEY CHECK(months IN (1,3,6,12)),
+ price_satang integer NOT NULL DEFAULT 0 CHECK(price_satang>=0),
+ enabled boolean NOT NULL DEFAULT false,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO cloud_addon_packages(months,price_satang,enabled)
+SELECT months,price_satang,enabled FROM cloud_packages
+ON CONFLICT(months) DO NOTHING;
 INSERT INTO plans(code,name_th,mode,max_mt5_accounts)
  VALUES ('CLOUD_1M','Cloud 1 เดือน','CLOUD',1),('CLOUD_3M','Cloud 3 เดือน','CLOUD',1),
  ('CLOUD_6M','Cloud 6 เดือน','CLOUD',1),('CLOUD_12M','Cloud 12 เดือน','CLOUD',1)
@@ -157,6 +166,7 @@ CREATE TABLE IF NOT EXISTS cloud_orders (
  promotion_code varchar(20),
  promotion_redemption_id uuid REFERENCES promotion_redemptions(id) ON DELETE SET NULL,
  status text NOT NULL DEFAULT 'CREATING' CHECK(status IN ('CREATING','PENDING','PAID','FAILED','REVIEW')),
+ purchase_type varchar(16) NOT NULL DEFAULT 'PACKAGE' CHECK(purchase_type IN ('PACKAGE','ADDON')),
  runner_id varchar(120) NOT NULL REFERENCES worker_nodes(runner_id),
  slot_id uuid REFERENCES license_slots(id),
  subscription_id uuid REFERENCES subscriptions(id),
@@ -169,6 +179,7 @@ CREATE TABLE IF NOT EXISTS cloud_orders (
 CREATE UNIQUE INDEX IF NOT EXISTS cloud_order_user_pending ON cloud_orders(user_id)
  WHERE status IN ('CREATING','PENDING','REVIEW');
 ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS checked_at timestamptz;
+ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS purchase_type varchar(16) NOT NULL DEFAULT 'PACKAGE';
 
 CREATE TABLE IF NOT EXISTS local_packages (
  months integer PRIMARY KEY CHECK(months IN (1,3,6,12)),
@@ -332,4 +343,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_instance_update_one_active
  WHERE state IN ('WAITING_SAFE','DELIVERED','VERIFYING');
 CREATE INDEX IF NOT EXISTS idx_instance_update_parent
  ON instance_update_jobs(server_update_job_id,state,created_at);
+
+
 `;

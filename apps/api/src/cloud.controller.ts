@@ -126,8 +126,13 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
     const paymentAccounts = mode === "EASYSLIP"
       ? await this.easyslip.listBankAccounts().catch(() => [])
       : [];
+    const [packages, addonPackages] = await Promise.all([
+      this.db.query("SELECT * FROM cloud_packages ORDER BY months"),
+      this.db.query("SELECT * FROM cloud_addon_packages ORDER BY months")
+    ]);
     return {
-      packages: (await this.db.query("SELECT * FROM cloud_packages ORDER BY months")).rows,
+      packages: packages.rows,
+      addonPackages: addonPackages.rows,
       available,
       provisioningPaused,
       salesPaused,
@@ -178,12 +183,70 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
       } else {
         slot = (await tx.query(`INSERT INTO license_slots(owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label)
           SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
-          CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
+          CASE WHEN $3='ADDON' THEN 'ADDON' ELSE 'PERSONAL' END,
           'ACTIVE','Cloud Trading'
-          FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`, [order.user_id, subscription.id])).rows[0];
+          FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`, [order.user_id, subscription.id, String(order.purchase_type || "PACKAGE").toUpperCase()])).rows[0];
       }
       await tx.query("UPDATE cloud_orders SET status='PAID',charge_id=$2,slot_id=$3,subscription_id=$4,paid_at=now() WHERE id=$1",
         [order.id, charge.id, slot.id, subscription.id]);
+      await tx.query(
+        `WITH renewed AS (
+           SELECT slot_type
+           FROM license_slots
+           WHERE id=$2
+             AND owner_user_id=$1
+             AND assigned_user_id=$1
+             AND mode='CLOUD'
+             AND status<>'DELETED'
+         ),
+         primary_access AS (
+           SELECT 1
+           FROM license_slots primary_slot
+           JOIN subscriptions primary_sub ON primary_sub.id=primary_slot.subscription_id
+           WHERE primary_slot.owner_user_id=$1
+             AND primary_slot.assigned_user_id=$1
+             AND primary_slot.mode='CLOUD'
+             AND primary_slot.slot_type='PERSONAL'
+             AND primary_slot.status<>'DELETED'
+             AND primary_sub.status='ACTIVE'
+             AND primary_sub.starts_at<=now()
+             AND primary_sub.expires_at>now()
+           LIMIT 1
+         )
+         UPDATE bot_instances bi
+         SET runtime_stop_state='NONE',
+             runtime_stop_requested_at=NULL,
+             runtime_stop_confirmed_at=NULL,
+             runtime_stop_error=NULL,
+             desired_state='STOPPED',
+             actual_state='OFFLINE',
+             last_seen_at=NULL,
+             metrics=(
+               COALESCE(bi.metrics,'{}'::jsonb)
+               - 'membershipCutoff'
+               - 'membershipCutoffAt'
+               - 'membershipExpiredAt'
+               - 'membershipCutoffReason'
+               - 'primaryMembershipExpiredAt'
+             )
+         FROM license_slots ls
+         JOIN subscriptions own_sub ON own_sub.id=ls.subscription_id
+         WHERE bi.slot_id=ls.id
+           AND ls.owner_user_id=$1
+           AND ls.assigned_user_id=$1
+           AND ls.mode='CLOUD'
+           AND ls.status<>'DELETED'
+           AND own_sub.status='ACTIVE'
+           AND own_sub.starts_at<=now()
+           AND own_sub.expires_at>now()
+           AND EXISTS (SELECT 1 FROM primary_access)
+           AND (
+             (SELECT slot_type FROM renewed LIMIT 1)='PERSONAL'
+             OR ls.id=$2
+           )
+           AND COALESCE((bi.metrics->>'membershipCutoff')::boolean,false)=true`,
+        [order.user_id, slot.id]
+      );
       await this.promotions.consume(tx, "CLOUD", order.id);
 
       // Referral accounting must never prevent a successfully paid customer
@@ -247,15 +310,73 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
         slot = (await tx.query(
           `INSERT INTO license_slots(owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label)
            SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
-                  CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
+                  CASE WHEN $3='ADDON' THEN 'ADDON' ELSE 'PERSONAL' END,
                   'ACTIVE','Cloud Trading'
            FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`,
-          [order.user_id, subscription.id]
+          [order.user_id, subscription.id, String(order.purchase_type || "PACKAGE").toUpperCase()]
         )).rows[0];
       }
       await tx.query(
         "UPDATE cloud_orders SET status='PAID',slot_id=$2,subscription_id=$3,paid_at=now(),expires_at=now() WHERE id=$1",
         [order.id, slot.id, subscription.id]
+      );
+      await tx.query(
+        `WITH renewed AS (
+           SELECT slot_type
+           FROM license_slots
+           WHERE id=$2
+             AND owner_user_id=$1
+             AND assigned_user_id=$1
+             AND mode='CLOUD'
+             AND status<>'DELETED'
+         ),
+         primary_access AS (
+           SELECT 1
+           FROM license_slots primary_slot
+           JOIN subscriptions primary_sub ON primary_sub.id=primary_slot.subscription_id
+           WHERE primary_slot.owner_user_id=$1
+             AND primary_slot.assigned_user_id=$1
+             AND primary_slot.mode='CLOUD'
+             AND primary_slot.slot_type='PERSONAL'
+             AND primary_slot.status<>'DELETED'
+             AND primary_sub.status='ACTIVE'
+             AND primary_sub.starts_at<=now()
+             AND primary_sub.expires_at>now()
+           LIMIT 1
+         )
+         UPDATE bot_instances bi
+         SET runtime_stop_state='NONE',
+             runtime_stop_requested_at=NULL,
+             runtime_stop_confirmed_at=NULL,
+             runtime_stop_error=NULL,
+             desired_state='STOPPED',
+             actual_state='OFFLINE',
+             last_seen_at=NULL,
+             metrics=(
+               COALESCE(bi.metrics,'{}'::jsonb)
+               - 'membershipCutoff'
+               - 'membershipCutoffAt'
+               - 'membershipExpiredAt'
+               - 'membershipCutoffReason'
+               - 'primaryMembershipExpiredAt'
+             )
+         FROM license_slots ls
+         JOIN subscriptions own_sub ON own_sub.id=ls.subscription_id
+         WHERE bi.slot_id=ls.id
+           AND ls.owner_user_id=$1
+           AND ls.assigned_user_id=$1
+           AND ls.mode='CLOUD'
+           AND ls.status<>'DELETED'
+           AND own_sub.status='ACTIVE'
+           AND own_sub.starts_at<=now()
+           AND own_sub.expires_at>now()
+           AND EXISTS (SELECT 1 FROM primary_access)
+           AND (
+             (SELECT slot_type FROM renewed LIMIT 1)='PERSONAL'
+             OR ls.id=$2
+           )
+           AND COALESCE((bi.metrics->>'membershipCutoff')::boolean,false)=true`,
+        [order.user_id, slot.id]
       );
       await this.promotions.consume(tx, "CLOUD", order.id);
       await tx.query(
@@ -299,10 +420,13 @@ export class CloudCustomerController {
   }
 
   @Get("orders") async orders(@Req() req: any) {
-    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,
-      s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number
-      FROM cloud_orders o LEFT JOIN subscriptions s ON s.id=o.subscription_id
-      LEFT JOIN bot_instances b ON b.slot_id=o.slot_id LEFT JOIN mt5_accounts a ON a.id=b.mt5_account_id
+    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
+      s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number,ls.slot_type
+      FROM cloud_orders o
+      LEFT JOIN subscriptions s ON s.id=o.subscription_id
+      LEFT JOIN license_slots ls ON ls.id=o.slot_id
+      LEFT JOIN bot_instances b ON b.slot_id=o.slot_id
+      LEFT JOIN mt5_accounts a ON a.id=b.mt5_account_id
       WHERE o.user_id=$1 ORDER BY o.created_at DESC LIMIT 50`, [req.user.sub])).rows;
   }
   @Post("orders/:id/verify-slip")
@@ -335,6 +459,48 @@ export class CloudCustomerController {
     if (order.charge_id && order.status !== "PAID") await this.cloud.reconcile(order.charge_id);
     return { ok: true };
   }
+  @Post("addon-prices")
+  async updateAddonPrices(
+    @Req() req: any,
+    @Body() body: { packages?: Array<{ months:number; priceSatang:number; enabled:boolean }> }
+  ) {
+    const user = await this.db.one("SELECT role,status FROM users WHERE id=$1", [req.user.sub]);
+    if (!user || user.status !== "ACTIVE" || String(user.role || "").toUpperCase() !== "OWNER") {
+      throw new UnauthorizedException("Owner เท่านั้นที่ตั้งราคา VPS Slot เสริมได้");
+    }
+    const rows = Array.isArray(body.packages) ? body.packages : [];
+    if (rows.length !== 4) throw new BadRequestException("กรุณากำหนดราคา 1, 3, 6 และ 12 เดือนให้ครบ");
+    const monthsSeen = new Set<number>();
+    for (const item of rows) {
+      const months = Math.trunc(Number(item.months));
+      const priceSatang = Math.trunc(Number(item.priceSatang));
+      if (![1,3,6,12].includes(months) || monthsSeen.has(months)) throw new BadRequestException("ระยะเวลา Slot เสริมไม่ถูกต้อง");
+      if (!Number.isInteger(priceSatang) || priceSatang < 0 || priceSatang > 15000000) throw new BadRequestException("ราคาต้องอยู่ระหว่าง 0 ถึง 150,000 บาท");
+      if (typeof item.enabled !== "boolean" || (item.enabled && priceSatang < 2000)) throw new BadRequestException("ราคาเปิดขายต้องไม่น้อยกว่า 20 บาท");
+      monthsSeen.add(months);
+    }
+    await this.db.transaction(async tx => {
+      for (const item of rows) {
+        await tx.query(
+          `INSERT INTO cloud_addon_packages(months,price_satang,enabled,updated_at)
+           VALUES($1,$2,$3,now())
+           ON CONFLICT(months) DO UPDATE SET price_satang=EXCLUDED.price_satang,enabled=EXCLUDED.enabled,updated_at=now()`,
+          [Math.trunc(Number(item.months)), Math.trunc(Number(item.priceSatang)), item.enabled]
+        );
+      }
+      await tx.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES($1,'OWNER_CLOUD_ADDON_PRICING_UPDATED','cloud_addon_packages',$2,$3::jsonb)`,
+        [
+          String(req.user?.code || req.user?.sub || "OWNER").slice(0,160),
+          String(req.user.sub),
+          JSON.stringify({ packages: rows })
+        ]
+      );
+    });
+    return { ok:true, addonPackages:(await this.db.query("SELECT * FROM cloud_addon_packages ORDER BY months")).rows };
+  }
+
   @Post("checkout") async checkout(@Req() req: any, @Body() body: { months: number; slotId?: string; promoCode?: string; purchaseType?: "PACKAGE" | "ADDON" }) {
     if (paymentMode() === "UNCONFIGURED" || (paymentMode() !== "EASYSLIP" && process.env.CLOUD_CHECKOUT_ENABLED !== "true")) throw new ConflictException("ยังไม่เปิดรับชำระเงิน");
     if (![1,3,6,12].includes(body.months)) throw new BadRequestException("Invalid package");
@@ -348,9 +514,6 @@ export class CloudCustomerController {
       if (user?.status !== "ACTIVE") throw new ConflictException("บัญชีไม่พร้อมใช้งาน");
       const pending = (await tx.query("SELECT id FROM cloud_orders WHERE user_id=$1 AND status IN ('CREATING','PENDING','REVIEW')", [req.user.sub])).rows[0];
       if (pending) throw new ConflictException("มีรายการรอชำระอยู่แล้ว กรุณาตรวจสอบรายการเดิม");
-      const pack = (await tx.query("SELECT * FROM cloud_packages WHERE months=$1 AND enabled=true AND price_satang>0", [body.months])).rows[0];
-      if (!pack) throw new ConflictException("แพ็กเกจยังไม่เปิดขาย");
-
       const purchaseType = body.slotId
         ? "RENEW"
         : String(body.purchaseType || "PACKAGE").toUpperCase();
@@ -390,11 +553,19 @@ export class CloudCustomerController {
         )).rows[0] || null;
       }
 
-      // Extra VPS slots are add-ons. Normal customers must already have a
-      // current primary Cloud entitlement before buying another runtime.
-      if (!slot && purchaseType === "ADDON" && !["OWNER","ADMIN"].includes(String(user.role || "").toUpperCase())) {
+      const addonFlow =
+        (!slot && purchaseType === "ADDON") ||
+        String(slot?.slot_type || "").toUpperCase() === "ADDON";
+
+      if (slot && String(slot.slot_type || "").toUpperCase() === "PERSONAL" && purchaseType === "RENEW") {
+        throw new ConflictException("Slot #1 เป็นแพ็กเกจหลัก กรุณาต่ออายุจากหน้าแพ็กเกจ");
+      }
+
+      // Slot #1 is the primary package gate. Add-on slots cannot be purchased,
+      // renewed or used while the primary package is expired.
+      if (addonFlow && !["OWNER","ADMIN"].includes(String(user.role || "").toUpperCase())) {
         const primary = (await tx.query(
-          `SELECT ls.id
+          `SELECT ls.id,s.expires_at
            FROM license_slots ls
            JOIN subscriptions s ON s.id=ls.subscription_id
            WHERE ls.owner_user_id=$1
@@ -409,8 +580,21 @@ export class CloudCustomerController {
           [req.user.sub]
         )).rows[0];
         if (!primary) {
-          throw new ConflictException("กรุณาเปิดแพ็กเกจ VPS หลักก่อนซื้อ VPS Slot เพิ่ม");
+          throw new ConflictException("แพ็กเกจ VPS หลัก (Slot #1) หมดอายุหรือยังไม่เปิดใช้งาน กรุณาต่ออายุแพ็กเกจหลักก่อน");
         }
+      }
+
+      const pricingPack = addonFlow
+        ? (await tx.query(
+            "SELECT * FROM cloud_addon_packages WHERE months=$1 AND enabled=true AND price_satang>0",
+            [body.months]
+          )).rows[0]
+        : (await tx.query(
+            "SELECT * FROM cloud_packages WHERE months=$1 AND enabled=true AND price_satang>0",
+            [body.months]
+          )).rows[0];
+      if (!pricingPack) {
+        throw new ConflictException(addonFlow ? "ราคา VPS Slot เสริมระยะเวลานี้ยังไม่เปิดขาย" : "แพ็กเกจยังไม่เปิดขาย");
       }
 
       const reserved = slot ? (await tx.query(`
@@ -441,15 +625,16 @@ export class CloudCustomerController {
         code: body.promoCode,
         userId: String(req.user.sub),
         mode: "CLOUD",
-        months: pack.months,
-        originalAmountSatang: Number(pack.price_satang)
+        months: pricingPack.months,
+        originalAmountSatang: Number(pricingPack.price_satang)
       });
       const order = (await tx.query(
         `INSERT INTO cloud_orders(
-           user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,runner_id,slot_id
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [req.user.sub, pack.months, promo.finalAmountSatang, pack.price_satang,
-         promo.discountAmountSatang, promo.code, promo.redemptionId, node.runner_id, slot?.id || null]
+           user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,runner_id,slot_id,purchase_type
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        [req.user.sub, pricingPack.months, promo.finalAmountSatang, pricingPack.price_satang,
+         promo.discountAmountSatang, promo.code, promo.redemptionId, node.runner_id, slot?.id || null,
+         addonFlow ? "ADDON" : "PACKAGE"]
       )).rows[0];
       await this.promotions.attachOrder(tx, promo.redemptionId, order.id);
       return order;

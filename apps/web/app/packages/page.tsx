@@ -102,6 +102,8 @@ type Order = {
   account_number?: string | null;
   actual_state?: string | null;
   last_seen_at?: string | null;
+  purchase_type?: string | null;
+  slot_type?: string | null;
 };
 
 type PromotionPreview = {
@@ -249,7 +251,14 @@ export default function PackagesPage() {
   }, [cooldown > 0]);
 
   const pendingLocal = localOrders.find(order => ["CREATING", "PENDING", "REVIEW"].includes(order.status));
-  const pendingCloud = cloudOrders.find(order => ["CREATING", "PENDING", "REVIEW"].includes(order.status));
+  const primaryCloudOrders = useMemo(
+    () => cloudOrders.filter(order =>
+      String(order.purchase_type || "PACKAGE").toUpperCase() !== "ADDON" &&
+      String(order.slot_type || "PERSONAL").toUpperCase() !== "ADDON"
+    ),
+    [cloudOrders]
+  );
+  const pendingCloud = primaryCloudOrders.find(order => ["CREATING", "PENDING", "REVIEW"].includes(order.status));
 
   useEffect(() => {
     if (!pendingLocal && !pendingCloud) return;
@@ -283,12 +292,15 @@ export default function PackagesPage() {
   );
 
   const activeCloud = useMemo(
-    () => cloudOrders.find(order =>
+    () => primaryCloudOrders.find(order =>
       order.status === "PAID" &&
       order.subscription_expires_at &&
       new Date(order.subscription_expires_at).getTime() > Date.now()
     ),
-    [cloudOrders]
+    [primaryCloudOrders]
+  );
+  const hasPrimaryCloudSlot = primaryCloudOrders.some(order =>
+    order.status === "PAID" && Boolean(order.slot_id)
   );
 
   function notify(kind: "good" | "bad" | "info", text: string) {
@@ -390,13 +402,13 @@ export default function PackagesPage() {
         checkoutDialog.current?.close();
         setCheckoutOrderId("");
         setCheckoutPack(null);
-        notify("good", "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Cloud แล้ว");
+        notify("good", "ใช้โปรโมชั่น 100% และเปิด/ต่ออายุแพ็กเกจ VPS หลักแล้ว");
       } else {
         setCheckoutOrderId(String(result?.id || ""));
       }
       return result;
     } catch (error: unknown) {
-      notify("bad", error instanceof Error ? error.message : "สร้างรายการ Cloud ไม่สำเร็จ");
+      notify("bad", error instanceof Error ? error.message : "สร้างรายการแพ็กเกจ VPS หลักไม่สำเร็จ");
       await load().catch(() => {});
       return null;
     } finally {
@@ -542,7 +554,7 @@ export default function PackagesPage() {
   const sendsRemaining = Number(trial?.otp?.sendsRemaining ?? 0);
   const isLocalSystem = activeSystem === "LOCAL";
   const activeCatalog = isLocalSystem ? localCatalog : cloudCatalog;
-  const activeOrders = isLocalSystem ? localOrders : cloudOrders;
+  const activeOrders = isLocalSystem ? localOrders : primaryCloudOrders;
   const activePending = isLocalSystem ? pendingLocal : pendingCloud;
   const activeMembership = isLocalSystem ? activeLocal : activeCloud;
   const salesPaused = Boolean(localCatalog?.salesPaused || cloudCatalog?.salesPaused);
@@ -867,10 +879,10 @@ export default function PackagesPage() {
                       "ต่ออายุเพิ่มจากเวลาคงเหลือ"
                     ]
                   : [
-                      "บอททำงานบน VPS ต่อเนื่อง 24 ชั่วโมง",
-                      "1 แพ็กเกจสำหรับ 1 บัญชี MT5",
-                      "สั่งเริ่มและหยุดบอทจากมือถือหรือคอมได้",
-                      "ระบบตรวจสอบ VPS ว่างก่อนสร้างรายการ"
+                      "Slot #1 คือแพ็กเกจ VPS หลักสำหรับ 1 บัญชี MT5",
+                      "แพ็กเกจหลักต้อง Active จึงจะใช้งาน Slot เสริมได้",
+                      "การต่ออายุแพ็กเกจหลักต่อจากเวลาคงเหลือเดิม",
+                      "อายุของ Slot เสริมจะไม่ถูกยืดตามแพ็กเกจหลัก"
                     ]
                 ).map(item => <span key={item}>{item}</span>)}
               </div>
@@ -887,7 +899,8 @@ export default function PackagesPage() {
                       salesPaused={salesPaused}
                       busy={Boolean(busy)}
                       pending={Boolean(activePending)}
-                      capacityAvailable={isLocalSystem || Number(cloudCatalog?.available || 0) > 0}
+                      capacityAvailable={isLocalSystem || hasPrimaryCloudSlot || Number(cloudCatalog?.available || 0) > 0}
+                      renewal={!isLocalSystem && hasPrimaryCloudSlot}
                       onBuy={() => {
                         setCheckoutPack(pack);
                         setCheckoutOrderId("");
@@ -1135,6 +1148,7 @@ function PackageCard({
   busy,
   pending,
   capacityAvailable = true,
+  renewal = false,
   onBuy
 }:{
   system:"LOCAL"|"CLOUD";
@@ -1145,6 +1159,7 @@ function PackageCard({
   busy:boolean;
   pending:boolean;
   capacityAvailable?:boolean;
+  renewal?:boolean;
   onBuy:()=>void;
 }) {
   const available =
@@ -1166,7 +1181,9 @@ function PackageCard({
           ? "VPS เต็มชั่วคราว"
           : pending
             ? "มีรายการรอชำระ"
-            : "เลือกแพ็กเกจ";
+            : system === "CLOUD" && renewal
+              ? "ต่ออายุแพ็กเกจหลัก"
+              : "เลือกแพ็กเกจ";
 
   const features = system === "LOCAL"
     ? [
@@ -1176,10 +1193,10 @@ function PackageCard({
         "ต่ออายุรักษาเวลาที่เหลือ"
       ]
     : [
-        "Cloud สำหรับ 1 บัญชี MT5",
-        "Start / Stop ผ่านมือถือ",
-        "ดูสถานะบอทได้ตลอด",
-        "ต่ออายุรักษาเวลาที่เหลือ"
+        "แพ็กเกจหลัก Slot #1 สำหรับ 1 บัญชี MT5",
+        "เป็นสิทธิ์หลักสำหรับ VPS Slot เสริมทั้งหมด",
+        "ต่ออายุจากเวลาคงเหลือเดิม",
+        "ไม่ยืดวันหมดอายุของ Slot เสริม"
       ];
 
   return (
