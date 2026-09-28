@@ -249,6 +249,52 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
     }
   }
 
+  async cancelPending(input: {
+    orderType: "LOCAL" | "CLOUD";
+    orderId: string;
+    userId: string;
+  }) {
+    if (!/^[0-9a-f-]{36}$/i.test(input.orderId)) {
+      throw new BadRequestException("Invalid order");
+    }
+    const table = input.orderType === "LOCAL" ? "local_orders" : "cloud_orders";
+    const lockKey = input.orderType === "LOCAL" ? 740092 : 740091;
+    return this.db.transaction(async (tx: PoolClient) => {
+      await tx.query("SELECT pg_advisory_xact_lock($1)", [lockKey]);
+      const order = (
+        await tx.query(
+          `SELECT * FROM ${table} WHERE id=$1 AND user_id=$2 FOR UPDATE`,
+          [input.orderId, input.userId]
+        )
+      ).rows[0];
+      if (!order) throw new BadRequestException("ไม่พบรายการ");
+      if (order.status === "PAID") {
+        throw new ConflictException("รายการนี้ชำระเงินสำเร็จแล้ว");
+      }
+      if (order.charge_id) {
+        throw new ConflictException("รายการ Payment Gateway ต้องรอผลจากผู้ให้บริการ");
+      }
+      if (!["PENDING", "REVIEW", "CREATING"].includes(String(order.status))) {
+        return { ok: true, status: String(order.status) };
+      }
+
+      await tx.query(
+        `UPDATE ${table} SET status='FAILED',expires_at=now() WHERE id=$1`,
+        [order.id]
+      );
+      await this.promotions.release(tx, input.orderType, order.id);
+      await tx.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES('CUSTOMER','PAYMENT_CANCELLED','order',$1,$2::jsonb)`,
+        [
+          order.id,
+          JSON.stringify({ paymentProvider: "EASYSLIP", orderType: input.orderType })
+        ]
+      );
+      return { ok: true, status: "FAILED" };
+    });
+  }
+
   async verifyAndActivate(input: {
     base64: string;
     orderType: "LOCAL" | "CLOUD";
