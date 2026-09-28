@@ -7211,6 +7211,49 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   color:#ff9bb3;
 }
 
+.vps-connected-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  min-height:86px;
+  padding:15px 18px;
+  border-color:rgba(102,194,160,.16);
+  background:linear-gradient(145deg,rgba(8,15,17,.96),rgba(8,11,18,.98));
+}
+.vps-connected-copy{
+  min-width:0;
+}
+.vps-connected-title-row{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin-top:2px;
+}
+.vps-connected-title-row h2{
+  margin:0;
+  color:#edf5f2;
+  font-size:20px;
+  line-height:1.15;
+}
+.vps-connected-title-row .badge{
+  padding:5px 8px;
+  font-size:11px;
+}
+.vps-connected-copy .muted{
+  margin:5px 0 0;
+  font-size:11px;
+  line-height:1.35;
+}
+.vps-connected-actions{
+  flex:0 0 auto;
+}
+.vps-connected-actions .btn{
+  min-height:36px;
+  padding:8px 12px;
+  border-radius:10px;
+}
+
 .vps-slot-manager{
   overflow:hidden;
   border:1px solid rgba(130,108,207,.22);
@@ -7798,6 +7841,19 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   }
   .membership-compact-card .membership-countdown-badge{
     display:none!important;
+  }
+  .vps-connected-card{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:10px;
+    min-height:0;
+    padding:12px!important;
+  }
+  .vps-connected-actions{
+    width:100%;
+  }
+  .vps-connected-actions .btn{
+    width:100%;
   }
   .vps-slot-manager{
     border-radius:16px;
