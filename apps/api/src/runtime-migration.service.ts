@@ -792,6 +792,20 @@ export class RuntimeMigrationService {
 
       migration = (await tx.query("SELECT * FROM runtime_migrations WHERE id=$1", [migration.id])).rows[0];
       if (migration.state === "TARGET_PROVISIONING") {
+        const leaseRotatedAt = migration.lease_rotated_at
+          ? new Date(migration.lease_rotated_at).getTime()
+          : 0;
+        const targetSeenAt = instance.last_seen_at
+          ? new Date(instance.last_seen_at).getTime()
+          : 0;
+        const cloudTargetWasReady =
+          instance.mode === "CLOUD" &&
+          String(instance.slot_id || "") === String(migration.target_slot_id || "") &&
+          (!migration.target_runner_id || String(instance.runner_id || "") === String(migration.target_runner_id)) &&
+          targetSeenAt > 0 &&
+          leaseRotatedAt > 0 &&
+          targetSeenAt >= leaseRotatedAt;
+
         if (instance.provisioning_error) {
           await tx.query(
             `UPDATE runtime_migrations SET state='FAILED',error_code='CLOUD_PROVISION_FAILED',
@@ -799,19 +813,44 @@ export class RuntimeMigrationService {
              WHERE id=$1`,
             [migration.id]
           );
-        } else if (instance.mode === "CLOUD" && this.fresh(instance.last_seen_at, 30_000)) {
+        } else if (
+          instance.mode === "CLOUD" &&
+          (this.fresh(instance.last_seen_at, 30_000) || cloudTargetWasReady)
+        ) {
           await tx.query(
-            `UPDATE runtime_migrations SET state='COMPLETED',target_ready_at=now(),updated_at=now()
+            `UPDATE runtime_migrations SET state='COMPLETED',
+               target_ready_at=COALESCE(target_ready_at,$2::timestamptz,now()),
+               updated_at=now(),error_code=NULL,error_detail=NULL
              WHERE id=$1`,
-            [migration.id]
+            [migration.id, instance.last_seen_at || null]
           );
         }
       } else if (migration.state === "WAITING_LOCAL_INSTALL") {
-        if (instance.mode === "LOCAL" && instance.device_status === "ACTIVE" && this.fresh(instance.agent_last_seen_at, 45_000)) {
+        const leaseRotatedAt = migration.lease_rotated_at
+          ? new Date(migration.lease_rotated_at).getTime()
+          : 0;
+        const localAgentSeenAt = instance.agent_last_seen_at
+          ? new Date(instance.agent_last_seen_at).getTime()
+          : 0;
+        const localTargetWasReady =
+          instance.mode === "LOCAL" &&
+          String(instance.slot_id || "") === String(migration.target_slot_id || "") &&
+          instance.device_status === "ACTIVE" &&
+          localAgentSeenAt > 0 &&
+          leaseRotatedAt > 0 &&
+          localAgentSeenAt >= leaseRotatedAt;
+
+        if (
+          instance.mode === "LOCAL" &&
+          instance.device_status === "ACTIVE" &&
+          (this.fresh(instance.agent_last_seen_at, 45_000) || localTargetWasReady)
+        ) {
           await tx.query(
-            `UPDATE runtime_migrations SET state='COMPLETED',target_ready_at=now(),updated_at=now()
+            `UPDATE runtime_migrations SET state='COMPLETED',
+               target_ready_at=COALESCE(target_ready_at,$2::timestamptz,now()),
+               updated_at=now(),error_code=NULL,error_detail=NULL
              WHERE id=$1`,
-            [migration.id]
+            [migration.id, instance.agent_last_seen_at || null]
           );
         }
       }
