@@ -504,6 +504,64 @@ export class PerformanceAnalyticsController {
     const detailedStatsReliable =
       !canReconcileToday ||
       Math.abs(journalReconciliationGap) <= 0.01;
+
+    // VPS/CLOUD uses the same EA journal recovery that already exists in MT5.
+    // Only queue a replay when the current-day MT5 heartbeat proves that the
+    // journal is incomplete. LOCAL behavior and trading control are untouched.
+    let journalRecovery:any = null;
+    if (
+      !detailedStatsReliable &&
+      String(account.mode || "").toUpperCase() === "CLOUD" &&
+      account.instance_id &&
+      freshHeartbeat
+    ) {
+      const latestReplay = await this.db.one(
+        `SELECT id,status,created_at,delivered_at,acked_at
+         FROM bot_commands
+         WHERE bot_instance_id=$1
+           AND command='JOURNAL_REPLAY_TODAY'
+         ORDER BY id DESC
+         LIMIT 1`,
+        [account.instance_id]
+      );
+      const latestReplayAt = latestReplay?.created_at
+        ? new Date(latestReplay.created_at).getTime()
+        : 0;
+      const latestReplayStatus = String(latestReplay?.status || "").toUpperCase();
+      const replayActive =
+        latestReplayStatus === "PENDING" ||
+        latestReplayStatus === "DELIVERED";
+      const replayCooldown =
+        latestReplayAt > 0 &&
+        Date.now() - latestReplayAt < 30_000;
+
+      if (!replayActive && !replayCooldown) {
+        journalRecovery = await this.db.one(
+          `INSERT INTO bot_commands(bot_instance_id,command)
+           VALUES($1,'JOURNAL_REPLAY_TODAY')
+           RETURNING id,status,created_at,delivered_at,acked_at`,
+          [account.instance_id]
+        );
+      } else {
+        journalRecovery = latestReplay;
+      }
+    }
+
+    const journalRecoveryStatus = String(journalRecovery?.status || "").toUpperCase();
+    const journalRecoveryAt = journalRecovery?.created_at
+      ? new Date(journalRecovery.created_at).getTime()
+      : 0;
+    const journalRecoveryActive =
+      !detailedStatsReliable &&
+      String(account.mode || "").toUpperCase() === "CLOUD" &&
+      freshHeartbeat &&
+      Boolean(journalRecovery) &&
+      (
+        journalRecoveryStatus === "PENDING" ||
+        journalRecoveryStatus === "DELIVERED" ||
+        (journalRecoveryAt > 0 && Date.now() - journalRecoveryAt < 30_000)
+      );
+
     const realizedSinceFrom = rawRealizedSinceFrom + mt5TodayReconciliation;
     const selectedRealizedNet = rawSelectedRealizedNet + mt5TodayReconciliation;
     const derivedStart = currentBalance > 0
@@ -775,14 +833,24 @@ export class PerformanceAnalyticsController {
       },
       dataQuality: {
         detailedStatsReliable,
-        detailStatus: detailedStatsReliable ? "COMPLETE" : "JOURNAL_INCOMPLETE",
+        detailStatus: detailedStatsReliable
+          ? "COMPLETE"
+          : journalRecoveryActive
+            ? "JOURNAL_RECOVERING"
+            : "JOURNAL_INCOMPLETE",
         journalRows: journalRows.length,
         selectedJournalRows: selectedDealRows.length,
         reconstructedPositions: selectedPositions.length,
         mt5ReconciliationAdjustment: journalReconciliationGap,
         moneySource: canReconcileToday
           ? "MT5_HEARTBEAT_RECONCILED"
-          : "TRADE_JOURNAL"
+          : "TRADE_JOURNAL",
+        recovery: journalRecoveryActive ? {
+          command: "JOURNAL_REPLAY_TODAY",
+          commandId: Number(journalRecovery?.id || 0) || null,
+          status: journalRecoveryStatus || "PENDING",
+          requestedAt: journalRecovery?.created_at || null
+        } : null
       },
       balance: {
         current: currentBalance > 0 ? currentBalance : null,
