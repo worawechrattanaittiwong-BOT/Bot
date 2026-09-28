@@ -78,6 +78,18 @@ internal sealed class WorkerClient : IDisposable
         return new EaRelayResult((int)response.StatusCode, body);
     }
 
+    public async Task<int> RelayEaJournalAsync(
+        string payload,
+        CancellationToken cancellationToken)
+    {
+        using var content = new StringContent(payload, Encoding.UTF8, "application/json");
+        using var response = await _http.PostAsync(
+            _config.EffectiveApiBase.TrimEnd('/') + "/api/ea/journal",
+            content,
+            cancellationToken);
+        return (int)response.StatusCode;
+    }
+
     public async Task<byte[]> DownloadUpdateArtifactAsync(
         string instanceUpdateId,
         CancellationToken cancellationToken)
