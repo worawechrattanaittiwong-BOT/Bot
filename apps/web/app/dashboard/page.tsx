@@ -4118,6 +4118,124 @@ export default function DashboardPage() {
         )}
 
         <dialog
+          ref={cloudMt5DialogRef}
+          className="cloud-mt5-dialog"
+          onClose={()=>{
+            setTradingPassword("");
+            setCloudMt5DialogAccountId("");
+            setCloudMt5DialogMode("NEW");
+          }}
+        >
+          <form className="cloud-mt5-dialog-card" onSubmit={submitCloudMt5Dialog}>
+            <header className="cloud-mt5-dialog-head">
+              <div>
+                <div className="eyebrow">VPS MT5 CONNECTION</div>
+                <h2>{cloudMt5DialogMode === "RECONNECT" ? "เชื่อม MT5 เดิมอีกครั้ง" : "เชื่อมบัญชี MT5"}</h2>
+                <p>
+                  {cloudMt5DialogMode === "RECONNECT"
+                    ? "กรอก Trading Password เพื่อเปิด MT5 บัญชีเดิมบน VPS อีกครั้ง"
+                    : "กรอก Login, Broker, Server และ Trading Password สำหรับ Slot ที่เลือก"}
+                </p>
+              </div>
+              <button type="button" aria-label="ปิด" disabled={busy} onClick={()=>cloudMt5DialogRef.current?.close()}>×</button>
+            </header>
+
+            <div className="cloud-mt5-dialog-grid">
+              <label className="field">
+                <span>MT5 Login</span>
+                <input
+                  className="input"
+                  inputMode="numeric"
+                  autoFocus
+                  value={accountNumber}
+                  readOnly={cloudMt5DialogMode === "RECONNECT"}
+                  onChange={e=>setAccountNumber(e.target.value.replace(/\D/g,""))}
+                  placeholder="เช่น 12345678"
+                  required
+                />
+              </label>
+
+              <label className="field">
+                <span>Broker</span>
+                <select
+                  className="input"
+                  value={brokerCode}
+                  disabled={cloudMt5DialogMode === "RECONNECT"}
+                  onChange={e=>{
+                    setBrokerCode(e.target.value);
+                    setBrokerServer("");
+                    setCustomBrokerServer("");
+                  }}
+                  required
+                >
+                  {brokerCatalog.map(b=><option key={b.code} value={b.code}>{b.name}</option>)}
+                  {!brokerCatalog.length && <option value="EXNESS">Exness</option>}
+                  <option value="OTHER">อื่น ๆ</option>
+                </select>
+              </label>
+
+              {brokerCode === "OTHER" && (
+                <label className="field">
+                  <span>ชื่อ Broker</span>
+                  <input
+                    className="input"
+                    value={customBrokerName}
+                    readOnly={cloudMt5DialogMode === "RECONNECT"}
+                    onChange={e=>setCustomBrokerName(e.target.value)}
+                    placeholder="ชื่อ Broker"
+                    required
+                  />
+                </label>
+              )}
+
+              <label className="field cloud-mt5-server-field">
+                <span>MT5 Server</span>
+                <input
+                  className="input"
+                  list="cloud-mt5-server-options"
+                  value={brokerServer}
+                  readOnly={cloudMt5DialogMode === "RECONNECT"}
+                  onChange={e=>setBrokerServer(e.target.value)}
+                  placeholder="พิมพ์ เช่น 13 หรือ Exness-MT5Real13"
+                  autoComplete="off"
+                  required
+                />
+                <datalist id="cloud-mt5-server-options">
+                  {(selectedBroker?.servers || []).map(server=>(
+                    <option key={server.serverName} value={server.serverName}>
+                      {server.environment!=="UNKNOWN" ? server.environment : ""}
+                    </option>
+                  ))}
+                </datalist>
+                <small>เลือกจาก Server ที่ระบบมีจริง หรือพิมพ์ชื่อ Server เองได้</small>
+              </label>
+
+              <label className="field cloud-mt5-password-field">
+                <span>MT5 Trading Password</span>
+                <input
+                  className="input"
+                  type="password"
+                  autoComplete="off"
+                  value={tradingPassword}
+                  onChange={e=>setTradingPassword(e.target.value)}
+                  placeholder="Trading Password"
+                  required
+                />
+              </label>
+            </div>
+
+            <footer className="cloud-mt5-dialog-actions">
+              <button type="button" className="btn ghost" disabled={busy} onClick={()=>cloudMt5DialogRef.current?.close()}>
+                ยกเลิก
+              </button>
+              <button type="submit" className="btn primary" disabled={busy}>
+                {busy ? "กำลังเชื่อม..." : cloudMt5DialogMode === "RECONNECT" ? "เชื่อม MT5 ใหม่" : "เชื่อมบัญชีนี้"}
+              </button>
+            </footer>
+          </form>
+        </dialog>
+
+        <dialog
           ref={vpsSlotDialogRef}
           className="vps-slot-dialog"
           onClose={()=>{
