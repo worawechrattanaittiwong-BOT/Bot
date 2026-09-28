@@ -4319,12 +4319,19 @@ function VpsSlotManager(props:{
   summary:{total:number;online:number;ready:number;expiring:number};
   selectedSlotId:string;
   ownerUnlimited:boolean;
+  primaryActive:boolean;
   canBuy:boolean;
   capacity:number;
+  ownerCanPrice:boolean;
   onSelect:(slotId:string)=>void;
   onBuy:()=>void;
   onRenew:(slotId:string)=>void;
+  onPrimaryRenew:()=>void;
+  onConfigurePricing:()=>void;
 }) {
+  const isPrimary = (slot:any) =>
+    String(slot?.slot_type || "").toUpperCase()==="PERSONAL" ||
+    Number(slot?.slot_number || 0)===1;
   const formatExpiry = (value:any) => {
     if (props.ownerUnlimited) return "ไม่จำกัดเวลา";
     if (!value) return "ยังไม่มีแพ็กเกจ";
@@ -4333,6 +4340,7 @@ function VpsSlotManager(props:{
     return d.toLocaleDateString("th-TH",{day:"2-digit",month:"short",year:"numeric"});
   };
   const slotTone = (slot:any) => {
+    if (!props.ownerUnlimited && !props.primaryActive && !isPrimary(slot)) return "blocked";
     if (!props.ownerUnlimited && slot?.subscription_expires_at && new Date(slot.subscription_expires_at).getTime() <= Date.now()) return "expired";
     if (slot?.mt5_online) return "online";
     if (slot?.instance_id) return "offline";
@@ -4340,6 +4348,7 @@ function VpsSlotManager(props:{
   };
   const slotLabel = (slot:any) => {
     const tone = slotTone(slot);
+    if (tone==="blocked") return "PRIMARY EXPIRED";
     if (tone==="expired") return "EXPIRED";
     if (tone==="online") return "ONLINE";
     if (tone==="offline") return "OFFLINE";
@@ -4352,15 +4361,26 @@ function VpsSlotManager(props:{
         <div>
           <div className="eyebrow">VPS SLOT MANAGER</div>
           <h2>VPS Slots ของคุณ</h2>
-          <p>แต่ละ Slot แยก MT5, EA Runtime และวันหมดอายุออกจากกัน</p>
+          <p>Slot #1 คือแพ็กเกจหลัก · Slot #2 ขึ้นไปเป็น Slot เสริมที่มีราคาและวันหมดอายุแยกกัน</p>
         </div>
         <div className="vps-slot-manager-actions">
           <span className={"vps-capacity-pill " + (props.capacity>0 ? "good" : "bad")}>
             <i/> Capacity {Math.max(0,props.capacity)}
           </span>
-          <button type="button" className="btn primary" disabled={!props.canBuy} onClick={props.onBuy}>+ ซื้อ VPS Slot</button>
+          {props.ownerCanPrice && (
+            <button type="button" className="btn ghost" onClick={props.onConfigurePricing}>ตั้งราคา Slot เสริม</button>
+          )}
+          <button type="button" className="btn primary" disabled={!props.canBuy} onClick={props.onBuy}>+ ซื้อ Slot เสริม</button>
         </div>
       </div>
+
+      {!props.ownerUnlimited && !props.primaryActive && (
+        <div className="vps-primary-gate-note">
+          <b>แพ็กเกจหลัก Slot #1 หมดอายุ</b>
+          <span>Slot เสริมทั้งหมดถูกพักการใช้งานจนกว่าจะต่ออายุแพ็กเกจหลัก วันคงเหลือของ Slot เสริมไม่เปลี่ยนแปลง</span>
+          <button type="button" className="btn primary" onClick={props.onPrimaryRenew}>ต่ออายุแพ็กเกจหลัก</button>
+        </div>
+      )}
 
       <div className="vps-slot-stats">
         <div><span>Slots ทั้งหมด</span><b>{props.summary.total}</b></div>
@@ -4372,34 +4392,57 @@ function VpsSlotManager(props:{
       <div className="vps-slot-grid">
         {props.slots.map(slot=>{
           const selected = String(slot?.id || "") === String(props.selectedSlotId || "");
+          const primary = isPrimary(slot);
           const tone = slotTone(slot);
           return (
             <article key={slot.id} className={"vps-slot-card tone-"+tone+(selected ? " selected" : "")}>
               <header>
                 <div>
-                  <span>VPS SLOT</span>
+                  <span>{primary ? "PRIMARY VPS PACKAGE" : "VPS ADD-ON SLOT"}</span>
                   <h3>Slot #{slot.slot_number}</h3>
                 </div>
                 <span className={"vps-slot-status "+tone}><i/>{slotLabel(slot)}</span>
               </header>
 
+              <div className={"vps-slot-kind "+(primary ? "primary" : "addon")}>
+                {primary ? "แพ็กเกจหลัก" : "Slot เสริม"}
+              </div>
+
               <div className="vps-slot-account">
                 <small>MT5 ACCOUNT</small>
                 <b>{slot.account_number || "ยังไม่ได้เชื่อม MT5"}</b>
-                <span>{slot.account_number ? ((slot.broker || "Broker")+" · "+(slot.broker_server || "Server")) : "พร้อมสำหรับเชื่อมบัญชีใหม่"}</span>
+                <span>
+                  {tone==="blocked"
+                    ? "แพ็กเกจหลักหมดอายุ · ระงับการใช้งานชั่วคราว"
+                    : slot.account_number
+                      ? ((slot.broker || "Broker")+" · "+(slot.broker_server || "Server"))
+                      : "พร้อมสำหรับเชื่อมบัญชีใหม่"}
+                </span>
               </div>
 
               <div className="vps-slot-meta">
-                <div><span>EA</span><b>{slot.actual_state || (slot.instance_id ? "STOPPED" : "NOT INSTALLED")}</b></div>
+                <div><span>EA</span><b>{tone==="blocked" ? "BLOCKED" : slot.actual_state || (slot.instance_id ? "STOPPED" : "NOT INSTALLED")}</b></div>
                 <div><span>หมดอายุ</span><b>{formatExpiry(slot.subscription_expires_at)}</b></div>
               </div>
 
               <footer>
-                <button type="button" className={"btn "+(selected ? "primary" : "ghost")} onClick={()=>props.onSelect(String(slot.id))}>
-                  {selected ? "กำลังจัดการ" : slot.account_number ? "จัดการ Slot" : "เชื่อม MT5"}
+                <button
+                  type="button"
+                  className={"btn "+(selected ? "primary" : "ghost")}
+                  disabled={tone==="blocked"}
+                  onClick={()=>props.onSelect(String(slot.id))}
+                >
+                  {tone==="blocked" ? "รอต่ออายุแพ็กเกจหลัก" : selected ? "กำลังจัดการ" : slot.account_number ? "จัดการ Slot" : "เชื่อม MT5"}
                 </button>
                 {!props.ownerUnlimited && (
-                  <button type="button" className="btn ghost" onClick={()=>props.onRenew(String(slot.id))}>ต่ออายุ</button>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    disabled={!primary && !props.primaryActive}
+                    onClick={()=>primary ? props.onPrimaryRenew() : props.onRenew(String(slot.id))}
+                  >
+                    {primary ? "ต่ออายุแพ็กเกจหลัก" : "ต่ออายุ Slot เสริม"}
+                  </button>
                 )}
               </footer>
             </article>
@@ -4408,8 +4451,8 @@ function VpsSlotManager(props:{
 
         <button type="button" className="vps-slot-add-card" disabled={!props.canBuy} onClick={props.onBuy}>
           <span className="vps-slot-add-icon">+</span>
-          <b>ซื้อ VPS Slot เพิ่ม</b>
-          <small>เพิ่ม VPS MT5 ใหม่ได้เรื่อย ๆ โดยไม่จำกัดจำนวนต่อบัญชี</small>
+          <b>ซื้อ VPS Slot เสริม</b>
+          <small>{props.primaryActive ? "ราคาและวันหมดอายุแยกจากแพ็กเกจหลัก" : "ต้องต่ออายุแพ็กเกจหลัก Slot #1 ก่อน"}</small>
         </button>
       </div>
     </section>
