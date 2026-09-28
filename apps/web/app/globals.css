@@ -6755,7 +6755,8 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .owner-mobile-nav-trigger-wrap{
     position:fixed;
     right:14px;
-    bottom:calc(14px + env(safe-area-inset-bottom));
+    top:calc(14px + env(safe-area-inset-top));
+    bottom:auto;
     z-index:2450;
     width:auto;
     margin:0;

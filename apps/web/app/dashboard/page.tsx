@@ -2367,6 +2367,62 @@ export default function DashboardPage() {
     await performMt5Reset();
   }
 
+  async function deleteVpsSlot(slotId:string) {
+    if (busy) return;
+    const slot = cloudSlots.find((item:any)=>String(item?.id || "")===String(slotId || ""));
+    if (!slot) {
+      setError("ไม่พบ VPS Slot นี้");
+      return;
+    }
+    const primary = String(slot?.slot_type || "").toUpperCase()==="PERSONAL" || Number(slot?.slot_number || 0)===1;
+    if (primary) {
+      setError("Slot #1 เป็นแพ็กเกจหลัก ไม่สามารถลบได้");
+      return;
+    }
+
+    const confirmed = await confirmPopup({
+      title:"ลบ VPS Slot",
+      tone:"warning",
+      message:"ลบ Slot #" + String(slot.slot_number || "") + " ออกจากบัญชีนี้หรือไม่? ถ้ามี MT5 บน VPS ระบบจะหยุด Runtime ก่อนลบ Slot",
+      confirmLabel:"ลบ Slot"
+    });
+    if (!confirmed) return;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const resetUrl = "/bot/mt5/reset?slotId=" + encodeURIComponent(slotId);
+      let reset = await api(resetUrl, { method:"POST" });
+      let attempts = 0;
+      while (reset?.pendingCloudStop && attempts < 45) {
+        if (attempts === 0) setNotice("กำลังหยุด MT5 บน VPS ก่อนลบ Slot");
+        await new Promise(resolve=>window.setTimeout(resolve,1200));
+        reset = await api(resetUrl, { method:"POST" });
+        attempts += 1;
+      }
+      if (reset?.pendingCloudStop) {
+        throw new Error("VPS ยังไม่ยืนยันการหยุด MT5 ภายในเวลาที่กำหนด กรุณาลองอีกครั้ง");
+      }
+
+      await api("/bot/slots/delete", {
+        method:"POST",
+        body:JSON.stringify({ slotId })
+      });
+
+      if (String(selectedSlotIdRef.current || "") === String(slotId)) {
+        selectedSlotIdRef.current = "";
+        setSelectedSlotId("");
+      }
+      setNotice("ลบ VPS Slot #" + String(slot.slot_number || "") + " แล้ว");
+      await Promise.all([load(""), loadVpsCommerce()]);
+    } catch (e:any) {
+      setError(String(e?.message || "ลบ VPS Slot ไม่สำเร็จ"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function prepareCloudMt5Dialog(slotId:string, dialogMode:"NEW"|"RECONNECT") {
     const slot = cloudSlots.find((item:any)=>String(item?.id || "")===String(slotId || "")) || null;
     if (slotId && slotId !== selectedSlotIdRef.current) {
@@ -2442,20 +2498,14 @@ export default function DashboardPage() {
         if (!selectedBrokerName) throw new Error("กรุณาเลือก Broker");
         if (!selectedServer.trim()) throw new Error("กรุณาเลือกหรือพิมพ์ MT5 Server");
 
-        const result = await api("/bot/mt5", {
+        await api("/bot/mt5", {
           method:"POST",
           body:JSON.stringify({
             slotId:selectedSlotIdRef.current || undefined,
             accountNumber:accountNumber.trim(),
             broker:selectedBrokerName,
             brokerServer:selectedServer.trim(),
-            mode:"CLOUD"
-          })
-        });
-        await api("/bot/mt5/cloud-credential", {
-          method:"POST",
-          body:JSON.stringify({
-            mt5AccountId:result.account.id,
+            mode:"CLOUD",
             tradingPassword
           })
         });
@@ -3098,7 +3148,9 @@ export default function DashboardPage() {
             <span className="cc-v3-title-icon"><ScenovaIcon name={activeView === "overview" ? "control" : activeView === "account" ? "account" : "strategy"} size={24}/></span>
             <div>
               <h1>{activeView === "overview" ? "Control Center" : activeView === "account" ? "MT5 & EA" : "Backtest & Performance"}</h1>
-              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "เชื่อมต่อและจัดการบัญชี MT5 ของคุณ" : "ดูผลทดสอบย้อนหลัง ดาวน์โหลดรายงาน และสร้างหน้าพอร์ตตัวอย่างแบบอ่านอย่างเดียว"}</p>
+              {activeView !== "account" && (
+                <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : "ดูผลทดสอบย้อนหลัง ดาวน์โหลดรายงาน และสร้างหน้าพอร์ตตัวอย่างแบบอ่านอย่างเดียว"}</p>
+              )}
             </div>
           </div>
           <div className="cc-v3-head-actions">
@@ -3119,7 +3171,6 @@ export default function DashboardPage() {
                 {" · "}
                 {data.account?.account_number || "ยังไม่เชื่อม MT5"}
               </b>
-              <span>การตั้งค่า, Start, Safe Stop และ Symbol ด้านล่างใช้กับ Slot ที่เลือกเท่านั้น</span>
             </div>
             <div className="cc-slot-switcher-actions">
               {controlSlots.length > 1 ? (
@@ -3820,19 +3871,9 @@ export default function DashboardPage() {
                 <div>
                   <div className="eyebrow">CONNECTION MODE</div>
                   <h2>เลือกระบบเชื่อมต่อ</h2>
-                  <p className="muted">เลือก Local MT5 หรือ VPS Server สำหรับบัญชีนี้</p>
                 </div>
                 <div className="connection-mode-actions">
                   <span className="badge">{String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" ? "VPS SERVER" : "LOCAL MT5"}</span>
-                  <button
-                    type="button"
-                    className="btn primary vps-buy-inline"
-                    disabled={!canBuyVpsSlot}
-                    title={!cloudCatalog?.checkoutEnabled ? "ระบบขาย VPS Slot ยังไม่พร้อม" : Number(cloudCatalog?.available || 0) <= 0 ? "VPS Capacity เต็มชั่วคราว" : "ซื้อ VPS Slot เพิ่ม"}
-                    onClick={()=>openVpsSlotDialog("")}
-                  >
-                    + ซื้อ VPS Slot
-                  </button>
                 </div>
               </div>
               <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
@@ -3912,6 +3953,7 @@ export default function DashboardPage() {
                 ownerCanPrice={String(data.user?.role || "").toUpperCase()==="OWNER"}
                 onSelect={(slotId:string)=>selectSlot(slotId)}
                 onConnect={(slotId:string)=>prepareCloudMt5Dialog(slotId,"NEW")}
+                onDelete={(slotId:string)=>void deleteVpsSlot(slotId)}
                 onBuy={()=>openVpsSlotDialog("")}
                 onRenew={(slotId:string)=>openVpsSlotDialog(slotId)}
                 onPrimaryRenew={openPrimaryPackagePage}
@@ -4076,11 +4118,6 @@ export default function DashboardPage() {
               <div>
                 <div className="eyebrow">VPS MT5 CONNECTION</div>
                 <h2>{cloudMt5DialogMode === "RECONNECT" ? "เชื่อม MT5 เดิมอีกครั้ง" : "เชื่อมบัญชี MT5"}</h2>
-                <p>
-                  {cloudMt5DialogMode === "RECONNECT"
-                    ? "กรอก Trading Password เพื่อเปิด MT5 บัญชีเดิมบน VPS อีกครั้ง"
-                    : "กรอก Login, Broker, Server และ Trading Password สำหรับ Slot ที่เลือก"}
-                </p>
               </div>
               <button type="button" aria-label="ปิด" disabled={busy} onClick={()=>cloudMt5DialogRef.current?.close()}>×</button>
             </header>
@@ -4166,7 +4203,6 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 )}
-                <small>เลือกจาก Server ที่ระบบมีจริง หรือพิมพ์ชื่อ Server เองได้</small>
               </label>
 
               <label className="field cloud-mt5-password-field">
@@ -4516,6 +4552,7 @@ function VpsSlotManager(props:{
   ownerCanPrice:boolean;
   onSelect:(slotId:string)=>void;
   onConnect:(slotId:string)=>void;
+  onDelete:(slotId:string)=>void;
   onBuy:()=>void;
   onRenew:(slotId:string)=>void;
   onPrimaryRenew:()=>void;
@@ -4553,7 +4590,6 @@ function VpsSlotManager(props:{
         <div>
           <div className="eyebrow">VPS SLOT MANAGER</div>
           <h2>VPS Slots ของคุณ</h2>
-          <p>Slot #1 คือแพ็กเกจหลัก · Slot #2 ขึ้นไปเป็น Slot เสริมที่มีราคาและวันหมดอายุแยกกัน</p>
         </div>
         <div className="vps-slot-manager-actions">
           <span className={"vps-capacity-pill " + (props.capacity>0 ? "good" : "bad")}>
@@ -4642,6 +4678,15 @@ function VpsSlotManager(props:{
                     {primary ? "ต่ออายุแพ็กเกจหลัก" : "ต่ออายุ Slot เสริม"}
                   </button>
                 )}
+                {!primary && (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={()=>props.onDelete(String(slot.id))}
+                  >
+                    ลบ Slot
+                  </button>
+                )}
               </footer>
             </article>
           );
@@ -4650,7 +4695,6 @@ function VpsSlotManager(props:{
         <button type="button" className="vps-slot-add-card" disabled={!props.canBuy} onClick={props.onBuy}>
           <span className="vps-slot-add-icon">+</span>
           <b>ซื้อ VPS Slot เสริม</b>
-          <small>{props.primaryActive ? "ราคาและวันหมดอายุแยกจากแพ็กเกจหลัก" : "ต้องต่ออายุแพ็กเกจหลัก Slot #1 ก่อน"}</small>
         </button>
       </div>
     </section>

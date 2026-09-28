@@ -1839,6 +1839,95 @@ export class BotController {
     return { ok: true };
   }
 
+  @Post("slots/delete")
+  async deleteCustomerCloudSlot(@Req() req: any, @Body() body: { slotId: string }) {
+    const slot = await this.db.one(
+      `SELECT * FROM license_slots
+       WHERE id=$1
+         AND owner_user_id=$2
+         AND assigned_user_id=$2
+         AND mode='CLOUD'
+         AND status<>'DELETED'`,
+      [body.slotId, req.user.sub]
+    );
+    if (!slot) throw new ConflictException("ไม่พบ VPS Slot นี้");
+    if (String(slot.slot_type || "").toUpperCase() === "PERSONAL" || Number(slot.slot_number || 0) === 1) {
+      throw new ConflictException("Slot #1 เป็นแพ็กเกจหลัก ไม่สามารถลบได้");
+    }
+
+    const instance = await this.db.one(
+      `SELECT bi.*,
+         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders
+       FROM bot_instances bi
+       WHERE bi.slot_id=$1`,
+      [slot.id]
+    );
+    if (instance && (
+      String(instance.actual_state || "").toUpperCase() === "RUNNING" ||
+      String(instance.desired_state || "").toUpperCase() === "RUNNING" ||
+      Number(instance.positions || 0) > 0 ||
+      Number(instance.pending_orders || 0) > 0
+    )) {
+      throw new ConflictException("หยุดบอทและปิด Position / Pending Order ให้หมดก่อนลบ Slot");
+    }
+    if (
+      instance?.runner_id &&
+      !["STOP_CONFIRMED","LEASE_REVOKED"].includes(String(instance.runtime_stop_state || "NONE").toUpperCase())
+    ) {
+      throw new ConflictException("VPS Slot ยังไม่ยืนยันการหยุด MT5 กรุณารอแล้วลองลบอีกครั้ง");
+    }
+
+    const revoked = randomBytes(32).toString("hex");
+    await this.db.transaction(async tx => {
+      if (instance?.mt5_account_id) {
+        await tx.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [instance.mt5_account_id]);
+        await tx.query("DELETE FROM mt5_credentials WHERE mt5_account_id=$1", [instance.mt5_account_id]);
+      }
+      if (instance?.id) {
+        await tx.query(
+          `UPDATE bot_instances SET
+             mt5_account_id=NULL,
+             runner_id=NULL,
+             lock_owner=NULL,
+             install_token_hash=$2,
+             execution_generation=execution_generation+1,
+             desired_state='STOPPED',
+             actual_state='OFFLINE',
+             last_seen_at=NULL,
+             agent_last_seen_at=NULL,
+             runtime_stop_state='LEASE_REVOKED',
+             runtime_stop_requested_at=NULL,
+             runtime_stop_confirmed_at=now(),
+             runtime_stop_error=NULL,
+             metrics='{}'::jsonb
+           WHERE id=$1`,
+          [instance.id, this.crypto.sha256(revoked)]
+        );
+        await tx.query("DELETE FROM bot_instance_secrets WHERE bot_instance_id=$1", [instance.id]);
+        await tx.query(
+          "UPDATE worker_commands SET status='CANCELLED',result_code='SLOT_DELETED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED')",
+          [instance.id]
+        );
+      }
+      await tx.query("UPDATE cloud_orders SET runner_id=NULL WHERE slot_id=$1 AND status='PAID'", [slot.id]);
+      await tx.query(
+        "UPDATE license_slots SET assigned_user_id=NULL,status='DELETED',updated_at=now() WHERE id=$1",
+        [slot.id]
+      );
+      await tx.query(
+        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'CUSTOMER_DELETE_CLOUD_SLOT','license_slot',$2,$3::jsonb)",
+        [
+          String(req.user?.code || req.user?.sub || "USER").slice(0,160),
+          slot.id,
+          JSON.stringify({ slotNumber: slot.slot_number, slotType: slot.slot_type, oldMt5AccountId: instance?.mt5_account_id || null })
+        ]
+      );
+    });
+
+    return { ok:true, slotId:slot.id, deleted:true };
+  }
+
   @Post("device/release")
   async releaseLocalDevice(@Req() req: any, @Query("slotId") slotId = "") {
     const slot = await this.db.one(
@@ -2101,6 +2190,7 @@ export class BotController {
       broker?: string;
       brokerServer: string;
       mode: "CLOUD" | "LOCAL";
+      tradingPassword?: string;
     }
   ) {
     const mode: "CLOUD" | "LOCAL" = body.mode === "CLOUD" ? "CLOUD" : "LOCAL";
@@ -2109,12 +2199,32 @@ export class BotController {
       : await this.ensureModeSlot(req.user.sub, mode);
     if (slot.mode !== mode) throw new ConflictException("slot mode does not match MT5 mode");
     const boundCloud = await this.db.one(
-      "SELECT id,runtime_stop_state,desired_state,actual_state,runner_id FROM bot_instances WHERE slot_id=$1 AND mode='CLOUD' AND runner_id IS NOT NULL",
+      `SELECT bi.id,bi.runtime_stop_state,bi.desired_state,bi.actual_state,bi.runner_id,bi.metrics,
+              a.account_number,a.broker_server,
+              EXISTS(SELECT 1 FROM mt5_credentials c WHERE c.mt5_account_id=bi.mt5_account_id) credential_ready
+       FROM bot_instances bi
+       LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
+       WHERE bi.slot_id=$1 AND bi.mode='CLOUD' AND bi.runner_id IS NOT NULL`,
       [slot.id]
+    );
+    const sameBoundIdentity = Boolean(
+      boundCloud &&
+      String(boundCloud.account_number || "").trim().toLowerCase() === String(body.accountNumber || "").trim().toLowerCase() &&
+      String(boundCloud.broker_server || "").trim().toLowerCase() === String(body.brokerServer || "").trim().toLowerCase()
+    );
+    const incompleteSameAccountBind = Boolean(
+      boundCloud &&
+      sameBoundIdentity &&
+      !boundCloud.credential_ready &&
+      String(boundCloud.actual_state || "").toUpperCase() !== "RUNNING" &&
+      String(boundCloud.desired_state || "").toUpperCase() !== "RUNNING" &&
+      Math.max(0,Number(boundCloud.metrics?.positions || 0)) === 0 &&
+      Math.max(0,Number(boundCloud.metrics?.accountScenovaPendingOrders || 0)) === 0
     );
     if (
       boundCloud &&
-      !["STOP_CONFIRMED","LEASE_REVOKED"].includes(String(boundCloud.runtime_stop_state || "NONE"))
+      !["STOP_CONFIRMED","LEASE_REVOKED"].includes(String(boundCloud.runtime_stop_state || "NONE")) &&
+      !incompleteSameAccountBind
     ) {
       throw new ConflictException(
         "กรุณากดเปลี่ยนบัญชี VPS ก่อน ระบบจะปิด MT5 เดิมบน Server ให้เรียบร้อยแล้วจึงเชื่อมบัญชีใหม่ได้"
@@ -2234,6 +2344,17 @@ export class BotController {
       "INSERT INTO bot_instance_secrets(bot_instance_id,ciphertext,iv,auth_tag) VALUES($1,$2,$3,$4) ON CONFLICT(bot_instance_id) DO UPDATE SET ciphertext=EXCLUDED.ciphertext,iv=EXCLUDED.iv,auth_tag=EXCLUDED.auth_tag",
       [instance.id, secret.ciphertext, secret.iv, secret.authTag]
     );
+
+    if (mode === "CLOUD" && body.tradingPassword !== undefined) {
+      if (!body.tradingPassword || /[\r\n\x00]/.test(body.tradingPassword)) {
+        throw new ConflictException("Trading Password ไม่ถูกต้อง");
+      }
+      const credential = this.crypto.encrypt(String(body.tradingPassword));
+      await this.db.query(
+        "INSERT INTO mt5_credentials(mt5_account_id,ciphertext,iv,auth_tag) VALUES($1,$2,$3,$4) ON CONFLICT(mt5_account_id) DO UPDATE SET ciphertext=EXCLUDED.ciphertext,iv=EXCLUDED.iv,auth_tag=EXCLUDED.auth_tag,updated_at=now()",
+        [account.id, credential.ciphertext, credential.iv, credential.authTag]
+      );
+    }
 
     await this.trials.claimPendingAuthorization(req.user.sub, account.id);
     return {
