@@ -2946,6 +2946,7 @@ export default function DashboardPage() {
                         ? "VPS Slot #" + String(slot.slot_number || "1")
                         : "Local MT5"}
                       {slot.account_number ? " · " + String(slot.account_number) : " · ยังไม่เชื่อม MT5"}
+                      {slot.actual_state ? " · " + String(slot.actual_state).toUpperCase() : ""}
                     </option>
                   ))}
                 </select>
