@@ -5428,14 +5428,14 @@
     border-radius:7px!important;
   }
   .cc-v17-running-head small{
-    font-size:10px!important;
+    font-size:var(--ui-type-caption)!important;
   }
   .cc-v17-running-head b{
     font-size:13px!important;
   }
   .cc-v17-running-head em{
     padding:4px 7px!important;
-    font-size:10px!important;
+    font-size:var(--ui-type-caption)!important;
   }
 
   .cc-v17-running-table>.head,
@@ -5446,7 +5446,7 @@
   .cc-v17-running-table>.head{
     min-height:30px!important;
     padding:5px 8px!important;
-    font-size:10px!important;
+    font-size:var(--ui-type-caption)!important;
   }
   .cc-v17-running-table .row{
     min-height:42px!important;
@@ -5457,7 +5457,7 @@
     min-width:38px!important;
     padding:3px 5px!important;
     border-radius:6px!important;
-    font-size:10px!important;
+    font-size:var(--ui-type-caption)!important;
   }
   .cc-v17-running-table .empty{
     min-height:78px!important;
@@ -5478,7 +5478,7 @@
   }
   .cc-v12-card-head small,
   .cc-v12-card-head em{
-    font-size:10px!important;
+    font-size:var(--ui-type-caption)!important;
   }
   .cc-v19-three-card-grid .cc-v12-mode-table{
     margin-top:0!important;
@@ -5487,16 +5487,16 @@
   .cc-v19-three-card-grid .cc-v12-mode-table .head{
     min-height:28px!important;
     padding:4px 6px!important;
-    font-size:10px!important;
+    font-size:var(--ui-type-caption)!important;
   }
   .cc-v19-three-card-grid .cc-v12-mode-table .row{
     min-height:42px!important;
     padding:4px 6px!important;
-    font-size:10px!important;
+    font-size:var(--ui-type-caption)!important;
   }
   .cc-v19-three-card-grid .cc-v12-mode-table .row>span small{
     margin-top:0!important;
-    font-size:9px!important;
+    font-size:var(--ui-type-caption)!important;
   }
 
   /* System Pulse repeats connection state already shown in the page header and
