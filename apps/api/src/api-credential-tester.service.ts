@@ -52,6 +52,9 @@ export class ApiCredentialTesterService {
     if (key.includes("RESEND") || /^re_[A-Za-z0-9_-]+$/.test(value) || url.includes("api.resend.com")) {
       return { provider: "Resend", from: key.includes("RESEND") ? "config key" : url ? "URL / key pattern" : "key pattern" };
     }
+    if (key.includes("EASYSLIP") || url.includes("api.easyslip.com")) {
+      return { provider: "EasySlip", from: key.includes("EASYSLIP") ? "config key" : "URL" };
+    }
     if (key.includes("OMISE") || /^skey_(?:test|live)_/i.test(value) || url.includes("api.omise.co")) {
       return { provider: "Opn / Omise", from: key.includes("OMISE") ? "config key" : url ? "URL / key pattern" : "key pattern" };
     }
@@ -229,6 +232,31 @@ export class ApiCredentialTesterService {
       }
       return this.result(false, "FAIL", "Resend", "preset/config key",
         `Resend ปฏิเสธคีย์ (HTTP ${response.status})`, response.status);
+    }
+
+    if (configKey === "EASYSLIP_API_KEY" || inferred.provider === "EasySlip") {
+      const { response, text } = await this.request("https://api.easyslip.com/v2/bank-accounts?limit=1", {
+        method: "GET",
+        headers: {
+          Authorization: "Bearer " + value,
+          Accept: "application/json"
+        }
+      });
+      let success = response.ok;
+      try {
+        const payload = JSON.parse(text);
+        success = response.ok && payload?.success !== false;
+      } catch {}
+      return this.result(
+        success,
+        success ? "PASS" : "FAIL",
+        "EasySlip",
+        "preset/config key",
+        success
+          ? "EasySlip API ตอบสำเร็จ พร้อมใช้ตรวจสลิป"
+          : `EasySlip ปฏิเสธ API Key (HTTP ${response.status})`,
+        response.status
+      );
     }
 
     if (configKey === "OMISE_WEBHOOK_SECRET") {
