@@ -49,7 +49,7 @@ export default function WebsitePage() {
                   <i key={i} style={{ "--x": `${7 + ((i * 29) % 86)}%`, "--y": `${12 + ((i * 37) % 76)}%`, "--delay": `${-(i * 0.8)}s`, "--duration": `${5 + (i % 5)}s` } as CSSProperties} />
                 ))}
               </div>
-              <img className={`${styles.mascotImage} ${motionStyles.mascotMotion}`} src="/assets/scenova-nova-mascot-v1.webp" width={1536} height={1024} alt="NOVA มาสคอตเสือดำเกราะจักรกลของ SCENOVA คู่กับกล่องผลิตภัณฑ์ ท่ามกลางวงแหวนพลังงานสีฟ้า" fetchPriority="high" />
+              <img className={`${styles.mascotImage} ${motionStyles.mascotMotion}`} src="/assets/scenova-nova-mascot-navy-v2.png" width={1536} height={1024} alt="NOVA มาสคอตเสือดำเกราะจักรกลของ SCENOVA คู่กับกล่องผลิตภัณฑ์ ท่ามกลางวงแหวนพลังงานสีฟ้า" fetchPriority="high" />
               <div className={`${styles.artLabel} ${styles.artLabelTop}`}><ScenovaIcon name="brain" size={20} /><div><small>BUILT FOR AUTOMATION</small><b>เทคโนโลยีที่พร้อมเคียงข้าง</b></div></div>
               <div className={styles.mascotIdentity}><span className={styles.identityRule} /><div><small>MEET YOUR DIGITAL GUARDIAN</small><b>NOVA<span> / SCENOVA MASCOT</span></b></div><span className={styles.identityIndex}>01</span></div>
             </div>
