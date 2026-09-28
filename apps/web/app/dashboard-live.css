@@ -1465,3 +1465,96 @@
     padding-right:5px!important;
   }
 }
+
+
+/* ===== V51 mobile membership clock + unobstructed KPI traces ===== */
+.cc-symbol-title-row{
+  min-width:0;
+}
+.cc-membership-mobile-countdown{
+  display:none;
+}
+
+@media(max-width:700px){
+  /* Put the expiring-membership clock directly beside the symbol on phones.
+     The existing hero/card dimensions are intentionally unchanged. */
+  .cc-v47 .cc-v6-symbol-copy{
+    min-width:0!important;
+    flex:1 1 auto!important;
+  }
+
+  .cc-v47 .cc-symbol-title-row{
+    width:100%;
+    min-width:0!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    gap:8px!important;
+  }
+
+  .cc-v47 .cc-symbol-title-row h2{
+    min-width:0!important;
+    flex:1 1 auto!important;
+    margin:0!important;
+  }
+
+  .cc-v47 .cc-membership-mobile-countdown{
+    flex:0 0 auto!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    min-height:24px!important;
+    padding:3px 7px!important;
+    border:1px solid rgba(153,125,255,.48)!important;
+    border-radius:7px!important;
+    background:linear-gradient(145deg,rgba(54,40,105,.44),rgba(24,25,57,.66))!important;
+    color:#d9ceff!important;
+    font-size:var(--ui-type-caption)!important;
+    font-weight:850!important;
+    font-variant-numeric:tabular-nums!important;
+    letter-spacing:.035em!important;
+    white-space:nowrap!important;
+    line-height:1!important;
+  }
+
+  /* Avoid duplicate countdown on phones; desktop keeps the chip version. */
+  .cc-v47 .cc-v6-symbol-chips>.cc-membership-mini-countdown{
+    display:none!important;
+  }
+
+  /* Keep KPI cards exactly the same size. Only reposition/shrink the decorative
+     spark trace so it no longer sits under Balance / Equity / P&L copy. */
+  .cc-v47 .cc-v13-kpis .cc-kpi{
+    overflow:hidden!important;
+  }
+
+  .cc-v47 .cc-kpi-trace{
+    right:8px!important;
+    bottom:6px!important;
+    width:40px!important;
+    height:12px!important;
+    opacity:.46!important;
+    z-index:1!important;
+    pointer-events:none!important;
+  }
+
+  .cc-v47 .cc-v13-kpis .cc-kpi>div{
+    position:relative!important;
+    z-index:2!important;
+  }
+}
+
+@media(max-width:390px){
+  .cc-v47 .cc-membership-mobile-countdown{
+    min-height:22px!important;
+    padding:3px 6px!important;
+    letter-spacing:.02em!important;
+  }
+
+  .cc-v47 .cc-kpi-trace{
+    right:7px!important;
+    bottom:5px!important;
+    width:36px!important;
+    height:11px!important;
+  }
+}
