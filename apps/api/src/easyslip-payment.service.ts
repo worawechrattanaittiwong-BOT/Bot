@@ -90,21 +90,34 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
       return this.accountsCache.items;
     }
 
-    const payload = await this.request("/bank-accounts?limit=20", { method: "GET" });
+    const [payload, banksPayload] = await Promise.all([
+      this.request("/bank-accounts?limit=20", { method: "GET" }),
+      this.request("/banks", { method: "GET" })
+    ]);
     const items = Array.isArray(payload?.data?.items)
       ? payload.data.items
       : Array.isArray(payload?.data)
         ? payload.data
         : [];
+    const banks = Array.isArray(banksPayload?.data) ? banksPayload.data : [];
+    const bankByCode = new Map(
+      banks.map((bank: any) => [String(bank?.code || ""), bank])
+    );
 
-    const safe = items.slice(0, 20).map((item: any) => ({
-      id: Number(item?.id || 0),
-      bankCode: String(item?.bankCode || "").slice(0, 16),
-      bankNumber: String(item?.bankNumber || "").slice(0, 80),
-      nameTh: String(item?.nameTh || "").slice(0, 180),
-      nameEn: String(item?.nameEn || "").slice(0, 180),
-      type: String(item?.type || "").slice(0, 32)
-    }));
+    const safe = items.slice(0, 20).map((item: any) => {
+      const bankCode = String(item?.bankCode || "").slice(0, 16);
+      const bank = bankByCode.get(bankCode) as any;
+      return {
+        id: Number(item?.id || 0),
+        bankCode,
+        bankName: String(bank?.nameTh || bank?.nameEn || "").slice(0, 120),
+        bankShortCode: String(bank?.shortCode || "").slice(0, 20),
+        bankNumber: String(item?.bankNumber || "").slice(0, 80),
+        nameTh: String(item?.nameTh || "").slice(0, 180),
+        nameEn: String(item?.nameEn || "").slice(0, 180),
+        type: String(item?.type || "").slice(0, 32)
+      };
+    });
 
     this.accountsCache = {
       expiresAt: Date.now() + 5 * 60 * 1000,
