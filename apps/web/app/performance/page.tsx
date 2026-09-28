@@ -507,6 +507,9 @@ export default function PerformanceDashboardPage() {
   const backSummary=backtest?.summary||{};
   const backExtra=backtestStats(backtest);
   const summary=mode==="BACKTEST"?{...backSummary,...backExtra}:liveSummary;
+  const detailedStatsReliable =
+    mode==="BACKTEST" || report?.dataQuality?.detailedStatsReliable !== false;
+  const detailValue=(value:string)=>detailedStatsReliable?value:"—";
   const currency=String(mode==="BACKTEST"?backtest?.currency:report?.account?.currency||"USD").trim().toUpperCase()||"USD";
   const symbol=String(mode==="BACKTEST"?backtest?.symbol:report?.account?.symbol||"—");
   const runtimeMode=String(mode==="BACKTEST"?"BACKTEST":report?.account?.mode||"LIVE").toUpperCase();
@@ -702,10 +705,23 @@ export default function PerformanceDashboardPage() {
                 </div>
                 <div className={styles.infoCol}>
                   <InfoRow icon="play" label="Data Mode" value={mode}/>
-                  <InfoRow icon="orders" label="Closed Baskets" value={String(Number(summary.trades||0))}/>
-                  <InfoRow icon="orders" label="Closed Positions" value={String(totalPositions)}/>
+                  <InfoRow icon="orders" label="Closed Baskets" value={detailValue(String(Number(summary.trades||0)))}/>
+                  <InfoRow icon="orders" label="Closed Positions" value={detailValue(String(totalPositions))}/>
                 </div>
               </div>
+
+              {!detailedStatsReliable && mode==="LIVE" ? (
+                <div className={styles.dataQualityNotice}>
+                  <ScenovaIcon name="status" size={17}/>
+                  <div>
+                    <b>ข้อมูลกำไรจาก MT5 ถูกต้อง แต่รายละเอียดการเทรดยังไม่ครบ</b>
+                    <span>
+                      ระบบยืนยัน Net Profit จาก MT5 แล้ว · Win Rate, จำนวนไม้, Lot และสถิติรายดีลจะแสดง “—”
+                      จนกว่า Journal ใหม่จะซิงก์ครบ
+                    </span>
+                  </div>
+                </div>
+              ) : null}
 
               <div className={styles.metricsCard}>
                 <Metric icon="wallet" label="Start Capital" value={money(startCapital,currency)}/>
@@ -713,11 +729,11 @@ export default function PerformanceDashboardPage() {
                 <Metric icon="profit" label="Net Profit" value={money(summary.netProfit,currency,true)} tone={Number(summary.netProfit)>=0?"good":"bad"}/>
                 <Metric icon="trend" label="Return" value={percent(summary.returnPercent,true)} tone={Number(summary.returnPercent)>=0?"good":"bad"}/>
                 <Metric icon="risk" label="Max Drawdown" value={percent(summary.maxDrawdownPercent)}/>
-                <Metric icon="target" label="Win Rate" value={percent(summary.winRate)}/>
-                <Metric icon="report" label="Profit Factor" value={fixed(summary.profitFactor)}/>
-                <Metric icon="orders" label="Closed Positions" value={totalPositions.toLocaleString("en-US")}/>
-                <Metric icon="pnl" label="Average Lot" value={fixed(summary.averageLot,3)}/>
-                <Metric icon="strategy" label="Primary Lot" value={fixed(primaryLot,3)+" · "+primaryLotCount+" ไม้ · "+percent(primaryLotPercent)}/>
+                <Metric icon="target" label="Win Rate" value={detailValue(percent(summary.winRate))}/>
+                <Metric icon="report" label="Profit Factor" value={detailValue(fixed(summary.profitFactor))}/>
+                <Metric icon="orders" label="Closed Positions" value={detailValue(totalPositions.toLocaleString("en-US"))}/>
+                <Metric icon="pnl" label="Average Lot" value={detailValue(fixed(summary.averageLot,3))}/>
+                <Metric icon="strategy" label="Primary Lot" value={detailValue(fixed(primaryLot,3)+" · "+primaryLotCount+" ไม้ · "+percent(primaryLotPercent))}/>
               </div>
 
               <div className={styles.resultsLabel}><ScenovaIcon name="report" size={15}/><span>Performance Breakdown · MT5 Analytics</span></div>
@@ -727,8 +743,8 @@ export default function PerformanceDashboardPage() {
                   <StatRow label="Total Net Profit" value={money(summary.netProfit,currency,true)} tone={Number(summary.netProfit)>=0?"good":"bad"}/>
                   <StatRow label="Gross Profit" value={money(summary.grossProfit,currency)}/>
                   <StatRow label="Gross Loss" value={"-"+money(Math.abs(Number(summary.grossLoss||0)),currency)} tone="bad"/>
-                  <StatRow label="Profit Factor" value={fixed(summary.profitFactor)}/>
-                  <StatRow label="Expected Payoff" value={money(summary.expectedPayoff,currency)}/>
+                  <StatRow label="Profit Factor" value={detailValue(fixed(summary.profitFactor))}/>
+                  <StatRow label="Expected Payoff" value={detailValue(money(summary.expectedPayoff,currency))}/>
                   <StatRow label="Recovery Factor" value={fixed(summary.recoveryFactor)}/>
                   <StatRow label="Sharpe Ratio" value={fixed(summary.sharpeRatio)}/>
                   <StatRow label="AHPR" value={growthRatio(summary.ahpr)}/>
@@ -750,15 +766,15 @@ export default function PerformanceDashboardPage() {
 
                 <div className={styles.panel}>
                   <PanelTitle icon="orders">Trades & Positions</PanelTitle>
-                  <StatRow label="Total Baskets" value={String(Number(summary.trades||0))}/>
-                  <StatRow label="Total Positions" value={String(totalPositions)}/>
-                  <StatRow label="Total Deals" value={String(totalDeals)}/>
-                  <StatRow label="Profit Baskets" value={String(Number(summary.wins||0))}/>
-                  <StatRow label="Loss Baskets" value={String(Number(summary.losses||0))}/>
-                  <StatRow label="Basket Win Rate" value={percent(summary.winRate)}/>
-                  <StatRow label="Profit Positions" value={String(Number(summary.profitPositions||0))}/>
-                  <StatRow label="Loss Positions" value={String(Number(summary.lossPositions||0))}/>
-                  <StatRow label="Position Win Rate" value={percent(summary.positionWinRate||0)}/>
+                  <StatRow label="Total Baskets" value={detailValue(String(Number(summary.trades||0)))}/>
+                  <StatRow label="Total Positions" value={detailValue(String(totalPositions))}/>
+                  <StatRow label="Total Deals" value={detailValue(String(totalDeals))}/>
+                  <StatRow label="Profit Baskets" value={detailValue(String(Number(summary.wins||0)))}/>
+                  <StatRow label="Loss Baskets" value={detailValue(String(Number(summary.losses||0)))}/>
+                  <StatRow label="Basket Win Rate" value={detailValue(percent(summary.winRate))}/>
+                  <StatRow label="Profit Positions" value={detailValue(String(Number(summary.profitPositions||0)))}/>
+                  <StatRow label="Loss Positions" value={detailValue(String(Number(summary.lossPositions||0)))}/>
+                  <StatRow label="Position Win Rate" value={detailValue(percent(summary.positionWinRate||0))}/>
                 </div>
 
                 <div className={styles.panel}>
@@ -775,12 +791,12 @@ export default function PerformanceDashboardPage() {
 
                 <div className={styles.panel}>
                   <PanelTitle icon="pnl">Execution Analytics</PanelTitle>
-                  <StatRow label="Largest profit trade" value={money(summary.largestProfitTrade,currency)}/>
-                  <StatRow label="Largest loss trade" value={money(summary.largestLossTrade,currency)} tone="bad"/>
-                  <StatRow label="Average profit trade" value={money(summary.averageProfitTrade,currency)}/>
-                  <StatRow label="Average loss trade" value={money(summary.averageLossTrade,currency)} tone="bad"/>
-                  <StatRow label="Average Lot" value={fixed(summary.averageLot,3)}/>
-                  <StatRow label="Maximum Lot" value={fixed(summary.maxLot,3)}/>
+                  <StatRow label="Largest profit trade" value={detailValue(money(summary.largestProfitTrade,currency))}/>
+                  <StatRow label="Largest loss trade" value={detailValue(money(summary.largestLossTrade,currency))} tone="bad"/>
+                  <StatRow label="Average profit trade" value={detailValue(money(summary.averageProfitTrade,currency))}/>
+                  <StatRow label="Average loss trade" value={detailValue(money(summary.averageLossTrade,currency))} tone="bad"/>
+                  <StatRow label="Average Lot" value={detailValue(fixed(summary.averageLot,3))}/>
+                  <StatRow label="Maximum Lot" value={detailValue(fixed(summary.maxLot,3))}/>
                 </div>
 
                 <div className={styles.panel}>
