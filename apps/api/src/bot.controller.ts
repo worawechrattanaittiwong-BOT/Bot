@@ -597,6 +597,46 @@ export class BotController {
       return { allowed: true, source: "SUBSCRIPTION", expiresAt: legacySub.expires_at };
     }
 
+    const groupGrant = await this.db.one(
+      `SELECT gg.id,gg.expires_at,gg.mode,ag.id group_id,ag.name group_name
+       FROM access_group_grants gg
+       JOIN access_groups ag ON ag.id=gg.access_group_id
+       WHERE gg.user_id=$1
+         AND gg.status='ACTIVE'
+         AND gg.starts_at<=now()
+         AND gg.expires_at>now()
+         AND ag.enabled=true
+         AND ($2::text IS NULL OR gg.mode=$2)
+       ORDER BY gg.expires_at DESC
+       LIMIT 1`,
+      [userId, mode]
+    );
+    if (groupGrant) {
+      return {
+        allowed: true,
+        source: "GROUP_TRIAL",
+        expiresAt: groupGrant.expires_at,
+        groupId: groupGrant.group_id,
+        groupName: groupGrant.group_name,
+        mode: groupGrant.mode
+      };
+    }
+
+    const disabledGroupGrant = await this.db.one(
+      `SELECT gg.id,gg.expires_at,ag.name group_name
+       FROM access_group_grants gg
+       JOIN access_groups ag ON ag.id=gg.access_group_id
+       WHERE gg.user_id=$1
+         AND gg.status='ACTIVE'
+         AND gg.starts_at<=now()
+         AND gg.expires_at>now()
+         AND ag.enabled=false
+         AND ($2::text IS NULL OR gg.mode=$2)
+       ORDER BY gg.expires_at DESC
+       LIMIT 1`,
+      [userId, mode]
+    );
+
     let expiredSub: any = null;
     if (slotId) {
       expiredSub = await this.db.one(
@@ -623,6 +663,9 @@ export class BotController {
     // Trial is intentionally Local-only. Cloud/VPS always requires a
     // Cloud entitlement so a Trial can never consume a reserved Trading VPS.
     if (String(mode || "").toUpperCase() === "CLOUD") {
+      if (disabledGroupGrant) {
+        return { allowed: false, source: "GROUP_DISABLED", groupName: disabledGroupGrant.group_name };
+      }
       if (expiredSub) {
         return { allowed: false, source: "SUBSCRIPTION_EXPIRED", expiresAt: expiredSub.expires_at };
       }
@@ -646,6 +689,9 @@ export class BotController {
     if (trial?.status === "APPROVED") return { allowed: true, source: "TRIAL_READY", trialId: trial.id };
     if (trial?.status === "ACTIVE" && trial.expires_at && new Date(trial.expires_at) > new Date()) {
       return { allowed: true, source: "TRIAL", expiresAt: trial.expires_at };
+    }
+    if (disabledGroupGrant) {
+      return { allowed: false, source: "GROUP_DISABLED", groupName: disabledGroupGrant.group_name };
     }
     if (expiredSub) {
       return { allowed: false, source: "SUBSCRIPTION_EXPIRED", expiresAt: expiredSub.expires_at };
