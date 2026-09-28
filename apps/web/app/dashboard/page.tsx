@@ -1217,6 +1217,13 @@ export default function DashboardPage() {
   const selectedServer = brokerServer === "__CUSTOM__"
     ? customBrokerServer.trim()
     : brokerServer;
+  const mt5ServerQuery = String(brokerServer || "").trim().toLowerCase();
+  const mt5ServerSuggestions = (selectedBroker?.servers || [])
+    .filter(server =>
+      !mt5ServerQuery ||
+      String(server.serverName || "").toLowerCase().includes(mt5ServerQuery)
+    )
+    .slice(0, 8);
   const hasLocalConnectionSlot = (data?.slots || []).some((slot:any) =>
     String(slot?.mode || "").toUpperCase() === "LOCAL" &&
     Boolean(slot?.can_control) &&
