@@ -408,13 +408,17 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
     }
 
     if (paymentMode() === "EASYSLIP") {
+      const qr = await this.easyslip.createPaymentQr({
+        orderId: String(order.id),
+        amountSatang: Number(order.amount)
+      });
       await this.db.query(
         `UPDATE local_orders
-         SET status='PENDING',expires_at=now()+interval '24 hours'
+         SET status='PENDING',qr_url=$2,expires_at=now()+interval '24 hours'
          WHERE id=$1 AND status='CREATING'`,
-        [order.id]
+        [order.id, qr?.dataUrl || null]
       );
-      return { id: order.id, paymentMode: "EASYSLIP" };
+      return { id: order.id, paymentMode: "EASYSLIP", qrAvailable: Boolean(qr?.dataUrl) };
     }
 
     try {
@@ -524,6 +528,7 @@ export class LocalPackageCustomerController {
   constructor(
     private readonly db: DbService,
     private readonly local: LocalPackageService,
+    private readonly promotions: PromotionService,
     private readonly easyslip: EasySlipPaymentService
   ) {}
 
@@ -547,6 +552,27 @@ export class LocalPackageCustomerController {
         [req.user.sub]
       )
     ).rows;
+  }
+
+  @Post("promotion-preview")
+  async promotionPreview(
+    @Req() req: any,
+    @Body() body: { months?: number; code?: string }
+  ) {
+    const months = Math.trunc(Number(body.months || 0));
+    if (![1, 3, 6, 12].includes(months)) throw new BadRequestException("Invalid package");
+    const pack = await this.db.one(
+      "SELECT price_satang FROM local_packages WHERE months=$1 AND enabled=true AND price_satang>0",
+      [months]
+    );
+    if (!pack) throw new ConflictException("แพ็กเกจ Local นี้ยังไม่เปิดขาย");
+    return this.promotions.preview({
+      code: String(body.code || ""),
+      userId: String(req.user.sub),
+      mode: "LOCAL",
+      months,
+      originalAmountSatang: Number(pack.price_satang)
+    });
   }
 
   @Post("checkout")

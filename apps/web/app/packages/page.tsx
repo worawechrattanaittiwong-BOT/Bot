@@ -104,6 +104,26 @@ type Order = {
   last_seen_at?: string | null;
 };
 
+type PromotionPreview = {
+  code:string;
+  active:boolean;
+  discountPercent:number;
+  discountAmountSatang:number;
+  finalAmountSatang:number;
+};
+
+function promoAlnum(value: string) {
+  return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11);
+}
+
+function formatPromoCode(value: string) {
+  const clean = promoAlnum(value);
+  if (!clean) return "";
+  if (clean.length <= 3) return clean;
+  if (clean.length <= 7) return clean.slice(0, 3) + "-" + clean.slice(3);
+  return clean.slice(0, 3) + "-" + clean.slice(3, 7) + "-" + clean.slice(7, 11);
+}
+
 function money(satang: number) {
   return (Number(satang || 0) / 100).toLocaleString("th-TH", {
     minimumFractionDigits: 0,
@@ -151,6 +171,10 @@ export default function PackagesPage() {
   const [checkoutPack, setCheckoutPack] = useState<PackageItem | null>(null);
   const checkoutDialog = useRef<HTMLDialogElement>(null);
   const [promoCode, setPromoCode] = useState("");
+  const [promoPreview, setPromoPreview] = useState<PromotionPreview | null>(null);
+  const [promoState, setPromoState] = useState<"IDLE"|"CHECKING"|"ACTIVE"|"ERROR">("IDLE");
+  const [promoNotice, setPromoNotice] = useState("");
+  const [checkoutOrderId, setCheckoutOrderId] = useState("");
   const polling = useRef(false);
 
   const role = String(account?.user.role || "").toUpperCase();
@@ -185,6 +209,10 @@ export default function PackagesPage() {
     if (t?.otp?.resendAfterSeconds != null) {
       setCooldown(Number(t.otp.resendAfterSeconds || 0));
     }
+    return {
+      localOrders: Array.isArray(lo) ? lo : [],
+      cloudOrders: Array.isArray(co) ? co : []
+    };
   }
 
   useEffect(() => {
@@ -305,40 +333,87 @@ export default function PackagesPage() {
   }
 
   async function checkoutLocal(months: number) {
-    if (busy) return;
+    if (busy) return null;
     setBusy("local-" + months);
     setMessage("");
     try {
       const result = await api("/packages/local/checkout", {
         method: "POST",
-        body: JSON.stringify({ months, promoCode: promoCode.trim().toUpperCase() })
+        body: JSON.stringify({ months, promoCode: formatPromoCode(promoCode) })
       });
       await load();
-      notify(result?.free ? "good" : "info", result?.free ? "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Local แล้ว" : result?.paymentMode === "EASYSLIP" ? "สร้างรายการแล้ว โอนยอดตามที่แสดงและแนบสลิปได้เลย" : "สร้าง QR สำหรับแพ็กเกจ Local แล้ว");
+      if (result?.free) {
+        checkoutDialog.current?.close();
+        setCheckoutOrderId("");
+        setCheckoutPack(null);
+        notify("good", "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Local แล้ว");
+      } else {
+        setCheckoutOrderId(String(result?.id || ""));
+      }
+      return result;
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "สร้างรายการ Local ไม่สำเร็จ");
       await load().catch(() => {});
+      return null;
     } finally {
       setBusy("");
     }
   }
 
   async function checkoutCloud(months: number) {
-    if (busy) return;
+    if (busy) return null;
     setBusy("cloud-" + months);
     setMessage("");
     try {
       const result = await api("/cloud/checkout", {
         method: "POST",
-        body: JSON.stringify({ months, promoCode: promoCode.trim().toUpperCase() })
+        body: JSON.stringify({ months, promoCode: formatPromoCode(promoCode) })
       });
       await load();
-      notify(result?.free ? "good" : "info", result?.free ? "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Cloud แล้ว" : result?.paymentMode === "EASYSLIP" ? "สร้างรายการแล้ว โอนยอดตามที่แสดงและแนบสลิปได้เลย" : "สร้าง QR สำหรับแพ็กเกจ Cloud แล้ว");
+      if (result?.free) {
+        checkoutDialog.current?.close();
+        setCheckoutOrderId("");
+        setCheckoutPack(null);
+        notify("good", "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Cloud แล้ว");
+      } else {
+        setCheckoutOrderId(String(result?.id || ""));
+      }
+      return result;
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "สร้างรายการ Cloud ไม่สำเร็จ");
       await load().catch(() => {});
+      return null;
     } finally {
       setBusy("");
+    }
+  }
+
+  async function applyPromo() {
+    if (!checkoutPack || busy) return;
+    const code = formatPromoCode(promoCode);
+    if (!/^SNV-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
+      setPromoPreview(null);
+      setPromoState("ERROR");
+      setPromoNotice("รหัสไม่ครบ");
+      return;
+    }
+    setPromoState("CHECKING");
+    setPromoNotice("");
+    try {
+      const result = await api(
+        activeSystem === "LOCAL" ? "/packages/local/promotion-preview" : "/cloud/promotion-preview",
+        {
+          method:"POST",
+          body:JSON.stringify({ months:checkoutPack.months, code })
+        }
+      );
+      setPromoCode(promoAlnum(String(result?.code || code)));
+      setPromoPreview(result);
+      setPromoState("ACTIVE");
+    } catch (error:unknown) {
+      setPromoPreview(null);
+      setPromoState("ERROR");
+      setPromoNotice(error instanceof Error ? error.message : "ใช้รหัสนี้ไม่ได้");
     }
   }
 
@@ -362,7 +437,7 @@ export default function PackagesPage() {
   }
 
   async function cancelSlipPayment(type: "local" | "cloud", id: string) {
-    if (busy) return;
+    if (busy) return false;
     const confirmed = await confirmPopup({
       title: "ยกเลิกรายการชำระเงิน",
       tone: "warning",
@@ -370,7 +445,7 @@ export default function PackagesPage() {
       confirmLabel: "ยกเลิกรายการ",
       cancelLabel: "กลับ"
     });
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
     setBusy("cancel-" + type);
     setMessage("");
@@ -383,22 +458,24 @@ export default function PackagesPage() {
       );
       await load();
       notify("info", "ยกเลิกรายการแล้ว สามารถเลือกแพ็กเกจใหม่ได้");
+      return true;
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "ยกเลิกรายการไม่สำเร็จ");
+      return false;
     } finally {
       setBusy("");
     }
   }
 
   async function verifySlip(type: "local" | "cloud", id: string, file: File) {
-    if (busy) return;
+    if (busy) return null;
     if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type)) {
       notify("bad", "รองรับสลิป JPG, PNG, GIF หรือ WebP เท่านั้น");
-      return;
+      return null;
     }
     if (file.size <= 0 || file.size > 4 * 1024 * 1024) {
       notify("bad", "รูปสลิปต้องมีขนาดไม่เกิน 4 MB");
-      return;
+      return null;
     }
 
     setBusy("slip-" + type);
@@ -427,8 +504,10 @@ export default function PackagesPage() {
           ? "ตรวจสลิปสำเร็จ เปิดสิทธิ์ใช้งานแล้ว"
           : "ตรวจสลิปสำเร็จ"
       );
+      return result;
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "ตรวจสลิปไม่สำเร็จ");
+      return null;
     } finally {
       setBusy("");
     }
@@ -451,6 +530,12 @@ export default function PackagesPage() {
   const activePending = isLocalSystem ? pendingLocal : pendingCloud;
   const activeMembership = isLocalSystem ? activeLocal : activeCloud;
   const salesPaused = Boolean(localCatalog?.salesPaused || cloudCatalog?.salesPaused);
+  const checkoutOrder = checkoutOrderId
+    ? activeOrders.find(order => order.id === checkoutOrderId) || null
+    : null;
+  const checkoutPrice = promoPreview?.active
+    ? Number(promoPreview.finalAmountSatang || 0)
+    : Number(checkoutPack?.price_satang || 0);
 
   async function setGlobalSalesPaused(paused: boolean) {
     if (!isOwner || busy) return;
@@ -655,7 +740,7 @@ export default function PackagesPage() {
                   paymentAccounts={activeCatalog?.paymentAccounts || []}
                   onRefresh={() => refreshOrder(isLocalSystem ? "local" : "cloud", activePending.id)}
                   onVerifySlip={file => verifySlip(isLocalSystem ? "local" : "cloud", activePending.id, file)}
-                  onCancel={() => cancelSlipPayment(isLocalSystem ? "local" : "cloud", activePending.id)}
+                  onCancel={() => { void cancelSlipPayment(isLocalSystem ? "local" : "cloud", activePending.id); }}
                 />
               </div>
             </section>
@@ -789,6 +874,11 @@ export default function PackagesPage() {
                       capacityAvailable={isLocalSystem || Number(cloudCatalog?.available || 0) > 0}
                       onBuy={() => {
                         setCheckoutPack(pack);
+                        setCheckoutOrderId("");
+                        setPromoCode("");
+                        setPromoPreview(null);
+                        setPromoState("IDLE");
+                        setPromoNotice("");
                         checkoutDialog.current?.showModal();
                       }}
                     />
@@ -822,41 +912,175 @@ export default function PackagesPage() {
           className={styles.checkoutDialog}
           aria-labelledby="checkout-title"
           onCancel={event => { if (busy) event.preventDefault(); }}
+          onClose={() => {
+            if (!checkoutOrderId) {
+              setPromoState("IDLE");
+              setPromoNotice("");
+            }
+          }}
         >
           {checkoutPack && <>
             <div className={styles.checkoutHeading}>
-              <div><span className={styles.eyebrow}>SCENOVA CHECKOUT</span><h2 id="checkout-title">แพ็กเกจที่คุณเลือก</h2><p>ตรวจสอบรายละเอียด แล้วดำเนินการชำระเงิน</p></div>
-              <button type="button" className={styles.closeDialog} aria-label="ปิดหน้าต่างชำระเงิน" disabled={Boolean(busy)} onClick={() => checkoutDialog.current?.close()}>×</button>
-            </div>
-            <div className={styles.checkoutSteps} aria-label="ขั้นตอนการชำระเงิน"><span aria-current="step"><b>01</b> ยืนยันแพ็กเกจ</span><i aria-hidden="true"/><span><b>02</b> สแกนชำระเงิน</span></div>
-            <div className={styles.checkoutColumns}>
-              <aside className={styles.checkoutPlan}>
-                <ScenovaIcon name={isLocalSystem ? "account" : "cloud"} size={32}/>
-                <span className={styles.eyebrow}>{isLocalSystem ? "LOCAL MT5" : "VPS / CLOUD MT5"}</span>
-                <h3>{checkoutPack.months} เดือน</h3>
-                <strong className={styles.checkoutPrice}>฿{money(checkoutPack.price_satang)}</strong>
-                <p>เฉลี่ย ฿{money(Math.round(checkoutPack.price_satang / checkoutPack.months))} / เดือน</p>
-                <ul><li>สำหรับ 1 บัญชี MT5</li><li>{isLocalSystem ? "ใช้งานบนคอมพิวเตอร์ของคุณ" : "Start / Stop ผ่านมือถือ"}</li><li>ต่ออายุเพิ่มจากเวลาที่เหลือ</li></ul>
-                <div className={styles.planFootnote}>SCENOVA<br/><span>ACCESS & MEMBERSHIP</span></div>
-              </aside>
-              <div className={styles.checkoutSummary}>
-                <h3>สรุปการชำระเงิน</h3>
-                <div className={styles.summaryRow}><span>แพ็กเกจ {checkoutPack.months} เดือน</span><b>฿{money(checkoutPack.price_satang)}</b></div>
-                <label className={styles.promoField} htmlFor="package-promo">รหัสโปรโมชั่น</label>
-                <div className={styles.promoInput}><input id="package-promo" placeholder="กรอกรหัสโปรโมชั่น" value={promoCode} onChange={event => setPromoCode(event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 13))} autoCapitalize="characters" spellCheck={false}/><button type="button" onClick={() => setPromoCode(value => value.trim().toUpperCase())}>ใช้รหัส</button></div>
-                <small className={styles.checkoutHint}>ส่วนลดจะได้รับการตรวจสอบเมื่อสร้างรายการ ยอดหลังส่วนลดจะแสดงในรายการชำระเงิน</small>
-                <div className={`${styles.summaryRow} ${styles.summaryTotal}`}><span>ราคาแพ็กเกจ<small>ก่อนใช้ส่วนลด</small></span><strong>฿{money(checkoutPack.price_satang)}</strong></div>
-                <p className={styles.checkoutHint}>ชำระครั้งเดียว · ไม่มีการต่ออายุอัตโนมัติ</p>
-                <div className={styles.paymentMethod}><ScenovaIcon name="wallet" size={23}/><div><b>{activeCatalog?.paymentMode === "EASYSLIP" ? "โอนเงิน + แนบสลิป" : "พร้อมเพย์ / QR Payment"}</b><p>{activeCatalog?.paymentMode === "EASYSLIP" ? "ระบบใช้ยอดจริงของแพ็กเกจและตรวจสลิปอัตโนมัติผ่าน EasySlip" : "สร้าง QR แล้วสแกนด้วยแอปธนาคารของคุณ"}</p></div></div>
-                <p className={styles.checkoutHint}>สิทธิ์จะเปิดใช้งานเมื่อยืนยันการชำระเงินสำเร็จ ติดตามสถานะได้ที่รายการรอชำระ</p>
-                {activeCatalog?.paymentMode === "TEST" && <div className={styles.testNotice}>โหมดทดสอบ · ยังไม่ใช่การรับชำระเงินจริง</div>}
-                <button type="button" className={styles.confirmCheckout} disabled={Boolean(busy)} onClick={() => {
-                  checkoutDialog.current?.close();
-                  void (isLocalSystem ? checkoutLocal(checkoutPack.months) : checkoutCloud(checkoutPack.months));
-                }}>{activeCatalog?.paymentMode === "EASYSLIP" ? "สร้างรายการและไปแนบสลิป" : "สร้าง QR เพื่อชำระเงิน"} <span aria-hidden="true">↗</span></button>
-                <button type="button" className={styles.cancelCheckout} disabled={Boolean(busy)} onClick={() => checkoutDialog.current?.close()}>ยกเลิก</button>
+              <div>
+                <span className={styles.eyebrow}>SCENOVA CHECKOUT</span>
+                <h2 id="checkout-title">{checkoutOrder ? "ชำระเงินแพ็กเกจ" : "แพ็กเกจที่คุณเลือก"}</h2>
+                <p>{checkoutOrder ? "สแกน QR และแนบสลิปได้ในหน้าต่างนี้" : "ตรวจสอบรายละเอียด แล้วดำเนินการชำระเงิน"}</p>
               </div>
+              <button
+                type="button"
+                className={styles.closeDialog}
+                aria-label="ปิดหน้าต่างชำระเงิน"
+                disabled={Boolean(busy)}
+                onClick={() => checkoutDialog.current?.close()}
+              >
+                ×
+              </button>
             </div>
+
+            <div className={styles.checkoutSteps} aria-label="ขั้นตอนการชำระเงิน">
+              <span aria-current={!checkoutOrder ? "step" : undefined} className={!checkoutOrder ? styles.checkoutStepActive : styles.checkoutStepDone}>
+                <b>01</b> ยืนยันแพ็กเกจ
+              </span>
+              <i aria-hidden="true"/>
+              <span aria-current={checkoutOrder ? "step" : undefined} className={checkoutOrder ? styles.checkoutStepActive : ""}>
+                <b>02</b> สแกน + แนบสลิป
+              </span>
+            </div>
+
+            {!checkoutOrder ? (
+              <div className={styles.checkoutColumns}>
+                <aside className={styles.checkoutPlan}>
+                  <ScenovaIcon name={isLocalSystem ? "account" : "cloud"} size={32}/>
+                  <span className={styles.eyebrow}>{isLocalSystem ? "LOCAL MT5" : "VPS / CLOUD MT5"}</span>
+                  <h3>{checkoutPack.months} เดือน</h3>
+                  <strong className={styles.checkoutPrice}>฿{money(checkoutPrice)}</strong>
+                  <p>เฉลี่ย ฿{money(Math.round(checkoutPrice / checkoutPack.months))} / เดือน</p>
+                  <ul>
+                    <li>สำหรับ 1 บัญชี MT5</li>
+                    <li>{isLocalSystem ? "ใช้งานบนคอมพิวเตอร์ของคุณ" : "Start / Stop ผ่านมือถือ"}</li>
+                    <li>ต่ออายุเพิ่มจากเวลาที่เหลือ</li>
+                  </ul>
+                  <div className={styles.planFootnote}>SCENOVA<br/><span>ACCESS & MEMBERSHIP</span></div>
+                </aside>
+
+                <div className={styles.checkoutSummary}>
+                  <h3>สรุปการชำระเงิน</h3>
+                  <div className={styles.summaryRow}>
+                    <span>แพ็กเกจ {checkoutPack.months} เดือน</span>
+                    <b>฿{money(checkoutPack.price_satang)}</b>
+                  </div>
+
+                  <label className={styles.promoField} htmlFor="package-promo">รหัสโปรโมชั่น</label>
+                  <div className={styles.promoInput + " " + (promoState === "ACTIVE" ? styles.promoInputActive : promoState === "ERROR" ? styles.promoInputError : "")}>
+                    <input
+                      id="package-promo"
+                      placeholder="SNV-XXXX-XXXX"
+                      value={formatPromoCode(promoCode)}
+                      onKeyDown={event => {
+                        if (event.key === "-") {
+                          event.preventDefault();
+                          setPromoNotice("ใช้เฉพาะตัวอักษรและตัวเลข");
+                          setPromoState(current => current === "ACTIVE" ? "IDLE" : current);
+                        }
+                      }}
+                      onPaste={event => {
+                        const text = event.clipboardData.getData("text");
+                        if (text.includes("-")) setPromoNotice("ใช้เฉพาะตัวอักษรและตัวเลข");
+                        event.preventDefault();
+                        setPromoCode(promoAlnum(text));
+                        setPromoPreview(null);
+                        setPromoState("IDLE");
+                      }}
+                      onChange={event => {
+                        setPromoCode(promoAlnum(event.target.value));
+                        setPromoPreview(null);
+                        setPromoState("IDLE");
+                        setPromoNotice("");
+                      }}
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      inputMode="text"
+                    />
+                    <button
+                      type="button"
+                      className={promoState === "ACTIVE" ? styles.promoActiveButton : ""}
+                      disabled={Boolean(busy) || promoState === "CHECKING" || promoState === "ACTIVE"}
+                      onClick={() => void applyPromo()}
+                    >
+                      {promoState === "CHECKING" ? "กำลังเช็ก…" : promoState === "ACTIVE" ? "ACTIVE ✓" : "ใช้รหัส"}
+                    </button>
+                  </div>
+                  {promoNotice && <div className={styles.promoNotice}>{promoNotice}</div>}
+                  {promoPreview?.active && (
+                    <div className={styles.promoLive}>
+                      <span>{promoPreview.code}</span>
+                      <b>ลด {promoPreview.discountPercent}% · -฿{money(promoPreview.discountAmountSatang)}</b>
+                    </div>
+                  )}
+
+                  {promoPreview?.active && (
+                    <div className={styles.summaryRow}>
+                      <span>ส่วนลด</span>
+                      <b>-฿{money(promoPreview.discountAmountSatang)}</b>
+                    </div>
+                  )}
+
+                  <div className={styles.summaryRow + " " + styles.summaryTotal}>
+                    <span>ยอดชำระ</span>
+                    <strong>฿{money(checkoutPrice)}</strong>
+                  </div>
+
+                  <p className={styles.checkoutHint}>ชำระครั้งเดียว · ไม่มีการต่ออายุอัตโนมัติ</p>
+                  <div className={styles.paymentMethod}>
+                    <ScenovaIcon name="wallet" size={23}/>
+                    <div>
+                      <b>{activeCatalog?.paymentMode === "EASYSLIP" ? "QR Payment + แนบสลิป" : "พร้อมเพย์ / QR Payment"}</b>
+                      <p>{activeCatalog?.paymentMode === "EASYSLIP" ? "ระบบสร้าง QR ตามยอดจริง และตรวจสลิปอัตโนมัติผ่าน EasySlip" : "สร้าง QR แล้วสแกนด้วยแอปธนาคารของคุณ"}</p>
+                    </div>
+                  </div>
+                  {activeCatalog?.paymentMode === "TEST" && <div className={styles.testNotice}>โหมดทดสอบ · ยังไม่ใช่การรับชำระเงินจริง</div>}
+
+                  <button
+                    type="button"
+                    className={styles.confirmCheckout}
+                    disabled={Boolean(busy)}
+                    onClick={() => void (isLocalSystem ? checkoutLocal(checkoutPack.months) : checkoutCloud(checkoutPack.months))}
+                  >
+                    {busy ? "กำลังสร้างรายการ…" : "สร้างรายการชำระเงิน"} <span aria-hidden="true">→</span>
+                  </button>
+                  <button type="button" className={styles.cancelCheckout} disabled={Boolean(busy)} onClick={() => checkoutDialog.current?.close()}>
+                    ยกเลิก
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className={styles.checkoutPaymentStage}>
+                <PaymentCard
+                  type={isLocalSystem ? "LOCAL" : "CLOUD"}
+                  order={checkoutOrder}
+                  busy={Boolean(busy)}
+                  paymentMode={activeCatalog?.paymentMode || "UNCONFIGURED"}
+                  paymentAccounts={activeCatalog?.paymentAccounts || []}
+                  inline
+                  onRefresh={() => void refreshOrder(isLocalSystem ? "local" : "cloud", checkoutOrder.id)}
+                  onVerifySlip={async file => {
+                    const result = await verifySlip(isLocalSystem ? "local" : "cloud", checkoutOrder.id, file);
+                    if (result?.status === "PAID") {
+                      setCheckoutOrderId("");
+                      setCheckoutPack(null);
+                      checkoutDialog.current?.close();
+                    }
+                  }}
+                  onCancel={async () => {
+                    const cancelled = await cancelSlipPayment(isLocalSystem ? "local" : "cloud", checkoutOrder.id);
+                    if (cancelled) {
+                      setCheckoutOrderId("");
+                      checkoutDialog.current?.close();
+                    }
+                  }}
+                />
+              </div>
+            )}
           </>}
         </dialog>
       </main>
@@ -977,6 +1201,7 @@ function PaymentCard({
   busy,
   paymentMode,
   paymentAccounts,
+  inline = false,
   onRefresh,
   onVerifySlip,
   onCancel
@@ -986,9 +1211,10 @@ function PaymentCard({
   busy:boolean;
   paymentMode:string;
   paymentAccounts:PaymentAccount[];
+  inline?:boolean;
   onRefresh:()=>void;
-  onVerifySlip:(file:File)=>void;
-  onCancel:()=>void;
+  onVerifySlip:(file:File)=>void|Promise<void>;
+  onCancel:()=>void|Promise<void>;
 }) {
   const [slip, setSlip] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
@@ -1005,18 +1231,35 @@ function PaymentCard({
 
   const easySlip = paymentMode === "EASYSLIP";
   const account = paymentAccounts[0] || null;
+  const qrSrc = String(order.qr_url || "");
+  const hasQr = order.status === "PENDING" && (
+    /^https:\/\//.test(qrSrc) ||
+    /^data:image\/(?:png|jpeg|webp);base64,/i.test(qrSrc)
+  );
 
   return (
-    <article className={`${styles.paymentCard} ${easySlip ? styles.paymentCardEasySlip : ""}`}>
-      {easySlip ? (
+    <article className={styles.paymentCard + " " + (easySlip ? styles.paymentCardEasySlip : "") + " " + (inline ? styles.paymentCardInline : "")}>
+      {hasQr ? (
+        <div className={styles.paymentQrWrap}>
+          <div className={styles.paymentQr}>
+            <img
+              src={qrSrc}
+              alt={"QR ชำระเงิน " + type + " " + order.months + " เดือน"}
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          <span>สแกนด้วย Mobile Banking</span>
+          <b>฿{money(order.amount)}</b>
+        </div>
+      ) : easySlip ? (
         <div className={styles.bankTransferCard}>
           <span className={styles.bankTransferIcon}><ScenovaIcon name="wallet" size={30}/></span>
-          <small>บัญชีรับเงิน</small>
+          <small>QR ยังไม่พร้อม · ใช้บัญชีรับเงินสำรอง</small>
           {account ? (
             <>
               <b>{account.nameTh || account.nameEn || "SCENOVA"}</b>
               <strong>{account.bankNumber}</strong>
-              <span>{account.bankShortCode || "BANK"} · {account.bankName || `Bank code ${account.bankCode}`}</span>
+              <span>{account.bankShortCode || "BANK"} · {account.bankName || "Bank code " + account.bankCode}</span>
             </>
           ) : (
             <>
@@ -1027,8 +1270,8 @@ function PaymentCard({
         </div>
       ) : (
         <div className={styles.paymentQr}>
-          {order.qr_url && /^https:\/\//.test(order.qr_url) && order.status === "PENDING" ? (
-            <img src={order.qr_url} alt={`QR PromptPay ${type} ${order.months} เดือน`} referrerPolicy="no-referrer"/>
+          {hasQr ? (
+            <img src={qrSrc} alt={"QR PromptPay " + type + " " + order.months + " เดือน"} referrerPolicy="no-referrer"/>
           ) : (
             <div className={styles.qrPlaceholder}><ScenovaIcon name="wallet" size={28}/></div>
           )}
@@ -1047,7 +1290,7 @@ function PaymentCard({
 
         {easySlip ? (
           <>
-            <p>โอนยอด <b>฿{money(order.amount)}</b> ให้ตรงกับรายการ แล้วแนบสลิปด้านล่าง ระบบจะตรวจยอด บัญชีผู้รับ และสลิปซ้ำก่อนเปิดสิทธิ์</p>
+            <p>สแกน QR ตามยอด <b>฿{money(order.amount)}</b> แล้วแนบสลิปด้านล่าง ระบบจะตรวจยอด บัญชีผู้รับ และสลิปซ้ำก่อนเปิดสิทธิ์</p>
             <small>รายการสร้างเมื่อ: {date(order.created_at)}</small>
             <label className={styles.slipUpload}>
               <input
@@ -1056,7 +1299,7 @@ function PaymentCard({
                 disabled={busy}
                 onChange={event => setSlip(event.target.files?.[0] || null)}
               />
-              <span>{slip ? slip.name : "กดเพื่อเลือกรูปสลิปจากเครื่อง"}</span>
+              <span>{slip ? slip.name : "แนบรูปสลิป"}</span>
               <small>JPG / PNG / GIF / WebP · สูงสุด 4 MB</small>
             </label>
             {preview && (
@@ -1068,7 +1311,7 @@ function PaymentCard({
               <button
                 type="button"
                 className={styles.primaryButton}
-                onClick={() => slip && onVerifySlip(slip)}
+                onClick={() => slip && void onVerifySlip(slip)}
                 disabled={busy || !slip || !account}
               >
                 {busy ? "กำลังดำเนินการ…" : "ตรวจสลิปและเปิดสิทธิ์"}
@@ -1076,7 +1319,7 @@ function PaymentCard({
               <button
                 type="button"
                 className={styles.secondaryButton}
-                onClick={onCancel}
+                onClick={() => void onCancel()}
                 disabled={busy}
               >
                 ยกเลิกรายการ
