@@ -208,7 +208,7 @@ function SummaryChart({points}:{points:any[]}) {
       <path d={area} fill="url(#perf-area)"/>
       <path d={line} fill="none" stroke="url(#perf-line)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
       <circle cx={last.x} cy={last.y} r="4" className={styles.endDot}/>
-      <text x={width/2} y={height-5} textAnchor="middle" className={styles.chartLabel}>จำนวนไม้</text>
+      <text x={width/2} y={height-5} textAnchor="middle" className={styles.chartLabel}>Closed Positions</text>
     </svg>
   );
 }
@@ -749,7 +749,7 @@ export default function PerformanceDashboardPage() {
                 <Metric icon="report" label="Profit Factor" value={detailValue(fixed(summary.profitFactor))}/>
                 <Metric icon="orders" label="Closed Positions" value={detailValue(totalPositions.toLocaleString("en-US"))}/>
                 <Metric icon="pnl" label="Average Lot" value={detailValue(fixed(summary.averageLot,3))}/>
-                <Metric icon="strategy" label="Primary Lot" value={detailValue(fixed(primaryLot,3)+" · "+primaryLotCount+" ไม้ · "+percent(primaryLotPercent))}/>
+                <Metric icon="strategy" label="Primary Lot" value={detailValue(fixed(primaryLot,3)+" · "+primaryLotCount+" Positions · "+percent(primaryLotPercent))}/>
               </div>
 
               <div className={styles.resultsLabel}><ScenovaIcon name="report" size={15}/><span>Performance Breakdown · MT5 Analytics</span></div>
@@ -843,20 +843,8 @@ export default function PerformanceDashboardPage() {
               </div>
 
               <div className={styles.analyticsCharts}>
-                <div className={styles.lotCard}>
-                  <div className={styles.chartHead}>
-                    <div><ScenovaIcon name="pnl" size={15}/><b>Lot Allocation</b><small>Lot Size · จำนวนไม้ · สัดส่วน</small></div>
-                    <span>{detailedStatsReliable?Number(summary.lotSizeCount||lotDistribution.length||0):"—"} Sizes</span>
-                  </div>
-                  <div className={styles.lotHighlights}>
-                    <div><span>Primary Lot</span><b>{detailValue(fixed(primaryLot,3))}</b></div>
-                    <div><span>Positions</span><b>{detailValue(String(primaryLotCount))}</b></div>
-                    <div><span>Share</span><b>{detailValue(percent(primaryLotPercent))}</b></div>
-                  </div>
-                  <LotDistributionChart rows={reliableLotDistribution} total={detailedStatsReliable?totalPositions:0}/>
-                </div>
                 <div className={styles.chartCard}>
-                  <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={15}/><b>Capital Growth</b><small>Balance progression · X = Closed Positions</small></div><span>End Balance: {money(endBalance,currency)}</span></div>
+                  <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={15}/><b>Capital Growth</b></div><span>End Balance: {money(endBalance,currency)}</span></div>
                   <SummaryChart points={reliableCurve}/>
                 </div>
               </div>
