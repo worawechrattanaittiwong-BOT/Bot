@@ -58,6 +58,8 @@ import { ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerControll
 import { ServerSoftwareUpdateService } from "./server-software-update.service";
 import { RuntimeEventWorkerController, RuntimeEventStreamController } from "./runtime-event.controller";
 import { RuntimeEventService } from "./runtime-event.service";
+import { InAppCampaignController } from "./in-app-campaign.controller";
+import { InAppCampaignService } from "./in-app-campaign.service";
 
 @Module({
   imports: [
@@ -66,8 +68,9 @@ import { RuntimeEventService } from "./runtime-event.service";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [RuntimeEventWorkerController, RuntimeEventStreamController, ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerController, CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
+  controllers: [InAppCampaignController, RuntimeEventWorkerController, RuntimeEventStreamController, ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerController, CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
+    InAppCampaignService,
     RuntimeEventService,
     ServerSoftwareUpdateService,
     CloudUpdateService,
