@@ -167,6 +167,7 @@ export class AdminController {
            jsonb_build_object(
              'id',ls3.id,
              'slot_number',ls3.slot_number,
+             'slot_type',ls3.slot_type,
              'mode',ls3.mode,
              'status',ls3.status,
              'label',ls3.label,
@@ -1172,17 +1173,31 @@ export class AdminController {
   }
 
   @Post("subscriptions/adjust-days")
-  async adjustSubscriptionDays(@Body() body: { subscriptionId: string; days: number }) {
+  async adjustSubscriptionDays(@Body() body: {
+    subscriptionId: string;
+    days: number;
+    userId?: string;
+    mode?: "LOCAL" | "CLOUD";
+  }) {
     const days = Math.trunc(Number(body.days));
     if (!Number.isFinite(days) || days === 0 || days < -3650 || days > 3650) {
       throw new ConflictException("จำนวนวันที่ปรับต้องอยู่ระหว่าง -3650 ถึง 3650 วัน และห้ามเป็น 0");
     }
+    const expectedMode = body.mode ? String(body.mode).toUpperCase() : null;
+    if (expectedMode && !["LOCAL","CLOUD"].includes(expectedMode)) {
+      throw new ConflictException("ระบบสมาชิกที่เลือกไม่ถูกต้อง");
+    }
 
     const current = await this.db.one(
-      "SELECT id,starts_at,expires_at,status FROM subscriptions WHERE id=$1",
-      [body.subscriptionId]
+      `SELECT s.id,s.starts_at,s.expires_at,s.status,s.user_id,p.mode
+       FROM subscriptions s
+       JOIN plans p ON p.id=s.plan_id
+       WHERE s.id=$1
+         AND ($2::uuid IS NULL OR s.user_id=$2::uuid)
+         AND ($3::text IS NULL OR p.mode=$3::text)`,
+      [body.subscriptionId, body.userId || null, expectedMode]
     );
-    if (!current) throw new ConflictException("subscription not found");
+    if (!current) throw new ConflictException("ไม่พบสมาชิกของระบบที่เลือก");
 
     const row = await this.db.one(
       `UPDATE subscriptions
@@ -1279,6 +1294,192 @@ export class AdminController {
       queuedDirectShifted: Boolean(relation?.direct_subscription_id)
     });
     return row;
+  }
+
+  @Post("slots/delete")
+  async deleteCustomerSlot(@Req() req: any, @Body() body: { userId: string; slotId: string }) {
+    const slot = await this.db.one(
+      `SELECT ls.*,u.user_code,
+              bi.id instance_id,bi.actual_state,bi.desired_state,bi.runner_id,
+              bi.execution_generation,bi.runtime_stop_state,bi.mt5_account_id,
+              COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+              COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders
+       FROM license_slots ls
+       JOIN users u ON u.id=ls.assigned_user_id
+       LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
+       WHERE ls.id=$1
+         AND ls.assigned_user_id=$2
+         AND ls.owner_user_id=$2
+         AND ls.status<>'DELETED'`,
+      [body.slotId, body.userId]
+    );
+    if (!slot) throw new ConflictException("ไม่พบ Slot ของลูกค้ารายนี้");
+
+    const mode = String(slot.mode || "").toUpperCase();
+    if (
+      mode === "CLOUD" &&
+      (String(slot.slot_type || "").toUpperCase() === "PERSONAL" || Number(slot.slot_number || 0) === 1)
+    ) {
+      throw new ConflictException("Cloud Slot #1 เป็นแพ็กเกจหลัก ไม่สามารถลบจากรายการ Slot ได้");
+    }
+
+    if (mode === "LOCAL") {
+      const localCount = await this.db.one(
+        `SELECT count(*)::int total
+         FROM license_slots
+         WHERE assigned_user_id=$1
+           AND owner_user_id=$1
+           AND mode='LOCAL'
+           AND status<>'DELETED'`,
+        [body.userId]
+      );
+      if (Number(localCount?.total || 0) <= 1) {
+        throw new ConflictException("ต้องคง Local Slot หลักไว้อย่างน้อย 1 Slot");
+      }
+    }
+
+    if (
+      String(slot.actual_state || "").toUpperCase() === "RUNNING" ||
+      ["RUNNING","STARTING","SAFE_STOP"].includes(String(slot.desired_state || "").toUpperCase()) ||
+      Number(slot.positions || 0) > 0 ||
+      Number(slot.pending_orders || 0) > 0
+    ) {
+      throw new ConflictException("หยุดบอทและปิด Position / Pending Order ให้หมดก่อนลบ Slot");
+    }
+
+    if (
+      mode === "CLOUD" &&
+      slot.runner_id &&
+      !["STOP_CONFIRMED","LEASE_REVOKED"].includes(String(slot.runtime_stop_state || "NONE").toUpperCase())
+    ) {
+      const activeStop = await this.db.one(
+        `SELECT id
+         FROM worker_commands
+         WHERE bot_instance_id=$1
+           AND command='STOP_INSTANCE'
+           AND status IN ('PENDING','DELIVERED')
+         ORDER BY id DESC
+         LIMIT 1`,
+        [slot.instance_id]
+      );
+      if (!activeStop) {
+        await this.db.query(
+          `INSERT INTO worker_commands(
+             runner_id,bot_instance_id,execution_generation,command,status
+           ) VALUES($1,$2,$3,'STOP_INSTANCE','PENDING')`,
+          [slot.runner_id, slot.instance_id, Number(slot.execution_generation || 1)]
+        );
+      }
+      await this.db.query(
+        `UPDATE bot_instances SET
+           desired_state='STOPPED',
+           runtime_stop_state='STOP_REQUESTED',
+           runtime_stop_requested_at=now(),
+           runtime_stop_confirmed_at=NULL,
+           runtime_stop_error=NULL
+         WHERE id=$1`,
+        [slot.instance_id]
+      );
+      return {
+        ok:false,
+        pendingCloudStop:true,
+        message:"กำลังปิด MT5 บน VPS ก่อนลบ Slot"
+      };
+    }
+
+    await this.db.transaction(async tx => {
+      if (slot.mt5_account_id) {
+        await tx.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [slot.mt5_account_id]);
+        if (mode === "CLOUD") {
+          await tx.query("DELETE FROM mt5_credentials WHERE mt5_account_id=$1", [slot.mt5_account_id]);
+        }
+      }
+
+      if (slot.instance_id) {
+        await tx.query(
+          `UPDATE bot_instances SET
+             mt5_account_id=NULL,
+             runner_id=NULL,
+             lock_owner=NULL,
+             install_token_hash=encode(gen_random_bytes(32),'hex'),
+             execution_generation=execution_generation+1,
+             lease_rotated_at=now(),
+             desired_state='STOPPED',
+             actual_state='OFFLINE',
+             last_seen_at=NULL,
+             agent_last_seen_at=NULL,
+             agent_version=NULL,
+             agent_terminal_path=NULL,
+             agent_ea_hash=NULL,
+             device_public_id=NULL,
+             device_secret_hash=NULL,
+             device_status='UNREGISTERED',
+             device_hostname=NULL,
+             device_registered_at=NULL,
+             device_last_seen_at=NULL,
+             device_last_ip=NULL,
+             ea_last_ip=NULL,
+             pending_account_number=NULL,
+             pending_broker=NULL,
+             pending_broker_server=NULL,
+             pending_account_ip=NULL,
+             pending_account_seen_at=NULL,
+             account_change_requested_at=NULL,
+             runtime_stop_state='LEASE_REVOKED',
+             runtime_stop_requested_at=NULL,
+             runtime_stop_confirmed_at=now(),
+             runtime_stop_error=NULL,
+             provisioning_error=NULL,
+             metrics='{}'::jsonb
+           WHERE id=$1`,
+          [slot.instance_id]
+        );
+        await tx.query("DELETE FROM bot_instance_secrets WHERE bot_instance_id=$1", [slot.instance_id]);
+        await tx.query(
+          "UPDATE bot_commands SET status='ACKED',acked_at=COALESCE(acked_at,now()) WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED')",
+          [slot.instance_id]
+        );
+        await tx.query(
+          "UPDATE worker_commands SET status='CANCELLED',result_code='ADMIN_SLOT_DELETED',acked_at=COALESCE(acked_at,now()) WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED')",
+          [slot.instance_id]
+        );
+      }
+
+      await tx.query(
+        "UPDATE install_enrollments SET status='CANCELLED' WHERE slot_id=$1 AND status='PENDING'",
+        [slot.id]
+      );
+      if (mode === "CLOUD") {
+        await tx.query(
+          "UPDATE cloud_orders SET runner_id=NULL WHERE slot_id=$1 AND status='PAID'",
+          [slot.id]
+        );
+      }
+      await tx.query(
+        "UPDATE license_slots SET assigned_user_id=NULL,status='DELETED',updated_at=now() WHERE id=$1",
+        [slot.id]
+      );
+    });
+
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    await this.audit(actor, "DELETE_CUSTOMER_SLOT", "license_slot", slot.id, {
+      userId: body.userId,
+      userCode: slot.user_code,
+      mode,
+      slotNumber: Number(slot.slot_number || 0),
+      slotType: slot.slot_type || null,
+      subscriptionId: slot.subscription_id || null,
+      oldMt5AccountId: slot.mt5_account_id || null,
+      oldRunnerId: slot.runner_id || null
+    });
+
+    return {
+      ok:true,
+      deleted:true,
+      slotId:slot.id,
+      mode,
+      slotNumber:Number(slot.slot_number || 0)
+    };
   }
 
   @Post("devices/release")
