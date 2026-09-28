@@ -63,9 +63,19 @@ type PackageItem = {
   updated_at: string;
 };
 
+type PaymentAccount = {
+  id: number;
+  bankCode: string;
+  bankNumber: string;
+  nameTh: string;
+  nameEn: string;
+  type: string;
+};
+
 type Catalog = {
   packages: PackageItem[];
   paymentMode: string;
+  paymentAccounts?: PaymentAccount[];
   checkoutEnabled: boolean;
   salesPaused?: boolean;
   available?: number;
@@ -349,6 +359,50 @@ export default function PackagesPage() {
     }
   }
 
+  async function verifySlip(type: "local" | "cloud", id: string, file: File) {
+    if (busy) return;
+    if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type)) {
+      notify("bad", "รองรับสลิป JPG, PNG, GIF หรือ WebP เท่านั้น");
+      return;
+    }
+    if (file.size <= 0 || file.size > 4 * 1024 * 1024) {
+      notify("bad", "รูปสลิปต้องมีขนาดไม่เกิน 4 MB");
+      return;
+    }
+
+    setBusy("slip-" + type);
+    setMessage("");
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("อ่านไฟล์สลิปไม่สำเร็จ"));
+        reader.readAsDataURL(file);
+      });
+
+      const result = await api(
+        type === "local"
+          ? `/packages/local/orders/${id}/verify-slip`
+          : `/cloud/orders/${id}/verify-slip`,
+        {
+          method: "POST",
+          body: JSON.stringify({ base64 })
+        }
+      );
+      await load();
+      notify(
+        "good",
+        result?.status === "PAID"
+          ? "ตรวจสลิปสำเร็จ เปิดสิทธิ์ใช้งานแล้ว"
+          : "ตรวจสลิปสำเร็จ"
+      );
+    } catch (error: unknown) {
+      notify("bad", error instanceof Error ? error.message : "ตรวจสลิปไม่สำเร็จ");
+    } finally {
+      setBusy("");
+    }
+  }
+
   if (loading) {
     return <main className={styles.loading}>กำลังโหลดแพ็กเกจ...</main>;
   }
@@ -566,7 +620,10 @@ export default function PackagesPage() {
                   type={isLocalSystem ? "LOCAL" : "CLOUD"}
                   order={activePending}
                   busy={Boolean(busy)}
+                  paymentMode={activeCatalog?.paymentMode || "UNCONFIGURED"}
+                  paymentAccounts={activeCatalog?.paymentAccounts || []}
                   onRefresh={() => refreshOrder(isLocalSystem ? "local" : "cloud", activePending.id)}
+                  onVerifySlip={file => verifySlip(isLocalSystem ? "local" : "cloud", activePending.id, file)}
                 />
               </div>
             </section>
@@ -706,7 +763,7 @@ export default function PackagesPage() {
                   ))}
                 </div>
               </div>
-              <div className={styles.purchaseNote}><ScenovaIcon name="wallet" size={17}/><span>ชำระผ่าน QR Payment · เพิ่มรหัสโปรโมชั่นได้ในขั้นตอนยืนยันแพ็กเกจ</span></div>
+              <div className={styles.purchaseNote}><ScenovaIcon name="wallet" size={17}/><span>{activeCatalog?.paymentMode === "EASYSLIP" ? "โอนเงินตามยอดจริงแล้วแนบสลิป · ระบบตรวจและเปิดสิทธิ์อัตโนมัติ" : "ชำระผ่าน QR Payment · เพิ่มรหัสโปรโมชั่นได้ในขั้นตอนยืนยันแพ็กเกจ"}</span></div>
             </div>
           </section>
 
@@ -758,13 +815,13 @@ export default function PackagesPage() {
                 <small className={styles.checkoutHint}>ส่วนลดจะได้รับการตรวจสอบเมื่อสร้างรายการ ยอดหลังส่วนลดจะแสดงในรายการชำระเงิน</small>
                 <div className={`${styles.summaryRow} ${styles.summaryTotal}`}><span>ราคาแพ็กเกจ<small>ก่อนใช้ส่วนลด</small></span><strong>฿{money(checkoutPack.price_satang)}</strong></div>
                 <p className={styles.checkoutHint}>ชำระครั้งเดียว · ไม่มีการต่ออายุอัตโนมัติ</p>
-                <div className={styles.paymentMethod}><ScenovaIcon name="wallet" size={23}/><div><b>พร้อมเพย์ / QR Payment</b><p>สร้าง QR แล้วสแกนด้วยแอปธนาคารของคุณ</p></div></div>
+                <div className={styles.paymentMethod}><ScenovaIcon name="wallet" size={23}/><div><b>{activeCatalog?.paymentMode === "EASYSLIP" ? "โอนเงิน + แนบสลิป" : "พร้อมเพย์ / QR Payment"}</b><p>{activeCatalog?.paymentMode === "EASYSLIP" ? "ระบบใช้ยอดจริงของแพ็กเกจและตรวจสลิปอัตโนมัติผ่าน EasySlip" : "สร้าง QR แล้วสแกนด้วยแอปธนาคารของคุณ"}</p></div></div>
                 <p className={styles.checkoutHint}>สิทธิ์จะเปิดใช้งานเมื่อยืนยันการชำระเงินสำเร็จ ติดตามสถานะได้ที่รายการรอชำระ</p>
                 {activeCatalog?.paymentMode === "TEST" && <div className={styles.testNotice}>โหมดทดสอบ · ยังไม่ใช่การรับชำระเงินจริง</div>}
                 <button type="button" className={styles.confirmCheckout} disabled={Boolean(busy)} onClick={() => {
                   checkoutDialog.current?.close();
                   void (isLocalSystem ? checkoutLocal(checkoutPack.months) : checkoutCloud(checkoutPack.months));
-                }}>สร้าง QR เพื่อชำระเงิน <span aria-hidden="true">↗</span></button>
+                }}>{activeCatalog?.paymentMode === "EASYSLIP" ? "สร้างรายการและไปแนบสลิป" : "สร้าง QR เพื่อชำระเงิน"} <span aria-hidden="true">↗</span></button>
                 <button type="button" className={styles.cancelCheckout} disabled={Boolean(busy)} onClick={() => checkoutDialog.current?.close()}>ยกเลิก</button>
               </div>
             </div>
@@ -886,22 +943,64 @@ function PaymentCard({
   type,
   order,
   busy,
-  onRefresh
+  paymentMode,
+  paymentAccounts,
+  onRefresh,
+  onVerifySlip
 }:{
   type:"LOCAL"|"CLOUD";
   order:Order;
   busy:boolean;
+  paymentMode:string;
+  paymentAccounts:PaymentAccount[];
   onRefresh:()=>void;
+  onVerifySlip:(file:File)=>void;
 }) {
+  const [slip, setSlip] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
+
+  useEffect(() => {
+    if (!slip) {
+      setPreview("");
+      return;
+    }
+    const url = URL.createObjectURL(slip);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [slip]);
+
+  const easySlip = paymentMode === "EASYSLIP";
+  const account = paymentAccounts[0] || null;
+
   return (
-    <article className={styles.paymentCard}>
-      <div className={styles.paymentQr}>
-        {order.qr_url && /^https:\/\//.test(order.qr_url) && order.status === "PENDING" ? (
-          <img src={order.qr_url} alt={`QR PromptPay ${type} ${order.months} เดือน`} referrerPolicy="no-referrer"/>
-        ) : (
-          <div className={styles.qrPlaceholder}><ScenovaIcon name="wallet" size={28}/></div>
-        )}
-      </div>
+    <article className={`${styles.paymentCard} ${easySlip ? styles.paymentCardEasySlip : ""}`}>
+      {easySlip ? (
+        <div className={styles.bankTransferCard}>
+          <span className={styles.bankTransferIcon}><ScenovaIcon name="wallet" size={30}/></span>
+          <small>บัญชีรับเงิน</small>
+          {account ? (
+            <>
+              <b>{account.nameTh || account.nameEn || "SCENOVA"}</b>
+              <strong>{account.bankNumber}</strong>
+              <span>Bank code {account.bankCode}</span>
+            </>
+          ) : (
+            <>
+              <b>ยังไม่พบบัญชีรับเงิน</b>
+              <span>ตรวจสอบบัญชีที่ผูกไว้ใน EasySlip</span>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className={styles.paymentQr}>
+          {order.qr_url && /^https:\/\//.test(order.qr_url) && order.status === "PENDING" ? (
+            <img src={order.qr_url} alt={`QR PromptPay ${type} ${order.months} เดือน`} referrerPolicy="no-referrer"/>
+          ) : (
+            <div className={styles.qrPlaceholder}><ScenovaIcon name="wallet" size={28}/></div>
+          )}
+        </div>
+      )}
+
       <div className={styles.paymentInfo}>
         <span className={styles.eyebrow}>{type} / {order.id.slice(0,8)}</span>
         <h3>{order.months} เดือน · ฿{money(order.amount)}</h3>
@@ -911,15 +1010,49 @@ function PaymentCard({
             <b>ลด ฿{money(Number(order.discount_amount || 0))}</b>
           </div>
         )}
-        <p>
-          {order.status === "REVIEW"
-            ? "กำลังตรวจสอบรายการกับ Payment Gateway"
-            : "สแกน QR ผ่านแอปธนาคาร ระบบจะเปิดสิทธิ์อัตโนมัติหลังยืนยันยอด"}
-        </p>
-        <small>QR หมดอายุ: {date(order.expires_at)}</small>
-        <button type="button" className={styles.secondaryButton} onClick={onRefresh} disabled={busy}>
-          ตรวจสอบการชำระเงิน
-        </button>
+
+        {easySlip ? (
+          <>
+            <p>โอนยอด <b>฿{money(order.amount)}</b> ให้ตรงกับรายการ แล้วแนบสลิปด้านล่าง ระบบจะตรวจยอด บัญชีผู้รับ และสลิปซ้ำก่อนเปิดสิทธิ์</p>
+            <small>รายการสร้างเมื่อ: {date(order.created_at)}</small>
+            <label className={styles.slipUpload}>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                disabled={busy}
+                onChange={event => setSlip(event.target.files?.[0] || null)}
+              />
+              <span>{slip ? slip.name : "กดเพื่อเลือกรูปสลิปจากเครื่อง"}</span>
+              <small>JPG / PNG / GIF / WebP · สูงสุด 4 MB</small>
+            </label>
+            {preview && (
+              <div className={styles.slipPreview}>
+                <img src={preview} alt="ตัวอย่างสลิปที่เลือก"/>
+              </div>
+            )}
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={() => slip && onVerifySlip(slip)}
+              disabled={busy || !slip || !account}
+            >
+              {busy ? "กำลังตรวจสลิป…" : "ตรวจสลิปและเปิดสิทธิ์"}
+            </button>
+            {!account && <div className={styles.paymentWarning}>ยังไม่พบบัญชีรับเงินที่ผูกกับ EasySlip จึงยังตรวจสลิปไม่ได้</div>}
+          </>
+        ) : (
+          <>
+            <p>
+              {order.status === "REVIEW"
+                ? "กำลังตรวจสอบรายการกับ Payment Gateway"
+                : "สแกน QR ผ่านแอปธนาคาร ระบบจะเปิดสิทธิ์อัตโนมัติหลังยืนยันยอด"}
+            </p>
+            <small>QR หมดอายุ: {date(order.expires_at)}</small>
+            <button type="button" className={styles.secondaryButton} onClick={onRefresh} disabled={busy}>
+              ตรวจสอบการชำระเงิน
+            </button>
+          </>
+        )}
       </div>
     </article>
   );
