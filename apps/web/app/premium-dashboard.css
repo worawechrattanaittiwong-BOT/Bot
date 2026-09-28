@@ -5505,3 +5505,82 @@
     display:none!important;
   }
 }
+
+
+/* ===== Control Center V49 · membership clock + live Net Profit ===== */
+.cc-v47 .cc-membership-mini-countdown{
+  font-variant-numeric:tabular-nums;
+  letter-spacing:.055em!important;
+  color:#d9ceff!important;
+  border-color:rgba(153,125,255,.48)!important;
+  background:linear-gradient(145deg,rgba(54,40,105,.44),rgba(24,25,57,.66))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 0 14px rgba(119,86,255,.08)!important;
+}
+
+.cc-v17-running-head-metrics{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:7px;
+}
+
+.cc-v17-net-profit{
+  min-height:28px;
+  padding:4px 8px;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  border:1px solid rgba(70,89,128,.55);
+  border-radius:999px;
+  background:#0a111b;
+  color:#8795ad;
+  font-size:var(--ui-type-caption);
+  font-weight:800;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+
+.cc-v17-net-profit b{
+  color:#cfd8e7;
+  font-size:var(--ui-type-meta);
+  font-weight:900;
+}
+
+.cc-v17-net-profit.good{
+  border-color:rgba(48,126,92,.58);
+  background:rgba(11,40,29,.72);
+  color:#7abf9c;
+}
+
+.cc-v17-net-profit.good b{color:#62e3a4}
+
+.cc-v17-net-profit.bad{
+  border-color:rgba(137,54,72,.60);
+  background:rgba(51,17,25,.72);
+  color:#c98a99;
+}
+
+.cc-v17-net-profit.bad b{color:#ff788d}
+
+@media(max-width:760px){
+  .cc-v17-running-head-metrics{
+    gap:5px;
+  }
+
+  .cc-v17-net-profit{
+    min-height:24px;
+    padding:3px 6px;
+    font-size:var(--ui-type-caption);
+  }
+
+  .cc-v17-net-profit b{
+    font-size:var(--ui-type-caption);
+  }
+
+  .cc-v47 .cc-membership-mini-countdown{
+    padding-left:7px!important;
+    padding-right:7px!important;
+    font-size:var(--ui-type-caption)!important;
+  }
+}

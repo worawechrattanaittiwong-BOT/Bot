@@ -772,11 +772,11 @@ export default function DashboardPage() {
   const entitlement = data?.entitlement;
 
   useEffect(() => {
-    if (activeView !== "account" || !entitlement?.expiresAt) return;
+    if (!entitlement?.expiresAt) return;
     setAccessClockNow(Date.now());
     const timer = window.setInterval(() => setAccessClockNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [activeView, entitlement?.expiresAt]);
+  }, [entitlement?.expiresAt]);
 
   const cloudMigrationTarget = (data?.slots || []).find((slot:any) =>
     String(slot?.mode || "").toUpperCase() === "CLOUD" &&
@@ -1137,6 +1137,22 @@ export default function DashboardPage() {
 
   const accessExpiry = entitlement?.expiresAt ? new Date(entitlement.expiresAt) : null;
   const accessRemaining = accessExpiry ? Math.max(0, accessExpiry.getTime() - accessClockNow) : null;
+  const accessCompactCountdown = accessRemaining === null ? "" : (() => {
+    const totalSeconds = Math.floor(accessRemaining / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return [
+      String(days).padStart(2,"0"),
+      String(hours).padStart(2,"0"),
+      String(minutes).padStart(2,"0"),
+      String(seconds).padStart(2,"0")
+    ].join(":");
+  })();
+  const showCompactAccessCountdown =
+    accessRemaining !== null &&
+    ["SUBSCRIPTION","TRIAL"].includes(String(entitlement?.source || "").toUpperCase());
 
   const accessLabel = useMemo(() => {
     if (!entitlement) return "ยังไม่มีสิทธิ์ใช้งาน";
@@ -1252,6 +1268,12 @@ export default function DashboardPage() {
   })();
   const openPositions = [...rawOpenPositions]
     .sort((a:any,b:any)=>Number(a.openedAt||0)-Number(b.openedAt||0));
+  const livePositionProfitSum = openPositions.reduce((sum:number, position:any) => {
+    const profit = Number(position?.profit ?? 0);
+    return sum + (Number.isFinite(profit) ? profit : 0);
+  }, 0);
+  const basketProfitMetric = Number(metrics.basketProfit);
+  const liveNetProfit = Number.isFinite(basketProfitMetric) ? basketProfitMetric : livePositionProfitSum;
   const livePositionTelemetryMissing = currentPositions > 0 && openPositions.length === 0;
   const livePositionEaVersion = String(metrics.eaVersion || softwareUpdate.currentEaVersion || "—");
   const livePositionRequiredVersion = String(softwareUpdate.latestEaVersion || "1.0.43");
@@ -2850,6 +2872,15 @@ export default function DashboardPage() {
                       <span title="ระบบที่บัญชีนี้กำลังใช้งาน">{runtimeModeLabel}</span>
                       <span title="ตำแหน่ง SCENOVA Trading Node">{runtimeLocationLabel}</span>
                       <span title="Ping จริงจาก MT5 ไป Broker Trade Server">{brokerPingMs>0?brokerPingMs.toFixed(0)+" ms":"— ms"}</span>
+                      {showCompactAccessCountdown && (
+                        <span
+                          className="cc-membership-mini-countdown"
+                          title={"เวลาสมาชิกคงเหลือ · หมดอายุ "+(accessExpiry ? accessExpiry.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"medium",hour12:false}) : "—")}
+                          aria-label={"เวลาสมาชิกคงเหลือ "+accessCompactCountdown}
+                        >
+                          {accessCompactCountdown}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2875,7 +2906,7 @@ export default function DashboardPage() {
                     <button className="symbol" disabled={symbolBusy} onClick={openTradingSymbolPicker}><ScenovaIcon name="trend" size={15}/><span><b>{desiredTradingSymbol||"Symbol"}</b><small>เลือก Symbol</small></span></button>
                     <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
                     <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
-                    <button className="close" disabled={busy} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ล้างและปิดทั้งหมด",message:"คำสั่งนี้จะ Force Flat ออเดอร์ของ SCENOVA และล้างสถานะค้างของบัญชีนี้ ใช้ได้แม้หน้าจอแสดง 0 Position ยืนยันดำเนินการทันที?",confirmLabel:"ล้าง / ปิดทั้งหมด",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งล้าง / ปิดทั้งหมดแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ล้าง / ปิดทั้งหมด</b><small>Force Flat &amp; Reset</small></span></button>
+                    <button className="close" disabled={busy} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ยืนยันปิดสถานะทั้งหมด",message:"คำสั่งนี้จะปิด Position ของ SCENOVA ทั้งหมดทันที และรีเซ็ตสถานะรอบที่ค้างของบัญชีนี้ ใช้ได้แม้หน้าจอแสดง 0 Position ยืนยันดำเนินการหรือไม่?",confirmLabel:"ปิดสถานะทั้งหมด",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งปิดสถานะทั้งหมดและรีเซ็ตสถานะแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ปิดสถานะทั้งหมด</b><small>Close All Positions</small></span></button>
                     <button className="terminal" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={15}/><span><b>Terminal</b><small>Live Logs</small></span></button>
                   </div>
                 </div>
@@ -2953,7 +2984,12 @@ export default function DashboardPage() {
                 <section className="panel cc-v17-running-positions" aria-label="ออเดอร์ที่บอทกำลังรัน">
                   <div className="cc-v17-running-head">
                     <div><span><ScenovaIcon name="orders" size={18}/></span><div><small>LIVE EXECUTION</small><b>ออเดอร์ที่กำลังรัน</b></div></div>
-                    <em className={currentPositions>0?"live":"idle"}>{currentPositions>0?currentPositions+" Running":"No Position"}</em>
+                    <div className="cc-v17-running-head-metrics">
+                      <span className={"cc-v17-net-profit "+(liveNetProfit>0?"good":liveNetProfit<0?"bad":"neutral")}>
+                        Net Profit <b>{formatAccountMoney(liveNetProfit,accountCurrency,true)}</b>
+                      </span>
+                      <em className={currentPositions>0?"live":"idle"}>{currentPositions>0?currentPositions+" Running":"No Position"}</em>
+                    </div>
                   </div>
                   <div className="cc-v17-running-table">
                     <div className="head"><span>เวลา</span><span>Symbol</span><span>Type</span><span>Lot</span><span>ราคาเปิด</span><span>P&L</span></div>

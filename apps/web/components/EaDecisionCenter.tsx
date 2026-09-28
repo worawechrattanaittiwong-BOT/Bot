@@ -37,6 +37,7 @@ const marketSessions: Array<{
   { code: "NEW_YORK", label: "นิวยอร์ก", hours: "20:00–05:00", start: 20, end: 29 },
   { code: "ROLLOVER", label: "ช่วงเปลี่ยนวัน", hours: "05:00–07:00", start: 5, end: 7 }
 ];
+const visibleMarketSessions = marketSessions.filter(session => session.code !== "ROLLOVER");
 
 function numberValue(value: unknown): number | null {
   if (typeof value !== "number" && typeof value !== "string") return null;
@@ -297,7 +298,7 @@ export function EaDecisionCenter(props: Props) {
         {reportedSessionInfo && reportedSessionInfo.code !== currentSessionInfo.code && <em title="ค่า Session ที่ EA รายงานล่าสุด">EA: {reportedSessionInfo.label}</em>}
       </div>
       <div className={styles.sessionRail} aria-label="ตารางช่วงเวลาตลาด">
-        {marketSessions.map(sessionItem => <div key={sessionItem.code} className={styles.sessionItem + " " + (sessionItem.code === currentSession ? styles.sessionActive : "")}>
+        {visibleMarketSessions.map(sessionItem => <div key={sessionItem.code} className={styles.sessionItem + " " + (sessionItem.code === currentSession ? styles.sessionActive : "")}>
           <span className={styles.sessionDot}/>
           <div><b>{sessionItem.label}</b><small>{sessionItem.hours} น.</small></div>
         </div>)}
