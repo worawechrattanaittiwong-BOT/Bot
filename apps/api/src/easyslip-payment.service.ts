@@ -687,7 +687,64 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
          WHERE id=$1`,
         [order.id, slot.id, subscription.id]
       );
-      await tx.query("SELECT scenova_rearm_cloud_after_subscription_change($1,$2)", [userId, slot.id]);
+      await tx.query(
+        `WITH renewed AS (
+           SELECT slot_type
+           FROM license_slots
+           WHERE id=$2
+             AND owner_user_id=$1
+             AND assigned_user_id=$1
+             AND mode='CLOUD'
+             AND status<>'DELETED'
+         ),
+         primary_access AS (
+           SELECT 1
+           FROM license_slots primary_slot
+           JOIN subscriptions primary_sub ON primary_sub.id=primary_slot.subscription_id
+           WHERE primary_slot.owner_user_id=$1
+             AND primary_slot.assigned_user_id=$1
+             AND primary_slot.mode='CLOUD'
+             AND primary_slot.slot_type='PERSONAL'
+             AND primary_slot.status<>'DELETED'
+             AND primary_sub.status='ACTIVE'
+             AND primary_sub.starts_at<=now()
+             AND primary_sub.expires_at>now()
+           LIMIT 1
+         )
+         UPDATE bot_instances bi
+         SET runtime_stop_state='NONE',
+             runtime_stop_requested_at=NULL,
+             runtime_stop_confirmed_at=NULL,
+             runtime_stop_error=NULL,
+             desired_state='STOPPED',
+             actual_state='OFFLINE',
+             last_seen_at=NULL,
+             metrics=(
+               COALESCE(bi.metrics,'{}'::jsonb)
+               - 'membershipCutoff'
+               - 'membershipCutoffAt'
+               - 'membershipExpiredAt'
+               - 'membershipCutoffReason'
+               - 'primaryMembershipExpiredAt'
+             )
+         FROM license_slots ls
+         JOIN subscriptions own_sub ON own_sub.id=ls.subscription_id
+         WHERE bi.slot_id=ls.id
+           AND ls.owner_user_id=$1
+           AND ls.assigned_user_id=$1
+           AND ls.mode='CLOUD'
+           AND ls.status<>'DELETED'
+           AND own_sub.status='ACTIVE'
+           AND own_sub.starts_at<=now()
+           AND own_sub.expires_at>now()
+           AND EXISTS (SELECT 1 FROM primary_access)
+           AND (
+             (SELECT slot_type FROM renewed LIMIT 1)='PERSONAL'
+             OR ls.id=$2
+           )
+           AND COALESCE((bi.metrics->>'membershipCutoff')::boolean,false)=true`,
+        [userId, slot.id]
+      );
       await this.promotions.consume(tx, "CLOUD", order.id);
 
       let referralCommissionCount = 0;
