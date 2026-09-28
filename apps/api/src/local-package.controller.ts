@@ -572,6 +572,15 @@ export class LocalPackageCustomerController {
     });
   }
 
+  @Post("orders/:id/cancel-slip-payment")
+  async cancelSlipPayment(@Req() req: any, @Param("id") id: string) {
+    return this.easyslip.cancelPending({
+      orderType: "LOCAL",
+      orderId: id,
+      userId: String(req.user.sub)
+    });
+  }
+
   @Post("orders/:id/refresh")
   async refresh(@Req() req: any, @Param("id") id: string) {
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
