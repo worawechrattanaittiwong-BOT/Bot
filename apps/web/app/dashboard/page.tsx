@@ -2038,19 +2038,91 @@ export default function DashboardPage() {
   }
 
 
+  function openPrimaryPackagePage() {
+    window.location.href = "/packages?system=cloud&renew=primary";
+  }
+
   function openVpsSlotDialog(slotId = "") {
-    const enabledPackages = (cloudCatalog?.packages || [])
+    const targetSlot = cloudSlots.find((slot:any)=>String(slot?.id || "")===String(slotId || "")) || null;
+    const targetIsPrimary =
+      Boolean(targetSlot) &&
+      (
+        String(targetSlot?.slot_type || "").toUpperCase()==="PERSONAL" ||
+        Number(targetSlot?.slot_number || 0)===1
+      );
+    if (targetIsPrimary && !ownerCloudAccess) {
+      openPrimaryPackagePage();
+      return;
+    }
+
+    const enabledPackages = (cloudCatalog?.addonPackages || [])
       .filter(pack=>pack.enabled && Number(pack.price_satang) > 0)
       .sort((a,b)=>Number(a.months)-Number(b.months));
     setVpsPurchaseMonths(Number(enabledPackages[0]?.months || 1));
     setVpsSlipFile(null);
+    setOwnerAddonPriceEditorOpen(false);
 
     const pending = cloudOrders.find(order =>
+      String(order.purchase_type || "PACKAGE").toUpperCase()==="ADDON" &&
       ["CREATING","PENDING","REVIEW"].includes(String(order.status || "").toUpperCase())
     );
     setVpsRenewSlotId(pending ? String(pending.slot_id || "") : slotId);
     setVpsPaymentOrderId(String(pending?.id || ""));
     vpsSlotDialogRef.current?.showModal();
+  }
+
+  function openOwnerAddonPricing() {
+    const next:Record<number,{priceBaht:string;enabled:boolean}> = {
+      1:{priceBaht:"",enabled:false},
+      3:{priceBaht:"",enabled:false},
+      6:{priceBaht:"",enabled:false},
+      12:{priceBaht:"",enabled:false}
+    };
+    for (const months of [1,3,6,12]) {
+      const pack = (cloudCatalog?.addonPackages || []).find(item=>Number(item.months)===months);
+      next[months] = {
+        priceBaht: pack ? String(Number(pack.price_satang || 0) / 100) : "",
+        enabled: Boolean(pack?.enabled)
+      };
+    }
+    setOwnerAddonPrices(next);
+    setOwnerAddonPriceEditorOpen(true);
+    setVpsRenewSlotId("");
+    setVpsPaymentOrderId("");
+    setVpsSlipFile(null);
+    vpsSlotDialogRef.current?.showModal();
+  }
+
+  async function saveOwnerAddonPrices() {
+    if (vpsPurchaseBusy) return;
+    setVpsPurchaseBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const packages = [1,3,6,12].map(months=>{
+        const row = ownerAddonPrices[months] || {priceBaht:"",enabled:false};
+        const priceBaht = Number(row.priceBaht || 0);
+        if (!Number.isFinite(priceBaht) || priceBaht < 0) {
+          throw new Error("กรุณาตรวจราคา Slot เสริมให้ถูกต้อง");
+        }
+        return {
+          months,
+          priceSatang:Math.round(priceBaht * 100),
+          enabled:Boolean(row.enabled)
+        };
+      });
+      await api("/cloud/addon-prices", {
+        method:"POST",
+        body:JSON.stringify({ packages })
+      });
+      await loadVpsCommerce();
+      setOwnerAddonPriceEditorOpen(false);
+      setNotice("บันทึกราคา VPS Slot เสริมแล้ว");
+    } catch (e:any) {
+      setError(String(e?.message || "บันทึกราคา Slot เสริมไม่สำเร็จ"));
+    } finally {
+      setVpsPurchaseBusy(false);
+    }
   }
 
   async function createVpsSlotOrder() {
@@ -2074,7 +2146,7 @@ export default function DashboardPage() {
         const targetSlotId = String(paidOrder?.slot_id || vpsRenewSlotId || selectedSlotIdRef.current || "");
         await load(targetSlotId);
         vpsSlotDialogRef.current?.close();
-        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เรียบร้อยแล้ว" : "เพิ่ม VPS Slot เรียบร้อยแล้ว");
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เสริมเรียบร้อยแล้ว" : "เพิ่ม VPS Slot เสริมเรียบร้อยแล้ว");
         return;
       }
       setVpsPaymentOrderId(String(result?.id || ""));
@@ -2120,7 +2192,7 @@ export default function DashboardPage() {
         vpsSlotDialogRef.current?.close();
         setVpsPaymentOrderId("");
         setVpsSlipFile(null);
-        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot สำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot ใหม่แล้ว");
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เสริมสำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot เสริมใหม่แล้ว");
       }
     } catch (e:any) {
       setError(String(e?.message || "ตรวจสลิปไม่สำเร็จ"));
@@ -2141,7 +2213,7 @@ export default function DashboardPage() {
         await load(targetSlotId);
         vpsSlotDialogRef.current?.close();
         setVpsPaymentOrderId("");
-        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot สำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot ใหม่แล้ว");
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เสริมสำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot เสริมใหม่แล้ว");
       }
     } catch (e:any) {
       setError(String(e?.message || "ตรวจสอบการชำระเงินไม่สำเร็จ"));
