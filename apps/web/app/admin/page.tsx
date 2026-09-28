@@ -892,15 +892,15 @@ export default function AdminPage() {
               <div className="owner-access-group-head">
                 <div>
                   <span className="owner-card-kicker">ACCESS GROUPS</span>
-                  <h3>กลุ่มสิทธิ์สมาชิก</h3>
-                  <p>แยกกลุ่มทดลองออกจากสมาชิกจริง และเปิด/ปิดสิทธิ์ได้เฉพาะกลุ่ม</p>
+                  <h3>กลุ่มทดลอง</h3>
+                  <p>ใช้สำหรับสิทธิ์ทดลองชั่วคราวเท่านั้น สมาชิกจริง Local/VPS จะไม่ถูกผูกกับกลุ่มนี้</p>
                 </div>
                 <div className="owner-access-group-create">
                   <input
                     className="input"
                     value={newAccessGroupName}
                     onChange={e=>setNewAccessGroupName(e.target.value.slice(0,80))}
-                    placeholder="เช่น ทดลอง / Beta / สมาชิกจริง"
+                    placeholder="เช่น ทดลอง / Beta / Test รอบแรก"
                   />
                   <button className="btn primary" disabled={groupAction==="create"} onClick={createAccessGroup}>
                     เพิ่มกลุ่ม
@@ -913,7 +913,10 @@ export default function AdminPage() {
                     <div className="owner-access-group-summary">
                       <div>
                         <b>{group.name}</b>
-                        <small>{Number(group.subscription_count||0)} สมาชิก · {Number(group.trial_count||0)} Trial</small>
+                        <small>
+                          {Number(group.trial_count||0)} ผู้ทดลอง
+                          {Number(group.paid_member_count||0)>0 ? " · "+Number(group.paid_member_count||0)+" มีสมาชิกจริง" : ""}
+                        </small>
                       </div>
                       <span className={"owner-state-chip "+(group.enabled?"good":"bad")}>{group.enabled?"เปิดใช้งาน":"ปิดอยู่"}</span>
                     </div>
@@ -956,10 +959,11 @@ export default function AdminPage() {
                             <div>
                               <b>{member.user_code}</b>
                               <small>
-                                {member.kind==="SUBSCRIPTION"
-                                  ? (member.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" · "+member.label
-                                  : member.kind==="TRIAL_PENDING" ? "Trial · รอเชื่อม MT5" : "Trial · "+member.status}
+                                {member.kind==="TRIAL_PENDING" ? "Trial · รอเชื่อม MT5" : "Trial · "+member.status}
                                 {member.expires_at ? " · ถึง "+new Date(member.expires_at).toLocaleDateString("th-TH") : ""}
+                                {member.paid_local || member.paid_cloud
+                                  ? " · สมาชิกจริง: "+[member.paid_local?"Local":"",member.paid_cloud?"VPS":""].filter(Boolean).join(" + ")
+                                  : " · ไม่มีสมาชิกจริง"}
                               </small>
                             </div>
                             <button
@@ -967,7 +971,7 @@ export default function AdminPage() {
                               disabled={Boolean(groupAction)}
                               onClick={()=>removeMemberFromGroup(group,member)}
                             >
-                              เอาออกจากกลุ่ม
+                              ยกเลิก Trial
                             </button>
                           </div>
                         )) : <div className="owner-control-empty">กลุ่มนี้ยังไม่มีสมาชิก</div>}
@@ -976,7 +980,7 @@ export default function AdminPage() {
                   </div>
                 )) : <div className="owner-control-empty">ยังไม่มีกลุ่ม · สร้างกลุ่ม “ทดลอง” เพื่อแยกจากสมาชิกจริงได้</div>}
               </div>
-              <div className="owner-control-note">ปิดกลุ่ม = พักสิทธิ์เฉพาะกลุ่ม · ลบกลุ่ม = ลบชื่อกลุ่มเท่านั้น สมาชิกและวันหมดอายุยังอยู่ครบ</div>
+              <div className="owner-control-note">ปิดกลุ่ม = หยุดสิทธิ์ทดลองทันที · ลบกลุ่ม = จบ Trial ในกลุ่มถาวร · สมาชิกจริงและวันใช้งานจริงไม่เปลี่ยน</div>
             </section>
 
             <div className="owner-customer-layout">
@@ -1100,13 +1104,6 @@ export default function AdminPage() {
                             <div className="owner-control-fields">
                               <label><span>จำนวนวัน</span><input className="input" type="number" min={1} max={3650} value={days} onChange={e=>setDays(Number(e.target.value))}/></label>
                               <label><span>ยอดชำระจริง (บาท)</span><input className="input" type="number" min={0} step="0.01" value={paidAmountBaht} onChange={e=>setPaidAmountBaht(e.target.value)} placeholder="0.00"/></label>
-                              <label className="owner-field-select">
-                                <span>กลุ่มสิทธิ์</span>
-                                <select className="input" value={selectedAccessGroupId} onChange={e=>setSelectedAccessGroupId(e.target.value)}>
-                                  <option value="">ไม่จัดกลุ่ม</option>
-                                  {accessGroups.map((group:any)=><option key={group.id} value={group.id}>{group.name}{group.enabled?"":" · ปิดอยู่"}</option>)}
-                                </select>
-                              </label>
                               <label className="wide"><span>Payment Reference</span><input className="input" value={paymentReference} onChange={e=>setPaymentReference(e.target.value.slice(0,160))} placeholder="PromptPay / slip / note"/></label>
                             </div>
                             <button
@@ -1172,18 +1169,9 @@ export default function AdminPage() {
                                     <b>{m.plan_code}</b>
                                     <small>
                                       {m.active?"ใช้งานอยู่":"สถานะ "+m.status} · หมดอายุ {new Date(m.expires_at).toLocaleString("th-TH")}
-                                      {m.group_name ? " · กลุ่ม "+m.group_name+(m.group_enabled===false?" (ปิด)":"") : ""}
                                     </small>
                                   </div>
                                   <div className="owner-membership-actions">
-                                    <select
-                                      value={String(m.group_id || "")}
-                                      disabled={Boolean(customerAction)}
-                                      onChange={e=>setSubscriptionGroup(m.subscription_id,e.target.value)}
-                                    >
-                                      <option value="">ไม่จัดกลุ่ม</option>
-                                      {accessGroups.map((group:any)=><option key={group.id} value={group.id}>{group.name}{group.enabled?"":" · ปิดอยู่"}</option>)}
-                                    </select>
                                     <div className="owner-add-days">
                                       <input
                                         type="number"
@@ -1220,7 +1208,7 @@ export default function AdminPage() {
                             <div className="owner-trial-control">
                               <label><span>Trial Days</span><input className="input" type="number" min={1} max={365} value={trialDays} onChange={e=>setTrialDays(Number(e.target.value))}/></label>
                               <label className="owner-field-select">
-                                <span>กลุ่ม Trial</span>
+                                <span>กลุ่มทดลอง</span>
                                 <select
                                   className="input"
                                   value={trialAccessGroupId}
