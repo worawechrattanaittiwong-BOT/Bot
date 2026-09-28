@@ -5,11 +5,14 @@ internal sealed class CloudEaRelay
     private static readonly TimeSpan HeartbeatRequestMaxAge = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan HeartbeatResponseMaxAge = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan HeartbeatRelayTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan JournalFileSettleAge = TimeSpan.FromMilliseconds(250);
 
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;
     private readonly string _instancesPath;
     private readonly Dictionary<string, DateTime> _eventRetryAfterUtc =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTime> _journalRetryAfterUtc =
         new(StringComparer.OrdinalIgnoreCase);
 
     public CloudEaRelay(WorkerConfig config, WorkerClient client)
@@ -23,7 +26,8 @@ internal sealed class CloudEaRelay
     {
         var heartbeatTask = RunHeartbeatRelayLoopAsync(cancellationToken);
         var eventTask = RunRuntimeEventRelayLoopAsync(cancellationToken);
-        await Task.WhenAll(heartbeatTask, eventTask);
+        var journalTask = RunJournalRelayLoopAsync(cancellationToken);
+        await Task.WhenAll(heartbeatTask, eventTask, journalTask);
     }
 
     private async Task RunHeartbeatRelayLoopAsync(CancellationToken cancellationToken)
@@ -83,6 +87,42 @@ internal sealed class CloudEaRelay
             catch
             {
                 // Runtime events are best-effort local queue files and retry later.
+            }
+
+            try
+            {
+                await Task.Delay(100, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+    }
+
+    private async Task RunJournalRelayLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                if (Directory.Exists(_instancesPath))
+                {
+                    foreach (var instancePath in Directory.EnumerateDirectories(_instancesPath))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await ProcessJournalEventsAsync(instancePath, cancellationToken);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch
+            {
+                // Journal files are durable. A transient filesystem/API error
+                // leaves them on disk for a later pass.
             }
 
             try
@@ -240,6 +280,91 @@ internal sealed class CloudEaRelay
             _eventRetryAfterUtc[instancePath] = DateTime.UtcNow.AddSeconds(1);
         else
             _eventRetryAfterUtc.Remove(instancePath);
+    }
+
+    private async Task ProcessJournalEventsAsync(
+        string instancePath,
+        CancellationToken cancellationToken)
+    {
+        var filesPath = Path.Combine(instancePath, "MQL5", "Files");
+        if (!Directory.Exists(filesPath)) return;
+
+        if (_journalRetryAfterUtc.TryGetValue(instancePath, out var retryAfter) &&
+            retryAfter > DateTime.UtcNow)
+            return;
+
+        var relayFailed = false;
+        var now = DateTime.UtcNow;
+
+        foreach (var journalPath in Directory.EnumerateFiles(
+                     filesPath,
+                     "scenova-journal-*.request.txt",
+                     SearchOption.TopDirectoryOnly)
+                 .OrderBy(File.GetCreationTimeUtc)
+                 .Take(128))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                if (now - File.GetLastWriteTimeUtc(journalPath) < JournalFileSettleAge)
+                    continue;
+            }
+            catch (IOException) { continue; }
+            catch (UnauthorizedAccessException) { continue; }
+
+            string payload;
+            try
+            {
+                payload = (await File.ReadAllTextAsync(journalPath, cancellationToken)).Trim();
+            }
+            catch (IOException) { continue; }
+            catch (UnauthorizedAccessException) { continue; }
+
+            if (payload.Length < 16)
+                continue;
+
+            try
+            {
+                var statusCode = await _client.RelayEaJournalAsync(payload, cancellationToken);
+                if (statusCode >= 200 && statusCode < 300)
+                {
+                    File.Delete(journalPath);
+                    continue;
+                }
+
+                // Keep malformed/unauthorized payloads for operator inspection,
+                // but move them out of the active queue so one poison file can
+                // never block newer journal events.
+                if (statusCode >= 400 && statusCode < 500 &&
+                    statusCode != 408 && statusCode != 429)
+                {
+                    var failedPath = journalPath.Replace(
+                        ".request.txt",
+                        ".failed.txt",
+                        StringComparison.OrdinalIgnoreCase);
+                    File.Move(journalPath, failedPath, true);
+                    continue;
+                }
+
+                relayFailed = true;
+                break;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                relayFailed = true;
+                break;
+            }
+        }
+
+        if (relayFailed)
+            _journalRetryAfterUtc[instancePath] = DateTime.UtcNow.AddSeconds(1);
+        else
+            _journalRetryAfterUtc.Remove(instancePath);
     }
 
     private static void CleanupExpiredHeartbeatFiles(string filesPath)
