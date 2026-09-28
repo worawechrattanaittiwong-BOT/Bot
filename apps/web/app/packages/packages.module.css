@@ -607,6 +607,16 @@
   max-height:280px;
   object-fit:contain
 }
+.slipActions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap
+}
+.slipActions .primaryButton,
+.slipActions .secondaryButton{
+  min-width:160px
+}
 .paymentWarning{
   margin-top:9px;
   border:1px solid #674d2b;
@@ -1209,6 +1219,8 @@
   .paymentCardEasySlip { grid-template-columns: 1fr; }
   .paymentInfo h3 { font-size: 24px; }
   .paymentInfo .secondaryButton { width: 100%; }
+  .slipActions { display:grid; grid-template-columns:1fr; }
+  .slipActions .primaryButton, .slipActions .secondaryButton { width:100%; min-width:0; }
   .historyGridSingle { padding: 0 18px 12px; }
   .checkoutDialog { width: calc(100% - 24px); max-height: calc(100dvh - 24px); padding: 22px; border-radius: 20px; }
   .checkoutHeading h2 { font-size: 24px; }
