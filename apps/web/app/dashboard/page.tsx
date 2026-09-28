@@ -147,6 +147,7 @@ export default function DashboardPage() {
   const [tradingSymbol, setTradingSymbol] = useState("");
   const [symbolBusy, setSymbolBusy] = useState(false);
   const [serverOperation, setServerOperation] = useState<any>(null);
+  const [serverOperationMinimized, setServerOperationMinimized] = useState(false);
   const [activeView, setActiveView] = useState<View>("overview");
   const [accessClockNow, setAccessClockNow] = useState(()=>Date.now());
   const [selectedSlotId, setSelectedSlotId] = useState("");
@@ -866,6 +867,13 @@ export default function DashboardPage() {
       }
     : null;
   const operationTerminal = serverOperation || cloudUpdateOperation;
+  const operationTerminalVisible =
+    Boolean(operationTerminal) &&
+    !(
+      serverOperationMinimized &&
+      operationTerminal?.kind === "STOP" &&
+      operationTerminal?.status === "RUNNING"
+    );
   const statusNoticeCount = Number(marketSessionClosed || !isMt5Online) + Number(softwareUpdateRequired) + Number(cloudUpdateVisible);
 
   const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };
@@ -923,8 +931,7 @@ export default function DashboardPage() {
       (
         op.kind === "SYMBOL" ||
         op.kind === "START" ||
-        op.kind === "CLOSE_ALL" ||
-        (op.kind === "STOP" && positions <= 0)
+        op.kind === "CLOSE_ALL"
       )
     ) {
       failed = true;
@@ -1100,9 +1107,16 @@ export default function DashboardPage() {
 
   const startConnectionReady = isMt5Online || isAgentOnline;
   const safeStopPositionCount = Math.max(0, Number(metrics.positions || 0));
+  const safeStopOperationRunning =
+    serverOperation?.kind === "STOP" &&
+    serverOperation?.status === "RUNNING";
   const safeStopInProgress =
-    safeStopPositionCount > 0 &&
-    (desired === "SAFE_STOP" || state === "SAFE_STOP");
+    desired === "SAFE_STOP" ||
+    state === "SAFE_STOP" ||
+    safeStopOperationRunning;
+  const safeStopStatusDetail = safeStopPositionCount > 0
+    ? "Safe Stop · เหลือ " + safeStopPositionCount + " Position"
+    : "Safe Stop · รอ EA ยืนยัน STOPPED";
   // Let the customer press Start whenever SCENOVA has a live connection, but
   // never race an in-flight Safe Stop drain. The Server also enforces this.
   const startBlocked =
@@ -2163,6 +2177,7 @@ export default function DashboardPage() {
         : operationKind === "CLOSE_ALL"
           ? "กำลัง Force Flat"
           : "Server กำลังดำเนินการ";
+    setServerOperationMinimized(false);
     setServerOperation({
       id:operationId,
       kind:operationKind,
@@ -2245,6 +2260,7 @@ export default function DashboardPage() {
     setError("");
     setNotice("");
     const operationId = Date.now() + "-" + Math.random().toString(36).slice(2);
+    setServerOperationMinimized(false);
     setServerOperation({
       id:operationId,
       kind:"SYMBOL",
@@ -2682,9 +2698,10 @@ export default function DashboardPage() {
         )}
 
 
-        {operationTerminal && (
+        {operationTerminalVisible && operationTerminal && (
           <div className="cc-server-operation-backdrop" role="presentation">
             <section
+              id="cc-server-operation-dialog"
               className={"cc-server-operation-terminal status-" + String(operationTerminal.status || "RUNNING").toLowerCase()}
               role="dialog"
               aria-modal="true"
@@ -2698,11 +2715,19 @@ export default function DashboardPage() {
                     <h3 id="cc-server-operation-title">{operationTerminal.title}</h3>
                   </div>
                 </div>
-                {(operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
+                {(operationTerminal.status === "FAILED" || operationTerminal.canClose || (operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING")) && (
                   <button
                     type="button"
-                    aria-label="ปิด"
-                    onClick={()=>operationTerminal.kind==="CLOUD_UPDATE" ? setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey)) : setServerOperation(null)}
+                    aria-label={operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING" ? "ย่อสถานะ Safe Stop" : "ปิด"}
+                    onClick={()=>{
+                      if (operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING") {
+                        setServerOperationMinimized(true);
+                      } else if (operationTerminal.kind === "CLOUD_UPDATE") {
+                        setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey));
+                      } else {
+                        setServerOperation(null);
+                      }
+                    }}
                   >×</button>
                 )}
               </header>
@@ -2728,16 +2753,26 @@ export default function DashboardPage() {
                       ? "ปิดหน้าต่างนี้เพื่อกดหยุดบอทเมื่อคุณพร้อม แล้วระบบจะอัปเดตต่อ"
                       : "SCENOVA กำลังอัปเดตบัญชีนี้ใน Terminal เดียว"
                   : operationTerminal.status === "RUNNING"
-                    ? "กำลังติดตามสถานะจาก Server อัตโนมัติทุก 1.5 วินาที"
+                    ? operationTerminal.kind === "STOP"
+                      ? "Safe Stop ยังทำงานต่อแม้ย่อหน้าต่าง · กดการ์ดสถานะด้านบนเพื่อเปิดกลับ"
+                      : "กำลังติดตามสถานะจาก Server อัตโนมัติทุก 1.5 วินาที"
                     : operationTerminal.status === "SUCCESS"
                       ? "สำเร็จ · หน้าต่างจะปิดอัตโนมัติ"
                       : "ไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"}</span>
-                {(operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
+                {(operationTerminal.status === "FAILED" || operationTerminal.canClose || (operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING")) && (
                   <button
                     type="button"
                     className="btn"
-                    onClick={()=>operationTerminal.kind==="CLOUD_UPDATE" ? setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey)) : setServerOperation(null)}
-                  >ปิด</button>
+                    onClick={()=>{
+                      if (operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING") {
+                        setServerOperationMinimized(true);
+                      } else if (operationTerminal.kind === "CLOUD_UPDATE") {
+                        setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey));
+                      } else {
+                        setServerOperation(null);
+                      }
+                    }}
+                  >{operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING" ? "ย่อไว้" : "ปิด"}</button>
                 )}
               </footer>
             </section>
@@ -2905,16 +2940,22 @@ export default function DashboardPage() {
 
                 <button
                   type="button"
-                  className={"cc-v47-live-state cc-status-trigger "+(statusNoticeCount > 0 ? "waiting" : state === "RUNNING" ? "running" : "idle")}
+                  className={"cc-v47-live-state cc-status-trigger "+(safeStopInProgress || statusNoticeCount > 0 ? "waiting" : state === "RUNNING" ? "running" : "idle")}
                   aria-haspopup="dialog"
-                  aria-controls="cc-system-status"
-                  aria-label={"เปิดสถานะระบบ"+(statusNoticeCount ? " · "+statusNoticeCount+" รายการแจ้งเตือน" : "")}
-                  onClick={()=>statusDialogRef.current?.showModal()}
+                  aria-controls={safeStopInProgress && safeStopOperationRunning ? "cc-server-operation-dialog" : "cc-system-status"}
+                  aria-label={safeStopInProgress ? "เปิดสถานะ Safe Stop" : "เปิดสถานะระบบ"+(statusNoticeCount ? " · "+statusNoticeCount+" รายการแจ้งเตือน" : "")}
+                  onClick={()=>{
+                    if (safeStopInProgress && safeStopOperationRunning) {
+                      setServerOperationMinimized(false);
+                    } else {
+                      statusDialogRef.current?.showModal();
+                    }
+                  }}
                 >
                   <i/>
                   <span className="cc-status-trigger-copy">
-                    <b>{isHeartbeatDelayed ? "Reconnecting" : !isMt5Online ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
-                    <small>สถานะและอัปเดต</small>
+                    <b>{safeStopInProgress ? "กำลังหยุดบอท" : isHeartbeatDelayed ? "Reconnecting" : !isMt5Online ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
+                    <small>{safeStopInProgress ? safeStopStatusDetail : "สถานะและอัปเดต"}</small>
                   </span>
                   <span className="cc-status-trigger-bell"><ScenovaIcon name="bell" size={16}/>{statusNoticeCount > 0 && <em>{statusNoticeCount}</em>}</span>
                 </button>
