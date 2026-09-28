@@ -2004,12 +2004,12 @@ export default function DashboardPage() {
       .filter(pack=>pack.enabled && Number(pack.price_satang) > 0)
       .sort((a,b)=>Number(a.months)-Number(b.months));
     setVpsPurchaseMonths(Number(enabledPackages[0]?.months || 1));
-    setVpsRenewSlotId(slotId);
     setVpsSlipFile(null);
 
     const pending = cloudOrders.find(order =>
       ["CREATING","PENDING","REVIEW"].includes(String(order.status || "").toUpperCase())
     );
+    setVpsRenewSlotId(pending ? String(pending.slot_id || "") : slotId);
     setVpsPaymentOrderId(String(pending?.id || ""));
     vpsSlotDialogRef.current?.showModal();
   }
@@ -2028,10 +2028,10 @@ export default function DashboardPage() {
         })
       });
       if (result?.free) {
-        await Promise.all([
-          loadVpsCommerce(),
-          load(selectedSlotIdRef.current)
-        ]);
+        const next = await loadVpsCommerce();
+        const paidOrder = next.orders.find((item:CloudOrder)=>item.id===String(result?.id || ""));
+        const targetSlotId = String(paidOrder?.slot_id || vpsRenewSlotId || selectedSlotIdRef.current || "");
+        await load(targetSlotId);
         vpsSlotDialogRef.current?.close();
         setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เรียบร้อยแล้ว" : "เพิ่ม VPS Slot เรียบร้อยแล้ว");
         return;
@@ -2071,10 +2071,10 @@ export default function DashboardPage() {
         method:"POST",
         body:JSON.stringify({ base64 })
       });
-      await Promise.all([
-        loadVpsCommerce(),
-        load(selectedSlotIdRef.current)
-      ]);
+      const next = await loadVpsCommerce();
+      const paidOrder = next.orders.find((item:CloudOrder)=>item.id===vpsPaymentOrderId);
+      const targetSlotId = String(paidOrder?.slot_id || vpsRenewSlotId || selectedSlotIdRef.current || "");
+      await load(targetSlotId);
       if (result?.status === "PAID") {
         vpsSlotDialogRef.current?.close();
         setVpsPaymentOrderId("");
@@ -2096,7 +2096,8 @@ export default function DashboardPage() {
       const next = await loadVpsCommerce();
       const order = next.orders.find((item:CloudOrder)=>item.id===vpsPaymentOrderId);
       if (order?.status === "PAID") {
-        await load(selectedSlotIdRef.current);
+        const targetSlotId = String(order.slot_id || vpsRenewSlotId || selectedSlotIdRef.current || "");
+        await load(targetSlotId);
         vpsSlotDialogRef.current?.close();
         setVpsPaymentOrderId("");
         setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot สำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot ใหม่แล้ว");
