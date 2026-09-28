@@ -289,6 +289,13 @@ export default function PackagesPage() {
     setMessage(text);
   }
 
+  function clearPromoForm() {
+    setPromoCode("");
+    setPromoPreview(null);
+    setPromoState("IDLE");
+    setPromoNotice("");
+  }
+
   async function requestOtp() {
     if (busy || cooldown > 0 || !trial?.verificationConfigured) return;
     setBusy("otp-send");
@@ -341,6 +348,7 @@ export default function PackagesPage() {
         method: "POST",
         body: JSON.stringify({ months, promoCode: formatPromoCode(promoCode) })
       });
+      clearPromoForm();
       await load();
       if (result?.free) {
         checkoutDialog.current?.close();
@@ -369,6 +377,7 @@ export default function PackagesPage() {
         method: "POST",
         body: JSON.stringify({ months, promoCode: formatPromoCode(promoCode) })
       });
+      clearPromoForm();
       await load();
       if (result?.free) {
         checkoutDialog.current?.close();
