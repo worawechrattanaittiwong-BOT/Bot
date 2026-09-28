@@ -2625,7 +2625,7 @@ export default function DashboardPage() {
             <span className="cc-v3-title-icon"><ScenovaIcon name={activeView === "overview" ? "control" : activeView === "account" ? "account" : "strategy"} size={24}/></span>
             <div>
               <h1>{activeView === "overview" ? "Control Center" : activeView === "account" ? "MT5 & EA" : "Backtest & Performance"}</h1>
-              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "เชื่อมต่อบัญชี MT5 ของคุณ พร้อมคู่มือติดตั้ง SCENOVA ทีละขั้นตอน" : "ดูผลทดสอบย้อนหลัง ดาวน์โหลดรายงาน และสร้างหน้าพอร์ตตัวอย่างแบบอ่านอย่างเดียว"}</p>
+              <p>{activeView === "overview" ? "ควบคุมบอทเทรดอัตโนมัติ พร้อมติดตามสัญญาณและสถานะแบบเรียลไทม์" : activeView === "account" ? "เชื่อมต่อและจัดการบัญชี MT5 ของคุณ" : "ดูผลทดสอบย้อนหลัง ดาวน์โหลดรายงาน และสร้างหน้าพอร์ตตัวอย่างแบบอ่านอย่างเดียว"}</p>
             </div>
           </div>
           <div className="cc-v3-head-actions">
@@ -3217,7 +3217,7 @@ export default function DashboardPage() {
               <div className="panel-head">
                 <div>
                   <div className="eyebrow">CONNECTION MODE</div>
-                  <h2>เลือกระบบที่ต้องการเชื่อมต่อ</h2>
+                  <h2>เลือกระบบเชื่อมต่อ</h2>
                   <p className="muted">เลือก Local MT5 หรือ VPS Server สำหรับบัญชีนี้</p>
                 </div>
                 <span className="badge">{String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" ? "VPS SERVER" : "LOCAL MT5"}</span>
