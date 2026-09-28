@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.89"
-#define SCENOVA_EA_VERSION "1.0.89"
-#define SCENOVA_PRODUCT_VERSION "1.0.89"
+#property version   "1.0.90"
+#define SCENOVA_EA_VERSION "1.0.90"
+#define SCENOVA_PRODUCT_VERSION "1.0.90"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -5716,10 +5716,50 @@ bool IsHttpTransportFailure(const int code,const int transportError)
           (transportError>=5200 && transportError<=5203);
 }
 
+bool PersistCloudJournalPayload(
+   const string payload,
+   const ulong dealTicket,
+   const string eventType
+)
+{
+   if(!InpCloudRelay || StringLen(payload)<16 || dealTicket==0)
+      return false;
+
+   string journalFile=
+      "scenova-journal-"+IntegerToString((long)dealTicket)+"-"+eventType+".request.txt";
+
+   // A pending file is already durable. Database idempotency makes a later
+   // replay safe even if MT5/Worker restarts between write and acknowledgement.
+   if(FileIsExist(journalFile))
+      return true;
+
+   ResetLastError();
+   int out=FileOpen(journalFile,FILE_WRITE|FILE_TXT|FILE_ANSI,0,CP_UTF8);
+   if(out==INVALID_HANDLE)
+      return false;
+
+   FileWriteString(out,payload);
+   FileFlush(out);
+   FileClose(out);
+   return FileIsExist(journalFile);
+}
+
 void QueueDeferredDealJournal(const ulong dealTicket,const bool rescueDeal)
 {
    if(dealTicket==0 || MQLInfoInteger(MQL_TESTER))
       return;
+
+   // Cloud journals become durable at the trade callback boundary using local
+   // file I/O only. No network call is made here. If the disk write fails, keep
+   // the legacy in-memory queue so OnTimer can retry without affecting trading.
+   if(InpCloudRelay)
+   {
+      bool persisted=rescueDeal
+         ? PostRescueJournalDeal(dealTicket)
+         : PostTradeJournalDeal(dealTicket);
+      if(persisted)
+         return;
+   }
 
    if(g_deferredJournalCount>=DEFERRED_DEAL_JOURNAL_MAX)
    {
@@ -5747,6 +5787,23 @@ void FlushOneDeferredDealJournal()
    bool zeroGridJournal=
       !rescueDeal &&
       TradeModeForDeal(ticket)=="ZERO_GRID";
+
+   // Cloud retries are durable-file writes only. Never pop the RAM fallback
+   // until the event is safely present on disk for Worker delivery.
+   if(InpCloudRelay)
+   {
+      bool persisted=rescueDeal
+         ? PostRescueJournalDeal(ticket)
+         : PostTradeJournalDeal(ticket);
+      if(!persisted)
+         return;
+
+      g_deferredJournalTickets[slot]=0;
+      g_deferredJournalRescue[slot]=false;
+      g_deferredJournalHead=(g_deferredJournalHead+1)%DEFERRED_DEAL_JOURNAL_MAX;
+      g_deferredJournalCount--;
+      return;
+   }
 
    // ZERO statistics are required by the per-mode dashboard. Do not discard a
    // ZERO deal just because one telemetry request timed out; keep it at the
@@ -6887,6 +6944,22 @@ bool PostTradeJournalDeal(ulong dealTicket)
       payload=StringSubstr(payload,0,StringLen(payload)-1)+
          RaceTelemetryCurrentJsonFragment()+"}";
 
+   if(InpCloudRelay)
+   {
+      if(PersistCloudJournalPayload(
+         payload,
+         dealTicket,
+         isExit ? "EXIT" : "ENTRY"
+      ))
+      {
+         g_journalSent++;
+         return true;
+      }
+
+      g_journalFailed++;
+      return false;
+   }
+
    string response = "";
    int journalTimeoutMs=journalControlMode=="ZERO_GRID"
       ? MathMax(ZERO_GRID_JOURNAL_HTTP_TIMEOUT_MS,ExecutionAwareHttpTimeoutMs(650))
@@ -6907,21 +6980,21 @@ bool PostTradeJournalDeal(ulong dealTicket)
    return false;
 }
 
-void PostRescueJournalDeal(ulong dealTicket)
+bool PostRescueJournalDeal(ulong dealTicket)
 {
    if(MQLInfoInteger(MQL_TESTER) || dealTicket==0 || !HistoryDealSelect(dealTicket))
-      return;
+      return true;
 
    long dealEntry=HistoryDealGetInteger(dealTicket,DEAL_ENTRY);
    if(dealEntry!=DEAL_ENTRY_IN &&
       dealEntry!=DEAL_ENTRY_OUT &&
       dealEntry!=DEAL_ENTRY_OUT_BY &&
       dealEntry!=DEAL_ENTRY_INOUT)
-      return;
+      return true;
 
    long dealType=HistoryDealGetInteger(dealTicket,DEAL_TYPE);
    if(dealType!=DEAL_TYPE_BUY && dealType!=DEAL_TYPE_SELL)
-      return;
+      return true;
 
    bool isExit=
       dealEntry==DEAL_ENTRY_OUT ||
@@ -6956,6 +7029,22 @@ void PostRescueJournalDeal(ulong dealTicket)
       g_signalConfidence
    );
 
+   if(InpCloudRelay)
+   {
+      if(PersistCloudJournalPayload(
+         payload,
+         dealTicket,
+         isExit ? "EXIT" : "ENTRY"
+      ))
+      {
+         g_journalSent++;
+         return true;
+      }
+
+      g_journalFailed++;
+      return false;
+   }
+
    string response="";
    int code=HttpPostJsonTimeout(
       InpApiBase+"/api/ea/journal",
@@ -6964,9 +7053,13 @@ void PostRescueJournalDeal(ulong dealTicket)
       ExecutionAwareHttpTimeoutMs(650)
    );
    if(code>=200 && code<300)
+   {
       g_journalSent++;
-   else
-      g_journalFailed++;
+      return true;
+   }
+
+   g_journalFailed++;
+   return false;
 }
 
 void ClearActiveBasketJournal()
