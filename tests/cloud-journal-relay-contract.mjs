@@ -42,6 +42,13 @@ assert.match(
   "EA journal endpoint must remain idempotent for safe replay"
 );
 
+assert.match(ea, /JOURNAL_REPLAY_TODAY/, "EA must support a targeted current-day journal replay command");
+assert.match(ea, /bool ReplayTodayTradeJournal\(\)/, "EA must implement current-day journal replay");
+assert.match(ea, /datetime from=BrokerDayStart\(\);[\s\S]*?HistorySelect\(from,to\)/,
+  "Current-day replay must be limited to the broker day only");
+assert.match(ea, /if\(closeConfirmed && commandCanAck\)[\s\S]*?AckCommand\(commandId\)/,
+  "Replay command must only ACK after durable journal persistence succeeds");
+
 const eaVersion = ea.match(/#define SCENOVA_EA_VERSION "([^"]+)"/)?.[1];
 const apiEaVersion = release.match(/DEFAULT_EA_VERSION = "([^"]+)"/)?.[1];
 assert.equal(eaVersion, apiEaVersion, "EA source and API promoted EA version must match");
