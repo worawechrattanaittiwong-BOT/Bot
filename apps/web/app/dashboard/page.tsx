@@ -3300,7 +3300,7 @@ export default function DashboardPage() {
                 )}
                 <div className="panel-head">
                   <div>
-                    <div className="eyebrow">MT5 ACCOUNT · CLOUD</div>
+                    <div className="eyebrow">MT5 ACCOUNT · VPS</div>
                     <h2>{data.account ? (data.account.broker + " · " + data.account.account_number) : "ยังไม่ได้ผูกบัญชี MT5"}</h2>
                     <p className="muted">{data.account ? (data.account.broker_server + " · บัญชี MT5 ที่เชื่อมต่ออยู่") : "กรอกข้อมูล MT5 เพื่อเชื่อมต่อ VPS"}</p>
                   </div>
@@ -3425,15 +3425,15 @@ export default function DashboardPage() {
                     </div>
                   </form>
                   {data.account && (
-                    <div className="help">เลขบัญชีและ Server ถูกล็อกตาม VPS Runtime ปัจจุบัน เพื่อป้องกันการเปลี่ยนบัญชีโดยไม่ตั้งใจ หากต้องการเปลี่ยนบัญชีให้ใช้ขั้นตอนเปลี่ยนบัญชี Cloud โดยเฉพาะ</div>
+                    <div className="help">ใช้บัญชีและ Server เดิมสำหรับการเชื่อมต่อครั้งนี้</div>
                   )}
                 </section>
               ) : (
                 <section className="panel">
-                  <div className="eyebrow">CLOUD MT5 · CONNECTED</div>
+                  <div className="eyebrow">VPS MT5 · CONNECTED</div>
                   <h2>{data.account.account_number}</h2>
                   <p className="muted">{data.account.broker} · {data.account.broker_server}</p>
-                  <button className="btn ghost" disabled={busy || state==="RUNNING" || desired==="RUNNING"} onClick={resetMt5}>เปลี่ยนบัญชี Cloud</button>
+                  <button className="btn ghost" disabled={busy || state==="RUNNING" || desired==="RUNNING"} onClick={resetMt5}>เปลี่ยนบัญชี VPS</button>
                 </section>
               )
             )}
