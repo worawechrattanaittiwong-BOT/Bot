@@ -2159,18 +2159,18 @@ export class BotController {
         0,
         Number(existingInstance.metrics?.positions || 0)
       );
+      const existingPendingOrders = Math.max(
+        0,
+        Number(existingInstance.metrics?.accountScenovaPendingOrders || 0)
+      );
       if (
         existingInstance.actual_state === "RUNNING" ||
         existingInstance.desired_state === "RUNNING" ||
-        existingPositions > 0
+        existingPositions > 0 ||
+        existingPendingOrders > 0
       ) {
         throw new ConflictException(
-          "หยุดบอทและปิด Position ให้หมดก่อนเปลี่ยนบัญชี Cloud MT5"
-        );
-      }
-      if (existingInstance.metrics?.pendingBasketJournal === true) {
-        throw new ConflictException(
-          "ยังมี Basket Journal ของบัญชี Cloud เดิมรอส่ง กรุณารอให้ส่งสำเร็จก่อนเปลี่ยนบัญชี"
+          "หยุดบอทและปิด Position / Pending Order ให้หมดก่อนเปลี่ยนบัญชี Cloud MT5"
         );
       }
     }
