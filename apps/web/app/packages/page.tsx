@@ -363,6 +363,38 @@ export default function PackagesPage() {
   const activeOrders = isLocalSystem ? localOrders : cloudOrders;
   const activePending = isLocalSystem ? pendingLocal : pendingCloud;
   const activeMembership = isLocalSystem ? activeLocal : activeCloud;
+  const salesPaused = Boolean(localCatalog?.salesPaused || cloudCatalog?.salesPaused);
+
+  async function setGlobalSalesPaused(paused: boolean) {
+    if (!isOwner || busy) return;
+    if (
+      paused &&
+      !window.confirm(
+        "ปิดการขายแพ็กเกจ Local และ Cloud ทั้งหมดชั่วคราว?\n\nลูกค้าจะสร้างรายการชำระเงินใหม่ไม่ได้ แต่รายการที่สร้างไว้แล้วจะไม่ถูกยกเลิก"
+      )
+    ) return;
+
+    setBusy("sales-control");
+    try {
+      await api("/admin/sales-control", {
+        method: "POST",
+        body: JSON.stringify({ paused })
+      });
+      checkoutDialog.current?.close();
+      setCheckoutPack(null);
+      await load();
+      notify(
+        "good",
+        paused
+          ? "ปิดการขายแพ็กเกจ Local และ Cloud ทั้งหมดแล้ว"
+          : "เปิดการขายแพ็กเกจ Local และ Cloud แล้ว"
+      );
+    } catch (error: unknown) {
+      notify("bad", error instanceof Error ? error.message : "เปลี่ยนสถานะการขายไม่สำเร็จ");
+    } finally {
+      setBusy("");
+    }
+  }
 
   return (
     <div className="app-wrap">
@@ -375,20 +407,6 @@ export default function PackagesPage() {
           : <CustomerMobileNav activeKey="packages" partner={partnerSummary}/>}
 
         <div className={styles.shell}>
-          <header className={styles.header}>
-            <div>
-              <div className={styles.breadcrumb}>SCENOVA <span>/</span> Membership</div>
-              <span className={styles.eyebrow}>SCENOVA MEMBERSHIP</span>
-              <h1>อีกระดับของการใช้งาน<br/><span className={styles.heroAccent}>ในแบบที่คุณเลือก</span></h1>
-              <p>Local หรือ Cloud เลือกแพ็กเกจที่ลงตัวกับคุณ<br/>จัดการสิทธิ์และการชำระเงินได้ในที่เดียว</p>
-              <div className={styles.heroDetails}><span>Local & Cloud MT5</span><i aria-hidden="true"/><span>ชำระครั้งเดียวตามระยะเวลาที่เลือก</span></div>
-            </div>
-            <div className={styles.currentAccess}>
-              <span>สิทธิ์ปัจจุบัน</span>
-              <b>{account.access.subscription?.code || account.access.trial?.status || "ยังไม่มีแพ็กเกจ"}</b>
-            </div>
-          </header>
-
           {message && (
             <div role="status" className={`${styles.message} ${messageKind === "good" ? styles.good : messageKind === "bad" ? styles.bad : ""}`}>
               {message}
@@ -402,7 +420,7 @@ export default function PackagesPage() {
                 <div>
                   <span className={styles.eyebrow}>LOCAL MT5 TRIAL</span>
                   <h2>ทดลองใช้งาน Local MT5</h2>
-                  <p>สิทธิ์ทดลองใช้งานสำหรับ Local MT5 · ยืนยันตัวตนผ่าน SMS หรืออีเมล</p>
+                  <p>ทดลอง Local MT5 · ยืนยันผ่าน SMS หรืออีเมล</p>
                 </div>
               </div>
               <div className={styles.trialHeaderActions}>
