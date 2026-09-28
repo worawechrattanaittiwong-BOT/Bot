@@ -86,10 +86,20 @@ assert.match(
   /JOURNAL_RECOVERING/,
   "Performance UI must poll while VPS journal replay is recovering detail"
 );
-assert.match(
+assert.doesNotMatch(
   performancePage,
-  /รายละเอียดการเทรดยังซิงก์ไม่ครบ/,
-  "Performance UI must explain incomplete journal detail instead of showing misleading zeros"
+  /กำลังซิงก์ประวัติการเทรดจาก VPS MT5|รายละเอียดการเทรดยังซิงก์ไม่ครบ/,
+  "Performance recovery must stay in the background without a sync notice"
+);
+assert.match(
+  performanceApi,
+  /metadata\?\.executedByBot !== false/,
+  "MT5 reconciliation must compare bot-executed journal deals and keep manual closes in actual performance"
+);
+assert.match(
+  performanceApi,
+  /PERFORMANCE_RECONCILED/,
+  "Completed performance reconciliation must retire stale VPS replay commands"
 );
 assert.match(
   performancePage,
