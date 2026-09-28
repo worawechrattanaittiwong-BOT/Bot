@@ -241,6 +241,60 @@ export class InAppCampaignService implements OnModuleInit {
     return { campaign: null };
   }
 
+  async adminList() {
+    const rows = (await this.db.query(`
+      SELECT
+        c.id,c.code,c.title,c.image_url,c.mobile_image_url,c.target_url,c.cta_label,
+        c.status,c.priority,c.starts_at,c.ends_at,c.settings,c.created_at,c.updated_at,
+        COALESCE((
+          SELECT jsonb_agg(
+            jsonb_build_object(
+              'slotCode',s.slot_code,
+              'startMinute',s.start_minute,
+              'endMinute',s.end_minute,
+              'enabled',s.enabled
+            )
+            ORDER BY s.start_minute,s.slot_code
+          )
+          FROM in_app_campaign_schedules s
+          WHERE s.campaign_id=c.id
+        ),'[]'::jsonb) AS schedules,
+        COALESCE((
+          SELECT jsonb_build_object(
+            'views',count(*) FILTER (WHERE e.event_type='VIEW'),
+            'clicks',count(*) FILTER (WHERE e.event_type='CLICK'),
+            'closes',count(*) FILTER (WHERE e.event_type='CLOSE'),
+            'hideToday',count(*) FILTER (WHERE e.event_type='HIDE_TODAY')
+          )
+          FROM in_app_campaign_events e
+          WHERE e.campaign_id=c.id
+        ),'{}'::jsonb) AS metrics
+      FROM in_app_campaigns c
+      ORDER BY c.priority DESC,c.created_at DESC
+    `)).rows || [];
+    return { campaigns: rows };
+  }
+
+  async adminSetStatus(campaignIdRaw: unknown, statusRaw: unknown) {
+    const campaignId = String(campaignIdRaw || "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(campaignId)) {
+      throw new BadRequestException("invalid campaign id");
+    }
+    const status = String(statusRaw || "").toUpperCase();
+    if (!["ACTIVE","PAUSED","ARCHIVED"].includes(status)) {
+      throw new BadRequestException("invalid campaign status");
+    }
+    const row = await this.db.one(
+      `UPDATE in_app_campaigns
+       SET status=$2,updated_at=now()
+       WHERE id=$1
+       RETURNING id,code,title,status,updated_at`,
+      [campaignId, status]
+    );
+    if (!row) throw new BadRequestException("campaign not found");
+    return row;
+  }
+
   async record(
     userId: string,
     campaignIdRaw: unknown,
