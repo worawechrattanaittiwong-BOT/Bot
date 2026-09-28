@@ -224,6 +224,7 @@ export default function PromotionCenterPage() {
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [editor,setEditor]=useState<EditorState|null>(null);
+  const [previewCampaign,setPreviewCampaign]=useState<Campaign|null>(null);
   const [archiveConfirm,setArchiveConfirm]=useState(false);
 
   async function load() {
@@ -532,6 +533,9 @@ export default function PromotionCenterPage() {
                       </div>
 
                       <div className={s.actions}>
+                        <button type="button" className={s.previewButton} onClick={()=>setPreviewCampaign(campaign)}>
+                          Preview Popup
+                        </button>
                         <button type="button" className={s.editButton} onClick={()=>{setArchiveConfirm(false);setEditor(campaignToEditor(campaign));}}>
                           แก้ไข Campaign
                         </button>
@@ -564,6 +568,31 @@ export default function PromotionCenterPage() {
           )}
         </div>
       </main>
+
+      {previewCampaign?(
+        <div className={s.previewLayer} role="presentation" onMouseDown={event=>{
+          if(event.target===event.currentTarget) setPreviewCampaign(null);
+        }}>
+          <section className={s.popupPreview} role="dialog" aria-modal="true" aria-label={"Preview "+previewCampaign.title}>
+            <button type="button" className={s.popupClose} aria-label="ปิด Preview" onClick={()=>setPreviewCampaign(null)}>×</button>
+            {previewCampaign.image_url?(
+              <picture>
+                {previewCampaign.mobile_image_url?<source media="(max-width: 720px)" srcSet={previewCampaign.mobile_image_url}/>:null}
+                <img src={previewCampaign.image_url} alt={previewCampaign.title}/>
+              </picture>
+            ):(
+              <div className={s.popupFallback}><b>{previewCampaign.title}</b><span>ยังไม่มีรูปโฆษณา</span></div>
+            )}
+            <footer className={s.popupFooter}>
+              <label><input type="checkbox" disabled/><span>ไม่แสดงโฆษณานี้อีกในวันนี้</span></label>
+              <a href={previewCampaign.target_url} target="_blank" rel="noreferrer">
+                {previewCampaign.cta_label||"ดูรายละเอียด"} <span>›</span>
+              </a>
+            </footer>
+            <div className={s.previewNote}>Preview เท่านั้น · ไม่บันทึก View / Click และไม่ใช้โควตาการแสดงจริง</div>
+          </section>
+        </div>
+      ):null}
 
       {editor?(
         <div className={s.editorLayer} role="presentation" onMouseDown={event=>{
