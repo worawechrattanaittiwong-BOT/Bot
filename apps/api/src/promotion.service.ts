@@ -162,6 +162,76 @@ export class PromotionService {
     `);
   }
 
+  async preview(input: {
+    code?: string;
+    userId: string;
+    mode: "LOCAL" | "CLOUD";
+    months: number;
+    originalAmountSatang: number;
+  }) {
+    const code = this.normalizeCode(input.code);
+    if (!/^SNV-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(code)) {
+      throw new BadRequestException("รูปแบบรหัสโปรโมชั่นไม่ถูกต้อง");
+    }
+    await this.releaseExpiredReservations();
+    const promo = await this.db.one(
+      "SELECT * FROM promotion_codes WHERE code=$1",
+      [code]
+    );
+    if (!promo || !promo.active) throw new ConflictException("รหัสโปรโมชั่นไม่พร้อมใช้งาน");
+
+    const now = Date.now();
+    if (new Date(promo.starts_at).getTime() > now) {
+      throw new ConflictException("โปรโมชั่นนี้ยังไม่ถึงเวลาเริ่มใช้");
+    }
+    if (new Date(promo.ends_at).getTime() <= now) {
+      throw new ConflictException("โปรโมชั่นนี้หมดอายุแล้ว");
+    }
+
+    if (!promo.applies_to_all_packages) {
+      const rule = await this.db.one(
+        "SELECT 1 FROM promotion_package_rules WHERE promotion_id=$1 AND mode=$2 AND months=$3",
+        [promo.id, input.mode, input.months]
+      );
+      if (!rule) throw new ConflictException("โปรโมชั่นนี้ใช้กับแพ็กเกจที่เลือกไม่ได้");
+    }
+
+    const usage = await this.db.one(`
+      SELECT
+        count(*) FILTER (WHERE status='USED')::int used,
+        count(*) FILTER (WHERE status='RESERVED')::int reserved
+      FROM promotion_redemptions
+      WHERE promotion_id=$1
+    `, [promo.id]);
+    if (Number(usage?.used || 0) + Number(usage?.reserved || 0) >= Number(promo.usage_limit)) {
+      throw new ConflictException("สิทธิ์โปรโมชั่นถูกใช้ครบแล้ว");
+    }
+
+    const userUsage = await this.db.one(`
+      SELECT
+        count(*) FILTER (WHERE status='USED')::int used,
+        count(*) FILTER (WHERE status='RESERVED')::int reserved
+      FROM promotion_redemptions
+      WHERE promotion_id=$1 AND user_id=$2
+    `, [promo.id, input.userId]);
+    if (Number(userUsage?.used || 0) + Number(userUsage?.reserved || 0) >= Number(promo.per_user_limit)) {
+      throw new ConflictException("บัญชีนี้ใช้โปรโมชั่นครบจำนวนที่กำหนดแล้ว");
+    }
+
+    const originalAmountSatang = Math.max(0, Math.trunc(Number(input.originalAmountSatang || 0)));
+    const discountPercent = Number(promo.discount_percent || 0);
+    const discountAmountSatang = Math.floor(originalAmountSatang * discountPercent / 100);
+    const finalAmountSatang = Math.max(0, originalAmountSatang - discountAmountSatang);
+
+    return {
+      code: promo.code,
+      active: true,
+      discountPercent,
+      discountAmountSatang,
+      finalAmountSatang
+    };
+  }
+
   async reserve(
     tx: PoolClient,
     input: { code?: string; userId: string; mode: "LOCAL" | "CLOUD"; months: number; originalAmountSatang: number }
