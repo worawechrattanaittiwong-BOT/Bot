@@ -631,12 +631,22 @@ export class BotController {
       }
     }
 
-    // Legacy fallback keeps already-issued subscriptions working while their slot
-    // migration catches up.
-    const legacySub = await this.db.one(
-      "SELECT s.id,s.expires_at,p.code,p.mode,p.max_mt5_accounts,p.allow_resale FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
-      [userId, mode]
-    );
+    // Legacy fallback is only for a slot that has not been linked to a
+    // subscription yet. Once a Slot owns a subscription, its expiry is
+    // independent; an active subscription on VPS Slot #1 must never unlock an
+    // expired VPS Slot #2.
+    const linkedSlot = slotId
+      ? await this.db.one(
+          "SELECT subscription_id FROM license_slots WHERE id=$1 AND assigned_user_id=$2",
+          [slotId, userId]
+        )
+      : null;
+    const legacySub = !slotId || !linkedSlot?.subscription_id
+      ? await this.db.one(
+          "SELECT s.id,s.expires_at,p.code,p.mode,p.max_mt5_accounts,p.allow_resale FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
+          [userId, mode]
+        )
+      : null;
     if (legacySub) {
       return { allowed: true, source: "SUBSCRIPTION", expiresAt: legacySub.expires_at };
     }
