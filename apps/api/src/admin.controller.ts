@@ -329,6 +329,96 @@ export class AdminController {
     return row;
   }
 
+  @Post("access-groups/grant")
+  async grantAccessGroup(@Body() body: {
+    groupId: string;
+    userId: string;
+    mode: "LOCAL" | "CLOUD";
+    days?: number;
+  }) {
+    const mode = String(body.mode || "").toUpperCase();
+    if (!["LOCAL","CLOUD"].includes(mode)) {
+      throw new ConflictException("โหมดสิทธิ์ต้องเป็น Local หรือ Cloud VPS");
+    }
+
+    const group = await this.db.one(
+      "SELECT id,name,enabled,trial_days FROM access_groups WHERE id=$1",
+      [body.groupId]
+    );
+    if (!group) throw new ConflictException("ไม่พบกลุ่มทดลอง");
+    if (!group.enabled) throw new ConflictException("กลุ่มทดลองนี้ปิดอยู่ กรุณาเปิดกลุ่มก่อน");
+
+    const user = await this.db.one(
+      "SELECT id,user_code,role,status FROM users WHERE id=$1",
+      [body.userId]
+    );
+    if (!user || user.status !== "ACTIVE") throw new ConflictException("บัญชีลูกค้าไม่พร้อมใช้งาน");
+    if (user.role === "OWNER" || user.role === "ADMIN") {
+      throw new ConflictException("OWNER/ADMIN มีสิทธิ์ถาวรอยู่แล้ว");
+    }
+
+    const days = Math.max(
+      1,
+      Math.min(365, Math.trunc(Number(body.days || group.trial_days || 1)))
+    );
+    const grant = await this.db.one(
+      `INSERT INTO access_group_grants(
+         access_group_id,user_id,mode,starts_at,expires_at,status,created_by
+       )
+       VALUES($1,$2,$3,now(),now()+make_interval(days=>$4::int),'ACTIVE','OWNER')
+       ON CONFLICT(access_group_id,user_id,mode) DO UPDATE SET
+         starts_at=now(),
+         expires_at=now()+make_interval(days=>$4::int),
+         status='ACTIVE',
+         created_by='OWNER',
+         updated_at=now()
+       RETURNING *`,
+      [body.groupId, body.userId, mode, days]
+    );
+
+    let slot = await this.db.one(
+      `SELECT id,mode,status,subscription_id
+       FROM license_slots
+       WHERE assigned_user_id=$1
+         AND mode=$2
+         AND status IN ('ACTIVE','AVAILABLE')
+       ORDER BY CASE WHEN subscription_id IS NOT NULL THEN 0 ELSE 1 END,slot_number,created_at
+       LIMIT 1`,
+      [body.userId, mode]
+    );
+    if (!slot) {
+      const max = await this.db.one(
+        "SELECT COALESCE(max(slot_number),0)::int max_slot FROM license_slots WHERE owner_user_id=$1 AND mode=$2",
+        [body.userId, mode]
+      );
+      slot = await this.db.one(
+        `INSERT INTO license_slots(
+           owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label
+         )
+         VALUES($1,$1,NULL,$2,$3,'PERSONAL','ACTIVE',$4)
+         RETURNING id,mode,status,subscription_id`,
+        [
+          body.userId,
+          mode,
+          Number(max?.max_slot || 0) + 1,
+          mode === "CLOUD" ? "Group Trial VPS" : "Group Trial Local"
+        ]
+      );
+    }
+
+    await this.audit("OWNER", "GRANT_ACCESS_GROUP", "access_group_grant", grant.id, {
+      groupId: group.id,
+      groupName: group.name,
+      userId: body.userId,
+      userCode: user.user_code,
+      mode,
+      days,
+      expiresAt: grant.expires_at,
+      paidMembershipUnaffected: true
+    });
+    return { ...grant, groupName: group.name, userCode: user.user_code, days, slot };
+  }
+
   @Post("access-groups/delete")
   async deleteAccessGroup(@Body() body: { groupId: string }) {
     const group = await this.db.one(
