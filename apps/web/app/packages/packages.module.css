@@ -1132,6 +1132,13 @@
 .checkoutSteps b { display: grid; place-items: center; width: 25px; height: 25px; border: 1px solid #a69abd33; border-radius: 50%; font-size: var(--ui-type-caption); font-weight: 500; }
 .checkoutSteps span[aria-current] { color: #d9cdf7; }
 .checkoutSteps span[aria-current] b { background: #30263f; border-color: #a38bb36b; }
+.checkoutStepActive { color:#ddd1fb!important; }
+.checkoutStepDone { color:#8ecbac!important; }
+.checkoutStepDone b {
+  border-color:rgba(88,170,126,.42)!important;
+  background:rgba(36,91,61,.42)!important;
+  color:#a5ddb9!important;
+}
 .checkoutSteps i { width: 40px; height: 1px; background: #9e91b733; }
 .checkoutColumns { display: grid; grid-template-columns: .85fr 1.15fr; gap: 30px; }
 .checkoutPlan { position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; gap: 15px; padding: 28px; border: 1px solid #a18dc35e; border-radius: 17px; background: linear-gradient(155deg, #2c2541, #151827 85%); }
@@ -1153,6 +1160,49 @@
 .promoInput input { min-width: 0; flex: 1; min-height: 44px; padding: 11px 12px; border: 1px solid #a59abc3b; border-radius: 9px; background: #0b0e17; color: #ece5f9; font-size: 12px; }
 .promoInput input::placeholder { color: #858ba1; }
 .promoInput button { padding: 10px 14px; border: 1px solid #a395ba40; border-radius: 9px; background: #252133; color: #d1c1eb; font-size: 12px; cursor: pointer; }
+.promoInputActive input {
+  border-color:#4f9674;
+  box-shadow:0 0 0 3px rgba(80,170,126,.09);
+}
+.promoInputError input {
+  border-color:#8a5360;
+  box-shadow:0 0 0 3px rgba(191,86,110,.08);
+}
+.promoInput .promoActiveButton {
+  border-color:#3e795e;
+  background:#10251c;
+  color:#86d7ad;
+}
+.promoNotice {
+  margin-top:7px;
+  color:#d4ae78;
+  font-size:11px;
+  line-height:1.45;
+}
+.promoLive {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:9px;
+  padding:8px 10px;
+  border:1px solid rgba(76,158,115,.35);
+  border-radius:9px;
+  background:rgba(20,57,39,.36);
+  color:#93d9b4;
+  font-size:11px;
+  line-height:1.4;
+}
+.promoLive span {
+  color:#b6e7cb;
+  font-family:Consolas,monospace;
+  font-weight:700;
+  letter-spacing:.04em;
+}
+.promoLive b {
+  color:#91d9b2;
+  font-weight:700;
+}
 .checkoutHint { display: block; margin: 10px 0; color: #9da4ba; font-size: 11px; line-height: 1.85; }
 .summaryTotal { align-items: center; margin-top: 22px; padding-top: 20px; border-top: 1px solid #a6a0bc26; color: #e0dcea; }
 .summaryTotal small { display: block; margin-top: 5px; color: #9da4ba; font-size: var(--ui-type-caption); }
@@ -1163,6 +1213,60 @@
 .paymentMethod p { margin: 5px 0 0; color: #a5a0b8; font-size: 11px; line-height: 1.7; }
 .confirmCheckout { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 48px; margin-top: 20px; padding: 13px 18px; border: 1px solid #d2c1f1; border-radius: 11px; background: linear-gradient(110deg, #d3c3f3, #b9a2df); color: #241932; font-size: 13px !important; font-weight: 600 !important; cursor: pointer; }
 .confirmCheckout:hover:not(:disabled) { background: #e0d0fc; }
+.checkoutPaymentStage {
+  padding:2px 0 4px;
+}
+.checkoutPaymentStage .paymentCard {
+  margin:0;
+}
+.paymentCardInline {
+  grid-template-columns:minmax(230px,280px) minmax(0,1fr);
+  align-items:start;
+  padding:18px;
+  border-color:rgba(155,140,190,.28);
+  border-radius:16px;
+  background:
+    radial-gradient(circle at 0 0,rgba(91,65,139,.12),transparent 42%),
+    linear-gradient(145deg,#0c111a,#090d15);
+}
+.paymentQrWrap {
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  padding:14px;
+  border:1px solid rgba(166,149,199,.2);
+  border-radius:14px;
+  background:linear-gradient(150deg,rgba(27,23,42,.82),rgba(10,13,20,.96));
+}
+.paymentQrWrap .paymentQr {
+  width:100%;
+  max-width:230px;
+  min-height:0;
+  aspect-ratio:1;
+  margin:0 auto;
+  padding:8px;
+  border-color:rgba(255,255,255,.92);
+  border-radius:12px;
+}
+.paymentQrWrap .paymentQr img {
+  width:100%;
+  height:100%;
+  padding:0;
+  object-fit:contain;
+}
+.paymentQrWrap > span {
+  margin-top:3px;
+  color:#8f98aa;
+  font-size:11px;
+}
+.paymentQrWrap > b {
+  color:#eee9f8;
+  font-size:18px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
 .cancelCheckout { display: block; min-height: 40px; margin: 8px auto 0; padding: 8px 20px; border: 0; background: transparent; color: #b0a7c4; font-size: 12px !important; cursor: pointer; }
 .checkoutDialog button:disabled { opacity: .5; cursor: not-allowed; }
 .shell button:focus-visible, .shell input:focus-visible, .checkoutDialog button:focus-visible, .checkoutDialog input:focus-visible { outline: 2px solid #d1bdf4; outline-offset: 3px; }
@@ -1229,6 +1333,24 @@
   .checkoutSteps i { flex: 1; min-width: 8px; max-width: 40px; }
   .checkoutSteps span { gap: 6px; font-size: var(--ui-type-caption); }
   .checkoutColumns { grid-template-columns: 1fr; gap: 22px; }
+  .checkoutPaymentStage .paymentCardInline {
+    grid-template-columns:1fr;
+    padding:14px;
+    gap:18px;
+  }
+  .paymentQrWrap {
+    width:100%;
+    max-width:340px;
+    margin:0 auto;
+  }
+  .paymentQrWrap .paymentQr {
+    max-width:260px;
+  }
+  .promoLive {
+    align-items:flex-start;
+    flex-direction:column;
+    gap:3px;
+  }
   .checkoutPlan { padding: 22px; gap: 10px; }
   .checkoutPlan > svg { display: none; }
   .checkoutPlan h3 { font-size: 22px; }
