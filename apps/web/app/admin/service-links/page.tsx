@@ -78,15 +78,15 @@ type CredentialForm = {
 
 const EMPTY_LINK: LinkForm = { name: "", purpose: "", url: "", note: "" };
 const EMPTY_CREDENTIAL: CredentialForm = {
-  preset: "CUSTOM",
-  category: "OTHER",
-  label: "",
-  configKey: "SERVICE_API_KEY",
+  preset: "EASYSLIP_API_KEY",
+  category: "PAYMENT",
+  label: "EasySlip API Key",
+  configKey: "EASYSLIP_API_KEY",
   value: "",
   companionValue: "",
-  note: "",
+  note: "เชื่อม EasySlip สำหรับตรวจสลิปและเปิดสิทธิ์แพ็กเกจอัตโนมัติ",
   active: true,
-  provider: "",
+  provider: "EasySlip",
   testUrl: "",
   authMode: "BEARER",
   headerName: ""
