@@ -6957,16 +6957,33 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
     white-space:nowrap;
   }
 
-  /* Secondary mobile menu sits above the primary bot controls instead of
-     covering the Stop button. */
-  .owner-mobile-nav-trigger-wrap{
-    right:12px!important;
-    bottom:calc(94px + env(safe-area-inset-bottom))!important;
-    z-index:2300!important;
+  /* Keep the secondary navigation in the top app header, physically away
+     from the persistent Start / Stop controls to prevent accidental Stop taps. */
+  .mobile-app-head{
+    gap:10px;
   }
-  .owner-mobile-nav-trigger{
-    min-width:88px!important;
-    min-height:46px!important;
+  .mobile-app-head-actions{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:7px;
+    flex:0 0 auto;
+  }
+  .mobile-app-head .owner-mobile-nav-trigger-wrap{
+    position:static!important;
+    inset:auto!important;
+    right:auto!important;
+    bottom:auto!important;
+    width:auto!important;
+    z-index:auto!important;
+    pointer-events:auto!important;
+  }
+  .mobile-app-head .owner-mobile-nav-trigger{
+    min-width:78px!important;
+    min-height:40px!important;
+    padding:7px 10px!important;
+    border-radius:12px!important;
+    gap:6px!important;
   }
 
   .cc-overview{
