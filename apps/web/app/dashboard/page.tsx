@@ -179,6 +179,7 @@ export default function DashboardPage() {
   const statusDialogRef = useRef<HTMLDialogElement | null>(null);
   const symbolDialogRef = useRef<HTMLDialogElement | null>(null);
   const ownerVpsDialogRef = useRef<HTMLDialogElement | null>(null);
+  const cloudMt5DialogRef = useRef<HTMLDialogElement | null>(null);
   const vpsSlotDialogRef = useRef<HTMLDialogElement | null>(null);
   const [cloudCatalog, setCloudCatalog] = useState<CloudCatalog | null>(null);
   const [cloudOrders, setCloudOrders] = useState<CloudOrder[]>([]);
@@ -219,6 +220,8 @@ export default function DashboardPage() {
   const [brokerServer, setBrokerServer] = useState("");
   const [customBrokerServer, setCustomBrokerServer] = useState("");
   const [tradingPassword, setTradingPassword] = useState("");
+  const [cloudMt5DialogMode, setCloudMt5DialogMode] = useState<"NEW"|"RECONNECT">("NEW");
+  const [cloudMt5DialogAccountId, setCloudMt5DialogAccountId] = useState("");
   const [installToken, setInstallToken] = useState("");
   const [installInstanceId, setInstallInstanceId] = useState("");
   const [activationMessage, setActivationMessage] = useState("");
@@ -1214,6 +1217,13 @@ export default function DashboardPage() {
   const selectedServer = brokerServer === "__CUSTOM__"
     ? customBrokerServer.trim()
     : brokerServer;
+  const mt5ServerQuery = String(brokerServer || "").trim().toLowerCase();
+  const mt5ServerSuggestions = (selectedBroker?.servers || [])
+    .filter(server =>
+      !mt5ServerQuery ||
+      String(server.serverName || "").toLowerCase().includes(mt5ServerQuery)
+    )
+    .slice(0, 8);
   const hasLocalConnectionSlot = (data?.slots || []).some((slot:any) =>
     String(slot?.mode || "").toUpperCase() === "LOCAL" &&
     Boolean(slot?.can_control) &&
@@ -1846,68 +1856,6 @@ export default function DashboardPage() {
     : "MQL5\\Presets";
   const presetFilePath = presetFolderPath + "\\SCENOVA-FastBasketBot.set";
 
-  async function linkAccount(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      if (!selectedBrokerName) throw new Error("กรุณาเลือก Broker");
-      if (!selectedServer) throw new Error("กรุณาเลือก MT5 Server");
-      const result = await api("/bot/mt5", {
-        method: "POST",
-        body: JSON.stringify({
-          slotId: selectedSlotIdRef.current || undefined,
-          accountNumber,
-          broker: selectedBrokerName,
-          brokerServer: selectedServer,
-          mode: "CLOUD"
-        })
-      });
-      setInstallToken(result.installToken || "");
-      setInstallInstanceId(result.instance?.id || "");
-      if (mode === "CLOUD" && tradingPassword) {
-        await api("/bot/mt5/cloud-credential", {
-          method: "POST",
-          body: JSON.stringify({ mt5AccountId: result.account.id, tradingPassword })
-        });
-      }
-      setTradingPassword("");
-      setNotice("บันทึกบัญชี MT5 แล้ว กำลังตรวจสอบการเชื่อมต่อ");
-      await load(selectedSlotIdRef.current);
-      setActiveView("account");
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function reconnectCloudAccount(e: FormEvent) {
-    e.preventDefault();
-    if (!data?.account?.id) return;
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      if (!tradingPassword) throw new Error("กรุณากรอก Trading Password");
-      await api("/bot/mt5/cloud-credential", {
-        method: "POST",
-        body: JSON.stringify({
-          mt5AccountId: data.account.id,
-          tradingPassword
-        })
-      });
-      setTradingPassword("");
-      setNotice("บันทึกข้อมูลแล้ว กำลังเชื่อมต่อ VPS ใหม่");
-      await load(selectedSlotIdRef.current, true);
-      setActiveView("account");
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function checkSoftwareVersions() {
     if (checkingVersion) return;
@@ -2368,14 +2316,15 @@ export default function DashboardPage() {
     return true;
   }
 
-  async function resetMt5() {
+  async function performMt5Reset() {
     const confirmed = await confirmPopup({
       title:"เปลี่ยนบัญชี MT5",
       tone:"warning",
-      message:"ระบบจะปิด MT5 เดิมบน VPS ก่อน แล้วนำบัญชีเดิมออกจาก Slot นี้ คุณจึงเชื่อมบัญชีใหม่ได้ โดยการตั้งค่าบอทของ Slot ยังอยู่เหมือนเดิม",
-      confirmLabel:"ปิด MT5 และเปลี่ยนบัญชี"
+      message:"ถ้าบอทหยุดและไม่มี Position / Pending Order ระบบจะปิด MT5 เดิมบน VPS แล้วให้เชื่อมบัญชีใหม่ได้ทันที",
+      confirmLabel:"เปลี่ยนบัญชี"
     });
-    if (!confirmed) return;
+    if (!confirmed) return false;
+
     setBusy(true);
     setError("");
     setNotice("");
@@ -2386,7 +2335,7 @@ export default function DashboardPage() {
 
       while (result?.pendingCloudStop && attempts < 45) {
         if (attempts === 0) {
-          setNotice("กำลังปิด MT5 เดิมบน VPS · รอ Server ยืนยันก่อนเปิดให้เชื่อมบัญชีใหม่");
+          setNotice("กำลังปิด MT5 เดิมบน VPS เพื่อเปลี่ยนบัญชี");
         }
         await new Promise(resolve=>window.setTimeout(resolve, 1200));
         result = await api(resetUrl, { method: "POST" });
@@ -2401,15 +2350,125 @@ export default function DashboardPage() {
       setInstallInstanceId("");
       setTradingPassword("");
       setAccountNumber("");
-      setNotice(
-        result?.cloudRuntimeStopped
-          ? "ปิด MT5 เดิมบน VPS แล้ว · พร้อมเชื่อมบัญชี MT5 ใหม่"
-          : "นำบัญชีเดิมออกแล้ว · พร้อมเชื่อมบัญชีใหม่"
-      );
+      setBrokerServer("");
+      setCustomBrokerServer("");
       await load(selectedSlotIdRef.current);
       setActiveView("account");
+      return true;
     } catch (e: any) {
       setError(e.message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetMt5() {
+    await performMt5Reset();
+  }
+
+  function prepareCloudMt5Dialog(slotId:string, dialogMode:"NEW"|"RECONNECT") {
+    const slot = cloudSlots.find((item:any)=>String(item?.id || "")===String(slotId || "")) || null;
+    if (slotId && slotId !== selectedSlotIdRef.current) {
+      selectSlot(slotId);
+    }
+
+    setCloudMt5DialogMode(dialogMode);
+    setCloudMt5DialogAccountId(dialogMode === "RECONNECT" ? String(slot?.mt5_account_id || "") : "");
+    setTradingPassword("");
+
+    if (dialogMode === "RECONNECT" && slot?.account_number) {
+      setAccountNumber(String(slot.account_number || ""));
+      const brokerMatch = brokerCatalog.find(item =>
+        String(item.name || "").toLowerCase() === String(slot.broker || "").toLowerCase() ||
+        String(item.code || "").toLowerCase() === String(slot.broker || "").toLowerCase()
+      );
+      if (brokerMatch) {
+        setBrokerCode(brokerMatch.code);
+        setCustomBrokerName("");
+      } else {
+        setBrokerCode("OTHER");
+        setCustomBrokerName(String(slot.broker || ""));
+      }
+      setBrokerServer(String(slot.broker_server || ""));
+      setCustomBrokerServer("");
+    } else {
+      setAccountNumber("");
+      setBrokerServer("");
+      setCustomBrokerServer("");
+      if (!brokerCatalog.some(item=>item.code===brokerCode)) {
+        setBrokerCode(brokerCatalog[0]?.code || "EXNESS");
+      }
+    }
+
+    window.setTimeout(()=>cloudMt5DialogRef.current?.showModal(),0);
+  }
+
+  async function beginCloudAccountChange() {
+    const blocked =
+      state === "RUNNING" ||
+      desired === "RUNNING" ||
+      Number(data?.instance?.metrics?.positions || 0) > 0 ||
+      Number(data?.instance?.metrics?.accountScenovaPendingOrders || 0) > 0;
+    if (blocked) {
+      setError("ต้องหยุดบอทและไม่มี Position / Pending Order ค้างอยู่ก่อนเปลี่ยนบัญชี");
+      return;
+    }
+
+    const slotId = String(selectedSlotIdRef.current || data?.selectedSlot?.id || "");
+    const ok = await performMt5Reset();
+    if (ok) prepareCloudMt5Dialog(slotId,"NEW");
+  }
+
+  async function submitCloudMt5Dialog(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      if (!tradingPassword) throw new Error("กรุณากรอก MT5 Trading Password");
+
+      if (cloudMt5DialogMode === "RECONNECT" && cloudMt5DialogAccountId) {
+        await api("/bot/mt5/cloud-credential", {
+          method:"POST",
+          body:JSON.stringify({
+            mt5AccountId:cloudMt5DialogAccountId,
+            tradingPassword
+          })
+        });
+      } else {
+        if (!accountNumber.trim()) throw new Error("กรุณากรอก MT5 Login");
+        if (!selectedBrokerName) throw new Error("กรุณาเลือก Broker");
+        if (!selectedServer.trim()) throw new Error("กรุณาเลือกหรือพิมพ์ MT5 Server");
+
+        const result = await api("/bot/mt5", {
+          method:"POST",
+          body:JSON.stringify({
+            slotId:selectedSlotIdRef.current || undefined,
+            accountNumber:accountNumber.trim(),
+            broker:selectedBrokerName,
+            brokerServer:selectedServer.trim(),
+            mode:"CLOUD"
+          })
+        });
+        await api("/bot/mt5/cloud-credential", {
+          method:"POST",
+          body:JSON.stringify({
+            mt5AccountId:result.account.id,
+            tradingPassword
+          })
+        });
+      }
+
+      setTradingPassword("");
+      cloudMt5DialogRef.current?.close();
+      setNotice(cloudMt5DialogMode === "RECONNECT"
+        ? "บันทึกรหัสแล้ว กำลังเชื่อม MT5 บน VPS ใหม่"
+        : "เชื่อมบัญชี MT5 ใหม่แล้ว กำลังเปิดบน VPS");
+      await load(selectedSlotIdRef.current,true);
+    } catch (e:any) {
+      setError(String(e?.message || "เชื่อม MT5 ไม่สำเร็จ"));
     } finally {
       setBusy(false);
     }
@@ -3852,6 +3911,7 @@ export default function DashboardPage() {
                 capacity={Number(cloudCatalog?.available || 0)}
                 ownerCanPrice={String(data.user?.role || "").toUpperCase()==="OWNER"}
                 onSelect={(slotId:string)=>selectSlot(slotId)}
+                onConnect={(slotId:string)=>prepareCloudMt5Dialog(slotId,"NEW")}
                 onBuy={()=>openVpsSlotDialog("")}
                 onRenew={(slotId:string)=>openVpsSlotDialog(slotId)}
                 onPrimaryRenew={openPrimaryPackagePage}
@@ -3865,7 +3925,7 @@ export default function DashboardPage() {
                   account={data.account}
                   online={accountConnectionOnline}
                   busy={busy}
-                  downloadBlocked={desired==="RUNNING" || (state==="RUNNING" && isMt5Online) || Number(data.instance?.metrics?.positions || 0)>0}
+                  downloadBlocked={desired==="RUNNING" || (state==="RUNNING" && isMt5Online) || Number(data?.instance?.metrics?.positions || 0)>0}
                   apiBase={mt5ApiBase}
                   message={activationMessage}
                   error={error}
@@ -3877,7 +3937,7 @@ export default function DashboardPage() {
                     blockedReason:
                       desired === "RUNNING" || state === "RUNNING"
                         ? "กรุณากด Safe Stop ก่อนย้ายไป VPS"
-                        : Number(data.instance?.metrics?.positions || 0) > 0
+                        : Number(data?.instance?.metrics?.positions || 0) > 0
                           ? "ต้องไม่มี Position ค้างก่อนย้ายไป VPS"
                           : "",
                     packageHref:"/packages?system=cloud&from=mt5-ea",
@@ -3950,129 +4010,189 @@ export default function DashboardPage() {
               </>
             )}
 
-            {data.selectedSlot?.mode === "CLOUD" && (
-              !data.account || !isMt5Online ? (
-                <section className="panel purple setup-panel">
-                  <div className="setup-heading">
-                    <div>
-                      <div className="eyebrow">{data.account ? "VPS RECONNECT" : "CLOUD MT5"}</div>
-                      <h2>{data.account ? "VPS หลุดการเชื่อมต่อ · เชื่อม MT5 ใหม่" : "เชื่อม MT5 Login สำหรับ VPS"}</h2>
-                      <p className="muted">
-                        {data.account
-                          ? "กรอก Trading Password เพื่อเชื่อมต่อ VPS อีกครั้ง"
-                          : "กรอก MT5 Login, Trading Password และ Server เพื่อเชื่อมต่อ VPS"}
-                      </p>
-                    </div>
+            {data.selectedSlot?.mode === "CLOUD" && data.account && (
+              <section className="panel vps-connected-card">
+                <div className="vps-connected-copy">
+                  <div className="eyebrow">SELECTED VPS SLOT</div>
+                  <div className="vps-connected-title-row">
+                    <h2>{data.account.account_number}</h2>
+                    <span className={"badge " + (isMt5Online ? "" : "warn")}>
+                      <span className={"dot " + (isMt5Online ? "green" : "amber")}/>
+                      {isMt5Online ? "ออนไลน์" : "ออฟไลน์"}
+                    </span>
                   </div>
-                  <form className="form-grid form-grid-human" onSubmit={data.account ? reconnectCloudAccount : linkAccount}>
-                    {data.account ? (
-                      <>
-                        <div className="field">
-                          <label>MT5 Login</label>
-                          <input className="input" value={String(data.account.account_number || "")} readOnly />
-                        </div>
-                        <div className="field">
-                          <label>Broker</label>
-                          <input className="input" value={String(data.account.broker || "")} readOnly />
-                        </div>
-                        <div className="field">
-                          <label>MT5 Server</label>
-                          <input className="input" value={String(data.account.broker_server || "")} readOnly />
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="field">
-                          <label>MT5 Login</label>
-                          <input className="input" inputMode="numeric" value={accountNumber} onChange={e=>setAccountNumber(e.target.value)} required />
-                        </div>
-                        <div className="field">
-                          <label>Broker</label>
-                          <select className="input" value={brokerCode} onChange={e=>{setBrokerCode(e.target.value);setBrokerServer("");setCustomBrokerServer("");}} required>
-                            {brokerCatalog.map(b=><option key={b.code} value={b.code}>{b.name}</option>)}
-                            {!brokerCatalog.length && <option value="EXNESS">Exness</option>}
-                          </select>
-                        </div>
-                        {brokerCode === "OTHER" && <div className="field"><label>ชื่อ Broker</label><input className="input" value={customBrokerName} onChange={e=>setCustomBrokerName(e.target.value)} required /></div>}
-                        <div className="field">
-                          <label>MT5 Server</label>
-                          <select className="input" value={brokerServer} onChange={e=>setBrokerServer(e.target.value)} required>
-                            <option value="">เลือก Server</option>
-                            {(selectedBroker?.servers || []).map(server=><option key={server.serverName} value={server.serverName}>{server.serverName}{server.environment!=="UNKNOWN"?" · "+server.environment:""}</option>)}
-                            <option value="__CUSTOM__">ไม่พบในรายการ — ระบุเอง</option>
-                          </select>
-                        </div>
-                        {brokerServer === "__CUSTOM__" && <div className="field"><label>ชื่อ MT5 Server</label><input className="input" value={customBrokerServer} onChange={e=>setCustomBrokerServer(e.target.value)} required /></div>}
-                      </>
-                    )}
-                    <div className="field">
-                      <label>Trading Password</label>
-                      <input className="input" type="password" value={tradingPassword} onChange={e=>setTradingPassword(e.target.value)} required />
-                    </div>
-                    <div className="field submit-field">
-                      <button className="btn primary btn-lg" disabled={busy}>
-                        {busy ? "กำลังเชื่อม..." : data.account ? "บันทึกรหัสและเชื่อม VPS ใหม่" : "เชื่อม VPS MT5"}
-                      </button>
-                    </div>
-                  </form>
-                  {data.account && (
-                    <div className="vps-reconnect-foot">
-                      <div className="help">ใช้บัญชีและ Server เดิมสำหรับการเชื่อมต่อครั้งนี้</div>
-                      <button
-                        type="button"
-                        className="btn ghost"
-                        disabled={
-                          busy ||
-                          state==="RUNNING" ||
-                          desired==="RUNNING" ||
-                          Number(data.instance?.metrics?.positions || 0)>0 ||
-                          Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
-                        }
-                        onClick={resetMt5}
-                      >
-                        เปลี่ยนเป็นบัญชี MT5 อื่น
-                      </button>
-                    </div>
-                  )}
-                </section>
-              ) : (
-                <section className="panel vps-connected-card">
-                  <div className="vps-connected-copy">
-                    <div className="eyebrow">SELECTED VPS SLOT · CONNECTED</div>
-                    <div className="vps-connected-title-row">
-                      <h2>{data.account.account_number}</h2>
-                      <span className="badge"><span className="dot green"/>ออนไลน์</span>
-                    </div>
-                    <p className="muted">{data.account.broker} · {data.account.broker_server} · Slot #{data.selectedSlot?.slot_number || "—"}</p>
-                  </div>
-                  <div className="vps-connected-actions">
+                  <p className="muted">{data.account.broker} · {data.account.broker_server} · Slot #{data.selectedSlot?.slot_number || "—"}</p>
+                </div>
+                <div className="vps-connected-actions">
+                  {!isMt5Online && (
                     <button
-                      className="btn ghost"
-                      disabled={
-                        busy ||
-                        state==="RUNNING" ||
-                        desired==="RUNNING" ||
-                        Number(data.instance?.metrics?.positions || 0)>0 ||
-                        Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
-                      }
-                      title={
-                        state==="RUNNING" || desired==="RUNNING"
-                          ? "หยุดบอทก่อนเปลี่ยนบัญชี"
-                          : Number(data.instance?.metrics?.positions || 0)>0 || Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
-                            ? "ปิด Position และ Pending Order ของ SCENOVA ให้หมดก่อนเปลี่ยนบัญชี"
-                            : "ปิด MT5 เดิมบน VPS แล้วเชื่อมบัญชีใหม่"
-                      }
-                      onClick={resetMt5}
+                      type="button"
+                      className="btn primary"
+                      disabled={busy}
+                      onClick={()=>prepareCloudMt5Dialog(String(data.selectedSlot?.id || ""),"RECONNECT")}
                     >
-                      {busy ? "กำลังดำเนินการ..." : "เปลี่ยนบัญชี VPS"}
+                      เชื่อม MT5 ใหม่
                     </button>
-                  </div>
-                </section>
-              )
+                  )}
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    disabled={
+                      busy ||
+                      state==="RUNNING" ||
+                      desired==="RUNNING" ||
+                      Number(data?.instance?.metrics?.positions || 0)>0 ||
+                      Number(data?.instance?.metrics?.accountScenovaPendingOrders || 0)>0
+                    }
+                    title={
+                      state==="RUNNING" || desired==="RUNNING"
+                        ? "หยุดบอทก่อนเปลี่ยนบัญชี"
+                        : Number(data?.instance?.metrics?.positions || 0)>0 || Number(data?.instance?.metrics?.accountScenovaPendingOrders || 0)>0
+                          ? "ปิด Position และ Pending Order ให้หมดก่อนเปลี่ยนบัญชี"
+                          : "เปลี่ยนบัญชี MT5 ได้ทันที"
+                    }
+                    onClick={()=>void beginCloudAccountChange()}
+                  >
+                    {busy ? "กำลังดำเนินการ..." : "เปลี่ยนบัญชี VPS"}
+                  </button>
+                </div>
+              </section>
             )}
 
           </div>
         )}
+
+        <dialog
+          ref={cloudMt5DialogRef}
+          className="cloud-mt5-dialog"
+          onClose={()=>{
+            setTradingPassword("");
+            setCloudMt5DialogAccountId("");
+            setCloudMt5DialogMode("NEW");
+          }}
+        >
+          <form className="cloud-mt5-dialog-card" onSubmit={submitCloudMt5Dialog}>
+            <header className="cloud-mt5-dialog-head">
+              <div>
+                <div className="eyebrow">VPS MT5 CONNECTION</div>
+                <h2>{cloudMt5DialogMode === "RECONNECT" ? "เชื่อม MT5 เดิมอีกครั้ง" : "เชื่อมบัญชี MT5"}</h2>
+                <p>
+                  {cloudMt5DialogMode === "RECONNECT"
+                    ? "กรอก Trading Password เพื่อเปิด MT5 บัญชีเดิมบน VPS อีกครั้ง"
+                    : "กรอก Login, Broker, Server และ Trading Password สำหรับ Slot ที่เลือก"}
+                </p>
+              </div>
+              <button type="button" aria-label="ปิด" disabled={busy} onClick={()=>cloudMt5DialogRef.current?.close()}>×</button>
+            </header>
+
+            <div className="cloud-mt5-dialog-grid">
+              <label className="field">
+                <span>MT5 Login</span>
+                <input
+                  className="input"
+                  inputMode="numeric"
+                  autoFocus
+                  value={accountNumber}
+                  readOnly={cloudMt5DialogMode === "RECONNECT"}
+                  onChange={e=>setAccountNumber(e.target.value.replace(/\D/g,""))}
+                  placeholder="เช่น 12345678"
+                  required
+                />
+              </label>
+
+              <label className="field">
+                <span>Broker</span>
+                <select
+                  className="input"
+                  value={brokerCode}
+                  disabled={cloudMt5DialogMode === "RECONNECT"}
+                  onChange={e=>{
+                    setBrokerCode(e.target.value);
+                    setBrokerServer("");
+                    setCustomBrokerServer("");
+                  }}
+                  required
+                >
+                  {brokerCatalog.map(b=><option key={b.code} value={b.code}>{b.name}</option>)}
+                  {!brokerCatalog.length && <option value="EXNESS">Exness</option>}
+                  <option value="OTHER">อื่น ๆ</option>
+                </select>
+              </label>
+
+              {brokerCode === "OTHER" && (
+                <label className="field">
+                  <span>ชื่อ Broker</span>
+                  <input
+                    className="input"
+                    value={customBrokerName}
+                    readOnly={cloudMt5DialogMode === "RECONNECT"}
+                    onChange={e=>setCustomBrokerName(e.target.value)}
+                    placeholder="ชื่อ Broker"
+                    required
+                  />
+                </label>
+              )}
+
+              <label className="field cloud-mt5-server-field">
+                <span>MT5 Server</span>
+                <input
+                  className="input"
+                  list="cloud-mt5-server-options"
+                  value={brokerServer}
+                  readOnly={cloudMt5DialogMode === "RECONNECT"}
+                  onChange={e=>setBrokerServer(e.target.value)}
+                  placeholder="พิมพ์ เช่น 13 หรือ Exness-MT5Real13"
+                  autoComplete="off"
+                  required
+                />
+                <datalist id="cloud-mt5-server-options">
+                  {(selectedBroker?.servers || []).map(server=>(
+                    <option key={server.serverName} value={server.serverName}>
+                      {server.environment!=="UNKNOWN" ? server.environment : ""}
+                    </option>
+                  ))}
+                </datalist>
+                {cloudMt5DialogMode !== "RECONNECT" && brokerServer.trim() && mt5ServerSuggestions.length > 0 && (
+                  <div className="cloud-mt5-server-suggestions">
+                    {mt5ServerSuggestions.map(server=>(
+                      <button
+                        type="button"
+                        key={server.serverName}
+                        onClick={()=>setBrokerServer(server.serverName)}
+                      >
+                        <b>{server.serverName}</b>
+                        {server.environment!=="UNKNOWN" && <span>{server.environment}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <small>เลือกจาก Server ที่ระบบมีจริง หรือพิมพ์ชื่อ Server เองได้</small>
+              </label>
+
+              <label className="field cloud-mt5-password-field">
+                <span>MT5 Trading Password</span>
+                <input
+                  className="input"
+                  type="password"
+                  autoComplete="off"
+                  value={tradingPassword}
+                  onChange={e=>setTradingPassword(e.target.value)}
+                  placeholder="Trading Password"
+                  required
+                />
+              </label>
+            </div>
+
+            <footer className="cloud-mt5-dialog-actions">
+              <button type="button" className="btn ghost" disabled={busy} onClick={()=>cloudMt5DialogRef.current?.close()}>
+                ยกเลิก
+              </button>
+              <button type="submit" className="btn primary" disabled={busy}>
+                {busy ? "กำลังเชื่อม..." : cloudMt5DialogMode === "RECONNECT" ? "เชื่อม MT5 ใหม่" : "เชื่อมบัญชีนี้"}
+              </button>
+            </footer>
+          </form>
+        </dialog>
 
         <dialog
           ref={vpsSlotDialogRef}
@@ -4395,6 +4515,7 @@ function VpsSlotManager(props:{
   capacity:number;
   ownerCanPrice:boolean;
   onSelect:(slotId:string)=>void;
+  onConnect:(slotId:string)=>void;
   onBuy:()=>void;
   onRenew:(slotId:string)=>void;
   onPrimaryRenew:()=>void;
@@ -4501,9 +4622,15 @@ function VpsSlotManager(props:{
                   type="button"
                   className={"btn "+(selected ? "primary" : "ghost")}
                   disabled={tone==="blocked"}
-                  onClick={()=>props.onSelect(String(slot.id))}
+                  onClick={()=>{
+                    if (!slot.account_number) {
+                      props.onConnect(String(slot.id));
+                      return;
+                    }
+                    props.onSelect(String(slot.id));
+                  }}
                 >
-                  {tone==="blocked" ? "รอต่ออายุแพ็กเกจหลัก" : selected ? "กำลังจัดการ" : slot.account_number ? "จัดการ Slot" : "เชื่อม MT5"}
+                  {tone==="blocked" ? "รอต่ออายุแพ็กเกจหลัก" : slot.account_number ? (selected ? "กำลังจัดการ" : "จัดการ Slot") : "เชื่อม MT5"}
                 </button>
                 {!props.ownerUnlimited && (
                   <button

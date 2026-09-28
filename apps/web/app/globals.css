@@ -8261,6 +8261,217 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   }
 }
 
+/* ===== MT5 & EA · compact desktop + MT5 popup ===== */
+.account-view-main .cc-page-head-account,
+.account-view-main .account-workspace{
+  width:min(1120px,100%);
+  margin-left:auto!important;
+  margin-right:auto!important;
+}
+.account-workspace-compact{
+  gap:12px!important;
+}
+.account-workspace-compact>.panel{
+  padding:14px 16px;
+}
+.vps-slot-manager-head{
+  padding:14px 16px 12px;
+}
+.vps-slot-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  padding:12px;
+}
+.vps-slot-card,
+.vps-slot-add-card{
+  min-height:200px;
+}
+.vps-connected-card{
+  min-height:72px;
+  padding:12px 14px;
+}
+.vps-connected-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.vps-connected-actions .btn{
+  margin:0!important;
+}
+.vps-connected-card .dot.amber{
+  background:#d9b66e;
+  box-shadow:0 0 10px rgba(217,182,110,.45);
+}
+
+.cloud-mt5-dialog{
+  width:min(620px,calc(100vw - 28px));
+  max-height:calc(100dvh - 28px);
+  padding:0;
+  overflow:visible;
+  border:1px solid rgba(130,108,207,.28);
+  border-radius:18px;
+  background:#090d16;
+  color:#eef0f6;
+  box-shadow:0 28px 80px rgba(0,0,0,.52),0 0 0 1px rgba(120,88,214,.05);
+}
+.cloud-mt5-dialog::backdrop{
+  background:rgba(2,4,10,.78);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.cloud-mt5-dialog-card{
+  padding:18px;
+}
+.cloud-mt5-dialog-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  padding-bottom:14px;
+  border-bottom:1px solid rgba(130,108,207,.14);
+}
+.cloud-mt5-dialog-head .eyebrow{
+  color:#79d7b4;
+  font-size:11px;
+}
+.cloud-mt5-dialog-head h2{
+  margin:4px 0 0;
+  color:#f2eef8;
+  font-size:22px;
+  line-height:1.15;
+}
+.cloud-mt5-dialog-head p{
+  margin:5px 0 0;
+  color:#81899a;
+  font-size:12px;
+  line-height:1.45;
+}
+.cloud-mt5-dialog-head>button{
+  flex:0 0 36px;
+  width:36px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(130,108,207,.18);
+  border-radius:10px;
+  background:#0d111c;
+  color:#a9afbd;
+  font-size:20px;
+  cursor:pointer;
+}
+.cloud-mt5-dialog-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:11px;
+  margin-top:14px;
+}
+.cloud-mt5-dialog-grid .field{
+  min-width:0;
+}
+.cloud-mt5-dialog-grid .field>span{
+  display:block;
+  margin-bottom:6px;
+  color:#9097a8;
+  font-size:11px;
+  font-weight:800;
+}
+.cloud-mt5-dialog-grid .field small{
+  display:block;
+  margin-top:6px;
+  color:#737d8e;
+  font-size:11px;
+  line-height:1.4;
+}
+.cloud-mt5-server-field,
+.cloud-mt5-password-field{
+  grid-column:1 / -1;
+}
+.cloud-mt5-server-field{
+  position:relative;
+}
+.cloud-mt5-server-suggestions{
+  display:grid;
+  gap:4px;
+  max-height:190px;
+  margin-top:6px;
+  padding:5px;
+  overflow:auto;
+  border:1px solid rgba(129,109,184,.18);
+  border-radius:10px;
+  background:#070b13;
+  box-shadow:0 12px 28px rgba(0,0,0,.22);
+}
+.cloud-mt5-server-suggestions button{
+  min-width:0;
+  min-height:34px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:7px 9px;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:#dcd7e8;
+  cursor:pointer;
+  text-align:left;
+}
+.cloud-mt5-server-suggestions button:hover{
+  background:rgba(111,78,206,.14);
+}
+.cloud-mt5-server-suggestions b{
+  overflow:hidden;
+  font-size:12px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.cloud-mt5-server-suggestions span{
+  flex:0 0 auto;
+  color:#8a7db0;
+  font-size:11px;
+}
+.cloud-mt5-dialog-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:16px;
+  padding-top:14px;
+  border-top:1px solid rgba(130,108,207,.12);
+}
+.cloud-mt5-dialog-actions .btn{
+  min-height:40px;
+  min-width:110px;
+}
+
+@media(max-width:720px){
+  .account-view-main .cc-page-head-account,
+  .account-view-main .account-workspace{
+    width:100%;
+  }
+  .vps-slot-grid{
+    grid-template-columns:1fr;
+  }
+  .cloud-mt5-dialog{
+    width:calc(100vw - 18px);
+    max-height:calc(100dvh - 18px);
+    overflow:auto;
+  }
+  .cloud-mt5-dialog-card{
+    padding:14px;
+  }
+  .cloud-mt5-dialog-grid{
+    grid-template-columns:1fr;
+  }
+  .cloud-mt5-server-field,
+  .cloud-mt5-password-field{
+    grid-column:auto;
+  }
+  .cloud-mt5-dialog-actions .btn{
+    flex:1;
+    min-width:0;
+  }
+}
+
 /* ===== MT5 & EA · compact mobile layout ===== */
 @media(max-width:720px){
   .account-view-main{padding-top:8px!important}

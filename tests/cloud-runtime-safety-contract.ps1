@@ -52,7 +52,9 @@ Assert-Contains $botApi 'pendingCloudStop: true' 'customer account switch must w
 Assert-Contains $botApi 'DELETE FROM mt5_credentials WHERE mt5_account_id=$1' 'old Cloud trading credential must be removed on account replacement'
 Assert-Contains $botApi "runtime_stop_state=CASE WHEN `$3='CLOUD' THEN 'NONE'" 'new Cloud account must rearm the existing VPS runtime'
 Assert-Contains $botApi 'an active subscription on VPS Slot #1 must never unlock an' 'per-slot Cloud entitlement isolation is missing'
-Assert-Contains $dashboard 'ปิด MT5 เดิมบน VPS แล้ว · พร้อมเชื่อมบัญชี MT5 ใหม่' 'customer account-switch completion UX missing'
+Assert-Contains $dashboard 'ถ้าบอทหยุดและไม่มี Position / Pending Order ระบบจะปิด MT5 เดิมบน VPS แล้วให้เชื่อมบัญชีใหม่ได้ทันที' 'customer account-switch eligibility UX missing'
+Assert-Contains $dashboard 'เปลี่ยนบัญชี MT5 ได้ทันที' 'customer stopped/flat account-switch action missing'
+Assert-Contains $dashboard 'cloud-mt5-server-suggestions' 'searchable MT5 server suggestions missing'
 Assert-Contains $dashboard 'PRIMARY VPS PACKAGE · เหลือน้อยกว่า 3 วัน' 'primary-package three-day renewal warning missing'
 Assert-Contains $dashboard 'การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ' 'expiry warning must explain broker positions remain open'
 

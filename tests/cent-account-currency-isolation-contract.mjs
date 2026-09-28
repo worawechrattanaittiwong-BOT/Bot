@@ -115,9 +115,23 @@ must(
 );
 
 const pendingJournalBotGuards = (botApi.match(/pendingBasketJournal === true/g) || []).length;
+const cloudResetStart = botApi.indexOf('@Post("mt5/reset")');
+const cloudResetEnd = botApi.indexOf('@Post("mt5/cloud-credential")', cloudResetStart);
+const cloudResetBlock = cloudResetStart >= 0 && cloudResetEnd > cloudResetStart
+  ? botApi.slice(cloudResetStart, cloudResetEnd)
+  : "";
+const cloudLinkStart = botApi.indexOf('@Post("mt5")');
+const cloudLinkEnd = botApi.indexOf('@Post("mt5/rotate-install-token")', cloudLinkStart);
+const cloudLinkBlock = cloudLinkStart >= 0 && cloudLinkEnd > cloudLinkStart
+  ? botApi.slice(cloudLinkStart, cloudLinkEnd)
+  : "";
 must(
-  pendingJournalBotGuards >= 7,
-  "Account change/rebind/reset/Cloud replacement plus Slot assign/release and Device release must block while a Basket journal is pending"
+  pendingJournalBotGuards >= 5 &&
+  !cloudResetBlock.includes("pendingBasketJournal === true") &&
+  !cloudLinkBlock.includes("pendingBasketJournal === true") &&
+  cloudResetBlock.includes("pending_orders") &&
+  cloudLinkBlock.includes("accountScenovaPendingOrders"),
+  "VPS account replacement must ignore Basket journal state but still block RUNNING, Position, or Pending Order; transfer/rebind/device safety guards remain"
 );
 
 const settingsFetchIndex = eaApi.indexOf(
