@@ -3097,23 +3097,33 @@ export default function DashboardPage() {
           </section>
         )}
 
+        {activeView === "overview" && String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" && !ownerCloudAccess && !primaryCloudActive && (
+          <section className="membership-expiry-warning membership-expiry-warning-overview primary-expired" role="alert">
+            <div className="membership-expiry-warning-icon">!</div>
+            <div className="membership-expiry-warning-copy">
+              <small>PRIMARY VPS PACKAGE · SLOT #1 EXPIRED</small>
+              <b>แพ็กเกจ VPS หลักหมดอายุ · ระงับการใช้งาน VPS Slot ทั้งหมด</b>
+              <p>ต้องต่ออายุ Slot #1 ก่อนจึงจะใช้ Slot เสริมได้อีกครั้ง วันคงเหลือของ Slot เสริมยังคงเดิมและจะไม่ถูกยืดตามแพ็กเกจหลัก</p>
+            </div>
+            <button type="button" className="btn primary" onClick={openPrimaryPackagePage}>
+              ต่ออายุแพ็กเกจหลัก
+            </button>
+          </section>
+        )}
+
         {activeView === "overview" && cloudRenewalWarning && (
           <section className="membership-expiry-warning membership-expiry-warning-overview" role="alert">
             <div className="membership-expiry-warning-icon">!</div>
             <div className="membership-expiry-warning-copy">
-              <small>VPS MEMBERSHIP · เหลือน้อยกว่า 3 วัน</small>
-              <b>กรุณาต่ออายุก่อนหมดอายุ เพื่อไม่ให้ VPS ถูกตัดระหว่างใช้งาน</b>
+              <small>PRIMARY VPS PACKAGE · เหลือน้อยกว่า 3 วัน</small>
+              <b>กรุณาต่ออายุแพ็กเกจหลัก Slot #1 ก่อนหมดอายุ</b>
               <p>
-                เมื่อสมาชิกหมดอายุ Server จะปิด MT5 ของ Slot นี้ทันที แม้บอทยังทำงานหรือมี Position / Pending Order อยู่
+                เมื่อแพ็กเกจหลักหมดอายุ Server จะปิด MT5 ของ VPS Slot ทุกตัวทันที แม้ Slot เสริมยังมีวันเหลืออยู่
                 การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ
               </p>
             </div>
-            <button
-              type="button"
-              className="btn primary"
-              onClick={()=>openVpsSlotDialog(String(data.selectedSlot?.id || ""))}
-            >
-              ต่ออายุ VPS Slot
+            <button type="button" className="btn primary" onClick={openPrimaryPackagePage}>
+              ต่ออายุแพ็กเกจหลัก
             </button>
           </section>
         )}
@@ -3800,23 +3810,33 @@ export default function DashboardPage() {
               />
             ) : null}
 
+            {String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" && !ownerCloudAccess && !primaryCloudActive && (
+              <section className="membership-expiry-warning primary-expired" role="alert">
+                <div className="membership-expiry-warning-icon">!</div>
+                <div className="membership-expiry-warning-copy">
+                  <small>PRIMARY VPS PACKAGE · SLOT #1 EXPIRED</small>
+                  <b>แพ็กเกจ VPS หลักหมดอายุ · VPS Slot เสริมทั้งหมดถูกระงับ</b>
+                  <p>ต่ออายุแพ็กเกจหลักก่อนเพื่อกลับมาใช้งาน ระบบจะไม่เพิ่มหรือลดวันคงเหลือของ Slot เสริม</p>
+                </div>
+                <button type="button" className="btn primary" onClick={openPrimaryPackagePage}>
+                  ต่ออายุแพ็กเกจหลัก
+                </button>
+              </section>
+            )}
+
             {cloudRenewalWarning && (
               <section className="membership-expiry-warning" role="alert">
                 <div className="membership-expiry-warning-icon">!</div>
                 <div className="membership-expiry-warning-copy">
-                  <small>VPS MEMBERSHIP · เหลือน้อยกว่า 3 วัน</small>
-                  <b>กรุณาต่ออายุก่อนหมดอายุ เพื่อไม่ให้การทำงานบน VPS ถูกตัด</b>
+                  <small>PRIMARY VPS PACKAGE · เหลือน้อยกว่า 3 วัน</small>
+                  <b>กรุณาต่ออายุแพ็กเกจหลัก Slot #1 ก่อนหมดอายุ</b>
                   <p>
-                    เมื่อเวลาสมาชิกหมด ระบบจะปิด MT5 บน Server ทันที แม้บอทยังทำงานหรือมี Position / Pending Order อยู่
-                    การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ กรุณาจัดการความเสี่ยงก่อนถึงเวลาหมดอายุ
+                    เมื่อแพ็กเกจหลักหมดอายุ Server จะปิด MT5 บน VPS ทุก Slot ทันที แม้ Slot เสริมยังมีวันเหลืออยู่
+                    การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={()=>openVpsSlotDialog(String(data.selectedSlot?.id || ""))}
-                >
-                  ต่ออายุ VPS Slot
+                <button type="button" className="btn primary" onClick={openPrimaryPackagePage}>
+                  ต่ออายุแพ็กเกจหลัก
                 </button>
               </section>
             )}
@@ -3827,11 +3847,15 @@ export default function DashboardPage() {
                 summary={cloudSlotSummary}
                 selectedSlotId={String(data.selectedSlot?.id || "")}
                 ownerUnlimited={ownerCloudAccess}
+                primaryActive={primaryCloudActive}
                 canBuy={canBuyVpsSlot}
                 capacity={Number(cloudCatalog?.available || 0)}
+                ownerCanPrice={String(data.user?.role || "").toUpperCase()==="OWNER"}
                 onSelect={(slotId:string)=>selectSlot(slotId)}
                 onBuy={()=>openVpsSlotDialog("")}
                 onRenew={(slotId:string)=>openVpsSlotDialog(slotId)}
+                onPrimaryRenew={openPrimaryPackagePage}
+                onConfigurePricing={openOwnerAddonPricing}
               />
             )}
 
