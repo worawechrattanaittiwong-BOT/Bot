@@ -166,9 +166,10 @@ function LotDistributionChart({rows,total}:{rows:any[];total:number}) {
 }
 
 function SummaryChart({points}:{points:any[]}) {
-  if(!points?.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลกราฟในช่วงเวลานี้</div>;
-  const width=1500,height=148,left=40,right=12,top=10,bottom=31;
-  const values=points.map((point)=>Number(point.balance??0));
+  const validPoints=(points||[]).filter((point:any)=>Number.isFinite(Number(point?.balance)));
+  if(!validPoints.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลกราฟในช่วงเวลานี้</div>;
+  const width=1000,height=220,left=52,right=18,top=18,bottom=42;
+  const values=validPoints.map((point:any)=>Number(point.balance));
   const min=Math.min(...values),max=Math.max(...values),pad=Math.max(1,(max-min)*.09);
   const low=min-pad,high=max+pad,range=Math.max(1,high-low);
   const plotWidth=width-left-right,plotHeight=height-top-bottom;
@@ -177,13 +178,18 @@ function SummaryChart({points}:{points:any[]}) {
     const y=top+(high-value)/range*plotHeight;
     return {x,y};
   });
-  const line=coords.map((p,i)=>(i?"L ":"M ")+p.x.toFixed(1)+" "+p.y.toFixed(1)).join(" ");
-  const area=line+" L "+coords[coords.length-1].x.toFixed(1)+" "+(top+plotHeight)+" L "+coords[0].x.toFixed(1)+" "+(top+plotHeight)+" Z";
-  const ticks=Array.from({length:Math.min(7,Math.max(2,points.length))},(_,i)=>Math.round(i*(points.length-1)/Math.max(1,Math.min(7,Math.max(2,points.length))-1)))
+  const singlePoint=coords.length===1;
+  const line=singlePoint
+    ? "M "+left+" "+coords[0].y.toFixed(1)+" L "+(width-right)+" "+coords[0].y.toFixed(1)
+    : coords.map((point,index)=>(index?"L ":"M ")+point.x.toFixed(1)+" "+point.y.toFixed(1)).join(" ");
+  const area=singlePoint
+    ? line+" L "+(width-right)+" "+(top+plotHeight)+" L "+left+" "+(top+plotHeight)+" Z"
+    : line+" L "+coords[coords.length-1].x.toFixed(1)+" "+(top+plotHeight)+" L "+coords[0].x.toFixed(1)+" "+(top+plotHeight)+" Z";
+  const ticks=Array.from({length:Math.min(7,Math.max(2,validPoints.length))},(_,i)=>Math.round(i*(validPoints.length-1)/Math.max(1,Math.min(7,Math.max(2,validPoints.length))-1)))
     .filter((value,index,array)=>index===0||value!==array[index-1]);
-  const last=coords[coords.length-1];
+  const last=singlePoint?{...coords[0],x:width-right}:coords[coords.length-1];
   return (
-    <svg className={styles.chart} viewBox={"0 0 "+width+" "+height} role="img" aria-label="Balance curve">
+    <svg className={styles.chart} viewBox={"0 0 "+width+" "+height} preserveAspectRatio="none" role="img" aria-label="Balance curve">
       <defs>
         <linearGradient id="perf-line" x1="0" x2="1"><stop offset="0%" stopColor="#61d9ff"/><stop offset="48%" stopColor="#8c78ff"/><stop offset="100%" stopColor="#bd69ff"/></linearGradient>
         <linearGradient id="perf-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#8068ff" stopOpacity=".48"/><stop offset="100%" stopColor="#8068ff" stopOpacity=".02"/></linearGradient>
@@ -193,16 +199,16 @@ function SummaryChart({points}:{points:any[]}) {
         const ratio=i/4;
         const y=top+ratio*plotHeight;
         const value=high-ratio*range;
-        return <g key={"h"+i}><line x1={left} x2={width-right} y1={y} y2={y} className={styles.gridLine}/><text x="3" y={y+3} className={styles.chartLabel}>{value.toFixed(0)}</text></g>;
+        return <g key={"h"+i}><line x1={left} x2={width-right} y1={y} y2={y} className={styles.gridLine}/><text x="4" y={y+4} className={styles.chartLabel}>{value.toFixed(0)}</text></g>;
       })}
       {ticks.map((index)=>{
-        const x=left+(points.length<=1?0:index/(points.length-1)*plotWidth);
-        return <g key={"v"+index}><line x1={x} x2={x} y1={top} y2={top+plotHeight} className={styles.gridLine}/><text x={x} y={height-16} textAnchor="middle" className={styles.chartLabel}>{String(Number(points[index]?.tradeNumber ?? index))}</text></g>;
+        const x=left+(validPoints.length<=1?0:index/(validPoints.length-1)*plotWidth);
+        return <g key={"v"+index}><line x1={x} x2={x} y1={top} y2={top+plotHeight} className={styles.gridLine}/><text x={x} y={height-16} textAnchor="middle" className={styles.chartLabel}>{String(Number(validPoints[index]?.tradeNumber ?? index))}</text></g>;
       })}
       <path d={area} fill="url(#perf-area)"/>
       <path d={line} fill="none" stroke="url(#perf-line)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
       <circle cx={last.x} cy={last.y} r="4" className={styles.endDot}/>
-      <text x={width/2} y={height-2} textAnchor="middle" className={styles.chartLabel}>จำนวนไม้</text>
+      <text x={width/2} y={height-5} textAnchor="middle" className={styles.chartLabel}>จำนวนไม้</text>
     </svg>
   );
 }
