@@ -66,6 +66,7 @@ type Catalog = {
   packages: PackageItem[];
   paymentMode: string;
   checkoutEnabled: boolean;
+  salesPaused?: boolean;
   available?: number;
   provisioningPaused?: boolean;
 };
@@ -132,13 +133,15 @@ export default function PackagesPage() {
   const [trialDelivery, setTrialDelivery] = useState<"SMS" | "EMAIL">("SMS");
   const [cooldown, setCooldown] = useState(0);
   const [activeSystem, setActiveSystem] = useState<"LOCAL" | "CLOUD">("CLOUD");
-  const [trialOpen, setTrialOpen] = useState(true);
+  const [trialOpen, setTrialOpen] = useState(false);
   const [checkoutPack, setCheckoutPack] = useState<PackageItem | null>(null);
   const checkoutDialog = useRef<HTMLDialogElement>(null);
   const [promoCode, setPromoCode] = useState("");
   const polling = useRef(false);
 
-  const elevated = ["OWNER", "ADMIN"].includes(String(account?.user.role || "").toUpperCase());
+  const role = String(account?.user.role || "").toUpperCase();
+  const elevated = ["OWNER", "ADMIN"].includes(role);
+  const isOwner = role === "OWNER";
   const partnerSummary = account?.access.partner ? {
     usedSeats: Number(account.access.partner.used_seats || 0),
     seat_limit: Number(account.access.partner.seat_limit || 0),
