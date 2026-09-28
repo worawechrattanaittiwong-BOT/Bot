@@ -740,7 +740,7 @@ export default function PackagesPage() {
                   paymentAccounts={activeCatalog?.paymentAccounts || []}
                   onRefresh={() => refreshOrder(isLocalSystem ? "local" : "cloud", activePending.id)}
                   onVerifySlip={file => verifySlip(isLocalSystem ? "local" : "cloud", activePending.id, file)}
-                  onCancel={() => cancelSlipPayment(isLocalSystem ? "local" : "cloud", activePending.id)}
+                  onCancel={() => { void cancelSlipPayment(isLocalSystem ? "local" : "cloud", activePending.id); }}
                 />
               </div>
             </section>
