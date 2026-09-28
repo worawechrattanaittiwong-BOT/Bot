@@ -888,12 +888,12 @@
 .trialHead { min-height: 62px; padding: 10px 14px; gap: 12px; }
 .trialHead .titleWithIcon { gap: 10px; }
 .trialHead .icon { width: 34px; height: 34px; border-radius: 9px; }
-.trialHead .eyebrow { font-size: 9px; letter-spacing: .14em; }
+.trialHead .eyebrow { font-size: var(--ui-type-caption); letter-spacing: .14em; }
 .trialHead .titleWithIcon h2 { margin: 2px 0 0; font-size: 15px; line-height: 1.35; }
 .trialHead .titleWithIcon p { margin: 2px 0 0; font-size: 11px; line-height: 1.4; }
 .trialHead .trialHeaderActions { gap: 7px; }
-.trialHead .badge { padding: 5px 8px; font-size: 9px; }
-.trialHead .trialToggle { min-height: 32px; padding: 6px 10px; font-size: 10px; }
+.trialHead .badge { padding: 5px 8px; font-size: var(--ui-type-caption); }
+.trialHead .trialToggle { min-height: 32px; padding: 6px 10px; font-size: var(--ui-type-caption); }
 .trialBody { padding: 10px 14px 14px; }
 .trialBody .trialSuccess,
 .trialBody .trialUnavailable,
@@ -912,9 +912,9 @@
 .centerTop { margin: 0 0 14px; gap: 18px; align-items: center; }
 .centerControls { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .ownerSalesControl { display: flex; align-items: center; gap: 7px; padding: 4px; border: 1px solid #79414c66; border-radius: 11px; background: #1b1015; }
-.ownerSalesState { display: inline-flex; align-items: center; gap: 7px; padding: 0 8px; color: #aeb5c5; font-size: 10px; white-space: nowrap; }
+.ownerSalesState { display: inline-flex; align-items: center; gap: 7px; padding: 0 8px; color: #aeb5c5; font-size: var(--ui-type-caption); white-space: nowrap; }
 .ownerSalesState i { width: 7px; height: 7px; border-radius: 50%; background: #74d9a6; box-shadow: 0 0 9px #74d9a655; }
-.ownerSalesControl button { min-height: 34px; border: 1px solid #8b4653; border-radius: 8px; background: #35151d; color: #f0b3bd; padding: 7px 10px; font-size: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.ownerSalesControl button { min-height: 34px; border: 1px solid #8b4653; border-radius: 8px; background: #35151d; color: #f0b3bd; padding: 7px 10px; font-size: var(--ui-type-caption); font-weight: 700; cursor: pointer; white-space: nowrap; }
 .ownerSalesControl button:hover:not(:disabled) { border-color: #b05c69; background: #421b24; }
 .ownerSalesControl button:disabled { opacity: .5; cursor: not-allowed; }
 .ownerSalesPaused { border-color: #39604d70; background: #0c1712; }
@@ -925,7 +925,7 @@
 .salesPausedNotice svg { flex: 0 0 auto; color: #df8796; }
 .salesPausedNotice b, .salesPausedNotice span { display: block; }
 .salesPausedNotice b { font-size: 11px; }
-.salesPausedNotice span { margin-top: 2px; color: #9f8e94; font-size: 10px; line-height: 1.45; }
+.salesPausedNotice span { margin-top: 2px; color: #9f8e94; font-size: var(--ui-type-caption); line-height: 1.45; }
 .centerTop h2 { margin-top: 8px; font-size: 25px; font-weight: 600; line-height: 1.4; letter-spacing: -.02em; }
 .systemSwitcher { gap: 4px; padding: 5px; border-color: var(--membership-line); border-radius: 15px; background: #0d1019; }
 .systemTab { padding: 11px 15px; transition: background .2s, border-color .2s; }
