@@ -2604,7 +2604,7 @@ export default function DashboardPage() {
         />
       )}
 
-      <main className="main app-main">
+      <main className={"main app-main" + (activeView === "account" ? " account-view-main" : "")}>
         <div className="mobile-only mobile-app-head">
           <div className="brand-lockup scenova-brand-lockup"><ScenovaBrand className="scenova-brand-logo-mobile"/></div>
           <button className="btn ghost" onClick={logout}>ออก</button>
@@ -2620,7 +2620,7 @@ export default function DashboardPage() {
           />
         )}
 
-        <header className={"page-head human-head cc-page-head cc-v3-head " + (activeView === "overview" ? "cc-page-head-overview cc-v4-page-head" : "")}>
+        <header className={"page-head human-head cc-page-head cc-v3-head " + (activeView === "overview" ? "cc-page-head-overview cc-v4-page-head" : activeView === "account" ? "cc-page-head-account" : "")}>
           <div className="cc-v3-title">
             <span className="cc-v3-title-icon"><ScenovaIcon name={activeView === "overview" ? "control" : activeView === "account" ? "account" : "strategy"} size={24}/></span>
             <div>
@@ -3212,8 +3212,8 @@ export default function DashboardPage() {
         )}
 
         {activeView === "account" && (
-          <div className="account-workspace">
-            <section className="panel account-card">
+          <div className="account-workspace account-workspace-compact">
+            <section className="panel account-card connection-mode-card">
               <div className="panel-head">
                 <div>
                   <div className="eyebrow">CONNECTION MODE</div>
@@ -3288,7 +3288,7 @@ export default function DashboardPage() {
                 />
               </>
             ) : (
-              <section className="panel account-card">
+              <section className="panel account-card mt5-vps-account-card">
                 {vpsMigrationProgress && (
                   <VpsMigrationProgressCard
                     progress={vpsMigrationProgress}
@@ -3429,7 +3429,7 @@ export default function DashboardPage() {
                   )}
                 </section>
               ) : (
-                <section className="panel">
+                <section className="panel vps-connected-card">
                   <div className="eyebrow">VPS MT5 · CONNECTED</div>
                   <h2>{data.account.account_number}</h2>
                   <p className="muted">{data.account.broker} · {data.account.broker_server}</p>
@@ -3552,6 +3552,7 @@ function MembershipCountdownCard(props:{remainingMs?:number;expiresAt?:Date;plan
 
   return (
     <section
+      className="membership-countdown-card"
       aria-live="polite"
       style={{
         position:"relative",
@@ -3576,9 +3577,10 @@ function MembershipCountdownCard(props:{remainingMs?:number;expiresAt?:Date;plan
           pointerEvents:"none"
         }}
       />
-      <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+      <div className="membership-countdown-head" style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+        <div className="membership-countdown-title" style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
           <span
+            className="membership-countdown-icon"
             style={{
               width:42,
               height:42,
@@ -3592,12 +3594,12 @@ function MembershipCountdownCard(props:{remainingMs?:number;expiresAt?:Date;plan
           >
             <ScenovaIcon name="clock" size={21}/>
           </span>
-          <div style={{minWidth:0}}>
-            <div style={{fontSize:11,fontWeight:800,letterSpacing:".14em",color:"#9c8bc8"}}>MEMBERSHIP TIME</div>
-            <div style={{fontSize:18,fontWeight:800,color:"#f5f1ff",marginTop:2}}>
+          <div className="membership-countdown-copy" style={{minWidth:0}}>
+            <div className="membership-countdown-eyebrow" style={{fontSize:11,fontWeight:800,letterSpacing:".14em",color:"#9c8bc8"}}>MEMBERSHIP TIME</div>
+            <div className="membership-countdown-status" style={{fontSize:18,fontWeight:800,color:"#f5f1ff",marginTop:2}}>
               {props.unlimited ? "Owner Access · ไม่จำกัดเวลา" : expired ? "สมาชิกหมดอายุแล้ว" : "เวลาสมาชิกคงเหลือ"}
             </div>
-            <div style={{fontSize:12,color:"#948eac",marginTop:3}}>
+            <div className="membership-countdown-meta" style={{fontSize:12,color:"#948eac",marginTop:3}}>
               {props.unlimited
                 ? ((props.mode ? props.mode+" · " : "") + "สิทธิ์ใช้งานไม่หมดอายุ")
                 : ((props.planCode ? props.planCode+" · " : "") + (props.mode ? props.mode+" · " : "") +
@@ -3606,6 +3608,7 @@ function MembershipCountdownCard(props:{remainingMs?:number;expiresAt?:Date;plan
           </div>
         </div>
         <span
+          className="membership-countdown-badge"
           style={{
             padding:"7px 11px",
             borderRadius:999,
@@ -3622,9 +3625,10 @@ function MembershipCountdownCard(props:{remainingMs?:number;expiresAt?:Date;plan
       </div>
 
       {!props.unlimited && (
-        <div style={{position:"relative",display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,marginTop:16}}>
+        <div className="membership-countdown-grid" style={{position:"relative",display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,marginTop:16}}>
           {blocks.map((block)=>(
             <div
+              className="membership-countdown-unit"
               key={block.label}
               style={{
                 textAlign:"center",
@@ -3634,10 +3638,10 @@ function MembershipCountdownCard(props:{remainingMs?:number;expiresAt?:Date;plan
                 background:"rgba(7,9,22,.52)"
               }}
             >
-              <div style={{fontVariantNumeric:"tabular-nums",fontSize:"clamp(20px,5vw,28px)",lineHeight:1,fontWeight:850,letterSpacing:".035em",color:expired?"#ff91aa":"#eee8ff"}}>
+              <div className="membership-countdown-value" style={{fontVariantNumeric:"tabular-nums",fontSize:"clamp(20px,5vw,28px)",lineHeight:1,fontWeight:850,letterSpacing:".035em",color:expired?"#ff91aa":"#eee8ff"}}>
                 {block.value}
               </div>
-              <div style={{fontSize:11,color:"#837d99",marginTop:7,fontWeight:700}}>{block.label}</div>
+              <div className="membership-countdown-label" style={{fontSize:11,color:"#837d99",marginTop:7,fontWeight:700}}>{block.label}</div>
             </div>
           ))}
         </div>
