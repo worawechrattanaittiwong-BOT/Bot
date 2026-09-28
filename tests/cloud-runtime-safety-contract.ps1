@@ -58,7 +58,8 @@ Assert-Contains $dashboard 'การปิด MT5 ไม่ได้ปิด P
 
 # Slot #1 is the Cloud package gate; add-on pricing and expiry remain independent.
 Assert-Contains $schema 'CREATE TABLE IF NOT EXISTS cloud_addon_packages' 'independent add-on pricing schema missing'
-Assert-Contains $addonMigration 'scenova_rearm_cloud_after_subscription_change' 'renewal rearm function missing'
+Assert-Contains $cloudApi "'membershipCutoffReason'" 'gateway renewal must clear Cloud membership cutoff markers'
+Assert-Contains $cloudApi 'EXISTS (SELECT 1 FROM primary_access)' 'gateway renewal must rearm only when the primary package is active'
 Assert-Contains $cloudApi 'addonFlow ? "ADDON" : "PACKAGE"' 'Cloud orders must persist package/add-on purchase type'
 Assert-Contains $cloudApi 'cloud_addon_packages WHERE months=$1' 'add-on checkout must use add-on pricing'
 Assert-Contains $cloudApi 'Slot #1 เป็นแพ็กเกจหลัก กรุณาต่ออายุจากหน้าแพ็กเกจ' 'primary renewal redirect guard missing'
