@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ScenovaIcon } from "./ScenovaIcon";
 import { ScenovaBrand } from "./ScenovaBrand";
+import { InAppCampaignHost } from "./InAppCampaignHost";
 
 type NavSection = "TRADING" | "MANAGEMENT" | "SYSTEM";
 type NavItem = {
@@ -111,6 +112,7 @@ function UnifiedSidebar({
   const avatar = elevated ? (role.toUpperCase()==="ADMIN" ? "A" : "O") : "U";
 
   return (
+    <>
     <aside className={"sidebar app-sidebar owner-sidebar " + (elevated ? "elevated-sidebar" : "customer-role-sidebar")}>
       <Link href="/dashboard?view=overview" className="brand-lockup side-brand scenova-brand-lockup" aria-label="SCENOVA Control Center">
         <ScenovaBrand className="scenova-brand-logo-sidebar"/>
@@ -147,6 +149,8 @@ function UnifiedSidebar({
       </div>
       <button type="button" className="btn ghost full owner-logout" onClick={onLogout}><ScenovaIcon name="logout" size={18}/>Sign Out</button>
     </aside>
+    <InAppCampaignHost />
+    </>
   );
 }
 
