@@ -671,12 +671,12 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
              )
              SELECT
                $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
-               CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
+               CASE WHEN $3='ADDON' THEN 'ADDON' ELSE 'PERSONAL' END,
                'ACTIVE','Cloud Trading'
              FROM license_slots
              WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED'
              RETURNING *`,
-            [userId, subscription.id]
+            [userId, subscription.id, String(order.purchase_type || "PACKAGE").toUpperCase()]
           )
         ).rows[0];
       }
@@ -687,6 +687,7 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
          WHERE id=$1`,
         [order.id, slot.id, subscription.id]
       );
+      await tx.query("SELECT scenova_rearm_cloud_after_subscription_change($1,$2)", [userId, slot.id]);
       await this.promotions.consume(tx, "CLOUD", order.id);
 
       let referralCommissionCount = 0;
