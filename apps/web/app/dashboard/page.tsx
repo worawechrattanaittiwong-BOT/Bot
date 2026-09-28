@@ -1234,7 +1234,7 @@ export default function DashboardPage() {
       if (ownerCloudAccess || !slot?.subscription_expires_at) return false;
       const expires = new Date(slot.subscription_expires_at).getTime();
       const remaining = expires - Date.now();
-      return remaining > 0 && remaining <= 7 * 24 * 60 * 60 * 1000;
+      return remaining > 0 && remaining < 3 * 24 * 60 * 60 * 1000;
     }).length
   };
   const vpsPaymentOrder = cloudOrders.find(order=>order.id===vpsPaymentOrderId) || null;
@@ -1250,6 +1250,12 @@ export default function DashboardPage() {
 
   const accessExpiry = entitlement?.expiresAt ? new Date(entitlement.expiresAt) : null;
   const accessRemaining = accessExpiry ? Math.max(0, accessExpiry.getTime() - accessClockNow) : null;
+  const cloudRenewalWarning =
+    String(data?.selectedSlot?.mode || "").toUpperCase() === "CLOUD" &&
+    entitlement?.source === "SUBSCRIPTION" &&
+    accessRemaining !== null &&
+    accessRemaining > 0 &&
+    accessRemaining < 3 * 24 * 60 * 60 * 1000;
   const accessCompactCountdown = accessRemaining === null ? "" : (() => {
     const totalSeconds = Math.floor(accessRemaining / 1000);
     const days = Math.floor(totalSeconds / 86400);
@@ -2265,19 +2271,43 @@ export default function DashboardPage() {
 
   async function resetMt5() {
     const confirmed = await confirmPopup({
-      title:"เปลี่ยนบัญชีหรือโหมด MT5",
+      title:"เปลี่ยนบัญชี MT5",
       tone:"warning",
-      message:"ต้องการรีเซ็ตการเชื่อมต่อปัจจุบันเพื่อเปลี่ยนบัญชีหรือโหมด MT5 ใช่หรือไม่?",
-      confirmLabel:"ดำเนินการต่อ"
+      message:"ระบบจะปิด MT5 เดิมบน VPS ก่อน แล้วนำบัญชีเดิมออกจาก Slot นี้ คุณจึงเชื่อมบัญชีใหม่ได้ โดยการตั้งค่าบอทของ Slot ยังอยู่เหมือนเดิม",
+      confirmLabel:"ปิด MT5 และเปลี่ยนบัญชี"
     });
     if (!confirmed) return;
     setBusy(true);
     setError("");
+    setNotice("");
     try {
-      await api("/bot/mt5/reset?slotId=" + encodeURIComponent(selectedSlotIdRef.current), { method: "POST" });
+      const resetUrl = "/bot/mt5/reset?slotId=" + encodeURIComponent(selectedSlotIdRef.current);
+      let result = await api(resetUrl, { method: "POST" });
+      let attempts = 0;
+
+      while (result?.pendingCloudStop && attempts < 45) {
+        if (attempts === 0) {
+          setNotice("กำลังปิด MT5 เดิมบน VPS · รอ Server ยืนยันก่อนเปิดให้เชื่อมบัญชีใหม่");
+        }
+        await new Promise(resolve=>window.setTimeout(resolve, 1200));
+        result = await api(resetUrl, { method: "POST" });
+        attempts += 1;
+      }
+
+      if (result?.pendingCloudStop) {
+        throw new Error("VPS ยังไม่ยืนยันการปิด MT5 ภายในเวลาที่กำหนด กรุณาลองอีกครั้ง");
+      }
+
       setInstallToken("");
       setInstallInstanceId("");
-      await load();
+      setTradingPassword("");
+      setAccountNumber("");
+      setNotice(
+        result?.cloudRuntimeStopped
+          ? "ปิด MT5 เดิมบน VPS แล้ว · พร้อมเชื่อมบัญชี MT5 ใหม่"
+          : "นำบัญชีเดิมออกแล้ว · พร้อมเชื่อมบัญชีใหม่"
+      );
+      await load(selectedSlotIdRef.current);
       setActiveView("account");
     } catch (e: any) {
       setError(e.message);
@@ -2968,7 +2998,28 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {activeView === "overview" && <BotPerformanceSummary dashboard={data} />}
+        {activeView === "overview" && cloudRenewalWarning && (
+          <section className="membership-expiry-warning membership-expiry-warning-overview" role="alert">
+            <div className="membership-expiry-warning-icon">!</div>
+            <div className="membership-expiry-warning-copy">
+              <small>VPS MEMBERSHIP · เหลือน้อยกว่า 3 วัน</small>
+              <b>กรุณาต่ออายุก่อนหมดอายุ เพื่อไม่ให้ VPS ถูกตัดระหว่างใช้งาน</b>
+              <p>
+                เมื่อสมาชิกหมดอายุ Server จะปิด MT5 ของ Slot นี้ทันที แม้บอทยังทำงานหรือมี Position / Pending Order อยู่
+                การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={()=>openVpsSlotDialog(String(data.selectedSlot?.id || ""))}
+            >
+              ต่ออายุ VPS Slot
+            </button>
+          </section>
+        )}
+
+                {activeView === "overview" && <BotPerformanceSummary dashboard={data} />}
 
         {maintenance.status !== "OFF" && (
           <div className={"system-maintenance-banner status-" + String(maintenance.status).toLowerCase()} role="alert">
@@ -3636,7 +3687,7 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            {entitlement?.source === "SUBSCRIPTION" && accessExpiry && accessRemaining !== null ? (
+            {(entitlement?.source === "SUBSCRIPTION" || entitlement?.source === "SUBSCRIPTION_EXPIRED") && accessExpiry && accessRemaining !== null ? (
               <MembershipCountdownCard
                 remainingMs={accessRemaining}
                 expiresAt={accessExpiry}
@@ -3649,6 +3700,27 @@ export default function DashboardPage() {
                 mode={String(data.selectedSlot?.mode || "")}
               />
             ) : null}
+
+            {cloudRenewalWarning && (
+              <section className="membership-expiry-warning" role="alert">
+                <div className="membership-expiry-warning-icon">!</div>
+                <div className="membership-expiry-warning-copy">
+                  <small>VPS MEMBERSHIP · เหลือน้อยกว่า 3 วัน</small>
+                  <b>กรุณาต่ออายุก่อนหมดอายุ เพื่อไม่ให้การทำงานบน VPS ถูกตัด</b>
+                  <p>
+                    เมื่อเวลาสมาชิกหมด ระบบจะปิด MT5 บน Server ทันที แม้บอทยังทำงานหรือมี Position / Pending Order อยู่
+                    การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ กรุณาจัดการความเสี่ยงก่อนถึงเวลาหมดอายุ
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={()=>openVpsSlotDialog(String(data.selectedSlot?.id || ""))}
+                >
+                  ต่ออายุ VPS Slot
+                </button>
+              </section>
+            )}
 
             {String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" && (
               <VpsSlotManager
@@ -3821,7 +3893,23 @@ export default function DashboardPage() {
                     </div>
                   </form>
                   {data.account && (
-                    <div className="help">ใช้บัญชีและ Server เดิมสำหรับการเชื่อมต่อครั้งนี้</div>
+                    <div className="vps-reconnect-foot">
+                      <div className="help">ใช้บัญชีและ Server เดิมสำหรับการเชื่อมต่อครั้งนี้</div>
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        disabled={
+                          busy ||
+                          state==="RUNNING" ||
+                          desired==="RUNNING" ||
+                          Number(data.instance?.metrics?.positions || 0)>0 ||
+                          Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
+                        }
+                        onClick={resetMt5}
+                      >
+                        เปลี่ยนเป็นบัญชี MT5 อื่น
+                      </button>
+                    </div>
                   )}
                 </section>
               ) : (
@@ -3835,7 +3923,26 @@ export default function DashboardPage() {
                     <p className="muted">{data.account.broker} · {data.account.broker_server} · Slot #{data.selectedSlot?.slot_number || "—"}</p>
                   </div>
                   <div className="vps-connected-actions">
-                    <button className="btn ghost" disabled={busy || state==="RUNNING" || desired==="RUNNING"} onClick={resetMt5}>เปลี่ยนบัญชี VPS</button>
+                    <button
+                      className="btn ghost"
+                      disabled={
+                        busy ||
+                        state==="RUNNING" ||
+                        desired==="RUNNING" ||
+                        Number(data.instance?.metrics?.positions || 0)>0 ||
+                        Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
+                      }
+                      title={
+                        state==="RUNNING" || desired==="RUNNING"
+                          ? "หยุดบอทก่อนเปลี่ยนบัญชี"
+                          : Number(data.instance?.metrics?.positions || 0)>0 || Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
+                            ? "ปิด Position และ Pending Order ของ SCENOVA ให้หมดก่อนเปลี่ยนบัญชี"
+                            : "ปิด MT5 เดิมบน VPS แล้วเชื่อมบัญชีใหม่"
+                      }
+                      onClick={resetMt5}
+                    >
+                      {busy ? "กำลังดำเนินการ..." : "เปลี่ยนบัญชี VPS"}
+                    </button>
                   </div>
                 </section>
               )

@@ -226,6 +226,99 @@ export class WorkerController {
   @Post("commands")
   async commands(@Body() body: { runnerId: string }) {
     const command = await this.db.transaction(async tx => {
+      // Paid Cloud access ends at the subscription timestamp. The Worker must
+      // close that MT5 runtime even when the EA still has open orders. This is
+      // an access cutoff, not Safe Stop: no trading drain is attempted.
+      const expiredRuntimes = (await tx.query(
+        `SELECT bi.id,bi.runner_id,bi.execution_generation,bi.runtime_stop_state,
+                ls.id slot_id,ls.assigned_user_id,sub.id subscription_id,sub.expires_at
+         FROM bot_instances bi
+         JOIN license_slots ls ON ls.id=bi.slot_id
+         JOIN subscriptions sub ON sub.id=ls.subscription_id
+         JOIN users u ON u.id=ls.assigned_user_id
+         WHERE bi.runner_id=$1
+           AND bi.mode='CLOUD'
+           AND ls.mode='CLOUD'
+           AND ls.status<>'DELETED'
+           AND u.role NOT IN ('OWNER','ADMIN')
+           AND sub.expires_at<=now()
+           AND COALESCE(bi.runtime_stop_state,'NONE') NOT IN ('STOP_REQUESTED','STOP_CONFIRMED','LEASE_REVOKED')
+           AND NOT EXISTS (
+             SELECT 1
+             FROM access_group_grants gg
+             JOIN access_groups ag ON ag.id=gg.access_group_id
+             WHERE gg.user_id=ls.assigned_user_id
+               AND gg.mode='CLOUD'
+               AND gg.status='ACTIVE'
+               AND gg.starts_at<=now()
+               AND gg.expires_at>now()
+               AND ag.enabled=true
+           )
+         FOR UPDATE OF bi`,
+        [body.runnerId]
+      )).rows;
+
+      for (const expired of expiredRuntimes) {
+        const activeStop = (await tx.query(
+          `SELECT id
+           FROM worker_commands
+           WHERE bot_instance_id=$1
+             AND execution_generation=$2
+             AND command='STOP_INSTANCE'
+             AND status IN ('PENDING','DELIVERED')
+           LIMIT 1
+           FOR UPDATE`,
+          [expired.id, Number(expired.execution_generation || 1)]
+        )).rows[0];
+
+        if (!activeStop) {
+          await tx.query(
+            `INSERT INTO worker_commands(
+               runner_id,bot_instance_id,execution_generation,command,status
+             ) VALUES($1,$2,$3,'STOP_INSTANCE','PENDING')`,
+            [expired.runner_id, expired.id, Number(expired.execution_generation || 1)]
+          );
+        }
+
+        await tx.query(
+          `UPDATE bot_instances SET
+             desired_state='STOPPED',
+             runtime_stop_state='STOP_REQUESTED',
+             runtime_stop_requested_at=now(),
+             runtime_stop_confirmed_at=NULL,
+             runtime_stop_error=NULL,
+             metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
+               'membershipCutoff',true,
+               'membershipCutoffAt',now()::text,
+               'membershipExpiredAt',$2::text
+             )
+           WHERE id=$1`,
+          [expired.id, expired.expires_at]
+        );
+        await tx.query(
+          `UPDATE bot_commands
+           SET status='ACKED',acked_at=COALESCE(acked_at,now())
+           WHERE bot_instance_id=$1
+             AND status IN ('PENDING','DELIVERED')`,
+          [expired.id]
+        );
+        await tx.query(
+          `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+           VALUES('SYSTEM','CLOUD_MEMBERSHIP_EXPIRED_RUNTIME_STOP','bot_instance',$1,$2::jsonb)`,
+          [
+            expired.id,
+            JSON.stringify({
+              slotId: expired.slot_id,
+              subscriptionId: expired.subscription_id,
+              expiresAt: expired.expires_at,
+              runnerId: expired.runner_id,
+              executionGeneration: Number(expired.execution_generation || 1),
+              policy: "HARD_MT5_CUTOFF"
+            })
+          ]
+        );
+      }
+
       await tx.query(
         `UPDATE worker_commands wc
          SET status='CANCELLED',result_code='STALE_GENERATION',acked_at=now()

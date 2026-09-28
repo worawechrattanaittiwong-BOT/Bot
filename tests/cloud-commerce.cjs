@@ -22,6 +22,11 @@ const { CLOUD_SCHEMA } = require('../apps/api/dist/cloud-schema');
     subscription_id uuid REFERENCES subscriptions(id),mode text,slot_number int,slot_type text,status text,label text,updated_at timestamptz DEFAULT now());
     ALTER TABLE bot_instances ADD COLUMN slot_id uuid REFERENCES license_slots(id);`);
   await pg.exec(fs.readFileSync(path.join(__dirname,'../database/002_cloud_worker.sql'),'utf8'));
+  await pg.exec(`CREATE TABLE IF NOT EXISTS access_groups (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),name text NOT NULL,enabled boolean NOT NULL DEFAULT true);
+    CREATE TABLE IF NOT EXISTS access_group_grants (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),access_group_id uuid REFERENCES access_groups(id),user_id uuid REFERENCES users(id),
+    mode text NOT NULL,starts_at timestamptz NOT NULL DEFAULT now(),expires_at timestamptz NOT NULL,status text NOT NULL DEFAULT 'ACTIVE');`);
   await pg.exec(CLOUD_SCHEMA);
   await pg.exec(CLOUD_SCHEMA); // startup migration can run again without resetting prices or nodes
   const adapt = db => ({query:async (sql,params=[])=>{const r=await db.query(sql,params);return {...r,rowCount:r.affectedRows};},
@@ -98,6 +103,21 @@ const { CLOUD_SCHEMA } = require('../apps/api/dist/cloud-schema');
   const failed=charges.get('chrg_test_3');failed.status='expired';
   await cloud.reconcile(failed.id);
   assert.equal((await cloud.catalog()).available,1,'provider expiry releases reservation');
-  console.log('PASS: migrations, per-node auth, offline/full checkout, reservations, payment validation, duplicate webhook, renewal, worker assignment, expiry.');
+
+  // Membership expiry is a hard VPS access cutoff. It must queue an exact
+  // STOP_INSTANCE even when the EA still reports open positions/pending orders.
+  const currentSubscription=await db.one('SELECT subscription_id FROM license_slots WHERE id=$1',[order.slot_id]);
+  await db.query("UPDATE subscriptions SET expires_at=now()-interval '1 second' WHERE id=$1",[currentSubscription.subscription_id]);
+  await db.query(
+    "UPDATE bot_instances SET desired_state='RUNNING',actual_state='RUNNING',runtime_stop_state='NONE',metrics=jsonb_build_object('positions',3,'accountScenovaPendingOrders',1) WHERE id=$1",
+    [bot.id]
+  );
+  const expiryCommand=await worker.commands({runnerId:'test-node'});
+  assert.equal(expiryCommand.command.name,'STOP_INSTANCE','expired Cloud membership queues a hard MT5 stop even with open positions');
+  const cutoffState=await db.one('SELECT desired_state,runtime_stop_state FROM bot_instances WHERE id=$1',[bot.id]);
+  assert.equal(cutoffState.desired_state,'STOPPED','membership cutoff revokes RUNNING intent immediately');
+  assert.equal(cutoffState.runtime_stop_state,'STOP_REQUESTED','membership cutoff waits for verified Worker process stop');
+
+  console.log('PASS: migrations, per-node auth, offline/full checkout, reservations, payment validation, duplicate webhook, renewal, worker assignment, expiry hard cutoff.');
   await pg.close();
 })().catch(error=>{console.error(error);process.exitCode=1;});

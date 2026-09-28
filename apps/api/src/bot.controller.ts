@@ -631,12 +631,22 @@ export class BotController {
       }
     }
 
-    // Legacy fallback keeps already-issued subscriptions working while their slot
-    // migration catches up.
-    const legacySub = await this.db.one(
-      "SELECT s.id,s.expires_at,p.code,p.mode,p.max_mt5_accounts,p.allow_resale FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
-      [userId, mode]
-    );
+    // Legacy fallback is only for a slot that has not been linked to a
+    // subscription yet. Once a Slot owns a subscription, its expiry is
+    // independent; an active subscription on VPS Slot #1 must never unlock an
+    // expired VPS Slot #2.
+    const linkedSlot = slotId
+      ? await this.db.one(
+          "SELECT subscription_id FROM license_slots WHERE id=$1 AND assigned_user_id=$2",
+          [slotId, userId]
+        )
+      : null;
+    const legacySub = !slotId || !linkedSlot?.subscription_id
+      ? await this.db.one(
+          "SELECT s.id,s.expires_at,p.code,p.mode,p.max_mt5_accounts,p.allow_resale FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
+          [userId, mode]
+        )
+      : null;
     if (legacySub) {
       return { allowed: true, source: "SUBSCRIPTION", expiresAt: legacySub.expires_at };
     }
@@ -2047,10 +2057,36 @@ export class BotController {
       ? await this.resolveSlot(req.user.sub, body.slotId)
       : await this.ensureModeSlot(req.user.sub, mode);
     if (slot.mode !== mode) throw new ConflictException("slot mode does not match MT5 mode");
-    const boundCloud = await this.db.one("SELECT id FROM bot_instances WHERE slot_id=$1 AND mode='CLOUD' AND runner_id IS NOT NULL", [slot.id]);
-    if (boundCloud) throw new ConflictException("Cloud นี้ผูก VPS แล้ว กรุณาติดต่อผู้ดูแลเพื่อเปลี่ยนบัญชี");
+    const boundCloud = await this.db.one(
+      "SELECT id,runtime_stop_state,desired_state,actual_state,runner_id FROM bot_instances WHERE slot_id=$1 AND mode='CLOUD' AND runner_id IS NOT NULL",
+      [slot.id]
+    );
+    if (
+      boundCloud &&
+      !["STOP_CONFIRMED","LEASE_REVOKED"].includes(String(boundCloud.runtime_stop_state || "NONE"))
+    ) {
+      throw new ConflictException(
+        "กรุณากดเปลี่ยนบัญชี VPS ก่อน ระบบจะปิด MT5 เดิมบน Server ให้เรียบร้อยแล้วจึงเชื่อมบัญชีใหม่ได้"
+      );
+    }
     if (mode === "LOCAL") {
       throw new ConflictException("LOCAL mode must be installed from the SCENOVA website; MT5 will be detected automatically");
+    }
+
+    const cloudAccess: any = await this.entitlement(
+      req.user.sub,
+      null,
+      "CLOUD",
+      slot.id
+    );
+    if (!cloudAccess.allowed) {
+      if (cloudAccess.source === "SUBSCRIPTION_EXPIRED") {
+        throw new ConflictException("สมาชิก VPS หมดอายุแล้ว กรุณาต่ออายุ Slot นี้ก่อนเชื่อมบัญชี MT5");
+      }
+      if (cloudAccess.source === "GROUP_DISABLED") {
+        throw new ConflictException("สิทธิ์ VPS ของบัญชีนี้ถูกปิด กรุณาติดต่อผู้ดูแล");
+      }
+      throw new ConflictException("ยังไม่มีสมาชิก VPS ที่ใช้งานได้สำหรับ Slot นี้");
     }
 
     await this.assertMt5IdentityAvailable(
@@ -2101,11 +2137,34 @@ export class BotController {
       );
     }
 
+    if (existingInstance?.mt5_account_id && existingInstance.mt5_account_id !== account.id) {
+      await this.db.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [existingInstance.mt5_account_id]);
+      if (mode === "CLOUD") {
+        await this.db.query("DELETE FROM mt5_credentials WHERE mt5_account_id=$1", [existingInstance.mt5_account_id]);
+      }
+    }
+
     const installToken = randomBytes(32).toString("hex");
     let instance = existingInstance;
     if (instance) {
       instance = await this.db.one(
-        "UPDATE bot_instances SET mt5_account_id=$2,mode=$3,install_token_hash=$4,desired_state='STOPPED',actual_state='OFFLINE',last_seen_at=NULL WHERE id=$1 RETURNING id,mode,desired_state,actual_state",
+        `UPDATE bot_instances SET
+           mt5_account_id=$2,
+           mode=$3,
+           install_token_hash=$4,
+           execution_generation=CASE WHEN $3='CLOUD' THEN execution_generation+1 ELSE execution_generation END,
+           lease_rotated_at=CASE WHEN $3='CLOUD' THEN now() ELSE lease_rotated_at END,
+           desired_state='STOPPED',
+           actual_state='OFFLINE',
+           last_seen_at=NULL,
+           runtime_stop_state=CASE WHEN $3='CLOUD' THEN 'NONE' ELSE runtime_stop_state END,
+           runtime_stop_requested_at=CASE WHEN $3='CLOUD' THEN NULL ELSE runtime_stop_requested_at END,
+           runtime_stop_confirmed_at=CASE WHEN $3='CLOUD' THEN NULL ELSE runtime_stop_confirmed_at END,
+           runtime_stop_error=CASE WHEN $3='CLOUD' THEN NULL ELSE runtime_stop_error END,
+           provisioning_error=CASE WHEN $3='CLOUD' THEN NULL ELSE provisioning_error END,
+           metrics=CASE WHEN $3='CLOUD' THEN '{}'::jsonb ELSE metrics END
+         WHERE id=$1
+         RETURNING id,mode,desired_state,actual_state,execution_generation,runtime_stop_state`,
         [instance.id, account.id, mode, this.crypto.sha256(installToken)]
       );
     } else {
@@ -2157,30 +2216,134 @@ export class BotController {
   async resetMt5(@Req() req: any, @Query("slotId") slotId = "") {
     const slot = await this.resolveSlot(req.user.sub, slotId || null);
     const instance = await this.db.one(
-      "SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions FROM bot_instances bi WHERE bi.slot_id=$1",
+      `SELECT bi.*,
+         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders
+       FROM bot_instances bi
+       WHERE bi.slot_id=$1`,
       [slot.id]
     );
     if (!instance) return { ok: true };
-    if (slot.mode === "CLOUD") {
-      const bound = await this.db.one("SELECT runner_id FROM bot_instances WHERE id=$1", [instance.id]);
-      if (bound?.runner_id) throw new ConflictException("Cloud นี้ผูก VPS แล้ว กรุณาติดต่อผู้ดูแลเพื่อหยุด MT5 ก่อนเปลี่ยนบัญชี");
-    }
-    if (instance.actual_state === "RUNNING" || instance.desired_state === "RUNNING" || Number(instance.positions || 0) > 0) {
-      throw new ConflictException("stop the bot and close positions before changing MT5 account");
+
+    if (
+      instance.actual_state === "RUNNING" ||
+      instance.desired_state === "RUNNING" ||
+      Number(instance.positions || 0) > 0 ||
+      Number(instance.pending_orders || 0) > 0
+    ) {
+      throw new ConflictException(
+        "กรุณาหยุดบอทและปิด Position / Pending Order ของ SCENOVA ให้หมดก่อนเปลี่ยนบัญชี MT5"
+      );
     }
     if (instance.metrics?.pendingBasketJournal === true) {
       throw new ConflictException(
         "ยังมี Basket Journal รอส่งจากบัญชี MT5 เดิม กรุณารอให้ส่งสำเร็จก่อนรีเซ็ตบัญชี"
       );
     }
-    if (instance.mt5_account_id) {
-      await this.db.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [instance.mt5_account_id]);
+
+    if (slot.mode === "CLOUD" && instance.runner_id) {
+      const stopState = String(instance.runtime_stop_state || "NONE").toUpperCase();
+      if (!["STOP_CONFIRMED","LEASE_REVOKED"].includes(stopState)) {
+        const activeStop = await this.db.one(
+          `SELECT id,status
+           FROM worker_commands
+           WHERE bot_instance_id=$1
+             AND command='STOP_INSTANCE'
+             AND status IN ('PENDING','DELIVERED')
+           ORDER BY id DESC
+           LIMIT 1`,
+          [instance.id]
+        );
+        if (!activeStop) {
+            await this.db.query(
+              `INSERT INTO worker_commands(
+                 runner_id,bot_instance_id,execution_generation,command,status
+               ) VALUES($1,$2,$3,'STOP_INSTANCE','PENDING')`,
+              [instance.runner_id, instance.id, Number(instance.execution_generation || 1)]
+            );
+          await this.db.query(
+            `UPDATE bot_instances SET
+               desired_state='STOPPED',
+               runtime_stop_state='STOP_REQUESTED',
+               runtime_stop_requested_at=now(),
+               runtime_stop_confirmed_at=NULL,
+               runtime_stop_error=NULL
+             WHERE id=$1`,
+            [instance.id]
+          );
+          await this.db.query(
+            `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+             VALUES($1,'CUSTOMER_CLOUD_ACCOUNT_SWITCH_STOP_REQUESTED','bot_instance',$2,$3::jsonb)`,
+            [
+              String(req.user?.code || req.user?.sub || "USER").slice(0,160),
+              instance.id,
+              JSON.stringify({
+                slotId: slot.id,
+                runnerId: instance.runner_id,
+                executionGeneration: Number(instance.execution_generation || 1)
+              })
+            ]
+          );
+        }
+        return {
+          ok: false,
+          pendingCloudStop: true,
+          state: "STOP_REQUESTED",
+          message: "กำลังปิด MT5 เดิมบน VPS เพื่อเตรียมเปลี่ยนบัญชี"
+        };
+      }
+    }
+
+    const oldAccountId = instance.mt5_account_id || null;
+    if (oldAccountId) {
+      await this.db.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [oldAccountId]);
+      if (slot.mode === "CLOUD") {
+        await this.db.query("DELETE FROM mt5_credentials WHERE mt5_account_id=$1", [oldAccountId]);
+      }
     }
     await this.db.query(
-      "UPDATE bot_instances SET mt5_account_id=NULL,desired_state='STOPPED',actual_state='OFFLINE',last_seen_at=NULL,pending_account_number=NULL,pending_broker=NULL,pending_broker_server=NULL,pending_account_ip=NULL,pending_account_seen_at=NULL,account_change_requested_at=NULL WHERE id=$1",
+      `UPDATE bot_instances SET
+         mt5_account_id=NULL,
+         desired_state='STOPPED',
+         actual_state='OFFLINE',
+         last_seen_at=NULL,
+         metrics=CASE WHEN mode='CLOUD' THEN '{}'::jsonb ELSE metrics END,
+         pending_account_number=NULL,
+         pending_broker=NULL,
+         pending_broker_server=NULL,
+         pending_account_ip=NULL,
+         pending_account_seen_at=NULL,
+         account_change_requested_at=NULL
+       WHERE id=$1`,
       [instance.id]
     );
-    return { ok: true, preservedTrialHistory: true };
+    await this.db.query(
+      `UPDATE bot_commands
+       SET status='ACKED',acked_at=COALESCE(acked_at,now())
+       WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED')`,
+      [instance.id]
+    );
+    await this.db.query(
+      `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+       VALUES($1,'CUSTOMER_MT5_ACCOUNT_RESET','bot_instance',$2,$3::jsonb)`,
+      [
+        String(req.user?.code || req.user?.sub || "USER").slice(0,160),
+        instance.id,
+        JSON.stringify({
+          slotId: slot.id,
+          mode: slot.mode,
+          oldMt5AccountId: oldAccountId,
+          runnerId: instance.runner_id || null,
+          cloudRuntimeStopped: slot.mode === "CLOUD" ? true : null
+        })
+      ]
+    );
+    return {
+      ok: true,
+      preservedTrialHistory: true,
+      oldAccountDeactivated: Boolean(oldAccountId),
+      cloudRuntimeStopped: slot.mode === "CLOUD" ? true : false
+    };
   }
 
   @Post("mt5/cloud-credential")
@@ -2195,13 +2358,61 @@ export class BotController {
     if (!account) throw new ConflictException("cloud MT5 account not found");
     if (!body.tradingPassword || /[\r\n\x00]/.test(body.tradingPassword)) throw new ConflictException("Trading Password ไม่ถูกต้อง");
     const bound = await this.db.one(
-      `SELECT id,last_seen_at,runner_id,runtime_stop_state
+      `SELECT id,slot_id,last_seen_at,runner_id,runtime_stop_state,metrics
        FROM bot_instances
-       WHERE mt5_account_id=$1 AND mode='CLOUD' AND runner_id IS NOT NULL
+       WHERE mt5_account_id=$1 AND mode='CLOUD'
        ORDER BY created_at DESC
        LIMIT 1`,
       [account.id]
     );
+
+    const cloudAccess: any = await this.entitlement(
+      req.user.sub,
+      account.id,
+      "CLOUD",
+      bound?.slot_id || null
+    );
+    if (!cloudAccess.allowed) {
+      if (cloudAccess.source === "SUBSCRIPTION_EXPIRED") {
+        throw new ConflictException("สมาชิก VPS หมดอายุแล้ว กรุณาต่ออายุก่อนเชื่อม MT5 บน Server อีกครั้ง");
+      }
+      if (cloudAccess.source === "GROUP_DISABLED") {
+        throw new ConflictException("สิทธิ์ VPS ของบัญชีนี้ถูกปิด กรุณาติดต่อผู้ดูแล");
+      }
+      throw new ConflictException("ยังไม่มีสมาชิก VPS ที่ใช้งานได้");
+    }
+
+    if (
+      bound &&
+      String(bound.runtime_stop_state || "NONE") === "STOP_CONFIRMED" &&
+      bound.metrics?.membershipCutoff === true
+    ) {
+      await this.db.query(
+        `UPDATE bot_instances SET
+           runtime_stop_state='NONE',
+           runtime_stop_requested_at=NULL,
+           runtime_stop_confirmed_at=NULL,
+           runtime_stop_error=NULL,
+           desired_state='STOPPED',
+           actual_state='OFFLINE',
+           last_seen_at=NULL,
+           metrics=(COALESCE(metrics,'{}'::jsonb)
+             - 'membershipCutoff'
+             - 'membershipCutoffAt'
+             - 'membershipExpiredAt')
+         WHERE id=$1`,
+        [bound.id]
+      );
+      bound.runtime_stop_state = "NONE";
+      bound.last_seen_at = null;
+      bound.metrics = {
+        ...(bound.metrics || {}),
+        membershipCutoff: undefined,
+        membershipCutoffAt: undefined,
+        membershipExpiredAt: undefined
+      };
+    }
+
     if (bound?.last_seen_at && Date.now() - new Date(bound.last_seen_at).getTime() <= 20_000) {
       throw new ConflictException("VPS ยังเชื่อมต่อ MT5 อยู่ จึงยังไม่ต้องบันทึกรหัสผ่านใหม่");
     }
