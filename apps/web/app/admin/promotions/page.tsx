@@ -374,6 +374,7 @@ export default function PromotionCenterPage() {
     };
 
     setBusyId(editor.id||"NEW");
+    let persistedCampaignId=editor.id||"";
     try {
       const saved=editor.id
         ? await adminApi("/admin/in-app-campaigns/"+encodeURIComponent(editor.id),{
@@ -386,6 +387,7 @@ export default function PromotionCenterPage() {
           });
       const campaignId=editor.id||String(saved?.id||"");
       if(!campaignId) throw new Error("ไม่พบ Campaign ID หลังบันทึก");
+      persistedCampaignId=campaignId;
 
       if(editor.removeDesktop) {
         await adminApi("/admin/in-app-campaigns/"+encodeURIComponent(campaignId)+"/asset/remove",{
@@ -416,6 +418,9 @@ export default function PromotionCenterPage() {
       setError("");
       await load();
     } catch(e:any) {
+      if(!editor.id&&persistedCampaignId) {
+        setEditor(current=>current?{...current,id:persistedCampaignId}:current);
+      }
       setError(String(e?.message||"บันทึก Campaign ไม่สำเร็จ"));
     } finally {
       setBusyId("");
