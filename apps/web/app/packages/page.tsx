@@ -299,6 +299,9 @@ export default function PackagesPage() {
     ),
     [primaryCloudOrders]
   );
+  const hasPrimaryCloudSlot = primaryCloudOrders.some(order =>
+    order.status === "PAID" && Boolean(order.slot_id)
+  );
 
   function notify(kind: "good" | "bad" | "info", text: string) {
     setMessageKind(kind);
@@ -896,7 +899,8 @@ export default function PackagesPage() {
                       salesPaused={salesPaused}
                       busy={Boolean(busy)}
                       pending={Boolean(activePending)}
-                      capacityAvailable={isLocalSystem || Number(cloudCatalog?.available || 0) > 0}
+                      capacityAvailable={isLocalSystem || hasPrimaryCloudSlot || Number(cloudCatalog?.available || 0) > 0}
+                      renewal={!isLocalSystem && hasPrimaryCloudSlot}
                       onBuy={() => {
                         setCheckoutPack(pack);
                         setCheckoutOrderId("");
@@ -1144,6 +1148,7 @@ function PackageCard({
   busy,
   pending,
   capacityAvailable = true,
+  renewal = false,
   onBuy
 }:{
   system:"LOCAL"|"CLOUD";
@@ -1154,6 +1159,7 @@ function PackageCard({
   busy:boolean;
   pending:boolean;
   capacityAvailable?:boolean;
+  renewal?:boolean;
   onBuy:()=>void;
 }) {
   const available =
@@ -1175,7 +1181,9 @@ function PackageCard({
           ? "VPS เต็มชั่วคราว"
           : pending
             ? "มีรายการรอชำระ"
-            : "เลือกแพ็กเกจ";
+            : system === "CLOUD" && renewal
+              ? "ต่ออายุแพ็กเกจหลัก"
+              : "เลือกแพ็กเกจ";
 
   const features = system === "LOCAL"
     ? [
@@ -1185,10 +1193,10 @@ function PackageCard({
         "ต่ออายุรักษาเวลาที่เหลือ"
       ]
     : [
-        "Cloud สำหรับ 1 บัญชี MT5",
-        "Start / Stop ผ่านมือถือ",
-        "ดูสถานะบอทได้ตลอด",
-        "ต่ออายุรักษาเวลาที่เหลือ"
+        "แพ็กเกจหลัก Slot #1 สำหรับ 1 บัญชี MT5",
+        "เป็นสิทธิ์หลักสำหรับ VPS Slot เสริมทั้งหมด",
+        "ต่ออายุจากเวลาคงเหลือเดิม",
+        "ไม่ยืดวันหมดอายุของ Slot เสริม"
       ];
 
   return (
