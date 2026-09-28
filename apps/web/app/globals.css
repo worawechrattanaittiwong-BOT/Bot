@@ -7370,6 +7370,30 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   }
 }
 
+.vps-reconnect-foot{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-top:10px;
+}
+.vps-reconnect-foot .help{
+  margin:0;
+}
+.vps-reconnect-foot .btn{
+  flex:0 0 auto;
+  min-height:36px;
+}
+@media(max-width:760px){
+  .vps-reconnect-foot{
+    align-items:stretch;
+    flex-direction:column;
+  }
+  .vps-reconnect-foot .btn{
+    width:100%;
+  }
+}
+
 .vps-connected-card{
   display:flex;
   align-items:center;
