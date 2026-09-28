@@ -977,12 +977,12 @@ export default function AdminPage() {
                     {expandedGroupId===group.id && (
                       <div className="owner-access-group-members">
                         {(groupMembers[String(group.id)] || []).length ? (groupMembers[String(group.id)] || []).map((member:any)=>(
-                          <div className="owner-access-group-member" key={member.kind+":"+member.ref_id}>
+                          <div className="owner-access-group-member" key={member.user_id+":"+member.mode}>
                             <div>
                               <b>{member.user_code}</b>
                               <small>
-                                {member.kind==="TRIAL_PENDING" ? "Trial · รอเชื่อม MT5" : "Trial · "+member.status}
-                                {member.expires_at ? " · ถึง "+new Date(member.expires_at).toLocaleDateString("th-TH") : ""}
+                                ทดลอง {member.mode==="CLOUD"?"Cloud VPS":"Local MT5"}
+                                {member.expires_at ? " · ถึง "+new Date(member.expires_at).toLocaleString("th-TH") : ""}
                                 {member.paid_local || member.paid_cloud
                                   ? " · สมาชิกจริง: "+[member.paid_local?"Local":"",member.paid_cloud?"VPS":""].filter(Boolean).join(" + ")
                                   : " · ไม่มีสมาชิกจริง"}
@@ -1289,7 +1289,7 @@ export default function AdminPage() {
 
                           <section className="owner-control-card">
                             <div className="owner-control-card-head">
-                              <div><span className="owner-card-kicker">TRIAL CONTROL</span><h3>กำหนดวันทดลอง</h3><p>เปลี่ยนจาก 1 วันเป็น 7 วัน หรือจำนวนอื่นได้ทันที</p></div>
+                              <div><span className="owner-card-kicker">TRIAL CONTROL</span><h3>Trial เดี่ยว</h3><p>ใช้สำหรับ Trial รายบัญชีแบบเดิม ไม่เกี่ยวกับกลุ่มทดลอง Local/VPS ด้านซ้าย</p></div>
                             </div>
                             <div className="owner-trial-control">
                               <label><span>Trial Days</span><input className="input" type="number" min={1} max={365} value={trialDays} onChange={e=>setTrialDays(Number(e.target.value))}/></label>
