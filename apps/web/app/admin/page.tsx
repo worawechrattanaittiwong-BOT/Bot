@@ -41,7 +41,8 @@ export default function AdminPage() {
   const [groupTrialDays, setGroupTrialDays] = useState<Record<string,number>>({});
   const [expandedGroupId, setExpandedGroupId] = useState("");
   const [groupMembers, setGroupMembers] = useState<Record<string,any[]>>({});
-  const [trialAccessGroupId, setTrialAccessGroupId] = useState("");
+  const [accessGrantType, setAccessGrantType] = useState<"MEMBERSHIP"|"GROUP">("MEMBERSHIP");
+  const [selectedTrialGroupId, setSelectedTrialGroupId] = useState("");
   const [newAccessGroupName, setNewAccessGroupName] = useState("");
   const [groupAction, setGroupAction] = useState("");
   const [customerAction, setCustomerAction] = useState("");
@@ -120,8 +121,7 @@ export default function AdminPage() {
           userId: user.id,
           days: safeDays,
           mt5AccountId: user.mt5_account_id || undefined,
-          approvedBy: "OWNER",
-          accessGroupId: trialAccessGroupId || undefined
+          approvedBy: "OWNER"
         })
       });
       setMessage(
@@ -206,6 +206,45 @@ export default function AdminPage() {
     }
   }
 
+  async function grantGroupAccess(user:any, mode:string) {
+    if (!selectedTrialGroupId) {
+      setMessage("กรุณาเลือกกลุ่มทดลองก่อน");
+      return;
+    }
+    const group=accessGroups.find((item:any)=>String(item.id)===String(selectedTrialGroupId));
+    if (!group) {
+      setMessage("ไม่พบกลุ่มทดลอง");
+      return;
+    }
+    if (!group.enabled) {
+      setMessage("กลุ่มทดลองนี้ปิดอยู่ กรุณาเปิดกลุ่มก่อน");
+      return;
+    }
+    const safeDays=Math.max(1,Math.min(365,Math.trunc(Number(days)||Number(group.trial_days)||1)));
+    setCustomerAction("group-grant:"+mode);
+    try {
+      const result=await adminApi("/admin/access-groups/grant", {
+        method:"POST",
+        body:JSON.stringify({
+          groupId:selectedTrialGroupId,
+          userId:user.id,
+          mode,
+          days:safeDays
+        })
+      });
+      setMessage(
+        "ให้ "+user.user_code+" ทดลอง "+(mode==="CLOUD"?"Cloud VPS":"Local MT5")+
+        " "+safeDays+" วันในกลุ่ม "+group.name+" แล้ว · สมาชิกจริงไม่เปลี่ยน"
+      );
+      await search(undefined,true);
+      if (expandedGroupId===selectedTrialGroupId) await loadAccessGroupMembers(selectedTrialGroupId);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setCustomerAction("");
+    }
+  }
+
   async function adjustSubscriptionDays(user: any, subscriptionId: string, amount: number) {
     if (!subscriptionId) return setMessage("ไม่พบสมาชิกที่ต้องการปรับวัน");
     const daysValue = Math.max(1, Math.min(3650, Math.trunc(Math.abs(Number(amount) || 1))));
@@ -222,23 +261,6 @@ export default function AdminPage() {
       );
       await search(undefined, true);
     } catch (e: any) {
-      setMessage(e.message);
-    } finally {
-      setCustomerAction("");
-    }
-  }
-
-  async function setTrialGroup(userId:string, groupId:string) {
-    setCustomerAction("trial");
-    try {
-      await adminApi("/admin/trials/set-group", {
-        method:"POST",
-        body:JSON.stringify({ userId, groupId:groupId || null })
-      });
-      setTrialAccessGroupId(groupId);
-      setMessage("อัปเดตกลุ่ม Trial แล้ว");
-      await search(undefined, true);
-    } catch(e:any) {
       setMessage(e.message);
     } finally {
       setCustomerAction("");
@@ -1009,9 +1031,8 @@ export default function AdminPage() {
                           const mode=memberships(user).find((m:any)=>isCurrentMembership(m))?.mode;
                           if(mode==="CLOUD") setPlan("CLOUD_30D");
                           else if(mode==="LOCAL") setPlan("LOCAL_30D");
-                          setTrialAccessGroupId(
-                            String(user.trial_group_id || user.trial_authorization_group_id || "")
-                          );
+                          setAccessGrantType("MEMBERSHIP");
+                          setSelectedTrialGroupId("");
                           const nextMembershipDays:Record<string,number> = {};
                           memberships(user).forEach((m:any)=>{ nextMembershipDays[String(m.subscription_id)] = 1; });
                           setMembershipDays(nextMembershipDays);
