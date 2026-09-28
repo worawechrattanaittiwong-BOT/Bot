@@ -41,7 +41,6 @@ export default function AdminPage() {
   const [groupTrialDays, setGroupTrialDays] = useState<Record<string,number>>({});
   const [expandedGroupId, setExpandedGroupId] = useState("");
   const [groupMembers, setGroupMembers] = useState<Record<string,any[]>>({});
-  const [selectedAccessGroupId, setSelectedAccessGroupId] = useState("");
   const [trialAccessGroupId, setTrialAccessGroupId] = useState("");
   const [newAccessGroupName, setNewAccessGroupName] = useState("");
   const [groupAction, setGroupAction] = useState("");
@@ -187,8 +186,7 @@ export default function AdminPage() {
           durationDays: Math.max(1, Math.min(3650, Math.trunc(Number(days) || 30))),
           activatedBy: "OWNER",
           paidAmountSatang: paidAmountBaht.trim() ? Math.round(Number(paidAmountBaht) * 100) : 0,
-          paymentReference: paymentReference.trim() || undefined,
-          accessGroupId: selectedAccessGroupId || undefined
+          paymentReference: paymentReference.trim() || undefined
         })
       });
       const seatCount = Array.isArray(result?.slots) ? result.slots.length : (result?.plan?.slots || 1);
@@ -224,22 +222,6 @@ export default function AdminPage() {
       );
       await search(undefined, true);
     } catch (e: any) {
-      setMessage(e.message);
-    } finally {
-      setCustomerAction("");
-    }
-  }
-
-  async function setSubscriptionGroup(subscriptionId:string, groupId:string) {
-    setCustomerAction("membership:"+subscriptionId);
-    try {
-      await adminApi("/admin/subscriptions/set-group", {
-        method:"POST",
-        body:JSON.stringify({ subscriptionId, groupId:groupId || null })
-      });
-      setMessage("อัปเดตกลุ่มสมาชิกแล้ว");
-      await search(undefined, true);
-    } catch(e:any) {
       setMessage(e.message);
     } finally {
       setCustomerAction("");
@@ -1016,7 +998,6 @@ export default function AdminPage() {
                           const mode=memberships(user).find((m:any)=>isCurrentMembership(m))?.mode;
                           if(mode==="CLOUD") setPlan("CLOUD_30D");
                           else if(mode==="LOCAL") setPlan("LOCAL_30D");
-                          setSelectedAccessGroupId("");
                           setTrialAccessGroupId(
                             String(user.trial_group_id || user.trial_authorization_group_id || "")
                           );
