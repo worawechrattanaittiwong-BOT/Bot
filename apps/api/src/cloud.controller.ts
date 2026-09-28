@@ -180,7 +180,7 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
           SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
           CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
           'ACTIVE','Cloud Trading'
-          FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' RETURNING *`, [order.user_id, subscription.id])).rows[0];
+          FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`, [order.user_id, subscription.id])).rows[0];
       }
       await tx.query("UPDATE cloud_orders SET status='PAID',charge_id=$2,slot_id=$3,subscription_id=$4,paid_at=now() WHERE id=$1",
         [order.id, charge.id, slot.id, subscription.id]);
@@ -249,7 +249,7 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
            SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
                   CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
                   'ACTIVE','Cloud Trading'
-           FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' RETURNING *`,
+           FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`,
           [order.user_id, subscription.id]
         )).rows[0];
       }
