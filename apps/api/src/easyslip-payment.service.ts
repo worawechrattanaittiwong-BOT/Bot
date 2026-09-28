@@ -6,11 +6,14 @@ import {
 } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DbService } from "./db.service";
+import { ReferralService } from "./referral.service";
+import { PromotionService } from "./promotion.service";
 
 export type EasySlipVerification = {
   transRef: string;
   amountBaht: number;
   slipDate: string | null;
+  isDuplicate: boolean;
   matchedAccount: any;
   sender: any;
   receiver: any;
@@ -20,7 +23,11 @@ export type EasySlipVerification = {
 export class EasySlipPaymentService implements OnApplicationBootstrap {
   private accountsCache: { expiresAt: number; items: any[] } | null = null;
 
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly referrals: ReferralService,
+    private readonly promotions: PromotionService
+  ) {}
 
   async onApplicationBootstrap() {
     await this.ensureSchema();
@@ -154,9 +161,6 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
 
     const data = payload?.data;
     if (!data) throw new ConflictException("EasySlip ไม่ส่งผลตรวจสอบกลับมา");
-    if (data.isDuplicate === true) {
-      throw new ConflictException("สลิปนี้ถูกตรวจสอบหรือถูกใช้ไปแล้ว");
-    }
     if (!data.matchedAccount) {
       throw new ConflictException("บัญชีผู้รับในสลิปไม่ตรงกับบัญชีรับเงินของ SCENOVA");
     }
@@ -176,17 +180,23 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
       throw new ConflictException("ไม่พบเลขอ้างอิงธุรกรรมในสลิป");
     }
 
+    const slipDateRaw = data.rawSlip?.date ? String(data.rawSlip.date) : "";
+    const slipDate = slipDateRaw && Number.isFinite(Date.parse(slipDateRaw))
+      ? new Date(slipDateRaw).toISOString()
+      : null;
+
     return {
       transRef,
       amountBaht: amountInSlip,
-      slipDate: data.rawSlip?.date ? String(data.rawSlip.date) : null,
+      slipDate,
+      isDuplicate: data.isDuplicate === true,
       matchedAccount: data.matchedAccount,
       sender: data.rawSlip?.sender || null,
       receiver: data.rawSlip?.receiver || null
     };
   }
 
-  async claim(
+  private async claim(
     tx: PoolClient,
     verification: EasySlipVerification,
     input: {
@@ -210,6 +220,7 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
           input.amountSatang,
           verification.slipDate || null,
           JSON.stringify({
+            easySlipDuplicate: verification.isDuplicate,
             matchedAccount: verification.matchedAccount,
             sender: verification.sender,
             receiver: verification.receiver,
@@ -223,5 +234,363 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
       }
       throw error;
     }
+  }
+
+  async verifyAndActivate(input: {
+    base64: string;
+    orderType: "LOCAL" | "CLOUD";
+    orderId: string;
+    userId: string;
+  }) {
+    if (!/^[0-9a-f-]{36}$/i.test(input.orderId)) {
+      throw new BadRequestException("Invalid order");
+    }
+
+    const table = input.orderType === "LOCAL" ? "local_orders" : "cloud_orders";
+    const snapshot = await this.db.one(
+      `SELECT * FROM ${table} WHERE id=$1 AND user_id=$2`,
+      [input.orderId, input.userId]
+    );
+    if (!snapshot) throw new BadRequestException("ไม่พบรายการชำระเงิน");
+    if (snapshot.status === "PAID") return { ok: true, status: "PAID" };
+    if (!["PENDING", "REVIEW"].includes(String(snapshot.status))) {
+      throw new ConflictException("รายการนี้ไม่อยู่ในสถานะที่สามารถแนบสลิปได้");
+    }
+
+    const verification = await this.verifySlip({
+      base64: input.base64,
+      amountSatang: Number(snapshot.amount),
+      orderType: input.orderType,
+      orderId: input.orderId
+    });
+
+    return input.orderType === "LOCAL"
+      ? this.activateLocal(input.userId, input.orderId, verification)
+      : this.activateCloud(input.userId, input.orderId, verification);
+  }
+
+  private async activateLocal(
+    userId: string,
+    orderId: string,
+    verification: EasySlipVerification
+  ) {
+    return this.db.transaction(async (tx: PoolClient) => {
+      await tx.query("SELECT pg_advisory_xact_lock(740092)");
+      const order = (
+        await tx.query(
+          "SELECT * FROM local_orders WHERE id=$1 AND user_id=$2 FOR UPDATE",
+          [orderId, userId]
+        )
+      ).rows[0];
+      if (!order) throw new BadRequestException("ไม่พบรายการ");
+      if (order.status === "PAID") return { ok: true, status: "PAID" };
+      if (!["PENDING", "REVIEW"].includes(String(order.status))) {
+        throw new ConflictException("รายการนี้ไม่สามารถยืนยันการชำระเงินได้");
+      }
+
+      const user = (
+        await tx.query("SELECT status FROM users WHERE id=$1 FOR UPDATE", [userId])
+      ).rows[0];
+      if (user?.status !== "ACTIVE") {
+        throw new ConflictException("บัญชีไม่พร้อมใช้งาน");
+      }
+
+      await this.claim(tx, verification, {
+        orderType: "LOCAL",
+        orderId: order.id,
+        userId,
+        amountSatang: Number(order.amount)
+      });
+
+      const current = (
+        await tx.query(
+          `SELECT max(s.expires_at) expires_at
+           FROM subscriptions s
+           JOIN plans p ON p.id=s.plan_id
+           WHERE s.user_id=$1
+             AND p.mode='LOCAL'
+             AND s.status='ACTIVE'
+             AND s.expires_at>now()`,
+          [userId]
+        )
+      ).rows[0];
+
+      const planCode = "LOCAL_" + Number(order.months) + "M";
+      const subscription = (
+        await tx.query(
+          `INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note)
+           SELECT
+             $1,p.id,now(),
+             GREATEST(now(),COALESCE($3::timestamptz,now())) + make_interval(months=>$2::int),
+             'EASYSLIP',$4
+           FROM plans p
+           WHERE p.code=$5 AND p.active=true
+           RETURNING *`,
+          [
+            userId,
+            Number(order.months),
+            current?.expires_at || null,
+            "EasySlip Local order " + order.id,
+            planCode
+          ]
+        )
+      ).rows[0];
+      if (!subscription) {
+        throw new ConflictException("ไม่พบแพ็กเกจ Local ที่เปิดใช้งาน");
+      }
+
+      let slot = (
+        await tx.query(
+          `SELECT *
+           FROM license_slots
+           WHERE owner_user_id=$1
+             AND assigned_user_id=$1
+             AND mode='LOCAL'
+             AND status<>'DELETED'
+           ORDER BY
+             CASE WHEN slot_type='PERSONAL' THEN 0 ELSE 1 END,
+             CASE WHEN subscription_id IS NOT NULL THEN 0 ELSE 1 END,
+             slot_number
+           LIMIT 1
+           FOR UPDATE`,
+          [userId]
+        )
+      ).rows[0];
+
+      if (slot) {
+        await tx.query(
+          `UPDATE license_slots
+           SET subscription_id=$2,status='ACTIVE',slot_type='PERSONAL',updated_at=now()
+           WHERE id=$1`,
+          [slot.id, subscription.id]
+        );
+      } else {
+        slot = (
+          await tx.query(
+            `INSERT INTO license_slots(
+               owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label
+             )
+             SELECT
+               $1,$1,$2,'LOCAL',COALESCE(max(slot_number),0)+1,'PERSONAL','ACTIVE','Local MT5'
+             FROM license_slots
+             WHERE owner_user_id=$1 AND mode='LOCAL'
+             RETURNING *`,
+            [userId, subscription.id]
+          )
+        ).rows[0];
+      }
+
+      await tx.query(
+        `UPDATE local_orders
+         SET status='PAID',slot_id=$2,subscription_id=$3,paid_at=now(),expires_at=now()
+         WHERE id=$1`,
+        [order.id, slot.id, subscription.id]
+      );
+      await this.promotions.consume(tx, "LOCAL", order.id);
+
+      let referralCommissionCount = 0;
+      await tx.query("SAVEPOINT easyslip_referral_credit");
+      try {
+        const commissions = await this.referrals.creditPurchase(tx, {
+          sourceUserId: userId,
+          sourceType: "LOCAL_ORDER",
+          sourceId: order.id,
+          grossAmountSatang: Number(order.amount || 0),
+          currency: "THB",
+          metadata: {
+            subscriptionId: subscription.id,
+            months: Number(order.months),
+            slotId: slot.id,
+            paymentProvider: "EASYSLIP",
+            transRef: verification.transRef
+          }
+        });
+        referralCommissionCount = commissions.length;
+        await tx.query("RELEASE SAVEPOINT easyslip_referral_credit");
+      } catch {
+        await tx.query("ROLLBACK TO SAVEPOINT easyslip_referral_credit");
+        await tx.query("RELEASE SAVEPOINT easyslip_referral_credit");
+      }
+
+      await tx.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES('EASYSLIP','LOCAL_ACTIVATED','order',$1,$2::jsonb)`,
+        [
+          order.id,
+          JSON.stringify({
+            transRef: verification.transRef,
+            slotId: slot.id,
+            subscriptionId: subscription.id,
+            referralCommissionCount
+          })
+        ]
+      );
+
+      return {
+        ok: true,
+        status: "PAID",
+        orderId: order.id,
+        subscriptionId: subscription.id,
+        expiresAt: subscription.expires_at
+      };
+    });
+  }
+
+  private async activateCloud(
+    userId: string,
+    orderId: string,
+    verification: EasySlipVerification
+  ) {
+    return this.db.transaction(async (tx: PoolClient) => {
+      await tx.query("SELECT pg_advisory_xact_lock(740091)");
+      const order = (
+        await tx.query(
+          "SELECT * FROM cloud_orders WHERE id=$1 AND user_id=$2 FOR UPDATE",
+          [orderId, userId]
+        )
+      ).rows[0];
+      if (!order) throw new BadRequestException("ไม่พบรายการ");
+      if (order.status === "PAID") return { ok: true, status: "PAID" };
+      if (!["PENDING", "REVIEW"].includes(String(order.status))) {
+        throw new ConflictException("รายการนี้ไม่สามารถยืนยันการชำระเงินได้");
+      }
+
+      const user = (
+        await tx.query("SELECT status FROM users WHERE id=$1 FOR UPDATE", [userId])
+      ).rows[0];
+      if (user?.status !== "ACTIVE") {
+        throw new ConflictException("บัญชีไม่พร้อมใช้งาน");
+      }
+
+      let slot = order.slot_id
+        ? (
+            await tx.query(
+              "SELECT * FROM license_slots WHERE id=$1 FOR UPDATE",
+              [order.slot_id]
+            )
+          ).rows[0]
+        : null;
+      if (
+        slot &&
+        (
+          slot.owner_user_id !== userId ||
+          slot.assigned_user_id !== userId ||
+          slot.status === "DELETED"
+        )
+      ) {
+        throw new ConflictException("Cloud Slot เปลี่ยนแปลง กรุณาติดต่อผู้ดูแล");
+      }
+
+      await this.claim(tx, verification, {
+        orderType: "CLOUD",
+        orderId: order.id,
+        userId,
+        amountSatang: Number(order.amount)
+      });
+
+      const subscription = (
+        await tx.query(
+          `INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note)
+           SELECT
+             $1,p.id,now(),
+             GREATEST(
+               now(),
+               COALESCE(
+                 (SELECT expires_at FROM subscriptions WHERE id=$3 AND status='ACTIVE'),
+                 now()
+               )
+             ) + make_interval(months=>$2::int),
+             'EASYSLIP',$4
+           FROM plans p
+           WHERE p.code='CLOUD_' || $2::text || 'M' AND p.active=true
+           RETURNING *`,
+          [
+            userId,
+            Number(order.months),
+            slot?.subscription_id || null,
+            "EasySlip Cloud order " + order.id
+          ]
+        )
+      ).rows[0];
+      if (!subscription) {
+        throw new ConflictException("ไม่พบแพ็กเกจ Cloud ที่เปิดใช้งาน");
+      }
+
+      if (slot) {
+        await tx.query(
+          "UPDATE license_slots SET subscription_id=$2,status='ACTIVE',updated_at=now() WHERE id=$1",
+          [slot.id, subscription.id]
+        );
+      } else {
+        slot = (
+          await tx.query(
+            `INSERT INTO license_slots(
+               owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label
+             )
+             SELECT
+               $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,'PERSONAL','ACTIVE','Cloud Trading'
+             FROM license_slots
+             WHERE owner_user_id=$1 AND mode='CLOUD'
+             RETURNING *`,
+            [userId, subscription.id]
+          )
+        ).rows[0];
+      }
+
+      await tx.query(
+        `UPDATE cloud_orders
+         SET status='PAID',slot_id=$2,subscription_id=$3,paid_at=now(),expires_at=now()
+         WHERE id=$1`,
+        [order.id, slot.id, subscription.id]
+      );
+      await this.promotions.consume(tx, "CLOUD", order.id);
+
+      let referralCommissionCount = 0;
+      await tx.query("SAVEPOINT easyslip_referral_credit");
+      try {
+        const commissions = await this.referrals.creditPurchase(tx, {
+          sourceUserId: userId,
+          sourceType: "CLOUD_ORDER",
+          sourceId: order.id,
+          grossAmountSatang: Number(order.amount || 0),
+          currency: "THB",
+          metadata: {
+            subscriptionId: subscription.id,
+            months: Number(order.months),
+            slotId: slot.id,
+            paymentProvider: "EASYSLIP",
+            transRef: verification.transRef
+          }
+        });
+        referralCommissionCount = commissions.length;
+        await tx.query("RELEASE SAVEPOINT easyslip_referral_credit");
+      } catch {
+        await tx.query("ROLLBACK TO SAVEPOINT easyslip_referral_credit");
+        await tx.query("RELEASE SAVEPOINT easyslip_referral_credit");
+      }
+
+      await tx.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES('EASYSLIP','CLOUD_ACTIVATED','order',$1,$2::jsonb)`,
+        [
+          order.id,
+          JSON.stringify({
+            transRef: verification.transRef,
+            slotId: slot.id,
+            runnerId: order.runner_id,
+            subscriptionId: subscription.id,
+            referralCommissionCount
+          })
+        ]
+      );
+
+      return {
+        ok: true,
+        status: "PAID",
+        orderId: order.id,
+        subscriptionId: subscription.id,
+        expiresAt: subscription.expires_at
+      };
+    });
   }
 }
