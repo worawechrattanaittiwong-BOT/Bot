@@ -4152,6 +4152,20 @@ export default function DashboardPage() {
                     </option>
                   ))}
                 </datalist>
+                {cloudMt5DialogMode !== "RECONNECT" && brokerServer.trim() && mt5ServerSuggestions.length > 0 && (
+                  <div className="cloud-mt5-server-suggestions">
+                    {mt5ServerSuggestions.map(server=>(
+                      <button
+                        type="button"
+                        key={server.serverName}
+                        onClick={()=>setBrokerServer(server.serverName)}
+                      >
+                        <b>{server.serverName}</b>
+                        {server.environment!=="UNKNOWN" && <span>{server.environment}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <small>เลือกจาก Server ที่ระบบมีจริง หรือพิมพ์ชื่อ Server เองได้</small>
               </label>
 
