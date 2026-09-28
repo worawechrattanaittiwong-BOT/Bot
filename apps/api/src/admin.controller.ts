@@ -751,7 +751,6 @@ export class AdminController {
     note?: string;
     paidAmountSatang?: number;
     paymentReference?: string;
-    accessGroupId?: string | null;
   }) {
     const plan = await this.db.one(
       "SELECT * FROM plans WHERE code=$1 AND active=true",
@@ -767,15 +766,6 @@ export class AdminController {
     }
     if (user.role === "OWNER" || user.role === "ADMIN") {
       throw new ConflictException("OWNER/ADMIN already has unlimited access");
-    }
-
-    let accessGroup: any = null;
-    if (body.accessGroupId) {
-      accessGroup = await this.db.one(
-        "SELECT id,name,enabled FROM access_groups WHERE id=$1",
-        [body.accessGroupId]
-      );
-      if (!accessGroup) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
     }
 
     const paidAmountSatang = Math.trunc(Number(body.paidAmountSatang || 0));
@@ -812,37 +802,13 @@ export class AdminController {
     );
 
     const row = await this.db.one(
-      "INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note,access_group_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *",
-      [body.userId, plan.id, startsAt, expiresAt, body.activatedBy || "ADMIN", body.note || null, accessGroup?.id || null]
+      "INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note,access_group_id) VALUES($1,$2,$3,$4,$5,$6,NULL) RETURNING *",
+      [body.userId, plan.id, startsAt, expiresAt, body.activatedBy || "ADMIN", body.note || null]
     );
     if (partnerSource) {
       await this.partner.detachCustomerToDirect(body.userId, row.id, body.activatedBy || "ADMIN");
     } else {
       await this.syncSlotsForSubscription(body.userId, row.id, plan);
-    }
-
-    if (accessGroup && accessGroup.enabled === false) {
-      const stopped = await this.db.query(
-        `UPDATE bot_instances bi
-         SET desired_state='SAFE_STOP'
-         FROM license_slots ls
-         WHERE ls.id=bi.slot_id
-           AND ls.subscription_id=$1
-           AND (
-             bi.desired_state IN ('RUNNING','STARTING')
-             OR bi.actual_state='RUNNING'
-             OR COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
-           )
-         RETURNING bi.id`,
-        [row.id]
-      );
-      if (stopped.rows.length) {
-        await this.db.query(
-          `INSERT INTO bot_commands(bot_instance_id,command)
-           SELECT id,'SAFE_STOP' FROM unnest($1::uuid[]) AS x(id)`,
-          [stopped.rows.map((item:any)=>item.id)]
-        );
-      }
     }
 
     let referralCommissionCount = 0;
@@ -879,8 +845,7 @@ export class AdminController {
       paymentReference: String(body.paymentReference || "").slice(0, 160) || null,
       referralCommissionCount,
       referralCreditFailed,
-      accessGroupId: accessGroup?.id || null,
-      accessGroupName: accessGroup?.name || null
+      trialGroupIsolation: true
     });
     const slots = await this.db.query(
       "SELECT id,slot_number,mode,status,assigned_user_id,subscription_id FROM license_slots WHERE owner_user_id=$1 AND mode=$2 AND status<>'DELETED' ORDER BY slot_number",
