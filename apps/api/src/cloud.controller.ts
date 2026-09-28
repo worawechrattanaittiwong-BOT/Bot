@@ -294,6 +294,15 @@ export class CloudCustomerController {
     });
   }
 
+  @Post("orders/:id/cancel-slip-payment")
+  async cancelSlipPayment(@Req() req: any, @Param("id") id: string) {
+    return this.easyslip.cancelPending({
+      orderType: "CLOUD",
+      orderId: id,
+      userId: String(req.user.sub)
+    });
+  }
+
   @Post("orders/:id/refresh") async refresh(@Req() req: any, @Param("id") id: string) {
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new BadRequestException("Invalid order");
     const order = await this.db.one("SELECT * FROM cloud_orders WHERE id=$1 AND user_id=$2", [id, req.user.sub]);
