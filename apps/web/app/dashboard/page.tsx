@@ -3635,27 +3635,15 @@ export default function DashboardPage() {
                   }}
                 />
               </>
-            ) : (
-              <section className="panel account-card mt5-vps-account-card">
-                {vpsMigrationProgress && (
-                  <VpsMigrationProgressCard
-                    progress={vpsMigrationProgress}
-                    onRetry={()=>{
-                      setVpsMigrationProgress(null);
-                      setError("");
-                    }}
-                  />
-                )}
-                <div className="panel-head">
-                  <div>
-                    <div className="eyebrow">MT5 ACCOUNT · VPS</div>
-                    <h2>{data.account ? (data.account.broker + " · " + data.account.account_number) : "ยังไม่ได้ผูกบัญชี MT5"}</h2>
-                    <p className="muted">{data.account ? (data.account.broker_server + " · บัญชี MT5 ที่เชื่อมต่ออยู่") : "กรอกข้อมูล MT5 เพื่อเชื่อมต่อ VPS"}</p>
-                  </div>
-                  <span className="badge"><span className={"dot "+(accountConnectionOnline?"green":"red")}/>{accountConnectionLabel}</span>
-                </div>
-              </section>
-            )}
+            ) : vpsMigrationProgress ? (
+              <VpsMigrationProgressCard
+                progress={vpsMigrationProgress}
+                onRetry={()=>{
+                  setVpsMigrationProgress(null);
+                  setError("");
+                }}
+              />
+            ) : null}
 
             {data.selectedSlot?.mode === "LOCAL" && (
               <>
@@ -3778,10 +3766,17 @@ export default function DashboardPage() {
                 </section>
               ) : (
                 <section className="panel vps-connected-card">
-                  <div className="eyebrow">VPS MT5 · CONNECTED</div>
-                  <h2>{data.account.account_number}</h2>
-                  <p className="muted">{data.account.broker} · {data.account.broker_server}</p>
-                  <button className="btn ghost" disabled={busy || state==="RUNNING" || desired==="RUNNING"} onClick={resetMt5}>เปลี่ยนบัญชี VPS</button>
+                  <div className="vps-connected-copy">
+                    <div className="eyebrow">SELECTED VPS SLOT · CONNECTED</div>
+                    <div className="vps-connected-title-row">
+                      <h2>{data.account.account_number}</h2>
+                      <span className="badge"><span className="dot green"/>ออนไลน์</span>
+                    </div>
+                    <p className="muted">{data.account.broker} · {data.account.broker_server} · Slot #{data.selectedSlot?.slot_number || "—"}</p>
+                  </div>
+                  <div className="vps-connected-actions">
+                    <button className="btn ghost" disabled={busy || state==="RUNNING" || desired==="RUNNING"} onClick={resetMt5}>เปลี่ยนบัญชี VPS</button>
+                  </div>
                 </section>
               )
             )}
