@@ -283,6 +283,11 @@ export class AdminController {
            FROM target t
            WHERE bi.id=t.id
              AND bi.desired_state<>'SAFE_STOP'
+             AND (
+               bi.desired_state IN ('RUNNING','STARTING')
+               OR bi.actual_state='RUNNING'
+               OR COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
+             )
            RETURNING bi.id
          )
          SELECT id FROM stopped`,
@@ -317,11 +322,37 @@ export class AdminController {
       [body.subscriptionId, body.groupId || null]
     );
     if (!row) throw new ConflictException("subscription not found");
+    let safeStopped = 0;
+    if (group && group.enabled === false) {
+      const stopped = await this.db.query(
+        `UPDATE bot_instances bi
+         SET desired_state='SAFE_STOP'
+         FROM license_slots ls
+         WHERE ls.id=bi.slot_id
+           AND ls.subscription_id=$1
+           AND (
+             bi.desired_state IN ('RUNNING','STARTING')
+             OR bi.actual_state='RUNNING'
+             OR COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
+           )
+         RETURNING bi.id`,
+        [row.id]
+      );
+      safeStopped = stopped.rowCount || 0;
+      if (stopped.rows.length) {
+        await this.db.query(
+          `INSERT INTO bot_commands(bot_instance_id,command)
+           SELECT id,'SAFE_STOP' FROM unnest($1::uuid[]) AS x(id)`,
+          [stopped.rows.map((item:any)=>item.id)]
+        );
+      }
+    }
     await this.audit("OWNER", "SET_SUBSCRIPTION_GROUP", "subscription", row.id, {
       groupId: group?.id || null,
-      groupName: group?.name || null
+      groupName: group?.name || null,
+      safeStopped
     });
-    return { ...row, group };
+    return { ...row, group, safeStopped };
   }
 
   @Post("trials/set-group")
@@ -339,11 +370,38 @@ export class AdminController {
       "UPDATE trial_authorizations SET access_group_id=$2,updated_at=now() WHERE user_id=$1",
       [body.userId, body.groupId || null]
     );
+    let safeStopped = 0;
+    if (group && group.enabled === false) {
+      const stopped = await this.db.query(
+        `UPDATE bot_instances bi
+         SET desired_state='SAFE_STOP'
+         FROM trial_grants tg
+         WHERE tg.mt5_account_id=bi.mt5_account_id
+           AND tg.user_id=$1
+           AND tg.access_group_id=$2
+           AND (
+             bi.desired_state IN ('RUNNING','STARTING')
+             OR bi.actual_state='RUNNING'
+             OR COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
+           )
+         RETURNING bi.id`,
+        [body.userId, group.id]
+      );
+      safeStopped = stopped.rowCount || 0;
+      if (stopped.rows.length) {
+        await this.db.query(
+          `INSERT INTO bot_commands(bot_instance_id,command)
+           SELECT id,'SAFE_STOP' FROM unnest($1::uuid[]) AS x(id)`,
+          [stopped.rows.map((item:any)=>item.id)]
+        );
+      }
+    }
     await this.audit("OWNER", "SET_TRIAL_GROUP", "user", body.userId, {
       groupId: group?.id || null,
-      groupName: group?.name || null
+      groupName: group?.name || null,
+      safeStopped
     });
-    return { ok: true, group };
+    return { ok: true, group, safeStopped };
   }
 
   @Get("system")
@@ -534,6 +592,30 @@ export class AdminController {
       await this.partner.detachCustomerToDirect(body.userId, row.id, body.activatedBy || "ADMIN");
     } else {
       await this.syncSlotsForSubscription(body.userId, row.id, plan);
+    }
+
+    if (accessGroup && accessGroup.enabled === false) {
+      const stopped = await this.db.query(
+        `UPDATE bot_instances bi
+         SET desired_state='SAFE_STOP'
+         FROM license_slots ls
+         WHERE ls.id=bi.slot_id
+           AND ls.subscription_id=$1
+           AND (
+             bi.desired_state IN ('RUNNING','STARTING')
+             OR bi.actual_state='RUNNING'
+             OR COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
+           )
+         RETURNING bi.id`,
+        [row.id]
+      );
+      if (stopped.rows.length) {
+        await this.db.query(
+          `INSERT INTO bot_commands(bot_instance_id,command)
+           SELECT id,'SAFE_STOP' FROM unnest($1::uuid[]) AS x(id)`,
+          [stopped.rows.map((item:any)=>item.id)]
+        );
+      }
     }
 
     let referralCommissionCount = 0;
