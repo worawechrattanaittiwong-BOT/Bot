@@ -91,7 +91,7 @@
 .sessionSummary strong { font-size: 16px; line-height: 1.2; }
 .sessionSummary small { color: #b4c5d9; font-size: var(--ui-type-meta); }
 .sessionSummary em { width: 100%; color: #8d9bb2; font-size: var(--ui-type-meta); font-style: normal; }
-.sessionRail { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; min-width: 0; }
+.sessionRail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-width: 0; }
 .sessionItem { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 7px 6px; border: 1px solid rgba(94, 120, 160, .17); border-radius: 7px; background: rgba(8, 19, 32, .42); }
 .sessionItem b, .sessionItem small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sessionItem b { color: #c8d4e7; font-size: var(--ui-type-meta); }
@@ -247,13 +247,14 @@
   }
 
   .sessionRail {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .sessionItem {
-    gap: 4px;
-    padding: 6px 4px;
+    gap: 6px;
+    min-height: 54px;
+    padding: 8px 7px;
   }
 
   .sessionItem b {
