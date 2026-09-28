@@ -180,7 +180,7 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
           SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
           CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
           'ACTIVE','Cloud Trading'
-          FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' RETURNING *`, [order.user_id, subscription.id])).rows[0];
+          FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`, [order.user_id, subscription.id])).rows[0];
       }
       await tx.query("UPDATE cloud_orders SET status='PAID',charge_id=$2,slot_id=$3,subscription_id=$4,paid_at=now() WHERE id=$1",
         [order.id, charge.id, slot.id, subscription.id]);
@@ -249,7 +249,7 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
            SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
                   CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
                   'ACTIVE','Cloud Trading'
-           FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' RETURNING *`,
+           FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`,
           [order.user_id, subscription.id]
         )).rows[0];
       }
@@ -335,7 +335,7 @@ export class CloudCustomerController {
     if (order.charge_id && order.status !== "PAID") await this.cloud.reconcile(order.charge_id);
     return { ok: true };
   }
-  @Post("checkout") async checkout(@Req() req: any, @Body() body: { months: number; slotId?: string; promoCode?: string }) {
+  @Post("checkout") async checkout(@Req() req: any, @Body() body: { months: number; slotId?: string; promoCode?: string; purchaseType?: "PACKAGE" | "ADDON" }) {
     if (paymentMode() === "UNCONFIGURED" || (paymentMode() !== "EASYSLIP" && process.env.CLOUD_CHECKOUT_ENABLED !== "true")) throw new ConflictException("ยังไม่เปิดรับชำระเงิน");
     if (![1,3,6,12].includes(body.months)) throw new BadRequestException("Invalid package");
     if (body.slotId && !/^[0-9a-f-]{36}$/i.test(body.slotId)) throw new BadRequestException("Invalid slot");
@@ -350,10 +350,84 @@ export class CloudCustomerController {
       if (pending) throw new ConflictException("มีรายการรอชำระอยู่แล้ว กรุณาตรวจสอบรายการเดิม");
       const pack = (await tx.query("SELECT * FROM cloud_packages WHERE months=$1 AND enabled=true AND price_satang>0", [body.months])).rows[0];
       if (!pack) throw new ConflictException("แพ็กเกจยังไม่เปิดขาย");
-      const slot = body.slotId ? (await tx.query("SELECT * FROM license_slots WHERE id=$1 AND owner_user_id=$2 AND assigned_user_id=$2 AND mode='CLOUD' AND status<>'DELETED'", [body.slotId,req.user.sub])).rows[0] : null;
+
+      const purchaseType = body.slotId
+        ? "RENEW"
+        : String(body.purchaseType || "PACKAGE").toUpperCase();
+      if (!["PACKAGE","ADDON","RENEW"].includes(purchaseType)) {
+        throw new BadRequestException("Invalid purchase type");
+      }
+
+      let slot = body.slotId
+        ? (await tx.query(
+            "SELECT * FROM license_slots WHERE id=$1 AND owner_user_id=$2 AND assigned_user_id=$2 AND mode='CLOUD' AND status<>'DELETED' FOR UPDATE",
+            [body.slotId,req.user.sub]
+          )).rows[0]
+        : null;
       if (body.slotId && !slot) throw new ConflictException("ไม่พบ Cloud Slot ของคุณ");
-      const reserved = slot ? (await tx.query(`SELECT runner_id FROM cloud_orders WHERE slot_id=$1 AND status='PAID'
-        UNION SELECT runner_id FROM bot_instances WHERE slot_id=$1 AND runner_id IS NOT NULL LIMIT 1`, [slot.id])).rows[0] : null;
+
+      // The normal Cloud package owns exactly one primary VPS slot.
+      // If the customer had an expired/legacy primary slot, renew that row
+      // instead of silently creating a second Slot #1.
+      if (!slot && purchaseType === "PACKAGE") {
+        slot = (await tx.query(
+          `SELECT ls.*
+           FROM license_slots ls
+           LEFT JOIN subscriptions s ON s.id=ls.subscription_id
+           LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
+           WHERE ls.owner_user_id=$1
+             AND ls.assigned_user_id=$1
+             AND ls.mode='CLOUD'
+             AND ls.slot_type='PERSONAL'
+             AND ls.status<>'DELETED'
+           ORDER BY
+             CASE WHEN s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() THEN 0 ELSE 1 END,
+             CASE WHEN bi.id IS NOT NULL THEN 0 ELSE 1 END,
+             ls.updated_at DESC
+           LIMIT 1
+           FOR UPDATE OF ls`,
+          [req.user.sub]
+        )).rows[0] || null;
+      }
+
+      // Extra VPS slots are add-ons. Normal customers must already have a
+      // current primary Cloud entitlement before buying another runtime.
+      if (!slot && purchaseType === "ADDON" && !["OWNER","ADMIN"].includes(String(user.role || "").toUpperCase())) {
+        const primary = (await tx.query(
+          `SELECT ls.id
+           FROM license_slots ls
+           JOIN subscriptions s ON s.id=ls.subscription_id
+           WHERE ls.owner_user_id=$1
+             AND ls.assigned_user_id=$1
+             AND ls.mode='CLOUD'
+             AND ls.slot_type='PERSONAL'
+             AND ls.status<>'DELETED'
+             AND s.status='ACTIVE'
+             AND s.starts_at<=now()
+             AND s.expires_at>now()
+           LIMIT 1`,
+          [req.user.sub]
+        )).rows[0];
+        if (!primary) {
+          throw new ConflictException("กรุณาเปิดแพ็กเกจ VPS หลักก่อนซื้อ VPS Slot เพิ่ม");
+        }
+      }
+
+      const reserved = slot ? (await tx.query(`
+        SELECT runner_id
+        FROM bot_instances
+        WHERE slot_id=$1 AND runner_id IS NOT NULL
+        UNION ALL
+        SELECT o.runner_id
+        FROM cloud_orders o
+        JOIN subscriptions s ON s.id=o.subscription_id
+        WHERE o.slot_id=$1
+          AND o.status='PAID'
+          AND s.status='ACTIVE'
+          AND s.starts_at<=now()
+          AND s.expires_at>now()
+          AND o.runner_id IS NOT NULL
+        LIMIT 1`, [slot.id])).rows[0] : null;
       const reservedHealthy = reserved ? (await tx.query(`SELECT runner_id FROM worker_nodes
         WHERE runner_id=$1 AND last_seen_at>now()-interval '30 seconds'
           AND telemetry->>'templateReady'='true' AND NOT capacity_blocked AND NOT quarantined`, [reserved.runner_id])).rows[0] : null;
