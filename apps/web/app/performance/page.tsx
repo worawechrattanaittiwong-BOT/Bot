@@ -154,13 +154,13 @@ function LotDistributionChart({rows,total}:{rows:any[];total:number}) {
           <div className={styles.lotRow} key={String(row.lot)}>
             <div className={styles.lotRowHead}>
               <b>{fixed(row.lot,3)} Lot</b>
-              <span>{Number(row.count||0)} ไม้ · {percent(pct)}</span>
+              <span>{Number(row.count||0)} Positions · {percent(pct)}</span>
             </div>
             <div className={styles.lotTrack}><i style={{width:Math.max(2,pct)+"%"}}/></div>
           </div>
         );
       })}
-      <div className={styles.lotTotal}>รวม {total.toLocaleString("en-US")} Position</div>
+      <div className={styles.lotTotal}>Total {total.toLocaleString("en-US")} Positions</div>
     </div>
   );
 }
@@ -189,7 +189,7 @@ function SummaryChart({points}:{points:any[]}) {
     .filter((value,index,array)=>index===0||value!==array[index-1]);
   const last=singlePoint?{...coords[0],x:width-right}:coords[coords.length-1];
   return (
-    <svg className={styles.chart} viewBox={"0 0 "+width+" "+height} preserveAspectRatio="none" role="img" aria-label="Balance curve">
+    <svg className={styles.chart} viewBox={"0 0 "+width+" "+height} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Balance curve">
       <defs>
         <linearGradient id="perf-line" x1="0" x2="1"><stop offset="0%" stopColor="#61d9ff"/><stop offset="48%" stopColor="#8c78ff"/><stop offset="100%" stopColor="#bd69ff"/></linearGradient>
         <linearGradient id="perf-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#8068ff" stopOpacity=".48"/><stop offset="100%" stopColor="#8068ff" stopOpacity=".02"/></linearGradient>
@@ -734,7 +734,7 @@ export default function PerformanceDashboardPage() {
                 <Metric icon="report" label="Profit Factor" value={detailValue(fixed(summary.profitFactor))}/>
                 <Metric icon="orders" label="Closed Positions" value={detailValue(totalPositions.toLocaleString("en-US"))}/>
                 <Metric icon="pnl" label="Average Lot" value={detailValue(fixed(summary.averageLot,3))}/>
-                <Metric icon="strategy" label="Primary Lot" value={detailValue(fixed(primaryLot,3)+" · "+primaryLotCount+" Positions · "+percent(primaryLotPercent))}/>
+                <Metric icon="strategy" label="Primary Lot" value={detailValue(fixed(primaryLot,3)+" · "+primaryLotCount+" Pos. · "+percent(primaryLotPercent))}/>
               </div>
 
               <div className={styles.resultsLabel}><ScenovaIcon name="report" size={15}/><span>Performance Breakdown · MT5 Analytics</span></div>
@@ -828,6 +828,18 @@ export default function PerformanceDashboardPage() {
               </div>
 
               <div className={styles.analyticsCharts}>
+                <div className={styles.lotCard}>
+                  <div className={styles.chartHead}>
+                    <div><ScenovaIcon name="pnl" size={15}/><b>Lot Allocation</b></div>
+                    <span>{detailedStatsReliable?Number(summary.lotSizeCount||lotDistribution.length||0):"—"} Sizes</span>
+                  </div>
+                  <div className={styles.lotHighlights}>
+                    <div><span>Primary Lot</span><b>{detailValue(fixed(primaryLot,3))}</b></div>
+                    <div><span>Positions</span><b>{detailValue(String(primaryLotCount))}</b></div>
+                    <div><span>Share</span><b>{detailValue(percent(primaryLotPercent))}</b></div>
+                  </div>
+                  <LotDistributionChart rows={reliableLotDistribution} total={detailedStatsReliable?totalPositions:0}/>
+                </div>
                 <div className={styles.chartCard}>
                   <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={15}/><b>Capital Growth</b></div><span>End Balance: {money(endBalance,currency)}</span></div>
                   <SummaryChart points={reliableCurve}/>
