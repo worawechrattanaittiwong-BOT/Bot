@@ -8,17 +8,21 @@ import { PromotionService } from "./promotion.service";
 import { EasySlipPaymentService } from "./easyslip-payment.service";
 import { CLOUD_SERVER_RELEASE, versionAtLeast, versionExact } from "./cloud-server-release";
 
-export function paymentMode() {
-  if (String(process.env.EASYSLIP_API_KEY || "").trim()) return "EASYSLIP";
+function omiseMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
   if (key.startsWith("skey_test_")) return "TEST";
   if (key.startsWith("skey_live_") || key.startsWith("skey_")) return "LIVE";
   return "UNCONFIGURED";
 }
+
+export function paymentMode() {
+  if (String(process.env.EASYSLIP_API_KEY || "").trim()) return "EASYSLIP";
+  return omiseMode();
+}
 export function validateCharge(charge: any, order: any) {
   if (charge.object !== "charge" || charge.metadata?.order_id !== order.id ||
       charge.amount !== order.amount || charge.currency?.toLowerCase() !== "thb" ||
-      charge.livemode !== (paymentMode() === "LIVE") ||
+      charge.livemode !== (omiseMode() === "LIVE") ||
       (order.charge_id && order.charge_id !== charge.id)) {
     throw new ConflictException("ข้อมูลการชำระเงินไม่ตรงกับรายการ");
   }
@@ -40,7 +44,7 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
   }
   onModuleDestroy() { if (this.timer) clearInterval(this.timer); }
   async reconcilePending() {
-    if (this.checking || !["TEST", "LIVE"].includes(paymentMode())) return;
+    if (this.checking || !["TEST", "LIVE"].includes(omiseMode())) return;
     this.checking = true;
     try {
       const orders = await this.db.query(`UPDATE cloud_orders SET checked_at=now() WHERE id IN (
@@ -55,7 +59,7 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async gateway(path: string, fields?: URLSearchParams) {
-    if (!["TEST", "LIVE"].includes(paymentMode())) throw new ConflictException("ไม่ได้ใช้งาน Opn / Omise ในโหมดการชำระเงินปัจจุบัน");
+    if (!["TEST", "LIVE"].includes(omiseMode())) throw new ConflictException("ยังไม่ได้เชื่อม Opn / Omise");
     const response = await fetch("https://api.omise.co" + path, {
       method: fields ? "POST" : "GET",
       headers: { Authorization: "Basic " + Buffer.from(process.env.OMISE_SECRET_KEY + ":").toString("base64"),
