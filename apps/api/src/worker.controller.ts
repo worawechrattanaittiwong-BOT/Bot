@@ -240,7 +240,6 @@ export class WorkerController {
            AND bi.mode='CLOUD'
            AND ls.mode='CLOUD'
            AND ls.status<>'DELETED'
-           AND u.status='ACTIVE'
            AND u.role NOT IN ('OWNER','ADMIN')
            AND sub.expires_at<=now()
            AND COALESCE(bi.runtime_stop_state,'NONE') NOT IN ('STOP_REQUESTED','STOP_CONFIRMED','LEASE_REVOKED')
