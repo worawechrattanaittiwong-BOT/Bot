@@ -37,7 +37,7 @@ const packagesNavItem: NavItem = {
   label:"Packages", hint:"Trial, Local MT5 & Cloud MT5"
 };
 const inviteEarnNavItem: NavItem = {
-  section:"MANAGEMENT", key:"referrals", href:"/referrals", icon:"users",
+  section:"MANAGEMENT", key:"referrals", href:"/referrals", icon:"referral",
   label:"Invite & Earn", hint:"Share your link & earn rewards"
 };
 
@@ -50,13 +50,13 @@ export const sharedTradingNavItems: NavItem[] = [
 export const ownerNavItems: NavItem[] = [
   controlCenterNavItem,
   mt5EaNavItem,
-  { section:"TRADING", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud Trading", hint:"Trading nodes & execution infrastructure" },
   performanceNavItem,
   myAccountNavItem,
   inviteEarnNavItem,
   { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trials, subscriptions & customer access" },
   { section:"MANAGEMENT", key:"commission-withdrawals", href:"/admin/commission", icon:"wallet", label:"Commission & Withdrawals", hint:"Wallet rules, withdrawal queue & payout audit" },
-  { section:"SYSTEM", key:"promotion-center", href:"/admin/promotions", icon:"target", label:"Promotion Center", hint:"Manage in-app campaigns, schedules & visibility" },
+  { section:"MANAGEMENT", key:"promotion-center", href:"/admin/promotions", icon:"spark", label:"Promotion Center", hint:"Manage in-app campaigns, schedules & visibility" },
+  { section:"SYSTEM", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud Trading", hint:"Trading nodes & execution infrastructure" },
   { section:"SYSTEM", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"System Overview", hint:"Platform health & system status" },
   { section:"SYSTEM", key:"system-test", href:"/admin/system-test", icon:"overview", label:"System Test", hint:"Read-only health checks & test history" },
   { section:"SYSTEM", key:"service-links", href:"/admin/service-links", icon:"strategy", label:"API & Service Links", hint:"Private links for connected services & providers" },
