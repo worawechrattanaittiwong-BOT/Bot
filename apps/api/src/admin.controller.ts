@@ -591,12 +591,10 @@ export class AdminController {
              SELECT 1
              FROM subscriptions alt
              JOIN plans ap ON ap.id=alt.plan_id
-             LEFT JOIN access_groups aag ON aag.id=alt.access_group_id
              WHERE alt.user_id=tg.user_id
                AND alt.status='ACTIVE'
                AND alt.starts_at<=now()
                AND alt.expires_at>now()
-               AND COALESCE(aag.enabled,true)
                AND ap.mode=bi.mode
            )
            AND NOT (
