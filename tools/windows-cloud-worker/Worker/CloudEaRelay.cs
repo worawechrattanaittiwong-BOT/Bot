@@ -336,8 +336,7 @@ internal sealed class CloudEaRelay
                 // Keep malformed/unauthorized payloads for operator inspection,
                 // but move them out of the active queue so one poison file can
                 // never block newer journal events.
-                if (statusCode >= 400 && statusCode < 500 &&
-                    statusCode != 408 && statusCode != 429)
+                if (statusCode is 400 or 422)
                 {
                     var failedPath = journalPath.Replace(
                         ".request.txt",
@@ -347,6 +346,9 @@ internal sealed class CloudEaRelay
                     continue;
                 }
 
+                // Authentication, route availability, rate limits and 5xx can
+                // all recover after a deployment/rebind. Keep the durable file
+                // and retry instead of silently stranding a valid trade event.
                 relayFailed = true;
                 break;
             }
