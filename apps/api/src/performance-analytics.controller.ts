@@ -500,6 +500,10 @@ export class PerformanceAnalyticsController {
     const mt5TodayReconciliation = canReconcileToday
       ? reportedTodayClosed - journalTodayClosed
       : 0;
+    const journalReconciliationGap = Number(mt5TodayReconciliation.toFixed(2));
+    const detailedStatsReliable =
+      !canReconcileToday ||
+      Math.abs(journalReconciliationGap) <= 0.01;
     const realizedSinceFrom = rawRealizedSinceFrom + mt5TodayReconciliation;
     const selectedRealizedNet = rawSelectedRealizedNet + mt5TodayReconciliation;
     const derivedStart = currentBalance > 0
@@ -768,6 +772,17 @@ export class PerformanceAnalyticsController {
         lastSeenAt: account.last_seen_at || null,
         positions: Number(metrics.positions || 0),
         marketSessionState: String(metrics.marketSessionState || "UNKNOWN")
+      },
+      dataQuality: {
+        detailedStatsReliable,
+        detailStatus: detailedStatsReliable ? "COMPLETE" : "JOURNAL_INCOMPLETE",
+        journalRows: journalRows.length,
+        selectedJournalRows: selectedDealRows.length,
+        reconstructedPositions: selectedPositions.length,
+        mt5ReconciliationAdjustment: journalReconciliationGap,
+        moneySource: canReconcileToday
+          ? "MT5_HEARTBEAT_RECONCILED"
+          : "TRADE_JOURNAL"
       },
       balance: {
         current: currentBalance > 0 ? currentBalance : null,
