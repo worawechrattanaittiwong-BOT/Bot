@@ -39,6 +39,7 @@ type BrokerCatalog = {
 
 type CloudCatalog = {
   packages: Array<{ months:number; price_satang:number; enabled:boolean; updated_at?:string }>;
+  addonPackages: Array<{ months:number; price_satang:number; enabled:boolean; updated_at?:string }>;
   available: number;
   provisioningPaused: boolean;
   salesPaused: boolean;
@@ -71,6 +72,8 @@ type CloudOrder = {
   slot_id?:string|null;
   subscription_expires_at?:string|null;
   account_number?:string|null;
+  purchase_type?:string|null;
+  slot_type?:string|null;
 };
 
 type View = "overview" | "account" | "backtest";
@@ -183,6 +186,13 @@ export default function DashboardPage() {
   const [vpsRenewSlotId, setVpsRenewSlotId] = useState("");
   const [vpsPaymentOrderId, setVpsPaymentOrderId] = useState("");
   const [vpsPurchaseBusy, setVpsPurchaseBusy] = useState(false);
+  const [ownerAddonPriceEditorOpen, setOwnerAddonPriceEditorOpen] = useState(false);
+  const [ownerAddonPrices, setOwnerAddonPrices] = useState<Record<number,{priceBaht:string;enabled:boolean}>>({
+    1:{priceBaht:"",enabled:false},
+    3:{priceBaht:"",enabled:false},
+    6:{priceBaht:"",enabled:false},
+    12:{priceBaht:"",enabled:false}
+  });
   const [vpsSlipFile, setVpsSlipFile] = useState<File | null>(null);
   const [vpsSlipPreview, setVpsSlipPreview] = useState("");
   const [ownerVpsPassword, setOwnerVpsPassword] = useState("");
@@ -1237,25 +1247,42 @@ export default function DashboardPage() {
       return remaining > 0 && remaining < 3 * 24 * 60 * 60 * 1000;
     }).length
   };
+  const primaryCloudSlot = cloudSlots.find((slot:any)=>String(slot?.slot_type || "").toUpperCase()==="PERSONAL")
+    || cloudSlots.find((slot:any)=>Number(slot?.slot_number || 0)===1)
+    || null;
+  const primaryCloudExpiry = primaryCloudSlot?.subscription_expires_at
+    ? new Date(primaryCloudSlot.subscription_expires_at)
+    : null;
+  const primaryCloudRemaining = primaryCloudExpiry
+    ? primaryCloudExpiry.getTime() - accessClockNow
+    : null;
+  const primaryCloudActive = ownerCloudAccess || (
+    Boolean(primaryCloudSlot?.subscription_active) &&
+    primaryCloudRemaining !== null &&
+    primaryCloudRemaining > 0
+  );
   const vpsPaymentOrder = cloudOrders.find(order=>order.id===vpsPaymentOrderId) || null;
   const vpsPaymentAccount = cloudCatalog?.paymentAccounts?.[0] || null;
-  const vpsPackages = (cloudCatalog?.packages || [])
+  const vpsPackages = (cloudCatalog?.addonPackages || [])
     .filter(pack=>pack.enabled && Number(pack.price_satang) > 0)
     .sort((a,b)=>Number(a.months)-Number(b.months));
   const selectedVpsPackage = vpsPackages.find(pack=>Number(pack.months)===Number(vpsPurchaseMonths)) || vpsPackages[0] || null;
   const vpsRenewSlot = cloudSlots.find((slot:any)=>String(slot?.id || "")===String(vpsRenewSlotId || "")) || null;
-  const canBuyVpsSlot = Boolean(cloudCatalog?.checkoutEnabled) && Number(cloudCatalog?.available || 0) > 0;
+  const canBuyVpsSlot = Boolean(cloudCatalog?.checkoutEnabled) &&
+    Number(cloudCatalog?.available || 0) > 0 &&
+    primaryCloudActive;
   const canCheckoutVpsOrder = Boolean(cloudCatalog?.checkoutEnabled) &&
+    primaryCloudActive &&
     (Boolean(vpsRenewSlotId) || Number(cloudCatalog?.available || 0) > 0);
 
   const accessExpiry = entitlement?.expiresAt ? new Date(entitlement.expiresAt) : null;
   const accessRemaining = accessExpiry ? Math.max(0, accessExpiry.getTime() - accessClockNow) : null;
   const cloudRenewalWarning =
     String(data?.selectedSlot?.mode || "").toUpperCase() === "CLOUD" &&
-    entitlement?.source === "SUBSCRIPTION" &&
-    accessRemaining !== null &&
-    accessRemaining > 0 &&
-    accessRemaining < 3 * 24 * 60 * 60 * 1000;
+    !ownerCloudAccess &&
+    primaryCloudRemaining !== null &&
+    primaryCloudRemaining > 0 &&
+    primaryCloudRemaining < 3 * 24 * 60 * 60 * 1000;
   const accessCompactCountdown = accessRemaining === null ? "" : (() => {
     const totalSeconds = Math.floor(accessRemaining / 1000);
     const days = Math.floor(totalSeconds / 86400);
