@@ -4101,7 +4101,12 @@ export default function DashboardPage() {
                       : "1 Slot เสริม = 1 VPS MT5 + 1 EA Runtime · อายุแยกจากแพ็กเกจหลัก"}
                 </p>
               </div>
-              <button type="button" className="vps-slot-dialog-close" onClick={()=>vpsSlotDialogRef.current?.close()} aria-label="ปิด">×</button>
+              <div className="vps-slot-dialog-head-actions">
+                {String(data.user?.role || "").toUpperCase()==="OWNER" && !ownerAddonPriceEditorOpen && !vpsPaymentOrder && (
+                  <button type="button" className="btn ghost" onClick={openOwnerAddonPricing}>ตั้งราคา Slot เสริม</button>
+                )}
+                <button type="button" className="vps-slot-dialog-close" onClick={()=>vpsSlotDialogRef.current?.close()} aria-label="ปิด">×</button>
+              </div>
             </header>
 
             {ownerAddonPriceEditorOpen ? (
