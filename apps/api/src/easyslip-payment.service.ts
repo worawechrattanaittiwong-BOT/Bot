@@ -84,6 +84,75 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
     return payload;
   }
 
+  private async requestV1(path: string, body: any) {
+    const key = String(process.env.EASYSLIP_API_KEY || "").trim();
+    if (!key) throw new ConflictException("ยังไม่ได้เชื่อม EasySlip API");
+
+    const response = await fetch("https://api.easyslip.com/v1" + path, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + key,
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000)
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || Number(payload?.status || response.status) >= 400) {
+      const message = String(payload?.message || "EasySlip ไม่สามารถสร้าง QR ได้").slice(0, 240);
+      throw new ConflictException(message);
+    }
+    return payload;
+  }
+
+  async createPaymentQr(input: { orderId: string; amountSatang: number }) {
+    const amountSatang = Math.trunc(Number(input.amountSatang || 0));
+    if (!Number.isInteger(amountSatang) || amountSatang <= 0) return null;
+    const amount = Number((amountSatang / 100).toFixed(2));
+    const ref1 = ("SCN" + String(input.orderId || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase()).slice(0, 20);
+
+    const promptPayId = String(process.env.EASYSLIP_PROMPTPAY_ID || "").replace(/\D/g, "");
+    const forcedType = String(process.env.EASYSLIP_QR_TYPE || "").trim().toUpperCase();
+    let type = forcedType;
+    if (!type) {
+      const account = (await this.listBankAccounts().catch(() => []))[0] || null;
+      const bank = String(account?.bankShortCode || "").toUpperCase();
+      if (bank === "KBANK") type = "KSHOP";
+      else if (bank === "SCB") type = "MAE_MANEE";
+      else if (bank === "KTB") type = "TUNGNGERN";
+      else if (promptPayId) type = "PROMPTPAY";
+    }
+
+    const payload: any = { type, amount };
+    if (type === "PROMPTPAY") {
+      if (promptPayId.length === 10) payload.msisdn = promptPayId;
+      else if (promptPayId.length === 13) payload.natId = promptPayId;
+      else if (promptPayId.length === 15) payload.eWalletId = promptPayId;
+      else return null;
+    } else if (["KSHOP", "MAE_MANEE", "TUNGNGERN"].includes(type)) {
+      payload.ref1 = ref1;
+      if (type === "TUNGNGERN") payload.merchantName = "SCENOVA";
+    } else {
+      return null;
+    }
+
+    try {
+      const result = await this.requestV1("/qr/generate", payload);
+      const image = String(result?.data?.image || "");
+      const mime = String(result?.data?.mime || "image/png");
+      const qrPayload = String(result?.data?.payload || "");
+      if (!image || !qrPayload) return null;
+      return {
+        dataUrl: `data:${mime};base64,${image}`,
+        payload: qrPayload,
+        type
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async listBankAccounts() {
     if (!this.configured()) return [];
     if (this.accountsCache && this.accountsCache.expiresAt > Date.now()) {
