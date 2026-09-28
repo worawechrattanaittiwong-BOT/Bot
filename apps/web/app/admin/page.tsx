@@ -36,7 +36,6 @@ export default function AdminPage() {
   const [partnerCustomerDays, setPartnerCustomerDays] = useState(30);
   const [partnerBusy, setPartnerBusy] = useState(false);
   const [trialDays, setTrialDays] = useState(1);
-  const [extendDays, setExtendDays] = useState(30);
   const [membershipDays, setMembershipDays] = useState<Record<string,number>>({});
   const [accessGroups, setAccessGroups] = useState<any[]>([]);
   const [selectedAccessGroupId, setSelectedAccessGroupId] = useState("");
