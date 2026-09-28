@@ -19,6 +19,7 @@ import { CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
+import { RuntimeMigrationService } from "./runtime-migration.service";
 import { reconstructCompletedJournal, resolveJournalControlMode } from "./performance-journal";
 
 function isBitcoinTradingSymbol(value: unknown) {
@@ -36,7 +37,8 @@ export class BotController {
     private readonly crypto: CryptoService,
     private readonly maintenance: MaintenanceService,
     private readonly partner: PartnerService,
-    private readonly trials: TrialAuthorizationService
+    private readonly trials: TrialAuthorizationService,
+    private readonly migrations: RuntimeMigrationService
   ) {}
 
   private supportedEaRuntime(version: any) {
@@ -595,9 +597,35 @@ export class BotController {
       return { allowed: true, source: "SUBSCRIPTION", expiresAt: legacySub.expires_at };
     }
 
+    let expiredSub: any = null;
+    if (slotId) {
+      expiredSub = await this.db.one(
+        `SELECT s.id,s.expires_at,p.code,p.mode
+         FROM license_slots ls
+         JOIN subscriptions s ON s.id=ls.subscription_id
+         JOIN plans p ON p.id=s.plan_id
+         WHERE ls.id=$1
+           AND ls.assigned_user_id=$2
+           AND s.expires_at<=now()
+           AND ($3::text IS NULL OR p.mode=$3)
+         ORDER BY s.expires_at DESC
+         LIMIT 1`,
+        [slotId, userId, mode]
+      );
+    }
+    if (!expiredSub) {
+      expiredSub = await this.db.one(
+        "SELECT s.id,s.expires_at,p.code,p.mode FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.expires_at<=now() AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
+        [userId, mode]
+      );
+    }
+
     // Trial is intentionally Local-only. Cloud/VPS always requires a
     // Cloud entitlement so a Trial can never consume a reserved Trading VPS.
     if (String(mode || "").toUpperCase() === "CLOUD") {
+      if (expiredSub) {
+        return { allowed: false, source: "SUBSCRIPTION_EXPIRED", expiresAt: expiredSub.expires_at };
+      }
       return { allowed: false, source: "NONE", reason: "TRIAL_LOCAL_ONLY" };
     }
 
@@ -605,12 +633,15 @@ export class BotController {
       "SELECT id,status,duration_minutes,started_at,expires_at FROM trial_grants WHERE user_id=$1 AND ($2::uuid IS NULL OR mt5_account_id=$2) ORDER BY created_at DESC LIMIT 1",
       [userId, mt5AccountId]
     );
-    if (!trial) return { allowed: false, source: "NONE" };
-    if (trial.status === "APPROVED") return { allowed: true, source: "TRIAL_READY", trialId: trial.id };
-    if (trial.status === "ACTIVE" && trial.expires_at && new Date(trial.expires_at) > new Date()) {
+    if (trial?.status === "APPROVED") return { allowed: true, source: "TRIAL_READY", trialId: trial.id };
+    if (trial?.status === "ACTIVE" && trial.expires_at && new Date(trial.expires_at) > new Date()) {
       return { allowed: true, source: "TRIAL", expiresAt: trial.expires_at };
     }
-    return { allowed: false, source: "TRIAL_EXPIRED" };
+    if (expiredSub) {
+      return { allowed: false, source: "SUBSCRIPTION_EXPIRED", expiresAt: expiredSub.expires_at };
+    }
+    if (!trial) return { allowed: false, source: "NONE" };
+    return { allowed: false, source: "TRIAL_EXPIRED", expiresAt: trial.expires_at || null };
   }
 
   @Get("dashboard")
@@ -2079,6 +2110,35 @@ export class BotController {
     try {
       await this.maintenance.assertStartAllowed();
       instance = await this.getInstance(req.user.sub, slotId || null);
+
+    const activeMigration = await this.db.one(
+      `SELECT id,state
+       FROM runtime_migrations
+       WHERE bot_instance_id=$1
+         AND state NOT IN ('COMPLETED','FAILED','CANCELLED')
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [instance.id]
+    );
+    if (activeMigration) {
+      let migrationState = String(activeMigration.state || "").toUpperCase();
+      if (["TARGET_PROVISIONING", "WAITING_LOCAL_INSTALL"].includes(migrationState)) {
+        const reconciled = await this.migrations.reconcile(
+          req.user.sub,
+          String(activeMigration.id),
+          String(req.user?.code || req.user?.user_code || req.user?.sub || "USER").slice(0, 160)
+        );
+        migrationState = String(reconciled?.state || migrationState).toUpperCase();
+      }
+      if (!["COMPLETED", "FAILED", "CANCELLED"].includes(migrationState)) {
+        throw new ConflictException(
+          "การย้ายระบบ Local/Cloud ยังไม่ยืนยันว่าเสร็จสมบูรณ์ (สถานะ " +
+          migrationState +
+          ") กรุณารอให้ระบบยืนยันปลายทางพร้อมก่อนเริ่มบอท"
+        );
+      }
+    }
+
     if (!instance.mt5_account_id) throw new ConflictException("เชื่อมบัญชี MT5 ก่อนเริ่มบอท");
     const unresolvedCloseAll = await this.db.one(
       "SELECT id FROM bot_commands WHERE bot_instance_id=$1 AND command='CLOSE_ALL' AND status IN ('PENDING','DELIVERED') ORDER BY id DESC LIMIT 1",
@@ -2112,7 +2172,15 @@ export class BotController {
       instance.mode,
       instance.slot_id
     );
-    if (!access.allowed) throw new ConflictException("trial or matching subscription required");
+    if (!access.allowed) {
+      if (access.source === "SUBSCRIPTION_EXPIRED") {
+        throw new ConflictException("สมาชิกหมดอายุแล้ว กรุณาต่ออายุสมาชิกก่อนเริ่มบอท");
+      }
+      if (access.source === "TRIAL_EXPIRED") {
+        throw new ConflictException("Trial หมดอายุแล้ว กรุณาติดต่อผู้ดูแลเพื่อขอสิทธิ์ใช้งาน");
+      }
+      throw new ConflictException("ยังไม่มี Trial หรือสมาชิกที่ใช้งานได้กับบัญชีนี้");
+    }
 
     const startSettingsRow = await this.db.one(
       "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
