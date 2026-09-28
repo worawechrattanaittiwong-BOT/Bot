@@ -77,6 +77,7 @@ WITH numbered AS (
     )::int AS next_number
   FROM license_slots ls
   WHERE ls.status<>'DELETED'
+    AND ls.mode='CLOUD'
 )
 UPDATE license_slots ls
 SET slot_number=n.next_number,
@@ -88,7 +89,7 @@ WHERE ls.id=n.id
 -- Prevent the same issue from returning.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_license_slots_owner_mode_number_live
   ON license_slots(owner_user_id,mode,slot_number)
-  WHERE status<>'DELETED';
+  WHERE status<>'DELETED' AND mode='CLOUD';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_license_slots_single_primary_live
   ON license_slots(owner_user_id,mode)
