@@ -5614,3 +5614,33 @@
     white-space:nowrap!important;
   }
 }
+
+
+/* ===== Control Center V52 · desktop running header metric sizing ===== */
+@media(min-width:701px){
+  .cc-v17-running-head>.cc-v17-running-title{
+    flex:1 1 auto;
+    min-width:0;
+  }
+  .cc-v17-running-head>.cc-v17-running-head-metrics{
+    flex:0 0 auto;
+    width:auto;
+    min-width:0;
+    overflow:visible;
+  }
+  .cc-v17-running-head>.cc-v17-running-head-metrics>.cc-v17-net-profit{
+    flex:0 0 auto!important;
+    width:auto!important;
+    height:auto!important;
+    min-width:0!important;
+    max-width:none!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    white-space:nowrap!important;
+  }
+  .cc-v17-running-head>.cc-v17-running-head-metrics>em{
+    flex:0 0 auto;
+    white-space:nowrap;
+  }
+}
