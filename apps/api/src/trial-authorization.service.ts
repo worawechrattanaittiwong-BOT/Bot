@@ -21,6 +21,7 @@ export class TrialAuthorizationService {
     phoneHash?: string | null;
     phoneLast4?: string | null;
     source?: "OWNER" | "SMS" | "EMAIL";
+    accessGroupId?: string | null;
   }) {
     const days = this.normalizeDays(input.days);
     const user = await this.db.one(
@@ -64,9 +65,9 @@ export class TrialAuthorizationService {
     const authorization = await this.db.one(
       `INSERT INTO trial_authorizations(
          user_id,duration_minutes,status,approved_by,approved_at,blocked_reason,claimed_at,claimed_mt5_account_id,
-         phone_hash,phone_last4,source,updated_at
+         phone_hash,phone_last4,source,access_group_id,updated_at
        )
-       VALUES($1,$2,'PENDING_BIND',$3,now(),NULL,NULL,NULL,$4,$5,$6,now())
+       VALUES($1,$2,'PENDING_BIND',$3,now(),NULL,NULL,NULL,$4,$5,$6,$7,now())
        ON CONFLICT(user_id) DO UPDATE
        SET duration_minutes=EXCLUDED.duration_minutes,
            status='PENDING_BIND',
@@ -78,6 +79,7 @@ export class TrialAuthorizationService {
            phone_hash=COALESCE(EXCLUDED.phone_hash,trial_authorizations.phone_hash),
            phone_last4=COALESCE(EXCLUDED.phone_last4,trial_authorizations.phone_last4),
            source=EXCLUDED.source,
+           access_group_id=EXCLUDED.access_group_id,
            updated_at=now()
        RETURNING *`,
       [
@@ -86,7 +88,8 @@ export class TrialAuthorizationService {
         approvedBy,
         input.phoneHash || null,
         input.phoneLast4 || null,
-        input.source || "OWNER"
+        input.source || "OWNER",
+        input.accessGroupId || null
       ]
     );
 
@@ -101,7 +104,8 @@ export class TrialAuthorizationService {
           mt5AccountId: input.mt5AccountId || null,
           source: input.source || "OWNER",
           phoneVerified: Boolean(input.phoneHash),
-          preapproved: true
+          preapproved: true,
+          accessGroupId: input.accessGroupId || null
         })
       ]
     );
@@ -278,9 +282,9 @@ export class TrialAuthorizationService {
     const row = await this.db.one(
       `INSERT INTO trial_grants(
          user_id,mt5_account_id,account_number,broker_server,duration_minutes,
-         approved_by,line_contact,request_ip
+         approved_by,line_contact,request_ip,access_group_id
        )
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT DO NOTHING
        RETURNING *`,
       [
@@ -291,7 +295,8 @@ export class TrialAuthorizationService {
         Number(authorization.duration_minutes || 1440),
         authorization.approved_by || "OWNER",
         request?.line_contact || null,
-        request?.request_ip || null
+        request?.request_ip || null,
+        authorization.access_group_id || null
       ]
     );
 
@@ -363,7 +368,8 @@ export class TrialAuthorizationService {
           mt5AccountId: account.id,
           accountNumber: account.account_number,
           brokerServer: account.broker_server,
-          durationMinutes: Number(authorization.duration_minutes || 1440)
+          durationMinutes: Number(authorization.duration_minutes || 1440),
+          accessGroupId: authorization.access_group_id || null
         })
       ]
     );
