@@ -305,29 +305,30 @@ export default function AdminPage() {
   }
 
   async function removeMemberFromGroup(group:any, member:any) {
+    const paidText = member.paid_local || member.paid_cloud
+      ? "\n\nสมาชิกจริงยังคงใช้งานต่อ: " +
+        [member.paid_local ? "Local" : "", member.paid_cloud ? "VPS" : ""].filter(Boolean).join(" + ")
+      : "";
     const confirmed=await confirmPopup({
-      title:"เอาออกจากกลุ่ม "+group.name,
+      title:"ยกเลิกสิทธิ์ทดลอง · "+member.user_code,
       tone:"warning",
       message:
-        "เอา "+member.user_code+" ออกจากกลุ่มนี้หรือไม่?\n\n"+
-        "สมาชิก/Trial ของบัญชียังอยู่เหมือนเดิม เพียงยกเลิกการจัดกลุ่มเท่านั้น",
-      confirmLabel:"เอาออกจากกลุ่ม"
+        "ยกเลิกสิทธิ์ทดลองของ "+member.user_code+" ในกลุ่ม “"+group.name+"” หรือไม่?"+
+        paidText+
+        "\n\nการดำเนินการนี้ไม่ลบวันสมาชิกจริง",
+      confirmLabel:"ยกเลิก Trial"
     });
     if(!confirmed) return;
-    setGroupAction("remove:"+member.kind+":"+member.ref_id);
+    setGroupAction("remove:"+member.user_id);
     try {
-      if (member.kind==="SUBSCRIPTION") {
-        await adminApi("/admin/subscriptions/set-group", {
-          method:"POST",
-          body:JSON.stringify({ subscriptionId:member.ref_id, groupId:null })
-        });
-      } else {
-        await adminApi("/admin/trials/set-group", {
-          method:"POST",
-          body:JSON.stringify({ userId:member.user_id, groupId:null })
-        });
-      }
-      setMessage("เอา "+member.user_code+" ออกจากกลุ่ม "+group.name+" แล้ว · สิทธิ์เดิมยังอยู่");
+      const result=await adminApi("/admin/access-groups/revoke-member", {
+        method:"POST",
+        body:JSON.stringify({ groupId:group.id, userId:member.user_id })
+      });
+      setMessage(
+        "ยกเลิก Trial ของ "+member.user_code+" แล้ว"+
+        (result.paidMembershipsKept ? " · สมาชิกจริงยังอยู่เหมือนเดิม" : "")
+      );
       await search(undefined,true);
       await loadAccessGroupMembers(group.id);
     } catch(e:any) {
@@ -344,14 +345,21 @@ export default function AdminPage() {
       const names=[...new Set(members.map((item:any)=>String(item.user_code||"")).filter(Boolean))];
       const preview=names.slice(0,12).join(", ");
       const more=names.length>12 ? " และอีก "+(names.length-12)+" บัญชี" : "";
+      const paidCount=[...new Set(
+        members
+          .filter((item:any)=>item.paid_local || item.paid_cloud)
+          .map((item:any)=>String(item.user_id||""))
+      )].length;
       const confirmed=await confirmPopup({
-        title:"ลบกลุ่ม "+group.name,
+        title:"ลบกลุ่มทดลอง "+group.name,
         tone:"warning",
         message:
-          "ลบเฉพาะกลุ่มนี้หรือไม่? สมาชิกและ Trial จะไม่ถูกลบ และวันหมดอายุจะไม่เปลี่ยน\n\n"+
-          (names.length ? "บัญชีในกลุ่ม: "+preview+more+"\n\n" : "กลุ่มนี้ยังไม่มีสมาชิก\n\n")+
-          "หลังลบ ทุกสิทธิ์ในกลุ่มจะกลับเป็น “ไม่จัดกลุ่ม”",
-        confirmLabel:"ลบเฉพาะกลุ่ม"
+          "ลบกลุ่มนี้หรือไม่? สิทธิ์ Trial ที่เปิดผ่านกลุ่มนี้จะสิ้นสุดทันที\n"+
+          "แต่วันสมาชิกจริง Local/VPS จะไม่ถูกลดหรือลบ\n\n"+
+          (names.length ? "ผู้ทดลอง: "+preview+more+"\n" : "กลุ่มนี้ยังไม่มีผู้ทดลอง\n")+
+          (paidCount ? "ในนี้มี "+paidCount+" บัญชีที่มีสมาชิกจริง และจะยังใช้งานต่อได้\n\n" : "\n")+
+          "บัญชีที่ไม่มีสมาชิกจริงจะหมดสิทธิ์ใช้งานทันที",
+        confirmLabel:"ลบกลุ่มและจบ Trial"
       });
       if(!confirmed) return;
       setGroupAction("delete:"+group.id);
@@ -361,8 +369,7 @@ export default function AdminPage() {
       });
       if(expandedGroupId===group.id) setExpandedGroupId("");
       setMessage(
-        "ลบกลุ่ม "+group.name+" แล้ว · คงสมาชิก "+
-        (Number(result.subscriptionCount||0)+Number(result.trialCount||0))+" สิทธิ์ไว้ครบ"
+        "ลบกลุ่ม "+group.name+" แล้ว · จบ Trial "+Number(result.trialCount||0)+" บัญชี · สมาชิกจริงไม่เปลี่ยน"
       );
       await search(undefined,true);
     } catch(e:any) {
