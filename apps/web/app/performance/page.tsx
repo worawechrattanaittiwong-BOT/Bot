@@ -333,9 +333,9 @@ export default function PerformanceDashboardPage() {
     }catch(e:any){setError(String(e?.message||"โหลดข้อมูลไม่สำเร็จ"));}
   }
 
-  async function refresh(nextAccountId=accountId,nextMode=mode){
+  async function refresh(nextAccountId=accountId,nextMode=mode,silent=false){
     if(!nextAccountId) return;
-    setLoading(true);
+    if(!silent) setLoading(true);
     try{
       const strategyQuery=nextMode==="LIVE"
         ? `&strategyModes=${encodeURIComponent(selectedStrategies.join(","))}`
@@ -351,7 +351,7 @@ export default function PerformanceDashboardPage() {
       }
       setError("");
     }catch(e:any){setError(String(e?.message||"โหลดข้อมูลไม่สำเร็จ"));}
-    finally{setLoading(false);}
+    finally{if(!silent) setLoading(false);}
   }
 
   useEffect(()=>{if(!getToken()){window.location.href="/login";return;}void loadOptions().finally(()=>setLoading(false));},[]);
@@ -362,6 +362,18 @@ export default function PerformanceDashboardPage() {
     }
     if(accountId){setShareResult(null);void refresh(accountId,mode);}
   },[accountId,mode,selectedStrategies,from,to,currentAccounts]);
+
+  useEffect(()=>{
+    if(
+      mode!=="LIVE" ||
+      !accountId ||
+      report?.dataQuality?.detailStatus!=="JOURNAL_RECOVERING"
+    ) return;
+    const timer=window.setInterval(()=>{
+      void refresh(accountId,mode,true);
+    },2500);
+    return ()=>window.clearInterval(timer);
+  },[accountId,mode,report?.dataQuality?.detailStatus,selectedStrategies,from,to]);
 
   function toggleStrategy(strategy:StrategyMode){
     setSelectedStrategies((current)=>{
@@ -509,6 +521,8 @@ export default function PerformanceDashboardPage() {
   const summary=mode==="BACKTEST"?{...backSummary,...backExtra}:liveSummary;
   const detailedStatsReliable =
     mode==="BACKTEST" || report?.dataQuality?.detailedStatsReliable !== false;
+  const journalRecovering =
+    mode==="LIVE" && report?.dataQuality?.detailStatus==="JOURNAL_RECOVERING";
   const detailValue=(value:string)=>detailedStatsReliable?value:"—";
   const currency=String(mode==="BACKTEST"?backtest?.currency:report?.account?.currency||"USD").trim().toUpperCase()||"USD";
   const symbol=String(mode==="BACKTEST"?backtest?.symbol:report?.account?.symbol||"—");
@@ -716,11 +730,12 @@ export default function PerformanceDashboardPage() {
                 <div className={styles.dataQualityNotice}>
                   <ScenovaIcon name="status" size={17}/>
                   <div>
-                    <b>ข้อมูลกำไรจาก MT5 ถูกต้อง แต่รายละเอียดการเทรดยังไม่ครบ</b>
-                    <span>
-                      ระบบยืนยัน Net Profit จาก MT5 แล้ว · Win Rate, จำนวนไม้, Lot และสถิติรายดีลจะแสดง “—”
-                      จนกว่า Journal ใหม่จะซิงก์ครบ
-                    </span>
+                    <b>{journalRecovering
+                      ? "กำลังซิงก์ประวัติการเทรดจาก VPS MT5"
+                      : "ข้อมูลกำไรจาก MT5 ถูกต้อง แต่รายละเอียดการเทรดยังไม่ครบ"}</b>
+                    <span>{journalRecovering
+                      ? "ระบบกำลังใช้ Journal Replay เดิมของ EA เพื่อส่ง ENTRY/EXIT ที่ขาดกลับเข้า Server · หน้านี้จะอัปเดตอัตโนมัติเมื่อข้อมูลครบ"
+                      : "ระบบยืนยัน Net Profit จาก MT5 แล้ว · Win Rate, จำนวนไม้, Lot และสถิติรายดีลจะแสดง “—” จนกว่า Journal ใหม่จะซิงก์ครบ"}</span>
                   </div>
                 </div>
               ) : null}
