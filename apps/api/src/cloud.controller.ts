@@ -277,6 +277,27 @@ export class CloudCustomerController {
     private readonly easyslip: EasySlipPaymentService
   ) {}
   @Get("catalog") catalog() { return this.cloud.catalog(); }
+  @Post("promotion-preview")
+  async promotionPreview(
+    @Req() req: any,
+    @Body() body: { months?: number; code?: string }
+  ) {
+    const months = Math.trunc(Number(body.months || 0));
+    if (![1,3,6,12].includes(months)) throw new BadRequestException("Invalid package");
+    const pack = await this.db.one(
+      "SELECT price_satang FROM cloud_packages WHERE months=$1 AND enabled=true AND price_satang>0",
+      [months]
+    );
+    if (!pack) throw new ConflictException("แพ็กเกจ Cloud นี้ยังไม่เปิดขาย");
+    return this.promotions.preview({
+      code:String(body.code || ""),
+      userId:String(req.user.sub),
+      mode:"CLOUD",
+      months,
+      originalAmountSatang:Number(pack.price_satang)
+    });
+  }
+
   @Get("orders") async orders(@Req() req: any) {
     return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,
       s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number
@@ -361,11 +382,15 @@ export class CloudCustomerController {
     });
     if (Number(order.amount) === 0) return this.cloud.activateFreeOrder(order.id);
     if (paymentMode() === "EASYSLIP") {
+      const qr = await this.easyslip.createPaymentQr({
+        orderId:String(order.id),
+        amountSatang:Number(order.amount)
+      });
       await this.db.query(
-        "UPDATE cloud_orders SET status='PENDING',expires_at=now()+interval '24 hours' WHERE id=$1 AND status='CREATING'",
-        [order.id]
+        "UPDATE cloud_orders SET status='PENDING',qr_url=$2,expires_at=now()+interval '24 hours' WHERE id=$1 AND status='CREATING'",
+        [order.id, qr?.dataUrl || null]
       );
-      return { id: order.id, paymentMode: "EASYSLIP" };
+      return { id: order.id, paymentMode: "EASYSLIP", qrAvailable:Boolean(qr?.dataUrl) };
     }
     try {
       const charge = await this.cloud.gateway("/charges", new URLSearchParams({ amount: String(order.amount), currency: "thb",
