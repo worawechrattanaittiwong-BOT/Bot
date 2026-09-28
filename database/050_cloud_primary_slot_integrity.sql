@@ -38,8 +38,36 @@ FROM (
 ) ranked
 WHERE rn=1;
 
--- Preserve history by soft-deleting only the old primary marker. Paid orders,
--- subscriptions and audit rows continue to reference the historical slot.
+-- Preserve legitimate extra runtimes. Any additional PERSONAL row that still
+-- has an active subscription or a connected MT5 runtime becomes ADDON.
+UPDATE license_slots ls
+SET slot_type='ADDON',
+    updated_at=now()
+FROM cloud_primary_keep keep
+WHERE ls.owner_user_id=keep.owner_user_id
+  AND ls.mode='CLOUD'
+  AND ls.slot_type='PERSONAL'
+  AND ls.status<>'DELETED'
+  AND ls.id<>keep.keep_id
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM subscriptions s
+      WHERE s.id=ls.subscription_id
+        AND s.status='ACTIVE'
+        AND s.starts_at<=now()
+        AND s.expires_at>now()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM bot_instances bi
+      WHERE bi.slot_id=ls.id
+        AND bi.mt5_account_id IS NOT NULL
+    )
+  );
+
+-- Old empty/expired duplicate primary rows are soft-deleted. Paid orders,
+-- subscriptions and audit rows still keep their historical references.
 UPDATE license_slots ls
 SET status='DELETED',
     updated_at=now(),
@@ -55,7 +83,7 @@ WHERE ls.owner_user_id=keep.owner_user_id
   AND ls.id<>keep.keep_id;
 
 -- If the best current runtime was previously labelled ADDON, promote it to the
--- single primary slot now that the stale PERSONAL row has been archived.
+-- single primary slot now that stale legacy rows have been repaired.
 UPDATE license_slots ls
 SET slot_type='PERSONAL',
     updated_at=now()
