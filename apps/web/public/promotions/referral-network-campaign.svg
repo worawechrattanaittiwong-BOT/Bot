@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="900" viewBox="0 0 1536 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#030817"/><stop offset=".55" stop-color="#081538"/><stop offset="1" stop-color="#030612"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff1bd"/><stop offset=".48" stop-color="#e8b85d"/><stop offset="1" stop-color="#fff0ba"/></linearGradient>
+    <linearGradient id="violet" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#55a7ff"/><stop offset=".45" stop-color="#7159ff"/><stop offset="1" stop-color="#d28cff"/></linearGradient>
+    <radialGradient id="orb"><stop stop-color="#f9edff"/><stop offset=".18" stop-color="#9c7cff"/><stop offset=".55" stop-color="#4330b5"/><stop offset="1" stop-color="#09142f"/></radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="12" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="1536" height="900" fill="url(#bg)"/>
+  <circle cx="1180" cy="205" r="190" fill="#20206b" opacity=".32"/>
+  <circle cx="1180" cy="205" r="130" fill="url(#orb)" filter="url(#glow)"/>
+  <circle cx="1180" cy="205" r="86" fill="#090d24" stroke="#fff1c8" stroke-width="4"/>
+  <text x="1180" y="238" text-anchor="middle" font-family="Arial,sans-serif" font-size="105" font-weight="700" fill="url(#gold)">S</text>
+  <g fill="none" stroke="url(#violet)" opacity=".85">
+    <ellipse cx="1180" cy="205" rx="205" ry="78" transform="rotate(18 1180 205)"/>
+    <ellipse cx="1180" cy="205" rx="205" ry="78" transform="rotate(73 1180 205)"/>
+    <ellipse cx="1180" cy="205" rx="205" ry="78" transform="rotate(132 1180 205)"/>
+  </g>
+  <text x="78" y="70" font-family="Arial,sans-serif" font-size="42" letter-spacing="12" fill="url(#gold)">SCENOVA</text>
+  <text x="78" y="190" font-family="Tahoma,Arial,sans-serif" font-size="78" font-weight="800" fill="#ffffff">แนะนำเพื่อน</text>
+  <text x="78" y="270" font-family="Tahoma,Arial,sans-serif" font-size="62" font-weight="800" fill="url(#gold)">รับค่าคอมมิชชั่นแบบไร้ขีดจำกัด</text>
+  <text x="78" y="325" font-family="Tahoma,Arial,sans-serif" font-size="31" font-weight="700" fill="#d8def6">จากยอดชำระจริงของสมาชิกทุกคนในเครือข่าย</text>
+  <path d="M0 560 C240 405 370 395 535 515 S860 590 1035 520 S1300 600 1536 505" fill="none" stroke="#6548ff" stroke-width="34" opacity=".26"/>
+  <path d="M0 560 C240 405 370 395 535 515 S860 590 1035 520 S1300 600 1536 505" fill="none" stroke="#8b78ff" stroke-width="3"/>
+  <g font-family="Tahoma,Arial,sans-serif" text-anchor="middle">
+    <g transform="translate(230 440)"><rect x="-110" y="-38" width="220" height="66" rx="33" fill="#0b1231" stroke="#aa8fff"/><text y="6" font-size="29" font-weight="700" fill="#fff">ระดับ 1  <tspan font-size="48" fill="#ffd98b">7%</tspan></text></g>
+    <g transform="translate(585 480)"><rect x="-105" y="-38" width="210" height="66" rx="33" fill="#0b1231" stroke="#aa8fff"/><text y="6" font-size="29" font-weight="700" fill="#fff">ระดับ 2  <tspan font-size="48" fill="#ffd98b">5%</tspan></text></g>
+    <g transform="translate(925 505)"><rect x="-105" y="-38" width="210" height="66" rx="33" fill="#0b1231" stroke="#aa8fff"/><text y="6" font-size="29" font-weight="700" fill="#fff">ระดับ 3  <tspan font-size="48" fill="#ffd98b">3%</tspan></text></g>
+    <g transform="translate(1260 530)"><rect x="-105" y="-38" width="210" height="66" rx="33" fill="#0b1231" stroke="#aa8fff"/><text y="6" font-size="29" font-weight="700" fill="#fff">ระดับ 4  <tspan font-size="48" fill="#ffd98b">1%</tspan></text></g>
+  </g>
+  <g fill="url(#orb)" stroke="#bbaaff" stroke-width="2">
+    <circle cx="230" cy="535" r="55"/><circle cx="585" cy="565" r="48"/><circle cx="925" cy="585" r="42"/><circle cx="1260" cy="600" r="36"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Arial,sans-serif" font-size="34" font-weight="700">
+    <text x="230" y="548">●</text><text x="585" y="576">●</text><text x="925" y="595">●</text><text x="1260" y="610">●</text>
+  </g>
+  <g stroke="#826cff" opacity=".75">
+    <path d="M230 590v55M145 645h170M145 645v45M190 645v45M230 645v45M270 645v45M315 645v45"/>
+    <path d="M585 613v45M510 658h150M510 658v38M548 658v38M585 658v38M622 658v38M660 658v38"/>
+    <path d="M925 627v40M858 667h134M858 667v34M892 667v34M925 667v34M958 667v34M992 667v34"/>
+    <path d="M1260 636v35M1200 671h120M1200 671v31M1230 671v31M1260 671v31M1290 671v31M1320 671v31"/>
+  </g>
+  <text x="768" y="770" text-anchor="middle" font-family="Tahoma,Arial,sans-serif" font-size="31" font-weight="700" fill="#eef0ff">สมาชิกแต่ละคนชำระเงินเข้าเงื่อนไข คุณรับตามระดับของเขา</text>
+  <rect x="375" y="802" width="786" height="70" rx="35" fill="url(#gold)"/>
+  <text x="768" y="849" text-anchor="middle" font-family="Tahoma,Arial,sans-serif" font-size="32" font-weight="800" fill="#08122d">ดูรายละเอียดการแนะนำเพื่อน  ›</text>
+</svg>
