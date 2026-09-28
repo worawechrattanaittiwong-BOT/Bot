@@ -3893,7 +3893,23 @@ export default function DashboardPage() {
                     </div>
                   </form>
                   {data.account && (
-                    <div className="help">ใช้บัญชีและ Server เดิมสำหรับการเชื่อมต่อครั้งนี้</div>
+                    <div className="vps-reconnect-foot">
+                      <div className="help">ใช้บัญชีและ Server เดิมสำหรับการเชื่อมต่อครั้งนี้</div>
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        disabled={
+                          busy ||
+                          state==="RUNNING" ||
+                          desired==="RUNNING" ||
+                          Number(data.instance?.metrics?.positions || 0)>0 ||
+                          Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
+                        }
+                        onClick={resetMt5}
+                      >
+                        เปลี่ยนเป็นบัญชี MT5 อื่น
+                      </button>
+                    </div>
                   )}
                 </section>
               ) : (
