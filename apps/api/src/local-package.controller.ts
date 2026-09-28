@@ -19,12 +19,16 @@ import { ReferralService } from "./referral.service";
 import { PromotionService } from "./promotion.service";
 import { EasySlipPaymentService } from "./easyslip-payment.service";
 
-function paymentMode() {
-  if (String(process.env.EASYSLIP_API_KEY || "").trim()) return "EASYSLIP";
+function omiseMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
   if (key.startsWith("skey_test_")) return "TEST";
   if (key.startsWith("skey_live_") || key.startsWith("skey_")) return "LIVE";
   return "UNCONFIGURED";
+}
+
+function paymentMode() {
+  if (String(process.env.EASYSLIP_API_KEY || "").trim()) return "EASYSLIP";
+  return omiseMode();
 }
 
 function validateCharge(charge: any, order: any) {
@@ -34,7 +38,7 @@ function validateCharge(charge: any, order: any) {
     charge?.metadata?.purchase_type !== "LOCAL" ||
     Number(charge?.amount) !== Number(order.amount) ||
     String(charge?.currency || "").toLowerCase() !== "thb" ||
-    Boolean(charge?.livemode) !== (paymentMode() === "LIVE") ||
+    Boolean(charge?.livemode) !== (omiseMode() === "LIVE") ||
     (order.charge_id && order.charge_id !== charge.id)
   ) {
     throw new ConflictException("ข้อมูลการชำระเงินไม่ตรงกับรายการ Local");
@@ -92,7 +96,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
   }
 
   async gateway(path: string, fields?: URLSearchParams) {
-    if (!["TEST", "LIVE"].includes(paymentMode())) {
+    if (!["TEST", "LIVE"].includes(omiseMode())) {
       throw new ConflictException("ไม่ได้ใช้งาน Opn / Omise ในโหมดการชำระเงินปัจจุบัน");
     }
     const response = await fetch("https://api.omise.co" + path, {
@@ -116,7 +120,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
   }
 
   async reconcilePending() {
-    if (this.checking || !["TEST", "LIVE"].includes(paymentMode())) return;
+    if (this.checking || !["TEST", "LIVE"].includes(omiseMode())) return;
     this.checking = true;
     try {
       const rows = await this.db.query(
