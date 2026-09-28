@@ -12,8 +12,8 @@ function rejectMatch(pattern, label) {
   if (pattern.test(ea)) throw new Error("Pass 7.1 violated: " + label);
 }
 
-requireText('#property version   "1.0.89"', "EA version bump");
-requireText('#define SCENOVA_EA_VERSION "1.0.89"', "runtime version bump");
+requireText('#property version   "1.0.90"', "EA version bump");
+requireText('#define SCENOVA_EA_VERSION "1.0.90"', "runtime version bump");
 requireText("#define CLOUD_RELAY_PENDING_CODE -5902", "explicit pending transport state");
 requireText("bool   g_cloudHeartbeatPending = false;", "persistent relay pending state");
 requireText("g_cloudHeartbeatStartedMs=GetTickCount64();", "request start timestamp");
