@@ -227,6 +227,7 @@ export default function PromotionCenterPage() {
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [editor,setEditor]=useState<EditorState|null>(null);
+  const [archiveConfirm,setArchiveConfirm]=useState(false);
 
   async function load() {
     setLoading(true);
@@ -449,7 +450,7 @@ export default function PromotionCenterPage() {
               <p>สร้างและแก้ไขรูปโฆษณา เวลา กลุ่มผู้ใช้ หน้าที่แสดง และลิงก์ปลายทางได้จากหน้านี้</p>
             </div>
             <div className={s.headerActions}>
-              <button className={s.createButton} onClick={()=>setEditor(newEditor())}>+ สร้าง Campaign</button>
+              <button className={s.createButton} onClick={()=>{setArchiveConfirm(false);setEditor(newEditor());}}>+ สร้าง Campaign</button>
               <button className={s.refresh} onClick={()=>void load()} disabled={loading}>รีเฟรช</button>
             </div>
           </header>
@@ -529,7 +530,7 @@ export default function PromotionCenterPage() {
                       </div>
 
                       <div className={s.actions}>
-                        <button type="button" className={s.editButton} onClick={()=>setEditor(campaignToEditor(campaign))}>
+                        <button type="button" className={s.editButton} onClick={()=>{setArchiveConfirm(false);setEditor(campaignToEditor(campaign));}}>
                           แก้ไข Campaign
                         </button>
                         {campaign.status==="ACTIVE"?(
@@ -756,24 +757,45 @@ export default function PromotionCenterPage() {
               </section>
             </div>
 
+            {archiveConfirm&&editor.id?(
+              <div className={s.archiveConfirm}>
+                <div>
+                  <b>ยืนยัน Archive Campaign?</b>
+                  <span>Campaign จะหยุดแสดงทันทีและถูกเก็บไว้ในประวัติ</span>
+                </div>
+                <div>
+                  <button type="button" className={s.cancelButton} onClick={()=>setArchiveConfirm(false)} disabled={Boolean(busyId)}>ยกเลิก</button>
+                  <button
+                    type="button"
+                    className={s.archiveButton}
+                    disabled={Boolean(busyId)}
+                    onClick={async()=>{
+                      const campaign=campaigns.find(item=>item.id===editor.id);
+                      if(!campaign) return;
+                      await setStatus(campaign,"ARCHIVED");
+                      setArchiveConfirm(false);
+                      setEditor(null);
+                    }}
+                  >
+                    ยืนยัน Archive
+                  </button>
+                </div>
+              </div>
+            ):null}
+
             <footer className={s.editorFooter}>
               {editor.id&&editor.status!=="ARCHIVED"?(
                 <button
                   type="button"
                   className={s.archiveButton}
                   disabled={Boolean(busyId)}
-                  onClick={async()=>{
-                    const campaign=campaigns.find(item=>item.id===editor.id);
-                    if(!campaign||!window.confirm("เก็บ Campaign นี้เป็น ARCHIVED ใช่หรือไม่?")) return;
-                    await setStatus(campaign,"ARCHIVED");
-                    setEditor(null);
-                  }}
+                  onClick={()=>setArchiveConfirm(true)}
                 >
                   Archive
                 </button>
               ):<span/>}
               <div>
-                <button type="button" className={s.cancelButton} onClick={()=>setEditor(null)} disabled={Boolean(busyId)}>ยกเลิก</button>
+                <button type="button" className={s.cancelButton} onClick={()=>{setArchiveConfirm(false);setEditor(null);}} disabled={Boolean(busyId)}>ยกเลิก</button>
                 <button type="button" className={s.saveButton} onClick={()=>void saveEditor()} disabled={Boolean(busyId)}>
                   {busyId?"กำลังบันทึก…":"บันทึก Campaign"}
                 </button>
