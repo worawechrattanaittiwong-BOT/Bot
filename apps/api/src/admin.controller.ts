@@ -222,7 +222,6 @@ export class AdminController {
   async accessGroups() {
     const rows = await this.db.query(
       `SELECT ag.id,ag.name,ag.enabled,ag.note,ag.trial_days,ag.created_by,ag.created_at,ag.updated_at,
-              (SELECT count(*)::int FROM subscriptions s WHERE s.access_group_id=ag.id) AS subscription_count,
               (
                 SELECT count(DISTINCT x.user_id)::int
                 FROM (
@@ -230,7 +229,23 @@ export class AdminController {
                   UNION
                   SELECT ta.user_id FROM trial_authorizations ta WHERE ta.access_group_id=ag.id
                 ) x
-              ) AS trial_count
+              ) AS trial_count,
+              (
+                SELECT count(DISTINCT x.user_id)::int
+                FROM (
+                  SELECT tg.user_id FROM trial_grants tg WHERE tg.access_group_id=ag.id
+                  UNION
+                  SELECT ta.user_id FROM trial_authorizations ta WHERE ta.access_group_id=ag.id
+                ) x
+                WHERE EXISTS (
+                  SELECT 1
+                  FROM subscriptions s
+                  WHERE s.user_id=x.user_id
+                    AND s.status='ACTIVE'
+                    AND s.starts_at<=now()
+                    AND s.expires_at>now()
+                )
+              ) AS paid_member_count
        FROM access_groups ag
        ORDER BY lower(ag.name),ag.created_at`
     );
@@ -262,25 +277,28 @@ export class AdminController {
     const group = await this.db.one("SELECT id,name FROM access_groups WHERE id=$1", [groupId]);
     if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
     const rows = await this.db.query(
-      `SELECT *
+      `SELECT members.*,
+              EXISTS (
+                SELECT 1
+                FROM subscriptions s
+                JOIN plans p ON p.id=s.plan_id
+                WHERE s.user_id=members.user_id::uuid
+                  AND s.status='ACTIVE'
+                  AND s.starts_at<=now()
+                  AND s.expires_at>now()
+                  AND p.mode='LOCAL'
+              ) AS paid_local,
+              EXISTS (
+                SELECT 1
+                FROM subscriptions s
+                JOIN plans p ON p.id=s.plan_id
+                WHERE s.user_id=members.user_id::uuid
+                  AND s.status='ACTIVE'
+                  AND s.starts_at<=now()
+                  AND s.expires_at>now()
+                  AND p.mode='CLOUD'
+              ) AS paid_cloud
        FROM (
-         SELECT
-           'SUBSCRIPTION'::text AS kind,
-           s.id::text AS ref_id,
-           u.id::text AS user_id,
-           u.user_code,
-           u.email,
-           p.mode,
-           p.code AS label,
-           s.status,
-           s.expires_at
-         FROM subscriptions s
-         JOIN users u ON u.id=s.user_id
-         JOIN plans p ON p.id=s.plan_id
-         WHERE s.access_group_id=$1
-
-         UNION ALL
-
          SELECT
            'TRIAL'::text AS kind,
            tg.id::text AS ref_id,
