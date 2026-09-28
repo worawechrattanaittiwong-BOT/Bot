@@ -118,6 +118,7 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
               provider,test_url,auth_mode,header_name,last_test_status,last_test_detail,last_tested_at,
               created_at,updated_at
        FROM admin_api_credentials
+       WHERE config_key NOT IN ('EASYSLIP_QR_TYPE','EASYSLIP_PROMPTPAY_ID')
        ORDER BY category,label,config_key`
     );
     return result.rows.map(row => ({
