@@ -131,6 +131,13 @@ function money(satang: number) {
   });
 }
 
+function maskedBankNumber(value?: string | null) {
+  const digits=String(value||"").replace(/\D/g,"");
+  if(!digits) return "";
+  if(digits.length<=4) return digits;
+  return "•••• "+digits.slice(-4);
+}
+
 function date(value?: string | null) {
   if (!value) return "—";
   const d = new Date(value);
@@ -1245,6 +1252,37 @@ function PaymentCard({
     /^https:\/\//.test(qrSrc) ||
     /^data:image\/(?:png|jpeg|webp);base64,/i.test(qrSrc)
   );
+  const recipientName = String(account?.nameTh || account?.nameEn || "").trim();
+  const recipientBank = String(account?.bankName || account?.bankShortCode || "").trim();
+  const recipientNumber = maskedBankNumber(account?.bankNumber);
+
+  async function downloadQr() {
+    if(!hasQr || !qrSrc) return;
+    const filename="SCENOVA-"+type+"-"+order.months+"M-"+order.id.slice(0,8)+"-QR.png";
+    const save=(href:string)=>{
+      const link=document.createElement("a");
+      link.href=href;
+      link.download=filename;
+      link.rel="noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    };
+    if(qrSrc.startsWith("data:image/")) {
+      save(qrSrc);
+      return;
+    }
+    try {
+      const response=await fetch(qrSrc,{cache:"no-store"});
+      if(!response.ok) throw new Error("QR download failed");
+      const blob=await response.blob();
+      const objectUrl=URL.createObjectURL(blob);
+      save(objectUrl);
+      window.setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);
+    } catch {
+      window.open(qrSrc,"_blank","noopener,noreferrer");
+    }
+  }
 
   return (
     <article className={styles.paymentCard + " " + (easySlip ? styles.paymentCardEasySlip : "") + " " + (inline ? styles.paymentCardInline : "")}>
@@ -1259,6 +1297,17 @@ function PaymentCard({
           </div>
           <span>สแกนด้วย Mobile Banking</span>
           <b>฿{money(order.amount)}</b>
+          {easySlip && account ? (
+            <div className={styles.qrRecipient}>
+              <small>ชื่อผู้รับที่ต้องตรวจสอบ</small>
+              <strong>{recipientName || "SCENOVA"}</strong>
+              <span>{recipientBank || "บัญชีที่ยืนยันกับ EasySlip"}{recipientNumber ? " · "+recipientNumber : ""}</span>
+            </div>
+          ) : null}
+          <button type="button" className={styles.downloadQrButton} onClick={()=>void downloadQr()}>
+            <ScenovaIcon name="download" size={15}/>
+            <span>ดาวน์โหลด QR</span>
+          </button>
         </div>
       ) : easySlip ? (
         <div className={styles.bankTransferCard}>
@@ -1300,6 +1349,14 @@ function PaymentCard({
         {easySlip ? (
           <>
             <p>สแกน QR ตามยอด <b>฿{money(order.amount)}</b> แล้วแนบสลิปด้านล่าง ระบบจะตรวจยอด บัญชีผู้รับ และสลิปซ้ำก่อนเปิดสิทธิ์</p>
+            {account ? (
+              <div className={styles.recipientCheck}>
+                <span>ตรวจสอบก่อนกดยืนยันโอน</span>
+                <b>{recipientName || "SCENOVA"}</b>
+                <small>{recipientBank || "บัญชีที่ยืนยันกับ EasySlip"}{recipientNumber ? " · "+recipientNumber : ""}</small>
+                <p>ชื่อผู้รับในแอปธนาคารต้องตรงกับชื่อนี้ หากชื่อไม่ตรง กรุณาอย่าโอนเงิน</p>
+              </div>
+            ) : null}
             <small>รายการสร้างเมื่อ: {date(order.created_at)}</small>
             <label className={styles.slipUpload}>
               <input
