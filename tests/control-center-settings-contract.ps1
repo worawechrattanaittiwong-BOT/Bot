@@ -162,7 +162,7 @@ Need $popup 'kind: "confirm"' 'System Popup confirm mode missing'
 Need $globals 'SCENOVA System Popup · global UI standard' 'Global System Popup visual standard missing'
 Need $globals '.sc-system-popup-layer.is-confirm' 'Centered confirm overlay styling missing'
 Need $page 'useSystemPopup' 'Dashboard must use the global System Popup'
-Need $page 'confirmPopup({tone:"warning",title:"ล้างและปิดทั้งหมด"' 'Force Flat Reset must use the centered system confirm popup'
+Need $page 'confirmPopup({tone:"warning",title:"ยืนยันปิดสถานะทั้งหมด"' 'Close All Positions must use the centered system confirm popup'
 if($page.Contains('page-notice">{error}')) { throw 'Dashboard must not render the legacy floating error notice' }
 if($page.Contains('page-notice">{notice}')) { throw 'Dashboard must not render the legacy floating success notice' }
 Need $manualActions 'useSystemPopup' 'Manual MT5 actions must use the global System Popup'
