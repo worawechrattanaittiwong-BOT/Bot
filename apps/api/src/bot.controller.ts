@@ -2229,36 +2229,36 @@ export class BotController {
           [instance.id]
         );
         if (!activeStop) {
+            await this.db.query(
+              `INSERT INTO worker_commands(
+                 runner_id,bot_instance_id,execution_generation,command,status
+               ) VALUES($1,$2,$3,'STOP_INSTANCE','PENDING')`,
+              [instance.runner_id, instance.id, Number(instance.execution_generation || 1)]
+            );
           await this.db.query(
-            `INSERT INTO worker_commands(
-               runner_id,bot_instance_id,execution_generation,command,status
-             ) VALUES($1,$2,$3,'STOP_INSTANCE','PENDING')`,
-            [instance.runner_id, instance.id, Number(instance.execution_generation || 1)]
+            `UPDATE bot_instances SET
+               desired_state='STOPPED',
+               runtime_stop_state='STOP_REQUESTED',
+               runtime_stop_requested_at=now(),
+               runtime_stop_confirmed_at=NULL,
+               runtime_stop_error=NULL
+             WHERE id=$1`,
+            [instance.id]
+          );
+          await this.db.query(
+            `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+             VALUES($1,'CUSTOMER_CLOUD_ACCOUNT_SWITCH_STOP_REQUESTED','bot_instance',$2,$3::jsonb)`,
+            [
+              String(req.user?.code || req.user?.sub || "USER").slice(0,160),
+              instance.id,
+              JSON.stringify({
+                slotId: slot.id,
+                runnerId: instance.runner_id,
+                executionGeneration: Number(instance.execution_generation || 1)
+              })
+            ]
           );
         }
-        await this.db.query(
-          `UPDATE bot_instances SET
-             desired_state='STOPPED',
-             runtime_stop_state='STOP_REQUESTED',
-             runtime_stop_requested_at=now(),
-             runtime_stop_confirmed_at=NULL,
-             runtime_stop_error=NULL
-           WHERE id=$1`,
-          [instance.id]
-        );
-        await this.db.query(
-          `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
-           VALUES($1,'CUSTOMER_CLOUD_ACCOUNT_SWITCH_STOP_REQUESTED','bot_instance',$2,$3::jsonb)`,
-          [
-            String(req.user?.code || req.user?.sub || "USER").slice(0,160),
-            instance.id,
-            JSON.stringify({
-              slotId: slot.id,
-              runnerId: instance.runner_id,
-              executionGeneration: Number(instance.execution_generation || 1)
-            })
-          ]
-        );
         return {
           ok: false,
           pendingCloudStop: true,
