@@ -221,21 +221,26 @@ export class AdminController {
   @Get("access-groups")
   async accessGroups() {
     const rows = await this.db.query(
-      `SELECT ag.id,ag.name,ag.enabled,ag.note,ag.created_by,ag.created_at,ag.updated_at,
-              count(DISTINCT s.id)::int AS subscription_count,
-              count(DISTINCT tg.id)::int AS trial_count
+      `SELECT ag.id,ag.name,ag.enabled,ag.note,ag.trial_days,ag.created_by,ag.created_at,ag.updated_at,
+              (SELECT count(*)::int FROM subscriptions s WHERE s.access_group_id=ag.id) AS subscription_count,
+              (
+                SELECT count(DISTINCT x.user_id)::int
+                FROM (
+                  SELECT tg.user_id FROM trial_grants tg WHERE tg.access_group_id=ag.id
+                  UNION
+                  SELECT ta.user_id FROM trial_authorizations ta WHERE ta.access_group_id=ag.id
+                ) x
+              ) AS trial_count
        FROM access_groups ag
-       LEFT JOIN subscriptions s ON s.access_group_id=ag.id
-       LEFT JOIN trial_grants tg ON tg.access_group_id=ag.id
-       GROUP BY ag.id
        ORDER BY lower(ag.name),ag.created_at`
     );
     return rows.rows;
   }
 
   @Post("access-groups/create")
-  async createAccessGroup(@Body() body: { name: string; note?: string }) {
+  async createAccessGroup(@Body() body: { name: string; note?: string; trialDays?: number }) {
     const name = String(body.name || "").trim().slice(0, 80);
+    const trialDays = Math.max(1, Math.min(365, Math.trunc(Number(body.trialDays) || 1)));
     if (name.length < 2) throw new ConflictException("ชื่อกลุ่มต้องมีอย่างน้อย 2 ตัวอักษร");
     const existing = await this.db.one(
       "SELECT id FROM access_groups WHERE lower(name)=lower($1) LIMIT 1",
@@ -243,13 +248,128 @@ export class AdminController {
     );
     if (existing) throw new ConflictException("มีกลุ่มชื่อนี้อยู่แล้ว");
     const row = await this.db.one(
-      `INSERT INTO access_groups(name,note,created_by)
-       VALUES($1,$2,'OWNER')
+      `INSERT INTO access_groups(name,note,trial_days,created_by)
+       VALUES($1,$2,$3,'OWNER')
        RETURNING *`,
-      [name, String(body.note || "").trim().slice(0, 500) || null]
+      [name, String(body.note || "").trim().slice(0, 500) || null, trialDays]
     );
-    await this.audit("OWNER", "CREATE_ACCESS_GROUP", "access_group", row.id, { name: row.name });
+    await this.audit("OWNER", "CREATE_ACCESS_GROUP", "access_group", row.id, { name: row.name, trialDays });
     return row;
+  }
+
+  @Get("access-groups/members")
+  async accessGroupMembers(@Query("groupId") groupId = "") {
+    const group = await this.db.one("SELECT id,name FROM access_groups WHERE id=$1", [groupId]);
+    if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+    const rows = await this.db.query(
+      `SELECT *
+       FROM (
+         SELECT
+           'SUBSCRIPTION'::text AS kind,
+           s.id::text AS ref_id,
+           u.id::text AS user_id,
+           u.user_code,
+           u.email,
+           p.mode,
+           p.code AS label,
+           s.status,
+           s.expires_at
+         FROM subscriptions s
+         JOIN users u ON u.id=s.user_id
+         JOIN plans p ON p.id=s.plan_id
+         WHERE s.access_group_id=$1
+
+         UNION ALL
+
+         SELECT
+           'TRIAL'::text AS kind,
+           tg.id::text AS ref_id,
+           u.id::text AS user_id,
+           u.user_code,
+           u.email,
+           'LOCAL'::text AS mode,
+           'TRIAL'::text AS label,
+           tg.status,
+           tg.expires_at
+         FROM trial_grants tg
+         JOIN users u ON u.id=tg.user_id
+         WHERE tg.access_group_id=$1
+
+         UNION ALL
+
+         SELECT
+           'TRIAL_PENDING'::text AS kind,
+           ta.id::text AS ref_id,
+           u.id::text AS user_id,
+           u.user_code,
+           u.email,
+           'LOCAL'::text AS mode,
+           'TRIAL PREAPPROVED'::text AS label,
+           ta.status,
+           NULL::timestamptz AS expires_at
+         FROM trial_authorizations ta
+         JOIN users u ON u.id=ta.user_id
+         WHERE ta.access_group_id=$1
+           AND NOT EXISTS (
+             SELECT 1 FROM trial_grants tg
+             WHERE tg.user_id=ta.user_id
+               AND tg.access_group_id=ta.access_group_id
+           )
+       ) members
+       ORDER BY lower(user_code),kind,label`,
+      [groupId]
+    );
+    return { group, members: rows.rows };
+  }
+
+  @Post("access-groups/set-trial-days")
+  async setAccessGroupTrialDays(@Body() body: { groupId: string; days: number }) {
+    const days = Math.max(1, Math.min(365, Math.trunc(Number(body.days) || 1)));
+    const row = await this.db.one(
+      "UPDATE access_groups SET trial_days=$2,updated_at=now() WHERE id=$1 RETURNING *",
+      [body.groupId, days]
+    );
+    if (!row) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+    await this.audit("OWNER", "SET_ACCESS_GROUP_TRIAL_DAYS", "access_group", row.id, {
+      name: row.name,
+      trialDays: days
+    });
+    return row;
+  }
+
+  @Post("access-groups/delete")
+  async deleteAccessGroup(@Body() body: { groupId: string }) {
+    const group = await this.db.one(
+      `SELECT ag.*,
+              (SELECT count(*)::int FROM subscriptions s WHERE s.access_group_id=ag.id) AS subscription_count,
+              (
+                SELECT count(DISTINCT x.user_id)::int
+                FROM (
+                  SELECT tg.user_id FROM trial_grants tg WHERE tg.access_group_id=ag.id
+                  UNION
+                  SELECT ta.user_id FROM trial_authorizations ta WHERE ta.access_group_id=ag.id
+                ) x
+              ) AS trial_count
+       FROM access_groups ag
+       WHERE ag.id=$1`,
+      [body.groupId]
+    );
+    if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+
+    await this.db.query("DELETE FROM access_groups WHERE id=$1", [body.groupId]);
+    await this.audit("OWNER", "DELETE_ACCESS_GROUP", "access_group", body.groupId, {
+      name: group.name,
+      subscriptionCount: Number(group.subscription_count || 0),
+      trialCount: Number(group.trial_count || 0),
+      membersKept: true,
+      accessRestoredToUngrouped: true
+    });
+    return {
+      ok: true,
+      name: group.name,
+      subscriptionCount: Number(group.subscription_count || 0),
+      trialCount: Number(group.trial_count || 0)
+    };
   }
 
   @Post("access-groups/toggle")
