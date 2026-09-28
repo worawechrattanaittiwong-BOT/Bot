@@ -1267,6 +1267,91 @@
   font-weight:700;
   font-variant-numeric:tabular-nums;
 }
+.qrRecipient{
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:3px;
+  margin-top:4px;
+  padding:10px 9px;
+  border:1px solid rgba(99,190,148,.28);
+  border-radius:10px;
+  background:rgba(35,106,74,.11);
+  text-align:center;
+}
+.qrRecipient small{
+  color:#86bda3;
+  font-size:11px;
+  font-weight:700;
+}
+.qrRecipient strong{
+  color:#f0fff7;
+  font-size:13px;
+  line-height:1.4;
+}
+.qrRecipient span{
+  color:#94a8a0;
+  font-size:11px;
+  line-height:1.4;
+}
+.downloadQrButton{
+  width:100%;
+  min-height:38px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  margin-top:3px;
+  border:1px solid rgba(138,119,216,.46);
+  border-radius:9px;
+  background:linear-gradient(135deg,rgba(87,67,169,.34),rgba(43,35,93,.42));
+  color:#e5ddff;
+  font-size:11px;
+  font-weight:800;
+  cursor:pointer;
+}
+.downloadQrButton:hover{
+  border-color:#8d74ee;
+  background:linear-gradient(135deg,rgba(105,81,206,.46),rgba(50,39,109,.54));
+}
+.recipientCheck{
+  max-width:520px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:3px 12px;
+  margin:10px 0 12px;
+  padding:11px 12px;
+  border:1px solid rgba(87,189,141,.25);
+  border-radius:10px;
+  background:rgba(30,92,65,.1);
+}
+.recipientCheck>span{
+  grid-column:1/-1;
+  color:#84b99f;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.03em;
+}
+.recipientCheck>b{
+  color:#f0fff7;
+  font-size:13px;
+  line-height:1.45;
+}
+.recipientCheck>small{
+  margin:0!important;
+  color:#91a89e!important;
+  font-size:11px!important;
+  text-align:right;
+}
+.recipientCheck>p{
+  grid-column:1/-1;
+  max-width:none!important;
+  margin:4px 0 0!important;
+  color:#a9cbb9!important;
+  font-size:11px!important;
+  line-height:1.5!important;
+}
 .cancelCheckout { display: block; min-height: 40px; margin: 8px auto 0; padding: 8px 20px; border: 0; background: transparent; color: #b0a7c4; font-size: 12px !important; cursor: pointer; }
 .checkoutDialog button:disabled { opacity: .5; cursor: not-allowed; }
 .shell button:focus-visible, .shell input:focus-visible, .checkoutDialog button:focus-visible, .checkoutDialog input:focus-visible { outline: 2px solid #d1bdf4; outline-offset: 3px; }
@@ -1345,6 +1430,12 @@
   }
   .paymentQrWrap .paymentQr {
     max-width:260px;
+  }
+  .recipientCheck{
+    grid-template-columns:1fr;
+  }
+  .recipientCheck>small{
+    text-align:left;
   }
   .promoLive {
     align-items:flex-start;
