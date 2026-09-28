@@ -2063,6 +2063,22 @@ export class BotController {
       throw new ConflictException("LOCAL mode must be installed from the SCENOVA website; MT5 will be detected automatically");
     }
 
+    const cloudAccess: any = await this.entitlement(
+      req.user.sub,
+      null,
+      "CLOUD",
+      slot.id
+    );
+    if (!cloudAccess.allowed) {
+      if (cloudAccess.source === "SUBSCRIPTION_EXPIRED") {
+        throw new ConflictException("สมาชิก VPS หมดอายุแล้ว กรุณาต่ออายุ Slot นี้ก่อนเชื่อมบัญชี MT5");
+      }
+      if (cloudAccess.source === "GROUP_DISABLED") {
+        throw new ConflictException("สิทธิ์ VPS ของบัญชีนี้ถูกปิด กรุณาติดต่อผู้ดูแล");
+      }
+      throw new ConflictException("ยังไม่มีสมาชิก VPS ที่ใช้งานได้สำหรับ Slot นี้");
+    }
+
     await this.assertMt5IdentityAvailable(
       req.user.sub,
       String(body.accountNumber),
@@ -2332,13 +2348,61 @@ export class BotController {
     if (!account) throw new ConflictException("cloud MT5 account not found");
     if (!body.tradingPassword || /[\r\n\x00]/.test(body.tradingPassword)) throw new ConflictException("Trading Password ไม่ถูกต้อง");
     const bound = await this.db.one(
-      `SELECT id,last_seen_at,runner_id,runtime_stop_state
+      `SELECT id,slot_id,last_seen_at,runner_id,runtime_stop_state,metrics
        FROM bot_instances
-       WHERE mt5_account_id=$1 AND mode='CLOUD' AND runner_id IS NOT NULL
+       WHERE mt5_account_id=$1 AND mode='CLOUD'
        ORDER BY created_at DESC
        LIMIT 1`,
       [account.id]
     );
+
+    const cloudAccess: any = await this.entitlement(
+      req.user.sub,
+      account.id,
+      "CLOUD",
+      bound?.slot_id || null
+    );
+    if (!cloudAccess.allowed) {
+      if (cloudAccess.source === "SUBSCRIPTION_EXPIRED") {
+        throw new ConflictException("สมาชิก VPS หมดอายุแล้ว กรุณาต่ออายุก่อนเชื่อม MT5 บน Server อีกครั้ง");
+      }
+      if (cloudAccess.source === "GROUP_DISABLED") {
+        throw new ConflictException("สิทธิ์ VPS ของบัญชีนี้ถูกปิด กรุณาติดต่อผู้ดูแล");
+      }
+      throw new ConflictException("ยังไม่มีสมาชิก VPS ที่ใช้งานได้");
+    }
+
+    if (
+      bound &&
+      String(bound.runtime_stop_state || "NONE") === "STOP_CONFIRMED" &&
+      bound.metrics?.membershipCutoff === true
+    ) {
+      await this.db.query(
+        `UPDATE bot_instances SET
+           runtime_stop_state='NONE',
+           runtime_stop_requested_at=NULL,
+           runtime_stop_confirmed_at=NULL,
+           runtime_stop_error=NULL,
+           desired_state='STOPPED',
+           actual_state='OFFLINE',
+           last_seen_at=NULL,
+           metrics=(COALESCE(metrics,'{}'::jsonb)
+             - 'membershipCutoff'
+             - 'membershipCutoffAt'
+             - 'membershipExpiredAt')
+         WHERE id=$1`,
+        [bound.id]
+      );
+      bound.runtime_stop_state = "NONE";
+      bound.last_seen_at = null;
+      bound.metrics = {
+        ...(bound.metrics || {}),
+        membershipCutoff: undefined,
+        membershipCutoffAt: undefined,
+        membershipExpiredAt: undefined
+      };
+    }
+
     if (bound?.last_seen_at && Date.now() - new Date(bound.last_seen_at).getTime() <= 20_000) {
       throw new ConflictException("VPS ยังเชื่อมต่อ MT5 อยู่ จึงยังไม่ต้องบันทึกรหัสผ่านใหม่");
     }
