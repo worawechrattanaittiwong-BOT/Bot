@@ -272,66 +272,43 @@ export class AdminController {
   @Get("access-groups/members")
   async accessGroupMembers(@Query("groupId") groupId = "") {
     const group = await this.db.one("SELECT id,name FROM access_groups WHERE id=$1", [groupId]);
-    if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+    if (!group) throw new ConflictException("ไม่พบกลุ่มทดลอง");
     const rows = await this.db.query(
-      `SELECT members.*,
-              EXISTS (
-                SELECT 1
-                FROM subscriptions s
-                JOIN plans p ON p.id=s.plan_id
-                WHERE s.user_id=members.user_id::uuid
-                  AND s.status='ACTIVE'
-                  AND s.starts_at<=now()
-                  AND s.expires_at>now()
-                  AND p.mode='LOCAL'
-              ) AS paid_local,
-              EXISTS (
-                SELECT 1
-                FROM subscriptions s
-                JOIN plans p ON p.id=s.plan_id
-                WHERE s.user_id=members.user_id::uuid
-                  AND s.status='ACTIVE'
-                  AND s.starts_at<=now()
-                  AND s.expires_at>now()
-                  AND p.mode='CLOUD'
-              ) AS paid_cloud
-       FROM (
-         SELECT
-           'TRIAL'::text AS kind,
-           tg.id::text AS ref_id,
-           u.id::text AS user_id,
-           u.user_code,
-           u.email,
-           'LOCAL'::text AS mode,
-           'TRIAL'::text AS label,
-           tg.status,
-           tg.expires_at
-         FROM trial_grants tg
-         JOIN users u ON u.id=tg.user_id
-         WHERE tg.access_group_id=$1
-
-         UNION ALL
-
-         SELECT
-           'TRIAL_PENDING'::text AS kind,
-           ta.id::text AS ref_id,
-           u.id::text AS user_id,
-           u.user_code,
-           u.email,
-           'LOCAL'::text AS mode,
-           'TRIAL PREAPPROVED'::text AS label,
-           ta.status,
-           NULL::timestamptz AS expires_at
-         FROM trial_authorizations ta
-         JOIN users u ON u.id=ta.user_id
-         WHERE ta.access_group_id=$1
-           AND NOT EXISTS (
-             SELECT 1 FROM trial_grants tg
-             WHERE tg.user_id=ta.user_id
-               AND tg.access_group_id=ta.access_group_id
-           )
-       ) members
-       ORDER BY lower(user_code),kind,label`,
+      `SELECT
+         gg.id::text AS ref_id,
+         gg.user_id::text AS user_id,
+         u.user_code,
+         u.email,
+         gg.mode,
+         gg.status,
+         gg.starts_at,
+         gg.expires_at,
+         EXISTS (
+           SELECT 1
+           FROM subscriptions s
+           JOIN plans p ON p.id=s.plan_id
+           WHERE s.user_id=gg.user_id
+             AND s.status='ACTIVE'
+             AND s.starts_at<=now()
+             AND s.expires_at>now()
+             AND p.mode='LOCAL'
+         ) AS paid_local,
+         EXISTS (
+           SELECT 1
+           FROM subscriptions s
+           JOIN plans p ON p.id=s.plan_id
+           WHERE s.user_id=gg.user_id
+             AND s.status='ACTIVE'
+             AND s.starts_at<=now()
+             AND s.expires_at>now()
+             AND p.mode='CLOUD'
+         ) AS paid_cloud
+       FROM access_group_grants gg
+       JOIN users u ON u.id=gg.user_id
+       WHERE gg.access_group_id=$1
+         AND gg.status='ACTIVE'
+         AND gg.expires_at>now()
+       ORDER BY lower(u.user_code),gg.mode,gg.expires_at DESC`,
       [groupId]
     );
     return { group, members: rows.rows };
