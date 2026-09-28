@@ -18,6 +18,24 @@ json_post() {
   curl -fsS -X POST "$url" -H 'content-type: application/json' "$@"
 }
 
+# The Phase 3 fixture intentionally applies only the minimal historical schema.
+# Current slot selection/Cloud cutoff logic also reads access-group grants, so
+# create the two read-only entitlement tables used by those queries.
+sql "create table if not exists access_groups (
+  id uuid primary key default gen_random_uuid(),
+  name varchar(80) not null,
+  enabled boolean not null default true
+);
+create table if not exists access_group_grants (
+  id uuid primary key default gen_random_uuid(),
+  access_group_id uuid not null references access_groups(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  mode varchar(16) not null,
+  starts_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  status varchar(20) not null default 'ACTIVE'
+);"
+
 echo '[phase3] register user and create primary Local slot'
 REGISTER=$(json_post "$BASE/auth/register" -d '{"email":"phase3-migration@scenova.test","password":"Migration123!"}')
 TOKEN=$(printf '%s' "$REGISTER" | jq -r '.token')
