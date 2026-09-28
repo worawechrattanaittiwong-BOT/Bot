@@ -2371,14 +2371,15 @@ export default function DashboardPage() {
     return true;
   }
 
-  async function resetMt5() {
+  async function performMt5Reset() {
     const confirmed = await confirmPopup({
       title:"เปลี่ยนบัญชี MT5",
       tone:"warning",
-      message:"ระบบจะปิด MT5 เดิมบน VPS ก่อน แล้วนำบัญชีเดิมออกจาก Slot นี้ คุณจึงเชื่อมบัญชีใหม่ได้ โดยการตั้งค่าบอทของ Slot ยังอยู่เหมือนเดิม",
-      confirmLabel:"ปิด MT5 และเปลี่ยนบัญชี"
+      message:"ถ้าบอทหยุดและไม่มี Position / Pending Order ระบบจะปิด MT5 เดิมบน VPS แล้วให้เชื่อมบัญชีใหม่ได้ทันที",
+      confirmLabel:"เปลี่ยนบัญชี"
     });
-    if (!confirmed) return;
+    if (!confirmed) return false;
+
     setBusy(true);
     setError("");
     setNotice("");
@@ -2389,7 +2390,7 @@ export default function DashboardPage() {
 
       while (result?.pendingCloudStop && attempts < 45) {
         if (attempts === 0) {
-          setNotice("กำลังปิด MT5 เดิมบน VPS · รอ Server ยืนยันก่อนเปิดให้เชื่อมบัญชีใหม่");
+          setNotice("กำลังปิด MT5 เดิมบน VPS เพื่อเปลี่ยนบัญชี");
         }
         await new Promise(resolve=>window.setTimeout(resolve, 1200));
         result = await api(resetUrl, { method: "POST" });
@@ -2404,15 +2405,125 @@ export default function DashboardPage() {
       setInstallInstanceId("");
       setTradingPassword("");
       setAccountNumber("");
-      setNotice(
-        result?.cloudRuntimeStopped
-          ? "ปิด MT5 เดิมบน VPS แล้ว · พร้อมเชื่อมบัญชี MT5 ใหม่"
-          : "นำบัญชีเดิมออกแล้ว · พร้อมเชื่อมบัญชีใหม่"
-      );
+      setBrokerServer("");
+      setCustomBrokerServer("");
       await load(selectedSlotIdRef.current);
       setActiveView("account");
+      return true;
     } catch (e: any) {
       setError(e.message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetMt5() {
+    await performMt5Reset();
+  }
+
+  function prepareCloudMt5Dialog(slotId:string, dialogMode:"NEW"|"RECONNECT") {
+    const slot = cloudSlots.find((item:any)=>String(item?.id || "")===String(slotId || "")) || null;
+    if (slotId && slotId !== selectedSlotIdRef.current) {
+      selectSlot(slotId);
+    }
+
+    setCloudMt5DialogMode(dialogMode);
+    setCloudMt5DialogAccountId(dialogMode === "RECONNECT" ? String(slot?.mt5_account_id || "") : "");
+    setTradingPassword("");
+
+    if (dialogMode === "RECONNECT" && slot?.account_number) {
+      setAccountNumber(String(slot.account_number || ""));
+      const brokerMatch = brokerCatalog.find(item =>
+        String(item.name || "").toLowerCase() === String(slot.broker || "").toLowerCase() ||
+        String(item.code || "").toLowerCase() === String(slot.broker || "").toLowerCase()
+      );
+      if (brokerMatch) {
+        setBrokerCode(brokerMatch.code);
+        setCustomBrokerName("");
+      } else {
+        setBrokerCode("OTHER");
+        setCustomBrokerName(String(slot.broker || ""));
+      }
+      setBrokerServer(String(slot.broker_server || ""));
+      setCustomBrokerServer("");
+    } else {
+      setAccountNumber("");
+      setBrokerServer("");
+      setCustomBrokerServer("");
+      if (!brokerCatalog.some(item=>item.code===brokerCode)) {
+        setBrokerCode(brokerCatalog[0]?.code || "EXNESS");
+      }
+    }
+
+    window.setTimeout(()=>cloudMt5DialogRef.current?.showModal(),0);
+  }
+
+  async function beginCloudAccountChange() {
+    const blocked =
+      state === "RUNNING" ||
+      desired === "RUNNING" ||
+      Number(data.instance?.metrics?.positions || 0) > 0 ||
+      Number(data.instance?.metrics?.accountScenovaPendingOrders || 0) > 0;
+    if (blocked) {
+      setError("ต้องหยุดบอทและไม่มี Position / Pending Order ค้างอยู่ก่อนเปลี่ยนบัญชี");
+      return;
+    }
+
+    const slotId = String(selectedSlotIdRef.current || data.selectedSlot?.id || "");
+    const ok = await performMt5Reset();
+    if (ok) prepareCloudMt5Dialog(slotId,"NEW");
+  }
+
+  async function submitCloudMt5Dialog(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      if (!tradingPassword) throw new Error("กรุณากรอก MT5 Trading Password");
+
+      if (cloudMt5DialogMode === "RECONNECT" && cloudMt5DialogAccountId) {
+        await api("/bot/mt5/cloud-credential", {
+          method:"POST",
+          body:JSON.stringify({
+            mt5AccountId:cloudMt5DialogAccountId,
+            tradingPassword
+          })
+        });
+      } else {
+        if (!accountNumber.trim()) throw new Error("กรุณากรอก MT5 Login");
+        if (!selectedBrokerName) throw new Error("กรุณาเลือก Broker");
+        if (!selectedServer.trim()) throw new Error("กรุณาเลือกหรือพิมพ์ MT5 Server");
+
+        const result = await api("/bot/mt5", {
+          method:"POST",
+          body:JSON.stringify({
+            slotId:selectedSlotIdRef.current || undefined,
+            accountNumber:accountNumber.trim(),
+            broker:selectedBrokerName,
+            brokerServer:selectedServer.trim(),
+            mode:"CLOUD"
+          })
+        });
+        await api("/bot/mt5/cloud-credential", {
+          method:"POST",
+          body:JSON.stringify({
+            mt5AccountId:result.account.id,
+            tradingPassword
+          })
+        });
+      }
+
+      setTradingPassword("");
+      cloudMt5DialogRef.current?.close();
+      setNotice(cloudMt5DialogMode === "RECONNECT"
+        ? "บันทึกรหัสแล้ว กำลังเชื่อม MT5 บน VPS ใหม่"
+        : "เชื่อมบัญชี MT5 ใหม่แล้ว กำลังเปิดบน VPS");
+      await load(selectedSlotIdRef.current,true);
+    } catch (e:any) {
+      setError(String(e?.message || "เชื่อม MT5 ไม่สำเร็จ"));
     } finally {
       setBusy(false);
     }
