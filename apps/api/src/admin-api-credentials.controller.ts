@@ -245,6 +245,13 @@ export class AdminApiCredentialsController {
           detail: "SMS fallback / notifications"
         },
         {
+          key: "easyslip",
+          name: "EasySlip",
+          category: "PAYMENT",
+          active: this.configured("EASYSLIP_API_KEY"),
+          detail: "ตรวจสลิปธนาคาร / จับคู่บัญชี / ตรวจยอดและสลิปซ้ำ"
+        },
+        {
           key: "omise",
           name: "Opn / Omise",
           category: "PAYMENT",

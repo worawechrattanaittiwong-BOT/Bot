@@ -9,6 +9,7 @@ import { AdminServiceLinksController } from "./admin-service-links.controller";
 import { AdminApiCredentialsController } from "./admin-api-credentials.controller";
 import { RuntimeSecretsService } from "./runtime-secrets.service";
 import { ApiCredentialTesterService } from "./api-credential-tester.service";
+import { EasySlipPaymentService } from "./easyslip-payment.service";
 import { EaController } from "./ea.controller";
 import { AgentActionController } from "./agent-action.controller";
 import { ManualMt5Controller } from "./manual-mt5.controller";
@@ -77,6 +78,7 @@ import { RuntimeEventService } from "./runtime-event.service";
     CommissionWithdrawalRiskService,
     CommissionWithdrawalService,
     ApiCredentialTesterService,
+    EasySlipPaymentService,
     RuntimeSecretsService,
     ProductionHardeningService,
     RuntimeMigrationService,

@@ -17,12 +17,18 @@ import { DbService } from "./db.service";
 import { AdminGuard, JwtGuard } from "./security";
 import { ReferralService } from "./referral.service";
 import { PromotionService } from "./promotion.service";
+import { EasySlipPaymentService } from "./easyslip-payment.service";
 
-function paymentMode() {
+function omiseMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
   if (key.startsWith("skey_test_")) return "TEST";
   if (key.startsWith("skey_live_") || key.startsWith("skey_")) return "LIVE";
   return "UNCONFIGURED";
+}
+
+function paymentMode() {
+  if (String(process.env.EASYSLIP_API_KEY || "").trim()) return "EASYSLIP";
+  return omiseMode();
 }
 
 function validateCharge(charge: any, order: any) {
@@ -32,7 +38,7 @@ function validateCharge(charge: any, order: any) {
     charge?.metadata?.purchase_type !== "LOCAL" ||
     Number(charge?.amount) !== Number(order.amount) ||
     String(charge?.currency || "").toLowerCase() !== "thb" ||
-    Boolean(charge?.livemode) !== (paymentMode() === "LIVE") ||
+    Boolean(charge?.livemode) !== (omiseMode() === "LIVE") ||
     (order.charge_id && order.charge_id !== charge.id)
   ) {
     throw new ConflictException("ข้อมูลการชำระเงินไม่ตรงกับรายการ Local");
@@ -47,7 +53,8 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
   constructor(
     private readonly db: DbService,
     private readonly referrals: ReferralService,
-    private readonly promotions: PromotionService
+    private readonly promotions: PromotionService,
+    private readonly easyslip: EasySlipPaymentService
   ) {}
 
   onApplicationBootstrap() {
@@ -62,8 +69,10 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
   }
 
   private checkoutEnabled() {
+    const mode = paymentMode();
+    if (mode === "EASYSLIP") return true;
     return process.env.LOCAL_CHECKOUT_ENABLED === "true" &&
-      paymentMode() !== "UNCONFIGURED";
+      mode !== "UNCONFIGURED";
   }
 
   async catalog() {
@@ -71,19 +80,24 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
       "SELECT sales_paused FROM production_controls WHERE id=1"
     );
     const salesPaused = Boolean(controls?.sales_paused);
+    const mode = paymentMode();
+    const paymentAccounts = mode === "EASYSLIP"
+      ? await this.easyslip.listBankAccounts().catch(() => [])
+      : [];
     return {
       packages: (await this.db.query(
         "SELECT months,price_satang,enabled,updated_at FROM local_packages ORDER BY months"
       )).rows,
-      paymentMode: paymentMode(),
+      paymentMode: mode,
+      paymentAccounts,
       salesPaused,
       checkoutEnabled: this.checkoutEnabled() && !salesPaused
     };
   }
 
   async gateway(path: string, fields?: URLSearchParams) {
-    if (paymentMode() === "UNCONFIGURED") {
-      throw new ConflictException("ยังไม่ได้เชื่อมระบบชำระเงิน");
+    if (!["TEST", "LIVE"].includes(omiseMode())) {
+      throw new ConflictException("ไม่ได้ใช้งาน Opn / Omise ในโหมดการชำระเงินปัจจุบัน");
     }
     const response = await fetch("https://api.omise.co" + path, {
       method: fields ? "POST" : "GET",
@@ -106,7 +120,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
   }
 
   async reconcilePending() {
-    if (this.checking || paymentMode() === "UNCONFIGURED") return;
+    if (this.checking || !["TEST", "LIVE"].includes(omiseMode())) return;
     this.checking = true;
     try {
       const rows = await this.db.query(
@@ -393,6 +407,16 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
       return this.activateFreeOrder(order.id);
     }
 
+    if (paymentMode() === "EASYSLIP") {
+      await this.db.query(
+        `UPDATE local_orders
+         SET status='PENDING',expires_at=now()+interval '24 hours'
+         WHERE id=$1 AND status='CREATING'`,
+        [order.id]
+      );
+      return { id: order.id, paymentMode: "EASYSLIP" };
+    }
+
     try {
       const charge = await this.gateway(
         "/charges",
@@ -499,7 +523,8 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
 export class LocalPackageCustomerController {
   constructor(
     private readonly db: DbService,
-    private readonly local: LocalPackageService
+    private readonly local: LocalPackageService,
+    private readonly easyslip: EasySlipPaymentService
   ) {}
 
   @Get("catalog")
@@ -531,6 +556,29 @@ export class LocalPackageCustomerController {
       Math.trunc(Number(body.months || 0)),
       String(body.promoCode || "")
     );
+  }
+
+  @Post("orders/:id/verify-slip")
+  async verifySlip(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: { base64?: string }
+  ) {
+    return this.easyslip.verifyAndActivate({
+      base64: String(body.base64 || ""),
+      orderType: "LOCAL",
+      orderId: id,
+      userId: String(req.user.sub)
+    });
+  }
+
+  @Post("orders/:id/cancel-slip-payment")
+  async cancelSlipPayment(@Req() req: any, @Param("id") id: string) {
+    return this.easyslip.cancelPending({
+      orderType: "LOCAL",
+      orderId: id,
+      userId: String(req.user.sub)
+    });
   }
 
   @Post("orders/:id/refresh")

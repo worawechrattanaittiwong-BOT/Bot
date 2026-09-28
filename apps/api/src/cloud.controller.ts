@@ -5,18 +5,24 @@ import { AdminGuard, CryptoService, JwtGuard } from "./security";
 import { ReferralService } from "./referral.service";
 import { LocalPackageService } from "./local-package.controller";
 import { PromotionService } from "./promotion.service";
+import { EasySlipPaymentService } from "./easyslip-payment.service";
 import { CLOUD_SERVER_RELEASE, versionAtLeast, versionExact } from "./cloud-server-release";
 
-export function paymentMode() {
+function omiseMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
   if (key.startsWith("skey_test_")) return "TEST";
   if (key.startsWith("skey_live_") || key.startsWith("skey_")) return "LIVE";
   return "UNCONFIGURED";
 }
+
+export function paymentMode() {
+  if (String(process.env.EASYSLIP_API_KEY || "").trim()) return "EASYSLIP";
+  return omiseMode();
+}
 export function validateCharge(charge: any, order: any) {
   if (charge.object !== "charge" || charge.metadata?.order_id !== order.id ||
       charge.amount !== order.amount || charge.currency?.toLowerCase() !== "thb" ||
-      charge.livemode !== (paymentMode() === "LIVE") ||
+      charge.livemode !== (omiseMode() === "LIVE") ||
       (order.charge_id && order.charge_id !== charge.id)) {
     throw new ConflictException("ข้อมูลการชำระเงินไม่ตรงกับรายการ");
   }
@@ -27,7 +33,8 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
   constructor(
     private readonly db: DbService,
     private readonly referrals: ReferralService,
-    private readonly promotions: PromotionService
+    private readonly promotions: PromotionService,
+    private readonly easyslip: EasySlipPaymentService
   ) {}
   private timer?: ReturnType<typeof setInterval>;
   private checking = false;
@@ -37,7 +44,7 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
   }
   onModuleDestroy() { if (this.timer) clearInterval(this.timer); }
   async reconcilePending() {
-    if (this.checking || paymentMode() === "UNCONFIGURED") return;
+    if (this.checking || !["TEST", "LIVE"].includes(omiseMode())) return;
     this.checking = true;
     try {
       const orders = await this.db.query(`UPDATE cloud_orders SET checked_at=now() WHERE id IN (
@@ -52,7 +59,7 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async gateway(path: string, fields?: URLSearchParams) {
-    if (paymentMode() === "UNCONFIGURED") throw new ConflictException("ยังไม่ได้เชื่อมระบบชำระเงิน");
+    if (!["TEST", "LIVE"].includes(omiseMode())) throw new ConflictException("ยังไม่ได้เชื่อม Opn / Omise");
     const response = await fetch("https://api.omise.co" + path, {
       method: fields ? "POST" : "GET",
       headers: { Authorization: "Basic " + Buffer.from(process.env.OMISE_SECRET_KEY + ":").toString("base64"),
@@ -115,13 +122,21 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
       n.health === "ONLINE" && n.accepting_jobs && n.telemetry?.templateReady === true &&
       !n.capacity_blocked && !n.quarantined
     ).reduce((sum, n) => sum + Math.max(0, n.capacity - Math.max(n.occupied, n.active_instances)), 0);
+    const mode = paymentMode();
+    const paymentAccounts = mode === "EASYSLIP"
+      ? await this.easyslip.listBankAccounts().catch(() => [])
+      : [];
     return {
       packages: (await this.db.query("SELECT * FROM cloud_packages ORDER BY months")).rows,
       available,
       provisioningPaused,
       salesPaused,
-      paymentMode: paymentMode(),
-      checkoutEnabled: process.env.CLOUD_CHECKOUT_ENABLED === "true" && paymentMode() !== "UNCONFIGURED" && !provisioningPaused && !salesPaused
+      paymentMode: mode,
+      paymentAccounts,
+      checkoutEnabled: (
+        mode === "EASYSLIP" ||
+        (process.env.CLOUD_CHECKOUT_ENABLED === "true" && mode !== "UNCONFIGURED")
+      ) && !provisioningPaused && !salesPaused
     };
   }
 
@@ -254,7 +269,8 @@ export class CloudCustomerController {
   constructor(
     private readonly db: DbService,
     private readonly cloud: CloudService,
-    private readonly promotions: PromotionService
+    private readonly promotions: PromotionService,
+    private readonly easyslip: EasySlipPaymentService
   ) {}
   @Get("catalog") catalog() { return this.cloud.catalog(); }
   @Get("orders") async orders(@Req() req: any) {
@@ -264,6 +280,29 @@ export class CloudCustomerController {
       LEFT JOIN bot_instances b ON b.slot_id=o.slot_id LEFT JOIN mt5_accounts a ON a.id=b.mt5_account_id
       WHERE o.user_id=$1 ORDER BY o.created_at DESC LIMIT 50`, [req.user.sub])).rows;
   }
+  @Post("orders/:id/verify-slip")
+  async verifySlip(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: { base64?: string }
+  ) {
+    return this.easyslip.verifyAndActivate({
+      base64: String(body.base64 || ""),
+      orderType: "CLOUD",
+      orderId: id,
+      userId: String(req.user.sub)
+    });
+  }
+
+  @Post("orders/:id/cancel-slip-payment")
+  async cancelSlipPayment(@Req() req: any, @Param("id") id: string) {
+    return this.easyslip.cancelPending({
+      orderType: "CLOUD",
+      orderId: id,
+      userId: String(req.user.sub)
+    });
+  }
+
   @Post("orders/:id/refresh") async refresh(@Req() req: any, @Param("id") id: string) {
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new BadRequestException("Invalid order");
     const order = await this.db.one("SELECT * FROM cloud_orders WHERE id=$1 AND user_id=$2", [id, req.user.sub]);
@@ -272,7 +311,7 @@ export class CloudCustomerController {
     return { ok: true };
   }
   @Post("checkout") async checkout(@Req() req: any, @Body() body: { months: number; slotId?: string; promoCode?: string }) {
-    if (process.env.CLOUD_CHECKOUT_ENABLED !== "true" || paymentMode() === "UNCONFIGURED") throw new ConflictException("ยังไม่เปิดรับชำระเงิน");
+    if (paymentMode() === "UNCONFIGURED" || (paymentMode() !== "EASYSLIP" && process.env.CLOUD_CHECKOUT_ENABLED !== "true")) throw new ConflictException("ยังไม่เปิดรับชำระเงิน");
     if (![1,3,6,12].includes(body.months)) throw new BadRequestException("Invalid package");
     if (body.slotId && !/^[0-9a-f-]{36}$/i.test(body.slotId)) throw new BadRequestException("Invalid slot");
     const order = await this.db.transaction(async tx => {
@@ -317,6 +356,13 @@ export class CloudCustomerController {
       return order;
     });
     if (Number(order.amount) === 0) return this.cloud.activateFreeOrder(order.id);
+    if (paymentMode() === "EASYSLIP") {
+      await this.db.query(
+        "UPDATE cloud_orders SET status='PENDING',expires_at=now()+interval '24 hours' WHERE id=$1 AND status='CREATING'",
+        [order.id]
+      );
+      return { id: order.id, paymentMode: "EASYSLIP" };
+    }
     try {
       const charge = await this.cloud.gateway("/charges", new URLSearchParams({ amount: String(order.amount), currency: "thb",
         "source[type]": "promptpay", "metadata[order_id]": order.id, "metadata[purchase_type]": "CLOUD", description: "SCENOVA Cloud " + order.months + " months",
