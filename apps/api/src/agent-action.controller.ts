@@ -109,6 +109,24 @@ export class AgentActionController {
       }
     }
 
+    const groupGrant = await this.db.one(
+      `SELECT gg.id
+       FROM access_group_grants gg
+       JOIN access_groups ag ON ag.id=gg.access_group_id
+       WHERE gg.user_id=$1
+         AND gg.mode=$2
+         AND gg.status='ACTIVE'
+         AND gg.starts_at<=now()
+         AND gg.expires_at>now()
+         AND ag.enabled=true
+       ORDER BY gg.expires_at DESC
+       LIMIT 1`,
+      [userId, instance.mode]
+    );
+    if (groupGrant) {
+      return { allowed: true, source: "GROUP_TRIAL" };
+    }
+
     if (instance.mt5_account_id) {
       const trial = await this.db.one(
         `SELECT tg.id,tg.status
