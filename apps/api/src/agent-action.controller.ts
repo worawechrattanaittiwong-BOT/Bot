@@ -9,7 +9,7 @@ const ACTION_PENDING_TTL_MS = 15 * 60_000;
 
 type AccessState = {
   allowed: boolean;
-  source: "OWNER" | "PARTNER" | "SUBSCRIPTION" | "TRIAL" | "TRIAL_READY" | "NONE";
+  source: "OWNER" | "PARTNER" | "SUBSCRIPTION" | "GROUP_TRIAL" | "TRIAL" | "TRIAL_READY" | "NONE";
   trialId?: string;
 };
 
