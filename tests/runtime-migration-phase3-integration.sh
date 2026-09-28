@@ -99,14 +99,19 @@ test "$CLOUD_TOKEN" != "$LOCAL_TOKEN"
 test "$WORKER_GENERATION" = "2"
 
 json_post "$BASE/ea/heartbeat" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$CLOUD_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"300001\",\"eaVersion\":\"1.0.10\",\"productVersion\":\"1.0.10\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}" >/dev/null
+# A migration can remain TARGET_PROVISIONING until the next dashboard/status read.
+# Simulate the customer returning later, after the successful target heartbeat is no
+# longer fresh. Historical post-handoff readiness must still close the migration.
+sql "update runtime_migrations set lease_rotated_at=now()-interval '10 minutes' where id='$MIG1'; update bot_instances set last_seen_at=now()-interval '5 minutes' where id='$INSTANCE';" >/dev/null
 STATUS1=$(curl -fsS "$BASE/runtime-migration/status" -H "authorization: Bearer $TOKEN")
 test "$(printf '%s' "$STATUS1" | jq -r --arg id "$MIG1" '.migrations[] | select(.id==$id) | .state')" = "COMPLETED"
 
 echo '[phase3] Cloud -> Local uses Worker STOP_CONFIRMED before runner release'
 LOCAL_SUB=$(sql "insert into subscriptions(user_id,plan_id,status,starts_at,expires_at,activated_by) select '$USER_ID',id,'ACTIVE',now(),now()+interval '30 days','PHASE3_CI' from plans where code='LOCAL_30D' returning id;")
 sql "update license_slots set subscription_id='$LOCAL_SUB',status='ACTIVE' where id='$LOCAL_SLOT';" >/dev/null
-# Keep the Worker heartbeat fresh for the verified release gate.
+# Keep the Worker and EA heartbeats fresh for the verified release gate.
 json_post "$BASE/worker/heartbeat" -H "x-worker-key: $WORKER_KEY" -d "{\"runnerId\":\"$RUNNER_ID\",\"hostname\":\"PHASE3-VPS\",\"capacity\":2,\"activeInstances\":1,\"telemetry\":{\"templateReady\":true,\"version\":\"1.1.0\"}}" >/dev/null
+json_post "$BASE/ea/heartbeat" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$CLOUD_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"300001\",\"eaVersion\":\"1.0.10\",\"productVersion\":\"1.0.10\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}" >/dev/null
 
 REQ2=$(json_post "$BASE/runtime-migration/request" -H "authorization: Bearer $TOKEN" -d "{\"sourceSlotId\":\"$CLOUD_SLOT\",\"targetSlotId\":\"$LOCAL_SLOT\",\"confirmFlat\":true,\"confirmSwitch\":true}")
 MIG2=$(printf '%s' "$REQ2" | jq -r '.id')
