@@ -4085,14 +4085,78 @@ export default function DashboardPage() {
           <div className="vps-slot-dialog-shell">
             <header className="vps-slot-dialog-head">
               <div>
-                <div className="eyebrow">VPS SLOT COMMERCE</div>
-                <h2>{vpsRenewSlot ? "ต่ออายุ VPS Slot #" + vpsRenewSlot.slot_number : "ซื้อ VPS Slot เพิ่ม"}</h2>
-                <p>{vpsRenewSlot ? "ต่ออายุ Slot เดิมโดยคงเวลาที่เหลืออยู่" : "1 Slot = 1 VPS MT5 + 1 EA Runtime · ซื้อเพิ่มได้เรื่อย ๆ"}</p>
+                <div className="eyebrow">{ownerAddonPriceEditorOpen ? "OWNER · ADD-ON PRICING" : "VPS ADD-ON SLOT COMMERCE"}</div>
+                <h2>
+                  {ownerAddonPriceEditorOpen
+                    ? "ตั้งราคา VPS Slot เสริม"
+                    : vpsRenewSlot
+                      ? "ต่ออายุ VPS Slot เสริม #" + vpsRenewSlot.slot_number
+                      : "ซื้อ VPS Slot เสริม"}
+                </h2>
+                <p>
+                  {ownerAddonPriceEditorOpen
+                    ? "ราคาชุดนี้แยกจากแพ็กเกจหลัก Slot #1 และใช้เฉพาะ Slot #2 ขึ้นไป"
+                    : vpsRenewSlot
+                      ? "ต่ออายุ Slot เสริมจากวันหมดอายุเดิม · ไม่กระทบอายุแพ็กเกจหลักหรือ Slot อื่น"
+                      : "1 Slot เสริม = 1 VPS MT5 + 1 EA Runtime · อายุแยกจากแพ็กเกจหลัก"}
+                </p>
               </div>
               <button type="button" className="vps-slot-dialog-close" onClick={()=>vpsSlotDialogRef.current?.close()} aria-label="ปิด">×</button>
             </header>
 
-            {!vpsPaymentOrder ? (
+            {ownerAddonPriceEditorOpen ? (
+              <section className="vps-addon-price-editor">
+                <div className="vps-addon-price-note">
+                  <b>ราคา Slot เสริม</b>
+                  <span>ตั้งราคา 1 / 3 / 6 / 12 เดือนได้อิสระ การแก้ราคานี้จะไม่เปลี่ยนราคาแพ็กเกจหลัก</span>
+                </div>
+                <div className="vps-addon-price-grid">
+                  {[1,3,6,12].map(months=>{
+                    const row = ownerAddonPrices[months] || {priceBaht:"",enabled:false};
+                    return (
+                      <div className="vps-addon-price-row" key={months}>
+                        <div>
+                          <b>{months} เดือน</b>
+                          <small>ต่อ 1 VPS Slot เสริม</small>
+                        </div>
+                        <label>
+                          <span>ราคา (บาท)</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={row.priceBaht}
+                            onChange={event=>setOwnerAddonPrices(current=>({
+                              ...current,
+                              [months]:{...(current[months] || {priceBaht:"",enabled:false}),priceBaht:event.target.value}
+                            }))}
+                          />
+                        </label>
+                        <label className="vps-addon-price-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(row.enabled)}
+                            onChange={event=>setOwnerAddonPrices(current=>({
+                              ...current,
+                              [months]:{...(current[months] || {priceBaht:"",enabled:false}),enabled:event.target.checked}
+                            }))}
+                          />
+                          <span>เปิดขาย</span>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="vps-addon-price-actions">
+                  <button type="button" className="btn ghost" disabled={vpsPurchaseBusy} onClick={()=>setOwnerAddonPriceEditorOpen(false)}>
+                    กลับ
+                  </button>
+                  <button type="button" className="btn primary" disabled={vpsPurchaseBusy} onClick={()=>void saveOwnerAddonPrices()}>
+                    {vpsPurchaseBusy ? "กำลังบันทึก..." : "บันทึกราคา Slot เสริม"}
+                  </button>
+                </div>
+              </section>
+            ) : !vpsPaymentOrder ? (
               <>
                 <section className="vps-slot-package-section">
                   <div className="vps-slot-dialog-label">เลือกระยะเวลา</div>
@@ -4106,7 +4170,7 @@ export default function DashboardPage() {
                       >
                         <span>{pack.months} เดือน</span>
                         <b>฿{(Number(pack.price_satang || 0)/100).toLocaleString("th-TH",{maximumFractionDigits:2})}</b>
-                        <small>ต่อ 1 VPS Slot</small>
+                        <small>ต่อ 1 VPS Slot เสริม</small>
                       </button>
                     ))}
                   </div>
@@ -4114,7 +4178,7 @@ export default function DashboardPage() {
 
                 <section className="vps-slot-order-summary">
                   <div>
-                    <span>{vpsRenewSlot ? "ต่ออายุ Slot" : "VPS Slot ใหม่"}</span>
+                    <span>{vpsRenewSlot ? "ต่ออายุ Slot เสริม" : "VPS Slot เสริมใหม่"}</span>
                     <b>{vpsRenewSlot ? "#" + vpsRenewSlot.slot_number : "เพิ่ม 1 Slot"}</b>
                   </div>
                   <div>
@@ -4129,9 +4193,11 @@ export default function DashboardPage() {
 
                 {!canCheckoutVpsOrder && (
                   <div className="vps-slot-capacity-warning">
-                    {!cloudCatalog?.checkoutEnabled
-                      ? "ระบบขาย VPS Slot ยังไม่พร้อมใช้งาน"
-                      : "VPS Capacity เต็มชั่วคราว ระบบจะไม่รับเงินสำหรับ Slot ใหม่จนกว่าจะมี Capacity ว่าง"}
+                    {!primaryCloudActive
+                      ? "แพ็กเกจ VPS หลัก Slot #1 หมดอายุ กรุณาต่ออายุแพ็กเกจหลักก่อนซื้อหรือต่ออายุ Slot เสริม"
+                      : !cloudCatalog?.checkoutEnabled
+                        ? "ระบบขาย VPS Slot เสริมยังไม่พร้อมใช้งาน"
+                        : "VPS Capacity เต็มชั่วคราว ระบบจะไม่รับเงินสำหรับ Slot เสริมใหม่จนกว่าจะมี Capacity ว่าง"}
                   </div>
                 )}
 
@@ -4141,7 +4207,7 @@ export default function DashboardPage() {
                   disabled={vpsPurchaseBusy || !selectedVpsPackage || !canCheckoutVpsOrder}
                   onClick={()=>void createVpsSlotOrder()}
                 >
-                  {vpsPurchaseBusy ? "กำลังสร้างรายการ..." : vpsRenewSlot ? "สร้างรายการต่ออายุ" : "สร้างรายการซื้อ VPS Slot"}
+                  {vpsPurchaseBusy ? "กำลังสร้างรายการ..." : vpsRenewSlot ? "สร้างรายการต่ออายุ Slot เสริม" : "สร้างรายการซื้อ Slot เสริม"}
                 </button>
               </>
             ) : (
@@ -4196,7 +4262,7 @@ export default function DashboardPage() {
                       disabled={vpsPurchaseBusy || !vpsSlipFile || !vpsPaymentAccount}
                       onClick={()=>void verifyVpsSlotSlip()}
                     >
-                      {vpsPurchaseBusy ? "กำลังตรวจสลิป..." : "ตรวจสลิปและเปิด VPS Slot"}
+                      {vpsPurchaseBusy ? "กำลังตรวจสลิป..." : "ตรวจสลิปและเปิด VPS Slot เสริม"}
                     </button>
                   </>
                 ) : (
