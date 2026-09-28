@@ -245,7 +245,7 @@ export default function AdminPage() {
     }
   }
 
-  async function adjustSubscriptionDays(user: any, subscriptionId: string, amount: number) {
+  async function adjustSubscriptionDays(user: any, subscriptionId: string, mode: string, amount: number) {
     if (!subscriptionId) return setMessage("ไม่พบสมาชิกที่ต้องการปรับวัน");
     const daysValue = Math.max(1, Math.min(3650, Math.trunc(Math.abs(Number(amount) || 1))));
     const signedDays = amount < 0 ? -daysValue : daysValue;
@@ -253,7 +253,7 @@ export default function AdminPage() {
     try {
       const result = await adminApi("/admin/subscriptions/adjust-days", {
         method: "POST",
-        body: JSON.stringify({ subscriptionId, days: signedDays })
+        body: JSON.stringify({ subscriptionId, days: signedDays, userId:user.id, mode })
       });
       setMessage(
         (signedDays > 0 ? "เพิ่ม " : "ลด ") + daysValue + " วันให้ " + user.user_code +
@@ -261,6 +261,40 @@ export default function AdminPage() {
       );
       await search(undefined, true);
     } catch (e: any) {
+      setMessage(e.message);
+    } finally {
+      setCustomerAction("");
+    }
+  }
+
+  async function deleteCustomerSlot(user:any, slot:any) {
+    if (!canDeleteCustomerSlot(user,slot)) return;
+    const slotLabel = (slot.mode==="CLOUD" ? "Cloud VPS" : "Local MT5") + " Slot #" + Number(slot.slot_number || 0);
+    const confirmed=await confirmPopup({
+      title:"ลบ "+slotLabel,
+      tone:"warning",
+      message:"ยืนยันลบ "+slotLabel+" ของ "+user.user_code+" หรือไม่?",
+      confirmLabel:"ลบ Slot"
+    });
+    if(!confirmed) return;
+    setCustomerAction("slot-delete:"+slot.id);
+    try {
+      let result:any=null;
+      for(let attempt=0; attempt<8; attempt++) {
+        result=await adminApi("/admin/slots/delete", {
+          method:"POST",
+          body:JSON.stringify({ userId:user.id, slotId:slot.id })
+        });
+        if(!result?.pendingCloudStop) break;
+        await new Promise(resolve=>setTimeout(resolve,1500));
+      }
+      if(result?.pendingCloudStop) {
+        setMessage("กำลังปิด VPS กรุณาลองลบอีกครั้งในอีกสักครู่");
+      } else {
+        setMessage("ลบ "+slotLabel+" แล้ว");
+      }
+      await search(undefined,true);
+    } catch(e:any) {
       setMessage(e.message);
     } finally {
       setCustomerAction("");
@@ -716,8 +750,35 @@ export default function AdminPage() {
   const memberships = (user:any) => Array.isArray(user?.memberships) ? user.memberships : [];
   const isCurrentMembership = (m:any) =>
     m?.status==="ACTIVE" && Boolean(m?.expires_at) && new Date(m.expires_at).getTime()>Date.now();
-  const currentModeMembership = (user:any, mode:string) =>
-    memberships(user).find((m:any)=>m.mode===mode && isCurrentMembership(m)) || null;
+  const currentModeMembership = (user:any, mode:string) => {
+    const current = memberships(user).filter((m:any)=>m.mode===mode && isCurrentMembership(m));
+    if (mode === "CLOUD") {
+      return current.find((m:any)=>String(m.slot_type || "").toUpperCase()==="PERSONAL")
+        || current.find((m:any)=>String(m.slot_type || "").toUpperCase()!=="ADDON")
+        || current[0]
+        || null;
+    }
+    return current[0] || null;
+  };
+  const customerSlots = (user:any) => Array.isArray(user?.customer_slots) ? user.customer_slots : [];
+  const primaryLocalSlotNumber = (user:any) => {
+    const values = customerSlots(user)
+      .filter((slot:any)=>String(slot.mode).toUpperCase()==="LOCAL")
+      .map((slot:any)=>Number(slot.slot_number || 0))
+      .filter((value:number)=>value>0);
+    return values.length ? Math.min(...values) : 0;
+  };
+  const canDeleteCustomerSlot = (user:any, slot:any) => {
+    const mode = String(slot?.mode || "").toUpperCase();
+    if (mode === "CLOUD") {
+      return String(slot?.slot_type || "").toUpperCase()==="ADDON" || Number(slot?.slot_number || 0)>1;
+    }
+    if (mode === "LOCAL") {
+      const localSlots = customerSlots(user).filter((item:any)=>String(item.mode).toUpperCase()==="LOCAL");
+      return localSlots.length>1 && Number(slot?.slot_number || 0)!==primaryLocalSlotNumber(user);
+    }
+    return false;
+  };
   const hasCurrentPlan = (user:any, planCode:string) =>
     memberships(user).some((m:any)=>m.plan_code===planCode && isCurrentMembership(m));
   const hasActiveMode = (user:any, mode:string) =>
@@ -1069,7 +1130,7 @@ export default function AdminPage() {
                       <div className="owner-customer-identity">
                         <span className="owner-customer-avatar large">{String(selectedCustomer.user_code||"U").slice(-1)}</span>
                         <div>
-                          <span className="owner-card-kicker">SELECTED CUSTOMER</span>
+                          <span className="owner-card-kicker">CUSTOMER</span>
                           <h2>{selectedCustomer.user_code}</h2>
                           <p>{selectedCustomer.email}</p>
                         </div>
@@ -1082,8 +1143,7 @@ export default function AdminPage() {
 
                     {selectedCustomer.role === "OWNER" || selectedCustomer.role === "ADMIN" ? (
                       <div className="owner-system-readonly">
-                        <b>System Account</b>
-                        <span>บัญชี OWNER / ADMIN มีสิทธิ์ถาวรและไม่ใช้ Customer Membership Control</span>
+                        <b>บัญชีผู้ดูแลระบบ</b>
                       </div>
                     ) : (
                       <>
@@ -1105,19 +1165,19 @@ export default function AdminPage() {
                         <div className="owner-control-grid">
                           <section className="owner-control-card access-card">
                             <div className="owner-control-card-head">
-                              <div><span className="owner-card-kicker">ACCESS CONTROL</span><h3>Local / Cloud VPS</h3><p>เลือกสิทธิ์ที่ต้องการเปิดให้ลูกค้า แล้วกำหนดจำนวนวันได้อิสระ</p></div>
+                              <div><h3>สิทธิ์ใช้งาน</h3></div>
                               <span className="owner-count">{selectedPlan.mode}</span>
                             </div>
 
                             <div className="owner-access-mode-grid">
                               <button type="button" className={"owner-access-option "+(plan==="LOCAL_30D"?"active":"")} onClick={()=>setPlan("LOCAL_30D")}>
                                 <span className="owner-access-check">{plan==="LOCAL_30D"?"✓":""}</span>
-                                <span><b>Local MT5</b><small>ใช้ MT5 บนคอมลูกค้า</small></span>
+                                <span><b>Local MT5</b></span>
                                 {currentModeMembership(selectedCustomer,"LOCAL") && <em>{modeAccessLabel(selectedCustomer,"LOCAL")}</em>}
                               </button>
                               <button type="button" className={"owner-access-option "+(plan==="CLOUD_30D"?"active":"")} onClick={()=>setPlan("CLOUD_30D")}>
                                 <span className="owner-access-check">{plan==="CLOUD_30D"?"✓":""}</span>
-                                <span><b>Cloud VPS</b><small>ใช้ MT5 บน Trading VPS</small></span>
+                                <span><b>Cloud VPS</b></span>
                                 {currentModeMembership(selectedCustomer,"CLOUD") && <em>{modeAccessLabel(selectedCustomer,"CLOUD")}</em>}
                               </button>
                             </div>
@@ -1151,9 +1211,9 @@ export default function AdminPage() {
                             {accessGrantType==="MEMBERSHIP" ? (
                               <>
                                 <div className="owner-control-fields">
-                                  <label><span>จำนวนวันสมาชิกจริง</span><input className="input" type="number" min={1} max={3650} value={days} onChange={e=>setDays(Number(e.target.value))}/></label>
-                                  <label><span>ยอดชำระจริง (บาท)</span><input className="input" type="number" min={0} step="0.01" value={paidAmountBaht} onChange={e=>setPaidAmountBaht(e.target.value)} placeholder="0.00"/></label>
-                                  <label className="wide"><span>Payment Reference</span><input className="input" value={paymentReference} onChange={e=>setPaymentReference(e.target.value.slice(0,160))} placeholder="PromptPay / slip / note"/></label>
+                                  <label><span>จำนวนวัน</span><input className="input" type="number" min={1} max={3650} value={days} onChange={e=>setDays(Number(e.target.value))}/></label>
+                                  <label><span>ยอดชำระ (บาท)</span><input className="input" type="number" min={0} step="0.01" value={paidAmountBaht} onChange={e=>setPaidAmountBaht(e.target.value)} placeholder="0.00"/></label>
+                                  <label className="wide"><span>อ้างอิงการชำระ</span><input className="input" value={paymentReference} onChange={e=>setPaymentReference(e.target.value.slice(0,160))} placeholder="PromptPay / Slip / Note"/></label>
                                 </div>
                                 <button
                                   className="btn primary owner-wide-action"
@@ -1161,15 +1221,14 @@ export default function AdminPage() {
                                   onClick={()=>activate(selectedCustomer,selectedPlan.code)}
                                 >
                                   {hasCurrentPlan(selectedCustomer,selectedPlan.code)
-                                    ? selectedPlan.label+" มีสมาชิกอยู่แล้ว — ปรับวันด้านล่าง"
-                                    : "เปิดสมาชิกจริง "+(selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" "+days+" วัน"}
+                                    ? (selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" ใช้งานอยู่"
+                                    : "เปิด "+(selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" "+days+" วัน"}
                                 </button>
 
                                 {currentModeMembership(selectedCustomer,selectedPlan.mode) ? (
                                   <div className="owner-selected-membership-adjust">
                                     <div>
-                                      <b>ปรับวันสมาชิกจริง {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"}</b>
-                                      <small>เพิ่มหรือลดเฉพาะวันสมาชิกจริง ไม่เกี่ยวกับกลุ่มทดลอง</small>
+                                      <b>ปรับวัน {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"}</b>
                                     </div>
                                     <div className="owner-add-days">
                                       <input
@@ -1187,7 +1246,7 @@ export default function AdminPage() {
                                         disabled={Boolean(customerAction)}
                                         onClick={()=>{
                                           const m=currentModeMembership(selectedCustomer,selectedPlan.mode);
-                                          if(m) adjustSubscriptionDays(selectedCustomer,m.subscription_id,-(membershipDays[String(m.subscription_id)] ?? 1));
+                                          if(m) adjustSubscriptionDays(selectedCustomer,m.subscription_id,selectedPlan.mode,-(membershipDays[String(m.subscription_id)] ?? 1));
                                         }}
                                       >
                                         − ลดวัน
@@ -1197,7 +1256,7 @@ export default function AdminPage() {
                                         disabled={Boolean(customerAction)}
                                         onClick={()=>{
                                           const m=currentModeMembership(selectedCustomer,selectedPlan.mode);
-                                          if(m) adjustSubscriptionDays(selectedCustomer,m.subscription_id,membershipDays[String(m.subscription_id)] ?? 1);
+                                          if(m) adjustSubscriptionDays(selectedCustomer,m.subscription_id,selectedPlan.mode,membershipDays[String(m.subscription_id)] ?? 1);
                                         }}
                                       >
                                         + เพิ่มวัน
@@ -1206,7 +1265,7 @@ export default function AdminPage() {
                                   </div>
                                 ) : (
                                   <div className="owner-control-note owner-membership-adjust-note">
-                                    ยังไม่มีสมาชิกจริง {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"} · เปิดสิทธิ์ด้านบนก่อนจึงเพิ่ม/ลดวันได้
+                                    ยังไม่มีสมาชิก {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"}
                                   </div>
                                 )}
                               </>
@@ -1241,55 +1300,14 @@ export default function AdminPage() {
                                 >
                                   ให้ทดลอง {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"} {days} วัน
                                 </button>
-                                <div className="owner-control-note owner-group-grant-note">
-                                  วันทดลองในกลุ่มแยกจากวันสมาชิกจริง · ปิดหรือลบกลุ่มเมื่อไร เฉพาะสิทธิ์ทดลองจะหยุด
-                                </div>
                               </>
                             )}
 
-                            <div className="owner-membership-list">
-                              {memberships(selectedCustomer).length ? memberships(selectedCustomer).map((m:any)=>(
-                                <div className="owner-membership-row" key={m.subscription_id}>
-                                  <div>
-                                    <span className={"owner-mode-badge "+String(m.mode).toLowerCase()}>{m.mode==="CLOUD"?"CLOUD VPS":"LOCAL"}</span>
-                                    <b>{m.plan_code}</b>
-                                    <small>
-                                      {m.active?"ใช้งานอยู่":"สถานะ "+m.status} · หมดอายุ {new Date(m.expires_at).toLocaleString("th-TH")}
-                                    </small>
-                                  </div>
-                                  <div className="owner-membership-actions">
-                                    <div className="owner-add-days">
-                                      <input
-                                        type="number"
-                                        min={1}
-                                        max={3650}
-                                        value={membershipDays[String(m.subscription_id)] ?? 1}
-                                        onChange={e=>setMembershipDays(prev=>({...prev,[String(m.subscription_id)]:Math.max(1,Number(e.target.value)||1)}))}
-                                      />
-                                      <button
-                                        className="btn danger"
-                                        disabled={Boolean(customerAction)}
-                                        onClick={()=>adjustSubscriptionDays(selectedCustomer,m.subscription_id,-(membershipDays[String(m.subscription_id)] ?? 1))}
-                                      >
-                                        − ลดวัน
-                                      </button>
-                                      <button
-                                        className="btn"
-                                        disabled={Boolean(customerAction)}
-                                        onClick={()=>adjustSubscriptionDays(selectedCustomer,m.subscription_id,membershipDays[String(m.subscription_id)] ?? 1)}
-                                      >
-                                        + เพิ่มวัน
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              )) : <div className="owner-control-empty">ยังไม่มีสมาชิกแบบชำระเงิน · เปิด Local หรือ Cloud VPS ก่อน แล้วจึงปรับวันได้</div>}
-                            </div>
                           </section>
 
                           <section className="owner-control-card">
                             <div className="owner-control-card-head">
-                              <div><span className="owner-card-kicker">TRIAL CONTROL</span><h3>Trial เดี่ยว</h3><p>ใช้สำหรับ Trial รายบัญชีแบบเดิม ไม่เกี่ยวกับกลุ่มทดลอง Local/VPS ด้านซ้าย</p></div>
+                              <div><h3>Trial</h3></div>
                             </div>
                             <div className="owner-trial-control">
                               <label><span>Trial Days</span><input className="input" type="number" min={1} max={365} value={trialDays} onChange={e=>setTrialDays(Number(e.target.value))}/></label>
@@ -1309,20 +1327,20 @@ export default function AdminPage() {
                             </div>
                             <div className="owner-control-note">
                               {selectedCustomer.trial_status
-                                ? "Trial ปัจจุบัน: "+selectedCustomer.trial_status+(selectedCustomer.trial_started_at?" · เริ่ม "+new Date(selectedCustomer.trial_started_at).toLocaleString("th-TH"):" · พร้อมเริ่มเมื่อผู้ใช้กด Start")
+                                ? "สถานะ: "+selectedCustomer.trial_status
                                 : selectedCustomer.trial_authorization_status==="PENDING_BIND"
-                                  ? "อนุมัติล่วงหน้าแล้ว · รอ MT5 แรกของลูกค้าเชื่อม ระบบจะผูก Trial ให้อัตโนมัติ"
+                                  ? "สถานะ: รอเชื่อม MT5"
                                   : selectedCustomer.trial_authorization_status==="BLOCKED"
-                                    ? "Trial ถูกบล็อก: "+(selectedCustomer.trial_authorization_blocked_reason||"บัญชีหรือ MT5 มีประวัติ Trial แล้ว")
+                                    ? "สถานะ: ไม่พร้อมใช้งาน"
                                     : selectedCustomer.mt5_account_id
-                                      ? "Owner สามารถอนุมัติ Trial ได้ทันที ไม่ต้องรอคำขอจากลูกค้า"
-                                      : "ยังไม่เชื่อม MT5 · Owner สามารถอนุมัติล่วงหน้าได้ และระบบจะผูกสิทธิ์กับ MT5 แรกที่ลูกค้าเชื่อม"}
+                                      ? "สถานะ: พร้อมอนุมัติ"
+                                      : "สถานะ: รอเชื่อม MT5"}
                             </div>
                           </section>
 
                           <section className="owner-control-card">
                             <div className="owner-control-card-head">
-                              <div><span className="owner-card-kicker">ACCOUNT SECURITY</span><h3>รีเซ็ตรหัสผ่าน</h3><p>ส่งลิงก์ตั้งรหัสผ่านใหม่ไปยังอีเมลลูกค้าโดยไม่เปิดเผยรหัสผ่านเดิม</p></div>
+                              <div><h3>รีเซ็ตรหัสผ่าน</h3></div>
                             </div>
                             <div className="owner-security-email">
                               <span>Email</span><b>{selectedCustomer.email}</b>
@@ -1331,27 +1349,39 @@ export default function AdminPage() {
                             <button className="btn owner-wide-action" disabled={customerAction==="password"} onClick={()=>sendPasswordReset(selectedCustomer)}>
                               {customerAction==="password"?"กำลังส่ง...":"ส่งลิงก์ตั้งรหัสผ่านใหม่"}
                             </button>
-                            <div className="owner-control-note">ลิงก์ใช้ได้ครั้งเดียว · หมดอายุใน 30 นาที · ลูกค้าเป็นผู้ตั้งรหัสใหม่เอง</div>
                           </section>
 
                           <section className="owner-control-card">
                             <div className="owner-control-card-head">
-                              <div><span className="owner-card-kicker">MT5 & DEVICE</span><h3>สถานะการเชื่อมต่อ</h3><p>ดู Local / Cloud Slot และ MT5 ที่ระบบตรวจพบ</p></div>
+                              <div><h3>MT5 และ Slot</h3></div>
                             </div>
                             <div className="owner-slot-list">
-                              {(Array.isArray(selectedCustomer.customer_slots)?selectedCustomer.customer_slots:[]).map((slot:any)=>(
-                                <div key={slot.id}>
+                              {customerSlots(selectedCustomer).map((slot:any)=>(
+                                <div className="owner-slot-row" key={slot.id}>
                                   <span className={"owner-mode-badge "+String(slot.mode).toLowerCase()}>{slot.mode==="CLOUD"?"CLOUD VPS":"LOCAL"}</span>
-                                  <div><b>{slot.account_number?"MT5 "+slot.account_number:"รอเชื่อม MT5"}</b><small>{slot.mode==="LOCAL"?(slot.mt5_online?"EA ONLINE":"EA OFFLINE / WAITING"):(slot.actual_state||"CLOUD READY")}</small></div>
+                                  <div>
+                                    <b>Slot #{Number(slot.slot_number || 0)} · {slot.account_number?"MT5 "+slot.account_number:"รอเชื่อม MT5"}</b>
+                                    <small>{slot.mode==="LOCAL"?(slot.mt5_online?"ONLINE":"OFFLINE"):(String(slot.actual_state||"OFFLINE").toUpperCase()==="RUNNING"?"ONLINE":"OFFLINE")}</small>
+                                  </div>
+                                  {canDeleteCustomerSlot(selectedCustomer,slot) && (
+                                    <button
+                                      type="button"
+                                      className="btn danger owner-slot-delete"
+                                      disabled={Boolean(customerAction)}
+                                      onClick={()=>void deleteCustomerSlot(selectedCustomer,slot)}
+                                    >
+                                      {customerAction==="slot-delete:"+slot.id?"กำลังลบ...":"ลบ"}
+                                    </button>
+                                  )}
                                 </div>
                               ))}
-                              {!(Array.isArray(selectedCustomer.customer_slots)&&selectedCustomer.customer_slots.length) && <div className="owner-control-empty">ยังไม่มี Slot ที่เชื่อมต่อ</div>}
+                              {!customerSlots(selectedCustomer).length && <div className="owner-control-empty">ยังไม่มี Slot</div>}
                             </div>
                           </section>
                         </div>
 
                         <details className="owner-customer-advanced">
-                          <summary><span><b>Partner Program</b><small>จัดการ Seats และอายุ Partner เมื่อต้องการ</small></span><span>Advanced ▾</span></summary>
+                          <summary><span><b>Partner Program</b></span><span>Advanced ▾</span></summary>
                           <div className="owner-partner-grid compact">
                             <div className="field"><label>Customer Seats</label><select className="input" value={partnerSeats} onChange={e=>setPartnerSeats(Number(e.target.value))}><option value={10}>10 Seats</option><option value={25}>25 Seats</option><option value={50}>50 Seats</option></select></div>
                             <div className="field"><label>Partner Days</label><input className="input" type="number" min={1} value={partnerDurationDays} onChange={e=>setPartnerDurationDays(Number(e.target.value))}/></div>
@@ -1365,7 +1395,7 @@ export default function AdminPage() {
                         </details>
 
                         <div className="owner-account-actions">
-                          <div><b>Account Status</b><small>ใช้เมื่อต้องระงับหรือเปิดบัญชีกลับมา</small></div>
+                          <div><b>สถานะบัญชี</b></div>
                           {selectedCustomer.status==="SUSPENDED"
                             ? <button className="btn primary" onClick={()=>reactivate(selectedCustomer)}>เปิดบัญชีกลับ</button>
                             : <button className="btn danger" onClick={()=>suspend(selectedCustomer)}>ระงับบัญชี</button>}
