@@ -8298,6 +8298,10 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 .vps-connected-actions .btn{
   margin:0!important;
 }
+.vps-connected-card .dot.amber{
+  background:#d9b66e;
+  box-shadow:0 0 10px rgba(217,182,110,.45);
+}
 
 .cloud-mt5-dialog{
   width:min(620px,calc(100vw - 28px));
