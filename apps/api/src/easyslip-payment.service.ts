@@ -113,7 +113,8 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
     const ref1 = ("SCN" + String(input.orderId || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase()).slice(0, 20);
 
     const promptPayId = String(process.env.EASYSLIP_PROMPTPAY_ID || "").replace(/\D/g, "");
-    const forcedType = String(process.env.EASYSLIP_QR_TYPE || "").trim().toUpperCase();
+    const forcedTypeRaw = String(process.env.EASYSLIP_QR_TYPE || "").trim().toUpperCase();
+    const forcedType = forcedTypeRaw === "AUTO" ? "" : forcedTypeRaw;
     let type = forcedType;
     if (!type) {
       const account = (await this.listBankAccounts().catch(() => []))[0] || null;
