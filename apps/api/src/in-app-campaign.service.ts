@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { DbService } from "./db.service";
 
 type CampaignSettings = {
@@ -11,15 +11,24 @@ type CampaignSettings = {
   audienceRoles?: string[];
 };
 
+type AdminScheduleInput = {
+  slotCode?: unknown;
+  startMinute?: unknown;
+  endMinute?: unknown;
+  enabled?: unknown;
+};
+
 const EVENT_TYPES = new Set(["VIEW", "CLOSE", "CLICK", "HIDE_TODAY"]);
+const CAMPAIGN_STATUSES = new Set(["ACTIVE", "PAUSED", "ARCHIVED"]);
+const AUDIENCE_ROLES = new Set(["CUSTOMER", "OWNER", "ADMIN"]);
+const ASSET_KINDS = new Set(["DESKTOP", "MOBILE"]);
+const MAX_ASSET_BYTES = 4 * 1024 * 1024;
 
 @Injectable()
 export class InAppCampaignService implements OnModuleInit {
   constructor(private readonly db: DbService) {}
 
   async onModuleInit() {
-    // Keep production deploys safe even when the SQL migration is applied later.
-    // database/048_in_app_campaigns.sql remains the canonical schema.
     await this.ensureSchema();
   }
 
@@ -65,6 +74,18 @@ export class InAppCampaignService implements OnModuleInit {
         created_at timestamptz NOT NULL DEFAULT now()
       );
 
+      CREATE TABLE IF NOT EXISTS in_app_campaign_assets (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        campaign_id uuid NOT NULL REFERENCES in_app_campaigns(id) ON DELETE CASCADE,
+        asset_kind varchar(16) NOT NULL CHECK(asset_kind IN ('DESKTOP','MOBILE')),
+        content_type varchar(64) NOT NULL,
+        content bytea NOT NULL,
+        size_bytes integer NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_in_app_campaign_asset_kind
+        ON in_app_campaign_assets(campaign_id,asset_kind);
       CREATE INDEX IF NOT EXISTS idx_in_app_campaign_active
         ON in_app_campaigns(status,priority DESC,starts_at,ends_at);
       CREATE INDEX IF NOT EXISTS idx_in_app_campaign_events_user_day
@@ -99,30 +120,19 @@ export class InAppCampaignService implements OnModuleInit {
           "allowedPathPrefixes":["/dashboard","/packages","/account","/referrals","/partner"]
         }'::jsonb
       )
-      ON CONFLICT(code) DO UPDATE SET
-        title=EXCLUDED.title,
-        image_url=EXCLUDED.image_url,
-        mobile_image_url=EXCLUDED.mobile_image_url,
-        target_url=EXCLUDED.target_url,
-        cta_label=EXCLUDED.cta_label,
-        priority=EXCLUDED.priority,
-        settings=EXCLUDED.settings,
-        updated_at=now();
+      ON CONFLICT(code) DO NOTHING;
 
       INSERT INTO in_app_campaign_schedules(campaign_id,slot_code,start_minute,end_minute,enabled)
       SELECT id,'MORNING',420,659,true FROM in_app_campaigns WHERE code='REFERRAL_NETWORK'
-      ON CONFLICT(campaign_id,slot_code) DO UPDATE SET
-        start_minute=EXCLUDED.start_minute,end_minute=EXCLUDED.end_minute,enabled=true;
+      ON CONFLICT(campaign_id,slot_code) DO NOTHING;
 
       INSERT INTO in_app_campaign_schedules(campaign_id,slot_code,start_minute,end_minute,enabled)
       SELECT id,'MIDDAY',660,899,true FROM in_app_campaigns WHERE code='REFERRAL_NETWORK'
-      ON CONFLICT(campaign_id,slot_code) DO UPDATE SET
-        start_minute=EXCLUDED.start_minute,end_minute=EXCLUDED.end_minute,enabled=true;
+      ON CONFLICT(campaign_id,slot_code) DO NOTHING;
 
       INSERT INTO in_app_campaign_schedules(campaign_id,slot_code,start_minute,end_minute,enabled)
       SELECT id,'EVENING',1020,1319,true FROM in_app_campaigns WHERE code='REFERRAL_NETWORK'
-      ON CONFLICT(campaign_id,slot_code) DO UPDATE SET
-        start_minute=EXCLUDED.start_minute,end_minute=EXCLUDED.end_minute,enabled=true;
+      ON CONFLICT(campaign_id,slot_code) DO NOTHING;
     `);
   }
 
@@ -142,15 +152,80 @@ export class InAppCampaignService implements OnModuleInit {
     return { dateKey, minuteOfDay };
   }
 
+  private uuid(value: unknown) {
+    const id = String(value || "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      throw new BadRequestException("invalid campaign id");
+    }
+    return id;
+  }
+
   private cleanPath(input: unknown) {
     const value = String(input || "/").split("?")[0].trim() || "/";
     return value.startsWith("/") ? value.slice(0, 240) : "/";
   }
 
-  private stringList(value: unknown) {
+  private cleanTargetUrl(input: unknown) {
+    const value = String(input || "").trim();
+    if (!value) throw new BadRequestException("target URL required");
+    if (value.startsWith("/")) return value.slice(0, 1000);
+    try {
+      const url = new URL(value);
+      if (!["http:", "https:"].includes(url.protocol)) throw new Error("unsupported protocol");
+      return url.toString().slice(0, 1000);
+    } catch {
+      throw new BadRequestException("invalid target URL");
+    }
+  }
+
+  private stringList(value: unknown, maxItems = 50) {
     return Array.isArray(value)
-      ? value.map(item => String(item || "").trim()).filter(Boolean)
+      ? Array.from(new Set(
+          value
+            .map(item => String(item || "").trim())
+            .filter(Boolean)
+            .slice(0, maxItems)
+        ))
       : [];
+  }
+
+  private normalizeSettings(value: any): CampaignSettings {
+    const raw = value && typeof value === "object" ? value : {};
+    const maxImpressionsPerDay = Math.max(1, Math.min(12, Math.trunc(Number(raw.maxImpressionsPerDay || 3))));
+    const delayMs = Math.max(0, Math.min(15_000, Math.trunc(Number(raw.delayMs ?? 2500))));
+    const audienceRoles = this.stringList(raw.audienceRoles, 3)
+      .map(item => item.toUpperCase())
+      .filter(item => AUDIENCE_ROLES.has(item));
+    return {
+      maxImpressionsPerDay,
+      oncePerSlot: raw.oncePerSlot !== false,
+      delayMs,
+      exactPaths: this.stringList(raw.exactPaths),
+      allowedPathPrefixes: this.stringList(raw.allowedPathPrefixes),
+      excludedPathPrefixes: this.stringList(raw.excludedPathPrefixes),
+      audienceRoles
+    };
+  }
+
+  private normalizeSchedules(value: unknown): Array<{
+    slotCode: string;
+    startMinute: number;
+    endMinute: number;
+    enabled: boolean;
+  }> {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set<string>();
+    const rows: Array<{ slotCode: string; startMinute: number; endMinute: number; enabled: boolean }> = [];
+    for (const item of value as AdminScheduleInput[]) {
+      const slotCode = String(item?.slotCode || "").trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 32);
+      if (!slotCode || seen.has(slotCode)) continue;
+      const startMinute = Math.max(0, Math.min(1439, Math.trunc(Number(item?.startMinute || 0))));
+      const endMinute = Math.max(0, Math.min(1439, Math.trunc(Number(item?.endMinute || 0))));
+      if (endMinute < startMinute) throw new BadRequestException(`invalid schedule: ${slotCode}`);
+      seen.add(slotCode);
+      rows.push({ slotCode, startMinute, endMinute, enabled: item?.enabled !== false });
+    }
+    return rows.slice(0, 12);
   }
 
   private routeAllowed(settings: CampaignSettings, path: string) {
@@ -162,6 +237,19 @@ export class InAppCampaignService implements OnModuleInit {
     if (!exact.length && !prefixes.length) return true;
     if (exact.includes(path)) return true;
     return prefixes.some(prefix => path === prefix || path.startsWith(prefix + "/"));
+  }
+
+  private async replaceSchedules(client: any, campaignId: string, schedulesRaw: unknown) {
+    const schedules = this.normalizeSchedules(schedulesRaw);
+    await client.query("DELETE FROM in_app_campaign_schedules WHERE campaign_id=$1", [campaignId]);
+    for (const row of schedules) {
+      await client.query(
+        `INSERT INTO in_app_campaign_schedules(
+           campaign_id,slot_code,start_minute,end_minute,enabled
+         ) VALUES($1,$2,$3,$4,$5)`,
+        [campaignId, row.slotCode, row.startMinute, row.endMinute, row.enabled]
+      );
+    }
   }
 
   async active(userId: string, role: string, pathRaw: unknown) {
@@ -275,13 +363,109 @@ export class InAppCampaignService implements OnModuleInit {
     return { campaigns: rows };
   }
 
+  async adminCreate(body: any) {
+    const code = String(body?.code || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 80);
+    if (code.length < 3) throw new BadRequestException("campaign code must be at least 3 characters");
+
+    const title = String(body?.title || "").trim().slice(0, 180);
+    if (!title) throw new BadRequestException("campaign title required");
+
+    const status = String(body?.status || "PAUSED").toUpperCase();
+    if (!CAMPAIGN_STATUSES.has(status)) throw new BadRequestException("invalid campaign status");
+
+    const targetUrl = this.cleanTargetUrl(body?.targetUrl);
+    const ctaLabel = String(body?.ctaLabel || "ดูรายละเอียด").trim().slice(0, 120) || "ดูรายละเอียด";
+    const priority = Math.max(-9999, Math.min(9999, Math.trunc(Number(body?.priority || 0))));
+    const startsAt = body?.startsAt ? new Date(String(body.startsAt)) : new Date();
+    const endsAt = body?.endsAt ? new Date(String(body.endsAt)) : null;
+    if (!Number.isFinite(startsAt.getTime())) throw new BadRequestException("invalid start date");
+    if (endsAt && !Number.isFinite(endsAt.getTime())) throw new BadRequestException("invalid end date");
+    if (endsAt && endsAt <= startsAt) throw new BadRequestException("end date must be after start date");
+    const settings = this.normalizeSettings(body?.settings);
+
+    return this.db.transaction(async client => {
+      const created = await client.query(
+        `INSERT INTO in_app_campaigns(
+           code,title,target_url,cta_label,status,priority,starts_at,ends_at,settings
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)
+         RETURNING id,code,title,status`,
+        [
+          code,
+          title,
+          targetUrl,
+          ctaLabel,
+          status,
+          priority,
+          startsAt.toISOString(),
+          endsAt?.toISOString() || null,
+          JSON.stringify(settings)
+        ]
+      );
+      const row = created.rows[0];
+      await this.replaceSchedules(client, row.id, body?.schedules || []);
+      return row;
+    });
+  }
+
+  async adminUpdate(campaignIdRaw: unknown, body: any) {
+    const campaignId = this.uuid(campaignIdRaw);
+    const existing = await this.db.one("SELECT * FROM in_app_campaigns WHERE id=$1", [campaignId]);
+    if (!existing) throw new NotFoundException("campaign not found");
+
+    const title = String(body?.title ?? existing.title).trim().slice(0, 180);
+    if (!title) throw new BadRequestException("campaign title required");
+    const targetUrl = this.cleanTargetUrl(body?.targetUrl ?? existing.target_url);
+    const ctaLabel = String(body?.ctaLabel ?? existing.cta_label).trim().slice(0, 120) || "ดูรายละเอียด";
+    const status = String(body?.status ?? existing.status).toUpperCase();
+    if (!CAMPAIGN_STATUSES.has(status)) throw new BadRequestException("invalid campaign status");
+    const priority = Math.max(-9999, Math.min(9999, Math.trunc(Number(body?.priority ?? existing.priority ?? 0))));
+    const startsAt = body?.startsAt ? new Date(String(body.startsAt)) : new Date(existing.starts_at);
+    const endsAt = body?.endsAt === null || body?.endsAt === ""
+      ? null
+      : body?.endsAt
+        ? new Date(String(body.endsAt))
+        : existing.ends_at ? new Date(existing.ends_at) : null;
+    if (!Number.isFinite(startsAt.getTime())) throw new BadRequestException("invalid start date");
+    if (endsAt && !Number.isFinite(endsAt.getTime())) throw new BadRequestException("invalid end date");
+    if (endsAt && endsAt <= startsAt) throw new BadRequestException("end date must be after start date");
+    const settings = this.normalizeSettings(body?.settings ?? existing.settings);
+
+    return this.db.transaction(async client => {
+      const updated = await client.query(
+        `UPDATE in_app_campaigns
+         SET title=$2,target_url=$3,cta_label=$4,status=$5,priority=$6,
+             starts_at=$7,ends_at=$8,settings=$9::jsonb,updated_at=now()
+         WHERE id=$1
+         RETURNING id,code,title,status,updated_at`,
+        [
+          campaignId,
+          title,
+          targetUrl,
+          ctaLabel,
+          status,
+          priority,
+          startsAt.toISOString(),
+          endsAt?.toISOString() || null,
+          JSON.stringify(settings)
+        ]
+      );
+      if (Array.isArray(body?.schedules)) {
+        await this.replaceSchedules(client, campaignId, body.schedules);
+      }
+      return updated.rows[0];
+    });
+  }
+
   async adminSetStatus(campaignIdRaw: unknown, statusRaw: unknown) {
-    const campaignId = String(campaignIdRaw || "");
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(campaignId)) {
-      throw new BadRequestException("invalid campaign id");
-    }
+    const campaignId = this.uuid(campaignIdRaw);
     const status = String(statusRaw || "").toUpperCase();
-    if (!["ACTIVE","PAUSED","ARCHIVED"].includes(status)) {
+    if (!CAMPAIGN_STATUSES.has(status)) {
       throw new BadRequestException("invalid campaign status");
     }
     const row = await this.db.one(
@@ -291,8 +475,79 @@ export class InAppCampaignService implements OnModuleInit {
        RETURNING id,code,title,status,updated_at`,
       [campaignId, status]
     );
-    if (!row) throw new BadRequestException("campaign not found");
+    if (!row) throw new NotFoundException("campaign not found");
     return row;
+  }
+
+  async adminUploadAsset(campaignIdRaw: unknown, body: any) {
+    const campaignId = this.uuid(campaignIdRaw);
+    const exists = await this.db.one("SELECT id FROM in_app_campaigns WHERE id=$1", [campaignId]);
+    if (!exists) throw new NotFoundException("campaign not found");
+
+    const assetKind = String(body?.assetKind || "").toUpperCase();
+    if (!ASSET_KINDS.has(assetKind)) throw new BadRequestException("invalid asset kind");
+    const dataUrl = String(body?.dataUrl || "");
+    const match = dataUrl.match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) throw new BadRequestException("image must be PNG, JPEG or WEBP");
+
+    const contentType = match[1];
+    const bytes = Buffer.from(match[2], "base64");
+    if (!bytes.length) throw new BadRequestException("empty image");
+    if (bytes.length > MAX_ASSET_BYTES) throw new BadRequestException("image exceeds 4 MB");
+
+    return this.db.transaction(async client => {
+      await client.query(
+        "DELETE FROM in_app_campaign_assets WHERE campaign_id=$1 AND asset_kind=$2",
+        [campaignId, assetKind]
+      );
+      const inserted = await client.query(
+        `INSERT INTO in_app_campaign_assets(campaign_id,asset_kind,content_type,content,size_bytes)
+         VALUES($1,$2,$3,$4,$5)
+         RETURNING id`,
+        [campaignId, assetKind, contentType, bytes, bytes.length]
+      );
+      const assetId = inserted.rows[0].id;
+      const assetUrl = `/backend/api/in-app-campaign-assets/${assetId}`;
+      const column = assetKind === "MOBILE" ? "mobile_image_url" : "image_url";
+      await client.query(
+        `UPDATE in_app_campaigns SET ${column}=$2,updated_at=now() WHERE id=$1`,
+        [campaignId, assetUrl]
+      );
+      return { ok: true, assetId, assetKind, assetUrl, sizeBytes: bytes.length };
+    });
+  }
+
+  async adminRemoveAsset(campaignIdRaw: unknown, assetKindRaw: unknown) {
+    const campaignId = this.uuid(campaignIdRaw);
+    const assetKind = String(assetKindRaw || "").toUpperCase();
+    if (!ASSET_KINDS.has(assetKind)) throw new BadRequestException("invalid asset kind");
+    return this.db.transaction(async client => {
+      await client.query(
+        "DELETE FROM in_app_campaign_assets WHERE campaign_id=$1 AND asset_kind=$2",
+        [campaignId, assetKind]
+      );
+      const column = assetKind === "MOBILE" ? "mobile_image_url" : "image_url";
+      const updated = await client.query(
+        `UPDATE in_app_campaigns SET ${column}=NULL,updated_at=now() WHERE id=$1 RETURNING id`,
+        [campaignId]
+      );
+      if (!updated.rowCount) throw new NotFoundException("campaign not found");
+      return { ok: true, assetKind };
+    });
+  }
+
+  async asset(assetIdRaw: unknown) {
+    const assetId = this.uuid(assetIdRaw);
+    const row = await this.db.one(
+      "SELECT content_type,content,size_bytes FROM in_app_campaign_assets WHERE id=$1",
+      [assetId]
+    );
+    if (!row) throw new NotFoundException("campaign asset not found");
+    return {
+      contentType: String(row.content_type || "application/octet-stream"),
+      content: row.content as Buffer,
+      sizeBytes: Number(row.size_bytes || 0)
+    };
   }
 
   async record(
@@ -300,10 +555,7 @@ export class InAppCampaignService implements OnModuleInit {
     campaignIdRaw: unknown,
     body: { eventType?: unknown; slotCode?: unknown; path?: unknown }
   ) {
-    const campaignId = String(campaignIdRaw || "");
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(campaignId)) {
-      throw new BadRequestException("invalid campaign id");
-    }
+    const campaignId = this.uuid(campaignIdRaw);
     const eventType = String(body?.eventType || "").toUpperCase();
     if (!EVENT_TYPES.has(eventType)) throw new BadRequestException("invalid campaign event");
     const slotCode = String(body?.slotCode || "").trim().toUpperCase().slice(0, 32);
