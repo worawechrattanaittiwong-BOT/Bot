@@ -832,7 +832,7 @@
   --membership-accent: #c1b4fa;
   background: radial-gradient(ellipse at 80% 0, #27213e40, transparent 46%), #090c13;
 }
-.shell { width: min(1320px, 100%); padding: 24px 0 48px; }
+.shell { width: min(1320px, 100%); padding: 16px 0 48px; }
 .shell *, .checkoutDialog * { box-sizing: border-box; }
 .eyebrow {
   color: #aaa0d6;
@@ -883,8 +883,21 @@
 .currentAccess span { color: #a4acc1; }
 .currentAccess b { margin-top: 8px; color: #e3ddff; font-weight: 600; overflow-wrap: anywhere; }
 .trialPanel, .paymentPanel, .historyPanel, .systemPanel { border-color: var(--membership-line); border-radius: 20px; background: #10131e; box-shadow: 0 8px 32px #00000012; }
-.trialPanel { margin-bottom: 30px; }
+.trialPanel { margin-bottom: 18px; border-radius: 14px; }
 .trialHead, .systemHeader, .sectionHeader { padding: 22px 24px; border-color: var(--membership-line); }
+.trialHead { min-height: 62px; padding: 10px 14px; gap: 12px; }
+.trialHead .titleWithIcon { gap: 10px; }
+.trialHead .icon { width: 34px; height: 34px; border-radius: 9px; }
+.trialHead .eyebrow { font-size: 9px; letter-spacing: .14em; }
+.trialHead .titleWithIcon h2 { margin: 2px 0 0; font-size: 15px; line-height: 1.35; }
+.trialHead .titleWithIcon p { margin: 2px 0 0; font-size: 11px; line-height: 1.4; }
+.trialHead .trialHeaderActions { gap: 7px; }
+.trialHead .badge { padding: 5px 8px; font-size: 9px; }
+.trialHead .trialToggle { min-height: 32px; padding: 6px 10px; font-size: 10px; }
+.trialBody { padding: 10px 14px 14px; }
+.trialBody .trialSuccess,
+.trialBody .trialUnavailable,
+.trialBody .phoneRequired { min-height: 52px; padding: 9px 11px; }
 .titleWithIcon h2, .systemName h2, .sectionHeader h2 { font-size: 18px; font-weight: 600; line-height: 1.5; }
 .titleWithIcon p, .systemName p, .centerTop p { color: #969eb3; line-height: 1.7; }
 .icon, .systemIcon, .tabIcon { border-color: #a495df30; background: #a08ae90c; color: #b5a7e7; }
@@ -896,7 +909,23 @@
 .badge, .trialToggle { font-family: inherit; font-weight: 500; font-size: 11px; }
 .trialToggle { min-height: 40px; }
 .badgeGood { color: #a4d1b4; background: #202f27; border-color: #88b69a30; }
-.centerTop { margin: 0 0 20px; gap: 20px; align-items: center; }
+.centerTop { margin: 0 0 14px; gap: 18px; align-items: center; }
+.centerControls { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.ownerSalesControl { display: flex; align-items: center; gap: 7px; padding: 4px; border: 1px solid #79414c66; border-radius: 11px; background: #1b1015; }
+.ownerSalesState { display: inline-flex; align-items: center; gap: 7px; padding: 0 8px; color: #aeb5c5; font-size: 10px; white-space: nowrap; }
+.ownerSalesState i { width: 7px; height: 7px; border-radius: 50%; background: #74d9a6; box-shadow: 0 0 9px #74d9a655; }
+.ownerSalesControl button { min-height: 34px; border: 1px solid #8b4653; border-radius: 8px; background: #35151d; color: #f0b3bd; padding: 7px 10px; font-size: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.ownerSalesControl button:hover:not(:disabled) { border-color: #b05c69; background: #421b24; }
+.ownerSalesControl button:disabled { opacity: .5; cursor: not-allowed; }
+.ownerSalesPaused { border-color: #39604d70; background: #0c1712; }
+.ownerSalesPaused .ownerSalesState i { background: #ec7e8f; box-shadow: 0 0 9px #ec7e8f55; }
+.ownerSalesPaused button { border-color: #3f735b; background: #10291f; color: #9fe0bd; }
+.ownerSalesPaused button:hover:not(:disabled) { border-color: #579879; background: #153528; }
+.salesPausedNotice { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 9px 12px; border: 1px solid #77455066; border-radius: 10px; background: #1a1014; color: #d7a7b0; }
+.salesPausedNotice svg { flex: 0 0 auto; color: #df8796; }
+.salesPausedNotice b, .salesPausedNotice span { display: block; }
+.salesPausedNotice b { font-size: 11px; }
+.salesPausedNotice span { margin-top: 2px; color: #9f8e94; font-size: 10px; line-height: 1.45; }
 .centerTop h2 { margin-top: 8px; font-size: 25px; font-weight: 600; line-height: 1.4; letter-spacing: -.02em; }
 .systemSwitcher { gap: 4px; padding: 5px; border-color: var(--membership-line); border-radius: 15px; background: #0d1019; }
 .systemTab { padding: 11px 15px; transition: background .2s, border-color .2s; }
