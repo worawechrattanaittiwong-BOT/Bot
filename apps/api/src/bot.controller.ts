@@ -2289,12 +2289,6 @@ export class BotController {
         "กรุณาหยุดบอทและปิด Position / Pending Order ของ SCENOVA ให้หมดก่อนเปลี่ยนบัญชี MT5"
       );
     }
-    if (instance.metrics?.pendingBasketJournal === true) {
-      throw new ConflictException(
-        "ยังมี Basket Journal รอส่งจากบัญชี MT5 เดิม กรุณารอให้ส่งสำเร็จก่อนรีเซ็ตบัญชี"
-      );
-    }
-
     if (slot.mode === "CLOUD" && instance.runner_id) {
       const stopState = String(instance.runtime_stop_state || "NONE").toUpperCase();
       if (!["STOP_CONFIRMED","LEASE_REVOKED"].includes(stopState)) {
