@@ -2030,7 +2030,9 @@ export default function DashboardPage() {
         method:"POST",
         body:JSON.stringify({
           months:vpsPurchaseMonths,
-          ...(vpsRenewSlotId ? { slotId:vpsRenewSlotId } : {})
+          ...(vpsRenewSlotId
+            ? { slotId:vpsRenewSlotId }
+            : { purchaseType:"ADDON" })
         })
       });
       if (result?.free) {
@@ -2852,6 +2854,16 @@ export default function DashboardPage() {
   }
 
   const isOwner = data.user?.role === "OWNER" || data.user?.role === "ADMIN";
+  const controlSlots = (data.slots || [])
+    .filter((slot:any) =>
+      Boolean(slot?.can_control) &&
+      ["ACTIVE","AVAILABLE"].includes(String(slot?.status || "").toUpperCase())
+    )
+    .sort((a:any,b:any) => {
+      const aMode = String(a?.mode || "").toUpperCase() === "CLOUD" ? 0 : 1;
+      const bMode = String(b?.mode || "").toUpperCase() === "CLOUD" ? 0 : 1;
+      return aMode - bMode || Number(a?.slot_number || 0) - Number(b?.slot_number || 0);
+    });
   const ownerActiveKey =
     activeView === "account" ? "trading-account" :
     activeView === "backtest" ? "trading-backtest" :
@@ -2907,6 +2919,53 @@ export default function DashboardPage() {
             <span className="cc-head-icon-button" aria-label="การแจ้งเตือน"><ScenovaIcon name="bell" size={18}/></span>
           </div>
         </header>
+
+        {activeView === "overview" && data.account && (
+          <section className="cc-slot-switcher" aria-label="บัญชีบอทที่กำลังควบคุม">
+            <div className="cc-slot-switcher-copy">
+              <small>BOT INSTANCE</small>
+              <b>
+                {String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD"
+                  ? "VPS Slot #" + String(data.selectedSlot?.slot_number || "1")
+                  : "Local MT5"}
+                {" · "}
+                {data.account?.account_number || "ยังไม่เชื่อม MT5"}
+              </b>
+              <span>การตั้งค่า, Start, Safe Stop และ Symbol ด้านล่างใช้กับ Slot ที่เลือกเท่านั้น</span>
+            </div>
+            <div className="cc-slot-switcher-actions">
+              {controlSlots.length > 1 ? (
+                <select
+                  value={String(data.selectedSlot?.id || selectedSlotId || "")}
+                  onChange={event=>selectSlot(event.target.value)}
+                  aria-label="สลับ VPS Slot หรือ Local MT5"
+                >
+                  {controlSlots.map((slot:any)=>(
+                    <option key={slot.id} value={slot.id}>
+                      {String(slot.mode || "").toUpperCase() === "CLOUD"
+                        ? "VPS Slot #" + String(slot.slot_number || "1")
+                        : "Local MT5"}
+                      {slot.account_number ? " · " + String(slot.account_number) : " · ยังไม่เชื่อม MT5"}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="cc-slot-single">1 Slot</span>
+              )}
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={()=>{
+                  setActiveView("account");
+                  window.history.pushState({}, "", "/dashboard?view=account");
+                  window.scrollTo({top:0,behavior:"smooth"});
+                }}
+              >
+                จัดการ MT5 & EA
+              </button>
+            </div>
+          </section>
+        )}
 
         {activeView === "overview" && <BotPerformanceSummary dashboard={data} />}
 
