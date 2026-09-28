@@ -314,7 +314,7 @@ export default function PackagesPage() {
         body: JSON.stringify({ months, promoCode: promoCode.trim().toUpperCase() })
       });
       await load();
-      notify(result?.free ? "good" : "info", result?.free ? "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Local แล้ว" : "สร้าง QR สำหรับแพ็กเกจ Local แล้ว");
+      notify(result?.free ? "good" : "info", result?.free ? "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Local แล้ว" : result?.paymentMode === "EASYSLIP" ? "สร้างรายการแล้ว โอนยอดตามที่แสดงและแนบสลิปได้เลย" : "สร้าง QR สำหรับแพ็กเกจ Local แล้ว");
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "สร้างรายการ Local ไม่สำเร็จ");
       await load().catch(() => {});
@@ -333,7 +333,7 @@ export default function PackagesPage() {
         body: JSON.stringify({ months, promoCode: promoCode.trim().toUpperCase() })
       });
       await load();
-      notify(result?.free ? "good" : "info", result?.free ? "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Cloud แล้ว" : "สร้าง QR สำหรับแพ็กเกจ Cloud แล้ว");
+      notify(result?.free ? "good" : "info", result?.free ? "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Cloud แล้ว" : result?.paymentMode === "EASYSLIP" ? "สร้างรายการแล้ว โอนยอดตามที่แสดงและแนบสลิปได้เลย" : "สร้าง QR สำหรับแพ็กเกจ Cloud แล้ว");
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "สร้างรายการ Cloud ไม่สำเร็จ");
       await load().catch(() => {});
@@ -356,6 +356,35 @@ export default function PackagesPage() {
       notify("good", "ตรวจสอบสถานะการชำระเงินแล้ว");
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "ตรวจสอบรายการไม่สำเร็จ");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function cancelSlipPayment(type: "local" | "cloud", id: string) {
+    if (busy) return;
+    const confirmed = await confirmPopup({
+      title: "ยกเลิกรายการชำระเงิน",
+      tone: "warning",
+      message: "ยกเลิกรายการนี้เพื่อกลับไปเลือกแพ็กเกจใหม่?",
+      confirmLabel: "ยกเลิกรายการ",
+      cancelLabel: "กลับ"
+    });
+    if (!confirmed) return;
+
+    setBusy("cancel-" + type);
+    setMessage("");
+    try {
+      await api(
+        type === "local"
+          ? `/packages/local/orders/${id}/cancel-slip-payment`
+          : `/cloud/orders/${id}/cancel-slip-payment`,
+        { method: "POST" }
+      );
+      await load();
+      notify("info", "ยกเลิกรายการแล้ว สามารถเลือกแพ็กเกจใหม่ได้");
+    } catch (error: unknown) {
+      notify("bad", error instanceof Error ? error.message : "ยกเลิกรายการไม่สำเร็จ");
     } finally {
       setBusy("");
     }
@@ -626,6 +655,7 @@ export default function PackagesPage() {
                   paymentAccounts={activeCatalog?.paymentAccounts || []}
                   onRefresh={() => refreshOrder(isLocalSystem ? "local" : "cloud", activePending.id)}
                   onVerifySlip={file => verifySlip(isLocalSystem ? "local" : "cloud", activePending.id, file)}
+                  onCancel={() => cancelSlipPayment(isLocalSystem ? "local" : "cloud", activePending.id)}
                 />
               </div>
             </section>
@@ -948,7 +978,8 @@ function PaymentCard({
   paymentMode,
   paymentAccounts,
   onRefresh,
-  onVerifySlip
+  onVerifySlip,
+  onCancel
 }:{
   type:"LOCAL"|"CLOUD";
   order:Order;
@@ -957,6 +988,7 @@ function PaymentCard({
   paymentAccounts:PaymentAccount[];
   onRefresh:()=>void;
   onVerifySlip:(file:File)=>void;
+  onCancel:()=>void;
 }) {
   const [slip, setSlip] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
@@ -1032,14 +1064,24 @@ function PaymentCard({
                 <img src={preview} alt="ตัวอย่างสลิปที่เลือก"/>
               </div>
             )}
-            <button
-              type="button"
-              className={styles.primaryButton}
-              onClick={() => slip && onVerifySlip(slip)}
-              disabled={busy || !slip || !account}
-            >
-              {busy ? "กำลังตรวจสลิป…" : "ตรวจสลิปและเปิดสิทธิ์"}
-            </button>
+            <div className={styles.slipActions}>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={() => slip && onVerifySlip(slip)}
+                disabled={busy || !slip || !account}
+              >
+                {busy ? "กำลังดำเนินการ…" : "ตรวจสลิปและเปิดสิทธิ์"}
+              </button>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={onCancel}
+                disabled={busy}
+              >
+                ยกเลิกรายการ
+              </button>
+            </div>
             {!account && <div className={styles.paymentWarning}>ยังไม่พบบัญชีรับเงินที่ผูกกับ EasySlip จึงยังตรวจสลิปไม่ได้</div>}
           </>
         ) : (
