@@ -4064,125 +4064,53 @@ export default function DashboardPage() {
               </>
             )}
 
-            {data.selectedSlot?.mode === "CLOUD" && (
-              !data.account || !isMt5Online ? (
-                <section className="panel purple setup-panel">
-                  <div className="setup-heading">
-                    <div>
-                      <div className="eyebrow">{data.account ? "VPS RECONNECT" : "CLOUD MT5"}</div>
-                      <h2>{data.account ? "VPS หลุดการเชื่อมต่อ · เชื่อม MT5 ใหม่" : "เชื่อม MT5 Login สำหรับ VPS"}</h2>
-                      <p className="muted">
-                        {data.account
-                          ? "กรอก Trading Password เพื่อเชื่อมต่อ VPS อีกครั้ง"
-                          : "กรอก MT5 Login, Trading Password และ Server เพื่อเชื่อมต่อ VPS"}
-                      </p>
-                    </div>
+            {data.selectedSlot?.mode === "CLOUD" && data.account && (
+              <section className="panel vps-connected-card">
+                <div className="vps-connected-copy">
+                  <div className="eyebrow">SELECTED VPS SLOT</div>
+                  <div className="vps-connected-title-row">
+                    <h2>{data.account.account_number}</h2>
+                    <span className={"badge " + (isMt5Online ? "" : "warn")}>
+                      <span className={"dot " + (isMt5Online ? "green" : "amber")}/>
+                      {isMt5Online ? "ออนไลน์" : "ออฟไลน์"}
+                    </span>
                   </div>
-                  <form className="form-grid form-grid-human" onSubmit={data.account ? reconnectCloudAccount : linkAccount}>
-                    {data.account ? (
-                      <>
-                        <div className="field">
-                          <label>MT5 Login</label>
-                          <input className="input" value={String(data.account.account_number || "")} readOnly />
-                        </div>
-                        <div className="field">
-                          <label>Broker</label>
-                          <input className="input" value={String(data.account.broker || "")} readOnly />
-                        </div>
-                        <div className="field">
-                          <label>MT5 Server</label>
-                          <input className="input" value={String(data.account.broker_server || "")} readOnly />
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="field">
-                          <label>MT5 Login</label>
-                          <input className="input" inputMode="numeric" value={accountNumber} onChange={e=>setAccountNumber(e.target.value)} required />
-                        </div>
-                        <div className="field">
-                          <label>Broker</label>
-                          <select className="input" value={brokerCode} onChange={e=>{setBrokerCode(e.target.value);setBrokerServer("");setCustomBrokerServer("");}} required>
-                            {brokerCatalog.map(b=><option key={b.code} value={b.code}>{b.name}</option>)}
-                            {!brokerCatalog.length && <option value="EXNESS">Exness</option>}
-                          </select>
-                        </div>
-                        {brokerCode === "OTHER" && <div className="field"><label>ชื่อ Broker</label><input className="input" value={customBrokerName} onChange={e=>setCustomBrokerName(e.target.value)} required /></div>}
-                        <div className="field">
-                          <label>MT5 Server</label>
-                          <select className="input" value={brokerServer} onChange={e=>setBrokerServer(e.target.value)} required>
-                            <option value="">เลือก Server</option>
-                            {(selectedBroker?.servers || []).map(server=><option key={server.serverName} value={server.serverName}>{server.serverName}{server.environment!=="UNKNOWN"?" · "+server.environment:""}</option>)}
-                            <option value="__CUSTOM__">ไม่พบในรายการ — ระบุเอง</option>
-                          </select>
-                        </div>
-                        {brokerServer === "__CUSTOM__" && <div className="field"><label>ชื่อ MT5 Server</label><input className="input" value={customBrokerServer} onChange={e=>setCustomBrokerServer(e.target.value)} required /></div>}
-                      </>
-                    )}
-                    <div className="field">
-                      <label>Trading Password</label>
-                      <input className="input" type="password" value={tradingPassword} onChange={e=>setTradingPassword(e.target.value)} required />
-                    </div>
-                    <div className="field submit-field">
-                      <button className="btn primary btn-lg" disabled={busy}>
-                        {busy ? "กำลังเชื่อม..." : data.account ? "บันทึกรหัสและเชื่อม VPS ใหม่" : "เชื่อม VPS MT5"}
-                      </button>
-                    </div>
-                  </form>
-                  {data.account && (
-                    <div className="vps-reconnect-foot">
-                      <div className="help">ใช้บัญชีและ Server เดิมสำหรับการเชื่อมต่อครั้งนี้</div>
-                      <button
-                        type="button"
-                        className="btn ghost"
-                        disabled={
-                          busy ||
-                          state==="RUNNING" ||
-                          desired==="RUNNING" ||
-                          Number(data.instance?.metrics?.positions || 0)>0 ||
-                          Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
-                        }
-                        onClick={resetMt5}
-                      >
-                        เปลี่ยนเป็นบัญชี MT5 อื่น
-                      </button>
-                    </div>
-                  )}
-                </section>
-              ) : (
-                <section className="panel vps-connected-card">
-                  <div className="vps-connected-copy">
-                    <div className="eyebrow">SELECTED VPS SLOT · CONNECTED</div>
-                    <div className="vps-connected-title-row">
-                      <h2>{data.account.account_number}</h2>
-                      <span className="badge"><span className="dot green"/>ออนไลน์</span>
-                    </div>
-                    <p className="muted">{data.account.broker} · {data.account.broker_server} · Slot #{data.selectedSlot?.slot_number || "—"}</p>
-                  </div>
-                  <div className="vps-connected-actions">
+                  <p className="muted">{data.account.broker} · {data.account.broker_server} · Slot #{data.selectedSlot?.slot_number || "—"}</p>
+                </div>
+                <div className="vps-connected-actions">
+                  {!isMt5Online && (
                     <button
-                      className="btn ghost"
-                      disabled={
-                        busy ||
-                        state==="RUNNING" ||
-                        desired==="RUNNING" ||
-                        Number(data.instance?.metrics?.positions || 0)>0 ||
-                        Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
-                      }
-                      title={
-                        state==="RUNNING" || desired==="RUNNING"
-                          ? "หยุดบอทก่อนเปลี่ยนบัญชี"
-                          : Number(data.instance?.metrics?.positions || 0)>0 || Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
-                            ? "ปิด Position และ Pending Order ของ SCENOVA ให้หมดก่อนเปลี่ยนบัญชี"
-                            : "ปิด MT5 เดิมบน VPS แล้วเชื่อมบัญชีใหม่"
-                      }
-                      onClick={resetMt5}
+                      type="button"
+                      className="btn primary"
+                      disabled={busy}
+                      onClick={()=>prepareCloudMt5Dialog(String(data.selectedSlot?.id || ""),"RECONNECT")}
                     >
-                      {busy ? "กำลังดำเนินการ..." : "เปลี่ยนบัญชี VPS"}
+                      เชื่อม MT5 ใหม่
                     </button>
-                  </div>
-                </section>
-              )
+                  )}
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    disabled={
+                      busy ||
+                      state==="RUNNING" ||
+                      desired==="RUNNING" ||
+                      Number(data.instance?.metrics?.positions || 0)>0 ||
+                      Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
+                    }
+                    title={
+                      state==="RUNNING" || desired==="RUNNING"
+                        ? "หยุดบอทก่อนเปลี่ยนบัญชี"
+                        : Number(data.instance?.metrics?.positions || 0)>0 || Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
+                          ? "ปิด Position และ Pending Order ให้หมดก่อนเปลี่ยนบัญชี"
+                          : "เปลี่ยนบัญชี MT5 ได้ทันที"
+                    }
+                    onClick={()=>void beginCloudAccountChange()}
+                  >
+                    {busy ? "กำลังดำเนินการ..." : "เปลี่ยนบัญชี VPS"}
+                  </button>
+                </div>
+              </section>
             )}
 
           </div>
