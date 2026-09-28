@@ -94,14 +94,12 @@ export class AgentActionController {
          FROM license_slots ls
          JOIN subscriptions s ON s.id=ls.subscription_id
          JOIN plans p ON p.id=s.plan_id
-         LEFT JOIN access_groups ag ON ag.id=s.access_group_id
          WHERE ls.id=$1
            AND ls.assigned_user_id=$2
            AND ls.status='ACTIVE'
            AND s.status='ACTIVE'
            AND s.starts_at<=now()
            AND s.expires_at>now()
-           AND COALESCE(ag.enabled,true)
            AND p.mode=$3
          LIMIT 1`,
         [instance.slot_id, userId, instance.mode]
