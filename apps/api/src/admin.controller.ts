@@ -709,33 +709,38 @@ export class AdminController {
       "SELECT id,name FROM access_groups WHERE id=$1",
       [body.groupId]
     );
-    if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+    if (!group) throw new ConflictException("ไม่พบกลุ่มทดลอง");
 
     const affected = await this.db.query(
       `WITH target AS (
          SELECT DISTINCT bi.id
-         FROM bot_instances bi
-         JOIN trial_grants tg ON tg.mt5_account_id=bi.mt5_account_id
-         JOIN users u ON u.id=tg.user_id
-         WHERE tg.access_group_id=$1
-           AND tg.user_id=$2
+         FROM access_group_grants gg
+         JOIN users u ON u.id=gg.user_id
+         JOIN bot_instances bi ON bi.mode=gg.mode
+         LEFT JOIN mt5_accounts ma ON ma.id=bi.mt5_account_id
+         LEFT JOIN license_slots ls ON ls.id=bi.slot_id
+         WHERE gg.access_group_id=$1
+           AND gg.user_id=$2
+           AND gg.status='ACTIVE'
+           AND gg.expires_at>now()
+           AND COALESCE(ls.assigned_user_id,ma.user_id)=gg.user_id
            AND u.role NOT IN ('OWNER','ADMIN')
            AND NOT EXISTS (
              SELECT 1
              FROM subscriptions s
              JOIN plans p ON p.id=s.plan_id
-             WHERE s.user_id=tg.user_id
+             WHERE s.user_id=gg.user_id
                AND s.status='ACTIVE'
                AND s.starts_at<=now()
                AND s.expires_at>now()
-               AND p.mode=bi.mode
+               AND p.mode=gg.mode
            )
            AND NOT (
-             bi.mode='LOCAL'
+             gg.mode='LOCAL'
              AND EXISTS (
                SELECT 1
                FROM partner_accounts pa
-               WHERE pa.user_id=tg.user_id
+               WHERE pa.user_id=gg.user_id
                  AND pa.status='ACTIVE'
                  AND pa.expires_at>now()
              )
@@ -765,40 +770,49 @@ export class AdminController {
       );
     }
 
-    const expired = await this.db.query(
+    const revoked = await this.db.query(
+      `UPDATE access_group_grants
+       SET status='REVOKED',
+           expires_at=LEAST(expires_at,now()),
+           updated_at=now()
+       WHERE access_group_id=$1
+         AND user_id=$2
+         AND status='ACTIVE'
+       RETURNING id,mode`,
+      [body.groupId, body.userId]
+    );
+
+    // Clean any legacy Trial grouping for the same customer as well.
+    await this.db.query(
       `UPDATE trial_grants
        SET status='EXPIRED',
            expires_at=LEAST(COALESCE(expires_at,now()),now())
        WHERE user_id=$1
          AND access_group_id=$2
-         AND status IN ('APPROVED','ACTIVE')
-       RETURNING id`,
+         AND status IN ('APPROVED','ACTIVE')`,
       [body.userId, body.groupId]
     );
-    const blocked = await this.db.query(
+    await this.db.query(
       `UPDATE trial_authorizations
        SET status='BLOCKED',
            blocked_reason='REMOVED_FROM_GROUP',
            updated_at=now()
        WHERE user_id=$1
          AND access_group_id=$2
-         AND status<>'BLOCKED'
-       RETURNING id`,
+         AND status<>'BLOCKED'`,
       [body.userId, body.groupId]
     );
 
     await this.audit("OWNER", "REVOKE_ACCESS_GROUP_MEMBER", "user", body.userId, {
       groupId: body.groupId,
       groupName: group.name,
-      expiredTrials: expired.rowCount || 0,
-      blockedAuthorizations: blocked.rowCount || 0,
+      revokedGrants: revoked.rowCount || 0,
       safeStopped: affected.rowCount || 0,
       paidMembershipsKept: true
     });
     return {
       ok: true,
-      expiredTrials: expired.rowCount || 0,
-      blockedAuthorizations: blocked.rowCount || 0,
+      revokedGrants: revoked.rowCount || 0,
       safeStopped: affected.rowCount || 0,
       paidMembershipsKept: true
     };
