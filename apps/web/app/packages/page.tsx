@@ -790,6 +790,7 @@ function PackageCard({
   pack,
   checkoutEnabled,
   paymentMode,
+  salesPaused,
   busy,
   pending,
   capacityAvailable = true,
@@ -799,6 +800,7 @@ function PackageCard({
   pack:PackageItem;
   checkoutEnabled:boolean;
   paymentMode:string;
+  salesPaused:boolean;
   busy:boolean;
   pending:boolean;
   capacityAvailable?:boolean;
@@ -815,8 +817,10 @@ function PackageCard({
   const label =
     !pack.enabled || pack.price_satang <= 0
       ? "ยังไม่เปิดขาย"
-      : !checkoutEnabled || paymentMode === "UNCONFIGURED"
-        ? "ระบบชำระเงินยังไม่เปิด"
+      : salesPaused
+        ? "ปิดรับการขายชั่วคราว"
+        : !checkoutEnabled || paymentMode === "UNCONFIGURED"
+          ? "ระบบชำระเงินยังไม่เปิด"
         : !capacityAvailable
           ? "VPS เต็มชั่วคราว"
           : pending
