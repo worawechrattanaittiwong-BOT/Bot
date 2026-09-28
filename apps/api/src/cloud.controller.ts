@@ -107,9 +107,10 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
   async catalog() {
     const [nodes, controls] = await Promise.all([
       this.nodes(),
-      this.db.one("SELECT cloud_provisioning_paused FROM production_controls WHERE id=1")
+      this.db.one("SELECT cloud_provisioning_paused,sales_paused FROM production_controls WHERE id=1")
     ]);
     const provisioningPaused = Boolean(controls?.cloud_provisioning_paused);
+    const salesPaused = Boolean(controls?.sales_paused);
     const available = provisioningPaused ? 0 : nodes.filter(n =>
       n.health === "ONLINE" && n.accepting_jobs && n.telemetry?.templateReady === true &&
       !n.capacity_blocked && !n.quarantined
@@ -118,8 +119,9 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
       packages: (await this.db.query("SELECT * FROM cloud_packages ORDER BY months")).rows,
       available,
       provisioningPaused,
+      salesPaused,
       paymentMode: paymentMode(),
-      checkoutEnabled: process.env.CLOUD_CHECKOUT_ENABLED === "true" && paymentMode() !== "UNCONFIGURED" && !provisioningPaused
+      checkoutEnabled: process.env.CLOUD_CHECKOUT_ENABLED === "true" && paymentMode() !== "UNCONFIGURED" && !provisioningPaused && !salesPaused
     };
   }
 
@@ -275,7 +277,8 @@ export class CloudCustomerController {
     if (body.slotId && !/^[0-9a-f-]{36}$/i.test(body.slotId)) throw new BadRequestException("Invalid slot");
     const order = await this.db.transaction(async tx => {
       await tx.query("SELECT pg_advisory_xact_lock(740091)");
-      const controls = (await tx.query("SELECT cloud_provisioning_paused FROM production_controls WHERE id=1 FOR UPDATE")).rows[0];
+      const controls = (await tx.query("SELECT cloud_provisioning_paused,sales_paused FROM production_controls WHERE id=1 FOR UPDATE")).rows[0];
+      if (controls?.sales_paused) throw new ConflictException("ขณะนี้ผู้ดูแลปิดการขายแพ็กเกจทั้งหมดชั่วคราว");
       if (controls?.cloud_provisioning_paused) throw new ConflictException("Cloud provisioning ถูกพักชั่วคราวโดยผู้ดูแล");
       const user = (await tx.query("SELECT * FROM users WHERE id=$1 FOR UPDATE", [req.user.sub])).rows[0];
       if (user?.status !== "ACTIVE") throw new ConflictException("บัญชีไม่พร้อมใช้งาน");
