@@ -222,28 +222,26 @@ export class AdminController {
     const rows = await this.db.query(
       `SELECT ag.id,ag.name,ag.enabled,ag.note,ag.trial_days,ag.created_by,ag.created_at,ag.updated_at,
               (
-                SELECT count(DISTINCT x.user_id)::int
-                FROM (
-                  SELECT tg.user_id FROM trial_grants tg WHERE tg.access_group_id=ag.id
-                  UNION
-                  SELECT ta.user_id FROM trial_authorizations ta WHERE ta.access_group_id=ag.id
-                ) x
+                SELECT count(DISTINCT gg.user_id)::int
+                FROM access_group_grants gg
+                WHERE gg.access_group_id=ag.id
+                  AND gg.status='ACTIVE'
+                  AND gg.expires_at>now()
               ) AS trial_count,
               (
-                SELECT count(DISTINCT x.user_id)::int
-                FROM (
-                  SELECT tg.user_id FROM trial_grants tg WHERE tg.access_group_id=ag.id
-                  UNION
-                  SELECT ta.user_id FROM trial_authorizations ta WHERE ta.access_group_id=ag.id
-                ) x
-                WHERE EXISTS (
-                  SELECT 1
-                  FROM subscriptions s
-                  WHERE s.user_id=x.user_id
-                    AND s.status='ACTIVE'
-                    AND s.starts_at<=now()
-                    AND s.expires_at>now()
-                )
+                SELECT count(DISTINCT gg.user_id)::int
+                FROM access_group_grants gg
+                WHERE gg.access_group_id=ag.id
+                  AND gg.status='ACTIVE'
+                  AND gg.expires_at>now()
+                  AND EXISTS (
+                    SELECT 1
+                    FROM subscriptions s
+                    WHERE s.user_id=gg.user_id
+                      AND s.status='ACTIVE'
+                      AND s.starts_at<=now()
+                      AND s.expires_at>now()
+                  )
               ) AS paid_member_count
        FROM access_groups ag
        ORDER BY lower(ag.name),ag.created_at`
