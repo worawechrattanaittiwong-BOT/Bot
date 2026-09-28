@@ -433,7 +433,7 @@ export default function PackagesPage() {
                   onClick={() => setTrialOpen(value => !value)}
                   aria-expanded={trialOpen}
                 >
-                  {trialOpen ? "ซ่อนรายละเอียด" : trialReady ? "ดูสิทธิ์ทดลองใช้งาน" : "เริ่มทดลองใช้งาน"}
+                  {trialOpen ? "ปิด" : trialReady ? "ดูสิทธิ์" : trialEligible ? "เริ่มทดลอง" : "ดูรายละเอียด"}
                 </button>
               </div>
             </div>
@@ -571,29 +571,60 @@ export default function PackagesPage() {
                 <h2>เลือกแพ็กเกจของคุณ</h2>
                 <p>เลือกใช้งานบนเครื่องของคุณ หรือทำงานต่อเนื่องบน Cloud</p>
               </div>
-              <div className={styles.systemSwitcher} role="tablist" aria-label="เลือกระบบแพ็กเกจ">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSystem === "CLOUD"}
-                  className={`${styles.systemTab} ${activeSystem === "CLOUD" ? styles.systemTabActive : ""}`}
-                  onClick={() => setActiveSystem("CLOUD")}
-                >
-                  <span className={styles.tabIcon}><ScenovaIcon name="cloud" size={22}/></span>
-                  <span><b>VPS / Cloud MT5</b><small>รันต่อเนื่องบนเซิร์ฟเวอร์ 24/7</small></span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSystem === "LOCAL"}
-                  className={`${styles.systemTab} ${activeSystem === "LOCAL" ? styles.systemTabActive : ""}`}
-                  onClick={() => setActiveSystem("LOCAL")}
-                >
-                  <span className={styles.tabIcon}><ScenovaIcon name="account" size={22}/></span>
-                  <span><b>Local MT5</b><small>รันบนคอมพิวเตอร์ของคุณ</small></span>
-                </button>
+              <div className={styles.centerControls}>
+                {isOwner && (
+                  <div className={`${styles.ownerSalesControl} ${salesPaused ? styles.ownerSalesPaused : ""}`}>
+                    <span className={styles.ownerSalesState}>
+                      <i aria-hidden="true"/>
+                      {salesPaused ? "ปิดการขายอยู่" : "เปิดขายอยู่"}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={busy === "sales-control"}
+                      onClick={() => void setGlobalSalesPaused(!salesPaused)}
+                    >
+                      {busy === "sales-control"
+                        ? "กำลังบันทึก..."
+                        : salesPaused
+                          ? "เปิดการขายทั้งหมด"
+                          : "ปิดการขายทั้งหมด"}
+                    </button>
+                  </div>
+                )}
+                <div className={styles.systemSwitcher} role="tablist" aria-label="เลือกระบบแพ็กเกจ">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeSystem === "CLOUD"}
+                    className={`${styles.systemTab} ${activeSystem === "CLOUD" ? styles.systemTabActive : ""}`}
+                    onClick={() => setActiveSystem("CLOUD")}
+                  >
+                    <span className={styles.tabIcon}><ScenovaIcon name="cloud" size={22}/></span>
+                    <span><b>VPS / Cloud MT5</b><small>รันต่อเนื่องบนเซิร์ฟเวอร์ 24/7</small></span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeSystem === "LOCAL"}
+                    className={`${styles.systemTab} ${activeSystem === "LOCAL" ? styles.systemTabActive : ""}`}
+                    onClick={() => setActiveSystem("LOCAL")}
+                  >
+                    <span className={styles.tabIcon}><ScenovaIcon name="account" size={22}/></span>
+                    <span><b>Local MT5</b><small>รันบนคอมพิวเตอร์ของคุณ</small></span>
+                  </button>
+                </div>
               </div>
             </div>
+
+            {salesPaused && (
+              <div className={styles.salesPausedNotice}>
+                <ScenovaIcon name="status" size={18}/>
+                <div>
+                  <b>ปิดรับการขายชั่วคราว</b>
+                  <span>ไม่สามารถสร้างรายการชำระเงินใหม่ได้ในขณะนี้ · สิทธิ์เดิมและรายการที่สร้างไว้แล้วไม่ถูกยกเลิก</span>
+                </div>
+              </div>
+            )}
 
             <div className={styles.systemPanel}>
               <div className={styles.systemHeader}>
@@ -651,6 +682,7 @@ export default function PackagesPage() {
                       pack={pack}
                       checkoutEnabled={Boolean(activeCatalog?.checkoutEnabled)}
                       paymentMode={activeCatalog?.paymentMode || "UNCONFIGURED"}
+                      salesPaused={salesPaused}
                       busy={Boolean(busy)}
                       pending={Boolean(activePending)}
                       capacityAvailable={isLocalSystem || Number(cloudCatalog?.available || 0) > 0}
