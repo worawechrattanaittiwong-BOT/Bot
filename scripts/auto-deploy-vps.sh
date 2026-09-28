@@ -3,6 +3,11 @@ set -euo pipefail
 
 REPO_DIR="${REPO_DIR:-/opt/Bot}"
 REPO_FULL_NAME="${REPO_FULL_NAME:-SCENOVA-CPU/Bot}"
+case "$REPO_FULL_NAME" in
+  scenova-lang/Bot|scenova-sketch/Bot|scenava-sys/Bot|SCENOVA-EA/Bot|SCENOVA-AI/Bot)
+    REPO_FULL_NAME="SCENOVA-CPU/Bot"
+    ;;
+esac
 LOCK_FILE="${SCENOVA_DEPLOY_LOCK_FILE:-/run/lock/scenova-auto-deploy.lock}"
 STATE_DIR="${SCENOVA_STATE_DIR:-/var/lib/scenova}"
 DEPLOYED_SHA_FILE="$STATE_DIR/deployed.sha"
