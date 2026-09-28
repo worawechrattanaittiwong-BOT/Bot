@@ -66,6 +66,8 @@ type PackageItem = {
 type PaymentAccount = {
   id: number;
   bankCode: string;
+  bankName: string;
+  bankShortCode: string;
   bankNumber: string;
   nameTh: string;
   nameEn: string;
@@ -982,7 +984,7 @@ function PaymentCard({
             <>
               <b>{account.nameTh || account.nameEn || "SCENOVA"}</b>
               <strong>{account.bankNumber}</strong>
-              <span>Bank code {account.bankCode}</span>
+              <span>{account.bankShortCode || "BANK"} · {account.bankName || `Bank code ${account.bankCode}`}</span>
             </>
           ) : (
             <>
