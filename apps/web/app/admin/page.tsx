@@ -1122,64 +1122,129 @@ export default function AdminPage() {
                               </button>
                             </div>
 
-                            <div className="owner-control-fields">
-                              <label><span>จำนวนวัน</span><input className="input" type="number" min={1} max={3650} value={days} onChange={e=>setDays(Number(e.target.value))}/></label>
-                              <label><span>ยอดชำระจริง (บาท)</span><input className="input" type="number" min={0} step="0.01" value={paidAmountBaht} onChange={e=>setPaidAmountBaht(e.target.value)} placeholder="0.00"/></label>
-                              <label className="wide"><span>Payment Reference</span><input className="input" value={paymentReference} onChange={e=>setPaymentReference(e.target.value.slice(0,160))} placeholder="PromptPay / slip / note"/></label>
+                            <div className="owner-access-type-switch">
+                              <button
+                                type="button"
+                                className={accessGrantType==="MEMBERSHIP"?"active":""}
+                                onClick={()=>setAccessGrantType("MEMBERSHIP")}
+                              >
+                                สมาชิกจริง
+                              </button>
+                              <button
+                                type="button"
+                                className={accessGrantType==="GROUP"?"active":""}
+                                onClick={()=>{
+                                  setAccessGrantType("GROUP");
+                                  if (!selectedTrialGroupId && accessGroups.length) {
+                                    const group=accessGroups.find((item:any)=>item.enabled) || accessGroups[0];
+                                    if(group) {
+                                      setSelectedTrialGroupId(String(group.id));
+                                      setDays(Math.max(1,Math.min(365,Number(group.trial_days||1))));
+                                    }
+                                  }
+                                }}
+                              >
+                                ทดลองเป็นกลุ่ม
+                              </button>
                             </div>
-                            <button
-                              className="btn primary owner-wide-action"
-                              disabled={hasCurrentPlan(selectedCustomer,selectedPlan.code) || Boolean(customerAction)}
-                              onClick={()=>activate(selectedCustomer,selectedPlan.code)}
-                            >
-                              {hasCurrentPlan(selectedCustomer,selectedPlan.code)
-                                ? selectedPlan.label+" มีสมาชิกอยู่แล้ว — ปรับวันด้านล่าง"
-                                : "เปิด "+(selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" "+days+" วัน"}
-                            </button>
 
-                            {currentModeMembership(selectedCustomer,selectedPlan.mode) ? (
-                              <div className="owner-selected-membership-adjust">
-                                <div>
-                                  <b>ปรับวัน {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"}</b>
-                                  <small>เพิ่มหรือลดจากวันหมดอายุของสิทธิ์นี้โดยตรง</small>
+                            {accessGrantType==="MEMBERSHIP" ? (
+                              <>
+                                <div className="owner-control-fields">
+                                  <label><span>จำนวนวันสมาชิกจริง</span><input className="input" type="number" min={1} max={3650} value={days} onChange={e=>setDays(Number(e.target.value))}/></label>
+                                  <label><span>ยอดชำระจริง (บาท)</span><input className="input" type="number" min={0} step="0.01" value={paidAmountBaht} onChange={e=>setPaidAmountBaht(e.target.value)} placeholder="0.00"/></label>
+                                  <label className="wide"><span>Payment Reference</span><input className="input" value={paymentReference} onChange={e=>setPaymentReference(e.target.value.slice(0,160))} placeholder="PromptPay / slip / note"/></label>
                                 </div>
-                                <div className="owner-add-days">
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={3650}
-                                    value={membershipDays[String(currentModeMembership(selectedCustomer,selectedPlan.mode)?.subscription_id)] ?? 1}
-                                    onChange={e=>{
-                                      const id=String(currentModeMembership(selectedCustomer,selectedPlan.mode)?.subscription_id||"");
-                                      if(id) setMembershipDays(prev=>({...prev,[id]:Math.max(1,Number(e.target.value)||1)}));
-                                    }}
-                                  />
-                                  <button
-                                    className="btn danger"
-                                    disabled={Boolean(customerAction)}
-                                    onClick={()=>{
-                                      const m=currentModeMembership(selectedCustomer,selectedPlan.mode);
-                                      if(m) adjustSubscriptionDays(selectedCustomer,m.subscription_id,-(membershipDays[String(m.subscription_id)] ?? 1));
-                                    }}
-                                  >
-                                    − ลดวัน
-                                  </button>
-                                  <button
-                                    className="btn"
-                                    disabled={Boolean(customerAction)}
-                                    onClick={()=>{
-                                      const m=currentModeMembership(selectedCustomer,selectedPlan.mode);
-                                      if(m) adjustSubscriptionDays(selectedCustomer,m.subscription_id,membershipDays[String(m.subscription_id)] ?? 1);
-                                    }}
-                                  >
-                                    + เพิ่มวัน
-                                  </button>
-                                </div>
-                              </div>
+                                <button
+                                  className="btn primary owner-wide-action"
+                                  disabled={hasCurrentPlan(selectedCustomer,selectedPlan.code) || Boolean(customerAction)}
+                                  onClick={()=>activate(selectedCustomer,selectedPlan.code)}
+                                >
+                                  {hasCurrentPlan(selectedCustomer,selectedPlan.code)
+                                    ? selectedPlan.label+" มีสมาชิกอยู่แล้ว — ปรับวันด้านล่าง"
+                                    : "เปิดสมาชิกจริง "+(selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" "+days+" วัน"}
+                                </button>
+
+                                {currentModeMembership(selectedCustomer,selectedPlan.mode) ? (
+                                  <div className="owner-selected-membership-adjust">
+                                    <div>
+                                      <b>ปรับวันสมาชิกจริง {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"}</b>
+                                      <small>เพิ่มหรือลดเฉพาะวันสมาชิกจริง ไม่เกี่ยวกับกลุ่มทดลอง</small>
+                                    </div>
+                                    <div className="owner-add-days">
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={3650}
+                                        value={membershipDays[String(currentModeMembership(selectedCustomer,selectedPlan.mode)?.subscription_id)] ?? 1}
+                                        onChange={e=>{
+                                          const id=String(currentModeMembership(selectedCustomer,selectedPlan.mode)?.subscription_id||"");
+                                          if(id) setMembershipDays(prev=>({...prev,[id]:Math.max(1,Number(e.target.value)||1)}));
+                                        }}
+                                      />
+                                      <button
+                                        className="btn danger"
+                                        disabled={Boolean(customerAction)}
+                                        onClick={()=>{
+                                          const m=currentModeMembership(selectedCustomer,selectedPlan.mode);
+                                          if(m) adjustSubscriptionDays(selectedCustomer,m.subscription_id,-(membershipDays[String(m.subscription_id)] ?? 1));
+                                        }}
+                                      >
+                                        − ลดวัน
+                                      </button>
+                                      <button
+                                        className="btn"
+                                        disabled={Boolean(customerAction)}
+                                        onClick={()=>{
+                                          const m=currentModeMembership(selectedCustomer,selectedPlan.mode);
+                                          if(m) adjustSubscriptionDays(selectedCustomer,m.subscription_id,membershipDays[String(m.subscription_id)] ?? 1);
+                                        }}
+                                      >
+                                        + เพิ่มวัน
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="owner-control-note owner-membership-adjust-note">
+                                    ยังไม่มีสมาชิกจริง {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"} · เปิดสิทธิ์ด้านบนก่อนจึงเพิ่ม/ลดวันได้
+                                  </div>
+                                )}
+                              </>
                             ) : (
-                              <div className="owner-control-note owner-membership-adjust-note">
-                                ยังไม่มีสมาชิก {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"} จึงยังเพิ่ม/ลดวันไม่ได้ · เปิดสิทธิ์ด้านบนก่อน
-                              </div>
+                              <>
+                                <div className="owner-control-fields owner-group-grant-fields">
+                                  <label className="owner-field-select">
+                                    <span>กลุ่มทดลอง</span>
+                                    <select
+                                      className="input"
+                                      value={selectedTrialGroupId}
+                                      onChange={e=>{
+                                        const next=e.target.value;
+                                        setSelectedTrialGroupId(next);
+                                        const group=accessGroups.find((item:any)=>String(item.id)===String(next));
+                                        if(group?.trial_days) setDays(Math.max(1,Math.min(365,Number(group.trial_days))));
+                                      }}
+                                    >
+                                      <option value="">เลือกกลุ่มทดลอง</option>
+                                      {accessGroups.map((group:any)=><option key={group.id} value={group.id}>{group.name}{group.enabled?"":" · ปิดอยู่"}</option>)}
+                                    </select>
+                                  </label>
+                                  <label>
+                                    <span>จำนวนวันทดลอง</span>
+                                    <input className="input" type="number" min={1} max={365} value={days} onChange={e=>setDays(Math.max(1,Math.min(365,Number(e.target.value)||1)))}/>
+                                  </label>
+                                </div>
+                                <button
+                                  className="btn primary owner-wide-action"
+                                  disabled={!selectedTrialGroupId || Boolean(customerAction)}
+                                  onClick={()=>grantGroupAccess(selectedCustomer,selectedPlan.mode)}
+                                >
+                                  ให้ทดลอง {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"} {days} วัน
+                                </button>
+                                <div className="owner-control-note owner-group-grant-note">
+                                  วันทดลองในกลุ่มแยกจากวันสมาชิกจริง · ปิดหรือลบกลุ่มเมื่อไร เฉพาะสิทธิ์ทดลองจะหยุด
+                                </div>
+                              </>
                             )}
 
                             <div className="owner-membership-list">
@@ -1228,26 +1293,6 @@ export default function AdminPage() {
                             </div>
                             <div className="owner-trial-control">
                               <label><span>Trial Days</span><input className="input" type="number" min={1} max={365} value={trialDays} onChange={e=>setTrialDays(Number(e.target.value))}/></label>
-                              <label className="owner-field-select">
-                                <span>กลุ่มทดลอง</span>
-                                <select
-                                  className="input"
-                                  value={trialAccessGroupId}
-                                  disabled={customerAction==="trial"}
-                                  onChange={e=>{
-                                    const next=e.target.value;
-                                    setTrialAccessGroupId(next);
-                                    const group=accessGroups.find((item:any)=>String(item.id)===String(next));
-                                    if(group?.trial_days) setTrialDays(Math.max(1,Math.min(365,Number(group.trial_days))));
-                                    if (selectedCustomer.trial_status || selectedCustomer.trial_authorization_status==="PENDING_BIND") {
-                                      setTrialGroup(selectedCustomer.id,next);
-                                    }
-                                  }}
-                                >
-                                  <option value="">ไม่จัดกลุ่ม</option>
-                                  {accessGroups.map((group:any)=><option key={group.id} value={group.id}>{group.name}{group.enabled?"":" · ปิดอยู่"}</option>)}
-                                </select>
-                              </label>
                               {selectedCustomer.trial_status || selectedCustomer.trial_authorization_status==="PENDING_BIND" ? (
                                 <button className="btn primary" disabled={customerAction==="trial"} onClick={()=>updateTrialDuration(selectedCustomer)}>
                                   บันทึก Trial {trialDays} วัน
