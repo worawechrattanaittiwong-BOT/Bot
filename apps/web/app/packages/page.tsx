@@ -104,6 +104,26 @@ type Order = {
   last_seen_at?: string | null;
 };
 
+type PromotionPreview = {
+  code:string;
+  active:boolean;
+  discountPercent:number;
+  discountAmountSatang:number;
+  finalAmountSatang:number;
+};
+
+function promoAlnum(value: string) {
+  return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11);
+}
+
+function formatPromoCode(value: string) {
+  const clean = promoAlnum(value);
+  if (!clean) return "";
+  if (clean.length <= 3) return clean;
+  if (clean.length <= 7) return clean.slice(0, 3) + "-" + clean.slice(3);
+  return clean.slice(0, 3) + "-" + clean.slice(3, 7) + "-" + clean.slice(7, 11);
+}
+
 function money(satang: number) {
   return (Number(satang || 0) / 100).toLocaleString("th-TH", {
     minimumFractionDigits: 0,
@@ -151,6 +171,10 @@ export default function PackagesPage() {
   const [checkoutPack, setCheckoutPack] = useState<PackageItem | null>(null);
   const checkoutDialog = useRef<HTMLDialogElement>(null);
   const [promoCode, setPromoCode] = useState("");
+  const [promoPreview, setPromoPreview] = useState<PromotionPreview | null>(null);
+  const [promoState, setPromoState] = useState<"IDLE"|"CHECKING"|"ACTIVE"|"ERROR">("IDLE");
+  const [promoNotice, setPromoNotice] = useState("");
+  const [checkoutOrderId, setCheckoutOrderId] = useState("");
   const polling = useRef(false);
 
   const role = String(account?.user.role || "").toUpperCase();
@@ -185,6 +209,10 @@ export default function PackagesPage() {
     if (t?.otp?.resendAfterSeconds != null) {
       setCooldown(Number(t.otp.resendAfterSeconds || 0));
     }
+    return {
+      localOrders: Array.isArray(lo) ? lo : [],
+      cloudOrders: Array.isArray(co) ? co : []
+    };
   }
 
   useEffect(() => {
@@ -305,40 +333,87 @@ export default function PackagesPage() {
   }
 
   async function checkoutLocal(months: number) {
-    if (busy) return;
+    if (busy) return null;
     setBusy("local-" + months);
     setMessage("");
     try {
       const result = await api("/packages/local/checkout", {
         method: "POST",
-        body: JSON.stringify({ months, promoCode: promoCode.trim().toUpperCase() })
+        body: JSON.stringify({ months, promoCode: formatPromoCode(promoCode) })
       });
       await load();
-      notify(result?.free ? "good" : "info", result?.free ? "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Local แล้ว" : result?.paymentMode === "EASYSLIP" ? "สร้างรายการแล้ว โอนยอดตามที่แสดงและแนบสลิปได้เลย" : "สร้าง QR สำหรับแพ็กเกจ Local แล้ว");
+      if (result?.free) {
+        checkoutDialog.current?.close();
+        setCheckoutOrderId("");
+        setCheckoutPack(null);
+        notify("good", "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Local แล้ว");
+      } else {
+        setCheckoutOrderId(String(result?.id || ""));
+      }
+      return result;
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "สร้างรายการ Local ไม่สำเร็จ");
       await load().catch(() => {});
+      return null;
     } finally {
       setBusy("");
     }
   }
 
   async function checkoutCloud(months: number) {
-    if (busy) return;
+    if (busy) return null;
     setBusy("cloud-" + months);
     setMessage("");
     try {
       const result = await api("/cloud/checkout", {
         method: "POST",
-        body: JSON.stringify({ months, promoCode: promoCode.trim().toUpperCase() })
+        body: JSON.stringify({ months, promoCode: formatPromoCode(promoCode) })
       });
       await load();
-      notify(result?.free ? "good" : "info", result?.free ? "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Cloud แล้ว" : result?.paymentMode === "EASYSLIP" ? "สร้างรายการแล้ว โอนยอดตามที่แสดงและแนบสลิปได้เลย" : "สร้าง QR สำหรับแพ็กเกจ Cloud แล้ว");
+      if (result?.free) {
+        checkoutDialog.current?.close();
+        setCheckoutOrderId("");
+        setCheckoutPack(null);
+        notify("good", "ใช้โปรโมชั่น 100% และเปิดสิทธิ์ Cloud แล้ว");
+      } else {
+        setCheckoutOrderId(String(result?.id || ""));
+      }
+      return result;
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "สร้างรายการ Cloud ไม่สำเร็จ");
       await load().catch(() => {});
+      return null;
     } finally {
       setBusy("");
+    }
+  }
+
+  async function applyPromo() {
+    if (!checkoutPack || busy) return;
+    const code = formatPromoCode(promoCode);
+    if (!/^SNV-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
+      setPromoPreview(null);
+      setPromoState("ERROR");
+      setPromoNotice("รหัสไม่ครบ");
+      return;
+    }
+    setPromoState("CHECKING");
+    setPromoNotice("");
+    try {
+      const result = await api(
+        activeSystem === "LOCAL" ? "/packages/local/promotion-preview" : "/cloud/promotion-preview",
+        {
+          method:"POST",
+          body:JSON.stringify({ months:checkoutPack.months, code })
+        }
+      );
+      setPromoCode(promoAlnum(String(result?.code || code)));
+      setPromoPreview(result);
+      setPromoState("ACTIVE");
+    } catch (error:unknown) {
+      setPromoPreview(null);
+      setPromoState("ERROR");
+      setPromoNotice(error instanceof Error ? error.message : "ใช้รหัสนี้ไม่ได้");
     }
   }
 
@@ -391,14 +466,14 @@ export default function PackagesPage() {
   }
 
   async function verifySlip(type: "local" | "cloud", id: string, file: File) {
-    if (busy) return;
+    if (busy) return null;
     if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type)) {
       notify("bad", "รองรับสลิป JPG, PNG, GIF หรือ WebP เท่านั้น");
-      return;
+      return null;
     }
     if (file.size <= 0 || file.size > 4 * 1024 * 1024) {
       notify("bad", "รูปสลิปต้องมีขนาดไม่เกิน 4 MB");
-      return;
+      return null;
     }
 
     setBusy("slip-" + type);
@@ -427,8 +502,10 @@ export default function PackagesPage() {
           ? "ตรวจสลิปสำเร็จ เปิดสิทธิ์ใช้งานแล้ว"
           : "ตรวจสลิปสำเร็จ"
       );
+      return result;
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "ตรวจสลิปไม่สำเร็จ");
+      return null;
     } finally {
       setBusy("");
     }
@@ -451,6 +528,12 @@ export default function PackagesPage() {
   const activePending = isLocalSystem ? pendingLocal : pendingCloud;
   const activeMembership = isLocalSystem ? activeLocal : activeCloud;
   const salesPaused = Boolean(localCatalog?.salesPaused || cloudCatalog?.salesPaused);
+  const checkoutOrder = checkoutOrderId
+    ? activeOrders.find(order => order.id === checkoutOrderId) || null
+    : null;
+  const checkoutPrice = promoPreview?.active
+    ? Number(promoPreview.finalAmountSatang || 0)
+    : Number(checkoutPack?.price_satang || 0);
 
   async function setGlobalSalesPaused(paused: boolean) {
     if (!isOwner || busy) return;
@@ -789,6 +872,11 @@ export default function PackagesPage() {
                       capacityAvailable={isLocalSystem || Number(cloudCatalog?.available || 0) > 0}
                       onBuy={() => {
                         setCheckoutPack(pack);
+                        setCheckoutOrderId("");
+                        setPromoCode("");
+                        setPromoPreview(null);
+                        setPromoState("IDLE");
+                        setPromoNotice("");
                         checkoutDialog.current?.showModal();
                       }}
                     />
