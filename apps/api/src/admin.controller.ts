@@ -424,43 +424,47 @@ export class AdminController {
     const group = await this.db.one(
       `SELECT ag.*,
               (
-                SELECT count(DISTINCT x.user_id)::int
-                FROM (
-                  SELECT tg.user_id FROM trial_grants tg WHERE tg.access_group_id=ag.id
-                  UNION
-                  SELECT ta.user_id FROM trial_authorizations ta WHERE ta.access_group_id=ag.id
-                ) x
+                SELECT count(DISTINCT gg.user_id)::int
+                FROM access_group_grants gg
+                WHERE gg.access_group_id=ag.id
+                  AND gg.status='ACTIVE'
+                  AND gg.expires_at>now()
               ) AS trial_count
        FROM access_groups ag
        WHERE ag.id=$1`,
       [body.groupId]
     );
-    if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+    if (!group) throw new ConflictException("ไม่พบกลุ่มทดลอง");
 
     const affected = await this.db.query(
       `WITH target AS (
          SELECT DISTINCT bi.id
-         FROM bot_instances bi
-         JOIN trial_grants tg ON tg.mt5_account_id=bi.mt5_account_id
-         JOIN users u ON u.id=tg.user_id
-         WHERE tg.access_group_id=$1
+         FROM access_group_grants gg
+         JOIN users u ON u.id=gg.user_id
+         JOIN bot_instances bi ON bi.mode=gg.mode
+         LEFT JOIN mt5_accounts ma ON ma.id=bi.mt5_account_id
+         LEFT JOIN license_slots ls ON ls.id=bi.slot_id
+         WHERE gg.access_group_id=$1
+           AND gg.status='ACTIVE'
+           AND gg.expires_at>now()
+           AND COALESCE(ls.assigned_user_id,ma.user_id)=gg.user_id
            AND u.role NOT IN ('OWNER','ADMIN')
            AND NOT EXISTS (
              SELECT 1
              FROM subscriptions s
              JOIN plans p ON p.id=s.plan_id
-             WHERE s.user_id=tg.user_id
+             WHERE s.user_id=gg.user_id
                AND s.status='ACTIVE'
                AND s.starts_at<=now()
                AND s.expires_at>now()
-               AND p.mode=bi.mode
+               AND p.mode=gg.mode
            )
            AND NOT (
-             bi.mode='LOCAL'
+             gg.mode='LOCAL'
              AND EXISTS (
                SELECT 1
                FROM partner_accounts pa
-               WHERE pa.user_id=tg.user_id
+               WHERE pa.user_id=gg.user_id
                  AND pa.status='ACTIVE'
                  AND pa.expires_at>now()
              )
@@ -490,48 +494,46 @@ export class AdminController {
       );
     }
 
-    const expired = await this.db.query(
+    // Clean up the short-lived legacy implementation too. Paid subscriptions
+    // are deliberately left untouched.
+    const expiredLegacy = await this.db.query(
       `UPDATE trial_grants
        SET status='EXPIRED',
            expires_at=LEAST(COALESCE(expires_at,now()),now())
        WHERE access_group_id=$1
          AND status IN ('APPROVED','ACTIVE')
-       RETURNING id,user_id`,
+       RETURNING id`,
       [body.groupId]
     );
-    const blocked = await this.db.query(
+    const blockedLegacy = await this.db.query(
       `UPDATE trial_authorizations
        SET status='BLOCKED',
            blocked_reason='GROUP_DELETED',
            updated_at=now()
        WHERE access_group_id=$1
          AND status<>'BLOCKED'
-       RETURNING id,user_id`,
+       RETURNING id`,
       [body.groupId]
     );
-
-    // Paid membership is never owned by a trial group. This is a safety cleanup
-    // for records created before trial-group isolation.
     await this.db.query(
       "UPDATE subscriptions SET access_group_id=NULL WHERE access_group_id=$1",
       [body.groupId]
     );
+
     await this.db.query("DELETE FROM access_groups WHERE id=$1", [body.groupId]);
 
     await this.audit("OWNER", "DELETE_ACCESS_GROUP", "access_group", body.groupId, {
       name: group.name,
       trialCount: Number(group.trial_count || 0),
-      expiredTrials: expired.rowCount || 0,
-      blockedAuthorizations: blocked.rowCount || 0,
       safeStopped: affected.rowCount || 0,
+      expiredLegacyTrials: expiredLegacy.rowCount || 0,
+      blockedLegacyAuthorizations: blockedLegacy.rowCount || 0,
       paidMembershipsKept: true
     });
     return {
       ok: true,
       name: group.name,
       trialCount: Number(group.trial_count || 0),
-      expiredTrials: expired.rowCount || 0,
-      blockedAuthorizations: blocked.rowCount || 0,
       safeStopped: affected.rowCount || 0,
       paidMembershipsKept: true
     };
