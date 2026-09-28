@@ -1151,8 +1151,9 @@ export default function DashboardPage() {
     ].join(":");
   })();
   const showCompactAccessCountdown =
+    Boolean(entitlement?.allowed) &&
     accessRemaining !== null &&
-    ["SUBSCRIPTION","TRIAL"].includes(String(entitlement?.source || "").toUpperCase());
+    Boolean(accessExpiry);
 
   const accessLabel = useMemo(() => {
     if (!entitlement) return "ยังไม่มีสิทธิ์ใช้งาน";
