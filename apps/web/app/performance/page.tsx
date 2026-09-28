@@ -521,8 +521,6 @@ export default function PerformanceDashboardPage() {
   const summary=mode==="BACKTEST"?{...backSummary,...backExtra}:liveSummary;
   const detailedStatsReliable =
     mode==="BACKTEST" || report?.dataQuality?.detailedStatsReliable !== false;
-  const journalRecovering =
-    mode==="LIVE" && report?.dataQuality?.detailStatus==="JOURNAL_RECOVERING";
   const detailValue=(value:string)=>detailedStatsReliable?value:"—";
   const currency=String(mode==="BACKTEST"?backtest?.currency:report?.account?.currency||"USD").trim().toUpperCase()||"USD";
   const symbol=String(mode==="BACKTEST"?backtest?.symbol:report?.account?.symbol||"—");
@@ -697,19 +695,6 @@ export default function PerformanceDashboardPage() {
           <header className={styles.summaryTitle}>
             <div className={styles.titleMark}><ScenovaIcon name="pnl" size={24}/><h2>BOT PERFORMANCE SUMMARY</h2><ScenovaIcon name="pnl" size={24}/></div>
             <p>{mode==="LIVE"?"Live portfolio performance · "+strategyScopeLabel:"Backtest performance analysis"}</p>
-            {report && !detailedStatsReliable && mode==="LIVE" ? (
-              <div
-                className={styles.dataQualityNotice}
-                title={journalRecovering
-                  ? "ระบบกำลังใช้ Journal Replay เดิมของ EA เพื่อส่ง ENTRY/EXIT ที่ขาดกลับเข้า Server และจะอัปเดตอัตโนมัติเมื่อข้อมูลครบ"
-                  : "ระบบยืนยัน Net Profit จาก MT5 แล้ว แต่รายละเอียด Journal ยังไม่ครบ"}
-              >
-                <ScenovaIcon name="status" size={14}/>
-                <b>{journalRecovering
-                  ? "กำลังซิงก์ประวัติการเทรดจาก VPS MT5"
-                  : "รายละเอียดการเทรดยังซิงก์ไม่ครบ"}</b>
-              </div>
-            ) : null}
           </header>
 
           {!report||(mode==="BACKTEST"&&!backtest)?(
