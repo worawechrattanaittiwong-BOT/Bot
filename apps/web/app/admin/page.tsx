@@ -38,6 +38,9 @@ export default function AdminPage() {
   const [trialDays, setTrialDays] = useState(1);
   const [membershipDays, setMembershipDays] = useState<Record<string,number>>({});
   const [accessGroups, setAccessGroups] = useState<any[]>([]);
+  const [groupTrialDays, setGroupTrialDays] = useState<Record<string,number>>({});
+  const [expandedGroupId, setExpandedGroupId] = useState("");
+  const [groupMembers, setGroupMembers] = useState<Record<string,any[]>>({});
   const [selectedAccessGroupId, setSelectedAccessGroupId] = useState("");
   const [trialAccessGroupId, setTrialAccessGroupId] = useState("");
   const [newAccessGroupName, setNewAccessGroupName] = useState("");
@@ -55,7 +58,15 @@ export default function AdminPage() {
       ]);
       setUsers(userRows);
       setSystem(systemStatus);
-      setAccessGroups(Array.isArray(groupRows) ? groupRows : []);
+      const nextGroups = Array.isArray(groupRows) ? groupRows : [];
+      setAccessGroups(nextGroups);
+      setGroupTrialDays(prev=>{
+        const next={...prev};
+        nextGroups.forEach((group:any)=>{
+          if (next[String(group.id)] === undefined) next[String(group.id)] = Math.max(1, Number(group.trial_days || 1));
+        });
+        return next;
+      });
       if (!preserveMessage) setMessage("");
     } catch (e: any) {
       setMessage(e.message);
@@ -264,6 +275,114 @@ export default function AdminPage() {
       setNewAccessGroupName("");
       setMessage("สร้างกลุ่ม "+group.name+" แล้ว");
       await search(undefined, true);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setGroupAction("");
+    }
+  }
+
+  async function loadAccessGroupMembers(groupId:string) {
+    const result = await adminApi("/admin/access-groups/members?groupId=" + encodeURIComponent(groupId));
+    const members = Array.isArray(result?.members) ? result.members : [];
+    setGroupMembers(prev=>({...prev,[groupId]:members}));
+    return members;
+  }
+
+  async function toggleGroupDetails(group:any) {
+    if (expandedGroupId===group.id) {
+      setExpandedGroupId("");
+      return;
+    }
+    setGroupAction("details:"+group.id);
+    try {
+      await loadAccessGroupMembers(group.id);
+      setExpandedGroupId(group.id);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setGroupAction("");
+    }
+  }
+
+  async function saveGroupTrialDays(group:any) {
+    const value=Math.max(1,Math.min(365,Math.trunc(Number(groupTrialDays[String(group.id)] || group.trial_days || 1))));
+    setGroupAction("days:"+group.id);
+    try {
+      await adminApi("/admin/access-groups/set-trial-days", {
+        method:"POST",
+        body:JSON.stringify({ groupId:group.id, days:value })
+      });
+      setMessage("กำหนด Trial เริ่มต้นของกลุ่ม "+group.name+" เป็น "+value+" วันแล้ว");
+      await search(undefined,true);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setGroupAction("");
+    }
+  }
+
+  async function removeMemberFromGroup(group:any, member:any) {
+    const confirmed=await confirmPopup({
+      title:"เอาออกจากกลุ่ม "+group.name,
+      tone:"warning",
+      message:
+        "เอา "+member.user_code+" ออกจากกลุ่มนี้หรือไม่?\n\n"+
+        "สมาชิก/Trial ของบัญชียังอยู่เหมือนเดิม เพียงยกเลิกการจัดกลุ่มเท่านั้น",
+      confirmLabel:"เอาออกจากกลุ่ม"
+    });
+    if(!confirmed) return;
+    setGroupAction("remove:"+member.kind+":"+member.ref_id);
+    try {
+      if (member.kind==="SUBSCRIPTION") {
+        await adminApi("/admin/subscriptions/set-group", {
+          method:"POST",
+          body:JSON.stringify({ subscriptionId:member.ref_id, groupId:null })
+        });
+      } else {
+        await adminApi("/admin/trials/set-group", {
+          method:"POST",
+          body:JSON.stringify({ userId:member.user_id, groupId:null })
+        });
+      }
+      setMessage("เอา "+member.user_code+" ออกจากกลุ่ม "+group.name+" แล้ว · สิทธิ์เดิมยังอยู่");
+      await search(undefined,true);
+      await loadAccessGroupMembers(group.id);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setGroupAction("");
+    }
+  }
+
+  async function deleteAccessGroup(group:any) {
+    setGroupAction("delete-preview:"+group.id);
+    try {
+      const members=await loadAccessGroupMembers(group.id);
+      const names=[...new Set(members.map((item:any)=>String(item.user_code||"")).filter(Boolean))];
+      const preview=names.slice(0,12).join(", ");
+      const more=names.length>12 ? " และอีก "+(names.length-12)+" บัญชี" : "";
+      const confirmed=await confirmPopup({
+        title:"ลบกลุ่ม "+group.name,
+        tone:"warning",
+        message:
+          "ลบเฉพาะกลุ่มนี้หรือไม่? สมาชิกและ Trial จะไม่ถูกลบ และวันหมดอายุจะไม่เปลี่ยน\n\n"+
+          (names.length ? "บัญชีในกลุ่ม: "+preview+more+"\n\n" : "กลุ่มนี้ยังไม่มีสมาชิก\n\n")+
+          "หลังลบ ทุกสิทธิ์ในกลุ่มจะกลับเป็น “ไม่จัดกลุ่ม”",
+        confirmLabel:"ลบเฉพาะกลุ่ม"
+      });
+      if(!confirmed) return;
+      setGroupAction("delete:"+group.id);
+      const result=await adminApi("/admin/access-groups/delete", {
+        method:"POST",
+        body:JSON.stringify({ groupId:group.id })
+      });
+      if(expandedGroupId===group.id) setExpandedGroupId("");
+      setMessage(
+        "ลบกลุ่ม "+group.name+" แล้ว · คงสมาชิก "+
+        (Number(result.subscriptionCount||0)+Number(result.trialCount||0))+" สิทธิ์ไว้ครบ"
+      );
+      await search(undefined,true);
     } catch(e:any) {
       setMessage(e.message);
     } finally {
