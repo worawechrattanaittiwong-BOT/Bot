@@ -492,9 +492,14 @@ export class PerformanceAnalyticsController {
       Number.isFinite(reportedTodayClosed) &&
       effectiveFrom.getTime() <= bangkokTodayStart.getTime() &&
       to.getTime() >= now.getTime();
+    // botTodayClosedProfit intentionally counts only deals executed by a
+    // SCENOVA magic. The journal also keeps customer/manual EXITs for accurate
+    // position P/L. Compare like-for-like here; otherwise a manual close creates
+    // a permanent false "journal incomplete" state even when every deal exists.
     const journalTodayClosed = canReconcileToday
       ? journalRows
           .filter((row:any) => new Date(row.created_at).getTime() >= bangkokTodayStart.getTime())
+          .filter((row:any) => row?.metadata?.executedByBot !== false)
           .reduce((sum:number,row:any) => sum + Number(row.net_profit || 0), 0)
       : 0;
     const mt5TodayReconciliation = canReconcileToday
@@ -504,6 +509,26 @@ export class PerformanceAnalyticsController {
     const detailedStatsReliable =
       !canReconcileToday ||
       Math.abs(journalReconciliationGap) <= 0.01;
+
+    // Once the comparable MT5/journal ledger is complete, retire any stale
+    // telemetry-only replay command so the VPS does not replay history forever.
+    if (
+      detailedStatsReliable &&
+      String(account.mode || "").toUpperCase() === "CLOUD" &&
+      account.instance_id
+    ) {
+      await this.db.query(
+        `UPDATE bot_commands
+         SET status='ACKED',
+             acked_at=COALESCE(acked_at,now()),
+             payload=COALESCE(payload,'{}'::jsonb) ||
+               jsonb_build_object('ackSource','PERFORMANCE_RECONCILED')
+         WHERE bot_instance_id=$1
+           AND command='JOURNAL_REPLAY_TODAY'
+           AND status IN ('PENDING','DELIVERED')`,
+        [account.instance_id]
+      );
+    }
 
     // VPS/CLOUD uses the same EA journal recovery that already exists in MT5.
     // Only queue a replay when the current-day MT5 heartbeat proves that the
@@ -860,6 +885,7 @@ export class PerformanceAnalyticsController {
         basis: derivedStart !== null ? "ACTUAL_ENTRY_EXIT_DEALS" : "BOT_CLOSED_PNL_ONLY",
         reconciliation: canReconcileToday ? {
           source: "MT5_HEARTBEAT_TODAY_CLOSED_PNL",
+          scope: "BOT_EXECUTED_DEALS",
           reportedTodayClosed: Number(reportedTodayClosed.toFixed(2)),
           journalTodayClosed: Number(journalTodayClosed.toFixed(2)),
           adjustment: Number(mt5TodayReconciliation.toFixed(2))
