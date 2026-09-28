@@ -69,7 +69,7 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
         Accept: "application/json",
         ...(init.headers || {})
       },
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(10000)
     });
 
     const payload = await response.json().catch(() => null);
@@ -276,6 +276,19 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
       orderType: input.orderType,
       orderId: input.orderId
     });
+
+    const slipTime = verification.slipDate ? Date.parse(verification.slipDate) : NaN;
+    const orderTime = Date.parse(String(snapshot.created_at || ""));
+    if (
+      !Number.isFinite(slipTime) ||
+      !Number.isFinite(orderTime) ||
+      slipTime < orderTime - 5 * 60 * 1000
+    ) {
+      throw new ConflictException("สลิปนี้เก่ากว่ารายการสั่งซื้อ กรุณาใช้สลิปของรายการนี้");
+    }
+    if (slipTime > Date.now() + 10 * 60 * 1000) {
+      throw new ConflictException("เวลาในสลิปไม่ถูกต้อง กรุณาตรวจสอบสลิปอีกครั้ง");
+    }
 
     return input.orderType === "LOCAL"
       ? this.activateLocal(input.userId, input.orderId, verification)
