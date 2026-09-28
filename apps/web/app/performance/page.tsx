@@ -189,7 +189,7 @@ function SummaryChart({points}:{points:any[]}) {
     .filter((value,index,array)=>index===0||value!==array[index-1]);
   const last=singlePoint?{...coords[0],x:width-right}:coords[coords.length-1];
   return (
-    <svg className={styles.chart} viewBox={"0 0 "+width+" "+height} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Balance curve">
+    <svg className={styles.chart} viewBox={"0 0 "+width+" "+height} preserveAspectRatio="none" role="img" aria-label="Balance curve">
       <defs>
         <linearGradient id="perf-line" x1="0" x2="1"><stop offset="0%" stopColor="#61d9ff"/><stop offset="48%" stopColor="#8c78ff"/><stop offset="100%" stopColor="#bd69ff"/></linearGradient>
         <linearGradient id="perf-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#8068ff" stopOpacity=".48"/><stop offset="100%" stopColor="#8068ff" stopOpacity=".02"/></linearGradient>
