@@ -150,3 +150,158 @@
   .event:last-child::before { display: none; }
   .event p { white-space: normal; overflow-wrap: anywhere; }
 }
+
+
+/* Mobile compact pass: preserve the desktop decision center while matching the
+   denser phone layout used by the Control Center reference. */
+@media (max-width: 640px) {
+  .center {
+    gap: 8px;
+    padding: 8px;
+    border-radius: 12px;
+  }
+
+  .cards {
+    gap: 8px;
+  }
+
+  .card {
+    padding: 9px;
+    border-radius: 10px;
+  }
+
+  .cardHeading {
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+  }
+
+  .timeframes {
+    gap: 4px;
+  }
+
+  .timeframe {
+    gap: 5px;
+    padding: 8px 2px 6px;
+    border-radius: 8px;
+  }
+
+  .timeframe > b {
+    font-size: 11px;
+  }
+
+  .directionIcon {
+    width: 28px;
+    height: 28px;
+    font-size: 20px;
+  }
+
+  .timeframe > strong,
+  .timeframe > small {
+    font-size: 9px;
+  }
+
+  .trendLine {
+    width: 68%;
+    height: 2px;
+    margin-top: 0;
+  }
+
+  .alignment {
+    margin: 6px 0 0;
+    font-size: 10px;
+  }
+
+  .marketContext {
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .marketContext > span,
+  .marketContext b {
+    font-size: 10px;
+  }
+
+  .timeline {
+    gap: 8px;
+    padding: 8px;
+    border-radius: 10px;
+  }
+
+  .timelineTitle {
+    gap: 7px;
+  }
+
+  .timelineTitle h3 {
+    margin-bottom: 2px;
+    font-size: 10px;
+  }
+
+  .timelineTitle small {
+    font-size: 9px;
+  }
+
+  /* The active session is already highlighted in the rail, so the separate
+     current-session summary is redundant on a narrow screen. */
+  .sessionSummary {
+    display: none;
+  }
+
+  .sessionRail {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .sessionItem {
+    gap: 4px;
+    padding: 6px 4px;
+  }
+
+  .sessionItem b {
+    font-size: 9px;
+  }
+
+  .sessionItem small {
+    margin-top: 1px;
+    font-size: 8px;
+  }
+
+  .sessionDot {
+    flex-basis: 5px;
+    width: 5px;
+    height: 5px;
+  }
+
+  .eventHistory {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 8px;
+    padding-top: 7px;
+  }
+
+  .eventHistoryLabel {
+    padding-top: 3px;
+    font-size: 9px;
+  }
+
+  .events {
+    gap: 8px;
+  }
+
+  .eventDot {
+    width: 22px;
+    height: 22px;
+  }
+
+  .event time,
+  .event b,
+  .event p {
+    font-size: 9px;
+  }
+
+  .event p {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+  }
+}
