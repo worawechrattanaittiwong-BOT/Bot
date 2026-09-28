@@ -2094,14 +2094,60 @@ export class BotController {
     );
     if (!account) throw new ConflictException("cloud MT5 account not found");
     if (!body.tradingPassword || /[\r\n\x00]/.test(body.tradingPassword)) throw new ConflictException("Trading Password ไม่ถูกต้อง");
-    const bound = await this.db.one("SELECT id FROM bot_instances WHERE mt5_account_id=$1 AND runner_id IS NOT NULL", [account.id]);
-    if (bound) throw new ConflictException("กรุณาติดต่อผู้ดูแลเพื่อเปลี่ยนรหัสผ่านบน VPS");
+    const bound = await this.db.one(
+      `SELECT id,last_seen_at,runner_id,runtime_stop_state
+       FROM bot_instances
+       WHERE mt5_account_id=$1 AND mode='CLOUD' AND runner_id IS NOT NULL
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [account.id]
+    );
+    if (bound?.last_seen_at && Date.now() - new Date(bound.last_seen_at).getTime() <= 20_000) {
+      throw new ConflictException("VPS ยังเชื่อมต่อ MT5 อยู่ จึงยังไม่ต้องบันทึกรหัสผ่านใหม่");
+    }
+    if (bound && String(bound.runtime_stop_state || "NONE") !== "NONE") {
+      throw new ConflictException("VPS กำลังหยุดหรือย้าย Runtime อยู่ กรุณารอให้ขั้นตอนนี้เสร็จก่อน");
+    }
+    if (bound) {
+      const migration = await this.db.one(
+        `SELECT id FROM runtime_migrations
+         WHERE bot_instance_id=$1
+           AND state NOT IN ('COMPLETED','FAILED','CANCELLED')
+         LIMIT 1`,
+        [bound.id]
+      );
+      if (migration) {
+        throw new ConflictException("VPS กำลังย้ายระบบอยู่ กรุณารอให้การย้ายเสร็จก่อน");
+      }
+    }
+
     const enc = this.crypto.encrypt(String(body.tradingPassword || ""));
     await this.db.query(
       "INSERT INTO mt5_credentials(mt5_account_id,ciphertext,iv,auth_tag) VALUES($1,$2,$3,$4) ON CONFLICT(mt5_account_id) DO UPDATE SET ciphertext=EXCLUDED.ciphertext,iv=EXCLUDED.iv,auth_tag=EXCLUDED.auth_tag,updated_at=now()",
       [account.id, enc.ciphertext, enc.iv, enc.authTag]
     );
-    return { ok: true };
+    if (bound) {
+      await this.db.query(
+        `UPDATE bot_instances SET
+           cloud_recovery_state='IDLE',
+           cloud_recovery_attempts=0,
+           cloud_recovery_window_started_at=NULL,
+           cloud_recovery_next_at=NULL,
+           cloud_recovery_last_error=NULL,
+           provisioning_error=NULL
+         WHERE id=$1`,
+        [bound.id]
+      );
+      await this.db.query(
+        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'CLOUD_CREDENTIAL_RECOVERY','bot_instance',$2,$3::jsonb)",
+        [
+          String(req.user?.code || req.user?.sub || "USER").slice(0, 160),
+          bound.id,
+          JSON.stringify({ mt5AccountId: account.id, runnerId: bound.runner_id })
+        ]
+      );
+    }
+    return { ok: true, recoveryRequested: Boolean(bound) };
   }
 
   @Post("start")
