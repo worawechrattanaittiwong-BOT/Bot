@@ -547,34 +547,39 @@ export class AdminController {
        WHERE id=$1 RETURNING *`,
       [body.groupId, enabled]
     );
-    if (!row) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+    if (!row) throw new ConflictException("ไม่พบกลุ่มทดลอง");
 
     let safeStopped = 0;
     if (!enabled) {
       const affected = await this.db.query(
         `WITH target AS (
            SELECT DISTINCT bi.id
-           FROM bot_instances bi
-           JOIN trial_grants tg ON tg.mt5_account_id=bi.mt5_account_id
-           JOIN users u ON u.id=tg.user_id
-           WHERE tg.access_group_id=$1
+           FROM access_group_grants gg
+           JOIN users u ON u.id=gg.user_id
+           JOIN bot_instances bi ON bi.mode=gg.mode
+           LEFT JOIN mt5_accounts ma ON ma.id=bi.mt5_account_id
+           LEFT JOIN license_slots ls ON ls.id=bi.slot_id
+           WHERE gg.access_group_id=$1
+             AND gg.status='ACTIVE'
+             AND gg.expires_at>now()
+             AND COALESCE(ls.assigned_user_id,ma.user_id)=gg.user_id
              AND u.role NOT IN ('OWNER','ADMIN')
              AND NOT EXISTS (
                SELECT 1
                FROM subscriptions s
                JOIN plans p ON p.id=s.plan_id
-               WHERE s.user_id=tg.user_id
+               WHERE s.user_id=gg.user_id
                  AND s.status='ACTIVE'
                  AND s.starts_at<=now()
                  AND s.expires_at>now()
-                 AND p.mode=bi.mode
+                 AND p.mode=gg.mode
              )
              AND NOT (
-               bi.mode='LOCAL'
+               gg.mode='LOCAL'
                AND EXISTS (
                  SELECT 1
                  FROM partner_accounts pa
-                 WHERE pa.user_id=tg.user_id
+                 WHERE pa.user_id=gg.user_id
                    AND pa.status='ACTIVE'
                    AND pa.expires_at>now()
                )
