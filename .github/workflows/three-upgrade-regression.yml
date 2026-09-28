@@ -60,7 +60,9 @@ jobs:
             database/013_backtest_performance.sql \
             database/014_maintenance_mode.sql \
             database/015_partner_program.sql \
-            database/016_upgrade_regression_safety.sql
+            database/016_upgrade_regression_safety.sql \
+            database/026_trial_authorizations.sql \
+            database/042_access_groups.sql
           do
             psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f "$migration"
           done
