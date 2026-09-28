@@ -818,6 +818,49 @@ export class AdminController {
     };
   }
 
+  @Get("sales-control")
+  async salesControl() {
+    const row = await this.db.one(
+      "SELECT sales_paused,updated_by,updated_at FROM production_controls WHERE id=1"
+    );
+    return {
+      salesPaused: Boolean(row?.sales_paused),
+      updatedBy: row?.updated_by || null,
+      updatedAt: row?.updated_at || null
+    };
+  }
+
+  @Post("sales-control")
+  async updateSalesControl(@Req() req: any, @Body() body: { paused: boolean }) {
+    if (req.user?.role && String(req.user.role).toUpperCase() !== "OWNER") {
+      throw new ForbiddenException("การเปิด/ปิดการขายทั้งหมดใช้ได้เฉพาะ OWNER เท่านั้น");
+    }
+    if (typeof body?.paused !== "boolean") {
+      throw new ConflictException("สถานะการขายไม่ถูกต้อง");
+    }
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    const row = await this.db.one(
+      `UPDATE production_controls
+       SET sales_paused=$1,updated_by=$2,updated_at=now()
+       WHERE id=1
+       RETURNING sales_paused,updated_by,updated_at`,
+      [body.paused, actor]
+    );
+    await this.audit(
+      actor,
+      body.paused ? "PAUSE_ALL_PACKAGE_SALES" : "RESUME_ALL_PACKAGE_SALES",
+      "production_controls",
+      "1",
+      { salesPaused: Boolean(row?.sales_paused) }
+    );
+    return {
+      ok: true,
+      salesPaused: Boolean(row?.sales_paused),
+      updatedBy: row?.updated_by || actor,
+      updatedAt: row?.updated_at || null
+    };
+  }
+
   @Get("system")
   async system() {
     const users = await this.db.one(
