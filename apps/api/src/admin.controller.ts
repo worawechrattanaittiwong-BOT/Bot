@@ -270,12 +270,48 @@ export class AdminController {
            FROM bot_instances bi
            JOIN license_slots ls ON ls.id=bi.slot_id
            JOIN subscriptions s ON s.id=ls.subscription_id
+           JOIN users u ON u.id=ls.assigned_user_id
            WHERE s.access_group_id=$1
+             AND u.role NOT IN ('OWNER','ADMIN')
+             AND NOT (
+               bi.mode='LOCAL'
+               AND EXISTS (
+                 SELECT 1 FROM partner_accounts pa
+                 WHERE pa.user_id=u.id
+                   AND pa.status='ACTIVE'
+                   AND pa.expires_at>now()
+               )
+             )
            UNION
            SELECT DISTINCT bi.id
            FROM bot_instances bi
+           JOIN mt5_accounts ma ON ma.id=bi.mt5_account_id
            JOIN trial_grants tg ON tg.mt5_account_id=bi.mt5_account_id
+           JOIN users u ON u.id=tg.user_id
+           LEFT JOIN license_slots ls ON ls.id=bi.slot_id
            WHERE tg.access_group_id=$1
+             AND u.role NOT IN ('OWNER','ADMIN')
+             AND NOT EXISTS (
+               SELECT 1
+               FROM subscriptions alt
+               JOIN plans ap ON ap.id=alt.plan_id
+               LEFT JOIN access_groups aag ON aag.id=alt.access_group_id
+               WHERE alt.user_id=tg.user_id
+                 AND alt.status='ACTIVE'
+                 AND alt.starts_at<=now()
+                 AND alt.expires_at>now()
+                 AND COALESCE(aag.enabled,true)
+                 AND ap.mode=bi.mode
+             )
+             AND NOT (
+               bi.mode='LOCAL'
+               AND EXISTS (
+                 SELECT 1 FROM partner_accounts pa
+                 WHERE pa.user_id=tg.user_id
+                   AND pa.status='ACTIVE'
+                   AND pa.expires_at>now()
+               )
+             )
          ),
          stopped AS (
            UPDATE bot_instances bi
@@ -379,6 +415,27 @@ export class AdminController {
          WHERE tg.mt5_account_id=bi.mt5_account_id
            AND tg.user_id=$1
            AND tg.access_group_id=$2
+           AND NOT EXISTS (
+             SELECT 1
+             FROM subscriptions alt
+             JOIN plans ap ON ap.id=alt.plan_id
+             LEFT JOIN access_groups aag ON aag.id=alt.access_group_id
+             WHERE alt.user_id=tg.user_id
+               AND alt.status='ACTIVE'
+               AND alt.starts_at<=now()
+               AND alt.expires_at>now()
+               AND COALESCE(aag.enabled,true)
+               AND ap.mode=bi.mode
+           )
+           AND NOT (
+             bi.mode='LOCAL'
+             AND EXISTS (
+               SELECT 1 FROM partner_accounts pa
+               WHERE pa.user_id=tg.user_id
+                 AND pa.status='ACTIVE'
+                 AND pa.expires_at>now()
+             )
+           )
            AND (
              bi.desired_state IN ('RUNNING','STARTING')
              OR bi.actual_state='RUNNING'
