@@ -95,7 +95,7 @@ const EMPTY_CREDENTIAL: CredentialForm = {
 const KEY_EXAMPLES: Record<string, string> = {
   EMAIL: "RESEND_API_KEY",
   SMS: "THAIBULKSMS_API_KEY",
-  PAYMENT: "OMISE_SECRET_KEY",
+  PAYMENT: "EASYSLIP_API_KEY",
   AI: "OPENAI_API_KEY",
   NEWS: "NEWS_API_KEY",
   MARKET_DATA: "MARKET_DATA_API_KEY",
@@ -110,6 +110,7 @@ const CREDENTIAL_PRESETS = [
   { key: "THAIBULKSMS_API_KEY", category: "SMS", label: "ThaiBulkSMS API Key" },
   { key: "THAIBULKSMS_API_SECRET", category: "SMS", label: "ThaiBulkSMS API Secret" },
   { key: "THAIBULKSMS_SENDER", category: "SMS", label: "ThaiBulkSMS Sender" },
+  { key: "EASYSLIP_API_KEY", category: "PAYMENT", label: "EasySlip API Key" },
   { key: "OMISE_SECRET_KEY", category: "PAYMENT", label: "Opn / Omise Secret Key" },
   { key: "OMISE_WEBHOOK_SECRET", category: "PAYMENT", label: "Opn / Omise Webhook Secret" },
   { key: "OPENAI_API_KEY", category: "AI", label: "OpenAI API Key" },
