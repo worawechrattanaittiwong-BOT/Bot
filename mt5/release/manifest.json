@@ -1,10 +1,10 @@
 ﻿{
-    "sourceCommit":  "0b4d7dce042c3fc1cc7a355f32c83a301ec29339",
+    "sourceCommit":  "99681c826037006610bb5243a27ac5f9f2014a0c",
     "policy":  "AUTO_VECTOR_EDGE_FLIP_LOCK_V1",
-    "eaVersion":  "1.0.89",
+    "eaVersion":  "1.0.90",
     "file":  "FastBasketBot.ex5",
     "brain":  "AUTO_VECTOR_EDGE_V1",
-    "builtAt":  "2026-09-27T17:56:52.6300069Z",
+    "builtAt":  "2026-09-28T07:37:53.6044988Z",
     "runtimeContract":  "RACE_USER_LOSS_ONLY_V5",
-    "sha256":  "8ab8b33d11f86d96055ed99517a087dd688ab4cbcac002c31287b06cf12f5bdf"
+    "sha256":  "411a2d3450eb254d5998f5f174522896d640e2c7143d8bb3cb9535e702a8ece6"
 }
