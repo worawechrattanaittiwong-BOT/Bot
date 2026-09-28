@@ -1699,7 +1699,7 @@ export default function DashboardPage() {
         });
       }
       setTradingPassword("");
-      setNotice("บันทึกบัญชี MT5 แล้ว ขั้นต่อไปคือเชื่อม EA ให้ระบบเห็นสถานะจริง");
+      setNotice("บันทึกบัญชี MT5 แล้ว กำลังตรวจสอบการเชื่อมต่อ");
       await load(selectedSlotIdRef.current);
       setActiveView("account");
     } catch (e: any) {
@@ -1725,7 +1725,7 @@ export default function DashboardPage() {
         })
       });
       setTradingPassword("");
-      setNotice("บันทึกข้อมูล VPS แล้ว ระบบ Cloud Recovery จะลองเชื่อม MT5 ใหม่อัตโนมัติ");
+      setNotice("บันทึกข้อมูลแล้ว กำลังเชื่อมต่อ VPS ใหม่");
       await load(selectedSlotIdRef.current, true);
       setActiveView("account");
     } catch (e: any) {
@@ -3218,7 +3218,7 @@ export default function DashboardPage() {
                 <div>
                   <div className="eyebrow">CONNECTION MODE</div>
                   <h2>เลือกระบบที่ต้องการเชื่อมต่อ</h2>
-                  <p className="muted">เลือก Local MT5 หรือ VPS Server ตาม Slot ที่บัญชีนี้มีสิทธิ์ใช้งาน ระบบจะไม่เปลี่ยนโหมดเองจากการหลุดการเชื่อมต่อ</p>
+                  <p className="muted">เลือก Local MT5 หรือ VPS Server สำหรับบัญชีนี้</p>
                 </div>
                 <span className="badge">{String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" ? "VPS SERVER" : "LOCAL MT5"}</span>
               </div>
@@ -3242,14 +3242,19 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            {entitlement?.source === "SUBSCRIPTION" && accessExpiry && accessRemaining !== null && (
+            {entitlement?.source === "SUBSCRIPTION" && accessExpiry && accessRemaining !== null ? (
               <MembershipCountdownCard
                 remainingMs={accessRemaining}
                 expiresAt={accessExpiry}
                 planCode={String(entitlement?.planCode || "")}
                 mode={String(data.selectedSlot?.mode || "")}
               />
-            )}
+            ) : entitlement?.source === "OWNER" ? (
+              <MembershipCountdownCard
+                unlimited
+                mode={String(data.selectedSlot?.mode || "")}
+              />
+            ) : null}
 
             {data.selectedSlot?.mode === "LOCAL" ? (
               <>
@@ -3297,7 +3302,7 @@ export default function DashboardPage() {
                   <div>
                     <div className="eyebrow">MT5 ACCOUNT · CLOUD</div>
                     <h2>{data.account ? (data.account.broker + " · " + data.account.account_number) : "ยังไม่ได้ผูกบัญชี MT5"}</h2>
-                    <p className="muted">{data.account ? (data.account.broker_server + " · บัญชีนี้เป็น MT5 ที่กำลังใช้งาน") : "กรอกข้อมูล MT5 เพื่อเชื่อมต่อ Cloud Trading"}</p>
+                    <p className="muted">{data.account ? (data.account.broker_server + " · บัญชี MT5 ที่เชื่อมต่ออยู่") : "กรอกข้อมูล MT5 เพื่อเชื่อมต่อ VPS"}</p>
                   </div>
                   <span className="badge"><span className={"dot "+(accountConnectionOnline?"green":"red")}/>{accountConnectionLabel}</span>
                 </div>
@@ -3363,8 +3368,8 @@ export default function DashboardPage() {
                       <h2>{data.account ? "VPS หลุดการเชื่อมต่อ · เชื่อม MT5 ใหม่" : "เชื่อม MT5 Login สำหรับ VPS"}</h2>
                       <p className="muted">
                         {data.account
-                          ? "Runtime ยังเป็น VPS เดิม ระบบไม่สลับไป Local อัตโนมัติ กรอก Trading Password อีกครั้งเพื่อให้ Cloud Recovery ลองเชื่อม MT5 เดิม"
-                          : "VPS ต้องใช้ MT5 Login + Trading Password + Server เพื่อให้ Trading Node Login Terminal แทนลูกค้า"}
+                          ? "กรอก Trading Password เพื่อเชื่อมต่อ VPS อีกครั้ง"
+                          : "กรอก MT5 Login, Trading Password และ Server เพื่อเชื่อมต่อ VPS"}
                       </p>
                     </div>
                   </div>
@@ -3530,13 +3535,14 @@ export default function DashboardPage() {
   );
 }
 
-function MembershipCountdownCard(props:{remainingMs:number;expiresAt:Date;planCode?:string;mode?:string}) {
-  const totalSeconds = Math.max(0, Math.floor(props.remainingMs / 1000));
+function MembershipCountdownCard(props:{remainingMs?:number;expiresAt?:Date;planCode?:string;mode?:string;unlimited?:boolean}) {
+  const remainingMs = Math.max(0, Number(props.remainingMs || 0));
+  const totalSeconds = Math.floor(remainingMs / 1000);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  const expired = props.remainingMs <= 0;
+  const expired = !props.unlimited && remainingMs <= 0;
   const blocks = [
     { value:String(days).padStart(2,"0"), label:"วัน" },
     { value:String(hours).padStart(2,"0"), label:"ชม." },
@@ -3589,11 +3595,13 @@ function MembershipCountdownCard(props:{remainingMs:number;expiresAt:Date;planCo
           <div style={{minWidth:0}}>
             <div style={{fontSize:11,fontWeight:800,letterSpacing:".14em",color:"#9c8bc8"}}>MEMBERSHIP TIME</div>
             <div style={{fontSize:18,fontWeight:800,color:"#f5f1ff",marginTop:2}}>
-              {expired ? "สมาชิกหมดอายุแล้ว" : "เวลาสมาชิกคงเหลือ"}
+              {props.unlimited ? "Owner Access · ไม่จำกัดเวลา" : expired ? "สมาชิกหมดอายุแล้ว" : "เวลาสมาชิกคงเหลือ"}
             </div>
             <div style={{fontSize:12,color:"#948eac",marginTop:3}}>
-              {(props.planCode ? props.planCode+" · " : "") + (props.mode ? props.mode+" · " : "")}
-              หมดอายุ {props.expiresAt.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"medium",hour12:false})}
+              {props.unlimited
+                ? ((props.mode ? props.mode+" · " : "") + "สิทธิ์ใช้งานไม่หมดอายุ")
+                : ((props.planCode ? props.planCode+" · " : "") + (props.mode ? props.mode+" · " : "") +
+                  "หมดอายุ " + (props.expiresAt ? props.expiresAt.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"medium",hour12:false}) : "-"))}
             </div>
           </div>
         </div>
@@ -3609,29 +3617,31 @@ function MembershipCountdownCard(props:{remainingMs:number;expiresAt:Date;planCo
             background:expired ? "rgba(255,72,112,.08)" : "rgba(50,210,160,.08)"
           }}
         >
-          {expired ? "EXPIRED" : "ACTIVE · LIVE"}
+          {props.unlimited ? "OWNER · UNLIMITED" : expired ? "EXPIRED" : "ACTIVE · LIVE"}
         </span>
       </div>
 
-      <div style={{position:"relative",display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,marginTop:16}}>
-        {blocks.map((block)=>(
-          <div
-            key={block.label}
-            style={{
-              textAlign:"center",
-              padding:"12px 5px 10px",
-              borderRadius:14,
-              border:"1px solid rgba(137,108,213,.18)",
-              background:"rgba(7,9,22,.52)"
-            }}
-          >
-            <div style={{fontVariantNumeric:"tabular-nums",fontSize:"clamp(20px,5vw,28px)",lineHeight:1,fontWeight:850,letterSpacing:".035em",color:expired?"#ff91aa":"#eee8ff"}}>
-              {block.value}
+      {!props.unlimited && (
+        <div style={{position:"relative",display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,marginTop:16}}>
+          {blocks.map((block)=>(
+            <div
+              key={block.label}
+              style={{
+                textAlign:"center",
+                padding:"12px 5px 10px",
+                borderRadius:14,
+                border:"1px solid rgba(137,108,213,.18)",
+                background:"rgba(7,9,22,.52)"
+              }}
+            >
+              <div style={{fontVariantNumeric:"tabular-nums",fontSize:"clamp(20px,5vw,28px)",lineHeight:1,fontWeight:850,letterSpacing:".035em",color:expired?"#ff91aa":"#eee8ff"}}>
+                {block.value}
+              </div>
+              <div style={{fontSize:11,color:"#837d99",marginTop:7,fontWeight:700}}>{block.label}</div>
             </div>
-            <div style={{fontSize:11,color:"#837d99",marginTop:7,fontWeight:700}}>{block.label}</div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
