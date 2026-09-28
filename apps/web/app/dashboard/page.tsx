@@ -2099,7 +2099,7 @@ export default function DashboardPage() {
       }
       setVpsPaymentOrderId(String(result?.id || ""));
       await loadVpsCommerce();
-      setNotice("สร้างรายการชำระเงินแล้ว โอนตามยอดจริงและแนบสลิปได้เลย");
+      setNotice("พร้อมชำระเงิน");
     } catch (e:any) {
       setError(String(e?.message || "สร้างรายการ VPS Slot ไม่สำเร็จ"));
       await loadVpsCommerce().catch(()=>{});
@@ -4241,21 +4241,16 @@ export default function DashboardPage() {
           <div className="vps-slot-dialog-shell">
             <header className="vps-slot-dialog-head">
               <div>
-                <div className="eyebrow">{ownerAddonPriceEditorOpen ? "OWNER · ADD-ON PRICING" : "VPS ADD-ON SLOT COMMERCE"}</div>
+                {ownerAddonPriceEditorOpen && <div className="eyebrow">OWNER · ADD-ON PRICING</div>}
                 <h2>
                   {ownerAddonPriceEditorOpen
                     ? "ตั้งราคา VPS Slot เสริม"
-                    : vpsRenewSlot
-                      ? "ต่ออายุ VPS Slot เสริม #" + vpsRenewSlot.slot_number
-                      : "ซื้อ VPS Slot เสริม"}
+                    : vpsPaymentOrder
+                      ? "ชำระเงิน VPS Slot เสริม"
+                      : vpsRenewSlot
+                        ? "ต่ออายุ VPS Slot เสริม #" + vpsRenewSlot.slot_number
+                        : "ซื้อ VPS Slot เสริม"}
                 </h2>
-                <p>
-                  {ownerAddonPriceEditorOpen
-                    ? "ราคาชุดนี้แยกจากแพ็กเกจหลัก Slot #1 และใช้เฉพาะ Slot #2 ขึ้นไป"
-                    : vpsRenewSlot
-                      ? "ต่ออายุ Slot เสริมจากวันหมดอายุเดิม · ไม่กระทบอายุแพ็กเกจหลักหรือ Slot อื่น"
-                      : "1 Slot เสริม = 1 VPS MT5 + 1 EA Runtime · อายุแยกจากแพ็กเกจหลัก"}
-                </p>
               </div>
               <div className="vps-slot-dialog-head-actions">
                 {String(data.user?.role || "").toUpperCase()==="OWNER" && !ownerAddonPriceEditorOpen && !vpsPaymentOrder && (
@@ -4331,7 +4326,6 @@ export default function DashboardPage() {
                       >
                         <span>{pack.months} เดือน</span>
                         <b>฿{(Number(pack.price_satang || 0)/100).toLocaleString("th-TH",{maximumFractionDigits:2})}</b>
-                        <small>ต่อ 1 VPS Slot เสริม</small>
                       </button>
                     ))}
                   </div>
@@ -4357,8 +4351,8 @@ export default function DashboardPage() {
                     {!primaryCloudActive
                       ? "แพ็กเกจ VPS หลัก Slot #1 หมดอายุ กรุณาต่ออายุแพ็กเกจหลักก่อนซื้อหรือต่ออายุ Slot เสริม"
                       : !cloudCatalog?.checkoutEnabled
-                        ? "ระบบขาย VPS Slot เสริมยังไม่พร้อมใช้งาน"
-                        : "VPS Capacity เต็มชั่วคราว ระบบจะไม่รับเงินสำหรับ Slot เสริมใหม่จนกว่าจะมี Capacity ว่าง"}
+                        ? "ยังไม่สามารถชำระเงินได้ในขณะนี้"
+                        : "VPS Slot เต็มชั่วคราว กรุณาลองใหม่ภายหลัง"}
                   </div>
                 )}
 
@@ -4368,38 +4362,41 @@ export default function DashboardPage() {
                   disabled={vpsPurchaseBusy || !selectedVpsPackage || !canCheckoutVpsOrder}
                   onClick={()=>void createVpsSlotOrder()}
                 >
-                  {vpsPurchaseBusy ? "กำลังสร้างรายการ..." : vpsRenewSlot ? "สร้างรายการต่ออายุ Slot เสริม" : "สร้างรายการซื้อ Slot เสริม"}
+                  {vpsPurchaseBusy ? "กำลังดำเนินการ..." : vpsRenewSlot ? "ชำระเงินต่ออายุ" : "ชำระเงิน"}
                 </button>
               </>
             ) : (
               <section className="vps-slot-payment-stage">
                 <div className="vps-slot-payment-summary">
                   <div>
-                    <span>Order</span>
-                    <b>#{vpsPaymentOrder.id.slice(0,8).toUpperCase()}</b>
-                  </div>
-                  <div>
-                    <span>แพ็กเกจ</span>
+                    <span>ระยะเวลา</span>
                     <b>{vpsPaymentOrder.months} เดือน</b>
                   </div>
                   <div className="total">
-                    <span>ยอดที่ต้องโอน</span>
+                    <span>ยอดชำระ</span>
                     <b>฿{(Number(vpsPaymentOrder.amount || 0)/100).toLocaleString("th-TH",{maximumFractionDigits:2})}</b>
                   </div>
                 </div>
 
+                {vpsPaymentOrder.qr_url ? (
+                  <div className="vps-slot-qr-wrap">
+                    <img src={vpsPaymentOrder.qr_url} alt="QR ชำระเงิน VPS Slot"/>
+                  </div>
+                ) : String(cloudCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" ? (
+                  <div className="vps-slot-bank-card">
+                    <span className="vps-slot-bank-icon"><ScenovaIcon name="wallet" size={24}/></span>
+                    <div>
+                      <b>{vpsPaymentAccount?.nameTh || vpsPaymentAccount?.nameEn || "SCENOVA"}</b>
+                      <strong>{vpsPaymentAccount?.bankNumber || "—"}</strong>
+                      <span>{vpsPaymentAccount?.bankShortCode || "BANK"}{vpsPaymentAccount?.bankName ? " · " + vpsPaymentAccount.bankName : ""}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="vps-slot-capacity-warning">QR ยังไม่พร้อม กรุณาลองใหม่</div>
+                )}
+
                 {String(cloudCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" ? (
                   <>
-                    <div className="vps-slot-bank-card">
-                      <span className="vps-slot-bank-icon"><ScenovaIcon name="wallet" size={24}/></span>
-                      <div>
-                        <small>บัญชีรับเงิน SCENOVA</small>
-                        <b>{vpsPaymentAccount?.nameTh || vpsPaymentAccount?.nameEn || "บัญชีที่ผูกกับ EasySlip"}</b>
-                        <strong>{vpsPaymentAccount?.bankNumber || "—"}</strong>
-                        <span>{vpsPaymentAccount?.bankShortCode || "BANK"}{vpsPaymentAccount?.bankName ? " · " + vpsPaymentAccount.bankName : ""}</span>
-                      </div>
-                    </div>
-
                     <label className="vps-slot-slip-upload">
                       <input
                         type="file"
@@ -4408,7 +4405,6 @@ export default function DashboardPage() {
                         onChange={e=>setVpsSlipFile(e.target.files?.[0] || null)}
                       />
                       <span>{vpsSlipFile ? vpsSlipFile.name : "แนบรูปสลิป"}</span>
-                      <small>ระบบตรวจยอดจริง + บัญชีผู้รับ + สลิปซ้ำ · สูงสุด 4 MB</small>
                     </label>
 
                     {vpsSlipPreview && (
@@ -4420,23 +4416,16 @@ export default function DashboardPage() {
                     <button
                       type="button"
                       className="btn primary btn-lg"
-                      disabled={vpsPurchaseBusy || !vpsSlipFile || !vpsPaymentAccount}
+                      disabled={vpsPurchaseBusy || !vpsSlipFile}
                       onClick={()=>void verifyVpsSlotSlip()}
                     >
-                      {vpsPurchaseBusy ? "กำลังตรวจสลิป..." : "ตรวจสลิปและเปิด VPS Slot เสริม"}
+                      {vpsPurchaseBusy ? "กำลังยืนยัน..." : "ยืนยันการชำระเงิน"}
                     </button>
                   </>
                 ) : (
-                  <>
-                    {vpsPaymentOrder.qr_url ? (
-                      <div className="vps-slot-qr-wrap"><img src={vpsPaymentOrder.qr_url} alt="QR ชำระเงิน VPS Slot"/></div>
-                    ) : (
-                      <div className="vps-slot-capacity-warning">กำลังรอ QR Payment จาก Gateway</div>
-                    )}
-                    <button type="button" className="btn primary btn-lg" disabled={vpsPurchaseBusy} onClick={()=>void refreshVpsSlotOrder()}>
-                      {vpsPurchaseBusy ? "กำลังตรวจสอบ..." : "ตรวจสอบการชำระเงิน"}
-                    </button>
-                  </>
+                  <button type="button" className="btn primary btn-lg" disabled={vpsPurchaseBusy} onClick={()=>void refreshVpsSlotOrder()}>
+                    {vpsPurchaseBusy ? "กำลังตรวจสอบ..." : "ตรวจสอบการชำระเงิน"}
+                  </button>
                 )}
 
                 <button type="button" className="btn ghost vps-slot-cancel-order" disabled={vpsPurchaseBusy} onClick={()=>void cancelVpsSlotOrder()}>
