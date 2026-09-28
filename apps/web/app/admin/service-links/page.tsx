@@ -44,6 +44,37 @@ type Connection = {
   detail: string;
 };
 
+type PaymentAccount = {
+  id: number;
+  bankCode: string;
+  bankName: string;
+  bankShortCode: string;
+  bankNumber: string;
+  nameTh: string;
+  nameEn: string;
+  type: string;
+};
+
+type PaymentQrMethod = "AUTO" | "PROMPTPAY_NATIONAL_ID" | "PROMPTPAY_PHONE";
+
+type PaymentQrSettings = {
+  method: PaymentQrMethod;
+  qrType: string;
+  promptPayIdMasked: string;
+  promptPayIdConfigured: boolean;
+  promptPayIdLength: number;
+  easySlipConfigured: boolean;
+  accounts: PaymentAccount[];
+};
+
+type PaymentQrTest = {
+  ok: boolean;
+  amountSatang: number;
+  qrType: string;
+  dataUrl: string;
+  accounts: PaymentAccount[];
+};
+
 type TestResult = {
   ok: boolean;
   status: "PASS" | "LIMITED" | "FAIL";
@@ -140,6 +171,13 @@ function companionFor(configKey: string) {
   return null;
 }
 
+function maskBankNumber(value: string) {
+  const digits=String(value || "").replace(/\D/g, "");
+  if (!digits) return "—";
+  if (digits.length <= 4) return digits;
+  return "•••• " + digits.slice(-4);
+}
+
 function formatDate(value: string | null) {
   if (!value) return "ยังไม่เคยทดสอบ";
   const date = new Date(value);
@@ -154,6 +192,12 @@ export default function AdminServiceLinksPage() {
   const [items, setItems] = useState<ServiceLink[]>([]);
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [paymentQr, setPaymentQr] = useState<PaymentQrSettings | null>(null);
+  const [paymentQrMethod, setPaymentQrMethod] = useState<PaymentQrMethod>("AUTO");
+  const [promptPayId, setPromptPayId] = useState("");
+  const [savingPaymentQr, setSavingPaymentQr] = useState(false);
+  const [testingPaymentQr, setTestingPaymentQr] = useState(false);
+  const [paymentQrTest, setPaymentQrTest] = useState<PaymentQrTest | null>(null);
 
   const [linkForm, setLinkForm] = useState<LinkForm>(EMPTY_LINK);
   const [credentialForm, setCredentialForm] = useState<CredentialForm>(EMPTY_CREDENTIAL);
@@ -215,13 +259,16 @@ export default function AdminServiceLinksPage() {
     setLoading(true);
     setError("");
     try {
-      const [links, vault] = await Promise.all([
+      const [links, vault, qrSettings] = await Promise.all([
         adminApi("/admin/service-links"),
-        adminApi("/admin/api-credentials")
+        adminApi("/admin/api-credentials"),
+        adminApi("/admin/payment-qr-settings")
       ]);
       setItems(Array.isArray(links?.items) ? links.items : []);
       setCredentials(Array.isArray(vault?.items) ? vault.items : []);
       setConnections(Array.isArray(vault?.connections) ? vault.connections : []);
+      setPaymentQr(qrSettings as PaymentQrSettings);
+      setPaymentQrMethod((qrSettings?.method || "AUTO") as PaymentQrMethod);
       setMessage("พร้อมใช้งาน");
     } catch (err: any) {
       setError(String(err?.message || "โหลดข้อมูลไม่สำเร็จ"));
@@ -528,6 +575,67 @@ export default function AdminServiceLinksPage() {
     }
   }
 
+  async function savePaymentQrSettings() {
+    if (savingPaymentQr) return;
+    setSavingPaymentQr(true);
+    setError("");
+    try {
+      const result = await adminApi("/admin/payment-qr-settings", {
+        method: "POST",
+        body: JSON.stringify({
+          method: paymentQrMethod,
+          promptPayId
+        })
+      });
+      setPaymentQr(result as PaymentQrSettings);
+      setPaymentQrMethod((result?.method || paymentQrMethod) as PaymentQrMethod);
+      setPromptPayId("");
+      setPaymentQrTest(null);
+      setMessage(
+        paymentQrMethod === "PROMPTPAY_NATIONAL_ID"
+          ? "บันทึก PromptPay เลขบัตรประชาชนเป็น QR หลักแล้ว"
+          : paymentQrMethod === "PROMPTPAY_PHONE"
+            ? "บันทึก PromptPay เบอร์โทรเป็น QR หลักแล้ว"
+            : "ตั้ง Merchant QR อัตโนมัติเป็น QR หลักแล้ว"
+      );
+      await load();
+    } catch (err: any) {
+      setError(String(err?.message || "บันทึก Payment QR ไม่สำเร็จ"));
+    } finally {
+      setSavingPaymentQr(false);
+    }
+  }
+
+  async function testPaymentQrSettings() {
+    if (testingPaymentQr) return;
+    setTestingPaymentQr(true);
+    setError("");
+    try {
+      const result = await adminApi("/admin/payment-qr-settings/test-qr", {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+      setPaymentQrTest(result as PaymentQrTest);
+      setMessage("สร้าง QR ทดสอบ ฿1 จากค่าที่บันทึกแล้ว");
+    } catch (err: any) {
+      setPaymentQrTest(null);
+      setError(String(err?.message || "สร้าง QR ทดสอบไม่สำเร็จ"));
+    } finally {
+      setTestingPaymentQr(false);
+    }
+  }
+
+  function downloadPaymentQrTest() {
+    const dataUrl = String(paymentQrTest?.dataUrl || "");
+    if (!dataUrl.startsWith("data:image/")) return;
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = "SCENOVA-PromptPay-Test-QR.png";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
   return (
     <div className="app-wrap owner-app">
       <OwnerSidebar activeKey="service-links" onLogout={logout}/>
@@ -563,6 +671,144 @@ export default function AdminServiceLinksPage() {
                 <small>{connection.detail}</small>
               </div>
             ))}
+          </section>
+
+          <div className={s.sectionHead}>
+            <div>
+              <span className={s.kicker}>PAYMENT / PROMPTPAY</span>
+              <h2>Payment QR Settings</h2>
+            </div>
+            <span>{paymentQr?.easySlipConfigured ? "EASYSLIP CONNECTED" : "EASYSLIP NOT SET"}</span>
+          </div>
+
+          <section className={s.paymentQrPanel}>
+            <div className={s.paymentAccountCard}>
+              <span className={s.paymentLabel}>บัญชีรับเงินที่ EasySlip ตรวจสอบ</span>
+              {paymentQr?.accounts?.[0] ? (
+                <>
+                  <b>{paymentQr.accounts[0].nameTh || paymentQr.accounts[0].nameEn || "SCENOVA"}</b>
+                  <strong>{paymentQr.accounts[0].bankName || paymentQr.accounts[0].bankShortCode || "Bank"}</strong>
+                  <code>{maskBankNumber(paymentQr.accounts[0].bankNumber)}</code>
+                  <small>สลิปจะต้อง Match กับบัญชีนี้ก่อนระบบเปิดสิทธิ์</small>
+                </>
+              ) : (
+                <>
+                  <b>ยังไม่พบบัญชีรับเงิน</b>
+                  <small>เชื่อม EasySlip API และเพิ่มบัญชีธนาคารใน EasySlip ก่อน</small>
+                </>
+              )}
+            </div>
+
+            <div className={s.paymentQrForm}>
+              <div className={s.paymentQrFields}>
+                <div className={s.field}>
+                  <label>QR หลัก</label>
+                  <select
+                    value={paymentQrMethod}
+                    onChange={event => {
+                      setPaymentQrMethod(event.target.value as PaymentQrMethod);
+                      setPromptPayId("");
+                      setPaymentQrTest(null);
+                    }}
+                  >
+                    <option value="AUTO">Merchant QR อัตโนมัติ</option>
+                    <option value="PROMPTPAY_NATIONAL_ID">PromptPay · เลขบัตรประชาชน 13 หลัก</option>
+                    <option value="PROMPTPAY_PHONE">PromptPay · เบอร์โทร 10 หลัก</option>
+                  </select>
+                </div>
+
+                {paymentQrMethod !== "AUTO" && (
+                  <div className={s.field}>
+                    <label>{paymentQrMethod === "PROMPTPAY_NATIONAL_ID" ? "เลขบัตรประชาชน" : "เบอร์โทร PromptPay"}</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      autoComplete="new-password"
+                      value={promptPayId}
+                      maxLength={paymentQrMethod === "PROMPTPAY_NATIONAL_ID" ? 13 : 10}
+                      onChange={event => {
+                        const max = paymentQrMethod === "PROMPTPAY_NATIONAL_ID" ? 13 : 10;
+                        setPromptPayId(event.target.value.replace(/\D/g, "").slice(0, max));
+                        setPaymentQrTest(null);
+                      }}
+                      placeholder={
+                        paymentQr?.promptPayIdConfigured
+                          ? "ใช้ค่าเดิม " + paymentQr.promptPayIdMasked + " หรือกรอกใหม่"
+                          : paymentQrMethod === "PROMPTPAY_NATIONAL_ID"
+                            ? "กรอกเลขบัตร 13 หลัก"
+                            : "กรอกเบอร์มือถือ 10 หลัก"
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className={s.paymentQrHint}>
+                {paymentQrMethod === "PROMPTPAY_NATIONAL_ID" ? (
+                  <>
+                    <b>PromptPay เลขบัตรประชาชน</b>
+                    <span>ระบบจะสร้าง QR ด้วย National ID และเก็บเลขเต็มแบบเข้ารหัส ไม่แสดงเลขเต็มกลับมาหลังบันทึก</span>
+                  </>
+                ) : paymentQrMethod === "PROMPTPAY_PHONE" ? (
+                  <>
+                    <b>PromptPay เบอร์โทร</b>
+                    <span>เงินจะเข้าบัญชีที่ผูก PromptPay กับเบอร์นี้ และสลิปยังต้องตรงกับบัญชี EasySlip ด้านซ้าย</span>
+                  </>
+                ) : (
+                  <>
+                    <b>Merchant QR อัตโนมัติ</b>
+                    <span>ระบบเลือก QR ตามธนาคารที่ EasySlip ส่งกลับมา เช่น KTB จะใช้ถุงเงิน</span>
+                  </>
+                )}
+              </div>
+
+              <div className={s.paymentQrActions}>
+                <button
+                  type="button"
+                  className={s.primary}
+                  disabled={savingPaymentQr || !paymentQr?.easySlipConfigured}
+                  onClick={() => void savePaymentQrSettings()}
+                >
+                  {savingPaymentQr ? "กำลังบันทึก..." : "บันทึกเป็น QR หลัก"}
+                </button>
+                <button
+                  type="button"
+                  className={s.ghost}
+                  disabled={testingPaymentQr || !paymentQr?.easySlipConfigured}
+                  onClick={() => void testPaymentQrSettings()}
+                >
+                  {testingPaymentQr ? "กำลังสร้าง..." : "สร้าง QR ทดสอบ ฿1"}
+                </button>
+                <span>
+                  ปัจจุบัน: {paymentQr?.method === "PROMPTPAY_NATIONAL_ID"
+                    ? "PromptPay เลขบัตร"
+                    : paymentQr?.method === "PROMPTPAY_PHONE"
+                      ? "PromptPay เบอร์โทร"
+                      : "Merchant / Auto"}
+                  {paymentQr?.promptPayIdConfigured && paymentQr?.method !== "AUTO"
+                    ? " · " + paymentQr.promptPayIdMasked
+                    : ""}
+                </span>
+              </div>
+            </div>
+
+            {paymentQrTest?.dataUrl ? (
+              <div className={s.paymentQrTest}>
+                <div className={s.paymentQrImage}>
+                  <img src={paymentQrTest.dataUrl} alt="QR ทดสอบ PromptPay ฿1"/>
+                </div>
+                <div>
+                  <span>QR TEST · ฿1.00</span>
+                  <b>{paymentQrTest.accounts?.[0]?.nameTh || paymentQrTest.accounts?.[0]?.nameEn || "ตรวจชื่อผู้รับในแอปธนาคาร"}</b>
+                  <small>
+                    {paymentQrTest.accounts?.[0]?.bankName || paymentQrTest.accounts?.[0]?.bankShortCode || "EasySlip account"}
+                    {paymentQrTest.accounts?.[0]?.bankNumber ? " · " + maskBankNumber(paymentQrTest.accounts[0].bankNumber) : ""}
+                  </small>
+                  <p>ดาวน์โหลด QR แล้วเปิด Mobile Banking → สแกนจากรูป เพื่อเช็กชื่อผู้รับก่อนใช้งานจริง</p>
+                  <button type="button" className={s.testButton} onClick={downloadPaymentQrTest}>ดาวน์โหลด QR ทดสอบ</button>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <div className={s.sectionHead}>
