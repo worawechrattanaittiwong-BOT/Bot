@@ -5564,13 +5564,35 @@
 .cc-v17-net-profit.bad b{color:#ff788d}
 
 @media(max-width:760px){
-  .cc-v17-running-head-metrics{
-    gap:5px;
+  .cc-v17-running-head{
+    min-height:70px!important;
+    flex-wrap:wrap!important;
+    align-items:center!important;
+    row-gap:5px!important;
+  }
+
+  .cc-v17-running-head>div:first-child{
+    flex:1 1 auto!important;
+    min-width:150px!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-head-metrics{
+    flex:1 0 100%!important;
+    width:100%!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    gap:8px!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-head-metrics>em{
+    flex:0 0 auto!important;
   }
 
   .cc-v17-net-profit{
+    min-width:0;
     min-height:24px;
-    padding:3px 6px;
+    padding:3px 7px;
     font-size:var(--ui-type-caption);
   }
 
@@ -5578,9 +5600,17 @@
     font-size:var(--ui-type-caption);
   }
 
+  .cc-v47 .cc-v6-symbol-chips{
+    display:flex!important;
+    flex-wrap:wrap!important;
+    align-items:center!important;
+  }
+
   .cc-v47 .cc-membership-mini-countdown{
     padding-left:7px!important;
     padding-right:7px!important;
     font-size:var(--ui-type-caption)!important;
+    font-variant-numeric:tabular-nums!important;
+    white-space:nowrap!important;
   }
 }
