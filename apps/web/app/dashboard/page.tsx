@@ -2408,14 +2408,14 @@ export default function DashboardPage() {
     const blocked =
       state === "RUNNING" ||
       desired === "RUNNING" ||
-      Number(data.instance?.metrics?.positions || 0) > 0 ||
-      Number(data.instance?.metrics?.accountScenovaPendingOrders || 0) > 0;
+      Number(data?.instance?.metrics?.positions || 0) > 0 ||
+      Number(data?.instance?.metrics?.accountScenovaPendingOrders || 0) > 0;
     if (blocked) {
       setError("ต้องหยุดบอทและไม่มี Position / Pending Order ค้างอยู่ก่อนเปลี่ยนบัญชี");
       return;
     }
 
-    const slotId = String(selectedSlotIdRef.current || data.selectedSlot?.id || "");
+    const slotId = String(selectedSlotIdRef.current || data?.selectedSlot?.id || "");
     const ok = await performMt5Reset();
     if (ok) prepareCloudMt5Dialog(slotId,"NEW");
   }
@@ -3925,7 +3925,7 @@ export default function DashboardPage() {
                   account={data.account}
                   online={accountConnectionOnline}
                   busy={busy}
-                  downloadBlocked={desired==="RUNNING" || (state==="RUNNING" && isMt5Online) || Number(data.instance?.metrics?.positions || 0)>0}
+                  downloadBlocked={desired==="RUNNING" || (state==="RUNNING" && isMt5Online) || Number(data?.instance?.metrics?.positions || 0)>0}
                   apiBase={mt5ApiBase}
                   message={activationMessage}
                   error={error}
@@ -3937,7 +3937,7 @@ export default function DashboardPage() {
                     blockedReason:
                       desired === "RUNNING" || state === "RUNNING"
                         ? "กรุณากด Safe Stop ก่อนย้ายไป VPS"
-                        : Number(data.instance?.metrics?.positions || 0) > 0
+                        : Number(data?.instance?.metrics?.positions || 0) > 0
                           ? "ต้องไม่มี Position ค้างก่อนย้ายไป VPS"
                           : "",
                     packageHref:"/packages?system=cloud&from=mt5-ea",
@@ -4041,13 +4041,13 @@ export default function DashboardPage() {
                       busy ||
                       state==="RUNNING" ||
                       desired==="RUNNING" ||
-                      Number(data.instance?.metrics?.positions || 0)>0 ||
-                      Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
+                      Number(data?.instance?.metrics?.positions || 0)>0 ||
+                      Number(data?.instance?.metrics?.accountScenovaPendingOrders || 0)>0
                     }
                     title={
                       state==="RUNNING" || desired==="RUNNING"
                         ? "หยุดบอทก่อนเปลี่ยนบัญชี"
-                        : Number(data.instance?.metrics?.positions || 0)>0 || Number(data.instance?.metrics?.accountScenovaPendingOrders || 0)>0
+                        : Number(data?.instance?.metrics?.positions || 0)>0 || Number(data?.instance?.metrics?.accountScenovaPendingOrders || 0)>0
                           ? "ปิด Position และ Pending Order ให้หมดก่อนเปลี่ยนบัญชี"
                           : "เปลี่ยนบัญชี MT5 ได้ทันที"
                     }
