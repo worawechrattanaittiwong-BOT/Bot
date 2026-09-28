@@ -442,11 +442,19 @@ export class CloudCustomerController {
         )).rows[0] || null;
       }
 
-      // Extra VPS slots are add-ons. Normal customers must already have a
-      // current primary Cloud entitlement before buying another runtime.
-      if (!slot && purchaseType === "ADDON" && !["OWNER","ADMIN"].includes(String(user.role || "").toUpperCase())) {
+      const addonFlow =
+        (!slot && purchaseType === "ADDON") ||
+        String(slot?.slot_type || "").toUpperCase() === "ADDON";
+
+      if (slot && String(slot.slot_type || "").toUpperCase() === "PERSONAL" && purchaseType === "RENEW") {
+        throw new ConflictException("Slot #1 เป็นแพ็กเกจหลัก กรุณาต่ออายุจากหน้าแพ็กเกจ");
+      }
+
+      // Slot #1 is the primary package gate. Add-on slots cannot be purchased,
+      // renewed or used while the primary package is expired.
+      if (addonFlow && !["OWNER","ADMIN"].includes(String(user.role || "").toUpperCase())) {
         const primary = (await tx.query(
-          `SELECT ls.id
+          `SELECT ls.id,s.expires_at
            FROM license_slots ls
            JOIN subscriptions s ON s.id=ls.subscription_id
            WHERE ls.owner_user_id=$1
@@ -461,8 +469,18 @@ export class CloudCustomerController {
           [req.user.sub]
         )).rows[0];
         if (!primary) {
-          throw new ConflictException("กรุณาเปิดแพ็กเกจ VPS หลักก่อนซื้อ VPS Slot เพิ่ม");
+          throw new ConflictException("แพ็กเกจ VPS หลัก (Slot #1) หมดอายุหรือยังไม่เปิดใช้งาน กรุณาต่ออายุแพ็กเกจหลักก่อน");
         }
+      }
+
+      const pricingPack = addonFlow
+        ? (await tx.query(
+            "SELECT * FROM cloud_addon_packages WHERE months=$1 AND enabled=true AND price_satang>0",
+            [body.months]
+          )).rows[0]
+        : pack;
+      if (!pricingPack) {
+        throw new ConflictException(addonFlow ? "ราคา VPS Slot เสริมระยะเวลานี้ยังไม่เปิดขาย" : "แพ็กเกจยังไม่เปิดขาย");
       }
 
       const reserved = slot ? (await tx.query(`
@@ -493,15 +511,16 @@ export class CloudCustomerController {
         code: body.promoCode,
         userId: String(req.user.sub),
         mode: "CLOUD",
-        months: pack.months,
-        originalAmountSatang: Number(pack.price_satang)
+        months: pricingPack.months,
+        originalAmountSatang: Number(pricingPack.price_satang)
       });
       const order = (await tx.query(
         `INSERT INTO cloud_orders(
-           user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,runner_id,slot_id
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [req.user.sub, pack.months, promo.finalAmountSatang, pack.price_satang,
-         promo.discountAmountSatang, promo.code, promo.redemptionId, node.runner_id, slot?.id || null]
+           user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,runner_id,slot_id,purchase_type
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        [req.user.sub, pricingPack.months, promo.finalAmountSatang, pricingPack.price_satang,
+         promo.discountAmountSatang, promo.code, promo.redemptionId, node.runner_id, slot?.id || null,
+         addonFlow ? "ADDON" : "PACKAGE"]
       )).rows[0];
       await this.promotions.attachOrder(tx, promo.redemptionId, order.id);
       return order;
