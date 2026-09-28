@@ -72,27 +72,16 @@ VALUES(
     "allowedPathPrefixes":["/dashboard","/packages","/account","/referrals","/partner"]
   }'::jsonb
 )
-ON CONFLICT(code) DO UPDATE SET
-  title=EXCLUDED.title,
-  image_url=EXCLUDED.image_url,
-  mobile_image_url=EXCLUDED.mobile_image_url,
-  target_url=EXCLUDED.target_url,
-  cta_label=EXCLUDED.cta_label,
-  priority=EXCLUDED.priority,
-  settings=EXCLUDED.settings,
-  updated_at=now();
+ON CONFLICT(code) DO NOTHING;
 
 INSERT INTO in_app_campaign_schedules(campaign_id,slot_code,start_minute,end_minute,enabled)
 SELECT id,'MORNING',420,659,true FROM in_app_campaigns WHERE code='REFERRAL_NETWORK'
-ON CONFLICT(campaign_id,slot_code) DO UPDATE SET
-  start_minute=EXCLUDED.start_minute,end_minute=EXCLUDED.end_minute,enabled=true;
+ON CONFLICT(campaign_id,slot_code) DO NOTHING;
 
 INSERT INTO in_app_campaign_schedules(campaign_id,slot_code,start_minute,end_minute,enabled)
 SELECT id,'MIDDAY',660,899,true FROM in_app_campaigns WHERE code='REFERRAL_NETWORK'
-ON CONFLICT(campaign_id,slot_code) DO UPDATE SET
-  start_minute=EXCLUDED.start_minute,end_minute=EXCLUDED.end_minute,enabled=true;
+ON CONFLICT(campaign_id,slot_code) DO NOTHING;
 
 INSERT INTO in_app_campaign_schedules(campaign_id,slot_code,start_minute,end_minute,enabled)
 SELECT id,'EVENING',1020,1319,true FROM in_app_campaigns WHERE code='REFERRAL_NETWORK'
-ON CONFLICT(campaign_id,slot_code) DO UPDATE SET
-  start_minute=EXCLUDED.start_minute,end_minute=EXCLUDED.end_minute,enabled=true;
+ON CONFLICT(campaign_id,slot_code) DO NOTHING;
