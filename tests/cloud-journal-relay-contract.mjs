@@ -72,6 +72,21 @@ assert.match(
   "Performance API must expose journal quality state"
 );
 assert.match(
+  performanceApi,
+  /String\(account\.mode \|\| ""\)\.toUpperCase\(\) === "CLOUD"[\s\S]*?JOURNAL_REPLAY_TODAY/,
+  "Incomplete VPS performance must reuse the existing MT5 journal replay command"
+);
+assert.match(
+  performanceApi,
+  /command='JOURNAL_REPLAY_TODAY'[\s\S]*?30_000/,
+  "VPS journal recovery must deduplicate replay commands with a cooldown"
+);
+assert.match(
+  performancePage,
+  /JOURNAL_RECOVERING/,
+  "Performance UI must poll while VPS journal replay is recovering detail"
+);
+assert.match(
   performancePage,
   /ข้อมูลกำไรจาก MT5 ถูกต้อง แต่รายละเอียดการเทรดยังไม่ครบ/,
   "Performance UI must explain incomplete journal detail instead of showing misleading zeros"
