@@ -758,13 +758,21 @@ export class AdminController {
     approvedBy?: string;
     accessGroupId?: string | null;
   }) {
+    let group: any = null;
     if (body.accessGroupId) {
-      const group = await this.db.one("SELECT id FROM access_groups WHERE id=$1", [body.accessGroupId]);
-      if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+      group = await this.db.one(
+        "SELECT id,name,enabled,trial_days FROM access_groups WHERE id=$1",
+        [body.accessGroupId]
+      );
+      if (!group) throw new ConflictException("ไม่พบกลุ่มทดลอง");
+      if (!group.enabled) throw new ConflictException("กลุ่มทดลองนี้ปิดอยู่ กรุณาเปิดกลุ่มก่อนอนุมัติ Trial");
     }
+    const effectiveDays = group
+      ? Math.max(1, Math.min(365, Math.trunc(Number(group.trial_days) || 1)))
+      : Math.max(1, Math.min(365, Math.trunc(Number(body.days) || 1)));
     return this.trials.authorizeUser({
       userId: body.userId,
-      days: body.days,
+      days: effectiveDays,
       mt5AccountId: body.mt5AccountId || null,
       approvedBy: body.approvedBy || "OWNER",
       accessGroupId: body.accessGroupId || null
