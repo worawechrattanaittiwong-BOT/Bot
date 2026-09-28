@@ -48,7 +48,7 @@ Assert-Contains $workerApi "'membershipCutoff',true" 'membership cutoff telemetr
 Assert-Contains $botApi 'CUSTOMER_CLOUD_ACCOUNT_SWITCH_STOP_REQUESTED' 'customer Cloud account switch stop flow missing'
 Assert-Contains $botApi 'pendingCloudStop: true' 'customer account switch must wait for verified VPS stop'
 Assert-Contains $botApi 'DELETE FROM mt5_credentials WHERE mt5_account_id=$1' 'old Cloud trading credential must be removed on account replacement'
-Assert-Contains $botApi "runtime_stop_state=CASE WHEN $3='CLOUD' THEN 'NONE'" 'new Cloud account must rearm the existing VPS runtime'
+Assert-Contains $botApi "runtime_stop_state=CASE WHEN `$3='CLOUD' THEN 'NONE'" 'new Cloud account must rearm the existing VPS runtime'
 Assert-Contains $dashboard 'ปิด MT5 เดิมบน VPS แล้ว · พร้อมเชื่อมบัญชี MT5 ใหม่' 'customer account-switch completion UX missing'
 Assert-Contains $dashboard 'VPS MEMBERSHIP · เหลือน้อยกว่า 3 วัน' 'three-day VPS renewal warning missing'
 Assert-Contains $dashboard 'การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ' 'expiry warning must explain broker positions remain open'
