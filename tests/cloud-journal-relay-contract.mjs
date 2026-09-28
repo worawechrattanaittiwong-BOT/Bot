@@ -88,7 +88,7 @@ assert.match(
 );
 assert.match(
   performancePage,
-  /ข้อมูลกำไรจาก MT5 ถูกต้อง แต่รายละเอียดการเทรดยังไม่ครบ/,
+  /รายละเอียดการเทรดยังซิงก์ไม่ครบ/,
   "Performance UI must explain incomplete journal detail instead of showing misleading zeros"
 );
 assert.match(
