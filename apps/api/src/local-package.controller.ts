@@ -67,12 +67,17 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
   }
 
   async catalog() {
+    const controls = await this.db.one(
+      "SELECT sales_paused FROM production_controls WHERE id=1"
+    );
+    const salesPaused = Boolean(controls?.sales_paused);
     return {
       packages: (await this.db.query(
         "SELECT months,price_satang,enabled,updated_at FROM local_packages ORDER BY months"
       )).rows,
       paymentMode: paymentMode(),
-      checkoutEnabled: this.checkoutEnabled()
+      salesPaused,
+      checkoutEnabled: this.checkoutEnabled() && !salesPaused
     };
   }
 
@@ -326,6 +331,12 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
 
     const order = await this.db.transaction(async (tx: PoolClient) => {
       await tx.query("SELECT pg_advisory_xact_lock(740092)");
+      const controls = (
+        await tx.query("SELECT sales_paused FROM production_controls WHERE id=1 FOR UPDATE")
+      ).rows[0];
+      if (controls?.sales_paused) {
+        throw new ConflictException("ขณะนี้ผู้ดูแลปิดการขายแพ็กเกจทั้งหมดชั่วคราว");
+      }
 
       const user = (
         await tx.query("SELECT status FROM users WHERE id=$1 FOR UPDATE", [userId])
