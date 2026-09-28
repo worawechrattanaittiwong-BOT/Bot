@@ -1225,7 +1225,11 @@ export default function DashboardPage() {
   const cloudSlotSummary = {
     total:cloudSlots.length,
     online:cloudSlots.filter((slot:any)=>Boolean(slot?.mt5_online)).length,
-    ready:cloudSlots.filter((slot:any)=>!slot?.mt5_account_id && ["ACTIVE","AVAILABLE"].includes(String(slot?.status || "").toUpperCase())).length,
+    ready:cloudSlots.filter((slot:any)=>
+      !slot?.mt5_account_id &&
+      ["ACTIVE","AVAILABLE"].includes(String(slot?.status || "").toUpperCase()) &&
+      (ownerCloudAccess || Boolean(slot?.subscription_active))
+    ).length,
     expiring:cloudSlots.filter((slot:any)=>{
       if (ownerCloudAccess || !slot?.subscription_expires_at) return false;
       const expires = new Date(slot.subscription_expires_at).getTime();
@@ -1241,6 +1245,8 @@ export default function DashboardPage() {
   const selectedVpsPackage = vpsPackages.find(pack=>Number(pack.months)===Number(vpsPurchaseMonths)) || vpsPackages[0] || null;
   const vpsRenewSlot = cloudSlots.find((slot:any)=>String(slot?.id || "")===String(vpsRenewSlotId || "")) || null;
   const canBuyVpsSlot = Boolean(cloudCatalog?.checkoutEnabled) && Number(cloudCatalog?.available || 0) > 0;
+  const canCheckoutVpsOrder = Boolean(cloudCatalog?.checkoutEnabled) &&
+    (Boolean(vpsRenewSlotId) || Number(cloudCatalog?.available || 0) > 0);
 
   const accessExpiry = entitlement?.expiresAt ? new Date(entitlement.expiresAt) : null;
   const accessRemaining = accessExpiry ? Math.max(0, accessExpiry.getTime() - accessClockNow) : null;
@@ -3836,18 +3842,18 @@ export default function DashboardPage() {
                   </div>
                 </section>
 
-                {!canBuyVpsSlot && (
+                {!canCheckoutVpsOrder && (
                   <div className="vps-slot-capacity-warning">
-                    {Number(cloudCatalog?.available || 0) <= 0
-                      ? "VPS Capacity เต็มชั่วคราว ระบบจะไม่รับเงินจนกว่าจะมี Capacity ว่าง"
-                      : "ระบบขาย VPS Slot ยังไม่พร้อมใช้งาน"}
+                    {!cloudCatalog?.checkoutEnabled
+                      ? "ระบบขาย VPS Slot ยังไม่พร้อมใช้งาน"
+                      : "VPS Capacity เต็มชั่วคราว ระบบจะไม่รับเงินสำหรับ Slot ใหม่จนกว่าจะมี Capacity ว่าง"}
                   </div>
                 )}
 
                 <button
                   type="button"
                   className="btn primary btn-lg vps-slot-checkout-button"
-                  disabled={vpsPurchaseBusy || !selectedVpsPackage || !canBuyVpsSlot}
+                  disabled={vpsPurchaseBusy || !selectedVpsPackage || !canCheckoutVpsOrder}
                   onClick={()=>void createVpsSlotOrder()}
                 >
                   {vpsPurchaseBusy ? "กำลังสร้างรายการ..." : vpsRenewSlot ? "สร้างรายการต่ออายุ" : "สร้างรายการซื้อ VPS Slot"}
