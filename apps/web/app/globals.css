@@ -6982,22 +6982,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
     justify-content:flex-end;
     gap:7px;
     flex:0 0 auto;
-  }
-  .mobile-app-head .owner-mobile-nav-trigger-wrap{
-    position:static!important;
-    inset:auto!important;
-    right:auto!important;
-    bottom:auto!important;
-    width:auto!important;
-    z-index:auto!important;
-    pointer-events:auto!important;
-  }
-  .mobile-app-head .owner-mobile-nav-trigger{
-    min-width:78px!important;
-    min-height:40px!important;
-    padding:7px 10px!important;
-    border-radius:12px!important;
-    gap:6px!important;
+    padding-right:104px;
   }
 
   .cc-overview{
