@@ -251,9 +251,12 @@ export default function PackagesPage() {
   }, [cooldown > 0]);
 
   const pendingLocal = localOrders.find(order => ["CREATING", "PENDING", "REVIEW"].includes(order.status));
-  const primaryCloudOrders = cloudOrders.filter(order =>
-    String(order.purchase_type || "PACKAGE").toUpperCase() !== "ADDON" &&
-    String(order.slot_type || "PERSONAL").toUpperCase() !== "ADDON"
+  const primaryCloudOrders = useMemo(
+    () => cloudOrders.filter(order =>
+      String(order.purchase_type || "PACKAGE").toUpperCase() !== "ADDON" &&
+      String(order.slot_type || "PERSONAL").toUpperCase() !== "ADDON"
+    ),
+    [cloudOrders]
   );
   const pendingCloud = primaryCloudOrders.find(order => ["CREATING", "PENDING", "REVIEW"].includes(order.status));
 
