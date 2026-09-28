@@ -197,7 +197,7 @@
 
   .timeframe > strong,
   .timeframe > small {
-    font-size: 9px;
+    font-size: var(--ui-type-caption);
   }
 
   .trendLine {
@@ -208,7 +208,7 @@
 
   .alignment {
     margin: 6px 0 0;
-    font-size: 10px;
+    font-size: var(--ui-type-caption);
   }
 
   .marketContext {
@@ -218,7 +218,7 @@
 
   .marketContext > span,
   .marketContext b {
-    font-size: 10px;
+    font-size: var(--ui-type-caption);
   }
 
   .timeline {
@@ -233,11 +233,11 @@
 
   .timelineTitle h3 {
     margin-bottom: 2px;
-    font-size: 10px;
+    font-size: var(--ui-type-caption);
   }
 
   .timelineTitle small {
-    font-size: 9px;
+    font-size: var(--ui-type-caption);
   }
 
   /* The active session is already highlighted in the rail, so the separate
@@ -257,12 +257,12 @@
   }
 
   .sessionItem b {
-    font-size: 9px;
+    font-size: var(--ui-type-caption);
   }
 
   .sessionItem small {
     margin-top: 1px;
-    font-size: 8px;
+    font-size: var(--ui-type-caption);
   }
 
   .sessionDot {
@@ -280,7 +280,7 @@
 
   .eventHistoryLabel {
     padding-top: 3px;
-    font-size: 9px;
+    font-size: var(--ui-type-caption);
   }
 
   .events {
@@ -295,7 +295,7 @@
   .event time,
   .event b,
   .event p {
-    font-size: 9px;
+    font-size: var(--ui-type-caption);
   }
 
   .event p {
