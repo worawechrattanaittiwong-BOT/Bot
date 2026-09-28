@@ -9,6 +9,7 @@ import {
   OwnerSidebar
 } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
+import { useSystemPopup } from "../../components/SystemPopupProvider";
 import styles from "./packages.module.css";
 import legacy from "../../components/cloud.module.css";
 
@@ -119,6 +120,7 @@ function logout() {
 }
 
 export default function PackagesPage() {
+  const { confirmPopup } = useSystemPopup();
   const [account, setAccount] = useState<Account | null>(null);
   const [trial, setTrial] = useState<TrialStatus | null>(null);
   const [localCatalog, setLocalCatalog] = useState<Catalog | null>(null);
@@ -367,12 +369,18 @@ export default function PackagesPage() {
 
   async function setGlobalSalesPaused(paused: boolean) {
     if (!isOwner || busy) return;
-    if (
-      paused &&
-      !window.confirm(
-        "ปิดการขายแพ็กเกจ Local และ Cloud ทั้งหมดชั่วคราว?\n\nลูกค้าจะสร้างรายการชำระเงินใหม่ไม่ได้ แต่รายการที่สร้างไว้แล้วจะไม่ถูกยกเลิก"
-      )
-    ) return;
+    if (paused) {
+      const confirmed = await confirmPopup({
+        title: "ปิดการขายทั้งหมด",
+        tone: "warning",
+        message:
+          "ปิดการขายแพ็กเกจ Local และ Cloud ทั้งหมดชั่วคราว?\n\n" +
+          "ลูกค้าจะสร้างรายการชำระเงินใหม่ไม่ได้ แต่รายการที่สร้างไว้แล้วจะไม่ถูกยกเลิก",
+        confirmLabel: "ปิดการขายทั้งหมด",
+        cancelLabel: "ยกเลิก"
+      });
+      if (!confirmed) return;
+    }
 
     setBusy("sales-control");
     try {
