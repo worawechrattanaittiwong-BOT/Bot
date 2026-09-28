@@ -2869,7 +2869,18 @@ export default function DashboardPage() {
                   <div className="cc-v6-gold-stage"><ScenovaIcon name="gold" size={52}/><i/><i/></div>
                   <div className="cc-v6-symbol-copy">
                     <span className="cc-v4-eyebrow">SCENOVA · LIVE EXECUTION</span>
-                    <h2>{metrics.symbol || settings.symbol}</h2>
+                    <div className="cc-symbol-title-row">
+                      <h2>{metrics.symbol || settings.symbol}</h2>
+                      {showCompactAccessCountdown && (
+                        <span
+                          className="cc-membership-mobile-countdown"
+                          title={"เวลาสมาชิกคงเหลือ · หมดอายุ "+(accessExpiry ? accessExpiry.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"medium",hour12:false}) : "—")}
+                          aria-label={"เวลาสมาชิกคงเหลือ "+accessCompactCountdown}
+                        >
+                          {accessCompactCountdown}
+                        </span>
+                      )}
+                    </div>
                     <div className="cc-v6-symbol-chips" aria-label="Runtime connection">
                       <span title="ระบบที่บัญชีนี้กำลังใช้งาน">{runtimeModeLabel}</span>
                       <span title="ตำแหน่ง SCENOVA Trading Node">{runtimeLocationLabel}</span>
