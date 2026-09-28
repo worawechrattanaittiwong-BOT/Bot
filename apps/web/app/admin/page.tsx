@@ -584,10 +584,19 @@ export default function AdminPage() {
   const selectedPlan = planOptions.find(p=>p.code===plan) || planOptions[0];
   const selectedCustomer = users.find((u:any)=>u.id===selectedCustomerId) || null;
   const memberships = (user:any) => Array.isArray(user?.memberships) ? user.memberships : [];
-  const hasActivePlan = (user:any, planCode:string) =>
-    memberships(user).some((m:any)=>m.plan_code===planCode && m.active);
+  const isCurrentMembership = (m:any) =>
+    m?.status==="ACTIVE" && Boolean(m?.expires_at) && new Date(m.expires_at).getTime()>Date.now();
+  const currentModeMembership = (user:any, mode:string) =>
+    memberships(user).find((m:any)=>m.mode===mode && isCurrentMembership(m)) || null;
+  const hasCurrentPlan = (user:any, planCode:string) =>
+    memberships(user).some((m:any)=>m.plan_code===planCode && isCurrentMembership(m));
   const hasActiveMode = (user:any, mode:string) =>
     memberships(user).some((m:any)=>m.mode===mode && m.active);
+  const modeAccessLabel = (user:any, mode:string) => {
+    const current=currentModeMembership(user,mode);
+    if (!current) return "OFF";
+    return current.group_enabled===false ? "PAUSED" : "ACTIVE";
+  };
 
   const maintenance = system?.maintenance || { status:"OFF", summary:{ openPositions:0, runningInstances:0 }, blockers:[] };
   const maintenanceBlockers = Array.isArray(maintenance.blockers) ? maintenance.blockers : [];
@@ -834,7 +843,7 @@ export default function AdminPage() {
                                 ? Math.max(1,Math.ceil(Number(user.trial_authorization_minutes)/1440))
                                 : 1
                           );
-                          const mode=memberships(user).find((m:any)=>m.active)?.mode;
+                          const mode=memberships(user).find((m:any)=>isCurrentMembership(m))?.mode;
                           if(mode==="CLOUD") setPlan("CLOUD_30D");
                           else if(mode==="LOCAL") setPlan("LOCAL_30D");
                           setSelectedAccessGroupId("");
@@ -898,8 +907,16 @@ export default function AdminPage() {
                         <div className="owner-customer-snapshot">
                           <div><small>MT5</small><b>{selectedCustomer.account_number || "ยังไม่เชื่อม"}</b><span>{selectedCustomer.mt5_online ? "Online" : "Offline / Waiting"}</span></div>
                           <div><small>Trial</small><b>{selectedCustomer.trial_status || (selectedCustomer.trial_authorization_status==="PENDING_BIND"?"PREAPPROVED":selectedCustomer.trial_authorization_status==="BLOCKED"?"BLOCKED":selectedCustomer.trial_request_status==="PENDING"?"PENDING":"NONE")}</b><span>{selectedCustomer.trial_expires_at ? "ถึง "+new Date(selectedCustomer.trial_expires_at).toLocaleDateString("th-TH") : selectedCustomer.trial_duration_minutes ? Math.ceil(Number(selectedCustomer.trial_duration_minutes)/1440)+" วัน" : selectedCustomer.trial_authorization_minutes ? Math.ceil(Number(selectedCustomer.trial_authorization_minutes)/1440)+" วัน · รอ MT5" : "ยังไม่กำหนด"}</span></div>
-                          <div><small>Local</small><b>{hasActiveMode(selectedCustomer,"LOCAL")?"ACTIVE":"OFF"}</b><span>{memberships(selectedCustomer).find((m:any)=>m.mode==="LOCAL"&&m.active)?.expires_at ? "ถึง "+new Date(memberships(selectedCustomer).find((m:any)=>m.mode==="LOCAL"&&m.active).expires_at).toLocaleDateString("th-TH") : "ไม่มีสิทธิ์"}</span></div>
-                          <div><small>Cloud VPS</small><b>{hasActiveMode(selectedCustomer,"CLOUD")?"ACTIVE":"OFF"}</b><span>{memberships(selectedCustomer).find((m:any)=>m.mode==="CLOUD"&&m.active)?.expires_at ? "ถึง "+new Date(memberships(selectedCustomer).find((m:any)=>m.mode==="CLOUD"&&m.active).expires_at).toLocaleDateString("th-TH") : "ไม่มีสิทธิ์"}</span></div>
+                          <div>
+                            <small>Local</small>
+                            <b>{modeAccessLabel(selectedCustomer,"LOCAL")}</b>
+                            <span>{currentModeMembership(selectedCustomer,"LOCAL")?.expires_at ? "ถึง "+new Date(currentModeMembership(selectedCustomer,"LOCAL").expires_at).toLocaleDateString("th-TH") : "ไม่มีสิทธิ์"}</span>
+                          </div>
+                          <div>
+                            <small>Cloud VPS</small>
+                            <b>{modeAccessLabel(selectedCustomer,"CLOUD")}</b>
+                            <span>{currentModeMembership(selectedCustomer,"CLOUD")?.expires_at ? "ถึง "+new Date(currentModeMembership(selectedCustomer,"CLOUD").expires_at).toLocaleDateString("th-TH") : "ไม่มีสิทธิ์"}</span>
+                          </div>
                         </div>
 
                         <div className="owner-control-grid">
@@ -913,12 +930,12 @@ export default function AdminPage() {
                               <button type="button" className={"owner-access-option "+(plan==="LOCAL_30D"?"active":"")} onClick={()=>setPlan("LOCAL_30D")}>
                                 <span className="owner-access-check">{plan==="LOCAL_30D"?"✓":""}</span>
                                 <span><b>Local MT5</b><small>ใช้ MT5 บนคอมลูกค้า</small></span>
-                                {hasActiveMode(selectedCustomer,"LOCAL") && <em>ACTIVE</em>}
+                                {currentModeMembership(selectedCustomer,"LOCAL") && <em>{modeAccessLabel(selectedCustomer,"LOCAL")}</em>}
                               </button>
                               <button type="button" className={"owner-access-option "+(plan==="CLOUD_30D"?"active":"")} onClick={()=>setPlan("CLOUD_30D")}>
                                 <span className="owner-access-check">{plan==="CLOUD_30D"?"✓":""}</span>
                                 <span><b>Cloud VPS</b><small>ใช้ MT5 บน Trading VPS</small></span>
-                                {hasActiveMode(selectedCustomer,"CLOUD") && <em>ACTIVE</em>}
+                                {currentModeMembership(selectedCustomer,"CLOUD") && <em>{modeAccessLabel(selectedCustomer,"CLOUD")}</em>}
                               </button>
                             </div>
 
@@ -936,11 +953,11 @@ export default function AdminPage() {
                             </div>
                             <button
                               className="btn primary owner-wide-action"
-                              disabled={hasActivePlan(selectedCustomer,selectedPlan.code) || Boolean(customerAction)}
+                              disabled={hasCurrentPlan(selectedCustomer,selectedPlan.code) || Boolean(customerAction)}
                               onClick={()=>activate(selectedCustomer,selectedPlan.code)}
                             >
-                              {hasActivePlan(selectedCustomer,selectedPlan.code)
-                                ? selectedPlan.label+" ใช้งานอยู่ — เพิ่มวันด้านล่าง"
+                              {hasCurrentPlan(selectedCustomer,selectedPlan.code)
+                                ? selectedPlan.label+" มีสมาชิกอยู่แล้ว — ปรับวันด้านล่าง"
                                 : "เปิด "+(selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" "+days+" วัน"}
                             </button>
 
