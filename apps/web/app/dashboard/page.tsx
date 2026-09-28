@@ -3476,7 +3476,7 @@ function MembershipCountdownCard(props:{remainingMs:number;expiresAt:Date;planCo
             <div style={{fontVariantNumeric:"tabular-nums",fontSize:"clamp(20px,5vw,28px)",lineHeight:1,fontWeight:850,letterSpacing:".035em",color:expired?"#ff91aa":"#eee8ff"}}>
               {block.value}
             </div>
-            <div style={{fontSize:10,color:"#837d99",marginTop:7,fontWeight:700}}>{block.label}</div>
+            <div style={{fontSize:11,color:"#837d99",marginTop:7,fontWeight:700}}>{block.label}</div>
           </div>
         ))}
       </div>
