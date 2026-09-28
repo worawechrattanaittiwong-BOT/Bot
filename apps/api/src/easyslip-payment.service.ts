@@ -673,7 +673,7 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
                CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
                'ACTIVE','Cloud Trading'
              FROM license_slots
-             WHERE owner_user_id=$1 AND mode='CLOUD'
+             WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED'
              RETURNING *`,
             [userId, subscription.id]
           )
