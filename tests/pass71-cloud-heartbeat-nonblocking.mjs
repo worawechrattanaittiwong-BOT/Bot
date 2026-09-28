@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 const ea = fs.readFileSync("mt5/FastBasketBot.mq5", "utf8");
+const release = fs.readFileSync("apps/api/src/release-version.ts", "utf8");
 
 function requireText(needle, label) {
   if (!ea.includes(needle)) throw new Error("Pass 7.1 missing: " + label);
@@ -12,8 +13,13 @@ function rejectMatch(pattern, label) {
   if (pattern.test(ea)) throw new Error("Pass 7.1 violated: " + label);
 }
 
-requireText('#property version   "1.0.90"', "EA version bump");
-requireText('#define SCENOVA_EA_VERSION "1.0.90"', "runtime version bump");
+const propertyVersion = ea.match(/#property\s+version\s+"([^"]+)"/)?.[1];
+const runtimeVersion = ea.match(/#define\s+SCENOVA_EA_VERSION\s+"([^"]+)"/)?.[1];
+const promotedVersion = release.match(/DEFAULT_EA_VERSION\s*=\s*"([^"]+)"/)?.[1];
+if (!propertyVersion || !runtimeVersion || !promotedVersion)
+  throw new Error("Pass 7.1 missing: EA release version metadata");
+if (propertyVersion !== runtimeVersion || runtimeVersion !== promotedVersion)
+  throw new Error("Pass 7.1 violated: EA source/runtime/promoted versions must match");
 requireText("#define CLOUD_RELAY_PENDING_CODE -5902", "explicit pending transport state");
 requireText("bool   g_cloudHeartbeatPending = false;", "persistent relay pending state");
 requireText("g_cloudHeartbeatStartedMs=GetTickCount64();", "request start timestamp");
