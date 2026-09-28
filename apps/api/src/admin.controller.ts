@@ -108,16 +108,15 @@ export class AdminController {
              'expires_at',sub.expires_at,
              'slots',p.max_mt5_accounts,
              'allow_resale',p.allow_resale,
-             'group_id',ag.id,
-             'group_name',ag.name,
-             'group_enabled',COALESCE(ag.enabled,true),
-             'active',(sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now() AND COALESCE(ag.enabled,true))
+             'group_id',NULL,
+             'group_name',NULL,
+             'group_enabled',true,
+             'active',(sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now())
            )
            ORDER BY p.mode,sub.expires_at DESC
          ) AS memberships
          FROM subscriptions sub
          JOIN plans p ON p.id=sub.plan_id
-         LEFT JOIN access_groups ag ON ag.id=sub.access_group_id
          WHERE sub.user_id=u.id
            AND sub.status='ACTIVE'
            AND sub.expires_at>now()
