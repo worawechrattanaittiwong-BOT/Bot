@@ -179,6 +179,7 @@ export default function DashboardPage() {
   const statusDialogRef = useRef<HTMLDialogElement | null>(null);
   const symbolDialogRef = useRef<HTMLDialogElement | null>(null);
   const ownerVpsDialogRef = useRef<HTMLDialogElement | null>(null);
+  const cloudMt5DialogRef = useRef<HTMLDialogElement | null>(null);
   const vpsSlotDialogRef = useRef<HTMLDialogElement | null>(null);
   const [cloudCatalog, setCloudCatalog] = useState<CloudCatalog | null>(null);
   const [cloudOrders, setCloudOrders] = useState<CloudOrder[]>([]);
@@ -219,6 +220,8 @@ export default function DashboardPage() {
   const [brokerServer, setBrokerServer] = useState("");
   const [customBrokerServer, setCustomBrokerServer] = useState("");
   const [tradingPassword, setTradingPassword] = useState("");
+  const [cloudMt5DialogMode, setCloudMt5DialogMode] = useState<"NEW"|"RECONNECT">("NEW");
+  const [cloudMt5DialogAccountId, setCloudMt5DialogAccountId] = useState("");
   const [installToken, setInstallToken] = useState("");
   const [installInstanceId, setInstallInstanceId] = useState("");
   const [activationMessage, setActivationMessage] = useState("");
