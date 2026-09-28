@@ -126,8 +126,13 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
     const paymentAccounts = mode === "EASYSLIP"
       ? await this.easyslip.listBankAccounts().catch(() => [])
       : [];
+    const [packages, addonPackages] = await Promise.all([
+      this.db.query("SELECT * FROM cloud_packages ORDER BY months"),
+      this.db.query("SELECT * FROM cloud_addon_packages ORDER BY months")
+    ]);
     return {
-      packages: (await this.db.query("SELECT * FROM cloud_packages ORDER BY months")).rows,
+      packages: packages.rows,
+      addonPackages: addonPackages.rows,
       available,
       provisioningPaused,
       salesPaused,
