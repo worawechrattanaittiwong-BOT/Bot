@@ -148,6 +148,7 @@ export default function DashboardPage() {
   const [symbolBusy, setSymbolBusy] = useState(false);
   const [serverOperation, setServerOperation] = useState<any>(null);
   const [activeView, setActiveView] = useState<View>("overview");
+  const [accessClockNow, setAccessClockNow] = useState(()=>Date.now());
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const selectedSlotIdRef = useRef("");
   const dashboardLoadInFlightRef = useRef(false);
@@ -768,6 +769,14 @@ export default function DashboardPage() {
     ? new Date(lastServerContactEpoch * 1000).toLocaleString("th-TH", {hour12:false})
     : "—";
   const entitlement = data?.entitlement;
+
+  useEffect(() => {
+    if (activeView !== "account" || !entitlement?.expiresAt) return;
+    setAccessClockNow(Date.now());
+    const timer = window.setInterval(() => setAccessClockNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [activeView, entitlement?.expiresAt]);
+
   const cloudMigrationTarget = (data?.slots || []).find((slot:any) =>
     String(slot?.mode || "").toUpperCase() === "CLOUD" &&
     Boolean(slot?.subscription_active) &&
@@ -1116,11 +1125,7 @@ export default function DashboardPage() {
     : brokerServer;
 
   const accessExpiry = entitlement?.expiresAt ? new Date(entitlement.expiresAt) : null;
-  const accessRemaining = accessExpiry ? Math.max(0, accessExpiry.getTime() - Date.now()) : null;
-  const remainingText = accessRemaining === null ? "" :
-    Math.floor(accessRemaining / 3600000).toString().padStart(2,"0") + ":" +
-    Math.floor((accessRemaining % 3600000) / 60000).toString().padStart(2,"0") + ":" +
-    Math.floor((accessRemaining % 60000) / 1000).toString().padStart(2,"0");
+  const accessRemaining = accessExpiry ? Math.max(0, accessExpiry.getTime() - accessClockNow) : null;
 
   const accessLabel = useMemo(() => {
     if (!entitlement) return "ยังไม่มีสิทธิ์ใช้งาน";
@@ -3118,6 +3123,15 @@ export default function DashboardPage() {
 
         {activeView === "account" && (
           <div className="account-workspace">
+            {entitlement?.source === "SUBSCRIPTION" && accessExpiry && accessRemaining !== null && (
+              <MembershipCountdownCard
+                remainingMs={accessRemaining}
+                expiresAt={accessExpiry}
+                planCode={String(entitlement?.planCode || "")}
+                mode={String(data.selectedSlot?.mode || "")}
+              />
+            )}
+
             {data.selectedSlot?.mode === "LOCAL" ? (
               <>
                 <Mt5ConnectionExperience
@@ -3361,6 +3375,112 @@ export default function DashboardPage() {
         )}
       </main>
     </div>
+  );
+}
+
+function MembershipCountdownCard(props:{remainingMs:number;expiresAt:Date;planCode?:string;mode?:string}) {
+  const totalSeconds = Math.max(0, Math.floor(props.remainingMs / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const expired = props.remainingMs <= 0;
+  const blocks = [
+    { value:String(days).padStart(2,"0"), label:"วัน" },
+    { value:String(hours).padStart(2,"0"), label:"ชม." },
+    { value:String(minutes).padStart(2,"0"), label:"นาที" },
+    { value:String(seconds).padStart(2,"0"), label:"วินาที" }
+  ];
+
+  return (
+    <section
+      aria-live="polite"
+      style={{
+        position:"relative",
+        overflow:"hidden",
+        border:"1px solid rgba(132,92,246,.38)",
+        borderRadius:22,
+        padding:"18px",
+        background:"linear-gradient(135deg,rgba(17,15,38,.98),rgba(8,12,27,.98) 58%,rgba(44,20,88,.92))",
+        boxShadow:"0 18px 44px rgba(13,8,35,.28), inset 0 1px 0 rgba(255,255,255,.04)"
+      }}
+    >
+      <div
+        aria-hidden="true"
+        style={{
+          position:"absolute",
+          width:180,
+          height:180,
+          borderRadius:"50%",
+          right:-70,
+          top:-95,
+          background:"radial-gradient(circle,rgba(139,92,246,.24),rgba(139,92,246,0) 68%)",
+          pointerEvents:"none"
+        }}
+      />
+      <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+          <span
+            style={{
+              width:42,
+              height:42,
+              borderRadius:14,
+              display:"grid",
+              placeItems:"center",
+              border:"1px solid rgba(150,112,255,.38)",
+              background:"rgba(112,69,224,.13)",
+              boxShadow:"inset 0 0 24px rgba(127,82,255,.08)"
+            }}
+          >
+            <ScenovaIcon name="clock" size={21}/>
+          </span>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:".14em",color:"#9c8bc8"}}>MEMBERSHIP TIME</div>
+            <div style={{fontSize:18,fontWeight:800,color:"#f5f1ff",marginTop:2}}>
+              {expired ? "สมาชิกหมดอายุแล้ว" : "เวลาสมาชิกคงเหลือ"}
+            </div>
+            <div style={{fontSize:12,color:"#948eac",marginTop:3}}>
+              {(props.planCode ? props.planCode+" · " : "") + (props.mode ? props.mode+" · " : "")}
+              หมดอายุ {props.expiresAt.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"medium",hour12:false})}
+            </div>
+          </div>
+        </div>
+        <span
+          style={{
+            padding:"7px 11px",
+            borderRadius:999,
+            fontSize:11,
+            fontWeight:800,
+            letterSpacing:".08em",
+            color:expired ? "#ff9db3" : "#a9f3dc",
+            border:expired ? "1px solid rgba(255,100,137,.28)" : "1px solid rgba(75,220,174,.24)",
+            background:expired ? "rgba(255,72,112,.08)" : "rgba(50,210,160,.08)"
+          }}
+        >
+          {expired ? "EXPIRED" : "ACTIVE · LIVE"}
+        </span>
+      </div>
+
+      <div style={{position:"relative",display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,marginTop:16}}>
+        {blocks.map((block)=>(
+          <div
+            key={block.label}
+            style={{
+              textAlign:"center",
+              padding:"12px 5px 10px",
+              borderRadius:14,
+              border:"1px solid rgba(137,108,213,.18)",
+              background:"rgba(7,9,22,.52)"
+            }}
+          >
+            <div style={{fontVariantNumeric:"tabular-nums",fontSize:"clamp(20px,5vw,28px)",lineHeight:1,fontWeight:850,letterSpacing:".035em",color:expired?"#ff91aa":"#eee8ff"}}>
+              {block.value}
+            </div>
+            <div style={{fontSize:10,color:"#837d99",marginTop:7,fontWeight:700}}>{block.label}</div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
