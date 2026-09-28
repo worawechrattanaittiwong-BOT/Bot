@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.90"
-#define SCENOVA_EA_VERSION "1.0.90"
-#define SCENOVA_PRODUCT_VERSION "1.0.90"
+#property version   "1.0.91"
+#define SCENOVA_EA_VERSION "1.0.91"
+#define SCENOVA_PRODUCT_VERSION "1.0.91"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -6618,9 +6618,16 @@ void SendHeartbeat()
    else
       DeleteTradingFibonacci();
 
+   bool commandCanAck=true;
    if(command == "CLOSE_ALL" && desired == "STOPPED")
    {
       ForceFlatResetAccount("REMOTE_CLOSE_ALL");
+   }
+   else if(command == "JOURNAL_REPLAY_TODAY")
+   {
+      commandCanAck=ReplayTodayTradeJournal();
+      if(commandCanAck)
+         PublishRealtimeEvent("JOURNAL_REPLAY_TODAY");
    }
 
    if(StateText() != realtimeStateBeforeControl)
@@ -6637,7 +6644,7 @@ void SendHeartbeat()
             ScenovaAccountPositionCount()==0 &&
             ScenovaAccountPendingCount()==0
          );
-      if(closeConfirmed)
+      if(closeConfirmed && commandCanAck)
          AckCommand(commandId);
    }
 }
@@ -6978,6 +6985,76 @@ bool PostTradeJournalDeal(ulong dealTicket)
 
    g_journalFailed++;
    return false;
+}
+
+bool ReplayTodayTradeJournal()
+{
+   if(MQLInfoInteger(MQL_TESTER))
+      return true;
+
+   datetime from=BrokerDayStart();
+   datetime to=TimeCurrent();
+   if(!HistorySelect(from,to))
+   {
+      Print("JOURNAL_REPLAY_TODAY HistorySelect failed err=",GetLastError());
+      return false;
+   }
+
+   int totalDeals=HistoryDealsTotal();
+   ulong dealTickets[];
+   ArrayResize(dealTickets,totalDeals);
+   for(int i=0;i<totalDeals;i++)
+      dealTickets[i]=HistoryDealGetTicket(i);
+
+   bool allPersisted=true;
+   int eligible=0;
+   int persisted=0;
+
+   for(int i=0;i<totalDeals;i++)
+   {
+      ulong deal=dealTickets[i];
+      if(deal==0 || !HistoryDealSelect(deal))
+         continue;
+      if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol)
+         continue;
+
+      long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+      if(entry!=DEAL_ENTRY_IN &&
+         entry!=DEAL_ENTRY_OUT &&
+         entry!=DEAL_ENTRY_OUT_BY &&
+         entry!=DEAL_ENTRY_INOUT)
+         continue;
+
+      long dealType=HistoryDealGetInteger(deal,DEAL_TYPE);
+      if(dealType!=DEAL_TYPE_BUY && dealType!=DEAL_TYPE_SELL)
+         continue;
+
+      long magic=HistoryDealGetInteger(deal,DEAL_MAGIC);
+      bool scenovaDeal=IsScenovaMagic(magic);
+      if(!scenovaDeal &&
+         (entry==DEAL_ENTRY_OUT ||
+          entry==DEAL_ENTRY_OUT_BY ||
+          entry==DEAL_ENTRY_INOUT))
+      {
+         scenovaDeal=IsScenovaMagic(ScenovaOwnerMagicForDeal(deal));
+      }
+      if(!scenovaDeal)
+         continue;
+
+      eligible++;
+      if(PostTradeJournalDeal(deal))
+         persisted++;
+      else
+         allPersisted=false;
+   }
+
+   Print(
+      "JOURNAL_REPLAY_TODAY from=",TimeToString(from,TIME_DATE|TIME_SECONDS),
+      " eligible=",eligible,
+      " persisted=",persisted,
+      " success=",allPersisted
+   );
+   return allPersisted;
 }
 
 bool PostRescueJournalDeal(ulong dealTicket)
