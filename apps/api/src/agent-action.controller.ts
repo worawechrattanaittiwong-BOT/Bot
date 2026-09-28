@@ -94,12 +94,14 @@ export class AgentActionController {
          FROM license_slots ls
          JOIN subscriptions s ON s.id=ls.subscription_id
          JOIN plans p ON p.id=s.plan_id
+         LEFT JOIN access_groups ag ON ag.id=s.access_group_id
          WHERE ls.id=$1
            AND ls.assigned_user_id=$2
            AND ls.status='ACTIVE'
            AND s.status='ACTIVE'
            AND s.starts_at<=now()
            AND s.expires_at>now()
+           AND COALESCE(ag.enabled,true)
            AND p.mode=$3
          LIMIT 1`,
         [instance.slot_id, userId, instance.mode]
@@ -111,15 +113,17 @@ export class AgentActionController {
 
     if (instance.mt5_account_id) {
       const trial = await this.db.one(
-        `SELECT id,status
-         FROM trial_grants
-         WHERE user_id=$1
-           AND mt5_account_id=$2
+        `SELECT tg.id,tg.status
+         FROM trial_grants tg
+         LEFT JOIN access_groups ag ON ag.id=tg.access_group_id
+         WHERE tg.user_id=$1
+           AND tg.mt5_account_id=$2
+           AND COALESCE(ag.enabled,true)
            AND (
-             status='APPROVED'
-             OR (status='ACTIVE' AND expires_at>now())
+             tg.status='APPROVED'
+             OR (tg.status='ACTIVE' AND tg.expires_at>now())
            )
-         ORDER BY created_at DESC
+         ORDER BY tg.created_at DESC
          LIMIT 1`,
         [userId, instance.mt5_account_id]
       );
