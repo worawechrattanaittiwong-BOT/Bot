@@ -177,7 +177,9 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
         await tx.query("UPDATE license_slots SET subscription_id=$2,status='ACTIVE',updated_at=now() WHERE id=$1", [slot.id, subscription.id]);
       } else {
         slot = (await tx.query(`INSERT INTO license_slots(owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label)
-          SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,'PERSONAL','ACTIVE','Cloud Trading'
+          SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
+          CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
+          'ACTIVE','Cloud Trading'
           FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' RETURNING *`, [order.user_id, subscription.id])).rows[0];
       }
       await tx.query("UPDATE cloud_orders SET status='PAID',charge_id=$2,slot_id=$3,subscription_id=$4,paid_at=now() WHERE id=$1",
@@ -244,7 +246,9 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
       } else {
         slot = (await tx.query(
           `INSERT INTO license_slots(owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label)
-           SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,'PERSONAL','ACTIVE','Cloud Trading'
+           SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
+                  CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
+                  'ACTIVE','Cloud Trading'
            FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' RETURNING *`,
           [order.user_id, subscription.id]
         )).rows[0];

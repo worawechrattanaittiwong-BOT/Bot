@@ -7094,6 +7094,824 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 }
 
 
+/* ===== MT5 & EA · VPS Slot Manager ===== */
+.account-workspace-compact{
+  display:grid;
+  gap:14px;
+}
+.connection-mode-card{
+  padding:18px 20px;
+  border-color:rgba(131,111,197,.2);
+  background:linear-gradient(145deg,rgba(9,13,20,.96),rgba(8,11,18,.92));
+}
+.connection-mode-card .panel-head{
+  margin-bottom:14px;
+}
+.connection-mode-actions{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+.vps-buy-inline{
+  min-height:36px;
+  padding:8px 13px;
+  border-radius:11px;
+  white-space:nowrap;
+}
+
+.membership-compact-card{
+  min-height:78px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  padding:14px 16px;
+  border:1px solid rgba(127,96,219,.26);
+  border-radius:17px;
+  background:
+    radial-gradient(circle at 92% 0%,rgba(113,72,211,.16),transparent 34%),
+    linear-gradient(135deg,rgba(17,15,36,.96),rgba(8,11,20,.98));
+  box-shadow:0 14px 34px rgba(5,4,15,.18),inset 0 1px 0 rgba(255,255,255,.035);
+}
+.membership-compact-card.expired{
+  border-color:rgba(239,78,112,.28);
+  background:linear-gradient(135deg,rgba(35,12,21,.92),rgba(12,10,17,.98));
+}
+.membership-compact-left{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:11px;
+}
+.membership-compact-card .membership-countdown-icon{
+  width:38px;
+  height:38px;
+  flex:0 0 38px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(149,115,244,.32);
+  border-radius:12px;
+  background:rgba(109,72,204,.12);
+  color:#bca8f4;
+}
+.membership-compact-card .membership-countdown-eyebrow{
+  color:#8d81ae;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.13em;
+}
+.membership-compact-card .membership-countdown-status{
+  margin-top:2px;
+  color:#f1edf9;
+  font-size:15px;
+  font-weight:800;
+  line-height:1.25;
+}
+.membership-compact-card .membership-countdown-meta{
+  margin-top:3px;
+  color:#8f8aa0;
+  font-size:11px;
+  line-height:1.35;
+}
+.membership-compact-right{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  flex:0 0 auto;
+}
+.membership-compact-time{
+  min-width:112px;
+  padding:8px 10px;
+  border:1px solid rgba(130,106,205,.22);
+  border-radius:10px;
+  background:rgba(5,8,15,.52);
+  color:#ddd4f7;
+  font-size:12px;
+  font-weight:850;
+  text-align:center;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.membership-countdown-badge{
+  padding:7px 10px;
+  border:1px solid rgba(71,213,169,.2);
+  border-radius:999px;
+  background:rgba(37,189,143,.07);
+  color:#9ce7cf;
+  font-size:11px;
+  font-weight:850;
+  letter-spacing:.07em;
+  white-space:nowrap;
+}
+.membership-compact-card.expired .membership-countdown-badge{
+  border-color:rgba(243,91,126,.24);
+  background:rgba(221,55,92,.08);
+  color:#ff9bb3;
+}
+
+.vps-connected-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  min-height:86px;
+  padding:15px 18px;
+  border-color:rgba(102,194,160,.16);
+  background:linear-gradient(145deg,rgba(8,15,17,.96),rgba(8,11,18,.98));
+}
+.vps-connected-copy{
+  min-width:0;
+}
+.vps-connected-title-row{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin-top:2px;
+}
+.vps-connected-title-row h2{
+  margin:0;
+  color:#edf5f2;
+  font-size:20px;
+  line-height:1.15;
+}
+.vps-connected-title-row .badge{
+  padding:5px 8px;
+  font-size:11px;
+}
+.vps-connected-copy .muted{
+  margin:5px 0 0;
+  font-size:11px;
+  line-height:1.35;
+}
+.vps-connected-actions{
+  flex:0 0 auto;
+}
+.vps-connected-actions .btn{
+  min-height:36px;
+  padding:8px 12px;
+  border-radius:10px;
+}
+
+.vps-slot-manager{
+  overflow:hidden;
+  border:1px solid rgba(130,108,207,.22);
+  border-radius:20px;
+  background:
+    radial-gradient(circle at 100% 0%,rgba(101,62,199,.13),transparent 32%),
+    linear-gradient(160deg,rgba(9,13,21,.98),rgba(7,10,17,.98));
+  box-shadow:0 18px 44px rgba(3,5,12,.16),inset 0 1px 0 rgba(255,255,255,.025);
+}
+.vps-slot-manager-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:18px 20px 15px;
+  border-bottom:1px solid rgba(133,113,192,.11);
+}
+.vps-slot-manager-head .eyebrow{
+  color:#70d7b1;
+}
+.vps-slot-manager-head h2{
+  margin:3px 0 0;
+  color:#f2edf9;
+  font-size:20px;
+  line-height:1.2;
+}
+.vps-slot-manager-head p{
+  margin:5px 0 0;
+  color:#828b9a;
+  font-size:12px;
+  line-height:1.45;
+}
+.vps-slot-manager-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:9px;
+  flex-wrap:wrap;
+}
+.vps-capacity-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  min-height:34px;
+  padding:7px 10px;
+  border:1px solid rgba(112,122,145,.18);
+  border-radius:999px;
+  background:rgba(9,13,21,.68);
+  color:#99a3b4;
+  font-size:11px;
+  font-weight:750;
+}
+.vps-capacity-pill i{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#677184;
+  box-shadow:0 0 10px rgba(103,113,132,.5);
+}
+.vps-capacity-pill.good{
+  border-color:rgba(55,211,158,.22);
+  color:#9ae2ca;
+}
+.vps-capacity-pill.good i{
+  background:#50d7aa;
+  box-shadow:0 0 11px rgba(80,215,170,.7);
+}
+.vps-capacity-pill.bad{
+  border-color:rgba(239,88,116,.22);
+  color:#ec9aab;
+}
+.vps-capacity-pill.bad i{
+  background:#ec6986;
+}
+
+.vps-slot-stats{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:1px;
+  border-bottom:1px solid rgba(133,113,192,.1);
+  background:rgba(139,117,211,.09);
+}
+.vps-slot-stats>div{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  min-height:62px;
+  padding:12px 16px;
+  background:rgba(7,10,17,.94);
+}
+.vps-slot-stats span{
+  color:#788295;
+  font-size:11px;
+  font-weight:700;
+}
+.vps-slot-stats b{
+  color:#e9e4f3;
+  font-size:20px;
+  font-weight:850;
+  font-variant-numeric:tabular-nums;
+}
+
+.vps-slot-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+  padding:16px;
+}
+.vps-slot-card,
+.vps-slot-add-card{
+  min-width:0;
+  min-height:220px;
+  border:1px solid rgba(129,113,177,.17);
+  border-radius:15px;
+  background:linear-gradient(155deg,rgba(12,16,25,.98),rgba(8,11,18,.98));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.018);
+}
+.vps-slot-card{
+  display:flex;
+  flex-direction:column;
+  padding:15px;
+  transition:border-color .18s ease,transform .18s ease,box-shadow .18s ease;
+}
+.vps-slot-card:hover{
+  transform:translateY(-1px);
+  border-color:rgba(139,114,214,.36);
+}
+.vps-slot-card.selected{
+  border-color:rgba(133,101,229,.52);
+  box-shadow:0 0 0 1px rgba(112,76,216,.16),0 14px 30px rgba(24,15,54,.15);
+}
+.vps-slot-card header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+}
+.vps-slot-card header span:first-child{
+  color:#7e7892;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.1em;
+}
+.vps-slot-card h3{
+  margin:3px 0 0;
+  color:#f1edf8;
+  font-size:19px;
+  line-height:1.15;
+}
+.vps-slot-status{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 8px;
+  border:1px solid rgba(112,123,145,.18);
+  border-radius:999px;
+  color:#9099aa;
+  font-size:11px;
+  font-weight:800;
+}
+.vps-slot-status i{
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:currentColor;
+}
+.vps-slot-status.online{
+  border-color:rgba(54,211,157,.2);
+  color:#77dcb9;
+}
+.vps-slot-status.ready{
+  border-color:rgba(125,98,221,.28);
+  color:#b3a0ed;
+}
+.vps-slot-status.expired{
+  border-color:rgba(239,85,115,.24);
+  color:#ee91a6;
+}
+.vps-slot-status.offline{
+  border-color:rgba(230,178,72,.2);
+  color:#d9b66e;
+}
+.vps-slot-account{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  min-width:0;
+  margin-top:16px;
+  padding:12px;
+  border:1px solid rgba(124,108,173,.1);
+  border-radius:11px;
+  background:rgba(5,8,13,.42);
+}
+.vps-slot-account small{
+  color:#737b8b;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.07em;
+}
+.vps-slot-account b{
+  overflow:hidden;
+  color:#ddd7eb;
+  font-size:14px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.vps-slot-account span{
+  overflow:hidden;
+  color:#7e8797;
+  font-size:11px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.vps-slot-meta{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+  margin-top:10px;
+}
+.vps-slot-meta>div{
+  min-width:0;
+}
+.vps-slot-meta span{
+  display:block;
+  color:#727b8b;
+  font-size:11px;
+  font-weight:700;
+}
+.vps-slot-meta b{
+  display:block;
+  overflow:hidden;
+  margin-top:2px;
+  color:#c8c3d3;
+  font-size:11px;
+  font-weight:800;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.vps-slot-card footer{
+  display:flex;
+  gap:7px;
+  margin-top:auto;
+  padding-top:14px;
+}
+.vps-slot-card footer .btn{
+  flex:1;
+  min-width:0;
+  min-height:36px;
+  padding:7px 9px;
+  font-size:11px;
+}
+.vps-slot-add-card{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  padding:20px;
+  border-style:dashed;
+  color:#968ab8;
+  cursor:pointer;
+  text-align:center;
+  transition:border-color .18s ease,background .18s ease,transform .18s ease;
+}
+.vps-slot-add-card:hover:not(:disabled){
+  transform:translateY(-1px);
+  border-color:rgba(143,111,231,.48);
+  background:linear-gradient(155deg,rgba(25,18,45,.72),rgba(9,12,19,.98));
+}
+.vps-slot-add-card:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+.vps-slot-add-icon{
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(142,109,230,.32);
+  border-radius:13px;
+  background:rgba(111,71,210,.09);
+  color:#b8a3ef;
+  font-size:25px;
+  line-height:1;
+}
+.vps-slot-add-card b{
+  color:#dcd5ec;
+  font-size:13px;
+}
+.vps-slot-add-card small{
+  max-width:230px;
+  color:#747d8d;
+  font-size:11px;
+  line-height:1.45;
+}
+
+.vps-slot-dialog{
+  width:min(720px,calc(100vw - 32px));
+  max-height:calc(100dvh - 32px);
+  overflow:auto;
+  padding:0;
+  border:1px solid rgba(133,104,219,.32);
+  border-radius:20px;
+  background:#090c14;
+  color:#e9e4f3;
+  box-shadow:0 28px 90px rgba(0,0,0,.55),0 0 0 1px rgba(128,91,225,.05);
+}
+.vps-slot-dialog::backdrop{
+  background:rgba(2,4,9,.78);
+  backdrop-filter:blur(6px);
+}
+.vps-slot-dialog-shell{
+  padding:20px;
+  background:
+    radial-gradient(circle at 100% 0%,rgba(111,64,219,.18),transparent 30%),
+    linear-gradient(160deg,rgba(13,16,27,.99),rgba(7,10,16,.99));
+}
+.vps-slot-dialog-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  padding-bottom:16px;
+  border-bottom:1px solid rgba(132,111,193,.13);
+}
+.vps-slot-dialog-head h2{
+  margin:4px 0 0;
+  color:#f3eefb;
+  font-size:23px;
+}
+.vps-slot-dialog-head p{
+  margin:5px 0 0;
+  color:#878f9f;
+  font-size:12px;
+  line-height:1.45;
+}
+.vps-slot-dialog-close{
+  width:36px;
+  height:36px;
+  flex:0 0 36px;
+  border:1px solid rgba(136,122,175,.18);
+  border-radius:11px;
+  background:rgba(11,14,22,.7);
+  color:#9e97ad;
+  font-size:22px;
+  cursor:pointer;
+}
+.vps-slot-package-section{
+  margin-top:18px;
+}
+.vps-slot-dialog-label{
+  margin-bottom:9px;
+  color:#8e879e;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.08em;
+}
+.vps-slot-package-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+}
+.vps-slot-package-option{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  min-height:98px;
+  padding:13px 11px;
+  border:1px solid rgba(127,113,170,.18);
+  border-radius:12px;
+  background:rgba(7,10,17,.72);
+  color:#b8b1c7;
+  cursor:pointer;
+  text-align:left;
+}
+.vps-slot-package-option.active{
+  border-color:rgba(143,108,237,.58);
+  background:linear-gradient(145deg,rgba(64,39,121,.28),rgba(10,12,21,.9));
+  box-shadow:inset 0 0 0 1px rgba(142,106,237,.08);
+}
+.vps-slot-package-option span{
+  font-size:11px;
+  font-weight:800;
+}
+.vps-slot-package-option b{
+  color:#eee8fa;
+  font-size:17px;
+}
+.vps-slot-package-option small{
+  color:#747d8e;
+  font-size:11px;
+}
+.vps-slot-order-summary,
+.vps-slot-payment-summary{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+  margin-top:14px;
+}
+.vps-slot-order-summary>div,
+.vps-slot-payment-summary>div{
+  padding:11px 12px;
+  border:1px solid rgba(123,108,166,.13);
+  border-radius:11px;
+  background:rgba(5,8,14,.48);
+}
+.vps-slot-order-summary span,
+.vps-slot-payment-summary span{
+  display:block;
+  color:#747d8e;
+  font-size:11px;
+}
+.vps-slot-order-summary b,
+.vps-slot-payment-summary b{
+  display:block;
+  margin-top:4px;
+  color:#d9d3e8;
+  font-size:13px;
+}
+.vps-slot-order-summary .total b,
+.vps-slot-payment-summary .total b{
+  color:#c9b7ff;
+  font-size:18px;
+}
+.vps-slot-capacity-warning{
+  margin-top:12px;
+  padding:10px 12px;
+  border:1px solid rgba(225,161,60,.23);
+  border-radius:10px;
+  background:rgba(86,57,14,.16);
+  color:#d7b777;
+  font-size:11px;
+  line-height:1.5;
+}
+.vps-slot-checkout-button{
+  width:100%;
+  margin-top:14px;
+}
+.vps-slot-payment-stage{
+  padding-top:2px;
+}
+.vps-slot-bank-card{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  margin-top:14px;
+  padding:14px;
+  border:1px solid rgba(115,93,181,.21);
+  border-radius:13px;
+  background:linear-gradient(145deg,rgba(22,17,39,.78),rgba(8,11,18,.88));
+}
+.vps-slot-bank-icon{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(139,106,231,.28);
+  border-radius:12px;
+  background:rgba(99,63,192,.1);
+  color:#b49eea;
+}
+.vps-slot-bank-card>div{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+.vps-slot-bank-card small{
+  color:#777e8d;
+  font-size:11px;
+}
+.vps-slot-bank-card b{
+  margin-top:2px;
+  color:#d9d2e8;
+  font-size:13px;
+}
+.vps-slot-bank-card strong{
+  margin-top:3px;
+  color:#c7b7f3;
+  font:800 18px Consolas,monospace;
+  word-break:break-all;
+}
+.vps-slot-bank-card span{
+  margin-top:2px;
+  color:#797f8e;
+  font-size:11px;
+}
+.vps-slot-slip-upload{
+  display:grid;
+  gap:4px;
+  margin:12px 0;
+  padding:14px;
+  border:1px dashed rgba(137,107,220,.38);
+  border-radius:12px;
+  background:rgba(8,10,17,.62);
+  cursor:pointer;
+}
+.vps-slot-slip-upload:hover{
+  border-color:rgba(155,121,242,.57);
+}
+.vps-slot-slip-upload input{
+  position:absolute;
+  width:1px;
+  height:1px;
+  opacity:0;
+  pointer-events:none;
+}
+.vps-slot-slip-upload span{
+  color:#cfc5e6;
+  font-size:12px;
+  font-weight:800;
+  overflow-wrap:anywhere;
+}
+.vps-slot-slip-upload small{
+  color:#747c8c;
+  font-size:11px;
+}
+.vps-slot-slip-preview{
+  width:min(100%,340px);
+  max-height:290px;
+  overflow:hidden;
+  margin:0 auto 12px;
+  border:1px solid rgba(122,109,167,.18);
+  border-radius:12px;
+  background:#05070c;
+}
+.vps-slot-slip-preview img{
+  display:block;
+  width:100%;
+  max-height:290px;
+  object-fit:contain;
+}
+.vps-slot-payment-stage>.btn.primary{
+  width:100%;
+}
+.vps-slot-cancel-order{
+  width:100%;
+  margin-top:8px;
+}
+.vps-slot-qr-wrap{
+  width:min(100%,300px);
+  margin:14px auto;
+  padding:12px;
+  border:1px solid rgba(124,109,169,.18);
+  border-radius:14px;
+  background:#fff;
+}
+.vps-slot-qr-wrap img{
+  display:block;
+  width:100%;
+  height:auto;
+}
+
+@media(max-width:1120px){
+  .vps-slot-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:820px){
+  .vps-slot-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .vps-slot-package-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:720px){
+  .connection-mode-actions{
+    width:100%;
+    justify-content:space-between;
+  }
+  .vps-buy-inline{
+    min-height:34px!important;
+    flex:0 0 auto!important;
+  }
+  .membership-compact-card{
+    min-height:0;
+    padding:11px 12px!important;
+    border-radius:14px!important;
+  }
+  .membership-compact-right{
+    align-items:flex-end;
+    flex-direction:column;
+    gap:5px;
+  }
+  .membership-compact-time{
+    min-width:auto;
+    padding:5px 7px;
+    font-size:11px;
+  }
+  .membership-compact-card .membership-countdown-badge{
+    display:none!important;
+  }
+  .vps-connected-card{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:10px;
+    min-height:0;
+    padding:12px!important;
+  }
+  .vps-connected-actions{
+    width:100%;
+  }
+  .vps-connected-actions .btn{
+    width:100%;
+  }
+  .vps-slot-manager{
+    border-radius:16px;
+  }
+  .vps-slot-manager-head{
+    align-items:flex-start;
+    flex-direction:column;
+    padding:14px;
+  }
+  .vps-slot-manager-actions{
+    width:100%;
+    justify-content:space-between;
+  }
+  .vps-slot-manager-actions .btn{
+    min-height:36px;
+  }
+  .vps-slot-stats>div{
+    min-height:54px;
+    padding:10px 12px;
+  }
+  .vps-slot-grid{
+    grid-template-columns:1fr;
+    padding:12px;
+  }
+  .vps-slot-card,
+  .vps-slot-add-card{
+    min-height:0;
+  }
+  .vps-slot-dialog{
+    width:calc(100vw - 18px);
+    max-height:calc(100dvh - 18px);
+    border-radius:16px;
+  }
+  .vps-slot-dialog-shell{
+    padding:15px;
+  }
+  .vps-slot-dialog-head h2{
+    font-size:20px;
+  }
+  .vps-slot-order-summary,
+  .vps-slot-payment-summary{
+    grid-template-columns:1fr;
+  }
+  .vps-slot-order-summary>div,
+  .vps-slot-payment-summary>div{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .vps-slot-order-summary b,
+  .vps-slot-payment-summary b,
+  .vps-slot-order-summary .total b,
+  .vps-slot-payment-summary .total b{
+    margin-top:0;
+  }
+}
+
 /* ===== MT5 & EA · compact mobile layout ===== */
 @media(max-width:720px){
   .account-view-main{padding-top:8px!important}

@@ -600,7 +600,9 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
                owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label
              )
              SELECT
-               $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,'PERSONAL','ACTIVE','Cloud Trading'
+               $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
+               CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
+               'ACTIVE','Cloud Trading'
              FROM license_slots
              WHERE owner_user_id=$1 AND mode='CLOUD'
              RETURNING *`,

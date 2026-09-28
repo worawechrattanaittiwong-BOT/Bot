@@ -37,6 +37,42 @@ type BrokerCatalog = {
   }>;
 };
 
+type CloudCatalog = {
+  packages: Array<{ months:number; price_satang:number; enabled:boolean; updated_at?:string }>;
+  available: number;
+  provisioningPaused: boolean;
+  salesPaused: boolean;
+  paymentMode: string;
+  paymentAccounts?: Array<{
+    id:number;
+    bankCode:string;
+    bankName?:string;
+    bankShortCode?:string;
+    bankNumber:string;
+    nameTh:string;
+    nameEn:string;
+    type:string;
+  }>;
+  checkoutEnabled: boolean;
+};
+
+type CloudOrder = {
+  id:string;
+  months:number;
+  amount:number;
+  original_amount?:number|null;
+  discount_amount?:number|null;
+  promotion_code?:string|null;
+  status:string;
+  qr_url?:string|null;
+  expires_at?:string|null;
+  created_at:string;
+  paid_at?:string|null;
+  slot_id?:string|null;
+  subscription_expires_at?:string|null;
+  account_number?:string|null;
+};
+
 type View = "overview" | "account" | "backtest";
 const LIVE_PRICE_WINDOW_MS = 15 * 60 * 1000;
 const TRADING_SYMBOL_PATTERN = /^[A-Za-z0-9._#-]+$/;
@@ -140,6 +176,15 @@ export default function DashboardPage() {
   const statusDialogRef = useRef<HTMLDialogElement | null>(null);
   const symbolDialogRef = useRef<HTMLDialogElement | null>(null);
   const ownerVpsDialogRef = useRef<HTMLDialogElement | null>(null);
+  const vpsSlotDialogRef = useRef<HTMLDialogElement | null>(null);
+  const [cloudCatalog, setCloudCatalog] = useState<CloudCatalog | null>(null);
+  const [cloudOrders, setCloudOrders] = useState<CloudOrder[]>([]);
+  const [vpsPurchaseMonths, setVpsPurchaseMonths] = useState(1);
+  const [vpsRenewSlotId, setVpsRenewSlotId] = useState("");
+  const [vpsPaymentOrderId, setVpsPaymentOrderId] = useState("");
+  const [vpsPurchaseBusy, setVpsPurchaseBusy] = useState(false);
+  const [vpsSlipFile, setVpsSlipFile] = useState<File | null>(null);
+  const [vpsSlipPreview, setVpsSlipPreview] = useState("");
   const [ownerVpsPassword, setOwnerVpsPassword] = useState("");
   const [ownerVpsBusy, setOwnerVpsBusy] = useState(false);
   const [vpsMigrationProgress, setVpsMigrationProgress] = useState<any>(null);
@@ -182,6 +227,16 @@ export default function DashboardPage() {
   const mt5ApiBase =
     process.env.NEXT_PUBLIC_MT5_API_BASE ||
     (typeof window !== "undefined" ? window.location.origin + "/backend" : "");
+
+  async function loadVpsCommerce() {
+    const [catalog, orders] = await Promise.all([
+      api("/cloud/catalog"),
+      api("/cloud/orders")
+    ]);
+    setCloudCatalog(catalog || null);
+    setCloudOrders(Array.isArray(orders) ? orders : []);
+    return { catalog, orders: Array.isArray(orders) ? orders : [] };
+  }
 
   async function load(slotIdArg?: string, light = false) {
     const requestedSlotId = slotIdArg ?? selectedSlotIdRef.current;
@@ -333,12 +388,23 @@ export default function DashboardPage() {
     api("/catalog/brokers")
       .then((rows)=>setBrokerCatalog(rows))
       .catch(()=>setBrokerCatalog([]));
+    void loadVpsCommerce().catch(()=>{});
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible" || dashboardLoadInFlightRef.current) return;
       void load(undefined, true);
     }, 5000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!vpsSlipFile) {
+      setVpsSlipPreview("");
+      return;
+    }
+    const url = URL.createObjectURL(vpsSlipFile);
+    setVpsSlipPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [vpsSlipFile]);
 
   useEffect(() => {
     if (!selectedSlotId) return;
@@ -1148,6 +1214,39 @@ export default function DashboardPage() {
     Boolean(slot?.can_control) &&
     ["ACTIVE","AVAILABLE"].includes(String(slot?.status || "").toUpperCase())
   );
+  const cloudSlots = (data?.slots || [])
+    .filter((slot:any) =>
+      String(slot?.mode || "").toUpperCase() === "CLOUD" &&
+      String(slot?.status || "").toUpperCase() !== "DELETED" &&
+      (Boolean(slot?.can_manage) || Boolean(slot?.can_control))
+    )
+    .sort((a:any,b:any)=>Number(a?.slot_number || 0)-Number(b?.slot_number || 0));
+  const ownerCloudAccess = ["OWNER","ADMIN"].includes(String(data?.user?.role || "").toUpperCase());
+  const cloudSlotSummary = {
+    total:cloudSlots.length,
+    online:cloudSlots.filter((slot:any)=>Boolean(slot?.mt5_online)).length,
+    ready:cloudSlots.filter((slot:any)=>
+      !slot?.mt5_account_id &&
+      ["ACTIVE","AVAILABLE"].includes(String(slot?.status || "").toUpperCase()) &&
+      (ownerCloudAccess || Boolean(slot?.subscription_active))
+    ).length,
+    expiring:cloudSlots.filter((slot:any)=>{
+      if (ownerCloudAccess || !slot?.subscription_expires_at) return false;
+      const expires = new Date(slot.subscription_expires_at).getTime();
+      const remaining = expires - Date.now();
+      return remaining > 0 && remaining <= 7 * 24 * 60 * 60 * 1000;
+    }).length
+  };
+  const vpsPaymentOrder = cloudOrders.find(order=>order.id===vpsPaymentOrderId) || null;
+  const vpsPaymentAccount = cloudCatalog?.paymentAccounts?.[0] || null;
+  const vpsPackages = (cloudCatalog?.packages || [])
+    .filter(pack=>pack.enabled && Number(pack.price_satang) > 0)
+    .sort((a,b)=>Number(a.months)-Number(b.months));
+  const selectedVpsPackage = vpsPackages.find(pack=>Number(pack.months)===Number(vpsPurchaseMonths)) || vpsPackages[0] || null;
+  const vpsRenewSlot = cloudSlots.find((slot:any)=>String(slot?.id || "")===String(vpsRenewSlotId || "")) || null;
+  const canBuyVpsSlot = Boolean(cloudCatalog?.checkoutEnabled) && Number(cloudCatalog?.available || 0) > 0;
+  const canCheckoutVpsOrder = Boolean(cloudCatalog?.checkoutEnabled) &&
+    (Boolean(vpsRenewSlotId) || Number(cloudCatalog?.available || 0) > 0);
 
   const accessExpiry = entitlement?.expiresAt ? new Date(entitlement.expiresAt) : null;
   const accessRemaining = accessExpiry ? Math.max(0, accessExpiry.getTime() - accessClockNow) : null;
@@ -1905,6 +2004,135 @@ export default function DashboardPage() {
     }
   }
 
+
+  function openVpsSlotDialog(slotId = "") {
+    const enabledPackages = (cloudCatalog?.packages || [])
+      .filter(pack=>pack.enabled && Number(pack.price_satang) > 0)
+      .sort((a,b)=>Number(a.months)-Number(b.months));
+    setVpsPurchaseMonths(Number(enabledPackages[0]?.months || 1));
+    setVpsSlipFile(null);
+
+    const pending = cloudOrders.find(order =>
+      ["CREATING","PENDING","REVIEW"].includes(String(order.status || "").toUpperCase())
+    );
+    setVpsRenewSlotId(pending ? String(pending.slot_id || "") : slotId);
+    setVpsPaymentOrderId(String(pending?.id || ""));
+    vpsSlotDialogRef.current?.showModal();
+  }
+
+  async function createVpsSlotOrder() {
+    if (vpsPurchaseBusy) return;
+    setVpsPurchaseBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await api("/cloud/checkout", {
+        method:"POST",
+        body:JSON.stringify({
+          months:vpsPurchaseMonths,
+          ...(vpsRenewSlotId ? { slotId:vpsRenewSlotId } : {})
+        })
+      });
+      if (result?.free) {
+        const next = await loadVpsCommerce();
+        const paidOrder = next.orders.find((item:CloudOrder)=>item.id===String(result?.id || ""));
+        const targetSlotId = String(paidOrder?.slot_id || vpsRenewSlotId || selectedSlotIdRef.current || "");
+        await load(targetSlotId);
+        vpsSlotDialogRef.current?.close();
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เรียบร้อยแล้ว" : "เพิ่ม VPS Slot เรียบร้อยแล้ว");
+        return;
+      }
+      setVpsPaymentOrderId(String(result?.id || ""));
+      await loadVpsCommerce();
+      setNotice("สร้างรายการชำระเงินแล้ว โอนตามยอดจริงและแนบสลิปได้เลย");
+    } catch (e:any) {
+      setError(String(e?.message || "สร้างรายการ VPS Slot ไม่สำเร็จ"));
+      await loadVpsCommerce().catch(()=>{});
+    } finally {
+      setVpsPurchaseBusy(false);
+    }
+  }
+
+  async function verifyVpsSlotSlip() {
+    if (vpsPurchaseBusy || !vpsPaymentOrderId || !vpsSlipFile) return;
+    if (!["image/jpeg","image/png","image/gif","image/webp"].includes(vpsSlipFile.type)) {
+      setError("รองรับสลิป JPG, PNG, GIF หรือ WebP เท่านั้น");
+      return;
+    }
+    if (vpsSlipFile.size <= 0 || vpsSlipFile.size > 4 * 1024 * 1024) {
+      setError("รูปสลิปต้องมีขนาดไม่เกิน 4 MB");
+      return;
+    }
+
+    setVpsPurchaseBusy(true);
+    setError("");
+    try {
+      const base64 = await new Promise<string>((resolve,reject)=>{
+        const reader = new FileReader();
+        reader.onload = ()=>resolve(String(reader.result || ""));
+        reader.onerror = ()=>reject(new Error("อ่านรูปสลิปไม่สำเร็จ"));
+        reader.readAsDataURL(vpsSlipFile);
+      });
+      const result = await api(`/cloud/orders/${vpsPaymentOrderId}/verify-slip`, {
+        method:"POST",
+        body:JSON.stringify({ base64 })
+      });
+      const next = await loadVpsCommerce();
+      const paidOrder = next.orders.find((item:CloudOrder)=>item.id===vpsPaymentOrderId);
+      const targetSlotId = String(paidOrder?.slot_id || vpsRenewSlotId || selectedSlotIdRef.current || "");
+      await load(targetSlotId);
+      if (result?.status === "PAID") {
+        vpsSlotDialogRef.current?.close();
+        setVpsPaymentOrderId("");
+        setVpsSlipFile(null);
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot สำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot ใหม่แล้ว");
+      }
+    } catch (e:any) {
+      setError(String(e?.message || "ตรวจสลิปไม่สำเร็จ"));
+    } finally {
+      setVpsPurchaseBusy(false);
+    }
+  }
+
+  async function refreshVpsSlotOrder() {
+    if (vpsPurchaseBusy || !vpsPaymentOrderId) return;
+    setVpsPurchaseBusy(true);
+    try {
+      await api(`/cloud/orders/${vpsPaymentOrderId}/refresh`, { method:"POST" });
+      const next = await loadVpsCommerce();
+      const order = next.orders.find((item:CloudOrder)=>item.id===vpsPaymentOrderId);
+      if (order?.status === "PAID") {
+        const targetSlotId = String(order.slot_id || vpsRenewSlotId || selectedSlotIdRef.current || "");
+        await load(targetSlotId);
+        vpsSlotDialogRef.current?.close();
+        setVpsPaymentOrderId("");
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot สำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot ใหม่แล้ว");
+      }
+    } catch (e:any) {
+      setError(String(e?.message || "ตรวจสอบการชำระเงินไม่สำเร็จ"));
+    } finally {
+      setVpsPurchaseBusy(false);
+    }
+  }
+
+  async function cancelVpsSlotOrder() {
+    if (vpsPurchaseBusy || !vpsPaymentOrderId) {
+      vpsSlotDialogRef.current?.close();
+      return;
+    }
+    setVpsPurchaseBusy(true);
+    try {
+      await api(`/cloud/orders/${vpsPaymentOrderId}/cancel-slip-payment`, { method:"POST" });
+      setVpsPaymentOrderId("");
+      setVpsSlipFile(null);
+      await loadVpsCommerce();
+      setNotice("ยกเลิกรายการชำระเงินแล้ว");
+    } catch (e:any) {
+      setError(String(e?.message || "ยกเลิกรายการไม่สำเร็จ"));
+    } finally {
+      setVpsPurchaseBusy(false);
+    }
+  }
 
   function selectSlot(slotId: string) {
     if (!slotId || slotId === selectedSlotIdRef.current) return;
@@ -3315,7 +3543,18 @@ export default function DashboardPage() {
                   <h2>เลือกระบบเชื่อมต่อ</h2>
                   <p className="muted">เลือก Local MT5 หรือ VPS Server สำหรับบัญชีนี้</p>
                 </div>
-                <span className="badge">{String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" ? "VPS SERVER" : "LOCAL MT5"}</span>
+                <div className="connection-mode-actions">
+                  <span className="badge">{String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" ? "VPS SERVER" : "LOCAL MT5"}</span>
+                  <button
+                    type="button"
+                    className="btn primary vps-buy-inline"
+                    disabled={!canBuyVpsSlot}
+                    title={!cloudCatalog?.checkoutEnabled ? "ระบบขาย VPS Slot ยังไม่พร้อม" : Number(cloudCatalog?.available || 0) <= 0 ? "VPS Capacity เต็มชั่วคราว" : "ซื้อ VPS Slot เพิ่ม"}
+                    onClick={()=>openVpsSlotDialog("")}
+                  >
+                    + ซื้อ VPS Slot
+                  </button>
+                </div>
               </div>
               <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
                 <button
@@ -3351,6 +3590,20 @@ export default function DashboardPage() {
               />
             ) : null}
 
+            {String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" && (
+              <VpsSlotManager
+                slots={cloudSlots}
+                summary={cloudSlotSummary}
+                selectedSlotId={String(data.selectedSlot?.id || "")}
+                ownerUnlimited={ownerCloudAccess}
+                canBuy={canBuyVpsSlot}
+                capacity={Number(cloudCatalog?.available || 0)}
+                onSelect={(slotId:string)=>selectSlot(slotId)}
+                onBuy={()=>openVpsSlotDialog("")}
+                onRenew={(slotId:string)=>openVpsSlotDialog(slotId)}
+              />
+            )}
+
             {data.selectedSlot?.mode === "LOCAL" ? (
               <>
                 <Mt5ConnectionExperience
@@ -3382,27 +3635,15 @@ export default function DashboardPage() {
                   }}
                 />
               </>
-            ) : (
-              <section className="panel account-card mt5-vps-account-card">
-                {vpsMigrationProgress && (
-                  <VpsMigrationProgressCard
-                    progress={vpsMigrationProgress}
-                    onRetry={()=>{
-                      setVpsMigrationProgress(null);
-                      setError("");
-                    }}
-                  />
-                )}
-                <div className="panel-head">
-                  <div>
-                    <div className="eyebrow">MT5 ACCOUNT · VPS</div>
-                    <h2>{data.account ? (data.account.broker + " · " + data.account.account_number) : "ยังไม่ได้ผูกบัญชี MT5"}</h2>
-                    <p className="muted">{data.account ? (data.account.broker_server + " · บัญชี MT5 ที่เชื่อมต่ออยู่") : "กรอกข้อมูล MT5 เพื่อเชื่อมต่อ VPS"}</p>
-                  </div>
-                  <span className="badge"><span className={"dot "+(accountConnectionOnline?"green":"red")}/>{accountConnectionLabel}</span>
-                </div>
-              </section>
-            )}
+            ) : vpsMigrationProgress ? (
+              <VpsMigrationProgressCard
+                progress={vpsMigrationProgress}
+                onRetry={()=>{
+                  setVpsMigrationProgress(null);
+                  setError("");
+                }}
+              />
+            ) : null}
 
             {data.selectedSlot?.mode === "LOCAL" && (
               <>
@@ -3525,16 +3766,169 @@ export default function DashboardPage() {
                 </section>
               ) : (
                 <section className="panel vps-connected-card">
-                  <div className="eyebrow">VPS MT5 · CONNECTED</div>
-                  <h2>{data.account.account_number}</h2>
-                  <p className="muted">{data.account.broker} · {data.account.broker_server}</p>
-                  <button className="btn ghost" disabled={busy || state==="RUNNING" || desired==="RUNNING"} onClick={resetMt5}>เปลี่ยนบัญชี VPS</button>
+                  <div className="vps-connected-copy">
+                    <div className="eyebrow">SELECTED VPS SLOT · CONNECTED</div>
+                    <div className="vps-connected-title-row">
+                      <h2>{data.account.account_number}</h2>
+                      <span className="badge"><span className="dot green"/>ออนไลน์</span>
+                    </div>
+                    <p className="muted">{data.account.broker} · {data.account.broker_server} · Slot #{data.selectedSlot?.slot_number || "—"}</p>
+                  </div>
+                  <div className="vps-connected-actions">
+                    <button className="btn ghost" disabled={busy || state==="RUNNING" || desired==="RUNNING"} onClick={resetMt5}>เปลี่ยนบัญชี VPS</button>
+                  </div>
                 </section>
               )
             )}
 
           </div>
         )}
+
+        <dialog
+          ref={vpsSlotDialogRef}
+          className="vps-slot-dialog"
+          onClose={()=>{
+            setVpsSlipFile(null);
+            if (!vpsPaymentOrderId) setVpsRenewSlotId("");
+          }}
+        >
+          <div className="vps-slot-dialog-shell">
+            <header className="vps-slot-dialog-head">
+              <div>
+                <div className="eyebrow">VPS SLOT COMMERCE</div>
+                <h2>{vpsRenewSlot ? "ต่ออายุ VPS Slot #" + vpsRenewSlot.slot_number : "ซื้อ VPS Slot เพิ่ม"}</h2>
+                <p>{vpsRenewSlot ? "ต่ออายุ Slot เดิมโดยคงเวลาที่เหลืออยู่" : "1 Slot = 1 VPS MT5 + 1 EA Runtime · ซื้อเพิ่มได้เรื่อย ๆ"}</p>
+              </div>
+              <button type="button" className="vps-slot-dialog-close" onClick={()=>vpsSlotDialogRef.current?.close()} aria-label="ปิด">×</button>
+            </header>
+
+            {!vpsPaymentOrder ? (
+              <>
+                <section className="vps-slot-package-section">
+                  <div className="vps-slot-dialog-label">เลือกระยะเวลา</div>
+                  <div className="vps-slot-package-grid">
+                    {vpsPackages.map(pack=>(
+                      <button
+                        key={pack.months}
+                        type="button"
+                        className={"vps-slot-package-option " + (Number(pack.months)===Number(vpsPurchaseMonths) ? "active" : "")}
+                        onClick={()=>setVpsPurchaseMonths(Number(pack.months))}
+                      >
+                        <span>{pack.months} เดือน</span>
+                        <b>฿{(Number(pack.price_satang || 0)/100).toLocaleString("th-TH",{maximumFractionDigits:2})}</b>
+                        <small>ต่อ 1 VPS Slot</small>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="vps-slot-order-summary">
+                  <div>
+                    <span>{vpsRenewSlot ? "ต่ออายุ Slot" : "VPS Slot ใหม่"}</span>
+                    <b>{vpsRenewSlot ? "#" + vpsRenewSlot.slot_number : "เพิ่ม 1 Slot"}</b>
+                  </div>
+                  <div>
+                    <span>ระยะเวลา</span>
+                    <b>{selectedVpsPackage?.months || vpsPurchaseMonths} เดือน</b>
+                  </div>
+                  <div className="total">
+                    <span>ยอดชำระ</span>
+                    <b>฿{(Number(selectedVpsPackage?.price_satang || 0)/100).toLocaleString("th-TH",{maximumFractionDigits:2})}</b>
+                  </div>
+                </section>
+
+                {!canCheckoutVpsOrder && (
+                  <div className="vps-slot-capacity-warning">
+                    {!cloudCatalog?.checkoutEnabled
+                      ? "ระบบขาย VPS Slot ยังไม่พร้อมใช้งาน"
+                      : "VPS Capacity เต็มชั่วคราว ระบบจะไม่รับเงินสำหรับ Slot ใหม่จนกว่าจะมี Capacity ว่าง"}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="btn primary btn-lg vps-slot-checkout-button"
+                  disabled={vpsPurchaseBusy || !selectedVpsPackage || !canCheckoutVpsOrder}
+                  onClick={()=>void createVpsSlotOrder()}
+                >
+                  {vpsPurchaseBusy ? "กำลังสร้างรายการ..." : vpsRenewSlot ? "สร้างรายการต่ออายุ" : "สร้างรายการซื้อ VPS Slot"}
+                </button>
+              </>
+            ) : (
+              <section className="vps-slot-payment-stage">
+                <div className="vps-slot-payment-summary">
+                  <div>
+                    <span>Order</span>
+                    <b>#{vpsPaymentOrder.id.slice(0,8).toUpperCase()}</b>
+                  </div>
+                  <div>
+                    <span>แพ็กเกจ</span>
+                    <b>{vpsPaymentOrder.months} เดือน</b>
+                  </div>
+                  <div className="total">
+                    <span>ยอดที่ต้องโอน</span>
+                    <b>฿{(Number(vpsPaymentOrder.amount || 0)/100).toLocaleString("th-TH",{maximumFractionDigits:2})}</b>
+                  </div>
+                </div>
+
+                {String(cloudCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" ? (
+                  <>
+                    <div className="vps-slot-bank-card">
+                      <span className="vps-slot-bank-icon"><ScenovaIcon name="wallet" size={24}/></span>
+                      <div>
+                        <small>บัญชีรับเงิน SCENOVA</small>
+                        <b>{vpsPaymentAccount?.nameTh || vpsPaymentAccount?.nameEn || "บัญชีที่ผูกกับ EasySlip"}</b>
+                        <strong>{vpsPaymentAccount?.bankNumber || "—"}</strong>
+                        <span>{vpsPaymentAccount?.bankShortCode || "BANK"}{vpsPaymentAccount?.bankName ? " · " + vpsPaymentAccount.bankName : ""}</span>
+                      </div>
+                    </div>
+
+                    <label className="vps-slot-slip-upload">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
+                        disabled={vpsPurchaseBusy}
+                        onChange={e=>setVpsSlipFile(e.target.files?.[0] || null)}
+                      />
+                      <span>{vpsSlipFile ? vpsSlipFile.name : "แนบรูปสลิป"}</span>
+                      <small>ระบบตรวจยอดจริง + บัญชีผู้รับ + สลิปซ้ำ · สูงสุด 4 MB</small>
+                    </label>
+
+                    {vpsSlipPreview && (
+                      <div className="vps-slot-slip-preview">
+                        <img src={vpsSlipPreview} alt="ตัวอย่างสลิป"/>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      className="btn primary btn-lg"
+                      disabled={vpsPurchaseBusy || !vpsSlipFile || !vpsPaymentAccount}
+                      onClick={()=>void verifyVpsSlotSlip()}
+                    >
+                      {vpsPurchaseBusy ? "กำลังตรวจสลิป..." : "ตรวจสลิปและเปิด VPS Slot"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {vpsPaymentOrder.qr_url ? (
+                      <div className="vps-slot-qr-wrap"><img src={vpsPaymentOrder.qr_url} alt="QR ชำระเงิน VPS Slot"/></div>
+                    ) : (
+                      <div className="vps-slot-capacity-warning">กำลังรอ QR Payment จาก Gateway</div>
+                    )}
+                    <button type="button" className="btn primary btn-lg" disabled={vpsPurchaseBusy} onClick={()=>void refreshVpsSlotOrder()}>
+                      {vpsPurchaseBusy ? "กำลังตรวจสอบ..." : "ตรวจสอบการชำระเงิน"}
+                    </button>
+                  </>
+                )}
+
+                <button type="button" className="btn ghost vps-slot-cancel-order" disabled={vpsPurchaseBusy} onClick={()=>void cancelVpsSlotOrder()}>
+                  ยกเลิกรายการ
+                </button>
+              </section>
+            )}
+          </div>
+        </dialog>
 
         {activeView === "backtest" && (
           <BacktestCenter
@@ -3630,6 +4024,108 @@ export default function DashboardPage() {
   );
 }
 
+function VpsSlotManager(props:{
+  slots:any[];
+  summary:{total:number;online:number;ready:number;expiring:number};
+  selectedSlotId:string;
+  ownerUnlimited:boolean;
+  canBuy:boolean;
+  capacity:number;
+  onSelect:(slotId:string)=>void;
+  onBuy:()=>void;
+  onRenew:(slotId:string)=>void;
+}) {
+  const formatExpiry = (value:any) => {
+    if (props.ownerUnlimited) return "ไม่จำกัดเวลา";
+    if (!value) return "ยังไม่มีแพ็กเกจ";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("th-TH",{day:"2-digit",month:"short",year:"numeric"});
+  };
+  const slotTone = (slot:any) => {
+    if (!props.ownerUnlimited && slot?.subscription_expires_at && new Date(slot.subscription_expires_at).getTime() <= Date.now()) return "expired";
+    if (slot?.mt5_online) return "online";
+    if (slot?.instance_id) return "offline";
+    return "ready";
+  };
+  const slotLabel = (slot:any) => {
+    const tone = slotTone(slot);
+    if (tone==="expired") return "EXPIRED";
+    if (tone==="online") return "ONLINE";
+    if (tone==="offline") return "OFFLINE";
+    return "READY";
+  };
+
+  return (
+    <section className="vps-slot-manager">
+      <div className="vps-slot-manager-head">
+        <div>
+          <div className="eyebrow">VPS SLOT MANAGER</div>
+          <h2>VPS Slots ของคุณ</h2>
+          <p>แต่ละ Slot แยก MT5, EA Runtime และวันหมดอายุออกจากกัน</p>
+        </div>
+        <div className="vps-slot-manager-actions">
+          <span className={"vps-capacity-pill " + (props.capacity>0 ? "good" : "bad")}>
+            <i/> Capacity {Math.max(0,props.capacity)}
+          </span>
+          <button type="button" className="btn primary" disabled={!props.canBuy} onClick={props.onBuy}>+ ซื้อ VPS Slot</button>
+        </div>
+      </div>
+
+      <div className="vps-slot-stats">
+        <div><span>Slots ทั้งหมด</span><b>{props.summary.total}</b></div>
+        <div><span>ออนไลน์</span><b>{props.summary.online}</b></div>
+        <div><span>พร้อมเชื่อม MT5</span><b>{props.summary.ready}</b></div>
+        <div><span>ใกล้หมดอายุ</span><b>{props.summary.expiring}</b></div>
+      </div>
+
+      <div className="vps-slot-grid">
+        {props.slots.map(slot=>{
+          const selected = String(slot?.id || "") === String(props.selectedSlotId || "");
+          const tone = slotTone(slot);
+          return (
+            <article key={slot.id} className={"vps-slot-card tone-"+tone+(selected ? " selected" : "")}>
+              <header>
+                <div>
+                  <span>VPS SLOT</span>
+                  <h3>Slot #{slot.slot_number}</h3>
+                </div>
+                <span className={"vps-slot-status "+tone}><i/>{slotLabel(slot)}</span>
+              </header>
+
+              <div className="vps-slot-account">
+                <small>MT5 ACCOUNT</small>
+                <b>{slot.account_number || "ยังไม่ได้เชื่อม MT5"}</b>
+                <span>{slot.account_number ? ((slot.broker || "Broker")+" · "+(slot.broker_server || "Server")) : "พร้อมสำหรับเชื่อมบัญชีใหม่"}</span>
+              </div>
+
+              <div className="vps-slot-meta">
+                <div><span>EA</span><b>{slot.actual_state || (slot.instance_id ? "STOPPED" : "NOT INSTALLED")}</b></div>
+                <div><span>หมดอายุ</span><b>{formatExpiry(slot.subscription_expires_at)}</b></div>
+              </div>
+
+              <footer>
+                <button type="button" className={"btn "+(selected ? "primary" : "ghost")} onClick={()=>props.onSelect(String(slot.id))}>
+                  {selected ? "กำลังจัดการ" : slot.account_number ? "จัดการ Slot" : "เชื่อม MT5"}
+                </button>
+                {!props.ownerUnlimited && (
+                  <button type="button" className="btn ghost" onClick={()=>props.onRenew(String(slot.id))}>ต่ออายุ</button>
+                )}
+              </footer>
+            </article>
+          );
+        })}
+
+        <button type="button" className="vps-slot-add-card" disabled={!props.canBuy} onClick={props.onBuy}>
+          <span className="vps-slot-add-icon">+</span>
+          <b>ซื้อ VPS Slot เพิ่ม</b>
+          <small>เพิ่ม VPS MT5 ใหม่ได้เรื่อย ๆ โดยไม่จำกัดจำนวนต่อบัญชี</small>
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function MembershipCountdownCard(props:{remainingMs?:number;expiresAt?:Date;planCode?:string;mode?:string;unlimited?:boolean}) {
   const remainingMs = Math.max(0, Number(props.remainingMs || 0));
   const totalSeconds = Math.floor(remainingMs / 1000);
@@ -3638,109 +4134,32 @@ function MembershipCountdownCard(props:{remainingMs?:number;expiresAt?:Date;plan
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   const expired = !props.unlimited && remainingMs <= 0;
-  const blocks = [
-    { value:String(days).padStart(2,"0"), label:"วัน" },
-    { value:String(hours).padStart(2,"0"), label:"ชม." },
-    { value:String(minutes).padStart(2,"0"), label:"นาที" },
-    { value:String(seconds).padStart(2,"0"), label:"วินาที" }
-  ];
+  const countdown = props.unlimited
+    ? "∞"
+    : days > 0
+      ? days+" วัน "+String(hours).padStart(2,"0")+":"+String(minutes).padStart(2,"0")+":"+String(seconds).padStart(2,"0")
+      : String(hours).padStart(2,"0")+":"+String(minutes).padStart(2,"0")+":"+String(seconds).padStart(2,"0");
 
   return (
-    <section
-      className="membership-countdown-card"
-      aria-live="polite"
-      style={{
-        position:"relative",
-        overflow:"hidden",
-        border:"1px solid rgba(132,92,246,.38)",
-        borderRadius:22,
-        padding:"18px",
-        background:"linear-gradient(135deg,rgba(17,15,38,.98),rgba(8,12,27,.98) 58%,rgba(44,20,88,.92))",
-        boxShadow:"0 18px 44px rgba(13,8,35,.28), inset 0 1px 0 rgba(255,255,255,.04)"
-      }}
-    >
-      <div
-        aria-hidden="true"
-        style={{
-          position:"absolute",
-          width:180,
-          height:180,
-          borderRadius:"50%",
-          right:-70,
-          top:-95,
-          background:"radial-gradient(circle,rgba(139,92,246,.24),rgba(139,92,246,0) 68%)",
-          pointerEvents:"none"
-        }}
-      />
-      <div className="membership-countdown-head" style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
-        <div className="membership-countdown-title" style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
-          <span
-            className="membership-countdown-icon"
-            style={{
-              width:42,
-              height:42,
-              borderRadius:14,
-              display:"grid",
-              placeItems:"center",
-              border:"1px solid rgba(150,112,255,.38)",
-              background:"rgba(112,69,224,.13)",
-              boxShadow:"inset 0 0 24px rgba(127,82,255,.08)"
-            }}
-          >
-            <ScenovaIcon name="clock" size={21}/>
-          </span>
-          <div className="membership-countdown-copy" style={{minWidth:0}}>
-            <div className="membership-countdown-eyebrow" style={{fontSize:11,fontWeight:800,letterSpacing:".14em",color:"#9c8bc8"}}>MEMBERSHIP TIME</div>
-            <div className="membership-countdown-status" style={{fontSize:18,fontWeight:800,color:"#f5f1ff",marginTop:2}}>
-              {props.unlimited ? "Owner Access · ไม่จำกัดเวลา" : expired ? "สมาชิกหมดอายุแล้ว" : "เวลาสมาชิกคงเหลือ"}
-            </div>
-            <div className="membership-countdown-meta" style={{fontSize:12,color:"#948eac",marginTop:3}}>
-              {props.unlimited
-                ? ((props.mode ? props.mode+" · " : "") + "สิทธิ์ใช้งานไม่หมดอายุ")
-                : ((props.planCode ? props.planCode+" · " : "") + (props.mode ? props.mode+" · " : "") +
-                  "หมดอายุ " + (props.expiresAt ? props.expiresAt.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"medium",hour12:false}) : "-"))}
-            </div>
+    <section className={"membership-countdown-card membership-compact-card "+(expired ? "expired" : "")} aria-live="polite">
+      <div className="membership-compact-left">
+        <span className="membership-countdown-icon"><ScenovaIcon name="clock" size={18}/></span>
+        <div>
+          <div className="membership-countdown-eyebrow">MEMBERSHIP</div>
+          <div className="membership-countdown-status">
+            {props.unlimited ? "Owner Access" : expired ? "สมาชิกหมดอายุ" : "สิทธิ์ใช้งานกำลัง Active"}
+          </div>
+          <div className="membership-countdown-meta">
+            {props.unlimited
+              ? ((props.mode || "CLOUD")+" · ไม่จำกัดเวลา")
+              : ((props.planCode ? props.planCode+" · " : "")+(props.mode || "CLOUD")+" · หมดอายุ "+(props.expiresAt ? props.expiresAt.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"short",hour12:false}) : "—"))}
           </div>
         </div>
-        <span
-          className="membership-countdown-badge"
-          style={{
-            padding:"7px 11px",
-            borderRadius:999,
-            fontSize:11,
-            fontWeight:800,
-            letterSpacing:".08em",
-            color:expired ? "#ff9db3" : "#a9f3dc",
-            border:expired ? "1px solid rgba(255,100,137,.28)" : "1px solid rgba(75,220,174,.24)",
-            background:expired ? "rgba(255,72,112,.08)" : "rgba(50,210,160,.08)"
-          }}
-        >
-          {props.unlimited ? "OWNER · UNLIMITED" : expired ? "EXPIRED" : "ACTIVE · LIVE"}
-        </span>
       </div>
-
-      {!props.unlimited && (
-        <div className="membership-countdown-grid" style={{position:"relative",display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,marginTop:16}}>
-          {blocks.map((block)=>(
-            <div
-              className="membership-countdown-unit"
-              key={block.label}
-              style={{
-                textAlign:"center",
-                padding:"12px 5px 10px",
-                borderRadius:14,
-                border:"1px solid rgba(137,108,213,.18)",
-                background:"rgba(7,9,22,.52)"
-              }}
-            >
-              <div className="membership-countdown-value" style={{fontVariantNumeric:"tabular-nums",fontSize:"clamp(20px,5vw,28px)",lineHeight:1,fontWeight:850,letterSpacing:".035em",color:expired?"#ff91aa":"#eee8ff"}}>
-                {block.value}
-              </div>
-              <div className="membership-countdown-label" style={{fontSize:11,color:"#837d99",marginTop:7,fontWeight:700}}>{block.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="membership-compact-right">
+        <span className="membership-compact-time">{countdown}</span>
+        <span className="membership-countdown-badge">{props.unlimited ? "OWNER · UNLIMITED" : expired ? "EXPIRED" : "ACTIVE"}</span>
+      </div>
     </section>
   );
 }
