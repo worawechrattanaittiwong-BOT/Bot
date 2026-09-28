@@ -34,7 +34,9 @@ create table if not exists access_group_grants (
   starts_at timestamptz not null default now(),
   expires_at timestamptz not null,
   status varchar(20) not null default 'ACTIVE'
-);"
+);
+alter table trial_grants
+  add column if not exists access_group_id uuid references access_groups(id) on delete set null;"
 
 echo '[phase3] register user and create primary Local slot'
 REGISTER=$(json_post "$BASE/auth/register" -d '{"email":"phase3-migration@scenova.test","password":"Migration123!"}')
