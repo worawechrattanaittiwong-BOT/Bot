@@ -493,17 +493,35 @@ export class BotController {
          (ls.assigned_user_id=$1 AND ls.mode='LOCAL' AND ls.status<>'DELETED') can_release_device,
          (ls.owner_user_id=$1) can_manage,
          (
-           (s.id IS NOT NULL AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now())
-           OR EXISTS (
-             SELECT 1
-             FROM access_group_grants gg
-             JOIN access_groups ag ON ag.id=gg.access_group_id
-             WHERE gg.user_id=$1
-               AND gg.mode=ls.mode
-               AND gg.status='ACTIVE'
-               AND gg.starts_at<=now()
-               AND gg.expires_at>now()
-               AND ag.enabled=true
+           (
+             (s.id IS NOT NULL AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now())
+             OR EXISTS (
+               SELECT 1
+               FROM access_group_grants gg
+               JOIN access_groups ag ON ag.id=gg.access_group_id
+               WHERE gg.user_id=$1
+                 AND gg.mode=ls.mode
+                 AND gg.status='ACTIVE'
+                 AND gg.starts_at<=now()
+                 AND gg.expires_at>now()
+                 AND ag.enabled=true
+             )
+           )
+           AND (
+             ls.mode<>'CLOUD'
+             OR EXISTS (
+               SELECT 1
+               FROM license_slots primary_slot
+               JOIN subscriptions primary_sub ON primary_sub.id=primary_slot.subscription_id
+               WHERE primary_slot.owner_user_id=ls.owner_user_id
+                 AND primary_slot.assigned_user_id=$1
+                 AND primary_slot.mode='CLOUD'
+                 AND primary_slot.slot_type='PERSONAL'
+                 AND primary_slot.status<>'DELETED'
+                 AND primary_sub.status='ACTIVE'
+                 AND primary_sub.starts_at<=now()
+                 AND primary_sub.expires_at>now()
+             )
            )
          ) subscription_active
        FROM license_slots ls
@@ -596,6 +614,39 @@ export class BotController {
     );
     if (user?.status === "ACTIVE" && (user.role === "OWNER" || user.role === "ADMIN")) {
       return { allowed: true, source: "OWNER", unlimited: true, expiresAt: null };
+    }
+
+    if (user?.status === "ACTIVE" && String(mode || "").toUpperCase() === "CLOUD") {
+      const primary = await this.db.one(
+        `SELECT ls.id slot_id,s.expires_at,
+                (
+                  s.id IS NOT NULL
+                  AND s.status='ACTIVE'
+                  AND s.starts_at<=now()
+                  AND s.expires_at>now()
+                ) active
+         FROM license_slots ls
+         LEFT JOIN subscriptions s ON s.id=ls.subscription_id
+         WHERE ls.owner_user_id=$1
+           AND ls.assigned_user_id=$1
+           AND ls.mode='CLOUD'
+           AND ls.slot_type='PERSONAL'
+           AND ls.status<>'DELETED'
+         ORDER BY ls.slot_number,ls.created_at
+         LIMIT 1`,
+        [userId]
+      );
+      if (!primary) {
+        return { allowed:false, source:"PRIMARY_SUBSCRIPTION_REQUIRED", primarySlotId:null };
+      }
+      if (!primary.active) {
+        return {
+          allowed:false,
+          source:"PRIMARY_SUBSCRIPTION_EXPIRED",
+          expiresAt:primary.expires_at || null,
+          primarySlotId:primary.slot_id
+        };
+      }
     }
 
     if (user?.status === "ACTIVE" && slotId) {
@@ -2373,8 +2424,11 @@ export class BotController {
       bound?.slot_id || null
     );
     if (!cloudAccess.allowed) {
+      if (cloudAccess.source === "PRIMARY_SUBSCRIPTION_EXPIRED" || cloudAccess.source === "PRIMARY_SUBSCRIPTION_REQUIRED") {
+        throw new ConflictException("แพ็กเกจ VPS หลัก (Slot #1) หมดอายุหรือยังไม่เปิดใช้งาน กรุณาต่ออายุแพ็กเกจหลักก่อน");
+      }
       if (cloudAccess.source === "SUBSCRIPTION_EXPIRED") {
-        throw new ConflictException("สมาชิก VPS หมดอายุแล้ว กรุณาต่ออายุก่อนเชื่อม MT5 บน Server อีกครั้ง");
+        throw new ConflictException("สมาชิก VPS Slot นี้หมดอายุแล้ว กรุณาต่ออายุ Slot ก่อนเชื่อม MT5 บน Server อีกครั้ง");
       }
       if (cloudAccess.source === "GROUP_DISABLED") {
         throw new ConflictException("สิทธิ์ VPS ของบัญชีนี้ถูกปิด กรุณาติดต่อผู้ดูแล");
@@ -2399,7 +2453,9 @@ export class BotController {
            metrics=(COALESCE(metrics,'{}'::jsonb)
              - 'membershipCutoff'
              - 'membershipCutoffAt'
-             - 'membershipExpiredAt')
+             - 'membershipExpiredAt'
+             - 'membershipCutoffReason'
+             - 'primaryMembershipExpiredAt')
          WHERE id=$1`,
         [bound.id]
       );
@@ -2409,7 +2465,9 @@ export class BotController {
         ...(bound.metrics || {}),
         membershipCutoff: undefined,
         membershipCutoffAt: undefined,
-        membershipExpiredAt: undefined
+        membershipExpiredAt: undefined,
+        membershipCutoffReason: undefined,
+        primaryMembershipExpiredAt: undefined
       };
     }
 
@@ -2538,8 +2596,11 @@ export class BotController {
       instance.slot_id
     );
     if (!access.allowed) {
+      if (access.source === "PRIMARY_SUBSCRIPTION_EXPIRED" || access.source === "PRIMARY_SUBSCRIPTION_REQUIRED") {
+        throw new ConflictException("แพ็กเกจ VPS หลัก (Slot #1) หมดอายุหรือยังไม่เปิดใช้งาน กรุณาต่ออายุแพ็กเกจหลักก่อนเริ่มบอท");
+      }
       if (access.source === "SUBSCRIPTION_EXPIRED") {
-        throw new ConflictException("สมาชิกหมดอายุแล้ว กรุณาต่ออายุสมาชิกก่อนเริ่มบอท");
+        throw new ConflictException("สมาชิก Slot นี้หมดอายุแล้ว กรุณาต่ออายุ Slot ก่อนเริ่มบอท");
       }
       if (access.source === "TRIAL_EXPIRED") {
         throw new ConflictException("Trial หมดอายุแล้ว กรุณาติดต่อผู้ดูแลเพื่อขอสิทธิ์ใช้งาน");
