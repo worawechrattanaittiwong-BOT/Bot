@@ -350,7 +350,7 @@ CREATE OR REPLACE FUNCTION scenova_rearm_cloud_after_subscription_change(
 )
 RETURNS integer
 LANGUAGE plpgsql
-AS $
+AS $scenova$
 DECLARE
  v_slot_type text;
  v_primary_active boolean := false;
@@ -400,5 +400,5 @@ BEGIN
  GET DIAGNOSTICS v_updated = ROW_COUNT;
  RETURN v_updated;
 END;
-$;
+$scenova$;
 `;
