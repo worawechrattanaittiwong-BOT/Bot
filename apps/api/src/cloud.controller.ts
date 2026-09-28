@@ -306,10 +306,13 @@ export class CloudCustomerController {
   }
 
   @Get("orders") async orders(@Req() req: any) {
-    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,
-      s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number
-      FROM cloud_orders o LEFT JOIN subscriptions s ON s.id=o.subscription_id
-      LEFT JOIN bot_instances b ON b.slot_id=o.slot_id LEFT JOIN mt5_accounts a ON a.id=b.mt5_account_id
+    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
+      s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number,ls.slot_type
+      FROM cloud_orders o
+      LEFT JOIN subscriptions s ON s.id=o.subscription_id
+      LEFT JOIN license_slots ls ON ls.id=o.slot_id
+      LEFT JOIN bot_instances b ON b.slot_id=o.slot_id
+      LEFT JOIN mt5_accounts a ON a.id=b.mt5_account_id
       WHERE o.user_id=$1 ORDER BY o.created_at DESC LIMIT 50`, [req.user.sub])).rows;
   }
   @Post("orders/:id/verify-slip")
@@ -342,6 +345,48 @@ export class CloudCustomerController {
     if (order.charge_id && order.status !== "PAID") await this.cloud.reconcile(order.charge_id);
     return { ok: true };
   }
+  @Post("addon-prices")
+  async updateAddonPrices(
+    @Req() req: any,
+    @Body() body: { packages?: Array<{ months:number; priceSatang:number; enabled:boolean }> }
+  ) {
+    const user = await this.db.one("SELECT role,status FROM users WHERE id=$1", [req.user.sub]);
+    if (!user || user.status !== "ACTIVE" || String(user.role || "").toUpperCase() !== "OWNER") {
+      throw new UnauthorizedException("Owner เท่านั้นที่ตั้งราคา VPS Slot เสริมได้");
+    }
+    const rows = Array.isArray(body.packages) ? body.packages : [];
+    if (rows.length !== 4) throw new BadRequestException("กรุณากำหนดราคา 1, 3, 6 และ 12 เดือนให้ครบ");
+    const monthsSeen = new Set<number>();
+    for (const item of rows) {
+      const months = Math.trunc(Number(item.months));
+      const priceSatang = Math.trunc(Number(item.priceSatang));
+      if (![1,3,6,12].includes(months) || monthsSeen.has(months)) throw new BadRequestException("ระยะเวลา Slot เสริมไม่ถูกต้อง");
+      if (!Number.isInteger(priceSatang) || priceSatang < 0 || priceSatang > 15000000) throw new BadRequestException("ราคาต้องอยู่ระหว่าง 0 ถึง 150,000 บาท");
+      if (typeof item.enabled !== "boolean" || (item.enabled && priceSatang < 2000)) throw new BadRequestException("ราคาเปิดขายต้องไม่น้อยกว่า 20 บาท");
+      monthsSeen.add(months);
+    }
+    await this.db.transaction(async tx => {
+      for (const item of rows) {
+        await tx.query(
+          `INSERT INTO cloud_addon_packages(months,price_satang,enabled,updated_at)
+           VALUES($1,$2,$3,now())
+           ON CONFLICT(months) DO UPDATE SET price_satang=EXCLUDED.price_satang,enabled=EXCLUDED.enabled,updated_at=now()`,
+          [Math.trunc(Number(item.months)), Math.trunc(Number(item.priceSatang)), item.enabled]
+        );
+      }
+      await tx.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES($1,'OWNER_CLOUD_ADDON_PRICING_UPDATED','cloud_addon_packages',$2,$3::jsonb)`,
+        [
+          String(req.user?.code || req.user?.sub || "OWNER").slice(0,160),
+          String(req.user.sub),
+          JSON.stringify({ packages: rows })
+        ]
+      );
+    });
+    return { ok:true, addonPackages:(await this.db.query("SELECT * FROM cloud_addon_packages ORDER BY months")).rows };
+  }
+
   @Post("checkout") async checkout(@Req() req: any, @Body() body: { months: number; slotId?: string; promoCode?: string; purchaseType?: "PACKAGE" | "ADDON" }) {
     if (paymentMode() === "UNCONFIGURED" || (paymentMode() !== "EASYSLIP" && process.env.CLOUD_CHECKOUT_ENABLED !== "true")) throw new ConflictException("ยังไม่เปิดรับชำระเงิน");
     if (![1,3,6,12].includes(body.months)) throw new BadRequestException("Invalid package");
