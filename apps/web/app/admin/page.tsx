@@ -921,22 +921,73 @@ export default function AdminPage() {
               <div className="owner-access-group-list">
                 {accessGroups.length ? accessGroups.map((group:any)=>(
                   <div className={"owner-access-group-item "+(group.enabled?"enabled":"disabled")} key={group.id}>
-                    <div>
-                      <b>{group.name}</b>
-                      <small>{Number(group.subscription_count||0)} สมาชิก · {Number(group.trial_count||0)} Trial</small>
+                    <div className="owner-access-group-summary">
+                      <div>
+                        <b>{group.name}</b>
+                        <small>{Number(group.subscription_count||0)} สมาชิก · {Number(group.trial_count||0)} Trial</small>
+                      </div>
+                      <span className={"owner-state-chip "+(group.enabled?"good":"bad")}>{group.enabled?"เปิดใช้งาน":"ปิดอยู่"}</span>
                     </div>
-                    <span className={"owner-state-chip "+(group.enabled?"good":"bad")}>{group.enabled?"เปิดใช้งาน":"ปิดอยู่"}</span>
-                    <button
-                      className={"btn "+(group.enabled?"danger":"primary")}
-                      disabled={groupAction===group.id}
-                      onClick={()=>toggleAccessGroup(group)}
-                    >
-                      {group.enabled?"ปิดทั้งกลุ่ม":"เปิดกลุ่ม"}
-                    </button>
+
+                    <div className="owner-access-group-days">
+                      <label>
+                        <span>Trial เริ่มต้น</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={groupTrialDays[String(group.id)] ?? Number(group.trial_days || 1)}
+                          onChange={e=>setGroupTrialDays(prev=>({...prev,[String(group.id)]:Math.max(1,Math.min(365,Number(e.target.value)||1))}))}
+                        />
+                      </label>
+                      <span>วัน</span>
+                      <button className="btn" disabled={groupAction==="days:"+group.id} onClick={()=>saveGroupTrialDays(group)}>บันทึก</button>
+                    </div>
+
+                    <div className="owner-access-group-actions">
+                      <button className="btn" disabled={Boolean(groupAction)} onClick={()=>toggleGroupDetails(group)}>
+                        {expandedGroupId===group.id?"ซ่อนรายชื่อ":"ดูรายชื่อ"}
+                      </button>
+                      <button
+                        className={"btn "+(group.enabled?"danger":"primary")}
+                        disabled={Boolean(groupAction)}
+                        onClick={()=>toggleAccessGroup(group)}
+                      >
+                        {group.enabled?"ปิดทั้งกลุ่ม":"เปิดกลุ่ม"}
+                      </button>
+                      <button className="btn danger" disabled={Boolean(groupAction)} onClick={()=>deleteAccessGroup(group)}>
+                        ลบกลุ่ม
+                      </button>
+                    </div>
+
+                    {expandedGroupId===group.id && (
+                      <div className="owner-access-group-members">
+                        {(groupMembers[String(group.id)] || []).length ? (groupMembers[String(group.id)] || []).map((member:any)=>(
+                          <div className="owner-access-group-member" key={member.kind+":"+member.ref_id}>
+                            <div>
+                              <b>{member.user_code}</b>
+                              <small>
+                                {member.kind==="SUBSCRIPTION"
+                                  ? (member.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" · "+member.label
+                                  : member.kind==="TRIAL_PENDING" ? "Trial · รอเชื่อม MT5" : "Trial · "+member.status}
+                                {member.expires_at ? " · ถึง "+new Date(member.expires_at).toLocaleDateString("th-TH") : ""}
+                              </small>
+                            </div>
+                            <button
+                              className="btn danger"
+                              disabled={Boolean(groupAction)}
+                              onClick={()=>removeMemberFromGroup(group,member)}
+                            >
+                              เอาออกจากกลุ่ม
+                            </button>
+                          </div>
+                        )) : <div className="owner-control-empty">กลุ่มนี้ยังไม่มีสมาชิก</div>}
+                      </div>
+                    )}
                   </div>
                 )) : <div className="owner-control-empty">ยังไม่มีกลุ่ม · สร้างกลุ่ม “ทดลอง” เพื่อแยกจากสมาชิกจริงได้</div>}
               </div>
-              <div className="owner-control-note">การปิดกลุ่มไม่ลบสมาชิกและไม่แก้วันหมดอายุ เมื่อเปิดกลับจะใช้วันหมดอายุเดิมต่อ</div>
+              <div className="owner-control-note">ปิดกลุ่ม = พักสิทธิ์เฉพาะกลุ่ม · ลบกลุ่ม = ลบชื่อกลุ่มเท่านั้น สมาชิกและวันหมดอายุยังอยู่ครบ</div>
             </section>
 
             <div className="owner-customer-layout">
@@ -1061,7 +1112,7 @@ export default function AdminPage() {
                             <div className="owner-control-fields">
                               <label><span>จำนวนวัน</span><input className="input" type="number" min={1} max={3650} value={days} onChange={e=>setDays(Number(e.target.value))}/></label>
                               <label><span>ยอดชำระจริง (บาท)</span><input className="input" type="number" min={0} step="0.01" value={paidAmountBaht} onChange={e=>setPaidAmountBaht(e.target.value)} placeholder="0.00"/></label>
-                              <label>
+                              <label className="owner-field-select">
                                 <span>กลุ่มสิทธิ์</span>
                                 <select className="input" value={selectedAccessGroupId} onChange={e=>setSelectedAccessGroupId(e.target.value)}>
                                   <option value="">ไม่จัดกลุ่ม</option>
@@ -1079,6 +1130,51 @@ export default function AdminPage() {
                                 ? selectedPlan.label+" มีสมาชิกอยู่แล้ว — ปรับวันด้านล่าง"
                                 : "เปิด "+(selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" "+days+" วัน"}
                             </button>
+
+                            {currentModeMembership(selectedCustomer,selectedPlan.mode) ? (
+                              <div className="owner-selected-membership-adjust">
+                                <div>
+                                  <b>ปรับวัน {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"}</b>
+                                  <small>เพิ่มหรือลดจากวันหมดอายุของสิทธิ์นี้โดยตรง</small>
+                                </div>
+                                <div className="owner-add-days">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={3650}
+                                    value={membershipDays[String(currentModeMembership(selectedCustomer,selectedPlan.mode)?.subscription_id)] ?? 1}
+                                    onChange={e=>{
+                                      const id=String(currentModeMembership(selectedCustomer,selectedPlan.mode)?.subscription_id||"");
+                                      if(id) setMembershipDays(prev=>({...prev,[id]:Math.max(1,Number(e.target.value)||1)}));
+                                    }}
+                                  />
+                                  <button
+                                    className="btn danger"
+                                    disabled={Boolean(customerAction)}
+                                    onClick={()=>{
+                                      const m=currentModeMembership(selectedCustomer,selectedPlan.mode);
+                                      if(m) adjustSubscriptionDays(selectedCustomer,m.subscription_id,-(membershipDays[String(m.subscription_id)] ?? 1));
+                                    }}
+                                  >
+                                    − ลดวัน
+                                  </button>
+                                  <button
+                                    className="btn"
+                                    disabled={Boolean(customerAction)}
+                                    onClick={()=>{
+                                      const m=currentModeMembership(selectedCustomer,selectedPlan.mode);
+                                      if(m) adjustSubscriptionDays(selectedCustomer,m.subscription_id,membershipDays[String(m.subscription_id)] ?? 1);
+                                    }}
+                                  >
+                                    + เพิ่มวัน
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="owner-control-note owner-membership-adjust-note">
+                                ยังไม่มีสมาชิก {selectedPlan.mode==="CLOUD"?"Cloud VPS":"Local MT5"} จึงยังเพิ่ม/ลดวันไม่ได้ · เปิดสิทธิ์ด้านบนก่อน
+                              </div>
+                            )}
 
                             <div className="owner-membership-list">
                               {memberships(selectedCustomer).length ? memberships(selectedCustomer).map((m:any)=>(
@@ -1125,7 +1221,7 @@ export default function AdminPage() {
                                     </div>
                                   </div>
                                 </div>
-                              )) : <div className="owner-control-empty">ยังไม่มีสมาชิกแบบชำระเงิน</div>}
+                              )) : <div className="owner-control-empty">ยังไม่มีสมาชิกแบบชำระเงิน · เปิด Local หรือ Cloud VPS ก่อน แล้วจึงปรับวันได้</div>}
                             </div>
                           </section>
 
@@ -1135,7 +1231,7 @@ export default function AdminPage() {
                             </div>
                             <div className="owner-trial-control">
                               <label><span>Trial Days</span><input className="input" type="number" min={1} max={365} value={trialDays} onChange={e=>setTrialDays(Number(e.target.value))}/></label>
-                              <label>
+                              <label className="owner-field-select">
                                 <span>กลุ่ม Trial</span>
                                 <select
                                   className="input"
@@ -1144,6 +1240,8 @@ export default function AdminPage() {
                                   onChange={e=>{
                                     const next=e.target.value;
                                     setTrialAccessGroupId(next);
+                                    const group=accessGroups.find((item:any)=>String(item.id)===String(next));
+                                    if(group?.trial_days) setTrialDays(Math.max(1,Math.min(365,Number(group.trial_days))));
                                     if (selectedCustomer.trial_status || selectedCustomer.trial_authorization_status==="PENDING_BIND") {
                                       setTrialGroup(selectedCustomer.id,next);
                                     }
