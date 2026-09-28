@@ -437,7 +437,7 @@ export default function PackagesPage() {
   }
 
   async function cancelSlipPayment(type: "local" | "cloud", id: string) {
-    if (busy) return;
+    if (busy) return false;
     const confirmed = await confirmPopup({
       title: "ยกเลิกรายการชำระเงิน",
       tone: "warning",
@@ -445,7 +445,7 @@ export default function PackagesPage() {
       confirmLabel: "ยกเลิกรายการ",
       cancelLabel: "กลับ"
     });
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
     setBusy("cancel-" + type);
     setMessage("");
@@ -458,8 +458,10 @@ export default function PackagesPage() {
       );
       await load();
       notify("info", "ยกเลิกรายการแล้ว สามารถเลือกแพ็กเกจใหม่ได้");
+      return true;
     } catch (error: unknown) {
       notify("bad", error instanceof Error ? error.message : "ยกเลิกรายการไม่สำเร็จ");
+      return false;
     } finally {
       setBusy("");
     }
@@ -1070,9 +1072,11 @@ export default function PackagesPage() {
                     }
                   }}
                   onCancel={async () => {
-                    await cancelSlipPayment(isLocalSystem ? "local" : "cloud", checkoutOrder.id);
-                    setCheckoutOrderId("");
-                    checkoutDialog.current?.close();
+                    const cancelled = await cancelSlipPayment(isLocalSystem ? "local" : "cloud", checkoutOrder.id);
+                    if (cancelled) {
+                      setCheckoutOrderId("");
+                      checkoutDialog.current?.close();
+                    }
                   }}
                 />
               </div>
