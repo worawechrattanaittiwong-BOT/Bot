@@ -1150,10 +1150,15 @@ export default function DashboardPage() {
       String(seconds).padStart(2,"0")
     ].join(":");
   })();
+  const unlimitedAccess = entitlement?.source === "OWNER";
   const showCompactAccessCountdown =
     Boolean(entitlement?.allowed) &&
-    accessRemaining !== null &&
-    Boolean(accessExpiry);
+    (unlimitedAccess || (accessRemaining !== null && Boolean(accessExpiry)));
+  const accessCompactLabel = unlimitedAccess ? "OWNER ∞" : accessCompactCountdown;
+  const accessCompactTitle = unlimitedAccess
+    ? "Owner Access · ใช้งานได้ไม่จำกัดเวลา"
+    : "เวลาสมาชิกคงเหลือ · หมดอายุ " +
+      (accessExpiry ? accessExpiry.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"medium",hour12:false}) : "—");
 
   const accessLabel = useMemo(() => {
     if (!entitlement) return "ยังไม่มีสิทธิ์ใช้งาน";
@@ -2874,10 +2879,10 @@ export default function DashboardPage() {
                       {showCompactAccessCountdown && (
                         <span
                           className="cc-membership-mobile-countdown"
-                          title={"เวลาสมาชิกคงเหลือ · หมดอายุ "+(accessExpiry ? accessExpiry.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"medium",hour12:false}) : "—")}
-                          aria-label={"เวลาสมาชิกคงเหลือ "+accessCompactCountdown}
+                          title={accessCompactTitle}
+                          aria-label={unlimitedAccess ? "Owner Access ไม่จำกัดเวลา" : "เวลาสมาชิกคงเหลือ "+accessCompactCountdown}
                         >
-                          {accessCompactCountdown}
+                          {accessCompactLabel}
                         </span>
                       )}
                     </div>
@@ -2888,10 +2893,10 @@ export default function DashboardPage() {
                       {showCompactAccessCountdown && (
                         <span
                           className="cc-membership-mini-countdown"
-                          title={"เวลาสมาชิกคงเหลือ · หมดอายุ "+(accessExpiry ? accessExpiry.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"medium",hour12:false}) : "—")}
-                          aria-label={"เวลาสมาชิกคงเหลือ "+accessCompactCountdown}
+                          title={accessCompactTitle}
+                          aria-label={unlimitedAccess ? "Owner Access ไม่จำกัดเวลา" : "เวลาสมาชิกคงเหลือ "+accessCompactCountdown}
                         >
-                          {accessCompactCountdown}
+                          {accessCompactLabel}
                         </span>
                       )}
                     </div>
