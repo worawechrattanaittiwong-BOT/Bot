@@ -697,6 +697,19 @@ export default function PerformanceDashboardPage() {
           <header className={styles.summaryTitle}>
             <div className={styles.titleMark}><ScenovaIcon name="pnl" size={24}/><h2>BOT PERFORMANCE SUMMARY</h2><ScenovaIcon name="pnl" size={24}/></div>
             <p>{mode==="LIVE"?"Live portfolio performance · "+strategyScopeLabel:"Backtest performance analysis"}</p>
+            {report && !detailedStatsReliable && mode==="LIVE" ? (
+              <div
+                className={styles.dataQualityNotice}
+                title={journalRecovering
+                  ? "ระบบกำลังใช้ Journal Replay เดิมของ EA เพื่อส่ง ENTRY/EXIT ที่ขาดกลับเข้า Server และจะอัปเดตอัตโนมัติเมื่อข้อมูลครบ"
+                  : "ระบบยืนยัน Net Profit จาก MT5 แล้ว แต่รายละเอียด Journal ยังไม่ครบ"}
+              >
+                <ScenovaIcon name="status" size={14}/>
+                <b>{journalRecovering
+                  ? "กำลังซิงก์ประวัติการเทรดจาก VPS MT5"
+                  : "รายละเอียดการเทรดยังซิงก์ไม่ครบ"}</b>
+              </div>
+            ) : null}
           </header>
 
           {!report||(mode==="BACKTEST"&&!backtest)?(
@@ -725,20 +738,6 @@ export default function PerformanceDashboardPage() {
                   <InfoRow icon="orders" label="Closed Positions" value={detailValue(String(totalPositions))}/>
                 </div>
               </div>
-
-              {!detailedStatsReliable && mode==="LIVE" ? (
-                <div className={styles.dataQualityNotice}>
-                  <ScenovaIcon name="status" size={17}/>
-                  <div>
-                    <b>{journalRecovering
-                      ? "กำลังซิงก์ประวัติการเทรดจาก VPS MT5"
-                      : "ข้อมูลกำไรจาก MT5 ถูกต้อง แต่รายละเอียดการเทรดยังไม่ครบ"}</b>
-                    <span>{journalRecovering
-                      ? "ระบบกำลังใช้ Journal Replay เดิมของ EA เพื่อส่ง ENTRY/EXIT ที่ขาดกลับเข้า Server · หน้านี้จะอัปเดตอัตโนมัติเมื่อข้อมูลครบ"
-                      : "ระบบยืนยัน Net Profit จาก MT5 แล้ว · Win Rate, จำนวนไม้, Lot และสถิติรายดีลจะแสดง “—” จนกว่า Journal ใหม่จะซิงก์ครบ"}</span>
-                  </div>
-                </div>
-              ) : null}
 
               <div className={styles.metricsCard}>
                 <Metric icon="wallet" label="Start Capital" value={money(startCapital,currency)}/>
