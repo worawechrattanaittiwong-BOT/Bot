@@ -2131,8 +2131,11 @@ export class BotController {
       slot.id
     );
     if (!cloudAccess.allowed) {
+      if (cloudAccess.source === "PRIMARY_SUBSCRIPTION_EXPIRED" || cloudAccess.source === "PRIMARY_SUBSCRIPTION_REQUIRED") {
+        throw new ConflictException("แพ็กเกจ VPS หลัก (Slot #1) หมดอายุหรือยังไม่เปิดใช้งาน กรุณาต่ออายุแพ็กเกจหลักก่อน");
+      }
       if (cloudAccess.source === "SUBSCRIPTION_EXPIRED") {
-        throw new ConflictException("สมาชิก VPS หมดอายุแล้ว กรุณาต่ออายุ Slot นี้ก่อนเชื่อมบัญชี MT5");
+        throw new ConflictException("สมาชิก VPS Slot นี้หมดอายุแล้ว กรุณาต่ออายุ Slot ก่อนเชื่อมบัญชี MT5");
       }
       if (cloudAccess.source === "GROUP_DISABLED") {
         throw new ConflictException("สิทธิ์ VPS ของบัญชีนี้ถูกปิด กรุณาติดต่อผู้ดูแล");
