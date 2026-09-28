@@ -658,7 +658,11 @@ export default function PackagesPage() {
                       : isLocalSystem
                         ? "พร้อมเลือกแพ็กเกจ"
                         : activeCatalog
-                          ? `${Number(activeCatalog.available || 0)} Slot พร้อม`
+                          ? elevated
+                            ? `${Number(activeCatalog.available || 0)} Slot พร้อม`
+                            : Number(activeCatalog.available || 0) > 0
+                              ? "พร้อมเลือกแพ็กเกจ"
+                              : "VPS เต็มชั่วคราว"
                           : "กำลังตรวจสอบ"}
                   </b>
                 </div>
