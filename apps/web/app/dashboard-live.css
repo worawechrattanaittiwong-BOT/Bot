@@ -1343,3 +1343,125 @@
 @keyframes cc-vps-migration-spin{
   to{transform:rotate(360deg)}
 }
+
+
+/* ===== V50 mobile running header + membership clock visibility =====
+   dashboard-live.css is loaded after premium-dashboard.css, so phone-specific
+   visibility/layout rules that must win belong here. */
+@media(max-width:700px){
+  .cc-v17-running-head{
+    min-height:50px!important;
+    padding:7px 8px!important;
+    display:flex!important;
+    flex-wrap:nowrap!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    gap:5px!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-title{
+    flex:1 1 auto!important;
+    min-width:0!important;
+    display:flex!important;
+    align-items:center!important;
+    gap:6px!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-title>span{
+    flex:0 0 27px!important;
+    width:27px!important;
+    height:27px!important;
+    border-radius:7px!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-title>div{
+    min-width:0!important;
+    display:flex!important;
+    flex-direction:column!important;
+    gap:0!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-title small{
+    font-size:var(--ui-type-caption)!important;
+    line-height:1!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-title b{
+    font-size:12px!important;
+    line-height:1.1!important;
+    white-space:nowrap!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-head-metrics{
+    flex:0 0 auto!important;
+    width:auto!important;
+    min-width:0!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-end!important;
+    gap:4px!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-head-metrics>.cc-v17-net-profit{
+    flex:0 0 auto!important;
+    width:auto!important;
+    height:auto!important;
+    min-width:0!important;
+    min-height:24px!important;
+    padding:3px 6px!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:3px!important;
+    border-radius:999px!important;
+    font-size:var(--ui-type-caption)!important;
+    white-space:nowrap!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-head-metrics>.cc-v17-net-profit b{
+    font-size:var(--ui-type-caption)!important;
+    white-space:nowrap!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-head-metrics>em{
+    flex:0 0 auto!important;
+    min-height:24px!important;
+    padding:3px 6px!important;
+    font-size:var(--ui-type-caption)!important;
+    white-space:nowrap!important;
+  }
+
+  .cc-v47 .cc-v6-symbol-chips{
+    display:flex!important;
+    flex-wrap:wrap!important;
+    overflow:visible!important;
+    white-space:normal!important;
+    row-gap:5px!important;
+  }
+
+  .cc-v47 .cc-v6-symbol-chips>.cc-membership-mini-countdown{
+    display:inline-flex!important;
+    flex:0 0 auto!important;
+    width:auto!important;
+    max-width:100%!important;
+    overflow:visible!important;
+    white-space:nowrap!important;
+    font-variant-numeric:tabular-nums!important;
+  }
+}
+
+@media(max-width:390px){
+  .cc-v17-running-head>.cc-v17-running-title small{
+    display:none!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-title b{
+    font-size:11px!important;
+  }
+
+  .cc-v17-running-head>.cc-v17-running-head-metrics>.cc-v17-net-profit,
+  .cc-v17-running-head>.cc-v17-running-head-metrics>em{
+    padding-left:5px!important;
+    padding-right:5px!important;
+  }
+}

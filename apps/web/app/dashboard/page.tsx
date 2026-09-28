@@ -2630,18 +2630,19 @@ export default function DashboardPage() {
       <main className={"main app-main" + (activeView === "account" ? " account-view-main" : "")}>
         <div className="mobile-only mobile-app-head">
           <div className="brand-lockup scenova-brand-lockup"><ScenovaBrand className="scenova-brand-logo-mobile"/></div>
-          <button className="btn ghost" onClick={logout}>ออก</button>
+          <div className="mobile-app-head-actions">
+            {isOwner ? (
+              <OwnerMobileNav activeKey={ownerActiveKey} onNavigate={handleOwnerNavigate}/>
+            ) : (
+              <CustomerMobileNav
+                activeKey={ownerActiveKey}
+                onNavigate={handleOwnerNavigate}
+                partner={data.partner}
+              />
+            )}
+            <button className="btn ghost" onClick={logout}>ออก</button>
+          </div>
         </div>
-
-        {isOwner ? (
-          <OwnerMobileNav activeKey={ownerActiveKey} onNavigate={handleOwnerNavigate}/>
-        ) : (
-          <CustomerMobileNav
-            activeKey={ownerActiveKey}
-            onNavigate={handleOwnerNavigate}
-            partner={data.partner}
-          />
-        )}
 
         <header className={"page-head human-head cc-page-head cc-v3-head " + (activeView === "overview" ? "cc-page-head-overview cc-v4-page-head" : activeView === "account" ? "cc-page-head-account" : "")}>
           <div className="cc-v3-title">
@@ -2984,7 +2985,7 @@ export default function DashboardPage() {
 
                 <section className="panel cc-v17-running-positions" aria-label="ออเดอร์ที่บอทกำลังรัน">
                   <div className="cc-v17-running-head">
-                    <div><span><ScenovaIcon name="orders" size={18}/></span><div><small>LIVE EXECUTION</small><b>ออเดอร์ที่กำลังรัน</b></div></div>
+                    <div className="cc-v17-running-title"><span><ScenovaIcon name="orders" size={18}/></span><div><small>LIVE EXECUTION</small><b>ออเดอร์ที่กำลังรัน</b></div></div>
                     <div className="cc-v17-running-head-metrics">
                       <span className={"cc-v17-net-profit "+(liveNetProfit>0?"good":liveNetProfit<0?"bad":"neutral")}>
                         Net Profit <b>{formatAccountMoney(liveNetProfit,accountCurrency,true)}</b>
