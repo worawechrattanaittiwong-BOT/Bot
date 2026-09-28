@@ -400,9 +400,6 @@ export class CloudCustomerController {
       if (user?.status !== "ACTIVE") throw new ConflictException("บัญชีไม่พร้อมใช้งาน");
       const pending = (await tx.query("SELECT id FROM cloud_orders WHERE user_id=$1 AND status IN ('CREATING','PENDING','REVIEW')", [req.user.sub])).rows[0];
       if (pending) throw new ConflictException("มีรายการรอชำระอยู่แล้ว กรุณาตรวจสอบรายการเดิม");
-      const pack = (await tx.query("SELECT * FROM cloud_packages WHERE months=$1 AND enabled=true AND price_satang>0", [body.months])).rows[0];
-      if (!pack) throw new ConflictException("แพ็กเกจยังไม่เปิดขาย");
-
       const purchaseType = body.slotId
         ? "RENEW"
         : String(body.purchaseType || "PACKAGE").toUpperCase();
@@ -478,7 +475,10 @@ export class CloudCustomerController {
             "SELECT * FROM cloud_addon_packages WHERE months=$1 AND enabled=true AND price_satang>0",
             [body.months]
           )).rows[0]
-        : pack;
+        : (await tx.query(
+            "SELECT * FROM cloud_packages WHERE months=$1 AND enabled=true AND price_satang>0",
+            [body.months]
+          )).rows[0];
       if (!pricingPack) {
         throw new ConflictException(addonFlow ? "ราคา VPS Slot เสริมระยะเวลานี้ยังไม่เปิดขาย" : "แพ็กเกจยังไม่เปิดขาย");
       }
