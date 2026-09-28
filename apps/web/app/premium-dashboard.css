@@ -5389,3 +5389,119 @@
 .cc-shell-v4 .cc-v46-performance-system-grid small{
   font-size:var(--ui-type-caption)!important;
 }
+
+
+/* ===== Mobile compact dashboard · generated reference pass =====
+   Keep desktop unchanged. On phones, remove the fixed-height dead space from
+   Live Execution and tighten the per-mode card so the dashboard reads as one
+   dense trading console instead of several oversized panels. */
+@media(max-width:760px){
+  .cc-v19-three-card-grid{
+    gap:8px!important;
+  }
+
+  .cc-v19-three-card-grid .cc-v17-running-positions{
+    height:auto!important;
+    min-height:0!important;
+  }
+  .cc-v19-three-card-grid .cc-v17-running-table{
+    height:auto!important;
+    min-height:0!important;
+  }
+  .cc-v19-three-card-grid .cc-v17-running-table .body{
+    height:auto!important;
+    min-height:0!important;
+    max-height:220px!important;
+    overflow:auto!important;
+  }
+  .cc-v17-running-head{
+    min-height:44px!important;
+    padding:7px 10px!important;
+    gap:8px!important;
+  }
+  .cc-v17-running-head>div{
+    gap:7px!important;
+  }
+  .cc-v17-running-head>div>span{
+    width:28px!important;
+    height:28px!important;
+    border-radius:7px!important;
+  }
+  .cc-v17-running-head small{
+    font-size:10px!important;
+  }
+  .cc-v17-running-head b{
+    font-size:13px!important;
+  }
+  .cc-v17-running-head em{
+    padding:4px 7px!important;
+    font-size:10px!important;
+  }
+
+  .cc-v17-running-table>.head,
+  .cc-v17-running-table .row{
+    gap:5px!important;
+    grid-template-columns:.72fr 1fr .72fr .56fr .95fr .82fr!important;
+  }
+  .cc-v17-running-table>.head{
+    min-height:30px!important;
+    padding:5px 8px!important;
+    font-size:10px!important;
+  }
+  .cc-v17-running-table .row{
+    min-height:42px!important;
+    padding:5px 8px!important;
+    font-size:11px!important;
+  }
+  .cc-v17-running-table .side{
+    min-width:38px!important;
+    padding:3px 5px!important;
+    border-radius:6px!important;
+    font-size:10px!important;
+  }
+  .cc-v17-running-table .empty{
+    min-height:78px!important;
+    padding:10px!important;
+    font-size:11px!important;
+  }
+
+  .cc-v19-three-card-grid .cc-v12-mode-performance .cc-v12-card-head{
+    min-height:44px!important;
+    padding:7px 9px!important;
+  }
+  .cc-v12-card-head>div>span{
+    width:27px!important;
+    height:27px!important;
+  }
+  .cc-v12-card-head b{
+    font-size:12px!important;
+  }
+  .cc-v12-card-head small,
+  .cc-v12-card-head em{
+    font-size:10px!important;
+  }
+  .cc-v19-three-card-grid .cc-v12-mode-table{
+    margin-top:0!important;
+    padding:3px 8px 8px!important;
+  }
+  .cc-v19-three-card-grid .cc-v12-mode-table .head{
+    min-height:28px!important;
+    padding:4px 6px!important;
+    font-size:10px!important;
+  }
+  .cc-v19-three-card-grid .cc-v12-mode-table .row{
+    min-height:42px!important;
+    padding:4px 6px!important;
+    font-size:10px!important;
+  }
+  .cc-v19-three-card-grid .cc-v12-mode-table .row>span small{
+    margin-top:0!important;
+    font-size:9px!important;
+  }
+
+  /* System Pulse repeats connection state already shown in the page header and
+     live status card. Hide the duplicate only on mobile to reclaim vertical room. */
+  .cc-v46-performance-system{
+    display:none!important;
+  }
+}
