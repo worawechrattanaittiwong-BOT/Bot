@@ -2110,14 +2110,25 @@ export class BotController {
     }
     if (bound) {
       const migration = await this.db.one(
-        `SELECT id FROM runtime_migrations
+        `SELECT id,state FROM runtime_migrations
          WHERE bot_instance_id=$1
            AND state NOT IN ('COMPLETED','FAILED','CANCELLED')
+         ORDER BY created_at DESC
          LIMIT 1`,
         [bound.id]
       );
       if (migration) {
-        throw new ConflictException("VPS กำลังย้ายระบบอยู่ กรุณารอให้การย้ายเสร็จก่อน");
+        const reconciled = await this.migrations.reconcile(
+          req.user.sub,
+          String(migration.id),
+          String(req.user?.code || req.user?.user_code || req.user?.sub || "USER").slice(0, 160)
+        );
+        const migrationState = String(reconciled?.state || migration.state || "").toUpperCase();
+        if (!["COMPLETED","FAILED","CANCELLED"].includes(migrationState)) {
+          throw new ConflictException(
+            "VPS ยังอยู่ระหว่างย้ายระบบ (" + migrationState + ") กรุณารอให้การย้ายเสร็จก่อน"
+          );
+        }
       }
     }
 
@@ -2167,15 +2178,12 @@ export class BotController {
       [instance.id]
     );
     if (activeMigration) {
-      let migrationState = String(activeMigration.state || "").toUpperCase();
-      if (["TARGET_PROVISIONING", "WAITING_LOCAL_INSTALL"].includes(migrationState)) {
-        const reconciled = await this.migrations.reconcile(
-          req.user.sub,
-          String(activeMigration.id),
-          String(req.user?.code || req.user?.user_code || req.user?.sub || "USER").slice(0, 160)
-        );
-        migrationState = String(reconciled?.state || migrationState).toUpperCase();
-      }
+      const reconciled = await this.migrations.reconcile(
+        req.user.sub,
+        String(activeMigration.id),
+        String(req.user?.code || req.user?.user_code || req.user?.sub || "USER").slice(0, 160)
+      );
+      const migrationState = String(reconciled?.state || activeMigration.state || "").toUpperCase();
       if (!["COMPLETED", "FAILED", "CANCELLED"].includes(migrationState)) {
         throw new ConflictException(
           "การย้ายระบบ Local/Cloud ยังไม่ยืนยันว่าเสร็จสมบูรณ์ (สถานะ " +
