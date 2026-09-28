@@ -359,7 +359,6 @@ export class AdminController {
   async deleteAccessGroup(@Body() body: { groupId: string }) {
     const group = await this.db.one(
       `SELECT ag.*,
-              (SELECT count(*)::int FROM subscriptions s WHERE s.access_group_id=ag.id) AS subscription_count,
               (
                 SELECT count(DISTINCT x.user_id)::int
                 FROM (
@@ -374,19 +373,103 @@ export class AdminController {
     );
     if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
 
+    const affected = await this.db.query(
+      `WITH target AS (
+         SELECT DISTINCT bi.id
+         FROM bot_instances bi
+         JOIN trial_grants tg ON tg.mt5_account_id=bi.mt5_account_id
+         JOIN users u ON u.id=tg.user_id
+         WHERE tg.access_group_id=$1
+           AND u.role NOT IN ('OWNER','ADMIN')
+           AND NOT EXISTS (
+             SELECT 1
+             FROM subscriptions s
+             JOIN plans p ON p.id=s.plan_id
+             WHERE s.user_id=tg.user_id
+               AND s.status='ACTIVE'
+               AND s.starts_at<=now()
+               AND s.expires_at>now()
+               AND p.mode=bi.mode
+           )
+           AND NOT (
+             bi.mode='LOCAL'
+             AND EXISTS (
+               SELECT 1
+               FROM partner_accounts pa
+               WHERE pa.user_id=tg.user_id
+                 AND pa.status='ACTIVE'
+                 AND pa.expires_at>now()
+             )
+           )
+       ),
+       stopped AS (
+         UPDATE bot_instances bi
+         SET desired_state='SAFE_STOP'
+         FROM target t
+         WHERE bi.id=t.id
+           AND bi.desired_state<>'SAFE_STOP'
+           AND (
+             bi.desired_state IN ('RUNNING','STARTING')
+             OR bi.actual_state='RUNNING'
+             OR COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
+           )
+         RETURNING bi.id
+       )
+       SELECT id FROM stopped`,
+      [body.groupId]
+    );
+    if (affected.rows.length) {
+      await this.db.query(
+        `INSERT INTO bot_commands(bot_instance_id,command)
+         SELECT id,'SAFE_STOP' FROM unnest($1::uuid[]) AS x(id)`,
+        [affected.rows.map((item:any)=>item.id)]
+      );
+    }
+
+    const expired = await this.db.query(
+      `UPDATE trial_grants
+       SET status='EXPIRED',
+           expires_at=LEAST(COALESCE(expires_at,now()),now())
+       WHERE access_group_id=$1
+         AND status IN ('APPROVED','ACTIVE')
+       RETURNING id,user_id`,
+      [body.groupId]
+    );
+    const blocked = await this.db.query(
+      `UPDATE trial_authorizations
+       SET status='BLOCKED',
+           blocked_reason='GROUP_DELETED',
+           updated_at=now()
+       WHERE access_group_id=$1
+         AND status<>'BLOCKED'
+       RETURNING id,user_id`,
+      [body.groupId]
+    );
+
+    // Paid membership is never owned by a trial group. This is a safety cleanup
+    // for records created before trial-group isolation.
+    await this.db.query(
+      "UPDATE subscriptions SET access_group_id=NULL WHERE access_group_id=$1",
+      [body.groupId]
+    );
     await this.db.query("DELETE FROM access_groups WHERE id=$1", [body.groupId]);
+
     await this.audit("OWNER", "DELETE_ACCESS_GROUP", "access_group", body.groupId, {
       name: group.name,
-      subscriptionCount: Number(group.subscription_count || 0),
       trialCount: Number(group.trial_count || 0),
-      membersKept: true,
-      accessRestoredToUngrouped: true
+      expiredTrials: expired.rowCount || 0,
+      blockedAuthorizations: blocked.rowCount || 0,
+      safeStopped: affected.rowCount || 0,
+      paidMembershipsKept: true
     });
     return {
       ok: true,
       name: group.name,
-      subscriptionCount: Number(group.subscription_count || 0),
-      trialCount: Number(group.trial_count || 0)
+      trialCount: Number(group.trial_count || 0),
+      expiredTrials: expired.rowCount || 0,
+      blockedAuthorizations: blocked.rowCount || 0,
+      safeStopped: affected.rowCount || 0,
+      paidMembershipsKept: true
     };
   }
 
@@ -406,45 +489,25 @@ export class AdminController {
         `WITH target AS (
            SELECT DISTINCT bi.id
            FROM bot_instances bi
-           JOIN license_slots ls ON ls.id=bi.slot_id
-           JOIN subscriptions s ON s.id=ls.subscription_id
-           JOIN users u ON u.id=ls.assigned_user_id
-           WHERE s.access_group_id=$1
-             AND u.role NOT IN ('OWNER','ADMIN')
-             AND NOT (
-               bi.mode='LOCAL'
-               AND EXISTS (
-                 SELECT 1 FROM partner_accounts pa
-                 WHERE pa.user_id=u.id
-                   AND pa.status='ACTIVE'
-                   AND pa.expires_at>now()
-               )
-             )
-           UNION
-           SELECT DISTINCT bi.id
-           FROM bot_instances bi
-           JOIN mt5_accounts ma ON ma.id=bi.mt5_account_id
            JOIN trial_grants tg ON tg.mt5_account_id=bi.mt5_account_id
            JOIN users u ON u.id=tg.user_id
-           LEFT JOIN license_slots ls ON ls.id=bi.slot_id
            WHERE tg.access_group_id=$1
              AND u.role NOT IN ('OWNER','ADMIN')
              AND NOT EXISTS (
                SELECT 1
-               FROM subscriptions alt
-               JOIN plans ap ON ap.id=alt.plan_id
-               LEFT JOIN access_groups aag ON aag.id=alt.access_group_id
-               WHERE alt.user_id=tg.user_id
-                 AND alt.status='ACTIVE'
-                 AND alt.starts_at<=now()
-                 AND alt.expires_at>now()
-                 AND COALESCE(aag.enabled,true)
-                 AND ap.mode=bi.mode
+               FROM subscriptions s
+               JOIN plans p ON p.id=s.plan_id
+               WHERE s.user_id=tg.user_id
+                 AND s.status='ACTIVE'
+                 AND s.starts_at<=now()
+                 AND s.expires_at>now()
+                 AND p.mode=bi.mode
              )
              AND NOT (
                bi.mode='LOCAL'
                AND EXISTS (
-                 SELECT 1 FROM partner_accounts pa
+                 SELECT 1
+                 FROM partner_accounts pa
                  WHERE pa.user_id=tg.user_id
                    AND pa.status='ACTIVE'
                    AND pa.expires_at>now()
@@ -479,54 +542,26 @@ export class AdminController {
 
     await this.audit("OWNER", enabled ? "ENABLE_ACCESS_GROUP" : "DISABLE_ACCESS_GROUP", "access_group", row.id, {
       name: row.name,
-      safeStopped
+      safeStopped,
+      paidMembershipsUnaffected: true
     });
-    return { ...row, safeStopped };
+    return { ...row, safeStopped, paidMembershipsUnaffected: true };
   }
 
   @Post("subscriptions/set-group")
   async setSubscriptionGroup(@Body() body: { subscriptionId: string; groupId?: string | null }) {
-    let group: any = null;
     if (body.groupId) {
-      group = await this.db.one("SELECT id,name,enabled FROM access_groups WHERE id=$1", [body.groupId]);
-      if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+      throw new ConflictException("กลุ่มทดลองใช้กับ Trial เท่านั้น สมาชิกจริงจะไม่ถูกผูกกับกลุ่ม");
     }
     const row = await this.db.one(
-      "UPDATE subscriptions SET access_group_id=$2 WHERE id=$1 RETURNING *",
-      [body.subscriptionId, body.groupId || null]
+      "UPDATE subscriptions SET access_group_id=NULL WHERE id=$1 RETURNING *",
+      [body.subscriptionId]
     );
     if (!row) throw new ConflictException("subscription not found");
-    let safeStopped = 0;
-    if (group && group.enabled === false) {
-      const stopped = await this.db.query(
-        `UPDATE bot_instances bi
-         SET desired_state='SAFE_STOP'
-         FROM license_slots ls
-         WHERE ls.id=bi.slot_id
-           AND ls.subscription_id=$1
-           AND (
-             bi.desired_state IN ('RUNNING','STARTING')
-             OR bi.actual_state='RUNNING'
-             OR COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
-           )
-         RETURNING bi.id`,
-        [row.id]
-      );
-      safeStopped = stopped.rowCount || 0;
-      if (stopped.rows.length) {
-        await this.db.query(
-          `INSERT INTO bot_commands(bot_instance_id,command)
-           SELECT id,'SAFE_STOP' FROM unnest($1::uuid[]) AS x(id)`,
-          [stopped.rows.map((item:any)=>item.id)]
-        );
-      }
-    }
-    await this.audit("OWNER", "SET_SUBSCRIPTION_GROUP", "subscription", row.id, {
-      groupId: group?.id || null,
-      groupName: group?.name || null,
-      safeStopped
+    await this.audit("OWNER", "DETACH_SUBSCRIPTION_GROUP", "subscription", row.id, {
+      paidMembershipKept: true
     });
-    return { ...row, group, safeStopped };
+    return { ...row, group: null, paidMembershipKept: true };
   }
 
   @Post("trials/set-group")
