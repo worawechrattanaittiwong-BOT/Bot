@@ -107,20 +107,28 @@ export class AdminController {
              'expires_at',sub.expires_at,
              'slots',p.max_mt5_accounts,
              'allow_resale',p.allow_resale,
-             'active',(sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now())
+             'group_id',ag.id,
+             'group_name',ag.name,
+             'group_enabled',COALESCE(ag.enabled,true),
+             'active',(sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now() AND COALESCE(ag.enabled,true))
            )
            ORDER BY p.mode,sub.expires_at DESC
          ) AS memberships
          FROM subscriptions sub
          JOIN plans p ON p.id=sub.plan_id
+         LEFT JOIN access_groups ag ON ag.id=sub.access_group_id
          WHERE sub.user_id=u.id
            AND sub.status='ACTIVE'
            AND sub.expires_at>now()
        ) ms ON true
        LEFT JOIN LATERAL (
          SELECT tg.status trial_status,tg.expires_at trial_expires_at,
-                tg.duration_minutes trial_duration_minutes,tg.started_at trial_started_at
+                tg.duration_minutes trial_duration_minutes,tg.started_at trial_started_at,
+                tg.access_group_id trial_group_id,
+                ag.name trial_group_name,
+                COALESCE(ag.enabled,true) trial_group_enabled
          FROM trial_grants tg
+         LEFT JOIN access_groups ag ON ag.id=tg.access_group_id
          WHERE tg.user_id=u.id
          ORDER BY tg.created_at DESC
          LIMIT 1
@@ -130,8 +138,12 @@ export class AdminController {
            auth.status trial_authorization_status,
            auth.duration_minutes trial_authorization_minutes,
            auth.approved_at trial_authorization_approved_at,
-           auth.blocked_reason trial_authorization_blocked_reason
+           auth.blocked_reason trial_authorization_blocked_reason,
+           auth.access_group_id trial_authorization_group_id,
+           ag.name trial_authorization_group_name,
+           COALESCE(ag.enabled,true) trial_authorization_group_enabled
          FROM trial_authorizations auth
+         LEFT JOIN access_groups ag ON ag.id=auth.access_group_id
          WHERE auth.user_id=u.id
          LIMIT 1
        ) ta ON true
@@ -205,6 +217,134 @@ export class AdminController {
     return result.rows;
   }
 
+  @Get("access-groups")
+  async accessGroups() {
+    const rows = await this.db.query(
+      `SELECT ag.id,ag.name,ag.enabled,ag.note,ag.created_by,ag.created_at,ag.updated_at,
+              count(DISTINCT s.id)::int AS subscription_count,
+              count(DISTINCT tg.id)::int AS trial_count
+       FROM access_groups ag
+       LEFT JOIN subscriptions s ON s.access_group_id=ag.id
+       LEFT JOIN trial_grants tg ON tg.access_group_id=ag.id
+       GROUP BY ag.id
+       ORDER BY lower(ag.name),ag.created_at`
+    );
+    return rows.rows;
+  }
+
+  @Post("access-groups/create")
+  async createAccessGroup(@Body() body: { name: string; note?: string }) {
+    const name = String(body.name || "").trim().slice(0, 80);
+    if (name.length < 2) throw new ConflictException("ชื่อกลุ่มต้องมีอย่างน้อย 2 ตัวอักษร");
+    const existing = await this.db.one(
+      "SELECT id FROM access_groups WHERE lower(name)=lower($1) LIMIT 1",
+      [name]
+    );
+    if (existing) throw new ConflictException("มีกลุ่มชื่อนี้อยู่แล้ว");
+    const row = await this.db.one(
+      `INSERT INTO access_groups(name,note,created_by)
+       VALUES($1,$2,'OWNER')
+       RETURNING *`,
+      [name, String(body.note || "").trim().slice(0, 500) || null]
+    );
+    await this.audit("OWNER", "CREATE_ACCESS_GROUP", "access_group", row.id, { name: row.name });
+    return row;
+  }
+
+  @Post("access-groups/toggle")
+  async toggleAccessGroup(@Body() body: { groupId: string; enabled: boolean }) {
+    const enabled = Boolean(body.enabled);
+    const row = await this.db.one(
+      `UPDATE access_groups SET enabled=$2,updated_at=now()
+       WHERE id=$1 RETURNING *`,
+      [body.groupId, enabled]
+    );
+    if (!row) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+
+    let safeStopped = 0;
+    if (!enabled) {
+      const affected = await this.db.query(
+        `WITH target AS (
+           SELECT DISTINCT bi.id
+           FROM bot_instances bi
+           JOIN license_slots ls ON ls.id=bi.slot_id
+           JOIN subscriptions s ON s.id=ls.subscription_id
+           WHERE s.access_group_id=$1
+           UNION
+           SELECT DISTINCT bi.id
+           FROM bot_instances bi
+           JOIN trial_grants tg ON tg.mt5_account_id=bi.mt5_account_id
+           WHERE tg.access_group_id=$1
+         ),
+         stopped AS (
+           UPDATE bot_instances bi
+           SET desired_state='SAFE_STOP'
+           FROM target t
+           WHERE bi.id=t.id
+             AND bi.desired_state<>'SAFE_STOP'
+           RETURNING bi.id
+         )
+         SELECT id FROM stopped`,
+        [body.groupId]
+      );
+      safeStopped = affected.rowCount || 0;
+      if (affected.rows.length) {
+        await this.db.query(
+          `INSERT INTO bot_commands(bot_instance_id,command)
+           SELECT id,'SAFE_STOP' FROM unnest($1::uuid[]) AS x(id)`,
+          [affected.rows.map((item:any)=>item.id)]
+        );
+      }
+    }
+
+    await this.audit("OWNER", enabled ? "ENABLE_ACCESS_GROUP" : "DISABLE_ACCESS_GROUP", "access_group", row.id, {
+      name: row.name,
+      safeStopped
+    });
+    return { ...row, safeStopped };
+  }
+
+  @Post("subscriptions/set-group")
+  async setSubscriptionGroup(@Body() body: { subscriptionId: string; groupId?: string | null }) {
+    let group: any = null;
+    if (body.groupId) {
+      group = await this.db.one("SELECT id,name,enabled FROM access_groups WHERE id=$1", [body.groupId]);
+      if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+    }
+    const row = await this.db.one(
+      "UPDATE subscriptions SET access_group_id=$2 WHERE id=$1 RETURNING *",
+      [body.subscriptionId, body.groupId || null]
+    );
+    if (!row) throw new ConflictException("subscription not found");
+    await this.audit("OWNER", "SET_SUBSCRIPTION_GROUP", "subscription", row.id, {
+      groupId: group?.id || null,
+      groupName: group?.name || null
+    });
+    return { ...row, group };
+  }
+
+  @Post("trials/set-group")
+  async setTrialGroup(@Body() body: { userId: string; groupId?: string | null }) {
+    let group: any = null;
+    if (body.groupId) {
+      group = await this.db.one("SELECT id,name,enabled FROM access_groups WHERE id=$1", [body.groupId]);
+      if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+    }
+    await this.db.query(
+      "UPDATE trial_grants SET access_group_id=$2 WHERE user_id=$1",
+      [body.userId, body.groupId || null]
+    );
+    await this.db.query(
+      "UPDATE trial_authorizations SET access_group_id=$2,updated_at=now() WHERE user_id=$1",
+      [body.userId, body.groupId || null]
+    );
+    await this.audit("OWNER", "SET_TRIAL_GROUP", "user", body.userId, {
+      groupId: group?.id || null,
+      groupName: group?.name || null
+    });
+    return { ok: true, group };
+  }
+
   @Get("system")
   async system() {
     const users = await this.db.one(
@@ -229,12 +369,18 @@ export class AdminController {
     days: number;
     mt5AccountId?: string;
     approvedBy?: string;
+    accessGroupId?: string | null;
   }) {
+    if (body.accessGroupId) {
+      const group = await this.db.one("SELECT id FROM access_groups WHERE id=$1", [body.accessGroupId]);
+      if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+    }
     return this.trials.authorizeUser({
       userId: body.userId,
       days: body.days,
       mt5AccountId: body.mt5AccountId || null,
-      approvedBy: body.approvedBy || "OWNER"
+      approvedBy: body.approvedBy || "OWNER",
+      accessGroupId: body.accessGroupId || null
     });
   }
 
@@ -319,6 +465,7 @@ export class AdminController {
     note?: string;
     paidAmountSatang?: number;
     paymentReference?: string;
+    accessGroupId?: string | null;
   }) {
     const plan = await this.db.one(
       "SELECT * FROM plans WHERE code=$1 AND active=true",
@@ -334,6 +481,15 @@ export class AdminController {
     }
     if (user.role === "OWNER" || user.role === "ADMIN") {
       throw new ConflictException("OWNER/ADMIN already has unlimited access");
+    }
+
+    let accessGroup: any = null;
+    if (body.accessGroupId) {
+      accessGroup = await this.db.one(
+        "SELECT id,name,enabled FROM access_groups WHERE id=$1",
+        [body.accessGroupId]
+      );
+      if (!accessGroup) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
     }
 
     const paidAmountSatang = Math.trunc(Number(body.paidAmountSatang || 0));
@@ -370,8 +526,8 @@ export class AdminController {
     );
 
     const row = await this.db.one(
-      "INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
-      [body.userId, plan.id, startsAt, expiresAt, body.activatedBy || "ADMIN", body.note || null]
+      "INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note,access_group_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+      [body.userId, plan.id, startsAt, expiresAt, body.activatedBy || "ADMIN", body.note || null, accessGroup?.id || null]
     );
     if (partnerSource) {
       await this.partner.detachCustomerToDirect(body.userId, row.id, body.activatedBy || "ADMIN");
@@ -412,7 +568,9 @@ export class AdminController {
       paidAmountSatang,
       paymentReference: String(body.paymentReference || "").slice(0, 160) || null,
       referralCommissionCount,
-      referralCreditFailed
+      referralCreditFailed,
+      accessGroupId: accessGroup?.id || null,
+      accessGroupName: accessGroup?.name || null
     });
     const slots = await this.db.query(
       "SELECT id,slot_number,mode,status,assigned_user_id,subscription_id FROM license_slots WHERE owner_user_id=$1 AND mode=$2 AND status<>'DELETED' ORDER BY slot_number",
@@ -498,6 +656,80 @@ export class AdminController {
         [extra.id]
       );
     }
+  }
+
+  @Post("subscriptions/adjust-days")
+  async adjustSubscriptionDays(@Body() body: { subscriptionId: string; days: number }) {
+    const days = Math.trunc(Number(body.days));
+    if (!Number.isFinite(days) || days === 0 || days < -3650 || days > 3650) {
+      throw new ConflictException("จำนวนวันที่ปรับต้องอยู่ระหว่าง -3650 ถึง 3650 วัน และห้ามเป็น 0");
+    }
+
+    const current = await this.db.one(
+      "SELECT id,starts_at,expires_at,status FROM subscriptions WHERE id=$1",
+      [body.subscriptionId]
+    );
+    if (!current) throw new ConflictException("subscription not found");
+
+    const row = await this.db.one(
+      `UPDATE subscriptions
+       SET expires_at=GREATEST(
+             starts_at,
+             CASE
+               WHEN $2::int > 0 THEN GREATEST(expires_at,now()) + make_interval(days => $2::int)
+               ELSE expires_at + make_interval(days => $2::int)
+             END
+           ),
+           status=CASE
+             WHEN GREATEST(
+               starts_at,
+               CASE
+                 WHEN $2::int > 0 THEN GREATEST(expires_at,now()) + make_interval(days => $2::int)
+                 ELSE expires_at + make_interval(days => $2::int)
+               END
+             ) > now() THEN 'ACTIVE'
+             ELSE 'EXPIRED'
+           END
+       WHERE id=$1
+       RETURNING *`,
+      [body.subscriptionId, days]
+    );
+
+    const relation = await this.db.one(
+      `UPDATE partner_customers
+       SET expires_at=$2,updated_at=now(),
+           status=CASE WHEN $2>now() THEN status ELSE 'EXPIRED' END
+       WHERE subscription_id=$1 AND status IN ('ACTIVE','DIRECT')
+       RETURNING id,direct_subscription_id`,
+      [row.id, row.expires_at]
+    );
+
+    if (new Date(row.expires_at).getTime() <= Date.now()) {
+      const stopped = await this.db.query(
+        `UPDATE bot_instances bi
+         SET desired_state='SAFE_STOP'
+         FROM license_slots ls
+         WHERE ls.id=bi.slot_id
+           AND ls.subscription_id=$1
+         RETURNING bi.id`,
+        [row.id]
+      );
+      if (stopped.rows.length) {
+        await this.db.query(
+          `INSERT INTO bot_commands(bot_instance_id,command)
+           SELECT id,'SAFE_STOP' FROM unnest($1::uuid[]) AS x(id)`,
+          [stopped.rows.map((item:any)=>item.id)]
+        );
+      }
+    }
+
+    await this.audit("OWNER", "ADJUST_SUBSCRIPTION_DAYS", "subscription", row.id, {
+      days,
+      previousExpiresAt: current.expires_at,
+      expiresAt: row.expires_at,
+      partnerRelationUpdated: Boolean(relation?.id)
+    });
+    return row;
   }
 
   @Post("subscriptions/extend")
