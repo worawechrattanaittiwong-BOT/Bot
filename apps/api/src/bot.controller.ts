@@ -474,6 +474,9 @@ export class BotController {
          p.name_th plan_name,
          p.allow_resale,
          p.max_mt5_accounts plan_slots,
+         ag.id access_group_id,
+         ag.name access_group_name,
+         COALESCE(ag.enabled,true) access_group_enabled,
          bi.id instance_id,
          bi.actual_state,
          bi.desired_state,
@@ -492,18 +495,19 @@ export class BotController {
          (ls.assigned_user_id=$1 AND ls.status IN ('ACTIVE','AVAILABLE')) can_control,
          (ls.assigned_user_id=$1 AND ls.mode='LOCAL' AND ls.status<>'DELETED') can_release_device,
          (ls.owner_user_id=$1) can_manage,
-         (s.id IS NOT NULL AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now()) subscription_active
+         (s.id IS NOT NULL AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND COALESCE(ag.enabled,true)) subscription_active
        FROM license_slots ls
        JOIN users ou ON ou.id=ls.owner_user_id
        LEFT JOIN users au ON au.id=ls.assigned_user_id
        LEFT JOIN subscriptions s ON s.id=ls.subscription_id
        LEFT JOIN plans p ON p.id=s.plan_id
+       LEFT JOIN access_groups ag ON ag.id=s.access_group_id
        LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
        LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
        WHERE (ls.owner_user_id=$1 OR ls.assigned_user_id=$1)
          AND ls.status<>'DELETED'
        ORDER BY
-         CASE WHEN ls.assigned_user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() THEN 0
+         CASE WHEN ls.assigned_user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND COALESCE(ag.enabled,true) THEN 0
               WHEN ls.assigned_user_id=$1 THEN 1 ELSE 2 END,
          ls.mode,ls.slot_number,ls.created_at`,
       [userId]
@@ -565,12 +569,14 @@ export class BotController {
          FROM license_slots ls
          JOIN subscriptions s ON s.id=ls.subscription_id
          JOIN plans p ON p.id=s.plan_id
+         LEFT JOIN access_groups ag ON ag.id=s.access_group_id
          WHERE ls.id=$1
            AND ls.assigned_user_id=$2
            AND ls.status='ACTIVE'
            AND s.status='ACTIVE'
            AND s.starts_at<=now()
            AND s.expires_at>now()
+           AND COALESCE(ag.enabled,true)
            AND ($3::text IS NULL OR p.mode=$3)
          LIMIT 1`,
         [slotId, userId, mode]
@@ -590,7 +596,7 @@ export class BotController {
     // Legacy fallback keeps already-issued subscriptions working while their slot
     // migration catches up.
     const legacySub = await this.db.one(
-      "SELECT s.id,s.expires_at,p.code,p.mode,p.max_mt5_accounts,p.allow_resale FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
+      "SELECT s.id,s.expires_at,p.code,p.mode,p.max_mt5_accounts,p.allow_resale FROM subscriptions s JOIN plans p ON p.id=s.plan_id LEFT JOIN access_groups ag ON ag.id=s.access_group_id WHERE s.user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() AND COALESCE(ag.enabled,true) AND ($2::text IS NULL OR p.mode=$2) ORDER BY s.expires_at DESC LIMIT 1",
       [userId, mode]
     );
     if (legacySub) {
@@ -620,9 +626,28 @@ export class BotController {
       );
     }
 
+    const disabledGroup = await this.db.one(
+      `SELECT ag.name
+       FROM subscriptions s
+       JOIN plans p ON p.id=s.plan_id
+       JOIN access_groups ag ON ag.id=s.access_group_id
+       WHERE s.user_id=$1
+         AND s.status='ACTIVE'
+         AND s.starts_at<=now()
+         AND s.expires_at>now()
+         AND ag.enabled=false
+         AND ($2::text IS NULL OR p.mode=$2)
+       ORDER BY s.expires_at DESC
+       LIMIT 1`,
+      [userId, mode]
+    );
+
     // Trial is intentionally Local-only. Cloud/VPS always requires a
     // Cloud entitlement so a Trial can never consume a reserved Trading VPS.
     if (String(mode || "").toUpperCase() === "CLOUD") {
+      if (disabledGroup) {
+        return { allowed: false, source: "GROUP_DISABLED", groupName: disabledGroup.name };
+      }
       if (expiredSub) {
         return { allowed: false, source: "SUBSCRIPTION_EXPIRED", expiresAt: expiredSub.expires_at };
       }
@@ -630,9 +655,19 @@ export class BotController {
     }
 
     const trial = await this.db.one(
-      "SELECT id,status,duration_minutes,started_at,expires_at FROM trial_grants WHERE user_id=$1 AND ($2::uuid IS NULL OR mt5_account_id=$2) ORDER BY created_at DESC LIMIT 1",
+      `SELECT tg.id,tg.status,tg.duration_minutes,tg.started_at,tg.expires_at,
+              ag.name access_group_name,COALESCE(ag.enabled,true) access_group_enabled
+       FROM trial_grants tg
+       LEFT JOIN access_groups ag ON ag.id=tg.access_group_id
+       WHERE tg.user_id=$1
+         AND ($2::uuid IS NULL OR tg.mt5_account_id=$2)
+       ORDER BY tg.created_at DESC
+       LIMIT 1`,
       [userId, mt5AccountId]
     );
+    if (trial && trial.access_group_enabled === false) {
+      return { allowed: false, source: "GROUP_DISABLED", groupName: trial.access_group_name || null };
+    }
     if (trial?.status === "APPROVED") return { allowed: true, source: "TRIAL_READY", trialId: trial.id };
     if (trial?.status === "ACTIVE" && trial.expires_at && new Date(trial.expires_at) > new Date()) {
       return { allowed: true, source: "TRIAL", expiresAt: trial.expires_at };
@@ -2232,6 +2267,11 @@ export class BotController {
       }
       if (access.source === "TRIAL_EXPIRED") {
         throw new ConflictException("Trial หมดอายุแล้ว กรุณาติดต่อผู้ดูแลเพื่อขอสิทธิ์ใช้งาน");
+      }
+      if (access.source === "GROUP_DISABLED") {
+        throw new ConflictException(
+          "สิทธิ์กลุ่ม " + String(access.groupName || "นี้") + " ถูกปิดชั่วคราว กรุณาติดต่อผู้ดูแล"
+        );
       }
       throw new ConflictException("ยังไม่มี Trial หรือสมาชิกที่ใช้งานได้กับบัญชีนี้");
     }
