@@ -108,6 +108,22 @@ export class AdminController {
              'expires_at',sub.expires_at,
              'slots',p.max_mt5_accounts,
              'allow_resale',p.allow_resale,
+             'slot_type',(
+               SELECT ls4.slot_type
+               FROM license_slots ls4
+               WHERE ls4.subscription_id=sub.id
+                 AND ls4.status<>'DELETED'
+               ORDER BY ls4.slot_number,ls4.created_at
+               LIMIT 1
+             ),
+             'slot_number',(
+               SELECT ls4.slot_number
+               FROM license_slots ls4
+               WHERE ls4.subscription_id=sub.id
+                 AND ls4.status<>'DELETED'
+               ORDER BY ls4.slot_number,ls4.created_at
+               LIMIT 1
+             ),
              'group_id',NULL,
              'group_name',NULL,
              'group_enabled',true,
@@ -1324,8 +1340,8 @@ export class AdminController {
     }
 
     if (mode === "LOCAL") {
-      const localCount = await this.db.one(
-        `SELECT count(*)::int total
+      const localSlots = await this.db.one(
+        `SELECT count(*)::int total,min(slot_number)::int primary_slot_number
          FROM license_slots
          WHERE assigned_user_id=$1
            AND owner_user_id=$1
@@ -1333,8 +1349,11 @@ export class AdminController {
            AND status<>'DELETED'`,
         [body.userId]
       );
-      if (Number(localCount?.total || 0) <= 1) {
-        throw new ConflictException("ต้องคง Local Slot หลักไว้อย่างน้อย 1 Slot");
+      if (
+        Number(localSlots?.total || 0) <= 1 ||
+        Number(slot.slot_number || 0) === Number(localSlots?.primary_slot_number || 0)
+      ) {
+        throw new ConflictException("Local Slot หลักไม่สามารถลบได้");
       }
     }
 
@@ -1350,6 +1369,7 @@ export class AdminController {
     if (
       mode === "CLOUD" &&
       slot.runner_id &&
+      String(slot.actual_state || "OFFLINE").toUpperCase() !== "OFFLINE" &&
       !["STOP_CONFIRMED","LEASE_REVOKED"].includes(String(slot.runtime_stop_state || "NONE").toUpperCase())
     ) {
       const activeStop = await this.db.one(
@@ -1459,6 +1479,18 @@ export class AdminController {
         "UPDATE license_slots SET assigned_user_id=NULL,status='DELETED',updated_at=now() WHERE id=$1",
         [slot.id]
       );
+      if (slot.subscription_id) {
+        const remaining = await tx.query(
+          "SELECT 1 FROM license_slots WHERE subscription_id=$1 AND status<>'DELETED' LIMIT 1",
+          [slot.subscription_id]
+        );
+        if (!remaining.rows.length) {
+          await tx.query(
+            "UPDATE subscriptions SET status='CANCELLED',expires_at=LEAST(expires_at,now()) WHERE id=$1 AND status='ACTIVE'",
+            [slot.subscription_id]
+          );
+        }
+      }
     });
 
     const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
