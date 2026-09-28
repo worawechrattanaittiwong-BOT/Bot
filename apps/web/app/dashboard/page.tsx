@@ -3966,6 +3966,7 @@ export default function DashboardPage() {
                 capacity={Number(cloudCatalog?.available || 0)}
                 ownerCanPrice={String(data.user?.role || "").toUpperCase()==="OWNER"}
                 onSelect={(slotId:string)=>selectSlot(slotId)}
+                onConnect={(slotId:string)=>prepareCloudMt5Dialog(slotId,"NEW")}
                 onBuy={()=>openVpsSlotDialog("")}
                 onRenew={(slotId:string)=>openVpsSlotDialog(slotId)}
                 onPrimaryRenew={openPrimaryPackagePage}
@@ -4437,6 +4438,7 @@ function VpsSlotManager(props:{
   capacity:number;
   ownerCanPrice:boolean;
   onSelect:(slotId:string)=>void;
+  onConnect:(slotId:string)=>void;
   onBuy:()=>void;
   onRenew:(slotId:string)=>void;
   onPrimaryRenew:()=>void;
@@ -4543,9 +4545,15 @@ function VpsSlotManager(props:{
                   type="button"
                   className={"btn "+(selected ? "primary" : "ghost")}
                   disabled={tone==="blocked"}
-                  onClick={()=>props.onSelect(String(slot.id))}
+                  onClick={()=>{
+                    if (!slot.account_number) {
+                      props.onConnect(String(slot.id));
+                      return;
+                    }
+                    props.onSelect(String(slot.id));
+                  }}
                 >
-                  {tone==="blocked" ? "รอต่ออายุแพ็กเกจหลัก" : selected ? "กำลังจัดการ" : slot.account_number ? "จัดการ Slot" : "เชื่อม MT5"}
+                  {tone==="blocked" ? "รอต่ออายุแพ็กเกจหลัก" : slot.account_number ? (selected ? "กำลังจัดการ" : "จัดการ Slot") : "เชื่อม MT5"}
                 </button>
                 {!props.ownerUnlimited && (
                   <button
