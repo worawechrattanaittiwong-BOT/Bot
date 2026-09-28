@@ -1,7 +1,7 @@
 .layer{
   position:fixed;
   inset:0;
-  z-index:8800;
+  z-index:4200;
   display:grid;
   place-items:center;
   padding:24px;
