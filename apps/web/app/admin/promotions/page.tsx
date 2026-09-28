@@ -55,7 +55,6 @@ type EditorState = {
   endsAt:string;
   maxImpressionsPerDay:number;
   delaySeconds:number;
-  oncePerSlot:boolean;
   audienceRoles:string[];
   allAuthenticatedPages:boolean;
   selectedPages:string[];
@@ -164,7 +163,6 @@ function campaignToEditor(campaign:Campaign):EditorState {
     endsAt:toLocalInput(campaign.ends_at),
     maxImpressionsPerDay:Math.max(1,Number(settings.maxImpressionsPerDay||3)),
     delaySeconds:Math.max(0,Number(settings.delayMs||2500)/1000),
-    oncePerSlot:settings.oncePerSlot!==false,
     audienceRoles:Array.isArray(settings.audienceRoles)?settings.audienceRoles.map((x:any)=>String(x).toUpperCase()):[],
     allAuthenticatedPages:!exact.length&&!prefixes.length,
     selectedPages:hasUnknownPaths?[]:selectedPages,
@@ -193,7 +191,6 @@ function newEditor():EditorState {
     endsAt:"",
     maxImpressionsPerDay:3,
     delaySeconds:2.5,
-    oncePerSlot:true,
     audienceRoles:["CUSTOMER"],
     allAuthenticatedPages:true,
     selectedPages:[],
@@ -360,7 +357,7 @@ export default function PromotionCenterPage() {
       endsAt:editor.endsAt?new Date(editor.endsAt).toISOString():null,
       settings:{
         maxImpressionsPerDay:Number(editor.maxImpressionsPerDay||3),
-        oncePerSlot:editor.oncePerSlot,
+        oncePerSlot:true,
         delayMs:Math.round(Number(editor.delaySeconds||0)*1000),
         exactPaths,
         allowedPathPrefixes,
@@ -689,10 +686,10 @@ export default function PromotionCenterPage() {
                     <span>หน่วงก่อนแสดง (วินาที)</span>
                     <input type="number" min="0" max="15" step="0.5" value={editor.delaySeconds} onChange={event=>setEditorField("delaySeconds",Number(event.target.value))}/>
                   </label>
-                  <label className={s.checkField}>
-                    <input type="checkbox" checked={editor.oncePerSlot} onChange={event=>setEditorField("oncePerSlot",event.target.checked)}/>
-                    <span>แสดงสูงสุด 1 ครั้งต่อช่วงเวลา</span>
-                  </label>
+                  <div className={s.fixedRule}>
+                    <b>กฎการแสดง</b>
+                    <span>1 ครั้งต่อช่วงเวลา · เช้า / เที่ยง / เย็น</span>
+                  </div>
                 </div>
               </section>
 
