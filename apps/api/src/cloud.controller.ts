@@ -183,12 +183,13 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
       } else {
         slot = (await tx.query(`INSERT INTO license_slots(owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label)
           SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
-          CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
+          CASE WHEN $3='ADDON' THEN 'ADDON' ELSE 'PERSONAL' END,
           'ACTIVE','Cloud Trading'
-          FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`, [order.user_id, subscription.id])).rows[0];
+          FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`, [order.user_id, subscription.id, String(order.purchase_type || "PACKAGE").toUpperCase()])).rows[0];
       }
       await tx.query("UPDATE cloud_orders SET status='PAID',charge_id=$2,slot_id=$3,subscription_id=$4,paid_at=now() WHERE id=$1",
         [order.id, charge.id, slot.id, subscription.id]);
+      await tx.query("SELECT scenova_rearm_cloud_after_subscription_change($1,$2)", [order.user_id, slot.id]);
       await this.promotions.consume(tx, "CLOUD", order.id);
 
       // Referral accounting must never prevent a successfully paid customer
@@ -252,16 +253,17 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
         slot = (await tx.query(
           `INSERT INTO license_slots(owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label)
            SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
-                  CASE WHEN COUNT(*) FILTER (WHERE status<>'DELETED')>0 THEN 'ADDON' ELSE 'PERSONAL' END,
+                  CASE WHEN $3='ADDON' THEN 'ADDON' ELSE 'PERSONAL' END,
                   'ACTIVE','Cloud Trading'
            FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`,
-          [order.user_id, subscription.id]
+          [order.user_id, subscription.id, String(order.purchase_type || "PACKAGE").toUpperCase()]
         )).rows[0];
       }
       await tx.query(
         "UPDATE cloud_orders SET status='PAID',slot_id=$2,subscription_id=$3,paid_at=now(),expires_at=now() WHERE id=$1",
         [order.id, slot.id, subscription.id]
       );
+      await tx.query("SELECT scenova_rearm_cloud_after_subscription_change($1,$2)", [order.user_id, slot.id]);
       await this.promotions.consume(tx, "CLOUD", order.id);
       await tx.query(
         "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES('PROMOTION','CLOUD_ACTIVATED','order',$1,$2::jsonb)",
