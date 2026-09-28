@@ -11,6 +11,8 @@ const release = read("apps/api/src/release-version.ts");
 const workerLoop = read("tools/windows-cloud-worker/Worker/WorkerLoop.cs");
 const workerProject = read("tools/windows-cloud-worker/Worker/ScenovaCloudWorker.csproj");
 const cloudRelease = read("apps/api/src/cloud-server-release.ts");
+const performanceApi = read("apps/api/src/performance-analytics.controller.ts");
+const performancePage = read("apps/web/app/performance/page.tsx");
 
 assert.match(ea, /bool PersistCloudJournalPayload\(/, "Cloud EA must persist journal payloads locally");
 assert.match(ea, /scenova-journal-/, "Cloud EA must use a dedicated durable journal file queue");
@@ -49,5 +51,26 @@ const workerProjectVersion = workerProject.match(/<Version>([^<]+)<\/Version>/)?
 const promotedWorkerVersion = cloudRelease.match(/workerVersion: "([^"]+)"/)?.[1];
 assert.equal(workerVersion, workerProjectVersion, "Worker source and project version must match");
 assert.equal(workerVersion, promotedWorkerVersion, "Worker source and promoted Cloud release must match");
+
+assert.match(
+  performanceApi,
+  /detailedStatsReliable/,
+  "Performance API must flag incomplete journal-derived detail"
+);
+assert.match(
+  performanceApi,
+  /JOURNAL_INCOMPLETE/,
+  "Performance API must expose journal quality state"
+);
+assert.match(
+  performancePage,
+  /ข้อมูลกำไรจาก MT5 ถูกต้อง แต่รายละเอียดการเทรดยังไม่ครบ/,
+  "Performance UI must explain incomplete journal detail instead of showing misleading zeros"
+);
+assert.match(
+  performancePage,
+  /const detailValue=.*detailedStatsReliable/,
+  "Performance UI must suppress unreliable detailed metrics"
+);
 
 console.log("Cloud durable journal relay contract PASS");
