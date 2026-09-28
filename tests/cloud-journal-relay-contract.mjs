@@ -8,6 +8,7 @@ const relay = read("tools/windows-cloud-worker/Worker/CloudEaRelay.cs");
 const client = read("tools/windows-cloud-worker/Worker/WorkerClient.cs");
 const api = read("apps/api/src/ea.controller.ts");
 const release = read("apps/api/src/release-version.ts");
+const eaManifest = JSON.parse(read("mt5/release/manifest.json").replace(/^\uFEFF/, ""));
 const workerLoop = read("tools/windows-cloud-worker/Worker/WorkerLoop.cs");
 const workerProject = read("tools/windows-cloud-worker/Worker/ScenovaCloudWorker.csproj");
 const cloudRelease = read("apps/api/src/cloud-server-release.ts");
@@ -52,6 +53,7 @@ assert.match(ea, /if\(closeConfirmed && commandCanAck\)[\s\S]*?AckCommand\(comma
 const eaVersion = ea.match(/#define SCENOVA_EA_VERSION "([^"]+)"/)?.[1];
 const apiEaVersion = release.match(/DEFAULT_EA_VERSION = "([^"]+)"/)?.[1];
 assert.equal(eaVersion, apiEaVersion, "EA source and API promoted EA version must match");
+assert.equal(eaManifest.eaVersion, eaVersion, "Published EA artifact manifest must match EA source version");
 
 const workerVersion = workerLoop.match(/Version = "([^"]+)"/)?.[1];
 const workerProjectVersion = workerProject.match(/<Version>([^<]+)<\/Version>/)?.[1];
