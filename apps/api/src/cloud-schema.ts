@@ -143,6 +143,15 @@ CREATE TABLE IF NOT EXISTS cloud_packages (
  updated_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO cloud_packages(months) VALUES(1),(3),(6),(12) ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS cloud_addon_packages (
+ months integer PRIMARY KEY CHECK(months IN (1,3,6,12)),
+ price_satang integer NOT NULL DEFAULT 0 CHECK(price_satang>=0),
+ enabled boolean NOT NULL DEFAULT false,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO cloud_addon_packages(months,price_satang,enabled)
+SELECT months,price_satang,enabled FROM cloud_packages
+ON CONFLICT(months) DO NOTHING;
 INSERT INTO plans(code,name_th,mode,max_mt5_accounts)
  VALUES ('CLOUD_1M','Cloud 1 เดือน','CLOUD',1),('CLOUD_3M','Cloud 3 เดือน','CLOUD',1),
  ('CLOUD_6M','Cloud 6 เดือน','CLOUD',1),('CLOUD_12M','Cloud 12 เดือน','CLOUD',1)
