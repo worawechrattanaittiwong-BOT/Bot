@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { SCENOVA_MASTER_MARK } from "../lib/brand";
 
 export type ScenovaIconName =
-  | "brand" | "control" | "overview" | "users" | "cloud" | "strategy"
+  | "brand" | "control" | "overview" | "users" | "referral" | "cloud" | "strategy"
   | "clock" | "report" | "settings" | "shield" | "book" | "chat" | "logout"
   | "wallet" | "equity" | "pnl" | "orders" | "gold" | "play" | "stop" | "close"
   | "trend" | "target" | "spread" | "hourglass" | "status" | "account" | "copy"
@@ -28,6 +28,7 @@ export function ScenovaIcon({name,size=18,className=""}:{name:ScenovaIconName|st
     case "control": body=<P><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M8 12h8M12 8v8"/><circle cx="12" cy="12" r="5"/></P>;break;
     case "overview": body=<P><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></P>;break;
     case "users": body=<P><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></P>;break;
+    case "referral": body=<P><circle cx="12" cy="5" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M12 7.5v4M12 11.5H6v4M12 11.5h6v4"/><path d="M2.5 22c.5-2 1.8-3 3.5-3s3 .9 3.5 3M14.5 22c.5-2 1.8-3 3.5-3s3 .9 3.5 3"/></P>;break;
     case "cloud": body=<P><path d="M17.5 19H7a5 5 0 0 1-.7-9.95A7 7 0 0 1 19.7 11 4 4 0 0 1 17.5 19Z"/></P>;break;
     case "strategy": body=<P><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 15 3-3 2 2 5-5"/><path d="M16 9h2v2"/></P>;break;
     case "clock":
