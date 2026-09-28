@@ -1066,11 +1066,21 @@
   .heroDetails { gap: 8px; font-size: var(--ui-type-caption); }
   .header .currentAccess { width: 100%; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; }
   .currentAccess b { margin-top: 0; text-align: right; }
-  .trialHead, .sectionHeader, .systemHeader { padding: 18px; gap: 14px; }
-  .trialBody { padding: 12px 18px 18px; }
-  .trialPanel { margin-bottom: 24px; }
-  .trialHeaderActions { flex-wrap: wrap; }
+  .sectionHeader, .systemHeader { padding: 18px; gap: 14px; }
+  .trialHead { min-height: 56px; padding: 9px 11px; gap: 8px; flex-direction: row; align-items: center; }
+  .trialHead .titleWithIcon { gap: 8px; }
+  .trialHead .icon { width: 32px; height: 32px; }
+  .trialHead .titleWithIcon p { display: none; }
+  .trialHead .trialHeaderActions { width: auto; margin-left: auto; justify-content: flex-end; flex-wrap: nowrap; }
+  .trialHead .badge { display: none; }
+  .trialHead .trialToggle { min-height: 31px; padding: 6px 9px; white-space: nowrap; }
+  .trialBody { padding: 10px 11px 12px; }
+  .trialPanel { margin-bottom: 16px; }
   .centerTop h2 { font-size: 22px; }
+  .centerControls { width: 100%; justify-content: stretch; }
+  .ownerSalesControl { width: 100%; justify-content: space-between; }
+  .systemSwitcher { flex: 1 1 100%; }
+  .salesPausedNotice { align-items: flex-start; padding: 9px 10px; }
   .systemSwitcher { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; }
   .systemTab { padding: 10px 8px; gap: 8px; }
   .systemTab b { font-size: 11px; line-height: 1.5; }
