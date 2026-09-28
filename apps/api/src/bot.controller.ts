@@ -492,7 +492,20 @@ export class BotController {
          (ls.assigned_user_id=$1 AND ls.status IN ('ACTIVE','AVAILABLE')) can_control,
          (ls.assigned_user_id=$1 AND ls.mode='LOCAL' AND ls.status<>'DELETED') can_release_device,
          (ls.owner_user_id=$1) can_manage,
-         (s.id IS NOT NULL AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now()) subscription_active
+         (
+           (s.id IS NOT NULL AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now())
+           OR EXISTS (
+             SELECT 1
+             FROM access_group_grants gg
+             JOIN access_groups ag ON ag.id=gg.access_group_id
+             WHERE gg.user_id=$1
+               AND gg.mode=ls.mode
+               AND gg.status='ACTIVE'
+               AND gg.starts_at<=now()
+               AND gg.expires_at>now()
+               AND ag.enabled=true
+           )
+         ) subscription_active
        FROM license_slots ls
        JOIN users ou ON ou.id=ls.owner_user_id
        LEFT JOIN users au ON au.id=ls.assigned_user_id
@@ -503,8 +516,25 @@ export class BotController {
        WHERE (ls.owner_user_id=$1 OR ls.assigned_user_id=$1)
          AND ls.status<>'DELETED'
        ORDER BY
-         CASE WHEN ls.assigned_user_id=$1 AND s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() THEN 0
-              WHEN ls.assigned_user_id=$1 THEN 1 ELSE 2 END,
+         CASE
+           WHEN ls.assigned_user_id=$1
+             AND (
+               (s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now())
+               OR EXISTS (
+                 SELECT 1
+                 FROM access_group_grants gg
+                 JOIN access_groups ag ON ag.id=gg.access_group_id
+                 WHERE gg.user_id=$1
+                   AND gg.mode=ls.mode
+                   AND gg.status='ACTIVE'
+                   AND gg.starts_at<=now()
+                   AND gg.expires_at>now()
+                   AND ag.enabled=true
+               )
+             ) THEN 0
+           WHEN ls.assigned_user_id=$1 THEN 1
+           ELSE 2
+         END,
          ls.mode,ls.slot_number,ls.created_at`,
       [userId]
     );
@@ -529,7 +559,21 @@ export class BotController {
        WHERE ls.assigned_user_id=$1 AND ls.status IN ('ACTIVE','AVAILABLE')
        ORDER BY
          CASE WHEN bi.last_seen_at IS NOT NULL AND bi.last_seen_at>now()-interval '30 seconds' THEN 0 ELSE 1 END,
-         CASE WHEN s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() THEN 0 ELSE 1 END,
+         CASE
+           WHEN s.status='ACTIVE' AND s.starts_at<=now() AND s.expires_at>now() THEN 0
+           WHEN EXISTS (
+             SELECT 1
+             FROM access_group_grants gg
+             JOIN access_groups ag ON ag.id=gg.access_group_id
+             WHERE gg.user_id=$1
+               AND gg.mode=ls.mode
+               AND gg.status='ACTIVE'
+               AND gg.starts_at<=now()
+               AND gg.expires_at>now()
+               AND ag.enabled=true
+           ) THEN 0
+           ELSE 1
+         END,
          CASE WHEN ls.mode='LOCAL' THEN 0 ELSE 1 END,
          bi.last_seen_at DESC NULLS LAST,
          ls.slot_number,ls.created_at
