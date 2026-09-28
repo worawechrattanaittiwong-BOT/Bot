@@ -37,18 +37,26 @@ export default function AdminPage() {
   const [partnerBusy, setPartnerBusy] = useState(false);
   const [trialDays, setTrialDays] = useState(1);
   const [extendDays, setExtendDays] = useState(30);
+  const [membershipDays, setMembershipDays] = useState<Record<string,number>>({});
+  const [accessGroups, setAccessGroups] = useState<any[]>([]);
+  const [selectedAccessGroupId, setSelectedAccessGroupId] = useState("");
+  const [trialAccessGroupId, setTrialAccessGroupId] = useState("");
+  const [newAccessGroupName, setNewAccessGroupName] = useState("");
+  const [groupAction, setGroupAction] = useState("");
   const [customerAction, setCustomerAction] = useState("");
 
   async function search(e?: FormEvent, preserveMessage = false) {
     e?.preventDefault();
     setLoading(true);
     try {
-      const [userRows, systemStatus] = await Promise.all([
+      const [userRows, systemStatus, groupRows] = await Promise.all([
         adminApi("/admin/users?q=" + encodeURIComponent(query)),
-        adminApi("/admin/system")
+        adminApi("/admin/system"),
+        adminApi("/admin/access-groups")
       ]);
       setUsers(userRows);
       setSystem(systemStatus);
+      setAccessGroups(Array.isArray(groupRows) ? groupRows : []);
       if (!preserveMessage) setMessage("");
     } catch (e: any) {
       setMessage(e.message);
@@ -103,7 +111,8 @@ export default function AdminPage() {
           userId: user.id,
           days: safeDays,
           mt5AccountId: user.mt5_account_id || undefined,
-          approvedBy: "OWNER"
+          approvedBy: "OWNER",
+          accessGroupId: trialAccessGroupId || undefined
         })
       });
       setMessage(
@@ -168,7 +177,8 @@ export default function AdminPage() {
           durationDays: Math.max(1, Math.min(3650, Math.trunc(Number(days) || 30))),
           activatedBy: "OWNER",
           paidAmountSatang: paidAmountBaht.trim() ? Math.round(Number(paidAmountBaht) * 100) : 0,
-          paymentReference: paymentReference.trim() || undefined
+          paymentReference: paymentReference.trim() || undefined,
+          accessGroupId: selectedAccessGroupId || undefined
         })
       });
       const seatCount = Array.isArray(result?.slots) ? result.slots.length : (result?.plan?.slots || 1);
@@ -188,21 +198,108 @@ export default function AdminPage() {
     }
   }
 
-  async function extendSubscription(user: any, subscriptionId: string, addDays: number) {
-    if (!subscriptionId) return setMessage("ไม่พบสมาชิกที่ต้องการต่ออายุ");
-    const safeDays = Math.max(1, Math.min(3650, Math.trunc(Number(addDays) || 1)));
+  async function adjustSubscriptionDays(user: any, subscriptionId: string, amount: number) {
+    if (!subscriptionId) return setMessage("ไม่พบสมาชิกที่ต้องการปรับวัน");
+    const daysValue = Math.max(1, Math.min(3650, Math.trunc(Math.abs(Number(amount) || 1))));
+    const signedDays = amount < 0 ? -daysValue : daysValue;
     setCustomerAction("membership:"+subscriptionId);
     try {
-      await adminApi("/admin/subscriptions/extend", {
+      const result = await adminApi("/admin/subscriptions/adjust-days", {
         method: "POST",
-        body: JSON.stringify({ subscriptionId, days: safeDays })
+        body: JSON.stringify({ subscriptionId, days: signedDays })
       });
-      setMessage("เพิ่ม " + safeDays + " วันให้ " + user.user_code + " แล้ว");
+      setMessage(
+        (signedDays > 0 ? "เพิ่ม " : "ลด ") + daysValue + " วันให้ " + user.user_code +
+        " แล้ว · หมดอายุ " + new Date(result.expires_at).toLocaleString("th-TH")
+      );
       await search(undefined, true);
     } catch (e: any) {
       setMessage(e.message);
     } finally {
       setCustomerAction("");
+    }
+  }
+
+  async function setSubscriptionGroup(subscriptionId:string, groupId:string) {
+    setCustomerAction("membership:"+subscriptionId);
+    try {
+      await adminApi("/admin/subscriptions/set-group", {
+        method:"POST",
+        body:JSON.stringify({ subscriptionId, groupId:groupId || null })
+      });
+      setMessage("อัปเดตกลุ่มสมาชิกแล้ว");
+      await search(undefined, true);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setCustomerAction("");
+    }
+  }
+
+  async function setTrialGroup(userId:string, groupId:string) {
+    setCustomerAction("trial");
+    try {
+      await adminApi("/admin/trials/set-group", {
+        method:"POST",
+        body:JSON.stringify({ userId, groupId:groupId || null })
+      });
+      setTrialAccessGroupId(groupId);
+      setMessage("อัปเดตกลุ่ม Trial แล้ว");
+      await search(undefined, true);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setCustomerAction("");
+    }
+  }
+
+  async function createAccessGroup() {
+    const name = newAccessGroupName.trim();
+    if (name.length < 2) return setMessage("กรุณาใส่ชื่อกลุ่มอย่างน้อย 2 ตัวอักษร");
+    setGroupAction("create");
+    try {
+      const group = await adminApi("/admin/access-groups/create", {
+        method:"POST",
+        body:JSON.stringify({ name })
+      });
+      setNewAccessGroupName("");
+      setMessage("สร้างกลุ่ม "+group.name+" แล้ว");
+      await search(undefined, true);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setGroupAction("");
+    }
+  }
+
+  async function toggleAccessGroup(group:any) {
+    const nextEnabled = !Boolean(group.enabled);
+    if (!nextEnabled) {
+      const confirmed = await confirmPopup({
+        title:"ปิดสิทธิ์ทั้งกลุ่ม",
+        tone:"warning",
+        message:
+          "ปิดกลุ่ม “"+group.name+"” หรือไม่?\n\n"+
+          "ระบบจะบล็อกการใช้งานของ Subscription/Trial ที่อยู่ในกลุ่มนี้ และสั่ง Safe Stop เฉพาะบอทในกลุ่มนี้เท่านั้น สมาชิกกลุ่มอื่นจะไม่ถูกกระทบ",
+        confirmLabel:"ปิดกลุ่มนี้"
+      });
+      if (!confirmed) return;
+    }
+    setGroupAction(group.id);
+    try {
+      const result = await adminApi("/admin/access-groups/toggle", {
+        method:"POST",
+        body:JSON.stringify({ groupId:group.id, enabled:nextEnabled })
+      });
+      setMessage(
+        (nextEnabled ? "เปิด" : "ปิด") + "กลุ่ม " + group.name + " แล้ว" +
+        (!nextEnabled && Number(result.safeStopped||0)>0 ? " · Safe Stop "+result.safeStopped+" บอท" : "")
+      );
+      await search(undefined, true);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setGroupAction("");
     }
   }
 
@@ -675,6 +772,46 @@ export default function AdminPage() {
               </form>
             </section>
 
+            <section className="owner-access-group-panel">
+              <div className="owner-access-group-head">
+                <div>
+                  <span className="owner-card-kicker">ACCESS GROUPS</span>
+                  <h3>กลุ่มสิทธิ์สมาชิก</h3>
+                  <p>แยกกลุ่มทดลองออกจากสมาชิกจริง และเปิด/ปิดสิทธิ์ได้เฉพาะกลุ่ม</p>
+                </div>
+                <div className="owner-access-group-create">
+                  <input
+                    className="input"
+                    value={newAccessGroupName}
+                    onChange={e=>setNewAccessGroupName(e.target.value.slice(0,80))}
+                    placeholder="เช่น ทดลอง / Beta / สมาชิกจริง"
+                  />
+                  <button className="btn primary" disabled={groupAction==="create"} onClick={createAccessGroup}>
+                    เพิ่มกลุ่ม
+                  </button>
+                </div>
+              </div>
+              <div className="owner-access-group-list">
+                {accessGroups.length ? accessGroups.map((group:any)=>(
+                  <div className={"owner-access-group-item "+(group.enabled?"enabled":"disabled")} key={group.id}>
+                    <div>
+                      <b>{group.name}</b>
+                      <small>{Number(group.subscription_count||0)} สมาชิก · {Number(group.trial_count||0)} Trial</small>
+                    </div>
+                    <span className={"owner-state-chip "+(group.enabled?"good":"bad")}>{group.enabled?"เปิดใช้งาน":"ปิดอยู่"}</span>
+                    <button
+                      className={"btn "+(group.enabled?"danger":"primary")}
+                      disabled={groupAction===group.id}
+                      onClick={()=>toggleAccessGroup(group)}
+                    >
+                      {group.enabled?"ปิดทั้งกลุ่ม":"เปิดกลุ่ม"}
+                    </button>
+                  </div>
+                )) : <div className="owner-control-empty">ยังไม่มีกลุ่ม · สร้างกลุ่ม “ทดลอง” เพื่อแยกจากสมาชิกจริงได้</div>}
+              </div>
+              <div className="owner-control-note">การปิดกลุ่มไม่ลบสมาชิกและไม่แก้วันหมดอายุ เมื่อเปิดกลับจะใช้วันหมดอายุเดิมต่อ</div>
+            </section>
+
             <div className="owner-customer-layout">
               <aside className="owner-customer-directory">
                 <div className="owner-customer-directory-head">
@@ -701,6 +838,13 @@ export default function AdminPage() {
                           const mode=memberships(user).find((m:any)=>m.active)?.mode;
                           if(mode==="CLOUD") setPlan("CLOUD_30D");
                           else if(mode==="LOCAL") setPlan("LOCAL_30D");
+                          setSelectedAccessGroupId("");
+                          setTrialAccessGroupId(
+                            String(user.trial_group_id || user.trial_authorization_group_id || "")
+                          );
+                          const nextMembershipDays:Record<string,number> = {};
+                          memberships(user).forEach((m:any)=>{ nextMembershipDays[String(m.subscription_id)] = 1; });
+                          setMembershipDays(nextMembershipDays);
                         }}
                       >
                         <span className="owner-customer-avatar">{String(user.user_code||"U").slice(-1)}</span>
@@ -782,6 +926,13 @@ export default function AdminPage() {
                             <div className="owner-control-fields">
                               <label><span>จำนวนวัน</span><input className="input" type="number" min={1} max={3650} value={days} onChange={e=>setDays(Number(e.target.value))}/></label>
                               <label><span>ยอดชำระจริง (บาท)</span><input className="input" type="number" min={0} step="0.01" value={paidAmountBaht} onChange={e=>setPaidAmountBaht(e.target.value)} placeholder="0.00"/></label>
+                              <label>
+                                <span>กลุ่มสิทธิ์</span>
+                                <select className="input" value={selectedAccessGroupId} onChange={e=>setSelectedAccessGroupId(e.target.value)}>
+                                  <option value="">ไม่จัดกลุ่ม</option>
+                                  {accessGroups.map((group:any)=><option key={group.id} value={group.id}>{group.name}{group.enabled?"":" · ปิดอยู่"}</option>)}
+                                </select>
+                              </label>
                               <label className="wide"><span>Payment Reference</span><input className="input" value={paymentReference} onChange={e=>setPaymentReference(e.target.value.slice(0,160))} placeholder="PromptPay / slip / note"/></label>
                             </div>
                             <button
@@ -800,11 +951,43 @@ export default function AdminPage() {
                                   <div>
                                     <span className={"owner-mode-badge "+String(m.mode).toLowerCase()}>{m.mode==="CLOUD"?"CLOUD VPS":"LOCAL"}</span>
                                     <b>{m.plan_code}</b>
-                                    <small>{m.active?"ใช้งานอยู่":"สถานะ "+m.status} · หมดอายุ {new Date(m.expires_at).toLocaleString("th-TH")}</small>
+                                    <small>
+                                      {m.active?"ใช้งานอยู่":"สถานะ "+m.status} · หมดอายุ {new Date(m.expires_at).toLocaleString("th-TH")}
+                                      {m.group_name ? " · กลุ่ม "+m.group_name+(m.group_enabled===false?" (ปิด)":"") : ""}
+                                    </small>
                                   </div>
-                                  <div className="owner-add-days">
-                                    <input type="number" min={1} max={3650} value={extendDays} onChange={e=>setExtendDays(Number(e.target.value))}/>
-                                    <button className="btn" disabled={Boolean(customerAction)} onClick={()=>extendSubscription(selectedCustomer,m.subscription_id,extendDays)}>+ เพิ่มวัน</button>
+                                  <div className="owner-membership-actions">
+                                    <select
+                                      value={String(m.group_id || "")}
+                                      disabled={Boolean(customerAction)}
+                                      onChange={e=>setSubscriptionGroup(m.subscription_id,e.target.value)}
+                                    >
+                                      <option value="">ไม่จัดกลุ่ม</option>
+                                      {accessGroups.map((group:any)=><option key={group.id} value={group.id}>{group.name}{group.enabled?"":" · ปิดอยู่"}</option>)}
+                                    </select>
+                                    <div className="owner-add-days">
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={3650}
+                                        value={membershipDays[String(m.subscription_id)] ?? 1}
+                                        onChange={e=>setMembershipDays(prev=>({...prev,[String(m.subscription_id)]:Math.max(1,Number(e.target.value)||1)}))}
+                                      />
+                                      <button
+                                        className="btn danger"
+                                        disabled={Boolean(customerAction)}
+                                        onClick={()=>adjustSubscriptionDays(selectedCustomer,m.subscription_id,-(membershipDays[String(m.subscription_id)] ?? 1))}
+                                      >
+                                        − ลดวัน
+                                      </button>
+                                      <button
+                                        className="btn"
+                                        disabled={Boolean(customerAction)}
+                                        onClick={()=>adjustSubscriptionDays(selectedCustomer,m.subscription_id,membershipDays[String(m.subscription_id)] ?? 1)}
+                                      >
+                                        + เพิ่มวัน
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
                               )) : <div className="owner-control-empty">ยังไม่มีสมาชิกแบบชำระเงิน</div>}
@@ -817,6 +1000,24 @@ export default function AdminPage() {
                             </div>
                             <div className="owner-trial-control">
                               <label><span>Trial Days</span><input className="input" type="number" min={1} max={365} value={trialDays} onChange={e=>setTrialDays(Number(e.target.value))}/></label>
+                              <label>
+                                <span>กลุ่ม Trial</span>
+                                <select
+                                  className="input"
+                                  value={trialAccessGroupId}
+                                  disabled={customerAction==="trial"}
+                                  onChange={e=>{
+                                    const next=e.target.value;
+                                    setTrialAccessGroupId(next);
+                                    if (selectedCustomer.trial_status || selectedCustomer.trial_authorization_status==="PENDING_BIND") {
+                                      setTrialGroup(selectedCustomer.id,next);
+                                    }
+                                  }}
+                                >
+                                  <option value="">ไม่จัดกลุ่ม</option>
+                                  {accessGroups.map((group:any)=><option key={group.id} value={group.id}>{group.name}{group.enabled?"":" · ปิดอยู่"}</option>)}
+                                </select>
+                              </label>
                               {selectedCustomer.trial_status || selectedCustomer.trial_authorization_status==="PENDING_BIND" ? (
                                 <button className="btn primary" disabled={customerAction==="trial"} onClick={()=>updateTrialDuration(selectedCustomer)}>
                                   บันทึก Trial {trialDays} วัน
