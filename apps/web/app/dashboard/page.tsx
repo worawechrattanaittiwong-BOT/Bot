@@ -1849,68 +1849,6 @@ export default function DashboardPage() {
     : "MQL5\\Presets";
   const presetFilePath = presetFolderPath + "\\SCENOVA-FastBasketBot.set";
 
-  async function linkAccount(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      if (!selectedBrokerName) throw new Error("กรุณาเลือก Broker");
-      if (!selectedServer) throw new Error("กรุณาเลือก MT5 Server");
-      const result = await api("/bot/mt5", {
-        method: "POST",
-        body: JSON.stringify({
-          slotId: selectedSlotIdRef.current || undefined,
-          accountNumber,
-          broker: selectedBrokerName,
-          brokerServer: selectedServer,
-          mode: "CLOUD"
-        })
-      });
-      setInstallToken(result.installToken || "");
-      setInstallInstanceId(result.instance?.id || "");
-      if (mode === "CLOUD" && tradingPassword) {
-        await api("/bot/mt5/cloud-credential", {
-          method: "POST",
-          body: JSON.stringify({ mt5AccountId: result.account.id, tradingPassword })
-        });
-      }
-      setTradingPassword("");
-      setNotice("บันทึกบัญชี MT5 แล้ว กำลังตรวจสอบการเชื่อมต่อ");
-      await load(selectedSlotIdRef.current);
-      setActiveView("account");
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function reconnectCloudAccount(e: FormEvent) {
-    e.preventDefault();
-    if (!data?.account?.id) return;
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      if (!tradingPassword) throw new Error("กรุณากรอก Trading Password");
-      await api("/bot/mt5/cloud-credential", {
-        method: "POST",
-        body: JSON.stringify({
-          mt5AccountId: data.account.id,
-          tradingPassword
-        })
-      });
-      setTradingPassword("");
-      setNotice("บันทึกข้อมูลแล้ว กำลังเชื่อมต่อ VPS ใหม่");
-      await load(selectedSlotIdRef.current, true);
-      setActiveView("account");
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function checkSoftwareVersions() {
     if (checkingVersion) return;
