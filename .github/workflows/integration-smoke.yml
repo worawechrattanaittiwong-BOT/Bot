@@ -89,7 +89,8 @@ jobs:
             database/035_withdrawal_advanced_security.sql \
             database/042_access_groups.sql \
             database/043_access_group_management.sql \
-            database/044_trial_group_isolation.sql
+            database/044_trial_group_isolation.sql \
+            database/045_access_group_grants.sql
           do
             psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f "$migration"
             psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f "$migration"
