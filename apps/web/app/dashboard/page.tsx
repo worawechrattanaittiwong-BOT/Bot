@@ -2635,7 +2635,7 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <BotPerformanceSummary dashboard={data} />
+        {activeView === "overview" && <BotPerformanceSummary dashboard={data} />}
 
         {maintenance.status !== "OFF" && (
           <div className={"system-maintenance-banner status-" + String(maintenance.status).toLowerCase()} role="alert">
