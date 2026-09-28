@@ -631,6 +631,107 @@ export class AdminController {
     return { ok: true, group, safeStopped };
   }
 
+  @Post("access-groups/revoke-member")
+  async revokeAccessGroupMember(@Body() body: { groupId: string; userId: string }) {
+    const group = await this.db.one(
+      "SELECT id,name FROM access_groups WHERE id=$1",
+      [body.groupId]
+    );
+    if (!group) throw new ConflictException("ไม่พบกลุ่มสิทธิ์");
+
+    const affected = await this.db.query(
+      `WITH target AS (
+         SELECT DISTINCT bi.id
+         FROM bot_instances bi
+         JOIN trial_grants tg ON tg.mt5_account_id=bi.mt5_account_id
+         JOIN users u ON u.id=tg.user_id
+         WHERE tg.access_group_id=$1
+           AND tg.user_id=$2
+           AND u.role NOT IN ('OWNER','ADMIN')
+           AND NOT EXISTS (
+             SELECT 1
+             FROM subscriptions s
+             JOIN plans p ON p.id=s.plan_id
+             WHERE s.user_id=tg.user_id
+               AND s.status='ACTIVE'
+               AND s.starts_at<=now()
+               AND s.expires_at>now()
+               AND p.mode=bi.mode
+           )
+           AND NOT (
+             bi.mode='LOCAL'
+             AND EXISTS (
+               SELECT 1
+               FROM partner_accounts pa
+               WHERE pa.user_id=tg.user_id
+                 AND pa.status='ACTIVE'
+                 AND pa.expires_at>now()
+             )
+           )
+       ),
+       stopped AS (
+         UPDATE bot_instances bi
+         SET desired_state='SAFE_STOP'
+         FROM target t
+         WHERE bi.id=t.id
+           AND bi.desired_state<>'SAFE_STOP'
+           AND (
+             bi.desired_state IN ('RUNNING','STARTING')
+             OR bi.actual_state='RUNNING'
+             OR COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
+           )
+         RETURNING bi.id
+       )
+       SELECT id FROM stopped`,
+      [body.groupId, body.userId]
+    );
+    if (affected.rows.length) {
+      await this.db.query(
+        `INSERT INTO bot_commands(bot_instance_id,command)
+         SELECT id,'SAFE_STOP' FROM unnest($1::uuid[]) AS x(id)`,
+        [affected.rows.map((item:any)=>item.id)]
+      );
+    }
+
+    const expired = await this.db.query(
+      `UPDATE trial_grants
+       SET status='EXPIRED',
+           expires_at=LEAST(COALESCE(expires_at,now()),now())
+       WHERE user_id=$1
+         AND access_group_id=$2
+         AND status IN ('APPROVED','ACTIVE')
+       RETURNING id`,
+      [body.userId, body.groupId]
+    );
+    const blocked = await this.db.query(
+      `UPDATE trial_authorizations
+       SET status='BLOCKED',
+           blocked_reason='REMOVED_FROM_GROUP',
+           updated_at=now()
+       WHERE user_id=$1
+         AND access_group_id=$2
+         AND status<>'BLOCKED'
+       RETURNING id`,
+      [body.userId, body.groupId]
+    );
+
+    await this.audit("OWNER", "REVOKE_ACCESS_GROUP_MEMBER", "user", body.userId, {
+      groupId: body.groupId,
+      groupName: group.name,
+      expiredTrials: expired.rowCount || 0,
+      blockedAuthorizations: blocked.rowCount || 0,
+      safeStopped: affected.rowCount || 0,
+      paidMembershipsKept: true
+    });
+    return {
+      ok: true,
+      expiredTrials: expired.rowCount || 0,
+      blockedAuthorizations: blocked.rowCount || 0,
+      safeStopped: affected.rowCount || 0,
+      paidMembershipsKept: true
+    };
+  }
+
   @Get("system")
   async system() {
     const users = await this.db.one(
