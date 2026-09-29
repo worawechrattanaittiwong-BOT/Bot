@@ -56,6 +56,12 @@ Need $page 'cc-v13-hero-actions' 'Hero bot action deck missing'
 Need $css '.cc-v13-hero-actions .cc-v19-hero-quick-actions' 'Hero control buttons styling missing'
 if($page.Contains('cc-v6-command start')) { throw 'Duplicate oversized hero Start button still exists' }
 
+Need $css 'Control Center V54 · compact mobile Bot Settings' 'Mobile Bot Settings compact layout marker missing'
+Need $css '--settings-label:116px' 'Mobile Bot Settings label column must shrink to prevent control collisions'
+Need $css 'grid-template-columns:38px minmax(0,1fr)!important;' 'Mobile risk toggle/value controls must fit without overlap'
+Need $css '.cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-setting-label .setting-toggle-text' 'Mobile risk rows must hide redundant switch text'
+Need $css 'height:auto!important;' 'Mobile Bot Settings must not inherit clipped desktop fixed height'
+
 Write-Host 'Control Center V12 inline-settings/per-mode-performance contract PASS'
 
 Need $page 'cc-bot-v14-head-save' 'Top-right Save Settings button missing'
