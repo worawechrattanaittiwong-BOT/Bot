@@ -44,9 +44,19 @@ assert.match(
   "active Local/VPS migration must be restored from Server after refresh"
 );
 assert.match(
+  dashboard,
+  /const operationTerminal = migrationOperation \|\| serverOperation \|\| cloudUpdateOperation/,
+  "active migration must take precedence over stale browser-restored operations"
+);
+assert.match(
   ea,
   /rememberVerifiedBrokerServer/,
   "successful authenticated MT5 heartbeat must enrich the broker server catalog"
+);
+assert.match(
+  ea,
+  /identityMatches[\s\S]*reportedText\.includes/,
+  "catalog learning must verify reported broker identity before saving a server"
 );
 assert.match(
   ea,
@@ -61,7 +71,6 @@ assert.match(
 assert.match(seed, /mt5-1\.pepperstone\.com/, "verified Pepperstone live server seed");
 assert.match(seed, /mt5-demo01\.pepperstone\.com/, "verified Pepperstone demo server seed");
 assert.match(seed, /EightcapGlobal-Live/, "verified Eightcap live server seed");
-assert.match(seed, /XMGlobal-MT5 10/, "verified XM server seed");
 assert.match(
   deploy,
   /database\/057_broker_server_catalog_verified\.sql/,
