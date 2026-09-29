@@ -297,7 +297,7 @@ export default function ReferralsPage() {
         twoFactorCode: ""
       }));
       setShowDestinationForm(false);
-      setMessage("บันทึกบัญชีรับเงินแล้ว ระบบเริ่ม ระยะรอความปลอดภัย เพื่อความปลอดภัย");
+      setMessage("บันทึกบัญชีรับเงินแล้ว");
       await load();
     } catch (error: any) {
       setMessage(String(error?.message || "บันทึกบัญชีรับเงินไม่สำเร็จ"));
@@ -325,7 +325,7 @@ export default function ReferralsPage() {
       });
       setWithdrawForm({ amountThb: "", currentPassword: "", twoFactorCode: "" });
       setWithdrawRequestKey(makeRequestKey());
-      setMessage("ส่งคำขอถอนแล้ว ยอดถูก Lock และรอ Admin ตรวจสอบ");
+      setMessage("ส่งคำขอถอนแล้ว");
       await load();
     } catch (error: any) {
       setMessage(String(error?.message || "ขอถอนเงินไม่สำเร็จ"));
@@ -350,7 +350,7 @@ export default function ReferralsPage() {
       await api("/commission-wallet/withdrawals/" + item.id + "/cancel", {
         method: "POST"
       });
-      setMessage("ยกเลิกรายการถอนแล้ว ยอดถูกคืนเข้า Available");
+      setMessage("ยกเลิกรายการถอนแล้ว");
       await load();
     } catch (error: any) {
       setMessage(String(error?.message || "ยกเลิกรายการไม่สำเร็จ"));
