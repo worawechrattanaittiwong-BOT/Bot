@@ -184,8 +184,9 @@ export default function RuntimeMigrationPage() {
         <span className={s.kicker}>3 · SAFETY CONFIRMATION</span><h2>ยืนยันก่อน Handoff</h2>
         <label className={s.confirm}><input type="checkbox" checked={confirmFlat} onChange={e=>setConfirmFlat(e.target.checked)}/><span>Bot อยู่ในสถานะ Stop และ Position = 0</span></label>
         <label className={s.confirm}><input type="checkbox" checked={confirmSwitch} onChange={e=>setConfirmSwitch(e.target.checked)}/><span>เข้าใจว่า Runtime เดิมจะถูกปิดและ Execution Lease เดิมจะถูกเพิกถอนก่อนเปิดปลายทาง</span></label>
-        <button className={s.primary} disabled={busy||!source||!target||!sourceFlat||!sourceAgentReady||!confirmFlat||!confirmSwitch}>{busy?"กำลังตรวจสอบ...":`ย้าย ${source?.mode||"Runtime"} → ${target?.mode||"Target"}`}</button>
-        {!sourceFlat&&source&&<p className={s.errorText}>ยังย้ายไม่ได้: Bot ต้องไม่ RUNNING และ Position ต้องเป็น 0</p>}
+        <button className={s.primary} disabled={busy||!source||!target||!sourceFlat||!sourceHeartbeatFresh||!confirmFlat||!confirmSwitch}>{busy?"กำลังตรวจสอบ...":`ย้าย ${source?.mode||"Runtime"} → ${target?.mode||"Target"}`}</button>
+        {!sourceFlat&&source&&<p className={s.errorText}>ยังย้ายไม่ได้: Bot ต้อง STOPPED และ Position / Pending Order ต้องเป็น 0</p>}
+        {sourceFlat&&!sourceHeartbeatFresh&&source?.mode==="LOCAL"&&<p className={s.errorText}>ยังย้ายไม่ได้: รอ MT5 heartbeat ล่าสุดยืนยันสถานะ Flat</p>}
       </section>
     </form>}
 
