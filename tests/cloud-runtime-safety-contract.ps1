@@ -71,7 +71,9 @@ Assert-Contains $botApi "runtime_stop_state=CASE WHEN `$3::varchar='CLOUD' THEN 
 Assert-Contains $botApi 'an active subscription on VPS Slot #1 must never unlock an' 'per-slot Cloud entitlement isolation is missing'
 Assert-Contains $dashboard 'ถ้าบอทหยุดและไม่มี Position / Pending Order ระบบจะปิด MT5 เดิมบน VPS แล้วให้เชื่อมบัญชีใหม่ได้ทันที' 'customer account-switch eligibility UX missing'
 Assert-Contains $dashboard 'เปลี่ยนบัญชี MT5 ได้ทันที' 'customer stopped/flat account-switch action missing'
-Assert-Contains $dashboard 'cloud-mt5-server-suggestions' 'searchable MT5 server suggestions missing'
+Assert-Contains $dashboard '<optgroup label="REAL / LIVE">' 'broker MT5 server REAL group missing'
+Assert-Contains $dashboard '<optgroup label="DEMO / TRIAL">' 'broker MT5 server DEMO group missing'
+Assert-Contains $dashboard 'ไม่พบในรายการ — กรอก Server เอง' 'manual MT5 server fallback missing'
 Assert-Contains $dashboard 'PRIMARY VPS PACKAGE · เหลือน้อยกว่า 3 วัน' 'primary-package three-day renewal warning missing'
 Assert-Contains $dashboard 'การปิด MT5 ไม่ได้ปิด Position ที่ Broker ให้อัตโนมัติ' 'expiry warning must explain broker positions remain open'
 
