@@ -430,13 +430,9 @@ export class BotController {
     if (slot) return slot;
 
     const user = await this.user(userId);
-    const max = await this.db.one(
-      "SELECT COALESCE(max(slot_number),0)::int max_slot FROM license_slots WHERE owner_user_id=$1 AND mode='LOCAL'",
-      [userId]
-    );
     slot = await this.db.one(
-      "INSERT INTO license_slots(owner_user_id,assigned_user_id,mode,slot_number,slot_type,status,label) VALUES($1,$1,'LOCAL',$2,$3,'ACTIVE','Primary') RETURNING *",
-      [userId, Number(max?.max_slot || 0) + 1, user?.role === "OWNER" || user?.role === "ADMIN" ? "OWNER" : "PERSONAL"]
+      "INSERT INTO license_slots(owner_user_id,assigned_user_id,mode,slot_number,slot_type,status,label) VALUES($1,$1,'LOCAL',1,$2,'ACTIVE','Primary') RETURNING *",
+      [userId, user?.role === "OWNER" || user?.role === "ADMIN" ? "OWNER" : "PERSONAL"]
     );
     return slot;
   }
