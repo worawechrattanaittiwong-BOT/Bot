@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "../lib/api";
 import { useSystemPopup } from "./SystemPopupProvider";
 import { Badge, date } from "./CloudConsole";
@@ -39,6 +39,48 @@ type UpdateSnapshot = {
   jobs:UpdateJob[];
 };
 
+type RunnerUiState =
+  | "READY"
+  | "CREATING"
+  | "WAITING_SAFE"
+  | "DELIVERING"
+  | "VERIFYING"
+  | "CURRENT"
+  | "UNKNOWN"
+  | "EMPTY"
+  | "OFFLINE";
+
+function jobTone(job:UpdateJob) {
+  if(job.failed>0 || job.state==="FAILED") return "bad";
+  if(job.state==="COMPLETED") return "good";
+  if(job.state==="RUNNING") return "warn";
+  return "";
+}
+
+function jobLabel(job:UpdateJob) {
+  if(job.failed>0 || job.state==="FAILED") return "ล้มเหลว";
+  if(job.state==="COMPLETED") return "เสร็จแล้ว";
+  if(job.verifying>0) return "กำลัง Verify";
+  if(job.waiting_safe>0) return "รอ Safe Stop";
+  if(job.delivered>0) return "กำลังติดตั้ง";
+  if(job.state==="RUNNING") return job.action==="ROLLBACK" ? "กำลัง Rollback" : "กำลังอัปเดต";
+  return job.state;
+}
+
+function runnerStateLabel(state:RunnerUiState,activeJob?:UpdateJob) {
+  switch(state) {
+    case "READY": return "พร้อมปล่อย";
+    case "CREATING": return "กำลังปล่อย";
+    case "WAITING_SAFE": return "รอ Safe Stop";
+    case "DELIVERING": return activeJob?.action==="ROLLBACK" ? "กำลัง Rollback" : "กำลังติดตั้ง";
+    case "VERIFYING": return "กำลัง Verify";
+    case "CURRENT": return "EA ล่าสุดแล้ว";
+    case "UNKNOWN": return "รอตรวจสอบ EA";
+    case "EMPTY": return "ไม่มี Cloud MT5";
+    case "OFFLINE": return "Server Offline";
+  }
+}
+
 export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
   const { confirmPopup } = useSystemPopup();
   const [data,setData]=useState<UpdateSnapshot|null>(null);
@@ -62,106 +104,271 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
     return()=>clearInterval(timer);
   },[]);
 
-  async function start(runnerId:string) {
-    const ok=await confirmPopup({
-      title:"ปล่อย EA Update ให้ลูกค้า",
-      tone:"warning",
-      message:"เตรียม EA เวอร์ชันล่าสุดบน "+runnerId+"? บัญชีที่กำลังเทรดจะไม่ถูกหยุด ระบบจะรอให้ลูกค้าแต่ละบัญชีกด Stop และ Position เป็น 0 แล้วอัปเดตบัญชีนั้นอัตโนมัติ",
-      confirmLabel:"สร้างคิวอัปเดต"
-    });
-    if(!ok)return;
+  const activeByRunner=useMemo(()=>{
+    const map=new Map<string,UpdateJob>();
+    for(const job of data?.jobs||[]) {
+      if(job.state!=="RUNNING" || map.has(job.runner_id)) continue;
+      map.set(job.runner_id,job);
+    }
+    return map;
+  },[data?.jobs]);
 
-    setBusy(runnerId);setError("");setNotice("");
+  async function start(runnerId:string) {
+    // UI lock complements the API-side active-job guard. Once one Fleet Update
+    // is RUNNING for a Server, a second release cannot be created from this UI.
+    if(busy || activeByRunner.has(runnerId)) return;
+
+    setBusy(runnerId);
+    setError("");
+    setNotice("");
     try{
+      const ok=await confirmPopup({
+        title:"ปล่อย EA Update ให้ลูกค้า",
+        tone:"warning",
+        message:"เตรียม EA เวอร์ชันล่าสุดบน "+runnerId+"? บัญชีที่กำลังเทรดจะไม่ถูกหยุด ระบบจะรอให้ลูกค้าแต่ละบัญชีกด Stop และ Position เป็น 0 แล้วอัปเดตบัญชีนั้นอัตโนมัติ",
+        confirmLabel:"ปล่อยอัปเดต"
+      });
+      if(!ok)return;
+
       await adminApi("/admin/cloud-updates",{
         method:"POST",
         body:JSON.stringify({runnerId})
       });
-      setNotice("สร้างคิว EA Update บน "+runnerId+" แล้ว · บัญชีที่กำลังรันจะอัปเดตเมื่อผู้ใช้กด Stop");
+      setNotice("ปล่อย EA Update บน "+runnerId+" แล้ว · ระบบจะดำเนินการทีละบัญชีเมื่อเข้าสู่ Safe State");
       await load();
-    }catch(e:any){setError(e.message);}
-    finally{setBusy("");}
+    }catch(e:any){
+      setError(e.message);
+      await load();
+    }finally{
+      setBusy("");
+    }
   }
 
   async function rollback(job:UpdateJob) {
-    const ok=await confirmPopup({
-      title:"Rollback EA",
-      tone:"warning",
-      message:"ย้อน EA ของ "+job.runner_id+" กลับจาก Backup ของงานนี้? บัญชีที่กำลังรันจะไม่ถูกหยุด และจะ Rollback เฉพาะเมื่อผู้ใช้กด Stop จนบัญชีนั้นปลอด Position",
-      confirmLabel:"เริ่ม Rollback"
-    });
-    if(!ok)return;
+    if(busy || activeByRunner.has(job.runner_id)) return;
 
-    setBusy(job.id);setError("");setNotice("");
+    setBusy(job.id);
+    setError("");
+    setNotice("");
     try{
+      const ok=await confirmPopup({
+        title:"Rollback EA",
+        tone:"warning",
+        message:"ย้อน EA ของ "+job.runner_id+" กลับจาก Backup ของงานนี้? บัญชีที่กำลังรันจะไม่ถูกหยุด และจะ Rollback เฉพาะเมื่อผู้ใช้กด Stop จนบัญชีนั้นปลอด Position",
+        confirmLabel:"เริ่ม Rollback"
+      });
+      if(!ok)return;
+
       await adminApi("/admin/cloud-updates/"+encodeURIComponent(job.id)+"/rollback",{
         method:"POST",
         body:JSON.stringify({})
       });
       setNotice("เริ่ม Rollback บน "+job.runner_id+" แล้ว");
       await load();
-    }catch(e:any){setError(e.message);}
-    finally{setBusy("");}
+    }catch(e:any){
+      setError(e.message);
+      await load();
+    }finally{
+      setBusy("");
+    }
   }
 
   const release=data?.currentRelease;
-  return <div className={s.split}>
-    <section className={s.panel}>
-      <div className={s.panelHead}>
-        <div><span className={s.eyebrow}>PHASE 6 / FLEET UPDATE</span><h3>Production EA</h3></div>
-        <Badge tone={release?"good":"warn"}>{release?"v"+release.version:"Artifact ไม่พร้อม"}</Badge>
-      </div>
-      <div className={s.panelBody+" "+s.form}>
+  const runningJobs=(data?.jobs||[]).filter(job=>job.state==="RUNNING").length;
+  const updateTargets=Object.values(data?.runnerStatus||{}).reduce(
+    (sum,status)=>sum+Math.max(0,status.outdated||0),
+    0
+  );
+
+  return <div className={s.updateWorkspace}>
+    <section className={s.updateLeft}>
+      <div className={s.updateSummaryCard}>
+        <div className={s.updateSummaryHead}>
+          <div>
+            <span className={s.eyebrow}>PHASE 6 / FLEET UPDATE</span>
+            <h3>Production EA</h3>
+          </div>
+          <Badge tone={release?"good":"warn"}>{release?"v"+release.version:"Artifact ไม่พร้อม"}</Badge>
+        </div>
+
         {error&&<div role="alert" className={s.notice+" "+s.error}>{error}</div>}
         {notice&&<div role="status" className={s.notice+" "+s.success}>{notice}</div>}
-        {release?<>
-          <p className={s.muted}>SHA256 <code>{release.sha256.slice(0,16)}…</code><br/>Runtime Contract: {release.runtimeContract}</p>
-          <p className={s.muted}>Deferred Update ไม่รบกวนบัญชีที่กำลังเทรด ลูกค้าจะเห็นแจ้งเตือนบน Control Center และเมื่อกด Stop จน Position เป็น 0 ระบบจะอัปเดตเฉพาะ MT5 บัญชีนั้น จากนั้นคงสถานะหยุดไว้จนลูกค้ากด Start เอง</p>
-        </>:<p className={s.muted}>Backend ยังไม่พบ EA production artifact จึงยังเริ่ม Fleet Update ไม่ได้</p>}
-        <div className={s.nodes}>
-          {nodes.map(n=>{
-            const status=data?.runnerStatus?.[n.runner_id];
-            const hasRealUpdate=Boolean(release&&status?.updateAvailable);
-            const waitingVersion=Boolean(release&&status&&status.total>0&&status.outdated===0&&status.unknown>0);
-            return <section key={n.runner_id} className={s.nodeCard}>
-              <div className={s.nodeHead}><div><h3>▤ {n.runner_id}</h3><span className={s.nodeMeta}>Worker {n.telemetry?.version||"—"}</span></div><Badge tone={n.health==="ONLINE"?"good":"warn"}>{n.health}</Badge></div>
-              {hasRealUpdate
-                ?<button
-                  className={s.button+" "+s.primary}
-                  disabled={n.health!=="ONLINE"||Boolean(busy)}
-                  onClick={()=>start(n.runner_id)}
-                >{busy===n.runner_id?"กำลังสร้างคิว…":"ปล่อย EA Update"}</button>
-                :waitingVersion
-                  ?<><Badge tone="warn">รอตรวจสอบเวอร์ชัน EA</Badge><span className={s.nodeMeta}>ยังไม่มีข้อมูลเวอร์ชันจาก {status?.unknown||0} บัญชี จึงไม่สร้างคิวซ้ำ</span></>
-                  :release&&status&&status.total>0
-                    ?<><Badge tone="good">EA ล่าสุดแล้ว</Badge><span className={s.nodeMeta}>ไม่มีอัปเดตใหม่สำหรับ Server นี้</span></>
-                    :release
-                      ?<span className={s.nodeMeta}>ยังไม่มี Cloud MT5 ที่ต้องอัปเดต</span>
-                      :null}
-            </section>;
-          })}
-        </div>
+
+        {release ? <>
+          <div className={s.releaseFacts}>
+            <div><span>SHA256</span><code>{release.sha256.slice(0,16)}…</code></div>
+            <div><span>Runtime</span><b>{release.runtimeContract}</b></div>
+          </div>
+          <div className={s.updateMiniStats}>
+            <div><span>Servers</span><b>{nodes.length}</b></div>
+            <div><span>Outdated</span><b>{updateTargets}</b></div>
+            <div><span>Active Jobs</span><b>{runningJobs}</b></div>
+          </div>
+          <p className={s.updatePolicy}>
+            Deferred Update ไม่ตัดการเทรดที่กำลังทำงาน ระบบจะรอ Stop และ Position = 0
+            ก่อนอัปเดตเฉพาะ MT5 บัญชีนั้น
+          </p>
+        </> : <p className={s.muted}>Backend ยังไม่พบ EA production artifact จึงยังเริ่ม Fleet Update ไม่ได้</p>}
+      </div>
+
+      <div className={s.updateServerList}>
+        {nodes.map(n=>{
+          const runnerId=String(n.runner_id||"");
+          const status=data?.runnerStatus?.[runnerId];
+          const activeJob=activeByRunner.get(runnerId);
+          const creating=busy===runnerId;
+          const online=n.health==="ONLINE";
+          const hasRealUpdate=Boolean(release&&status?.updateAvailable);
+          const waitingVersion=Boolean(release&&status&&status.total>0&&status.outdated===0&&status.unknown>0);
+
+          let state:RunnerUiState="EMPTY";
+          if(!online) state="OFFLINE";
+          else if(creating) state="CREATING";
+          else if(activeJob?.verifying) state="VERIFYING";
+          else if(activeJob?.waiting_safe) state="WAITING_SAFE";
+          else if(activeJob) state="DELIVERING";
+          else if(waitingVersion) state="UNKNOWN";
+          else if(hasRealUpdate) state="READY";
+          else if(release&&status&&status.total>0) state="CURRENT";
+
+          const canRelease=state==="READY" && !busy && !activeJob;
+          const progressTotal=Math.max(0,activeJob?.total||0);
+          const progressDone=Math.max(0,activeJob?.completed||0);
+          const progressPercent=progressTotal>0
+            ? Math.max(0,Math.min(100,Math.round(progressDone/progressTotal*100)))
+            : 0;
+
+          return <section key={runnerId} className={s.updateServerCard}>
+            <div className={s.updateServerTop}>
+              <div className={s.updateServerIdentity}>
+                <span className={s.updateServerIcon}>▤</span>
+                <div>
+                  <h3>{runnerId}</h3>
+                  <span>Worker {n.telemetry?.version||"—"}</span>
+                </div>
+              </div>
+              <Badge tone={online?"good":"warn"}>{n.health}</Badge>
+            </div>
+
+            <div className={s.updateStateRow}>
+              <div>
+                <span className={s.updateStateLabel}>สถานะการอัปเดต</span>
+                <b className={
+                  state==="CURRENT" ? s.updateStateGood :
+                  state==="OFFLINE" ? s.updateStateBad :
+                  state==="READY" ? s.updateStateReady :
+                  s.updateStateWorking
+                }>{runnerStateLabel(state,activeJob)}</b>
+              </div>
+              {release&&<span className={s.updateTarget}>Target v{release.version}</span>}
+            </div>
+
+            {activeJob&&<>
+              <div className={s.updateProgressTrack} aria-label={"Update progress "+progressPercent+"%"}>
+                <span style={{width:progressPercent+"%"}}/>
+              </div>
+              <div className={s.updateProgressMeta}>
+                <span>{progressDone}/{progressTotal} เสร็จแล้ว</span>
+                <span>Safe {activeJob.waiting_safe} · Verify {activeJob.verifying} · Fail {activeJob.failed}</span>
+              </div>
+            </>}
+
+            {state==="UNKNOWN"&&
+              <p className={s.updateServerHint}>ยังไม่มีข้อมูลเวอร์ชันจาก {status?.unknown||0} บัญชี ระบบจึงไม่สร้างคิวซ้ำ</p>}
+            {state==="CURRENT"&&
+              <p className={s.updateServerHint}>ทุกบัญชีบน Server นี้ใช้ Production EA ล่าสุดแล้ว</p>}
+            {state==="EMPTY"&&
+              <p className={s.updateServerHint}>ยังไม่มี Cloud MT5 ที่ต้องอัปเดตบน Server นี้</p>}
+            {activeJob&&
+              <p className={s.updateServerHint}>
+                งานนี้ล็อกการปล่อยซ้ำจนกว่าจะจบ เพื่อป้องกันคิวอัปเดตซ้อนกัน
+              </p>}
+
+            <button
+              className={s.updateReleaseButton+(canRelease?" "+s.updateReleaseReady:"")}
+              disabled={!canRelease}
+              onClick={()=>start(runnerId)}
+            >
+              {state==="READY" ? "ปล่อย EA Update" :
+               state==="CREATING" ? "กำลังปล่อย..." :
+               state==="WAITING_SAFE" ? "รอ Safe Stop" :
+               state==="VERIFYING" ? "กำลัง Verify..." :
+               state==="DELIVERING" ? (activeJob?.action==="ROLLBACK"?"กำลัง Rollback...":"กำลังอัปเดต...") :
+               state==="CURRENT" ? "EA ล่าสุดแล้ว" :
+               state==="UNKNOWN" ? "รอตรวจสอบ EA" :
+               state==="OFFLINE" ? "Server Offline" :
+               "ไม่มีรายการอัปเดต"}
+            </button>
+          </section>;
+        })}
+
+        {!nodes.length&&
+          <div className={s.updateEmptyServer}>
+            <b>ยังไม่มี Cloud Server</b>
+            <span>เพิ่ม VPS ก่อนจึงจะสามารถปล่อย Fleet Update ได้</span>
+          </div>}
       </div>
     </section>
 
-    <section className={s.panel}>
-      <div className={s.panelHead}><div><span className={s.eyebrow}>UPDATE HISTORY</span><h3>งานอัปเดตล่าสุด</h3></div><button className={s.button} onClick={load} disabled={Boolean(busy)}>↻</button></div>
-      <div className={s.tableWrap}>
-        <table className={s.table}>
-          <thead><tr><th>SERVER / ACTION</th><th>PROGRESS</th><th>STATUS</th><th>เวลา</th><th></th></tr></thead>
-          <tbody>
-            {(data?.jobs||[]).map(job=><tr key={job.id}>
-              <td><b>{job.runner_id}</b><small>{job.action+(job.target_version?" → v"+job.target_version:"")}</small></td>
-              <td>{job.completed} / {job.total}<small>รอ Safe {job.waiting_safe} · Verify {job.verifying} · Fail {job.failed}</small></td>
-              <td><Badge tone={job.state==="COMPLETED"?"good":job.state==="RUNNING"?"warn":job.failed>0?"bad":""}>{job.state}</Badge></td>
-              <td>{date(job.created_at)}</td>
-              <td>{job.action==="UPDATE"&&job.completed>0&&job.state!=="RUNNING"
-                ?<button className={s.button} disabled={Boolean(busy)} onClick={()=>rollback(job)}>Rollback</button>
-                :"—"}</td>
-            </tr>)}
-          </tbody>
-        </table>
-        {!data?.jobs?.length&&<div className={s.empty}><b>ยังไม่มี Fleet Update</b><p>เลือก Server แล้วเริ่ม Safe Update เมื่อพร้อม</p></div>}
+    <section className={s.updateHistoryCard}>
+      <div className={s.updateHistoryHead}>
+        <div>
+          <span className={s.eyebrow}>UPDATE HISTORY</span>
+          <h3>งานอัปเดตล่าสุด</h3>
+        </div>
+        <button className={s.updateRefreshButton} onClick={load} disabled={Boolean(busy)} aria-label="รีเฟรชงานอัปเดต">↻</button>
+      </div>
+
+      <div className={s.updateHistoryList}>
+        {(data?.jobs||[]).map(job=>{
+          const progressTotal=Math.max(0,job.total||0);
+          const progressDone=Math.max(0,job.completed||0);
+          const progressPercent=progressTotal>0
+            ? Math.max(0,Math.min(100,Math.round(progressDone/progressTotal*100)))
+            : 0;
+          const rollbackAllowed=
+            job.action==="UPDATE" &&
+            job.completed>0 &&
+            job.state!=="RUNNING" &&
+            !activeByRunner.has(job.runner_id);
+
+          return <article key={job.id} className={s.updateHistoryRow}>
+            <div className={s.updateHistoryMain}>
+              <div className={s.updateHistoryIdentity}>
+                <b>{job.runner_id}</b>
+                <span>{job.action}{job.target_version?" → v"+job.target_version:""}</span>
+              </div>
+              <Badge tone={jobTone(job)}>{jobLabel(job)}</Badge>
+            </div>
+
+            <div className={s.updateHistoryProgress}>
+              <div className={s.updateProgressTrack}>
+                <span style={{width:progressPercent+"%"}}/>
+              </div>
+              <div className={s.updateProgressMeta}>
+                <span>{progressDone}/{progressTotal}</span>
+                <span>Safe {job.waiting_safe} · Verify {job.verifying} · Fail {job.failed}</span>
+              </div>
+            </div>
+
+            <div className={s.updateHistoryFooter}>
+              <time>{date(job.created_at)}</time>
+              {rollbackAllowed
+                ?<button
+                  className={s.updateRollbackButton}
+                  disabled={Boolean(busy)}
+                  onClick={()=>rollback(job)}
+                >Rollback</button>
+                :<span className={s.updateHistoryNoAction}>{job.state==="RUNNING"?"กำลังทำงาน":"—"}</span>}
+            </div>
+          </article>;
+        })}
+
+        {!data?.jobs?.length&&
+          <div className={s.empty}>
+            <b>ยังไม่มี Fleet Update</b>
+            <p>เมื่อมี Production EA ใหม่ งานที่ปล่อยจะปรากฏที่นี่พร้อมสถานะและความคืบหน้า</p>
+          </div>}
       </div>
     </section>
   </div>;
