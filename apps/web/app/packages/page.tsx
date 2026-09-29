@@ -485,19 +485,8 @@ export default function PackagesPage() {
     }
   }
 
-  async function cancelSlipPayment(type: "local" | "cloud", id: string, askConfirm = true) {
+  async function cancelSlipPayment(type: "local" | "cloud", id: string) {
     if (busy) return false;
-    if (askConfirm) {
-      const confirmed = await confirmPopup({
-        title: "ยกเลิกรายการชำระเงิน",
-        tone: "warning",
-        message: "ยกเลิกรายการนี้เพื่อกลับไปเลือกแพ็กเกจใหม่?",
-        confirmLabel: "ยกเลิกรายการ",
-        cancelLabel: "กลับ"
-      });
-      if (!confirmed) return false;
-    }
-
     setBusy("cancel-" + type);
     setMessage("");
     try {
@@ -508,10 +497,8 @@ export default function PackagesPage() {
         { method: "POST" }
       );
       await load();
-      notify("info", "ยกเลิกรายการแล้ว สามารถเลือกแพ็กเกจใหม่ได้");
       return true;
-    } catch (error: unknown) {
-      notify("bad", error instanceof Error ? error.message : "ยกเลิกรายการไม่สำเร็จ");
+    } catch {
       return false;
     } finally {
       setBusy("");
@@ -523,8 +510,7 @@ export default function PackagesPage() {
     if (checkoutOrderId) {
       const cancelled = await cancelSlipPayment(
         activeSystem === "LOCAL" ? "local" : "cloud",
-        checkoutOrderId,
-        false
+        checkoutOrderId
       );
       if (!cancelled) return;
       setCheckoutOrderId("");
