@@ -110,10 +110,14 @@ test "$CLOUD_TOKEN" != "$LOCAL_TOKEN"
 test "$WORKER_GENERATION" = "2"
 
 json_post "$BASE/ea/heartbeat" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$CLOUD_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"300001\",\"eaVersion\":\"1.0.10\",\"productVersion\":\"1.0.10\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}" >/dev/null
-# A migration can remain TARGET_PROVISIONING until the next dashboard/status read.
-# Simulate the customer returning later, after the successful target heartbeat is no
-# longer fresh. Historical post-handoff readiness must still close the migration.
+# A stale historical heartbeat must never complete TARGET_PROVISIONING.
+# Completion now requires the target Worker and the new-lease EA heartbeat to be
+# fresh at reconciliation time, preventing a false "migration complete" state.
 sql "update runtime_migrations set lease_rotated_at=now()-interval '10 minutes' where id='$MIG1'; update bot_instances set last_seen_at=now()-interval '5 minutes' where id='$INSTANCE';" >/dev/null
+STATUS_STALE=$(curl -fsS "$BASE/runtime-migration/status" -H "authorization: Bearer $TOKEN")
+test "$(printf '%s' "$STATUS_STALE" | jq -r --arg id "$MIG1" '.migrations[] | select(.id==$id) | .state')" = "TARGET_PROVISIONING"
+json_post "$BASE/worker/heartbeat" -H "x-worker-key: $WORKER_KEY" -d "{\"runnerId\":\"$RUNNER_ID\",\"hostname\":\"PHASE3-VPS\",\"capacity\":2,\"activeInstances\":1,\"telemetry\":{\"templateReady\":true,\"version\":\"1.1.0\"}}" >/dev/null
+json_post "$BASE/ea/heartbeat" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$CLOUD_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"300001\",\"eaVersion\":\"1.0.10\",\"productVersion\":\"1.0.10\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}" >/dev/null
 STATUS1=$(curl -fsS "$BASE/runtime-migration/status" -H "authorization: Bearer $TOKEN")
 test "$(printf '%s' "$STATUS1" | jq -r --arg id "$MIG1" '.migrations[] | select(.id==$id) | .state')" = "COMPLETED"
 
@@ -163,6 +167,9 @@ test -n "$LOCAL_TOKEN2"
 test "$LOCAL_TOKEN2" != "$CLOUD_TOKEN"
 
 json_post "$BASE/ea/agent-heartbeat" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$LOCAL_TOKEN2\",\"agentVersion\":\"1.0.9\",\"terminalPath\":\"C:\\\\MT5-RETURN\\\\TerminalData\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"PHASE3-PC-RETURN\",\"devicePublicId\":\"phase3-local-device-002\",\"deviceSecret\":\"phase3-return-device-secret-123456789\"}" >/dev/null
+# Local handoff is complete only after both the Windows Agent and the EA itself
+# report with the rotated Local token. Agent-only enrollment must not claim MT5 ready.
+json_post "$BASE/ea/heartbeat" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$LOCAL_TOKEN2\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"300001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.0.10\",\"productVersion\":\"1.0.10\",\"server\":\"SCENOVA-Demo\",\"positions\":0,\"accountScenovaPendingOrders\":0}}" >/dev/null
 STATUS2=$(curl -fsS "$BASE/runtime-migration/status" -H "authorization: Bearer $TOKEN")
 test "$(printf '%s' "$STATUS2" | jq -r --arg id "$MIG2" '.migrations[] | select(.id==$id) | .state')" = "COMPLETED"
 test "$(sql "select id from bot_instances where mt5_account_id='$ACCOUNT_ID';")" = "$INSTANCE"
