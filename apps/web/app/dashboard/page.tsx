@@ -918,6 +918,12 @@ export default function DashboardPage() {
     ["ACTIVE","AVAILABLE"].includes(String(slot?.status || "").toUpperCase())
   ) || null;
   const customerHasCloudMigrationAccess = Boolean(cloudMigrationTarget);
+  const localMigrationTarget = (data?.slots || []).find((slot:any) =>
+    String(slot?.mode || "").toUpperCase() === "LOCAL" &&
+    Boolean(slot?.can_control) &&
+    !slot?.instance_id &&
+    ["ACTIVE","AVAILABLE"].includes(String(slot?.status || "").toUpperCase())
+  ) || null;
   const serverLiveStatus = data?.liveStatus || {
     code: isMt5Online ? "RUNNING_READY" : "MT5_OFFLINE",
     label: isMt5Online ? "กำลังตรวจสอบสถานะบอท" : "MT5 ยังไม่เชื่อมต่อ",
@@ -1008,6 +1014,9 @@ export default function DashboardPage() {
             ? "SUCCESS"
             : "RUNNING",
         message:String(vpsMigrationProgress.message || "Server กำลังตรวจสอบการย้ายระบบ"),
+        stage:String(vpsMigrationProgress.stage || ""),
+        targetSlotId:String(vpsMigrationProgress.targetSlotId || ""),
+        targetMode:String(vpsMigrationProgress.targetMode || ""),
         canClose:vpsMigrationProgress.status === "FAILED" || vpsMigrationProgress.status === "SUCCESS"
       }
     : null;
@@ -1209,18 +1218,31 @@ export default function DashboardPage() {
         if (!migration) return;
 
         const migrationState = String(migration.state || "").toUpperCase();
+        const targetMode = String(
+          vpsMigrationProgress.targetMode ||
+          migration.target_mode ||
+          "CLOUD"
+        ).toUpperCase();
+        const movingToLocal = targetMode === "LOCAL";
         const runnerLabel = String(
           vpsMigrationProgress.runnerRegion ||
           vpsMigrationProgress.runnerId ||
           migration.target_runner_id ||
           "SCENOVA VPS"
         );
-        const stateMessage:Record<string,string> = {
-          STOPPING_LOCAL:"กำลังย้ายระบบ · กำลังตรวจและหยุด Local MT5 อย่างปลอดภัย",
-          SOURCE_STOP_CONFIRMED:"Local MT5 หยุดแล้ว · กำลังส่งระบบไป VPS",
-          TARGET_PROVISIONING:"กำลังติดตั้งระบบ VPS · กำลังเปิด MT5 และ FastBasketBot บน " + runnerLabel,
-          COMPLETED:"ย้ายระบบไป VPS สำเร็จ · VPS Online แล้ว · พร้อมกดเริ่มบอท"
-        };
+        const stateMessage:Record<string,string> = movingToLocal
+          ? {
+              STOPPING_CLOUD:"กำลังย้ายระบบ · กำลังปิด MT5 เดิมบน VPS อย่างปลอดภัย",
+              SOURCE_STOP_CONFIRMED:"VPS ยืนยันว่าปิด MT5 เดิมแล้ว · กำลังย้ายสิทธิ์ไป Local",
+              WAITING_LOCAL_INSTALL:"VPS ปิดแล้ว · รอเชื่อม SCENOVA Local MT5 ด้วยสิทธิ์ใหม่",
+              COMPLETED:"ย้ายกลับ Local สำเร็จ · Local MT5 และ EA เชื่อมต่อแล้ว"
+            }
+          : {
+              STOPPING_LOCAL:"กำลังย้ายระบบ · กำลังตรวจและหยุด Local MT5 อย่างปลอดภัย",
+              SOURCE_STOP_CONFIRMED:"Local MT5 หยุดแล้ว · กำลังส่งระบบไป VPS",
+              TARGET_PROVISIONING:"กำลังติดตั้งระบบ VPS · กำลังเปิด MT5 และ FastBasketBot บน " + runnerLabel,
+              COMPLETED:"ย้ายระบบไป VPS สำเร็จ · VPS และ MT5 Online แล้ว · พร้อมกดเริ่มบอท"
+            };
 
         if (migrationState === "FAILED" || migrationState === "CANCELLED") {
           setVpsMigrationProgress((current:any) =>
@@ -1243,7 +1265,7 @@ export default function DashboardPage() {
               ? { ...current, status:"SUCCESS", stage:"COMPLETED", message:stateMessage.COMPLETED }
               : current
           );
-          setNotice("ย้ายระบบไป VPS สำเร็จ");
+          setNotice(movingToLocal ? "ย้ายระบบกลับ Local สำเร็จ" : "ย้ายระบบไป VPS สำเร็จ");
           if (targetSlotId) {
             selectedSlotIdRef.current = targetSlotId;
             setSelectedSlotId(targetSlotId);
@@ -1276,7 +1298,8 @@ export default function DashboardPage() {
     vpsMigrationProgress?.status,
     vpsMigrationProgress?.runnerId,
     vpsMigrationProgress?.runnerRegion,
-    vpsMigrationProgress?.targetSlotId
+    vpsMigrationProgress?.targetSlotId,
+    vpsMigrationProgress?.targetMode
   ]);
 
   useEffect(() => {
@@ -2788,6 +2811,7 @@ export default function DashboardPage() {
     setVpsMigrationProgress({
       status:"RUNNING",
       stage:"REQUESTING",
+      targetMode:"CLOUD",
       message:"กำลังย้ายระบบ · กำลังตรวจ Local MT5 และเตรียม VPS"
     });
 
@@ -2822,6 +2846,7 @@ export default function DashboardPage() {
         stage:String(migration?.state || "STOPPING_LOCAL"),
         migrationId:String(migration?.id || ""),
         targetSlotId,
+        targetMode:"CLOUD",
         runnerId:String(result?.runnerId || migration?.target_runner_id || ""),
         runnerRegion:String(result?.runnerRegion || ""),
         message:String(migration?.state || "").toUpperCase() === "TARGET_PROVISIONING"
@@ -2836,6 +2861,76 @@ export default function DashboardPage() {
       });
     } finally {
       setOwnerVpsBusy(false);
+    }
+  }
+
+  async function moveVpsToLocal() {
+    if (!localMigrationTarget?.id) {
+      setError("ยังไม่มี Local Slot ว่างสำหรับย้ายกลับเครื่อง Local");
+      return;
+    }
+    if (
+      desired === "RUNNING" ||
+      state === "RUNNING" ||
+      Number(data?.instance?.metrics?.positions || 0) > 0 ||
+      Number(data?.instance?.metrics?.accountScenovaPendingOrders || 0) > 0
+    ) {
+      setError("กรุณาหยุดบอทและปิด Position / Pending Order ให้หมดก่อนย้ายกลับ Local");
+      return;
+    }
+
+    const confirmed = await confirmPopup({
+      title:"ย้ายกลับ Local MT5",
+      tone:"warning",
+      message:"ระบบจะปิด MT5 บน VPS ให้สนิทก่อน ตัดสิทธิ์ Runtime เดิม แล้วจึงออกสิทธิ์ใหม่ให้ Local เพื่อไม่ให้สองฝั่งทำงานพร้อมกัน",
+      confirmLabel:"ย้ายกลับ Local"
+    });
+    if (!confirmed) return;
+
+    const sourceSlotId = String(selectedSlotIdRef.current || data?.selectedSlot?.id || "");
+    setBusy(true);
+    setError("");
+    setNotice("");
+    setServerOperation(null);
+    setServerOperationMinimized(false);
+    setVpsMigrationProgress({
+      status:"RUNNING",
+      stage:"REQUESTING",
+      targetMode:"LOCAL",
+      targetSlotId:String(localMigrationTarget.id),
+      message:"กำลังย้ายระบบ · กำลังตรวจและปิด MT5 เดิมบน VPS"
+    });
+
+    try {
+      const migration = await api("/runtime-migration/request", {
+        method:"POST",
+        body:JSON.stringify({
+          sourceSlotId,
+          targetSlotId:String(localMigrationTarget.id),
+          confirmFlat:true,
+          confirmSwitch:true
+        })
+      });
+      setVpsMigrationProgress({
+        status:"RUNNING",
+        stage:String(migration?.state || "STOPPING_CLOUD"),
+        migrationId:String(migration?.id || ""),
+        targetSlotId:String(localMigrationTarget.id),
+        targetMode:"LOCAL",
+        message:String(migration?.state || "").toUpperCase() === "WAITING_LOCAL_INSTALL"
+          ? "VPS ปิดแล้ว · รอเชื่อม SCENOVA Local MT5 ด้วยสิทธิ์ใหม่"
+          : "กำลังย้ายระบบ · กำลังปิด MT5 เดิมบน VPS อย่างปลอดภัย"
+      });
+    } catch (e:any) {
+      setVpsMigrationProgress({
+        status:"FAILED",
+        stage:"FAILED",
+        targetMode:"LOCAL",
+        targetSlotId:String(localMigrationTarget.id),
+        message:String(e?.message || "ย้ายระบบกลับ Local ไม่สำเร็จ")
+      });
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -3530,6 +3625,21 @@ export default function DashboardPage() {
                 {operationTerminal.kind === "CLOUD_UPDATE" && operationTerminal.target && (
                   <div className="cc-server-operation-meta"><span>Target Version</span><b>v{operationTerminal.target}</b></div>
                 )}
+                {operationTerminal.kind === "MIGRATION" &&
+                  operationTerminal.stage === "WAITING_LOCAL_INSTALL" &&
+                  operationTerminal.targetSlotId && (
+                    <div className="cc-server-operation-meta">
+                      <span>ขั้นตอนถัดไป</span>
+                      <button
+                        type="button"
+                        className="btn primary"
+                        disabled={busy}
+                        onClick={()=>void downloadInstallerForSlot(String(operationTerminal.targetSlotId))}
+                      >
+                        ดาวน์โหลด SCENOVA Setup
+                      </button>
+                    </div>
+                  )}
                 <div className="cc-server-operation-progress" aria-hidden="true"><i/></div>
               </div>
               <footer>
@@ -4315,6 +4425,22 @@ export default function DashboardPage() {
                       onClick={()=>prepareCloudMt5Dialog(String(data.selectedSlot?.id || ""),"RECONNECT")}
                     >
                       เชื่อม MT5 ใหม่
+                    </button>
+                  )}
+                  {localMigrationTarget?.id && (
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      disabled={
+                        busy ||
+                        state==="RUNNING" ||
+                        desired==="RUNNING" ||
+                        Number(data?.instance?.metrics?.positions || 0)>0 ||
+                        Number(data?.instance?.metrics?.accountScenovaPendingOrders || 0)>0
+                      }
+                      onClick={()=>void moveVpsToLocal()}
+                    >
+                      ย้ายกลับ Local MT5
                     </button>
                   )}
                   <button
