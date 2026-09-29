@@ -217,7 +217,7 @@ export default function AdminCommissionPage() {
       });
       setMessage("");
     } catch (error: any) {
-      setMessage(String(error?.message || "โหลด Withdrawal Center ไม่สำเร็จ"));
+      setMessage(String(error?.message || "โหลดข้อมูลไม่สำเร็จ"));
     } finally {
       setLoading(false);
     }
@@ -236,7 +236,7 @@ export default function AdminCommissionPage() {
           destinationCooldownHours: Math.trunc(Number(settingsForm.cooldownHours || 0))
         })
       });
-      setMessage("บันทึก Withdrawal Settings แล้ว");
+      setMessage("บันทึกการตั้งค่าแล้ว");
       await load();
     } catch (error: any) {
       setMessage(String(error?.message || "บันทึก Settings ไม่สำเร็จ"));
@@ -260,10 +260,10 @@ export default function AdminCommissionPage() {
           autoPayoutEnabled: advancedForm.autoPayoutEnabled
         })
       });
-      setMessage("บันทึก Phase 3 Security Policy แล้ว");
+      setMessage("บันทึกการตั้งค่าความปลอดภัยแล้ว");
       await load();
     } catch (error: any) {
-      setMessage(String(error?.message || "บันทึก Phase 3 Settings ไม่สำเร็จ"));
+      setMessage(String(error?.message || "บันทึกการตั้งค่าไม่สำเร็จ"));
     } finally {
       setBusy("");
     }
@@ -321,7 +321,7 @@ export default function AdminCommissionPage() {
       });
       setMessage(
         action === "approve" && result?.approved === false
-          ? `บันทึก Approval แล้ว ${result.approvalCount}/${result.approvalRequired} · ต้องใช้ Admin อีกคน`
+          ? `บันทึกการอนุมัติแล้ว ${result.approvalCount}/${result.approvalRequired}`
           : `${action.toUpperCase()} ${item.user_code} สำเร็จ`
       );
       await load();
@@ -345,7 +345,7 @@ export default function AdminCommissionPage() {
           dailyLimitSatang: null
         })
       });
-      setMessage(paused ? `Pause การถอนของ ${item.user_code} แล้ว` : `Resume การถอนของ ${item.user_code} แล้ว`);
+      setMessage(paused ? `พักการถอนของ ${item.user_code} แล้ว` : `เปิดการถอนของ ${item.user_code} แล้ว`);
       await load();
     } catch (error: any) {
       setMessage(String(error?.message || "ปรับ User Control ไม่สำเร็จ"));
@@ -424,7 +424,7 @@ export default function AdminCommissionPage() {
       setMessage("ยืนยันการจ่ายเงินแล้ว");
       await load();
     } catch (error: any) {
-      setMessage(String(error?.message || "Manual Reconciliation ไม่สำเร็จ"));
+      setMessage(String(error?.message || "ยืนยันรายการไม่สำเร็จ"));
     } finally {
       setBusy("");
     }
@@ -630,9 +630,9 @@ export default function AdminCommissionPage() {
                     </div>
 
                     <div className={s.requestFacts}>
-                      <span>Approval <b>{item.approval_count}/{item.approval_required}</b></span>
-                      <span>Reconcile <b>{item.reconciliation_status}</b></span>
-                      <span>Auto Payout <b>{item.auto_payout_eligible ? "พร้อม" : "ไม่ใช้"}</b></span>
+                      <span>อนุมัติ <b>{item.approval_count}/{item.approval_required}</b></span>
+                      <span>ตรวจยอด <b>{item.reconciliation_status}</b></span>
+                      <span>จ่ายอัตโนมัติ <b>{item.auto_payout_eligible ? "พร้อม" : "ไม่ใช้"}</b></span>
                     </div>
 
                     <div className={s.bankBox}>
@@ -660,13 +660,13 @@ export default function AdminCommissionPage() {
                         className={s.noteInput}
                         value={notes[item.id] || ""}
                         onChange={event=>setNotes(v=>({...v,[item.id]:event.target.value}))}
-                        placeholder="เหตุผล Hold / Reject / Pause ผู้ใช้"
+                        placeholder="ระบุเหตุผล"
                       />
                     </label>
 
                     {item.status === "APPROVED" && (
                       <label className={s.fieldLabel}>
-                        <span>Payment Reference</span>
+                        <span>เลขอ้างอิง</span>
                         <input
                           className={s.noteInput}
                           value={references[item.id] || ""}
@@ -796,7 +796,7 @@ export default function AdminCommissionPage() {
                 </div>
                 <label className={s.fieldLabel}>
                   <span>เหตุผล</span>
-                  <input className={s.noteInput} value={killReason} onChange={event=>setKillReason(event.target.value)} placeholder="เช่น payout anomaly / suspected fraud"/>
+                  <input className={s.noteInput} value={killReason} onChange={event=>setKillReason(event.target.value)} placeholder="ระบุเหตุผล"/>
                 </label>
                 <button
                   type="button"
@@ -814,7 +814,7 @@ export default function AdminCommissionPage() {
             <>
               <div className={s.sectionHead}>
                 <div>
-                  <h2>ระบบจ่ายเงินและประวัติ</h2>
+                  <h2>การจ่ายเงินและประวัติ</h2>
                 </div>
               </div>
 
@@ -837,11 +837,11 @@ export default function AdminCommissionPage() {
                         <b>{item.title}</b>
                         <span>{item.user_code || "SYSTEM"} · {item.alert_type}</span>
                         {item.status==="OPEN" && (
-                          <button type="button" disabled={Boolean(busy)} onClick={()=>void resolveAlert(item.id)}>Resolve Alert</button>
+                          <button type="button" disabled={Boolean(busy)} onClick={()=>void resolveAlert(item.id)}>ปิดการแจ้งเตือน</button>
                         )}
                       </article>
                     ))}
-                    {!data?.phase3.alerts.length && <div className={s.empty}>ไม่มี Fraud / Reconciliation alert</div>}
+                    {!data?.phase3.alerts.length && <div className={s.empty}>ไม่มีการแจ้งเตือน</div>}
                   </div>
                 </div>
 
@@ -861,7 +861,7 @@ export default function AdminCommissionPage() {
                         <time>{dateTime(job.updated_at)}</time>
                       </div>
                     ))}
-                    {!data?.phase3.payoutJobs.length && <div className={s.empty}>ยังไม่มี Auto Payout job</div>}
+                    {!data?.phase3.payoutJobs.length && <div className={s.empty}>ยังไม่มีรายการจ่ายเงิน</div>}
                   </div>
                 </div>
               </section>
@@ -879,7 +879,7 @@ export default function AdminCommissionPage() {
                     <time>{dateTime(item.created_at)}</time>
                   </div>
                 ))}
-                {!data?.audit.length && <div className={s.empty}>ยังไม่มี Audit event</div>}
+                {!data?.audit.length && <div className={s.empty}>ยังไม่มีประวัติ</div>}
               </section>
             </>
           )}
