@@ -37,5 +37,7 @@ foreach ($required in @(
 
 if (-not $page.Contains('import { BotPerformanceSummary }')) { throw 'Dashboard summary component import missing' }
 if (-not $page.Contains('<BotPerformanceSummary dashboard={data} />')) { throw 'Dashboard summary launcher mount missing' }
+if (-not $web.Contains('.bps-modal{position:relative;width:100%;max-width:none')) { throw 'Bot performance summary modal must fill the available viewport width' }
+if ($web.Contains('width:min(1320px,calc(100vw - 16px))')) { throw 'Legacy fixed summary modal width cap must stay removed' }
 
 Write-Host 'Bot performance summary contract PASS'
