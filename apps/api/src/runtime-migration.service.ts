@@ -161,6 +161,7 @@ export class RuntimeMigrationService {
          bi.last_seen_at,bi.agent_last_seen_at,bi.agent_version,bi.device_status,
          bi.runner_id,bi.execution_generation,bi.runtime_stop_state,
          COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders,
          a.account_number,a.broker,a.broker_server
        FROM license_slots ls
        LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
@@ -214,8 +215,9 @@ export class RuntimeMigrationService {
 
       const source = (await tx.query(
         `SELECT ls.id,ls.mode,ls.status,bi.id instance_id,bi.mt5_account_id,
-           bi.desired_state,bi.actual_state,
-           COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions
+           bi.desired_state,bi.actual_state,bi.last_seen_at,
+           COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+           COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders
          FROM license_slots ls
          JOIN bot_instances bi ON bi.slot_id=ls.id
          WHERE ls.id=$1
@@ -227,11 +229,17 @@ export class RuntimeMigrationService {
       )).rows[0];
       if (!source) throw new NotFoundException("Owner Local runtime not found");
       if (!source.mt5_account_id) throw new ConflictException("Local runtime has no MT5 account");
-      if (source.desired_state === "RUNNING" || source.actual_state === "RUNNING") {
-        throw new ConflictException("หยุดบอท Local ก่อนย้ายไป VPS");
+      if (source.desired_state === "RUNNING" || source.actual_state !== "STOPPED") {
+        throw new ConflictException("หยุดบอท Local ให้เป็น STOPPED ก่อนย้ายไป VPS");
       }
       if (Number(source.positions || 0) > 0) {
         throw new ConflictException("ปิด Position ให้หมดก่อนย้ายไป VPS");
+      }
+      if (Number(source.pending_orders || 0) > 0) {
+        throw new ConflictException("ยกเลิก Pending Order ให้หมดก่อนย้ายไป VPS");
+      }
+      if (!this.fresh(source.last_seen_at, 15_000)) {
+        throw new ConflictException("รอ MT5 heartbeat ล่าสุดยืนยันสถานะ STOPPED และ Flat ก่อนย้ายไป VPS");
       }
 
       let target = (await tx.query(
@@ -333,6 +341,7 @@ export class RuntimeMigrationService {
            bi.last_seen_at,bi.agent_last_seen_at,bi.agent_version,bi.agent_terminal_path,
            bi.device_status,bi.runner_id,bi.runtime_stop_state,bi.provisioning_error,
            COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+           COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders,
            a.account_number,a.broker_server
          FROM license_slots ls
          JOIN bot_instances bi ON bi.slot_id=ls.id
@@ -374,11 +383,14 @@ export class RuntimeMigrationService {
       if (existingMigration) {
         throw new ConflictException("This bot already has an active runtime migration");
       }
-      if (source.desired_state === "RUNNING" || source.actual_state === "RUNNING") {
-        throw new ConflictException("Stop the bot before changing runtime mode");
+      if (source.desired_state === "RUNNING" || source.actual_state !== "STOPPED") {
+        throw new ConflictException("Source bot must be STOPPED before changing runtime mode");
       }
       if (Number(source.positions || 0) > 0) {
         throw new ConflictException("Close all positions before changing runtime mode");
+      }
+      if (Number(source.pending_orders || 0) > 0) {
+        throw new ConflictException("Cancel all pending orders before changing runtime mode");
       }
       const unresolvedClose = (await tx.query(
         `SELECT id FROM bot_commands
@@ -412,21 +424,15 @@ export class RuntimeMigrationService {
         );
       }
 
-      let migrationState = source.mode === "LOCAL" ? "STOPPING_LOCAL" : "STOPPING_CLOUD";
+      let migrationState = source.mode === "LOCAL" ? "SOURCE_STOP_CONFIRMED" : "STOPPING_CLOUD";
       if (source.mode === "LOCAL") {
-        if (!this.fresh(source.agent_last_seen_at, 45_000) || source.device_status !== "ACTIVE") {
-          throw new ConflictException("Local Agent must be online before moving to Cloud");
+        // LOCAL -> CLOUD is verified by the EA runtime state, not by the Windows
+        // Agent version. The instance row stays locked until finalizeHandoffTx
+        // rotates generation/token, so the old Local lease cannot survive the
+        // handoff or race a new START command.
+        if (!this.fresh(source.last_seen_at, 15_000)) {
+          throw new ConflictException("Fresh EA heartbeat is required before Local to Cloud handoff");
         }
-        if (!this.versionAtLeast(source.agent_version, LOCAL_MIGRATION_AGENT_MIN_VERSION)) {
-          throw new ConflictException(`SCENOVA Windows Agent ${LOCAL_MIGRATION_AGENT_MIN_VERSION}+ is required for verified Local stop`);
-        }
-        if (!source.agent_terminal_path) {
-          throw new ConflictException("Local Agent has not reported its MT5 terminal path");
-        }
-        // A Local runtime that is already STOPPED may legitimately have no fresh
-        // EA heartbeat. Runtime ownership is still released safely because the
-        // online Windows Agent must verify that the exact terminal64.exe process
-        // for this profile is absent/stopped before the handoff can commit.
       } else {
         if (!source.runner_id) throw new ConflictException("Cloud runtime is not bound to a Worker");
         const node = (await tx.query(
@@ -542,12 +548,19 @@ export class RuntimeMigrationService {
     if (migration.state !== "SOURCE_STOP_CONFIRMED") return migration;
 
     const instance = (await tx.query(
-      `SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions
+      `SELECT bi.*,
+         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders
        FROM bot_instances bi WHERE bi.id=$1 FOR UPDATE`,
       [migration.bot_instance_id]
     )).rows[0];
     if (!instance) throw new NotFoundException("Bot instance not found");
-    if (instance.desired_state === "RUNNING" || instance.actual_state === "RUNNING" || Number(instance.positions || 0) > 0) {
+    if (
+      instance.desired_state === "RUNNING" ||
+      instance.actual_state !== "STOPPED" ||
+      Number(instance.positions || 0) > 0 ||
+      Number(instance.pending_orders || 0) > 0
+    ) {
       throw new ConflictException("Source runtime became unsafe before handoff");
     }
     if (Number(instance.execution_generation || 1) !== Number(migration.execution_generation)) {

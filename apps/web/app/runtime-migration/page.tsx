@@ -10,6 +10,7 @@ type Slot = {
   instance_id?:string|null; instance_mode?:string|null; desired_state?:string|null; actual_state?:string|null;
   last_seen_at?:string|null; agent_last_seen_at?:string|null; agent_version?:string|null; device_status?:string|null;
   runner_id?:string|null; execution_generation?:number|null; runtime_stop_state?:string|null; positions?:number|null;
+  pending_orders?:number|null;
   account_number?:string|null; broker?:string|null; broker_server?:string|null;
 };
 type Migration = {
@@ -32,14 +33,6 @@ const stateLabels:Record<string,string> = {
   FAILED:"การย้ายหยุดเพื่อความปลอดภัย",
   CANCELLED:"ยกเลิกแล้ว"
 };
-
-function versionAtLeast(current:string|undefined|null, required:string) {
-  const parse=(value:string)=>value.replace(/^v/i,"").split(".").map(n=>Number(n)||0);
-  const a=parse(String(current||"0")); const b=parse(required);
-  while(a.length<4)a.push(0); while(b.length<4)b.push(0);
-  for(let i=0;i<4;i++){ if(a[i]>b[i])return true; if(a[i]<b[i])return false; }
-  return true;
-}
 
 export default function RuntimeMigrationPage() {
   const [data,setData]=useState<Snapshot|null>(null);
@@ -75,8 +68,16 @@ export default function RuntimeMigrationPage() {
   const activeMigration=useMemo(()=>data?.migrations.find(x=>!terminalStates.has(x.state))||null,[data]);
   const recentMigration=data?.migrations?.[0]||null;
   const requiredAgent=data?.localAgentMinVersion||"1.0.9";
-  const sourceAgentReady=source?.mode!=="LOCAL" || versionAtLeast(source?.agent_version,requiredAgent);
-  const sourceFlat=Number(source?.positions||0)===0 && source?.desired_state!=="RUNNING" && source?.actual_state!=="RUNNING";
+  const sourceFlat=
+    Number(source?.positions||0)===0 &&
+    Number(source?.pending_orders||0)===0 &&
+    source?.desired_state!=="RUNNING" &&
+    source?.actual_state==="STOPPED";
+  const sourceHeartbeatFresh=source?.mode!=="LOCAL" || Boolean(
+    source?.last_seen_at &&
+    Date.now()-new Date(String(source.last_seen_at)).getTime()>=0 &&
+    Date.now()-new Date(String(source.last_seen_at)).getTime()<=15000
+  );
 
   useEffect(()=>{
     if(source && targetSlotId && !targetSlots.some(x=>x.id===targetSlotId)) setTargetSlotId("");
@@ -103,8 +104,8 @@ export default function RuntimeMigrationPage() {
   async function submit(e:FormEvent) {
     e.preventDefault();
     if(!source||!target) return setError("กรุณาเลือก Source และ Target Runtime");
-    if(!sourceFlat) return setError("ต้อง Stop Bot และปิด Position ให้เป็น 0 ก่อน");
-    if(!sourceAgentReady) return setError(`Local Agent ต้องเป็น ${requiredAgent} หรือใหม่กว่า`);
+    if(!sourceFlat) return setError("ต้อง Stop Bot และให้ Position / Pending Order เป็น 0 ก่อน");
+    if(!sourceHeartbeatFresh) return setError("รอ MT5 heartbeat ล่าสุดยืนยันสถานะ STOPPED และ Flat ก่อนย้าย");
     setBusy(true);setError("");setMessage("");
     try {
       const result=await api("/runtime-migration/request",{
@@ -157,9 +158,9 @@ export default function RuntimeMigrationPage() {
         </label>
         {source&&<div className={s.detail}>
           <p><b>{source.mode}</b> · {source.broker_server||"—"}</p>
-          <p>Bot: {source.actual_state||"—"} / {source.desired_state||"—"} · Positions: <b>{Number(source.positions||0)}</b></p>
+          <p>Bot: {source.actual_state||"—"} / {source.desired_state||"—"} · Positions: <b>{Number(source.positions||0)}</b> · Pending: <b>{Number(source.pending_orders||0)}</b></p>
           <p>Generation: {source.execution_generation||1}</p>
-          {source.mode==="LOCAL"&&<><p>Agent: {source.agent_version||"ไม่พบ"} · ต้องการ {requiredAgent}+</p>{!sourceAgentReady&&<button type="button" onClick={()=>downloadInstaller(source.id)} disabled={busy}>อัปเดต Local Agent เป็น {requiredAgent}</button>}</>}
+          {source.mode==="LOCAL"&&<p>Agent: {source.agent_version||"ไม่พบ"} · เวอร์ชัน Agent ไม่บล็อกการย้ายไป VPS; ระบบยืนยันจาก EA heartbeat ที่ STOPPED/Flat</p>}
           {source.mode==="CLOUD"&&<p>Runner: {source.runner_id||"—"} · Stop state: {source.runtime_stop_state||"NONE"}</p>}
         </div>}
       </section>

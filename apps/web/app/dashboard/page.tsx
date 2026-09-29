@@ -3977,11 +3977,15 @@ export default function DashboardPage() {
                     isOwner,
                     busy:ownerVpsBusy,
                     blockedReason:
-                      desired === "RUNNING" || state === "RUNNING"
-                        ? "กรุณากด Safe Stop ก่อนย้ายไป VPS"
+                      desired === "RUNNING" || state !== "STOPPED"
+                        ? "กรุณากด Safe Stop และรอ Bot เป็น STOPPED ก่อนย้ายไป VPS"
                         : Number(data?.instance?.metrics?.positions || 0) > 0
                           ? "ต้องไม่มี Position ค้างก่อนย้ายไป VPS"
-                          : "",
+                          : Number(data?.instance?.metrics?.accountScenovaPendingOrders || 0) > 0
+                            ? "ต้องไม่มี Pending Order ค้างก่อนย้ายไป VPS"
+                            : !data?.instance?.last_seen_at || Date.now()-new Date(String(data.instance.last_seen_at)).getTime()>15000
+                              ? "รอ MT5 heartbeat ล่าสุดก่อนย้ายไป VPS"
+                              : "",
                     packageHref:"/packages?system=cloud&from=mt5-ea",
                     progress:vpsMigrationProgress,
                     onMove:openOwnerVpsMigration,

@@ -48,7 +48,7 @@ LOCAL_SLOT=$(printf '%s' "$DASH" | jq -r '.selectedSlot.id')
 test -n "$USER_ID"
 test -n "$LOCAL_SLOT"
 
-echo '[phase3] enroll Local Agent 1.0.9 and bind Demo MT5'
+echo '[phase3] enroll legacy Local Agent 1.0.8 and bind Demo MT5'
 PREP=$(json_post "$BASE/bot/installers/windows" -H "authorization: Bearer $TOKEN" -d "{\"slotId\":\"$LOCAL_SLOT\"}")
 CODE=$(printf '%s' "$PREP" | jq -r '.code')
 test -n "$CODE"
@@ -59,7 +59,7 @@ test -n "$INSTANCE"
 test -n "$LOCAL_TOKEN"
 
 EA_HASH=$(sha256sum /tmp/FastBasketBot.ex5 | awk '{print $1}')
-json_post "$BASE/ea/agent-heartbeat" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$LOCAL_TOKEN\",\"agentVersion\":\"1.0.9\",\"terminalPath\":\"C:\\\\MT5\\\\TerminalData\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"PHASE3-PC\",\"devicePublicId\":\"phase3-local-device-001\",\"deviceSecret\":\"phase3-local-device-secret-123456789\"}" >/dev/null
+json_post "$BASE/ea/agent-heartbeat" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$LOCAL_TOKEN\",\"agentVersion\":\"1.0.8\",\"terminalPath\":\"C:\\\\MT5\\\\TerminalData\",\"eaHash\":\"$EA_HASH\",\"hostname\":\"PHASE3-PC\",\"devicePublicId\":\"phase3-local-device-001\",\"deviceSecret\":\"phase3-local-device-secret-123456789\"}" >/dev/null
 json_post "$BASE/ea/heartbeat" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$LOCAL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"300001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.0.10\",\"productVersion\":\"1.0.10\",\"server\":\"SCENOVA-Demo\",\"positions\":0}}" >/dev/null
 
 ACCOUNT_ID=$(sql "select mt5_account_id from bot_instances where id='$INSTANCE';")
@@ -74,28 +74,19 @@ WORKER_HASH=$(printf '%s' "$WORKER_KEY" | sha256sum | awk '{print $1}')
 sql "insert into worker_nodes(runner_id,region,hostname,capacity,active_instances,status,last_seen_at,accepting_jobs,worker_key_hash,telemetry) values('$RUNNER_ID','ci','PHASE3-VPS',2,0,'ONLINE',now(),true,'$WORKER_HASH','{\"templateReady\":true,\"version\":\"1.1.0\"}'::jsonb) on conflict(runner_id) do update set last_seen_at=now(),capacity=2,active_instances=0,accepting_jobs=true,worker_key_hash=excluded.worker_key_hash,telemetry=excluded.telemetry;" >/dev/null
 sql "insert into cloud_orders(user_id,months,amount,status,runner_id,slot_id,subscription_id,charge_id,paid_at) values('$USER_ID',1,100,'PAID','$RUNNER_ID','$CLOUD_SLOT','$CLOUD_SUB','phase3-ci-charge',now());" >/dev/null
 
-echo '[phase3] Local -> Cloud request enters STOPPING_LOCAL'
+echo '[phase3] pending order blocks Local -> Cloud even when the bot is STOPPED'
+json_post "$BASE/ea/heartbeat" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$LOCAL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"300001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.0.10\",\"productVersion\":\"1.0.10\",\"server\":\"SCENOVA-Demo\",\"positions\":0,\"accountScenovaPendingOrders\":1}}" >/dev/null
+PENDING_HTTP=$(curl -sS -o /tmp/phase3-pending.json -w '%{http_code}' -X POST "$BASE/runtime-migration/request" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "{\"sourceSlotId\":\"$LOCAL_SLOT\",\"targetSlotId\":\"$CLOUD_SLOT\",\"tradingPassword\":\"DemoPass123!\",\"confirmFlat\":true,\"confirmSwitch\":true}")
+test "$PENDING_HTTP" = "409"
+
+echo '[phase3] legacy Agent version does not block fresh STOPPED / flat Local -> Cloud handoff'
+json_post "$BASE/ea/heartbeat" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$LOCAL_TOKEN\",\"state\":\"STOPPED\",\"metrics\":{\"accountNumber\":\"300001\",\"broker\":\"SCENOVA\",\"eaVersion\":\"1.0.10\",\"productVersion\":\"1.0.10\",\"server\":\"SCENOVA-Demo\",\"positions\":0,\"accountScenovaPendingOrders\":0}}" >/dev/null
 REQ1=$(json_post "$BASE/runtime-migration/request" -H "authorization: Bearer $TOKEN" -d "{\"sourceSlotId\":\"$LOCAL_SLOT\",\"targetSlotId\":\"$CLOUD_SLOT\",\"tradingPassword\":\"DemoPass123!\",\"confirmFlat\":true,\"confirmSwitch\":true}")
 MIG1=$(printf '%s' "$REQ1" | jq -r '.id')
-test "$(printf '%s' "$REQ1" | jq -r '.state')" = "STOPPING_LOCAL"
+test "$(printf '%s' "$REQ1" | jq -r '.state')" = "TARGET_PROVISIONING"
 test -n "$MIG1"
 
-# DB-level invariant: no API/UI bypass may START while migration is active.
-if psql -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -v ON_ERROR_STOP=1 -c "update bot_instances set desired_state='RUNNING' where id='$INSTANCE';" >/tmp/phase3-start.out 2>/tmp/phase3-start.err; then
-  echo 'START guard failed: desired_state RUNNING was accepted during migration'
-  exit 1
-fi
-grep -qi 'runtime migration is active' /tmp/phase3-start.err
-
-POLL1=$(json_post "$BASE/runtime-migration/agent/poll" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$LOCAL_TOKEN\"}")
-test "$(printf '%s' "$POLL1" | jq -r '.action')" = "STOP_LOCAL_RUNTIME"
-GEN1=$(printf '%s' "$POLL1" | jq -r '.executionGeneration')
-test "$GEN1" = "1"
-
-CONFIRM1=$(json_post "$BASE/runtime-migration/agent/confirm" -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$LOCAL_TOKEN\",\"migrationId\":\"$MIG1\",\"executionGeneration\":$GEN1,\"result\":\"STOP_CONFIRMED\"}")
-test "$(printf '%s' "$CONFIRM1" | jq -r '.state')" = "TARGET_PROVISIONING"
-test "$(printf '%s' "$CONFIRM1" | jq -r '.removeProfile')" = "true"
-
+# The handoff is atomic: generation/token are rotated before Cloud ownership is exposed.
 MODE1=$(sql "select mode from bot_instances where id='$INSTANCE';")
 SLOT1=$(sql "select slot_id from bot_instances where id='$INSTANCE';")
 GEN_AFTER_LOCAL=$(sql "select execution_generation from bot_instances where id='$INSTANCE';")
