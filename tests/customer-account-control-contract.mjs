@@ -95,14 +95,20 @@ assert.match(installer, /deviceFingerprint/);
 assert.match(deviceFingerprint, /MachineGuid/);
 assert.match(deviceFingerprint, /SHA256/);
 
-assert.match(adminPage, /CUSTOMER CONTROL CENTER/);
+assert.match(adminPage, /จัดการลูกค้า/);
 assert.match(adminPage, /Local MT5/);
 assert.match(adminPage, /Cloud VPS/);
-assert.match(adminPage, /Trial Days/);
+assert.match(adminPage, /จำนวนวัน Trial/);
 assert.match(adminPage, /วันล่วงหน้า/);
 assert.match(adminPage, /\/admin\/trials\/authorize/);
 assert.doesNotMatch(adminPage, /!selectedCustomer\.mt5_account_id \|\| selectedCustomer\.trial_request_status!=="PENDING"/);
 assert.match(adminPage, /ส่งลิงก์ตั้งรหัสผ่านใหม่/);
+assert.match(adminPage, /\/admin\/slots\/delete/);
+assert.match(adminPage, /canonicalCustomerSlot/);
+assert.match(adminApi, /@Post\("slots\/delete"\)/);
+assert.match(adminApi, /Local MT5 ใช้ได้ 1 Slot/);
+assert.doesNotMatch(adminPage, /ค้นหาบัญชี → เลือกลูกค้า/);
+assert.doesNotMatch(adminPage, /ใช้สำหรับสิทธิ์ทดลองชั่วคราวเท่านั้น/);
 assert.match(adminPage, /extendDays/);
 assert.doesNotMatch(adminPage, /อนุมัติ Trial 3h/);
 
