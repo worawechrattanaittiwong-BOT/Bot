@@ -97,6 +97,11 @@ Assert-Contains $cloudUpdate 'EA บน Server นี้เป็นเวอร
 Assert-Contains $cloudUpdateUi 'const hasRealUpdate=Boolean(release&&status?.updateAvailable);' 'EA Update button must depend on a real release delta'
 Assert-Contains $cloudUpdateUi 'EA ล่าสุดแล้ว' 'Current EA state must replace the repeat update button'
 Assert-Contains $cloudUpdateUi 'จึงไม่สร้างคิวซ้ำ' 'Unknown EA version must not create a duplicate update queue'
+Assert-Contains $schema 'ALTER TABLE ea_releases ADD COLUMN IF NOT EXISTS artifact_bytes bytea' 'Fleet update release artifact snapshot schema missing'
+Assert-Contains $cloudUpdate 'artifact_bytes=COALESCE(ea_releases.artifact_bytes,EXCLUDED.artifact_bytes)' 'Fleet update must pin the exact EA binary when a deferred job is created'
+Assert-Contains $cloudUpdate 'Stored Fleet Update artifact hash mismatch' 'Pinned Fleet update artifact integrity guard missing'
+Assert-Contains $cloudUpdate 'Fleet Update artifact snapshot unavailable' 'Legacy deferred update artifact fallback guard missing'
+Assert-NotContains $cloudUpdate 'Production EA changed after this Fleet Update was created' 'Deferred Fleet jobs must not fail only because Production advanced to a newer EA release'
 
 # Windows Worker may terminate only the exact portable terminal belonging to this instance.
 # Phase 4 raises the control-plane Worker protocol to v1.2.0 while preserving
