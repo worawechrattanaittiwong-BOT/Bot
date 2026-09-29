@@ -4407,7 +4407,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="total">
                     <span>ราคา</span>
-                    <b>{Number(vpsPaymentOrder.final_price_usd_cents || 0) > 0 ? `${formatUsdCents(vpsPaymentOrder.final_price_usd_cents)} USD` : "USD —"}</b>
+                    <b>{Number(vpsPaymentOrder.final_price_usd_cents || 0) > 0 ? `$${formatUsdCents(vpsPaymentOrder.final_price_usd_cents)} USD` : "USD —"}</b>
                     <small>ยอดชำระจริง ฿{formatThbSatang(vpsPaymentOrder.amount)} THB</small>
                   </div>
                 </div>
