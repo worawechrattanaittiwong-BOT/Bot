@@ -147,7 +147,7 @@ must(
 );
 
 must(
-  eaApi.includes("ON CONFLICT(bot_instance_id,mt5_account_id,deal_ticket,event_type) DO NOTHING") &&
+  eaApi.includes("ON CONFLICT(bot_instance_id,mt5_account_id,deal_ticket,event_type) DO UPDATE") &&
   journalSchema.includes("UNIQUE(bot_instance_id, mt5_account_id, deal_ticket, event_type)") &&
   currencyMigration.includes("trade_journal_instance_account_deal_event_key"),
   "Trade Journal deal identity must include MT5 account to avoid ticket collisions after rebind"
