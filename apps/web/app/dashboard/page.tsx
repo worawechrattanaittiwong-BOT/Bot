@@ -2221,7 +2221,6 @@ export default function DashboardPage() {
       setVpsPaymentOrderId("");
       setVpsSlipFile(null);
       await loadVpsCommerce();
-      setNotice("ยกเลิกรายการชำระเงินแล้ว");
       if (closeAfter) vpsSlotDialogRef.current?.close();
     } catch (e:any) {
       setError(String(e?.message || "ยกเลิกรายการไม่สำเร็จ"));
