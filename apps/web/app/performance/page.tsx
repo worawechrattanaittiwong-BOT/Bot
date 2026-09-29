@@ -540,11 +540,11 @@ export default function PerformanceDashboardPage() {
   const backSummary=backtest?.summary||{};
   const backExtra=backtestStats(backtest);
   const summary=mode==="BACKTEST"?{...backSummary,...backExtra}:liveSummary;
-  const detailedStatsReliable =
-    mode==="BACKTEST" || report?.dataQuality?.detailedStatsReliable !== false;
-  const journalRecovering =
-    mode==="LIVE" && report?.dataQuality?.detailStatus==="JOURNAL_RECOVERING";
-  const detailValue=(value:string)=>detailedStatsReliable?value:"—";
+  // Always render the latest analytics returned by the API.
+  // Journal recovery may continue in the background, but it no longer hides
+  // otherwise available Performance values behind reliability placeholders.
+  const detailedStatsReliable = true;
+  const detailValue=(value:string)=>value;
   const currency=String(mode==="BACKTEST"?backtest?.currency:report?.account?.currency||"USD").trim().toUpperCase()||"USD";
   const symbol=String(mode==="BACKTEST"?backtest?.symbol:report?.account?.symbol||"—");
   const runtimeMode=String(mode==="BACKTEST"?"BACKTEST":report?.account?.mode||"LIVE").toUpperCase();
@@ -716,14 +716,6 @@ export default function PerformanceDashboardPage() {
             ):null}
           </div>
           <header className={styles.summaryTitle}>
-            {!detailedStatsReliable?(
-              <div className={`${styles.dataQualityNotice} ${styles.titleDataQualityNotice}`}>
-                <ScenovaIcon name="status" size={15}/>
-                <b>{journalRecovering
-                  ?"กำลังซิงก์ประวัติ Deal จาก MT5 · ระบบจะอัปเดตสถิติอัตโนมัติ"
-                  :"กำลังตรวจสอบความครบถ้วนของประวัติ Deal จาก MT5"}</b>
-              </div>
-            ):null}
             <div className={styles.titleMark}><ScenovaIcon name="pnl" size={24}/><h2>BOT PERFORMANCE SUMMARY</h2><ScenovaIcon name="pnl" size={24}/></div>
             <p>{mode==="LIVE"?"Live portfolio performance · "+strategyScopeLabel:"Backtest performance analysis"}</p>
           </header>
