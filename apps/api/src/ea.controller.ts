@@ -611,7 +611,11 @@ export class EaController {
       (
         !instance.mt5_account_id ||
         reportedAccount !== String(instance.account_number || "") ||
-        (reportedServer && instance.broker_server && reportedServer !== String(instance.broker_server))
+        (
+          reportedServer &&
+          instance.broker_server &&
+          reportedServer.toLowerCase() !== String(instance.broker_server).trim().toLowerCase()
+        )
       );
 
     // Existing LOCAL accounts never auto-follow a different MT5 login.
