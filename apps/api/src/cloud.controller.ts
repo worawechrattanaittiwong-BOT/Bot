@@ -7,6 +7,7 @@ import { LocalPackageService } from "./local-package.controller";
 import { PromotionService } from "./promotion.service";
 import { EasySlipPaymentService } from "./easyslip-payment.service";
 import { CLOUD_SERVER_RELEASE, versionAtLeast, versionExact } from "./cloud-server-release";
+import { discountedUsdCents, getUsdThbQuote, usdCentsToThbSatang } from "./commerce-currency";
 
 function omiseMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
@@ -126,14 +127,21 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
     const paymentAccounts = mode === "EASYSLIP"
       ? await this.easyslip.listBankAccounts().catch(() => [])
       : [];
-    const [packages, addonPackages] = await Promise.all([
+    const [packages, addonPackages, quote] = await Promise.all([
       this.db.query("SELECT * FROM cloud_packages ORDER BY months"),
-      this.db.query("SELECT * FROM cloud_addon_packages ORDER BY months")
+      this.db.query("SELECT * FROM cloud_addon_packages ORDER BY months"),
+      getUsdThbQuote()
     ]);
+    const withEstimate = (row:any) => ({
+      ...row,
+      estimated_price_satang: usdCentsToThbSatang(row.price_usd_cents, quote.usdThb)
+    });
     return {
-      packages: packages.rows,
-      addonPackages: addonPackages.rows,
+      packages: packages.rows.map(withEstimate),
+      addonPackages: addonPackages.rows.map(withEstimate),
       available,
+      capacityAvailable: available > 0,
+      fx: quote,
       provisioningPaused,
       salesPaused,
       paymentMode: mode,
@@ -412,21 +420,32 @@ export class CloudCustomerController {
     const months = Math.trunc(Number(body.months || 0));
     if (![1,3,6,12].includes(months)) throw new BadRequestException("Invalid package");
     const pack = await this.db.one(
-      "SELECT price_satang FROM cloud_packages WHERE months=$1 AND enabled=true AND price_satang>0",
+      "SELECT price_usd_cents FROM cloud_packages WHERE months=$1 AND enabled=true AND price_usd_cents>0",
       [months]
     );
     if (!pack) throw new ConflictException("แพ็กเกจ Cloud นี้ยังไม่เปิดขาย");
-    return this.promotions.preview({
+    const quote = await getUsdThbQuote();
+    const originalUsdCents = Math.max(0, Math.trunc(Number(pack.price_usd_cents || 0)));
+    const preview = await this.promotions.preview({
       code:String(body.code || ""),
       userId:String(req.user.sub),
       mode:"CLOUD",
       months,
-      originalAmountSatang:Number(pack.price_satang)
+      originalAmountSatang:usdCentsToThbSatang(originalUsdCents, quote.usdThb)
     });
+    return {
+      ...preview,
+      originalUsdCents,
+      discountUsdCents: Math.max(0, originalUsdCents - discountedUsdCents(originalUsdCents, preview.discountPercent)),
+      finalUsdCents: discountedUsdCents(originalUsdCents, preview.discountPercent),
+      estimatedThbSatang: preview.finalAmountSatang,
+      fx: quote
+    };
   }
 
   @Get("orders") async orders(@Req() req: any) {
     return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
+      o.list_price_usd_cents,o.final_price_usd_cents,o.fx_rate_usd_thb,o.fx_source,o.fx_quoted_at,
       s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number,ls.slot_type
       FROM cloud_orders o
       LEFT JOIN subscriptions s ON s.id=o.subscription_id
@@ -468,7 +487,7 @@ export class CloudCustomerController {
   @Post("addon-prices")
   async updateAddonPrices(
     @Req() req: any,
-    @Body() body: { packages?: Array<{ months:number; priceSatang:number; enabled:boolean }> }
+    @Body() body: { packages?: Array<{ months:number; priceUsdCents:number; enabled:boolean }> }
   ) {
     const user = await this.db.one("SELECT role,status FROM users WHERE id=$1", [req.user.sub]);
     if (!user || user.status !== "ACTIVE" || String(user.role || "").toUpperCase() !== "OWNER") {
@@ -479,19 +498,25 @@ export class CloudCustomerController {
     const monthsSeen = new Set<number>();
     for (const item of rows) {
       const months = Math.trunc(Number(item.months));
-      const priceSatang = Math.trunc(Number(item.priceSatang));
+      const priceUsdCents = Math.trunc(Number(item.priceUsdCents));
       if (![1,3,6,12].includes(months) || monthsSeen.has(months)) throw new BadRequestException("ระยะเวลา Slot เสริมไม่ถูกต้อง");
-      if (!Number.isInteger(priceSatang) || priceSatang < 0 || priceSatang > 15000000) throw new BadRequestException("ราคาต้องอยู่ระหว่าง 0 ถึง 150,000 บาท");
-      if (typeof item.enabled !== "boolean" || (item.enabled && priceSatang < 2000)) throw new BadRequestException("ราคาเปิดขายต้องไม่น้อยกว่า 20 บาท");
+      if (!Number.isInteger(priceUsdCents) || priceUsdCents < 0 || priceUsdCents > 3_000_000) throw new BadRequestException("ราคา USD ไม่ถูกต้อง");
+      if (typeof item.enabled !== "boolean" || (item.enabled && priceUsdCents < 50)) throw new BadRequestException("ราคาเปิดขายต้องไม่น้อยกว่า $0.50");
       monthsSeen.add(months);
     }
+    const quote = await getUsdThbQuote();
     await this.db.transaction(async tx => {
       for (const item of rows) {
+        const priceUsdCents = Math.trunc(Number(item.priceUsdCents));
         await tx.query(
-          `INSERT INTO cloud_addon_packages(months,price_satang,enabled,updated_at)
-           VALUES($1,$2,$3,now())
-           ON CONFLICT(months) DO UPDATE SET price_satang=EXCLUDED.price_satang,enabled=EXCLUDED.enabled,updated_at=now()`,
-          [Math.trunc(Number(item.months)), Math.trunc(Number(item.priceSatang)), item.enabled]
+          `INSERT INTO cloud_addon_packages(months,price_satang,price_usd_cents,enabled,updated_at)
+           VALUES($1,$2,$3,$4,now())
+           ON CONFLICT(months) DO UPDATE SET
+             price_satang=EXCLUDED.price_satang,
+             price_usd_cents=EXCLUDED.price_usd_cents,
+             enabled=EXCLUDED.enabled,
+             updated_at=now()`,
+          [Math.trunc(Number(item.months)), usdCentsToThbSatang(priceUsdCents, quote.usdThb), priceUsdCents, item.enabled]
         );
       }
       await tx.query(
@@ -508,6 +533,7 @@ export class CloudCustomerController {
   }
 
   @Post("checkout") async checkout(@Req() req: any, @Body() body: { months: number; slotId?: string; promoCode?: string; purchaseType?: "PACKAGE" | "ADDON" }) {
+    const quote = await getUsdThbQuote();
     if (paymentMode() === "UNCONFIGURED" || (paymentMode() !== "EASYSLIP" && process.env.CLOUD_CHECKOUT_ENABLED !== "true")) throw new ConflictException("ยังไม่เปิดรับชำระเงิน");
     if (![1,3,6,12].includes(body.months)) throw new BadRequestException("Invalid package");
     if (body.slotId && !/^[0-9a-f-]{36}$/i.test(body.slotId)) throw new BadRequestException("Invalid slot");
@@ -592,11 +618,11 @@ export class CloudCustomerController {
 
       const pricingPack = addonFlow
         ? (await tx.query(
-            "SELECT * FROM cloud_addon_packages WHERE months=$1 AND enabled=true AND price_satang>0",
+            "SELECT * FROM cloud_addon_packages WHERE months=$1 AND enabled=true AND price_usd_cents>0",
             [body.months]
           )).rows[0]
         : (await tx.query(
-            "SELECT * FROM cloud_packages WHERE months=$1 AND enabled=true AND price_satang>0",
+            "SELECT * FROM cloud_packages WHERE months=$1 AND enabled=true AND price_usd_cents>0",
             [body.months]
           )).rows[0];
       if (!pricingPack) {
@@ -627,20 +653,25 @@ export class CloudCustomerController {
         AND GREATEST(l.occupied,w.active_instances)<w.capacity
         ORDER BY GREATEST(l.occupied,w.active_instances)::float/w.capacity,w.runner_id LIMIT 1`)).rows[0];
       if (!node) throw new ConflictException("Cloud เต็มหรือ VPS ยังไม่ผ่าน Health Guard กรุณาลองภายหลัง");
+      const listPriceUsdCents = Math.max(0, Math.trunc(Number(pricingPack.price_usd_cents || 0)));
+      const originalAmountSatang = usdCentsToThbSatang(listPriceUsdCents, quote.usdThb);
       const promo = await this.promotions.reserve(tx, {
         code: body.promoCode,
         userId: String(req.user.sub),
         mode: "CLOUD",
         months: pricingPack.months,
-        originalAmountSatang: Number(pricingPack.price_satang)
+        originalAmountSatang
       });
+      const finalPriceUsdCents = discountedUsdCents(listPriceUsdCents, promo.discountPercent);
       const order = (await tx.query(
         `INSERT INTO cloud_orders(
-           user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,runner_id,slot_id,purchase_type
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-        [req.user.sub, pricingPack.months, promo.finalAmountSatang, pricingPack.price_satang,
+           user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,runner_id,slot_id,purchase_type,
+           list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        [req.user.sub, pricingPack.months, promo.finalAmountSatang, originalAmountSatang,
          promo.discountAmountSatang, promo.code, promo.redemptionId, node.runner_id, slot?.id || null,
-         addonFlow ? "ADDON" : "PACKAGE"]
+         addonFlow ? "ADDON" : "PACKAGE",
+         listPriceUsdCents, finalPriceUsdCents, quote.usdThb, quote.source, quote.quotedAt]
       )).rows[0];
       await this.promotions.attachOrder(tx, promo.redemptionId, order.id);
       return order;
@@ -794,9 +825,13 @@ export class CloudAdminController {
     if (!result.rowCount) throw new BadRequestException("ไม่พบ VPS");
     return { runnerId:id,workerKey:key };
   }
-  @Post("packages") async packages(@Body() body: { months: number; priceSatang: number; enabled: boolean }) {
-    if (![1,3,6,12].includes(body.months) || !Number.isInteger(body.priceSatang) || body.priceSatang<0 || body.priceSatang>15000000 || typeof body.enabled!=="boolean" || (body.enabled && body.priceSatang<2000)) throw new BadRequestException("ตรวจราคาแพ็กเกจ เปิดขายได้ตั้งแต่ 20 ถึง 150,000 บาท");
-    await this.db.query("UPDATE cloud_packages SET price_satang=$2,enabled=$3,updated_at=now() WHERE months=$1",[body.months,body.priceSatang,body.enabled]);
+  @Post("packages") async packages(@Body() body: { months: number; priceUsdCents: number; enabled: boolean }) {
+    if (![1,3,6,12].includes(body.months) || !Number.isInteger(body.priceUsdCents) || body.priceUsdCents<0 || body.priceUsdCents>3_000_000 || typeof body.enabled!=="boolean" || (body.enabled && body.priceUsdCents<50)) throw new BadRequestException("ตรวจราคาแพ็กเกจ USD ให้ถูกต้อง");
+    const quote = await getUsdThbQuote();
+    await this.db.query(
+      "UPDATE cloud_packages SET price_usd_cents=$2,price_satang=$3,enabled=$4,updated_at=now() WHERE months=$1",
+      [body.months,body.priceUsdCents,usdCentsToThbSatang(body.priceUsdCents,quote.usdThb),body.enabled]
+    );
     return { ok:true };
   }
   @Post("reconcile") async reconcile(@Body() body: { chargeId: string }) { await this.cloud.reconcile(body.chargeId); return { ok:true }; }
