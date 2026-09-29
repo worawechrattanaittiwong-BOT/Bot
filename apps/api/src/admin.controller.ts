@@ -1548,13 +1548,22 @@ export class AdminController {
         await tx.query(
           `UPDATE license_slots
            SET slot_number=slot_number+1000,
-               slot_type=CASE WHEN id=$2 THEN 'PERSONAL' ELSE 'ADDON' END,
+               slot_type='ADDON',
                updated_at=now()
            WHERE owner_user_id=$1
              AND assigned_user_id=$1
              AND mode='CLOUD'
-             AND status<>'DELETED'`,
+             AND status<>'DELETED'
+             AND id<>$2`,
           [body.userId, keepSlot.id]
+        );
+        await tx.query(
+          `UPDATE license_slots
+           SET slot_number=slot_number+1000,
+               slot_type='PERSONAL',
+               updated_at=now()
+           WHERE id=$1`,
+          [keepSlot.id]
         );
         const cloudRows = await tx.query(
           `SELECT id
