@@ -835,8 +835,7 @@ export class CloudCustomerController {
           WHERE w.accepting_jobs
             AND w.last_seen_at>now()-interval '30 seconds'
             AND w.telemetry->>'templateReady'='true'
-            AND NOT w.capacity_blocked
-            AND NOT w.quarantined
+            AND NOT w.capacity_blocked AND NOT w.quarantined
             AND GREATEST(l.occupied,w.active_instances)<w.capacity
           ORDER BY load_ratio,w.runner_id`)).rows;
         for (const row of capacityRows) {
