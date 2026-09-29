@@ -552,6 +552,19 @@ export default function DashboardPage() {
   }, [serverOperation, selectedSlotId, data?.user?.id]);
 
   useEffect(() => {
+    const userId = String(data?.user?.id || "");
+    if (!userId || !vpsMigrationProgress?.migrationId) return;
+    try {
+      localStorage.removeItem("scenova-mt5-operation-v1:" + userId);
+    } catch {}
+    setServerOperation((current:any) =>
+      current && ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND"].includes(String(current.kind || ""))
+        ? null
+        : current
+    );
+  }, [data?.user?.id, vpsMigrationProgress?.migrationId]);
+
+  useEffect(() => {
     if (!vpsSlipFile) {
       setVpsSlipPreview("");
       return;
@@ -1203,7 +1216,8 @@ export default function DashboardPage() {
         (
           op.kind === "MT5_CONNECT" ||
           op.kind === "MT5_RECONNECT" ||
-          op.kind === "MT5_SWITCH"
+          op.kind === "MT5_SWITCH" ||
+          op.kind === "LOCAL_MT5_BIND"
         )
       )
     ) {
@@ -1250,7 +1264,8 @@ export default function DashboardPage() {
     } else if (
       op.kind === "MT5_CONNECT" ||
       op.kind === "MT5_RECONNECT" ||
-      op.kind === "MT5_SWITCH"
+      op.kind === "MT5_SWITCH" ||
+      op.kind === "LOCAL_MT5_BIND"
     ) {
       const expectedAccount = String(op.target || "");
       const liveAccount = String(data?.account?.account_number || "");
@@ -1264,7 +1279,9 @@ export default function DashboardPage() {
         message = "MT5 เดิมปิดแล้ว · กรุณาเชื่อมบัญชีใหม่เพื่อทำขั้นตอนต่อ";
       } else if (accountMatches && runnerReady && mt5Ready) {
         complete = true;
-        message = "เชื่อม MT5 สำเร็จ · Server ตรวจบัญชีและ Heartbeat เรียบร้อยแล้ว";
+        message = op.kind === "LOCAL_MT5_BIND"
+          ? "ยืนยันบัญชี Local MT5 สำเร็จ · EA Heartbeat ตรงกับบัญชีใหม่แล้ว"
+          : "เชื่อม MT5 สำเร็จ · Server ตรวจบัญชีและ Heartbeat เรียบร้อยแล้ว";
       } else if (!runnerReady) {
         message = "กำลังรอ VPS Worker ออนไลน์...";
       } else if (!accountMatches) {
@@ -1272,7 +1289,9 @@ export default function DashboardPage() {
       } else if (mt5GraceReady) {
         message = "MT5 ตอบกลับแล้ว · กำลังยืนยัน Heartbeat ให้เสถียร";
       } else {
-        message = "VPS ออนไลน์แล้ว · กำลังเปิด MT5 และรอ EA เชื่อมต่อ";
+        message = op.kind === "LOCAL_MT5_BIND"
+          ? "บัญชีถูกยืนยันแล้ว · กำลังรอ EA Heartbeat ล่าสุด"
+          : "VPS ออนไลน์แล้ว · กำลังเปิด MT5 และรอ EA เชื่อมต่อ";
       }
     }
 
