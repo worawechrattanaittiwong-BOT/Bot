@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ScenovaIcon } from "./ScenovaIcon";
 import { ScenovaBrand } from "./ScenovaBrand";
 import { InAppCampaignHost } from "./InAppCampaignHost";
@@ -172,18 +172,67 @@ function UnifiedMobileNav({
   const [open, setOpen] = useState(false);
   const drawerId = elevated ? "owner-mobile-sidebar-drawer" : "customer-mobile-sidebar-drawer";
 
+  useEffect(()=>{
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event:KeyboardEvent)=>{
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return ()=>{
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  },[open]);
+
+  function goBack() {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.assign("/dashboard?view=overview");
+  }
+
+  function reloadSystem() {
+    window.location.reload();
+  }
+
   return (
     <>
-      <div className="mobile-only owner-mobile-nav owner-mobile-nav-trigger-wrap">
+      <div className="mobile-only owner-mobile-nav owner-mobile-nav-trigger-wrap" aria-label="เครื่องมือบนมือถือ">
         <button
           type="button"
           className={"owner-mobile-nav-trigger " + (open ? "active" : "")}
           aria-expanded={open}
           aria-controls={drawerId}
+          aria-label={open ? "ปิดเมนูระบบ" : "เปิดเมนูระบบ"}
           onClick={()=>setOpen(value=>!value)}
         >
-          <ScenovaIcon name="overview" size={19}/>
+          <ScenovaIcon name="overview" size={20}/>
           <span>เมนู</span>
+        </button>
+
+        <button
+          type="button"
+          className="owner-mobile-utility-button"
+          aria-label="ย้อนกลับหน้าก่อนหน้า"
+          onClick={goBack}
+        >
+          <span className="owner-mobile-utility-icon" aria-hidden="true">←</span>
+          <span>ย้อนกลับ</span>
+        </button>
+
+        <button
+          type="button"
+          className="owner-mobile-utility-button"
+          aria-label="รีโหลดระบบใหม่"
+          onClick={reloadSystem}
+        >
+          <span className="owner-mobile-utility-icon" aria-hidden="true">↻</span>
+          <span>รีโหลด</span>
         </button>
       </div>
 
@@ -201,7 +250,6 @@ function UnifiedMobileNav({
             aria-label="เมนูระบบ"
             onClick={event=>event.stopPropagation()}
           >
-            <div className="owner-mobile-drawer-handle" aria-hidden="true"/>
             <header className="owner-mobile-drawer-head">
               <div>
                 <b>SCENOVA</b>
@@ -232,6 +280,7 @@ function UnifiedMobileNav({
                           <b>{item.label}</b>
                           <small>{item.hint}</small>
                         </span>
+                        <span className="owner-mobile-drawer-caret" aria-hidden="true">›</span>
                       </Link>
                     ))}
                   </div>
