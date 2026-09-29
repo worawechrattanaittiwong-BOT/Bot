@@ -29,6 +29,76 @@ export class EaController {
     private readonly trials: TrialAuthorizationService
   ) {}
 
+  private readonly verifiedBrokerServers = new Set<string>();
+
+  private brokerServerEnvironment(serverName: string) {
+    const value = String(serverName || "").toLowerCase();
+    if (/demo|trial/.test(value)) return "DEMO";
+    if (/real|live/.test(value)) return "REAL";
+    return "UNKNOWN";
+  }
+
+  private async rememberVerifiedBrokerServer(
+    broker: unknown,
+    reportedBroker: unknown,
+    serverName: unknown,
+    mode: unknown
+  ) {
+    const brokerKey = String(broker || "").trim();
+    const reported = String(reportedBroker || "").trim();
+    const server = String(serverName || "").trim();
+    const runtimeMode = String(mode || "").toUpperCase();
+    if (!brokerKey || !server) return;
+    // Cloud broker identity was selected by the customer before the Worker
+    // successfully logged in. LOCAL does not have a user-selected broker, so
+    // never guess a catalog broker there unless the terminal reports one.
+    if (runtimeMode !== "CLOUD" && !reported) return;
+
+    const cacheKey = brokerKey.toLowerCase() + "|" + server.toLowerCase();
+    if (this.verifiedBrokerServers.has(cacheKey)) return;
+
+    try {
+      const catalogBroker = await this.db.one(
+        `SELECT id,code,name
+         FROM brokers
+         WHERE code<>'OTHER'
+           AND (lower(code)=lower($1) OR lower(name)=lower($1))
+         LIMIT 1`,
+        [brokerKey]
+      );
+      if (!catalogBroker) return;
+
+      const reportedText = reported.toLowerCase();
+      const canonicalTokens = String(catalogBroker.name || "")
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((token:string)=>token.length >= 3);
+      const codeToken = String(catalogBroker.code || "").toLowerCase();
+      const reportedIdentityMatches =
+        canonicalTokens.some((token:string)=>reportedText.includes(token)) ||
+        (codeToken.length >= 2 && reportedText.includes(codeToken));
+      const identityMatches = runtimeMode === "CLOUD" || reportedIdentityMatches;
+      if (!identityMatches) return;
+
+      await this.db.query(
+        `INSERT INTO broker_servers(broker_id,server_name,environment,sort_order,active)
+         VALUES($1,$2,$3,
+           CASE $3 WHEN 'REAL' THEN 10 WHEN 'DEMO' THEN 50 ELSE 90 END,
+           true)
+         ON CONFLICT (broker_id,server_name) DO UPDATE SET
+           active=true,
+           environment=CASE
+             WHEN broker_servers.environment='UNKNOWN' THEN EXCLUDED.environment
+             ELSE broker_servers.environment
+           END`,
+        [catalogBroker.id, server, this.brokerServerEnvironment(server)]
+      );
+      this.verifiedBrokerServers.add(cacheKey);
+    } catch {
+      // Broker catalog enrichment must never block a trading heartbeat.
+    }
+  }
+
   private normalizeReleaseChannel(value: unknown) {
     const raw = String(value || "Stable").trim().toUpperCase().replace(/[ _-]+/g, "_");
     if (raw === "BETA") return "Beta";
@@ -566,113 +636,22 @@ export class EaController {
       instance.desired_state = "STOPPED";
     }
 
-    let accountFollowPreviousPositions: number | null = null;
+    const journalDrainPending = metrics.pendingBasketJournal === true;
     let accountMismatch =
       Boolean(reportedAccount) &&
       (
         !instance.mt5_account_id ||
         reportedAccount !== String(instance.account_number || "") ||
-        (reportedServer && instance.broker_server && reportedServer !== String(instance.broker_server))
+        (
+          reportedServer &&
+          instance.broker_server &&
+          reportedServer.toLowerCase() !== String(instance.broker_server).trim().toLowerCase()
+        )
       );
 
-    // LOCAL account-follow: changing the MT5 login switches SCENOVA to the new
-    // account automatically only while the previously-bound account is flat and
-    // the old account has no Basket journal waiting to be flushed. Heartbeat runs
-    // before journal flush in the EA timer, so one blocked heartbeat gives the
-    // old journal a chance to persist under the old MT5 account before rebind.
-    const journalDrainPending = metrics.pendingBasketJournal === true;
-    if (accountMismatch && instance.mode === "LOCAL" && reportedAccount && reportedServer) {
-      const previousBoundPositions = Number(
-        instance.metrics?.previousBoundPositions ??
-        instance.metrics?.positions ??
-        0
-      );
-
-      if (previousBoundPositions <= 0 && !journalDrainPending) {
-        const foreignAccount = await this.db.one(
-          `SELECT id,user_id
-           FROM mt5_accounts
-           WHERE lower(account_number)=lower($1)
-             AND lower(broker_server)=lower($2)
-             AND status='ACTIVE'
-             AND user_id<>$3
-           LIMIT 1`,
-          [reportedAccount, reportedServer, instance.user_id]
-        );
-
-        if (!foreignAccount) {
-          let nextAccount = await this.db.one(
-            `SELECT *
-             FROM mt5_accounts
-             WHERE user_id=$1
-               AND lower(account_number)=lower($2)
-               AND lower(broker_server)=lower($3)
-             ORDER BY created_at DESC
-             LIMIT 1`,
-            [instance.user_id, reportedAccount, reportedServer]
-          );
-
-          if (nextAccount) {
-            nextAccount = await this.db.one(
-              "UPDATE mt5_accounts SET broker=$2,mode='LOCAL',status='ACTIVE' WHERE id=$1 RETURNING *",
-              [nextAccount.id, reportedBroker || nextAccount.broker || "Detected MT5"]
-            );
-          } else {
-            nextAccount = await this.db.one(
-              "INSERT INTO mt5_accounts(user_id,account_number,broker,broker_server,mode,status) VALUES($1,$2,$3,$4,'LOCAL','ACTIVE') RETURNING *",
-              [instance.user_id, reportedAccount, reportedBroker || "Detected MT5", reportedServer]
-            );
-          }
-
-          const previousAccountId = instance.mt5_account_id || null;
-          const nextActualState = String(body.state || "STOPPED").slice(0, 24);
-          await this.db.query(
-            `UPDATE bot_instances SET
-               mt5_account_id=$2,
-               desired_state='STOPPED',
-               actual_state=$3,
-               last_seen_at=now(),
-               ea_last_ip=$4,
-               metrics=$5::jsonb,
-               pending_account_number=NULL,
-               pending_broker=NULL,
-               pending_broker_server=NULL,
-               pending_account_ip=NULL,
-               pending_account_seen_at=NULL,
-               account_change_requested_at=NULL
-             WHERE id=$1`,
-            [instance.id, nextAccount.id, nextActualState, eaIp, JSON.stringify(metrics)]
-          );
-
-          await this.db.query(
-            "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'AUTO_FOLLOW_MT5_ACCOUNT','bot_instance',$2,$3::jsonb)",
-            [
-              "EA:" + String(instance.user_id),
-              instance.id,
-              JSON.stringify({
-                previousAccountId,
-                nextAccountId: nextAccount.id,
-                accountNumber: reportedAccount,
-                brokerServer: reportedServer,
-                source: "LOCAL_RUNTIME"
-              })
-            ]
-          );
-
-          await this.trials.claimPendingAuthorization(instance.user_id, nextAccount.id);
-          instance.mt5_account_id = nextAccount.id;
-          instance.account_number = nextAccount.account_number;
-          instance.broker = nextAccount.broker;
-          instance.broker_server = nextAccount.broker_server;
-          instance.account_status = "ACTIVE";
-          instance.desired_state = "STOPPED";
-          instance.actual_state = nextActualState;
-          accountFollowPreviousPositions = previousBoundPositions;
-          accountMismatch = false;
-        }
-      }
-    }
-
+    // Existing LOCAL accounts never auto-follow a different MT5 login.
+    // A detected account is forced into SAFE_STOP below and must be confirmed
+    // explicitly from the website before SCENOVA changes the binding.
     if (accountMismatch) {
       const previousBoundPositions = Number(
         instance.metrics?.previousBoundPositions ??
@@ -726,6 +705,13 @@ export class EaController {
         settings: {}
       };
     }
+
+    await this.rememberVerifiedBrokerServer(
+      instance.broker || reportedBroker,
+      reportedBroker,
+      reportedServer || instance.broker_server,
+      instance.mode
+    );
 
     const access = await this.hasAccess(
       instance.user_id,
@@ -962,7 +948,7 @@ export class EaController {
       commandId: cmd?.id || null,
       commandName: cmd?.command || null,
       commandPayload: cmd?.payload || null,
-      previousBoundPositions: accountFollowPreviousPositions,
+      previousBoundPositions: null,
       settings: runtimeSettings,
       ...intelligenceStats,
       ...setupStats

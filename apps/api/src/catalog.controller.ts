@@ -17,7 +17,11 @@ export class CatalogController {
                'serverName', s.server_name,
                'environment', s.environment
              )
-             ORDER BY s.sort_order, s.server_name
+             ORDER BY
+               CASE s.environment WHEN 'REAL' THEN 0 WHEN 'DEMO' THEN 1 ELSE 2 END,
+               s.sort_order,
+               lower(s.server_name),
+               s.server_name
            ) FILTER (WHERE s.id IS NOT NULL),
            '[]'::json
          ) AS servers

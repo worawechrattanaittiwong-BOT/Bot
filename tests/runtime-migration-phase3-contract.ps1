@@ -113,7 +113,7 @@ Require $mt5Connect 'props\.vpsMove\.progress' 'MT5 connection panel renders mig
 Require $dashboard 'hasAccess:Boolean\(data\.account\) && \(isOwner \|\| customerHasCloudMigrationAccess\)' 'OWNER VPS move bypasses customer membership UX'
 Require $dashboard 'status:"SUCCESS".*title:"เริ่มบอทสำเร็จ".*message:"บอททำงานสำเร็จ"' 'Start terminal completes immediately after the Server accepts Start'
 Require $dashboard 'serverOperation\?\.kind === "START" \? 550 : 1200' 'Start success terminal auto-closes quickly'
-Require $dashboard 'const operationTerminal = serverOperation \|\| migrationOperation \|\| cloudUpdateOperation' 'MT5 migration, Cloud update and Server actions share one terminal surface'
+Require $dashboard 'const operationTerminal = migrationOperation \|\| serverOperation \|\| cloudUpdateOperation' 'active MT5 migration is authoritative on the unified Server Terminal surface'
 Require $dashboard 'SCENOVA CLOUD UPDATE' 'Cloud update is rendered inside the unified Server Terminal'
 Require $dashboard 'MT5_CONNECT' 'new VPS MT5 connection is tracked in the unified Server Terminal'
 Require $dashboard 'MT5_RECONNECT' 'VPS MT5 reconnect is tracked in the unified Server Terminal'
