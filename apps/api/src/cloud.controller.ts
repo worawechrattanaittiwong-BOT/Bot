@@ -397,7 +397,13 @@ export class CloudCustomerController {
     private readonly promotions: PromotionService,
     private readonly easyslip: EasySlipPaymentService
   ) {}
-  @Get("catalog") catalog() { return this.cloud.catalog(); }
+  @Get("catalog")
+  async catalog(@Req() req: any) {
+    const catalog = await this.cloud.catalog();
+    if (String(req.user?.role || "").toUpperCase() === "OWNER") return catalog;
+    const { available: _available, ...customerCatalog } = catalog;
+    return customerCatalog;
+  }
   @Post("promotion-preview")
   async promotionPreview(
     @Req() req: any,
