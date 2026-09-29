@@ -446,6 +446,7 @@ CREATE TABLE IF NOT EXISTS ea_releases (
  created_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE(version,sha256)
 );
+ALTER TABLE ea_releases ADD COLUMN IF NOT EXISTS artifact_bytes bytea;
 CREATE TABLE IF NOT EXISTS server_update_jobs (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  runner_id varchar(120) NOT NULL REFERENCES worker_nodes(runner_id) ON DELETE CASCADE,
