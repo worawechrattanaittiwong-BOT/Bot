@@ -245,6 +245,7 @@ export default function DashboardPage() {
   const [accessClockNow, setAccessClockNow] = useState(()=>Date.now());
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const selectedSlotIdRef = useRef("");
+  const mt5OperationRestoreUserRef = useRef("");
   const connectionWasOnlineRef = useRef<Record<string,boolean>>({});
   const dashboardLoadInFlightRef = useRef(false);
   const dashboardReloadPendingRef = useRef<string | null>(null);
@@ -434,37 +435,11 @@ export default function DashboardPage() {
       }
     }
 
-    let initialSlotId = "";
-    try {
-      const savedRaw = localStorage.getItem("scenova-mt5-operation-v1");
-      if (savedRaw) {
-        const saved = JSON.parse(savedRaw);
-        const op = saved?.operation;
-        const ageMs = Date.now() - Number(op?.startedAt || 0);
-        if (
-          op &&
-          ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND"].includes(String(op.kind || "")) &&
-          String(op.status || "") !== "SUCCESS" &&
-          ageMs >= 0 &&
-          ageMs < 12 * 60 * 60 * 1000
-        ) {
-          initialSlotId = String(saved?.slotId || "");
-          if (initialSlotId) {
-            selectedSlotIdRef.current = initialSlotId;
-            setSelectedSlotId(initialSlotId);
-          }
-          setServerOperation(op);
-          setServerOperationMinimized(false);
-          setActiveView("account");
-        } else {
-          localStorage.removeItem("scenova-mt5-operation-v1");
-        }
-      }
-    } catch {
-      localStorage.removeItem("scenova-mt5-operation-v1");
-    }
+    // Legacy unscoped operation state could belong to another SCENOVA login.
+    // Never restore it; current operation persistence is keyed by user id below.
+    try { localStorage.removeItem("scenova-mt5-operation-v1"); } catch {}
 
-    load(initialSlotId);
+    load("");
     api("/runtime-migration/status")
       .then((snapshot:any)=>{
         const migration = (snapshot?.migrations || []).find((item:any) =>
@@ -510,6 +485,45 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    const userId = String(data?.user?.id || "");
+    if (!userId || mt5OperationRestoreUserRef.current === userId) return;
+    mt5OperationRestoreUserRef.current = userId;
+    const key = "scenova-mt5-operation-v1:" + userId;
+    try {
+      const savedRaw = localStorage.getItem(key);
+      if (!savedRaw) return;
+      const saved = JSON.parse(savedRaw);
+      const op = saved?.operation;
+      const ageMs = Date.now() - Number(op?.startedAt || 0);
+      if (
+        op &&
+        ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND"].includes(String(op.kind || "")) &&
+        String(op.status || "") !== "SUCCESS" &&
+        ageMs >= 0 &&
+        ageMs < 12 * 60 * 60 * 1000
+      ) {
+        const savedSlotId = String(saved?.slotId || "");
+        if (savedSlotId) {
+          selectedSlotIdRef.current = savedSlotId;
+          setSelectedSlotId(savedSlotId);
+          void load(savedSlotId, true);
+        }
+        setServerOperation(op);
+        setServerOperationMinimized(false);
+        setActiveView("account");
+        window.history.replaceState({}, "", "/dashboard?view=account");
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      localStorage.removeItem(key);
+    }
+  }, [data?.user?.id]);
+
+  useEffect(() => {
+    const userId = String(data?.user?.id || "");
+    if (!userId) return;
+    const key = "scenova-mt5-operation-v1:" + userId;
     const persistentKinds = ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND"];
     try {
       if (
@@ -518,17 +532,17 @@ export default function DashboardPage() {
         String(serverOperation.status || "") !== "SUCCESS"
       ) {
         localStorage.setItem(
-          "scenova-mt5-operation-v1",
+          key,
           JSON.stringify({
             slotId:String(selectedSlotIdRef.current || selectedSlotId || ""),
             operation:serverOperation
           })
         );
       } else {
-        localStorage.removeItem("scenova-mt5-operation-v1");
+        localStorage.removeItem(key);
       }
     } catch {}
-  }, [serverOperation, selectedSlotId]);
+  }, [serverOperation, selectedSlotId, data?.user?.id]);
 
   useEffect(() => {
     if (!vpsSlipFile) {
