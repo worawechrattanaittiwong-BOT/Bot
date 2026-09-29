@@ -1,31 +1,8 @@
 name: Production Hardening Phase 4
 
-concurrency:
-  group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
-  cancel-in-progress: true
 
 on:
-  pull_request:
-    paths:
-      - "apps/api/src/production-hardening.*"
-      - "apps/api/src/worker.controller.ts"
-      - "apps/api/src/cloud.controller.ts"
-      - "apps/api/src/cloud-schema.ts"
-      - "apps/web/public/downloads/SCENOVA-CloudWorker.ps1"
-      - "database/019_production_hardening.sql"
-      - "tests/production-hardening-phase4-*"
-      - ".github/workflows/production-hardening-phase4.yml"
-  push:
-    branches: [main]
-    paths:
-      - "apps/api/src/production-hardening.*"
-      - "apps/api/src/worker.controller.ts"
-      - "apps/api/src/cloud.controller.ts"
-      - "apps/api/src/cloud-schema.ts"
-      - "apps/web/public/downloads/SCENOVA-CloudWorker.ps1"
-      - "database/019_production_hardening.sql"
-      - "tests/production-hardening-phase4-*"
-      - ".github/workflows/production-hardening-phase4.yml"
+  workflow_call:
   workflow_dispatch:
 
 jobs:

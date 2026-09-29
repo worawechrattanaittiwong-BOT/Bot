@@ -1,28 +1,8 @@
 name: Runtime Migration Phase 3
 
-concurrency:
-  group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
-  cancel-in-progress: true
 
 on:
-  pull_request:
-    paths:
-      - "apps/api/src/runtime-migration.*"
-      - "apps/api/src/cloud-schema.ts"
-      - "apps/api/src/worker.controller.ts"
-      - "apps/api/src/installer.controller.ts"
-      - "apps/api/src/ea.controller.ts"
-      - "database/018_runtime_migration.sql"
-      - "tests/runtime-migration-phase3-integration.sh"
-      - ".github/workflows/runtime-migration-phase3.yml"
-  push:
-    branches: [main]
-    paths:
-      - "apps/api/src/runtime-migration.*"
-      - "apps/api/src/cloud-schema.ts"
-      - "database/018_runtime_migration.sql"
-      - "tests/runtime-migration-phase3-integration.sh"
-      - ".github/workflows/runtime-migration-phase3.yml"
+  workflow_call:
   workflow_dispatch:
 
 jobs:

@@ -248,7 +248,7 @@ resolve_ci_anchor() {
 
 verify_generated_ea_release() {
   local sha="$1"
-  local parent parent_ci parent_smoke
+  local parent parent_ci
 
   if ! validate_generated_ea_shape "$sha"; then
     echo "[SCENOVA] generated EA release rejected: untrusted commit shape"
@@ -273,11 +273,6 @@ verify_generated_ea_release() {
     echo "[SCENOVA] generated EA release waiting for source CI ($parent_ci)"
     return 1
   fi
-  parent_smoke="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow "Integration Smoke" --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
-  if [ "$parent_smoke" != "completed:success" ]; then
-    echo "[SCENOVA] generated EA release waiting for source Integration Smoke ($parent_smoke)"
-    return 1
-  fi
 
   echo "[SCENOVA] trusted generated EX5 release verified"
   return 0
@@ -285,7 +280,7 @@ verify_generated_ea_release() {
 
 verify_generated_installer_release() {
   local sha="$1"
-  local parent parent_ci parent_smoke
+  local parent parent_ci
 
   if ! validate_generated_installer_shape "$sha"; then
     echo "[SCENOVA] generated installer release rejected: untrusted commit shape"
@@ -310,11 +305,6 @@ verify_generated_installer_release() {
     echo "[SCENOVA] generated installer release waiting for source CI ($parent_ci)"
     return 1
   fi
-  parent_smoke="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow "Integration Smoke" --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
-  if [ "$parent_smoke" != "completed:success" ]; then
-    echo "[SCENOVA] generated installer release waiting for source Integration Smoke ($parent_smoke)"
-    return 1
-  fi
 
   echo "[SCENOVA] trusted generated Windows installer release verified"
   return 0
@@ -323,21 +313,19 @@ verify_generated_installer_release() {
 
 verify_generated_cloud_setup_release() {
   local sha="$1"
-  local parent parent_ci parent_smoke
+  local parent parent_ci
   validate_generated_cloud_setup_shape "$sha" || { echo "[SCENOVA] generated Cloud Setup release rejected: untrusted commit shape"; return 1; }
   parent="$(resolve_ci_anchor "$sha" 2>/dev/null || true)"
   [ -n "$parent" ] || return 1
   parent_ci="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow CI --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
   [ "$parent_ci" = "completed:success" ] || { echo "[SCENOVA] generated Cloud Setup waiting for source CI ($parent_ci)"; return 1; }
-  parent_smoke="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow "Integration Smoke" --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
-  [ "$parent_smoke" = "completed:success" ] || { echo "[SCENOVA] generated Cloud Setup waiting for source Integration Smoke ($parent_smoke)"; return 1; }
   echo "[SCENOVA] trusted generated Cloud Setup release verified"
   return 0
 }
 
 verify_generated_owner_mobile_release() {
   local sha="$1"
-  local parent parent_ci parent_smoke
+  local parent parent_ci
 
   if ! validate_generated_owner_mobile_shape "$sha"; then
     echo "[SCENOVA] generated Owner APK release rejected: untrusted commit shape"
@@ -353,16 +341,13 @@ verify_generated_owner_mobile_release() {
     return 1
   }
 
-  parent_smoke="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow "Integration Smoke" --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
-  [ "$parent_smoke" = "completed:success" ] || {
-    echo "[SCENOVA] generated Owner APK waiting for source Integration Smoke ($parent_smoke)"
-    return 1
-  }
 
   echo "[SCENOVA] trusted generated Owner APK release verified"
   return 0
 }
 
+# Main uses one serialized GitHub Actions pipeline (CI). Do not require
+# separately-triggered smoke/regression workflows here; they are jobs inside CI.
 if command -v gh >/dev/null 2>&1; then
   CI_STATE="$(
     gh run list \
@@ -377,13 +362,9 @@ if command -v gh >/dev/null 2>&1; then
 
   case "$CI_STATE" in
     completed:success)
-      echo "[SCENOVA] CI passed"
-      SMOKE_STATE="$(gh run list --repo "$REPO_FULL_NAME" --commit "$REMOTE_SHA" --workflow "Integration Smoke" --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
-      if [ "$SMOKE_STATE" != "completed:success" ]; then
-        echo "[SCENOVA] Integration Smoke not ready/passed ($SMOKE_STATE); deployment blocked"
-        exit 0
-      fi
-      echo "[SCENOVA] Integration Smoke passed"
+      # CI is now the single serialized main gate. It includes Integration Smoke,
+      # upgrade regression, runtime migration and production hardening in order.
+      echo "[SCENOVA] unified CI pipeline passed"
       ;;
     completed:failure|completed:cancelled|completed:timed_out|completed:action_required)
       echo "[SCENOVA] CI did not pass ($CI_STATE); deployment blocked"
