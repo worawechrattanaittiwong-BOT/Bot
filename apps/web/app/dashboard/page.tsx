@@ -5553,7 +5553,6 @@ function BotSettingsModal(props:any) {
 
   const modeGuide:Record<string,{
     title:string;
-    tagline:string;
     icon:string;
     workflow:string;
     good:string;
@@ -5562,7 +5561,6 @@ function BotSettingsModal(props:any) {
   }> = {
     AUTO:{
       title:"AUTO",
-      tagline:"ให้บอทหาจังหวะให้",
       icon:"brain",
       workflow:"บอทดูภาพรวมก่อนว่าตอนนี้ฝั่ง BUY หรือ SELL ได้เปรียบกว่า ถ้ายังไม่ชัดก็รอ ไม่จำเป็นต้องมีออเดอร์ตลอดเวลา",
       good:"เทรนด์เริ่มชัด มีแรงไปต่อ หรือมีจังหวะย่อแล้วกลับไปทางเดิม",
@@ -5571,7 +5569,6 @@ function BotSettingsModal(props:any) {
     },
     RACE:{
       title:"RACE",
-      tagline:"เห็นแรงก็ไปกับแรง",
       icon:"status",
       workflow:"RACE เน้นจับว่าตอนนี้ฝั่งไหนกำลังคุมตลาด ถ้าแรงซื้อชัดก็หาจังหวะ BUY ถ้าแรงขายชัดก็หาจังหวะ SELL เน้นตอบสนองไวกว่า AUTO",
       good:"ช่วงที่ราคาวิ่ง มี Momentum ชัด และฝั่งหนึ่งคุมเกมต่อเนื่อง",
@@ -5580,7 +5577,6 @@ function BotSettingsModal(props:any) {
     },
     FLIP_LOCK:{
       title:"FLIP LOCK",
-      tagline:"วิ่งตามเทรนด์แล้วล็อกกำไร",
       icon:"trend",
       workflow:"เปิดทีละฝั่ง พอราคาไปถูกทางและเริ่มมีกำไร ระบบจะค่อย ๆ ขยับจุดป้องกันกำไรตามราคา พอรอบจบก็ดูตลาดใหม่แล้วเลือกฝั่งต่อ",
       good:"ตลาดที่เดินเป็นทาง วิ่งยาว มีระยะให้กำไรโต",
@@ -5589,7 +5585,6 @@ function BotSettingsModal(props:any) {
     },
     ZERO_GRID:{
       title:"ZERO GRID",
-      tagline:"รอราคาเลือกฝั่ง แล้วเก็บไม้ตามทาง",
       icon:"layers",
       workflow:"ระบบวางระดับรอทั้งข้างบนและข้างล่าง พอราคาวิ่งไปทางไหน ไม้ฝั่งนั้นจะถูกเปิดตามระดับไปเรื่อย ๆ แล้วดูผลรวมของทั้งชุดเพื่อปิดรอบ",
       good:"ตลาดที่มีแรงจริงและเดินไปทางเดียวต่อเนื่อง ยิ่งราคาไปต่อ ไม้ก่อนหน้าก็มีพื้นที่ทำกำไรมากขึ้น",
@@ -5598,7 +5593,6 @@ function BotSettingsModal(props:any) {
     },
     MANUAL:{
       title:"MANUAL",
-      tagline:"ตั้งเกมเอง บอททำตาม",
       icon:"settings",
       workflow:"คุณเป็นคนกำหนดแผน เช่น ทิศทาง Lot จำนวนไม้ เป้ากำไร และจุดตัดขาดทุน แล้วบอททำงานตามค่าที่ตั้ง ถ้าเลือกทิศทางอัตโนมัติ บอทยังช่วยเลือกฝั่งจากตลาดได้",
       good:"ตอนที่คุณมีมุมมองชัดอยู่แล้วว่าอยากเล่นฝั่งไหน หรืออยากคุมแผนและความเสี่ยงด้วยตัวเอง",
@@ -5929,7 +5923,6 @@ function BotSettingsModal(props:any) {
               <div>
                 <small>TRADING MODE GUIDE</small>
                 <h2 id="cc-mode-guide-title">{activeModeGuide.title}</h2>
-                <p>{activeModeGuide.tagline}</p>
               </div>
             </div>
             <button
