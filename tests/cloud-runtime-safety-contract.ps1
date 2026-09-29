@@ -8,6 +8,7 @@ $workerApi = Get-Content (Join-Path $root 'apps/api/src/worker.controller.ts') -
 $botApi = Get-Content (Join-Path $root 'apps/api/src/bot.controller.ts') -Raw
 $cloudApi = Get-Content (Join-Path $root 'apps/api/src/cloud.controller.ts') -Raw
 $cloudUpdate = Get-Content (Join-Path $root 'apps/api/src/cloud-update.service.ts') -Raw
+$cloudUpdateController = Get-Content (Join-Path $root 'apps/api/src/cloud-update.controller.ts') -Raw
 $cloudUpdateUi = Get-Content (Join-Path $root 'apps/web/components/CloudUpdatesPanel.tsx') -Raw
 $addonMigration = Get-Content (Join-Path $root 'database/051_cloud_addon_pricing.sql') -Raw
 $dashboard = Get-Content (Join-Path $root 'apps/web/app/dashboard/page.tsx') -Raw
@@ -102,6 +103,8 @@ Assert-Contains $cloudUpdate 'artifact_bytes=COALESCE(ea_releases.artifact_bytes
 Assert-Contains $cloudUpdate 'Stored Fleet Update artifact hash mismatch' 'Pinned Fleet update artifact integrity guard missing'
 Assert-Contains $cloudUpdate 'Fleet Update artifact snapshot unavailable' 'Legacy deferred update artifact fallback guard missing'
 Assert-NotContains $cloudUpdate 'Production EA changed after this Fleet Update was created' 'Deferred Fleet jobs must not fail only because Production advanced to a newer EA release'
+Assert-Contains $cloudUpdateController 'return new StreamableFile(bytes);' 'Fleet artifact endpoint must stream the pinned release bytes'
+Assert-NotContains $cloudUpdateController 'createReadStream(path)' 'Fleet artifact endpoint must not reopen the mutable Production artifact path'
 
 # Windows Worker may terminate only the exact portable terminal belonging to this instance.
 # Phase 4 raises the control-plane Worker protocol to v1.2.0 while preserving
