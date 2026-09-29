@@ -2139,7 +2139,6 @@ export default function DashboardPage() {
       }
       setVpsPaymentOrderId(String(result?.id || ""));
       await loadVpsCommerce();
-      setNotice("พร้อมชำระเงิน");
     } catch (e:any) {
       setError(String(e?.message || "สร้างรายการ VPS Slot ไม่สำเร็จ"));
       await loadVpsCommerce().catch(()=>{});
