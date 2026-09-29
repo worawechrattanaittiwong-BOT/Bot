@@ -2038,12 +2038,8 @@ export default function DashboardPage() {
     setVpsSlipFile(null);
     setOwnerAddonPriceEditorOpen(false);
 
-    const pending = cloudOrders.find(order =>
-      String(order.purchase_type || "PACKAGE").toUpperCase()==="ADDON" &&
-      ["CREATING","PENDING","REVIEW"].includes(String(order.status || "").toUpperCase())
-    );
-    setVpsRenewSlotId(pending ? String(pending.slot_id || "") : slotId);
-    setVpsPaymentOrderId(String(pending?.id || ""));
+    setVpsRenewSlotId(slotId);
+    setVpsPaymentOrderId("");
     vpsSlotDialogRef.current?.showModal();
   }
 
@@ -2198,9 +2194,9 @@ export default function DashboardPage() {
     }
   }
 
-  async function cancelVpsSlotOrder() {
+  async function cancelVpsSlotOrder(closeAfter = false) {
     if (vpsPurchaseBusy || !vpsPaymentOrderId) {
-      vpsSlotDialogRef.current?.close();
+      if (closeAfter || !vpsPaymentOrderId) vpsSlotDialogRef.current?.close();
       return;
     }
     setVpsPurchaseBusy(true);
@@ -2210,6 +2206,7 @@ export default function DashboardPage() {
       setVpsSlipFile(null);
       await loadVpsCommerce();
       setNotice("ยกเลิกรายการชำระเงินแล้ว");
+      if (closeAfter) vpsSlotDialogRef.current?.close();
     } catch (e:any) {
       setError(String(e?.message || "ยกเลิกรายการไม่สำเร็จ"));
     } finally {
@@ -4265,6 +4262,10 @@ export default function DashboardPage() {
         <dialog
           ref={vpsSlotDialogRef}
           className="vps-slot-dialog"
+          onCancel={event=>{
+            event.preventDefault();
+            if (!vpsPurchaseBusy) void cancelVpsSlotOrder(true);
+          }}
           onClose={()=>{
             setVpsSlipFile(null);
             if (!vpsPaymentOrderId) setVpsRenewSlotId("");
@@ -4288,7 +4289,7 @@ export default function DashboardPage() {
                 {String(data.user?.role || "").toUpperCase()==="OWNER" && !ownerAddonPriceEditorOpen && !vpsPaymentOrder && (
                   <button type="button" className="btn ghost" onClick={openOwnerAddonPricing}>ตั้งราคา Slot เสริม</button>
                 )}
-                <button type="button" className="vps-slot-dialog-close" onClick={()=>vpsSlotDialogRef.current?.close()} aria-label="ปิด">×</button>
+                <button type="button" className="vps-slot-dialog-close" onClick={()=>void cancelVpsSlotOrder(true)} aria-label="ปิด">×</button>
               </div>
             </header>
 
