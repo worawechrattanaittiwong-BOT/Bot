@@ -6008,7 +6008,7 @@
   border-radius:999px;
   background:rgba(24,118,79,.2);
   color:#7df0b9;
-  font-size:10px;
+  font-size:var(--ui-type-caption);
   line-height:1;
   font-style:normal;
   font-weight:900;
