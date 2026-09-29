@@ -586,11 +586,34 @@ export class PerformanceAnalyticsController {
       ? reportedTodayClosed - journalTodayClosed
       : 0;
     const journalReconciliationGap = Number(mt5TodayReconciliation.toFixed(2));
+
+    // Older Cloud EA journals may not have immutable MT5 deal timestamps even
+    // though every deal was delivered correctly. Requiring those legacy rows
+    // to be replay-enriched can leave Performance stuck in recovery until the
+    // running EA is upgraded. Accept the legacy timing fallback only when:
+    // 1) MT5 and journal closed P/L reconcile exactly for the broker day, and
+    // 2) every untimed row was actually received inside that same broker-day
+    //    window. This preserves the strict money reconciliation guard while
+    //    allowing already-complete Cloud journals to render immediately.
+    const legacyUntimedRowsInsideBrokerDay =
+      brokerClockReliable &&
+      untimedComparableRows.length > 0 &&
+      untimedComparableRows.every((row:any) => {
+        const createdAt = new Date(row?.created_at).getTime();
+        return (
+          Number.isFinite(createdAt) &&
+          createdAt >= reconciliationDayStart.getTime() &&
+          createdAt <= now.getTime() + 60_000
+        );
+      });
+    const legacyTimingCompatible =
+      Math.abs(journalReconciliationGap) <= 0.01 &&
+      legacyUntimedRowsInsideBrokerDay;
     const detailedStatsReliable =
       !canReconcileToday ||
       (
         Math.abs(journalReconciliationGap) <= 0.01 &&
-        untimedComparableRows.length === 0
+        (untimedComparableRows.length === 0 || legacyTimingCompatible)
       );
 
     // Once the comparable MT5/journal ledger is complete, retire any stale
@@ -957,6 +980,7 @@ export class PerformanceAnalyticsController {
         reconciliationClock,
         brokerDayStart: brokerDayStartUtc?.toISOString() || null,
         untimedJournalRows: untimedComparableRows.length,
+        legacyTimingAccepted: legacyTimingCompatible,
         moneySource: canReconcileToday
           ? "MT5_HEARTBEAT_RECONCILED"
           : "TRADE_JOURNAL",
