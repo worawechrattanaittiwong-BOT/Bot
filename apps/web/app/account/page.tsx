@@ -409,8 +409,7 @@ export default function AccountPage() {
               <div>
                 <div className={styles.eyebrow}>SCENOVA ACCOUNT</div>
                 <h1>My Account</h1>
-                <p>ข้อมูลบัญชี ความปลอดภัย และสิทธิ์การใช้งาน</p>
-              </div>
+                              </div>
             </div>
             <span className={styles.accountStatus}><i/> {data.user.status}</span>
           </header>
@@ -430,7 +429,7 @@ export default function AccountPage() {
           </section>
 
           <div className={styles.sectionStack}>
-            <InfoSection icon="account" title="Account Overview" subtitle="ข้อมูลบัญชีหลัก">
+            <InfoSection icon="account" title="Account Overview">
               <div className={styles.detailGrid}>
                 <Detail label="Email Address" value={data.user.email}/>
                 <Detail label="Account Role" value={data.user.role}/>
@@ -545,9 +544,6 @@ export default function AccountPage() {
               {phoneLocked && (
                 <div className={styles.lockNote}>เบอร์นี้ยืนยัน OTP แล้ว จึงถูกล็อกเพื่อป้องกันการเปลี่ยนเบอร์ที่ผูกกับสิทธิ์ Trial</div>
               )}
-              {isOwner && data.user.phone && !open.phone && (
-                <div className={styles.lockNote}>สิทธิ์ OWNER: แก้ไขเบอร์ของบัญชีนี้ได้ แม้เคยยืนยันแล้ว และสามารถนำเบอร์ที่ค้างอยู่กับบัญชีที่ลบแล้วกลับมาใช้ได้ โดยประวัติ Trial เดิมยังถูกเก็บไว้</div>
-              )}
               {!phoneSmsAvailable && data.user.phone && !data.user.phone.verified && !open.phone && (
                 <div className={styles.lockNote}>บริการยืนยันเบอร์ผ่าน SMS ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่ภายหลัง</div>
               )}
@@ -560,13 +556,12 @@ export default function AccountPage() {
               <SectionHeader
                 icon="wallet"
                 title="Trial & Packages"
-                subtitle="Trial, Local MT5 และ Cloud MT5 ย้ายไปอยู่หน้า Packages"
                 action="เปิดหน้า Packages"
                 onAction={() => window.location.assign("/packages")}
               />
             </section>
 
-            <InfoSection icon="shield" title="Security Status" subtitle="สถานะความปลอดภัยของบัญชี">
+            <InfoSection icon="shield" title="Security Status">
               <div className={styles.statusGrid}>
                 <StatusItem label="Email Verification" value={data.user.emailVerified ? "Verified" : "Pending"} good={data.user.emailVerified}/>
                 <StatusItem label="Mobile Number" value={data.user.phone ? (data.user.phone.verified ? "Verified" : "รอยืนยัน OTP") : "Not linked"} good={Boolean(data.user.phone?.verified)}/>
@@ -739,7 +734,7 @@ function Summary({label,value,good=false,mono=false}:{label:string;value:string;
   );
 }
 
-function InfoSection({icon,title,subtitle,children}:{icon:string;title:string;subtitle:string;children:React.ReactNode}) {
+function InfoSection({icon,title,subtitle,children}:{icon:string;title:string;subtitle?:string;children:React.ReactNode}) {
   return (
     <section className={styles.sectionCard}>
       <SectionHeader icon={icon} title={title} subtitle={subtitle}/>
@@ -760,7 +755,7 @@ function SectionHeader({
 }:{
   icon:string;
   title:string;
-  subtitle:string;
+  subtitle?:string;
   badge?:string;
   good?:boolean;
   action?:string;
@@ -773,7 +768,7 @@ function SectionHeader({
         <span className={styles.icon}><ScenovaIcon name={icon} size={18}/></span>
         <div>
           <h2>{title}</h2>
-          <p>{subtitle}</p>
+          {subtitle && <p>{subtitle}</p>}
         </div>
       </div>
       <div className={styles.sectionControls}>
