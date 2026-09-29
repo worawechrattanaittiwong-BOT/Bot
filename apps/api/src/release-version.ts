@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 
 export const DEFAULT_INSTALLER_VERSION = "1.0.13";
 export const DEFAULT_EA_VERSION = "1.0.93";
-export const EA_RUNTIME_CONTRACT = "RACE_USER_LOSS_ONLY_V5";
+export const EA_RUNTIME_CONTRACT = "RACE_DISTANCE_ARMED_EXIT_V1";
 export const ZERO_GRID_MAX_LEVELS_PER_SIDE = 30;
 
 // 3.1.2 introduced the Agent protocol used by the current 1.0.x line

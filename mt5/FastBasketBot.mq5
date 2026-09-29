@@ -2,7 +2,7 @@
 #property version   "1.0.93"
 #define SCENOVA_EA_VERSION "1.0.93"
 #define SCENOVA_PRODUCT_VERSION "1.0.93"
-#define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
+#define SCENOVA_RUNTIME_CONTRACT "RACE_DISTANCE_ARMED_EXIT_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -184,8 +184,8 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define RACE_VOLUME_HISTORY_SECONDS 60
 #define RACE_EXIT_CYCLE_GRACE_SECONDS 20
 #define RACE_EXIT_LAST_FILL_GRACE_SECONDS 15
-#define RACE_EXIT_CONFIRM_SECONDS 12
-#define RACE_EXIT_SEVERE_CONFIRM_SECONDS 8
+#define RACE_EXIT_CONFIRM_SECONDS 20
+#define RACE_EXIT_SEVERE_CONFIRM_SECONDS 12
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
 #define ZERO_GRID_MAX_LEVELS 30
 #define ZERO_GRID_DEFAULT_LEVELS 3
@@ -3562,9 +3562,12 @@ bool RaceWrongDirectionConfirmed(
    datetime now = TimeCurrent();
    bool candidateActive = g_raceExitCandidateSince > 0;
 
-   // V4 separates a temporary pullback from a persistent reversal. Broker SL
-   // and Max Basket Loss remain authoritative hard protection; this soft exit
-   // is disabled during startup and after every newly accepted RACE fill.
+   // Distance-Armed RACE exit:
+   // never allow intelligence to close a losing Basket while price is still
+   // oscillating around the weighted RACE entry. Time/pressure/structure may
+   // pause new fills inside this zone, but only real adverse travel can arm an
+   // intelligent loss exit. Broker SL, Max Basket Loss and Daily Loss remain
+   // independent hard protections.
    if(g_raceCycleStartedAt <= 0 ||
       now - g_raceCycleStartedAt < RACE_EXIT_CYCLE_GRACE_SECONDS ||
       g_raceLastFillAt <= 0 ||
@@ -3574,8 +3577,9 @@ bool RaceWrongDirectionConfirmed(
       return false;
    }
 
-   double progress = RaceMidProgressPoints(direction);
-   double adversePoints = -progress;
+   // Use volume-weighted RACE Basket entry rather than the oldest ticket.
+   // This prevents a later fill from making a small move look artificially far.
+   double adversePoints = RaceV1AdversePoints(direction);
    if(adversePoints <= 0.0)
    {
       RaceResetExitCandidate();
@@ -3597,18 +3601,28 @@ bool RaceWrongDirectionConfirmed(
       return false;
    }
 
-   double adverseFloor = MathMax(
-      spread * 5.00,
-      MathMax(atrM1 * 0.90, atrM5 * 0.35)
+   // Absolute NO-CUT ZONE. Intelligence cannot close a negative RACE Basket
+   // until price has travelled at least half of the normal emergency-stop
+   // distance, with additional M5 ATR/spread floors to reject local noise.
+   double stopPoints = RaceAtrStopPoints();
+   double noCutFloor = MathMax(
+      spread * 8.00,
+      MathMax(atrM1 * 1.25, atrM5 * 0.80)
    );
+   if(stopPoints > 0.0)
+      noCutFloor = MathMax(noCutFloor, stopPoints * 0.50);
    if(filling)
-      adverseFloor *= 1.10;
+      noCutFloor *= 1.10;
 
-   if(!candidateActive && adversePoints < adverseFloor)
+   if(adversePoints < noCutFloor)
+   {
+      if(candidateActive && adversePoints < noCutFloor * 0.85)
+         RaceResetExitCandidate();
+      reasonOut = "RACE_NO_CUT_ZONE";
       return false;
+   }
 
-   // Use the same rolling 60-second RACE pressure window for entry and soft-loss
-   // confirmation so every RACE order-flow decision observes one full minute.
+   // One complete 60-second pressure history is mandatory after the distance arm.
    if(g_raceVolumeWarmupStartedAt <= 0 ||
       now - g_raceVolumeWarmupStartedAt < RACE_VOLUME_HISTORY_SECONDS)
    {
@@ -3639,18 +3653,17 @@ bool RaceWrongDirectionConfirmed(
    double fastOppositeShare = fastOpposite / fastTotal;
    double slowOppositeShare = slowOpposite / slowTotal;
 
-   // Entry into candidate state is strict; once active, hysteresis allows a
-   // modest pressure fade without instantly resetting or closing the basket.
-   double fastRequired = candidateActive ? 0.62 : 0.70;
-   double slowRequired = candidateActive ? 0.56 : 0.60;
+   // Candidate creation is deliberately strict. Once armed, small pressure
+   // relaxation is tolerated so one tick cannot repeatedly reset the timer.
+   double fastRequired = candidateActive ? 0.64 : 0.72;
+   double slowRequired = candidateActive ? 0.58 : 0.62;
    if(fastOppositeShare < fastRequired || slowOppositeShare < slowRequired)
    {
       RaceResetExitCandidate();
       return false;
    }
 
-   // Use only the completed M1 candle. The mutable live candle was correlated
-   // with tick momentum and could falsely classify a short pullback as reversal.
+   // Completed M1 only: never use the forming candle to cut a loss.
    double open1 = iOpen(_Symbol, PERIOD_M1, 1);
    double close1 = iClose(_Symbol, PERIOD_M1, 1);
    double high1 = iHigh(_Symbol, PERIOD_M1, 1);
@@ -3666,28 +3679,42 @@ bool RaceWrongDirectionConfirmed(
       ? MathMin(1.0, MathMax(0.0, adverseBodyPoints / rangePoints))
       : 0.0;
    bool m1ClosedOpposite =
-      adverseBodyPoints >= MathMax(spread * 1.00, atrM1 * 0.28) &&
-      bodyRatio >= 0.55;
+      adverseBodyPoints >= MathMax(spread * 1.20, atrM1 * 0.35) &&
+      bodyRatio >= 0.58;
 
    double adverseMomentum = -direction * momentum;
    bool momentumOpposite =
-      adverseMomentum >= MathMax(spread * 0.75, atrM1 * 0.25);
+      adverseMomentum >= MathMax(spread * 1.00, atrM1 * 0.30);
    bool m5Opposite = RaceM5CandleDirection() == -direction;
+   bool structureBroken = RaceV2StructureBroken(direction);
 
-   if(!m1ClosedOpposite || (!momentumOpposite && !m5Opposite))
+   int confirmationVotes = 0;
+   if(momentumOpposite) confirmationVotes++;
+   if(m5Opposite) confirmationVotes++;
+   if(structureBroken) confirmationVotes++;
+
+   // After the price-distance arm, require a completed M1 reversal plus at
+   // least two independent secondary confirmations. A single momentum flip,
+   // candle, or structure signal can only pause fills; it cannot close a loss.
+   if(!m1ClosedOpposite || confirmationVotes < 2)
    {
       RaceResetExitCandidate();
       return false;
    }
 
    double severeFloor = MathMax(
-      spread * 8.00,
-      MathMax(atrM1 * 1.35, atrM5 * 0.65)
+      spread * 12.00,
+      MathMax(atrM1 * 2.00, atrM5 * 1.15)
    );
+   if(stopPoints > 0.0)
+      severeFloor = MathMax(severeFloor, stopPoints * 0.80);
+
    bool severe =
       adversePoints >= severeFloor &&
-      fastOppositeShare >= 0.78 &&
-      slowOppositeShare >= 0.68;
+      fastOppositeShare >= 0.80 &&
+      slowOppositeShare >= 0.70 &&
+      m5Opposite &&
+      structureBroken;
 
    if(!candidateActive)
    {
@@ -3695,10 +3722,12 @@ bool RaceWrongDirectionConfirmed(
       g_raceExitCandidatePeakAdverse = adversePoints;
       g_raceRecoveryWatch = true;
       Print(
-         "RACE reversal candidate adversePts=",DoubleToString(adversePoints,1),
-         " floor=",DoubleToString(adverseFloor,1),
+         "RACE distance-armed reversal candidate adversePts=",DoubleToString(adversePoints,1),
+         " noCut=",DoubleToString(noCutFloor,1),
+         " severeFloor=",DoubleToString(severeFloor,1),
          " fastOpp=",DoubleToString(fastOppositeShare,2),
          " slowOpp=",DoubleToString(slowOppositeShare,2),
+         " votes=",confirmationVotes,
          " severe=",severe
       );
       return false;
@@ -3707,15 +3736,15 @@ bool RaceWrongDirectionConfirmed(
    if(adversePoints > g_raceExitCandidatePeakAdverse)
       g_raceExitCandidatePeakAdverse = adversePoints;
 
-   // Cancel when price reclaims 30% of the worst adverse excursion or moves
-   // materially back inside the adverse trigger floor.
+   // A meaningful rebound cancels the exit candidate. The Basket gets another
+   // chance rather than being cut while price is already recovering.
    bool rebound =
       adversePoints <= g_raceExitCandidatePeakAdverse * 0.70 ||
-      adversePoints < adverseFloor * 0.75;
+      adversePoints < noCutFloor * 0.90;
    if(rebound)
    {
       Print(
-         "RACE reversal candidate cancelled by rebound adversePts=",
+         "RACE distance-armed candidate cancelled by rebound adversePts=",
          DoubleToString(adversePoints,1),
          " peak=",DoubleToString(g_raceExitCandidatePeakAdverse,1)
       );
@@ -3731,10 +3760,11 @@ bool RaceWrongDirectionConfirmed(
       return false;
 
    reasonOut = severe
-      ? "RACE_PERSISTENT_REVERSAL_SEVERE_HOLD"
-      : "RACE_PERSISTENT_REVERSAL_CONFIRMED_HOLD";
+      ? "RACE_DISTANCE_ARMED_SEVERE_EXIT"
+      : "RACE_DISTANCE_ARMED_REVERSAL_EXIT";
    Print(
-      "RACE persistent reversal hold adversePts=",DoubleToString(adversePoints,1),
+      "RACE distance-armed exit confirmed adversePts=",DoubleToString(adversePoints,1),
+      " noCut=",DoubleToString(noCutFloor,1),
       " fastOpp=",DoubleToString(fastOppositeShare,2),
       " slowOpp=",DoubleToString(slowOppositeShare,2),
       " candidateAge=",candidateAge,
@@ -4266,10 +4296,10 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   // RACE_USER_LOSS_ONLY_V5 + VNext Phase 2:
+   // RACE_DISTANCE_ARMED_EXIT_V1:
    // Distinguish spread/commission/noise from real adverse travel. Intelligence
-   // may stop additional fills, but a losing Basket is still liquidated only by
-   // the user's Max Basket/Daily loss, the Broker SL, or explicit Close All.
+   // may pause additional fills immediately, but it may close a losing Basket
+   // only after the distance arm and persistent multi-signal confirmation.
    RaceV1UpdateExposureTelemetry(direction,0.0);
    g_raceExposureRiskMismatch =
       lossLimit > 0.0 &&
@@ -4294,11 +4324,12 @@ bool ManageRaceBasket(double momentum)
          g_executionStatus="RACE_STRUCTURE_INVALID_HOLD";
          return true;
       }
-      if(g_raceLossState=="REVERSAL_HOLD")
+      if(g_raceLossState=="REVERSAL_EXIT")
       {
          g_raceRecoveryWatch=true;
-         g_raceState="REVERSAL_HOLD";
-         g_executionStatus="RACE_REVERSAL_HOLD";
+         RaceCloseCycle(wrongDirectionReason=="NONE"
+            ? "RACE_DISTANCE_ARMED_REVERSAL_EXIT"
+            : wrongDirectionReason);
          return true;
       }
       if(g_raceLossState=="EXIT_CANDIDATE")

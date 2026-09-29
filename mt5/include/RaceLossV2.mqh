@@ -43,12 +43,8 @@ string RaceV2LossState(
       return "COST_NOISE";
    }
 
-   if(RaceV2StructureBroken(direction))
-   {
-      reasonOut="RACE_STRUCTURE_INVALID";
-      return "STRUCTURE_INVALID";
-   }
-
+   // Structure by itself can pause fills, but only the distance-armed reversal
+   // brain is allowed to close a negative RACE Basket before Broker SL.
    string reversalReason="NONE";
    if(RaceWrongDirectionConfirmed(
       direction,
@@ -58,13 +54,19 @@ string RaceV2LossState(
    ))
    {
       reasonOut=reversalReason;
-      return "REVERSAL_HOLD";
+      return "REVERSAL_EXIT";
    }
 
    if(g_raceExitCandidateSince>0)
    {
       reasonOut="RACE_EXIT_CANDIDATE";
       return "EXIT_CANDIDATE";
+   }
+
+   if(RaceV2StructureBroken(direction))
+   {
+      reasonOut="RACE_STRUCTURE_INVALID";
+      return "STRUCTURE_INVALID";
    }
 
    int decision=RaceAnalysisDirection(momentum);
