@@ -662,3 +662,28 @@
     aspect-ratio:1000 / 300;
   }
 }
+
+
+/* ===== Performance stability hardening =====
+   Keep overflow containment local to /performance. This prevents desktop
+   horizontal scrollbar/jitter without changing shared dashboard layout. */
+.shell,
+.main,
+.summaryShell{
+  min-width:0;
+  max-width:100%;
+  overflow-x:hidden;
+}
+.infoCard,
+.metricsCard,
+.resultsGrid,
+.analyticsCharts,
+.panel,
+.chartCard,
+.lotCard{
+  min-width:0;
+  max-width:100%;
+}
+.summaryShell{
+  overscroll-behavior-x:none;
+}
