@@ -578,6 +578,146 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
     });
   }
 
+  private cloudOrderQuantity(order: any) {
+    const quantity = Math.trunc(Number(order?.quantity || 1));
+    return Number.isInteger(quantity) ? Math.max(1, Math.min(10, quantity)) : 1;
+  }
+
+  private cloudRunnerAllocations(order: any) {
+    const source = Array.isArray(order?.runner_allocations)
+      ? order.runner_allocations
+      : [];
+    const runners = source
+      .map((value:any)=>String(value || "").trim())
+      .filter(Boolean);
+    if (!runners.length && order?.runner_id) runners.push(String(order.runner_id));
+    return runners;
+  }
+
+  private async provisionCloudOrderSlots(
+    tx: PoolClient,
+    order: any,
+    userId: string,
+    existingSlot: any
+  ) {
+    const quantity = existingSlot ? 1 : this.cloudOrderQuantity(order);
+    const allocations = this.cloudRunnerAllocations(order);
+    if (!existingSlot && allocations.length < quantity) {
+      throw new ConflictException("ข้อมูลการจัดสรร VPS Slot ไม่ครบ กรุณาติดต่อผู้ดูแล");
+    }
+
+    const slotIds:string[] = [];
+    const subscriptionIds:string[] = [];
+    let firstSlot:any = null;
+    let firstSubscription:any = null;
+
+    for (let index=0; index<quantity; index+=1) {
+      const slotForRenew = index === 0 ? existingSlot : null;
+      const subscription = (
+        await tx.query(
+          `INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note)
+           SELECT
+             $1,p.id,now(),
+             GREATEST(
+               now(),
+               COALESCE(
+                 (SELECT expires_at FROM subscriptions WHERE id=$3 AND status='ACTIVE'),
+                 now()
+               )
+             ) + make_interval(months=>$2::int),
+             'EASYSLIP',$4
+           FROM plans p
+           WHERE p.code='CLOUD_' || $2::text || 'M' AND p.active=true
+           RETURNING *`,
+          [
+            userId,
+            Number(order.months),
+            slotForRenew?.subscription_id || null,
+            "EasySlip Cloud order " + order.id +
+              (quantity > 1 ? " · Slot " + (index + 1) + "/" + quantity : "")
+          ]
+        )
+      ).rows[0];
+      if (!subscription) {
+        throw new ConflictException("ไม่พบแพ็กเกจ Cloud ที่เปิดใช้งาน");
+      }
+
+      let slot = slotForRenew;
+      if (slot) {
+        await tx.query(
+          "UPDATE license_slots SET subscription_id=$2,status='ACTIVE',updated_at=now() WHERE id=$1",
+          [slot.id, subscription.id]
+        );
+      } else {
+        slot = (
+          await tx.query(
+            `INSERT INTO license_slots(
+               owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label
+             )
+             SELECT
+               $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
+               CASE WHEN $3='ADDON' THEN 'ADDON' ELSE 'PERSONAL' END,
+               'ACTIVE','Cloud Trading'
+             FROM license_slots
+             WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED'
+             RETURNING *`,
+            [userId, subscription.id, String(order.purchase_type || "PACKAGE").toUpperCase()]
+          )
+        ).rows[0];
+      }
+
+      const runnerId = String(
+        slotForRenew
+          ? order.runner_id
+          : allocations[index] || order.runner_id || ""
+      ).trim();
+      if (!runnerId) {
+        throw new ConflictException("ไม่พบ VPS สำหรับ Slot ที่ซื้อ");
+      }
+
+      if (index > 0) {
+        await tx.query(
+          `INSERT INTO cloud_orders(
+             user_id,months,amount,original_amount,discount_amount,status,runner_id,slot_id,subscription_id,
+             purchase_type,list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at,
+             paid_at,expires_at,quantity,runner_allocations,parent_order_id,bundle_index
+           )
+           VALUES(
+             $1,$2,0,0,0,'PAID',$3,$4,$5,'ADDON',0,0,$6,$7,$8,
+             now(),now(),1,jsonb_build_array($3::text),$9,$10
+           )`,
+          [
+            userId,
+            Number(order.months),
+            runnerId,
+            slot.id,
+            subscription.id,
+            order.fx_rate_usd_thb || null,
+            order.fx_source || null,
+            order.fx_quoted_at || null,
+            order.id,
+            index + 1
+          ]
+        );
+      }
+
+      slotIds.push(String(slot.id));
+      subscriptionIds.push(String(subscription.id));
+      if (!firstSlot) {
+        firstSlot = slot;
+        firstSubscription = subscription;
+      }
+    }
+
+    return {
+      slot:firstSlot,
+      subscription:firstSubscription,
+      slotIds,
+      subscriptionIds,
+      quantity
+    };
+  }
+
   private async activateCloud(
     userId: string,
     orderId: string,
