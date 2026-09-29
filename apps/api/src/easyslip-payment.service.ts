@@ -541,8 +541,11 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
           currency: "THB",
           metadata: {
             subscriptionId: subscription.id,
+            subscriptionIds: provisioned.subscriptionIds,
             months: Number(order.months),
             slotId: slot.id,
+            slotIds: provisioned.slotIds,
+            quantity: provisioned.quantity,
             paymentProvider: "EASYSLIP",
             transRef: verification.transRef
           }
@@ -573,6 +576,10 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
         status: "PAID",
         orderId: order.id,
         subscriptionId: subscription.id,
+        subscriptionIds: provisioned.subscriptionIds,
+        slotId: slot.id,
+        slotIds: provisioned.slotIds,
+        quantity: provisioned.quantity,
         expiresAt: subscription.expires_at
       };
     });
@@ -770,56 +777,14 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
         amountSatang: Number(order.amount)
       });
 
-      const subscription = (
-        await tx.query(
-          `INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note)
-           SELECT
-             $1,p.id,now(),
-             GREATEST(
-               now(),
-               COALESCE(
-                 (SELECT expires_at FROM subscriptions WHERE id=$3 AND status='ACTIVE'),
-                 now()
-               )
-             ) + make_interval(months=>$2::int),
-             'EASYSLIP',$4
-           FROM plans p
-           WHERE p.code='CLOUD_' || $2::text || 'M' AND p.active=true
-           RETURNING *`,
-          [
-            userId,
-            Number(order.months),
-            slot?.subscription_id || null,
-            "EasySlip Cloud order " + order.id
-          ]
-        )
-      ).rows[0];
-      if (!subscription) {
-        throw new ConflictException("ไม่พบแพ็กเกจ Cloud ที่เปิดใช้งาน");
-      }
-
-      if (slot) {
-        await tx.query(
-          "UPDATE license_slots SET subscription_id=$2,status='ACTIVE',updated_at=now() WHERE id=$1",
-          [slot.id, subscription.id]
-        );
-      } else {
-        slot = (
-          await tx.query(
-            `INSERT INTO license_slots(
-               owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label
-             )
-             SELECT
-               $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
-               CASE WHEN $3='ADDON' THEN 'ADDON' ELSE 'PERSONAL' END,
-               'ACTIVE','Cloud Trading'
-             FROM license_slots
-             WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED'
-             RETURNING *`,
-            [userId, subscription.id, String(order.purchase_type || "PACKAGE").toUpperCase()]
-          )
-        ).rows[0];
-      }
+      const provisioned = await this.provisionCloudOrderSlots(
+        tx,
+        order,
+        userId,
+        slot
+      );
+      slot = provisioned.slot;
+      const subscription = provisioned.subscription;
 
       await tx.query(
         `UPDATE cloud_orders
@@ -919,8 +884,11 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
           JSON.stringify({
             transRef: verification.transRef,
             slotId: slot.id,
+            slotIds: provisioned.slotIds,
+            quantity: provisioned.quantity,
             runnerId: order.runner_id,
             subscriptionId: subscription.id,
+            subscriptionIds: provisioned.subscriptionIds,
             referralCommissionCount
           })
         ]
