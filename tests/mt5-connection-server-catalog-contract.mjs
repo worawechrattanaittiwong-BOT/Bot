@@ -49,6 +49,15 @@ assert.match(
   "active migration must take precedence over stale browser-restored operations"
 );
 assert.match(
+  dashboard,
+  /localStorage\.removeItem\("scenova-mt5-operation-v1:" \+ userId\)[\s\S]*vpsMigrationProgress\?\.migrationId/,
+  "server-backed migration must discard stale browser MT5 operations"
+);
+assert.ok(
+  (dashboard.match(/op\.kind === "LOCAL_MT5_BIND"/g) || []).length >= 2,
+  "restored Local MT5 bind must participate in timeout and live-state completion checks"
+);
+assert.match(
   ea,
   /rememberVerifiedBrokerServer/,
   "successful authenticated MT5 heartbeat must enrich the broker server catalog"
