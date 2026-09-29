@@ -325,24 +325,14 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
         await tx.query("UPDATE cloud_orders SET status='REVIEW',charge_id=$2 WHERE id=$1", [order.id, charge.id]);
         return;
       }
-      let slot = order.slot_id ? (await tx.query("SELECT * FROM license_slots WHERE id=$1 FOR UPDATE", [order.slot_id])).rows[0] : null;
-      if (slot && (slot.owner_user_id !== order.user_id || slot.assigned_user_id !== order.user_id || slot.status === "DELETED")) {
-        throw new ConflictException("Slot เปลี่ยนแปลง กรุณาติดต่อผู้ดูแล");
-      }
-      // Calendar months; renewing preserves the unused time of this exact slot.
-      const subscription = (await tx.query(`INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note)
-        SELECT $1,p.id,now(),GREATEST(now(),COALESCE((SELECT expires_at FROM subscriptions WHERE id=$3 AND status='ACTIVE'),now()))
-          + make_interval(months=>$2::int),'PAYMENT', $4 FROM plans p WHERE p.code='CLOUD_' || $2::text || 'M' RETURNING *`,
-        [order.user_id, order.months, slot?.subscription_id || null, "Order " + order.id])).rows[0];
-      if (slot) {
-        await tx.query("UPDATE license_slots SET subscription_id=$2,status='ACTIVE',updated_at=now() WHERE id=$1", [slot.id, subscription.id]);
-      } else {
-        slot = (await tx.query(`INSERT INTO license_slots(owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label)
-          SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
-          CASE WHEN $3='ADDON' THEN 'ADDON' ELSE 'PERSONAL' END,
-          'ACTIVE','Cloud Trading'
-          FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`, [order.user_id, subscription.id, String(order.purchase_type || "PACKAGE").toUpperCase()])).rows[0];
-      }
+      const provisioned = await this.provisionCloudOrderSlots(
+        tx,
+        order,
+        "PAYMENT",
+        "Order " + order.id
+      );
+      const slot = provisioned.slot;
+      const subscription = provisioned.subscription;
       await tx.query("UPDATE cloud_orders SET status='PAID',charge_id=$2,slot_id=$3,subscription_id=$4,paid_at=now() WHERE id=$1",
         [order.id, charge.id, slot.id, subscription.id]);
       await tx.query(
@@ -420,8 +410,11 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
           currency: "THB",
           metadata: {
             subscriptionId: subscription.id,
+            subscriptionIds: provisioned.subscriptionIds,
             months: order.months,
-            slotId: slot.id
+            slotId: slot.id,
+            slotIds: provisioned.slotIds,
+            quantity: provisioned.quantity
           }
         });
         referralCommissionCount = commissions.length;
@@ -432,8 +425,21 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
       }
 
       await tx.query("INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES('PAYMENT','CLOUD_ACTIVATED','order',$1,$2)",
-        [order.id, JSON.stringify({ chargeId, slotId: slot.id, runnerId: order.runner_id, referralCommissionCount })]);
-      return { ...order, status: "PAID", slot_id: slot.id };
+        [order.id, JSON.stringify({
+          chargeId,
+          slotId: slot.id,
+          slotIds: provisioned.slotIds,
+          quantity: provisioned.quantity,
+          runnerId: order.runner_id,
+          referralCommissionCount
+        })]);
+      return {
+        ...order,
+        status: "PAID",
+        slot_id: slot.id,
+        slot_ids: provisioned.slotIds,
+        quantity: provisioned.quantity
+      };
     });
   }
 
