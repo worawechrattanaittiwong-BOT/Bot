@@ -2310,19 +2310,19 @@ export class BotController {
       instance = await this.db.one(
         `UPDATE bot_instances SET
            mt5_account_id=$2,
-           mode=$3,
+           mode=$3::varchar,
            install_token_hash=$4,
-           execution_generation=CASE WHEN $3='CLOUD' THEN execution_generation+1 ELSE execution_generation END,
-           lease_rotated_at=CASE WHEN $3='CLOUD' THEN now() ELSE lease_rotated_at END,
+           execution_generation=CASE WHEN $3::varchar='CLOUD' THEN execution_generation+1 ELSE execution_generation END,
+           lease_rotated_at=CASE WHEN $3::varchar='CLOUD' THEN now() ELSE lease_rotated_at END,
            desired_state='STOPPED',
            actual_state='OFFLINE',
            last_seen_at=NULL,
-           runtime_stop_state=CASE WHEN $3='CLOUD' THEN 'NONE' ELSE runtime_stop_state END,
-           runtime_stop_requested_at=CASE WHEN $3='CLOUD' THEN NULL ELSE runtime_stop_requested_at END,
-           runtime_stop_confirmed_at=CASE WHEN $3='CLOUD' THEN NULL ELSE runtime_stop_confirmed_at END,
-           runtime_stop_error=CASE WHEN $3='CLOUD' THEN NULL ELSE runtime_stop_error END,
-           provisioning_error=CASE WHEN $3='CLOUD' THEN NULL ELSE provisioning_error END,
-           metrics=CASE WHEN $3='CLOUD' THEN '{}'::jsonb ELSE metrics END
+           runtime_stop_state=CASE WHEN $3::varchar='CLOUD' THEN 'NONE' ELSE runtime_stop_state END,
+           runtime_stop_requested_at=CASE WHEN $3::varchar='CLOUD' THEN NULL ELSE runtime_stop_requested_at END,
+           runtime_stop_confirmed_at=CASE WHEN $3::varchar='CLOUD' THEN NULL ELSE runtime_stop_confirmed_at END,
+           runtime_stop_error=CASE WHEN $3::varchar='CLOUD' THEN NULL ELSE runtime_stop_error END,
+           provisioning_error=CASE WHEN $3::varchar='CLOUD' THEN NULL ELSE provisioning_error END,
+           metrics=CASE WHEN $3::varchar='CLOUD' THEN '{}'::jsonb ELSE metrics END
          WHERE id=$1
          RETURNING id,mode,desired_state,actual_state,execution_generation,runtime_stop_state`,
         [instance.id, account.id, mode, this.crypto.sha256(installToken)]
