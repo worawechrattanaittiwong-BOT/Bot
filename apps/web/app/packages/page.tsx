@@ -59,6 +59,8 @@ type TrialStatus = {
 type PackageItem = {
   months: number;
   price_satang: number;
+  price_usd_cents: number;
+  estimated_price_satang?: number;
   enabled: boolean;
   updated_at: string;
 };
@@ -76,6 +78,8 @@ type PaymentAccount = {
 
 type Catalog = {
   packages: PackageItem[];
+  fx?: { usdThb:number; source:string; quotedAt:string };
+  capacityAvailable?: boolean;
   paymentMode: string;
   paymentAccounts?: PaymentAccount[];
   checkoutEnabled: boolean;
@@ -112,6 +116,11 @@ type PromotionPreview = {
   discountPercent:number;
   discountAmountSatang:number;
   finalAmountSatang:number;
+  originalUsdCents?:number;
+  discountUsdCents?:number;
+  finalUsdCents?:number;
+  estimatedThbSatang?:number;
+  fx?:{ usdThb:number; source:string; quotedAt:string };
 };
 
 function promoAlnum(value: string) {
@@ -126,9 +135,16 @@ function formatPromoCode(value: string) {
   return clean.slice(0, 3) + "-" + clean.slice(3, 7) + "-" + clean.slice(7, 11);
 }
 
-function money(satang: number) {
+function thbMoney(satang: number) {
   return (Number(satang || 0) / 100).toLocaleString("th-TH", {
     minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+}
+
+function usdMoney(cents: number) {
+  return (Number(cents || 0) / 100).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 }
@@ -561,9 +577,12 @@ export default function PackagesPage() {
   const checkoutOrder = checkoutOrderId
     ? activeOrders.find(order => order.id === checkoutOrderId) || null
     : null;
-  const checkoutPrice = promoPreview?.active
-    ? Number(promoPreview.finalAmountSatang || 0)
-    : Number(checkoutPack?.price_satang || 0);
+  const checkoutUsdCents = promoPreview?.active
+    ? Number(promoPreview.finalUsdCents || 0)
+    : Number(checkoutPack?.price_usd_cents || 0);
+  const checkoutEstimatedThb = promoPreview?.active
+    ? Number(promoPreview.estimatedThbSatang || 0)
+    : Number(checkoutPack?.estimated_price_satang || 0);
 
   async function setGlobalSalesPaused(paused: boolean) {
     if (!isOwner || busy) return;
@@ -899,7 +918,7 @@ export default function PackagesPage() {
                       salesPaused={salesPaused}
                       busy={Boolean(busy)}
                       pending={Boolean(activePending)}
-                      capacityAvailable={isLocalSystem || hasPrimaryCloudSlot || Number(cloudCatalog?.available || 0) > 0}
+                      capacityAvailable={isLocalSystem || hasPrimaryCloudSlot || cloudCatalog?.capacityAvailable !== false}
                       renewal={!isLocalSystem && hasPrimaryCloudSlot}
                       onBuy={() => {
                         setCheckoutPack(pack);
@@ -982,8 +1001,8 @@ export default function PackagesPage() {
                   <ScenovaIcon name={isLocalSystem ? "account" : "cloud"} size={32}/>
                   <span className={styles.eyebrow}>{isLocalSystem ? "LOCAL MT5" : "VPS / CLOUD MT5"}</span>
                   <h3>{checkoutPack.months} เดือน</h3>
-                  <strong className={styles.checkoutPrice}>฿{money(checkoutPrice)}</strong>
-                  <p>เฉลี่ย ฿{money(Math.round(checkoutPrice / checkoutPack.months))} / เดือน</p>
+                  <strong className={styles.checkoutPrice}>${usdMoney(checkoutUsdCents)} USD</strong>
+                  <p>เฉลี่ย ${usdMoney(Math.round(checkoutUsdCents / checkoutPack.months))} USD / เดือน</p>
                   <ul>
                     <li>สำหรับ 1 บัญชี MT5</li>
                     <li>{isLocalSystem ? "ใช้งานบนคอมพิวเตอร์ของคุณ" : "Start / Stop ผ่านมือถือ"}</li>
@@ -996,7 +1015,7 @@ export default function PackagesPage() {
                   <h3>สรุปการชำระเงิน</h3>
                   <div className={styles.summaryRow}>
                     <span>แพ็กเกจ {checkoutPack.months} เดือน</span>
-                    <b>฿{money(checkoutPack.price_satang)}</b>
+                    <b>${usdMoney(checkoutPack.price_usd_cents)} USD</b>
                   </div>
 
                   <label className={styles.promoField} htmlFor="package-promo">รหัสโปรโมชั่น</label>
@@ -1043,20 +1062,24 @@ export default function PackagesPage() {
                   {promoPreview?.active && (
                     <div className={styles.promoLive}>
                       <span>{promoPreview.code}</span>
-                      <b>ลด {promoPreview.discountPercent}% · -฿{money(promoPreview.discountAmountSatang)}</b>
+                      <b>ลด {promoPreview.discountPercent}% · -${usdMoney(Number(promoPreview.discountUsdCents || 0))}</b>
                     </div>
                   )}
 
                   {promoPreview?.active && (
                     <div className={styles.summaryRow}>
                       <span>ส่วนลด</span>
-                      <b>-฿{money(promoPreview.discountAmountSatang)}</b>
+                      <b>-${usdMoney(Number(promoPreview.discountUsdCents || 0))}</b>
                     </div>
                   )}
 
                   <div className={styles.summaryRow + " " + styles.summaryTotal}>
                     <span>ยอดชำระ</span>
-                    <strong>฿{money(checkoutPrice)}</strong>
+                    <strong>${usdMoney(checkoutUsdCents)} USD</strong>
+                  </div>
+                  <div className={styles.summaryRow}>
+                    <span>ยอดชำระจริงโดยประมาณ</span>
+                    <b>฿{thbMoney(checkoutEstimatedThb)} THB</b>
                   </div>
 
                   <p className={styles.checkoutHint}>ชำระครั้งเดียว · ไม่มีการต่ออายุอัตโนมัติ</p>
@@ -1164,14 +1187,14 @@ function PackageCard({
 }) {
   const available =
     pack.enabled &&
-    pack.price_satang > 0 &&
+    pack.price_usd_cents > 0 &&
     checkoutEnabled &&
     capacityAvailable &&
     !pending;
 
   const featured = pack.months === 3;
   const label =
-    !pack.enabled || pack.price_satang <= 0
+    !pack.enabled || pack.price_usd_cents <= 0
       ? "ยังไม่เปิดขาย"
       : salesPaused
         ? "ปิดรับการขายชั่วคราว"
@@ -1205,10 +1228,10 @@ function PackageCard({
       <span className={styles.planType}><ScenovaIcon name={system === "LOCAL" ? "account" : "cloud"} size={19}/>{system === "LOCAL" ? "LOCAL MT5" : "CLOUD MT5"}</span>
       <h3>{pack.months} เดือน</h3>
       <div className={`${legacy.price} ${styles.planPrice}`}>
-        {pack.price_satang > 0 ? `฿${money(pack.price_satang)}` : "รอประกาศราคา"}
+        {pack.price_usd_cents > 0 ? `${usdMoney(pack.price_usd_cents)} USD` : "รอประกาศราคา"}
         <small>
-          {pack.price_satang > 0
-            ? `เฉลี่ย ฿${money(Math.round(pack.price_satang / pack.months))} / เดือน`
+          {pack.price_usd_cents > 0
+            ? `เฉลี่ย ${usdMoney(Math.round(pack.price_usd_cents / pack.months))} USD / เดือน`
             : "ราคาจะแสดงเมื่อพร้อมเปิดขาย"}
         </small>
       </div>
@@ -1313,7 +1336,7 @@ function PaymentCard({
             />
           </div>
           <span>สแกนด้วย Mobile Banking</span>
-          <b>฿{money(order.amount)}</b>
+          <b>฿{thbMoney(order.amount)} THB</b>
           {easySlip && account ? (
             <div className={styles.qrRecipient}>
               <small>ชื่อผู้รับที่ต้องตรวจสอบ</small>
@@ -1355,17 +1378,17 @@ function PaymentCard({
 
       <div className={styles.paymentInfo}>
         <span className={styles.eyebrow}>{type} / {order.id.slice(0,8)}</span>
-        <h3>{order.months} เดือน · ฿{money(order.amount)}</h3>
+        <h3>{order.months} เดือน · {Number(order.final_price_usd_cents || 0) > 0 ? `${usdMoney(Number(order.final_price_usd_cents || 0))} USD` : `฿${thbMoney(order.amount)} THB`}</h3>
         {Number(order.discount_amount || 0) > 0 && (
           <div className={styles.promoApplied}>
             <span>{order.promotion_code}</span>
-            <b>ลด ฿{money(Number(order.discount_amount || 0))}</b>
+            <b>ลด {Number(order.list_price_usd_cents || 0) > 0 ? `${usdMoney(Math.max(0,Number(order.list_price_usd_cents || 0)-Number(order.final_price_usd_cents || 0)))} USD` : `฿${thbMoney(Number(order.discount_amount || 0))}`}</b>
           </div>
         )}
 
         {easySlip ? (
           <>
-            <p>สแกน QR ตามยอด <b>฿{money(order.amount)}</b> แล้วแนบสลิปด้านล่าง ระบบจะตรวจยอด บัญชีผู้รับ และสลิปซ้ำก่อนเปิดสิทธิ์</p>
+            <p>สแกน QR ตามยอดจริง <b>฿{thbMoney(order.amount)} THB</b> แล้วแนบสลิปด้านล่าง ระบบจะตรวจยอด บัญชีผู้รับ และสลิปซ้ำก่อนเปิดสิทธิ์</p>
             {account ? (
               <div className={styles.recipientCheck}>
                 <span>ตรวจสอบก่อนกดยืนยันโอน</span>
@@ -1440,7 +1463,7 @@ function OrderHistory({title,orders}:{title:string;orders:Order[]}) {
                 <b>{order.months} เดือน</b>
                 <span>{date(order.created_at)}</span>
               </div>
-              <strong>฿{money(order.amount)}</strong>
+              <strong>{Number(order.final_price_usd_cents || 0) > 0 ? `${usdMoney(Number(order.final_price_usd_cents || 0))}` : `฿${thbMoney(order.amount)}`}</strong>
               <em className={order.status === "PAID" ? styles.orderPaid : order.status === "FAILED" ? styles.orderFailed : ""}>
                 {order.status}
               </em>
