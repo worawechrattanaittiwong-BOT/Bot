@@ -596,7 +596,7 @@ export class CloudCustomerController {
   }
 
   @Get("orders") async orders(@Req() req: any) {
-    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
+    return (await this.db.query(`SELECT o.id,o.months,o.quantity,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
       o.list_price_usd_cents,o.final_price_usd_cents,o.fx_rate_usd_thb,o.fx_source,o.fx_quoted_at,
       s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number,ls.slot_type
       FROM cloud_orders o
@@ -604,7 +604,7 @@ export class CloudCustomerController {
       LEFT JOIN license_slots ls ON ls.id=o.slot_id
       LEFT JOIN bot_instances b ON b.slot_id=o.slot_id
       LEFT JOIN mt5_accounts a ON a.id=b.mt5_account_id
-      WHERE o.user_id=$1 ORDER BY o.created_at DESC LIMIT 50`, [req.user.sub])).rows;
+      WHERE o.user_id=$1 AND o.parent_order_id IS NULL ORDER BY o.created_at DESC LIMIT 50`, [req.user.sub])).rows;
   }
   @Post("orders/:id/verify-slip")
   async verifySlip(
@@ -684,7 +684,7 @@ export class CloudCustomerController {
     return { ok:true, addonPackages:(await this.db.query("SELECT * FROM cloud_addon_packages ORDER BY months")).rows };
   }
 
-  @Post("checkout") async checkout(@Req() req: any, @Body() body: { months: number; slotId?: string; promoCode?: string; purchaseType?: "PACKAGE" | "ADDON" }) {
+  @Post("checkout") async checkout(@Req() req: any, @Body() body: { months: number; slotId?: string; promoCode?: string; purchaseType?: "PACKAGE" | "ADDON"; quantity?: number }) {
     const quote = await getUsdThbQuote();
     if (paymentMode() === "UNCONFIGURED" || (paymentMode() !== "EASYSLIP" && process.env.CLOUD_CHECKOUT_ENABLED !== "true")) throw new ConflictException("ยังไม่เปิดรับชำระเงิน");
     if (![1,3,6,12].includes(body.months)) throw new BadRequestException("Invalid package");
@@ -753,6 +753,14 @@ export class CloudCustomerController {
       const addonFlow =
         (!slot && purchaseType === "ADDON") ||
         String(slot?.slot_type || "").toUpperCase() === "ADDON";
+      const requestedQuantity = Math.trunc(Number(body.quantity ?? 1));
+      if (!Number.isInteger(requestedQuantity) || requestedQuantity < 1 || requestedQuantity > 10) {
+        throw new BadRequestException("จำนวน VPS Slot ต้องอยู่ระหว่าง 1–10");
+      }
+      const quantity = !slot && addonFlow ? requestedQuantity : 1;
+      if ((slot || !addonFlow) && requestedQuantity !== 1) {
+        throw new BadRequestException("กำหนดจำนวนมากกว่า 1 ได้เฉพาะการซื้อ VPS Slot เสริมใหม่");
+      }
 
       if (slot && String(slot.slot_type || "").toUpperCase() === "PERSONAL" && purchaseType === "RENEW") {
         throw new ConflictException("Slot #1 เป็นแพ็กเกจหลัก กรุณาต่ออายุจากหน้าแพ็กเกจ");
@@ -812,13 +820,43 @@ export class CloudCustomerController {
       const reservedHealthy = reserved ? (await tx.query(`SELECT runner_id FROM worker_nodes
         WHERE runner_id=$1 AND last_seen_at>now()-interval '30 seconds'
           AND telemetry->>'templateReady'='true' AND NOT capacity_blocked AND NOT quarantined`, [reserved.runner_id])).rows[0] : null;
-      const node = reservedHealthy || (await tx.query(`SELECT w.runner_id FROM worker_nodes w JOIN cloud_node_load l USING(runner_id)
-        WHERE w.accepting_jobs AND w.last_seen_at>now()-interval '30 seconds' AND w.telemetry->>'templateReady'='true'
-        AND NOT w.capacity_blocked AND NOT w.quarantined
-        AND GREATEST(l.occupied,w.active_instances)<w.capacity
-        ORDER BY GREATEST(l.occupied,w.active_instances)::float/w.capacity,w.runner_id LIMIT 1`)).rows[0];
-      if (!node) throw new ConflictException("Cloud เต็มหรือ VPS ยังไม่ผ่าน Health Guard กรุณาลองภายหลัง");
-      const listPriceUsdCents = Math.max(0, Math.trunc(Number(pricingPack.price_usd_cents || 0)));
+
+      const runnerAllocations:string[] = [];
+      if (reservedHealthy) {
+        runnerAllocations.push(String(reservedHealthy.runner_id));
+      } else {
+        const capacityRows = (await tx.query(`
+          SELECT
+            w.runner_id,
+            GREATEST(0,w.capacity-GREATEST(l.occupied,w.active_instances))::int free_slots,
+            GREATEST(l.occupied,w.active_instances)::float/NULLIF(w.capacity,0) load_ratio
+          FROM worker_nodes w
+          JOIN cloud_node_load l USING(runner_id)
+          WHERE w.accepting_jobs
+            AND w.last_seen_at>now()-interval '30 seconds'
+            AND w.telemetry->>'templateReady'='true'
+            AND NOT w.capacity_blocked
+            AND NOT w.quarantined
+            AND GREATEST(l.occupied,w.active_instances)<w.capacity
+          ORDER BY load_ratio,w.runner_id`)).rows;
+        for (const row of capacityRows) {
+          const free = Math.max(0, Math.trunc(Number(row.free_slots || 0)));
+          for (let seat=0; seat<free && runnerAllocations.length<quantity; seat+=1) {
+            runnerAllocations.push(String(row.runner_id));
+          }
+          if (runnerAllocations.length>=quantity) break;
+        }
+      }
+      if (runnerAllocations.length < quantity) {
+        throw new ConflictException(
+          quantity > 1
+            ? "VPS Slot ว่างไม่พอสำหรับจำนวนที่เลือก กรุณาลดจำนวน Slot หรือลองใหม่ภายหลัง"
+            : "Cloud เต็มหรือ VPS ยังไม่ผ่าน Health Guard กรุณาลองภายหลัง"
+        );
+      }
+      const node = { runner_id:runnerAllocations[0] };
+      const unitListPriceUsdCents = Math.max(0, Math.trunc(Number(pricingPack.price_usd_cents || 0)));
+      const listPriceUsdCents = unitListPriceUsdCents * quantity;
       const originalAmountSatang = usdCentsToThbSatang(listPriceUsdCents, quote.usdThb);
       const promo = await this.promotions.reserve(tx, {
         code: body.promoCode,
@@ -831,12 +869,13 @@ export class CloudCustomerController {
       const order = (await tx.query(
         `INSERT INTO cloud_orders(
            user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,runner_id,slot_id,purchase_type,
-           list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+           list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at,quantity,runner_allocations
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb) RETURNING *`,
         [req.user.sub, pricingPack.months, promo.finalAmountSatang, originalAmountSatang,
          promo.discountAmountSatang, promo.code, promo.redemptionId, node.runner_id, slot?.id || null,
          addonFlow ? "ADDON" : "PACKAGE",
-         listPriceUsdCents, finalPriceUsdCents, quote.usdThb, quote.source, quote.quotedAt]
+         listPriceUsdCents, finalPriceUsdCents, quote.usdThb, quote.source, quote.quotedAt,
+         quantity, JSON.stringify(runnerAllocations)]
       )).rows[0];
       await this.promotions.attachOrder(tx, promo.redemptionId, order.id);
       return order;
@@ -855,7 +894,7 @@ export class CloudCustomerController {
     }
     try {
       const charge = await this.cloud.gateway("/charges", new URLSearchParams({ amount: String(order.amount), currency: "thb",
-        "source[type]": "promptpay", "metadata[order_id]": order.id, "metadata[purchase_type]": "CLOUD", description: "SCENOVA Cloud " + order.months + " months",
+        "source[type]": "promptpay", "metadata[order_id]": order.id, "metadata[purchase_type]": "CLOUD", description: "SCENOVA Cloud " + order.months + " months x" + Number(order.quantity || 1),
         expires_at: new Date(Date.now()+15*60000).toISOString() }));
       validateCharge(charge, order);
       await this.db.query("UPDATE cloud_orders SET charge_id=$2,qr_url=$3,expires_at=$4,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=$1",
@@ -953,8 +992,10 @@ export class CloudAdminController {
         a.account_number,u.user_code,CASE WHEN c.mt5_account_id IS NULL THEN false ELSE true END credential_ready
         FROM bot_instances b LEFT JOIN mt5_accounts a ON a.id=b.mt5_account_id LEFT JOIN users u ON u.id=a.user_id
         LEFT JOIN mt5_credentials c ON c.mt5_account_id=a.id WHERE b.mode='CLOUD' ORDER BY b.created_at DESC LIMIT 100`),
-      this.db.query(`SELECT o.id,o.months,o.amount,o.status,o.charge_id,o.runner_id,o.slot_id,o.created_at,u.user_code
-        FROM cloud_orders o JOIN users u ON u.id=o.user_id ORDER BY o.created_at DESC LIMIT 100`)
+      this.db.query(`SELECT o.id,o.months,o.quantity,o.amount,o.status,o.charge_id,o.runner_id,o.slot_id,o.created_at,u.user_code
+        FROM cloud_orders o JOIN users u ON u.id=o.user_id
+        WHERE o.parent_order_id IS NULL
+        ORDER BY o.created_at DESC LIMIT 100`)
     ]);
     return { ...catalog,nodes,instances:instances.rows,orders:orders.rows };
   }
