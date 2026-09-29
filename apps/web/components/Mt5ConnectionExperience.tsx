@@ -14,6 +14,8 @@ type VpsMoveProps = {
     status?: string;
     stage?: string;
     message?: string;
+    targetMode?: "LOCAL" | "CLOUD" | string;
+    targetSlotId?: string;
   } | null;
   onMove?: () => void;
   onRetry?: () => void;
@@ -50,6 +52,8 @@ export function VpsMigrationProgressCard(props: {
   if (!progress) return null;
 
   const status = String(progress.status || "RUNNING").toUpperCase();
+  const targetMode = String(progress.targetMode || "CLOUD").toUpperCase();
+  const movingToLocal = targetMode === "LOCAL";
   return (
     <div className={styles.vpsMove}>
       <div className={
@@ -65,17 +69,17 @@ export function VpsMigrationProgressCard(props: {
             {status === "SUCCESS" ? "✓" : status === "FAILED" ? "!" : "↻"}
           </span>
           <div>
-            <small>SCENOVA VPS</small>
+            <small>{movingToLocal ? "SCENOVA LOCAL" : "SCENOVA VPS"}</small>
             <b>
               {status === "SUCCESS"
-                ? "ย้ายระบบสำเร็จ · พร้อมเริ่ม"
+                ? movingToLocal ? "ย้ายกลับ Local สำเร็จ" : "ย้ายระบบสำเร็จ · พร้อมเริ่ม"
                 : status === "FAILED"
                   ? "ย้ายระบบไม่สำเร็จ"
-                  : "กำลังย้ายระบบ"}
+                  : movingToLocal ? "กำลังย้ายกลับ Local" : "กำลังย้ายระบบ"}
             </b>
           </div>
         </div>
-        <p>{progress.message || "กำลังเตรียมระบบ VPS"}</p>
+        <p>{progress.message || (movingToLocal ? "กำลังเตรียมระบบ Local" : "กำลังเตรียมระบบ VPS")}</p>
         {status === "RUNNING" && (
           <div className={styles.vpsProgressBar} aria-hidden="true"><i/></div>
         )}
