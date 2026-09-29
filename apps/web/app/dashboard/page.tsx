@@ -40,7 +40,7 @@ type BrokerCatalog = {
 type CloudCatalog = {
   packages: Array<{ months:number; price_satang:number; enabled:boolean; updated_at?:string }>;
   addonPackages: Array<{ months:number; price_satang:number; enabled:boolean; updated_at?:string }>;
-  available: number;
+  available?: number;
   provisioningPaused: boolean;
   salesPaused: boolean;
   paymentMode: string;
@@ -4592,11 +4592,13 @@ function VpsSlotManager(props:{
           <h2>VPS Slots ของคุณ</h2>
         </div>
         <div className="vps-slot-manager-actions">
-          <span className={"vps-capacity-pill " + (props.capacity>0 ? "good" : "bad")}>
-            <i/> Capacity {Math.max(0,props.capacity)}
-          </span>
           {props.ownerCanPrice && (
-            <button type="button" className="btn ghost" onClick={props.onConfigurePricing}>ตั้งราคา Slot เสริม</button>
+            <>
+              <span className={"vps-capacity-pill " + (props.capacity>0 ? "good" : "bad")}>
+                <i/> Capacity {Math.max(0,props.capacity)}
+              </span>
+              <button type="button" className="btn ghost" onClick={props.onConfigurePricing}>ตั้งราคา Slot เสริม</button>
+            </>
           )}
           <button type="button" className="btn primary" disabled={!props.canBuy} onClick={props.onBuy}>+ ซื้อ Slot เสริม</button>
         </div>
