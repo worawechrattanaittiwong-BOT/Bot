@@ -62,7 +62,6 @@ type CloudCatalog = {
 type CloudOrder = {
   id:string;
   months:number;
-  quantity?:number;
   amount:number;
   original_amount?:number|null;
   discount_amount?:number|null;
@@ -222,7 +221,6 @@ export default function DashboardPage() {
   const [cloudCatalog, setCloudCatalog] = useState<CloudCatalog | null>(null);
   const [cloudOrders, setCloudOrders] = useState<CloudOrder[]>([]);
   const [vpsPurchaseMonths, setVpsPurchaseMonths] = useState(1);
-  const [vpsPurchaseQuantity, setVpsPurchaseQuantity] = useState(1);
   const [vpsRenewSlotId, setVpsRenewSlotId] = useState("");
   const [vpsPaymentOrderId, setVpsPaymentOrderId] = useState("");
   const [vpsPurchaseBusy, setVpsPurchaseBusy] = useState(false);
@@ -1322,9 +1320,6 @@ export default function DashboardPage() {
     .sort((a,b)=>Number(a.months)-Number(b.months));
   const selectedVpsPackage = vpsPackages.find(pack=>Number(pack.months)===Number(vpsPurchaseMonths)) || vpsPackages[0] || null;
   const vpsRenewSlot = cloudSlots.find((slot:any)=>String(slot?.id || "")===String(vpsRenewSlotId || "")) || null;
-  const vpsSlotQuantity = vpsRenewSlot ? 1 : Math.max(1,Math.min(10,Math.trunc(Number(vpsPurchaseQuantity)||1)));
-  const vpsSlotTotalUsdCents = Math.max(0,Number(selectedVpsPackage?.price_usd_cents || 0)) * vpsSlotQuantity;
-  const vpsSlotTotalEstimatedSatang = Math.max(0,Number(selectedVpsPackage?.estimated_price_satang || 0)) * vpsSlotQuantity;
   const canBuyVpsSlot = Boolean(cloudCatalog?.checkoutEnabled) &&
     primaryCloudActive &&
     cloudCatalog?.capacityAvailable !== false;
@@ -2056,7 +2051,6 @@ export default function DashboardPage() {
       .filter(pack=>pack.enabled && Number(pack.price_satang) > 0)
       .sort((a,b)=>Number(a.months)-Number(b.months));
     setVpsPurchaseMonths(Number(enabledPackages[0]?.months || 1));
-    setVpsPurchaseQuantity(1);
     setVpsSlipFile(null);
     setOwnerAddonPriceEditorOpen(false);
 
@@ -2081,7 +2075,6 @@ export default function DashboardPage() {
     }
     setOwnerAddonPrices(next);
     setOwnerAddonPriceEditorOpen(true);
-    setVpsPurchaseQuantity(1);
     setVpsRenewSlotId("");
     setVpsPaymentOrderId("");
     setVpsSlipFile(null);
@@ -2132,7 +2125,7 @@ export default function DashboardPage() {
           months:vpsPurchaseMonths,
           ...(vpsRenewSlotId
             ? { slotId:vpsRenewSlotId }
-            : { purchaseType:"ADDON", quantity:vpsSlotQuantity })
+            : { purchaseType:"ADDON" })
         })
       });
       if (result?.free) {
@@ -2141,10 +2134,7 @@ export default function DashboardPage() {
         const targetSlotId = String(paidOrder?.slot_id || vpsRenewSlotId || selectedSlotIdRef.current || "");
         await load(targetSlotId);
         vpsSlotDialogRef.current?.close();
-        const purchasedQuantity = Math.max(1,Number(paidOrder?.quantity || result?.quantity || vpsSlotQuantity));
-        setNotice(vpsRenewSlotId
-          ? "ต่ออายุ VPS Slot เสริมเรียบร้อยแล้ว"
-          : "เพิ่ม VPS Slot เสริม " + purchasedQuantity + " Slot เรียบร้อยแล้ว");
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เสริมเรียบร้อยแล้ว" : "เพิ่ม VPS Slot เสริมเรียบร้อยแล้ว");
         return;
       }
       setVpsPaymentOrderId(String(result?.id || ""));
@@ -2189,10 +2179,7 @@ export default function DashboardPage() {
         vpsSlotDialogRef.current?.close();
         setVpsPaymentOrderId("");
         setVpsSlipFile(null);
-        const purchasedQuantity = Math.max(1,Number(paidOrder?.quantity || vpsSlotQuantity));
-        setNotice(vpsRenewSlotId
-          ? "ต่ออายุ VPS Slot เสริมสำเร็จ"
-          : "ชำระสำเร็จ · เพิ่ม VPS Slot เสริม " + purchasedQuantity + " Slot แล้ว");
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เสริมสำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot เสริมใหม่แล้ว");
       }
     } catch (e:any) {
       setError(String(e?.message || "ตรวจสลิปไม่สำเร็จ"));
@@ -2213,10 +2200,7 @@ export default function DashboardPage() {
         await load(targetSlotId);
         vpsSlotDialogRef.current?.close();
         setVpsPaymentOrderId("");
-        const purchasedQuantity = Math.max(1,Number(order.quantity || vpsSlotQuantity));
-        setNotice(vpsRenewSlotId
-          ? "ต่ออายุ VPS Slot เสริมสำเร็จ"
-          : "ชำระสำเร็จ · เพิ่ม VPS Slot เสริม " + purchasedQuantity + " Slot แล้ว");
+        setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เสริมสำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot เสริมใหม่แล้ว");
       }
     } catch (e:any) {
       setError(String(e?.message || "ตรวจสอบการชำระเงินไม่สำเร็จ"));
@@ -4433,34 +4417,10 @@ export default function DashboardPage() {
                   </div>
                 </section>
 
-                {!vpsRenewSlot && (
-                  <section className="vps-slot-quantity-section">
-                    <div>
-                      <span className="vps-slot-dialog-label">จำนวน Slot</span>
-                      <small>ซื้อพร้อมกันได้สูงสุด 10 Slot ต่อรายการ</small>
-                    </div>
-                    <div className="vps-slot-quantity-stepper" aria-label="จำนวน VPS Slot">
-                      <button
-                        type="button"
-                        disabled={vpsPurchaseBusy || vpsSlotQuantity<=1}
-                        onClick={()=>setVpsPurchaseQuantity(current=>Math.max(1,Math.trunc(Number(current)||1)-1))}
-                        aria-label="ลดจำนวน Slot"
-                      >−</button>
-                      <b>{vpsSlotQuantity}</b>
-                      <button
-                        type="button"
-                        disabled={vpsPurchaseBusy || vpsSlotQuantity>=10}
-                        onClick={()=>setVpsPurchaseQuantity(current=>Math.min(10,Math.trunc(Number(current)||1)+1))}
-                        aria-label="เพิ่มจำนวน Slot"
-                      >+</button>
-                    </div>
-                  </section>
-                )}
-
                 <section className="vps-slot-order-summary">
                   <div>
                     <span>{vpsRenewSlot ? "ต่ออายุ Slot เสริม" : "VPS Slot เสริมใหม่"}</span>
-                    <b>{vpsRenewSlot ? "#" + vpsRenewSlot.slot_number : "เพิ่ม " + vpsSlotQuantity + " Slot"}</b>
+                    <b>{vpsRenewSlot ? "#" + vpsRenewSlot.slot_number : "เพิ่ม 1 Slot"}</b>
                   </div>
                   <div>
                     <span>ระยะเวลา</span>
@@ -4468,13 +4428,8 @@ export default function DashboardPage() {
                   </div>
                   <div className="total">
                     <span>ราคา</span>
-                    <b>${formatUsdCents(vpsSlotTotalUsdCents)} USD</b>
-                    <small>
-                      {vpsRenewSlot || vpsSlotQuantity===1
-                        ? "ประมาณ ฿" + formatThbSatang(vpsSlotTotalEstimatedSatang) + " THB"
-                        : "$" + formatUsdCents(selectedVpsPackage?.price_usd_cents) + " × " + vpsSlotQuantity +
-                          " · ประมาณ ฿" + formatThbSatang(vpsSlotTotalEstimatedSatang) + " THB"}
-                    </small>
+                    <b>${formatUsdCents(selectedVpsPackage?.price_usd_cents)} USD</b>
+                    <small>ประมาณ ฿{formatThbSatang(selectedVpsPackage?.estimated_price_satang)} THB</small>
                   </div>
                 </section>
 
@@ -4553,7 +4508,6 @@ export default function DashboardPage() {
                   <div className="vps-slot-payment-info">
                     <span className="eyebrow">VPS SLOT / {vpsPaymentOrder.id.slice(0,8)}</span>
                     <h3>
-                      {Number(vpsPaymentOrder.quantity || 1) > 1 ? Number(vpsPaymentOrder.quantity) + " Slots · " : ""}
                       {vpsPaymentOrder.months} เดือน · {Number(vpsPaymentOrder.final_price_usd_cents || 0) > 0
                         ? `$${formatUsdCents(vpsPaymentOrder.final_price_usd_cents)} USD`
                         : "USD —"}

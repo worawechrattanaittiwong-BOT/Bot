@@ -13,9 +13,6 @@ const onboarding = read("apps/web/app/onboarding/page.tsx");
 const dashboard = read("apps/web/app/dashboard/page.tsx");
 const mt5Connect = read("apps/web/components/Mt5ConnectionExperience.tsx");
 const botApi = read("apps/api/src/bot.controller.ts");
-const cloudApi = read("apps/api/src/cloud.controller.ts");
-const easySlip = read("apps/api/src/easyslip-payment.service.ts");
-const cloudQuantityMigration = read("database/055_cloud_addon_quantity.sql");
 
 assert.match(sms, /purpose:\s*"ACCOUNT" \| "LOCAL_TRIAL"/);
 assert.match(sms, /THAIBULKSMS_LIVE_MODE/);
@@ -74,14 +71,5 @@ assert.match(mt5Connect, /ย้ายไป VPS/);
 assert.match(mt5Connect, /onClick=\{props\.vpsMove\.onMove\}/);
 assert.match(mt5Connect, /props\.vpsMove\.progress/);
 assert.match(dashboard, /ย้ายระบบไป VPS สำเร็จ/);
-assert.match(dashboard, /vpsPurchaseQuantity/);
-assert.match(dashboard, /vps-slot-quantity-stepper/);
-assert.match(dashboard, /quantity:vpsSlotQuantity/);
-assert.match(cloudApi, /quantity\?: number/);
-assert.match(cloudApi, /VPS Slot ว่างไม่พอสำหรับจำนวนที่เลือก/);
-assert.match(cloudApi, /parent_order_id/);
-assert.match(easySlip, /provisionCloudOrderSlots/);
-assert.match(cloudQuantityMigration, /cloud_orders_quantity_check/);
-assert.match(cloudQuantityMigration, /runner_allocations/);
 
 console.log("Customer onboarding, Local Trial SMS, and VPS migration contract PASS");
