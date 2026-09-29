@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.91"
-#define SCENOVA_EA_VERSION "1.0.91"
-#define SCENOVA_PRODUCT_VERSION "1.0.91"
+#property version   "1.0.92"
+#define SCENOVA_EA_VERSION "1.0.92"
+#define SCENOVA_PRODUCT_VERSION "1.0.92"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -4307,9 +4307,9 @@ bool ManageRaceBasket(double momentum)
       RaceResetExitCandidate();
    }
 
-   // User-controlled RACE close-all target. This check intentionally runs
-   // before wrong-direction analysis and per-ticket profit harvesting so a
-   // reached target is acted on immediately with the existing close command.
+   // User-controlled RACE close-all target. "Per round" means the
+   // currently-open MT5 RACE Basket only: once its live floating profit reaches
+   // the configured amount, close every open RACE position immediately.
    bool raceBasketProfitTarget =
       g_raceProfitTargetMode == "BASKET" &&
       g_raceCloseAllProfitMoney > 0.0;
@@ -4320,7 +4320,7 @@ bool ManageRaceBasket(double momentum)
       raceBasketProfitTarget || racePerPositionProfitTarget;
 
    if(raceBasketProfitTarget &&
-      cycleProfit >= g_raceCloseAllProfitMoney)
+      floatingProfit >= g_raceCloseAllProfitMoney)
    {
       RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET");
       return true;
@@ -4521,7 +4521,7 @@ bool FastProfitClosePriority()
       g_raceProfitTargetMode=="BASKET" &&
       g_raceCloseAllProfitMoney>0.0;
    if(raceBasketProfitTarget &&
-      BasketCycleProfit()>=g_raceCloseAllProfitMoney)
+      BasketProfit()>=g_raceCloseAllProfitMoney)
    {
       RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET");
       return true;
