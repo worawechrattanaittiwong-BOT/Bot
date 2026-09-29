@@ -522,6 +522,7 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       FROM bot_instances bi
       JOIN mt5_accounts a ON a.id=bi.mt5_account_id
       JOIN users u ON u.id=a.user_id
+      WHERE bi.slot_id IS NULL
       ON CONFLICT (id) DO NOTHING;
 
       UPDATE bot_instances
