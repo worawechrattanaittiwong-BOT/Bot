@@ -55,10 +55,10 @@ expect(files.security.includes("x-payout-worker-key"), "separate payout worker k
 
 expect(files.api.includes("scenova_device_id"), "stable device risk id missing");
 expect(files.api.includes("x-scenova-device-id"), "device risk header missing");
-expect(files.admin.includes("Fraud Risk · Dual Approval · Kill Switch"), "phase 3 admin UI missing");
-expect(files.admin.includes("ACTIVATE KILL SWITCH"), "kill switch UI missing");
+expect(files.admin.includes("ความเสี่ยงและการอนุมัติ") && files.admin.includes("อนุมัติ 2 คนเมื่อ ≥ THB"), "phase 3 risk / dual approval admin UI missing");
+expect(files.admin.includes("หยุดการถอนฉุกเฉิน") && files.admin.includes("toggleKillSwitch"), "kill switch UI missing");
 expect(files.admin.includes("Auto Payout"), "auto payout UI missing");
-expect(files.admin.includes("Fraud & Reconciliation Alerts"), "alert UI missing");
+expect(files.admin.includes("การแจ้งเตือน") && files.admin.includes("Manual Reconciliation"), "alert / reconciliation UI missing");
 expect(files.admin.includes("Reconcile as Paid"), "manual reconciliation UI missing");
 
 expect(files.deploy.includes("database/035_withdrawal_advanced_security.sql"), "phase 3 production migration missing");
