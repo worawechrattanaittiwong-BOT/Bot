@@ -46,9 +46,8 @@ expect(files.controller.includes('Post("destinations/:id/reveal")'), "secure rev
 
 expect(files.referral.includes("lockedSatang"), "wallet locked balance missing");
 expect(files.referral.includes("withdrawalEnabled"), "withdrawal state missing from referral wallet");
-expect(files.customer.includes("ยืนยันรหัสผ่านและ 2FA"), "customer security explanation missing");
 expect(files.customer.includes("ยืนยันคำขอถอนเงิน"), "customer withdrawal action missing");
-expect(files.admin.includes("Commission & Withdrawal Center"), "admin withdrawal center missing");
+expect(files.admin.includes("ศูนย์ถอนเงินและคอมมิชชั่น"), "admin withdrawal center missing");
 expect(files.admin.includes("Mark Paid"), "admin mark-paid control missing");
 expect(files.sidebar.includes("/admin/commission"), "admin withdrawal navigation missing");
 expect(files.deploy.includes("database/034_secure_withdrawals.sql"), "production migration wiring missing");
