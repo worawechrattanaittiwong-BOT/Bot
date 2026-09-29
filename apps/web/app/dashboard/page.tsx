@@ -115,6 +115,22 @@ function formatThbSatang(value: unknown) {
     maximumFractionDigits: 2
   });
 }
+
+function maskPaymentAccountNumber(value: unknown) {
+  const text = String(value || "").replace(/\s+/g, "");
+  if (!text) return "";
+  return text.length <= 4 ? text : "•••• " + text.slice(-4);
+}
+
+function formatPaymentDate(value: unknown) {
+  const date = new Date(String(value || ""));
+  if (!Number.isFinite(date.getTime())) return "—";
+  return date.toLocaleString("th-TH", {
+    dateStyle:"medium",
+    timeStyle:"short",
+    hour12:false
+  });
+}
 const defaultSettings = {
   symbol: "XAUUSD",
   lot: 0.01,
@@ -2214,6 +2230,40 @@ export default function DashboardPage() {
     }
   }
 
+  async function downloadVpsSlotQr() {
+    const qrSrc = String(vpsPaymentOrder?.qr_url || "");
+    if (!qrSrc || !vpsPaymentOrder) return;
+    const filename =
+      "SCENOVA-VPS-SLOT-" +
+      vpsPaymentOrder.months +
+      "M-" +
+      vpsPaymentOrder.id.slice(0,8) +
+      "-QR.png";
+    const save = (href:string) => {
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = filename;
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    };
+    if (qrSrc.startsWith("data:image/")) {
+      save(qrSrc);
+      return;
+    }
+    try {
+      const response = await fetch(qrSrc, { cache:"no-store" });
+      if (!response.ok) throw new Error("QR download failed");
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      save(objectUrl);
+      window.setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);
+    } catch {
+      window.open(qrSrc,"_blank","noopener,noreferrer");
+    }
+  }
+
   function selectSlot(slotId: string) {
     if (!slotId || slotId === selectedSlotIdRef.current) return;
     settingsDirtyRef.current = false;
@@ -4261,7 +4311,7 @@ export default function DashboardPage() {
 
         <dialog
           ref={vpsSlotDialogRef}
-          className="vps-slot-dialog"
+          className={`vps-slot-dialog ${vpsPaymentOrder ? "vps-slot-dialog-checkout" : ""}`}
           onCancel={event=>{
             event.preventDefault();
             if (!vpsPurchaseBusy) void cancelVpsSlotOrder(true);
@@ -4274,7 +4324,11 @@ export default function DashboardPage() {
           <div className="vps-slot-dialog-shell">
             <header className="vps-slot-dialog-head">
               <div>
-                {ownerAddonPriceEditorOpen && <div className="eyebrow">OWNER · ADD-ON PRICING</div>}
+                {ownerAddonPriceEditorOpen ? (
+                  <div className="eyebrow">OWNER · ADD-ON PRICING</div>
+                ) : vpsPaymentOrder ? (
+                  <div className="eyebrow">SCENOVA CHECKOUT</div>
+                ) : null}
                 <h2>
                   {ownerAddonPriceEditorOpen
                     ? "ตั้งราคา VPS Slot เสริม"
@@ -4284,6 +4338,7 @@ export default function DashboardPage() {
                         ? "ต่ออายุ VPS Slot เสริม #" + vpsRenewSlot.slot_number
                         : "ซื้อ VPS Slot เสริม"}
                 </h2>
+                {vpsPaymentOrder && <p>สแกน QR และแนบสลิปได้ในหน้าต่างนี้</p>}
               </div>
               <div className="vps-slot-dialog-head-actions">
                 {String(data.user?.role || "").toUpperCase()==="OWNER" && !ownerAddonPriceEditorOpen && !vpsPaymentOrder && (
@@ -4401,71 +4456,141 @@ export default function DashboardPage() {
               </>
             ) : (
               <section className="vps-slot-payment-stage">
-                <div className="vps-slot-payment-summary">
-                  <div>
-                    <span>ระยะเวลา</span>
-                    <b>{vpsPaymentOrder.months} เดือน</b>
-                  </div>
-                  <div className="total">
-                    <span>ราคา</span>
-                    <b>{Number(vpsPaymentOrder.final_price_usd_cents || 0) > 0 ? `$${formatUsdCents(vpsPaymentOrder.final_price_usd_cents)} USD` : "USD —"}</b>
-                    <small>ยอดชำระจริง ฿{formatThbSatang(vpsPaymentOrder.amount)} THB</small>
-                  </div>
+                <div className="vps-slot-checkout-steps" aria-label="ขั้นตอนชำระเงิน">
+                  <span className="done"><b>01</b> ยืนยัน Slot</span>
+                  <i/>
+                  <span className="active"><b>02</b> สแกน + แนบสลิป</span>
                 </div>
 
-                {vpsPaymentOrder.qr_url ? (
-                  <div className="vps-slot-qr-wrap">
-                    <img src={vpsPaymentOrder.qr_url} alt="QR ชำระเงิน VPS Slot"/>
-                  </div>
-                ) : String(cloudCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" ? (
-                  <div className="vps-slot-bank-card">
-                    <span className="vps-slot-bank-icon"><ScenovaIcon name="wallet" size={24}/></span>
-                    <div>
-                      <b>{vpsPaymentAccount?.nameTh || vpsPaymentAccount?.nameEn || "SCENOVA"}</b>
-                      <strong>{vpsPaymentAccount?.bankNumber || "—"}</strong>
-                      <span>{vpsPaymentAccount?.bankShortCode || "BANK"}{vpsPaymentAccount?.bankName ? " · " + vpsPaymentAccount.bankName : ""}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="vps-slot-capacity-warning">QR ยังไม่พร้อม กรุณาลองใหม่</div>
-                )}
+                <article className="vps-slot-payment-card">
+                  <div className="vps-slot-payment-qr-panel">
+                    {vpsPaymentOrder.qr_url ? (
+                      <div className="vps-slot-payment-qr">
+                        <img
+                          src={vpsPaymentOrder.qr_url}
+                          alt="QR ชำระเงิน VPS Slot"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                    ) : (
+                      <div className="vps-slot-payment-qr vps-slot-payment-qr-empty">
+                        <ScenovaIcon name="wallet" size={32}/>
+                        <span>QR ยังไม่พร้อม</span>
+                      </div>
+                    )}
+                    <span>สแกนด้วย Mobile Banking</span>
+                    <b>฿{formatThbSatang(vpsPaymentOrder.amount)} THB</b>
 
-                {String(cloudCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" ? (
-                  <>
-                    <label className="vps-slot-slip-upload">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/gif,image/webp"
-                        disabled={vpsPurchaseBusy}
-                        onChange={e=>setVpsSlipFile(e.target.files?.[0] || null)}
-                      />
-                      <span>{vpsSlipFile ? vpsSlipFile.name : "แนบรูปสลิป"}</span>
-                    </label>
-
-                    {vpsSlipPreview && (
-                      <div className="vps-slot-slip-preview">
-                        <img src={vpsSlipPreview} alt="ตัวอย่างสลิป"/>
+                    {vpsPaymentAccount && (
+                      <div className="vps-slot-payment-recipient-mini">
+                        <small>ชื่อผู้รับที่ต้องตรวจสอบ</small>
+                        <strong>{vpsPaymentAccount.nameTh || vpsPaymentAccount.nameEn || "SCENOVA"}</strong>
+                        <span>
+                          {vpsPaymentAccount.bankShortCode || vpsPaymentAccount.bankName || "BANK"}
+                          {vpsPaymentAccount.bankNumber
+                            ? " · " + maskPaymentAccountNumber(vpsPaymentAccount.bankNumber)
+                            : ""}
+                        </span>
                       </div>
                     )}
 
-                    <button
-                      type="button"
-                      className="btn primary btn-lg"
-                      disabled={vpsPurchaseBusy || !vpsSlipFile}
-                      onClick={()=>void verifyVpsSlotSlip()}
-                    >
-                      {vpsPurchaseBusy ? "กำลังยืนยัน..." : "ยืนยันการชำระเงิน"}
-                    </button>
-                  </>
-                ) : (
-                  <button type="button" className="btn primary btn-lg" disabled={vpsPurchaseBusy} onClick={()=>void refreshVpsSlotOrder()}>
-                    {vpsPurchaseBusy ? "กำลังตรวจสอบ..." : "ตรวจสอบการชำระเงิน"}
-                  </button>
-                )}
+                    {vpsPaymentOrder.qr_url && (
+                      <button
+                        type="button"
+                        className="vps-slot-download-qr"
+                        disabled={vpsPurchaseBusy}
+                        onClick={()=>void downloadVpsSlotQr()}
+                      >
+                        <ScenovaIcon name="download" size={15}/>
+                        <span>ดาวน์โหลด QR</span>
+                      </button>
+                    )}
+                  </div>
 
-                <button type="button" className="btn ghost vps-slot-cancel-order" disabled={vpsPurchaseBusy} onClick={()=>void cancelVpsSlotOrder(true)}>
-                  ยกเลิกรายการ
-                </button>
+                  <div className="vps-slot-payment-info">
+                    <span className="eyebrow">VPS SLOT / {vpsPaymentOrder.id.slice(0,8)}</span>
+                    <h3>
+                      {vpsPaymentOrder.months} เดือน · {Number(vpsPaymentOrder.final_price_usd_cents || 0) > 0
+                        ? `$${formatUsdCents(vpsPaymentOrder.final_price_usd_cents)} USD`
+                        : "USD —"}
+                    </h3>
+
+                    {String(cloudCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" ? (
+                      <>
+                        <p>
+                          สแกน QR ตามยอดจริง <b>฿{formatThbSatang(vpsPaymentOrder.amount)} THB</b> แล้วแนบสลิปด้านล่าง
+                          ระบบจะตรวจยอด บัญชีผู้รับ และสลิปซ้ำก่อนเปิดสิทธิ์
+                        </p>
+
+                        {vpsPaymentAccount && (
+                          <div className="vps-slot-recipient-check">
+                            <span>ตรวจสอบก่อนกดยืนยันโอน</span>
+                            <b>{vpsPaymentAccount.nameTh || vpsPaymentAccount.nameEn || "SCENOVA"}</b>
+                            <small>
+                              {vpsPaymentAccount.bankName || vpsPaymentAccount.bankShortCode || "บัญชีที่ยืนยันกับ EasySlip"}
+                              {vpsPaymentAccount.bankNumber
+                                ? " · " + maskPaymentAccountNumber(vpsPaymentAccount.bankNumber)
+                                : ""}
+                            </small>
+                            <p>ชื่อผู้รับในแอปธนาคารต้องตรงกับชื่อนี้ หากชื่อไม่ตรง กรุณาอย่าโอนเงิน</p>
+                          </div>
+                        )}
+
+                        <small className="vps-slot-payment-created">
+                          รายการสร้างเมื่อ: {formatPaymentDate(vpsPaymentOrder.created_at)}
+                        </small>
+
+                        <label className="vps-slot-slip-upload">
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            disabled={vpsPurchaseBusy}
+                            onChange={e=>setVpsSlipFile(e.target.files?.[0] || null)}
+                          />
+                          <span>{vpsSlipFile ? vpsSlipFile.name : "แนบรูปสลิป"}</span>
+                          <small>JPG / PNG / GIF / WebP · สูงสุด 4 MB</small>
+                        </label>
+
+                        {vpsSlipPreview && (
+                          <div className="vps-slot-slip-preview">
+                            <img src={vpsSlipPreview} alt="ตัวอย่างสลิป"/>
+                          </div>
+                        )}
+
+                        <div className="vps-slot-payment-actions">
+                          <button
+                            type="button"
+                            className="btn primary btn-lg"
+                            disabled={vpsPurchaseBusy || !vpsSlipFile || !vpsPaymentAccount}
+                            onClick={()=>void verifyVpsSlotSlip()}
+                          >
+                            {vpsPurchaseBusy ? "กำลังดำเนินการ..." : "ตรวจสลิปและเปิดสิทธิ์"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn ghost"
+                            disabled={vpsPurchaseBusy}
+                            onClick={()=>void cancelVpsSlotOrder(true)}
+                          >
+                            ยกเลิกรายการ
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p>สแกน QR ผ่านแอปธนาคาร ระบบจะเปิดสิทธิ์อัตโนมัติหลังยืนยันยอด</p>
+                        <button
+                          type="button"
+                          className="btn ghost btn-lg"
+                          disabled={vpsPurchaseBusy}
+                          onClick={()=>void refreshVpsSlotOrder()}
+                        >
+                          {vpsPurchaseBusy ? "กำลังตรวจสอบ..." : "ตรวจสอบการชำระเงิน"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </article>
               </section>
             )}
           </div>
