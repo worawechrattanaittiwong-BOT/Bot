@@ -541,14 +541,8 @@ export default function AccountPage() {
                   </div>
                 </div>
               )}
-              {phoneLocked && (
-                <div className={styles.lockNote}>เบอร์นี้ยืนยัน OTP แล้ว จึงถูกล็อกเพื่อป้องกันการเปลี่ยนเบอร์ที่ผูกกับสิทธิ์ Trial</div>
-              )}
               {!phoneSmsAvailable && data.user.phone && !data.user.phone.verified && !open.phone && (
                 <div className={styles.lockNote}>บริการยืนยันเบอร์ผ่าน SMS ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่ภายหลัง</div>
-              )}
-              {!isOwner && !phoneLocked && data.user.phone && !open.phone && (
-                <div className={styles.lockNote}>สามารถแก้ไขหมายเลขได้จนกว่าจะยืนยันเบอร์มือถือสำเร็จ</div>
               )}
             </section>
 
