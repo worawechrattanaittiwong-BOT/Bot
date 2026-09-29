@@ -544,8 +544,21 @@ export class CloudCustomerController {
       if (controls?.cloud_provisioning_paused) throw new ConflictException("Cloud provisioning ถูกพักชั่วคราวโดยผู้ดูแล");
       const user = (await tx.query("SELECT * FROM users WHERE id=$1 FOR UPDATE", [req.user.sub])).rows[0];
       if (user?.status !== "ACTIVE") throw new ConflictException("บัญชีไม่พร้อมใช้งาน");
-      const pending = (await tx.query("SELECT id FROM cloud_orders WHERE user_id=$1 AND status IN ('CREATING','PENDING','REVIEW')", [req.user.sub])).rows[0];
-      if (pending) throw new ConflictException("มีรายการรอชำระอยู่แล้ว กรุณาตรวจสอบรายการเดิม");
+      const pending = (await tx.query(
+        "SELECT id,charge_id FROM cloud_orders WHERE user_id=$1 AND status IN ('CREATING','PENDING','REVIEW') ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
+        [req.user.sub]
+      )).rows[0];
+      if (pending) {
+        if (paymentMode() === "EASYSLIP" && !pending.charge_id) {
+          await tx.query(
+            "UPDATE cloud_orders SET status='FAILED',expires_at=now() WHERE id=$1",
+            [pending.id]
+          );
+          await this.promotions.release(tx, "CLOUD", pending.id);
+        } else {
+          throw new ConflictException("มีรายการรอชำระอยู่แล้ว กรุณาตรวจสอบรายการเดิม");
+        }
+      }
       const purchaseType = body.slotId
         ? "RENEW"
         : String(body.purchaseType || "PACKAGE").toUpperCase();
