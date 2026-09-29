@@ -383,8 +383,12 @@ export class RuntimeMigrationService {
       if (existingMigration) {
         throw new ConflictException("This bot already has an active runtime migration");
       }
-      if (source.desired_state === "RUNNING" || source.actual_state !== "STOPPED") {
-        throw new ConflictException("Source bot must be STOPPED before changing runtime mode");
+      if (source.mode === "LOCAL") {
+        if (source.desired_state === "RUNNING" || source.actual_state !== "STOPPED") {
+          throw new ConflictException("Local source bot must be STOPPED before moving to Cloud");
+        }
+      } else if (source.desired_state === "RUNNING" || source.actual_state === "RUNNING") {
+        throw new ConflictException("Stop the bot before changing runtime mode");
       }
       if (Number(source.positions || 0) > 0) {
         throw new ConflictException("Close all positions before changing runtime mode");
@@ -555,9 +559,10 @@ export class RuntimeMigrationService {
       [migration.bot_instance_id]
     )).rows[0];
     if (!instance) throw new NotFoundException("Bot instance not found");
+    const sourceIsLocal = String(migration.source_mode) === "LOCAL";
     if (
       instance.desired_state === "RUNNING" ||
-      instance.actual_state !== "STOPPED" ||
+      (sourceIsLocal ? instance.actual_state !== "STOPPED" : instance.actual_state === "RUNNING") ||
       Number(instance.positions || 0) > 0 ||
       Number(instance.pending_orders || 0) > 0
     ) {
