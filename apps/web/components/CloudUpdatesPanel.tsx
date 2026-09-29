@@ -24,8 +24,18 @@ type UpdateJob = {
   completed_at:string|null;
 };
 
+type RunnerUpdateStatus = {
+  total:number;
+  current:number;
+  outdated:number;
+  unknown:number;
+  ahead:number;
+  updateAvailable:boolean;
+};
+
 type UpdateSnapshot = {
   currentRelease:{version:string;sha256:string;runtimeContract:string}|null;
+  runnerStatus:Record<string,RunnerUpdateStatus>;
   jobs:UpdateJob[];
 };
 
@@ -109,14 +119,27 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
           <p className={s.muted}>Deferred Update ไม่รบกวนบัญชีที่กำลังเทรด ลูกค้าจะเห็นแจ้งเตือนบน Control Center และเมื่อกด Stop จน Position เป็น 0 ระบบจะอัปเดตเฉพาะ MT5 บัญชีนั้น จากนั้นคงสถานะหยุดไว้จนลูกค้ากด Start เอง</p>
         </>:<p className={s.muted}>Backend ยังไม่พบ EA production artifact จึงยังเริ่ม Fleet Update ไม่ได้</p>}
         <div className={s.nodes}>
-          {nodes.map(n=><section key={n.runner_id} className={s.nodeCard}>
-            <div className={s.nodeHead}><div><h3>▤ {n.runner_id}</h3><span className={s.nodeMeta}>Worker {n.telemetry?.version||"—"}</span></div><Badge tone={n.health==="ONLINE"?"good":"warn"}>{n.health}</Badge></div>
-            <button
-              className={s.button+" "+s.primary}
-              disabled={!release||n.health!=="ONLINE"||Boolean(busy)}
-              onClick={()=>start(n.runner_id)}
-            >{busy===n.runner_id?"กำลังสร้างคิว…":"ปล่อย EA Update"}</button>
-          </section>)}
+          {nodes.map(n=>{
+            const status=data?.runnerStatus?.[n.runner_id];
+            const hasRealUpdate=Boolean(release&&status?.updateAvailable);
+            const waitingVersion=Boolean(release&&status&&status.total>0&&status.outdated===0&&status.unknown>0);
+            return <section key={n.runner_id} className={s.nodeCard}>
+              <div className={s.nodeHead}><div><h3>▤ {n.runner_id}</h3><span className={s.nodeMeta}>Worker {n.telemetry?.version||"—"}</span></div><Badge tone={n.health==="ONLINE"?"good":"warn"}>{n.health}</Badge></div>
+              {hasRealUpdate
+                ?<button
+                  className={s.button+" "+s.primary}
+                  disabled={n.health!=="ONLINE"||Boolean(busy)}
+                  onClick={()=>start(n.runner_id)}
+                >{busy===n.runner_id?"กำลังสร้างคิว…":"ปล่อย EA Update"}</button>
+                :waitingVersion
+                  ?<><Badge tone="warn">รอตรวจสอบเวอร์ชัน EA</Badge><span className={s.nodeMeta}>ยังไม่มีข้อมูลเวอร์ชันจาก {status?.unknown||0} บัญชี จึงไม่สร้างคิวซ้ำ</span></>
+                  :release&&status&&status.total>0
+                    ?<><Badge tone="good">EA ล่าสุดแล้ว</Badge><span className={s.nodeMeta}>ไม่มีอัปเดตใหม่สำหรับ Server นี้</span></>
+                    :release
+                      ?<span className={s.nodeMeta}>ยังไม่มี Cloud MT5 ที่ต้องอัปเดต</span>
+                      :null}
+            </section>;
+          })}
         </div>
       </div>
     </section>

@@ -7,6 +7,8 @@ $service = Get-Content (Join-Path $root 'apps/api/src/runtime-safety.service.ts'
 $workerApi = Get-Content (Join-Path $root 'apps/api/src/worker.controller.ts') -Raw
 $botApi = Get-Content (Join-Path $root 'apps/api/src/bot.controller.ts') -Raw
 $cloudApi = Get-Content (Join-Path $root 'apps/api/src/cloud.controller.ts') -Raw
+$cloudUpdate = Get-Content (Join-Path $root 'apps/api/src/cloud-update.service.ts') -Raw
+$cloudUpdateUi = Get-Content (Join-Path $root 'apps/web/components/CloudUpdatesPanel.tsx') -Raw
 $addonMigration = Get-Content (Join-Path $root 'database/051_cloud_addon_pricing.sql') -Raw
 $dashboard = Get-Content (Join-Path $root 'apps/web/app/dashboard/page.tsx') -Raw
 $worker = Get-Content (Join-Path $root 'apps/web/public/downloads/SCENOVA-CloudWorker.ps1') -Raw
@@ -71,6 +73,15 @@ Assert-Contains $workerApi 'primary_access.primary_active IS DISTINCT FROM true'
 Assert-Contains $dashboard 'ตั้งราคา Slot เสริม' 'Owner add-on pricing control missing'
 Assert-Contains $dashboard 'ต่ออายุแพ็กเกจหลัก' 'primary package renewal CTA missing'
 Assert-Contains $dashboard '/packages?system=cloud&renew=primary' 'primary renewal must route to packages page'
+
+# Fleet EA update must be a real delta, never a repeat button for an already-current Server.
+Assert-Contains $cloudUpdate 'fleetReleaseState(' 'Fleet update release-state classifier missing'
+Assert-Contains $cloudUpdate 'status.updateAvailable = status.outdated > 0' 'Fleet update availability must require at least one outdated EA'
+Assert-Contains $cloudUpdate 'instance => this.fleetReleaseState(instance.metrics || {}, release) === "OUTDATED"' 'Fleet update queue must target only outdated EA instances'
+Assert-Contains $cloudUpdate 'EA บน Server นี้เป็นเวอร์ชันล่าสุดแล้ว ไม่มีอัปเดตที่ต้องปล่อย' 'Fleet update no-op server guard missing'
+Assert-Contains $cloudUpdateUi 'const hasRealUpdate=Boolean(release&&status?.updateAvailable);' 'EA Update button must depend on a real release delta'
+Assert-Contains $cloudUpdateUi 'EA ล่าสุดแล้ว' 'Current EA state must replace the repeat update button'
+Assert-Contains $cloudUpdateUi 'จึงไม่สร้างคิวซ้ำ' 'Unknown EA version must not create a duplicate update queue'
 
 # Windows Worker may terminate only the exact portable terminal belonging to this instance.
 # Phase 4 raises the control-plane Worker protocol to v1.2.0 while preserving

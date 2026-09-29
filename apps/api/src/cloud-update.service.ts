@@ -68,6 +68,28 @@ export class CloudUpdateService {
     return true;
   }
 
+  private fleetReleaseState(
+    metrics: Record<string, any> | null | undefined,
+    release: { version: string; runtimeContract: string }
+  ) {
+    const installedVersion = String(metrics?.eaVersion || "").trim().replace(/^v/i, "");
+    const targetVersion = String(release.version || "").trim().replace(/^v/i, "");
+    const installedContract = String(metrics?.runtimeContract || "").trim();
+    const targetContract = String(release.runtimeContract || "").trim();
+
+    if (!installedVersion) return "UNKNOWN" as const;
+    if (installedVersion === targetVersion) {
+      return (!targetContract || installedContract === targetContract)
+        ? "CURRENT" as const
+        : "OUTDATED" as const;
+    }
+    if (this.versionAtLeast(installedVersion, targetVersion)) {
+      // Never present a downgrade as an EA update.
+      return "AHEAD" as const;
+    }
+    return "OUTDATED" as const;
+  }
+
   async list() {
     await this.reconcileAll();
     const jobs = await this.db.query(
@@ -89,12 +111,53 @@ export class CloudUpdateService {
     );
 
     const release = this.currentRelease(false);
+    const runnerStatus: Record<string, {
+      total: number;
+      current: number;
+      outdated: number;
+      unknown: number;
+      ahead: number;
+      updateAvailable: boolean;
+    }> = {};
+
+    if (release) {
+      const instances = await this.db.query(
+        `SELECT runner_id,metrics
+         FROM bot_instances
+         WHERE runner_id IS NOT NULL
+           AND mode='CLOUD'
+           AND COALESCE(runtime_stop_state,'NONE')='NONE'`
+      );
+      for (const instance of instances.rows) {
+        const runnerId = String(instance.runner_id || "");
+        if (!runnerId) continue;
+        const state = this.fleetReleaseState(instance.metrics || {}, release);
+        const status = runnerStatus[runnerId] ||= {
+          total: 0,
+          current: 0,
+          outdated: 0,
+          unknown: 0,
+          ahead: 0,
+          updateAvailable: false
+        };
+        status.total++;
+        if (state === "CURRENT") status.current++;
+        else if (state === "OUTDATED") status.outdated++;
+        else if (state === "AHEAD") status.ahead++;
+        else status.unknown++;
+      }
+      for (const status of Object.values(runnerStatus)) {
+        status.updateAvailable = status.outdated > 0;
+      }
+    }
+
     return {
       currentRelease: release ? {
         version: release.version,
         sha256: release.sha256,
         runtimeContract: release.runtimeContract
       } : null,
+      runnerStatus,
       jobs: jobs.rows
     };
   }
@@ -133,7 +196,7 @@ export class CloudUpdateService {
 
       const instances = (await tx.query(
         `SELECT
-           id,desired_state,
+           id,desired_state,metrics,
            COALESCE(metrics->>'eaVersion','') previous_version
          FROM bot_instances
          WHERE runner_id=$1
@@ -146,6 +209,13 @@ export class CloudUpdateService {
 
       if (!instances.length) {
         throw new BadRequestException("Server นี้ยังไม่มี Cloud MT5 สำหรับอัปเดต");
+      }
+
+      const updateTargets = instances.filter(
+        instance => this.fleetReleaseState(instance.metrics || {}, release) === "OUTDATED"
+      );
+      if (!updateTargets.length) {
+        throw new ConflictException("EA บน Server นี้เป็นเวอร์ชันล่าสุดแล้ว ไม่มีอัปเดตที่ต้องปล่อย");
       }
 
       const releaseRow = (await tx.query(
@@ -166,7 +236,7 @@ export class CloudUpdateService {
         [runnerId, releaseRow.id, actor]
       )).rows[0];
 
-      for (const instance of instances) {
+      for (const instance of updateTargets) {
         const child = (await tx.query(
           `INSERT INTO instance_update_jobs(
              server_update_job_id,bot_instance_id,action,target_version,target_sha256,
