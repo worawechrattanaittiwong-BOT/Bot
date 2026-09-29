@@ -41,12 +41,18 @@ export class EaController {
   private async rememberVerifiedBrokerServer(
     broker: unknown,
     reportedBroker: unknown,
-    serverName: unknown
+    serverName: unknown,
+    mode: unknown
   ) {
     const brokerKey = String(broker || "").trim();
     const reported = String(reportedBroker || "").trim();
     const server = String(serverName || "").trim();
-    if (!brokerKey || !reported || !server) return;
+    const runtimeMode = String(mode || "").toUpperCase();
+    if (!brokerKey || !server) return;
+    // Cloud broker identity was selected by the customer before the Worker
+    // successfully logged in. LOCAL does not have a user-selected broker, so
+    // never guess a catalog broker there unless the terminal reports one.
+    if (runtimeMode !== "CLOUD" && !reported) return;
 
     const cacheKey = brokerKey.toLowerCase() + "|" + server.toLowerCase();
     if (this.verifiedBrokerServers.has(cacheKey)) return;
@@ -68,9 +74,10 @@ export class EaController {
         .split(/[^a-z0-9]+/)
         .filter((token:string)=>token.length >= 3);
       const codeToken = String(catalogBroker.code || "").toLowerCase();
-      const identityMatches =
+      const reportedIdentityMatches =
         canonicalTokens.some((token:string)=>reportedText.includes(token)) ||
         (codeToken.length >= 2 && reportedText.includes(codeToken));
+      const identityMatches = runtimeMode === "CLOUD" || reportedIdentityMatches;
       if (!identityMatches) return;
 
       await this.db.query(
@@ -702,7 +709,8 @@ export class EaController {
     await this.rememberVerifiedBrokerServer(
       instance.broker || reportedBroker,
       reportedBroker,
-      reportedServer || instance.broker_server
+      reportedServer || instance.broker_server,
+      instance.mode
     );
 
     const access = await this.hasAccess(
