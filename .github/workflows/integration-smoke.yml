@@ -43,6 +43,10 @@ jobs:
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/002_slots_devices.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/003_unique_mt5_identity.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/003_unique_mt5_identity.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/004_broker_catalog.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/004_broker_catalog.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/057_broker_server_catalog_verified.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/057_broker_server_catalog_verified.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/004_mt5_change_request.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/004_mt5_change_request.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/005_gold_spread_default.sql
@@ -575,7 +579,7 @@ jobs:
           REBIND_BLOCKED_HTTP=$(curl -sS -o /tmp/rebind-open-positions.json -w "%{http_code}" -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$REBIND_BLOCKED_HTTP" = "409"
 
-          echo "[integration] pending Basket journal blocks MT5 account-follow until the old account journal drains"
+          echo "[integration] pending Basket journal blocks explicit MT5 rebind until the old account journal drains"
           OLD_FLAT=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"100001\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Demo\",\"currency\":\"USD\",\"symbol\":\"XAUUSDm\",\"positions\":0,\"pendingBasketJournal\":true}}")
           PENDING_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"symbol\":\"XAUUSDc\",\"positions\":0,\"pendingBasketJournal\":true}}")
           test "$(printf '%s' "$PENDING_REAL" | jq -r '.accountMismatch')" = "true"
@@ -599,12 +603,22 @@ jobs:
           DRAIN_SYMBOL=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select metadata->>'symbol' from trade_journal where deal_ticket=900099 and event_type='BASKET';")
           test "$DRAIN_SYMBOL" = "XAUUSDm"
 
-          echo "[integration] automatic account-follow succeeds after the old Basket journal is drained"
-          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"symbol\":\"XAUUSDc\",\"positions\":0,\"pendingBasketJournal\":false}}")
-          test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch // false')" = "false"
-          test "$(printf '%s' "$DETECT_REAL" | jq -r '.access')" = "false"
-          test "$(printf '%s' "$DETECT_REAL" | jq -r '.desiredState')" = "SAFE_STOP"
-          test "$(printf '%s' "$DETECT_REAL" | jq -r '.previousBoundPositions')" = "0"
+          echo "[integration] drained journal allows explicit account confirmation but never auto-switches"
+          DETECT_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"symbol\":\"XAUUSDc\",\"positions\":0,\"pendingBasketJournal\":false}}")
+          test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountMismatch')" = "true"
+          test "$(printf '%s' "$DETECT_REAL" | jq -r '.journalDrainPending')" = "false"
+          test "$(printf '%s' "$DETECT_REAL" | jq -r '.accountChangeBlocked')" = "false"
+          STILL_OLD_ACCOUNT=$(PGPASSWORD=bot psql -h localhost -U bot -d bot -Atc "select a.account_number from bot_instances bi join mt5_accounts a on a.id=bi.mt5_account_id where bi.id='$INSTANCE';")
+          test "$STILL_OLD_ACCOUNT" = "100001"
+
+          CONFIRM_REBIND=$(curl -fsS -X POST "$BASE/bot/mt5/rebind?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
+          test "$(printf '%s' "$CONFIRM_REBIND" | jq -r '.ok')" = "true"
+          test "$(printf '%s' "$CONFIRM_REBIND" | jq -r '.firstBind')" = "false"
+          test "$(printf '%s' "$CONFIRM_REBIND" | jq -r '.account.account_number')" = "200002"
+
+          CONFIRMED_REAL=$(curl -fsS -X POST "$BASE/ea/heartbeat" -H 'content-type: application/json' -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"state\":\"SAFE_STOP\",\"metrics\":{\"accountNumber\":\"200002\",\"broker\":\"SCENOVA\",\"eaVersion\":\"$EA_VERSION\",\"runtimeContract\":\"$RUNTIME_CONTRACT\",\"server\":\"SCENOVA-Real\",\"currency\":\"USC\",\"symbol\":\"XAUUSDc\",\"positions\":0,\"pendingBasketJournal\":false}}")
+          test "$(printf '%s' "$CONFIRMED_REAL" | jq -r '.accountMismatch // false')" = "false"
+          test "$(printf '%s' "$CONFIRMED_REAL" | jq -r '.desiredState')" = "SAFE_STOP"
 
           FOLLOW_DASH=$(curl -fsS "$BASE/bot/dashboard?slotId=$SLOT" -H "authorization: Bearer $TOKEN")
           test "$(printf '%s' "$FOLLOW_DASH" | jq -r '.account.account_number')" = "200002"
