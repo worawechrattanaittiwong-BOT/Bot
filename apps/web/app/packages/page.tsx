@@ -1228,10 +1228,10 @@ function PackageCard({
       <span className={styles.planType}><ScenovaIcon name={system === "LOCAL" ? "account" : "cloud"} size={19}/>{system === "LOCAL" ? "LOCAL MT5" : "CLOUD MT5"}</span>
       <h3>{pack.months} เดือน</h3>
       <div className={`${legacy.price} ${styles.planPrice}`}>
-        {pack.price_usd_cents > 0 ? `${usdMoney(pack.price_usd_cents)} USD` : "รอประกาศราคา"}
+        {pack.price_usd_cents > 0 ? `$${usdMoney(pack.price_usd_cents)} USD` : "รอประกาศราคา"}
         <small>
           {pack.price_usd_cents > 0
-            ? `เฉลี่ย ${usdMoney(Math.round(pack.price_usd_cents / pack.months))} USD / เดือน`
+            ? `เฉลี่ย $${usdMoney(Math.round(pack.price_usd_cents / pack.months))} USD / เดือน`
             : "ราคาจะแสดงเมื่อพร้อมเปิดขาย"}
         </small>
       </div>
@@ -1378,11 +1378,11 @@ function PaymentCard({
 
       <div className={styles.paymentInfo}>
         <span className={styles.eyebrow}>{type} / {order.id.slice(0,8)}</span>
-        <h3>{order.months} เดือน · {Number(order.final_price_usd_cents || 0) > 0 ? `${usdMoney(Number(order.final_price_usd_cents || 0))} USD` : `฿${thbMoney(order.amount)} THB`}</h3>
+        <h3>{order.months} เดือน · {Number(order.final_price_usd_cents || 0) > 0 ? `$${usdMoney(Number(order.final_price_usd_cents || 0))} USD` : `฿${thbMoney(order.amount)} THB`}</h3>
         {Number(order.discount_amount || 0) > 0 && (
           <div className={styles.promoApplied}>
             <span>{order.promotion_code}</span>
-            <b>ลด {Number(order.list_price_usd_cents || 0) > 0 ? `${usdMoney(Math.max(0,Number(order.list_price_usd_cents || 0)-Number(order.final_price_usd_cents || 0)))} USD` : `฿${thbMoney(Number(order.discount_amount || 0))}`}</b>
+            <b>ลด {Number(order.list_price_usd_cents || 0) > 0 ? `$${usdMoney(Math.max(0,Number(order.list_price_usd_cents || 0)-Number(order.final_price_usd_cents || 0)))} USD` : `฿${thbMoney(Number(order.discount_amount || 0))}`}</b>
           </div>
         )}
 
@@ -1463,7 +1463,7 @@ function OrderHistory({title,orders}:{title:string;orders:Order[]}) {
                 <b>{order.months} เดือน</b>
                 <span>{date(order.created_at)}</span>
               </div>
-              <strong>{Number(order.final_price_usd_cents || 0) > 0 ? `${usdMoney(Number(order.final_price_usd_cents || 0))}` : `฿${thbMoney(order.amount)}`}</strong>
+              <strong>{Number(order.final_price_usd_cents || 0) > 0 ? `$${usdMoney(Number(order.final_price_usd_cents || 0))}` : `฿${thbMoney(order.amount)}`}</strong>
               <em className={order.status === "PAID" ? styles.orderPaid : order.status === "FAILED" ? styles.orderFailed : ""}>
                 {order.status}
               </em>
