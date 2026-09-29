@@ -180,6 +180,14 @@ jobs:
           }
 
           $versionedPath = "apps/web/public/downloads/SCENOVA-Setup-v$version.exe"
+
+          # Keep only the current versioned installer plus the stable
+          # SCENOVA-Setup.exe alias. Historical installer binaries are not used
+          # by the website and otherwise make every deploy/build context grow.
+          Get-ChildItem "apps/web/public/downloads" -Filter "SCENOVA-Setup-v*.exe" -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -ne "SCENOVA-Setup-v$version.exe" } |
+            Remove-Item -Force
+
           Copy-Item -Force "installer-publish/SCENOVA-Setup.exe" "apps/web/public/downloads/SCENOVA-Setup.exe"
           Copy-Item -Force "installer-publish/SCENOVA-Setup.exe" $versionedPath
 
@@ -189,6 +197,7 @@ jobs:
 
           git config user.name "scenova-build"
           git config user.email "actions@users.noreply.github.com"
+          git add -u -- "apps/web/public/downloads"
           git add "apps/web/public/downloads/SCENOVA-Setup.exe" $versionedPath
 
           git diff --cached --quiet
