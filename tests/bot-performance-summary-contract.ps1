@@ -37,7 +37,8 @@ foreach ($required in @(
 
 if (-not $page.Contains('import { BotPerformanceSummary }')) { throw 'Dashboard summary component import missing' }
 if (-not $page.Contains('<BotPerformanceSummary dashboard={data} />')) { throw 'Dashboard summary launcher mount missing' }
-if (-not $web.Contains('.bps-modal{position:relative;width:100%;max-width:none')) { throw 'Bot performance summary modal must fill the available viewport width' }
-if ($web.Contains('width:min(1320px,calc(100vw - 16px))')) { throw 'Legacy fixed summary modal width cap must stay removed' }
+if (-not $web.Contains('width:min(1320px,calc(100vw - 16px))')) { throw 'Bot performance summary modal must keep the original centered width' }
+if (-not $web.Contains('aspect-ratio:1200/184')) { throw 'Bot performance chart must use its native aspect ratio so the line fills the card horizontally' }
+if ($web.Contains('.bps-modal{position:relative;width:100%;max-width:none')) { throw 'Bot performance summary modal must not stretch to full viewport width' }
 
 Write-Host 'Bot performance summary contract PASS'
