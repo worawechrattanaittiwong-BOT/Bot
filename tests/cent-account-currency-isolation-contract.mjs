@@ -99,10 +99,11 @@ must(
 
 must(
   eaApi.includes("const journalDrainPending = metrics.pendingBasketJournal === true") &&
-  eaApi.includes("previousBoundPositions <= 0 && !journalDrainPending") &&
+  eaApi.includes("Existing LOCAL accounts never auto-follow a different MT5 login") &&
   eaApi.includes("...(instance.metrics || {})") &&
-  eaApi.includes("accountChangeBlocked: previousBoundPositions > 0 || journalDrainPending"),
-  "MT5 account-follow must wait for the previous account Basket journal to drain without overwriting its metrics"
+  eaApi.includes("accountChangeBlocked: previousBoundPositions > 0 || journalDrainPending") &&
+  botApi.includes("instance.metrics?.pendingBasketJournal === true"),
+  "Explicit LOCAL account switch must preserve the previous account Basket journal until it drains"
 );
 
 must(
