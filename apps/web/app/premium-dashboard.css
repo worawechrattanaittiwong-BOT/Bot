@@ -6340,3 +6340,53 @@
     line-height:1.3!important;
   }
 }
+
+
+/* ===== Control Center V56 · desktop three-card breathing room ===== */
+/* Desktop only: widen Bot Settings, narrow Live Execution, and give all
+   three primary cards a little more vertical breathing room. */
+@media(min-width:1181px){
+  .cc-v19-three-card-grid{
+    grid-template-columns:36.33fr 30.33fr 33.34fr!important;
+    gap:10px!important;
+  }
+
+  .cc-v19-three-card-grid>section,
+  .cc-v19-settings-card,
+  .cc-v19-three-card-grid .cc-v17-running-positions,
+  .cc-v19-three-card-grid .cc-v12-mode-performance{
+    height:470px!important;
+    min-height:470px!important;
+    max-height:470px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-embedded-frame,
+  .cc-v19-settings-card .cc-bot-v2-embedded{
+    height:470px!important;
+    min-height:470px!important;
+    max-height:470px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+    height:420px!important;
+    min-height:420px!important;
+    max-height:420px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+    height:41px!important;
+    min-height:41px!important;
+    max-height:41px!important;
+    padding-top:3px!important;
+    padding-bottom:3px!important;
+  }
+
+  .cc-v19-three-card-grid .cc-v17-running-table .body{
+    max-height:388px!important;
+  }
+
+  .cc-v19-three-card-grid .cc-v12-mode-table{
+    max-height:390px!important;
+  }
+}
