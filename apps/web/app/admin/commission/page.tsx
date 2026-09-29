@@ -488,9 +488,7 @@ export default function AdminCommissionPage() {
 
           <header className={s.header} aria-label="Commission & Withdrawal Center">
             <div>
-              <span className={s.kicker}>FINANCE / WITHDRAWALS</span>
               <h1>ศูนย์ถอนเงินและคอมมิชชั่น</h1>
-              <p>ตรวจคำขอ → ประเมินความเสี่ยง → อนุมัติ → จ่ายเงิน → ตรวจสอบย้อนหลัง</p>
             </div>
             <span className={
               killSwitchActive ? `${s.systemBadge} ${s.systemDanger}` :
@@ -528,15 +526,7 @@ export default function AdminCommissionPage() {
                 <article className={s.heroStatus}>
                   <div className={s.statusTitle}>
                     <div>
-                      <span className={s.kicker}>SYSTEM STATUS</span>
                       <h2>{killSwitchActive ? "ระบบถอนถูกหยุดฉุกเฉิน" : requestsOpen ? "ระบบพร้อมรับคำขอถอน" : "ระบบพักรับคำขอถอน"}</h2>
-                      <p>
-                        {killSwitchActive
-                          ? "Kill Switch ทำงานอยู่ ระบบไม่รับคำขอใหม่และ Auto Payout ถูกหยุด"
-                          : requestsOpen
-                            ? "คำขอใหม่เข้าคิวตรวจสอบตาม Risk Policy และ Approval Policy ปัจจุบัน"
-                            : "ยังไม่รับคำขอใหม่ แต่รายการเดิมและประวัติยังตรวจสอบได้ตามปกติ"}
-                      </p>
                     </div>
                     <span className={
                       killSwitchActive ? `${s.systemBadge} ${s.systemDanger}` :
@@ -553,47 +543,43 @@ export default function AdminCommissionPage() {
                 </article>
 
                 <article className={s.workflowCard}>
-                  <span className={s.kicker}>WITHDRAWAL FLOW</span>
-                  <h2>ลำดับงานที่ควรทำ</h2>
                   <div className={s.workflowSteps}>
-                    <div><strong>1</strong><span><b>ตรวจคำขอ</b><small>ยอด, บัญชีรับเงิน, Risk</small></span></div>
-                    <div><strong>2</strong><span><b>อนุมัติ</b><small>ใช้ 2 คนเมื่อถึง Threshold</small></span></div>
-                    <div><strong>3</strong><span><b>จ่ายเงิน</b><small>Auto Payout หรือ Manual Paid</small></span></div>
-                    <div><strong>4</strong><span><b>ตรวจสอบ</b><small>Reconcile, Alert และ Audit</small></span></div>
+                    <div><strong>1</strong><span><b>ตรวจคำขอ</b></span></div>
+                    <div><strong>2</strong><span><b>อนุมัติ</b></span></div>
+                    <div><strong>3</strong><span><b>จ่ายเงิน</b></span></div>
+                    <div><strong>4</strong><span><b>ตรวจสอบ</b></span></div>
                   </div>
                 </article>
               </section>
 
               <section className={s.summaryGrid}>
-                <article><span>ต้องตรวจตอนนี้</span><b>{pendingReviewCount}</b><small>Requested + On Hold</small></article>
-                <article><span>พร้อมจ่าย</span><b>{readyToPayCount}</b><small>Approved</small></article>
-                <article><span>เงินที่ล็อกไว้</span><b>{money(data?.summary.lockedSatang || 0)}</b><small>รอการตัดสินใจ/จ่าย</small></article>
-                <article><span>จ่ายแล้วทั้งหมด</span><b>{money(data?.summary.paidSatang || 0)}</b><small>ยอดสะสม</small></article>
+                <article><span>ต้องตรวจตอนนี้</span><b>{pendingReviewCount}</b></article>
+                <article><span>พร้อมจ่าย</span><b>{readyToPayCount}</b></article>
+                <article><span>เงินที่ล็อกไว้</span><b>{money(data?.summary.lockedSatang || 0)}</b></article>
+                <article><span>จ่ายแล้วทั้งหมด</span><b>{money(data?.summary.paidSatang || 0)}</b></article>
               </section>
 
               <section className={s.taskGrid}>
                 <button type="button" onClick={()=>setActivePanel("requests")}>
                   <span className={s.taskNumber}>{pendingReviewCount}</span>
-                  <span><b>ตรวจคำขอถอน</b><small>เริ่มจากรายการที่รอตรวจหรือถูก Hold</small></span>
+                  <span><b>ตรวจคำขอถอน</b></span>
                   <i>›</i>
                 </button>
                 <button type="button" onClick={()=>setActivePanel("operations")}>
                   <span className={s.taskNumber}>{openAlerts.length}</span>
-                  <span><b>ตรวจ Alert</b><small>Fraud และ Reconciliation ที่ยังเปิดอยู่</small></span>
+                  <span><b>ตรวจ Alert</b></span>
                   <i>›</i>
                 </button>
                 <button type="button" onClick={()=>setActivePanel("security")}>
                   <span className={s.taskNumber}>{activeJobs.length}</span>
-                  <span><b>ตรวจนโยบายระบบ</b><small>Rules, Risk Policy และ Emergency Control</small></span>
+                  <span><b>ความปลอดภัย</b></span>
                   <i>›</i>
                 </button>
               </section>
 
               <section className={s.ownerAppCard}>
                 <div>
-                  <span className={s.kicker}>OWNER MOBILE</span>
                   <h2>SCENOVA Owner สำหรับ Android</h2>
-                  <p>ใช้สำหรับตรวจยอดและจัดการงาน Owner จากมือถือ โดยไม่ปะปนกับการตั้งค่าระบบบนหน้านี้</p>
                 </div>
                 <a className={s.ownerAppDownload} href="/downloads/SCENOVA-Owner.apk" download="SCENOVA-Owner.apk">
                   ดาวน์โหลดแอป
@@ -606,23 +592,20 @@ export default function AdminCommissionPage() {
             <>
               <div className={s.sectionHead}>
                 <div>
-                  <span className={s.kicker}>REVIEW QUEUE</span>
                   <h2>คำขอถอนเงิน</h2>
-                  <p>ตรวจความเสี่ยงและข้อมูลบัญชีก่อนตัดสินใจทุกครั้ง</p>
                 </div>
                 <span>{loading ? "LOADING" : `${data?.items.length || 0} รายการ`}</span>
               </div>
 
               <details className={s.stepUp}>
                 <summary>
-                  <span><b>ยืนยันตัวตนสำหรับงานสำคัญ</b><small>ใช้เฉพาะ Reveal เลขบัญชี, Manual Paid และ Reconciliation</small></span>
+                  <span><b>ยืนยันตัวตน</b></span>
                   <span className={s.securityTag}>PASSWORD + 2FA</span>
                 </summary>
                 <div className={s.verifyFields}>
                   <label><span>รหัสผ่านปัจจุบัน</span><input type="password" value={verification.currentPassword} onChange={event=>setVerification(v=>({...v,currentPassword:event.target.value}))} autoComplete="current-password"/></label>
                   <label><span>รหัส 2FA</span><input value={verification.twoFactorCode} onChange={event=>setVerification(v=>({...v,twoFactorCode:event.target.value}))} maxLength={6} inputMode="numeric" placeholder="6 หลัก"/></label>
                 </div>
-                <p>เลขบัญชีเต็มจะแสดงชั่วคราว 60 วินาที และทุกการ Reveal ถูกบันทึก Audit</p>
               </details>
 
               <section className={s.queue}>
@@ -739,16 +722,14 @@ export default function AdminCommissionPage() {
             <>
               <div className={s.sectionHead}>
                 <div>
-                  <span className={s.kicker}>POLICY & SECURITY</span>
                   <h2>กฎการถอนและความปลอดภัย</h2>
-                  <p>ตั้งค่าที่มีผลกับทุกคำขอถอน แยกจากงานตรวจสอบประจำวัน</p>
                 </div>
               </div>
 
               <section className={s.settingsLayout}>
                 <div className={s.controlCard}>
                   <div className={s.cardHead}>
-                    <div><span className={s.kicker}>WITHDRAWAL RULES</span><h2>กฎพื้นฐานการถอน</h2></div>
+                    <div><h2>กฎการถอน</h2></div>
                     <label className={s.switchLine}>
                       <input
                         type="checkbox"
@@ -759,7 +740,6 @@ export default function AdminCommissionPage() {
                       รับคำขอถอน
                     </label>
                   </div>
-                  <p>กำหนดยอดต่ำสุด/สูงสุด และช่วงเวลาป้องกันหลังเปลี่ยนบัญชีรับเงิน</p>
                   <div className={s.settingsFields}>
                     <label><span>ขั้นต่ำ (THB)</span><input value={settingsForm.minThb} onChange={event=>setSettingsForm(v=>({...v,minThb:event.target.value}))}/></label>
                     <label><span>สูงสุด (THB)</span><input value={settingsForm.maxThb} onChange={event=>setSettingsForm(v=>({...v,maxThb:event.target.value}))}/></label>
@@ -772,10 +752,9 @@ export default function AdminCommissionPage() {
 
                 <div className={s.controlCard}>
                   <div className={s.cardHead}>
-                    <div><span className={s.kicker}>Fraud Risk · Dual Approval · Kill Switch</span><h2>นโยบายความเสี่ยงและการอนุมัติ</h2></div>
-                    <span className={s.securityTag}>RISK ENGINE</span>
+                    <div><h2>ความเสี่ยงและการอนุมัติ</h2></div>
+                    <span className={s.securityTag}>RISK</span>
                   </div>
-                  <p>ใช้เพื่อจำกัดยอดรวมรายวัน กำหนดจุดที่ต้องอนุมัติ 2 คน และระดับ Risk Score</p>
                   <div className={s.advancedFields}>
                     <label><span>วงเงินรวม/วัน (THB)</span><input value={advancedForm.globalDailyThb} onChange={event=>setAdvancedForm(v=>({...v,globalDailyThb:event.target.value}))}/></label>
                     <label><span>อนุมัติ 2 คนเมื่อ ≥ THB</span><input value={advancedForm.dualApprovalThb} onChange={event=>setAdvancedForm(v=>({...v,dualApprovalThb:event.target.value}))}/></label>
@@ -809,9 +788,7 @@ export default function AdminCommissionPage() {
               <section className={`${s.dangerZone} ${killSwitchActive ? s.dangerActive : ""}`}>
                 <div className={s.dangerHeader}>
                   <div>
-                    <span className={s.kicker}>EMERGENCY CONTROL</span>
                     <h2>Kill Switch การถอนเงิน</h2>
-                    <p>ใช้เมื่อพบเหตุผิดปกติร้ายแรงเท่านั้น การเปิดจะหยุด Requests และ Auto Payout ทันที แต่ไม่ปลดล็อกเงินที่อยู่ระหว่างตรวจสอบ</p>
                   </div>
                   <span className={killSwitchActive ? `${s.systemBadge} ${s.systemDanger}` : `${s.systemBadge} ${s.systemOpen}`}>
                     <i/>{killSwitchActive ? "ACTIVE" : "STANDBY"}
@@ -837,16 +814,14 @@ export default function AdminCommissionPage() {
             <>
               <div className={s.sectionHead}>
                 <div>
-                  <span className={s.kicker}>OPERATIONS & AUDIT</span>
                   <h2>ระบบจ่ายเงินและประวัติ</h2>
-                  <p>ใช้ตรวจสิ่งผิดปกติ งาน Payout และเหตุการณ์ย้อนหลัง โดยไม่ปะปนกับการอนุมัติคำขอ</p>
                 </div>
               </div>
 
               <section className={s.operationsColumns}>
                 <div>
                   <div className={s.subsectionHead}>
-                    <div><h3>Fraud & Reconciliation Alerts</h3><p>แก้รายการที่ยังเปิดอยู่ก่อน</p></div>
+                    <div><h3>Fraud & Reconciliation Alerts</h3></div>
                     <span>{openAlerts.length} OPEN</span>
                   </div>
                   <div className={s.alertGrid}>
@@ -872,7 +847,7 @@ export default function AdminCommissionPage() {
 
                 <div>
                   <div className={s.subsectionHead}>
-                    <div><h3>Payout Jobs</h3><p>สถานะงานจาก Payout Worker</p></div>
+                    <div><h3>Payout Jobs</h3></div>
                     <span>{data?.phase3.payoutJobs.length || 0} JOBS</span>
                   </div>
                   <div className={s.jobList}>
@@ -892,7 +867,7 @@ export default function AdminCommissionPage() {
               </section>
 
               <div className={s.subsectionHead}>
-                <div><h3>Recent Security Events</h3><p>Audit log แบบ append-only สำหรับตรวจย้อนหลัง</p></div>
+                <div><h3>Recent Security Events</h3></div>
                 <span>{data?.audit.length || 0} EVENTS</span>
               </div>
               <section className={s.auditList}>
