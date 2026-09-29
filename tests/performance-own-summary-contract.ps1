@@ -83,6 +83,19 @@ if (-not $web.Contains('styles.strategyCheck')) { throw 'Strategy modes must use
 if (-not $css.Contains('Performance compact right-options rail v2')) { throw 'Performance options must use the compact right-side vertical rail' }
 if ($web.Contains('className={styles.controlCard}')) { throw 'External performance control card must stay removed so summary can fill the viewport' }
 
+foreach ($required in @(
+  'PERFORMANCE_PREFS_KEY',
+  'readPerformancePreferences',
+  'savePerformancePreferences',
+  'window.localStorage.setItem',
+  'บันทึกค่า',
+  'styles.saveSettingsButton'
+)) {
+  if (-not $web.Contains($required)) { throw "Performance saved-report preferences missing: $required" }
+}
+if (-not $css.Contains('Performance viewport fit + saved report controls')) { throw 'Performance desktop viewport-fit contract missing' }
+if (-not $css.Contains('aspect-ratio:1000 / 136!important')) { throw 'Performance capital chart must keep the compact desktop aspect ratio' }
+
 $ea = [System.IO.File]::ReadAllText((Resolve-Path 'mt5/FastBasketBot.mq5'))
 if (-not $ea.Contains('\"accountTradeMode\":%d')) { throw 'EA heartbeat must publish authoritative accountTradeMode' }
 if (-not $ea.Contains('AccountInfoInteger(ACCOUNT_TRADE_MODE)')) { throw 'EA account type telemetry must come from MT5 ACCOUNT_TRADE_MODE' }
