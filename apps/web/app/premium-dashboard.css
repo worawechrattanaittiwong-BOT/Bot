@@ -6266,3 +6266,77 @@
     padding-right:8px!important;
   }
 }
+
+
+/* ===== Control Center V55 · mobile readable Bot Settings height ===== */
+/* Give Thai labels a little more vertical room on phones. The card remains
+   content-sized, so only the mobile Bot Settings card grows as needed. */
+@media(max-width:760px){
+  .cc-v19-settings-card .cc-bot-v2-embedded{
+    --settings-row:42px;
+    --settings-control-h:32px;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
+    height:58px!important;
+    min-height:58px!important;
+    padding-top:8px!important;
+    padding-bottom:8px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+    padding-top:5px!important;
+    padding-bottom:10px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
+    min-height:46px!important;
+    padding-top:3px!important;
+    padding-bottom:3px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-field,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div,
+  .cc-v19-settings-card .cc-bot-manual-risk-add{
+    min-height:42px!important;
+    padding-top:4px!important;
+    padding-bottom:4px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+    min-height:44px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-field>span,
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child{
+    font-size:12px!important;
+    line-height:1.3!important;
+    overflow-wrap:break-word!important;
+    word-break:normal!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-field>select.input,
+  .cc-v19-settings-card .cc-bot-v17-add-setting>select.input,
+  .cc-v19-settings-card .cc-bot-v2-control-stack>select.input,
+  .cc-v19-settings-card .money-input-shell,
+  .cc-v19-settings-card .number-input-shell{
+    height:32px!important;
+    min-height:32px!important;
+    max-height:32px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-choice-row button{
+    height:32px!important;
+    min-height:32px!important;
+  }
+}
+
+@media(max-width:390px){
+  .cc-v19-settings-card .cc-bot-v2-field>span,
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child{
+    font-size:11.5px!important;
+    line-height:1.3!important;
+  }
+}
