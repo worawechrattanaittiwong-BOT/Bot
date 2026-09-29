@@ -434,7 +434,70 @@ export default function DashboardPage() {
       }
     }
 
-    load("");
+    let initialSlotId = "";
+    try {
+      const savedRaw = localStorage.getItem("scenova-mt5-operation-v1");
+      if (savedRaw) {
+        const saved = JSON.parse(savedRaw);
+        const op = saved?.operation;
+        const ageMs = Date.now() - Number(op?.startedAt || 0);
+        if (
+          op &&
+          ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND"].includes(String(op.kind || "")) &&
+          String(op.status || "") !== "SUCCESS" &&
+          ageMs >= 0 &&
+          ageMs < 12 * 60 * 60 * 1000
+        ) {
+          initialSlotId = String(saved?.slotId || "");
+          if (initialSlotId) {
+            selectedSlotIdRef.current = initialSlotId;
+            setSelectedSlotId(initialSlotId);
+          }
+          setServerOperation(op);
+          setServerOperationMinimized(false);
+          setActiveView("account");
+        } else {
+          localStorage.removeItem("scenova-mt5-operation-v1");
+        }
+      }
+    } catch {
+      localStorage.removeItem("scenova-mt5-operation-v1");
+    }
+
+    load(initialSlotId);
+    api("/runtime-migration/status")
+      .then((snapshot:any)=>{
+        const migration = (snapshot?.migrations || []).find((item:any) =>
+          !["COMPLETED","FAILED","CANCELLED"].includes(String(item?.state || "").toUpperCase())
+        );
+        if (!migration) return;
+        const targetMode = String(migration.target_mode || "CLOUD").toUpperCase();
+        const state = String(migration.state || "REQUESTING").toUpperCase();
+        const movingToLocal = targetMode === "LOCAL";
+        const messages:Record<string,string> = movingToLocal
+          ? {
+              STOPPING_CLOUD:"กำลังย้ายระบบ · กำลังปิด MT5 เดิมบน VPS อย่างปลอดภัย",
+              SOURCE_STOP_CONFIRMED:"VPS ยืนยันว่าปิด MT5 เดิมแล้ว · กำลังย้ายสิทธิ์ไป Local",
+              WAITING_LOCAL_INSTALL:"VPS ปิดแล้ว · รอเชื่อม SCENOVA Local MT5 ด้วยสิทธิ์ใหม่"
+            }
+          : {
+              STOPPING_LOCAL:"กำลังย้ายระบบ · กำลังตรวจและหยุด Local MT5 อย่างปลอดภัย",
+              SOURCE_STOP_CONFIRMED:"Local MT5 หยุดแล้ว · กำลังส่งระบบไป VPS",
+              TARGET_PROVISIONING:"กำลังติดตั้งระบบ VPS · กำลังเปิด MT5 และ FastBasketBot"
+            };
+        setVpsMigrationProgress({
+          status:"RUNNING",
+          stage:state,
+          migrationId:String(migration.id || ""),
+          targetSlotId:String(migration.target_slot_id || ""),
+          targetMode,
+          runnerId:String(migration.target_runner_id || migration.current_runner_id || ""),
+          message:messages[state] || "Server กำลังตรวจสอบการย้ายระบบ"
+        });
+        setServerOperationMinimized(false);
+        setActiveView("account");
+      })
+      .catch(()=>{});
     api("/catalog/brokers")
       .then((rows)=>setBrokerCatalog(rows))
       .catch(()=>setBrokerCatalog([]));
@@ -445,6 +508,27 @@ export default function DashboardPage() {
     }, 5000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const persistentKinds = ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND"];
+    try {
+      if (
+        serverOperation &&
+        persistentKinds.includes(String(serverOperation.kind || "")) &&
+        String(serverOperation.status || "") !== "SUCCESS"
+      ) {
+        localStorage.setItem(
+          "scenova-mt5-operation-v1",
+          JSON.stringify({
+            slotId:String(selectedSlotIdRef.current || selectedSlotId || ""),
+            operation:serverOperation
+          })
+        );
+      } else {
+        localStorage.removeItem("scenova-mt5-operation-v1");
+      }
+    } catch {}
+  }, [serverOperation, selectedSlotId]);
 
   useEffect(() => {
     if (!vpsSlipFile) {
@@ -1152,7 +1236,9 @@ export default function DashboardPage() {
       const mt5Ready = Boolean(data?.instance?.mt5_online);
       const mt5GraceReady = Boolean(data?.instance?.mt5_connection_online);
 
-      if (accountMatches && runnerReady && mt5Ready) {
+      if (op.kind === "MT5_SWITCH" && !data?.account) {
+        message = "MT5 เดิมปิดแล้ว · กรุณาเชื่อมบัญชีใหม่เพื่อทำขั้นตอนต่อ";
+      } else if (accountMatches && runnerReady && mt5Ready) {
         complete = true;
         message = "เชื่อม MT5 สำเร็จ · Server ตรวจบัญชีและ Heartbeat เรียบร้อยแล้ว";
       } else if (!runnerReady) {
@@ -1346,13 +1432,18 @@ export default function DashboardPage() {
   const selectedServer = brokerServer === "__CUSTOM__"
     ? customBrokerServer.trim()
     : brokerServer;
-  const mt5ServerQuery = String(brokerServer || "").trim().toLowerCase();
-  const mt5ServerSuggestions = (selectedBroker?.servers || [])
-    .filter(server =>
-      !mt5ServerQuery ||
-      String(server.serverName || "").toLowerCase().includes(mt5ServerQuery)
-    )
-    .slice(0, 8);
+  const sortedBrokerServers = [...(selectedBroker?.servers || [])].sort((a,b) => {
+    const rank:Record<string,number> = { REAL:0, DEMO:1, UNKNOWN:2 };
+    const env = (value:any) => rank[String(value?.environment || "UNKNOWN").toUpperCase()] ?? 2;
+    return env(a) - env(b) ||
+      String(a.serverName || "").localeCompare(String(b.serverName || ""), undefined, {
+        numeric:true,
+        sensitivity:"base"
+      });
+  });
+  const realBrokerServers = sortedBrokerServers.filter(server => String(server.environment).toUpperCase() === "REAL");
+  const demoBrokerServers = sortedBrokerServers.filter(server => String(server.environment).toUpperCase() === "DEMO");
+  const otherBrokerServers = sortedBrokerServers.filter(server => !["REAL","DEMO"].includes(String(server.environment).toUpperCase()));
   const hasLocalConnectionSlot = (data?.slots || []).some((slot:any) =>
     String(slot?.mode || "").toUpperCase() === "LOCAL" &&
     Boolean(slot?.can_control) &&
@@ -4515,15 +4606,16 @@ export default function DashboardPage() {
                   value={brokerCode}
                   disabled={cloudMt5DialogMode === "RECONNECT"}
                   onChange={e=>{
-                    setBrokerCode(e.target.value);
-                    setBrokerServer("");
+                    const nextBroker = e.target.value;
+                    setBrokerCode(nextBroker);
+                    setBrokerServer(nextBroker === "OTHER" ? "__CUSTOM__" : "");
                     setCustomBrokerServer("");
                   }}
                   required
                 >
-                  {brokerCatalog.map(b=><option key={b.code} value={b.code}>{b.name}</option>)}
+                  {brokerCatalog.filter(b=>b.code!=="OTHER").map(b=><option key={b.code} value={b.code}>{b.name}</option>)}
                   {!brokerCatalog.length && <option value="EXNESS">Exness</option>}
-                  <option value="OTHER">อื่น ๆ</option>
+                  <option value="OTHER">อื่น ๆ / กรอกชื่อ Broker เอง</option>
                 </select>
               </label>
 
@@ -4543,36 +4635,68 @@ export default function DashboardPage() {
 
               <label className="field cloud-mt5-server-field">
                 <span>MT5 Server</span>
-                <input
-                  className="input"
-                  list="cloud-mt5-server-options"
-                  value={brokerServer}
-                  readOnly={cloudMt5DialogMode === "RECONNECT"}
-                  onChange={e=>setBrokerServer(e.target.value)}
-                  placeholder="พิมพ์ เช่น 13 หรือ Exness-MT5Real13"
-                  autoComplete="off"
-                  required
-                />
-                <datalist id="cloud-mt5-server-options">
-                  {(selectedBroker?.servers || []).map(server=>(
-                    <option key={server.serverName} value={server.serverName}>
-                      {server.environment!=="UNKNOWN" ? server.environment : ""}
-                    </option>
-                  ))}
-                </datalist>
-                {cloudMt5DialogMode !== "RECONNECT" && brokerServer.trim() && mt5ServerSuggestions.length > 0 && (
-                  <div className="cloud-mt5-server-suggestions">
-                    {mt5ServerSuggestions.map(server=>(
-                      <button
-                        type="button"
-                        key={server.serverName}
-                        onClick={()=>setBrokerServer(server.serverName)}
-                      >
-                        <b>{server.serverName}</b>
-                        {server.environment!=="UNKNOWN" && <span>{server.environment}</span>}
-                      </button>
-                    ))}
-                  </div>
+                {cloudMt5DialogMode === "RECONNECT" ? (
+                  <input
+                    className="input"
+                    value={brokerServer}
+                    readOnly
+                    aria-label="MT5 Server ปัจจุบัน"
+                  />
+                ) : (
+                  <>
+                    <select
+                      className="input"
+                      value={brokerServer}
+                      onChange={e=>{
+                        setBrokerServer(e.target.value);
+                        if (e.target.value !== "__CUSTOM__") setCustomBrokerServer("");
+                      }}
+                      required
+                    >
+                      <option value="">เลือก MT5 Server</option>
+                      {realBrokerServers.length > 0 && (
+                        <optgroup label="REAL / LIVE">
+                          {realBrokerServers.map(server=>(
+                            <option key={server.serverName} value={server.serverName}>
+                              {server.serverName}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {demoBrokerServers.length > 0 && (
+                        <optgroup label="DEMO / TRIAL">
+                          {demoBrokerServers.map(server=>(
+                            <option key={server.serverName} value={server.serverName}>
+                              {server.serverName}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {otherBrokerServers.length > 0 && (
+                        <optgroup label="OTHER / VERIFIED">
+                          {otherBrokerServers.map(server=>(
+                            <option key={server.serverName} value={server.serverName}>
+                              {server.serverName}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      <option value="__CUSTOM__">ไม่พบในรายการ — กรอก Server เอง</option>
+                    </select>
+                    {brokerServer === "__CUSTOM__" && (
+                      <input
+                        className="input"
+                        value={customBrokerServer}
+                        onChange={e=>setCustomBrokerServer(e.target.value)}
+                        placeholder="กรอกชื่อ Server ให้ตรงกับ MT5 / Broker"
+                        autoComplete="off"
+                        required
+                      />
+                    )}
+                    <small className="muted">
+                      เลือก Server ให้ตรงกับบัญชี MT5 ของคุณ หากไม่พบให้เลือก “กรอก Server เอง”
+                    </small>
+                  </>
                 )}
               </label>
 
