@@ -829,10 +829,21 @@ export default function DashboardPage() {
   const isMt5Online = Boolean(data?.instance?.mt5_online) && state !== "OFFLINE";
   const isCloudRuntime = String(data?.selectedSlot?.mode || "").toUpperCase() === "CLOUD";
   const isCloudWorkerOnline = Boolean(data?.instance?.runner_online);
-  // Customer connection status for VPS follows the VPS Server/Worker itself.
-  // Strict EA heartbeat freshness remains separate in isMt5Online for trading safety.
-  const isConnectionOnline = isCloudRuntime ? isCloudWorkerOnline : isMt5Online;
   const eaLastSeenAgeSeconds = Number(data?.instance?.ea_last_seen_age_seconds ?? -1);
+  // Keep the 20s heartbeat strict for trading safety, but give customer-facing
+  // connection state a 60s grace window so one delayed relay/poll never looks
+  // like a real disconnect.
+  const isMt5ConnectionOnline = Boolean(
+    data?.instance?.mt5_connection_online ??
+    (eaLastSeenAgeSeconds >= 0 && eaLastSeenAgeSeconds <= 60)
+  );
+  const isMt5ConnectionDegraded = Boolean(
+    data?.instance?.mt5_connection_degraded ??
+    (!isMt5Online && isMt5ConnectionOnline)
+  );
+  const isConnectionOnline = isCloudRuntime
+    ? (isCloudWorkerOnline || isMt5ConnectionOnline)
+    : isMt5ConnectionOnline;
   const symbolDigits = Math.max(0, Math.min(8, Number(metrics.symbolDigits ?? 3)));
   const spreadPoints = Number(metrics.spreadPoints || 0);
   const pointSize = Number(metrics.pointSize || 0);
@@ -869,9 +880,8 @@ export default function DashboardPage() {
   const isAgentOnline = Boolean(data?.instance?.agent_online || data?.instance?.device_online);
   const isHeartbeatDelayed =
     !isMt5Online &&
-    isAgentOnline &&
-    eaLastSeenAgeSeconds >= 0 &&
-    eaLastSeenAgeSeconds <= 60;
+    isMt5ConnectionOnline &&
+    (isCloudRuntime || isAgentOnline || isMt5ConnectionDegraded);
   const connectionAgeLabel = eaLastSeenAgeSeconds >= 0
     ? Math.max(0, eaLastSeenAgeSeconds).toFixed(0) + "s"
     : "—";
@@ -987,7 +997,21 @@ export default function DashboardPage() {
         cloudUpdateKey:cloudUpdateStageKey
       }
     : null;
-  const operationTerminal = serverOperation || cloudUpdateOperation;
+  const migrationOperation = vpsMigrationProgress
+    ? {
+        id:"runtime-migration-" + String(vpsMigrationProgress.migrationId || vpsMigrationProgress.stage || "pending"),
+        kind:"MIGRATION",
+        title:"กำลังย้ายระบบ MT5",
+        status:vpsMigrationProgress.status === "FAILED"
+          ? "FAILED"
+          : vpsMigrationProgress.status === "SUCCESS"
+            ? "SUCCESS"
+            : "RUNNING",
+        message:String(vpsMigrationProgress.message || "Server กำลังตรวจสอบการย้ายระบบ"),
+        canClose:vpsMigrationProgress.status === "FAILED" || vpsMigrationProgress.status === "SUCCESS"
+      }
+    : null;
+  const operationTerminal = serverOperation || migrationOperation || cloudUpdateOperation;
   const operationTerminalVisible =
     Boolean(operationTerminal) &&
     !(
@@ -1048,15 +1072,26 @@ export default function DashboardPage() {
     const operationAgeMs = Math.max(0, Date.now() - Number(op.startedAt || Date.now()));
 
     if (
-      operationAgeMs >= 90_000 &&
       (
-        op.kind === "SYMBOL" ||
-        op.kind === "START" ||
-        op.kind === "CLOSE_ALL"
+        operationAgeMs >= 90_000 &&
+        (
+          op.kind === "SYMBOL" ||
+          op.kind === "START" ||
+          op.kind === "CLOSE_ALL"
+        )
+      ) ||
+      (
+        operationAgeMs >= 180_000 &&
+        Boolean(op.target) &&
+        (
+          op.kind === "MT5_CONNECT" ||
+          op.kind === "MT5_RECONNECT" ||
+          op.kind === "MT5_SWITCH"
+        )
       )
     ) {
       failed = true;
-      message = "Server ไม่ได้รับสถานะยืนยันภายใน 90 วินาที · กรุณาตรวจ MT5/EA แล้วลองใหม่";
+      message = "Server ไม่ได้รับสถานะยืนยันภายในเวลาที่กำหนด · กรุณาตรวจ MT5/EA แล้วลองใหม่";
     } else if (op.kind === "SYMBOL") {
       const target = String(op.target || "");
       const current = String(liveMetrics.symbol || "");
@@ -1094,6 +1129,31 @@ export default function DashboardPage() {
         message = "Force Flat สำเร็จ · Position และ Pending Order ของ SCENOVA เป็น 0";
       } else {
         message = "Server กำลัง Force Flat · เหลือ " + positions + " Position / " + pendingOrders + " Pending";
+      }
+    } else if (
+      op.kind === "MT5_CONNECT" ||
+      op.kind === "MT5_RECONNECT" ||
+      op.kind === "MT5_SWITCH"
+    ) {
+      const expectedAccount = String(op.target || "");
+      const liveAccount = String(data?.account?.account_number || "");
+      const accountMatches = !expectedAccount || liveAccount === expectedAccount;
+      const runtimeIsCloud = String(data?.selectedSlot?.mode || "").toUpperCase() === "CLOUD";
+      const runnerReady = !runtimeIsCloud || Boolean(data?.instance?.runner_online);
+      const mt5Ready = Boolean(data?.instance?.mt5_online);
+      const mt5GraceReady = Boolean(data?.instance?.mt5_connection_online);
+
+      if (accountMatches && runnerReady && mt5Ready) {
+        complete = true;
+        message = "เชื่อม MT5 สำเร็จ · Server ตรวจบัญชีและ Heartbeat เรียบร้อยแล้ว";
+      } else if (!runnerReady) {
+        message = "กำลังรอ VPS Worker ออนไลน์...";
+      } else if (!accountMatches) {
+        message = "กำลังตรวจสอบบัญชี MT5 ใหม่...";
+      } else if (mt5GraceReady) {
+        message = "MT5 ตอบกลับแล้ว · กำลังยืนยัน Heartbeat ให้เสถียร";
+      } else {
+        message = "VPS ออนไลน์แล้ว · กำลังเปิด MT5 และรอ EA เชื่อมต่อ";
       }
     }
 
@@ -1369,11 +1429,17 @@ export default function DashboardPage() {
   }, [entitlement]);
 
   const connectionLabel = isCloudRuntime
-    ? (isCloudWorkerOnline ? "VPS Server เชื่อมต่อแล้ว" : "VPS Server ออฟไลน์")
+    ? isMt5Online
+      ? "VPS + MT5 เชื่อมต่อแล้ว"
+      : isMt5ConnectionOnline
+        ? "VPS ออนไลน์ · MT5 กำลังยืนยันการเชื่อมต่อ"
+        : isCloudWorkerOnline
+          ? "VPS ออนไลน์ · กำลังรอ MT5"
+          : "VPS Server ออฟไลน์"
     : isMt5Online
       ? "EA + MT5 เชื่อมต่อแล้ว"
       : isHeartbeatDelayed
-        ? "EA Heartbeat ขาดช่วง · กำลังเชื่อมต่อใหม่"
+        ? "EA Heartbeat ขาดช่วง · กำลังตรวจสอบ"
         : isAgentOnline
           ? "Windows Agent เชื่อมแล้ว · EA ยังไม่ตอบสนอง"
           : data?.account
@@ -2401,6 +2467,16 @@ export default function DashboardPage() {
     setBusy(true);
     setError("");
     setNotice("");
+    const operationId = Date.now() + "-mt5-switch-" + Math.random().toString(36).slice(2);
+    setServerOperationMinimized(false);
+    setServerOperation({
+      id:operationId,
+      kind:"MT5_SWITCH",
+      title:"กำลังเปลี่ยนบัญชี MT5",
+      status:"RUNNING",
+      message:"กำลังสั่งปิด MT5 เดิมบน VPS อย่างปลอดภัย...",
+      startedAt:Date.now()
+    });
     try {
       const resetUrl = "/bot/mt5/reset?slotId=" + encodeURIComponent(selectedSlotIdRef.current);
       let result = await api(resetUrl, { method: "POST" });
@@ -2410,6 +2486,11 @@ export default function DashboardPage() {
         if (attempts === 0) {
           setNotice("กำลังปิด MT5 เดิมบน VPS เพื่อเปลี่ยนบัญชี");
         }
+        setServerOperation((current:any) =>
+          current?.id === operationId
+            ? { ...current, message:"Server กำลังรอ Worker ยืนยันว่า MT5 เดิมปิดสนิท...", updatedAt:Date.now() }
+            : current
+        );
         await new Promise(resolve=>window.setTimeout(resolve, 1200));
         result = await api(resetUrl, { method: "POST" });
         attempts += 1;
@@ -2427,9 +2508,19 @@ export default function DashboardPage() {
       setCustomBrokerServer("");
       await load(selectedSlotIdRef.current);
       setActiveView("account");
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? { ...current, message:"MT5 เดิมปิดแล้ว · รอข้อมูลบัญชีใหม่เพื่อเชื่อมต่อ", updatedAt:Date.now() }
+          : current
+      );
       return true;
     } catch (e: any) {
       setError(e.message);
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? { ...current, status:"FAILED", message:String(e?.message || "เปลี่ยนบัญชี MT5 ไม่สำเร็จ"), updatedAt:Date.now(), canClose:true }
+          : current
+      );
       return false;
     } finally {
       setBusy(false);
@@ -2555,6 +2646,31 @@ export default function DashboardPage() {
     setBusy(true);
     setError("");
     setNotice("");
+    const existingSwitch = serverOperation?.status === "RUNNING" && serverOperation?.kind === "MT5_SWITCH"
+      ? serverOperation
+      : null;
+    const operationId = String(existingSwitch?.id || (Date.now() + "-mt5-connect-" + Math.random().toString(36).slice(2)));
+    const operationKind = existingSwitch
+      ? "MT5_SWITCH"
+      : cloudMt5DialogMode === "RECONNECT"
+        ? "MT5_RECONNECT"
+        : "MT5_CONNECT";
+    const expectedAccount = String(accountNumber || data?.account?.account_number || "").trim();
+    setServerOperationMinimized(false);
+    setServerOperation({
+      ...(existingSwitch || {}),
+      id:operationId,
+      kind:operationKind,
+      title:operationKind === "MT5_SWITCH"
+        ? "กำลังเปลี่ยนบัญชี MT5"
+        : cloudMt5DialogMode === "RECONNECT"
+          ? "กำลังเชื่อม MT5 ใหม่"
+          : "กำลังเชื่อมบัญชี MT5",
+      status:"RUNNING",
+      target:expectedAccount,
+      message:"กำลังส่งข้อมูลไป Server และเตรียม MT5 บน VPS...",
+      startedAt:Number(existingSwitch?.startedAt || Date.now())
+    });
     try {
       if (!tradingPassword) throw new Error("กรุณากรอก MT5 Trading Password");
 
@@ -2589,9 +2705,20 @@ export default function DashboardPage() {
       setNotice(cloudMt5DialogMode === "RECONNECT"
         ? "บันทึกรหัสแล้ว กำลังเชื่อม MT5 บน VPS ใหม่"
         : "เชื่อมบัญชี MT5 ใหม่แล้ว กำลังเปิดบน VPS");
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? { ...current, message:"Server รับข้อมูลแล้ว · กำลังเปิด MT5 และรอ EA Heartbeat ยืนยัน", updatedAt:Date.now() }
+          : current
+      );
       await load(selectedSlotIdRef.current,true);
     } catch (e:any) {
-      setError(String(e?.message || "เชื่อม MT5 ไม่สำเร็จ"));
+      const message = String(e?.message || "เชื่อม MT5 ไม่สำเร็จ");
+      setError(message);
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? { ...current, status:"FAILED", message, updatedAt:Date.now(), canClose:true }
+          : current
+      );
     } finally {
       setBusy(false);
     }
@@ -2627,9 +2754,9 @@ export default function DashboardPage() {
     setError("");
     setNotice("");
 
-    // Close the credential dialog and replace the action card immediately.
-    // The migration continues in the background and reports compact progress
-    // instead of opening the full-screen Server Terminal.
+    // Close the credential dialog; vpsMigrationProgress is also rendered by
+    // the existing SCENOVA Server Terminal so the customer sees every stage
+    // until the new runtime is actually verified.
     ownerVpsDialogRef.current?.close();
     setVpsMigrationProgress({
       status:"RUNNING",
@@ -4135,15 +4262,21 @@ export default function DashboardPage() {
                   <div className="eyebrow">SELECTED VPS SLOT</div>
                   <div className="vps-connected-title-row">
                     <h2>{data.account.account_number}</h2>
-                    <span className={"badge " + (isConnectionOnline ? "" : "warn")}>
-                      <span className={"dot " + (isConnectionOnline ? "green" : "amber")}/>
-                      {isConnectionOnline ? "ออนไลน์" : "ออฟไลน์"}
+                    <span className={"badge " + (isMt5Online ? "" : "warn")}>
+                      <span className={"dot " + (isMt5Online ? "green" : "amber")}/>
+                      {isMt5Online
+                        ? "MT5 ออนไลน์"
+                        : isMt5ConnectionOnline
+                          ? "กำลังตรวจสอบ MT5"
+                          : isCloudWorkerOnline
+                            ? "VPS ออนไลน์ · รอ MT5"
+                            : "ออฟไลน์"}
                     </span>
                   </div>
                   <p className="muted">{data.account.broker} · {data.account.broker_server} · Slot #{data.selectedSlot?.slot_number || "—"}</p>
                 </div>
                 <div className="vps-connected-actions">
-                  {!isConnectionOnline && (
+                  {!isMt5ConnectionOnline && (
                     <button
                       type="button"
                       className="btn primary"
