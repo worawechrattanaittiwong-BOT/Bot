@@ -43,6 +43,7 @@ export class CloudUpdateService {
 
     return {
       path,
+      bytes,
       version: String(release.eaVersion || "").trim(),
       sha256,
       runtimeContract: String(release.runtimeContract || "").trim(),
@@ -244,13 +245,22 @@ export class CloudUpdateService {
       }
 
       const releaseRow = (await tx.query(
-        `INSERT INTO ea_releases(version,sha256,runtime_contract,artifact_name,source_commit)
-         VALUES($1,$2,$3,'FastBasketBot.ex5',$4)
+        `INSERT INTO ea_releases(
+           version,sha256,runtime_contract,artifact_name,source_commit,artifact_bytes
+         )
+         VALUES($1,$2,$3,'FastBasketBot.ex5',$4,$5)
          ON CONFLICT(version,sha256) DO UPDATE
          SET runtime_contract=EXCLUDED.runtime_contract,
-             source_commit=COALESCE(EXCLUDED.source_commit,ea_releases.source_commit)
+             source_commit=COALESCE(EXCLUDED.source_commit,ea_releases.source_commit),
+             artifact_bytes=COALESCE(ea_releases.artifact_bytes,EXCLUDED.artifact_bytes)
          RETURNING id`,
-        [release.version, release.sha256, release.runtimeContract, release.sourceCommit]
+        [
+          release.version,
+          release.sha256,
+          release.runtimeContract,
+          release.sourceCommit,
+          release.bytes
+        ]
       )).rows[0];
 
       const parent = (await tx.query(
@@ -440,9 +450,13 @@ export class CloudUpdateService {
 
   async artifact(runnerId: string, instanceUpdateId: string) {
     const row = await this.db.one(
-      `SELECT ij.target_sha256,ij.action
+      `SELECT
+         ij.target_sha256,ij.action,
+         er.sha256 release_sha256,
+         er.artifact_bytes
        FROM instance_update_jobs ij
        JOIN server_update_jobs sj ON sj.id=ij.server_update_job_id
+       LEFT JOIN ea_releases er ON er.id=sj.release_id
        WHERE ij.id=$1
          AND sj.runner_id=$2
          AND ij.state='DELIVERED'`,
@@ -453,12 +467,37 @@ export class CloudUpdateService {
       throw new NotFoundException("Update artifact job not found");
     }
 
-    const release = this.currentRelease(true)!;
-    if (String(row.target_sha256 || "").toLowerCase() !== release.sha256) {
-      throw new ConflictException("Production EA changed after this Fleet Update was created");
+    const targetSha = String(row.target_sha256 || "").trim().toLowerCase();
+    const storedSha = String(row.release_sha256 || "").trim().toLowerCase();
+    const storedBytes = row.artifact_bytes
+      ? Buffer.from(row.artifact_bytes)
+      : null;
+
+    if (storedBytes) {
+      const actualSha = createHash("sha256").update(storedBytes).digest("hex");
+      if (!targetSha || actualSha !== targetSha || (storedSha && actualSha !== storedSha)) {
+        throw new ConflictException("Stored Fleet Update artifact hash mismatch");
+      }
+      return storedBytes;
     }
 
-    return release.path;
+    // Compatibility path for Fleet jobs created before immutable release
+    // snapshots were introduced. It is safe only while Production still points
+    // to the exact same hash; then backfill the snapshot for the rest of the
+    // deferred job. New Fleet jobs always store artifact_bytes at creation.
+    const release = this.currentRelease(true)!;
+    if (!targetSha || targetSha !== release.sha256) {
+      throw new ConflictException("Fleet Update artifact snapshot unavailable");
+    }
+
+    await this.db.query(
+      `UPDATE ea_releases
+       SET artifact_bytes=$2
+       WHERE sha256=$1 AND artifact_bytes IS NULL`,
+      [release.sha256, release.bytes]
+    );
+
+    return release.bytes;
   }
 
   async result(
