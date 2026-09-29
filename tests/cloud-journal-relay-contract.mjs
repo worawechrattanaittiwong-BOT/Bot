@@ -96,10 +96,10 @@ assert.match(
   /JOURNAL_RECOVERING/,
   "Performance UI must poll while VPS journal replay is recovering detail"
 );
-assert.match(
+assert.doesNotMatch(
   performancePage,
   /กำลังซิงก์ประวัติ Deal จาก MT5/,
-  "Performance recovery must explain temporary detail suppression while replay is running"
+  "Performance recovery must stay background-only and must not block the live analytics UI"
 );
 assert.match(
   performanceApi,
@@ -129,8 +129,13 @@ assert.match(
 );
 assert.match(
   performancePage,
-  /const detailValue=.*detailedStatsReliable/,
-  "Performance UI must suppress unreliable detailed metrics"
+  /const detailedStatsReliable = true;/,
+  "Performance UI must render the latest available live analytics without a journal reliability gate"
+);
+assert.match(
+  performancePage,
+  /const detailValue=\(value:string\)=>value;/,
+  "Performance UI must pass through available detail values while recovery continues in the background"
 );
 
 console.log("Cloud durable journal relay contract PASS");
