@@ -66,7 +66,7 @@ Assert-Contains $workerApi "'membershipCutoff',true" 'membership cutoff telemetr
 Assert-Contains $botApi 'CUSTOMER_CLOUD_ACCOUNT_SWITCH_STOP_REQUESTED' 'customer Cloud account switch stop flow missing'
 Assert-Contains $botApi 'pendingCloudStop: true' 'customer account switch must wait for verified VPS stop'
 Assert-Contains $botApi 'DELETE FROM mt5_credentials WHERE mt5_account_id=$1' 'old Cloud trading credential must be removed on account replacement'
-Assert-Contains $botApi "runtime_stop_state=CASE WHEN `$3='CLOUD' THEN 'NONE'" 'new Cloud account must rearm the existing VPS runtime'
+Assert-Contains $botApi "runtime_stop_state=CASE WHEN `$3::varchar='CLOUD' THEN 'NONE'" 'new Cloud account must rearm the existing VPS runtime'
 Assert-Contains $botApi 'an active subscription on VPS Slot #1 must never unlock an' 'per-slot Cloud entitlement isolation is missing'
 Assert-Contains $dashboard 'ถ้าบอทหยุดและไม่มี Position / Pending Order ระบบจะปิด MT5 เดิมบน VPS แล้วให้เชื่อมบัญชีใหม่ได้ทันที' 'customer account-switch eligibility UX missing'
 Assert-Contains $dashboard 'เปลี่ยนบัญชี MT5 ได้ทันที' 'customer stopped/flat account-switch action missing'
