@@ -8163,6 +8163,304 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   height:auto;
 }
 
+/* VPS Slot checkout uses the same visual language as the package checkout. */
+.vps-slot-dialog-checkout{
+  width:min(900px,calc(100vw - 40px));
+  border-color:rgba(155,140,190,.34);
+  border-radius:24px;
+  background:#11141f;
+  box-shadow:0 40px 120px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);
+}
+.vps-slot-dialog-checkout .vps-slot-dialog-shell{
+  padding:32px;
+  background:
+    radial-gradient(ellipse at 0 0,rgba(76,62,108,.15),transparent 60%),
+    #11141f;
+}
+.vps-slot-dialog-checkout .vps-slot-dialog-head{
+  padding-bottom:24px;
+  border-bottom:0;
+}
+.vps-slot-dialog-checkout .vps-slot-dialog-head .eyebrow{
+  color:#b7a7dc;
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.18em;
+}
+.vps-slot-dialog-checkout .vps-slot-dialog-head h2{
+  margin:10px 0 6px;
+  font-size:28px;
+  font-weight:600;
+  line-height:1.4;
+  letter-spacing:-.03em;
+}
+.vps-slot-dialog-checkout .vps-slot-dialog-head p{
+  margin:0;
+  color:#a1a8bb;
+  font-size:13px;
+  line-height:1.7;
+}
+.vps-slot-dialog-checkout .vps-slot-dialog-close{
+  width:38px;
+  height:38px;
+  flex-basis:38px;
+  border-color:rgba(165,169,195,.16);
+  border-radius:50%;
+  background:rgba(255,255,255,.02);
+  color:#c2bdd2;
+  font-size:23px;
+}
+.vps-slot-dialog-checkout .vps-slot-dialog-close:hover{
+  background:rgba(255,255,255,.05);
+}
+.vps-slot-checkout-steps{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  margin:0 0 24px;
+  padding:15px 0;
+  border-top:1px solid rgba(167,173,194,.1);
+  border-bottom:1px solid rgba(167,173,194,.1);
+}
+.vps-slot-checkout-steps span{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:#929aaf;
+  font-size:11px;
+}
+.vps-slot-checkout-steps b{
+  display:grid;
+  place-items:center;
+  width:25px;
+  height:25px;
+  border:1px solid rgba(166,154,189,.2);
+  border-radius:50%;
+  font-size:11px;
+  font-weight:500;
+}
+.vps-slot-checkout-steps .done{
+  color:#8ecbac;
+}
+.vps-slot-checkout-steps .done b{
+  border-color:rgba(88,170,126,.42);
+  background:rgba(36,91,61,.42);
+  color:#a5ddb9;
+}
+.vps-slot-checkout-steps .active{
+  color:#ddd1fb;
+}
+.vps-slot-checkout-steps .active b{
+  border-color:rgba(163,139,179,.42);
+  background:#30263f;
+}
+.vps-slot-checkout-steps i{
+  width:40px;
+  height:1px;
+  background:rgba(158,145,183,.2);
+}
+.vps-slot-payment-card{
+  display:grid;
+  grid-template-columns:minmax(230px,280px) minmax(0,1fr);
+  align-items:start;
+  gap:30px;
+  padding:18px;
+  border:1px solid rgba(155,140,190,.28);
+  border-radius:16px;
+  background:
+    radial-gradient(circle at 0 0,rgba(91,65,139,.12),transparent 42%),
+    linear-gradient(145deg,#0c111a,#090d15);
+}
+.vps-slot-payment-qr-panel{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  padding:14px;
+  border:1px solid rgba(166,149,199,.2);
+  border-radius:14px;
+  background:linear-gradient(150deg,rgba(27,23,42,.82),rgba(10,13,20,.96));
+}
+.vps-slot-payment-qr{
+  width:100%;
+  max-width:230px;
+  aspect-ratio:1;
+  display:grid;
+  place-items:center;
+  margin:0 auto;
+  padding:8px;
+  border:1px solid rgba(255,255,255,.92);
+  border-radius:12px;
+  background:#fff;
+  overflow:hidden;
+}
+.vps-slot-payment-qr img{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:contain;
+}
+.vps-slot-payment-qr-empty{
+  border-color:rgba(166,149,199,.25);
+  background:#0a0d15;
+  color:#8f98aa;
+  gap:8px;
+}
+.vps-slot-payment-qr-panel>span{
+  margin-top:3px;
+  color:#8f98aa;
+  font-size:11px;
+}
+.vps-slot-payment-qr-panel>b{
+  color:#eee9f8;
+  font-size:18px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.vps-slot-payment-recipient-mini{
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:3px;
+  margin-top:4px;
+  padding:10px 9px;
+  border:1px solid rgba(99,190,148,.28);
+  border-radius:10px;
+  background:rgba(35,106,74,.11);
+  text-align:center;
+}
+.vps-slot-payment-recipient-mini small{
+  color:#86bda3;
+  font-size:11px;
+  font-weight:700;
+}
+.vps-slot-payment-recipient-mini strong{
+  color:#f0fff7;
+  font-size:13px;
+  line-height:1.4;
+}
+.vps-slot-payment-recipient-mini span{
+  color:#94a8a0;
+  font-size:11px;
+  line-height:1.4;
+}
+.vps-slot-download-qr{
+  width:100%;
+  min-height:38px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  margin-top:3px;
+  border:1px solid rgba(138,119,216,.46);
+  border-radius:9px;
+  background:linear-gradient(135deg,rgba(87,67,169,.34),rgba(43,35,93,.42));
+  color:#e5ddff;
+  font-size:11px;
+  font-weight:800;
+  cursor:pointer;
+}
+.vps-slot-download-qr:hover:not(:disabled){
+  border-color:#8d74ee;
+  background:linear-gradient(135deg,rgba(105,81,206,.46),rgba(50,39,109,.54));
+}
+.vps-slot-payment-info{
+  min-width:0;
+  padding:6px 0;
+}
+.vps-slot-payment-info>.eyebrow{
+  color:#b7a7dc;
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.18em;
+}
+.vps-slot-payment-info h3{
+  margin:14px 0 12px;
+  color:#f2edf9;
+  font-size:26px;
+  font-weight:600;
+  line-height:1.35;
+  letter-spacing:-.03em;
+}
+.vps-slot-payment-info>p{
+  margin:0 0 12px;
+  color:#a9adbc;
+  font-size:12px;
+  line-height:1.75;
+}
+.vps-slot-payment-info>p b{
+  color:#e9e1f7;
+}
+.vps-slot-recipient-check{
+  max-width:520px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:3px 12px;
+  margin:10px 0 12px;
+  padding:11px 12px;
+  border:1px solid rgba(87,189,141,.25);
+  border-radius:10px;
+  background:rgba(30,92,65,.1);
+}
+.vps-slot-recipient-check>span{
+  grid-column:1/-1;
+  color:#84b99f;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.03em;
+}
+.vps-slot-recipient-check>b{
+  color:#f0fff7;
+  font-size:13px;
+  line-height:1.45;
+}
+.vps-slot-recipient-check>small{
+  margin:0;
+  color:#91a89e;
+  font-size:11px;
+  text-align:right;
+}
+.vps-slot-recipient-check>p{
+  grid-column:1/-1;
+  margin:4px 0 0;
+  color:#a9cbb9;
+  font-size:11px;
+  line-height:1.5;
+}
+.vps-slot-payment-created{
+  display:block;
+  margin:8px 0 12px;
+  color:#858c9f;
+  font-size:11px;
+}
+.vps-slot-dialog-checkout .vps-slot-slip-upload{
+  margin:0 0 12px;
+  min-height:78px;
+  align-content:center;
+  padding:14px 16px;
+  border-color:rgba(137,107,220,.38);
+  border-radius:12px;
+}
+.vps-slot-dialog-checkout .vps-slot-slip-upload span{
+  font-size:12px;
+}
+.vps-slot-payment-actions{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(150px,.72fr);
+  gap:10px;
+  margin-top:12px;
+}
+.vps-slot-payment-actions .btn{
+  width:100%;
+  min-width:0;
+}
+.vps-slot-dialog-checkout button:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+}
+
 @media(max-width:1120px){
   .vps-slot-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
@@ -8171,6 +8469,52 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .vps-slot-package-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:720px){
+  .vps-slot-dialog-checkout{
+    width:calc(100vw - 24px);
+    max-height:calc(100dvh - 24px);
+    border-radius:20px;
+  }
+  .vps-slot-dialog-checkout .vps-slot-dialog-shell{
+    padding:22px;
+  }
+  .vps-slot-dialog-checkout .vps-slot-dialog-head h2{
+    font-size:24px;
+  }
+  .vps-slot-checkout-steps{
+    gap:9px;
+    margin-bottom:20px;
+  }
+  .vps-slot-checkout-steps i{
+    flex:1;
+    min-width:8px;
+    max-width:40px;
+  }
+  .vps-slot-checkout-steps span{
+    gap:6px;
+    font-size:10px;
+  }
+  .vps-slot-payment-card{
+    grid-template-columns:1fr;
+    gap:18px;
+    padding:14px;
+  }
+  .vps-slot-payment-qr-panel{
+    width:100%;
+    max-width:340px;
+    margin:0 auto;
+  }
+  .vps-slot-payment-qr{
+    max-width:260px;
+  }
+  .vps-slot-recipient-check{
+    grid-template-columns:1fr;
+  }
+  .vps-slot-recipient-check>small{
+    text-align:left;
+  }
+  .vps-slot-payment-actions{
+    grid-template-columns:1fr;
+  }
   .connection-mode-actions{
     width:100%;
     justify-content:space-between;
