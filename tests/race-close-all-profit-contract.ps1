@@ -37,9 +37,9 @@ Need $race 'raceBasketProfitTarget' 'RACE Basket target ownership is missing'
 Need $race 'racePerPositionProfitTarget' 'RACE per-position target ownership is missing'
 Need $race 'raceStrictProfitTarget' 'RACE configured target must block hidden profitable exits'
 Need $race 'RACE_CLOSE_ALL_PROFIT_TARGET' 'RACE Basket target exit is missing'
-Need $race 'floatingProfit >= g_raceCloseAllProfitMoney' 'RACE Basket target must use only the currently-open MT5 round profit'
+Need $race 'displayedRoundProfit >= g_raceCloseAllProfitMoney' 'RACE Basket target must use the live MT5 displayed Profit for the current round'
 if($race.Contains('cycleProfit >= g_raceCloseAllProfitMoney')){throw 'RACE Basket target must not carry prior realized cycle P/L into the current round target'}
-Need $fastClose 'BasketProfit()>=g_raceCloseAllProfitMoney' 'RACE fast close must use current open MT5 Basket profit'
+Need $fastClose 'RaceDisplayedOpenProfit()>=g_raceCloseAllProfitMoney' 'RACE fast close must use the live MT5 displayed Profit for the current round'
 if($fastClose.Contains('BasketCycleProfit()>=g_raceCloseAllProfitMoney')){throw 'RACE fast close must not use historical cycle P/L'}
 Need $race 'RACE_WAIT_PER_POSITION_TARGET' 'RACE must wait for configured per-position target'
 Need $race 'RACE_WAIT_BASKET_TARGET' 'RACE must wait for configured Basket target'
@@ -57,6 +57,9 @@ Need $ea 'nowMs-g_raceLastExitBurstMs<30' 'RACE close retry must be 30 ms'
 Need $ea 'if(FastProfitClosePriority())' 'profit fast path must run before normal tick/timer work'
 Need $harvestBlock 'g_raceProfitTargetMode == "POSITION"' 'RACE harvest must run only in per-position mode'
 Need $harvestBlock 'g_racePerPositionProfitMoney' 'RACE harvest must use its dedicated per-position amount'
+Need $harvestBlock 'PositionGetDouble(POSITION_PROFIT)' 'RACE per-position target must follow the MT5 displayed Profit value'
+if($harvestBlock.Contains('PositionGetDouble(POSITION_SWAP)')){throw 'RACE per-position target must not alter the displayed MT5 Profit with swap'}
+Need $ea 'double RaceDisplayedOpenProfit()' 'RACE displayed-profit helper missing'
 Need $raceStop 'double points = RaceAtrStopPoints();' 'RACE stop must use RACE ATR only'
 if($raceStop.Contains('g_manualStopLossPoints')){throw 'MANUAL Stop Loss still leaks into RACE'}
 

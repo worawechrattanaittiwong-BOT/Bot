@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.92"
-#define SCENOVA_EA_VERSION "1.0.92"
-#define SCENOVA_PRODUCT_VERSION "1.0.92"
+#property version   "1.0.93"
+#define SCENOVA_EA_VERSION "1.0.93"
+#define SCENOVA_PRODUCT_VERSION "1.0.93"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_USER_LOSS_ONLY_V5"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -3840,6 +3840,24 @@ double RaceGivebackMoney(double peakProfit, double armMoney)
 // calls this function. On hedging accounts each blue ticket is closed in full;
 // on netting accounts one configured-lot unit is realized per pass because MT5
 // exposes only one aggregate position per symbol.
+double RaceDisplayedOpenProfit()
+{
+   double total=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic ||
+         StringFind(PositionGetString(POSITION_COMMENT),"SaaSRace")<0)
+         continue;
+      // Match the live Profit value shown for the open MT5 position.
+      total+=PositionGetDouble(POSITION_PROFIT);
+   }
+   return total;
+}
+
 int RaceHarvestProfitablePositions()
 {
    int harvested = 0;
@@ -3862,17 +3880,16 @@ int RaceHarvestProfitablePositions()
       if(StringFind(PositionGetString(POSITION_COMMENT), "SaaSRace") < 0)
          continue;
 
-      double netFloating = PositionGetDouble(POSITION_PROFIT) +
-                           PositionGetDouble(POSITION_SWAP);
+      double displayedProfit = PositionGetDouble(POSITION_PROFIT);
       double positionVolume = PositionGetDouble(POSITION_VOLUME);
-      double targetComparableProfit = netFloating;
+      double targetComparableProfit = displayedProfit;
       if(!hedging && positionVolume > 0.0 && baseVolume > 0.0)
       {
          // Netting exposes one aggregate position. Compare the proportional
          // profit of one configured-Lot unit to the user's per-position target,
          // then realize exactly one unit per pass.
          targetComparableProfit =
-            netFloating * MathMin(1.0, baseVolume / positionVolume);
+            displayedProfit * MathMin(1.0, baseVolume / positionVolume);
       }
       if(perPositionTarget <= 0.0 ||
          targetComparableProfit + 0.00000001 < perPositionTarget)
@@ -3891,7 +3908,7 @@ int RaceHarvestProfitablePositions()
          g_lastCloseReason = "RACE_PROFIT_HARVEST";
          Print(
             "RACE profit harvest ticket=",ticket,
-            " profit=",DoubleToString(netFloating,2),
+            " profit=",DoubleToString(displayedProfit,2),
             " closeVolume=",DoubleToString(closeVolume,2)
          );
 
@@ -4319,8 +4336,9 @@ bool ManageRaceBasket(double momentum)
    bool raceStrictProfitTarget =
       raceBasketProfitTarget || racePerPositionProfitTarget;
 
+   double displayedRoundProfit=RaceDisplayedOpenProfit();
    if(raceBasketProfitTarget &&
-      floatingProfit >= g_raceCloseAllProfitMoney)
+      displayedRoundProfit >= g_raceCloseAllProfitMoney)
    {
       RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET");
       return true;
@@ -4521,7 +4539,7 @@ bool FastProfitClosePriority()
       g_raceProfitTargetMode=="BASKET" &&
       g_raceCloseAllProfitMoney>0.0;
    if(raceBasketProfitTarget &&
-      BasketProfit()>=g_raceCloseAllProfitMoney)
+      RaceDisplayedOpenProfit()>=g_raceCloseAllProfitMoney)
    {
       RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET");
       return true;
