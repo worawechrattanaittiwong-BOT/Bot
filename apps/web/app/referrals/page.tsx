@@ -376,7 +376,7 @@ export default function ReferralsPage() {
       <main className={styles.loading}>
         <div>
           <ScenovaIcon name="info" size={24}/>
-          <b>ไม่สามารถเปิดหน้าระบบแนะนำเพื่อนได้</b>
+          <b>ไม่สามารถเปิดหน้าแนะนำเพื่อนได้</b>
           <span>{message || "กรุณาเข้าสู่ระบบอีกครั้ง"}</span>
         </div>
       </main>
@@ -538,7 +538,7 @@ export default function ReferralsPage() {
             <div>
               <span className={styles.statusIcon}><ScenovaIcon name="lock" size={18}/></span>
               <span>
-                <b>{data.wallet.withdrawalEnabled ? "ระบบถอนเงินพร้อมใช้งาน" : "ระบบถอนเงินพักชั่วคราว"}</b>
+                <b>{data.wallet.withdrawalEnabled ? "พร้อมถอนเงิน" : "พักการถอน"}</b>
                 
               </span>
             </div>
@@ -687,7 +687,7 @@ export default function ReferralsPage() {
                   <span className={styles.statusBadge}>{withdrawalStatusLabel(openWithdrawal.status)}</span>
                   <b>{money(openWithdrawal.amount_satang)}</b>
                   <small>สร้างเมื่อ {dateTime(openWithdrawal.created_at)}</small>
-                  <p>ระบบกันยอดรายการนี้ไว้แล้ว จึงไม่สามารถส่งคำขอถอนซ้ำได้</p>
+                  <p>มีคำขอถอนที่กำลังดำเนินการอยู่</p>
                   {openWithdrawal.status === "REQUESTED" && (
                     <button type="button" className={styles.cancelButton} disabled={cancellingId===openWithdrawal.id} onClick={()=>void cancelWithdrawal(openWithdrawal)}>
                       {cancellingId===openWithdrawal.id ? "กำลังยกเลิก..." : "ยกเลิกรายการและคืนยอด"}
@@ -862,8 +862,8 @@ export default function ReferralsPage() {
         <section className={styles.learnCard}>
           <div className={styles.learnIcon}><ScenovaIcon name="book" size={22}/></div>
           <div>
-            <h2>ดูวิธีการทำงานของระบบแนะนำเพื่อน</h2>
-            <p>ดูโครงสร้างเครือข่าย 4 ระดับ ตัวอย่างการคำนวณ และหลักเกณฑ์การได้รับคอมมิชชั่น</p>
+            <h2>รายละเอียดการแนะนำเพื่อน</h2>
+            <p>ดูรายละเอียดคอมมิชชั่นและเครือข่าย</p>
           </div>
           <Link className={styles.detailsButton} href="/referrals/details">
             ดูรายละเอียด <span>→</span>
