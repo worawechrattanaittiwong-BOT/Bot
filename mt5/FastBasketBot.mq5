@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.95"
-#define SCENOVA_EA_VERSION "1.0.95"
-#define SCENOVA_PRODUCT_VERSION "1.0.95"
+#property version   "1.0.96"
+#define SCENOVA_EA_VERSION "1.0.96"
+#define SCENOVA_PRODUCT_VERSION "1.0.96"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_DISTANCE_ARMED_EXIT_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -345,6 +345,8 @@ double g_zeroGridStartEquity = 0.0;
 datetime g_zeroGridCycleStartedAt = 0;
 bool   g_zeroGridClosing = false;
 ulong  g_zeroGridLastExitBurstMs = 0;
+ulong  g_zeroGridPendingBuyRequestMs[ZERO_GRID_MAX_LEVELS+1];
+ulong  g_zeroGridPendingSellRequestMs[ZERO_GRID_MAX_LEVELS+1];
 // V3 locks geometry for the lifetime of one cycle. Web setting changes are
 // applied only while flat, never halfway through a filled ladder.
 double g_zeroGridCycleStepPrice = 0.0;
@@ -2015,6 +2017,8 @@ void ResetZeroGridCycleState()
    g_zeroGridCycleStartedAt=0;
    g_zeroGridClosing=false;
    g_zeroGridLastExitBurstMs=0;
+   ArrayInitialize(g_zeroGridPendingBuyRequestMs,0);
+   ArrayInitialize(g_zeroGridPendingSellRequestMs,0);
    g_zeroGridCycleStepPrice=0.0;
    g_zeroGridCycleLevelsPerSide=0;
    g_zeroGridCycleBaseLot=0.0;
@@ -2269,11 +2273,10 @@ double ZeroGridEffectiveLevelLot(int level)
 
 double ZeroGridEntryGapPrice()
 {
-   // Customer geometry is explicit: current/center 4000.00 -> BUY STOP
-   // 4001.00 and SELL STOP 3999.00. Keep exactly 1.00 price unit whenever
-   // the broker permits it; widen only when StopsLevel genuinely requires it.
+   // Normal ZERO: first trigger sits 3.00 price units from the live quote.
+   // Low-volatility keeps its dedicated compact 0.10 profile.
    double tick=ZeroGridTickSize();
-   double preferredGap=ZeroGridEffectiveLowVolatilityEnabled() ? 0.10 : 1.0;
+   double preferredGap=ZeroGridEffectiveLowVolatilityEnabled() ? 0.10 : 3.0;
    double brokerSafeGap=ZeroGridMinPendingDistancePrice()+tick*2.0;
    double gap=MathMax(preferredGap,brokerSafeGap);
    double units=MathCeil((gap/tick)-1e-10);
@@ -2348,10 +2351,10 @@ double ZeroGridPendingAnchorPrice(bool buySide)
    if(!SymbolInfoTick(_Symbol,live)) return 0.0;
 
    double gap=ZeroGridEntryGapPrice();
-   double raw=buySide ? g_zeroGridCenter+gap : g_zeroGridCenter-gap;
+   double raw=buySide ? live.ask+gap : live.bid-gap;
 
    // Guard the request against a fast quote move while keeping the intended
-   // center +/- first-gap geometry whenever the broker allows it.
+   // live quote +/- first-gap geometry whenever the broker allows it.
    double brokerSafe=ZeroGridMinPendingDistancePrice()+ZeroGridTickSize();
    double legal=buySide ? live.ask+brokerSafe : live.bid-brokerSafe;
    if(buySide && raw<legal) raw=legal;
@@ -2420,9 +2423,45 @@ bool ZeroGridRecenterFlatCycle()
    return g_zeroGridCenter>0.0;
 }
 
+bool ZeroGridPendingRequestInFlight(bool buySide,int level)
+{
+   if(level<1 || level>ZERO_GRID_MAX_LEVELS)
+      return false;
+   ulong sentAt=buySide
+      ? g_zeroGridPendingBuyRequestMs[level]
+      : g_zeroGridPendingSellRequestMs[level];
+   if(sentAt==0)
+      return false;
+   if(ZeroGridLevelExists(buySide,level))
+   {
+      if(buySide) g_zeroGridPendingBuyRequestMs[level]=0;
+      else g_zeroGridPendingSellRequestMs[level]=0;
+      return false;
+   }
+   ulong nowMs=GetTickCount64();
+   if(nowMs>=sentAt && nowMs-sentAt<1500)
+      return true;
+   if(buySide) g_zeroGridPendingBuyRequestMs[level]=0;
+   else g_zeroGridPendingSellRequestMs[level]=0;
+   return false;
+}
+
+void ZeroGridMarkPendingRequest(bool buySide,int level)
+{
+   if(level<1 || level>ZERO_GRID_MAX_LEVELS)
+      return;
+   ulong nowMs=GetTickCount64();
+   if(buySide) g_zeroGridPendingBuyRequestMs[level]=nowMs;
+   else g_zeroGridPendingSellRequestMs[level]=nowMs;
+}
+
 bool ZeroGridSendPending(bool buySide,int level)
 {
-   if(level<1 || level>ZeroGridEffectiveLevelsPerSide() || ZeroGridLevelExists(buySide,level))
+   if(level<1 || level>ZeroGridEffectiveLevelsPerSide())
+      return true;
+   if(ZeroGridLevelExists(buySide,level))
+      return true;
+   if(!MQLInfoInteger(MQL_TESTER) && ZeroGridPendingRequestInFlight(buySide,level))
       return true;
    if(g_zeroGridCenter<=0.0)
       return false;
@@ -2507,14 +2546,25 @@ bool ZeroGridSendPending(bool buySide,int level)
       request.comment=ZeroGridComment(buySide,level);
 
       ResetLastError();
-      bool sent=OrderSend(request,result);
+      bool testerMode=(bool)MQLInfoInteger(MQL_TESTER);
+      bool sent=false;
+      if(testerMode)
+         sent=OrderSend(request,result);
+      else
+         sent=OrderSendAsync(request,result);
       RegisterOrderRequest();
       g_lastOrderRetcode=(long)result.retcode;
       g_lastOrderError=GetLastError();
       g_lastOrderAt=TimeCurrent();
 
-      if(sent && (result.retcode==TRADE_RETCODE_DONE || result.retcode==TRADE_RETCODE_PLACED))
+      if(sent && (!testerMode ||
+         result.retcode==TRADE_RETCODE_DONE ||
+         result.retcode==TRADE_RETCODE_PLACED))
+      {
+         if(!testerMode)
+            ZeroGridMarkPendingRequest(buySide,level);
          return true;
+      }
 
       PrintFormat(
          "ZERO pending retry side=%s level=%d attempt=%d price=%.*f bid=%.*f ask=%.*f retcode=%u error=%d",
