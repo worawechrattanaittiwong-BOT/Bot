@@ -2780,7 +2780,7 @@ export default function DashboardPage() {
       setCustomBrokerServer("");
     } else {
       setAccountNumber("");
-      setBrokerServer("");
+      setBrokerServer(brokerCode === "OTHER" ? "__CUSTOM__" : "");
       setCustomBrokerServer("");
       if (!brokerCatalog.some(item=>item.code===brokerCode)) {
         setBrokerCode(brokerCatalog[0]?.code || "EXNESS");
