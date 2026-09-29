@@ -541,11 +541,8 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
           currency: "THB",
           metadata: {
             subscriptionId: subscription.id,
-            subscriptionIds: provisioned.subscriptionIds,
             months: Number(order.months),
             slotId: slot.id,
-            slotIds: provisioned.slotIds,
-            quantity: provisioned.quantity,
             paymentProvider: "EASYSLIP",
             transRef: verification.transRef
           }
@@ -576,10 +573,6 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
         status: "PAID",
         orderId: order.id,
         subscriptionId: subscription.id,
-        subscriptionIds: provisioned.subscriptionIds,
-        slotId: slot.id,
-        slotIds: provisioned.slotIds,
-        quantity: provisioned.quantity,
         expiresAt: subscription.expires_at
       };
     });
@@ -863,8 +856,11 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
           currency: "THB",
           metadata: {
             subscriptionId: subscription.id,
+            subscriptionIds: provisioned.subscriptionIds,
             months: Number(order.months),
             slotId: slot.id,
+            slotIds: provisioned.slotIds,
+            quantity: provisioned.quantity,
             paymentProvider: "EASYSLIP",
             transRef: verification.transRef
           }
@@ -899,6 +895,10 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
         status: "PAID",
         orderId: order.id,
         subscriptionId: subscription.id,
+        subscriptionIds: provisioned.subscriptionIds,
+        slotId: slot.id,
+        slotIds: provisioned.slotIds,
+        quantity: provisioned.quantity,
         expiresAt: subscription.expires_at
       };
     });
