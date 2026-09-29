@@ -475,6 +475,10 @@ export class BotController {
          bi.desired_state,
          COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
          (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') mt5_online,
+         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '60 seconds') mt5_connection_online,
+         (bi.last_seen_at IS NOT NULL
+           AND bi.last_seen_at <= now() - interval '20 seconds'
+           AND bi.last_seen_at > now() - interval '60 seconds') mt5_connection_degraded,
          (wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now() - interval '30 seconds') runner_online,
          bi.device_status,
          bi.device_hostname,
@@ -817,6 +821,10 @@ export class BotController {
          wn.region AS runner_region,
          wn.hostname AS runner_hostname,
          (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') AS mt5_online,
+         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '60 seconds') AS mt5_connection_online,
+         (bi.last_seen_at IS NOT NULL
+           AND bi.last_seen_at <= now() - interval '20 seconds'
+           AND bi.last_seen_at > now() - interval '60 seconds') AS mt5_connection_degraded,
          (wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now() - interval '30 seconds') AS runner_online,
          (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '30 minutes') AS agent_online,
          (bi.device_last_seen_at IS NOT NULL AND bi.device_last_seen_at > now() - interval '90 seconds') AS device_online,
@@ -2546,7 +2554,7 @@ export class BotController {
     if (!account) throw new ConflictException("cloud MT5 account not found");
     if (!body.tradingPassword || /[\r\n\x00]/.test(body.tradingPassword)) throw new ConflictException("Trading Password ไม่ถูกต้อง");
     const bound = await this.db.one(
-      `SELECT id,slot_id,last_seen_at,runner_id,runtime_stop_state,metrics
+      `SELECT id,slot_id,last_seen_at,runner_id,runtime_stop_state,metrics,execution_generation
        FROM bot_instances
        WHERE mt5_account_id=$1 AND mode='CLOUD'
        ORDER BY created_at DESC
@@ -2651,16 +2659,44 @@ export class BotController {
            cloud_recovery_window_started_at=NULL,
            cloud_recovery_next_at=NULL,
            cloud_recovery_last_error=NULL,
-           provisioning_error=NULL
+           provisioning_error=NULL,
+           actual_state='OFFLINE',
+           last_seen_at=NULL
          WHERE id=$1`,
         [bound.id]
       );
+
+      if (bound.runner_id) {
+        const activeReload = await this.db.one(
+          `SELECT id FROM worker_commands
+           WHERE bot_instance_id=$1
+             AND command='RELOAD_INSTANCE'
+             AND status IN ('PENDING','DELIVERED')
+           ORDER BY id DESC
+           LIMIT 1`,
+          [bound.id]
+        );
+        if (!activeReload) {
+          await this.db.query(
+            `INSERT INTO worker_commands(
+               runner_id,bot_instance_id,execution_generation,command,status
+             ) VALUES($1,$2,$3,'RELOAD_INSTANCE','PENDING')`,
+            [bound.runner_id, bound.id, Number(bound.execution_generation || 1)]
+          );
+        }
+      }
+
       await this.db.query(
         "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'CLOUD_CREDENTIAL_RECOVERY','bot_instance',$2,$3::jsonb)",
         [
           String(req.user?.code || req.user?.sub || "USER").slice(0, 160),
           bound.id,
-          JSON.stringify({ mt5AccountId: account.id, runnerId: bound.runner_id })
+          JSON.stringify({
+            mt5AccountId: account.id,
+            runnerId: bound.runner_id,
+            executionGeneration: Number(bound.execution_generation || 1),
+            reloadRequested: Boolean(bound.runner_id)
+          })
         ]
       );
     }

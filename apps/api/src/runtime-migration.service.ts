@@ -809,8 +809,12 @@ export class RuntimeMigrationService {
       if (TERMINAL_STATES.includes(String(migration.state))) return migration;
 
       const instance = (await tx.query(
-        `SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions
-         FROM bot_instances bi WHERE bi.id=$1 FOR UPDATE`,
+        `SELECT bi.*,COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+           wn.last_seen_at AS runner_last_seen_at
+         FROM bot_instances bi
+         LEFT JOIN worker_nodes wn ON wn.runner_id=bi.runner_id
+         WHERE bi.id=$1
+         FOR UPDATE OF bi`,
         [migration.bot_instance_id]
       )).rows[0];
       if (!instance) throw new NotFoundException("Bot instance not found");
@@ -841,13 +845,16 @@ export class RuntimeMigrationService {
         const targetSeenAt = instance.last_seen_at
           ? new Date(instance.last_seen_at).getTime()
           : 0;
-        const cloudTargetWasReady =
+        const cloudTargetIdentityMatches =
           instance.mode === "CLOUD" &&
           String(instance.slot_id || "") === String(migration.target_slot_id || "") &&
-          (!migration.target_runner_id || String(instance.runner_id || "") === String(migration.target_runner_id)) &&
+          (!migration.target_runner_id || String(instance.runner_id || "") === String(migration.target_runner_id));
+        const cloudHeartbeatBelongsToNewLease =
           targetSeenAt > 0 &&
           leaseRotatedAt > 0 &&
           targetSeenAt >= leaseRotatedAt;
+        const cloudRunnerFresh =
+          !migration.target_runner_id || this.fresh(instance.runner_last_seen_at, 30_000);
 
         if (instance.provisioning_error) {
           await tx.query(
@@ -857,8 +864,10 @@ export class RuntimeMigrationService {
             [migration.id]
           );
         } else if (
-          instance.mode === "CLOUD" &&
-          (this.fresh(instance.last_seen_at, 30_000) || cloudTargetWasReady)
+          cloudTargetIdentityMatches &&
+          cloudHeartbeatBelongsToNewLease &&
+          cloudRunnerFresh &&
+          this.fresh(instance.last_seen_at, 30_000)
         ) {
           await tx.query(
             `UPDATE runtime_migrations SET state='COMPLETED',
@@ -875,18 +884,23 @@ export class RuntimeMigrationService {
         const localAgentSeenAt = instance.agent_last_seen_at
           ? new Date(instance.agent_last_seen_at).getTime()
           : 0;
-        const localTargetWasReady =
+        const localEaSeenAt = instance.last_seen_at
+          ? new Date(instance.last_seen_at).getTime()
+          : 0;
+        const localTargetIdentityMatches =
           instance.mode === "LOCAL" &&
           String(instance.slot_id || "") === String(migration.target_slot_id || "") &&
-          instance.device_status === "ACTIVE" &&
-          localAgentSeenAt > 0 &&
+          instance.device_status === "ACTIVE";
+        const localSignalsBelongToNewLease =
           leaseRotatedAt > 0 &&
-          localAgentSeenAt >= leaseRotatedAt;
+          localAgentSeenAt >= leaseRotatedAt &&
+          localEaSeenAt >= leaseRotatedAt;
 
         if (
-          instance.mode === "LOCAL" &&
-          instance.device_status === "ACTIVE" &&
-          (this.fresh(instance.agent_last_seen_at, 45_000) || localTargetWasReady)
+          localTargetIdentityMatches &&
+          localSignalsBelongToNewLease &&
+          this.fresh(instance.agent_last_seen_at, 60_000) &&
+          this.fresh(instance.last_seen_at, 60_000)
         ) {
           await tx.query(
             `UPDATE runtime_migrations SET state='COMPLETED',

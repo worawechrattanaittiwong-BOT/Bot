@@ -932,7 +932,17 @@ internal sealed class Mt5Runtime
             catch { }
         }
 
-        return !HasExactTerminal(terminal);
+        var stopped = !HasExactTerminal(terminal);
+        if (stopped)
+        {
+            // A verified stop ends the previous runtime ownership window.
+            // Rearm the next generation/account so a stale launch-attempt
+            // claim can never block the replacement MT5 from starting.
+            _autoLaunchAttempted.Remove(instanceId);
+            _maximizedProcessByInstance.Remove(instanceId);
+        }
+
+        return stopped;
     }
 
     private string GetInstancePath(string instanceId)
