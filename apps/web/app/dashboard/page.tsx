@@ -38,9 +38,11 @@ type BrokerCatalog = {
 };
 
 type CloudCatalog = {
-  packages: Array<{ months:number; price_satang:number; enabled:boolean; updated_at?:string }>;
-  addonPackages: Array<{ months:number; price_satang:number; enabled:boolean; updated_at?:string }>;
+  packages: Array<{ months:number; price_satang:number; price_usd_cents:number; estimated_price_satang?:number; enabled:boolean; updated_at?:string }>;
+  addonPackages: Array<{ months:number; price_satang:number; price_usd_cents:number; estimated_price_satang?:number; enabled:boolean; updated_at?:string }>;
   available?: number;
+  capacityAvailable?: boolean;
+  fx?: { usdThb:number; source:string; quotedAt:string };
   provisioningPaused: boolean;
   salesPaused: boolean;
   paymentMode: string;
@@ -74,6 +76,11 @@ type CloudOrder = {
   account_number?:string|null;
   purchase_type?:string|null;
   slot_type?:string|null;
+  list_price_usd_cents?:number|null;
+  final_price_usd_cents?:number|null;
+  fx_rate_usd_thb?:number|null;
+  fx_source?:string|null;
+  fx_quoted_at?:string|null;
 };
 
 type View = "overview" | "account" | "backtest";
@@ -93,6 +100,20 @@ function formatAccountMoney(value: unknown, currency: unknown, signed = false) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }) + " " + normalizeAccountCurrency(currency);
+}
+
+function formatUsdCents(value: unknown) {
+  return (Number(value || 0) / 100).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function formatThbSatang(value: unknown) {
+  return (Number(value || 0) / 100).toLocaleString("th-TH", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
 }
 const defaultSettings = {
   symbol: "XAUUSD",
@@ -188,11 +209,11 @@ export default function DashboardPage() {
   const [vpsPaymentOrderId, setVpsPaymentOrderId] = useState("");
   const [vpsPurchaseBusy, setVpsPurchaseBusy] = useState(false);
   const [ownerAddonPriceEditorOpen, setOwnerAddonPriceEditorOpen] = useState(false);
-  const [ownerAddonPrices, setOwnerAddonPrices] = useState<Record<number,{priceBaht:string;enabled:boolean}>>({
-    1:{priceBaht:"",enabled:false},
-    3:{priceBaht:"",enabled:false},
-    6:{priceBaht:"",enabled:false},
-    12:{priceBaht:"",enabled:false}
+  const [ownerAddonPrices, setOwnerAddonPrices] = useState<Record<number,{priceUsd:string;enabled:boolean}>>({
+    1:{priceUsd:"",enabled:false},
+    3:{priceUsd:"",enabled:false},
+    6:{priceUsd:"",enabled:false},
+    12:{priceUsd:"",enabled:false}
   });
   const [vpsSlipFile, setVpsSlipFile] = useState<File | null>(null);
   const [vpsSlipPreview, setVpsSlipPreview] = useState("");
@@ -1279,14 +1300,16 @@ export default function DashboardPage() {
   const vpsPaymentOrder = cloudOrders.find(order=>order.id===vpsPaymentOrderId) || null;
   const vpsPaymentAccount = cloudCatalog?.paymentAccounts?.[0] || null;
   const vpsPackages = (cloudCatalog?.addonPackages || [])
-    .filter(pack=>pack.enabled && Number(pack.price_satang) > 0)
+    .filter(pack=>pack.enabled && Number(pack.price_usd_cents) > 0)
     .sort((a,b)=>Number(a.months)-Number(b.months));
   const selectedVpsPackage = vpsPackages.find(pack=>Number(pack.months)===Number(vpsPurchaseMonths)) || vpsPackages[0] || null;
   const vpsRenewSlot = cloudSlots.find((slot:any)=>String(slot?.id || "")===String(vpsRenewSlotId || "")) || null;
   const canBuyVpsSlot = Boolean(cloudCatalog?.checkoutEnabled) &&
-    primaryCloudActive;
+    primaryCloudActive &&
+    cloudCatalog?.capacityAvailable !== false;
   const canCheckoutVpsOrder = Boolean(cloudCatalog?.checkoutEnabled) &&
-    primaryCloudActive;
+    primaryCloudActive &&
+    (Boolean(vpsRenewSlotId) || cloudCatalog?.capacityAvailable !== false);
 
   const accessExpiry = entitlement?.expiresAt ? new Date(entitlement.expiresAt) : null;
   const accessRemaining = accessExpiry ? Math.max(0, accessExpiry.getTime() - accessClockNow) : null;
@@ -2025,16 +2048,16 @@ export default function DashboardPage() {
   }
 
   function openOwnerAddonPricing() {
-    const next:Record<number,{priceBaht:string;enabled:boolean}> = {
-      1:{priceBaht:"",enabled:false},
-      3:{priceBaht:"",enabled:false},
-      6:{priceBaht:"",enabled:false},
-      12:{priceBaht:"",enabled:false}
+    const next:Record<number,{priceUsd:string;enabled:boolean}> = {
+      1:{priceUsd:"",enabled:false},
+      3:{priceUsd:"",enabled:false},
+      6:{priceUsd:"",enabled:false},
+      12:{priceUsd:"",enabled:false}
     };
     for (const months of [1,3,6,12]) {
       const pack = (cloudCatalog?.addonPackages || []).find(item=>Number(item.months)===months);
       next[months] = {
-        priceBaht: pack ? String(Number(pack.price_satang || 0) / 100) : "",
+        priceUsd: pack ? (Number(pack.price_usd_cents || 0) / 100).toFixed(2) : "",
         enabled: Boolean(pack?.enabled)
       };
     }
@@ -2053,14 +2076,14 @@ export default function DashboardPage() {
     setNotice("");
     try {
       const packages = [1,3,6,12].map(months=>{
-        const row = ownerAddonPrices[months] || {priceBaht:"",enabled:false};
-        const priceBaht = Number(row.priceBaht || 0);
-        if (!Number.isFinite(priceBaht) || priceBaht < 0) {
-          throw new Error("กรุณาตรวจราคา Slot เสริมให้ถูกต้อง");
+        const row = ownerAddonPrices[months] || {priceUsd:"",enabled:false};
+        const priceUsd = Number(row.priceUsd || 0);
+        if (!Number.isFinite(priceUsd) || priceUsd < 0) {
+          throw new Error("กรุณาตรวจราคา USD ของ Slot เสริมให้ถูกต้อง");
         }
         return {
           months,
-          priceSatang:Math.round(priceBaht * 100),
+          priceUsdCents:Math.round(priceUsd * 100),
           enabled:Boolean(row.enabled)
         };
       });
@@ -4277,7 +4300,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="vps-addon-price-grid">
                   {[1,3,6,12].map(months=>{
-                    const row = ownerAddonPrices[months] || {priceBaht:"",enabled:false};
+                    const row = ownerAddonPrices[months] || {priceUsd:"",enabled:false};
                     return (
                       <div className="vps-addon-price-row" key={months}>
                         <div>
@@ -4285,15 +4308,15 @@ export default function DashboardPage() {
                           <small>ต่อ 1 VPS Slot เสริม</small>
                         </div>
                         <label>
-                          <span>ราคา (บาท)</span>
+                          <span>ราคา (USD)</span>
                           <input
                             type="number"
                             min="0"
-                            step="1"
-                            value={row.priceBaht}
+                            step="0.01"
+                            value={row.priceUsd}
                             onChange={event=>setOwnerAddonPrices(current=>({
                               ...current,
-                              [months]:{...(current[months] || {priceBaht:"",enabled:false}),priceBaht:event.target.value}
+                              [months]:{...(current[months] || {priceUsd:"",enabled:false}),priceUsd:event.target.value}
                             }))}
                           />
                         </label>
@@ -4303,7 +4326,7 @@ export default function DashboardPage() {
                             checked={Boolean(row.enabled)}
                             onChange={event=>setOwnerAddonPrices(current=>({
                               ...current,
-                              [months]:{...(current[months] || {priceBaht:"",enabled:false}),enabled:event.target.checked}
+                              [months]:{...(current[months] || {priceUsd:"",enabled:false}),enabled:event.target.checked}
                             }))}
                           />
                           <span>เปิดขาย</span>
@@ -4334,7 +4357,7 @@ export default function DashboardPage() {
                         onClick={()=>setVpsPurchaseMonths(Number(pack.months))}
                       >
                         <span>{pack.months} เดือน</span>
-                        <b>฿{(Number(pack.price_satang || 0)/100).toLocaleString("th-TH",{maximumFractionDigits:2})}</b>
+                        <b>${formatUsdCents(pack.price_usd_cents)} USD</b>
                       </button>
                     ))}
                   </div>
@@ -4350,8 +4373,9 @@ export default function DashboardPage() {
                     <b>{selectedVpsPackage?.months || vpsPurchaseMonths} เดือน</b>
                   </div>
                   <div className="total">
-                    <span>ยอดชำระ</span>
-                    <b>฿{(Number(selectedVpsPackage?.price_satang || 0)/100).toLocaleString("th-TH",{maximumFractionDigits:2})}</b>
+                    <span>ราคา</span>
+                    <b>${formatUsdCents(selectedVpsPackage?.price_usd_cents)} USD</b>
+                    <small>ประมาณ ฿{formatThbSatang(selectedVpsPackage?.estimated_price_satang)} THB</small>
                   </div>
                 </section>
 
@@ -4382,8 +4406,9 @@ export default function DashboardPage() {
                     <b>{vpsPaymentOrder.months} เดือน</b>
                   </div>
                   <div className="total">
-                    <span>ยอดชำระ</span>
-                    <b>฿{(Number(vpsPaymentOrder.amount || 0)/100).toLocaleString("th-TH",{maximumFractionDigits:2})}</b>
+                    <span>ราคา</span>
+                    <b>{Number(vpsPaymentOrder.final_price_usd_cents || 0) > 0 ? `$${formatUsdCents(vpsPaymentOrder.final_price_usd_cents)} USD` : "USD —"}</b>
+                    <small>ยอดชำระจริง ฿{formatThbSatang(vpsPaymentOrder.amount)} THB</small>
                   </div>
                 </div>
 

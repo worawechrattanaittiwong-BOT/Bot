@@ -12,16 +12,10 @@ export type OwnerApi = (path: string, options?: RequestInit) => Promise<any>;
 type PackageRow = {
   months: number;
   price_satang: number;
+  price_usd_cents: number;
   enabled: boolean;
   updated_at: string;
 };
-
-function baht(satang: number | string | null | undefined) {
-  return (Number(satang || 0) / 100).toLocaleString("th-TH", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  });
-}
 
 function when(value?: string | null) {
   if (!value) return "—";
@@ -48,7 +42,7 @@ function PackageEditor({
   api: OwnerApi;
 }) {
   const { colors: c } = useTheme();
-  const [price, setPrice] = useState((Number(item.price_satang || 0) / 100).toString());
+  const [price, setPrice] = useState((Number(item.price_usd_cents || 0) / 100).toFixed(2));
   const [enabled, setEnabled] = useState(Boolean(item.enabled));
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,7 +50,7 @@ function PackageEditor({
   async function save() {
     const number = Number(price);
     if (!Number.isFinite(number) || number < 0) {
-      Alert.alert("ราคาไม่ถูกต้อง", "กรุณาใส่ราคาเป็นบาท");
+      Alert.alert("ราคาไม่ถูกต้อง", "กรุณาใส่ราคาเป็น USD");
       return;
     }
     setBusy(true);
@@ -66,7 +60,7 @@ function PackageEditor({
         body: JSON.stringify({
           mode,
           months: item.months,
-          priceSatang: Math.round(number * 100),
+          priceUsdCents: Math.round(number * 100),
           enabled,
           pin
         })
@@ -87,12 +81,12 @@ function PackageEditor({
         <IconTile name={mode === "LOCAL" ? "bank" : "wallet"} tone={mode === "LOCAL" ? "blue" : "accent"} size={36} />
         <View>
           <Copy style={s.heading}>{mode} · {item.months} เดือน</Copy>
-          <Copy style={[s.small, { color: c.muted }]}>ปัจจุบัน {baht(item.price_satang)} บาท</Copy>
+          <Copy style={[s.small, { color: c.muted }]}>ปัจจุบัน ${(Number(item.price_usd_cents || 0) / 100).toFixed(2)} USD</Copy>
         </View>
       </View>
       <Badge text={enabled ? "เปิดขาย" : "ปิดขาย"} tone={enabled ? "success" : "neutral"} />
     </View>
-    <Field label="ราคา (บาท)" value={price} onChangeText={v => setPrice(v.replace(/[^0-9.]/g, ""))} keyboardType="decimal-pad" />
+    <Field label="ราคา (USD)" value={price} onChangeText={v => setPrice(v.replace(/[^0-9.]/g, ""))} keyboardType="decimal-pad" />
     <Button
       label={enabled ? "สถานะ: เปิดขาย" : "สถานะ: ปิดขาย"}
       icon="check"

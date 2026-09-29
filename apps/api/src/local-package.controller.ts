@@ -18,6 +18,7 @@ import { AdminGuard, JwtGuard } from "./security";
 import { ReferralService } from "./referral.service";
 import { PromotionService } from "./promotion.service";
 import { EasySlipPaymentService } from "./easyslip-payment.service";
+import { discountedUsdCents, getUsdThbQuote, usdCentsToThbSatang } from "./commerce-currency";
 
 function omiseMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
@@ -84,10 +85,16 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
     const paymentAccounts = mode === "EASYSLIP"
       ? await this.easyslip.listBankAccounts().catch(() => [])
       : [];
+    const quote = await getUsdThbQuote();
+    const packages = (await this.db.query(
+      "SELECT months,price_satang,price_usd_cents,enabled,updated_at FROM local_packages ORDER BY months"
+    )).rows.map((pack:any) => ({
+      ...pack,
+      estimated_price_satang: usdCentsToThbSatang(pack.price_usd_cents, quote.usdThb)
+    }));
     return {
-      packages: (await this.db.query(
-        "SELECT months,price_satang,enabled,updated_at FROM local_packages ORDER BY months"
-      )).rows,
+      packages,
+      fx: quote,
       paymentMode: mode,
       paymentAccounts,
       salesPaused,
@@ -336,6 +343,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
   }
 
   async checkout(userId: string, months: number, promoCode?: string) {
+    const quote = await getUsdThbQuote();
     if (!this.checkoutEnabled()) {
       throw new ConflictException("ยังไม่เปิดรับชำระแพ็กเกจ Local");
     }
@@ -374,7 +382,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
       const pack = (
         await tx.query(
           `SELECT * FROM local_packages
-           WHERE months=$1 AND enabled=true AND price_satang>0`,
+           WHERE months=$1 AND enabled=true AND price_usd_cents>0`,
           [months]
         )
       ).rows[0];
@@ -382,21 +390,26 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
         throw new ConflictException("แพ็กเกจ Local นี้ยังไม่เปิดขาย");
       }
 
+      const listPriceUsdCents = Math.max(0, Math.trunc(Number(pack.price_usd_cents || 0)));
+      const originalAmountSatang = usdCentsToThbSatang(listPriceUsdCents, quote.usdThb);
       const promo = await this.promotions.reserve(tx, {
         code: promoCode,
         userId,
         mode: "LOCAL",
         months: pack.months,
-        originalAmountSatang: Number(pack.price_satang)
+        originalAmountSatang
       });
+      const finalPriceUsdCents = discountedUsdCents(listPriceUsdCents, promo.discountPercent);
       const order = (
         await tx.query(
           `INSERT INTO local_orders(
-             user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id
-           ) VALUES($1,$2,$3,$4,$5,$6,$7)
+             user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,
+             list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
            RETURNING *`,
-          [userId, pack.months, promo.finalAmountSatang, pack.price_satang,
-           promo.discountAmountSatang, promo.code, promo.redemptionId]
+          [userId, pack.months, promo.finalAmountSatang, originalAmountSatang,
+           promo.discountAmountSatang, promo.code, promo.redemptionId,
+           listPriceUsdCents, finalPriceUsdCents, quote.usdThb, quote.source, quote.quotedAt]
         )
       ).rows[0];
       await this.promotions.attachOrder(tx, promo.redemptionId, order.id);
@@ -543,6 +556,7 @@ export class LocalPackageCustomerController {
       await this.db.query(
         `SELECT
            o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,
+           o.list_price_usd_cents,o.final_price_usd_cents,o.fx_rate_usd_thb,o.fx_source,o.fx_quoted_at,
            o.slot_id,o.subscription_id,s.expires_at subscription_expires_at
          FROM local_orders o
          LEFT JOIN subscriptions s ON s.id=o.subscription_id
@@ -562,17 +576,27 @@ export class LocalPackageCustomerController {
     const months = Math.trunc(Number(body.months || 0));
     if (![1, 3, 6, 12].includes(months)) throw new BadRequestException("Invalid package");
     const pack = await this.db.one(
-      "SELECT price_satang FROM local_packages WHERE months=$1 AND enabled=true AND price_satang>0",
+      "SELECT price_usd_cents FROM local_packages WHERE months=$1 AND enabled=true AND price_usd_cents>0",
       [months]
     );
     if (!pack) throw new ConflictException("แพ็กเกจ Local นี้ยังไม่เปิดขาย");
-    return this.promotions.preview({
+    const quote = await getUsdThbQuote();
+    const originalUsdCents = Math.max(0, Math.trunc(Number(pack.price_usd_cents || 0)));
+    const preview = await this.promotions.preview({
       code: String(body.code || ""),
       userId: String(req.user.sub),
       mode: "LOCAL",
       months,
-      originalAmountSatang: Number(pack.price_satang)
+      originalAmountSatang: usdCentsToThbSatang(originalUsdCents, quote.usdThb)
     });
+    return {
+      ...preview,
+      originalUsdCents,
+      discountUsdCents: Math.max(0, originalUsdCents - discountedUsdCents(originalUsdCents, preview.discountPercent)),
+      finalUsdCents: discountedUsdCents(originalUsdCents, preview.discountPercent),
+      estimatedThbSatang: preview.finalAmountSatang,
+      fx: quote
+    };
   }
 
   @Post("checkout")
@@ -633,30 +657,32 @@ export class LocalPackageAdminController {
   async list() {
     return (
       await this.db.query(
-        "SELECT months,price_satang,enabled,updated_at FROM local_packages ORDER BY months"
+        "SELECT months,price_satang,price_usd_cents,enabled,updated_at FROM local_packages ORDER BY months"
       )
     ).rows;
   }
 
   @Post()
   async save(
-    @Body() body: { months?: number; priceSatang?: number; enabled?: boolean }
+    @Body() body: { months?: number; priceUsdCents?: number; enabled?: boolean }
   ) {
     const months = Math.trunc(Number(body.months || 0));
-    const priceSatang = Math.trunc(Number(body.priceSatang || 0));
+    const priceUsdCents = Math.trunc(Number(body.priceUsdCents || 0));
     if (![1, 3, 6, 12].includes(months)) {
       throw new BadRequestException("Invalid package");
     }
-    if (!Number.isInteger(priceSatang) || priceSatang < 0 || priceSatang > 100000000) {
-      throw new BadRequestException("Invalid price");
+    if (!Number.isInteger(priceUsdCents) || priceUsdCents < 0 || priceUsdCents > 3_000_000) {
+      throw new BadRequestException("Invalid USD price");
     }
+    const quote = await getUsdThbQuote();
+    const priceSatang = usdCentsToThbSatang(priceUsdCents, quote.usdThb);
 
     return this.db.one(
       `UPDATE local_packages
-       SET price_satang=$2,enabled=$3,updated_at=now()
+       SET price_usd_cents=$2,price_satang=$3,enabled=$4,updated_at=now()
        WHERE months=$1
-       RETURNING months,price_satang,enabled,updated_at`,
-      [months, priceSatang, Boolean(body.enabled)]
+       RETURNING months,price_satang,price_usd_cents,enabled,updated_at`,
+      [months, priceUsdCents, priceSatang, Boolean(body.enabled)]
     );
   }
 }
