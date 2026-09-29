@@ -5,10 +5,8 @@
 
 WITH verified(code,server_name,environment,sort_order) AS (
   VALUES
-    ('EXNESS','Exness-MT5Trial6','DEMO',50),
     ('PEPPERSTONE','mt5-1.pepperstone.com','REAL',10),
     ('PEPPERSTONE','mt5-demo01.pepperstone.com','DEMO',50),
-    ('XM','XMGlobal-MT5 10','UNKNOWN',90),
     ('EIGHTCAP','EightcapGlobal-Live','REAL',10)
 )
 INSERT INTO broker_servers(broker_id,server_name,environment,sort_order,active)
