@@ -2222,8 +2222,8 @@ export default function DashboardPage() {
       setVpsSlipFile(null);
       await loadVpsCommerce();
       if (closeAfter) vpsSlotDialogRef.current?.close();
-    } catch (e:any) {
-      setError(String(e?.message || "ยกเลิกรายการไม่สำเร็จ"));
+    } catch {
+      if (closeAfter) vpsSlotDialogRef.current?.close();
     } finally {
       setVpsPurchaseBusy(false);
     }
