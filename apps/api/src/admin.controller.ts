@@ -394,32 +394,39 @@ export class AdminController {
     );
 
     let slot = await this.db.one(
-      `SELECT id,mode,status,subscription_id
+      `SELECT id,mode,status,subscription_id,slot_number
        FROM license_slots
        WHERE assigned_user_id=$1
          AND mode=$2
-         AND status IN ('ACTIVE','AVAILABLE')
+         AND status<>'DELETED'
        ORDER BY CASE WHEN subscription_id IS NOT NULL THEN 0 ELSE 1 END,slot_number,created_at
        LIMIT 1`,
       [body.userId, mode]
     );
     if (!slot) {
-      const max = await this.db.one(
-        "SELECT COALESCE(max(slot_number),0)::int max_slot FROM license_slots WHERE owner_user_id=$1 AND mode=$2",
-        [body.userId, mode]
-      );
+      const max = mode === "LOCAL"
+        ? { max_slot: 0 }
+        : await this.db.one(
+            "SELECT COALESCE(max(slot_number),0)::int max_slot FROM license_slots WHERE owner_user_id=$1 AND mode=$2",
+            [body.userId, mode]
+          );
       slot = await this.db.one(
         `INSERT INTO license_slots(
            owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label
          )
          VALUES($1,$1,NULL,$2,$3,'PERSONAL','ACTIVE',$4)
-         RETURNING id,mode,status,subscription_id`,
+         RETURNING id,mode,status,subscription_id,slot_number`,
         [
           body.userId,
           mode,
-          Number(max?.max_slot || 0) + 1,
+          mode === "LOCAL" ? 1 : Number(max?.max_slot || 0) + 1,
           mode === "CLOUD" ? "Group Trial VPS" : "Group Trial Local"
         ]
+      );
+    } else if (mode === "LOCAL" && slot.status !== "ACTIVE") {
+      slot = await this.db.one(
+        "UPDATE license_slots SET assigned_user_id=$2,status='ACTIVE',slot_number=1,updated_at=now() WHERE id=$1 RETURNING id,mode,status,subscription_id,slot_number",
+        [slot.id, body.userId]
       );
     }
 
@@ -1126,7 +1133,20 @@ export class AdminController {
   private async syncSlotsForSubscription(userId: string, subscriptionId: string, plan: any) {
     const target = Math.max(1, Number(plan.max_mt5_accounts || 1));
     const existing = await this.db.query(
-      "SELECT * FROM license_slots WHERE owner_user_id=$1 AND mode=$2 AND status<>'DELETED' ORDER BY slot_number,created_at",
+      `SELECT ls.*
+       FROM license_slots ls
+       LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
+       WHERE ls.owner_user_id=$1
+         AND ls.mode=$2
+         AND ls.status<>'DELETED'
+       ORDER BY
+         CASE WHEN $2='CLOUD' AND ls.slot_type='PERSONAL' THEN 0
+              WHEN $2='CLOUD' THEN 1
+              ELSE 0 END,
+         CASE WHEN bi.mt5_account_id IS NOT NULL THEN 0 ELSE 1 END,
+         CASE WHEN ls.subscription_id IS NOT NULL THEN 0 ELSE 1 END,
+         ls.slot_number,
+         ls.created_at`,
       [userId, plan.mode]
     );
     const rows = existing.rows;
@@ -1134,7 +1154,7 @@ export class AdminController {
       "SELECT COALESCE(max(slot_number),0)::int max_slot FROM license_slots WHERE owner_user_id=$1 AND mode=$2",
       [userId, plan.mode]
     );
-    let nextNumber = Number(maxRow?.max_slot || 0) + 1;
+    let nextNumber = plan.mode === "LOCAL" ? 1 : Number(maxRow?.max_slot || 0) + 1;
 
     for (let i = 0; i < target; i++) {
       const current = rows[i];
