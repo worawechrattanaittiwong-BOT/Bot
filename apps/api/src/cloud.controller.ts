@@ -454,30 +454,14 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
       }
       const user = (await tx.query("SELECT status FROM users WHERE id=$1 FOR UPDATE", [order.user_id])).rows[0];
       if (user?.status !== "ACTIVE") throw new ConflictException("บัญชีไม่พร้อมใช้งาน");
-      let slot = order.slot_id ? (await tx.query("SELECT * FROM license_slots WHERE id=$1 FOR UPDATE", [order.slot_id])).rows[0] : null;
-      if (slot && (slot.owner_user_id !== order.user_id || slot.assigned_user_id !== order.user_id || slot.status === "DELETED")) {
-        throw new ConflictException("Slot เปลี่ยนแปลง กรุณาติดต่อผู้ดูแล");
-      }
-      const subscription = (await tx.query(
-        `INSERT INTO subscriptions(user_id,plan_id,starts_at,expires_at,activated_by,note)
-         SELECT $1,p.id,now(),GREATEST(now(),COALESCE((SELECT expires_at FROM subscriptions WHERE id=$3 AND status='ACTIVE'),now()))
-           + make_interval(months=>$2::int),'PROMOTION',$4
-         FROM plans p WHERE p.code='CLOUD_' || $2::text || 'M' RETURNING *`,
-        [order.user_id, order.months, slot?.subscription_id || null, "Promotion order " + order.id]
-      )).rows[0];
-      if (!subscription) throw new ConflictException("ไม่พบแพ็กเกจ Cloud ที่เปิดใช้งาน");
-      if (slot) {
-        await tx.query("UPDATE license_slots SET subscription_id=$2,status='ACTIVE',updated_at=now() WHERE id=$1", [slot.id, subscription.id]);
-      } else {
-        slot = (await tx.query(
-          `INSERT INTO license_slots(owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label)
-           SELECT $1,$1,$2,'CLOUD',COALESCE(max(slot_number),0)+1,
-                  CASE WHEN $3='ADDON' THEN 'ADDON' ELSE 'PERSONAL' END,
-                  'ACTIVE','Cloud Trading'
-           FROM license_slots WHERE owner_user_id=$1 AND mode='CLOUD' AND status<>'DELETED' RETURNING *`,
-          [order.user_id, subscription.id, String(order.purchase_type || "PACKAGE").toUpperCase()]
-        )).rows[0];
-      }
+      const provisioned = await this.provisionCloudOrderSlots(
+        tx,
+        order,
+        "PROMOTION",
+        "Promotion order " + order.id
+      );
+      const slot = provisioned.slot;
+      const subscription = provisioned.subscription;
       await tx.query(
         "UPDATE cloud_orders SET status='PAID',slot_id=$2,subscription_id=$3,paid_at=now(),expires_at=now() WHERE id=$1",
         [order.id, slot.id, subscription.id]
@@ -543,9 +527,23 @@ export class CloudService implements OnApplicationBootstrap, OnModuleDestroy {
       await this.promotions.consume(tx, "CLOUD", order.id);
       await tx.query(
         "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES('PROMOTION','CLOUD_ACTIVATED','order',$1,$2::jsonb)",
-        [order.id, JSON.stringify({ subscriptionId: subscription.id, slotId: slot.id, runnerId: order.runner_id, promotionCode: order.promotion_code })]
+        [order.id, JSON.stringify({
+          subscriptionId: subscription.id,
+          subscriptionIds: provisioned.subscriptionIds,
+          slotId: slot.id,
+          slotIds: provisioned.slotIds,
+          quantity: provisioned.quantity,
+          runnerId: order.runner_id,
+          promotionCode: order.promotion_code
+        })]
       );
-      return { id: order.id, free: true };
+      return {
+        id: order.id,
+        free: true,
+        slotId: slot.id,
+        slotIds: provisioned.slotIds,
+        quantity: provisioned.quantity
+      };
     });
   }
 }
