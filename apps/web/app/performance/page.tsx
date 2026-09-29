@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken } from "../../lib/api";
 import { CustomerSidebar, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
@@ -296,6 +296,7 @@ export default function PerformanceDashboardPage() {
   const [shareResult,setShareResult]=useState<any>(null);
   const [error,setError]=useState("");
   const [controlsOpen,setControlsOpen]=useState(false);
+  const refreshSequence=useRef(0);
 
   const ownAccounts=useMemo(
     ()=>(options?.accounts||[]).filter((account:any)=>account.userId===options?.user?.id),
@@ -335,23 +336,33 @@ export default function PerformanceDashboardPage() {
 
   async function refresh(nextAccountId=accountId,nextMode=mode,silent=false){
     if(!nextAccountId) return;
+    const requestId=++refreshSequence.current;
     if(!silent) setLoading(true);
     try{
       const strategyQuery=nextMode==="LIVE"
         ? `&strategyModes=${encodeURIComponent(selectedStrategies.join(","))}`
         : "";
       const next=await api(`/performance-analytics/report?accountId=${encodeURIComponent(nextAccountId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${strategyQuery}`);
+      if(requestId!==refreshSequence.current) return;
       setReport(next);
       if(nextMode==="BACKTEST"){
         const candidate=selectedBacktestId||next.backtests?.[0]?.id||"";
         setSelectedBacktestId(candidate);
-        setBacktest(candidate?await api(`/performance-analytics/backtest?id=${encodeURIComponent(candidate)}`):null);
+        const nextBacktest=candidate
+          ? await api(`/performance-analytics/backtest?id=${encodeURIComponent(candidate)}`)
+          : null;
+        if(requestId!==refreshSequence.current) return;
+        setBacktest(nextBacktest);
       }else{
         setBacktest(null);
       }
       setError("");
-    }catch(e:any){setError(String(e?.message||"โหลดข้อมูลไม่สำเร็จ"));}
-    finally{if(!silent) setLoading(false);}
+    }catch(e:any){
+      if(requestId===refreshSequence.current)
+        setError(String(e?.message||"โหลดข้อมูลไม่สำเร็จ"));
+    }finally{
+      if(requestId===refreshSequence.current) setLoading(false);
+    }
   }
 
   useEffect(()=>{if(!getToken()){window.location.href="/login";return;}void loadOptions().finally(()=>setLoading(false));},[]);
@@ -369,10 +380,20 @@ export default function PerformanceDashboardPage() {
       !accountId ||
       report?.dataQuality?.detailStatus!=="JOURNAL_RECOVERING"
     ) return;
-    const timer=window.setInterval(()=>{
-      void refresh(accountId,mode,true);
-    },2500);
-    return ()=>window.clearInterval(timer);
+
+    let cancelled=false;
+    let timer:number|undefined;
+    const poll=async()=>{
+      if(cancelled) return;
+      await refresh(accountId,mode,true);
+      if(!cancelled) timer=window.setTimeout(()=>{void poll();},2500);
+    };
+    timer=window.setTimeout(()=>{void poll();},2500);
+
+    return ()=>{
+      cancelled=true;
+      if(timer!==undefined) window.clearTimeout(timer);
+    };
   },[accountId,mode,report?.dataQuality?.detailStatus,selectedStrategies,from,to]);
 
   function toggleStrategy(strategy:StrategyMode){
