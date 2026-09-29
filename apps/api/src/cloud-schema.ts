@@ -213,7 +213,7 @@ ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS quantity integer NOT NULL DEFA
 ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS runner_allocations jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS parent_order_id uuid REFERENCES cloud_orders(id) ON DELETE CASCADE;
 ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS bundle_index integer;
-DO $
+DO $cloud_quantity$
 BEGIN
  IF NOT EXISTS (
    SELECT 1 FROM pg_constraint WHERE conname='cloud_orders_quantity_check'
@@ -221,7 +221,7 @@ BEGIN
    ALTER TABLE cloud_orders
      ADD CONSTRAINT cloud_orders_quantity_check CHECK (quantity BETWEEN 1 AND 10);
  END IF;
-END $;
+END $cloud_quantity$;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cloud_order_bundle_child
  ON cloud_orders(parent_order_id,bundle_index)
  WHERE parent_order_id IS NOT NULL;
