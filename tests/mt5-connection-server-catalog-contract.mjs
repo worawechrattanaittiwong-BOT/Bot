@@ -45,6 +45,11 @@ assert.match(
 );
 assert.match(
   ea,
+  /reportedServer\.toLowerCase\(\) !== String\(instance\.broker_server\)\.trim\(\)\.toLowerCase\(\)/,
+  "MT5 server identity comparison must ignore harmless casing differences"
+);
+assert.match(
+  ea,
   /Broker catalog enrichment must never block a trading heartbeat/,
   "catalog enrichment must fail open without interrupting heartbeat"
 );
