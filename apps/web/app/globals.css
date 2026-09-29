@@ -8491,7 +8491,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   }
   .vps-slot-checkout-steps span{
     gap:6px;
-    font-size:10px;
+    font-size:var(--ui-type-caption);
   }
   .vps-slot-payment-card{
     grid-template-columns:1fr;
