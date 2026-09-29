@@ -6,11 +6,12 @@ import { useSystemPopup } from "./SystemPopupProvider";
 import s from "./cloud.module.css";
 import { CloudUpdatesPanel } from "./CloudUpdatesPanel";
 
-export type CloudPackage = { months:number; price_satang:number; enabled:boolean; updated_at:string };
+export type CloudPackage = { months:number; price_satang:number; price_usd_cents:number; estimated_price_satang?:number; enabled:boolean; updated_at:string };
 type Node = { runner_id:string; region:string; hostname:string; capacity:number; occupied:number; active_instances:number; accepting_jobs:boolean; health:string; setup_state:"WAITING_INSTALL"|"INSTALLING"|"ONLINE"|"TEMPLATE_NOT_READY"|"WORKER_OFFLINE"; monthly_cost:number; spec:string; last_seen_at:string|null; telemetry:{ cpuPercent?:number|null; ramUsedGb?:number|null; ramTotalGb?:number|null; diskFreeGb?:number|null; diskTotalGb?:number|null; templateReady?:boolean; version?:string; setupVersion?:string }; latest_worker_version:string; latest_setup_version:string; server_update_available:boolean; server_update_capable:boolean; server_update_state?:string|null; server_update_target_worker?:string|null; server_update_target_setup?:string|null; server_update_error?:string|null };
 type Snapshot = { packages:CloudPackage[]; localPackages:CloudPackage[]; nodes:Node[]; orders:any[]; instances:any[]; available:number; checkoutEnabled:boolean; paymentMode:string };
 type Tab = "overview"|"nodes"|"updates"|"packages"|"orders"|"setup";
 export const money = (satang:number) => new Intl.NumberFormat("th-TH", { maximumFractionDigits:2 }).format(satang/100);
+export const usd = (cents:number) => new Intl.NumberFormat("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 }).format(cents/100);
 export const date = (value:string|null|undefined) => value ? new Date(value).toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"short"}) : "ยังไม่เชื่อมต่อ";
 export function Badge({children,tone=""}:{children:ReactNode;tone?:string}) { return <span className={`${s.badge} ${tone==="good"?s.good:tone==="warn"?s.warn:tone==="bad"?s.bad: ""}`}>{children}</span>; }
 function serverStatusLabel(state:Node["setup_state"]) {
@@ -84,11 +85,11 @@ export function CloudConsole() {
   const occupied=data.nodes.reduce((sum,n)=>sum+Math.max(n.occupied,n.active_instances),0);
   const total=data.nodes.reduce((sum,n)=>sum+n.capacity,0);
   const cost=data.nodes.reduce((sum,n)=>sum+n.monthly_cost,0);
-  const ready=data.checkoutEnabled&&data.paymentMode==="LIVE"&&data.available>0&&data.packages.some(p=>p.enabled&&p.price_satang>0);
+  const ready=data.checkoutEnabled&&data.paymentMode==="LIVE"&&data.available>0&&data.packages.some(p=>p.enabled&&p.price_usd_cents>0);
   const nav: [Tab,string][]=[["overview","ภาพรวม"],["nodes","VPS & MT5"],["updates","EA Updates"],["packages","แพ็กเกจ"],["orders","คำสั่งซื้อ"],["setup","ตั้งค่าการเชื่อมต่อ"]];
   const openAdd=()=>{setTab("nodes");setShowAdd(true);};
   const setupSteps=[{title:"เชื่อม Windows VPS",body:"เพิ่มเครื่อง ติดตั้ง Worker และตรวจ MT5 Template",done:data.nodes.some(n=>n.health==="ONLINE"&&n.telemetry?.templateReady)},
-    {title:"ตั้งราคาแพ็กเกจ",body:"กำหนดราคา 1 / 3 / 6 / 12 เดือน แล้วเลือกเปิดขาย",done:data.packages.some(p=>p.enabled&&p.price_satang>0)},
+    {title:"ตั้งราคาแพ็กเกจ",body:"กำหนดราคา USD สำหรับ 1 / 3 / 6 / 12 เดือน แล้วเลือกเปิดขาย",done:data.packages.some(p=>p.enabled&&p.price_usd_cents>0)},
     {title:"เชื่อม PromptPay",body:"ตั้งค่า Opn/Omise และ Webhook ยืนยันการชำระเงิน",done:data.paymentMode==="LIVE"},
     {title:"เปิดรับลูกค้า",body:"ทดสอบครบวงจร เปิด Checkout และเปิดรับงานบน VPS",done:ready}];
   return <div className={s.root}>
@@ -161,6 +162,6 @@ function NodeCard({node:n,busy,save,renewEnrollment,updateServer}:{node:Node;bus
   </section>;
 }
 function PackageEditor({pack:p,busy,save,system="CLOUD"}:{pack:CloudPackage;busy:boolean;save:(path:string,body:any)=>Promise<any>;system?:"LOCAL"|"CLOUD"}) {
-  const [price,setPrice]=useState(String(p.price_satang/100));const [enabled,setEnabled]=useState(p.enabled);
-  return <form className={`${s.package} ${p.months===3?s.featured:""}`} onSubmit={e=>{e.preventDefault();save("/packages",{months:p.months,priceSatang:Math.round(Number(price)*100),enabled});}}><span className={s.eyebrow}>{system} MEMBERSHIP</span><h3>{p.months} เดือน</h3><Badge tone={p.enabled?"good":""}>{p.enabled?"เปิดขาย":"ยังไม่เปิดขาย"}</Badge><div className={s.features}><span>1 Cloud MT5</span><span>ควบคุมผ่านเว็บ / มือถือ</span><span>ต่ออายุเก็บเวลาที่เหลือ</span></div><label className={s.field}>ราคารวม (บาท)<input type="number" min={0} max={1000000} step="0.01" value={price} onChange={e=>setPrice(e.target.value)} required/></label><label className={s.check}><input type="checkbox" checked={enabled} onChange={e=>setEnabled(e.target.checked)}/>เปิดขายแพ็กเกจนี้</label><button className={s.button} disabled={busy}>บันทึกแพ็กเกจ</button></form>;
+  const [price,setPrice]=useState((Number(p.price_usd_cents||0)/100).toFixed(2));const [enabled,setEnabled]=useState(p.enabled);
+  return <form className={`${s.package} ${p.months===3?s.featured:""}`} onSubmit={e=>{e.preventDefault();save("/packages",{months:p.months,priceUsdCents:Math.round(Number(price)*100),enabled});}}><span className={s.eyebrow}>{system} MEMBERSHIP</span><h3>{p.months} เดือน</h3><Badge tone={p.enabled?"good":""}>{p.enabled?"เปิดขาย":"ยังไม่เปิดขาย"}</Badge><div className={s.features}><span>1 Cloud MT5</span><span>ควบคุมผ่านเว็บ / มือถือ</span><span>ต่ออายุเก็บเวลาที่เหลือ</span></div><label className={s.field}>ราคารวม (USD)<input type="number" min={0} max={100000} step="0.01" value={price} onChange={e=>setPrice(e.target.value)} required/></label><label className={s.check}><input type="checkbox" checked={enabled} onChange={e=>setEnabled(e.target.checked)}/>เปิดขายแพ็กเกจนี้</label><button className={s.button} disabled={busy}>บันทึกแพ็กเกจ</button></form>;
 }
