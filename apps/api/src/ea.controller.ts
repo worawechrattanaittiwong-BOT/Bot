@@ -38,29 +38,53 @@ export class EaController {
     return "UNKNOWN";
   }
 
-  private async rememberVerifiedBrokerServer(broker: unknown, serverName: unknown) {
+  private async rememberVerifiedBrokerServer(
+    broker: unknown,
+    reportedBroker: unknown,
+    serverName: unknown
+  ) {
     const brokerKey = String(broker || "").trim();
+    const reported = String(reportedBroker || "").trim();
     const server = String(serverName || "").trim();
-    if (!brokerKey || !server) return;
+    if (!brokerKey || !reported || !server) return;
 
     const cacheKey = brokerKey.toLowerCase() + "|" + server.toLowerCase();
     if (this.verifiedBrokerServers.has(cacheKey)) return;
 
     try {
+      const catalogBroker = await this.db.one(
+        `SELECT id,code,name
+         FROM brokers
+         WHERE code<>'OTHER'
+           AND (lower(code)=lower($1) OR lower(name)=lower($1))
+         LIMIT 1`,
+        [brokerKey]
+      );
+      if (!catalogBroker) return;
+
+      const reportedText = reported.toLowerCase();
+      const canonicalTokens = String(catalogBroker.name || "")
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((token:string)=>token.length >= 3);
+      const codeToken = String(catalogBroker.code || "").toLowerCase();
+      const identityMatches =
+        canonicalTokens.some((token:string)=>reportedText.includes(token)) ||
+        (codeToken.length >= 2 && reportedText.includes(codeToken));
+      if (!identityMatches) return;
+
       await this.db.query(
         `INSERT INTO broker_servers(broker_id,server_name,environment,sort_order,active)
-         SELECT b.id,$2,$3,
+         VALUES($1,$2,$3,
            CASE $3 WHEN 'REAL' THEN 10 WHEN 'DEMO' THEN 50 ELSE 90 END,
-           true
-         FROM brokers b
-         WHERE lower(b.code)=lower($1) OR lower(b.name)=lower($1)
+           true)
          ON CONFLICT (broker_id,server_name) DO UPDATE SET
            active=true,
            environment=CASE
              WHEN broker_servers.environment='UNKNOWN' THEN EXCLUDED.environment
              ELSE broker_servers.environment
            END`,
-        [brokerKey, server, this.brokerServerEnvironment(server)]
+        [catalogBroker.id, server, this.brokerServerEnvironment(server)]
       );
       this.verifiedBrokerServers.add(cacheKey);
     } catch {
@@ -677,6 +701,7 @@ export class EaController {
 
     await this.rememberVerifiedBrokerServer(
       instance.broker || reportedBroker,
+      reportedBroker,
       reportedServer || instance.broker_server
     );
 
