@@ -44,10 +44,16 @@ assert.match(
 );
 
 assert.match(ea, /JOURNAL_REPLAY_TODAY/, "EA must support a targeted current-day journal replay command");
-assert.match(ea, /\\\"brokerDayStart\\\":%I64d,\\\"brokerUtcOffsetSeconds\\\":%I64d/,
-  "EA heartbeat must publish the exact broker-day clock used by Performance reconciliation");
-assert.match(ea, /\\\"dealTimeMsc\\\":%I64d,\\\"brokerUtcOffsetSeconds\\\":%I64d/,
-  "EA journal must persist immutable MT5 deal time and broker UTC offset");
+assert.match(
+  ea,
+  /performanceClockDiagnostics=StringFormat\([\s\S]*?brokerDayStart[\s\S]*?brokerUtcOffsetSeconds/,
+  "EA heartbeat must publish the exact broker-day clock used by Performance reconciliation"
+);
+assert.match(
+  ea,
+  /journalTimeDiagnostics=StringFormat\([\s\S]*?dealTimeMsc[\s\S]*?brokerUtcOffsetSeconds/,
+  "EA journal must persist immutable MT5 deal time and broker UTC offset"
+);
 assert.match(ea, /bool ReplayTodayTradeJournal\(\)/, "EA must implement current-day journal replay");
 assert.match(ea, /datetime from=BrokerDayStart\(\);[\s\S]*?HistorySelect\(from,to\)/,
   "Current-day replay must be limited to the broker day only");
