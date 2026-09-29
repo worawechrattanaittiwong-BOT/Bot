@@ -2778,6 +2778,8 @@ export default function DashboardPage() {
     setOwnerVpsBusy(true);
     setError("");
     setNotice("");
+    setServerOperation(null);
+    setServerOperationMinimized(false);
 
     // Close the credential dialog; vpsMigrationProgress is also rendered by
     // the existing SCENOVA Server Terminal so the customer sees every stage
@@ -3507,6 +3509,8 @@ export default function DashboardPage() {
                         setServerOperationMinimized(true);
                       } else if (operationTerminal.kind === "CLOUD_UPDATE") {
                         setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey));
+                      } else if (operationTerminal.kind === "MIGRATION") {
+                        setVpsMigrationProgress(null);
                       } else {
                         setServerOperation(null);
                       }
@@ -3551,6 +3555,8 @@ export default function DashboardPage() {
                         setServerOperationMinimized(true);
                       } else if (operationTerminal.kind === "CLOUD_UPDATE") {
                         setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey));
+                      } else if (operationTerminal.kind === "MIGRATION") {
+                        setVpsMigrationProgress(null);
                       } else {
                         setServerOperation(null);
                       }
