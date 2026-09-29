@@ -1365,7 +1365,7 @@ export class AdminController {
 
     if (
       String(slot.actual_state || "").toUpperCase() === "RUNNING" ||
-      ["RUNNING","STARTING","SAFE_STOP"].includes(String(slot.desired_state || "").toUpperCase()) ||
+      ["RUNNING","STARTING"].includes(String(slot.desired_state || "").toUpperCase()) ||
       Number(slot.positions || 0) > 0 ||
       Number(slot.pending_orders || 0) > 0
     ) {
