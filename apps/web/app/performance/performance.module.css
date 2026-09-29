@@ -689,3 +689,117 @@
 .summaryShell{
   overscroll-behavior-x:none;
 }
+
+
+/* ===== Performance viewport fit + saved report controls =====
+   Desktop keeps the whole report inside the viewport without horizontal or
+   vertical scrolling on normal laptop/desktop heights. Short screens retain
+   the existing safe scroll fallback instead of clipping analytics. */
+.drawerActionRow{
+  display:grid;
+  grid-template-columns:minmax(0,1.45fr) minmax(0,.85fr);
+  gap:7px;
+  width:100%;
+}
+.drawerActionRow .refreshButton{width:100%}
+.saveSettingsButton{
+  width:100%;
+  min-height:37px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  border:1px solid #4f4a82;
+  border-radius:8px;
+  background:linear-gradient(145deg,#19172d,#111625);
+  color:#d9d2ff;
+  font-size:var(--ui-type-meta);
+  font-weight:850;
+  cursor:pointer;
+}
+.saveSettingsButton:hover:not(:disabled){
+  border-color:#806bea;
+  background:linear-gradient(145deg,#28204a,#17182e);
+  color:#fff;
+}
+.saveSettingsButton:disabled{opacity:.48;cursor:not-allowed}
+
+@media(min-width:1251px){
+  .resultsGrid{
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  }
+  .analyticsCharts{
+    grid-template-columns:minmax(250px,300px) minmax(0,1fr)!important;
+    gap:7px!important;
+    margin-top:6px!important;
+  }
+  .analyticsCharts .chartCard .chart{
+    width:100%!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:145px!important;
+    aspect-ratio:1000 / 136!important;
+    margin-top:3px!important;
+  }
+  .lotCard{
+    padding:7px 9px!important;
+  }
+  .lotHighlights{
+    margin:5px 0!important;
+  }
+  .lotCard .lotChart{
+    min-height:54px!important;
+    max-height:92px!important;
+  }
+}
+
+@media(min-width:1251px) and (min-height:780px){
+  .main,
+  .summaryShell{
+    overflow:hidden!important;
+  }
+  .summaryShell{
+    height:calc(100vh - 16px)!important;
+  }
+  .summaryTitle{
+    padding-top:0!important;
+    padding-bottom:5px!important;
+  }
+  .infoCard{
+    padding-top:5px!important;
+    padding-bottom:5px!important;
+  }
+  .metricsCard{
+    margin-top:5px!important;
+    padding:5px!important;
+  }
+  .metric{
+    padding-top:6px!important;
+    padding-bottom:6px!important;
+  }
+  .metric b{
+    margin-top:3px!important;
+  }
+  .resultsLabel{
+    margin-top:5px!important;
+    margin-bottom:4px!important;
+  }
+  .panel{
+    padding-top:5px!important;
+    padding-bottom:5px!important;
+  }
+  .panelTitle{
+    margin-bottom:4px!important;
+  }
+  .statRow{
+    padding-top:2px!important;
+    padding-bottom:2px!important;
+    line-height:1.25!important;
+  }
+}
+
+@media(max-width:900px){
+  .drawerActionRow{
+    grid-template-columns:1fr;
+  }
+}
