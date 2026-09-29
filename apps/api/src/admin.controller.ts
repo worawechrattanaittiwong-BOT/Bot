@@ -1332,29 +1332,35 @@ export class AdminController {
     if (!slot) throw new ConflictException("ไม่พบ Slot ของลูกค้ารายนี้");
 
     const mode = String(slot.mode || "").toUpperCase();
-    if (
-      mode === "CLOUD" &&
-      (String(slot.slot_type || "").toUpperCase() === "PERSONAL" || Number(slot.slot_number || 0) === 1)
-    ) {
-      throw new ConflictException("Cloud Slot #1 เป็นแพ็กเกจหลัก ไม่สามารถลบจากรายการ Slot ได้");
-    }
-
-    if (mode === "LOCAL") {
-      const localSlots = await this.db.one(
-        `SELECT count(*)::int total,min(slot_number)::int primary_slot_number
-         FROM license_slots
-         WHERE assigned_user_id=$1
-           AND owner_user_id=$1
-           AND mode='LOCAL'
-           AND status<>'DELETED'`,
-        [body.userId]
+    const keepSlot = await this.db.one(
+      `SELECT ls.id,ls.subscription_id,ls.slot_number,ls.slot_type
+       FROM license_slots ls
+       LEFT JOIN subscriptions sub ON sub.id=ls.subscription_id
+       LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
+       WHERE ls.owner_user_id=$1
+         AND ls.assigned_user_id=$1
+         AND ls.mode=$2
+         AND ls.status<>'DELETED'
+       ORDER BY
+         CASE WHEN $2='CLOUD' AND ls.slot_type='PERSONAL' THEN 0
+              WHEN $2='CLOUD' THEN 1
+              ELSE 0 END,
+         CASE WHEN bi.mt5_account_id IS NOT NULL THEN 0 ELSE 1 END,
+         CASE WHEN sub.status='ACTIVE' AND sub.starts_at<=now() AND sub.expires_at>now() THEN 0 ELSE 1 END,
+         CASE WHEN ls.subscription_id IS NOT NULL THEN 0 ELSE 1 END,
+         ls.slot_number,
+         ls.created_at,
+         ls.id
+       LIMIT 1`,
+      [body.userId, mode]
+    );
+    if (!keepSlot) throw new ConflictException("ไม่พบ Slot ของลูกค้ารายนี้");
+    if (String(keepSlot.id) === String(slot.id)) {
+      throw new ConflictException(
+        mode === "LOCAL"
+          ? "Local MT5 ใช้ได้ 1 Slot และ Slot หลักนี้ต้องคงไว้"
+          : "Cloud VPS Slot หลักต้องคงไว้"
       );
-      if (
-        Number(localSlots?.total || 0) <= 1 ||
-        Number(slot.slot_number || 0) === Number(localSlots?.primary_slot_number || 0)
-      ) {
-        throw new ConflictException("Local Slot หลักไม่สามารถลบได้");
-      }
     }
 
     if (
@@ -1408,6 +1414,21 @@ export class AdminController {
     }
 
     await this.db.transaction(async tx => {
+      let transferredSubscription = false;
+      if (slot.subscription_id && !keepSlot.subscription_id) {
+        await tx.query(
+          "UPDATE license_slots SET subscription_id=$2,updated_at=now() WHERE id=$1",
+          [keepSlot.id, slot.subscription_id]
+        );
+        if (mode === "CLOUD") {
+          await tx.query(
+            "UPDATE cloud_orders SET slot_id=$2 WHERE slot_id=$1 AND status='PAID'",
+            [slot.id, keepSlot.id]
+          );
+        }
+        transferredSubscription = true;
+      }
+
       if (slot.mt5_account_id) {
         await tx.query("UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1", [slot.mt5_account_id]);
         if (mode === "CLOUD") {
@@ -1479,7 +1500,7 @@ export class AdminController {
         "UPDATE license_slots SET assigned_user_id=NULL,status='DELETED',updated_at=now() WHERE id=$1",
         [slot.id]
       );
-      if (slot.subscription_id) {
+      if (slot.subscription_id && !transferredSubscription) {
         const remaining = await tx.query(
           "SELECT 1 FROM license_slots WHERE subscription_id=$1 AND status<>'DELETED' LIMIT 1",
           [slot.subscription_id]
@@ -1488,6 +1509,67 @@ export class AdminController {
           await tx.query(
             "UPDATE subscriptions SET status='CANCELLED',expires_at=LEAST(expires_at,now()) WHERE id=$1 AND status='ACTIVE'",
             [slot.subscription_id]
+          );
+        }
+      }
+
+      if (mode === "LOCAL") {
+        await tx.query(
+          `UPDATE license_slots
+           SET slot_number=CASE WHEN id=$2 THEN 1 ELSE slot_number+1000 END,
+               slot_type=CASE WHEN id=$2 AND slot_type<>'OWNER' THEN 'PERSONAL' ELSE slot_type END,
+               updated_at=now()
+           WHERE owner_user_id=$1
+             AND assigned_user_id=$1
+             AND mode='LOCAL'
+             AND status<>'DELETED'`,
+          [body.userId, keepSlot.id]
+        );
+        const extraLocal = await tx.query(
+          `SELECT id
+           FROM license_slots
+           WHERE owner_user_id=$1
+             AND assigned_user_id=$1
+             AND mode='LOCAL'
+             AND status<>'DELETED'
+             AND id<>$2
+           ORDER BY
+             CASE WHEN EXISTS(SELECT 1 FROM bot_instances bi WHERE bi.slot_id=license_slots.id AND bi.mt5_account_id IS NOT NULL) THEN 0 ELSE 1 END,
+             created_at,id`,
+          [body.userId, keepSlot.id]
+        );
+        for (let index=0; index<extraLocal.rows.length; index++) {
+          await tx.query(
+            "UPDATE license_slots SET slot_number=$2,updated_at=now() WHERE id=$1",
+            [extraLocal.rows[index].id, index+2]
+          );
+        }
+      } else if (mode === "CLOUD") {
+        await tx.query(
+          `UPDATE license_slots
+           SET slot_number=slot_number+1000,
+               slot_type=CASE WHEN id=$2 THEN 'PERSONAL' ELSE 'ADDON' END,
+               updated_at=now()
+           WHERE owner_user_id=$1
+             AND assigned_user_id=$1
+             AND mode='CLOUD'
+             AND status<>'DELETED'`,
+          [body.userId, keepSlot.id]
+        );
+        const cloudRows = await tx.query(
+          `SELECT id
+           FROM license_slots
+           WHERE owner_user_id=$1
+             AND assigned_user_id=$1
+             AND mode='CLOUD'
+             AND status<>'DELETED'
+           ORDER BY CASE WHEN id=$2 THEN 0 ELSE 1 END,created_at,id`,
+          [body.userId, keepSlot.id]
+        );
+        for (let index=0; index<cloudRows.rows.length; index++) {
+          await tx.query(
+            "UPDATE license_slots SET slot_number=$2,updated_at=now() WHERE id=$1",
+            [cloudRows.rows[index].id, index+1]
           );
         }
       }
