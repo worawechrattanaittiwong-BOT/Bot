@@ -25,6 +25,15 @@ Assert-Contains $schema 'execution_generation bigint NOT NULL DEFAULT 1' 'execut
 Assert-Contains $schema 'CREATE TABLE IF NOT EXISTS worker_commands' 'worker_commands schema missing'
 Assert-Contains $schema 'idx_worker_stop_one_active' 'active STOP_INSTANCE uniqueness guard missing'
 
+# Cloud capacity must count only real connected usage or an active paid entitlement.
+Assert-Contains $schema "co.status='PAID'" 'pending/review Cloud orders must not reserve VPS capacity'
+Assert-Contains $schema "primary_access.primary_active IS TRUE" 'Cloud capacity must require an active primary entitlement'
+Assert-Contains $schema "sub.expires_at>now()" 'expired Cloud slot entitlement must not reserve VPS capacity'
+Assert-Contains $schema "gg.expires_at>now()" 'expired access-group entitlement must not reserve VPS capacity'
+Assert-Contains $schema "u.role IN ('OWNER','ADMIN')" 'connected owner/admin Cloud runtime capacity rule missing'
+Assert-Contains $schema "bi.last_seen_at>now()-interval '30 seconds'" 'owner/admin capacity must require a fresh connected runtime'
+Assert-Contains $schema "NOT EXISTS (" 'paid reservation must not double-count an already assigned runtime'
+
 # Server must fail closed before asking a Worker to stop a terminal.
 Assert-Contains $controller 'Cloud Worker v1.1.0 or newer is required for verified stop' 'Worker verified-stop version gate missing'
 Assert-Contains $controller 'EA heartbeat is not fresh' 'fresh EA heartbeat guard missing'
