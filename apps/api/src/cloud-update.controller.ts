@@ -10,7 +10,6 @@ import {
   StreamableFile,
   UseGuards
 } from "@nestjs/common";
-import { createReadStream } from "node:fs";
 import { AdminGuard, WorkerGuard } from "./security";
 import { CloudUpdateService } from "./cloud-update.service";
 
@@ -72,10 +71,10 @@ export class CloudUpdateWorkerController {
     @Body() body: { runnerId: string; instanceUpdateId: string },
     @Res({ passthrough: true }) res: any
   ) {
-    const path = await this.updates.artifact(
+    const bytes = await this.updates.artifact(
       String(body.runnerId || ""),
       String(body.instanceUpdateId || "")
     );
-    return new StreamableFile(createReadStream(path));
+    return new StreamableFile(bytes);
   }
 }
