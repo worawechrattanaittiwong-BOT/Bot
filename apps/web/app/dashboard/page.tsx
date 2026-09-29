@@ -2057,19 +2057,44 @@ export default function DashboardPage() {
     setBusy(true);
     setError("");
     setNotice("");
+    const operationId = Date.now() + "-local-mt5-bind-" + Math.random().toString(36).slice(2);
+    setServerOperationMinimized(false);
+    setServerOperation({
+      id:operationId,
+      kind:"LOCAL_MT5_BIND",
+      title:firstBind ? "กำลังเชื่อมบัญชี MT5" : "กำลังเปลี่ยนบัญชี MT5",
+      status:"RUNNING",
+      target:String(data.instance.pending_account_number || ""),
+      message:"Server กำลังตรวจสอบบัญชีและ Heartbeat ล่าสุด...",
+      startedAt:Date.now()
+    });
     try {
       const result = await api(
         "/bot/mt5/rebind?slotId=" + encodeURIComponent(selectedSlotIdRef.current),
         { method: "POST" }
       );
+      const successMessage = result?.firstBind
+        ? "ผูกบัญชี MT5 สำเร็จ · Server ยืนยัน Heartbeat แล้ว"
+        : "เปลี่ยนบัญชี MT5 สำเร็จ · Server ยืนยันบัญชีใหม่แล้ว";
       setNotice(
         result?.firstBind
           ? "ผูกบัญชี MT5 แรกเรียบร้อยแล้ว"
           : "เปลี่ยนบัญชี MT5 เรียบร้อยแล้ว ไม่ต้องเปลี่ยน .set หรือ Install Token"
       );
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? { ...current, status:"SUCCESS", message:successMessage, updatedAt:Date.now(), canClose:true }
+          : current
+      );
       await load(selectedSlotIdRef.current);
     } catch (e: any) {
-      setError(e.message);
+      const message = String(e?.message || "เชื่อมบัญชี MT5 ไม่สำเร็จ");
+      setError(message);
+      setServerOperation((current:any) =>
+        current?.id === operationId
+          ? { ...current, status:"FAILED", message, updatedAt:Date.now(), canClose:true }
+          : current
+      );
     } finally {
       setBusy(false);
     }
