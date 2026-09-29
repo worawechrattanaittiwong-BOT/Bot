@@ -108,9 +108,11 @@ jobs:
         run: ./tests/local-execution-plane-contract.ps1
       - name: ZERO GRID stability simulation regression
         run: node ./tests/zero-grid-v1-simulation.mjs
-      - name: LOCAL account-follow no customer Slot contract
+      - name: LOCAL explicit account switch no customer Slot contract
         shell: pwsh
         run: ./tests/local-account-follow-contract.ps1
+      - name: MT5 connection persistence and broker server catalog contract
+        run: node ./tests/mt5-connection-server-catalog-contract.mjs
       - name: Unified release version consistency
         shell: pwsh
         run: ./tests/release-version-consistency.ps1
