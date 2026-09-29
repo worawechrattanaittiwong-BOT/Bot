@@ -2351,10 +2351,12 @@ double ZeroGridPendingAnchorPrice(bool buySide)
    if(!SymbolInfoTick(_Symbol,live)) return 0.0;
 
    double gap=ZeroGridEntryGapPrice();
-   double raw=buySide ? live.ask+gap : live.bid-gap;
+   double raw=ZeroGridEffectiveLowVolatilityEnabled()
+      ? (buySide ? g_zeroGridCenter+gap : g_zeroGridCenter-gap)
+      : (buySide ? live.ask+gap : live.bid-gap);
 
-   // Guard the request against a fast quote move while keeping the intended
-   // live quote +/- first-gap geometry whenever the broker allows it.
+   // Normal ZERO uses the live quote +/- first gap. Low-volatility preserves
+   // its existing compact center-based geometry.
    double brokerSafe=ZeroGridMinPendingDistancePrice()+ZeroGridTickSize();
    double legal=buySide ? live.ask+brokerSafe : live.bid-brokerSafe;
    if(buySide && raw<legal) raw=legal;

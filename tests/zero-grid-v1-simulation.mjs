@@ -5,11 +5,14 @@ function up(value, tick) { return Math.ceil(value / tick - 1e-10) * tick; }
 function down(value, tick) { return Math.floor(value / tick + 1e-10) * tick; }
 
 export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPerSide = 5, brokerMinDistance = 0, tick = 0.01, firstOffsetPrice = 3.0, lowVolatility = false }) {
+  const center = (bid + ask) / 2;
   const effectiveStep = lowVolatility ? 0.30 : step;
   const effectiveFirstOffset = lowVolatility ? 0.10 : firstOffsetPrice;
   const brokerSafe = Math.max(tick, brokerMinDistance) + tick;
-  const buyAnchor = up(Math.max(ask + effectiveFirstOffset, ask + brokerSafe), tick);
-  const sellAnchor = down(Math.min(bid - effectiveFirstOffset, bid - brokerSafe), tick);
+  const requestedBuy = lowVolatility ? center + effectiveFirstOffset : ask + effectiveFirstOffset;
+  const requestedSell = lowVolatility ? center - effectiveFirstOffset : bid - effectiveFirstOffset;
+  const buyAnchor = up(Math.max(requestedBuy, ask + brokerSafe), tick);
+  const sellAnchor = down(Math.min(requestedSell, bid - brokerSafe), tick);
   const orders = [];
   for (let level = 1; level <= levelsPerSide; level += 1) {
     const offset = effectiveStep * (level - 1);
@@ -67,9 +70,9 @@ assert.match(sendBlock, /request\.action\s*=\s*TRADE_ACTION_PENDING/);
 assert.match(sendBlock, /ORDER_TYPE_BUY_STOP/);
 assert.match(sendBlock, /ORDER_TYPE_SELL_STOP/);
 assert.doesNotMatch(sendBlock, /TRADE_ACTION_DEAL/);
-assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=ZeroGridEffectiveLowVolatilityEnabled\(\) \? 0\.10 : 1\.0;[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);
+assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=ZeroGridEffectiveLowVolatilityEnabled\(\) \? 0\.10 : 3\.0;[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);
 assert.doesNotMatch(ea, /MathMax\(stops,freeze\)/);
-assert.match(ea, /double ZeroGridPendingAnchorPrice\(bool buySide\)[\s\S]*g_zeroGridCenter\+gap[\s\S]*g_zeroGridCenter-gap[\s\S]*live\.ask\+brokerSafe[\s\S]*live\.bid-brokerSafe/);
+assert.match(ea, /double ZeroGridPendingAnchorPrice\(bool buySide\)[\s\S]*g_zeroGridCenter\+gap[\s\S]*live\.ask\+gap[\s\S]*live\.bid-gap[\s\S]*live\.ask\+brokerSafe[\s\S]*live\.bid-brokerSafe/);
 assert.doesNotMatch(ea, /ZeroGridEffectiveStepPrice\(\)\*1\.5/);
 assert.match(ea, /double ZeroGridEstimatedExitCostMoney\(\)/);
 assert.match(ea, /double ZeroGridRequiredCloseNet\(\)[\s\S]*return MathMax\(0\.01,g_zeroGridMinNetProfitMoney\);/, "ZERO must close at the exact configured money target");
