@@ -10,12 +10,12 @@
 .updateSummaryHead h3,.updateHistoryHead h3{font-size:16px;margin:5px 0 0}
 .releaseFacts{display:grid;gap:9px;padding:13px 14px;border:1px solid #252f3c;border-radius:12px;background:#0c121a}
 .releaseFacts div{display:grid;gap:4px;min-width:0}
-.releaseFacts span{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#718095;font-weight:700}
+.releaseFacts span{font-size:var(--ui-type-caption);letter-spacing:.08em;text-transform:uppercase;color:#718095;font-weight:700}
 .releaseFacts code,.releaseFacts b{font-size:11px;color:#bcc8d8;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .releaseFacts code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
 .updateMiniStats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .updateMiniStats div{border:1px solid #252f3c;border-radius:11px;padding:10px;background:#0d131c;display:grid;gap:5px}
-.updateMiniStats span{font-size:9px;color:#77869a;text-transform:uppercase;letter-spacing:.06em}
+.updateMiniStats span{font-size:var(--ui-type-caption);color:#77869a;text-transform:uppercase;letter-spacing:.06em}
 .updateMiniStats b{font-size:16px;color:#edf2fb}
 .updatePolicy{margin:0;padding:12px 13px;border-left:2px solid #7566ad;background:#17182a;border-radius:0 10px 10px 0;color:#909db0;font-size:11px;line-height:1.7}
 .updateServerList{display:grid;gap:12px}
@@ -24,23 +24,23 @@
 .updateServerIdentity{display:flex;align-items:flex-start;gap:10px;min-width:0}
 .updateServerIcon{display:grid;place-items:center;width:30px;height:30px;flex:0 0 30px;border:1px solid #343e4f;border-radius:9px;background:#1b2330;color:#b8abeb;font-size:13px}
 .updateServerIdentity h3{margin:0 0 4px;font-size:14px;overflow-wrap:anywhere}
-.updateServerIdentity span:not(.updateServerIcon){font-size:10px;color:#7f8da0}
+.updateServerIdentity span:not(.updateServerIcon){font-size:var(--ui-type-caption);color:#7f8da0}
 .updateStateRow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-top:11px;border-top:1px solid #ffffff0c}
 .updateStateRow>div{display:grid;gap:4px}
-.updateStateLabel{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#718095}
+.updateStateLabel{font-size:var(--ui-type-caption);text-transform:uppercase;letter-spacing:.08em;color:#718095}
 .updateStateGood,.updateStateBad,.updateStateReady,.updateStateWorking{font-size:12px}
 .updateStateGood{color:#91dfb9}.updateStateBad{color:#ee9caf}.updateStateReady{color:#c1b2ff}.updateStateWorking{color:#ebc882}
-.updateTarget{font-size:10px;color:#8b98aa;border:1px solid #313948;border-radius:999px;padding:5px 8px;white-space:nowrap}
+.updateTarget{font-size:var(--ui-type-caption);color:#8b98aa;border:1px solid #313948;border-radius:999px;padding:5px 8px;white-space:nowrap}
 .updateProgressTrack{height:6px;border-radius:999px;background:#252e3c;overflow:hidden}
 .updateProgressTrack span{display:block;height:100%;min-width:0;background:linear-gradient(90deg,#8e7cdd,#86b6df);border-radius:999px;transition:width .25s ease}
-.updateProgressMeta{display:flex;justify-content:space-between;gap:10px;color:#738297;font-size:9px;line-height:1.4}
-.updateServerHint{margin:0;color:#8390a2;font-size:10px;line-height:1.55}
+.updateProgressMeta{display:flex;justify-content:space-between;gap:10px;color:#738297;font-size:var(--ui-type-caption);line-height:1.4}
+.updateServerHint{margin:0;color:#8390a2;font-size:var(--ui-type-caption);line-height:1.55}
 .updateReleaseButton{width:100%;min-height:40px;border-radius:11px;border:1px solid #313b4b;background:#1a202b;color:#8592a4;font-weight:800;font-size:11px;cursor:not-allowed}
 .updateReleaseButton:disabled{opacity:1}
 .updateReleaseReady{border-color:#a99aef;background:linear-gradient(135deg,#b7a7ff,#9c8aec);color:#171225;cursor:pointer;box-shadow:0 8px 20px #6f5bcc26}
 .updateReleaseReady:hover:not(:disabled){background:linear-gradient(135deg,#c6b9ff,#ac9bf5);transform:translateY(-1px)}
 .updateEmptyServer{border:1px dashed #30394a;border-radius:14px;padding:24px;text-align:center;display:grid;gap:5px;color:#93a0b2}
-.updateEmptyServer b{font-size:12px}.updateEmptyServer span{font-size:10px}
+.updateEmptyServer b{font-size:12px}.updateEmptyServer span{font-size:var(--ui-type-caption)}
 .updateHistoryCard{min-width:0}
 .updateHistoryHead{padding:18px 20px;border-bottom:1px solid #252d38}
 .updateRefreshButton{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;border:1px solid #343d4f;background:#1b2230;color:#c2ccda;cursor:pointer}
@@ -52,13 +52,13 @@
 .updateHistoryMain{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
 .updateHistoryIdentity{display:grid;gap:4px;min-width:0}
 .updateHistoryIdentity b{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.updateHistoryIdentity span{font-size:9px;color:#758398}
+.updateHistoryIdentity span{font-size:var(--ui-type-caption);color:#758398}
 .updateHistoryProgress{display:grid;gap:7px}
 .updateHistoryFooter{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-width:0}
-.updateHistoryFooter time{font-size:10px;color:#8794a6;white-space:nowrap}
-.updateRollbackButton{border:1px solid #3b4556;background:#1b2230;color:#c2ccda;border-radius:9px;padding:7px 10px;font-size:10px;cursor:pointer}
+.updateHistoryFooter time{font-size:var(--ui-type-caption);color:#8794a6;white-space:nowrap}
+.updateRollbackButton{border:1px solid #3b4556;background:#1b2230;color:#c2ccda;border-radius:9px;padding:7px 10px;font-size:var(--ui-type-caption);cursor:pointer}
 .updateRollbackButton:hover:not(:disabled){background:#273142}
-.updateHistoryNoAction{font-size:9px;color:#647287;white-space:nowrap}
+.updateHistoryNoAction{font-size:var(--ui-type-caption);color:#647287;white-space:nowrap}
 
 @media(max-width:1150px){.packages{grid-template-columns:repeat(2,1fr)}.split{grid-template-columns:1fr}.updateWorkspace{grid-template-columns:minmax(320px,390px) minmax(0,1fr)}.updateHistoryRow{grid-template-columns:minmax(160px,1fr) minmax(190px,.9fr) minmax(120px,.65fr);gap:12px}.hero{grid-template-columns:1.2fr 1fr;padding:25px}.stat{padding:16px}.stats{gap:10px}}
 @media(max-width:720px){.hero{grid-template-columns:1fr;padding:23px}.hero h2{font-size:29px}.stats{grid-template-columns:1fr 1fr}.nodes,.checkout{grid-template-columns:1fr}.panelHead{padding:18px}.panelBody{padding:18px}.packages{gap:12px}.package{padding:18px}.formGrid{grid-template-columns:1fr}.customer{padding:20px 14px 40px}.diagram{padding:18px}.price{font-size:24px}.nodeCard{padding:20px}.updateWorkspace{grid-template-columns:1fr}.updateHistoryList{max-height:none}.updateHistoryRow{grid-template-columns:1fr;gap:11px;padding:15px 16px}.updateHistoryMain,.updateHistoryFooter{justify-content:space-between}.updateMiniStats{grid-template-columns:repeat(3,1fr)}}
