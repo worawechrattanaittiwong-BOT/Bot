@@ -9115,3 +9115,77 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .membership-countdown-status{font-size:15px!important}
   .mt5-vps-account-card h2,.vps-connected-card h2{font-size:21px!important}
 }
+
+
+/* ===== Mobile left drawer final precedence guard ===== */
+/* Keep the requested left-side mobile navigation authoritative even though
+   older mobile-header rules also target the same trigger wrapper. */
+@media(max-width:960px){
+  .mobile-app-head .owner-mobile-nav-trigger-wrap,
+  .owner-mobile-nav-trigger-wrap{
+    position:fixed!important;
+    left:10px!important;
+    right:auto!important;
+    top:calc(72px + env(safe-area-inset-top))!important;
+    bottom:auto!important;
+    width:auto!important;
+    z-index:2750!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:flex-start!important;
+    gap:7px!important;
+    pointer-events:none!important;
+  }
+
+  .owner-mobile-nav-trigger-wrap .owner-mobile-nav-trigger,
+  .owner-mobile-nav-trigger-wrap .owner-mobile-utility-button{
+    pointer-events:auto!important;
+  }
+
+  .mobile-app-head .owner-mobile-nav-trigger{
+    min-width:92px!important;
+    min-height:46px!important;
+    padding:8px 12px!important;
+    border-radius:14px!important;
+  }
+
+  .owner-mobile-utility-button{
+    min-width:92px!important;
+    min-height:38px!important;
+  }
+
+  .owner-mobile-drawer-backdrop{
+    position:fixed!important;
+    inset:0!important;
+    z-index:3200!important;
+    display:flex!important;
+    align-items:stretch!important;
+    justify-content:flex-start!important;
+  }
+
+  .owner-mobile-drawer{
+    transform:none;
+    width:min(88vw,380px)!important;
+    height:100dvh!important;
+    max-height:none!important;
+    border-radius:0 24px 24px 0!important;
+    animation:ownerMobileDrawerSlideIn .24s cubic-bezier(.2,.75,.2,1) both!important;
+  }
+}
+
+@media(max-width:390px){
+  .mobile-app-head .owner-mobile-nav-trigger-wrap,
+  .owner-mobile-nav-trigger-wrap{
+    left:8px!important;
+    top:calc(66px + env(safe-area-inset-top))!important;
+  }
+  .mobile-app-head .owner-mobile-nav-trigger{
+    min-width:86px!important;
+    min-height:44px!important;
+    padding:7px 10px!important;
+  }
+  .owner-mobile-utility-button{
+    min-width:86px!important;
+    min-height:36px!important;
+  }
+}
