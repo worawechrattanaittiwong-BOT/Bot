@@ -10,8 +10,8 @@ const deploy = read("scripts/deploy-hostinger.sh");
 
 assert.match(
   catalog,
-  /ORDER BY s\.sort_order, s\.server_name/,
-  "broker API must return MT5 servers in deterministic order"
+  /CASE s\.environment WHEN 'REAL' THEN 0 WHEN 'DEMO' THEN 1 ELSE 2 END,[\s\S]*?s\.sort_order,[\s\S]*?lower\(s\.server_name\)/,
+  "broker API must return MT5 servers in deterministic REAL -> DEMO -> other order"
 );
 assert.match(
   dashboard,
