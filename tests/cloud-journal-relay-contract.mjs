@@ -116,6 +116,12 @@ assert.match(
   /MT5_BROKER_DAY/,
   "Performance reconciliation must use the MT5 broker-day clock when available"
 );
+
+assert.match(
+  performanceApi,
+  /legacyTimingCompatible[\s\S]*?journalReconciliationGap[\s\S]*?legacyUntimedRowsInsideBrokerDay/,
+  "Reconciled legacy Cloud journals may use same-broker-day receive time until immutable MT5 timestamps are backfilled"
+);
 assert.match(
   performanceApi,
   /event_at/,
