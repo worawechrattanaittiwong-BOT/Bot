@@ -396,9 +396,7 @@ export default function ReferralsPage() {
         <header className={styles.header}>
           <div className={styles.headerIcon}><ScenovaIcon name="users" size={24}/></div>
           <div className={styles.headerCopy}>
-            <div className={styles.eyebrow}>ระบบแนะนำเพื่อน SCENOVA</div>
             <h1>แนะนำเพื่อน & รับคอมมิชชั่น</h1>
-            <p>แชร์ลิงก์ส่วนตัวเพื่อสร้างเครือข่าย และรับคอมมิชชั่นจากรายการที่เข้าเงื่อนไข</p>
           </div>
           <div className={styles.headerActions}>
             <span className={styles.maxRate}>คอมมิชชั่นสูงสุดรวม {data.program.maximumNetworkRatePercent}%</span>
@@ -419,7 +417,6 @@ export default function ReferralsPage() {
           <div className={styles.inviteIntro}>
             <span className={styles.eyebrow}>ลิงก์เชิญของคุณ</span>
             <h2>เชิญเพื่อนเข้าร่วม SCENOVA</h2>
-            <p>ส่งรหัสหรือลิงก์เชิญของคุณ เมื่อเพื่อนสมัครผ่านลิงก์ ระบบจะเชื่อมเข้ากับเครือข่ายของคุณโดยอัตโนมัติ</p>
           </div>
 
           <div className={styles.inviteActions}>
@@ -442,9 +439,9 @@ export default function ReferralsPage() {
           <div className={styles.sectionHead}>
             <div>
               <span className={styles.eyebrow}>โครงสร้างเครือข่าย</span>
-              <h2>คอมมิชชั่นจากเครือข่ายสูงสุด 4 ระดับ</h2>
+              <h2>โครงสร้างคอมมิชชั่น</h2>
             </div>
-            <Link href="/referrals/details">วิธีการทำงาน →</Link>
+            <Link href="/referrals/details">รายละเอียด →</Link>
           </div>
 
           <div className={styles.levelGrid}>
@@ -452,15 +449,7 @@ export default function ReferralsPage() {
               <article key={level.level} className={styles.levelCard}>
                 <span>ระดับ {level.level}</span>
                 <b>{level.ratePercent}%</b>
-                <small>
-                  {level.level === 1
-                    ? "เพื่อนที่คุณเชิญโดยตรง"
-                    : level.level === 2
-                      ? "ผู้ที่สมาชิกระดับ 1 เชิญมา"
-                      : level.level === 3
-                        ? "ผู้ที่สมาชิกระดับ 2 เชิญมา"
-                        : "ผู้ที่สมาชิกระดับ 3 เชิญมา"}
-                </small>
+                <small>{level.level === 1 ? "สมาชิกโดยตรง" : `สมาชิกระดับ ${level.level}`}</small>
                 <em>{level.count} สมาชิก</em>
               </article>
             ))}
@@ -471,22 +460,22 @@ export default function ReferralsPage() {
           <article>
             <span>เชิญโดยตรง</span>
             <b>{data.network.directInvites}</b>
-            <small>รวม {data.network.total} สมาชิกใน 4 ระดับ</small>
+            
           </article>
           <article>
             <span>รอตรวจสอบ</span>
             <b>{money(data.wallet.pendingSatang)}</b>
-            <small>ระยะตรวจสอบ {data.program.holdDays} วัน</small>
+            
           </article>
           <article>
             <span>ถอนได้</span>
             <b>{money(data.wallet.availableSatang)}</b>
-            <small>ถอนได้เมื่อผ่านเงื่อนไข</small>
+            
           </article>
           <article>
             <span>ถอนแล้ว</span>
             <b>{money(data.wallet.paidSatang)}</b>
-            <small>ยอดที่จ่ายออกแล้ว</small>
+            
           </article>
         </section>
 
@@ -495,7 +484,6 @@ export default function ReferralsPage() {
             <div>
               <span className={styles.eyebrow}>กระเป๋าคอมมิชชั่น</span>
               <h2>จัดการยอดคอมมิชชั่นและการถอนเงิน</h2>
-              <p>ติดตามยอดคอมมิชชั่น บัญชีรับเงิน และคำขอถอนจากจุดเดียว</p>
             </div>
             <span className={data.wallet.ledgerVerified ? styles.verified : styles.review}>
               <ScenovaIcon name={data.wallet.ledgerVerified ? "check" : "info"} size={15}/>
@@ -509,7 +497,7 @@ export default function ReferralsPage() {
               <div>
                 <small>ยอดคงเหลือปัจจุบัน</small>
                 <b>{money(data.wallet.currentBalanceSatang)}</b>
-                <span>ยอดรอตรวจสอบ + ถอนได้ + กันยอด</span>
+                
               </div>
             </article>
             <article className={styles.balanceCard}>
@@ -517,7 +505,7 @@ export default function ReferralsPage() {
               <div>
                 <small>คอมมิชชั่นรอตรวจสอบ</small>
                 <b>{money(data.wallet.pendingSatang)}</b>
-                <span>อยู่ในช่วงตรวจสอบ {data.program.holdDays} วัน</span>
+                
               </div>
             </article>
             <article className={styles.balanceCard}>
@@ -525,7 +513,7 @@ export default function ReferralsPage() {
               <div>
                 <small>ยอดที่ถอนได้</small>
                 <b>{money(data.wallet.availableSatang)}</b>
-                <span>ยอดที่พร้อมถอนได้</span>
+                
               </div>
             </article>
             <article className={styles.balanceCard}>
@@ -533,7 +521,7 @@ export default function ReferralsPage() {
               <div>
                 <small>ยอดที่กันไว้</small>
                 <b>{money(data.wallet.lockedSatang)}</b>
-                <span>กำลังดำเนินการตรวจสอบ</span>
+                
               </div>
             </article>
             <article className={styles.balanceCard}>
@@ -541,7 +529,7 @@ export default function ReferralsPage() {
               <div>
                 <small>ยอดที่ถอนแล้ว</small>
                 <b>{money(data.wallet.paidSatang)}</b>
-                <span>จำนวนเงินที่จ่ายออกแล้ว</span>
+                
               </div>
             </article>
           </div>
@@ -551,10 +539,10 @@ export default function ReferralsPage() {
               <span className={styles.statusIcon}><ScenovaIcon name="lock" size={18}/></span>
               <span>
                 <b>{data.wallet.withdrawalEnabled ? "ระบบถอนเงินพร้อมใช้งาน" : "ระบบถอนเงินพักชั่วคราว"}</b>
-                <small>ยืนยันรหัสผ่านและ 2FA · ระยะรอความปลอดภัย · กันยอดก่อนตรวจสอบ</small>
+                
               </span>
             </div>
-            <span className={styles.phaseChip}>ระบบถอนเงินปลอดภัย</span>
+            
           </div>
 
           {!twoFactorEnabled && (
@@ -562,7 +550,7 @@ export default function ReferralsPage() {
               <ScenovaIcon name="info" size={20}/>
               <span>
                 <b>ต้องเปิดใช้การยืนยันตัวตน 2 ขั้นตอน (2FA) ก่อนถอนเงิน</b>
-                <small>โปรดตั้งค่า 2FA ในบัญชีของคุณ เพื่อความปลอดภัยของเงินและข้อมูลบัญชี</small>
+                
               </span>
               <Link href="/account">เปิด 2FA <span>→</span></Link>
             </div>
@@ -576,7 +564,6 @@ export default function ReferralsPage() {
                   <div>
                     <span className={styles.eyebrow}>บัญชีรับเงิน</span>
                     <h3>บัญชีรับเงิน</h3>
-                    <p>ระบุบัญชีธนาคารสำหรับรับเงินค่าคอมมิชชั่น</p>
                   </div>
                 </div>
                 {destination && (
@@ -687,7 +674,6 @@ export default function ReferralsPage() {
                   <div>
                     <span className={styles.eyebrow}>ถอนเงิน</span>
                     <h3>ขอถอนเงิน</h3>
-                    <p>ระบุจำนวนเงินที่ต้องการถอนจากค่าคอมมิชชั่น</p>
                   </div>
                 </div>
                 <span className={data.wallet.withdrawalEnabled ? styles.readyBadge : styles.coolingBadge}>
@@ -800,7 +786,6 @@ export default function ReferralsPage() {
                 <div>
                   <span className={styles.eyebrow}>ประวัติการถอน</span>
                   <h3>ประวัติการถอน</h3>
-                  <p>แสดงรายการคำขอถอนเงินทั้งหมด</p>
                 </div>
               </div>
               <span>{data.wallet.withdrawal.recent.length} คำขอถอนล่าสุด</span>
@@ -836,7 +821,6 @@ export default function ReferralsPage() {
                 <div>
                   <span className={styles.eyebrow}>รายการคอมมิชชั่น</span>
                   <h3>รายการคอมมิชชั่นล่าสุด</h3>
-                  <p>รายการเคลื่อนไหวของคอมมิชชั่นล่าสุด</p>
                 </div>
               </div>
               <span>{data.wallet.recent.length} รายการล่าสุด</span>
