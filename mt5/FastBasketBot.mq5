@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.94"
-#define SCENOVA_EA_VERSION "1.0.94"
-#define SCENOVA_PRODUCT_VERSION "1.0.94"
+#property version   "1.0.95"
+#define SCENOVA_EA_VERSION "1.0.95"
+#define SCENOVA_PRODUCT_VERSION "1.0.95"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_DISTANCE_ARMED_EXIT_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -5982,6 +5982,21 @@ void SendHeartbeat()
       (long)g_lastOrderAt
    );
 
+   // Performance clock telemetry only. This does not participate in entry,
+   // exit, sizing, risk, or order-management decisions. It lets the server
+   // reconcile the same broker-day window that MT5 uses for closed P/L.
+   long performanceBrokerUtcOffsetSeconds=BrokerUtcOffsetSeconds();
+   if(StringLen(payload)>=2)
+   {
+      string performanceClockDiagnostics=StringFormat(
+         ",\"brokerTime\":%I64d,\"brokerDayStart\":%I64d,\"brokerUtcOffsetSeconds\":%I64d}}",
+         (long)TimeCurrent(),
+         (long)BrokerDayStart(),
+         performanceBrokerUtcOffsetSeconds
+      );
+      payload=StringSubstr(payload,0,StringLen(payload)-2)+performanceClockDiagnostics;
+   }
+
    bool suppressLivePriceTelemetry=LocalExecutionExposureActive();
    if(suppressLivePriceTelemetry && StringLen(payload)>=2)
    {
@@ -6966,6 +6981,23 @@ bool PostTradeJournalDeal(ulong dealTicket)
       basketIndex
    );
 
+   // Immutable MT5 deal timing for Performance reconstruction. Keep the raw
+   // broker timestamp plus its UTC offset so replayed deals retain the exact
+   // execution time instead of the later HTTP/Worker arrival time.
+   long journalDealTime=(long)HistoryDealGetInteger(dealTicket,DEAL_TIME);
+   long journalDealTimeMsc=(long)HistoryDealGetInteger(dealTicket,DEAL_TIME_MSC);
+   long journalBrokerUtcOffsetSeconds=BrokerUtcOffsetSeconds();
+   if(StringLen(payload)>=1)
+   {
+      string journalTimeDiagnostics=StringFormat(
+         ",\"dealTime\":%I64d,\"dealTimeMsc\":%I64d,\"brokerUtcOffsetSeconds\":%I64d}",
+         journalDealTime,
+         journalDealTimeMsc,
+         journalBrokerUtcOffsetSeconds
+      );
+      payload=StringSubstr(payload,0,StringLen(payload)-1)+journalTimeDiagnostics;
+   }
+
    if(!isExit && AutoV20Enabled() && StringLen(payload)>=1)
    {
       AUTO_V20_SIDE auditSide;
@@ -7154,6 +7186,20 @@ bool PostRescueJournalDeal(ulong dealTicket)
       positionDirection>0 ? g_bullishOrderBlockQuality : g_bearishOrderBlockQuality,
       g_signalConfidence
    );
+
+   long rescueDealTime=(long)HistoryDealGetInteger(dealTicket,DEAL_TIME);
+   long rescueDealTimeMsc=(long)HistoryDealGetInteger(dealTicket,DEAL_TIME_MSC);
+   long rescueBrokerUtcOffsetSeconds=BrokerUtcOffsetSeconds();
+   if(StringLen(payload)>=1)
+   {
+      string rescueTimeDiagnostics=StringFormat(
+         ",\"dealTime\":%I64d,\"dealTimeMsc\":%I64d,\"brokerUtcOffsetSeconds\":%I64d}",
+         rescueDealTime,
+         rescueDealTimeMsc,
+         rescueBrokerUtcOffsetSeconds
+      );
+      payload=StringSubstr(payload,0,StringLen(payload)-1)+rescueTimeDiagnostics;
+   }
 
    if(InpCloudRelay)
    {
@@ -16867,6 +16913,23 @@ bool ManagePerPositionTargets()
    }
 
    return closedAny;
+}
+
+long BrokerUtcOffsetSeconds()
+{
+   datetime serverNow=TimeTradeServer();
+   if(serverNow<=0)
+      serverNow=TimeCurrent();
+   datetime utcNow=TimeGMT();
+   if(serverNow<=0 || utcNow<=0)
+      return 0;
+
+   long rawOffset=(long)(serverNow-utcNow);
+   if(MathAbs((double)rawOffset)>14.0*3600.0)
+      return 0;
+
+   long roundedMinutes=(long)MathRound((double)rawOffset/60.0);
+   return roundedMinutes*60;
 }
 
 datetime BrokerDayStart()

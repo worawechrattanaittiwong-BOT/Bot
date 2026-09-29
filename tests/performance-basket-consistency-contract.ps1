@@ -32,6 +32,9 @@ foreach ($required in @(
   'MT5_HEARTBEAT_TODAY_CLOSED_PNL',
   'mt5TodayReconciliation',
   'reportedTodayClosed',
+  'MT5_BROKER_DAY',
+  'brokerDayStartUtc',
+  'event_at',
   'selectedStrategyModes',
   'strategyModes: selectedStrategyModes',
   'lotDistribution',
@@ -43,7 +46,8 @@ foreach ($required in @(
   'position.remainingVolume=Math.max(0,position.remainingVolume-volume);',
   'basket.netProfit+=net;',
   'if(!stillOpen)',
-  'resolveJournalControlMode'
+  'resolveJournalControlMode',
+  'rowEventTime'
 )) {
   if (-not $journal.Contains($required)) { throw "Journal reconstruction contract missing: $required" }
 }

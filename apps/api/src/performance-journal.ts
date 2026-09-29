@@ -11,6 +11,7 @@ export type PerformanceJournalDeal = {
   entry_quality_score?: number | string | null;
   confidence?: number | string | null;
   created_at: string;
+  event_at?: string | null;
   metadata?: Record<string, any> | null;
 };
 
@@ -73,9 +74,13 @@ function numeric(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function rowEventTime(row: PerformanceJournalDeal) {
+  return String(row.event_at || row.created_at);
+}
+
 export function reconstructCompletedJournal(rows: PerformanceJournalDeal[]) {
   const ordered=[...(rows || [])].sort((a,b) => {
-    const dt=new Date(a.created_at).getTime()-new Date(b.created_at).getTime();
+    const dt=new Date(rowEventTime(a)).getTime()-new Date(rowEventTime(b)).getTime();
     if(dt!==0) return dt;
     return String(a.deal_ticket ?? "").localeCompare(String(b.deal_ticket ?? ""));
   });
@@ -182,7 +187,7 @@ export function reconstructCompletedJournal(rows: PerformanceJournalDeal[]) {
           direction:String(row.direction || "").toUpperCase() || "BUY",
           controlMode:mode,
           symbol,
-          openedAt:row.created_at,
+          openedAt:rowEventTime(row),
           netProfit:0,
           entryCount:0,
           dealCount:0,
@@ -201,8 +206,8 @@ export function reconstructCompletedJournal(rows: PerformanceJournalDeal[]) {
           direction:String(row.direction || "").toUpperCase() || basket.direction,
           controlMode:basket.controlMode,
           symbol:basket.symbol,
-          openedAt:row.created_at,
-          closedAt:row.created_at,
+          openedAt:rowEventTime(row),
+          closedAt:rowEventTime(row),
           openedVolume:0,
           remainingVolume:0,
           entryValue:0,
@@ -244,7 +249,7 @@ export function reconstructCompletedJournal(rows: PerformanceJournalDeal[]) {
         direction:String(row.direction || "").toUpperCase() || "BUY",
         controlMode:mode,
         symbol,
-        openedAt:row.created_at,
+        openedAt:rowEventTime(row),
         netProfit:0,
         entryCount:0,
         dealCount:0,
@@ -259,8 +264,8 @@ export function reconstructCompletedJournal(rows: PerformanceJournalDeal[]) {
         direction:basket.direction,
         controlMode:basket.controlMode,
         symbol:basket.symbol,
-        openedAt:row.created_at,
-        closedAt:row.created_at,
+        openedAt:rowEventTime(row),
+        closedAt:rowEventTime(row),
         openedVolume:volume,
         remainingVolume:volume,
         entryValue:0,
@@ -275,10 +280,10 @@ export function reconstructCompletedJournal(rows: PerformanceJournalDeal[]) {
     position.netProfit+=net;
     position.remainingVolume=Math.max(0,position.remainingVolume-volume);
     position.exitPrice=numeric(row.price)>0 ? numeric(row.price) : position.exitPrice;
-    position.closedAt=row.created_at;
+    position.closedAt=rowEventTime(row);
     basket.netProfit+=net;
     basket.dealCount++;
-    basket.metadata.__closedAt=row.created_at;
+    basket.metadata.__closedAt=rowEventTime(row);
 
     if(position.remainingVolume<=0.00000001)
       finishPosition(pKey,position);

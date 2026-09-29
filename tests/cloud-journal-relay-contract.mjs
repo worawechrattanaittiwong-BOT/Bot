@@ -39,11 +39,15 @@ assert.match(client, /\/api\/ea\/journal/, "Journal relay must use the existing 
 
 assert.match(
   api,
-  /ON CONFLICT\(bot_instance_id,mt5_account_id,deal_ticket,event_type\) DO NOTHING/,
-  "EA journal endpoint must remain idempotent for safe replay"
+  /ON CONFLICT\(bot_instance_id,mt5_account_id,deal_ticket,event_type\) DO UPDATE[\s\S]*?dealTimeMsc[\s\S]*?brokerUtcOffsetSeconds/,
+  "EA journal replay must stay idempotent while enriching immutable MT5 deal timing"
 );
 
 assert.match(ea, /JOURNAL_REPLAY_TODAY/, "EA must support a targeted current-day journal replay command");
+assert.match(ea, /\"brokerDayStart\":%I64d,\"brokerUtcOffsetSeconds\":%I64d/,
+  "EA heartbeat must publish the exact broker-day clock used by Performance reconciliation");
+assert.match(ea, /\"dealTimeMsc\":%I64d,\"brokerUtcOffsetSeconds\":%I64d/,
+  "EA journal must persist immutable MT5 deal time and broker UTC offset");
 assert.match(ea, /bool ReplayTodayTradeJournal\(\)/, "EA must implement current-day journal replay");
 assert.match(ea, /datetime from=BrokerDayStart\(\);[\s\S]*?HistorySelect\(from,to\)/,
   "Current-day replay must be limited to the broker day only");
@@ -78,18 +82,18 @@ assert.match(
 );
 assert.match(
   performanceApi,
-  /command='JOURNAL_REPLAY_TODAY'[\s\S]*?30_000/,
-  "VPS journal recovery must deduplicate replay commands with a cooldown"
+  /command='JOURNAL_REPLAY_TODAY'[\s\S]*?90_000/,
+  "VPS journal recovery must deduplicate replay commands with a worker-drain cooldown"
 );
 assert.match(
   performancePage,
   /JOURNAL_RECOVERING/,
   "Performance UI must poll while VPS journal replay is recovering detail"
 );
-assert.doesNotMatch(
+assert.match(
   performancePage,
-  /กำลังซิงก์ประวัติการเทรดจาก VPS MT5|รายละเอียดการเทรดยังซิงก์ไม่ครบ/,
-  "Performance recovery must stay in the background without a sync notice"
+  /กำลังซิงก์ประวัติ Deal จาก MT5/,
+  "Performance recovery must explain temporary detail suppression while replay is running"
 );
 assert.match(
   performanceApi,
@@ -100,6 +104,16 @@ assert.match(
   performanceApi,
   /PERFORMANCE_RECONCILED/,
   "Completed performance reconciliation must retire stale VPS replay commands"
+);
+assert.match(
+  performanceApi,
+  /MT5_BROKER_DAY/,
+  "Performance reconciliation must use the MT5 broker-day clock when available"
+);
+assert.match(
+  performanceApi,
+  /event_at/,
+  "Performance analytics must reconstruct replayed deals from immutable MT5 event time"
 );
 assert.match(
   performancePage,

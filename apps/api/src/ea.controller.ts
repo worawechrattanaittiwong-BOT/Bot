@@ -975,6 +975,9 @@ export class EaController {
     installToken: string;
     dealTicket: string | number;
     positionId?: string | number;
+    dealTime?: number;
+    dealTimeMsc?: number;
+    brokerUtcOffsetSeconds?: number;
     eventType: string;
     direction: string;
     volume?: number;
@@ -1138,7 +1141,18 @@ export class EaController {
          $1,$2,$3::bigint,NULLIF($4,'')::bigint,$5,$6,
          $7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb
        )
-       ON CONFLICT(bot_instance_id,mt5_account_id,deal_ticket,event_type) DO NOTHING`,
+       ON CONFLICT(bot_instance_id,mt5_account_id,deal_ticket,event_type) DO UPDATE
+       SET metadata=COALESCE(trade_journal.metadata,'{}'::jsonb) ||
+         jsonb_strip_nulls(
+           jsonb_build_object(
+             'dealTime',EXCLUDED.metadata->'dealTime',
+             'dealTimeMsc',EXCLUDED.metadata->'dealTimeMsc',
+             'brokerUtcOffsetSeconds',EXCLUDED.metadata->'brokerUtcOffsetSeconds',
+             'executedByBot',EXCLUDED.metadata->'executedByBot',
+             'controlMode',EXCLUDED.metadata->'controlMode',
+             'controlModeSource',EXCLUDED.metadata->'controlModeSource'
+           )
+         )`,
       [
         instance.id,
         instance.mt5_account_id || null,
@@ -1161,6 +1175,14 @@ export class EaController {
         Math.max(0, Math.trunc(n(body.basketIndex))),
         JSON.stringify({
           source: "EA",
+          dealTime: n(body.dealTime) > 0 ? Math.trunc(n(body.dealTime)) : undefined,
+          dealTimeMsc: n(body.dealTimeMsc) > 0 ? Math.trunc(n(body.dealTimeMsc)) : undefined,
+          brokerUtcOffsetSeconds:
+            body.brokerUtcOffsetSeconds !== undefined &&
+            Number.isFinite(Number(body.brokerUtcOffsetSeconds)) &&
+            Math.abs(Number(body.brokerUtcOffsetSeconds)) <= 14 * 60 * 60
+              ? Math.trunc(Number(body.brokerUtcOffsetSeconds))
+              : undefined,
           controlMode: journalControlMode,
           controlModeSource: validJournalModes.includes(reportedJournalMode) ? "EA_DEAL" : "SERVER_SETTINGS",
           executedByBot: body.executedByBot !== false,

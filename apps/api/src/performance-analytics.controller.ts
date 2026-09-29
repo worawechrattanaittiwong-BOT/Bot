@@ -344,6 +344,27 @@ export class PerformanceAnalyticsController {
     const metrics = account.metrics || {};
     const currentBalance = Number(metrics.balance || 0);
     const currentEquity = Number(metrics.equity || 0);
+    const freshHeartbeat =
+      Boolean(account.last_seen_at) &&
+      Date.now() - new Date(account.last_seen_at).getTime() <= 35_000;
+    const reportedBrokerTime = Number(metrics.brokerTime);
+    const reportedBrokerDayStart = Number(metrics.brokerDayStart);
+    const reportedBrokerUtcOffsetSeconds = Number(metrics.brokerUtcOffsetSeconds);
+    const brokerClockReliable =
+      freshHeartbeat &&
+      Number.isFinite(reportedBrokerTime) &&
+      Number.isFinite(reportedBrokerDayStart) &&
+      Number.isFinite(reportedBrokerUtcOffsetSeconds) &&
+      reportedBrokerTime > 0 &&
+      reportedBrokerDayStart > 0 &&
+      reportedBrokerTime >= reportedBrokerDayStart &&
+      reportedBrokerTime - reportedBrokerDayStart < 26 * 60 * 60 &&
+      Math.abs(reportedBrokerUtcOffsetSeconds) <= 14 * 60 * 60;
+    const brokerDayStartUtc = brokerClockReliable
+      ? new Date((reportedBrokerDayStart - reportedBrokerUtcOffsetSeconds) * 1000)
+      : null;
+    const journalEventTime = (row:any) =>
+      new Date(row?.event_at || row?.created_at).getTime();
 
     const resetRow = await this.db.one(
       `SELECT created_at
@@ -361,6 +382,12 @@ export class PerformanceAnalyticsController {
         : from;
     const now = new Date();
     const journalTo = now.getTime() > to.getTime() ? now : to;
+    const journalQueryFrom =
+      brokerDayStartUtc &&
+      Number.isFinite(brokerDayStartUtc.getTime()) &&
+      brokerDayStartUtc.getTime() < effectiveFrom.getTime()
+        ? brokerDayStartUtc
+        : effectiveFrom;
 
     // Total time the bot was commanded to run inside the selected report range.
     // START begins a run; SAFE_STOP/CLOSE_ALL ends it. Repeated START commands
@@ -425,39 +452,75 @@ export class PerformanceAnalyticsController {
     // because async close callbacks can finalize that legacy row before every
     // exit deal has been accumulated.
     const journalResult = await this.db.query(
-      `SELECT
-         deal_ticket,position_id,event_type,direction,volume::float8,price::float8,
-         net_profit::float8,entry_model,entry_trigger,entry_quality_score::float8,
-         confidence::float8,created_at,metadata
-       FROM trade_journal
-       WHERE mt5_account_id=$1
-         AND event_type IN ('ENTRY','EXIT')
-         AND created_at >= $2
-         AND created_at <= $3
-       ORDER BY created_at ASC,id ASC
+      `WITH journal_source AS (
+         SELECT
+           id,deal_ticket,position_id,event_type,direction,volume::float8,price::float8,
+           net_profit::float8,entry_model,entry_trigger,entry_quality_score::float8,
+           confidence::float8,created_at,metadata,
+           COALESCE(
+             CASE
+               WHEN (metadata->>'dealTimeMsc') ~ '^[0-9]+$'
+                 AND (metadata->>'dealTimeMsc')::numeric > 0
+               THEN to_timestamp(
+                 (metadata->>'dealTimeMsc')::double precision / 1000.0 -
+                 CASE
+                   WHEN (metadata->>'brokerUtcOffsetSeconds') ~ '^-?[0-9]+$'
+                   THEN (metadata->>'brokerUtcOffsetSeconds')::double precision
+                   ELSE 0
+                 END
+               )
+               WHEN (metadata->>'dealTime') ~ '^[0-9]+$'
+                 AND (metadata->>'dealTime')::numeric > 0
+               THEN to_timestamp(
+                 (metadata->>'dealTime')::double precision -
+                 CASE
+                   WHEN (metadata->>'brokerUtcOffsetSeconds') ~ '^-?[0-9]+$'
+                   THEN (metadata->>'brokerUtcOffsetSeconds')::double precision
+                   ELSE 0
+                 END
+               )
+               ELSE NULL
+             END,
+             created_at
+           ) AS event_at
+         FROM trade_journal
+         WHERE mt5_account_id=$1
+           AND event_type IN ('ENTRY','EXIT')
+       )
+       SELECT
+         id,deal_ticket,position_id,event_type,direction,volume,price,net_profit,
+         entry_model,entry_trigger,entry_quality_score,confidence,created_at,event_at,metadata
+       FROM journal_source
+       WHERE event_at >= $2
+         AND event_at <= $3
+       ORDER BY event_at ASC,created_at ASC,id ASC
        LIMIT 50000`,
-      [account.id, effectiveFrom.toISOString(), journalTo.toISOString()]
+      [account.id, journalQueryFrom.toISOString(), journalTo.toISOString()]
     );
     const journalRows = journalResult.rows || [];
     const reconstructed = reconstructCompletedJournal(journalRows);
     const allBaskets = reconstructed.baskets;
     const allPositions = reconstructed.positions;
-    const rangeBasketsAllModes = allBaskets.filter(
-      (row) => new Date(row.created_at).getTime() <= to.getTime()
-    );
+    const rangeBasketsAllModes = allBaskets.filter((row) => {
+      const closedAt = new Date(row.created_at).getTime();
+      return closedAt >= effectiveFrom.getTime() && closedAt <= to.getTime();
+    });
     const selectedBaskets = rangeBasketsAllModes.filter(
       (row) => includeControlMode(row.controlMode)
     );
     const selectedPositions = allPositions.filter(
       (row) =>
+        new Date(row.closedAt).getTime() >= effectiveFrom.getTime() &&
         new Date(row.closedAt).getTime() <= to.getTime() &&
         includeControlMode(row.controlMode)
     );
     const filteredJournalRows = journalRows.filter(
-      (row:any) => includeControlMode(resolveJournalControlMode(row))
+      (row:any) =>
+        journalEventTime(row) >= effectiveFrom.getTime() &&
+        includeControlMode(resolveJournalControlMode(row))
     );
     const selectedDealRows = filteredJournalRows.filter(
-      (row:any) => new Date(row.created_at).getTime() <= to.getTime()
+      (row:any) => journalEventTime(row) <= to.getTime()
     );
 
     // Money follows the actual realized deal ledger, including partial closes
@@ -480,27 +543,44 @@ export class PerformanceAnalyticsController {
     );
     // MT5's broker-day closed P/L is account-wide. Reconcile only when all
     // strategies are selected; custom portfolios use strategy-tagged journal P/L.
-    const bangkokTodayStart = new Date(this.dayKey(now) + "T00:00:00.000+07:00");
-    const freshHeartbeat =
-      Boolean(account.last_seen_at) &&
-      Date.now() - new Date(account.last_seen_at).getTime() <= 35_000;
+    // EA 1.0.95+ publishes the exact broker-day boundary and UTC offset used by
+    // BotTodayClosedProfitAllModes(), eliminating Bangkok/broker timezone drift.
+    const legacyBangkokDayStart = new Date(this.dayKey(now) + "T00:00:00.000+07:00");
+    const reconciliationDayStart =
+      brokerClockReliable && brokerDayStartUtc
+        ? brokerDayStartUtc
+        : legacyBangkokDayStart;
+    const reconciliationClock = brokerClockReliable
+      ? "MT5_BROKER_DAY"
+      : "BANGKOK_LEGACY";
     const reportedTodayClosed = Number(metrics.botTodayClosedProfit);
     const allStrategiesSelected = selectedStrategyModes.length === 5;
     const canReconcileToday =
       allStrategiesSelected &&
       freshHeartbeat &&
       Number.isFinite(reportedTodayClosed) &&
-      effectiveFrom.getTime() <= bangkokTodayStart.getTime() &&
+      effectiveFrom.getTime() <= reconciliationDayStart.getTime() &&
       to.getTime() >= now.getTime();
+    const comparableTodayRows = canReconcileToday
+      ? journalRows.filter((row:any) =>
+          journalEventTime(row) >= reconciliationDayStart.getTime() &&
+          row?.metadata?.executedByBot !== false
+        )
+      : [];
+    const untimedComparableRows = brokerClockReliable
+      ? comparableTodayRows.filter((row:any) =>
+          !(Number(row?.metadata?.dealTimeMsc) > 0 || Number(row?.metadata?.dealTime) > 0)
+        )
+      : [];
     // botTodayClosedProfit intentionally counts only deals executed by a
     // SCENOVA magic. The journal also keeps customer/manual EXITs for accurate
     // position P/L. Compare like-for-like here; otherwise a manual close creates
     // a permanent false "journal incomplete" state even when every deal exists.
     const journalTodayClosed = canReconcileToday
-      ? journalRows
-          .filter((row:any) => new Date(row.created_at).getTime() >= bangkokTodayStart.getTime())
-          .filter((row:any) => row?.metadata?.executedByBot !== false)
-          .reduce((sum:number,row:any) => sum + Number(row.net_profit || 0), 0)
+      ? comparableTodayRows.reduce(
+          (sum:number,row:any) => sum + Number(row.net_profit || 0),
+          0
+        )
       : 0;
     const mt5TodayReconciliation = canReconcileToday
       ? reportedTodayClosed - journalTodayClosed
@@ -508,7 +588,10 @@ export class PerformanceAnalyticsController {
     const journalReconciliationGap = Number(mt5TodayReconciliation.toFixed(2));
     const detailedStatsReliable =
       !canReconcileToday ||
-      Math.abs(journalReconciliationGap) <= 0.01;
+      (
+        Math.abs(journalReconciliationGap) <= 0.01 &&
+        untimedComparableRows.length === 0
+      );
 
     // Once the comparable MT5/journal ledger is complete, retire any stale
     // telemetry-only replay command so the VPS does not replay history forever.
@@ -549,16 +632,18 @@ export class PerformanceAnalyticsController {
          LIMIT 1`,
         [account.instance_id]
       );
-      const latestReplayAt = latestReplay?.created_at
-        ? new Date(latestReplay.created_at).getTime()
-        : 0;
+      const replayActivityAt = Math.max(
+        latestReplay?.created_at ? new Date(latestReplay.created_at).getTime() : 0,
+        latestReplay?.delivered_at ? new Date(latestReplay.delivered_at).getTime() : 0,
+        latestReplay?.acked_at ? new Date(latestReplay.acked_at).getTime() : 0
+      );
       const latestReplayStatus = String(latestReplay?.status || "").toUpperCase();
       const replayActive =
         latestReplayStatus === "PENDING" ||
         latestReplayStatus === "DELIVERED";
       const replayCooldown =
-        latestReplayAt > 0 &&
-        Date.now() - latestReplayAt < 30_000;
+        replayActivityAt > 0 &&
+        Date.now() - replayActivityAt < 90_000;
 
       if (!replayActive && !replayCooldown) {
         journalRecovery = await this.db.one(
@@ -573,9 +658,11 @@ export class PerformanceAnalyticsController {
     }
 
     const journalRecoveryStatus = String(journalRecovery?.status || "").toUpperCase();
-    const journalRecoveryAt = journalRecovery?.created_at
-      ? new Date(journalRecovery.created_at).getTime()
-      : 0;
+    const journalRecoveryAt = Math.max(
+      journalRecovery?.created_at ? new Date(journalRecovery.created_at).getTime() : 0,
+      journalRecovery?.delivered_at ? new Date(journalRecovery.delivered_at).getTime() : 0,
+      journalRecovery?.acked_at ? new Date(journalRecovery.acked_at).getTime() : 0
+    );
     const journalRecoveryActive =
       !detailedStatsReliable &&
       String(account.mode || "").toUpperCase() === "CLOUD" &&
@@ -584,7 +671,7 @@ export class PerformanceAnalyticsController {
       (
         journalRecoveryStatus === "PENDING" ||
         journalRecoveryStatus === "DELIVERED" ||
-        (journalRecoveryAt > 0 && Date.now() - journalRecoveryAt < 30_000)
+        (journalRecoveryAt > 0 && Date.now() - journalRecoveryAt < 90_000)
       );
 
     const realizedSinceFrom = rawRealizedSinceFrom + mt5TodayReconciliation;
@@ -672,7 +759,7 @@ export class PerformanceAnalyticsController {
       .filter((value) => Number.isFinite(value));
     const dailyProfitMap = new Map<string, number>();
     for (const row of selectedDealRows) {
-      const key = this.dayKey(row.created_at);
+      const key = this.dayKey(row.event_at || row.created_at);
       dailyProfitMap.set(key, (dailyProfitMap.get(key) || 0) + Number(row.net_profit || 0));
     }
     const dailyProfits = Array.from(dailyProfitMap.values());
@@ -867,6 +954,9 @@ export class PerformanceAnalyticsController {
         selectedJournalRows: selectedDealRows.length,
         reconstructedPositions: selectedPositions.length,
         mt5ReconciliationAdjustment: journalReconciliationGap,
+        reconciliationClock,
+        brokerDayStart: brokerDayStartUtc?.toISOString() || null,
+        untimedJournalRows: untimedComparableRows.length,
         moneySource: canReconcileToday
           ? "MT5_HEARTBEAT_RECONCILED"
           : "TRADE_JOURNAL",
@@ -886,6 +976,9 @@ export class PerformanceAnalyticsController {
         reconciliation: canReconcileToday ? {
           source: "MT5_HEARTBEAT_TODAY_CLOSED_PNL",
           scope: "BOT_EXECUTED_DEALS",
+          clock: reconciliationClock,
+          brokerDayStart: brokerDayStartUtc?.toISOString() || null,
+          brokerUtcOffsetSeconds: brokerClockReliable ? reportedBrokerUtcOffsetSeconds : null,
           reportedTodayClosed: Number(reportedTodayClosed.toFixed(2)),
           journalTodayClosed: Number(journalTodayClosed.toFixed(2)),
           adjustment: Number(mt5TodayReconciliation.toFixed(2))

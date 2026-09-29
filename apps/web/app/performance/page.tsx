@@ -521,6 +521,8 @@ export default function PerformanceDashboardPage() {
   const summary=mode==="BACKTEST"?{...backSummary,...backExtra}:liveSummary;
   const detailedStatsReliable =
     mode==="BACKTEST" || report?.dataQuality?.detailedStatsReliable !== false;
+  const journalRecovering =
+    mode==="LIVE" && report?.dataQuality?.detailStatus==="JOURNAL_RECOVERING";
   const detailValue=(value:string)=>detailedStatsReliable?value:"—";
   const currency=String(mode==="BACKTEST"?backtest?.currency:report?.account?.currency||"USD").trim().toUpperCase()||"USD";
   const symbol=String(mode==="BACKTEST"?backtest?.symbol:report?.account?.symbol||"—");
@@ -723,6 +725,15 @@ export default function PerformanceDashboardPage() {
                   <InfoRow icon="orders" label="Closed Positions" value={detailValue(String(totalPositions))}/>
                 </div>
               </div>
+
+              {!detailedStatsReliable?(
+                <div className={styles.dataQualityNotice}>
+                  <ScenovaIcon name="status" size={15}/>
+                  <b>{journalRecovering
+                    ?"กำลังซิงก์ประวัติ Deal จาก MT5 · ระบบจะอัปเดตสถิติอัตโนมัติ"
+                    :"กำลังตรวจสอบความครบถ้วนของประวัติ Deal จาก MT5"}</b>
+                </div>
+              ):null}
 
               <div className={styles.metricsCard}>
                 <Metric icon="wallet" label="Start Capital" value={money(startCapital,currency)}/>
