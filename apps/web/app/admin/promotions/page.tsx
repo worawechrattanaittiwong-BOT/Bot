@@ -448,9 +448,7 @@ export default function PromotionCenterPage() {
 
           <header className={s.header}>
             <div>
-              <span className={s.kicker}>SCENOVA / PROMOTION CENTER</span>
               <h1>Promotion Center</h1>
-              <p>สร้างและแก้ไขรูปโฆษณา เวลา กลุ่มผู้ใช้ หน้าที่แสดง และลิงก์ปลายทางได้จากหน้านี้</p>
             </div>
             <div className={s.headerActions}>
               <button className={s.createButton} onClick={()=>{setArchiveConfirm(false);setEditor(newEditor());}}>+ สร้าง Campaign</button>
@@ -468,17 +466,11 @@ export default function PromotionCenterPage() {
             <div><span>Clicks</span><b>{totals.clicks.toLocaleString()}</b></div>
           </section>
 
-          <section className={s.notice}>
-            <b>Display Scope</b>
-            <span>แสดงเฉพาะระบบหลัง Login · หน้า Login / Website / Public Share จะไม่แสดง Campaign</span>
-          </section>
-
           {loading?(
             <div className={s.empty}>กำลังโหลด Campaign…</div>
           ):campaigns.length===0?(
             <div className={s.empty}>
               <b>ยังไม่มี Campaign</b>
-              <span>กด “สร้าง Campaign” เพื่อเพิ่มโฆษณาแรก</span>
             </div>
           ):(
             <section className={s.grid}>
@@ -589,7 +581,6 @@ export default function PromotionCenterPage() {
                 {previewCampaign.cta_label||"ดูรายละเอียด"} <span>›</span>
               </a>
             </footer>
-            <div className={s.previewNote}>Preview เท่านั้น · ไม่บันทึก View / Click และไม่ใช้โควตาการแสดงจริง</div>
           </section>
         </div>
       ):null}
@@ -601,7 +592,6 @@ export default function PromotionCenterPage() {
           <section className={s.editorPanel} role="dialog" aria-modal="true" aria-label="แก้ไข Campaign">
             <header className={s.editorHead}>
               <div>
-                <span>CAMPAIGN EDITOR</span>
                 <h2>{editor.id?"แก้ไข Campaign":"สร้าง Campaign ใหม่"}</h2>
               </div>
               <button type="button" aria-label="ปิด" onClick={()=>setEditor(null)} disabled={Boolean(busyId)}>×</button>
@@ -611,7 +601,6 @@ export default function PromotionCenterPage() {
               <section className={s.editorSection}>
                 <div className={s.sectionTitle}>
                   <b>1. เนื้อหาและลิงก์</b>
-                  <span>ข้อความที่ใช้จัดการ Campaign และปลายทางเมื่อผู้ใช้กดโฆษณา</span>
                 </div>
                 <div className={s.formGrid}>
                   <label>
@@ -640,7 +629,6 @@ export default function PromotionCenterPage() {
               <section className={s.editorSection}>
                 <div className={s.sectionTitle}>
                   <b>2. รูปโฆษณา</b>
-                  <span>อัปโหลด PNG / JPEG / WEBP ไม่เกิน 4 MB ต่อรูป · Mobile ไม่ใส่ก็ใช้รูป Desktop อัตโนมัติ</span>
                 </div>
                 <div className={s.assetGrid}>
                   <div className={s.assetCard}>
@@ -688,7 +676,6 @@ export default function PromotionCenterPage() {
               <section className={s.editorSection}>
                 <div className={s.sectionTitle}>
                   <b>3. สถานะและช่วงวันที่</b>
-                  <span>Campaign จะแสดงเฉพาะเมื่อสถานะ Active และอยู่ในช่วงวันที่กำหนด</span>
                 </div>
                 <div className={s.formGrid}>
                   <label>
@@ -725,7 +712,6 @@ export default function PromotionCenterPage() {
               <section className={s.editorSection}>
                 <div className={s.sectionTitle}>
                   <b>4. เวลาแสดง</b>
-                  <span>เปิด/ปิดแต่ละช่วงและกำหนดเวลาเองได้</span>
                 </div>
                 <div className={s.slotGrid}>
                   {editor.schedules.map(row=>(
@@ -747,7 +733,6 @@ export default function PromotionCenterPage() {
               <section className={s.editorSection}>
                 <div className={s.sectionTitle}>
                   <b>5. กลุ่มผู้ใช้และหน้าที่แสดง</b>
-                  <span>หน้า Login / Website / Public Share ถูกปิดตายและไม่สามารถเลือกให้แสดงได้</span>
                 </div>
                 <div className={s.roles}>
                   {ROLE_OPTIONS.map(role=>(
@@ -761,7 +746,7 @@ export default function PromotionCenterPage() {
 
                 <label className={s.allPages}>
                   <input type="checkbox" checked={editor.allAuthenticatedPages} onChange={event=>setEditorField("allAuthenticatedPages",event.target.checked)}/>
-                  <span><b>ทุกหน้าหลัง Login</b><small>ใช้กฎกลางของระบบและไม่แสดงบนหน้า Public</small></span>
+                  <span><b>ทุกหน้าหลัง Login</b></span>
                 </label>
 
                 {!editor.allAuthenticatedPages?(
@@ -783,7 +768,7 @@ export default function PromotionCenterPage() {
                     onChange={event=>setEditorField("excludedPaths",event.target.value)}
                     placeholder={"/checkout\n/security"}
                   />
-                  <small>ใส่ทีละบรรทัด เช่น /checkout เพื่อไม่ให้ Campaign รบกวนหน้าสำคัญ</small>
+                  
                 </label>
               </section>
             </div>
