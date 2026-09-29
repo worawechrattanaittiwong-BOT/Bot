@@ -3,6 +3,7 @@ function Require-Contains([string]$text,[string]$needle,[string]$label) { if (-n
 function Require-NotContains([string]$text,[string]$needle,[string]$label) { if ($text.Contains($needle)) { throw "Obsolete customer Slot contract: $label -> $needle" } }
 $eaApi = [System.IO.File]::ReadAllText((Resolve-Path "apps/api/src/ea.controller.ts"))
 $botApi = [System.IO.File]::ReadAllText((Resolve-Path "apps/api/src/bot.controller.ts"))
+$db = [System.IO.File]::ReadAllText((Resolve-Path "apps/api/src/db.service.ts"))
 $page = [System.IO.File]::ReadAllText((Resolve-Path "apps/web/app/dashboard/page.tsx"))
 $layout = [System.IO.File]::ReadAllText((Resolve-Path "apps/web/app/layout.tsx"))
 $nav = [System.IO.File]::ReadAllText((Resolve-Path "apps/web/components/CustomerNavigationLabels.tsx"))
@@ -16,6 +17,7 @@ Require-Contains $eaApi 'AND a.user_id<>$3' 'cross-customer MT5 identity protect
 Require-Contains $page 'ใช้บัญชีนี้' 'customer explicitly confirms detected Local MT5 account'
 Require-Contains $page 'kind:"LOCAL_MT5_BIND"' 'Local account confirmation uses Server Terminal'
 Require-Contains $botApi 'bi.last_seen_at DESC NULLS LAST' 'automatic active installation selection'
+Require-Contains $db 'WHERE bi.slot_id IS NULL' 'startup license-slot backfill must ignore already-linked bot instances'
 Require-NotContains $page 'className="slot-switcher"' 'customer Slot selector removed'
 Require-NotContains $page 'เลือก Slot ที่ต้องการควบคุม' 'customer Slot chooser copy removed'
 Require-NotContains $layout '<Mt5AccountSwitchAssistant />' 'manual account-switch assistant removed'
