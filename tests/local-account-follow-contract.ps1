@@ -12,7 +12,7 @@ Require-Contains $eaApi 'Existing LOCAL accounts never auto-follow a different M
 Require-Contains $eaApi "actual_state='SAFE_STOP'" 'detected Local account is held in SAFE_STOP'
 Require-Contains $eaApi 'pending_account_number=$4' 'detected Local account waits for website confirmation'
 Require-Contains $eaApi 'previousBoundPositions' 'old account position guard is preserved'
-Require-Contains $eaApi 'AND user_id<>$3' 'cross-customer MT5 identity protection'
+Require-Contains $eaApi 'AND a.user_id<>$3' 'cross-customer MT5 identity protection'
 Require-Contains $page 'ใช้บัญชีนี้' 'customer explicitly confirms detected Local MT5 account'
 Require-Contains $page 'kind:"LOCAL_MT5_BIND"' 'Local account confirmation uses Server Terminal'
 Require-Contains $botApi 'bi.last_seen_at DESC NULLS LAST' 'automatic active installation selection'
