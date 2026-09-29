@@ -34,6 +34,11 @@ Assert-Contains $schema "u.role IN ('OWNER','ADMIN')" 'connected owner/admin Clo
 Assert-Contains $schema "bi.last_seen_at>now()-interval '30 seconds'" 'owner/admin capacity must require a fresh connected runtime'
 Assert-Contains $schema "NOT EXISTS (" 'paid reservation must not double-count an already assigned runtime'
 
+# Reusing one MT5 identity across LOCAL/CLOUD must go through verified migration.
+Assert-Contains $botApi 'WHERE bi.mt5_account_id=$1' 'cross-slot MT5 binding preflight missing'
+Assert-Contains $botApi 'AND bi.slot_id<>$2' 'same MT5 identity must detect another bound slot'
+Assert-Contains $botApi 'บัญชี MT5 นี้ยังเชื่อมกับ Local อยู่' 'Local-to-Cloud direct bind must return migration guidance instead of DB 500'
+
 # Server must fail closed before asking a Worker to stop a terminal.
 Assert-Contains $controller 'Cloud Worker v1.1.0 or newer is required for verified stop' 'Worker verified-stop version gate missing'
 Assert-Contains $controller 'EA heartbeat is not fresh' 'fresh EA heartbeat guard missing'

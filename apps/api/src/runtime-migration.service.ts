@@ -98,8 +98,33 @@ export class RuntimeMigrationService {
       )).rows[0];
       runnerId = String(order?.runner_id || "");
     }
+    // A manually granted/migrated Cloud membership can be valid without a
+    // historical paid order. Choose a healthy free Runner instead of rejecting
+    // that valid Local -> Cloud migration.
     if (!runnerId) {
-      throw new ConflictException("Cloud target does not have a reserved VPS Runner");
+      await tx.query("SELECT pg_advisory_xact_lock(740091)");
+      const fallback = (await tx.query(
+        `SELECT w.runner_id
+         FROM worker_nodes w
+         LEFT JOIN cloud_node_load l USING(runner_id)
+         WHERE w.last_seen_at>now()-interval '30 seconds'
+           AND COALESCE(w.accepting_jobs,true)=true
+           AND COALESCE(w.capacity_blocked,false)=false
+           AND COALESCE(w.quarantined,false)=false
+           AND COALESCE(w.telemetry->>'templateReady','false')='true'
+           AND GREATEST(COALESCE(l.occupied,0),COALESCE(w.active_instances,0)) < w.capacity
+         ORDER BY
+           GREATEST(COALESCE(l.occupied,0),COALESCE(w.active_instances,0))::float
+             / GREATEST(w.capacity,1),
+           w.last_seen_at DESC,
+           w.runner_id
+         LIMIT 1
+         FOR UPDATE OF w`
+      )).rows[0];
+      runnerId = String(fallback?.runner_id || "");
+    }
+    if (!runnerId) {
+      throw new ConflictException("ยังไม่มี SCENOVA VPS ที่พร้อมรับบัญชีนี้");
     }
 
     const node = (await tx.query(

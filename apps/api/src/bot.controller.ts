@@ -2286,6 +2286,26 @@ export class BotController {
       [req.user.sub, String(body.accountNumber), String(body.brokerServer)]
     );
     if (account) {
+      const otherBinding = await this.db.one(
+        `SELECT bi.id,bi.slot_id,bi.mode,bi.desired_state,bi.actual_state,
+                bi.agent_version,bi.agent_last_seen_at
+         FROM bot_instances bi
+         WHERE bi.mt5_account_id=$1
+           AND bi.slot_id<>$2
+         ORDER BY bi.created_at DESC
+         LIMIT 1`,
+        [account.id, slot.id]
+      );
+      if (otherBinding) {
+        if (mode === "CLOUD" && String(otherBinding.mode) === "LOCAL") {
+          throw new ConflictException(
+            "บัญชี MT5 นี้ยังเชื่อมกับ Local อยู่ กรุณากลับไปที่ Local Slot เดิมแล้วกด ย้ายไป VPS เพื่อย้ายบัญชีอย่างปลอดภัย"
+          );
+        }
+        throw new ConflictException(
+          "บัญชี MT5 นี้ยังเชื่อมอยู่กับ Slot อื่น กรุณาย้ายหรือยกเลิกการเชื่อมเดิมก่อน"
+        );
+      }
       account = await this.db.one(
         "UPDATE mt5_accounts SET broker=$2,mode=$3,status='ACTIVE' WHERE id=$1 RETURNING *",
         [account.id, body.broker || "Exness", mode]

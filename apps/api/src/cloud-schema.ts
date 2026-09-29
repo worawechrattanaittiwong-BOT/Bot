@@ -283,6 +283,34 @@ CREATE TRIGGER trg_block_start_during_runtime_migration
 BEFORE UPDATE OF desired_state ON bot_instances
 FOR EACH ROW
 EXECUTE FUNCTION scenova_block_start_during_runtime_migration();
+CREATE TABLE IF NOT EXISTS access_groups (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name varchar(80) NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  note text,
+  created_by varchar(120),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_access_groups_name_unique
+  ON access_groups(lower(name));
+
+CREATE TABLE IF NOT EXISTS access_group_grants (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  access_group_id uuid NOT NULL REFERENCES access_groups(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  mode varchar(16) NOT NULL CHECK (mode IN ('LOCAL','CLOUD')),
+  starts_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  status varchar(20) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','REVOKED','EXPIRED')),
+  created_by varchar(120),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(access_group_id,user_id,mode)
+);
+CREATE INDEX IF NOT EXISTS idx_access_group_grants_user_mode
+  ON access_group_grants(user_id,mode,status,expires_at DESC);
+
 CREATE OR REPLACE VIEW cloud_node_load AS
 WITH eligible_slots AS (
   SELECT ls.id AS slot_id

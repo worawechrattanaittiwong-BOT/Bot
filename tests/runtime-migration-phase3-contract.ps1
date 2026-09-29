@@ -56,6 +56,9 @@ Require $service "slot_type,status,label.*OWNER.*ACTIVE.*Owner VPS" 'OWNER migra
 Require $service "w\.status='ONLINE'" 'OWNER migration selects an online VPS'
 Require $service 'COALESCE\(w\.accepting_jobs,true\)=true' 'OWNER migration requires a VPS accepting jobs'
 Require $service 'GREATEST\(COALESCE\(l\.occupied,0\),COALESCE\(w\.active_instances,0\)\) < w\.capacity' 'OWNER migration requires free VPS capacity'
+Require $service 'manually granted/migrated Cloud membership can be valid without a' 'customer migration supports active Cloud entitlement without paid-order reservation'
+Require $service 'SELECT pg_advisory_xact_lock\(740091\)' 'unreserved customer migration serializes Runner allocation'
+Require $service 'ยังไม่มี SCENOVA VPS ที่พร้อมรับบัญชีนี้' 'customer migration reports no free VPS cleanly'
 
 Require $controller '@UseGuards\(JwtGuard\)' 'customer migration is JWT protected'
 Require $controller '@Post\("owner/local-to-cloud"\)' 'OWNER one-click Local to VPS endpoint'
