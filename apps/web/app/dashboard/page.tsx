@@ -5454,6 +5454,17 @@ function EmptySetup({onNext}:{onNext:()=>void}) {
 
 function BotSettingsModal(props:any) {
   const [revealedManualRisk,setRevealedManualRisk] = useState<Record<string,boolean>>({});
+  const [modeGuideOpen,setModeGuideOpen] = useState(false);
+  const [modeGuideMode,setModeGuideMode] = useState("AUTO");
+
+  useEffect(()=>{
+    if(!modeGuideOpen) return;
+    const onKeyDown=(event:KeyboardEvent)=>{
+      if(event.key==="Escape") setModeGuideOpen(false);
+    };
+    window.addEventListener("keydown",onKeyDown);
+    return()=>window.removeEventListener("keydown",onKeyDown);
+  },[modeGuideOpen]);
   const accountCurrency = normalizeAccountCurrency(props.metrics?.currency);
   const savedAccountCurrency = String(props.settings?.accountCurrency || "").trim().toUpperCase();
   const reportedAccountCurrency = String(props.metrics?.currency || "").trim().toUpperCase();
@@ -5539,6 +5550,68 @@ function BotSettingsModal(props:any) {
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
     MANUAL:{title:"MANUAL",subtitle:"โหมดตั้งค่าด้วยตนเอง ใช้เป้ากำไรและ Stop ของ MANUAL เอง และไม่ส่ง Position ให้ AUTO V20 จัดการ"}
   };
+
+  const modeGuide:Record<string,{
+    title:string;
+    tagline:string;
+    icon:string;
+    workflow:string;
+    good:string;
+    caution:string;
+    remember:string;
+  }> = {
+    AUTO:{
+      title:"AUTO",
+      tagline:"ให้บอทหาจังหวะให้",
+      icon:"brain",
+      workflow:"บอทดูภาพรวมก่อนว่าตอนนี้ฝั่ง BUY หรือ SELL ได้เปรียบกว่า ถ้ายังไม่ชัดก็รอ ไม่จำเป็นต้องมีออเดอร์ตลอดเวลา",
+      good:"เทรนด์เริ่มชัด มีแรงไปต่อ หรือมีจังหวะย่อแล้วกลับไปทางเดิม",
+      caution:"ตลาดมั่ว ๆ ขึ้นทีลงที เปลี่ยนหน้าบ่อย เพราะทิศทางตลาดอาจสลับเร็ว",
+      remember:"AUTO = ให้บอทเลือกเกมให้"
+    },
+    RACE:{
+      title:"RACE",
+      tagline:"เห็นแรงก็ไปกับแรง",
+      icon:"status",
+      workflow:"RACE เน้นจับว่าตอนนี้ฝั่งไหนกำลังคุมตลาด ถ้าแรงซื้อชัดก็หาจังหวะ BUY ถ้าแรงขายชัดก็หาจังหวะ SELL เน้นตอบสนองไวกว่า AUTO",
+      good:"ช่วงที่ราคาวิ่ง มี Momentum ชัด และฝั่งหนึ่งคุมเกมต่อเนื่อง",
+      caution:"ตลาดสะบัดแรง สลับ BUY/SELL ไปมา หรือวิ่งแรงแต่กลับตัวบ่อย เพราะแรงที่เห็นอาจเปลี่ยนฝั่งเร็ว",
+      remember:"RACE = ตามฝั่งที่กำลังคุมเกม"
+    },
+    FLIP_LOCK:{
+      title:"FLIP LOCK",
+      tagline:"วิ่งตามเทรนด์แล้วล็อกกำไร",
+      icon:"trend",
+      workflow:"เปิดทีละฝั่ง พอราคาไปถูกทางและเริ่มมีกำไร ระบบจะค่อย ๆ ขยับจุดป้องกันกำไรตามราคา พอรอบจบก็ดูตลาดใหม่แล้วเลือกฝั่งต่อ",
+      good:"ตลาดที่เดินเป็นทาง วิ่งยาว มีระยะให้กำไรโต",
+      caution:"Sideway แคบ ๆ สะบัดกลับไปกลับมาบ่อย เพราะอาจปิดแล้วเข้าใหม่หลายรอบ กำไรต่อไม้สั้นและต้นทุนเกิดบ่อย",
+      remember:"FLIP LOCK = ได้ทางแล้วลากกำไรไปให้สุด"
+    },
+    ZERO_GRID:{
+      title:"ZERO GRID",
+      tagline:"รอราคาเลือกฝั่ง แล้วเก็บไม้ตามทาง",
+      icon:"layers",
+      workflow:"ระบบวางระดับรอทั้งข้างบนและข้างล่าง พอราคาวิ่งไปทางไหน ไม้ฝั่งนั้นจะถูกเปิดตามระดับไปเรื่อย ๆ แล้วดูผลรวมของทั้งชุดเพื่อปิดรอบ",
+      good:"ตลาดที่มีแรงจริงและเดินไปทางเดียวต่อเนื่อง ยิ่งราคาไปต่อ ไม้ก่อนหน้าก็มีพื้นที่ทำกำไรมากขึ้น",
+      caution:"Sideway ที่วิ่งขึ้นลงผ่านหลายระดับ เพราะอาจเปิดทั้ง BUY และ SELL ค้างคนละฝั่ง ไม้เริ่มเยอะ และยอดลบรวมอาจโตขึ้นก่อนตลาดเลือกทางจริง",
+      remember:"ZERO GRID = ชอบตลาดวิ่ง ไม่ชอบตลาดยึกยักอยู่ที่เดิม"
+    },
+    MANUAL:{
+      title:"MANUAL",
+      tagline:"ตั้งเกมเอง บอททำตาม",
+      icon:"settings",
+      workflow:"คุณเป็นคนกำหนดแผน เช่น ทิศทาง Lot จำนวนไม้ เป้ากำไร และจุดตัดขาดทุน แล้วบอททำงานตามค่าที่ตั้ง ถ้าเลือกทิศทางอัตโนมัติ บอทยังช่วยเลือกฝั่งจากตลาดได้",
+      good:"ตอนที่คุณมีมุมมองชัดอยู่แล้วว่าอยากเล่นฝั่งไหน หรืออยากคุมแผนและความเสี่ยงด้วยตัวเอง",
+      caution:"ตลาดเปลี่ยนหน้าไปจากตอนที่ตั้งค่าไว้ เช่น จากนิ่งกลายเป็นวิ่งแรง แต่ยังใช้ Lot จำนวนไม้ หรือจุดตัดขาดทุนแบบเดิม",
+      remember:"MANUAL = คุณวางแผน บอทเป็นคนลงมือ"
+    }
+  };
+
+  const openModeGuide=()=>{
+    setModeGuideMode(controlMode);
+    setModeGuideOpen(true);
+  };
+  const activeModeGuide=modeGuide[modeGuideMode] || modeGuide.AUTO;
 
   const applyControlMode = (mode:string) => {
     if (mode === "ZERO_GRID" && zeroGridBlockedForSymbol) return;
@@ -5683,8 +5756,15 @@ function BotSettingsModal(props:any) {
             <span>Safety Stop → Trailing SL ขยับตามราคา MT5</span>
             <span>ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า</span>
           </div>
-          <section className="cc-bot-v2-mode-section">
+          <section className="cc-bot-v2-mode-section cc-mode-guide-anchor">
             <div className="cc-bot-v2-section-title"><span>01</span><div><b>โหมดการเทรด</b></div></div>
+            <button
+              type="button"
+              className="cc-mode-guide-alert"
+              onClick={openModeGuide}
+              aria-label={"เปิดคู่มือโหมด "+controlMode}
+              title="อ่านแนวทางการใช้งานแต่ละโหมด"
+            ><span>!</span></button>
             {isBitcoinSymbol&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="status" size={17}/><span><b>BTC Mode Support</b><small>AUTO · RACE · FLIP LOCK · MANUAL ใช้งานได้ · ZERO GRID ถูกบล็อก</small></span></div>}
             {embedded ? (
               <div className="cc-bot-v12-mode-select-wrap">
@@ -5829,6 +5909,73 @@ function BotSettingsModal(props:any) {
           <div><button type="button" className="btn" onClick={()=>props.onClose?.()} disabled={props.busy}>ยกเลิก</button><button type="button" className="btn cc-save-primary" disabled={props.busy||!props.dirty} onClick={props.onSave}><ScenovaIcon name="save" size={17}/>{props.busy?"กำลังบันทึก...":"บันทึกการตั้งค่า"}</button></div>
         </div>}
       </div>
+
+      {modeGuideOpen&&<div
+        className="cc-mode-guide-backdrop"
+        role="presentation"
+        onMouseDown={event=>{
+          if(event.target===event.currentTarget) setModeGuideOpen(false);
+        }}
+      >
+        <section
+          className={"cc-mode-guide-dialog cc-mode-guide-"+modeGuideMode.toLowerCase()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cc-mode-guide-title"
+        >
+          <header className="cc-mode-guide-head">
+            <div className="cc-mode-guide-heading">
+              <span className="cc-mode-guide-heading-icon"><ScenovaIcon name={activeModeGuide.icon} size={22}/></span>
+              <div>
+                <small>TRADING MODE GUIDE</small>
+                <h2 id="cc-mode-guide-title">{activeModeGuide.title}</h2>
+                <p>{activeModeGuide.tagline}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="cc-mode-guide-close"
+              onClick={()=>setModeGuideOpen(false)}
+              aria-label="ปิดคู่มือโหมด"
+            >×</button>
+          </header>
+
+          <nav className="cc-mode-guide-tabs" aria-label="เลือกอ่านโหมดการเทรด">
+            {["AUTO","RACE","FLIP_LOCK","ZERO_GRID","MANUAL"].map(mode=>(
+              <button
+                key={mode}
+                type="button"
+                className={modeGuideMode===mode?"active":""}
+                onClick={()=>setModeGuideMode(mode)}
+              >{mode==="FLIP_LOCK"?"FLIP LOCK":mode==="ZERO_GRID"?"ZERO GRID":mode}</button>
+            ))}
+          </nav>
+
+          <div className="cc-mode-guide-content">
+            <article className="cc-mode-guide-block cc-mode-guide-workflow">
+              <span className="cc-mode-guide-block-icon">01</span>
+              <div><small>แนวทางการทำงาน</small><p>{activeModeGuide.workflow}</p></div>
+            </article>
+            <article className="cc-mode-guide-block cc-mode-guide-good">
+              <span className="cc-mode-guide-block-icon">02</span>
+              <div><small>ตลาดที่น่าเล่น</small><p>{activeModeGuide.good}</p></div>
+            </article>
+            <article className="cc-mode-guide-block cc-mode-guide-caution">
+              <span className="cc-mode-guide-block-icon">03</span>
+              <div><small>ตลาดที่ต้องระวัง</small><p>{activeModeGuide.caution}</p></div>
+            </article>
+            <div className="cc-mode-guide-remember">
+              <span>จำง่าย ๆ</span>
+              <b>{activeModeGuide.remember}</b>
+            </div>
+          </div>
+
+          <footer className="cc-mode-guide-footer">
+            <span>คำอธิบายนี้สรุปพฤติกรรมของแต่ละโหมดให้อ่านง่าย ก่อนเลือกใช้งานจริง</span>
+            <button type="button" onClick={()=>setModeGuideOpen(false)}>เข้าใจแล้ว</button>
+          </footer>
+        </section>
+      </div>}
     </div>
   );
 }
