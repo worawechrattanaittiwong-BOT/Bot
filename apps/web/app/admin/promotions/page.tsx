@@ -632,7 +632,7 @@ export default function PromotionCenterPage() {
                 </div>
                 <div className={s.assetGrid}>
                   <div className={s.assetCard}>
-                    <div className={s.assetHead}><b>Desktop</b><span>แนะนำภาพแนวนอน</span></div>
+                    <div className={s.assetHead}><b>Desktop</b></div>
                     <div className={s.assetPreview}>
                       {(editor.desktopDataUrl||(!editor.removeDesktop&&editor.imageUrl))?(
                         <img src={editor.desktopDataUrl||editor.imageUrl} alt="Desktop preview"/>
@@ -652,7 +652,7 @@ export default function PromotionCenterPage() {
                   </div>
 
                   <div className={s.assetCard}>
-                    <div className={s.assetHead}><b>Mobile</b><span>ไม่บังคับ · ใช้สำหรับจอมือถือ</span></div>
+                    <div className={s.assetHead}><b>Mobile</b></div>
                     <div className={s.assetPreview}>
                       {(editor.mobileDataUrl||(!editor.removeMobile&&editor.mobileImageUrl))?(
                         <img src={editor.mobileDataUrl||editor.mobileImageUrl} alt="Mobile preview"/>
@@ -703,8 +703,8 @@ export default function PromotionCenterPage() {
                     <input type="number" min="0" max="15" step="0.5" value={editor.delaySeconds} onChange={event=>setEditorField("delaySeconds",Number(event.target.value))}/>
                   </label>
                   <div className={s.fixedRule}>
-                    <b>กฎการแสดง</b>
-                    <span>1 ครั้งต่อช่วงเวลา · เช้า / เที่ยง / เย็น</span>
+                    <b>ช่วงเวลา</b>
+                    <span>เช้า / เที่ยง / เย็น</span>
                   </div>
                 </div>
               </section>
@@ -741,7 +741,6 @@ export default function PromotionCenterPage() {
                       <span>{role.label}</span>
                     </label>
                   ))}
-                  <small>ถ้าไม่เลือก Role ใด ระบบจะอนุญาตทุก Role ที่ Login แล้ว</small>
                 </div>
 
                 <label className={s.allPages}>
@@ -777,7 +776,6 @@ export default function PromotionCenterPage() {
               <div className={s.archiveConfirm}>
                 <div>
                   <b>ยืนยัน Archive Campaign?</b>
-                  <span>Campaign จะหยุดแสดงทันทีและถูกเก็บไว้ในประวัติ</span>
                 </div>
                 <div>
                   <button type="button" className={s.cancelButton} onClick={()=>setArchiveConfirm(false)} disabled={Boolean(busyId)}>ยกเลิก</button>
