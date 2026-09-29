@@ -6016,3 +6016,253 @@
   white-space:nowrap;
   box-shadow:0 0 12px rgba(65,216,153,.1);
 }
+
+
+/* ===== Control Center V54 · compact mobile Bot Settings ===== */
+/* Mobile-only cleanup for the embedded Bot Settings card.
+   Keep the desktop form untouched while preventing label/control collisions
+   on iPhone-sized viewports. */
+@media(max-width:760px){
+  /* Mobile cards should fit their content instead of inheriting the desktop
+     fixed-height shell, which can clip the last risk rows. */
+  .cc-v19-three-card-grid>section,
+  .cc-v19-settings-card,
+  .cc-v19-settings-card .cc-bot-embedded-frame,
+  .cc-v19-settings-card .cc-bot-v2-embedded{
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-embedded{
+    --settings-label:116px;
+    --settings-row:36px;
+    --settings-control-h:30px;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
+    height:54px!important;
+    min-height:54px!important;
+    max-height:none!important;
+    padding:6px 8px!important;
+    gap:8px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-head .cc-bot-modal-title{
+    min-width:0!important;
+    gap:8px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-head .cc-bot-modal-title>span{
+    width:36px!important;
+    height:36px!important;
+    flex:0 0 36px!important;
+    border-radius:10px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-head .cc-bot-modal-title>span svg{
+    width:19px!important;
+    height:19px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-head h2{
+    font-size:17px!important;
+    white-space:nowrap!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-kicker{
+    display:none!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-head .cc-bot-modal-head-actions{
+    flex:0 0 auto!important;
+    min-width:0!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-head .cc-bot-modal-head-actions .cc-bot-v14-head-save{
+    width:auto!important;
+    min-width:118px!important;
+    max-width:132px!important;
+    height:36px!important;
+    min-height:36px!important;
+    padding:0 10px!important;
+    gap:6px!important;
+    border-radius:9px!important;
+    font-size:11px!important;
+    white-space:nowrap!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-head .cc-bot-modal-head-actions .cc-bot-v14-head-save svg{
+    width:15px!important;
+    height:15px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+    padding:2px 8px 7px!important;
+  }
+
+  /* Every row uses the same compact label | control geometry. */
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label,
+  .cc-v19-settings-card .cc-bot-v2-field,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div,
+  .cc-v19-settings-card .cc-bot-manual-risk-add{
+    grid-template-columns:minmax(0,var(--settings-label)) minmax(0,1fr)!important;
+    gap:7px!important;
+    min-height:36px!important;
+    padding:2px 0!important;
+    overflow:visible!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
+    min-height:42px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-field>span,
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child{
+    min-width:0!important;
+    gap:5px!important;
+    padding-right:0!important;
+    font-size:11px!important;
+    line-height:1.18!important;
+    overflow-wrap:anywhere!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-field>span svg,
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span svg,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child svg{
+    width:14px!important;
+    height:14px!important;
+    flex:0 0 14px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v12-mode-select,
+  .cc-v19-settings-card .cc-bot-v2-field>select.input,
+  .cc-v19-settings-card .cc-bot-v17-add-setting>select.input,
+  .cc-v19-settings-card .cc-bot-v2-control-stack>select.input,
+  .cc-v19-settings-card .money-input-shell,
+  .cc-v19-settings-card .number-input-shell{
+    width:100%!important;
+    min-width:0!important;
+    height:30px!important;
+    min-height:30px!important;
+    max-height:30px!important;
+    border-radius:7px!important;
+    font-size:11px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v12-mode-select{
+    height:36px!important;
+    min-height:36px!important;
+    max-height:36px!important;
+    padding-left:8px!important;
+    padding-right:30px!important;
+    font-size:12px!important;
+  }
+
+  .cc-v19-settings-card .money-input-shell,
+  .cc-v19-settings-card .number-input-shell{
+    grid-template-columns:auto minmax(0,1fr) auto!important;
+  }
+  .cc-v19-settings-card .money-input-shell .input,
+  .cc-v19-settings-card .number-input-shell .input{
+    width:100%!important;
+    min-width:0!important;
+    height:28px!important;
+    min-height:28px!important;
+    padding-left:5px!important;
+    padding-right:5px!important;
+    font-size:11px!important;
+  }
+  .cc-v19-settings-card .money-input-shell>span,
+  .cc-v19-settings-card .number-input-shell>span{
+    padding-left:6px!important;
+    padding-right:6px!important;
+    font-size:10px!important;
+    white-space:nowrap!important;
+  }
+
+  /* RACE / MANUAL two-choice controls stay side-by-side but become smaller. */
+  .cc-v19-settings-card .cc-bot-v2-choice-row,
+  .cc-v19-settings-card .cc-bot-v2-choice-inline{
+    width:100%!important;
+    min-width:0!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:5px!important;
+    margin:0!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-choice-row button{
+    min-width:0!important;
+    min-height:30px!important;
+    height:30px!important;
+    padding:3px 5px!important;
+    gap:4px!important;
+    border-radius:7px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-choice-row button svg{
+    width:13px!important;
+    height:13px!important;
+    flex:0 0 13px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-choice-row button b{
+    font-size:10.5px!important;
+    white-space:nowrap!important;
+  }
+
+  /* Risk controls are the tightest rows: on phones the text "เปิด" is
+     redundant beside the switch, so keep only the switch + amount field. */
+  .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field{
+    width:100%!important;
+    min-width:0!important;
+    display:grid!important;
+    grid-template-columns:38px minmax(0,1fr)!important;
+    align-items:center!important;
+    gap:5px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-setting-label{
+    width:38px!important;
+    min-width:38px!important;
+    margin:0!important;
+    position:static!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-setting-label .setting-toggle-text{
+    display:none!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-limit-grid .setting-toggle-track{
+    width:34px!important;
+    height:20px!important;
+    padding:2px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-limit-grid .setting-toggle-track i{
+    width:14px!important;
+    height:14px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-limit-grid .enabled .setting-toggle-track i{
+    transform:translateX(14px)!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child{
+    margin:0!important;
+  }
+
+  /* Keep the RACE guide triangle inside the label column instead of letting
+     it sit on top of the right-side control. */
+  .cc-v19-settings-card .cc-mode-guide-alert{
+    left:calc(var(--settings-label) - 23px)!important;
+    right:auto!important;
+    top:9px!important;
+    width:20px!important;
+    height:18px!important;
+    filter:drop-shadow(0 0 5px rgba(239,51,78,.36))!important;
+  }
+  .cc-v19-settings-card .cc-mode-guide-alert span{
+    margin-top:5px!important;
+    font-size:9px!important;
+  }
+}
+
+@media(max-width:390px){
+  .cc-v19-settings-card .cc-bot-v2-embedded{
+    --settings-label:108px;
+  }
+  .cc-v19-settings-card .cc-bot-v2-head .cc-bot-modal-head-actions .cc-bot-v14-head-save{
+    min-width:108px!important;
+    max-width:116px!important;
+    padding-left:8px!important;
+    padding-right:8px!important;
+  }
+}
