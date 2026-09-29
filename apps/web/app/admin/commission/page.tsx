@@ -273,9 +273,9 @@ export default function AdminCommissionPage() {
     if (busy) return;
     if (enabled) {
       const confirmed = await confirmPopup({
-        title: "Activate Withdrawal Kill Switch",
-        message: "หยุดรับคำขอถอนใหม่และหยุด Auto Payout queue ทันที?",
-        confirmLabel: "Activate Kill Switch",
+        title: "ยืนยันหยุดการถอนฉุกเฉิน",
+        message: "ยืนยันหยุดรับคำขอถอนชั่วคราวหรือไม่?",
+        confirmLabel: "ยืนยัน",
         cancelLabel: "Cancel",
         tone: "warning"
       });
@@ -290,11 +290,11 @@ export default function AdminCommissionPage() {
       });
       setKillReason("");
       setMessage(enabled
-        ? "Kill Switch ทำงานแล้ว · Requests และ Auto Payout ถูกปิด"
-        : "ปิด Kill Switch แล้ว · ระบบยังไม่เปิด Requests/Auto Payout เอง");
+        ? "หยุดการถอนฉุกเฉินแล้ว"
+        : "ปิดการหยุดฉุกเฉินแล้ว");
       await load();
     } catch (error: any) {
-      setMessage(String(error?.message || "เปลี่ยน Kill Switch ไม่สำเร็จ"));
+      setMessage(String(error?.message || "เปลี่ยนสถานะไม่สำเร็จ"));
     } finally {
       setBusy("");
     }
@@ -388,7 +388,7 @@ export default function AdminCommissionPage() {
           return next;
         });
       }, 60_000);
-      setMessage("เปิดเลขบัญชีชั่วคราว 60 วินาที และบันทึก Audit แล้ว");
+      setMessage("แสดงเลขบัญชีแล้ว");
     } catch (error: any) {
       setMessage(String(error?.message || "Reveal ไม่สำเร็จ"));
     } finally {
@@ -421,7 +421,7 @@ export default function AdminCommissionPage() {
         })
       });
       setVerification({ currentPassword: "", twoFactorCode: "" });
-      setMessage("Manual Reconciliation สำเร็จ · ยืนยัน PAID และปิด mismatch alert แล้ว");
+      setMessage("ยืนยันการจ่ายเงินแล้ว");
       await load();
     } catch (error: any) {
       setMessage(String(error?.message || "Manual Reconciliation ไม่สำเร็จ"));
@@ -454,7 +454,7 @@ export default function AdminCommissionPage() {
         })
       });
       setVerification({ currentPassword: "", twoFactorCode: "" });
-      setMessage("Mark Paid สำเร็จ · Locked balance ถูกย้ายเป็น Withdrawn");
+      setMessage("ยืนยันจ่ายเงินแล้ว");
       await load();
     } catch (error: any) {
       setMessage(String(error?.message || "Mark Paid ไม่สำเร็จ"));
@@ -496,7 +496,7 @@ export default function AdminCommissionPage() {
               `${s.systemBadge} ${s.systemPaused}`
             }>
               <i/>
-              {killSwitchActive ? "หยุดระบบฉุกเฉิน" : requestsOpen ? "รับคำขอถอนปกติ" : "พักรับคำขอถอน"}
+              {killSwitchActive ? "หยุดฉุกเฉิน" : requestsOpen ? "รับคำขอถอนปกติ" : "พักรับคำขอถอน"}
             </span>
           </header>
 
@@ -515,7 +515,7 @@ export default function AdminCommissionPage() {
               กฎและความปลอดภัย
             </button>
             <button type="button" className={activePanel==="operations" ? s.activeTab : ""} onClick={()=>setActivePanel("operations")}>
-              ระบบและประวัติ
+              ประวัติ
               {(openAlerts.length + activeJobs.length) > 0 && <span className={s.tabCount}>{openAlerts.length + activeJobs.length}</span>}
             </button>
           </nav>
@@ -526,7 +526,7 @@ export default function AdminCommissionPage() {
                 <article className={s.heroStatus}>
                   <div className={s.statusTitle}>
                     <div>
-                      <h2>{killSwitchActive ? "ระบบถอนถูกหยุดฉุกเฉิน" : requestsOpen ? "ระบบพร้อมรับคำขอถอน" : "ระบบพักรับคำขอถอน"}</h2>
+                      <h2>{killSwitchActive ? "หยุดการถอนฉุกเฉิน" : requestsOpen ? "พร้อมรับคำขอถอน" : "พักรับคำขอถอน"}</h2>
                     </div>
                     <span className={
                       killSwitchActive ? `${s.systemBadge} ${s.systemDanger}` :
@@ -536,9 +536,9 @@ export default function AdminCommissionPage() {
                   </div>
                   <div className={s.statusGrid}>
                     <div><span>รับคำขอถอน</span><b>{requestsOpen ? "เปิด" : "ปิด"}</b></div>
-                    <div><span>Risk Engine</span><b>{data?.phase3.advanced.riskEngineEnabled ? "เปิด" : "ปิด"}</b></div>
-                    <div><span>Payout Worker</span><b>{workerReady ? "พร้อม" : "ยังไม่พร้อม"}</b></div>
-                    <div><span>Auto Payout</span><b>{data?.phase3.advanced.autoPayoutEnabled ? "เปิด" : "ปิด"}</b></div>
+                    <div><span>ตรวจความเสี่ยง</span><b>{data?.phase3.advanced.riskEngineEnabled ? "เปิด" : "ปิด"}</b></div>
+                    <div><span>การจ่ายเงิน</span><b>{workerReady ? "พร้อม" : "ยังไม่พร้อม"}</b></div>
+                    <div><span>จ่ายอัตโนมัติ</span><b>{data?.phase3.advanced.autoPayoutEnabled ? "เปิด" : "ปิด"}</b></div>
                   </div>
                 </article>
 
@@ -743,7 +743,7 @@ export default function AdminCommissionPage() {
                   <div className={s.settingsFields}>
                     <label><span>ขั้นต่ำ (THB)</span><input value={settingsForm.minThb} onChange={event=>setSettingsForm(v=>({...v,minThb:event.target.value}))}/></label>
                     <label><span>สูงสุด (THB)</span><input value={settingsForm.maxThb} onChange={event=>setSettingsForm(v=>({...v,maxThb:event.target.value}))}/></label>
-                    <label><span>Cooling period (ชั่วโมง)</span><input value={settingsForm.cooldownHours} onChange={event=>setSettingsForm(v=>({...v,cooldownHours:event.target.value}))}/></label>
+                    <label><span>ระยะพัก (ชั่วโมง)</span><input value={settingsForm.cooldownHours} onChange={event=>setSettingsForm(v=>({...v,cooldownHours:event.target.value}))}/></label>
                   </div>
                   <button type="button" className={s.primary} disabled={busy==="settings"} onClick={()=>void saveSettings()}>
                     {busy==="settings" ? "กำลังบันทึก…" : "บันทึกกฎการถอน"}
@@ -758,8 +758,8 @@ export default function AdminCommissionPage() {
                   <div className={s.advancedFields}>
                     <label><span>วงเงินรวม/วัน (THB)</span><input value={advancedForm.globalDailyThb} onChange={event=>setAdvancedForm(v=>({...v,globalDailyThb:event.target.value}))}/></label>
                     <label><span>อนุมัติ 2 คนเมื่อ ≥ THB</span><input value={advancedForm.dualApprovalThb} onChange={event=>setAdvancedForm(v=>({...v,dualApprovalThb:event.target.value}))}/></label>
-                    <label><span>High Risk Score</span><input value={advancedForm.highRisk} onChange={event=>setAdvancedForm(v=>({...v,highRisk:event.target.value}))}/></label>
-                    <label><span>Critical Score</span><input value={advancedForm.criticalRisk} onChange={event=>setAdvancedForm(v=>({...v,criticalRisk:event.target.value}))}/></label>
+                    <label><span>เกณฑ์ความเสี่ยงสูง</span><input value={advancedForm.highRisk} onChange={event=>setAdvancedForm(v=>({...v,highRisk:event.target.value}))}/></label>
+                    <label><span>เกณฑ์วิกฤต</span><input value={advancedForm.criticalRisk} onChange={event=>setAdvancedForm(v=>({...v,criticalRisk:event.target.value}))}/></label>
                   </div>
                   <div className={s.policySwitches}>
                     <label className={s.switchLine}>
@@ -788,14 +788,14 @@ export default function AdminCommissionPage() {
               <section className={`${s.dangerZone} ${killSwitchActive ? s.dangerActive : ""}`}>
                 <div className={s.dangerHeader}>
                   <div>
-                    <h2>Kill Switch การถอนเงิน</h2>
+                    <h2>หยุดการถอนฉุกเฉิน</h2>
                   </div>
                   <span className={killSwitchActive ? `${s.systemBadge} ${s.systemDanger}` : `${s.systemBadge} ${s.systemOpen}`}>
                     <i/>{killSwitchActive ? "ACTIVE" : "STANDBY"}
                   </span>
                 </div>
                 <label className={s.fieldLabel}>
-                  <span>เหตุผล / Incident note</span>
+                  <span>เหตุผล</span>
                   <input className={s.noteInput} value={killReason} onChange={event=>setKillReason(event.target.value)} placeholder="เช่น payout anomaly / suspected fraud"/>
                 </label>
                 <button
@@ -804,7 +804,7 @@ export default function AdminCommissionPage() {
                   disabled={busy==="kill"}
                   onClick={()=>void toggleKillSwitch(!killSwitchActive)}
                 >
-                  {killSwitchActive ? "ปิด Kill Switch" : "ACTIVATE KILL SWITCH"}
+                  {killSwitchActive ? "เปิดรับคำขอ" : "หยุดฉุกเฉิน"}
                 </button>
               </section>
             </>
@@ -821,7 +821,7 @@ export default function AdminCommissionPage() {
               <section className={s.operationsColumns}>
                 <div>
                   <div className={s.subsectionHead}>
-                    <div><h3>Fraud & Reconciliation Alerts</h3></div>
+                    <div><h3>การแจ้งเตือน</h3></div>
                     <span>{openAlerts.length} OPEN</span>
                   </div>
                   <div className={s.alertGrid}>
@@ -847,7 +847,7 @@ export default function AdminCommissionPage() {
 
                 <div>
                   <div className={s.subsectionHead}>
-                    <div><h3>Payout Jobs</h3></div>
+                    <div><h3>รายการจ่ายเงิน</h3></div>
                     <span>{data?.phase3.payoutJobs.length || 0} JOBS</span>
                   </div>
                   <div className={s.jobList}>
@@ -867,7 +867,7 @@ export default function AdminCommissionPage() {
               </section>
 
               <div className={s.subsectionHead}>
-                <div><h3>Recent Security Events</h3></div>
+                <div><h3>ประวัติความปลอดภัย</h3></div>
                 <span>{data?.audit.length || 0} EVENTS</span>
               </div>
               <section className={s.auditList}>
