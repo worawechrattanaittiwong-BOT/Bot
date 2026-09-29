@@ -7997,6 +7997,60 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   color:#747d8e;
   font-size:11px;
 }
+.vps-slot-quantity-section{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  margin-top:14px;
+  padding:11px 12px;
+  border:1px solid rgba(123,108,166,.13);
+  border-radius:11px;
+  background:rgba(5,8,14,.48);
+}
+.vps-slot-quantity-section>div:first-child{
+  display:grid;
+  gap:3px;
+}
+.vps-slot-quantity-section .vps-slot-dialog-label{
+  margin:0;
+}
+.vps-slot-quantity-section small{
+  color:#747d8e;
+  font-size:var(--ui-type-caption);
+}
+.vps-slot-quantity-stepper{
+  display:grid;
+  grid-template-columns:34px 52px 34px;
+  align-items:center;
+  overflow:hidden;
+  border:1px solid rgba(143,108,237,.35);
+  border-radius:10px;
+  background:#080b13;
+}
+.vps-slot-quantity-stepper button{
+  width:34px;
+  height:34px;
+  border:0;
+  background:rgba(124,91,222,.10);
+  color:#c9b7ff;
+  font-size:20px;
+  font-weight:800;
+  cursor:pointer;
+}
+.vps-slot-quantity-stepper button:hover:not(:disabled){
+  background:rgba(124,91,222,.20);
+}
+.vps-slot-quantity-stepper button:disabled{
+  opacity:.35;
+  cursor:not-allowed;
+}
+.vps-slot-quantity-stepper b{
+  text-align:center;
+  color:#f1ecfb;
+  font-size:var(--ui-type-label);
+  font-variant-numeric:tabular-nums;
+}
 .vps-slot-order-summary,
 .vps-slot-payment-summary{
   display:grid;
@@ -8967,4 +9021,10 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .connection-mode-card .btn{font-size:13px;padding-left:8px;padding-right:8px}
   .membership-countdown-status{font-size:15px!important}
   .mt5-vps-account-card h2,.vps-connected-card h2{font-size:21px!important}
+}
+
+@media(max-width:620px){
+  .vps-slot-quantity-section{
+    align-items:flex-start;
+  }
 }
