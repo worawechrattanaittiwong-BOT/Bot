@@ -1251,7 +1251,11 @@ export default function DashboardPage() {
                   ...current,
                   status:"FAILED",
                   stage:migrationState,
-                  message:String(migration.error_detail || migration.error_code || "ย้ายบัญชีไป VPS ไม่สำเร็จ")
+                  message:String(
+                    migration.error_detail ||
+                    migration.error_code ||
+                    (movingToLocal ? "ย้ายระบบกลับ Local ไม่สำเร็จ" : "ย้ายบัญชีไป VPS ไม่สำเร็จ")
+                  )
                 }
               : current
           );
