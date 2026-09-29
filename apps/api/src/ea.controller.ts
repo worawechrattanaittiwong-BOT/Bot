@@ -605,6 +605,7 @@ export class EaController {
       instance.desired_state = "STOPPED";
     }
 
+    const journalDrainPending = metrics.pendingBasketJournal === true;
     let accountMismatch =
       Boolean(reportedAccount) &&
       (
