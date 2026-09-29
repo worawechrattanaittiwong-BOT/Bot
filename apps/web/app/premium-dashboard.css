@@ -5978,3 +5978,41 @@
   }
   .cc-mode-guide-footer button{width:100%}
 }
+
+
+/* RACE recommended mode marker */
+.cc-bot-v12-mode-select.is-race-recommended{
+  border-color:#39c98a!important;
+  background:linear-gradient(145deg,rgba(20,71,53,.96),rgba(10,28,26,.98))!important;
+  color:#baf7da!important;
+  box-shadow:0 0 18px rgba(57,201,138,.14),inset 0 1px 0 rgba(255,255,255,.04)!important;
+}
+.cc-bot-v12-mode-select .cc-race-recommended-option,
+.cc-race-recommended-option{
+  color:#75e7af;
+  font-weight:900;
+}
+.cc-bot-mode-name{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:0;
+}
+.cc-race-recommended-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:18px;
+  padding:2px 7px;
+  border:1px solid rgba(65,216,153,.5);
+  border-radius:999px;
+  background:rgba(24,118,79,.2);
+  color:#7df0b9;
+  font-size:10px;
+  line-height:1;
+  font-style:normal;
+  font-weight:900;
+  letter-spacing:.02em;
+  white-space:nowrap;
+  box-shadow:0 0 12px rgba(65,216,153,.1);
+}
