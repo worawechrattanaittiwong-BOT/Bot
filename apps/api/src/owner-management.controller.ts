@@ -13,6 +13,7 @@ import {
 import { DbService } from "./db.service";
 import { OwnerMobileService } from "./owner-mobile.controller";
 import { PromotionInput, PromotionService } from "./promotion.service";
+import { getUsdThbQuote, usdCentsToThbSatang } from "./commerce-currency";
 
 const PACKAGE_MONTHS = [1, 3, 6, 12];
 
@@ -32,37 +33,40 @@ export class OwnerManagementService {
   }
 
   async packages() {
-    const [local, cloud] = await Promise.all([
-      this.db.query("SELECT months,price_satang,enabled,updated_at FROM local_packages ORDER BY months"),
-      this.db.query("SELECT months,price_satang,enabled,updated_at FROM cloud_packages ORDER BY months")
+    const [local, cloud, quote] = await Promise.all([
+      this.db.query("SELECT months,price_satang,price_usd_cents,enabled,updated_at FROM local_packages ORDER BY months"),
+      this.db.query("SELECT months,price_satang,price_usd_cents,enabled,updated_at FROM cloud_packages ORDER BY months"),
+      getUsdThbQuote()
     ]);
-    return { local: local.rows, cloud: cloud.rows };
+    return { local: local.rows, cloud: cloud.rows, fx: quote };
   }
 
-  async savePackage(session: any, input: { mode?: string; months?: number; priceSatang?: number; enabled?: boolean }) {
+  async savePackage(session: any, input: { mode?: string; months?: number; priceUsdCents?: number; enabled?: boolean }) {
     const mode = String(input.mode || "").toUpperCase();
     const months = Math.trunc(Number(input.months || 0));
-    const price = Math.trunc(Number(input.priceSatang ?? -1));
+    const priceUsdCents = Math.trunc(Number(input.priceUsdCents ?? -1));
     if (!["LOCAL", "CLOUD"].includes(mode) || !PACKAGE_MONTHS.includes(months)) {
       throw new BadRequestException("แพ็กเกจไม่ถูกต้อง");
     }
-    if (!Number.isInteger(price) || price < 0 || price > 100_000_000) {
-      throw new BadRequestException("ราคาแพ็กเกจไม่ถูกต้อง");
+    if (!Number.isInteger(priceUsdCents) || priceUsdCents < 0 || priceUsdCents > 3_000_000) {
+      throw new BadRequestException("ราคาแพ็กเกจ USD ไม่ถูกต้อง");
     }
-    if (Boolean(input.enabled) && price <= 0) {
-      throw new BadRequestException("แพ็กเกจที่เปิดขายต้องมีราคามากกว่า 0 บาท");
+    if (Boolean(input.enabled) && priceUsdCents <= 0) {
+      throw new BadRequestException("แพ็กเกจที่เปิดขายต้องมีราคา USD มากกว่า 0");
     }
-    if (mode === "CLOUD" && Boolean(input.enabled) && price < 2000) {
-      throw new BadRequestException("Cloud เปิดขายได้ตั้งแต่ 20 บาทขึ้นไป");
+    if (mode === "CLOUD" && Boolean(input.enabled) && priceUsdCents < 50) {
+      throw new BadRequestException("Cloud เปิดขายได้ตั้งแต่ $0.50 ขึ้นไป");
     }
+    const quote = await getUsdThbQuote();
+    const priceSatang = usdCentsToThbSatang(priceUsdCents, quote.usdThb);
     const table = mode === "LOCAL" ? "local_packages" : "cloud_packages";
     const row = await this.db.one(
-      "UPDATE " + table + " SET price_satang=$2,enabled=$3,updated_at=now() WHERE months=$1 RETURNING months,price_satang,enabled,updated_at",
-      [months, price, Boolean(input.enabled)]
+      "UPDATE " + table + " SET price_usd_cents=$2,price_satang=$3,enabled=$4,updated_at=now() WHERE months=$1 RETURNING months,price_satang,price_usd_cents,enabled,updated_at",
+      [months, priceUsdCents, priceSatang, Boolean(input.enabled)]
     );
     if (!row) throw new ConflictException("ไม่พบแพ็กเกจ");
     await this.audit(session, "UPDATE_PACKAGE", "package", mode + "_" + months + "M", {
-      mode, months, priceSatang: price, enabled: Boolean(input.enabled)
+      mode, months, priceUsdCents, fxRateUsdThb: quote.usdThb, enabled: Boolean(input.enabled)
     });
     return row;
   }
