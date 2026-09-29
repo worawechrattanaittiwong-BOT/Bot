@@ -485,16 +485,18 @@ export default function PackagesPage() {
     }
   }
 
-  async function cancelSlipPayment(type: "local" | "cloud", id: string) {
+  async function cancelSlipPayment(type: "local" | "cloud", id: string, askConfirm = true) {
     if (busy) return false;
-    const confirmed = await confirmPopup({
-      title: "ยกเลิกรายการชำระเงิน",
-      tone: "warning",
-      message: "ยกเลิกรายการนี้เพื่อกลับไปเลือกแพ็กเกจใหม่?",
-      confirmLabel: "ยกเลิกรายการ",
-      cancelLabel: "กลับ"
-    });
-    if (!confirmed) return false;
+    if (askConfirm) {
+      const confirmed = await confirmPopup({
+        title: "ยกเลิกรายการชำระเงิน",
+        tone: "warning",
+        message: "ยกเลิกรายการนี้เพื่อกลับไปเลือกแพ็กเกจใหม่?",
+        confirmLabel: "ยกเลิกรายการ",
+        cancelLabel: "กลับ"
+      });
+      if (!confirmed) return false;
+    }
 
     setBusy("cancel-" + type);
     setMessage("");
@@ -514,6 +516,23 @@ export default function PackagesPage() {
     } finally {
       setBusy("");
     }
+  }
+
+  async function closeCheckoutDialog() {
+    if (busy) return;
+    if (checkoutOrderId) {
+      const cancelled = await cancelSlipPayment(
+        activeSystem === "LOCAL" ? "local" : "cloud",
+        checkoutOrderId,
+        false
+      );
+      if (!cancelled) return;
+      setCheckoutOrderId("");
+    }
+    setCheckoutPack(null);
+    setPromoState("IDLE");
+    setPromoNotice("");
+    checkoutDialog.current?.close();
   }
 
   async function verifySlip(type: "local" | "cloud", id: string, file: File) {
@@ -575,7 +594,7 @@ export default function PackagesPage() {
   const sendsRemaining = Number(trial?.otp?.sendsRemaining ?? 0);
   const isLocalSystem = activeSystem === "LOCAL";
   const activeCatalog = isLocalSystem ? localCatalog : cloudCatalog;
-  const activeOrders = isLocalSystem ? localOrders : primaryCloudOrders;
+  const activeOrders = isLocalSystem ? localOrders : cloudOrders;
   const activePending = isLocalSystem ? pendingLocal : pendingCloud;
   const activeMembership = isLocalSystem ? activeLocal : activeCloud;
   const salesPaused = Boolean(localCatalog?.salesPaused || cloudCatalog?.salesPaused);
@@ -922,7 +941,7 @@ export default function PackagesPage() {
                       paymentMode={activeCatalog?.paymentMode || "UNCONFIGURED"}
                       salesPaused={salesPaused}
                       busy={Boolean(busy)}
-                      pending={Boolean(activePending)}
+                      pending={isLocalSystem && Boolean(activePending)}
                       capacityAvailable={isLocalSystem || hasPrimaryCloudSlot || cloudCatalog?.capacityAvailable !== false}
                       renewal={!isLocalSystem && hasPrimaryCloudSlot}
                       onBuy={() => {
@@ -964,7 +983,10 @@ export default function PackagesPage() {
           ref={checkoutDialog}
           className={styles.checkoutDialog}
           aria-labelledby="checkout-title"
-          onCancel={event => { if (busy) event.preventDefault(); }}
+          onCancel={event => {
+            event.preventDefault();
+            if (!busy) void closeCheckoutDialog();
+          }}
           onClose={() => {
             if (!checkoutOrderId) {
               setPromoState("IDLE");
@@ -984,7 +1006,7 @@ export default function PackagesPage() {
                 className={styles.closeDialog}
                 aria-label="ปิดหน้าต่างชำระเงิน"
                 disabled={Boolean(busy)}
-                onClick={() => checkoutDialog.current?.close()}
+                onClick={() => void closeCheckoutDialog()}
               >
                 ×
               </button>
@@ -1105,7 +1127,7 @@ export default function PackagesPage() {
                   >
                     {busy ? "กำลังสร้างรายการ…" : "สร้างรายการชำระเงิน"} <span aria-hidden="true">→</span>
                   </button>
-                  <button type="button" className={styles.cancelCheckout} disabled={Boolean(busy)} onClick={() => checkoutDialog.current?.close()}>
+                  <button type="button" className={styles.cancelCheckout} disabled={Boolean(busy)} onClick={() => void closeCheckoutDialog()}>
                     ยกเลิก
                   </button>
                 </div>
@@ -1457,23 +1479,30 @@ function PaymentCard({
 }
 
 function OrderHistory({title,orders}:{title:string;orders:Order[]}) {
+  const paidOrders = orders.filter(order => String(order.status || "").toUpperCase() === "PAID");
   return (
     <div className={styles.historyCard}>
       <h3>{title}</h3>
-      {orders.length ? (
+      {paidOrders.length ? (
         <div className={styles.orderList}>
-          {orders.slice(0,5).map(order => (
-            <div className={styles.orderRow} key={order.id}>
-              <div>
-                <b>{order.months} เดือน</b>
-                <span>{date(order.created_at)}</span>
+          {paidOrders.slice(0,5).map(order => {
+            const purchaseType = String(order.purchase_type || "PACKAGE").toUpperCase();
+            const itemName = purchaseType === "ADDON"
+              ? "VPS Slot เสริม"
+              : purchaseType === "RENEW"
+                ? "ต่ออายุ VPS Slot"
+                : title;
+            return (
+              <div className={styles.orderRow} key={order.id}>
+                <div>
+                  <b>{itemName} · {order.months} เดือน</b>
+                  <span>{date(order.created_at)}</span>
+                </div>
+                <strong>{Number(order.final_price_usd_cents || 0) > 0 ? `${usdMoney(Number(order.final_price_usd_cents || 0))}` : `฿${thbMoney(order.amount)}`}</strong>
+                <em className={styles.orderPaid}>PAID</em>
               </div>
-              <strong>{Number(order.final_price_usd_cents || 0) > 0 ? `$${usdMoney(Number(order.final_price_usd_cents || 0))}` : `฿${thbMoney(order.amount)}`}</strong>
-              <em className={order.status === "PAID" ? styles.orderPaid : order.status === "FAILED" ? styles.orderFailed : ""}>
-                {order.status}
-              </em>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p className={styles.empty}>ยังไม่มีรายการ</p>
