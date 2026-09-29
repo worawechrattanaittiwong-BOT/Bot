@@ -460,6 +460,7 @@ export default function DashboardPage() {
               SOURCE_STOP_CONFIRMED:"Local MT5 หยุดแล้ว · กำลังส่งระบบไป VPS",
               TARGET_PROVISIONING:"กำลังติดตั้งระบบ VPS · กำลังเปิด MT5 และ FastBasketBot"
             };
+        setServerOperation(null);
         setVpsMigrationProgress({
           status:"RUNNING",
           stage:state,
@@ -487,6 +488,11 @@ export default function DashboardPage() {
   useEffect(() => {
     const userId = String(data?.user?.id || "");
     if (!userId || mt5OperationRestoreUserRef.current === userId) return;
+    if (vpsMigrationProgress?.status === "RUNNING") {
+      mt5OperationRestoreUserRef.current = userId;
+      try { localStorage.removeItem("scenova-mt5-operation-v1:" + userId); } catch {}
+      return;
+    }
     mt5OperationRestoreUserRef.current = userId;
     const key = "scenova-mt5-operation-v1:" + userId;
     try {
@@ -518,7 +524,7 @@ export default function DashboardPage() {
     } catch {
       localStorage.removeItem(key);
     }
-  }, [data?.user?.id]);
+  }, [data?.user?.id, vpsMigrationProgress?.status]);
 
   useEffect(() => {
     const userId = String(data?.user?.id || "");
@@ -1118,7 +1124,10 @@ export default function DashboardPage() {
         canClose:vpsMigrationProgress.status === "FAILED" || vpsMigrationProgress.status === "SUCCESS"
       }
     : null;
-  const operationTerminal = serverOperation || migrationOperation || cloudUpdateOperation;
+  // An active runtime migration owns the connection surface. This prevents a
+  // stale connect/switch operation restored from the browser from covering the
+  // authoritative Local <-> VPS handoff state.
+  const operationTerminal = migrationOperation || serverOperation || cloudUpdateOperation;
   const operationTerminalVisible =
     Boolean(operationTerminal) &&
     !(
