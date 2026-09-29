@@ -122,16 +122,30 @@ export class CloudUpdateService {
 
     if (release) {
       const instances = await this.db.query(
-        `SELECT runner_id,metrics
-         FROM bot_instances
-         WHERE runner_id IS NOT NULL
-           AND mode='CLOUD'
-           AND COALESCE(runtime_stop_state,'NONE')='NONE'`
+        `SELECT
+           bi.runner_id,
+           bi.metrics,
+           EXISTS (
+             SELECT 1
+             FROM instance_update_jobs ij
+             WHERE ij.bot_instance_id=bi.id
+               AND ij.action='UPDATE'
+               AND ij.state='COMPLETED'
+               AND ij.target_version=$1
+               AND lower(COALESCE(ij.target_sha256,''))=lower($2)
+           ) AS current_release_completed
+         FROM bot_instances bi
+         WHERE bi.runner_id IS NOT NULL
+           AND bi.mode='CLOUD'
+           AND COALESCE(bi.runtime_stop_state,'NONE')='NONE'`,
+        [release.version, release.sha256]
       );
       for (const instance of instances.rows) {
         const runnerId = String(instance.runner_id || "");
         if (!runnerId) continue;
-        const state = this.fleetReleaseState(instance.metrics || {}, release);
+        const state = instance.current_release_completed
+          ? "CURRENT"
+          : this.fleetReleaseState(instance.metrics || {}, release);
         const status = runnerStatus[runnerId] ||= {
           total: 0,
           current: 0,
@@ -196,15 +210,24 @@ export class CloudUpdateService {
 
       const instances = (await tx.query(
         `SELECT
-           id,desired_state,metrics,
-           COALESCE(metrics->>'eaVersion','') previous_version
-         FROM bot_instances
-         WHERE runner_id=$1
-           AND mode='CLOUD'
-           AND COALESCE(runtime_stop_state,'NONE')='NONE'
-         ORDER BY created_at
-         FOR UPDATE`,
-        [runnerId]
+           bi.id,bi.desired_state,bi.metrics,
+           COALESCE(bi.metrics->>'eaVersion','') previous_version,
+           EXISTS (
+             SELECT 1
+             FROM instance_update_jobs ij
+             WHERE ij.bot_instance_id=bi.id
+               AND ij.action='UPDATE'
+               AND ij.state='COMPLETED'
+               AND ij.target_version=$2
+               AND lower(COALESCE(ij.target_sha256,''))=lower($3)
+           ) AS current_release_completed
+         FROM bot_instances bi
+         WHERE bi.runner_id=$1
+           AND bi.mode='CLOUD'
+           AND COALESCE(bi.runtime_stop_state,'NONE')='NONE'
+         ORDER BY bi.created_at
+         FOR UPDATE OF bi`,
+        [runnerId, release.version, release.sha256]
       )).rows;
 
       if (!instances.length) {
@@ -212,7 +235,9 @@ export class CloudUpdateService {
       }
 
       const updateTargets = instances.filter(
-        instance => this.fleetReleaseState(instance.metrics || {}, release) === "OUTDATED"
+        instance =>
+          !instance.current_release_completed &&
+          this.fleetReleaseState(instance.metrics || {}, release) === "OUTDATED"
       );
       if (!updateTargets.length) {
         throw new ConflictException("EA บน Server นี้เป็นเวอร์ชันล่าสุดแล้ว ไม่มีอัปเดตที่ต้องปล่อย");
