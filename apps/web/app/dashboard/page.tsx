@@ -3476,7 +3476,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="cc-v3-head-actions">
-            <span className={"cc-head-chip " + (isConnectionOnline ? "good" : "bad")}><i/><span><b>{isConnectionOnline ? "เชื่อมต่อแล้ว" : "ยังไม่เชื่อมต่อ"}</b><small>{isCloudRuntime ? (isCloudWorkerOnline ? "VPS Server Online" : "VPS Server Offline") : isMt5Online ? (data.account?.broker || "MT5")+" · EA Online" : isHeartbeatDelayed ? "Windows Agent Online · Heartbeat "+connectionAgeLabel : isAgentOnline ? "Windows Agent Online · รอ EA" : (data.account?.broker || "MT5")+" · LOCAL"}</small></span></span>
+            <span className={"cc-head-chip " + (isMt5ConnectionOnline ? "good" : isCloudRuntime && isCloudWorkerOnline ? "warn" : "bad")}><i/><span><b>{isMt5ConnectionOnline ? "เชื่อมต่อแล้ว" : isCloudRuntime && isCloudWorkerOnline ? "กำลังเชื่อม MT5" : "ยังไม่เชื่อมต่อ"}</b><small>{isCloudRuntime ? (isMt5Online ? "VPS Server Online · MT5 Online" : isCloudWorkerOnline ? "VPS Server Online · รอ MT5" : "VPS Server Offline") : isMt5Online ? (data.account?.broker || "MT5")+" · EA Online" : isHeartbeatDelayed ? "Windows Agent Online · Heartbeat "+connectionAgeLabel : isAgentOnline ? "Windows Agent Online · รอ EA" : (data.account?.broker || "MT5")+" · LOCAL"}</small></span></span>
             <span className={"cc-head-chip bot " + (desired==="RUNNING" ? "active" : "")}><ScenovaIcon name="bot" size={18}/><span><b>{controlStateLabel}</b><small>{settings.entryMode || "AUTO MOMENTUM"}</small></span></span>
             <span className="cc-head-icon-button" aria-label="การแจ้งเตือน"><ScenovaIcon name="bell" size={18}/></span>
           </div>
