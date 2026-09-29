@@ -30,8 +30,13 @@ assert.match(
 );
 assert.match(
   dashboard,
-  /scenova-mt5-operation-v1/,
-  "MT5 connect/switch terminal must survive a page refresh"
+  /"scenova-mt5-operation-v1:" \+ userId/,
+  "MT5 connect/switch terminal must survive refresh without leaking state across SCENOVA users"
+);
+assert.match(
+  dashboard,
+  /localStorage\.removeItem\("scenova-mt5-operation-v1"\)/,
+  "legacy unscoped MT5 operation state must never be restored"
 );
 assert.match(
   dashboard,
