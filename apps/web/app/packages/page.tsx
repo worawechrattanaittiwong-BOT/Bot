@@ -108,6 +108,11 @@ type Order = {
   last_seen_at?: string | null;
   purchase_type?: string | null;
   slot_type?: string | null;
+  list_price_usd_cents?: number | null;
+  final_price_usd_cents?: number | null;
+  fx_rate_usd_thb?: number | null;
+  fx_source?: string | null;
+  fx_quoted_at?: string | null;
 };
 
 type PromotionPreview = {
