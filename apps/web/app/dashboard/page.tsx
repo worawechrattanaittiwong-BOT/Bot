@@ -256,6 +256,7 @@ export default function DashboardPage() {
   const [brokerCode, setBrokerCode] = useState("EXNESS");
   const [customBrokerName, setCustomBrokerName] = useState("");
   const [brokerServer, setBrokerServer] = useState("");
+  const [mt5ServerSearch, setMt5ServerSearch] = useState("");
   const [customBrokerServer, setCustomBrokerServer] = useState("");
   const [tradingPassword, setTradingPassword] = useState("");
   const [cloudMt5DialogMode, setCloudMt5DialogMode] = useState<"NEW"|"RECONNECT">("NEW");
@@ -1464,9 +1465,15 @@ export default function DashboardPage() {
         sensitivity:"base"
       });
   });
-  const realBrokerServers = sortedBrokerServers.filter(server => String(server.environment).toUpperCase() === "REAL");
-  const demoBrokerServers = sortedBrokerServers.filter(server => String(server.environment).toUpperCase() === "DEMO");
-  const otherBrokerServers = sortedBrokerServers.filter(server => !["REAL","DEMO"].includes(String(server.environment).toUpperCase()));
+  const mt5ServerSearchKey = mt5ServerSearch.trim().toLowerCase();
+  const visibleBrokerServers = sortedBrokerServers.filter(server =>
+    !mt5ServerSearchKey ||
+    String(server.serverName || "").toLowerCase().includes(mt5ServerSearchKey) ||
+    String(server.environment || "").toLowerCase().includes(mt5ServerSearchKey)
+  );
+  const realBrokerServers = visibleBrokerServers.filter(server => String(server.environment).toUpperCase() === "REAL");
+  const demoBrokerServers = visibleBrokerServers.filter(server => String(server.environment).toUpperCase() === "DEMO");
+  const otherBrokerServers = visibleBrokerServers.filter(server => !["REAL","DEMO"].includes(String(server.environment).toUpperCase()));
   const hasLocalConnectionSlot = (data?.slots || []).some((slot:any) =>
     String(slot?.mode || "").toUpperCase() === "LOCAL" &&
     Boolean(slot?.can_control) &&
@@ -2762,6 +2769,7 @@ export default function DashboardPage() {
     setCloudMt5DialogMode(dialogMode);
     setCloudMt5DialogAccountId(dialogMode === "RECONNECT" ? String(slot?.mt5_account_id || "") : "");
     setTradingPassword("");
+    setMt5ServerSearch("");
 
     if (dialogMode === "RECONNECT" && slot?.account_number) {
       setAccountNumber(String(slot.account_number || ""));
@@ -4632,6 +4640,7 @@ export default function DashboardPage() {
                     const nextBroker = e.target.value;
                     setBrokerCode(nextBroker);
                     setBrokerServer(nextBroker === "OTHER" ? "__CUSTOM__" : "");
+                    setMt5ServerSearch("");
                     setCustomBrokerServer("");
                   }}
                   required
@@ -4666,13 +4675,24 @@ export default function DashboardPage() {
                     aria-label="MT5 Server ปัจจุบัน"
                   />
                 ) : (
-                  <>
+                  <div className="cloud-mt5-server-suggestions">
+                    <input
+                      className="input"
+                      value={mt5ServerSearch}
+                      onChange={e=>setMt5ServerSearch(e.target.value)}
+                      placeholder="ค้นหา MT5 Server เช่น Real, Demo หรือชื่อ Server"
+                      autoComplete="off"
+                      aria-label="ค้นหา MT5 Server"
+                    />
                     <select
                       className="input"
                       value={brokerServer}
                       onChange={e=>{
                         setBrokerServer(e.target.value);
-                        if (e.target.value !== "__CUSTOM__") setCustomBrokerServer("");
+                        if (e.target.value !== "__CUSTOM__") {
+                          setCustomBrokerServer("");
+                          setMt5ServerSearch("");
+                        }
                       }}
                       required
                     >
@@ -4719,7 +4739,7 @@ export default function DashboardPage() {
                     <small className="muted">
                       เลือก Server ให้ตรงกับบัญชี MT5 ของคุณ หากไม่พบให้เลือก “กรอก Server เอง”
                     </small>
-                  </>
+                  </div>
                 )}
               </label>
 
