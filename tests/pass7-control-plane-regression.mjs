@@ -22,7 +22,12 @@ function rejectMatch(text, pattern, label) {
 requireText(web, "const isHeartbeatDelayed =", "dashboard reconnecting state");
 requireText(web, '"Reconnecting"', "dashboard reconnecting label");
 requireText(web, "const showLastKnownTelemetry = isMt5Online || isHeartbeatDelayed;", "last-known telemetry during reconnect");
+requireText(web, "const isConnectionOnline = isCloudRuntime ? isCloudWorkerOnline : isMt5Online;", "Cloud connection follows VPS Server state");
+requireText(web, 'isCloudWorkerOnline ? "VPS Server Online" : "VPS Server Offline"', "customer connection label mirrors VPS Server");
+requireText(web, "cloudSlots.filter((slot:any)=>Boolean(slot?.runner_online)).length", "Cloud slot summary mirrors VPS Server");
 requireMatch(bot, /interval '20 seconds'/, "backend MT5 freshness remains 20 seconds");
+requireText(bot, "AS runner_online", "dashboard exposes VPS Server online state");
+requireText(bot, "interval '30 seconds') runner_online", "slot list uses canonical Cloud Server health window");
 
 // Pass 3: SSE receives its own long-lived, unbuffered proxy while EA heartbeat keeps short timeouts.
 requireMatch(

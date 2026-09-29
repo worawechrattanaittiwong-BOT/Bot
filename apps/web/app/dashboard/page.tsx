@@ -790,6 +790,11 @@ export default function DashboardPage() {
     ? new Date(data.instance.last_seen_at)
     : null;
   const isMt5Online = Boolean(data?.instance?.mt5_online) && state !== "OFFLINE";
+  const isCloudRuntime = String(data?.selectedSlot?.mode || "").toUpperCase() === "CLOUD";
+  const isCloudWorkerOnline = Boolean(data?.instance?.runner_online);
+  // Customer connection status for VPS follows the VPS Server/Worker itself.
+  // Strict EA heartbeat freshness remains separate in isMt5Online for trading safety.
+  const isConnectionOnline = isCloudRuntime ? isCloudWorkerOnline : isMt5Online;
   const eaLastSeenAgeSeconds = Number(data?.instance?.ea_last_seen_age_seconds ?? -1);
   const symbolDigits = Math.max(0, Math.min(8, Number(metrics.symbolDigits ?? 3)));
   const spreadPoints = Number(metrics.spreadPoints || 0);
@@ -1244,7 +1249,7 @@ export default function DashboardPage() {
   const ownerCloudAccess = ["OWNER","ADMIN"].includes(String(data?.user?.role || "").toUpperCase());
   const cloudSlotSummary = {
     total:cloudSlots.length,
-    online:cloudSlots.filter((slot:any)=>Boolean(slot?.mt5_online)).length,
+    online:cloudSlots.filter((slot:any)=>Boolean(slot?.runner_online)).length,
     ready:cloudSlots.filter((slot:any)=>
       !slot?.mt5_account_id &&
       ["ACTIVE","AVAILABLE"].includes(String(slot?.status || "").toUpperCase()) &&
@@ -1326,16 +1331,18 @@ export default function DashboardPage() {
     return "ยังไม่มีสิทธิ์ใช้งาน";
   }, [entitlement]);
 
-  const connectionLabel = isMt5Online
-    ? "EA + MT5 เชื่อมต่อแล้ว"
-    : isHeartbeatDelayed
-      ? "EA Heartbeat ขาดช่วง · กำลังเชื่อมต่อใหม่"
-      : isAgentOnline
-        ? "Windows Agent เชื่อมแล้ว · EA ยังไม่ตอบสนอง"
-        : data?.account
-          ? "รอ Windows Agent / MT5"
-          : "ยังไม่ได้เชื่อมบัญชี";
-  const accountConnectionOnline = isMt5Online;
+  const connectionLabel = isCloudRuntime
+    ? (isCloudWorkerOnline ? "VPS Server เชื่อมต่อแล้ว" : "VPS Server ออฟไลน์")
+    : isMt5Online
+      ? "EA + MT5 เชื่อมต่อแล้ว"
+      : isHeartbeatDelayed
+        ? "EA Heartbeat ขาดช่วง · กำลังเชื่อมต่อใหม่"
+        : isAgentOnline
+          ? "Windows Agent เชื่อมแล้ว · EA ยังไม่ตอบสนอง"
+          : data?.account
+            ? "รอ Windows Agent / MT5"
+            : "ยังไม่ได้เชื่อมบัญชี";
+  const accountConnectionOnline = isConnectionOnline;
   const accountConnectionLabel = accountConnectionOnline
     ? "เชื่อมต่อแล้ว"
     : data?.account
@@ -1346,7 +1353,7 @@ export default function DashboardPage() {
     const slotId = String(data?.selectedSlot?.id || "");
     if (!slotId || !data?.instance?.id || !data?.account) return;
 
-    if (isMt5Online) {
+    if (isConnectionOnline) {
       connectionWasOnlineRef.current[slotId] = true;
       return;
     }
@@ -1360,7 +1367,7 @@ export default function DashboardPage() {
     }
   }, [
     activeView,
-    isMt5Online,
+    isConnectionOnline,
     data?.selectedSlot?.id,
     data?.instance?.id,
     data?.account?.id
@@ -3154,7 +3161,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="cc-v3-head-actions">
-            <span className={"cc-head-chip " + (isMt5Online ? "good" : isHeartbeatDelayed ? "warn" : "bad")}><i/><span><b>{isMt5Online ? "เชื่อมต่อแล้ว" : isHeartbeatDelayed ? "กำลังเชื่อมต่อใหม่" : isAgentOnline ? "EA ไม่ตอบสนอง" : "ยังไม่เชื่อมต่อ"}</b><small>{isMt5Online ? (data.account?.broker || "MT5")+" · EA Online" : isHeartbeatDelayed ? "Windows Agent Online · Heartbeat "+connectionAgeLabel : isAgentOnline ? "Windows Agent Online · รอ EA" : (data.account?.broker || "MT5")+" · "+(data.selectedSlot?.mode || "LOCAL")}</small></span></span>
+            <span className={"cc-head-chip " + (isConnectionOnline ? "good" : "bad")}><i/><span><b>{isConnectionOnline ? "เชื่อมต่อแล้ว" : "ยังไม่เชื่อมต่อ"}</b><small>{isCloudRuntime ? (isCloudWorkerOnline ? "VPS Server Online" : "VPS Server Offline") : isMt5Online ? (data.account?.broker || "MT5")+" · EA Online" : isHeartbeatDelayed ? "Windows Agent Online · Heartbeat "+connectionAgeLabel : isAgentOnline ? "Windows Agent Online · รอ EA" : (data.account?.broker || "MT5")+" · LOCAL"}</small></span></span>
             <span className={"cc-head-chip bot " + (desired==="RUNNING" ? "active" : "")}><ScenovaIcon name="bot" size={18}/><span><b>{controlStateLabel}</b><small>{settings.entryMode || "AUTO MOMENTUM"}</small></span></span>
             <span className="cc-head-icon-button" aria-label="การแจ้งเตือน"><ScenovaIcon name="bell" size={18}/></span>
           </div>
@@ -4062,15 +4069,15 @@ export default function DashboardPage() {
                   <div className="eyebrow">SELECTED VPS SLOT</div>
                   <div className="vps-connected-title-row">
                     <h2>{data.account.account_number}</h2>
-                    <span className={"badge " + (isMt5Online ? "" : "warn")}>
-                      <span className={"dot " + (isMt5Online ? "green" : "amber")}/>
-                      {isMt5Online ? "ออนไลน์" : "ออฟไลน์"}
+                    <span className={"badge " + (isConnectionOnline ? "" : "warn")}>
+                      <span className={"dot " + (isConnectionOnline ? "green" : "amber")}/>
+                      {isConnectionOnline ? "ออนไลน์" : "ออฟไลน์"}
                     </span>
                   </div>
                   <p className="muted">{data.account.broker} · {data.account.broker_server} · Slot #{data.selectedSlot?.slot_number || "—"}</p>
                 </div>
                 <div className="vps-connected-actions">
-                  {!isMt5Online && (
+                  {!isConnectionOnline && (
                     <button
                       type="button"
                       className="btn primary"
@@ -4564,7 +4571,7 @@ function VpsSlotManager(props:{
   const slotTone = (slot:any) => {
     if (!props.ownerUnlimited && !props.primaryActive && !isPrimary(slot)) return "blocked";
     if (!props.ownerUnlimited && slot?.subscription_expires_at && new Date(slot.subscription_expires_at).getTime() <= Date.now()) return "expired";
-    if (slot?.mt5_online) return "online";
+    if (String(slot?.mode || "").toUpperCase()==="CLOUD" ? slot?.runner_online : slot?.mt5_online) return "online";
     if (slot?.instance_id) return "offline";
     return "ready";
   };

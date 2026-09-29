@@ -475,6 +475,7 @@ export class BotController {
          bi.desired_state,
          COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
          (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') mt5_online,
+         (wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now() - interval '30 seconds') runner_online,
          bi.device_status,
          bi.device_hostname,
          bi.device_last_seen_at,
@@ -526,6 +527,7 @@ export class BotController {
        LEFT JOIN subscriptions s ON s.id=ls.subscription_id
        LEFT JOIN plans p ON p.id=s.plan_id
        LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
+       LEFT JOIN worker_nodes wn ON wn.runner_id=bi.runner_id
        LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
        WHERE (ls.owner_user_id=$1 OR ls.assigned_user_id=$1)
          AND ls.status<>'DELETED'
@@ -815,6 +817,7 @@ export class BotController {
          wn.region AS runner_region,
          wn.hostname AS runner_hostname,
          (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') AS mt5_online,
+         (wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now() - interval '30 seconds') AS runner_online,
          (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '30 minutes') AS agent_online,
          (bi.device_last_seen_at IS NOT NULL AND bi.device_last_seen_at > now() - interval '90 seconds') AS device_online,
          CASE WHEN bi.last_seen_at IS NULL THEN NULL ELSE EXTRACT(EPOCH FROM (now() - bi.last_seen_at)) END AS ea_last_seen_age_seconds,
