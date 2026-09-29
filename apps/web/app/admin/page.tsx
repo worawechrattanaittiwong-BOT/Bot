@@ -761,23 +761,34 @@ export default function AdminPage() {
     return current[0] || null;
   };
   const customerSlots = (user:any) => Array.isArray(user?.customer_slots) ? user.customer_slots : [];
-  const primaryLocalSlotNumber = (user:any) => {
-    const values = customerSlots(user)
-      .filter((slot:any)=>String(slot.mode).toUpperCase()==="LOCAL")
-      .map((slot:any)=>Number(slot.slot_number || 0))
-      .filter((value:number)=>value>0);
-    return values.length ? Math.min(...values) : 0;
+  const canonicalCustomerSlot = (user:any, mode:string) => {
+    const normalizedMode=String(mode || "").toUpperCase();
+    const rows=customerSlots(user).filter((slot:any)=>String(slot?.mode || "").toUpperCase()===normalizedMode);
+    if (!rows.length) return null;
+    return [...rows].sort((a:any,b:any)=>{
+      if (normalizedMode==="CLOUD") {
+        const aPrimary=String(a?.slot_type || "").toUpperCase()==="PERSONAL" ? 0 : 1;
+        const bPrimary=String(b?.slot_type || "").toUpperCase()==="PERSONAL" ? 0 : 1;
+        if (aPrimary!==bPrimary) return aPrimary-bPrimary;
+      }
+      const aMt5=a?.account_number ? 0 : 1;
+      const bMt5=b?.account_number ? 0 : 1;
+      if (aMt5!==bMt5) return aMt5-bMt5;
+      const aSubscription=a?.subscription_id ? 0 : 1;
+      const bSubscription=b?.subscription_id ? 0 : 1;
+      if (aSubscription!==bSubscription) return aSubscription-bSubscription;
+      const aNumber=Number(a?.slot_number || 999999);
+      const bNumber=Number(b?.slot_number || 999999);
+      if (aNumber!==bNumber) return aNumber-bNumber;
+      return String(a?.id || "").localeCompare(String(b?.id || ""));
+    })[0];
   };
   const canDeleteCustomerSlot = (user:any, slot:any) => {
-    const mode = String(slot?.mode || "").toUpperCase();
-    if (mode === "CLOUD") {
-      return String(slot?.slot_type || "").toUpperCase()==="ADDON" || Number(slot?.slot_number || 0)>1;
-    }
-    if (mode === "LOCAL") {
-      const localSlots = customerSlots(user).filter((item:any)=>String(item.mode).toUpperCase()==="LOCAL");
-      return localSlots.length>1 && Number(slot?.slot_number || 0)!==primaryLocalSlotNumber(user);
-    }
-    return false;
+    const mode=String(slot?.mode || "").toUpperCase();
+    const rows=customerSlots(user).filter((item:any)=>String(item?.mode || "").toUpperCase()===mode);
+    if (rows.length<=1) return false;
+    const keep=canonicalCustomerSlot(user,mode);
+    return Boolean(keep?.id) && String(keep.id)!==String(slot?.id);
   };
   const hasCurrentPlan = (user:any, planCode:string) =>
     memberships(user).some((m:any)=>m.plan_code===planCode && isCurrentMembership(m));
@@ -805,7 +816,7 @@ export default function AdminPage() {
 
   const title = useMemo(() => ({
     overview: ["ภาพรวมระบบ","เห็นสุขภาพระบบและสิ่งที่ต้องจัดการในหน้าจอเดียว"],
-    customers: ["Customer Control Center","จัดการสิทธิ์ Local / Cloud VPS, Trial, วันใช้งาน และความปลอดภัยของลูกค้าจากจุดเดียว"],
+    customers: ["จัดการลูกค้า",""],
     workers: ["Cloud Trading System","ตรวจ Trading Nodes, Load และสถานะ Cloud MT5"]
   }[activeMenu]), [activeMenu]);
 
@@ -829,7 +840,7 @@ export default function AdminPage() {
           <div>
             <div className="owner-breadcrumb">SCENOVA <span>/</span> OWNER CONSOLE</div>
             <h1>{title[0]}</h1>
-            <p>{title[1]}</p>
+            {title[1] && <p>{title[1]}</p>}
           </div>
           <div className="owner-head-actions">
             <span className="owner-live"><span className="dot green"/> OWNER ONLINE</span>
@@ -961,9 +972,7 @@ export default function AdminPage() {
           <>
             <section className="owner-customer-toolbar">
               <div>
-                <span className="owner-card-kicker">CUSTOMER CONTROL CENTER</span>
-                <h2>จัดการลูกค้าจากจุดเดียว</h2>
-                <p>ค้นหาบัญชี → เลือกลูกค้า → จัดการ Local / Cloud VPS, Trial, วันใช้งาน และรหัสผ่านได้ทันที</p>
+                <h2>ค้นหาลูกค้า</h2>
               </div>
               <form className="owner-search" onSubmit={search}>
                 <input className="input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="User ID, email, LINE หรือเลข MT5"/>
@@ -974,9 +983,7 @@ export default function AdminPage() {
             <section className="owner-access-group-panel">
               <div className="owner-access-group-head">
                 <div>
-                  <span className="owner-card-kicker">ACCESS GROUPS</span>
                   <h3>กลุ่มทดลอง</h3>
-                  <p>ใช้สำหรับสิทธิ์ทดลองชั่วคราวเท่านั้น สมาชิกจริง Local/VPS จะไม่ถูกผูกกับกลุ่มนี้</p>
                 </div>
                 <div className="owner-access-group-create">
                   <input
@@ -1061,16 +1068,14 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
-                )) : <div className="owner-control-empty">ยังไม่มีกลุ่ม · สร้างกลุ่ม “ทดลอง” เพื่อแยกจากสมาชิกจริงได้</div>}
+                )) : <div className="owner-control-empty">ยังไม่มีกลุ่มทดลอง</div>}
               </div>
-              <div className="owner-control-note">ปิดกลุ่ม = หยุดสิทธิ์ทดลองทันที · ลบกลุ่ม = จบ Trial ในกลุ่มถาวร · สมาชิกจริงและวันใช้งานจริงไม่เปลี่ยน</div>
             </section>
 
             <div className="owner-customer-layout">
               <aside className="owner-customer-directory">
                 <div className="owner-customer-directory-head">
-                  <div><b>Customer Accounts</b><small>{users.length} บัญชี</small></div>
-                  <span className="owner-state-chip good">LIVE</span>
+                  <div><b>บัญชีลูกค้า</b><small>{users.length} บัญชี</small></div>
                 </div>
                 <div className="owner-customer-list">
                   {users.map(user=>{
@@ -1130,7 +1135,6 @@ export default function AdminPage() {
                       <div className="owner-customer-identity">
                         <span className="owner-customer-avatar large">{String(selectedCustomer.user_code||"U").slice(-1)}</span>
                         <div>
-                          <span className="owner-card-kicker">CUSTOMER</span>
                           <h2>{selectedCustomer.user_code}</h2>
                           <p>{selectedCustomer.email}</p>
                         </div>
@@ -1310,7 +1314,7 @@ export default function AdminPage() {
                               <div><h3>Trial</h3></div>
                             </div>
                             <div className="owner-trial-control">
-                              <label><span>Trial Days</span><input className="input" type="number" min={1} max={365} value={trialDays} onChange={e=>setTrialDays(Number(e.target.value))}/></label>
+                              <label><span>จำนวนวัน Trial</span><input className="input" type="number" min={1} max={365} value={trialDays} onChange={e=>setTrialDays(Number(e.target.value))}/></label>
                               {selectedCustomer.trial_status || selectedCustomer.trial_authorization_status==="PENDING_BIND" ? (
                                 <button className="btn primary" disabled={customerAction==="trial"} onClick={()=>updateTrialDuration(selectedCustomer)}>
                                   บันทึก Trial {trialDays} วัน
