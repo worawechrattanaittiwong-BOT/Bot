@@ -55,8 +55,18 @@ assert.match(
 );
 assert.match(
   ea,
-  /identityMatches[\s\S]*reportedText\.includes/,
-  "catalog learning must verify reported broker identity before saving a server"
+  /const reportedIdentityMatches =[\s\S]*reportedText\.includes/,
+  "LOCAL catalog learning must verify a reported broker identity"
+);
+assert.match(
+  ea,
+  /const identityMatches = runtimeMode === "CLOUD" \|\| reportedIdentityMatches/,
+  "Cloud may learn the selected broker server only after authenticated runtime heartbeat"
+);
+assert.match(
+  ea,
+  /runtimeMode !== "CLOUD" && !reported/,
+  "LOCAL must never guess a broker when the terminal does not report one"
 );
 assert.match(
   ea,
