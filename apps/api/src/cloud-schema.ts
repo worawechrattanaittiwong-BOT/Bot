@@ -143,6 +143,18 @@ CREATE TABLE IF NOT EXISTS cloud_packages (
  updated_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO cloud_packages(months) VALUES(1),(3),(6),(12) ON CONFLICT DO NOTHING;
+ALTER TABLE cloud_packages ADD COLUMN IF NOT EXISTS price_usd_cents integer CHECK(price_usd_cents>=0);
+UPDATE cloud_packages
+SET price_usd_cents=CASE months
+  WHEN 1 THEN 2050
+  WHEN 3 THEN 5625
+  WHEN 6 THEN 10390
+  WHEN 12 THEN 17825
+  ELSE 0
+END
+WHERE price_usd_cents IS NULL;
+ALTER TABLE cloud_packages ALTER COLUMN price_usd_cents SET DEFAULT 0;
+ALTER TABLE cloud_packages ALTER COLUMN price_usd_cents SET NOT NULL;
 CREATE TABLE IF NOT EXISTS cloud_addon_packages (
  months integer PRIMARY KEY CHECK(months IN (1,3,6,12)),
  price_satang integer NOT NULL DEFAULT 0 CHECK(price_satang>=0),
@@ -152,6 +164,18 @@ CREATE TABLE IF NOT EXISTS cloud_addon_packages (
 INSERT INTO cloud_addon_packages(months,price_satang,enabled)
 SELECT months,price_satang,enabled FROM cloud_packages
 ON CONFLICT(months) DO NOTHING;
+ALTER TABLE cloud_addon_packages ADD COLUMN IF NOT EXISTS price_usd_cents integer CHECK(price_usd_cents>=0);
+UPDATE cloud_addon_packages
+SET price_usd_cents=CASE months
+  WHEN 1 THEN 860
+  WHEN 3 THEN 2350
+  WHEN 6 THEN 4430
+  WHEN 12 THEN 7410
+  ELSE 0
+END
+WHERE price_usd_cents IS NULL;
+ALTER TABLE cloud_addon_packages ALTER COLUMN price_usd_cents SET DEFAULT 0;
+ALTER TABLE cloud_addon_packages ALTER COLUMN price_usd_cents SET NOT NULL;
 INSERT INTO plans(code,name_th,mode,max_mt5_accounts)
  VALUES ('CLOUD_1M','Cloud 1 เดือน','CLOUD',1),('CLOUD_3M','Cloud 3 เดือน','CLOUD',1),
  ('CLOUD_6M','Cloud 6 เดือน','CLOUD',1),('CLOUD_12M','Cloud 12 เดือน','CLOUD',1)
@@ -180,6 +204,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS cloud_order_user_pending ON cloud_orders(user_
  WHERE status IN ('CREATING','PENDING','REVIEW');
 ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS checked_at timestamptz;
 ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS purchase_type varchar(16) NOT NULL DEFAULT 'PACKAGE';
+ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS list_price_usd_cents integer CHECK(list_price_usd_cents>=0);
+ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS final_price_usd_cents integer CHECK(final_price_usd_cents>=0);
+ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS fx_rate_usd_thb numeric(12,6);
+ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS fx_source varchar(40);
+ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS fx_quoted_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS local_packages (
  months integer PRIMARY KEY CHECK(months IN (1,3,6,12)),
@@ -188,6 +217,12 @@ CREATE TABLE IF NOT EXISTS local_packages (
  updated_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO local_packages(months) VALUES(1),(3),(6),(12) ON CONFLICT DO NOTHING;
+ALTER TABLE local_packages ADD COLUMN IF NOT EXISTS price_usd_cents integer CHECK(price_usd_cents>=0);
+UPDATE local_packages
+SET price_usd_cents=ROUND(price_satang::numeric / 33.60)::integer
+WHERE price_usd_cents IS NULL;
+ALTER TABLE local_packages ALTER COLUMN price_usd_cents SET DEFAULT 0;
+ALTER TABLE local_packages ALTER COLUMN price_usd_cents SET NOT NULL;
 INSERT INTO plans(code,name_th,mode,max_mt5_accounts)
  VALUES ('LOCAL_1M','Local MT5 1 เดือน','LOCAL',1),('LOCAL_3M','Local MT5 3 เดือน','LOCAL',1),
  ('LOCAL_6M','Local MT5 6 เดือน','LOCAL',1),('LOCAL_12M','Local MT5 12 เดือน','LOCAL',1)
@@ -213,6 +248,11 @@ CREATE TABLE IF NOT EXISTS local_orders (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS local_order_user_pending ON local_orders(user_id)
  WHERE status IN ('CREATING','PENDING','REVIEW');
+ALTER TABLE local_orders ADD COLUMN IF NOT EXISTS list_price_usd_cents integer CHECK(list_price_usd_cents>=0);
+ALTER TABLE local_orders ADD COLUMN IF NOT EXISTS final_price_usd_cents integer CHECK(final_price_usd_cents>=0);
+ALTER TABLE local_orders ADD COLUMN IF NOT EXISTS fx_rate_usd_thb numeric(12,6);
+ALTER TABLE local_orders ADD COLUMN IF NOT EXISTS fx_source varchar(40);
+ALTER TABLE local_orders ADD COLUMN IF NOT EXISTS fx_quoted_at timestamptz;
 CREATE TABLE IF NOT EXISTS worker_commands (
  id bigserial PRIMARY KEY,
  runner_id varchar(120) NOT NULL REFERENCES worker_nodes(runner_id) ON DELETE CASCADE,
