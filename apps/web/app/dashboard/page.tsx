@@ -4463,7 +4463,7 @@ export default function DashboardPage() {
                   </button>
                 )}
 
-                <button type="button" className="btn ghost vps-slot-cancel-order" disabled={vpsPurchaseBusy} onClick={()=>void cancelVpsSlotOrder()}>
+                <button type="button" className="btn ghost vps-slot-cancel-order" disabled={vpsPurchaseBusy} onClick={()=>void cancelVpsSlotOrder(true)}>
                   ยกเลิกรายการ
                 </button>
               </section>
