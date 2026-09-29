@@ -17,13 +17,6 @@ type PackageRow = {
   updated_at: string;
 };
 
-function baht(satang: number | string | null | undefined) {
-  return (Number(satang || 0) / 100).toLocaleString("th-TH", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  });
-}
-
 function when(value?: string | null) {
   if (!value) return "—";
   const d = new Date(value);
