@@ -7,7 +7,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 REPO_DIR="${REPO_DIR:-/opt/Bot}"
-REPO_FULL_NAME="${REPO_FULL_NAME:-SCENOVA-CPU/Bot}"
+REPO_FULL_NAME="${REPO_FULL_NAME:-SCENOVA-SNV/Bot}"
 
 if [ ! -d "$REPO_DIR/.git" ]; then
   echo "Git repository not found at $REPO_DIR"
