@@ -1284,11 +1284,9 @@ export default function DashboardPage() {
   const selectedVpsPackage = vpsPackages.find(pack=>Number(pack.months)===Number(vpsPurchaseMonths)) || vpsPackages[0] || null;
   const vpsRenewSlot = cloudSlots.find((slot:any)=>String(slot?.id || "")===String(vpsRenewSlotId || "")) || null;
   const canBuyVpsSlot = Boolean(cloudCatalog?.checkoutEnabled) &&
-    Number(cloudCatalog?.available || 0) > 0 &&
     primaryCloudActive;
   const canCheckoutVpsOrder = Boolean(cloudCatalog?.checkoutEnabled) &&
-    primaryCloudActive &&
-    (Boolean(vpsRenewSlotId) || Number(cloudCatalog?.available || 0) > 0);
+    primaryCloudActive;
 
   const accessExpiry = entitlement?.expiresAt ? new Date(entitlement.expiresAt) : null;
   const accessRemaining = accessExpiry ? Math.max(0, accessExpiry.getTime() - accessClockNow) : null;
