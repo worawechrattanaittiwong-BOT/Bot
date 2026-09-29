@@ -6173,7 +6173,7 @@
   .cc-v19-settings-card .number-input-shell>span{
     padding-left:6px!important;
     padding-right:6px!important;
-    font-size:10px!important;
+    font-size:var(--ui-type-caption)!important;
     white-space:nowrap!important;
   }
 
@@ -6200,7 +6200,7 @@
     flex:0 0 13px!important;
   }
   .cc-v19-settings-card .cc-bot-v2-choice-row button b{
-    font-size:10.5px!important;
+    font-size:var(--ui-type-caption)!important;
     white-space:nowrap!important;
   }
 
@@ -6251,7 +6251,7 @@
   }
   .cc-v19-settings-card .cc-mode-guide-alert span{
     margin-top:5px!important;
-    font-size:9px!important;
+    font-size:var(--ui-type-caption)!important;
   }
 }
 
