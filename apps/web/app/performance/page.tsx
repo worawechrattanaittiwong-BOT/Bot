@@ -10,6 +10,43 @@ import styles from "./performance.module.css";
 type Mode = "LIVE" | "BACKTEST";
 type StrategyMode = "AUTO" | "RACE" | "FLIP_LOCK" | "MANUAL" | "ZERO_GRID";
 const STRATEGY_OPTIONS:StrategyMode[]=["AUTO","RACE","FLIP_LOCK","MANUAL","ZERO_GRID"];
+const PERFORMANCE_PREFS_KEY="scenova.performance.preferences.v1";
+
+type PerformancePreferences = {
+  accountId:string;
+  mode:Mode;
+  selectedStrategies:StrategyMode[];
+  from:string;
+  to:string;
+};
+
+function performancePreferencesKey(userId:string) {
+  return PERFORMANCE_PREFS_KEY+":"+String(userId||"guest");
+}
+
+function readPerformancePreferences(userId:string):PerformancePreferences|null {
+  try {
+    const raw=window.localStorage.getItem(performancePreferencesKey(userId));
+    if(!raw) return null;
+    const parsed=JSON.parse(raw);
+    const savedStrategies=Array.isArray(parsed?.selectedStrategies)
+      ? STRATEGY_OPTIONS.filter((item)=>parsed.selectedStrategies.includes(item))
+      : [];
+    const savedMode:Mode=parsed?.mode==="BACKTEST"?"BACKTEST":"LIVE";
+    const savedFrom=/^\d{4}-\d{2}-\d{2}$/.test(String(parsed?.from||""))?String(parsed.from):"";
+    const savedTo=/^\d{4}-\d{2}-\d{2}$/.test(String(parsed?.to||""))?String(parsed.to):"";
+    return {
+      accountId:String(parsed?.accountId||""),
+      mode:savedMode,
+      selectedStrategies:savedStrategies.length?savedStrategies:[...STRATEGY_OPTIONS],
+      from:savedFrom,
+      to:savedTo
+    };
+  } catch {
+    return null;
+  }
+}
+
 type Options = {
   user: { id:string; user_code:string; email:string; role:string } | null;
   elevated: boolean;
@@ -168,7 +205,7 @@ function LotDistributionChart({rows,total}:{rows:any[];total:number}) {
 function SummaryChart({points}:{points:any[]}) {
   const validPoints=(points||[]).filter((point:any)=>Number.isFinite(Number(point?.balance)));
   if(!validPoints.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลกราฟในช่วงเวลานี้</div>;
-  const width=1000,height=220,left=52,right=18,top=18,bottom=42;
+  const width=1000,height=136,left=52,right=18,top=12,bottom=30;
   const values=validPoints.map((point:any)=>Number(point.balance));
   const min=Math.min(...values),max=Math.max(...values),pad=Math.max(1,(max-min)*.09);
   const low=min-pad,high=max+pad,range=Math.max(1,high-low);
@@ -328,7 +365,21 @@ export default function PerformanceDashboardPage() {
       const own=(next.accounts||[]).filter((account:any)=>account.userId===next.user?.id);
       const current=currentRealDemoAccounts(own).sort(compareCurrentAccounts);
       const first=current[0];
-      setAccountId(first?.id||"");
+      const saved=readPerformancePreferences(String(next.user?.id||""));
+      const savedAccount=saved?.accountId
+        ? current.find((account:any)=>account.id===saved.accountId)
+        : null;
+      const preferred=savedAccount||first;
+
+      if(saved){
+        setMode(saved.mode);
+        setSelectedStrategies(saved.selectedStrategies);
+        if(saved.from&&saved.to&&saved.from<=saved.to){
+          setFrom(saved.from);
+          setTo(saved.to);
+        }
+      }
+      setAccountId(preferred?.id||"");
       if(!first) setError("ยังไม่พบบัญชี MT5 ของคุณสำหรับดู Performance");
       else setError("");
     }catch(e:any){setError(String(e?.message||"โหลดข้อมูลไม่สำเร็จ"));}
@@ -415,6 +466,28 @@ export default function PerformanceDashboardPage() {
   function applyDays(days:number){
     const range=rangeFromDays(to||today,days);
     setFrom(range.from);setTo(range.to);
+  }
+
+  function savePerformancePreferences(){
+    const userId=String(options?.user?.id||"");
+    if(!userId||!accountId) return;
+    const preferences:PerformancePreferences={
+      accountId,
+      mode,
+      selectedStrategies,
+      from,
+      to
+    };
+    window.localStorage.setItem(
+      performancePreferencesKey(userId),
+      JSON.stringify(preferences)
+    );
+    showPopup({
+      tone:"success",
+      title:"บันทึกค่ารายงานแล้ว",
+      message:"บัญชี แหล่งรายงาน ช่วงวันที่ และ Strategy Portfolio จะถูกเรียกคืนอัตโนมัติเมื่อรีเฟรชหรือเปิดหน้านี้ใหม่",
+      duration:3200
+    });
   }
 
   async function chooseBacktest(id:string){
@@ -663,9 +736,19 @@ export default function PerformanceDashboardPage() {
                 <label><span>End Date</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
               </div>
 
-              <button className={styles.refreshButton} onClick={()=>refresh()} disabled={loading||!accountId}>
-                <ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh Report"}
-              </button>
+              <div className={styles.drawerActionRow}>
+                <button className={styles.refreshButton} onClick={()=>refresh()} disabled={loading||!accountId}>
+                  <ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh Report"}
+                </button>
+                <button
+                  type="button"
+                  className={styles.saveSettingsButton}
+                  onClick={savePerformancePreferences}
+                  disabled={!accountId}
+                >
+                  <ScenovaIcon name="settings" size={15}/>บันทึกค่า
+                </button>
+              </div>
             </div>
 
             {mode==="LIVE"?(
