@@ -4137,12 +4137,10 @@ bool RaceFlowStillRunning(int direction, double momentum)
 
 double RaceAtrStopPoints()
 {
-   // RACE uses its isolated M15 ATR stop at 1.50x. Do not depend on the AUTO
-   // market-context cache because the first RACE fill may happen before that
-   // cache has been refreshed.
-   double atr = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
-   if(atr <= 0.0 && g_atrPoints > 0.0)
-      atr = g_atrPoints;
+   // RACE is a fast scalp engine: base the broker SL on M5 volatility, while
+   // using the configured hardStopAtrMultiplier exactly. Broker stop/freeze
+   // distance remains the only mandatory widening.
+   double atr = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
    if(atr <= 0.0)
       return 0.0;
 
@@ -4151,7 +4149,7 @@ double RaceAtrStopPoints()
       (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
    ) + 2.0;
 
-   double multiplier = EffectiveHardStopMultiplier();
+   double multiplier = MathMax(0.5, MathMin(10.0, g_hardStopAtrMultiplier));
    return MathMax(atr * multiplier, brokerMinimumPoints);
 }
 
@@ -4192,15 +4190,14 @@ double RaceInitialStopPrice(int direction, double entryPrice)
 
 bool RaceStopReady()
 {
-   double atr = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   double atr = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
    if(atr <= 0.0)
    {
       g_executionStatus = "RACE_ATR_NOT_READY";
       return false;
    }
 
-   // Publish the exact ATR used by the RACE stop so dashboard telemetry and the
-   // actual Broker SL agree on the same source value.
+   // Publish the exact M5 ATR used by the RACE scalp stop.
    g_atrPoints = atr;
    return true;
 }
@@ -13468,10 +13465,10 @@ double EffectiveHardStopMultiplier()
 {
    double multiplier = g_hardStopAtrMultiplier;
 
-   // RACE owns a fixed 1.50x M15 ATR stop. Keep this isolated from AUTO and
-   // from the generic server multiplier so changing RACE cannot alter AUTO.
+   // RACE must respect the configured stop multiplier exactly. Do not replace
+   // the user's setting with a hidden fixed multiplier or regime adjustment.
    if(RaceModeEnabled() || BasketHasRacePosition())
-      return 1.50;
+      return MathMax(0.5, MathMin(10.0, multiplier));
 
    if(g_marketRegime == "HIGH_VOLATILITY") multiplier *= 1.25;
    else if(g_marketRegime == "QUIET") multiplier *= 0.85;
