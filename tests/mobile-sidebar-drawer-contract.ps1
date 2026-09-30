@@ -31,10 +31,10 @@ Need $sidebar 'owner-mobile-drawer-logout' 'Sign out must be inside the mobile m
 Need $sidebar '<span>ออกจากระบบ</span>' 'Mobile sign-out label missing'
 Need $sidebar 'onLogout();' 'Mobile menu sign out action missing'
 
-Need $css 'Mobile app Top Bar · final precedence' 'Shared mobile Top Bar final CSS missing'
+Need $css 'Mobile app Top Bar · canonical' 'Shared mobile Top Bar final CSS missing'
 Need $css 'position:sticky!important;' 'Mobile controls must be a real sticky Top Bar instead of floating controls'
 Need $css 'top:0!important;' 'Shared mobile Top Bar must sit at the top'
-Need $css 'grid-template-columns:auto minmax(0,1fr) auto!important;' 'Shared mobile Top Bar three-part layout missing'
+Need $css 'grid-template-columns:40px minmax(0,1fr) auto!important;' 'Shared mobile Top Bar three-part layout missing'
 Need $css '.owner-mobile-topbar-brand' 'Shared Top Bar brand styling missing'
 Need $css 'justify-content:flex-end!important;' 'Mobile menu drawer must open from the right'
 Need $css 'border-left:1px solid rgba(134,96,222,.52)!important;' 'Right drawer purple edge missing'
