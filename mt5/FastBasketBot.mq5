@@ -1536,7 +1536,9 @@ string ResolveCloudStartupSymbol(const string requested)
       else
          score+=100;
 
-      score-=MathMax(0,StringLen(candidate)-StringLen(canonical));
+      int suffixLength=StringLen(candidate)-StringLen(canonical);
+      if(suffixLength>0)
+         score-=suffixLength;
 
       if(score>bestScore)
       {
