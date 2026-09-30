@@ -158,11 +158,13 @@ function UnifiedSidebar({
 function UnifiedMobileNav({
   activeKey,
   onNavigate,
+  onLogout,
   elevated,
   partner
 }:{
   activeKey:string;
   onNavigate?:SidebarNavigateHandler;
+  onLogout:()=>void;
   elevated:boolean;
   partner?:PartnerSummary;
 }) {
@@ -205,35 +207,35 @@ function UnifiedMobileNav({
       <div className="mobile-only owner-mobile-nav owner-mobile-nav-trigger-wrap" aria-label="เครื่องมือบนมือถือ">
         <button
           type="button"
-          className={"owner-mobile-nav-trigger " + (open ? "active" : "")}
-          aria-expanded={open}
-          aria-controls={drawerId}
-          aria-label={open ? "ปิดเมนูระบบ" : "เปิดเมนูระบบ"}
-          onClick={()=>setOpen(value=>!value)}
-        >
-          <ScenovaIcon name="overview" size={20}/>
-          <span>เมนู</span>
-        </button>
-
-        <button
-          type="button"
-          className="owner-mobile-utility-button"
+          className="owner-mobile-utility-button owner-mobile-back-button"
           aria-label="ย้อนกลับหน้าก่อนหน้า"
           onClick={goBack}
         >
           <span className="owner-mobile-utility-icon" aria-hidden="true">←</span>
-          <span>ย้อนกลับ</span>
         </button>
 
-        <button
-          type="button"
-          className="owner-mobile-utility-button"
-          aria-label="รีโหลดระบบใหม่"
-          onClick={reloadSystem}
-        >
-          <span className="owner-mobile-utility-icon" aria-hidden="true">↻</span>
-          <span>รีโหลด</span>
-        </button>
+        <div className="owner-mobile-nav-right-actions">
+          <button
+            type="button"
+            className="owner-mobile-utility-button owner-mobile-reload-button"
+            aria-label="รีโหลดระบบใหม่"
+            onClick={reloadSystem}
+          >
+            <span className="owner-mobile-utility-icon" aria-hidden="true">↻</span>
+          </button>
+
+          <button
+            type="button"
+            className={"owner-mobile-nav-trigger " + (open ? "active" : "")}
+            aria-expanded={open}
+            aria-controls={drawerId}
+            aria-label={open ? "ปิดเมนูระบบ" : "เปิดเมนูระบบ"}
+            onClick={()=>setOpen(value=>!value)}
+          >
+            <ScenovaIcon name="overview" size={19}/>
+            <span>เมนู</span>
+          </button>
+        </div>
       </div>
 
       {open ? (
@@ -287,6 +289,18 @@ function UnifiedMobileNav({
                 </section>
               ))}
             </div>
+
+            <button
+              type="button"
+              className="owner-mobile-drawer-logout"
+              onClick={()=>{
+                setOpen(false);
+                onLogout();
+              }}
+            >
+              <ScenovaIcon name="logout" size={19}/>
+              <span>ออกจากระบบ</span>
+            </button>
           </aside>
         </div>
       ) : null}
@@ -344,22 +358,26 @@ export function CustomerSidebar({
 
 export function OwnerMobileNav({
   activeKey,
-  onNavigate
+  onNavigate,
+  onLogout
 }:{
   activeKey:string;
   onNavigate?:SidebarNavigateHandler;
+  onLogout:()=>void;
 }) {
-  return <UnifiedMobileNav activeKey={activeKey} onNavigate={onNavigate} elevated/>;
+  return <UnifiedMobileNav activeKey={activeKey} onNavigate={onNavigate} onLogout={onLogout} elevated/>;
 }
 
 export function CustomerMobileNav({
   activeKey,
   onNavigate,
+  onLogout,
   partner
 }:{
   activeKey:string;
   onNavigate?:SidebarNavigateHandler;
+  onLogout:()=>void;
   partner?:PartnerSummary;
 }) {
-  return <UnifiedMobileNav activeKey={activeKey} onNavigate={onNavigate} elevated={false} partner={partner}/>;
+  return <UnifiedMobileNav activeKey={activeKey} onNavigate={onNavigate} onLogout={onLogout} elevated={false} partner={partner}/>;
 }
