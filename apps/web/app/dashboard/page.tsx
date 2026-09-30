@@ -3899,42 +3899,69 @@ export default function DashboardPage() {
 
         <dialog
           ref={ownerVpsDialogRef}
-          className="cc-symbol-picker"
+          className="cc-symbol-picker cc-vps-migration-dialog"
           onCancel={()=>{ if(!ownerVpsBusy) ownerVpsDialogRef.current?.close(); }}
         >
-          <form className="cc-symbol-picker-card" onSubmit={moveOwnerLocalToVps}>
-            <div className="cc-symbol-picker-head">
-              <b>ย้ายบัญชีนี้ไป SCENOVA VPS</b>
-              <button type="button" aria-label="ปิด" disabled={ownerVpsBusy} onClick={()=>ownerVpsDialogRef.current?.close()}>×</button>
-            </div>
-            <p className="cc-symbol-picker-source">
-              {data.account
-                ? data.account.account_number + " · " + data.account.broker_server
-                : "บัญชี MT5 ปัจจุบัน"}
-            </p>
-            <label className="field">
-              <span>MT5 Trading Password</span>
-              <input
-                className="input"
-                autoFocus
-                type="password"
-                autoComplete="off"
-                value={ownerVpsPassword}
+          <form className="cc-symbol-picker-card cc-vps-migration-card" onSubmit={moveOwnerLocalToVps}>
+            <div className="cc-vps-migration-head">
+              <div className="cc-vps-migration-title">
+                <span className="cc-vps-migration-icon" aria-hidden="true">
+                  <ScenovaIcon name="cloud" size={24}/>
+                </span>
+                <div>
+                  <b>ย้ายบัญชีขึ้นไป SCENOVA VPS</b>
+                  <p>
+                    {data.account
+                      ? data.account.account_number + " · " + data.account.broker_server
+                      : "บัญชี MT5 ปัจจุบัน"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="cc-vps-migration-close"
+                aria-label="ปิด"
                 disabled={ownerVpsBusy}
-                onChange={e=>setOwnerVpsPassword(e.target.value)}
-                placeholder="กรอกรหัส Trading ของ MT5"
-                required
-              />
+                onClick={()=>ownerVpsDialogRef.current?.close()}
+              >
+                <ScenovaIcon name="close" size={19}/>
+              </button>
+            </div>
+
+            <label className="cc-vps-password-field">
+              <span>MT5 Trading Password</span>
+              <span className="cc-vps-password-shell">
+                <ScenovaIcon name="lock" size={20}/>
+                <input
+                  autoFocus
+                  type="password"
+                  autoComplete="off"
+                  value={ownerVpsPassword}
+                  disabled={ownerVpsBusy}
+                  onChange={e=>setOwnerVpsPassword(e.target.value)}
+                  placeholder="กรอกรหัส Trading ของ MT5"
+                  required
+                />
+              </span>
             </label>
-            <p className="cc-symbol-picker-source">
-              {isOwner
-                ? "SCENOVA จะเลือก VPS ที่ ONLINE / HEALTHY และมี Capacity ให้อัตโนมัติ"
-                : "ระบบจะใช้สิทธิ์แพ็กเกจ VPS ที่บัญชีนี้ซื้อไว้"} · Local เดิมจะถูกหยุดอย่างปลอดภัยก่อนติดตั้ง MT5 และ EA บน VPS
-            </p>
-            <div className="cc-symbol-picker-actions">
-              <button type="button" className="btn" disabled={ownerVpsBusy} onClick={()=>ownerVpsDialogRef.current?.close()}>ยกเลิก</button>
-              <button type="submit" className="btn primary" disabled={ownerVpsBusy || !ownerVpsPassword}>
-                {ownerVpsBusy ? "กำลังย้าย..." : "ยืนยันย้ายไป VPS"}
+
+            <div className="cc-vps-security-note">
+              <ScenovaIcon name="shield" size={16}/>
+              <span><b>SECURE CREDENTIAL</b> · เข้ารหัส AES-256-GCM ก่อนจัดเก็บ และใช้เฉพาะเชื่อมต่อ MT5 บน VPS</span>
+            </div>
+
+            <div className="cc-vps-migration-actions">
+              <button
+                type="button"
+                className="cc-vps-cancel"
+                disabled={ownerVpsBusy}
+                onClick={()=>ownerVpsDialogRef.current?.close()}
+              >
+                ยกเลิก
+              </button>
+              <button type="submit" className="cc-vps-confirm" disabled={ownerVpsBusy || !ownerVpsPassword}>
+                <span>{ownerVpsBusy ? "กำลังย้าย..." : "ยืนยันย้ายไป VPS"}</span>
+                {!ownerVpsBusy && <span aria-hidden="true">→</span>}
               </button>
             </div>
           </form>
