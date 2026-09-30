@@ -149,6 +149,7 @@ internal static class ProvisioningSelfTest
                 AssertContains(preset, "InpInstanceId=" + item.Job.InstanceId, "instance id");
                 AssertContains(preset, "InpInstallToken=install-token-" + number, "install token");
                 AssertContains(preset, "InpCloudRelay=true", "Cloud heartbeat relay");
+                AssertContains(preset, "InpStartupSymbol=BTCUSD", "canonical startup symbol passed to EA");
                 AssertContains(startup, "Login=" + (900000 + number), "account");
                 AssertContains(startup, "Password=demo-password-" + number, "password");
                 AssertContains(startup, "Server=SCENOVA-Demo-" + number, "broker server");

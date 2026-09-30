@@ -378,7 +378,8 @@ internal sealed class Mt5Runtime
                 "InpApiBase=" + SafeIniValue(_config.EffectiveApiBase),
                 "InpInstanceId=" + SafeIniValue(job.InstanceId),
                 "InpInstallToken=" + SafeIniValue(job.InstallToken),
-                "InpCloudRelay=true"
+                "InpCloudRelay=true",
+                "InpStartupSymbol=" + SafeIniValue(job.RequestedSymbol)
             },
             Encoding.Unicode);
 

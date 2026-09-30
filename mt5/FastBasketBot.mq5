@@ -127,6 +127,7 @@ input string          InpApiBase              = "https://snvea-bot.online/backen
 input string          InpInstanceId           = "";
 input string          InpInstallToken         = "";
 input bool            InpCloudRelay           = false;
+input string          InpStartupSymbol        = "";
 input long            InpMagic                = 26090501;
 input double          InpLot                  = 0.01;
 input int             InpMaxPositions         = 10;
@@ -1468,6 +1469,117 @@ bool PublishEaAttachMarker()
    return true;
 }
 
+string CloudCanonicalStartupSymbol(string requested)
+{
+   string upper=requested;
+   StringToUpper(upper);
+
+   if(StringFind(upper,"XAUUSD")==0)
+      return "XAUUSD";
+
+   if(StringFind(upper,"BTCUSD")==0 || StringFind(upper,"XBTUSD")==0)
+      return "BTCUSD";
+
+   return requested;
+}
+
+bool CloudStartupFamilyMatch(const string candidate,const string canonical)
+{
+   string candidateUpper=candidate;
+   string canonicalUpper=canonical;
+   StringToUpper(candidateUpper);
+   StringToUpper(canonicalUpper);
+
+   if(canonicalUpper=="XAUUSD")
+      return StringFind(candidateUpper,"XAUUSD")==0;
+
+   if(canonicalUpper=="BTCUSD")
+      return StringFind(candidateUpper,"BTCUSD")==0 ||
+             StringFind(candidateUpper,"XBTUSD")==0;
+
+   return candidateUpper==canonicalUpper;
+}
+
+string ResolveCloudStartupSymbol(const string requested)
+{
+   string canonical=CloudCanonicalStartupSymbol(requested);
+   string canonicalUpper=canonical;
+   StringToUpper(canonicalUpper);
+
+   string best="";
+   int bestScore=-1000000;
+   int total=SymbolsTotal(false);
+
+   for(int i=0;i<total;i++)
+   {
+      string candidate=SymbolName(i,false);
+      if(StringLen(candidate)<=0 || !CloudStartupFamilyMatch(candidate,canonical))
+         continue;
+
+      long tradeMode=SymbolInfoInteger(candidate,SYMBOL_TRADE_MODE);
+      if(tradeMode==SYMBOL_TRADE_MODE_DISABLED ||
+         tradeMode==SYMBOL_TRADE_MODE_CLOSEONLY)
+         continue;
+
+      string candidateUpper=candidate;
+      StringToUpper(candidateUpper);
+
+      int score=0;
+      if(candidateUpper==canonicalUpper)
+         score+=10000;
+
+      if((bool)SymbolInfoInteger(candidate,SYMBOL_SELECT))
+         score+=1000;
+
+      if(tradeMode==SYMBOL_TRADE_MODE_FULL)
+         score+=200;
+      else
+         score+=100;
+
+      score-=MathMax(0,StringLen(candidate)-StringLen(canonical));
+
+      if(score>bestScore)
+      {
+         bestScore=score;
+         best=candidate;
+      }
+   }
+
+   return StringLen(best)>0 ? best : requested;
+}
+
+bool SwitchCloudChartToAccountSymbol()
+{
+   if(!InpCloudRelay || StringLen(InpStartupSymbol)<=0)
+      return false;
+
+   string resolved=ResolveCloudStartupSymbol(InpStartupSymbol);
+   if(StringLen(resolved)<=0 || StringCompare(resolved,_Symbol,false)==0)
+      return false;
+
+   if(!SymbolSelect(resolved,true))
+   {
+      Print("SCENOVA CLOUD SYMBOL: cannot select ",resolved,
+            " requested=",InpStartupSymbol,
+            " current=",_Symbol);
+      return false;
+   }
+
+   ResetLastError();
+   if(!ChartSetSymbolPeriod(0,resolved,PERIOD_M5))
+   {
+      Print("SCENOVA CLOUD SYMBOL: chart switch failed ",
+            _Symbol," -> ",resolved,
+            " error=",GetLastError());
+      return false;
+   }
+
+   Print("SCENOVA CLOUD SYMBOL: account symbol resolved ",
+         _Symbol," -> ",resolved,
+         " requested=",InpStartupSymbol);
+   return true;
+}
+
 int OnInit()
 {
    for(int t = 0; t < EMA_TF_COUNT; t++)
@@ -1485,6 +1597,13 @@ int OnInit()
          RenderChartStatus("CONFIG REQUIRED", clrTomato, "Load SCENOVA-FastBasketBot.set");
          return(INIT_PARAMETERS_INCORRECT);
       }
+
+      // A Cloud account switch can change the broker-native symbol suffix.
+      // Resolve the actual tradable symbol from the newly logged-in MT5 account
+      // before declaring the EA attached, so an old XAUUSDm/XAUUSDc suffix never
+      // leaks across accounts.
+      if(SwitchCloudChartToAccountSymbol())
+         return(INIT_SUCCEEDED);
 
       // This marker proves that MetaTrader loaded FastBasketBot with the
       // intended Cloud preset. Broker history/indicator warm-up and the first

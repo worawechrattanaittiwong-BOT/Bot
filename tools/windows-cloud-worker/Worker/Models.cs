@@ -98,7 +98,7 @@ internal sealed class CloudJob
             _ => ""
         };
 
-    public string Symbol
+    public string RequestedSymbol
     {
         get
         {
@@ -115,9 +115,12 @@ internal sealed class CloudJob
                      !string.IsNullOrWhiteSpace(symbol.GetString()))
                 requested = symbol.GetString()!.Trim();
 
-            return ResolveBrokerSymbol(requested, Broker, BrokerServer);
+            return requested;
         }
     }
+
+    public string Symbol =>
+        ResolveBrokerSymbol(RequestedSymbol, Broker, BrokerServer);
 
     internal static string ResolveBrokerSymbol(
         string requested,
@@ -134,10 +137,10 @@ internal sealed class CloudJob
         if (!isExness)
             return symbol;
 
-        // Exness Cloud terminals expose Gold/BTC under their broker-native
-        // Market Watch names. Preserve an already-resolved symbol, but map the
-        // canonical Web choices to the actual Exness chart names so MT5 never
-        // opens a synthetic/blank BTCUSD or XAUUSD chart.
+        // Bootstrap only: this gives MT5 a likely valid first chart.
+        // FastBasketBot receives RequestedSymbol separately and resolves the
+        // actual tradable suffix from the newly logged-in account before it
+        // publishes its Cloud-ready marker.
         if (string.Equals(symbol, "XAUUSD", StringComparison.OrdinalIgnoreCase))
             return "XAUUSDm";
         if (string.Equals(symbol, "BTCUSD", StringComparison.OrdinalIgnoreCase) ||
