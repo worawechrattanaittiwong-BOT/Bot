@@ -219,6 +219,10 @@ function UnifiedMobileNav({
           <span className="owner-mobile-utility-icon" aria-hidden="true">←</span>
         </button>
 
+        <Link href="/dashboard?view=overview" className="owner-mobile-topbar-brand" aria-label="SCENOVA">
+          <ScenovaBrand className="owner-mobile-topbar-logo"/>
+        </Link>
+
         <div className="owner-mobile-nav-right-actions">
           <button
             type="button"
