@@ -1533,7 +1533,11 @@ export default function DashboardPage() {
         sensitivity:"base"
       });
   });
-  const mt5ServerFilterKey = brokerServer.trim().toLowerCase();
+  const serverInputKey = brokerServer.trim().toLowerCase();
+  const serverCatalogHasExactMatch = sortedBrokerServers.some(
+    server => String(server.serverName || "").trim().toLowerCase() === serverInputKey
+  );
+  const mt5ServerFilterKey = serverMenuOpen && serverCatalogHasExactMatch ? "" : serverInputKey;
   const visibleBrokerServers = sortedBrokerServers.filter(server =>
     !mt5ServerFilterKey ||
     String(server.serverName || "").toLowerCase().includes(mt5ServerFilterKey) ||
@@ -1542,9 +1546,6 @@ export default function DashboardPage() {
   const realBrokerServers = visibleBrokerServers.filter(server => String(server.environment).toUpperCase() === "REAL");
   const demoBrokerServers = visibleBrokerServers.filter(server => String(server.environment).toUpperCase() === "DEMO");
   const otherBrokerServers = visibleBrokerServers.filter(server => !["REAL","DEMO"].includes(String(server.environment).toUpperCase()));
-  const serverCatalogHasExactMatch = sortedBrokerServers.some(
-    server => String(server.serverName || "").trim().toLowerCase() === mt5ServerFilterKey
-  );
   const hasLocalConnectionSlot = (data?.slots || []).some((slot:any) =>
     String(slot?.mode || "").toUpperCase() === "LOCAL" &&
     Boolean(slot?.can_control) &&
@@ -4776,6 +4777,8 @@ export default function DashboardPage() {
             setTradingPassword("");
             setCloudMt5DialogAccountId("");
             setCloudMt5DialogMode("NEW");
+            setServerMenuOpen(false);
+            setCloudMt5DialogError("");
           }}
         >
           <form className="cloud-mt5-dialog-card" onSubmit={submitCloudMt5Dialog}>
@@ -4850,7 +4853,7 @@ export default function DashboardPage() {
                 </label>
               )}
 
-              <label className="field cloud-mt5-server-field">
+              <div className="field cloud-mt5-server-field">
                 <span>MT5 Server</span>
                 {cloudMt5DialogMode === "RECONNECT" ? (
                   <input
@@ -4976,16 +4979,11 @@ export default function DashboardPage() {
                             ไม่พบในรายการ — กรอก Server เอง
                           </div>
                         )}
-                        {brokerServer.trim() && visibleBrokerServers.length === 0 && !serverCatalogHasExactMatch && (
-                          <div className="cloud-mt5-server-hint">
-                            ไม่พบในรายการ — กรอก Server เองได้จากช่องนี้
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
                 )}
-              </label>
+              </div>
 
               <label className="field cloud-mt5-password-field">
                 <span>MT5 Trading Password</span>
@@ -5008,7 +5006,7 @@ export default function DashboardPage() {
 
             {cloudMt5DialogError && (
               <div className="cloud-mt5-inline-error" role="alert">
-                <ScenovaIcon name="warning" size={18}/>
+                <ScenovaIcon name="info" size={18}/>
                 <span>{cloudMt5DialogError}</span>
               </div>
             )}
