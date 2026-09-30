@@ -565,7 +565,31 @@ internal sealed class Mt5Runtime
             return;
 
         if (!await EnsureBrokerPlatformAsync(job, cancellationToken))
+        {
+            var instancePathForError = GetInstancePath(job.InstanceId);
+            var rawPlatformError = ReadSmallText(
+                Path.Combine(instancePathForError, "broker-platform-error.txt"));
+            var lastTokenIndex = rawPlatformError.LastIndexOf(' ');
+            var platformError = lastTokenIndex >= 0
+                ? rawPlatformError.Substring(lastTokenIndex + 1)
+                : rawPlatformError;
+            var errorCode = NormalizeRuntimeError(
+                string.IsNullOrWhiteSpace(platformError)
+                    ? "BROKER_PLATFORM_FAILED"
+                    : platformError);
+
+            try
+            {
+                await client.PostAsync("provision-result", new
+                {
+                    instanceId = job.InstanceId,
+                    errorCode
+                }, cancellationToken);
+            }
+            catch { }
+
             return;
+        }
 
         var instancePath = GetInstancePath(job.InstanceId);
         var terminal = Path.Combine(instancePath, "terminal64.exe");
@@ -605,14 +629,14 @@ internal sealed class Mt5Runtime
                 errorCode = ""
             }, cancellationToken);
         }
-        catch
+        catch (Exception ex)
         {
             try
             {
                 await client.PostAsync("provision-result", new
                 {
                     instanceId = job.InstanceId,
-                    errorCode = "CHECK_TEMPLATE_OR_TERMINAL"
+                    errorCode = NormalizeRuntimeError(ex.Message)
                 }, cancellationToken);
             }
             catch { }
