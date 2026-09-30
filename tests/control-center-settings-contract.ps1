@@ -22,14 +22,14 @@ Need $page 'cc-v19-three-card-grid' 'Three-card Control Center grid missing'
 Need $page '<BotSettingsModal' 'Bot Settings workspace missing'
 Need $page 'embedded' 'Bot Settings must be embedded on the Control Center'
 Need $page 'cc-bot-v12-mode-select' 'Trading Mode dropdown missing'
-Need $page 'cc-race-recommended-option' 'RACE recommended option marker missing'
+Need $page 'cc-rated-mode-option' 'Rated mode option marker missing'
 Need $page 'cc-race-recommended-badge' 'RACE recommended badge missing'
-Need $css '.cc-bot-v12-mode-select.is-race-recommended' 'RACE selected-state recommendation styling missing'
+Need $css '.cc-bot-v12-mode-select.is-rated-mode' 'Rated selected-state styling missing'
 Need $css '.cc-race-recommended-badge' 'RACE recommendation badge styling missing'
-foreach($mode in @('<option value="AUTO">AUTO</option>','<option value="RACE" className="cc-race-recommended-option">★ RACE · แนะนำ</option>','<option value="FLIP_LOCK">FLIP LOCK</option>','<option value="MANUAL">MANUAL</option>')) {
+foreach($mode in @('<option value="AUTO">AUTO</option>','<option value="RACE" className="cc-rated-mode-option">★★★ RACE</option>','<option value="FLIP_LOCK" className="cc-rated-mode-option">★★ FLIP LOCK</option>','<option value="MANUAL">MANUAL</option>')) {
   Need $page $mode "Concise mode dropdown option missing: $mode"
 }
-Need $page '<option value="ZERO_GRID" disabled={zeroGridBlockedForSymbol}>' 'ZERO GRID dropdown option must remain available for supported symbols and disable on BTC/XBT'
+Need $page '<option value="ZERO_GRID" className="cc-rated-mode-option" disabled={zeroGridBlockedForSymbol}>★ ZERO GRID' 'ZERO GRID rated dropdown option must remain available for supported symbols and disable on BTC/XBT'
 Need $page 'Win Rate วันนี้' 'Daily Win Rate KPI missing'
 Need $page 'Drawdown วันนี้' 'Daily Drawdown KPI missing'
 Need $page 'PERFORMANCE BY MODE' 'Per-mode performance card missing'
