@@ -192,19 +192,19 @@ jobs:
 
   three-upgrade-regression:
     name: Three Upgrade Regression
-    needs: integration-smoke
+    needs: build
     uses: ./.github/workflows/three-upgrade-regression.yml
     secrets: inherit
 
   runtime-migration-phase3:
     name: Runtime Migration Phase 3
-    needs: three-upgrade-regression
+    needs: build
     uses: ./.github/workflows/runtime-migration-phase3.yml
     secrets: inherit
 
   production-hardening-phase4:
     name: Production Hardening Phase 4
-    needs: runtime-migration-phase3
+    needs: build
     uses: ./.github/workflows/production-hardening-phase4.yml
     secrets: inherit
 

@@ -394,9 +394,10 @@ export default function ReferralsPage() {
           : <CustomerMobileNav activeKey="referrals" partner={partnerSummary}/>}
 
         <header className={styles.header}>
-          <div className={styles.headerIcon}><ScenovaIcon name="users" size={24}/></div>
+          <div className={styles.headerIcon}><ScenovaIcon name="referral" size={24}/></div>
           <div className={styles.headerCopy}>
-            <h1>แนะนำเพื่อน & รับคอมมิชชั่น</h1>
+            <span className={styles.headerEyebrow}>INVITE &amp; EARN</span>
+            <h1>แนะนำเพื่อน &amp; รับคอมมิชชั่น</h1>
           </div>
           <div className={styles.headerActions}>
             <span className={styles.maxRate}>คอมมิชชั่นสูงสุดรวม {data.program.maximumNetworkRatePercent}%</span>
@@ -415,19 +416,23 @@ export default function ReferralsPage() {
 
         <section className={styles.inviteCard}>
           <div className={styles.inviteIntro}>
-            <span className={styles.eyebrow}>ลิงก์เชิญของคุณ</span>
-            <h2>เชิญเพื่อนเข้าร่วม SCENOVA</h2>
+            <span className={styles.inviteBadge}><ScenovaIcon name="referral" size={28}/></span>
+            <div>
+              <span className={styles.eyebrow}>เชิญเพื่อนมาร่วม SCENOVA</span>
+              <h2>แชร์ลิงก์ของคุณ</h2>
+              <p>รับคอมมิชชั่นตามระดับเครือข่ายเมื่อเพื่อนของคุณเริ่มใช้งาน</p>
+            </div>
           </div>
 
           <div className={styles.inviteActions}>
             <div className={styles.codeBox}>
-              <div><small>รหัสเชิญ</small><b>{data.user.referralCode}</b></div>
+              <div><small>รหัสเชิญของคุณ</small><b>{data.user.referralCode}</b></div>
               <button type="button" onClick={()=>copy(data.user.referralCode,"คัดลอกรหัสเชิญแล้ว")}>
                 <ScenovaIcon name="copy" size={16}/> คัดลอก
               </button>
             </div>
             <div className={styles.linkBox}>
-              <span>{inviteLink}</span>
+              <div><small>ลิงก์เชิญของคุณ</small><span>{inviteLink}</span></div>
               <button type="button" onClick={()=>copy(inviteLink,"คัดลอกลิงก์เชิญแล้ว")}>
                 <ScenovaIcon name="copy" size={16}/> คัดลอกลิงก์
               </button>
@@ -446,11 +451,19 @@ export default function ReferralsPage() {
 
           <div className={styles.levelGrid}>
             {data.network.byLevel.map(level => (
-              <article key={level.level} className={styles.levelCard}>
-                <span>ระดับ {level.level}</span>
-                <b>{level.ratePercent}%</b>
-                <small>{level.level === 1 ? "สมาชิกโดยตรง" : `สมาชิกระดับ ${level.level}`}</small>
-                <em>{level.count} สมาชิก</em>
+              <article key={level.level} className={styles.levelCard} data-level={level.level}>
+                <div className={styles.levelTop}>
+                  <span className={styles.levelNumber}>{level.level}</span>
+                  <div className={styles.levelCopy}>
+                    <small>ระดับ {level.level}</small>
+                    <b>{level.ratePercent}%</b>
+                  </div>
+                  <span className={styles.levelPeople}><ScenovaIcon name="users" size={22}/></span>
+                </div>
+                <div className={styles.levelBottom}>
+                  <span>{level.level === 1 ? "สมาชิกโดยตรง" : `สมาชิกระดับ ${level.level}`}</span>
+                  <strong>{level.count} สมาชิก</strong>
+                </div>
               </article>
             ))}
           </div>
@@ -458,24 +471,20 @@ export default function ReferralsPage() {
 
         <section className={styles.summaryGrid}>
           <article>
-            <span>เชิญโดยตรง</span>
-            <b>{data.network.directInvites}</b>
-            
+            <span className={styles.summaryIcon}><ScenovaIcon name="users" size={18}/></span>
+            <div><span>เชิญโดยตรง</span><b>{data.network.directInvites}</b></div>
           </article>
           <article>
-            <span>รอตรวจสอบ</span>
-            <b>{money(data.wallet.pendingSatang)}</b>
-            
+            <span className={styles.summaryIcon}><ScenovaIcon name="clock" size={18}/></span>
+            <div><span>รอตรวจสอบ</span><b>{money(data.wallet.pendingSatang)}</b></div>
           </article>
           <article>
-            <span>ถอนได้</span>
-            <b>{money(data.wallet.availableSatang)}</b>
-            
+            <span className={styles.summaryIcon}><ScenovaIcon name="coins" size={18}/></span>
+            <div><span>ถอนได้</span><b>{money(data.wallet.availableSatang)}</b></div>
           </article>
           <article>
-            <span>ถอนแล้ว</span>
-            <b>{money(data.wallet.paidSatang)}</b>
-            
+            <span className={styles.summaryIcon}><ScenovaIcon name="check" size={18}/></span>
+            <div><span>ถอนแล้ว</span><b>{money(data.wallet.paidSatang)}</b></div>
           </article>
         </section>
 
@@ -485,10 +494,15 @@ export default function ReferralsPage() {
               <span className={styles.eyebrow}>กระเป๋าคอมมิชชั่น</span>
               <h2>จัดการยอดคอมมิชชั่นและการถอนเงิน</h2>
             </div>
-            <span className={data.wallet.ledgerVerified ? styles.verified : styles.review}>
-              <ScenovaIcon name={data.wallet.ledgerVerified ? "check" : "info"} size={15}/>
-              {data.wallet.ledgerVerified ? "ตรวจสอบยอดแล้ว" : "พักการถอนเงิน"}
-            </span>
+            <div className={styles.walletHeadActions}>
+              <Link className={styles.walletDetailsLink} href="/referrals/details">
+                <ScenovaIcon name="report" size={15}/> ดูตารางยอดคอมมิชชั่น
+              </Link>
+              <span className={data.wallet.ledgerVerified ? styles.verified : styles.review}>
+                <ScenovaIcon name={data.wallet.ledgerVerified ? "check" : "info"} size={15}/>
+                {data.wallet.ledgerVerified ? "ตรวจสอบยอดแล้ว" : "พักการถอนเงิน"}
+              </span>
+            </div>
           </div>
 
           <div className={styles.walletBalances}>
@@ -702,6 +716,9 @@ export default function ReferralsPage() {
                       <div className={styles.amountInput}>
                         <input
                           name="scenova-withdrawal-amount-thb"
+                          type="number"
+                          min="0"
+                          step="0.01"
                           value={withdrawForm.amountThb}
                           onChange={event=>{
                             const cleaned=event.target.value.replace(/[^0-9.]/g,"");
@@ -716,6 +733,9 @@ export default function ReferralsPage() {
                           }}
                           inputMode="decimal"
                           autoComplete="off"
+                          aria-autocomplete="none"
+                          data-form-type="other"
+                          data-bwignore="true"
                           data-lpignore="true"
                           data-1p-ignore="true"
                           placeholder="1,000"
