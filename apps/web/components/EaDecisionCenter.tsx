@@ -102,7 +102,10 @@ export function EaDecisionCenter(props: Props) {
   const analyzing = online && running && !marketClosed;
   const execution = textValue(metrics.executionStatus).toUpperCase();
   const bias = textValue(metrics.entryBias).toUpperCase();
-  const autoActive = mode === "AUTO" && metrics.autoV20Active === true;
+  const autoActive = mode === "AUTO" && (
+    metrics.autoV20Active === true ||
+    textValue(metrics.autoV20Active).toLowerCase() === "true"
+  );
   const explicitlyWaiting = /WAIT|BLOCK|COOLDOWN|INITIALIZ|DATA_NOT_READY|NO_SIGNAL/.test(execution);
   const platformReady = liveStatus.tradeReady === true && metrics.tradeReady !== false;
   const signal = !connectionOnline ? "OFFLINE"
@@ -122,10 +125,43 @@ export function EaDecisionCenter(props: Props) {
     : signal === "MANUAL" ? "ใช้การควบคุมตามโหมด Manual"
     : signal === "BUY" || signal === "SELL" ? "ทิศทางที่ EA รายงานล่าสุด"
     : "EA กำลังติดตามจังหวะเข้า";
+  const autoPublishedConfidence = numberValue(metrics.autoV20Confidence);
+  const autoBuyConfidence = numberValue(metrics.autoV20BuyConfidence);
+  const autoSellConfidence = numberValue(metrics.autoV20SellConfidence);
+  const autoBuyScore = numberValue(metrics.autoV20BuyScore);
+  const autoSellScore = numberValue(metrics.autoV20SellScore);
+  const autoCandidateSide = autoActive
+    ? (autoBuyScore !== null && autoSellScore !== null && autoBuyScore !== autoSellScore
+        ? (autoBuyScore > autoSellScore ? "BUY" : "SELL")
+        : autoBuyConfidence !== null && autoSellConfidence !== null && autoBuyConfidence !== autoSellConfidence
+          ? (autoBuyConfidence > autoSellConfidence ? "BUY" : "SELL")
+          : "")
+    : "";
+  const autoCandidateConfidence = autoCandidateSide === "BUY"
+    ? autoBuyConfidence
+    : autoCandidateSide === "SELL"
+      ? autoSellConfidence
+      : autoBuyConfidence !== null || autoSellConfidence !== null
+        ? Math.max(autoBuyConfidence ?? 0, autoSellConfidence ?? 0)
+        : null;
+  const autoUsingCandidateConfidence =
+    autoActive &&
+    analyzing &&
+    (autoPublishedConfidence === null || autoPublishedConfidence <= 0) &&
+    autoCandidateConfidence !== null &&
+    autoCandidateConfidence > 0;
   const confidenceValue = analyzing
-    ? numberValue(autoActive ? metrics.autoV20Confidence : metrics.signalConfidence) : null;
+    ? (autoActive
+        ? (autoPublishedConfidence !== null && autoPublishedConfidence > 0
+            ? autoPublishedConfidence
+            : autoCandidateConfidence)
+        : numberValue(metrics.signalConfidence))
+    : null;
   const confidence = confidenceValue !== null && confidenceValue >= 0 && confidenceValue <= 100
     ? confidenceValue : null;
+  const confidenceDetail = autoUsingCandidateConfidence
+    ? "คะแนน " + (autoCandidateSide || "candidate") + " ที่ EA กำลังประเมิน"
+    : "คะแนนสัญญาณจาก EA";
   const receivedAt = timestamp(props.observedAt);
   const price = (value: unknown) => {
     const parsed = online ? numberValue(value) : null;
@@ -242,7 +278,7 @@ export function EaDecisionCenter(props: Props) {
         <p className={styles.signalDetail}>{signalDetail}</p>
         <div className={styles.confidence}>
           <strong>{confidence !== null ? confidence.toFixed(0) + "%" : "—"}</strong>
-          <div><b>CONFIDENCE</b><small>คะแนนสัญญาณจาก EA</small></div>
+          <div><b>CONFIDENCE</b><small>{confidenceDetail}</small></div>
         </div>
         <div className={styles.confidenceTrack} role={confidence !== null ? "meter" : undefined} aria-label="คะแนนสัญญาณ EA" aria-valuemin={confidence !== null ? 0 : undefined} aria-valuemax={confidence !== null ? 100 : undefined} aria-valuenow={confidence ?? undefined}>
           <span style={{ width: (confidence ?? 0) + "%" }}/>
