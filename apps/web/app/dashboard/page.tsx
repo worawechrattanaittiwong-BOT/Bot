@@ -980,21 +980,26 @@ export default function DashboardPage() {
     : null;
   const isMt5Online = Boolean(data?.instance?.mt5_online) && state !== "OFFLINE";
   const isCloudRuntime = String(data?.selectedSlot?.mode || "").toUpperCase() === "CLOUD";
-  const isCloudWorkerOnline = Boolean(data?.instance?.runner_online);
+  const selectedCloudSlot = isCloudRuntime
+    ? (data?.slots || []).find((slot:any)=>String(slot?.id || "") === String(data?.selectedSlot?.id || ""))
+    : null;
+  // Cloud customer-facing connection has one source of truth: the selected
+  // VPS slot runner status shown on the MT5 & EA page.
+  const isCloudWorkerOnline = Boolean(selectedCloudSlot?.runner_online);
   const eaLastSeenAgeSeconds = Number(data?.instance?.ea_last_seen_age_seconds ?? -1);
-  // Keep the 20s heartbeat strict for trading safety, but give customer-facing
-  // connection state a 60s grace window so one delayed relay/poll never looks
-  // like a real disconnect.
-  const isMt5ConnectionOnline = Boolean(
-    data?.instance?.mt5_connection_online ??
-    (eaLastSeenAgeSeconds >= 0 && eaLastSeenAgeSeconds <= 60)
-  );
+  // Local keeps the existing MT5/EA connection logic. Cloud deliberately
+  // ignores EA heartbeat/terminal freshness for the Connected/Offline badge.
+  const isMt5ConnectionOnline = isCloudRuntime
+    ? isCloudWorkerOnline
+    : Boolean(
+        data?.instance?.mt5_connection_online ??
+        (eaLastSeenAgeSeconds >= 0 && eaLastSeenAgeSeconds <= 60)
+      );
   const isMt5ConnectionDegraded = Boolean(
     data?.instance?.mt5_connection_degraded ??
     (!isMt5Online && isMt5ConnectionOnline)
   );
-  // Customer-facing connectivity follows the actual MT5 terminal state.
-  // EA heartbeat freshness remains a separate, strict trading-safety gate.
+  // Trading safety still uses the strict EA heartbeat separately.
   const isConnectionOnline = isMt5ConnectionOnline;
   const symbolDigits = Math.max(0, Math.min(8, Number(metrics.symbolDigits ?? 3)));
   const spreadPoints = Number(metrics.spreadPoints || 0);

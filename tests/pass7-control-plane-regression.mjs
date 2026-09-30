@@ -23,11 +23,17 @@ requireText(web, "const isHeartbeatDelayed =", "dashboard reconnecting state");
 requireText(web, '"MT5 Connected"', "dashboard keeps MT5 connected while EA heartbeat is delayed");
 rejectMatch(web, /isHeartbeatDelayed\s*\?\s*"Reconnecting"/, "EA heartbeat delay must not replace MT5 connection with Reconnecting");
 requireText(web, "const showLastKnownTelemetry = isMt5Online || isHeartbeatDelayed;", "last-known telemetry during reconnect");
-requireText(web, "const isMt5ConnectionOnline = Boolean(", "dashboard exposes MT5 connection grace state");
+requireText(web, "const selectedCloudSlot = isCloudRuntime", "dashboard resolves the selected Cloud slot");
+requireText(web, "const isCloudWorkerOnline = Boolean(selectedCloudSlot?.runner_online);", "Cloud connection mirrors the VPS slot runner status");
+requireMatch(
+  web,
+  /const isMt5ConnectionOnline = isCloudRuntime\s*\? isCloudWorkerOnline\s*:\s*Boolean\(/,
+  "Cloud connection uses only selected-slot runner liveness while Local keeps MT5 logic"
+);
 requireMatch(
   web,
   /const isConnectionOnline = isMt5ConnectionOnline;/,
-  "customer connection follows the actual MT5 terminal state instead of VPS liveness alone"
+  "customer connection uses the mode-specific canonical connection source"
 );
 requireText(web, 'VPS Server Online · MT5 Online', "customer label distinguishes healthy VPS and MT5");
 requireText(web, 'VPS Server Online · รอ MT5', "customer label distinguishes VPS-only from MT5 connected");
