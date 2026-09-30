@@ -49,7 +49,7 @@ Need $fastClose '? "ZERO_GRID_REARMING"' 'ZERO fast close must preserve normal R
 Need $fastClose ': "ZERO_GRID_STOPPED_FLAT";' 'ZERO fast close must release STOP/SAFE_STOP without blocking heartbeat'
 
 Need $flipManage 'bool canOpenNewCycle=' 'SaaS authorization must control only new FLIP risk'
-Need $flipManage 'the existing live leg keeps its broker Safety Stop.' 'live FLIP Safety Stop must remain broker-side through SaaS latency'
+Need $flipManage 'live leg keeps its broker Safety Stop.' 'live FLIP Safety Stop must remain broker-side through SaaS latency'
 Need $flipSync 'SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE)' 'FLIP pending baton must follow broker tick increments'
 Need $flipSync 'FLIP_LOCK_PENDING_SYNC_MIN_MS' 'FLIP pending-baton local cadence missing'
 
