@@ -6487,11 +6487,11 @@ function BotSettingsModal(props:any) {
               <div className="cc-bot-v12-mode-select-wrap">
                 <label>
                   <span><ScenovaIcon name="brain" size={17}/>โหมดการเทรด <small>Trading Mode</small></span>
-                  <select className={"input cc-bot-v12-mode-select "+(controlMode==="RACE"?"is-race-recommended":"")} value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)} style={{colorScheme:"dark"}}>
+                  <select className={"input cc-bot-v12-mode-select "+(["RACE","FLIP_LOCK","ZERO_GRID"].includes(controlMode)?"is-rated-mode":"")} value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)} style={{colorScheme:"dark"}}>
                     <option value="AUTO">AUTO</option>
-                    <option value="RACE" className="cc-race-recommended-option">★ RACE · แนะนำ</option>
-                    <option value="FLIP_LOCK">FLIP LOCK</option>
-                    <option value="ZERO_GRID" disabled={zeroGridBlockedForSymbol}>ZERO GRID{zeroGridBlockedForSymbol ? " · ไม่รองรับ BTC" : ""}</option>
+                    <option value="RACE" className="cc-rated-mode-option">★★★ RACE</option>
+                    <option value="FLIP_LOCK" className="cc-rated-mode-option">★★ FLIP LOCK</option>
+                    <option value="ZERO_GRID" className="cc-rated-mode-option" disabled={zeroGridBlockedForSymbol}>★ ZERO GRID{zeroGridBlockedForSymbol ? " · ไม่รองรับ BTC" : ""}</option>
                     <option value="MANUAL">MANUAL</option>
                   </select>
                 </label>
