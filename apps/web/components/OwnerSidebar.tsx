@@ -164,7 +164,7 @@ function UnifiedMobileNav({
 }:{
   activeKey:string;
   onNavigate?:SidebarNavigateHandler;
-  onLogout:()=>void;
+  onLogout?:()=>void;
   elevated:boolean;
   partner?:PartnerSummary;
 }) {
@@ -200,6 +200,11 @@ function UnifiedMobileNav({
 
   function reloadSystem() {
     window.location.reload();
+  }
+
+  function logoutSystem() {
+    localStorage.removeItem("bot_token");
+    window.location.href = "/login";
   }
 
   return (
@@ -295,7 +300,8 @@ function UnifiedMobileNav({
               className="owner-mobile-drawer-logout"
               onClick={()=>{
                 setOpen(false);
-                onLogout();
+                if (onLogout) onLogout();
+                else logoutSystem();
               }}
             >
               <ScenovaIcon name="logout" size={19}/>
@@ -363,7 +369,7 @@ export function OwnerMobileNav({
 }:{
   activeKey:string;
   onNavigate?:SidebarNavigateHandler;
-  onLogout:()=>void;
+  onLogout?:()=>void;
 }) {
   return <UnifiedMobileNav activeKey={activeKey} onNavigate={onNavigate} onLogout={onLogout} elevated/>;
 }
@@ -376,7 +382,7 @@ export function CustomerMobileNav({
 }:{
   activeKey:string;
   onNavigate?:SidebarNavigateHandler;
-  onLogout:()=>void;
+  onLogout?:()=>void;
   partner?:PartnerSummary;
 }) {
   return <UnifiedMobileNav activeKey={activeKey} onNavigate={onNavigate} onLogout={onLogout} elevated={false} partner={partner}/>;
