@@ -443,8 +443,9 @@ internal sealed partial class InstallerForm : Form
                 heartbeat = await TryHeartbeatAsync(profile, http);
             }
 
-            heartbeat ??= throw new InvalidOperationException(
-                "SCENOVA Server ยังไม่ตอบกลับ จึงยังยืนยันเวอร์ชันล่าสุดไม่ได้");
+            if (heartbeat is null)
+                throw new InvalidOperationException(
+                    "SCENOVA Server ยังไม่ตอบกลับ จึงยังยืนยันเวอร์ชันล่าสุดไม่ได้");
             EnsureAccountMatches(profile, heartbeat);
             var plan = SmartHealthEngine.BuildPlan(terminal, profile, heartbeat);
             var repairPreset = newInstall || plan.RepairPreset || !PresetMatches(profile, token);
