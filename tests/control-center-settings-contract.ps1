@@ -126,7 +126,7 @@ Need $css 'grid-template-columns:minmax(126px,.88fr) minmax(160px,1.12fr)!import
 Need $css '.cc-v19-settings-card .cc-bot-v2-lowvol-note{' 'ZERO GRID compact embedded treatment missing'
 
 Need $page 'alwaysShowInput' 'Always-visible optional setting controls missing'
-Need $page 'รูปแบบกำไร RACE' 'Aligned RACE Basket/per-position selector missing'
+Need $page 'รูปแบบกำไร</span>' 'Aligned Basket/per-position selector missing'
 Need $page 'cc-bot-v2-choice-inline' 'Aligned MANUAL profit selector missing'
 if($page.Contains('revealedOptional')) { throw 'Legacy global optional reveal state must stay removed' }
 Need $page 'cc-bot-manual-risk-add' 'MANUAL must provide a single optional-risk add control'

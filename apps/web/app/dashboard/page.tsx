@@ -6558,13 +6558,13 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>กำไร / Stop Loss</b></div></div>
                 {controlMode==="RACE" ? <div className="cc-bot-v2-fields exit-fields">
                   <div className="cc-bot-v2-field cc-bot-profit-kind-field">
-                    <span><ScenovaIcon name="profit" size={17}/>รูปแบบกำไร RACE</span>
+                    <span><ScenovaIcon name="profit" size={17}/>รูปแบบกำไร</span>
                     <div className="cc-bot-v2-choice-row cc-bot-v2-choice-inline">
                       <button type="button" className={raceProfitTargetMode==="BASKET"?"active":""} onClick={()=>{props.onEdit?.("raceProfitTargetMode","BASKET");props.onEdit?.("raceCloseAllProfitEnabled",true)}}><ScenovaIcon name="profit" size={16}/><span><b>ทั้งชุด</b></span></button>
                       <button type="button" className={raceProfitTargetMode==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("raceProfitTargetMode","POSITION");props.onEdit?.("raceCloseAllProfitEnabled",false)}}><ScenovaIcon name="orders" size={16}/><span><b>ต่อไม้</b></span></button>
                     </div>
                   </div>
-                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{raceProfitTargetMode==="POSITION"?"เป้ากำไร RACE ต่อไม้":"เป้ากำไร RACE ทั้งชุด"}</span><MoneyInput value={raceProfitTargetMode==="POSITION"?racePerPositionProfitMoney:raceCloseAllProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(raceProfitTargetMode==="POSITION"?"racePerPositionProfitMoney":"raceCloseAllProfitMoney",v)}/><small>ใช้เฉพาะ RACE · ถึงเป้าที่เลือกแล้วจึงปิดกำไร</small></label>
+                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{raceProfitTargetMode==="POSITION"?"เป้ากำไรต่อไม้":"เป้ากำไรทั้งชุด"}</span><MoneyInput value={raceProfitTargetMode==="POSITION"?racePerPositionProfitMoney:raceCloseAllProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(raceProfitTargetMode==="POSITION"?"racePerPositionProfitMoney":"raceCloseAllProfitMoney",v)}/><small>ใช้เฉพาะ RACE · ถึงเป้าที่เลือกแล้วจึงปิดกำไร</small></label>
                 </div> : controlMode==="AUTO" ? <div className="cc-bot-v2-fields exit-fields">
                   <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไร AUTO</span><MoneyInput value={props.settings.autoProfitTargetMoney || 0} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("autoProfitTargetMoney",v)}/><small>ใช้เฉพาะ AUTO · ถึงแล้วปิด Basket ทันที</small></label>
                   <div className="cc-bot-v2-engine-line"><ScenovaIcon name="target" size={16}/><b>Hard Profit Target</b><span>ถึงจำนวนเงินที่ตั้งไว้แล้วปิดทั้งชุดทันที ไม่รอ Reversal / Giveback / EMA</span></div>

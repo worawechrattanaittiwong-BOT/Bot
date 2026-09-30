@@ -6477,26 +6477,29 @@
   /* Spend the existing lower free space on the 3 risk rows.
      Keep the parent card height unchanged, but add real separation between 10/25/10. */
   .cc-v19-settings-card .cc-bot-v2-limit-grid{
-    row-gap:8px!important;
+    grid-auto-rows:52px!important;
+    gap:10px!important;
+    row-gap:10px!important;
   }
   .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-    height:60px!important;
-    min-height:60px!important;
-    max-height:60px!important;
-    padding:7px 2px!important;
+    block-size:52px!important;
+    height:52px!important;
+    min-height:52px!important;
+    max-height:52px!important;
+    padding:6px 2px!important;
   }
   .cc-v19-settings-card .cc-bot-v2-limit-grid .money-input-shell,
   .cc-v19-settings-card .cc-bot-v2-limit-grid .number-input-shell{
-    height:46px!important;
-    min-height:46px!important;
-    max-height:46px!important;
+    height:42px!important;
+    min-height:42px!important;
+    max-height:42px!important;
     margin:0!important;
   }
   .cc-v19-settings-card .cc-bot-v2-limit-grid .money-input-shell .input,
   .cc-v19-settings-card .cc-bot-v2-limit-grid .number-input-shell .input{
-    height:44px!important;
-    min-height:44px!important;
-    max-height:44px!important;
+    height:40px!important;
+    min-height:40px!important;
+    max-height:40px!important;
   }
 }
 /* ===== /Control Center V58 · Bot Settings visual polish only ===== */
