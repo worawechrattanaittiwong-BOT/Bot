@@ -211,7 +211,9 @@ export function EaDecisionCenter(props: Props) {
     { icon: "spread", title: "สภาพ Spread", detail: spreadKnown ? spread : "รอข้อมูล Spread จาก EA", badge: spreadStatus || "—", tone: spreadTone }
   ];
   const timeframes = ["M5", "M15", "M30", "H1"].map(label => {
-    const value = online ? numberValue(metrics["trend" + label]) : null;
+    const displayValue = online ? numberValue(metrics["displayTrend" + label]) : null;
+    const legacyValue = online ? numberValue(metrics["trend" + label]) : null;
+    const value = displayValue ?? legacyValue;
     const direction = value === null ? "—" : value > 0 ? "BUY" : value < 0 ? "SELL" : "NEUTRAL";
     const tone: Tone = direction === "BUY" ? "good" : direction === "SELL" ? "bad" : "muted";
     return { label, value, direction, tone };

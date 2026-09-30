@@ -6063,6 +6063,18 @@ void SendHeartbeat()
       );
       payload = StringSubstr(payload, 0, StringLen(payload) - 2) + burstDiagnostics;
 
+      int displayTrendM5=DisplayTimeframeTrend(PERIOD_M5,g_emaTrendM5,g_trendM5);
+      int displayTrendM15=DisplayTimeframeTrend(PERIOD_M15,g_emaTrendM15,g_trendM15);
+      int displayTrendM30=DisplayTimeframeTrend(PERIOD_M30,g_emaTrendM30,g_trendM30);
+      int displayTrendH1=DisplayTimeframeTrend(PERIOD_H1,g_emaTrendH1,g_trendH1);
+      string displayTrendDiagnostics=StringFormat(
+         ",\"displayTrendM5\":%d,\"displayTrendM15\":%d,\"displayTrendM30\":%d,\"displayTrendH1\":%d",
+         displayTrendM5,
+         displayTrendM15,
+         displayTrendM30,
+         displayTrendH1
+      );
+
       // Market-context telemetry makes every entry auditable on the web.
       string marketContextDiagnostics = StringFormat(
          ",\"trendM1\":%d,\"trendM30\":%d,\"effectiveConfidenceThreshold\":%.1f,\"confidenceGateEnabled\":%s,\"entryDecisionMode\":\"INDICATOR_INTELLIGENCE_V6\",\"entryTrigger\":\"%s\",\"newsTradingEnabled\":true,\"nearestSupport\":%s,\"nearestResistance\":%s,\"m5Support\":%s,\"m5Resistance\":%s,\"supportTimeframe\":\"%s\",\"resistanceTimeframe\":\"%s\",\"majorSupport\":%s,\"majorResistance\":%s,\"bullishOrderBlockLow\":%s,\"bullishOrderBlockHigh\":%s,\"bearishOrderBlockLow\":%s,\"bearishOrderBlockHigh\":%s,\"orderBlockTimeframe\":\"%s\",\"fibSwingLow\":%s,\"fibSwingHigh\":%s,\"fibDirection\":%d,\"fibRetracement\":%.4f,\"fibTimeframe\":\"%s\",\"fibM5Direction\":%d,\"fibM5Retracement\":%.4f,\"fibM5Strength\":%.1f,\"fibM15Direction\":%d,\"fibM15Retracement\":%.4f,\"fibM15Strength\":%.1f,\"fibConfluenceScore\":%.1f,\"structureScore\":%.1f,\"locationScore\":%.1f,\"entryScore\":%.1f,\"entryModel\":\"%s\",\"fiboVisible\":%s",
@@ -6310,7 +6322,7 @@ void SendHeartbeat()
       );
 
       string positionDiagnostics =
-         marketContextDiagnostics + intelligenceV3Diagnostics + probabilityDiagnostics +
+         displayTrendDiagnostics + marketContextDiagnostics + intelligenceV3Diagnostics + probabilityDiagnostics +
          intelligenceV4Diagnostics + smartProfitDiagnostics + marketCycleV2Diagnostics +
          indicatorV6Diagnostics +
          StringFormat(
@@ -7904,6 +7916,75 @@ int TimeframeTrend(ENUM_TIMEFRAMES timeframe)
    double neutralBand = MathMax(_Point * 2.0, AverageTrueRangePoints(timeframe, g_atrPeriod) * _Point * 0.03);
    if(fast > slow + neutralBand) return 1;
    if(fast < slow - neutralBand) return -1;
+   return 0;
+}
+
+int DisplayTimeframeTrend(
+   ENUM_TIMEFRAMES timeframe,
+   int emaDirection,
+   int legacyDirection
+)
+{
+   // UI-only trend view. This deliberately does NOT feed AUTO/RACE decisions.
+   // It reacts faster than the legacy 12/26 closed-bar average by combining
+   // live price action, recent market structure and the existing EMA stack.
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   if(CopyRates(_Symbol,timeframe,0,7,rates)<7)
+      return emaDirection!=0 ? emaDirection : legacyDirection;
+
+   double atrPrice=MathMax(
+      _Point*4.0,
+      AverageTrueRangePoints(timeframe,g_atrPeriod)*_Point
+   );
+   int score=0;
+
+   // EMA stack is useful context, but it cannot overrule fresh structure alone.
+   if(emaDirection>0) score+=2;
+   else if(emaDirection<0) score-=2;
+
+   // Compare the two most recent completed candles with the two before them.
+   double recentHigh=MathMax(rates[1].high,rates[2].high);
+   double recentLow=MathMin(rates[1].low,rates[2].low);
+   double priorHigh=MathMax(rates[3].high,rates[4].high);
+   double priorLow=MathMin(rates[3].low,rates[4].low);
+
+   bool higherHigh=recentHigh>priorHigh+atrPrice*0.03;
+   bool higherLow=recentLow>priorLow+atrPrice*0.03;
+   bool lowerHigh=recentHigh<priorHigh-atrPrice*0.03;
+   bool lowerLow=recentLow<priorLow-atrPrice*0.03;
+
+   if(higherHigh && higherLow) score+=3;
+   else
+   {
+      if(higherHigh) score++;
+      if(higherLow) score++;
+   }
+
+   if(lowerHigh && lowerLow) score-=3;
+   else
+   {
+      if(lowerHigh) score--;
+      if(lowerLow) score--;
+   }
+
+   // Recent closes include the forming candle, so the display can reflect a
+   // real-time turn instead of waiting for the whole timeframe to close.
+   double recentCloseAvg=(rates[0].close+rates[1].close+rates[2].close)/3.0;
+   double priorCloseAvg=(rates[3].close+rates[4].close+rates[5].close)/3.0;
+   if(recentCloseAvg>priorCloseAvg+atrPrice*0.05) score+=2;
+   else if(recentCloseAvg<priorCloseAvg-atrPrice*0.05) score-=2;
+
+   double liveBody=rates[0].close-rates[0].open;
+   if(liveBody>atrPrice*0.08) score++;
+   else if(liveBody<-atrPrice*0.08) score--;
+
+   // Legacy trend is only a light tie-breaker for the UI.
+   if(legacyDirection>0) score++;
+   else if(legacyDirection<0) score--;
+
+   if(score>=2) return 1;
+   if(score<=-2) return -1;
    return 0;
 }
 
