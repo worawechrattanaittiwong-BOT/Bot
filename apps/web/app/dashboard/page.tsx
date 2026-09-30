@@ -1088,7 +1088,7 @@ export default function DashboardPage() {
         ...serverLiveStatus,
         code: "EA_HEARTBEAT_DELAYED",
         label: "EA Heartbeat ขาดช่วง",
-        detail: "Windows Agent ยังเชื่อมอยู่ · Heartbeat ล่าสุด " + connectionAgeLabel,
+        detail: "MT5 ยังเชื่อมต่ออยู่ · EA Heartbeat ล่าสุด " + connectionAgeLabel,
         tone: "warn"
       }
     : serverLiveStatus;
@@ -1183,7 +1183,7 @@ export default function DashboardPage() {
       operationTerminal?.kind === "STOP" &&
       operationTerminal?.status === "RUNNING"
     );
-  const statusNoticeCount = Number(marketSessionClosed || !isMt5Online) + Number(softwareUpdateRequired) + Number(cloudUpdateVisible);
+  const statusNoticeCount = Number(marketSessionClosed || !isMt5ConnectionOnline || isHeartbeatDelayed) + Number(softwareUpdateRequired) + Number(cloudUpdateVisible);
 
   const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };
   const maintenanceBlocksStart = Boolean(maintenance.blockStarts);
@@ -1795,7 +1795,7 @@ export default function DashboardPage() {
       ? "ตลาดปิด — MT5/EA ยังเชื่อมต่อ · รอ Session เปิด"
       : !isMt5Online
         ? (isHeartbeatDelayed
-            ? "EA Heartbeat ขาดช่วง — Windows Agent ยังออนไลน์และกำลังเชื่อมต่อใหม่"
+            ? "MT5 เชื่อมต่ออยู่ · EA Heartbeat ขาดช่วง — รอข้อมูลรอบถัดไป"
             : isAgentOnline
               ? "Windows Agent ออนไลน์ แต่ EA ไม่ตอบสนองเกินช่วงรอ — ตรวจ MT5/EA"
               : "รอ MT5 เชื่อมต่อ")
@@ -4067,9 +4067,9 @@ export default function DashboardPage() {
                   <div className="cc-alert-icon"><ScenovaIcon name="info" size={20}/></div>
                   <div className="cc-alert-copy">
                     <b>{isHeartbeatDelayed ? "EA Heartbeat ขาดช่วง" : isAgentOnline ? "EA ยังไม่ตอบสนอง" : "ยังไม่ได้เชื่อมต่อ MT5"}</b>
-                    <span>{isHeartbeatDelayed ? "Windows Agent ยังเชื่อมอยู่ · กำลังรอ Heartbeat ถัดไป (ล่าสุด "+connectionAgeLabel+")" : isAgentOnline ? "Windows Agent ยังเชื่อมอยู่ แต่ EA ไม่ส่ง Heartbeat เกิน 60 วินาที · ตรวจ MT5/EA" : data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span>
+                    <span>{isHeartbeatDelayed ? "MT5 ยังเชื่อมต่ออยู่ · กำลังรอ EA Heartbeat ถัดไป (ล่าสุด "+connectionAgeLabel+")" : isAgentOnline ? "Windows Agent ยังเชื่อมอยู่ แต่ EA ไม่ส่ง Heartbeat เกิน 60 วินาที · ตรวจ MT5/EA" : data.account.mode === "LOCAL" ? "เปิด MetaTrader 5 เพื่อเชื่อมต่อ" : "กำลังรอการเชื่อมต่อ"}</span>
                   </div>
-                  <button type="button" className="btn cc-alert-action" onClick={()=>{statusDialogRef.current?.close();setActiveView("account");}}>{isAgentOnline ? "ตรวจการเชื่อมต่อ →" : "ไปหน้าการเชื่อมต่อ →"}</button>
+                  <button type="button" className="btn cc-alert-action" onClick={()=>{statusDialogRef.current?.close();setActiveView("account");}}>{isMt5ConnectionOnline || isAgentOnline ? "ดู MT5 & EA →" : "ไปหน้าการเชื่อมต่อ →"}</button>
                 </div>
               )}
                 {!marketSessionClosed && isMt5Online && (
@@ -4163,8 +4163,8 @@ export default function DashboardPage() {
                 >
                   <i/>
                   <span className="cc-status-trigger-copy">
-                    <b>{safeStopInProgress ? "กำลังหยุดบอท" : isHeartbeatDelayed ? "Reconnecting" : !isMt5Online ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
-                    <small>{safeStopInProgress ? safeStopStatusDetail : "สถานะและอัปเดต"}</small>
+                    <b>{safeStopInProgress ? "กำลังหยุดบอท" : !isMt5ConnectionOnline ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : isHeartbeatDelayed ? "MT5 Connected" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
+                    <small>{safeStopInProgress ? safeStopStatusDetail : isHeartbeatDelayed ? "EA Heartbeat ขาดช่วง · MT5 ยังออนไลน์" : "สถานะและอัปเดต"}</small>
                   </span>
                   <span className="cc-status-trigger-bell"><ScenovaIcon name="bell" size={16}/>{statusNoticeCount > 0 && <em>{statusNoticeCount}</em>}</span>
                 </button>
@@ -4321,7 +4321,7 @@ export default function DashboardPage() {
                         <span><ScenovaIcon name="status" size={16}/></span>
                         <div><b>System Pulse</b><small>สถานะระบบแบบย่อ</small></div>
                       </div>
-                      <em className={isMt5Online&&isAgentOnline?"good":"warn"}>{isMt5Online&&isAgentOnline?"All Online":isHeartbeatDelayed?"Reconnecting":"Check"}</em>
+                      <em className={isMt5ConnectionOnline?(isMt5Online&&isAgentOnline?"good":"warn"):"warn"}>{isMt5ConnectionOnline?(isMt5Online?"All Online":"MT5 Online"):"Check"}</em>
                     </div>
                     <div className="cc-v46-performance-system-grid">
                       <div>
@@ -4464,7 +4464,7 @@ export default function DashboardPage() {
                     <em>Live status</em>
                   </div>
                   <div className="cc-v42-news-status">
-                    <span className={marketSessionClosed?"warn":isMt5Online?"good":isHeartbeatDelayed?"warn":"neutral"}>{marketSessionClosed?"Market Closed":isMt5Online?"Market Online":isHeartbeatDelayed?"Reconnecting":"Waiting MT5"}</span>
+                    <span className={marketSessionClosed?"warn":isMt5Online?"good":isMt5ConnectionOnline?"warn":"neutral"}>{marketSessionClosed?"Market Closed":isMt5Online?"Market Online":isMt5ConnectionOnline?"MT5 Connected":"Waiting MT5"}</span>
                     <b>{marketTradeLabel}</b>
                   </div>
                   <div className="cc-v42-news-list">
@@ -5342,7 +5342,7 @@ export default function DashboardPage() {
               </div>
 
               <div className="cc-terminal-drawer-stats">
-                <TerminalStat label="CONNECTION" value={connectionLabel} tone={isMt5Online ? "good" : isHeartbeatDelayed ? "warn" : "bad"} />
+                <TerminalStat label="CONNECTION" value={connectionLabel} tone={isMt5ConnectionOnline ? "good" : "bad"} />
                 <TerminalStat label="ACTUAL" value={String(botLogs?.snapshot?.actual_state || state)} tone={state==="RUNNING" ? "good" : "neutral"} />
                 <TerminalStat label="DESIRED" value={String(botLogs?.snapshot?.desired_state || desired)} tone={desired==="RUNNING" ? "good" : "neutral"} />
                 <TerminalStat label="SPREAD" value={spreadValueLabel} />

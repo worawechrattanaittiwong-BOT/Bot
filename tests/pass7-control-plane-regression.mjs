@@ -20,7 +20,8 @@ function rejectMatch(text, pattern, label) {
 
 // Pass 2: UI may soften the display state, but backend safety freshness remains strict.
 requireText(web, "const isHeartbeatDelayed =", "dashboard reconnecting state");
-requireText(web, '"Reconnecting"', "dashboard reconnecting label");
+requireText(web, '"MT5 Connected"', "dashboard keeps MT5 connected while EA heartbeat is delayed");
+rejectMatch(web, /isHeartbeatDelayed\s*\?\s*"Reconnecting"/, "EA heartbeat delay must not replace MT5 connection with Reconnecting");
 requireText(web, "const showLastKnownTelemetry = isMt5Online || isHeartbeatDelayed;", "last-known telemetry during reconnect");
 requireText(web, "const isMt5ConnectionOnline = Boolean(", "dashboard exposes MT5 connection grace state");
 requireMatch(
