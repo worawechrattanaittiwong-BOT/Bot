@@ -6390,3 +6390,50 @@
     max-height:390px!important;
   }
 }
+
+
+/* ===== Control Center V57 · relaxed mobile Bot Settings spacing ===== */
+/* Mobile only: give each settings row more vertical breathing room. */
+@media(max-width:760px){
+  .cc-v19-settings-card .cc-bot-v2-embedded{
+    --settings-row:50px;
+    --settings-control-h:36px;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
+    padding:8px 10px 16px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
+    min-height:54px!important;
+    padding-top:6px!important;
+    padding-bottom:6px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-field,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div,
+  .cc-v19-settings-card .cc-bot-manual-risk-add{
+    min-height:50px!important;
+    padding-top:6px!important;
+    padding-bottom:6px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+    min-height:52px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-field>select.input,
+  .cc-v19-settings-card .cc-bot-v17-add-setting>select.input,
+  .cc-v19-settings-card .cc-bot-v2-control-stack>select.input,
+  .cc-v19-settings-card .money-input-shell,
+  .cc-v19-settings-card .number-input-shell{
+    height:36px!important;
+    min-height:36px!important;
+    max-height:36px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-choice-row button{
+    height:36px!important;
+    min-height:36px!important;
+  }
+}
