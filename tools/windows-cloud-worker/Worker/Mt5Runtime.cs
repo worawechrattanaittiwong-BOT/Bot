@@ -41,6 +41,8 @@ internal sealed class Mt5Runtime
         new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _autoLaunchAttempted =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _provisioningHealthyReported =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _maximizedProcessByInstance =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -208,6 +210,59 @@ internal sealed class Mt5Runtime
             if (value.Length > 240)
                 value = value.Substring(value.Length - 240);
             return value;
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static string DetectMt5ConnectionFailure(string instancePath)
+    {
+        try
+        {
+            var directory = Path.Combine(instancePath, "logs");
+            if (!Directory.Exists(directory)) return "";
+
+            var file = Directory.EnumerateFiles(directory, "*.log", SearchOption.TopDirectoryOnly)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+            if (file is null) return "";
+
+            var updatedAt = File.GetLastWriteTimeUtc(file);
+            if (DateTime.UtcNow - updatedAt > TimeSpan.FromMinutes(2))
+                return "";
+
+            var recent = string.Join(
+                "\n",
+                File.ReadLines(file)
+                    .TakeLast(240))
+                .ToLowerInvariant();
+
+            if (
+                recent.Contains("authorization failed") ||
+                recent.Contains("invalid account") ||
+                recent.Contains("invalid login") ||
+                recent.Contains("invalid password")
+            )
+                return "MT5_AUTH_FAILED";
+
+            if (
+                recent.Contains("account disabled") ||
+                recent.Contains("account is disabled") ||
+                recent.Contains("blocked account")
+            )
+                return "MT5_ACCOUNT_DISABLED";
+
+            if (
+                recent.Contains("server not found") ||
+                recent.Contains("unknown server") ||
+                recent.Contains("invalid server") ||
+                recent.Contains("server is unavailable")
+            )
+                return "MT5_SERVER_NOT_FOUND";
+
+            return "";
         }
         catch
         {
@@ -602,6 +657,39 @@ internal sealed class Mt5Runtime
             ShouldAutoLaunch(job.InstanceId, terminalRunning: true);
             TryApplyChartLayout(job, terminal);
 
+            if (job.EaOnline)
+            {
+                if (_provisioningHealthyReported.Add(job.InstanceId))
+                {
+                    try
+                    {
+                        await client.PostAsync("provision-result", new
+                        {
+                            instanceId = job.InstanceId,
+                            errorCode = ""
+                        }, cancellationToken);
+                    }
+                    catch { }
+                }
+            }
+            else
+            {
+                _provisioningHealthyReported.Remove(job.InstanceId);
+                var detectedConnectionFailure = DetectMt5ConnectionFailure(instancePath);
+                if (!string.IsNullOrWhiteSpace(detectedConnectionFailure))
+                {
+                    try
+                    {
+                        await client.PostAsync("provision-result", new
+                        {
+                            instanceId = job.InstanceId,
+                            errorCode = detectedConnectionFailure
+                        }, cancellationToken);
+                    }
+                    catch { }
+                }
+            }
+
             var startup = Path.Combine(instancePath, "cloud-start.ini");
             if (job.EaOnline &&
                 File.Exists(startup) &&
@@ -674,6 +762,7 @@ internal sealed class Mt5Runtime
             StopInstance(job.InstanceId);
 
             _autoLaunchAttempted.Remove(job.InstanceId);
+            _provisioningHealthyReported.Remove(job.InstanceId);
             _maximizedProcessByInstance.Remove(job.InstanceId);
             return true;
         }
