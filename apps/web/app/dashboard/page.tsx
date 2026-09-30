@@ -1185,7 +1185,7 @@ export default function DashboardPage() {
     Boolean(operationTerminal) &&
     !(
       serverOperationMinimized &&
-      operationTerminal?.kind === "STOP" &&
+      ["STOP","MIGRATION"].includes(String(operationTerminal?.kind || "")) &&
       operationTerminal?.status === "RUNNING"
     );
   const statusNoticeCount = Number(marketSessionClosed || !isMt5ConnectionOnline || isHeartbeatDelayed) + Number(softwareUpdateRequired) + Number(cloudUpdateVisible);
@@ -3883,12 +3883,12 @@ export default function DashboardPage() {
                     <h3 id="cc-server-operation-title">{operationTerminal.title}</h3>
                   </div>
                 </div>
-                {(operationTerminal.status === "FAILED" || operationTerminal.canClose || (operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING")) && (
+                {(operationTerminal.status === "FAILED" || operationTerminal.canClose || (["STOP","MIGRATION"].includes(String(operationTerminal.kind || "")) && operationTerminal.status === "RUNNING")) && (
                   <button
                     type="button"
-                    aria-label={operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING" ? "ย่อสถานะ Safe Stop" : "ปิด"}
+                    aria-label={operationTerminal.status === "RUNNING" && ["STOP","MIGRATION"].includes(String(operationTerminal.kind || "")) ? (operationTerminal.kind === "MIGRATION" ? "ย่อสถานะการย้ายระบบ MT5" : "ย่อสถานะ Safe Stop") : "ปิด"}
                     onClick={()=>{
-                      if (operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING") {
+                      if (operationTerminal.status === "RUNNING" && ["STOP","MIGRATION"].includes(String(operationTerminal.kind || ""))) {
                         setServerOperationMinimized(true);
                       } else if (operationTerminal.kind === "CLOUD_UPDATE") {
                         setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey));
@@ -3940,16 +3940,18 @@ export default function DashboardPage() {
                   : operationTerminal.status === "RUNNING"
                     ? operationTerminal.kind === "STOP"
                       ? "Safe Stop ยังทำงานต่อแม้ย่อหน้าต่าง · กดการ์ดสถานะด้านบนเพื่อเปิดกลับ"
-                      : "กำลังติดตามสถานะจาก Server อัตโนมัติทุก 1.5 วินาที"
+                      : operationTerminal.kind === "MIGRATION"
+                        ? "การย้ายระบบยังทำงานต่อแม้ย่อหน้าต่าง · กดการ์ดสถานะด้านบนเพื่อเปิดกลับ"
+                        : "กำลังติดตามสถานะจาก Server อัตโนมัติทุก 1.5 วินาที"
                     : operationTerminal.status === "SUCCESS"
                       ? "สำเร็จ · หน้าต่างจะปิดอัตโนมัติ"
                       : "ไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"}</span>
-                {(operationTerminal.status === "FAILED" || operationTerminal.canClose || (operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING")) && (
+                {(operationTerminal.status === "FAILED" || operationTerminal.canClose || (["STOP","MIGRATION"].includes(String(operationTerminal.kind || "")) && operationTerminal.status === "RUNNING")) && (
                   <button
                     type="button"
                     className="btn"
                     onClick={()=>{
-                      if (operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING") {
+                      if (operationTerminal.status === "RUNNING" && ["STOP","MIGRATION"].includes(String(operationTerminal.kind || ""))) {
                         setServerOperationMinimized(true);
                       } else if (operationTerminal.kind === "CLOUD_UPDATE") {
                         setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey));
@@ -3959,7 +3961,7 @@ export default function DashboardPage() {
                         setServerOperation(null);
                       }
                     }}
-                  >{operationTerminal.kind === "STOP" && operationTerminal.status === "RUNNING" ? "ย่อไว้" : "ปิด"}</button>
+                  >{operationTerminal.status === "RUNNING" && ["STOP","MIGRATION"].includes(String(operationTerminal.kind || "")) ? "ย่อไว้" : "ปิด"}</button>
                 )}
               </footer>
             </section>
@@ -4156,10 +4158,10 @@ export default function DashboardPage() {
                   type="button"
                   className={"cc-v47-live-state cc-status-trigger "+(safeStopInProgress || statusNoticeCount > 0 ? "waiting" : state === "RUNNING" ? "running" : "idle")}
                   aria-haspopup="dialog"
-                  aria-controls={safeStopInProgress && safeStopOperationRunning ? "cc-server-operation-dialog" : "cc-system-status"}
-                  aria-label={safeStopInProgress ? "เปิดสถานะ Safe Stop" : "เปิดสถานะระบบ"+(statusNoticeCount ? " · "+statusNoticeCount+" รายการแจ้งเตือน" : "")}
+                  aria-controls={(safeStopInProgress && safeStopOperationRunning) || (migrationOperation?.status === "RUNNING") ? "cc-server-operation-dialog" : "cc-system-status"}
+                  aria-label={migrationOperation?.status === "RUNNING" ? "เปิดสถานะการย้ายระบบ MT5" : safeStopInProgress ? "เปิดสถานะ Safe Stop" : "เปิดสถานะระบบ"+(statusNoticeCount ? " · "+statusNoticeCount+" รายการแจ้งเตือน" : "")}
                   onClick={()=>{
-                    if (safeStopInProgress && safeStopOperationRunning) {
+                    if ((safeStopInProgress && safeStopOperationRunning) || migrationOperation?.status === "RUNNING") {
                       setServerOperationMinimized(false);
                     } else {
                       statusDialogRef.current?.showModal();
