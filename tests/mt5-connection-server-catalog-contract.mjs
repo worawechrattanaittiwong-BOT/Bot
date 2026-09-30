@@ -8,6 +8,7 @@ const ea = read("apps/api/src/ea.controller.ts");
 const seed = read("database/057_broker_server_catalog_verified.sql");
 const deploy = read("scripts/deploy-hostinger.sh");
 const worker = read("tools/windows-cloud-worker/Worker/Mt5Runtime.cs");
+const workerController = read("apps/api/src/worker.controller.ts");
 
 assert.match(
   catalog,
@@ -115,6 +116,16 @@ assert.match(
   worker,
   /errorCode = NormalizeRuntimeError\(ex\.Message\)/,
   "Cloud Worker must return precise MT5 provisioning errors"
+);
+assert.match(
+  worker,
+  /MT5_AUTH_FAILED[\s\S]*MT5_ACCOUNT_DISABLED[\s\S]*MT5_SERVER_NOT_FOUND/,
+  "Cloud Worker must detect common MT5 authentication/server failures"
+);
+assert.match(
+  workerController,
+  /\^\[A-Z0-9_\]\{0,96\}\$/,
+  "worker API must accept normalized bounded provisioning error codes"
 );
 
 console.log("MT5 connection persistence and broker server catalog contract PASS");
