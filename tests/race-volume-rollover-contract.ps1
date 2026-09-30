@@ -95,7 +95,7 @@ Need $raceAtr 'AverageTrueRangePoints(PERIOD_M5, g_atrPeriod)' 'RACE v1.0.100 st
 Need $raceStop 'RaceV2StructureInvalidPrice(direction)' 'RACE stop must use nearby structure to tighten placement'
 Need $raceStop 'double minDistancePoints' 'RACE stop must keep a minimum anti-noise distance'
 Need $raceStop 'structureDistancePoints < selectedDistancePoints' 'RACE structure may tighten but never widen the configured stop'
-Need $raceStop 'MathMax(minDistancePoints,' 'RACE structure tightening must respect the minimum stop floor'
+Need $raceStop 'selectedDistancePoints = MathMax(' 'RACE structure tightening must clamp through the minimum stop floor'
 Need $fill 'RaceV1UpdateExposureTelemetry(direction,g_adaptiveLot)' 'RACE must recalculate projected exposure before every fill'
 Need $manage 'RaceV1UpdateExposureTelemetry(direction,0.0)' 'RACE must refresh live Basket exposure before loss classification'
 Need $ea '#include "include\\RaceExposureV1.mqh"' 'RACE Exposure V1 module missing'
