@@ -494,7 +494,7 @@ export class BotController {
          (bi.last_seen_at IS NOT NULL
            AND bi.last_seen_at <= now() - interval '20 seconds'
            AND bi.last_seen_at > now() - interval '60 seconds') mt5_connection_degraded,
-         (wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now() - interval '30 seconds') runner_online,
+         (wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now() - interval '120 seconds') runner_online,
          bi.device_status,
          bi.device_hostname,
          bi.device_last_seen_at,
@@ -855,7 +855,7 @@ export class BotController {
          (bi.last_seen_at IS NOT NULL
            AND bi.last_seen_at <= now() - interval '20 seconds'
            AND bi.last_seen_at > now() - interval '60 seconds') AS mt5_connection_degraded,
-         (wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now() - interval '30 seconds') AS runner_online,
+         (wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now() - interval '120 seconds') AS runner_online,
          (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '30 minutes') AS agent_online,
          (bi.device_last_seen_at IS NOT NULL AND bi.device_last_seen_at > now() - interval '90 seconds') AS device_online,
          CASE WHEN bi.last_seen_at IS NULL THEN NULL ELSE EXTRACT(EPOCH FROM (now() - bi.last_seen_at)) END AS ea_last_seen_age_seconds,

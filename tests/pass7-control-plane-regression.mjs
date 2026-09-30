@@ -46,7 +46,7 @@ requireText(bot, "wn.last_seen_at > now() - interval '90 seconds'", "Cloud termi
 requireText(bot, "AS mt5_connection_online", "dashboard exposes MT5 terminal connection state");
 requireText(bot, "AS mt5_connection_degraded", "dashboard exposes degraded heartbeat state");
 requireText(bot, "AS runner_online", "dashboard exposes VPS Server online state");
-requireText(bot, "interval '30 seconds') runner_online", "slot list uses canonical Cloud Server health window");
+requireText(bot, "interval '120 seconds') runner_online", "slot list uses resilient Cloud Server health window");
 
 // Pass 3: SSE receives its own long-lived, unbuffered proxy while EA heartbeat keeps short timeouts.
 requireMatch(
