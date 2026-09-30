@@ -12,6 +12,9 @@ COPY apps/web/package.json apps/web/package.json
 RUN npm install
 COPY apps/web apps/web
 RUN npm run build -w @bot/web
+# Prune the exact dependency graph that produced .next, then reuse it at runtime.
+# This prevents build/start from resolving or caching different Next/React versions.
+RUN npm prune --omit=dev
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
@@ -20,7 +23,7 @@ ENV API_INTERNAL_URL=http://api:4000
 COPY package.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
-RUN npm install --omit=dev
+COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/apps/web/.next apps/web/.next
 COPY --from=build /app/apps/web/public apps/web/public
 COPY --from=build /app/apps/web/package.json apps/web/package.json
