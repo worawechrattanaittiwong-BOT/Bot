@@ -9903,102 +9903,237 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 }
 
 
-/* ===== VPS MT5 connection dialog · unified server picker ===== */
+/* ===== VPS MT5 connection dialog · compact high-contrast ===== */
 .cloud-mt5-dialog{
-  width:min(860px,calc(100vw - 36px))!important;
+  width:min(760px,calc(100vw - 28px))!important;
+  max-height:calc(100dvh - 24px)!important;
+  overflow:visible!important;
+  border:1px solid rgba(103,124,164,.46)!important;
+  border-radius:20px!important;
+  background:
+    linear-gradient(180deg,#0c111b 0%,#080d16 100%)!important;
+  color:#f4f7fb!important;
+  box-shadow:
+    0 28px 82px rgba(0,0,0,.68),
+    0 0 0 1px rgba(255,255,255,.025),
+    0 0 34px rgba(40,105,220,.08)!important;
+}
+
+.cloud-mt5-dialog::backdrop{
+  background:rgba(2,5,10,.82)!important;
+  backdrop-filter:blur(10px)!important;
+  -webkit-backdrop-filter:blur(10px)!important;
 }
 
 .cloud-mt5-dialog-card{
-  padding:30px 32px 28px!important;
+  padding:22px 24px 20px!important;
 }
 
 .cloud-mt5-dialog-head{
-  padding-bottom:22px!important;
+  align-items:center!important;
+  padding-bottom:15px!important;
+  border-bottom:1px solid rgba(112,130,164,.18)!important;
+}
+
+.cloud-mt5-dialog-title{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.cloud-mt5-dialog-icon{
+  width:46px!important;
+  height:46px!important;
+  flex:0 0 46px!important;
+  display:grid!important;
+  place-items:center!important;
+  border:1px solid rgba(91,133,211,.5)!important;
+  border-radius:14px!important;
+  background:linear-gradient(145deg,#111b2e,#0d1423)!important;
+  color:#9fc4ff!important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 8px 22px rgba(18,72,170,.11)!important;
+}
+
+.cloud-mt5-dialog-head .eyebrow{
+  color:#7ee0bd!important;
+  font-size:11px!important;
+  font-weight:900!important;
+  letter-spacing:.16em!important;
+}
+
+.cloud-mt5-dialog-head h2{
+  margin:3px 0 0!important;
+  color:#f8fafc!important;
+  font-size:22px!important;
+  line-height:1.12!important;
+  font-weight:950!important;
+  letter-spacing:-.02em!important;
+}
+
+.cloud-mt5-dialog-close{
+  width:38px!important;
+  height:38px!important;
+  flex:0 0 38px!important;
+  display:grid!important;
+  place-items:center!important;
+  border:1px solid rgba(91,108,139,.42)!important;
+  border-radius:11px!important;
+  background:#0a101b!important;
+  color:#aeb8ca!important;
+  cursor:pointer!important;
+  transition:
+    border-color .16s ease,
+    background .16s ease,
+    color .16s ease,
+    transform .16s ease!important;
+}
+
+.cloud-mt5-dialog-close:hover:not(:disabled){
+  border-color:rgba(108,162,255,.72)!important;
+  background:#101a2a!important;
+  color:#fff!important;
+  transform:translateY(-1px);
 }
 
 .cloud-mt5-dialog-grid{
-  gap:20px 22px!important;
-  margin-top:24px!important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+  gap:13px 16px!important;
+  margin-top:16px!important;
 }
 
-.cloud-mt5-dialog-grid .field>span:first-child{
-  margin-bottom:9px!important;
+.cloud-mt5-dialog-grid .field>span:first-child,
+.cloud-mt5-server-field>span:first-child{
+  display:block!important;
+  margin-bottom:7px!important;
+  color:#b7c1d4!important;
+  font-size:11px!important;
+  font-weight:850!important;
+  letter-spacing:.01em!important;
 }
 
 .cloud-mt5-dialog .input{
-  min-height:58px!important;
-  border-radius:15px!important;
-  font-size:15px!important;
+  min-height:48px!important;
+  height:48px!important;
+  padding:0 14px!important;
+  border:1px solid #2a374c!important;
+  border-radius:12px!important;
+  background:#070c14!important;
+  color:#f8fafc!important;
+  font-size:14px!important;
+  font-weight:700!important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.025),
+    0 5px 14px rgba(0,0,0,.08)!important;
+  transition:
+    border-color .16s ease,
+    box-shadow .16s ease,
+    background .16s ease!important;
+}
+
+.cloud-mt5-dialog .input:hover:not(:disabled):not([readonly]){
+  border-color:#3a4d69!important;
+  background:#09101b!important;
+}
+
+.cloud-mt5-dialog .input:focus{
+  border-color:#6ea8fe!important;
+  background:#09111e!important;
+  box-shadow:
+    0 0 0 3px rgba(75,139,255,.14),
+    0 8px 20px rgba(20,78,180,.1)!important;
+  outline:0!important;
+}
+
+.cloud-mt5-dialog .input::placeholder{
+  color:#68758a!important;
+  opacity:1!important;
+}
+
+.cloud-mt5-dialog select.input{
+  color-scheme:dark;
+}
+
+.cloud-mt5-dialog select.input option,
+.cloud-mt5-dialog select.input optgroup{
+  background:#080d16;
+  color:#f3f6fb;
+}
+
+.cloud-mt5-server-field,
+.cloud-mt5-password-field{
+  grid-column:1 / -1!important;
 }
 
 .cloud-mt5-server-field{
   position:relative;
 }
 
-.cloud-mt5-server-combobox{
-  position:relative;
-}
-
+.cloud-mt5-server-combobox,
 .cloud-mt5-server-input-wrap{
   position:relative;
 }
 
 .cloud-mt5-server-input-wrap .input{
-  padding-right:54px!important;
+  padding-right:48px!important;
 }
 
 .cloud-mt5-server-toggle{
   position:absolute;
   top:50%;
-  right:10px;
-  width:38px;
-  height:38px;
+  right:7px;
+  width:34px;
+  height:34px;
   display:grid;
   place-items:center;
   transform:translateY(-50%);
   border:0;
-  border-radius:10px;
+  border-radius:9px;
   background:transparent;
-  color:#c9cee0;
-  font-size:22px;
+  color:#aeb8ca;
+  font-size:20px;
   line-height:1;
   cursor:pointer;
 }
 
 .cloud-mt5-server-toggle:hover{
-  background:rgba(126,99,239,.1);
-  color:#fff;
+  background:rgba(72,130,232,.12);
+  color:#dbeafe;
 }
 
 .cloud-mt5-server-menu{
   position:absolute;
-  z-index:30;
-  top:calc(100% + 8px);
+  z-index:40;
+  top:calc(100% + 7px);
   left:0;
   right:0;
-  max-height:280px;
+  max-height:250px;
   overflow:auto;
-  padding:8px;
-  border:1px solid rgba(119,101,190,.42);
-  border-radius:14px;
-  background:#080c17;
-  box-shadow:0 22px 54px rgba(0,0,0,.5),0 0 0 1px rgba(121,95,224,.06);
+  padding:7px;
+  border:1px solid #33445e;
+  border-radius:12px;
+  background:#080e18;
+  box-shadow:
+    0 22px 52px rgba(0,0,0,.58),
+    0 0 0 1px rgba(255,255,255,.02);
 }
 
 .cloud-mt5-server-group{
-  padding:4px;
+  padding:3px;
 }
 
 .cloud-mt5-server-group+.cloud-mt5-server-group{
-  margin-top:4px;
-  padding-top:9px;
-  border-top:1px solid rgba(126,110,184,.12);
+  margin-top:3px;
+  padding-top:8px;
+  border-top:1px solid rgba(115,133,165,.14);
 }
 
 .cloud-mt5-server-group>b{
   display:block;
-  padding:4px 8px 6px;
-  color:#8b93a8;
+  padding:4px 8px 5px;
+  color:#91a0b9;
   font-size:11px;
   font-weight:900;
   letter-spacing:.08em;
@@ -10007,16 +10142,16 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 .cloud-mt5-server-group button,
 .cloud-mt5-server-custom{
   width:100%;
-  min-height:42px;
+  min-height:38px;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:12px;
-  padding:9px 10px;
+  gap:10px;
+  padding:8px 10px;
   border:0;
-  border-radius:10px;
+  border-radius:9px;
   background:transparent;
-  color:#eef0f7;
+  color:#eef4ff;
   font:inherit;
   font-size:13px;
   font-weight:750;
@@ -10027,66 +10162,102 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 .cloud-mt5-server-group button:hover,
 .cloud-mt5-server-group button[aria-selected="true"],
 .cloud-mt5-server-custom:hover{
-  background:rgba(119,83,235,.15);
+  background:rgba(65,124,230,.15);
+  box-shadow:inset 0 0 0 1px rgba(94,151,255,.1);
 }
 
 .cloud-mt5-server-custom{
-  margin-top:5px;
-  border:1px solid rgba(119,83,235,.22);
-  background:rgba(85,58,176,.08);
+  margin-top:4px;
+  border:1px solid rgba(83,139,239,.28);
+  background:rgba(35,84,167,.1);
 }
 
 .cloud-mt5-server-custom span{
-  color:#a99cff;
+  color:#8eb9ff;
   font-size:11px;
   font-weight:850;
 }
 
 .cloud-mt5-server-custom strong{
   overflow:hidden;
-  color:#f7f5ff;
+  color:#f8fbff;
   text-overflow:ellipsis;
   white-space:nowrap;
 }
 
-.cloud-mt5-server-empty,
-.cloud-mt5-server-hint{
-  padding:12px 11px;
-  color:#838ba0;
-  font-size:12px;
+.cloud-mt5-server-empty{
+  padding:10px;
+  color:#8996ab;
+  font-size:11px;
   line-height:1.45;
 }
 
 .cloud-mt5-password-shell{
-  min-height:58px;
+  min-height:48px!important;
+  height:48px!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:10px!important;
+  padding:0 13px!important;
+  border:1px solid #2a374c!important;
+  border-radius:12px!important;
+  background:#070c14!important;
+  color:#7f8ba1!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025)!important;
+  transition:
+    border-color .16s ease,
+    box-shadow .16s ease,
+    background .16s ease,
+    color .16s ease!important;
+}
+
+.cloud-mt5-password-shell:focus-within{
+  border-color:#6ea8fe!important;
+  background:#09111e!important;
+  box-shadow:0 0 0 3px rgba(75,139,255,.14)!important;
+  color:#9fc4ff!important;
 }
 
 .cloud-mt5-password-shell input{
-  height:56px;
+  width:100%!important;
+  min-width:0!important;
+  height:46px!important;
+  border:0!important;
+  outline:0!important;
+  background:transparent!important;
+  color:#fff!important;
+  font:inherit!important;
+  font-size:14px!important;
+  font-weight:700!important;
+}
+
+.cloud-mt5-password-shell input::placeholder{
+  color:#68758a!important;
+  font-weight:650!important;
 }
 
 .cloud-mt5-password-note{
   display:block!important;
-  margin-top:8px!important;
-  color:#81899d!important;
+  margin-top:6px!important;
+  color:#8490a5!important;
   font-size:11px!important;
   font-weight:650!important;
-  line-height:1.45!important;
+  line-height:1.4!important;
 }
 
 .cloud-mt5-inline-error{
   display:flex;
   align-items:flex-start;
-  gap:9px;
-  margin-top:18px;
-  padding:12px 14px;
-  border:1px solid rgba(241,102,114,.3);
-  border-radius:13px;
-  background:rgba(91,24,35,.18);
-  color:#ffb1ba;
-  font-size:12px;
+  gap:8px;
+  margin-top:13px;
+  padding:10px 12px;
+  border:1px solid rgba(244,92,110,.34);
+  border-radius:11px;
+  background:rgba(110,25,38,.18);
+  color:#ffb4be;
+  font-size:11px;
   font-weight:750;
-  line-height:1.5;
+  line-height:1.45;
 }
 
 .cloud-mt5-inline-error svg{
@@ -10095,49 +10266,130 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 }
 
 .cloud-mt5-dialog-actions{
-  margin-top:24px!important;
-  padding-top:20px!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,.82fr) minmax(0,1.28fr)!important;
+  gap:10px!important;
+  margin-top:17px!important;
+  padding-top:15px!important;
+  border-top:1px solid rgba(112,130,164,.17)!important;
 }
 
 .cloud-mt5-cancel,
 .cloud-mt5-confirm{
-  min-height:54px!important;
+  min-height:46px!important;
+  border-radius:12px!important;
+  font:inherit!important;
+  font-size:13px!important;
+  font-weight:900!important;
+  cursor:pointer!important;
+  transition:
+    transform .16s ease,
+    filter .16s ease,
+    border-color .16s ease,
+    box-shadow .16s ease!important;
+}
+
+.cloud-mt5-cancel{
+  border:1px solid #34445e!important;
+  background:#0b121e!important;
+  color:#dce4f1!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025)!important;
+}
+
+.cloud-mt5-cancel:hover:not(:disabled){
+  border-color:#536885!important;
+  background:#101927!important;
+}
+
+.cloud-mt5-confirm{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:10px!important;
+  border:1px solid rgba(141,165,255,.9)!important;
+  background:linear-gradient(135deg,#705cff 0%,#526cff 48%,#3283f6 100%)!important;
+  color:#fff!important;
+  box-shadow:
+    0 10px 28px rgba(45,103,232,.3),
+    inset 0 1px 0 rgba(255,255,255,.2)!important;
+}
+
+.cloud-mt5-confirm:hover:not(:disabled){
+  transform:translateY(-1px);
+  filter:brightness(1.08);
+  box-shadow:
+    0 13px 32px rgba(45,103,232,.38),
+    inset 0 1px 0 rgba(255,255,255,.22)!important;
+}
+
+.cloud-mt5-cancel:disabled,
+.cloud-mt5-confirm:disabled,
+.cloud-mt5-dialog-close:disabled{
+  opacity:.48!important;
+  cursor:not-allowed!important;
 }
 
 @media(max-width:720px){
   .cloud-mt5-dialog{
-    width:calc(100vw - 14px)!important;
+    width:calc(100vw - 12px)!important;
+    max-height:calc(100dvh - 12px)!important;
+    overflow:auto!important;
+    border-radius:17px!important;
   }
 
   .cloud-mt5-dialog-card{
-    padding:18px 16px 16px!important;
+    padding:16px 14px 14px!important;
+  }
+
+  .cloud-mt5-dialog-title{
+    gap:10px!important;
+  }
+
+  .cloud-mt5-dialog-icon{
+    width:42px!important;
+    height:42px!important;
+    flex-basis:42px!important;
+    border-radius:12px!important;
+  }
+
+  .cloud-mt5-dialog-head h2{
+    font-size:20px!important;
   }
 
   .cloud-mt5-dialog-grid{
-    gap:15px!important;
-    margin-top:18px!important;
+    grid-template-columns:1fr!important;
+    gap:12px!important;
+    margin-top:14px!important;
   }
 
-  .cloud-mt5-dialog .input{
-    min-height:52px!important;
-    font-size:14px!important;
+  .cloud-mt5-server-field,
+  .cloud-mt5-password-field{
+    grid-column:auto!important;
+  }
+
+  .cloud-mt5-dialog .input,
+  .cloud-mt5-password-shell{
+    min-height:48px!important;
+    height:48px!important;
   }
 
   .cloud-mt5-server-menu{
     position:relative;
     top:auto;
-    margin-top:7px;
-    max-height:230px;
+    margin-top:6px;
+    max-height:210px;
   }
 
   .cloud-mt5-dialog-actions{
-    gap:9px!important;
-    margin-top:18px!important;
-    padding-top:15px!important;
+    grid-template-columns:1fr 1.3fr!important;
+    gap:8px!important;
+    margin-top:15px!important;
+    padding-top:13px!important;
   }
 
   .cloud-mt5-cancel,
   .cloud-mt5-confirm{
-    min-height:50px!important;
+    min-height:44px!important;
   }
 }
+
