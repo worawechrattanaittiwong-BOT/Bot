@@ -4726,11 +4726,24 @@ export default function DashboardPage() {
         >
           <form className="cloud-mt5-dialog-card" onSubmit={submitCloudMt5Dialog}>
             <header className="cloud-mt5-dialog-head">
-              <div>
-                <div className="eyebrow">VPS MT5 CONNECTION</div>
-                <h2>{cloudMt5DialogMode === "RECONNECT" ? "เชื่อม MT5 เดิมอีกครั้ง" : "เชื่อมบัญชี MT5"}</h2>
+              <div className="cloud-mt5-dialog-title">
+                <span className="cloud-mt5-dialog-icon" aria-hidden="true">
+                  <ScenovaIcon name="cloud" size={24}/>
+                </span>
+                <div>
+                  <div className="eyebrow">VPS MT5 CONNECTION</div>
+                  <h2>{cloudMt5DialogMode === "RECONNECT" ? "เชื่อม MT5 เดิมอีกครั้ง" : "เชื่อมบัญชี MT5"}</h2>
+                </div>
               </div>
-              <button type="button" aria-label="ปิด" disabled={busy} onClick={()=>cloudMt5DialogRef.current?.close()}>×</button>
+              <button
+                type="button"
+                className="cloud-mt5-dialog-close"
+                aria-label="ปิด"
+                disabled={busy}
+                onClick={()=>cloudMt5DialogRef.current?.close()}
+              >
+                <ScenovaIcon name="close" size={19}/>
+              </button>
             </header>
 
             <div className="cloud-mt5-dialog-grid">
@@ -4863,24 +4876,31 @@ export default function DashboardPage() {
 
               <label className="field cloud-mt5-password-field">
                 <span>MT5 Trading Password</span>
-                <input
-                  className="input"
-                  type="password"
-                  autoComplete="off"
-                  value={tradingPassword}
-                  onChange={e=>setTradingPassword(e.target.value)}
-                  placeholder="Trading Password"
-                  required
-                />
+                <span className="cloud-mt5-password-shell">
+                  <ScenovaIcon name="lock" size={20}/>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={tradingPassword}
+                    onChange={e=>setTradingPassword(e.target.value)}
+                    placeholder="กรอกรหัส Trading ของ MT5"
+                    required
+                  />
+                </span>
+                <small className="cloud-mt5-security-note">
+                  <ScenovaIcon name="shield" size={15}/>
+                  <span><b>SECURE CREDENTIAL</b> · เข้ารหัส AES-256-GCM ก่อนจัดเก็บ และถอดใช้เฉพาะตอนเชื่อม MT5 บน VPS</span>
+                </small>
               </label>
             </div>
 
             <footer className="cloud-mt5-dialog-actions">
-              <button type="button" className="btn ghost" disabled={busy} onClick={()=>cloudMt5DialogRef.current?.close()}>
+              <button type="button" className="cloud-mt5-cancel" disabled={busy} onClick={()=>cloudMt5DialogRef.current?.close()}>
                 ยกเลิก
               </button>
-              <button type="submit" className="btn primary" disabled={busy}>
-                {busy ? "กำลังเชื่อม..." : cloudMt5DialogMode === "RECONNECT" ? "เชื่อม MT5 ใหม่" : "เชื่อมบัญชีนี้"}
+              <button type="submit" className="cloud-mt5-confirm" disabled={busy}>
+                <span>{busy ? "กำลังเชื่อม..." : cloudMt5DialogMode === "RECONNECT" ? "เชื่อม MT5 ใหม่" : "เชื่อมบัญชีนี้"}</span>
+                {!busy && <span aria-hidden="true">→</span>}
               </button>
             </footer>
           </form>
