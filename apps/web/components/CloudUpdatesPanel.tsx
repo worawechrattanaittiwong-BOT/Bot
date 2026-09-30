@@ -114,19 +114,33 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
   },[data?.jobs]);
 
   async function start(runnerId:string) {
-    // UI lock complements the API-side active-job guard. Once one Fleet Update
-    // is RUNNING for a Server, a second release cannot be created from this UI.
-    if(busy || activeByRunner.has(runnerId)) return;
+    const release=data?.currentRelease;
+    const activeJob=activeByRunner.get(runnerId);
+    const canSupersede=Boolean(
+      release &&
+      activeJob &&
+      activeJob.action==="UPDATE" &&
+      activeJob.target_version &&
+      activeJob.target_version!==release.version &&
+      activeJob.delivered===0 &&
+      activeJob.verifying===0 &&
+      activeJob.waiting_safe>0
+    );
+    if(busy || (activeJob && !canSupersede)) return;
 
     setBusy(runnerId);
     setError("");
     setNotice("");
     try{
       const ok=await confirmPopup({
-        title:"ปล่อย EA Update ให้ลูกค้า",
+        title:canSupersede
+          ? "แทนคิวเก่าด้วย EA v"+release?.version
+          : "ปล่อย EA Update ให้ลูกค้า",
         tone:"warning",
-        message:"เตรียม EA เวอร์ชันล่าสุดบน "+runnerId+"? บัญชีที่กำลังเทรดจะไม่ถูกหยุด ระบบจะรอให้ลูกค้าแต่ละบัญชีกด Stop และ Position เป็น 0 แล้วอัปเดตบัญชีนั้นอัตโนมัติ",
-        confirmLabel:"ปล่อยอัปเดต"
+        message:canSupersede
+          ? "ยกเลิกเฉพาะคิว "+activeJob?.target_version+" ที่ยังรอ Safe Stop และแทนด้วย v"+release?.version+"? บัญชีที่กำลังเทรดจะไม่ถูกหยุด และเมื่อกด Stop จะอัปเดตตรงเป็นเวอร์ชันล่าสุด"
+          : "เตรียม EA เวอร์ชันล่าสุดบน "+runnerId+"? บัญชีที่กำลังเทรดจะไม่ถูกหยุด ระบบจะรอให้ลูกค้าแต่ละบัญชีกด Stop และ Position เป็น 0 แล้วอัปเดตบัญชีนั้นอัตโนมัติ",
+        confirmLabel:canSupersede ? "แทนด้วยเวอร์ชันล่าสุด" : "ปล่อยอัปเดต"
       });
       if(!ok)return;
 
@@ -134,7 +148,11 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
         method:"POST",
         body:JSON.stringify({runnerId})
       });
-      setNotice("ปล่อย EA Update บน "+runnerId+" แล้ว · ระบบจะดำเนินการทีละบัญชีเมื่อเข้าสู่ Safe State");
+      setNotice(
+        canSupersede
+          ? "แทนคิวเก่าบน "+runnerId+" ด้วย EA v"+release?.version+" แล้ว · บัญชีที่หยุดภายหลังจะอัปเดตตรงเป็นเวอร์ชันล่าสุด"
+          : "ปล่อย EA Update บน "+runnerId+" แล้ว · ระบบจะดำเนินการทีละบัญชีเมื่อเข้าสู่ Safe State"
+      );
       await load();
     }catch(e:any){
       setError(e.message);
@@ -220,6 +238,17 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
           const online=n.health==="ONLINE";
           const hasRealUpdate=Boolean(release&&status?.updateAvailable);
           const waitingVersion=Boolean(release&&status&&status.total>0&&status.outdated===0&&status.unknown>0);
+          const canSupersede=Boolean(
+            release &&
+            hasRealUpdate &&
+            activeJob &&
+            activeJob.action==="UPDATE" &&
+            activeJob.target_version &&
+            activeJob.target_version!==release.version &&
+            activeJob.delivered===0 &&
+            activeJob.verifying===0 &&
+            activeJob.waiting_safe>0
+          );
 
           let state:RunnerUiState="EMPTY";
           if(!online) state="OFFLINE";
@@ -231,7 +260,7 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
           else if(hasRealUpdate) state="READY";
           else if(release&&status&&status.total>0) state="CURRENT";
 
-          const canRelease=state==="READY" && !busy && !activeJob;
+          const canRelease=(state==="READY" || canSupersede) && !busy;
           const progressTotal=Math.max(0,activeJob?.total||0);
           const progressDone=Math.max(0,activeJob?.completed||0);
           const progressPercent=progressTotal>0
@@ -281,7 +310,9 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
               <p className={s.updateServerHint}>ยังไม่มี Cloud MT5 ที่ต้องอัปเดตบน Server นี้</p>}
             {activeJob&&
               <p className={s.updateServerHint}>
-                งานนี้ล็อกการปล่อยซ้ำจนกว่าจะจบ เพื่อป้องกันคิวอัปเดตซ้อนกัน
+                {canSupersede
+                  ? "มี Production EA ใหม่กว่า · คิวที่ยังรอ Safe Stop สามารถข้ามเวอร์ชันเก่าไปเวอร์ชันล่าสุดได้"
+                  : "งานนี้ล็อกการปล่อยซ้ำจนกว่าจะจบ เพื่อป้องกันคิวอัปเดตซ้อนกัน"}
               </p>}
 
             <button
@@ -289,7 +320,8 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
               disabled={!canRelease}
               onClick={()=>start(runnerId)}
             >
-              {state==="READY" ? "ปล่อย EA Update" :
+              {canSupersede ? "ปล่อย v"+release?.version+" แทน "+activeJob?.target_version :
+               state==="READY" ? "ปล่อย EA Update" :
                state==="CREATING" ? "กำลังปล่อย..." :
                state==="WAITING_SAFE" ? "รอ Safe Stop" :
                state==="VERIFYING" ? "กำลัง Verify..." :

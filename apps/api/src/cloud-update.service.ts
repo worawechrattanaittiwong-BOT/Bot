@@ -202,12 +202,76 @@ export class CloudUpdateService {
       }
 
       const active = (await tx.query(
-        `SELECT id FROM server_update_jobs
-         WHERE runner_id=$1 AND state='RUNNING'
-         ORDER BY created_at DESC LIMIT 1`,
+        `SELECT sj.id,sj.action,er.version target_version,er.sha256 target_sha256
+         FROM server_update_jobs sj
+         LEFT JOIN ea_releases er ON er.id=sj.release_id
+         WHERE sj.runner_id=$1 AND sj.state='RUNNING'
+         ORDER BY sj.created_at DESC LIMIT 1
+         FOR UPDATE OF sj`,
         [runnerId]
       )).rows[0];
-      if (active) throw new ConflictException("Server นี้มี Fleet Update กำลังทำงานอยู่");
+
+      if (active) {
+        const sameRelease =
+          String(active.target_version || "").replace(/^v/i, "") ===
+            String(release.version || "").replace(/^v/i, "") &&
+          String(active.target_sha256 || "").toLowerCase() ===
+            String(release.sha256 || "").toLowerCase();
+
+        if (sameRelease) {
+          throw new ConflictException("EA เวอร์ชันนี้กำลังอยู่ในคิวอัปเดตแล้ว");
+        }
+
+        if (active.action !== "UPDATE") {
+          throw new ConflictException("Server นี้มี Fleet Update กำลังทำงานอยู่");
+        }
+
+        const activeCounts = (await tx.query(
+          `SELECT
+             COUNT(*) FILTER (WHERE state='WAITING_SAFE')::int waiting_safe,
+             COUNT(*) FILTER (WHERE state='DELIVERED')::int delivered,
+             COUNT(*) FILTER (WHERE state='VERIFYING')::int verifying
+           FROM instance_update_jobs
+           WHERE server_update_job_id=$1`,
+          [active.id]
+        )).rows[0];
+
+        const inFlight =
+          Number(activeCounts?.delivered || 0) +
+          Number(activeCounts?.verifying || 0);
+
+        const activeVersion = String(active.target_version || "").trim();
+        const productionIsNotOlder =
+          !activeVersion || this.versionAtLeast(release.version, activeVersion);
+
+        if (inFlight > 0 || !productionIsNotOlder) {
+          throw new ConflictException(
+            "งานอัปเดตก่อนหน้ายังมีบัญชีที่กำลังติดตั้งหรือ Verify อยู่ กรุณารอให้งานนั้นจบก่อน"
+          );
+        }
+
+        // A newer Production release replaces only work that has never left
+        // WAITING_SAFE. Running customers are untouched; when they later press
+        // Stop they receive the newest release directly instead of stepping
+        // through an obsolete deferred version first.
+        await tx.query(
+          `UPDATE instance_update_jobs
+           SET state='CANCELLED',
+               result_code='SUPERSEDED_BY_NEW_RELEASE',
+               completed_at=COALESCE(completed_at,now())
+           WHERE server_update_job_id=$1
+             AND state='WAITING_SAFE'`,
+          [active.id]
+        );
+
+        await tx.query(
+          `UPDATE server_update_jobs
+           SET state='CANCELLED',
+               completed_at=COALESCE(completed_at,now())
+           WHERE id=$1 AND state='RUNNING'`,
+          [active.id]
+        );
+      }
 
       const instances = (await tx.query(
         `SELECT
