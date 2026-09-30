@@ -87,6 +87,31 @@ type View = "overview" | "account" | "backtest";
 const LIVE_PRICE_WINDOW_MS = 15 * 60 * 1000;
 const TRADING_SYMBOL_PATTERN = /^[A-Za-z0-9._#-]+$/;
 
+function mt5ProvisioningFailureMessage(value: unknown) {
+  const code = String(value || "").trim().toUpperCase();
+  if (!code) return "";
+
+  if (
+    code.includes("BROKER_INSTALLER") ||
+    code.includes("BROKER_TERMINAL_MISSING") ||
+    code.includes("BROKER_PLATFORM")
+  ) {
+    return "ติดตั้ง MT5 ของ Broker บน VPS ไม่สำเร็จ · ลองเชื่อมใหม่ หรือตรวจว่า Broker มี MT5 สำหรับ Windows";
+  }
+  if (code.includes("EA_ATTACH_TIMEOUT")) {
+    return "MT5 เปิดได้แล้ว แต่ EA ยังไม่พร้อม · ระบบจะไม่เริ่มบอทจนกว่า EA จะเชื่อมสำเร็จ";
+  }
+  if (
+    code.includes("TERMINAL_START_FAILED") ||
+    code.includes("CHECK_TEMPLATE_OR_TERMINAL") ||
+    code.includes("MISSING_MT5") ||
+    code.includes("TEMPLATE")
+  ) {
+    return "VPS เปิด MT5 ไม่สำเร็จ · ลองเชื่อมใหม่ หากยังเกิดซ้ำให้ตรวจ MT5 ของ Broker บน Server";
+  }
+  return "VPS เตรียม MT5 ไม่สำเร็จ · ตรวจ MT5 Login, Trading Password และ Server แล้วลองใหม่";
+}
+
 function normalizeAccountCurrency(value: unknown) {
   const currency = String(value || "").trim().toUpperCase();
   return currency || "USD";
@@ -256,8 +281,8 @@ export default function DashboardPage() {
   const [brokerCode, setBrokerCode] = useState("EXNESS");
   const [customBrokerName, setCustomBrokerName] = useState("");
   const [brokerServer, setBrokerServer] = useState("");
-  const [mt5ServerSearch, setMt5ServerSearch] = useState("");
-  const [customBrokerServer, setCustomBrokerServer] = useState("");
+  const [serverMenuOpen, setServerMenuOpen] = useState(false);
+  const [cloudMt5DialogError, setCloudMt5DialogError] = useState("");
   const [tradingPassword, setTradingPassword] = useState("");
   const [cloudMt5DialogMode, setCloudMt5DialogMode] = useState<"NEW"|"RECONNECT">("NEW");
   const [cloudMt5DialogAccountId, setCloudMt5DialogAccountId] = useState("");
@@ -1195,13 +1220,18 @@ export default function DashboardPage() {
     const pendingOrders = Math.max(0, Number(liveMetrics.accountScenovaPendingOrders || 0));
     const httpStatus = Number(liveMetrics.heartbeatHttpStatus || 0);
     const heartbeatOk = Boolean(data.instance.mt5_online) && httpStatus >= 200 && httpStatus < 300;
+    const connectionOperation = ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND"].includes(String(serverOperation.kind || ""));
+    const provisioningFailure = mt5ProvisioningFailureMessage(data.instance.provisioning_error);
 
     let complete = false;
     let failed = false;
     let message = String(op.message || "");
     const operationAgeMs = Math.max(0, Date.now() - Number(op.startedAt || Date.now()));
 
-    if (
+    if (connectionOperation && provisioningFailure) {
+      failed = true;
+      message = provisioningFailure;
+    } else if (
       (
         operationAgeMs >= 90_000 &&
         (
@@ -1222,7 +1252,9 @@ export default function DashboardPage() {
       )
     ) {
       failed = true;
-      message = "Server ไม่ได้รับสถานะยืนยันภายในเวลาที่กำหนด · กรุณาตรวจ MT5/EA แล้วลองใหม่";
+      message = connectionOperation
+        ? "เชื่อม MT5 ไม่สำเร็จภายในเวลาที่กำหนด · ตรวจ Login, Trading Password และ Server ก่อน หากข้อมูลถูกต้อง Broker อาจต้องใช้ MT5 Terminal ของตัวเอง"
+        : "Server ไม่ได้รับสถานะยืนยันภายในเวลาที่กำหนด · กรุณาตรวจ MT5/EA แล้วลองใหม่";
     } else if (op.kind === "SYMBOL") {
       const target = String(op.target || "");
       const current = String(liveMetrics.symbol || "");
@@ -1274,8 +1306,25 @@ export default function DashboardPage() {
       const runnerReady = !runtimeIsCloud || Boolean(data?.instance?.runner_online);
       const mt5Ready = Boolean(data?.instance?.mt5_online);
       const mt5GraceReady = Boolean(data?.instance?.mt5_connection_online);
+      const terminalConnected = liveMetrics.terminalConnected;
+      const accountTradeAllowed = liveMetrics.accountTradeAllowed;
+      const accountTradeExpert = liveMetrics.accountTradeExpert;
+      const terminalTradeAllowed = liveMetrics.terminalTradeAllowed;
+      const mqlTradeAllowed = liveMetrics.mqlTradeAllowed;
 
-      if (op.kind === "MT5_SWITCH" && !data?.account) {
+      if (operationAgeMs >= 30_000 && terminalConnected === false) {
+        failed = true;
+        message = "MT5 เปิดแล้วแต่ยังเชื่อม Broker ไม่สำเร็จ · ตรวจ Login, Trading Password และชื่อ Server ให้ตรงกับบัญชี";
+      } else if (accountTradeAllowed === false) {
+        failed = true;
+        message = "เชื่อมบัญชีได้ แต่ Broker ปิดสิทธิ์ Trading ของบัญชีนี้ · ตรวจสถานะบัญชีกับ Broker";
+      } else if (accountTradeExpert === false) {
+        failed = true;
+        message = "เชื่อมบัญชีได้ แต่บัญชีไม่อนุญาต Expert Advisor · เปิดสิทธิ์ EA หรือสอบถาม Broker";
+      } else if (terminalTradeAllowed === false || mqlTradeAllowed === false) {
+        failed = true;
+        message = "เชื่อม MT5 ได้ แต่ Algo Trading ยังปิดอยู่ · เปิด Algo Trading ใน MT5 แล้วลองอีกครั้ง";
+      } else if (op.kind === "MT5_SWITCH" && !data?.account) {
         message = "MT5 เดิมปิดแล้ว · กรุณาเชื่อมบัญชีใหม่เพื่อทำขั้นตอนต่อ";
       } else if (accountMatches && runnerReady && mt5Ready) {
         complete = true;
@@ -1296,6 +1345,7 @@ export default function DashboardPage() {
     }
 
     if (failed) {
+      if (connectionOperation) setError(message);
       setServerOperation((current:any) =>
         current?.id === op.id
           ? { ...current, status:"FAILED", message, updatedAt:Date.now() }
@@ -1327,6 +1377,7 @@ export default function DashboardPage() {
     data?.instance?.metrics?.manualMt5ActionStatus,
     data?.instance?.metrics?.positions,
     data?.instance?.metrics?.accountScenovaPendingOrders,
+    data?.instance?.provisioning_error,
     serverOperation?.id,
     serverOperation?.status,
     startPhase,
@@ -1472,9 +1523,7 @@ export default function DashboardPage() {
   const selectedBrokerName = brokerCode === "OTHER"
     ? customBrokerName.trim()
     : (selectedBroker?.name || brokerCode);
-  const selectedServer = brokerServer === "__CUSTOM__"
-    ? customBrokerServer.trim()
-    : brokerServer;
+  const selectedServer = brokerServer.trim();
   const sortedBrokerServers = [...(selectedBroker?.servers || [])].sort((a,b) => {
     const rank:Record<string,number> = { REAL:0, DEMO:1, UNKNOWN:2 };
     const env = (value:any) => rank[String(value?.environment || "UNKNOWN").toUpperCase()] ?? 2;
@@ -1484,15 +1533,18 @@ export default function DashboardPage() {
         sensitivity:"base"
       });
   });
-  const mt5ServerSearchKey = mt5ServerSearch.trim().toLowerCase();
+  const mt5ServerFilterKey = brokerServer.trim().toLowerCase();
   const visibleBrokerServers = sortedBrokerServers.filter(server =>
-    !mt5ServerSearchKey ||
-    String(server.serverName || "").toLowerCase().includes(mt5ServerSearchKey) ||
-    String(server.environment || "").toLowerCase().includes(mt5ServerSearchKey)
+    !mt5ServerFilterKey ||
+    String(server.serverName || "").toLowerCase().includes(mt5ServerFilterKey) ||
+    String(server.environment || "").toLowerCase().includes(mt5ServerFilterKey)
   );
   const realBrokerServers = visibleBrokerServers.filter(server => String(server.environment).toUpperCase() === "REAL");
   const demoBrokerServers = visibleBrokerServers.filter(server => String(server.environment).toUpperCase() === "DEMO");
   const otherBrokerServers = visibleBrokerServers.filter(server => !["REAL","DEMO"].includes(String(server.environment).toUpperCase()));
+  const serverCatalogHasExactMatch = sortedBrokerServers.some(
+    server => String(server.serverName || "").trim().toLowerCase() === mt5ServerFilterKey
+  );
   const hasLocalConnectionSlot = (data?.slots || []).some((slot:any) =>
     String(slot?.mode || "").toUpperCase() === "LOCAL" &&
     Boolean(slot?.can_control) &&
@@ -2697,7 +2749,8 @@ export default function DashboardPage() {
       setTradingPassword("");
       setAccountNumber("");
       setBrokerServer("");
-      setCustomBrokerServer("");
+      setServerMenuOpen(false);
+      setCloudMt5DialogError("");
       await load(selectedSlotIdRef.current);
       setActiveView("account");
       setServerOperation((current:any) =>
@@ -2788,7 +2841,8 @@ export default function DashboardPage() {
     setCloudMt5DialogMode(dialogMode);
     setCloudMt5DialogAccountId(dialogMode === "RECONNECT" ? String(slot?.mt5_account_id || "") : "");
     setTradingPassword("");
-    setMt5ServerSearch("");
+    setServerMenuOpen(false);
+    setCloudMt5DialogError("");
 
     if (dialogMode === "RECONNECT" && slot?.account_number) {
       setAccountNumber(String(slot.account_number || ""));
@@ -2804,11 +2858,9 @@ export default function DashboardPage() {
         setCustomBrokerName(String(slot.broker || ""));
       }
       setBrokerServer(String(slot.broker_server || ""));
-      setCustomBrokerServer("");
     } else {
       setAccountNumber("");
-      setBrokerServer(brokerCode === "OTHER" ? "__CUSTOM__" : "");
-      setCustomBrokerServer("");
+      setBrokerServer("");
       if (!brokerCatalog.some(item=>item.code===brokerCode)) {
         setBrokerCode(brokerCatalog[0]?.code || "EXNESS");
       }
@@ -2839,6 +2891,7 @@ export default function DashboardPage() {
     setBusy(true);
     setError("");
     setNotice("");
+    setCloudMt5DialogError("");
     const existingSwitch = serverOperation?.status === "RUNNING" && serverOperation?.kind === "MT5_SWITCH"
       ? serverOperation
       : null;
@@ -2906,6 +2959,7 @@ export default function DashboardPage() {
       await load(selectedSlotIdRef.current,true);
     } catch (e:any) {
       const message = String(e?.message || "เชื่อม MT5 ไม่สำเร็จ");
+      setCloudMt5DialogError(message);
       setError(message);
       setServerOperation((current:any) =>
         current?.id === operationId
@@ -4770,9 +4824,9 @@ export default function DashboardPage() {
                   onChange={e=>{
                     const nextBroker = e.target.value;
                     setBrokerCode(nextBroker);
-                    setBrokerServer(nextBroker === "OTHER" ? "__CUSTOM__" : "");
-                    setMt5ServerSearch("");
-                    setCustomBrokerServer("");
+                    setBrokerServer("");
+                    setServerMenuOpen(false);
+                    setCloudMt5DialogError("");
                   }}
                   required
                 >
@@ -4806,70 +4860,129 @@ export default function DashboardPage() {
                     aria-label="MT5 Server ปัจจุบัน"
                   />
                 ) : (
-                  <div className="cloud-mt5-server-suggestions">
-                    <input
-                      className="input"
-                      value={mt5ServerSearch}
-                      onChange={e=>setMt5ServerSearch(e.target.value)}
-                      placeholder="ค้นหา MT5 Server เช่น Real, Demo หรือชื่อ Server"
-                      autoComplete="off"
-                      aria-label="ค้นหา MT5 Server"
-                    />
-                    <select
-                      className="input"
-                      value={brokerServer}
-                      onChange={e=>{
-                        setBrokerServer(e.target.value);
-                        if (e.target.value !== "__CUSTOM__") {
-                          setCustomBrokerServer("");
-                          setMt5ServerSearch("");
-                        }
-                      }}
-                      required
-                    >
-                      <option value="">เลือก MT5 Server</option>
-                      {realBrokerServers.length > 0 && (
-                        <optgroup label="REAL / LIVE">
-                          {realBrokerServers.map(server=>(
-                            <option key={server.serverName} value={server.serverName}>
-                              {server.serverName}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {demoBrokerServers.length > 0 && (
-                        <optgroup label="DEMO / TRIAL">
-                          {demoBrokerServers.map(server=>(
-                            <option key={server.serverName} value={server.serverName}>
-                              {server.serverName}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {otherBrokerServers.length > 0 && (
-                        <optgroup label="OTHER / VERIFIED">
-                          {otherBrokerServers.map(server=>(
-                            <option key={server.serverName} value={server.serverName}>
-                              {server.serverName}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      <option value="__CUSTOM__">ไม่พบในรายการ — กรอก Server เอง</option>
-                    </select>
-                    {brokerServer === "__CUSTOM__" && (
+                  <div className="cloud-mt5-server-combobox">
+                    <div className="cloud-mt5-server-input-wrap">
                       <input
                         className="input"
-                        value={customBrokerServer}
-                        onChange={e=>setCustomBrokerServer(e.target.value)}
-                        placeholder="กรอกชื่อ Server ให้ตรงกับ MT5 / Broker"
+                        value={brokerServer}
+                        onFocus={()=>setServerMenuOpen(true)}
+                        onBlur={()=>window.setTimeout(()=>setServerMenuOpen(false),120)}
+                        onChange={e=>{
+                          setBrokerServer(e.target.value);
+                          setServerMenuOpen(true);
+                          setCloudMt5DialogError("");
+                        }}
+                        onKeyDown={e=>{
+                          if (e.key === "Escape") setServerMenuOpen(false);
+                          if (e.key === "ArrowDown") setServerMenuOpen(true);
+                        }}
+                        placeholder="เลือกหรือพิมพ์ MT5 Server"
                         autoComplete="off"
+                        aria-label="MT5 Server"
+                        aria-autocomplete="list"
+                        aria-expanded={serverMenuOpen}
                         required
                       />
+                      <button
+                        type="button"
+                        className="cloud-mt5-server-toggle"
+                        tabIndex={-1}
+                        aria-label="เปิดรายการ MT5 Server"
+                        onMouseDown={e=>e.preventDefault()}
+                        onClick={()=>setServerMenuOpen(value=>!value)}
+                      >⌄</button>
+                    </div>
+
+                    {serverMenuOpen && (
+                      <div className="cloud-mt5-server-menu" role="listbox" aria-label="รายการ MT5 Server">
+                        {realBrokerServers.length > 0 && (
+                          <div className="cloud-mt5-server-group">
+                            <b>REAL / LIVE</b>
+                            {realBrokerServers.map(server=>(
+                              <button
+                                key={"real-"+server.serverName}
+                                type="button"
+                                role="option"
+                                aria-selected={brokerServer === server.serverName}
+                                onMouseDown={e=>e.preventDefault()}
+                                onClick={()=>{
+                                  setBrokerServer(server.serverName);
+                                  setServerMenuOpen(false);
+                                  setCloudMt5DialogError("");
+                                }}
+                              >
+                                <span>{server.serverName}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {demoBrokerServers.length > 0 && (
+                          <div className="cloud-mt5-server-group">
+                            <b>DEMO / TRIAL</b>
+                            {demoBrokerServers.map(server=>(
+                              <button
+                                key={"demo-"+server.serverName}
+                                type="button"
+                                role="option"
+                                aria-selected={brokerServer === server.serverName}
+                                onMouseDown={e=>e.preventDefault()}
+                                onClick={()=>{
+                                  setBrokerServer(server.serverName);
+                                  setServerMenuOpen(false);
+                                  setCloudMt5DialogError("");
+                                }}
+                              >
+                                <span>{server.serverName}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {otherBrokerServers.length > 0 && (
+                          <div className="cloud-mt5-server-group">
+                            <b>OTHER</b>
+                            {otherBrokerServers.map(server=>(
+                              <button
+                                key={"other-"+server.serverName}
+                                type="button"
+                                role="option"
+                                aria-selected={brokerServer === server.serverName}
+                                onMouseDown={e=>e.preventDefault()}
+                                onClick={()=>{
+                                  setBrokerServer(server.serverName);
+                                  setServerMenuOpen(false);
+                                  setCloudMt5DialogError("");
+                                }}
+                              >
+                                <span>{server.serverName}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {brokerServer.trim() && !serverCatalogHasExactMatch && (
+                          <button
+                            type="button"
+                            className="cloud-mt5-server-custom"
+                            role="option"
+                            aria-selected="true"
+                            onMouseDown={e=>e.preventDefault()}
+                            onClick={()=>setServerMenuOpen(false)}
+                          >
+                            <span>ใช้ Server นี้</span>
+                            <strong>{brokerServer.trim()}</strong>
+                          </button>
+                        )}
+                        {!brokerServer.trim() && sortedBrokerServers.length === 0 && (
+                          <div className="cloud-mt5-server-empty">
+                            ไม่พบในรายการ — กรอก Server เอง
+                          </div>
+                        )}
+                        {brokerServer.trim() && visibleBrokerServers.length === 0 && !serverCatalogHasExactMatch && (
+                          <div className="cloud-mt5-server-hint">
+                            ไม่พบในรายการ — กรอก Server เองได้จากช่องนี้
+                          </div>
+                        )}
+                      </div>
                     )}
-                    <small className="muted">
-                      เลือก Server ให้ตรงกับบัญชี MT5 ของคุณ หากไม่พบให้เลือก “กรอก Server เอง”
-                    </small>
                   </div>
                 )}
               </label>
@@ -4887,12 +5000,18 @@ export default function DashboardPage() {
                     required
                   />
                 </span>
-                <small className="cloud-mt5-security-note">
-                  <ScenovaIcon name="shield" size={15}/>
-                  <span><b>SECURE CREDENTIAL</b> · เข้ารหัส AES-256-GCM ก่อนจัดเก็บ และถอดใช้เฉพาะตอนเชื่อม MT5 บน VPS</span>
+                <small className="cloud-mt5-password-note">
+                  ใช้ Trading Password เท่านั้น ไม่ใช่ Investor Password
                 </small>
               </label>
             </div>
+
+            {cloudMt5DialogError && (
+              <div className="cloud-mt5-inline-error" role="alert">
+                <ScenovaIcon name="warning" size={18}/>
+                <span>{cloudMt5DialogError}</span>
+              </div>
+            )}
 
             <footer className="cloud-mt5-dialog-actions">
               <button type="button" className="cloud-mt5-cancel" disabled={busy} onClick={()=>cloudMt5DialogRef.current?.close()}>
