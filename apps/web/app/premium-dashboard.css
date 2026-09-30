@@ -5455,36 +5455,65 @@
 
 /* ===== Control Center V59 · mobile authoritative alignment =====
    premium-dashboard.css loads after globals.css. Keep this as the final owner
-   of the five AUTO controls and risk-row vertical alignment on phones. */
+   of AUTO control width and risk-row alignment on phones. */
 @media(max-width:760px){
-  /* Exactly the five visible AUTO boxes:
-     trading mode, direction, max positions, lot and AUTO profit target.
-     Keep the label column intact and reduce only the control itself to 2/3. */
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-two-thirds-control,
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-input-shell{
-    box-sizing:border-box!important;
-    width:66.666%!important;
-    min-width:0!important;
-    max-width:66.666%!important;
-    justify-self:end!important;
-    margin-left:auto!important;
-    margin-right:0!important;
+  .cc-v19-settings-card .cc-bot-mode-auto{
+    --mobile-auto-control-width:min(100%,288px);
   }
 
-  /* Risk values stay vertically centered inside the 38px row instead of
-     visually sitting on the lower separator. */
+  /* Keep every visible AUTO row on one vertical center line. */
+  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v12-mode-select-wrap>label,
+  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v2-fields>.cc-bot-v2-field,
+  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field,
   .cc-v19-settings-card .cc-bot-v2-limit-grid>div:not(.cc-bot-manual-risk-add){
     align-items:center!important;
   }
+
+  /* Trading mode, direction, max positions, lot and AUTO target share one
+     right edge and one control height instead of using mixed 2/3 widths. */
+  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-two-thirds-control,
+  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-input-shell{
+    box-sizing:border-box!important;
+    width:var(--mobile-auto-control-width)!important;
+    min-width:0!important;
+    max-width:var(--mobile-auto-control-width)!important;
+    height:40px!important;
+    min-height:40px!important;
+    max-height:40px!important;
+    justify-self:end!important;
+    align-self:center!important;
+    margin:0 0 0 auto!important;
+  }
+  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-input{
+    height:38px!important;
+    min-height:38px!important;
+    max-height:38px!important;
+    line-height:38px!important;
+  }
+
+  /* Risk rows get real top/bottom breathing room so the switch and amount
+     field sit in the middle instead of touching the separator line. */
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div:not(.cc-bot-manual-risk-add){
+    box-sizing:border-box!important;
+    height:58px!important;
+    min-height:58px!important;
+    max-height:58px!important;
+    padding:9px 0!important;
+  }
   .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field{
-    height:32px!important;
-    min-height:32px!important;
-    max-height:32px!important;
+    box-sizing:border-box!important;
+    width:min(100%,288px)!important;
+    min-width:0!important;
+    max-width:288px!important;
+    height:40px!important;
+    min-height:40px!important;
+    max-height:40px!important;
     display:grid!important;
     grid-template-columns:68px minmax(0,1fr)!important;
     align-items:center!important;
     align-self:center!important;
-    gap:8px!important;
+    justify-self:end!important;
+    gap:10px!important;
     margin:0!important;
   }
   .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field .toggle-setting-label{
@@ -5492,8 +5521,8 @@
     inset:auto!important;
     width:68px!important;
     min-width:68px!important;
-    height:32px!important;
-    min-height:32px!important;
+    height:40px!important;
+    min-height:40px!important;
     margin:0!important;
     padding:0!important;
     display:flex!important;
@@ -5504,27 +5533,19 @@
     box-sizing:border-box!important;
     width:100%!important;
     min-width:0!important;
-    height:30px!important;
-    min-height:30px!important;
-    max-height:30px!important;
+    height:40px!important;
+    min-height:40px!important;
+    max-height:40px!important;
     align-self:center!important;
     margin:0!important;
   }
   .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field .money-input{
-    height:28px!important;
-    min-height:28px!important;
-    max-height:28px!important;
-    line-height:28px!important;
+    height:38px!important;
+    min-height:38px!important;
+    max-height:38px!important;
+    line-height:38px!important;
     padding-top:0!important;
     padding-bottom:0!important;
-  }
-}
-
-@media(max-width:390px){
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-two-thirds-control,
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-input-shell{
-    width:66.666%!important;
-    max-width:66.666%!important;
   }
 }
 
