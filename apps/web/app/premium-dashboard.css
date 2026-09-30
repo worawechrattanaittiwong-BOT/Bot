@@ -5464,8 +5464,7 @@
   /* Keep every visible AUTO row on one vertical center line. */
   .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v12-mode-select-wrap>label,
   .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v2-fields>.cc-bot-v2-field,
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field,
-  .cc-v19-settings-card .cc-bot-v2-limit-grid>div:not(.cc-bot-manual-risk-add){
+  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field{
     align-items:center!important;
   }
 
@@ -5495,6 +5494,7 @@
      field sit in the middle instead of touching the separator line. */
   .cc-v19-settings-card .cc-bot-v2-limit-grid>div:not(.cc-bot-manual-risk-add){
     box-sizing:border-box!important;
+    align-items:center!important;
     height:58px!important;
     min-height:58px!important;
     max-height:58px!important;
