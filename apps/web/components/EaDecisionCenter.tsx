@@ -11,6 +11,7 @@ type Props = {
   symbol: string;
   state: string;
   online: boolean;
+  connectionOnline: boolean;
   marketClosed: boolean;
   observedAt: string | number | null;
   digits: number;
@@ -93,7 +94,7 @@ function CardHeading({ icon, title, detail }: { icon: string; title: string; det
 }
 
 export function EaDecisionCenter(props: Props) {
-  const { metrics, online, marketClosed, state, liveStatus } = props;
+  const { metrics, online, connectionOnline, marketClosed, state, liveStatus } = props;
   const [observations, setObservations] = useState<Observation[]>([]);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const mode = (textValue(metrics.controlMode) || props.mode).toUpperCase();
@@ -104,7 +105,8 @@ export function EaDecisionCenter(props: Props) {
   const autoActive = mode === "AUTO" && metrics.autoV20Active === true;
   const explicitlyWaiting = /WAIT|BLOCK|COOLDOWN|INITIALIZ|DATA_NOT_READY|NO_SIGNAL/.test(execution);
   const platformReady = liveStatus.tradeReady === true && metrics.tradeReady !== false;
-  const signal = !online ? "OFFLINE"
+  const signal = !connectionOnline ? "OFFLINE"
+    : !online ? "WAIT"
     : !running ? "PAUSED"
     : marketClosed || explicitlyWaiting || !platformReady ? "WAIT"
     : mode === "ZERO_GRID" ? "GRID"
@@ -112,7 +114,8 @@ export function EaDecisionCenter(props: Props) {
     : bias === "BUY" || bias === "SELL" ? bias : "WAIT";
   const signalTone: Tone = signal === "BUY" ? "good" : signal === "SELL" ? "bad"
     : signal === "WAIT" ? "warn" : "muted";
-  const signalDetail = !online ? "รอการเชื่อมต่อ EA"
+  const signalDetail = !connectionOnline ? "รอการเชื่อมต่อ MT5"
+    : !online ? "MT5 ออนไลน์ · รอข้อมูล EA รอบถัดไป"
     : !running ? "บอทหยุดอยู่ · แสดงสถานะล่าสุด"
     : marketClosed ? "รอเปิดตลาด"
     : signal === "GRID" ? "ติดตามคำสั่งกริดตามโหมดที่ใช้งาน"
@@ -149,7 +152,8 @@ export function EaDecisionCenter(props: Props) {
     || (entryReason || blockReason ? props.decisionLabel : "")
     || liveStatus.detail
     || "รอ EA รายงานเหตุผลการตัดสินใจ";
-  const visibleReason = !online ? "รอข้อมูลการตัดสินใจจาก EA"
+  const visibleReason = !connectionOnline ? "รอการเชื่อมต่อ MT5"
+    : !online ? "MT5 ออนไลน์ · รอข้อมูลการตัดสินใจจาก EA"
     : !running || marketClosed ? signalDetail : decisionReason;
   const demandLow = online ? numberValue(metrics.demandZoneLow) : null;
   const demandHigh = online ? numberValue(metrics.demandZoneHigh) : null;
@@ -189,7 +193,8 @@ export function EaDecisionCenter(props: Props) {
   const reportedSession = meaningfulCode(metrics.sessionProfile).toUpperCase() as MarketSessionCode | "";
   const currentSessionInfo = marketSessions.find(item => item.code === currentSession) || marketSessions[0];
   const reportedSessionInfo = marketSessions.find(item => item.code === reportedSession);
-  const sessionStatus = !online ? "รอ EA เชื่อมต่อ"
+  const sessionStatus = !connectionOnline ? "รอ MT5 เชื่อมต่อ"
+    : !online ? "MT5 ออนไลน์ · รอข้อมูล EA"
     : marketClosed ? "ตลาดปิดตามสถานะจาก EA"
     : "ตลาดที่กำลังอยู่ในช่วงเวลาไทย";
 
@@ -223,7 +228,7 @@ export function EaDecisionCenter(props: Props) {
       </div>
       <div className={styles.headerMeta}>
         <span>{props.symbol} <i/> {mode.replace(/_/g, " ")}</span>
-        <span className={styles.badge + " " + styles[online ? "good" : "muted"]}><i/>{online ? "EA ONLINE" : "WAITING EA"}</span>
+        <span className={styles.badge + " " + styles[connectionOnline ? "good" : "muted"]}><i/>{connectionOnline ? (online ? "EA ONLINE" : "MT5 ONLINE") : "OFFLINE"}</span>
       </div>
     </header>
 

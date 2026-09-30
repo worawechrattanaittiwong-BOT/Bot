@@ -4359,6 +4359,7 @@ export default function DashboardPage() {
                 symbol={String(metrics.symbol || settings.symbol || "—")}
                 state={state}
                 online={isMt5Online}
+                connectionOnline={isMt5ConnectionOnline}
                 marketClosed={marketSessionClosed}
                 observedAt={data.instance?.last_seen_at || null}
                 digits={symbolDigits}
