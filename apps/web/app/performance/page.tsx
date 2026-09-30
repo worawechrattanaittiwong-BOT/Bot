@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken } from "../../lib/api";
 import { CustomerSidebar, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
+import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
 import styles from "./performance.module.css";
 
@@ -357,6 +358,13 @@ export default function PerformanceDashboardPage() {
   );
 
   function logout(){localStorage.removeItem("bot_token");window.location.href="/login";}
+  function closePerformance(){
+    if(window.history.length>1){
+      window.history.back();
+      return;
+    }
+    window.location.href="/dashboard?view=overview";
+  }
 
   async function loadOptions(){
     try{
@@ -670,6 +678,30 @@ export default function PerformanceDashboardPage() {
         ? <OwnerSidebar activeKey="trading-backtest" onLogout={logout} role={String(options?.user?.role || "OWNER")}/>
         : <CustomerSidebar activeKey="trading-backtest" onLogout={logout} userCode={options?.user?.user_code}/>} 
       <main className={`${styles.main} ${options?.elevated ? styles.mainOwner : styles.mainCustomer}`}>
+        <div className={styles.mobileTopBar}>
+          <button
+            type="button"
+            className={`${styles.mobileTopbarSettings} ${controlsOpen?styles.mobileTopbarSettingsOpen:""}`}
+            onClick={()=>setControlsOpen((value)=>!value)}
+            aria-expanded={controlsOpen}
+            aria-controls="performance-mobile-settings"
+          >
+            <ScenovaIcon name="control" size={16}/>
+            <span>ตั้งค่า</span>
+          </button>
+
+          <div className={styles.mobileTopbarBrand} aria-label="SCENOVA">
+            <ScenovaBrand className={styles.mobileTopbarLogo}/>
+          </div>
+
+          <button
+            type="button"
+            className={styles.mobileTopbarClose}
+            onClick={closePerformance}
+            aria-label="ปิด Backtest และ Performance"
+          >×</button>
+        </div>
+
         {error?<div className={styles.error}>{error}</div>:null}
 
         <section className={styles.summaryShell}>
@@ -685,11 +717,7 @@ export default function PerformanceDashboardPage() {
             <span className={styles.optionsChevron}>▾</span>
           </button>
 
-          <div className={`${styles.optionsDrawer} ${controlsOpen?styles.optionsDrawerOpen:""}`}>
-            <div className={styles.mobileDrawerHead}>
-              <b>ตั้งค่า</b>
-              <button type="button" className={styles.drawerCloseMobile} onClick={()=>setControlsOpen(false)} aria-label="ปิดตั้งค่า">×</button>
-            </div>
+          <div id="performance-mobile-settings" className={`${styles.optionsDrawer} ${controlsOpen?styles.optionsDrawerOpen:""}`}>
             <div className={styles.drawerTop}>
               <div className={styles.toolbarIdentity}>
                 {selectedAccount?<span className={String(selectedAccount.accountType).toUpperCase()==="DEMO"?styles.demoBadge:styles.realBadge}>{String(selectedAccount.accountType||"REAL").toUpperCase()}</span>:null}
