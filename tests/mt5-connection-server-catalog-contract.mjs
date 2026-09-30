@@ -7,6 +7,7 @@ const catalog = read("apps/api/src/catalog.controller.ts");
 const ea = read("apps/api/src/ea.controller.ts");
 const seed = read("database/057_broker_server_catalog_verified.sql");
 const deploy = read("scripts/deploy-hostinger.sh");
+const worker = read("tools/windows-cloud-worker/Worker/Mt5Runtime.cs");
 
 assert.match(
   catalog,
@@ -15,13 +16,28 @@ assert.match(
 );
 assert.match(
   dashboard,
-  /<optgroup label="REAL \/ LIVE">[\s\S]*?<optgroup label="DEMO \/ TRIAL">/,
-  "MT5 server selector must show REAL before DEMO"
+  /cloud-mt5-server-group[\s\S]*?REAL \/ LIVE[\s\S]*?cloud-mt5-server-group[\s\S]*?DEMO \/ TRIAL/,
+  "MT5 server picker must show REAL before DEMO"
 );
 assert.match(
   dashboard,
   /ไม่พบในรายการ — กรอก Server เอง/,
-  "MT5 server selector must retain a manual fallback"
+  "MT5 server picker must retain a manual fallback"
+);
+assert.match(
+  dashboard,
+  /cloud-mt5-server-combobox/,
+  "MT5 server must use one searchable/selectable combobox"
+);
+assert.doesNotMatch(
+  dashboard,
+  /mt5ServerSearch|customBrokerServer/,
+  "MT5 server picker must not require separate search/custom inputs"
+);
+assert.match(
+  dashboard,
+  /provisioningFailure = mt5ProvisioningFailureMessage/,
+  "MT5 connection UI must surface provisioning failures"
 );
 assert.match(
   dashboard,
@@ -94,6 +110,11 @@ assert.match(
   deploy,
   /database\/057_broker_server_catalog_verified\.sql/,
   "production deploy must apply broker server catalog migration"
+);
+assert.match(
+  worker,
+  /errorCode = NormalizeRuntimeError\(ex\.Message\)/,
+  "Cloud Worker must return precise MT5 provisioning errors"
 );
 
 console.log("MT5 connection persistence and broker server catalog contract PASS");
