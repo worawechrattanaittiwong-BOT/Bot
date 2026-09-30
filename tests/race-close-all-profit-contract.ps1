@@ -60,7 +60,7 @@ Need $harvestBlock 'g_racePerPositionProfitMoney' 'RACE harvest must use its ded
 Need $harvestBlock 'PositionGetDouble(POSITION_PROFIT)' 'RACE per-position target must follow the MT5 displayed Profit value'
 if($harvestBlock.Contains('PositionGetDouble(POSITION_SWAP)')){throw 'RACE per-position target must not alter the displayed MT5 Profit with swap'}
 Need $ea 'double RaceDisplayedOpenProfit()' 'RACE displayed-profit helper missing'
-Need $raceStop 'double points = RaceAtrStopPoints();' 'RACE stop must use RACE ATR only'
+Need $raceStop 'RaceAtrStopPoints();' 'RACE stop must use RACE ATR only'
 if($raceStop.Contains('g_manualStopLossPoints')){throw 'MANUAL Stop Loss still leaks into RACE'}
 
 Need $api 'numberSetting("racePerPositionProfitMoney", 0.01, maxAccountMoney)' 'API must validate RACE per-position target with the account-currency-safe limit'
