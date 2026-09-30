@@ -26,6 +26,7 @@ $page = Read-Text 'apps/web/app/runtime-migration/page.tsx'
 $dashboard = Read-Text 'apps/web/app/dashboard/page.tsx'
 $mt5Connect = Read-Text 'apps/web/components/Mt5ConnectionExperience.tsx'
 $agentVersion = Read-Text 'tools/windows-installer/AgentBuildInfo.cs'
+$installerForm = Read-Text 'tools/windows-installer/InstallerForm.cs'
 
 Require $schema 'CREATE TABLE IF NOT EXISTS runtime_migrations' 'runtime migration ledger'
 Require $schema "state NOT IN \('COMPLETED','FAILED','CANCELLED'\)" 'one active migration guard'
@@ -129,6 +130,8 @@ Require $dashboard 'WAITING_LOCAL_INSTALL' 'VPS to Local terminal waits for fres
 Require $dashboard 'ดาวน์โหลด SCENOVA Setup' 'VPS to Local terminal exposes the Local installer step'
 Require $dashboard 'ใช้บัญชีนี้' 'VPS to Local terminal exposes detected Local MT5 account confirmation'
 Require $dashboard 'movingToLocal && migrationState === "WAITING_LOCAL_INSTALL"' 'dashboard switches to Local target slot during install handoff'
+Require $installerForm 'var enrollmentCode = ScenovaRuntime\.ReadEnrollmentCode\(\)' 'fresh personalized Setup code is read even when an old Local profile exists'
+Require $installerForm 'heartbeat is null[\s\S]*!newInstall[\s\S]*EnrollProfileAsync\(terminal, enrollmentCode, profile\)' 'stale Local profile re-enrolls with the fresh Cloud-to-Local lease'
 Reject $dashboard 'cc-cloud-update-float' 'legacy separate Cloud Update floating card is removed'
 
 Write-Host 'SCENOVA Phase 3 runtime migration safety contract PASS'

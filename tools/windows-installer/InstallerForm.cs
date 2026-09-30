@@ -411,14 +411,14 @@ internal sealed partial class InstallerForm : Form
                 throw new InvalidOperationException("กรุณาแก้รายการที่ระบุว่าต้องดำเนินการ แล้วกดปุ่มนี้อีกครั้ง");
 
             profile = SelectedProfile();
+            var enrollmentCode = ScenovaRuntime.ReadEnrollmentCode();
             var newInstall = profile is null;
             if (newInstall)
             {
-                var code = ScenovaRuntime.ReadEnrollmentCode();
-                if (string.IsNullOrWhiteSpace(code))
+                if (string.IsNullOrWhiteSpace(enrollmentCode))
                     throw new InvalidOperationException("กรุณาดาวน์โหลดตัวติดตั้งจากหน้า MT5 & EA ในบัญชี SCENOVA ของคุณ");
                 SetStep(2, "กำลังเชื่อมต่อบัญชี SCENOVA กับ MT5 ที่เลือก");
-                profile = await EnrollProfileAsync(terminal, code, null);
+                profile = await EnrollProfileAsync(terminal, enrollmentCode, null);
             }
             if (profile is null) throw new InvalidOperationException("ไม่พบข้อมูลการติดตั้งสำหรับ MT5 ที่เลือก");
 
@@ -426,8 +426,25 @@ internal sealed partial class InstallerForm : Form
                 ?? throw new InvalidOperationException("ข้อมูลการเชื่อมต่อไม่ครบ กรุณาดาวน์โหลดตัวติดตั้งจากบัญชี SCENOVA อีกครั้ง");
             using var http = ScenovaClient.NewHttpClient();
             SetStep(2, "กำลังตรวจสอบเวอร์ชันและการเชื่อมต่อ");
-            var heartbeat = await TryHeartbeatAsync(profile, http)
-                ?? throw new InvalidOperationException("SCENOVA Server ยังไม่ตอบกลับ จึงยังยืนยันเวอร์ชันล่าสุดไม่ได้");
+            var heartbeat = await TryHeartbeatAsync(profile, http);
+
+            // Cloud -> Local rotates the installation lease. A PC can still have
+            // the old Local profile on disk, so the freshly downloaded Setup must
+            // be allowed to replace that stale token instead of looping forever
+            // on the previous profile.
+            if (heartbeat is null &&
+                !newInstall &&
+                !string.IsNullOrWhiteSpace(enrollmentCode))
+            {
+                SetStep(2, "กำลังรับสิทธิ์ Local ใหม่จาก SCENOVA");
+                profile = await EnrollProfileAsync(terminal, enrollmentCode, profile);
+                token = ScenovaRuntime.TryUnprotect(profile.InstallTokenProtected)
+                    ?? throw new InvalidOperationException("รับสิทธิ์ Local ใหม่แล้ว แต่ข้อมูลการเชื่อมต่อไม่ครบ");
+                heartbeat = await TryHeartbeatAsync(profile, http);
+            }
+
+            heartbeat ??= throw new InvalidOperationException(
+                "SCENOVA Server ยังไม่ตอบกลับ จึงยังยืนยันเวอร์ชันล่าสุดไม่ได้");
             EnsureAccountMatches(profile, heartbeat);
             var plan = SmartHealthEngine.BuildPlan(terminal, profile, heartbeat);
             var repairPreset = newInstall || plan.RepairPreset || !PresetMatches(profile, token);
