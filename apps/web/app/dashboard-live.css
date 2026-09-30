@@ -1558,3 +1558,243 @@
     height:11px!important;
   }
 }
+
+
+/* ===== SCENOVA VPS migration modal · premium single-card treatment ===== */
+.cc-vps-migration-dialog{
+  width:min(610px,calc(100vw - 28px));
+  max-width:none;
+}
+
+.cc-vps-migration-card{
+  gap:0;
+  padding:24px;
+  overflow:hidden;
+  border:1px solid rgba(124,92,244,.72);
+  border-radius:24px;
+  background:
+    radial-gradient(circle at 18% 0,rgba(91,71,224,.17),transparent 35%),
+    radial-gradient(circle at 100% 100%,rgba(93,61,214,.12),transparent 34%),
+    linear-gradient(155deg,#11152c 0%,#0b1022 58%,#090d1a 100%);
+  box-shadow:
+    0 28px 90px rgba(0,0,0,.62),
+    0 0 42px rgba(101,76,224,.17),
+    inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.cc-vps-migration-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:18px;
+  margin-bottom:28px;
+}
+
+.cc-vps-migration-title{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:14px;
+}
+
+.cc-vps-migration-icon{
+  width:54px;
+  height:54px;
+  flex:0 0 54px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(123,86,235,.7);
+  border-radius:16px;
+  background:linear-gradient(145deg,rgba(61,42,129,.68),rgba(21,20,54,.96));
+  color:#c6b5ff;
+  box-shadow:0 0 24px rgba(111,77,229,.16),inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.cc-vps-migration-title b{
+  display:block;
+  color:#f5f2ff;
+  font-size:22px;
+  line-height:1.2;
+  font-weight:950;
+  letter-spacing:-.02em;
+}
+
+.cc-vps-migration-title p{
+  margin:7px 0 0;
+  color:#9da6c2;
+  font-size:13px;
+  line-height:1.35;
+  font-weight:700;
+}
+
+.cc-vps-migration-close{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(116,126,166,.3);
+  border-radius:13px;
+  background:rgba(10,14,29,.78);
+  color:#b7bfd5;
+  cursor:pointer;
+  transition:border-color .16s ease,background .16s ease,color .16s ease,transform .16s ease;
+}
+
+.cc-vps-migration-close:hover:not(:disabled){
+  border-color:rgba(145,116,243,.7);
+  background:rgba(32,24,65,.92);
+  color:#f0ebff;
+  transform:translateY(-1px);
+}
+
+.cc-vps-password-field{
+  display:grid;
+  gap:10px;
+  color:#f0edff;
+  font-size:14px;
+  font-weight:850;
+}
+
+.cc-vps-password-shell{
+  min-height:58px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:0 16px;
+  border:1px solid rgba(87,102,151,.58);
+  border-radius:15px;
+  background:linear-gradient(180deg,rgba(6,10,19,.96),rgba(7,11,21,.99));
+  color:#858da9;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.02);
+  transition:border-color .16s ease,box-shadow .16s ease;
+}
+
+.cc-vps-password-shell:focus-within{
+  border-color:#8267ef;
+  box-shadow:0 0 0 3px rgba(130,103,239,.13),0 0 24px rgba(100,74,218,.1);
+  color:#a895ff;
+}
+
+.cc-vps-password-shell input{
+  width:100%;
+  min-width:0;
+  height:56px;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:#fff;
+  font:inherit;
+  font-size:15px;
+  font-weight:750;
+}
+
+.cc-vps-password-shell input::placeholder{
+  color:#70788f;
+  font-weight:650;
+}
+
+.cc-vps-security-note{
+  margin-top:12px;
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  color:#d8bd67;
+  font-size:11.5px;
+  line-height:1.45;
+  font-weight:650;
+}
+
+.cc-vps-security-note svg{
+  flex:0 0 auto;
+  margin-top:1px;
+  color:#e0bf56;
+}
+
+.cc-vps-security-note b{
+  color:#f0ce62;
+  font-size:10.5px;
+  letter-spacing:.08em;
+}
+
+.cc-vps-migration-actions{
+  display:grid;
+  grid-template-columns:minmax(0,.85fr) minmax(0,1.35fr);
+  gap:12px;
+  margin-top:26px;
+}
+
+.cc-vps-cancel,
+.cc-vps-confirm{
+  min-height:50px;
+  border-radius:14px;
+  font:inherit;
+  font-size:13px;
+  font-weight:900;
+  cursor:pointer;
+  transition:transform .16s ease,filter .16s ease,border-color .16s ease;
+}
+
+.cc-vps-cancel{
+  border:1px solid rgba(108,89,204,.65);
+  background:linear-gradient(145deg,rgba(25,27,55,.88),rgba(13,17,34,.96));
+  color:#eeeaff;
+}
+
+.cc-vps-confirm{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  border:1px solid rgba(154,126,255,.9);
+  background:linear-gradient(135deg,#7b55f4 0%,#6b48ef 48%,#4f63f2 100%);
+  color:#fff;
+  box-shadow:0 10px 28px rgba(91,65,226,.28),inset 0 1px 0 rgba(255,255,255,.18);
+}
+
+.cc-vps-cancel:hover:not(:disabled),
+.cc-vps-confirm:hover:not(:disabled){
+  transform:translateY(-1px);
+  filter:brightness(1.06);
+}
+
+.cc-vps-cancel:disabled,
+.cc-vps-confirm:disabled,
+.cc-vps-migration-close:disabled{
+  opacity:.48;
+  cursor:not-allowed;
+}
+
+@media(max-width:560px){
+  .cc-vps-migration-card{
+    padding:20px 18px;
+    border-radius:20px;
+  }
+
+  .cc-vps-migration-head{
+    margin-bottom:24px;
+  }
+
+  .cc-vps-migration-icon{
+    width:48px;
+    height:48px;
+    flex-basis:48px;
+    border-radius:14px;
+  }
+
+  .cc-vps-migration-title{
+    gap:11px;
+  }
+
+  .cc-vps-migration-title b{
+    font-size:18px;
+  }
+
+  .cc-vps-migration-title p{
+    font-size:12px;
+  }
+
+  .cc-vps-migration-actions{
+    grid-template-columns:1fr 1.35fr;
+  }
+}
