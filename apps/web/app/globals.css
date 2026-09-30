@@ -9901,3 +9901,243 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
     grid-template-columns:1fr 1.35fr!important;
   }
 }
+
+
+/* ===== VPS MT5 connection dialog · unified server picker ===== */
+.cloud-mt5-dialog{
+  width:min(860px,calc(100vw - 36px))!important;
+}
+
+.cloud-mt5-dialog-card{
+  padding:30px 32px 28px!important;
+}
+
+.cloud-mt5-dialog-head{
+  padding-bottom:22px!important;
+}
+
+.cloud-mt5-dialog-grid{
+  gap:20px 22px!important;
+  margin-top:24px!important;
+}
+
+.cloud-mt5-dialog-grid .field>span:first-child{
+  margin-bottom:9px!important;
+}
+
+.cloud-mt5-dialog .input{
+  min-height:58px!important;
+  border-radius:15px!important;
+  font-size:15px!important;
+}
+
+.cloud-mt5-server-field{
+  position:relative;
+}
+
+.cloud-mt5-server-combobox{
+  position:relative;
+}
+
+.cloud-mt5-server-input-wrap{
+  position:relative;
+}
+
+.cloud-mt5-server-input-wrap .input{
+  padding-right:54px!important;
+}
+
+.cloud-mt5-server-toggle{
+  position:absolute;
+  top:50%;
+  right:10px;
+  width:38px;
+  height:38px;
+  display:grid;
+  place-items:center;
+  transform:translateY(-50%);
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:#c9cee0;
+  font-size:22px;
+  line-height:1;
+  cursor:pointer;
+}
+
+.cloud-mt5-server-toggle:hover{
+  background:rgba(126,99,239,.1);
+  color:#fff;
+}
+
+.cloud-mt5-server-menu{
+  position:absolute;
+  z-index:30;
+  top:calc(100% + 8px);
+  left:0;
+  right:0;
+  max-height:280px;
+  overflow:auto;
+  padding:8px;
+  border:1px solid rgba(119,101,190,.42);
+  border-radius:14px;
+  background:#080c17;
+  box-shadow:0 22px 54px rgba(0,0,0,.5),0 0 0 1px rgba(121,95,224,.06);
+}
+
+.cloud-mt5-server-group{
+  padding:4px;
+}
+
+.cloud-mt5-server-group+.cloud-mt5-server-group{
+  margin-top:4px;
+  padding-top:9px;
+  border-top:1px solid rgba(126,110,184,.12);
+}
+
+.cloud-mt5-server-group>b{
+  display:block;
+  padding:4px 8px 6px;
+  color:#8b93a8;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.08em;
+}
+
+.cloud-mt5-server-group button,
+.cloud-mt5-server-custom{
+  width:100%;
+  min-height:42px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:9px 10px;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:#eef0f7;
+  font:inherit;
+  font-size:13px;
+  font-weight:750;
+  text-align:left;
+  cursor:pointer;
+}
+
+.cloud-mt5-server-group button:hover,
+.cloud-mt5-server-group button[aria-selected="true"],
+.cloud-mt5-server-custom:hover{
+  background:rgba(119,83,235,.15);
+}
+
+.cloud-mt5-server-custom{
+  margin-top:5px;
+  border:1px solid rgba(119,83,235,.22);
+  background:rgba(85,58,176,.08);
+}
+
+.cloud-mt5-server-custom span{
+  color:#a99cff;
+  font-size:11px;
+  font-weight:850;
+}
+
+.cloud-mt5-server-custom strong{
+  overflow:hidden;
+  color:#f7f5ff;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.cloud-mt5-server-empty,
+.cloud-mt5-server-hint{
+  padding:12px 11px;
+  color:#838ba0;
+  font-size:12px;
+  line-height:1.45;
+}
+
+.cloud-mt5-password-shell{
+  min-height:58px;
+}
+
+.cloud-mt5-password-shell input{
+  height:56px;
+}
+
+.cloud-mt5-password-note{
+  display:block!important;
+  margin-top:8px!important;
+  color:#81899d!important;
+  font-size:11px!important;
+  font-weight:650!important;
+  line-height:1.45!important;
+}
+
+.cloud-mt5-inline-error{
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  margin-top:18px;
+  padding:12px 14px;
+  border:1px solid rgba(241,102,114,.3);
+  border-radius:13px;
+  background:rgba(91,24,35,.18);
+  color:#ffb1ba;
+  font-size:12px;
+  font-weight:750;
+  line-height:1.5;
+}
+
+.cloud-mt5-inline-error svg{
+  flex:0 0 auto;
+  margin-top:1px;
+}
+
+.cloud-mt5-dialog-actions{
+  margin-top:24px!important;
+  padding-top:20px!important;
+}
+
+.cloud-mt5-cancel,
+.cloud-mt5-confirm{
+  min-height:54px!important;
+}
+
+@media(max-width:720px){
+  .cloud-mt5-dialog{
+    width:calc(100vw - 14px)!important;
+  }
+
+  .cloud-mt5-dialog-card{
+    padding:18px 16px 16px!important;
+  }
+
+  .cloud-mt5-dialog-grid{
+    gap:15px!important;
+    margin-top:18px!important;
+  }
+
+  .cloud-mt5-dialog .input{
+    min-height:52px!important;
+    font-size:14px!important;
+  }
+
+  .cloud-mt5-server-menu{
+    position:relative;
+    top:auto;
+    margin-top:7px;
+    max-height:230px;
+  }
+
+  .cloud-mt5-dialog-actions{
+    gap:9px!important;
+    margin-top:18px!important;
+    padding-top:15px!important;
+  }
+
+  .cloud-mt5-cancel,
+  .cloud-mt5-confirm{
+    min-height:50px!important;
+  }
+}
