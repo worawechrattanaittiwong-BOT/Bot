@@ -1552,17 +1552,26 @@ string ResolveCloudStartupSymbol(const string requested)
 
 bool SwitchCloudChartToAccountSymbol()
 {
-   if(!InpCloudRelay || StringLen(InpStartupSymbol)<=0)
+   if(!InpCloudRelay)
       return false;
 
-   string resolved=ResolveCloudStartupSymbol(InpStartupSymbol);
+   // Worker 2.2.25+ passes the canonical Web symbol explicitly. Older Workers
+   // can still receive EA 1.0.97 through Fleet Update, so fall back to the
+   // bootstrap chart family and resolve its account-specific suffix locally.
+   string requested=InpStartupSymbol;
+   if(StringLen(requested)<=0)
+      requested=_Symbol;
+   if(StringLen(requested)<=0)
+      return false;
+
+   string resolved=ResolveCloudStartupSymbol(requested);
    if(StringLen(resolved)<=0 || StringCompare(resolved,_Symbol,false)==0)
       return false;
 
    if(!SymbolSelect(resolved,true))
    {
       Print("SCENOVA CLOUD SYMBOL: cannot select ",resolved,
-            " requested=",InpStartupSymbol,
+            " requested=",requested,
             " current=",_Symbol);
       return false;
    }
@@ -1578,7 +1587,7 @@ bool SwitchCloudChartToAccountSymbol()
 
    Print("SCENOVA CLOUD SYMBOL: account symbol resolved ",
          _Symbol," -> ",resolved,
-         " requested=",InpStartupSymbol);
+         " requested=",requested);
    return true;
 }
 
