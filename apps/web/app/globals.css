@@ -8761,7 +8761,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 /* ===== MT5 & EA · compact desktop + MT5 popup ===== */
 .account-view-main .cc-page-head-account,
 .account-view-main .account-workspace{
-  width:min(1120px,100%);
+  width:min(1240px,100%);
   margin-left:auto!important;
   margin-right:auto!important;
 }
