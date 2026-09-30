@@ -182,6 +182,7 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define AUTO_V21_EXIT_CONFIRM_SECONDS 10
 #define AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS 6
 #define RACE_VOLUME_WINDOW_SECONDS 60
+#define RACE_HARD_STOP_ATR_MULTIPLIER 1.20
 #define RACE_VOLUME_HISTORY_SECONDS 60
 #define RACE_EXIT_CYCLE_GRACE_SECONDS 20
 #define RACE_EXIT_LAST_FILL_GRACE_SECONDS 15
@@ -3757,8 +3758,8 @@ bool RaceFlowStillRunning(int direction, double momentum)
 
 double RaceAtrStopPoints()
 {
-   // RACE v1.0.100 uses M5 volatility for a materially closer scalp stop while
-   // preserving the configured hardStopAtrMultiplier from Settings.
+   // RACE 1.1.0 uses M5 volatility with a fixed 1.20 ATR stop multiplier.
+   // The shared hardStopAtrMultiplier remains available to other modes only.
    double atr = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
    if(atr <= 0.0)
       return 0.0;
@@ -3768,8 +3769,7 @@ double RaceAtrStopPoints()
       (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
    ) + 2.0;
 
-   double multiplier = EffectiveHardStopMultiplier();
-   return MathMax(atr * multiplier, brokerMinimumPoints);
+   return MathMax(atr * RACE_HARD_STOP_ATR_MULTIPLIER, brokerMinimumPoints);
 }
 
 double RaceInitialStopPrice(int direction, double entryPrice)

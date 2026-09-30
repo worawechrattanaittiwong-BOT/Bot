@@ -6472,7 +6472,7 @@ function BotSettingsModal(props:any) {
     : controlMode === "MANUAL"
       ? Number(manualSl).toFixed(0)+" points"
       : controlMode === "RACE"
-        ? "ATR × 1.50"
+        ? "M5 ATR × 1.20"
         : "ATR × 2.00";
   const selectedZeroLevels = Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||10));
   const zeroGridLowVolatilityEnabled = props.settings?.zeroGridLowVolatilityEnabled === true;

@@ -91,7 +91,7 @@ Need $harvest 'g_racePerPositionProfitMoney' 'RACE per-position exit must use th
 Need $harvest 'targetComparableProfit + 0.00000001 < perPositionTarget' 'RACE must wait until each ticket/unit reaches its money target'
 Need $harvest 'baseVolume / positionVolume' 'Netting RACE must compare profit proportionally per configured-Lot unit'
 Need $ea 'RACE_DIRECTION_LOCK' 'RACE must keep mixed BUY/SELL baskets blocked'
-Need $raceAtr 'AverageTrueRangePoints(PERIOD_M5, g_atrPeriod)' 'RACE v1.0.100 stop must use M5 ATR for a closer scalp stop'
+Need $raceAtr 'AverageTrueRangePoints(PERIOD_M5, g_atrPeriod)' 'RACE 1.1.0 stop must use M5 ATR for a closer scalp stop'
 Need $raceStop 'RaceV2StructureInvalidPrice(direction)' 'RACE stop must use nearby structure to tighten placement'
 Need $raceStop 'double minDistancePoints' 'RACE stop must keep a minimum anti-noise distance'
 Need $raceStop 'structureDistancePoints < selectedDistancePoints' 'RACE structure may tighten but never widen the configured stop'
@@ -122,10 +122,9 @@ Need $raceTelemetryV1 'raceLegPhase' 'RACE telemetry must expose leg phase'
 Need $api 'raceTelemetryVersion?: number;' 'API journal input must accept RACE telemetry'
 Need $api 'raceProjectedStructureLossMoney: Math.max(0, n(body.raceProjectedStructureLossMoney))' 'API must persist RACE projected structure loss in journal metadata'
 Need $api 'raceRiskMismatch: body.raceRiskMismatch === true' 'API must persist RACE exposure-risk mismatch'
-Need $raceAtr 'EffectiveHardStopMultiplier()' 'RACE stop must consume the configured ATR multiplier'
-Need $hardStopMultiplier 'RaceModeEnabled() || BasketHasRacePosition()' 'RACE ATR multiplier isolation gate missing'
-Need $hardStopMultiplier 'return MathMax(0.5, MathMin(10.0, multiplier));' 'RACE must honor the configured ATR multiplier'
-if($hardStopMultiplier.Contains('return 1.50;')){throw 'Obsolete fixed RACE M15 x1.50 stop remains'}
+Need $ea '#define RACE_HARD_STOP_ATR_MULTIPLIER 1.20' 'RACE stop multiplier must be fixed at 1.20 ATR'
+Need $raceAtr 'RACE_HARD_STOP_ATR_MULTIPLIER' 'RACE ATR stop must use the dedicated 1.20 multiplier'
+if($raceAtr.Contains('EffectiveHardStopMultiplier()')){throw 'RACE must not inherit the shared 2.00 ATR multiplier'}
 Need $raceStopReady 'RACE_ATR_NOT_READY' 'RACE must wait instead of opening with a tiny placeholder stop when ATR is unavailable'
 Need $fill 'if(!RaceStopReady())' 'RACE must verify ATR stop readiness before sending an order'
 Need $send 'bool raceOrder = RaceModeEnabled() || BasketHasRacePosition();' 'shared order sender must identify RACE orders from execution ownership, not stale entry metadata'
@@ -141,4 +140,4 @@ if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
 }
 Need $release 'EA_RUNTIME_CONTRACT = "RACE_CONFIGURED_LOSS_ONLY_V1"' 'API runtime contract must match EA'
 
-Write-Host 'RACE v1.0.100 60-second flow + configured-loss-only contract: PASS'
+Write-Host 'RACE 1.1.0 60-second flow + 1.20 ATR stop + configured-loss-only contract: PASS'
