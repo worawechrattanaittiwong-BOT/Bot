@@ -2,9 +2,11 @@ namespace Scenova.CloudWorker;
 
 internal sealed class WorkerLoop
 {
-    internal const string Version = "2.2.26";
+    internal const string Version = "2.2.27";
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan HeartbeatRequestTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan TelemetryInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan TelemetryRequestTimeout = TimeSpan.FromSeconds(15);
 
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;
@@ -31,6 +33,7 @@ internal sealed class WorkerLoop
         using var backgroundCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var relayTask = _eaRelay.RunAsync(backgroundCts.Token);
         var heartbeatTask = RunHeartbeatLoopAsync(backgroundCts.Token);
+        var telemetryTask = RunTelemetryLoopAsync(backgroundCts.Token);
 
         try
         {
@@ -125,32 +128,92 @@ internal sealed class WorkerLoop
         finally
         {
             backgroundCts.Cancel();
-            try { await Task.WhenAll(relayTask, heartbeatTask); }
+            try { await Task.WhenAll(relayTask, heartbeatTask, telemetryTask); }
             catch (OperationCanceledException) { }
         }
     }
 
     private async Task RunHeartbeatLoopAsync(CancellationToken cancellationToken)
     {
+        // Liveness must stay independent from WMI, filesystem scans, log reads,
+        // EA hashing and MT5 diagnostics. If any diagnostics stall, the Server
+        // must still know this Windows Worker is alive.
         while (!cancellationToken.IsCancellationRequested)
         {
             var startedAt = DateTime.UtcNow;
             try
             {
-                var templateReady = _mt5.TemplateReady;
-                var telemetry = TelemetryReader.Read(templateReady);
-                telemetry.SetupVersion = _config.SetupVersion;
-                telemetry.Instances = _mt5.Diagnostics();
-
                 using var requestCts =
                     CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 requestCts.CancelAfter(HeartbeatRequestTimeout);
 
+                await _client.PostAsync(
+                    "heartbeat",
+                    new { hostname = Environment.MachineName },
+                    requestCts.Token);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                var message = ex.Message.Replace('\r', ' ').Replace('\n', ' ');
+                if (message.Length > 500) message = message[..500];
+                Console.Error.WriteLine(
+                    "WORKER_LIVENESS_RETRY " + DateTimeOffset.UtcNow.ToString("O") +
+                    " runner=" + _config.RunnerId +
+                    " error=" + ex.GetType().Name +
+                    " message=" + message);
+            }
+
+            var elapsed = DateTime.UtcNow - startedAt;
+            var delay = HeartbeatInterval - elapsed;
+            if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
+
+            try
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+    }
+
+    private async Task RunTelemetryLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var startedAt = DateTime.UtcNow;
+            try
+            {
+                // Keep potentially blocking Windows/WMI/file diagnostics off the
+                // lightweight liveness path. One stuck telemetry pass must never
+                // make the customer-facing VPS connection badge go offline.
+                var snapshot = await Task.Run(() =>
+                {
+                    var templateReady = _mt5.TemplateReady;
+                    var telemetry = TelemetryReader.Read(templateReady);
+                    telemetry.SetupVersion = _config.SetupVersion;
+                    telemetry.Instances = _mt5.Diagnostics();
+                    return new
+                    {
+                        ActiveInstances = _mt5.ActiveInstanceCount(),
+                        Telemetry = telemetry
+                    };
+                }, cancellationToken);
+
+                using var requestCts =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                requestCts.CancelAfter(TelemetryRequestTimeout);
+
                 await _client.PostAsync("heartbeat", new
                 {
                     hostname = Environment.MachineName,
-                    activeInstances = _mt5.ActiveInstanceCount(),
-                    telemetry
+                    activeInstances = snapshot.ActiveInstances,
+                    telemetry = snapshot.Telemetry
                 }, requestCts.Token);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -162,14 +225,14 @@ internal sealed class WorkerLoop
                 var message = ex.Message.Replace('\r', ' ').Replace('\n', ' ');
                 if (message.Length > 500) message = message[..500];
                 Console.Error.WriteLine(
-                    "WORKER_HEARTBEAT_RETRY " + DateTimeOffset.UtcNow.ToString("O") +
+                    "WORKER_TELEMETRY_RETRY " + DateTimeOffset.UtcNow.ToString("O") +
                     " runner=" + _config.RunnerId +
                     " error=" + ex.GetType().Name +
                     " message=" + message);
             }
 
             var elapsed = DateTime.UtcNow - startedAt;
-            var delay = HeartbeatInterval - elapsed;
+            var delay = TelemetryInterval - elapsed;
             if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
 
             try

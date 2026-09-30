@@ -13,6 +13,7 @@ $cloudUpdateUi = Get-Content (Join-Path $root 'apps/web/components/CloudUpdatesP
 $addonMigration = Get-Content (Join-Path $root 'database/051_cloud_addon_pricing.sql') -Raw
 $dashboard = Get-Content (Join-Path $root 'apps/web/app/dashboard/page.tsx') -Raw
 $worker = Get-Content (Join-Path $root 'apps/web/public/downloads/SCENOVA-CloudWorker.ps1') -Raw
+$workerLoop = Get-Content (Join-Path $root 'tools/windows-cloud-worker/Worker/WorkerLoop.cs') -Raw
 
 function Assert-Contains([string]$Text, [string]$Needle, [string]$Message) {
   if (-not $Text.Contains($Needle)) { throw $Message }
@@ -36,6 +37,11 @@ Assert-Contains $schema "bi.last_seen_at>now()-interval '30 seconds'" 'owner/adm
 Assert-Contains $schema "NOT EXISTS (" 'paid reservation must not double-count an already assigned runtime'
 
 # Reusing one MT5 identity across LOCAL/CLOUD must go through verified migration.
+Assert-Contains $workerLoop 'private async Task RunTelemetryLoopAsync' 'Cloud Worker telemetry must run independently from liveness heartbeat'
+Assert-Contains $workerLoop 'new { hostname = Environment.MachineName }' 'Cloud Worker liveness heartbeat must not depend on diagnostics payload'
+Assert-Contains $workerLoop 'WORKER_LIVENESS_RETRY' 'Cloud Worker lightweight liveness retry path missing'
+Assert-Contains $workerApi 'WHEN $5::int IS NULL THEN worker_nodes.active_instances' 'Liveness-only worker heartbeat must preserve active instance telemetry'
+
 Assert-Contains $botApi 'WHERE bi.mt5_account_id=$1' 'cross-slot MT5 binding preflight missing'
 Assert-Contains $botApi 'AND bi.slot_id<>$2' 'same MT5 identity must detect another bound slot'
 Assert-Contains $botApi 'บัญชี MT5 นี้ยังเชื่อมกับ Local อยู่' 'Local-to-Cloud direct bind must return migration guidance instead of DB 500'

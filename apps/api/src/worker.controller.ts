@@ -51,14 +51,28 @@ export class WorkerController {
     if (body.activeInstances != null && (!Number.isInteger(body.activeInstances) || body.activeInstances<0 || body.activeInstances>200)) {
       throw new BadRequestException("invalid instance count");
     }
+    const activeInstances = body.activeInstances == null
+      ? null
+      : Math.max(0, Number(body.activeInstances || 0));
+
     await this.db.query(
-      "INSERT INTO worker_nodes(runner_id,region,hostname,capacity,active_instances,status,last_seen_at) VALUES($1,$2,$3,$4,$5,'ONLINE',now()) ON CONFLICT(runner_id) DO UPDATE SET hostname=EXCLUDED.hostname,active_instances=EXCLUDED.active_instances,status='ONLINE',last_seen_at=now()",
+      `INSERT INTO worker_nodes(
+         runner_id,region,hostname,capacity,active_instances,status,last_seen_at
+       ) VALUES($1,$2,$3,$4,COALESCE($5::int,0),'ONLINE',now())
+       ON CONFLICT(runner_id) DO UPDATE SET
+         hostname=EXCLUDED.hostname,
+         active_instances=CASE
+           WHEN $5::int IS NULL THEN worker_nodes.active_instances
+           ELSE EXCLUDED.active_instances
+         END,
+         status='ONLINE',
+         last_seen_at=now()`,
       [
         body.runnerId,
         body.region || "singapore",
         body.hostname || null,
         Math.max(1, Number(body.capacity || 10)),
-        Math.max(0, Number(body.activeInstances || 0))
+        activeInstances
       ]
     );
     if (body.telemetry) {
