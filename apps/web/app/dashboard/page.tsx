@@ -993,9 +993,9 @@ export default function DashboardPage() {
     data?.instance?.mt5_connection_degraded ??
     (!isMt5Online && isMt5ConnectionOnline)
   );
-  const isConnectionOnline = isCloudRuntime
-    ? (isCloudWorkerOnline || isMt5ConnectionOnline)
-    : isMt5ConnectionOnline;
+  // Customer-facing connectivity follows the actual MT5 terminal state.
+  // EA heartbeat freshness remains a separate, strict trading-safety gate.
+  const isConnectionOnline = isMt5ConnectionOnline;
   const symbolDigits = Math.max(0, Math.min(8, Number(metrics.symbolDigits ?? 3)));
   const spreadPoints = Number(metrics.spreadPoints || 0);
   const pointSize = Number(metrics.pointSize || 0);
@@ -1658,13 +1658,13 @@ export default function DashboardPage() {
   }, [entitlement]);
 
   const connectionLabel = isCloudRuntime
-    ? isMt5Online
-      ? "VPS + MT5 เชื่อมต่อแล้ว"
-      : isMt5ConnectionOnline
-        ? "VPS ออนไลน์ · MT5 กำลังยืนยันการเชื่อมต่อ"
-        : isCloudWorkerOnline
-          ? "VPS ออนไลน์ · กำลังรอ MT5"
-          : "VPS Server ออฟไลน์"
+    ? isMt5ConnectionOnline
+      ? isMt5Online
+        ? "VPS + MT5 + EA เชื่อมต่อแล้ว"
+        : "VPS + MT5 เชื่อมต่อแล้ว · EA Heartbeat ขาดช่วง"
+      : isCloudWorkerOnline
+        ? "VPS ออนไลน์ · กำลังรอ MT5"
+        : "VPS Server ออฟไลน์"
     : isMt5Online
       ? "EA + MT5 เชื่อมต่อแล้ว"
       : isHeartbeatDelayed
@@ -3759,7 +3759,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="cc-v3-head-actions">
-            <span className={"cc-head-chip " + (isMt5ConnectionOnline ? "good" : isCloudRuntime && isCloudWorkerOnline ? "warn" : "bad")}><i/><span><b>{isMt5ConnectionOnline ? "เชื่อมต่อแล้ว" : isCloudRuntime && isCloudWorkerOnline ? "กำลังเชื่อม MT5" : "ยังไม่เชื่อมต่อ"}</b><small>{isCloudRuntime ? (isMt5Online ? "VPS Server Online · MT5 Online" : isCloudWorkerOnline ? "VPS Server Online · รอ MT5" : "VPS Server Offline") : isMt5Online ? (data.account?.broker || "MT5")+" · EA Online" : isHeartbeatDelayed ? "Windows Agent Online · Heartbeat "+connectionAgeLabel : isAgentOnline ? "Windows Agent Online · รอ EA" : (data.account?.broker || "MT5")+" · LOCAL"}</small></span></span>
+            <span className={"cc-head-chip " + (isMt5ConnectionOnline ? "good" : isCloudRuntime && isCloudWorkerOnline ? "warn" : "bad")}><i/><span><b>{isMt5ConnectionOnline ? "เชื่อมต่อแล้ว" : isCloudRuntime && isCloudWorkerOnline ? "กำลังเชื่อม MT5" : "ยังไม่เชื่อมต่อ"}</b><small>{isCloudRuntime ? (isMt5ConnectionOnline ? "VPS Server Online · MT5 Online" : isCloudWorkerOnline ? "VPS Server Online · รอ MT5" : "VPS Server Offline") : isMt5Online ? (data.account?.broker || "MT5")+" · EA Online" : isHeartbeatDelayed ? "Windows Agent Online · Heartbeat "+connectionAgeLabel : isAgentOnline ? "Windows Agent Online · รอ EA" : (data.account?.broker || "MT5")+" · LOCAL"}</small></span></span>
             <span className={"cc-head-chip bot " + (desired==="RUNNING" ? "active" : "")}><ScenovaIcon name="bot" size={18}/><span><b>{controlStateLabel}</b><small>{settings.entryMode || "AUTO MOMENTUM"}</small></span></span>
             <span className="cc-head-icon-button" aria-label="การแจ้งเตือน"><ScenovaIcon name="bell" size={18}/></span>
           </div>
@@ -4335,9 +4335,9 @@ export default function DashboardPage() {
                         <small>{heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"}</small>
                       </div>
                       <div>
-                        <span><i className={isMt5Online?"good":"warn"}/>MT5 / EA</span>
-                        <b>{isMt5Online?"Connected":isHeartbeatDelayed?"Reconnecting":"Waiting"}</b>
-                        <small>{heartbeatAgeSeconds.toFixed(0)}s heartbeat</small>
+                        <span><i className={isMt5ConnectionOnline?"good":"warn"}/>MT5</span>
+                        <b>{isMt5ConnectionOnline?"Connected":"Waiting"}</b>
+                        <small>{isMt5Online ? "EA ready · "+heartbeatAgeSeconds.toFixed(0)+"s heartbeat" : isHeartbeatDelayed ? "EA heartbeat delayed · "+heartbeatAgeSeconds.toFixed(0)+"s" : heartbeatAgeSeconds.toFixed(0)+"s heartbeat"}</small>
                       </div>
                     </div>
                   </div>
@@ -4711,15 +4711,13 @@ export default function DashboardPage() {
                   <div className="eyebrow">SELECTED VPS SLOT</div>
                   <div className="vps-connected-title-row">
                     <h2>{data.account.account_number}</h2>
-                    <span className={"badge " + (isMt5Online ? "" : "warn")}>
-                      <span className={"dot " + (isMt5Online ? "green" : "amber")}/>
-                      {isMt5Online
+                    <span className={"badge " + (isMt5ConnectionOnline ? "" : "warn")}>
+                      <span className={"dot " + (isMt5ConnectionOnline ? "green" : "amber")}/>
+                      {isMt5ConnectionOnline
                         ? "MT5 ออนไลน์"
-                        : isMt5ConnectionOnline
-                          ? "กำลังตรวจสอบ MT5"
-                          : isCloudWorkerOnline
-                            ? "VPS ออนไลน์ · รอ MT5"
-                            : "ออฟไลน์"}
+                        : isCloudWorkerOnline
+                          ? "VPS ออนไลน์ · รอ MT5"
+                          : "ออฟไลน์"}
                     </span>
                   </div>
                   <p className="muted">{data.account.broker} · {data.account.broker_server} · Slot #{data.selectedSlot?.slot_number || "—"}</p>

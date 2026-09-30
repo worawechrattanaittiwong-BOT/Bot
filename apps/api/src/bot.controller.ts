@@ -475,7 +475,22 @@ export class BotController {
          bi.desired_state,
          COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
          (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') mt5_online,
-         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '60 seconds') mt5_connection_online,
+         (
+            (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '60 seconds')
+            OR (
+              bi.mode='CLOUD'
+              AND wn.last_seen_at IS NOT NULL
+              AND wn.last_seen_at > now() - interval '90 seconds'
+              AND EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(
+                  COALESCE((wn.telemetry->'instances')::jsonb, '[]'::jsonb)
+                ) AS worker_instance
+                WHERE worker_instance->>'instanceId'=bi.id::text
+                  AND worker_instance->>'terminalRunning'='true'
+              )
+            )
+          ) mt5_connection_online,
          (bi.last_seen_at IS NOT NULL
            AND bi.last_seen_at <= now() - interval '20 seconds'
            AND bi.last_seen_at > now() - interval '60 seconds') mt5_connection_degraded,
@@ -821,7 +836,22 @@ export class BotController {
          wn.region AS runner_region,
          wn.hostname AS runner_hostname,
          (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') AS mt5_online,
-         (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '60 seconds') AS mt5_connection_online,
+         (
+            (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '60 seconds')
+            OR (
+              bi.mode='CLOUD'
+              AND wn.last_seen_at IS NOT NULL
+              AND wn.last_seen_at > now() - interval '90 seconds'
+              AND EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(
+                  COALESCE((wn.telemetry->'instances')::jsonb, '[]'::jsonb)
+                ) AS worker_instance
+                WHERE worker_instance->>'instanceId'=bi.id::text
+                  AND worker_instance->>'terminalRunning'='true'
+              )
+            )
+          ) AS mt5_connection_online,
          (bi.last_seen_at IS NOT NULL
            AND bi.last_seen_at <= now() - interval '20 seconds'
            AND bi.last_seen_at > now() - interval '60 seconds') AS mt5_connection_degraded,
