@@ -43,25 +43,9 @@ string RaceV2LossState(
       return "COST_NOISE";
    }
 
-   // Structure by itself can pause fills, but only the distance-armed reversal
-   // brain is allowed to close a negative RACE Basket before Broker SL.
-   string reversalReason="NONE";
-   if(RaceWrongDirectionConfirmed(
-      direction,
-      momentum,
-      filling,
-      reversalReason
-   ))
-   {
-      reasonOut=reversalReason;
-      return "REVERSAL_EXIT";
-   }
-
-   if(g_raceExitCandidateSince>0)
-   {
-      reasonOut="RACE_EXIT_CANDIDATE";
-      return "EXIT_CANDIDATE";
-   }
+   // v1.0.100: intelligence is observation/hold only while the Basket is
+   // negative. It can stop additional exposure, but it cannot close the loss.
+   RaceResetExitCandidate();
 
    if(RaceV2StructureBroken(direction))
    {

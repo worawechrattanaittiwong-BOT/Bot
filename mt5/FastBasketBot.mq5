@@ -1,8 +1,8 @@
 #property strict
-#property version   "1.0.97"
-#define SCENOVA_EA_VERSION "1.0.97"
-#define SCENOVA_PRODUCT_VERSION "1.0.97"
-#define SCENOVA_RUNTIME_CONTRACT "RACE_DISTANCE_ARMED_EXIT_V1"
+#property version   "1.0.100"
+#define SCENOVA_EA_VERSION "1.0.100"
+#define SCENOVA_PRODUCT_VERSION "1.0.100"
+#define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -3740,222 +3740,12 @@ bool RaceWrongDirectionConfirmed(
    string &reasonOut
 )
 {
+   // RACE v1.0.100 does not liquidate a losing Basket from flow, momentum,
+   // candle reversal or structure intelligence. Loss exits are owned only by
+   // the broker SL and explicit configured money limits such as Max Basket Loss.
    reasonOut = "NONE";
-   if(direction == 0)
-      return false;
-
-   datetime now = TimeCurrent();
-   bool candidateActive = g_raceExitCandidateSince > 0;
-
-   // Distance-Armed RACE exit:
-   // never allow intelligence to close a losing Basket while price is still
-   // oscillating around the weighted RACE entry. Time/pressure/structure may
-   // pause new fills inside this zone, but only real adverse travel can arm an
-   // intelligent loss exit. Broker SL, Max Basket Loss and Daily Loss remain
-   // independent hard protections.
-   if(g_raceCycleStartedAt <= 0 ||
-      now - g_raceCycleStartedAt < RACE_EXIT_CYCLE_GRACE_SECONDS ||
-      g_raceLastFillAt <= 0 ||
-      now - g_raceLastFillAt < RACE_EXIT_LAST_FILL_GRACE_SECONDS)
-   {
-      RaceResetExitCandidate();
-      return false;
-   }
-
-   // Use volume-weighted RACE Basket entry rather than the oldest ticket.
-   // This prevents a later fill from making a small move look artificially far.
-   double adversePoints = RaceV1AdversePoints(direction);
-   if(adversePoints <= 0.0)
-   {
-      RaceResetExitCandidate();
-      return false;
-   }
-
-   double atrM1 = AverageTrueRangePoints(PERIOD_M1, g_atrPeriod);
-   double atrM5 = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
-   if(atrM1 <= 0.0 || atrM5 <= 0.0)
-   {
-      RaceResetExitCandidate();
-      return false;
-   }
-
-   double spread = CurrentSpreadPoints();
-   if(spread <= 0.0 || spread >= 999999.0)
-   {
-      RaceResetExitCandidate();
-      return false;
-   }
-
-   // Absolute NO-CUT ZONE. Intelligence cannot close a negative RACE Basket
-   // until price has travelled at least half of the normal emergency-stop
-   // distance, with additional M5 ATR/spread floors to reject local noise.
-   double stopPoints = RaceAtrStopPoints();
-   double noCutFloor = MathMax(
-      spread * 8.00,
-      MathMax(atrM1 * 1.25, atrM5 * 0.80)
-   );
-   if(stopPoints > 0.0)
-      noCutFloor = MathMax(noCutFloor, stopPoints * 0.50);
-   if(filling)
-      noCutFloor *= 1.10;
-
-   if(adversePoints < noCutFloor)
-   {
-      if(candidateActive && adversePoints < noCutFloor * 0.85)
-         RaceResetExitCandidate();
-      reasonOut = "RACE_NO_CUT_ZONE";
-      return false;
-   }
-
-   // One complete 60-second pressure history is mandatory after the distance arm.
-   if(g_raceVolumeWarmupStartedAt <= 0 ||
-      now - g_raceVolumeWarmupStartedAt < RACE_VOLUME_HISTORY_SECONDS)
-   {
-      RaceResetExitCandidate();
-      return false;
-   }
-
-   double fastBuy = 0.0;
-   double fastSell = 0.0;
-   int fastSamples = 0;
-   RaceVolumeSnapshotWindow(RACE_VOLUME_WINDOW_SECONDS,fastBuy,fastSell,fastSamples);
-
-   double slowBuy = 0.0;
-   double slowSell = 0.0;
-   int slowSamples = 0;
-   RaceVolumeSnapshotWindow(RACE_VOLUME_HISTORY_SECONDS,slowBuy,slowSell,slowSamples);
-
-   double fastTotal = fastBuy + fastSell;
-   double slowTotal = slowBuy + slowSell;
-   if(fastSamples < 8 || slowSamples < 18 || fastTotal <= 0.0 || slowTotal <= 0.0)
-   {
-      RaceResetExitCandidate();
-      return false;
-   }
-
-   double fastOpposite = direction > 0 ? fastSell : fastBuy;
-   double slowOpposite = direction > 0 ? slowSell : slowBuy;
-   double fastOppositeShare = fastOpposite / fastTotal;
-   double slowOppositeShare = slowOpposite / slowTotal;
-
-   // Candidate creation is deliberately strict. Once armed, small pressure
-   // relaxation is tolerated so one tick cannot repeatedly reset the timer.
-   double fastRequired = candidateActive ? 0.64 : 0.72;
-   double slowRequired = candidateActive ? 0.58 : 0.62;
-   if(fastOppositeShare < fastRequired || slowOppositeShare < slowRequired)
-   {
-      RaceResetExitCandidate();
-      return false;
-   }
-
-   // Completed M1 only: never use the forming candle to cut a loss.
-   double open1 = iOpen(_Symbol, PERIOD_M1, 1);
-   double close1 = iClose(_Symbol, PERIOD_M1, 1);
-   double high1 = iHigh(_Symbol, PERIOD_M1, 1);
-   double low1 = iLow(_Symbol, PERIOD_M1, 1);
-   double bodyPoints = (open1 > 0.0 && close1 > 0.0)
-      ? (close1 - open1) / _Point
-      : 0.0;
-   double rangePoints = (high1 > 0.0 && low1 > 0.0 && high1 >= low1)
-      ? (high1 - low1) / _Point
-      : 0.0;
-   double adverseBodyPoints = -direction * bodyPoints;
-   double bodyRatio = rangePoints > 0.0
-      ? MathMin(1.0, MathMax(0.0, adverseBodyPoints / rangePoints))
-      : 0.0;
-   bool m1ClosedOpposite =
-      adverseBodyPoints >= MathMax(spread * 1.20, atrM1 * 0.35) &&
-      bodyRatio >= 0.58;
-
-   double adverseMomentum = -direction * momentum;
-   bool momentumOpposite =
-      adverseMomentum >= MathMax(spread * 1.00, atrM1 * 0.30);
-   bool m5Opposite = RaceM5CandleDirection() == -direction;
-   bool structureBroken = RaceV2StructureBroken(direction);
-
-   int confirmationVotes = 0;
-   if(momentumOpposite) confirmationVotes++;
-   if(m5Opposite) confirmationVotes++;
-   if(structureBroken) confirmationVotes++;
-
-   // After the price-distance arm, require a completed M1 reversal plus at
-   // least two independent secondary confirmations. A single momentum flip,
-   // candle, or structure signal can only pause fills; it cannot close a loss.
-   if(!m1ClosedOpposite || confirmationVotes < 2)
-   {
-      RaceResetExitCandidate();
-      return false;
-   }
-
-   double severeFloor = MathMax(
-      spread * 12.00,
-      MathMax(atrM1 * 2.00, atrM5 * 1.15)
-   );
-   if(stopPoints > 0.0)
-      severeFloor = MathMax(severeFloor, stopPoints * 0.80);
-
-   bool severe =
-      adversePoints >= severeFloor &&
-      fastOppositeShare >= 0.80 &&
-      slowOppositeShare >= 0.70 &&
-      m5Opposite &&
-      structureBroken;
-
-   if(!candidateActive)
-   {
-      g_raceExitCandidateSince = now;
-      g_raceExitCandidatePeakAdverse = adversePoints;
-      g_raceRecoveryWatch = true;
-      Print(
-         "RACE distance-armed reversal candidate adversePts=",DoubleToString(adversePoints,1),
-         " noCut=",DoubleToString(noCutFloor,1),
-         " severeFloor=",DoubleToString(severeFloor,1),
-         " fastOpp=",DoubleToString(fastOppositeShare,2),
-         " slowOpp=",DoubleToString(slowOppositeShare,2),
-         " votes=",confirmationVotes,
-         " severe=",severe
-      );
-      return false;
-   }
-
-   if(adversePoints > g_raceExitCandidatePeakAdverse)
-      g_raceExitCandidatePeakAdverse = adversePoints;
-
-   // A meaningful rebound cancels the exit candidate. The Basket gets another
-   // chance rather than being cut while price is already recovering.
-   bool rebound =
-      adversePoints <= g_raceExitCandidatePeakAdverse * 0.70 ||
-      adversePoints < noCutFloor * 0.90;
-   if(rebound)
-   {
-      Print(
-         "RACE distance-armed candidate cancelled by rebound adversePts=",
-         DoubleToString(adversePoints,1),
-         " peak=",DoubleToString(g_raceExitCandidatePeakAdverse,1)
-      );
-      RaceResetExitCandidate();
-      return false;
-   }
-
-   int requiredSeconds = severe
-      ? RACE_EXIT_SEVERE_CONFIRM_SECONDS
-      : RACE_EXIT_CONFIRM_SECONDS;
-   int candidateAge = (int)(now - g_raceExitCandidateSince);
-   if(candidateAge < requiredSeconds)
-      return false;
-
-   reasonOut = severe
-      ? "RACE_DISTANCE_ARMED_SEVERE_EXIT"
-      : "RACE_DISTANCE_ARMED_REVERSAL_EXIT";
-   Print(
-      "RACE distance-armed exit confirmed adversePts=",DoubleToString(adversePoints,1),
-      " noCut=",DoubleToString(noCutFloor,1),
-      " fastOpp=",DoubleToString(fastOppositeShare,2),
-      " slowOpp=",DoubleToString(slowOppositeShare,2),
-      " candidateAge=",candidateAge,
-      " severe=",severe
-   );
-   return true;
+   RaceResetExitCandidate();
+   return false;
 }
 
 bool RaceFlowStillRunning(int direction, double momentum)
@@ -3967,12 +3757,9 @@ bool RaceFlowStillRunning(int direction, double momentum)
 
 double RaceAtrStopPoints()
 {
-   // RACE uses its isolated M15 ATR stop at 1.50x. Do not depend on the AUTO
-   // market-context cache because the first RACE fill may happen before that
-   // cache has been refreshed.
-   double atr = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
-   if(atr <= 0.0 && g_atrPoints > 0.0)
-      atr = g_atrPoints;
+   // RACE v1.0.100 uses M5 volatility for a materially closer scalp stop while
+   // preserving the configured hardStopAtrMultiplier from Settings.
+   double atr = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
    if(atr <= 0.0)
       return 0.0;
 
@@ -3987,50 +3774,74 @@ double RaceAtrStopPoints()
 
 double RaceInitialStopPrice(int direction, double entryPrice)
 {
-   // RACE broker SL is an emergency boundary, not the normal noise detector.
-   // Keep the existing isolated M15 ATR x1.50 floor, then move it farther away
-   // only when the current RACE structure invalidation requires more room.
-   double points = RaceAtrStopPoints();
-   if(points <= 0.0)
+   // Moderate structure-aware stop:
+   // - M5 ATR x the configured multiplier is the maximum normal distance.
+   // - nearby RACE structure may pull the SL closer,
+   // - structure is never allowed to widen the SL,
+   // - an M5/spread/broker floor prevents an excessively tight stop.
+   double configuredDistancePoints = RaceAtrStopPoints();
+   if(configuredDistancePoints <= 0.0)
       return 0.0;
 
-   double stop = direction > 0
-      ? entryPrice - points * _Point
-      : entryPrice + points * _Point;
+   double atrM5Points = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
+   if(atrM5Points <= 0.0)
+      return 0.0;
 
-   double invalidPrice=RaceV2StructureInvalidPrice(direction);
-   double atrM5Price=MathMax(
-      _Point*8.0,
-      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   double brokerMinimumPoints = MathMax(
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
+      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
+   ) + 2.0;
+   double spreadPoints = CurrentSpreadPoints();
+   if(spreadPoints <= 0.0 || spreadPoints >= 999999.0)
+      spreadPoints = 0.0;
+
+   double minDistancePoints = MathMax(
+      brokerMinimumPoints,
+      MathMax(atrM5Points * 0.70, spreadPoints * 3.00)
    );
-   double structureBuffer=atrM5Price*0.18;
+   double selectedDistancePoints = MathMax(
+      configuredDistancePoints,
+      minDistancePoints
+   );
 
-   if(invalidPrice>0.0)
+   double invalidPrice = RaceV2StructureInvalidPrice(direction);
+   if(invalidPrice > 0.0)
    {
-      double structureStop=direction>0
-         ? invalidPrice-structureBuffer
-         : invalidPrice+structureBuffer;
+      double structureBufferPrice = atrM5Points * _Point * 0.12;
+      double structureStop = direction > 0
+         ? invalidPrice - structureBufferPrice
+         : invalidPrice + structureBufferPrice;
+      double structureDistancePoints = direction > 0
+         ? (entryPrice - structureStop) / _Point
+         : (structureStop - entryPrice) / _Point;
 
-      if(direction>0 && structureStop<stop && structureStop<entryPrice)
-         stop=structureStop;
-      else if(direction<0 && structureStop>stop && structureStop>entryPrice)
-         stop=structureStop;
+      // Structure can tighten the configured stop, never widen it.
+      if(structureDistancePoints > 0.0 &&
+         structureDistancePoints < selectedDistancePoints)
+      {
+         selectedDistancePoints = MathMax(
+            minDistancePoints,
+            structureDistancePoints
+         );
+      }
    }
 
+   double stop = direction > 0
+      ? entryPrice - selectedDistancePoints * _Point
+      : entryPrice + selectedDistancePoints * _Point;
    return NormalizeStopPriceToTick(stop,direction);
 }
 
 bool RaceStopReady()
 {
-   double atr = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   double atr = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
    if(atr <= 0.0)
    {
       g_executionStatus = "RACE_ATR_NOT_READY";
       return false;
    }
 
-   // Publish the exact ATR used by the RACE stop so dashboard telemetry and the
-   // actual Broker SL agree on the same source value.
+   // Publish the exact M5 ATR source used by the RACE v1.0.100 stop.
    g_atrPoints = atr;
    return true;
 }
@@ -4462,8 +4273,7 @@ bool ManageRaceBasket(double momentum)
    {
       g_raceCycleStartedAt = TimeCurrent();
       // After an EA/terminal restart an already-open RACE basket has no local
-      // last-fill timestamp. Rebase it to now so V4 gets fresh grace instead of
-      // disabling soft reversal protection for the entire recovered cycle.
+      // last-fill timestamp. Rebase it for consistent recovered-cycle telemetry.
       if(g_raceLastFillAt <= 0)
          g_raceLastFillAt = g_raceCycleStartedAt;
    }
@@ -4481,10 +4291,10 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   // RACE_DISTANCE_ARMED_EXIT_V1:
-   // Distinguish spread/commission/noise from real adverse travel. Intelligence
-   // may pause additional fills immediately, but it may close a losing Basket
-   // only after the distance arm and persistent multi-signal confirmation.
+   // RACE_CONFIGURED_LOSS_ONLY_V1:
+   // Intelligence may classify an adverse move and pause additional fills, but
+   // it never liquidates a losing RACE Basket. Broker SL and configured money
+   // limits remain the only loss-closing mechanisms.
    RaceV1UpdateExposureTelemetry(direction,0.0);
    g_raceExposureRiskMismatch =
       lossLimit > 0.0 &&
@@ -4507,21 +4317,6 @@ bool ManageRaceBasket(double momentum)
          g_raceRecoveryWatch=true;
          g_raceState="STRUCTURE_INVALID";
          g_executionStatus="RACE_STRUCTURE_INVALID_HOLD";
-         return true;
-      }
-      if(g_raceLossState=="REVERSAL_EXIT")
-      {
-         g_raceRecoveryWatch=true;
-         RaceCloseCycle(wrongDirectionReason=="NONE"
-            ? "RACE_DISTANCE_ARMED_REVERSAL_EXIT"
-            : wrongDirectionReason);
-         return true;
-      }
-      if(g_raceLossState=="EXIT_CANDIDATE")
-      {
-         g_raceRecoveryWatch=true;
-         g_raceState="EXIT_CANDIDATE";
-         g_executionStatus="RACE_EXIT_CANDIDATE";
          return true;
       }
       if(g_raceLossState=="ADVERSE_WATCH")
@@ -4583,10 +4378,9 @@ bool ManageRaceBasket(double momentum)
    }
 
 
-   // RACE_PERSISTENT_REVERSAL_EXIT_V4: direction still comes from the rolling
-   // 60-second BUY/SELL pressure window. A simple pressure flip never adds on
-   // the stale side. A negative cycle waits in recovery unless the persistent
-   // reversal guard above survives grace, slow confirmation and hysteresis.
+   // Direction still comes from the rolling 60-second BUY/SELL pressure
+   // window. A pressure flip never adds on the stale side. A negative cycle
+   // waits for the configured SL / Max Basket Loss instead of a brain cut.
    int volumeDirection = RaceAnalysisDirection(momentum);
    if(volumeDirection != 0 && volumeDirection != direction)
    {
@@ -4640,8 +4434,8 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   // A configured RACE money target owns every profitable exit. Loss/reversal
-   // protection above remains active, but quick-profit/giveback cannot bank
+   // A configured RACE money target owns every profitable exit. Configured
+   // loss protections remain active, while quick-profit/giveback cannot bank
    // profit early before the selected Basket/per-position target.
    if(raceStrictProfitTarget)
    {
@@ -13262,10 +13056,11 @@ double EffectiveHardStopMultiplier()
 {
    double multiplier = g_hardStopAtrMultiplier;
 
-   // RACE owns a fixed 1.50x M15 ATR stop. Keep this isolated from AUTO and
-   // from the generic server multiplier so changing RACE cannot alter AUTO.
+   // RACE respects the configured ATR multiplier. Its stop distance is based on
+   // M5 volatility below, so the user setting remains authoritative without
+   // silently falling back to the old fixed M15 x1.50 stop.
    if(RaceModeEnabled() || BasketHasRacePosition())
-      return 1.50;
+      return MathMax(0.5, MathMin(10.0, multiplier));
 
    if(g_marketRegime == "HIGH_VOLATILITY") multiplier *= 1.25;
    else if(g_marketRegime == "QUIET") multiplier *= 0.85;
