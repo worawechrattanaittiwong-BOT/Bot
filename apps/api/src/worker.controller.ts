@@ -578,12 +578,16 @@ export class WorkerController {
 
   @Post("provision-result")
   async provisionResult(@Body() body: { runnerId: string; instanceId: string; errorCode: string }) {
-    if (!/^[0-9a-f-]{36}$/i.test(body.instanceId) || !["","CHECK_TEMPLATE_OR_TERMINAL"].includes(body.errorCode)) {
+    const errorCode = String(body.errorCode || "").trim().toUpperCase();
+    if (
+      !/^[0-9a-f-]{36}$/i.test(body.instanceId) ||
+      !/^[A-Z0-9_]{0,96}$/.test(errorCode)
+    ) {
       throw new BadRequestException("Invalid result");
     }
     await this.db.query(
       "UPDATE bot_instances SET provisioning_error=$3 WHERE id=$1 AND runner_id=$2",
-      [body.instanceId,body.runnerId,body.errorCode||null]
+      [body.instanceId,body.runnerId,errorCode||null]
     );
     return { ok:true };
   }
