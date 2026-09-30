@@ -53,6 +53,8 @@ Reject $service 'INSERT INTO bot_instances' 'migration must never create a secon
 Require $service 'runner_id=NULL,lock_owner=NULL' 'Cloud runner ownership released only in Local handoff'
 Require $service 'DELETE FROM mt5_credentials' 'Cloud credential removed when returning to Local'
 Require $service "state='WAITING_LOCAL_INSTALL'" 'Cloud to Local waits for fresh Local enrollment'
+Require $service 'localAccountConfirmed' 'Cloud to Local waits for explicit confirmation when Local MT5 account changed'
+Require $service 'pending_account_number' 'Cloud to Local migration observes pending Local MT5 account identity'
 Require $service "state='TARGET_PROVISIONING'" 'Local to Cloud waits for Worker provisioning'
 Require $service 'async ownerLocalToCloud' 'OWNER has a direct Local to VPS migration entrypoint'
 Require $service "slot_type,status,label.*OWNER.*ACTIVE.*Owner VPS" 'OWNER migration creates a dedicated Cloud target slot when needed'
@@ -125,6 +127,8 @@ Require $dashboard 'LOCAL_MT5_BIND' 'Local MT5 bind/rebind is tracked in the uni
 Require $dashboard 'moveVpsToLocal' 'dashboard exposes verified VPS to Local handoff'
 Require $dashboard 'WAITING_LOCAL_INSTALL' 'VPS to Local terminal waits for fresh Local enrollment'
 Require $dashboard 'ดาวน์โหลด SCENOVA Setup' 'VPS to Local terminal exposes the Local installer step'
+Require $dashboard 'ใช้บัญชีนี้' 'VPS to Local terminal exposes detected Local MT5 account confirmation'
+Require $dashboard 'movingToLocal && migrationState === "WAITING_LOCAL_INSTALL"' 'dashboard switches to Local target slot during install handoff'
 Reject $dashboard 'cc-cloud-update-float' 'legacy separate Cloud Update floating card is removed'
 
 Write-Host 'SCENOVA Phase 3 runtime migration safety contract PASS'

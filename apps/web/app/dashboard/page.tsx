@@ -1472,6 +1472,19 @@ export default function DashboardPage() {
           return;
         }
 
+        if (movingToLocal && migrationState === "WAITING_LOCAL_INSTALL") {
+          const targetSlotId = String(
+            vpsMigrationProgress.targetSlotId ||
+            migration.target_slot_id ||
+            ""
+          );
+          if (targetSlotId && String(selectedSlotIdRef.current || "") !== targetSlotId) {
+            selectedSlotIdRef.current = targetSlotId;
+            setSelectedSlotId(targetSlotId);
+            void load(targetSlotId, true);
+          }
+        }
+
         const nextMessage = stateMessage[migrationState];
         if (nextMessage) {
           setVpsMigrationProgress((current:any) =>
@@ -3925,6 +3938,29 @@ export default function DashboardPage() {
                         onClick={()=>void downloadInstallerForSlot(String(operationTerminal.targetSlotId))}
                       >
                         ดาวน์โหลด SCENOVA Setup
+                      </button>
+                    </div>
+                  )}
+                {operationTerminal.kind === "MIGRATION" &&
+                  operationTerminal.stage === "WAITING_LOCAL_INSTALL" &&
+                  data.instance?.pending_account_number && (
+                    <div className="cc-server-operation-meta">
+                      <span>
+                        พบบัญชี Local MT5 {String(data.instance.pending_account_number)}
+                        {" · "}
+                        {String(data.instance.pending_broker_server || "ไม่ทราบ Server")}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn primary"
+                        disabled={
+                          busy ||
+                          !data.instance.rebind_ready ||
+                          Number(data.instance?.metrics?.previousBoundPositions || 0) > 0
+                        }
+                        onClick={()=>void rebindDetectedAccount()}
+                      >
+                        ใช้บัญชีนี้
                       </button>
                     </div>
                   )}

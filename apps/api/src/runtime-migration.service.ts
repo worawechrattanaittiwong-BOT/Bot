@@ -895,10 +895,13 @@ export class RuntimeMigrationService {
           leaseRotatedAt > 0 &&
           localAgentSeenAt >= leaseRotatedAt &&
           localEaSeenAt >= leaseRotatedAt;
+        const localAccountConfirmed =
+          !String(instance.pending_account_number || "").trim();
 
         if (
           localTargetIdentityMatches &&
           localSignalsBelongToNewLease &&
+          localAccountConfirmed &&
           this.fresh(instance.agent_last_seen_at, 60_000) &&
           this.fresh(instance.last_seen_at, 60_000)
         ) {

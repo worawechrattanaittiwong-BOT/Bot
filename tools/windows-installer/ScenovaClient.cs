@@ -181,19 +181,35 @@ internal static class ScenovaClient
 
     internal static async Task<bool> CanReachApiAsync()
     {
-        try
+        using var http = NewHttpClient();
+        http.Timeout = TimeSpan.FromSeconds(8);
+        var healthUrl =
+            ScenovaRuntime.ProductionApiBase.TrimEnd('/') + "/api/health";
+
+        for (var attempt = 1; attempt <= 3; attempt++)
         {
-            using var http = NewHttpClient();
-            http.Timeout = TimeSpan.FromSeconds(6);
-            using var response = await http.GetAsync(
-                ScenovaRuntime.ProductionWebBase,
-                HttpCompletionOption.ResponseHeadersRead);
-            return (int)response.StatusCode < 500;
+            try
+            {
+                using var response = await http.GetAsync(
+                    healthUrl,
+                    HttpCompletionOption.ResponseHeadersRead);
+                if (response.IsSuccessStatusCode)
+                    return true;
+            }
+            catch (Exception ex) when (
+                ex is HttpRequestException ||
+                ex is TaskCanceledException ||
+                ex is OperationCanceledException)
+            {
+                // Retry a short transport/TLS/DNS interruption before declaring
+                // the SCENOVA API unavailable.
+            }
+
+            if (attempt < 3)
+                await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt));
         }
-        catch
-        {
-            return false;
-        }
+
+        return false;
     }
 
     internal static async Task<byte[]> DownloadArtifactAsync(
