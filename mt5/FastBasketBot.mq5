@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.0.98"
-#define SCENOVA_EA_VERSION "1.0.98"
-#define SCENOVA_PRODUCT_VERSION "1.0.98"
+#property version   "1.0.99"
+#define SCENOVA_EA_VERSION "1.0.99"
+#define SCENOVA_PRODUCT_VERSION "1.0.99"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_30S_PROOF_EXIT_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -3977,7 +3977,7 @@ bool RaceWrongDirectionConfirmed(
       return false;
    }
 
-   // One complete 60-second pressure history is mandatory after the distance arm.
+   // One complete 30-second pressure history is mandatory after the distance arm.
    if(g_raceVolumeWarmupStartedAt <= 0 ||
       now - g_raceVolumeWarmupStartedAt < RACE_VOLUME_HISTORY_SECONDS)
    {
@@ -4155,9 +4155,9 @@ double RaceAtrStopPoints()
 
 double RaceInitialStopPrice(int direction, double entryPrice)
 {
-   // RACE broker SL is an emergency boundary, not the normal noise detector.
-   // Keep the existing isolated M15 ATR x1.50 floor, then move it farther away
-   // only when the current RACE structure invalidation requires more room.
+   // Settings contract: RACE must not secretly widen the configured stop.
+   // The stop is M5 ATR x hardStopAtrMultiplier exactly, except when the broker
+   // requires a larger minimum stop/freeze distance.
    double points = RaceAtrStopPoints();
    if(points <= 0.0)
       return 0.0;
@@ -4165,25 +4165,6 @@ double RaceInitialStopPrice(int direction, double entryPrice)
    double stop = direction > 0
       ? entryPrice - points * _Point
       : entryPrice + points * _Point;
-
-   double invalidPrice=RaceV2StructureInvalidPrice(direction);
-   double atrM5Price=MathMax(
-      _Point*8.0,
-      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
-   );
-   double structureBuffer=atrM5Price*0.18;
-
-   if(invalidPrice>0.0)
-   {
-      double structureStop=direction>0
-         ? invalidPrice-structureBuffer
-         : invalidPrice+structureBuffer;
-
-      if(direction>0 && structureStop<stop && structureStop<entryPrice)
-         stop=structureStop;
-      else if(direction<0 && structureStop>stop && structureStop>entryPrice)
-         stop=structureStop;
-   }
 
    return NormalizeStopPriceToTick(stop,direction);
 }
