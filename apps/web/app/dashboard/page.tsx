@@ -2931,6 +2931,71 @@ export default function DashboardPage() {
     ownerVpsDialogRef.current?.showModal();
   }
 
+  async function waitForFreshLocalMigrationHeartbeat(sourceSlotId:string) {
+    const deadline = Date.now() + 25_000;
+    let lastReason = "กำลังรอ MT5 heartbeat ล่าสุด";
+
+    while (Date.now() < deadline) {
+      try {
+        const query = new URLSearchParams();
+        query.set("slotId", sourceSlotId);
+        query.set("light", "1");
+        const snapshot = await api("/bot/dashboard?" + query.toString());
+        const instance = snapshot?.instance || {};
+        const actualState = String(instance.actual_state || "OFFLINE").toUpperCase();
+        const desiredState = String(instance.desired_state || "STOPPED").toUpperCase();
+        const snapshotMetrics = instance.metrics || {};
+        const positions = Math.max(0, Number(snapshotMetrics.positions || 0));
+        const pendingOrders = Math.max(0, Number(snapshotMetrics.accountScenovaPendingOrders || 0));
+        const reportedAge = Number(instance.ea_last_seen_age_seconds ?? -1);
+        const calculatedAge = instance.last_seen_at
+          ? Math.max(0, (Date.now() - new Date(String(instance.last_seen_at)).getTime()) / 1000)
+          : -1;
+        const heartbeatAge = reportedAge >= 0 ? reportedAge : calculatedAge;
+        const heartbeatFresh = heartbeatAge >= 0 && heartbeatAge <= 15;
+
+        if (
+          desiredState !== "RUNNING" &&
+          actualState === "STOPPED" &&
+          positions <= 0 &&
+          pendingOrders <= 0 &&
+          heartbeatFresh
+        ) {
+          return snapshot;
+        }
+
+        lastReason =
+          desiredState === "RUNNING" || actualState === "RUNNING"
+            ? "กำลังรอ Safe Stop ยืนยันจาก MT5"
+            : positions > 0
+              ? "กำลังรอ Position ปิดให้หมด"
+              : pendingOrders > 0
+                ? "กำลังรอ Pending Order ถูกยกเลิกให้หมด"
+                : actualState !== "STOPPED"
+                  ? "กำลังรอ EA ยืนยันสถานะ STOPPED"
+                  : "กำลังรอ MT5 heartbeat ล่าสุดก่อนย้ายไป VPS";
+
+        setVpsMigrationProgress((current:any) => ({
+          ...(current || {}),
+          status:"RUNNING",
+          stage:"WAITING_HEARTBEAT",
+          targetMode:"CLOUD",
+          message:lastReason
+        }));
+      } catch {
+        lastReason = "กำลังรอการเชื่อมต่อ MT5/EA เพื่อยืนยันสถานะก่อนย้าย";
+      }
+
+      await new Promise(resolve=>window.setTimeout(resolve,1250));
+    }
+
+    throw new Error(
+      lastReason === "กำลังรอ MT5 heartbeat ล่าสุดก่อนย้ายไป VPS"
+        ? "รอ MT5 heartbeat ล่าสุดก่อนย้ายไป VPS · กรุณาเปิด MT5 และ EA ไว้ แล้วลองอีกครั้ง"
+        : lastReason + " · กรุณาตรวจ MT5/EA แล้วลองอีกครั้ง"
+    );
+  }
+
   async function moveOwnerLocalToVps(e: FormEvent) {
     e.preventDefault();
     const sourceSlotId = String(selectedSlotIdRef.current || data?.selectedSlot?.id || "");
@@ -2961,6 +3026,15 @@ export default function DashboardPage() {
     });
 
     try {
+      await waitForFreshLocalMigrationHeartbeat(sourceSlotId);
+      setVpsMigrationProgress((current:any) => ({
+        ...(current || {}),
+        status:"RUNNING",
+        stage:"HEARTBEAT_CONFIRMED",
+        targetMode:"CLOUD",
+        message:"MT5 ยืนยัน STOPPED และ Flat แล้ว · กำลังส่งคำสั่งย้ายไป VPS"
+      }));
+
       const result = isOwner
         ? await api("/runtime-migration/owner/local-to-cloud", {
             method:"POST",
@@ -4463,8 +4537,8 @@ export default function DashboardPage() {
                     isOwner,
                     busy:ownerVpsBusy,
                     blockedReason:
-                      desired === "RUNNING" || state !== "STOPPED"
-                        ? "กรุณากด Safe Stop และรอ Bot เป็น STOPPED ก่อนย้ายไป VPS"
+                      desired === "RUNNING" || state === "RUNNING"
+                        ? "กรุณากด Safe Stop ก่อนย้ายไป VPS"
                         : Number(data?.instance?.metrics?.positions || 0) > 0
                           ? "ต้องไม่มี Position ค้างก่อนย้ายไป VPS"
                           : Number(data?.instance?.metrics?.accountScenovaPendingOrders || 0) > 0
