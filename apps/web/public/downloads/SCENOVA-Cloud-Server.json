@@ -1,7 +1,7 @@
 ﻿{
     "setupVersion":  "0.6.16",
     "workerVersion":  "2.2.26",
-    "setupSha256":  "b5c576993df75fb15e9142cabc3dd9b28cfc5a4915190c73660e41e21f738165",
-    "workerSha256":  "bb6de9020e6f8e2559dd1fac99248a67e19409669aec1e9b5a106a0403701444",
-    "builtAt":  "2026-09-30T09:51:19.3188889Z"
+    "setupSha256":  "3d80fc1b895458bacd219c11549cc02e35a63bbdbd93db340b4c60ada5d62565",
+    "workerSha256":  "ac0a2447a046a95bc2f51f4c868fc80d97763c604c91bd4b4d75aefc94bf6daa",
+    "builtAt":  "2026-09-30T10:06:16.0198246Z"
 }
