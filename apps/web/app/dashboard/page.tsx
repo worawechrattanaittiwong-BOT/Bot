@@ -91,6 +91,15 @@ function mt5ProvisioningFailureMessage(value: unknown) {
   const code = String(value || "").trim().toUpperCase();
   if (!code) return "";
 
+  if (code.includes("MT5_AUTH_FAILED")) {
+    return "MT5 Login หรือ Trading Password ไม่ถูกต้อง · ตรวจเลขบัญชี รหัส Trading และ Server แล้วลองใหม่";
+  }
+  if (code.includes("MT5_ACCOUNT_DISABLED")) {
+    return "บัญชี MT5 ถูกปิดหรือถูกระงับ · ตรวจสถานะบัญชีกับ Broker ก่อนเชื่อมใหม่";
+  }
+  if (code.includes("MT5_SERVER_NOT_FOUND")) {
+    return "MT5 ไม่พบ Server นี้ · ตรวจชื่อ Server ให้ตรงทุกตัว หากถูกต้อง Broker อาจต้องใช้ MT5 Terminal ของตัวเอง";
+  }
   if (
     code.includes("BROKER_INSTALLER") ||
     code.includes("BROKER_TERMINAL_MISSING") ||
