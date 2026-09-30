@@ -236,7 +236,10 @@ function UnifiedMobileNav({
             onClick={reloadSystem}
           >
             <span className="owner-mobile-utility-icon" aria-hidden="true">
-              <ScenovaIcon name="refresh" size={22} className="owner-mobile-utility-svg"/>
+              <svg className="owner-mobile-utility-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6v5h-5"/>
+                <path d="M19.2 11A7.5 7.5 0 1 0 17 17.4"/>
+              </svg>
             </span>
           </button>
 
