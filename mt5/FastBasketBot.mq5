@@ -276,6 +276,7 @@ ulong  g_lastHeartbeatTickMs = 0;
 ulong  g_lastMarketTickMs = 0;
 ulong  g_lastTimerEventTickMs = 0;
 ulong  g_timerArmedAtTickMs = 0;
+ulong  g_cloudSymbolResolveUntilMs = 0;
 datetime g_lastSuccessfulHeartbeat = 0;
 datetime g_lastRunAuthorization = 0;
 datetime g_lastServerContactAt = 0;
@@ -1612,7 +1613,9 @@ int OnInit()
       // A Cloud account switch can change the broker-native symbol suffix.
       // Resolve the actual tradable symbol from the newly logged-in MT5 account
       // before declaring the EA attached, so an old XAUUSDm/XAUUSDc suffix never
-      // leaks across accounts.
+      // leaks across accounts. Keep a short retry window because MT5 may finish
+      // loading the new broker's symbol catalog after the first OnInit pass.
+      g_cloudSymbolResolveUntilMs=GetTickCount64()+30000;
       if(SwitchCloudChartToAccountSymbol())
          return(INIT_SUCCEEDED);
 
@@ -5599,6 +5602,12 @@ bool SendFlatHeartbeatIfDue()
 void OnTimer()
 {
    g_lastTimerEventTickMs=GetTickCount64();
+
+   if(InpCloudRelay &&
+      g_cloudSymbolResolveUntilMs>0 &&
+      g_lastTimerEventTickMs<=g_cloudSymbolResolveUntilMs &&
+      SwitchCloudChartToAccountSymbol())
+      return;
 
    // A flat/STOPPED Cloud runtime has no exposure to protect. Give a due
    // heartbeat the whole timer pass before indicators/chart/profit work so a
