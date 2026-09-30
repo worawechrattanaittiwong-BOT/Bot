@@ -2849,10 +2849,14 @@ export class BotController {
         throw new ConflictException("EA ยังไม่พร้อมส่งคำสั่ง ระบบกำลังซ่อม Allow Live Trading อัตโนมัติ กรุณารอ Heartbeat ถัดไป");
       }
       if (metrics.accountTradeAllowed === false) {
-        throw new ConflictException("บัญชี MT5 นี้ไม่อนุญาตให้เทรด");
+        throw new ConflictException(
+          "บัญชี MT5 เชื่อมต่อแล้ว แต่ยังส่งคำสั่งซื้อขายไม่ได้ · ตรวจว่าใช้ Trading Password ไม่ใช่ Investor Password และตรวจสถานะ Read-only / การจำกัดสิทธิ์กับ Broker"
+        );
       }
       if (metrics.accountTradeExpert === false) {
-        throw new ConflictException("บัญชี MT5 นี้ไม่อนุญาตให้ Expert Advisor เทรด");
+        throw new ConflictException(
+          "บัญชี MT5 เชื่อมต่อแล้ว แต่ยังไม่อนุญาต Expert Advisor · ตรวจสิทธิ์ EA/Algo Trading ของบัญชีกับ Broker"
+        );
       }
 
       // ZERO GRID may start only after a fresh heartbeat proves that the loaded
