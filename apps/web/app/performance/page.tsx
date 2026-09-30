@@ -680,11 +680,16 @@ export default function PerformanceDashboardPage() {
             aria-expanded={controlsOpen}
           >
             <ScenovaIcon name="control" size={15}/>
-            <span>ตัวเลือก</span>
+            <span className={styles.optionsLabelDesktop}>ตัวเลือก</span>
+            <span className={styles.optionsLabelMobile}>ตั้งค่า</span>
             <span className={styles.optionsChevron}>▾</span>
           </button>
 
           <div className={`${styles.optionsDrawer} ${controlsOpen?styles.optionsDrawerOpen:""}`}>
+            <div className={styles.mobileDrawerHead}>
+              <b>ตั้งค่า</b>
+              <button type="button" className={styles.drawerCloseMobile} onClick={()=>setControlsOpen(false)} aria-label="ปิดตั้งค่า">×</button>
+            </div>
             <div className={styles.drawerTop}>
               <div className={styles.toolbarIdentity}>
                 {selectedAccount?<span className={String(selectedAccount.accountType).toUpperCase()==="DEMO"?styles.demoBadge:styles.realBadge}>{String(selectedAccount.accountType||"REAL").toUpperCase()}</span>:null}
