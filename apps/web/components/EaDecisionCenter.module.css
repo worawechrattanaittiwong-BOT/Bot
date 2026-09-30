@@ -132,7 +132,7 @@
   .headerMeta > span:first-child { display: none; }
 }
 @media (max-width: 640px) {
-  .center { padding: 10px; border-radius: 13px; }
+  
   .header { flex-wrap: wrap; gap: 8px; }
   .identity h2 { font-size: 11px; letter-spacing: .025em; }
   .identity h2 span { display: block; }
@@ -140,15 +140,15 @@
   .headerMeta { width: 100%; justify-content: space-between; }
   .headerMeta > span:first-child { display: flex; }
   .cards { grid-template-columns: minmax(0, 1fr); }
-  .card { padding: 13px; }
+  
   .signal { font-size: 36px; }
   .signalFoot { margin-top: 0; }
-  .sessionRail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .eventHistory { align-items: flex-start; flex-direction: column; }
-  .events { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  
+  
+  .events { grid-template-columns: minmax(0, 1fr); }
   .event::before { top: 24px; bottom: -12px; left: 11px; right: auto; border-top: 0; border-left: 1px dashed rgba(99, 143, 182, .3); }
   .event:last-child::before { display: none; }
-  .event p { white-space: normal; overflow-wrap: anywhere; }
+  .event p { overflow-wrap: anywhere; }
 }
 
 

@@ -2,8 +2,8 @@
 
 /* Premium white-blue logo glow (keep the brand readable without changing its proportions) */
 .owner-sidebar .scenova-brand-lockup{position:relative;isolation:isolate;overflow:visible!important}
-.owner-sidebar .scenova-brand-lockup::before{display:none!important}
-.owner-sidebar .scenova-brand-logo-sidebar{position:relative;z-index:1;filter:none!important;opacity:1!important}
+
+.owner-sidebar .scenova-brand-logo-sidebar{position:relative;z-index:1;}
 .owner-sidebar .side-brand{padding-bottom:19px!important;margin-bottom:22px!important;border-bottom:1px solid rgba(205,228,255,.10)!important;box-shadow:0 1px 0 rgba(96,156,255,.04)!important}
 
 /* Restore the original top-card width proportions. Do NOT force equal widths. */
@@ -29,7 +29,7 @@
 .cc-v4 .cc-v6-ai-brand{min-width:0!important;box-sizing:border-box!important}
 
 .cc-v8-left-stack>.cc-v6-hourly-chart{height:384px!important;min-height:384px!important}
-.cc-v8-left-stack .cc-v6-hourly-chart .cc-v6-chart-canvas{height:244px!important}
+
 .cc-v4 .cc-v6-account-card{height:588px!important;min-height:588px!important}
 .cc-v4 .cc-v6-ai-brand{height:588px!important;min-height:588px!important}
 .cc-v4 .cc-v6-ai-brand>img{width:100%!important;height:100%!important;object-fit:cover!important;object-position:center center!important}
@@ -183,20 +183,19 @@
     linear-gradient(155deg,#0d1526,#080d17 70%);
   box-shadow:0 16px 38px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.035)
 }
-.cc-v12 .cc-v6-hero{
-  min-height:112px!important;padding:12px 15px!important;border-color:rgba(78,105,184,.58)!important;
+.cc-v12 .cc-v6-hero{border-color:rgba(78,105,184,.58)!important;
   background:
     radial-gradient(560px 160px at 11% 30%,rgba(40,108,255,.10),transparent 66%),
     radial-gradient(440px 170px at 85% 0,rgba(128,73,255,.11),transparent 64%),
     linear-gradient(145deg,#10182a,#080d18)!important;
   box-shadow:0 18px 45px rgba(0,0,0,.24),0 0 34px rgba(66,101,255,.055),inset 0 1px 0 rgba(255,255,255,.04)!important
 }
-.cc-v12 .cc-v6-gold-stage{width:76px!important;height:76px!important;min-width:76px!important}
-.cc-v12 .cc-v6-symbol-copy h2{font-size:29px!important;line-height:1!important;margin:2px 0 4px!important}
-.cc-v12 .cc-v6-symbol-chips{gap:5px!important;margin-top:6px!important}
-.cc-v12 .cc-v6-symbol-chips>span{padding:4px 7px!important;font-size:var(--ui-type-caption)!important}
-.cc-v12 .cc-v6-version-row{margin-top:6px!important;gap:5px!important}
-.cc-v12 .cc-v6-version-chip,.cc-v12 .cc-v6-version-check{min-height:24px!important;padding:4px 7px!important;font-size:var(--ui-type-caption)!important}
+
+.cc-v12 .cc-v6-symbol-copy h2{line-height:1!important;}
+.cc-v12 .cc-v6-symbol-chips{gap:5px!important;}
+
+.cc-v12 .cc-v6-version-row{gap:5px!important}
+.cc-v12 .cc-v6-version-chip,.cc-v12 .cc-v6-version-check{padding:4px 7px!important;}
 .cc-v12 .cc-v6-command-center{align-self:stretch!important}
 .cc-v12 .cc-v6-hero-actions{height:100%!important;gap:7px!important}
 .cc-v12 .cc-v6-command{min-height:76px!important;min-width:118px!important;padding:9px 11px!important;border-radius:13px!important}
@@ -214,11 +213,10 @@
 .cc-v12 .cc-v12-kpis b{font-size:17px!important}.cc-v12 .cc-v12-kpis span{font-size:var(--ui-type-caption)!important}.cc-v12 .cc-v12-kpis small{font-size:var(--ui-type-caption)!important}
 
 .cc-v12-control-grid{
-  display:grid;grid-template-columns:minmax(0,1.72fr) minmax(365px,.74fr);gap:9px;
-  align-items:stretch;min-height:505px
-}
+  display:grid;
+  align-items:stretch;}
 .cc-v12-settings-column,.cc-v12-side-column{min-width:0;min-height:0}
-.cc-v12-side-column{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:9px}
+.cc-v12-side-column{display:grid;}
 
 /* Inline bot settings: same production form, no modal and no chart. */
 .cc-bot-embedded-frame{position:relative;height:100%;min-height:0}
@@ -232,77 +230,74 @@
   box-shadow:0 20px 50px rgba(0,0,0,.26),0 0 34px rgba(76,92,235,.06),inset 0 1px 0 rgba(255,255,255,.04)!important;
   animation:none!important
 }
-.cc-bot-v2-embedded .cc-bot-v2-head{
-  min-height:54px!important;padding:8px 12px!important;
-  background:linear-gradient(90deg,rgba(31,28,74,.76),rgba(10,17,31,.92) 48%,rgba(8,14,25,.96))!important
-}
+
 .cc-bot-v2-embedded .cc-bot-v2-head .cc-bot-modal-title>span{width:36px;height:36px;border-radius:10px}
-.cc-bot-v2-embedded .cc-bot-v2-head h2{font-size:16px!important}
-.cc-bot-v2-embedded .cc-bot-v2-kicker{font-size:var(--ui-type-caption)!important;margin-bottom:2px!important}
+
+.cc-bot-v2-embedded .cc-bot-v2-kicker{margin-bottom:2px!important}
 .cc-bot-v12-lock{display:flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid #64502d;border-radius:999px;background:#1d180e;color:#e6c16d;font-size:var(--ui-type-caption);font-weight:800}
-.cc-bot-v2-embedded .cc-bot-v2-body{flex:1;min-height:0;padding:8px 10px!important;gap:7px!important;overflow:hidden!important}
+.cc-bot-v2-embedded .cc-bot-v2-body{flex:1;min-height:0;overflow:hidden!important}
 .cc-bot-v2-embedded.is-locked .cc-bot-v2-body{position:relative}
 .cc-bot-v2-embedded.is-locked .cc-bot-v2-body input,
 .cc-bot-v2-embedded.is-locked .cc-bot-v2-body select,
 .cc-bot-v2-embedded.is-locked .cc-bot-v2-body button{pointer-events:none!important}
 
-.cc-bot-v2-embedded .cc-bot-v2-mode-section{padding:8px 10px!important;border-radius:12px!important}
-.cc-bot-v2-embedded .cc-bot-v2-mode-section>.cc-bot-v2-section-title{display:none!important}
-.cc-bot-v12-mode-select-wrap{display:grid;grid-template-columns:minmax(235px,.58fr) minmax(0,1fr);gap:9px;align-items:center}
-.cc-bot-v12-mode-select-wrap>label{display:flex;align-items:center;gap:8px}
-.cc-bot-v12-mode-select-wrap>label>span{display:flex;flex-direction:column;gap:1px;min-width:86px;color:#dce5f3;font-size:var(--ui-type-meta);font-weight:850}
-.cc-bot-v12-mode-select-wrap>label>span svg{color:#a78fff}.cc-bot-v12-mode-select-wrap>label>span small{color:#667793;font-size:var(--ui-type-caption);font-weight:700}
-.cc-bot-v12-mode-select{height:36px!important;min-height:36px!important;border-color:#6656c4!important;background:linear-gradient(145deg,#171637,#0b1220)!important;color:#eeeaff!important;font-size:var(--ui-type-meta)!important;font-weight:850!important;box-shadow:0 0 20px rgba(109,84,229,.09)}
+
+
+.cc-bot-v12-mode-select-wrap{display:grid;}
+.cc-bot-v12-mode-select-wrap>label{align-items:center;gap:8px}
+
+.cc-bot-v12-mode-select-wrap>label>span svg{color:#a78fff}.cc-bot-v12-mode-select-wrap>label>span small{color:#667793;font-weight:700}
+.cc-bot-v12-mode-select{border-color:#6656c4!important;font-weight:850!important;}
 .cc-bot-v12-mode-copy{min-width:0;padding:7px 10px;border-left:1px solid #293858;display:flex;flex-direction:column;gap:2px}
-.cc-bot-v12-mode-copy b{color:#cbbcff;font-size:var(--ui-type-meta)}.cc-bot-v12-mode-copy span{color:#71809a;font-size:var(--ui-type-caption);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-bot-v12-mode-copy b{color:#cbbcff;}.cc-bot-v12-mode-copy span{color:#71809a;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 .cc-bot-v2-embedded .cc-bot-v2-workspace{grid-template-columns:1fr!important;gap:7px!important;margin-top:7px!important}
 .cc-bot-v2-embedded .cc-bot-v2-summary{display:none!important}
-.cc-bot-v2-embedded .cc-bot-v2-main{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px!important}
+.cc-bot-v2-embedded .cc-bot-v2-main{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));}
 .cc-bot-v2-embedded .cc-bot-v2-main>.cc-bot-v2-panel:first-child{grid-column:1/-1}
-.cc-bot-v2-embedded .cc-bot-v2-panel{padding:8px 9px!important;border-radius:11px!important}
-.cc-bot-v2-embedded .cc-bot-v2-section-title.compact{min-height:25px;margin-bottom:6px!important;padding-bottom:5px!important}
-.cc-bot-v2-embedded .cc-bot-v2-section-title.compact>span{width:22px;height:22px;font-size:var(--ui-type-caption)}
-.cc-bot-v2-embedded .cc-bot-v2-section-title b{font-size:var(--ui-type-meta)}.cc-bot-v2-embedded .cc-bot-v2-section-title small{font-size:var(--ui-type-caption)}
-.cc-bot-v2-embedded .cc-bot-v2-fields{gap:5px!important}
-.cc-bot-v2-embedded .cc-bot-v2-field{min-height:61px!important;padding:6px 7px!important;border-radius:8px!important;gap:4px!important}
-.cc-bot-v2-embedded .cc-bot-v2-field>span,.cc-bot-v2-embedded .cc-bot-v2-field>label{font-size:var(--ui-type-caption)!important;gap:4px!important}
-.cc-bot-v2-embedded .cc-bot-v2-field .input{min-height:28px!important;height:28px!important;padding:4px 7px!important;font-size:var(--ui-type-caption)!important}
-.cc-bot-v2-embedded .cc-bot-v2-field strong{font-size:var(--ui-type-meta)!important}
-.cc-bot-v2-embedded .cc-bot-v2-field small{font-size:var(--ui-type-caption)!important;line-height:1.2!important;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
-.cc-bot-v2-embedded .cc-bot-v2-engine-line{min-height:26px!important;margin-top:5px!important;padding:4px 7px!important;font-size:var(--ui-type-caption)!important;white-space:nowrap;overflow:hidden}
-.cc-bot-v2-embedded .cc-bot-v2-engine-line span{font-size:var(--ui-type-caption)!important;overflow:hidden;text-overflow:ellipsis}
-.cc-bot-v2-embedded .cc-bot-v2-auto-grid{gap:5px!important}.cc-bot-v2-embedded .cc-bot-v2-auto-grid>div{min-height:47px!important;padding:6px 7px!important}
-.cc-bot-v2-embedded .cc-bot-v2-auto-grid small{font-size:var(--ui-type-caption)!important}.cc-bot-v2-embedded .cc-bot-v2-auto-grid b{font-size:var(--ui-type-caption)!important}
-.cc-bot-v2-embedded .cc-bot-v2-limit-grid{gap:5px!important}
-.cc-bot-v2-embedded .cc-bot-v2-limit-grid>div{min-height:78px!important;padding:6px!important}
+
+
+
+
+
+
+.cc-bot-v2-embedded .cc-bot-v2-field>span,.cc-bot-v2-embedded .cc-bot-v2-field>label{gap:4px!important}
+
+
+.cc-bot-v2-embedded .cc-bot-v2-field small{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.cc-bot-v2-embedded .cc-bot-v2-engine-line{min-height:26px!important;margin-top:5px!important;padding:4px 7px!important;white-space:nowrap;overflow:hidden}
+.cc-bot-v2-embedded .cc-bot-v2-engine-line span{overflow:hidden;text-overflow:ellipsis}
+
+
+
+
 .cc-bot-v2-embedded .cc-bot-v2-limit-grid>div>div:first-child{margin-bottom:4px!important;padding-right:38px!important}
-.cc-bot-v2-embedded .cc-bot-v2-limit-grid b{font-size:var(--ui-type-caption)!important}.cc-bot-v2-embedded .cc-bot-v2-limit-grid small{font-size:var(--ui-type-caption)!important}
+
 .cc-bot-v2-embedded .cc-bot-v2-limit-grid .toggle-setting-label{top:6px!important;right:6px!important}
-.cc-bot-v2-embedded .cc-bot-v2-choice-row{gap:5px!important;margin-bottom:5px!important}.cc-bot-v2-embedded .cc-bot-v2-choice-row>button{min-height:40px!important;padding:5px 7px!important}
-.cc-bot-v2-embedded .cc-bot-v2-lowvol-card{margin:0 0 6px!important;padding:7px 8px!important;border-radius:9px!important;grid-template-columns:1fr auto!important;gap:6px!important}.cc-bot-v2-embedded .cc-bot-v2-lowvol-icon{width:29px;height:29px;flex-basis:29px}.cc-bot-v2-embedded .cc-bot-v2-lowvol-copy b{font-size:var(--ui-type-meta)}.cc-bot-v2-embedded .cc-bot-v2-lowvol-copy p,.cc-bot-v2-embedded .cc-bot-v2-lowvol-note{font-size:var(--ui-type-caption)!important}.cc-bot-v2-embedded .cc-bot-v2-lowvol-note{display:none}
-.cc-bot-v2-embedded .cc-bot-v2-footer{min-height:45px!important;padding:6px 10px!important}
-.cc-bot-v12-footer-state{display:flex;align-items:center;gap:6px;color:#70809a;font-size:var(--ui-type-caption)}.cc-bot-v12-footer-state i{width:6px;height:6px;border-radius:50%;background:#5be3a4;box-shadow:0 0 9px rgba(80,226,160,.55)}.cc-bot-v12-footer-state i.warn{background:#e7bd62;box-shadow:0 0 9px rgba(231,189,98,.4)}
-.cc-bot-v2-embedded .cc-save-primary{min-width:150px!important;min-height:31px!important;padding:6px 10px!important;font-size:var(--ui-type-caption)!important}
+.cc-bot-v2-embedded .cc-bot-v2-choice-row{margin-bottom:5px!important}
+.cc-bot-v2-embedded .cc-bot-v2-lowvol-icon{width:29px;height:29px;flex-basis:29px}.cc-bot-v2-embedded .cc-bot-v2-lowvol-copy p,.cc-bot-v2-embedded .cc-bot-v2-lowvol-note{font-size:var(--ui-type-caption)!important}.cc-bot-v2-embedded .cc-bot-v2-lowvol-note{display:none}
+.cc-bot-v2-embedded .cc-bot-v2-footer{padding:6px 10px!important}
+.cc-bot-v12-footer-state{display:flex;align-items:center;gap:6px;color:#70809a;}.cc-bot-v12-footer-state i{width:6px;height:6px;border-radius:50%;background:#5be3a4;box-shadow:0 0 9px rgba(80,226,160,.55)}.cc-bot-v12-footer-state i.warn{background:#e7bd62;box-shadow:0 0 9px rgba(231,189,98,.4)}
+.cc-bot-v2-embedded .cc-save-primary{min-height:31px!important;padding:6px 10px!important;}
 
 /* Right command / performance rail. */
-.cc-v12-card-head{min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:7px;border-bottom:1px solid rgba(76,101,158,.25)}
+.cc-v12-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:7px;border-bottom:1px solid rgba(76,101,158,.25)}
 .cc-v12-card-head>div{display:flex;align-items:center;gap:7px;min-width:0}.cc-v12-card-head>div>span{width:29px;height:29px;border:1px solid #4c4087;border-radius:8px;background:#171532;color:#af96fa;display:grid;place-items:center}
-.cc-v12-card-head>div>div{min-width:0;display:flex;flex-direction:column;gap:1px}.cc-v12-card-head small{font-size:var(--ui-type-caption);color:#6d7b96;letter-spacing:.08em}.cc-v12-card-head b{font-size:var(--ui-type-meta);color:#edf1fb}
-.cc-v12-card-head em{padding:4px 6px;border:1px solid #32405b;border-radius:999px;background:#0b111c;color:#8290aa;font-size:var(--ui-type-caption);font-style:normal;font-weight:850}.cc-v12-card-head em.good{border-color:#2c604a;color:#69e2a6;background:#0b1b16}.cc-v12-card-head em.warn{border-color:#65512e;color:#e5c16d}
+.cc-v12-card-head>div>div{min-width:0;display:flex;flex-direction:column;gap:1px}.cc-v12-card-head small{color:#6d7b96;letter-spacing:.08em}.cc-v12-card-head b{color:#edf1fb}
+.cc-v12-card-head em{padding:4px 6px;border:1px solid #32405b;border-radius:999px;background:#0b111c;color:#8290aa;font-style:normal;font-weight:850}.cc-v12-card-head em.good{border-color:#2c604a;color:#69e2a6;background:#0b1b16}.cc-v12-card-head em.warn{border-color:#65512e;color:#e5c16d}
 
-.cc-v12-strategy-card{padding:9px!important}
-.cc-v12-strategy-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:7px 0}.cc-v12-strategy-meta span{padding:5px 6px;border:1px solid #25334f;border-radius:7px;background:#09111d;display:flex;flex-direction:column;gap:1px}.cc-v12-strategy-meta small{font-size:var(--ui-type-caption);color:#687791}.cc-v12-strategy-meta b{font-size:var(--ui-type-caption);color:#dce5f3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cc-v12-strategy-meta b.good{color:#64e0a3}.cc-v12-strategy-meta b.warn{color:#e4be68}
-.cc-v12-quick-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
-.cc-v12-quick-actions button{min-width:0;min-height:43px;padding:5px;border:1px solid #2d3b58;border-radius:8px;background:#09111c;color:#8998b2;display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer}.cc-v12-quick-actions button span{display:flex;flex-direction:column;gap:0}.cc-v12-quick-actions button b{font-size:var(--ui-type-caption);color:#e3e9f4}.cc-v12-quick-actions button small{font-size:var(--ui-type-caption);color:#65748f}.cc-v12-quick-actions button.start{border-color:#2f6d53;color:#59dfa2;background:linear-gradient(145deg,#0d251d,#091410)}.cc-v12-quick-actions button.stop{border-color:#51417f;color:#aa93f0;background:linear-gradient(145deg,#18152f,#0c111d)}.cc-v12-quick-actions button.close{border-color:#6c3441;color:#fa7288;background:linear-gradient(145deg,#261017,#100d14)}.cc-v12-quick-actions button.terminal{border-color:#315274;color:#77bfff}.cc-v12-quick-actions button:disabled{opacity:.4;cursor:not-allowed}
 
-.cc-v12-mode-performance{padding:9px!important;overflow:hidden}
-.cc-v12-mode-table{margin-top:6px;border:1px solid #263550;border-radius:8px;overflow:hidden}
-.cc-v12-mode-table .head,.cc-v12-mode-table .row{display:grid;grid-template-columns:1.15fr .72fr .85fr .58fr;align-items:center;gap:4px}
-.cc-v12-mode-table .head{min-height:25px;padding:4px 7px;background:#0d1728;color:#6e7f9b;font-size:var(--ui-type-caption);font-weight:800}
-.cc-v12-mode-table .row{min-height:38px;padding:4px 7px;border-top:1px solid rgba(74,98,151,.18);background:#090f19;color:#cfd8e7;font-size:var(--ui-type-caption)}
+.cc-v12-strategy-meta{display:grid;grid-template-columns:repeat(3,1fr);}.cc-v12-strategy-meta span{border:1px solid #25334f;border-radius:7px;background:#09111d;display:flex;flex-direction:column;gap:1px}.cc-v12-strategy-meta small{color:#687791}.cc-v12-strategy-meta b{color:#dce5f3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cc-v12-strategy-meta b.good{color:#64e0a3}.cc-v12-strategy-meta b.warn{color:#e4be68}
+.cc-v12-quick-actions{display:grid;}
+.cc-v12-quick-actions button{min-width:0;border:1px solid #2d3b58;background:#09111c;color:#8998b2;display:flex;align-items:center;cursor:pointer}.cc-v12-quick-actions button span{display:flex;flex-direction:column;gap:0}.cc-v12-quick-actions button b{color:#e3e9f4}.cc-v12-quick-actions button small{color:#65748f}.cc-v12-quick-actions button.start{color:#59dfa2;}.cc-v12-quick-actions button.stop{color:#aa93f0;}.cc-v12-quick-actions button.close{color:#fa7288;}.cc-v12-quick-actions button.terminal{color:#77bfff}.cc-v12-quick-actions button:disabled{opacity:.4;cursor:not-allowed}
+
+.cc-v12-mode-performance{overflow:hidden}
+.cc-v12-mode-table{border:1px solid #263550;border-radius:8px;overflow:hidden}
+.cc-v12-mode-table .head,.cc-v12-mode-table .row{display:grid;align-items:center;gap:4px}
+.cc-v12-mode-table .head{background:#0d1728;color:#6e7f9b;font-weight:800}
+.cc-v12-mode-table .row{border-top:1px solid rgba(74,98,151,.18);background:#090f19;color:#cfd8e7;}
 .cc-v12-mode-table .row.active{background:linear-gradient(90deg,rgba(91,73,206,.18),rgba(18,27,46,.7));box-shadow:inset 2px 0 #8b70ff}
-.cc-v12-mode-table .row>span{min-width:0;font-weight:800}.cc-v12-mode-table .row>span small{display:block;margin-top:1px;color:#5e6f89;font-size:var(--ui-type-caption);font-weight:700}
+.cc-v12-mode-table .row>span{min-width:0;font-weight:800}.cc-v12-mode-table .row>span small{display:block;margin-top:1px;color:#5e6f89;font-weight:700}
 .cc-v12-mode-table .mode{display:flex;align-items:center;gap:5px}.cc-v12-mode-table .mode i{width:6px;height:6px;border-radius:2px;border:1px solid #5b6f9b;background:#18233a}.cc-v12-mode-table .row.active .mode i{border-color:#907cff;background:#765fff;box-shadow:0 0 8px rgba(128,94,255,.55)}
 .cc-v12-mode-table .good{color:#58dfa1}.cc-v12-mode-table .warn{color:#e7bd62}.cc-v12-mode-table .bad{color:#ff7188}.cc-v12-mode-table .neutral{color:#8290aa}
 
@@ -392,33 +387,33 @@
   grid-template-rows:auto minmax(0,1fr) auto!important;
   gap:8px!important
 }
-.cc-bot-v2-embedded .cc-bot-v2-head{min-height:52px!important;padding:7px 11px!important}
+
 .cc-bot-v2-embedded .cc-bot-v2-head h2{font-size:17px!important}
 .cc-bot-v2-embedded .cc-bot-v2-kicker{font-size:var(--ui-type-caption)!important}
 .cc-bot-v2-embedded .cc-bot-modal-dirty,.cc-bot-v12-lock{font-size:var(--ui-type-caption)!important}
 .cc-bot-v2-embedded .cc-bot-v2-body{padding:8px 9px!important;gap:7px!important}
-.cc-bot-v12-mode-select-wrap{grid-template-columns:minmax(310px,.72fr) minmax(0,1fr)!important}
-.cc-bot-v12-mode-select-wrap>label>span{font-size:var(--ui-type-meta)!important;min-width:96px!important}
+
+
 .cc-bot-v12-mode-select-wrap>label>span small{font-size:var(--ui-type-caption)!important}
-.cc-bot-v12-mode-select{height:38px!important;min-height:38px!important;font-size:11.5px!important;padding:7px 32px 7px 10px!important;color-scheme:dark!important}
+.cc-bot-v12-mode-select{padding:7px 32px 7px 10px!important;color-scheme:dark!important}
 .cc-bot-v12-mode-select option{background:#0b1120!important;color:#edf2ff!important}
 .cc-bot-v12-mode-copy b{font-size:var(--ui-type-meta)!important}.cc-bot-v12-mode-copy span{font-size:var(--ui-type-caption)!important}
 .cc-bot-v2-embedded .cc-bot-v2-main{gap:7px!important}
-.cc-bot-v2-embedded .cc-bot-v2-panel{padding:8px 9px!important}
+
 .cc-bot-v2-embedded .cc-bot-v2-section-title.compact{margin-bottom:6px!important;padding-bottom:5px!important}
-.cc-bot-v2-embedded .cc-bot-v2-section-title b{font-size:11.5px!important}
+
 .cc-bot-v2-embedded .cc-bot-v2-section-title small{font-size:var(--ui-type-caption)!important}
-.cc-bot-v2-embedded .cc-bot-v2-field{min-height:63px!important;padding:7px 8px!important}
+
 .cc-bot-v2-embedded .cc-bot-v2-field>span,.cc-bot-v2-embedded .cc-bot-v2-field>label{font-size:var(--ui-type-meta)!important}
-.cc-bot-v2-embedded .cc-bot-v2-field .input{min-height:30px!important;height:30px!important;font-size:var(--ui-type-meta)!important}
-.cc-bot-v2-embedded .cc-bot-v2-field strong{font-size:11px!important}
+
+
 .cc-bot-v2-embedded .cc-bot-v2-field small{font-size:var(--ui-type-caption)!important;line-height:1.25!important}
 .cc-bot-v2-embedded .cc-bot-v2-engine-line{font-size:var(--ui-type-caption)!important}
 .cc-bot-v2-embedded .cc-bot-v2-engine-line span{font-size:var(--ui-type-caption)!important}
-.cc-bot-v2-embedded .cc-bot-v2-auto-grid small{font-size:var(--ui-type-caption)!important}
-.cc-bot-v2-embedded .cc-bot-v2-auto-grid b{font-size:var(--ui-type-meta)!important}
-.cc-bot-v2-embedded .cc-bot-v2-limit-grid>div{min-height:82px!important}
-.cc-bot-v2-embedded .cc-bot-v2-limit-grid b{font-size:var(--ui-type-meta)!important}
+
+
+
+
 .cc-bot-v2-embedded .cc-bot-v2-limit-grid small{font-size:var(--ui-type-caption)!important}
 .cc-bot-v2-embedded .cc-bot-v2-footer{min-height:44px!important}
 .cc-bot-v12-footer-state{font-size:var(--ui-type-caption)!important}
@@ -729,7 +724,6 @@
   display:grid;
   grid-template-columns:minmax(0,1.8fr) minmax(360px,.92fr);
   gap:10px;
-  height:330px;
 }
 .cc-v48-bottom-intelligence>.panel{
   min-width:0;
@@ -744,8 +738,6 @@
 .cc-v48-market-panel{border-color:rgba(57,128,134,.62)!important}
 .cc-v48-signal-panel{border-color:rgba(91,75,169,.62)!important}
 .cc-v48-panel-head{
-  height:46px;
-  padding:0 13px;
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -753,50 +745,45 @@
   border-bottom:1px solid rgba(60,74,116,.42);
   background:linear-gradient(180deg,rgba(20,27,48,.88),rgba(10,15,28,.72));
 }
-.cc-v48-title{min-width:0;display:flex;align-items:center;gap:9px}
-.cc-v48-title>span{
-  width:30px;height:30px;display:grid;place-items:center;flex:0 0 30px;
+.cc-v48-title{min-width:0;display:flex;align-items:center;}
+.cc-v48-title>span{display:grid;place-items:center;flex:0 0 30px;
   color:#8e7dff;border:1px solid rgba(102,84,201,.48);border-radius:9px;
   background:linear-gradient(145deg,rgba(54,42,123,.56),rgba(18,26,57,.58));
   box-shadow:0 0 18px rgba(113,86,255,.11);
 }
 .cc-v48-market-panel .cc-v48-title>span{color:#62dff1;border-color:rgba(57,172,181,.38);background:rgba(20,76,81,.28)}
 .cc-v48-title>div{min-width:0;display:flex;flex-direction:column;gap:2px}
-.cc-v48-title b{color:#a995ff;font-size:11px;line-height:1;letter-spacing:.11em}
+.cc-v48-title b{color:#a995ff;}
 .cc-v48-market-panel .cc-v48-title b{color:#77dae7}
-.cc-v48-title small{color:#6d7990;font-size:var(--ui-type-caption);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-v48-title small{color:#6d7990;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cc-v48-panel-head>em{
-  flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:4px 9px;
+  flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;
   color:#8995aa;border:1px solid rgba(72,86,126,.44);border-radius:999px;
-  background:rgba(10,16,29,.62);font-size:var(--ui-type-caption);font-style:normal;font-weight:800;
+  background:rgba(10,16,29,.62);font-style:normal;font-weight:800;
 }
 .cc-v48-panel-head>em i{width:6px;height:6px;border-radius:50%;background:#768197}
 .cc-v48-panel-head>em.live{color:#67e7a8;border-color:rgba(53,174,113,.35);background:rgba(17,74,49,.25)}
 .cc-v48-panel-head>em.live i{background:#63e7a8;box-shadow:0 0 9px rgba(99,231,168,.55)}
 .cc-v48-panel-head>em.warn{color:#e7ba61;border-color:rgba(183,128,35,.38);background:rgba(75,53,16,.24)}
 .cc-v48-panel-head>em.warn i{background:#e7ba61}
-.cc-v48-market-strip{
-  height:48px;padding:0 13px;display:grid;grid-template-columns:minmax(170px,.85fr) minmax(250px,1.2fr) minmax(170px,.75fr);
-  gap:12px;align-items:center;border-bottom:1px solid rgba(51,65,102,.34);
+.cc-v48-market-strip{display:grid;align-items:center;border-bottom:1px solid rgba(51,65,102,.34);
 }
-.cc-v48-symbol{min-width:0;display:flex;align-items:center;gap:8px;color:#8173ec}
+.cc-v48-symbol{min-width:0;display:flex;align-items:center;color:#8173ec}
 .cc-v48-symbol>span{min-width:0;display:flex;flex-direction:column}
-.cc-v48-symbol b{color:#edf3fb;font-size:13px;line-height:1.1}
-.cc-v48-symbol small{color:#68758c;font-size:var(--ui-type-caption);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cc-v48-timeframes{display:flex;align-items:center;gap:5px;justify-content:center}
-.cc-v48-timeframes>span{
-  min-width:37px;height:25px;padding:0 7px;display:flex;align-items:center;justify-content:center;gap:4px;
-  color:#78849a;border:1px solid rgba(57,70,106,.42);border-radius:7px;background:rgba(8,14,25,.58);
-  font-size:var(--ui-type-caption);font-weight:800;
+.cc-v48-symbol b{color:#edf3fb;line-height:1.1}
+.cc-v48-symbol small{color:#68758c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-v48-timeframes{display:flex;align-items:center;justify-content:center}
+.cc-v48-timeframes>span{display:flex;align-items:center;justify-content:center;
+  color:#78849a;border:1px solid rgba(57,70,106,.42);border-radius:7px;background:rgba(8,14,25,.58);font-weight:800;
 }
 .cc-v48-timeframes>span i{font-style:normal}
 .cc-v48-timeframes>span.up{color:#68e4a7;border-color:rgba(50,158,104,.35);background:rgba(18,73,50,.26)}
 .cc-v48-timeframes>span.down{color:#ff7d96;border-color:rgba(188,64,92,.34);background:rgba(83,24,41,.27)}
-.cc-v48-price{min-width:0;display:grid;grid-template-columns:auto auto;align-items:end;justify-content:end;gap:0 9px}
-.cc-v48-price small{grid-column:1/-1;color:#6c7890;font-size:var(--ui-type-caption);text-align:right}
-.cc-v48-price b{color:#69e3a9;font-size:18px;line-height:1}
-.cc-v48-price em{color:#69e3a9;font-size:var(--ui-type-caption);font-style:normal;font-weight:800}
-.cc-v48-chart-shell{position:relative;height:calc(100% - 94px);min-height:190px;overflow:hidden;background:linear-gradient(180deg,rgba(7,13,24,.7),rgba(5,10,18,.96))}
+.cc-v48-price{min-width:0;display:grid;grid-template-columns:auto auto;align-items:end;justify-content:end;}
+.cc-v48-price small{grid-column:1/-1;color:#6c7890;text-align:right}
+.cc-v48-price b{color:#69e3a9;line-height:1}
+.cc-v48-price em{color:#69e3a9;font-style:normal;font-weight:800}
+.cc-v48-chart-shell{position:relative;overflow:hidden;background:linear-gradient(180deg,rgba(7,13,24,.7),rgba(5,10,18,.96))}
 .cc-v48-chart-shell svg{position:absolute;inset:0;width:100%;height:100%}
 .cc-v48-chart-shell .grid{stroke:rgba(71,88,128,.22);stroke-width:1;vector-effect:non-scaling-stroke}
 .cc-v48-chart-shell .supply-zone{fill:rgba(215,65,91,.14);stroke:rgba(244,81,110,.43);stroke-width:1;vector-effect:non-scaling-stroke}
@@ -813,43 +800,43 @@
 .cc-v48-level-label.resistance{right:18%;color:#ff7a90}
 .cc-v48-level-label.support{right:18%;color:#5ce5ad}
 .cc-v48-chart-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#53617a}
-.cc-v48-chart-empty b{color:#7b879d;font-size:var(--ui-type-meta)}
-.cc-v48-chart-empty small{font-size:var(--ui-type-caption)}
-.cc-v48-signal-split{height:63px;padding:9px 12px 11px;display:grid;grid-template-columns:1fr 1fr;gap:7px;position:relative}
+.cc-v48-chart-empty b{color:#7b879d;}
+
+.cc-v48-signal-split{display:grid;grid-template-columns:1fr 1fr;position:relative}
 .cc-v48-signal-split>div{display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:9px;border:1px solid;font-weight:850}
-.cc-v48-signal-split small{font-size:var(--ui-type-caption)}.cc-v48-signal-split b{font-size:18px;line-height:1}
+.cc-v48-signal-split b{line-height:1}
 .cc-v48-signal-split .buy{color:#5ce9aa;border-color:rgba(47,190,124,.56);background:linear-gradient(135deg,rgba(17,81,52,.46),rgba(10,39,32,.36))}
 .cc-v48-signal-split .sell{color:#ff728d;border-color:rgba(205,64,93,.53);background:linear-gradient(135deg,rgba(82,23,40,.42),rgba(45,18,31,.35))}
 .cc-v48-signal-split>span{position:absolute;left:12px;right:12px;bottom:5px;height:4px;display:flex;overflow:hidden;border-radius:999px;background:#1b2334}
 .cc-v48-signal-split>span i:first-child{background:#43dda0}.cc-v48-signal-split>span i:last-child{background:#fb627d}
 .cc-v48-signal-split.waiting>span{opacity:.35}
-.cc-v48-signal-grid{padding:0 12px 7px;display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.cc-v48-signal-grid>div{min-width:0;height:42px;padding:6px 8px;display:flex;flex-direction:column;justify-content:center;gap:2px;border:1px solid rgba(55,69,106,.43);border-radius:8px;background:rgba(11,18,32,.7)}
-.cc-v48-signal-grid span{display:flex;align-items:center;gap:5px;color:#68758c;font-size:var(--ui-type-caption)}.cc-v48-signal-grid span svg{color:#8877ed}
-.cc-v48-signal-grid b{overflow:hidden;color:#dce4f1;font-size:var(--ui-type-meta);white-space:nowrap;text-overflow:ellipsis}
+.cc-v48-signal-grid{display:grid;grid-template-columns:1fr 1fr;}
+.cc-v48-signal-grid>div{min-width:0;display:flex;flex-direction:column;justify-content:center;border:1px solid rgba(55,69,106,.43);border-radius:8px;background:rgba(11,18,32,.7)}
+.cc-v48-signal-grid span{display:flex;align-items:center;color:#68758c;}.cc-v48-signal-grid span svg{color:#8877ed}
+.cc-v48-signal-grid b{overflow:hidden;color:#dce4f1;white-space:nowrap;text-overflow:ellipsis}
 .cc-v48-signal-grid b.good{color:#67e5aa}.cc-v48-signal-grid b.bad{color:#ff788f}.cc-v48-signal-grid b.warn{color:#e5b95f}
-.cc-v48-trend-row{padding:0 12px 7px}.cc-v48-trend-row>span{display:block;margin-bottom:4px;color:#707c92;font-size:var(--ui-type-caption)}
-.cc-v48-trend-row>div{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
-.cc-v48-trend-row i{min-width:0;height:34px;padding:4px 5px;display:flex;flex-direction:column;gap:1px;border:1px solid rgba(55,68,105,.42);border-radius:7px;background:rgba(10,16,29,.72);font-style:normal}
-.cc-v48-trend-row i small{color:#68748a;font-size:var(--ui-type-caption)}.cc-v48-trend-row i b{font-size:var(--ui-type-caption);white-space:nowrap}.cc-v48-trend-row i.up b{color:#62e3a5}.cc-v48-trend-row i.down b{color:#ff738d}.cc-v48-trend-row i.flat b{color:#8994a7}
-.cc-v48-context-grid{padding:0 12px 7px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.cc-v48-context-grid>div{min-width:0;height:47px;padding:6px;display:grid;grid-template-columns:25px minmax(0,1fr);grid-template-rows:auto auto;column-gap:6px;border:1px solid rgba(56,70,108,.43);border-radius:8px;background:rgba(10,17,30,.72)}
-.cc-v48-context-grid>div>span{grid-row:1/3;width:25px;height:25px;display:grid;place-items:center;align-self:center;color:#72e1b0;border-radius:7px;background:rgba(20,75,53,.28)}
-.cc-v48-context-grid small{color:#69758b;font-size:var(--ui-type-caption)}.cc-v48-context-grid b{overflow:hidden;color:#cbd4e3;font-size:var(--ui-type-caption);line-height:1.1;white-space:nowrap;text-overflow:ellipsis}
-.cc-v48-session-row{margin:0 12px;height:31px;padding:0 9px;display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:7px;align-items:center;border:1px solid rgba(66,75,129,.42);border-radius:8px;background:linear-gradient(90deg,rgba(45,32,92,.35),rgba(18,26,48,.5))}
-.cc-v48-session-row span{color:#6d7990;font-size:var(--ui-type-caption)}.cc-v48-session-row b{color:#a995ff;font-size:var(--ui-type-caption)}.cc-v48-session-row em{overflow:hidden;text-align:right;color:#8d98aa;font-size:var(--ui-type-caption);font-style:normal;font-weight:750;white-space:nowrap;text-overflow:ellipsis}
+.cc-v48-trend-row>span{display:block;color:#707c92;}
+.cc-v48-trend-row>div{display:grid;grid-template-columns:repeat(4,1fr);}
+.cc-v48-trend-row i{min-width:0;display:flex;flex-direction:column;border:1px solid rgba(55,68,105,.42);border-radius:7px;background:rgba(10,16,29,.72);font-style:normal}
+.cc-v48-trend-row i small{color:#68748a;}.cc-v48-trend-row i b{white-space:nowrap}.cc-v48-trend-row i.up b{color:#62e3a5}.cc-v48-trend-row i.down b{color:#ff738d}.cc-v48-trend-row i.flat b{color:#8994a7}
+.cc-v48-context-grid{display:grid;grid-template-columns:repeat(3,1fr);}
+.cc-v48-context-grid>div{min-width:0;display:grid;grid-template-rows:auto auto;border:1px solid rgba(56,70,108,.43);border-radius:8px;background:rgba(10,17,30,.72)}
+.cc-v48-context-grid>div>span{grid-row:1/3;display:grid;place-items:center;align-self:center;color:#72e1b0;border-radius:7px;background:rgba(20,75,53,.28)}
+.cc-v48-context-grid small{color:#69758b;}.cc-v48-context-grid b{overflow:hidden;color:#cbd4e3;white-space:nowrap;text-overflow:ellipsis}
+.cc-v48-session-row{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;border:1px solid rgba(66,75,129,.42);border-radius:8px;background:linear-gradient(90deg,rgba(45,32,92,.35),rgba(18,26,48,.5))}
+.cc-v48-session-row span{color:#6d7990;}.cc-v48-session-row b{color:#a995ff;}.cc-v48-session-row em{overflow:hidden;text-align:right;color:#8d98aa;font-style:normal;font-weight:750;white-space:nowrap;text-overflow:ellipsis}
 .cc-v48-session-row em.good{color:#65e4a7}.cc-v48-session-row em.warn{color:#deb45c}
 @media(max-width:1279px){
-  .cc-v48-bottom-intelligence{height:auto;grid-template-columns:1fr}
-  .cc-v48-bottom-intelligence>.panel{height:320px}
+  .cc-v48-bottom-intelligence{grid-template-columns:1fr}
+  
 }
 @media(max-width:720px){
-  .cc-v48-bottom-intelligence>.panel{height:auto;min-height:330px}
-  .cc-v48-market-strip{height:auto;min-height:78px;grid-template-columns:1fr auto;padding:8px 10px}
+  
+  .cc-v48-market-strip{height:auto;}
   .cc-v48-timeframes{grid-column:1/-1;grid-row:2;justify-content:flex-start;overflow-x:auto}
-  .cc-v48-chart-shell{height:210px}
-  .cc-v48-title small{display:none}
-  .cc-v48-context-grid{grid-template-columns:1fr}
+  
+  
+  
   .cc-v48-signal-panel{padding-bottom:10px!important}
 }
 
@@ -1123,7 +1110,6 @@
 }
 .cc-v17-settings-column .cc-bot-v2-fields{
   grid-template-columns:1fr!important;
-  gap:0!important;
 }
 
 .cc-v17-split-grid{
@@ -1144,7 +1130,7 @@
 }
 .cc-v17-settings-column .cc-bot-v2-workspace{grid-template-columns:1fr!important}
 .cc-v17-settings-column .cc-bot-v2-summary{display:none!important}
-.cc-v17-settings-column .cc-bot-v2-main{grid-template-columns:1fr!important;gap:8px!important}
+.cc-v17-settings-column .cc-bot-v2-main{grid-template-columns:1fr!important;}
 .cc-v17-settings-column .cc-bot-v2-main>.cc-bot-v2-panel:first-child{grid-column:1/-1!important}
 .cc-v17-settings-column .cc-bot-v2-panel{align-self:start!important}
 .cc-v17-settings-column .cc-bot-v17-hidden-engine,
@@ -1328,30 +1314,15 @@
   display:grid;
   grid-template-columns:minmax(330px,.92fr) minmax(390px,1.08fr) minmax(330px,.92fr);
   gap:10px;
-  align-items:start;
   min-width:0;
 }
 .cc-v19-three-card-grid>section{min-width:0}
 
 /* Settings stays one card, compact and only as tall as needed. */
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  height:auto!important;
-  min-height:0!important;
-  max-height:560px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
-  min-height:48px!important;
-  padding:6px 10px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  max-height:505px!important;
-  overflow:auto!important;
-  padding:0 10px 8px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-mode-section{
-  padding:7px 2px!important;
-}
+
+
+
+
 .cc-v19-settings-card .cc-bot-v2-panel{
   padding:7px 2px 6px!important;
 }
@@ -1360,36 +1331,22 @@
   padding-bottom:4px!important;
 }
 .cc-v19-settings-card .cc-bot-v2-field{
-  min-height:39px!important;
-  padding:3px 1px!important;
   grid-template-columns:minmax(125px,.88fr) minmax(155px,1.12fr)!important;
   gap:9px!important;
 }
-.cc-v19-settings-card .cc-bot-v2-field .input{
-  min-height:31px!important;
-  height:31px!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select{
-  min-height:33px!important;
-  height:33px!important;
-}
+
+
 
 /* Running orders card uses the available column without stretching the whole page. */
 .cc-v19-three-card-grid .cc-v17-running-positions{
   height:560px!important;
   min-height:0!important;
 }
-.cc-v19-three-card-grid .cc-v17-running-table .body{
-  max-height:495px!important;
-  overflow:auto!important;
-}
+
 
 /* Restore the older per-mode win-rate card as the third column. */
 .cc-v19-three-card-grid .cc-v12-mode-performance{
-  height:auto!important;
-  min-height:0!important;
   padding:0!important;
-  overflow:hidden!important;
 }
 .cc-v19-three-card-grid .cc-v12-mode-performance .cc-v12-card-head{
   min-height:52px;
@@ -1402,9 +1359,7 @@
 .cc-v19-three-card-grid .cc-v12-mode-table .row{
   grid-template-columns:1.1fr .85fr .95fr .7fr!important;
 }
-.cc-v19-three-card-grid .cc-v12-mode-table .row{
-  min-height:54px;
-}
+
 
 @media(max-width:1500px){
   .cc-v19-three-card-grid{
@@ -1429,8 +1384,6 @@
 }
 .cc-v19-settings-card .cc-bot-v2-mode-section,
 .cc-v19-settings-card .cc-bot-v2-panel{
-  margin:0!important;
-  padding:0 2px!important;
   border:0!important;
   border-bottom:0!important;
   border-radius:0!important;
@@ -1443,9 +1396,7 @@
   padding:0!important;
   gap:0!important;
 }
-.cc-v19-settings-card .cc-bot-v2-fields{
-  gap:0!important;
-}
+
 .cc-v19-settings-card .cc-bot-v2-mode-section{
   padding:5px 2px 4px!important;
 }
@@ -1461,57 +1412,22 @@
   min-height:30px!important;
   height:30px!important;
 }
-.cc-v19-settings-card .cc-bot-v12-mode-select{
-  min-height:31px!important;
-  height:31px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  max-height:470px!important;
-  padding:0 10px 6px!important;
-}
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  max-height:525px!important;
-}
+
+
+
 
 
 /* ===== Control Center V21 · compact fixed-height settings =====
    Fixed to the fully-expanded MANUAL footprint so switching modes never
    changes the card height. Rows follow a dense label | control layout. */
-.cc-v19-settings-card,
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  height:560px!important;
-  min-height:560px!important;
-  max-height:560px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
-  height:46px!important;
-  min-height:46px!important;
-  padding:5px 10px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:514px!important;
-  min-height:0!important;
-  max-height:none!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-  padding:3px 10px 8px!important;
-  scrollbar-width:thin;
-}
+
+
+
 .cc-v19-settings-card .cc-bot-v2-mode-section>.cc-bot-v2-section-title{
   display:none!important;
 }
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
-  display:block!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
-  display:grid!important;
-  grid-template-columns:minmax(126px,.88fr) minmax(160px,1.12fr)!important;
-  gap:9px!important;
-  align-items:center!important;
-  min-height:35px!important;
-}
+
+
 .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span{
   min-width:0!important;
   flex-direction:row!important;
@@ -1519,14 +1435,7 @@
   gap:7px!important;
   font-size:12px!important;
 }
-.cc-v19-settings-card .cc-bot-v12-mode-select{
-  width:100%!important;
-  height:31px!important;
-  min-height:31px!important;
-  padding:4px 9px!important;
-  font-size:12px!important;
-  border-radius:7px!important;
-}
+
 .cc-v19-settings-card .cc-bot-v2-field,
 .cc-v19-settings-card .cc-bot-v17-add-setting{
   min-height:35px!important;
@@ -1566,11 +1475,7 @@
 .cc-v19-settings-card .cc-bot-v17-add-setting .input{
   padding:4px 9px!important;
 }
-.cc-v19-settings-card .cc-bot-v2-choice-row{
-  min-height:36px!important;
-  margin:3px 0!important;
-  gap:6px!important;
-}
+
 .cc-v19-settings-card .cc-bot-v2-choice-row button{
   min-height:32px!important;
   padding:4px 8px!important;
@@ -1585,17 +1490,8 @@
 }
 
 /* Risk rows use the same compact label | control rhythm as the main form. */
-.cc-v19-settings-card .cc-bot-v2-limit-grid{
-  margin:0!important;
-  gap:0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-  min-height:38px!important;
-  padding:2px 1px!important;
-  grid-template-columns:minmax(126px,.88fr) minmax(160px,1.12fr)!important;
-  gap:9px!important;
-  border-bottom:1px solid rgba(65,82,121,.20)!important;
-}
+
+
 .cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child{
   min-width:0!important;
   display:flex!important;
@@ -1608,14 +1504,10 @@
 }
 .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field{
   display:grid!important;
-  grid-template-columns:auto minmax(90px,1fr)!important;
   align-items:center!important;
-  gap:7px!important;
   min-height:30px!important;
 }
-.cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-setting-label{
-  min-width:max-content!important;
-}
+
 .cc-v19-settings-card .cc-bot-v2-limit-grid .money-input-shell{
   min-width:0!important;
   min-height:30px!important;
@@ -1657,13 +1549,8 @@
   --settings-row:42px;
   --settings-control-h:34px;
 }
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  padding:5px 14px 10px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-mode-section,
-.cc-v19-settings-card .cc-bot-v2-panel{
-  padding:0!important;
-}
+
+
 .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label,
 .cc-v19-settings-card .cc-bot-v2-field,
 .cc-v19-settings-card .cc-bot-v17-add-setting,
@@ -1700,9 +1587,6 @@
 .cc-v19-settings-card .cc-bot-v17-add-setting>select.input,
 .cc-v19-settings-card .cc-bot-v2-control-stack>select.input{
   width:100%!important;
-  height:var(--settings-control-h)!important;
-  min-height:var(--settings-control-h)!important;
-  padding:4px 38px 4px 12px!important;
   border:1px solid rgba(82,101,145,.58)!important;
   border-radius:8px!important;
   background:#080d15!important;
@@ -1721,18 +1605,12 @@
 }
 
 /* Trading mode is the primary selector: larger, brighter and unmistakable. */
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
-  margin:1px 0 3px!important;
-}
+
 .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
-  min-height:52px!important;
   border-bottom:1px solid rgba(100,91,172,.34)!important;
 }
 .cc-v19-settings-card .cc-bot-v12-mode-select{
   width:100%!important;
-  height:42px!important;
-  min-height:42px!important;
-  padding:5px 42px 5px 14px!important;
   border:1px solid rgba(128,104,255,.9)!important;
   border-radius:10px!important;
   background:linear-gradient(135deg,#161331,#0a1019 72%)!important;
@@ -1754,11 +1632,9 @@
   min-width:0!important;
 }
 .cc-v19-settings-card .cc-bot-v2-control-stack{
-  display:grid!important;
   gap:3px!important;
 }
 .cc-v19-settings-card .cc-bot-v2-control-stack>small{
-  display:block!important;
   padding:0 2px!important;
   color:#6f7e99!important;
   font-size:var(--ui-type-caption)!important;
@@ -1873,10 +1749,7 @@
 }
 
 /* Risk rows are identical to ordinary rows, including disabled values. */
-.cc-v19-settings-card .cc-bot-v2-limit-grid{
-  margin:0!important;
-  gap:0!important;
-}
+
 .cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child{
   margin:0!important;
   padding:0!important;
@@ -1886,16 +1759,8 @@
 }
 
 /* Keep fixed-card behavior while using the space for real controls. */
-.cc-v19-settings-card,
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  height:560px!important;
-  min-height:560px!important;
-  max-height:560px!important;
-}
+
 .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:514px!important;
-  overflow-y:auto!important;
   scrollbar-width:thin;
 }
 @media(max-width:1500px){
@@ -1939,30 +1804,10 @@
   color:#b9a8ff!important;
 }
 
-.cc-v19-settings-card,
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded,
-.cc-v19-three-card-grid .cc-v17-running-positions,
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  height:520px!important;
-  min-height:520px!important;
-  max-height:520px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:474px!important;
-  min-height:474px!important;
-  max-height:474px!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v17-running-table .body{
-  max-height:455px!important;
-  overflow:auto!important;
-}
-.cc-v19-three-card-grid .cc-v12-mode-table{
-  max-height:458px!important;
-  overflow:auto!important;
-}
+
+
+
+
 
 /* Mode sizing selectors share the same professional control width. */
 .cc-v19-settings-card .cc-bot-v2-field>select.input{
@@ -1973,8 +1818,6 @@
 /* ===== Control Center V24 · MANUAL reveal-all + no idle scroll ===== */
 .cc-v19-settings-card .cc-bot-manual-risk-add-all{
   width:100%!important;
-  height:34px!important;
-  min-height:34px!important;
   display:flex!important;
   align-items:center!important;
   justify-content:center!important;
@@ -1991,39 +1834,15 @@
   border-color:rgba(157,136,255,.9)!important;
   background:linear-gradient(135deg,rgba(53,41,103,.96),rgba(13,19,31,.98))!important;
 }
-.cc-v19-settings-card,
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded,
-.cc-v19-three-card-grid .cc-v17-running-positions,
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  height:545px!important;
-  min-height:545px!important;
-  max-height:545px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:499px!important;
-  min-height:499px!important;
-  max-height:499px!important;
-}
+
+
 
 
 /* ===== Control Center V25 · compact MANUAL within original card height =====
    Keep the 520px workspace footprint. MANUAL alone uses a slightly denser
    rhythm so its normal state fits without an internal scrollbar. */
-.cc-v19-settings-card,
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded,
-.cc-v19-three-card-grid .cc-v17-running-positions,
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  height:520px!important;
-  min-height:520px!important;
-  max-height:520px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:474px!important;
-  min-height:474px!important;
-  max-height:474px!important;
-}
+
+
 .cc-v19-settings-card .cc-bot-mode-manual{
   --settings-row:38px;
   --settings-control-h:32px;
@@ -2069,9 +1888,7 @@
 /* ===== Control Center V26 · content-fit compact workspace =====
    Settings height follows the active mode's visible rows. Adjacent cards
    stretch to the same grid row instead of forcing a fixed 520/545px shell. */
-.cc-v19-three-card-grid{
-  align-items:stretch!important;
-}
+
 .cc-v19-settings-card,
 .cc-v19-settings-card .cc-bot-embedded-frame,
 .cc-v19-settings-card .cc-bot-v2-embedded,
@@ -2081,51 +1898,15 @@
   min-height:0!important;
   max-height:none!important;
 }
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  --settings-row:38px;
-  --settings-control-h:32px;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
-  height:46px!important;
-  min-height:46px!important;
-  padding:5px 10px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:auto!important;
-  min-height:0!important;
-  max-height:none!important;
-  overflow:visible!important;
-  padding:2px 12px 7px!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
-  margin:0 0 1px!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
-  min-height:46px!important;
-  padding-top:2px!important;
-  padding-bottom:2px!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select{
-  height:38px!important;
-  min-height:38px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-field,
-.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-  min-height:38px!important;
-  padding-top:2px!important;
-  padding-bottom:2px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row{
-  min-height:34px!important;
-  margin:1px 0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row button,
-.cc-v19-settings-card .money-input-shell,
-.cc-v19-settings-card .number-input-shell,
-.cc-v19-settings-card .cc-bot-v2-field>select.input{
-  height:32px!important;
-  min-height:32px!important;
-}
+
+
+
+
+
+
+
+
+
 
 /* ZERO GRID: controls only, no secondary helper copy consuming height. */
 .cc-v19-settings-card .cc-bot-mode-zero_grid .cc-bot-v2-control-stack>small,
@@ -2134,107 +1915,37 @@
 }
 
 /* The neighboring cards follow the settings card height and scroll internally. */
-.cc-v19-three-card-grid .cc-v17-running-positions,
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  align-self:stretch!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v17-running-positions{
-  display:flex!important;
-  flex-direction:column!important;
-}
-.cc-v19-three-card-grid .cc-v17-running-table{
-  min-height:0!important;
-  flex:1 1 auto!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v17-running-table .body{
-  max-height:180px!important;
-  overflow:auto!important;
-}
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  display:flex!important;
-  flex-direction:column!important;
-}
-.cc-v19-three-card-grid .cc-v12-mode-table{
-  min-height:0!important;
-  max-height:210px!important;
-  overflow:auto!important;
-  flex:1 1 auto!important;
-}
-.cc-v19-three-card-grid .cc-v12-mode-table .row{
-  min-height:36px!important;
-}
+
+
+
+
+
+
+
 
 /* Keep the reveal-all row as the natural bottom of MANUAL before expansion. */
 .cc-v19-settings-card .cc-bot-manual-risk-add{
   margin-bottom:0!important;
-  border-bottom:0!important;
 }
 
 
 /* ===== Control Center V27 · compact independent cards =====
    Do not stretch sibling cards. Every card ends at its own content.
    Bot Settings uses one dense rhythm across AUTO/RACE/FLIP/ZERO/MANUAL. */
-.cc-v19-three-card-grid{
-  align-items:start!important;
-}
-.cc-v19-three-card-grid>section,
-.cc-v19-settings-card,
-.cc-v19-three-card-grid .cc-v17-running-positions,
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  align-self:start!important;
-  height:auto!important;
-  min-height:0!important;
-  max-height:none!important;
-}
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  height:auto!important;
-  min-height:0!important;
-  max-height:none!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  --settings-row:36px;
-  --settings-control-h:31px;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
-  height:44px!important;
-  min-height:44px!important;
-  padding:4px 9px!important;
-}
+
+
+
+
+
 .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:auto!important;
-  min-height:0!important;
-  max-height:none!important;
   overflow:visible!important;
-  padding:1px 11px 4px!important;
 }
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
-  margin:0!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
-  min-height:43px!important;
-  padding:1px 0!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select{
-  height:36px!important;
-  min-height:36px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-mode-section,
-.cc-v19-settings-card .cc-bot-v2-panel{
-  margin:0!important;
-  padding:0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-field,
-.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-  min-height:36px!important;
-  padding:1px 1px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row{
-  min-height:31px!important;
-  margin:0!important;
-}
+
+
+
+
+
+
 .cc-v19-settings-card .cc-bot-v2-choice-row button,
 .cc-v19-settings-card .money-input-shell,
 .cc-v19-settings-card .number-input-shell,
@@ -2242,33 +1953,15 @@
   height:31px!important;
   min-height:31px!important;
 }
-.cc-v19-settings-card .cc-bot-manual-risk-add{
-  min-height:36px!important;
-  margin:0!important;
-  padding:1px!important;
-  border-bottom:0!important;
-}
-.cc-v19-settings-card .cc-bot-manual-risk-add-all{
-  height:31px!important;
-  min-height:31px!important;
-}
+
+
 
 /* Running Positions: compact by its own content, never inherit settings height. */
-.cc-v19-three-card-grid .cc-v17-running-positions{
-  display:block!important;
-  overflow:hidden!important;
-}
+
 .cc-v19-three-card-grid .cc-v17-running-table{
   height:auto!important;
-  min-height:0!important;
-  overflow:hidden!important;
 }
-.cc-v19-three-card-grid .cc-v17-running-table .body{
-  height:auto!important;
-  min-height:0!important;
-  max-height:260px!important;
-  overflow:auto!important;
-}
+
 .cc-v19-three-card-grid .cc-v17-running-table .empty{
   height:auto!important;
   min-height:116px!important;
@@ -2276,20 +1969,9 @@
 }
 
 /* Performance: compact by its own rows, independent from both neighboring cards. */
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  display:block!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v12-mode-table{
-  height:auto!important;
-  min-height:0!important;
-  max-height:272px!important;
-  overflow:auto!important;
-  flex:none!important;
-}
-.cc-v19-three-card-grid .cc-v12-mode-table .row{
-  min-height:38px!important;
-}
+
+
+
 
 /* No fixed-height or sibling-equalization behavior on desktop. */
 @media(min-width:1181px){
@@ -2302,78 +1984,25 @@
 /* ===== Control Center V28 · MANUAL-height fixed settings card =====
    MANUAL defines the permanent Bot Settings card height. Switching modes
    must never resize the card; every mode uses the same compact row rhythm. */
-.cc-v19-three-card-grid{
-  align-items:start!important;
-}
+
 .cc-v19-settings-card{
   align-self:start!important;
   height:520px!important;
   min-height:520px!important;
   max-height:520px!important;
 }
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  height:520px!important;
-  min-height:520px!important;
-  max-height:520px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  --settings-row:36px;
-  --settings-control-h:31px;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
-  height:44px!important;
-  min-height:44px!important;
-  max-height:44px!important;
-  padding:4px 9px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:476px!important;
-  min-height:476px!important;
-  max-height:476px!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-  padding:1px 11px 4px!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
-  margin:0!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
-  min-height:43px!important;
-  padding:1px 0!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select{
-  height:36px!important;
-  min-height:36px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-mode-section,
-.cc-v19-settings-card .cc-bot-v2-panel{
-  margin:0!important;
-  padding:0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-field,
-.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-  min-height:36px!important;
-  padding:1px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row{
-  min-height:31px!important;
-  margin:0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row button,
-.cc-v19-settings-card .money-input-shell,
-.cc-v19-settings-card .number-input-shell,
-.cc-v19-settings-card .cc-bot-v2-field>select.input,
-.cc-v19-settings-card .cc-bot-manual-risk-add-all{
-  height:31px!important;
-  min-height:31px!important;
-}
-.cc-v19-settings-card .cc-bot-manual-risk-add{
-  min-height:36px!important;
-  margin:0!important;
-  padding:1px!important;
-  border-bottom:0!important;
-}
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* Sibling cards remain independent; only Bot Settings is MANUAL-height fixed. */
 .cc-v19-three-card-grid .cc-v17-running-positions,
@@ -2388,296 +2017,87 @@
 /* ===== Control Center V29 · all three cards fixed to MANUAL baseline =====
    One immutable baseline: Settings, Running Positions, Performance = 520px.
    Switching mode changes only visible fields, never card height or row spacing. */
-.cc-v19-three-card-grid{
-  align-items:start!important;
-}
-.cc-v19-three-card-grid>section,
-.cc-v19-settings-card,
-.cc-v19-three-card-grid .cc-v17-running-positions,
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  align-self:start!important;
-  height:520px!important;
-  min-height:520px!important;
-  max-height:520px!important;
-}
+
+
 
 /* Settings keeps the MANUAL baseline and the same compact rhythm in every mode. */
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  height:520px!important;
-  min-height:520px!important;
-  max-height:520px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  --settings-row:36px;
-  --settings-control-h:31px;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:476px!important;
-  min-height:476px!important;
-  max-height:476px!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-}
-.cc-v19-settings-card .cc-bot-v2-field,
-.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-  min-height:36px!important;
-  padding-top:1px!important;
-  padding-bottom:1px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row{
-  min-height:31px!important;
-  margin:0!important;
-}
+
+
+
+
+
 
 /* Running Positions is fixed to the same 520px shell; rows never stretch. */
-.cc-v19-three-card-grid .cc-v17-running-positions{
-  display:flex!important;
-  flex-direction:column!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v17-running-table{
-  flex:1 1 auto!important;
-  min-height:0!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v17-running-table .body{
-  height:auto!important;
-  min-height:0!important;
-  max-height:438px!important;
-  overflow:auto!important;
-}
+
+
+
 
 /* Performance is fixed to the same 520px shell; mode rows stay compact. */
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  display:flex!important;
-  flex-direction:column!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v12-mode-table{
-  flex:1 1 auto!important;
-  min-height:0!important;
-  height:auto!important;
-  max-height:458px!important;
-  overflow:auto!important;
-}
-.cc-v19-three-card-grid .cc-v12-mode-table .row{
-  min-height:38px!important;
-  height:38px!important;
-}
+
+
+
 
 
 /* ===== Control Center V30 · measured MANUAL baseline 400px =====
    The visible bottom of MANUAL's "การตั้งค่าเพิ่มเติม" defines the card baseline.
    All three cards are locked to this measured height. */
-.cc-v19-three-card-grid{
-  align-items:start!important;
-}
-.cc-v19-three-card-grid>section,
-.cc-v19-settings-card,
-.cc-v19-three-card-grid .cc-v17-running-positions,
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  align-self:start!important;
-  height:400px!important;
-  min-height:400px!important;
-  max-height:400px!important;
-}
+
+
 
 /* Settings: fixed MANUAL baseline, identical compact rhythm in every mode. */
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  height:400px!important;
-  min-height:400px!important;
-  max-height:400px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  --settings-row:36px;
-  --settings-control-h:31px;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
-  height:44px!important;
-  min-height:44px!important;
-  max-height:44px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:356px!important;
-  min-height:356px!important;
-  max-height:356px!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-  padding:1px 11px 4px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-field,
-.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-  min-height:36px!important;
-  padding-top:1px!important;
-  padding-bottom:1px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row{
-  min-height:31px!important;
-  margin:0!important;
-}
+
+
+
+
+
+
 
 /* Running Positions: same 400px shell; rows scroll inside instead of stretching card. */
-.cc-v19-three-card-grid .cc-v17-running-positions{
-  display:flex!important;
-  flex-direction:column!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v17-running-table{
-  flex:1 1 auto!important;
-  min-height:0!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v17-running-table .body{
-  height:auto!important;
-  min-height:0!important;
-  max-height:318px!important;
-  overflow:auto!important;
-}
+
+
+
 
 /* Performance: same 400px shell; compact rows, internal scroll only when required. */
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  display:flex!important;
-  flex-direction:column!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v12-mode-table{
-  flex:1 1 auto!important;
-  min-height:0!important;
-  height:auto!important;
-  max-height:338px!important;
-  overflow:auto!important;
-}
-.cc-v19-three-card-grid .cc-v12-mode-table .row{
-  min-height:38px!important;
-  height:38px!important;
-}
+
+
+
 
 
 /* ===== Control Center V31 · 380px cards + MANUAL spacing for every mode =====
    Shorten the three cards slightly, keep the settings scrollbar, and force
    AUTO/RACE/FLIP_LOCK/ZERO_GRID/MANUAL to share the exact MANUAL rhythm. */
-.cc-v19-three-card-grid{
-  align-items:start!important;
-}
-.cc-v19-three-card-grid>section,
-.cc-v19-settings-card,
-.cc-v19-three-card-grid .cc-v17-running-positions,
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  align-self:start!important;
-  height:380px!important;
-  min-height:380px!important;
-  max-height:380px!important;
-}
+
+
 
 /* Same card shell in every mode. */
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  height:380px!important;
-  min-height:380px!important;
-  max-height:380px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  --settings-row:38px;
-  --settings-control-h:32px;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
-  height:44px!important;
-  min-height:44px!important;
-  max-height:44px!important;
-  padding:4px 9px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:336px!important;
-  min-height:336px!important;
-  max-height:336px!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-  padding:2px 11px 5px!important;
-}
+
+
+
+
 
 /* Exact MANUAL spacing applied globally to every mode. */
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
-  margin:0 0 1px!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
-  min-height:46px!important;
-  padding-top:2px!important;
-  padding-bottom:2px!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select{
-  height:38px!important;
-  min-height:38px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-mode-section,
-.cc-v19-settings-card .cc-bot-v2-panel{
-  margin:0!important;
-  padding:0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-fields{
-  gap:0!important;
-  margin:0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-field,
-.cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-  min-height:38px!important;
-  padding-top:2px!important;
-  padding-bottom:2px!important;
-  margin:0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-limit-grid{
-  gap:0!important;
-  margin:0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row{
-  min-height:34px!important;
-  margin:1px 0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row button,
-.cc-v19-settings-card .money-input-shell,
-.cc-v19-settings-card .number-input-shell,
-.cc-v19-settings-card .cc-bot-v2-field>select.input,
-.cc-v19-settings-card .cc-bot-manual-risk-add-all{
-  height:32px!important;
-  min-height:32px!important;
-}
+
+
+
+
+
+
+
+
+
 .cc-v19-settings-card .cc-bot-manual-risk-add{
-  min-height:38px!important;
-  margin:0!important;
-  padding:2px 1px!important;
   border-bottom:0!important;
 }
 
 /* The other two cards follow the same shortened shell and scroll internally. */
-.cc-v19-three-card-grid .cc-v17-running-positions{
-  display:flex!important;
-  flex-direction:column!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v17-running-table{
-  flex:1 1 auto!important;
-  min-height:0!important;
-  overflow:hidden!important;
-}
+
+
 .cc-v19-three-card-grid .cc-v17-running-table .body{
   height:auto!important;
   min-height:0!important;
-  max-height:298px!important;
-  overflow:auto!important;
 }
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  display:flex!important;
-  flex-direction:column!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v12-mode-table{
-  flex:1 1 auto!important;
-  min-height:0!important;
-  height:auto!important;
-  max-height:318px!important;
-  overflow:auto!important;
-}
+
+
 .cc-v19-three-card-grid .cc-v12-mode-table .row{
   min-height:38px!important;
   height:38px!important;
@@ -2687,167 +2107,57 @@
 /* ===== Control Center V32 · MANUAL no-scroll + exact compact rows =====
    Keep the existing 380px card. Make every mode use exact row heights so
    AUTO/RACE/FLIP_LOCK/ZERO_GRID cannot open larger vertical gaps than MANUAL. */
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  --settings-row:34px;
-  --settings-control-h:28px;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
-  height:44px!important;
-  min-height:44px!important;
-  max-height:44px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:336px!important;
-  min-height:336px!important;
-  max-height:336px!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-  padding:1px 11px 3px!important;
-}
+
+
+
 
 /* Mode selector row uses a fixed compact height everywhere. */
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
-  margin:0!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
-  height:38px!important;
-  min-height:38px!important;
-  max-height:38px!important;
-  padding:1px 0!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select{
-  height:34px!important;
-  min-height:34px!important;
-  max-height:34px!important;
-}
+
+
+
 
 /* Ordinary fields and risk rows are exact-height, not just min-height. */
-.cc-v19-settings-card .cc-bot-v2-fields{
-  gap:0!important;
-  margin:0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-mode-section,
-.cc-v19-settings-card .cc-bot-v2-panel{
-  margin:0!important;
-  padding:0!important;
-}
+
+
 .cc-v19-settings-card .cc-bot-v2-field,
 .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-  height:34px!important;
-  min-height:34px!important;
-  max-height:34px!important;
-  padding:1px!important;
-  margin:0!important;
-  overflow:hidden!important;
-}
-.cc-v19-settings-card .cc-bot-v2-limit-grid{
-  gap:0!important;
-  margin:0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row{
-  height:30px!important;
-  min-height:30px!important;
-  max-height:30px!important;
-  margin:0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row button,
-.cc-v19-settings-card .money-input-shell,
-.cc-v19-settings-card .number-input-shell,
-.cc-v19-settings-card .cc-bot-v2-field>select.input,
-.cc-v19-settings-card .cc-bot-manual-risk-add-all{
-  height:28px!important;
-  min-height:28px!important;
-  max-height:28px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-inline-toggle-value,
-.cc-v19-settings-card .toggle-money-field{
-  min-height:28px!important;
-  height:28px!important;
-}
-.cc-v19-settings-card .cc-bot-manual-risk-add{
-  height:34px!important;
-  min-height:34px!important;
-  max-height:34px!important;
-  margin:0!important;
   padding:1px!important;
 }
 
+
+
+
+
+
 /* MANUAL baseline must fit naturally with no visible scrollbar. */
-.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-body{
-  overflow-y:hidden!important;
-}
+
 
 
 /* ===== Control Center V33 · fit card to MANUAL, do not compress content =====
    MANUAL keeps its existing V31 spacing. Only the card shell is adjusted so
    the MANUAL baseline fits without a scrollbar or extra empty space. */
-.cc-v19-three-card-grid{
-  align-items:start!important;
-}
-.cc-v19-three-card-grid>section,
-.cc-v19-settings-card,
-.cc-v19-three-card-grid .cc-v17-running-positions,
-.cc-v19-three-card-grid .cc-v12-mode-performance{
-  align-self:start!important;
-  height:402px!important;
-  min-height:402px!important;
-  max-height:402px!important;
-}
+
+
 
 /* Restore the original MANUAL spacing/control dimensions from V31. */
-.cc-v19-settings-card .cc-bot-embedded-frame,
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  height:402px!important;
-  min-height:402px!important;
-  max-height:402px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded{
-  --settings-row:38px;
-  --settings-control-h:32px;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
-  height:44px!important;
-  min-height:44px!important;
-  max-height:44px!important;
-  padding:4px 9px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:358px!important;
-  min-height:358px!important;
-  max-height:358px!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-  padding:2px 11px 5px!important;
-}
-.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-body{
-  overflow-y:hidden!important;
-}
+
+
+
+
+
 
 /* Do not compress rows: restore MANUAL's normal dimensions exactly. */
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
-  margin:0 0 1px!important;
-}
+
 .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
-  height:auto!important;
-  min-height:46px!important;
-  max-height:none!important;
   padding-top:2px!important;
   padding-bottom:2px!important;
 }
-.cc-v19-settings-card .cc-bot-v12-mode-select{
-  height:38px!important;
-  min-height:38px!important;
-  max-height:none!important;
-}
+
 .cc-v19-settings-card .cc-bot-v2-fields{
   gap:0!important;
   margin:0!important;
 }
-.cc-v19-settings-card .cc-bot-v2-mode-section,
-.cc-v19-settings-card .cc-bot-v2-panel{
-  margin:0!important;
-  padding:0!important;
-}
+
 .cc-v19-settings-card .cc-bot-v2-field,
 .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
   height:auto!important;
@@ -2862,34 +2172,10 @@
   gap:0!important;
   margin:0!important;
 }
-.cc-v19-settings-card .cc-bot-v2-choice-row{
-  height:auto!important;
-  min-height:34px!important;
-  max-height:none!important;
-  margin:1px 0!important;
-}
-.cc-v19-settings-card .cc-bot-v2-choice-row button,
-.cc-v19-settings-card .money-input-shell,
-.cc-v19-settings-card .number-input-shell,
-.cc-v19-settings-card .cc-bot-v2-field>select.input,
-.cc-v19-settings-card .cc-bot-manual-risk-add-all{
-  height:32px!important;
-  min-height:32px!important;
-  max-height:none!important;
-}
-.cc-v19-settings-card .cc-bot-v2-inline-toggle-value,
-.cc-v19-settings-card .toggle-money-field{
-  height:auto!important;
-  min-height:32px!important;
-  max-height:none!important;
-}
-.cc-v19-settings-card .cc-bot-manual-risk-add{
-  height:auto!important;
-  min-height:38px!important;
-  max-height:none!important;
-  margin:0!important;
-  padding:2px 1px!important;
-}
+
+
+
+
 
 /* The neighboring cards match MANUAL's shell and scroll only inside. */
 .cc-v19-three-card-grid .cc-v17-running-positions{
@@ -2897,27 +2183,12 @@
   flex-direction:column!important;
   overflow:hidden!important;
 }
-.cc-v19-three-card-grid .cc-v17-running-table{
-  flex:1 1 auto!important;
-  min-height:0!important;
-  overflow:hidden!important;
-}
-.cc-v19-three-card-grid .cc-v17-running-table .body{
-  max-height:320px!important;
-  overflow:auto!important;
-}
+
+
 .cc-v19-three-card-grid .cc-v12-mode-performance{
-  display:flex!important;
-  flex-direction:column!important;
   overflow:hidden!important;
 }
-.cc-v19-three-card-grid .cc-v12-mode-table{
-  flex:1 1 auto!important;
-  min-height:0!important;
-  height:auto!important;
-  max-height:340px!important;
-  overflow:auto!important;
-}
+
 
 /* ===== Control Center V34 · 430px MANUAL-rhythm settings =====
    Keep every mode visually as compact as MANUAL, add a little more breathing
@@ -2946,36 +2217,13 @@
   --settings-row:38px;
   --settings-control-h:32px;
 }
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
-  height:44px!important;
-  min-height:44px!important;
-  max-height:44px!important;
-  padding:5px 11px!important;
-}
-.cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:386px!important;
-  min-height:386px!important;
-  max-height:386px!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-  padding:4px 13px 8px!important;
-}
+
+
 
 /* Use the exact MANUAL rhythm for AUTO / RACE / FLIP LOCK / ZERO GRID too. */
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
-  margin:0 0 1px!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
-  height:auto!important;
-  min-height:46px!important;
-  max-height:none!important;
-  padding:2px 2px!important;
-}
-.cc-v19-settings-card .cc-bot-v12-mode-select{
-  height:38px!important;
-  min-height:38px!important;
-  max-height:none!important;
-}
+
+
+
 .cc-v19-settings-card .cc-bot-v2-mode-section,
 .cc-v19-settings-card .cc-bot-v2-panel{
   margin:0!important;
@@ -2995,12 +2243,7 @@
   margin:0!important;
   padding:2px 2px!important;
 }
-.cc-v19-settings-card .cc-bot-v2-choice-row{
-  height:auto!important;
-  min-height:34px!important;
-  max-height:none!important;
-  margin:1px 0!important;
-}
+
 .cc-v19-settings-card .cc-bot-v2-choice-row button,
 .cc-v19-settings-card .money-input-shell,
 .cc-v19-settings-card .number-input-shell,
@@ -3052,9 +2295,6 @@
    stretching completely instead of only overriding min-heights. */
 .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
   display:block!important;
-  height:386px!important;
-  min-height:386px!important;
-  max-height:386px!important;
   padding:2px 12px 4px!important;
   overflow-y:auto!important;
   overflow-x:hidden!important;
@@ -3125,11 +2365,7 @@
   align-items:center!important;
   gap:14px!important;
   width:100%!important;
-  height:38px!important;
-  min-height:38px!important;
-  max-height:38px!important;
   margin:0!important;
-  padding:2px!important;
   border-bottom:1px solid rgba(76,91,128,.22)!important;
   overflow:hidden!important;
 }
@@ -3238,7 +2474,6 @@
   min-height:34px!important;
   max-height:34px!important;
   line-height:34px!important;
-  padding:0 38px 0 14px!important;
   margin:0!important;
 }
 
@@ -3251,7 +2486,6 @@
   min-height:30px!important;
   max-height:30px!important;
   line-height:30px!important;
-  padding:0 34px 0 14px!important;
   margin:0!important;
   vertical-align:middle!important;
 }
@@ -3752,7 +2986,6 @@
 .cc-v42-side-stack{
   min-width:0;
   height:330px;
-  display:grid;
   grid-template-rows:1.28fr .72fr;
   gap:10px;
 }
@@ -4275,103 +3508,62 @@
    Readability pass only for the V42 monitoring suite. Keep the V44 one-screen
    layout, but use normal desktop dashboard text sizes instead of micro text. */
 @media(min-width:1280px){
-  .cc-shell-v4 .cc-v42-card-head b{
-    font-size:12px!important;
-    line-height:1.15!important;
-  }
+  
 
   .cc-shell-v4 .cc-v42-card-head small{
     font-size:var(--ui-type-meta)!important;
     line-height:1.2!important;
   }
 
-  .cc-shell-v4 .cc-v42-card-head em,
-  .cc-shell-v4 .cc-v42-card-head button{
-    font-size:var(--ui-type-caption)!important;
-  }
+  
 
   .cc-shell-v4 .cc-v42-empty{
     font-size:var(--ui-type-meta)!important;
   }
 
-  .cc-shell-v4 .cc-v42-table-head{
-    font-size:var(--ui-type-meta)!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-table-row{
-    font-size:var(--ui-type-meta)!important;
-    line-height:1.2!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-side{
-    font-size:var(--ui-type-meta)!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-mini-stats b{
-    font-size:12px!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-mini-stats small{
-    font-size:var(--ui-type-caption)!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-log-row time{
-    font-size:var(--ui-type-meta)!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-log-row b{
-    font-size:var(--ui-type-meta)!important;
-    line-height:1.2!important;
-  }
+  
 
   .cc-shell-v4 .cc-v42-log-row small{
     font-size:var(--ui-type-caption)!important;
     line-height:1.2!important;
   }
 
-  .cc-shell-v4 .cc-v42-goal-ring b{
-    font-size:18px!important;
-  }
+  
 
   .cc-shell-v4 .cc-v42-goal-ring small{
-    font-size:var(--ui-type-caption)!important;
     line-height:1.2!important;
   }
 
-  .cc-shell-v4 .cc-v42-goal-copy span{
-    font-size:var(--ui-type-meta)!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-goal-copy b{
-    font-size:12px!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-goal-foot span,
-  .cc-shell-v4 .cc-v42-goal-foot small{
-    font-size:var(--ui-type-caption)!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-goal-foot b{
-    font-size:11px!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-news-status span{
-    font-size:var(--ui-type-caption)!important;
-  }
+  
 
   .cc-shell-v4 .cc-v42-news-status b{
     font-size:var(--ui-type-meta)!important;
     line-height:1.3!important;
   }
 
-  .cc-shell-v4 .cc-v42-news-list time{
-    font-size:var(--ui-type-caption)!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-news-list b{
-    font-size:var(--ui-type-meta)!important;
-    line-height:1.2!important;
-  }
+  
 
   .cc-shell-v4 .cc-v42-news-list small,
   .cc-shell-v4 .cc-v42-news-list em{
@@ -4384,23 +3576,16 @@
     line-height:1.25!important;
   }
 
-  .cc-shell-v4 .cc-v42-risk-level b{
-    font-size:var(--ui-type-meta)!important;
-  }
+  
 
-  .cc-shell-v4 .cc-v42-risk-level span{
-    font-size:var(--ui-type-caption)!important;
-  }
+  
 
   .cc-shell-v4 .cc-v42-risk p{
     font-size:var(--ui-type-meta)!important;
     line-height:1.35!important;
   }
 
-  .cc-shell-v4 .cc-v42-risk li{
-    font-size:var(--ui-type-meta)!important;
-    line-height:1.2!important;
-  }
+  
 
   .cc-shell-v4 .cc-v42-system-grid span{
     font-size:var(--ui-type-caption)!important;
@@ -5222,7 +4407,6 @@
     overflow:auto!important;
   }
   .cc-v17-running-head{
-    min-height:44px!important;
     padding:7px 10px!important;
     gap:8px!important;
   }
@@ -5843,13 +5027,9 @@
 
   .cc-v19-settings-card .cc-bot-v2-embedded{
     --settings-label:116px;
-    --settings-row:36px;
-    --settings-control-h:30px;
   }
 
   .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
-    height:54px!important;
-    min-height:54px!important;
     max-height:none!important;
     padding:6px 8px!important;
     gap:8px!important;
@@ -5901,7 +5081,6 @@
     min-height:0!important;
     max-height:none!important;
     overflow:visible!important;
-    padding:2px 8px 7px!important;
   }
 
   /* Every row uses the same compact label | control geometry. */
@@ -5916,9 +5095,7 @@
     overflow:visible!important;
   }
 
-  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
-    min-height:42px!important;
-  }
+  
 
   .cc-v19-settings-card .cc-bot-v2-field>span,
   .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span,
@@ -5926,9 +5103,6 @@
     min-width:0!important;
     gap:5px!important;
     padding-right:0!important;
-    font-size:11px!important;
-    line-height:1.18!important;
-    overflow-wrap:anywhere!important;
   }
   .cc-v19-settings-card .cc-bot-v2-field>span svg,
   .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span svg,
@@ -5995,8 +5169,6 @@
   }
   .cc-v19-settings-card .cc-bot-v2-choice-row button{
     min-width:0!important;
-    min-height:30px!important;
-    height:30px!important;
     padding:3px 5px!important;
     gap:4px!important;
     border-radius:7px!important;
@@ -6016,10 +5188,6 @@
   .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field{
     width:100%!important;
     min-width:0!important;
-    display:grid!important;
-    grid-template-columns:38px minmax(0,1fr)!important;
-    align-items:center!important;
-    gap:5px!important;
   }
   .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-setting-label{
     width:38px!important;
@@ -6079,10 +5247,7 @@
 /* Give Thai labels a little more vertical room on phones. The card remains
    content-sized, so only the mobile Bot Settings card grows as needed. */
 @media(max-width:760px){
-  .cc-v19-settings-card .cc-bot-v2-embedded{
-    --settings-row:42px;
-    --settings-control-h:32px;
-  }
+  
 
   .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
     height:58px!important;
@@ -6096,23 +5261,11 @@
     padding-bottom:10px!important;
   }
 
-  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label{
-    min-height:46px!important;
-    padding-top:3px!important;
-    padding-bottom:3px!important;
-  }
+  
 
-  .cc-v19-settings-card .cc-bot-v2-field,
-  .cc-v19-settings-card .cc-bot-v2-limit-grid>div,
-  .cc-v19-settings-card .cc-bot-manual-risk-add{
-    min-height:42px!important;
-    padding-top:4px!important;
-    padding-bottom:4px!important;
-  }
+  
 
-  .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-    min-height:44px!important;
-  }
+  
 
   .cc-v19-settings-card .cc-bot-v2-field>span,
   .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span,
@@ -6123,20 +5276,9 @@
     word-break:normal!important;
   }
 
-  .cc-v19-settings-card .cc-bot-v2-field>select.input,
-  .cc-v19-settings-card .cc-bot-v17-add-setting>select.input,
-  .cc-v19-settings-card .cc-bot-v2-control-stack>select.input,
-  .cc-v19-settings-card .money-input-shell,
-  .cc-v19-settings-card .number-input-shell{
-    height:32px!important;
-    min-height:32px!important;
-    max-height:32px!important;
-  }
+  
 
-  .cc-v19-settings-card .cc-bot-v2-choice-row button{
-    height:32px!important;
-    min-height:32px!important;
-  }
+  
 }
 
 @media(max-width:390px){

@@ -1,16 +1,10 @@
 .main{
   max-width:none!important;
   min-height:100vh;
-  background:
-    radial-gradient(circle at 82% 0,rgba(105,78,224,.08),transparent 31%),
-    #080b12;
   color:#edf2fb
 }
 .shell{
-  width:min(1240px,100%);
-  margin:0 auto;
-  padding:18px 0 48px
-}
+  margin:0 auto;}
 .loading{
   min-height:100vh;
   display:grid;
@@ -21,29 +15,14 @@
 }
 .header{
   display:flex;
-  align-items:flex-end;
   justify-content:space-between;
-  gap:22px;
-  margin-bottom:20px
-}
+  gap:22px;}
 .eyebrow{
-  color:#9b89f6;
-  font:800 var(--ui-type-meta)/1 Consolas,monospace;
-  letter-spacing:.16em
-}
+  font:800 var(--ui-type-meta)/1 Consolas,monospace;}
 .header h1{
-  margin:8px 0 0;
-  color:#f5f7fc;
-  font-size:34px;
-  line-height:1;
-  letter-spacing:-.035em
-}
+  color:#f5f7fc;}
 .header p{
-  margin:9px 0 0;
-  color:#8793a8;
-  font-size:13px;
-  line-height:1.6
-}
+  margin:9px 0 0;}
 .currentAccess{
   min-width:220px;
   border:1px solid #333d59;
@@ -53,13 +32,10 @@
 }
 .currentAccess span{
   display:block;
-  color:#7d899e;
   font-size:11px
 }
 .currentAccess b{
   display:block;
-  margin-top:5px;
-  color:#e2e7f2;
   font-size:13px
 }
 .message{
@@ -106,7 +82,6 @@
   align-items:center;
   justify-content:space-between;
   gap:18px;
-  padding:17px 18px;
   border-bottom:1px solid rgba(115,129,158,.11)
 }
 .titleWithIcon,
@@ -122,10 +97,7 @@
   display:grid;
   place-items:center;
   flex:0 0 auto;
-  border:1px solid #4a3f79;
-  background:#16142b;
-  color:#aa98ff
-}
+  border:1px solid #4a3f79;}
 .icon{
   width:42px;
   height:42px;
@@ -149,10 +121,7 @@
 .systemName p,
 .centerTop p{
   margin:6px 0 0;
-  color:#8390a4;
-  font-size:12.5px;
-  line-height:1.55
-}
+  font-size:12.5px;}
 .trialHeaderActions{
   display:flex;
   align-items:center;
@@ -169,13 +138,8 @@
   font:800 var(--ui-type-meta) Consolas,monospace;
   letter-spacing:.07em
 }
-.badgeGood{
-  border-color:#2c634b;
-  background:#0c2117;
-  color:#82ddae
-}
+
 .trialToggle{
-  min-height:36px;
   border:1px solid #514771;
   border-radius:9px;
   background:#171522;
@@ -189,11 +153,8 @@
   border-color:#7462a7;
   background:#1d1a2b
 }
-.trialBody{
-  padding:13px 18px 16px
-}
+
 .localTrialBadge{
-  display:inline-flex;
   align-items:center;
   min-height:28px;
   margin-bottom:10px;
@@ -270,10 +231,7 @@
   padding:12px 14px
 }
 .trialSuccess{
-  justify-content:flex-start;
-  border-color:#2c5d47;
-  background:#0b1913
-}
+  justify-content:flex-start;}
 .successIcon{
   width:34px;
   height:34px;
@@ -458,30 +416,20 @@
   cursor:not-allowed;
   box-shadow:none
 }
-.pendingGrid{
-  padding:15px
-}
+
 .paymentCard{
   display:grid;
-  grid-template-columns:170px minmax(0,1fr);
-  gap:18px;
   align-items:center;
-  border:1px solid #303a53;
-  border-radius:13px;
-  background:#0a1019;
-  padding:14px
-}
+  border:1px solid #303a53;}
 .paymentQr{
   min-height:160px;
   display:grid;
   place-items:center;
   border:1px solid #2a334a;
-  border-radius:10px;
   background:#fff
 }
 .paymentQr img{
   display:block;
-  width:150px;
   max-width:100%;
   padding:8px
 }
@@ -494,20 +442,13 @@
   color:#8274c8
 }
 .paymentInfo h3{
-  margin:7px 0;
-  color:#e9edf6;
-  font-size:18px
-}
+  color:#e9edf6;}
 .paymentInfo p{
   margin:0 0 7px;
-  color:#8491a5;
-  font-size:12.5px;
-  line-height:1.6
-}
+  font-size:12.5px;}
 .paymentInfo small{
   display:block;
   margin-bottom:10px;
-  color:#758297;
   font-size:11px
 }
 .paymentCardEasySlip{
@@ -627,26 +568,17 @@
   font-size:11px;
   line-height:1.5
 }
-.accessCenter{
-  margin-bottom:16px
-}
+
 .centerTop{
   display:grid;
   grid-template-columns:minmax(0,1fr) auto;
-  align-items:end;
-  gap:24px;
   margin-bottom:12px;
   padding:0 2px
 }
 .systemSwitcher{
   display:grid;
   grid-template-columns:repeat(2,minmax(190px,1fr));
-  gap:9px;
-  padding:5px;
-  border:1px solid #313b56;
-  border-radius:14px;
-  background:#0b1019
-}
+  border:1px solid #313b56;}
 .systemTab{
   min-width:0;
   display:flex;
@@ -656,7 +588,6 @@
   border-radius:10px;
   background:transparent;
   color:#8996aa;
-  padding:10px 12px;
   text-align:left;
   cursor:pointer
 }
@@ -665,11 +596,7 @@
   color:#d7deeb
 }
 .systemTabActive{
-  border-color:#66558f;
-  background:linear-gradient(135deg,#231d36,#171724);
-  color:#f2efff;
-  box-shadow:0 8px 22px rgba(54,39,99,.18)
-}
+  color:#f2efff;}
 .tabIcon{
   width:38px;
   height:38px;
@@ -684,40 +611,29 @@
 }
 .systemTab small{
   margin-top:3px;
-  color:#748196;
   font-size:11px
 }
-.systemTabActive small{
-  color:#9d92ba
-}
+
 .systemStatus{
   display:grid;
   justify-items:end;
   gap:5px
 }
 .systemStatus span{
-  color:#a08ff5;
   font:800 var(--ui-type-meta) Consolas,monospace;
   letter-spacing:.08em
 }
 .systemStatus b{
-  color:#8793a6;
   font-size:11px;
   font-weight:600
 }
 .systemFeatures{
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
-  border-bottom:1px solid rgba(115,129,158,.11);
-  background:#0a1018
-}
+  border-bottom:1px solid rgba(115,129,158,.11);}
 .systemFeatures span{
   min-width:0;
-  padding:12px 14px;
   border-right:1px solid rgba(115,129,158,.11);
-  color:#909caf;
-  font-size:12px;
-  line-height:1.45;
   text-align:center
 }
 .systemFeatures span:last-child{
@@ -725,7 +641,6 @@
 }
 .legacyPackageScope{
   gap:0!important;
-  padding:18px;
   background:transparent!important
 }
 .legacyPackageScope article{
@@ -741,20 +656,11 @@
 .legacyPackageScope article small{
   line-height:1.5
 }
-.historyGridSingle{
-  padding:15px
-}
+
 .historyCard{
-  border:1px solid #2d3650;
-  border-radius:11px;
-  background:#0a1018;
-  padding:12px 14px
-}
+  border-radius:11px;}
 .historyCard h3{
-  margin:0 0 9px;
-  color:#e7ebf4;
-  font-size:14px
-}
+  margin:0 0 9px;}
 .orderList{
   display:grid
 }
@@ -763,7 +669,6 @@
   grid-template-columns:minmax(0,1fr) auto auto;
   gap:12px;
   align-items:center;
-  padding:11px 0;
   border-top:1px solid rgba(115,129,158,.10)
 }
 .orderRow:first-child{
@@ -804,7 +709,6 @@
 }
 .empty{
   margin:0;
-  color:#7a879b;
   font-size:12px
 }
 .promoBox{
@@ -1011,7 +915,7 @@
 .trialHead .trialHeaderActions { gap: 7px; }
 .trialHead .badge { padding: 5px 8px; font-size: var(--ui-type-caption); }
 .trialHead .trialToggle { min-height: 32px; padding: 6px 10px; font-size: var(--ui-type-caption); }
-.trialBody { padding: 10px 14px 14px; }
+
 .trialBody .trialSuccess,
 .trialBody .trialUnavailable,
 .trialBody .phoneRequired { min-height: 52px; padding: 9px 11px; }
