@@ -285,7 +285,6 @@ function UnifiedMobileNav({
                         <span className="owner-mobile-drawer-icon"><ScenovaIcon name={item.icon} size={20}/></span>
                         <span className="owner-mobile-drawer-copy">
                           <b>{item.label}</b>
-                          <small>{item.hint}</small>
                         </span>
                         <span className="owner-mobile-drawer-caret" aria-hidden="true">›</span>
                       </Link>
