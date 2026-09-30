@@ -4469,9 +4469,7 @@ export default function DashboardPage() {
                           ? "ต้องไม่มี Position ค้างก่อนย้ายไป VPS"
                           : Number(data?.instance?.metrics?.accountScenovaPendingOrders || 0) > 0
                             ? "ต้องไม่มี Pending Order ค้างก่อนย้ายไป VPS"
-                            : !data?.instance?.last_seen_at || Date.now()-new Date(String(data.instance.last_seen_at)).getTime()>15000
-                              ? "รอ MT5 heartbeat ล่าสุดก่อนย้ายไป VPS"
-                              : "",
+                            : "",
                     packageHref:"/packages?system=cloud&from=mt5-ea",
                     progress:vpsMigrationProgress,
                     onMove:openOwnerVpsMigration,
