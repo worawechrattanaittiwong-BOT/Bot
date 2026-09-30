@@ -1324,22 +1324,22 @@ export default function DashboardPage() {
       if (operationAgeMs >= 30_000 && terminalConnected === false) {
         failed = true;
         message = "MT5 เปิดแล้วแต่ยังเชื่อม Broker ไม่สำเร็จ · ตรวจ Login, Trading Password และชื่อ Server ให้ตรงกับบัญชี";
-      } else if (accountTradeAllowed === false) {
-        failed = true;
-        message = "เชื่อมบัญชีได้ แต่ Broker ปิดสิทธิ์ Trading ของบัญชีนี้ · ตรวจสถานะบัญชีกับ Broker";
-      } else if (accountTradeExpert === false) {
-        failed = true;
-        message = "เชื่อมบัญชีได้ แต่บัญชีไม่อนุญาต Expert Advisor · เปิดสิทธิ์ EA หรือสอบถาม Broker";
-      } else if (terminalTradeAllowed === false || mqlTradeAllowed === false) {
-        failed = true;
-        message = "เชื่อม MT5 ได้ แต่ Algo Trading ยังปิดอยู่ · เปิด Algo Trading ใน MT5 แล้วลองอีกครั้ง";
       } else if (op.kind === "MT5_SWITCH" && !data?.account) {
         message = "MT5 เดิมปิดแล้ว · กรุณาเชื่อมบัญชีใหม่เพื่อทำขั้นตอนต่อ";
       } else if (accountMatches && runnerReady && mt5Ready) {
         complete = true;
+
+        const tradingWarning = accountTradeAllowed === false
+          ? " · เชื่อมบัญชีสำเร็จ แต่บัญชียังส่งคำสั่งซื้อขายไม่ได้ อาจใช้ Investor Password / บัญชี Read-only / ถูก Broker จำกัดสิทธิ์"
+          : accountTradeExpert === false
+            ? " · เชื่อมบัญชีสำเร็จ แต่บัญชียังไม่อนุญาต Expert Advisor"
+            : (terminalTradeAllowed === false || mqlTradeAllowed === false)
+              ? " · เชื่อมบัญชีสำเร็จ แต่ Algo Trading / Allow Live Trading ยังไม่พร้อม"
+              : "";
+
         message = op.kind === "LOCAL_MT5_BIND"
-          ? "ยืนยันบัญชี Local MT5 สำเร็จ · EA Heartbeat ตรงกับบัญชีใหม่แล้ว"
-          : "เชื่อม MT5 สำเร็จ · Server ตรวจบัญชีและ Heartbeat เรียบร้อยแล้ว";
+          ? "ยืนยันบัญชี Local MT5 สำเร็จ · EA Heartbeat ตรงกับบัญชีใหม่แล้ว" + tradingWarning
+          : "เชื่อม MT5 สำเร็จ · Server ตรวจบัญชีและ Heartbeat เรียบร้อยแล้ว" + tradingWarning;
       } else if (!runnerReady) {
         message = "กำลังรอ VPS Worker ออนไลน์...";
       } else if (!accountMatches) {
