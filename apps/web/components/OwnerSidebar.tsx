@@ -216,7 +216,12 @@ function UnifiedMobileNav({
           aria-label="ย้อนกลับหน้าก่อนหน้า"
           onClick={goBack}
         >
-          <span className="owner-mobile-utility-icon" aria-hidden="true">←</span>
+          <span className="owner-mobile-utility-icon" aria-hidden="true">
+            <svg className="owner-mobile-utility-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.5 6 8.5 12l6 6"/>
+              <path d="M9 12h10"/>
+            </svg>
+          </span>
         </button>
 
         <Link href="/dashboard?view=overview" className="owner-mobile-topbar-brand" aria-label="SCENOVA">
@@ -230,7 +235,9 @@ function UnifiedMobileNav({
             aria-label="รีโหลดระบบใหม่"
             onClick={reloadSystem}
           >
-            <span className="owner-mobile-utility-icon" aria-hidden="true">↻</span>
+            <span className="owner-mobile-utility-icon" aria-hidden="true">
+              <ScenovaIcon name="refresh" size={22} className="owner-mobile-utility-svg"/>
+            </span>
           </button>
 
           <button
