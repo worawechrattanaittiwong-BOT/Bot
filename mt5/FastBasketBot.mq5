@@ -187,12 +187,6 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define RACE_EXIT_LAST_FILL_GRACE_SECONDS 15
 #define RACE_EXIT_CONFIRM_SECONDS 20
 #define RACE_EXIT_SEVERE_CONFIRM_SECONDS 12
-// RACE-only anti-chase timing. The guard evaluates every tick, prefers a short
-// 30-second pause at a terminal edge, and never holds one anti-chase cycle
-// longer than 90 seconds.
-#define RACE_ANTI_CHASE_MIN_WAIT_SECONDS 30
-#define RACE_ANTI_CHASE_MAX_WAIT_SECONDS 90
-#define RACE_H1_TERMINAL_LOOKBACK_BARS 24
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
 #define ZERO_GRID_MAX_LEVELS 30
 #define ZERO_GRID_DEFAULT_LEVELS 3
@@ -401,9 +395,8 @@ double g_racePerPositionProfitMoney = 0.50;
 // Exchange/deal-side flags are used when the broker publishes them; quote-only
 // symbols fall back to uptick/downtick tick-volume counts. Intact Demand/Supply
 // zones may override only at the boundary; a live ATR-buffer break releases the
-// 60-second flow to continue through the broken zone. H1 location is used only
-// by the RACE anti-chase fill guard; it never changes BUY/SELL side selection.
-// Trend/EMA signals remain excluded from RACE side selection.
+// 60-second flow to continue through the broken zone. Trend/EMA/timeframes stay
+// excluded from RACE side selection.
 datetime g_raceVolumeBucketSecond[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketBuy[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketSell[RACE_VOLUME_HISTORY_SECONDS];
@@ -3523,86 +3516,11 @@ bool RaceAntiChasePullbackContinuationReady(int direction,double atrM5Price)
           priorBody>=atrM5Price*0.10;
 }
 
-bool RaceH1TerminalContext(
-   int direction,
-   double price,
-   double &atrH1Price)
-{
-   atrH1Price=0.0;
-   if(direction==0 || price<=0.0)
-      return false;
-
-   double atrH1Points=AverageTrueRangePoints(PERIOD_H1,g_atrPeriod);
-   if(atrH1Points<=0.0)
-      return false;
-   atrH1Price=atrH1Points*_Point;
-
-   MqlRates h1[];
-   ArraySetAsSeries(h1,true);
-   int copied=CopyRates(
-      _Symbol,
-      PERIOD_H1,
-      1,
-      RACE_H1_TERMINAL_LOOKBACK_BARS,
-      h1
-   );
-   if(copied<8)
-      return false;
-
-   double h1High=h1[0].high;
-   double h1Low=h1[0].low;
-   for(int i=1;i<copied;i++)
-   {
-      h1High=MathMax(h1High,h1[i].high);
-      h1Low=MathMin(h1Low,h1[i].low);
-   }
-
-   // A clean live break beyond the closed-H1 extreme is not treated as a
-   // terminal fade. The normal RACE flow remains free to trade the breakout.
-   double breakoutBuffer=atrH1Price*0.10;
-   bool breakout=direction>0
-      ? price>h1High+breakoutBuffer
-      : price<h1Low-breakoutBuffer;
-   if(breakout)
-      return false;
-
-   double terminalBuffer=atrH1Price*0.22;
-   return direction>0
-      ? price>=h1High-terminalBuffer
-      : price<=h1Low+terminalBuffer;
-}
-
 bool RaceAntiChaseBlocked(int direction,string &reasonOut)
 {
-   // RACE-only state. It is intentionally local to this guard so AUTO/MANUAL/
-   // FLIP/ZERO cannot read or alter the anti-chase timer.
-   static datetime waitStartedAt=0;
-   static int waitDirection=0;
-   static string waitReason="NONE";
-   static datetime bypassUntil=0;
-
    reasonOut="NONE";
    if(direction==0)
-   {
-      waitStartedAt=0;
-      waitDirection=0;
-      waitReason="NONE";
-      bypassUntil=0;
       return false;
-   }
-
-   datetime now=TimeCurrent();
-   if(bypassUntil>now)
-      return false;
-   if(bypassUntil>0 && bypassUntil<=now)
-      bypassUntil=0;
-
-   if(waitDirection!=0 && waitDirection!=direction)
-   {
-      waitStartedAt=0;
-      waitDirection=0;
-      waitReason="NONE";
-   }
 
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol,tick))
@@ -3663,13 +3581,6 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
          : price<=m15Low+atrM15Price*0.14;
    }
 
-   double atrH1Price=0.0;
-   bool nearH1Terminal=RaceH1TerminalContext(
-      direction,
-      price,
-      atrH1Price
-   );
-
    double latestRange=MathMax(_Point,m5[0].high-m5[0].low);
    double latestBody=MathAbs(m5[0].close-m5[0].open);
    double latestBodyRatio=latestBody/latestRange;
@@ -3677,6 +3588,9 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
       ? m5[0].close>m5[0].open
       : m5[0].close<m5[0].open;
 
+   // A single large completed M5 expansion candle is the exact case that used
+   // to make RACE chase the bottom/top. It is a hard WAIT until pullback +
+   // continuation is visible.
    bool largeExpansion=
       latestDirectional &&
       latestBody>=atrM5Price*0.75 &&
@@ -3701,21 +3615,12 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
       sameDirectionBars>=3 &&
       runTravel>=atrM5Price*1.05;
 
-   // H1 is location only, never a side selector. Pair it with M5 so a BUY is
-   // delayed near an H1 high only when M5 is also at/near its terminal area,
-   // and vice versa for SELL near an H1 low.
-   bool h1M5TerminalRisk=
-      nearH1Terminal &&
-      (nearM5Terminal || largeExpansion || stretchedRun);
-
-   bool terminalEdge=
-      nearM5Terminal ||
-      nearM15Terminal ||
-      h1M5TerminalRisk;
+   bool terminalEdge=nearM5Terminal || nearM15Terminal;
 
    // Protect the still-forming impulse too. Waiting only for the M5 candle to
    // close is too late for RACE because it can fill while the long candle is
-   // still extending.
+   // still extending. Measure live displacement from the latest completed M5
+   // close and hard-WAIT once that displacement reaches 0.35 ATR at the edge.
    double liveTravel=direction>0
       ? price-m5[0].close
       : m5[0].close-price;
@@ -3723,77 +3628,32 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
       terminalEdge &&
       liveTravel>=atrM5Price*0.35;
 
-   bool chaseRisk=
-      liveImpulseExtension ||
-      largeExpansion ||
-      (terminalEdge && stretchedRun) ||
-      h1M5TerminalRisk;
-
-   // A completed M5 pullback followed by continuation is always enough to
-   // release the wait early. Direction itself is never flipped here.
-   if(RaceAntiChasePullbackContinuationReady(direction,atrM5Price))
+   if(liveImpulseExtension)
    {
-      waitStartedAt=0;
-      waitDirection=0;
-      waitReason="NONE";
-      return false;
+      reasonOut=direction>0
+         ? "RACE_WAIT_BUY_LIVE_EXTENSION"
+         : "RACE_WAIT_SELL_LIVE_EXTENSION";
+      return true;
    }
 
-   // Once a terminal wait starts, keep the first 30 seconds stable even if a
-   // few ticks briefly move away from the edge. After 30 seconds, release as
-   // soon as terminal/chase risk has genuinely cleared.
-   if(waitStartedAt>0 && waitDirection==direction)
-   {
-      int elapsed=(int)(now-waitStartedAt);
-
-      if(elapsed>=RACE_ANTI_CHASE_MAX_WAIT_SECONDS)
-      {
-         waitStartedAt=0;
-         waitDirection=0;
-         waitReason="NONE";
-
-         // Hard cap: never let one anti-chase hold exceed 90 seconds. Give the
-         // freshly re-evaluated RACE direction a short execution window so the
-         // same terminal snapshot cannot immediately restart the old timer.
-         bypassUntil=now+5;
-         return false;
-      }
-
-      if(elapsed<RACE_ANTI_CHASE_MIN_WAIT_SECONDS || chaseRisk)
-      {
-         reasonOut=waitReason;
-         return true;
-      }
-
-      waitStartedAt=0;
-      waitDirection=0;
-      waitReason="NONE";
-      return false;
-   }
-
+   bool chaseRisk=largeExpansion || (terminalEdge && stretchedRun);
    if(!chaseRisk)
       return false;
 
-   if(h1M5TerminalRisk)
-      waitReason=direction>0
-         ? "RACE_WAIT_BUY_H1_M5_TERMINAL"
-         : "RACE_WAIT_SELL_H1_M5_TERMINAL";
-   else if(liveImpulseExtension)
-      waitReason=direction>0
-         ? "RACE_WAIT_BUY_LIVE_EXTENSION"
-         : "RACE_WAIT_SELL_LIVE_EXTENSION";
-   else if(largeExpansion)
-      waitReason=direction>0
+   // Never reverse the side here. A valid pullback/continuation simply releases
+   // the existing RACE direction; otherwise the fill waits and is re-evaluated.
+   if(RaceAntiChasePullbackContinuationReady(direction,atrM5Price))
+      return false;
+
+   if(largeExpansion)
+      reasonOut=direction>0
          ? "RACE_WAIT_BUY_EXPANSION_PULLBACK"
          : "RACE_WAIT_SELL_EXPANSION_PULLBACK";
    else
-      waitReason=direction>0
+      reasonOut=direction>0
          ? "RACE_WAIT_BUY_TERMINAL_PULLBACK"
          : "RACE_WAIT_SELL_TERMINAL_PULLBACK";
 
-   waitStartedAt=now;
-   waitDirection=direction;
-   reasonOut=waitReason;
    return true;
 }
 
