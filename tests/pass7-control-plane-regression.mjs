@@ -25,14 +25,18 @@ requireText(web, "const showLastKnownTelemetry = isMt5Online || isHeartbeatDelay
 requireText(web, "const isMt5ConnectionOnline = Boolean(", "dashboard exposes MT5 connection grace state");
 requireMatch(
   web,
-  /const isConnectionOnline = isCloudRuntime\s*\? \(isCloudWorkerOnline \|\| isMt5ConnectionOnline\)\s*:\s*isMt5ConnectionOnline;/,
-  "customer connection tolerates a short MT5 heartbeat gap without hiding VPS liveness"
+  /const isConnectionOnline = isMt5ConnectionOnline;/,
+  "customer connection follows the actual MT5 terminal state instead of VPS liveness alone"
 );
 requireText(web, 'VPS Server Online · MT5 Online', "customer label distinguishes healthy VPS and MT5");
 requireText(web, 'VPS Server Online · รอ MT5', "customer label distinguishes VPS-only from MT5 connected");
 requireText(web, "cloudSlots.filter((slot:any)=>Boolean(slot?.runner_online)).length", "Cloud slot summary mirrors VPS Server");
 requireMatch(bot, /interval '20 seconds'/, "backend trading MT5 freshness remains strict at 20 seconds");
-requireMatch(bot, /interval '60 seconds'\) AS mt5_connection_online/, "dashboard exposes 60 second customer connection grace");
+requireMatch(bot, /interval '60 seconds'/, "recent EA heartbeat still contributes to customer connection continuity");
+requireText(bot, "wn.telemetry->'instances'", "Cloud connection reads Worker instance telemetry");
+requireText(bot, "worker_instance->>'terminalRunning'='true'", "Cloud MT5 connection follows the actual terminal process");
+requireText(bot, "wn.last_seen_at > now() - interval '90 seconds'", "Cloud terminal state requires a fresh Worker heartbeat");
+requireText(bot, "AS mt5_connection_online", "dashboard exposes MT5 terminal connection state");
 requireText(bot, "AS mt5_connection_degraded", "dashboard exposes degraded heartbeat state");
 requireText(bot, "AS runner_online", "dashboard exposes VPS Server online state");
 requireText(bot, "interval '30 seconds') runner_online", "slot list uses canonical Cloud Server health window");
