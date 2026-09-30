@@ -3598,15 +3598,15 @@ export default function DashboardPage() {
           <div className="brand-lockup scenova-brand-lockup"><ScenovaBrand className="scenova-brand-logo-mobile"/></div>
           <div className="mobile-app-head-actions">
             {isOwner ? (
-              <OwnerMobileNav activeKey={ownerActiveKey} onNavigate={handleOwnerNavigate}/>
+              <OwnerMobileNav activeKey={ownerActiveKey} onNavigate={handleOwnerNavigate} onLogout={logout}/>
             ) : (
               <CustomerMobileNav
                 activeKey={ownerActiveKey}
                 onNavigate={handleOwnerNavigate}
+                onLogout={logout}
                 partner={data.partner}
               />
             )}
-            <button className="btn ghost" onClick={logout}>ออก</button>
           </div>
         </div>
 
