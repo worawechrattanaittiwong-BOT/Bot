@@ -2201,6 +2201,19 @@ export class BotController {
     }
   ) {
     const mode: "CLOUD" | "LOCAL" = body.mode === "CLOUD" ? "CLOUD" : "LOCAL";
+    const accountNumber = String(body.accountNumber || "").trim();
+    const brokerServer = String(body.brokerServer || "").trim();
+    const brokerName = String(body.broker || "").trim() || "Other";
+
+    if (!/^\d{3,20}$/.test(accountNumber)) {
+      throw new BadRequestException("MT5 Login ไม่ถูกต้อง · กรุณาตรวจเลขบัญชี MT5");
+    }
+    if (!brokerServer || brokerServer.length > 160 || /[\r\n\x00]/.test(brokerServer)) {
+      throw new BadRequestException("MT5 Server ไม่ถูกต้อง · ใช้ชื่อ Server ให้ตรงกับที่ Broker แสดง");
+    }
+    if (!brokerName || brokerName.length > 160 || /[\r\n\x00]/.test(brokerName)) {
+      throw new BadRequestException("ชื่อ Broker ไม่ถูกต้อง");
+    }
     const slot = body.slotId
       ? await this.resolveSlot(req.user.sub, body.slotId)
       : await this.ensureModeSlot(req.user.sub, mode);
@@ -2216,8 +2229,8 @@ export class BotController {
     );
     const sameBoundIdentity = Boolean(
       boundCloud &&
-      String(boundCloud.account_number || "").trim().toLowerCase() === String(body.accountNumber || "").trim().toLowerCase() &&
-      String(boundCloud.broker_server || "").trim().toLowerCase() === String(body.brokerServer || "").trim().toLowerCase()
+      String(boundCloud.account_number || "").trim().toLowerCase() === accountNumber.toLowerCase() &&
+      String(boundCloud.broker_server || "").trim().toLowerCase() === brokerServer.toLowerCase()
     );
     const incompleteSameAccountBind = Boolean(
       boundCloud &&
@@ -2262,8 +2275,8 @@ export class BotController {
 
     await this.assertMt5IdentityAvailable(
       req.user.sub,
-      String(body.accountNumber),
-      String(body.brokerServer),
+      accountNumber,
+      brokerServer,
       slot.id
     );
 
@@ -2294,7 +2307,7 @@ export class BotController {
 
     let account = await this.db.one(
       "SELECT * FROM mt5_accounts WHERE user_id=$1 AND lower(account_number)=lower($2) AND lower(broker_server)=lower($3) LIMIT 1",
-      [req.user.sub, String(body.accountNumber), String(body.brokerServer)]
+      [req.user.sub, accountNumber, brokerServer]
     );
     if (account) {
       const otherBinding = await this.db.one(
@@ -2319,12 +2332,12 @@ export class BotController {
       }
       account = await this.db.one(
         "UPDATE mt5_accounts SET broker=$2,mode=$3,status='ACTIVE' WHERE id=$1 RETURNING *",
-        [account.id, body.broker || "Exness", mode]
+        [account.id, brokerName, mode]
       );
     } else {
       account = await this.db.one(
         "INSERT INTO mt5_accounts(user_id,account_number,broker,broker_server,mode) VALUES($1,$2,$3,$4,$5) RETURNING *",
-        [req.user.sub, String(body.accountNumber), body.broker || "Exness", String(body.brokerServer), mode]
+        [req.user.sub, accountNumber, brokerName, brokerServer, mode]
       );
     }
 
