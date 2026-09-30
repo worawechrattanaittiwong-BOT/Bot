@@ -1,8 +1,8 @@
 #property strict
-#property version   "1.0.99"
-#define SCENOVA_EA_VERSION "1.0.99"
-#define SCENOVA_PRODUCT_VERSION "1.0.99"
-#define SCENOVA_RUNTIME_CONTRACT "RACE_30S_PROOF_EXIT_V1"
+#property version   "1.0.97"
+#define SCENOVA_EA_VERSION "1.0.97"
+#define SCENOVA_PRODUCT_VERSION "1.0.97"
+#define SCENOVA_RUNTIME_CONTRACT "RACE_DISTANCE_ARMED_EXIT_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
 
@@ -181,12 +181,12 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS 15
 #define AUTO_V21_EXIT_CONFIRM_SECONDS 10
 #define AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS 6
-#define RACE_VOLUME_WINDOW_SECONDS 30
-#define RACE_VOLUME_HISTORY_SECONDS 30
-#define RACE_EXIT_CYCLE_GRACE_SECONDS 6
-#define RACE_EXIT_LAST_FILL_GRACE_SECONDS 3
-#define RACE_EXIT_CONFIRM_SECONDS 4
-#define RACE_EXIT_SEVERE_CONFIRM_SECONDS 2
+#define RACE_VOLUME_WINDOW_SECONDS 60
+#define RACE_VOLUME_HISTORY_SECONDS 60
+#define RACE_EXIT_CYCLE_GRACE_SECONDS 20
+#define RACE_EXIT_LAST_FILL_GRACE_SECONDS 15
+#define RACE_EXIT_CONFIRM_SECONDS 20
+#define RACE_EXIT_SEVERE_CONFIRM_SECONDS 12
 // RACE-only anti-chase timing. The guard evaluates every tick, prefers a short
 // 30-second pause at a terminal edge, and never holds one anti-chase cycle
 // longer than 90 seconds.
@@ -397,7 +397,7 @@ bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
 string g_raceProfitTargetMode = "BASKET";
 double g_racePerPositionProfitMoney = 0.50;
-// RACE uses a rolling 30-second order-flow window as the primary side signal.
+// RACE uses a rolling 60-second order-flow window as the primary side signal.
 // Exchange/deal-side flags are used when the broker publishes them; quote-only
 // symbols fall back to uptick/downtick tick-volume counts. Intact Demand/Supply
 // zones may override only at the boundary; a live ATR-buffer break releases the
@@ -3800,7 +3800,7 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
 int RaceAnalysisDirection(double momentum)
 {
    // Explicit customer direction remains authoritative. AUTO RACE keeps the
-   // rolling 30-second pressure as its primary signal, then combines only
+   // rolling 60-second pressure as its primary signal, then combines only
    // RACE-local candle flow, structure, leg phase and rejection context.
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
    if(g_entryMode == ENTRY_SELL_ONLY) return -1;
@@ -3857,7 +3857,7 @@ int RaceAnalysisDirection(double momentum)
    );
 
    // No confidence gate is added to RACE. A tie falls back to the original
-   // 30-second side so Phase 1 changes direction quality, not trading cadence.
+   // 60-second side so Phase 1 changes direction quality, not trading cadence.
    return decision==0 ? volumeDirection : decision;
 }
 
@@ -3926,36 +3926,6 @@ bool RaceWrongDirectionConfirmed(
       return false;
    }
 
-   // 30-second fast-fail: once price has moved meaningfully against the Basket,
-   // a clear flip in live order-flow closes the RACE cycle immediately. This is
-   // deliberately earlier than the legacy distance-armed reversal path below.
-   double liveBuy=0.0, liveSell=0.0;
-   int liveSamples=0;
-   RaceVolumeSnapshot(liveBuy,liveSell,liveSamples);
-   double liveTotal=liveBuy+liveSell;
-   double oppositePressure=direction>0 ? liveSell : liveBuy;
-   double oppositeShare=liveTotal>0.0 ? oppositePressure/liveTotal : 0.0;
-   double fastExitFloor=MathMax(
-      spread*3.0,
-      MathMax(atrM1*0.45,atrM5*0.18)
-   );
-
-   if(RaceVolumeWindowReady() &&
-      liveSamples>=8 &&
-      liveTotal>0.0 &&
-      oppositeShare>=0.64 &&
-      adversePoints>=fastExitFloor)
-   {
-      reasonOut="RACE_30S_FLOW_REVERSAL_EXIT";
-      Print(
-         "RACE 30s fast exit adversePts=",DoubleToString(adversePoints,1),
-         " floor=",DoubleToString(fastExitFloor,1),
-         " oppositeShare=",DoubleToString(oppositeShare,2),
-         " samples=",liveSamples
-      );
-      return true;
-   }
-
    // Absolute NO-CUT ZONE. Intelligence cannot close a negative RACE Basket
    // until price has travelled at least half of the normal emergency-stop
    // distance, with additional M5 ATR/spread floors to reject local noise.
@@ -3977,7 +3947,7 @@ bool RaceWrongDirectionConfirmed(
       return false;
    }
 
-   // One complete 30-second pressure history is mandatory after the distance arm.
+   // One complete 60-second pressure history is mandatory after the distance arm.
    if(g_raceVolumeWarmupStartedAt <= 0 ||
       now - g_raceVolumeWarmupStartedAt < RACE_VOLUME_HISTORY_SECONDS)
    {
@@ -4130,17 +4100,19 @@ bool RaceWrongDirectionConfirmed(
 
 bool RaceFlowStillRunning(int direction, double momentum)
 {
-   // RACE profit-run continuation follows the same 30-second volume majority
+   // RACE profit-run continuation follows the same 60-second volume majority
    // used for entry. Trend, EMA and candle direction do not participate.
    return RaceVolumeDirection() == direction;
 }
 
 double RaceAtrStopPoints()
 {
-   // RACE is a fast scalp engine: base the broker SL on M5 volatility, while
-   // using the configured hardStopAtrMultiplier exactly. Broker stop/freeze
-   // distance remains the only mandatory widening.
-   double atr = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
+   // RACE uses its isolated M15 ATR stop at 1.50x. Do not depend on the AUTO
+   // market-context cache because the first RACE fill may happen before that
+   // cache has been refreshed.
+   double atr = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
+   if(atr <= 0.0 && g_atrPoints > 0.0)
+      atr = g_atrPoints;
    if(atr <= 0.0)
       return 0.0;
 
@@ -4149,15 +4121,15 @@ double RaceAtrStopPoints()
       (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
    ) + 2.0;
 
-   double multiplier = MathMax(0.5, MathMin(10.0, g_hardStopAtrMultiplier));
+   double multiplier = EffectiveHardStopMultiplier();
    return MathMax(atr * multiplier, brokerMinimumPoints);
 }
 
 double RaceInitialStopPrice(int direction, double entryPrice)
 {
-   // Settings contract: RACE must not secretly widen the configured stop.
-   // The stop is M5 ATR x hardStopAtrMultiplier exactly, except when the broker
-   // requires a larger minimum stop/freeze distance.
+   // RACE broker SL is an emergency boundary, not the normal noise detector.
+   // Keep the existing isolated M15 ATR x1.50 floor, then move it farther away
+   // only when the current RACE structure invalidation requires more room.
    double points = RaceAtrStopPoints();
    if(points <= 0.0)
       return 0.0;
@@ -4166,19 +4138,39 @@ double RaceInitialStopPrice(int direction, double entryPrice)
       ? entryPrice - points * _Point
       : entryPrice + points * _Point;
 
+   double invalidPrice=RaceV2StructureInvalidPrice(direction);
+   double atrM5Price=MathMax(
+      _Point*8.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+   double structureBuffer=atrM5Price*0.18;
+
+   if(invalidPrice>0.0)
+   {
+      double structureStop=direction>0
+         ? invalidPrice-structureBuffer
+         : invalidPrice+structureBuffer;
+
+      if(direction>0 && structureStop<stop && structureStop<entryPrice)
+         stop=structureStop;
+      else if(direction<0 && structureStop>stop && structureStop>entryPrice)
+         stop=structureStop;
+   }
+
    return NormalizeStopPriceToTick(stop,direction);
 }
 
 bool RaceStopReady()
 {
-   double atr = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
+   double atr = AverageTrueRangePoints(PERIOD_M15, g_atrPeriod);
    if(atr <= 0.0)
    {
       g_executionStatus = "RACE_ATR_NOT_READY";
       return false;
    }
 
-   // Publish the exact M5 ATR used by the RACE scalp stop.
+   // Publish the exact ATR used by the RACE stop so dashboard telemetry and the
+   // actual Broker SL agree on the same source value.
    g_atrPoints = atr;
    return true;
 }
@@ -4417,42 +4409,6 @@ bool ProcessRaceFill(int direction)
       }
    }
 
-   // Profit-proof scaling: the first RACE order must prove the direction before
-   // any additional exposure is allowed. Never add to a red Basket. Adds require
-   // positive live P/L, real price progress, and the 30-second flow still agreeing.
-   if(existingPositions > 0)
-   {
-      double proofProfit=BasketProfit();
-      double proofProgress=RaceMidProgressPoints(direction);
-      double proofSpread=CurrentSpreadPoints();
-      double proofAtrM1=AverageTrueRangePoints(PERIOD_M1,g_atrPeriod);
-      double proofFloor=MathMax(
-         MathMax(1.0,proofSpread),
-         MathMax(1.0,proofAtrM1*0.10)
-      );
-
-      double proofBuy=0.0, proofSell=0.0;
-      int proofSamples=0;
-      RaceVolumeSnapshot(proofBuy,proofSell,proofSamples);
-      double proofTotal=proofBuy+proofSell;
-      double samePressure=direction>0 ? proofBuy : proofSell;
-      double sameShare=proofTotal>0.0 ? samePressure/proofTotal : 0.0;
-
-      if(proofProfit<=0.0 || proofProgress<proofFloor)
-      {
-         g_raceState="PROFIT_PROOF_WAIT";
-         g_executionStatus="RACE_WAIT_PROFIT_PROOF";
-         return false;
-      }
-
-      if(!RaceVolumeWindowReady() || proofSamples<8 || sameShare<0.56)
-      {
-         g_raceState="FLOW_CONFIRM_WAIT";
-         g_executionStatus="RACE_WAIT_30S_FLOW_CONFIRM";
-         return false;
-      }
-   }
-
    string raceNewsReason="NONE";
    if(RaceNewsPauseActive(raceNewsReason))
    {
@@ -4530,7 +4486,7 @@ bool ProcessRaceFill(int direction)
       projectedLossLimit > 0.0 &&
       g_raceExposureNoiseMoney > projectedLossLimit * 0.80;
 
-   g_entryModel = "RACE_VOLUME_30S";
+   g_entryModel = "RACE_VOLUME_60S";
    g_entryTrigger = direction > 0 ? "RACE_VOLUME_BUY" : "RACE_VOLUME_SELL";
    g_entryQuality = "RACE";
    g_entryQualityScore = 0.0;
@@ -13446,10 +13402,10 @@ double EffectiveHardStopMultiplier()
 {
    double multiplier = g_hardStopAtrMultiplier;
 
-   // RACE must respect the configured stop multiplier exactly. Do not replace
-   // the user's setting with a hidden fixed multiplier or regime adjustment.
+   // RACE owns a fixed 1.50x M15 ATR stop. Keep this isolated from AUTO and
+   // from the generic server multiplier so changing RACE cannot alter AUTO.
    if(RaceModeEnabled() || BasketHasRacePosition())
-      return MathMax(0.5, MathMin(10.0, multiplier));
+      return 1.50;
 
    if(g_marketRegime == "HIGH_VOLATILITY") multiplier *= 1.25;
    else if(g_marketRegime == "QUIET") multiplier *= 0.85;
