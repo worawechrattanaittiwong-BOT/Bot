@@ -48,7 +48,7 @@ Need $onTick 'if(!manualOwnedBasket)' 'MANUAL reversal/correction isolation miss
 Need $onTick 'MANUAL is user-owned.' 'MANUAL strict ownership marker missing'
 
 # RACE must never consume MANUAL stop and must use dedicated target mode.
-Need $raceStop 'double points = RaceAtrStopPoints();' 'RACE must use its own ATR stop'
+Need $raceStop 'RaceAtrStopPoints();' 'RACE must use its own ATR stop'
 Forbid $raceStop 'g_manualStopLossPoints' 'MANUAL stop leaked into RACE'
 Need $ea 'g_raceProfitTargetMode == "POSITION"' 'RACE dedicated per-position target mode missing'
 Need $ea 'g_racePerPositionProfitMoney' 'RACE per-position profit amount missing'
