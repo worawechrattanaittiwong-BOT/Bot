@@ -9610,3 +9610,14 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
     padding-right:9px!important;
   }
 }
+
+
+/* Hide obsolete mobile header shells when the shared Top Bar is rendered separately. */
+@media(max-width:960px){
+  .mobile-app-head:not(:has(.owner-mobile-nav-trigger-wrap)){
+    display:none!important;
+    min-height:0!important;
+    margin:0!important;
+    padding:0!important;
+  }
+}
