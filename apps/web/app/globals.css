@@ -9117,80 +9117,6 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 }
 
 
-/* ===== Mobile left drawer final precedence guard ===== */
-/* Keep the requested left-side mobile navigation authoritative even though
-   older mobile-header rules also target the same trigger wrapper. */
-@media(max-width:960px){
-  .mobile-app-head .owner-mobile-nav-trigger-wrap,
-  .owner-mobile-nav-trigger-wrap{
-    position:fixed!important;
-    left:10px!important;
-    right:auto!important;
-    top:calc(72px + env(safe-area-inset-top))!important;
-    bottom:auto!important;
-    width:auto!important;
-    z-index:2750!important;
-    display:flex!important;
-    flex-direction:column!important;
-    align-items:flex-start!important;
-    gap:7px!important;
-    pointer-events:none!important;
-  }
-
-  .owner-mobile-nav-trigger-wrap .owner-mobile-nav-trigger,
-  .owner-mobile-nav-trigger-wrap .owner-mobile-utility-button{
-    pointer-events:auto!important;
-  }
-
-  .mobile-app-head .owner-mobile-nav-trigger{
-    min-width:92px!important;
-    min-height:46px!important;
-    padding:8px 12px!important;
-    border-radius:14px!important;
-  }
-
-  .owner-mobile-utility-button{
-    min-width:92px!important;
-    min-height:38px!important;
-  }
-
-  .owner-mobile-drawer-backdrop{
-    position:fixed!important;
-    inset:0!important;
-    z-index:3200!important;
-    display:flex!important;
-    align-items:stretch!important;
-    justify-content:flex-start!important;
-  }
-
-  .owner-mobile-drawer{
-    transform:none;
-    width:min(88vw,380px)!important;
-    height:100dvh!important;
-    max-height:none!important;
-    border-radius:0 24px 24px 0!important;
-    animation:ownerMobileDrawerSlideIn .24s cubic-bezier(.2,.75,.2,1) both!important;
-  }
-}
-
-@media(max-width:390px){
-  .mobile-app-head .owner-mobile-nav-trigger-wrap,
-  .owner-mobile-nav-trigger-wrap{
-    left:8px!important;
-    top:calc(66px + env(safe-area-inset-top))!important;
-  }
-  .mobile-app-head .owner-mobile-nav-trigger{
-    min-width:86px!important;
-    min-height:44px!important;
-    padding:7px 10px!important;
-  }
-  .owner-mobile-utility-button{
-    min-width:86px!important;
-    min-height:36px!important;
-  }
-}
-
-
 /* ===== Mobile Control Center navigation refinement ===== */
 /* Mobile only. Desktop sidebar/header behavior stays unchanged. */
 @media(max-width:960px){
@@ -9391,37 +9317,6 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .owner-mobile-drawer-logout svg{color:#b997ff}
 }
 
-@media(max-width:760px){
-  .cc-v19-settings-card .cc-bot-v2-body{
-    padding:18px 12px 24px!important;
-  }
-  .cc-v19-settings-card .cc-bot-v2-mode-section{
-    padding:16px 14px!important;
-  }
-  .cc-v19-settings-card .cc-bot-v2-workspace{
-    margin-top:16px!important;
-  }
-  .cc-v19-settings-card .cc-bot-v2-main{
-    gap:18px!important;
-  }
-  .cc-v19-settings-card .cc-bot-v2-panel{
-    padding:16px 14px!important;
-  }
-  .cc-v19-settings-card .cc-bot-v2-fields,
-  .cc-v19-settings-card .cc-bot-v2-limit-grid{
-    gap:13px!important;
-  }
-  .cc-v19-settings-card .cc-bot-v2-field{
-    min-height:96px!important;
-    padding:12px!important;
-    gap:10px!important;
-  }
-  .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-    min-height:126px!important;
-    padding:12px!important;
-  }
-}
-
 @media(max-width:390px){
   .mobile-app-head .owner-mobile-nav-trigger-wrap,
   .owner-mobile-nav-trigger-wrap{
@@ -9549,23 +9444,29 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 
   .owner-mobile-back-button .owner-mobile-utility-icon,
   .owner-mobile-reload-button .owner-mobile-utility-icon{
-    width:22px!important;
-    height:22px!important;
-    display:grid!important;
-    place-items:center!important;
-    flex:0 0 22px!important;
+    position:relative!important;
+    width:24px!important;
+    height:24px!important;
+    display:block!important;
+    flex:0 0 24px!important;
     background:transparent!important;
     color:#dfd6ff!important;
     line-height:0!important;
+    overflow:visible!important;
   }
 
   .owner-mobile-back-button .owner-mobile-utility-svg,
   .owner-mobile-reload-button .owner-mobile-utility-svg{
-    width:22px!important;
-    height:22px!important;
+    position:absolute!important;
+    left:50%!important;
+    top:50%!important;
+    width:20px!important;
+    height:20px!important;
     display:block!important;
     margin:0!important;
-    transform:none!important;
+    transform:translate(-50%,-50%)!important;
+    transform-origin:50% 50%!important;
+    overflow:visible!important;
   }
 
   .owner-mobile-nav-trigger-wrap .owner-mobile-nav-trigger{
@@ -9621,127 +9522,6 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   }
 }
 
-
-/* ===== Mobile alignment fix · utility icons + Risk Controls ===== */
-@media(max-width:760px){
-  /* Keep the three risk rows as true horizontal rows on phones:
-     label | toggle | money field. This prevents the money field from dropping
-     onto the lower card border when the generic MoneyInput suffix wraps. */
-  .cc-v19-settings-card .cc-bot-v2-limit-grid{
-    grid-template-columns:1fr!important;
-    gap:10px!important;
-  }
-
-  .cc-v19-settings-card .cc-bot-v2-limit-grid>div:not(.cc-bot-manual-risk-add){
-    min-height:82px!important;
-    padding:12px 14px!important;
-    display:grid!important;
-    grid-template-columns:minmax(0,1fr) minmax(178px,.95fr)!important;
-    align-items:center!important;
-    column-gap:12px!important;
-  }
-
-  .cc-v19-settings-card .cc-bot-v2-limit-grid>div:not(.cc-bot-manual-risk-add)>div:first-child{
-    min-width:0!important;
-    margin:0!important;
-    padding-right:0!important;
-    align-items:center!important;
-  }
-
-  .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field{
-    min-width:0!important;
-    width:100%!important;
-    display:grid!important;
-    grid-template-columns:48px minmax(118px,1fr)!important;
-    align-items:center!important;
-    gap:10px!important;
-  }
-
-  .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field .toggle-setting-label{
-    position:static!important;
-    inset:auto!important;
-    width:48px!important;
-    min-width:48px!important;
-    min-height:40px!important;
-    margin:0!important;
-    padding:0!important;
-    display:flex!important;
-    align-items:center!important;
-    justify-content:center!important;
-  }
-
-  .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field .money-input-shell{
-    width:100%!important;
-    min-width:0!important;
-    min-height:48px!important;
-    margin:0!important;
-    padding:0 12px!important;
-    grid-template-columns:auto minmax(0,1fr)!important;
-    grid-template-rows:1fr!important;
-    align-items:center!important;
-    column-gap:12px!important;
-    border:1px solid #26334d!important;
-    border-radius:12px!important;
-    background:#070d18!important;
-    box-sizing:border-box!important;
-  }
-
-  .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field .money-input-shell>small{
-    display:none!important;
-  }
-
-  .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field .money-input{
-    min-height:46px!important;
-    height:46px!important;
-    padding:0!important;
-    border:0!important;
-    background:transparent!important;
-    line-height:46px!important;
-    box-shadow:none!important;
-  }
-
-  /* Both utility glyphs now use the same SVG box and the same centering rules. */
-  .owner-mobile-back-button .owner-mobile-utility-icon,
-  .owner-mobile-reload-button .owner-mobile-utility-icon{
-    position:relative!important;
-    width:24px!important;
-    height:24px!important;
-    display:block!important;
-    line-height:0!important;
-    overflow:visible!important;
-  }
-
-  .owner-mobile-back-button .owner-mobile-utility-svg,
-  .owner-mobile-reload-button .owner-mobile-utility-svg{
-    position:absolute!important;
-    left:50%!important;
-    top:50%!important;
-    width:20px!important;
-    height:20px!important;
-    display:block!important;
-    margin:0!important;
-    transform:translate(-50%,-50%)!important;
-    transform-origin:50% 50%!important;
-    overflow:visible!important;
-  }
-}
-
-@media(max-width:390px){
-  .cc-v19-settings-card .cc-bot-v2-limit-grid>div:not(.cc-bot-manual-risk-add){
-    grid-template-columns:minmax(0,1fr) minmax(164px,.95fr)!important;
-    column-gap:9px!important;
-    padding-left:11px!important;
-    padding-right:11px!important;
-  }
-  .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field{
-    grid-template-columns:44px minmax(110px,1fr)!important;
-    gap:8px!important;
-  }
-  .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field .toggle-setting-label{
-    width:44px!important;
-    min-width:44px!important;
-  }
-}
 
 /* Hide obsolete mobile header shells when the shared Top Bar is rendered separately. */
 @media(max-width:960px){
