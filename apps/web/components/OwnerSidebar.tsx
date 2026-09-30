@@ -218,8 +218,8 @@ function UnifiedMobileNav({
         >
           <span className="owner-mobile-utility-icon" aria-hidden="true">
             <svg className="owner-mobile-utility-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14.5 6 8.5 12l6 6"/>
-              <path d="M9 12h10"/>
+              <path d="M13 6 7 12l6 6"/>
+              <path d="M7 12h10"/>
             </svg>
           </span>
         </button>
@@ -237,8 +237,8 @@ function UnifiedMobileNav({
           >
             <span className="owner-mobile-utility-icon" aria-hidden="true">
               <svg className="owner-mobile-utility-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 6v5h-5"/>
-                <path d="M19.2 11A7.5 7.5 0 1 0 17 17.4"/>
+                <path d="M20 12a8 8 0 1 1-2.34-5.66L20 8"/>
+                <path d="M20 4v4h-4"/>
               </svg>
             </span>
           </button>

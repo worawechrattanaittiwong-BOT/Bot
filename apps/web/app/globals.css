@@ -9703,20 +9703,25 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   /* Both utility glyphs now use the same SVG box and the same centering rules. */
   .owner-mobile-back-button .owner-mobile-utility-icon,
   .owner-mobile-reload-button .owner-mobile-utility-icon{
+    position:relative!important;
     width:24px!important;
     height:24px!important;
-    display:grid!important;
-    place-items:center!important;
+    display:block!important;
     line-height:0!important;
+    overflow:visible!important;
   }
 
   .owner-mobile-back-button .owner-mobile-utility-svg,
   .owner-mobile-reload-button .owner-mobile-utility-svg{
-    width:22px!important;
-    height:22px!important;
+    position:absolute!important;
+    left:50%!important;
+    top:50%!important;
+    width:20px!important;
+    height:20px!important;
     display:block!important;
     margin:0!important;
-    transform:none!important;
+    transform:translate(-50%,-50%)!important;
+    transform-origin:50% 50%!important;
     overflow:visible!important;
   }
 }
