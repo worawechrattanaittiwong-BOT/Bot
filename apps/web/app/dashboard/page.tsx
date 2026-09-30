@@ -6489,7 +6489,7 @@ function BotSettingsModal(props:any) {
                   <span><ScenovaIcon name="brain" size={17}/>โหมดการเทรด <small>Trading Mode</small></span>
                   <select className={"input cc-bot-v12-mode-select "+(controlMode==="RACE"?"is-race-recommended":"")} value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)} style={{colorScheme:"dark"}}>
                     <option value="AUTO">AUTO</option>
-                    <option value="RACE" className="cc-race-recommended-option">RACE · แนะนำ</option>
+                    <option value="RACE" className="cc-race-recommended-option">★ RACE · แนะนำ</option>
                     <option value="FLIP_LOCK">FLIP LOCK</option>
                     <option value="ZERO_GRID" disabled={zeroGridBlockedForSymbol}>ZERO GRID{zeroGridBlockedForSymbol ? " · ไม่รองรับ BTC" : ""}</option>
                     <option value="MANUAL">MANUAL</option>

@@ -6437,3 +6437,63 @@
     min-height:36px!important;
   }
 }
+
+
+/* ===== Control Center V58 · Bot Settings visual polish only ===== */
+/* Scope strictly to the embedded Bot Settings card. No trading logic or other cards. */
+@media(min-width:761px){
+  .cc-v19-settings-card .cc-bot-v2-embedded{
+    border-color:rgba(112,91,224,.72)!important;
+    background:
+      radial-gradient(560px 220px at 10% 0,rgba(104,78,224,.18),transparent 62%),
+      radial-gradient(520px 250px at 94% 8%,rgba(47,94,178,.13),transparent 66%),
+      linear-gradient(155deg,#11182b 0%,#0d1324 48%,#090e1a 100%)!important;
+    box-shadow:
+      0 20px 50px rgba(0,0,0,.30),
+      0 0 28px rgba(91,71,206,.10),
+      inset 0 1px 0 rgba(255,255,255,.045)!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-head{
+    background:
+      linear-gradient(90deg,rgba(45,34,92,.82),rgba(19,23,45,.94) 54%,rgba(11,16,30,.97))!important;
+    border-bottom-color:rgba(104,89,187,.34)!important;
+  }
+
+  /* RACE recommendation: no special green fill, only colored text + star. */
+  .cc-v19-settings-card .cc-bot-v12-mode-select.is-race-recommended{
+    background:linear-gradient(145deg,#171637,#0b1220)!important;
+    border-color:#6656c4!important;
+    color:#75e7af!important;
+    box-shadow:0 0 18px rgba(109,84,229,.10)!important;
+  }
+  .cc-v19-settings-card .cc-bot-v12-mode-select .cc-race-recommended-option,
+  .cc-v19-settings-card .cc-race-recommended-option{
+    background:#0b1120!important;
+    color:#75e7af!important;
+    font-weight:900!important;
+  }
+
+  /* Use the existing spare lower space: taller risk rows and amount boxes,
+     while the parent settings card keeps its current fixed height. */
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
+    height:49px!important;
+    min-height:49px!important;
+    max-height:49px!important;
+    padding:5px 2px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-limit-grid .money-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid .number-input-shell{
+    height:38px!important;
+    min-height:38px!important;
+    max-height:38px!important;
+    margin:0!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-limit-grid .money-input-shell .input,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid .number-input-shell .input{
+    height:36px!important;
+    min-height:36px!important;
+    max-height:36px!important;
+  }
+}
+/* ===== /Control Center V58 · Bot Settings visual polish only ===== */
