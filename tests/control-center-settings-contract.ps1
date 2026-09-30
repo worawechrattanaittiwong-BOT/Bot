@@ -26,7 +26,7 @@ Need $page 'cc-race-recommended-option' 'RACE recommended option marker missing'
 Need $page 'cc-race-recommended-badge' 'RACE recommended badge missing'
 Need $css '.cc-bot-v12-mode-select.is-race-recommended' 'RACE selected-state recommendation styling missing'
 Need $css '.cc-race-recommended-badge' 'RACE recommendation badge styling missing'
-foreach($mode in @('<option value="AUTO">AUTO</option>','<option value="RACE" className="cc-race-recommended-option">RACE · แนะนำ</option>','<option value="FLIP_LOCK">FLIP LOCK</option>','<option value="MANUAL">MANUAL</option>')) {
+foreach($mode in @('<option value="AUTO">AUTO</option>','<option value="RACE" className="cc-race-recommended-option">★ RACE · แนะนำ</option>','<option value="FLIP_LOCK">FLIP LOCK</option>','<option value="MANUAL">MANUAL</option>')) {
   Need $page $mode "Concise mode dropdown option missing: $mode"
 }
 Need $page '<option value="ZERO_GRID" disabled={zeroGridBlockedForSymbol}>' 'ZERO GRID dropdown option must remain available for supported symbols and disable on BTC/XBT'
