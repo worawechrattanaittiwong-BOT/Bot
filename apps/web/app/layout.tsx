@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./premium-dashboard.css";
 import "./dashboard-live.css";
+import "./mt5-dialog-premium.css";
 import { Mt5ManualActionControls } from "../components/Mt5ManualActionControls";
 import { SystemPopupProvider } from "../components/SystemPopupProvider";
 import { SCENOVA_APPLE_TOUCH_ICON, SCENOVA_BRAND_NAME, SCENOVA_MASTER_MARK } from "../lib/brand";
