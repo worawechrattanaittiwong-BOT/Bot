@@ -175,6 +175,11 @@ Need $css '--settings-control-h:36px' 'Current mobile settings control height mi
 Need $css 'Control Center V58 · Bot Settings visual polish only' 'Current Bot Settings visual-polish layer missing'
 Need $css 'grid-auto-rows:52px!important;' 'Current desktop risk-row sizing missing'
 Need $css 'Control Center V59 · mobile authoritative alignment' 'Current mobile authoritative alignment layer missing'
+Need $css '--mobile-form-control-width:66.666%' 'All mobile modes must share the same right-edge control width'
+Need $css '--mobile-form-row-h:52px' 'Standard mobile settings rows must share one vertical rhythm'
+Need $css '.cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>select.input,' 'Standard mobile selects must use the shared right-column owner'
+Need $css '.cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-choice-row,' 'RACE/MANUAL segmented controls must use the shared right-column owner'
 Need $css 'grid-template-columns:68px minmax(0,1fr)!important;' 'Current mobile risk toggle/value alignment missing'
+if($css.Contains('--mobile-auto-control-width')) { throw 'AUTO-only mobile width owner must not return; all modes share one right-column geometry' }
 Need $css '.cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-body{' 'MANUAL no-scroll selector missing'
 Need $css 'overflow-y:hidden!important;' 'MANUAL baseline must remain no-scroll'
