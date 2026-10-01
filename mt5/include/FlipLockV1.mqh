@@ -1,16 +1,18 @@
 #ifndef SCENOVA_FLIP_LOCK_V1_MQH
 #define SCENOVA_FLIP_LOCK_V1_MQH
 
-// FLIP LOCK 1.1.0 - M1 pending-baton engine.
+// FLIP LOCK 1.1.1 - M1 pending-baton engine.
 // One live FLIP position is paired with one opposite STOP pending order.
 // The pending trigger follows favorable M1 price movement and becomes the next
 // side when price reverses through it. Every new leg uses the configured Lot;
 // there is no martingale, multiplier or progressive volume sizing.
-#define FLIP_LOCK_V1_VERSION "1.1.0"
+#define FLIP_LOCK_V1_VERSION "1.1.1"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
 #define FLIP_LOCK_PENDING_SYNC_MIN_MS 120
+#define FLIP_LOCK_PROFIT_TIGHTEN_ARM_MONEY 0.50
+#define FLIP_LOCK_NET_PROFIT_BUFFER_MONEY 0.05
 
 int g_flipLockDirection=0;
 double g_flipLockPeakPrice=0.0;
@@ -24,6 +26,9 @@ string g_flipLockReason="IDLE";
 ulong g_flipLockLastStopSyncMs=0;
 int g_flipLockPendingDirection=0;
 double g_flipLockPendingTriggerPrice=0.0;
+ulong g_flipLockCostPositionId=0;
+double g_flipLockCostPositionVolume=0.0;
+double g_flipLockSideCommissionPerLot=0.0;
 
 bool FlipLockModeEnabled()
 {
@@ -57,6 +62,9 @@ void FlipLockResetTracking(const bool resetCounter)
    g_flipLockLastStopSyncMs=0;
    g_flipLockPendingDirection=0;
    g_flipLockPendingTriggerPrice=0.0;
+   g_flipLockCostPositionId=0;
+   g_flipLockCostPositionVolume=0.0;
+   g_flipLockSideCommissionPerLot=0.0;
    g_flipLockReason="IDLE";
    if(resetCounter) g_flipLockFlipCount=0;
 }
@@ -70,7 +78,7 @@ double FlipLockBrokerMinDistancePoints()
 
 double FlipLockAtrPoints()
 {
-   // 1.1.0 is intentionally M1-only. No M5/H1/macro fallback is allowed.
+   // 1.1.1 is intentionally M1-only. No M5/H1/macro fallback is allowed.
    return AverageTrueRangePoints(PERIOD_M1,MathMax(5,g_atrPeriod));
 }
 
@@ -96,6 +104,199 @@ double FlipLockTrailDistancePoints()
       FlipLockBrokerMinDistancePoints(),
       MathMax(spread*3.0,atr*0.45)
    );
+}
+
+double FlipLockTransitionCostReserve(
+   const ulong positionTicket,
+   const double positionVolume
+)
+{
+   if(positionTicket==0 || positionVolume<=0.0)
+      return FLIP_LOCK_NET_PROFIT_BUFFER_MONEY;
+   if(!PositionSelectByTicket(positionTicket))
+      return FLIP_LOCK_NET_PROFIT_BUFFER_MONEY;
+
+   ulong positionId=(ulong)PositionGetInteger(POSITION_IDENTIFIER);
+
+   // Entry commission is stable for a live leg, so cache only that historical
+   // lookup. Spread and swap stay dynamic and are recalculated every tick after
+   // the +0.50 arm threshold.
+   if(positionId==0 ||
+      g_flipLockCostPositionId!=positionId ||
+      MathAbs(g_flipLockCostPositionVolume-positionVolume)>=0.0000001)
+   {
+      double entryCost=0.0;
+      double entryVolume=0.0;
+      if(positionId>0 && HistorySelectByPosition(positionId))
+      {
+         int totalDeals=HistoryDealsTotal();
+         for(int i=0;i<totalDeals;i++)
+         {
+            ulong deal=HistoryDealGetTicket(i);
+            if(deal==0) continue;
+            if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol) continue;
+            if(HistoryDealGetInteger(deal,DEAL_MAGIC)!=InpMagic) continue;
+
+            long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+            if(entry!=DEAL_ENTRY_IN && entry!=DEAL_ENTRY_INOUT) continue;
+
+            double dealVolume=HistoryDealGetDouble(deal,DEAL_VOLUME);
+            if(dealVolume<=0.0) continue;
+            entryVolume+=dealVolume;
+            entryCost+=MathAbs(HistoryDealGetDouble(deal,DEAL_COMMISSION));
+            entryCost+=MathAbs(HistoryDealGetDouble(deal,DEAL_FEE));
+         }
+      }
+
+      g_flipLockCostPositionId=positionId;
+      g_flipLockCostPositionVolume=positionVolume;
+      g_flipLockSideCommissionPerLot=
+         entryVolume>0.0 ? entryCost/entryVolume : 0.0;
+   }
+
+   double currentEntryCommission=
+      g_flipLockSideCommissionPerLot*positionVolume;
+   double estimatedCloseCommission=
+      g_flipLockSideCommissionPerLot*positionVolume;
+   double estimatedNextEntryCommission=
+      g_flipLockSideCommissionPerLot*positionVolume;
+   double nextLegSpreadReserve=CurrentSpreadCost(positionVolume);
+   double negativeSwapReserve=MathMax(
+      0.0,
+      -PositionGetDouble(POSITION_SWAP)
+   );
+
+   // Reserve the costs already paid on this leg plus the likely costs of the
+   // FLIP handoff. Current-leg spread is already inside POSITION_PROFIT.
+   // A small positive buffer protects against tick rounding; slippage/gaps can
+   // still make the final realized amount differ from the estimate.
+   return MathMax(
+      FLIP_LOCK_NET_PROFIT_BUFFER_MONEY,
+      currentEntryCommission+
+      estimatedCloseCommission+
+      estimatedNextEntryCommission+
+      nextLegSpreadReserve+
+      negativeSwapReserve+
+      FLIP_LOCK_NET_PROFIT_BUFFER_MONEY
+   );
+}
+
+double FlipLockBreakEvenTriggerPrice(
+   const ulong positionTicket,
+   const int direction,
+   const double positionVolume,
+   const MqlTick &tick
+)
+{
+   if(positionTicket==0 || direction==0 || positionVolume<=0.0)
+      return 0.0;
+   if(!PositionSelectByTicket(positionTicket))
+      return 0.0;
+
+   // Before +0.50 floating profit, FLIP behaves exactly as before.
+   double liveProfit=PositionGetDouble(POSITION_PROFIT);
+   if(liveProfit<FLIP_LOCK_PROFIT_TIGHTEN_ARM_MONEY)
+      return 0.0;
+
+   double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
+   double currentPrice=direction>0 ? tick.bid : tick.ask;
+   if(openPrice<=0.0 || currentPrice<=0.0)
+      return 0.0;
+   if((direction>0 && currentPrice<=openPrice) ||
+      (direction<0 && currentPrice>=openPrice))
+      return 0.0;
+
+   double requiredGrossProfit=
+      FlipLockTransitionCostReserve(positionTicket,positionVolume);
+   ENUM_ORDER_TYPE liveType=direction>0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+
+   double currentCalculatedProfit=0.0;
+   if(!OrderCalcProfit(
+         liveType,
+         _Symbol,
+         positionVolume,
+         openPrice,
+         currentPrice,
+         currentCalculatedProfit
+      ) ||
+      currentCalculatedProfit<requiredGrossProfit)
+      return 0.0;
+
+   // Solve the first executable price whose gross P/L covers known entry costs,
+   // estimated close/next-entry commission, next-leg spread and a small buffer.
+   double low=0.0;
+   double high=1.0;
+   for(int i=0;i<28;i++)
+   {
+      double mid=(low+high)*0.5;
+      double testPrice=openPrice+(currentPrice-openPrice)*mid;
+      double testProfit=0.0;
+      if(!OrderCalcProfit(
+            liveType,
+            _Symbol,
+            positionVolume,
+            openPrice,
+            testPrice,
+            testProfit
+         ))
+         return 0.0;
+
+      if(testProfit<requiredGrossProfit)
+         low=mid;
+      else
+         high=mid;
+   }
+
+   double lockPrice=openPrice+(currentPrice-openPrice)*high;
+
+   // Round toward MORE protected profit first.
+   double tickSize=SymbolTickSizeNow();
+   double units=lockPrice/tickSize;
+   units=direction>0
+      ? MathCeil(units-1e-10)
+      : MathFloor(units+1e-10);
+   lockPrice=NormalizeDouble(
+      units*tickSize,
+      (int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS)
+   );
+
+   double brokerMinimum=FlipLockBrokerMinDistancePoints()*_Point;
+
+   // Respect broker stop/freeze distance. If the legal boundary cannot yet
+   // cover all reserved costs, keep the original ATR baton until it can.
+   if(direction>0)
+   {
+      double maxLegal=NormalizeTargetPriceToTick(
+         tick.bid-brokerMinimum,
+         -1
+      );
+      lockPrice=MathMin(lockPrice,maxLegal);
+   }
+   else
+   {
+      double minLegal=NormalizeTargetPriceToTick(
+         tick.ask+brokerMinimum,
+         1
+      );
+      lockPrice=MathMax(lockPrice,minLegal);
+   }
+
+   if(lockPrice<=0.0)
+      return 0.0;
+
+   double lockedCalculatedProfit=0.0;
+   if(!OrderCalcProfit(
+         liveType,
+         _Symbol,
+         positionVolume,
+         openPrice,
+         lockPrice,
+         lockedCalculatedProfit
+      ) ||
+      lockedCalculatedProfit+0.0001<requiredGrossProfit)
+      return 0.0;
+
+   return lockPrice;
 }
 
 double FlipLockSafetyDistancePoints()
@@ -393,15 +594,37 @@ bool FlipLockOpenStarter(const int forcedDirection=0)
    return sent;
 }
 
-double FlipLockCandidateTrigger(const int direction,const MqlTick &tick)
+double FlipLockCandidateTrigger(
+   const ulong positionTicket,
+   const int direction,
+   const double positionVolume,
+   const MqlTick &tick
+)
 {
    double distancePoints=FlipLockTrailDistancePoints();
-   if(direction==0 || distancePoints<=0.0) return 0.0;
+   if(direction==0 || positionVolume<=0.0 || distancePoints<=0.0) return 0.0;
 
    // BUY position => SELL STOP below Bid. SELL position => BUY STOP above Ask.
    double candidate=direction>0
       ? tick.bid-distancePoints*_Point
       : tick.ask+distancePoints*_Point;
+   candidate=NormalizeTargetPriceToTick(candidate,-direction);
+
+   // Flat/losing legs keep the original ATR/spread baton. After +0.50 floating
+   // profit, add a cost-aware break-even floor. As price keeps running, the
+   // normal ATR candidate naturally overtakes this floor and resumes the
+   // original trailing distance; the trigger is still never allowed to loosen.
+   double breakEvenLock=FlipLockBreakEvenTriggerPrice(
+      positionTicket,
+      direction,
+      positionVolume,
+      tick
+   );
+   if(breakEvenLock>0.0)
+      candidate=direction>0
+         ? MathMax(candidate,breakEvenLock)
+         : MathMin(candidate,breakEvenLock);
+
    return NormalizeTargetPriceToTick(candidate,-direction);
 }
 
@@ -424,7 +647,12 @@ bool FlipLockSyncBaton(
    if(!PositionSelectByTicket(positionTicket)) return false;
 
    int pendingDirection=-direction;
-   double candidate=FlipLockCandidateTrigger(direction,tick);
+   double candidate=FlipLockCandidateTrigger(
+      positionTicket,
+      direction,
+      positionVolume,
+      tick
+   );
    if(candidate<=0.0 || !FlipLockTriggerIsLegal(direction,candidate,tick))
    {
       g_flipLockReason="WAIT_M1_PENDING_DISTANCE";
@@ -745,6 +973,9 @@ void FlipLockManage()
       g_flipLockPendingTriggerPrice=0.0;
       g_flipLockArmed=false;
       g_flipLockLastStopSyncMs=0;
+      g_flipLockCostPositionId=0;
+      g_flipLockCostPositionVolume=0.0;
+      g_flipLockSideCommissionPerLot=0.0;
    }
 
    if(direction>0)

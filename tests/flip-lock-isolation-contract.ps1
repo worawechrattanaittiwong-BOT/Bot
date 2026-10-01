@@ -38,6 +38,9 @@ $manage = Block $flip 'void FlipLockManage()'
 $sync = Block $flip 'bool FlipLockSyncBaton('
 $atr = Block $flip 'double FlipLockAtrPoints()'
 $trail = Block $flip 'double FlipLockTrailDistancePoints()'
+$transitionCost = Block $flip 'double FlipLockTransitionCostReserve('
+$breakEvenLock = Block $flip 'double FlipLockBreakEvenTriggerPrice('
+$candidate = Block $flip 'double FlipLockCandidateTrigger('
 $safety = Block $flip 'double FlipLockSafetyDistancePoints()'
 
 Need $effective 'if(control == "FLIP_LOCK") return "FLIP_LOCK";' 'FLIP LOCK must own its execution mode'
@@ -51,7 +54,7 @@ Need $send '? NormalizeTradeVolume(g_lot)' 'FLIP starter must use configured Lot
 Need $send 'FLIP_LOCK_LIVE_COMMENT' 'FLIP live position ownership tag missing'
 Need $send 'FlipLockInitialSafetyStopPrice(direction,entryPrice,tick)' 'FLIP Safety Stop missing'
 
-Need $flip '#define FLIP_LOCK_V1_VERSION "1.1.0"' 'FLIP internal version must be 1.1.0'
+Need $flip '#define FLIP_LOCK_V1_VERSION "1.1.1"' 'FLIP internal version must be 1.1.1'
 Need $atr 'PERIOD_M1' 'FLIP ATR must use M1'
 Forbid $atr 'PERIOD_M5' 'FLIP ATR must not use M5 fallback'
 Forbid $starterDirection 'g_macroTrendDirection' 'FLIP starter must not use macro trend'
@@ -66,6 +69,25 @@ Need $sync 'FlipLockModifyPending' 'opposite pending must trail favorable price 
 Need $sync 'M1_PENDING_BATON_ACTIVE' 'pending baton status missing'
 Need $trail 'atr*0.45' 'M1 pending distance must use moderate ATR spacing'
 Need $trail 'spread*3.0' 'M1 pending must keep spread/noise room'
+Need $flip '#define FLIP_LOCK_PROFIT_TIGHTEN_ARM_MONEY 0.50' 'FLIP break-even tightening must not arm before +0.50 floating profit'
+Need $flip '#define FLIP_LOCK_NET_PROFIT_BUFFER_MONEY 0.05' 'FLIP cost-aware break-even must keep a small positive reserve'
+Need $transitionCost 'HistorySelectByPosition(positionId)' 'FLIP must read actual entry commission/fee for the live position'
+Need $transitionCost 'DEAL_COMMISSION' 'FLIP cost reserve must include observed commission'
+Need $transitionCost 'DEAL_FEE' 'FLIP cost reserve must include observed broker fees'
+Need $transitionCost 'estimatedCloseCommission' 'FLIP cost reserve must estimate closing commission'
+Need $transitionCost 'estimatedNextEntryCommission' 'FLIP cost reserve must cover the next FLIP leg commission'
+Need $transitionCost 'CurrentSpreadCost(positionVolume)' 'FLIP cost reserve must cover the next leg spread'
+Need $transitionCost 'PositionGetDouble(POSITION_SWAP)' 'FLIP cost reserve must cover negative swap already accrued'
+Need $transitionCost 'g_flipLockSideCommissionPerLot' 'FLIP may cache only stable observed commission for the live leg'
+Need $transitionCost 'Spread and swap stay dynamic' 'FLIP must recalculate market-dependent costs after arming'
+Forbid $flip 'FLIP_LOCK_PROFIT_LOCK_MONEY' 'obsolete fixed +0.30 profit lock must not remain'
+Need $breakEvenLock 'PositionGetDouble(POSITION_PROFIT)' 'FLIP break-even lock must arm from the live position floating profit'
+Need $breakEvenLock 'OrderCalcProfit(' 'FLIP break-even lock must solve account-currency profit from broker symbol economics'
+Need $breakEvenLock 'FlipLockBrokerMinDistancePoints()*_Point' 'FLIP break-even lock must respect broker minimum pending distance'
+Need $breakEvenLock 'lockedCalculatedProfit+0.0001<requiredGrossProfit' 'FLIP must not claim cost coverage when broker distance cannot legally preserve it'
+Need $candidate 'FlipLockBreakEvenTriggerPrice(' 'FLIP candidate must add the +0.50 cost-aware break-even floor'
+Need $candidate '? MathMax(candidate,breakEvenLock)' 'BUY FLIP baton must only tighten upward toward break-even protection'
+Need $candidate ': MathMin(candidate,breakEvenLock)' 'SELL FLIP baton must only tighten downward toward break-even protection'
 Need $safety 'atr*1.25' 'Safety Stop must remain wider than normal pending baton'
 Need $safety 'spread*8.0' 'Safety Stop must remain materially outside spread'
 
@@ -87,8 +109,8 @@ $releaseVersionMatch = [regex]::Match($release, 'DEFAULT_EA_VERSION\s*=\s*"([^"]
 if(-not $eaVersionMatch.Success -or -not $releaseVersionMatch.Success){
   throw 'EA release version marker missing'
 }
-if($eaVersionMatch.Groups[1].Value -ne '1.1.0' -or $releaseVersionMatch.Groups[1].Value -ne '1.1.0'){
-  throw ("FLIP 1.1.0 version mismatch: EA={0} API={1}" -f $eaVersionMatch.Groups[1].Value,$releaseVersionMatch.Groups[1].Value)
+if($eaVersionMatch.Groups[1].Value -ne '1.1.1' -or $releaseVersionMatch.Groups[1].Value -ne '1.1.1'){
+  throw ("FLIP 1.1.1 version mismatch: EA={0} API={1}" -f $eaVersionMatch.Groups[1].Value,$releaseVersionMatch.Groups[1].Value)
 }
 
-Write-Host 'FLIP LOCK 1.1.0 M1 pending-baton / fixed-Lot contract: PASS'
+Write-Host 'FLIP LOCK 1.1.1 M1 pending-baton / fixed-Lot + cost-aware profit lock contract: PASS'
