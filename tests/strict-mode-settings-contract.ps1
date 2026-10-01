@@ -29,6 +29,9 @@ $raceStop = Block $ea 'double RaceInitialStopPrice(int direction, double entryPr
 $onTick = Block $ea 'void OnTick()'
 $autoEval = Block $ea 'void AutoV20PlanPrices'
 $autoPrecision = Block $ea 'int AutoV20PrecisionDirection(double momentum)'
+$adaptiveEntry = Block $ea 'int AdaptiveEntryDirection(double momentum)'
+$sharedBrain = Block $ea 'int SharedAutoManualBrainDirection(double momentum)'
+$sharedZone = Block $ea 'bool SharedZoneReactionCandidate('
 $closeAll = Block $ea 'bool ClosePositionByTicket(ulong ticket)'
 $partialClose = Block $ea 'bool ClosePositionVolumeByTicket'
 
@@ -40,6 +43,22 @@ Need $dynamic '!strictAutoHardTarget && profitPoints >= atr * 0.55' 'AUTO hard t
 Need $dynamic '!strictAutoHardTarget && profitPoints >= atr * 1.10' 'AUTO hard target must block ATR profit trailing'
 Need $dynamic '!strictAutoHardTarget && profitPoints >= atr * 0.70' 'AUTO hard target must block EMA profit trailing'
 Need $onTick 'strictTacticalProfitTarget' 'Tactical AUTO must not bank profit before configured hard target'
+
+# AUTO + MANUAL share one Zone-First entry brain while keeping separate exits.
+Need $sharedZone 'g_demandZoneScore' 'Shared brain must consume Demand scoring'
+Need $sharedZone 'g_supplyZoneScore' 'Shared brain must consume Supply scoring'
+Need $sharedZone 'ExecutionTurningEvent(direction,momentum)' 'Zone entry must require a live execution reaction'
+Need $sharedZone 'PriceInsideOrNearZone' 'Zone entry must require price to reach or approach the zone'
+Need $sharedBrain 'ZONE_FIRST_DEMAND' 'Shared brain Demand trigger missing'
+Need $sharedBrain 'ZONE_FIRST_SUPPLY' 'Shared brain Supply trigger missing'
+Need $sharedBrain 'return BrainV13SmartDirection(momentum);' 'Shared brain must preserve non-zone market opportunities'
+Need $autoPrecision 'direction=SharedAutoManualBrainDirection(momentum);' 'AUTO first entry must use shared brain'
+Need $adaptiveEntry 'int rawDirection = SharedAutoManualBrainDirection(momentum);' 'MANUAL first entry must use shared brain'
+Need $autoPrecision 'if(!vectorLiveAllowed && count>0)' 'Vector Edge must remain hard for adds only'
+Need $autoEval 'g_demandZoneLow' 'AUTO SL plan must use Demand zone geometry'
+Need $autoEval 'g_supplyZoneHigh' 'AUTO SL plan must use Supply zone geometry'
+Need $autoEval 'g_supplyZoneLow' 'AUTO TP plan must target opposing Supply'
+Need $autoEval 'g_demandZoneHigh' 'AUTO TP plan must target opposing Demand'
 
 # MANUAL strict ownership.
 Need $dynamic 'if(manualPosition)' 'MANUAL dynamic protection isolation missing'
