@@ -8,7 +8,6 @@ import {
   OwnerMobileNav,
   OwnerSidebar
 } from "../../components/OwnerSidebar";
-import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./fleet-monitor.module.css";
 
@@ -343,7 +342,6 @@ export default function FleetMonitorPage() {
 
       <main className={styles.main}>
         <div className={styles.mobileHead}>
-          <ScenovaBrand className={styles.mobileLogo}/>
           {data.elevated ? (
             <OwnerMobileNav activeKey="trading-fleet-monitor" onLogout={logout}/>
           ) : (
