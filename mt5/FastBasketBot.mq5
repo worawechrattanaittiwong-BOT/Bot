@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.9"
-#define SCENOVA_EA_VERSION "1.1.9"
-#define SCENOVA_PRODUCT_VERSION "1.1.9"
+#property version   "1.1.10"
+#define SCENOVA_EA_VERSION "1.1.10"
+#define SCENOVA_PRODUCT_VERSION "1.1.10"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -3939,19 +3939,25 @@ double RaceAtrStopPoints()
 
 double RaceInitialStopPrice(int direction, double entryPrice)
 {
-   // RACE 1.1.9 structure-first automatic hard stop:
+   // RACE 1.1.10 structure-first automatic hard stop:
    // - M5 structure defines the preferred invalidation distance,
    // - M5 ATR + spread define the anti-noise floor,
    // - the fallback breathes automatically around 1.50-1.60 ATR,
-   // - a 1.80 ATR safety cap prevents an abnormally distant structure from
-   //   creating the large loss tail that RACE is designed to avoid.
+   // - 1.80 ATR is a real hard safety cap. If broker/spread constraints need
+   //   more room than that, RACE skips the entry instead of silently widening.
    double fallbackDistancePoints=RaceAtrStopPoints();
    if(fallbackDistancePoints<=0.0)
+   {
+      g_executionStatus="RACE_ATR_NOT_READY";
       return 0.0;
+   }
 
    double atrM5Points=AverageTrueRangePoints(PERIOD_M5,g_atrPeriod);
    if(atrM5Points<=0.0)
+   {
+      g_executionStatus="RACE_ATR_NOT_READY";
       return 0.0;
+   }
 
    double brokerMinimumPoints=MathMax(
       (double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL),
@@ -3969,10 +3975,14 @@ double RaceInitialStopPrice(int direction, double entryPrice)
          spreadPoints*3.00
       )
    );
-   double maxDistancePoints=MathMax(
-      minDistancePoints,
-      atrM5Points*RACE_AUTO_STOP_ATR_CAP
-   );
+   double maxDistancePoints=atrM5Points*RACE_AUTO_STOP_ATR_CAP;
+
+   if(maxDistancePoints<=0.0 ||
+      minDistancePoints>maxDistancePoints)
+   {
+      g_executionStatus="RACE_STOP_RISK_TOO_WIDE";
+      return 0.0;
+   }
 
    double selectedDistancePoints=MathMax(
       minDistancePoints,
@@ -3990,8 +4000,6 @@ double RaceInitialStopPrice(int direction, double entryPrice)
          ? (entryPrice-structureStop)/_Point
          : (structureStop-entryPrice)/_Point;
 
-      // Structure is allowed to tighten OR widen the fallback, but only inside
-      // the anti-noise floor and hard safety cap.
       if(structureDistancePoints>0.0)
       {
          selectedDistancePoints=MathMax(
@@ -4004,6 +4012,7 @@ double RaceInitialStopPrice(int direction, double entryPrice)
    double stop=direction>0
       ? entryPrice-selectedDistancePoints*_Point
       : entryPrice+selectedDistancePoints*_Point;
+   g_executionStatus="RACE_STOP_READY";
    return NormalizeStopPriceToTick(stop,direction);
 }
 
@@ -4671,10 +4680,10 @@ bool ManageRaceBasket(double momentum)
          return true;
       }
 
-      // Never average down in RACE. Additional positions are pyramid fills and
-      // are allowed only after the already-open Basket is in positive floating
-      // P/L. The first entry keeps its normal M5 structure/ATR room to breathe.
-      if(floatingProfit<=0.0)
+      // Never add exposure while the RACE cycle is still losing. Both the
+      // currently-open Basket and the full cycle including realized deals must
+      // be positive before another pyramid fill is allowed.
+      if(floatingProfit<=0.0 || cycleProfit<=0.0)
       {
          g_raceState="ADD_WAIT_PROFIT";
          g_executionStatus="RACE_ADD_WAIT_PROFIT";
@@ -18001,6 +18010,31 @@ bool OrderSendWithPriceRetry(MqlTradeRequest &request, MqlTradeResult &result)
    else
       return sent;
 
+   // RACE risk is anchored to the actual retry entry price. A requote must not
+   // reuse an SL calculated from the stale first price because that can widen
+   // the real loss distance beyond the automatic safety envelope.
+   bool raceEntryRetry=
+      request.position==0 &&
+      StringCompare(request.comment,"SaaSRace")==0;
+   if(raceEntryRetry)
+   {
+      int raceDirection=request.type==ORDER_TYPE_BUY ? 1 : -1;
+      double refreshedStop=RaceInitialStopPrice(
+         raceDirection,
+         request.price
+      );
+      if(refreshedStop<=0.0)
+      {
+         result.retcode=TRADE_RETCODE_INVALID_STOPS;
+         return false;
+      }
+      request.sl=NormalizeStopPriceToTick(
+         refreshedStop,
+         raceDirection
+      );
+      g_dynamicStopPrice=request.sl;
+   }
+
    request.deviation = DynamicDeviationPointsForSymbol(request.symbol);
    ResetLastError();
    return OrderSend(request, result);
@@ -19232,10 +19266,7 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
             ? FlipLockInitialSafetyStopPrice(direction,entryPrice,tick)
             : DynamicInitialStopPrice(direction, entryPrice));
       if(raceOrder && request.sl <= 0.0)
-      {
-         g_executionStatus = "RACE_ATR_NOT_READY";
          return false;
-      }
       if(flipLockOrder && request.sl <= 0.0)
       {
          g_executionStatus = "FLIP_LOCK_WAIT_ATR";
@@ -19295,7 +19326,12 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
       g_lastOrderError = GetLastError();
       g_lastOrderRetcode = (long)result.retcode;
       g_lastOrderAt = TimeCurrent();
-      g_executionStatus = RetcodeExecutionStatus((long)result.retcode);
+      bool preserveRaceRiskStatus=
+         raceOrder &&
+         (g_executionStatus=="RACE_STOP_RISK_TOO_WIDE" ||
+          g_executionStatus=="RACE_ATR_NOT_READY");
+      if(!preserveRaceRiskStatus)
+         g_executionStatus = RetcodeExecutionStatus((long)result.retcode);
       Print("OrderSend failed. error=", g_lastOrderError, " retcode=", result.retcode);
       return false;
    }

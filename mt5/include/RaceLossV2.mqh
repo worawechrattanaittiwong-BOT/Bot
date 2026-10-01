@@ -38,15 +38,15 @@ string RaceV2LossState(
    double adversePoints=RaceV1AdversePoints(direction);
    if(adversePoints<=g_raceExposureNoisePoints)
    {
-      RaceResetExitCandidate();
       reasonOut="RACE_COST_NOISE";
       return "COST_NOISE";
    }
 
-   // v1.0.100: intelligence is observation/hold only while the Basket is
-   // negative. It can stop additional exposure, but it cannot close the loss.
-   RaceResetExitCandidate();
-
+   // Classification must never own the soft-exit confirmation clock. The
+   // caller immediately evaluates RaceWrongDirectionConfirmed(), which resets
+   // the candidate only when the actual confirmation conditions stop holding.
+   // Keeping the classifier side-effect free lets the 5-8 second confirmation
+   // persist across ticks as designed.
    if(RaceV2StructureBroken(direction))
    {
       reasonOut="RACE_STRUCTURE_INVALID";
