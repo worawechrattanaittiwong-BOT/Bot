@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.8"
-#define SCENOVA_EA_VERSION "1.1.8"
-#define SCENOVA_PRODUCT_VERSION "1.1.8"
+#property version   "1.1.9"
+#define SCENOVA_EA_VERSION "1.1.9"
+#define SCENOVA_PRODUCT_VERSION "1.1.9"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -184,7 +184,11 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define RACE_VOLUME_WINDOW_SECONDS 30
 #define RACE_SIGNAL_MAX_WAIT_SECONDS 60
 #define RACE_VOLUME_MIN_DOMINANCE 0.55
-#define RACE_HARD_STOP_ATR_MULTIPLIER 1.20
+#define RACE_AUTO_STOP_ATR_BASE 1.50
+#define RACE_AUTO_STOP_ATR_WIDE 1.60
+#define RACE_AUTO_STOP_ATR_FLOOR 1.00
+#define RACE_AUTO_STOP_ATR_CAP 1.80
+#define RACE_PROFIT_ARM_MIN_LOCK_RATIO 0.70
 #define RACE_VOLUME_HISTORY_SECONDS 60
 #define RACE_EXIT_CYCLE_GRACE_SECONDS 15
 #define RACE_EXIT_LAST_FILL_GRACE_SECONDS 10
@@ -387,6 +391,7 @@ double g_autoV20AverageNet = 0.0;
 int    g_raceDirection = 0;
 double g_racePeakProfit = 0.0;
 bool   g_raceProfitArmed = false;
+bool   g_raceTargetProfitArmed = false;
 bool   g_raceRecoveryWatch = false;
 string g_raceState = "IDLE";
 datetime g_raceCycleStartedAt = 0;
@@ -435,6 +440,8 @@ string   g_raceLossState = "NORMAL";
 bool     g_raceHadExposure = false;
 bool     g_raceReentryPending = false;
 datetime g_raceReentryStartedAt = 0;
+double   g_raceLastObservedCycleProfit = 0.0;
+int      g_raceReentryObserveSeconds = 6;
 // RACE VNext Phase 4 news-pause telemetry. RACE only; existing baskets are
 // never force-closed merely because an event window became active.
 bool     g_raceNewsPauseActive = false;
@@ -3306,6 +3313,7 @@ void ResetRaceRuntime()
    g_raceDirection = 0;
    g_racePeakProfit = 0.0;
    g_raceProfitArmed = false;
+   g_raceTargetProfitArmed = false;
    g_raceRecoveryWatch = false;
    g_raceState = "IDLE";
    g_raceCycleStartedAt = 0;
@@ -3782,8 +3790,8 @@ int RaceAnalysisDirection(double momentum)
       g_raceVNextDecisionScore
    );
 
-   // No confidence gate is added to RACE. A tie falls back to the original
-   // 60-second side so Phase 1 changes direction quality, not trading cadence.
+   // No confidence gate is added to RACE. A tie falls back to the qualified
+   // 30-second side so Phase 1 changes direction quality, not trading cadence.
    return decision==0 ? volumeDirection : decision;
 }
 
@@ -3893,79 +3901,109 @@ bool RaceFlowStillRunning(int direction, double momentum)
    return RaceVolumeDirection() == direction;
 }
 
+double RaceAutoAtrStopMultiplier(double atrPoints)
+{
+   // The fallback hard-stop breathes with current transaction noise. Normal
+   // RACE conditions stay around 1.50 ATR and widen smoothly toward 1.60 ATR
+   // only when spread is large relative to M5 volatility. Structure remains the
+   // primary invalidation reference in RaceInitialStopPrice().
+   if(atrPoints<=0.0)
+      return RACE_AUTO_STOP_ATR_BASE;
+
+   double spreadPoints=CurrentSpreadPoints();
+   if(spreadPoints<=0.0 || spreadPoints>=999999.0)
+      return RACE_AUTO_STOP_ATR_BASE;
+
+   double spreadRatio=spreadPoints/atrPoints;
+   double widenFactor=(spreadRatio-0.05)/0.10;
+   widenFactor=MathMax(0.0,MathMin(1.0,widenFactor));
+
+   return RACE_AUTO_STOP_ATR_BASE+
+      (RACE_AUTO_STOP_ATR_WIDE-RACE_AUTO_STOP_ATR_BASE)*widenFactor;
+}
+
 double RaceAtrStopPoints()
 {
-   // RACE 1.1.0 uses M5 volatility with a fixed 1.20 ATR stop multiplier.
-   // The shared hardStopAtrMultiplier remains available to other modes only.
-   double atr = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
-   if(atr <= 0.0)
+   double atr=AverageTrueRangePoints(PERIOD_M5,g_atrPeriod);
+   if(atr<=0.0)
       return 0.0;
 
-   double brokerMinimumPoints = MathMax(
-      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
-      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
-   ) + 2.0;
+   double brokerMinimumPoints=MathMax(
+      (double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL),
+      (double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_FREEZE_LEVEL)
+   )+2.0;
 
-   return MathMax(atr * RACE_HARD_STOP_ATR_MULTIPLIER, brokerMinimumPoints);
+   double autoMultiplier=RaceAutoAtrStopMultiplier(atr);
+   return MathMax(atr*autoMultiplier,brokerMinimumPoints);
 }
 
 double RaceInitialStopPrice(int direction, double entryPrice)
 {
-   // Moderate structure-aware stop:
-   // - M5 ATR x the configured multiplier is the maximum normal distance.
-   // - nearby RACE structure may pull the SL closer,
-   // - structure is never allowed to widen the SL,
-   // - an M5/spread/broker floor prevents an excessively tight stop.
-   double configuredDistancePoints = RaceAtrStopPoints();
-   if(configuredDistancePoints <= 0.0)
+   // RACE 1.1.9 structure-first automatic hard stop:
+   // - M5 structure defines the preferred invalidation distance,
+   // - M5 ATR + spread define the anti-noise floor,
+   // - the fallback breathes automatically around 1.50-1.60 ATR,
+   // - a 1.80 ATR safety cap prevents an abnormally distant structure from
+   //   creating the large loss tail that RACE is designed to avoid.
+   double fallbackDistancePoints=RaceAtrStopPoints();
+   if(fallbackDistancePoints<=0.0)
       return 0.0;
 
-   double atrM5Points = AverageTrueRangePoints(PERIOD_M5, g_atrPeriod);
-   if(atrM5Points <= 0.0)
+   double atrM5Points=AverageTrueRangePoints(PERIOD_M5,g_atrPeriod);
+   if(atrM5Points<=0.0)
       return 0.0;
 
-   double brokerMinimumPoints = MathMax(
-      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL),
-      (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL)
-   ) + 2.0;
-   double spreadPoints = CurrentSpreadPoints();
-   if(spreadPoints <= 0.0 || spreadPoints >= 999999.0)
-      spreadPoints = 0.0;
+   double brokerMinimumPoints=MathMax(
+      (double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL),
+      (double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_FREEZE_LEVEL)
+   )+2.0;
 
-   double minDistancePoints = MathMax(
+   double spreadPoints=CurrentSpreadPoints();
+   if(spreadPoints<=0.0 || spreadPoints>=999999.0)
+      spreadPoints=0.0;
+
+   double minDistancePoints=MathMax(
       brokerMinimumPoints,
-      MathMax(atrM5Points * 0.70, spreadPoints * 3.00)
+      MathMax(
+         atrM5Points*RACE_AUTO_STOP_ATR_FLOOR,
+         spreadPoints*3.00
+      )
    );
-   double selectedDistancePoints = MathMax(
-      configuredDistancePoints,
-      minDistancePoints
+   double maxDistancePoints=MathMax(
+      minDistancePoints,
+      atrM5Points*RACE_AUTO_STOP_ATR_CAP
    );
 
-   double invalidPrice = RaceV2StructureInvalidPrice(direction);
-   if(invalidPrice > 0.0)
+   double selectedDistancePoints=MathMax(
+      minDistancePoints,
+      MathMin(maxDistancePoints,fallbackDistancePoints)
+   );
+
+   double invalidPrice=RaceV2StructureInvalidPrice(direction);
+   if(invalidPrice>0.0)
    {
-      double structureBufferPrice = atrM5Points * _Point * 0.12;
-      double structureStop = direction > 0
-         ? invalidPrice - structureBufferPrice
-         : invalidPrice + structureBufferPrice;
-      double structureDistancePoints = direction > 0
-         ? (entryPrice - structureStop) / _Point
-         : (structureStop - entryPrice) / _Point;
+      double structureBufferPrice=atrM5Points*_Point*0.12;
+      double structureStop=direction>0
+         ? invalidPrice-structureBufferPrice
+         : invalidPrice+structureBufferPrice;
+      double structureDistancePoints=direction>0
+         ? (entryPrice-structureStop)/_Point
+         : (structureStop-entryPrice)/_Point;
 
-      // Structure can tighten the configured stop, never widen it.
-      if(structureDistancePoints > 0.0 &&
-         structureDistancePoints < selectedDistancePoints)
+      // Structure is allowed to tighten OR widen the fallback, but only inside
+      // the anti-noise floor and hard safety cap.
+      if(structureDistancePoints>0.0)
       {
-         selectedDistancePoints = MathMax(
+         selectedDistancePoints=MathMax(
             minDistancePoints,
-            structureDistancePoints
+            MathMin(maxDistancePoints,structureDistancePoints)
          );
       }
    }
 
-   double stop = direction > 0
-      ? entryPrice - selectedDistancePoints * _Point
-      : entryPrice + selectedDistancePoints * _Point;
+   double stop=direction>0
+      ? entryPrice-selectedDistancePoints*_Point
+      : entryPrice+selectedDistancePoints*_Point;
    return NormalizeStopPriceToTick(stop,direction);
 }
 
@@ -4201,6 +4239,9 @@ bool ProcessRaceFill(int direction)
    // fill must stay on that same side. A new BUY/SELL decision is allowed only
    // after the entire RACE basket is flat.
    int existingPositions = BasketPositionCount();
+   if(existingPositions<=0)
+      g_raceLastObservedCycleProfit=0.0;
+
    if(existingPositions > 0)
    {
       int existingDirection = BasketDirection();
@@ -4451,6 +4492,7 @@ bool ManageRaceBasket(double momentum)
    bool filling = filledUnits < g_maxPositions;
    double floatingProfit = BasketProfit();
    double cycleProfit = BasketCycleProfit();
+   g_raceLastObservedCycleProfit=cycleProfit;
 
    // Explicit user loss control remains a hard safety boundary in every mode.
    double lossLimit = EffectiveBasketLossLimit();
@@ -4515,28 +4557,68 @@ bool ManageRaceBasket(double momentum)
       RaceResetExitCandidate();
    }
 
-   // User-controlled RACE close-all target. "Per round" means the
-   // currently-open MT5 RACE Basket only: once its live floating profit reaches
-   // the configured amount, close every open RACE position immediately.
+   // BASKET mode treats the configured money target as a PROFIT ARM. Once the
+   // live MT5 Basket reaches it, RACE stops adding exposure and lets a healthy
+   // 30-second flow run. POSITION mode keeps its explicit per-ticket close
+   // semantics unchanged.
    bool raceBasketProfitTarget =
-      g_raceProfitTargetMode == "BASKET" &&
-      g_raceCloseAllProfitMoney > 0.0;
+      g_raceProfitTargetMode=="BASKET" &&
+      g_raceCloseAllProfitMoney>0.0;
    bool racePerPositionProfitTarget =
-      g_raceProfitTargetMode == "POSITION" &&
-      g_racePerPositionProfitMoney > 0.0;
+      g_raceProfitTargetMode=="POSITION" &&
+      g_racePerPositionProfitMoney>0.0;
    bool raceStrictProfitTarget =
       raceBasketProfitTarget || racePerPositionProfitTarget;
 
+   if(!raceBasketProfitTarget)
+      g_raceTargetProfitArmed=false;
+
    double displayedRoundProfit=RaceDisplayedOpenProfit();
    if(raceBasketProfitTarget &&
-      displayedRoundProfit >= g_raceCloseAllProfitMoney)
+      !g_raceTargetProfitArmed &&
+      displayedRoundProfit>=g_raceCloseAllProfitMoney)
    {
-      RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET");
+      g_raceTargetProfitArmed=true;
+      g_racePeakProfit=displayedRoundProfit;
+      g_raceState="PROFIT_ARMED";
+      g_executionStatus="RACE_PROFIT_ARMED";
+   }
+
+   if(raceBasketProfitTarget && g_raceTargetProfitArmed)
+   {
+      if(displayedRoundProfit>g_racePeakProfit)
+         g_racePeakProfit=displayedRoundProfit;
+
+      bool flowing=RaceFlowStillRunning(direction,momentum);
+      double giveback=RaceGivebackMoney(
+         g_racePeakProfit,
+         g_raceCloseAllProfitMoney
+      );
+      double protectedProfitFloor=MathMax(
+         g_raceCloseAllProfitMoney*RACE_PROFIT_ARM_MIN_LOCK_RATIO,
+         g_racePeakProfit-giveback
+      );
+
+      if(!flowing && displayedRoundProfit>0.0)
+      {
+         RaceCloseCycle("RACE_PROFIT_ARM_FLOW_END");
+         return true;
+      }
+
+      if(displayedRoundProfit<=protectedProfitFloor)
+      {
+         RaceCloseCycle("RACE_PROFIT_ARM_GIVEBACK");
+         return true;
+      }
+
+      RefreshMarketContext(false);
+      g_raceState="PROFIT_RUN";
+      g_executionStatus="RACE_PROFIT_RUN";
       return true;
    }
 
    // Per-position mode closes only the RACE ticket that reached its configured
-   // money target. Other RACE tickets continue under the same 60-second engine.
+   // money target. Other RACE tickets continue under the same 30-second engine.
    int harvested = racePerPositionProfitTarget
       ? RaceHarvestProfitablePositions()
       : 0;
@@ -4695,8 +4777,9 @@ bool ManageRaceBasket(double momentum)
 
 bool FastProfitClosePriority()
 {
-   // CLOSE_FAST_PATH_V157: only accelerate an already-existing ZERO/RACE
-   // Basket-profit contract. No entry, target, risk or direction rule changes.
+   // CLOSE_FAST_PATH_V157: accelerate ZERO exits and retry an already-closing
+   // RACE Basket. A live RACE Basket target is now a profit ARM and must pass
+   // through ManageRaceBasket() so flow/giveback logic cannot be bypassed.
    if(g_zeroGridClosing)
    {
       ZeroGridClosePositions();
@@ -4731,17 +4814,6 @@ bool FastProfitClosePriority()
    if(g_raceState=="CLOSING" && BasketHasRacePosition())
    {
       RaceClosePositionsBurst();
-      return true;
-   }
-
-   bool raceBasketProfitTarget =
-      BasketHasRacePosition() &&
-      g_raceProfitTargetMode=="BASKET" &&
-      g_raceCloseAllProfitMoney>0.0;
-   if(raceBasketProfitTarget &&
-      RaceDisplayedOpenProfit()>=g_raceCloseAllProfitMoney)
-   {
-      RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET");
       return true;
    }
 

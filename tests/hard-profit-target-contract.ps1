@@ -41,7 +41,9 @@ Need $zero 'return MathMax(0.01,g_zeroGridMinNetProfitMoney);' 'ZERO exact confi
 Forbid $zero 'g_zeroGridCloseReserveMoney' 'ZERO hidden reserve'
 Forbid $zero 'ZeroGridEstimatedExitCostMoney' 'ZERO hidden estimated close cost'
 
-Need $ea 'displayedRoundProfit >= g_raceCloseAllProfitMoney' 'RACE immediate close-all target must follow the live MT5 displayed Profit values'
+Need $ea 'displayedRoundProfit>=g_raceCloseAllProfitMoney' 'RACE Basket profit arm must follow the live MT5 displayed Profit values'
+Need $ea 'RACE_PROFIT_ARMED' 'RACE Basket target must arm instead of immediately closing'
+Need $ea 'RACE_PROFIT_ARM_GIVEBACK' 'RACE armed profit must have a protected giveback exit'
 Need $ea 'if(g_controlMode == "FLIP_LOCK")' 'FLIP isolation must remain present'
 
 Need $api 'else if (requestedProfitMode === "AUTO")' 'API must preserve AUTO Basket target'
