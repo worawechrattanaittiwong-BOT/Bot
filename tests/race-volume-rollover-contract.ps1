@@ -37,6 +37,7 @@ $raceStop = Block $ea 'double RaceInitialStopPrice(int direction, double entryPr
 $raceStopReady = Block $ea 'bool RaceStopReady()'
 $hardStopMultiplier = Block $ea 'double EffectiveHardStopMultiplier()'
 $send = Block $ea 'bool SendMarketOrder(int direction)'
+$retry = Block $ea 'bool OrderSendWithPriceRetry('
 $onTick = Block $ea 'void OnTick()'
 
 Need $ea '#define RACE_VOLUME_WINDOW_SECONDS 30' 'RACE volume window must be exactly 30 seconds'
@@ -78,8 +79,8 @@ Need $manage 'RaceWrongDirectionConfirmed(' 'RACE negative Basket must pass the 
 Need $manage 'RaceCloseCycle(wrongDirectionReason)' 'RACE confirmed soft exit must close through the RACE-only cycle closer'
 Need $manage 'RACE_ADVERSE_WATCH' 'RACE must stop adding exposure while adverse evidence builds'
 Need $manage 'RACE_STRUCTURE_INVALID_HOLD' 'RACE unconfirmed structure invalidation must remain a hold state'
-Need $manage 'RACE_ADD_WAIT_PROFIT' 'RACE must block additional fills while the open Basket is not profitable'
-Need $manage 'if(floatingProfit<=0.0)' 'RACE pyramid gate must forbid averaging down'
+Need $manage 'RACE_ADD_WAIT_PROFIT' 'RACE must block additional fills while the open Basket or full cycle is not profitable'
+Need $manage 'if(floatingProfit<=0.0 || cycleProfit<=0.0)' 'RACE pyramid gate must forbid adding while the net cycle is still losing'
 Need $wrong 'RaceV2StructureBroken(direction)' 'RACE soft exit must require broken M5 structure'
 Need $wrong 'RaceVolumeDirection()' 'RACE soft exit must require the 30-second order-flow side'
 Need $wrong 'oppositeVolume' 'RACE soft exit must require opposite order flow'
@@ -96,6 +97,9 @@ if($wrong.Contains('RACE_DISTANCE_ARMED')){
 if($raceLossV2.Contains('RaceWrongDirectionConfirmed(') -or $raceLossV2.Contains('"REVERSAL_EXIT"') -or $raceLossV2.Contains('"EXIT_CANDIDATE"')){
   throw 'RACE Loss V2 must classify/hold only and never emit a closing state'
 }
+if($raceLossV2.Contains('RaceResetExitCandidate()')){
+  throw 'RACE Loss V2 classifier must not reset the 5-8 second soft-exit confirmation clock'
+}
 Need $raceLossV2 'RACE_STRUCTURE_INVALID' 'RACE Loss V2 structure hold state missing'
 Need $raceLossV2 'RACE_ADVERSE_WATCH' 'RACE Loss V2 adverse watch state missing'
 Need $manage 'g_raceLastFillAt = g_raceCycleStartedAt' 'RACE restart recovery must preserve recovered-cycle timing telemetry'
@@ -107,7 +111,7 @@ Need $harvest 'g_racePerPositionProfitMoney' 'RACE per-position exit must use th
 Need $harvest 'targetComparableProfit + 0.00000001 < perPositionTarget' 'RACE must wait until each ticket/unit reaches its money target'
 Need $harvest 'baseVolume / positionVolume' 'Netting RACE must compare profit proportionally per configured-Lot unit'
 Need $ea 'RACE_DIRECTION_LOCK' 'RACE must keep mixed BUY/SELL baskets blocked'
-Need $raceAtr 'AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)' 'RACE 1.1.9 automatic stop must use M5 ATR'
+Need $raceAtr 'AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)' 'RACE 1.1.10 automatic stop must use M5 ATR'
 Need $raceStop 'RaceV2StructureInvalidPrice(direction)' 'RACE stop must use M5 structure as the primary invalidation reference'
 Need $raceStop 'double minDistancePoints' 'RACE stop must keep a minimum anti-noise distance'
 Need $raceStop 'double maxDistancePoints' 'RACE stop must keep an automatic maximum safety distance'
@@ -153,9 +157,15 @@ Need $raceAutoStop 'RACE_AUTO_STOP_ATR_WIDE' 'RACE automatic stop helper must st
 Need $raceAtr 'RaceAutoAtrStopMultiplier(atr)' 'RACE ATR fallback must use the automatic multiplier'
 if($raceAtr.Contains('EffectiveHardStopMultiplier()')){throw 'RACE must not inherit the shared hard-stop multiplier'}
 Need $raceStop 'RACE_AUTO_STOP_ATR_FLOOR' 'RACE structure stop must keep a one-ATR anti-noise floor'
-Need $raceStop 'RACE_AUTO_STOP_ATR_CAP' 'RACE structure stop must have a hard safety cap'
+Need $raceStop 'double maxDistancePoints=atrM5Points*RACE_AUTO_STOP_ATR_CAP;' 'RACE 1.80 ATR maximum must be a real hard cap, not widened by the floor'
+Need $raceStop 'minDistancePoints>maxDistancePoints' 'RACE must reject entries whose broker/spread floor exceeds the 1.80 ATR cap'
+Need $raceStop 'RACE_STOP_RISK_TOO_WIDE' 'RACE must expose an explicit status when the hard stop cap makes entry unsafe'
 Need $raceStop 'selectedDistancePoints=MathMax(' 'RACE structure must be allowed to both tighten and widen inside auto guardrails'
 Need $raceStop 'MathMin(maxDistancePoints,structureDistancePoints)' 'RACE structure distance must be clamped by the automatic safety cap'
+Need $retry 'raceEntryRetry' 'RACE requote retry must be isolated to RACE entry orders'
+Need $retry 'RaceInitialStopPrice(' 'RACE requote must recalculate the automatic SL from the refreshed entry price'
+Need $retry 'request.price' 'RACE requote SL refresh must use the retry price'
+Need $retry 'request.sl=NormalizeStopPriceToTick(' 'RACE requote must replace the stale SL before retrying the order'
 Need $raceStopReady 'RACE_ATR_NOT_READY' 'RACE must wait instead of opening with a tiny placeholder stop when ATR is unavailable'
 Need $fill 'if(!RaceStopReady())' 'RACE must verify ATR stop readiness before sending an order'
 Need $send 'bool raceOrder = RaceModeEnabled() || BasketHasRacePosition();' 'shared order sender must identify RACE orders from execution ownership, not stale entry metadata'
@@ -171,4 +181,4 @@ if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
 }
 Need $release 'EA_RUNTIME_CONTRACT = "RACE_CONFIGURED_LOSS_ONLY_V1"' 'API runtime contract must match EA'
 
-Write-Host 'RACE 1.1.9 30-second flow + no averaging down + confirmed soft exit + structure-first auto SL: PASS'
+Write-Host 'RACE 1.1.10 30-second flow + persistent soft exit + net-cycle pyramids + hard-capped auto SL + requote refresh: PASS'
